@@ -4,17 +4,21 @@ import java.awt.Color;
 import java.awt.Component;
 import java.awt.Cursor;
 import java.awt.Font;
+import java.awt.Graphics2D;
 import java.awt.font.TextAttribute;
+import java.awt.image.BufferedImage;
 import java.text.AttributedCharacterIterator.Attribute;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 import java.util.function.Function;
 
 import javax.swing.AbstractButton;
 import javax.swing.BorderFactory;
 import javax.swing.Icon;
+import javax.swing.ImageIcon;
 import javax.swing.JButton;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
@@ -35,6 +39,9 @@ public class ComponentDecorator {
 	private Icon theIcon;
 	private Boolean isEnabled;
 	private Cursor theCursor;
+
+	private boolean isUsingImage;
+	private BufferedImage theImage;
 
 	public Border getBorder() {
 		return theBorder;
@@ -59,6 +66,7 @@ public class ComponentDecorator {
 		theHAlign = theVAlign = null;
 		theIcon = null;
 		isEnabled = null;
+		isUsingImage = false;
 		return this;
 	}
 
@@ -218,6 +226,14 @@ public class ComponentDecorator {
 		return withIcon(ObservableSwingUtils.getFixedIcon(clazz, iconRef, width, height));
 	}
 
+	public ComponentDecorator withImageIcon(int width, int height, Consumer<Graphics2D> image) {
+		if (theImage == null || theImage.getWidth() != width || theImage.getHeight() != height)
+			theImage = new BufferedImage(width, height, BufferedImage.TYPE_4BYTE_ABGR);
+		image.accept((Graphics2D) theImage.getGraphics());
+		isUsingImage = true;
+		return this;
+	}
+
 	public ComponentDecorator enabled(Boolean enabled) {
 		isEnabled = enabled;
 		return this;
@@ -301,11 +317,21 @@ public class ComponentDecorator {
 
 		if (c instanceof JLabel) {
 			Icon oldIcon = ((JLabel) c).getIcon();
-			((JLabel) c).setIcon(theIcon);
+			if (theIcon != null)
+				((JLabel) c).setIcon(theIcon);
+			else if (isUsingImage)
+				((JLabel) c).setIcon(new ImageIcon(theImage));
+			else
+				((JLabel) c).setIcon(null);
 			revert.add(() -> ((JLabel) c).setIcon(oldIcon));
 		} else if (c instanceof AbstractButton) {
 			Icon oldIcon = ((JButton) c).getIcon();
-			((JButton) c).setIcon(theIcon);
+			if (theIcon != null)
+				((JButton) c).setIcon(theIcon);
+			else if (isUsingImage)
+				((JButton) c).setIcon(new ImageIcon(theImage));
+			else
+				((JButton) c).setIcon(null);
 			revert.add(() -> ((JButton) c).setIcon(oldIcon));
 		}
 

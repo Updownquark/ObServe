@@ -1359,7 +1359,7 @@ implements TableBuilder<R, P> {
 		}
 
 		instantiating.close();
-		decorate(table);
+		decorate(comp);
 		return comp;
 	}
 

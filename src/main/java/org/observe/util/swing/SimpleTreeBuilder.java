@@ -287,8 +287,7 @@ public class SimpleTreeBuilder<F, P extends SimpleTreeBuilder<F, P>> extends Abs
 				SimpleDataAction<BetterList<F>, ?> action = actions[a];
 				SimpleButtonEditor<?, ?> buttonEditor = new SimpleButtonEditor<>(null, actionMenuItems[a], null, action.theObservableAction,
 					false, getUntil());
-				if (action.theButtonMod != null)
-					action.theButtonMod.accept(buttonEditor);
+				action.modifyButtonEditor(buttonEditor);
 				buttonEditor.getComponent();
 				actionMenuItems[a].addActionListener(evt -> action.theObservableAction.act(evt));
 			}

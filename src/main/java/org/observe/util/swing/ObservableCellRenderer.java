@@ -2,16 +2,12 @@ package org.observe.util.swing;
 
 import java.awt.Color;
 import java.awt.Component;
-import java.awt.Image;
-import java.awt.image.BufferedImage;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 import javax.swing.DefaultListCellRenderer;
-import javax.swing.Icon;
-import javax.swing.ImageIcon;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JLabel;
@@ -150,7 +146,6 @@ public interface ObservableCellRenderer<M, C> {
 		private DefaultListCellRenderer theListRenderer;
 		private JLabel theLabel;
 
-		private Function<? super ModelCell<? extends M, ? extends C>, ? extends Icon> theIcon;
 		private CellDecorator<M, C> theDecorator;
 		private ComponentDecorator theComponentDecorator;
 		private final Function<? super ModelCell<? extends M, ? extends C>, String> theTextRenderer;
@@ -201,9 +196,6 @@ public interface ObservableCellRenderer<M, C> {
 				theLabel.setText(rendered);
 				c = theLabel;
 			}
-			if (c instanceof JLabel && theIcon != null)
-				((JLabel) c).setIcon(theIcon.apply(cell));
-
 			if (theDecorator != null) {
 				if (theComponentDecorator == null)
 					theComponentDecorator = new ComponentDecorator();
@@ -222,26 +214,6 @@ public interface ObservableCellRenderer<M, C> {
 			else
 				theDecorator = theDecorator.modify(decorator);
 			return this;
-		}
-
-		public DefaultObservableCellRenderer<M, C> withIcon(Function<? super ModelCell<? extends M, ? extends C>, ? extends Icon> icon) {
-			theIcon = icon;
-			return this;
-		}
-
-		public DefaultObservableCellRenderer<M, C> withBufferedIcon(int width, int height,
-			BiFunction<? super ModelCell<? extends M, ? extends C>, BufferedImage, Image> icon) {
-			BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_4BYTE_ABGR);
-			ImageIcon imageIcon = new ImageIcon(image);
-			return withIcon(cell -> {
-				Image iconImage = icon.apply(cell, image);
-				if (iconImage == image)
-					return imageIcon;
-				else if (iconImage == null)
-					return null;
-				else
-					return new ImageIcon(iconImage);
-			});
 		}
 	}
 

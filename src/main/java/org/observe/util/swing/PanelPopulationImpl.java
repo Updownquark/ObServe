@@ -3368,14 +3368,17 @@ class PanelPopulationImpl {
 		}
 
 		void addButton(PanelPopulator<?, ?> panel) {
-			panel.addButton(theActionName, theObservableAction, button -> {
-				if (theTooltipString != null)
-					button.withTooltip(theTooltipString);
-				if (theButtonMod != null)
-					theButtonMod.accept(button);
-				if (!isDisplayedWhenDisabled)
-					button.visibleWhen(theObservableAction.isEnabled().map(e -> e == null));
-			});
+			panel.addButton(theActionName, theObservableAction, this::modifyButtonEditor);
+		}
+
+		void modifyButtonEditor(ButtonEditor<?, ?> button) {
+			button.withText(theActionName);
+			if (theTooltipString != null)
+				button.withTooltip(theTooltipString);
+			if (theButtonMod != null)
+				theButtonMod.accept(button);
+			if (!isDisplayedWhenDisabled)
+				button.visibleWhen(theObservableAction.isEnabled().map(e -> e == null));
 		}
 	}
 
