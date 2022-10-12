@@ -13,6 +13,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.LinkedList;
 import java.util.List;
@@ -683,6 +685,8 @@ public class TypeTokens {
 		return (T) value;
 	}
 
+	private final ThreadLocal<Set<TypeVariable<?>>> ASSIGNABLE_VARIABLE_STACK = ThreadLocal.withInitial(HashSet::new);
+
 	/**
 	 * Similar to {@link TypeToken#isAssignableFrom(TypeToken)}, but this method allows for assignments where conversion is required, e.g.
 	 * auto-(un)boxing and primitive number type conversion.
@@ -694,32 +698,70 @@ public class TypeTokens {
 	public boolean isAssignable(TypeToken<?> left, TypeToken<?> right) {
 		if (left.isAssignableFrom(right))
 			return true;
-		Class<?> primitiveRight = unwrap(getRawType(right));
-		Class<?> primitiveLeft = unwrap(getRawType(left));
-		if (primitiveLeft == Object.class)
+		Class<?> rawRight = unwrap(getRawType(right));
+		Class<?> rawLeft = unwrap(getRawType(left));
+		if (rawLeft == Object.class)
 			return true;
-		else if (!primitiveRight.isPrimitive())
-			return false;
-		else if (primitiveRight.equals(primitiveLeft))
+		else if (rawRight.isPrimitive()) {
+			if (rawRight.equals(rawLeft))
+				return true;
+			else if (rawRight == boolean.class)
+				return false;
+			else if (rawLeft == Number.class)
+				return true;
+			else if (!rawLeft.isPrimitive())
+				return false;
+			else if (rawLeft == double.class)
+				return true;
+			// Now left!=right and left!=double.class
+			else if (rawRight == double.class || rawRight == float.class || rawRight == long.class)
+				return false;
+			// Now right can only be int, short, byte, or char
+			else if (rawLeft == long.class || rawLeft == int.class)
+				return true;
+			else if (rawRight == byte.class)
+				return rawLeft == short.class || rawLeft == char.class;
+		}
+
+		// Neither is primitive
+		if (left.getType() instanceof Class)
+			return false; // Simple type, not compatible
+		else if (left.getType() instanceof TypeVariable) {
+			if (!ASSIGNABLE_VARIABLE_STACK.get().add((TypeVariable<?>) left.getType()))
+				return true; // Recursive, already checked
+			for (Type bound : ((TypeVariable<?>) left.getType()).getBounds()) {
+				TypeToken<?> boundToken = left.resolveType(bound);
+				if (!isAssignable(boundToken, right))
+					return false;
+			}
 			return true;
-		else if (primitiveRight == boolean.class)
-			return false;
-		else if (primitiveLeft == Number.class)
+		} else if (left.getType() instanceof WildcardType) {
+			for (Type bound : ((WildcardType) left.getType()).getUpperBounds()) {
+				TypeToken<?> boundToken = left.resolveType(bound);
+				if (!isAssignable(boundToken, right))
+					return false;
+			}
+			for (Type bound : ((WildcardType) left.getType()).getLowerBounds()) {
+				TypeToken<?> boundToken = left.resolveType(bound);
+				if (!isAssignable(right, boundToken))
+					return false;
+			}
 			return true;
-		else if (!primitiveLeft.isPrimitive())
-			return false;
-		else if (primitiveLeft == double.class)
+		} else if (left.getType() instanceof ParameterizedType) {
+			if (!rawLeft.isAssignableFrom(rawRight))
+				return false;
+			for (int p = 0; p < rawLeft.getTypeParameters().length; p++) {
+				TypeToken<?> leftTP = left.resolveType(rawLeft.getTypeParameters()[p]);
+				TypeToken<?> rightTP = right.resolveType(rawLeft.getTypeParameters()[p]);
+
+				if (!isAssignable(leftTP, rightTP))
+					return false;
+			}
 			return true;
-		// Now left!=right and left!=double.class
-		else if (primitiveRight == double.class || primitiveRight == float.class || primitiveRight == long.class)
-			return false;
-		// Now right can only be int, short, byte, or char
-		else if (primitiveLeft == long.class || primitiveLeft == int.class)
-			return true;
-		else if (primitiveRight == byte.class)
-			return primitiveLeft == short.class || primitiveLeft == char.class;
-		else
-			return false;
+		} else if (left.isArray()) {
+			return right.isArray() && isAssignable(left.getComponentType(), right.getComponentType());
+		} else
+			return false; // Dunno what it could be, but we can't resolve it
 	}
 
 	/**
@@ -847,44 +889,47 @@ public class TypeTokens {
 		} else {
 			nullCheck = v -> v;
 		}
-		if (!primitiveSource.isPrimitive())
-			throw new IllegalArgumentException("Cannot cast " + source + " to " + target);
-		else if (primitiveSource == primitiveTarget)
-			return new TypeConverter<>((TypeToken<T>) source, "wrapping-cast", v -> (T) nullCheck.apply(v));
-		else if (wrappedTarget.isAssignableFrom(wrappedSource))
-			return new TypeConverter<>((TypeToken<T>) TypeTokens.get().of(wrappedSource), "wrapping-cast", v -> (T) nullCheck.apply(v));
-		else if (!primitiveTarget.isPrimitive())
-			throw new IllegalArgumentException("Cannot cast " + source + " to " + target);
-		else if (primitiveSource == boolean.class)
-			throw new IllegalArgumentException("Cannot cast " + source + " to " + target);
-		Function<S, Number> toNumber;
-		if (primitiveSource == char.class) {
-			toNumber = v -> Integer.valueOf(((Character) nullCheck.apply(v)).charValue());
-		} else {
-			toNumber = v -> (Number) nullCheck.apply(v);
-		}
-		Function<S, Object> fn;
-		if (primitiveTarget == double.class) {
-			fn = v -> toNumber.apply(v).doubleValue();
-			// Now left!=right and left!=double.class
-		} else if (primitiveSource == double.class || primitiveSource == float.class || primitiveSource == long.class)
-			throw new IllegalArgumentException("Cannot cast " + source + " to " + target);
-		// Now right can only be int, short, byte, or char
-		else if (primitiveTarget == long.class) {
-			fn = v -> toNumber.apply(v).longValue();
-		} else if (primitiveTarget == int.class) {
-			fn = v -> toNumber.apply(v).intValue();
-		} else if (primitiveSource == byte.class) {
-			if (primitiveTarget == short.class) {
-				fn = v -> toNumber.apply(v).shortValue();
-			} else if (primitiveTarget == char.class) {
-				fn = v -> Character.valueOf((char) toNumber.apply(v).byteValue());
+		if (primitiveSource.isPrimitive()) {
+			if (primitiveSource == primitiveTarget)
+				return new TypeConverter<>((TypeToken<T>) source, "wrapping-cast", v -> (T) nullCheck.apply(v));
+			else if (wrappedTarget.isAssignableFrom(wrappedSource))
+				return new TypeConverter<>((TypeToken<T>) TypeTokens.get().of(wrappedSource), "wrapping-cast", v -> (T) nullCheck.apply(v));
+			else if (!primitiveTarget.isPrimitive())
+				throw new IllegalArgumentException("Cannot cast " + source + " to " + target);
+			else if (primitiveSource == boolean.class)
+				throw new IllegalArgumentException("Cannot cast " + source + " to " + target);
+			Function<S, Number> toNumber;
+			if (primitiveSource == char.class) {
+				toNumber = v -> Integer.valueOf(((Character) nullCheck.apply(v)).charValue());
+			} else {
+				toNumber = v -> (Number) nullCheck.apply(v);
+			}
+			Function<S, Object> fn;
+			if (primitiveTarget == double.class) {
+				fn = v -> toNumber.apply(v).doubleValue();
+				// Now left!=right and left!=double.class
+			} else if (primitiveSource == double.class || primitiveSource == float.class || primitiveSource == long.class)
+				throw new IllegalArgumentException("Cannot cast " + source + " to " + target);
+			// Now right can only be int, short, byte, or char
+			else if (primitiveTarget == long.class) {
+				fn = v -> toNumber.apply(v).longValue();
+			} else if (primitiveTarget == int.class) {
+				fn = v -> toNumber.apply(v).intValue();
+			} else if (primitiveSource == byte.class) {
+				if (primitiveTarget == short.class) {
+					fn = v -> toNumber.apply(v).shortValue();
+				} else if (primitiveTarget == char.class) {
+					fn = v -> Character.valueOf((char) toNumber.apply(v).byteValue());
+				} else
+					throw new IllegalArgumentException("Cannot cast " + target + " to " + source);
 			} else
 				throw new IllegalArgumentException("Cannot cast " + target + " to " + source);
-		} else
-			throw new IllegalArgumentException("Cannot cast " + target + " to " + source);
 
-		return new TypeConverter<>(target, "primitive-cast", (Function<S, T>) fn);
+			return new TypeConverter<>(target, "primitive-cast", (Function<S, T>) fn);
+		} else if (isAssignable(target, source))
+			return new TypeConverter<>((TypeToken<T>) source, "no-op", v -> (T) v);
+		else
+			throw new IllegalArgumentException("Cannot cast " + target + " to " + source);
 	}
 
 	/**
@@ -1000,6 +1045,165 @@ public class TypeTokens {
 		for (Class<?> intf2 : intf.getInterfaces())
 			this.<Object, X> decomposeInterfaces(decomposed, (Class<Object>) intf2,
 				(TypeToken<Object>) intfType.getSupertype((Class<Object>) intf2));
+	}
+
+	/**
+	 * <p>
+	 * A class representing a set of method parameters.
+	 * </p>
+	 * <p>
+	 * This class facilitates determination of whether invocation of a parameterized method is valid with a given set of argument types as
+	 * well as determination of the return type of the method for a given set of argument types.
+	 * </p>
+	 */
+	public class TypeVariableAccumulation {
+		private final Map<TypeVariable<?>, TypeToken<?>[]> theAccumulatedTypes;
+		private final TypeToken<?> theResolver;
+
+		TypeVariableAccumulation(TypeVariable<?>[] variables, TypeToken<?> resolver) {
+			theAccumulatedTypes = new LinkedHashMap<>();
+			theResolver = resolver;
+			for (TypeVariable<?> vbl : variables)
+				theAccumulatedTypes.put(vbl, new TypeToken[] { null, null });
+		}
+
+		private TypeToken<?> resolveInternal(Type type) {
+			return theResolver == null ? of(type) : theResolver.resolveType(type);
+		}
+
+		/**
+		 * Called to check an argument type against a method parameter
+		 *
+		 * @param parameterType The type of the method's parameter
+		 * @param evaluatedType The type of the argument that is supplied for the parameter
+		 * @return Whether the argument type is valid for the given parameter type in the parameterized method
+		 */
+		public boolean accumulate(TypeToken<?> parameterType, TypeToken<?> evaluatedType) {
+			return accumulate(parameterType, evaluatedType, true);
+		}
+
+		private boolean accumulate(TypeToken<?> parameterType, TypeToken<?> evaluatedType, boolean upperBound) {
+			if (theAccumulatedTypes.isEmpty())
+				return true;
+			if (parameterType.getType() instanceof TypeVariable<?>) {
+				TypeToken<?>[] accumulated = theAccumulatedTypes.get(parameterType.getType());
+				if (accumulated != null) {
+					if (upperBound) {
+						TypeToken<?> newAccum = accumulated[0] == null ? evaluatedType : getCommonType(accumulated[0], evaluatedType);
+						if (newAccum != null && isAssignable(parameterType, newAccum)) {
+							accumulated[0] = newAccum;
+							return true;
+						} else
+							return false;
+					} else {
+						TypeToken<?> newAccum = accumulated[1] == null ? evaluatedType : getCommonType(accumulated[1], evaluatedType);
+						if (newAccum != null && isAssignable(newAccum, parameterType)) {
+							accumulated[1] = newAccum;
+							return true;
+						} else
+							return false;
+					}
+				} else {
+					for (Type bound : ((TypeVariable<?>) parameterType.getType()).getBounds()) {
+						if (!accumulate(resolveInternal(bound), evaluatedType, upperBound))
+							return false;
+					}
+					return true;
+				}
+			} else if (parameterType.getType() instanceof WildcardType) {
+				for (Type bound : ((WildcardType) parameterType.getType()).getLowerBounds()) {
+					if (!accumulate(resolveInternal(bound), evaluatedType, !upperBound))
+						return false;
+				}
+				for (Type bound : ((WildcardType) parameterType.getType()).getUpperBounds()) {
+					if (!accumulate(resolveInternal(bound), evaluatedType, upperBound))
+						return false;
+				}
+				return true;
+			} else if (parameterType.getType() instanceof ParameterizedType) {
+				if (!(evaluatedType.getType() instanceof ParameterizedType))
+					return true;
+				for (Type pt : ((ParameterizedType) parameterType.getType()).getActualTypeArguments()) {
+					if (!accumulate(resolveInternal(pt), evaluatedType.resolveType(pt), upperBound))
+						return false;
+				}
+				return true;
+			} else if (parameterType.isArray() && evaluatedType.isArray())
+				return accumulate(parameterType.getComponentType(), evaluatedType.getComponentType());
+			else
+				return true;
+		}
+
+		/**
+		 * Typically used to resolve the return type of a parameterized method given a set of argument types (provided via
+		 * {@link #accumulate(TypeToken, TypeToken)})
+		 *
+		 * @param type The generic return type of the method
+		 * @return The return type of the method, given the argument types provided via {@link #accumulate(TypeToken, TypeToken)}
+		 */
+		public TypeToken<?> resolve(Type type) {
+			if (type instanceof TypeVariable) {
+				TypeToken<?>[] accumulated = theAccumulatedTypes.get(type);
+				return accumulated == null ? resolveInternal(type) : accumulated[0];
+			} else if (type instanceof WildcardType) {
+				WildcardType wild = (WildcardType) type;
+				Type[] upper = new Type[wild.getUpperBounds().length], lower = new Type[wild.getLowerBounds().length];
+				for (int b = 0; b < upper.length; b++)
+					upper[b] = resolve(wild.getUpperBounds()[b]).getType();
+				for (int b = 0; b < lower.length; b++)
+					lower[b] = resolve(wild.getLowerBounds()[b]).getType();
+				return of(new WildcardTypeImpl(lower, upper));
+			} else if (type instanceof ParameterizedType) {
+				ParameterizedType pt = (ParameterizedType) type;
+				Type[] pts = new Type[pt.getActualTypeArguments().length];
+				for (int p = 0; p < pts.length; p++)
+					pts[p] = resolve(pt.getActualTypeArguments()[p]).getType();
+				return of(new ParameterizedTypeImpl(//
+					resolve(pt.getOwnerType()).getType(), //
+					pts));
+			} else if (type instanceof GenericArrayType)
+				return getArrayType(resolve(//
+					((GenericArrayType) type).getGenericComponentType()), 1);
+			else
+				return resolveInternal(type);
+		}
+
+		@Override
+		public String toString() {
+			if (theAccumulatedTypes.size() == 1)
+				return print(theAccumulatedTypes.entrySet().iterator().next(), new StringBuilder()).toString();
+			else {
+				StringBuilder str = new StringBuilder("{");
+				for (Map.Entry<TypeVariable<?>, TypeToken<?>[]> accum : theAccumulatedTypes.entrySet())
+					print(accum, str.append("\n\t"));
+				return str.append('}').toString();
+			}
+		}
+
+		private StringBuilder print(Map.Entry<TypeVariable<?>, TypeToken<?>[]> accum, StringBuilder str) {
+			str.append(accum.getKey().getName()).append('=');
+			if (accum.getValue()[0] == null) {
+				if (accum.getValue()[1] == null)
+					str.append('?');
+				else
+					str.append("? super ").append(accum.getValue()[1]);
+			} else if (accum.getValue()[1] == null) {
+				str.append("? extends ").append(accum.getValue()[0]);
+			} else
+				str.append(accum.getValue()[0]).append("...").append(accum.getValue()[1]);
+			return str;
+		}
+	}
+
+	/**
+	 * Creates a type variable accumulator
+	 * 
+	 * @param vbls The type variables of the method to invoke
+	 * @param resolver A context type to use to resolve types, e.g. the object that the non-static method is being invoked on
+	 * @return The type variable accumulator
+	 */
+	public TypeVariableAccumulation accumulate(TypeVariable<?>[] vbls, TypeToken<?> resolver) {
+		return new TypeVariableAccumulation(vbls, resolver);
 	}
 
 	/**

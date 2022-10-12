@@ -7,6 +7,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.Type;
+import java.lang.reflect.TypeVariable;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -182,68 +183,82 @@ public abstract class Invocation implements ObservableExpression {
 			List<QonfigInterpretationException> errors = null;
 			for (int o = 0; o < argOptions.size(); o++) {
 				try {
+					TypeTokens.TypeVariableAccumulation tva;
 					Args option = argOptions.get(o);
 					int methodArgCount = (!isStatic && arg0Context) ? option.size() - 1 : option.size();
 					if (methodArgCount < 0 || !Invocation.checkArgCount(m.getParameterTypes().length, methodArgCount, m.isVarArgs()))
 						continue;
-					boolean ok = true;
+					TypeToken<?> tvaResolver;
+					int methodArgStart;
 					if (isStatic) {
+						// No context, all arguments are parameters
+						tvaResolver = null;
+						methodArgStart = 0;
 						if (paramTypes == null) {
 							paramTypes = new TypeToken[m.getParameterTypes().length];
 							for (int p = 0; p < paramTypes.length; p++)
 								paramTypes[p] = TypeTokens.get().of(m.getGenericParameterTypes()[p]);
 						}
-						// All arguments are parameters
-						for (int a = 0; ok && a < option.size(); a++) {
-							int p = a;
-							TypeToken<?> paramType = p < paramTypes.length ? paramTypes[p] : paramTypes[paramTypes.length - 1];
-							if (!option.matchesType(a, paramType))
-								ok = false;
+					} else if (arg0Context) {
+						// Use the first argument as context
+						if (!option.matchesType(0, contextType))
+							continue;
+						tvaResolver = option.resolve(0);
+						methodArgStart = 1;
+						if (paramTypes == null) {
+							paramTypes = new TypeToken[m.getParameterTypes().length];
+							for (int p = 0; p < paramTypes.length; p++)
+								paramTypes[p] = TypeTokens.get().of(m.getGenericParameterTypes()[p]);
 						}
 					} else {
-						if (arg0Context) {
-							// Use the first argument as context
-							contextType = option.resolve(0);
-							if (paramTypes == null) {
-								paramTypes = new TypeToken[m.getParameterTypes().length];
-								for (int p = 0; p < paramTypes.length; p++) {
+						// Ignore context (supplied by caller), all arguments are parameters
+						tvaResolver = null;
+						methodArgStart = 0;
+						if (paramTypes == null) {
+							paramTypes = new TypeToken[m.getParameterTypes().length];
+							for (int p = 0; p < paramTypes.length; p++) {
+								if (!(contextType.getType() instanceof Class))
 									paramTypes[p] = contextType.resolveType(m.getGenericParameterTypes()[p]);
-								}
-							}
-							ok = true;
-							if (!option.matchesType(0, contextType))
-								continue;
-							for (int a = 1; ok && a < option.size(); a++) {
-								int p = a - 1;
-								TypeToken<?> paramType = p < paramTypes.length ? paramTypes[p] : paramTypes[paramTypes.length - 1];
-								if (!option.matchesType(a, paramType))
-									ok = false;
-							}
-						} else {
-							// Ignore context (supplied by caller), all arguments are parameters
-							if (paramTypes == null) {
-								paramTypes = new TypeToken[m.getParameterTypes().length];
-								for (int p = 0; p < paramTypes.length; p++) {
-									if (!(contextType.getType() instanceof Class))
-										paramTypes[p] = contextType.resolveType(m.getGenericParameterTypes()[p]);
-									else
-										paramTypes[p] = TypeTokens.get().of(m.getGenericParameterTypes()[p]);
-								}
-							}
-							for (int a = 0; ok && a < option.size(); a++) {
-								int p = a;
-								TypeToken<?> paramType = p < paramTypes.length ? paramTypes[p] : paramTypes[paramTypes.length - 1];
-								if (!option.matchesType(a, paramType))
-									ok = false;
+								else
+									paramTypes[p] = TypeTokens.get().of(m.getGenericParameterTypes()[p]);
 							}
 						}
 					}
+					boolean ok = true;
+					boolean varArgs = false;
+					tva = TypeTokens.get().accumulate(impl.getMethodTypes(m), tvaResolver);
+					for (int a = 0; ok && a < option.size() - methodArgStart; a++) {
+						int ma = a - methodArgStart;
+						int p = ma < paramTypes.length ? ma : paramTypes.length - 1;
+						TypeToken<?> paramType = paramTypes[p];
+						if (p == paramTypes.length - 1 && m.isVarArgs()) {
+							// Test var-args invocation first
+							QonfigInterpretationException ex = null;
+							try {
+								TypeToken<?> ptComp = paramType.getComponentType();
+								varArgs = option.matchesType(a, ptComp);
+								if (varArgs && !tva.accumulate(ptComp, option.resolve(a)))
+									ok = false;
+							} catch (QonfigInterpretationException e) {
+								ex = e;
+							}
+							if (!varArgs && option.size() == paramTypes.length) { // Check for non-var-args invocation
+								if (option.matchesType(a, paramType)) {
+									if (!tva.accumulate(paramType, option.resolve(a)))
+										ok = false;
+								} else {
+									ok = false;
+									if (ex != null)
+										throw ex;
+								}
+							}
+						} else if (!option.matchesType(a, paramType))
+							ok = false;
+						else if (!tva.accumulate(paramType, option.resolve(a)))
+							ok = false;
+					}
 					if (ok) {
-						TypeToken<?> returnType;
-						if (!isStatic)
-							returnType = contextType.resolveType(impl.getReturnType(m));
-						else
-							returnType = TypeTokens.get().of(impl.getReturnType(m));
+						TypeToken<?> returnType = tva.resolve(impl.getReturnType(m));
 
 						if (!voidTarget && !TypeTokens.get().isAssignable(targetType, returnType))
 							throw new QonfigInterpretationException("Return type " + returnType + " of method "
@@ -461,6 +476,8 @@ public abstract class Invocation implements ObservableExpression {
 
 		Type getReturnType(M method);
 
+		TypeVariable<?>[] getMethodTypes(M method);
+
 		Object execute(M method, Object context, Object[] args)
 			throws IllegalAccessException, IllegalArgumentException, InvocationTargetException, InstantiationException;
 
@@ -475,6 +492,11 @@ public abstract class Invocation implements ObservableExpression {
 			@Override
 			public Type getReturnType(Method method) {
 				return method.getGenericReturnType();
+			}
+
+			@Override
+			public TypeVariable<?>[] getMethodTypes(Method method) {
+				return method.getTypeParameters();
 			}
 
 			@Override
@@ -503,6 +525,11 @@ public abstract class Invocation implements ObservableExpression {
 			@Override
 			public Type getReturnType(Constructor<?> method) {
 				return method.getDeclaringClass();
+			}
+
+			@Override
+			public TypeVariable<?>[] getMethodTypes(Constructor<?> method) {
+				return method.getDeclaringClass().getTypeParameters();
 			}
 
 			@Override
@@ -570,7 +597,8 @@ public abstract class Invocation implements ObservableExpression {
 					if (method.isVarArgs()) {
 						System.arraycopy(args, 1, parameters, 0, parameters.length - 1);
 						int lastArgLen = args.length - parameters.length;
-						Object lastArg = Array.newInstance(method.getParameterTypes()[parameters.length - 1], lastArgLen);
+						Object lastArg = Array.newInstance(method.getParameterTypes()[parameters.length - 1].getComponentType(),
+							lastArgLen);
 						System.arraycopy(args, parameters.length, lastArg, 0, lastArgLen);
 						parameters[parameters.length - 1] = lastArg;
 					} else
@@ -578,7 +606,7 @@ public abstract class Invocation implements ObservableExpression {
 				} else { // var args
 					System.arraycopy(args, 0, parameters, 0, parameters.length - 1);
 					int lastArgLen = args.length - parameters.length + 1;
-					Object lastArg = Array.newInstance(method.getParameterTypes()[parameters.length - 1], lastArgLen);
+					Object lastArg = Array.newInstance(method.getParameterTypes()[parameters.length - 1].getComponentType(), lastArgLen);
 					System.arraycopy(args, parameters.length - 1, lastArg, 0, lastArgLen);
 					parameters[parameters.length - 1] = lastArg;
 				}
