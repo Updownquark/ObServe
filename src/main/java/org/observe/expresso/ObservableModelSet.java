@@ -103,6 +103,11 @@ public interface ObservableModelSet {
 				public MV2 get(ModelSetInstance models) {
 					return map.apply(outer.get(models));
 				}
+
+				@Override
+				public String toString() {
+					return map + "(" + outer + ")";
+				}
 			};
 		}
 

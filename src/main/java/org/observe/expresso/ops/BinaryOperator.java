@@ -111,7 +111,8 @@ public class BinaryOperator implements ObservableExpression {
 		switch (types.size()) {
 		case 0:
 			throw new QonfigInterpretationException(
-				"Binary operator '" + theOperator + "' is not supported or implemented for left operand type " + left.getType().getType(0));
+				"Binary operator '" + theOperator + "' is not supported or implemented for left operand type " + left.getType().getType(0)
+				+ ", target type " + targetType.getName());
 		case 1:
 			targetOpType = TypeTokens.get().of(types.iterator().next());
 			break;
@@ -125,7 +126,7 @@ public class BinaryOperator implements ObservableExpression {
 		if (op == null)
 			throw new QonfigInterpretationException(
 				"Binary operator '" + theOperator + "' is not supported or implemented for operand types " + left.getType().getType(0)
-				+ " and " + right.getType().getType(0));
+					+ " and " + right.getType().getType(0) + ", target type " + targetType.getName());
 		TypeToken<Object> resultType = TypeTokens.get().of(op.getTargetType());
 		if (action) {
 			if (type.getModelType() != ModelTypes.Action)

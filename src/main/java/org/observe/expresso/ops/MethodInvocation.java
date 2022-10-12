@@ -65,16 +65,16 @@ public class MethodInvocation extends Invocation {
 		if (replacement != this)
 			return replacement;
 		ObservableExpression ctx = theContext == null ? null : theContext.replaceAll(replace);
-		List<? extends ObservableExpression> children = getChildren();
-		List<ObservableExpression> newChildren = new ArrayList<>(children.size());
+		List<ObservableExpression> args = getArguments();
+		List<ObservableExpression> newArgs = new ArrayList<>(args.size());
 		boolean different = ctx != theContext;
-		for (ObservableExpression child : children) {
-			ObservableExpression newChild = child.replaceAll(replace);
-			newChildren.add(newChild);
-			different |= newChild != child;
+		for (ObservableExpression arg : args) {
+			ObservableExpression newArg = arg.replaceAll(replace);
+			newArgs.add(newArg);
+			different |= newArg != arg;
 		}
 		if (different)
-			return new MethodInvocation(ctx, theMethodName, getTypeArguments(), Collections.unmodifiableList(newChildren));
+			return new MethodInvocation(ctx, theMethodName, getTypeArguments(), Collections.unmodifiableList(newArgs));
 		return this;
 	}
 

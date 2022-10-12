@@ -2225,6 +2225,8 @@ public class EntityReflector<E> {
 			theSuperFieldGetters.get(superIndex).add(theSuperMethodMappings.get(superIndex).get(field.getGetter().getMethodElement()));
 			if (field.getSetter() != null)
 				theSuperFieldSetters.get(superIndex).add(theSuperMethodMappings.get(superIndex).get(field.getSetter().getMethodElement()));
+			else
+				theSuperFieldSetters.get(superIndex).add(null);
 		}
 	}
 

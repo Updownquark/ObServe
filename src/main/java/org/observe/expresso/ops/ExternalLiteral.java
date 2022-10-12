@@ -3,6 +3,7 @@ package org.observe.expresso.ops;
 import java.text.ParseException;
 import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 import java.util.function.Function;
 
 import org.observe.ObservableValue;
@@ -96,9 +97,10 @@ public class ExternalLiteral implements ObservableExpression {
 	 */
 	public <T> ObservableValue<? extends T> parseValue(TypeToken<T> asType, ExpressoEnv env) throws QonfigInterpretationException {
 		// Get all parsers that may possibly be able to generate an appropriate value
-		List<NonStructuredParser> parsers = env.getNonStructuredParsers(TypeTokens.getRawType(asType));
+		Class<T> rawType = TypeTokens.getRawType(asType);
+		Set<NonStructuredParser> parsers = env.getNonStructuredParsers(rawType);
 		if (parsers.isEmpty())
-			throw new QonfigInterpretationException("No literal parsers available for type " + asType);
+			throw new QonfigInterpretationException("No literal parsers available for type " + rawType.getName());
 		NonStructuredParser parser = null;
 		for (NonStructuredParser p : parsers) {
 			if (p.canParse(asType, theText)) {
@@ -107,12 +109,12 @@ public class ExternalLiteral implements ObservableExpression {
 			}
 		}
 		if (parser == null)
-			throw new QonfigInterpretationException("No literal parsers for value `" + theText + "` as type " + asType);
+			throw new QonfigInterpretationException("No literal parsers for value `" + theText + "` as type " + rawType.getName());
 		ObservableValue<? extends T> value;
 		try {
 			value = parser.parse(asType, theText);
 		} catch (ParseException e) {
-			throw new QonfigInterpretationException("Literal parsing failed for value `" + theText + "` as type " + asType, e);
+			throw new QonfigInterpretationException("Literal parsing failed for value `" + theText + "` as type " + rawType.getName(), e);
 		}
 		return value;
 	}

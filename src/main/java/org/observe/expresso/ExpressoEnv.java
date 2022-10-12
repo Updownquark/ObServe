@@ -6,7 +6,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Collections;
 import java.util.LinkedHashSet;
-import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -14,7 +13,6 @@ import org.observe.expresso.ops.BinaryOperatorSet;
 import org.observe.expresso.ops.UnaryOperatorSet;
 import org.observe.util.TypeTokens;
 import org.qommons.ClassMap;
-import org.qommons.ClassMap.TypeMatch;
 import org.qommons.Colors;
 import org.qommons.TimeUtils;
 
@@ -73,8 +71,8 @@ public class ExpressoEnv {
 		return this;
 	}
 
-	public List<NonStructuredParser> getNonStructuredParsers(Class<?> type) {
-		return theNonStructuredParsers.getAll(type, TypeMatch.SUPER_TYPE).stream().flatMap(Set::stream).collect(Collectors.toList());
+	public Set<NonStructuredParser> getNonStructuredParsers(Class<?> type) {
+		return theNonStructuredParsers.getAll(type, null).stream().flatMap(Set::stream).collect(Collectors.toSet());
 	}
 
 	public ExpressoEnv withDefaultNonStructuredParsing() {
