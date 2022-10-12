@@ -1800,6 +1800,9 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 	 * @param <T> The result type of the transformation
 	 */
 	public interface Engine<S, T> extends ObservableValue<TransformationState> {
+		/** @return The cached transformation state in this engine */
+		TransformationState getCachedState();
+
 		/** @return The transformation definition of this engine */
 		Transformation<S, T> getTransformation();
 
@@ -2203,6 +2206,11 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 		@Override
 		public long getStamp() {
 			return Stamped.compositeStamp(theTransformation.getArgs());
+		}
+
+		@Override
+		public TransformationState getCachedState() {
+			return theCachedValues;
 		}
 
 		@Override

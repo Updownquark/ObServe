@@ -960,7 +960,10 @@ public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>,
 		 * @return A tuple containing the current transformed element and transformation state of the engine
 		 */
 		protected BiTuple<TransformedElement<S, T>, TransformationState> getState() {
+			Transformation.TransformationState cachedState = theEngine.getCachedState();
 			Transformation.TransformationState state = theEngine.get();
+			if (state != cachedState)
+				theElement.transformationStateChanged(cachedState, state);
 			if (!theObservers.isEmpty() || !theTransformation.isCached())
 				return new BiTuple<>(theElement, state);
 			long stamp = theSource.getStamp();
@@ -969,8 +972,9 @@ public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>,
 					stamp = theSource.getStamp();
 					theSourceStamp = stamp;
 					S source = theSource.get();
+					S oldSource = theCachedSource;
 					theCachedSource = source;
-					theElement.sourceChanged(theCachedSource, source, theEngine.get());
+					theElement.sourceChanged(oldSource, source, theEngine.get());
 				}
 			}
 			return new BiTuple<>(theElement, state);
