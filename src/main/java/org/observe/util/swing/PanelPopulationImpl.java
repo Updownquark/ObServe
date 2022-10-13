@@ -52,6 +52,7 @@ import javax.swing.JComponent;
 import javax.swing.JDialog;
 import javax.swing.JLabel;
 import javax.swing.JList;
+import javax.swing.JMenu;
 import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
@@ -110,7 +111,7 @@ import org.observe.util.swing.PanelPopulation.ToggleEditor;
 import org.observe.util.swing.PanelPopulation.TreeEditor;
 import org.observe.util.swing.PanelPopulation.TreeTableEditor;
 import org.observe.util.swing.PanelPopulation.WindowBuilder;
-import org.observe.util.swing.WindowPopulation.AbstractMenuBuilder;
+import org.observe.util.swing.WindowPopulation.JMenuBuilder;
 import org.qommons.BiTuple;
 import org.qommons.Identifiable;
 import org.qommons.Identifiable.AbstractIdentifiable;
@@ -581,7 +582,7 @@ class PanelPopulationImpl {
 
 		protected Consumer<FontAdjuster<?>> theFont;
 		private ObservableValue<Boolean> isVisible;
-		private Consumer<MenuBuilder<?>> thePopupMenu;
+		private Consumer<MenuBuilder<JPopupMenu, ?>> thePopupMenu;
 
 		AbstractComponentEditor(String fieldName, E editor, Observable<?> until) {
 			theFieldName = fieldName == null ? null : ObservableValue.of(fieldName);
@@ -732,7 +733,7 @@ class PanelPopulationImpl {
 		}
 
 		@Override
-		public P withPopupMenu(Consumer<MenuBuilder<?>> menu) {
+		public P withPopupMenu(Consumer<MenuBuilder<JPopupMenu, ?>> menu) {
 			thePopupMenu = menu;
 			return (P) this;
 		}
@@ -798,41 +799,81 @@ class PanelPopulationImpl {
 			decorated = true;
 			if (theName != null)
 				c.setName(theName);
-			class JPMBuilder extends AbstractMenuBuilder<JPMBuilder> {
-				private final JPopupMenu popup = new JPopupMenu();
+			class JPMBuilder extends AbstractComponentEditor<JPopupMenu, JPMBuilder> implements MenuBuilder<JPopupMenu, JPMBuilder> {
+				ObservableValue<String> theDisablement;
 
 				public JPMBuilder(Observable<?> until) {
-					super(until);
+					super(null, new JPopupMenu(), until);
 				}
 
 				@Override
-				protected JComponent getComponent() {
-					return popup;
+				public JPMBuilder withText(ObservableValue<String> text) {
+					System.err.println("Text cannot be set for a popup menu");
+					return this;
 				}
 
 				@Override
-				protected void setText(String text) {
-					// No text on a popup menu
+				public JPMBuilder disableWith(ObservableValue<String> disabled) {
+					if (theDisablement == null)
+						theDisablement = disabled;
+					else
+						theDisablement = ObservableValue.firstValue(TypeTokens.get().STRING, e -> e != null, null, theDisablement,
+						disabled);
+					return this;
 				}
 
 				@Override
-				protected void setIcon(Icon icon) {
-					// No icon on a popup menu
+				public JPMBuilder withPostLabel(ObservableValue<String> postLabel) {
+					System.err.println("Post label cannot be set for a popup menu");
+					return this;
 				}
 
 				@Override
-				protected int getMenuComponentCount() {
-					return popup.getComponentCount();
+				public JPMBuilder withPostButton(String buttonText, ObservableAction<?> action, Consumer<ButtonEditor<JButton, ?>> modify) {
+					System.err.println("Post Button cannot be set for a popup menu");
+					return this;
 				}
 
 				@Override
-				protected Component getMenuComponent(int i) {
-					return popup.getComponent(i);
+				public JPMBuilder withIcon(ObservableValue<? extends Icon> icon) {
+					System.err.println("Icon not supported for a popup menu");
+					return this;
 				}
 
 				@Override
-				protected void add(JMenuItem item) {
-					popup.add(item);
+				protected Component createPostLabel(Observable<?> until) {
+					return null;
+				}
+
+				@Override
+				public JPMBuilder withSubMenu(String name, Consumer<MenuBuilder<JMenu, ?>> subMenu) {
+					JMenu jmenu = null;
+					for (int m = 0; m < getEditor().getComponentCount(); m++) {
+						if (getEditor().getComponent(m) instanceof JMenu && ((JMenu) getEditor().getComponent(m)).getText().equals(name)) {
+							jmenu = (JMenu) getEditor().getComponent(m);
+							break;
+						}
+					}
+					boolean found = jmenu != null;
+					if (!found)
+						jmenu = new JMenu(name);
+					JMenuBuilder<?> builder = new JMenuBuilder<>(jmenu, getUntil());
+					subMenu.accept(builder);
+					if (!found)
+						getEditor().add((JMenu) builder.getComponent());
+					return this;
+				}
+
+				@Override
+				public JPMBuilder withAction(String name, ObservableAction<?> action, Consumer<ButtonEditor<JMenuItem, ?>> ui) {
+					JMenuItem item = new JMenuItem(name);
+					ButtonEditor<JMenuItem, ?> button = new PanelPopulationImpl.SimpleButtonEditor<>(name, item, name, action, false,
+						getUntil());
+					if (ui != null) {
+						ui.accept(button);
+					}
+					getEditor().add((JMenuItem) button.getComponent());
+					return this;
 				}
 			}
 			JPMBuilder menuBuilder;
@@ -840,7 +881,7 @@ class PanelPopulationImpl {
 			if (thePopupMenu != null) {
 				menuBuilder = new JPMBuilder(getUntil());
 				thePopupMenu.accept(menuBuilder);
-				popup = (JPopupMenu) menuBuilder.install();
+				popup = (JPopupMenu) menuBuilder.createComponent();
 			} else {
 				menuBuilder = null;
 				popup = null;
@@ -853,9 +894,7 @@ class PanelPopulationImpl {
 						if (theMouseListener != null)
 							theMouseListener.accept(e);
 						if (popup != null //
-							&& e.getClickCount() == 1 && SwingUtilities.isRightMouseButton(e)//
-							&& (menuBuilder.getVisibility() == null || menuBuilder.getVisibility().get())//
-							&& (menuBuilder.getDisabled() == null || menuBuilder.getDisabled().get() == null)) {
+							&& e.getClickCount() == 1 && SwingUtilities.isRightMouseButton(e)) {
 							boolean anyActionsVisible = false;
 							for (Component item : popup.getComponents()) {
 								if (item.isVisible()) {
@@ -1354,6 +1393,7 @@ class PanelPopulationImpl {
 			super(fieldName, button, until);
 			theAction = action;
 			theText = ObservableValue.of(TypeTokens.get().STRING, buttonText);
+			theDisablement = action == null ? null : action.isEnabled();
 			isPostButton = postButton;
 		}
 
@@ -1401,9 +1441,7 @@ class PanelPopulationImpl {
 					theAction.isEnabled());
 				else
 					enabled = theDisablement;
-			} else if (theAction != null)
-				enabled = theAction.isEnabled();
-			else
+			} else
 				enabled = ObservableValue.of(String.class, null);
 			enabled.combine((e, tt) -> e == null ? tt : e, getTooltip()).changes().takeUntil(getUntil())
 			.act(evt -> getEditor().setToolTipText(evt.getNewValue()));
@@ -2691,8 +2729,9 @@ class PanelPopulationImpl {
 			private final List<R> theActionItems;
 
 			ListItemAction(String actionName, Consumer<? super List<? extends R>> action, Supplier<List<R>> selectedValues) {
-				super(actionName, SimpleListBuilder.this, action, selectedValues);
+				super(actionName, SimpleListBuilder.this, action, selectedValues, false);
 				theActionItems = new ArrayList<>();
+				displayAsPopup(false);
 			}
 
 			@Override
@@ -2739,6 +2778,12 @@ class PanelPopulationImpl {
 		@Override
 		public P withAdd(Supplier<? extends R> creator, Consumer<DataAction<R, ?>> actionMod) {
 			throw new UnsupportedOperationException("Not implemented yet");
+		}
+
+		@Override
+		public P withActionsOnTop(boolean actionsOnTop) {
+			System.err.println("List.actionsOnTop unsupported");
+			return (P) this;
 		}
 
 		private CollectionElement<R> findElement(R value) {
@@ -2956,7 +3001,7 @@ class PanelPopulationImpl {
 				}
 
 				@Override
-				public P2 withPopupMenu(Consumer<MenuBuilder<?>> menu) {
+				public P2 withPopupMenu(Consumer<MenuBuilder<JPopupMenu, ?>> menu) {
 					System.err.println("Popup menu is not supported on a list action");
 					return (P2) this;
 				}
@@ -3072,6 +3117,8 @@ class PanelPopulationImpl {
 		private Function<? super R, String> theEnablement;
 		private Function<? super List<? extends R>, String> theMultiEnablement;
 		private Function<? super List<? extends R>, String> theTooltip;
+		private boolean isButton;
+		private boolean isPopup;
 		private boolean zeroAllowed;
 		private boolean multipleAllowed;
 		private boolean actWhenAnyEnabled;
@@ -3082,7 +3129,7 @@ class PanelPopulationImpl {
 		Consumer<ButtonEditor<?, ?>> theButtonMod;
 
 		SimpleDataAction(String actionName, CollectionWidgetBuilder<R, ?, ?> widget, Consumer<? super List<? extends R>> action,
-			Supplier<List<R>> selectedValues) {
+			Supplier<List<R>> selectedValues, boolean defaultAsButton) {
 			theWidget = widget;
 			theActionName = actionName;
 			theAction = action;
@@ -3110,6 +3157,11 @@ class PanelPopulationImpl {
 			};
 			isDisplayedWhenDisabled = true;
 			multipleAllowed = true;
+			isButton = defaultAsButton;
+			isPopup = !defaultAsButton;
+			EventQueue.invokeLater(() -> {
+				updateSelection(selectedValues.get(), null);
+			});
 		}
 
 		public String isEnabled() {
@@ -3129,6 +3181,18 @@ class PanelPopulationImpl {
 		@Override
 		public boolean isDisplayedWhenDisabled() {
 			return isDisplayedWhenDisabled;
+		}
+
+		@Override
+		public A displayAsButton(boolean button) {
+			isButton = button;
+			return (A) this;
+		}
+
+		@Override
+		public A displayAsPopup(boolean popup) {
+			isPopup = popup;
+			return (A) this;
 		}
 
 		@Override
@@ -3282,6 +3346,16 @@ class PanelPopulationImpl {
 					}
 				};
 			});
+		}
+
+		@Override
+		public boolean isButton() {
+			return isButton;
+		}
+
+		@Override
+		public boolean isPopup() {
+			return isPopup;
 		}
 
 		@Override

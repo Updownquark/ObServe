@@ -28,16 +28,19 @@ import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
-import javax.swing.AbstractButton;
 import javax.swing.Box;
 import javax.swing.Icon;
 import javax.swing.ImageIcon;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
+import javax.swing.JComponent;
 import javax.swing.JDialog;
 import javax.swing.JLabel;
+import javax.swing.JMenu;
+import javax.swing.JMenuItem;
 import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
 import javax.swing.JProgressBar;
 import javax.swing.JRadioButton;
 import javax.swing.JScrollPane;
@@ -424,7 +427,7 @@ public class PanelPopulation {
 			return (P) this;
 		}
 
-		P withPopupMenu(Consumer<MenuBuilder<?>> menu);
+		P withPopupMenu(Consumer<MenuBuilder<JPopupMenu, ?>> menu);
 
 		P onMouse(Consumer<MouseEvent> onMouse);
 
@@ -516,7 +519,7 @@ public class PanelPopulation {
 		I withIcon(ObservableValue<? extends Icon> icon);
 	}
 
-	public interface ButtonEditor<B extends AbstractButton, P extends ButtonEditor<B, P>> extends FieldEditor<B, P>, Iconized<P> {
+	public interface ButtonEditor<B extends JComponent, P extends ButtonEditor<B, P>> extends FieldEditor<B, P>, Iconized<P> {
 		default P withText(String text) {
 			return withText(text == null ? null : ObservableValue.of(text));
 		}
@@ -727,6 +730,8 @@ public class PanelPopulation {
 		P withItemName(String itemName);
 
 		String getItemName();
+
+		P withActionsOnTop(boolean actionsOnTop);
 	}
 
 	public interface ListWidgetBuilder<R, C extends Component, P extends ListWidgetBuilder<R, C, P>> {
@@ -826,8 +831,6 @@ public class PanelPopulation {
 		P dragAcceptRow(Consumer<? super Dragging.TransferAccepter<R, R, R>> accept);
 
 		P withMouseListener(ObservableTableModel.RowMouseListener<? super R> listener);
-
-		P withActionsOnTop(boolean actionsOnTop);
 	}
 
 	public interface DataAction<R, A extends DataAction<R, A>> {
@@ -858,6 +861,24 @@ public class PanelPopulation {
 		 * @return This action
 		 */
 		A displayWhenDisabled(boolean display);
+
+		/**
+		 * @param button Whether this action should be available as a button in a panel adjacent to the widget
+		 * @return This action
+		 */
+		A displayAsButton(boolean button);
+
+		/**
+		 * @param popup Whether this action should be available as a menu item in a popup menu, typically accessed via right-click
+		 * @return This action
+		 */
+		A displayAsPopup(boolean popup);
+
+		/** @return Whether this action should be available as a button in a panel adjacent to the widget */
+		boolean isButton();
+
+		/** @return Whether this action should be available as a menu item in a popup menu, typically accessed via right-click */
+		boolean isPopup();
 
 		boolean isAllowedForMultiple();
 
@@ -1110,27 +1131,21 @@ public class PanelPopulation {
 		P withModality(ObservableValue<ModalityType> modality);
 	}
 
-	public interface UiAction<A extends UiAction<A>> extends Iconized<A>, Tooltipped<A> {
-		A visibleWhen(ObservableValue<Boolean> visible);
+	public interface MenuBuilder<B extends JComponent, M extends MenuBuilder<B, M>> extends ButtonEditor<B, M> {
+		M withAction(String name, ObservableAction<?> action, Consumer<ButtonEditor<JMenuItem, ?>> ui);
 
-		A decorate(Consumer<ComponentDecorator> decoration);
+		default M withAction(String name, Consumer<Object> action, Consumer<ButtonEditor<JMenuItem, ?>> ui) {
+			return withAction(name, ObservableAction.of(TypeTokens.get().VOID, cause -> {
+				action.accept(cause);
+				return null;
+			}), ui);
+		}
 
-		A disableWith(ObservableValue<String> disabled);
-
-		@Override
-		A withTooltip(ObservableValue<String> tooltip);
-
-		A withText(ObservableValue<String> text);
-	}
-
-	public interface MenuBuilder<M extends MenuBuilder<M>> extends UiAction<M> {
-		M withAction(String name, Consumer<Object> action, Consumer<UiAction<?>> ui);
-
-		M withSubMenu(String name, Consumer<MenuBuilder<?>> subMenu);
+		M withSubMenu(String name, Consumer<MenuBuilder<JMenu, ?>> subMenu);
 	}
 
 	public interface MenuBarBuilder<M extends MenuBarBuilder<M>> {
-		M withMenu(String menuName, Consumer<MenuBuilder<?>> menu);
+		M withMenu(String menuName, Consumer<MenuBuilder<JMenu, ?>> menu);
 	}
 
 	public interface ComboButtonBuilder<F, B extends ComboButton<F>, P extends ComboButtonBuilder<F, B, P>> extends ButtonEditor<B, P> {

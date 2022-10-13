@@ -202,9 +202,14 @@ public class ObservableTableModel<R> implements TableModel {
 
 	@Override
 	public void setValueAt(Object aValue, int rowIndex, int columnIndex) {
+		// These index checks aren't normally needed, but I've seen this called with higher row indexes and I'm not sure why
+		if (columnIndex >= theColumnModel.getSize())
+			return;
 		CategoryRenderStrategy<? super R, Object> column = (CategoryRenderStrategy<? super R, Object>) theColumnModel
 			.getElementAt(columnIndex);
 		try (Transaction t = theRows.lock(true, null)) {
+			if (rowIndex >= theRows.size())
+				return;
 			MutableCollectionElement<R> rowElement = theRows.mutableElement(theRows.getElement(rowIndex).getElementId());
 			column.getMutator().mutate(rowElement, aValue);
 		}

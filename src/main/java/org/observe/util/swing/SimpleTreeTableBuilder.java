@@ -1,11 +1,10 @@
 package org.observe.util.swing;
 
+import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.datatransfer.Transferable;
 import java.awt.dnd.InvalidDnDOperationException;
-import java.awt.event.MouseAdapter;
-import java.awt.event.MouseEvent;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -18,11 +17,9 @@ import javax.swing.BoundedRangeModel;
 import javax.swing.DropMode;
 import javax.swing.Icon;
 import javax.swing.JComponent;
-import javax.swing.JMenuItem;
-import javax.swing.JPopupMenu;
+import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTable;
-import javax.swing.SwingUtilities;
 import javax.swing.TransferHandler;
 import javax.swing.event.ChangeEvent;
 import javax.swing.event.ChangeListener;
@@ -42,8 +39,8 @@ import org.observe.util.TypeTokens;
 import org.observe.util.swing.PanelPopulation.DataAction;
 import org.observe.util.swing.PanelPopulation.TreeTableEditor;
 import org.observe.util.swing.PanelPopulationImpl.AbstractComponentEditor;
-import org.observe.util.swing.PanelPopulationImpl.SimpleButtonEditor;
 import org.observe.util.swing.PanelPopulationImpl.SimpleDataAction;
+import org.observe.util.swing.PanelPopulationImpl.SimpleHPanel;
 import org.qommons.LambdaUtils;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
@@ -94,6 +91,7 @@ implements TreeTableEditor<F, P> {
 	private ObservableCollection<F> theValueMultiSelection;
 	private ObservableCollection<BetterList<F>> thePathMultiSelection;
 	private List<SimpleDataAction<BetterList<F>, ?>> theActions;
+	private boolean theActionsOnTop;
 
 	private Function<? super F, String> theNameFunction;
 	private CategoryRenderStrategy<BetterList<F>, F> theTreeColumn;
@@ -116,6 +114,7 @@ implements TreeTableEditor<F, P> {
 		theActions = new ArrayList<>();
 		theTreeColumn = new CategoryRenderStrategy<>("Tree", root.getType(),
 			LambdaUtils.printableFn(BetterList::getLast, "BetterList::getLast", null));
+		theActionsOnTop = true;
 	}
 
 	class PPTreeModel extends ObservableTreeModel<F> {
@@ -156,9 +155,15 @@ implements TreeTableEditor<F, P> {
 	@Override
 	public P withMultiAction(String actionName, Consumer<? super List<? extends BetterList<F>>> action,
 		Consumer<DataAction<BetterList<F>, ?>> actionMod) {
-		SimpleDataAction<BetterList<F>, ?> ta = new SimpleDataAction<>(actionName, this, action, this::getSelection);
+		SimpleDataAction<BetterList<F>, ?> ta = new SimpleDataAction<>(actionName, this, action, this::getSelection, true);
 		actionMod.accept(ta);
 		theActions.add(ta);
+		return (P) this;
+	}
+
+	@Override
+	public P withActionsOnTop(boolean actionsOnTop) {
+		theActionsOnTop = actionsOnTop;
 		return (P) this;
 	}
 
@@ -449,38 +454,41 @@ implements TreeTableEditor<F, P> {
 		if (isSingleSelection)
 			getEditor().getSelectionModel().setSelectionMode(TreeSelectionModel.SINGLE_TREE_SELECTION);
 
+		Component comp = scroll;
 		if (!theActions.isEmpty()) {
-			JPopupMenu popup = new JPopupMenu();
 			SimpleDataAction<BetterList<F>, ?>[] actions = theActions.toArray(new SimpleDataAction[theActions.size()]);
-			JMenuItem[] actionMenuItems = new JMenuItem[actions.length];
-			for (int a = 0; a < actions.length; a++) {
-				actionMenuItems[a] = new JMenuItem();
-				SimpleDataAction<BetterList<F>, ?> action = actions[a];
-				SimpleButtonEditor<?, ?> buttonEditor = new SimpleButtonEditor<>(null, actionMenuItems[a], null, action.theObservableAction,
-					false, getUntil());
-				if (action.theButtonMod != null)
-					action.theButtonMod.accept(buttonEditor);
-				buttonEditor.getComponent();
-			}
 			getEditor().getTreeSelectionModel().addTreeSelectionListener(evt -> {
 				List<BetterList<F>> selection = getSelection();
 				for (SimpleDataAction<BetterList<F>, ?> action : actions)
 					action.updateSelection(selection, evt);
 			});
-			getEditor().addMouseListener(new MouseAdapter() {
-				@Override
-				public void mouseClicked(MouseEvent evt) {
-					if (!SwingUtilities.isRightMouseButton(evt))
-						return;
-					popup.removeAll();
-					for (int a = 0; a < actions.length; a++) {
-						if (actions[a].isEnabled() == null)
-							popup.add(actionMenuItems[a]);
+			boolean hasPopups = false, hasButtons = false;
+			for (SimpleDataAction<BetterList<F>, ?> action : actions) {
+				if (action.isPopup())
+					hasPopups = true;
+				if (action.isButton())
+					hasButtons = true;
+			}
+			if (hasPopups) {
+				withPopupMenu(popupMenu -> {
+					for (SimpleDataAction<BetterList<F>, ?> action : actions) {
+						if (action.isPopup())
+							popupMenu.withAction("Action", action.theObservableAction, action::modifyButtonEditor);
 					}
-					if (popup.getComponentCount() > 0)
-						popup.show(getEditor(), evt.getX(), evt.getY());
+				});
+			}
+			if (hasButtons) {
+				SimpleHPanel<JPanel, ?> buttonPanel = new SimpleHPanel<>(null,
+					new JPanel(new JustifiedBoxLayout(false).setMainAlignment(JustifiedBoxLayout.Alignment.LEADING)), getUntil());
+				for (SimpleDataAction<BetterList<F>, ?> action : actions) {
+					if (((SimpleDataAction<?, ?>) action).isButton())
+						((SimpleDataAction<BetterList<F>, ?>) action).addButton(buttonPanel);
 				}
-			});
+				JPanel treePanel = new JPanel(new BorderLayout());
+				treePanel.add(buttonPanel.getComponent(), theActionsOnTop ? BorderLayout.NORTH : BorderLayout.SOUTH);
+				treePanel.add(scroll, BorderLayout.CENTER);
+				comp = treePanel;
+			}
 		}
 		table.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
 
@@ -500,8 +508,7 @@ implements TreeTableEditor<F, P> {
 			table.setTransferHandler(handler);
 		}
 
-		JScrollPane scroll2 = new JScrollPane(getEditor());
-		return scroll2;
+		return decorate(comp);
 	}
 
 	class TreeTableBuilderTransferHandler extends TransferHandler {

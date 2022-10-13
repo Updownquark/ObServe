@@ -15,8 +15,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
 
-import javax.swing.Icon;
-import javax.swing.JComponent;
 import javax.swing.JDialog;
 import javax.swing.JFrame;
 import javax.swing.JMenu;
@@ -26,18 +24,18 @@ import javax.swing.RootPaneContainer;
 import javax.swing.WindowConstants;
 
 import org.observe.Observable;
+import org.observe.ObservableAction;
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.SimpleObservable;
 import org.observe.util.TypeTokens;
+import org.observe.util.swing.PanelPopulation.ButtonEditor;
 import org.observe.util.swing.PanelPopulation.DialogBuilder;
-import org.observe.util.swing.PanelPopulation.Iconized;
 import org.observe.util.swing.PanelPopulation.MenuBarBuilder;
 import org.observe.util.swing.PanelPopulation.MenuBuilder;
 import org.observe.util.swing.PanelPopulation.PanelPopulator;
-import org.observe.util.swing.PanelPopulation.Tooltipped;
-import org.observe.util.swing.PanelPopulation.UiAction;
 import org.observe.util.swing.PanelPopulation.WindowBuilder;
+import org.observe.util.swing.PanelPopulationImpl.SimpleButtonEditor;
 import org.qommons.BreakpointHere;
 import org.qommons.Causable;
 import org.qommons.Transaction;
@@ -421,7 +419,7 @@ public class WindowPopulation {
 		}
 
 		@Override
-		public M withMenu(String menuName, Consumer<MenuBuilder<?>> menu) {
+		public M withMenu(String menuName, Consumer<MenuBuilder<JMenu, ?>> menu) {
 			JMenu jmenu = null;
 			for (int m = 0; m < theMenuBar.getMenuCount(); m++) {
 				if (theMenuBar.getMenu(m).getText().equals(menuName)) {
@@ -434,203 +432,45 @@ public class WindowPopulation {
 				jmenu = new JMenu(menuName);
 			JMenuBuilder<?> builder = new JMenuBuilder<>(jmenu, theUntil);
 			menu.accept(builder);
-			builder.install();
 			if (!found)
-				theMenuBar.add(jmenu);
+				theMenuBar.add((JMenu) builder.getComponent());
 			return (M) this;
 		}
 	}
 
-	static abstract class AbstractMenuThingBuilder<M extends AbstractMenuThingBuilder<M>> implements Iconized<M>, Tooltipped<M> {
-		protected final Observable<?> theUntil;
-		private ObservableValue<Boolean> theVisibility;
-		private ObservableValue<String> theDisabled;
-		private ObservableValue<String> theText;
-		private ObservableValue<String> theTooltip;
-		private ObservableValue<? extends Icon> theIcon;
-
-		AbstractMenuThingBuilder(Observable<?> until) {
-			theUntil = until;
-		}
-
-		protected abstract JComponent getComponent();
-
-		protected abstract void setText(String text);
-
-		protected abstract void setIcon(Icon icon);
-
-		@Override
-		public M withIcon(ObservableValue<? extends Icon> icon) {
-			theIcon = icon;
-			return (M) this;
-		}
-
-		public M visibleWhen(ObservableValue<Boolean> visible) {
-			theVisibility = visible;
-			return (M) this;
-		}
-
-		public M decorate(Consumer<ComponentDecorator> decoration) {
-			ComponentDecorator deco = new ComponentDecorator();
-			decoration.accept(deco);
-			deco.decorate(getComponent());
-			return (M) this;
-		}
-
-		public M disableWith(ObservableValue<String> disabled) {
-			theDisabled = disabled;
-			return (M) this;
+	static class JMenuBuilder<M extends JMenuBuilder<M>> extends SimpleButtonEditor<JMenu, M> implements MenuBuilder<JMenu, M> {
+		public JMenuBuilder(JMenu button, Observable<?> until) {
+			super((String) null, button, button.getText(), ObservableAction.nullAction(TypeTokens.get().VOID, null), false, until);
 		}
 
 		@Override
-		public M withTooltip(ObservableValue<String> tooltip) {
-			theTooltip = tooltip;
-			return (M) this;
-		}
-
-		public M withText(ObservableValue<String> text) {
-			theText = text;
-			return (M) this;
-		}
-
-		public ObservableValue<Boolean> getVisibility() {
-			return theVisibility;
-		}
-
-		public ObservableValue<String> getDisabled() {
-			return theDisabled;
-		}
-
-		JComponent install() {
-			JComponent c = getComponent();
-			if (theVisibility != null)
-				theVisibility.changes().takeUntil(theUntil).act(evt -> c.setVisible(evt.getNewValue()));
-			if (theDisabled != null)
-				theDisabled.changes().takeUntil(theUntil).act(evt -> c.setEnabled(evt.getNewValue() == null));
-			if (theText != null)
-				theText.changes().takeUntil(theUntil).act(evt -> setText(evt.getNewValue()));
-			if (theIcon != null)
-				theIcon.changes().takeUntil(theUntil).act(evt -> setIcon(evt.getNewValue()));
-			ObservableValue<String> tooltip;
-			if (theDisabled != null) {
-				if (theTooltip != null)
-					tooltip = ObservableValue.firstValue(TypeTokens.get().STRING, s -> s != null, () -> null, theDisabled, theTooltip);
-				else
-					tooltip = theDisabled;
-			} else
-				tooltip = theTooltip;
-			if (tooltip != null)
-				tooltip.changes().takeUntil(theUntil).act(evt -> c.setToolTipText(evt.getNewValue()));
-			return c;
-		}
-	}
-
-	static abstract class AbstractMenuBuilder<M extends AbstractMenuBuilder<M>> extends AbstractMenuThingBuilder<M>
-	implements MenuBuilder<M> {
-		protected abstract int getMenuComponentCount();
-
-		protected abstract Component getMenuComponent(int i);
-
-		protected abstract void add(JMenuItem item);
-
-		AbstractMenuBuilder(Observable<?> until) {
-			super(until);
-		}
-
-		@Override
-		public M withSubMenu(String name, Consumer<MenuBuilder<?>> subMenu) {
+		public M withSubMenu(String name, Consumer<MenuBuilder<JMenu, ?>> subMenu) {
 			JMenu jmenu = null;
-			for (int m = 0; m < getMenuComponentCount(); m++) {
-				if (getMenuComponent(m) instanceof JMenu && ((JMenu) getMenuComponent(m)).getText().equals(name)) {
-					jmenu = (JMenu) getMenuComponent(m);
+			for (int m = 0; m < getEditor().getItemCount(); m++) {
+				if (getEditor().getItem(m) instanceof JMenu && ((JMenu) getEditor().getItem(m)).getText().equals(name)) {
+					jmenu = (JMenu) getEditor().getItem(m);
 					break;
 				}
 			}
 			boolean found = jmenu != null;
 			if (!found)
 				jmenu = new JMenu(name);
-			JMenuBuilder<?> builder = new JMenuBuilder<>(jmenu, theUntil);
+			JMenuBuilder<?> builder = new JMenuBuilder<>(jmenu, getUntil());
 			subMenu.accept(builder);
-			builder.install();
 			if (!found)
-				add(jmenu);
+				getEditor().add((JMenu) builder.getComponent());
 			return (M) this;
 		}
 
 		@Override
-		public M withAction(String name, Consumer<Object> action, Consumer<UiAction<?>> ui) {
+		public M withAction(String name, ObservableAction<?> action, Consumer<ButtonEditor<JMenuItem, ?>> ui) {
 			JMenuItem item = new JMenuItem(name);
-			item.addActionListener(evt -> action.accept(evt));
+			ButtonEditor<JMenuItem, ?> button = new PanelPopulationImpl.SimpleButtonEditor<>(name, item, name, action, false, getUntil());
 			if (ui != null) {
-				JMenuItemBuilder<?> itemBuilder = new JMenuItemBuilder<>(item, theUntil);
-				ui.accept(itemBuilder);
-				itemBuilder.install();
+				ui.accept(button);
 			}
-			add(item);
+			getEditor().add((JMenuItem) button.getComponent());
 			return (M) this;
-		}
-	}
-
-	static class JMenuBuilder<M extends JMenuBuilder<M>> extends AbstractMenuBuilder<M> {
-		private final JMenu theMenu;
-
-		JMenuBuilder(JMenu menu, Observable<?> until) {
-			super(until);
-			theMenu = menu;
-		}
-
-		@Override
-		protected int getMenuComponentCount() {
-			return theMenu.getMenuComponentCount();
-		}
-
-		@Override
-		protected Component getMenuComponent(int i) {
-			return theMenu.getMenuComponent(i);
-		}
-
-		@Override
-		protected void add(JMenuItem item) {
-			theMenu.add(item);
-		}
-
-		@Override
-		protected JComponent getComponent() {
-			return theMenu;
-		}
-
-		@Override
-		protected void setText(String text) {
-			theMenu.setText(text);
-		}
-
-		@Override
-		protected void setIcon(Icon icon) {
-			theMenu.setIcon(icon);
-		}
-	}
-
-	static class JMenuItemBuilder<M extends JMenuItemBuilder<M>> extends AbstractMenuThingBuilder<M> implements UiAction<M> {
-		private final JMenuItem theItem;
-
-		JMenuItemBuilder(JMenuItem item, Observable<?> until) {
-			super(until);
-			theItem = item;
-		}
-
-		@Override
-		protected JComponent getComponent() {
-			return theItem;
-		}
-
-		@Override
-		protected void setText(String text) {
-			theItem.setText(text);
-		}
-
-		@Override
-		protected void setIcon(Icon icon) {
-			theItem.setIcon(icon);
 		}
 	}
 }

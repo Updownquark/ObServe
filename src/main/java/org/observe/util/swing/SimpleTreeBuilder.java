@@ -1,5 +1,6 @@
 package org.observe.util.swing;
 
+import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
@@ -12,11 +13,9 @@ import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
-import javax.swing.JMenuItem;
-import javax.swing.JPopupMenu;
+import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTree;
-import javax.swing.SwingUtilities;
 import javax.swing.tree.TreeCellRenderer;
 import javax.swing.tree.TreePath;
 import javax.swing.tree.TreeSelectionModel;
@@ -30,8 +29,8 @@ import org.observe.util.TypeTokens;
 import org.observe.util.swing.PanelPopulation.DataAction;
 import org.observe.util.swing.PanelPopulation.TreeEditor;
 import org.observe.util.swing.PanelPopulationImpl.AbstractComponentEditor;
-import org.observe.util.swing.PanelPopulationImpl.SimpleButtonEditor;
 import org.observe.util.swing.PanelPopulationImpl.SimpleDataAction;
+import org.observe.util.swing.PanelPopulationImpl.SimpleHPanel;
 import org.qommons.LambdaUtils;
 import org.qommons.ThreadConstraint;
 import org.qommons.collect.BetterList;
@@ -60,6 +59,7 @@ public class SimpleTreeBuilder<F, P extends SimpleTreeBuilder<F, P>> extends Abs
 	private ObservableCollection<F> theValueMultiSelection;
 	private ObservableCollection<BetterList<F>> thePathMultiSelection;
 	private List<SimpleDataAction<BetterList<F>, ?>> theActions;
+	private boolean theActionsOnTop;
 
 	private SimpleTreeBuilder(ObservableValue<? extends F> root, ObservableTreeModel<F> model, Observable<?> until) {
 		super(null, new JTree(model), until);
@@ -67,6 +67,7 @@ public class SimpleTreeBuilder<F, P extends SimpleTreeBuilder<F, P>> extends Abs
 			LambdaUtils.printableFn(BetterList::getLast, "BetterList::getLast", null));
 		theRoot = root;
 		theActions = new ArrayList<>();
+		theActionsOnTop = true;
 	}
 
 	static abstract class PPTreeModel<F> extends ObservableTreeModel<F> {
@@ -138,9 +139,15 @@ public class SimpleTreeBuilder<F, P extends SimpleTreeBuilder<F, P>> extends Abs
 	@Override
 	public P withMultiAction(String actionName, Consumer<? super List<? extends BetterList<F>>> action,
 		Consumer<DataAction<BetterList<F>, ?>> actionMod) {
-		SimpleDataAction<BetterList<F>, ?> ta = new SimpleDataAction<>(actionName, this, action, this::getSelection);
+		SimpleDataAction<BetterList<F>, ?> ta = new SimpleDataAction<>(actionName, this, action, this::getSelection, false);
 		actionMod.accept(ta);
 		theActions.add(ta);
+		return (P) this;
+	}
+
+	@Override
+	public P withActionsOnTop(boolean actionsOnTop) {
+		theActionsOnTop = actionsOnTop;
 		return (P) this;
 	}
 
@@ -278,41 +285,44 @@ public class SimpleTreeBuilder<F, P extends SimpleTreeBuilder<F, P>> extends Abs
 			getEditor().getSelectionModel().setSelectionMode(TreeSelectionModel.SINGLE_TREE_SELECTION);
 
 		getEditor().setExpandsSelectedPaths(true);
+		JScrollPane scroll = new JScrollPane(getEditor());
+		Component comp = scroll;
 		if (!theActions.isEmpty()) {
-			JPopupMenu popup = new JPopupMenu();
 			SimpleDataAction<BetterList<F>, ?>[] actions = theActions.toArray(new SimpleDataAction[theActions.size()]);
-			JMenuItem[] actionMenuItems = new JMenuItem[actions.length];
-			for (int a = 0; a < actions.length; a++) {
-				actionMenuItems[a] = new JMenuItem();
-				SimpleDataAction<BetterList<F>, ?> action = actions[a];
-				SimpleButtonEditor<?, ?> buttonEditor = new SimpleButtonEditor<>(null, actionMenuItems[a], null, action.theObservableAction,
-					false, getUntil());
-				action.modifyButtonEditor(buttonEditor);
-				buttonEditor.getComponent();
-				actionMenuItems[a].addActionListener(evt -> action.theObservableAction.act(evt));
-			}
 			getEditor().getSelectionModel().addTreeSelectionListener(evt -> {
 				List<BetterList<F>> selection = getSelection();
 				for (SimpleDataAction<BetterList<F>, ?> action : actions)
 					action.updateSelection(selection, evt);
 			});
-			getEditor().addMouseListener(new MouseAdapter() {
-				@Override
-				public void mouseClicked(MouseEvent evt) {
-					if (!SwingUtilities.isRightMouseButton(evt))
-						return;
-					popup.removeAll();
-					for (int a = 0; a < actions.length; a++) {
-						if (actions[a].isEnabled() == null)
-							popup.add(actionMenuItems[a]);
+			boolean hasPopups = false, hasButtons = false;
+			for (SimpleDataAction<BetterList<F>, ?> action : actions) {
+				if (action.isPopup())
+					hasPopups = true;
+				if (action.isButton())
+					hasButtons = true;
+			}
+			if (hasPopups) {
+				withPopupMenu(popupMenu -> {
+					for (SimpleDataAction<BetterList<F>, ?> action : actions) {
+						if (action.isPopup())
+							popupMenu.withAction("Action", action.theObservableAction, action::modifyButtonEditor);
 					}
-					if (popup.getComponentCount() > 0)
-						popup.show(getEditor(), evt.getX(), evt.getY());
+				});
+			}
+			if (hasButtons) {
+				SimpleHPanel<JPanel, ?> buttonPanel = new SimpleHPanel<>(null,
+					new JPanel(new JustifiedBoxLayout(false).setMainAlignment(JustifiedBoxLayout.Alignment.LEADING)), getUntil());
+				for (SimpleDataAction<BetterList<F>, ?> action : actions) {
+					if (((SimpleDataAction<?, ?>) action).isButton())
+						((SimpleDataAction<BetterList<F>, ?>) action).addButton(buttonPanel);
 				}
-			});
+				JPanel treePanel = new JPanel(new BorderLayout());
+				treePanel.add(buttonPanel.getComponent(), theActionsOnTop ? BorderLayout.NORTH : BorderLayout.SOUTH);
+				treePanel.add(scroll, BorderLayout.CENTER);
+				comp = treePanel;
+			}
 		}
-		JScrollPane scroll = new JScrollPane(decorate(getEditor()));
-		return scroll;
+		return comp;
 	}
 
 

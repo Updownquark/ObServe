@@ -492,7 +492,7 @@ implements TableBuilder<R, P> {
 
 	@Override
 	public P withMultiAction(String actionName, Consumer<? super List<? extends R>> action, Consumer<DataAction<R, ?>> actionMod) {
-		SimpleDataAction<R, ?> ta = new SimpleDataAction<>(actionName, this, action, this::getSelection);
+		SimpleDataAction<R, ?> ta = new SimpleDataAction<>(actionName, this, action, this::getSelection, false);
 		actionMod.accept(ta);
 		theActions.add(ta);
 		return (P) this;
@@ -1242,6 +1242,15 @@ implements TableBuilder<R, P> {
 
 		JComponent comp;
 		if (!theActions.isEmpty()) {
+			boolean hasPopups = false, hasButtons = false;
+			for (Object action : theActions) {
+				if (!(action instanceof SimpleDataAction))
+					hasButtons = true;
+				else if (((SimpleDataAction<R, ?>) action).isPopup())
+					hasPopups = true;
+				if (((SimpleDataAction<R, ?>) action).isButton())
+					hasButtons = true;
+			}
 			ListSelectionListener selListener = e -> {
 				List<R> selection = selectionGetter.get();
 				for (Object action : theActions) {
@@ -1287,18 +1296,34 @@ implements TableBuilder<R, P> {
 				table.getSelectionModel().removeListSelectionListener(selListener);
 				model.getRowModel().removeListDataListener(dataListener);
 			});
-			SimpleHPanel<JPanel, ?> buttonPanel = new SimpleHPanel<>(null,
-				new JPanel(new JustifiedBoxLayout(false).setMainAlignment(JustifiedBoxLayout.Alignment.LEADING)), getUntil());
-			for (Object action : theActions) {
-				if (action instanceof SimpleDataAction)
-					((SimpleDataAction<R, ?>) action).addButton(buttonPanel);
-				else if (action instanceof Consumer)
-					buttonPanel.addHPanel(null, "box", (Consumer<PanelPopulator<JPanel, ?>>) action);
+			if (hasPopups) {
+				withPopupMenu(popupMenu -> {
+					for (Object action : theActions) {
+						if (action instanceof SimpleDataAction && ((SimpleDataAction<R, ?>) action).isPopup()) {
+							SimpleDataAction<R, ?> dataAction = (SimpleDataAction<R, ?>) action;
+							popupMenu.withAction("Action", dataAction.theObservableAction, dataAction::modifyButtonEditor);
+						}
+					}
+				});
 			}
-			JPanel tablePanel = new JPanel(new BorderLayout());
-			tablePanel.add(buttonPanel.getComponent(), theActionsOnTop ? BorderLayout.NORTH : BorderLayout.SOUTH);
-			tablePanel.add(scroll, BorderLayout.CENTER);
-			comp = tablePanel;
+			if (hasButtons) {
+				SimpleHPanel<JPanel, ?> buttonPanel = new SimpleHPanel<>(null,
+					new JPanel(new JustifiedBoxLayout(false).setMainAlignment(JustifiedBoxLayout.Alignment.LEADING)), getUntil());
+				for (Object action : theActions) {
+					if (action instanceof SimpleDataAction) {
+						if (((SimpleDataAction<?, ?>) action).isButton())
+							((SimpleDataAction<R, ?>) action).addButton(buttonPanel);
+						if (((SimpleDataAction<?, ?>) action).isPopup())
+							System.err.println("Popup-type actions are not implemented for tables");
+					} else if (action instanceof Consumer)
+						buttonPanel.addHPanel(null, "box", (Consumer<PanelPopulator<JPanel, ?>>) action);
+				}
+				JPanel tablePanel = new JPanel(new BorderLayout());
+				tablePanel.add(buttonPanel.getComponent(), theActionsOnTop ? BorderLayout.NORTH : BorderLayout.SOUTH);
+				tablePanel.add(scroll, BorderLayout.CENTER);
+				comp = tablePanel;
+			} else
+				comp = scroll;
 		} else
 			comp = scroll;
 
