@@ -415,25 +415,26 @@ public interface ObservableExpression {
 		@Override
 		public <M, MV extends M> ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env)
 			throws QonfigInterpretationException {
+			String text = theExpression != null ? theExpression.getText() : toString();
 			if (type.getModelType() != ModelTypes.Value)
-				throw new QonfigInterpretationException("'" + theExpression.getText() + "' cannot be evaluated as a " + type);
+				throw new QonfigInterpretationException("'" + text + "' cannot be evaluated as a " + type);
 			if (theValue == null) {
 				if (type.getType(0).isPrimitive())
 					throw new QonfigInterpretationException("Cannot assign null to a primitive type (" + type.getType(0));
 				MV value = (MV) createValue(type.getType(0), null);
-				return ObservableModelSet.container(LambdaUtils.constantFn(value, theExpression.getText(), null), type);
+				return ObservableModelSet.container(LambdaUtils.constantFn(value, text, null), type);
 			} else if (TypeTokens.get().isInstance(type.getType(0), theValue)) {
 				MV value = (MV) createValue(type.getType(0), theValue);
-				return ObservableModelSet.container(LambdaUtils.constantFn(value, theExpression.getText(), null),
+				return ObservableModelSet.container(LambdaUtils.constantFn(value, text, null),
 					(ModelInstanceType<M, MV>) ModelTypes.Value.forType(theValue.getClass()));
 			} else if (TypeTokens.get().isAssignable(type.getType(0), TypeTokens.get().of(theValue.getClass()))) {
 				TypeTokens.TypeConverter<T, Object> convert = TypeTokens.get().getCast(TypeTokens.get().of((Class<T>) theValue.getClass()),
 					(TypeToken<Object>) type.getType(0));
 				MV value = (MV) createValue(type.getType(0), convert.apply(theValue));
-				return ObservableModelSet.container(LambdaUtils.constantFn(value, theExpression.getText(), null),
+				return ObservableModelSet.container(LambdaUtils.constantFn(value, text, null),
 					(ModelInstanceType<M, MV>) ModelTypes.Value.forType(theValue.getClass()));
 			} else
-				throw new QonfigInterpretationException("'" + theExpression.getText() + "' cannot be evaluated as a " + type);
+				throw new QonfigInterpretationException("'" + text + "' cannot be evaluated as a " + type);
 		}
 
 		@Override
@@ -454,8 +455,9 @@ public interface ObservableExpression {
 		}
 
 		SettableValue<?> createValue(TypeToken<?> type, Object value) {
+			String text = theExpression != null ? theExpression.getText() : toString();
 			return SettableValue.asSettable(ObservableValue.of((TypeToken<Object>) type, value), //
-				__ -> "Literal value '" + theExpression.getText() + "'");
+				__ -> "Literal value '" + text + "'");
 		}
 
 		@Override
