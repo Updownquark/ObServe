@@ -9,7 +9,7 @@
 	<toolkit def="/org/observe/quick/quick-swing.qtd" />
 	<special-session>org.observe.expresso.ExpressoSessionImplV0_1</special-session>
 	<special-session>org.observe.quick.QuickSessionImplV0_1</special-session>
-	<interpretation>org.observe.expresso.ExpressoV0_1</interpretation>
+	<interpretation>org.observe.expresso.ExpressoBaseV0_1</interpretation>
 	<interpretation>org.observe.quick.QuickCore</interpretation>
 	<interpretation>org.observe.quick.QuickBase</interpretation>
 	<interpretation>org.observe.quick.QuickSwing</interpretation>

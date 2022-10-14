@@ -1,6 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<qonfig-def name="Expresso-Core" version="0.1" root="models">
+<!--
+This file defines the base syntax of the expresso toolkit specification.
+
+It includes the expression type definition as well as the basic structure of expresso toolkits.
+
+It does not include anything "useful" in the concrete, i.e. no values or transformations.  This file is an interface specification.
+-->
+<qonfig-def name="Expresso-Core" version="0.1" root="expresso">
 	<value-types>
 		<pattern name="identifier">[_a-zA-Z$][_a-zA-Z0-9$]*</pattern>
 
@@ -93,6 +100,11 @@
 		<!-- Specified under an element-def declaration to define model values that must be supplied specifically for the interpreted value -->
 		<element-def name="element-model" extends="abst-model">
 			<child-mod child="abst-model.value" requires="allow-ext-model" inherits="element-model-value" />
+		</element-def>
+
+		<element-def name="expresso">
+			<child-def name="imports" type="imports" min="0" />
+			<child-def name="models" type="models" />
 		</element-def>
 	</elements>
 </qonfig-def>

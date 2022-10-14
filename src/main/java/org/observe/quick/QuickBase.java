@@ -45,7 +45,7 @@ import org.observe.SettableValue;
 import org.observe.SimpleObservable;
 import org.observe.collect.ObservableCollection;
 import org.observe.expresso.ExpressoQIS;
-import org.observe.expresso.ExpressoV0_1;
+import org.observe.expresso.ExpressoBaseV0_1;
 import org.observe.expresso.ModelType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
@@ -851,7 +851,7 @@ public class QuickBase implements QonfigInterpretation {
 	private ValueCreator<ObservableCollection<?>, ObservableCollection<CategoryRenderStrategy<Object, ?>>> interpretColumns(
 		StyleQIS session) throws QonfigInterpretationException {
 		ExpressoQIS exS = session.as(ExpressoQIS.class);
-		TypeToken<Object> rowType = (TypeToken<Object>) ExpressoV0_1.parseType(session.getAttributeText("type"), exS.getExpressoEnv());
+		TypeToken<Object> rowType = (TypeToken<Object>) ExpressoBaseV0_1.parseType(session.getAttributeText("type"), exS.getExpressoEnv());
 		session.put("model-type", rowType);
 		TypeToken<CategoryRenderStrategy<Object, ?>> columnType = TypeTokens.get().keyFor(CategoryRenderStrategy.class)
 			.<CategoryRenderStrategy<Object, ?>> parameterized(rowType, TypeTokens.get().WILDCARD);

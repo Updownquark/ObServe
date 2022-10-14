@@ -9,7 +9,7 @@ import java.util.List;
 import java.util.Map;
 
 import org.observe.expresso.ExpressoQIS;
-import org.observe.expresso.ExpressoV0_1;
+import org.observe.expresso.ExpressoBaseV0_1;
 import org.observe.util.TypeTokens;
 import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterCollections;
@@ -79,7 +79,7 @@ public class QuickStyleType {
 					continue;
 				}
 				declaredAttributes.put(name, new QuickStyleAttribute<>(styled, name, //
-					ExpressoV0_1.parseType(styleAttr.getAttributeText(typeAttr), session.as(ExpressoQIS.class).getExpressoEnv()), //
+					ExpressoBaseV0_1.parseType(styleAttr.getAttributeText(typeAttr), session.as(ExpressoQIS.class).getExpressoEnv()), //
 					styleAttr.getAttribute(trickleAttr, boolean.class)));
 			}
 		}

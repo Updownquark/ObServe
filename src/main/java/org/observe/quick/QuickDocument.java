@@ -6,14 +6,14 @@ import java.util.function.Function;
 import javax.swing.WindowConstants;
 
 import org.observe.SettableValue;
-import org.observe.expresso.ExpressoV0_1;
+import org.observe.expresso.ExpressoBaseV0_1;
 import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.ExternalModelSet;
 import org.observe.expresso.ObservableModelSet.JavaNameChecker;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.qommons.config.QonfigElement;
 
-public interface QuickDocument extends ExpressoV0_1.AppEnvironment {
+public interface QuickDocument extends ExpressoBaseV0_1.AppEnvironment {
 	class QuickDocumentImpl implements QuickDocument {
 		private final QonfigElement theElement;
 		private final QuickHeadSection theHead;

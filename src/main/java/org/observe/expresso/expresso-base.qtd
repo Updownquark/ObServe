@@ -1,6 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<qonfig-def name="Expresso-Base" version="0.1" extends="core:Expresso-Core v0.1">
+<!--
+This file defines the basic set of operations for the expresso toolkit.
+
+It builds on the Expresso-Core specification and contains everything needed for basic expresso models - values, collections, transformations,
+	external and internal models.
+-->
+<qonfig-def name="Expresso-Base" version="0.1" extends:core="Expresso-Core v0.1">
 	<value-types>
 		<pattern name="int">\d{1,7}</pattern> <!-- Positive integer -->
 		<pattern name="float">[-+]?[0-9]*\.?[0-9]+([eE][-+]?[0-9]+)?</pattern>
@@ -23,18 +29,6 @@
 		</add-on>
 		<add-on name="sorted" abstract="true" >
 			<attribute name="sort-with" type="expression" specify="optional" />
-		</add-on>
-
-		<add-on name="allow-config-model" abstract="true" />
-		<add-on name="config-model-value" requires="model-value" inherits="type-required">
-			<attribute name="config-path" type="string" specify="optional" />
-			<attribute name="format" type="expression" specify="optional" />
-		</add-on>
-		<add-on name="config-value" requires="value" inherits="config-model-value">
-			<attribute name="default" type="expression" specify="optional" />
-		</add-on>
-		<add-on name="config-map" requires="map" inherits="config-model-value">
-			<attribute name="key-format" type="expression" specify="optional" />
 		</add-on>
 
 		<add-on name="map-reverse-type" abstract="true" />
@@ -68,80 +62,27 @@
 			<attribute name="add" type="expression" />
 			<attribute name="add-accept" type="expression" />
 		</add-on>
-
-		<add-on name="file-source-type" requires="file-source" abstract="true" />
-		<add-on name="native" inherits="file-source-type" requires="file-source" />
-		<add-on name="sftp" inherits="file-source-type" requires="file-source">
-			<attribute name="host" type="expression" />
-			<attribute name="user" type="expression" />
-			<attribute name="password" type="expression" />
-			<attribute name="connecting" type="expression" />
-		</add-on>
-		<add-on name="archive-type" requires="archive-method" />
-		<add-on name="zip" inherits="archive-type" requires="archive-method" />
-		<add-on name="tar" inherits="archive-type" requires="archive-method" />
-		<add-on name="gz" inherits="archive-type" requires="archive-method" />
-
-		<add-on name="format-type" requires="format" abstract="true" />
-		<add-on name="text" inherits="format-type" requires="format" />
-		<add-on name="file" inherits="format-type" requires="format">
-			<attribute name="file-source" type="expression" specify="optional" />
-			<attribute name="working-dir" type="expression" specify="optional" />
-			<attribute name="allow-empty" type="boolean" default="false" />
-		</add-on>
-		<add-on name="int-format" inherits="format-type" requires="format">
-			<attribute name="grouping-separator" type="string" specify="optional" />
-		</add-on>
-		<add-on name="long-format" inherits="int-format" requires="format" />
-		<add-on name="double" inherits="format-type" requires="format">
-			<attribute name="sig-digs" type="int" />
-			<attribute name="unit" type="string" specify="optional" />
-			<attribute name="unit-required" type="boolean" default="true" />
-			<attribute name="metric-prefixes" type="boolean" default="false" />
-			<attribute name="metric-prefixes-p2" type="boolean" default="false" />
-			<child-def name="prefix" type="prefix" min="0" max="inf" />
-			<!-- TODO -->
-		</add-on>
-		<add-on name="instant" inherits="format-type" requires="format">
-			<attribute name="day-format" type="string" default="EEE MMM dd, yyyy" />
-			<attribute name="time-zone" type="string" specify="optional" />
-			<attribute name="max-resolution" type="string" default="Second" />
-			<attribute name="format-24h" type="boolean" default="false" />
-			<attribute name="relative-eval-type" type="string" default="Closest" />
-			<attribute name="relative-to" type="expression" specify="optional" />
-		</add-on>
-		<add-on name="regex-format" inherits="format-type" requires="format" />
-		<add-on name="regex-format-string" inherits="format-type" requires="format" />
-		<add-on name="validate-type" abstract="true" />
-		<add-on name="regex-validation" inherits="validate-type">
-			<attribute name="pattern" type="expression" />
-		</add-on>
-		<add-on name="filter-validation" inherits="validate-type">
-			<attribute name="filter" type="expression" />
-		</add-on>
 	</add-ons>
 
 	<elements>
 		<!-- Models, values and transformations -->
 		<element-def name="event" extends="model-value" inherits="allow-ext-model" />
-		<element-def name="action" extends="model-value" inherits="allow-ext-model">
-			<attribute name="disable-with" type="expression" specify="optional" />
-		</element-def>
-		<element-def name="value" extends="model-value" inherits="allow-ext-model,allow-config-model" />
-		<element-def name="list" extends="model-value" inherits="allow-ext-model,allow-config-model">
+		<element-def name="action" extends="model-value" inherits="allow-ext-model" />
+		<element-def name="value" extends="model-value" inherits="allow-ext-model" />
+		<element-def name="list" extends="model-value" inherits="allow-ext-model">
 			<value-mod specify="forbidden" />
 		</element-def>
 		<element-def name="value-set" extends="list" />
 		<element-def name="set" extends="list" />
 		<element-def name="sorted-set" extends="set" />
 		<element-def name="sorted-list" extends="list" />
-		<element-def name="map" extends="model-value" inherits="allow-ext-model,allow-config-model,map-model-value" />
+		<element-def name="map" extends="model-value" inherits="allow-ext-model,map-model-value" />
 		<element-def name="sorted-map" extends="map" />
 		<element-def name="multi-map" extends="map" />
 		<element-def name="sorted-multi-map" extends="multi-map" />
 		
 		<element-def name="constant" extends="model-value">
-			<value-mod type="expression" specify="required" />
+			<value-mod specify="required" />
 		</element-def>
 		<element-def name="element">
 			<value type="expression" specify="required" />
@@ -150,24 +91,6 @@
 			<attribute name="key" type="expression" />
 		</element-def>
 
-		<!-- Config models.  These function similarly to internal models, except that they represent persistent values from
-			 ObservableConfig.  Some of these allow specification of default values, but these are only used if the persistent data
-			 for the value has not been initialized. -->
-		<element-def name="config" extends="model">
-			<attribute name="config-name" type="string" specify="optional" />
-			<attribute name="config-dir" type="expression" specify="optional" />
-			<child-def name="old-config-name" type="old-config-name" min="0" max="inf" />
-			<child-mod child="abst-model.value" requires="allow-config-model" inherits="config-model-value" />
-			<attribute name="backup" type="boolean" default="true" />
-		</element-def>
-		<element-def name="old-config-name">
-			<value type="string" />
-		</element-def>
-		<element-def name="first-value" extends="model-value">
-			<value-mod specify="forbidden" />
-			<child-def name="value" type="model-value" min="1" max="inf" />
-		</element-def>
-		
 		<!-- Transformations.  These take values supplied by other models and perform some dynamic operation on the value(s) to produce
 			 a result that is a product of the source. -->
 		<element-def name="transform" extends="model-value">
@@ -229,6 +152,9 @@
 			<!-- For distinct flows, the reverse operation must be specified.
 				 For distinct sorted flows, either the reverse operation or a sorting function may be specified. -->
 		</element-def>
+		<element-def name="disable" extends="operation">
+			<attribute name="with" type="expression" />
+		</element-def>
 		<element-def name="flatten-reverse">
 			<attribute name="type" type="flatten-reverse-type" />
 		</element-def>
@@ -258,33 +184,9 @@
 		<element-def name="take-until" extends="operation">
 			<attribute name="until" type="expression" specify="required" />
 		</element-def>
-		<element-def name="archive-method">
-			<attribute name="type" type="archive-type" />
-		</element-def>
-		<element-def name="file-source" extends="model-value">
-			<attr-mod name="model-value.type" specify="forbidden" default="" />
-			<attribute name="type" type="file-source-type" default="native" />
-			<attribute name="max-archive-depth" type="expression" default="10" />
-			<child-def name="archive" type="archive-method" min="0" max="inf" />
-		</element-def>
-
-		<element-def name="validate">
-			<attribute name="type" type="validate-type" />
-		</element-def>
-		<element-def name="format" extends="model-value">
-			<attr-mod name="model-value.type" specify="forbidden" default="" />
-			<attribute name="type" type="format-type" />
-			<child-def name="validate" type="validate" min="0" max="inf" />
-		</element-def>
-		<element-def name="prefix">
-			<attribute name="name" type="string" />
-			<attribute name="exp" type="int" specify="optional" />
-			<attribute name="multiplier" type="float" specify="optional" />
-		</element-def>
-		<element-def name="simple-config-format" extends="model-value">
-			<!-- Optional because this can be supplied for some types -->
-			<attribute name="format" type="expression" specify="optional" />
-			<attribute name="default" type="string" specify="optional" />
+		<element-def name="first-value" extends="model-value">
+			<value-mod specify="forbidden" />
+			<child-def name="value" type="model-value" min="1" max="inf" />
 		</element-def>
 	</elements>
 
@@ -297,13 +199,6 @@
 		</auto-inherit>
 		<auto-inherit inherits="int-map">
 			<target element="map" role="model.value" />
-		</auto-inherit>
-
-		<auto-inherit inherits="config-value">
-			<target element="value" role="config.value" />
-		</auto-inherit>
-		<auto-inherit inherits="config-map">
-			<target element="map" role="config.value" />
 		</auto-inherit>
 	</auto-inheritance>
 </qonfig-def>

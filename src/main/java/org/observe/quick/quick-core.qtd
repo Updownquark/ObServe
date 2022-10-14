@@ -75,9 +75,7 @@
 			<child-def name="head" type="head" min="0" />
 			<child-def name="root" type="widget" min="1" />
 		</element-def>
-		<element-def name="head">
-			<child-def name="imports" type="imports" min="0" />
-			<child-def name="models" type="models" min="0" /> <!-- Don't know what you could do without models, but whatever -->
+		<element-def name="head" extends="expresso">
 			<child-def name="style-sheet" type="style-sheet" min="0" />
 		</element-def>
 
