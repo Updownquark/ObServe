@@ -67,27 +67,48 @@ It builds on the Expresso-Core specification and contains everything needed for 
 
 	<elements>
 		<!-- Models, values and transformations -->
+		<!-- An Observable that fires values to be consumed by listeners -->
 		<element-def name="event" extends="model-value" inherits="allow-ext-model" />
+		<!-- An action that can be invoked -->
 		<element-def name="action" extends="model-value" inherits="allow-ext-model" />
+		<!-- A simple value. For internal models, this may be configured with:
+		  - An 'init=' attribute to initialize it. The value will not change as any components of the init expression change,
+		  		and the value is settable regardless of the init expression
+		  - A value. This value will be slaved to that of the given expression, changing as it changes. Assignment of this value will
+		  		propagate to the configured value
+		  - Nothing, in which case the initial value will be defaulted (same as a java field)
+		-->
 		<element-def name="value" extends="model-value" inherits="allow-ext-model" />
+		<!-- An ordered collection of values.  For internal models, this may be initialized with elements -->
 		<element-def name="list" extends="model-value" inherits="allow-ext-model">
 			<value-mod specify="forbidden" />
 		</element-def>
+		<!-- An ordered collection with added addition capabilities -->
 		<element-def name="value-set" extends="list" />
+		<!-- An ordered collection of values with no duplicates -->
 		<element-def name="set" extends="list" />
-		<element-def name="sorted-set" extends="set" />
+		<!-- An ordered, sorted collection of values -->
 		<element-def name="sorted-list" extends="list" />
+		<!-- An ordered, sorted collection of values with no duplicates -->
+		<element-def name="sorted-set" extends="set" />
+		<!-- An association of key values each to a single other value -->
 		<element-def name="map" extends="model-value" inherits="allow-ext-model,map-model-value" />
+		<!-- An association of sorted key values each to a single other value -->
 		<element-def name="sorted-map" extends="map" />
+		<!-- An association of key values each to one or more other values -->
 		<element-def name="multi-map" extends="map" />
+		<!-- An association of sorted key values each to one or more other values -->
 		<element-def name="sorted-multi-map" extends="multi-map" />
-		
+
+		<!-- A simple value that cannot be changed after initialization. This value does not change as the expression used to initialize it does. -->		
 		<element-def name="constant" extends="model-value">
 			<value-mod specify="required" />
 		</element-def>
+		<!-- May be used to initialize collections in internal models -->
 		<element-def name="element">
 			<value type="expression" specify="required" />
 		</element-def>
+		<!-- May be used to initialize maps in internal models -->
 		<element-def name="entry" extends="element">
 			<attribute name="key" type="expression" />
 		</element-def>

@@ -78,4 +78,16 @@ public class ExpressoTestEntity {
 			return "instants are diffferent: " + theInstant + " vs " + expected.theInstant;
 		return null;
 	}
+
+	@Override
+	public boolean equals(Object obj) {
+		if (!(obj instanceof ExpressoTestEntity))
+			return false;
+		ExpressoTestEntity other = (ExpressoTestEntity) obj;
+		return theInt == other.theInt//
+			&& theDouble == other.theDouble//
+			&& theBoolean == other.theBoolean//
+			&& Objects.equals(theString, other.theString)//
+			&& Objects.equals(theInstant, other.theInstant);
+	}
 }

@@ -58,6 +58,7 @@ public class TypeTokens {
 		private TypeToken<?> parameterizedType;
 		/** Whether this type is extends {@link Comparable} */
 		public final boolean comparable;
+		private int theComplexity = -1;
 		private Map<List<TypeToken<?>>, TypeToken<? extends T>> theCompoundTypes;
 		private Map<Object, Object> theCache;
 
@@ -68,6 +69,44 @@ public class TypeTokens {
 			comparable = clazz.isPrimitive() || Comparable.class.isAssignableFrom(clazz);
 			if (typeParameters > 0)
 				theCompoundTypes = new ConcurrentHashMap<>();
+		}
+
+		/**
+		 * @return A number representing the complexity of this type, i.e. how many things it extends/implements. The number is not
+		 *         quantitative, but qualitative--it doesn't represent an exact value relating to anything
+		 */
+		public int getComplexity() {
+			if (theComplexity >= 0)
+				return theComplexity;
+			Class<?> unwrapped = unwrap(clazz);
+			if (unwrapped.isPrimitive()) {
+				if (unwrapped == void.class)
+					theComplexity = 0;
+				else if (unwrapped == boolean.class)
+					theComplexity = 1;
+				else if (unwrapped == char.class)
+					theComplexity = 2;
+				else if (unwrapped == byte.class)
+					theComplexity = 3;
+				else if (unwrapped == short.class)
+					theComplexity = 4;
+				else if (unwrapped == int.class)
+					theComplexity = 5;
+				else if (unwrapped == long.class)
+					theComplexity = 6;
+				else if (unwrapped == float.class)
+					theComplexity = 7;
+				else if (unwrapped == double.class)
+					theComplexity = 8;
+				else
+					throw new IllegalStateException("Unaccounted primitive " + clazz);
+				return theComplexity;
+			} else if (clazz == Object.class)
+				return theComplexity = 10;
+			else if (clazz.isInterface())
+				return theComplexity = 10 + addIntfs(clazz, new HashSet<>(Arrays.asList(clazz))).size();
+			else
+				return theComplexity = keyFor(clazz.getSuperclass()).getComplexity() + 1 + addIntfs(clazz, new HashSet<>()).size();
 		}
 
 		/**
@@ -388,6 +427,8 @@ public class TypeTokens {
 	 * @return The type token for the given type
 	 */
 	public TypeToken<?> of(Type type) {
+		if (type == null)
+			throw new NullPointerException();
 		if (type instanceof Class)
 			return of((Class<?>) type);
 		else if (type instanceof ParameterizedType && ((ParameterizedType) type).getOwnerType() instanceof Class)
@@ -570,6 +611,28 @@ public class TypeTokens {
 			return (Class<T>) char.class;
 		else if (type == Void.class)
 			return (Class<T>) void.class;
+		else
+			return type;
+	}
+
+	/**
+	 * @param type The type to wrap
+	 * @return The non-primitive wrapper class corresponding to the given primitive type, or the input if it is not primitive
+	 */
+	public Type wrap(Type type) {
+		if (type instanceof Class)
+			return wrap((Class<?>) type);
+		else
+			return type;
+	}
+
+	/**
+	 * @param type The type to unwrap
+	 * @return The primitive type corresponding to the given primitive wrapper class, or the input if it is not a primitive wrapper
+	 */
+	public Type unwrap(Type type) {
+		if (type instanceof Class)
+			return unwrap((Class<?>) type);
 		else
 			return type;
 	}
@@ -1159,7 +1222,7 @@ public class TypeTokens {
 				for (int p = 0; p < pts.length; p++)
 					pts[p] = resolve(pt.getActualTypeArguments()[p]).getType();
 				return of(new ParameterizedTypeImpl(//
-					resolve(pt.getOwnerType()).getType(), //
+					resolve(pt.getRawType()).getType(), //
 					pts));
 			} else if (type instanceof GenericArrayType)
 				return getArrayType(resolve(//
@@ -1197,13 +1260,53 @@ public class TypeTokens {
 
 	/**
 	 * Creates a type variable accumulator
-	 * 
+	 *
 	 * @param vbls The type variables of the method to invoke
 	 * @param resolver A context type to use to resolve types, e.g. the object that the non-static method is being invoked on
 	 * @return The type variable accumulator
 	 */
 	public TypeVariableAccumulation accumulate(TypeVariable<?>[] vbls, TypeToken<?> resolver) {
 		return new TypeVariableAccumulation(vbls, resolver);
+	}
+
+	/**
+	 * @param type The type to analyze
+	 * @return The complexity of the type. Sub-types are more complex than super-types.
+	 */
+	public int getTypeComplexity(Type type) {
+		if (type instanceof Class)
+			return keyFor((Class<?>) type).getComplexity();
+		else if (type instanceof ParameterizedType) {
+			ParameterizedType pt = (ParameterizedType) type;
+			int complexity = getTypeComplexity(pt.getRawType());
+			for (Type p : pt.getActualTypeArguments())
+				complexity += getTypeComplexity(p);
+			return complexity;
+		} else if (type instanceof GenericArrayType)
+			return getTypeComplexity(((GenericArrayType) type).getGenericComponentType()) + 1;
+		else if (type instanceof TypeVariable) {
+			int complexity = 0;
+			for (Type bound : ((TypeVariable<?>) type).getBounds())
+				complexity += getTypeComplexity(bound);
+			return complexity;
+		} else if (type instanceof WildcardType) {
+			int complexity = 0;
+			for (Type bound : ((WildcardType) type).getLowerBounds())
+				complexity += getTypeComplexity(bound);
+			for (Type bound : ((WildcardType) type).getUpperBounds())
+				complexity += getTypeComplexity(bound);
+			return complexity;
+		} else
+			throw new IllegalArgumentException("Unrecognized type: " + type);
+	}
+
+	static Set<Class<?>> addIntfs(Class<?> clazz, Set<Class<?>> intfs) {
+		for (Class<?> intf : clazz.getInterfaces()) {
+			if (clazz.getSuperclass() != null && intf.isAssignableFrom(clazz.getSuperclass())) {//
+			} else if (intfs.add(intf))
+				addIntfs(intf, intfs);
+		}
+		return intfs;
 	}
 
 	/**

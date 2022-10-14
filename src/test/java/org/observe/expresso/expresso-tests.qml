@@ -4,16 +4,11 @@
 	<!-- TODO
 		Test AND DOCUMENT!!
 
-		Constant
-		Simple value
-			Blank, with init, and with expression
-		Derived value (+ test set)
 		Simple Lists, Sorted Lists, Sets, Sorted Sets with configured elements
 		Derived Lists, Sorted Lists, Sets, Sorted Sets (+ test set)
 		Simple Maps, Sorted Maps, Multi-Maps, Sorted Multi-Maps with configured entries
 		Derived Maps, Sorted Maps, Multi-Maps, Sorted Multi-Maps (+ test set)
 		Event
-		Action
 
 		Transformation (values, collections, (multi-)maps, actions
 			disable
@@ -67,7 +62,9 @@
 				Function
 				Static
 				Non-static
-			Field
+				var-args
+				type-parameterized
+			Field access/set
 			Model value (e.g. 'model.value')
 			Parenthetic
 
@@ -84,6 +81,10 @@
 			<value name="actionName" type="String" />
 		</ext-model>
 		<model name="models">
+			<constant name="constant">5</constant>
+			<value name="alsoConstant">5</value>
+			<value name="emptyValue" type="Integer" />
+
 			<value name="test" init="new ExpressoTestEntity()" />
 			<value name="expected" init="new ExpressoTestEntity()" />
 
@@ -98,6 +99,8 @@
 			<value name="anyBool" init="true" />
 			<value name="anyStr" init="&quot;Something&quot;" />
 			<value type="java.time.Instant" name="anyInst" init="`05May2022 10:15:43am`" />
+			
+			<value name="derivedInt">anyInt*10</value>
 
 			<action name="assignInt">test.setInt(anyInt)</action>
 			<action name="assignDbl">test.setDouble(anyDbl)</action>
@@ -106,19 +109,62 @@
 			<action name="assignInst">test.setInstant(anyInst)</action>
 
 			<value name="error">test.assertEquals(expected)</value>
+
+			<list name="list" type="int">
+				<element>5</element>
+				<element>4</element>
+				<element>3</element>
+				<element>2</element>
+				<element>1</element>
+			</list>
 		</model>
 		<model name="tests">
+			<model name="constant">
+				<action name="testConstant">assertEquals(ext.actionName, 5, models.constant)</action>
+				<action name="testConstantAssignmentXUnsupportedOperationException">models.constant=6</action>
+			</model>
+			<model name="simpleValue">
+				<action name="testConstant">assertEquals(ext.actionName, 5, models.alsoConstant)</action>
+				<action name="testConstantAssignmentXUnsupportedOperationException">models.alsoConstant=6</action>
+				<action name="testEmptyValue">assertEquals(ext.actionName, null, models.emptyValue)</action>
+				<action name="testAssignEmptyVal">models.emptyValue=5</action>
+				<action name="testEmptyValue2">assertEquals(ext.actionName, 5, models.emptyValue)</action>
+				<action name="testSimpleValue">assertEquals(ext.actionName, 10, models.anyInt)</action>
+				<action name="testAssignSimpleValue">models.anyInt=5</action>
+				<action name="testSimpleValue2">assertEquals(ext.actionName, 5, models.anyInt)</action>
+			</model>
+			<model name="derivedValue">
+				<action name="assignTestField">models.test.setInt(30)</action>
+				<action name="checkTestValue">assertEquals(ext.actionName, 30, models.testInt)</action>
+				<action name="assignTestValueXUnsupportedOperationException">models.testInt=20</action>
+
+				<action name="checkDerivedValue">assertEquals(ext.actionName, 100, models.derivedInt)</action>
+				<action name="assignDerivedValue">models.derivedInt=150</action>
+				<action name="checkDerivedValue2">assertEquals(ext.actionName, 150, models.derivedInt)</action>
+				<action name="checkSourceValue">assertEquals(ext.actionName, 15, models.anyInt)</action>
+			</model>
+			<model name="list">
+				<value name="size">models.list.observeSize()</value>
+				<action name="checkSize">assertEquals(ext.actionName, 5, size)</action>
+				<action name="addValue">models.list.add(17)</action>
+				<action name="checkSize2">assertEquals(ext.actionName, 6, size)</action>
+				<!-- TODO Need more -->
+			</model>
 			<model name="assignInt">
 				<action name="setExpectInt">models.expected.setInt(models.anyInt)</action>
 				<action name="checkNotEqual">assertNotEquals(ext.actionName, models.expected, models.test)</action>
 				<action name="checkError">assertNotNull(ext.actionName, models.error)</action>
 				<action name="assignInt">models.assignInt</action>
+				<action name="checkEqual">assertEquals(ext.actionName, models.expected, models.test)</action>
+				<action name="checkError2">assertNull(ext.actionName, models.error)</action>
 			</model>
-			<model name="assignInst">
+			<model name="assignInstant">
 				<action name="setExpectInst">models.expected.setInstant(models.anyInst)</action>
 				<action name="checkNotEqual">assertNotEquals(ext.actionName, models.expected, models.test)</action>
 				<action name="checkError">assertNotNull(ext.actionName, models.error)</action>
 				<action name="assignInst">models.assignInst</action>
+				<action name="checkEqual">assertEquals(ext.actionName, models.expected, models.test)</action>
+				<action name="checkError2">assertNull(ext.actionName, models.error)</action>
 			</model>
 		</model>
 	</models>

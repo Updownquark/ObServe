@@ -16,6 +16,7 @@ import java.util.stream.Collectors;
 import org.observe.Observable;
 import org.observe.ObservableAction;
 import org.observe.ObservableValue;
+import org.observe.ObservableValueEvent;
 import org.observe.SettableValue;
 import org.observe.Transformation;
 import org.observe.Transformation.TransformationPrecursor;
@@ -41,7 +42,9 @@ import org.observe.expresso.ObservableModelSet.ValueCreator;
 import org.observe.expresso.ops.NameExpression;
 import org.observe.util.TypeTokens;
 import org.qommons.BiTuple;
+import org.qommons.Identifiable.AbstractIdentifiable;
 import org.qommons.ThreadConstraint;
+import org.qommons.Transaction;
 import org.qommons.TriFunction;
 import org.qommons.Version;
 import org.qommons.collect.BetterList;
@@ -247,7 +250,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 
 			@Override
 			public ValueCreator<C, C> createValue(CoreSession session) throws QonfigInterpretationException {
-				TypeToken<Object> type = session.get(VALUE_TYPE_KEY, TypeToken.class);
+				TypeToken<Object> type = TypeTokens.get().wrap((TypeToken<Object>) session.get(VALUE_TYPE_KEY, TypeToken.class));
 				List<ValueCreator<SettableValue<?>, SettableValue<Object>>> elCreators = session.asElement("int-list")
 					.interpretChildren("element", ValueCreator.class);
 				return () -> {
@@ -288,8 +291,8 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 
 			@Override
 			public ValueCreator<M, M> createValue(CoreSession session) throws QonfigInterpretationException {
-				TypeToken<Object> keyType = session.get(KEY_TYPE_KEY, TypeToken.class);
-				TypeToken<Object> valueType = session.get(VALUE_TYPE_KEY, TypeToken.class);
+				TypeToken<Object> keyType = TypeTokens.get().wrap((TypeToken<Object>) session.get(KEY_TYPE_KEY, TypeToken.class));
+				TypeToken<Object> valueType = TypeTokens.get().wrap((TypeToken<Object>) session.get(VALUE_TYPE_KEY, TypeToken.class));
 				List<BiTuple<ValueCreator<SettableValue<?>, SettableValue<Object>>, ValueCreator<SettableValue<?>, SettableValue<Object>>>> entryCreators;
 				entryCreators = session.asElement("int-map").interpretChildren("entry", BiTuple.class);
 				return () -> {
@@ -338,8 +341,8 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 
 			@Override
 			public ValueCreator<M, M> createValue(CoreSession session) throws QonfigInterpretationException {
-				TypeToken<Object> keyType = session.get(KEY_TYPE_KEY, TypeToken.class);
-				TypeToken<Object> valueType = session.get(VALUE_TYPE_KEY, TypeToken.class);
+				TypeToken<Object> keyType = TypeTokens.get().wrap((TypeToken<Object>) session.get(KEY_TYPE_KEY, TypeToken.class));
+				TypeToken<Object> valueType = TypeTokens.get().wrap((TypeToken<Object>) session.get(VALUE_TYPE_KEY, TypeToken.class));
 				List<BiTuple<ValueCreator<SettableValue<?>, SettableValue<Object>>, ValueCreator<SettableValue<?>, SettableValue<Object>>>> entryCreators;
 				entryCreators = session.asElement("int-map").interpretChildren("entry", BiTuple.class);
 				return () -> {
@@ -418,7 +421,72 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 						@Override
 						public SettableValue<Object> get(ModelSetInstance models) {
 							Object v = valueC.apply(models).get();
-							return SettableValue.of((TypeToken<Object>) getType().getType(0), v, "Constant value");
+							class ConstantValue<T> extends AbstractIdentifiable implements SettableValue<T> {
+								private final TypeToken<T> theType;
+								private final T theValue;
+
+								public ConstantValue(TypeToken<T> type, T value2) {
+									theType = type;
+									theValue = value2;
+								}
+
+								@Override
+								public TypeToken<T> getType() {
+									return theType;
+								}
+
+								@Override
+								public long getStamp() {
+									return 0;
+								}
+
+								@Override
+								public T get() {
+									return theValue;
+								}
+
+								@Override
+								public Observable<ObservableValueEvent<T>> noInitChanges() {
+									return Observable.empty();
+								}
+
+								@Override
+								public boolean isLockSupported() {
+									return true;
+								}
+
+								@Override
+								public Transaction lock(boolean write, Object cause) {
+									return Transaction.NONE;
+								}
+
+								@Override
+								public Transaction tryLock(boolean write, Object cause) {
+									return Transaction.NONE;
+								}
+
+								@Override
+								public <V extends T> T set(V value2, Object cause)
+									throws IllegalArgumentException, UnsupportedOperationException {
+									throw new UnsupportedOperationException("Constant value");
+								}
+
+								@Override
+								public <V extends T> String isAcceptable(V value2) {
+									return "Constant value";
+								}
+
+								@Override
+								public ObservableValue<String> isEnabled() {
+									return ObservableValue.of("Constant value");
+								}
+
+								@Override
+								protected Object createIdentity() {
+									return session.get(PATH_KEY);
+								}
+							}
+							return new ConstantValue<>((TypeToken<Object>) getType().getType(0), v);
 						}
 					};
 				}
@@ -480,7 +548,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 				TypeToken<Object> type = (TypeToken<Object>) session.get(VALUE_TYPE_KEY);
 				try {
 					ValueContainer<ObservableAction<?>, ObservableAction<Object>> action = valueX.evaluate(
-						ModelTypes.Action.forType(type == null ? (TypeToken<Object>) (TypeToken<?>) TypeTokens.get().VOID : type),
+						ModelTypes.Action.forType(type == null ? (TypeToken<Object>) (TypeToken<?>) TypeTokens.get().WILDCARD : type),
 						exS.getExpressoEnv());
 					return action;
 				} catch (QonfigInterpretationException e) {
@@ -489,7 +557,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 				}
 			};
 		}).createWith("value-set", ValueCreator.class, session -> () -> {
-			TypeToken<Object> type = session.get(VALUE_TYPE_KEY, TypeToken.class);
+			TypeToken<Object> type = TypeTokens.get().wrap((TypeToken<Object>) session.get(VALUE_TYPE_KEY, TypeToken.class));
 			return new AbstractValueContainer<ObservableValueSet<?>, ObservableValueSet<Object>>(ModelTypes.ValueSet.forType(type)) {
 				@Override
 				public ObservableValueSet<Object> get(ModelSetInstance models) {

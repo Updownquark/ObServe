@@ -187,7 +187,7 @@ public class JavaExpressoParser implements ExpressoParser {
 					if (!(context instanceof NameExpression))
 						throw new ExpressoParseException(expression,
 							"Expression of type " + context.getClass().getName() + " cannot be assigned a value");
-					ObservableExpression value = _parse(expression.getComponents().getFirst());
+					ObservableExpression value = _parse(expression.getComponents().getLast());
 					return new AssignmentExpression(context, value);
 				case "+":
 				case "-":

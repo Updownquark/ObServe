@@ -86,7 +86,7 @@ public class MethodInvocation extends Invocation {
 				Class<?> clazz = env.getClassView().getType(theContext.toString());
 				if (clazz != null) {
 					Invocation.MethodResult<Method, ?> result = Invocation.findMethod(clazz.getMethods(), theMethodName,
-						TypeTokens.get().of(clazz), true, Arrays.asList(args), targetType, env, Invocation.ExecutableImpl.METHOD);
+						TypeTokens.get().of(clazz), true, Arrays.asList(args), targetType, env, Invocation.ExecutableImpl.METHOD, this);
 					if (result != null) {
 						ValueContainer<SettableValue<?>, SettableValue<?>>[] realArgs = new ValueContainer[getArguments().size()];
 						for (int a = 0; a < realArgs.length; a++)
@@ -111,7 +111,7 @@ public class MethodInvocation extends Invocation {
 			ValueContainer<SettableValue<?>, SettableValue<?>> ctx = theContext.evaluate(ModelTypes.Value.any(), env);
 			Invocation.MethodResult<Method, ?> result = Invocation.findMethod(
 				TypeTokens.getRawType(ctx.getType().getType(0)).getMethods(), theMethodName, ctx.getType().getType(0), false,
-				Arrays.asList(args), targetType, env, Invocation.ExecutableImpl.METHOD);
+				Arrays.asList(args), targetType, env, Invocation.ExecutableImpl.METHOD, this);
 			if (result != null) {
 				ValueContainer<SettableValue<?>, SettableValue<?>>[] realArgs = new ValueContainer[getArguments().size()];
 				for (int a = 0; a < realArgs.length; a++)
@@ -134,7 +134,7 @@ public class MethodInvocation extends Invocation {
 		} else {
 			List<Method> methods = env.getClassView().getImportedStaticMethods(theMethodName);
 			Invocation.MethodResult<Method, ?> result = Invocation.findMethod(methods.toArray(new Method[methods.size()]),
-				theMethodName, null, true, Arrays.asList(args), targetType, env, Invocation.ExecutableImpl.METHOD);
+				theMethodName, null, true, Arrays.asList(args), targetType, env, Invocation.ExecutableImpl.METHOD, this);
 			if (result != null) {
 				ValueContainer<SettableValue<?>, SettableValue<?>>[] realArgs = new ValueContainer[getArguments().size()];
 				for (int a = 0; a < realArgs.length; a++)

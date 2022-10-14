@@ -90,7 +90,8 @@ public class MethodReferenceExpression implements ObservableExpression {
 					Class<?> type = env.getClassView().getType(theContext.toString());
 					if (type != null) {
 						Invocation.MethodResult<Method, ? extends T> result = Invocation.findMethod(type.getMethods(), theMethodName,
-							TypeTokens.get().of(type), true, theOptions, targetType, env, Invocation.ExecutableImpl.METHOD);
+							TypeTokens.get().of(type), true, theOptions, targetType, env, Invocation.ExecutableImpl.METHOD,
+							MethodReferenceExpression.this);
 						if (result != null) {
 							setResultType(result.returnType);
 							MethodOption option = theOptions.get(result.argListOption);
@@ -128,7 +129,7 @@ public class MethodReferenceExpression implements ObservableExpression {
 				ValueContainer<SettableValue<?>, SettableValue<?>> ctx = theContext.evaluate(ModelTypes.Value.any(), env);
 				Invocation.MethodResult<Method, ? extends T> result = Invocation.findMethod(//
 					TypeTokens.getRawType(ctx.getType().getType(0)).getMethods(), theMethodName, ctx.getType().getType(0), true,
-					theOptions, targetType, env, Invocation.ExecutableImpl.METHOD);
+					theOptions, targetType, env, Invocation.ExecutableImpl.METHOD, MethodReferenceExpression.this);
 				if (result != null) {
 					setResultType(result.returnType);
 					MethodOption option = theOptions.get(result.argListOption);

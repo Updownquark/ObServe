@@ -183,6 +183,31 @@ public class ModelTypes {
 			Function<Object, Object>[] casts, Function<Object, Object>[] reverses) {
 			return src -> src.map((TypeToken<Object>) target.getType(0), casts[0]);
 		}
+
+		@Override
+		protected void setupConversions(ConversionBuilder<ObservableAction<?>> builder) {
+			builder.convertSelf(new ModelConverter<ObservableAction<?>, ObservableAction<?>>() {
+				@Override
+				public ModelInstanceConverter<ObservableAction<?>, ObservableAction<?>> convert(
+					ModelInstanceType<ObservableAction<?>, ?> source, ModelInstanceType<ObservableAction<?>, ?> dest)
+						throws IllegalArgumentException {
+					if (dest.getType(0).getType() == void.class || dest.getType(0).getType() == Void.class) {
+						return new ModelInstanceConverter<ObservableAction<?>, ObservableAction<?>>() {
+							@Override
+							public ObservableAction<?> convert(ObservableAction<?> source2) {
+								return source2.map(TypeTokens.get().VOID, __ -> null);
+							}
+
+							@Override
+							public ModelInstanceType<ObservableAction<?>, ?> getType() {
+								return Action.forType(TypeTokens.get().VOID);
+							}
+						};
+					}
+					return null;
+				}
+			});
+		}
 	}
 
 	/** See {@link ModelTypes#Value} */

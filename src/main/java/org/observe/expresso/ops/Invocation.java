@@ -9,7 +9,9 @@ import java.lang.reflect.Modifier;
 import java.lang.reflect.Type;
 import java.lang.reflect.TypeVariable;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 import org.observe.Observable;
 import org.observe.ObservableAction;
@@ -27,6 +29,7 @@ import org.observe.expresso.ObservableModelSet.ValueContainer;
 import org.observe.util.TypeTokens;
 import org.qommons.ArrayUtils;
 import org.qommons.config.QonfigInterpretationException;
+import org.qommons.ex.CheckedExceptionWrapper;
 
 import com.google.common.reflect.TypeToken;
 
@@ -90,7 +93,7 @@ public abstract class Invocation implements ObservableExpression {
 			ValueContainer<SettableValue<?>, SettableValue<?>> c;
 			for (int i = 0; i < args[arg].size(); i++) {
 				c = args[arg].get(i);
-				if (TypeTokens.get().isAssignable(paramType, c.getType().getType(i))) {
+				if (TypeTokens.get().isAssignable(paramType, c.getType().getType(0))) {
 					// Move to the beginning
 					args[arg].remove(i);
 					args[arg].add(0, c);
@@ -109,6 +112,11 @@ public abstract class Invocation implements ObservableExpression {
 			if (resolved[arg] == null)
 				resolved[arg] = theArguments.get(arg).evaluate(ModelTypes.Value.any(), theEnv);
 			return resolved[arg].getType().getType(0);
+		}
+
+		@Override
+		public String toString() {
+			return theArguments.toString();
 		}
 	}
 
@@ -165,21 +173,35 @@ public abstract class Invocation implements ObservableExpression {
 	 * @param targetType The result type of the invocation
 	 * @param env The expresso environment to use for the invocation
 	 * @param impl The executable implementation corresponding to the invokable type
+	 * @param invocation The expression that this is being called from, just for inclusion in an error message
 	 * @return The result containing the invokable matching the given options, or null if no such invokable was found in the list
 	 * @throws QonfigInterpretationException If a suitable invokable is found, but there is an error with its invocation
 	 */
 	public static <M extends Executable, T> Invocation.MethodResult<M, ? extends T> findMethod(M[] methods, String methodName,
 		TypeToken<?> contextType, boolean arg0Context, List<? extends Args> argOptions, TypeToken<T> targetType, ExpressoEnv env,
-		ExecutableImpl<M> impl) throws QonfigInterpretationException {
+		ExecutableImpl<M> impl, ObservableExpression invocation) throws QonfigInterpretationException {
 		Class<T> rawTarget = targetType == null ? (Class<T>) Void.class : TypeTokens.get().wrap(TypeTokens.getRawType(targetType));
 		boolean voidTarget = rawTarget == Void.class;
+		Map<String, QonfigInterpretationException> methodErrors = null;
+		MethodResult<M, ? extends T> bestResult = null;
 		for (M m : methods) {
 			if (methodName != null && !m.getName().equals(methodName))
 				continue;
 			boolean isStatic = impl.isStatic(m);
 			if (!isStatic && !arg0Context && contextType == null)
 				continue;
+			int complexity = -1;
 			TypeToken<?>[] paramTypes = null;
+			if (bestResult != null) {
+				complexity = 0;
+				paramTypes = new TypeToken[m.getParameterTypes().length];
+				for (int p = 0; p < paramTypes.length; p++) {
+					paramTypes[p] = TypeTokens.get().of(m.getGenericParameterTypes()[p]);
+					complexity += TypeTokens.get().getTypeComplexity(paramTypes[p].getType());
+				}
+				if (complexity < bestResult.complexity)
+					continue; // Current result is better than this even if it matches
+			}
 			List<QonfigInterpretationException> errors = null;
 			for (int o = 0; o < argOptions.size(); o++) {
 				try {
@@ -218,7 +240,7 @@ public abstract class Invocation implements ObservableExpression {
 							paramTypes = new TypeToken[m.getParameterTypes().length];
 							for (int p = 0; p < paramTypes.length; p++) {
 								if (!(contextType.getType() instanceof Class))
-									paramTypes[p] = contextType.resolveType(m.getGenericParameterTypes()[p]);
+									paramTypes[p] = contextType.resolveType(TypeTokens.get().wrap(m.getGenericParameterTypes()[p]));
 								else
 									paramTypes[p] = TypeTokens.get().of(m.getGenericParameterTypes()[p]);
 							}
@@ -263,7 +285,12 @@ public abstract class Invocation implements ObservableExpression {
 						if (!voidTarget && !TypeTokens.get().isAssignable(targetType, returnType))
 							throw new QonfigInterpretationException("Return type " + returnType + " of method "
 								+ Invocation.printSignature(m) + " cannot be assigned to type " + targetType);
-						return new Invocation.MethodResult<>(m, o, false, (TypeToken<T>) returnType);
+						if (complexity < 0) {
+							complexity = 0;
+							for (TypeToken<?> pt : paramTypes)
+								complexity += TypeTokens.get().getTypeComplexity(pt.getType());
+						}
+						bestResult = new Invocation.MethodResult<>(m, o, false, (TypeToken<T>) returnType, complexity);
 					}
 				} catch (QonfigInterpretationException e) {
 					if (errors == null)
@@ -271,14 +298,48 @@ public abstract class Invocation implements ObservableExpression {
 					errors.add(e);
 				}
 			}
-			if (errors != null) {
-				QonfigInterpretationException ex = errors.get(0);
-				for (int i = 1; i < errors.size(); i++)
-					ex.addSuppressed(errors.get(i));
-				throw ex;
+			if (bestResult == null && errors != null) {
+				if (methodErrors == null)
+					methodErrors = new LinkedHashMap<>();
+				if (errors.size() == 1)
+					methodErrors.put(m.toString(), errors.get(0));
+				else {
+					StringBuilder msg = new StringBuilder().append('\t');
+					for (int i = 0; i < errors.size(); i++) {
+						if (i > 0)
+							msg.append("\n\t\t");
+						msg.append(errors.get(i).getMessage());
+					}
+
+					QonfigInterpretationException ex = new QonfigInterpretationException(msg.toString(), errors.get(0));
+					for (int i = 1; i < errors.size(); i++)
+						ex.addSuppressed(errors.get(i));
+					methodErrors.put(m.toString(), ex);
+				}
 			}
 		}
-		return null;
+		if (bestResult == null && methodErrors != null) {
+			String exMsg = methodErrors.values().iterator().next().getMessage();
+			boolean sameMsg = true;
+			for (QonfigInterpretationException ex : methodErrors.values())
+				sameMsg &= exMsg.equals(ex.getMessage());
+			if (sameMsg)
+				throw methodErrors.values().iterator().next();
+			StringBuilder msg = new StringBuilder("Could not find a match for ").append(invocation).append(':');
+			for (Map.Entry<String, QonfigInterpretationException> err : methodErrors.entrySet()) {
+				msg.append("\n\t").append(err.getKey()).append(": ").append(err.getValue().getMessage());
+			}
+			QonfigInterpretationException ex = new QonfigInterpretationException(msg.toString(), methodErrors.values().iterator().next());
+			boolean first = true;
+			for (QonfigInterpretationException err : methodErrors.values()) {
+				if (first)
+					first = false;
+				else
+					ex.addSuppressed(err);
+			}
+			throw ex;
+		}
+		return bestResult;
 	}
 
 	static abstract class InvocationContainer<X extends Executable, M, T, MV extends M> implements ValueContainer<M, MV> {
@@ -415,6 +476,13 @@ public abstract class Invocation implements ObservableExpression {
 			return ObservableAction.of(getType().getValueType(), __ -> {
 				try {
 					return invoke(ctxV, argVs, true);
+				} catch (InvocationTargetException e) {
+					if (e.getTargetException() instanceof RuntimeException)
+						throw (RuntimeException) e.getTargetException();
+					else if (e.getTargetException() instanceof Error)
+						throw (Error) e.getTargetException();
+					else
+						throw new CheckedExceptionWrapper(e.getTargetException());
 				} catch (Throwable e) {
 					e.printStackTrace();
 					return null;
@@ -562,19 +630,22 @@ public abstract class Invocation implements ObservableExpression {
 		public final M method;
 		/**
 		 * The index of the option passed to
-		 * {@link Invocation#findMethod(Executable[], String, TypeToken, boolean, List, TypeToken, ExpressoEnv, ExecutableImpl)} whose
-		 * arguments match this invocation
+		 * {@link Invocation#findMethod(Executable[], String, TypeToken, boolean, List, TypeToken, ExpressoEnv, ExecutableImpl, ObservableExpression)}
+		 * whose arguments match this invocation
 		 */
 		public final int argListOption;
 		private final boolean isArg0Context;
 		/** The return type of the invocation */
 		public final TypeToken<R> returnType;
+		/** The {@link TypeTokens#getTypeComplexity(Type) complexity} of the method's parameters */
+		public final int complexity;
 
-		MethodResult(M method, int argListOption, boolean arg0Context, TypeToken<R> returnType) {
+		MethodResult(M method, int argListOption, boolean arg0Context, TypeToken<R> returnType, int complexity) {
 			this.method = method;
 			this.argListOption = argListOption;
 			isArg0Context = arg0Context;
 			this.returnType = returnType;
+			this.complexity = complexity;
 		}
 
 		/**

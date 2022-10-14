@@ -336,7 +336,7 @@ public class NameExpression implements ObservableExpression {
 				} else if (theNames.size() == 1) {
 					Invocation.MethodResult<Method, ? extends T> result = Invocation.findMethod(//
 						env.getClassView().getImportedStaticMethods(theNames.getFirst()).toArray(new Method[0]), theNames.getFirst(), null,
-						false, theOptions, voidTarget ? null : targetType, env, Invocation.ExecutableImpl.METHOD);
+						false, theOptions, voidTarget ? null : targetType, env, Invocation.ExecutableImpl.METHOD, NameExpression.this);
 					if (result != null) {
 						setResultType(result.returnType);
 						MethodOption option = theOptions.get(result.argListOption);
@@ -364,7 +364,7 @@ public class NameExpression implements ObservableExpression {
 					if (type != null) {
 						Invocation.MethodResult<Method, ? extends T> result = Invocation.findMethod(//
 							type.getMethods(), theNames.getFirst(), null, false, theOptions, voidTarget ? null : targetType, env,
-								Invocation.ExecutableImpl.METHOD);
+							Invocation.ExecutableImpl.METHOD, NameExpression.this);
 						if (result != null) {
 							setResultType(result.returnType);
 							MethodOption option = theOptions.get(result.argListOption);

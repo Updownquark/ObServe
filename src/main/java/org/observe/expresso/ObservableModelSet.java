@@ -794,7 +794,7 @@ public interface ObservableModelSet {
 				if (theValue == null) {
 					theValue = theValueMaker.createValue();
 					if (theValue == null)
-						throw new IllegalStateException("Value maker failed to create value");
+						return null;
 				}
 				return theValue.getType();
 			}

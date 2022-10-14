@@ -1,6 +1,7 @@
 package org.observe.expresso.ops;
 
 import java.util.List;
+import java.util.Objects;
 import java.util.function.Function;
 
 import org.observe.ObservableAction;
@@ -66,7 +67,7 @@ public class AssignmentExpression implements ObservableExpression {
 		ValueContainer<SettableValue<?>, SettableValue<Object>> context = theTarget
 			.evaluate((ModelInstanceType<SettableValue<?>, SettableValue<Object>>) (ModelInstanceType<?, ?>) ModelTypes.Value.any(), env);
 		boolean isVoid = type.getType(0).getType() == void.class || type.getType(0).getType() == Void.class;
-		if (!isVoid && !TypeTokens.get().isAssignable(context.getType().getType(0), type.getType(0)))
+		if (!isVoid && !TypeTokens.get().isAssignable(type.getType(0), context.getType().getType(0)))
 			throw new QonfigInterpretationException(
 				"Cannot assign " + context + ", type " + type.getType(0) + " to " + context.getType().getType(0));
 		ValueContainer<SettableValue<?>, SettableValue<Object>> value = theValue
@@ -87,6 +88,11 @@ public class AssignmentExpression implements ObservableExpression {
 				SettableValue<Object> valueValue = value.get(models);
 				return ctxValue.assignmentTo(valueValue);
 			}
+
+			@Override
+			public String toString() {
+				return AssignmentExpression.this.toString();
+			}
 		};
 	}
 
@@ -94,5 +100,21 @@ public class AssignmentExpression implements ObservableExpression {
 	public <P1, P2, P3, T> MethodFinder<P1, P2, P3, T> findMethod(TypeToken<T> targetType, ExpressoEnv env)
 		throws QonfigInterpretationException {
 		throw new QonfigInterpretationException("Not implemented");
+	}
+
+	@Override
+	public int hashCode() {
+		return Objects.hash(theTarget, theValue);
+	}
+
+	@Override
+	public boolean equals(Object obj) {
+		return obj instanceof AssignmentExpression && theTarget.equals(((AssignmentExpression) obj).theTarget)
+			&& theValue.equals(((AssignmentExpression) obj).theValue);
+	}
+
+	@Override
+	public String toString() {
+		return theTarget + "=" + theValue;
 	}
 }

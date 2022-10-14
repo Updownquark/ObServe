@@ -72,7 +72,7 @@ public class ConstructorInvocation extends Invocation {
 		if (constructorType == null)
 			throw new QonfigInterpretationException("No such type found: " + theType);
 		Invocation.MethodResult<Constructor<?>, ?> result = Invocation.findMethod(constructorType.getConstructors(), null, null, true,
-			Arrays.asList(args), targetType, env, Invocation.ExecutableImpl.CONSTRUCTOR);
+			Arrays.asList(args), targetType, env, Invocation.ExecutableImpl.CONSTRUCTOR, this);
 		if (result != null) {
 			ValueContainer<SettableValue<?>, SettableValue<?>>[] realArgs = new ValueContainer[getArguments().size()];
 			for (int a = 0; a < realArgs.length; a++)
