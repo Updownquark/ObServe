@@ -144,7 +144,7 @@
 				<action name="checkSourceValue">assertEquals(ext.actionName, 15, models.anyInt)</action>
 			</model>
 			<model name="list">
-				<value name="size">models.list.observeSize()</value>
+				<value name="size" type="int">models.list.observeSize()</value>
 				<action name="checkSize">assertEquals(ext.actionName, 5, size)</action>
 				<action name="addValue">models.list.add(17)</action>
 				<action name="checkSize2">assertEquals(ext.actionName, 6, size)</action>

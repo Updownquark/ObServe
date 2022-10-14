@@ -72,41 +72,41 @@ public class TypeTokens {
 		}
 
 		/**
-		 * @return A number representing the complexity of this type, i.e. how many things it extends/implements. The number is not
+		 * @return A number representing the specificity of this type, i.e. how many things it extends/implements. The number is not
 		 *         quantitative, but qualitative--it doesn't represent an exact value relating to anything
 		 */
-		public int getComplexity() {
+		public int getSpecificity() {
 			if (theComplexity >= 0)
 				return theComplexity;
 			Class<?> unwrapped = unwrap(clazz);
 			if (unwrapped.isPrimitive()) {
 				if (unwrapped == void.class)
 					theComplexity = 0;
-				else if (unwrapped == boolean.class)
-					theComplexity = 1;
-				else if (unwrapped == char.class)
-					theComplexity = 2;
-				else if (unwrapped == byte.class)
-					theComplexity = 3;
-				else if (unwrapped == short.class)
-					theComplexity = 4;
-				else if (unwrapped == int.class)
-					theComplexity = 5;
-				else if (unwrapped == long.class)
-					theComplexity = 6;
-				else if (unwrapped == float.class)
-					theComplexity = 7;
 				else if (unwrapped == double.class)
+					theComplexity = 1;
+				else if (unwrapped == float.class)
+					theComplexity = 2;
+				else if (unwrapped == long.class)
+					theComplexity = 3;
+				else if (unwrapped == int.class)
+					theComplexity = 4;
+				else if (unwrapped == short.class)
+					theComplexity = 5;
+				else if (unwrapped == byte.class)
+					theComplexity = 6;
+				else if (unwrapped == char.class)
+					theComplexity = 7;
+				else if (unwrapped == boolean.class)
 					theComplexity = 8;
 				else
 					throw new IllegalStateException("Unaccounted primitive " + clazz);
 				return theComplexity;
 			} else if (clazz == Object.class)
-				return theComplexity = 10;
+				return theComplexity = 0;
 			else if (clazz.isInterface())
 				return theComplexity = 10 + addIntfs(clazz, new HashSet<>(Arrays.asList(clazz))).size();
 			else
-				return theComplexity = keyFor(clazz.getSuperclass()).getComplexity() + 1 + addIntfs(clazz, new HashSet<>()).size();
+				return theComplexity = keyFor(clazz.getSuperclass()).getSpecificity() + 1 + addIntfs(clazz, new HashSet<>()).size();
 		}
 
 		/**
@@ -1271,30 +1271,30 @@ public class TypeTokens {
 
 	/**
 	 * @param type The type to analyze
-	 * @return The complexity of the type. Sub-types are more complex than super-types.
+	 * @return The specificity of the type. Sub-types are more specific than super-types.
 	 */
-	public int getTypeComplexity(Type type) {
+	public int getTypeSpecificity(Type type) {
 		if (type instanceof Class)
-			return keyFor((Class<?>) type).getComplexity();
+			return keyFor((Class<?>) type).getSpecificity();
 		else if (type instanceof ParameterizedType) {
 			ParameterizedType pt = (ParameterizedType) type;
-			int complexity = getTypeComplexity(pt.getRawType());
+			int complexity = getTypeSpecificity(pt.getRawType());
 			for (Type p : pt.getActualTypeArguments())
-				complexity += getTypeComplexity(p);
+				complexity += getTypeSpecificity(p);
 			return complexity;
 		} else if (type instanceof GenericArrayType)
-			return getTypeComplexity(((GenericArrayType) type).getGenericComponentType()) + 1;
+			return getTypeSpecificity(((GenericArrayType) type).getGenericComponentType()) + 1;
 		else if (type instanceof TypeVariable) {
 			int complexity = 0;
 			for (Type bound : ((TypeVariable<?>) type).getBounds())
-				complexity += getTypeComplexity(bound);
+				complexity += getTypeSpecificity(bound);
 			return complexity;
 		} else if (type instanceof WildcardType) {
 			int complexity = 0;
 			for (Type bound : ((WildcardType) type).getLowerBounds())
-				complexity += getTypeComplexity(bound);
+				complexity += getTypeSpecificity(bound);
 			for (Type bound : ((WildcardType) type).getUpperBounds())
-				complexity += getTypeComplexity(bound);
+				complexity += getTypeSpecificity(bound);
 			return complexity;
 		} else
 			throw new IllegalArgumentException("Unrecognized type: " + type);

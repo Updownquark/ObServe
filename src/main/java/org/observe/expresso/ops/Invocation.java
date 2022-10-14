@@ -197,9 +197,9 @@ public abstract class Invocation implements ObservableExpression {
 				paramTypes = new TypeToken[m.getParameterTypes().length];
 				for (int p = 0; p < paramTypes.length; p++) {
 					paramTypes[p] = TypeTokens.get().of(m.getGenericParameterTypes()[p]);
-					complexity += TypeTokens.get().getTypeComplexity(paramTypes[p].getType());
+					complexity += TypeTokens.get().getTypeSpecificity(paramTypes[p].getType());
 				}
-				if (complexity < bestResult.complexity)
+				if (complexity < bestResult.specificity)
 					continue; // Current result is better than this even if it matches
 			}
 			List<QonfigInterpretationException> errors = null;
@@ -288,7 +288,7 @@ public abstract class Invocation implements ObservableExpression {
 						if (complexity < 0) {
 							complexity = 0;
 							for (TypeToken<?> pt : paramTypes)
-								complexity += TypeTokens.get().getTypeComplexity(pt.getType());
+								complexity += TypeTokens.get().getTypeSpecificity(pt.getType());
 						}
 						bestResult = new Invocation.MethodResult<>(m, o, false, (TypeToken<T>) returnType, complexity);
 					}
@@ -637,15 +637,15 @@ public abstract class Invocation implements ObservableExpression {
 		private final boolean isArg0Context;
 		/** The return type of the invocation */
 		public final TypeToken<R> returnType;
-		/** The {@link TypeTokens#getTypeComplexity(Type) complexity} of the method's parameters */
-		public final int complexity;
+		/** The {@link TypeTokens#getTypeSpecificity(Type) specificity} of the method's parameters */
+		public final int specificity;
 
-		MethodResult(M method, int argListOption, boolean arg0Context, TypeToken<R> returnType, int complexity) {
+		MethodResult(M method, int argListOption, boolean arg0Context, TypeToken<R> returnType, int specificity) {
 			this.method = method;
 			this.argListOption = argListOption;
 			isArg0Context = arg0Context;
 			this.returnType = returnType;
-			this.complexity = complexity;
+			this.specificity = specificity;
 		}
 
 		/**
