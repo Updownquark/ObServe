@@ -1,7 +1,5 @@
 package org.observe.expresso;
 
-import static org.observe.expresso.ObservableModelSet.buildExternal;
-
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -274,9 +272,25 @@ public interface ObservableModelSet {
 	 *         <li>an {@link ObservableModelSet} if the thing is a sub-model (created with
 	 *         {@link ObservableModelSet.Builder#createSubModel(String)})</li>
 	 *         <li>any other structure that the particular model implementation knows how to deal with</li>
+	 *         <li>or null if no such thing exists with the given path in this model set</li>
 	 *         </ul>
 	 */
 	Object getThing(String path);
+
+	/**
+	 * @param path The path of the sub-model to get
+	 * @return The model set at the given path
+	 * @throws IllegalArgumentException If there is no sub-model at the given path
+	 */
+	default ObservableModelSet getSubModel(String path) throws IllegalArgumentException {
+		Object thing = getThing(path);
+		if (thing == null)
+			throw new IllegalArgumentException("No such sub-model " + this + "." + path);
+		else if (!(thing instanceof ObservableModelSet))
+			throw new IllegalArgumentException("Value at " + this + "." + path + " is not a model");
+		else
+			return (ObservableModelSet) thing;
+	}
 
 	NameChecker getNameChecker();
 
@@ -456,6 +470,8 @@ public interface ObservableModelSet {
 
 		public <M, MV extends M> ExternalModelSetBuilder with(String name, ModelInstanceType<M, MV> type, MV item)
 			throws QonfigInterpretationException {
+			if (item == null)
+				throw new NullPointerException("Installing null for " + type + "@" + name);
 			theNameChecker.checkName(name);
 			if (theThings.containsKey(name))
 				throw new QonfigInterpretationException(
@@ -1071,7 +1087,7 @@ public interface ObservableModelSet {
 		public WrappedInstanceBuilder wrap(ModelSetInstance msi) {
 			WrappedInstanceBuilderImpl instBuilder = new WrappedInstanceBuilderImpl(this, theModelId, msi, thePlaceholders.values(),
 				theCustomValues.values());
-			install(instBuilder, buildExternal(theNameChecker).build());
+			install(instBuilder, ObservableModelSet.buildExternal(theNameChecker).build());
 			return instBuilder;
 		}
 

@@ -194,7 +194,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 					path.setLength(pathLen);
 					Expresso.ExtModelValue<?> container = child.interpret(Expresso.ExtModelValue.class);
 					ModelInstanceType<Object, Object> childType = (ModelInstanceType<Object, Object>) container.getType(child);
-					ValueContainer<Object, Object> defaultV = child.getAttribute("default", childType, () -> null);
+					ValueContainer<Object, Object> defaultV = child.asElement("ext-model-value").getAttribute("default", childType, null);
 					model.withExternal(name, childType, new ObservableModelSet.ExtValueRef<Object>() {
 						@Override
 						public Object get(ExternalModelSet extModels) {
@@ -385,7 +385,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 					ValueCreator<?, ?> container = child.interpret(ValueCreator.class);
 					model.withMaker(child.getAttributeText("model-element", "name"), container);
 				} else if (child.fulfills(subModelRole)) {
-					ObservableModelSet.Builder subModel = model.createSubModel(child.getAttributeText("abst-model", "name"));
+					ObservableModelSet.Builder subModel = model.createSubModel(child.getAttributeText("named", "name"));
 					child.setModels(subModel, null);
 					child.interpret(ObservableModelSet.class);
 				}

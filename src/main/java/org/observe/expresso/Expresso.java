@@ -8,6 +8,7 @@ import org.qommons.config.QonfigInterpreterCore.QonfigValueCreator;
 
 import com.google.common.reflect.TypeToken;
 
+/** A simple structure consisting of a class view and models, the definition for a set of models for an appliction */
 public class Expresso {
 	/**
 	 * Provided to

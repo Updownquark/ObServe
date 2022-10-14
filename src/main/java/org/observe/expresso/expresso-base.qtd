@@ -23,6 +23,7 @@ It builds on the Expresso-Core specification and contains everything needed for 
 			<attr-mod name="map.key-type" specify="optional" default="" />
 			<child-def name="entry" type="entry" min="0" max="inf" />
 		</add-on>
+
 		<add-on name="map-model-value" requires="model-value">
 			<attribute name="key-type" type="string" specify="required" />
 			<value-mod specify="forbidden" />

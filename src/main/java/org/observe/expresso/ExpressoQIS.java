@@ -86,7 +86,7 @@ public class ExpressoQIS implements SpecialSession<ExpressoQIS> {
 			if (defaultValue == null)
 				return null;
 			return new ValueContainer<M, MV>() {
-				final Function<ModelSetInstance, MV> def = defaultValue.get();
+				final Function<ModelSetInstance, MV> def = defaultValue == null ? null : defaultValue.get();
 
 				@Override
 				public ModelInstanceType<M, MV> getType() {
@@ -95,7 +95,7 @@ public class ExpressoQIS implements SpecialSession<ExpressoQIS> {
 
 				@Override
 				public MV get(ModelSetInstance models) {
-					return def.apply(models);
+					return def == null ? null : def.apply(models);
 				}
 			};
 		}

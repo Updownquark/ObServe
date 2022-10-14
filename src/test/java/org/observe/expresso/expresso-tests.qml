@@ -6,6 +6,7 @@
 
 		Constant
 		Simple value
+			Blank, with init, and with expression
 		Derived value (+ test set)
 		Simple Lists, Sorted Lists, Sets, Sorted Sets with configured elements
 		Derived Lists, Sorted Lists, Sets, Sorted Sets (+ test set)
@@ -70,14 +71,19 @@
 			Model value (e.g. 'model.value')
 			Parenthetic
 
+		Test external models
 		In new file, test Expresso-Config
 		In new file, test styles (make a test toolkit and impl?)
 	-->
 	<imports>
 		<import>org.observe.expresso.ExpressoTestEntity</import>
+		<import>org.junit.Assert.*</import>
 	</imports>
 	<models>
-		<model name="model1">
+		<ext-model name="ext">
+			<value name="actionName" type="String" />
+		</ext-model>
+		<model name="models">
 			<value name="test" init="new ExpressoTestEntity()" />
 			<value name="expected" init="new ExpressoTestEntity()" />
 
@@ -101,8 +107,19 @@
 
 			<value name="error">test.assertEquals(expected)</value>
 		</model>
-		<model name="model2">
-			<action name="assignInst">model1.anyInst=`01Jan2022 12:00pm`</action>
+		<model name="tests">
+			<model name="assignInt">
+				<action name="setExpectInt">models.expected.setInt(models.anyInt)</action>
+				<action name="checkNotEqual">assertNotEquals(ext.actionName, models.expected, models.test)</action>
+				<action name="checkError">assertNotNull(ext.actionName, models.error)</action>
+				<action name="assignInt">models.assignInt</action>
+			</model>
+			<model name="assignInst">
+				<action name="setExpectInst">models.expected.setInstant(models.anyInst)</action>
+				<action name="checkNotEqual">assertNotEquals(ext.actionName, models.expected, models.test)</action>
+				<action name="checkError">assertNotNull(ext.actionName, models.error)</action>
+				<action name="assignInst">models.assignInst</action>
+			</model>
 		</model>
 	</models>
 </expresso>
