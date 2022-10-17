@@ -108,6 +108,13 @@
 					<map-reverse type="modify-source" target-as="intValue">entity.setInt(intValue)</map-reverse>
 				</map-to>
 			</transform>
+			<transform name="combinedInt" source="test">
+				<map-to source-as="entity">
+					<combine-with name="other">anyInt</combine-with>
+					<map-with>entity.getInt()+other</map-with>
+					<map-reverse type="modify-source" target-as="intValue">entity.setInt(intValue-other)</map-reverse>
+				</map-to>
+			</transform>
 
 			<action name="assignInt">test.setInt(anyInt)</action>
 			<action name="assignDbl">test.setDouble(anyDbl)</action>
@@ -179,7 +186,15 @@
 				<action name="assignDerived">models.derivedIntModifiable+=500</action>
 				<action name="checkDerivedChanged">assertNotEquals(ext.actionName, initSource, models.derivedIntModifiable)</action>
 				<action name="checkDerived2">assertEquals(ext.actionName, models.derivedIntModifiable, models.test.getInt())</action>
-				<!-- TODO Test combine-with, enabled, accept, add, add-accept attributes for map-to -->
+
+				<action name="checkCombined">assertEquals(ext.actionName, models.test.getInt()+models.anyInt, models.combinedInt)</action>
+				<action name="modifyCombinedSource">models.test.setInt(22)</action>
+				<action name="checkCombinedChanged">assertEquals(ext.actionName, models.test.getInt()+models.anyInt, models.combinedInt)</action>
+				<action name="modifyCombinedOther">models.anyInt=42</action>
+				<action name="checkCombinedChanged2">assertEquals(ext.actionName, models.test.getInt()+models.anyInt, models.combinedInt)</action>
+				<action name="modifyCombined">models.combinedInt=-37</action>
+				<action name="checkCombinedChanged3">assertEquals(ext.actionName, models.test.getInt()+models.anyInt, models.combinedInt)</action>
+				<!-- TODO Test enabled, accept, add, add-accept attributes for map-to -->
 			</model>
 			<model name="assignInt">
 				<action name="setExpectInt">models.expected.setInt(models.anyInt)</action>

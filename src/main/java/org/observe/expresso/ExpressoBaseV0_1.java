@@ -1311,11 +1311,9 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 			ObservableModelSet.WrappedInstanceBuilder reverseMSIBuilder = reverseModels.wrap(modelSet)//
 				.with(sourcePlaceholder, sourceV.disableWith(ObservableValue.of(StdMsg.UNSUPPORTED_OPERATION)))//
 				.with(targetPlaceholder, targetV.disableWith(ObservableValue.of(StdMsg.UNSUPPORTED_OPERATION)));
-			Map<String, SettableValue<Object>> transformCombinedVs = new LinkedHashMap<>();
 			Map<String, SettableValue<Object>> combinedVs = new LinkedHashMap<>();
 			for (Map.Entry<String, ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<Object>>> cv : combinedValues
 				.entrySet()) {
-				transformCombinedVs.put(cv.getKey(), (SettableValue<Object>) modelSet.get(cv.getKey(), ModelTypes.Value.any()));
 				SettableValue<Object> value = SettableValue.build((TypeToken<Object>) cv.getValue().getType().getType(0)).build();
 				combinedVs.put(cv.getKey(), value);
 				reverseMSIBuilder.with(cv.getValue(), value.disableWith(ObservableValue.of(StdMsg.UNSUPPORTED_OPERATION)));
@@ -1337,45 +1335,60 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 				if (stateful)
 					sourceV.set(tvs.getCurrentSource(), null);
 				targetV.set(target, null);
+				int cvIdx = 0;
 				for (Map.Entry<String, ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<Object>>> cv : combinedValues
-					.entrySet())
-					combinedVs.get(cv.getKey()).set(tvs.get(transformCombinedVs.get(cv.getKey())), null);
+					.entrySet()) {
+					combinedVs.get(cv.getKey()).set(tvs.get(transformation.getArg(cvIdx)), null);
+					cvIdx++;
+				}
 				return reversedEvld.get();
 			};
 			enabledFn = enabledEvld == null ? null : tvs -> {
 				if (stateful)
 					sourceV.set(tvs.getCurrentSource(), null);
 				targetV.set(null, null);
+				int cvIdx = 0;
 				for (Map.Entry<String, ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<Object>>> cv : combinedValues
-					.entrySet())
-					combinedVs.get(cv.getKey()).set(tvs.get(transformCombinedVs.get(cv.getKey())), null);
+					.entrySet()) {
+					combinedVs.get(cv.getKey()).set(tvs.get(transformation.getArg(cvIdx)), null);
+					cvIdx++;
+				}
 				return acceptEvld.get();
 			};
 			acceptFn = enabledEvld == null ? null : (target, tvs) -> {
 				if (stateful)
 					sourceV.set(tvs.getCurrentSource(), null);
 				targetV.set(target, null);
+				int cvIdx = 0;
 				for (Map.Entry<String, ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<Object>>> cv : combinedValues
-					.entrySet())
-					combinedVs.get(cv.getKey()).set(tvs.get(transformCombinedVs.get(cv.getKey())), null);
+					.entrySet()) {
+					combinedVs.get(cv.getKey()).set(tvs.get(transformation.getArg(cvIdx)), null);
+					cvIdx++;
+				}
 				return acceptEvld.get();
 			};
 			addFn = addEvld == null ? null : (target, tvs, test) -> {
 				if (stateful)
 					sourceV.set(tvs.getCurrentSource(), null);
 				targetV.set(target, null);
+				int cvIdx = 0;
 				for (Map.Entry<String, ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<Object>>> cv : combinedValues
-					.entrySet())
-					combinedVs.get(cv.getKey()).set(tvs.get(transformCombinedVs.get(cv.getKey())), null);
+					.entrySet()) {
+					combinedVs.get(cv.getKey()).set(tvs.get(transformation.getArg(cvIdx)), null);
+					cvIdx++;
+				}
 				return addEvld.get();
 			};
 			addAcceptFn = addAcceptEvld == null ? null : (target, tvs) -> {
 				if (stateful)
 					sourceV.set(tvs.getCurrentSource(), null);
 				targetV.set(target, null);
+				int cvIdx = 0;
 				for (Map.Entry<String, ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<Object>>> cv : combinedValues
-					.entrySet())
-					combinedVs.get(cv.getKey()).set(tvs.get(transformCombinedVs.get(cv.getKey())), null);
+					.entrySet()) {
+					combinedVs.get(cv.getKey()).set(tvs.get(transformation.getArg(cvIdx)), null);
+					cvIdx++;
+				}
 				return addAcceptEvld.get();
 			};
 			return new Transformation.SourceReplacingReverse<>(transformation, reverseFn, enabledFn, acceptFn, addFn, addAcceptFn, stateful,
@@ -1423,11 +1436,9 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 			ObservableModelSet.WrappedInstanceBuilder reverseMSIBuilder = reverseModels.wrap(modelSet)//
 				.with(sourcePlaceholder, sourceV.disableWith(ObservableValue.of(StdMsg.UNSUPPORTED_OPERATION)))//
 				.with(targetPlaceholder, targetV.disableWith(ObservableValue.of(StdMsg.UNSUPPORTED_OPERATION)));
-			Map<String, SettableValue<Object>> transformCombinedVs = new LinkedHashMap<>();
 			Map<String, SettableValue<Object>> combinedVs = new LinkedHashMap<>();
 			for (Map.Entry<String, ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<Object>>> cv : combinedValues
 				.entrySet()) {
-				transformCombinedVs.put(cv.getKey(), (SettableValue<Object>) modelSet.get(cv.getKey(), ModelTypes.Value.any()));
 				SettableValue<Object> value = SettableValue.build((TypeToken<Object>) cv.getValue().getType().getType(0)).build();
 				combinedVs.put(cv.getKey(), value);
 				reverseMSIBuilder.with(cv.getValue(), value.disableWith(ObservableValue.of(StdMsg.UNSUPPORTED_OPERATION)));
@@ -1448,41 +1459,56 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 			reverseFn = (target, tvs) -> {
 				sourceV.set(tvs.getCurrentSource(), null);
 				targetV.set(target, null);
+				int cvIdx = 0;
 				for (Map.Entry<String, ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<Object>>> cv : combinedValues
-					.entrySet())
-					combinedVs.get(cv.getKey()).set(tvs.get(transformCombinedVs.get(cv.getKey())), null);
+					.entrySet()) {
+					combinedVs.get(cv.getKey()).set(tvs.get(transformation.getArg(cvIdx)), null);
+					cvIdx++;
+				}
 				reversedEvld.act(null);
 			};
 			enabledFn = enabledEvld == null ? null : tvs -> {
 				sourceV.set(tvs.getCurrentSource(), null);
 				targetV.set(null, null);
+				int cvIdx = 0;
 				for (Map.Entry<String, ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<Object>>> cv : combinedValues
-					.entrySet())
-					combinedVs.get(cv.getKey()).set(tvs.get(transformCombinedVs.get(cv.getKey())), null);
+					.entrySet()) {
+					combinedVs.get(cv.getKey()).set(tvs.get(transformation.getArg(cvIdx)), null);
+					cvIdx++;
+				}
 				return acceptEvld.get();
 			};
 			acceptFn = enabledEvld == null ? null : (target, tvs) -> {
 				sourceV.set(tvs.getCurrentSource(), null);
 				targetV.set(target, null);
+				int cvIdx = 0;
 				for (Map.Entry<String, ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<Object>>> cv : combinedValues
-					.entrySet())
-					combinedVs.get(cv.getKey()).set(tvs.get(transformCombinedVs.get(cv.getKey())), null);
+					.entrySet()) {
+					combinedVs.get(cv.getKey()).set(tvs.get(transformation.getArg(cvIdx)), null);
+					cvIdx++;
+				}
 				return acceptEvld.get();
 			};
 			addFn = addEvld == null ? null : (target, tvs, test) -> {
 				sourceV.set(tvs.getCurrentSource(), null);
 				targetV.set(target, null);
+				int cvIdx = 0;
 				for (Map.Entry<String, ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<Object>>> cv : combinedValues
-					.entrySet())
-					combinedVs.get(cv.getKey()).set(tvs.get(transformCombinedVs.get(cv.getKey())), null);
+					.entrySet()) {
+					combinedVs.get(cv.getKey()).set(tvs.get(transformation.getArg(cvIdx)), null);
+					cvIdx++;
+				}
 				return addEvld.get();
 			};
 			addAcceptFn = addAcceptEvld == null ? null : (target, tvs) -> {
 				sourceV.set(tvs.getCurrentSource(), null);
 				targetV.set(target, null);
+				int cvIdx = 0;
 				for (Map.Entry<String, ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<Object>>> cv : combinedValues
-					.entrySet())
-					combinedVs.get(cv.getKey()).set(tvs.get(transformCombinedVs.get(cv.getKey())), null);
+					.entrySet()) {
+					combinedVs.get(cv.getKey()).set(tvs.get(transformation.getArg(cvIdx)), null);
+					cvIdx++;
+				}
 				return addAcceptEvld.get();
 			};
 			return new Transformation.SourceModifyingReverse<>(reverseFn, enabledFn, acceptFn, addFn, addAcceptFn);
