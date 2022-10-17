@@ -5,6 +5,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.function.BiFunction;
 import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 import org.observe.ObservableValue;
@@ -68,6 +69,27 @@ public interface ObservableExpression {
 	 * @return The replaced expression
 	 */
 	ObservableExpression replaceAll(Function<ObservableExpression, ? extends ObservableExpression> replace);
+
+	/**
+	 * @param search The search to apply
+	 * @return All of this expression or its descendants that match the given search
+	 */
+	default BetterList<ObservableExpression> find(Predicate<ObservableExpression> search) {
+		boolean thisApplies = search.test(this);
+		BetterList<ObservableExpression> children = BetterList.of(getChildren().stream().flatMap(child -> child.find(search).stream()));
+		if (thisApplies) {
+			if (children.isEmpty())
+				return BetterList.of(this);
+			else {
+				ObservableExpression[] found = new ObservableExpression[children.size() + 1];
+				found[0] = this;
+				for (int i = 0; i < children.size(); i++)
+					found[i + 1] = children.get(i);
+				return BetterList.of(found);
+			}
+		} else
+			return children;
+	}
 
 	/**
 	 * Attempts to evaluate this expression

@@ -32,17 +32,15 @@ It builds on the Expresso-Core specification and contains everything needed for 
 			<attribute name="sort-with" type="expression" specify="optional" />
 		</add-on>
 
-		<add-on name="map-reverse-type" abstract="true" />
-		<add-on name="source-modifying-transform-reverse" inherits="map-reverse-type">
-			<attribute name="function" type="expression" />
+		<add-on name="map-reverse-type" requires="map-reverse" abstract="true" />
+		<add-on name="modify-source" inherits="map-reverse-type">
 			<attribute name="enabled" type="expression" specify="optional" />
 			<attribute name="accept" type="expression" specify="optional" />
 			<attribute name="add" type="expression" specify="optional" />
 			<attribute name="add-accept" type="expression" specify="optional" />
 		</add-on>
-		<add-on name="source-replacing-transform-reverse" inherits="source-modifying-transform-reverse">
-			<attribute name="stateful" type="boolean" specify="optional" default="true" />
-			<attribute name="inexact" type="boolean" specify="optional" default="false" />
+		<add-on name="replace-source" inherits="modify-source">
+			<attribute name="inexact" type="boolean" default="false" />
 		</add-on>
 
 		<add-on name="abst-map-op" abstract="true" >
@@ -122,18 +120,23 @@ It builds on the Expresso-Core specification and contains everything needed for 
 			<child-def name="op" type="operation" min="0" max="inf" /> <!-- Allow min=0 to facilitate aliases -->
 		</element-def>
 		<element-def name="operation" abstract="true" />
-		<element-def name="modify-source" inherits="source-modifying-transform-reverse" />
-		<element-def name="replace-source" inherits="source-replacing-transform-reverse" />
-		<element-def name="map-reverse">
-			<attribute name="type" type="map-reverse-type" />
-		</element-def>
-		<element-def name="combine-with">
+		<element-def name="combine-with" inherits="named">
 			<value type="expression" specify="required" />
 		</element-def>
-		<element-def name="map-to" extends="operation" inherits="abst-map-op">
+		<element-def name="map-with">
+			<value type="expression" />
+		</element-def>
+		<element-def name="map-reverse">
+			<attribute name="type" type="map-reverse-type" />
+			<!-- Previous result reference? -->
+			<attribute name="target-as" type="identifier" />
+			<value type="expression" />
+		</element-def>
+		<element-def name="map-to" extends="operation" inherits="abst-map-op, typed">
+			<attribute name="source-as" type="identifier" />
 			<attribute name="equivalence" type="expression" specify="optional" />
-			<attribute name="function" type="expression" specify="required" />
 			<child-def name="combined-value" type="combine-with" min="0" max="inf" />
+			<child-def name="map" type="map-with" />
 			<child-def name="reverse" type="map-reverse" min="0" />
 		</element-def>
 		<element-def name="filter" extends="operation">

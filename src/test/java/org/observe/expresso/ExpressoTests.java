@@ -97,6 +97,12 @@ public class ExpressoTests {
 		executeTestActions("list");
 	}
 
+	/** Tests the mapping transformation type */
+	@Test
+	public void testMapTo() {
+		executeTestActions("mapTo");
+	}
+
 	/** Tests int assignment */
 	@Test
 	public void testAssignInt() {
@@ -131,7 +137,7 @@ public class ExpressoTests {
 					throw new AssertionError("Expected action " + actionName + " to throw " + exName);
 			} catch (RuntimeException e) {
 				if (exName == null || !exName.equals(e.getClass().getSimpleName()))
-					throw e;
+					throw new IllegalStateException("Unexpected exception on action " + actionName, e);
 			}
 		}
 	}

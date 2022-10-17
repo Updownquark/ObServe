@@ -969,20 +969,38 @@ public class TypeTokens {
 			}
 			Function<S, Object> fn;
 			if (primitiveTarget == double.class) {
-				fn = v -> toNumber.apply(v).doubleValue();
+				fn = v -> {
+					Number n = toNumber.apply(v);
+					return n == null ? null : n.doubleValue();
+				};
 				// Now left!=right and left!=double.class
 			} else if (primitiveSource == double.class || primitiveSource == float.class || primitiveSource == long.class)
 				throw new IllegalArgumentException("Cannot cast " + source + " to " + target);
 			// Now right can only be int, short, byte, or char
 			else if (primitiveTarget == long.class) {
-				fn = v -> toNumber.apply(v).longValue();
+				fn = v -> {
+					Number n = toNumber.apply(v);
+					return n == null ? null : n.longValue();
+				};
 			} else if (primitiveTarget == int.class) {
-				fn = v -> toNumber.apply(v).intValue();
+				fn = v -> {
+					Number n = toNumber.apply(v);
+					return n == null ? null : n.intValue();
+				};
 			} else if (primitiveSource == byte.class) {
 				if (primitiveTarget == short.class) {
-					fn = v -> toNumber.apply(v).shortValue();
+					fn = v -> {
+						Number n = toNumber.apply(v);
+						return n == null ? null : n.shortValue();
+					};
 				} else if (primitiveTarget == char.class) {
-					fn = v -> Character.valueOf((char) toNumber.apply(v).byteValue());
+					fn = v -> {
+						Number n = toNumber.apply(v);
+						if (n == null)
+							return null;
+						else
+							return Character.valueOf((char) n.byteValue());
+					};
 				} else
 					throw new IllegalArgumentException("Cannot cast " + target + " to " + source);
 			} else

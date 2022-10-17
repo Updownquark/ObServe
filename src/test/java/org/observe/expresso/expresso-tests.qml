@@ -100,7 +100,14 @@
 			<value name="anyStr" init="&quot;Something&quot;" />
 			<value type="java.time.Instant" name="anyInst" init="`05May2022 10:15:43am`" />
 			
+			<constant name="constant2">anyInt</constant>
 			<value name="derivedInt">anyInt*10</value>
+			<transform name="derivedIntModifiable" source="test">
+				<map-to source-as="entity">
+					<map-with>entity.getInt()</map-with>
+					<map-reverse type="modify-source" target-as="intValue">entity.setInt(intValue)</map-reverse>
+				</map-to>
+			</transform>
 
 			<action name="assignInt">test.setInt(anyInt)</action>
 			<action name="assignDbl">test.setDouble(anyDbl)</action>
@@ -122,6 +129,10 @@
 			<model name="constant">
 				<action name="testConstant">assertEquals(ext.actionName, 5, models.constant)</action>
 				<action name="testConstantAssignmentXUnsupportedOperationException">models.constant=6</action>
+				<value name="initInt" init="models.anyInt" />
+				<action name="testConstant2">assertEquals(ext.actionName, initInt, models.constant2)</action>
+				<action name="modifyConstantSource">models.anyInt+=50</action>
+				<action name="testConstant3">assertEquals(ext.actionName, initInt, models.constant2)</action>
 			</model>
 			<model name="simpleValue">
 				<action name="testConstant">assertEquals(ext.actionName, 5, models.alsoConstant)</action>
@@ -149,6 +160,26 @@
 				<action name="addValue">models.list.add(17)</action>
 				<action name="checkSize2">assertEquals(ext.actionName, 6, size)</action>
 				<!-- TODO Need more -->
+			</model>
+			<model name="mapTo">
+				<transform name="mapped" source="models.anyInt">
+					<map-to source-as="source">
+						<map-with>source+10</map-with>
+						<map-reverse type="replace-source" target-as="target">target-10</map-reverse>
+					</map-to>
+				</transform>
+				<value name="initSource" init="models.anyInt" />
+				<action name="checkMapped">assertEquals(ext.actionName, models.anyInt+10, mapped)</action>
+				<action name="modifyMapped">mapped+=25</action>
+				<action name="checkSource">assertEquals(ext.actionName, models.anyInt, initSource+25)</action>
+				<action name="checkMapped2">assertEquals(ext.actionName, models.anyInt+10, mapped)</action>
+
+				<action name="assignInitSource">initSource=models.test.getInt()</action>
+				<action name="checkDerived">assertEquals(ext.actionName, initSource, models.derivedIntModifiable)</action>
+				<action name="assignDerived">models.derivedIntModifiable+=500</action>
+				<action name="checkDerivedChanged">assertNotEquals(ext.actionName, initSource, models.derivedIntModifiable)</action>
+				<action name="checkDerived2">assertEquals(ext.actionName, models.derivedIntModifiable, models.test.getInt())</action>
+				<!-- TODO Test combine-with, enabled, accept, add, add-accept attributes for map-to -->
 			</model>
 			<model name="assignInt">
 				<action name="setExpectInt">models.expected.setInt(models.anyInt)</action>

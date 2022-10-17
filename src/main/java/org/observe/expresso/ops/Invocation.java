@@ -20,6 +20,7 @@ import org.observe.SettableValue;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableSet;
 import org.observe.expresso.ExpressoEnv;
+import org.observe.expresso.ModelType.ModelInstanceConverter;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelType.ModelInstanceType.SingleTyped;
 import org.observe.expresso.ModelTypes;
@@ -282,9 +283,13 @@ public abstract class Invocation implements ObservableExpression {
 					if (ok) {
 						TypeToken<?> returnType = tva.resolve(impl.getReturnType(m));
 
-						if (!voidTarget && !TypeTokens.get().isAssignable(targetType, returnType))
-							throw new QonfigInterpretationException("Return type " + returnType + " of method "
-								+ Invocation.printSignature(m) + " cannot be assigned to type " + targetType);
+						if (!voidTarget) {
+							ModelInstanceConverter<SettableValue<?>, SettableValue<?>> converter = ModelTypes.Value.forType(returnType)
+								.convert(ModelTypes.Value.forType(targetType));
+							if (converter == null)
+								throw new QonfigInterpretationException("Return type " + returnType + " of method "
+									+ Invocation.printSignature(m) + " cannot be assigned to type " + targetType);
+						}
 						if (complexity < 0) {
 							complexity = 0;
 							for (TypeToken<?> pt : paramTypes)

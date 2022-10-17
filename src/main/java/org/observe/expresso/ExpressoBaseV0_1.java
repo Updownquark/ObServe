@@ -6,7 +6,9 @@ import java.text.ParseException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
@@ -19,8 +21,8 @@ import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.SettableValue;
 import org.observe.Transformation;
+import org.observe.Transformation.MaybeReversibleTransformation;
 import org.observe.Transformation.TransformationPrecursor;
-import org.observe.Transformation.TransformationValues;
 import org.observe.assoc.ObservableMap;
 import org.observe.assoc.ObservableMultiMap;
 import org.observe.assoc.ObservableSortedMap;
@@ -66,8 +68,11 @@ import com.google.common.reflect.TypeToken;
 
 /** Qonfig Interpretation for the ExpressoBaseV0_1 API */
 public class ExpressoBaseV0_1 implements QonfigInterpretation {
+	/** Session key containing a model value's path */
 	public static final String PATH_KEY = "model-path";
+	/** Session key containing a model value's type, if known */
 	public static final String VALUE_TYPE_KEY = "value-type";
+	/** Sesison key containing a model value's key-type, if applicable and known */
 	public static final String KEY_TYPE_KEY = "key-type";
 
 	/** Represents an application so that various models in this class can provide intelligent interaction with the user */
@@ -111,6 +116,9 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		configureInternalModels(interpreter);
 		interpreter.createWith("first-value", ValueCreator.class, session -> createFirstValue(wrap(session)));
 		interpreter.createWith("transform", ValueCreator.class, session -> createTransform(wrap(session)));
+		interpreter.delegateToType("map-reverse", "type", MapReverse.class)//
+		.createWith("replace-source", MapReverse.class, session -> createSourceReplace(wrap(session)))//
+		.createWith("modify-source", MapReverse.class, session -> createSourceModifier(wrap(session)));
 		return interpreter;
 	}
 
@@ -500,6 +508,8 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 			return () -> {
 				TypeToken<Object> type = (TypeToken<Object>) session.get(VALUE_TYPE_KEY);
 				ValueContainer<SettableValue<?>, SettableValue<Object>> value;
+				@SuppressWarnings("unused") // For debugging
+				String valueS = valueX == null ? null : valueX.toString();
 				try {
 					value = valueX == null ? null : parseValue(//
 						exS.getExpressoEnv(), type, valueX);
@@ -724,6 +734,14 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		};
 	}
 
+	/**
+	 * Parses a type specified in a Qonfig file
+	 *
+	 * @param text The text to parse the type from
+	 * @param env The expresso environment to use to parse the type
+	 * @return The parsed type
+	 * @throws QonfigInterpretationException If the type cannot be parsed
+	 */
 	public static TypeToken<?> parseType(String text, ExpressoEnv env) throws QonfigInterpretationException {
 		VariableType vbl;
 		try {
@@ -735,6 +753,16 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		return type;
 	}
 
+	/**
+	 * Parses a simple value
+	 *
+	 * @param <T> The type to parse
+	 * @param env The environment to parse from
+	 * @param type The type to parse
+	 * @param expression The expression representing the value to parse
+	 * @return The parsed and evaluated value
+	 * @throws QonfigInterpretationException If the value could not be parsed or evaluated
+	 */
 	public static <T> ValueContainer<SettableValue<?>, SettableValue<T>> parseValue(ExpressoEnv env, TypeToken<T> type,
 		ObservableExpression expression) throws QonfigInterpretationException {
 		if (expression == null)
@@ -818,8 +846,8 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 							tx -> ptx.transform(tx, models));
 						return SettableValue.asSettable(value, __ -> "No reverse configured for " + transform.toString());
 					};
-					currentType = ptx.getTargetType();
 				}
+				currentType = ptx.getTargetType();
 				break;
 			case "refresh":
 				Function<ModelSetInstance, Observable<?>> refresh = op.getAttributeExpression("on")
@@ -1089,182 +1117,59 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 	private ParsedTransformation mapTransformation(TypeToken<Object> currentType, ExpressoQIS op)
 		throws QonfigInterpretationException {
 		List<? extends ExpressoQIS> combinedValues = op.forChildren("combined-value");
-		List<ValueContainer<?, ? extends SettableValue<?>>> combined = new ArrayList<>(combinedValues.size());
+		ExpressoQIS map = op.forChildren("map").getFirst();
+		ObservableModelSet.WrappedBuilder mapModelsBuilder = map.getExpressoEnv().getModels().wrap();
+		Map<String, ValueContainer<SettableValue<?>, SettableValue<Object>>> combined = new LinkedHashMap<>(combinedValues.size() * 2);
+		Map<String, ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<Object>>> combinedPlaceholders = new LinkedHashMap<>();
 		for (ExpressoQIS combine : combinedValues) {
-			String name = combine.getValueText();
-			combined.add(op.getExpressoEnv().getModels().get(name, ModelTypes.Value));
+			String name = combine.getAttributeText("name");
+			op.getExpressoEnv().getModels().getNameChecker().checkName(name);
+			ObservableExpression value = combine.getValueExpression();
+			ValueContainer<SettableValue<?>, SettableValue<Object>> combineV = value.evaluate(
+				(ModelInstanceType<SettableValue<?>, SettableValue<Object>>) (ModelInstanceType<?, ?>) ModelTypes.Value.any(),
+				combine.getExpressoEnv());
+			combined.put(name, combineV);
+			combinedPlaceholders.put(name, mapModelsBuilder.withRuntimeValue(name, combineV.getType()));
 		}
-		TypeToken<?>[] argTypes = new TypeToken[combined.size()];
-		for (int i = 0; i < argTypes.length; i++)
-			argTypes[i] = combined.get(i).getType().getType(0);
-		MethodFinder<Object, TransformationValues<?, ?>, ?, Object> map;
-		map = op.getAttributeExpression("function").findMethod(TypeTokens.get().OBJECT, op.getExpressoEnv());
-		map.withOption(argList(currentType).with(argTypes), (src, tv, __, args, models) -> {
-			args[0] = src;
-			for (int i = 0; i < combined.size(); i++)
-				args[i + 1] = tv.get(combined.get(i).get(models));
-		});
-		Function<ModelSetInstance, BiFunction<Object, TransformationValues<?, ?>, Object>> mapFn = map.find2();
-		TypeToken<Object> targetType = (TypeToken<Object>) map.getResultType();
-		ExpressoQIS reverseEl = op.forChildren("reverse").peekFirst();
-		return new ParsedTransformation() {
-			private boolean stateful;
-			private boolean inexact;
-			Function<ModelSetInstance, BiFunction<Object, TransformationValues<?, ?>, Object>> reverseFn;
-			Function<ModelSetInstance, BiConsumer<Object, TransformationValues<?, ?>>> reverseModifier;
-			Function<ModelSetInstance, Function<TransformationValues<?, ?>, String>> enabled;
-			Function<ModelSetInstance, BiFunction<Object, TransformationValues<?, ?>, String>> accept;
-			Function<ModelSetInstance, TriFunction<Object, TransformationValues<?, ?>, Boolean, Object>> create;
-			Function<ModelSetInstance, BiFunction<Object, TransformationValues<?, ?>, String>> addAccept;
+		String sourceName = op.getAttributeText("source-as");
+		ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<Object>> sourcePlaceholder = mapModelsBuilder
+			.withRuntimeValue(sourceName, ModelTypes.Value.forType(currentType));
+		ObservableModelSet.Wrapped mapModels = mapModelsBuilder.build();
+		map.setModels(mapModels, null);
+		ObservableExpression mapEx = map.getValueExpression();
+		String targetTypeName = op.getAttributeText("type");
+		TypeToken<Object> targetType;
+		ValueContainer<SettableValue<?>, SettableValue<Object>> mapped;
+		if (targetTypeName != null) {
+			targetType = (TypeToken<Object>) parseType(targetTypeName, map.getExpressoEnv());
+			mapped = mapEx.evaluate(ModelTypes.Value.forType(targetType), map.getExpressoEnv());
+		} else {
+			mapped = mapEx.evaluate(
+				(ModelInstanceType<SettableValue<?>, SettableValue<Object>>) (ModelInstanceType<?, ?>) ModelTypes.Value.any(),
+				map.getExpressoEnv());
+			targetType = (TypeToken<Object>) mapped.getType().getType(0);
+		}
 
-			{
-				if (reverseEl != null) {//
-					boolean modifying;
-					String reverseType = reverseEl.getAttributeText("type");
-					if (reverseType.equals("replace-source")) {
-						ExpressoQIS replaceSource = reverseEl.asElement("replace-source");
-						modifying = false;
-						stateful = replaceSource.getAttribute("stateful", Boolean.class);
-						inexact = replaceSource.getAttribute("inexact", Boolean.class);
-					} else if (reverseType.equals("modify-source")) {
-						modifying = true;
-						stateful = true;
-						inexact = false;
-					} else
-						throw new IllegalStateException("Unrecognized reverse type: " + reverseType);
-					TypeToken<TransformationValues<Object, Object>> tvType = TypeTokens.get()
-						.keyFor(Transformation.TransformationValues.class)
-						.parameterized(TypeTokens.get().getExtendsWildcard(currentType), TypeTokens.get().getExtendsWildcard(targetType));
-					if (modifying) {
-						reverseFn = null;
-						MethodFinder<Object, TransformationValues<?, ?>, ?, Void> reverse = reverseEl
-							.getAttributeExpression("function")
-							.findMethod(TypeTokens.get().VOID, reverseEl.getExpressoEnv());
-						reverse.withOption(argList(targetType, tvType), (r, tv, __, args, models) -> {
-							args[0] = r;
-							args[1] = tv;
-						});
-						if (stateful)
-							reverse.withOption(argList(currentType, targetType).with(argTypes), (r, tv, __, args, models) -> {
-								args[0] = r;
-								args[1] = tv.getCurrentSource();
-								for (int i = 0; i < combined.size(); i++)
-									args[i + 2] = combined.get(i);
-							});
-						reverse.withOption(argList(targetType).with(argTypes), (r, tv, __, args, models) -> {
-							args[0] = r;
-							for (int i = 0; i < combined.size(); i++)
-								args[i + 1] = combined.get(i);
-						});
-						reverseModifier = reverse.find2().andThen(fn -> (r, tv) -> {
-							fn.apply(r, tv);
-						});
-					} else {
-						reverseModifier = null;
-						MethodFinder<Object, TransformationValues<?, ?>, ?, Object> reverse = reverseEl
-							.getAttributeExpression("function")
-							.findMethod(currentType, reverseEl.getExpressoEnv());
-						reverse.withOption(argList(targetType, tvType), (r, tv, __, args, models) -> {
-							args[0] = r;
-							args[1] = tv;
-						});
-						if (stateful)
-							reverse.withOption(argList(currentType, targetType).with(argTypes), (r, tv, __, args, models) -> {
-								args[0] = r;
-								args[1] = tv.getCurrentSource();
-								for (int i = 0; i < combined.size(); i++)
-									args[i + 2] = combined.get(i);
-							});
-						reverse.withOption(argList(targetType).with(argTypes), (r, tv, __, args, models) -> {
-							args[0] = r;
-							for (int i = 0; i < combined.size(); i++)
-								args[i + 1] = combined.get(i);
-						});
-						reverseFn = reverse.find2();
-					}
+		boolean cached = op.getAttribute("cache", boolean.class);
+		boolean reEval = op.getAttribute("re-eval-on-update", boolean.class);
+		boolean fireIfUnchanged = op.getAttribute("fire-if-unchanged", boolean.class);
+		boolean nullToNull = op.getAttribute("null-to-null", boolean.class);
+		boolean manyToOne = op.getAttribute("many-to-one", boolean.class);
+		boolean oneToMany = op.getAttribute("one-to-many", boolean.class);
 
-					ObservableExpression enabledEx = reverseEl.getAttributeExpression("enabled");
-					if (enabledEx != null) {
-						enabled = enabledEx
-							.<TransformationValues<?, ?>, Void, Void, String> findMethod(TypeTokens.get().STRING,
-								reverseEl.getExpressoEnv())//
-							.withOption(argList(tvType), (tv, __, ___, args, models) -> {
-								args[0] = tv;
-							}).withOption(argList(currentType).with(argTypes), (tv, __, ___, args, models) -> {
-								args[0] = tv.getCurrentSource();
-								for (int i = 0; i < combined.size(); i++)
-									args[i + 1] = combined.get(i);
-							}).withOption(argList(argTypes), (tv, __, ___, args, models) -> {
-								for (int i = 0; i < combined.size(); i++)
-									args[i] = combined.get(i);
-							}).find1();
-					}
-					ObservableExpression acceptEx = reverseEl.getAttributeExpression("accept");
-					if (acceptEx != null) {
-						MethodFinder<Object, TransformationValues<?, ?>, ?, String> acceptFinder = acceptEx
-							.findMethod(TypeTokens.get().STRING, reverseEl.getExpressoEnv());
-						acceptFinder.withOption(argList(targetType, tvType), (r, tv, __, args, models) -> {
-							args[0] = r;
-							args[1] = tv;
-						});
-						if (stateful)
-							acceptFinder.withOption(argList(targetType, currentType).with(argTypes), (r, tv, __, args, models) -> {
-								args[0] = r;
-								args[1] = tv.getCurrentSource();
-								for (int i = 0; i < combined.size(); i++)
-									args[i + 2] = combined.get(i);
-							});
-						acceptFinder.withOption(argList(targetType).with(argTypes), (r, tv, __, args, models) -> {
-							args[0] = r;
-							for (int i = 0; i < combined.size(); i++)
-								args[i + 1] = combined.get(i);
-						});
-						accept = acceptFinder.find2();
-					}
-					ObservableExpression createEx = reverseEl.getAttributeExpression("create");
-					if (createEx != null) {
-						create = createEx
-							.<Object, TransformationValues<?, ?>, Boolean, Object> findMethod(currentType, reverseEl.getExpressoEnv())//
-							.withOption(argList(targetType, tvType, TypeTokens.get().BOOLEAN), (r, tv, b, args, models) -> {
-								args[0] = r;
-								args[1] = tv;
-								args[2] = b;
-							}).withOption(argList(targetType).with(argTypes).with(TypeTokens.get().BOOLEAN), (r, tv, b, args, models) -> {
-								args[0] = r;
-								for (int i = 0; i < combined.size(); i++)
-									args[i + 1] = combined.get(i);
-								args[args.length - 1] = b;
-							}).withOption(argList(targetType).with(argTypes), (r, tv, b, args, models) -> {
-								args[0] = r;
-								for (int i = 0; i < combined.size(); i++)
-									args[i + 1] = combined.get(i);
-							}).find3();
-					}
-					ObservableExpression addAcceptEx = reverseEl.getAttributeExpression("add-accept");
-					if (addAcceptEx != null) {
-						MethodFinder<Object, TransformationValues<?, ?>, ?, String> addAcceptFinder = addAcceptEx
-							.findMethod(TypeTokens.get().STRING, reverseEl.getExpressoEnv());
-						addAcceptFinder.withOption(argList(targetType, tvType), (r, tv, __, args, models) -> {
-							args[0] = r;
-							args[1] = tv;
-						});
-						if (stateful)
-							addAcceptFinder.withOption(argList(targetType, currentType).with(argTypes), (r, tv, __, args, models) -> {
-								args[0] = r;
-								args[1] = tv.getCurrentSource();
-								for (int i = 0; i < combined.size(); i++)
-									args[i + 2] = combined.get(i);
-							});
-						addAcceptFinder.withOption(argList(targetType).with(argTypes), (r, tv, __, args, models) -> {
-							args[0] = r;
-							for (int i = 0; i < combined.size(); i++)
-								args[i + 1] = combined.get(i);
-						});
-						addAccept = addAcceptFinder.find2();
-					}
-				}
+		MapReverse<Object, Object> mapReverse;
+		ExpressoQIS reverse = op.forChildren("reverse").peekFirst();
+		if (reverse != null) {
+			Map<String, TypeToken<Object>> combinedTypes = new LinkedHashMap<>();
+			for (Map.Entry<String, ValueContainer<SettableValue<?>, SettableValue<Object>>> combinedV : combined.entrySet()) {
+				combinedTypes.put(combinedV.getKey(), (TypeToken<Object>) combinedV.getValue().getType().getType(0));
 			}
+			reverse.put(REVERSE_CONFIG, new MapReverseConfig<>(sourceName, currentType, targetType, combinedTypes));
+			mapReverse = reverse.interpret(MapReverse.class);
+		} else
+			mapReverse = null;
 
+		return new ParsedTransformation() {
 			@Override
 			public TypeToken<Object> getTargetType() {
 				return targetType;
@@ -1272,42 +1177,330 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 
 			@Override
 			public boolean isReversible() {
-				return reverseEl != null;
+				return mapReverse != null;
 			}
 
 			@Override
-			public Transformation<Object, Object> transform(TransformationPrecursor<Object, Object, ?> precursor,
+			public Transformation<Object, Object> transform(Transformation.TransformationPrecursor<Object, Object, ?> precursor,
 				ModelSetInstance modelSet) {
-				for (ValueContainer<?, ? extends SettableValue<?>> v : combined)
-					precursor = (Transformation.ReversibleTransformationPrecursor<Object, Object, ?>) precursor
-					.combineWith(v.get(modelSet));
-				if (!(precursor instanceof Transformation.ReversibleTransformationPrecursor))
-					return precursor.build(mapFn.apply(modelSet));
-				Transformation.MaybeReversibleMapping<Object, Object> built;
-				built = ((Transformation.ReversibleTransformationPrecursor<Object, Object, ?>) precursor).build(mapFn.apply(modelSet));
-				if (reverseFn == null && reverseModifier == null) {//
-					return built;
-				} else {
-					Function<TransformationValues<?, ?>, String> enabled2 = enabled == null ? null : enabled.apply(modelSet);
-					BiFunction<Object, TransformationValues<?, ?>, String> accept2 = accept == null ? null : accept.apply(modelSet);
-					TriFunction<Object, TransformationValues<?, ?>, Boolean, Object> create2 = create == null ? null
-						: create.apply(modelSet);
-					BiFunction<Object, TransformationValues<?, ?>, String> addAccept2 = addAccept == null ? null
-						: addAccept.apply(modelSet);
-					if (reverseModifier != null) {
-						BiConsumer<Object, TransformationValues<?, ?>> reverseModifier2 = reverseModifier.apply(modelSet);
-						return built.withReverse(
-							new Transformation.SourceModifyingReverse<>(reverseModifier2, enabled2, accept2, create2, addAccept2));
-					} else {
-						BiFunction<Object, TransformationValues<?, ?>, Object> reverseFn2 = reverseFn.apply(modelSet);
-						return built.withReverse(new Transformation.SourceReplacingReverse<>(built, reverseFn2, enabled2, accept2, create2,
-							addAccept2, stateful, inexact));
-					}
+				SettableValue<Object> sourceV = SettableValue.build(currentType).build();
+				Map<String, SettableValue<Object>> combinedSourceVs = new LinkedHashMap<>();
+				Map<String, SettableValue<Object>> combinedTransformVs = new LinkedHashMap<>();
+				Transformation.TransformationBuilder<Object, Object, ?> builder = precursor//
+					.cache(cached).reEvalOnUpdate(reEval).fireIfUnchanged(fireIfUnchanged).nullToNull(nullToNull).manyToOne(manyToOne)
+					.oneToMany(oneToMany);
+				ObservableModelSet.WrappedInstanceBuilder mapMSIBuilder = mapModels.wrap(modelSet)//
+					.with(sourcePlaceholder, sourceV.disableWith(ObservableValue.of(StdMsg.UNSUPPORTED_OPERATION)));
+				for (Map.Entry<String, ValueContainer<SettableValue<?>, SettableValue<Object>>> cv : combined.entrySet()) {
+					SettableValue<Object> v = cv.getValue().get(modelSet);
+					combinedSourceVs.put(cv.getKey(), v);
+					builder = builder.combineWith(v);
+					SettableValue<Object> cv2 = SettableValue.build((TypeToken<Object>) cv.getValue().getType().getType(0)).build();
+					combinedTransformVs.put(cv.getKey(), cv2);
+					mapMSIBuilder.with(combinedPlaceholders.get(cv.getKey()), cv2);
 				}
+				ModelSetInstance mapMSI = mapMSIBuilder.build();
+				SettableValue<Object> mappedV = mapped.get(mapMSI);
+				BiFunction<Object, Transformation.TransformationValues<?, ?>, Object> mapFn = (source, tvs) -> {
+					sourceV.set(source, null);
+					for (Map.Entry<String, SettableValue<Object>> cv : combinedTransformVs.entrySet())
+						cv.getValue().set(tvs.get(combinedSourceVs.get(cv.getKey())), null);
+					return mappedV.get();
+				};
+				Transformation<Object, Object> transformation = builder.build(mapFn);
+				if (mapReverse != null)
+					transformation = ((MaybeReversibleTransformation<Object, Object>) transformation).withReverse(//
+						mapReverse.reverse(transformation, modelSet));
+				return transformation;
 			}
 		};
 	}
 
+	/**
+	 * Provided to a {@link MapReverse} implementation via the {@link ExpressoBaseV0_1#REVERSE_CONFIG} key
+	 *
+	 * @param <S> The type of the source value
+	 * @param <T> The type of the transformed value
+	 */
+	public static class MapReverseConfig<S, T> {
+		/** The name for the source value in expressions */
+		public final String sourceName;
+		/** The type of the source value */
+		public final TypeToken<S> sourceType;
+		/** The type of the transformed value */
+		public final TypeToken<T> targetType;
+		/** The name and type of each value combined */
+		public final Map<String, TypeToken<Object>> combinedValues;
+
+		/**
+		 * @param sourceName The name for the source value in expressions
+		 * @param sourceType The type of the source value
+		 * @param targetType The type of the transformed value
+		 * @param combinedValues The name and type of each value combined
+		 */
+		public MapReverseConfig(String sourceName, TypeToken<S> sourceType, TypeToken<T> targetType,
+			Map<String, TypeToken<Object>> combinedValues) {
+			this.sourceName = sourceName;
+			this.sourceType = sourceType;
+			this.targetType = targetType;
+			this.combinedValues = combinedValues;
+		}
+	}
+
+	/** The session key for the {@link MapReverseConfig} provided to the map-reverse session */
+	public static final String REVERSE_CONFIG = "reverse-config";
+
+	/**
+	 * Interface to provide via {@link org.qommons.config.QonfigInterpreterCore.Builder#createWith(String, Class, QonfigValueCreator)} to
+	 * support a new map-reverse type
+	 *
+	 * @param <S> The type of the source value
+	 * @param <T> The type of the transformed value
+	 */
+	public interface MapReverse<S, T> {
+		/**
+		 * @param transformation The transformation to reverse
+		 * @param modelSet The model instance
+		 * @return The transformation reverse
+		 */
+		Transformation.TransformReverse<S, T> reverse(Transformation<S, T> transformation, ModelSetInstance modelSet);
+	}
+
+	<S, T> MapReverse<S, T> createSourceReplace(ExpressoQIS reverse) throws QonfigInterpretationException {
+		MapReverseConfig<S, T> reverseConfig = (MapReverseConfig<S, T>) reverse.get(REVERSE_CONFIG);
+		ObservableExpression reverseX = reverse.getValueExpression();
+		ObservableExpression enabled = reverse.getAttributeExpression("enabled");
+		ObservableExpression accept = reverse.getAttributeExpression("accept");
+		ObservableExpression add = reverse.getAttributeExpression("add");
+		ObservableExpression addAccept = reverse.getAttributeExpression("add-accept");
+		String targetName = reverse.getAttributeText("target-as");
+		reverse.getExpressoEnv().getModels().getNameChecker().checkName(targetName);
+
+		boolean stateful = refersToSource(reverseX, reverseConfig.sourceName)//
+			|| (enabled != null && refersToSource(enabled, reverseConfig.sourceName))
+			|| (accept != null && refersToSource(accept, reverseConfig.sourceName));
+		boolean inexact = reverse.getAttribute("inexact", boolean.class);
+
+		ObservableModelSet.WrappedBuilder reverseModelBuilder = reverse.getExpressoEnv().getModels().wrap();
+		ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<S>> sourcePlaceholder = reverseModelBuilder
+			.withRuntimeValue(reverseConfig.sourceName, ModelTypes.Value.forType(reverseConfig.sourceType));
+		ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<T>> targetPlaceholder = reverseModelBuilder
+			.withRuntimeValue(targetName, ModelTypes.Value.forType(reverseConfig.targetType));
+		Map<String, ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<Object>>> combinedValues = new LinkedHashMap<>();
+		for (Map.Entry<String, TypeToken<Object>> combined : reverseConfig.combinedValues.entrySet())
+			combinedValues.put(combined.getKey(),
+				reverseModelBuilder.withRuntimeValue(combined.getKey(), ModelTypes.Value.forType(combined.getValue())));
+
+		ObservableModelSet.Wrapped reverseModels = reverseModelBuilder.build();
+		reverse.setModels(reverseModels, null);
+
+		ValueContainer<SettableValue<?>, SettableValue<S>> reversedV = reverseX.evaluate(ModelTypes.Value.forType(reverseConfig.sourceType),
+			reverse.getExpressoEnv());
+		ValueContainer<SettableValue<?>, SettableValue<String>> enabledV = enabled == null ? null
+			: enabled.evaluate(ModelTypes.Value.forType(String.class), reverse.getExpressoEnv());
+		ValueContainer<SettableValue<?>, SettableValue<String>> acceptV = accept == null ? null
+			: accept.evaluate(ModelTypes.Value.forType(String.class), reverse.getExpressoEnv());
+		ValueContainer<SettableValue<?>, SettableValue<S>> addV = add == null ? null
+			: add.evaluate(ModelTypes.Value.forType(reverseConfig.sourceType), reverse.getExpressoEnv());
+		ValueContainer<SettableValue<?>, SettableValue<String>> addAcceptV = addAccept == null ? null
+			: addAccept.evaluate(ModelTypes.Value.forType(String.class), reverse.getExpressoEnv());
+
+		return (transformation, modelSet) -> {
+			SettableValue<S> sourceV = SettableValue.build(reverseConfig.sourceType).build();
+			SettableValue<T> targetV = SettableValue.build(reverseConfig.targetType).build();
+			ObservableModelSet.WrappedInstanceBuilder reverseMSIBuilder = reverseModels.wrap(modelSet)//
+				.with(sourcePlaceholder, sourceV.disableWith(ObservableValue.of(StdMsg.UNSUPPORTED_OPERATION)))//
+				.with(targetPlaceholder, targetV.disableWith(ObservableValue.of(StdMsg.UNSUPPORTED_OPERATION)));
+			Map<String, SettableValue<Object>> transformCombinedVs = new LinkedHashMap<>();
+			Map<String, SettableValue<Object>> combinedVs = new LinkedHashMap<>();
+			for (Map.Entry<String, ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<Object>>> cv : combinedValues
+				.entrySet()) {
+				transformCombinedVs.put(cv.getKey(), (SettableValue<Object>) modelSet.get(cv.getKey(), ModelTypes.Value.any()));
+				SettableValue<Object> value = SettableValue.build((TypeToken<Object>) cv.getValue().getType().getType(0)).build();
+				combinedVs.put(cv.getKey(), value);
+				reverseMSIBuilder.with(cv.getValue(), value.disableWith(ObservableValue.of(StdMsg.UNSUPPORTED_OPERATION)));
+			}
+			ModelSetInstance reverseMSI = reverseMSIBuilder.build();
+
+			SettableValue<S> reversedEvld = reversedV.get(reverseMSI);
+			SettableValue<String> enabledEvld = enabledV == null ? null : enabledV.get(reverseMSI);
+			SettableValue<String> acceptEvld = acceptV == null ? null : acceptV.get(reverseMSI);
+			SettableValue<S> addEvld = addV == null ? null : addV.get(reverseMSI);
+			SettableValue<String> addAcceptEvld = addAcceptV == null ? null : addAcceptV.get(reverseMSI);
+
+			BiFunction<T, Transformation.TransformationValues<? extends S, ? extends T>, S> reverseFn;
+			Function<Transformation.TransformationValues<? extends S, ? extends T>, String> enabledFn;
+			BiFunction<T, Transformation.TransformationValues<? extends S, ? extends T>, String> acceptFn;
+			TriFunction<T, Transformation.TransformationValues<? extends S, ? extends T>, Boolean, S> addFn;
+			BiFunction<T, Transformation.TransformationValues<? extends S, ? extends T>, String> addAcceptFn;
+			reverseFn = (target, tvs) -> {
+				if (stateful)
+					sourceV.set(tvs.getCurrentSource(), null);
+				targetV.set(target, null);
+				for (Map.Entry<String, ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<Object>>> cv : combinedValues
+					.entrySet())
+					combinedVs.get(cv.getKey()).set(tvs.get(transformCombinedVs.get(cv.getKey())), null);
+				return reversedEvld.get();
+			};
+			enabledFn = enabledEvld == null ? null : tvs -> {
+				if (stateful)
+					sourceV.set(tvs.getCurrentSource(), null);
+				targetV.set(null, null);
+				for (Map.Entry<String, ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<Object>>> cv : combinedValues
+					.entrySet())
+					combinedVs.get(cv.getKey()).set(tvs.get(transformCombinedVs.get(cv.getKey())), null);
+				return acceptEvld.get();
+			};
+			acceptFn = enabledEvld == null ? null : (target, tvs) -> {
+				if (stateful)
+					sourceV.set(tvs.getCurrentSource(), null);
+				targetV.set(target, null);
+				for (Map.Entry<String, ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<Object>>> cv : combinedValues
+					.entrySet())
+					combinedVs.get(cv.getKey()).set(tvs.get(transformCombinedVs.get(cv.getKey())), null);
+				return acceptEvld.get();
+			};
+			addFn = addEvld == null ? null : (target, tvs, test) -> {
+				if (stateful)
+					sourceV.set(tvs.getCurrentSource(), null);
+				targetV.set(target, null);
+				for (Map.Entry<String, ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<Object>>> cv : combinedValues
+					.entrySet())
+					combinedVs.get(cv.getKey()).set(tvs.get(transformCombinedVs.get(cv.getKey())), null);
+				return addEvld.get();
+			};
+			addAcceptFn = addAcceptEvld == null ? null : (target, tvs) -> {
+				if (stateful)
+					sourceV.set(tvs.getCurrentSource(), null);
+				targetV.set(target, null);
+				for (Map.Entry<String, ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<Object>>> cv : combinedValues
+					.entrySet())
+					combinedVs.get(cv.getKey()).set(tvs.get(transformCombinedVs.get(cv.getKey())), null);
+				return addAcceptEvld.get();
+			};
+			return new Transformation.SourceReplacingReverse<>(transformation, reverseFn, enabledFn, acceptFn, addFn, addAcceptFn, stateful,
+				inexact);
+		};
+	}
+
+	<S, T> MapReverse<S, T> createSourceModifier(ExpressoQIS reverse) throws QonfigInterpretationException {
+		MapReverseConfig<S, T> reverseConfig = (MapReverseConfig<S, T>) reverse.get(REVERSE_CONFIG);
+		ObservableExpression reverseX = reverse.getValueExpression();
+		ObservableExpression enabled = reverse.getAttributeExpression("enabled");
+		ObservableExpression accept = reverse.getAttributeExpression("accept");
+		ObservableExpression add = reverse.getAttributeExpression("add");
+		ObservableExpression addAccept = reverse.getAttributeExpression("add-accept");
+		String targetName = reverse.getAttributeText("target-as");
+		reverse.getExpressoEnv().getModels().getNameChecker().checkName(targetName);
+
+		ObservableModelSet.WrappedBuilder reverseModelBuilder = reverse.getExpressoEnv().getModels().wrap();
+		ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<S>> sourcePlaceholder = reverseModelBuilder
+			.withRuntimeValue(reverseConfig.sourceName, ModelTypes.Value.forType(reverseConfig.sourceType));
+		ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<T>> targetPlaceholder = reverseModelBuilder
+			.withRuntimeValue(targetName, ModelTypes.Value.forType(reverseConfig.targetType));
+		Map<String, ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<Object>>> combinedValues = new LinkedHashMap<>();
+		for (Map.Entry<String, TypeToken<Object>> combined : reverseConfig.combinedValues.entrySet())
+			combinedValues.put(combined.getKey(),
+				reverseModelBuilder.withRuntimeValue(combined.getKey(), ModelTypes.Value.forType(combined.getValue())));
+
+		ObservableModelSet.Wrapped reverseModels = reverseModelBuilder.build();
+		reverse.setModels(reverseModels, null);
+
+		ValueContainer<ObservableAction<?>, ObservableAction<?>> reversedV = reverseX.evaluate(ModelTypes.Action.any(),
+			reverse.getExpressoEnv());
+		ValueContainer<SettableValue<?>, SettableValue<String>> enabledV = enabled == null ? null
+			: enabled.evaluate(ModelTypes.Value.forType(String.class), reverse.getExpressoEnv());
+		ValueContainer<SettableValue<?>, SettableValue<String>> acceptV = accept == null ? null
+			: accept.evaluate(ModelTypes.Value.forType(String.class), reverse.getExpressoEnv());
+		ValueContainer<SettableValue<?>, SettableValue<S>> addV = add == null ? null
+			: add.evaluate(ModelTypes.Value.forType(reverseConfig.sourceType), reverse.getExpressoEnv());
+		ValueContainer<SettableValue<?>, SettableValue<String>> addAcceptV = addAccept == null ? null
+			: addAccept.evaluate(ModelTypes.Value.forType(String.class), reverse.getExpressoEnv());
+
+		return (transformation, modelSet) -> {
+			SettableValue<S> sourceV = SettableValue.build(reverseConfig.sourceType).build();
+			SettableValue<T> targetV = SettableValue.build(reverseConfig.targetType).build();
+			ObservableModelSet.WrappedInstanceBuilder reverseMSIBuilder = reverseModels.wrap(modelSet)//
+				.with(sourcePlaceholder, sourceV.disableWith(ObservableValue.of(StdMsg.UNSUPPORTED_OPERATION)))//
+				.with(targetPlaceholder, targetV.disableWith(ObservableValue.of(StdMsg.UNSUPPORTED_OPERATION)));
+			Map<String, SettableValue<Object>> transformCombinedVs = new LinkedHashMap<>();
+			Map<String, SettableValue<Object>> combinedVs = new LinkedHashMap<>();
+			for (Map.Entry<String, ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<Object>>> cv : combinedValues
+				.entrySet()) {
+				transformCombinedVs.put(cv.getKey(), (SettableValue<Object>) modelSet.get(cv.getKey(), ModelTypes.Value.any()));
+				SettableValue<Object> value = SettableValue.build((TypeToken<Object>) cv.getValue().getType().getType(0)).build();
+				combinedVs.put(cv.getKey(), value);
+				reverseMSIBuilder.with(cv.getValue(), value.disableWith(ObservableValue.of(StdMsg.UNSUPPORTED_OPERATION)));
+			}
+			ModelSetInstance reverseMSI = reverseMSIBuilder.build();
+
+			ObservableAction<?> reversedEvld = reversedV.get(reverseMSI);
+			SettableValue<String> enabledEvld = enabledV == null ? null : enabledV.get(reverseMSI);
+			SettableValue<String> acceptEvld = acceptV == null ? null : acceptV.get(reverseMSI);
+			SettableValue<S> addEvld = addV == null ? null : addV.get(reverseMSI);
+			SettableValue<String> addAcceptEvld = addAcceptV == null ? null : addAcceptV.get(reverseMSI);
+
+			BiConsumer<T, Transformation.TransformationValues<? extends S, ? extends T>> reverseFn;
+			Function<Transformation.TransformationValues<? extends S, ? extends T>, String> enabledFn;
+			BiFunction<T, Transformation.TransformationValues<? extends S, ? extends T>, String> acceptFn;
+			TriFunction<T, Transformation.TransformationValues<? extends S, ? extends T>, Boolean, S> addFn;
+			BiFunction<T, Transformation.TransformationValues<? extends S, ? extends T>, String> addAcceptFn;
+			reverseFn = (target, tvs) -> {
+				sourceV.set(tvs.getCurrentSource(), null);
+				targetV.set(target, null);
+				for (Map.Entry<String, ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<Object>>> cv : combinedValues
+					.entrySet())
+					combinedVs.get(cv.getKey()).set(tvs.get(transformCombinedVs.get(cv.getKey())), null);
+				reversedEvld.act(null);
+			};
+			enabledFn = enabledEvld == null ? null : tvs -> {
+				sourceV.set(tvs.getCurrentSource(), null);
+				targetV.set(null, null);
+				for (Map.Entry<String, ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<Object>>> cv : combinedValues
+					.entrySet())
+					combinedVs.get(cv.getKey()).set(tvs.get(transformCombinedVs.get(cv.getKey())), null);
+				return acceptEvld.get();
+			};
+			acceptFn = enabledEvld == null ? null : (target, tvs) -> {
+				sourceV.set(tvs.getCurrentSource(), null);
+				targetV.set(target, null);
+				for (Map.Entry<String, ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<Object>>> cv : combinedValues
+					.entrySet())
+					combinedVs.get(cv.getKey()).set(tvs.get(transformCombinedVs.get(cv.getKey())), null);
+				return acceptEvld.get();
+			};
+			addFn = addEvld == null ? null : (target, tvs, test) -> {
+				sourceV.set(tvs.getCurrentSource(), null);
+				targetV.set(target, null);
+				for (Map.Entry<String, ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<Object>>> cv : combinedValues
+					.entrySet())
+					combinedVs.get(cv.getKey()).set(tvs.get(transformCombinedVs.get(cv.getKey())), null);
+				return addEvld.get();
+			};
+			addAcceptFn = addAcceptEvld == null ? null : (target, tvs) -> {
+				sourceV.set(tvs.getCurrentSource(), null);
+				targetV.set(target, null);
+				for (Map.Entry<String, ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<Object>>> cv : combinedValues
+					.entrySet())
+					combinedVs.get(cv.getKey()).set(tvs.get(transformCombinedVs.get(cv.getKey())), null);
+				return addAcceptEvld.get();
+			};
+			return new Transformation.SourceModifyingReverse<>(reverseFn, enabledFn, acceptFn, addFn, addAcceptFn);
+		};
+	}
+
+	private static boolean refersToSource(ObservableExpression ex, String sourceName) {
+		return !ex.find(ex2 -> ex2 instanceof NameExpression && ((NameExpression) ex2).getNames().getFirst().equals(sourceName)).isEmpty();
+	}
+
+	/**
+	 * @param <T> The type to compare
+	 * @param type The type to compare
+	 * @param expression The expression representing the comparison operation
+	 * @param env The environment to evaluate the expression in
+	 * @return A function to produce a comparator given a model instance set
+	 * @throws QonfigInterpretationException If the comparator cannot be evaluated
+	 */
 	public static <T> Function<ModelSetInstance, Comparator<T>> parseComparator(TypeToken<T> type, ObservableExpression expression,
 		ExpressoEnv env) throws QonfigInterpretationException {
 		TypeToken<? super T> superType = TypeTokens.get().getSuperWildcard(type);
@@ -1321,7 +1514,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		return compareFn.andThen(biFn -> (v1, v2) -> biFn.apply(v1, v2));
 	}
 
-	public static BetterList<TypeToken<?>> argList(TypeToken<?>... init) {
+	static BetterList<TypeToken<?>> argList(TypeToken<?>... init) {
 		return BetterTreeList.<TypeToken<?>> build().build().with(init);
 	}
 
