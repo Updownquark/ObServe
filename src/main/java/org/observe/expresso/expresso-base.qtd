@@ -29,7 +29,19 @@ It builds on the Expresso-Core specification and contains everything needed for 
 			<value-mod specify="forbidden" />
 		</add-on>
 		<add-on name="sorted" abstract="true" >
-			<attribute name="sort-with" type="expression" specify="optional" />
+			<child-def name="sort" type="sort-by" min="0" max="inf" />
+		</add-on>
+
+		<add-on name="complex-operation" requires="operation">
+			<attribute name="source-as" type="identifier" />
+		</add-on>
+		<add-on name="abst-map-op" requires="operation" inherits="complex-operation" abstract="true" >
+			<attribute name="cache" type="boolean" default="true" />
+			<attribute name="re-eval-on-update" type="boolean" default="true" />
+			<attribute name="fire-if-unchanged" type="boolean" default="true" />
+			<attribute name="null-to-null" type="boolean" default="false" />
+			<attribute name="many-to-one" type="boolean" default="false" />
+			<attribute name="one-to-many" type="boolean" default="false" />
 		</add-on>
 
 		<add-on name="map-reverse-type" requires="map-reverse" abstract="true" />
@@ -41,15 +53,6 @@ It builds on the Expresso-Core specification and contains everything needed for 
 		</add-on>
 		<add-on name="replace-source" inherits="modify-source">
 			<attribute name="inexact" type="boolean" default="false" />
-		</add-on>
-
-		<add-on name="abst-map-op" abstract="true" >
-			<attribute name="cache" type="boolean" default="true" />
-			<attribute name="re-eval-on-update" type="boolean" default="true" />
-			<attribute name="fire-if-unchanged" type="boolean" default="true" />
-			<attribute name="null-to-null" type="boolean" default="false" />
-			<attribute name="many-to-one" type="boolean" default="false" />
-			<attribute name="one-to-many" type="boolean" default="false" />
 		</add-on>
 
 		<add-on name="flatten-reverse-type" abstract="true" />
@@ -64,6 +67,10 @@ It builds on the Expresso-Core specification and contains everything needed for 
 	</add-ons>
 
 	<elements>
+		<element-def name="sort-by">
+			<attribute name="ascending" type="boolean" default="true" />
+			<value type="expression" />
+		</element-def>
 		<!-- Models, values and transformations -->
 		<!-- An Observable that fires values to be consumed by listeners -->
 		<element-def name="event" extends="model-value" inherits="allow-ext-model" />
@@ -133,13 +140,12 @@ It builds on the Expresso-Core specification and contains everything needed for 
 			<value type="expression" />
 		</element-def>
 		<element-def name="map-to" extends="operation" inherits="abst-map-op, typed">
-			<attribute name="source-as" type="identifier" />
 			<attribute name="equivalence" type="expression" specify="optional" />
 			<child-def name="combined-value" type="combine-with" min="0" max="inf" />
 			<child-def name="map" type="map-with" />
 			<child-def name="reverse" type="map-reverse" min="0" />
 		</element-def>
-		<element-def name="filter" extends="operation">
+		<element-def name="filter" extends="operation" inherits="complex-operation">
 			<attribute name="test" type="expression" />
 		</element-def>
 		<element-def name="filter-by-type" extends="operation">
@@ -149,7 +155,7 @@ It builds on the Expresso-Core specification and contains everything needed for 
 		<element-def name="refresh" extends="operation">
 			<attribute name="on" type="expression" />
 		</element-def>
-		<element-def name="refresh-each" extends="operation">
+		<element-def name="refresh-each" extends="operation" inherits="complex-operation">
 			<attribute name="on" type="expression" />
 		</element-def>
 		<element-def name="distinct" extends="operation">
@@ -157,14 +163,14 @@ It builds on the Expresso-Core specification and contains everything needed for 
 			<attribute name="use-first" type="boolean" default="false" />
 			<attribute name="preserve-source-order" type="boolean" default="false" />
 		</element-def>
-		<element-def name="sort" extends="operation" inherits="sorted" />
+		<element-def name="sort" extends="operation" inherits="sorted, complex-operation" />
 		<element-def name="with-equivalence" extends="operation">
 			<attribute name="equivalence" type="expression" />
 		</element-def>
 		<element-def name="unmodifiable" extends="operation">
 			<attribute name="allow-updates" type="boolean" default="true" />
 		</element-def>
-		<element-def name="filter-mod" extends="operation">
+		<element-def name="filter-mod" extends="operation" inherits="complex-operation">
 			<!-- Obviously, some of these are incompatible -->
 			<attribute name="no-add" type="string" specify="optional" />
 			<attribute name="no-remove" type="string" specify="optional" />
@@ -177,7 +183,7 @@ It builds on the Expresso-Core specification and contains everything needed for 
 			<!-- For distinct flows, the reverse operation must be specified.
 				 For distinct sorted flows, either the reverse operation or a sorting function may be specified. -->
 		</element-def>
-		<element-def name="disable" extends="operation">
+		<element-def name="disable" extends="operation" inherits="complex-operation">
 			<attribute name="with" type="expression" />
 		</element-def>
 		<element-def name="flatten-reverse">
@@ -196,7 +202,7 @@ It builds on the Expresso-Core specification and contains everything needed for 
 			<attribute name="filter" type="expression" />
 			<attribute name="inclusive" type="boolean" default="true" />
 		</element-def>
-		<element-def name="group-by" extends="operation">
+		<element-def name="group-by" extends="operation" inherits="complex-operation">
 			<child-def name="key" type="operation" />
 		</element-def>
 		<element-def name="no-init" extends="operation" />
