@@ -4,7 +4,9 @@ import org.qommons.config.CustomValueType;
 import org.qommons.config.QonfigParseSession;
 import org.qommons.config.QonfigToolkit;
 
+/** A Qonfig {@link CustomValueType} for parsing expressions */
 public class ExpressionValueType implements CustomValueType {
+	/** The name of this type */
 	public static final String NAME = "expression";
 
 	@Override

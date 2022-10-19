@@ -54,6 +54,7 @@ import org.qommons.Version;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.FastFailLockingStrategy;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
+import org.qommons.config.AbstractQIS;
 import org.qommons.config.QonfigChildDef;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigInterpretation;
@@ -646,13 +647,13 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 							ModelSetInstance wrappedModels = exS.wrapLocal(models);
 							return new LoopAction(//
 								initV == null ? null : initV.get(wrappedModels), //
-								beforeV == null ? null : beforeV.get(wrappedModels), //
-								whileV.get(wrappedModels), //
-								beforeBodyV == null ? null : beforeBodyV.get(wrappedModels), //
-								execVs.stream().map(v -> v.get(wrappedModels)).collect(Collectors.toList()), //
-								afterBodyV == null ? null : afterBodyV.get(wrappedModels), //
-								finallyV == null ? null : finallyV.get(wrappedModels)//
-							);
+									beforeV == null ? null : beforeV.get(wrappedModels), //
+										whileV.get(wrappedModels), //
+										beforeBodyV == null ? null : beforeBodyV.get(wrappedModels), //
+											execVs.stream().map(v -> v.get(wrappedModels)).collect(Collectors.toList()), //
+											afterBodyV == null ? null : afterBodyV.get(wrappedModels), //
+												finallyV == null ? null : finallyV.get(wrappedModels)//
+								);
 						}
 					};
 				} catch (QonfigInterpretationException e) {
@@ -1024,11 +1025,33 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		};
 	}
 
+	/**
+	 * A transformer capable of handling a specific transformation of one observable structure to another
+	 *
+	 * @param <M1> The model type of the source observable
+	 * @param <MV1> The type of the source observable
+	 * @param <M2> The model type of the transformed observable
+	 * @param <MV2> The type of the transformedobservable
+	 */
+
 	public interface ObservableStructureTransform<M1, MV1 extends M1, M2, MV2 extends M2> {
+		/** @return The type of the transformed observable */
 		ModelInstanceType<M2, MV2> getTargetType();
 
+		/**
+		 * @param source The source observable
+		 * @param models The models to use for the transformation
+		 * @return The transformed observable
+		 */
 		MV2 transform(MV1 source, ModelSetInstance models);
 
+		/**
+		 * @param <M0> The original source model type
+		 * @param <MV0> The original source type
+		 * @param previous The original transformation which this transform comes after
+		 * @return A transformation capable of transforming a source observable structure for <code>previous</code> to this transformation's
+		 *         structure
+		 */
 		default <M0, MV0 extends M0> ObservableStructureTransform<M0, MV0, M2, MV2> after(
 			ObservableStructureTransform<M0, MV0, M1, MV1> previous) {
 			ObservableStructureTransform<M1, MV1, M2, MV2> next = this;
@@ -1046,6 +1069,12 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 			};
 		}
 
+		/**
+		 * @param <M> The observable model type
+		 * @param <MV> The observable type
+		 * @param type The observable type
+		 * @return A transformation that is a no-op
+		 */
 		static <M, MV extends M> ObservableStructureTransform<M, MV, M, MV> unity(ModelInstanceType<M, MV> type){
 			return new ObservableStructureTransform<M, MV, M, MV>() {
 				@Override
@@ -1061,6 +1090,11 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		}
 	}
 
+	/**
+	 * @param <M> The model type
+	 * @param modelType The model type class
+	 * @return The {@link ModelType} whose {@link ModelType#modelType modelType} class is the given class
+	 */
 	protected <M> ModelType<M> getModelType(Class<M> modelType) {
 		if (Observable.class.isAssignableFrom(modelType))
 			return (ModelType<M>) ModelTypes.Event;
@@ -1078,6 +1112,13 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 			return null;
 	}
 
+	/**
+	 * Gets the transformation type for an observable model type. This will be used to query {@link AbstractQIS#interpret(Class)} to satisfy
+	 * a transformation operation.
+	 *
+	 * @param modelType The model type to get the transform type for
+	 * @return The type of transformation known to be able to handle observable structures of the given model type
+	 */
 	@SuppressWarnings("rawtypes")
 	protected Class<? extends ObservableStructureTransform> getTransformFor(ModelType modelType) {
 		if (modelType==ModelTypes.Event)
@@ -1091,7 +1132,24 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 			return null;
 	}
 
+	/**
+	 * A transformer capable of transforming an {@link Observable}
+	 *
+	 * @param <S> The type of the observable
+	 * @param <M> The model type of the target observable structure
+	 * @param <MV> The type of the target observable structure
+	 */
+
 	public interface ObservableTransform<S, M, MV extends M> extends ObservableStructureTransform<Observable<?>, Observable<S>, M, MV> {
+		/**
+		 * Creates an observable->observable transformer
+		 *
+		 * @param <S> The type of the source observable
+		 * @param <T> The type of the target observable
+		 * @param type The type of the target observable
+		 * @param transform A function to do the transformation
+		 * @return The transformer
+		 */
 		static <S, T> ObservableTransform<S, Observable<?>, Observable<T>> of(TypeToken<T> type,
 			BiFunction<Observable<S>, ModelSetInstance, Observable<T>> transform) {
 			return new ObservableTransform<S, Observable<?>, Observable<T>>() {
@@ -1107,6 +1165,16 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 			};
 		}
 
+		/**
+		 * Creates an observable transformer
+		 *
+		 * @param <S> The type of the source observable
+		 * @param <M> The model type of the target structure
+		 * @param <MV> The type of the target structure
+		 * @param type The type of the target structure
+		 * @param transform A function to do the transformation
+		 * @return The transformer
+		 */
 		static <S, M, MV extends M> ObservableTransform<S, M, MV> of(ModelInstanceType<M, MV> type,
 			BiFunction<Observable<S>, ModelSetInstance, MV> transform) {
 			return new ObservableTransform<S, M, MV>() {
@@ -1123,7 +1191,23 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		}
 	}
 
+	/**
+	 * A transformer capable of transforming a {@link SettableValue}
+	 *
+	 * @param <S> The type of the value
+	 * @param <M> The model type of the target observable structure
+	 * @param <MV> The type of the target observable structure
+	 */
 	public interface ValueTransform<S, M, MV extends M> extends ObservableStructureTransform<SettableValue<?>, SettableValue<S>, M, MV> {
+		/**
+		 * Creates a value->value transformer
+		 *
+		 * @param <S> The type of the source value
+		 * @param <T> The type of the target value
+		 * @param type The type of the target value
+		 * @param transform A function to do the transformation
+		 * @return The transformer
+		 */
 		static <S, T> ValueTransform<S, SettableValue<?>, SettableValue<T>> of(TypeToken<T> type,
 			BiFunction<SettableValue<S>, ModelSetInstance, SettableValue<T>> transform) {
 			return new ValueTransform<S, SettableValue<?>, SettableValue<T>>() {
@@ -1139,6 +1223,16 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 			};
 		}
 
+		/**
+		 * Creates a value transformer
+		 *
+		 * @param <S> The type of the source value
+		 * @param <M> The model type of the target structure
+		 * @param <MV> The type of the target structure
+		 * @param type The type of the target structure
+		 * @param transform A function to do the transformation
+		 * @return The transformer
+		 */
 		static <S, M, MV extends M> ValueTransform<S, M, MV> of(ModelInstanceType<M, MV> type,
 			BiFunction<SettableValue<S>, ModelSetInstance, MV> transform) {
 			return new ValueTransform<S, M, MV>() {
@@ -1155,8 +1249,25 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		}
 	}
 
+	/**
+	 * A transformer capable of transforming an {@link ObservableCollection}
+	 *
+	 * @param <S> The type of the collection
+	 * @param <M> The model type of the target observable structure
+	 * @param <MV> The type of the target observable structure
+	 */
 	public interface CollectionTransform<S, M, MV extends M>
 	extends ObservableStructureTransform<ObservableCollection<?>, ObservableCollection<S>, M, MV> {
+		/**
+		 * Creates a collection->collection transformer
+		 *
+		 * @param <S> The type of the source collection
+		 * @param <T> The type of the target collection
+		 * @param modelType the sub-model type of the target collection
+		 * @param type The type of the target collection
+		 * @param transform A function to do the transformation
+		 * @return The transformer
+		 */
 		static <S, T> FlowCollectionTransform<S, T, ObservableCollection<?>, ObservableCollection<T>> of(
 			ModelType.SingleTyped<? extends ObservableCollection<?>> modelType, TypeToken<T> type,
 				BiFunction<CollectionDataFlow<?, ?, S>, ModelSetInstance, CollectionDataFlow<?, ?, T>> transform) {
@@ -1178,6 +1289,16 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 			};
 		}
 
+		/**
+		 * Creates a collection transformer
+		 * 
+		 * @param <S> The type of the source collection
+		 * @param <M> The model type of the target structure
+		 * @param <MV> The type of the target structure
+		 * @param type The type of the target structure
+		 * @param transform A function to do the transformation
+		 * @return The transformer
+		 */
 		static <S, M, MV extends M> CollectionTransform<S, M, MV> of(ModelInstanceType<M, MV> type,
 			BiFunction<ObservableCollection<S>, ModelSetInstance, MV> transform) {
 			return new CollectionTransform<S, M, MV>() {
@@ -1194,10 +1315,34 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		}
 	}
 
+	/**
+	 * A transformer capable of transforming an {@link ObservableCollection} into another {@link ObservableCollection}
+	 *
+	 * @param <M1> The model type of the source collection
+	 * @param <MV1> The model instance type of the target collection
+	 * @param <S> The type of the source collection
+	 * @param <T> The type of the target collection
+	 * @param <M> The model type of the target observable structure
+	 * @param <MV> The type of the target observable structure
+	 */
 	public interface FlowTransform<M1, MV1 extends M1, S, T, M extends ObservableCollection<?>, MV extends M>
 	extends ObservableStructureTransform<M1, MV1, M, MV> {
+		/**
+		 * Transforms a collection flow
+		 *
+		 * @param source The source flow
+		 * @param models The models to do the transformation
+		 * @return The transformed flow
+		 */
 		CollectionDataFlow<?, ?, T> transformFlow(CollectionDataFlow<?, ?, S> source, ModelSetInstance models);
 
+		/**
+		 * Transforms a source observable structure into a transformed flow
+		 * 
+		 * @param source The source observable structure
+		 * @param models The models to do the transformation
+		 * @return The transformed flow
+		 */
 		CollectionDataFlow<?, ?, T> transformToFlow(MV1 source, ModelSetInstance models);
 
 		@Override
@@ -1235,6 +1380,18 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 				return ObservableStructureTransform.super.after(previous);
 		}
 	}
+
+	/**
+	 * A {@link CollectionTransform} that is also a {@link FlowTransform}. A {@link CollectionTransform} is inefficient at
+	 * chain-transforming collections and a {@link FlowTransform} is capable of transforming source observable structures other than
+	 * collections, but implementations of collection transform operations must return {@link CollectionTransform}. Generally, if a
+	 * collection transform operation produces a collection, an instance of this interface should be returned.
+	 *
+	 * @param <S> The type of the collection
+	 * @param <T> The type of the target collection
+	 * @param <M> The model type of the target observable structure
+	 * @param <MV> The type of the target observable structure
+	 */
 
 	public interface FlowCollectionTransform<S, T, M extends ObservableCollection<?>, MV extends M>
 	extends CollectionTransform<S, M, MV>, FlowTransform<ObservableCollection<?>, ObservableCollection<S>, S, T, M, MV> {

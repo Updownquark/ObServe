@@ -29,6 +29,7 @@ import org.qommons.config.SpecialSession;
 
 import com.google.common.reflect.TypeToken;
 
+/** A special session with extra utility for the Expresso toolkits */
 public class ExpressoQIS implements SpecialSession<ExpressoQIS> {
 	public static final String TOOLKIT_NAME = "Expresso-Core";
 	static final String SATISFIERS_KEY = ExpressoQIS.class.getSimpleName() + "$SATISFIERS";
@@ -46,29 +47,52 @@ public class ExpressoQIS implements SpecialSession<ExpressoQIS> {
 		return theWrapped;
 	}
 
+	/** @return The expresso parser to use to parse expressions under this session */
 	public ExpressoParser getExpressoParser() {
 		return (ExpressoParser) theWrapped.get("EXPRESSO_PARSER");
 	}
 
+	/**
+	 * @param parser The expresso parser to use to parse expressions under this session
+	 * @return This session
+	 */
 	public ExpressoQIS setExpressoParser(ExpressoParser parser) {
 		theWrapped.put("EXPRESSO_PARSER", parser);
 		return this;
 	}
 
+	/** @return The expresso environment to use to evaluate expressions under this session */
 	public ExpressoEnv getExpressoEnv() {
 		return (ExpressoEnv) theWrapped.get("EXPRESSO_ENV");
 	}
 
+	/**
+	 * @param env The expresso environment to use to evaluate expressions under this session
+	 * @return This session
+	 */
 	public ExpressoQIS setExpressoEnv(ExpressoEnv env) {
 		theWrapped.put("EXPRESSO_ENV", env);
 		return this;
 	}
 
+	/**
+	 * @param models The models to use for evaluating expressions under this session (or null to keep this session's)
+	 * @param classView The class view to use for evaluating expressions under this session (or null to keep this session's)
+	 * @return This session
+	 */
 	public ExpressoQIS setModels(ObservableModelSet models, ClassView classView) {
 		setExpressoEnv(getExpressoEnv().with(models, classView));
 		return this;
 	}
 
+	/**
+	 * All {@link ObservableModelSet.ValueContainer}s for expressions parsed under this session should be
+	 * {@link ObservableModelSet.ValueContainer#get(ModelSetInstance) satisfied} with a model set wrapped by this method if this element
+	 * extends with-local-models.
+	 *
+	 * @param models The model instance
+	 * @return The wrapped model instance containing data for this element's local models
+	 */
 	public ModelSetInstance wrapLocal(ModelSetInstance models) {
 		ObservableModelSet.Wrapped localModel = (ObservableModelSet.Wrapped) get(LOCAL_MODEL_KEY);
 		return localModel == null ? models : localModel.wrap(models).build();

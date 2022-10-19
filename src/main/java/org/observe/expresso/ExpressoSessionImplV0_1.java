@@ -28,7 +28,9 @@ import org.qommons.config.QonfigToolkit;
 import org.qommons.config.SpecialSession;
 import org.qommons.config.SpecialSessionImplementation;
 
+/** Supports Qonfig evaluation using the {@link ExpressoQIS} session type */
 public class ExpressoSessionImplV0_1 implements SpecialSessionImplementation<ExpressoQIS>{
+	/** The Expresso version supported by this class */
 	public static final Version VERSION = new Version(0, 1, 0);
 	private QonfigToolkit theToolkit;
 
@@ -108,6 +110,12 @@ public class ExpressoSessionImplV0_1 implements SpecialSessionImplementation<Exp
 	public void postInitParallel(ExpressoQIS session, ExpressoQIS parallel) throws QonfigInterpretationException {
 	}
 
+	/**
+	 * Configures expression parsing for the session's element's configuration
+	 *
+	 * @param session The session to configure
+	 * @throws QonfigInterpretationException If the session's element's parsing configuration cannot be set up for any reason
+	 */
 	protected void configureExpressionParsing(ExpressoQIS session) throws QonfigInterpretationException {
 		if (!session.isInstance("expresso-parser"))
 			return;
@@ -139,6 +147,15 @@ public class ExpressoSessionImplV0_1 implements SpecialSessionImplementation<Exp
 		}
 	}
 
+	/**
+	 * @param <T> The type of the value to parse
+	 * @param parseText The text to parse
+	 * @param type The type of the value to parse
+	 * @param element The element to parse the value for
+	 * @param sourceEnv The Expresso environment to use to evaluate the parsed expression
+	 * @return The parsed and evaluated expression
+	 * @throws QonfigInterpretationException If the expression could not be parsed or evaluated
+	 */
 	protected <T> T parseValue(String parseText, Class<T> type, QonfigElement element, ExpressoEnv sourceEnv)
 		throws QonfigInterpretationException {
 		ObservableModelSet models = ObservableModelSet.build(ObservableModelSet.JAVA_NAME_CHECKER)//
