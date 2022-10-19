@@ -82,13 +82,31 @@ import com.google.common.reflect.TypeToken;
 
 /** Qonfig Interpretation for the ExpressoBaseV0_1 API */
 public class ExpressoConfigV0_1 implements QonfigInterpretation {
+	/**
+	 * Creates an {@link ObservableConfigFormat}
+	 * 
+	 * @param <T> The type of the format
+	 */
 	public interface ConfigFormatProducer<T> {
+		/**
+		 * Creates the format
+		 * 
+		 * @param models The model instance to use to create the format
+		 * @return The config format
+		 */
 		ObservableConfigFormat<T> getFormat(ModelSetInstance models);
 	}
 
+	/**
+	 * Abstract {@link Expresso.ConfigModelValue} implementation
+	 * 
+	 * @param <M> The model type of the value
+	 * @param <MV> The type of the value
+	 */
 	public static abstract class AbstractConfigModelValue<M, MV extends M> implements Expresso.ConfigModelValue<M, MV> {
 		private final ModelInstanceType<M, MV> theType;
 
+		/** @param type The type of the value */
 		public AbstractConfigModelValue(ModelInstanceType<M, MV> type) {
 			theType = type;
 		}

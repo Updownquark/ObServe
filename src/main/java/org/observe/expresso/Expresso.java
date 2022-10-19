@@ -18,13 +18,29 @@ public class Expresso {
 	 * @param <M> The model type of the result
 	 */
 	public interface ExtModelValue<M> {
+		/**
+		 * @param session The session to use to evaluate the type
+		 * @return The type of this model value
+		 * @throws QonfigInterpretationException If the type cannot be evaluated
+		 */
 		ModelInstanceType<M, ?> getType(ExpressoQIS session) throws QonfigInterpretationException;
 
-		class SingleTyped<M> implements ExtModelValue<M> {
+		/**
+		 * An {@link ExtModelValue} with a single parameter type
+		 *
+		 * @param <M> The model type
+		 */
+		public class SingleTyped<M> implements ExtModelValue<M> {
 			private final ModelType.SingleTyped<M> theType;
 
-			SingleTyped(ModelType.SingleTyped<M> type) {
+			/** @param type The model type of this value */
+			public SingleTyped(ModelType.SingleTyped<M> type) {
 				theType = type;
+			}
+
+			/** @return The model type of this value */
+			public ModelType.SingleTyped<M> getType() {
+				return theType;
 			}
 
 			@Override
@@ -33,11 +49,22 @@ public class Expresso {
 			}
 		}
 
+		/**
+		 * An {@link ExtModelValue} with 2 parameter types
+		 *
+		 * @param <M> The model type
+		 */
 		class DoubleTyped<M> implements ExtModelValue<M> {
 			private final ModelType.DoubleTyped<M> theType;
 
-			DoubleTyped(ModelType.DoubleTyped<M> type) {
+			/** @param type The model type of this value */
+			public DoubleTyped(ModelType.DoubleTyped<M> type) {
 				theType = type;
+			}
+
+			/** @return The model type of this value */
+			public ModelType.DoubleTyped<M> getType() {
+				return theType;
 			}
 
 			@Override
@@ -58,23 +85,37 @@ public class Expresso {
 	 * @param <MV> The value type of the result
 	 */
 	public interface ConfigModelValue<M, MV extends M> {
+		/** @return The type of this value */
 		ModelInstanceType<M, MV> getType();
 
+		/**
+		 * Creates the value
+		 * 
+		 * @param config The config value builder to use to build the structure
+		 * @param msi The model set to use to build the structure
+		 * @return The created value
+		 */
 		MV create(ObservableConfig.ObservableConfigValueBuilder<?> config, ModelSetInstance msi);
 	}
 
 	private final ClassView theClassView;
 	private final ObservableModelSet theModels;
 
+	/**
+	 * @param classView The class view for this expresso structure
+	 * @param models The models for this expresso structure
+	 */
 	public Expresso(ClassView classView, ObservableModelSet models) {
 		theClassView = classView;
 		theModels = models;
 	}
 
+	/** @return The class view of this expresso structure */
 	public ClassView getClassView() {
 		return theClassView;
 	}
 
+	/** @return The models of this expresso structure */
 	public ObservableModelSet getModels() {
 		return theModels;
 	}
