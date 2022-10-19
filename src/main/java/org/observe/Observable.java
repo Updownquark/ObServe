@@ -98,7 +98,7 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable {
 	 * @param type The type of values to filter
 	 * @return An observable that only fires values from this observable that are an instance of the given type
 	 */
-	default <X extends T> Observable<X> filter(Class<X> type) {
+	default <X> Observable<X> filter(Class<X> type) {
 		return filterMap(
 			LambdaUtils.printableFn(v -> type.isInstance(type) ? type.cast(v) : null, () -> "instanceof " + type.getName(), null));
 	}

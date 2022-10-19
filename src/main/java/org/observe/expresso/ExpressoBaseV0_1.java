@@ -908,6 +908,11 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		.createWith("filter-by-type", ObservableTransform.class, session -> filterObservableByType(wrap(session)))//
 		;
 		interpreter//
+		.createWith("disable", ActionTransform.class, session -> disabledAction(wrap(session)))//
+		;
+		interpreter//
+		.createWith("disable", ValueTransform.class, session -> disabledValue(wrap(session)))//
+		.createWith("filter-accept", ValueTransform.class, session -> filterAcceptValue(wrap(session)))//
 		.createWith("map-to", ValueTransform.class, session -> mapValueTo(wrap(session)))//
 		.createWith("refresh", ValueTransform.class, session -> refreshValue(wrap(session)))//
 		.createWith("unmodifiable", ValueTransform.class, session -> unmodifiableValue(wrap(session)))//
@@ -1192,6 +1197,66 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 	}
 
 	/**
+	 * A transformer capable of transforming an {@link ObservableAction}
+	 *
+	 * @param <S> The type of the action
+	 * @param <M> The model type of the target observable structure
+	 * @param <MV> The type of the target observable structure
+	 */
+
+	public interface ActionTransform<S, M, MV extends M>
+	extends ObservableStructureTransform<ObservableAction<?>, ObservableAction<S>, M, MV> {
+		/**
+		 * Creates an action->action transformer
+		 *
+		 * @param <S> The type of the source action
+		 * @param <T> The type of the target action
+		 * @param type The type of the target action
+		 * @param transform A function to do the transformation
+		 * @return The transformer
+		 */
+		static <S, T> ActionTransform<S, ObservableAction<?>, ObservableAction<T>> of(TypeToken<T> type,
+			BiFunction<ObservableAction<S>, ModelSetInstance, ObservableAction<T>> transform) {
+			return new ActionTransform<S, ObservableAction<?>, ObservableAction<T>>() {
+				@Override
+				public ModelInstanceType<ObservableAction<?>, ObservableAction<T>> getTargetType() {
+					return ModelTypes.Action.forType(type);
+				}
+
+				@Override
+				public ObservableAction<T> transform(ObservableAction<S> source, ModelSetInstance models) {
+					return transform.apply(source, models);
+				}
+			};
+		}
+
+		/**
+		 * Creates an action transformer
+		 *
+		 * @param <S> The type of the source action
+		 * @param <M> The model type of the target structure
+		 * @param <MV> The type of the target structure
+		 * @param type The type of the target structure
+		 * @param transform A function to do the transformation
+		 * @return The transformer
+		 */
+		static <S, M, MV extends M> ActionTransform<S, M, MV> of(ModelInstanceType<M, MV> type,
+			BiFunction<ObservableAction<S>, ModelSetInstance, MV> transform) {
+			return new ActionTransform<S, M, MV>() {
+				@Override
+				public ModelInstanceType<M, MV> getTargetType() {
+					return type;
+				}
+
+				@Override
+				public MV transform(ObservableAction<S> source, ModelSetInstance models) {
+					return transform.apply(source, models);
+				}
+			};
+		}
+	}
+
+	/**
 	 * A transformer capable of transforming a {@link SettableValue}
 	 *
 	 * @param <S> The type of the value
@@ -1291,7 +1356,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 
 		/**
 		 * Creates a collection transformer
-		 * 
+		 *
 		 * @param <S> The type of the source collection
 		 * @param <M> The model type of the target structure
 		 * @param <MV> The type of the target structure
@@ -1338,7 +1403,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 
 		/**
 		 * Transforms a source observable structure into a transformed flow
-		 * 
+		 *
 		 * @param source The source observable structure
 		 * @param models The models to do the transformation
 		 * @return The transformed flow
@@ -1428,20 +1493,140 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		return ObservableTransform.of(sourceType.getValueType(), (source, models) -> source.takeUntil(until.get(models)));
 	}
 
-	private <T> ObservableTransform<T, Observable<?>, Observable<T>> mapObservableTo(ExpressoQIS op) throws QonfigInterpretationException {
-		throw new QonfigInterpretationException("Not yet implemented"); // TODO
+	private <S, T> ObservableTransform<S, Observable<?>, Observable<T>> mapObservableTo(ExpressoQIS op)
+		throws QonfigInterpretationException {
+		ModelInstanceType.SingleTyped<SettableValue<?>, S, SettableValue<S>> sourceType;
+		sourceType = (ModelInstanceType.SingleTyped<SettableValue<?>, S, SettableValue<S>>) op.get(VALUE_TYPE_KEY);
+
+		String sourceAs = op.getAttributeText("source-as");
+		ObservableModelSet.WrappedBuilder wrappedBuilder = op.getExpressoEnv().getModels().wrap();
+		RuntimeValuePlaceholder<SettableValue<?>, SettableValue<S>> sourcePlaceholder = wrappedBuilder.withRuntimeValue(sourceAs,
+			ModelTypes.Value.forType(sourceType.getValueType()));
+		ObservableModelSet.Wrapped wrapped = wrappedBuilder.build();
+
+		ValueContainer<SettableValue<?>, SettableValue<T>> map = op.getAttributeExpression("map").evaluate(
+			(ModelInstanceType<SettableValue<?>, SettableValue<T>>) (ModelInstanceType<?, ?>) ModelTypes.Value.any(),
+			op.getExpressoEnv().with(wrapped, null));
+		TypeToken<T> targetType = (TypeToken<T>) map.getType().getType(0).resolveType(SettableValue.class.getTypeParameters()[0]);
+		return ObservableTransform.of(targetType, (source, models) -> {
+			SettableValue<S> sourceV = SettableValue.build(sourceType.getValueType()).build();
+			ModelSetInstance wrappedModel = wrapped.wrap(models)//
+				.with(sourcePlaceholder, sourceV)//
+				.build();
+			SettableValue<T> mappedV = map.get(wrappedModel);
+			return source.map(s -> {
+				sourceV.set(s, null);
+				return mappedV.get();
+			});
+		});
 	}
 
 	private <T> ObservableTransform<T, Observable<?>, Observable<T>> filterObservable(ExpressoQIS op) throws QonfigInterpretationException {
-		throw new QonfigInterpretationException("Not yet implemented"); // TODO
+		ModelInstanceType.SingleTyped<Observable<?>, T, Observable<T>> sourceType;
+		sourceType = (ModelInstanceType.SingleTyped<Observable<?>, T, Observable<T>>) op.get(VALUE_TYPE_KEY);
+		String sourceAs = op.getAttributeText("source-as");
+		ObservableModelSet.WrappedBuilder wrappedBuilder = op.getExpressoEnv().getModels().wrap();
+		RuntimeValuePlaceholder<SettableValue<?>, SettableValue<T>> sourcePlaceholder = wrappedBuilder.withRuntimeValue(sourceAs,
+			ModelTypes.Value.forType(sourceType.getValueType()));
+		ObservableModelSet.Wrapped wrapped = wrappedBuilder.build();
+
+		ValueContainer<SettableValue<?>, SettableValue<String>> test = parseFilter(op.getAttributeExpression("test"),
+			op.getExpressoEnv().with(wrapped, null), false);
+		return ObservableTransform.of(sourceType.getValueType(), (source, models) -> {
+			SettableValue<T> sourceV = SettableValue.build(sourceType.getValueType()).build();
+			ModelSetInstance wrappedMSI = wrapped.wrap(models)//
+				.with(sourcePlaceholder, sourceV)//
+				.build();
+			SettableValue<String> message = test.get(wrappedMSI);
+			return source.filter(v -> {
+				sourceV.set(v, null);
+				return message.get() == null;
+			});
+		});
 	}
 
-	private <T> ObservableTransform<T, Observable<?>, Observable<T>> filterObservableByType(ExpressoQIS op)
+	private static ValueContainer<SettableValue<?>, SettableValue<String>> parseFilter(ObservableExpression testX, ExpressoEnv env,
+		boolean preferMessage) throws QonfigInterpretationException {
+		ValueContainer<SettableValue<?>, SettableValue<String>> test;
+		try {
+			if (preferMessage)
+				test = testX.evaluate(ModelTypes.Value.forType(String.class), env);
+			else {
+				test = testX.evaluate(ModelTypes.Value.forType(boolean.class), env)//
+					.map(ModelTypes.Value.forType(String.class),
+						bv -> SettableValue.asSettable(bv.map(String.class, b -> b ? null : "Not allowed"), __ -> "Not settable"));
+			}
+		} catch (QonfigInterpretationException e) {
+			try {
+				if (preferMessage) {
+					test = testX.evaluate(ModelTypes.Value.forType(boolean.class), env)//
+						.map(ModelTypes.Value.forType(String.class),
+							bv -> SettableValue.asSettable(bv.map(String.class, b -> b ? null : "Not allowed"), __ -> "Not settable"));
+				} else
+					test = testX.evaluate(ModelTypes.Value.forType(String.class), env);
+			} catch (QonfigInterpretationException e2) {
+				throw new QonfigInterpretationException("Could not interpret '" + testX + "' as a String or a boolean", e);
+			}
+		}
+		return test;
+	}
+
+	private <S, T> ObservableTransform<S, Observable<?>, Observable<T>> filterObservableByType(ExpressoQIS op)
 		throws QonfigInterpretationException {
-		throw new QonfigInterpretationException("Not yet implemented"); // TODO
+		ValueContainer<SettableValue<?>, SettableValue<Class<T>>> typeC = op.getAttributeExpression("type")
+			.evaluate(ModelTypes.Value.forType(TypeTokens.get().keyFor(Class.class).wildCard()), op.getExpressoEnv());
+		TypeToken<T> targetType = (TypeToken<T>) typeC.getType().getType(0).resolveType(Class.class.getTypeParameters()[0]);
+		return ObservableTransform.of(targetType, (source, models) -> {
+			Class<T> type = typeC.get(models).get();
+			return source.filter(type);
+		});
+	}
+
+	// Action transform
+
+	private <T> ActionTransform<T, ObservableAction<?>, ObservableAction<T>> disabledAction(ExpressoQIS op)
+		throws QonfigInterpretationException {
+		ModelInstanceType.SingleTyped<ObservableAction<?>, T, ObservableAction<T>> sourceType;
+		sourceType = (ModelInstanceType.SingleTyped<ObservableAction<?>, T, ObservableAction<T>>) op.get(VALUE_TYPE_KEY);
+		ValueContainer<SettableValue<?>, SettableValue<String>> enabled = op.getAttributeExpression("with")
+			.evaluate(ModelTypes.Value.forType(String.class), op.getExpressoEnv());
+		return ActionTransform.of(sourceType.getValueType(), (source, models) -> source.disableWith(enabled.get(models)));
 	}
 
 	// Value transform
+
+	private <T> ValueTransform<T, SettableValue<?>, SettableValue<T>> disabledValue(ExpressoQIS op) throws QonfigInterpretationException {
+		ModelInstanceType.SingleTyped<SettableValue<?>, T, SettableValue<T>> sourceType;
+		sourceType = (ModelInstanceType.SingleTyped<SettableValue<?>, T, SettableValue<T>>) op.get(VALUE_TYPE_KEY);
+		ValueContainer<SettableValue<?>, SettableValue<String>> enabled = op.getAttributeExpression("with")
+			.evaluate(ModelTypes.Value.forType(String.class), op.getExpressoEnv());
+		return ValueTransform.of(sourceType.getValueType(), (source, models) -> source.disableWith(enabled.get(models)));
+	}
+
+	private <T> ValueTransform<T, SettableValue<?>, SettableValue<T>> filterAcceptValue(ExpressoQIS op)
+		throws QonfigInterpretationException {
+		ModelInstanceType.SingleTyped<SettableValue<?>, T, SettableValue<T>> sourceType;
+		sourceType = (ModelInstanceType.SingleTyped<SettableValue<?>, T, SettableValue<T>>) op.get(VALUE_TYPE_KEY);
+		String sourceAs = op.getAttributeText("source-as");
+		ObservableModelSet.WrappedBuilder wrappedBuilder = op.getExpressoEnv().getModels().wrap();
+		RuntimeValuePlaceholder<SettableValue<?>, SettableValue<T>> sourcePlaceholder = wrappedBuilder.withRuntimeValue(sourceAs,
+			sourceType);
+		ObservableModelSet.Wrapped wrapped = wrappedBuilder.build();
+
+		ValueContainer<SettableValue<?>, SettableValue<String>> test = parseFilter(op.getAttributeExpression("test"),
+			op.getExpressoEnv().with(wrapped, null), true);
+		return ValueTransform.of(sourceType.getValueType(), (source, models) -> {
+			SettableValue<T> sourceV = SettableValue.build(sourceType.getValueType()).build();
+			ModelSetInstance wrappedMSI = wrapped.wrap(models)//
+				.with(sourcePlaceholder, sourceV)//
+				.build();
+			SettableValue<String> message = test.get(wrappedMSI);
+			return source.filterAccept(v -> {
+				sourceV.set(v, null);
+				return message.get();
+			});
+		});
+	}
 
 	private <S, T> ValueTransform<S, SettableValue<?>, SettableValue<T>> mapValueTo(ExpressoQIS op) throws QonfigInterpretationException {
 		ModelInstanceType.SingleTyped<SettableValue<?>, S, SettableValue<S>> sourceType = (ModelInstanceType.SingleTyped<SettableValue<?>, S, SettableValue<S>>) op
@@ -1553,12 +1738,41 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 
 	private <T> FlowCollectionTransform<T, T, ObservableCollection<?>, ObservableCollection<T>> filterCollection(
 		ExpressoQIS op) throws QonfigInterpretationException {
-		throw new QonfigInterpretationException("Not yet implemented"); // TODO
+		ModelInstanceType.SingleTyped<ObservableCollection<?>, T, ObservableCollection<T>> sourceType;
+		sourceType = (ModelInstanceType.SingleTyped<ObservableCollection<?>, T, ObservableCollection<T>>) op.get(VALUE_TYPE_KEY);
+		String sourceAs = op.getAttributeText("source-as");
+		ObservableModelSet.WrappedBuilder wrappedBuilder = op.getExpressoEnv().getModels().wrap();
+		RuntimeValuePlaceholder<SettableValue<?>, SettableValue<T>> sourcePlaceholder = wrappedBuilder.withRuntimeValue(sourceAs,
+			ModelTypes.Value.forType(sourceType.getValueType()));
+		ObservableModelSet.Wrapped wrapped = wrappedBuilder.build();
+
+		ValueContainer<SettableValue<?>, SettableValue<String>> test = parseFilter(op.getAttributeExpression("test"),
+			op.getExpressoEnv().with(wrapped, null), false);
+		return CollectionTransform.of(sourceType.getModelType(), sourceType.getValueType(), (source, models) -> {
+			SettableValue<T> sourceV = SettableValue.build(sourceType.getValueType()).build();
+			ModelSetInstance wrappedMSI = wrapped.wrap(models)//
+				.with(sourcePlaceholder, sourceV)//
+				.build();
+			SettableValue<String> message = test.get(wrappedMSI);
+			return source.filter(v -> {
+				sourceV.set(v, null);
+				return message.get();
+			});
+		});
 	}
 
-	private <T> FlowCollectionTransform<T, T, ObservableCollection<?>, ObservableCollection<T>> filterCollectionByType(
+	private <S, T> FlowCollectionTransform<T, T, ObservableCollection<?>, ObservableCollection<T>> filterCollectionByType(
 		ExpressoQIS op) throws QonfigInterpretationException {
-		throw new QonfigInterpretationException("Not yet implemented"); // TODO
+		ModelInstanceType.SingleTyped<ObservableCollection<?>, S, ObservableCollection<S>> sourceType;
+		sourceType = (ModelInstanceType.SingleTyped<ObservableCollection<?>, S, ObservableCollection<S>>) op.get(VALUE_TYPE_KEY);
+
+		ValueContainer<SettableValue<?>, SettableValue<Class<T>>> typeC = op.getAttributeExpression("type")
+			.evaluate(ModelTypes.Value.forType(TypeTokens.get().keyFor(Class.class).wildCard()), op.getExpressoEnv());
+		TypeToken<T> targetType = (TypeToken<T>) typeC.getType().getType(0).resolveType(Class.class.getTypeParameters()[0]);
+		return CollectionTransform.of(sourceType.getModelType(), targetType, (source, models) -> {
+			Class<T> type = typeC.get(models).get();
+			return source.filter(type);
+		});
 	}
 
 	private <T> FlowCollectionTransform<T, T, ObservableCollection<?>, ObservableCollection<T>> reverseCollection(
@@ -2176,7 +2390,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		String compareValueAs = session.getAttributeText("sort-compare-value-as");
 		ObservableExpression sortWith = session.getAttributeExpression("sort-with");
 		List<ExpressoQIS> sortBy = session.forChildren("sort-by");
-		// TODO use ascending
+		boolean ascending = session.getAttribute("ascending", boolean.class);
 		ModelInstanceType.SingleTyped<SettableValue<?>, Comparator<T>, SettableValue<Comparator<T>>> compareType = ModelTypes.Value
 			.forType(TypeTokens.get().keyFor(Comparator.class).parameterized(type));
 		if (sortWith != null) {
@@ -2216,6 +2430,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 							.build();
 						SettableValue<Integer> comparisonV = comparison.get(cModelInstance);
 						return SettableValue.of(compareType.getValueType(), (v1, v2) -> {
+							// Put nulls last regardless of ascending
 							if (v1 == null) {
 								if (v2 == null)
 									return 0;
@@ -2225,7 +2440,8 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 								return -1;
 							leftValue.set(v1, null);
 							rightValue.set(v2, null);
-							return comparisonV.get();
+							int comp = comparisonV.get();
+							return ascending ? comp : -comp;
 						}, "Not Modifiable");
 					}
 				};
@@ -2275,6 +2491,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 						for (ValueContainer<SettableValue<?>, SettableValue<Comparator<Object>>> sortByCV : sortByCVs)
 							sortByComps.add(sortByCV.get(cModelInstance).get());
 						return SettableValue.of(compareType.getValueType(), (v1, v2) -> {
+							// Put nulls last regardless of ascending
 							if (v1 == null) {
 								if (v2 == null)
 									return 0;
@@ -2282,16 +2499,17 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 									return 1;
 							} else if (v2 == null)
 								return -1;
+							int comp = 0;
 							for (int i = 0; i < sortByComps.size(); i++) {
 								value.set(v1, null);
 								Object cv1 = sortByMapVs.get(i).get();
 								value.set(v2, null);
 								Object cv2 = sortByMapVs.get(i).get();
-								int comp = sortByComps.get(i).compare(cv1, cv2);
+								comp = sortByComps.get(i).compare(cv1, cv2);
 								if (comp != 0)
-									return comp;
+									break;
 							}
-							return 0;
+							return ascending ? comp : -comp;
 						}, "Not Modifiable");
 					}
 				};

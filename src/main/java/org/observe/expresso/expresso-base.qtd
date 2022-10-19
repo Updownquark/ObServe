@@ -125,6 +125,12 @@ It builds on the Expresso-Core specification and contains everything needed for 
 			<child-def name="op" type="operation" min="0" max="inf" /> <!-- Allow min=0 to facilitate aliases -->
 		</element-def>
 		<element-def name="operation" abstract="true" />
+		<element-def name="disable" extends="operation" inherits="complex-operation">
+			<attribute name="with" type="expression" />
+		</element-def>
+		<element-def name="filter-accept" extends="operation" inherits="complex-operation">
+			<attribute name="test" type="expression" />
+		</element-def>
 		<element-def name="combine-with" inherits="named">
 			<value type="expression" specify="required" />
 		</element-def>
@@ -147,7 +153,7 @@ It builds on the Expresso-Core specification and contains everything needed for 
 			<attribute name="test" type="expression" />
 		</element-def>
 		<element-def name="filter-by-type" extends="operation">
-			<attribute name="type" type="string" />
+			<attribute name="type" type="expression" />
 		</element-def>
 		<element-def name="reverse" extends="operation" />
 		<element-def name="refresh" extends="operation">
@@ -190,9 +196,6 @@ It builds on the Expresso-Core specification and contains everything needed for 
 			<!-- For distinct flows, the reverse operation must be specified.
 				 For distinct sorted flows, either the reverse operation or a sorting function may be specified. -->
 			<child-def name="sort" type="sort" min="0" />
-		</element-def>
-		<element-def name="disable" extends="operation" inherits="complex-operation">
-			<attribute name="with" type="expression" />
 		</element-def>
 		<element-def name="flatten-reverse">
 			<attribute name="type" type="flatten-reverse-type" />
