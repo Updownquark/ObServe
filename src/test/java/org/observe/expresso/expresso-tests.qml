@@ -224,13 +224,14 @@
 						.setString(random.getAlphaNumericString(0, 10))
 					</action>
 				</model>
-				<loop name="modifyList" init="i=0" while="i&lt;5" after-body="i++">
+				<loop name="modifyList" init="i=0" while="i&lt;25" after-body="i++">
 					<model>
 						<value name="i" type="int" />
 					</model>
 					<action>intModel.randomlyModifyEntity</action>
 					<action>checkEntityListOrder(models.sortedEntityList)</action>
 				</loop>
+				<action name="printResults">System.out.println(models.sortedEntityList)</action>
 			</model>
 			<model name="assignInt">
 				<action name="setExpectInt">models.expected.setInt(models.anyInt)</action>

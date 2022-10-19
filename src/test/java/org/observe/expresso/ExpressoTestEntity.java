@@ -125,4 +125,12 @@ public class ExpressoTestEntity {
 			&& Objects.equals(theString, other.theString)//
 			&& Objects.equals(theInstant, other.theInstant);
 	}
+
+	@Override
+	public String toString() {
+		StringBuilder str = new StringBuilder("{");
+		str.append("int=").append(theInt).append(", dbl=").append(theDouble).append(", str=").append(theString).append(", inst=")
+			.append(theInstant);
+		return str.append("}").toString();
+	}
 }

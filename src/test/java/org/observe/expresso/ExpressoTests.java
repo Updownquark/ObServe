@@ -109,6 +109,12 @@ public class ExpressoTests {
 		executeTestActions("mapTo");
 	}
 
+	/** Tests the sort transformation type */
+	@Test
+	public void testSort() {
+		executeTestActions("sort");
+	}
+
 	/** Tests int assignment */
 	@Test
 	public void testAssignInt() {
@@ -148,7 +154,13 @@ public class ExpressoTests {
 		}
 	}
 
-	public static void checkEntityListOrder(List<ExpressoTestEntity> entities) {
+	/**
+	 * Called by the sort test from Expresso. Ensures that all the entities are {@link #ENTITY_COMPARE order}.
+	 * 
+	 * @param entities The entities to check
+	 * @throws AssertionError If the entities are not in order
+	 */
+	public static void checkEntityListOrder(List<ExpressoTestEntity> entities) throws AssertionError {
 		ExpressoTestEntity prev = null;
 		for (ExpressoTestEntity entity : entities) {
 			if (prev != null && ENTITY_COMPARE.compare(prev, entity) > 0)
