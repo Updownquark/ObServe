@@ -28,8 +28,8 @@ It builds on the Expresso-Core specification and contains everything needed for 
 			<attribute name="key-type" type="string" specify="required" />
 			<value-mod specify="forbidden" />
 		</add-on>
-		<add-on name="sorted" abstract="true" >
-			<child-def name="sort" type="sort-by" min="0" max="inf" />
+		<add-on name="sorted-model-value" requires="model-value">
+			<child-def name="sort" type="sort" min="0" />
 		</add-on>
 
 		<add-on name="complex-operation" requires="operation">
@@ -67,15 +67,14 @@ It builds on the Expresso-Core specification and contains everything needed for 
 	</add-ons>
 
 	<elements>
-		<element-def name="sort-by">
-			<attribute name="ascending" type="boolean" default="true" />
-			<value type="expression" />
-		</element-def>
 		<!-- Models, values and transformations -->
 		<!-- An Observable that fires values to be consumed by listeners -->
 		<element-def name="event" extends="model-value" inherits="allow-ext-model" />
 		<!-- An action that can be invoked -->
-		<element-def name="action" extends="model-value" inherits="allow-ext-model" />
+		<element-def name="action" extends="model-value" inherits="allow-ext-model,with-local-model" />
+		<element-def name="action-group" extends="model-value" inherits="with-local-model">
+			<child-def name="action" type="action" min="0" max="inf" />
+		</element-def>
 		<!-- A simple value. For internal models, this may be configured with:
 		  - An 'init=' attribute to initialize it. The value will not change as any components of the init expression change,
 		  		and the value is settable regardless of the init expression
@@ -93,17 +92,17 @@ It builds on the Expresso-Core specification and contains everything needed for 
 		<!-- An ordered collection of values with no duplicates -->
 		<element-def name="set" extends="list" />
 		<!-- An ordered, sorted collection of values -->
-		<element-def name="sorted-list" extends="list" />
+		<element-def name="sorted-list" extends="list" inherits="sorted-model-value" />
 		<!-- An ordered, sorted collection of values with no duplicates -->
-		<element-def name="sorted-set" extends="set" />
+		<element-def name="sorted-set" extends="set" inherits="sorted-model-value" />
 		<!-- An association of key values each to a single other value -->
 		<element-def name="map" extends="model-value" inherits="allow-ext-model,map-model-value" />
 		<!-- An association of sorted key values each to a single other value -->
-		<element-def name="sorted-map" extends="map" />
+		<element-def name="sorted-map" extends="map" inherits="sorted-model-value" />
 		<!-- An association of key values each to one or more other values -->
 		<element-def name="multi-map" extends="map" />
 		<!-- An association of sorted key values each to one or more other values -->
-		<element-def name="sorted-multi-map" extends="multi-map" />
+		<element-def name="sorted-multi-map" extends="multi-map" inherits="sorted-model-value" />
 
 		<!-- A simple value that cannot be changed after initialization. This value does not change as the expression used to initialize it does. -->		
 		<element-def name="constant" extends="model-value">
@@ -123,7 +122,6 @@ It builds on the Expresso-Core specification and contains everything needed for 
 		<element-def name="transform" extends="model-value">
 			<attribute name="source" type="expression" specify="required" />
 			<!-- Default of this attribute is whatever the flow prefers -->
-			<attribute name="active" type="boolean" specify="optional" />
 			<child-def name="op" type="operation" min="0" max="inf" /> <!-- Allow min=0 to facilitate aliases -->
 		</element-def>
 		<element-def name="operation" abstract="true" />
@@ -159,11 +157,20 @@ It builds on the Expresso-Core specification and contains everything needed for 
 			<attribute name="on" type="expression" />
 		</element-def>
 		<element-def name="distinct" extends="operation">
-			<attribute name="sort-with" type="expression" specify="optional" />
+			<child-def name="sort" type="sort" min="0" />
 			<attribute name="use-first" type="boolean" default="false" />
 			<attribute name="preserve-source-order" type="boolean" default="false" />
 		</element-def>
-		<element-def name="sort" extends="operation" inherits="sorted, complex-operation" />
+		<element-def name="sort" extends="operation">
+			<attribute name="sort-value-as" type="identifier" specify="optional" />
+			<attribute name="sort-compare-value-as" type="identifier" specify="optional" />
+			<attribute name="sort-with" type="expression" specify="optional" />
+			<attribute name="ascending" type="boolean" default="true" />
+			<child-def name="sort-by" type="sort-by" min="0" max="inf" />
+		</element-def>
+		<element-def name="sort-by" extends="sort">
+			<value type="expression" />
+		</element-def>
 		<element-def name="with-equivalence" extends="operation">
 			<attribute name="equivalence" type="expression" />
 		</element-def>
@@ -179,9 +186,10 @@ It builds on the Expresso-Core specification and contains everything needed for 
 			<attribute name="filter-add" type="expression" specify="optional" />
 			<attribute name="filter-remove" type="expression" specify="optional" />
 		</element-def>
-		<element-def name="map-equivalent" extends="map-to" inherits="sorted">
+		<element-def name="map-equivalent" extends="map-to">
 			<!-- For distinct flows, the reverse operation must be specified.
 				 For distinct sorted flows, either the reverse operation or a sorting function may be specified. -->
+			<child-def name="sort" type="sort" min="0" />
 		</element-def>
 		<element-def name="disable" extends="operation" inherits="complex-operation">
 			<attribute name="with" type="expression" />
@@ -190,10 +198,11 @@ It builds on the Expresso-Core specification and contains everything needed for 
 			<attribute name="type" type="flatten-reverse-type" />
 		</element-def>
 		<element-def name="flatten" extends="operation" inherits="abst-map-op">
-			<attribute name="function" type="expression" specify="optional" /> <!-- Don't require if the type is already flattenable -->
 			<!-- This option requires caching, so the default will be the same as the cached attribute and cannot be specified here -->
 			<attribute name="propagate-update-to-parent" type="boolean" specify="optional" />
-			<child-def name="reverse" type="flatten-reverse" min="0" max="1" />
+			<child-def name="reverse" type="flatten-reverse" min="0" />
+			<!-- This is needed to flatten sorted collections or sets -->
+			<child-def name="sort" type="sort" min="0" />
 		</element-def>
 		<element-def name="cross" extends="flatten">
 			<attribute name="with" type="expression" />
@@ -215,9 +224,23 @@ It builds on the Expresso-Core specification and contains everything needed for 
 		<element-def name="take-until" extends="operation">
 			<attribute name="until" type="expression" specify="required" />
 		</element-def>
+		<element-def name="collect" extends="operation">
+			<attribute name="active" type="boolean" specify="optional" />
+		</element-def>
 		<element-def name="first-value" extends="model-value">
 			<value-mod specify="forbidden" />
 			<child-def name="value" type="model-value" min="1" max="inf" />
+		</element-def>
+
+		<!-- Just a little bit of code flow structure -->
+		<element-def name="loop" extends="model-value" inherits="with-local-model">
+			<attribute name="init" type="expression" specify="optional" />
+			<attribute name="before-while" type="expression" specify="optional" />
+			<attribute name="while" type="expression" specify="required" />
+			<attribute name="before-body" type="expression" specify="optional" />
+			<attribute name="after-body" type="expression" specify="optional" />
+			<attribute name="finally" type="expression" specify="optional" />
+			<child-def name="body" type="action" min="0" max="inf" />
 		</element-def>
 	</elements>
 

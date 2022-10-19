@@ -119,6 +119,36 @@ public interface ObservableModelSet {
 				}
 			};
 		}
+
+		default ValueContainer<M, MV> wrapModels(Function<ModelSetInstance, ModelSetInstance> modelWrapper) {
+			ValueContainer<M, MV> outer = this;
+			return new ValueContainer<M, MV>() {
+				@Override
+				public ModelInstanceType<M, MV> getType() {
+					return outer.getType();
+				}
+
+				@Override
+				public MV get(ModelSetInstance models) {
+					return outer.get(modelWrapper.apply(models));
+				}
+
+				@Override
+				public int hashCode() {
+					return outer.hashCode();
+				}
+
+				@Override
+				public boolean equals(Object obj) {
+					return outer.equals(obj);
+				}
+
+				@Override
+				public String toString() {
+					return outer.toString();
+				}
+			};
+		}
 	}
 
 	interface ValueCreator<M, MV extends M> {
@@ -602,7 +632,7 @@ public interface ObservableModelSet {
 		private Placeholder<?, ?> getPlaceholder(String path, boolean required) throws QonfigInterpretationException {
 			int dot = path.lastIndexOf('.');
 			if (dot >= 0) {
-				Default subModel = theRoot.getSubModel(path.substring(0, dot), required);
+				Default subModel = getSubModel(path.substring(0, dot), required);
 				return subModel == null ? null : subModel.getPlaceholder(path.substring(dot + 1), required);
 			}
 			theNameChecker.checkName(path);
@@ -616,24 +646,25 @@ public interface ObservableModelSet {
 
 		private Default getSubModel(String path, boolean required) throws QonfigInterpretationException {
 			int dot = path.indexOf('.');
-			String modelName;
 			if (dot >= 0) {
-				modelName = path.substring(0, dot);
-			} else
-				modelName = path;
-			theNameChecker.checkName(modelName);
-			Placeholder<?, ?> subModel = theThings.get(modelName);
-			if (subModel == null) {
-				if (required)
-					throw new QonfigInterpretationException("No such sub-model declared: '" + pathTo(modelName) + "'");
-				else
-					return null;
-			} else if (subModel.getType().getModelType() != ModelTypes.Model)
-				throw new QonfigInterpretationException("'" + pathTo(modelName) + "' is a " + subModel.getType() + ", not a Model");
-			if (dot < 0)
-				return subModel.getModel();
+				Default model0 = getSubModel(path.substring(0, dot), required);
+				return model0 == null ? null : model0.getSubModel(path.substring(dot + 1), required);
+			}
+			theNameChecker.checkName(path);
+			Default refModel = this;
+			while (refModel != null) {
+				Placeholder<?, ?> subModel = refModel.theThings.get(path);
+				if (subModel != null) {
+					if (subModel.getType().getModelType() != ModelTypes.Model)
+						throw new QonfigInterpretationException("'" + pathTo(path) + "' is a " + subModel.getType() + ", not a Model");
+					return subModel.getModel();
+				}
+				refModel = refModel.theParent;
+			}
+			if (required)
+				throw new QonfigInterpretationException("No such sub-model declared: '" + pathTo(path) + "'");
 			else
-				return subModel.getModel().getSubModel(path.substring(dot + 1), required);
+				return null;
 		}
 
 		@Override

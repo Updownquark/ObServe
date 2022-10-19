@@ -235,7 +235,7 @@ public abstract class Invocation implements ObservableExpression {
 						}
 					} else {
 						// Ignore context (supplied by caller), all arguments are parameters
-						tvaResolver = null;
+						tvaResolver = contextType;
 						methodArgStart = 0;
 						if (paramTypes == null) {
 							paramTypes = new TypeToken[m.getParameterTypes().length];
@@ -597,12 +597,16 @@ public abstract class Invocation implements ObservableExpression {
 
 			@Override
 			public Type getReturnType(Constructor<?> method) {
-				return method.getDeclaringClass();
+				if (method.getDeclaringClass().getTypeParameters().length == 0)
+					return method.getDeclaringClass();
+				else
+					return TypeTokens.get().keyFor(method.getDeclaringClass()).parameterized(method.getDeclaringClass().getTypeParameters())
+						.getType();
 			}
 
 			@Override
 			public TypeVariable<?>[] getMethodTypes(Constructor<?> method) {
-				return method.getDeclaringClass().getTypeParameters();
+				return ArrayUtils.concat(TypeVariable.class, method.getDeclaringClass().getTypeParameters(), method.getTypeParameters());
 			}
 
 			@Override

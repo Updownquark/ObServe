@@ -142,9 +142,11 @@ public class NameExpression implements ObservableExpression {
 			return models.get(toString(), type);
 		if (mv.getType().getModelType() == ModelTypes.Model) {
 			path.append('.').append(theNames.get(nameIndex));
-			ValueContainer<?, ?> nextMV = models.get(path.toString(), false);
+			String pathStr = path.toString();
+			ValueContainer<?, ?> nextMV = models.get(pathStr, false);
 			if (nextMV != null)
 				return evaluateModel(nextMV, nameIndex + 1, path, type, models);
+			models.get(pathStr, false);// DEBUGGING
 			throw new QonfigInterpretationException("'" + theNames.get(nameIndex) + "' cannot be resolved or is not a model value");
 		} else if (mv.getType().getModelType() == ModelTypes.Value) {
 			Field field;
@@ -364,7 +366,7 @@ public class NameExpression implements ObservableExpression {
 					if (type != null) {
 						Invocation.MethodResult<Method, ? extends T> result = Invocation.findMethod(//
 							type.getMethods(), theNames.getFirst(), null, false, theOptions, voidTarget ? null : targetType, env,
-							Invocation.ExecutableImpl.METHOD, NameExpression.this);
+								Invocation.ExecutableImpl.METHOD, NameExpression.this);
 						if (result != null) {
 							setResultType(result.returnType);
 							MethodOption option = theOptions.get(result.argListOption);

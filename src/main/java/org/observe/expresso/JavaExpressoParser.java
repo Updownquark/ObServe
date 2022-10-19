@@ -126,11 +126,8 @@ public class JavaExpressoParser implements ExpressoParser {
 									typeArgs.add(t.getText());
 							} else if (typeArgs != null)
 								throw new ExpressoParseException(expression, "Non-static member constructors are not supported yet");
-							else {
-								if (typeName.length() > 0)
-									typeName.append('.');
+							else
 								typeName.append(ch.getText());
-							}
 						}
 						if (creator.getComponent("arrayCreatorRest") != null) {
 							throw new ExpressoParseException(expression, "Array creation is not yet implemented"); // TODO

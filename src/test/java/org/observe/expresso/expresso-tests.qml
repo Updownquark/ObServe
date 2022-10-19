@@ -75,6 +75,7 @@
 	<imports>
 		<import>org.observe.expresso.ExpressoTestEntity</import>
 		<import>org.junit.Assert.*</import>
+		<import>org.observe.expresso.ExpressoTests.*</import>
 	</imports>
 	<models>
 		<ext-model name="ext">
@@ -131,6 +132,22 @@
 				<element>2</element>
 				<element>1</element>
 			</list>
+			<list name="entityList" type="ExpressoTestEntity">
+				<element>new ExpressoTestEntity()</element>
+				<element>new ExpressoTestEntity()</element>
+				<element>new ExpressoTestEntity()</element>
+				<element>new ExpressoTestEntity()</element>
+			</list>
+			<transform name="sortedEntityList" source="entityList">
+				<refresh-each source-as="entity" on="entity.changes()" />
+				<sort sort-value-as="entity">
+					<sort-by>entity.getInt()</sort-by>
+					<sort-by>entity.getDouble()</sort-by>
+					<sort-by>entity.getBoolean()</sort-by>
+					<sort-by>entity.getInstant()</sort-by>
+					<sort-by>entity.getString()</sort-by>
+				</sort>
+			</transform>
 		</model>
 		<model name="tests">
 			<model name="constant">
@@ -195,6 +212,25 @@
 				<action name="modifyCombined">models.combinedInt=-37</action>
 				<action name="checkCombinedChanged3">assertEquals(ext.actionName, models.test.getInt()+models.anyInt, models.combinedInt)</action>
 				<!-- TODO Test enabled, accept, add, add-accept attributes for map-to -->
+			</model>
+			<model name="sort">
+				<model name="intModel">
+					<value name="entityCopy" init="new java.util.ArrayList&lt;&gt;(models.sortedEntityList)" />
+					<value name="random">new org.qommons.TestUtil()</value>
+					<value name="maxInstant" type="java.time.Instant">`Dec 31, 2100`</value>
+					<action name="randomlyModifyEntity">entityCopy.get(random.getInt(0, entityCopy.size()))
+						.setInt(random.getAnyInt()).setDouble(random.getAnyDouble()).setBoolean(random.getBoolean())
+						.setInstant(java.time.Instant.ofEpochMilli(random.getLong(0, maxInstant.toEpochMilli())))
+						.setString(random.getAlphaNumericString(0, 10))
+					</action>
+				</model>
+				<loop name="modifyList" init="i=0" while="i&lt;5" after-body="i++">
+					<model>
+						<value name="i" type="int" />
+					</model>
+					<action>intModel.randomlyModifyEntity</action>
+					<action>checkEntityListOrder(models.sortedEntityList)</action>
+				</loop>
 			</model>
 			<model name="assignInt">
 				<action name="setExpectInt">models.expected.setInt(models.anyInt)</action>

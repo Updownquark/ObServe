@@ -3,6 +3,9 @@ package org.observe.expresso;
 import java.time.Instant;
 import java.util.Objects;
 
+import org.observe.Observable;
+import org.observe.SimpleObservable;
+
 /** A simple entity bean for the {@link ExpressoTests} */
 public class ExpressoTestEntity {
 	private int theInt;
@@ -11,14 +14,21 @@ public class ExpressoTestEntity {
 	private String theString;
 	private Instant theInstant;
 
+	private final SimpleObservable<Void> theChanges = new SimpleObservable<>();
+
 	/** @return The value of the integer field */
 	public int getInt() {
 		return theInt;
 	}
 
-	/** @param i The value for the integer field */
-	public void setInt(int i) {
+	/**
+	 * @param i The value for the integer field
+	 * @return This entity
+	 */
+	public ExpressoTestEntity setInt(int i) {
 		theInt = i;
+		theChanges.onNext(null);
+		return this;
 	}
 
 	/** @return The value of the double field */
@@ -26,9 +36,14 @@ public class ExpressoTestEntity {
 		return theDouble;
 	}
 
-	/** @param d The value for the double field */
-	public void setDouble(double d) {
+	/**
+	 * @param d The value for the double field
+	 * @return This entity
+	 */
+	public ExpressoTestEntity setDouble(double d) {
 		theDouble = d;
+		theChanges.onNext(null);
+		return this;
 	}
 
 	/** @return The value of the boolean field */
@@ -36,9 +51,14 @@ public class ExpressoTestEntity {
 		return theBoolean;
 	}
 
-	/** @param b The value for the boolean field */
-	public void setBoolean(boolean b) {
+	/**
+	 * @param b The value for the boolean field
+	 * @return This entity
+	 */
+	public ExpressoTestEntity setBoolean(boolean b) {
 		theBoolean = b;
+		theChanges.onNext(null);
+		return this;
 	}
 
 	/** @return The value of the string field */
@@ -46,9 +66,14 @@ public class ExpressoTestEntity {
 		return theString;
 	}
 
-	/** @param string The value for the string field */
-	public void setString(String string) {
+	/**
+	 * @param string The value for the string field
+	 * @return This entity
+	 */
+	public ExpressoTestEntity setString(String string) {
 		theString = string;
+		theChanges.onNext(null);
+		return this;
 	}
 
 	/** @return The value of the instant field */
@@ -56,9 +81,19 @@ public class ExpressoTestEntity {
 		return theInstant;
 	}
 
-	/** @param instant The value for the instant field */
-	public void setInstant(Instant instant) {
+	/**
+	 * @param instant The value for the instant field
+	 * @return This entity
+	 */
+	public ExpressoTestEntity setInstant(Instant instant) {
 		theInstant = instant;
+		theChanges.onNext(null);
+		return this;
+	}
+
+	/** @return An observable that fires when any of this entity's fields changes */
+	public Observable<Void> changes() {
+		return theChanges.readOnly();
 	}
 
 	/**

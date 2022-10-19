@@ -33,6 +33,7 @@ public class ExpressoQIS implements SpecialSession<ExpressoQIS> {
 	public static final String TOOLKIT_NAME = "Expresso-Core";
 	static final String SATISFIERS_KEY = ExpressoQIS.class.getSimpleName() + "$SATISFIERS";
 	public static final String MODEL_VALUE_OWNER_PROP = "expresso-interpreter-model-value-owner";
+	public static final String LOCAL_MODEL_KEY = "ExpressoLocalModel";
 
 	private final CoreSession theWrapped;
 
@@ -66,6 +67,11 @@ public class ExpressoQIS implements SpecialSession<ExpressoQIS> {
 	public ExpressoQIS setModels(ObservableModelSet models, ClassView classView) {
 		setExpressoEnv(getExpressoEnv().with(models, classView));
 		return this;
+	}
+
+	public ModelSetInstance wrapLocal(ModelSetInstance models) {
+		ObservableModelSet.Wrapped localModel = (ObservableModelSet.Wrapped) get(LOCAL_MODEL_KEY);
+		return localModel == null ? models : localModel.wrap(models).build();
 	}
 
 	public ObservableExpression getAttributeExpression(String attrName) throws QonfigInterpretationException {

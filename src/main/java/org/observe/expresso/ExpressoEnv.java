@@ -86,12 +86,16 @@ public class ExpressoEnv {
 	}
 
 	public ExpressoEnv with(ObservableModelSet models, ClassView classView) {
+		if ((models == null || theModels == models) && (classView == null || theClassView == classView))
+			return this;
 		return new ExpressoEnv(models == null ? theModels : models, //
 			classView == null ? theClassView : classView, //
 				theNonStructuredParsers, theUnaryOperators, theBinaryOperators);
 	}
 
 	public ExpressoEnv withOperators(UnaryOperatorSet unaryOps, BinaryOperatorSet binaryOps) {
+		if ((unaryOps == null || theUnaryOperators == unaryOps) && (binaryOps == null || theBinaryOperators == binaryOps))
+			return this;
 		return new ExpressoEnv(theModels, theClassView, theNonStructuredParsers, //
 			unaryOps == null ? theUnaryOperators : unaryOps, //
 				binaryOps == null ? theBinaryOperators : binaryOps);

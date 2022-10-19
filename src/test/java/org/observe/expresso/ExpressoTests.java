@@ -1,8 +1,10 @@
 package org.observe.expresso;
 
 import java.io.IOException;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 import org.junit.Before;
@@ -18,6 +20,7 @@ import org.qommons.config.QonfigParseException;
 /** Some tests for Expresso functionality */
 public class ExpressoTests {
 	private static Expresso TEST_EXPRESSO;
+	private static Comparator<? super ExpressoTestEntity> ENTITY_COMPARE;
 
 	static synchronized Expresso getTestExpresso() {
 		if (TEST_EXPRESSO == null) {
@@ -52,6 +55,9 @@ public class ExpressoTests {
 			.withSubModel("ext", ext -> ext.with("actionName", ModelTypes.Value.forType(String.class), theActionName))//
 			.build();
 		theModelInstance = expresso.getModels().createInstance(extModels, Observable.empty());
+
+		ENTITY_COMPARE = expresso.getModels().get("models.sortedEntityList", ModelTypes.SortedCollection.forType(ExpressoTestEntity.class))
+			.get(theModelInstance).comparator();
 
 		theTestActions = new HashMap<>();
 		ObservableModelSet tests = expresso.getModels().getSubModel("tests");
@@ -139,6 +145,15 @@ public class ExpressoTests {
 				if (exName == null || !exName.equals(e.getClass().getSimpleName()))
 					throw new IllegalStateException("Unexpected exception on action " + actionName, e);
 			}
+		}
+	}
+
+	public static void checkEntityListOrder(List<ExpressoTestEntity> entities) {
+		ExpressoTestEntity prev = null;
+		for (ExpressoTestEntity entity : entities) {
+			if (prev != null && ENTITY_COMPARE.compare(prev, entity) > 0)
+				throw new AssertionError(prev + ">" + entity);
+			prev = entity;
 		}
 	}
 }

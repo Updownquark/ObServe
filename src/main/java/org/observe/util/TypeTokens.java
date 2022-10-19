@@ -1202,12 +1202,16 @@ public class TypeTokens {
 				}
 				return true;
 			} else if (parameterType.getType() instanceof ParameterizedType) {
-				if (!(evaluatedType.getType() instanceof ParameterizedType))
-					return true;
-				for (Type pt : ((ParameterizedType) parameterType.getType()).getActualTypeArguments()) {
-					if (!accumulate(resolveInternal(pt), evaluatedType.resolveType(pt), upperBound))
-						return false;
-				}
+				ParameterizedType pt = (ParameterizedType) parameterType.getType();
+				if (pt.getRawType() instanceof Class) {
+					Class<?> raw = (Class<?>) pt.getRawType();
+					for (int t = 0; t < pt.getActualTypeArguments().length; t++) {
+						Type tp = raw.getTypeParameters()[t];
+						if (!accumulate(parameterType.resolveType(tp), evaluatedType.resolveType(tp), upperBound))
+							return false;
+					}
+				} else
+					return false; // Don't know how to handle non-class raw types
 				return true;
 			} else if (parameterType.isArray() && evaluatedType.isArray())
 				return accumulate(parameterType.getComponentType(), evaluatedType.getComponentType());
