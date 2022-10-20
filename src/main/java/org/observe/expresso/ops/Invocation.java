@@ -29,6 +29,7 @@ import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ValueContainer;
 import org.observe.util.TypeTokens;
 import org.qommons.ArrayUtils;
+import org.qommons.Transaction;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.ex.CheckedExceptionWrapper;
 
@@ -62,11 +63,14 @@ public abstract class Invocation implements ObservableExpression {
 	public <M, MV extends M> ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env)
 		throws QonfigInterpretationException {
 		TypeToken<?> targetType;
+		boolean action = type.getModelType() == ModelTypes.Action;
 		if (type.getModelType() == ModelTypes.Action || type.getModelType() == ModelTypes.Value)
 			targetType = type.getType(0);
 		else
 			targetType = TypeTokens.get().keyFor(type.getModelType().modelType).parameterized(type.getTypeList());
-		return evaluateInternal2(type, env, new ArgOption(env), targetType);
+		try (Transaction t = action ? asAction() : Transaction.NONE) {
+			return evaluateInternal2(type, env, new ArgOption(env), targetType);
+		}
 	}
 
 	/** An {@link org.observe.expresso.ObservableExpression.Args} option representing a set of arguments to an invokable */
@@ -347,12 +351,26 @@ public abstract class Invocation implements ObservableExpression {
 		return bestResult;
 	}
 
+	private static ThreadLocal<Boolean> AS_ACTION = new ThreadLocal<>();
+
+	/**
+	 * During the transaction, values evaluated from invocations will be uncached, such that each request of the value will cause a fresh
+	 * invocation of the invokable.
+	 * 
+	 * @return The transaction to close
+	 */
+	public static Transaction asAction() {
+		AS_ACTION.set(true);
+		return AS_ACTION::remove;
+	}
+
 	static abstract class InvocationContainer<X extends Executable, M, T, MV extends M> implements ValueContainer<M, MV> {
 		private final Invocation.MethodResult<X, T> theMethod;
 		private final ValueContainer<SettableValue<?>, SettableValue<?>> theContext;
 		private final List<ValueContainer<SettableValue<?>, SettableValue<?>>> theArguments;
 		private final ModelInstanceType<M, MV> theType;
 		private final Invocation.ExecutableImpl<X> theImpl;
+		private final boolean isCaching;
 		private boolean isUpdatingContext;
 		private T theCachedValue;
 
@@ -372,6 +390,7 @@ public abstract class Invocation implements ObservableExpression {
 				theContext = context;
 			}
 			theImpl = impl;
+			isCaching = !Boolean.TRUE.equals(AS_ACTION.get());
 		}
 
 		@Override
@@ -430,23 +449,35 @@ public abstract class Invocation implements ObservableExpression {
 
 		protected <X2> SettableValue<X2> syntheticResultValue(TypeToken<X2> type, SettableValue<?> ctxV, SettableValue<?>[] argVs,
 			Observable<?> changes) {
-			return SettableValue.asSettable(//
-				ObservableValue.of(type, () -> {
-					try {
-						return (X2) invoke(ctxV, argVs, false);
-					} catch (Throwable e) {
-						e.printStackTrace();
-						return null;
-					}
-				}, () -> {
-					long stamp = ctxV == null ? 0 : ctxV.getStamp();
-					for (SettableValue<?> argV : argVs) {
-						if (argV != null)
-							stamp = Long.rotateLeft(stamp, 13) ^ argV.getStamp();
-					}
-					return stamp;
-				}, changes, () -> this).cached(), //
-				__ -> theImpl + "s are not reversible");
+			ObservableValue.SyntheticObservable<X2> backing = ObservableValue.of(type, () -> {
+				try {
+					return (X2) invoke(ctxV, argVs, false);
+				} catch (Throwable e) {
+					e.printStackTrace();
+					return null;
+				}
+			}, () -> {
+				long stamp = ctxV == null ? 0 : ctxV.getStamp();
+				for (SettableValue<?> argV : argVs) {
+					if (argV != null)
+						stamp = Long.rotateLeft(stamp, 13) ^ argV.getStamp();
+				}
+				return stamp;
+			}, changes, () -> this);
+			if (isCaching) {
+				return SettableValue.asSettable(backing.cached(), //
+					__ -> theImpl + "s are not reversible");
+			} else {
+				long[] stamp = new long[1];
+				return SettableValue.asSettable(ObservableValue.of(type, //
+					() -> {
+						stamp[0]++;
+						return backing.get();
+					}, () -> {
+						return backing.getStamp() ^ stamp[0];
+					}, changes, () -> this), //
+					__ -> theImpl + "s are not reversible");
+			}
 		}
 
 		@Override

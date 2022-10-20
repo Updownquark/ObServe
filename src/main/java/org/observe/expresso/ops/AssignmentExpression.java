@@ -14,6 +14,7 @@ import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ValueContainer;
 import org.observe.util.TypeTokens;
 import org.qommons.QommonsUtils;
+import org.qommons.Transaction;
 import org.qommons.config.QonfigInterpretationException;
 
 import com.google.common.reflect.TypeToken;
@@ -70,8 +71,11 @@ public class AssignmentExpression implements ObservableExpression {
 		if (!isVoid && !TypeTokens.get().isAssignable(type.getType(0), context.getType().getType(0)))
 			throw new QonfigInterpretationException(
 				"Cannot assign " + context + ", type " + type.getType(0) + " to " + context.getType().getType(0));
-		ValueContainer<SettableValue<?>, SettableValue<Object>> value = theValue
-			.evaluate(ModelTypes.Value.forType((TypeToken<Object>) TypeTokens.get().getExtendsWildcard(context.getType().getType(0))), env);
+		ValueContainer<SettableValue<?>, SettableValue<Object>> value;
+		try (Transaction t = Invocation.asAction()) {
+			value = theValue.evaluate(
+				ModelTypes.Value.forType((TypeToken<Object>) TypeTokens.get().getExtendsWildcard(context.getType().getType(0))), env);
+		}
 		return (ValueContainer<M, MV>) new ValueContainer<ObservableAction<?>, ObservableAction<?>>() {
 			@Override
 			public ModelInstanceType<ObservableAction<?>, ObservableAction<?>> getType() {

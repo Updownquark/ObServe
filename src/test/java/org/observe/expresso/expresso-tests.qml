@@ -218,11 +218,18 @@
 					<value name="entityCopy" init="new java.util.ArrayList&lt;&gt;(models.sortedEntityList)" />
 					<value name="random">new org.qommons.TestUtil()</value>
 					<value name="maxInstant" type="java.time.Instant">`Dec 31, 2100`</value>
-					<action name="randomlyModifyEntity">entityCopy.get(random.getInt(0, entityCopy.size()))
-						.setInt(random.getAnyInt()).setDouble(random.getAnyDouble()).setBoolean(random.getBoolean())
-						.setInstant(java.time.Instant.ofEpochMilli(random.getLong(0, maxInstant.toEpochMilli())))
-						.setString(random.getAlphaNumericString(0, 10))
-					</action>
+					<value name="index" type="int" />
+					<action-group name="randomlyModifyEntity">
+						<action>index=random.getInt(0, entityCopy.size())</action>
+						<action>entityCopy.get(index)
+							.setInt(random.getInt(-10, 11))
+							.setDouble(random.getDouble(-10, 10))
+							.setBoolean(random.getBoolean())
+							.setInstant(java.time.Instant.ofEpochMilli(random.getLong(0, maxInstant.toEpochMilli())))
+							.setString(random.getAlphaNumericString(0, 10))
+						</action>
+						<!-- DEBUG <action>System.out.println("index="+index+", list="+models.sortedEntityList)</action>-->
+					</action-group>
 				</model>
 				<loop name="modifyList" init="i=0" while="i&lt;25" after-body="i++">
 					<model>
@@ -231,7 +238,6 @@
 					<action>intModel.randomlyModifyEntity</action>
 					<action>checkEntityListOrder(models.sortedEntityList)</action>
 				</loop>
-				<action name="printResults">System.out.println(models.sortedEntityList)</action>
 			</model>
 			<model name="assignInt">
 				<action name="setExpectInt">models.expected.setInt(models.anyInt)</action>
