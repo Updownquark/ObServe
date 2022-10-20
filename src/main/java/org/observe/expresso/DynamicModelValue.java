@@ -97,4 +97,28 @@ public class DynamicModelValue<M, MV extends M> implements ValueContainer<M, MV>
 		ModelType.HollowModelValue<M, MV> hollow = (ModelType.HollowModelValue<M, MV>) model.get(name, type);
 		hollow.satisfy(value);
 	}
+
+	/**
+	 * Checks if the given dynamic value is satisfied
+	 *
+	 * @param <M> The model type of the value
+	 * @param <MV> The type of the value
+	 * @param name The name of the value
+	 * @param type The type of the value
+	 * @param model The model instance the value may be satisfied in
+	 * @return Whether the given dynamic value has already been satisfied with
+	 *         {@link #satisfyDynamicValue(String, ModelInstanceType, ModelSetInstance, Object)}
+	 */
+	public static <M, MV extends M> boolean isDynamicValueSatisfied(String name, ModelInstanceType<M, MV> type, ModelSetInstance model) {
+		try { // Check for the value rigorously
+			model.getModel().get(name, type);
+		} catch (QonfigInterpretationException e) {
+			throw new IllegalArgumentException("No such dynamic model value: " + model.getModel().getPath() + "." + name);
+		}
+		MV dynamicValue = model.get(name, type);
+		if (!(dynamicValue instanceof ModelType.HollowModelValue))
+			throw new IllegalArgumentException("No such dynamic model value: " + model.getModel().getPath() + "." + name);
+		ModelType.HollowModelValue<M, MV> hollow = (ModelType.HollowModelValue<M, MV>) model.get(name, type);
+		return hollow.isSatisfied();
+	}
 }

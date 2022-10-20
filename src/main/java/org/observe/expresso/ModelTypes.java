@@ -180,8 +180,6 @@ public class ModelTypes {
 		public synchronized void satisfy(MV realValue, Consumer<L> forEachListener) {
 			if (realValue == null)
 				throw new NullPointerException("Cannot satisfy a hollow value (" + theType + ") with null");
-			else if (theSatisfied != null)
-				throw new IllegalStateException("Hollow value (" + theType + ") has already been satisfied");
 			theSatisfied = realValue;
 			if (theListeners != null) {
 				theListeners.dumpAndClear(//
@@ -197,6 +195,11 @@ public class ModelTypes {
 		@Override
 		public synchronized void satisfy(MV realValue) throws IllegalStateException {
 			satisfy(realValue, null);
+		}
+
+		@Override
+		public boolean isSatisfied() {
+			return theSatisfied != null;
 		}
 
 		@Override
@@ -427,11 +430,14 @@ public class ModelTypes {
 			public void satisfy(ObservableAction<T> realValue) throws IllegalStateException {
 				if (realValue == null)
 					throw new NullPointerException("Cannot satisfy a hollow value (Action<" + theType + ">) with null");
-				else if (theSatisfied != null)
-					throw new IllegalStateException("Hollow value (Action<" + theType + ">) has already been satisfied");
 				theSatisfied = realValue;
 				if (theEnabled != null)
 					theEnabled.satisfy(SettableValue.asSettable(realValue.isEnabled(), __ -> "Not Settable"));
+			}
+
+			@Override
+			public boolean isSatisfied() {
+				return theSatisfied != null;
 			}
 
 			@Override
@@ -779,8 +785,6 @@ public class ModelTypes {
 			public void satisfy(SettableValue<T> realValue) throws IllegalStateException {
 				if (realValue == null)
 					throw new NullPointerException("Cannot satisfy a hollow value (Action<" + theType + ">) with null");
-				else if (theSatisfied != null)
-					throw new IllegalStateException("Hollow value (Value<" + theType + ">) has already been satisfied");
 				theSatisfied = realValue;
 				if (theHollowChanges != null) {
 					ObservableValueEvent<T> initEvent = realValue.createInitialEvent(realValue.get(), null);
@@ -792,6 +796,11 @@ public class ModelTypes {
 				}
 				if (theEnabled != null)
 					theEnabled.satisfy(SettableValue.asSettable(realValue.isEnabled(), __ -> "Not Settable"));
+			}
+
+			@Override
+			public boolean isSatisfied() {
+				return theSatisfied != null;
 			}
 
 			@Override

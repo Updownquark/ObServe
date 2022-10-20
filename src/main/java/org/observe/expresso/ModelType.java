@@ -800,5 +800,8 @@ public abstract class ModelType<M> implements Named {
 		 * @throws IllegalStateException If this value has already been satisfied
 		 */
 		void satisfy(MV realValue) throws IllegalStateException;
+
+		/** @return If this value has been {@link #satisfy(Object) satisfied} */
+		boolean isSatisfied();
 	}
 }

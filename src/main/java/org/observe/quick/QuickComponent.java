@@ -92,7 +92,7 @@ public class QuickComponent {
 			} catch (QonfigInterpretationException e) {
 				throw new IllegalStateException("Should have happened earlier", e);
 			}
-			theModelsInstance = models;
+			theModelsInstance = definition.getSession().as(ExpressoQIS.class).wrapLocal(models);
 			exSession.startInterpretingAs(Component.class, models);
 			theAttributeValues = new LinkedHashMap<>();
 			theChildren = ObservableCollection.build(QuickComponent.class).build();

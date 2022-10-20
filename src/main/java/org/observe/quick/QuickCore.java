@@ -44,6 +44,7 @@ import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.Subscription;
 import org.observe.expresso.ClassView;
+import org.observe.expresso.DynamicModelValue;
 import org.observe.expresso.Expression.ExpressoParseException;
 import org.observe.expresso.ExpressoEnv;
 import org.observe.expresso.ExpressoQIS;
@@ -54,6 +55,7 @@ import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ValueContainer;
 import org.observe.expresso.QonfigExpression;
 import org.observe.expresso.SuppliedModelValue;
+import org.observe.quick.QuickCore.MouseValueSupport;
 import org.observe.quick.style.QuickElementStyle;
 import org.observe.quick.style.QuickElementStyle.QuickElementStyleAttribute;
 import org.observe.quick.style.QuickStyleSheet;
@@ -609,7 +611,7 @@ public class QuickCore implements QonfigInterpretation {
 			ModelTypes.Value.forType(boolean.class));
 		initMouseListening();
 		// Install style model value support
-		if (!exS.isSatisfied(hovered, Component.class))
+		if (!DynamicModelValue.isDynamicValueSatisfied("hovered", ModelTypes.Value.forType(boolean.class), comp.getModels()))
 			exS.satisfy(hovered, Component.class, () -> new MouseValueSupport(hovered, null), MouseValueSupport::install);
 		if (!exS.isSatisfied(pressed, Component.class))
 			exS.satisfy(pressed, Component.class, () -> new MouseValueSupport(pressed, true), MouseValueSupport::install);
