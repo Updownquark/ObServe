@@ -1003,7 +1003,9 @@ public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>,
 		@Override
 		public T get() {
 			BiTuple<TransformedElement<S, T>, TransformationState> state = getState();
-			return state.getValue1().getCurrentValue(state.getValue2());
+			TransformedElement<S, T> el = state.getValue1();
+			TransformationState tx = state.getValue2();
+			return el.getCurrentValue(tx);
 		}
 
 		@Override

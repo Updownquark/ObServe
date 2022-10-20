@@ -8,7 +8,7 @@ import org.qommons.config.QonfigInterpreterCore.QonfigValueCreator;
 
 import com.google.common.reflect.TypeToken;
 
-/** A simple structure consisting of a class view and models, the definition for a set of models for an appliction */
+/** A simple structure consisting of a class view and models, the definition for a set of models for an application */
 public class Expresso {
 	/**
 	 * Provided to
@@ -31,21 +31,31 @@ public class Expresso {
 		 * @param <M> The model type
 		 */
 		public class SingleTyped<M> implements ExtModelValue<M> {
-			private final ModelType.SingleTyped<M> theType;
+			private final ModelType.SingleTyped<M> theModelType;
+			private final VariableType theValueType;
 
-			/** @param type The model type of this value */
-			public SingleTyped(ModelType.SingleTyped<M> type) {
-				theType = type;
+			/**
+			 * @param modelType The model type of this value
+			 * @param valueType The value type of this value
+			 */
+			public SingleTyped(ModelType.SingleTyped<M> modelType, VariableType valueType) {
+				theModelType = modelType;
+				theValueType = valueType;
 			}
 
 			/** @return The model type of this value */
-			public ModelType.SingleTyped<M> getType() {
-				return theType;
+			public ModelType.SingleTyped<M> getModelType() {
+				return theModelType;
+			}
+
+			/** @return The value type of this value */
+			public VariableType getValueType() {
+				return theValueType;
 			}
 
 			@Override
 			public ModelInstanceType<M, ?> getType(ExpressoQIS session) throws QonfigInterpretationException {
-				return theType.forType((TypeToken<?>) session.get(ExpressoBaseV0_1.VALUE_TYPE_KEY));
+				return theModelType.forType((TypeToken<?>) theValueType.getType(session.getExpressoEnv().getModels()));
 			}
 		}
 
@@ -55,23 +65,42 @@ public class Expresso {
 		 * @param <M> The model type
 		 */
 		class DoubleTyped<M> implements ExtModelValue<M> {
-			private final ModelType.DoubleTyped<M> theType;
+			private final ModelType.DoubleTyped<M> theModelType;
+			private final VariableType theValueType1;
+			private final VariableType theValueType2;
 
-			/** @param type The model type of this value */
-			public DoubleTyped(ModelType.DoubleTyped<M> type) {
-				theType = type;
+			/**
+			 * @param type The model type of this value
+			 * @param valueType1 The first value type of this value
+			 * @param valueType2 The second value type of this value
+			 */
+			public DoubleTyped(ModelType.DoubleTyped<M> type, VariableType valueType1, VariableType valueType2) {
+				theModelType = type;
+				theValueType1 = valueType1;
+				theValueType2 = valueType2;
 			}
 
 			/** @return The model type of this value */
 			public ModelType.DoubleTyped<M> getType() {
-				return theType;
+				return theModelType;
+			}
+
+			/** @return The first value type of this value */
+			public VariableType getValueType1() {
+				return theValueType1;
+			}
+
+			/** @return The secondvalue type of this value */
+			public VariableType getValueType2() {
+				return theValueType2;
 			}
 
 			@Override
 			public ModelInstanceType<M, ?> getType(ExpressoQIS session) throws QonfigInterpretationException {
-				return theType.forType(//
-					(TypeToken<?>) session.get(ExpressoBaseV0_1.KEY_TYPE_KEY), //
-					(TypeToken<?>) session.get(ExpressoBaseV0_1.VALUE_TYPE_KEY, TypeToken.class));
+				return theModelType.forType(//
+					(TypeToken<?>) theValueType1.getType(session.getExpressoEnv().getModels()), //
+					(TypeToken<?>) theValueType2.getType(session.getExpressoEnv().getModels())//
+					);
 			}
 		}
 	}
@@ -90,7 +119,7 @@ public class Expresso {
 
 		/**
 		 * Creates the value
-		 * 
+		 *
 		 * @param config The config value builder to use to build the structure
 		 * @param msi The model set to use to build the structure
 		 * @return The created value

@@ -127,6 +127,12 @@ public class ExpressoTests {
 		executeTestActions("assignInstant");
 	}
 
+	/** Tests value-derived model values (see {@link DynamicModelValues}) */
+	@Test
+	public void testInternalState() {
+		executeTestActions("internalState");
+	}
+
 	private void executeTestActions(String testName) {
 		Map<String, ObservableAction<?>> actions = theTestActions.get(testName);
 		if (actions == null)
@@ -156,7 +162,7 @@ public class ExpressoTests {
 
 	/**
 	 * Called by the sort test from Expresso. Ensures that all the entities are {@link #ENTITY_COMPARE order}.
-	 * 
+	 *
 	 * @param entities The entities to check
 	 * @throws AssertionError If the entities are not in order
 	 */

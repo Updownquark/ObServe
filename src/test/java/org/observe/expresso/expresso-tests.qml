@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<expresso uses:expresso="Expresso-Base 0.1">
+<expresso uses:test="Expresso-Test 0.1">
 	<!-- TODO
 		Test AND DOCUMENT!!
 
@@ -193,6 +193,7 @@
 					</map-to>
 				</transform>
 				<value name="initSource" init="models.anyInt" />
+
 				<action name="checkMapped">assertEquals(ext.actionName, models.anyInt+10, mapped)</action>
 				<action name="modifyMapped">mapped+=25</action>
 				<action name="checkSource">assertEquals(ext.actionName, models.anyInt, initSource+25)</action>
@@ -231,6 +232,7 @@
 						<!-- DEBUG <action>System.out.println("index="+index+", list="+models.sortedEntityList)</action>-->
 					</action-group>
 				</model>
+
 				<loop name="modifyList" init="i=0" while="i&lt;25" after-body="i++">
 					<model>
 						<value name="i" type="int" />
@@ -254,6 +256,36 @@
 				<action name="assignInst">models.assignInst</action>
 				<action name="checkEqual">assertEquals(ext.actionName, models.expected, models.test)</action>
 				<action name="checkError2">assertNull(ext.actionName, models.error)</action>
+			</model>
+			<model name="internalState">
+				<stateful-struct name="struct1" derived-state="internalState + 10" />
+				<stateful-struct name="struct2" derived-state="internalState - 10" />
+				<stateful-struct name="struct3" derived-state="internalState * 10" />
+				<stateful-struct name="struct4" derived-state="internalState % 10" />
+
+				<value name="struct1iv" type="int">struct1.getInternalState()</value>
+				<value name="struct2iv" type="int">struct2.getInternalState()</value>
+				<value name="struct3iv" type="int">struct3.getInternalState()</value>
+				<value name="struct4iv" type="int">struct4.getInternalState()</value>
+				<value name="struct1dv" type="int">struct1.getDerivedState()</value>
+				<value name="struct2dv" type="int">struct2.getDerivedState()</value>
+				<value name="struct3dv" type="int">struct3.getDerivedState()</value>
+				<value name="struct4dv" type="int">struct4.getDerivedState()</value>
+
+				<action name="checkState1">assertEquals(ext.actionName, 25, struct1dv)</action>
+				<action name="checkState2">assertEquals(ext.actionName, 5, struct2dv)</action>
+				<action name="checkState3">assertEquals(ext.actionName, 150, struct3dv)</action>
+				<action name="checkState4">assertEquals(ext.actionName, 5, struct4dv)</action>
+
+				<action name="modState1">struct1iv=1</action>
+				<action name="modState2">struct2iv=2</action>
+				<action name="modState3">struct3iv=3</action>
+				<action name="modState4">struct4iv=4</action>
+
+				<action name="checkState1_2">assertEquals(ext.actionName, 11, struct1dv)</action>
+				<action name="checkState2_2">assertEquals(ext.actionName, -8, struct2dv)</action>
+				<action name="checkState3_2">assertEquals(ext.actionName, 30, struct3dv)</action>
+				<action name="checkState4_2">assertEquals(ext.actionName, 4, struct4dv)</action>
 			</model>
 		</model>
 	</models>

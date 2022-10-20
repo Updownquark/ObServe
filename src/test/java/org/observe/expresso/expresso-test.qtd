@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<qonfig-def name="Expresso-Test" version="0.1" extends:base="Expresso-Base v0.1">
+	<elements>
+		<element-def name="stateful-struct" extends="model-value" inherits="with-element-model">
+			<element-model>
+				<value name="internalState" type="int" />
+			</element-model>
+			<attribute name="derived-state" type="expression" />
+		</element-def>
+	</elements>
+</qonfig-def>

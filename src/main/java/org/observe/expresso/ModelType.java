@@ -165,25 +165,33 @@ public abstract class ModelType<M> implements Named {
 		}
 	}
 
+	public static class NoOpConverter<M> implements ModelInstanceConverter<M, M> {
+		private final ModelInstanceType<M, ?> theType;
+
+		public NoOpConverter(ModelInstanceType<M, ?> type) {
+			theType = type;
+		}
+
+		@Override
+		public M convert(M source) {
+			return source;
+		}
+
+		@Override
+		public ModelInstanceType<M, ?> getType() {
+			return theType;
+		}
+
+		@Override
+		public String toString() {
+			return "no-op";
+		}
+	}
+
 	public static <M> ModelInstanceConverter<M, M> nullConverter(ModelInstanceType<M, ?> type) {
 		if (type == null)
 			throw new NullPointerException();
-		return new ModelInstanceConverter<M, M>() {
-			@Override
-			public M convert(M source) {
-				return source;
-			}
-
-			@Override
-			public ModelInstanceType<M, ?> getType() {
-				return type;
-			}
-
-			@Override
-			public String toString() {
-				return "no-op";
-			}
-		};
+		return new NoOpConverter<>(type);
 	}
 
 	public static <M1, M2> ModelInstanceConverter<M1, M2> converter(Function<M1, M2> converter, ModelInstanceType<M2, ?> type) {
@@ -348,9 +356,10 @@ public abstract class ModelType<M> implements Named {
 			if (converter == null) {
 				source.getType().convert(targetType); // TODO DEBUG REMOVE
 				throw new QonfigInterpretationException("Cannot convert " + source + " (" + source.getType() + ") to " + targetType);
-			}
-
-			return new ConvertedValue<>(source, (ModelInstanceType<M2, MV2>) converter.getType(), converter);
+			} else if (converter instanceof NoOpConverter)
+				return (ValueContainer<M2, MV2>) source;
+			else
+				return new ConvertedValue<>(source, (ModelInstanceType<M2, MV2>) converter.getType(), converter);
 		}
 
 		@Override
@@ -569,6 +578,8 @@ public abstract class ModelType<M> implements Named {
 	protected void setupConversions(ConversionBuilder<M> builder) {
 	}
 
+	public abstract <MV extends M> HollowModelValue<M, MV> createHollowValue(String name, ModelInstanceType<M, MV> type);
+
 	@Override
 	public String toString() {
 		return new StringBuilder(theName)//
@@ -764,5 +775,24 @@ public abstract class ModelType<M> implements Named {
 		public String toString() {
 			return theSource.toString();
 		}
+	}
+
+	/**
+	 * It can't be declared, but instances of this interface also must implement MV. This interface functions as an empty vessel that
+	 * implements the full contract of a typical model value, but with no content until it is {@link #satisfy(Object) satisfied} dynamically
+	 * with a real value, upon which it becomes a pass-through to that value.
+	 *
+	 * @param <M> The model type of the value
+	 * @param <MV> The type of the value
+	 */
+	public interface HollowModelValue<M, MV extends M> {
+		/**
+		 * Satisfies this value with a real value, so that this value becomes a pass-through to the given value. This may only be called
+		 * once.
+		 *
+		 * @param realValue The model value for this value to reflect
+		 * @throws IllegalStateException If this value has already been satisfied
+		 */
+		void satisfy(MV realValue) throws IllegalStateException;
 	}
 }

@@ -558,6 +558,45 @@ public class TypeTokens {
 	}
 
 	/**
+	 * @param <T> The type of the value to get
+	 * @param type The type to get a default value for
+	 * @return A default value to use for the given type
+	 */
+	public <T> T getDefaultValue(TypeToken<T> type) {
+		return getDefaultValue(getRawType(type));
+	}
+
+	/**
+	 * @param <T> The type of the value to get
+	 * @param type The type to get a default value for
+	 * @return A default value to use for the given type
+	 */
+	public <T> T getDefaultValue(Class<T> type) {
+		if (!type.isPrimitive())
+			return null;
+		else if (type == void.class)
+			return null;
+		else if (type == boolean.class)
+			return (T) Boolean.FALSE;
+		else if (type == char.class)
+			return (T) Character.valueOf((char) 0);
+		else if (type == byte.class)
+			return (T) Byte.valueOf((byte) 0);
+		else if (type == short.class)
+			return (T) Short.valueOf((short) 0);
+		else if (type == int.class)
+			return (T) Integer.valueOf(0);
+		else if (type == long.class)
+			return (T) Long.valueOf(0L);
+		else if (type == float.class)
+			return (T) Float.valueOf(0.0f);
+		else if (type == double.class)
+			return (T) Double.valueOf(0.0);
+		else
+			throw new IllegalStateException("Unrecognized primitive type: " + type);
+	}
+
+	/**
 	 * @param type The type to wrap
 	 * @return The non-primitive wrapper class corresponding to the given primitive type, or the input if it is not primitive
 	 */
