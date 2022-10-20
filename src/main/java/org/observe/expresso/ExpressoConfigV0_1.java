@@ -84,13 +84,13 @@ import com.google.common.reflect.TypeToken;
 public class ExpressoConfigV0_1 implements QonfigInterpretation {
 	/**
 	 * Creates an {@link ObservableConfigFormat}
-	 * 
+	 *
 	 * @param <T> The type of the format
 	 */
 	public interface ConfigFormatProducer<T> {
 		/**
 		 * Creates the format
-		 * 
+		 *
 		 * @param models The model instance to use to create the format
 		 * @return The config format
 		 */
@@ -99,7 +99,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 
 	/**
 	 * Abstract {@link Expresso.ConfigModelValue} implementation
-	 * 
+	 *
 	 * @param <M> The model type of the value
 	 * @param <MV> The type of the value
 	 */
@@ -451,6 +451,11 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 										builder.withFormat(format.getFormat(msi));
 									return configValue.create(builder, msi);
 								}
+
+								@Override
+								public BetterList<ValueContainer<?, ?>> getCores() {
+									return BetterList.of(this);
+								}
 							};
 						} catch (QonfigInterpretationException e) {
 							childSession.withError(e.getMessage(), e);
@@ -708,6 +713,11 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 					return SettableValue.asSettable(formatObj.transform(ocfType, tx -> tx.nullToNull(true)//
 						.map(f -> ObservableConfigFormat.ofQommonFormat(f, defaultV))), __ -> "Not reversible");
 				}
+
+				@Override
+				public BetterList<ValueContainer<?, ?>> getCores() {
+					return BetterList.of(this);
+				}
 			};
 		};
 	}
@@ -838,6 +848,11 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 				public SettableValue<FileDataSource> get(ModelSetInstance models) {
 					return fSource2.apply(models);
 				}
+
+				@Override
+				public BetterList<ValueContainer<?, ?>> getCores() {
+					return BetterList.of(this);
+				}
 			};
 		};
 	}
@@ -930,6 +945,11 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 					return ObservableModelSet.literal(SpinnerFormat.flexDate(relativeTo2.apply(models), dayFormat, __ -> fOptions),
 						"instant");
 				}
+
+				@Override
+				public BetterList<ValueContainer<?, ?>> getCores() {
+					return BetterList.of(this);
+				}
 			};
 		};
 	}
@@ -978,6 +998,11 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 							return new BetterFile.FileFormat(fs, workingDirFile, allowEmpty);
 						})), //
 						__ -> "Not reversible");
+				}
+
+				@Override
+				public BetterList<ValueContainer<?, ?>> getCores() {
+					return BetterList.of(this);
 				}
 			};
 		};

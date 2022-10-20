@@ -7,22 +7,23 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
+import org.observe.expresso.DynamicModelValue;
 import org.observe.expresso.ExpressoEnv;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ValueContainer;
-import org.observe.expresso.SuppliedModelValue;
 import org.observe.expresso.ops.BinaryOperator;
 import org.observe.expresso.ops.NameExpression;
 import org.qommons.LambdaUtils;
 import org.qommons.MultiInheritanceSet;
-import org.qommons.collect.MultiMap;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigAttributeDef;
 import org.qommons.config.QonfigChildDef;
@@ -35,6 +36,7 @@ public class StyleValueApplication {
 	public static final StyleValueApplication ALL = new StyleValueApplication(null, null, MultiInheritanceSet.empty(), null, null, 0,
 		Collections.emptyList());
 	public static final ObservableValue<Boolean> TRUE = ObservableValue.of(boolean.class, true);
+	private static final Map<QonfigElement, Integer> COMPLEXITY = new ConcurrentHashMap<>();
 
 	private final StyleValueApplication theParent;
 	private final QonfigChildDef theRole;
@@ -43,11 +45,11 @@ public class StyleValueApplication {
 	private final ObservableExpression theCondition;
 	private final ValueContainer<SettableValue<?>, SettableValue<Boolean>> theConditionValue;
 	private final int theConditionComplexity;
-	private final List<SuppliedModelValue<?, ?>> theModelValues;
+	private final List<DynamicModelValue<?, ?>> theModelValues;
 
 	private StyleValueApplication(StyleValueApplication parent, QonfigChildDef role, MultiInheritanceSet<QonfigElementOrAddOn> types,
 		ObservableExpression condition, ValueContainer<SettableValue<?>, SettableValue<Boolean>> conditionValue, int conditionComplexity,
-		List<SuppliedModelValue<?, ?>> modelValues) {
+		List<DynamicModelValue<?, ?>> modelValues) {
 		if ((parent != null) != (role != null))
 			throw new IllegalArgumentException("A role must be accompanied by a parent style application and vice-versa");
 		theParent = parent;
@@ -82,21 +84,28 @@ public class StyleValueApplication {
 			addHierarchy(inh, visited);
 	}
 
-	public static int findModelValues(ObservableExpression ex, Collection<SuppliedModelValue<?, ?>> modelValues,
-		MultiMap<String, SuppliedModelValue<?, ?>> availableModelValues) throws QonfigInterpretationException {
+	public static int findModelValues(ObservableExpression ex, Collection<DynamicModelValue<?, ?>> modelValues, ObservableModelSet models,
+		QonfigAttributeDef.Declared priorityAttr) throws QonfigInterpretationException {
 		if (ex instanceof NameExpression && ((NameExpression) ex).getContext() == null) {
 			String name = ((NameExpression) ex).getNames().getFirst();
-			Collection<SuppliedModelValue<?, ?>> values = availableModelValues.get(name);
-			if (values.isEmpty())
+			Object thing = models.getThing(name);
+			if (thing instanceof ObservableModelSet.ValueCreator) {
+				ValueContainer<?, ?> container = ((ObservableModelSet.ValueCreator<?, ?>) thing).createValue();
+				int complexity = 1;
+				for (ValueContainer<?, ?> core : container.getCores()) {
+					if (core instanceof DynamicModelValue) {
+						DynamicModelValue<?, ?> dynamicValue = (DynamicModelValue<?, ?>) core;
+						if (modelValues.add(dynamicValue))
+							complexity += QuickStyleValue.getPriority(dynamicValue, priorityAttr);
+					}
+				}
+				return complexity;
+			} else
 				return 1;
-			else if (values.size() > 1)
-				throw new QonfigInterpretationException("Multiple model values named '" + name + "': " + values);
-			modelValues.addAll(values);
-			return 1;
 		} else {
 			int complexity = 1; // 1 for this expression
 			for (ObservableExpression child : ex.getChildren())
-				complexity += findModelValues(child, modelValues, availableModelValues);
+				complexity += findModelValues(child, modelValues, models, priorityAttr);
 			return complexity;
 		}
 	}
@@ -145,7 +154,7 @@ public class StyleValueApplication {
 		return theCondition;
 	}
 
-	public List<SuppliedModelValue<?, ?>> getModelValues() {
+	public List<DynamicModelValue<?, ?>> getModelValues() {
 		return theModelValues;
 	}
 
@@ -198,19 +207,18 @@ public class StyleValueApplication {
 		return new StyleValueApplication(this, child, types, null, null, theConditionComplexity, theModelValues);
 	}
 
-	public StyleValueApplication forCondition(ObservableExpression condition, ExpressoEnv env,
-		MultiMap<String, SuppliedModelValue<?, ?>> availableModelValues, QonfigAttributeDef.Declared priorityAttr)
-			throws QonfigInterpretationException {
+	public StyleValueApplication forCondition(ObservableExpression condition, ExpressoEnv env, QonfigAttributeDef.Declared priorityAttr)
+		throws QonfigInterpretationException {
 		ObservableExpression newCondition;
 		if (theCondition == null)
 			newCondition = condition;
 		else
 			newCondition = new BinaryOperator("&&", theCondition, condition);
 
-		Set<SuppliedModelValue<?, ?>> mvs = new LinkedHashSet<>();
+		Set<DynamicModelValue<?, ?>> mvs = new LinkedHashSet<>();
 		// We don't need to worry about satisfying anything here. The model values just need to be available for the link level.
-		int complexity = findModelValues(newCondition, mvs, availableModelValues);
-		List<SuppliedModelValue<?, ?>> mvList = new ArrayList<>(mvs.size() + (theParent == null ? 0 : theParent.getModelValues().size()));
+		int complexity = findModelValues(newCondition, mvs, env.getModels(), priorityAttr);
+		List<DynamicModelValue<?, ?>> mvList = new ArrayList<>(mvs.size() + (theParent == null ? 0 : theParent.getModelValues().size()));
 		mvList.addAll(mvs);
 		if (theParent != null) {
 			complexity = theParent.getConditionComplexity();
@@ -219,7 +227,7 @@ public class StyleValueApplication {
 		if (!mvs.isEmpty()) {
 			// We don't need to worry about satisfying anything here. The model values just need to be available for the link level.
 			ObservableModelSet.WrappedBuilder wrappedBuilder = env.getModels().wrap();
-			for (SuppliedModelValue<?, ?> mv : mvs)
+			for (DynamicModelValue<?, ?> mv : mvs)
 				wrappedBuilder.withCustomValue(mv.getName(), mv);
 			env = env.with(wrappedBuilder.build(), null);
 		}

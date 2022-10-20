@@ -4,6 +4,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.function.Function;
+import java.util.stream.Stream;
 
 import org.observe.SettableValue;
 import org.observe.expresso.ExpressoEnv;
@@ -13,6 +14,7 @@ import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ValueContainer;
 import org.observe.util.TypeTokens;
+import org.qommons.collect.BetterList;
 import org.qommons.config.QonfigInterpretationException;
 
 import com.google.common.reflect.TypeToken;
@@ -105,6 +107,11 @@ public class ArrayAccessExpression implements ObservableExpression {
 						} else
 							a[idx] = newValue;
 					}));
+			}
+
+			@Override
+			public BetterList<ValueContainer<?, ?>> getCores() {
+				return BetterList.of(Stream.of(arrayValue, indexValue).flatMap(cv -> cv.getCores().stream()));
 			}
 		};
 	}

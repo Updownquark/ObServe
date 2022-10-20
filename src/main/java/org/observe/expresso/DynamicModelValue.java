@@ -1,24 +1,78 @@
 package org.observe.expresso;
 
+import java.util.Objects;
+
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ValueContainer;
+import org.qommons.Named;
+import org.qommons.collect.BetterList;
+import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigInterpretationException;
 
-/** Supports the satisfaction of interpreted-value-specific model values declared with metadata under a with-element-model implementation */
-public class DynamicModelValues {
+/**
+ * A dynamic (interpreted-value-specific) model value
+ *
+ * @param <M> The model type of the value
+ * @param <MV> The type of the value
+ */
+public class DynamicModelValue<M, MV extends M> implements ValueContainer<M, MV>, Named {
+	private final String theName;
+	private final ModelInstanceType<M, MV> theType;
+	private final QonfigElement theDeclaration;
+
 	/**
 	 * Called by the Expresso interpreter to declare a dynamic (interpreted-value-specific) model value
 	 *
-	 * @param <M> The model type of the value
-	 * @param <MV> The type of the value
 	 * @param name The name of the value
 	 * @param type The type of the value
-	 * @return The {@link ValueContainer} to use for {@link ObservableModelSet.WrappedBuilder#with(String, ValueContainer)} to declare the
-	 *         dynamic value in the model
+	 * @param declaration The metadata element that is the declaration for the dynamic value
 	 */
-	public static <M, MV extends M> ValueContainer<M, MV> declareDynamicValue(String name, ModelInstanceType<M, MV> type) {
-		return new DynamicModelValue<>(name, type);
+	public DynamicModelValue(String name, ModelInstanceType<M, MV> type, QonfigElement declaration) {
+		theName = name;
+		theType = type;
+		theDeclaration = declaration;
+	}
+
+	@Override
+	public String getName() {
+		return theName;
+	}
+
+	/** @return The metadata that is the declaration for this dynamic value */
+	public QonfigElement getDeclaration() {
+		return theDeclaration;
+	}
+
+	@Override
+	public ModelInstanceType<M, MV> getType() {
+		return theType;
+	}
+
+	@Override
+	public MV get(ModelSetInstance models) {
+		return (MV) theType.getModelType().createHollowValue(theName, theType);
+	}
+
+	@Override
+	public BetterList<ValueContainer<?, ?>> getCores() {
+		return BetterList.of(this);
+	}
+
+	@Override
+	public int hashCode() {
+		return Objects.hash(theDeclaration, theType);
+	}
+
+	@Override
+	public boolean equals(Object obj) {
+		return obj instanceof DynamicModelValue && theDeclaration.equals(((DynamicModelValue<?, ?>) obj).theDeclaration)
+			&& theType.equals(((DynamicModelValue<?, ?>) obj).theType);
+	}
+
+	@Override
+	public String toString() {
+		return theDeclaration.toString();
 	}
 
 	/**
@@ -42,25 +96,5 @@ public class DynamicModelValues {
 			throw new IllegalArgumentException("No such dynamic model value: " + model.getModel().getPath() + "." + name);
 		ModelType.HollowModelValue<M, MV> hollow = (ModelType.HollowModelValue<M, MV>) model.get(name, type);
 		hollow.satisfy(value);
-	}
-
-	private static class DynamicModelValue<M, MV extends M> implements ValueContainer<M, MV> {
-		private final String theName;
-		private final ModelInstanceType<M, MV> theType;
-
-		DynamicModelValue(String name, ModelInstanceType<M, MV> type) {
-			theName = name;
-			theType = type;
-		}
-
-		@Override
-		public ModelInstanceType<M, MV> getType() {
-			return theType;
-		}
-
-		@Override
-		public MV get(ModelSetInstance models) {
-			return (MV) theType.getModelType().createHollowValue(theName, theType);
-		}
 	}
 }

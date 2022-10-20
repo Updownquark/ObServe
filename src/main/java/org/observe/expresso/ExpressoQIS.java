@@ -10,6 +10,7 @@ import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ValueContainer;
 import org.observe.util.TypeTokens;
+import org.qommons.collect.BetterList;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigInterpreterCore.CoreSession;
 import org.qommons.config.SpecialSession;
@@ -128,6 +129,11 @@ public class ExpressoQIS implements SpecialSession<ExpressoQIS> {
 				public MV get(ModelSetInstance models) {
 					return def == null ? null : def.apply(models);
 				}
+
+				@Override
+				public BetterList<ValueContainer<?, ?>> getCores() {
+					return BetterList.of(this);
+				}
 			};
 		}
 		ObservableExpression obEx;
@@ -180,6 +186,11 @@ public class ExpressoQIS implements SpecialSession<ExpressoQIS> {
 				public MV get(ModelSetInstance models) {
 					return def.apply(models);
 				}
+
+				@Override
+				public BetterList<ValueContainer<?, ?>> getCores() {
+					return BetterList.of(this);
+				}
 			};
 		} else if (!(value instanceof QonfigExpression))
 			throw new QonfigInterpretationException(
@@ -211,7 +222,7 @@ public class ExpressoQIS implements SpecialSession<ExpressoQIS> {
 
 	/**
 	 * Evaluates an attribute as a simple value
-	 * 
+	 *
 	 * @param <T> The type to evaluate the attribute as
 	 * @param attrName The name of the attribute to evaluate
 	 * @param type The type to evaluate the attribute as
@@ -226,7 +237,7 @@ public class ExpressoQIS implements SpecialSession<ExpressoQIS> {
 
 	/**
 	 * Evaluates this element's value as a simple value
-	 * 
+	 *
 	 * @param <T> The type to evaluate the value as
 	 * @param type The type to evaluate the value as
 	 * @param defaultValue Supplies a default value if the value is not specified (optional)
@@ -240,7 +251,7 @@ public class ExpressoQIS implements SpecialSession<ExpressoQIS> {
 
 	/**
 	 * Evaluates this element's value as a simple value
-	 * 
+	 *
 	 * @param <T> The element type to evaluate the value as
 	 * @param type The type to evaluate the value as
 	 * @param defaultValue Supplies a default value if the value is not specified (optional)
@@ -298,7 +309,7 @@ public class ExpressoQIS implements SpecialSession<ExpressoQIS> {
 
 	/**
 	 * Evaluates this element's value as a collection
-	 * 
+	 *
 	 * @param <T> The element type to evaluate the value as
 	 * @param type The element type to evaluate the value as
 	 * @param defaultValue Supplies a default collection if the value is not specified (optional)

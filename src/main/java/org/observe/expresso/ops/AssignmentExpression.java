@@ -3,6 +3,7 @@ package org.observe.expresso.ops;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Function;
+import java.util.stream.Stream;
 
 import org.observe.ObservableAction;
 import org.observe.SettableValue;
@@ -15,6 +16,7 @@ import org.observe.expresso.ObservableModelSet.ValueContainer;
 import org.observe.util.TypeTokens;
 import org.qommons.QommonsUtils;
 import org.qommons.Transaction;
+import org.qommons.collect.BetterList;
 import org.qommons.config.QonfigInterpretationException;
 
 import com.google.common.reflect.TypeToken;
@@ -91,6 +93,11 @@ public class AssignmentExpression implements ObservableExpression {
 				SettableValue<Object> ctxValue = context.get(models);
 				SettableValue<Object> valueValue = value.get(models);
 				return ctxValue.assignmentTo(valueValue);
+			}
+
+			@Override
+			public BetterList<ValueContainer<?, ?>> getCores() {
+				return BetterList.of(Stream.of(context, value).flatMap(vc -> vc.getCores().stream()));
 			}
 
 			@Override

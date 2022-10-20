@@ -2,6 +2,7 @@ package org.observe.expresso.ops;
 
 import java.util.List;
 import java.util.function.Function;
+import java.util.stream.Stream;
 
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
@@ -15,6 +16,7 @@ import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ValueContainer;
 import org.observe.util.TypeTokens;
 import org.qommons.QommonsUtils;
+import org.qommons.collect.BetterList;
 import org.qommons.config.QonfigInterpretationException;
 
 import com.google.common.reflect.TypeToken;
@@ -158,6 +160,11 @@ public class ConditionalExpression implements ObservableExpression {
 				} else
 					throw new IllegalStateException(
 						"Conditional expressions not supported for model type " + primaryV.getType().getModelType());
+			}
+
+			@Override
+			public BetterList<ValueContainer<?, ?>> getCores() {
+				return BetterList.of(Stream.of(conditionV, primaryV, secondaryV).flatMap(vc -> vc.getCores().stream()));
 			}
 		};
 	}

@@ -7,6 +7,7 @@ import org.observe.SettableValue;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ValueContainer;
 import org.qommons.Version;
+import org.qommons.collect.BetterList;
 import org.qommons.config.QonfigInterpretation;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigInterpreterCore.Builder;
@@ -55,9 +56,14 @@ public class TestInterpretation implements QonfigInterpretation {
 					public SettableValue<StatefulTestStructure> get(ModelSetInstance models) {
 						models = exS.wrapLocal(models);
 						StatefulTestStructure structure = new StatefulTestStructure(derivedStateV.get(models));
-						DynamicModelValues.satisfyDynamicValue(//
+						DynamicModelValue.satisfyDynamicValue(//
 							"internalState", ModelTypes.Value.forType(int.class), models, structure.getInternalState());
 						return SettableValue.of(StatefulTestStructure.class, structure, "Not Settable");
+					}
+
+					@Override
+					public BetterList<ValueContainer<?, ?>> getCores() {
+						return BetterList.of(this);
 					}
 				};
 			};

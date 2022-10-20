@@ -17,6 +17,9 @@
 
 		<add-on name="styled" inherits="with-element-model,with-local-model">
 			<element-meta-mod meta="with-element-model.element-model" inherits="style-model" />
+			<element-model>
+				<value name="__PARENT$MODEL$INSTANCE" type="org.observe.expresso.ObservableModelSet.ModelSetInstance" />
+			</element-model>
 			<element-meta name="styles" type="styles" min="0" />
 			<child-def name="style" type="style" inherits="element-style" min="0" max="inf" />
 		</add-on>

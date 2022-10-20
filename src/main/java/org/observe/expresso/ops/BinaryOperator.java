@@ -3,6 +3,7 @@ package org.observe.expresso.ops;
 import java.util.List;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.stream.Stream;
 
 import org.observe.ObservableAction;
 import org.observe.ObservableValue;
@@ -20,6 +21,7 @@ import org.observe.expresso.ops.BinaryOperatorSet.BinaryOp;
 import org.observe.util.TypeTokens;
 import org.qommons.LambdaUtils;
 import org.qommons.QommonsUtils;
+import org.qommons.collect.BetterList;
 import org.qommons.config.QonfigInterpretationException;
 
 import com.google.common.reflect.TypeToken;
@@ -126,7 +128,7 @@ public class BinaryOperator implements ObservableExpression {
 		if (op == null)
 			throw new QonfigInterpretationException(
 				"Binary operator '" + theOperator + "' is not supported or implemented for operand types " + left.getType().getType(0)
-					+ " and " + right.getType().getType(0) + ", target type " + targetType.getName());
+				+ " and " + right.getType().getType(0) + ", target type " + targetType.getName());
 		TypeToken<Object> resultType = TypeTokens.get().of(op.getTargetType());
 		if (action) {
 			if (type.getModelType() != ModelTypes.Action)
@@ -184,6 +186,11 @@ public class BinaryOperator implements ObservableExpression {
 				}
 
 				@Override
+				public BetterList<ValueContainer<?, ?>> getCores() {
+					return BetterList.of(Stream.of(left, right).flatMap(vc -> vc.getCores().stream()));
+				}
+
+				@Override
 				public String toString() {
 					return BinaryOperator.this.toString();
 				}
@@ -224,6 +231,11 @@ public class BinaryOperator implements ObservableExpression {
 								return ReverseQueryResult.value(op.reverse(transformValues.getCurrentSource(), rgt, newValue));
 							}
 						}));
+				}
+
+				@Override
+				public BetterList<ValueContainer<?, ?>> getCores() {
+					return BetterList.of(Stream.of(left, right).flatMap(vc -> vc.getCores().stream()));
 				}
 
 				@Override

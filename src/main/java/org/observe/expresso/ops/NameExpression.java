@@ -109,6 +109,11 @@ public class NameExpression implements ObservableExpression {
 							public MV get(ModelSetInstance extModels) {
 								return retValue;
 							}
+
+							@Override
+							public BetterList<ValueContainer<?, ?>> getCores() {
+								return BetterList.of(this);
+							}
 						};
 					}
 				}
@@ -158,14 +163,14 @@ public class NameExpression implements ObservableExpression {
 				throw new QonfigInterpretationException(getPath(nameIndex) + " cannot be accessed", e);
 			}
 			return evaluateField(field, mv.getType().getType(0).resolveType(field.getGenericType()), //
-				msi -> (SettableValue<?>) mv.get(msi), nameIndex + 1, type);
+				(ValueContainer<SettableValue<?>, ? extends SettableValue<?>>) mv, nameIndex + 1, type);
 		} else
 			throw new QonfigInterpretationException(
 				"Cannot evaluate field '" + theNames.get(nameIndex + 1) + "' against model of type " + mv.getType());
 	}
 
 	private <M, MV extends M, F> ValueContainer<M, MV> evaluateField(Field field, TypeToken<F> fieldType,
-		Function<ModelSetInstance, ? extends SettableValue<?>> context, int nameIndex, ModelInstanceType<M, MV> type)
+		ValueContainer<SettableValue<?>, ? extends SettableValue<?>> context, int nameIndex, ModelInstanceType<M, MV> type)
 			throws QonfigInterpretationException {
 		if (!field.isAccessible()) {
 			try {
@@ -209,54 +214,151 @@ public class NameExpression implements ObservableExpression {
 		return StringUtils.print(null, ".", theNames, StringBuilder::append).toString();
 	}
 
-	private <F, M> Function<ModelSetInstance, SettableValue<M>> getFieldValue(Field field, TypeToken<F> fieldType,
-		Function<ModelSetInstance, ? extends SettableValue<?>> context, TypeToken<M> targetType) {
+	private <F, M> ValueContainer<SettableValue<?>, SettableValue<M>> getFieldValue(Field field, TypeToken<F> fieldType,
+		ValueContainer<SettableValue<?>, ? extends SettableValue<?>> context, TypeToken<M> targetType) {
 		if (targetType == null || fieldType.equals(targetType)) {
-			if (context == null)
-				return msi -> (SettableValue<M>) new NameExpression.FieldValue<>(field, fieldType, null, null);
-				return msi -> (SettableValue<M>) context.apply(msi).transformReversible(fieldType, tx -> tx.nullToNull(true).map(ctx -> {
-					try {
-						return (F) field.get(ctx);
-					} catch (IllegalAccessException e) {
-						throw new IllegalStateException("Could not access field " + field.getName(), e);
+			if (context == null) {
+				return new ValueContainer<SettableValue<?>, SettableValue<M>>() {
+					@Override
+					public ModelInstanceType<SettableValue<?>, SettableValue<M>> getType() {
+						return ModelTypes.Value.forType(targetType);
 					}
-				}).modifySource((ctx, newFieldValue) -> {
-					try {
-						field.set(ctx, newFieldValue);
-					} catch (IllegalAccessException e) {
-						throw new IllegalStateException("Could not access field " + field.getName(), e);
+
+					@Override
+					public SettableValue<M> get(ModelSetInstance models) {
+						return (SettableValue<M>) new NameExpression.FieldValue<>(field, fieldType, null, null);
 					}
-				}));
+
+					@Override
+					public BetterList<ValueContainer<?, ?>> getCores() {
+						return BetterList.of(this);
+					}
+				};
+			} else {
+				return new ValueContainer<SettableValue<?>, SettableValue<M>>() {
+					@Override
+					public ModelInstanceType<SettableValue<?>, SettableValue<M>> getType() {
+						return ModelTypes.Value.forType(targetType);
+					}
+
+					@Override
+					public SettableValue<M> get(ModelSetInstance models) {
+						return (SettableValue<M>) context.apply(models).transformReversible(fieldType,
+							tx -> tx.nullToNull(true).map(ctx -> {
+								try {
+									return (F) field.get(ctx);
+								} catch (IllegalAccessException e) {
+									throw new IllegalStateException("Could not access field " + field.getName(), e);
+								}
+							}).modifySource((ctx, newFieldValue) -> {
+								try {
+									field.set(ctx, newFieldValue);
+								} catch (IllegalAccessException e) {
+									throw new IllegalStateException("Could not access field " + field.getName(), e);
+								}
+							}));
+					}
+
+					@Override
+					public BetterList<ValueContainer<?, ?>> getCores() {
+						return context.getCores();
+					}
+				};
+			}
 		} else if (TypeTokens.get().isAssignable(targetType, fieldType)) {
 			Function<F, M> cast = TypeTokens.get().getCast(fieldType, targetType, true);
 			if (TypeTokens.get().isAssignable(fieldType, targetType)) {
 				Function<M, F> reverse = TypeTokens.get().getCast(targetType, fieldType, true);
-				if (context == null)
-					return msi -> (SettableValue<M>) new NameExpression.FieldValue<>(field, fieldType, cast, reverse);
-					return msi -> context.apply(msi).transformReversible(targetType, tx -> tx.nullToNull(true).map(ctx -> {
-						try {
-							return cast.apply((F) field.get(ctx));
-						} catch (IllegalAccessException e) {
-							throw new IllegalStateException("Could not access field " + field.getName(), e);
+				if (context == null) {
+					return new ValueContainer<SettableValue<?>, SettableValue<M>>() {
+						@Override
+						public ModelInstanceType<SettableValue<?>, SettableValue<M>> getType() {
+							return ModelTypes.Value.forType(targetType);
 						}
-					}).modifySource((ctx, newFieldValue) -> {
-						try {
-							field.set(ctx, reverse.apply(newFieldValue));
-						} catch (IllegalAccessException e) {
-							throw new IllegalStateException("Could not access field " + field.getName(), e);
+
+						@Override
+						public SettableValue<M> get(ModelSetInstance models) {
+							return (SettableValue<M>) new NameExpression.FieldValue<>(field, fieldType, cast, reverse);
 						}
-					}));
+
+						@Override
+						public BetterList<ValueContainer<?, ?>> getCores() {
+							return BetterList.of(this);
+						}
+					};
+				} else {
+					return new ValueContainer<SettableValue<?>, SettableValue<M>>() {
+						@Override
+						public ModelInstanceType<SettableValue<?>, SettableValue<M>> getType() {
+							return ModelTypes.Value.forType(targetType);
+						}
+
+						@Override
+						public SettableValue<M> get(ModelSetInstance models) {
+							return context.apply(models).transformReversible(targetType, tx -> tx.nullToNull(true).map(ctx -> {
+								try {
+									return cast.apply((F) field.get(ctx));
+								} catch (IllegalAccessException e) {
+									throw new IllegalStateException("Could not access field " + field.getName(), e);
+								}
+							}).modifySource((ctx, newFieldValue) -> {
+								try {
+									field.set(ctx, reverse.apply(newFieldValue));
+								} catch (IllegalAccessException e) {
+									throw new IllegalStateException("Could not access field " + field.getName(), e);
+								}
+							}));
+						}
+
+						@Override
+						public BetterList<ValueContainer<?, ?>> getCores() {
+							return context.getCores();
+						}
+					};
+				}
 			} else {
-				if (context == null)
-					return msi -> (SettableValue<M>) new NameExpression.FieldValue<>(field, fieldType, cast, null);
-					return msi -> (SettableValue<M>) context.apply(msi).transform((TypeToken<Object>) targetType,
-						tx -> tx.nullToNull(true).map(ctx -> {
-							try {
-								return cast.apply((F) field.get(ctx));
-							} catch (IllegalAccessException e) {
-								throw new IllegalStateException("Could not access field " + field.getName(), e);
-							}
-						}));
+				if (context == null) {
+					return new ValueContainer<SettableValue<?>, SettableValue<M>>() {
+						@Override
+						public ModelInstanceType<SettableValue<?>, SettableValue<M>> getType() {
+							return ModelTypes.Value.forType(targetType);
+						}
+
+						@Override
+						public SettableValue<M> get(ModelSetInstance models) {
+							return (SettableValue<M>) new NameExpression.FieldValue<>(field, fieldType, cast, null);
+						}
+
+						@Override
+						public BetterList<ValueContainer<?, ?>> getCores() {
+							return BetterList.of(this);
+						}
+					};
+				} else {
+					return new ValueContainer<SettableValue<?>, SettableValue<M>>() {
+						@Override
+						public ModelInstanceType<SettableValue<?>, SettableValue<M>> getType() {
+							return ModelTypes.Value.forType(targetType);
+						}
+
+						@Override
+						public SettableValue<M> get(ModelSetInstance models) {
+							return (SettableValue<M>) context.apply(models).transform((TypeToken<Object>) targetType,
+								tx -> tx.nullToNull(true).map(ctx -> {
+									try {
+										return cast.apply((F) field.get(ctx));
+									} catch (IllegalAccessException e) {
+										throw new IllegalStateException("Could not access field " + field.getName(), e);
+									}
+								}));
+						}
+
+						@Override
+						public BetterList<ValueContainer<?, ?>> getCores() {
+							return context.getCores();
+						}
+					};
+				}
 			}
 		} else
 			throw new IllegalStateException(

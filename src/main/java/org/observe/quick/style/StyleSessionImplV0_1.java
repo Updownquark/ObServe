@@ -5,15 +5,8 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 
-import org.observe.SettableValue;
 import org.observe.expresso.ExpressoQIS;
-import org.observe.expresso.ModelType.ModelInstanceType;
-import org.observe.expresso.ModelTypes;
-import org.observe.expresso.ObservableModelSet;
-import org.observe.expresso.ObservableModelSet.ModelSetInstance;
-import org.observe.expresso.ObservableModelSet.ValueContainer;
 import org.observe.quick.style.QuickStyle.StyleValues;
-import org.observe.util.TypeTokens;
 import org.qommons.Version;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigInterpreterCore.CoreSession;
@@ -97,20 +90,6 @@ public class StyleSessionImplV0_1 implements SpecialSessionImplementation<StyleQ
 		if (!session.isStyled())
 			return;
 		ExpressoQIS exS = session.as(ExpressoQIS.class);
-
-		ObservableModelSet.WrappedBuilder builder = exS.getExpressoEnv().getModels().wrap();
-		builder.with(StyleQIS.PARENT_MODEL_NAME, new ValueContainer<SettableValue<?>, SettableValue<ModelSetInstance>>() {
-			@Override
-			public ModelInstanceType<SettableValue<?>, SettableValue<ModelSetInstance>> getType() {
-				return ModelTypes.Value.forType(ModelSetInstance.class);
-			}
-
-			@Override
-			public SettableValue<ModelSetInstance> get(ModelSetInstance models) {
-				return new ExpressoQIS.OneTimeSettableValue<>(TypeTokens.get().of(ModelSetInstance.class));
-			}
-		});
-		exS.setModels(builder.build(), null);
 
 		// Parse style values, if any
 		session.put(StyleQIS.STYLE_ELEMENT, session.getElement());

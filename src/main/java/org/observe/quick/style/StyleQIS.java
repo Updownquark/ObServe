@@ -1,13 +1,11 @@
 package org.observe.quick.style;
 
 import org.observe.SettableValue;
+import org.observe.expresso.DynamicModelValue;
 import org.observe.expresso.ExpressoQIS;
-import org.observe.expresso.ExpressoQIS.OneTimeSettableValue;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
-import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
-import org.observe.expresso.ObservableModelSet.ValueContainer;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigInterpreterCore.CoreSession;
@@ -21,40 +19,12 @@ public class StyleQIS implements SpecialSession<StyleQIS> {
 	public static final String STYLE_PROP = "quick-interpreter-style";
 	public static final String STYLE_SHEET_PROP = "quick-interpreter-style-sheet";
 
-	public static final String PARENT_MODEL_NAME = "__PARENT$MODEL$INSTANCE";
-	public static final ValueContainer<SettableValue<?>, SettableValue<ModelSetInstance>> PARENT_MODEL = new ValueContainer<SettableValue<?>, SettableValue<ModelSetInstance>>() {
-		private final ModelInstanceType<SettableValue<?>, SettableValue<ModelSetInstance>> theType = ModelTypes.Value
-			.forType(ModelSetInstance.class);
-
-		@Override
-		public ModelInstanceType<SettableValue<?>, SettableValue<ModelSetInstance>> getType() {
-			return theType;
-		}
-
-		@Override
-		public SettableValue<ModelSetInstance> get(ModelSetInstance models) {
-			throw new IllegalStateException("Parent model was not installed");
-		}
-
-		@Override
-		public String toString() {
-			return PARENT_MODEL_NAME;
-		}
-	};
+	private static final String PARENT_MODEL_NAME = "__PARENT$MODEL$INSTANCE";
+	private static final ModelInstanceType<SettableValue<?>, SettableValue<ModelSetInstance>> PARENT_MODEL_TYPE = ModelTypes.Value
+		.forType(ModelSetInstance.class);
 
 	public static ModelSetInstance getParentModels(ModelSetInstance models) {
-		return models.get(PARENT_MODEL_NAME, PARENT_MODEL.getType()).get();
-	}
-
-	public static ObservableModelSet.WrappedBuilder createChildModel(ObservableModelSet parentModels) {
-		return parentModels.wrap()//
-			.withCustomValue(PARENT_MODEL_NAME, PARENT_MODEL);
-	}
-
-	public static ObservableModelSet.WrappedInstanceBuilder createChildModelInstance(ObservableModelSet.Wrapped models,
-		ModelSetInstance parentModelInstance) {
-		return models.wrap(parentModelInstance)//
-			.withCustom(PARENT_MODEL, SettableValue.of(ModelSetInstance.class, parentModelInstance, "Not Reversible"));
+		return models.get(PARENT_MODEL_NAME, PARENT_MODEL_TYPE).get();
 	}
 
 	private final CoreSession theWrapped;
@@ -104,8 +74,9 @@ public class StyleQIS implements SpecialSession<StyleQIS> {
 		return QuickStyleType.of(getType(), as(ExpressoQIS.class), theStyleTK).getAttribute(name, type);
 	}
 
-	public void installParentModels(ModelSetInstance models, ModelSetInstance parentModels) {
-		((OneTimeSettableValue<ModelSetInstance>) models.get(PARENT_MODEL_NAME, null)).set(parentModels, null);
+	public static void installParentModels(ModelSetInstance models, ModelSetInstance parentModels) {
+		DynamicModelValue.satisfyDynamicValue(PARENT_MODEL_NAME, ModelTypes.Value.forType(ModelSetInstance.class), models, //
+			SettableValue.of(ModelSetInstance.class, parentModels, "Not settable"));
 	}
 
 	@Override

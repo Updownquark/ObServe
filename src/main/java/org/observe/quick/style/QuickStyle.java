@@ -18,13 +18,9 @@ import java.util.Set;
 import org.observe.expresso.ExpressoQIS;
 import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet;
-import org.observe.expresso.SuppliedModelOwner;
-import org.observe.expresso.SuppliedModelValue;
 import org.qommons.IdentityKey;
 import org.qommons.QommonsUtils;
 import org.qommons.Version;
-import org.qommons.collect.BetterHashMultiMap;
-import org.qommons.collect.MultiMap;
 import org.qommons.config.DefaultQonfigParser;
 import org.qommons.config.QommonsConfig;
 import org.qommons.config.QonfigAddOn;
@@ -41,10 +37,12 @@ import org.qommons.config.QonfigToolkit;
 import org.qommons.config.SpecialSession;
 
 public class QuickStyle implements QonfigInterpretation {
+	public static final String TOOLKIT_NAME = "Quick-Style";
 	public static final String STYLE_NAME = "quick-style-name";
 	public static final String STYLE_APPLICATION = "quick-parent-style-application";
 	public static final String STYLE_ATTRIBUTE = "quick-style-attribute";
 	public static final String STYLE_SHEET_REF = "quick-style-sheet-ref";
+	public static final String STYLE_MODEL_VALUE_ELEMENT = "style-model-value";
 	public static final String EXPRESSO_DEPENDENCY = "expresso";
 
 	public static abstract class StyleValues extends AbstractList<QuickStyleValue<?>> {
@@ -179,23 +177,7 @@ public class QuickStyle implements QonfigInterpretation {
 		}
 		ObservableExpression newCondition = exS.getAttributeExpression("condition");
 		if (newCondition != null) {
-			MultiMap<String, SuppliedModelValue<?, ?>> availableModelValues = BetterHashMultiMap.<String, SuppliedModelValue<?, ?>> build()
-				.buildMultiMap();
-			QonfigToolkit expresso = theToolkit.getDependencies().get(EXPRESSO_DEPENDENCY);
-			for (QonfigElementOrAddOn type : application.getTypes().values()) {
-				SuppliedModelOwner owner = SuppliedModelOwner.of(type, exS, expresso);
-				availableModelValues.putAll(owner.getModelValues());
-			}
-			if (element != null) {
-				SuppliedModelOwner owner = SuppliedModelOwner.of(element.getType(), exS, expresso);
-				availableModelValues.putAll(owner.getModelValues());
-				for (QonfigAddOn inh : element.getInheritance().values()) {
-					owner = SuppliedModelOwner.of(inh, exS, expresso);
-					availableModelValues.putAll(owner.getModelValues());
-				}
-			}
-			application = application.forCondition(newCondition, exS.getExpressoEnv(), availableModelValues,
-				QuickStyleType.getPriorityAttr(theToolkit));
+			application = application.forCondition(newCondition, exS.getExpressoEnv(), QuickStyleType.getPriorityAttr(theToolkit));
 		}
 		session.put(STYLE_APPLICATION, application);
 

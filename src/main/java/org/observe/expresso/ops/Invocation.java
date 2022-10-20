@@ -12,6 +12,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Stream;
 
 import org.observe.Observable;
 import org.observe.ObservableAction;
@@ -30,6 +31,7 @@ import org.observe.expresso.ObservableModelSet.ValueContainer;
 import org.observe.util.TypeTokens;
 import org.qommons.ArrayUtils;
 import org.qommons.Transaction;
+import org.qommons.collect.BetterList;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.ex.CheckedExceptionWrapper;
 
@@ -356,7 +358,7 @@ public abstract class Invocation implements ObservableExpression {
 	/**
 	 * During the transaction, values evaluated from invocations will be uncached, such that each request of the value will cause a fresh
 	 * invocation of the invokable.
-	 * 
+	 *
 	 * @return The transaction to close
 	 */
 	public static Transaction asAction() {
@@ -413,6 +415,13 @@ public abstract class Invocation implements ObservableExpression {
 			}
 			return createModelValue(ctxV, argVs, //
 				Observable.or(changeSources));
+		}
+
+		@Override
+		public BetterList<ValueContainer<?, ?>> getCores() {
+			return BetterList.of(//
+				Stream.concat(Stream.of(theContext), theArguments.stream())
+					.flatMap(vc -> vc == null ? Stream.empty() : vc.getCores().stream()));
 		}
 
 		protected abstract MV createModelValue(SettableValue<?> ctxV, SettableValue<?>[] argVs, Observable<Object> changes);

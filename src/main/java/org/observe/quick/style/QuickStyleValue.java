@@ -10,12 +10,12 @@ import java.util.Map;
 import java.util.Set;
 
 import org.observe.SettableValue;
+import org.observe.expresso.DynamicModelValue;
 import org.observe.expresso.ExpressoEnv;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.ValueContainer;
-import org.observe.expresso.SuppliedModelValue;
 import org.observe.expresso.ops.NameExpression;
 import org.qommons.StringUtils;
 import org.qommons.config.QonfigAttributeDef;
@@ -25,16 +25,16 @@ import org.qommons.config.QonfigInterpretationException;
 /** Represents a conditional value for a style attribute in quick */
 public class QuickStyleValue<T> implements Comparable<QuickStyleValue<?>> {
 	public static final String WIDGET_MODEL_VALUE = "widget-model-value";
-	private static final Map<SuppliedModelValue<?, ?>, Integer> MODEL_VALUE_PRIORITY = new HashMap<>();
+	private static final Map<DynamicModelValue<?, ?>, Integer> MODEL_VALUE_PRIORITY = new HashMap<>();
 
-	public static synchronized int getPriority(SuppliedModelValue<?, ?> modelValue, QonfigAttributeDef.Declared priorityAttr) {
+	public static synchronized int getPriority(DynamicModelValue<?, ?> modelValue, QonfigAttributeDef.Declared priorityAttr) {
 		Integer priority=MODEL_VALUE_PRIORITY.get(modelValue);
 		if(priority!=null)
 			return priority;
-		if (!modelValue.getValueElement().isInstance(priorityAttr.getOwner()))
+		if (!modelValue.getDeclaration().isInstance(priorityAttr.getOwner()))
 			priority = 0;
 		else
-			priority = Integer.parseInt(modelValue.getValueElement().getAttributeText(priorityAttr));
+			priority = Integer.parseInt(modelValue.getDeclaration().getAttributeText(priorityAttr));
 		MODEL_VALUE_PRIORITY.put(modelValue, priority);
 		return priority;
 	}
@@ -44,7 +44,7 @@ public class QuickStyleValue<T> implements Comparable<QuickStyleValue<?>> {
 	private final QuickStyleAttribute<T> theAttribute;
 	private final ObservableExpression theValueExpression;
 	private final ValueContainer<SettableValue<?>, ? extends SettableValue<? extends T>> theValue;
-	private final List<SuppliedModelValue<?, ?>> theUsedModelValues;
+	private final List<DynamicModelValue<?, ?>> theUsedModelValues;
 
 	public QuickStyleValue(QuickStyleSheet styleSheet, StyleValueApplication application, QuickStyleAttribute<T> attribute,
 		ObservableExpression value, ExpressoEnv env) throws QonfigInterpretationException {
@@ -53,23 +53,23 @@ public class QuickStyleValue<T> implements Comparable<QuickStyleValue<?>> {
 		theAttribute = attribute;
 		theValueExpression = value;
 		theValue = value.evaluate(ModelTypes.Value.forType(attribute.getType()), env);
-		Set<SuppliedModelValue<?, ?>> modelValues = new LinkedHashSet<>();
+		Set<DynamicModelValue<?, ?>> modelValues = new LinkedHashSet<>();
 		modelValues.addAll(theApplication.getModelValues());
 		findModelValues(theValueExpression, modelValues, env.getModels());
-		List<SuppliedModelValue<?, ?>> sortedModelValues = new ArrayList<>(modelValues.size());
+		List<DynamicModelValue<?, ?>> sortedModelValues = new ArrayList<>(modelValues.size());
 		sortedModelValues.addAll(modelValues);
 		QonfigAttributeDef.Declared priorityAttr = attribute.getDeclarer().getPriorityAttr();
 		Collections.sort(sortedModelValues, (mv1, mv2) -> -Integer.compare(getPriority(mv1, priorityAttr), getPriority(mv2, priorityAttr)));
 		theUsedModelValues = Collections.unmodifiableList(sortedModelValues);
 	}
 
-	private static void findModelValues(ObservableExpression ex, Set<SuppliedModelValue<?, ?>> modelValues, ObservableModelSet models)
+	private static void findModelValues(ObservableExpression ex, Set<DynamicModelValue<?, ?>> modelValues, ObservableModelSet models)
 		throws QonfigInterpretationException {
 		if (ex instanceof NameExpression && ((NameExpression) ex).getContext() == null) {
 			String name = ((NameExpression) ex).getNames().getFirst();
 			ValueContainer<?, ?> value = models.get(name, false);
-			if (value instanceof SuppliedModelValue)
-				modelValues.add((SuppliedModelValue<?, ?>) value);
+			if (value instanceof DynamicModelValue)
+				modelValues.add((DynamicModelValue<?, ?>) value);
 		} else {
 			for (ObservableExpression child : ex.getChildren())
 				findModelValues(child, modelValues, models);
@@ -96,15 +96,15 @@ public class QuickStyleValue<T> implements Comparable<QuickStyleValue<?>> {
 		return theValue;
 	}
 
-	public List<SuppliedModelValue<?, ?>> getUsedModelValues() {
+	public List<DynamicModelValue<?, ?>> getUsedModelValues() {
 		return theUsedModelValues;
 	}
 
 	@Override
 	public int compareTo(QuickStyleValue<?> o) {
 		// Most importantly, compare the priority of model values used in the condition and value
-		Iterator<SuppliedModelValue<?, ?>> iter1 = theUsedModelValues.iterator();
-		Iterator<SuppliedModelValue<?, ?>> iter2 = o.theUsedModelValues.iterator();
+		Iterator<DynamicModelValue<?, ?>> iter1 = theUsedModelValues.iterator();
+		Iterator<DynamicModelValue<?, ?>> iter2 = o.theUsedModelValues.iterator();
 		int comp = 0;
 		QonfigAttributeDef.Declared priorityAttr = theAttribute.getDeclarer().getPriorityAttr();
 		while (comp == 0) {

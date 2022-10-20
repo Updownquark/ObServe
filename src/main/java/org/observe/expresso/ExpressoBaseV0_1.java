@@ -15,6 +15,7 @@ import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import org.observe.Observable;
 import org.observe.ObservableAction;
@@ -190,7 +191,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 									"Multiple element-model values named '" + name + "' in type hierarchy");
 							Expresso.ExtModelValue<Object> spec = value.interpret(Expresso.ExtModelValue.class);
 							ModelInstanceType<Object, Object> valueType = (ModelInstanceType<Object, Object>) spec.getType(session);
-							models.with(name, DynamicModelValues.declareDynamicValue(name, valueType));
+							models.with(name, new DynamicModelValue<>(name, valueType, value.getElement()));
 							hasValues = true;
 						}
 					}
@@ -405,6 +406,11 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 							}
 							return collection;
 						}
+
+						@Override
+						public BetterList<ValueContainer<?, ?>> getCores() {
+							return BetterList.of(this);
+						}
 					};
 				};
 			}
@@ -470,6 +476,11 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 							}
 							return map;
 						}
+
+						@Override
+						public BetterList<ValueContainer<?, ?>> getCores() {
+							return BetterList.of(this);
+						}
 					};
 				};
 			}
@@ -532,6 +543,11 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 									entry.getValue2().apply(models));
 							}
 							return map;
+						}
+
+						@Override
+						public BetterList<ValueContainer<?, ?>> getCores() {
+							return BetterList.of(this);
 						}
 					};
 				};
@@ -654,6 +670,11 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 							}
 							return new ConstantValue<>((TypeToken<Object>) getType().getType(0), v);
 						}
+
+						@Override
+						public BetterList<ValueContainer<?, ?>> getCores() {
+							return BetterList.of(this);
+						}
 					};
 				}
 			};
@@ -715,6 +736,14 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 							builder.withValue(fInit.apply(models).get());
 						return builder.build();
 					}
+
+					@Override
+					public BetterList<ValueContainer<?, ?>> getCores() {
+						if (fValue != null)
+							return fValue.getCores();
+						else
+							return BetterList.of(this);
+					}
 				};
 			};
 		}).createWith("action", ValueCreator.class, session -> {
@@ -756,6 +785,11 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 								result.add(realAction.act(cause));
 							return result;
 						});
+					}
+
+					@Override
+					public BetterList<ValueContainer<?, ?>> getCores() {
+						return BetterList.of(actionVs.stream().flatMap(vc -> vc.getCores().stream()));
 					}
 				};
 			};
@@ -803,6 +837,13 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 												finallyV == null ? null : finallyV.get(wrappedModels)//
 								);
 						}
+
+						@Override
+						public BetterList<ValueContainer<?, ?>> getCores() {
+							return BetterList.of(Stream.concat(//
+								Stream.of(initV, beforeV, whileV, beforeBodyV, afterBodyV, finallyV), //
+								execVs.stream()).flatMap(cv -> cv == null ? Stream.empty() : cv.getCores().stream()));
+						}
 					};
 				} catch (QonfigInterpretationException e) {
 					session.withError(e.getMessage(), e);
@@ -839,6 +880,11 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 						ObservableConfig config = ObservableConfig.createRoot("root", null,
 							__ -> new FastFailLockingStrategy(ThreadConstraint.ANY));
 						return config.asValue((TypeToken<Object>) getType().getType(0)).buildEntitySet(null);
+					}
+
+					@Override
+					public BetterList<ValueContainer<?, ?>> getCores() {
+						return BetterList.of(this);
 					}
 				};
 			};
@@ -1020,6 +1066,11 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 					for (int i = 0; i < vs.length; i++)
 						vs[i] = valueContainers.get(i).get(models);
 					return SettableValue.firstValue(commonType, v -> v != null, () -> null, vs);
+				}
+
+				@Override
+				public BetterList<ValueContainer<?, ?>> getCores() {
+					return BetterList.of(valueContainers.stream().flatMap(vc -> vc.getCores().stream()));
 				}
 			};
 		};
@@ -1206,6 +1257,11 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 					public Object get(ModelSetInstance models) {
 						return fTransform.transform(//
 							firstStep.get(models), models);
+					}
+
+					@Override
+					public BetterList<ValueContainer<?, ?>> getCores() {
+						return firstStep.getCores();
 					}
 				};
 			}
@@ -2626,6 +2682,11 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 							return ascending ? comp : -comp;
 						}, "Not Modifiable");
 					}
+
+					@Override
+					public BetterList<ValueContainer<?, ?>> getCores() {
+						return comparison.getCores();
+					}
 				};
 			};
 		} else if (!sortBy.isEmpty()) {
@@ -2693,6 +2754,11 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 							}
 							return ascending ? comp : -comp;
 						}, "Not Modifiable");
+					}
+
+					@Override
+					public BetterList<ValueContainer<?, ?>> getCores() {
+						return BetterList.of(sortByMaps.stream().flatMap(vc -> vc.getCores().stream()));
 					}
 				};
 			};

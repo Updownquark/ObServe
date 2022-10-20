@@ -21,6 +21,7 @@ import org.observe.util.TypeTokens;
 import org.qommons.BreakpointHere;
 import org.qommons.Named;
 import org.qommons.QommonsUtils;
+import org.qommons.collect.BetterList;
 import org.qommons.config.CustomValueType;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigParseSession;
@@ -89,6 +90,8 @@ public interface ObservableModelSet {
 
 		MV get(ModelSetInstance models);
 
+		BetterList<ValueContainer<?, ?>> getCores();
+
 		@Override
 		default MV apply(ModelSetInstance models) {
 			return get(models);
@@ -100,6 +103,11 @@ public interface ObservableModelSet {
 				@Override
 				public MV2 get(ModelSetInstance models) {
 					return map.apply(outer.get(models));
+				}
+
+				@Override
+				public BetterList<ValueContainer<?, ?>> getCores() {
+					return outer.getCores();
 				}
 
 				@Override
@@ -117,6 +125,11 @@ public interface ObservableModelSet {
 				public MV2 get(ModelSetInstance models) {
 					return map.apply(outer.get(models), models);
 				}
+
+				@Override
+				public BetterList<ValueContainer<?, ?>> getCores() {
+					return outer.getCores();
+				}
 			};
 		}
 
@@ -131,6 +144,11 @@ public interface ObservableModelSet {
 				@Override
 				public MV get(ModelSetInstance models) {
 					return outer.get(modelWrapper.apply(models));
+				}
+
+				@Override
+				public BetterList<ValueContainer<?, ?>> getCores() {
+					return outer.getCores();
 				}
 
 				@Override
@@ -203,6 +221,11 @@ public interface ObservableModelSet {
 			}
 
 			@Override
+			public BetterList<ValueContainer<?, ?>> getCores() {
+				return BetterList.of(this);
+			}
+
+			@Override
 			public int hashCode() {
 				return value.hashCode();
 			}
@@ -265,6 +288,11 @@ public interface ObservableModelSet {
 			@Override
 			public SettableValue<T> get(ModelSetInstance extModels) {
 				return theValue;
+			}
+
+			@Override
+			public BetterList<ValueContainer<?, ?>> getCores() {
+				return BetterList.of(this);
 			}
 		};
 	}
@@ -779,6 +807,11 @@ public interface ObservableModelSet {
 			}
 
 			@Override
+			public BetterList<ValueContainer<?, ?>> getCores() {
+				return BetterList.of(this);
+			}
+
+			@Override
 			public Object getThing() {
 				if (theGetter != null)
 					return theGetter;
@@ -843,6 +876,16 @@ public interface ObservableModelSet {
 			@Override
 			public MV get(ModelSetInstance models) {
 				return (MV) ((AbstractMSI) models).getThing(this);
+			}
+
+			@Override
+			public BetterList<ValueContainer<?, ?>> getCores() {
+				if (theValue == null) {
+					theValue = theValueMaker.createValue();
+					if (theValue == null)
+						throw new IllegalStateException("Value maker failed to create value");
+				}
+				return theValue.getCores();
 			}
 
 			@Override
@@ -1298,6 +1341,11 @@ public interface ObservableModelSet {
 			@Override
 			public MV get(ModelSetInstanceBuilder modelSet, ExternalModelSet extModel) {
 				throw new IllegalStateException("Placeholder " + this + " is unfulfilled");
+			}
+
+			@Override
+			public BetterList<ValueContainer<?, ?>> getCores() {
+				return BetterList.of(this);
 			}
 
 			@Override
