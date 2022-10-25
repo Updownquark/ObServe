@@ -14,7 +14,6 @@ import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.NonStructuredParser;
 import org.observe.expresso.ObservableExpression;
-import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ValueContainer;
 import org.observe.util.TypeTokens;
@@ -67,7 +66,7 @@ public class ExternalLiteral implements ObservableExpression {
 		if (type.getModelType() != ModelTypes.Value)
 			throw new QonfigInterpretationException("'" + theExpression.getText() + "' cannot be evaluated as a " + type);
 		ObservableValue<?> value = parseValue(type.getType(0), env);
-		return ObservableModelSet.container((ModelInstanceType<M, MV>) ModelTypes.Value.forType(value.getType()), //
+		return ValueContainer.of((ModelInstanceType<M, MV>) ModelTypes.Value.forType(value.getType()), //
 			LambdaUtils.constantFn(//
 				(MV) SettableValue.asSettable(value, __ -> "Literal value cannot be modified"), theExpression.getText(), null));
 	}

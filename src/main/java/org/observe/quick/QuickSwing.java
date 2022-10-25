@@ -120,7 +120,7 @@ public class QuickSwing implements QonfigInterpretation {
 
 		ValueContainer<SettableValue<?>, SettableValue<QuickComponent>> selectedComponent = theDebugDoc.getHead()
 			.getModels()
-			.get("debug.selectedComponent", ModelTypes.Value.forType(QuickComponent.class));
+			.getValue("debug.selectedComponent", ModelTypes.Value.forType(QuickComponent.class));
 		// ValueContainer<SettableValue<?>, SettableValue<Integer>> scX, scY, scW, scH;
 		// ValueContainer<SettableValue<?>, SettableValue<Boolean>> scV;
 		// scX=msi->

@@ -181,7 +181,7 @@ public class NameExpression implements ObservableExpression {
 		}
 		if (nameIndex == theNames.size() - 1) {
 			if (type.getModelType() == ModelTypes.Value) {
-				return ObservableModelSet.<M, MV> container((ModelInstanceType<M, MV>) ModelTypes.Value.forType(fieldType),
+				return ValueContainer.<M, MV> of((ModelInstanceType<M, MV>) ModelTypes.Value.forType(fieldType),
 					msi -> (MV) getFieldValue(field, fieldType, context, type.getType(0)).get(msi));
 			} else
 				throw new IllegalStateException("Only Value types supported by fields currently"); // TODO

@@ -67,7 +67,7 @@ public class QuickStyleValue<T> implements Comparable<QuickStyleValue<?>> {
 		throws QonfigInterpretationException {
 		if (ex instanceof NameExpression && ((NameExpression) ex).getContext() == null) {
 			String name = ((NameExpression) ex).getNames().getFirst();
-			ValueContainer<?, ?> value = models.get(name, false);
+			ValueContainer<?, ?> value = models.getValue(name, false);
 			if (value instanceof DynamicModelValue)
 				modelValues.add((DynamicModelValue<?, ?>) value);
 		} else {

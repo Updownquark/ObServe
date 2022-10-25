@@ -24,7 +24,7 @@ public class StyleQIS implements SpecialSession<StyleQIS> {
 		.forType(ModelSetInstance.class);
 
 	public static ModelSetInstance getParentModels(ModelSetInstance models) {
-		return models.get(PARENT_MODEL_NAME, PARENT_MODEL_TYPE).get();
+		return models.getValue(PARENT_MODEL_NAME, PARENT_MODEL_TYPE).get();
 	}
 
 	private final CoreSession theWrapped;

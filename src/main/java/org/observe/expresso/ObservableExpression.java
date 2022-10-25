@@ -444,16 +444,16 @@ public interface ObservableExpression {
 				if (type.getType(0).isPrimitive())
 					throw new QonfigInterpretationException("Cannot assign null to a primitive type (" + type.getType(0));
 				MV value = (MV) createValue(type.getType(0), null);
-				return ObservableModelSet.container(type, LambdaUtils.constantFn(value, text, null));
+				return ValueContainer.of(type, LambdaUtils.constantFn(value, text, null));
 			} else if (TypeTokens.get().isInstance(type.getType(0), theValue)) {
 				MV value = (MV) createValue(type.getType(0), theValue);
-				return ObservableModelSet.container((ModelInstanceType<M, MV>) ModelTypes.Value.forType(theValue.getClass()),
+				return ValueContainer.of((ModelInstanceType<M, MV>) ModelTypes.Value.forType(theValue.getClass()),
 					LambdaUtils.constantFn(value, text, null));
 			} else if (TypeTokens.get().isAssignable(type.getType(0), TypeTokens.get().of(theValue.getClass()))) {
 				TypeTokens.TypeConverter<T, Object> convert = TypeTokens.get().getCast(TypeTokens.get().of((Class<T>) theValue.getClass()),
 					(TypeToken<Object>) type.getType(0));
 				MV value = (MV) createValue(type.getType(0), convert.apply(theValue));
-				return ObservableModelSet.container((ModelInstanceType<M, MV>) ModelTypes.Value.forType(theValue.getClass()),
+				return ValueContainer.of((ModelInstanceType<M, MV>) ModelTypes.Value.forType(theValue.getClass()),
 					LambdaUtils.constantFn(value, text, null));
 			} else
 				throw new QonfigInterpretationException("'" + text + "' cannot be evaluated as a " + type);

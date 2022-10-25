@@ -23,10 +23,7 @@ import org.qommons.Named;
 import org.qommons.QommonsUtils;
 import org.qommons.StringUtils;
 import org.qommons.collect.BetterList;
-import org.qommons.config.CustomValueType;
 import org.qommons.config.QonfigInterpretationException;
-import org.qommons.config.QonfigParseSession;
-import org.qommons.config.QonfigToolkit;
 import org.qommons.ex.ExConsumer;
 
 import com.google.common.reflect.TypeToken;
@@ -36,18 +33,23 @@ import com.google.common.reflect.TypeToken;
  * An ObservableModelSet is a bag containing definitions for typed, typically observable model values, actions, events, etc.
  * </p>
  * <p>
- * An ObservableModelSet is create with {@link #build(NameChecker)}. The {@link ObservableModelSet.NameChecker} parameter validates the
- * names of all identifiers (e.g. variable names) so that they can be referenced by expressions.
+ * An ObservableModelSet is create with {@link #build(String, NameChecker)}. The {@link ObservableModelSet.NameChecker} parameter validates
+ * the names of all identifiers (e.g. variable names) so that they can be referenced by expressions.
  * </p>
  *
  */
 public interface ObservableModelSet extends Identifiable {
+	/** An identifier for a model or model component */
 	public final class ModelComponentId {
 		private final ModelComponentId theRootId;
 		private final ModelComponentId theOwnerId;
 		private final String theName;
 		private final int theHashCode;
 
+		/**
+		 * @param ownerId The component ID of the model that owns this component, or null if this is the identifier of a root model
+		 * @param name The name of this component in its model, or the name of the root model
+		 */
 		public ModelComponentId(ModelComponentId ownerId, String name) {
 			theRootId = ownerId == null ? this : ownerId.theRootId;
 			theOwnerId = ownerId;
@@ -55,14 +57,17 @@ public interface ObservableModelSet extends Identifiable {
 			theHashCode = System.identityHashCode(this);
 		}
 
+		/** @return The component ID of this component's root model */
 		public ModelComponentId getRootId() {
 			return theRootId;
 		}
 
+		/** @return The component ID oif this component's owner model, or null if this is the identifier of a root model */
 		public ModelComponentId getOwnerId() {
 			return theOwnerId;
 		}
 
+		/** @return The name of this component in its model, or the name of the root model */
 		public String getName() {
 			return theName;
 		}
@@ -77,6 +82,7 @@ public interface ObservableModelSet extends Identifiable {
 			return this == obj;
 		}
 
+		/** @return The path of this component, relative to the root model */
 		public String getPath() {
 			if (this == theRootId)
 				return "";
@@ -95,23 +101,61 @@ public interface ObservableModelSet extends Identifiable {
 		}
 	}
 
+	/**
+	 * A holder for a component in an {@link ObservableModelSet}
+	 *
+	 * @param <M> The model type of the component
+	 * @param <MV> The value type of the component
+	 */
 	public interface ModelComponentNode<M, MV extends M> extends ValueContainer<M, MV>, Identifiable {
 		@Override
 		ModelComponentId getIdentity();
 
+		/** @return The sub-model held by this component, or null if this component is not a sub-model */
 		ObservableModelSet getModel();
 
+		/**
+		 * Creates a value for this model component
+		 *
+		 * @param modelSet The model set instance to create the value for
+		 * @param extModels The external model set to retrieve the value from
+		 * @return The value to use for this component for the model set instance
+		 */
 		MV create(ModelSetInstance modelSet, ExternalModelSet extModels);
 
+		/**
+		 * @return One of:
+		 *         <ul>
+		 *         <li>A {@link ValueCreator} if this component represents a model value installed with
+		 *         {@link ObservableModelSet.Builder#withMaker(String, ValueCreator)},
+		 *         {@link ObservableModelSet.Builder#with(String, ValueContainer)}, or another value method</li>
+		 *         <li>A {@link ExtValueRef} if this component represents a placeholder for an external model value installed with
+		 *         {@link ObservableModelSet.Builder#withExternal(String, ExtValueRef)} or another external value method</li>
+		 *         <li>A {@link RuntimeValuePlaceholder} if this component represents a placeholder for a model value to be
+		 *         {@link ModelSetInstanceBuilder#with(RuntimeValuePlaceholder, Object) installed} at runtime, installed with
+		 *         {@link ObservableModelSet.Builder#withRuntimeValue(String, ModelInstanceType)}</li>
+		 *         <li>An {@link ObservableModelSet} if this component represents a sub-model installed with
+		 *         {@link ObservableModelSet.Builder#createSubModel(String)}</li>
+		 *         <li>Potentially anything else if this model is extended from the default</li>
+		 *         </ul>
+		 */
 		Object getThing();
 	}
 
+	/** Checks names of model components to ensure they are accessible as identifiers from expressions */
 	interface NameChecker {
+		/**
+		 * @param name The identifier name to check
+		 * @throws IllegalArgumentException If the given name is illegal as an identifier in the model
+		 */
 		void checkName(String name) throws IllegalArgumentException;
 	}
 
+	/** A {@link NameChecker} that ensures names are accessible as identifiers from java expressions */
 	public static class JavaNameChecker implements NameChecker {
+		/** The regex pattern java identifiers must match */
 		public static final Pattern IDENTIFIER_PATTERN = Pattern.compile("^([a-zA-Z_$][a-zA-Z\\d_$]*)$");
+		/** Java reserved key words that cannot be identifiers */
 		public static final Set<String> JAVA_KEY_WORDS = Collections.unmodifiableSet(new HashSet<>(Arrays.asList(//
 			"abstract", "assert", "boolean", "break", "byte", "case", "catch", "char", "class", "const", "continue", //
 			"default", "do", "double", "else", "enum", "extends", "final", "finally", "float", "for", "goto", //
@@ -119,6 +163,12 @@ public interface ObservableModelSet extends Identifiable {
 			"package", "private", "protected", "public", "return", "short", "static", "strictfp", "super", "switch", "synchronized", //
 			"this", "throw", "throws", "transient", "try", "void", "volatile", "while")));
 
+		/**
+		 * Static version of {@link #checkName(String)}
+		 *
+		 * @param name The identifier name to check
+		 * @throws IllegalArgumentException If the given name is illegal as a java identifier
+		 */
 		public static void checkJavaName(String name) throws IllegalArgumentException {
 			if (!IDENTIFIER_PATTERN.matcher(name).matches())
 				throw new IllegalArgumentException("'" + name + "' is not a valid identifier");
@@ -137,32 +187,23 @@ public interface ObservableModelSet extends Identifiable {
 		}
 	}
 
+	/** Singleton instance of {@link JavaNameChecker} */
 	public static final JavaNameChecker JAVA_NAME_CHECKER = new JavaNameChecker();
-	public static final CustomValueType JAVA_IDENTIFIER_TYPE = new CustomValueType() {
-		@Override
-		public String getName() {
-			return "identifier";
-		}
 
-		@Override
-		public Object parse(String value, QonfigToolkit tk, QonfigParseSession session) {
-			try {
-				JavaNameChecker.checkJavaName(value);
-			} catch (IllegalArgumentException e) {
-				session.withError(e.getMessage());
-			}
-			return value;
-		}
-
-		@Override
-		public boolean isInstance(Object value) {
-			return value instanceof String;
-		}
-	};
-
-	interface ValueContainer<M, MV extends M> {
+	/**
+	 * Represents a model value that is ready to be, but may not have been, instantiated in a {@link ModelSetInstance}
+	 *
+	 * @param <M> The model type of the value
+	 * @param <MV> The type of the value
+	 */
+	public interface ValueContainer<M, MV extends M> {
+		/** @return The type of the value */
 		ModelInstanceType<M, MV> getType();
 
+		/**
+		 * @param models The model instance set to get the model value for this container from
+		 * @return The model value for this container in the given model instance set
+		 */
 		MV get(ModelSetInstance models);
 
 		BetterList<ValueContainer<?, ?>> getCores();
@@ -238,6 +279,13 @@ public interface ObservableModelSet extends Identifiable {
 			};
 		}
 
+		/**
+		 * @param <T> The type of the value
+		 * @param type The type of the value
+		 * @param value The value to wrap
+		 * @param text The text to represent the value
+		 * @return A ValueContainer that always produces a constant value for the given value
+		 */
 		static <T> ObservableModelSet.ValueContainer<SettableValue<?>, SettableValue<T>> literal(
 			ModelInstanceType<SettableValue<?>, SettableValue<T>> type, T value, String text) {
 			return new ObservableModelSet.ValueContainer<SettableValue<?>, SettableValue<T>>() {
@@ -260,6 +308,13 @@ public interface ObservableModelSet extends Identifiable {
 			};
 		}
 
+		/**
+		 * @param <T> The type of the value
+		 * @param type The type of the value
+		 * @param value The value to wrap
+		 * @param text The text to represent the value
+		 * @return A ValueContainer that always produces a constant value for the given value
+		 */
 		static <T> ObservableModelSet.ValueContainer<SettableValue<?>, SettableValue<T>> literal(TypeToken<T> type, T value, String text) {
 			return new ObservableModelSet.ValueContainer<SettableValue<?>, SettableValue<T>>() {
 				private final SettableValue<T> theValue = ObservableModelSet.literal(type, value, text);
@@ -286,6 +341,13 @@ public interface ObservableModelSet extends Identifiable {
 			};
 		}
 
+		/**
+		 * @param <M> The model type for the value
+		 * @param <MV> The type for the value
+		 * @param type The type for the value
+		 * @param value Produces the value from a model instance set
+		 * @return A value container with the given type, implemented by the given function
+		 */
 		static <M, MV extends M> ValueContainer<M, MV> of(ModelInstanceType<M, MV> type, Function<ModelSetInstance, MV> value) {
 			class SimpleVC implements ValueContainer<M, MV> {
 				@Override
@@ -312,9 +374,23 @@ public interface ObservableModelSet extends Identifiable {
 		}
 	}
 
-	interface ValueCreator<M, MV extends M> {
+	/**
+	 * A value added to an {@link ObservableModelSet} via {@link Builder#with(String, ValueContainer)},
+	 * {@link Builder#withMaker(String, ValueCreator)}, or another value method
+	 *
+	 * @param <M> The model type of the value
+	 * @param <MV> The type of the value
+	 */
+	public interface ValueCreator<M, MV extends M> {
+		/** @return The created value container */
 		ValueContainer<M, MV> createValue();
 
+		/**
+		 * @param <M> The model type of the value
+		 * @param <MV> The type of the value
+		 * @param container The value container to return
+		 * @return A {@link ValueCreator} that always {@link #createValue() returns} the given container
+		 */
 		static <M, MV extends M> ValueCreator<M, MV> constant(ValueContainer<M, MV> container) {
 			return new ValueCreator<M, MV>() {
 				@Override
@@ -329,22 +405,63 @@ public interface ObservableModelSet extends Identifiable {
 			};
 		}
 
+		/**
+		 * @param <T> The type of the value
+		 * @param type The type of the value
+		 * @param value The value
+		 * @param text The text representing the value
+		 * @return A {@link ValueCreator} that always returns a value container which produces a constant value for the given value
+		 */
 		static <T> ValueCreator<SettableValue<?>, SettableValue<T>> literal(TypeToken<T> type, T value, String text) {
 			return constant(ValueContainer.literal(ModelTypes.Value.forType(type), value, text));
 		}
 	}
 
+	/**
+	 * A value added to an {@link ObservableModelSet} with {@link Builder#withExternal(String, ExtValueRef)} or another external value
+	 * method
+	 *
+	 * @param <M> The model type of the value
+	 * @param <MV> The type of the value
+	 */
 	public interface ExtValueRef<M, MV extends M> {
+		/** @return The expected type of the external value */
 		ModelInstanceType<M, MV> getType();
 
+		/**
+		 * @param extModels The external model set to get the value from
+		 * @return The value represented by this reference in the given external model set
+		 */
 		MV get(ExternalModelSet extModels);
 
+		/**
+		 * If no value is supplied in the external model set for this value, this reference may optionally supply a default value. If no
+		 * default value is supplied, then an error will be thrown (but not by this method).
+		 *
+		 * @param models The model set to use to get the default value for this unsatisfied external reference
+		 * @return The default value for this external reference, or null if this reference does not specify a default value
+		 */
 		MV getDefault(ModelSetInstance models);
 
+		/**
+		 * @param <M> The model type for the reference
+		 * @param <MV> The type for the reference
+		 * @param type The type for the reference
+		 * @param value Retrieves the external value from the external model set
+		 * @return The external reference
+		 */
 		public static <M, MV extends M> ExtValueRef<M, MV> of(ModelInstanceType<M, MV> type, Function<ExternalModelSet, MV> value) {
 			return of(type, value, null);
 		}
 
+		/**
+		 * @param <M> The model type for the reference
+		 * @param <MV> The type for the reference
+		 * @param type The type for the reference
+		 * @param value Retrieves the external value from the external model set
+		 * @param defaultValue Retrieves or constructs a default value for the external reference (may be null)
+		 * @return The external reference
+		 */
 		public static <M, MV extends M> ExtValueRef<M, MV> of(ModelInstanceType<M, MV> type, Function<ExternalModelSet, MV> value,
 			Function<ModelSetInstance, MV> defaultValue) {
 			class SimpleEVR implements ExtValueRef<M, MV> {
@@ -372,15 +489,31 @@ public interface ObservableModelSet extends Identifiable {
 		}
 	}
 
-	public interface RuntimeValuePlaceholder<M, MV extends M> extends Named {
+	/**
+	 * A placeholder returned by {@link Builder#withRuntimeValue(String, ModelInstanceType)}. This placeholder can be used to satisfy the
+	 * value in a {@link ModelSetInstance} with {@link ModelSetInstanceBuilder#with(RuntimeValuePlaceholder, Object)}.
+	 *
+	 * @param <M> The model type of the runtime value
+	 * @param <MV> The type of the runtime value
+	 */
+	public interface RuntimeValuePlaceholder<M, MV extends M> extends Named, Identifiable {
+		@Override
 		ModelComponentId getIdentity();
 
+		/** @return The declared type of the runtime value */
 		ModelInstanceType<M, MV> getType();
 	}
 
-	abstract class AbstractValueContainer<M, MV extends M> implements ValueContainer<M, MV> {
+	/**
+	 * Abstract {@link ValueContainer} implementation
+	 *
+	 * @param <M> The model type of the value
+	 * @param <MV> The type of the value
+	 */
+	public abstract class AbstractValueContainer<M, MV extends M> implements ValueContainer<M, MV> {
 		private final ModelInstanceType<M, MV> theType;
 
+		/** @param type The type of the value */
 		public AbstractValueContainer(ModelInstanceType<M, MV> type) {
 			theType = type;
 		}
@@ -389,49 +522,6 @@ public interface ObservableModelSet extends Identifiable {
 		public ModelInstanceType<M, MV> getType() {
 			return theType;
 		}
-	}
-
-	static <M, MV extends M> ValueContainer<M, MV> container(ModelInstanceType<M, MV> type, Function<ModelSetInstance, MV> value) {
-		class SyntheticValueContainer implements ValueContainer<M, MV> {
-			@Override
-			public ModelInstanceType<M, MV> getType() {
-				return type;
-			}
-
-			private Function<ModelSetInstance, MV> getValue() {
-				return value;
-			}
-
-			@Override
-			public MV get(ModelSetInstance extModels) {
-				return value.apply(extModels);
-			}
-
-			@Override
-			public BetterList<ValueContainer<?, ?>> getCores() {
-				return BetterList.of(this);
-			}
-
-			@Override
-			public int hashCode() {
-				return value.hashCode();
-			}
-
-			@Override
-			public boolean equals(Object obj) {
-				if (this == obj)
-					return true;
-				else if (!(obj instanceof SyntheticValueContainer))
-					return false;
-				return value.equals(((SyntheticValueContainer) obj).getValue());
-			}
-
-			@Override
-			public String toString() {
-				return value.toString();
-			}
-		}
-		return new SyntheticValueContainer();
 	}
 
 	public static <T> SettableValue<T> literal(TypeToken<T> type, T value, String text) {
@@ -445,12 +535,20 @@ public interface ObservableModelSet extends Identifiable {
 	@Override
 	ModelComponentId getIdentity();
 
+	/** @return The parent model that this model is a sub-model of */
 	ObservableModelSet getParent();
 
+	/** @return The root model that this model belongs to as itself or a descendant */
 	ObservableModelSet getRoot();
 
+	/** @return All model sets (by root ID) that were added to this model with {@link Builder#withAll(ObservableModelSet)} */
 	Map<ModelComponentId, ObservableModelSet> getInheritance();
 
+	/**
+	 * @param modelId The ID of the model to check
+	 * @return Whether this model is the same as, or a descendant of, the given model's root, whether any of its {@link #getInheritance()
+	 *         inherited models} are
+	 */
 	default boolean isRelated(ModelComponentId modelId) {
 		ModelComponentId root = modelId.getRootId();
 		if (root == getIdentity().getRootId())
@@ -461,6 +559,10 @@ public interface ObservableModelSet extends Identifiable {
 	/** @return All this model's contents */
 	Map<String, ModelComponentNode<?, ?>> getComponents();
 
+	/**
+	 * @param path The dot-separated path of the component to get
+	 * @return The node representing the target component, or null if no such component exists accessible to this model
+	 */
 	default ModelComponentNode<?, ?> getComponentIfExists(String path) {
 		ModelComponentNode<?, ?> node;
 		int dot = path.lastIndexOf('.');
@@ -485,6 +587,11 @@ public interface ObservableModelSet extends Identifiable {
 		return node;
 	}
 
+	/**
+	 * @param path The dot-separated path of the component to get
+	 * @return The node representing the target component
+	 * @throws QonfigInterpretationException If no such component exists accessible to this model
+	 */
 	default ModelComponentNode<?, ?> getComponent(String path) throws QonfigInterpretationException {
 		ModelComponentNode<?, ?> node;
 		int dot = path.lastIndexOf('.');
@@ -511,6 +618,10 @@ public interface ObservableModelSet extends Identifiable {
 		return node;
 	}
 
+	/**
+	 * @param path The dot-separated path of the sub-model to get
+	 * @return The node representing the target sub-model, or null if no such sub-model exists accessible to this model
+	 */
 	default ObservableModelSet getSubModelIfExists(String path) {
 		ObservableModelSet refModel = this;
 		String name;
@@ -547,6 +658,11 @@ public interface ObservableModelSet extends Identifiable {
 		return node.getModel();
 	}
 
+	/**
+	 * @param path The dot-separated path of the sub-model to get
+	 * @return The node representing the target sub-model
+	 * @throws QonfigInterpretationException If no such sub-model exists accessible to this model
+	 */
 	default ObservableModelSet getSubModel(String path) throws QonfigInterpretationException {
 		ObservableModelSet refModel = this;
 		String name;
@@ -589,6 +705,15 @@ public interface ObservableModelSet extends Identifiable {
 		return node.getModel();
 	}
 
+	/**
+	 * @param <M> The model type of the value to get
+	 * @param <MV> The type of the value to get
+	 * @param path The dot-separated path of the value to get
+	 * @param type The type of the value to get
+	 * @return The container of the value in this model at the given path, converted to the given type if needed
+	 * @throws QonfigInterpretationException If no such value exists accessible at the given path, or if the value at the path could not be
+	 *         converted to the target type
+	 */
 	default <M, MV extends M> ValueContainer<M, MV> getValue(String path, ModelInstanceType<M, MV> type)
 		throws QonfigInterpretationException {
 		ModelComponentNode<Object, Object> node = (ModelComponentNode<Object, Object>) getComponent(path);
@@ -597,6 +722,7 @@ public interface ObservableModelSet extends Identifiable {
 		return node.getType().as(node, type);
 	}
 
+	/** @return Checks the names of components in this model set to ensure they are accessible from expressions */
 	NameChecker getNameChecker();
 
 	ModelSetInstanceBuilder createInstance(ExternalModelSet extModel, Observable<?> until);
@@ -609,220 +735,28 @@ public interface ObservableModelSet extends Identifiable {
 		return build(modelName, getNameChecker()).withAll(this);
 	}
 
+	/**
+	 * Builds a new {@link ObservableModelSet}
+	 *
+	 * @param modelName The name for the new root model
+	 * @param nameChecker The {@link ObservableModelSet#getNameChecker() name checker} for the new model
+	 * @return A builder for the new model set
+	 */
 	public static Builder build(String modelName, NameChecker nameChecker) {
 		return new DefaultModelSet.DefaultBuilder(new ModelComponentId(null, modelName), null, null, nameChecker);
 	}
 
+	/**
+	 * Builds a new {@link ExternalModelSet}
+	 *
+	 * @param nameChecker The {@link ObservableModelSet#getNameChecker() name checker} for the new model
+	 * @return A builder for the new external model set
+	 */
 	public static ExternalModelSetBuilder buildExternal(NameChecker nameChecker) {
 		return new ExternalModelSetBuilder(null, "", nameChecker);
 	}
 
-	public interface ModelSetInstance {
-		ObservableModelSet getModel();
-
-		Object getModelConfiguration();
-
-		Observable<?> getUntil();
-
-		<M, MV extends M> MV get(ModelComponentNode<M, MV> component);
-	}
-
-	public interface ModelSetInstanceBuilder {
-		<M, MV extends M> ModelSetInstanceBuilder with(RuntimeValuePlaceholder<M, MV> placeholder, MV value);
-
-		ModelSetInstanceBuilder withAll(ModelSetInstance other);
-
-		ModelSetInstance build();
-	}
-
-	public interface ExternalModelSet {
-		NameChecker getNameChecker();
-
-		ExternalModelSet getSubModel(String path) throws QonfigInterpretationException;
-
-		ExternalModelSet getSubModelIfExists(String path);
-
-		<M> M get(String path, ModelInstanceType<?, ?> type) throws QonfigInterpretationException;
-	}
-
-	public class DefaultExternalModelSet implements ExternalModelSet {
-		final DefaultExternalModelSet theRoot;
-		private final String thePath;
-		final Map<String, Placeholder> theThings;
-		/** Checker for model and value names */
-		protected final NameChecker theNameChecker;
-
-		DefaultExternalModelSet(DefaultExternalModelSet root, String path, Map<String, Placeholder> things, NameChecker nameChecker) {
-			if (!path.isEmpty() && path.charAt(0) == '.')
-				BreakpointHere.breakpoint();
-			theRoot = root == null ? this : root;
-			thePath = path;
-			theThings = things;
-			theNameChecker = nameChecker;
-		}
-
-		public String getPath() {
-			return thePath;
-		}
-
-		@Override
-		public NameChecker getNameChecker() {
-			return theNameChecker;
-		}
-
-		@Override
-		public <M> M get(String path, ModelInstanceType<?, ?> type) throws QonfigInterpretationException {
-			int dot = path.lastIndexOf('.');
-			if (dot >= 0) {
-				DefaultExternalModelSet subModel = theRoot.getSubModel(path.substring(0, dot));
-				return subModel.get(path.substring(dot + 1), type);
-			}
-			theNameChecker.checkName(path);
-			Placeholder thing = theThings.get(path);
-			if (thing == null)
-				throw new QonfigInterpretationException("No such " + type + " declared: '" + pathTo(path) + "'");
-			ModelType.ModelInstanceConverter<Object, M> converter = (ModelType.ModelInstanceConverter<Object, M>) thing.type.convert(type);
-			if (converter == null)
-				throw new QonfigInterpretationException("Cannot convert " + path + " (" + thing.type + ") to " + type);
-			return converter.convert(thing.thing);
-		}
-
-		@Override
-		public DefaultExternalModelSet getSubModel(String path) throws QonfigInterpretationException {
-			int dot = path.indexOf('.');
-			String modelName;
-			if (dot >= 0) {
-				modelName = path.substring(0, dot);
-			} else
-				modelName = path;
-			theNameChecker.checkName(modelName);
-			Placeholder subModel = theThings.get(modelName);
-			if (subModel == null)
-				throw new QonfigInterpretationException("No such sub-model declared: '" + pathTo(modelName) + "'");
-			else if (subModel.type.getModelType() != ModelTypes.Model)
-				throw new QonfigInterpretationException("'" + pathTo(modelName) + "' is a " + subModel.type + ", not a Model");
-			if (dot < 0)
-				return (DefaultExternalModelSet) subModel.thing;
-			else
-				return ((DefaultExternalModelSet) subModel.thing).getSubModel(path.substring(dot + 1));
-		}
-
-		@Override
-		public ExternalModelSet getSubModelIfExists(String path) {
-			int dot = path.indexOf('.');
-			String modelName;
-			if (dot >= 0) {
-				modelName = path.substring(0, dot);
-			} else
-				modelName = path;
-			theNameChecker.checkName(modelName);
-			Placeholder subModel = theThings.get(modelName);
-			if (subModel == null)
-				return null;
-			else if (subModel.type.getModelType() != ModelTypes.Model)
-				return null;
-			if (dot < 0)
-				return (DefaultExternalModelSet) subModel.thing;
-			else
-				return ((DefaultExternalModelSet) subModel.thing).getSubModelIfExists(path.substring(dot + 1));
-		}
-
-		String pathTo(String name) {
-			if (thePath.isEmpty())
-				return name;
-			else
-				return thePath + "." + name;
-		}
-
-		@Override
-		public String toString() {
-			StringBuilder str = new StringBuilder(thePath);
-			print(str, 1);
-			return str.toString();
-		}
-
-		protected void print(StringBuilder str, int indent) {
-			for (Map.Entry<String, Placeholder> thing : theThings.entrySet()) {
-				str.append('\n');
-				for (int i = 0; i < indent; i++)
-					str.append('\t');
-				str.append(thing.getKey()).append(": ").append(thing.getValue().type);
-				if (thing.getValue().thing instanceof ExternalModelSet)
-					((DefaultExternalModelSet) thing.getValue().thing).print(str, indent + 1);
-			}
-		}
-
-		static class Placeholder {
-			final ModelInstanceType<?, ?> type;
-			final Object thing;
-
-			Placeholder(ModelInstanceType<?, ?> type, Object thing) {
-				this.type = type;
-				this.thing = thing;
-			}
-		}
-	}
-
-	public class ExternalModelSetBuilder extends DefaultExternalModelSet {
-		ExternalModelSetBuilder(ExternalModelSetBuilder root, String path, NameChecker nameChecker) {
-			super(root, path, new LinkedHashMap<>(), nameChecker);
-		}
-
-		public <M, MV extends M> ExternalModelSetBuilder with(String name, ModelInstanceType<M, MV> type, MV item)
-			throws QonfigInterpretationException {
-			if (item == null)
-				throw new NullPointerException("Installing null for " + type + "@" + name);
-			theNameChecker.checkName(name);
-			if (theThings.containsKey(name))
-				throw new QonfigInterpretationException(
-					"A value of type " + theThings.get(name).type + " has already been added as '" + name + "'");
-			theThings.put(name, new DefaultExternalModelSet.Placeholder(type, item));
-			return this;
-		}
-
-		public ExternalModelSetBuilder withSubModel(String name,
-			ExConsumer<ExternalModelSetBuilder, QonfigInterpretationException> modelBuilder) throws QonfigInterpretationException {
-			theNameChecker.checkName(name);
-			if (theThings.containsKey(name))
-				throw new QonfigInterpretationException(
-					"A value of type " + theThings.get(name).type + " has already been added as '" + name + "'");
-			ExternalModelSetBuilder subModel = new ExternalModelSetBuilder((ExternalModelSetBuilder) theRoot, pathTo(name), theNameChecker);
-			theThings.put(name, new DefaultExternalModelSet.Placeholder(ModelTypes.Model.instance(), subModel));
-			modelBuilder.accept(subModel);
-			return this;
-		}
-
-		public ExternalModelSetBuilder addSubModel(String name) throws QonfigInterpretationException {
-			theNameChecker.checkName(name);
-			if (theThings.containsKey(name))
-				throw new QonfigInterpretationException(
-					"A value of type " + theThings.get(name).type + " has already been added as '" + name + "'");
-			ExternalModelSetBuilder subModel = new ExternalModelSetBuilder((ExternalModelSetBuilder) theRoot, pathTo(name), theNameChecker);
-			theThings.put(name, new DefaultExternalModelSet.Placeholder(ModelTypes.Model.instance(), subModel));
-			return subModel;
-		}
-
-		public ExternalModelSet build() {
-			return _build(null, getPath());
-		}
-
-		private ExternalModelSet _build(DefaultExternalModelSet root, String path) {
-			Map<String, DefaultExternalModelSet.Placeholder> things = new LinkedHashMap<>(theThings.size() * 3 / 2 + 1);
-			DefaultExternalModelSet model = new DefaultExternalModelSet(root, path, Collections.unmodifiableMap(things), theNameChecker);
-			if (root == null)
-				root = model;
-			for (Map.Entry<String, DefaultExternalModelSet.Placeholder> thing : theThings.entrySet()) {
-				if (thing.getValue().type.getModelType() == ModelTypes.Model) {
-					String childPath = path.isEmpty() ? thing.getKey() : path + "." + thing.getKey();
-					things.put(thing.getKey(), new DefaultExternalModelSet.Placeholder(ModelTypes.Model.instance(), //
-						((ExternalModelSetBuilder) thing.getValue().thing)._build(root, childPath)));
-				} else
-					things.put(thing.getKey(), thing.getValue());
-			}
-			return model;
-		}
-	}
-
+	/** Builds an {@link ObservableModelSet} */
 	public interface Builder extends ObservableModelSet {
 		Builder setModelConfiguration(Function<ModelSetInstance, ?> modelConfiguration);
 
@@ -856,23 +790,325 @@ public interface ObservableModelSet extends Identifiable {
 		}
 	}
 
+	/** A set of actual values created by the containers declared in an {@link ObservableModelSet} */
+	public interface ModelSetInstance {
+		/**
+		 * @return The model set that this instance was {@link ObservableModelSet#createInstance(ExternalModelSet, Observable) created} for
+		 */
+		ObservableModelSet getModel();
+
+		/**
+		 * An object created for this model instance set by {@link ObservableModelSet.Builder#setModelConfiguration(Function)}
+		 *
+		 * @return This model set's model configuration object
+		 */
+		Object getModelConfiguration();
+
+		/** @return An observable that will fire when this model instance set's lifetime expires */
+		Observable<?> getUntil();
+
+		/**
+		 * @param <M> The model type of the component to get the value for
+		 * @param <MV> The type of the component to get the value for
+		 * @param component The component to get the value for
+		 * @return The model value in this model instance set for the given component
+		 */
+		<M, MV extends M> MV get(ModelComponentNode<M, MV> component);
+	}
+
+	/** Builds a {@link ModelSetInstance} */
+	public interface ModelSetInstanceBuilder {
+		/**
+		 * Satisfies a runtime value declared with {@link ObservableModelSet.Builder#withRuntimeValue(String, ModelInstanceType)}
+		 *
+		 * @param <M> The model type of the value
+		 * @param <MV> The type of the value
+		 * @param placeholder The placeholder returned by {@link ObservableModelSet.Builder#withRuntimeValue(String, ModelInstanceType)}
+		 *        when the value was declared
+		 * @param value The value to install for the runtime placeholder
+		 * @return This builder
+		 */
+		<M, MV extends M> ModelSetInstanceBuilder with(RuntimeValuePlaceholder<M, MV> placeholder, MV value);
+
+		/**
+		 * @param other The model instance set created for one of the {@link ObservableModelSet#getInheritance() inherited} models of the
+		 *        model that this instance set is being built for
+		 * @return This builder
+		 */
+		ModelSetInstanceBuilder withAll(ModelSetInstance other);
+
+		/** @return The model instance set configured with this builder */
+		ModelSetInstance build();
+	}
+
+	/**
+	 * A set of values supplied to {@link ObservableModelSet#createInstance(ExternalModelSet, Observable)} to satisfy placeholders installed
+	 * in the {@link ObservableModelSet} with {@link Builder#withExternal(String, ExtValueRef)} or another external value method
+	 */
+	public interface ExternalModelSet {
+		/**
+		 * @return The name checker for the model set
+		 * @see ObservableModelSet#getNameChecker()
+		 */
+		NameChecker getNameChecker();
+
+		/**
+		 * @param path The dot-separated path of the sub-model to get
+		 * @return The node representing the target sub-model, or null if no such sub-model exists accessible to this model
+		 */
+		ExternalModelSet getSubModelIfExists(String path);
+
+		/**
+		 * @param path The dot-separated path of the sub-model to get
+		 * @return The node representing the target sub-model
+		 * @throws QonfigInterpretationException If no such sub-model exists accessible to this model
+		 */
+		ExternalModelSet getSubModel(String path) throws QonfigInterpretationException;
+
+		/**
+		 * @param <M> The model type of the value to get
+		 * @param <MV> The type of the value to get
+		 * @param path The dot-separated path of the value to get
+		 * @param type The type of the value to get
+		 * @return The value in this model at the given path, converted to the given type if needed
+		 * @throws QonfigInterpretationException If no such value exists accessible at the given path, or if the value at the path could not
+		 *         be converted to the target type
+		 */
+		<M, MV extends M> MV getValue(String path, ModelInstanceType<M, MV> type) throws QonfigInterpretationException;
+	}
+
+	/** Default {@link ExternalModelSet} implementation */
+	public class DefaultExternalModelSet implements ExternalModelSet {
+		final DefaultExternalModelSet theRoot;
+		private final String thePath;
+		final Map<String, Placeholder> theComponents;
+		/** Checker for model and value names */
+		protected final NameChecker theNameChecker;
+
+		DefaultExternalModelSet(DefaultExternalModelSet root, String path, Map<String, Placeholder> things, NameChecker nameChecker) {
+			if (!path.isEmpty() && path.charAt(0) == '.')
+				BreakpointHere.breakpoint();
+			theRoot = root == null ? this : root;
+			thePath = path;
+			theComponents = things;
+			theNameChecker = nameChecker;
+		}
+
+		/** @return This model's path under its root */
+		public String getPath() {
+			return thePath;
+		}
+
+		@Override
+		public NameChecker getNameChecker() {
+			return theNameChecker;
+		}
+
+		@Override
+		public <M, MV extends M> MV getValue(String path, ModelInstanceType<M, MV> type) throws QonfigInterpretationException {
+			int dot = path.lastIndexOf('.');
+			if (dot >= 0) {
+				DefaultExternalModelSet subModel = theRoot.getSubModel(path.substring(0, dot));
+				return subModel.getValue(path.substring(dot + 1), type);
+			}
+			theNameChecker.checkName(path);
+			Placeholder thing = theComponents.get(path);
+			if (thing == null)
+				throw new QonfigInterpretationException("No such " + type + " declared: '" + pathTo(path) + "'");
+			ModelType.ModelInstanceConverter<Object, M> converter = ((ModelInstanceType<Object, Object>) thing.type).convert(type);
+			if (converter == null)
+				throw new QonfigInterpretationException("Cannot convert " + path + " (" + thing.type + ") to " + type);
+			return (MV) converter.convert(thing.thing);
+		}
+
+		@Override
+		public DefaultExternalModelSet getSubModel(String path) throws QonfigInterpretationException {
+			int dot = path.indexOf('.');
+			String modelName;
+			if (dot >= 0) {
+				modelName = path.substring(0, dot);
+			} else
+				modelName = path;
+			theNameChecker.checkName(modelName);
+			Placeholder subModel = theComponents.get(modelName);
+			if (subModel == null)
+				throw new QonfigInterpretationException("No such sub-model declared: '" + pathTo(modelName) + "'");
+			else if (subModel.type.getModelType() != ModelTypes.Model)
+				throw new QonfigInterpretationException("'" + pathTo(modelName) + "' is a " + subModel.type + ", not a Model");
+			if (dot < 0)
+				return (DefaultExternalModelSet) subModel.thing;
+			else
+				return ((DefaultExternalModelSet) subModel.thing).getSubModel(path.substring(dot + 1));
+		}
+
+		@Override
+		public ExternalModelSet getSubModelIfExists(String path) {
+			int dot = path.indexOf('.');
+			String modelName;
+			if (dot >= 0) {
+				modelName = path.substring(0, dot);
+			} else
+				modelName = path;
+			theNameChecker.checkName(modelName);
+			Placeholder subModel = theComponents.get(modelName);
+			if (subModel == null)
+				return null;
+			else if (subModel.type.getModelType() != ModelTypes.Model)
+				return null;
+			if (dot < 0)
+				return (DefaultExternalModelSet) subModel.thing;
+			else
+				return ((DefaultExternalModelSet) subModel.thing).getSubModelIfExists(path.substring(dot + 1));
+		}
+
+		String pathTo(String name) {
+			if (thePath.isEmpty())
+				return name;
+			else
+				return thePath + "." + name;
+		}
+
+		@Override
+		public String toString() {
+			StringBuilder str = new StringBuilder(thePath);
+			print(str, 1);
+			return str.toString();
+		}
+
+		void print(StringBuilder str, int indent) {
+			for (Map.Entry<String, Placeholder> thing : theComponents.entrySet()) {
+				str.append('\n');
+				for (int i = 0; i < indent; i++)
+					str.append('\t');
+				str.append(thing.getKey()).append(": ").append(thing.getValue().type);
+				if (thing.getValue().thing instanceof ExternalModelSet)
+					((DefaultExternalModelSet) thing.getValue().thing).print(str, indent + 1);
+			}
+		}
+
+		static class Placeholder {
+			final ModelInstanceType<?, ?> type;
+			final Object thing;
+
+			Placeholder(ModelInstanceType<?, ?> type, Object thing) {
+				this.type = type;
+				this.thing = thing;
+			}
+		}
+	}
+
+	/** Builds an {@link ExternalModelSet} */
+	public class ExternalModelSetBuilder extends DefaultExternalModelSet {
+		ExternalModelSetBuilder(ExternalModelSetBuilder root, String path, NameChecker nameChecker) {
+			super(root, path, new LinkedHashMap<>(), nameChecker);
+		}
+
+		/**
+		 * @param <M> The model type of the new value
+		 * @param <MV> The type of the new value
+		 * @param name The name of the new value in this model
+		 * @param type The type of the new value
+		 * @param item The new value
+		 * @return This builder
+		 * @throws QonfigInterpretationException If a name conflict occurs
+		 */
+		public <M, MV extends M> ExternalModelSetBuilder with(String name, ModelInstanceType<M, MV> type, MV item)
+			throws QonfigInterpretationException {
+			if (item == null)
+				throw new NullPointerException("Installing null for " + type + "@" + name);
+			theNameChecker.checkName(name);
+			if (theComponents.containsKey(name))
+				throw new QonfigInterpretationException(
+					"A value of type " + theComponents.get(name).type + " has already been added as '" + name + "'");
+			theComponents.put(name, new DefaultExternalModelSet.Placeholder(type, item));
+			return this;
+		}
+
+		/**
+		 * @param name The name for the new sub-model
+		 * @param modelBuilder Accepts a {@link ExternalModelSetBuilder} to builder the sub-model
+		 * @return This model builder
+		 * @throws QonfigInterpretationException If a name conflict occurs
+		 */
+		public ExternalModelSetBuilder withSubModel(String name,
+			ExConsumer<ExternalModelSetBuilder, QonfigInterpretationException> modelBuilder) throws QonfigInterpretationException {
+			theNameChecker.checkName(name);
+			if (theComponents.containsKey(name))
+				throw new QonfigInterpretationException(
+					"A value of type " + theComponents.get(name).type + " has already been added as '" + name + "'");
+			ExternalModelSetBuilder subModel = new ExternalModelSetBuilder((ExternalModelSetBuilder) theRoot, pathTo(name), theNameChecker);
+			theComponents.put(name, new DefaultExternalModelSet.Placeholder(ModelTypes.Model.instance(), subModel));
+			modelBuilder.accept(subModel);
+			return this;
+		}
+
+		/**
+		 * @param name The name for the new sub-model
+		 * @return an {@link ExternalModelSetBuilder} for the new sub-model
+		 * @throws QonfigInterpretationException If a name conflict occurs
+		 */
+		public ExternalModelSetBuilder addSubModel(String name) throws QonfigInterpretationException {
+			theNameChecker.checkName(name);
+			if (theComponents.containsKey(name))
+				throw new QonfigInterpretationException(
+					"A value of type " + theComponents.get(name).type + " has already been added as '" + name + "'");
+			ExternalModelSetBuilder subModel = new ExternalModelSetBuilder((ExternalModelSetBuilder) theRoot, pathTo(name), theNameChecker);
+			theComponents.put(name, new DefaultExternalModelSet.Placeholder(ModelTypes.Model.instance(), subModel));
+			return subModel;
+		}
+
+		/** @return An {@link ExternalModelSet} configured with values from this builder */
+		public ExternalModelSet build() {
+			return _build(null, getPath());
+		}
+
+		private ExternalModelSet _build(DefaultExternalModelSet root, String path) {
+			Map<String, DefaultExternalModelSet.Placeholder> things = new LinkedHashMap<>(theComponents.size() * 3 / 2 + 1);
+			DefaultExternalModelSet model = new DefaultExternalModelSet(root, path, Collections.unmodifiableMap(things), theNameChecker);
+			if (root == null)
+				root = model;
+			for (Map.Entry<String, DefaultExternalModelSet.Placeholder> thing : theComponents.entrySet()) {
+				if (thing.getValue().type.getModelType() == ModelTypes.Model) {
+					String childPath = path.isEmpty() ? thing.getKey() : path + "." + thing.getKey();
+					things.put(thing.getKey(), new DefaultExternalModelSet.Placeholder(ModelTypes.Model.instance(), //
+						((ExternalModelSetBuilder) thing.getValue().thing)._build(root, childPath)));
+				} else
+					things.put(thing.getKey(), thing.getValue());
+			}
+			return model;
+		}
+	}
+
+	/** Default {@link ObservableModelSet} implementation */
 	public class DefaultModelSet implements ObservableModelSet {
 		private final ModelComponentId theId;
 		private final DefaultModelSet theParent;
 		private final Map<ModelComponentId, ObservableModelSet> theInheritance;
 		private final DefaultModelSet theRoot;
+		/** This model's components */
 		protected final Map<String, ModelComponentNode<?, ?>> theComponents;
+		/** The function to produce the {@link ModelSetInstance#getModelConfiguration() model configuration} for this model */
 		protected final Function<ModelSetInstance, ?> theModelConfiguration;
 		private final NameChecker theNameChecker;
 
+		/**
+		 * @param id The component id for the new model
+		 * @param root The root model for the new model, or null if the new model is to be the root
+		 * @param parent The parent model for the new model, or null if the new model is to be the root
+		 * @param inheritance The new model's {@link ObservableModelSet#getInheritance() inheritance}
+		 * @param components The {@link ObservableModelSet#getComponents() components} for the new model
+		 * @param modelConfiguration The function to produce {@link ModelSetInstance#getModelConfiguration() model configuration} for the
+		 *        new model
+		 * @param nameChecker The {@link ObservableModelSet#getNameChecker() name checker} for the new model
+		 */
 		protected DefaultModelSet(ModelComponentId id, DefaultModelSet root, DefaultModelSet parent,
-			Map<ModelComponentId, ObservableModelSet> inheritance, Map<String, ModelComponentNode<?, ?>> things,
+			Map<ModelComponentId, ObservableModelSet> inheritance, Map<String, ModelComponentNode<?, ?>> components,
 			Function<ModelSetInstance, ?> modelConfiguration, NameChecker nameChecker) {
 			theId = id;
 			theRoot = root == null ? this : root;
 			theInheritance = inheritance;
 			theParent = parent;
-			theComponents = things;
+			theComponents = components;
 			theModelConfiguration = modelConfiguration;
 			theNameChecker = nameChecker;
 		}
@@ -1066,9 +1302,16 @@ public interface ObservableModelSet extends Identifiable {
 			}
 		}
 
+		/** {@link Builder} for a {@link DefaultModelSet} */
 		public static class DefaultBuilder extends DefaultModelSet implements Builder {
 			private Function<ModelSetInstance, ?> theModelConfigurationCreator;
 
+			/**
+			 * @param id The component ID for the new model
+			 * @param root The root for the new model, or null if this is to be the root
+			 * @param parent The parent for the new model, or null if this is to be the root
+			 * @param nameChecker The {@link ObservableModelSet#getNameChecker() name checker} for the new model
+			 */
 			protected DefaultBuilder(ModelComponentId id, DefaultBuilder root, DefaultBuilder parent, NameChecker nameChecker) {
 				super(id, root, parent, new LinkedHashMap<>(), new LinkedHashMap<>(), null, nameChecker);
 			}
@@ -1152,10 +1395,22 @@ public interface ObservableModelSet extends Identifiable {
 				return this;
 			}
 
+			/**
+			 * Creates a new {@link ModelComponentNode} for a new component in this model
+			 *
+			 * @param <M> The model type of the component
+			 * @param <MV> The type of the component
+			 * @param componentId The component ID for the component
+			 * @param creator The value creator for the component
+			 * @param runtimeValue The runtime value of the component
+			 * @param extRef The external value retriever of the component
+			 * @param subModel The sub model of the component
+			 * @return The new component node
+			 */
 			protected <M, MV extends M> ModelComponentNode<M, MV> createPlaceholder(ModelComponentId componentId,
-				ValueCreator<M, MV> getter, RuntimeValuePlaceholder<M, MV> runtimeValue, ExtValueRef<M, MV> extGetter,
+				ValueCreator<M, MV> creator, RuntimeValuePlaceholder<M, MV> runtimeValue, ExtValueRef<M, MV> extRef,
 				DefaultModelSet subModel) {
-				return new ModelNodeImpl<>(componentId, getter, runtimeValue, extGetter, subModel);
+				return new ModelNodeImpl<>(componentId, creator, runtimeValue, extRef, subModel);
 			}
 
 			@Override
@@ -1178,10 +1433,19 @@ public interface ObservableModelSet extends Identifiable {
 				return model;
 			}
 
+			/**
+			 * Creates a {@link DefaultModelSet} from {@link #build()}
+			 *
+			 * @param root The root model, or null if the new model is to be the root
+			 * @param parent The parent model, or null if the new model is to be the root
+			 * @param components The component map for the new model
+			 * @param modelConfiguration The model configuration producer for the new model
+			 * @return The new model
+			 */
 			protected DefaultModelSet createModel(DefaultModelSet root, DefaultModelSet parent,
-				Map<String, ModelComponentNode<?, ?>> things, Function<ModelSetInstance, ?> modelConfiguration) {
+				Map<String, ModelComponentNode<?, ?>> components, Function<ModelSetInstance, ?> modelConfiguration) {
 				return new DefaultModelSet(getIdentity(), root, parent, QommonsUtils.unmodifiableCopy(super.getInheritance()),
-					Collections.unmodifiableMap(things), modelConfiguration, getNameChecker());
+					Collections.unmodifiableMap(components), modelConfiguration, getNameChecker());
 			}
 		}
 

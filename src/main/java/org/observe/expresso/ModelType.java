@@ -9,7 +9,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
-import java.util.function.Supplier;
 
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ValueContainer;
@@ -77,7 +76,7 @@ public abstract class ModelType<M> implements Named {
 			 */
 			M2 convert(M1 source);
 
-			ModelInstanceType<M2, ?> getType(ModelInstanceType<M1, ?> source, ModelInstanceType<M2, ?> dest);
+			ModelInstanceType<M2, ?> getType(ModelInstanceType<M1, ?> source, ModelInstanceType<M2, ?> target);
 		}
 
 		/**
@@ -277,32 +276,23 @@ public abstract class ModelType<M> implements Named {
 		};
 	}
 
-	public static <M1, M2> ModelInstanceConverter<M1, M2> converter(Function<M1, M2> converter,
-		Supplier<ModelInstanceType<M2, ?>> typeConverter) {
-		if (converter == null || typeConverter == null)
-			throw new NullPointerException();
-		return new ModelInstanceConverter<M1, M2>() {
-			private ModelInstanceType<M2, ?> theType;
-
-			@Override
-			public M2 convert(M1 source) {
-				return converter.apply(source);
-			}
-
-			@Override
-			public ModelInstanceType<M2, ?> getType() {
-				if (theType == null)
-					theType = typeConverter.get();
-				return theType;
-			}
-		};
-	}
-
+	/**
+	 * Represents a type of model value complete with parameter types
+	 *
+	 * @param <M> The wildcard-parameterized type of values of this type
+	 * @param <MV> The fully-parameterized type of values of this type
+	 */
 	public static abstract class ModelInstanceType<M, MV extends M> {
+		/** @return This type's model type */
 		public abstract ModelType<M> getModelType();
 
+		/**
+		 * @param typeIndex The type index to get the type parameter for
+		 * @return The type parameter of this type for the given index
+		 */
 		public abstract TypeToken<?> getType(int typeIndex);
 
+		/** @return All of this type's parameter types */
 		public TypeToken<?>[] getTypeList() {
 			TypeToken<?>[] types = new TypeToken[getModelType().getTypeCount()];
 			for (int t = 0; t < types.length; t++)
@@ -310,6 +300,10 @@ public abstract class ModelType<M> implements Named {
 			return types;
 		}
 
+		/**
+		 * @param value The model value to check
+		 * @return Whether, to the best of this type's ability to discern, the given value is an instance of this model type
+		 */
 		public boolean isInstance(Object value) {
 			if (!(getModelType().modelType.isInstance(value)))
 				return false;
@@ -320,6 +314,11 @@ public abstract class ModelType<M> implements Named {
 			return true;
 		}
 
+		/**
+		 * @param <M2> The type to convert to
+		 * @param target The type to convert to
+		 * @return A converter capable of converting instances of this type to instances of the given target type
+		 */
 		public <M2> ModelInstanceConverter<M, M2> convert(ModelInstanceType<M2, ? extends M2> target) {
 			if (target == null) {
 				ModelConverter<M, M2> selfConverter = (ModelConverter<M, M2>) SELF_CONVERSION_TARGETS.get(getModelType());
@@ -480,6 +479,11 @@ public abstract class ModelType<M> implements Named {
 			return str.append('>').toString();
 		}
 
+		/**
+		 * An {@link ModelInstanceType} for {@link UnTyped} models
+		 *
+		 * @param <M> The model type of this type
+		 */
 		public static abstract class UnTyped<M> extends ModelInstanceType<M, M> {
 			@Override
 			public abstract ModelType.UnTyped<M> getModelType();
@@ -495,6 +499,13 @@ public abstract class ModelType<M> implements Named {
 			}
 		}
 
+		/**
+		 * An {@link ModelInstanceType} for {@link SingleTyped} models
+		 *
+		 * @param <M> The model type of this type
+		 * @param <V> The value type of this type
+		 * @param <MV> The model value type of this type
+		 */
 		public static abstract class SingleTyped<M, V, MV extends M> extends ModelInstanceType<M, MV> {
 			private final TypeToken<V> theValueType;
 
@@ -507,6 +518,7 @@ public abstract class ModelType<M> implements Named {
 			@Override
 			public abstract ModelType.SingleTyped<M> getModelType();
 
+			/** @return The only parameter type of this type */
 			public TypeToken<V> getValueType() {
 				return theValueType;
 			}
@@ -526,6 +538,14 @@ public abstract class ModelType<M> implements Named {
 			}
 		}
 
+		/**
+		 * An {@link ModelInstanceType} for {@link DoubleTyped} models, e.g. Maps
+		 *
+		 * @param <M> The model type of this type
+		 * @param <K> The key type of this type
+		 * @param <V> The value type of this type
+		 * @param <MV> The model value type of this type
+		 */
 		public static abstract class DoubleTyped<M, K, V, MV extends M> extends ModelInstanceType<M, MV> {
 			private final TypeToken<K> theKeyType;
 			private final TypeToken<V> theValueType;
@@ -540,10 +560,12 @@ public abstract class ModelType<M> implements Named {
 			@Override
 			public abstract ModelType.DoubleTyped<M> getModelType();
 
+			/** @return The first parameter type of this type */
 			public TypeToken<K> getKeyType() {
 				return theKeyType;
 			}
 
+			/** @return The second parameter type of this type */
 			public TypeToken<V> getValueType() {
 				return theValueType;
 			}
@@ -671,6 +693,13 @@ public abstract class ModelType<M> implements Named {
 	protected void setupConversions(ConversionBuilder<M> builder) {
 	}
 
+	/**
+	 * @param <MV> The type of the value to create
+	 * @param name The name of the value to create
+	 * @param type The type of the value to create
+	 * @return A model value that minimally fulfills the contract of its model type until it is {@link HollowModelValue#satisfy(Object)
+	 *         satisfied} with a value that it shall then reflect
+	 */
 	public abstract <MV extends M> HollowModelValue<M, MV> createHollowValue(String name, ModelInstanceType<M, MV> type);
 
 	@Override
@@ -680,13 +709,18 @@ public abstract class ModelType<M> implements Named {
 			.toString();
 	}
 
-	public static String print(ModelType type) {
-		return type == null ? "Unknown" : type.toString();
-	}
-
+	/**
+	 * A model type with no parameter types
+	 *
+	 * @param <M> The type of values of this model type
+	 */
 	public static abstract class UnTyped<M> extends ModelType<M> {
 		private final ModelInstanceType.UnTyped<M> theInstance;
 
+		/**
+		 * @param name The name of the model type
+		 * @param type The super type of the model type
+		 */
 		public UnTyped(String name, Class<M> type) {
 			super(name, type);
 			theInstance = new ModelInstanceType.UnTyped<M>() {
@@ -704,6 +738,11 @@ public abstract class ModelType<M> implements Named {
 			return instance();
 		}
 
+		/**
+		 * Since there are no parameters, there's no need for more than one instance of this type
+		 *
+		 * @return The instance of this type
+		 */
 		public ModelInstanceType.UnTyped<M> instance() {
 			return theInstance;
 		}
@@ -715,7 +754,16 @@ public abstract class ModelType<M> implements Named {
 		}
 	}
 
+	/**
+	 * A model type with one parameter type
+	 *
+	 * @param <M> The type of values of this model type
+	 */
 	public static abstract class SingleTyped<M> extends ModelType<M> {
+		/**
+		 * @param name The name of the model type
+		 * @param type The super type of the model type
+		 */
 		public SingleTyped(String name, Class<M> type) {
 			super(name, type);
 		}
@@ -736,10 +784,20 @@ public abstract class ModelType<M> implements Named {
 			return createInstance(types[0]);
 		}
 
+		/**
+		 * @param <V> The parameter type for the new instance type
+		 * @param type The parameter type for the new instance type
+		 * @return The parameterized instance type
+		 */
 		public <V> ModelInstanceType.SingleTyped<M, V, ?> forType(TypeToken<V> type) {
 			return createInstance(type);
 		}
 
+		/**
+		 * @param <V> The parameter type for the new instance type
+		 * @param type The parameter type for the new instance type
+		 * @return The parameterized instance type
+		 */
 		public <V> ModelInstanceType.SingleTyped<M, V, ?> forType(Class<V> type) {
 			return forType(TypeTokens.get().of(type));
 		}
@@ -769,7 +827,16 @@ public abstract class ModelType<M> implements Named {
 		}
 	}
 
+	/**
+	 * A model type with two parameter types
+	 *
+	 * @param <M> The type of values of this model type
+	 */
 	public static abstract class DoubleTyped<M> extends ModelType<M> {
+		/**
+		 * @param name The name of the model type
+		 * @param type The super type of the model type
+		 */
 		public DoubleTyped(String name, Class<M> type) {
 			super(name, type);
 		}
@@ -791,10 +858,24 @@ public abstract class ModelType<M> implements Named {
 			return createInstance(types[0], types[1]);
 		}
 
+		/**
+		 * @param <K> The key parameter type for the new instance type
+		 * @param <V> The value parameter type for the new instance type
+		 * @param keyType The key parameter type for the new instance type
+		 * @param valueType The value parameter type for the new instance type
+		 * @return The parameterized instance type
+		 */
 		public <K, V> ModelInstanceType.DoubleTyped<M, K, V, ?> forType(TypeToken<K> keyType, TypeToken<V> valueType) {
 			return createInstance(keyType, valueType);
 		}
 
+		/**
+		 * @param <K> The key parameter type for the new instance type
+		 * @param <V> The value parameter type for the new instance type
+		 * @param keyType The key parameter type for the new instance type
+		 * @param valueType The value parameter type for the new instance type
+		 * @return The parameterized instance type
+		 */
 		public <K, V> ModelInstanceType.DoubleTyped<M, K, V, ?> forType(Class<K> keyType, Class<V> valueType) {
 			return forType(TypeTokens.get().of(keyType), TypeTokens.get().of(valueType));
 		}

@@ -44,8 +44,8 @@ import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.SimpleObservable;
 import org.observe.collect.ObservableCollection;
-import org.observe.expresso.ExpressoQIS;
 import org.observe.expresso.ExpressoBaseV0_1;
+import org.observe.expresso.ExpressoQIS;
 import org.observe.expresso.ModelType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
@@ -260,8 +260,8 @@ public class QuickBase implements QonfigInterpretation {
 		for (String key : models.getContentNames()) {
 			Object thing = models.getThing(key);
 			if (thing instanceof ObservableModelSet.ExtValueRef) {
-				ValueContainer<?, ?> vc = models.get(key, true);
-				extValues.put(key, session.getExpressoEnv().getModels().get(path + "." + key, vc.getType()));
+				ValueContainer<?, ?> vc = models.getValue(key, true);
+				extValues.put(key, session.getExpressoEnv().getModels().getValue(path + "." + key, vc.getType()));
 			} else if (thing instanceof ObservableModelSet) {
 				extValues.put(key, compileExtModels(path + "." + key, (ObservableModelSet) thing, session));
 			}
@@ -558,7 +558,7 @@ public class QuickBase implements QonfigInterpretation {
 		} else
 			buttonText = valueX.evaluate(ModelTypes.Value.forType(String.class), exS.getExpressoEnv());
 		Function<ModelSetInstance, ? extends ObservableAction<?>> action = exS.getExpressoEnv().getModels()
-			.get(session.getAttributeText("action"), ModelTypes.Action);
+			.getValue(session.getAttributeText("action"), ModelTypes.Action);
 		return new AbstractQuickComponentDef(session) {
 			@Override
 			public QuickComponent install(PanelPopulator<?, ?> container, QuickComponent.Builder builder) {

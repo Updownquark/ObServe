@@ -307,7 +307,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 					ValueContainer<Object, Object> defaultV = child.asElement("ext-model-value").getAttribute("default", childType, null);
 					model.withExternal(name, childType, extModels -> {
 						try {
-							return extModels.get(childPath, childType);
+							return extModels.getValue(childPath, childType);
 						} catch (IllegalArgumentException | QonfigInterpretationException e) {
 							if (defaultV == null)
 								throw new IllegalArgumentException(

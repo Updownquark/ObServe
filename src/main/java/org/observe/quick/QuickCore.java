@@ -321,7 +321,7 @@ public class QuickCore implements QonfigInterpretation {
 			session.as(ExpressoQIS.class).setExpressoEnv(importSession.as(ExpressoQIS.class).getExpressoEnv()).setModels(null, cv);
 		ObservableModelSet model = session.interpretChildren("models", ObservableModelSet.class).peekFirst();
 		if (model == null)
-			model = ObservableModelSet.build(ObservableModelSet.JAVA_NAME_CHECKER).build();
+			model = ObservableModelSet.build("models", ObservableModelSet.JAVA_NAME_CHECKER).build();
 		session.as(ExpressoQIS.class).setModels(model, null);
 		QuickStyleSheet styleSheet;
 		if (session.getChildren("style-sheet").isEmpty())
