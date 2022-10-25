@@ -482,7 +482,7 @@ public class QuickBase implements QonfigInterpretation {
 			else
 				throw new QonfigInterpretationException(
 					"No default format available for type " + value.getType().getType(0) + " -- format must be specified");
-			format = ObservableModelSet.literalContainer(ModelTypes.Value.forType((Class<Format<Object>>) (Class<?>) Format.class),
+			format = ValueContainer.literalContainer(ModelTypes.Value.forType((Class<Format<Object>>) (Class<?>) Format.class),
 				(Format<Object>) f, type.getSimpleName());
 		}
 		return new AbstractQuickValueEditor(session) {
@@ -1142,7 +1142,7 @@ public class QuickBase implements QonfigInterpretation {
 			else
 				throw new QonfigInterpretationException(
 					"No default format available for type " + value.getType().getType(0) + " -- format must be specified");
-			format = ObservableModelSet.literalContainer(ModelTypes.Value.forType((Class<Format<Object>>) (Class<?>) Format.class),
+			format = ValueContainer.literalContainer(ModelTypes.Value.forType((Class<Format<Object>>) (Class<?>) Format.class),
 				(Format<Object>) f, type.getSimpleName());
 		}
 		ValueContainer<SettableValue<?>, SettableValue<Integer>> rows = exS.getAttribute("rows", ModelTypes.Value.forType(Integer.class),
@@ -1313,9 +1313,9 @@ public class QuickBase implements QonfigInterpretation {
 			valueX = valueEx.evaluate(ModelTypes.Value.any(), exS.getExpressoEnv());
 		else if (session.getElement().getValue() == null) {
 			session.withWarning("No value for label");
-			valueX = ObservableModelSet.literalContainer(ModelTypes.Value.forType(String.class), "", "");
+			valueX = ValueContainer.literalContainer(ModelTypes.Value.forType(String.class), "", "");
 		} else
-			valueX = ObservableModelSet.literalContainer(ModelTypes.Value.forType(String.class), session.getValueText(),
+			valueX = ValueContainer.literalContainer(ModelTypes.Value.forType(String.class), session.getValueText(),
 				session.getValueText());
 		ObservableExpression formatX = exS.getAttributeExpression("format");
 		Function<ModelSetInstance, SettableValue<Format<Object>>> format;

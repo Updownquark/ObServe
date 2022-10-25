@@ -249,6 +249,16 @@ public abstract class ModelType<M> implements Named {
 			return types;
 		}
 
+		public boolean isInstance(Object value) {
+			if (!(getModelType().modelType.isInstance(value)))
+				return false;
+			for (int t = 0; t < getModelType().getTypeCount(); t++) {
+				if (!TypeTokens.get().isAssignable(getType(t), getModelType().getType((M) value, t)))
+					return false;
+			}
+			return true;
+		}
+
 		public <M2> ModelInstanceConverter<M, M2> convert(ModelInstanceType<M2, ? extends M2> target) {
 			if (target == null) {
 				ModelConverter<M, M2> selfConverter = (ModelConverter<M, M2>) SELF_CONVERSION_TARGETS.get(getModelType());
@@ -353,10 +363,11 @@ public abstract class ModelType<M> implements Named {
 
 		public <M2, MV2 extends M2> ValueContainer<M2, MV2> as(ValueContainer<M, MV> source, ModelInstanceType<M2, MV2> targetType)
 			throws QonfigInterpretationException {
-			ModelType.ModelInstanceConverter<M, M2> converter = source.getType().convert(targetType);
+			ModelInstanceType<M, MV> sourceType = source.getType();
+			ModelType.ModelInstanceConverter<M, M2> converter = sourceType.convert(targetType);
 			if (converter == null) {
-				source.getType().convert(targetType); // TODO DEBUG REMOVE
-				throw new QonfigInterpretationException("Cannot convert " + source + " (" + source.getType() + ") to " + targetType);
+				sourceType.convert(targetType); // TODO DEBUG REMOVE
+				throw new QonfigInterpretationException("Cannot convert " + source + " (" + sourceType + ") to " + targetType);
 			} else if (converter instanceof NoOpConverter)
 				return (ValueContainer<M2, MV2>) source;
 			else
@@ -564,6 +575,13 @@ public abstract class ModelType<M> implements Named {
 	public int getTypeCount() {
 		return theTypeCount;
 	}
+
+	/**
+	 * @param value The value to get the type of
+	 * @param typeIndex the type index to get the type for
+	 * @return The type of the given value at the given index, or null if the information cannot be determined
+	 */
+	public abstract TypeToken<?> getType(M value, int typeIndex);
 
 	public abstract ModelInstanceType<M, ?> forTypes(TypeToken<?>... types);
 

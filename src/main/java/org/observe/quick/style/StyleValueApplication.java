@@ -224,13 +224,6 @@ public class StyleValueApplication {
 			complexity = theParent.getConditionComplexity();
 			mvList.addAll(theParent.getModelValues());
 		}
-		if (!mvs.isEmpty()) {
-			// We don't need to worry about satisfying anything here. The model values just need to be available for the link level.
-			ObservableModelSet.WrappedBuilder wrappedBuilder = env.getModels().wrap();
-			for (DynamicModelValue<?, ?> mv : mvs)
-				wrappedBuilder.withCustomValue(mv.getName(), mv);
-			env = env.with(wrappedBuilder.build(), null);
-		}
 		Collections.sort(mvList,
 			(mv1, mv2) -> -Integer.compare(QuickStyleValue.getPriority(mv1, priorityAttr), QuickStyleValue.getPriority(mv2, priorityAttr)));
 		return new StyleValueApplication(theParent, theRole, theTypes, newCondition, //

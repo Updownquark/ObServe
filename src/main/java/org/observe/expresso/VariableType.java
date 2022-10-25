@@ -171,7 +171,7 @@ public interface VariableType {
 
 		@Override
 		public TypeToken<?> getType(ObservableModelSet models) throws QonfigInterpretationException {
-			ModelInstanceType<?, ?> type = models.get(thePath, true).getType();
+			ModelInstanceType<?, ?> type = models.getComponent(thePath).getType();
 			return type.getType(theTypeIndex);
 		}
 

@@ -80,10 +80,13 @@ public class ExpressoQIS implements SpecialSession<ExpressoQIS> {
 	 * @return The wrapped model instance containing data for this element's local models
 	 */
 	public ModelSetInstance wrapLocal(ModelSetInstance models) {
-		ObservableModelSet.Wrapped elementModel = (ObservableModelSet.Wrapped) get(ELEMENT_MODEL_KEY);
-		models = elementModel == null ? models : elementModel.wrap(models).build();
-		ObservableModelSet.Wrapped localModel = (ObservableModelSet.Wrapped) get(LOCAL_MODEL_KEY);
-		return localModel == null ? models : localModel.wrap(models).build();
+		ObservableModelSet elementModel = (ObservableModelSet) get(ELEMENT_MODEL_KEY);
+		if (elementModel != null && !models.getModel().isRelated(elementModel.getIdentity()))
+			models = elementModel.createInstance(models.getUntil()).withAll(models).build();
+		ObservableModelSet localModel = (ObservableModelSet) get(LOCAL_MODEL_KEY);
+		if (localModel != null && !models.getModel().isRelated(localModel.getIdentity()))
+			models = localModel.createInstance(models.getUntil()).withAll(models).build();
+		return models;
 	}
 
 	/**

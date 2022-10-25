@@ -9,7 +9,6 @@ import org.observe.expresso.ExpressoEnv;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
-import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.ValueContainer;
 import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigInterpretationException;
@@ -54,7 +53,7 @@ public class ClassInstanceExpression implements ObservableExpression {
 		TypeToken<Class<?>> classType = TypeTokens.get().keyFor(Class.class).parameterized(clazz);
 		if (!TypeTokens.get().isAssignable(type.getType(0), classType))
 			throw new QonfigInterpretationException(theType + ".class cannot be evaluated as a " + type.getType(0));
-		return (ValueContainer<M, MV>) ObservableModelSet.literalContainer(ModelTypes.Value.forType(classType), clazz, theType + ".class");
+		return (ValueContainer<M, MV>) ValueContainer.literal(ModelTypes.Value.forType(classType), clazz, theType + ".class");
 	}
 
 	@Override

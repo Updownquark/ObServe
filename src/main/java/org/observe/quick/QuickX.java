@@ -13,7 +13,6 @@ import org.observe.collect.ObservableCollection;
 import org.observe.expresso.ExpressoQIS;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet;
-import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ValueContainer;
 import org.observe.quick.QuickContainer.AbstractQuickContainer;
 import org.observe.quick.style.StyleQIS;
@@ -62,7 +61,7 @@ public class QuickX implements QonfigInterpretation {
 	@Override
 	public QonfigInterpreterCore.Builder configureInterpreter(QonfigInterpreterCore.Builder interpreter) {
 		interpreter.createWith("collapse-pane", QuickComponentDef.class, session -> interpretCollapsePane(session.as(StyleQIS.class)))//
-			.createWith("tree-table", QuickComponentDef.class, session -> interpretTreeTable(session.as(StyleQIS.class)))//
+		.createWith("tree-table", QuickComponentDef.class, session -> interpretTreeTable(session.as(StyleQIS.class)))//
 		;
 		return interpreter;
 	}
@@ -102,7 +101,7 @@ public class QuickX implements QonfigInterpretation {
 		ExpressoQIS exS = session.as(ExpressoQIS.class);
 		return QuickBase.interpretAbstractTree(session, new QuickBase.TreeMaker<T, E>() {
 			TypeToken<CategoryRenderStrategy<BetterList<T>, ?>> columnType;
-			Function<ModelSetInstance, ObservableCollection<CategoryRenderStrategy<BetterList<T>, ?>>> columnsAttr;
+			ValueContainer<ObservableCollection<?>, ObservableCollection<CategoryRenderStrategy<BetterList<T>, ?>>> columnsAttr;
 			List<QuickBase.Column<BetterList<T>, ?>> columns = new ArrayList<>();
 
 			@Override
@@ -126,7 +125,7 @@ public class QuickX implements QonfigInterpretation {
 						// The flatten here is so columns can also be specified on the table.
 						// Without this, additional columns could not be added if, as is likely, the columnsAttr collection is unmodifiable.
 						t.withColumns(ObservableCollection.flattenCollections(columnType, //
-							columnsAttr.apply(builder.getModels()), //
+							columnsAttr.get(builder.getModels()), //
 							ObservableCollection.build(columnType).build()).collect());
 					}
 					for (QuickBase.Column<BetterList<T>, ?> column : columns)

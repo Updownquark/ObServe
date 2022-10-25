@@ -67,9 +67,9 @@ public class ExternalLiteral implements ObservableExpression {
 		if (type.getModelType() != ModelTypes.Value)
 			throw new QonfigInterpretationException("'" + theExpression.getText() + "' cannot be evaluated as a " + type);
 		ObservableValue<?> value = parseValue(type.getType(0), env);
-		return ObservableModelSet.container(LambdaUtils.constantFn(//
-			(MV) SettableValue.asSettable(value, __ -> "Literal value cannot be modified"), theExpression.getText(), null), //
-			(ModelInstanceType<M, MV>) ModelTypes.Value.forType(value.getType()));
+		return ObservableModelSet.container((ModelInstanceType<M, MV>) ModelTypes.Value.forType(value.getType()), //
+			LambdaUtils.constantFn(//
+				(MV) SettableValue.asSettable(value, __ -> "Literal value cannot be modified"), theExpression.getText(), null));
 	}
 
 	@Override

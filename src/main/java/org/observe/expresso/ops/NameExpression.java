@@ -86,7 +86,7 @@ public class NameExpression implements ObservableExpression {
 		if (theContext != null)
 			mv = theContext.evaluate(ModelTypes.Value.any(), env);
 		if (mv == null)
-			mv = env.getModels().get(theNames.getFirst(), false);
+			mv = env.getModels().getComponentIfExists(theNames.getFirst());
 		if (mv != null)
 			return evaluateModel(//
 				mv, 1, new StringBuilder(theNames.get(0)), type, env.getModels());
@@ -144,14 +144,14 @@ public class NameExpression implements ObservableExpression {
 	private <M, MV extends M> ObservableModelSet.ValueContainer<M, MV> evaluateModel(ValueContainer<?, ?> mv, int nameIndex,
 		StringBuilder path, ModelInstanceType<M, MV> type, ObservableModelSet models) throws QonfigInterpretationException {
 		if (nameIndex == theNames.size())
-			return models.get(toString(), type);
+			return models.getValue(toString(), type);
 		if (mv.getType().getModelType() == ModelTypes.Model) {
 			path.append('.').append(theNames.get(nameIndex));
 			String pathStr = path.toString();
-			ValueContainer<?, ?> nextMV = models.get(pathStr, false);
+			ValueContainer<?, ?> nextMV = models.getComponentIfExists(pathStr);
 			if (nextMV != null)
 				return evaluateModel(nextMV, nameIndex + 1, path, type, models);
-			models.get(pathStr, false);// DEBUGGING
+			models.getComponentIfExists(pathStr);// DEBUGGING
 			throw new QonfigInterpretationException("'" + theNames.get(nameIndex) + "' cannot be resolved or is not a model value");
 		} else if (mv.getType().getModelType() == ModelTypes.Value) {
 			Field field;
@@ -181,9 +181,8 @@ public class NameExpression implements ObservableExpression {
 		}
 		if (nameIndex == theNames.size() - 1) {
 			if (type.getModelType() == ModelTypes.Value) {
-				return ObservableModelSet.<M, MV> container(
-					(Function<ModelSetInstance, MV>) getFieldValue(field, fieldType, context, type.getType(0)),
-					(ModelInstanceType<M, MV>) ModelTypes.Value.forType(fieldType));
+				return ObservableModelSet.<M, MV> container((ModelInstanceType<M, MV>) ModelTypes.Value.forType(fieldType),
+					msi -> (MV) getFieldValue(field, fieldType, context, type.getType(0)).get(msi));
 			} else
 				throw new IllegalStateException("Only Value types supported by fields currently"); // TODO
 		}
@@ -243,7 +242,7 @@ public class NameExpression implements ObservableExpression {
 
 					@Override
 					public SettableValue<M> get(ModelSetInstance models) {
-						return (SettableValue<M>) context.apply(models).transformReversible(fieldType,
+						return (SettableValue<M>) context.get(models).transformReversible(fieldType,
 							tx -> tx.nullToNull(true).map(ctx -> {
 								try {
 									return (F) field.get(ctx);
@@ -295,7 +294,7 @@ public class NameExpression implements ObservableExpression {
 
 						@Override
 						public SettableValue<M> get(ModelSetInstance models) {
-							return context.apply(models).transformReversible(targetType, tx -> tx.nullToNull(true).map(ctx -> {
+							return context.get(models).transformReversible(targetType, tx -> tx.nullToNull(true).map(ctx -> {
 								try {
 									return cast.apply((F) field.get(ctx));
 								} catch (IllegalAccessException e) {
@@ -343,7 +342,7 @@ public class NameExpression implements ObservableExpression {
 
 						@Override
 						public SettableValue<M> get(ModelSetInstance models) {
-							return (SettableValue<M>) context.apply(models).transform((TypeToken<Object>) targetType,
+							return (SettableValue<M>) context.get(models).transform((TypeToken<Object>) targetType,
 								tx -> tx.nullToNull(true).map(ctx -> {
 									try {
 										return cast.apply((F) field.get(ctx));
@@ -372,7 +371,7 @@ public class NameExpression implements ObservableExpression {
 		return new MethodFinder<P1, P2, P3, T>(targetType) {
 			@Override
 			public Function<ModelSetInstance, TriFunction<P1, P2, P3, T>> find3() throws QonfigInterpretationException {
-				ValueContainer<?, ?> mv = env.getModels().get(toString(), false);
+				ValueContainer<?, ?> mv = env.getModels().getComponentIfExists(toString());
 				if (mv != null) {
 					for (MethodOption option : theOptions) {
 						switch (option.size()) {
@@ -380,22 +379,22 @@ public class NameExpression implements ObservableExpression {
 							if (mv.getType().getModelType() == ModelTypes.Value) {
 								if (targetType.isAssignableFrom(mv.getType().getType(0))) {
 									// TODO resultType
-									return msi -> (p1, p2, p3) -> ((SettableValue<T>) mv.apply(msi)).get();
+									return msi -> (p1, p2, p3) -> ((SettableValue<T>) mv.get(msi)).get();
 								} else if (TypeTokens.get().isAssignable(targetType, mv.getType().getType(0))) {
-									ValueContainer<?, SettableValue<T>> mv2 = env.getModels().get(toString(),
+									ValueContainer<?, SettableValue<T>> mv2 = env.getModels().getValue(toString(),
 										ModelTypes.Value.forType(targetType));
 									// TODO resultType
-									return msi -> (p1, p2, p3) -> mv2.apply(msi).get();
+									return msi -> (p1, p2, p3) -> mv2.get(msi).get();
 								} else if (Supplier.class.isAssignableFrom(TypeTokens.getRawType(mv.getType().getType(0)))
 									&& TypeTokens.get().isAssignable(targetType,
 										mv.getType().getType(0).resolveType(Supplier.class.getTypeParameters()[0]))) {
 									// TODO resultType
-									return msi -> (p1, p2, p3) -> ((SettableValue<Supplier<? extends T>>) mv.apply(msi)).get().get();
+									return msi -> (p1, p2, p3) -> ((SettableValue<Supplier<? extends T>>) mv.get(msi)).get().get();
 								} else if (voidTarget
 									&& Runnable.class.isAssignableFrom(TypeTokens.getRawType(mv.getType().getType(0)))) {
 									// TODO resultType
 									return msi -> (p1, p2, p3) -> {
-										((SettableValue<? extends Runnable>) mv.apply(msi)).get().run();
+										((SettableValue<? extends Runnable>) mv.get(msi)).get().run();
 										return null;
 									};
 								} else
@@ -403,7 +402,7 @@ public class NameExpression implements ObservableExpression {
 							} else if (targetType.isAssignableFrom(TypeTokens.get().keyFor(mv.getType().getModelType().modelType)
 								.parameterized(mv.getType().getType(0)))) {
 								// TODO resultType
-								return msi -> (p1, p2, p3) -> (T) mv.apply(msi);
+								return msi -> (p1, p2, p3) -> (T) mv.get(msi);
 							} else
 								continue;
 						case 1:
@@ -417,7 +416,7 @@ public class NameExpression implements ObservableExpression {
 									return msi -> (p1, p2, p3) -> {
 										Object[] args = new Object[1];
 										option.getArgMaker().makeArgs(p1, p2, p3, args, msi);
-										return ((SettableValue<Function<Object, ? extends T>>) mv.apply(msi)).get().apply(args[0]);
+										return ((SettableValue<Function<Object, ? extends T>>) mv.get(msi)).get().apply(args[0]);
 									};
 								} else if (voidTarget
 									&& Consumer.class.isAssignableFrom(TypeTokens.getRawType(mv.getType().getType(0)))) {
@@ -425,7 +424,7 @@ public class NameExpression implements ObservableExpression {
 									return msi -> (p1, p2, p3) -> {
 										Object[] args = new Object[1];
 										option.getArgMaker().makeArgs(p1, p2, p3, args, msi);
-										((SettableValue<? extends Consumer<Object>>) mv.apply(msi)).get().accept(args[0]);
+										((SettableValue<? extends Consumer<Object>>) mv.get(msi)).get().accept(args[0]);
 										return null;
 									};
 								} else

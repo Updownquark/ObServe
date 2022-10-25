@@ -79,12 +79,12 @@ public class LambdaExpression implements ObservableExpression {
 								+ option.size();
 						continue;
 					}
-					ObservableModelSet.WrappedBuilder wrappedModelsBuilder = env.getModels().wrap();
-					ObservableModelSet.RuntimeValuePlaceholder<?, ?>[] placeholders = new ObservableModelSet.RuntimeValuePlaceholder[theParameters
-					                                                                                                                 .size()];
+					ObservableModelSet.Builder wrappedModelsBuilder = env.getModels().wrap("lambda");
+					ObservableModelSet.RuntimeValuePlaceholder<?, ?>[] placeholders;
+					placeholders = new ObservableModelSet.RuntimeValuePlaceholder[theParameters.size()];
 					for (int i = 0; i < theParameters.size(); i++)
 						placeholders[i] = configureParameter(wrappedModelsBuilder, theParameters.get(i), option.resolve(i));
-					ObservableModelSet.Wrapped wrappedModels = wrappedModelsBuilder.build();
+					ObservableModelSet wrappedModels = wrappedModelsBuilder.build();
 					ValueContainer<SettableValue<?>, SettableValue<T>> body;
 					try {
 						body = theBody.evaluate(ModelTypes.Value.forType(targetType), env.with(wrappedModels, null));
@@ -99,13 +99,13 @@ public class LambdaExpression implements ObservableExpression {
 						Object[] args = new Object[theParameters.size()];
 						if (argMaker != null)
 							argMaker.makeArgs(p1, p2, p3, args, msi);
-						ObservableModelSet.WrappedInstanceBuilder instBuilder = wrappedModels.wrap(msi);
+						ObservableModelSet.ModelSetInstanceBuilder instBuilder = wrappedModels.createInstance(msi.getUntil()).withAll(msi);
 						for (int i = 0; i < theParameters.size(); i++)
 							instBuilder.with((RuntimeValuePlaceholder<SettableValue<?>, SettableValue<Object>>) placeholders[i],
 								ObservableModelSet.literal((TypeToken<Object>) placeholders[i].getType().getType(0), args[i],
 									String.valueOf(args[i])));
 						ModelSetInstance wrappedMSI = instBuilder.build();
-						return body.apply(wrappedMSI).get();
+						return body.get(wrappedMSI).get();
 					};
 				}
 				if (ex != null)
@@ -117,7 +117,7 @@ public class LambdaExpression implements ObservableExpression {
 			}
 
 			private <T2> RuntimeValuePlaceholder<SettableValue<?>, SettableValue<T2>> configureParameter(
-				ObservableModelSet.WrappedBuilder modelBuilder, String paramName, TypeToken<T2> paramType) {
+				ObservableModelSet.Builder modelBuilder, String paramName, TypeToken<T2> paramType) {
 				ModelInstanceType<SettableValue<?>, SettableValue<T2>> type = ModelTypes.Value.forType(paramType);
 				return modelBuilder.withRuntimeValue(paramName, type);
 			}

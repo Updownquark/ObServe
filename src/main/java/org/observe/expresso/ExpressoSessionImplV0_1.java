@@ -150,7 +150,7 @@ public class ExpressoSessionImplV0_1 implements SpecialSessionImplementation<Exp
 	 */
 	protected <T> T parseValue(String parseText, Class<T> type, QonfigElement element, ExpressoEnv sourceEnv)
 		throws QonfigInterpretationException {
-		ObservableModelSet models = ObservableModelSet.build(ObservableModelSet.JAVA_NAME_CHECKER)//
+		ObservableModelSet models = ObservableModelSet.build(element.getType().getName() + "_value", ObservableModelSet.JAVA_NAME_CHECKER)//
 			.with("toolkit", ModelTypes.Value.forType(QonfigToolkit.class),
 				m -> SettableValue.of(QonfigToolkit.class, theToolkit, "Not modifiable"))//
 			.with("element", ModelTypes.Value.forType(QonfigElement.class),
@@ -161,8 +161,8 @@ public class ExpressoSessionImplV0_1 implements SpecialSessionImplementation<Exp
 		try {
 			return new JavaExpressoParser().parse(parseText)//
 				.evaluate(ModelTypes.Value.forType(type), env)//
-				.apply(env.getModels().createInstance(ObservableModelSet.buildExternal(ObservableModelSet.JAVA_NAME_CHECKER).build(),
-					Observable.empty()))//
+				.get(env.getModels().createInstance(ObservableModelSet.buildExternal(ObservableModelSet.JAVA_NAME_CHECKER).build(),
+					Observable.empty()).build())//
 				.get();
 		} catch (ExpressoParseException e) {
 			throw new QonfigInterpretationException(e);

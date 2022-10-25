@@ -209,7 +209,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 					if (defaultV != null && config.getConfig().getChild(config.getPath(), false, null) == null) {
 						if (config.getFormat() instanceof ObservableConfigFormat.Impl.SimpleConfigFormat)
 							format[0] = ((ObservableConfigFormat.Impl.SimpleConfigFormat<Object>) config.getFormat()).format;
-						built.set(defaultV.apply(msi).get(), null);
+						built.set(defaultV.get(msi).get(), null);
 						format[0] = null;
 					}
 					return built;
@@ -305,7 +305,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			ExpressoQIS eqis = wrap(session);
 			ObservableModelSet.Builder model = (ObservableModelSet.Builder) eqis.getExpressoEnv().getModels();
 			String configName = session.getAttributeText("config-name");
-			Function<ModelSetInstance, SettableValue<BetterFile>> configDir = eqis.getAttributeAsValue("config-dir", BetterFile.class,
+			ValueContainer<SettableValue<?>, SettableValue<BetterFile>> configDir = eqis.getAttributeAsValue("config-dir", BetterFile.class,
 				() -> {
 					return msi -> {
 						String prop = System.getProperty(configName + ".config");
@@ -319,7 +319,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			for (QonfigElement ch : session.getChildren("old-config-name"))
 				oldConfigNames.add(ch.getValueText());
 			model.setModelConfiguration(msi -> {
-				BetterFile configDirFile = configDir == null ? null : configDir.apply(msi).get();
+				BetterFile configDirFile = configDir == null ? null : configDir.get(msi).get();
 				if (configDirFile == null) {
 					String configProp = System.getProperty(configName + ".config");
 					if (configProp != null)
@@ -528,8 +528,8 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			opts -> opts.withMaxResolution(TimeUtils.DateElementType.Second).withEvaluationType(TimeUtils.RelativeInstantEvaluation.Past));
 		JFrame[] frame = new JFrame[1];
 		boolean[] backedUp = new boolean[1];
-		ObservableValue<String> title = app.getTitle().apply(msi);
-		ObservableValue<Image> icon = app.getIcon().apply(msi);
+		ObservableValue<String> title = app.getTitle().get(msi);
+		ObservableValue<Image> icon = app.getIcon().get(msi);
 		frame[0] = WindowPopulation.populateWindow(null, null, false, false)//
 			.withTitle((app == null || title.get() == null) ? "Backup" : title.get() + " Backup")//
 			.withIcon(app == null ? ObservableValue.of(Image.class, null) : icon)//
@@ -600,7 +600,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 						+ ObservableConfigFormat.class.getSimpleName() + "<" + type + ">");
 					return null;
 				} else
-					return msi -> (ObservableConfigFormat<T>) formatVC.apply(msi).get();
+					return msi -> (ObservableConfigFormat<T>) formatVC.get(msi).get();
 			} else if (Format.class.isAssignableFrom(TypeTokens.getRawType(formatVC.getType().getType(0)))) {
 				if (!type.equals(formatVC.getType().getType(0).resolveType(Format.class.getTypeParameters()[0]))) {
 					System.err.println(formatX + ": Cannot use " + formatVC.getType().getType(0) + " as " + Format.class.getSimpleName()
@@ -608,7 +608,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 					return null;
 				} else {
 					return msi -> {
-						Format<T> format = (Format<T>) formatVC.apply(msi).get();
+						Format<T> format = (Format<T>) formatVC.get(msi).get();
 						return ObservableConfigFormat.ofQommonFormat(format, //
 							valueS == null ? null : () -> {
 								try {
@@ -685,7 +685,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 					session.withError("No default format available for type " + valueType + " -- please specify a format");
 					return null;
 				}
-				format = ObservableModelSet.literalContainer(formatType, (Format<Object>) f, type.getSimpleName());
+				format = ValueContainer.literal(formatType, (Format<Object>) f, type.getSimpleName());
 				if (defaultS == null)
 					defaultValue = null;
 				else {
@@ -726,7 +726,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		interpreter.delegateToType("format", "type", ValueCreator.class);
 		interpreter.createWith("file-source", ValueCreator.class, session -> createFileSource(wrap(session)));
 		interpreter.createWith("text", ValueCreator.class, session -> {
-			return ValueCreator.constant(ObservableModelSet.literalContainer(
+			return ValueCreator.constant(ValueContainer.literal(
 				ModelTypes.Value.forType(TypeTokens.get().keyFor(Format.class).<Format<String>> parameterized(String.class)),
 				SpinnerFormat.NUMERICAL_TEXT, "text"));
 		});
@@ -739,7 +739,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 				else
 					format = format.withGroupingSeparator(sep.charAt(0));
 			}
-			return ValueCreator.constant(ObservableModelSet.literalContainer(
+			return ValueCreator.constant(ValueContainer.literal(
 				ModelTypes.Value.forType(TypeTokens.get().keyFor(Format.class).<Format<Integer>> parameterized(Integer.class)), format,
 				"int"));
 		});
@@ -752,7 +752,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 				else
 					format = format.withGroupingSeparator(sep.charAt(0));
 			}
-			return ValueCreator.constant(ObservableModelSet.literalContainer(
+			return ValueCreator.constant(ValueContainer.literal(
 				ModelTypes.Value.forType(TypeTokens.get().keyFor(Format.class).<Format<Long>> parameterized(Long.class)), format, "long"));
 		});
 		interpreter.createWith("double", ValueCreator.class, session -> createDoubleFormat(wrap(session)));
@@ -811,20 +811,20 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 				}
 			}
 			ObservableExpression mad = session.getAttributeExpression("max-archive-depth");
-			Supplier<Function<ModelSetInstance, SettableValue<Integer>>> maxZipDepth = () -> {
+			Supplier<ValueContainer<SettableValue<?>, SettableValue<Integer>>> maxZipDepth = () -> {
 				try {
 					return mad.evaluate(ModelTypes.Value.forType(int.class), session.getExpressoEnv());
 				} catch (QonfigInterpretationException e) {
 					session.withError(e.getMessage(), e);
-					return __ -> ObservableModelSet.literal(TypeTokens.get().INT, 10, "10");
+					return ValueContainer.literal(TypeTokens.get().INT, 10, "10");
 				}
 			};
 
 			Supplier<Function<ModelSetInstance, SettableValue<FileDataSource>>> root = source;
 			source = () -> {
-				Function<ModelSetInstance, SettableValue<Integer>> mzd = maxZipDepth == null ? null : maxZipDepth.get();
+				ValueContainer<SettableValue<?>, SettableValue<Integer>> mzd = maxZipDepth == null ? null : maxZipDepth.get();
 				return modelSet -> {
-					SettableValue<Integer> zd = mzd == null ? null : mzd.apply(modelSet);
+					SettableValue<Integer> zd = mzd == null ? null : mzd.get(modelSet);
 					return root.get().apply(modelSet).transformReversible(FileDataSource.class, //
 						tx -> tx.nullToNull(true).map(fs -> {
 							ArchiveEnabledFileSource aefs = new ArchiveEnabledFileSource(fs).withArchival(archiveMethods);
@@ -960,19 +960,19 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		ObservableExpression workingDirEx = session.getAttributeExpression("working-dir");
 		boolean allowEmpty = session.getAttribute("allow-empty", boolean.class);
 		return () -> {
-			Function<ModelSetInstance, SettableValue<BetterFile.FileDataSource>> fileSource;
-			Function<ModelSetInstance, SettableValue<String>> workingDir;
+			ValueContainer<SettableValue<?>, SettableValue<BetterFile.FileDataSource>> fileSource;
+			ValueContainer<SettableValue<?>, SettableValue<String>> workingDir;
 			try {
 				if (fileSourceEx != null)
 					fileSource = fileSourceEx.evaluate(//
 						ModelTypes.Value.forType(BetterFile.FileDataSource.class), session.getExpressoEnv());
 				else
-					fileSource = ObservableModelSet.literalContainer(ModelTypes.Value.forType(BetterFile.FileDataSource.class),
-						new NativeFileSource(), "native");
+					fileSource = ValueContainer.literal(ModelTypes.Value.forType(BetterFile.FileDataSource.class), new NativeFileSource(),
+						"native");
 			} catch (QonfigInterpretationException e) {
 				session.withError(e.getMessage(), e);
-				fileSource = ObservableModelSet.literalContainer(ModelTypes.Value.forType(BetterFile.FileDataSource.class),
-					new NativeFileSource(), "native");
+				fileSource = ValueContainer.literal(ModelTypes.Value.forType(BetterFile.FileDataSource.class), new NativeFileSource(),
+					"native");
 			}
 			try {
 				if (workingDirEx != null)
@@ -983,18 +983,18 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 				session.withError(e.getMessage(), e);
 				workingDir = null;
 			}
-			Function<ModelSetInstance, SettableValue<BetterFile.FileDataSource>> fileSource2 = fileSource;
-			Function<ModelSetInstance, SettableValue<String>> workingDir2 = workingDir;
+			ValueContainer<SettableValue<?>, SettableValue<BetterFile.FileDataSource>> fileSource2 = fileSource;
+			ValueContainer<SettableValue<?>, SettableValue<String>> workingDir2 = workingDir;
 			TypeToken<Format<BetterFile>> fileFormatType = TypeTokens.get().keyFor(Format.class)
 				.<Format<BetterFile>> parameterized(BetterFile.class);
 			return new ObservableModelSet.AbstractValueContainer<SettableValue<?>, SettableValue<Format<BetterFile>>>(
 				ModelTypes.Value.forType(fileFormatType)) {
 				@Override
 				public SettableValue<Format<BetterFile>> get(ModelSetInstance models) {
-					SettableValue<BetterFile.FileDataSource> fds = fileSource2.apply(models);
+					SettableValue<BetterFile.FileDataSource> fds = fileSource2.get(models);
 					return SettableValue.asSettable(//
 						fds.transform(fileFormatType, tx -> tx.map(fs -> {
-							BetterFile workingDirFile = BetterFile.at(fs, workingDir2 == null ? "." : workingDir2.apply(models).get());
+							BetterFile workingDirFile = BetterFile.at(fs, workingDir2 == null ? "." : workingDir2.get(models).get());
 							return new BetterFile.FileFormat(fs, workingDirFile, allowEmpty);
 						})), //
 						__ -> "Not reversible");

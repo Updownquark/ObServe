@@ -8,6 +8,7 @@ import java.util.Map;
 import org.observe.collect.ObservableCollection;
 import org.observe.expresso.ExpressoQIS;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.quick.style.StyleQIS;
 import org.qommons.config.QonfigAttributeDef;
 import org.qommons.config.QonfigInterpretationException;
 
@@ -86,14 +87,13 @@ public class QuickComponent {
 			theDefinition = definition;
 			theParent = parent;
 			ExpressoQIS exSession;
-			definition.getSession().installParentModels(models, parent == null ? null : parent.getModels());
+			StyleQIS.installParentModels(models, parent == null ? null : parent.getModels());
 			try {
 				exSession = definition.getSession().as(ExpressoQIS.class);
 			} catch (QonfigInterpretationException e) {
 				throw new IllegalStateException("Should have happened earlier", e);
 			}
-			theModelsInstance = definition.getSession().as(ExpressoQIS.class).wrapLocal(models);
-			exSession.startInterpretingAs(Component.class, models);
+			theModelsInstance = exSession.wrapLocal(models);
 			theAttributeValues = new LinkedHashMap<>();
 			theChildren = ObservableCollection.build(QuickComponent.class).build();
 		}
@@ -145,14 +145,4 @@ public class QuickComponent {
 			return "Building " + theDefinition.toString();
 		}
 	}
-
-	// static class DefaultModelSupport<T> extends ObservableValue.ConstantObservableValue<T> implements ModelValueSupport<T> {
-	// public DefaultModelSupport(TypeToken<T> type) {
-	// super(type, TypeTokens.get().getPrimitiveDefault(type));
-	// }
-	//
-	// @Override
-	// public void install(Component component) {
-	// }
-	// }
 }

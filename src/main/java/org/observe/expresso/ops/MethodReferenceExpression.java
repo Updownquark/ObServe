@@ -134,7 +134,7 @@ public class MethodReferenceExpression implements ObservableExpression {
 					setResultType(result.returnType);
 					MethodOption option = theOptions.get(result.argListOption);
 					return msi -> (p1, p2, p3) -> {
-						Object ctxV = ctx.apply(msi).get();
+						Object ctxV = ctx.get(msi).get();
 						Object[] args = new Object[option.size()];
 						option.getArgMaker().makeArgs(p1, p2, p3, args, msi);
 						try {

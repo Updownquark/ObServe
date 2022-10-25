@@ -87,14 +87,15 @@ public class DynamicModelValue<M, MV extends M> implements ValueContainer<M, MV>
 	 */
 	public static <M, MV extends M> void satisfyDynamicValue(String name, ModelInstanceType<M, MV> type, ModelSetInstance model, MV value) {
 		try { // Check for the value rigorously
-			model.getModel().get(name, type);
+			model.getModel().getValue(name, type);
 		} catch (QonfigInterpretationException e) {
-			throw new IllegalArgumentException("No such dynamic model value: " + model.getModel().getPath() + "." + name);
+			throw new IllegalArgumentException("No such dynamic model value: " + model.getModel().getIdentity() + "." + name);
 		}
-		MV dynamicValue = model.get(name, type);
+		ObservableModelSet.ModelComponentNode<?, ?> modelValue = model.getModel().getComponentIfExists(name);
+		MV dynamicValue = (MV) model.get(modelValue);
 		if (!(dynamicValue instanceof ModelType.HollowModelValue))
-			throw new IllegalArgumentException("No such dynamic model value: " + model.getModel().getPath() + "." + name);
-		ModelType.HollowModelValue<M, MV> hollow = (ModelType.HollowModelValue<M, MV>) model.get(name, type);
+			throw new IllegalArgumentException("No such dynamic model value: " + model.getModel().getIdentity() + "." + name);
+		ModelType.HollowModelValue<M, MV> hollow = (ModelType.HollowModelValue<M, MV>) dynamicValue;
 		hollow.satisfy(value);
 	}
 
@@ -111,14 +112,43 @@ public class DynamicModelValue<M, MV extends M> implements ValueContainer<M, MV>
 	 */
 	public static <M, MV extends M> boolean isDynamicValueSatisfied(String name, ModelInstanceType<M, MV> type, ModelSetInstance model) {
 		try { // Check for the value rigorously
-			model.getModel().get(name, type);
+			model.getModel().getValue(name, type);
 		} catch (QonfigInterpretationException e) {
-			throw new IllegalArgumentException("No such dynamic model value: " + model.getModel().getPath() + "." + name);
+			throw new IllegalArgumentException("No such dynamic model value: " + model.getModel().getIdentity() + "." + name);
 		}
-		MV dynamicValue = model.get(name, type);
+		ObservableModelSet.ModelComponentNode<?, ?> modelValue = model.getModel().getComponentIfExists(name);
+		MV dynamicValue = (MV) model.get(modelValue);
 		if (!(dynamicValue instanceof ModelType.HollowModelValue))
-			throw new IllegalArgumentException("No such dynamic model value: " + model.getModel().getPath() + "." + name);
-		ModelType.HollowModelValue<M, MV> hollow = (ModelType.HollowModelValue<M, MV>) model.get(name, type);
+			throw new IllegalArgumentException("No such dynamic model value: " + model.getModel().getIdentity() + "." + name);
+		ModelType.HollowModelValue<M, MV> hollow = (ModelType.HollowModelValue<M, MV>) dynamicValue;
 		return hollow.isSatisfied();
 	}
+
+	/**
+	 * Called by some implementation to satisfy a metadata-declared dynamic (interpreted-value-specific) model value, if it is not already
+	 * satisfied.
+	 *
+	 * @param <M> The model type of the value
+	 * @param <MV> The type of the value
+	 * @param name The name of the value
+	 * @param type The type of the value
+	 * @param model The model instance to satisfy the value in (should be {@link ExpressoQIS#wrapLocal(ModelSetInstance) wrapLocal}'ed)
+	 * @param value The value to use to satisfy the model value
+	 */
+	public static <M, MV extends M> void satisfyDynamicValueIfUnsatisfied(String name, ModelInstanceType<M, MV> type,
+		ModelSetInstance model, MV value) {
+		try { // Check for the value rigorously
+			model.getModel().getValue(name, type);
+		} catch (QonfigInterpretationException e) {
+			throw new IllegalArgumentException("No such dynamic model value: " + model.getModel().getIdentity() + "." + name);
+		}
+		ObservableModelSet.ModelComponentNode<?, ?> modelValue = model.getModel().getComponentIfExists(name);
+		MV dynamicValue = (MV) model.get(modelValue);
+		if (!(dynamicValue instanceof ModelType.HollowModelValue))
+			throw new IllegalArgumentException("No such dynamic model value: " + model.getModel().getIdentity() + "." + name);
+		ModelType.HollowModelValue<M, MV> hollow = (ModelType.HollowModelValue<M, MV>) dynamicValue;
+		if (!hollow.isSatisfied())
+			hollow.satisfy(value);
+	}
+
 }

@@ -9,7 +9,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
 import java.util.Set;
-import java.util.function.Function;
 
 import javax.swing.JDialog;
 import javax.swing.JFrame;
@@ -23,7 +22,7 @@ import org.observe.expresso.ExpressoQIS;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.ExternalModelSet;
-import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.ObservableModelSet.ValueContainer;
 import org.observe.quick.style.StyleQIS;
 import org.observe.util.TypeTokens;
 import org.qommons.QommonsUtils;
@@ -72,8 +71,8 @@ public class QuickSwing implements QonfigInterpretation {
 		interpreter
 		.extend(interpreter.getToolkit().getElement("quick"), interpreter.getToolkit().getElement("quick-debug"), QuickDocument.class,
 			QuickDocument.class, //
-				(doc, session) -> extendQuickDebug(doc, session.as(StyleQIS.class), interpreter.getToolkit()))//
-			.modifyWith("quick", QuickDocument.class, (doc, session) -> modifyQuickDocument(doc, session.as(StyleQIS.class)))//
+			(doc, session) -> extendQuickDebug(doc, session.as(StyleQIS.class), interpreter.getToolkit()))//
+		.modifyWith("quick", QuickDocument.class, (doc, session) -> modifyQuickDocument(doc, session.as(StyleQIS.class)))//
 		;
 		return interpreter;
 	}
@@ -106,8 +105,8 @@ public class QuickSwing implements QonfigInterpretation {
 			}
 		}
 
-		Function<ModelSetInstance, SettableValue<Integer>> xVal, yVal, wVal, hVal;
-		Function<ModelSetInstance, SettableValue<Boolean>> vVal;
+		ValueContainer<SettableValue<?>, SettableValue<Integer>> xVal, yVal, wVal, hVal;
+		ValueContainer<SettableValue<?>, SettableValue<Boolean>> vVal;
 		xVal = exS.getAttribute("debug-x", ModelTypes.Value.forType(int.class),
 			() -> msi -> SettableValue.build(int.class).withDescription("x").withValue(0).build());
 		yVal = exS.getAttribute("debug-y", ModelTypes.Value.forType(int.class),
@@ -119,10 +118,11 @@ public class QuickSwing implements QonfigInterpretation {
 		vVal = exS.getAttribute("debug-visible", ModelTypes.Value.forType(boolean.class),
 			() -> msi -> SettableValue.build(boolean.class).withDescription("v").withValue(true).build());
 
-		Function<ModelSetInstance, SettableValue<QuickComponent>> selectedComponent = theDebugDoc.getHead().getModels()
+		ValueContainer<SettableValue<?>, SettableValue<QuickComponent>> selectedComponent = theDebugDoc.getHead()
+			.getModels()
 			.get("debug.selectedComponent", ModelTypes.Value.forType(QuickComponent.class));
-		// Function<ModelSetInstance, SettableValue<Integer>> scX, scY, scW, scH;
-		// Function<ModelSetInstance, SettableValue<Boolean>> scV;
+		// ValueContainer<SettableValue<?>, SettableValue<Integer>> scX, scY, scW, scH;
+		// ValueContainer<SettableValue<?>, SettableValue<Boolean>> scV;
 		// scX=msi->
 
 		return new QuickDocument() {
@@ -142,55 +142,55 @@ public class QuickSwing implements QonfigInterpretation {
 			}
 
 			@Override
-			public Function<ModelSetInstance, SettableValue<String>> getTitle() {
+			public ValueContainer<SettableValue<?>, SettableValue<String>> getTitle() {
 				return doc.getTitle();
 			}
 
 			@Override
-			public void setTitle(Function<ModelSetInstance, SettableValue<String>> title) {
+			public void setTitle(ValueContainer<SettableValue<?>, SettableValue<String>> title) {
 				doc.setTitle(title);
 			}
 
 			@Override
-			public Function<ModelSetInstance, SettableValue<Image>> getIcon() {
+			public ValueContainer<SettableValue<?>, SettableValue<Image>> getIcon() {
 				return doc.getIcon();
 			}
 
 			@Override
-			public void setIcon(Function<ModelSetInstance, SettableValue<Image>> icon) {
+			public void setIcon(ValueContainer<SettableValue<?>, SettableValue<Image>> icon) {
 				doc.setIcon(icon);
 			}
 
 			@Override
-			public Function<ModelSetInstance, SettableValue<Integer>> getX() {
+			public ValueContainer<SettableValue<?>, SettableValue<Integer>> getX() {
 				return doc.getX();
 			}
 
 			@Override
-			public Function<ModelSetInstance, SettableValue<Integer>> getY() {
+			public ValueContainer<SettableValue<?>, SettableValue<Integer>> getY() {
 				return doc.getY();
 			}
 
 			@Override
-			public Function<ModelSetInstance, SettableValue<Integer>> getWidth() {
+			public ValueContainer<SettableValue<?>, SettableValue<Integer>> getWidth() {
 				return doc.getWidth();
 			}
 
 			@Override
-			public Function<ModelSetInstance, SettableValue<Integer>> getHeight() {
+			public ValueContainer<SettableValue<?>, SettableValue<Integer>> getHeight() {
 				return doc.getHeight();
 			}
 
 			@Override
-			public QuickDocument withBounds(Function<ModelSetInstance, SettableValue<Integer>> x,
-				Function<ModelSetInstance, SettableValue<Integer>> y, Function<ModelSetInstance, SettableValue<Integer>> width,
-				Function<ModelSetInstance, SettableValue<Integer>> height) {
+			public QuickDocument withBounds(ValueContainer<SettableValue<?>, SettableValue<Integer>> x,
+				ValueContainer<SettableValue<?>, SettableValue<Integer>> y, ValueContainer<SettableValue<?>, SettableValue<Integer>> width,
+				ValueContainer<SettableValue<?>, SettableValue<Integer>> height) {
 				doc.withBounds(x, y, width, height);
 				return this;
 			}
 
 			@Override
-			public Function<ModelSetInstance, SettableValue<Boolean>> getVisible() {
+			public ValueContainer<SettableValue<?>, SettableValue<Boolean>> getVisible() {
 				return doc.getVisible();
 			}
 
@@ -200,7 +200,7 @@ public class QuickSwing implements QonfigInterpretation {
 			}
 
 			@Override
-			public QuickDocument setVisible(Function<ModelSetInstance, SettableValue<Boolean>> visible) {
+			public QuickDocument setVisible(ValueContainer<SettableValue<?>, SettableValue<Boolean>> visible) {
 				doc.setVisible(visible);
 				return this;
 			}
@@ -234,14 +234,14 @@ public class QuickSwing implements QonfigInterpretation {
 							.buildExternal(ObservableModelSet.JAVA_NAME_CHECKER);
 						try {
 							ObservableModelSet.ExternalModelSetBuilder debugUiModels = debugExtModelsBuilder.addSubModel("ext");
-							debugUiModels.with("x", ModelTypes.Value.forType(int.class), xVal.apply(theContentUi.getModels()));
-							debugUiModels.with("y", ModelTypes.Value.forType(int.class), yVal.apply(theContentUi.getModels()));
-							debugUiModels.with("width", ModelTypes.Value.forType(int.class), wVal.apply(theContentUi.getModels()));
-							debugUiModels.with("height", ModelTypes.Value.forType(int.class), hVal.apply(theContentUi.getModels()));
+							debugUiModels.with("x", ModelTypes.Value.forType(int.class), xVal.get(theContentUi.getModels()));
+							debugUiModels.with("y", ModelTypes.Value.forType(int.class), yVal.get(theContentUi.getModels()));
+							debugUiModels.with("width", ModelTypes.Value.forType(int.class), wVal.get(theContentUi.getModels()));
+							debugUiModels.with("height", ModelTypes.Value.forType(int.class), hVal.get(theContentUi.getModels()));
 							debugUiModels.with("ui", ModelTypes.Value.forType(QuickComponent.class), theRoot);
 							debugUiModels.with("cursorX", ModelTypes.Value.forType(int.class), theCursorX);
 							debugUiModels.with("cursorY", ModelTypes.Value.forType(int.class), theCursorY);
-							debugUiModels.with("visible", ModelTypes.Value.forType(boolean.class), vVal.apply(theContentUi.getModels()));
+							debugUiModels.with("visible", ModelTypes.Value.forType(boolean.class), vVal.get(theContentUi.getModels()));
 						} catch (QonfigInterpretationException e) {
 							e.printStackTrace();
 						}
@@ -249,7 +249,7 @@ public class QuickSwing implements QonfigInterpretation {
 					}
 
 					ExternalModelSet createOverlayModel() {
-						SettableValue<QuickComponent> component = selectedComponent.apply(theDebugUi.getModels());
+						SettableValue<QuickComponent> component = selectedComponent.get(theDebugUi.getModels());
 						SettableValue<Integer> x = SettableValue.build(int.class).withDescription("x").withValue(0).build();
 						SettableValue<Integer> y = SettableValue.build(int.class).withDescription("y").withValue(0).build();
 						SettableValue<Integer> w = SettableValue.build(int.class).withDescription("w").withValue(0).build();

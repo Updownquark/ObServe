@@ -59,6 +59,11 @@ public class ModelTypes {
 	public static final ModelType.UnTyped<ObservableModelSet> Model = new ModelType.UnTyped<ObservableModelSet>("Model",
 		ObservableModelSet.class) {
 		@Override
+		public TypeToken<?> getType(ObservableModelSet value, int typeIndex) {
+			throw new IndexOutOfBoundsException(typeIndex + " of 0");
+		}
+
+		@Override
 		public <MV extends ObservableModelSet> HollowModelValue<ObservableModelSet, MV> createHollowValue(String name,
 			ModelInstanceType<ObservableModelSet, MV> type) {
 			throw new IllegalStateException("Hollow values not supported for models");
@@ -215,6 +220,14 @@ public class ModelTypes {
 		}
 
 		@Override
+		public TypeToken<?> getType(Observable<?> value, int typeIndex) {
+			if (typeIndex == 0)
+				return null;
+			else
+				throw new IndexOutOfBoundsException(typeIndex + " of 1");
+		}
+
+		@Override
 		public ModelInstanceType<Observable<?>, Observable<?>> any() {
 			return (ModelInstanceType<Observable<?>, Observable<?>>) super.any();
 		}
@@ -315,6 +328,14 @@ public class ModelTypes {
 	public static class ActionModelType extends ModelType.SingleTyped<ObservableAction<?>> {
 		private ActionModelType() {
 			super("Action", (Class<ObservableAction<?>>) (Class<?>) ObservableAction.class);
+		}
+
+		@Override
+		public TypeToken<?> getType(ObservableAction<?> value, int typeIndex) {
+			if (typeIndex == 0)
+				return value.getType();
+			else
+				throw new IndexOutOfBoundsException(typeIndex + " of 1");
 		}
 
 		@Override
@@ -449,8 +470,22 @@ public class ModelTypes {
 
 	/** See {@link ModelTypes#Value} */
 	public static class ValueModelType extends ModelType.SingleTyped<SettableValue<?>> {
+		public final ModelInstanceType.SingleTyped<SettableValue<?>, Boolean, SettableValue<Boolean>> BOOLEAN = forType(boolean.class);
+		public final ModelInstanceType.SingleTyped<SettableValue<?>, Character, SettableValue<Character>> CHAR = forType(char.class);
+		public final ModelInstanceType.SingleTyped<SettableValue<?>, Byte, SettableValue<Byte>> BYTE = forType(byte.class);
+		public final ModelInstanceType.SingleTyped<SettableValue<?>, Integer, SettableValue<Integer>> INT = forType(int.class);
+		public final ModelInstanceType.SingleTyped<SettableValue<?>, Double, SettableValue<Double>> DOUBLE = forType(double.class);
+
 		private ValueModelType() {
 			super("Value", (Class<SettableValue<?>>) (Class<?>) SettableValue.class);
+		}
+
+		@Override
+		public TypeToken<?> getType(SettableValue<?> value, int typeIndex) {
+			if (typeIndex == 0)
+				return value.getType();
+			else
+				throw new IndexOutOfBoundsException(typeIndex + " of 1");
 		}
 
 		@Override
@@ -817,6 +852,14 @@ public class ModelTypes {
 		}
 
 		@Override
+		public TypeToken<?> getType(ObservableCollection<?> value, int typeIndex) {
+			if (typeIndex == 0)
+				return value.getType();
+			else
+				throw new IndexOutOfBoundsException(typeIndex + " of 1");
+		}
+
+		@Override
 		public ModelInstanceType<ObservableCollection<?>, ObservableCollection<?>> any() {
 			return (ModelInstanceType<ObservableCollection<?>, ObservableCollection<?>>) super.any();
 		}
@@ -900,6 +943,14 @@ public class ModelTypes {
 	public static class SortedCollectionModelType extends ModelType.SingleTyped<ObservableSortedCollection<?>> {
 		SortedCollectionModelType() {
 			super("SortedCollection", (Class<ObservableSortedCollection<?>>) (Class<?>) ObservableSortedCollection.class);
+		}
+
+		@Override
+		public TypeToken<?> getType(ObservableSortedCollection<?> value, int typeIndex) {
+			if (typeIndex == 0)
+				return value.getType();
+			else
+				throw new IndexOutOfBoundsException(typeIndex + " of 1");
 		}
 
 		@Override
@@ -999,6 +1050,14 @@ public class ModelTypes {
 		}
 
 		@Override
+		public TypeToken<?> getType(ObservableSet<?> value, int typeIndex) {
+			if (typeIndex == 0)
+				return value.getType();
+			else
+				throw new IndexOutOfBoundsException(typeIndex + " of 1");
+		}
+
+		@Override
 		public ModelInstanceType<ObservableSet<?>, ObservableSet<?>> any() {
 			return (ModelInstanceType<ObservableSet<?>, ObservableSet<?>>) super.any();
 		}
@@ -1080,6 +1139,14 @@ public class ModelTypes {
 	public static class SortedSetModelType extends ModelType.SingleTyped<ObservableSortedSet<?>> {
 		SortedSetModelType() {
 			super("SortedSet", (Class<ObservableSortedSet<?>>) (Class<?>) ObservableSortedSet.class);
+		}
+
+		@Override
+		public TypeToken<?> getType(ObservableSortedSet<?> value, int typeIndex) {
+			if (typeIndex == 0)
+				return value.getType();
+			else
+				throw new IndexOutOfBoundsException(typeIndex + " of 1");
 		}
 
 		@Override
@@ -1174,6 +1241,14 @@ public class ModelTypes {
 		}
 
 		@Override
+		public TypeToken<?> getType(ObservableValueSet<?> value, int typeIndex) {
+			if (typeIndex == 0)
+				return value.getValues().getType();
+			else
+				throw new IndexOutOfBoundsException(typeIndex + " of 1");
+		}
+
+		@Override
 		public ModelInstanceType<ObservableValueSet<?>, ObservableValueSet<?>> any() {
 			return (ModelInstanceType<ObservableValueSet<?>, ObservableValueSet<?>>) super.any();
 		}
@@ -1253,6 +1328,16 @@ public class ModelTypes {
 	public static class MapModelType extends ModelType.DoubleTyped<ObservableMap<?, ?>> {
 		MapModelType() {
 			super("Map", (Class<ObservableMap<?, ?>>) (Class<?>) ObservableMap.class);
+		}
+
+		@Override
+		public TypeToken<?> getType(ObservableMap<?, ?> value, int typeIndex) {
+			if (typeIndex == 0)
+				return value.getKeyType();
+			else if (typeIndex == 1)
+				return value.getValueType();
+			else
+				throw new IndexOutOfBoundsException(typeIndex + " of 2");
 		}
 
 		@Override
@@ -1338,6 +1423,16 @@ public class ModelTypes {
 	public static class SortedMapModelType extends ModelType.DoubleTyped<ObservableSortedMap<?, ?>> {
 		SortedMapModelType() {
 			super("SortedMap", (Class<ObservableSortedMap<?, ?>>) (Class<?>) ObservableSortedMap.class);
+		}
+
+		@Override
+		public TypeToken<?> getType(ObservableSortedMap<?, ?> value, int typeIndex) {
+			if (typeIndex == 0)
+				return value.getKeyType();
+			else if (typeIndex == 1)
+				return value.getValueType();
+			else
+				throw new IndexOutOfBoundsException(typeIndex + " of 2");
 		}
 
 		@Override
@@ -1429,6 +1524,16 @@ public class ModelTypes {
 	public static class MultiMapModelType extends ModelType.DoubleTyped<ObservableMultiMap<?, ?>> {
 		MultiMapModelType() {
 			super("MultiMap", (Class<ObservableMultiMap<?, ?>>) (Class<?>) ObservableMultiMap.class);
+		}
+
+		@Override
+		public TypeToken<?> getType(ObservableMultiMap<?, ?> value, int typeIndex) {
+			if (typeIndex == 0)
+				return value.getKeyType();
+			else if (typeIndex == 1)
+				return value.getValueType();
+			else
+				throw new IndexOutOfBoundsException(typeIndex + " of 2");
 		}
 
 		@Override
@@ -1536,6 +1641,16 @@ public class ModelTypes {
 	public static class SortedMultiMapModelType extends ModelType.DoubleTyped<ObservableSortedMultiMap<?, ?>> {
 		SortedMultiMapModelType() {
 			super("SortedMultiMap", (Class<ObservableSortedMultiMap<?, ?>>) (Class<?>) ObservableSortedMultiMap.class);
+		}
+
+		@Override
+		public TypeToken<?> getType(ObservableSortedMultiMap<?, ?> value, int typeIndex) {
+			if (typeIndex == 0)
+				return value.getKeyType();
+			else if (typeIndex == 1)
+				return value.getValueType();
+			else
+				throw new IndexOutOfBoundsException(typeIndex + " of 2");
 		}
 
 		@Override

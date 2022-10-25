@@ -12,6 +12,7 @@ import org.junit.Test;
 import org.observe.Observable;
 import org.observe.ObservableAction;
 import org.observe.SettableValue;
+import org.observe.expresso.ObservableModelSet.ModelComponentNode;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.qommons.config.QonfigApp;
 import org.qommons.config.QonfigInterpretationException;
@@ -54,26 +55,29 @@ public class ExpressoTests {
 		ObservableModelSet.ExternalModelSet extModels = ObservableModelSet.buildExternal(ObservableModelSet.JAVA_NAME_CHECKER)//
 			.withSubModel("ext", ext -> ext.with("actionName", ModelTypes.Value.forType(String.class), theActionName))//
 			.build();
-		theModelInstance = expresso.getModels().createInstance(extModels, Observable.empty());
+		theModelInstance = expresso.getModels().createInstance(extModels, Observable.empty()).build();
 
-		ENTITY_COMPARE = expresso.getModels().get("models.sortedEntityList", ModelTypes.SortedCollection.forType(ExpressoTestEntity.class))
+		ENTITY_COMPARE = expresso.getModels()
+			.getValue("models.sortedEntityList", ModelTypes.SortedCollection.forType(ExpressoTestEntity.class))
 			.get(theModelInstance).comparator();
 
 		theTestActions = new HashMap<>();
 		ObservableModelSet tests = expresso.getModels().getSubModel("tests");
-		for (String modelName : tests.getContentNames()) {
-			Object thing = tests.getThing(modelName);
-			if (!(thing instanceof ObservableModelSet))
+		for (ModelComponentNode<?, ?> component : tests.getComponents().values()) {
+			if (component.getModel() == null)
 				continue;
-			ObservableModelSet subModel = (ObservableModelSet) thing;
+			ObservableModelSet subModel = component.getModel();
 			Map<String, ObservableAction<?>> actions = new LinkedHashMap<>();
-			theTestActions.put(modelName, actions);
-			for (String actionName : subModel.getContentNames()) {
-				try {
-					actions.put(actionName, theModelInstance.get(//
-						"tests." + modelName + "." + actionName, ModelTypes.Action.any()));
-				} catch (IllegalArgumentException e) {
-					// Not an action, just don't add it
+			theTestActions.put(subModel.getIdentity().getName(), actions);
+			for (ModelComponentNode<?, ?> action : subModel.getComponents().values()) {
+				if (action.getType().getModelType() == ModelTypes.Action) {
+					try {
+						actions.put(action.getIdentity().getName(), TEST_EXPRESSO.getModels().getValue(//
+							"tests." + subModel.getIdentity().getName() + "." + action.getIdentity().getName(), ModelTypes.Action.any())
+							.get(theModelInstance));
+					} catch (IllegalArgumentException e) {
+						// Not an action, just don't add it
+					}
 				}
 			}
 		}

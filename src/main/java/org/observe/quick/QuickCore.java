@@ -48,14 +48,13 @@ import org.observe.expresso.DynamicModelValue;
 import org.observe.expresso.Expression.ExpressoParseException;
 import org.observe.expresso.ExpressoEnv;
 import org.observe.expresso.ExpressoQIS;
+import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ValueContainer;
 import org.observe.expresso.QonfigExpression;
-import org.observe.expresso.SuppliedModelValue;
-import org.observe.quick.QuickCore.MouseValueSupport;
 import org.observe.quick.style.QuickElementStyle;
 import org.observe.quick.style.QuickElementStyle.QuickElementStyleAttribute;
 import org.observe.quick.style.QuickStyleSheet;
@@ -136,8 +135,9 @@ public class QuickCore implements QonfigInterpretation {
 		return QommonsUtils.unmodifiableDistinctCopy(ExpressoQIS.class, StyleQIS.class);
 	}
 
-	public static Function<ModelSetInstance, SettableValue<QuickPosition>> parsePosition(QonfigExpression expression, ExpressoQIS session)
-		throws QonfigInterpretationException {
+	public static ValueContainer<SettableValue<?>, SettableValue<QuickPosition>> parsePosition(QonfigExpression expression,
+		ExpressoQIS session)
+			throws QonfigInterpretationException {
 		if (expression == null)
 			return null;
 		QuickPosition.PositionUnit unit = null;
@@ -148,15 +148,15 @@ public class QuickCore implements QonfigInterpretation {
 				break;
 			}
 		}
-		Function<ModelSetInstance, SettableValue<QuickPosition>> positionValue;
+		ValueContainer<SettableValue<?>, SettableValue<QuickPosition>> positionValue;
 		try {
 			if (unit != null) {
 				QuickPosition.PositionUnit fUnit = unit;
-				Function<ModelSetInstance, SettableValue<Double>> num = session.getExpressoParser()
+				ValueContainer<SettableValue<?>, SettableValue<Double>> num = session.getExpressoParser()
 					.parse(expression.text.substring(0, expression.text.length() - unit.name.length()))//
 					.evaluate(ModelTypes.Value.forType(double.class), session.getExpressoEnv());
-				positionValue = msi -> {
-					SettableValue<Double> numV = num.apply(msi);
+				positionValue = ValueContainer.of(ModelTypes.Value.forType(QuickPosition.class), msi -> {
+					SettableValue<Double> numV = num.get(msi);
 					return numV.transformReversible(QuickPosition.class, tx -> tx//
 						.map(n -> new QuickPosition(n.floatValue(), fUnit))//
 						.replaceSource(p -> (double) p.value, rev -> rev//
@@ -164,7 +164,7 @@ public class QuickCore implements QonfigInterpretation {
 								p -> p.type == fUnit ? null : "Only positions with the same unit as the source (" + fUnit + ") can be set")//
 							)//
 						);
-				};
+				});
 			} else {
 				ObservableExpression obEx = session.getExpressoParser().parse(expression.text);
 				try {
@@ -172,7 +172,7 @@ public class QuickCore implements QonfigInterpretation {
 				} catch (QonfigInterpretationException e1) {
 					// If it doesn't parse as a position, try parsing as a number.
 					positionValue = obEx.evaluate(ModelTypes.Value.forType(int.class), session.getExpressoEnv())//
-						.andThen(v -> v.transformReversible(QuickPosition.class, tx -> tx
+						.map(ModelTypes.Value.forType(QuickPosition.class), v -> v.transformReversible(QuickPosition.class, tx -> tx
 							.map(d -> new QuickPosition(d, QuickPosition.PositionUnit.Pixels)).withReverse(pos -> Math.round(pos.value))));
 				}
 			}
@@ -182,7 +182,7 @@ public class QuickCore implements QonfigInterpretation {
 		return positionValue;
 	}
 
-	public static Function<ModelSetInstance, SettableValue<QuickSize>> parseSize(QonfigExpression expression, ExpressoQIS session)
+	public static ValueContainer<SettableValue<?>, SettableValue<QuickSize>> parseSize(QonfigExpression expression, ExpressoQIS session)
 		throws QonfigInterpretationException {
 		if (expression == null)
 			return null;
@@ -194,15 +194,15 @@ public class QuickCore implements QonfigInterpretation {
 				break;
 			}
 		}
-		Function<ModelSetInstance, SettableValue<QuickSize>> positionValue;
+		ValueContainer<SettableValue<?>, SettableValue<QuickSize>> positionValue;
 		try {
 			if (unit != null) {
 				QuickSize.SizeUnit fUnit = unit;
-				Function<ModelSetInstance, SettableValue<Double>> num = session.getExpressoParser()
+				ValueContainer<SettableValue<?>, SettableValue<Double>> num = session.getExpressoParser()
 					.parse(expression.text.substring(0, expression.text.length() - unit.name.length()))//
 					.evaluate(ModelTypes.Value.forType(double.class), session.getExpressoEnv());
-				positionValue = msi -> {
-					SettableValue<Double> numV = num.apply(msi);
+				positionValue = ValueContainer.of(ModelTypes.Value.forType(QuickSize.class), msi -> {
+					SettableValue<Double> numV = num.get(msi);
 					return numV.transformReversible(QuickSize.class, tx -> tx//
 						.map(n -> new QuickSize(n.floatValue(), fUnit))//
 						.replaceSource(s -> (double) s.value, rev -> rev//
@@ -210,7 +210,7 @@ public class QuickCore implements QonfigInterpretation {
 								p -> p.type == fUnit ? null : "Only sizes with the same unit as the source (" + fUnit + ") can be set")//
 							)//
 						);
-				};
+				});
 			} else {
 				ObservableExpression obEx = session.getExpressoParser().parse(expression.text);
 				try {
@@ -218,7 +218,7 @@ public class QuickCore implements QonfigInterpretation {
 				} catch (QonfigInterpretationException e1) {
 					// If it doesn't parse as a position, try parsing as a number.
 					positionValue = obEx.evaluate(ModelTypes.Value.forType(int.class), session.getExpressoEnv())//
-						.andThen(v -> v.transformReversible(QuickSize.class,
+						.map(ModelTypes.Value.forType(QuickSize.class), v -> v.transformReversible(QuickSize.class,
 							tx -> tx.map(d -> new QuickSize(d, QuickSize.SizeUnit.Pixels)).withReverse(pos -> Math.round(pos.value))));
 				}
 			}
@@ -236,14 +236,14 @@ public class QuickCore implements QonfigInterpretation {
 			if (Icon.class.isAssignableFrom(iconType))
 				return (Function<ModelSetInstance, SettableValue<Icon>>) (ValueContainer<?, ?>) iconV;
 			else if (Image.class.isAssignableFrom(iconType)) {
-				return msi -> SettableValue.asSettable(iconV.apply(msi).map(img -> img == null ? null : new ImageIcon((Image) img)),
+				return msi -> SettableValue.asSettable(iconV.get(msi).map(img -> img == null ? null : new ImageIcon((Image) img)),
 					__ -> "unsettable");
 			} else if (URL.class.isAssignableFrom(iconType)) {
-				return msi -> SettableValue.asSettable(iconV.apply(msi).map(url -> url == null ? null : new ImageIcon((URL) url)),
+				return msi -> SettableValue.asSettable(iconV.get(msi).map(url -> url == null ? null : new ImageIcon((URL) url)),
 					__ -> "unsettable");
 			} else if (String.class.isAssignableFrom(iconType)) {
 				Class<?> callingClass = session.getWrapped().getInterpreter().getCallingClass();
-				return msi -> SettableValue.asSettable(iconV.apply(msi).map(loc -> loc == null ? null//
+				return msi -> SettableValue.asSettable(iconV.get(msi).map(loc -> loc == null ? null//
 					: ObservableSwingUtils.getFixedIcon(callingClass, (String) loc, 16, 16)), __ -> "unsettable");
 			} else {
 				session.withWarning("Cannot use value " + expression + ", type " + iconV.getType().getType(0) + " as an icon");
@@ -400,27 +400,22 @@ public class QuickCore implements QonfigInterpretation {
 	}
 
 	static class MouseValueSupport extends ObservableValue.LazyObservableValue<Boolean> implements SettableValue<Boolean>, MouseListener {
-		private Component theComponent;
-		private final SuppliedModelValue<SettableValue<?>, SettableValue<Boolean>> theModelValue;
+		private final Component theComponent;
+		private final String theName;
 		private final Boolean theButton;
 		private BiConsumer<Boolean, Object> theListener;
 		private boolean isListening;
 
-		public MouseValueSupport(SuppliedModelValue<SettableValue<?>, SettableValue<Boolean>> modelValue, Boolean button) {
+		public MouseValueSupport(Component component, String name, Boolean button) {
 			super(TypeTokens.get().BOOLEAN, Transactable.noLock(ThreadConstraint.EDT));
-			theModelValue = modelValue;
-			theButton = button;
-		}
-
-		void install(Component component) {
 			theComponent = component;
-			if (theListener != null)
-				setListening(true);
+			theName = name;
+			theButton = button;
 		}
 
 		@Override
 		protected Object createIdentity() {
-			return Identifiable.wrap(theComponent, theModelValue.getName());
+			return Identifiable.wrap(theComponent, theName);
 		}
 
 		@Override
@@ -499,7 +494,7 @@ public class QuickCore implements QonfigInterpretation {
 		private void setListening(boolean listening) {
 			if (listening == isListening)
 				return;
-			if (listening && (theComponent == null || theListener == null))
+			if (listening && theListener == null)
 				return;
 			isListening = listening;
 			if (listening)
@@ -577,12 +572,109 @@ public class QuickCore implements QonfigInterpretation {
 		}
 	}
 
+	class FocusSupport extends ObservableValue.LazyObservableValue<Boolean> implements SettableValue<Boolean>, FocusListener {
+		private final Component theComponent;
+		private BiConsumer<Boolean, Object> theListener;
+		private boolean isListening;
+
+		FocusSupport(Component component) {
+			super(TypeTokens.get().BOOLEAN, Transactable.noLock(ThreadConstraint.EDT));
+			theComponent = component;
+		}
+
+		@Override
+		protected Object createIdentity() {
+			return Identifiable.wrap(theComponent, "focused");
+		}
+
+		@Override
+		protected Boolean getSpontaneous() {
+			return theComponent.isFocusOwner();
+		}
+
+		@Override
+		protected Subscription subscribe(BiConsumer<Boolean, Object> listener) {
+			theListener = listener;
+			setListening(true);
+			return () -> setListening(false);
+		}
+
+		@Override
+		public Transaction lock(boolean write, Object cause) {
+			return Transaction.NONE;
+		}
+
+		@Override
+		public Transaction tryLock(boolean write, Object cause) {
+			return Transaction.NONE;
+		}
+
+		@Override
+		public boolean isLockSupported() {
+			return false;
+		}
+
+		@Override
+		public Boolean set(Boolean value, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
+			throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+		}
+
+		@Override
+		public String isAcceptable(Boolean value) {
+			return StdMsg.UNSUPPORTED_OPERATION;
+		}
+
+		@Override
+		public ObservableValue<String> isEnabled() {
+			return SettableValue.ALWAYS_DISABLED;
+		}
+
+		private void setListening(boolean listening) {
+			if (listening == isListening)
+				return;
+			if (listening && theListener == null)
+				return;
+			isListening = listening;
+			if (listening)
+				theComponent.addFocusListener(this);
+			else if (theComponent != null)
+				theComponent.removeFocusListener(this);
+			if (!listening)
+				theListener = null;
+		}
+
+		@Override
+		public void focusGained(FocusEvent e) {
+			if (theListener != null)
+				theListener.accept(true, e);
+		}
+
+		@Override
+		public void focusLost(FocusEvent e) {
+			if (theListener != null)
+				theListener.accept(false, e);
+		}
+	}
+
 	private QuickComponentDef modifyWidget(QuickComponentDef widget, StyleQIS session) throws QonfigInterpretationException {
 		ExpressoQIS exS = session.as(ExpressoQIS.class);
-		widget.modify((editor, builder) -> editor.modifyComponent(comp -> {
-			builder.withComponent(comp);
-			exS.installInterpretedValue(comp, builder.getModels());
-		}));
+		ModelInstanceType<SettableValue<?>, SettableValue<Boolean>> boolMIT = ModelTypes.Value.forType(boolean.class);
+		widget.modify((editor, builder) -> {
+			editor.modifyComponent(comp -> {
+				if (!DynamicModelValue.isDynamicValueSatisfied("hovered", boolMIT, builder.getModels()))
+					DynamicModelValue.satisfyDynamicValue("hovered", boolMIT, builder.getModels(),
+						new MouseValueSupport(comp, "hovered", null));
+				if (!DynamicModelValue.isDynamicValueSatisfied("pressed", boolMIT, builder.getModels()))
+					DynamicModelValue.satisfyDynamicValue("pressed", boolMIT, builder.getModels(),
+						new MouseValueSupport(comp, "pressed", true));
+				if (!DynamicModelValue.isDynamicValueSatisfied("rightPressed", boolMIT, builder.getModels()))
+					DynamicModelValue.satisfyDynamicValue("rightPressed", boolMIT, builder.getModels(),
+						new MouseValueSupport(comp, "rightPressed", false));
+				if (!DynamicModelValue.isDynamicValueSatisfied("focused", boolMIT, builder.getModels()))
+					DynamicModelValue.satisfyDynamicValue("focused", boolMIT, builder.getModels(), new FocusSupport(comp));
+				builder.withComponent(comp);
+			});
+		});
 		String name = session.getAttribute("name", String.class);
 		ValueContainer<SettableValue<?>, SettableValue<String>> tooltip = exS.getAttribute("tooltip",
 			ModelTypes.Value.forType(String.class), null);
@@ -596,119 +688,12 @@ public class QuickCore implements QonfigInterpretation {
 		}
 		if (tooltip != null) {
 			widget.modify((comp, builder) -> {
-				comp.withTooltip(tooltip.apply(builder.getModels()));
+				comp.withTooltip(tooltip.get(builder.getModels()));
 			});
 		}
 		QuickElementStyleAttribute<? extends Color> bgColorStyle = widget.getStyle().get(//
 			session.getStyleAttribute(null, "color", Color.class));
-		SuppliedModelValue<SettableValue<?>, SettableValue<Boolean>> hovered = exS.getModelValueOwner().getModelValue("hovered",
-			ModelTypes.Value.forType(boolean.class));
-		SuppliedModelValue<SettableValue<?>, SettableValue<Boolean>> focused = exS.getModelValueOwner().getModelValue("focused",
-			ModelTypes.Value.forType(boolean.class));
-		SuppliedModelValue<SettableValue<?>, SettableValue<Boolean>> pressed = exS.getModelValueOwner().getModelValue("pressed",
-			ModelTypes.Value.forType(boolean.class));
-		SuppliedModelValue<SettableValue<?>, SettableValue<Boolean>> rightPressed = exS.getModelValueOwner().getModelValue("rightPressed",
-			ModelTypes.Value.forType(boolean.class));
 		initMouseListening();
-		// Install style model value support
-		if (!DynamicModelValue.isDynamicValueSatisfied("hovered", ModelTypes.Value.forType(boolean.class), comp.getModels()))
-			exS.satisfy(hovered, Component.class, () -> new MouseValueSupport(hovered, null), MouseValueSupport::install);
-		if (!exS.isSatisfied(pressed, Component.class))
-			exS.satisfy(pressed, Component.class, () -> new MouseValueSupport(pressed, true), MouseValueSupport::install);
-		if (!exS.isSatisfied(rightPressed, Component.class))
-			exS.satisfy(pressed, Component.class, () -> new MouseValueSupport(rightPressed, false), MouseValueSupport::install);
-		if (!exS.isSatisfied(focused, Component.class)) {
-			class FocusSupport extends ObservableValue.LazyObservableValue<Boolean> implements SettableValue<Boolean>, FocusListener {
-				private Component theComponent;
-				private BiConsumer<Boolean, Object> theListener;
-				private boolean isListening;
-
-				FocusSupport() {
-					super(TypeTokens.get().BOOLEAN, Transactable.noLock(ThreadConstraint.EDT));
-				}
-
-				void install(Component component) {
-					theComponent = component;
-					if (theListener != null)
-						setListening(true);
-				}
-
-				@Override
-				protected Object createIdentity() {
-					return Identifiable.wrap(theComponent, focused.getName());
-				}
-
-				@Override
-				protected Boolean getSpontaneous() {
-					return theComponent != null && theComponent.isFocusOwner();
-				}
-
-				@Override
-				protected Subscription subscribe(BiConsumer<Boolean, Object> listener) {
-					theListener = listener;
-					setListening(true);
-					return () -> setListening(false);
-				}
-
-				@Override
-				public Transaction lock(boolean write, Object cause) {
-					return Transaction.NONE;
-				}
-
-				@Override
-				public Transaction tryLock(boolean write, Object cause) {
-					return Transaction.NONE;
-				}
-
-				@Override
-				public boolean isLockSupported() {
-					return false;
-				}
-
-				@Override
-				public Boolean set(Boolean value, Object cause)
-					throws IllegalArgumentException, UnsupportedOperationException {
-					throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
-				}
-
-				@Override
-				public String isAcceptable(Boolean value) {
-					return StdMsg.UNSUPPORTED_OPERATION;
-				}
-
-				@Override
-				public ObservableValue<String> isEnabled() {
-					return SettableValue.ALWAYS_DISABLED;
-				}
-
-				private void setListening(boolean listening) {
-					if (listening == isListening)
-						return;
-					if (listening && (theComponent == null || theListener == null))
-						return;
-					isListening = listening;
-					if (listening)
-						theComponent.addFocusListener(this);
-					else if (theComponent != null)
-						theComponent.removeFocusListener(this);
-					if (!listening)
-						theListener = null;
-				}
-
-				@Override
-				public void focusGained(FocusEvent e) {
-					if (theListener != null)
-						theListener.accept(true, e);
-				}
-
-				@Override
-				public void focusLost(FocusEvent e) {
-					if (theListener != null)
-						theListener.accept(false, e);
-				}
-			}
-			exS.satisfy(focused, Component.class, () -> new FocusSupport(), FocusSupport::install);
-		}
 		List<QuickMouseListener.Container> mouseListeners = session.asElement("widget").interpretChildren("mouse-listener",
 			QuickMouseListener.Container.class);
 		List<QuickKeyListener.Container> keyListeners = session.asElement("widget").interpretChildren("key-listener",
@@ -837,7 +822,7 @@ public class QuickCore implements QonfigInterpretation {
 		});
 		if (visible != null)
 			widget.modify((comp, builder) -> {
-				comp.visibleWhen(visible.apply(builder.getModels()));
+				comp.visibleWhen(visible.get(builder.getModels()));
 			});
 		if (border != null)
 			widget.modify((comp, builder) -> {
@@ -949,7 +934,8 @@ public class QuickCore implements QonfigInterpretation {
 
 	private QuickBorder interpretTitledBorder(StyleQIS session) throws QonfigInterpretationException {
 		ExpressoQIS exS = session.as(ExpressoQIS.class);
-		Function<ModelSetInstance, SettableValue<String>> title = exS.getAttribute("title", ModelTypes.Value.forType(String.class), null);
+		ValueContainer<SettableValue<?>, SettableValue<String>> title = exS.getAttribute("title", ModelTypes.Value.forType(String.class),
+			null);
 		QuickElementStyle style = session.getStyle();
 		QuickElementStyleAttribute<? extends Color> colorStyle = style.get(session.getStyleAttribute(null, "border-color", Color.class));
 		QuickElementStyleAttribute<? extends Integer> thicknessStyle = style
@@ -971,7 +957,7 @@ public class QuickCore implements QonfigInterpretation {
 			ObservableValue<? extends Double> fontSlant = fontSlantStyle.evaluate(builder.getModels());
 			ObservableValue<Font> font = getFont(defaultFont, fontColor, fontSize, fontWeight, fontSlant);
 			SettableValue<Border> borderV = SettableValue.build(Border.class).withValue(border).build();
-			title.apply(builder.getModels()).changes().takeUntil(builder.getModels().getUntil()).act(evt -> {
+			title.get(builder.getModels()).changes().takeUntil(builder.getModels().getUntil()).act(evt -> {
 				border.setTitle(evt.getNewValue());
 				borderV.set(border, evt);
 				comp.repaint();
@@ -1005,27 +991,6 @@ public class QuickCore implements QonfigInterpretation {
 		ValueContainer<ObservableAction<?>, ObservableAction<?>> action = exSession.getValueExpression().evaluate(ModelTypes.Action.any(),
 			exSession.getExpressoEnv());
 
-		SuppliedModelValue<SettableValue<?>, SettableValue<Integer>> x = exSession.getModelValueOwner().getModelValue("x",
-			ModelTypes.Value.forType(int.class));
-		SuppliedModelValue<SettableValue<?>, SettableValue<Integer>> y = exSession.getModelValueOwner().getModelValue("y",
-			ModelTypes.Value.forType(int.class));
-		SuppliedModelValue<SettableValue<?>, SettableValue<Boolean>> alt = exSession.getModelValueOwner().getModelValue("altPressed",
-			ModelTypes.Value.forType(boolean.class));
-		SuppliedModelValue<SettableValue<?>, SettableValue<Boolean>> ctrl = exSession.getModelValueOwner().getModelValue("ctrlPressed",
-			ModelTypes.Value.forType(boolean.class));
-		SuppliedModelValue<SettableValue<?>, SettableValue<Boolean>> shift = exSession.getModelValueOwner().getModelValue("shiftPressed",
-			ModelTypes.Value.forType(boolean.class));
-		ExpressoQIS.SimpleModelValueSupport<Integer> xSupport = new ExpressoQIS.SimpleModelValueSupport<>(int.class, 0);
-		ExpressoQIS.SimpleModelValueSupport<Integer> ySupport = new ExpressoQIS.SimpleModelValueSupport<>(int.class, 0);
-		ExpressoQIS.SimpleModelValueSupport<Boolean> altSupport = new ExpressoQIS.SimpleModelValueSupport<>(boolean.class, false);
-		ExpressoQIS.SimpleModelValueSupport<Boolean> ctrlSupport = new ExpressoQIS.SimpleModelValueSupport<>(boolean.class, false);
-		ExpressoQIS.SimpleModelValueSupport<Boolean> shiftSupport = new ExpressoQIS.SimpleModelValueSupport<>(boolean.class, false);
-		exSession.satisfy(x, Component.class, xSupport, null);
-		exSession.satisfy(y, Component.class, ySupport, null);
-		exSession.satisfy(alt, Component.class, altSupport, null);
-		exSession.satisfy(ctrl, Component.class, ctrlSupport, null);
-		exSession.satisfy(shift, Component.class, shiftSupport, null);
-
 		return new QuickMouseListener.Container() {
 			@Override
 			public boolean isMotionListener() {
@@ -1039,16 +1004,24 @@ public class QuickCore implements QonfigInterpretation {
 
 			@Override
 			public QuickMouseListener createListener(ModelSetInstance models) {
+				ModelInstanceType<SettableValue<?>, SettableValue<Integer>> intType = ModelTypes.Value.forType(int.class);
+				ModelInstanceType<SettableValue<?>, SettableValue<Boolean>> boolType = ModelTypes.Value.forType(boolean.class);
+				SettableValue<Integer> xV = SettableValue.build(int.class).withValue(0).build();
+				SettableValue<Integer> yV = SettableValue.build(int.class).withValue(0).build();
+				SettableValue<Boolean> altV = SettableValue.build(boolean.class).withValue(false).build();
+				SettableValue<Boolean> ctrlV = SettableValue.build(boolean.class).withValue(false).build();
+				SettableValue<Boolean> shiftV = SettableValue.build(boolean.class).withValue(false).build();
+				DynamicModelValue.satisfyDynamicValueIfUnsatisfied("x", intType, models, xV);
+				DynamicModelValue.satisfyDynamicValueIfUnsatisfied("y", intType, models, yV);
+				DynamicModelValue.satisfyDynamicValueIfUnsatisfied("altPressed", boolType, models, altV);
+				DynamicModelValue.satisfyDynamicValueIfUnsatisfied("ctrlPressed", boolType, models, ctrlV);
+				DynamicModelValue.satisfyDynamicValueIfUnsatisfied("shiftPressed", boolType, models, shiftV);
 				List<SettableValue<Boolean>> filterVs = filters.stream().map(f -> f.get(models)).collect(Collectors.toList());
 				ObservableAction<?> actionV = action.get(models);
-				SettableValue<Integer> xV = exSession.getIfSupported(x.apply(models), xSupport);
-				SettableValue<Integer> yV = exSession.getIfSupported(y.apply(models), ySupport);
-				SettableValue<Boolean> altV = exSession.getIfSupported(alt.apply(models), altSupport);
-				SettableValue<Boolean> ctrlV = exSession.getIfSupported(ctrl.apply(models), ctrlSupport);
-				SettableValue<Boolean> shiftV = exSession.getIfSupported(shift.apply(models), shiftSupport);
 				return new QuickMouseListener() {
 					@Override
 					public boolean applies(MouseEvent evt) {
+						satisfyInternalValuesFor(evt);
 						for (SettableValue<Boolean> filterV : filterVs) {
 							if (filterV != null && !filterV.get())
 								return false;
@@ -1058,6 +1031,11 @@ public class QuickCore implements QonfigInterpretation {
 
 					@Override
 					public void actionPerformed(MouseEvent evt) {
+						satisfyInternalValuesFor(evt);
+						actionV.act(evt);
+					}
+
+					void satisfyInternalValuesFor(MouseEvent evt) {
 						try (CausableInUse cause = Causable.cause(evt)) {
 							xV.set(evt.getX(), cause);
 							yV.set(evt.getY(), cause);
@@ -1112,10 +1090,6 @@ public class QuickCore implements QonfigInterpretation {
 		ExpressoQIS exSession = session.as(ExpressoQIS.class);
 		ValueContainer<SettableValue<?>, SettableValue<Integer>> clickCount = exSession.getAttributeAsValue("click-count", Integer.class,
 			null);
-		SuppliedModelValue<SettableValue<?>, SettableValue<Integer>> clickCountMV = exSession.getModelValueOwner()
-			.getModelValue("clickCount", ModelTypes.Value.forType(int.class));
-		ExpressoQIS.SimpleModelValueSupport<Integer> ccSupport = new ExpressoQIS.SimpleModelValueSupport<>(int.class, 0);
-		exSession.satisfy(clickCountMV, Component.class, ccSupport, null);
 		return new QuickMouseListener.Container() {
 			@Override
 			public boolean isMotionListener() {
@@ -1129,12 +1103,15 @@ public class QuickCore implements QonfigInterpretation {
 
 			@Override
 			public QuickMouseListener createListener(ModelSetInstance models) {
+				SettableValue<Integer> clickCountInternalV = SettableValue.build(int.class).withValue(0).build();
+				DynamicModelValue.satisfyDynamicValueIfUnsatisfied("clickCount", ModelTypes.Value.forType(int.class), models,
+					clickCountInternalV);
 				QuickMouseListener superL = listener.createListener(models);
 				ObservableValue<Integer> clickCountV = clickCount == null ? null : clickCount.get(models);
-				SettableValue<Integer> ccMV = exSession.getIfSupported(clickCountMV.apply(models), ccSupport);
 				return new QuickMouseListener() {
 					@Override
 					public boolean applies(MouseEvent evt) {
+						satisfyInternalValuesFor(evt);
 						if (!superL.applies(evt))
 							return false;
 						else if (evt.getID() != MouseEvent.MOUSE_CLICKED)
@@ -1149,8 +1126,13 @@ public class QuickCore implements QonfigInterpretation {
 
 					@Override
 					public void actionPerformed(MouseEvent evt) {
+						satisfyInternalValuesFor(evt);
+						superL.actionPerformed(evt);
+					}
+
+					void satisfyInternalValuesFor(MouseEvent evt) {
 						try (CausableInUse cause = Causable.cause(evt)) {
-							ccMV.set(evt.getClickCount(), cause);
+							clickCountInternalV.set(evt.getClickCount(), cause);
 							superL.actionPerformed(evt);
 						}
 					}
@@ -1196,11 +1178,6 @@ public class QuickCore implements QonfigInterpretation {
 
 	private QuickMouseListener.Container modifyMouseWheelListener(QuickMouseListener.Container listener, StyleQIS session)
 		throws QonfigInterpretationException {
-		ExpressoQIS exSession = session.as(ExpressoQIS.class);
-		SuppliedModelValue<SettableValue<?>, SettableValue<Integer>> scrollAmountMV = exSession.getModelValueOwner()
-			.getModelValue("scrollAmount", ModelTypes.Value.forType(int.class));
-		ExpressoQIS.SimpleModelValueSupport<Integer> scrollSupport = new ExpressoQIS.SimpleModelValueSupport<>(int.class, 0);
-		exSession.satisfy(scrollAmountMV, Component.class, scrollSupport, null);
 		return new QuickMouseListener.Container() {
 			@Override
 			public boolean isMotionListener() {
@@ -1214,8 +1191,9 @@ public class QuickCore implements QonfigInterpretation {
 
 			@Override
 			public QuickMouseListener createListener(ModelSetInstance models) {
+				SettableValue<Integer> scrollAmount = SettableValue.build(int.class).build();
+				DynamicModelValue.satisfyDynamicValueIfUnsatisfied("scrollAmount", ModelTypes.Value.INT, models, scrollAmount);
 				QuickMouseListener superL = listener.createListener(models);
-				SettableValue<Integer> scrollMV = exSession.getIfSupported(scrollAmountMV.apply(models), scrollSupport);
 				return new QuickMouseListener() {
 					@Override
 					public boolean applies(MouseEvent evt) {
@@ -1229,7 +1207,7 @@ public class QuickCore implements QonfigInterpretation {
 					@Override
 					public void actionPerformed(MouseEvent evt) {
 						try (CausableInUse cause = Causable.cause(evt)) {
-							scrollMV.set(((MouseWheelEvent) evt).getScrollAmount(), cause);
+							scrollAmount.set(((MouseWheelEvent) evt).getScrollAmount(), cause);
 							superL.actionPerformed(evt);
 						}
 					}
@@ -1247,32 +1225,19 @@ public class QuickCore implements QonfigInterpretation {
 			exSession.getExpressoEnv());
 		ValueContainer<SettableValue<?>, SettableValue<KeyCode>> key = exSession.getAttributeAsValue("key", KeyCode.class, null);
 
-		SuppliedModelValue<SettableValue<?>, SettableValue<KeyCode>> keyMV = exSession.getModelValueOwner().getModelValue("key",
-			ModelTypes.Value.forType(KeyCode.class));
-		SuppliedModelValue<SettableValue<?>, SettableValue<Boolean>> alt = exSession.getModelValueOwner().getModelValue("altPressed",
-			ModelTypes.Value.forType(boolean.class));
-		SuppliedModelValue<SettableValue<?>, SettableValue<Boolean>> ctrl = exSession.getModelValueOwner().getModelValue("ctrlPressed",
-			ModelTypes.Value.forType(boolean.class));
-		SuppliedModelValue<SettableValue<?>, SettableValue<Boolean>> shift = exSession.getModelValueOwner().getModelValue("shiftPressed",
-			ModelTypes.Value.forType(boolean.class));
-		ExpressoQIS.SimpleModelValueSupport<KeyCode> keySupport = new ExpressoQIS.SimpleModelValueSupport<>(KeyCode.class, null);
-		ExpressoQIS.SimpleModelValueSupport<Boolean> altSupport = new ExpressoQIS.SimpleModelValueSupport<>(boolean.class, false);
-		ExpressoQIS.SimpleModelValueSupport<Boolean> ctrlSupport = new ExpressoQIS.SimpleModelValueSupport<>(boolean.class, false);
-		ExpressoQIS.SimpleModelValueSupport<Boolean> shiftSupport = new ExpressoQIS.SimpleModelValueSupport<>(boolean.class, false);
-		exSession.satisfy(keyMV, Component.class, keySupport, null);
-		exSession.satisfy(alt, Component.class, altSupport, null);
-		exSession.satisfy(ctrl, Component.class, ctrlSupport, null);
-		exSession.satisfy(shift, Component.class, shiftSupport, null);
-
 		int eventType = pressed ? KeyEvent.KEY_PRESSED : KeyEvent.KEY_RELEASED;
 		return models -> {
+			SettableValue<KeyCode> keyMV2 = SettableValue.build(KeyCode.class).build();
+			SettableValue<Boolean> altV = SettableValue.build(boolean.class).withValue(false).build();
+			SettableValue<Boolean> ctrlV = SettableValue.build(boolean.class).withValue(false).build();
+			SettableValue<Boolean> shiftV = SettableValue.build(boolean.class).withValue(false).build();
+			DynamicModelValue.satisfyDynamicValueIfUnsatisfied("key", ModelTypes.Value.forType(KeyCode.class), models, keyMV2);
+			DynamicModelValue.satisfyDynamicValueIfUnsatisfied("altPressed", ModelTypes.Value.BOOLEAN, models, altV);
+			DynamicModelValue.satisfyDynamicValueIfUnsatisfied("ctrlPressed", ModelTypes.Value.BOOLEAN, models, ctrlV);
+			DynamicModelValue.satisfyDynamicValueIfUnsatisfied("shiftPressed", ModelTypes.Value.BOOLEAN, models, shiftV);
 			List<SettableValue<Boolean>> filterVs = filters.stream().map(f -> f.get(models)).collect(Collectors.toList());
 			SettableValue<KeyCode> keyV = key == null ? null : key.get(models);
 			ObservableAction<?> actionV = action.get(models);
-			SettableValue<KeyCode> keyMV2 = exSession.getIfSupported(keyMV.apply(models), keySupport);
-			SettableValue<Boolean> altV = exSession.getIfSupported(alt.apply(models), altSupport);
-			SettableValue<Boolean> ctrlV = exSession.getIfSupported(ctrl.apply(models), ctrlSupport);
-			SettableValue<Boolean> shiftV = exSession.getIfSupported(shift.apply(models), shiftSupport);
 			return new QuickKeyListener() {
 				@Override
 				public boolean applies(KeyEvent evt) {
@@ -1280,6 +1245,7 @@ public class QuickCore implements QonfigInterpretation {
 						return false;
 					else if (keyV != null && getKeyCodeFromAWT(evt.getKeyCode(), evt.getKeyLocation()) != keyV.get())
 						return false;
+					setModelValues(evt);
 					for (SettableValue<Boolean> filterV : filterVs) {
 						if (filterV != null && !filterV.get())
 							return false;
@@ -1289,12 +1255,16 @@ public class QuickCore implements QonfigInterpretation {
 
 				@Override
 				public void actionPerformed(KeyEvent evt) {
+					setModelValues(evt);
+					actionV.act(evt);
+				}
+
+				private void setModelValues(KeyEvent evt) {
 					try (CausableInUse cause = Causable.cause(evt)) {
 						keyMV2.set(getKeyCodeFromAWT(evt.getKeyCode(), evt.getKeyLocation()), cause);
 						altV.set(evt.isAltDown(), cause);
 						ctrlV.set(evt.isControlDown(), cause);
 						shiftV.set(evt.isShiftDown(), cause);
-						actionV.act(evt);
 					}
 				}
 			};
@@ -1599,30 +1569,17 @@ public class QuickCore implements QonfigInterpretation {
 		if (typedChar != null && typedChar.length() != 1)
 			session.withError("char attribute must only have a single character");
 
-		SuppliedModelValue<SettableValue<?>, SettableValue<Character>> charMV = exSession.getModelValueOwner().getModelValue("char",
-			ModelTypes.Value.forType(Character.class));
-		SuppliedModelValue<SettableValue<?>, SettableValue<Boolean>> alt = exSession.getModelValueOwner().getModelValue("altPressed",
-			ModelTypes.Value.forType(boolean.class));
-		SuppliedModelValue<SettableValue<?>, SettableValue<Boolean>> ctrl = exSession.getModelValueOwner().getModelValue("ctrlPressed",
-			ModelTypes.Value.forType(boolean.class));
-		SuppliedModelValue<SettableValue<?>, SettableValue<Boolean>> shift = exSession.getModelValueOwner().getModelValue("shiftPressed",
-			ModelTypes.Value.forType(boolean.class));
-		ExpressoQIS.SimpleModelValueSupport<Character> charSupport = new ExpressoQIS.SimpleModelValueSupport<>(Character.class, (char) 0);
-		ExpressoQIS.SimpleModelValueSupport<Boolean> altSupport = new ExpressoQIS.SimpleModelValueSupport<>(boolean.class, false);
-		ExpressoQIS.SimpleModelValueSupport<Boolean> ctrlSupport = new ExpressoQIS.SimpleModelValueSupport<>(boolean.class, false);
-		ExpressoQIS.SimpleModelValueSupport<Boolean> shiftSupport = new ExpressoQIS.SimpleModelValueSupport<>(boolean.class, false);
-		exSession.satisfy(charMV, Component.class, charSupport, null);
-		exSession.satisfy(alt, Component.class, altSupport, null);
-		exSession.satisfy(ctrl, Component.class, ctrlSupport, null);
-		exSession.satisfy(shift, Component.class, shiftSupport, null);
-
 		return models -> {
 			List<SettableValue<Boolean>> filterVs = filters.stream().map(f -> f.get(models)).collect(Collectors.toList());
 			ObservableAction<?> actionV = action.get(models);
-			SettableValue<Character> charMV2 = exSession.getIfSupported(charMV.apply(models), charSupport);
-			SettableValue<Boolean> altV = exSession.getIfSupported(alt.apply(models), altSupport);
-			SettableValue<Boolean> ctrlV = exSession.getIfSupported(ctrl.apply(models), ctrlSupport);
-			SettableValue<Boolean> shiftV = exSession.getIfSupported(shift.apply(models), shiftSupport);
+			SettableValue<Character> charMV = SettableValue.build(char.class).withValue((char) 0).build();
+			SettableValue<Boolean> altV = SettableValue.build(boolean.class).withValue(false).build();
+			SettableValue<Boolean> ctrlV = SettableValue.build(boolean.class).withValue(false).build();
+			SettableValue<Boolean> shiftV = SettableValue.build(boolean.class).withValue(false).build();
+			DynamicModelValue.satisfyDynamicValueIfUnsatisfied("char", ModelTypes.Value.CHAR, models, charMV);
+			DynamicModelValue.satisfyDynamicValueIfUnsatisfied("altPressed", ModelTypes.Value.BOOLEAN, models, altV);
+			DynamicModelValue.satisfyDynamicValueIfUnsatisfied("ctrlPressed", ModelTypes.Value.BOOLEAN, models, ctrlV);
+			DynamicModelValue.satisfyDynamicValueIfUnsatisfied("shiftPressed", ModelTypes.Value.BOOLEAN, models, shiftV);
 			return new QuickKeyListener() {
 				@Override
 				public boolean applies(KeyEvent evt) {
@@ -1630,6 +1587,7 @@ public class QuickCore implements QonfigInterpretation {
 						return false;
 					else if (typedChar != null && typedChar.charAt(0) != evt.getKeyChar())
 						return false;
+					setModelValues(evt);
 					for (SettableValue<Boolean> filterV : filterVs) {
 						if (filterV != null && !filterV.get())
 							return false;
@@ -1639,12 +1597,16 @@ public class QuickCore implements QonfigInterpretation {
 
 				@Override
 				public void actionPerformed(KeyEvent evt) {
+					setModelValues(evt);
+					actionV.act(evt);
+				}
+
+				private void setModelValues(KeyEvent evt) {
 					try (CausableInUse cause = Causable.cause(evt)) {
-						charMV2.set(evt.getKeyChar(), cause);
+						charMV.set(evt.getKeyChar(), cause);
 						altV.set(evt.isAltDown(), cause);
 						ctrlV.set(evt.isControlDown(), cause);
 						shiftV.set(evt.isShiftDown(), cause);
-						actionV.act(evt);
 					}
 				}
 			};

@@ -45,7 +45,7 @@ public class QuickUiDef {
 
 	public ModelSetInstance getModels() {
 		if (theModels == null)
-			theModels = theDocument.getHead().getModels().createInstance(theExternalModels, getUntil());
+			theModels = theDocument.getHead().getModels().createInstance(theExternalModels, getUntil()).build();
 		return theModels;
 	}
 
@@ -72,19 +72,19 @@ public class QuickUiDef {
 
 	public <W extends Window> WindowBuilder<W, ?> install(WindowBuilder<W, ?> builder) {
 		if (theDocument.getTitle() != null)
-			builder.withTitle(theDocument.getTitle().apply(getModels()));
+			builder.withTitle(theDocument.getTitle().get(getModels()));
 		if (theDocument.getIcon() != null)
-			builder.withIcon(theDocument.getIcon().apply(getModels()));
+			builder.withIcon(theDocument.getIcon().get(getModels()));
 		if (theDocument.getVisible() != null)
-			builder.withVisible(theDocument.getVisible().apply(getModels()));
+			builder.withVisible(theDocument.getVisible().get(getModels()));
 		if (theDocument.getX() != null)
-			builder.withX(theDocument.getX().apply(getModels()));
+			builder.withX(theDocument.getX().get(getModels()));
 		if (theDocument.getY() != null)
-			builder.withY(theDocument.getY().apply(getModels()));
+			builder.withY(theDocument.getY().get(getModels()));
 		if (theDocument.getWidth() != null)
-			builder.withWidth(theDocument.getWidth().apply(getModels()));
+			builder.withWidth(theDocument.getWidth().get(getModels()));
 		if (theDocument.getHeight() != null)
-			builder.withHeight(theDocument.getHeight().apply(getModels()));
+			builder.withHeight(theDocument.getHeight().get(getModels()));
 		builder.withCloseAction(theDocument.getCloseAction());
 		builder.withHContent(new BorderLayout(), content -> installContent(content));
 		builder.run(null);

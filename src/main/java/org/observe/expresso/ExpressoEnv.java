@@ -25,9 +25,9 @@ public class ExpressoEnv {
 	 * Standard java environment, including imported java.lang.* and standard java operators, plus some
 	 * {@link #withDefaultNonStructuredParsing() default} non-structured parsing
 	 */
-	public static final ExpressoEnv STANDARD_JAVA = new ExpressoEnv(ObservableModelSet.build(ObservableModelSet.JAVA_NAME_CHECKER),
-		ClassView.build().withWildcardImport("java.lang.*").build(), null, UnaryOperatorSet.STANDARD_JAVA,
-		BinaryOperatorSet.STANDARD_JAVA)//
+	public static final ExpressoEnv STANDARD_JAVA = new ExpressoEnv(
+		ObservableModelSet.build("StandardJava", ObservableModelSet.JAVA_NAME_CHECKER),
+		ClassView.build().withWildcardImport("java.lang.*").build(), null, UnaryOperatorSet.STANDARD_JAVA, BinaryOperatorSet.STANDARD_JAVA)//
 		.withDefaultNonStructuredParsing();
 
 	private final ObservableModelSet theModels;
@@ -110,7 +110,7 @@ public class ExpressoEnv {
 
 	/**
 	 * Registers some simple default non-structured parsers for utility
-	 * 
+	 *
 	 * @return This environment
 	 */
 	public ExpressoEnv withDefaultNonStructuredParsing() {
