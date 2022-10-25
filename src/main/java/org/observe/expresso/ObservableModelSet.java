@@ -30,7 +30,6 @@ import org.qommons.config.QonfigToolkit;
 import org.qommons.ex.ExConsumer;
 
 import com.google.common.reflect.TypeToken;
-import com.sun.xml.internal.ws.server.sei.ValueGetter;
 
 /**
  * <p>
@@ -459,16 +458,7 @@ public interface ObservableModelSet extends Identifiable {
 		return getInheritance().containsKey(root);
 	}
 
-	/**
-	 * @return The names of all this model's contents, whether
-	 *         <ul>
-	 *         <li>an internal value (created with {@link ObservableModelSet.Builder#with(String, ModelInstanceType, ValueGetter)}),</li>
-	 *         <li>a dynamic value (created with {@link ObservableModelSet.Builder#withMaker(String, ValueCreator)}),</li>
-	 *         <li>an external value (created with
-	 *         {@link ObservableModelSet.Builder#withExternal(String, ModelInstanceType, ExtValueRef)}),</li>
-	 *         <li>or a sub-model (created with {@link ObservableModelSet.Builder#createSubModel(String)}).</li>
-	 *         </ul>
-	 */
+	/** @return All this model's contents */
 	Map<String, ModelComponentNode<?, ?>> getComponents();
 
 	default ModelComponentNode<?, ?> getComponentIfExists(String path) {
@@ -930,7 +920,7 @@ public interface ObservableModelSet extends Identifiable {
 			return str.toString();
 		}
 
-		protected void print(StringBuilder str, int indent) {
+		private void print(StringBuilder str, int indent) {
 			for (Map.Entry<String, ModelComponentNode<?, ?>> thing : theComponents.entrySet()) {
 				str.append('\n');
 				for (int i = 0; i < indent; i++)
@@ -1076,7 +1066,7 @@ public interface ObservableModelSet extends Identifiable {
 			}
 		}
 
-		protected static class DefaultBuilder extends DefaultModelSet implements Builder {
+		public static class DefaultBuilder extends DefaultModelSet implements Builder {
 			private Function<ModelSetInstance, ?> theModelConfigurationCreator;
 
 			protected DefaultBuilder(ModelComponentId id, DefaultBuilder root, DefaultBuilder parent, NameChecker nameChecker) {

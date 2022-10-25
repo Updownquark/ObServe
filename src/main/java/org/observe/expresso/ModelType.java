@@ -28,10 +28,28 @@ import com.google.common.reflect.TypeToken;
  * @param <M> The java type of value represented by this type
  */
 public abstract class ModelType<M> implements Named {
+	/**
+	 * An object that knows how to produce {@link ModelInstanceConverter instance converters}
+	 *
+	 * @param <M1> The model type to convert from
+	 * @param <M2> The model type to convert to
+	 */
 	public interface ModelConverter<M1, M2> {
-		ModelInstanceConverter<M1, M2> convert(ModelInstanceType<M1, ?> source, ModelInstanceType<M2, ?> dest)
+		/**
+		 * @param source The type to convert from
+		 * @param target The type to convert to
+		 * @return A converter capable of converting from the given source type to the given target type
+		 * @throws IllegalArgumentException If this converter cannot create an instance converter for the given source/target types
+		 */
+		ModelInstanceConverter<M1, M2> convert(ModelInstanceType<M1, ?> source, ModelInstanceType<M2, ?> target)
 			throws IllegalArgumentException;
 
+		/**
+		 * A model converter for an {@link UnTyped un-typed} model type
+		 *
+		 * @param <M1> The model type to convert from
+		 * @param <M2> The model type to convert to
+		 */
 		public interface SimpleUnTyped<M1, M2> extends ModelConverter<M1, M2> {
 			@Override
 			default ModelInstanceConverter<M1, M2> convert(ModelInstanceType<M1, ?> source, ModelInstanceType<M2, ?> dest)
@@ -53,11 +71,21 @@ public abstract class ModelType<M> implements Named {
 				};
 			}
 
+			/**
+			 * @param source The source value to convert
+			 * @return The converted value
+			 */
 			M2 convert(M1 source);
 
 			ModelInstanceType<M2, ?> getType(ModelInstanceType<M1, ?> source, ModelInstanceType<M2, ?> dest);
 		}
 
+		/**
+		 * A model converter for a {@link SingleTyped single-typed} model type
+		 *
+		 * @param <M1> The model type to convert from
+		 * @param <M2> The model type to convert to
+		 */
 		public interface SimpleSingleTyped<M1, M2> extends ModelConverter<M1, M2> {
 			@Override
 			default ModelInstanceConverter<M1, M2> convert(ModelInstanceType<M1, ?> source, ModelInstanceType<M2, ?> dest)
@@ -92,6 +120,12 @@ public abstract class ModelType<M> implements Named {
 			<S, T> M2 convert(M1 source, TypeToken<T> targetType, Function<S, T> cast, Function<T, S> reverse);
 		}
 
+		/**
+		 * A model converter for a {@link DoubleTyped double-typed} model type
+		 *
+		 * @param <M1> The model type to convert from
+		 * @param <M2> The model type to convert to
+		 */
 		public interface SimpleDoubleTyped<M1, M2> extends ModelConverter<M1, M2> {
 			@Override
 			default ModelInstanceConverter<M1, M2> convert(ModelInstanceType<M1, ?> source, ModelInstanceType<M2, ?> dest)
@@ -144,11 +178,27 @@ public abstract class ModelType<M> implements Named {
 		}
 	}
 
+	/**
+	 * A converter that knows how to convert a source-typed model instance value to a target type
+	 *
+	 * @param <M1> The type of model instance value to convert
+	 * @param <M2> The type to convert the model value to
+	 */
 	public interface ModelInstanceConverter<M1, M2> {
+		/**
+		 * @param source The source value to convert
+		 * @return The converter value
+		 */
 		M2 convert(M1 source);
 
+		/** @return The type of value that this convert converts to */
 		ModelInstanceType<M2, ?> getType();
 
+		/**
+		 * @param <M3> The target type of the next converter
+		 * @param next The next converter
+		 * @return A converter that converts from this converter's source type to the target type of the next converter
+		 */
 		default <M3> ModelInstanceConverter<M1, M3> and(ModelInstanceConverter<M2, M3> next) {
 			ModelInstanceConverter<M1, M2> self = this;
 			return new ModelInstanceConverter<M1, M3>() {
@@ -166,9 +216,15 @@ public abstract class ModelType<M> implements Named {
 		}
 	}
 
+	/**
+	 * A converter that does nothing, and simply returns the source it is to convert
+	 *
+	 * @param <M> The model type that this converter is for
+	 */
 	public static class NoOpConverter<M> implements ModelInstanceConverter<M, M> {
 		private final ModelInstanceType<M, ?> theType;
 
+		/** @param type The type to convert */
 		public NoOpConverter(ModelInstanceType<M, ?> type) {
 			theType = type;
 		}
@@ -189,7 +245,12 @@ public abstract class ModelType<M> implements Named {
 		}
 	}
 
-	public static <M> ModelInstanceConverter<M, M> nullConverter(ModelInstanceType<M, ?> type) {
+	/**
+	 * @param <M> The model type to convert
+	 * @param type The type to convert
+	 * @return A converter that does nothing, and simply returns the source it is to convert
+	 */
+	public static <M> NoOpConverter<M> nullConverter(ModelInstanceType<M, ?> type) {
 		if (type == null)
 			throw new NullPointerException();
 		return new NoOpConverter<>(type);
@@ -361,6 +422,14 @@ public abstract class ModelType<M> implements Named {
 			return firstConverter.and(secondConverter);
 		}
 
+		/**
+		 * @param <M2> The model type to convert to
+		 * @param <MV2> The type to convert to
+		 * @param source The source value of this type
+		 * @param targetType The type to convert to
+		 * @return A value equivalent to this value, but with the given type
+		 * @throws QonfigInterpretationException If no converter is available for the conversion from this type to the given type
+		 */
 		public <M2, MV2 extends M2> ValueContainer<M2, MV2> as(ValueContainer<M, MV> source, ModelInstanceType<M2, MV2> targetType)
 			throws QonfigInterpretationException {
 			ModelInstanceType<M, MV> sourceType = source.getType();
@@ -583,8 +652,13 @@ public abstract class ModelType<M> implements Named {
 	 */
 	public abstract TypeToken<?> getType(M value, int typeIndex);
 
+	/**
+	 * @param types The parameter types to create the instance type for
+	 * @return A {@link ModelInstanceType} of this model type with the given parameter types
+	 */
 	public abstract ModelInstanceType<M, ?> forTypes(TypeToken<?>... types);
 
+	/** @return A {@link ModelInstanceType} of this model type with wildcard parameter types */
 	public ModelInstanceType<M, ?> any() {
 		TypeToken<?>[] types = new TypeToken[theTypeCount];
 		Arrays.fill(types, TypeTokens.get().WILDCARD);
