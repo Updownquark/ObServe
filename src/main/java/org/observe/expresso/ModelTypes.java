@@ -470,10 +470,15 @@ public class ModelTypes {
 
 	/** See {@link ModelTypes#Value} */
 	public static class ValueModelType extends ModelType.SingleTyped<SettableValue<?>> {
+		/** Value&lt;boolean> type */
 		public final ModelInstanceType.SingleTyped<SettableValue<?>, Boolean, SettableValue<Boolean>> BOOLEAN = forType(boolean.class);
+		/** Value&lt;char> type */
 		public final ModelInstanceType.SingleTyped<SettableValue<?>, Character, SettableValue<Character>> CHAR = forType(char.class);
+		/** Value&lt;byte> type */
 		public final ModelInstanceType.SingleTyped<SettableValue<?>, Byte, SettableValue<Byte>> BYTE = forType(byte.class);
+		/** Value&lt;int> type */
 		public final ModelInstanceType.SingleTyped<SettableValue<?>, Integer, SettableValue<Integer>> INT = forType(int.class);
+		/** Value&lt;double> type */
 		public final ModelInstanceType.SingleTyped<SettableValue<?>, Double, SettableValue<Double>> DOUBLE = forType(double.class);
 
 		private ValueModelType() {

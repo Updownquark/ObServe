@@ -22,8 +22,6 @@ public interface DynamicModelValue<M, MV extends M> extends ValueContainer<M, MV
 	/** @return The metadata that is the declaration for this dynamic value */
 	public QonfigElement getDeclaration();
 
-	public ModelInstanceType<M, MV> getDeclaredType();
-
 	/**
 	 * Called by some implementation to satisfy a metadata-declared dynamic (interpreted-value-specific) model value.
 	 *
@@ -148,6 +146,12 @@ public interface DynamicModelValue<M, MV extends M> extends ValueContainer<M, MV
 		return DynamicTypedModelValueCreator.satisfyDynamicValue(name, model, satisfier, true);
 	}
 
+	/**
+	 * A dynamic (interpreted-value-specific) model value
+	 *
+	 * @param <M> The model type of the value
+	 * @param <MV> The type of the value
+	 */
 	public class RuntimeModelValue<M, MV extends M> implements DynamicModelValue<M, MV> {
 		private final String theName;
 		private final ModelInstanceType<M, MV> theType;
@@ -174,11 +178,6 @@ public interface DynamicModelValue<M, MV extends M> extends ValueContainer<M, MV
 		@Override
 		public QonfigElement getDeclaration() {
 			return theDeclaration;
-		}
-
-		@Override
-		public ModelInstanceType<M, MV> getDeclaredType() {
-			return theType;
 		}
 
 		@Override
@@ -213,11 +212,18 @@ public interface DynamicModelValue<M, MV extends M> extends ValueContainer<M, MV
 		}
 	}
 
+	/**
+	 * A value container created by {@link DynamicTypedModelValueCreator} that wraps the dynamic value's
+	 * {@link DynamicModelValue#satisfyDynamicValue(String, ObservableModelSet, ValueCreator) satisfier} (after satisfaction occurs)
+	 *
+	 * @param <M> The model type of the value
+	 * @param <MV> The type of the value
+	 */
 	public class DynamicContainerWrapper<M, MV extends M> implements DynamicModelValue<M, MV> {
 		private final DynamicTypedModelValueCreator<M, MV> theCreator;
 		private ValueContainer<M, MV> theContainer;
 
-		public DynamicContainerWrapper(DynamicTypedModelValueCreator<M, MV> creator) {
+		DynamicContainerWrapper(DynamicTypedModelValueCreator<M, MV> creator) {
 			theCreator = creator;
 		}
 
@@ -250,11 +256,12 @@ public interface DynamicModelValue<M, MV extends M> extends ValueContainer<M, MV
 			return theCreator.getDeclaration();
 		}
 
-		@Override
+		/** @return The type that this value's {@link #getCreator() creator} was declared with */
 		public ModelInstanceType<M, MV> getDeclaredType() {
 			return theCreator.getDeclaredType();
 		}
 
+		/** @return The dynamically-typed value creator that created this wrapper */
 		public DynamicTypedModelValueCreator<M, MV> getCreator() {
 			return theCreator;
 		}
@@ -290,10 +297,12 @@ public interface DynamicModelValue<M, MV extends M> extends ValueContainer<M, MV
 			return theName;
 		}
 
+		/** @return The type that this value creator was declared with */
 		public ModelInstanceType<M, MV> getDeclaredType() {
 			return theDeclaredType;
 		}
 
+		/** @return The metadata that is the declaration for this dynamic value */
 		public QonfigElement getDeclaration() {
 			return theDeclaration;
 		}
