@@ -172,11 +172,43 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 								throw new QonfigInterpretationException(
 									"Multiple element-model values named '" + name + "' in type hierarchy");
 							Expresso.ExtModelValue<Object> spec = value.interpret(Expresso.ExtModelValue.class);
+							String sourceAttr = value.asElement("element-model-value").getAttributeText("source-attribute");
 							ModelInstanceType<Object, Object> valueType = (ModelInstanceType<Object, Object>) spec.getType(session);
-							if (spec.isTypeSpecified())
-								models.with(name, new DynamicModelValue<>(name, valueType, value.getElement()));
+							if (sourceAttr != null) {
+								ObservableExpression sourceAttrX;
+								try {
+									if (sourceAttr.isEmpty())
+										sourceAttrX = session.asElement(type).getValueExpression();
+									else
+										sourceAttrX = session.asElement(type).getAttributeExpression(sourceAttr);
+								} catch (QonfigInterpretationException e) {
+									if (sourceAttr.isEmpty())
+										throw new QonfigInterpretationException("Could not obtain source value expression for " + type,
+											e);
+									else if (type.getAttributesByName().get(sourceAttr).isEmpty())
+										throw new QonfigInterpretationException("No such source-attribute " + type + "." + sourceAttr);
+									else
+										throw new QonfigInterpretationException(
+											"Could not obtain source-attribute expression for " + type + "." + sourceAttr, e);
+								}
+								models.withMaker(name, new ValueCreator<Object, Object>() {
+									@Override
+									public ValueContainer<Object, Object> createValue() {
+										try {
+											return sourceAttrX.evaluate(valueType, session.getExpressoEnv());
+										} catch (QonfigInterpretationException e) {
+											String msg = "Could not interpret source" + (sourceAttr.isEmpty() ? " value for " + type
+												: "-attribute " + type + "." + sourceAttr);
+											session.withError(msg, e);
+											throw new IllegalStateException(msg, e);
+										}
+									}
+								});
+							} else if (spec.isTypeSpecified())
+								models.with(name, new DynamicModelValue.RuntimeModelValue<>(name, valueType, value.getElement()));
 							else
-								models.withMaker(name, new DynamicTypedModelValue<>(name, valueType, value.getElement()));
+								models.withMaker(name,
+									new DynamicModelValue.DynamicTypedModelValueCreator<>(name, valueType, value.getElement()));
 							hasValues = true;
 						}
 					}

@@ -43,6 +43,7 @@ It does not include anything "useful" in the concrete, i.e. no values or transfo
 			<child-def name="model" type="model" min="0" />
 		</add-on>
 		<add-on name="element-model-value" requires="model-value" abstract="true">
+			<attribute name="source-attribute" type="string" specify="optional" />
 			<value-mod specify="forbidden" /> <!-- External/element values are specified by code instantiating the model -->
 		</add-on>
 

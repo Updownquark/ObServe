@@ -78,7 +78,7 @@ public class TestInterpretation implements QonfigInterpretation {
 			ObservableExpression derivedStateX = exS.getAttributeExpression("derived-state");
 			return () -> {
 				// Satisfy the internalState value with the internalState container
-				DynamicTypedModelValue.satisfyDynamicValue("internalState", exS.getExpressoEnv().getModels(), () -> {
+				DynamicModelValue.satisfyDynamicValue("internalState", exS.getExpressoEnv().getModels(), () -> {
 					try {
 						return internalStateX.evaluate(ModelTypes.Value.any(), exS.getExpressoEnv());
 					} catch (QonfigInterpretationException e) {
@@ -86,6 +86,36 @@ public class TestInterpretation implements QonfigInterpretation {
 						return null;
 					}
 				});
+				ValueContainer<SettableValue<?>, SettableValue<?>> internalStateV;
+				ValueContainer<SettableValue<?>, SettableValue<?>> derivedStateV;
+				try {
+					internalStateV = exS.getExpressoEnv().getModels().getValue("internalState", ModelTypes.Value.any());
+					derivedStateV = derivedStateX.evaluate(ModelTypes.Value.any(), exS.getExpressoEnv());
+				} catch (QonfigInterpretationException e) {
+					session.withError("Could not create derived value", e);
+					return null;
+				}
+				return new ObservableModelSet.AbstractValueContainer<SettableValue<?>, SettableValue<DynamicTypeStatefulTestStructure>>(
+					ModelTypes.Value.forType(DynamicTypeStatefulTestStructure.class)) {
+					@Override
+					public SettableValue<DynamicTypeStatefulTestStructure> get(ModelSetInstance models) {
+						models = exS.wrapLocal(models);
+						DynamicTypeStatefulTestStructure structure = new DynamicTypeStatefulTestStructure(//
+							internalStateV.get(models), derivedStateV.get(models));
+						return SettableValue.of(DynamicTypeStatefulTestStructure.class, structure, "Not Settable");
+					}
+
+					@Override
+					public BetterList<ValueContainer<?, ?>> getCores() {
+						return BetterList.of(this);
+					}
+				};
+			};
+		})//
+		.createWith("dynamic-type-stateful-struct2", ObservableModelSet.ValueCreator.class, session -> {
+			ExpressoQIS exS = session.as(ExpressoQIS.class);
+			ObservableExpression derivedStateX = exS.getAttributeExpression("derived-state");
+			return () -> {
 				ValueContainer<SettableValue<?>, SettableValue<?>> internalStateV;
 				ValueContainer<SettableValue<?>, SettableValue<?>> derivedStateV;
 				try {
