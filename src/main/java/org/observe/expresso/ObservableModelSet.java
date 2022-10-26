@@ -205,8 +205,16 @@ public interface ObservableModelSet extends Identifiable {
 		 */
 		MV get(ModelSetInstance models);
 
+		/** @return All the self-sufficient containers that compose this value container */
 		BetterList<ValueContainer<?, ?>> getCores();
 
+		/**
+		 * @param <M2> The model type for the mapped value
+		 * @param <MV2> The type for the mapped value
+		 * @param type The type for the mapped value
+		 * @param map The function to take a value of this container's type and transform it to the target type
+		 * @return A ValueContainer that returns this container's value, transformed to the given type
+		 */
 		default <M2, MV2 extends M2> ValueContainer<M2, MV2> map(ModelInstanceType<M2, MV2> type, Function<? super MV, ? extends MV2> map) {
 			ValueContainer<M, MV> outer = this;
 			return new AbstractValueContainer<M2, MV2>(type) {
@@ -227,6 +235,13 @@ public interface ObservableModelSet extends Identifiable {
 			};
 		}
 
+		/**
+		 * @param <M2> The model type for the mapped value
+		 * @param <MV2> The type for the mapped value
+		 * @param type The type for the mapped value
+		 * @param map The function to take a value of this container's type and transform it to the target type
+		 * @return A ValueContainer that returns this container's value, transformed to the given type
+		 */
 		default <M2, MV2 extends M2> ValueContainer<M2, MV2> map(ModelInstanceType<M2, MV2> type,
 			BiFunction<? super MV, ModelSetInstance, ? extends MV2> map) {
 			ValueContainer<M, MV> outer = this;
@@ -243,6 +258,11 @@ public interface ObservableModelSet extends Identifiable {
 			};
 		}
 
+		/**
+		 * @param modelWrapper The function to wrap the model instance set passed to {@link #get(ModelSetInstance)}
+		 * @return A ValueContainer that is the same as this one, but which uses the given function to wrap the model set instance before
+		 *         passing it to this container's {@link #get(ModelSetInstance)} method
+		 */
 		default ValueContainer<M, MV> wrapModels(Function<ModelSetInstance, ModelSetInstance> modelWrapper) {
 			ValueContainer<M, MV> outer = this;
 			return new ValueContainer<M, MV>() {
@@ -523,10 +543,27 @@ public interface ObservableModelSet extends Identifiable {
 		}
 	}
 
+	/**
+	 * Simple utility function to produce a literal value
+	 *
+	 * @param <T> The type of the value
+	 * @param type The type of the value
+	 * @param value The value
+	 * @param text The text to represent the value
+	 * @return A SettableValue that is not modifiable
+	 */
 	public static <T> SettableValue<T> literal(TypeToken<T> type, T value, String text) {
 		return SettableValue.asSettable(ObservableValue.of(value), __ -> "Literal value '" + text + "'");
 	}
 
+	/**
+	 * Simple utility function to produce a literal value
+	 *
+	 * @param <T> The type of the value
+	 * @param value The value
+	 * @param text The text to represent the value
+	 * @return A SettableValue that is not modifiable
+	 */
 	public static <T> SettableValue<T> literal(T value, String text) {
 		return literal(TypeTokens.get().of((Class<T>) value.getClass()), value, text);
 	}
@@ -724,12 +761,36 @@ public interface ObservableModelSet extends Identifiable {
 	/** @return Checks the names of components in this model set to ensure they are accessible from expressions */
 	NameChecker getNameChecker();
 
+	/**
+	 * Creates a builder for a {@link ModelSetInstance} which will contain values for all the components in this model set
+	 *
+	 * @param extModel The external model set to satisfy {@link ExtValueRef external value references} installed with
+	 *        {@link Builder#withExternal(String, ExtValueRef)}
+	 * @param until An observable that fires when the lifetime of the new model instance set expires (or null if the lifetime of the new
+	 *        model instance set is to be infinite)
+	 * @return A builder for the new instance set
+	 */
 	ModelSetInstanceBuilder createInstance(ExternalModelSet extModel, Observable<?> until);
 
+	/**
+	 * Creates a builder for a {@link ModelSetInstance} which will contain values for all the components in this model set. This builder may
+	 * only be used if no {@link ExtValueRef external value references} were installed in this model set with
+	 * {@link Builder#withExternal(String, ExtValueRef)}
+	 *
+	 * @param until An observable that fires when the lifetime of the new model instance set expires (or null if the lifetime of the new
+	 *        model instance set is to be infinite)
+	 * @return A builder for the new instance set
+	 */
 	default ModelSetInstanceBuilder createInstance(Observable<?> until) {
 		return createInstance(null, until);
 	}
 
+	/**
+	 * Shorthand for <code>build(modelName, getNameChecker()).withAll(this)</code>
+	 *
+	 * @param modelName The name for the new model set
+	 * @return A builder for a model set containing all of this model's information and potentially more
+	 */
 	default Builder wrap(String modelName) {
 		return build(modelName, getNameChecker()).withAll(this);
 	}
@@ -757,36 +818,119 @@ public interface ObservableModelSet extends Identifiable {
 
 	/** Builds an {@link ObservableModelSet} */
 	public interface Builder extends ObservableModelSet {
+		/**
+		 * @param modelConfiguration A function to produce the {@link ModelSetInstance#getModelConfiguration() model configuration} for
+		 *        instances of this model
+		 * @return This builder
+		 */
 		Builder setModelConfiguration(Function<ModelSetInstance, ?> modelConfiguration);
 
+		/**
+		 * Declares a dependency on a value from an {@link ExternalModelSet}
+		 *
+		 * @param <M> The model type of the value
+		 * @param <MV> The type of the value
+		 * @param name The name of the value in this model set
+		 * @param extGetter The reference to retrieve the value from an {@link ExternalModelSet} passed to
+		 *        {@link ObservableModelSet#createInstance(ExternalModelSet, Observable)}
+		 * @return This builder
+		 */
 		<M, MV extends M> Builder withExternal(String name, ExtValueRef<M, MV> extGetter);
 
+		/**
+		 * Installs a creator for a model value
+		 *
+		 * @param name The name of the value in this model set
+		 * @param maker The creator to create the model value
+		 * @return This builder
+		 */
 		Builder withMaker(String name, ValueCreator<?, ?> maker);
 
+		/**
+		 * Declares a value to be satisfied with {@link ModelSetInstanceBuilder#with(RuntimeValuePlaceholder, Object)}
+		 *
+		 * @param <M> The model type of the runtime value
+		 * @param <MV> The type of the runtime value
+		 * @param name The name of the value in this model set
+		 * @param type The type of the runtime value
+		 * @return This builder
+		 */
 		<M, MV extends M> RuntimeValuePlaceholder<M, MV> withRuntimeValue(String name, ModelInstanceType<M, MV> type);
 
+		/**
+		 * Retrieves or creates a builder for a sub-model under this model set
+		 *
+		 * @param name The name for the sub-model
+		 * @return The builder for the sub-model
+		 */
 		Builder createSubModel(String name);
 
+		/**
+		 * Causes this model to {@link ObservableModelSet#getInheritance() inherit} all of the other model's components. All of the other
+		 * model's components will be accessible from this model.
+		 *
+		 * @param other The model whose components to inherit
+		 * @return This builder
+		 */
 		Builder withAll(ObservableModelSet other);
 
-		ObservableModelSet build();
-
+		/**
+		 * Declares a dependency on a value from an {@link ExternalModelSet}
+		 *
+		 * @param <M> The model type of the value
+		 * @param <MV> The type of the value
+		 * @param name The name of the value in this model set
+		 * @param type The type of the external value
+		 * @param value The function to retrieve the value from an {@link ExternalModelSet} passed to
+		 *        {@link ObservableModelSet#createInstance(ExternalModelSet, Observable)}
+		 * @return This builder
+		 */
 		default <M, MV extends M> Builder withExternal(String name, ModelInstanceType<M, MV> type, Function<ExternalModelSet, MV> value) {
 			return withExternal(name, ExtValueRef.of(type, value));
 		}
 
+		/**
+		 * Declares a dependency on a value from an {@link ExternalModelSet}
+		 *
+		 * @param <M> The model type of the value
+		 * @param <MV> The type of the value
+		 * @param name The name of the value in this model set
+		 * @param type The type of the external value
+		 * @param value The function to retrieve the value from an {@link ExternalModelSet} passed to
+		 *        {@link ObservableModelSet#createInstance(ExternalModelSet, Observable)}
+		 * @param defaultValue Produces a default value if there is no such reference in the {@link ExternalModelSet} (may be null)
+		 * @return This builder
+		 */
 		default <M, MV extends M> Builder withExternal(String name, ModelInstanceType<M, MV> type, Function<ExternalModelSet, MV> value,
 			Function<ModelSetInstance, MV> defaultValue) {
 			return withExternal(name, ExtValueRef.of(type, value, defaultValue));
 		}
 
+		/**
+		 * Installs a container for a model value
+		 *
+		 * @param name The name of the value in this model set
+		 * @param value The container to create the model value
+		 * @return This builder
+		 */
 		default <M, MV extends M> Builder with(String name, ValueContainer<M, MV> value) {
 			return withMaker(name, ValueCreator.constant(value));
 		}
 
+		/**
+		 * Installs a creator for a model value
+		 *
+		 * @param name The name of the value in this model set
+		 * @param type The type of the new value
+		 * @param value The function to create the model value
+		 * @return This builder
+		 */
 		default <M, MV extends M> Builder with(String name, ModelInstanceType<M, MV> type, Function<ModelSetInstance, MV> value) {
 			return with(name, ValueContainer.of(type, value));
 		}
+
+		/** @return The immutable {@link ObservableModelSet} configured with this builder */
+		ObservableModelSet build();
 	}
 
 	/** A set of actual values created by the containers declared in an {@link ObservableModelSet} */

@@ -28,7 +28,8 @@ import com.google.common.reflect.TypeToken;
  */
 public abstract class ModelType<M> implements Named {
 	/**
-	 * An object that knows how to produce {@link ModelInstanceConverter instance converters}
+	 * An object that knows how to produce {@link ModelInstanceConverter instance converters}. ModelType implementations may override
+	 * {@link ModelType#setupConversions(ConversionBuilder)} and install instances of this type to provide conversion ability.
 	 *
 	 * @param <M1> The model type to convert from
 	 * @param <M2> The model type to convert to
@@ -37,11 +38,10 @@ public abstract class ModelType<M> implements Named {
 		/**
 		 * @param source The type to convert from
 		 * @param target The type to convert to
-		 * @return A converter capable of converting from the given source type to the given target type
-		 * @throws IllegalArgumentException If this converter cannot create an instance converter for the given source/target types
+		 * @return A converter capable of converting from the given source type to the given target type, or null if this converter cannot
+		 *         create an instance converter for the given source/target types be made
 		 */
-		ModelInstanceConverter<M1, M2> convert(ModelInstanceType<M1, ?> source, ModelInstanceType<M2, ?> target)
-			throws IllegalArgumentException;
+		ModelInstanceConverter<M1, M2> convert(ModelInstanceType<M1, ?> source, ModelInstanceType<M2, ?> target);
 
 		/**
 		 * A model converter for an {@link UnTyped un-typed} model type
@@ -54,8 +54,6 @@ public abstract class ModelType<M> implements Named {
 			default ModelInstanceConverter<M1, M2> convert(ModelInstanceType<M1, ?> source, ModelInstanceType<M2, ?> dest)
 				throws IllegalArgumentException {
 				return new ModelInstanceConverter<M1, M2>() {
-					private ModelInstanceType<M2, ?> theType;
-
 					@Override
 					public M2 convert(M1 src) {
 						return convert(src);
@@ -63,9 +61,7 @@ public abstract class ModelType<M> implements Named {
 
 					@Override
 					public ModelInstanceType<M2, ?> getType() {
-						if (theType == null)
-							theType = SimpleUnTyped.this.getType(source, dest);
-						return theType;
+						return dest;
 					}
 				};
 			}
@@ -75,8 +71,6 @@ public abstract class ModelType<M> implements Named {
 			 * @return The converted value
 			 */
 			M2 convert(M1 source);
-
-			ModelInstanceType<M2, ?> getType(ModelInstanceType<M1, ?> source, ModelInstanceType<M2, ?> target);
 		}
 
 		/**
@@ -116,6 +110,15 @@ public abstract class ModelType<M> implements Named {
 				};
 			}
 
+			/**
+			 * @param <S> The value-type of the source to convert from
+			 * @param <T> The value-type of the target to convert to
+			 * @param source The source value to convert
+			 * @param targetType The target value type
+			 * @param cast The function to cast source values to target values
+			 * @param reverse The function to cast target values back to source values (if possible)
+			 * @return The source model value, converted to this type
+			 */
 			<S, T> M2 convert(M1 source, TypeToken<T> targetType, Function<S, T> cast, Function<T, S> reverse);
 		}
 
@@ -172,6 +175,20 @@ public abstract class ModelType<M> implements Named {
 				};
 			}
 
+			/**
+			 * @param <KS> The key-type of the source to convert from
+			 * @param <KT> The key-type of the target to convert to
+			 * @param <VS> The value-type of the source to convert from
+			 * @param <VT> The value-type of the target to convert to
+			 * @param source The source value to convert
+			 * @param targetKeyType The target key type
+			 * @param targetValueType The target value type
+			 * @param keyCast The function to cast source keys to target keys
+			 * @param keyReverse The function to cast target keys back to source keys (if possible)
+			 * @param valueCast The function to cast source values to target values
+			 * @param valueReverse The function to cast target values back to source values (if possible)
+			 * @return The source model value, converted to this type
+			 */
 			<KS, KT, VS, VT> M2 convert(M1 source, TypeToken<KT> targetKeyType, TypeToken<VT> targetValueType, //
 				Function<KS, KT> keyCast, Function<KT, KS> keyReverse, Function<VS, VT> valueCast, Function<VT, VS> valueReverse);
 		}
@@ -255,6 +272,15 @@ public abstract class ModelType<M> implements Named {
 		return new NoOpConverter<>(type);
 	}
 
+	/**
+	 * Creates a converter from a function
+	 *
+	 * @param <M1> The model type to convert from
+	 * @param <M2> The model type to convert to
+	 * @param converter The function to convert a source model value to a target model value
+	 * @param type The type that the function converts to
+	 * @return A converter that performs the given transformation
+	 */
 	public static <M1, M2> ModelInstanceConverter<M1, M2> converter(Function<M1, M2> converter, ModelInstanceType<M2, ?> type) {
 		if (converter == null || type == null)
 			throw new NullPointerException();
@@ -687,9 +713,21 @@ public abstract class ModelType<M> implements Named {
 		return forTypes(types);
 	}
 
+	/**
+	 * @param target The type to convert to
+	 * @param casts Functions to convert values of each of this model type's parameter types to values of the target type's parameter types
+	 * @param reverses Functions to convert values of each of the target type's parameter types to values of the this model type's parameter
+	 *        types
+	 * @return The function to convert model values of this model type to model values of the target type
+	 */
 	protected abstract Function<M, M> convertType(ModelInstanceType<M, ?> target, Function<Object, Object>[] casts,
 		Function<Object, Object>[] reverses);
 
+	/**
+	 * Called by the constructor to set up this type's conversion capabilities
+	 *
+	 * @param builder The builder to use to install converters
+	 */
 	protected void setupConversions(ConversionBuilder<M> builder) {
 	}
 
@@ -802,26 +840,70 @@ public abstract class ModelType<M> implements Named {
 			return forType(TypeTokens.get().of(type));
 		}
 
+		/**
+		 * Creates an instance of this type with a parameterized type
+		 *
+		 * @param <V> The type to convert to
+		 * @param rawType The raw type to convert to
+		 * @param parameters The parameters for the raw type
+		 * @return The parameterized instance type
+		 */
 		public <V> ModelInstanceType.SingleTyped<M, V, ?> forType(Class<? super V> rawType, TypeToken<?>... parameters) {
 			return forType(TypeTokens.get().keyFor(rawType).parameterized(parameters));
 		}
 
+		/**
+		 * Creates an instance of this type with a parameterized type
+		 *
+		 * @param <V> The type to convert to
+		 * @param rawType The raw type to convert to
+		 * @param parameters The parameters for the raw type
+		 * @return The parameterized instance type
+		 */
 		public <V> ModelInstanceType.SingleTyped<M, V, ?> forType(Class<? super V> rawType, Class<?>... parameters) {
 			return forType(TypeTokens.get().keyFor(rawType).parameterized(parameters));
 		}
 
+		/**
+		 * Creates a "? extends" wildcard-parameterized instance of this type
+		 *
+		 * @param <V> The upper bound for the wildcard
+		 * @param type The upper bound for the wildcard
+		 * @return The wildcard-parameterized instance type
+		 */
 		public <V> ModelInstanceType.SingleTyped<M, ? extends V, ?> below(TypeToken<V> type) {
 			return forType(TypeTokens.get().getExtendsWildcard(type));
 		}
 
+		/**
+		 * Creates a "? extends" wildcard-parameterized instance of this type
+		 *
+		 * @param <V> The upper bound for the wildcard
+		 * @param type The upper bound for the wildcard
+		 * @return The wildcard-parameterized instance type
+		 */
 		public <V> ModelInstanceType.SingleTyped<M, ? extends V, ?> below(Class<V> type) {
 			return below(TypeTokens.get().of(type));
 		}
 
+		/**
+		 * Creates a "? super" wildcard-parameterized instance of this type
+		 *
+		 * @param <V> The lower bound for the wildcard
+		 * @param type The lower bound for the wildcard
+		 * @return The wildcard-parameterized instance type
+		 */
 		public <V> ModelInstanceType.SingleTyped<M, ? super V, ?> above(TypeToken<V> type) {
 			return forType(TypeTokens.get().getSuperWildcard(type));
 		}
 
+		/**
+		 * Creates a "? super" wildcard-parameterized instance of this type
+		 *
+		 * @param <V> The lower bound for the wildcard
+		 * @param type The lower bound for the wildcard
+		 * @return The wildcard-parameterized instance type
+		 */
 		public <V> ModelInstanceType.SingleTyped<M, ? super V, ?> above(Class<V> type) {
 			return above(TypeTokens.get().of(type));
 		}
@@ -880,40 +962,134 @@ public abstract class ModelType<M> implements Named {
 			return forType(TypeTokens.get().of(keyType), TypeTokens.get().of(valueType));
 		}
 
+		/**
+		 * Creates a "? extends" wildcard-parameterized instance of this type
+		 *
+		 * @param <K> The upper bound for the key wildcard type
+		 * @param <V> The upper bound for the value wildcard type
+		 * @param keyType The upper bound for the key wildcard type
+		 * @param valueType The upper bound for the value wildcard type
+		 * @return The wildcard-parameterized instance type
+		 */
 		public <K, V> ModelInstanceType.DoubleTyped<M, ? extends K, ? extends V, ?> below(TypeToken<K> keyType, TypeToken<V> valueType) {
 			return forType(TypeTokens.get().getSuperWildcard(keyType), TypeTokens.get().getExtendsWildcard(valueType));
 		}
 
+		/**
+		 * Creates a "? extends" wildcard-parameterized instance of this type
+		 *
+		 * @param <K> The upper bound for the key wildcard type
+		 * @param <V> The upper bound for the value wildcard type
+		 * @param keyType The upper bound for the key wildcard type
+		 * @param valueType The upper bound for the value wildcard type
+		 * @return The wildcard-parameterized instance type
+		 */
 		public <K, V> ModelInstanceType.DoubleTyped<M, ? extends K, ? extends V, ?> below(Class<K> keyType, Class<V> valueType) {
 			return below(TypeTokens.get().of(keyType), TypeTokens.get().of(valueType));
 		}
 
+		/**
+		 * Creates a "? super" wildcard-parameterized instance of this type
+		 *
+		 * @param <K> The lower bound for the key wildcard type
+		 * @param <V> The lower bound for the value wildcard type
+		 * @param keyType The lower bound for the key wildcard type
+		 * @param valueType The lower bound for the value wildcard type
+		 * @return The wildcard-parameterized instance type
+		 */
 		public <K, V> ModelInstanceType.DoubleTyped<M, ? super K, ? super V, ?> above(TypeToken<K> keyType, TypeToken<V> valueType) {
 			return forType(TypeTokens.get().getSuperWildcard(keyType), TypeTokens.get().getSuperWildcard(valueType));
 		}
 
+		/**
+		 * Creates a "? super" wildcard-parameterized instance of this type
+		 *
+		 * @param <K> The lower bound for the key wildcard type
+		 * @param <V> The lower bound for the value wildcard type
+		 * @param keyType The lower bound for the key wildcard type
+		 * @param valueType The lower bound for the value wildcard type
+		 * @return The wildcard-parameterized instance type
+		 */
 		public <K, V> ModelInstanceType.DoubleTyped<M, ? super K, ? super V, ?> above(Class<K> keyType, Class<V> valueType) {
 			return above(TypeTokens.get().of(keyType), TypeTokens.get().of(valueType));
 		}
 	}
 
+	/**
+	 * A builder (passed to {@link #setupConversions(ConversionBuilder)} from the constructor) to allow implementations of ModelType to
+	 * install converters related to this type.
+	 *
+	 * @param <M> The model type installing the converters
+	 */
 	public interface ConversionBuilder<M> {
+		/**
+		 * Installs a converter for any model value of this type to another given model type. The converter can always return null if a
+		 * particular conversion cannot be made.
+		 *
+		 * @param <M2> The model type to convert to
+		 * @param targetModelType The model type to convert to
+		 * @param converter The converter to do the conversion
+		 * @return This builder
+		 */
 		<M2> ConversionBuilder<M> convertibleTo(ModelType<M2> targetModelType, ModelConverter<M, M2> converter);
 
+		/**
+		 * Installs a converter for any model value of the given type to this type. The converter can always return null if a particular
+		 * conversion cannot be made.
+		 *
+		 * @param <M2> The model type to convert from
+		 * @param sourceModelType The model type to convert from
+		 * @param converter The converter to do the conversion
+		 * @return This builder
+		 */
 		<M2> ConversionBuilder<M> convertibleFrom(ModelType<M2> sourceModelType, ModelConverter<M2, M> converter);
 
+		/**
+		 * Installs a converter that may know how to convert a model value of this type to a value of any other type. The converter can
+		 * always return null if a particular conversion cannot be made.
+		 *
+		 * @param converter The converter to do the conversion
+		 * @return This builder
+		 */
 		ConversionBuilder<M> convertibleToAny(ModelConverter<M, Object> converter);
 
+		/**
+		 * Installs a converter that may know how to convert a model value of the given type to a value of this type. The converter can
+		 * always return null if a particular conversion cannot be made.
+		 *
+		 * @param converter The converter to do the conversion
+		 * @return This builder
+		 */
 		ConversionBuilder<M> convertibleFromAny(ModelConverter<Object, M> converter);
 
+		/**
+		 * Installs a converter that may know how to convert a model value of this type to a model value of a different parameterization of
+		 * this type. The converter can always return null if a particular conversion cannot be made.
+		 *
+		 * @param converter The converter to do the conversion
+		 * @return This builder
+		 */
 		ConversionBuilder<M> convertSelf(ModelConverter<M, M> converter);
 	}
 
+	/**
+	 * A ValueContainer, converted from one type to another
+	 *
+	 * @param <MS> The model type of the source value
+	 * @param <MVS> The type of the source value
+	 * @param <MT> The model type of the target value
+	 * @param <MVT> The type of the target value
+	 */
 	public static class ConvertedValue<MS, MVS extends MS, MT, MVT extends MT> implements ValueContainer<MT, MVT> {
 		private final ValueContainer<MS, MVS> theSource;
 		private final ModelInstanceType<MT, MVT> theType;
 		private final ModelType.ModelInstanceConverter<MS, MT> theConverter;
 
+		/**
+		 * @param source The source value to convert
+		 * @param type The type to convert to
+		 * @param converter The convert to convert values of the source type to the target type
+		 */
 		public ConvertedValue(ValueContainer<MS, MVS> source, ModelInstanceType<MT, MVT> type, ModelInstanceConverter<MS, MT> converter) {
 			if (source == null || type == null || converter == null)
 				throw new NullPointerException();
@@ -922,13 +1098,15 @@ public abstract class ModelType<M> implements Named {
 			theConverter = converter;
 		}
 
-		public ValueContainer<?, ?> getSource() {
+		/** @return The lowest-level source value that is converted by this value */
+		public ValueContainer<?, ?> getSourceRoot() {
 			if (theSource instanceof ConvertedValue)
-				return ((ConvertedValue<?, ?, ?, ?>) theSource).getSource();
+				return ((ConvertedValue<?, ?, ?, ?>) theSource).getSourceRoot();
 			else
 				return theSource;
 		}
 
+		/** @return The converter converting the source value to this value's type */
 		public ModelType.ModelInstanceConverter<MS, MT> getConverter() {
 			return theConverter;
 		}

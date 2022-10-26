@@ -137,7 +137,7 @@ public class ExpressoTests {
 		executeTestActions("internalState");
 	}
 
-	/** Tests dynamically-typed value-derived model values (see {@link DynamicTypedModelValue}) */
+	/** Tests dynamically-typed value-derived model values (see {@link DynamicModelValue}) */
 	@Test
 	public void testDynamicTypeInternalState() {
 		executeTestActions("dynamicTypeInternalState");
