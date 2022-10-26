@@ -66,7 +66,7 @@ public abstract class Invocation implements ObservableExpression {
 		throws QonfigInterpretationException {
 		TypeToken<?> targetType;
 		boolean action = type.getModelType() == ModelTypes.Action;
-		if (type.getModelType() == ModelTypes.Action || type.getModelType() == ModelTypes.Value)
+		if (action || type.getModelType() == ModelTypes.Value)
 			targetType = type.getType(0);
 		else
 			targetType = TypeTokens.get().keyFor(type.getModelType().modelType).parameterized(type.getTypeList());
@@ -421,7 +421,7 @@ public abstract class Invocation implements ObservableExpression {
 		public BetterList<ValueContainer<?, ?>> getCores() {
 			return BetterList.of(//
 				Stream.concat(Stream.of(theContext), theArguments.stream())
-					.flatMap(vc -> vc == null ? Stream.empty() : vc.getCores().stream()));
+				.flatMap(vc -> vc == null ? Stream.empty() : vc.getCores().stream()));
 		}
 
 		protected abstract MV createModelValue(SettableValue<?> ctxV, SettableValue<?>[] argVs, Observable<Object> changes);

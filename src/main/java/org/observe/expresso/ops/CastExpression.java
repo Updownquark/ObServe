@@ -81,7 +81,7 @@ public class CastExpression implements ObservableExpression {
 			&& !TypeTokens.get().isAssignable(valueType, sourceType))
 			throw new QonfigInterpretationException(
 				"Cannot cast value of type " + valueContainer.getType().getType(0) + " to " + valueType);
-		Class<T> valueClass = TypeTokens.getRawType(valueType);
+		Class<T> valueClass = TypeTokens.get().wrap(TypeTokens.getRawType(valueType));
 		Class<S> sourceClass = TypeTokens.getRawType(sourceType);
 		return valueContainer.map(ModelTypes.Value.forType(valueType), vc -> vc.transformReversible(valueType, tx -> tx//
 			.map(v -> {

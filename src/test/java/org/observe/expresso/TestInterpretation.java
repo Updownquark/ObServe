@@ -14,8 +14,11 @@ import org.qommons.config.QonfigInterpreterCore.Builder;
 import org.qommons.config.QonfigToolkit;
 import org.qommons.config.SpecialSession;
 
+/** Interpretation for the test-specific Qonfig toolkit */
 public class TestInterpretation implements QonfigInterpretation {
+	/** The name of the test toolkit */
 	public static final String TOOLKIT_NAME = "Expresso-Test";
+	/** The version of the test toolkit */
 	public static final Version VERSION = new Version(0, 1, 0);
 
 	@Override
@@ -39,7 +42,8 @@ public class TestInterpretation implements QonfigInterpretation {
 
 	@Override
 	public Builder configureInterpreter(Builder interpreter) {
-		interpreter.createWith("stateful-struct", ObservableModelSet.ValueCreator.class, session -> {
+		interpreter//
+		.createWith("stateful-struct", ObservableModelSet.ValueCreator.class, session -> {
 			ExpressoQIS exS = session.as(ExpressoQIS.class);
 			ObservableExpression derivedStateX = exS.getAttributeExpression("derived-state");
 			return () -> {
@@ -67,7 +71,48 @@ public class TestInterpretation implements QonfigInterpretation {
 					}
 				};
 			};
-		});
+		})//
+		.createWith("dynamic-type-stateful-struct", ObservableModelSet.ValueCreator.class, session -> {
+			ExpressoQIS exS = session.as(ExpressoQIS.class);
+			ObservableExpression internalStateX = exS.getAttributeExpression("internal-state");
+			ObservableExpression derivedStateX = exS.getAttributeExpression("derived-state");
+			return () -> {
+				// Satisfy the internalState value with the internalState container
+				DynamicTypedModelValue.satisfyDynamicValue("internalState", exS.getExpressoEnv().getModels(), () -> {
+					try {
+						return internalStateX.evaluate(ModelTypes.Value.any(), exS.getExpressoEnv());
+					} catch (QonfigInterpretationException e) {
+						session.withError("Could not create internal value", e);
+						return null;
+					}
+				});
+				ValueContainer<SettableValue<?>, SettableValue<?>> internalStateV;
+				ValueContainer<SettableValue<?>, SettableValue<?>> derivedStateV;
+				try {
+					internalStateV = exS.getExpressoEnv().getModels().getValue("internalState", ModelTypes.Value.any());
+					derivedStateV = derivedStateX.evaluate(ModelTypes.Value.any(), exS.getExpressoEnv());
+				} catch (QonfigInterpretationException e) {
+					session.withError("Could not create derived value", e);
+					return null;
+				}
+				return new ObservableModelSet.AbstractValueContainer<SettableValue<?>, SettableValue<DynamicTypeStatefulTestStructure>>(
+					ModelTypes.Value.forType(DynamicTypeStatefulTestStructure.class)) {
+					@Override
+					public SettableValue<DynamicTypeStatefulTestStructure> get(ModelSetInstance models) {
+						models = exS.wrapLocal(models);
+						DynamicTypeStatefulTestStructure structure = new DynamicTypeStatefulTestStructure(//
+							internalStateV.get(models), derivedStateV.get(models));
+						return SettableValue.of(DynamicTypeStatefulTestStructure.class, structure, "Not Settable");
+					}
+
+					@Override
+					public BetterList<ValueContainer<?, ?>> getCores() {
+						return BetterList.of(this);
+					}
+				};
+			};
+		})//
+		;
 		return interpreter;
 	}
 }

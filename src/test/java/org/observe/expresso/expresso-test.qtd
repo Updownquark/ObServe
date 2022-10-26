@@ -8,5 +8,15 @@
 			</element-model>
 			<attribute name="derived-state" type="expression" />
 		</element-def>
+		<element-def name="dynamic-type-stateful-struct" extends="model-value" inherits="with-element-model">
+			<element-model>
+				<!-- Since the type is unspecified here, it is up to the implementation (interpretation) to satisfy the type
+					as well as the value.
+					In this case, internalState is set to the value given in the 'internal-state' attribute with its type.-->
+				<value name="internalState" />
+			</element-model>
+			<attribute name="internal-state" type="expression" />
+			<attribute name="derived-state" type="expression" />
+		</element-def>
 	</elements>
 </qonfig-def>

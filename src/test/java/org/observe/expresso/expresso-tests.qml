@@ -287,6 +287,46 @@
 				<action name="checkState3_2">assertEquals(ext.actionName, 30, struct3dv)</action>
 				<action name="checkState4_2">assertEquals(ext.actionName, 4, struct4dv)</action>
 			</model>
+			<model name="dynamicTypeInternalState">
+				<!-- This test checks the functionality of dynamically-typed internal values specified by element-models in toolkit metadata -->
+				<!-- By not specifying a type on the 'internalState' value in the model, the API is advertising a value but leaving the type
+					as well as the value up to satisfaction by the implementation.
+					As documented in the toolkit, the internalState value is set to the value of the 'internal-state' attribute with its type.
+					This allows the derived-state expression to use the internalState value as a value its dynamically-determined type.
+				-->
+				<dynamic-type-stateful-struct name="struct1" internal-state="models.anyInt" derived-state="internalState + 10" />
+				<dynamic-type-stateful-struct name="struct2" internal-state="models.anyDbl" derived-state="internalState / 10" />
+				<dynamic-type-stateful-struct name="struct3" internal-state="models.anyBool" derived-state="!internalState" />
+				<dynamic-type-stateful-struct name="struct4" internal-state="models.anyStr" derived-state="internalState + &quot;-derived&quot;" />
+
+				<value name="struct1iv" type="int">(int) struct1.getInternalState()</value>
+				<value name="struct2iv" type="double">(double) struct2.getInternalState()</value>
+				<value name="struct3iv" type="boolean">(boolean) struct3.getInternalState()</value>
+				<value name="struct4iv" type="String">(String) struct4.getInternalState()</value>
+				<value name="struct1dv" type="int">(int) struct1.getDerivedState()</value>
+				<value name="struct2dv" type="double">(double) struct2.getDerivedState()</value>
+				<value name="struct3dv" type="boolean">(Boolean) struct3.getDerivedState()</value>
+				<value name="struct4dv" type="String">(String) struct4.getDerivedState()</value>
+
+				<action name="setInitInt">models.anyInt=10</action>
+				<action name="setInitDbl">models.anyDbl=15</action>
+				<action name="setInitStr">models.anyStr="initStr"</action>
+
+				<action name="checkState1">assertEquals(ext.actionName, 20, struct1dv)</action>
+				<action name="checkState2">assertEquals(ext.actionName, 1.5, struct2dv, 1E-10)</action>
+				<action name="checkState3">assertEquals(ext.actionName, false, struct3dv)</action>
+				<action name="checkState4">assertEquals(ext.actionName, "initStr-derived", struct4dv)</action>
+
+				<action name="modState1">struct1iv=25</action>
+				<action name="modState2">struct2iv=-9.75</action>
+				<action name="modState3">struct3iv=false</action>
+				<action name="modState4">struct4iv="changedStr"</action>
+
+				<action name="checkState1_2">assertEquals(ext.actionName, 35, struct1dv)</action>
+				<action name="checkState2_2">assertEquals(ext.actionName, -0.975, struct2dv, 1E-10)</action>
+				<action name="checkState3_2">assertEquals(ext.actionName, true, struct3dv)</action>
+				<action name="checkState4_2">assertEquals(ext.actionName, "changedStr-derived", struct4dv)</action>
+			</model>
 		</model>
 	</models>
 </expresso>

@@ -3,6 +3,7 @@ package org.observe.expresso;
 import org.observe.config.ObservableConfig;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigInterpreterCore.QonfigValueCreator;
 
@@ -24,6 +25,9 @@ public class Expresso {
 		 * @throws QonfigInterpretationException If the type cannot be evaluated
 		 */
 		ModelInstanceType<M, ?> getType(ExpressoQIS session) throws QonfigInterpretationException;
+
+		/** @return Whether the type of this value specification has been fully specified */
+		boolean isTypeSpecified();
 
 		/**
 		 * An {@link ExtModelValue} with a single parameter type
@@ -54,8 +58,16 @@ public class Expresso {
 			}
 
 			@Override
+			public boolean isTypeSpecified() {
+				return theValueType != null;
+			}
+
+			@Override
 			public ModelInstanceType<M, ?> getType(ExpressoQIS session) throws QonfigInterpretationException {
-				return theModelType.forType((TypeToken<?>) theValueType.getType(session.getExpressoEnv().getModels()));
+				if (theValueType != null)
+					return theModelType.forType((TypeToken<?>) theValueType.getType(session.getExpressoEnv().getModels()));
+				else
+					return theModelType.any();
 			}
 		}
 
@@ -90,17 +102,32 @@ public class Expresso {
 				return theValueType1;
 			}
 
-			/** @return The secondvalue type of this value */
+			/** @return The second value type of this value */
 			public VariableType getValueType2() {
 				return theValueType2;
 			}
 
 			@Override
+			public boolean isTypeSpecified() {
+				return theValueType1 != null && theValueType2 != null;
+			}
+
+			@Override
 			public ModelInstanceType<M, ?> getType(ExpressoQIS session) throws QonfigInterpretationException {
-				return theModelType.forType(//
-					(TypeToken<?>) theValueType1.getType(session.getExpressoEnv().getModels()), //
-					(TypeToken<?>) theValueType2.getType(session.getExpressoEnv().getModels())//
-					);
+				if (theValueType1 != null && theValueType2 != null)
+					return theModelType.forType(//
+						(TypeToken<?>) theValueType1.getType(session.getExpressoEnv().getModels()), //
+						(TypeToken<?>) theValueType2.getType(session.getExpressoEnv().getModels())//
+						);
+				else if (theValueType1 == null && theValueType2 == null)
+					return theModelType.any();
+				else
+					return theModelType.forType(//
+						(TypeToken<?>) (theValueType1 == null ? TypeTokens.get().WILDCARD
+							: theValueType1.getType(session.getExpressoEnv().getModels())), //
+						(TypeToken<?>) (theValueType2 == null ? TypeTokens.get().WILDCARD
+							: theValueType2.getType(session.getExpressoEnv().getModels()))//
+						);
 			}
 		}
 	}

@@ -70,14 +70,18 @@ public class ExpressoTests {
 			Map<String, ObservableAction<?>> actions = new LinkedHashMap<>();
 			theTestActions.put(subModel.getIdentity().getName(), actions);
 			for (ModelComponentNode<?, ?> action : subModel.getComponents().values()) {
-				if (action.getType().getModelType() == ModelTypes.Action) {
-					try {
-						actions.put(action.getIdentity().getName(), TEST_EXPRESSO.getModels().getValue(//
-							"tests." + subModel.getIdentity().getName() + "." + action.getIdentity().getName(), ModelTypes.Action.any())
-							.get(theModelInstance));
-					} catch (IllegalArgumentException e) {
-						// Not an action, just don't add it
+				try {
+					if (action.getType().getModelType() == ModelTypes.Action) {
+						try {
+							actions.put(action.getIdentity().getName(), TEST_EXPRESSO.getModels().getValue(//
+								"tests." + subModel.getIdentity().getName() + "." + action.getIdentity().getName(), ModelTypes.Action.any())
+								.get(theModelInstance));
+						} catch (IllegalArgumentException e) {
+							// Not an action, just don't add it
+						}
 					}
+				} catch (Throwable e) {
+					action.getType();
 				}
 			}
 		}
@@ -131,10 +135,16 @@ public class ExpressoTests {
 		executeTestActions("assignInstant");
 	}
 
-	/** Tests value-derived model values (see {@link DynamicModelValues}) */
+	/** Tests value-derived model values (see {@link DynamicModelValue}) */
 	@Test
 	public void testInternalState() {
 		executeTestActions("internalState");
+	}
+
+	/** Tests dynamically-typed value-derived model values (see {@link DynamicModelValue}) */
+	@Test
+	public void testDynamicTypeInternalState() {
+		executeTestActions("dynamicTypeInternalState");
 	}
 
 	private void executeTestActions(String testName) {

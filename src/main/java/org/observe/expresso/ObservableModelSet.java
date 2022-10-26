@@ -36,7 +36,6 @@ import com.google.common.reflect.TypeToken;
  * An ObservableModelSet is create with {@link #build(String, NameChecker)}. The {@link ObservableModelSet.NameChecker} parameter validates
  * the names of all identifiers (e.g. variable names) so that they can be referenced by expressions.
  * </p>
- *
  */
 public interface ObservableModelSet extends Identifiable {
 	/** An identifier for a model or model component */
