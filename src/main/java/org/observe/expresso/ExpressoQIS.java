@@ -134,6 +134,11 @@ public class ExpressoQIS implements SpecialSession<ExpressoQIS> {
 				}
 
 				@Override
+				public MV forModelCopy(MV value, ModelSetInstance sourceModels, ModelSetInstance newModels) {
+					return def == null ? null : def.apply(newModels);
+				}
+
+				@Override
 				public BetterList<ValueContainer<?, ?>> getCores() {
 					return BetterList.of(this);
 				}
@@ -188,6 +193,11 @@ public class ExpressoQIS implements SpecialSession<ExpressoQIS> {
 				@Override
 				public MV get(ModelSetInstance models) {
 					return def.apply(models);
+				}
+
+				@Override
+				public MV forModelCopy(MV value2, ModelSetInstance sourceModels, ModelSetInstance newModels) {
+					return def == null ? null : def.apply(newModels);
 				}
 
 				@Override

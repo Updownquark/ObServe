@@ -2,6 +2,7 @@ package org.observe.expresso;
 
 import java.util.Objects;
 
+import org.observe.expresso.ModelType.HollowModelValue;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ValueContainer;
@@ -116,18 +117,36 @@ public interface DynamicModelValue<M, MV extends M> extends ValueContainer<M, MV
 	}
 
 	/**
+	 * For metadata-declared dynamic model values with no type specified, this method may be called to specify the type of the model,
+	 * instead of specifying the value creator with {@link #satisfyDynamicValue(String, ObservableModelSet, ValueCreator)}. If this method
+	 * is called, {@link #satisfyDynamicValue(String, ModelInstanceType, ModelSetInstance, Object)} must be called for the model instance
+	 * set.
+	 *
+	 * @param <M> The model type of the value
+	 * @param <MV> The type of the value
+	 * @param name The name of the value
+	 * @param models The model instance to satisfy the value's type in
+	 * @param type The type for the dynamic model value
+	 */
+	public static <M, MV extends M> void satisfyDynamicValueType(String name, ObservableModelSet models, ModelInstanceType<M, MV> type) {
+		ObservableModelSet.ModelComponentNode<?, ?> component = getDynamicValueComponent(name, models);
+		satisfyDynamicValue(name, models,
+			() -> new RuntimeModelValue<>(name, type, ((DynamicTypedModelValueCreator<?, ?>) component.getThing()).getDeclaration()));
+	}
+
+	/**
 	 * Called by some implementation to satisfy a metadata-declared dynamic (interpreted-value-specific) model value.
 	 *
 	 * @param <M> The model type of the value
 	 * @param <MV> The type of the value
 	 * @param name The name of the value
-	 * @param model The model instance to satisfy the value in (should be {@link ExpressoQIS#wrapLocal(ModelSetInstance) wrapLocal}'ed)
+	 * @param models The model instance to satisfy the value in
 	 * @param satisfier The value creator to use to satisfy the model value
-	 * @throws IllegalStateException If the value has already been satisfied for the given model instance
+	 * @throws IllegalStateException If the value has already been satisfied for the given model set
 	 */
-	public static <M, MV extends M> void satisfyDynamicValue(String name, ObservableModelSet model, ValueCreator<M, MV> satisfier)
+	public static <M, MV extends M> void satisfyDynamicValue(String name, ObservableModelSet models, ValueCreator<M, MV> satisfier)
 		throws IllegalStateException {
-		DynamicTypedModelValueCreator.satisfyDynamicValue(name, model, satisfier, false);
+		DynamicTypedModelValueCreator.satisfyDynamicValue(name, models, satisfier, false);
 	}
 
 	/**
@@ -137,13 +156,13 @@ public interface DynamicModelValue<M, MV extends M> extends ValueContainer<M, MV
 	 * @param <M> The model type of the value
 	 * @param <MV> The type of the value
 	 * @param name The name of the value
-	 * @param model The model instance to satisfy the value in (should be {@link ExpressoQIS#wrapLocal(ModelSetInstance) wrapLocal}'ed)
+	 * @param models The model instance to satisfy the value in
 	 * @param satisfier The value creator to use to satisfy the model value
 	 * @return Whether the value was newly satisfied as a result of this call
 	 */
-	public static <M, MV extends M> boolean satisfyDynamicValueIfUnsatisfied(String name, ObservableModelSet model,
+	public static <M, MV extends M> boolean satisfyDynamicValueIfUnsatisfied(String name, ObservableModelSet models,
 		ValueCreator<M, MV> satisfier) {
-		return DynamicTypedModelValueCreator.satisfyDynamicValue(name, model, satisfier, true);
+		return DynamicTypedModelValueCreator.satisfyDynamicValue(name, models, satisfier, true);
 	}
 
 	/**
@@ -188,6 +207,13 @@ public interface DynamicModelValue<M, MV extends M> extends ValueContainer<M, MV
 		@Override
 		public MV get(ModelSetInstance models) {
 			return (MV) theType.getModelType().createHollowValue(theName, theType);
+		}
+
+		@Override
+		public MV forModelCopy(MV value, ModelSetInstance sourceModels, ModelSetInstance newModels) {
+			HollowModelValue<M, MV> hollow = theType.getModelType().createHollowValue(theName, theType);
+			hollow.satisfy(value);
+			return (MV) hollow;
 		}
 
 		@Override
@@ -239,6 +265,13 @@ public interface DynamicModelValue<M, MV extends M> extends ValueContainer<M, MV
 			if (theContainer == null)
 				theContainer = theCreator.createDynamicContainer();
 			return theContainer.get(models);
+		}
+
+		@Override
+		public MV forModelCopy(MV value, ModelSetInstance sourceModels, ModelSetInstance newModels) {
+			if (theContainer == null)
+				theContainer = theCreator.createDynamicContainer();
+			return theContainer.forModelCopy(value, sourceModels, newModels);
 		}
 
 		@Override

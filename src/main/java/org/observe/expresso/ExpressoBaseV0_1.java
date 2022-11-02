@@ -13,6 +13,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
+import java.util.function.BiPredicate;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -436,6 +437,13 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 						}
 
 						@Override
+						public C forModelCopy(C value, ModelSetInstance sourceModels, ModelSetInstance newModels) {
+							// Configured elements are merely initialized, not slaved, and the collection may have been modified
+							// since it was created. There's no sense to making a re-initialized copy here.
+							return value;
+						}
+
+						@Override
 						public BetterList<ValueContainer<?, ?>> getCores() {
 							return BetterList.of(this);
 						}
@@ -505,6 +513,13 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 						}
 
 						@Override
+						public M forModelCopy(M value, ModelSetInstance sourceModels, ModelSetInstance newModels) {
+							// Configured entries are merely initialized, not slaved, and the map may have been modified
+							// since it was created. There's no sense to making a re-initialized copy here.
+							return value;
+						}
+
+						@Override
 						public BetterList<ValueContainer<?, ?>> getCores() {
 							return BetterList.of(this);
 						}
@@ -569,6 +584,13 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 									entry.getValue2().get(models));
 							}
 							return map;
+						}
+
+						@Override
+						public M forModelCopy(M value, ModelSetInstance sourceModels, ModelSetInstance newModels) {
+							// Configured entries are merely initialized, not slaved, and the multi-map may have been modified
+							// since it was created. There's no sense to making a re-initialized copy here.
+							return value;
 						}
 
 						@Override
@@ -698,6 +720,12 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 						}
 
 						@Override
+						public SettableValue<Object> forModelCopy(SettableValue<Object> value2, ModelSetInstance sourceModels,
+							ModelSetInstance newModels) {
+							return value2;
+						}
+
+						@Override
 						public BetterList<ValueContainer<?, ?>> getCores() {
 							return BetterList.of(this);
 						}
@@ -763,6 +791,15 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 					}
 
 					@Override
+					public SettableValue<Object> forModelCopy(SettableValue<Object> value2, ModelSetInstance sourceModels,
+						ModelSetInstance newModels) {
+						if (fValue != null)
+							return fValue.forModelCopy(value2, sourceModels, newModels);
+						else
+							return value2;
+					}
+
+					@Override
 					public BetterList<ValueContainer<?, ?>> getCores() {
 						if (fValue != null)
 							return fValue.getCores();
@@ -804,6 +841,25 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 						ModelSetInstance wrappedModels = exS.wrapLocal(models);
 						List<ObservableAction<Object>> realActions = actionVs.stream().map(a -> a.get(wrappedModels))
 							.collect(Collectors.toList());
+						return createActionGroup(realActions);
+					}
+
+					@Override
+					public ObservableAction<Object> forModelCopy(ObservableAction<Object> value, ModelSetInstance sourceModels,
+						ModelSetInstance newModels) {
+						ModelSetInstance wrappedNew = exS.wrapLocal(newModels);
+						List<ObservableAction<Object>> realActions = new ArrayList<>(actionVs.size());
+						boolean different = false;
+						for (ValueContainer<ObservableAction<?>, ObservableAction<Object>> actionV : actionVs) {
+							ObservableAction<Object> sourceAction = actionV.get(sourceModels);
+							ObservableAction<Object> copyAction = actionV.forModelCopy(sourceAction, sourceModels, wrappedNew);
+							different |= sourceAction != copyAction;
+							realActions.add(copyAction);
+						}
+						return different ? createActionGroup(realActions) : value;
+					}
+
+					private ObservableAction<Object> createActionGroup(List<ObservableAction<Object>> realActions) {
 						return ObservableAction.of(TypeTokens.get().OBJECT, cause -> {
 							List<Object> result = new ArrayList<>(realActions.size());
 							for (ObservableAction<Object> realAction : realActions)
@@ -864,6 +920,38 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 						}
 
 						@Override
+						public ObservableAction<Object> forModelCopy(ObservableAction<Object> value, ModelSetInstance sourceModels,
+							ModelSetInstance newModels) {
+							ObservableAction<?> initS = initV == null ? null : initV.get(sourceModels);
+							ObservableAction<?> initA = initV == null ? null : initV.forModelCopy(initS, sourceModels, newModels);
+							ObservableAction<?> beforeS = beforeV == null ? null : beforeV.get(sourceModels);
+							ObservableAction<?> beforeA = beforeV == null ? null : beforeV.forModelCopy(beforeS, sourceModels, newModels);
+							SettableValue<Boolean> whileS = whileV.get(sourceModels);
+							SettableValue<Boolean> whileC = whileV.forModelCopy(whileS, sourceModels, newModels);
+							ObservableAction<?> beforeBodyS = beforeBodyV == null ? null : beforeBodyV.get(sourceModels);
+							ObservableAction<?> beforeBodyA = beforeBodyV == null ? null
+								: beforeBodyV.forModelCopy(beforeBodyS, sourceModels, newModels);
+							boolean different = initS != initA || beforeS != beforeA || whileS != whileC || beforeBodyS != beforeBodyA;
+							List<ObservableAction<?>> execAs = new ArrayList<>(execVs.size());
+							for (ValueContainer<ObservableAction<?>, ObservableAction<?>> execV : execVs) {
+								ObservableAction<?> execS = execV.get(sourceModels);
+								ObservableAction<?> execA = execV.forModelCopy(execS, sourceModels, newModels);
+								different |= execS != execA;
+							}
+							ObservableAction<?> afterBodyS = afterBodyV == null ? null : afterBodyV.get(sourceModels);
+							ObservableAction<?> afterBodyA = afterBodyV == null ? null
+								: afterBodyV.forModelCopy(afterBodyS, sourceModels, newModels);
+							ObservableAction<?> finallyS = finallyV == null ? null : finallyV.get(sourceModels);
+							ObservableAction<?> finallyA = finallyV == null ? null
+								: finallyV.forModelCopy(finallyS, sourceModels, newModels);
+							different |= afterBodyS != afterBodyA || finallyS != finallyA;
+							if (different)
+								return new LoopAction(initA, beforeA, whileC, beforeBodyA, execAs, afterBodyA, finallyA);
+							else
+								return value;
+						}
+
+						@Override
 						public BetterList<ValueContainer<?, ?>> getCores() {
 							return BetterList.of(Stream.concat(//
 								Stream.of(initV, beforeV, whileV, beforeBodyV, afterBodyV, finallyV), //
@@ -905,6 +993,12 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 						ObservableConfig config = ObservableConfig.createRoot("root", null,
 							__ -> new FastFailLockingStrategy(ThreadConstraint.ANY));
 						return config.asValue((TypeToken<Object>) getType().getType(0)).buildEntitySet(null);
+					}
+
+					@Override
+					public ObservableValueSet<Object> forModelCopy(ObservableValueSet<Object> value, ModelSetInstance sourceModels,
+						ModelSetInstance newModels) {
+						return value;
 					}
 
 					@Override
@@ -1091,6 +1185,23 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 					for (int i = 0; i < vs.length; i++)
 						vs[i] = valueContainers.get(i).get(models);
 					return SettableValue.firstValue(commonType, v -> v != null, () -> null, vs);
+				}
+
+				@Override
+				public SettableValue<Object> forModelCopy(SettableValue<Object> value, ModelSetInstance sourceModels,
+					ModelSetInstance newModels) {
+					SettableValue<?>[] vs = new SettableValue[valueCreators.size()];
+					boolean different = false;
+					for (int i = 0; i < vs.length; i++) {
+						SettableValue<?> sv = valueContainers.get(i).get(sourceModels);
+						SettableValue<?> nv = valueContainers.get(i).forModelCopy(sv, sourceModels, newModels);
+						different |= sv != nv;
+						vs[i] = nv;
+					}
+					if (different)
+						return SettableValue.firstValue(commonType, v -> v != null, () -> null, vs);
+					else
+						return value;
 				}
 
 				@Override
@@ -1285,6 +1396,17 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 					}
 
 					@Override
+					public Object forModelCopy(Object value, ModelSetInstance sourceModels, ModelSetInstance newModels) {
+						Object firstStepS = firstStep.get(sourceModels);
+						Object firstStepN = firstStep.forModelCopy(firstStepS, sourceModels, newModels);
+						if (firstStepS != firstStepN || fTransform.isDifferent(sourceModels, newModels))
+							return fTransform.transform(//
+								firstStepN, newModels);
+						else
+							return value;
+					}
+
+					@Override
 					public BetterList<ValueContainer<?, ?>> getCores() {
 						return firstStep.getCores();
 					}
@@ -1312,6 +1434,8 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		 */
 		MV2 transform(MV1 source, ModelSetInstance models);
 
+		boolean isDifferent(ModelSetInstance sourceModels, ModelSetInstance newModels);
+
 		/**
 		 * @param <M0> The original source model type
 		 * @param <MV0> The original source type
@@ -1333,6 +1457,11 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 					MV1 intermediate = previous.transform(source, models);
 					return next.transform(intermediate, models);
 				}
+
+				@Override
+				public boolean isDifferent(ModelSetInstance sourceModels, ModelSetInstance newModels) {
+					return previous.isDifferent(sourceModels, newModels) || next.isDifferent(sourceModels, newModels);
+				}
 			};
 		}
 
@@ -1352,6 +1481,11 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 				@Override
 				public MV transform(MV source, ModelSetInstance models) {
 					return source;
+				}
+
+				@Override
+				public boolean isDifferent(ModelSetInstance sourceModels, ModelSetInstance newModels) {
+					return false;
 				}
 			};
 		}
@@ -1418,7 +1552,8 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		 * @return The transformer
 		 */
 		static <S, T> ObservableTransform<S, Observable<?>, Observable<T>> of(TypeToken<T> type,
-			BiFunction<Observable<S>, ModelSetInstance, Observable<T>> transform) {
+			BiFunction<Observable<S>, ModelSetInstance, Observable<T>> transform,
+			BiPredicate<ModelSetInstance, ModelSetInstance> difference) {
 			return new ObservableTransform<S, Observable<?>, Observable<T>>() {
 				@Override
 				public ModelInstanceType<Observable<?>, Observable<T>> getTargetType() {
@@ -1428,6 +1563,11 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 				@Override
 				public Observable<T> transform(Observable<S> source, ModelSetInstance models) {
 					return transform.apply(source, models);
+				}
+
+				@Override
+				public boolean isDifferent(ModelSetInstance sourceModels, ModelSetInstance newModels) {
+					return difference != null && difference.test(sourceModels, newModels);
 				}
 			};
 		}
@@ -1443,7 +1583,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		 * @return The transformer
 		 */
 		static <S, M, MV extends M> ObservableTransform<S, M, MV> of(ModelInstanceType<M, MV> type,
-			BiFunction<Observable<S>, ModelSetInstance, MV> transform) {
+			BiFunction<Observable<S>, ModelSetInstance, MV> transform, BiPredicate<ModelSetInstance, ModelSetInstance> difference) {
 			return new ObservableTransform<S, M, MV>() {
 				@Override
 				public ModelInstanceType<M, MV> getTargetType() {
@@ -1453,6 +1593,11 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 				@Override
 				public MV transform(Observable<S> source, ModelSetInstance models) {
 					return transform.apply(source, models);
+				}
+
+				@Override
+				public boolean isDifferent(ModelSetInstance sourceModels, ModelSetInstance newModels) {
+					return difference != null && difference.test(sourceModels, newModels);
 				}
 			};
 		}
@@ -1478,7 +1623,8 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		 * @return The transformer
 		 */
 		static <S, T> ActionTransform<S, ObservableAction<?>, ObservableAction<T>> of(TypeToken<T> type,
-			BiFunction<ObservableAction<S>, ModelSetInstance, ObservableAction<T>> transform) {
+			BiFunction<ObservableAction<S>, ModelSetInstance, ObservableAction<T>> transform,
+			BiPredicate<ModelSetInstance, ModelSetInstance> difference) {
 			return new ActionTransform<S, ObservableAction<?>, ObservableAction<T>>() {
 				@Override
 				public ModelInstanceType<ObservableAction<?>, ObservableAction<T>> getTargetType() {
@@ -1488,6 +1634,11 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 				@Override
 				public ObservableAction<T> transform(ObservableAction<S> source, ModelSetInstance models) {
 					return transform.apply(source, models);
+				}
+
+				@Override
+				public boolean isDifferent(ModelSetInstance sourceModels, ModelSetInstance newModels) {
+					return difference != null && difference.test(sourceModels, newModels);
 				}
 			};
 		}
@@ -1503,7 +1654,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		 * @return The transformer
 		 */
 		static <S, M, MV extends M> ActionTransform<S, M, MV> of(ModelInstanceType<M, MV> type,
-			BiFunction<ObservableAction<S>, ModelSetInstance, MV> transform) {
+			BiFunction<ObservableAction<S>, ModelSetInstance, MV> transform, BiPredicate<ModelSetInstance, ModelSetInstance> difference) {
 			return new ActionTransform<S, M, MV>() {
 				@Override
 				public ModelInstanceType<M, MV> getTargetType() {
@@ -1513,6 +1664,11 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 				@Override
 				public MV transform(ObservableAction<S> source, ModelSetInstance models) {
 					return transform.apply(source, models);
+				}
+
+				@Override
+				public boolean isDifferent(ModelSetInstance sourceModels, ModelSetInstance newModels) {
+					return difference != null && difference.test(sourceModels, newModels);
 				}
 			};
 		}
@@ -1536,7 +1692,8 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		 * @return The transformer
 		 */
 		static <S, T> ValueTransform<S, SettableValue<?>, SettableValue<T>> of(TypeToken<T> type,
-			BiFunction<SettableValue<S>, ModelSetInstance, SettableValue<T>> transform) {
+			BiFunction<SettableValue<S>, ModelSetInstance, SettableValue<T>> transform,
+			BiPredicate<ModelSetInstance, ModelSetInstance> difference) {
 			return new ValueTransform<S, SettableValue<?>, SettableValue<T>>() {
 				@Override
 				public ModelInstanceType<SettableValue<?>, SettableValue<T>> getTargetType() {
@@ -1546,6 +1703,11 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 				@Override
 				public SettableValue<T> transform(SettableValue<S> source, ModelSetInstance models) {
 					return transform.apply(source, models);
+				}
+
+				@Override
+				public boolean isDifferent(ModelSetInstance sourceModels, ModelSetInstance newModels) {
+					return difference != null && difference.test(sourceModels, newModels);
 				}
 			};
 		}
@@ -1561,7 +1723,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		 * @return The transformer
 		 */
 		static <S, M, MV extends M> ValueTransform<S, M, MV> of(ModelInstanceType<M, MV> type,
-			BiFunction<SettableValue<S>, ModelSetInstance, MV> transform) {
+			BiFunction<SettableValue<S>, ModelSetInstance, MV> transform, BiPredicate<ModelSetInstance, ModelSetInstance> difference) {
 			return new ValueTransform<S, M, MV>() {
 				@Override
 				public ModelInstanceType<M, MV> getTargetType() {
@@ -1571,6 +1733,11 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 				@Override
 				public MV transform(SettableValue<S> source, ModelSetInstance models) {
 					return transform.apply(source, models);
+				}
+
+				@Override
+				public boolean isDifferent(ModelSetInstance sourceModels, ModelSetInstance newModels) {
+					return difference != null && difference.test(sourceModels, newModels);
 				}
 			};
 		}
@@ -1597,7 +1764,8 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		 */
 		static <S, T> FlowCollectionTransform<S, T, ObservableCollection<?>, ObservableCollection<T>> of(
 			ModelType.SingleTyped<? extends ObservableCollection<?>> modelType, TypeToken<T> type,
-				BiFunction<CollectionDataFlow<?, ?, S>, ModelSetInstance, CollectionDataFlow<?, ?, T>> transform) {
+			BiFunction<CollectionDataFlow<?, ?, S>, ModelSetInstance, CollectionDataFlow<?, ?, T>> transform,
+			BiPredicate<ModelSetInstance, ModelSetInstance> difference) {
 			return new FlowCollectionTransform<S, T, ObservableCollection<?>, ObservableCollection<T>>() {
 				@Override
 				public ModelInstanceType<ObservableCollection<?>, ObservableCollection<T>> getTargetType() {
@@ -1613,6 +1781,11 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 				public CollectionDataFlow<?, ?, T> transformToFlow(ObservableCollection<S> source, ModelSetInstance models) {
 					return transform.apply(source.flow(), models);
 				}
+
+				@Override
+				public boolean isDifferent(ModelSetInstance sourceModels, ModelSetInstance newModels) {
+					return difference != null && difference.test(sourceModels, newModels);
+				}
 			};
 		}
 
@@ -1627,7 +1800,8 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		 * @return The transformer
 		 */
 		static <S, M, MV extends M> CollectionTransform<S, M, MV> of(ModelInstanceType<M, MV> type,
-			BiFunction<ObservableCollection<S>, ModelSetInstance, MV> transform) {
+			BiFunction<ObservableCollection<S>, ModelSetInstance, MV> transform,
+			BiPredicate<ModelSetInstance, ModelSetInstance> difference) {
 			return new CollectionTransform<S, M, MV>() {
 				@Override
 				public ModelInstanceType<M, MV> getTargetType() {
@@ -1637,6 +1811,11 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 				@Override
 				public MV transform(ObservableCollection<S> source, ModelSetInstance models) {
 					return transform.apply(source, models);
+				}
+
+				@Override
+				public boolean isDifferent(ModelSetInstance sourceModels, ModelSetInstance newModels) {
+					return difference != null && difference.test(sourceModels, newModels);
 				}
 			};
 		}
@@ -1702,6 +1881,11 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 						CollectionDataFlow<?, ?, S> sourceFlow = prevTCT.transformFlow(source, models);
 						return next.transformFlow(sourceFlow, models);
 					}
+
+					@Override
+					public boolean isDifferent(ModelSetInstance sourceModels, ModelSetInstance newModels) {
+						return previous.isDifferent(sourceModels, newModels) || next.isDifferent(sourceModels, newModels);
+					}
 				};
 			} else
 				return ObservableStructureTransform.super.after(previous);
@@ -1729,21 +1913,21 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 	private <T> ObservableTransform<T, Observable<?>, Observable<T>> noInitObservable(ExpressoQIS op) throws QonfigInterpretationException {
 		ModelInstanceType.SingleTyped<Observable<?>, T, Observable<T>> sourceType;
 		sourceType = (ModelInstanceType.SingleTyped<Observable<?>, T, Observable<T>>) op.get(VALUE_TYPE_KEY);
-		return ObservableTransform.of(sourceType.getValueType(), (source, models) -> source.noInit());
+		return ObservableTransform.of(sourceType.getValueType(), (source, models) -> source.noInit(), null);
 	}
 
 	private <T> ObservableTransform<T, Observable<?>, Observable<T>> skipObservable(ExpressoQIS op) throws QonfigInterpretationException {
 		ModelInstanceType.SingleTyped<Observable<?>, T, Observable<T>> sourceType;
 		sourceType = (ModelInstanceType.SingleTyped<Observable<?>, T, Observable<T>>) op.get(VALUE_TYPE_KEY);
 		int times = Integer.parseInt(op.getAttributeText("times"));
-		return ObservableTransform.of(sourceType.getValueType(), (source, models) -> source.skip(times));
+		return ObservableTransform.of(sourceType.getValueType(), (source, models) -> source.skip(times), null);
 	}
 
 	private <T> ObservableTransform<T, Observable<?>, Observable<T>> takeObservable(ExpressoQIS op) throws QonfigInterpretationException {
 		ModelInstanceType.SingleTyped<Observable<?>, T, Observable<T>> sourceType;
 		sourceType = (ModelInstanceType.SingleTyped<Observable<?>, T, Observable<T>>) op.get(VALUE_TYPE_KEY);
 		int times = Integer.parseInt(op.getAttributeText("times"));
-		return ObservableTransform.of(sourceType.getValueType(), (source, models) -> source.take(times));
+		return ObservableTransform.of(sourceType.getValueType(), (source, models) -> source.take(times), null);
 	}
 
 	private <T> ObservableTransform<T, Observable<?>, Observable<T>> takeUntilObservable(ExpressoQIS op)
@@ -1752,7 +1936,8 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		sourceType = (ModelInstanceType.SingleTyped<Observable<?>, T, Observable<T>>) op.get(VALUE_TYPE_KEY);
 		ValueContainer<Observable<?>, Observable<?>> until = op.getAttributeExpression("until").evaluate(ModelTypes.Event.any(),
 			op.getExpressoEnv());
-		return ObservableTransform.of(sourceType.getValueType(), (source, models) -> source.takeUntil(until.get(models)));
+		return ObservableTransform.of(sourceType.getValueType(), (source, models) -> source.takeUntil(until.get(models)),
+			(sourceModels, newModels) -> until.get(sourceModels) != until.get(newModels));
 	}
 
 	private <S, T> ObservableTransform<S, Observable<?>, Observable<T>> mapObservableTo(ExpressoQIS op)
@@ -1780,7 +1965,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 				sourceV.set(s, null);
 				return mappedV.get();
 			});
-		});
+		}, null);
 	}
 
 	private <T> ObservableTransform<T, Observable<?>, Observable<T>> filterObservable(ExpressoQIS op) throws QonfigInterpretationException {
@@ -1804,7 +1989,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 				sourceV.set(v, null);
 				return message.get() == null;
 			});
-		});
+		}, null);
 	}
 
 	private static ValueContainer<SettableValue<?>, SettableValue<String>> parseFilter(ObservableExpression testX, ExpressoEnv env,
@@ -1841,7 +2026,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		return ObservableTransform.of(targetType, (source, models) -> {
 			Class<T> type = typeC.get(models).get();
 			return source.filter(type);
-		});
+		}, null);
 	}
 
 	// Action transform
@@ -1852,7 +2037,8 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		sourceType = (ModelInstanceType.SingleTyped<ObservableAction<?>, T, ObservableAction<T>>) op.get(VALUE_TYPE_KEY);
 		ValueContainer<SettableValue<?>, SettableValue<String>> enabled = op.getAttributeExpression("with")
 			.evaluate(ModelTypes.Value.forType(String.class), op.getExpressoEnv());
-		return ActionTransform.of(sourceType.getValueType(), (source, models) -> source.disableWith(enabled.get(models)));
+		return ActionTransform.of(sourceType.getValueType(), (source, models) -> source.disableWith(enabled.get(models)),
+			(sourceModels, newModels) -> enabled.get(sourceModels) != enabled.get(newModels));
 	}
 
 	// Value transform
@@ -1862,7 +2048,8 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		sourceType = (ModelInstanceType.SingleTyped<SettableValue<?>, T, SettableValue<T>>) op.get(VALUE_TYPE_KEY);
 		ValueContainer<SettableValue<?>, SettableValue<String>> enabled = op.getAttributeExpression("with")
 			.evaluate(ModelTypes.Value.forType(String.class), op.getExpressoEnv());
-		return ValueTransform.of(sourceType.getValueType(), (source, models) -> source.disableWith(enabled.get(models)));
+		return ValueTransform.of(sourceType.getValueType(), (source, models) -> source.disableWith(enabled.get(models)),
+			(sourceModels, newModels) -> enabled.get(sourceModels) != enabled.get(newModels));
 	}
 
 	private <T> ValueTransform<T, SettableValue<?>, SettableValue<T>> filterAcceptValue(ExpressoQIS op)
@@ -1887,7 +2074,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 				sourceV.set(v, null);
 				return message.get();
 			});
-		});
+		}, null);
 	}
 
 	private <S, T> ValueTransform<S, SettableValue<?>, SettableValue<T>> mapValueTo(ExpressoQIS op) throws QonfigInterpretationException {
@@ -1896,12 +2083,12 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		ParsedTransformation<S, T> ptx = mapTransformation(sourceType.getValueType(), op);
 		if (ptx.isReversible()) {
 			return ValueTransform.of(ptx.getTargetType(), (v, models) -> v.transformReversible(ptx.getTargetType(),
-				tx -> (Transformation.ReversibleTransformation<S, T>) ptx.transform(tx, models)));
+				tx -> (Transformation.ReversibleTransformation<S, T>) ptx.transform(tx, models)), ptx::isDifferent);
 		} else {
 			return ValueTransform.of(ptx.getTargetType(), (v, models) -> {
 				ObservableValue<T> value = v.transform(ptx.getTargetType(), tx -> ptx.transform(tx, models));
 				return SettableValue.asSettable(value, __ -> "No reverse configured for " + op.toString());
-			});
+			}, ptx::isDifferent);
 		}
 	}
 
@@ -1910,7 +2097,8 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 			.get(VALUE_TYPE_KEY);
 		ValueContainer<Observable<?>, Observable<?>> refresh = op.getAttributeExpression("on").evaluate(ModelTypes.Event.any(),
 			op.getExpressoEnv());
-		return ValueTransform.of(sourceType, (v, models) -> v.refresh(refresh.get(models)));
+		return ValueTransform.of(sourceType, (v, models) -> v.refresh(refresh.get(models)),
+			(sourceModels, newModels) -> refresh.get(sourceModels) != refresh.get(newModels));
 	}
 
 	private <T> ValueTransform<T, SettableValue<?>, SettableValue<T>> unmodifiableValue(ExpressoQIS op)
@@ -1919,7 +2107,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 			.get(VALUE_TYPE_KEY);
 		boolean allowUpdates = op.getAttribute("allow-updates", Boolean.class);
 		if (!allowUpdates) {
-			return ValueTransform.of(sourceType, (v, models) -> v.disableWith(ObservableValue.of(StdMsg.UNSUPPORTED_OPERATION)));
+			return ValueTransform.of(sourceType, (v, models) -> v.disableWith(ObservableValue.of(StdMsg.UNSUPPORTED_OPERATION)), null);
 		} else {
 			return ValueTransform.of(sourceType, (v, models) -> {
 				return v.filterAccept(input -> {
@@ -1928,7 +2116,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 					else
 						return StdMsg.ILLEGAL_ELEMENT;
 				});
-			});
+			}, null);
 		}
 	}
 
@@ -1941,28 +2129,29 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		ExpressoQIS sort = op.forChildren("sort").peekFirst();
 		if (SettableValue.class.isAssignableFrom(rawType)) {
 			return ValueTransform.of((TypeToken<T>) sourceType.getValueType().resolveType(SettableValue.class.getTypeParameters()[0]),
-				(v, models) -> SettableValue.flatten((ObservableValue<SettableValue<T>>) (ObservableValue<?>) v));
+				(v, models) -> SettableValue.flatten((ObservableValue<SettableValue<T>>) (ObservableValue<?>) v), null);
 		} else if (ObservableValue.class.isAssignableFrom(rawType)) {
 			return ValueTransform.of((TypeToken<T>) sourceType.getValueType().resolveType(ObservableValue.class.getTypeParameters()[0]),
-				(v, models) -> SettableValue.flattenAsSettable((ObservableValue<ObservableValue<T>>) (ObservableValue<?>) v, () -> null));
+				(v, models) -> SettableValue.flattenAsSettable((ObservableValue<ObservableValue<T>>) (ObservableValue<?>) v, () -> null),
+				null);
 		} else if (ObservableSortedSet.class.isAssignableFrom(rawType) && sort != null) {
 			ValueContainer<SettableValue<?>, SettableValue<Comparator<T>>> compare = sort.interpret(ValueContainer.class);
 			resultType = (TypeToken<T>) sourceType.getValueType().resolveType(ObservableCollection.class.getTypeParameters()[0]);
 			return ValueTransform.of(ModelTypes.SortedSet.forType(resultType), (value, models) -> ObservableSortedSet
-				.flattenValue((ObservableValue<ObservableSortedSet<T>>) value, compare.get(models).get()));
+				.flattenValue((ObservableValue<ObservableSortedSet<T>>) value, compare.get(models).get()), null);
 		} else if (ObservableSortedCollection.class.isAssignableFrom(rawType) && sort != null) {
 			ValueContainer<SettableValue<?>, SettableValue<Comparator<T>>> compare = sort.interpret(ValueContainer.class);
 			resultType = (TypeToken<T>) sourceType.getValueType().resolveType(ObservableCollection.class.getTypeParameters()[0]);
 			return ValueTransform.of(ModelTypes.SortedCollection.forType(resultType), (value, models) -> ObservableSortedCollection
-				.flattenValue((ObservableValue<ObservableSortedCollection<T>>) value, compare.get(models).get()));
+				.flattenValue((ObservableValue<ObservableSortedCollection<T>>) value, compare.get(models).get()), null);
 		} else if (ObservableSet.class.isAssignableFrom(rawType)) {
 			resultType = (TypeToken<T>) sourceType.getValueType().resolveType(ObservableCollection.class.getTypeParameters()[0]);
 			return ValueTransform.of(ModelTypes.Set.forType(resultType),
-				(value, models) -> ObservableSet.flattenValue((ObservableValue<ObservableSet<T>>) value));
+				(value, models) -> ObservableSet.flattenValue((ObservableValue<ObservableSet<T>>) value), null);
 		} else if (ObservableCollection.class.isAssignableFrom(rawType)) {
 			resultType = (TypeToken<T>) sourceType.getValueType().resolveType(ObservableCollection.class.getTypeParameters()[0]);
 			return ValueTransform.of(ModelTypes.Collection.forType(resultType),
-				(value, models) -> ObservableCollection.flattenValue((ObservableValue<ObservableCollection<T>>) value));
+				(value, models) -> ObservableCollection.flattenValue((ObservableValue<ObservableCollection<T>>) value), null);
 		} else
 			throw new QonfigInterpretationException("Cannot flatten value of type " + sourceType);
 	}
@@ -1980,21 +2169,24 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 			if (sourceType.getModelType() == ModelTypes.SortedSet)
 				return CollectionTransform.of(ModelTypes.SortedSet, ptx.getTargetType(),
 					(c, models) -> ((ObservableCollection.DistinctSortedDataFlow<?, ?, S>) c).transformEquivalent(ptx.getTargetType(),
-						tx -> (Transformation.ReversibleTransformation<S, T>) ptx.transform(tx, models)));
+						tx -> (Transformation.ReversibleTransformation<S, T>) ptx.transform(tx, models)),
+					ptx::isDifferent);
 			else if (sourceType.getModelType() == ModelTypes.SortedCollection)
 				return CollectionTransform.of(ModelTypes.SortedCollection, ptx.getTargetType(),
 					(c, models) -> ((ObservableCollection.SortedDataFlow<?, ?, S>) c).transformEquivalent(ptx.getTargetType(),
-						tx -> (Transformation.ReversibleTransformation<S, T>) ptx.transform(tx, models)));
+						tx -> (Transformation.ReversibleTransformation<S, T>) ptx.transform(tx, models)),
+					ptx::isDifferent);
 			else if (sourceType.getModelType() == ModelTypes.Set)
 				return CollectionTransform.of(ModelTypes.Set, ptx.getTargetType(),
 					(c, models) -> ((ObservableCollection.DistinctDataFlow<?, ?, S>) c).transformEquivalent(ptx.getTargetType(),
-						tx -> (Transformation.ReversibleTransformation<S, T>) ptx.transform(tx, models)));
+						tx -> (Transformation.ReversibleTransformation<S, T>) ptx.transform(tx, models)),
+					ptx::isDifferent);
 			else
 				return CollectionTransform.of(ModelTypes.Collection, ptx.getTargetType(), (c, models) -> c.transform(ptx.getTargetType(),
-					tx -> (Transformation.ReversibleTransformation<S, T>) ptx.transform(tx, models)));
+					tx -> (Transformation.ReversibleTransformation<S, T>) ptx.transform(tx, models)), ptx::isDifferent);
 		} else {
 			return CollectionTransform.of(ModelTypes.Collection, ptx.getTargetType(),
-				(f, models) -> f.transform(ptx.getTargetType(), tx -> ptx.transform(tx, models)));
+				(f, models) -> f.transform(ptx.getTargetType(), tx -> ptx.transform(tx, models)), ptx::isDifferent);
 		}
 	}
 
@@ -2020,7 +2212,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 				sourceV.set(v, null);
 				return message.get();
 			});
-		});
+		}, null);
 	}
 
 	private <S, T> FlowCollectionTransform<T, T, ObservableCollection<?>, ObservableCollection<T>> filterCollectionByType(ExpressoQIS op)
@@ -2034,7 +2226,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		return CollectionTransform.of(sourceType.getModelType(), targetType, (source, models) -> {
 			Class<T> type = typeC.get(models).get();
 			return source.filter(type);
-		});
+		}, null);
 	}
 
 	private <T> FlowCollectionTransform<T, T, ObservableCollection<?>, ObservableCollection<T>> reverseCollection(ExpressoQIS op)
@@ -2063,6 +2255,11 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 			public ObservableCollection<T> transform(ObservableCollection<T> source, ModelSetInstance models) {
 				return source.reverse();
 			}
+
+			@Override
+			public boolean isDifferent(ModelSetInstance sourceModels, ModelSetInstance newModels) {
+				return false;
+			}
 		};
 	}
 
@@ -2077,7 +2274,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		return CollectionTransform.of(sourceType.getModelType(), sourceType.getValueType(), (f, models) -> {
 			Observable<?> refresh = refreshX.get(models);
 			return f.refresh(refresh);
-		});
+		}, (sourceModels, newModels) -> refreshX.get(sourceModels) != refreshX.get(newModels));
 	}
 
 	private <T> FlowCollectionTransform<T, T, ObservableCollection<?>, ObservableCollection<T>> refreshCollectionEach(ExpressoQIS op)
@@ -2103,7 +2300,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 				sourceValue.set(v, null);
 				return refresh.get();
 			});
-		});
+		}, null);
 	}
 
 	private <T> FlowCollectionTransform<T, T, ObservableCollection<?>, ObservableCollection<T>> distinctCollection(ExpressoQIS op)
@@ -2121,10 +2318,10 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 			return CollectionTransform.of(ModelTypes.SortedSet, sourceType.getValueType(), (f, models) -> {
 				Comparator<T> comparator = compare.get(models).get();
 				return f.distinctSorted(comparator, useFirst);
-			});
+			}, null);
 		} else {
 			return CollectionTransform.of(ModelTypes.Set, sourceType.getValueType(),
-				(f, models) -> f.distinct(opts -> opts.useFirst(useFirst).preserveSourceOrder(preserveSourceOrder)));
+				(f, models) -> f.distinct(opts -> opts.useFirst(useFirst).preserveSourceOrder(preserveSourceOrder)), null);
 		}
 	}
 
@@ -2139,7 +2336,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		return CollectionTransform.of(ModelTypes.SortedCollection, sourceType.getValueType(), (f, models) -> {
 			Comparator<T> comparator = compare.createValue().get(models).get();
 			return f.sorted(comparator);
-		});
+		}, null);
 	}
 
 	private <T> FlowCollectionTransform<T, T, ObservableCollection<?>, ObservableCollection<T>> withCollectionEquivalence(ExpressoQIS op)
@@ -2154,7 +2351,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 			.get(VALUE_TYPE_KEY);
 
 		boolean allowUpdates = op.getAttribute("allow-updates", boolean.class);
-		return CollectionTransform.of(ModelTypes.Collection, sourceType.getValueType(), (f, models) -> f.unmodifiable(allowUpdates));
+		return CollectionTransform.of(ModelTypes.Collection, sourceType.getValueType(), (f, models) -> f.unmodifiable(allowUpdates), null);
 	}
 
 	private <T> FlowCollectionTransform<T, T, ObservableCollection<?>, ObservableCollection<T>> filterCollectionModification(ExpressoQIS op)
@@ -2177,20 +2374,20 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		if (ObservableValue.class.isAssignableFrom(raw)) {
 			TypeToken<T> resultType = (TypeToken<T>) sourceType.getValueType().resolveType(ObservableValue.class.getTypeParameters()[0]);
 			return CollectionTransform.of(ModelTypes.Collection, resultType, //
-				(flow, models) -> flow.flattenValues(resultType, v -> (ObservableValue<? extends T>) v));
+				(flow, models) -> flow.flattenValues(resultType, v -> (ObservableValue<? extends T>) v), null);
 		} else if (ObservableCollection.class.isAssignableFrom(raw)) {
 			System.err.println("WARNING: Collection flatten is not fully implemented.  Many options are unsupported.");
 			// TODO Use sort, map options, reverse
 			TypeToken<T> resultType = (TypeToken<T>) sourceType.getValueType()
 				.resolveType(ObservableCollection.class.getTypeParameters()[0]);
 			return CollectionTransform.of(ModelTypes.Collection, resultType, //
-				(flow, models) -> flow.flatMap(resultType, v -> ((ObservableCollection<? extends T>) v).flow()));
+				(flow, models) -> flow.flatMap(resultType, v -> ((ObservableCollection<? extends T>) v).flow()), null);
 		} else if (CollectionDataFlow.class.isAssignableFrom(raw)) {
 			System.err.println("WARNING: Collection flatten is not fully implemented.  Many options are unsupported.");
 			// TODO Use sort, map options, reverse
 			TypeToken<T> resultType = (TypeToken<T>) sourceType.getValueType().resolveType(CollectionDataFlow.class.getTypeParameters()[2]);
 			return CollectionTransform.of(ModelTypes.Collection, resultType, //
-				(flow, models) -> flow.flatMap(resultType, v -> (CollectionDataFlow<?, ?, ? extends T>) v));
+				(flow, models) -> flow.flatMap(resultType, v -> (CollectionDataFlow<?, ?, ? extends T>) v), null);
 		} else
 			throw new QonfigInterpretationException("Cannot flatten a collection of type " + sourceType.getValueType());
 	}
@@ -2210,7 +2407,8 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 			.evaluate(ModelTypes.Collection.any(), op.getExpressoEnv());
 		boolean inclusive = op.getAttribute("inclusive", boolean.class);
 		return CollectionTransform.of(sourceType.getModelType(), sourceType.getValueType(), (flow, models) -> flow.whereContained(//
-			filter.get(models).flow(), inclusive));
+			filter.get(models).flow(), inclusive), //
+			(sourceModels, newModels) -> filter.get(sourceModels) != filter.get(newModels));
 	}
 
 	private <K, V> CollectionTransform<V, ObservableMultiMap<?, ?>, ObservableMultiMap<K, V>> groupCollectionBy(ExpressoQIS op)
@@ -2235,7 +2433,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 				return flow.collectActive(models.getUntil()).flow();
 			else
 				return flow.collectPassive().flow();
-		});
+		}, null);
 	}
 
 	private <S, T> ParsedTransformation<S, T> mapTransformation(TypeToken<S> currentType, ExpressoQIS op)
@@ -2335,6 +2533,15 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 					transformation = ((MaybeReversibleTransformation<S, T>) transformation).withReverse(//
 						mapReverse.reverse(transformation, modelSet));
 				return transformation;
+			}
+
+			@Override
+			public boolean isDifferent(ModelSetInstance sourceModels, ModelSetInstance newModels) {
+				for (ValueContainer<SettableValue<?>, SettableValue<Object>> combinedSourceV : combined.values()) {
+					if (combinedSourceV.get(sourceModels) != combinedSourceV.get(newModels))
+						return true;
+				}
+				return false;
 			}
 		};
 	}
@@ -2709,6 +2916,12 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 					}
 
 					@Override
+					public SettableValue<Comparator<T>> forModelCopy(SettableValue<Comparator<T>> value, ModelSetInstance sourceModels,
+						ModelSetInstance newModels) {
+						return value;
+					}
+
+					@Override
 					public BetterList<ValueContainer<?, ?>> getCores() {
 						return comparison.getCores();
 					}
@@ -2782,6 +2995,12 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 					}
 
 					@Override
+					public SettableValue<Comparator<T>> forModelCopy(SettableValue<Comparator<T>> value, ModelSetInstance sourceModels,
+						ModelSetInstance newModels) {
+						return value;
+					}
+
+					@Override
 					public BetterList<ValueContainer<?, ?>> getCores() {
 						return BetterList.of(sortByMaps.stream().flatMap(vc -> vc.getCores().stream()));
 					}
@@ -2840,5 +3059,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		boolean isReversible();
 
 		Transformation<S, T> transform(TransformationPrecursor<S, T, ?> precursor, ModelSetInstance modelSet);
+
+		boolean isDifferent(ModelSetInstance sourceModels, ModelSetInstance newModels);
 	}
 }

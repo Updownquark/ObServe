@@ -404,16 +404,38 @@ public abstract class Invocation implements ObservableExpression {
 		public MV get(ModelSetInstance models) {
 			SettableValue<?> ctxV = theContext == null ? null : theContext.get(models);
 			SettableValue<?>[] argVs = new SettableValue[theArguments.size()];
-			Observable<?>[] changeSources = new Observable[ctxV == null ? argVs.length : argVs.length + 1];
-			if (ctxV != null)
-				changeSources[changeSources.length - 1] = ctxV.noInitChanges();
+			Observable<?>[] changeSources = new Observable[theContext == null ? argVs.length : argVs.length + 1];
 			for (int i = 0; i < argVs.length; i++) {
 				argVs[i] = theArguments.get(i).get(models);
 				if (argVs[i] == null)
 					throw new IllegalStateException("Caller provided a model set without variable " + theArguments.get(i).toString());
 				changeSources[i] = argVs[i].noInitChanges();
 			}
+			if (ctxV != null)
+				changeSources[changeSources.length - 1] = ctxV.noInitChanges();
 			return createModelValue(ctxV, argVs, //
+				Observable.or(changeSources));
+		}
+
+		@Override
+		public MV forModelCopy(MV value, ModelSetInstance sourceModels, ModelSetInstance newModels) {
+			SettableValue<?> sourceCtx = theContext == null ? null : theContext.get(sourceModels);
+			SettableValue<?> newCtx = theContext == null ? null : theContext.forModelCopy(sourceCtx, sourceModels, newModels);
+			SettableValue<?>[] argVs = new SettableValue[theArguments.size()];
+			Observable<?>[] changeSources = new Observable[theContext == null ? argVs.length : argVs.length + 1];
+			boolean different = sourceCtx != newCtx;
+			for (int i = 0; i < argVs.length; i++) {
+				SettableValue<?> sourceArg = theArguments.get(i).get(sourceModels);
+				SettableValue<?> newArg = theArguments.get(i).forModelCopy(sourceArg, sourceModels, newModels);
+				different |= sourceArg != newArg;
+				argVs[i] = newArg;
+			}
+
+			if (!different)
+				return value;
+			if (theContext != null)
+				changeSources[changeSources.length - 1] = newCtx.noInitChanges();
+			return createModelValue(newCtx, argVs, //
 				Observable.or(changeSources));
 		}
 

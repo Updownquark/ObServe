@@ -5,7 +5,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.SortedMap;
 import java.util.SortedSet;
-import java.util.function.Consumer;
 import java.util.function.Function;
 
 import org.observe.Observable;
@@ -28,21 +27,16 @@ import org.observe.collect.ObservableSet;
 import org.observe.collect.ObservableSortedCollection;
 import org.observe.collect.ObservableSortedSet;
 import org.observe.config.ObservableValueSet;
-import org.observe.expresso.ModelType.HollowModelValue;
-import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.util.TypeTokens;
 import org.qommons.BiTuple;
-import org.qommons.Causable;
 import org.qommons.ClassMap;
 import org.qommons.ClassMap.TypeMatch;
-import org.qommons.Identifiable;
+import org.qommons.Identifiable.AbstractIdentifiable;
 import org.qommons.LambdaUtils;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterSortedList;
-import org.qommons.collect.ListenerList;
 import org.qommons.collect.MultiMap;
-import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.collect.SortedMultiMap;
 
 import com.google.common.reflect.TypeToken;
@@ -123,96 +117,6 @@ public class ModelTypes {
 		}
 	}
 
-	static class ListenerHolder<L> implements Subscription {
-		final L listener;
-		Runnable removeUnsatisfied;
-		Subscription removeSatisfied;
-
-		ListenerHolder(L listener) {
-			this.listener = listener;
-		}
-
-		@Override
-		public void unsubscribe() {
-			removeUnsatisfied.run();
-			if (removeSatisfied != null)
-				removeSatisfied.unsubscribe();
-		}
-	}
-
-	static abstract class HollowListenable<M, MV extends M, L> implements Identifiable, HollowModelValue<M, MV> {
-		private final NamedUniqueIdentity theIdentity;
-		private final ModelInstanceType<M, MV> theType;
-		private MV theSatisfied;
-		private ListenerList<ListenerHolder<L>> theListeners;
-
-		protected HollowListenable(String name, ModelInstanceType<M, MV> type) {
-			theIdentity = new NamedUniqueIdentity(name);
-			theType = type;
-		}
-
-		@Override
-		public Object getIdentity() {
-			return theIdentity;
-		}
-
-		public MV getSatisfied() {
-			return theSatisfied;
-		}
-
-		public ModelInstanceType<M, MV> getType() {
-			return theType;
-		}
-
-		public Subscription subscribe(L listener) {
-			Subscription really = reallySubscribe(listener);
-			if (really != null)
-				return really;
-			synchronized (this) {
-				really = reallySubscribe(listener);
-				if (really != null)
-					return really;
-				if (theListeners == null)
-					theListeners = ListenerList.build().build();
-				ListenerHolder<L> holder = new ListenerHolder<>(listener);
-				holder.removeUnsatisfied = theListeners.add(holder, false);
-				return holder;
-			}
-		}
-
-		protected abstract Subscription reallySubscribe(L listener);
-
-		public synchronized void satisfy(MV realValue, Consumer<L> forEachListener) {
-			if (realValue == null)
-				throw new NullPointerException("Cannot satisfy a hollow value (" + theType + ") with null");
-			theSatisfied = realValue;
-			if (theListeners != null) {
-				theListeners.dumpAndClear(//
-					listener -> {
-						listener.removeSatisfied = reallySubscribe(listener.listener);
-						if (forEachListener != null)
-							forEachListener.accept(listener.listener);
-					});
-				theListeners = null;
-			}
-		}
-
-		@Override
-		public synchronized void satisfy(MV realValue) throws IllegalStateException {
-			satisfy(realValue, null);
-		}
-
-		@Override
-		public boolean isSatisfied() {
-			return theSatisfied != null;
-		}
-
-		@Override
-		public String toString() {
-			return theIdentity.toString();
-		}
-	}
-
 	/** See {@link ModelTypes#Event} */
 	public static class EventModelType extends ModelType.SingleTyped<Observable<?>> {
 		private EventModelType() {
@@ -271,55 +175,70 @@ public class ModelTypes {
 		@Override
 		public <MV extends Observable<?>> HollowModelValue<Observable<?>, MV> createHollowValue(String name,
 			ModelInstanceType<Observable<?>, MV> type) {
-			return (HollowModelValue<Observable<?>, MV>) new HollowObservable<>(name,
-				(ModelInstanceType<Observable<?>, Observable<Object>>) type);
+			return (HollowModelValue<Observable<?>, MV>) new HollowObservable<>(name);
 		}
 
-		static class HollowObservable<T> extends HollowListenable<Observable<?>, Observable<T>, Observer<? super T>>
-		implements Observable<T> {
-			HollowObservable(String name, ModelInstanceType<Observable<?>, Observable<T>> type) {
-				super(name, type);
+		class HollowObservable<T> extends AbstractIdentifiable
+		implements Observable<T>, HollowModelValue<Observable<?>, Observable<T>> {
+			private final NamedUniqueIdentity theId;
+			private final SettableValue<Observable<T>> theContainer;
+			private final Observable<T> theFlatObservable;
+
+			public HollowObservable(String name) {
+				theId = new NamedUniqueIdentity(name);
+				theContainer = SettableValue.build(TypeTokens.get().keyFor(Observable.class).<Observable<T>> wildCard()).build();
+				;
+					theFlatObservable = ObservableValue.flattenObservableValue(theContainer);
 			}
 
 			@Override
-			public boolean isEventing() {
-				return getSatisfied() == null ? false : getSatisfied().isEventing();
+			protected Object createIdentity() {
+				return theId;
 			}
 
 			@Override
 			public CoreId getCoreId() {
-				return getSatisfied() == null ? null : getSatisfied().getCoreId();
+				return theFlatObservable.getCoreId();
 			}
 
 			@Override
 			public ThreadConstraint getThreadConstraint() {
-				return getSatisfied() == null ? ThreadConstraint.ANY : getSatisfied().getThreadConstraint();
+				return theContainer.get() == null ? ThreadConstraint.ANY : theContainer.get().getThreadConstraint();
+			}
+
+			@Override
+			public boolean isEventing() {
+				return theFlatObservable.isEventing();
+			}
+
+			@Override
+			public void satisfy(Observable<T> realValue) {
+				theContainer.set(realValue, null);
+			}
+
+			@Override
+			public boolean isSatisfied() {
+				return theContainer.get() == null;
 			}
 
 			@Override
 			public Subscription subscribe(Observer<? super T> observer) {
-				return super.subscribe(observer);
-			}
-
-			@Override
-			protected Subscription reallySubscribe(Observer<? super T> listener) {
-				Observable<T> satisfied = getSatisfied();
-				return satisfied == null ? null : satisfied.subscribe(listener);
+				return theFlatObservable.subscribe(observer);
 			}
 
 			@Override
 			public boolean isSafe() {
-				return getSatisfied() == null ? false : getSatisfied().isSafe();
+				return false;
 			}
 
 			@Override
 			public Transaction lock() {
-				return getSatisfied() == null ? Transaction.NONE : getSatisfied().lock();
+				return theFlatObservable.lock();
 			}
 
 			@Override
 			public Transaction tryLock() {
-				return getSatisfied() == null ? Transaction.NONE : getSatisfied().tryLock();
+				return theFlatObservable.tryLock();
 			}
 		}
 	}
@@ -413,7 +332,7 @@ public class ModelTypes {
 		static class HollowAction<T> implements HollowModelValue<ObservableAction<?>, ObservableAction<T>>, ObservableAction<T> {
 			private final String theName;
 			private final TypeToken<T> theType;
-			private ValueModelType.HollowValue<String> theEnabled;
+			private HollowModelValue<SettableValue<?>, SettableValue<String>> theEnabled;
 
 			private ObservableAction<T> theSatisfied;
 
@@ -437,13 +356,13 @@ public class ModelTypes {
 				if (theSatisfied != null)
 					return theSatisfied.isEnabled();
 				else if (theEnabled != null)
-					return theEnabled;
+					return (ObservableValue<String>) theEnabled;
 				synchronized (this) {
 					if (theSatisfied != null)
 						return theSatisfied.isEnabled();
 					else if (theEnabled == null)
-						theEnabled = new ValueModelType.HollowValue<>(theName + ".enabled", TypeTokens.get().STRING);
-					return theEnabled;
+						theEnabled = Value.createHollowValue(theName + ".enabled", Value.STRING);
+					return (ObservableValue<String>) theEnabled;
 				}
 			}
 
@@ -480,6 +399,8 @@ public class ModelTypes {
 		public final ModelInstanceType.SingleTyped<SettableValue<?>, Integer, SettableValue<Integer>> INT = forType(int.class);
 		/** Value&lt;double> type */
 		public final ModelInstanceType.SingleTyped<SettableValue<?>, Double, SettableValue<Double>> DOUBLE = forType(double.class);
+		/** Value&lt;String> type */
+		public final ModelInstanceType.SingleTyped<SettableValue<?>, String, SettableValue<String>> STRING = forType(String.class);
 
 		private ValueModelType() {
 			super("Value", (Class<SettableValue<?>>) (Class<?>) SettableValue.class);
@@ -720,132 +641,85 @@ public class ModelTypes {
 			return (HollowModelValue<SettableValue<?>, MV>) new HollowValue<>(name, (TypeToken<Object>) type.getType(0));
 		}
 
-		static class HollowValue<T> implements HollowModelValue<SettableValue<?>, SettableValue<T>>, SettableValue<T> {
-			private final Object theIdentity;
-			private final TypeToken<T> theType;
-
-			private T theDefaultValue;
-			private EventModelType.HollowObservable<ObservableValueEvent<T>> theHollowChanges;
-			private HollowValue<String> theEnabled;
-
-			private SettableValue<T> theSatisfied;
+		static class HollowValue<T> extends AbstractIdentifiable
+			implements HollowModelValue<SettableValue<?>, SettableValue<T>>, SettableValue<T> {
+			private final NamedUniqueIdentity theId;
+			private final SettableValue<SettableValue<T>> theContainer;
+			private final SettableValue<T> theFlatValue;
 
 			public HollowValue(String name, TypeToken<T> type) {
-				theIdentity = new NamedUniqueIdentity(name);
-				theType = type;
+				theId = new NamedUniqueIdentity(name);
+				theContainer = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<T>> parameterized(type))
+					.build();
+				T defaultValue = TypeTokens.get().getDefaultValue(type);
+				theFlatValue = SettableValue.flatten(theContainer, () -> defaultValue);
 			}
 
 			@Override
 			public T get() {
-				if (theSatisfied != null)
-					return theSatisfied.get();
-				else if (theDefaultValue == null && theType.isPrimitive())
-					theDefaultValue = TypeTokens.get().getDefaultValue(theType);
-				return theDefaultValue;
+				return theFlatValue.get();
 			}
 
 			@Override
 			public Observable<ObservableValueEvent<T>> noInitChanges() {
-				if (theSatisfied != null)
-					return theSatisfied.noInitChanges();
-				else if (theHollowChanges != null)
-					return theHollowChanges;
-				synchronized (this) {
-					if (theSatisfied != null)
-						return theSatisfied.noInitChanges();
-					else if (theHollowChanges == null)
-						theHollowChanges = new EventModelType.HollowObservable<>(theIdentity + ".noInitChanges", Event.forType(//
-							TypeTokens.get().keyFor(ObservableValueEvent.class).parameterized(theType)));
-					return theHollowChanges;
-				}
+				return theFlatValue.noInitChanges();
 			}
 
 			@Override
-			public Object getIdentity() {
-				return theIdentity;
+			protected Object createIdentity() {
+				return theId;
 			}
 
 			@Override
 			public long getStamp() {
-				return theSatisfied == null ? 0 : theSatisfied.getStamp();
+				return theFlatValue.getStamp();
 			}
 
 			@Override
 			public Transaction lock(boolean write, Object cause) {
-				return theSatisfied == null ? Transaction.NONE : theSatisfied.lock(write, cause);
+				return theFlatValue.lock(write, cause);
 			}
 
 			@Override
 			public Transaction tryLock(boolean write, Object cause) {
-				return theSatisfied == null ? Transaction.NONE : theSatisfied.tryLock(write, cause);
+				return theFlatValue.tryLock(write, cause);
 			}
 
 			@Override
 			public TypeToken<T> getType() {
-				return theType;
+				return theFlatValue.getType();
 			}
 
 			@Override
 			public boolean isLockSupported() {
-				return theSatisfied == null ? true : theSatisfied.isLockSupported();
+				return theFlatValue.isLockSupported();
 			}
 
 			@Override
 			public <V extends T> T set(V value, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
-				if (theSatisfied != null)
-					return theSatisfied.set(value, cause);
-				else
-					throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+				return theFlatValue.set(value, cause);
 			}
 
 			@Override
 			public <V extends T> String isAcceptable(V value) {
-				if (theSatisfied != null)
-					return theSatisfied.isAcceptable(value);
-				else
-					return StdMsg.UNSUPPORTED_OPERATION;
+				return theFlatValue.isAcceptable(value);
 			}
 
 			@Override
 			public ObservableValue<String> isEnabled() {
-				if (theSatisfied != null)
-					return theSatisfied.isEnabled();
-				else if (theEnabled != null)
-					return theEnabled;
-				synchronized (this) {
-					if (theSatisfied != null)
-						return theSatisfied.isEnabled();
-					else if (theEnabled == null)
-						theEnabled = new HollowValue<>(theIdentity + ".enabled", TypeTokens.get().STRING);
-					return theEnabled;
-				}
+				return theFlatValue.isEnabled();
 			}
 
 			@Override
 			public void satisfy(SettableValue<T> realValue) throws IllegalStateException {
 				if (realValue == null)
-					throw new NullPointerException("Cannot satisfy a hollow value (Action<" + theType + ">) with null");
-				theSatisfied = realValue;
-				if (theHollowChanges != null) {
-					ObservableValueEvent<T> initEvent = realValue.createInitialEvent(realValue.get(), null);
-					try (Transaction t = Causable.use(initEvent)) {
-						theHollowChanges.satisfy(realValue.noInitChanges(), listener -> {
-							listener.onNext(initEvent);
-						});
-					}
-				}
-				if (theEnabled != null)
-					theEnabled.satisfy(SettableValue.asSettable(realValue.isEnabled(), __ -> "Not Settable"));
+					throw new NullPointerException("Cannot satisfy a hollow value (Action<" + getType() + ">) with null");
+				theContainer.set(realValue, null);
 			}
 
 			@Override
 			public boolean isSatisfied() {
-				return theSatisfied != null;
-			}
-
-			@Override
-			public String toString() {
-				return theIdentity.toString();
+				return theContainer.get() != null;
 			}
 		}
 	}

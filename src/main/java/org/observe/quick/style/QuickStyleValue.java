@@ -15,6 +15,7 @@ import org.observe.expresso.ExpressoEnv;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet;
+import org.observe.expresso.ObservableModelSet.ModelComponentNode;
 import org.observe.expresso.ObservableModelSet.ValueContainer;
 import org.observe.expresso.ops.NameExpression;
 import org.qommons.StringUtils;
@@ -67,9 +68,13 @@ public class QuickStyleValue<T> implements Comparable<QuickStyleValue<?>> {
 		throws QonfigInterpretationException {
 		if (ex instanceof NameExpression && ((NameExpression) ex).getContext() == null) {
 			String name = ((NameExpression) ex).getNames().getFirst();
-			ValueContainer<?, ?> value = models.getValue(name, false);
-			if (value instanceof DynamicModelValue)
-				modelValues.add((DynamicModelValue<?, ?>) value);
+			ModelComponentNode<?, ?> component = models.getComponentIfExists(name);
+			if (component != null) {
+				for (ValueContainer<?, ?> core : component.getCores()) {
+					if (core instanceof DynamicModelValue)
+						modelValues.add((DynamicModelValue<?, ?>) core);
+				}
+			}
 		} else {
 			for (ObservableExpression child : ex.getChildren())
 				findModelValues(child, modelValues, models);

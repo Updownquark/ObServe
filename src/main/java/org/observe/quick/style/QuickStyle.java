@@ -280,9 +280,9 @@ public class QuickStyle implements QonfigInterpretation {
 				for (QonfigToolkit tk : session.getElement().getDocument().getDocToolkit().getDependencies().values())
 					parser.withToolkit(tk);
 			}
+			String address = sse.getAttributeText("ref");
 			URL ref;
 			try {
-				String address = sse.getAttributeText("ref");
 				String urlStr = QommonsConfig.resolve(address, session.getElement().getDocument().getLocation());
 				ref = new URL(urlStr);
 			} catch (IOException e) {
@@ -302,7 +302,7 @@ public class QuickStyle implements QonfigInterpretation {
 			StyleQIS importSession = session.intepretRoot(ssDoc.getRoot())//
 				.put(STYLE_SHEET_REF, ref);
 			importSession.as(ExpressoQIS.class)//
-			.setModels(ObservableModelSet.build(exS.getExpressoEnv().getModels().getNameChecker()).build(),
+				.setModels(ObservableModelSet.build(address, exS.getExpressoEnv().getModels().getNameChecker()).build(),
 				exS.getExpressoEnv().getClassView());
 			modifyForStyle(session);
 			QuickStyleSheet imported = importSession.interpret(QuickStyleSheet.class);

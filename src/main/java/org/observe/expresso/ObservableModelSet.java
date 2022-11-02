@@ -205,6 +205,8 @@ public interface ObservableModelSet extends Identifiable {
 		 */
 		MV get(ModelSetInstance models);
 
+		MV forModelCopy(MV value, ModelSetInstance sourceModels, ModelSetInstance newModels);
+
 		/** @return All the self-sufficient containers that compose this value container */
 		BetterList<ValueContainer<?, ?>> getCores();
 
@@ -221,6 +223,15 @@ public interface ObservableModelSet extends Identifiable {
 				@Override
 				public MV2 get(ModelSetInstance models) {
 					return map.apply(outer.get(models));
+				}
+
+				@Override
+				public MV2 forModelCopy(MV2 value, ModelSetInstance sourceModels, ModelSetInstance newModels) {
+					MV sourceValue = outer.get(sourceModels);
+					MV sourceCopy = outer.forModelCopy(sourceValue, sourceModels, newModels);
+					if (sourceCopy == sourceValue)
+						return value;
+					return map.apply(sourceCopy);
 				}
 
 				@Override
@@ -252,6 +263,15 @@ public interface ObservableModelSet extends Identifiable {
 				}
 
 				@Override
+				public MV2 forModelCopy(MV2 value, ModelSetInstance sourceModels, ModelSetInstance newModels) {
+					MV sourceValue = outer.get(sourceModels);
+					MV sourceCopy = outer.forModelCopy(sourceValue, sourceModels, newModels);
+					if (sourceCopy == sourceValue)
+						return value;
+					return map.apply(sourceCopy, newModels);
+				}
+
+				@Override
 				public BetterList<ValueContainer<?, ?>> getCores() {
 					return outer.getCores();
 				}
@@ -274,6 +294,13 @@ public interface ObservableModelSet extends Identifiable {
 				@Override
 				public MV get(ModelSetInstance models) {
 					return outer.get(modelWrapper.apply(models));
+				}
+
+				@Override
+				public MV forModelCopy(MV value, ModelSetInstance sourceModels, ModelSetInstance newModels) {
+					ModelSetInstance wrappedNew = modelWrapper.apply(newModels);
+					MV sourceValue = outer.get(sourceModels);
+					return outer.forModelCopy(sourceValue, sourceModels, wrappedNew);
 				}
 
 				@Override
@@ -321,6 +348,11 @@ public interface ObservableModelSet extends Identifiable {
 				}
 
 				@Override
+				public SettableValue<T> forModelCopy(SettableValue<T> value2, ModelSetInstance sourceModels, ModelSetInstance newModels) {
+					return theValue;
+				}
+
+				@Override
 				public BetterList<ObservableModelSet.ValueContainer<?, ?>> getCores() {
 					return BetterList.of(this);
 				}
@@ -354,6 +386,11 @@ public interface ObservableModelSet extends Identifiable {
 				}
 
 				@Override
+				public SettableValue<T> forModelCopy(SettableValue<T> value2, ModelSetInstance sourceModels, ModelSetInstance newModels) {
+					return theValue;
+				}
+
+				@Override
 				public String toString() {
 					return value.toString();
 				}
@@ -377,6 +414,11 @@ public interface ObservableModelSet extends Identifiable {
 				@Override
 				public MV get(ModelSetInstance models) {
 					return value.apply(models);
+				}
+
+				@Override
+				public MV forModelCopy(MV value2, ModelSetInstance sourceModels, ModelSetInstance newModels) {
+					return value.apply(newModels);
 				}
 
 				@Override
@@ -957,6 +999,8 @@ public interface ObservableModelSet extends Identifiable {
 		 * @return The model value in this model instance set for the given component
 		 */
 		<M, MV extends M> MV get(ModelComponentNode<M, MV> component);
+
+		ModelSetInstanceBuilder copy();
 	}
 
 	/** Builds a {@link ModelSetInstance} */
@@ -1288,7 +1332,7 @@ public interface ObservableModelSet extends Identifiable {
 
 		@Override
 		public ModelSetInstanceBuilder createInstance(ExternalModelSet extModel, Observable<?> until) {
-			return new DefaultMSIBuilder(this, extModel, until, theModelConfiguration);
+			return new DefaultMSIBuilder(this, null, extModel, until, theModelConfiguration);
 		}
 
 		@Override
@@ -1362,6 +1406,19 @@ public interface ObservableModelSet extends Identifiable {
 			}
 
 			@Override
+			public MV forModelCopy(MV value, ModelSetInstance sourceModels, ModelSetInstance newModels) {
+				if (theCreator != null) {
+					if (theValue == null) {
+						theValue = theCreator.createValue();
+						if (theValue == null)
+							return null;
+					}
+					return theValue.forModelCopy(value, sourceModels, newModels);
+				} else
+					return value;
+			}
+
+			@Override
 			public MV create(ModelSetInstance modelSet, ExternalModelSet extModels) {
 				if (theCreator != null) {
 					if (theValue == null) {
@@ -1387,7 +1444,15 @@ public interface ObservableModelSet extends Identifiable {
 
 			@Override
 			public BetterList<ValueContainer<?, ?>> getCores() {
-				return BetterList.of(this);
+				if (theCreator != null) {
+					if (theValue == null) {
+						theValue = theCreator.createValue();
+						if (theValue == null)
+							return BetterList.of(this);
+					}
+					return theValue.getCores();
+				} else
+					return BetterList.of(this);
 			}
 
 			@Override
@@ -1598,12 +1663,12 @@ public interface ObservableModelSet extends Identifiable {
 			private final Map<RuntimeValuePlaceholder<?, ?>, Boolean> theRuntimeVariables;
 			private final DefaultMSI theMSI;
 
-			DefaultMSIBuilder(ObservableModelSet models, ExternalModelSet extModels, Observable<?> until,
+			DefaultMSIBuilder(ObservableModelSet models, ModelSetInstance sourceModel, ExternalModelSet extModels, Observable<?> until,
 				Function<ModelSetInstance, ?> modelConfiguration) {
 				theComponents = new HashMap<>();
 				theInheritance = new LinkedHashMap<>();
 				theRuntimeVariables = new HashMap<>();
-				theMSI = new DefaultMSI(models.getRoot(), extModels, until, modelConfiguration, theComponents,
+				theMSI = new DefaultMSI(models.getRoot(), sourceModel, extModels, until, modelConfiguration, theComponents,
 					Collections.unmodifiableMap(theInheritance));
 				lookForRuntimeVars(models);
 			}
@@ -1684,6 +1749,7 @@ public interface ObservableModelSet extends Identifiable {
 
 		static class DefaultMSI implements ModelSetInstance {
 			private final ObservableModelSet theModel;
+			private final ModelSetInstance theSourceModel;
 			private final ExternalModelSet theExtModels;
 			private final Observable<?> theUntil;
 			private Function<ModelSetInstance, ?> theModelConfigurationCreator;
@@ -1692,10 +1758,11 @@ public interface ObservableModelSet extends Identifiable {
 			private final Map<ModelComponentId, ModelSetInstance> theInheritance;
 			private Set<ModelComponentNode<?, ?>> theCircularityDetector;
 
-			protected DefaultMSI(ObservableModelSet models, ExternalModelSet extModels, Observable<?> until,
+			protected DefaultMSI(ObservableModelSet models, ModelSetInstance sourceModel, ExternalModelSet extModels, Observable<?> until,
 				Function<ModelSetInstance, ?> configuration, Map<ModelComponentId, Object> components,
 				Map<ModelComponentId, ModelSetInstance> inheritance) {
 				theModel = models;
+				theSourceModel = sourceModel;
 				theExtModels = extModels;
 				theUntil = until;
 				theModelConfigurationCreator = configuration;
@@ -1748,12 +1815,20 @@ public interface ObservableModelSet extends Identifiable {
 				try {
 					ExternalModelSet extModel = theExtModels == null ? null
 						: theExtModels.getSubModelIfExists(component.getIdentity().getOwnerId().getPath());
-					thing = component.create(this, extModel);
+					if (theSourceModel != null)
+						thing = component.forModelCopy(component.get(theSourceModel), theSourceModel, this);
+					else
+						thing = component.create(this, extModel);
 					theComponents.put(component.getIdentity(), thing);
 				} finally {
 					theCircularityDetector.remove(component);
 				}
 				return thing;
+			}
+
+			@Override
+			public ModelSetInstanceBuilder copy() {
+				return new DefaultMSIBuilder(theModel, this, theExtModels, theUntil, theModelConfigurationCreator);
 			}
 
 			void built() {

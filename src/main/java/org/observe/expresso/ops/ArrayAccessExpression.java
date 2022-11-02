@@ -66,15 +66,15 @@ public class ArrayAccessExpression implements ObservableExpression {
 		if (type.getModelType() != ModelTypes.Value)
 			throw new QonfigInterpretationException("An array access expression can only be evaluated as a value");
 
-		ValueContainer<SettableValue<?>, ? extends SettableValue<Object[]>> arrayValue = theArray.evaluate(ModelTypes.Value.forType(//
+		ValueContainer<SettableValue<?>, SettableValue<Object[]>> arrayValue = theArray.evaluate(ModelTypes.Value.forType(//
 			(TypeToken<Object[]>) TypeTokens.get().getArrayType(type.getType(0), 1)), env);
 		ValueContainer<SettableValue<?>, SettableValue<Integer>> indexValue = theIndex.evaluate(ModelTypes.Value.forType(int.class), env);
 		return (ValueContainer<M, MV>) this.<Object> doEval(arrayValue, indexValue, env);
 	}
 
 	private <T> ValueContainer<SettableValue<?>, SettableValue<T>> doEval(
-		ValueContainer<SettableValue<?>, ? extends SettableValue<T[]>> arrayValue,
-			ValueContainer<SettableValue<?>, SettableValue<Integer>> indexValue, ExpressoEnv env) {
+		ValueContainer<SettableValue<?>, SettableValue<T[]>> arrayValue,
+		ValueContainer<SettableValue<?>, SettableValue<Integer>> indexValue, ExpressoEnv env) {
 		TypeToken<T> targetType = (TypeToken<T>) arrayValue.getType().getType(0).getComponentType();
 		ModelInstanceType<SettableValue<?>, SettableValue<T>> targetModelType = ModelTypes.Value.forType(targetType);
 		return new ValueContainer<SettableValue<?>, SettableValue<T>>() {
@@ -87,6 +87,10 @@ public class ArrayAccessExpression implements ObservableExpression {
 			public SettableValue<T> get(ModelSetInstance models) {
 				SettableValue<T[]> arrayV = arrayValue.get(models);
 				SettableValue<Integer> indexV = indexValue.get(models);
+				return createArrayValue(arrayV, indexV);
+			}
+
+			private SettableValue<T> createArrayValue(SettableValue<T[]> arrayV, SettableValue<Integer> indexV) {
 				return arrayV.transformReversible(targetType, tx -> tx.combineWith(indexV)//
 					.combine((a, idx) -> {
 						if (a == null) {
@@ -107,6 +111,18 @@ public class ArrayAccessExpression implements ObservableExpression {
 						} else
 							a[idx] = newValue;
 					}));
+			}
+
+			@Override
+			public SettableValue<T> forModelCopy(SettableValue<T> value, ModelSetInstance sourceModels, ModelSetInstance newModels) {
+				SettableValue<T[]> sourceArray = arrayValue.get(sourceModels);
+				SettableValue<T[]> newArray = arrayValue.forModelCopy(sourceArray, sourceModels, newModels);
+				SettableValue<Integer> sourceIndex = indexValue.get(sourceModels);
+				SettableValue<Integer> newIndex = indexValue.forModelCopy(sourceIndex, sourceModels, newModels);
+				if (sourceArray == newArray && sourceIndex == newIndex)
+					return value;
+				else
+					return createArrayValue(newArray, newIndex);
 			}
 
 			@Override

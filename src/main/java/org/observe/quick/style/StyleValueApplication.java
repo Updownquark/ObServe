@@ -18,6 +18,7 @@ import org.observe.expresso.ExpressoEnv;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet;
+import org.observe.expresso.ObservableModelSet.ModelComponentNode;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ValueContainer;
 import org.observe.expresso.ops.BinaryOperator;
@@ -88,11 +89,10 @@ public class StyleValueApplication {
 		QonfigAttributeDef.Declared priorityAttr) throws QonfigInterpretationException {
 		if (ex instanceof NameExpression && ((NameExpression) ex).getContext() == null) {
 			String name = ((NameExpression) ex).getNames().getFirst();
-			Object thing = models.getThing(name);
-			if (thing instanceof ObservableModelSet.ValueCreator) {
-				ValueContainer<?, ?> container = ((ObservableModelSet.ValueCreator<?, ?>) thing).createValue();
+			ModelComponentNode<?, ?> component = models.getComponentIfExists(name);
+			if (component.getThing() instanceof ObservableModelSet.ValueCreator) {
 				int complexity = 1;
-				for (ValueContainer<?, ?> core : container.getCores()) {
+				for (ValueContainer<?, ?> core : component.getCores()) {
 					if (core instanceof DynamicModelValue) {
 						DynamicModelValue<?, ?> dynamicValue = (DynamicModelValue<?, ?>) core;
 						if (modelValues.add(dynamicValue))

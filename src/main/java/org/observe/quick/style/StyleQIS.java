@@ -24,7 +24,11 @@ public class StyleQIS implements SpecialSession<StyleQIS> {
 		.forType(ModelSetInstance.class);
 
 	public static ModelSetInstance getParentModels(ModelSetInstance models) {
-		return models.getValue(PARENT_MODEL_NAME, PARENT_MODEL_TYPE).get();
+		try {
+			return models.getModel().getValue(PARENT_MODEL_NAME, PARENT_MODEL_TYPE).get(models).get();
+		} catch (QonfigInterpretationException e) {
+			throw new IllegalStateException("No parent models installed", e);
+		}
 	}
 
 	private final CoreSession theWrapped;

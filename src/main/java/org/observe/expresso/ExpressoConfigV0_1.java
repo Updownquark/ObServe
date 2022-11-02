@@ -453,6 +453,12 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 								}
 
 								@Override
+								public Object forModelCopy(Object value, ModelSetInstance sourceModels, ModelSetInstance newModels) {
+									// Should be the same thing, since the config hasn't changed
+									return value;
+								}
+
+								@Override
 								public BetterList<ValueContainer<?, ?>> getCores() {
 									return BetterList.of(this);
 								}
@@ -715,6 +721,20 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 				}
 
 				@Override
+				public SettableValue<ObservableConfigFormat<Object>> forModelCopy(SettableValue<ObservableConfigFormat<Object>> value,
+					ModelSetInstance sourceModels, ModelSetInstance newModels) {
+					SettableValue<Format<Object>> sourceFormat = format.get(sourceModels);
+					SettableValue<Format<Object>> newFormat = format.forModelCopy(sourceFormat, sourceModels, newModels);
+					if (sourceFormat == newFormat)
+						return value;
+					else {
+						Supplier<Object> defaultV = defaultValue == null ? null : () -> defaultValue.apply(newModels);
+						return SettableValue.asSettable(newFormat.transform(ocfType, tx -> tx.nullToNull(true)//
+							.map(f -> ObservableConfigFormat.ofQommonFormat(f, defaultV))), __ -> "Not reversible");
+					}
+				}
+
+				@Override
 				public BetterList<ValueContainer<?, ?>> getCores() {
 					return BetterList.of(this);
 				}
@@ -779,10 +799,10 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 
 	private ValueCreator<SettableValue<?>, SettableValue<BetterFile.FileDataSource>> createFileSource(ExpressoQIS session)
 		throws QonfigInterpretationException {
-		Supplier<Function<ModelSetInstance, SettableValue<FileDataSource>>> source;
+		Supplier<ValueContainer<SettableValue<?>, SettableValue<FileDataSource>>> source;
 		switch (session.getAttributeText("type")) {
 		case "native":
-			source = () -> modelSet -> ObservableModelSet.literal(new NativeFileSource(), "native-file-source");
+			source = () -> ValueContainer.literal(TypeTokens.get().of(FileDataSource.class), new NativeFileSource(), "native-file-source");
 			break;
 		case "sftp":
 			throw new UnsupportedOperationException("Not yet implemented");
@@ -820,12 +840,12 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 				}
 			};
 
-			Supplier<Function<ModelSetInstance, SettableValue<FileDataSource>>> root = source;
+			Supplier<ValueContainer<SettableValue<?>, SettableValue<FileDataSource>>> root = source;
 			source = () -> {
 				ValueContainer<SettableValue<?>, SettableValue<Integer>> mzd = maxZipDepth == null ? null : maxZipDepth.get();
-				return modelSet -> {
+				return ValueContainer.of(ModelTypes.Value.forType(FileDataSource.class), modelSet -> {
 					SettableValue<Integer> zd = mzd == null ? null : mzd.get(modelSet);
-					return root.get().apply(modelSet).transformReversible(FileDataSource.class, //
+					return root.get().get(modelSet).transformReversible(FileDataSource.class, //
 						tx -> tx.nullToNull(true).map(fs -> {
 							ArchiveEnabledFileSource aefs = new ArchiveEnabledFileSource(fs).withArchival(archiveMethods);
 							if (zd != null) {
@@ -836,17 +856,23 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 							}
 							return aefs;
 						}).replaceSource(aefs -> null, rev -> rev.disableWith(tv -> "Not settable")));
-				};
+				});
 			};
 		}
-		Supplier<Function<ModelSetInstance, SettableValue<FileDataSource>>> fSource = source;
+		Supplier<ValueContainer<SettableValue<?>, SettableValue<FileDataSource>>> fSource = source;
 		return () -> {
-			Function<ModelSetInstance, SettableValue<FileDataSource>> fSource2 = fSource.get();
+			ValueContainer<SettableValue<?>, SettableValue<FileDataSource>> fSource2 = fSource.get();
 			return new ObservableModelSet.AbstractValueContainer<SettableValue<?>, SettableValue<BetterFile.FileDataSource>>(
 				ModelTypes.Value.forType(FileDataSource.class)) {
 				@Override
 				public SettableValue<FileDataSource> get(ModelSetInstance models) {
-					return fSource2.apply(models);
+					return fSource2.get(models);
+				}
+
+				@Override
+				public SettableValue<FileDataSource> forModelCopy(SettableValue<FileDataSource> value, ModelSetInstance sourceModels,
+					ModelSetInstance newModels) {
+					return fSource2.forModelCopy(value, sourceModels, newModels);
 				}
 
 				@Override
@@ -947,6 +973,13 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 				}
 
 				@Override
+				public SettableValue<Format<Instant>> forModelCopy(SettableValue<Format<Instant>> value, ModelSetInstance sourceModels,
+					ModelSetInstance newModels) {
+					return ObservableModelSet.literal(SpinnerFormat.flexDate(relativeTo2.apply(newModels), dayFormat, __ -> fOptions),
+						"instant");
+				}
+
+				@Override
 				public BetterList<ValueContainer<?, ?>> getCores() {
 					return BetterList.of(this);
 				}
@@ -992,12 +1025,35 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 				@Override
 				public SettableValue<Format<BetterFile>> get(ModelSetInstance models) {
 					SettableValue<BetterFile.FileDataSource> fds = fileSource2.get(models);
+					SettableValue<String> workingDirF = workingDir2 == null ? SettableValue.of(String.class, ".", "Not Settable")
+						: workingDir2.get(models);
 					return SettableValue.asSettable(//
 						fds.transform(fileFormatType, tx -> tx.map(fs -> {
-							BetterFile workingDirFile = BetterFile.at(fs, workingDir2 == null ? "." : workingDir2.get(models).get());
+							BetterFile workingDirFile = BetterFile.at(fs, workingDirF.get());
 							return new BetterFile.FileFormat(fs, workingDirFile, allowEmpty);
 						})), //
 						__ -> "Not reversible");
+				}
+
+				@Override
+				public SettableValue<Format<BetterFile>> forModelCopy(SettableValue<Format<BetterFile>> value,
+					ModelSetInstance sourceModels, ModelSetInstance newModels) {
+					SettableValue<BetterFile.FileDataSource> sourceFDS = fileSource2.get(sourceModels);
+					SettableValue<BetterFile.FileDataSource> newFDS = fileSource2.forModelCopy(sourceFDS, sourceModels, newModels);
+					SettableValue<String> sourceWorkingDir = workingDir2 == null ? SettableValue.of(String.class, ".", "Not Settable")
+						: workingDir2.get(sourceModels);
+					SettableValue<String> newWorkingDir = workingDir2 == null ? sourceWorkingDir
+						: workingDir2.forModelCopy(sourceWorkingDir, sourceModels, newModels);
+					if (sourceFDS == newFDS && sourceWorkingDir == newWorkingDir)
+						return value;
+					else {
+						return SettableValue.asSettable(//
+							newFDS.transform(fileFormatType, tx -> tx.map(fs -> {
+								BetterFile workingDirFile = BetterFile.at(fs, newWorkingDir.get());
+								return new BetterFile.FileFormat(fs, workingDirFile, allowEmpty);
+							})), //
+							__ -> "Not reversible");
+					}
 				}
 
 				@Override

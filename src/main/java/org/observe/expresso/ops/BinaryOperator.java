@@ -107,7 +107,8 @@ public class BinaryOperator implements ObservableExpression {
 			targetOpType = TypeTokens.get().WILDCARD;
 			break;
 		}
-		ValueContainer<SettableValue<?>, ? extends SettableValue<?>> left = theLeft.evaluate(ModelTypes.Value.forType(targetOpType), env);
+		ValueContainer<SettableValue<?>, SettableValue<Object>> left = theLeft
+			.evaluate(ModelTypes.Value.forType((TypeToken<Object>) targetOpType), env);
 		Class<?> leftType = TypeTokens.getRawType(left.getType().getType(0));
 		types = env.getBinaryOperators().getSupportedSecondaryInputTypes(operator, targetType, leftType);
 		switch (types.size()) {
@@ -122,7 +123,8 @@ public class BinaryOperator implements ObservableExpression {
 			targetOpType = TypeTokens.get().WILDCARD;
 			break;
 		}
-		ValueContainer<SettableValue<?>, ? extends SettableValue<?>> right = theRight.evaluate(ModelTypes.Value.forType(targetOpType), env);
+		ValueContainer<SettableValue<?>, SettableValue<Object>> right = theRight
+			.evaluate(ModelTypes.Value.forType((TypeToken<Object>) targetOpType), env);
 		BinaryOp<Object, Object, Object> op = (BinaryOp<Object, Object, Object>) env.getBinaryOperators().getOperator(operator, targetType, //
 			leftType, TypeTokens.getRawType(right.getType().getType(0)));
 		if (op == null)
@@ -150,8 +152,12 @@ public class BinaryOperator implements ObservableExpression {
 
 				@Override
 				public ObservableAction<Object> get(ModelSetInstance msi) {
-					SettableValue<Object> leftV = (SettableValue<Object>) left.get(msi);
-					SettableValue<Object> rightV = (SettableValue<Object>) right.get(msi);
+					SettableValue<Object> leftV = left.get(msi);
+					SettableValue<Object> rightV = right.get(msi);
+					return createOpAction(leftV, rightV);
+				}
+
+				private ObservableAction<Object> createOpAction(SettableValue<Object> leftV, SettableValue<Object> rightV) {
 					ObservableValue<Object> result = leftV.transform(resultType, tx -> tx.combineWith(rightV)//
 						.combine((lft, rgt) -> op.apply(lft, rgt)));
 					ObservableValue<String> leftEnabled = leftV.isEnabled();
@@ -186,6 +192,19 @@ public class BinaryOperator implements ObservableExpression {
 				}
 
 				@Override
+				public ObservableAction<Object> forModelCopy(ObservableAction<Object> value, ModelSetInstance sourceModels,
+					ModelSetInstance newModels) {
+					SettableValue<Object> sourceLeft = left.get(sourceModels);
+					SettableValue<Object> newLeft = left.forModelCopy(sourceLeft, sourceModels, newModels);
+					SettableValue<Object> sourceRight = right.get(sourceModels);
+					SettableValue<Object> newRight = right.forModelCopy(sourceRight, sourceModels, newModels);
+					if (sourceLeft == newLeft && sourceRight == newRight)
+						return value;
+					else
+						return createOpAction(newLeft, newRight);
+				}
+
+				@Override
 				public BetterList<ValueContainer<?, ?>> getCores() {
 					return BetterList.of(Stream.of(left, right).flatMap(vc -> vc.getCores().stream()));
 				}
@@ -206,8 +225,12 @@ public class BinaryOperator implements ObservableExpression {
 
 				@Override
 				public SettableValue<Object> get(ModelSetInstance msi) {
-					SettableValue<Object> leftV = (SettableValue<Object>) left.get(msi);
-					SettableValue<Object> rightV = (SettableValue<Object>) right.get(msi);
+					SettableValue<Object> leftV = left.get(msi);
+					SettableValue<Object> rightV = right.get(msi);
+					return createOpValue(leftV, rightV);
+				}
+
+				private SettableValue<Object> createOpValue(SettableValue<Object> leftV, SettableValue<Object> rightV) {
 					return leftV.transformReversible(resultType, tx -> tx.combineWith(rightV)//
 						.combine(LambdaUtils.printableBiFn((lft, rgt) -> op.apply(lft, rgt), op::toString, op))//
 						.withReverse(new Transformation.TransformReverse<Object, Object>() {
@@ -231,6 +254,19 @@ public class BinaryOperator implements ObservableExpression {
 								return ReverseQueryResult.value(op.reverse(transformValues.getCurrentSource(), rgt, newValue));
 							}
 						}));
+				}
+
+				@Override
+				public SettableValue<Object> forModelCopy(SettableValue<Object> value, ModelSetInstance sourceModels,
+					ModelSetInstance newModels) {
+					SettableValue<Object> sourceLeft = left.get(sourceModels);
+					SettableValue<Object> newLeft = left.forModelCopy(sourceLeft, sourceModels, newModels);
+					SettableValue<Object> sourceRight = right.get(sourceModels);
+					SettableValue<Object> newRight = right.forModelCopy(sourceRight, sourceModels, newModels);
+					if (sourceLeft == newLeft && sourceRight == newRight)
+						return value;
+					else
+						return createOpValue(newLeft, newRight);
 				}
 
 				@Override

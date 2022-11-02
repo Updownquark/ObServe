@@ -95,27 +95,9 @@ public class NameExpression implements ObservableExpression {
 			Class<?> paramType = TypeTokens.getRawType(type.getType(0));
 			if (paramType != null && paramType.isEnum()) {
 				for (Enum<?> value : ((Class<? extends Enum<?>>) paramType).getEnumConstants()) {
-					if (value.name().equals(theNames.getFirst())) {
-						return new ValueContainer<M, MV>() {
-							final ModelInstanceType<M, MV> retType = (ModelInstanceType<M, MV>) ModelTypes.Value.forType(paramType);
-							final MV retValue = (MV) ObservableModelSet.literal(value, value.name());
-
-							@Override
-							public ModelInstanceType<M, MV> getType() {
-								return retType;
-							}
-
-							@Override
-							public MV get(ModelSetInstance extModels) {
-								return retValue;
-							}
-
-							@Override
-							public BetterList<ValueContainer<?, ?>> getCores() {
-								return BetterList.of(this);
-							}
-						};
-					}
+					if (value.name().equals(theNames.getFirst()))
+						return (ValueContainer<M, MV>) ValueContainer.literal(TypeTokens.get().of((Class<Object>) paramType), value,
+							value.name());
 				}
 			}
 		}
@@ -216,147 +198,62 @@ public class NameExpression implements ObservableExpression {
 	private <F, M> ValueContainer<SettableValue<?>, SettableValue<M>> getFieldValue(Field field, TypeToken<F> fieldType,
 		ValueContainer<SettableValue<?>, ? extends SettableValue<?>> context, TypeToken<M> targetType) {
 		if (targetType == null || fieldType.equals(targetType)) {
-			if (context == null) {
-				return new ValueContainer<SettableValue<?>, SettableValue<M>>() {
-					@Override
-					public ModelInstanceType<SettableValue<?>, SettableValue<M>> getType() {
-						return ModelTypes.Value.forType(targetType);
-					}
-
-					@Override
-					public SettableValue<M> get(ModelSetInstance models) {
-						return (SettableValue<M>) new NameExpression.FieldValue<>(field, fieldType, null, null);
-					}
-
-					@Override
-					public BetterList<ValueContainer<?, ?>> getCores() {
-						return BetterList.of(this);
-					}
-				};
-			} else {
-				return new ValueContainer<SettableValue<?>, SettableValue<M>>() {
-					@Override
-					public ModelInstanceType<SettableValue<?>, SettableValue<M>> getType() {
-						return ModelTypes.Value.forType(targetType);
-					}
-
-					@Override
-					public SettableValue<M> get(ModelSetInstance models) {
-						return (SettableValue<M>) context.get(models).transformReversible(fieldType,
-							tx -> tx.nullToNull(true).map(ctx -> {
-								try {
-									return (F) field.get(ctx);
-								} catch (IllegalAccessException e) {
-									throw new IllegalStateException("Could not access field " + field.getName(), e);
-								}
-							}).modifySource((ctx, newFieldValue) -> {
-								try {
-									field.set(ctx, newFieldValue);
-								} catch (IllegalAccessException e) {
-									throw new IllegalStateException("Could not access field " + field.getName(), e);
-								}
-							}));
-					}
-
-					@Override
-					public BetterList<ValueContainer<?, ?>> getCores() {
-						return context.getCores();
-					}
-				};
+			if (context == null)
+				return ValueContainer.of(ModelTypes.Value.forType(targetType),
+					models -> (SettableValue<M>) new NameExpression.FieldValue<>(field, fieldType, null, null));
+			else {
+				return ValueContainer.of(ModelTypes.Value.forType(targetType),
+					models -> (SettableValue<M>) context.get(models).transformReversible(fieldType, tx -> tx.nullToNull(true).map(ctx -> {
+						try {
+							return (F) field.get(ctx);
+						} catch (IllegalAccessException e) {
+							throw new IllegalStateException("Could not access field " + field.getName(), e);
+						}
+					}).modifySource((ctx, newFieldValue) -> {
+						try {
+							field.set(ctx, newFieldValue);
+						} catch (IllegalAccessException e) {
+							throw new IllegalStateException("Could not access field " + field.getName(), e);
+						}
+					})));
 			}
 		} else if (TypeTokens.get().isAssignable(targetType, fieldType)) {
 			Function<F, M> cast = TypeTokens.get().getCast(fieldType, targetType, true);
 			if (TypeTokens.get().isAssignable(fieldType, targetType)) {
 				Function<M, F> reverse = TypeTokens.get().getCast(targetType, fieldType, true);
-				if (context == null) {
-					return new ValueContainer<SettableValue<?>, SettableValue<M>>() {
-						@Override
-						public ModelInstanceType<SettableValue<?>, SettableValue<M>> getType() {
-							return ModelTypes.Value.forType(targetType);
+				if (context == null)
+					return ValueContainer.of(ModelTypes.Value.forType(targetType),
+						models -> (SettableValue<M>) new NameExpression.FieldValue<>(field, fieldType, cast, reverse));
+				else {
+					return ValueContainer.of(ModelTypes.Value.forType(targetType),
+						models -> context.get(models).transformReversible(targetType, tx -> tx.nullToNull(true).map(ctx -> {
+						try {
+							return cast.apply((F) field.get(ctx));
+						} catch (IllegalAccessException e) {
+							throw new IllegalStateException("Could not access field " + field.getName(), e);
 						}
-
-						@Override
-						public SettableValue<M> get(ModelSetInstance models) {
-							return (SettableValue<M>) new NameExpression.FieldValue<>(field, fieldType, cast, reverse);
+					}).modifySource((ctx, newFieldValue) -> {
+						try {
+							field.set(ctx, reverse.apply(newFieldValue));
+						} catch (IllegalAccessException e) {
+							throw new IllegalStateException("Could not access field " + field.getName(), e);
 						}
-
-						@Override
-						public BetterList<ValueContainer<?, ?>> getCores() {
-							return BetterList.of(this);
-						}
-					};
-				} else {
-					return new ValueContainer<SettableValue<?>, SettableValue<M>>() {
-						@Override
-						public ModelInstanceType<SettableValue<?>, SettableValue<M>> getType() {
-							return ModelTypes.Value.forType(targetType);
-						}
-
-						@Override
-						public SettableValue<M> get(ModelSetInstance models) {
-							return context.get(models).transformReversible(targetType, tx -> tx.nullToNull(true).map(ctx -> {
+						})));
+				}
+			} else {
+				if (context == null)
+					return ValueContainer.of(ModelTypes.Value.forType(targetType),
+						models -> (SettableValue<M>) new NameExpression.FieldValue<>(field, fieldType, cast, null));
+				else {
+					return ValueContainer.of(ModelTypes.Value.forType(targetType),
+						models -> (SettableValue<M>) context.get(models).transform((TypeToken<Object>) targetType,
+							tx -> tx.nullToNull(true).map(ctx -> {
 								try {
 									return cast.apply((F) field.get(ctx));
 								} catch (IllegalAccessException e) {
 									throw new IllegalStateException("Could not access field " + field.getName(), e);
 								}
-							}).modifySource((ctx, newFieldValue) -> {
-								try {
-									field.set(ctx, reverse.apply(newFieldValue));
-								} catch (IllegalAccessException e) {
-									throw new IllegalStateException("Could not access field " + field.getName(), e);
-								}
-							}));
-						}
-
-						@Override
-						public BetterList<ValueContainer<?, ?>> getCores() {
-							return context.getCores();
-						}
-					};
-				}
-			} else {
-				if (context == null) {
-					return new ValueContainer<SettableValue<?>, SettableValue<M>>() {
-						@Override
-						public ModelInstanceType<SettableValue<?>, SettableValue<M>> getType() {
-							return ModelTypes.Value.forType(targetType);
-						}
-
-						@Override
-						public SettableValue<M> get(ModelSetInstance models) {
-							return (SettableValue<M>) new NameExpression.FieldValue<>(field, fieldType, cast, null);
-						}
-
-						@Override
-						public BetterList<ValueContainer<?, ?>> getCores() {
-							return BetterList.of(this);
-						}
-					};
-				} else {
-					return new ValueContainer<SettableValue<?>, SettableValue<M>>() {
-						@Override
-						public ModelInstanceType<SettableValue<?>, SettableValue<M>> getType() {
-							return ModelTypes.Value.forType(targetType);
-						}
-
-						@Override
-						public SettableValue<M> get(ModelSetInstance models) {
-							return (SettableValue<M>) context.get(models).transform((TypeToken<Object>) targetType,
-								tx -> tx.nullToNull(true).map(ctx -> {
-									try {
-										return cast.apply((F) field.get(ctx));
-									} catch (IllegalAccessException e) {
-										throw new IllegalStateException("Could not access field " + field.getName(), e);
-									}
-								}));
-						}
-
-						@Override
-						public BetterList<ValueContainer<?, ?>> getCores() {
-							return context.getCores();
-						}
-					};
+							})));
 				}
 			}
 		} else

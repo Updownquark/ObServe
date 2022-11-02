@@ -1124,6 +1124,16 @@ public abstract class ModelType<M> implements Named {
 		}
 
 		@Override
+		public MVT forModelCopy(MVT value, ModelSetInstance sourceModels, ModelSetInstance newModels) {
+			MVS sourceV = theSource.get(sourceModels);
+			MVS newSourceV = theSource.forModelCopy(sourceV, sourceModels, newModels);
+			if (sourceV == newSourceV)
+				return value;
+			else
+				return (MVT) theConverter.convert(newSourceV);
+		}
+
+		@Override
 		public BetterList<ValueContainer<?, ?>> getCores() {
 			return theSource.getCores();
 		}
@@ -1144,13 +1154,11 @@ public abstract class ModelType<M> implements Named {
 	 */
 	public interface HollowModelValue<M, MV extends M> {
 		/**
-		 * Satisfies this value with a real value, so that this value becomes a pass-through to the given value. This may only be called
-		 * once.
+		 * Satisfies this value with a real value, so that this value becomes a pass-through to the given value.
 		 *
 		 * @param realValue The model value for this value to reflect
-		 * @throws IllegalStateException If this value has already been satisfied
 		 */
-		void satisfy(MV realValue) throws IllegalStateException;
+		void satisfy(MV realValue);
 
 		/** @return If this value has been {@link #satisfy(Object) satisfied} */
 		boolean isSatisfied();

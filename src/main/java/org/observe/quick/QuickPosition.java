@@ -12,10 +12,8 @@ import org.observe.expresso.ExpressoParser;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
-import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ValueContainer;
 import org.observe.util.TypeTokens;
-import org.qommons.collect.BetterList;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.config.CustomValueType;
 import org.qommons.config.QonfigInterpretationException;
@@ -171,24 +169,10 @@ public class QuickPosition {
 				throw new QonfigInterpretationException("Cannot cast SizeUnit to " + type.getType(0));
 			ValueContainer<SettableValue<?>, SettableValue<Double>> valueC = theValue
 				.evaluateInternal(ModelTypes.Value.forType(double.class), env);
-			return (ValueContainer<M, MV>) new ValueContainer<SettableValue<?>, SettableValue<QuickPosition>>() {
-				@Override
-				public ModelInstanceType<SettableValue<?>, SettableValue<QuickPosition>> getType() {
-					return ModelTypes.Value.forType(QuickPosition.class);
-				}
-
-				@Override
-				public SettableValue<QuickPosition> get(ModelSetInstance models) {
-					return valueC.get(models).transformReversible(QuickPosition.class, tx -> tx.cache(false)//
-						.map(dbl -> new QuickPosition(dbl.floatValue(), theUnit))//
-						.withReverse(pos -> Double.valueOf(pos.value)));
-				}
-
-				@Override
-				public BetterList<ValueContainer<?, ?>> getCores() {
-					return BetterList.of(this);
-				}
-			};
+			return (ValueContainer<M, MV>) valueC.map(ModelTypes.Value.forType(QuickPosition.class),
+				doubleValue -> doubleValue.transformReversible(QuickPosition.class, tx -> tx.cache(false)//
+					.map(dbl -> new QuickPosition(dbl.floatValue(), theUnit))//
+					.withReverse(pos -> Double.valueOf(pos.value))));
 		}
 
 		@Override

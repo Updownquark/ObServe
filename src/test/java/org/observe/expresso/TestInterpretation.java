@@ -66,6 +66,12 @@ public class TestInterpretation implements QonfigInterpretation {
 					}
 
 					@Override
+						public SettableValue<StatefulTestStructure> forModelCopy(SettableValue<StatefulTestStructure> value,
+							ModelSetInstance sourceModels, ModelSetInstance newModels) {
+							return value;
+						}
+
+						@Override
 					public BetterList<ValueContainer<?, ?>> getCores() {
 						return BetterList.of(this);
 					}
@@ -106,6 +112,13 @@ public class TestInterpretation implements QonfigInterpretation {
 					}
 
 					@Override
+						public SettableValue<DynamicTypeStatefulTestStructure> forModelCopy(
+							SettableValue<DynamicTypeStatefulTestStructure> value, ModelSetInstance sourceModels,
+							ModelSetInstance newModels) {
+							return value;
+						}
+
+						@Override
 					public BetterList<ValueContainer<?, ?>> getCores() {
 						return BetterList.of(this);
 					}
@@ -136,6 +149,13 @@ public class TestInterpretation implements QonfigInterpretation {
 					}
 
 					@Override
+						public SettableValue<DynamicTypeStatefulTestStructure> forModelCopy(
+							SettableValue<DynamicTypeStatefulTestStructure> value, ModelSetInstance sourceModels,
+							ModelSetInstance newModels) {
+							return value;
+						}
+
+						@Override
 					public BetterList<ValueContainer<?, ?>> getCores() {
 						return BetterList.of(this);
 					}
