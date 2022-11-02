@@ -1,9 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<!--
-	GitHub URL https://github.com/Updownquark/Quick/releases/download/v1.0.0/quick.qtd
-	Local URL ../../../../core/src/main/resources/quick.dtd
--->
 <qonfig-def name="Quick-Base" version="0.1" extends:core="Quick-Core v0.1">
 	<add-ons>
 		<add-on name="orientation" />
@@ -41,27 +37,19 @@
 			<child-mod child="box.content" inherits="simple-layout-child" />
 		</add-on>
 
-		<add-on name="renderer-value-override" requires="value-widget">
-			<element-model>
-				<value name="selected" type="boolean" priority="100" />
-			</element-model>
-			<attr-mod name="value-widget.value" default="subject" specify="optional" />
-		</add-on>
-		<add-on name="single-rendering" inherits="styled">
-			<element-model>
-				<value name="rendered" />
-			</element-model>
-			<child-def name="renderer" type="value-widget" inherits="renderer-value-override" min="0" />
-		</add-on>
-
 		<add-on name="multi-value-renderable">
 			<element-model>
-				<value name="value" />
+				<value name="value" priority="1" />
+				<value name="selected" type="boolean" priority="100" />
 			</element-model>
 		</add-on>
 		<add-on name="tabular-widget" requires="multi-value-widget">
-			<attribute name="columns" type="expression" specify="optional" />
+			<element-model>
+				<value name="rowIndex" type="int" priority="2" />
+				<value name="columnIndex" type="int" priority="2" />
+			</element-model>
 			<child-def name="column" type="column" min="0" max="inf" />
+			<child-def name="columns" type="columns-ref" min="0" max="inf" />
 		</add-on>
 		<add-on name="column-edit-type" requires="column-edit" abstract="true">
 			<attribute name="commit" type="expression" />
@@ -84,7 +72,8 @@
 			<attribute name="fill" type="boolean" specify="optional" />
 		</add-on>
 		
-		<add-on name="abstract-tab">
+		<add-on name="abstract-tab" inherits="with-element-model">
+			<attribute name="tab-id" type="expression" specify="optional" />
 			<attribute name="tab-name" type="expression" specify="optional" />
 			<attribute name="tab-icon" type="expression" specify="optional" />
 			<attribute name="removable" type="boolean" default="false" />
@@ -94,7 +83,7 @@
 		</add-on>
 
 		<add-on name="tab" requires="widget" inherits="abstract-tab">
-			<attribute name="tab-id" type="expression" />
+			<attr-mod name="abstract-tab.tab-id" type="expression" specify="required" />
 		</add-on>
 
 		<add-on name="menu-container">
@@ -120,15 +109,18 @@
 
 		<!-- Editors -->
 		<element-def name="check-box" extends="value-widget">
+			<!-- value here is the text for the check box's label -->
 			<value type="expression" specify="optional" />
 		</element-def>
 		<element-def name="toggle-button" extends="value-widget">
+			<!-- value here is the toggle button's text -->
 			<value type="expression" />
 		</element-def>
 		<element-def name="file-button" extends="value-widget">
 			<attribute name="open" type="boolean" />
 		</element-def>
 		<element-def name="label" extends="text-widget">
+			<!-- The value is the text for the label.  If this text is specified, it takes the place of both value and format. -->
 			<value type="string" specify="optional" />
 			<attr-mod name="value-widget.value" specify="optional" default="" />
 			<attribute name="icon" type="expression" specify="optional" />
@@ -157,38 +149,62 @@
 			<child-def name="field" type="value-widget" min="0" max="inf" />
 		</element-def>
 
-		<element-def name="collection-selector-widget" extends="value-widget" inherits="single-rendering" abstract="true">
+		<element-def name="collection-selector-widget" extends="value-widget" abstract="true">
+			<element-model>
+				<value name="selected" type="boolean" priority="100" />
+			</element-model>
 			<attribute name="values" type="expression" specify="required" />
-			<attribute name="value-tooltip" type="expression" specify="optional" />
 		</element-def>
 		<element-def name="combo" extends="collection-selector-widget" />
 		<element-def name="radio-buttons" extends="collection-selector-widget" />
 		<element-def name="toggle-buttons" extends="collection-selector-widget" />
 
 		<element-def name="multi-value-widget" extends="widget" inherits="multi-value-renderable">
+			<element-model>
+				<value name="value" priority="1" />
+				<value name="selected" type="boolean" priority="100" />
+			</element-model>
 			<attribute name="selection" type="expression" specify="optional" />
 		</element-def>
-		<element-def name="little-list" extends="multi-value-widget" inherits="single-rendering">
+		<element-def name="little-list" extends="multi-value-widget">
 			<attribute name="values" type="expression" specify="required" />
 		</element-def>
-		<element-def name="column" inherits="single-rendering">
+		<element-def name="column">
+			<element-model>
+				<value name="columnValue" priority="2" />
+			</element-model>
 			<attribute name="name" type="string" />
-			<!-- Unspecified value means to use the row value for the column value -->
+			<!-- Unspecified column-value means to use the model value for the column value -->
 			<attribute name="value" type="expression" specify="optional" />
+			<attribute name="tooltip" type="expression" specify="optional" />
 			<child-def name="edit" type="column-edit" min="0" />
 		</element-def>
 		<element-def name="column-edit">
-			<element-model>
-				<value name="editing" />
-			</element-model>
 			<attribute name="type" type="column-edit-type" />
 			<child-def name="editor" type="value-widget" inherits="column-editor" />
 			<attribute name="clicks" type="int" specify="optional" />
 		</element-def>
-		<element-def name="columns" extends="model-value" inherits="multi-value-renderable">
+		<element-def name="columns-ref">
+			<attribute name="model-value" type="expression" />
+			<value type="expression" />
+		</element-def>
+		<element-def name="abstract-column-set" extends="model-value" inherits="with-element-model" abstract="true">
+			<element-model>
+				<value name="modelValue" />
+			</element-model>
+			<attribute name="model-value-type" type="string" />
+		</element-def>
+		<element-def name="columns" extends="abstract-column-set">
 			<child-def name="column" type="column" min="0" max="inf" />
 		</element-def>
-		<element-def name="value-action">
+		<element-def name="variable-columns" extends="abstract-column-set">
+			<element-model>
+				<value name="columnVariableValue" />
+			</element-model>
+			<attribute name="for-each" type="expression" />
+			<child-def name="column" type="column" />
+		</element-def>
+		<element-def name="abstract-value-action" abstract="true">
 			<attribute name="name" type="expression" specify="optional" />
 			<attribute name="icon" type="expression" specify="optional" />
 			<attribute name="action" type="expression" specify="required" />
@@ -197,22 +213,30 @@
 			<attribute name="allow-for-multiple" type="boolean" default="true" />
 			<attribute name="tooltip" type="expression" specify="optional" />
 		</element-def>
-		<element-def name="multi-value-action" extends="value-action">
+		<element-def name="value-action" extends="abstract-action" inherits="with-element-model">
+			<element-model>
+				<value name="value"/>
+			</element-model>
+		</element-def>
+		<element-def name="multi-value-action" extends="abstract-action" inherits="with-element-model">
 			<element-model>
 				<list name="values" />
 			</element-model>
 		</element-def>
 		<element-def name="table" extends="multi-value-widget" inherits="tabular-widget">
 			<attribute name="rows" type="expression" specify="required" />
-			<child-def name="action" type="value-action" min="0" max="inf" />
+			<child-def name="action" type="abstract-value-action" min="0" max="inf" />
 		</element-def>
 		<element-def name="tree" extends="multi-value-widget">
+			<element-model>
+				<list name="path" priority="1" />
+				<value name="leaf" type="boolean" priority="20" />
+			</element-model>
 			<attribute name="root" type="expression" specify="required" />
 			<attribute name="children" type="expression" specify="required" />
 			<attribute name="leaf" type="expression" specify="optional" />
 			<child-def name="tree-column" type="column" inherits="tree-column" min="0" max="1" />
-			<child-def name="action" type="value-action" min="0" max="inf" />
-			<attribute name="value-tooltip" type="expression" specify="optional" />
+			<child-def name="action" type="abstract-value-action" min="0" max="inf" />
 		</element-def>
 
 		<!-- Containers -->
@@ -229,13 +253,17 @@
 		<element-def name="scroll" extends="singleton-container" />
 		
 		<element-def name="tabs" extends="container">
+			<element-model>
+				<value name="tabValue" priority="1" />
+				<value name="tabSelected" type="boolean" priority="100" />
+			</element-model>
 			<attribute name="selected" type="expression" specify="optional" />
 			<child-mod child="content" inherits="tab" />
 			<child-def name="tab-set" type="tab-set" min="0" max="inf" />
 		</element-def>
-		<element-def name="tab-set" inherits="single-rendering,abstract-tab"> <!-- Renderer is the tab's content -->
+		<element-def name="tab-set" extends="container">
 			<attribute name="values" type="expression" />
-			<child-mod child="single-rendering.renderer" min="1" />
+			<child-mod child="content" inherits="tab" min="1" max="1" />
 		</element-def>
 		<element-def name="split" extends="container">
 			<attribute name="orientation" type="orientation" specify="required" />

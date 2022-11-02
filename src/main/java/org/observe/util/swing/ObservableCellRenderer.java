@@ -33,20 +33,22 @@ public interface ObservableCellRenderer<M, C> {
 		SortedMatchSet getEmphaticRegions();
 	}
 
-	String renderAsText(Supplier<? extends M> modelValue, C columnValue);
+	String renderAsText(ModelCell<? extends M, ? extends C> cell);
 
 	ObservableCellRenderer<M, C> decorate(CellDecorator<M, C> decorator);
 
 	Component getCellRendererComponent(Component parent, ModelCell<? extends M, ? extends C> cell, CellRenderContext ctx);
 
 	public static <M, C> ObservableCellRenderer<M, C> fromTableRenderer(TableCellRenderer renderer,
-		BiFunction<? super Supplier<? extends M>, C, String> asText) {
+		BiFunction<Supplier<? extends M>, C, String> asText) {
 		class FlatTableCellRenderer implements ObservableCellRenderer<M, C> {
 			private CellDecorator<M, C> theDecorator;
+			private ComponentDecorator theComponentDecorator;
+			private Runnable theDecorationUndo;
 
 			@Override
-			public String renderAsText(Supplier<? extends M> modelValue, C columnValue) {
-				return asText.apply(modelValue, columnValue);
+			public String renderAsText(ModelCell<? extends M, ? extends C> cell) {
+				return asText.apply(cell::getModelValue, cell.getCellValue());
 			}
 
 			@Override
@@ -60,6 +62,16 @@ public interface ObservableCellRenderer<M, C> {
 				Component rendered = renderer.getTableCellRendererComponent(parent instanceof JTable ? (JTable) parent : null,
 					cell.getCellValue(), cell.isSelected(), cell.hasFocus(), cell.getRowIndex(), cell.getColumnIndex());
 				rendered = tryEmphasize(rendered, ctx);
+				if (theDecorationUndo != null) {
+					theDecorationUndo.run();
+					theDecorationUndo = null;
+				}
+				if (theDecorator != null) {
+					if (theComponentDecorator == null)
+						theComponentDecorator = new ComponentDecorator();
+					theDecorator.decorate(cell, theComponentDecorator);
+					theDecorationUndo = theComponentDecorator.decorate(rendered);
+				}
 				return rendered;
 			}
 		}
@@ -67,13 +79,15 @@ public interface ObservableCellRenderer<M, C> {
 	}
 
 	public static <M, C> ObservableCellRenderer<M, C> fromTreeRenderer(TreeCellRenderer renderer,
-		BiFunction<? super Supplier<? extends M>, C, String> asText) {
+		BiFunction<Supplier<? extends M>, C, String> asText) {
 		class FlatTreeCellRenderer implements ObservableCellRenderer<M, C> {
 			private CellDecorator<M, C> theDecorator;
+			private ComponentDecorator theComponentDecorator;
+			private Runnable theDecorationUndo;
 
 			@Override
-			public String renderAsText(Supplier<? extends M> modelValue, C columnValue) {
-				return asText.apply(modelValue, columnValue);
+			public String renderAsText(ModelCell<? extends M, ? extends C> cell) {
+				return asText.apply(cell::getModelValue, cell.getCellValue());
 			}
 
 			@Override
@@ -87,6 +101,16 @@ public interface ObservableCellRenderer<M, C> {
 				Component rendered = renderer.getTreeCellRendererComponent(parent instanceof JTree ? (JTree) parent : null,
 					cell.getCellValue(), cell.isSelected(), cell.isExpanded(), cell.isLeaf(), cell.getRowIndex(), cell.hasFocus());
 				rendered = tryEmphasize(rendered, ctx);
+				if (theDecorationUndo != null) {
+					theDecorationUndo.run();
+					theDecorationUndo = null;
+				}
+				if (theDecorator != null) {
+					if (theComponentDecorator == null)
+						theComponentDecorator = new ComponentDecorator();
+					theDecorator.decorate(cell, theComponentDecorator);
+					theDecorationUndo = theComponentDecorator.decorate(rendered);
+				}
 				return rendered;
 			}
 		}
@@ -160,9 +184,8 @@ public interface ObservableCellRenderer<M, C> {
 		}
 
 		@Override
-		public String renderAsText(Supplier<? extends M> modelValue, C columnValue) {
-			return theTextRenderer
-				.apply(new ModelCell.Default<M, C>(modelValue, columnValue, 0, 0, false, false, false, false, false, false));
+		public String renderAsText(ModelCell<? extends M, ? extends C> cell) {
+			return theTextRenderer.apply(cell);
 		}
 
 		@Override
@@ -171,8 +194,7 @@ public interface ObservableCellRenderer<M, C> {
 				theRevert.run();
 				theRevert = null;
 			}
-			String rendered = renderAsText(//
-				cell::getModelValue, cell.getCellValue());
+			String rendered = renderAsText(cell);
 			rendered = tryEmphasize(rendered, ctx);
 			Component c;
 			if (parent instanceof JTable) {
@@ -246,10 +268,10 @@ public interface ObservableCellRenderer<M, C> {
 		}
 
 		@Override
-		public String renderAsText(Supplier<? extends M> modelValue, C columnValue) {
+		public String renderAsText(ModelCell<? extends M, ? extends C> cell) {
 			if (theText != null)
-				return theText.apply(new ModelCell.Default<M, C>(modelValue, columnValue, 0, 0, false, false, false, false, false, false));
-			return String.valueOf(columnValue);
+				return theText.apply(cell);
+			return String.valueOf(cell.getCellValue());
 		}
 
 		@Override
@@ -296,8 +318,8 @@ public interface ObservableCellRenderer<M, C> {
 		}
 
 		@Override
-		public String renderAsText(Supplier<? extends M> modelValue, C columnValue) {
-			return theText.apply(new ModelCell.Default<M, C>(modelValue, columnValue, 0, 0, false, false, false, false, false, false));
+		public String renderAsText(ModelCell<? extends M, ? extends C> cell) {
+			return theText.apply(cell);
 		}
 
 		@Override
@@ -352,8 +374,8 @@ public interface ObservableCellRenderer<M, C> {
 			}
 
 			@Override
-			public String renderAsText(Supplier<? extends M> modelValue, C columnValue) {
-				return format.apply(modelValue.get(), columnValue);
+			public String renderAsText(ModelCell<? extends M, ? extends C> cell) {
+				return format.apply(cell.getModelValue(), cell.getCellValue());
 			}
 
 			@Override
@@ -371,8 +393,8 @@ public interface ObservableCellRenderer<M, C> {
 			}
 
 			@Override
-			public String renderAsText(Supplier<? extends M> modelValue, C columnValue) {
-				return format.apply(columnValue);
+			public String renderAsText(ModelCell<? extends M, ? extends C> cell) {
+				return format.apply(cell.getCellValue());
 			}
 
 			@Override

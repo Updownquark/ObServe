@@ -576,7 +576,8 @@ public class CategoryRenderStrategy<R, C> implements ValueRenderer<R> {
 
 	public String print(Supplier<? extends R> rowValue, C colValue) {
 		if (theRenderer != null)
-			return theRenderer.renderAsText(rowValue, colValue);
+			return theRenderer
+				.renderAsText(new ModelCell.Default<R, C>(rowValue, colValue, 0, 0, false, false, false, false, false, false));
 		else
 			return printDefault(rowValue, colValue);
 	}

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<qonfig-def name="Quick-Core" version="0.1" root="quick,style-sheet" extends:expresso="Expresso v0.1">
+<qonfig-def name="Quick-Core" version="0.1" root="quick,style-sheet" extends:expresso="Expresso-Base v0.1" extends:style="Quick-Style v0.1">
 	<value-types>
 		<one-of name="window-close-action">
 			<literal>do-nothing</literal>
@@ -172,7 +172,7 @@
 		<!-- Now a basic outline of abstract Quick widgets -->
 		<element-def name="value-widget" extends="widget" abstract="true" >
 			<element-model>
-				<value name="value" />
+				<value name="value" source-attribute="value" priority="1" />
 			</element-model>
 			<attribute name="value" type="expression" specify="required" />
 			<attribute name="disable-with" type="expression" specify="optional" />

@@ -673,7 +673,8 @@ public class ObservableValueSelector<T, X> extends JPanel {
 		String text) {
 		String rendered;
 		if (column.getRenderer() != null)
-			rendered = column.getRenderer().renderAsText(() -> value, column.getCategoryValue(value));
+			rendered = column.getRenderer().renderAsText(
+				new ModelCell.Default<>(() -> value, column.getCategoryValue(value), 0, 0, false, false, false, false, false, false));
 		else
 			rendered = String.valueOf(column.getCategoryValue(value));
 		int textIdx = 0;
