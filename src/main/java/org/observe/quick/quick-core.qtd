@@ -81,8 +81,8 @@
 
 		<element-def name="widget" abstract="true" inherits="with-text">
 			<element-model>
-				<value name="hovered" type="boolean" priority="0" />
-				<value name="focused" type="boolean" priority="0" />
+				<value name="hovered" type="boolean" priority="5" />
+				<value name="focused" type="boolean" priority="1" />
 				<value name="pressed" type="boolean" priority="10" />
 				<value name="rightPressed" type="boolean" priority="11" />
 			</element-model>
@@ -182,10 +182,4 @@
 			<attribute name="editable" type="expression" specify="optional" />
 		</element-def>
 	</elements>
-
-	<auto-inheritance>
-		<auto-inherit inherits="widget-model">
-			<target element="element-model" role="widget.element-model" />
-		</auto-inherit>
-	</auto-inheritance>
 </qonfig-def>

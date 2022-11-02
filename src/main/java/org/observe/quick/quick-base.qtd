@@ -37,7 +37,7 @@
 			<child-mod child="box.content" inherits="simple-layout-child" />
 		</add-on>
 
-		<add-on name="multi-value-renderable">
+		<add-on name="multi-value-renderable" inherits="styled">
 			<element-model>
 				<value name="value" priority="1" />
 				<value name="selected" type="boolean" priority="100" />
@@ -62,7 +62,7 @@
 		<add-on name="replace-row-value" requires="column-edit" inherits="column-edit-type">
 			<attr-mod name="column-edit-type.commit" specify="optional" default="" />
 		</add-on>
-		<add-on name="column-editor" requires="value-widget" inherits="renderer-value-override" />
+		<add-on name="column-editor" requires="value-widget" />
 		<add-on name="tree-column" requires="column">
 			<attr-mod name="column.value" specify="forbidden" default="org.qommons.collect.BetterList::getLast" />
 		</add-on>
@@ -169,7 +169,7 @@
 		<element-def name="little-list" extends="multi-value-widget">
 			<attribute name="values" type="expression" specify="required" />
 		</element-def>
-		<element-def name="column">
+		<element-def name="column" inherits="styled">
 			<element-model>
 				<value name="columnValue" priority="2" />
 			</element-model>
@@ -213,12 +213,12 @@
 			<attribute name="allow-for-multiple" type="boolean" default="true" />
 			<attribute name="tooltip" type="expression" specify="optional" />
 		</element-def>
-		<element-def name="value-action" extends="abstract-action" inherits="with-element-model">
+		<element-def name="value-action" extends="abstract-value-action" inherits="with-element-model">
 			<element-model>
 				<value name="value"/>
 			</element-model>
 		</element-def>
-		<element-def name="multi-value-action" extends="abstract-action" inherits="with-element-model">
+		<element-def name="multi-value-action" extends="abstract-value-action" inherits="with-element-model">
 			<element-model>
 				<list name="values" />
 			</element-model>
