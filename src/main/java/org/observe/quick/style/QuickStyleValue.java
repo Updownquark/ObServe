@@ -1,23 +1,16 @@
 package org.observe.quick.style;
 
-import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 import org.observe.SettableValue;
 import org.observe.expresso.DynamicModelValue;
 import org.observe.expresso.ExpressoEnv;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
-import org.observe.expresso.ObservableModelSet;
-import org.observe.expresso.ObservableModelSet.ModelComponentNode;
 import org.observe.expresso.ObservableModelSet.ValueContainer;
-import org.observe.expresso.ops.NameExpression;
 import org.qommons.StringUtils;
 import org.qommons.config.QonfigAttributeDef;
 import org.qommons.config.QonfigChildDef;
@@ -26,9 +19,9 @@ import org.qommons.config.QonfigInterpretationException;
 /** Represents a conditional value for a style attribute in quick */
 public class QuickStyleValue<T> implements Comparable<QuickStyleValue<?>> {
 	public static final String WIDGET_MODEL_VALUE = "widget-model-value";
-	private static final Map<DynamicModelValue<?, ?>, Integer> MODEL_VALUE_PRIORITY = new HashMap<>();
+	private static final Map<DynamicModelValue.Identity, Integer> MODEL_VALUE_PRIORITY = new HashMap<>();
 
-	public static synchronized int getPriority(DynamicModelValue<?, ?> modelValue, QonfigAttributeDef.Declared priorityAttr) {
+	public static synchronized int getPriority(DynamicModelValue.Identity modelValue, QonfigAttributeDef.Declared priorityAttr) {
 		Integer priority=MODEL_VALUE_PRIORITY.get(modelValue);
 		if(priority!=null)
 			return priority;
@@ -44,41 +37,16 @@ public class QuickStyleValue<T> implements Comparable<QuickStyleValue<?>> {
 	private final StyleValueApplication theApplication;
 	private final QuickStyleAttribute<T> theAttribute;
 	private final ObservableExpression theValueExpression;
-	private final ValueContainer<SettableValue<?>, ? extends SettableValue<? extends T>> theValue;
-	private final List<DynamicModelValue<?, ?>> theUsedModelValues;
+	private final List<DynamicModelValue.Identity> theUsedModelValues;
 
 	public QuickStyleValue(QuickStyleSheet styleSheet, StyleValueApplication application, QuickStyleAttribute<T> attribute,
-		ObservableExpression value, ExpressoEnv env) throws QonfigInterpretationException {
+		ObservableExpression value, List<DynamicModelValue.Identity> usedModelValues)
+			throws QonfigInterpretationException {
 		theStyleSheet = styleSheet;
 		theApplication = application;
 		theAttribute = attribute;
 		theValueExpression = value;
-		theValue = value.evaluate(ModelTypes.Value.forType(attribute.getType()), env);
-		Set<DynamicModelValue<?, ?>> modelValues = new LinkedHashSet<>();
-		modelValues.addAll(theApplication.getModelValues());
-		findModelValues(theValueExpression, modelValues, env.getModels());
-		List<DynamicModelValue<?, ?>> sortedModelValues = new ArrayList<>(modelValues.size());
-		sortedModelValues.addAll(modelValues);
-		QonfigAttributeDef.Declared priorityAttr = attribute.getDeclarer().getPriorityAttr();
-		Collections.sort(sortedModelValues, (mv1, mv2) -> -Integer.compare(getPriority(mv1, priorityAttr), getPriority(mv2, priorityAttr)));
-		theUsedModelValues = Collections.unmodifiableList(sortedModelValues);
-	}
-
-	private static void findModelValues(ObservableExpression ex, Set<DynamicModelValue<?, ?>> modelValues, ObservableModelSet models)
-		throws QonfigInterpretationException {
-		if (ex instanceof NameExpression && ((NameExpression) ex).getContext() == null) {
-			String name = ((NameExpression) ex).getNames().getFirst();
-			ModelComponentNode<?, ?> component = models.getComponentIfExists(name);
-			if (component != null) {
-				for (ValueContainer<?, ?> core : component.getCores()) {
-					if (core instanceof DynamicModelValue)
-						modelValues.add((DynamicModelValue<?, ?>) core);
-				}
-			}
-		} else {
-			for (ObservableExpression child : ex.getChildren())
-				findModelValues(child, modelValues, models);
-		}
+		theUsedModelValues = usedModelValues;
 	}
 
 	public QuickStyleSheet getStyleSheet() {
@@ -97,19 +65,22 @@ public class QuickStyleValue<T> implements Comparable<QuickStyleValue<?>> {
 		return theValueExpression;
 	}
 
-	public ValueContainer<SettableValue<?>, ? extends SettableValue<? extends T>> getValue() {
-		return theValue;
+	public List<DynamicModelValue.Identity> getUsedModelValues() {
+		return theUsedModelValues;
 	}
 
-	public List<DynamicModelValue<?, ?>> getUsedModelValues() {
-		return theUsedModelValues;
+	public EvaluatedStyleValue<T> evaluate(ExpressoEnv expressoEnv) throws QonfigInterpretationException {
+		EvaluatedStyleApplication application = theApplication.evaluate(expressoEnv);
+		ValueContainer<SettableValue<?>, SettableValue<T>> valueV = theValueExpression
+			.evaluate(ModelTypes.Value.forType(theAttribute.getType()), expressoEnv);
+		return new EvaluatedStyleValue<>(this, application, valueV);
 	}
 
 	@Override
 	public int compareTo(QuickStyleValue<?> o) {
 		// Most importantly, compare the priority of model values used in the condition and value
-		Iterator<DynamicModelValue<?, ?>> iter1 = theUsedModelValues.iterator();
-		Iterator<DynamicModelValue<?, ?>> iter2 = o.theUsedModelValues.iterator();
+		Iterator<DynamicModelValue.Identity> iter1 = theUsedModelValues.iterator();
+		Iterator<DynamicModelValue.Identity> iter2 = o.theUsedModelValues.iterator();
 		int comp = 0;
 		QonfigAttributeDef.Declared priorityAttr = theAttribute.getDeclarer().getPriorityAttr();
 		while (comp == 0) {

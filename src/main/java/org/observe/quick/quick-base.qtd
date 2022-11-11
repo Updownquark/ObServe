@@ -37,11 +37,12 @@
 			<child-mod child="box.content" inherits="simple-layout-child" />
 		</add-on>
 
-		<add-on name="multi-value-renderable" inherits="styled">
+		<add-on name="multi-value-renderable" requires="widget">
 			<element-model>
-				<value name="value" priority="1" />
+				<value name-attribute="value-name" priority="1" />
 				<value name="selected" type="boolean" priority="100" />
 			</element-model>
+			<attribute name="value-name" type="identifier" default="value" />
 		</add-on>
 		<add-on name="tabular-widget" requires="multi-value-widget">
 			<element-model>
@@ -63,9 +64,6 @@
 			<attr-mod name="column-edit-type.commit" specify="optional" default="" />
 		</add-on>
 		<add-on name="column-editor" requires="value-widget" />
-		<add-on name="tree-column" requires="column">
-			<attr-mod name="column.value" specify="forbidden" default="org.qommons.collect.BetterList::getLast" />
-		</add-on>
 
 		<add-on name="field" requires="widget">
 			<attribute name="field-name" type="expression" specify="optional" />
@@ -160,10 +158,6 @@
 		<element-def name="toggle-buttons" extends="collection-selector-widget" />
 
 		<element-def name="multi-value-widget" extends="widget" inherits="multi-value-renderable">
-			<element-model>
-				<value name="value" priority="1" />
-				<value name="selected" type="boolean" priority="100" />
-			</element-model>
 			<attribute name="selection" type="expression" specify="optional" />
 		</element-def>
 		<element-def name="little-list" extends="multi-value-widget">
@@ -171,12 +165,14 @@
 		</element-def>
 		<element-def name="column" inherits="styled">
 			<element-model>
-				<value name="columnValue" priority="2" />
+				<value name-attribute="column-value-name" priority="2" />
 			</element-model>
 			<attribute name="name" type="string" />
 			<!-- Unspecified column-value means to use the model value for the column value -->
 			<attribute name="value" type="expression" specify="optional" />
+			<attribute name="column-value-name" type="identifier" default="columnValue" />
 			<attribute name="tooltip" type="expression" specify="optional" />
+			<child-def name="renderer" type="widget" min="0" />
 			<child-def name="edit" type="column-edit" min="0" />
 		</element-def>
 		<element-def name="column-edit">
@@ -190,18 +186,20 @@
 		</element-def>
 		<element-def name="abstract-column-set" extends="model-value" inherits="with-element-model" abstract="true">
 			<element-model>
-				<value name="modelValue" />
+				<value name-attribute="model-value-name" />
 			</element-model>
 			<attribute name="model-value-type" type="string" />
+			<attribute name="model-value-name" type="identifier" default="modelValue" />
 		</element-def>
 		<element-def name="columns" extends="abstract-column-set">
 			<child-def name="column" type="column" min="0" max="inf" />
 		</element-def>
 		<element-def name="variable-columns" extends="abstract-column-set">
 			<element-model>
-				<value name="columnVariableValue" />
+				<value name-attribute="column-variable-name" />
 			</element-model>
 			<attribute name="for-each" type="expression" />
+			<attribute name="column-variable-name" type="identifier" default="columnVariableValue" />
 			<child-def name="column" type="column" />
 		</element-def>
 		<element-def name="abstract-value-action" abstract="true">
@@ -215,13 +213,15 @@
 		</element-def>
 		<element-def name="value-action" extends="abstract-value-action" inherits="with-element-model">
 			<element-model>
-				<value name="value"/>
+				<value name-attribute="value-name"/>
 			</element-model>
+			<attribute name="value-name" type="identifier" default="actionValue" />
 		</element-def>
 		<element-def name="multi-value-action" extends="abstract-value-action" inherits="with-element-model">
 			<element-model>
-				<list name="values" />
+				<value name-attribute="values-name"/>
 			</element-model>
+			<attribute name="values-name" type="identifier" default="actionValues" />
 		</element-def>
 		<element-def name="table" extends="multi-value-widget" inherits="tabular-widget">
 			<attribute name="rows" type="expression" specify="required" />
@@ -229,13 +229,14 @@
 		</element-def>
 		<element-def name="tree" extends="multi-value-widget">
 			<element-model>
-				<list name="path" priority="1" />
+				<value name-attribute="path-name" priority="1" />
 				<value name="leaf" type="boolean" priority="20" />
 			</element-model>
 			<attribute name="root" type="expression" specify="required" />
 			<attribute name="children" type="expression" specify="required" />
 			<attribute name="leaf" type="expression" specify="optional" />
-			<child-def name="tree-column" type="column" inherits="tree-column" min="0" max="1" />
+			<attribute name="path-name" type="identifier" default="path" />
+			<child-def name="tree-column" type="column" min="0" max="1" />
 			<child-def name="action" type="abstract-value-action" min="0" max="inf" />
 		</element-def>
 

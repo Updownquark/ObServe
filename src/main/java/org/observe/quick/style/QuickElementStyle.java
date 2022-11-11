@@ -1,5 +1,6 @@
 package org.observe.quick.style;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -25,38 +26,44 @@ import com.google.common.reflect.TypeToken;
 public class QuickElementStyle {
 	private final QuickElementStyle theParent;
 	private final QonfigElement theElement;
-	private final List<QuickStyleValue<?>> theDeclaredValues;
+	private final List<EvaluatedStyleValue<?>> theDeclaredValues;
 	private final Map<QuickStyleAttribute<?>, QuickElementStyleAttribute<?>> theValues;
 
 	public QuickElementStyle(List<QuickStyleValue<?>> declaredValues, QuickElementStyle parent, QuickStyleSheet styleSheet,
 		QonfigElement element, ExpressoQIS session, QonfigToolkit style) throws QonfigInterpretationException {
 		theParent = parent;
 		theElement = element;
-		theDeclaredValues = declaredValues;
+		List<EvaluatedStyleValue<?>> evaldValues = new ArrayList<>(declaredValues.size());
+		theDeclaredValues = Collections.unmodifiableList(evaldValues);
+		for (QuickStyleValue<?> dv : declaredValues)
+			evaldValues.add(dv.evaluate(session.getExpressoEnv()));
 
-		Map<QuickStyleAttribute<?>, BetterSortedList<? extends QuickStyleValue<?>>> values = new HashMap<>();
+		Map<QuickStyleAttribute<?>, BetterSortedList<? extends EvaluatedStyleValue<?>>> values = new HashMap<>();
 		// Compile all attributes applicable to this element
 		QuickStyleType type = QuickStyleType.of(element.getType(), session, style);
 		for (QuickStyleAttribute<?> attr : type.getAttributes().values())
-			values.computeIfAbsent(attr, __ -> SortedTreeList.<QuickStyleValue<?>> buildTreeList(QuickStyleValue::compareTo).build());
+			values.computeIfAbsent(attr,
+				__ -> SortedTreeList.<EvaluatedStyleValue<?>> buildTreeList(EvaluatedStyleValue::compareTo).build());
 		for (QonfigAddOn inh : element.getInheritance().getExpanded(QonfigAddOn::getInheritance)) {
 			type = QuickStyleType.of(inh, session, style);
 			if (type == null)
 				continue;
 			for (QuickStyleAttribute<?> attr : type.getAttributes().values())
-				values.computeIfAbsent(attr, __ -> SortedTreeList.<QuickStyleValue<?>> buildTreeList(QuickStyleValue::compareTo).build());
+				values.computeIfAbsent(attr,
+					__ -> SortedTreeList.<EvaluatedStyleValue<?>> buildTreeList(EvaluatedStyleValue::compareTo).build());
 		}
-		for (QuickStyleValue<?> sv : theDeclaredValues)
-			((List<QuickStyleValue<?>>) values.computeIfAbsent(sv.getAttribute(),
-				__ -> SortedTreeList.<QuickStyleValue<?>> buildTreeList(QuickStyleValue::compareTo).build())).add(sv);
+		for (EvaluatedStyleValue<?> sv : theDeclaredValues)
+			((List<EvaluatedStyleValue<?>>) values.computeIfAbsent(sv.getStyleValue().getAttribute(),
+				__ -> SortedTreeList.<EvaluatedStyleValue<?>> buildTreeList(EvaluatedStyleValue::compareTo).build())).add(sv);
 		for (QuickStyleValue<?> sv : styleSheet.getValues(element))
-			((List<QuickStyleValue<?>>) values.computeIfAbsent(sv.getAttribute(),
-				__ -> SortedTreeList.<QuickStyleValue<?>> buildTreeList(QuickStyleValue::compareTo).build())).add(sv);
+			((List<EvaluatedStyleValue<?>>) values.computeIfAbsent(sv.getAttribute(),
+				__ -> SortedTreeList.<EvaluatedStyleValue<?>> buildTreeList(EvaluatedStyleValue::compareTo).build()))
+			.add(sv.evaluate(session.getExpressoEnv()));
 		Map<QuickStyleAttribute<?>, QuickElementStyleAttribute<?>> styleValues = new HashMap<>();
-		for (Map.Entry<QuickStyleAttribute<?>, BetterSortedList<? extends QuickStyleValue<?>>> v : values.entrySet()) {
+		for (Map.Entry<QuickStyleAttribute<?>, BetterSortedList<? extends EvaluatedStyleValue<?>>> v : values.entrySet()) {
 			QuickStyleAttribute<Object> attr = (QuickStyleAttribute<Object>) v.getKey();
 			styleValues.put(attr, new QuickElementStyleAttribute<>(attr, this,
-				QommonsUtils.unmodifiableCopy((List<QuickStyleValue<Object>>) v.getValue()), //
+				QommonsUtils.unmodifiableCopy((List<EvaluatedStyleValue<Object>>) v.getValue()), //
 				theParent != null && attr.isTrickleDown() ? getInherited(theParent, attr) : null));
 		}
 		theValues = Collections.unmodifiableMap(styleValues);
@@ -76,7 +83,7 @@ public class QuickElementStyle {
 		return theElement;
 	}
 
-	public List<QuickStyleValue<?>> getDeclaredValues() {
+	public List<EvaluatedStyleValue<?>> getDeclaredValues() {
 		return theDeclaredValues;
 	}
 
@@ -98,10 +105,10 @@ public class QuickElementStyle {
 	public static class QuickElementStyleAttribute<T> {
 		private final QuickStyleAttribute<T> theAttribute;
 		private final QuickElementStyle theStyle;
-		private final List<QuickStyleValue<T>> theValues;
+		private final List<EvaluatedStyleValue<T>> theValues;
 		private final QuickElementStyleAttribute<T> theInherited;
 
-		public QuickElementStyleAttribute(QuickStyleAttribute<T> attribute, QuickElementStyle style, List<QuickStyleValue<T>> values,
+		public QuickElementStyleAttribute(QuickStyleAttribute<T> attribute, QuickElementStyle style, List<EvaluatedStyleValue<T>> values,
 			QuickElementStyleAttribute<T> inherited) {
 			theAttribute = attribute;
 			theStyle = style;
@@ -117,7 +124,7 @@ public class QuickElementStyle {
 			return theStyle;
 		}
 
-		public List<QuickStyleValue<T>> getValues() {
+		public List<EvaluatedStyleValue<T>> getValues() {
 			return theValues;
 		}
 

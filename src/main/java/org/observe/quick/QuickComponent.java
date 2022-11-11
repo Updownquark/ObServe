@@ -87,13 +87,13 @@ public class QuickComponent {
 			theDefinition = definition;
 			theParent = parent;
 			ExpressoQIS exSession;
-			StyleQIS.installParentModels(models, parent == null ? null : parent.getModels());
 			try {
 				exSession = definition.getSession().as(ExpressoQIS.class);
 			} catch (QonfigInterpretationException e) {
 				throw new IllegalStateException("Should have happened earlier", e);
 			}
 			theModelsInstance = exSession.wrapLocal(models);
+			StyleQIS.installParentModels(theModelsInstance, parent == null ? null : parent.getModels());
 			theAttributeValues = new LinkedHashMap<>();
 			theChildren = ObservableCollection.build(QuickComponent.class).build();
 		}

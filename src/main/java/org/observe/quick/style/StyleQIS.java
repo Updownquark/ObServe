@@ -19,7 +19,7 @@ public class StyleQIS implements SpecialSession<StyleQIS> {
 	public static final String STYLE_PROP = "quick-interpreter-style";
 	public static final String STYLE_SHEET_PROP = "quick-interpreter-style-sheet";
 
-	private static final String PARENT_MODEL_NAME = "__PARENT$MODEL$INSTANCE";
+	private static final String PARENT_MODEL_NAME = "PARENT$MODEL$INSTANCE";
 	private static final ModelInstanceType<SettableValue<?>, SettableValue<ModelSetInstance>> PARENT_MODEL_TYPE = ModelTypes.Value
 		.forType(ModelSetInstance.class);
 
@@ -75,7 +75,7 @@ public class StyleQIS implements SpecialSession<StyleQIS> {
 				throw new QonfigInterpretationException("This element is not an instance of  '" + element + "'");
 			return QuickStyleType.of(el, as(ExpressoQIS.class), theStyleTK).getAttribute(name, type);
 		}
-		return QuickStyleType.of(getType(), as(ExpressoQIS.class), theStyleTK).getAttribute(name, type);
+		return QuickStyleType.of(getFocusType(), as(ExpressoQIS.class), theStyleTK).getAttribute(name, type);
 	}
 
 	public static void installParentModels(ModelSetInstance models, ModelSetInstance parentModels) {

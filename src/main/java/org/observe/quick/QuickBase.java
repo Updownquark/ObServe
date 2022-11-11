@@ -117,6 +117,10 @@ public class QuickBase implements QonfigInterpretation {
 			ValueContainer<SettableValue<?>, SettableValue<R>> defaultColumnValue);
 	}
 
+	public interface ColumnList<R> {
+		ObservableCollection<Column<R, ?>> getColumns();
+	}
+
 	public interface ColumnEditing<R, C> {
 		public void modifyColumn(CategoryRenderStrategy<R, C>.CategoryMutationStrategy mutation, ModelSetInstance models,
 			BiConsumer<ModelSetInstance, ModelCell<? extends R, ? extends C>> config);
@@ -166,6 +170,8 @@ public class QuickBase implements QonfigInterpretation {
 		}
 	};
 
+	private QonfigToolkit theToolkit;
+
 	@Override
 	public Set<Class<? extends SpecialSession<?>>> getExpectedAPIs() {
 		return QommonsUtils.unmodifiableDistinctCopy(ExpressoQIS.class, StyleQIS.class);
@@ -183,6 +189,7 @@ public class QuickBase implements QonfigInterpretation {
 
 	@Override
 	public void init(QonfigToolkit toolkit) {
+		theToolkit = toolkit;
 	}
 
 	StyleQIS wrap(CoreSession session) throws QonfigInterpretationException {
@@ -433,7 +440,8 @@ public class QuickBase implements QonfigInterpretation {
 		ExpressoQIS exS = session.as(ExpressoQIS.class);
 		TypeToken<T> valueType = session.get(MODEL_TYPE_KEY, TypeToken.class);
 		// Specify the type here, the value will be specified by the caller
-		DynamicModelValue.satisfyDynamicValueType("values", exS.getExpressoEnv().getModels(), ModelTypes.Value.forType(valueType));
+		String valuesName = session.getAttributeText("values-name");
+		DynamicModelValue.satisfyDynamicValueType(valuesName, exS.getExpressoEnv().getModels(), ModelTypes.Value.forType(valueType));
 
 		ModelInstanceType<ObservableCollection<?>, ObservableCollection<T>> valuesType = ModelTypes.Collection.forType(valueType);
 
@@ -448,7 +456,7 @@ public class QuickBase implements QonfigInterpretation {
 			ModelTypes.Value.forType(String.class), null);
 
 		return new ValueAction<>(exS.getExpressoEnv().getModels(), null, (models, values) -> {
-			DynamicModelValue.satisfyDynamicValue("values", valuesType, models, values);
+			DynamicModelValue.satisfyDynamicValue(valuesName, valuesType, models, values);
 		}, name, icon, action, enabled, //
 			session.getAttribute("allow-for-empty", boolean.class), //
 			session.getAttribute("allow-for-multiple", boolean.class), //
@@ -457,8 +465,8 @@ public class QuickBase implements QonfigInterpretation {
 
 	private <T> QuickComponentDef interpretTextField(StyleQIS session) throws QonfigInterpretationException {
 		ExpressoQIS exS = session.as(ExpressoQIS.class);
-		ValueContainer<SettableValue<?>, SettableValue<T>> value = exS
-			.getValue((ModelInstanceType<SettableValue<?>, SettableValue<T>>) (ModelInstanceType<?, ?>) ModelTypes.Value.any(), null);
+		ValueContainer<SettableValue<?>, SettableValue<T>> value = exS.getAttribute("value",
+			(ModelInstanceType<SettableValue<?>, SettableValue<T>>) (ModelInstanceType<?, ?>) ModelTypes.Value.any(), null);
 		ModelInstanceType.SingleTyped<SettableValue<?>, T, SettableValue<T>> type;
 		type = (ModelInstanceType.SingleTyped<SettableValue<?>, T, SettableValue<T>>) value.getType();
 		ObservableExpression formatX = exS.getAttributeExpression("format");
@@ -544,8 +552,8 @@ public class QuickBase implements QonfigInterpretation {
 
 	private <T> QuickComponentDef interpretTextArea(StyleQIS session) throws QonfigInterpretationException {
 		ExpressoQIS exS = session.as(ExpressoQIS.class);
-		ValueContainer<SettableValue<?>, SettableValue<T>> value = exS
-			.getValue((ModelInstanceType<SettableValue<?>, SettableValue<T>>) (ModelInstanceType<?, ?>) ModelTypes.Value.any(), null);
+		ValueContainer<SettableValue<?>, SettableValue<T>> value = exS.getAttribute("value",
+			(ModelInstanceType<SettableValue<?>, SettableValue<T>>) (ModelInstanceType<?, ?>) ModelTypes.Value.any(), null);
 		ModelInstanceType.SingleTyped<SettableValue<?>, T, SettableValue<T>> type;
 		type = (ModelInstanceType.SingleTyped<SettableValue<?>, T, SettableValue<T>>) value.getType();
 		ObservableExpression formatX = exS.getAttributeExpression("format");
@@ -657,7 +665,7 @@ public class QuickBase implements QonfigInterpretation {
 
 	private <M, C> Column<M, C> interpretColumn(StyleQIS session, QonfigToolkit base) throws QonfigInterpretationException {
 		ExpressoQIS exS = session.as(ExpressoQIS.class);
-		ValueContainer<SettableValue<?>, SettableValue<C>> columnValue = exS.getAttribute("column-value",
+		ValueContainer<SettableValue<?>, SettableValue<C>> columnValue = exS.getAttribute("value",
 			(ModelInstanceType<SettableValue<?>, SettableValue<C>>) (ModelInstanceType<?, ?>) ModelTypes.Value.any(), null);
 		TypeToken<M> modelType = session.get(MODEL_TYPE_KEY, TypeToken.class);
 		TypeToken<C> columnType = (TypeToken<C>) (columnValue != null ? columnValue.getType().getType(0) : modelType);
@@ -1322,8 +1330,9 @@ public class QuickBase implements QonfigInterpretation {
 		TypeToken<R> modelType = (TypeToken<R>) rows.getType().getType(0);
 		session.put(MODEL_TYPE_KEY, modelType);
 
-		DynamicModelValue.satisfyDynamicValueType("value", exS.getExpressoEnv().getModels(), ModelTypes.Value.forType(modelType));
-		ValueContainer<SettableValue<?>, SettableValue<R>> modelValue = exS.getExpressoEnv().getModels().getValue("value",
+		String valueName = exS.getAttributeText("value-name");
+		DynamicModelValue.satisfyDynamicValueType(valueName, exS.getExpressoEnv().getModels(), ModelTypes.Value.forType(modelType));
+		ValueContainer<SettableValue<?>, SettableValue<R>> modelValue = exS.getExpressoEnv().getModels().getValue(valueName,
 			ModelTypes.Value.forType(modelType));
 
 		ValueContainer<SettableValue<?>, SettableValue<R>> selectionV;
@@ -1351,48 +1360,54 @@ public class QuickBase implements QonfigInterpretation {
 			ModelTypes.Value.INT);
 		ValueContainer<SettableValue<?>, SettableValue<Integer>> columnIndex = exS.getExpressoEnv().getModels().getValue("columnIndex",
 			ModelTypes.Value.INT);
-		TypeToken<CategoryRenderStrategy<R, ?>> columnType = TypeTokens.get().keyFor(CategoryRenderStrategy.class)
-			.<CategoryRenderStrategy<R, ?>> parameterized(modelType, TypeTokens.get().WILDCARD);
-		ValueContainer<ObservableCollection<?>, ObservableCollection<CategoryRenderStrategy<R, ?>>> columnsAttr = exS.getAttribute(
-			"columns", ModelTypes.Collection.forType(columnType), null);
-		List<Column<R, ?>> columns = new ArrayList<>();
-		for (StyleQIS columnEl : session.forChildren("column"))
-			columns.add(columnEl.interpret(Column.class));
+		TypeToken<Column<R, ?>> columnType = TypeTokens.get().keyFor(Column.class).<Column<R, ?>> parameterized(modelType,
+			TypeTokens.get().WILDCARD);
+		List<ObservableCollection<Column<R, ?>>> columns = new ArrayList<>();
+		List<Column<R, ?>> simpleColumns = null;
+		for (ExpressoQIS child : exS.forChildren()) {
+			if (child.supportsInterpretation(Column.class)) {
+				if (simpleColumns == null)
+					simpleColumns = new ArrayList<>();
+				simpleColumns.add(child.interpret(Column.class));
+			} else if (child.supportsInterpretation(ColumnList.class)) {
+				if (simpleColumns != null) {
+					columns.add(ObservableCollection.of(columnType, simpleColumns));
+					simpleColumns = null;
+				}
+				columns.add(child.interpret(ColumnList.class).getColumns());
+			}
+		}
 		List<ValueAction<R>> actions = session.interpretChildren("action", ValueAction.class);
 		return new AbstractQuickComponentDef(session) {
 			@Override
 			public QuickComponent install(PanelPopulator<?, ?> container, QuickComponent.Builder builder) {
+				Function<Column<R, ?>, CategoryRenderStrategy<R, ?>> columnEval = col -> col.createColumn(() -> {
+					ModelSetInstance columnModels = builder.getModels().copy().build();
+					SettableValue<R> modelValueI = SettableValue.build(modelType).build();
+					DynamicModelValue.satisfyDynamicValue(valueName, ModelTypes.Value.forType(modelType), columnModels, modelValueI);
+					DynamicModelValue.satisfyDynamicValue("rowIndex", ModelTypes.Value.INT, columnModels,
+						SettableValue.build(int.class).withValue(-1).build());
+					DynamicModelValue.satisfyDynamicValue("columnIndex", ModelTypes.Value.INT, columnModels,
+						SettableValue.build(int.class).withValue(-1).build());
+					return columnModels;
+				}, (columnModels, modelValueV) -> {
+					modelValue.get(columnModels).set(modelValueV, null);
+				}, (columnModels, cell) -> {
+					modelValue.get(columnModels).set(cell.getModelValue(), null);
+					rowIndex.get(columnModels).set(cell.getRowIndex(), null);
+					columnIndex.get(columnModels).set(cell.getColumnIndex(), null);
+				}, modelValue);
+				ObservableCollection<CategoryRenderStrategy<R, ?>> tableColumns = ObservableCollection.flattenCollections(columnType, //
+					columns.toArray(new ObservableCollection[columns.size()]))//
+					.map(CategoryRenderStrategy.class, columnEval)//
+					.collect();
 				container.addTable(rows.get(builder.getModels()), table -> {
 					modify(table, builder);
 					if (selectionV != null)
 						table.withSelection(selectionV.get(builder.getModels()), false);
 					if (selectionC != null)
 						table.withSelection(selectionC.get(builder.getModels()));
-					if (columnsAttr != null) {
-						// The flatten here is so columns can also be specified on the table.
-						// Without this, additional columns could not be added if except into the columns collection,
-						// which is not desirable, as it may be used by multiple tabular widgets.
-						table.withColumns(ObservableCollection.flattenCollections(columnType, //
-							columnsAttr.get(builder.getModels()), //
-							ObservableCollection.build(columnType).build()).collect());
-					}
-					for (Column<R, ?> column : columns)
-						table.withColumn(column.createColumn(() -> {
-							ModelSetInstance columnModels = builder.getModels().copy().build();
-							SettableValue<R> modelValueI = SettableValue.build(modelType).build();
-							DynamicModelValue.satisfyDynamicValue("value", ModelTypes.Value.forType(modelType), columnModels, modelValueI);
-							DynamicModelValue.satisfyDynamicValue("rowIndex", ModelTypes.Value.INT, columnModels,
-								SettableValue.build(int.class).withValue(-1).build());
-							DynamicModelValue.satisfyDynamicValue("columnIndex", ModelTypes.Value.INT, columnModels,
-								SettableValue.build(int.class).withValue(-1).build());
-							return columnModels;
-						}, (columnModels, modelValueV) -> {
-							modelValue.get(columnModels).set(modelValueV, null);
-						}, (columnModels, cell) -> {
-							modelValue.get(columnModels).set(cell.getModelValue(), null);
-							rowIndex.get(columnModels).set(cell.getRowIndex(), null);
-							columnIndex.get(columnModels).set(cell.getColumnIndex(), null);
-						}, modelValue));
+					table.withColumns(tableColumns);
 					for (ValueAction<R> action : actions) {
 						ModelSetInstance actionModels = action.model.createInstance(builder.getModels().getUntil())
 							.withAll(builder.getModels()).build();
@@ -1476,8 +1491,10 @@ public class QuickBase implements QonfigInterpretation {
 			.getAttribute("root", ModelTypes.Value.any(), null);
 		TypeToken<T> valueType = (TypeToken<T>) root.getType().getType(0);
 		TypeToken<BetterList<T>> pathType = TypeTokens.get().keyFor(BetterList.class).<BetterList<T>> parameterized(valueType);
-		DynamicModelValue.satisfyDynamicValueType("path", exS.getExpressoEnv().getModels(), ModelTypes.Value.forType(pathType));
-		DynamicModelValue.satisfyDynamicValue("value", exS.getExpressoEnv().getModels(), () -> {
+		String pathName = exS.getAttributeText("path-name");
+		String valueName = exS.getAttributeText("value-name");
+		DynamicModelValue.satisfyDynamicValueType(pathName, exS.getExpressoEnv().getModels(), ModelTypes.Value.forType(pathType));
+		DynamicModelValue.satisfyDynamicValue(valueName, exS.getExpressoEnv().getModels(), () -> {
 			try {
 				return TREE_VALUE_EXPRESSION.evaluate(//
 					ModelTypes.Value.forType(valueType), exS.getExpressoEnv());
@@ -1488,9 +1505,9 @@ public class QuickBase implements QonfigInterpretation {
 		});
 		session.put(MODEL_TYPE_KEY, valueType);
 
-		ValueContainer<SettableValue<?>, SettableValue<BetterList<T>>> path = exS.getExpressoEnv().getModels().getValue("path",
+		ValueContainer<SettableValue<?>, SettableValue<BetterList<T>>> path = exS.getExpressoEnv().getModels().getValue(pathName,
 			ModelTypes.Value.forType(pathType));
-		ValueContainer<SettableValue<?>, SettableValue<T>> treeNodeValue = exS.getExpressoEnv().getModels().getValue("value",
+		ValueContainer<SettableValue<?>, SettableValue<T>> treeNodeValue = exS.getExpressoEnv().getModels().getValue(valueName,
 			ModelTypes.Value.forType(valueType));
 		ValueContainer<SettableValue<?>, SettableValue<Boolean>> selected = exS.getExpressoEnv().getModels().getValue("selected",
 			ModelTypes.Value.BOOLEAN);
@@ -1543,11 +1560,11 @@ public class QuickBase implements QonfigInterpretation {
 			public QuickComponent install(PanelPopulator<?, ?> container, QuickComponent.Builder builder) {
 				ModelSetInstance treeDataModels = builder.getModels().copy().build();
 				SettableValue<BetterList<T>> pathValue = SettableValue.build(pathType).build();
-				DynamicModelValue.satisfyDynamicValue("path", ModelTypes.Value.forType(pathType), treeDataModels, pathValue);
+				DynamicModelValue.satisfyDynamicValue(pathName, ModelTypes.Value.forType(pathType), treeDataModels, pathValue);
 				treeMaker.makeTree(//
 					builder, container, root.get(builder.getModels()), p -> {
 						ModelSetInstance nodeModels = treeDataModels.copy().build();
-						DynamicModelValue.satisfyDynamicValue("path", ModelTypes.Value.forType(pathType), nodeModels,
+						DynamicModelValue.satisfyDynamicValue(pathName, ModelTypes.Value.forType(pathType), nodeModels,
 							SettableValue.of(pathType, p, "Not modifiable here"));
 						return children.get(nodeModels);
 					}, tree -> {
@@ -1563,12 +1580,12 @@ public class QuickBase implements QonfigInterpretation {
 						if (treeColumn != null)
 							tree.withRender(treeColumn.createColumn(() -> {
 								ModelSetInstance newModel = builder.getModels().copy().build();
-								SettableValue<BetterList<T>> newPathValue = SettableValue.build(pathType).withDescription("path").build();
+								SettableValue<BetterList<T>> newPathValue = SettableValue.build(pathType).withDescription(pathName).build();
 								SettableValue<Boolean> selectedV = SettableValue.build(boolean.class).withValue(false)
 									.withDescription("selected").build();
 								SettableValue<Boolean> hoveredV = SettableValue.build(boolean.class).withValue(false)
 									.withDescription("hovered").build();
-								DynamicModelValue.satisfyDynamicValue("path", ModelTypes.Value.forType(pathType), newModel, newPathValue);
+								DynamicModelValue.satisfyDynamicValue(pathName, ModelTypes.Value.forType(pathType), newModel, newPathValue);
 								DynamicModelValue.satisfyDynamicValue("selected", ModelTypes.Value.BOOLEAN, newModel, selectedV);
 								DynamicModelValue.satisfyDynamicValue("focused", ModelTypes.Value.BOOLEAN, newModel, selectedV);
 								DynamicModelValue.satisfyDynamicValue("hovered", ModelTypes.Value.BOOLEAN, newModel, hoveredV);

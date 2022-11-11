@@ -1,12 +1,9 @@
 package org.observe.quick.style;
 
-import java.util.ArrayList;
 import java.util.Collections;
-import java.util.List;
 import java.util.Set;
 
 import org.observe.expresso.ExpressoQIS;
-import org.observe.quick.style.QuickStyle.StyleValues;
 import org.qommons.Version;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigInterpreterCore.CoreSession;
@@ -16,9 +13,9 @@ import org.qommons.config.SpecialSessionImplementation;
 
 /** Provides {@link StyleQIS} special sessions */
 public class StyleSessionImplV0_1 implements SpecialSessionImplementation<StyleQIS> {
-	/** The name of the Quick-Core toolkit */
-	public static final String NAME = "Quick-Core";
-	/** The supported version of the Quick-Core toolkit */
+	/** The name of the Quick-Style toolkit */
+	public static final String NAME = "Quick-Style";
+	/** The supported version of the Quick-Style toolkit */
 	public static final Version VERSION = new Version(0, 1, 0);
 
 	private QonfigToolkit theToolkit;
@@ -87,27 +84,28 @@ public class StyleSessionImplV0_1 implements SpecialSessionImplementation<StyleQ
 	}
 
 	private void initStyleData(StyleQIS session, StyleQIS parentSession) throws QonfigInterpretationException {
-		if (!session.isStyled())
-			return;
-		ExpressoQIS exS = session.as(ExpressoQIS.class);
-
-		// Parse style values, if any
-		session.put(StyleQIS.STYLE_ELEMENT, session.getElement());
-		List<QuickStyleValue<?>> declared = null;
-		for (StyleValues sv : session.getWrapped().interpretChildren("style", StyleValues.class)) {
-			sv.init();
-			if (declared == null)
-				declared = new ArrayList<>();
-			declared.addAll(sv);
-		}
-		if (declared == null)
-			declared = Collections.emptyList();
-		Collections.sort(declared);
-
-		// Find parent
-		QuickElementStyle parent = parentSession == null ? null : parentSession.getStyle();
-		// Create QuickElementStyle and put into session
-		session.put(StyleQIS.STYLE_PROP, new QuickElementStyle(Collections.unmodifiableList(declared), parent, session.getStyleSheet(),
-			session.getElement(), exS, theToolkit));
+		// This is all handled in interpretation now
+		// if (!session.isStyled())
+		// return;
+		// ExpressoQIS exS = session.as(ExpressoQIS.class);
+		//
+		// // Parse style values, if any
+		// session.put(StyleQIS.STYLE_ELEMENT, session.getElement());
+		// List<QuickStyleValue<?>> declared = null;
+		// for (StyleValues sv : session.getWrapped().interpretChildren("style", StyleValues.class)) {
+		// sv.init();
+		// if (declared == null)
+		// declared = new ArrayList<>();
+		// declared.addAll(sv);
+		// }
+		// if (declared == null)
+		// declared = Collections.emptyList();
+		// Collections.sort(declared);
+		//
+		// // Find parent
+		// QuickElementStyle parent = parentSession == null ? null : parentSession.getStyle();
+		// // Create QuickElementStyle and put into session
+		// session.put(StyleQIS.STYLE_PROP, new QuickElementStyle(Collections.unmodifiableList(declared), parent, session.getStyleSheet(),
+		// session.getElement(), exS, theToolkit));
 	}
 }
