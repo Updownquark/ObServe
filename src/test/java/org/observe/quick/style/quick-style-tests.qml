@@ -1,12 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
 <testing uses:style="Quick-Style-Test 0.1">
-	<!--Test: (all with changes, observability)
-		Prioritization of element values in a style with more than one possible values for an attribute
-			Test observability as values of both elements change
-		Inherited style from parent
-		Style sheet styles
-	-->
 	<head>
 		<imports>
 			<import>org.junit.Assert.*</import>
@@ -31,6 +25,7 @@
 		</style-sheet>
 	</head>
 	<test name="basicStyle">
+		<!-- Basic styles that depend on model values with various conditions with varying priority and complexity -->
 		<model>
 			<a name="a0" a="models.m0" b="models.m2" c="models.m1" d="models.m4">
 				<style attr="s0">a</style>
@@ -46,24 +41,31 @@
 		<action name="checkS0_1">assertEquals(ext.actionName, models.m0, a0.s0)</action>
 		<action name="checkWS0_1">assertEquals(ext.actionName, models.m0, w_a0_s0)</action>
 
-		<!-- a=models.m0=true, so s1 should be models.m1 -->
+		<!-- Default s1 condition, c=models.m1=0, so s1 should be 0 -->
+		<action name="checkS1_1">assertEquals(ext.actionName, 0, a0.s1)</action>
+		<action name="checkWS0_1">assertEquals(ext.actionName, 0, w_a0_s1)</action>
+
+		<!-- Change the value of the active -->
 		<action name="assignM1_1">models.m1=25</action>
 		<action name="checkS1_1">assertEquals(ext.actionName, 25, a0.s1)</action>
 		<action name="checkWS0_1">assertEquals(ext.actionName, 25, w_a0_s1)</action>
 
+		<!-- Revert to default condition -->
 		<action name="assignA_2">models.m0=false</action>
 		<action name="checkS1_1">assertEquals(ext.actionName, 250, a0.s1)</action>
 		<action name="checkWS0_1">assertEquals(ext.actionName, 250, w_a0_s1)</action>
 
+		<!-- Verify no change for value with unmet condition -->
 		<action name="assignM3">models.m3=50</action>
 		<action name="checkS1_2">assertEquals(ext.actionName, 250, a0.s1)</action>
 		<action name="checkWS0_2">assertEquals(ext.actionName, 250, w_a0_s1)</action>
 
+		<!-- Change to b condition -->
 		<action name="assignB_1">models.m2=true</action>
 		<action name="checkS1_3">assertEquals(ext.actionName, 50, a0.s1)</action>
 		<action name="checkWS0_3">assertEquals(ext.actionName, 50, w_a0_s1)</action>
 
-		<!-- b=models.m2 has higher priority than a=models.m0, so making a true won't affect s1 -->
+		<!-- b=models.m2 has higher priority than a=models.m0, so making 'a' true won't affect s1 -->
 		<action name="assignA_3">models.m0=true</action>
 		<action name="checkS1_3">assertEquals(ext.actionName, 50, a0.s1)</action>
 		<action name="checkWS0_3">assertEquals(ext.actionName, 50, w_a0_s1)</action>
@@ -72,19 +74,23 @@
 		<action name="assignD_1">models.m4=true</action>
 		<action name="checkS1_3">assertEquals(ext.actionName, 75, a0.s1)</action>
 		<action name="checkWS0_3">assertEquals(ext.actionName, 75, w_a0_s1)</action>
+		<!-- Back to b condition -->
 		<action name="assignD_2">models.m4=false</action>
 		<action name="checkS1_3">assertEquals(ext.actionName, 50, a0.s1)</action>
 		<action name="checkWS0_3">assertEquals(ext.actionName, 50, w_a0_s1)</action>
 
+		<!-- Verify no change for value with unmet condition -->
 		<action name="assignM1_2">models.m1=300</action>
 		<action name="checkS1_4">assertEquals(ext.actionName, 50, a0.s1)</action>
 		<action name="checkWS0_4">assertEquals(ext.actionName, 50, w_a0_s1)</action>
 
-		<action name="assignM2_2">models.m2=false</action>
+		<!-- Back to a condition -->
+		<action name="assignB_2">models.m2=false</action>
 		<action name="checkS1_4">assertEquals(ext.actionName, 300, a0.s1)</action>
 		<action name="checkWS0_4">assertEquals(ext.actionName, 300, w_a0_s1)</action>
 
-		<action name="assignB_4">models.m0=false</action>
+		<!-- Revert to default condition -->
+		<action name="assignA_4">models.m0=false</action>
 		<action name="checkS1_5">assertEquals(ext.actionName, 3000, a0.s1)</action>
 		<action name="checkWS0_5">assertEquals(ext.actionName, 3000, w_a0_s1)</action>
 
@@ -93,6 +99,15 @@
 		<action name="checkS1_5">assertEquals(ext.actionName, 3000, a0.s1)</action>
 		<action name="checkWS0_5">assertEquals(ext.actionName, 3000, w_a0_s1)</action>
 	</test>
-	<!--<test name="styleSheet">
+	<!--<test name="localStyleSheet">
+		<!- Test styles that are prescribed by a style sheet defined in this document ->
+		<model>
+		</model>
+	</test>-->
+	<!--<test name="importedStyleSheet">
+		<!- Test styles that are prescribed by a style sheet imported from outside this document ->
+	</test>-->
+	<!--<test name="inheritedStyle">
+		<!- Test inheritance of styles from parent elements ->
 	</test>-->
 </testing>
