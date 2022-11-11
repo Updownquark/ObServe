@@ -99,15 +99,68 @@
 		<action name="checkS1_5">assertEquals(ext.actionName, 3000, a0.s1)</action>
 		<action name="checkWS0_5">assertEquals(ext.actionName, 3000, w_a0_s1)</action>
 	</test>
-	<!--<test name="localStyleSheet">
-		<!- Test styles that are prescribed by a style sheet defined in this document ->
+	<test name="localStyleSheet">
+		<!-- Test styles that are prescribed by a style sheet defined in this document -->
+		<model>
+			<a name="a0" a="localA" b="localB" c="localC" d="localD">
+				<model>
+					<value name="localA" type="boolean" init="false" />
+					<value name="localB" type="boolean" init="false" />
+					<value name="localC" type="int" init="0" />
+					<value name="localD" type="boolean" init="false" />
+				</model>
+			</a>
+			<b name="b0" e="localE" f="localF">
+				<model>
+					<value name="localA" type="boolean" init="false" />
+					<value name="localB" type="boolean" init="false" />
+					<value name="localC" type="int" init="0" />
+					<value name="localD" type="boolean" init="false" />
+					<value name="localE" type="boolean" init="false" />
+					<value name="localF" type="int" init="0" />
+				</model>
+				<a a="localA" b="localB" c="localC" d="localD" />
+			</b>
+			<c name="c0" e="localE" f="localF" g="localG">
+				<model>
+					<value name="localA" type="boolean" init="false" />
+					<value name="localB" type="boolean" init="false" />
+					<value name="localC" type="int" init="0" />
+					<value name="localD" type="boolean" init="false" />
+					<value name="localE" type="boolean" init="false" />
+					<value name="localF" type="int" init="0" />
+					<value name="localG" type="boolean" init="false" />
+				</model>
+				<a a="localA" b="localB" c="localC" d="localD" />
+			</c>
+			<d name="d0" e="localE" f="localF" h="localH">
+				<model>
+					<value name="localA" type="boolean" init="false" />
+					<value name="localB" type="boolean" init="false" />
+					<value name="localC" type="int" init="0" />
+					<value name="localD" type="boolean" init="false" />
+					<value name="localE" type="boolean" init="false" />
+					<value name="localF" type="int" init="0" />
+					<value name="localH" type="int" init="0" />
+				</model>
+				<a a="localA" b="localB" c="localC" d="localD" />
+			</d>
+		</model>
+		<!--
+			Include local styles also
+		-->
+		<action name="blank">models.m0=true</action>
+	</test>
+	<test name="importedStyleSheet">
+		<!-- Test styles that are prescribed by a style sheet imported from outside this document -->
 		<model>
 		</model>
-	</test>-->
-	<!--<test name="importedStyleSheet">
-		<!- Test styles that are prescribed by a style sheet imported from outside this document ->
-	</test>-->
-	<!--<test name="inheritedStyle">
-		<!- Test inheritance of styles from parent elements ->
-	</test>-->
+		<action name="blank">models.m0=true</action>
+	</test>
+	<test name="inheritedStyle">
+		<!-- Test inheritance of styles from parent elements -->
+		<model>
+		</model>
+		<action name="blank">models.m0=true</action>
+	</test>
 </testing>

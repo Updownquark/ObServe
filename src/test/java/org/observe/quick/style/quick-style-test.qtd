@@ -29,34 +29,34 @@
 		</element-def>
 		<element-def name="b" extends="styled-value">
 			<element-model>
-				<value name="d" type="boolean" source-attribute="d" priority="1" />
-				<value name="e" type="int" source-attribute="e" priority="5" />
+				<value name="e" type="boolean" source-attribute="e" priority="1" />
+				<value name="f" type="int" source-attribute="f" priority="5" />
 			</element-model>
 			<styles>
 				<style-attribute name="s3" type="int" trickle-down="true" />
 				<style-attribute name="s4" type="int" trickle-down="false" />
 			</styles>
-			<attribute name="d" type="expression" />
 			<attribute name="e" type="expression" />
+			<attribute name="f" type="expression" />
 			<child-def name="a" type="a" min="0" max="inf" />
 		</element-def>
 		<element-def name="c" extends="b">
 			<element-model>
-				<value name="f" type="boolean" source-attribute="f" priority="3" />
+				<value name="g" type="boolean" source-attribute="g" priority="3" />
 			</element-model>
 			<styles>
 				<style-attribute name="s5" type="boolean" trickle-down="false" />
 			</styles>
-			<attribute name="f" type="expression" />
+			<attribute name="g" type="expression" />
 		</element-def>
 		<element-def name="d" extends="b">
 			<element-model>
-				<value name="g" type="int" source-attribute="g" priority="10" />
+				<value name="h" type="int" source-attribute="h" priority="10" />
 			</element-model>
 			<styles>
 				<style-attribute name="s6" type="int" trickle-down="true" />
 			</styles>
-			<attribute name="g" type="expression" />
+			<attribute name="h" type="expression" />
 		</element-def>
 	</elements>
 
