@@ -110,6 +110,9 @@ public interface ObservableModelSet extends Identifiable {
 		@Override
 		ModelComponentId getIdentity();
 
+		/** @return The {@link IdentifableValueCreator#getIdentity() identity} of the value itself, independent of this model */
+		Object getValueIdentity();
+
 		/** @return The sub-model held by this component, or null if this component is not a sub-model */
 		ObservableModelSet getModel();
 
@@ -205,6 +208,14 @@ public interface ObservableModelSet extends Identifiable {
 		 */
 		MV get(ModelSetInstance models);
 
+		/**
+		 * @param value The value to copy
+		 * @param sourceModels The model instance that the value is from
+		 * @param newModels The new model to copy the value into
+		 * @return A copy of the given value for the new model instance. Often this will be exactly the source <code>value</code>, but if
+		 *         the value is a composite of values that have been replaced in the target models, the return value will be a re-built
+		 *         composite using the copied components.
+		 */
 		MV forModelCopy(MV value, ModelSetInstance sourceModels, ModelSetInstance newModels);
 
 		/** @return All the self-sufficient containers that compose this value container */
@@ -479,6 +490,41 @@ public interface ObservableModelSet extends Identifiable {
 	}
 
 	/**
+	 * A value creator for a value that has an identity outside of this model. Such values can be
+	 * {@link ObservableModelSet#getIdentifiedValue(Object) retrieved} by their value ID.
+	 *
+	 * @param <M> The model type of the value
+	 * @param <MV> The type of the value
+	 */
+	public interface IdentifableValueCreator<M, MV extends M> extends ValueCreator<M, MV>, Identifiable {
+		/**
+		 * @param <M> The model type of the value
+		 * @param <MV> The type of the value
+		 * @param identity The identity of the value
+		 * @param container The value
+		 * @return An identifiable value container for the given value
+		 */
+		static <M, MV extends M> IdentifableValueCreator<M, MV> of(Object identity, ValueContainer<M, MV> container) {
+			return new IdentifableValueCreator<M, MV>() {
+				@Override
+				public Object getIdentity() {
+					return identity;
+				}
+
+				@Override
+				public ValueContainer<M, MV> createValue() {
+					return container;
+				}
+
+				@Override
+				public String toString() {
+					return identity + ":" + container;
+				}
+			};
+		}
+	}
+
+	/**
 	 * A value added to an {@link ObservableModelSet} with {@link Builder#withExternal(String, ExtValueRef)} or another external value
 	 * method
 	 *
@@ -595,7 +641,7 @@ public interface ObservableModelSet extends Identifiable {
 	 * @return A SettableValue that is not modifiable
 	 */
 	public static <T> SettableValue<T> literal(TypeToken<T> type, T value, String text) {
-		return SettableValue.asSettable(ObservableValue.of(value), __ -> "Literal value '" + text + "'");
+		return SettableValue.asSettable(ObservableValue.of(type, value), __ -> "Literal value '" + text + "'");
 	}
 
 	/**
@@ -693,6 +739,21 @@ public interface ObservableModelSet extends Identifiable {
 		}
 		if (node == null)
 			throw new QonfigInterpretationException("Nothing at '" + path + "'");
+		return node;
+	}
+
+	/** @return All {@link IdentifableValueCreator identified} components in this model */
+	Map<Object, ModelComponentNode<?, ?>> getIdentifiedComponents();
+
+	/**
+	 * @param valueIdentifier The identifier of the value
+	 * @return The {@link IdentifableValueCreator identified} value in this model with the given value ID
+	 * @throws QonfigInterpretationException If no such identified value exists in this model
+	 */
+	default ModelComponentNode<?, ?> getIdentifiedValue(Object valueIdentifier) throws QonfigInterpretationException {
+		ModelComponentNode<?, ?> node = getIdentifiedComponents().get(valueIdentifier);
+		if (node == null)
+			throw new QonfigInterpretationException("No such value in this model with identifier " + valueIdentifier);
 		return node;
 	}
 
@@ -797,6 +858,8 @@ public interface ObservableModelSet extends Identifiable {
 		ModelComponentNode<Object, Object> node = (ModelComponentNode<Object, Object>) getComponent(path);
 		if (node.getModel() != null)
 			throw new QonfigInterpretationException("'" + path + "' is a sub-model, not a value");
+		if (node.getIdentity().toString().equals("models.tests.internalState.struct1"))
+			BreakpointHere.breakpoint();
 		return node.getType().as(node, type);
 	}
 
@@ -860,13 +923,6 @@ public interface ObservableModelSet extends Identifiable {
 
 	/** Builds an {@link ObservableModelSet} */
 	public interface Builder extends ObservableModelSet {
-		/**
-		 * @param modelConfiguration A function to produce the {@link ModelSetInstance#getModelConfiguration() model configuration} for
-		 *        instances of this model
-		 * @return This builder
-		 */
-		Builder setModelConfiguration(Function<ModelSetInstance, ?> modelConfiguration);
-
 		/**
 		 * Declares a dependency on a value from an {@link ExternalModelSet}
 		 *
@@ -982,13 +1038,6 @@ public interface ObservableModelSet extends Identifiable {
 		 */
 		ObservableModelSet getModel();
 
-		/**
-		 * An object created for this model instance set by {@link ObservableModelSet.Builder#setModelConfiguration(Function)}
-		 *
-		 * @return This model set's model configuration object
-		 */
-		Object getModelConfiguration();
-
 		/** @return An observable that will fire when this model instance set's lifetime expires */
 		Observable<?> getUntil();
 
@@ -1000,6 +1049,7 @@ public interface ObservableModelSet extends Identifiable {
 		 */
 		<M, MV extends M> MV get(ModelComponentNode<M, MV> component);
 
+		/** @return A builder containing all of this model's data, but whose runtime components may be replaced */
 		ModelSetInstanceBuilder copy();
 	}
 
@@ -1274,9 +1324,9 @@ public interface ObservableModelSet extends Identifiable {
 		private final DefaultModelSet theRoot;
 		/** This model's components */
 		protected final Map<String, ModelComponentNode<?, ?>> theComponents;
-		/** The function to produce the {@link ModelSetInstance#getModelConfiguration() model configuration} for this model */
-		protected final Function<ModelSetInstance, ?> theModelConfiguration;
+		private final Map<Object, ModelComponentNode<?, ?>> theIdentifiedComponents;
 		private final NameChecker theNameChecker;
+		private final Set<ModelComponentNode<?, ?>> theCycleChecker;
 
 		/**
 		 * @param id The component id for the new model
@@ -1284,20 +1334,20 @@ public interface ObservableModelSet extends Identifiable {
 		 * @param parent The parent model for the new model, or null if the new model is to be the root
 		 * @param inheritance The new model's {@link ObservableModelSet#getInheritance() inheritance}
 		 * @param components The {@link ObservableModelSet#getComponents() components} for the new model
-		 * @param modelConfiguration The function to produce {@link ModelSetInstance#getModelConfiguration() model configuration} for the
-		 *        new model
+		 * @param identifiedComponents All {@link IdentifableValueCreator identified} values in the model
 		 * @param nameChecker The {@link ObservableModelSet#getNameChecker() name checker} for the new model
 		 */
 		protected DefaultModelSet(ModelComponentId id, DefaultModelSet root, DefaultModelSet parent,
 			Map<ModelComponentId, ObservableModelSet> inheritance, Map<String, ModelComponentNode<?, ?>> components,
-			Function<ModelSetInstance, ?> modelConfiguration, NameChecker nameChecker) {
+			Map<Object, ModelComponentNode<?, ?>> identifiedComponents, NameChecker nameChecker) {
 			theId = id;
 			theRoot = root == null ? this : root;
 			theInheritance = inheritance;
 			theParent = parent;
 			theComponents = components;
-			theModelConfiguration = modelConfiguration;
+			theIdentifiedComponents = identifiedComponents;
 			theNameChecker = nameChecker;
+			theCycleChecker = new LinkedHashSet<>();
 		}
 
 		@Override
@@ -1331,8 +1381,13 @@ public interface ObservableModelSet extends Identifiable {
 		}
 
 		@Override
+		public Map<Object, ModelComponentNode<?, ?>> getIdentifiedComponents() {
+			return theIdentifiedComponents;
+		}
+
+		@Override
 		public ModelSetInstanceBuilder createInstance(ExternalModelSet extModel, Observable<?> until) {
-			return new DefaultMSIBuilder(this, null, extModel, until, theModelConfiguration);
+			return new DefaultMSIBuilder(this, null, extModel, until);
 		}
 
 		@Override
@@ -1354,8 +1409,8 @@ public interface ObservableModelSet extends Identifiable {
 			}
 		}
 
-		static class ModelNodeImpl<M, MV extends M> implements ModelComponentNode<M, MV> {
-			private final ModelComponentId theId;
+		class ModelNodeImpl<M, MV extends M> implements ModelComponentNode<M, MV> {
+			private final ModelComponentId theNodeId;
 			private final ValueCreator<M, MV> theCreator;
 			private final RuntimeValuePlaceholder<M, MV> theRuntimePlaceholder;
 			private ValueContainer<M, MV> theValue;
@@ -1364,7 +1419,7 @@ public interface ObservableModelSet extends Identifiable {
 
 			ModelNodeImpl(ModelComponentId id, ValueCreator<M, MV> creator, RuntimeValuePlaceholder<M, MV> runtimePlaceholder,
 				ExtValueRef<M, MV> extRef, DefaultModelSet model) {
-				theId = id;
+				theNodeId = id;
 				theCreator = creator;
 				theRuntimePlaceholder = runtimePlaceholder;
 				theExtRef = extRef;
@@ -1373,7 +1428,12 @@ public interface ObservableModelSet extends Identifiable {
 
 			@Override
 			public ModelComponentId getIdentity() {
-				return theId;
+				return theNodeId;
+			}
+
+			@Override
+			public Object getValueIdentity() {
+				return theCreator instanceof IdentifableValueCreator ? ((IdentifableValueCreator<M, MV>) theCreator).getIdentity() : null;
 			}
 
 			@Override
@@ -1384,12 +1444,7 @@ public interface ObservableModelSet extends Identifiable {
 			@Override
 			public ModelInstanceType<M, MV> getType() {
 				if (theCreator != null) {
-					if (theValue == null) {
-						theValue = theCreator.createValue();
-						if (theValue == null)
-							return null;
-					}
-					return theValue.getType();
+					return getOfValue(v -> v.getType());
 				} else if (theRuntimePlaceholder != null)
 					return theRuntimePlaceholder.getType();
 				else if (theExtRef != null)
@@ -1400,6 +1455,27 @@ public interface ObservableModelSet extends Identifiable {
 					throw new IllegalStateException();
 			}
 
+			private <T> T getOfValue(Function<ValueContainer<M, MV>, T> value) {
+				if (!theCycleChecker.add(this)) {
+					String depPath;
+					if (theCycleChecker.size() == 1)
+						depPath = theCycleChecker.iterator().next() + " depends on itself";
+					else
+						depPath = StringUtils.print("<-", theCycleChecker, Object::toString).toString();
+					throw new IllegalStateException("Dependency cycle detected: " + depPath);
+				}
+				try {
+					if (theValue == null) {
+						theValue = theCreator.createValue();
+						if (theValue == null)
+							return null;
+					}
+					return value.apply(theValue);
+				} finally {
+					theCycleChecker.remove(this);
+				}
+			}
+
 			@Override
 			public MV get(ModelSetInstance models) {
 				return models.get(this);
@@ -1408,12 +1484,7 @@ public interface ObservableModelSet extends Identifiable {
 			@Override
 			public MV forModelCopy(MV value, ModelSetInstance sourceModels, ModelSetInstance newModels) {
 				if (theCreator != null) {
-					if (theValue == null) {
-						theValue = theCreator.createValue();
-						if (theValue == null)
-							return null;
-					}
-					return theValue.forModelCopy(value, sourceModels, newModels);
+					return getOfValue(v -> v.forModelCopy(value, sourceModels, newModels));
 				} else
 					return value;
 			}
@@ -1421,36 +1492,26 @@ public interface ObservableModelSet extends Identifiable {
 			@Override
 			public MV create(ModelSetInstance modelSet, ExternalModelSet extModels) {
 				if (theCreator != null) {
-					if (theValue == null) {
-						theValue = theCreator.createValue();
-						if (theValue == null)
-							return null;
-					}
-					return theValue.get(modelSet);
+					return getOfValue(v -> v.get(modelSet));
 				} else if (theExtRef != null) {
 					MV value = extModels == null ? null : theExtRef.get(extModels);
 					if (value == null)
 						value = theExtRef.getDefault(modelSet);
 					if (value == null) {
 						if (extModels == null)
-							throw new IllegalArgumentException("No such external model: " + theId.getOwnerId());
+							throw new IllegalArgumentException("No such external model: " + theNodeId.getOwnerId());
 						else
-							throw new IllegalArgumentException("No such external value specified: " + theId);
+							throw new IllegalArgumentException("No such external value specified: " + theNodeId);
 					} else
 						return value;
 				} else
-					throw new IllegalStateException(theId + " is not an internal value");
+					throw new IllegalStateException(theNodeId + " is not an internal value");
 			}
 
 			@Override
 			public BetterList<ValueContainer<?, ?>> getCores() {
 				if (theCreator != null) {
-					if (theValue == null) {
-						theValue = theCreator.createValue();
-						if (theValue == null)
-							return BetterList.of(this);
-					}
-					return theValue.getCores();
+					return getOfValue(v -> v.getCores());
 				} else
 					return BetterList.of(this);
 			}
@@ -1470,13 +1531,13 @@ public interface ObservableModelSet extends Identifiable {
 			@Override
 			public String toString() {
 				if (theCreator != null)
-					return theCreator + "@" + theId;
+					return theCreator + "@" + theNodeId;
 				else if (theExtRef != null)
-					return "ext:" + theExtRef.getType() + "@" + theId;
+					return "ext:" + theExtRef.getType() + "@" + theNodeId;
 				else if (theRuntimePlaceholder != null)
-					return "runtime:" + theRuntimePlaceholder.getType() + "@" + theId;
+					return "runtime:" + theRuntimePlaceholder.getType() + "@" + theNodeId;
 				else
-					return theId.toString();
+					return theNodeId.toString();
 			}
 		}
 
@@ -1512,8 +1573,6 @@ public interface ObservableModelSet extends Identifiable {
 
 		/** {@link Builder} for a {@link DefaultModelSet} */
 		public static class DefaultBuilder extends DefaultModelSet implements Builder {
-			private Function<ModelSetInstance, ?> theModelConfigurationCreator;
-
 			/**
 			 * @param id The component ID for the new model
 			 * @param root The root for the new model, or null if this is to be the root
@@ -1521,7 +1580,7 @@ public interface ObservableModelSet extends Identifiable {
 			 * @param nameChecker The {@link ObservableModelSet#getNameChecker() name checker} for the new model
 			 */
 			protected DefaultBuilder(ModelComponentId id, DefaultBuilder root, DefaultBuilder parent, NameChecker nameChecker) {
-				super(id, root, parent, new LinkedHashMap<>(), new LinkedHashMap<>(), null, nameChecker);
+				super(id, root, parent, new LinkedHashMap<>(), new LinkedHashMap<>(), new LinkedHashMap<>(), nameChecker);
 			}
 
 			@Override
@@ -1530,14 +1589,13 @@ public interface ObservableModelSet extends Identifiable {
 			}
 
 			@Override
-			public Map<ModelComponentId, ObservableModelSet> getInheritance() {
-				return Collections.unmodifiableMap(super.getInheritance());
+			public Map<Object, ModelComponentNode<?, ?>> getIdentifiedComponents() {
+				return Collections.unmodifiableMap(super.getIdentifiedComponents());
 			}
 
 			@Override
-			public Builder setModelConfiguration(Function<ModelSetInstance, ?> modelConfiguration) {
-				theModelConfigurationCreator = modelConfiguration;
-				return this;
+			public Map<ModelComponentId, ObservableModelSet> getInheritance() {
+				return Collections.unmodifiableMap(super.getInheritance());
 			}
 
 			@Override
@@ -1556,7 +1614,10 @@ public interface ObservableModelSet extends Identifiable {
 				if (theComponents.containsKey(name))
 					throw new IllegalArgumentException(
 						"A value of type " + theComponents.get(name).getType() + " has already been added as '" + name + "'");
-				theComponents.put(name, createPlaceholder(new ModelComponentId(getIdentity(), name), maker, null, null, null));
+				ModelComponentNode<?, ?> node = createPlaceholder(new ModelComponentId(getIdentity(), name), maker, null, null, null);
+				theComponents.put(name, node);
+				if (node.getValueIdentity() != null)
+					super.getIdentifiedComponents().put(node.getValueIdentity(), node);
 				return this;
 			}
 
@@ -1596,9 +1657,10 @@ public interface ObservableModelSet extends Identifiable {
 					super.getInheritance().putIfAbsent(subInh, other);
 				// For any sub-models with the same name, this model's sub-model should inherit that of the other
 				for (ModelComponentNode<?, ?> component : other.getComponents().values()) {
-					if (component.getModel() == null)
-						continue;
-					createSubModel(component.getIdentity().getName()).withAll(component.getModel());
+					if (component.getModel() != null)
+						createSubModel(component.getIdentity().getName()).withAll(component.getModel());
+					else if (component.getValueIdentity() != null)
+						super.getIdentifiedComponents().putIfAbsent(component.getValueIdentity(), component);
 				}
 				return this;
 			}
@@ -1627,16 +1689,17 @@ public interface ObservableModelSet extends Identifiable {
 			}
 
 			private DefaultModelSet _build(DefaultModelSet root, DefaultModelSet parent) {
-				Map<String, ModelComponentNode<?, ?>> things = new LinkedHashMap<>(theComponents.size() * 3 / 2 + 1);
-				DefaultModelSet model = createModel(root, parent, things, theModelConfigurationCreator);
+				Map<String, ModelComponentNode<?, ?>> components = new LinkedHashMap<>(theComponents.size() * 3 / 2 + 1);
+				DefaultModelSet model = createModel(root, parent, components);
 				if (root == null)
 					root = model;
-				for (Map.Entry<String, ModelComponentNode<?, ?>> thing : theComponents.entrySet()) {
-					if (thing.getValue().getModel() != null) {
-						DefaultModelSet subModel = ((DefaultBuilder) thing.getValue().getModel())._build(root, model);
-						things.put(thing.getKey(), createPlaceholder(thing.getValue().getIdentity(), null, null, null, subModel));
+				for (Map.Entry<String, ModelComponentNode<?, ?>> component : theComponents.entrySet()) {
+					if (component.getValue().getModel() != null) {
+						DefaultModelSet subModel = ((DefaultBuilder) component.getValue().getModel())._build(root, model);
+						components.put(component.getKey(),
+							createPlaceholder(component.getValue().getIdentity(), null, null, null, subModel));
 					} else
-						things.put(thing.getKey(), thing.getValue());
+						components.put(component.getKey(), component.getValue());
 				}
 				return model;
 			}
@@ -1647,13 +1710,13 @@ public interface ObservableModelSet extends Identifiable {
 			 * @param root The root model, or null if the new model is to be the root
 			 * @param parent The parent model, or null if the new model is to be the root
 			 * @param components The component map for the new model
-			 * @param modelConfiguration The model configuration producer for the new model
 			 * @return The new model
 			 */
 			protected DefaultModelSet createModel(DefaultModelSet root, DefaultModelSet parent,
-				Map<String, ModelComponentNode<?, ?>> components, Function<ModelSetInstance, ?> modelConfiguration) {
+				Map<String, ModelComponentNode<?, ?>> components) {
 				return new DefaultModelSet(getIdentity(), root, parent, QommonsUtils.unmodifiableCopy(super.getInheritance()),
-					Collections.unmodifiableMap(components), modelConfiguration, getNameChecker());
+					Collections.unmodifiableMap(components), QommonsUtils.unmodifiableCopy(getIdentifiedComponents()),
+					getNameChecker());
 			}
 		}
 
@@ -1663,12 +1726,11 @@ public interface ObservableModelSet extends Identifiable {
 			private final Map<RuntimeValuePlaceholder<?, ?>, Boolean> theRuntimeVariables;
 			private final DefaultMSI theMSI;
 
-			DefaultMSIBuilder(ObservableModelSet models, ModelSetInstance sourceModel, ExternalModelSet extModels, Observable<?> until,
-				Function<ModelSetInstance, ?> modelConfiguration) {
+			DefaultMSIBuilder(ObservableModelSet models, ModelSetInstance sourceModel, ExternalModelSet extModels, Observable<?> until) {
 				theComponents = new HashMap<>();
 				theInheritance = new LinkedHashMap<>();
 				theRuntimeVariables = new HashMap<>();
-				theMSI = new DefaultMSI(models.getRoot(), sourceModel, extModels, until, modelConfiguration, theComponents,
+				theMSI = new DefaultMSI(models.getRoot(), sourceModel, extModels, until, theComponents,
 					Collections.unmodifiableMap(theInheritance));
 				lookForRuntimeVars(models);
 			}
@@ -1700,14 +1762,12 @@ public interface ObservableModelSet extends Identifiable {
 					throw new IllegalArgumentException("Model " + other.getModel().getIdentity() + " is not related to this model ("
 						+ theMSI.getModel().getIdentity() + ")");
 				}
-				if (theInheritance.computeIfAbsent(other.getModel().getIdentity().getRootId(), __ -> other) != other)
+				ModelSetInstance override = theInheritance.putIfAbsent(other.getModel().getIdentity().getRootId(), other);
+				if (override != null && override != other)
 					throw new IllegalStateException(
 						"An instance of model " + other.getModel().getIdentity().getRootId() + " has already been added to this model");
-				for (ModelComponentId modelId : other.getModel().getInheritance().keySet()) {
-					if (theInheritance.computeIfAbsent(other.getModel().getIdentity(), __ -> other) != other)
-						throw new IllegalStateException("An instance of model " + modelId + ", inherited by "
-							+ other.getModel().getIdentity() + " has already been added to this model");
-				}
+				for (ModelComponentId modelId : other.getModel().getInheritance().keySet())
+					theInheritance.putIfAbsent(modelId, other);
 				return this;
 			}
 
@@ -1752,20 +1812,16 @@ public interface ObservableModelSet extends Identifiable {
 			private final ModelSetInstance theSourceModel;
 			private final ExternalModelSet theExtModels;
 			private final Observable<?> theUntil;
-			private Function<ModelSetInstance, ?> theModelConfigurationCreator;
-			private Object theModelConfiguration;
 			protected final Map<ModelComponentId, Object> theComponents;
 			private final Map<ModelComponentId, ModelSetInstance> theInheritance;
 			private Set<ModelComponentNode<?, ?>> theCircularityDetector;
 
 			protected DefaultMSI(ObservableModelSet models, ModelSetInstance sourceModel, ExternalModelSet extModels, Observable<?> until,
-				Function<ModelSetInstance, ?> configuration, Map<ModelComponentId, Object> components,
-				Map<ModelComponentId, ModelSetInstance> inheritance) {
+				Map<ModelComponentId, Object> components, Map<ModelComponentId, ModelSetInstance> inheritance) {
 				theModel = models;
 				theSourceModel = sourceModel;
 				theExtModels = extModels;
 				theUntil = until;
-				theModelConfigurationCreator = configuration;
 				theComponents = components;
 				theInheritance = inheritance;
 				theCircularityDetector = new LinkedHashSet<>();
@@ -1774,16 +1830,6 @@ public interface ObservableModelSet extends Identifiable {
 			@Override
 			public ObservableModelSet getModel() {
 				return theModel;
-			}
-
-			@Override
-			public Object getModelConfiguration() {
-				if (theModelConfiguration != null)
-					return theModelConfiguration;
-				else if (theModelConfigurationCreator == null)
-					return null;
-				theModelConfiguration = theModelConfigurationCreator.apply(this);
-				return theModelConfiguration;
 			}
 
 			@Override
@@ -1802,7 +1848,8 @@ public interface ObservableModelSet extends Identifiable {
 						throw new IllegalStateException(
 							"Missing inheritance " + rootModelId + ": use ModelSetInstanceBuilder.withAll(ModelSetInstance)");
 					else
-						throw new IllegalArgumentException("Unrecognized model component: " + component);
+						throw new IllegalArgumentException(
+							"This model component (" + component + ") is for an unrelated model (" + rootModelId + ")");
 				}
 				MV thing = (MV) theComponents.get(component.getIdentity());
 				if (thing != null)
@@ -1828,7 +1875,7 @@ public interface ObservableModelSet extends Identifiable {
 
 			@Override
 			public ModelSetInstanceBuilder copy() {
-				return new DefaultMSIBuilder(theModel, this, theExtModels, theUntil, theModelConfigurationCreator);
+				return new DefaultMSIBuilder(theModel, this, theExtModels, theUntil);
 			}
 
 			void built() {

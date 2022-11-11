@@ -137,7 +137,7 @@ public class TypeTokens {
 			return parameterized(//
 				new Type[] { parameter.getType() }, //
 				new TypeToken[] { parameter }, //
-				paramTypes -> TypeToken.of(new ParameterizedTypeImpl(clazz, paramTypes)).where(tp, parameter)//
+				paramTypes -> TypeToken.of(new ParameterizedTypeImpl(clazz, paramTypes)).where(tp, wrap(parameter))//
 				);
 		}
 
@@ -158,7 +158,7 @@ public class TypeTokens {
 			return parameterized(//
 				new Type[] { param1.getType(), param2.getType() }, //
 				new TypeToken[] { param1, param2 },
-				paramTypes -> TypeToken.of(new ParameterizedTypeImpl(clazz, paramTypes)).where(tp1, param1).where(tp2, param2)//
+				paramTypes -> TypeToken.of(new ParameterizedTypeImpl(clazz, paramTypes)).where(tp1, wrap(param1)).where(tp2, wrap(param2))//
 				);
 		}
 
@@ -183,7 +183,7 @@ public class TypeTokens {
 			return parameterized(//
 				new Type[] { param1.getType(), param2.getType(), param3.getType() }, //
 				new TypeToken[] { param1, param2, param3 }, paramTypes -> TypeToken.of(new ParameterizedTypeImpl(clazz, paramTypes))
-				.where(tp1, param1).where(tp2, param2).where(tp3, param3)//
+					.where(tp1, wrap(param1)).where(tp2, wrap(param2)).where(tp3, wrap(param3))//
 				);
 		}
 
@@ -213,7 +213,7 @@ public class TypeTokens {
 			return parameterized(//
 				new Type[] { param1.getType(), param2.getType(), param3.getType(), param4.getType() }, //
 				new TypeToken[] { param1, param2, param3, param4 }, paramTypes -> TypeToken.of(new ParameterizedTypeImpl(clazz, paramTypes))
-				.where(tp1, param1).where(tp2, param2).where(tp3, param3).where(tp4, param4)//
+					.where(tp1, wrap(param1)).where(tp2, wrap(param2)).where(tp3, wrap(param3)).where(tp4, wrap(param4))//
 				);
 		}
 
@@ -247,8 +247,8 @@ public class TypeTokens {
 			return parameterized(//
 				new Type[] { param1.getType(), param2.getType(), param3.getType(), param4.getType(), param5.getType() }, //
 				new TypeToken[] { param1, param2, param3, param4, param5 },
-				paramTypes -> TypeToken.of(new ParameterizedTypeImpl(clazz, paramTypes)).where(tp1, param1).where(tp2, param2)
-				.where(tp3, param3).where(tp4, param4).where(tp5, param5)//
+				paramTypes -> TypeToken.of(new ParameterizedTypeImpl(clazz, paramTypes)).where(tp1, wrap(param1)).where(tp2, wrap(param2))
+					.where(tp3, wrap(param3)).where(tp4, wrap(param4)).where(tp5, wrap(param5))//
 				);
 		}
 
@@ -263,7 +263,7 @@ public class TypeTokens {
 					+ " parameters; cannot be parameterized with " + Arrays.toString(parameters));
 			TypeToken<?>[] paramTokens = new TypeToken[parameters.length];
 			for (int i = 0; i < paramTokens.length; i++)
-				paramTokens[i] = of(parameters[i]);
+				paramTokens[i] = of(wrap(parameters[i]));
 			return parameterized(parameters, paramTokens, paramTypes -> TypeToken.of(new ParameterizedTypeImpl(clazz, parameters)));
 		}
 
@@ -278,12 +278,16 @@ public class TypeTokens {
 					+ " parameters; cannot be parameterized with " + Arrays.toString(parameters));
 			Type[] paramTypes = new Type[parameters.length];
 			for (int i = 0; i < paramTypes.length; i++)
-				paramTypes[i] = parameters[i].getType();
+				paramTypes[i] = wrap(parameters[i].getType());
 			return parameterized(paramTypes, parameters, __ -> TypeToken.of(new ParameterizedTypeImpl(clazz, paramTypes)));
 		}
 
 		private <P, C extends T> TypeToken<C> parameterized(Type[] paramTypes, TypeToken<?>[] paramTokens,
 			Function<Type[], TypeToken<?>> creator) {
+			for (int t = 0; t < paramTokens.length; t++) {
+				paramTypes[t] = wrap(paramTypes[t]);
+				paramTokens[t] = wrap(paramTokens[t]);
+			}
 			return (TypeToken<C>) theCompoundTypes.computeIfAbsent(Arrays.asList(paramTokens),
 				__ -> (TypeToken<? extends T>) creator.apply(paramTypes));
 		}

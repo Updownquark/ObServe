@@ -101,7 +101,7 @@ public class ConstructorInvocation extends Invocation {
 
 	/** @return A string representing this constructor invocation */
 	public String printSignature() {
-		StringBuilder str = new StringBuilder(theType).append('(');
+		StringBuilder str = new StringBuilder("new ").append(theType).append('(');
 		boolean first = true;
 		for (ObservableExpression arg : getArguments()) {
 			if (first)

@@ -6,7 +6,6 @@ import java.text.ParseException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -37,6 +36,7 @@ import org.observe.collect.ObservableSortedCollection;
 import org.observe.collect.ObservableSortedSet;
 import org.observe.config.ObservableConfig;
 import org.observe.config.ObservableValueSet;
+import org.observe.expresso.DynamicModelValue.Identity;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ObservableModelSet.AbstractValueContainer;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
@@ -57,11 +57,8 @@ import org.qommons.collect.BetterList;
 import org.qommons.collect.FastFailLockingStrategy;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.config.AbstractQIS;
-import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigChildDef;
 import org.qommons.config.QonfigElement;
-import org.qommons.config.QonfigElementDef;
-import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretation;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigInterpreterCore;
@@ -98,6 +95,8 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		ValueContainer<SettableValue<?>, ? extends ObservableValue<Image>> getIcon();
 	}
 
+	private QonfigToolkit theExpressoToolkit;
+
 	@Override
 	public Set<Class<? extends SpecialSession<?>>> getExpectedAPIs() {
 		return Collections.singleton(ExpressoQIS.class);
@@ -115,6 +114,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 
 	@Override
 	public void init(QonfigToolkit toolkit) {
+		theExpressoToolkit = toolkit;
 	}
 
 	@Override
@@ -127,94 +127,68 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		});
 		interpreter//
 		.modifyWith("with-element-model", Object.class, new QonfigValueModifier<Object>() {
-			class ElementModelData {
-				Set<QonfigElement> metadata;
-				Set<String> valueNames;
-			}
-
 			@Override
 			public void prepareSession(CoreSession session) throws QonfigInterpretationException {
 				ExpressoQIS exS = wrap(session);
-				ObservableModelSet.Builder wrappedBuilder = exS.getExpressoEnv().getModels().wrap("elementModel");
-				ElementModelData helper = new ElementModelData();
-				boolean hasValues = installElementModelFor(exS, wrappedBuilder, exS.getElement().getType(), helper);
-				for (QonfigAddOn inh : exS.getElement().getInheritance().values())
-					hasValues |= installElementModelFor(exS, wrappedBuilder, inh, helper);
-				if (hasValues) {
+				Map<String, DynamicModelValue.Identity> dynamicValues = DynamicModelValue.getDynamicValues(theExpressoToolkit,
+					exS.getElement().getType(), null);
+				if (!dynamicValues.isEmpty()) {
+					ObservableModelSet.Builder wrappedBuilder = exS.getExpressoEnv().getModels().wrap("elementModel");
+					for (DynamicModelValue.Identity dv : dynamicValues.values()) {
+						String name;
+						if (dv.getNameAttribute() == null)
+							name = dv.getName();
+						else
+							name = session.getElement().getAttributeText(dv.getNameAttribute());
+						ExpressoQIS dvSession = exS.interpretChild(dv.getDeclaration(), dv.getDeclaration().getType());
+						Expresso.ExtModelValue<Object> spec = dvSession.interpret(Expresso.ExtModelValue.class);
+						ModelInstanceType<Object, Object> valueType = (ModelInstanceType<Object, Object>) spec.getType(exS);
+						ObservableExpression sourceAttrX;
+						try {
+							if (dv.isSourceValue())
+								sourceAttrX = exS.asElement(dv.getOwner()).getValueExpression();
+							else if (dv.getSourceAttribute() != null)
+								sourceAttrX = exS.asElement(dv.getOwner()).getAttributeExpression(dv.getSourceAttribute());
+							else
+								sourceAttrX = null;
+						} catch (QonfigInterpretationException e) {
+							if (dv.isSourceValue())
+								throw new QonfigInterpretationException("Could not obtain source value expression for " + dv.getOwner(),
+									e);
+							else
+								throw new QonfigInterpretationException(
+									"Could not obtain source-attribute expression for " + dv.getSourceAttribute(), e);
+						}
+						if (sourceAttrX != null) {
+							wrappedBuilder.withMaker(name, new DynamicModelValue.Creator<Object, Object>() {
+								@Override
+								public Identity getIdentity() {
+									return dv;
+								}
+
+								@Override
+								public ValueContainer<Object, Object> createValue() {
+									try {
+										return sourceAttrX.evaluate(valueType, exS.getExpressoEnv());
+									} catch (QonfigInterpretationException e) {
+										String msg = "Could not interpret source" + (dv.isSourceValue() ? " value for " + dv.getOwner()
+										: "-attribute " + dv.getSourceAttribute());
+										session.withError(msg, e);
+										throw new IllegalStateException(msg, e);
+									}
+								}
+							});
+							// } else if (dv.getType() != null) {
+							// wrappedBuilder.withMaker(name, ObservableModelSet.IdentifableValueCreator.of(dv,
+							// new DynamicModelValue.RuntimeModelValue<>(dv, valueType)));
+						} else {
+							wrappedBuilder.withMaker(name, new DynamicModelValue.DynamicTypedModelValueCreator<>(dv, valueType));
+						}
+					}
 					ObservableModelSet wrapped = wrappedBuilder.build();
 					exS.setModels(wrapped, null);
 					exS.put(ExpressoQIS.ELEMENT_MODEL_KEY, wrapped);
 				}
-			}
-
-			private boolean installElementModelFor(ExpressoQIS session, ObservableModelSet.Builder models, QonfigElementOrAddOn type,
-				ElementModelData helper) throws QonfigInterpretationException {
-				ExpressoQIS elModelSession = session.forMetadata("element-model").peekFirst();
-				if (elModelSession != null) {
-					if (helper.metadata == null)
-						helper.metadata = new HashSet<>();
-					if (!helper.metadata.add(elModelSession.getElement()))
-						return false;
-				}
-				boolean hasValues = false;
-				if (type instanceof QonfigElementDef && type.getSuperElement() != null)
-					hasValues |= installElementModelFor(session, models, type.getSuperElement(), helper);
-				for (QonfigElementOrAddOn inh : type.getInheritance())
-					hasValues |= installElementModelFor(session, models, inh, helper);
-				if (elModelSession != null) {
-					List<ExpressoQIS> values = elModelSession.forChildren("value");
-					if (!values.isEmpty()) {
-						hasValues = true;
-						if (helper.valueNames == null)
-							helper.valueNames = new HashSet<>();
-						for (ExpressoQIS value : values) {
-							String name = value.asElement("named").getAttributeText("name");
-							if (!helper.valueNames.add(name))
-								throw new QonfigInterpretationException(
-									"Multiple element-model values named '" + name + "' in type hierarchy");
-							Expresso.ExtModelValue<Object> spec = value.interpret(Expresso.ExtModelValue.class);
-							String sourceAttr = value.asElement("element-model-value").getAttributeText("source-attribute");
-							ModelInstanceType<Object, Object> valueType = (ModelInstanceType<Object, Object>) spec.getType(session);
-							if (sourceAttr != null) {
-								ObservableExpression sourceAttrX;
-								try {
-									if (sourceAttr.isEmpty())
-										sourceAttrX = session.asElement(type).getValueExpression();
-									else
-										sourceAttrX = session.asElement(type).getAttributeExpression(sourceAttr);
-								} catch (QonfigInterpretationException e) {
-									if (sourceAttr.isEmpty())
-										throw new QonfigInterpretationException("Could not obtain source value expression for " + type,
-											e);
-									else if (type.getAttributesByName().get(sourceAttr).isEmpty())
-										throw new QonfigInterpretationException("No such source-attribute " + type + "." + sourceAttr);
-									else
-										throw new QonfigInterpretationException(
-											"Could not obtain source-attribute expression for " + type + "." + sourceAttr, e);
-								}
-								models.withMaker(name, new ValueCreator<Object, Object>() {
-									@Override
-									public ValueContainer<Object, Object> createValue() {
-										try {
-											return sourceAttrX.evaluate(valueType, session.getExpressoEnv());
-										} catch (QonfigInterpretationException e) {
-											String msg = "Could not interpret source" + (sourceAttr.isEmpty() ? " value for " + type
-												: "-attribute " + type + "." + sourceAttr);
-											session.withError(msg, e);
-											throw new IllegalStateException(msg, e);
-										}
-									}
-								});
-							} else if (spec.isTypeSpecified())
-								models.with(name, new DynamicModelValue.RuntimeModelValue<>(name, valueType, value.getElement()));
-							else
-								models.withMaker(name,
-									new DynamicModelValue.DynamicTypedModelValueCreator<>(name, valueType, value.getElement()));
-							hasValues = true;
-						}
-					}
-				}
-				return hasValues;
 			}
 
 			@Override
@@ -1212,7 +1186,14 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		};
 	}
 
-	private static <T> TypeToken<T> getType(ExpressoQIS session, String typeKey) throws QonfigInterpretationException {
+	/**
+	 * @param <T> The type to assume of the session type
+	 * @param session The session to get the type from
+	 * @param typeKey The value key to get the type from the session
+	 * @return The type stored in the given key, or null if no value is stored for the key
+	 * @throws QonfigInterpretationException If the value in the session for the given key is not a type
+	 */
+	public static <T> TypeToken<T> getType(ExpressoQIS session, String typeKey) throws QonfigInterpretationException {
 		Object type = session.get(typeKey);
 		if (type == null)
 			return null;
@@ -1354,7 +1335,6 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 				}
 				ObservableStructureTransform<Object, Object, Object, Object> transform = ObservableStructureTransform
 					.unity(firstStep.getType());
-				ValueContainer<Object, Object> step = firstStep;
 				List<ExpressoQIS> ops;
 				try {
 					ops = session.forChildren("op");
@@ -1368,13 +1348,13 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 						session.withError("No transform supported for model type " + transform.getTargetType().getModelType());
 						return null;
 					} else if (!op.supportsInterpretation(transformType)) {
-						session.withError("No transform supported for operation type " + op.getType().getName() + " for model type "
+						session.withError("No transform supported for operation type " + op.getFocusType().getName() + " for model type "
 							+ transform.getTargetType().getModelType());
 						return null;
 					}
 					ObservableStructureTransform<Object, Object, Object, Object> next;
 					try {
-						next = op.put(VALUE_TYPE_KEY, step.getType()).interpret(transformType);
+						next = op.put(VALUE_TYPE_KEY, transform.getTargetType()).interpret(transformType);
 					} catch (QonfigInterpretationException e) {
 						session.withError("Could not interpret operation " + op.toString() + " as a transformation from "
 							+ transform.getTargetType() + " via " + transformType.getName(), e);
@@ -1434,6 +1414,13 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		 */
 		MV2 transform(MV1 source, ModelSetInstance models);
 
+		/**
+		 * Helps support the {@link ValueContainer#forModelCopy(Object, ModelSetInstance, ModelSetInstance)} method
+		 *
+		 * @param sourceModels The source model instance
+		 * @param newModels The new model instance
+		 * @return Whether observables produced by this transform would be different between the two models
+		 */
 		boolean isDifferent(ModelSetInstance sourceModels, ModelSetInstance newModels);
 
 		/**
@@ -1549,6 +1536,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		 * @param <T> The type of the target observable
 		 * @param type The type of the target observable
 		 * @param transform A function to do the transformation
+		 * @param difference Implementation for the {@link ObservableTransform#isDifferent(ModelSetInstance, ModelSetInstance)} method
 		 * @return The transformer
 		 */
 		static <S, T> ObservableTransform<S, Observable<?>, Observable<T>> of(TypeToken<T> type,
@@ -1580,6 +1568,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		 * @param <MV> The type of the target structure
 		 * @param type The type of the target structure
 		 * @param transform A function to do the transformation
+		 * @param difference Implementation for the {@link ObservableTransform#isDifferent(ModelSetInstance, ModelSetInstance)} method
 		 * @return The transformer
 		 */
 		static <S, M, MV extends M> ObservableTransform<S, M, MV> of(ModelInstanceType<M, MV> type,
@@ -1620,6 +1609,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		 * @param <T> The type of the target action
 		 * @param type The type of the target action
 		 * @param transform A function to do the transformation
+		 * @param difference Implementation for the {@link ObservableTransform#isDifferent(ModelSetInstance, ModelSetInstance)} method
 		 * @return The transformer
 		 */
 		static <S, T> ActionTransform<S, ObservableAction<?>, ObservableAction<T>> of(TypeToken<T> type,
@@ -1651,6 +1641,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		 * @param <MV> The type of the target structure
 		 * @param type The type of the target structure
 		 * @param transform A function to do the transformation
+		 * @param difference Implementation for the {@link ObservableTransform#isDifferent(ModelSetInstance, ModelSetInstance)} method
 		 * @return The transformer
 		 */
 		static <S, M, MV extends M> ActionTransform<S, M, MV> of(ModelInstanceType<M, MV> type,
@@ -1689,6 +1680,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		 * @param <T> The type of the target value
 		 * @param type The type of the target value
 		 * @param transform A function to do the transformation
+		 * @param difference Implementation for the {@link ObservableTransform#isDifferent(ModelSetInstance, ModelSetInstance)} method
 		 * @return The transformer
 		 */
 		static <S, T> ValueTransform<S, SettableValue<?>, SettableValue<T>> of(TypeToken<T> type,
@@ -1720,6 +1712,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		 * @param <MV> The type of the target structure
 		 * @param type The type of the target structure
 		 * @param transform A function to do the transformation
+		 * @param difference Implementation for the {@link ObservableTransform#isDifferent(ModelSetInstance, ModelSetInstance)} method
 		 * @return The transformer
 		 */
 		static <S, M, MV extends M> ValueTransform<S, M, MV> of(ModelInstanceType<M, MV> type,
@@ -1760,12 +1753,13 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		 * @param modelType the sub-model type of the target collection
 		 * @param type The type of the target collection
 		 * @param transform A function to do the transformation
+		 * @param difference Implementation for the {@link ObservableTransform#isDifferent(ModelSetInstance, ModelSetInstance)} method
 		 * @return The transformer
 		 */
 		static <S, T> FlowCollectionTransform<S, T, ObservableCollection<?>, ObservableCollection<T>> of(
 			ModelType.SingleTyped<? extends ObservableCollection<?>> modelType, TypeToken<T> type,
-			BiFunction<CollectionDataFlow<?, ?, S>, ModelSetInstance, CollectionDataFlow<?, ?, T>> transform,
-			BiPredicate<ModelSetInstance, ModelSetInstance> difference) {
+				BiFunction<CollectionDataFlow<?, ?, S>, ModelSetInstance, CollectionDataFlow<?, ?, T>> transform,
+				BiPredicate<ModelSetInstance, ModelSetInstance> difference) {
 			return new FlowCollectionTransform<S, T, ObservableCollection<?>, ObservableCollection<T>>() {
 				@Override
 				public ModelInstanceType<ObservableCollection<?>, ObservableCollection<T>> getTargetType() {
@@ -1797,6 +1791,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		 * @param <MV> The type of the target structure
 		 * @param type The type of the target structure
 		 * @param transform A function to do the transformation
+		 * @param difference Implementation for the {@link ObservableTransform#isDifferent(ModelSetInstance, ModelSetInstance)} method
 		 * @return The transformer
 		 */
 		static <S, M, MV extends M> CollectionTransform<S, M, MV> of(ModelInstanceType<M, MV> type,

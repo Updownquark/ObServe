@@ -145,7 +145,7 @@ public class NameExpression implements ObservableExpression {
 				throw new QonfigInterpretationException(getPath(nameIndex) + " cannot be accessed", e);
 			}
 			return evaluateField(field, mv.getType().getType(0).resolveType(field.getGenericType()), //
-				(ValueContainer<SettableValue<?>, ? extends SettableValue<?>>) mv, nameIndex + 1, type);
+				(ValueContainer<SettableValue<?>, ? extends SettableValue<?>>) mv, nameIndex, type);
 		} else
 			throw new QonfigInterpretationException(
 				"Cannot evaluate field '" + theNames.get(nameIndex + 1) + "' against model of type " + mv.getType());
@@ -218,7 +218,7 @@ public class NameExpression implements ObservableExpression {
 					})));
 			}
 		} else if (TypeTokens.get().isAssignable(targetType, fieldType)) {
-			Function<F, M> cast = TypeTokens.get().getCast(fieldType, targetType, true);
+			TypeTokens.TypeConverter<F, M> cast = TypeTokens.get().getCast(fieldType, targetType, true);
 			if (TypeTokens.get().isAssignable(fieldType, targetType)) {
 				Function<M, F> reverse = TypeTokens.get().getCast(targetType, fieldType, true);
 				if (context == null)
@@ -227,17 +227,17 @@ public class NameExpression implements ObservableExpression {
 				else {
 					return ValueContainer.of(ModelTypes.Value.forType(targetType),
 						models -> context.get(models).transformReversible(targetType, tx -> tx.nullToNull(true).map(ctx -> {
-						try {
-							return cast.apply((F) field.get(ctx));
-						} catch (IllegalAccessException e) {
-							throw new IllegalStateException("Could not access field " + field.getName(), e);
-						}
-					}).modifySource((ctx, newFieldValue) -> {
-						try {
-							field.set(ctx, reverse.apply(newFieldValue));
-						} catch (IllegalAccessException e) {
-							throw new IllegalStateException("Could not access field " + field.getName(), e);
-						}
+							try {
+								return cast.apply((F) field.get(ctx));
+							} catch (IllegalAccessException e) {
+								throw new IllegalStateException("Could not access field " + field.getName(), e);
+							}
+						}).modifySource((ctx, newFieldValue) -> {
+							try {
+								field.set(ctx, reverse.apply(newFieldValue));
+							} catch (IllegalAccessException e) {
+								throw new IllegalStateException("Could not access field " + field.getName(), e);
+							}
 						})));
 				}
 			} else {
@@ -246,14 +246,15 @@ public class NameExpression implements ObservableExpression {
 						models -> (SettableValue<M>) new NameExpression.FieldValue<>(field, fieldType, cast, null));
 				else {
 					return ValueContainer.of(ModelTypes.Value.forType(targetType),
-						models -> (SettableValue<M>) context.get(models).transform((TypeToken<Object>) targetType,
+						models -> SettableValue
+							.asSettable((ObservableValue<M>) context.get(models).transform((TypeToken<Object>) targetType,
 							tx -> tx.nullToNull(true).map(ctx -> {
 								try {
 									return cast.apply((F) field.get(ctx));
 								} catch (IllegalAccessException e) {
 									throw new IllegalStateException("Could not access field " + field.getName(), e);
 								}
-							})));
+								})), __ -> "Cannot convert from " + fieldType + " to " + targetType));
 				}
 			}
 		} else

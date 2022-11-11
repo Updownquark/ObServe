@@ -11,6 +11,7 @@ import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ValueContainer;
 import org.observe.util.TypeTokens;
 import org.qommons.collect.BetterList;
+import org.qommons.config.QonfigAttributeDef;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigInterpreterCore.CoreSession;
 import org.qommons.config.SpecialSession;
@@ -96,6 +97,22 @@ public class ExpressoQIS implements SpecialSession<ExpressoQIS> {
 	 */
 	public ObservableExpression getAttributeExpression(String attrName) throws QonfigInterpretationException {
 		QonfigExpression expression = getAttribute(attrName, QonfigExpression.class);
+		if (expression == null)
+			return null;
+		try {
+			return getExpressoParser().parse(expression.text);
+		} catch (ExpressoParseException e) {
+			throw new QonfigInterpretationException(e);
+		}
+	}
+
+	/**
+	 * @param attr The attribute to get
+	 * @return The observable expression at the given attribute
+	 * @throws QonfigInterpretationException If the attribute expression could not be parsed
+	 */
+	public ObservableExpression getAttributeExpression(QonfigAttributeDef attr) throws QonfigInterpretationException {
+		QonfigExpression expression = getAttribute(attr, QonfigExpression.class, null);
 		if (expression == null)
 			return null;
 		try {

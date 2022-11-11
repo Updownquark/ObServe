@@ -33,6 +33,7 @@ import org.qommons.ClassMap;
 import org.qommons.ClassMap.TypeMatch;
 import org.qommons.Identifiable.AbstractIdentifiable;
 import org.qommons.LambdaUtils;
+import org.qommons.QommonsUtils;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterSortedList;
@@ -88,6 +89,28 @@ public class ModelTypes {
 	public static final MultiMapModelType MultiMap = new MultiMapModelType();
 	/** An {@link ObservableSortedMultiMap} */
 	public static final SortedMultiMapModelType SortedMultiMap = new SortedMultiMapModelType();
+
+	static final Map<ModelType<?>, Function<SettableValue<?>, Object>> MODEL_VALUE_FLATTENERS = QommonsUtils//
+		.<ModelType<?>, Function<SettableValue<?>, Object>> buildMap(null)//
+		.with(Event, value -> ObservableValue.flattenObservableValue((SettableValue<Observable<?>>) value))//
+		.with(Action, value -> {
+			TypeToken<Object> type = (TypeToken<Object>) value.getType().resolveType(ObservableAction.class.getTypeParameters()[0]);
+			return ObservableAction.of(type, cause -> {
+				ObservableAction<Object> a = (ObservableAction<Object>) value.get();
+				if (a != null)
+					return a.act(cause);
+				else
+					return null;
+			});
+		})//
+		.with(Value, value -> {
+			TypeToken<Object> type = (TypeToken<Object>) value.getType().resolveType(ObservableValue.class.getTypeParameters()[0]);
+			Object defaultV = TypeTokens.get().getDefaultValue(type);
+			return SettableValue.flattenAsSettable((ObservableValue<ObservableValue<Object>>) value, () -> defaultV);
+		})//
+		.with(Collection, value -> ObservableCollection.flattenValue((ObservableValue<ObservableCollection<Object>>) value))//
+		.with(Set, value -> ObservableSet.flattenValue((ObservableValue<ObservableSet<Object>>) value))//
+		.getUnmodifiable();
 
 	static {
 		ALL_TYPES.with(Observable.class, Event);
@@ -188,7 +211,7 @@ public class ModelTypes {
 				theId = new NamedUniqueIdentity(name);
 				theContainer = SettableValue.build(TypeTokens.get().keyFor(Observable.class).<Observable<T>> wildCard()).build();
 				;
-					theFlatObservable = ObservableValue.flattenObservableValue(theContainer);
+				theFlatObservable = ObservableValue.flattenObservableValue(theContainer);
 			}
 
 			@Override
@@ -509,7 +532,8 @@ public class ModelTypes {
 						if (valueConverter == null)
 							return null;
 						ModelInstanceType<SettableValue<?>, ?> type = Value.forType(//
-							TypeTokens.get().keyFor(valueConverter.getType().getModelType().modelType).parameterized(destParamTypes));
+							TypeTokens.get().keyFor(valueConverter.getType().getModelType().modelType)
+							.parameterized(valueConverter.getType().getTypeList()));
 						return new ModelInstanceConverter<Object, SettableValue<?>>() {
 							@Override
 							public SettableValue<?> convert(Object sourceV) {
@@ -564,6 +588,9 @@ public class ModelTypes {
 					boolean ov = rawSourceType == ObservableValue.class;
 					if (ov && ((ModelType<?>) dest.getModelType()) == Value // This is a special case we can handle
 						|| dest.getModelType().modelType.isAssignableFrom(rawSourceType)) {
+						Function<SettableValue<?>, Object> flattener = MODEL_VALUE_FLATTENERS.get(dest.getModelType());
+						if (flattener == null)
+							return null;
 						TypeToken<?>[] sourceParamTypes = new TypeToken[dest.getModelType().getTypeCount()];
 						BiTuple<Class<?>, ModelType<?>> convertModel = ALL_TYPES.getEntry(dest.getModelType().modelType,
 							TypeMatch.SUPER_TYPE);
@@ -576,11 +603,7 @@ public class ModelTypes {
 						return new ModelInstanceConverter<SettableValue<?>, Object>() {
 							@Override
 							public Object convert(SettableValue<?> sourceV) {
-								Object v = sourceV.get();
-								if (v == null)
-									throw new IllegalStateException("A value converted to a model cannot be null");
-								if (ov)
-									v = SettableValue.asSettable((ObservableValue<Object>) v, __ -> "Not Settable");
+								Object v = flattener.apply(sourceV);
 								return valueConverter.convert(v);
 							}
 
@@ -642,7 +665,7 @@ public class ModelTypes {
 		}
 
 		static class HollowValue<T> extends AbstractIdentifiable
-			implements HollowModelValue<SettableValue<?>, SettableValue<T>>, SettableValue<T> {
+		implements HollowModelValue<SettableValue<?>, SettableValue<T>>, SettableValue<T> {
 			private final NamedUniqueIdentity theId;
 			private final SettableValue<SettableValue<T>> theContainer;
 			private final SettableValue<T> theFlatValue;
@@ -892,7 +915,8 @@ public class ModelTypes {
 		protected void setupConversions(ConversionBuilder<ObservableSortedCollection<?>> builder) {
 			builder
 			.convertibleTo(Collection,
-				(source, dest) -> ModelType.converter(LambdaUtils.printableFn(src -> src, "trivial", "trivial"), dest))//
+				(source, dest) -> ModelType.converter(LambdaUtils.printableFn(src -> src, "trivial", "trivial"),
+					Collection.forType(source.getType(0))))//
 			.convertibleTo(Event, new ModelConverter<ObservableSortedCollection<?>, Observable<?>>() {
 				@Override
 				public ModelInstanceConverter<ObservableSortedCollection<?>, Observable<?>> convert(
@@ -986,7 +1010,8 @@ public class ModelTypes {
 		protected void setupConversions(ConversionBuilder<ObservableSet<?>> builder) {
 			builder
 			.<ObservableCollection<?>> convertibleTo(Collection,
-				(source, dest) -> ModelType.converter(LambdaUtils.printableFn(src -> src, "trivial", "trivial"), dest))//
+				(source, dest) -> ModelType.converter(LambdaUtils.printableFn(src -> src, "trivial", "trivial"),
+					Collection.forType(source.getType(0))))//
 			.convertibleTo(Event, new ModelConverter<ObservableSet<?>, Observable<?>>() {
 				@Override
 				public ModelInstanceConverter<ObservableSet<?>, Observable<?>> convert(ModelInstanceType<ObservableSet<?>, ?> source,
@@ -1081,10 +1106,14 @@ public class ModelTypes {
 		protected void setupConversions(ConversionBuilder<ObservableSortedSet<?>> builder) {
 			builder
 			.convertibleTo(Collection,
-				(source, dest) -> ModelType.converter(LambdaUtils.printableFn(src -> src, "trivial", "trivial"), dest))//
+				(source, dest) -> ModelType.converter(LambdaUtils.printableFn(src -> src, "trivial", "trivial"),
+					Collection.forType(source.getType(0))))//
 			.convertibleTo(SortedCollection,
-				(source, dest) -> ModelType.converter(LambdaUtils.printableFn(src -> src, "trivial", "trivial"), dest))//
-			.convertibleTo(Set, (source, dest) -> ModelType.converter(LambdaUtils.printableFn(src -> src, "trivial", "trivial"), dest))//
+				(source, dest) -> ModelType.converter(LambdaUtils.printableFn(src -> src, "trivial", "trivial"),
+					SortedCollection.forType(source.getType(0))))//
+			.convertibleTo(Set,
+				(source, dest) -> ModelType.converter(LambdaUtils.printableFn(src -> src, "trivial", "trivial"),
+					Set.forType(source.getType(0))))//
 			.convertibleTo(Event, new ModelConverter<ObservableSortedSet<?>, Observable<?>>() {
 				@Override
 				public ModelInstanceConverter<ObservableSortedSet<?>, Observable<?>> convert(
@@ -1370,7 +1399,9 @@ public class ModelTypes {
 		@Override
 		protected void setupConversions(ConversionBuilder<ObservableSortedMap<?, ?>> builder) {
 			builder
-			.convertibleTo(Map, (source, dest) -> ModelType.converter(LambdaUtils.printableFn(src -> src, "trivial", "trivial"), dest))//
+			.convertibleTo(Map,
+				(source, dest) -> ModelType.converter(LambdaUtils.printableFn(src -> src, "trivial", "trivial"),
+					Map.forType(source.getType(0), source.getType(1))))//
 			.convertibleTo(Event, new ModelConverter<ObservableSortedMap<?, ?>, Observable<?>>() {
 				@Override
 				public ModelInstanceConverter<ObservableSortedMap<?, ?>, Observable<?>> convert(
@@ -1608,7 +1639,8 @@ public class ModelTypes {
 		protected void setupConversions(ConversionBuilder<ObservableSortedMultiMap<?, ?>> builder) {
 			builder
 			.convertibleTo(MultiMap,
-				(source, dest) -> ModelType.converter(LambdaUtils.printableFn(src -> src, "trivial", "trivial"), dest))//
+				(source, dest) -> ModelType.converter(LambdaUtils.printableFn(src -> src, "trivial", "trivial"),
+					MultiMap.forType(source.getType(0), source.getType(1))))//
 			.convertibleTo(Event, new ModelConverter<ObservableSortedMultiMap<?, ?>, Observable<?>>() {
 				@Override
 				public ModelInstanceConverter<ObservableSortedMultiMap<?, ?>, Observable<?>> convert(

@@ -42,14 +42,17 @@ It does not include anything "useful" in the concrete, i.e. no values or transfo
 		<add-on name="with-local-model" abstract="true">
 			<child-def name="model" type="model" min="0" />
 		</add-on>
-		<add-on name="element-model-value" requires="model-value" abstract="true">
+		<add-on name="element-model-value" requires="model-value" inherits="model-element" abstract="true">
+			<attr-mod name="named.name" default="$" />
+			<attribute name="name-attribute" type="string" specify="optional" />
 			<attribute name="source-attribute" type="string" specify="optional" />
 			<value-mod specify="forbidden" /> <!-- External/element values are specified by code instantiating the model -->
 		</add-on>
 
 		<add-on name="allow-ext-model" abstract="true" />
-		<add-on name="ext-model-value" requires="model-value" inherits="element-model-value,type-required" abstract="true">
+		<add-on name="ext-model-value" requires="model-value" inherits="type-required" abstract="true">
 			<attribute name="default" type="expression" specify="optional" />
+			<value-mod specify="forbidden" /> <!-- External/element values are specified by code instantiating the model -->
 		</add-on>
 	</add-ons>
 

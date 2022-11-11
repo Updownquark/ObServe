@@ -99,7 +99,8 @@ public class BinaryOperator implements ObservableExpression {
 		TypeToken<?> targetOpType;
 		switch (types.size()) {
 		case 0:
-			throw new QonfigInterpretationException("Unsupported or unimplemented binary operator '" + theOperator + "'");
+			throw new QonfigInterpretationException(
+				"Unsupported or unimplemented binary operator '" + theOperator + "' targeting type " + targetType.getName());
 		case 1:
 			targetOpType = TypeTokens.get().of(types.iterator().next());
 			break;

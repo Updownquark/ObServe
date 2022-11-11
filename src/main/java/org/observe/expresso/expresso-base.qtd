@@ -35,7 +35,7 @@ It builds on the Expresso-Core specification and contains everything needed for 
 		<add-on name="complex-operation" requires="operation">
 			<attribute name="source-as" type="identifier" />
 		</add-on>
-		<add-on name="abst-map-op" requires="operation" inherits="complex-operation" abstract="true" >
+		<add-on name="abst-map-op" requires="operation" abstract="true" >
 			<attribute name="cache" type="boolean" default="true" />
 			<attribute name="re-eval-on-update" type="boolean" default="true" />
 			<attribute name="fire-if-unchanged" type="boolean" default="true" />
@@ -126,6 +126,7 @@ It builds on the Expresso-Core specification and contains everything needed for 
 		</element-def>
 		<element-def name="operation" abstract="true" />
 		<element-def name="disable" extends="operation" inherits="complex-operation">
+			<attr-mod name="complex-operation.source-as" default="$SOURCE$" />
 			<attribute name="with" type="expression" />
 		</element-def>
 		<element-def name="filter-accept" extends="operation" inherits="complex-operation">
@@ -143,7 +144,7 @@ It builds on the Expresso-Core specification and contains everything needed for 
 			<attribute name="target-as" type="identifier" />
 			<value type="expression" />
 		</element-def>
-		<element-def name="map-to" extends="operation" inherits="abst-map-op, typed">
+		<element-def name="map-to" extends="operation" inherits="abst-map-op, complex-operation, typed">
 			<attribute name="equivalence" type="expression" specify="optional" />
 			<child-def name="combined-value" type="combine-with" min="0" max="inf" />
 			<child-def name="map" type="map-with" />

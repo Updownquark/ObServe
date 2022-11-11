@@ -1,6 +1,10 @@
 package org.observe.expresso;
 
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.observe.expresso.ModelType.HollowModelValue;
 import org.observe.expresso.ModelType.ModelInstanceType;
@@ -10,8 +14,15 @@ import org.observe.expresso.ObservableModelSet.ValueCreator;
 import org.observe.util.TypeTokens;
 import org.qommons.Named;
 import org.qommons.collect.BetterList;
+import org.qommons.config.QonfigAddOn;
+import org.qommons.config.QonfigAttributeDef;
+import org.qommons.config.QonfigChildDef;
 import org.qommons.config.QonfigElement;
+import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
+import org.qommons.config.QonfigToolkit;
+import org.qommons.config.QonfigValueType;
+import org.qommons.config.SpecificationType;
 
 /**
  * A dynamic (interpreted-value-specific) model value
@@ -20,8 +31,119 @@ import org.qommons.config.QonfigInterpretationException;
  * @param <MV> The type of the value
  */
 public interface DynamicModelValue<M, MV extends M> extends ValueContainer<M, MV>, Named {
-	/** @return The metadata that is the declaration for this dynamic value */
-	public QonfigElement getDeclaration();
+	/** The definition of a dynamic model value */
+	public static class Identity implements Named {
+		private final QonfigElementOrAddOn theOwner;
+		private final String theName;
+		private final QonfigAttributeDef theNameAttribute;
+		private final String theType;
+		private final QonfigAttributeDef theSourceAttribute;
+		private final boolean isSourceValue;
+		private final QonfigElement theDeclaration;
+
+		/**
+		 * @param owner The type declaring the value
+		 * @param name The declared name of the value (may be null if <code>nameAttribute</code> is defined)
+		 * @param nameAttribute The attribute that determines the name of this value (null if <code>name</code> is defined)
+		 * @param type The string representation of the type for this value. Null if the type is variable.
+		 * @param sourceAttribute If defined, the this value will be that evaluated from this expression-typed attribute
+		 * @param sourceValue If true, this value will be that evaluated from the expression-typed {@link QonfigElement#getValue()} of the
+		 *        element
+		 * @param declaration The element that declares this value
+		 */
+		public Identity(QonfigElementOrAddOn owner, String name, QonfigAttributeDef nameAttribute, String type,
+			QonfigAttributeDef sourceAttribute, boolean sourceValue, QonfigElement declaration) {
+			theOwner = owner;
+			theName = name;
+			theNameAttribute = nameAttribute;
+			theType = type;
+			theSourceAttribute = sourceAttribute;
+			isSourceValue = sourceValue;
+			theDeclaration = declaration;
+		}
+
+		/** @return The type declaring this value */
+		public QonfigElementOrAddOn getOwner() {
+			return theOwner;
+		}
+
+		/** @return The declared name of the value (may be null if <code>nameAttribute</code> is defined) */
+		@Override
+		public String getName() {
+			if (theName != null)
+				return theName;
+			else
+				return "{" + theNameAttribute + "}";
+		}
+
+		/** @return The attribute that determines the name of this value (null if <code>name</code> is defined) */
+		public QonfigAttributeDef getNameAttribute() {
+			return theNameAttribute;
+		}
+
+		/** @return The string representation of the type for this value. Null if the type is variable. */
+		public String getType() {
+			return theType;
+		}
+
+		/** @return If defined, the this value will be that evaluated from this expression-typed attribute */
+		public QonfigAttributeDef getSourceAttribute() {
+			return theSourceAttribute;
+		}
+
+		/** @return If true, this value will be that evaluated from the expression-typed {@link QonfigElement#getValue()} of the element */
+		public boolean isSourceValue() {
+			return isSourceValue;
+		}
+
+		/** @return The metadata that is the declaration for this dynamic value */
+		public QonfigElement getDeclaration() {
+			return theDeclaration;
+		}
+
+		@Override
+		public String toString() {
+			StringBuilder str = new StringBuilder(theOwner.toString()).append('.').append(theName);
+			if (theType != null)
+				str.append('(').append(theType).append(')');
+			if (theSourceAttribute != null)
+				str.append("<=").append(theSourceAttribute);
+			else if (isSourceValue)
+				str.append("<=<value>");
+			return str.toString();
+		}
+	}
+
+	/**
+	 * Dynamic values in models should always be {@link ObservableModelSet.Builder#withMaker(String, ValueCreator) added} as an instance of
+	 * this type.
+	 *
+	 * @param <M> The model type of the dynamic value
+	 * @param <MV> The type of the dynamic value
+	 */
+	public interface Creator<M, MV extends M> extends ObservableModelSet.IdentifableValueCreator<M, MV> {
+		@Override
+		Identity getIdentity();
+	}
+
+	/**
+	 * @param expresso The toolkit to get expresso types from
+	 * @param type The element type to get the dynamic values for
+	 * @param values The map to add the dynamic values into
+	 * @return The identities/definitions of all dynamic values defined on the given type, grouped by name/name attribute
+	 */
+	public static Map<String, Identity> getDynamicValues(QonfigToolkit expresso, QonfigElementOrAddOn type,
+		Map<String, Identity> values) {
+		return Impl.getDynamicValues(expresso, null, type, values);
+	}
+
+	/** @return The declared definition of this dynamic value */
+	public Identity getDeclaration();
+
+	@Override
+	default String getName() {
+		return getDeclaration().getName();
+	}
 
 	/**
 	 * Called by some implementation to satisfy a metadata-declared dynamic (interpreted-value-specific) model value.
@@ -131,7 +253,7 @@ public interface DynamicModelValue<M, MV extends M> extends ValueContainer<M, MV
 	public static <M, MV extends M> void satisfyDynamicValueType(String name, ObservableModelSet models, ModelInstanceType<M, MV> type) {
 		ObservableModelSet.ModelComponentNode<?, ?> component = getDynamicValueComponent(name, models);
 		satisfyDynamicValue(name, models,
-			() -> new RuntimeModelValue<>(name, type, ((DynamicTypedModelValueCreator<?, ?>) component.getThing()).getDeclaration()));
+			() -> new RuntimeModelValue<>(((DynamicTypedModelValueCreator<?, ?>) component.getThing()).getIdentity(), type));
 	}
 
 	/**
@@ -172,30 +294,22 @@ public interface DynamicModelValue<M, MV extends M> extends ValueContainer<M, MV
 	 * @param <MV> The type of the value
 	 */
 	public class RuntimeModelValue<M, MV extends M> implements DynamicModelValue<M, MV> {
-		private final String theName;
+		private final Identity theDeclaration;
 		private final ModelInstanceType<M, MV> theType;
-		private final QonfigElement theDeclaration;
 
 		/**
 		 * Called by the Expresso interpreter to declare a dynamic (interpreted-value-specific) model value
 		 *
-		 * @param name The name of the value
+		 * @param declaration The declared definition of the dynamic value
 		 * @param type The type of the value
-		 * @param declaration The metadata element that is the declaration for the dynamic value
 		 */
-		public RuntimeModelValue(String name, ModelInstanceType<M, MV> type, QonfigElement declaration) {
-			theName = name;
-			theType = type;
+		public RuntimeModelValue(Identity declaration, ModelInstanceType<M, MV> type) {
 			theDeclaration = declaration;
+			theType = type;
 		}
 
 		@Override
-		public String getName() {
-			return theName;
-		}
-
-		@Override
-		public QonfigElement getDeclaration() {
+		public Identity getDeclaration() {
 			return theDeclaration;
 		}
 
@@ -206,12 +320,12 @@ public interface DynamicModelValue<M, MV extends M> extends ValueContainer<M, MV
 
 		@Override
 		public MV get(ModelSetInstance models) {
-			return (MV) theType.getModelType().createHollowValue(theName, theType);
+			return (MV) theType.getModelType().createHollowValue(getName(), theType);
 		}
 
 		@Override
 		public MV forModelCopy(MV value, ModelSetInstance sourceModels, ModelSetInstance newModels) {
-			HollowModelValue<M, MV> hollow = theType.getModelType().createHollowValue(theName, theType);
+			HollowModelValue<M, MV> hollow = theType.getModelType().createHollowValue(getName(), theType);
 			hollow.satisfy(value);
 			return (MV) hollow;
 		}
@@ -285,8 +399,8 @@ public interface DynamicModelValue<M, MV extends M> extends ValueContainer<M, MV
 		}
 
 		@Override
-		public QonfigElement getDeclaration() {
-			return theCreator.getDeclaration();
+		public Identity getDeclaration() {
+			return theCreator.getIdentity();
 		}
 
 		/** @return The type that this value's {@link #getCreator() creator} was declared with */
@@ -307,27 +421,24 @@ public interface DynamicModelValue<M, MV extends M> extends ValueContainer<M, MV
 	 * @param <M> The model type of the value
 	 * @param <MV> The type of the value, as far as it is known
 	 */
-	public class DynamicTypedModelValueCreator<M, MV extends M> implements ValueCreator<M, MV>, Named {
-		private final String theName;
+	public class DynamicTypedModelValueCreator<M, MV extends M> implements Creator<M, MV>, Named {
+		private final Identity theIdentity;
 		private final ModelInstanceType<M, MV> theDeclaredType;
-		private final QonfigElement theDeclaration;
 
 		private ValueCreator<M, MV> theSatisfier;
 
 		/**
-		 * @param name The name of the dynamic value
+		 * @param declaration The declared definition of the dynamic value
 		 * @param declaredType The type of the value, as far as it is known
-		 * @param declaration The metadata element that is the declaration for the dynamic value
 		 */
-		public DynamicTypedModelValueCreator(String name, ModelInstanceType<M, MV> declaredType, QonfigElement declaration) {
-			theName = name;
+		public DynamicTypedModelValueCreator(Identity declaration, ModelInstanceType<M, MV> declaredType) {
+			theIdentity = declaration;
 			theDeclaredType = declaredType;
-			theDeclaration = declaration;
 		}
 
 		@Override
 		public String getName() {
-			return theName;
+			return theIdentity.getName();
 		}
 
 		/** @return The type that this value creator was declared with */
@@ -335,27 +446,29 @@ public interface DynamicModelValue<M, MV extends M> extends ValueContainer<M, MV
 			return theDeclaredType;
 		}
 
-		/** @return The metadata that is the declaration for this dynamic value */
-		public QonfigElement getDeclaration() {
-			return theDeclaration;
+		@Override
+		public Identity getIdentity() {
+			return theIdentity;
 		}
 
 		@Override
-		public ValueContainer<M, MV> createValue() {
+		public DynamicModelValue<M, MV> createValue() {
 			return new DynamicContainerWrapper<>(this);
 		}
 
 		ValueContainer<M, MV> createDynamicContainer() {
 			if (theSatisfier == null)
-				throw new IllegalStateException("Dynamic model value " + theName + " requested but not yet satisfied");
+				theSatisfier = ObservableModelSet.IdentifableValueCreator.of(theIdentity,
+					new DynamicModelValue.RuntimeModelValue<>(theIdentity, theDeclaredType));
+			// throw new IllegalStateException("Dynamic model value " + getName() + " requested but not yet satisfied");
 			ValueContainer<M, MV> container = theSatisfier.createValue();
 			if (!getDeclaredType().getModelType().equals(container.getType().getModelType()))
 				throw new IllegalStateException(
-					"Dynamic model value " + theName + "(" + getDeclaredType() + ") satisfied with " + container.getType());
+					"Dynamic model value " + getName() + "(" + getDeclaredType() + ") satisfied with " + container.getType());
 			for (int t = 0; t < getDeclaredType().getModelType().getTypeCount(); t++) {
 				if (!TypeTokens.get().isAssignable(getDeclaredType().getType(t), container.getType().getType(t)))
 					throw new IllegalStateException(
-						"Dynamic model value " + theName + "(" + getDeclaredType() + ") satisfied with " + container.getType());
+						"Dynamic model value " + getName() + "(" + getDeclaredType() + ") satisfied with " + container.getType());
 			}
 			return container;
 		}
@@ -371,6 +484,118 @@ public interface DynamicModelValue<M, MV extends M> extends ValueContainer<M, MV
 				return false;
 			else
 				throw new IllegalStateException("Dynamic model value " + name + " has already been satisfied");
+		}
+	}
+
+	/** Implementation details in this interface */
+	class Impl {
+		private static class ElementModelData {
+			QonfigElementOrAddOn withElementModel;
+			QonfigChildDef elementModel;
+			QonfigChildDef modelValue;
+			QonfigAttributeDef nameAttr;
+			QonfigAttributeDef nameAttrAttr;
+			QonfigValueType identifierType;
+			QonfigAttributeDef typeAttr;
+			QonfigAttributeDef sourceAttr;
+		}
+
+		private static ConcurrentHashMap<QonfigElementOrAddOn, Map<String, Identity>> DYNAMIC_VALUES = new ConcurrentHashMap<>();
+
+		static Map<String, Identity> getDynamicValues(QonfigToolkit expresso, ElementModelData modelData, QonfigElementOrAddOn type,
+			Map<String, Identity> values) {
+			if (modelData == null) {
+				modelData = new ElementModelData();
+				modelData.withElementModel = expresso.getElementOrAddOn("with-element-model");
+			}
+			if (!modelData.withElementModel.isAssignableFrom(type))
+				return Collections.emptyMap();
+			Map<String, Identity> found = DYNAMIC_VALUES.get(type);
+			if (found == null) {
+				synchronized (Impl.class) {
+					found = DYNAMIC_VALUES.get(type);
+					if (found == null) {
+						found = compileDynamicValues(expresso, modelData, type);
+						DYNAMIC_VALUES.put(type, found);
+					}
+				}
+			}
+			if (values == null)
+				values = new LinkedHashMap<>();
+			values.putAll(found);
+			return values;
+		}
+
+		private static Map<String, Identity> compileDynamicValues(QonfigToolkit expresso, ElementModelData modelData,
+			QonfigElementOrAddOn type) {
+			Map<String, Identity> values = new LinkedHashMap<>();
+			if (type.getSuperElement() != null)
+				getDynamicValues(expresso, modelData, type.getSuperElement(), values);
+			for (QonfigAddOn inh : type.getInheritance())
+				getDynamicValues(expresso, modelData, inh, values);
+			if (modelData.elementModel == null)
+				modelData.elementModel = expresso.getMetaChild("with-element-model", "element-model");
+			QonfigElement metadata = type.getMetadata().getRoot().getChildrenByRole().get(modelData.elementModel.getDeclared()).peekFirst();
+			if (metadata != null) {
+				if (modelData.modelValue == null) {
+					modelData.modelValue = expresso.getChild("element-model", "value");
+					modelData.nameAttr = expresso.getAttribute("named", "name");
+					modelData.nameAttrAttr = expresso.getAttribute("element-model-value", "name-attribute");
+					modelData.identifierType = expresso.getAttributeType("identifier");
+					modelData.typeAttr = expresso.getAttribute("typed", "type");
+					modelData.sourceAttr = expresso.getAttribute("element-model-value", "source-attribute");
+				}
+				for (QonfigElement value : metadata.getChildrenByRole().get(modelData.modelValue.getDeclared())) {
+					String name = value.getAttributeText(modelData.nameAttr);
+					String nameAttrS = value.getAttributeText(modelData.nameAttrAttr);
+					QonfigAttributeDef nameAttr;
+					if (nameAttrS != null) {
+						if (!"$".equals(name))
+							throw new IllegalArgumentException("Cannot specify both name and name-attribute on an internal model value");
+						name = null;
+						nameAttr = type.getAttribute(nameAttrS);
+						if (nameAttr == null)
+							throw new IllegalArgumentException("No such attribute " + type + "." + nameAttrS);
+						else if (nameAttr.getType() != modelData.identifierType)
+							throw new IllegalArgumentException(
+								"name-attribute must refer to an attribute of type 'identifier', not " + nameAttr.getType());
+						else if (nameAttr.getSpecification() != SpecificationType.Required && nameAttr.getDefaultValue() == null)
+							throw new IllegalArgumentException(
+								"name-attribute " + nameAttr + " must either be required or specify a default");
+					} else {
+						nameAttr = null;
+					}
+					String typeName = value.getAttributeText(modelData.typeAttr);
+					String sourceName = value.getAttributeText(modelData.sourceAttr);
+					boolean sourceValue;
+					QonfigAttributeDef sourceAttr;
+					if (sourceName == null) {
+						sourceValue = false;
+						sourceAttr = null;
+					} else if (sourceName.isEmpty()) {
+						sourceValue = true;
+						sourceAttr = null;
+					} else {
+						sourceValue = false;
+						int dot = sourceName.indexOf('.');
+						if (dot >= 0)
+							sourceAttr = type.getDeclarer().getAttribute(//
+								sourceName.substring(0, dot), sourceName.substring(dot + 1));
+						else
+							sourceAttr = type.getAttribute(sourceName);
+						if (sourceAttr == null)
+							throw new IllegalArgumentException(
+								"For dynamic value " + type + "." + name + " , no such source attribute found: " + sourceName);
+					}
+					Identity newModelValue = new Identity(type, name, nameAttr, typeName, sourceAttr, sourceValue, value);
+					Identity overridden = values.get(newModelValue.getName());
+					if (overridden != null)
+						throw new IllegalArgumentException("Type " + type + " declares a dynamic value '" + newModelValue.getName()
+						+ "' that clashes with the value of the same name declared by " + overridden.getOwner());
+					values.put(newModelValue.getName(), newModelValue);
+				}
+			}
+			return Collections.unmodifiableMap(values);
 		}
 	}
 }

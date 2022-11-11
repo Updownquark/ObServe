@@ -116,8 +116,12 @@ public abstract class Invocation implements ObservableExpression {
 
 		@Override
 		public TypeToken<?> resolve(int arg) throws QonfigInterpretationException {
-			if (resolved[arg] == null)
-				resolved[arg] = theArguments.get(arg).evaluate(ModelTypes.Value.any(), theEnv);
+			if (resolved[arg] == null) {
+				if (args[arg].isEmpty())
+					resolved[arg] = theArguments.get(arg).evaluate(ModelTypes.Value.any(), theEnv);
+				else
+					resolved[arg] = args[arg].get(0);
+			}
 			return resolved[arg].getType().getType(0);
 		}
 

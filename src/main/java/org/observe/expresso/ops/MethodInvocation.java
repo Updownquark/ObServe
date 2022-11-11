@@ -130,7 +130,8 @@ public class MethodInvocation extends Invocation {
 						(ModelInstanceType<M, MV>) type.getModelType().forTypes(paramTypes), Invocation.ExecutableImpl.METHOD);
 				}
 			}
-			throw new QonfigInterpretationException("No such method " + printSignature() + " in type " + ctx.getType().getType(0));
+			throw new QonfigInterpretationException(
+				"No such method " + printSignature() + " on " + theContext + "(" + ctx.getType().getType(0) + ")");
 		} else {
 			List<Method> methods = env.getClassView().getImportedStaticMethods(theMethodName);
 			Invocation.MethodResult<Method, ?> result = Invocation.findMethod(methods.toArray(new Method[methods.size()]),
