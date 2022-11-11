@@ -2,10 +2,10 @@
 
 <qonfig-def name="Quick-Style" version="0.1" root="style-sheet" extends:expresso="Expresso-Base v0.1">
 	<value-types>
-		<pattern name="style-name">[a-zA-Z_\\-]+</pattern>
-		<pattern name="widget-name">((?&lt;ns&gt;[a-zA-Z_\\-]+)\:)?(?&lt;widget&gt;[a-zA-Z_\\-]+)</pattern>
-		<pattern name="style-attr">(((?&lt;ns&gt;[a-zA-Z_\\-]+)\:)?(?&lt;widget&gt;[a-zA-Z_\\-]+)\.)?(?&lt;attr&gt;[a-zA-Z_\\-]+)</pattern>
-		<pattern name="role-path">([a-zA-Z_\\-]+)(\.[a-zA-Z_\\-]+)*</pattern>
+		<pattern name="style-name">[a-zA-Z0-9_\\-]+</pattern>
+		<pattern name="widget-name">((?&lt;ns&gt;[a-zA-Z0-9_\\-]+)\:)?(?&lt;widget&gt;[a-zA-Z0-9_\\-]+)</pattern>
+		<pattern name="style-attr">(((?&lt;ns&gt;[a-zA-Z0-9_\\-]+)\:)?(?&lt;widget&gt;[a-zA-Z0-9_\\-]+)\.)?(?&lt;attr&gt;[a-zA-Z0-9_\\-]+)</pattern>
+		<pattern name="role-path">([a-zA-Z0-9_\\-]+)(\.[a-zA-Z0-9_\\-]+)*</pattern>
 	</value-types>
 
 	<add-ons>
@@ -18,7 +18,9 @@
 		<add-on name="styled" inherits="with-element-model,with-local-model">
 			<element-meta-mod meta="with-element-model.element-model" inherits="style-model" />
 			<element-model>
-				<value name="__PARENT$MODEL$INSTANCE" type="org.observe.expresso.ObservableModelSet.ModelSetInstance" priority="0" />
+				<value name="PARENT$MODEL$INSTANCE" type="org.observe.expresso.ObservableModelSet.ModelSetInstance" priority="0" />
+				<!-- This is pretty much just for debugging, and I might remove it sometime -->
+				<value name="MODEL$ELEMENT" type="org.qommons.config.QonfigElement" priority="0" />
 			</element-model>
 			<element-meta name="styles" type="styles" min="0" />
 			<child-def name="style" type="style" inherits="element-style" min="0" max="inf" />
