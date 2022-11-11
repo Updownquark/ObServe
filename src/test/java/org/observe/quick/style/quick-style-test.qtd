@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<qonfig-def name="Quick-Style-Test" version="0.1" extends:expresso="Expresso-Testing v0.1" extends:style="Quick-Style v0.1">
+	<add-ons>
+		<add-on name="style-head" requires="head">
+			<child-def name="style-sheet" type="style-sheet" min="0" />
+		</add-on>
+	</add-ons>
+
+	<elements>
+		<element-def name="styled-value" extends="model-value" inherits="styled" abstract="true" />
+
+		<element-def name="a" extends="styled-value">
+			<element-model>
+				<value name="a" type="boolean" source-attribute="a" priority="1" />
+				<value name="b" type="boolean" source-attribute="b" priority="2"  />
+				<value name="c" type="int" source-attribute="c" priority="3"  />
+			</element-model>
+			<styles>
+				<style-attribute name="s0" type="boolean" trickle-down="true" />
+				<style-attribute name="s1" type="int" trickle-down="true" />
+				<style-attribute name="s2" type="boolean" trickle-down="false" />
+			</styles>
+			<attribute name="a" type="expression" />
+			<attribute name="b" type="expression" />
+			<attribute name="c" type="expression" />
+		</element-def>
+		<element-def name="b" extends="styled-value">
+			<element-model>
+				<value name="d" type="boolean" source-attribute="d" priority="1" />
+				<value name="e" type="int" source-attribute="e" priority="5" />
+			</element-model>
+			<styles>
+				<style-attribute name="s3" type="int" trickle-down="true" />
+				<style-attribute name="s4" type="int" trickle-down="false" />
+			</styles>
+			<attribute name="d" type="expression" />
+			<attribute name="e" type="expression" />
+		</element-def>
+		<element-def name="c" extends="b">
+			<element-model>
+				<value name="f" type="boolean" source-attribute="f" priority="3" />
+			</element-model>
+			<styles>
+				<style-attribute name="s5" type="boolean" trickle-down="false" />
+			</styles>
+			<attribute name="f" type="expression" />
+		</element-def>
+		<element-def name="d" extends="b">
+			<element-model>
+				<value name="g" type="int" source-attribute="g" priority="10" />
+			</element-model>
+			<styles>
+				<style-attribute name="s6" type="int" trickle-down="true" />
+			</styles>
+			<attribute name="g" type="expression" />
+		</element-def>
+	</elements>
+
+	<auto-inheritance>
+		<auto-inherit inherits="style-head">
+			<target element="head" />
+		</auto-inherit>
+	</auto-inheritance>
+</qonfig-def>
