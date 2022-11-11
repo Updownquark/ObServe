@@ -32,11 +32,34 @@
 		<model>
 			<a name="a0" a="models.m0" b="models.m2" c="models.m1">
 				<style attr="s0">a</style>
-				<style attr="s1" condition="b">10</style>
+				<style attr="s1" condition="b">models.m3</style>
 				<style attr="s1">c*10</style>
 			</a>
+			<watch name="w_a0_s0">a0.s0</watch>
+			<watch name="w_a0_s1">a0.s1</watch>
 		</model>
-		<action name="action1">models.m0=true</action>
-		<action name="action2">assertEquals(a0.s0, a0.a)</action>
+		<action name="assignM0_1">models.m0=true</action>
+		<action name="checkS0_1">assertEquals(ext.actionName, models.m0, a0.s0)</action>
+		<action name="checkWS0_1">assertEquals(ext.actionName, models.m0, w_a0_s0)</action>
+
+		<action name="assignM1_1">models.m1=25</action>
+		<action name="checkS1_1">assertEquals(ext.actionName, 250, a0.s1)</action>
+		<action name="checkWS0_1">assertEquals(ext.actionName, 250, w_a0_s1)</action>
+
+		<action name="assignM3">models.m3=50</action>
+		<action name="checkS1_2">assertEquals(ext.actionName, 250, a0.s1)</action>
+		<action name="checkWS0_2">assertEquals(ext.actionName, 250, w_a0_s1)</action>
+
+		<action name="assignM2_1" breakpoint="true">models.m2=true</action>
+		<action name="checkS1_3" breakpoint="true">assertEquals(ext.actionName, 50, a0.s1)</action>
+		<action name="checkWS0_3">assertEquals(ext.actionName, 50, w_a0_s1)</action>
+
+		<action name="assignM1_2" breakpoint="true">models.m1=300</action>
+		<action name="checkS1_4" breakpoint="true">assertEquals(ext.actionName, 50, a0.s1)</action>
+		<action name="checkWS0_4">assertEquals(ext.actionName, 50, w_a0_s1)</action>
+
+		<action name="assignM2_2" breakpoint="true">models.m2=false</action>
+		<action name="checkS1_5" breakpoint="true">assertEquals(ext.actionName, 3000, a0.s1)</action>
+		<action name="checkWS0_5">assertEquals(ext.actionName, 3000, w_a0_s1)</action>
 	</test>
 </testing>

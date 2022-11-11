@@ -12,6 +12,7 @@ import org.observe.SettableValue;
 import org.observe.expresso.ExpressoQIS;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.util.TypeTokens;
+import org.qommons.LambdaUtils;
 import org.qommons.QommonsUtils;
 import org.qommons.collect.BetterSortedList;
 import org.qommons.config.QonfigAddOn;
@@ -137,16 +138,21 @@ public class QuickElementStyle {
 			for (int i = 0; i < theValues.size(); i++) {
 				ObservableValue<Boolean> condition = theValues.get(i).getApplication().getCondition(models);
 				SettableValue<? extends T> value = theValues.get(i).getValue().get(models);
-				values[i] = condition.map(pass -> new ConditionalValue<>(pass, value));
+				values[i] = condition
+					.map(LambdaUtils.printableFn(pass -> new ConditionalValue<>(pass, value), "ifPass(" + value + ")", null));
 			}
 			if (theInherited != null) {
 				ObservableValue<T> value = theInherited.evaluate(StyleQIS.getParentModels(models));
 				values[theValues.size()] = ObservableValue.of(new ConditionalValue<>(true, value));
 			}
+			ConditionalValue<T> defaultCV = new ConditionalValue<>(true, null);
 			ObservableValue<ConditionalValue<T>> conditionalValue = ObservableValue.firstValue(
-				(TypeToken<ConditionalValue<T>>) (TypeToken<?>) TypeTokens.get().of(ConditionalValue.class), cv -> cv.pass, () -> null,
-				values);
-			return ObservableValue.flatten(conditionalValue.map(cv -> cv == null ? null : cv.value));
+				(TypeToken<ConditionalValue<T>>) (TypeToken<?>) TypeTokens.get().of(ConditionalValue.class), //
+				LambdaUtils.printablePred(cv -> cv.pass, "pass", null), //
+				LambdaUtils.printableSupplier(() -> defaultCV, () -> "null", null), values);
+			ObservableValue<T> value = ObservableValue
+				.flatten(conditionalValue.map(LambdaUtils.printableFn(cv -> cv.value, "value", null)));
+			return value;
 		}
 
 		private static class ConditionalValue<T> {
@@ -156,6 +162,11 @@ public class QuickElementStyle {
 			ConditionalValue(boolean pass, ObservableValue<? extends T> value) {
 				this.pass = pass;
 				this.value = value;
+			}
+
+			@Override
+			public String toString() {
+				return value.toString();
 			}
 		}
 

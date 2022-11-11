@@ -129,37 +129,37 @@ public class QuickStyle implements QonfigInterpretation {
 	@Override
 	public Builder configureInterpreter(Builder interpreter) {
 		interpreter//
-			.modifyWith("styled", Object.class, new QonfigValueModifier<Object>() {
-				@Override
-				public void prepareSession(CoreSession session) throws QonfigInterpretationException {
-					QuickElementStyle parentStyle = session.get(StyleQIS.STYLE_PROP, QuickElementStyle.class);
-					QuickStyleSheet styleSheet = session.get(StyleQIS.STYLE_SHEET_PROP, QuickStyleSheet.class);
-					// Parse style values, if any
-					session.put(StyleQIS.STYLE_ELEMENT, session.getElement());
-					List<QuickStyleValue<?>> declared = null;
-					for (StyleValues sv : session.interpretChildren("style", StyleValues.class)) {
-						sv.init();
-						if (declared == null)
-							declared = new ArrayList<>();
-						declared.addAll(sv);
-					}
+		.modifyWith("styled", Object.class, new QonfigValueModifier<Object>() {
+			@Override
+			public void prepareSession(CoreSession session) throws QonfigInterpretationException {
+				QuickElementStyle parentStyle = session.get(StyleQIS.STYLE_PROP, QuickElementStyle.class);
+				QuickStyleSheet styleSheet = session.get(StyleQIS.STYLE_SHEET_PROP, QuickStyleSheet.class);
+				// Parse style values, if any
+				session.put(StyleQIS.STYLE_ELEMENT, session.getElement());
+				List<QuickStyleValue<?>> declared = null;
+				for (StyleValues sv : session.interpretChildren("style", StyleValues.class)) {
+					sv.init();
 					if (declared == null)
-						declared = Collections.emptyList();
-					Collections.sort(declared);
-
-					// Create QuickElementStyle and put into session
-					ExpressoQIS exS = session.as(ExpressoQIS.class);
-					DynamicModelValue.satisfyDynamicValue(MODEL_ELEMENT_NAME, exS.getExpressoEnv().getModels(),//
-						ObservableModelSet.ValueCreator.literal(TypeTokens.get().of(QonfigElement.class), session.getElement(), MODEL_ELEMENT_NAME));
-					session.put(StyleQIS.STYLE_PROP, new QuickElementStyle(Collections.unmodifiableList(declared), parentStyle, styleSheet,
-						session.getElement(), exS, theToolkit));
+						declared = new ArrayList<>();
+					declared.addAll(sv);
 				}
+				if (declared == null)
+					declared = Collections.emptyList();
+				Collections.sort(declared);
 
-				@Override
-				public Object modifyValue(Object value, CoreSession session) throws QonfigInterpretationException {
-					return value;
-				}
-			})//
+				// Create QuickElementStyle and put into session
+				ExpressoQIS exS = session.as(ExpressoQIS.class);
+				DynamicModelValue.satisfyDynamicValue(MODEL_ELEMENT_NAME, exS.getExpressoEnv().getModels(),//
+					ObservableModelSet.ValueCreator.literal(TypeTokens.get().of(QonfigElement.class), session.getElement(), MODEL_ELEMENT_NAME));
+				session.put(StyleQIS.STYLE_PROP, new QuickElementStyle(Collections.unmodifiableList(declared), parentStyle, styleSheet,
+					session.getElement(), exS, theToolkit));
+			}
+
+			@Override
+			public Object modifyValue(Object value, CoreSession session) throws QonfigInterpretationException {
+				return value;
+			}
+		})//
 		.createWith("style", StyleValues.class, session -> interpretStyle(wrap(session)))//
 		.createWith("style-sheet", QuickStyleSheet.class, session -> interpretStyleSheet(wrap(session)))//
 		;
@@ -288,13 +288,7 @@ public class QuickStyle implements QonfigInterpretation {
 					Set<DynamicModelValue.Identity> mvs = new LinkedHashSet<>();
 					ObservableExpression replacedValue = theApplication.findModelValues(value, mvs, exS.getExpressoEnv().getModels(),
 						theToolkit, styleSheet != null);
-					mvs.addAll(theApplication.getModelValues());
-					List<DynamicModelValue.Identity> sortedModelValues = new ArrayList<>(mvs.size());
-					sortedModelValues.addAll(mvs);
-					Collections.sort(sortedModelValues, (mv1, mv2) -> -Integer.compare(QuickStyleValue.getPriority(mv1, thePriorityAttr),
-						QuickStyleValue.getPriority(mv2, thePriorityAttr)));
-					values
-					.add(new QuickStyleValue<>(styleSheet, theApplication, theAttr, replacedValue, QommonsUtils.unmodifiableCopy(mvs)));
+					values.add(new QuickStyleValue<>(styleSheet, theApplication, theAttr, replacedValue));
 				}
 				if (styleSetRef != null)
 					values.addAll(styleSetRef);

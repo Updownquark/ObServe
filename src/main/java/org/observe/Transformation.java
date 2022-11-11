@@ -2583,7 +2583,8 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 
 			@Override
 			public T getCurrentValue(S source, TransformationState state) {
-				return transform(false, () -> source, source, null, state, false);
+				return transform(false, //
+					() -> source, source, null, state, false);
 			}
 
 			@Override

@@ -4,8 +4,11 @@ package org.observe.quick.style;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -27,6 +30,7 @@ import org.observe.expresso.ObservableModelSet.ModelComponentNode;
 import org.observe.expresso.ObservableModelSet.ValueContainer;
 import org.observe.expresso.ops.BinaryOperator;
 import org.observe.expresso.ops.NameExpression;
+import org.qommons.BiTuple;
 import org.qommons.MultiInheritanceSet;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigAttributeDef;
@@ -38,28 +42,58 @@ import org.qommons.config.QonfigToolkit;
 
 import com.google.common.reflect.TypeToken;
 
-public class StyleValueApplication {
+public class StyleValueApplication implements Comparable<StyleValueApplication> {
 	public static MultiInheritanceSet.Inheritance<QonfigElementOrAddOn> STYLE_INHERITANCE = QonfigElementOrAddOn::isAssignableFrom;
-	public static final StyleValueApplication ALL = new StyleValueApplication(null, null, MultiInheritanceSet.empty(), null, 0,
-		Collections.emptyList());
+	public static final StyleValueApplication ALL = new StyleValueApplication(null, null, MultiInheritanceSet.empty(), null,
+		Collections.emptyMap());
+
+	private static final Map<DynamicModelValue.Identity, Integer> MODEL_VALUE_PRIORITY = new HashMap<>();
+
+	public static synchronized int getPriority(DynamicModelValue.Identity modelValue, QonfigAttributeDef.Declared priorityAttr) {
+		Integer priority = MODEL_VALUE_PRIORITY.get(modelValue);
+		if (priority != null)
+			return priority;
+		if (!modelValue.getDeclaration().isInstance(priorityAttr.getOwner()))
+			priority = 0;
+		else
+			priority = Integer.parseInt(modelValue.getDeclaration().getAttributeText(priorityAttr));
+		MODEL_VALUE_PRIORITY.put(modelValue, priority);
+		return priority;
+	}
+
+	public static Map<DynamicModelValue.Identity, Integer> prioritizeModelValues(Collection<DynamicModelValue.Identity> modelValues,
+		Map<DynamicModelValue.Identity, Integer> known, QonfigAttributeDef.Declared priorityAttr) {
+		List<BiTuple<DynamicModelValue.Identity, Integer>> mvList = new ArrayList<>(modelValues.size());
+		for (DynamicModelValue.Identity mv : modelValues) {
+			Integer priority = known.get(mv);
+			mvList.add(new BiTuple<>(mv, priority != null ? priority.intValue() : getPriority(mv, priorityAttr)));
+		}
+		Collections.sort(mvList, (mv1, mv2) -> -mv1.getValue2().compareTo(mv2.getValue2()));
+
+		Map<DynamicModelValue.Identity, Integer> prioritizedMVs = new LinkedHashMap<>();
+		int complexity = 0;
+		for (BiTuple<DynamicModelValue.Identity, Integer> mv : mvList) {
+			prioritizedMVs.put(mv.getValue1(), mv.getValue2());
+			complexity += mv.getValue2();
+		}
+		return Collections.unmodifiableMap(prioritizedMVs);
+	}
 
 	private final StyleValueApplication theParent;
 	private final QonfigChildDef theRole;
 	private final MultiInheritanceSet<QonfigElementOrAddOn> theTypes;
 	private final int theTypeComplexity;
 	private final ObservableExpression theCondition;
-	private final int theConditionComplexity;
-	private final List<DynamicModelValue.Identity> theModelValues;
+	private final Map<DynamicModelValue.Identity, Integer> theModelValues;
 
 	private StyleValueApplication(StyleValueApplication parent, QonfigChildDef role, MultiInheritanceSet<QonfigElementOrAddOn> types,
-		ObservableExpression condition, int conditionComplexity, List<DynamicModelValue.Identity> modelValues) {
+		ObservableExpression condition, Map<DynamicModelValue.Identity, Integer> modelValues) {
 		if ((parent != null) != (role != null))
 			throw new IllegalArgumentException("A role must be accompanied by a parent style application and vice-versa");
 		theParent = parent;
 		theRole = role;
 		theTypes = MultiInheritanceSet.unmodifiable(types);
 		theCondition = condition;
-		theConditionComplexity = conditionComplexity;
 		theModelValues = modelValues;
 
 		// Put together derived fields
@@ -239,8 +273,35 @@ public class StyleValueApplication {
 		return theCondition;
 	}
 
-	public List<DynamicModelValue.Identity> getModelValues() {
+	public Map<DynamicModelValue.Identity, Integer> getModelValues() {
 		return theModelValues;
+	}
+
+	@Override
+	public int compareTo(StyleValueApplication o) {
+		// Most importantly, compare the priority of model values used in the condition and value
+		Iterator<Integer> iter1 = theModelValues.values().iterator();
+		Iterator<Integer> iter2 = o.theModelValues.values().iterator();
+		int comp = 0;
+		while (comp == 0) {
+			if (iter1.hasNext()) {
+				if (iter2.hasNext())
+					comp = -iter1.next().compareTo(iter2.next());
+				else
+					comp = -1; // We use more model values--higher priority
+			} else if (iter2.hasNext()) {
+				comp = 1; // We user fewer model values--lower priority
+			} else {
+				break;
+			}
+		}
+		// Compare the complexity of the role path
+		if (comp == 0)
+			comp = -Integer.compare(getDepth(), o.getDepth());
+		// Compare the complexity of the element type
+		if (comp == 0)
+			comp = -Integer.compare(getTypeComplexity(), o.getTypeComplexity());
+		return comp;
 	}
 
 	public StyleValueApplication forType(QonfigElementOrAddOn... types) {
@@ -259,14 +320,14 @@ public class StyleValueApplication {
 		}
 		if (newTypes == null)
 			return this; // All types already contained
-		return new StyleValueApplication(theParent, theRole, newTypes, theCondition, theConditionComplexity, theModelValues);
+		return new StyleValueApplication(theParent, theRole, newTypes, theCondition, theModelValues);
 	}
 
 	public StyleValueApplication forChild(QonfigChildDef child) {
 		MultiInheritanceSet<QonfigElementOrAddOn> types = MultiInheritanceSet.create(STYLE_INHERITANCE);
 		types.add(child.getType());
 		types.addAll(child.getInheritance());
-		return new StyleValueApplication(this, child, types, null, theConditionComplexity, theModelValues);
+		return new StyleValueApplication(this, child, types, null, theModelValues);
 	}
 
 	public StyleValueApplication forCondition(ObservableExpression condition, ExpressoEnv env, QonfigAttributeDef.Declared priorityAttr,
@@ -280,15 +341,9 @@ public class StyleValueApplication {
 		Set<DynamicModelValue.Identity> mvs = new LinkedHashSet<>();
 		// We don't need to worry about satisfying anything here. The model values just need to be available for the link level.
 		newCondition = findModelValues(newCondition, mvs, env.getModels(), priorityAttr.getDeclarer(), styleSheet);
-		mvs.addAll(theModelValues);
-		List<DynamicModelValue.Identity> mvList = new ArrayList<>(mvs.size());
-		mvList.addAll(mvs);
-		Collections.sort(mvList,
-			(mv1, mv2) -> -Integer.compare(QuickStyleValue.getPriority(mv1, priorityAttr), QuickStyleValue.getPriority(mv2, priorityAttr)));
-		int complexity = 0;
-		for (DynamicModelValue.Identity mv : mvList)
-			complexity += QuickStyleValue.getPriority(mv, priorityAttr);
-		return new StyleValueApplication(theParent, theRole, theTypes, newCondition, complexity, Collections.unmodifiableList(mvList));
+		mvs.addAll(theModelValues.keySet());
+		return new StyleValueApplication(theParent, theRole, theTypes, newCondition,
+			prioritizeModelValues(mvs, theModelValues, priorityAttr));
 	}
 
 	public int getDepth() {
@@ -300,10 +355,6 @@ public class StyleValueApplication {
 
 	public int getTypeComplexity() {
 		return theTypeComplexity;
-	}
-
-	public int getConditionComplexity() {
-		return theConditionComplexity;
 	}
 
 	public EvaluatedStyleApplication evaluate(ExpressoEnv expressoEnv) throws QonfigInterpretationException {

@@ -137,6 +137,6 @@ public class SimpleSettableValue<T> implements SettableValue<T> {
 
 	@Override
 	public String toString() {
-		return "simple value " + theValue;
+		return new StringBuilder(theIdentity.toString()).append('(').append(theValue).append(')').toString();
 	}
 }

@@ -4,6 +4,7 @@
 	<add-ons>
 		<add-on name="test-action" requires="action" inherits="named">
 			<attribute name="expect-throw" type="identifier" specify="optional" />
+			<attribute name="breakpoint" type="boolean" default="false" />
 		</add-on>
 	</add-ons>
 
@@ -17,7 +18,7 @@
 			<child-def name="test-action" type="action" inherits="test-action" max="inf" />
 		</element-def>
 		<element-def name="watch" extends="model-value">
-			<attribute name="value" type="expression" />
+			<value type="expression" />
 		</element-def>
 	</elements>
 </qonfig-def>

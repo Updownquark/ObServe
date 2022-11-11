@@ -8,6 +8,7 @@ import java.util.Map;
 import java.util.Set;
 
 import org.observe.ObservableAction;
+import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.expresso.ExpressoTesting.ExpressoTest;
 import org.observe.expresso.ExpressoTesting.TestAction;
@@ -20,6 +21,7 @@ import org.qommons.config.QonfigInterpreterCore.Builder;
 import org.qommons.config.QonfigToolkit;
 import org.qommons.config.SpecialSession;
 
+/** Interpretation for types defined by the Expresso Test Framework */
 public class ExpressoTestFrameworkInterpretation implements QonfigInterpretation {
 	/** The name of the test toolkit */
 	public static final String TOOLKIT_NAME = "Expresso-Testing";
@@ -64,20 +66,19 @@ public class ExpressoTestFrameworkInterpretation implements QonfigInterpretation
 				ExpressoQIS testActionS = actionS.asElement("test-action");
 				actions.add(new TestAction(testActionS.getAttributeText("name"), //
 					((ValueCreator<ObservableAction<?>, ObservableAction<?>>) actionS.interpret(ValueCreator.class)).createValue(), //
-					testActionS.getAttributeText("expect-throw")));
+					testActionS.getAttributeText("expect-throw"), testActionS.getAttribute("breakpoint", boolean.class)));
 			}
 			return new ExpressoTest(session.getAttributeText("name"), exS.getExpressoEnv().getModels(),
 				Collections.unmodifiableList(actions));
 		})//
 		.createWith("watch", ValueCreator.class, session -> {
 			ExpressoQIS exS = session.as(ExpressoQIS.class);
-			ValueContainer<SettableValue<?>, SettableValue<?>> watching = exS.getExpressoEnv().getModels()
-				.getValue(session.getAttributeText("value"), ModelTypes.Value.any());
+			ValueContainer<SettableValue<?>, SettableValue<?>> watching = exS.getValue(ModelTypes.Value.any(), null);
 			return () -> ValueContainer.of(watching.getType(), msi -> {
 				SettableValue<Object> value = (SettableValue<Object>) watching.get(msi);
 				SettableValue<Object> copy = SettableValue.build(value.getType()).withValue(value.get()).build();
 				value.noInitChanges().takeUntil(msi.getUntil()).act(evt -> copy.set(evt.getNewValue(), evt));
-				return value;
+				return value.disableWith(ObservableValue.of("A watched value cannot be modified"));
 			});
 		})//
 		;

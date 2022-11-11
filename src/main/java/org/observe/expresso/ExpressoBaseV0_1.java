@@ -733,15 +733,23 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 				}
 				ValueContainer<SettableValue<?>, SettableValue<Object>> init;
 				try {
-					init = initX == null ? null : parseValue(//
-						exS.getExpressoEnv(), type, initX);
+					if (initX != null) {
+						if (value != null) {
+							session.withError("Value cannot specify both a value and an initializer");
+							throw new IllegalStateException("Value cannot specify both a value and an initializer");
+						} else
+							init = parseValue(exS.getExpressoEnv(), type, initX);
+					} else if (value == null) {
+						if (type == null) {
+							session.withError("Either a type or a value (or initializer) must be specified");
+							throw new IllegalStateException("Either a type or a value (or initializer) must be specified");
+						} else
+							init = ValueContainer.literal(type, TypeTokens.get().getDefaultValue(type), "<default>");
+					} else
+						init = null;
 				} catch (QonfigInterpretationException e) {
 					session.withError(e.getMessage(), e);
 					throw new IllegalStateException(e);
-				}
-				if (value == null && init == null && type == null) {
-					session.withError("Either a type or a value must be specified");
-					throw new IllegalStateException("Either a type or a value must be specified");
 				}
 				ValueContainer<SettableValue<?>, SettableValue<Object>> fValue = value;
 				ValueContainer<SettableValue<?>, SettableValue<Object>> fInit = init;

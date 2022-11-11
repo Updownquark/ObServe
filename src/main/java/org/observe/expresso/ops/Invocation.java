@@ -201,16 +201,16 @@ public abstract class Invocation implements ObservableExpression {
 			boolean isStatic = impl.isStatic(m);
 			if (!isStatic && !arg0Context && contextType == null)
 				continue;
-			int complexity = -1;
+			int specificity = -1;
 			TypeToken<?>[] paramTypes = null;
 			if (bestResult != null) {
-				complexity = 0;
+				specificity = 0;
 				paramTypes = new TypeToken[m.getParameterTypes().length];
 				for (int p = 0; p < paramTypes.length; p++) {
 					paramTypes[p] = TypeTokens.get().of(m.getGenericParameterTypes()[p]);
-					complexity += TypeTokens.get().getTypeSpecificity(paramTypes[p].getType());
+					specificity += TypeTokens.get().getTypeSpecificity(paramTypes[p].getType());
 				}
-				if (complexity < bestResult.specificity)
+				if (specificity < bestResult.specificity)
 					continue; // Current result is better than this even if it matches
 			}
 			List<QonfigInterpretationException> errors = null;
@@ -300,12 +300,12 @@ public abstract class Invocation implements ObservableExpression {
 								throw new QonfigInterpretationException("Return type " + returnType + " of method "
 									+ Invocation.printSignature(m) + " cannot be assigned to type " + targetType);
 						}
-						if (complexity < 0) {
-							complexity = 0;
+						if (specificity < 0) {
+							specificity = 0;
 							for (TypeToken<?> pt : paramTypes)
-								complexity += TypeTokens.get().getTypeSpecificity(pt.getType());
+								specificity += TypeTokens.get().getTypeSpecificity(pt.getType());
 						}
-						bestResult = new Invocation.MethodResult<>(m, o, false, (TypeToken<T>) returnType, complexity);
+						bestResult = new Invocation.MethodResult<>(m, o, false, (TypeToken<T>) returnType, specificity);
 					}
 				} catch (QonfigInterpretationException e) {
 					if (errors == null)
@@ -458,7 +458,7 @@ public abstract class Invocation implements ObservableExpression {
 				return theCachedValue;
 			Object ctx = ctxV == null ? null : ctxV.get();
 			if (ctx == null && ctxV != null) {
-				// Although this is better in theory, all the conditionals needed to work around this are obnoxious
+				// Although throwing an exception is better in theory, all the conditionals needed to work around this are obnoxious
 				// throw new NullPointerException(ctxV + " is null, cannot call " + theMethod);
 				return null;
 			}

@@ -163,8 +163,7 @@ public class NameExpression implements ObservableExpression {
 		}
 		if (nameIndex == theNames.size() - 1) {
 			if (type.getModelType() == ModelTypes.Value) {
-				return ValueContainer.<M, MV> of((ModelInstanceType<M, MV>) ModelTypes.Value.forType(fieldType),
-					msi -> (MV) getFieldValue(field, fieldType, context, type.getType(0)).get(msi));
+				return (ValueContainer<M, MV>) getFieldValue(field, fieldType, context, type.getType(0));
 			} else
 				throw new IllegalStateException("Only Value types supported by fields currently"); // TODO
 		}
@@ -196,70 +195,13 @@ public class NameExpression implements ObservableExpression {
 	}
 
 	private <F, M> ValueContainer<SettableValue<?>, SettableValue<M>> getFieldValue(Field field, TypeToken<F> fieldType,
-		ValueContainer<SettableValue<?>, ? extends SettableValue<?>> context, TypeToken<M> targetType) {
-		if (targetType == null || fieldType.equals(targetType)) {
-			if (context == null)
-				return ValueContainer.of(ModelTypes.Value.forType(targetType),
-					models -> (SettableValue<M>) new NameExpression.FieldValue<>(field, fieldType, null, null));
-			else {
-				return ValueContainer.of(ModelTypes.Value.forType(targetType),
-					models -> (SettableValue<M>) context.get(models).transformReversible(fieldType, tx -> tx.nullToNull(true).map(ctx -> {
-						try {
-							return (F) field.get(ctx);
-						} catch (IllegalAccessException e) {
-							throw new IllegalStateException("Could not access field " + field.getName(), e);
-						}
-					}).modifySource((ctx, newFieldValue) -> {
-						try {
-							field.set(ctx, newFieldValue);
-						} catch (IllegalAccessException e) {
-							throw new IllegalStateException("Could not access field " + field.getName(), e);
-						}
-					})));
-			}
-		} else if (TypeTokens.get().isAssignable(targetType, fieldType)) {
-			TypeTokens.TypeConverter<F, M> cast = TypeTokens.get().getCast(fieldType, targetType, true);
-			if (TypeTokens.get().isAssignable(fieldType, targetType)) {
-				Function<M, F> reverse = TypeTokens.get().getCast(targetType, fieldType, true);
-				if (context == null)
-					return ValueContainer.of(ModelTypes.Value.forType(targetType),
-						models -> (SettableValue<M>) new NameExpression.FieldValue<>(field, fieldType, cast, reverse));
-				else {
-					return ValueContainer.of(ModelTypes.Value.forType(targetType),
-						models -> context.get(models).transformReversible(targetType, tx -> tx.nullToNull(true).map(ctx -> {
-							try {
-								return cast.apply((F) field.get(ctx));
-							} catch (IllegalAccessException e) {
-								throw new IllegalStateException("Could not access field " + field.getName(), e);
-							}
-						}).modifySource((ctx, newFieldValue) -> {
-							try {
-								field.set(ctx, reverse.apply(newFieldValue));
-							} catch (IllegalAccessException e) {
-								throw new IllegalStateException("Could not access field " + field.getName(), e);
-							}
-						})));
-				}
-			} else {
-				if (context == null)
-					return ValueContainer.of(ModelTypes.Value.forType(targetType),
-						models -> (SettableValue<M>) new NameExpression.FieldValue<>(field, fieldType, cast, null));
-				else {
-					return ValueContainer.of(ModelTypes.Value.forType(targetType),
-						models -> SettableValue
-							.asSettable((ObservableValue<M>) context.get(models).transform((TypeToken<Object>) targetType,
-							tx -> tx.nullToNull(true).map(ctx -> {
-								try {
-									return cast.apply((F) field.get(ctx));
-								} catch (IllegalAccessException e) {
-									throw new IllegalStateException("Could not access field " + field.getName(), e);
-								}
-								})), __ -> "Cannot convert from " + fieldType + " to " + targetType));
-				}
-			}
-		} else
-			throw new IllegalStateException(
-				"Cannot convert from SettableValue<" + fieldType + "> to SettableValue<" + targetType + ">");
+		ValueContainer<SettableValue<?>, ? extends SettableValue<?>> context, TypeToken<M> targetType)
+			throws QonfigInterpretationException {
+		ModelInstanceType<SettableValue<?>, SettableValue<F>> fieldModelType = ModelTypes.Value.forType(fieldType);
+		ModelInstanceType<SettableValue<?>, SettableValue<M>> targetModelType = ModelTypes.Value.forType(targetType);
+		ValueContainer<SettableValue<?>, SettableValue<F>> fieldValue = ValueContainer.of(fieldModelType,
+			msi -> new FieldValue<>(context == null ? null : context.get(msi), field, fieldType));
+		return fieldModelType.as(fieldValue, targetModelType);
 	}
 
 	@Override
@@ -395,24 +337,30 @@ public class NameExpression implements ObservableExpression {
 	}
 
 	static class FieldValue<M, F> extends Identifiable.AbstractIdentifiable implements SettableValue<F> {
+		private final SettableValue<?> theContext;
 		private final Field theField;
 		private final TypeToken<F> theType;
-		// private final Function<F, M> theCast;
-		// private final Function<M, F> theReverse;
-		private final SimpleObservable<ObservableValueEvent<F>> theChanges;
+		private final SimpleObservable<Void> theChanges;
+		private final ObservableValue<F> theMappedValue;
 		private long theStamp;
 
-		FieldValue(Field field, TypeToken<F> type, Function<F, M> cast, Function<M, F> reverse) {
+		FieldValue(SettableValue<?> context, Field field, TypeToken<F> type) {
+			theContext = context;
 			theField = field;
 			theType = type;
-			// theCast = cast;
-			// theReverse = reverse;
 			theChanges = SimpleObservable.build().build();
+			if (theContext == null)
+				theMappedValue = ObservableValue.of(type, this::getStatic, this::getStamp, theChanges);
+			else
+				theMappedValue = theContext.map(this::getFromContext);
 		}
 
 		@Override
 		protected Object createIdentity() {
-			return Identifiable.baseId(theField.getName(), theField);
+			if (theContext != null)
+				return Identifiable.wrap(theContext.getIdentity(), theField.getName());
+			else
+				return Identifiable.baseId(theField.getName(), theField);
 		}
 
 		@Override
@@ -437,6 +385,10 @@ public class NameExpression implements ObservableExpression {
 
 		@Override
 		public F get() {
+			return theMappedValue.get();
+		}
+
+		private F getStatic() {
 			try {
 				return (F) theField.get(null);
 			} catch (IllegalArgumentException | IllegalAccessException e) {
@@ -444,42 +396,67 @@ public class NameExpression implements ObservableExpression {
 			}
 		}
 
+		private F getFromContext(Object context) {
+			if (context == null)
+				return TypeTokens.get().getDefaultValue(theType);
+			try {
+				return (F) theField.get(context);
+			} catch (IllegalArgumentException | IllegalAccessException e) {
+				throw new IllegalStateException("Could not access field " + theField.getName(), e);
+			}
+		}
+
 		@Override
 		public Observable<ObservableValueEvent<F>> noInitChanges() {
-			return theChanges.readOnly();
+			return theMappedValue.noInitChanges();
 		}
 
 		@Override
 		public long getStamp() {
-			return theStamp;
+			return theStamp + (theContext == null ? 0 : theContext.getStamp());
 		}
 
 		@Override
 		public ObservableValue<String> isEnabled() {
 			if (Modifier.isFinal(theField.getModifiers()))
 				return ObservableValue.of("Final field cannot be assigned");
-			return SettableValue.ALWAYS_ENABLED;
+			else if (theContext != null)
+				return theContext.map(String.class, ctx -> ctx == null ? "Cannot assign the field of a null value" : null);
+			else
+				return SettableValue.ALWAYS_ENABLED;
 		}
 
 		@Override
 		public <V extends F> String isAcceptable(V value) {
 			if (Modifier.isFinal(theField.getModifiers()))
 				return "Final field cannot be assigned";
-			return null;
+			else if (theContext != null && theContext.get() == null)
+				return "Cannot assign the field of a null value";
+			else
+				return null;
 		}
 
 		@Override
 		public <V extends F> F set(V value, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
+			if (Modifier.isFinal(theField.getModifiers()))
+				throw new UnsupportedOperationException("Final field cannot be assigned");
+			Object ctx = theContext == null ? null : theContext.get();
+			if (theContext != null && ctx == null)
+				throw new UnsupportedOperationException("Cannot assign the field of a null value");
 			F previous;
 			try {
-				previous = (F) theField.get(null);
-				theField.set(null, value);
+				previous = (F) theField.get(ctx);
+				theField.set(ctx, value);
 			} catch (IllegalAccessException e) {
 				throw new IllegalStateException("Could not access field " + theField.getName(), e);
 			}
-			theChanges.onNext(this.createChangeEvent(previous, value, cause));
-			theStamp++;
-			return null;
+			if (theContext != null && ((SettableValue<Object>) theContext).isAcceptable(ctx) == null)
+				((SettableValue<Object>) theContext).set(ctx, cause);
+			else {
+				theStamp++;
+				theChanges.onNext(null);
+			}
+			return previous;
 		}
 	}
 }

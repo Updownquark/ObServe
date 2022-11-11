@@ -8,6 +8,7 @@ import org.observe.SettableValue;
 import org.observe.SimpleObservable;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ValueContainer;
+import org.qommons.BreakpointHere;
 import org.qommons.Named;
 import org.qommons.config.QonfigInterpretationException;
 
@@ -41,11 +42,14 @@ public class ExpressoTesting<H extends Expresso> {
 		private final String theName;
 		private final ValueContainer<ObservableAction<?>, ObservableAction<?>> theAction;
 		private final String theExpectedException;
+		private final boolean isBreakpoint;
 
-		public TestAction(String name, ValueContainer<ObservableAction<?>, ObservableAction<?>> action, String expectedException) {
+		public TestAction(String name, ValueContainer<ObservableAction<?>, ObservableAction<?>> action, String expectedException,
+			boolean breakpoint) {
 			theName = name;
 			theAction = action;
 			theExpectedException = expectedException;
+			isBreakpoint = breakpoint;
 		}
 
 		public String getName() {
@@ -58,6 +62,10 @@ public class ExpressoTesting<H extends Expresso> {
 
 		public String getExpectedException() {
 			return theExpectedException;
+		}
+
+		public boolean isBreakpoint() {
+			return isBreakpoint;
 		}
 	}
 
@@ -105,10 +113,13 @@ public class ExpressoTesting<H extends Expresso> {
 			System.out.println("ready");
 
 			for (TestAction action : test.getActions()) {
+				actionName.set(action.getName(), null);
 				System.out.print(action.getName());
 				System.out.flush();
 				ObservableAction<?> testAction = action.getAction().get(modelInstance);
 				System.out.println(":");
+				if (action.isBreakpoint())
+					BreakpointHere.breakpoint();
 				try {
 					testAction.act(null);
 					if (action.getExpectedException() != null)

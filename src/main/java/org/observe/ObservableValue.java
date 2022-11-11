@@ -1911,16 +1911,17 @@ public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>,
 		@Override
 		public Object getIdentity() {
 			if (theIdentity == null) {
-				StringBuilder str = new StringBuilder("first(");
+				StringBuilder str = new StringBuilder("first:").append(theTest).append('(');
 				List<Object> obsIds = new ArrayList<>(theValues.length + 2);
-				for (ObservableValue<? extends T> value : theValues) {
-					obsIds.add(value.getIdentity());
-					str.append(value.getIdentity()).append(", ");
+				for (int i = 0; i < theValues.length; i++) {
+					obsIds.add(theValues[i].getIdentity());
+					str.append(theValues[i].getIdentity());
+					if (i < theValues.length - 1)
+						str.append(", ");
 				}
 				obsIds.add(theTest);
-				str.append(theTest).append(", ");
 				obsIds.add(theDefault);
-				str.append(theDefault).append(')');
+				str.append("):").append(theDefault);
 				theIdentity = Identifiable.baseId(str.toString(), obsIds);
 			}
 			return theIdentity;
