@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<qonfig-def name="Expresso-Testing" version="0.1" extends:base="Expresso-Base v0.1" root="testing">
+	<add-ons>
+		<add-on name="test-action" requires="action" inherits="named">
+			<attribute name="expect-throw" type="identifier" specify="optional" />
+		</add-on>
+	</add-ons>
+
+	<elements>
+		<element-def name="testing" inherits="with-element-model">
+			<child-def name="head" type="head" min="0" />
+			<child-def name="test" type="test" max="inf" />
+		</element-def>
+		<element-def name="head" extends="expresso" />
+		<element-def name="test" inherits="with-local-model,named">
+			<child-def name="test-action" type="action" inherits="test-action" max="inf" />
+		</element-def>
+		<element-def name="watch" extends="model-value">
+			<attribute name="value" type="expression" />
+		</element-def>
+	</elements>
+</qonfig-def>
