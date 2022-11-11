@@ -15,6 +15,7 @@
 				<value name="a" type="boolean" source-attribute="a" priority="1" />
 				<value name="b" type="boolean" source-attribute="b" priority="2"  />
 				<value name="c" type="int" source-attribute="c" priority="3"  />
+				<value name="d" type="boolean" source-attribute="d" priority="2"  />
 			</element-model>
 			<styles>
 				<style-attribute name="s0" type="boolean" trickle-down="true" />
@@ -24,6 +25,7 @@
 			<attribute name="a" type="expression" />
 			<attribute name="b" type="expression" />
 			<attribute name="c" type="expression" />
+			<attribute name="d" type="expression" />
 		</element-def>
 		<element-def name="b" extends="styled-value">
 			<element-model>
@@ -36,6 +38,7 @@
 			</styles>
 			<attribute name="d" type="expression" />
 			<attribute name="e" type="expression" />
+			<child-def name="a" type="a" min="0" max="inf" />
 		</element-def>
 		<element-def name="c" extends="b">
 			<element-model>

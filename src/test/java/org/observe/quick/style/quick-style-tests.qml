@@ -2,14 +2,10 @@
 
 <testing uses:style="Quick-Style-Test 0.1">
 	<!--Test: (all with changes, observability)
-		Simple style as fn of model value
-		Simple style as fn of element value
-		Simple style as fn of local value
 		Prioritization of element values in a style with more than one possible values for an attribute
 			Test observability as values of both elements change
 		Inherited style from parent
 		Style sheet styles
-		Local styles
 	-->
 	<head>
 		<imports>
@@ -25,24 +21,37 @@
 				<value name="m1" type="int" />
 				<value name="m2" type="boolean" />
 				<value name="m3" type="int" />
+				<value name="m4" type="boolean "/>
 			</model>
 		</models>
+		<style-sheet>
+			<style element="b">
+				<style attr="s3" condition="d">models.m3</style>
+			</style>
+		</style-sheet>
 	</head>
-	<test name="test0">
+	<test name="basicStyle">
 		<model>
-			<a name="a0" a="models.m0" b="models.m2" c="models.m1">
+			<a name="a0" a="models.m0" b="models.m2" c="models.m1" d="models.m4">
 				<style attr="s0">a</style>
-				<style attr="s1" condition="b">models.m3</style>
 				<style attr="s1">c*10</style>
+				<style attr="s1" condition="a">models.m1</style>
+				<style attr="s1" condition="b">models.m3</style>
+				<style attr="s1" condition="a &amp;&amp; d">models.m1 + models.m3</style>
 			</a>
 			<watch name="w_a0_s0">a0.s0</watch>
 			<watch name="w_a0_s1">a0.s1</watch>
 		</model>
-		<action name="assignM0_1">models.m0=true</action>
+		<action name="assignA_1">models.m0=true</action>
 		<action name="checkS0_1">assertEquals(ext.actionName, models.m0, a0.s0)</action>
 		<action name="checkWS0_1">assertEquals(ext.actionName, models.m0, w_a0_s0)</action>
 
+		<!-- a=models.m0=true, so s1 should be models.m1 -->
 		<action name="assignM1_1">models.m1=25</action>
+		<action name="checkS1_1">assertEquals(ext.actionName, 25, a0.s1)</action>
+		<action name="checkWS0_1">assertEquals(ext.actionName, 25, w_a0_s1)</action>
+
+		<action name="assignA_2">models.m0=false</action>
 		<action name="checkS1_1">assertEquals(ext.actionName, 250, a0.s1)</action>
 		<action name="checkWS0_1">assertEquals(ext.actionName, 250, w_a0_s1)</action>
 
@@ -50,16 +59,40 @@
 		<action name="checkS1_2">assertEquals(ext.actionName, 250, a0.s1)</action>
 		<action name="checkWS0_2">assertEquals(ext.actionName, 250, w_a0_s1)</action>
 
-		<action name="assignM2_1" breakpoint="true">models.m2=true</action>
-		<action name="checkS1_3" breakpoint="true">assertEquals(ext.actionName, 50, a0.s1)</action>
+		<action name="assignB_1">models.m2=true</action>
+		<action name="checkS1_3">assertEquals(ext.actionName, 50, a0.s1)</action>
 		<action name="checkWS0_3">assertEquals(ext.actionName, 50, w_a0_s1)</action>
 
-		<action name="assignM1_2" breakpoint="true">models.m1=300</action>
-		<action name="checkS1_4" breakpoint="true">assertEquals(ext.actionName, 50, a0.s1)</action>
+		<!-- b=models.m2 has higher priority than a=models.m0, so making a true won't affect s1 -->
+		<action name="assignA_3">models.m0=true</action>
+		<action name="checkS1_3">assertEquals(ext.actionName, 50, a0.s1)</action>
+		<action name="checkWS0_3">assertEquals(ext.actionName, 50, w_a0_s1)</action>
+
+		<!-- a && d has higher priority than b though -->
+		<action name="assignD_1">models.m4=true</action>
+		<action name="checkS1_3">assertEquals(ext.actionName, 75, a0.s1)</action>
+		<action name="checkWS0_3">assertEquals(ext.actionName, 75, w_a0_s1)</action>
+		<action name="assignD_2">models.m4=false</action>
+		<action name="checkS1_3">assertEquals(ext.actionName, 50, a0.s1)</action>
+		<action name="checkWS0_3">assertEquals(ext.actionName, 50, w_a0_s1)</action>
+
+		<action name="assignM1_2">models.m1=300</action>
+		<action name="checkS1_4">assertEquals(ext.actionName, 50, a0.s1)</action>
 		<action name="checkWS0_4">assertEquals(ext.actionName, 50, w_a0_s1)</action>
 
-		<action name="assignM2_2" breakpoint="true">models.m2=false</action>
-		<action name="checkS1_5" breakpoint="true">assertEquals(ext.actionName, 3000, a0.s1)</action>
+		<action name="assignM2_2">models.m2=false</action>
+		<action name="checkS1_4">assertEquals(ext.actionName, 300, a0.s1)</action>
+		<action name="checkWS0_4">assertEquals(ext.actionName, 300, w_a0_s1)</action>
+
+		<action name="assignB_4">models.m0=false</action>
+		<action name="checkS1_5">assertEquals(ext.actionName, 3000, a0.s1)</action>
+		<action name="checkWS0_5">assertEquals(ext.actionName, 3000, w_a0_s1)</action>
+
+		<!-- No change, needs both a and d -->
+		<action name="assignD_3">models.m4=true</action>
+		<action name="checkS1_5">assertEquals(ext.actionName, 3000, a0.s1)</action>
 		<action name="checkWS0_5">assertEquals(ext.actionName, 3000, w_a0_s1)</action>
 	</test>
+	<!--<test name="styleSheet">
+	</test>-->
 </testing>
