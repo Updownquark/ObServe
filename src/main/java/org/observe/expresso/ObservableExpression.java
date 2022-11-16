@@ -38,7 +38,7 @@ public interface ObservableExpression {
 		@Override
 		public <M, MV extends M> ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env)
 			throws QonfigInterpretationException {
-			throw new QonfigInterpretationException("Empty expression");
+			return ValueContainer.literal(TypeTokens.get().WILDCARD, null, "(empty)").as(type);
 		}
 
 		@Override

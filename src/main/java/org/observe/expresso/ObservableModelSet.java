@@ -698,7 +698,7 @@ public interface ObservableModelSet extends Identifiable {
 
 		/**
 		 * Creates a model tag
-		 * 
+		 *
 		 * @param <T> The type of the tag
 		 * @param name The name of the tag
 		 * @param type The type of the tag
@@ -2039,7 +2039,11 @@ public interface ObservableModelSet extends Identifiable {
 
 			@Override
 			public ModelSetInstanceBuilder copy() {
-				return new DefaultMSIBuilder(theModel, this, theExtModels, theUntil);
+				ModelSetInstanceBuilder builder = new DefaultMSIBuilder(theModel, this, theExtModels, theUntil);
+
+				for (ModelSetInstance inh : theInheritance.values())
+					builder.withAll(inh);
+				return builder;
 			}
 
 			void built() {

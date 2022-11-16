@@ -768,7 +768,9 @@ public class QuickBase implements QonfigInterpretation {
 		Color defaultSelectionBackground = ui.getColor("List.selectionBackground");
 		Color defaultSelectionForeground = ui.getColor("List.selectionForeground");
 		return (modelCreator, configModelValue, configCell, defaultColumnValue) -> {
-			ModelSetInstance renderModels = modelCreator.get();
+			ModelSetInstance callerModels = modelCreator.get();
+			ModelSetInstance renderModels = exS.getExpressoEnv().getModels().createInstance(callerModels.getUntil()).withAll(callerModels)
+				.build();
 			SettableValue<C> columnV;
 			if (columnValue != null)
 				columnV = columnValue.get(renderModels);
