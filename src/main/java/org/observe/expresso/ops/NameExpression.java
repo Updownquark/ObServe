@@ -83,13 +83,16 @@ public class NameExpression implements ObservableExpression {
 	public <M, MV extends M> ObservableModelSet.ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env)
 		throws QonfigInterpretationException {
 		ValueContainer<?, ?> mv = null;
-		if (theContext != null)
+		if (theContext != null) {
 			mv = theContext.evaluate(ModelTypes.Value.any(), env);
-		if (mv == null)
-			mv = env.getModels().getComponentIfExists(theNames.getFirst());
-		if (mv != null)
 			return evaluateModel(//
-				mv, 1, new StringBuilder(theNames.get(0)), type, env.getModels());
+				mv, 0, new StringBuilder(), type, env.getModels());
+		} else {
+			mv = env.getModels().getComponentIfExists(theNames.getFirst());
+			if (mv != null)
+				return evaluateModel(//
+					mv, 1, new StringBuilder(theNames.get(0)), type, env.getModels());
+		}
 		// Allow unqualified enum value references
 		if (theNames.size() == 1 && type.getModelType() == ModelTypes.Value) {
 			Class<?> paramType = TypeTokens.getRawType(type.getType(0));
@@ -125,8 +128,11 @@ public class NameExpression implements ObservableExpression {
 
 	private <M, MV extends M> ObservableModelSet.ValueContainer<M, MV> evaluateModel(ValueContainer<?, ?> mv, int nameIndex,
 		StringBuilder path, ModelInstanceType<M, MV> type, ObservableModelSet models) throws QonfigInterpretationException {
-		if (nameIndex == theNames.size())
-			return models.getValue(toString(), type);
+		if (nameIndex == theNames.size()) {
+			if (mv.getType().getModelType() == ModelTypes.Model)
+				throw new QonfigInterpretationException(this + " is a model, not a " + type.getModelType());
+			return (ValueContainer<M, MV>) mv;
+		}
 		if (mv.getType().getModelType() == ModelTypes.Model) {
 			path.append('.').append(theNames.get(nameIndex));
 			String pathStr = path.toString();
@@ -162,10 +168,10 @@ public class NameExpression implements ObservableExpression {
 			}
 		}
 		if (nameIndex == theNames.size() - 1) {
-			if (type.getModelType() == ModelTypes.Value) {
+			if (type.getModelType() == ModelTypes.Value)
 				return (ValueContainer<M, MV>) getFieldValue(field, fieldType, context, type.getType(0));
-			} else
-				throw new IllegalStateException("Only Value types supported by fields currently"); // TODO
+			else
+				return getFieldValue(field, fieldType, context, TypeTokens.get().WILDCARD).as(type);
 		}
 		Field newField;
 		try {
@@ -191,7 +197,10 @@ public class NameExpression implements ObservableExpression {
 
 	@Override
 	public String toString() {
-		return StringUtils.print(null, ".", theNames, StringBuilder::append).toString();
+		StringBuilder str = new StringBuilder();
+		if (theContext != null)
+			str.append(theContext).append('.');
+		return StringUtils.print(str, ".", theNames, StringBuilder::append).toString();
 	}
 
 	private <F, M> ValueContainer<SettableValue<?>, SettableValue<M>> getFieldValue(Field field, TypeToken<F> fieldType,
@@ -201,7 +210,7 @@ public class NameExpression implements ObservableExpression {
 		ModelInstanceType<SettableValue<?>, SettableValue<M>> targetModelType = ModelTypes.Value.forType(targetType);
 		ValueContainer<SettableValue<?>, SettableValue<F>> fieldValue = ValueContainer.of(fieldModelType,
 			msi -> new FieldValue<>(context == null ? null : context.get(msi), field, fieldType));
-		return fieldModelType.as(fieldValue, targetModelType);
+		return fieldValue.as(targetModelType);
 	}
 
 	@Override

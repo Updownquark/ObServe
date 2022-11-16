@@ -106,7 +106,7 @@ public interface ObservableExpression {
 		ValueContainer<M, MV> value = evaluateInternal(type, env);
 		if (value == null)
 			return null;
-		return value.getType().as(value, type);
+		return value.as(type);
 	}
 
 	/**
@@ -484,7 +484,10 @@ public interface ObservableExpression {
 
 		@Override
 		public String toString() {
-			return String.valueOf(theValue);
+			if (theExpression != null)
+				return theExpression.toString();
+			else
+				return String.valueOf(theValue);
 		}
 	}
 }

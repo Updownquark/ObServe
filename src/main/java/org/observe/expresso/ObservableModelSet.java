@@ -10,6 +10,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.function.BiFunction;
 import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.regex.Pattern;
 
 import org.observe.Observable;
@@ -222,6 +223,17 @@ public interface ObservableModelSet extends Identifiable {
 		BetterList<ValueContainer<?, ?>> getCores();
 
 		/**
+		 * @param <M2> The model type to convert to
+		 * @param <MV2> The type to convert to
+		 * @param type The type to convert to
+		 * @return This value, converted to the given type
+		 * @throws QonfigInterpretationException If the conversion to the given type is not possible
+		 */
+		default <M2, MV2 extends M2> ValueContainer<M2, MV2> as(ModelInstanceType<M2, MV2> type) throws QonfigInterpretationException {
+			return getType().as(this, type);
+		}
+
+		/**
 		 * @param <M2> The model type for the mapped value
 		 * @param <MV2> The type for the mapped value
 		 * @param type The type for the mapped value
@@ -285,6 +297,11 @@ public interface ObservableModelSet extends Identifiable {
 				@Override
 				public BetterList<ValueContainer<?, ?>> getCores() {
 					return outer.getCores();
+				}
+
+				@Override
+				public String toString() {
+					return map + "(" + type + ")";
 				}
 			};
 		}
@@ -367,6 +384,11 @@ public interface ObservableModelSet extends Identifiable {
 				public BetterList<ObservableModelSet.ValueContainer<?, ?>> getCores() {
 					return BetterList.of(this);
 				}
+
+				@Override
+				public String toString() {
+					return text;
+				}
 			};
 		}
 
@@ -403,7 +425,7 @@ public interface ObservableModelSet extends Identifiable {
 
 				@Override
 				public String toString() {
-					return value.toString();
+					return text;
 				}
 			};
 		}
@@ -486,6 +508,39 @@ public interface ObservableModelSet extends Identifiable {
 		 */
 		static <T> ValueCreator<SettableValue<?>, SettableValue<T>> literal(TypeToken<T> type, T value, String text) {
 			return constant(ValueContainer.literal(ModelTypes.Value.forType(type), value, text));
+		}
+
+		/**
+		 * @param <M> The model type of the value
+		 * @param <MV> The type of the value
+		 * @param name The name of the value
+		 * @param creator The creator to wrap
+		 * @return A ValueCreator functionally identical to <code>creator</code>, but with the given name as its {@link #toString()}
+		 */
+		static <M, MV extends M> ValueCreator<M, MV> name(String name, ValueCreator<M, MV> creator) {
+			return name(() -> name, creator);
+		}
+
+		/**
+		 * @param <M> The model type of the value
+		 * @param <MV> The type of the value
+		 * @param name The name of the value
+		 * @param creator The creator to wrap
+		 * @return A ValueCreator functionally identical to <code>creator</code>, but which uses the given name supplier for its
+		 *         {@link #toString()}
+		 */
+		static <M, MV extends M> ValueCreator<M, MV> name(Supplier<String> name, ValueCreator<M, MV> creator) {
+			return new ValueCreator<M, MV>() {
+				@Override
+				public ValueContainer<M, MV> createValue() {
+					return creator.createValue();
+				}
+
+				@Override
+				public String toString() {
+					return name.get();
+				}
+			};
 		}
 	}
 
@@ -632,6 +687,44 @@ public interface ObservableModelSet extends Identifiable {
 	}
 
 	/**
+	 * A tag on a model set. This tag is not used by the {@link ObservableModelSet#createInstance(ExternalModelSet, Observable) instance},
+	 * but just serves as a marker on the model set itself.
+	 *
+	 * @param <T> The type of values for the tag
+	 */
+	public interface ModelTag<T> extends Named {
+		/** @return The type of values that the tag may have */
+		TypeToken<T> getType();
+
+		/**
+		 * Creates a model tag
+		 * 
+		 * @param <T> The type of the tag
+		 * @param name The name of the tag
+		 * @param type The type of the tag
+		 * @return The new tag
+		 */
+		public static <T> ModelTag<T> of(String name, TypeToken<T> type) {
+			return new ModelTag<T>() {
+				@Override
+				public String getName() {
+					return name;
+				}
+
+				@Override
+				public TypeToken<T> getType() {
+					return type;
+				}
+
+				@Override
+				public String toString() {
+					return name + "(" + type + ")";
+				}
+			};
+		}
+	}
+
+	/**
 	 * Simple utility function to produce a literal value
 	 *
 	 * @param <T> The type of the value
@@ -665,7 +758,14 @@ public interface ObservableModelSet extends Identifiable {
 	/** @return The root model that this model belongs to as itself or a descendant */
 	ObservableModelSet getRoot();
 
-	/** @return All model sets (by root ID) that were added to this model with {@link Builder#withAll(ObservableModelSet)} */
+	/**
+	 * @param <T> The type of the tag
+	 * @param tag The model tag to get the value of
+	 * @return The value for the given tag in this model set
+	 */
+	<T> T getTagValue(ModelTag<T> tag);
+
+	/** @return All model sets (by ID) that were added to this model with {@link Builder#withAll(ObservableModelSet)} */
 	Map<ModelComponentId, ObservableModelSet> getInheritance();
 
 	/**
@@ -860,7 +960,7 @@ public interface ObservableModelSet extends Identifiable {
 			throw new QonfigInterpretationException("'" + path + "' is a sub-model, not a value");
 		if (node.getIdentity().toString().equals("models.tests.internalState.struct1"))
 			BreakpointHere.breakpoint();
-		return node.getType().as(node, type);
+		return node.as(type);
 	}
 
 	/** @return Checks the names of components in this model set to ensure they are accessible from expressions */
@@ -923,6 +1023,16 @@ public interface ObservableModelSet extends Identifiable {
 
 	/** Builds an {@link ObservableModelSet} */
 	public interface Builder extends ObservableModelSet {
+		/**
+		 * Assigns a value to a model tag in this model
+		 *
+		 * @param <T> The type of the tag
+		 * @param tag The tag to set
+		 * @param value The value to set
+		 * @return This builder
+		 */
+		<T> Builder withTagValue(ModelTag<T> tag, T value);
+
 		/**
 		 * Declares a dependency on a value from an {@link ExternalModelSet}
 		 *
@@ -1320,6 +1430,7 @@ public interface ObservableModelSet extends Identifiable {
 	public class DefaultModelSet implements ObservableModelSet {
 		private final ModelComponentId theId;
 		private final DefaultModelSet theParent;
+		private final Map<ModelTag<?>, Object> theTagValues;
 		private final Map<ModelComponentId, ObservableModelSet> theInheritance;
 		private final DefaultModelSet theRoot;
 		/** This model's components */
@@ -1332,16 +1443,18 @@ public interface ObservableModelSet extends Identifiable {
 		 * @param id The component id for the new model
 		 * @param root The root model for the new model, or null if the new model is to be the root
 		 * @param parent The parent model for the new model, or null if the new model is to be the root
+		 * @param tagValues Model tag values for this model
 		 * @param inheritance The new model's {@link ObservableModelSet#getInheritance() inheritance}
 		 * @param components The {@link ObservableModelSet#getComponents() components} for the new model
 		 * @param identifiedComponents All {@link IdentifableValueCreator identified} values in the model
 		 * @param nameChecker The {@link ObservableModelSet#getNameChecker() name checker} for the new model
 		 */
-		protected DefaultModelSet(ModelComponentId id, DefaultModelSet root, DefaultModelSet parent,
+		protected DefaultModelSet(ModelComponentId id, DefaultModelSet root, DefaultModelSet parent, Map<ModelTag<?>, Object> tagValues,
 			Map<ModelComponentId, ObservableModelSet> inheritance, Map<String, ModelComponentNode<?, ?>> components,
 			Map<Object, ModelComponentNode<?, ?>> identifiedComponents, NameChecker nameChecker) {
 			theId = id;
 			theRoot = root == null ? this : root;
+			theTagValues = tagValues;
 			theInheritance = inheritance;
 			theParent = parent;
 			theComponents = components;
@@ -1373,6 +1486,26 @@ public interface ObservableModelSet extends Identifiable {
 		@Override
 		public NameChecker getNameChecker() {
 			return theNameChecker;
+		}
+
+		@Override
+		public <T> T getTagValue(ModelTag<T> tag) {
+			T value = (T) theTagValues.get(tag);
+			if (value == null) {
+				for (ObservableModelSet inh : theInheritance.values()) {
+					value = inh.getTagValue(tag);
+					if (value != null)
+						break;
+				}
+			}
+			if (value == null && theParent != null)
+				value = theParent.getTagValue(tag);
+			return value;
+		}
+
+		/** @return All model tag values in this model */
+		protected Map<ModelTag<?>, Object> getTagValues() {
+			return theTagValues;
 		}
 
 		@Override
@@ -1580,7 +1713,8 @@ public interface ObservableModelSet extends Identifiable {
 			 * @param nameChecker The {@link ObservableModelSet#getNameChecker() name checker} for the new model
 			 */
 			protected DefaultBuilder(ModelComponentId id, DefaultBuilder root, DefaultBuilder parent, NameChecker nameChecker) {
-				super(id, root, parent, new LinkedHashMap<>(), new LinkedHashMap<>(), new LinkedHashMap<>(), nameChecker);
+				super(id, root, parent, new LinkedHashMap<>(), new LinkedHashMap<>(), new LinkedHashMap<>(), new LinkedHashMap<>(),
+					nameChecker);
 			}
 
 			@Override
@@ -1596,6 +1730,15 @@ public interface ObservableModelSet extends Identifiable {
 			@Override
 			public Map<ModelComponentId, ObservableModelSet> getInheritance() {
 				return Collections.unmodifiableMap(super.getInheritance());
+			}
+
+			@Override
+			public <T> Builder withTagValue(ModelTag<T> tag, T value) {
+				if (value != null && !TypeTokens.get().isInstance(tag.getType(), value))
+					throw new IllegalArgumentException(
+						"Illegal value of type " + value.getClass().getName() + " for tag " + tag.getName() + "(" + tag.getType() + ")");
+				getTagValues().put(tag, value);
+				return this;
 			}
 
 			@Override
@@ -1685,7 +1828,10 @@ public interface ObservableModelSet extends Identifiable {
 
 			@Override
 			public ObservableModelSet build() {
-				return _build(null, null);
+				if (getParent() == null)
+					return _build(null, null);
+				else
+					return _build(getRoot(), getParent());
 			}
 
 			private DefaultModelSet _build(DefaultModelSet root, DefaultModelSet parent) {
@@ -1714,8 +1860,11 @@ public interface ObservableModelSet extends Identifiable {
 			 */
 			protected DefaultModelSet createModel(DefaultModelSet root, DefaultModelSet parent,
 				Map<String, ModelComponentNode<?, ?>> components) {
-				return new DefaultModelSet(getIdentity(), root, parent, QommonsUtils.unmodifiableCopy(super.getInheritance()),
-					Collections.unmodifiableMap(components), QommonsUtils.unmodifiableCopy(getIdentifiedComponents()),
+				return new DefaultModelSet(getIdentity(), root, parent, //
+					QommonsUtils.unmodifiableCopy(getTagValues()), //
+					QommonsUtils.unmodifiableCopy(super.getInheritance()), //
+					Collections.unmodifiableMap(components), //
+					QommonsUtils.unmodifiableCopy(getIdentifiedComponents()), //
 					getNameChecker());
 			}
 		}
@@ -1758,17 +1907,27 @@ public interface ObservableModelSet extends Identifiable {
 
 			@Override
 			public ModelSetInstanceBuilder withAll(ModelSetInstance other) {
-				if (!theMSI.getModel().getInheritance().containsKey(other.getModel().getIdentity().getRootId())) {
+				if(theMSI.getModel().getIdentity().equals(other.getModel().getIdentity())){
+					addAll(theMSI.getModel(), other);
+					for (ModelComponentId inh : theMSI.getModel().getInheritance().keySet())
+						theInheritance.put(inh, other);
+				} else if (!theMSI.getModel().getInheritance().containsKey(other.getModel().getIdentity().getRootId())) {
 					throw new IllegalArgumentException("Model " + other.getModel().getIdentity() + " is not related to this model ("
 						+ theMSI.getModel().getIdentity() + ")");
 				}
-				ModelSetInstance override = theInheritance.putIfAbsent(other.getModel().getIdentity().getRootId(), other);
-				if (override != null && override != other)
-					throw new IllegalStateException(
-						"An instance of model " + other.getModel().getIdentity().getRootId() + " has already been added to this model");
+				theInheritance.put(other.getModel().getIdentity().getRootId(), other);
 				for (ModelComponentId modelId : other.getModel().getInheritance().keySet())
-					theInheritance.putIfAbsent(modelId, other);
+					theInheritance.put(modelId, other);
 				return this;
+			}
+
+			private void addAll(ObservableModelSet model, ModelSetInstance other) {
+				for (ModelComponentNode<?, ?> comp : model.getComponents().values()) {
+					if (comp.getModel() != null)
+						addAll(comp.getModel(), other);
+					else
+						theComponents.put(comp.getIdentity(), other.get(comp));
+				}
 			}
 
 			@Override
@@ -1804,6 +1963,11 @@ public interface ObservableModelSet extends Identifiable {
 					else
 						theMSI.get(component);
 				}
+			}
+
+			@Override
+			public String toString() {
+				return "instanceBuilder:" + theMSI.getModel();
 			}
 		}
 
@@ -1880,6 +2044,11 @@ public interface ObservableModelSet extends Identifiable {
 
 			void built() {
 				theCircularityDetector = null;
+			}
+
+			@Override
+			public String toString() {
+				return "instance:" + theModel;
 			}
 		}
 	}

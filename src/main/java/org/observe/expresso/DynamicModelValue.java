@@ -485,6 +485,14 @@ public interface DynamicModelValue<M, MV extends M> extends ValueContainer<M, MV
 			else
 				throw new IllegalStateException("Dynamic model value " + name + " has already been satisfied");
 		}
+
+		@Override
+		public String toString() {
+			if (theDeclaredType != null)
+				return getName() + "(" + theDeclaredType + ")";
+			else
+				return getName();
+		}
 	}
 
 	/** Implementation details in this interface */

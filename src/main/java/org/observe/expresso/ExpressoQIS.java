@@ -20,7 +20,6 @@ import com.google.common.reflect.TypeToken;
 
 /** A special session with extra utility for the Expresso toolkits */
 public class ExpressoQIS implements SpecialSession<ExpressoQIS> {
-	static final String LOCAL_MODEL_KEY = "ExpressoLocalModel";
 	static final String ELEMENT_MODEL_KEY = "ExpressoElementModel";
 
 	private final CoreSession theWrapped;
@@ -84,9 +83,6 @@ public class ExpressoQIS implements SpecialSession<ExpressoQIS> {
 		ObservableModelSet elementModel = (ObservableModelSet) get(ELEMENT_MODEL_KEY);
 		if (elementModel != null && !models.getModel().isRelated(elementModel.getIdentity()))
 			models = elementModel.createInstance(models.getUntil()).withAll(models).build();
-		ObservableModelSet localModel = (ObservableModelSet) get(LOCAL_MODEL_KEY);
-		if (localModel != null && !models.getModel().isRelated(localModel.getIdentity()))
-			models = localModel.createInstance(models.getUntil()).withAll(models).build();
 		return models;
 	}
 

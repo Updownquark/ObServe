@@ -159,6 +159,17 @@ public class ModelTypes {
 			return (ModelInstanceType<Observable<?>, Observable<?>>) super.any();
 		}
 
+		/**
+		 * A form of {@link #any()} that casts the type to a type parameter. This is useful in cases where the value type defines a type
+		 * parameter in the calling method.
+		 *
+		 * @param <V> The type to assign as
+		 * @return A ModelInstanceType of this model type with wildcard parameter types, as the given type
+		 */
+		public <V> ModelInstanceType<Observable<?>, Observable<V>> anyAs() {
+			return (ModelInstanceType<Observable<?>, Observable<V>>) super.any();
+		}
+
 		@Override
 		public <V> ModelInstanceType.SingleTyped<Observable<?>, V, Observable<V>> forType(TypeToken<V> type) {
 			return (ModelInstanceType.SingleTyped<Observable<?>, V, Observable<V>>) super.forType(type);
@@ -283,6 +294,17 @@ public class ModelTypes {
 		@Override
 		public ModelInstanceType<ObservableAction<?>, ObservableAction<?>> any() {
 			return (ModelInstanceType<ObservableAction<?>, ObservableAction<?>>) super.any();
+		}
+
+		/**
+		 * A form of {@link #any()} that casts the type to a type parameter. This is useful in cases where the value type defines a type
+		 * parameter in the calling method.
+		 *
+		 * @param <V> The type to assign as
+		 * @return A ModelInstanceType of this model type with wildcard parameter types, as the given type
+		 */
+		public <V> ModelInstanceType<ObservableAction<?>, ObservableAction<V>> anyAs() {
+			return (ModelInstanceType<ObservableAction<?>, ObservableAction<V>>) super.any();
 		}
 
 		@Override
@@ -440,6 +462,17 @@ public class ModelTypes {
 		@Override
 		public ModelInstanceType<SettableValue<?>, SettableValue<?>> any() {
 			return (ModelInstanceType<SettableValue<?>, SettableValue<?>>) super.any();
+		}
+
+		/**
+		 * A form of {@link #any()} that casts the type to a type parameter. This is useful in cases where the value type defines a type
+		 * parameter in the calling method.
+		 *
+		 * @param <V> The type to assign as
+		 * @return A ModelInstanceType of this model type with wildcard parameter types, as the given type
+		 */
+		public <V> ModelInstanceType<SettableValue<?>, SettableValue<V>> anyAs() {
+			return (ModelInstanceType<SettableValue<?>, SettableValue<V>>) super.any();
 		}
 
 		@Override
@@ -766,6 +799,17 @@ public class ModelTypes {
 			return (ModelInstanceType<ObservableCollection<?>, ObservableCollection<?>>) super.any();
 		}
 
+		/**
+		 * A form of {@link #any()} that casts the type to a type parameter. This is useful in cases where the value type defines a type
+		 * parameter in the calling method.
+		 *
+		 * @param <V> The type to assign as
+		 * @return A ModelInstanceType of this model type with wildcard parameter types, as the given type
+		 */
+		public <V> ModelInstanceType<ObservableCollection<?>, ObservableCollection<V>> anyAs() {
+			return (ModelInstanceType<ObservableCollection<?>, ObservableCollection<V>>) super.any();
+		}
+
 		@Override
 		public <V> ModelInstanceType.SingleTyped<ObservableCollection<?>, V, ObservableCollection<V>> forType(TypeToken<V> type) {
 			return (ModelInstanceType.SingleTyped<ObservableCollection<?>, V, ObservableCollection<V>>) super.forType(type);
@@ -858,6 +902,17 @@ public class ModelTypes {
 		@Override
 		public ModelInstanceType<ObservableSortedCollection<?>, ObservableSortedCollection<?>> any() {
 			return (ModelInstanceType<ObservableSortedCollection<?>, ObservableSortedCollection<?>>) super.any();
+		}
+
+		/**
+		 * A form of {@link #any()} that casts the type to a type parameter. This is useful in cases where the value type defines a type
+		 * parameter in the calling method.
+		 *
+		 * @param <V> The type to assign as
+		 * @return A ModelInstanceType of this model type with wildcard parameter types, as the given type
+		 */
+		public <V> ModelInstanceType<ObservableSortedCollection<?>, ObservableSortedCollection<V>> anyAs() {
+			return (ModelInstanceType<ObservableSortedCollection<?>, ObservableSortedCollection<V>>) super.any();
 		}
 
 		@Override
@@ -965,6 +1020,17 @@ public class ModelTypes {
 			return (ModelInstanceType<ObservableSet<?>, ObservableSet<?>>) super.any();
 		}
 
+		/**
+		 * A form of {@link #any()} that casts the type to a type parameter. This is useful in cases where the value type defines a type
+		 * parameter in the calling method.
+		 *
+		 * @param <V> The type to assign as
+		 * @return A ModelInstanceType of this model type with wildcard parameter types, as the given type
+		 */
+		public <V> ModelInstanceType<ObservableSet<?>, ObservableSet<V>> anyAs() {
+			return (ModelInstanceType<ObservableSet<?>, ObservableSet<V>>) super.any();
+		}
+
 		@Override
 		public <V> ModelInstanceType.SingleTyped<ObservableSet<?>, V, ObservableSet<V>> forType(TypeToken<V> type) {
 			return (ModelInstanceType.SingleTyped<ObservableSet<?>, V, ObservableSet<V>>) super.forType(type);
@@ -1056,6 +1122,17 @@ public class ModelTypes {
 		@Override
 		public ModelInstanceType<ObservableSortedSet<?>, ObservableSortedSet<?>> any() {
 			return (ModelInstanceType<ObservableSortedSet<?>, ObservableSortedSet<?>>) super.any();
+		}
+
+		/**
+		 * A form of {@link #any()} that casts the type to a type parameter. This is useful in cases where the value type defines a type
+		 * parameter in the calling method.
+		 *
+		 * @param <V> The type to assign as
+		 * @return A ModelInstanceType of this model type with wildcard parameter types, as the given type
+		 */
+		public <V> ModelInstanceType<ObservableSortedSet<?>, ObservableSortedSet<V>> anyAs() {
+			return (ModelInstanceType<ObservableSortedSet<?>, ObservableSortedSet<V>>) super.any();
 		}
 
 		@Override

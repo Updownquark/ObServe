@@ -235,6 +235,12 @@ It builds on the Expresso-Core specification and contains everything needed for 
 			<value-mod specify="forbidden" />
 			<child-def name="value" type="model-value" min="1" max="inf" />
 		</element-def>
+		<element-def name="hook" extends="model-value" inherits="with-element-model">
+			<element-model>
+				<value name="event" />
+			</element-model>
+			<attribute name="on" type="expression" />
+		</element-def>
 
 		<!-- Just a little bit of code flow structure -->
 		<element-def name="loop" extends="model-value" inherits="with-local-model">

@@ -3,14 +3,26 @@ package org.observe.expresso;
 import org.observe.config.ObservableConfig;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.ObservableModelSet.ModelTag;
 import org.observe.util.TypeTokens;
+import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigInterpretationException;
+import org.qommons.config.QonfigInterpreterCore;
+import org.qommons.config.QonfigInterpreterCore.CoreSession;
 import org.qommons.config.QonfigInterpreterCore.QonfigValueCreator;
+import org.qommons.config.QonfigInterpreterCore.QonfigValueModifier;
 
 import com.google.common.reflect.TypeToken;
 
 /** A simple structure consisting of a class view and models, the definition for a set of models for an application */
 public class Expresso {
+	/**
+	 * {@link ObservableModelSet#getTagValue(ModelTag) Model tag} where the {@link QonfigElement} is stored by
+	 * {@link ElementModelAugmentation}s
+	 */
+	public static final ModelTag<QonfigElement> QONFIG_ELEMENT_TAG = ModelTag.of(QonfigElement.class.getSimpleName(),
+		TypeTokens.get().of(QonfigElement.class));
+
 	/**
 	 * Provided to
 	 * {@link org.qommons.config.QonfigInterpreterCore.Builder#createWith(org.qommons.config.QonfigElementOrAddOn, Class, QonfigValueCreator)}
@@ -152,6 +164,57 @@ public class Expresso {
 		 * @return The created value
 		 */
 		MV create(ObservableConfig.ObservableConfigValueBuilder<?> config, ModelSetInstance msi);
+	}
+
+	/**
+	 * A {@link QonfigValueModifier modifier} that is capable of adding values into the model set that an element sees (in its
+	 * {@link ExpressoQIS})'s {@link ExpressoQIS#getExpressoEnv() expresso environment}
+	 * 
+	 * @param <T> The type to modify
+	 */
+	public interface ElementModelAugmentation<T> extends QonfigInterpreterCore.QonfigValueModifier<T> {
+		@Override
+		default Object prepareSession(CoreSession session) throws QonfigInterpretationException {
+			ObservableModelSet.Builder builder;
+			boolean createdBuilder;
+			ExpressoQIS exS = session.as(ExpressoQIS.class);
+			ObservableModelSet model = exS.getExpressoEnv().getModels();
+			if (model instanceof ObservableModelSet.Builder && model.getTagValue(QONFIG_ELEMENT_TAG) == session.getElement()) {
+				builder = (ObservableModelSet.Builder) model;
+				createdBuilder = false;
+			} else {
+				builder = model.wrap("element-model:" + session.getElement()).withTagValue(QONFIG_ELEMENT_TAG, session.getElement());
+				exS.setModels(builder, null);
+				createdBuilder = true;
+			}
+			augmentElementModel(exS, builder);
+			return createdBuilder;
+		}
+
+		@Override
+		default Object postPrepare(CoreSession session, Object prepared) throws QonfigInterpretationException {
+			if (Boolean.TRUE.equals(prepared)) {
+				ExpressoQIS exS = session.as(ExpressoQIS.class);
+				if (exS.getExpressoEnv().getModels() instanceof ObservableModelSet.Builder) {
+					ObservableModelSet wrapped = ((ObservableModelSet.Builder) exS.getExpressoEnv().getModels()).build();
+					exS.setModels(wrapped, null);
+					session.putLocal(ExpressoQIS.ELEMENT_MODEL_KEY, wrapped);
+				}
+			}
+			return prepared;
+		}
+
+		@Override
+		default T modifyValue(T value, CoreSession session, Object prepared) throws QonfigInterpretationException {
+			return value;
+		}
+
+		/**
+		 * @param session The expresso session to use to augment the model
+		 * @param builder The model builder to augment
+		 * @throws QonfigInterpretationException If an error occurs augmenting the model
+		 */
+		void augmentElementModel(ExpressoQIS session, ObservableModelSet.Builder builder) throws QonfigInterpretationException;
 	}
 
 	private final ClassView theClassView;
