@@ -17,6 +17,7 @@ import org.observe.expresso.ObservableModelSet.ValueCreator;
 import org.qommons.QommonsUtils;
 import org.qommons.Version;
 import org.qommons.config.QonfigInterpretation;
+import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigInterpreterCore.Builder;
 import org.qommons.config.QonfigToolkit;
 import org.qommons.config.SpecialSession;
@@ -55,8 +56,11 @@ public class ExpressoTestFrameworkInterpretation implements QonfigInterpretation
 			Expresso head = exS.forChildren("head").get(0).asElement("expresso").interpret(Expresso.class);
 			exS.setModels(head.getModels(), head.getClassView());
 			Map<String, ExpressoTest> tests = new LinkedHashMap<>();
-			for (ExpressoTest test : exS.interpretChildren("test", ExpressoTest.class))
+			for (ExpressoTest test : exS.interpretChildren("test", ExpressoTest.class)) {
+				if (tests.containsKey(test.getName()))
+					throw new QonfigInterpretationException("Duplicate tests named " + test.getName());
 				tests.put(test.getName(), test);
+			}
 			return new ExpressoTesting<>(head, Collections.unmodifiableMap(tests));
 		})//
 		.createWith("test", ExpressoTest.class, session -> {
@@ -64,22 +68,29 @@ public class ExpressoTestFrameworkInterpretation implements QonfigInterpretation
 			List<TestAction> actions = new ArrayList<>();
 			for (ExpressoQIS actionS : exS.forChildren("test-action")) {
 				ExpressoQIS testActionS = actionS.asElement("test-action");
-				actions.add(new TestAction(testActionS.getAttributeText("name"), //
+				actions.add(new TestAction(testActionS.getAttributeText("name"), exS.getExpressoEnv().getModels(), exS, //
 					((ValueCreator<ObservableAction<?>, ObservableAction<?>>) actionS.interpret(ValueCreator.class)).createValue(), //
 					testActionS.getAttributeText("expect-throw"), testActionS.getAttribute("breakpoint", boolean.class)));
 			}
-			return new ExpressoTest(session.getAttributeText("name"), exS.getExpressoEnv().getModels(),
+			return new ExpressoTest(session.getAttributeText("name"), exS.getExpressoEnv().getModels(), exS,
 				Collections.unmodifiableList(actions));
 		})//
 		.createWith("watch", ValueCreator.class, session -> {
 			ExpressoQIS exS = session.as(ExpressoQIS.class);
-			ValueContainer<SettableValue<?>, SettableValue<?>> watching = exS.getValue(ModelTypes.Value.any(), null);
-			return () -> ValueContainer.of(watching.getType(), msi -> {
-				SettableValue<Object> value = (SettableValue<Object>) watching.get(msi);
-				SettableValue<Object> copy = SettableValue.build(value.getType()).withValue(value.get()).build();
-				value.noInitChanges().takeUntil(msi.getUntil()).act(evt -> copy.set(evt.getNewValue(), evt));
-				return value.disableWith(ObservableValue.of("A watched value cannot be modified"));
-			});
+			return () -> {
+				ValueContainer<SettableValue<?>, SettableValue<?>> watching;
+				try {
+					watching = exS.getValue(ModelTypes.Value.any(), null);
+				} catch (QonfigInterpretationException e) {
+					throw new IllegalStateException(e);
+				}
+				return ValueContainer.of(watching.getType(), msi -> {
+					SettableValue<Object> value = (SettableValue<Object>) watching.get(msi);
+					SettableValue<Object> copy = SettableValue.build(value.getType()).withValue(value.get()).build();
+					value.noInitChanges().takeUntil(msi.getUntil()).act(evt -> copy.set(evt.getNewValue(), evt));
+					return value.disableWith(ObservableValue.of("A watched value cannot be modified"));
+				});
+			};
 		})//
 		;
 		return interpreter;

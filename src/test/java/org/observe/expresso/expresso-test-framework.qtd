@@ -9,7 +9,7 @@
 	</add-ons>
 
 	<elements>
-		<element-def name="testing" inherits="with-element-model">
+		<element-def name="testing">
 			<child-def name="head" type="head" min="0" />
 			<child-def name="test" type="test" max="inf" />
 		</element-def>

@@ -5,6 +5,7 @@ import java.util.Objects;
 
 import org.observe.Observable;
 import org.observe.SimpleObservable;
+import org.qommons.StringUtils;
 
 /** A simple entity bean for the {@link ExpressoTests} */
 public class ExpressoTestEntity {
@@ -91,6 +92,39 @@ public class ExpressoTestEntity {
 		return this;
 	}
 
+	/**
+	 * @param other The entity to compare to
+	 * @return The comparison with the other entity, by its {@link #getInt() int}, {@link #getDouble() double}, {@link #getInstant()
+	 *         instant}, and {@link #getString() string} fields
+	 */
+	public int compareByFields(ExpressoTestEntity other) {
+		int comp;
+		comp = Integer.compare(theInt, other.theInt);
+		if (comp == 0)
+			comp = Double.compare(theDouble, other.theDouble);
+		if (comp == 0)
+			comp = Boolean.compare(theBoolean, other.theBoolean);
+		if (comp == 0) {
+			if (theInstant != null) {
+				if (other.theInstant != null)
+					comp = theInstant.compareTo(other.theInstant);
+				else
+					comp = -1;
+			} else if (other.theInstant != null)
+				comp = 1;
+		}
+		if (comp == 0) {
+			if (theString != null) {
+				if (other.theString != null)
+					comp = StringUtils.compareNumberTolerant(theString, other.theString, true, true);
+				else
+					comp = -1;
+			} else if (other.theString != null)
+				comp = 1;
+		}
+		return comp;
+	}
+
 	/** @return An observable that fires when any of this entity's fields changes */
 	public Observable<Void> changes() {
 		return theChanges.readOnly();
@@ -130,7 +164,7 @@ public class ExpressoTestEntity {
 	public String toString() {
 		StringBuilder str = new StringBuilder("{");
 		str.append("int=").append(theInt).append(", dbl=").append(theDouble).append(", str=").append(theString).append(", inst=")
-			.append(theInstant);
+		.append(theInstant);
 		return str.append("}").toString();
 	}
 }

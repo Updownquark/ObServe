@@ -299,18 +299,18 @@ public class JavaExpressoParser implements ExpressoParser {
 			} else
 				radix = 10;
 			if (isLong)
-				return literalExpression(expression, Long.parseLong(text, radix));
+				return literalExpression(expression, Long.parseLong(text.replaceAll("_", ""), radix));
 			else
-				return literalExpression(expression, Integer.parseInt(text, radix));
+				return literalExpression(expression, Integer.parseInt(text.replaceAll("_", ""), radix));
 		case "floatLiteral":
 			Expression type = expression.search().get("FloatingTypeSuffix").findAny();
 			text = expression.toString();
 			if (type != null)
 				text = text.substring(0, text.length() - 1);
 			if (type == null || type.toString().equalsIgnoreCase("d"))
-				return literalExpression(expression, Double.parseDouble(text));
+				return literalExpression(expression, Double.parseDouble(text.replaceAll("_", "")));
 			else
-				return literalExpression(expression, Float.parseFloat(text));
+				return literalExpression(expression, Float.parseFloat(text.replaceAll("_", "")));
 		case "BOOL_LITERAL":
 			return literalExpression(expression, "true".equals(expression.toString()));
 		case "CHAR_LITERAL":
