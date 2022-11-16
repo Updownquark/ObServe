@@ -75,9 +75,7 @@
 			<child-def name="head" type="head" min="0" />
 			<child-def name="root" type="widget" min="1" />
 		</element-def>
-		<element-def name="head" extends="expresso">
-			<child-def name="style-sheet" type="style-sheet" min="0" />
-		</element-def>
+		<element-def name="head" extends="expresso" extends="with-style-sheet" />
 
 		<element-def name="widget" abstract="true" inherits="with-text">
 			<element-model>

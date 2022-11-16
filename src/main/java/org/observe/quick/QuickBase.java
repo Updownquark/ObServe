@@ -202,13 +202,13 @@ public class QuickBase implements QonfigInterpretation {
 		interpreter//
 		.createWith("ext-widget", QuickComponentDef.class, session -> interpretExtWidget(wrap(session)))//
 		.createWith("box", QuickBox.class, session -> interpretBox(wrap(session)))//
-		.modifyWith("border", QuickBox.class, (box, session) -> modifyBoxBorder(box, wrap(session), base))//
-		.modifyWith("simple", QuickBox.class, (box, session) -> modifyBoxSimple(box, wrap(session)))//
-		.modifyWith("inline", QuickBox.class, (box, session) -> modifyBoxInline(box, wrap(session)))//
+		.modifyWith("border", QuickBox.class, (box, session, prep) -> modifyBoxBorder(box, wrap(session), base))//
+		.modifyWith("simple", QuickBox.class, (box, session, prep) -> modifyBoxSimple(box, wrap(session)))//
+		.modifyWith("inline", QuickBox.class, (box, session, prep) -> modifyBoxInline(box, wrap(session)))//
 		.createWith("multi-value-action", ValueAction.class, session -> interpretMultiValueAction(wrap(session)))//
 		.createWith("label", QuickComponentDef.class, session -> evaluateLabel(wrap(session)))//
 		.createWith("text-field", QuickComponentDef.class, session -> interpretTextField(wrap(session)))//
-		.modifyWith("editable-text-widget", QuickComponentDef.class, (comp, session) -> modifyTextEditor(comp, wrap(session)))//
+		.modifyWith("editable-text-widget", QuickComponentDef.class, (comp, session, prep) -> modifyTextEditor(comp, wrap(session)))//
 		.createWith("button", QuickComponentDef.class, session -> interpretButton(wrap(session)))//
 		.createWith("table", QuickComponentDef.class, session -> interpretTable(wrap(session)))//
 		.createWith("column", Column.class, session -> interpretColumn(wrap(session), base))//
@@ -217,7 +217,7 @@ public class QuickBase implements QonfigInterpretation {
 		.createWith("columns", ValueCreator.class, session -> interpretColumns(wrap(session)))//
 		.createWith("split", QuickComponentDef.class, session -> interpretSplit(wrap(session)))//
 		.createWith("field-panel", QuickComponentDef.class, session -> interpretFieldPanel(wrap(session)))//
-		.modifyWith("field", QuickComponentDef.class, (field, session) -> modifyField(field, wrap(session)))//
+		.modifyWith("field", QuickComponentDef.class, (field, session, prep) -> modifyField(field, wrap(session)))//
 		.createWith("spacer", QuickComponentDef.class, session -> interpretSpacer(wrap(session)))//
 		.createWith("tree", QuickComponentDef.class, session -> interpretTree(wrap(session)))//
 		.createWith("text-area", QuickComponentDef.class, session -> interpretTextArea(wrap(session)))//
@@ -881,8 +881,8 @@ public class QuickBase implements QonfigInterpretation {
 		};
 	}
 
-	private <M> ValueCreator<ObservableCollection<?>, ObservableCollection<CategoryRenderStrategy<M, ?>>> interpretColumns(
-		StyleQIS session) throws QonfigInterpretationException {
+	private <M> ValueCreator<ObservableCollection<?>, ObservableCollection<CategoryRenderStrategy<M, ?>>> interpretColumns(StyleQIS session)
+		throws QonfigInterpretationException {
 		ExpressoQIS exS = session.as(ExpressoQIS.class);
 		TypeToken<M> rowType = (TypeToken<M>) ExpressoBaseV0_1.parseType(session.getAttributeText("type"), exS.getExpressoEnv());
 		session.put(MODEL_TYPE_KEY, rowType);
@@ -1326,7 +1326,8 @@ public class QuickBase implements QonfigInterpretation {
 	private <R> QuickComponentDef interpretTable(StyleQIS session) throws QonfigInterpretationException {
 		ExpressoQIS exS = session.as(ExpressoQIS.class);
 		ValueContainer<ObservableCollection<?>, ? extends ObservableCollection<R>> rows;
-		rows= (ValueContainer<ObservableCollection<?>, ? extends ObservableCollection<R>>) exS.getAttribute("rows", ModelTypes.Collection.any(), null);
+		rows = (ValueContainer<ObservableCollection<?>, ? extends ObservableCollection<R>>) exS.getAttribute("rows",
+			ModelTypes.Collection.any(), null);
 		TypeToken<R> modelType = (TypeToken<R>) rows.getType().getType(0);
 		session.put(MODEL_TYPE_KEY, modelType);
 
@@ -1536,10 +1537,10 @@ public class QuickBase implements QonfigInterpretation {
 				multiSelectionPath = null;
 				if (TypeTokens.get().isAssignable(valueType, selection.getType().getType(0))) {
 					singleSelectionPath = null;
-					singleSelectionV = hackS.getType().as(hackS, ModelTypes.Value.forType(valueType));
+					singleSelectionV = hackS.as(ModelTypes.Value.forType(valueType));
 				} else if (TypeTokens.get().isAssignable(pathType, selection.getType().getType(0))) {
 					singleSelectionV = null;
-					singleSelectionPath = hackS.getType().as(hackS, ModelTypes.Value.forType(pathType));
+					singleSelectionPath = hackS.as(ModelTypes.Value.forType(pathType));
 				} else
 					throw new QonfigInterpretationException(
 						"Value " + selectionEx + ", type " + selection.getType() + " cannot be used for tree selection");

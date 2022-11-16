@@ -15,6 +15,9 @@
 			<child-mod child="sub-style" inherits="element-style" />
 		</add-on>
 
+		<add-on name="with-style-sheet">
+			<child-def name="style-sheet" type="style-sheet" min="0" />
+		</add-on>
 		<add-on name="styled" inherits="with-element-model,with-local-model">
 			<element-meta-mod meta="with-element-model.element-model" inherits="style-model" />
 			<element-model>

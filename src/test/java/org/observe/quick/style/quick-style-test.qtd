@@ -2,8 +2,8 @@
 
 <qonfig-def name="Quick-Style-Test" version="0.1" extends:expresso="Expresso-Testing v0.1" extends:style="Quick-Style v0.1">
 	<add-ons>
-		<add-on name="style-head" requires="head">
-			<child-def name="style-sheet" type="style-sheet" min="0" />
+		<add-on name="styled-test" requires="test" inherits="with-style-sheet">
+			<child-def name="styled-value" type="styled-value" min="0" max="inf" inherits="named" />
 		</add-on>
 	</add-ons>
 
@@ -61,8 +61,8 @@
 	</elements>
 
 	<auto-inheritance>
-		<auto-inherit inherits="style-head">
-			<target element="head" />
+		<auto-inherit inherits="styled-test">
+			<target element="test" />
 		</auto-inherit>
 	</auto-inheritance>
 </qonfig-def>

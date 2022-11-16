@@ -6,6 +6,9 @@ import org.observe.expresso.ExpressoQIS;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.ObservableModelSet.ModelTag;
+import org.observe.util.TypeTokens;
+import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigInterpreterCore.CoreSession;
@@ -13,6 +16,8 @@ import org.qommons.config.QonfigToolkit;
 import org.qommons.config.SpecialSession;
 
 public class StyleQIS implements SpecialSession<StyleQIS> {
+	public static final ModelTag<QonfigElement> STYLED_ELEMENT_TAG = ModelTag.of(QonfigElement.class.getSimpleName(),
+		TypeTokens.get().of(QonfigElement.class));
 	public static final String STYLE_ELEMENT = "quick-style-element";
 
 	public static final String STYLED_PROP = "quick-interpreter-styled";

@@ -136,8 +136,7 @@ public class QuickCore implements QonfigInterpretation {
 	}
 
 	public static ValueContainer<SettableValue<?>, SettableValue<QuickPosition>> parsePosition(QonfigExpression expression,
-		ExpressoQIS session)
-			throws QonfigInterpretationException {
+		ExpressoQIS session) throws QonfigInterpretationException {
 		if (expression == null)
 			return null;
 		QuickPosition.PositionUnit unit = null;
@@ -263,32 +262,32 @@ public class QuickCore implements QonfigInterpretation {
 		interpreter//
 		.createWith("quick", QuickDocument.class, session -> interpretQuick(wrap(session)))//
 		.createWith("head", QuickHeadSection.class, session -> interpretHead(wrap(session)))//
-		.modifyWith("window", QuickDocument.class, (doc, session) -> modifyWindow(doc, wrap(session)))//
-		.modifyWith("widget", QuickComponentDef.class, (comp, session) -> modifyWidget(comp, wrap(session)))//
-		.modifyWith("text-widget", QuickComponentDef.class, (txt, session) -> modifyTextWidget(txt, wrap(session)))//
+		.modifyWith("window", QuickDocument.class, (doc, session, prep) -> modifyWindow(doc, wrap(session)))//
+		.modifyWith("widget", QuickComponentDef.class, (comp, session, prep) -> modifyWidget(comp, wrap(session)))//
+		.modifyWith("text-widget", QuickComponentDef.class, (txt, session, prep) -> modifyTextWidget(txt, wrap(session)))//
 		.createWith("line-border", QuickBorder.class, session -> interpretLineBorder(wrap(session)))//
 		.createWith("titled-border", QuickBorder.class, session -> interpretTitledBorder(wrap(session)))//
 		.createWith("mouse-listener", QuickMouseListener.Container.class, session -> interpretMouseListener(wrap(session)))//
 		.modifyWith("on-click", QuickMouseListener.Container.class,
-			(listener, session) -> modifyMouseClickListener(listener, wrap(session)))//
+			(listener, session, prep) -> modifyMouseClickListener(listener, wrap(session)))//
 		.modifyWith("on-mouse-press", QuickMouseListener.Container.class,
-			(listener, session) -> modifyMouseListenerWithType(listener, MouseEvent.MOUSE_PRESSED, false))//
+			(listener, session, prep) -> modifyMouseListenerWithType(listener, MouseEvent.MOUSE_PRESSED, false))//
 		.modifyWith("on-mouse-release", QuickMouseListener.Container.class,
-			(listener, session) -> modifyMouseListenerWithType(listener, MouseEvent.MOUSE_RELEASED, false))//
+			(listener, session, prep) -> modifyMouseListenerWithType(listener, MouseEvent.MOUSE_RELEASED, false))//
 		.modifyWith("on-hover", QuickMouseListener.Container.class,
-			(listener, session) -> modifyMouseListenerWithType(listener, MouseEvent.MOUSE_MOVED, true))//
+			(listener, session, prep) -> modifyMouseListenerWithType(listener, MouseEvent.MOUSE_MOVED, true))//
 		.modifyWith("on-mouse-enter", QuickMouseListener.Container.class,
-			(listener, session) -> modifyMouseListenerWithType(listener, MouseEvent.MOUSE_ENTERED, false))//
+			(listener, session, prep) -> modifyMouseListenerWithType(listener, MouseEvent.MOUSE_ENTERED, false))//
 		.modifyWith("on-mouse-exit", QuickMouseListener.Container.class,
-			(listener, session) -> modifyMouseListenerWithType(listener, MouseEvent.MOUSE_EXITED, false))//
+			(listener, session, prep) -> modifyMouseListenerWithType(listener, MouseEvent.MOUSE_EXITED, false))//
 		.modifyWith("on-scroll", QuickMouseListener.Container.class,
-			(listener, session) -> modifyMouseWheelListener(listener, wrap(session)))//
+			(listener, session, prep) -> modifyMouseWheelListener(listener, wrap(session)))//
 		.modifyWith("left-button", QuickMouseListener.Container.class,
-			(listener, session) -> modifyMouseButtonListener(listener, MouseEvent.BUTTON1))//
+			(listener, session, prep) -> modifyMouseButtonListener(listener, MouseEvent.BUTTON1))//
 		.modifyWith("right-button", QuickMouseListener.Container.class,
-			(listener, session) -> modifyMouseButtonListener(listener, MouseEvent.BUTTON3))//
+			(listener, session, prep) -> modifyMouseButtonListener(listener, MouseEvent.BUTTON3))//
 		.modifyWith("middle-button", QuickMouseListener.Container.class,
-			(listener, session) -> modifyMouseButtonListener(listener, MouseEvent.BUTTON2))//
+			(listener, session, prep) -> modifyMouseButtonListener(listener, MouseEvent.BUTTON2))//
 		;
 		return interpreter;
 	}
@@ -323,12 +322,7 @@ public class QuickCore implements QonfigInterpretation {
 		if (model == null)
 			model = ObservableModelSet.build("models", ObservableModelSet.JAVA_NAME_CHECKER).build();
 		session.as(ExpressoQIS.class).setModels(model, null);
-		QuickStyleSheet styleSheet;
-		if (session.getChildren("style-sheet").isEmpty())
-			styleSheet = QuickStyleSheet.EMPTY;
-		else
-			styleSheet = session.interpretChildren("style-sheet", QuickStyleSheet.class).getFirst();
-		session.setStyleSheet(styleSheet);
+		QuickStyleSheet styleSheet = session.getStyleSheet();
 		return new QuickHeadSection(cv, model, styleSheet);
 	}
 

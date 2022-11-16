@@ -72,7 +72,7 @@ public class QuickSwing implements QonfigInterpretation {
 		.extend(interpreter.getToolkit().getElement("quick"), interpreter.getToolkit().getElement("quick-debug"), QuickDocument.class,
 			QuickDocument.class, //
 			(doc, session) -> extendQuickDebug(doc, session.as(StyleQIS.class), interpreter.getToolkit()))//
-		.modifyWith("quick", QuickDocument.class, (doc, session) -> modifyQuickDocument(doc, session.as(StyleQIS.class)))//
+		.modifyWith("quick", QuickDocument.class, (doc, session, prep) -> modifyQuickDocument(doc, session.as(StyleQIS.class)))//
 		;
 		return interpreter;
 	}
@@ -118,8 +118,7 @@ public class QuickSwing implements QonfigInterpretation {
 		vVal = exS.getAttribute("debug-visible", ModelTypes.Value.forType(boolean.class),
 			() -> msi -> SettableValue.build(boolean.class).withDescription("v").withValue(true).build());
 
-		ValueContainer<SettableValue<?>, SettableValue<QuickComponent>> selectedComponent = theDebugDoc.getHead()
-			.getModels()
+		ValueContainer<SettableValue<?>, SettableValue<QuickComponent>> selectedComponent = theDebugDoc.getHead().getModels()
 			.getValue("debug.selectedComponent", ModelTypes.Value.forType(QuickComponent.class));
 		// ValueContainer<SettableValue<?>, SettableValue<Integer>> scX, scY, scW, scH;
 		// ValueContainer<SettableValue<?>, SettableValue<Boolean>> scV;

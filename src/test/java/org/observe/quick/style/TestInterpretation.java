@@ -7,7 +7,9 @@ import java.util.stream.Collectors;
 
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
+import org.observe.expresso.Expresso;
 import org.observe.expresso.ExpressoQIS;
+import org.observe.expresso.ExpressoTesting.ExpressoTest;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
@@ -20,8 +22,6 @@ import org.qommons.collect.BetterList;
 import org.qommons.config.QonfigInterpretation;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigInterpreterCore.Builder;
-import org.qommons.config.QonfigInterpreterCore.CoreSession;
-import org.qommons.config.QonfigInterpreterCore.QonfigValueModifier;
 import org.qommons.config.QonfigToolkit;
 import org.qommons.config.SpecialSession;
 
@@ -30,6 +30,8 @@ public class TestInterpretation implements QonfigInterpretation {
 	public static final String TOOLKIT_NAME = "Quick-Style-Test";
 	/** The version of the test toolkit */
 	public static final Version VERSION = new Version(0, 1, 0);
+
+	private QonfigToolkit theToolkit;
 
 	@Override
 	public Set<Class<? extends SpecialSession<?>>> getExpectedAPIs() {
@@ -48,6 +50,7 @@ public class TestInterpretation implements QonfigInterpretation {
 
 	@Override
 	public void init(QonfigToolkit toolkit) {
+		theToolkit = toolkit;
 	}
 
 	@Override
@@ -57,15 +60,12 @@ public class TestInterpretation implements QonfigInterpretation {
 			.createWith("b", ValueCreator.class, session -> ValueCreator.constant(B.Def.create(session.as(StyleQIS.class))))//
 			.createWith("c", ValueCreator.class, session -> ValueCreator.constant(new C.Def(session.as(StyleQIS.class))))//
 			.createWith("d", ValueCreator.class, session -> ValueCreator.constant(new D.Def(session.as(StyleQIS.class))))//
-			.modifyWith("testing", Object.class, new QonfigValueModifier<Object>() {
+			.modifyWith("styled-test", ExpressoTest.class, new Expresso.ElementModelAugmentation<ExpressoTest>() {
 				@Override
-				public void prepareSession(CoreSession session) throws QonfigInterpretationException {
-					session.as(StyleQIS.class).setStyleSheet(QuickStyleSheet.EMPTY);
-				}
-
-				@Override
-				public Object modifyValue(Object value, CoreSession session) throws QonfigInterpretationException {
-					return value;
+				public void augmentElementModel(ExpressoQIS session, org.observe.expresso.ObservableModelSet.Builder builder)
+					throws QonfigInterpretationException {
+					for (ExpressoQIS value : session.forChildren("styled-value"))
+						builder.withMaker(value.getAttributeText("name"), value.interpret(ValueCreator.class));
 				}
 			})//
 			;
@@ -77,6 +77,7 @@ public class TestInterpretation implements QonfigInterpretation {
 			private final ValueContainer<SettableValue<?>, SettableValue<Boolean>> a;
 			private final ValueContainer<SettableValue<?>, SettableValue<Boolean>> b;
 			private final ValueContainer<SettableValue<?>, SettableValue<Integer>> c;
+			private final ValueContainer<SettableValue<?>, SettableValue<Boolean>> d;
 			private final QuickElementStyleAttribute<Boolean> s0;
 			private final QuickElementStyleAttribute<Integer> s1;
 			private final QuickElementStyleAttribute<Boolean> s2;
@@ -86,6 +87,7 @@ public class TestInterpretation implements QonfigInterpretation {
 				a = expressoSession.getExpressoEnv().getModels().getValue("a", ModelTypes.Value.BOOLEAN);
 				b = expressoSession.getExpressoEnv().getModels().getValue("b", ModelTypes.Value.BOOLEAN);
 				c = expressoSession.getExpressoEnv().getModels().getValue("c", ModelTypes.Value.INT);
+				d = expressoSession.getExpressoEnv().getModels().getValue("d", ModelTypes.Value.BOOLEAN);
 
 				Map<String, List<QuickStyleAttribute<?>>> attrs = session.getStyle().getAttributes().stream()
 					.collect(Collectors.groupingBy(QuickStyleAttribute::getName));
@@ -113,11 +115,17 @@ public class TestInterpretation implements QonfigInterpretation {
 			public BetterList<ValueContainer<?, ?>> getCores() {
 				return BetterList.of(this);
 			}
+
+			@Override
+			public String toString() {
+				return expressoSession.getElement().toString();
+			}
 		}
 
 		public final SettableValue<Boolean> a;
 		public final SettableValue<Boolean> b;
 		public final SettableValue<Integer> c;
+		public final SettableValue<Boolean> d;
 		public final ObservableValue<Boolean> s0;
 		public final ObservableValue<Integer> s1;
 		public final ObservableValue<Boolean> s2;
@@ -126,9 +134,21 @@ public class TestInterpretation implements QonfigInterpretation {
 			this.a = def.a.get(msi);
 			this.b = def.b.get(msi);
 			this.c = def.c.get(msi);
+			this.d = def.d.get(msi);
 			this.s0 = def.s0.evaluate(msi);
 			this.s1 = def.s1.evaluate(msi);
 			this.s2 = def.s2.evaluate(msi);
+		}
+
+		public A(SettableValue<Boolean> a, SettableValue<Boolean> b, SettableValue<Integer> c, SettableValue<Boolean> d,
+			ObservableValue<Boolean> s0, ObservableValue<Integer> s1, ObservableValue<Boolean> s2) {
+			this.a = a;
+			this.b = b;
+			this.c = c;
+			this.d = d;
+			this.s0 = s0;
+			this.s1 = s1;
+			this.s2 = s2;
 		}
 	}
 
@@ -167,12 +187,13 @@ public class TestInterpretation implements QonfigInterpretation {
 
 			@Override
 			public SettableValue<T> get(ModelSetInstance models) {
-				return SettableValue.of(clazz, create(models), "Immutable");
+				ModelSetInstance localModels = expressoSession.wrapLocal(models);
+				return SettableValue.of(clazz, create(localModels, //
+					children.stream().map(def -> def.get(localModels).get()).collect(Collectors.toList())), "Immutable");
 			}
 
-			T create(ModelSetInstance models) {
-				return (T) new B(this, expressoSession.wrapLocal(models), //
-					children.stream().map(def -> def.get(models).get()).collect(Collectors.toList()));
+			T create(ModelSetInstance models, List<A> aChildren) {
+				return (T) new B(this, models, aChildren);
 			}
 
 			@Override
@@ -190,14 +211,14 @@ public class TestInterpretation implements QonfigInterpretation {
 		public final SettableValue<Integer> f;
 		public final ObservableValue<Integer> s3;
 		public final ObservableValue<Integer> s4;
-		public final List<A> children;
+		public final List<A> a;
 
 		B(Def<?> def, ModelSetInstance msi, List<A> children) {
 			this.e = def.e.get(msi);
 			this.f = def.f.get(msi);
 			this.s3 = def.s3.evaluate(msi);
 			this.s4 = def.s4.evaluate(msi);
-			this.children = children;
+			this.a = children;
 		}
 	}
 
@@ -212,6 +233,11 @@ public class TestInterpretation implements QonfigInterpretation {
 				Map<String, List<QuickStyleAttribute<?>>> attrs = session.getStyle().getAttributes().stream()
 					.collect(Collectors.groupingBy(QuickStyleAttribute::getName));
 				s5 = session.getStyle().get((QuickStyleAttribute<Boolean>) attrs.get("s5").get(0));
+			}
+
+			@Override
+			C create(ModelSetInstance models, List<A> aChildren) {
+				return new C(this, models, aChildren);
 			}
 		}
 
@@ -236,6 +262,11 @@ public class TestInterpretation implements QonfigInterpretation {
 				Map<String, List<QuickStyleAttribute<?>>> attrs = session.getStyle().getAttributes().stream()
 					.collect(Collectors.groupingBy(QuickStyleAttribute::getName));
 				s6 = session.getStyle().get((QuickStyleAttribute<Integer>) attrs.get("s6").get(0));
+			}
+
+			@Override
+			D create(ModelSetInstance models, List<A> aChildren) {
+				return new D(this, models, aChildren);
 			}
 		}
 

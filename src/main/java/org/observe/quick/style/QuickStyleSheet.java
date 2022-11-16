@@ -68,4 +68,34 @@ public class QuickStyleSheet {
 		// TODO Style sets?
 		return values;
 	}
+
+	public StringBuilder print(StringBuilder str, int indent) {
+		if (str == null)
+			str = new StringBuilder();
+		if (theReference != null)
+			str.append(theReference);
+		str.append("{");
+		if (!theImportedStyleSheets.isEmpty() || !theValues.isEmpty())
+			str.append('\n');
+		for (Map.Entry<String, QuickStyleSheet> imp : theImportedStyleSheets.entrySet()) {
+			indent(str, indent);
+			str.append(imp.getKey()).append("<-");
+			imp.getValue().print(str, indent + 1).append('\n');
+		}
+		for (QuickStyleValue<?> qsv : theValues) {
+			indent(str, indent);
+			str.append(qsv);
+		}
+		return str.append("}");
+	}
+
+	private void indent(StringBuilder str, int indent) {
+		for (int i = 0; i < indent; i++)
+			str.append('\t');
+	}
+
+	@Override
+	public String toString() {
+		return print(null, 0).toString();
+	}
 }

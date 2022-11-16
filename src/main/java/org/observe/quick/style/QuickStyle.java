@@ -16,6 +16,7 @@ import java.util.Map;
 import java.util.Set;
 
 import org.observe.expresso.DynamicModelValue;
+import org.observe.expresso.Expresso;
 import org.observe.expresso.ExpressoQIS;
 import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet;
@@ -48,7 +49,7 @@ public class QuickStyle implements QonfigInterpretation {
 	public static final String STYLE_SHEET_REF = "quick-style-sheet-ref";
 	public static final String STYLE_MODEL_VALUE_ELEMENT = "style-model-value";
 	public static final String EXPRESSO_DEPENDENCY = "expresso";
-	public static final String MODEL_ELEMENT_NAME="MODEL$ELEMENT";
+	public static final String MODEL_ELEMENT_NAME = "MODEL$ELEMENT";
 
 	public static abstract class StyleValues extends AbstractList<QuickStyleValue<?>> {
 		private static final ThreadLocal<LinkedHashSet<IdentityKey<StyleValues>>> STACK = ThreadLocal.withInitial(LinkedHashSet::new);
@@ -129,9 +130,23 @@ public class QuickStyle implements QonfigInterpretation {
 	@Override
 	public Builder configureInterpreter(Builder interpreter) {
 		interpreter//
-		.modifyWith("styled", Object.class, new QonfigValueModifier<Object>() {
+		.modifyWith("with-style-sheet", Object.class, new QonfigValueModifier<Object>() {
 			@Override
-			public void prepareSession(CoreSession session) throws QonfigInterpretationException {
+			public Object prepareSession(CoreSession session) throws QonfigInterpretationException {
+				QuickStyleSheet styleSheet = session.interpretChildren("style-sheet", QuickStyleSheet.class).peekFirst();
+				session.as(StyleQIS.class).setStyleSheet(styleSheet != null ? styleSheet : QuickStyleSheet.EMPTY);
+				return null;
+			}
+
+			@Override
+			public Object modifyValue(Object value, CoreSession session, Object prepared) throws QonfigInterpretationException {
+				return value;
+			}
+		})//
+		.modifyWith("styled", Object.class, new Expresso.ElementModelAugmentation<Object>() {
+			@Override
+			public void augmentElementModel(ExpressoQIS session, ObservableModelSet.Builder builder)
+				throws QonfigInterpretationException {
 				QuickElementStyle parentStyle = session.get(StyleQIS.STYLE_PROP, QuickElementStyle.class);
 				QuickStyleSheet styleSheet = session.get(StyleQIS.STYLE_SHEET_PROP, QuickStyleSheet.class);
 				// Parse style values, if any
@@ -149,15 +164,12 @@ public class QuickStyle implements QonfigInterpretation {
 
 				// Create QuickElementStyle and put into session
 				ExpressoQIS exS = session.as(ExpressoQIS.class);
-				DynamicModelValue.satisfyDynamicValue(MODEL_ELEMENT_NAME, exS.getExpressoEnv().getModels(),//
-					ObservableModelSet.ValueCreator.literal(TypeTokens.get().of(QonfigElement.class), session.getElement(), MODEL_ELEMENT_NAME));
+				DynamicModelValue.satisfyDynamicValue(MODEL_ELEMENT_NAME, exS.getExpressoEnv().getModels(), //
+					ObservableModelSet.ValueCreator.literal(TypeTokens.get().of(QonfigElement.class), session.getElement(),
+						MODEL_ELEMENT_NAME));
 				session.put(StyleQIS.STYLE_PROP, new QuickElementStyle(Collections.unmodifiableList(declared), parentStyle, styleSheet,
 					session.getElement(), exS, theToolkit));
-			}
-
-			@Override
-			public Object modifyValue(Object value, CoreSession session) throws QonfigInterpretationException {
-				return value;
+				builder.withTagValue(StyleQIS.STYLED_ELEMENT_TAG, session.getElement());
 			}
 		})//
 		.createWith("style", StyleValues.class, session -> interpretStyle(wrap(session)))//

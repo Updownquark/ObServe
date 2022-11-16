@@ -20,8 +20,6 @@ import org.observe.SettableValue;
 import org.observe.expresso.DynamicModelValue;
 import org.observe.expresso.DynamicModelValue.Identity;
 import org.observe.expresso.ExpressoEnv;
-import org.observe.expresso.ModelType;
-import org.observe.expresso.ModelType.ModelInstanceConverter;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
@@ -198,12 +196,7 @@ public class StyleValueApplication implements Comparable<StyleValueApplication> 
 		public <M, MV extends M> ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env)
 			throws QonfigInterpretationException {
 			ModelComponentNode<?, ?> node = env.getModels().getIdentifiedValue(theModelValue);
-			ModelInstanceConverter<Object, MV> converter = (ModelInstanceConverter<Object, MV>) ((ModelComponentNode<Object, Object>) node)
-				.getType().convert(type);
-			if (converter instanceof ModelType.NoOpConverter)
-				return (ValueContainer<M, MV>) node;
-			else
-				return node.map(type, converter::convert);
+			return node.as(type);
 		}
 
 		@Override
@@ -279,10 +272,18 @@ public class StyleValueApplication implements Comparable<StyleValueApplication> 
 
 	@Override
 	public int compareTo(StyleValueApplication o) {
-		// Most importantly, compare the priority of model values used in the condition and value
+		int comp = 0;
+		// Compare the complexity of the role path
+		if (comp == 0)
+			comp = -Integer.compare(getDepth(), o.getDepth());
+
+		// Compare the complexity of the element type
+		if (comp == 0)
+			comp = -Integer.compare(getTypeComplexity(), o.getTypeComplexity());
+
+		// Compare the priority of model values used in the condition and value
 		Iterator<Integer> iter1 = theModelValues.values().iterator();
 		Iterator<Integer> iter2 = o.theModelValues.values().iterator();
-		int comp = 0;
 		while (comp == 0) {
 			if (iter1.hasNext()) {
 				if (iter2.hasNext())
@@ -295,12 +296,6 @@ public class StyleValueApplication implements Comparable<StyleValueApplication> 
 				break;
 			}
 		}
-		// Compare the complexity of the role path
-		if (comp == 0)
-			comp = -Integer.compare(getDepth(), o.getDepth());
-		// Compare the complexity of the element type
-		if (comp == 0)
-			comp = -Integer.compare(getTypeComplexity(), o.getTypeComplexity());
 		return comp;
 	}
 
@@ -358,13 +353,40 @@ public class StyleValueApplication implements Comparable<StyleValueApplication> 
 	}
 
 	public EvaluatedStyleApplication evaluate(ExpressoEnv expressoEnv) throws QonfigInterpretationException {
-		/* I think the bug I'm having is because this evaluate call for the parent expression is being called on the models
-		 * for the child widget.  So the precise model value being pulled out of the model by the WrappingObservableExpression above
-		 * is the wrong value, even though it's named the same. */
-		EvaluatedStyleApplication parent = theParent == null ? null : theParent.evaluate(expressoEnv);
+		EvaluatedStyleApplication parent = theParent == null ? null : theParent.evaluate(//
+			expressoEnv.with(getParentModel(expressoEnv.getModels()), null));
 		ValueContainer<SettableValue<?>, SettableValue<Boolean>> conditionV = theCondition == null ? null
 			: theCondition.evaluate(ModelTypes.Value.BOOLEAN, expressoEnv);
 		return new EvaluatedStyleApplication(parent, this, conditionV);
+	}
+
+	private static ObservableModelSet getParentModel(ObservableModelSet models) {
+		/* TODO
+		 * I think the bug I'm having is because this evaluate call for the parent expression is being called on the models
+		 * for the child widget.  So the precise model value being pulled out of the model by the WrappingObservableExpression above
+		 * is the wrong value, even though it's named the same.
+		 *
+		 * One idea to fix it is to add the ability to "tag" OMS with values that are not model values.  Basically add another map into the
+		 * OMS that the MSI doesn't care about, then tag the OMS with the element in ExpressoBase.
+		 *
+		 * Then here we'd look for the first ancestor of the model tagged with a different <styled>-inheriting element than the one
+		 * models is tagged with.
+		 *
+		 * Still need to populate the tag values for EQIS and SQIS
+		 */
+		QonfigElement element = models.getTagValue(StyleQIS.STYLED_ELEMENT_TAG);
+		if (element == null)
+			return models;
+		for (ObservableModelSet parent = models.getParent(); parent != null; parent = parent.getParent()) {
+			QonfigElement parentEl = parent.getTagValue(StyleQIS.STYLED_ELEMENT_TAG);
+			if (parentEl == null)
+				return models;
+			else if (parentEl == element)
+				continue;
+			else
+				return parent;
+		}
+		return models;
 	}
 
 	@Override
