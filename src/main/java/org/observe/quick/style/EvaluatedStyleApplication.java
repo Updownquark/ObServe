@@ -41,4 +41,9 @@ public class EvaluatedStyleApplication {
 			return parentCond.transform(boolean.class, tx -> tx.combineWith(localCond)//
 				.combine(LambdaUtils.printableBiFn((c1, c2) -> c1 && c2, "&&", "&&")));
 	}
+
+	@Override
+	public String toString() {
+		return theApplication.toString();
+	}
 }

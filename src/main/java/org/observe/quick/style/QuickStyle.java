@@ -147,6 +147,7 @@ public class QuickStyle implements QonfigInterpretation {
 			@Override
 			public void augmentElementModel(ExpressoQIS session, ObservableModelSet.Builder builder)
 				throws QonfigInterpretationException {
+					builder.withTagValue(StyleQIS.STYLED_ELEMENT_TAG, session.getElement());
 				QuickElementStyle parentStyle = session.get(StyleQIS.STYLE_PROP, QuickElementStyle.class);
 				QuickStyleSheet styleSheet = session.get(StyleQIS.STYLE_SHEET_PROP, QuickStyleSheet.class);
 				// Parse style values, if any
@@ -169,7 +170,6 @@ public class QuickStyle implements QonfigInterpretation {
 						MODEL_ELEMENT_NAME));
 				session.put(StyleQIS.STYLE_PROP, new QuickElementStyle(Collections.unmodifiableList(declared), parentStyle, styleSheet,
 					session.getElement(), exS, theToolkit));
-				builder.withTagValue(StyleQIS.STYLED_ELEMENT_TAG, session.getElement());
 			}
 		})//
 		.createWith("style", StyleValues.class, session -> interpretStyle(wrap(session)))//

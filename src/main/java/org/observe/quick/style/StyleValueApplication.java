@@ -361,32 +361,24 @@ public class StyleValueApplication implements Comparable<StyleValueApplication> 
 	}
 
 	private static ObservableModelSet getParentModel(ObservableModelSet models) {
-		/* TODO
-		 * I think the bug I'm having is because this evaluate call for the parent expression is being called on the models
-		 * for the child widget.  So the precise model value being pulled out of the model by the WrappingObservableExpression above
-		 * is the wrong value, even though it's named the same.
-		 *
-		 * One idea to fix it is to add the ability to "tag" OMS with values that are not model values.  Basically add another map into the
-		 * OMS that the MSI doesn't care about, then tag the OMS with the element in ExpressoBase.
-		 *
-		 * Then here we'd look for the first ancestor of the model tagged with a different <styled>-inheriting element than the one
-		 * models is tagged with.
-		 *
-		 * Still need to populate the tag values for EQIS and SQIS
-		 */
+		// Get the models for the most recent styled ancestor element
 		QonfigElement element = models.getTagValue(StyleQIS.STYLED_ELEMENT_TAG);
 		if (element == null)
 			return models;
-		for (ObservableModelSet parent = models.getParent(); parent != null; parent = parent.getParent()) {
-			QonfigElement parentEl = parent.getTagValue(StyleQIS.STYLED_ELEMENT_TAG);
+		ObservableModelSet inh = models;
+		// Only consider direct descendants for now. See if we need to do better later.
+		while (true) {
+			if (inh.getInheritance().isEmpty())
+				return models;
+			inh = inh.getInheritance().values().iterator().next();
+			QonfigElement parentEl = inh.getTagValue(StyleQIS.STYLED_ELEMENT_TAG);
 			if (parentEl == null)
 				return models;
 			else if (parentEl == element)
 				continue;
 			else
-				return parent;
+				return inh;
 		}
-		return models;
 	}
 
 	@Override
