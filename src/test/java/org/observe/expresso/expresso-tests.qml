@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<testing uses:test="Expresso-Test 0.1">
+<testing uses:test="Expresso-Test 0.1" uses:debug="Expresso-Debug v0.1">
 	<!-- TODO
 		Test AND DOCUMENT!!
 
@@ -273,6 +273,7 @@
 			<stateful-struct name="struct3" derived-state="internalState * 10" />
 			<stateful-struct name="struct4" derived-state="internalState % 10" />
 
+			<!-- Types are declared here so Expresso will flatten the SettableValues -->
 			<value name="struct1iv" type="int">struct1.getInternalState()</value>
 			<value name="struct2iv" type="int">struct2.getInternalState()</value>
 			<value name="struct3iv" type="int">struct3.getInternalState()</value>
@@ -311,6 +312,7 @@
 			<dynamic-type-stateful-struct name="struct3" internal-state="models.anyBool" derived-state="!internalState" />
 			<dynamic-type-stateful-struct name="struct4" internal-state="models.anyStr" derived-state="internalState + &quot;-derived&quot;" />
 
+			<!-- Types are declared here so Expresso will flatten the SettableValues -->
 			<value name="struct1iv" type="int">(int) struct1.getInternalState()</value>
 			<value name="struct2iv" type="double">(double) struct2.getInternalState()</value>
 			<value name="struct3iv" type="boolean">(boolean) struct3.getInternalState()</value>
@@ -353,6 +355,7 @@
 			<dynamic-type-stateful-struct2 name="struct3" internal-state="models.anyBool" derived-state="!internalState" />
 			<dynamic-type-stateful-struct2 name="struct4" internal-state="models.anyStr" derived-state="internalState + &quot;-derived&quot;" />
 
+			<!-- Types are declared here so Expresso will flatten the SettableValues -->
 			<value name="struct1iv" type="int">(int) struct1.getInternalState()</value>
 			<value name="struct2iv" type="double">(double) struct2.getInternalState()</value>
 			<value name="struct3iv" type="boolean">(boolean) struct3.getInternalState()</value>

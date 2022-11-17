@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!--
+This file defines syntax for debugging expresso models
+-->
+<qonfig-def name="Expresso-Debug" version="0.1" extends:expresso="Expresso-Core v0.1">
+	<value-types>
+		<one-of name="breakpoint-type">
+			<literal>parse</literal>
+			<literal>createContainer</literal>
+			<literal>createValue</literal>
+		</one-of>
+	</value-types>
+
+	<add-ons>
+		<add-on name="debug-value" requires="model-value">
+			<attribute name="break-on" type="breakpoint-type" specify="optional" />
+		</add-on>
+	</add-ons>
+
+	<auto-inheritance>
+		<auto-inherit inherits="debug-value">
+			<target role="model.value" />
+		</auto-inherit>
+	</auto-inheritance>
+</qonfig-def>
