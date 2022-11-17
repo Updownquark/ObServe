@@ -38,8 +38,6 @@ import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigToolkit;
 
-import com.google.common.reflect.TypeToken;
-
 public class StyleValueApplication implements Comparable<StyleValueApplication> {
 	public static MultiInheritanceSet.Inheritance<QonfigElementOrAddOn> STYLE_INHERITANCE = QonfigElementOrAddOn::isAssignableFrom;
 	public static final StyleValueApplication ALL = new StyleValueApplication(null, null, MultiInheritanceSet.empty(), null,
@@ -197,12 +195,6 @@ public class StyleValueApplication implements Comparable<StyleValueApplication> 
 			throws QonfigInterpretationException {
 			ModelComponentNode<?, ?> node = env.getModels().getIdentifiedValue(theModelValue);
 			return node.as(type);
-		}
-
-		@Override
-		public <P1, P2, P3, T> MethodFinder<P1, P2, P3, T> findMethod(TypeToken<T> targetType, ExpressoEnv env)
-			throws QonfigInterpretationException {
-			throw new QonfigInterpretationException("findMethod not supported for this expression");
 		}
 
 		@Override

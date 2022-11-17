@@ -74,7 +74,31 @@ public abstract class Invocation implements ObservableExpression {
 		}
 	}
 
-	/** An {@link org.observe.expresso.ObservableExpression.Args} option representing a set of arguments to an invokable */
+	/**
+	 * Represents an argument option supplied to
+	 * {@link Invocation#findMethod(Executable[], String, TypeToken, boolean, List, ModelInstanceType, ExpressoEnv, ExecutableImpl, ObservableExpression)}
+	 */
+	public interface Args {
+		/** @return The number of arguments in the option */
+		int size();
+
+		/**
+		 * @param arg The index of the argument to check
+		 * @param paramType The type of the input parameter
+		 * @return Whether the given parameter can be matched to the given argument
+		 * @throws QonfigInterpretationException If an error occurs making the determination
+		 */
+		boolean matchesType(int arg, TypeToken<?> paramType) throws QonfigInterpretationException;
+
+		/**
+		 * @param arg The argument index
+		 * @return The argument type at the given index
+		 * @throws QonfigInterpretationException If an error occurs making the determination
+		 */
+		TypeToken<?> resolve(int arg) throws QonfigInterpretationException;
+	}
+
+	/** An {@link Args} option representing a set of arguments to an invokable */
 	protected class ArgOption implements Args {
 		final ExpressoEnv theEnv;
 		/** The arguments */

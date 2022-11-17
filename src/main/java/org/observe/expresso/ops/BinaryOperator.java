@@ -284,12 +284,6 @@ public class BinaryOperator implements ObservableExpression {
 	}
 
 	@Override
-	public <P1, P2, P3, T> MethodFinder<P1, P2, P3, T> findMethod(TypeToken<T> targetType, ExpressoEnv env)
-		throws QonfigInterpretationException {
-		throw new QonfigInterpretationException("Not supported for binary operators");
-	}
-
-	@Override
 	public String toString() {
 		return theLeft + " " + theOperator + " " + theRight;
 	}

@@ -10,8 +10,6 @@ import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet.ValueContainer;
 import org.qommons.config.QonfigInterpretationException;
 
-import com.google.common.reflect.TypeToken;
-
 /** An expression in parentheses */
 public class ParentheticExpression implements ObservableExpression {
 	private final ObservableExpression theContent;
@@ -41,12 +39,6 @@ public class ParentheticExpression implements ObservableExpression {
 	public <M, MV extends M> ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env)
 		throws QonfigInterpretationException {
 		return theContent.evaluateInternal(type, env);
-	}
-
-	@Override
-	public <P1, P2, P3, T> MethodFinder<P1, P2, P3, T> findMethod(TypeToken<T> targetType, ExpressoEnv env)
-		throws QonfigInterpretationException {
-		return theContent.findMethod(targetType, env);
 	}
 
 	@Override

@@ -4,7 +4,6 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.io.PrintStream;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 
 import org.antlr.v4.runtime.CharStreams;
@@ -20,9 +19,7 @@ import org.observe.expresso.ops.ConditionalExpression;
 import org.observe.expresso.ops.ConstructorInvocation;
 import org.observe.expresso.ops.ExternalLiteral;
 import org.observe.expresso.ops.InstanceofExpression;
-import org.observe.expresso.ops.LambdaExpression;
 import org.observe.expresso.ops.MethodInvocation;
-import org.observe.expresso.ops.MethodReferenceExpression;
 import org.observe.expresso.ops.NameExpression;
 import org.observe.expresso.ops.ParentheticExpression;
 import org.observe.expresso.ops.UnaryOperator;
@@ -232,7 +229,8 @@ public class JavaExpressoParser implements ExpressoParser {
 					ObservableExpression index = _parse(expression.getComponents().get(2));
 					return new ArrayAccessExpression(array, index);
 				case "::":
-					context = _parse(expression.getComponents().getFirst());
+					throw new ExpressoParseException(expression, "Method references are not supported");
+					/*context = _parse(expression.getComponents().getFirst());
 					if (expression.getComponent("typeArguments") != null) {
 						List<Expression> typeArgExprs = expression.getComponents("typeArguments", "typeArgumentList", "typeArgument");
 						typeArgs = new ArrayList<>(typeArgExprs.size());
@@ -242,7 +240,7 @@ public class JavaExpressoParser implements ExpressoParser {
 						}
 					} else
 						typeArgs = null;
-					return new MethodReferenceExpression(context, expression.getComponents().getLast().toString(), typeArgs);
+					return new MethodReferenceExpression(context, expression.getComponents().getLast().toString(), typeArgs);*/
 				}
 			}
 			// TODO
@@ -581,7 +579,8 @@ public class JavaExpressoParser implements ExpressoParser {
 			// expression.getComponents("argumentList", "expression"), env);
 			throw new ExpressoParseException(expression, "Expression type '" + expression.getType() + "' not implemented yet");
 		case "lambdaExpression":
-			Expression body = expression.getComponent("lambdaBody").getComponents().getFirst();
+			throw new ExpressoParseException(expression, "Lambdas are not supported");
+			/*Expression body = expression.getComponent("lambdaBody").getComponents().getFirst();
 			if (!body.getType().equals("expression"))
 				throw new ExpressoParseException(body, "Lambda expressions with block bodies are not supported");
 			if (expression.getComponent("lambdaParameters", "formalParameterList") != null)
@@ -598,10 +597,11 @@ public class JavaExpressoParser implements ExpressoParser {
 				parameters = Collections.unmodifiableList(parameters);
 			}
 			return new LambdaExpression(parameters, //
-				_parse(expression.getComponent("lambdaBody").getComponents().getFirst()));
+				_parse(expression.getComponent("lambdaBody").getComponents().getFirst()));*/
 		case "methodReference":
 		case "methodReference_lfno_primary":
-			target = expression.getComponents().getFirst();
+			throw new ExpressoParseException(expression, "Method references are not supported");
+			/*target = expression.getComponents().getFirst();
 			if (target.getComponents().isEmpty() && "super".equals(target.toString()))
 				throw new ExpressoParseException(target, "'super' is not allowed");
 			context = parseOld(target);
@@ -614,7 +614,7 @@ public class JavaExpressoParser implements ExpressoParser {
 				}
 			} else
 				typeArgs = null;
-			return new MethodReferenceExpression(context, expression.getComponents().getLast().toString(), typeArgs);
+			return new MethodReferenceExpression(context, expression.getComponents().getLast().toString(), typeArgs);*/
 		case "this":
 		case "fieldAccess":
 		case "fieldAccess_lfno_primary":
@@ -682,7 +682,8 @@ public class JavaExpressoParser implements ExpressoParser {
 					base = new MethodInvocation(base, ex.getComponent("Identifier").getText(), typeArgs, args);
 					break;
 				case "methodReference_lf_primary":
-					if (ex.getComponent("typeArguments") != null) {
+					throw new ExpressoParseException(expression, "Method references are not supported");
+					/*if (ex.getComponent("typeArguments") != null) {
 						List<Expression> typeArgExprs = ex.getComponents("typeArguments", "typeArgumentList", "typeArgument");
 						typeArgs = new ArrayList<>(typeArgExprs.size());
 						for (Expression tae : typeArgExprs) {
@@ -692,7 +693,7 @@ public class JavaExpressoParser implements ExpressoParser {
 					} else
 						typeArgs = null;
 					base = new MethodReferenceExpression(base, ex.getComponent("Identifier").getText(), typeArgs);
-					break;
+					break;*/
 				default:
 					throw new ExpressoParseException(expression, "Unrecognized primary operator: '" + ex.getType());
 				}

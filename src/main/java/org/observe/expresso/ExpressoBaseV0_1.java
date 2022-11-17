@@ -49,6 +49,7 @@ import org.observe.util.TypeTokens;
 import org.qommons.BiTuple;
 import org.qommons.Causable;
 import org.qommons.Identifiable.AbstractIdentifiable;
+import org.qommons.LambdaUtils;
 import org.qommons.StringUtils;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
@@ -1030,31 +1031,31 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 				return ObservableSet.build(type);
 			}
 		}).createWith("sorted-set", ValueCreator.class, new InternalCollectionValue<ObservableSortedSet<?>>(ModelTypes.SortedSet) {
-			private Function<ModelSetInstance, Comparator<Object>> theComparator;
+			private ValueContainer<SettableValue<?>, SettableValue<Comparator<Object>>> theComparator;
 
 			@Override
 			protected <V> void prepare(TypeToken<V> type, ExpressoQIS session) throws QonfigInterpretationException {
-				theComparator = parseComparator((TypeToken<Object>) type, session.getAttributeExpression("sort-with"),
-					session.getExpressoEnv());
+				theComparator = (ValueContainer<SettableValue<?>, SettableValue<Comparator<Object>>>) (ValueContainer<?, ?>) parseSorting(
+					type, session.forChildren("sort").peekFirst()).createValue();
 			}
 
 			@Override
 			protected <V> ObservableCollectionBuilder<V, ?> create(TypeToken<V> type, ModelSetInstance models) {
-				return ObservableSortedSet.build(type, (Comparator<? super V>) theComparator);
+				return ObservableSortedSet.build(type, theComparator.get(models).get());
 			}
 		}).createWith("sorted-list", ValueCreator.class,
 			new InternalCollectionValue<ObservableSortedCollection<?>>(ModelTypes.SortedCollection) {
-			private Function<ModelSetInstance, Comparator<Object>> theComparator;
+			private ValueContainer<SettableValue<?>, SettableValue<Comparator<Object>>> theComparator;
 
 			@Override
 			protected <V> void prepare(TypeToken<V> type, ExpressoQIS session) throws QonfigInterpretationException {
-				theComparator = parseComparator((TypeToken<Object>) type, session.getAttributeExpression("sort-with"),
-					session.getExpressoEnv());
+				theComparator = (ValueContainer<SettableValue<?>, SettableValue<Comparator<Object>>>) (ValueContainer<?, ?>) parseSorting(
+					type, session.forChildren("sort").peekFirst()).createValue();
 			}
 
 			@Override
 			protected <V> ObservableCollectionBuilder<V, ?> create(TypeToken<V> type, ModelSetInstance models) {
-				return ObservableSortedCollection.build(type, (Comparator<? super V>) theComparator);
+				return ObservableSortedCollection.build(type, theComparator.get(models).get());
 			}
 		}).createWith("entry", BiTuple.class, session -> {
 			ExpressoQIS exS = wrap(session);
@@ -1072,19 +1073,19 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 				return ObservableMap.build(keyType, valueType);
 			}
 		}).createWith("sorted-map", ValueCreator.class, new InternalMapValue<ObservableSortedMap<?, ?>>(ModelTypes.SortedMap) {
-			private Function<ModelSetInstance, Comparator<Object>> theComparator;
+			private ValueContainer<SettableValue<?>, SettableValue<Comparator<Object>>> theComparator;
 
 			@Override
 			protected <K, V> void prepare(TypeToken<K> keyType, TypeToken<V> valueType, ExpressoQIS session)
 				throws QonfigInterpretationException {
-				theComparator = parseComparator((TypeToken<Object>) keyType, session.getAttributeExpression("sort-with"),
-					session.getExpressoEnv());
+				theComparator = (ValueContainer<SettableValue<?>, SettableValue<Comparator<Object>>>) (ValueContainer<?, ?>) parseSorting(
+					keyType, session.forChildren("sort").peekFirst()).createValue();
 			}
 
 			@Override
 			protected <K, V> ObservableMap.Builder<K, V, ?> create(TypeToken<K> keyType, TypeToken<V> valueType,
 				ModelSetInstance models) {
-				return ObservableSortedMap.build(keyType, valueType, theComparator.apply(models));
+				return ObservableSortedMap.build(keyType, valueType, theComparator.get(models).get());
 			}
 		}).createWith("multi-map", ValueCreator.class, new InternalMultiMapValue<ObservableMultiMap<?, ?>>(ModelTypes.MultiMap) {
 			@Override
@@ -1093,19 +1094,19 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 				return ObservableMultiMap.build(keyType, valueType);
 			}
 		}).createWith("sorted-multi-map", ValueCreator.class, new InternalMultiMapValue<ObservableMultiMap<?, ?>>(ModelTypes.MultiMap) {
-			private Function<ModelSetInstance, Comparator<Object>> theComparator;
+			private ValueContainer<SettableValue<?>, SettableValue<Comparator<Object>>> theComparator;
 
 			@Override
 			protected <K, V> void prepare(TypeToken<K> keyType, TypeToken<V> valueType, ExpressoQIS session)
 				throws QonfigInterpretationException {
-				theComparator = parseComparator((TypeToken<Object>) keyType, session.getAttributeExpression("sort-with"),
-					session.getExpressoEnv());
+				theComparator = (ValueContainer<SettableValue<?>, SettableValue<Comparator<Object>>>) (ValueContainer<?, ?>) parseSorting(
+					keyType, session.forChildren("sort").peekFirst()).createValue();
 			}
 
 			@Override
 			protected <K, V> ObservableMultiMap.Builder<K, V, ?> create(TypeToken<K> keyType, TypeToken<V> valueType,
 				ModelSetInstance models) {
-				return ObservableMultiMap.build(keyType, valueType).sortedBy(theComparator.apply(models));
+				return ObservableMultiMap.build(keyType, valueType).sortedBy(theComparator.get(models).get());
 			}
 		});
 	}
@@ -3158,47 +3159,56 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 					}
 				};
 			};
-		} else if (TypeTokens.get().isAssignable(TypeTokens.get().keyFor(Comparable.class).wildCard(), type)) {
-			return () -> {
-				if (CharSequence.class.isAssignableFrom(TypeTokens.getRawType(type))) {
-					return ValueContainer.literal(compareType, (Comparator<T>) StringUtils.DISTINCT_NUMBER_TOLERANT, "NUMBER_TOLERANT");
-				} else {
-					return ValueContainer.literal(compareType, (Comparator<T>) (v1, v2) -> {
-						if (v1 == null) {
-							if (v2 == null)
-								return 0;
-							else
-								return 1;
-						} else if (v2 == null)
-							return -1;
-						else
-							return ((Comparable<T>) v1).compareTo(v2);
-					}, "Comparable");
-				}
-			};
-		} else
-			throw new QonfigInterpretationException(type + " is not Comparable, use either sort-with or sort-by");
+		} else {
+			Comparator<T> compare = getDefaultSorting(TypeTokens.getRawType(type));
+			if (compare != null)
+				return ValueCreator.literal(TypeTokens.get().keyFor(Comparator.class).parameterized(type), compare, compare.toString());
+			else
+				throw new QonfigInterpretationException(type + " is not Comparable, use either sort-with or sort-by");
+		}
 	}
 
 	/**
-	 * @param <T> The type to compare
-	 * @param type The type to compare
-	 * @param expression The expression representing the comparison operation
-	 * @param env The environment to evaluate the expression in
-	 * @return A function to produce a comparator given a model instance set
-	 * @throws QonfigInterpretationException If the comparator cannot be evaluated
+	 * @param <T> The type to get the sorting for
+	 * @param type The type to get the sorting for
+	 * @return The default sorting for the given type, or null if no default sorting is available for the type
 	 */
-	public static <T> Function<ModelSetInstance, Comparator<T>> parseComparator(TypeToken<T> type, ObservableExpression expression,
-		ExpressoEnv env) throws QonfigInterpretationException {
-		TypeToken<? super T> superType = TypeTokens.get().getSuperWildcard(type);
-		Function<ModelSetInstance, BiFunction<T, T, Integer>> compareFn = expression
-			.<T, T, Void, Integer> findMethod(TypeTokens.get().INT, env)//
-			.withOption(argList(superType, superType), (v1, v2, __, args, models) -> {
-				args[0] = v1;
-				args[1] = v2;
-			})//
-			.find2();
-		return compareFn.andThen(biFn -> (v1, v2) -> biFn.apply(v1, v2));
+	public static <T> Comparator<T> getDefaultSorting(Class<T> type) {
+		if (CharSequence.class.isAssignableFrom(type))
+			return (Comparator<T>) StringUtils.DISTINCT_NUMBER_TOLERANT;
+		else if (Comparable.class.isAssignableFrom(type)) {
+			return LambdaUtils.printableComparator((v1, v2) -> {
+				if (v1 == null) {
+					if (v2 == null)
+						return 0;
+					else
+						return 1;
+				} else if (v2 == null)
+					return -1;
+				else
+					return ((Comparable<T>) v1).compareTo(v2);
+			}, () -> "comparable", "comparableComparator");
+		} else
+			return null;
+	}
+
+	/**
+	 * @param <V> The type to get the sorting for
+	 * @param type The type to get the sorting for
+	 * @param sort The sorting declaration (null to use the {@link #getDefaultSorting(Class) default sorting} for the type)
+	 * @return The defined sorting
+	 * @throws QonfigInterpretationException If the sorting could not be parsed or is not defined by default for the given type
+	 */
+	public static <V> ValueCreator<SettableValue<?>, SettableValue<Comparator<V>>> parseSorting(TypeToken<V> type, ExpressoQIS sort)
+		throws QonfigInterpretationException {
+		if (sort == null) {
+			Comparator<V> sorting = getDefaultSorting(TypeTokens.getRawType(type));
+			if (sorting == null)
+				throw new QonfigInterpretationException("No default sorting available for type " + type + ", use <sort>");
+			return ValueCreator.literal(TypeTokens.get().keyFor(Comparator.class).<Comparator<V>> parameterized(type), sorting,
+				sorting.toString());
+		} else
+			return sort.put(VALUE_TYPE_KEY, type).interpret(ValueCreator.class);
 	}
 
 	static BetterList<TypeToken<?>> argList(TypeToken<?>... init) {

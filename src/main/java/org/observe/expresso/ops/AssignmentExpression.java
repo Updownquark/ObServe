@@ -120,12 +120,6 @@ public class AssignmentExpression implements ObservableExpression {
 	}
 
 	@Override
-	public <P1, P2, P3, T> MethodFinder<P1, P2, P3, T> findMethod(TypeToken<T> targetType, ExpressoEnv env)
-		throws QonfigInterpretationException {
-		throw new QonfigInterpretationException("Not implemented");
-	}
-
-	@Override
 	public int hashCode() {
 		return Objects.hash(theTarget, theValue);
 	}

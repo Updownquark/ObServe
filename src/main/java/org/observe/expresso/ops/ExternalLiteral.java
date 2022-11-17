@@ -14,11 +14,9 @@ import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.NonStructuredParser;
 import org.observe.expresso.ObservableExpression;
-import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ValueContainer;
 import org.observe.util.TypeTokens;
 import org.qommons.LambdaUtils;
-import org.qommons.TriFunction;
 import org.qommons.config.QonfigInterpretationException;
 
 import com.google.common.reflect.TypeToken;
@@ -69,22 +67,6 @@ public class ExternalLiteral implements ObservableExpression {
 		return ValueContainer.of((ModelInstanceType<M, MV>) ModelTypes.Value.forType(value.getType()), //
 			LambdaUtils.constantFn(//
 				(MV) SettableValue.asSettable(value, __ -> "Literal value cannot be modified"), theExpression.getText(), null));
-	}
-
-	@Override
-	public <P1, P2, P3, T2> MethodFinder<P1, P2, P3, T2> findMethod(TypeToken<T2> targetType, ExpressoEnv env)
-		throws QonfigInterpretationException {
-		ObservableValue<?> value = parseValue(targetType, env);
-		return new MethodFinder<P1, P2, P3, T2>(targetType) {
-			@Override
-			public Function<ModelSetInstance, TriFunction<P1, P2, P3, T2>> find3() throws QonfigInterpretationException {
-				for (MethodOption option : theOptions) {
-					if (option.size() == 0)
-						return __ -> (p1, p2, p3) -> (T2) value.get();
-				}
-				throw new QonfigInterpretationException("No zero-parameter option for literal `" + theText + "`");
-			}
-		};
 	}
 
 	/**

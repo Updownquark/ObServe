@@ -2,7 +2,6 @@ package org.observe.expresso;
 
 import static org.observe.expresso.ExpressoBaseV0_1.KEY_TYPE_KEY;
 import static org.observe.expresso.ExpressoBaseV0_1.VALUE_TYPE_KEY;
-import static org.observe.expresso.ExpressoBaseV0_1.parseComparator;
 import static org.observe.expresso.ExpressoBaseV0_1.parseType;
 import static org.observe.expresso.ExpressoBaseV0_1.parseValue;
 
@@ -29,7 +28,9 @@ import java.util.regex.PatternSyntaxException;
 
 import javax.swing.JFrame;
 
+import org.observe.Observable;
 import org.observe.ObservableValue;
+import org.observe.ObservableValueEvent;
 import org.observe.SettableValue;
 import org.observe.assoc.ObservableMap;
 import org.observe.assoc.ObservableMultiMap;
@@ -53,12 +54,15 @@ import org.observe.expresso.ObservableModelSet.ValueContainer;
 import org.observe.expresso.ObservableModelSet.ValueCreator;
 import org.observe.util.TypeTokens;
 import org.observe.util.swing.WindowPopulation;
+import org.qommons.Identifiable;
 import org.qommons.ThreadConstraint;
 import org.qommons.TimeUtils;
 import org.qommons.TimeUtils.TimeEvaluationOptions;
+import org.qommons.Transaction;
 import org.qommons.Version;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.BetterSortedSet;
+import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.config.QommonsConfig;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigInterpretation;
@@ -226,7 +230,8 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 					return (ObservableValueSet<Object>) config.buildEntitySet(null);
 				}
 			};
-		}).createWith("list", Expresso.ConfigModelValue.class, new ConfigCollectionValue<ObservableCollection<?>>(ModelTypes.Collection) {
+		})
+		.createWith("list", Expresso.ConfigModelValue.class, new ConfigCollectionValue<ObservableCollection<?>>(ModelTypes.Collection) {
 			@Override
 			protected <V> ObservableCollection<V> modify(ObservableCollection<V> collection, ModelSetInstance msi) {
 				return collection;
@@ -236,32 +241,34 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			protected <V> ObservableSet<V> modify(ObservableCollection<V> collection, ModelSetInstance msi) {
 				return collection.flow().distinct().collectActive(msi.getUntil());
 			}
-		}).createWith("sorted-set", Expresso.ConfigModelValue.class, new ConfigCollectionValue<ObservableSortedSet<?>>(ModelTypes.SortedSet) {
-			private Function<ModelSetInstance, Comparator<Object>> theComparator;
+		}).createWith("sorted-set", Expresso.ConfigModelValue.class,
+			new ConfigCollectionValue<ObservableSortedSet<?>>(ModelTypes.SortedSet) {
+			private ValueContainer<SettableValue<?>, SettableValue<Comparator<Object>>> theComparator;
 
 			@Override
 			protected <V> void prepare(TypeToken<V> type, ExpressoQIS session) throws QonfigInterpretationException {
-				theComparator = parseComparator((TypeToken<Object>) type, session.getAttributeExpression("sort-with"),
-					session.getExpressoEnv());
+				theComparator = (ValueContainer<SettableValue<?>, SettableValue<Comparator<Object>>>) (ValueContainer<?, ?>) ExpressoBaseV0_1
+					.parseSorting(type, session.forChildren("sort").peekFirst()).createValue();
 			}
 
 			@Override
 			protected <V> ObservableSortedSet<V> modify(ObservableCollection<V> collection, ModelSetInstance msi) {
-				return collection.flow().distinctSorted(theComparator.apply(msi), false).collectActive(msi.getUntil());
+				return collection.flow().distinctSorted(theComparator.get(msi).get(), false).collectActive(msi.getUntil());
 			}
-		}).createWith("sorted-list", Expresso.ConfigModelValue.class,
+		})
+		.createWith("sorted-list", Expresso.ConfigModelValue.class,
 			new ConfigCollectionValue<ObservableSortedCollection<?>>(ModelTypes.SortedCollection) {
-			private Function<ModelSetInstance, Comparator<Object>> theComparator;
+			private ValueContainer<SettableValue<?>, SettableValue<Comparator<Object>>> theComparator;
 
 			@Override
 			protected <V> void prepare(TypeToken<V> type, ExpressoQIS session) throws QonfigInterpretationException {
-				theComparator = parseComparator((TypeToken<Object>) type,
-					session.getAttributeExpression("sort-with"), session.getExpressoEnv());
+				theComparator = (ValueContainer<SettableValue<?>, SettableValue<Comparator<Object>>>) (ValueContainer<?, ?>) ExpressoBaseV0_1
+					.parseSorting(type, session.forChildren("sort").peekFirst()).createValue();
 			}
 
 			@Override
 			protected <V> ObservableSortedCollection<?> modify(ObservableCollection<V> collection, ModelSetInstance msi) {
-				return collection.flow().sorted(theComparator.apply(msi)).collectActive(msi.getUntil());
+				return collection.flow().sorted(theComparator.get(msi).get()).collectActive(msi.getUntil());
 			}
 		})
 		.createWith("map", Expresso.ConfigModelValue.class, session -> {
@@ -467,8 +474,8 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 					public ValueContainer<Object, Object> createValue() {
 						child.put(VALUE_TYPE_KEY, type);
 						try {
-							ConfigFormatProducer<Object> format = parseConfigFormat(
-								child.getAttributeExpression("format"), null, child.getExpressoEnv().with(model, null), type);
+							ConfigFormatProducer<Object> format = parseConfigFormat(child.getAttributeExpression("format"), null,
+								child.getExpressoEnv().with(model, null), type);
 							Expresso.ConfigModelValue<Object, Object> configValue = child.interpret(Expresso.ConfigModelValue.class);
 							return new ValueContainer<Object, Object>() {
 								@Override
@@ -669,9 +676,8 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			return null;
 	}
 
-	private ValueCreator<SettableValue<?>, SettableValue<ObservableConfigFormat<Object>>> createSimpleConfigFormat(
-		ExpressoQIS session)
-			throws QonfigInterpretationException {
+	private ValueCreator<SettableValue<?>, SettableValue<ObservableConfigFormat<Object>>> createSimpleConfigFormat(ExpressoQIS session)
+		throws QonfigInterpretationException {
 		TypeToken<Object> valueType = (TypeToken<Object>) parseType(session.getAttributeText("type"), session.getExpressoEnv());
 		ModelInstanceType<SettableValue<?>, SettableValue<Format<Object>>> formatType = ModelTypes.Value
 			.forType(TypeTokens.get().keyFor(Format.class).parameterized(valueType));
@@ -983,33 +989,92 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			session.withWarning("Unrecognized relative evaluation type: '" + rteS);
 		}
 		TimeEvaluationOptions fOptions = options;
-		TypeToken<Format<Instant>> formatType = TypeTokens.get().keyFor(Format.class).<Format<Instant>> parameterized(Instant.class);
+		TypeToken<Instant> instantType = TypeTokens.get().of(Instant.class);
+		TypeToken<Format<Instant>> formatType = TypeTokens.get().keyFor(Format.class).<Format<Instant>> parameterized(instantType);
+		ModelInstanceType<SettableValue<?>, SettableValue<Instant>> instantModelType = ModelTypes.Value.forType(instantType);
 		ModelInstanceType<SettableValue<?>, SettableValue<Format<Instant>>> formatInstanceType = ModelTypes.Value.forType(formatType);
 		ObservableExpression relativeV = session.getAttributeExpression("relative-to");
 		return () -> {
-			Function<ModelSetInstance, Supplier<Instant>> relativeTo;
-			if (relativeV == null) {
-				relativeTo = msi -> Instant::now;
-			} else {
+			ValueContainer<SettableValue<?>, SettableValue<Instant>> relativeTo = null;
+			if (relativeV != null) {
 				try {
-					relativeTo = relativeV.findMethod(Instant.class, session.getExpressoEnv()).withOption(BetterList.empty(), null).find0();
+					relativeTo = relativeV.evaluate(instantModelType, session.getExpressoEnv());
 				} catch (QonfigInterpretationException e) {
 					session.withError(e.getMessage(), e);
-					relativeTo = msi -> Instant::now;
 				}
 			}
-			Function<ModelSetInstance, Supplier<Instant>> relativeTo2 = relativeTo;
+			if (relativeTo == null) {
+				relativeTo = ValueContainer.of(instantModelType, msi -> new SettableValue<Instant>() {
+					private long theStamp;
+
+					@Override
+					public Object getIdentity() {
+						return Identifiable.baseId("Instant.now()", "Instant.now()");
+					}
+
+					@Override
+					public TypeToken<Instant> getType() {
+						return null;
+					}
+
+					@Override
+					public Instant get() {
+						return Instant.now();
+					}
+
+					@Override
+					public Observable<ObservableValueEvent<Instant>> noInitChanges() {
+						return Observable.empty();
+					}
+
+					@Override
+					public long getStamp() {
+						return theStamp++;
+					}
+
+					@Override
+					public boolean isLockSupported() {
+						return false;
+					}
+
+					@Override
+					public Transaction lock(boolean write, Object cause) {
+						return Transaction.NONE;
+					}
+
+					@Override
+					public Transaction tryLock(boolean write, Object cause) {
+						return Transaction.NONE;
+					}
+
+					@Override
+					public ObservableValue<String> isEnabled() {
+						return SettableValue.ALWAYS_DISABLED;
+					}
+
+					@Override
+					public String isAcceptable(Instant value) {
+						return StdMsg.UNSUPPORTED_OPERATION;
+					}
+
+					@Override
+					public Instant set(Instant value, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
+						throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+					}
+				});
+			}
+			ValueContainer<SettableValue<?>, SettableValue<Instant>> relativeTo2 = relativeTo;
 			return new ObservableModelSet.AbstractValueContainer<SettableValue<?>, SettableValue<Format<Instant>>>(formatInstanceType) {
 				@Override
 				public SettableValue<Format<Instant>> get(ModelSetInstance models) {
-					return ObservableModelSet.literal(SpinnerFormat.flexDate(relativeTo2.apply(models), dayFormat, __ -> fOptions),
+					return ObservableModelSet.literal(SpinnerFormat.flexDate(relativeTo2.get(models), dayFormat, __ -> fOptions),
 						"instant");
 				}
 
 				@Override
 				public SettableValue<Format<Instant>> forModelCopy(SettableValue<Format<Instant>> value, ModelSetInstance sourceModels,
 					ModelSetInstance newModels) {
-					return ObservableModelSet.literal(SpinnerFormat.flexDate(relativeTo2.apply(newModels), dayFormat, __ -> fOptions),
+					return ObservableModelSet.literal(SpinnerFormat.flexDate(relativeTo2.get(newModels), dayFormat, __ -> fOptions),
 						"instant");
 				}
 

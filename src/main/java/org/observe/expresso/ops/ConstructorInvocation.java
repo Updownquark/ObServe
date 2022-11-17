@@ -14,8 +14,6 @@ import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet.ValueContainer;
 import org.qommons.config.QonfigInterpretationException;
 
-import com.google.common.reflect.TypeToken;
-
 /** An expression representing the invocation of a constructor to create a new instance of a type */
 public class ConstructorInvocation extends Invocation {
 	private final String theType;
@@ -56,12 +54,6 @@ public class ConstructorInvocation extends Invocation {
 		if (different)
 			return new ConstructorInvocation(getType(), getTypeArguments(), Collections.unmodifiableList(newChildren));
 		return this;
-	}
-
-	@Override
-	public <P1, P2, P3, T> MethodFinder<P1, P2, P3, T> findMethod(TypeToken<T> targetType, ExpressoEnv env)
-		throws QonfigInterpretationException {
-		throw new QonfigInterpretationException("Not implemented");
 	}
 
 	@Override

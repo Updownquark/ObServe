@@ -1,14 +1,10 @@
 package org.observe.expresso.ops;
 
 import java.lang.reflect.Field;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.util.Collections;
 import java.util.List;
-import java.util.function.Consumer;
 import java.util.function.Function;
-import java.util.function.Supplier;
 
 import org.observe.Observable;
 import org.observe.ObservableValue;
@@ -20,14 +16,12 @@ import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet;
-import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ValueContainer;
 import org.observe.util.TypeTokens;
 import org.qommons.Identifiable;
 import org.qommons.QommonsUtils;
 import org.qommons.StringUtils;
 import org.qommons.Transaction;
-import org.qommons.TriFunction;
 import org.qommons.collect.BetterList;
 import org.qommons.config.QonfigInterpretationException;
 
@@ -211,141 +205,6 @@ public class NameExpression implements ObservableExpression {
 		ValueContainer<SettableValue<?>, SettableValue<F>> fieldValue = ValueContainer.of(fieldModelType,
 			msi -> new FieldValue<>(context == null ? null : context.get(msi), field, fieldType));
 		return fieldValue.as(targetModelType);
-	}
-
-	@Override
-	public <P1, P2, P3, T> MethodFinder<P1, P2, P3, T> findMethod(TypeToken<T> targetType, ExpressoEnv env)
-		throws QonfigInterpretationException {
-		boolean voidTarget = TypeTokens.get().unwrap(TypeTokens.getRawType(targetType)) == void.class;
-		return new MethodFinder<P1, P2, P3, T>(targetType) {
-			@Override
-			public Function<ModelSetInstance, TriFunction<P1, P2, P3, T>> find3() throws QonfigInterpretationException {
-				ValueContainer<?, ?> mv = env.getModels().getComponentIfExists(toString());
-				if (mv != null) {
-					for (MethodOption option : theOptions) {
-						switch (option.size()) {
-						case 0:
-							if (mv.getType().getModelType() == ModelTypes.Value) {
-								if (targetType.isAssignableFrom(mv.getType().getType(0))) {
-									// TODO resultType
-									return msi -> (p1, p2, p3) -> ((SettableValue<T>) mv.get(msi)).get();
-								} else if (TypeTokens.get().isAssignable(targetType, mv.getType().getType(0))) {
-									ValueContainer<?, SettableValue<T>> mv2 = env.getModels().getValue(toString(),
-										ModelTypes.Value.forType(targetType));
-									// TODO resultType
-									return msi -> (p1, p2, p3) -> mv2.get(msi).get();
-								} else if (Supplier.class.isAssignableFrom(TypeTokens.getRawType(mv.getType().getType(0)))
-									&& TypeTokens.get().isAssignable(targetType,
-										mv.getType().getType(0).resolveType(Supplier.class.getTypeParameters()[0]))) {
-									// TODO resultType
-									return msi -> (p1, p2, p3) -> ((SettableValue<Supplier<? extends T>>) mv.get(msi)).get().get();
-								} else if (voidTarget
-									&& Runnable.class.isAssignableFrom(TypeTokens.getRawType(mv.getType().getType(0)))) {
-									// TODO resultType
-									return msi -> (p1, p2, p3) -> {
-										((SettableValue<? extends Runnable>) mv.get(msi)).get().run();
-										return null;
-									};
-								} else
-									continue;
-							} else if (targetType.isAssignableFrom(TypeTokens.get().keyFor(mv.getType().getModelType().modelType)
-								.parameterized(mv.getType().getType(0)))) {
-								// TODO resultType
-								return msi -> (p1, p2, p3) -> (T) mv.get(msi);
-							} else
-								continue;
-						case 1:
-							if (mv.getType().getModelType() == ModelTypes.Value) {
-								if (Function.class.isAssignableFrom(TypeTokens.getRawType(mv.getType().getType(0)))
-									&& TypeTokens.get().isAssignable(
-										mv.getType().getType(0).resolveType(Function.class.getTypeParameters()[0]), option.resolve(0))//
-									&& TypeTokens.get().isAssignable(targetType,
-										mv.getType().getType(0).resolveType(Function.class.getTypeParameters()[1]))) {
-									// TODO resultType
-									return msi -> (p1, p2, p3) -> {
-										Object[] args = new Object[1];
-										option.getArgMaker().makeArgs(p1, p2, p3, args, msi);
-										return ((SettableValue<Function<Object, ? extends T>>) mv.get(msi)).get().apply(args[0]);
-									};
-								} else if (voidTarget
-									&& Consumer.class.isAssignableFrom(TypeTokens.getRawType(mv.getType().getType(0)))) {
-									// TODO resultType
-									return msi -> (p1, p2, p3) -> {
-										Object[] args = new Object[1];
-										option.getArgMaker().makeArgs(p1, p2, p3, args, msi);
-										((SettableValue<? extends Consumer<Object>>) mv.get(msi)).get().accept(args[0]);
-										return null;
-									};
-								} else
-									continue;
-							} else
-								continue;
-						case 2:
-						default:
-							// TODO
-						}
-					}
-				} else if (theNames.size() == 1) {
-					Invocation.MethodResult<Method, SettableValue<T>> result = Invocation.findMethod(//
-						env.getClassView().getImportedStaticMethods(theNames.getFirst()).toArray(new Method[0]), theNames.getFirst(), null,
-						false, theOptions, ModelTypes.Value.forType(targetType), env, Invocation.ExecutableImpl.METHOD,
-						NameExpression.this);
-					if (result != null) {
-						setResultType((TypeToken<T>) result.converter.getType().getType(0));
-						MethodOption option = theOptions.get(result.argListOption);
-						return msi -> (p1, p2, p3) -> {
-							Object[] args = new Object[option.size()];
-							option.getArgMaker().makeArgs(p1, p2, p3, args, msi);
-							try {
-								Object returned = result.invoke(null, args, Invocation.ExecutableImpl.METHOD);
-								return voidTarget ? null : result.converter.convert(SettableValue.of(Object.class, returned, "")).get();
-							} catch (InvocationTargetException e) {
-								throw new IllegalStateException(NameExpression.this + ": Could not invoke " + result,
-									e.getTargetException());
-							} catch (IllegalAccessException | IllegalArgumentException | InstantiationException e) {
-								throw new IllegalStateException(NameExpression.this + ": Could not invoke " + result, e);
-							} catch (NullPointerException e) {
-								NullPointerException npe = new NullPointerException(NameExpression.this.toString()//
-									+ (e.getMessage() == null ? "" : ": " + e.getMessage()));
-								npe.setStackTrace(e.getStackTrace());
-								throw npe;
-							}
-						};
-					}
-				} else {
-					// TODO evaluate model value for names.length-1, then use that context to find a method
-					Class<?> type = env.getClassView().getType(getPath(theNames.size() - 2));
-					if (type != null) {
-						Invocation.MethodResult<Method, SettableValue<T>> result = Invocation.findMethod(//
-							type.getMethods(), theNames.getFirst(), null, false, theOptions, ModelTypes.Value.forType(targetType), env,
-							Invocation.ExecutableImpl.METHOD, NameExpression.this);
-						if (result != null) {
-							setResultType((TypeToken<T>) result.converter.getType().getType(0));
-							MethodOption option = theOptions.get(result.argListOption);
-							return msi -> (p1, p2, p3) -> {
-								Object[] args = new Object[option.size()];
-								option.getArgMaker().makeArgs(p1, p2, p3, args, msi);
-								try {
-									Object returned = result.invoke(null, args, Invocation.ExecutableImpl.METHOD);
-									return voidTarget ? null : result.converter.convert(SettableValue.of(Object.class, returned, "")).get();
-								} catch (InvocationTargetException e) {
-									throw new IllegalStateException(NameExpression.this + ": Could not invoke " + result,
-										e.getTargetException());
-								} catch (IllegalAccessException | IllegalArgumentException | InstantiationException e) {
-									throw new IllegalStateException(NameExpression.this + ": Could not invoke " + result, e);
-								} catch (NullPointerException e) {
-									NullPointerException npe = new NullPointerException(NameExpression.this.toString()//
-										+ (e.getMessage() == null ? "" : ": " + e.getMessage()));
-									npe.setStackTrace(e.getStackTrace());
-									throw npe;
-								}
-							};
-						}
-					}
-				}
-				throw new QonfigInterpretationException("Could not parse method from " + NameExpression.this.toString());
-			}
-		};
 	}
 
 	static class FieldValue<M, F> extends Identifiable.AbstractIdentifiable implements SettableValue<F> {

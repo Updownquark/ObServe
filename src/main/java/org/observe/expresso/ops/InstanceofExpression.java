@@ -14,8 +14,6 @@ import org.observe.expresso.ObservableModelSet.ValueContainer;
 import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigInterpretationException;
 
-import com.google.common.reflect.TypeToken;
-
 /** An expression that returns a boolean for whether a given expression's value is an instance of a constant type */
 public class InstanceofExpression implements ObservableExpression {
 	private final ObservableExpression theLeft;
@@ -74,12 +72,6 @@ public class InstanceofExpression implements ObservableExpression {
 					__ -> "instanceof expressions are not reversible");
 			});
 		return (ValueContainer<M, MV>) container;
-	}
-
-	@Override
-	public <P1, P2, P3, T> MethodFinder<P1, P2, P3, T> findMethod(TypeToken<T> targetType, ExpressoEnv env)
-		throws QonfigInterpretationException {
-		throw new QonfigInterpretationException("Not supported for instanceof operators");
 	}
 
 	@Override

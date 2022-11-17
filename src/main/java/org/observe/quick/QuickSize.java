@@ -14,13 +14,10 @@ import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet.ValueContainer;
 import org.observe.util.TypeTokens;
-import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.config.CustomValueType;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigParseSession;
 import org.qommons.config.QonfigToolkit;
-
-import com.google.common.reflect.TypeToken;
 
 public class QuickSize {
 	public enum SizeUnit {
@@ -149,12 +146,6 @@ public class QuickSize {
 		@Override
 		public List<? extends ObservableExpression> getChildren() {
 			return Collections.singletonList(theValue);
-		}
-
-		@Override
-		public <P1, P2, P3, T> MethodFinder<P1, P2, P3, T> findMethod(TypeToken<T> targetType, ExpressoEnv env)
-			throws QonfigInterpretationException {
-			throw new QonfigInterpretationException(StdMsg.UNSUPPORTED_OPERATION);
 		}
 
 		@Override

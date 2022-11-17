@@ -16,8 +16,6 @@ import org.observe.expresso.ObservableModelSet.ValueContainer;
 import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigInterpretationException;
 
-import com.google.common.reflect.TypeToken;
-
 /** An expression representing the invocation of a method */
 public class MethodInvocation extends Invocation {
 	private final ObservableExpression theContext;
@@ -120,12 +118,6 @@ public class MethodInvocation extends Invocation {
 			}
 			throw new QonfigInterpretationException("No such imported method " + printSignature());
 		}
-	}
-
-	@Override
-	public <P1, P2, P3, T> MethodFinder<P1, P2, P3, T> findMethod(TypeToken<T> targetType, ExpressoEnv env)
-		throws QonfigInterpretationException {
-		throw new QonfigInterpretationException("Not implemented.  Are you sure you didn't mean to use the resolution operator (::)?");
 	}
 
 	@Override
