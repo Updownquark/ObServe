@@ -10,7 +10,6 @@ import java.util.function.Function;
 import org.observe.SettableValue;
 import org.observe.expresso.ExpressoEnv;
 import org.observe.expresso.ModelType.ModelInstanceType;
-import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet.ValueContainer;
 import org.qommons.config.QonfigInterpretationException;
@@ -66,30 +65,18 @@ public class ConstructorInvocation extends Invocation {
 	}
 
 	@Override
-	protected <M, MV extends M> ValueContainer<M, MV> evaluateInternal2(ModelInstanceType<M, MV> type, ExpressoEnv env, ArgOption args,
-		TypeToken<?> targetType) throws QonfigInterpretationException {
+	protected <M, MV extends M> InvokableResult<?, M, MV> evaluateInternal2(ModelInstanceType<M, MV> type, ExpressoEnv env, ArgOption args)
+		throws QonfigInterpretationException {
 		Class<?> constructorType = env.getClassView().getType(theType);
 		if (constructorType == null)
 			throw new QonfigInterpretationException("No such type found: " + theType);
-		Invocation.MethodResult<Constructor<?>, ?> result = Invocation.findMethod(constructorType.getConstructors(), null, null, true,
-			Arrays.asList(args), targetType, env, Invocation.ExecutableImpl.CONSTRUCTOR, this);
+		Invocation.MethodResult<Constructor<?>, MV> result = Invocation.findMethod(constructorType.getConstructors(), null, null, true,
+			Arrays.asList(args), type, env, Invocation.ExecutableImpl.CONSTRUCTOR, this);
 		if (result != null) {
 			ValueContainer<SettableValue<?>, SettableValue<?>>[] realArgs = new ValueContainer[getArguments().size()];
 			for (int a = 0; a < realArgs.length; a++)
 				realArgs[a] = args.args[a].get(0);
-			if (type.getModelType() == ModelTypes.Value)
-				return (ValueContainer<M, MV>) new InvocationValueContainer<>(result, null, Arrays.asList(realArgs),
-					Invocation.ExecutableImpl.CONSTRUCTOR);
-			else if (type.getModelType() == ModelTypes.Action)
-				return (ValueContainer<M, MV>) new InvocationActionContainer<>(result, null, Arrays.asList(realArgs),
-					Invocation.ExecutableImpl.CONSTRUCTOR);
-			else {
-				TypeToken<?>[] paramTypes = new TypeToken[type.getModelType().getTypeCount()];
-				for (int i = 0; i < paramTypes.length; i++)
-					paramTypes[i] = result.returnType.resolveType(type.getModelType().modelType.getTypeParameters()[i]);
-				return new InvocationThingContainer<>((Invocation.MethodResult<Constructor<?>, MV>) result, null, Arrays.asList(realArgs),
-					(ModelInstanceType<M, MV>) type.getModelType().forTypes(paramTypes), Invocation.ExecutableImpl.CONSTRUCTOR);
-			}
+			return new InvokableResult<>(result, null, Arrays.asList(realArgs), Invocation.ExecutableImpl.CONSTRUCTOR);
 		}
 		throw new QonfigInterpretationException("No such constructor " + printSignature());
 	}

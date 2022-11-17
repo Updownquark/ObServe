@@ -89,11 +89,11 @@ public class MethodReferenceExpression implements ObservableExpression {
 				if (theContext instanceof NameExpression) {
 					Class<?> type = env.getClassView().getType(theContext.toString());
 					if (type != null) {
-						Invocation.MethodResult<Method, ? extends T> result = Invocation.findMethod(type.getMethods(), theMethodName,
-							TypeTokens.get().of(type), true, theOptions, targetType, env, Invocation.ExecutableImpl.METHOD,
-							MethodReferenceExpression.this);
+						Invocation.MethodResult<Method, SettableValue<T>> result = Invocation.findMethod(type.getMethods(), theMethodName,
+							TypeTokens.get().of(type), true, theOptions, ModelTypes.Value.forType(targetType), env,
+							Invocation.ExecutableImpl.METHOD, MethodReferenceExpression.this);
 						if (result != null) {
-							setResultType(result.returnType);
+							setResultType((TypeToken<T>) result.converter.getType().getType(0));
 							MethodOption option = theOptions.get(result.argListOption);
 							boolean isStatic = (result.method.getModifiers() & Modifier.STATIC) != 0;
 							return msi -> (p1, p2, p3) -> {
@@ -107,8 +107,8 @@ public class MethodReferenceExpression implements ObservableExpression {
 									args = ArrayUtils.remove(args, 0);
 								}
 								try {
-									T val = result.invoke(ctx, args, Invocation.ExecutableImpl.METHOD);
-									return voidTarget ? null : val;
+									Object returned = result.invoke(ctx, args, Invocation.ExecutableImpl.METHOD);
+									return result.converter.convert(SettableValue.of(Object.class, returned, "")).get();
 								} catch (InvocationTargetException e) {
 									throw new IllegalStateException(MethodReferenceExpression.this + ": Could not invoke " + result,
 										e.getTargetException());
@@ -127,19 +127,19 @@ public class MethodReferenceExpression implements ObservableExpression {
 					}
 				}
 				ValueContainer<SettableValue<?>, SettableValue<?>> ctx = theContext.evaluate(ModelTypes.Value.any(), env);
-				Invocation.MethodResult<Method, ? extends T> result = Invocation.findMethod(//
-					TypeTokens.getRawType(ctx.getType().getType(0)).getMethods(), theMethodName, ctx.getType().getType(0), true,
-					theOptions, targetType, env, Invocation.ExecutableImpl.METHOD, MethodReferenceExpression.this);
+				Invocation.MethodResult<Method, SettableValue<T>> result = Invocation.findMethod(//
+					TypeTokens.getRawType(ctx.getType().getType(0)).getMethods(), theMethodName, ctx.getType().getType(0), true, theOptions,
+					ModelTypes.Value.forType(targetType), env, Invocation.ExecutableImpl.METHOD, MethodReferenceExpression.this);
 				if (result != null) {
-					setResultType(result.returnType);
+					setResultType((TypeToken<T>) result.converter.getType().getType(0));
 					MethodOption option = theOptions.get(result.argListOption);
 					return msi -> (p1, p2, p3) -> {
 						Object ctxV = ctx.get(msi).get();
 						Object[] args = new Object[option.size()];
 						option.getArgMaker().makeArgs(p1, p2, p3, args, msi);
 						try {
-							T val = result.invoke(ctxV, args, Invocation.ExecutableImpl.METHOD);
-							return voidTarget ? null : val;
+							Object returned = result.invoke(ctxV, args, Invocation.ExecutableImpl.METHOD);
+							return voidTarget ? null : result.converter.convert(SettableValue.of(Object.class, returned, "")).get();
 						} catch (InvocationTargetException e) {
 							throw new IllegalStateException(MethodReferenceExpression.this + ": Could not invoke " + result,
 								e.getTargetException());

@@ -286,17 +286,19 @@ public class NameExpression implements ObservableExpression {
 						}
 					}
 				} else if (theNames.size() == 1) {
-					Invocation.MethodResult<Method, ? extends T> result = Invocation.findMethod(//
+					Invocation.MethodResult<Method, SettableValue<T>> result = Invocation.findMethod(//
 						env.getClassView().getImportedStaticMethods(theNames.getFirst()).toArray(new Method[0]), theNames.getFirst(), null,
-						false, theOptions, voidTarget ? null : targetType, env, Invocation.ExecutableImpl.METHOD, NameExpression.this);
+						false, theOptions, ModelTypes.Value.forType(targetType), env, Invocation.ExecutableImpl.METHOD,
+						NameExpression.this);
 					if (result != null) {
-						setResultType(result.returnType);
+						setResultType((TypeToken<T>) result.converter.getType().getType(0));
 						MethodOption option = theOptions.get(result.argListOption);
 						return msi -> (p1, p2, p3) -> {
 							Object[] args = new Object[option.size()];
 							option.getArgMaker().makeArgs(p1, p2, p3, args, msi);
 							try {
-								return result.invoke(null, args, Invocation.ExecutableImpl.METHOD);
+								Object returned = result.invoke(null, args, Invocation.ExecutableImpl.METHOD);
+								return voidTarget ? null : result.converter.convert(SettableValue.of(Object.class, returned, "")).get();
 							} catch (InvocationTargetException e) {
 								throw new IllegalStateException(NameExpression.this + ": Could not invoke " + result,
 									e.getTargetException());
@@ -314,17 +316,18 @@ public class NameExpression implements ObservableExpression {
 					// TODO evaluate model value for names.length-1, then use that context to find a method
 					Class<?> type = env.getClassView().getType(getPath(theNames.size() - 2));
 					if (type != null) {
-						Invocation.MethodResult<Method, ? extends T> result = Invocation.findMethod(//
-							type.getMethods(), theNames.getFirst(), null, false, theOptions, voidTarget ? null : targetType, env,
-								Invocation.ExecutableImpl.METHOD, NameExpression.this);
+						Invocation.MethodResult<Method, SettableValue<T>> result = Invocation.findMethod(//
+							type.getMethods(), theNames.getFirst(), null, false, theOptions, ModelTypes.Value.forType(targetType), env,
+							Invocation.ExecutableImpl.METHOD, NameExpression.this);
 						if (result != null) {
-							setResultType(result.returnType);
+							setResultType((TypeToken<T>) result.converter.getType().getType(0));
 							MethodOption option = theOptions.get(result.argListOption);
 							return msi -> (p1, p2, p3) -> {
 								Object[] args = new Object[option.size()];
 								option.getArgMaker().makeArgs(p1, p2, p3, args, msi);
 								try {
-									return result.invoke(null, args, Invocation.ExecutableImpl.METHOD);
+									Object returned = result.invoke(null, args, Invocation.ExecutableImpl.METHOD);
+									return voidTarget ? null : result.converter.convert(SettableValue.of(Object.class, returned, "")).get();
 								} catch (InvocationTargetException e) {
 									throw new IllegalStateException(NameExpression.this + ": Could not invoke " + result,
 										e.getTargetException());

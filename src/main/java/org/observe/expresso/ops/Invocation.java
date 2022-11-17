@@ -18,8 +18,6 @@ import org.observe.Observable;
 import org.observe.ObservableAction;
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
-import org.observe.collect.ObservableCollection;
-import org.observe.collect.ObservableSet;
 import org.observe.expresso.ExpressoEnv;
 import org.observe.expresso.ModelType.ModelInstanceConverter;
 import org.observe.expresso.ModelType.ModelInstanceType;
@@ -64,14 +62,15 @@ public abstract class Invocation implements ObservableExpression {
 	@Override
 	public <M, MV extends M> ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env)
 		throws QonfigInterpretationException {
-		TypeToken<?> targetType;
-		boolean action = type.getModelType() == ModelTypes.Action;
-		if (action || type.getModelType() == ModelTypes.Value)
-			targetType = type.getType(0);
-		else
-			targetType = TypeTokens.get().keyFor(type.getModelType().modelType).parameterized(type.getTypeList());
-		try (Transaction t = action ? asAction() : Transaction.NONE) {
-			return evaluateInternal2(type, env, new ArgOption(env), targetType);
+		if (type.getModelType() == ModelTypes.Action) {
+			try (Transaction t = asAction()) {
+				InvokableResult<?, SettableValue<?>, ? extends SettableValue<?>> result = evaluateInternal2(
+					ModelTypes.Value.forType(type.getType(0)), env, new ArgOption(env));
+				return (ValueContainer<M, MV>) createActionContainer((InvokableResult<?, SettableValue<?>, SettableValue<Object>>) result);
+			}
+		} else {
+			InvokableResult<?, M, MV> result = evaluateInternal2(type, env, new ArgOption(env));
+			return createValueContainer(result);
 		}
 	}
 
@@ -132,17 +131,57 @@ public abstract class Invocation implements ObservableExpression {
 	}
 
 	/**
+	 * A structure containing everything needed to invoke an invokable
+	 *
+	 * @param <X> The type of invokable
+	 * @param <M> The model type of the result
+	 * @param <MV> The type of the result
+	 */
+	protected static class InvokableResult<X extends Executable, M, MV extends M> {
+		/** The method to invoke */
+		public final MethodResult<X, MV> method;
+		/** The context for the method invocation */
+		public final ValueContainer<SettableValue<?>, SettableValue<?>> context;
+		/** The arguments for the method invocation */
+		public final List<ValueContainer<SettableValue<?>, SettableValue<?>>> arguments;
+		/** The interface to actually invoke the invokable */
+		public final ExecutableImpl<X> impl;
+
+		/**
+		 * @param method The method to invoke
+		 * @param context The context for the method invocation
+		 * @param arguments The arguments for the method invocation
+		 * @param impl The interface to actually invoke the invokable
+		 */
+		public InvokableResult(MethodResult<X, MV> method, ValueContainer<SettableValue<?>, SettableValue<?>> context,
+			List<ValueContainer<SettableValue<?>, SettableValue<?>>> arguments, ExecutableImpl<X> impl) {
+			this.method = method;
+			this.context = context;
+			this.arguments = arguments;
+			this.impl = impl;
+		}
+	}
+
+	/**
 	 * @param <M> The model type
 	 * @param <MV> The model instance type
 	 * @param type The model instance type of the value container to create
 	 * @param env The expresso environment to use to evaluate this invocation
 	 * @param args The argument option to use to invoke
-	 * @param targetType The type to evaluate the invokable as
-	 * @return The result value container
+	 * @return The result definition
 	 * @throws QonfigInterpretationException If an error occurs evaluating the invokable
 	 */
-	protected abstract <M, MV extends M> ValueContainer<M, MV> evaluateInternal2(ModelInstanceType<M, MV> type, ExpressoEnv env,
-		ArgOption args, TypeToken<?> targetType) throws QonfigInterpretationException;
+	protected abstract <M, MV extends M> InvokableResult<?, M, MV> evaluateInternal2(ModelInstanceType<M, MV> type, ExpressoEnv env,
+		ArgOption args) throws QonfigInterpretationException;
+
+	private <X extends Executable, T> InvocationActionContainer<X, T> createActionContainer(
+		InvokableResult<X, SettableValue<?>, SettableValue<T>> result) {
+		return new InvocationActionContainer<>(result.method, result.context, result.arguments, result.impl);
+	}
+
+	private <X extends Executable, M, MV extends M> ValueContainer<M, MV> createValueContainer(InvokableResult<X, M, MV> result) {
+		return new InvocationThingContainer<>(result.method, result.context, result.arguments, result.impl);
+	}
 
 	/**
 	 * @param method The invokable to print
@@ -174,8 +213,9 @@ public abstract class Invocation implements ObservableExpression {
 	/**
 	 * Finds the method matching an invocation
 	 *
-	 * @param <M> The type of the invokable to find
-	 * @param <T> The result type of the invocation
+	 * @param <X> The type of the invokable to find
+	 * @param <M> The model type of the target result
+	 * @param <MV> The type of the target result
 	 * @param methods The invokables to search through
 	 * @param methodName The name of the invokable to find
 	 * @param contextType The type that the invocation's context was evaluated to
@@ -188,14 +228,12 @@ public abstract class Invocation implements ObservableExpression {
 	 * @return The result containing the invokable matching the given options, or null if no such invokable was found in the list
 	 * @throws QonfigInterpretationException If a suitable invokable is found, but there is an error with its invocation
 	 */
-	public static <M extends Executable, T> Invocation.MethodResult<M, ? extends T> findMethod(M[] methods, String methodName,
-		TypeToken<?> contextType, boolean arg0Context, List<? extends Args> argOptions, TypeToken<T> targetType, ExpressoEnv env,
-		ExecutableImpl<M> impl, ObservableExpression invocation) throws QonfigInterpretationException {
-		Class<T> rawTarget = targetType == null ? (Class<T>) Void.class : TypeTokens.get().wrap(TypeTokens.getRawType(targetType));
-		boolean voidTarget = rawTarget == Void.class;
+	public static <X extends Executable, M, MV extends M> MethodResult<X, MV> findMethod(X[] methods, String methodName,
+		TypeToken<?> contextType, boolean arg0Context, List<? extends Args> argOptions, ModelInstanceType<M, MV> targetType,
+		ExpressoEnv env, ExecutableImpl<X> impl, ObservableExpression invocation) throws QonfigInterpretationException {
 		Map<String, QonfigInterpretationException> methodErrors = null;
-		MethodResult<M, ? extends T> bestResult = null;
-		for (M m : methods) {
+		MethodResult<X, MV> bestResult = null;
+		for (X m : methods) {
 			if (methodName != null && !m.getName().equals(methodName))
 				continue;
 			boolean isStatic = impl.isStatic(m);
@@ -293,19 +331,17 @@ public abstract class Invocation implements ObservableExpression {
 					if (ok) {
 						TypeToken<?> returnType = tva.resolve(impl.getReturnType(m));
 
-						if (!voidTarget) {
-							ModelInstanceConverter<SettableValue<?>, SettableValue<?>> converter = ModelTypes.Value.forType(returnType)
-								.convert(ModelTypes.Value.forType(targetType));
-							if (converter == null)
-								throw new QonfigInterpretationException("Return type " + returnType + " of method "
-									+ Invocation.printSignature(m) + " cannot be assigned to type " + targetType);
-						}
+						ModelInstanceConverter<?, ?> converter = ModelTypes.Value.forType(returnType).convert(targetType);
+						if (converter == null)
+							throw new QonfigInterpretationException("Return type " + returnType + " of method "
+								+ Invocation.printSignature(m) + " cannot be assigned to type " + targetType);
 						if (specificity < 0) {
 							specificity = 0;
 							for (TypeToken<?> pt : paramTypes)
 								specificity += TypeTokens.get().getTypeSpecificity(pt.getType());
 						}
-						bestResult = new Invocation.MethodResult<>(m, o, false, (TypeToken<T>) returnType, specificity);
+						bestResult = new Invocation.MethodResult<>(m, o, false, specificity,
+							(ModelInstanceConverter<SettableValue<Object>, MV>) converter);
 					}
 				} catch (QonfigInterpretationException e) {
 					if (errors == null)
@@ -370,17 +406,17 @@ public abstract class Invocation implements ObservableExpression {
 		return AS_ACTION::remove;
 	}
 
-	static abstract class InvocationContainer<X extends Executable, M, T, MV extends M> implements ValueContainer<M, MV> {
-		private final Invocation.MethodResult<X, T> theMethod;
+	static abstract class InvocationContainer<X extends Executable, R, M, MV extends M> implements ValueContainer<M, MV> {
+		private final Invocation.MethodResult<X, R> theMethod;
 		private final ValueContainer<SettableValue<?>, SettableValue<?>> theContext;
 		private final List<ValueContainer<SettableValue<?>, SettableValue<?>>> theArguments;
 		private final ModelInstanceType<M, MV> theType;
 		private final Invocation.ExecutableImpl<X> theImpl;
 		private final boolean isCaching;
 		private boolean isUpdatingContext;
-		private T theCachedValue;
+		private Object theCachedValue;
 
-		InvocationContainer(Invocation.MethodResult<X, T> method, ValueContainer<SettableValue<?>, SettableValue<?>> context,
+		InvocationContainer(Invocation.MethodResult<X, R> method, ValueContainer<SettableValue<?>, SettableValue<?>> context,
 			List<ValueContainer<SettableValue<?>, SettableValue<?>>> arguments, ModelInstanceType<M, MV> type,
 			Invocation.ExecutableImpl<X> impl) {
 			theMethod = method;
@@ -402,6 +438,10 @@ public abstract class Invocation implements ObservableExpression {
 		@Override
 		public ModelInstanceType<M, MV> getType() {
 			return theType;
+		}
+
+		protected Invocation.MethodResult<X, R> getMethod() {
+			return theMethod;
 		}
 
 		@Override
@@ -452,7 +492,7 @@ public abstract class Invocation implements ObservableExpression {
 
 		protected abstract MV createModelValue(SettableValue<?> ctxV, SettableValue<?>[] argVs, Observable<Object> changes);
 
-		protected <C> T invoke(SettableValue<C> ctxV, SettableValue<?>[] argVs, boolean asAction)
+		protected <C> Object invoke(SettableValue<C> ctxV, SettableValue<?>[] argVs, boolean asAction)
 			throws IllegalAccessException, IllegalArgumentException, InvocationTargetException, InstantiationException {
 			if (isUpdatingContext)
 				return theCachedValue;
@@ -465,7 +505,7 @@ public abstract class Invocation implements ObservableExpression {
 			Object[] args = new Object[argVs.length];
 			for (int a = 0; a < args.length; a++)
 				args[a] = argVs[a].get();
-			T returnValue = theMethod.invoke(ctx, args, theImpl);
+			Object returnValue = theMethod.invoke(ctx, args, theImpl);
 			if (asAction && !isUpdatingContext && ctxV != null && theImpl.updateContext() && ctxV.isAcceptable(ctxV.get()) == null) {
 				isUpdatingContext = true;
 				theCachedValue = returnValue;
@@ -531,10 +571,11 @@ public abstract class Invocation implements ObservableExpression {
 	}
 
 	static class InvocationActionContainer<X extends Executable, T>
-	extends Invocation.InvocationContainer<X, ObservableAction<?>, T, ObservableAction<T>> {
-		InvocationActionContainer(Invocation.MethodResult<X, T> method, ValueContainer<SettableValue<?>, SettableValue<?>> context,
+	extends Invocation.InvocationContainer<X, SettableValue<T>, ObservableAction<?>, ObservableAction<T>> {
+		InvocationActionContainer(Invocation.MethodResult<X, SettableValue<T>> method,
+			ValueContainer<SettableValue<?>, SettableValue<?>> context,
 			List<ValueContainer<SettableValue<?>, SettableValue<?>>> arguments, Invocation.ExecutableImpl<X> impl) {
-			super(method, context, arguments, ModelTypes.Action.forType(method.returnType), impl);
+			super(method, context, arguments, ModelTypes.Action.forType((TypeToken<T>) method.converter.getType().getType(0)), impl);
 		}
 
 		@Override
@@ -546,7 +587,8 @@ public abstract class Invocation implements ObservableExpression {
 		protected ObservableAction<T> createModelValue(SettableValue<?> ctxV, SettableValue<?>[] argVs, Observable<Object> changes) {
 			return ObservableAction.of(getType().getValueType(), __ -> {
 				try {
-					return invoke(ctxV, argVs, true);
+					Object retValue = invoke(ctxV, argVs, true);
+					return getMethod().converter.convert(SettableValue.of(Object.class, retValue, "")).get();
 				} catch (InvocationTargetException e) {
 					if (e.getTargetException() instanceof RuntimeException)
 						throw (RuntimeException) e.getTargetException();
@@ -562,51 +604,17 @@ public abstract class Invocation implements ObservableExpression {
 		}
 	}
 
-	static class InvocationValueContainer<X extends Executable, T>
-	extends Invocation.InvocationContainer<X, SettableValue<?>, T, SettableValue<T>> {
-		InvocationValueContainer(Invocation.MethodResult<X, T> method, ValueContainer<SettableValue<?>, SettableValue<?>> context,
-			List<ValueContainer<SettableValue<?>, SettableValue<?>>> arguments, Invocation.ExecutableImpl<X> impl) {
-			super(method, context, arguments, ModelTypes.Value.forType(method.returnType), impl);
-		}
-
-		@Override
-		public ModelInstanceType.SingleTyped<SettableValue<?>, T, SettableValue<T>> getType() {
-			return (SingleTyped<SettableValue<?>, T, SettableValue<T>>) super.getType();
-		}
-
-		@Override
-		protected SettableValue<T> createModelValue(SettableValue<?> ctxV, SettableValue<?>[] argVs, Observable<Object> changes) {
-			return syntheticResultValue(getType().getValueType(), ctxV, argVs, changes);
-		}
-	}
-
-	static class InvocationThingContainer<X extends Executable, M, MV extends M> extends Invocation.InvocationContainer<X, M, MV, MV> {
+	static class InvocationThingContainer<X extends Executable, M, MV extends M> extends Invocation.InvocationContainer<X, MV, M, MV> {
 		InvocationThingContainer(Invocation.MethodResult<X, MV> method, ValueContainer<SettableValue<?>, SettableValue<?>> context,
-			List<ValueContainer<SettableValue<?>, SettableValue<?>>> arguments, ModelInstanceType<M, MV> type,
-			Invocation.ExecutableImpl<X> impl) {
-			super(method, context, arguments, type, impl);
+			List<ValueContainer<SettableValue<?>, SettableValue<?>>> arguments, Invocation.ExecutableImpl<X> impl) {
+			super(method, context, arguments, (ModelInstanceType<M, MV>) method.converter.getType(), impl);
 		}
 
 		@Override
 		protected MV createModelValue(SettableValue<?> ctxV, SettableValue<?>[] argVs, Observable<Object> changes) {
-			if (getType().getModelType() == ModelTypes.Collection) {
-				ObservableValue<ObservableCollection<?>> value = syntheticResultValue(//
-					TypeTokens.get().keyFor(ObservableCollection.class).<ObservableCollection<?>> parameterized(getType().getType(0)), ctxV,
-					argVs, changes);
-				return (MV) ObservableCollection.flattenValue(value);
-			} else if (getType().getModelType() == ModelTypes.Set) {
-				ObservableValue<ObservableSet<?>> value = syntheticResultValue(
-					TypeTokens.get().keyFor(ObservableSet.class).<ObservableSet<?>> parameterized(getType().getType(0)), ctxV, argVs,
-					changes);
-				return (MV) ObservableSet.flattenValue(value);
-			} else {
-				try {
-					return invoke(ctxV, argVs, false);
-				} catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException | InstantiationException e) {
-					e.printStackTrace();
-					return (MV) ObservableCollection.of(getType().getType(0));
-				}
-			}
+			SettableValue<Object> value = syntheticResultValue(//
+				TypeTokens.get().OBJECT, ctxV, argVs, changes);
+			return getMethod().converter.convert(value);
 		}
 	}
 
@@ -698,29 +706,30 @@ public abstract class Invocation implements ObservableExpression {
 	 * Represents a suitable invokable for an invocation with some additional information needed to invoke it
 	 *
 	 * @param <M> The type of the invokable
-	 * @param <R> The return type of the invocation
+	 * @param <MV> The model instance type of the result
 	 */
-	public static class MethodResult<M extends Executable, R> {
+	public static class MethodResult<M extends Executable, MV> {
 		/** The invokable to invoke */
 		public final M method;
 		/**
 		 * The index of the option passed to
-		 * {@link Invocation#findMethod(Executable[], String, TypeToken, boolean, List, TypeToken, ExpressoEnv, ExecutableImpl, ObservableExpression)}
+		 * {@link Invocation#findMethod(Executable[], String, TypeToken, boolean, List, ModelInstanceType, ExpressoEnv, ExecutableImpl, ObservableExpression)}
 		 * whose arguments match this invocation
 		 */
 		public final int argListOption;
 		private final boolean isArg0Context;
-		/** The return type of the invocation */
-		public final TypeToken<R> returnType;
 		/** The {@link TypeTokens#getTypeSpecificity(Type) specificity} of the method's parameters */
 		public final int specificity;
+		/** The convert to convert a {@link SettableValue} containing the invokable's return value to the target type */
+		public final ModelInstanceConverter<SettableValue<Object>, MV> converter;
 
-		MethodResult(M method, int argListOption, boolean arg0Context, TypeToken<R> returnType, int specificity) {
+		MethodResult(M method, int argListOption, boolean arg0Context, int specificity,
+			ModelInstanceConverter<SettableValue<Object>, MV> converter) {
 			this.method = method;
 			this.argListOption = argListOption;
 			isArg0Context = arg0Context;
-			this.returnType = returnType;
 			this.specificity = specificity;
+			this.converter = converter;
 		}
 
 		/**
@@ -733,7 +742,7 @@ public abstract class Invocation implements ObservableExpression {
 		 * @throws InvocationTargetException If the invokable itself throws an exception
 		 * @throws InstantiationException If the constructor cannot create an instance of its type
 		 */
-		public R invoke(Object context, Object[] args, ExecutableImpl<M> impl)
+		public Object invoke(Object context, Object[] args, ExecutableImpl<M> impl)
 			throws IllegalAccessException, IllegalArgumentException, InvocationTargetException, InstantiationException {
 			Object[] parameters;
 			if (isArg0Context || method.isVarArgs()) {
@@ -758,8 +767,7 @@ public abstract class Invocation implements ObservableExpression {
 				}
 			} else
 				parameters = args;
-			Object retVal = impl.execute(method, context, parameters);
-			return (R) retVal;
+			return impl.execute(method, context, parameters);
 		}
 
 		@Override

@@ -79,80 +79,44 @@ public class MethodInvocation extends Invocation {
 	}
 
 	@Override
-	protected <M, MV extends M> ValueContainer<M, MV> evaluateInternal2(ModelInstanceType<M, MV> type, ExpressoEnv env, ArgOption args,
-		TypeToken<?> targetType) throws QonfigInterpretationException {
+	protected <M, MV extends M> InvokableResult<?, M, MV> evaluateInternal2(ModelInstanceType<M, MV> type, ExpressoEnv env, ArgOption args)
+		throws QonfigInterpretationException {
 		if (theContext != null) {
 			if (theContext instanceof NameExpression) {
 				Class<?> clazz = env.getClassView().getType(theContext.toString());
 				if (clazz != null) {
-					Invocation.MethodResult<Method, ?> result = Invocation.findMethod(clazz.getMethods(), theMethodName,
-						TypeTokens.get().of(clazz), true, Arrays.asList(args), targetType, env, Invocation.ExecutableImpl.METHOD, this);
+					Invocation.MethodResult<Method, MV> result = Invocation.findMethod(clazz.getMethods(), theMethodName,
+						TypeTokens.get().of(clazz), true, Arrays.asList(args), type, env, Invocation.ExecutableImpl.METHOD, this);
 					if (result != null) {
 						ValueContainer<SettableValue<?>, SettableValue<?>>[] realArgs = new ValueContainer[getArguments().size()];
 						for (int a = 0; a < realArgs.length; a++)
 							realArgs[a] = args.args[a].get(0);
-						if (type.getModelType() == ModelTypes.Value)
-							return (ValueContainer<M, MV>) new InvocationValueContainer<>(result, null, Arrays.asList(realArgs),
-								Invocation.ExecutableImpl.METHOD);
-						else if (type.getModelType() == ModelTypes.Action)
-							return (ValueContainer<M, MV>) new InvocationActionContainer<>(result, null, Arrays.asList(realArgs),
-								Invocation.ExecutableImpl.METHOD);
-						else {
-							TypeToken<?>[] paramTypes = new TypeToken[type.getModelType().getTypeCount()];
-							for (int i = 0; i < paramTypes.length; i++)
-								paramTypes[i] = result.returnType.resolveType(type.getModelType().modelType.getTypeParameters()[i]);
-							return new InvocationThingContainer<>((Invocation.MethodResult<Method, MV>) result, null, Arrays.asList(realArgs),
-								(ModelInstanceType<M, MV>) type.getModelType().forTypes(paramTypes), Invocation.ExecutableImpl.METHOD);
-						}
+						return new InvokableResult<>(result, null, Arrays.asList(realArgs), Invocation.ExecutableImpl.METHOD);
 					}
 					throw new QonfigInterpretationException("No such method " + printSignature() + " in class " + clazz.getName());
 				}
 			}
 			ValueContainer<SettableValue<?>, SettableValue<?>> ctx = theContext.evaluate(ModelTypes.Value.any(), env);
-			Invocation.MethodResult<Method, ?> result = Invocation.findMethod(
+			Invocation.MethodResult<Method, MV> result = Invocation.findMethod(
 				TypeTokens.getRawType(ctx.getType().getType(0)).getMethods(), theMethodName, ctx.getType().getType(0), false,
-				Arrays.asList(args), targetType, env, Invocation.ExecutableImpl.METHOD, this);
+				Arrays.asList(args), type, env, Invocation.ExecutableImpl.METHOD, this);
 			if (result != null) {
 				ValueContainer<SettableValue<?>, SettableValue<?>>[] realArgs = new ValueContainer[getArguments().size()];
 				for (int a = 0; a < realArgs.length; a++)
 					realArgs[a] = args.args[a].get(0);
-				if (type.getModelType() == ModelTypes.Value)
-					return (ValueContainer<M, MV>) new InvocationValueContainer<>(result, ctx, Arrays.asList(realArgs),
-						Invocation.ExecutableImpl.METHOD);
-				else if (type.getModelType() == ModelTypes.Action)
-					return (ValueContainer<M, MV>) new InvocationActionContainer<>(result, ctx, Arrays.asList(realArgs),
-						Invocation.ExecutableImpl.METHOD);
-				else {
-					TypeToken<?>[] paramTypes = new TypeToken[type.getModelType().getTypeCount()];
-					for (int i = 0; i < paramTypes.length; i++)
-						paramTypes[i] = result.returnType.resolveType(type.getModelType().modelType.getTypeParameters()[i]);
-					return new InvocationThingContainer<>((Invocation.MethodResult<Method, MV>) result, ctx, Arrays.asList(realArgs),
-						(ModelInstanceType<M, MV>) type.getModelType().forTypes(paramTypes), Invocation.ExecutableImpl.METHOD);
-				}
+				return new InvokableResult<>(result, ctx, Arrays.asList(realArgs), Invocation.ExecutableImpl.METHOD);
 			}
 			throw new QonfigInterpretationException(
 				"No such method " + printSignature() + " on " + theContext + "(" + ctx.getType().getType(0) + ")");
 		} else {
 			List<Method> methods = env.getClassView().getImportedStaticMethods(theMethodName);
-			Invocation.MethodResult<Method, ?> result = Invocation.findMethod(methods.toArray(new Method[methods.size()]),
-				theMethodName, null, true, Arrays.asList(args), targetType, env, Invocation.ExecutableImpl.METHOD, this);
+			Invocation.MethodResult<Method, MV> result = Invocation.findMethod(methods.toArray(new Method[methods.size()]), theMethodName,
+				null, true, Arrays.asList(args), type, env, Invocation.ExecutableImpl.METHOD, this);
 			if (result != null) {
 				ValueContainer<SettableValue<?>, SettableValue<?>>[] realArgs = new ValueContainer[getArguments().size()];
 				for (int a = 0; a < realArgs.length; a++)
 					realArgs[a] = args.args[a].get(0);
-				if (type.getModelType() == ModelTypes.Value)
-					return (ValueContainer<M, MV>) new InvocationValueContainer<>(result, null, Arrays.asList(realArgs),
-						Invocation.ExecutableImpl.METHOD);
-				else if (type.getModelType() == ModelTypes.Action)
-					return (ValueContainer<M, MV>) new InvocationActionContainer<>(result, null, Arrays.asList(realArgs),
-						Invocation.ExecutableImpl.METHOD);
-				else {
-					TypeToken<?>[] paramTypes = new TypeToken[type.getModelType().getTypeCount()];
-					for (int i = 0; i < paramTypes.length; i++)
-						paramTypes[i] = result.returnType.resolveType(type.getModelType().modelType.getTypeParameters()[i]);
-					return new InvocationThingContainer<>((Invocation.MethodResult<Method, MV>) result, null, Arrays.asList(realArgs),
-						(ModelInstanceType<M, MV>) type.getModelType().forTypes(paramTypes), Invocation.ExecutableImpl.METHOD);
-				}
+				return new InvokableResult<>(result, null, Arrays.asList(realArgs), Invocation.ExecutableImpl.METHOD);
 			}
 			throw new QonfigInterpretationException("No such imported method " + printSignature());
 		}
