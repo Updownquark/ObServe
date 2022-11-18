@@ -54,7 +54,6 @@ import org.observe.expresso.ModelType;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
-import org.observe.expresso.ObservableExpression.MethodFinder;
 import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.AbstractValueContainer;
 import org.observe.expresso.ObservableModelSet.ExternalModelSetBuilder;
@@ -104,6 +103,7 @@ import org.qommons.io.Format;
 import org.qommons.io.SpinnerFormat;
 
 import com.google.common.reflect.TypeToken;
+import com.sun.beans.finder.MethodFinder;
 
 public class QuickBase implements QonfigInterpretation {
 	public static final String NAME = "Quick-Base";
@@ -500,10 +500,13 @@ public class QuickBase implements QonfigInterpretation {
 					"No default format available for type " + value.getType().getType(0) + " -- format must be specified");
 			format = ValueContainer.literal(formatType, f, rawType.getSimpleName());
 		}
+		ValueContainer<SettableValue<?>, SettableValue<String>> disabled = exS.getAttribute("disable-with", ModelTypes.Value.STRING, null);
 		return new AbstractQuickValueEditor(session) {
 			@Override
 			public QuickComponent install(PanelPopulator<?, ?> container, QuickComponent.Builder builder) {
 				SettableValue<T> realValue = value.get(builder.getModels());
+				if (disabled != null)
+					realValue = realValue.disableWith(disabled.get(builder.getModels()));
 				ObservableValue<String> fieldName;
 				if (getFieldName() != null)
 					fieldName = getFieldName().apply(builder.getModels());
@@ -590,36 +593,40 @@ public class QuickBase implements QonfigInterpretation {
 			null);
 		ValueContainer<SettableValue<?>, SettableValue<Boolean>> editable = exS.getAttribute("editable",
 			ModelTypes.Value.forType(Boolean.class), null);
+		ValueContainer<SettableValue<?>, SettableValue<String>> disabled = exS.getAttribute("disable-with", ModelTypes.Value.STRING, null);
 		return new AbstractQuickField(session) {
 			@Override
 			public QuickComponent install(PanelPopulator<?, ?> container, QuickComponent.Builder builder) {
+				SettableValue<T> realValue = value.get(builder.getModels());
+				if (disabled != null)
+					realValue = realValue.disableWith(disabled.get(builder.getModels()));
 				ObservableValue<String> fieldName;
 				if (getFieldName() != null)
 					fieldName = getFieldName().apply(builder.getModels());
 				else
 					fieldName = null;
-				container.addTextArea(fieldName == null ? null : fieldName.get(), //
-					value.get(builder.getModels()), format.get(builder.getModels()).get(), field -> {
-						modify(field, builder);
-						if (rows != null) {
-							SettableValue<Integer> rowsV = rows.get(builder.getModels());
-							rowsV.changes().act(evt -> {
-								field.getEditor().withRows(evt.getNewValue());
-							});
-						}
-						if (html != null) {
-							SettableValue<Boolean> htmlV = html.get(builder.getModels());
-							htmlV.changes().act(evt -> {
-								field.getEditor().asHtml(evt.getNewValue());
-							});
-						}
-						if (editable != null) {
-							SettableValue<Boolean> editableV = editable.get(builder.getModels());
-							editableV.changes().act(evt -> {
-								field.getEditor().setEditable(evt.getNewValue());
-							});
-						}
-					});
+				container.addTextArea(fieldName == null ? null : fieldName.get(), realValue, format.get(builder.getModels()).get(),
+					field -> {
+					modify(field, builder);
+					if (rows != null) {
+						SettableValue<Integer> rowsV = rows.get(builder.getModels());
+						rowsV.changes().act(evt -> {
+							field.getEditor().withRows(evt.getNewValue());
+						});
+					}
+					if (html != null) {
+						SettableValue<Boolean> htmlV = html.get(builder.getModels());
+						htmlV.changes().act(evt -> {
+							field.getEditor().asHtml(evt.getNewValue());
+						});
+					}
+					if (editable != null) {
+						SettableValue<Boolean> editableV = editable.get(builder.getModels());
+						editableV.changes().act(evt -> {
+							field.getEditor().setEditable(evt.getNewValue());
+						});
+					}
+				});
 				return builder.build();
 			}
 		};
@@ -1153,10 +1160,13 @@ public class QuickBase implements QonfigInterpretation {
 		ValueContainer<SettableValue<?>, SettableValue<Boolean>> value;
 		value = exS.getAttribute("value", ModelTypes.Value.forType(boolean.class), null);
 		ValueContainer<SettableValue<?>, SettableValue<String>> text = exS.getValue(ModelTypes.Value.forType(String.class), null);
+		ValueContainer<SettableValue<?>, SettableValue<String>> disabled = exS.getAttribute("disable-with", ModelTypes.Value.STRING, null);
 		return new AbstractQuickValueEditor(session) {
 			@Override
 			public QuickComponent install(PanelPopulator<?, ?> container, QuickComponent.Builder builder) {
 				SettableValue<Boolean> realValue = value.get(builder.getModels());
+				if (disabled != null)
+					realValue = realValue.disableWith(disabled.get(builder.getModels()));
 				container.addCheckField(null, realValue, check -> {
 					if (text != null) {
 						text.get(builder.getModels()).changes().act(evt -> {
@@ -1196,12 +1206,14 @@ public class QuickBase implements QonfigInterpretation {
 		value = (ValueContainer<SettableValue<?>, ? extends SettableValue<Object>>) exS.getAttribute("value", ModelTypes.Value.any(), null);
 		ValueContainer<SettableValue<?>, SettableValue<Object[]>> values = exS.getAttribute("values",
 			ModelTypes.Value.forType((TypeToken<Object[]>) TypeTokens.get().getArrayType(value.getType().getType(0), 1)), null);
+		ValueContainer<SettableValue<?>, SettableValue<String>> disabled = exS.getAttribute("disable-with", ModelTypes.Value.STRING, null);
 		return new AbstractQuickField(session) {
 			@Override
 			public QuickComponent install(PanelPopulator<?, ?> container, QuickComponent.Builder builder) {
 				SettableValue<Object> realValue = value.get(builder.getModels());
-				container.addRadioField(null, //
-					realValue, //
+				if (disabled != null)
+					realValue = realValue.disableWith(disabled.get(builder.getModels()));
+				container.addRadioField(null, realValue, //
 					values.get(builder.getModels()).get(), //
 					radioBs -> {
 						modify(radioBs, builder);
@@ -1234,10 +1246,14 @@ public class QuickBase implements QonfigInterpretation {
 		} else
 			throw new QonfigInterpretationException("Cannot use " + value + " as a File");
 		boolean open = session.getAttribute("open", boolean.class);
+		ValueContainer<SettableValue<?>, SettableValue<String>> disabled = exS.getAttribute("disable-with", ModelTypes.Value.STRING, null);
 		return new AbstractQuickValueEditor(session) {
 			@Override
 			public QuickComponent install(PanelPopulator<?, ?> container, QuickComponent.Builder builder) {
-				container.addFileField(null, file.apply(builder.getModels()), open, fb -> {
+				SettableValue<File> realValue = file.apply(builder.getModels());
+				if (disabled != null)
+					realValue = realValue.disableWith(disabled.get(builder.getModels()));
+				container.addFileField(null, realValue, open, fb -> {
 					modify(fb, builder);
 				});
 				return builder.build();

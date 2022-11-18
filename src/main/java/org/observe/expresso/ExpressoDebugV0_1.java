@@ -61,7 +61,7 @@ public class ExpressoDebugV0_1 implements QonfigInterpretation {
 			public ValueCreator<?, ?> modifyValue(ValueCreator<?, ?> value, CoreSession session, Object prepared)
 				throws QonfigInterpretationException {
 				String breakpointType = session.getAttributeText("break-on");
-				if (breakpointType == null)
+						if (breakpointType == null || "parse".equals(breakpointType))
 					return value;
 				return new ValueCreator<Object, Object>() {
 					@Override

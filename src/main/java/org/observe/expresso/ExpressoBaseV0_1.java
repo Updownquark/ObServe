@@ -29,6 +29,7 @@ import org.observe.Transformation.TransformationPrecursor;
 import org.observe.assoc.ObservableMap;
 import org.observe.assoc.ObservableMultiMap;
 import org.observe.assoc.ObservableSortedMap;
+import org.observe.assoc.ObservableSortedMultiMap;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.collect.ObservableCollectionBuilder;
@@ -1561,6 +1562,8 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 	protected <M> ModelType<M> getModelType(Class<M> modelType) {
 		if (Observable.class.isAssignableFrom(modelType))
 			return (ModelType<M>) ModelTypes.Event;
+		else if (ObservableAction.class.isAssignableFrom(modelType))
+			return (ModelType<M>) ModelTypes.Action;
 		else if (SettableValue.class.isAssignableFrom(modelType))
 			return (ModelType<M>) ModelTypes.Value;
 		else if (ObservableSortedSet.class.isAssignableFrom(modelType))
@@ -1571,6 +1574,14 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 			return (ModelType<M>) ModelTypes.Set;
 		else if (ObservableCollection.class.isAssignableFrom(modelType))
 			return (ModelType<M>) ModelTypes.Collection;
+		else if (ObservableSortedMap.class.isAssignableFrom(modelType))
+			return (ModelType<M>) ModelTypes.SortedMap;
+		else if (ObservableMap.class.isAssignableFrom(modelType))
+			return (ModelType<M>) ModelTypes.Map;
+		else if (ObservableSortedMultiMap.class.isAssignableFrom(modelType))
+			return (ModelType<M>) ModelTypes.SortedMultiMap;
+		else if (ObservableMultiMap.class.isAssignableFrom(modelType))
+			return (ModelType<M>) ModelTypes.MultiMap;
 		else
 			return null;
 	}
@@ -1586,6 +1597,8 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 	protected Class<? extends ObservableStructureTransform> getTransformFor(ModelType modelType) {
 		if (modelType == ModelTypes.Event)
 			return ObservableTransform.class;
+		else if (modelType == ModelTypes.Action)
+			return ActionTransform.class;
 		else if (modelType == ModelTypes.Value)
 			return ValueTransform.class;
 		else if (modelType == ModelTypes.Collection || modelType == ModelTypes.Set || modelType == ModelTypes.SortedCollection
@@ -2163,8 +2176,9 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		sourceType = (ModelInstanceType.SingleTyped<ObservableAction<?>, T, ObservableAction<T>>) op.get(VALUE_TYPE_KEY);
 		ValueContainer<SettableValue<?>, SettableValue<String>> enabled = op.getAttributeExpression("with")
 			.evaluate(ModelTypes.Value.forType(String.class), op.getExpressoEnv());
-		return ActionTransform.of(sourceType.getValueType(), (source, models) -> source.disableWith(enabled.get(models)),
-			(sourceModels, newModels) -> enabled.get(sourceModels) != enabled.get(newModels), () -> "disable(" + enabled + ")");
+		return ActionTransform.of(sourceType.getValueType(), (source, models) -> {
+			return source.disableWith(enabled.get(models));
+		}, (sourceModels, newModels) -> enabled.get(sourceModels) != enabled.get(newModels), () -> "disable(" + enabled + ")");
 	}
 
 	// Value transform

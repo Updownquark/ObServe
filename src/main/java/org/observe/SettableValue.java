@@ -776,7 +776,7 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 
 		@Override
 		public <V extends T> T set(V value, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
-			try (Transaction t = lock()) {
+			try (Transaction t = lock(true, cause)) {
 				BiTuple<TransformedElement<S, T>, TransformationState> state = getState();
 				S source = state.getValue1().set(value, state.getValue2(), false).getReversed();
 				T prevResult = getTransformation().isCached() ? get() : null;

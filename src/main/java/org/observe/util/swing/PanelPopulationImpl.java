@@ -1435,13 +1435,9 @@ class PanelPopulationImpl {
 			if (theAction != null)
 				getEditor().addActionListener(evt -> theAction.act(evt));
 			ObservableValue<String> enabled;
-			if (theDisablement != null) {
-				if (theAction != null)
-					enabled = ObservableValue.firstValue(TypeTokens.get().STRING, msg -> msg != null, () -> null, theDisablement,
-					theAction.isEnabled());
-				else
-					enabled = theDisablement;
-			} else
+			if (theDisablement != null)
+				enabled = theDisablement;
+			else
 				enabled = ObservableValue.of(String.class, null);
 			enabled.combine((e, tt) -> e == null ? tt : e, getTooltip()).changes().takeUntil(getUntil())
 			.act(evt -> getEditor().setToolTipText(evt.getNewValue()));

@@ -214,7 +214,8 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 				.collectPassive());
 
 			boolean[] init = new boolean[] { true };
-			Subscription collSub = theCollection.subscribe(evt -> handleEvent(evt, init[0]), true);
+			Subscription collSub = theCollection.subscribe(//
+				evt -> handleEvent(evt, init[0]), true);
 			init[0] = false;
 			if (until != null)
 				until.take(1).act(__ -> {
