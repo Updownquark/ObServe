@@ -132,7 +132,8 @@ public class BinaryOperator implements ObservableExpression {
 			throw new QonfigInterpretationException(
 				"Binary operator '" + theOperator + "' is not supported or implemented for operand types " + left.getType().getType(0)
 				+ " and " + right.getType().getType(0) + ", target type " + targetType.getName());
-		TypeToken<Object> resultType = TypeTokens.get().of(op.getTargetType());
+		TypeToken<Object> resultType = op.getTargetType(//
+			left.getType().getType(0), right.getType().getType(0));
 		if (action) {
 			if (type.getModelType() != ModelTypes.Action)
 				throw new QonfigInterpretationException("Binary operator " + theOperator + " can only be evaluated as an action");
@@ -218,7 +219,7 @@ public class BinaryOperator implements ObservableExpression {
 		} else {
 			if (type.getModelType() != ModelTypes.Value)
 				throw new QonfigInterpretationException("Binary operator " + theOperator + " can only be evaluated as a value");
-			return (ValueContainer<M, MV>) new ValueContainer<SettableValue<?>, SettableValue<Object>>() {
+			ValueContainer<SettableValue<?>, SettableValue<Object>> operated = new ValueContainer<SettableValue<?>, SettableValue<Object>>() {
 				@Override
 				public ModelInstanceType<SettableValue<?>, SettableValue<Object>> getType() {
 					return ModelTypes.Value.forType(resultType);
@@ -280,6 +281,7 @@ public class BinaryOperator implements ObservableExpression {
 					return BinaryOperator.this.toString();
 				}
 			};
+			return operated.as(type);
 		}
 	}
 

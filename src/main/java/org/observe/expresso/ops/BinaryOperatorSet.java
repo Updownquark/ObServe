@@ -8,11 +8,14 @@ import java.util.Set;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 
+import org.observe.util.TypeTokens;
 import org.qommons.BiTuple;
 import org.qommons.ClassMap;
 import org.qommons.ClassMap.TypeMatch;
 import org.qommons.StringUtils;
 import org.qommons.TriFunction;
+
+import com.google.common.reflect.TypeToken;
 
 /** A set of binary operations that a {@link BinaryOperator} can use to evaluate itself */
 public class BinaryOperatorSet {
@@ -24,8 +27,15 @@ public class BinaryOperatorSet {
 	 * @param <V> The type of output produced by this operator
 	 */
 	public interface BinaryOp<S, T, V> {
-		/** @return The type of output produced by this operator */
-		Class<V> getTargetType();
+		/** @return The super-type of output produced by this operator */
+		Class<V> getTargetSuperType();
+
+		/**
+		 * @param leftOpType The type of the left operand
+		 * @param rightOpType The type of the right operand
+		 * @return The type of output produced by this operator for the given operand types
+		 */
+		TypeToken<V> getTargetType(TypeToken<? extends S> leftOpType, TypeToken<? extends T> rightOpType);
 
 		/**
 		 * Performs the operation
@@ -68,7 +78,7 @@ public class BinaryOperatorSet {
 		 *        always reversible
 		 * @return The binary operator composed of the given functions
 		 */
-		static <S, T> BinaryOp<S, T, S> of(String name, Class<S> type, BiFunction<? super S, ? super T, ? extends S> op,
+		static <S, T> BinaryOp<S, T, S> of(String name, TypeToken<S> type, BiFunction<? super S, ? super T, ? extends S> op,
 			TriFunction<? super S, ? super T, ? super S, ? extends S> reverse,
 			TriFunction<? super S, ? super T, ? super S, String> reverseEnabled) {
 			return of2(name, type, op, reverse, reverseEnabled);
@@ -88,12 +98,17 @@ public class BinaryOperatorSet {
 		 *        always reversible
 		 * @return The binary operator composed of the given functions
 		 */
-		static <S, T, V> BinaryOp<S, T, V> of2(String name, Class<V> type, BiFunction<? super S, ? super T, ? extends V> op,
+		static <S, T, V> BinaryOp<S, T, V> of2(String name, TypeToken<V> type, BiFunction<? super S, ? super T, ? extends V> op,
 			TriFunction<? super S, ? super T, ? super V, ? extends S> reverse,
 			TriFunction<? super S, ? super T, ? super V, String> reverseEnabled) {
 			return new BinaryOp<S, T, V>() {
 				@Override
-				public Class<V> getTargetType() {
+				public Class<V> getTargetSuperType() {
+					return TypeTokens.getRawType(type);
+				}
+
+				@Override
+				public TypeToken<V> getTargetType(TypeToken<? extends S> leftOpType, TypeToken<? extends T> rightOpType) {
 					return type;
 				}
 
@@ -130,19 +145,19 @@ public class BinaryOperatorSet {
 	 */
 	public interface CastOp<S, T> {
 		/** Cast from byte to short */
-		CastOp<Byte, Short> byteShort = CastOp.of(s -> unwrapS(s),
+		CastOp<Byte, Short> byteShort = CastOp.of(TypeTokens.get().PR_SHORT, s -> unwrapS(s),
 			v -> (v < Byte.MIN_VALUE || v > Byte.MAX_VALUE) ? "Short value is too large for a byte" : null, v -> unwrapByte(v));
 		/** Cast from byte to int */
-		CastOp<Byte, Integer> byteInt = CastOp.of(s -> unwrapI(s),
+		CastOp<Byte, Integer> byteInt = CastOp.of(TypeTokens.get().PR_INT, s -> unwrapI(s),
 			v -> (v < Byte.MIN_VALUE || v > Byte.MAX_VALUE) ? "Integer value is too large for a byte" : null, v -> unwrapByte(v));
 		/** Cast from byte to long */
-		CastOp<Byte, Long> byteLong = CastOp.of(s -> unwrapL(s),
+		CastOp<Byte, Long> byteLong = CastOp.of(TypeTokens.get().PR_LONG, s -> unwrapL(s),
 			v -> (v < Byte.MIN_VALUE || v > Byte.MAX_VALUE) ? "Long value is too large for a byte" : null, v -> unwrapByte(v));
 		/** Cast from byte to char */
-		CastOp<Byte, Character> byteChar = CastOp.of(s -> s == null ? (char) 0 : (char) s.byteValue(),
+		CastOp<Byte, Character> byteChar = CastOp.of(TypeTokens.get().PR_CHAR, s -> s == null ? (char) 0 : (char) s.byteValue(),
 			v -> v > Byte.MAX_VALUE ? "Character value is too large for a byte" : null, v -> v == null ? (byte) 0 : (byte) v.charValue());
 		/** Cast from byte to float */
-		CastOp<Byte, Float> byteFloat = CastOp.of(s -> unwrapF(s), v -> {
+		CastOp<Byte, Float> byteFloat = CastOp.of(TypeTokens.get().PR_FLOAT, s -> unwrapF(s), v -> {
 			if (v < Byte.MIN_VALUE || v > Byte.MAX_VALUE)
 				return "Float value is too large for a byte";
 			float rem = v % 1;
@@ -151,7 +166,7 @@ public class BinaryOperatorSet {
 			return null;
 		}, v -> unwrapByte(v));
 		/** Cast from byte to double */
-		CastOp<Byte, Double> byteDouble = CastOp.of(s -> unwrapD(s), v -> {
+		CastOp<Byte, Double> byteDouble = CastOp.of(TypeTokens.get().PR_DOUBLE, s -> unwrapD(s), v -> {
 			if (v < Byte.MIN_VALUE || v > Byte.MAX_VALUE)
 				return "Double value is too large for a byte";
 			double rem = v % 1;
@@ -161,17 +176,17 @@ public class BinaryOperatorSet {
 		}, v -> unwrapByte(v));
 
 		/** Cast from short to int */
-		CastOp<Short, Integer> shortInt = CastOp.of(s -> unwrapI(s),
+		CastOp<Short, Integer> shortInt = CastOp.of(TypeTokens.get().PR_INT, s -> unwrapI(s),
 			v -> (v < Short.MIN_VALUE || v > Short.MAX_VALUE) ? "Integer value is too large for a short" : null, v -> unwrapS(v));
 		/** Cast from short to long */
-		CastOp<Short, Long> shortLong = CastOp.of(s -> unwrapL(s),
+		CastOp<Short, Long> shortLong = CastOp.of(TypeTokens.get().PR_LONG, s -> unwrapL(s),
 			v -> (v < Short.MIN_VALUE || v > Short.MAX_VALUE) ? "Long value is too large for a short" : null, v -> unwrapS(v));
 		/** Cast from short to char */
-		CastOp<Short, Character> shortChar = CastOp.of(s -> s == null ? (char) 0 : (char) s.shortValue(),
+		CastOp<Short, Character> shortChar = CastOp.of(TypeTokens.get().PR_CHAR, s -> s == null ? (char) 0 : (char) s.shortValue(),
 			v -> v > Short.MAX_VALUE ? "Character value is too large for a short" : null,
 				v -> v == null ? (short) 0 : (short) v.charValue());
 		/** Cast from short to float */
-		CastOp<Short, Float> shortFloat = CastOp.of(s -> unwrapF(s), v -> {
+		CastOp<Short, Float> shortFloat = CastOp.of(TypeTokens.get().PR_FLOAT, s -> unwrapF(s), v -> {
 			if (v < Short.MIN_VALUE || v > Short.MAX_VALUE)
 				return "Float value is too large for a short";
 			float rem = v % 1;
@@ -180,7 +195,7 @@ public class BinaryOperatorSet {
 			return null;
 		}, v -> unwrapS(v));
 		/** Cast from short to double */
-		CastOp<Short, Double> shortDouble = CastOp.of(s -> unwrapD(s), v -> {
+		CastOp<Short, Double> shortDouble = CastOp.of(TypeTokens.get().PR_DOUBLE, s -> unwrapD(s), v -> {
 			if (v < Short.MIN_VALUE || v > Short.MAX_VALUE)
 				return "Double value is too large for a short";
 			double rem = v % 1;
@@ -190,13 +205,13 @@ public class BinaryOperatorSet {
 		}, v -> unwrapS(v));
 
 		/** Cast from int to long */
-		CastOp<Integer, Long> intLong = CastOp.of(s -> unwrapL(s),
+		CastOp<Integer, Long> intLong = CastOp.of(TypeTokens.get().PR_LONG, s -> unwrapL(s),
 			v -> (v < Integer.MIN_VALUE || v > Integer.MAX_VALUE) ? "Long value is too large for an integer" : null, v -> unwrapI(v));
 		/** Cast from int to char */
-		CastOp<Integer, Character> intChar = CastOp.of(s -> s == null ? (char) 0 : (char) s.intValue(), null,
+		CastOp<Integer, Character> intChar = CastOp.of(TypeTokens.get().PR_CHAR, s -> s == null ? (char) 0 : (char) s.intValue(), null,
 			v -> v == null ? (int) 0 : (int) v.charValue());
 		/** Cast from int to float */
-		CastOp<Integer, Float> intFloat = CastOp.of(s -> unwrapF(s), v -> {
+		CastOp<Integer, Float> intFloat = CastOp.of(TypeTokens.get().PR_FLOAT, s -> unwrapF(s), v -> {
 			if (v < Integer.MIN_VALUE || v > Integer.MAX_VALUE)
 				return "Float value is too large for an integer";
 			float rem = v % 1;
@@ -205,7 +220,7 @@ public class BinaryOperatorSet {
 			return null;
 		}, v -> unwrapI(v));
 		/** Cast from int to double */
-		CastOp<Integer, Double> intDouble = CastOp.of(s -> unwrapD(s), v -> {
+		CastOp<Integer, Double> intDouble = CastOp.of(TypeTokens.get().PR_DOUBLE, s -> unwrapD(s), v -> {
 			if (v < Integer.MIN_VALUE || v > Integer.MAX_VALUE)
 				return "Double value is too large for an integer";
 			double rem = v % 1;
@@ -215,10 +230,10 @@ public class BinaryOperatorSet {
 		}, v -> unwrapI(v));
 
 		/** Cast from long to char */
-		CastOp<Long, Character> longChar = CastOp.of(s -> s == null ? (char) 0 : (char) s.longValue(), null,
+		CastOp<Long, Character> longChar = CastOp.of(TypeTokens.get().PR_CHAR, s -> s == null ? (char) 0 : (char) s.longValue(), null,
 			v -> v == null ? (long) 0 : (long) v.charValue());
 		/** Cast from long to float */
-		CastOp<Long, Float> longFloat = CastOp.of(s -> unwrapF(s), v -> {
+		CastOp<Long, Float> longFloat = CastOp.of(TypeTokens.get().PR_FLOAT, s -> unwrapF(s), v -> {
 			if (v < Long.MIN_VALUE || v > Long.MAX_VALUE)
 				return "Float value is too large for a long";
 			float rem = v % 1;
@@ -227,7 +242,7 @@ public class BinaryOperatorSet {
 			return null;
 		}, v -> unwrapL(v));
 		/** Cast from long to double */
-		CastOp<Long, Double> longDouble = CastOp.of(s -> unwrapD(s), v -> {
+		CastOp<Long, Double> longDouble = CastOp.of(TypeTokens.get().PR_DOUBLE, s -> unwrapD(s), v -> {
 			if (v < Long.MIN_VALUE || v > Long.MAX_VALUE)
 				return "Double value is too large for a long";
 			double rem = v % 1;
@@ -237,10 +252,10 @@ public class BinaryOperatorSet {
 		}, v -> unwrapL(v));
 
 		/** Cast from char to short */
-		CastOp<Character, Short> charShort = CastOp.of(s -> s == null ? (short) 0 : (short) s.charValue(),
+		CastOp<Character, Short> charShort = CastOp.of(TypeTokens.get().PR_SHORT, s -> s == null ? (short) 0 : (short) s.charValue(),
 			v -> v < 0 ? "A character cannot be negative" : null, v -> v == null ? (char) 0 : (char) v.shortValue());
 		/** Cast from char to int */
-		CastOp<Character, Integer> charInt = CastOp.of(s -> s == null ? (int) 0 : (int) s.charValue(), v -> {
+		CastOp<Character, Integer> charInt = CastOp.of(TypeTokens.get().PR_INT, s -> s == null ? (int) 0 : (int) s.charValue(), v -> {
 			if (v < 0)
 				return "A character cannot be negative";
 			else if (v > Character.MAX_VALUE)
@@ -249,7 +264,7 @@ public class BinaryOperatorSet {
 				return null;
 		}, v -> v == null ? (char) 0 : (char) v.intValue());
 		/** Cast from char to long */
-		CastOp<Character, Long> charLong = CastOp.of(s -> s == null ? (long) 0 : (long) s.charValue(), v -> {
+		CastOp<Character, Long> charLong = CastOp.of(TypeTokens.get().PR_LONG, s -> s == null ? (long) 0 : (long) s.charValue(), v -> {
 			if (v < 0)
 				return "A character cannot be negative";
 			else if (v > Character.MAX_VALUE)
@@ -258,7 +273,7 @@ public class BinaryOperatorSet {
 				return null;
 		}, v -> v == null ? (char) 0 : (char) v.intValue());
 		/** Cast from char to short */
-		CastOp<Character, Float> charFloat = CastOp.of(s -> s == null ? (float) 0 : (float) s.charValue(), v -> {
+		CastOp<Character, Float> charFloat = CastOp.of(TypeTokens.get().PR_FLOAT, s -> s == null ? (float) 0 : (float) s.charValue(), v -> {
 			if (v < 0)
 				return "A character cannot be negative";
 			else if (v > Character.MAX_VALUE)
@@ -269,19 +284,20 @@ public class BinaryOperatorSet {
 			return null;
 		}, v -> v == null ? (char) 0 : (char) v.intValue());
 		/** Cast from char to double */
-		CastOp<Character, Double> charDouble = CastOp.of(s -> s == null ? (double) 0 : (double) s.charValue(), v -> {
-			if (v < 0)
-				return "A character cannot be negative";
-			else if (v > Character.MAX_VALUE)
-				return "Double value is to large for a character";
-			double rem = v % 1;
-			if (rem != 0)
-				return "Double value has decimal--cannot be assigned to a character";
-			return null;
-		}, v -> v == null ? (char) 0 : (char) v.intValue());
+		CastOp<Character, Double> charDouble = CastOp.of(TypeTokens.get().PR_DOUBLE, s -> s == null ? (double) 0 : (double) s.charValue(),
+			v -> {
+				if (v < 0)
+					return "A character cannot be negative";
+				else if (v > Character.MAX_VALUE)
+					return "Double value is to large for a character";
+				double rem = v % 1;
+				if (rem != 0)
+					return "Double value has decimal--cannot be assigned to a character";
+				return null;
+			}, v -> v == null ? (char) 0 : (char) v.intValue());
 
 		/** Cast from float to double */
-		CastOp<Float, Double> floatDouble = CastOp.of(s -> unwrapD(s), v -> {
+		CastOp<Float, Double> floatDouble = CastOp.of(TypeTokens.get().PR_DOUBLE, s -> unwrapD(s), v -> {
 			if (v < Float.MIN_VALUE || v > Float.MAX_VALUE)
 				return "Float value is too large for a byte";
 			float f = v.floatValue();
@@ -289,6 +305,12 @@ public class BinaryOperatorSet {
 				return "Double value has decimal precision that cannot be stored in a float";
 			return null;
 		}, v -> unwrapF(v));
+
+		/**
+		 * @param sourceType The type of the source argument being cast
+		 * @return The result type of the cast
+		 */
+		TypeToken<? extends T> getType(TypeToken<? extends S> sourceType);
 
 		/**
 		 * @param source The source value
@@ -316,8 +338,13 @@ public class BinaryOperatorSet {
 		default <V> BinaryOp<S, T, V> castPrimary(BinaryOp<T, T, V> op) {
 			return new BinaryOp<S, T, V>() {
 				@Override
-				public Class<V> getTargetType() {
-					return op.getTargetType();
+				public Class<V> getTargetSuperType() {
+					return op.getTargetSuperType();
+				}
+
+				@Override
+				public TypeToken<V> getTargetType(TypeToken<? extends S> leftOpType, TypeToken<? extends T> rightOpType) {
+					return op.getTargetType(getType(leftOpType), rightOpType);
 				}
 
 				@Override
@@ -351,8 +378,13 @@ public class BinaryOperatorSet {
 		default <V> BinaryOp<T, S, V> castSecondary(BinaryOp<T, T, V> op) {
 			return new BinaryOp<T, S, V>() {
 				@Override
-				public Class<V> getTargetType() {
-					return op.getTargetType();
+				public Class<V> getTargetSuperType() {
+					return op.getTargetSuperType();
+				}
+
+				@Override
+				public TypeToken<V> getTargetType(TypeToken<? extends T> leftOpType, TypeToken<? extends S> rightOpType) {
+					return op.getTargetType(leftOpType, getType(rightOpType));
 				}
 
 				@Override
@@ -385,8 +417,13 @@ public class BinaryOperatorSet {
 		static <S, T, T2, V> BinaryOp<S, T, V> castBoth(BinaryOp<T2, T2, V> op, CastOp<S, T2> sourceCast, CastOp<T, T2> otherCast) {
 			return new BinaryOp<S, T, V>() {
 				@Override
-				public Class<V> getTargetType() {
-					return op.getTargetType();
+				public Class<V> getTargetSuperType() {
+					return op.getTargetSuperType();
+				}
+
+				@Override
+				public TypeToken<V> getTargetType(TypeToken<? extends S> leftOpType, TypeToken<? extends T> rightOpType) {
+					return op.getTargetType(sourceCast.getType(leftOpType), otherCast.getType(rightOpType));
 				}
 
 				@Override
@@ -418,14 +455,20 @@ public class BinaryOperatorSet {
 		 *
 		 * @param <S> The source type for the cast
 		 * @param <T> The target type for the cast
+		 * @param type The target type of the cast
 		 * @param cast The function to use for {@link CastOp#cast(Object)}
 		 * @param canReverse The function to use for {@link CastOp#canReverse(Object)}, or null if the cast is always reversible
 		 * @param reverse The function to use for {@link CastOp#reverse(Object)}
 		 * @return The cast backed by the given functions
 		 */
-		static <S, T> CastOp<S, T> of(Function<? super S, ? extends T> cast, Function<? super T, String> canReverse,
+		static <S, T> CastOp<S, T> of(TypeToken<T> type, Function<? super S, ? extends T> cast, Function<? super T, String> canReverse,
 			Function<? super T, ? extends S> reverse) {
 			return new CastOp<S, T>() {
+				@Override
+				public TypeToken<T> getType(TypeToken<? extends S> sourceType) {
+					return type;
+				}
+
 				@Override
 				public T cast(S source) {
 					return cast.apply(source);
@@ -964,7 +1007,7 @@ public class BinaryOperatorSet {
 		if (ops == null || ops.isEmpty())
 			return Collections.emptySet();
 		Set<Class<?>> primaryTypes = new LinkedHashSet<>();
-		for (ClassMap<ClassMap<BinaryOp<?, ?, ?>>> targetOps : ops.getAll(targetType, TypeMatch.SUB_TYPE))
+		for (ClassMap<ClassMap<BinaryOp<?, ?, ?>>> targetOps : ops.getAll(targetType, null))
 			primaryTypes.addAll(targetOps.getTopLevelKeys());
 		return primaryTypes;
 	}
@@ -981,7 +1024,7 @@ public class BinaryOperatorSet {
 		if (ops == null || ops.isEmpty())
 			return Collections.emptySet();
 		Set<Class<?>> secondaryTypes = new LinkedHashSet<>();
-		for (ClassMap<ClassMap<BinaryOp<?, ?, ?>>> targetOps : ops.getAll(targetType, TypeMatch.SUB_TYPE)) {
+		for (ClassMap<ClassMap<BinaryOp<?, ?, ?>>> targetOps : ops.getAll(targetType, null)) {
 			for (ClassMap<BinaryOp<?, ?, ?>> ops2 : targetOps.getAll(primaryType, TypeMatch.SUPER_TYPE))
 				secondaryTypes.addAll(ops2.getTopLevelKeys());
 		}
@@ -1001,7 +1044,7 @@ public class BinaryOperatorSet {
 		ClassMap<ClassMap<ClassMap<BinaryOp<?, ?, ?>>>> ops = theOperators.get(operator);
 		if (ops == null || ops.isEmpty())
 			return null;
-		for (ClassMap<ClassMap<BinaryOp<?, ?, ?>>> targetOps : ops.getAll(targetType, TypeMatch.SUB_TYPE)) {
+		for (ClassMap<ClassMap<BinaryOp<?, ?, ?>>> targetOps : ops.getAll(targetType, null)) {
 			for (ClassMap<BinaryOp<?, ?, ?>> ops2 : targetOps.getAll(primaryType, TypeMatch.SUPER_TYPE)) {
 				BinaryOp<?, ?, ?> op = ops2.get(secondaryType, TypeMatch.SUPER_TYPE);
 				if (op != null)
@@ -1053,7 +1096,7 @@ public class BinaryOperatorSet {
 		 */
 		public <S, T> Builder with(String operator, Class<S> primary, Class<T> secondary, BinaryOp<S, T, ?> op) {
 			theOperators.computeIfAbsent(operator, __ -> new ClassMap<>())//
-			.computeIfAbsent(op.getTargetType(), () -> new ClassMap<>())//
+			.computeIfAbsent(op.getTargetSuperType(), () -> new ClassMap<>())//
 			.computeIfAbsent(primary, () -> new ClassMap<>())//
 			.with(secondary, op);
 			return this;
@@ -1074,11 +1117,11 @@ public class BinaryOperatorSet {
 		 * @see BinaryOp#canReverse(Object, Object, Object)
 		 * @see BinaryOp#reverse(Object, Object, Object)
 		 */
-		public <S, T> Builder with(String operator, Class<S> primary, Class<T> secondary,
-			BiFunction<? super S, ? super T, ? extends S> op, TriFunction<? super S, ? super T, ? super S, ? extends S> reverse,
+		public <S, T> Builder with(String operator, Class<S> primary, Class<T> secondary, BiFunction<? super S, ? super T, ? extends S> op,
+			TriFunction<? super S, ? super T, ? super S, ? extends S> reverse,
 			TriFunction<? super S, ? super T, ? super S, String> reverseEnabled) {
 			with(operator, primary, secondary, //
-				BinaryOp.of(operator, primary, op, reverse, reverseEnabled));
+				BinaryOp.of(operator, TypeTokens.get().of(primary), op, reverse, reverseEnabled));
 			return this;
 		}
 
@@ -1104,7 +1147,7 @@ public class BinaryOperatorSet {
 			theOperators.computeIfAbsent(operator, __ -> new ClassMap<>())//
 			.computeIfAbsent(target, () -> new ClassMap<>())//
 			.computeIfAbsent(primary, () -> new ClassMap<>())//
-			.with(secondary, BinaryOp.of2(operator, target, op, reverse, reverseEnabled));
+			.with(secondary, BinaryOp.of2(operator, TypeTokens.get().of(target), op, reverse, reverseEnabled));
 			return this;
 		}
 

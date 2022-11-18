@@ -8,8 +8,10 @@ import org.observe.SettableValue;
 import org.observe.expresso.Expression.ExpressoParseException;
 import org.observe.expresso.ops.BinaryOperatorSet;
 import org.observe.expresso.ops.UnaryOperatorSet;
+import org.observe.util.TypeTokens;
 import org.qommons.Version;
 import org.qommons.collect.BetterCollection;
+import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigAttributeDef;
 import org.qommons.config.QonfigChildDef;
@@ -20,12 +22,48 @@ import org.qommons.config.QonfigToolkit;
 import org.qommons.config.SpecialSession;
 import org.qommons.config.SpecialSessionImplementation;
 
+import com.google.common.reflect.TypeToken;
+
 /** Supports Qonfig evaluation using the {@link ExpressoQIS} session type */
-public class ExpressoSessionImplV0_1 implements SpecialSessionImplementation<ExpressoQIS>{
+public class ExpressoSessionImplV0_1 implements SpecialSessionImplementation<ExpressoQIS> {
 	/** The name of the core toolkit */
 	public static final String TOOLKIT_NAME = "Expresso-Core";
 	/** The Expresso version supported by this class */
 	public static final Version VERSION = new Version(0, 1, 0);
+	/**
+	 * An extra convenience operator that is an OR operation (||) for objects. This operator returns the first argument if it is not null,
+	 * otherwise it returns the second.
+	 */
+	public BinaryOperatorSet.BinaryOp<Object, Object, Object> OBJECT_OR = new BinaryOperatorSet.BinaryOp<Object, Object, Object>() {
+		@Override
+		public Class<Object> getTargetSuperType() {
+			return Object.class;
+		}
+
+		@Override
+		public TypeToken<Object> getTargetType(TypeToken<? extends Object> leftOpType, TypeToken<? extends Object> rightOpType) {
+			return TypeTokens.get().getCommonType(leftOpType, rightOpType);
+		}
+
+		@Override
+		public Object apply(Object source, Object other) {
+			if (source != null)
+				return source;
+			else
+				return other;
+		}
+
+		@Override
+		public String canReverse(Object currentSource, Object other, Object value) {
+			return StdMsg.UNSUPPORTED_OPERATION;
+		}
+
+		@Override
+		public Object reverse(Object currentSource, Object other, Object value) {
+			throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+		}
+	};
+
 	private QonfigToolkit theToolkit;
 
 	private QonfigAddOn theParseableEl;
@@ -68,7 +106,10 @@ public class ExpressoSessionImplV0_1 implements SpecialSessionImplementation<Exp
 	public ExpressoQIS viewOfRoot(CoreSession coreSession, ExpressoQIS source) throws QonfigInterpretationException {
 		ExpressoQIS qis = new ExpressoQIS(coreSession);
 		qis.setExpressoParser(new JavaExpressoParser());
-		qis.setExpressoEnv(ExpressoEnv.STANDARD_JAVA);
+		qis.setExpressoEnv(ExpressoEnv.STANDARD_JAVA//
+			.withOperators(null, BinaryOperatorSet.STANDARD_JAVA.copy()//
+				.with("||", Object.class, Object.class, OBJECT_OR)//
+				.build()));
 		configureExpressionParsing(qis);
 		return qis;
 	}
@@ -109,7 +150,7 @@ public class ExpressoSessionImplV0_1 implements SpecialSessionImplementation<Exp
 	 * @throws QonfigInterpretationException If the session's element's parsing configuration cannot be set up for any reason
 	 */
 	protected void configureExpressionParsing(ExpressoQIS session) throws QonfigInterpretationException {
-		if (!session.isInstance("expresso-parser"))
+		if (!session.getElement().isInstance(theParseableEl))
 			return;
 		QonfigElement parserEl = session.getElement().getChildrenByRole().get(theParserChild).peekFirst();
 		if (parserEl != null) {
@@ -161,8 +202,9 @@ public class ExpressoSessionImplV0_1 implements SpecialSessionImplementation<Exp
 		try {
 			return new JavaExpressoParser().parse(parseText)//
 				.evaluate(ModelTypes.Value.forType(type), env)//
-				.get(env.getModels().createInstance(ObservableModelSet.buildExternal(ObservableModelSet.JAVA_NAME_CHECKER).build(),
-					Observable.empty()).build())//
+				.get(env.getModels()
+					.createInstance(ObservableModelSet.buildExternal(ObservableModelSet.JAVA_NAME_CHECKER).build(), Observable.empty())
+					.build())//
 				.get();
 		} catch (ExpressoParseException e) {
 			throw new QonfigInterpretationException(e);

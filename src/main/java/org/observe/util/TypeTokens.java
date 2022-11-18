@@ -183,7 +183,7 @@ public class TypeTokens {
 			return parameterized(//
 				new Type[] { param1.getType(), param2.getType(), param3.getType() }, //
 				new TypeToken[] { param1, param2, param3 }, paramTypes -> TypeToken.of(new ParameterizedTypeImpl(clazz, paramTypes))
-					.where(tp1, wrap(param1)).where(tp2, wrap(param2)).where(tp3, wrap(param3))//
+				.where(tp1, wrap(param1)).where(tp2, wrap(param2)).where(tp3, wrap(param3))//
 				);
 		}
 
@@ -213,7 +213,7 @@ public class TypeTokens {
 			return parameterized(//
 				new Type[] { param1.getType(), param2.getType(), param3.getType(), param4.getType() }, //
 				new TypeToken[] { param1, param2, param3, param4 }, paramTypes -> TypeToken.of(new ParameterizedTypeImpl(clazz, paramTypes))
-					.where(tp1, wrap(param1)).where(tp2, wrap(param2)).where(tp3, wrap(param3)).where(tp4, wrap(param4))//
+				.where(tp1, wrap(param1)).where(tp2, wrap(param2)).where(tp3, wrap(param3)).where(tp4, wrap(param4))//
 				);
 		}
 
@@ -248,7 +248,7 @@ public class TypeTokens {
 				new Type[] { param1.getType(), param2.getType(), param3.getType(), param4.getType(), param5.getType() }, //
 				new TypeToken[] { param1, param2, param3, param4, param5 },
 				paramTypes -> TypeToken.of(new ParameterizedTypeImpl(clazz, paramTypes)).where(tp1, wrap(param1)).where(tp2, wrap(param2))
-					.where(tp3, wrap(param3)).where(tp4, wrap(param4)).where(tp5, wrap(param5))//
+				.where(tp3, wrap(param3)).where(tp4, wrap(param4)).where(tp5, wrap(param5))//
 				);
 		}
 
@@ -353,26 +353,44 @@ public class TypeTokens {
 
 	/** TypeToken&lt;String> */
 	public final TypeToken<String> STRING;
-	/** TypeToken&lt;String> */
+	/** TypeToken&lt;Boolean> */
 	public final TypeToken<Boolean> BOOLEAN;
+	/** TypeToken&lt;boolean> */
+	public final TypeToken<Boolean> PR_BOOLEAN;
 	/** TypeToken&lt;Double> */
 	public final TypeToken<Double> DOUBLE;
+	/** TypeToken&lt;double> */
+	public final TypeToken<Double> PR_DOUBLE;
 	/** TypeToken&lt;Float> */
 	public final TypeToken<Float> FLOAT;
+	/** TypeToken&lt;float> */
+	public final TypeToken<Float> PR_FLOAT;
 	/** TypeToken&lt;Long> */
 	public final TypeToken<Long> LONG;
+	/** TypeToken&lt;long> */
+	public final TypeToken<Long> PR_LONG;
 	/** TypeToken&lt;Integer> */
 	public final TypeToken<Integer> INT;
+	/** TypeToken&lt;int> */
+	public final TypeToken<Integer> PR_INT;
 	/** TypeToken&lt;Short> */
 	public final TypeToken<Short> SHORT;
+	/** TypeToken&lt;short> */
+	public final TypeToken<Short> PR_SHORT;
 	/** TypeToken&lt;Byte> */
 	public final TypeToken<Byte> BYTE;
+	/** TypeToken&lt;byte> */
+	public final TypeToken<Byte> PR_BYTE;
 	/** TypeToken&lt;Character> */
 	public final TypeToken<Character> CHAR;
+	/** TypeToken&lt;char> */
+	public final TypeToken<Character> PR_CHAR;
 	/** TypeToken&lt;Object> */
 	public final TypeToken<Object> OBJECT;
 	/** TypeToken&lt;Void> */
 	public final TypeToken<Void> VOID;
+	/** TypeToken&lt;void> */
+	public final TypeToken<Void> PR_VOID;
 	/** TypeToken&lt;?> */
 	public final TypeToken<?> WILDCARD;
 	/** TypeToken&lt;Class&lt;?>> */
@@ -385,15 +403,24 @@ public class TypeTokens {
 
 		STRING = of(String.class);
 		BOOLEAN = of(Boolean.class);
+		PR_BOOLEAN = of(boolean.class);
 		DOUBLE = of(Double.class);
+		PR_DOUBLE = of(double.class);
 		FLOAT = of(Float.class);
+		PR_FLOAT = of(float.class);
 		LONG = of(Long.class);
+		PR_LONG = of(long.class);
 		INT = of(Integer.class);
+		PR_INT = of(int.class);
 		SHORT = of(Short.class);
+		PR_SHORT = of(short.class);
 		BYTE = of(Byte.class);
+		PR_BYTE = of(byte.class);
 		CHAR = of(Character.class);
+		PR_CHAR = of(char.class);
 		OBJECT = of(Object.class);
 		VOID = of(Void.class);
+		PR_VOID = of(void.class);
 		WILDCARD = TypeToken.of(new WildcardTypeImpl());
 		CLASS = keyFor(Class.class).wildCard();
 		// WILDCARD = new TypeToken<Class<?>>() {}.resolveType(Class.class.getTypeParameters()[0]);
