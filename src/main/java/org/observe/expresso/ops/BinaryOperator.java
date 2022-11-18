@@ -197,9 +197,9 @@ public class BinaryOperator implements ObservableExpression {
 				public ObservableAction<Object> forModelCopy(ObservableAction<Object> value, ModelSetInstance sourceModels,
 					ModelSetInstance newModels) {
 					SettableValue<Object> sourceLeft = left.get(sourceModels);
-					SettableValue<Object> newLeft = left.forModelCopy(sourceLeft, sourceModels, newModels);
+					SettableValue<Object> newLeft = left.get(newModels);
 					SettableValue<Object> sourceRight = right.get(sourceModels);
-					SettableValue<Object> newRight = right.forModelCopy(sourceRight, sourceModels, newModels);
+					SettableValue<Object> newRight = right.get(newModels);
 					if (sourceLeft == newLeft && sourceRight == newRight)
 						return value;
 					else
@@ -262,9 +262,9 @@ public class BinaryOperator implements ObservableExpression {
 				public SettableValue<Object> forModelCopy(SettableValue<Object> value, ModelSetInstance sourceModels,
 					ModelSetInstance newModels) {
 					SettableValue<Object> sourceLeft = left.get(sourceModels);
-					SettableValue<Object> newLeft = left.forModelCopy(sourceLeft, sourceModels, newModels);
+					SettableValue<Object> newLeft = left.get(newModels);
 					SettableValue<Object> sourceRight = right.get(sourceModels);
-					SettableValue<Object> newRight = right.forModelCopy(sourceRight, sourceModels, newModels);
+					SettableValue<Object> newRight = right.get(newModels);
 					if (sourceLeft == newLeft && sourceRight == newRight)
 						return value;
 					else

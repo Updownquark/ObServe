@@ -1126,7 +1126,7 @@ public abstract class ModelType<M> implements Named {
 		@Override
 		public MVT forModelCopy(MVT value, ModelSetInstance sourceModels, ModelSetInstance newModels) {
 			MVS sourceV = theSource.get(sourceModels);
-			MVS newSourceV = theSource.forModelCopy(sourceV, sourceModels, newModels);
+			MVS newSourceV = theSource.get(newModels);
 			if (sourceV == newSourceV)
 				return value;
 			else

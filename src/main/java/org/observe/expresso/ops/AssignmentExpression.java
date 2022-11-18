@@ -98,9 +98,9 @@ public class AssignmentExpression implements ObservableExpression {
 			@Override
 			public ObservableAction<?> forModelCopy(ObservableAction<?> value2, ModelSetInstance sourceModels, ModelSetInstance newModels) {
 				SettableValue<Object> sourceCtx = context.get(sourceModels);
-				SettableValue<Object> newCtx = context.forModelCopy(sourceCtx, sourceModels, newModels);
+				SettableValue<Object> newCtx = context.get(newModels);
 				SettableValue<Object> sourceValue = value.get(sourceModels);
-				SettableValue<Object> newValue = value.forModelCopy(sourceValue, sourceModels, newModels);
+				SettableValue<Object> newValue = value.get(newModels);
 				if (sourceCtx == newCtx && sourceValue == newValue)
 					return value2;
 				else

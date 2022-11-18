@@ -855,7 +855,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 						boolean different = false;
 						for (ValueContainer<ObservableAction<?>, ObservableAction<Object>> actionV : actionVs) {
 							ObservableAction<Object> sourceAction = actionV.get(sourceModels);
-							ObservableAction<Object> copyAction = actionV.forModelCopy(sourceAction, sourceModels, wrappedNew);
+							ObservableAction<Object> copyAction = actionV.get(wrappedNew);
 							different |= sourceAction != copyAction;
 							realActions.add(copyAction);
 						}
@@ -926,27 +926,24 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 						public ObservableAction<Object> forModelCopy(ObservableAction<Object> value, ModelSetInstance sourceModels,
 							ModelSetInstance newModels) {
 							ObservableAction<?> initS = initV == null ? null : initV.get(sourceModels);
-							ObservableAction<?> initA = initV == null ? null : initV.forModelCopy(initS, sourceModels, newModels);
+							ObservableAction<?> initA = initV == null ? null : initV.get(newModels);
 							ObservableAction<?> beforeS = beforeV == null ? null : beforeV.get(sourceModels);
-							ObservableAction<?> beforeA = beforeV == null ? null : beforeV.forModelCopy(beforeS, sourceModels, newModels);
+							ObservableAction<?> beforeA = beforeV == null ? null : beforeV.get(newModels);
 							SettableValue<Boolean> whileS = whileV.get(sourceModels);
-							SettableValue<Boolean> whileC = whileV.forModelCopy(whileS, sourceModels, newModels);
+							SettableValue<Boolean> whileC = whileV.get(newModels);
 							ObservableAction<?> beforeBodyS = beforeBodyV == null ? null : beforeBodyV.get(sourceModels);
-							ObservableAction<?> beforeBodyA = beforeBodyV == null ? null
-								: beforeBodyV.forModelCopy(beforeBodyS, sourceModels, newModels);
+							ObservableAction<?> beforeBodyA = beforeBodyV == null ? null : beforeBodyV.get(newModels);
 							boolean different = initS != initA || beforeS != beforeA || whileS != whileC || beforeBodyS != beforeBodyA;
 							List<ObservableAction<?>> execAs = new ArrayList<>(execVs.size());
 							for (ValueContainer<ObservableAction<?>, ObservableAction<?>> execV : execVs) {
 								ObservableAction<?> execS = execV.get(sourceModels);
-								ObservableAction<?> execA = execV.forModelCopy(execS, sourceModels, newModels);
+								ObservableAction<?> execA = execV.get(newModels);
 								different |= execS != execA;
 							}
 							ObservableAction<?> afterBodyS = afterBodyV == null ? null : afterBodyV.get(sourceModels);
-							ObservableAction<?> afterBodyA = afterBodyV == null ? null
-								: afterBodyV.forModelCopy(afterBodyS, sourceModels, newModels);
+							ObservableAction<?> afterBodyA = afterBodyV == null ? null : afterBodyV.get(newModels);
 							ObservableAction<?> finallyS = finallyV == null ? null : finallyV.get(sourceModels);
-							ObservableAction<?> finallyA = finallyV == null ? null
-								: finallyV.forModelCopy(finallyS, sourceModels, newModels);
+							ObservableAction<?> finallyA = finallyV == null ? null : finallyV.get(newModels);
 							different |= afterBodyS != afterBodyA || finallyS != finallyA;
 							if (different)
 								return new LoopAction(initA, beforeA, whileC, beforeBodyA, execAs, afterBodyA, finallyA);
@@ -1197,7 +1194,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 					boolean different = false;
 					for (int i = 0; i < vs.length; i++) {
 						SettableValue<?> sv = valueContainers.get(i).get(sourceModels);
-						SettableValue<?> nv = valueContainers.get(i).forModelCopy(sv, sourceModels, newModels);
+						SettableValue<?> nv = valueContainers.get(i).get(newModels);
 						different |= sv != nv;
 						vs[i] = nv;
 					}
@@ -1444,7 +1441,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 					@Override
 					public Object forModelCopy(Object value, ModelSetInstance sourceModels, ModelSetInstance newModels) {
 						Object firstStepS = firstStep.get(sourceModels);
-						Object firstStepN = firstStep.forModelCopy(firstStepS, sourceModels, newModels);
+						Object firstStepN = firstStep.get(newModels);
 						if (firstStepS != firstStepN || fTransform.isDifferent(sourceModels, newModels))
 							return fTransform.transform(//
 								firstStepN, newModels);

@@ -764,7 +764,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 				public SettableValue<ObservableConfigFormat<Object>> forModelCopy(SettableValue<ObservableConfigFormat<Object>> value,
 					ModelSetInstance sourceModels, ModelSetInstance newModels) {
 					SettableValue<Format<Object>> sourceFormat = format.get(sourceModels);
-					SettableValue<Format<Object>> newFormat = format.forModelCopy(sourceFormat, sourceModels, newModels);
+					SettableValue<Format<Object>> newFormat = format.get(newModels);
 					if (sourceFormat == newFormat)
 						return value;
 					else {
@@ -1138,11 +1138,10 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 				public SettableValue<Format<BetterFile>> forModelCopy(SettableValue<Format<BetterFile>> value,
 					ModelSetInstance sourceModels, ModelSetInstance newModels) {
 					SettableValue<BetterFile.FileDataSource> sourceFDS = fileSource2.get(sourceModels);
-					SettableValue<BetterFile.FileDataSource> newFDS = fileSource2.forModelCopy(sourceFDS, sourceModels, newModels);
+					SettableValue<BetterFile.FileDataSource> newFDS = fileSource2.get(newModels);
 					SettableValue<String> sourceWorkingDir = workingDir2 == null ? SettableValue.of(String.class, ".", "Not Settable")
 						: workingDir2.get(sourceModels);
-					SettableValue<String> newWorkingDir = workingDir2 == null ? sourceWorkingDir
-						: workingDir2.forModelCopy(sourceWorkingDir, sourceModels, newModels);
+					SettableValue<String> newWorkingDir = workingDir2 == null ? sourceWorkingDir : workingDir2.get(newModels);
 					if (sourceFDS == newFDS && sourceWorkingDir == newWorkingDir)
 						return value;
 					else {

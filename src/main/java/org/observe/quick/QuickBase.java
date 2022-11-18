@@ -607,26 +607,26 @@ public class QuickBase implements QonfigInterpretation {
 					fieldName = null;
 				container.addTextArea(fieldName == null ? null : fieldName.get(), realValue, format.get(builder.getModels()).get(),
 					field -> {
-					modify(field, builder);
-					if (rows != null) {
-						SettableValue<Integer> rowsV = rows.get(builder.getModels());
-						rowsV.changes().act(evt -> {
-							field.getEditor().withRows(evt.getNewValue());
-						});
-					}
-					if (html != null) {
-						SettableValue<Boolean> htmlV = html.get(builder.getModels());
-						htmlV.changes().act(evt -> {
-							field.getEditor().asHtml(evt.getNewValue());
-						});
-					}
-					if (editable != null) {
-						SettableValue<Boolean> editableV = editable.get(builder.getModels());
-						editableV.changes().act(evt -> {
-							field.getEditor().setEditable(evt.getNewValue());
-						});
-					}
-				});
+						modify(field, builder);
+						if (rows != null) {
+							SettableValue<Integer> rowsV = rows.get(builder.getModels());
+							rowsV.changes().act(evt -> {
+								field.getEditor().withRows(evt.getNewValue());
+							});
+						}
+						if (html != null) {
+							SettableValue<Boolean> htmlV = html.get(builder.getModels());
+							htmlV.changes().act(evt -> {
+								field.getEditor().asHtml(evt.getNewValue());
+							});
+						}
+						if (editable != null) {
+							SettableValue<Boolean> editableV = editable.get(builder.getModels());
+							editableV.changes().act(evt -> {
+								field.getEditor().setEditable(evt.getNewValue());
+							});
+						}
+					});
 				return builder.build();
 			}
 		};
@@ -1530,8 +1530,8 @@ public class QuickBase implements QonfigInterpretation {
 			ModelTypes.Value.forType(valueType));
 		ValueContainer<SettableValue<?>, SettableValue<Boolean>> selected = exS.getExpressoEnv().getModels().getValue("selected",
 			ModelTypes.Value.BOOLEAN);
-		ValueContainer<SettableValue<?>, SettableValue<Boolean>> focused = exS.getExpressoEnv().getModels().getValue("focused",
-			ModelTypes.Value.BOOLEAN);
+		// ValueContainer<SettableValue<?>, SettableValue<Boolean>> focused = exS.getExpressoEnv().getModels().getValue("focused",
+		// ModelTypes.Value.BOOLEAN);
 		ValueContainer<SettableValue<?>, SettableValue<Boolean>> hovered = exS.getExpressoEnv().getModels().getValue("hovered",
 			ModelTypes.Value.BOOLEAN);
 		ValueContainer<ObservableCollection<?>, ObservableCollection<T>> children = exS.getAttribute("children",
@@ -1563,7 +1563,8 @@ public class QuickBase implements QonfigInterpretation {
 					throw new QonfigInterpretationException(
 						"Value " + selectionEx + ", type " + selection.getType() + " cannot be used for tree selection");
 			} else if (selection.getType().getModelType() == ModelTypes.Collection
-				|| selection.getType().getModelType() == ModelTypes.SortedCollection || selection.getType().getModelType() == ModelTypes.Set
+				|| selection.getType().getModelType() == ModelTypes.SortedCollection//
+				|| selection.getType().getModelType() == ModelTypes.Set//
 				|| selection.getType().getModelType() == ModelTypes.SortedSet) {
 				singleSelectionV = null;
 				singleSelectionPath = null;
@@ -1578,7 +1579,7 @@ public class QuickBase implements QonfigInterpretation {
 			@Override
 			public QuickComponent install(PanelPopulator<?, ?> container, QuickComponent.Builder builder) {
 				ModelSetInstance treeDataModels = builder.getModels().copy().build();
-				SettableValue<BetterList<T>> pathValue = SettableValue.build(pathType).build();
+				SettableValue<BetterList<T>> pathValue = SettableValue.build(pathType).withDescription("treeRootPath").build();
 				DynamicModelValue.satisfyDynamicValue(pathName, ModelTypes.Value.forType(pathType), treeDataModels, pathValue);
 				treeMaker.makeTree(//
 					builder, container, root.get(builder.getModels()), p -> {
@@ -1589,10 +1590,13 @@ public class QuickBase implements QonfigInterpretation {
 					}, tree -> {
 						modify(tree.fill().fillV(), builder);
 						if (leaf != null) {
+							ModelSetInstance leafModel = treeDataModels.copy().build();
 							ObservableTreeModel<T> treeModel = (ObservableTreeModel<T>) ((JTree) tree.getEditor()).getModel();
-							SettableValue<Boolean> leafV = leaf.get(treeDataModels);
+							SettableValue<BetterList<T>> leafPathValue = SettableValue.build(pathType).withDescription(pathName).build();
+							DynamicModelValue.satisfyDynamicValue(pathName, ModelTypes.Value.forType(pathType), leafModel, leafPathValue);
+							SettableValue<Boolean> leafV = leaf.get(leafModel);
 							tree.withLeafTest(value -> {
-								pathValue.set(treeModel.getBetterPath(value, false), null);
+								leafPathValue.set(treeModel.getBetterPath(value, false), null);
 								return leafV.get();
 							});
 						}

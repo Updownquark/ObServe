@@ -488,13 +488,13 @@ public abstract class Invocation implements ObservableExpression {
 		@Override
 		public MV forModelCopy(MV value, ModelSetInstance sourceModels, ModelSetInstance newModels) {
 			SettableValue<?> sourceCtx = theContext == null ? null : theContext.get(sourceModels);
-			SettableValue<?> newCtx = theContext == null ? null : theContext.forModelCopy(sourceCtx, sourceModels, newModels);
+			SettableValue<?> newCtx = theContext == null ? null : theContext.get(newModels);
 			SettableValue<?>[] argVs = new SettableValue[theArguments.size()];
 			Observable<?>[] changeSources = new Observable[theContext == null ? argVs.length : argVs.length + 1];
 			boolean different = sourceCtx != newCtx;
 			for (int i = 0; i < argVs.length; i++) {
 				SettableValue<?> sourceArg = theArguments.get(i).get(sourceModels);
-				SettableValue<?> newArg = theArguments.get(i).forModelCopy(sourceArg, sourceModels, newModels);
+				SettableValue<?> newArg = theArguments.get(i).get(newModels);
 				different |= sourceArg != newArg;
 				argVs[i] = newArg;
 			}

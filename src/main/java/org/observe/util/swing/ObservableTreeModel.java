@@ -471,6 +471,14 @@ public abstract class ObservableTreeModel<T> implements TreeModel {
 				}
 			});
 		}
+
+		@Override
+		public String toString() {
+			if (theParent != null)
+				return theParent + "/" + theValue;
+			else
+				return String.valueOf(theValue);
+		}
 	}
 
 	/**

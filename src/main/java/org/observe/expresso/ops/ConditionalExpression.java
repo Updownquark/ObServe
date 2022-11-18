@@ -155,11 +155,11 @@ public class ConditionalExpression implements ObservableExpression {
 			@Override
 			public MV forModelCopy(MV value, ModelSetInstance sourceModels, ModelSetInstance newModels) {
 				SettableValue<Boolean> sourceCondition = conditionV.get(sourceModels);
-				SettableValue<Boolean> newCondition = conditionV.forModelCopy(sourceCondition, sourceModels, newModels);
+				SettableValue<Boolean> newCondition = conditionV.get(newModels);
 				Object sourcePrimary = primaryV.get(sourceModels);
-				Object newPrimary = ((ValueContainer<Object, Object>) primaryV).forModelCopy(sourcePrimary, sourceModels, newModels);
+				Object newPrimary = ((ValueContainer<Object, Object>) primaryV).get(newModels);
 				Object sourceSecondary = secondaryV.get(sourceModels);
-				Object newSecondary = ((ValueContainer<Object, Object>) secondaryV).forModelCopy(sourceSecondary, sourceModels, newModels);
+				Object newSecondary = ((ValueContainer<Object, Object>) secondaryV).get(newModels);
 				if (sourceCondition == newCondition && sourcePrimary == newPrimary && sourceSecondary == newSecondary)
 					return value;
 				return createValue(newCondition, newPrimary, newSecondary);

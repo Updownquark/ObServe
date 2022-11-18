@@ -116,9 +116,9 @@ public class ArrayAccessExpression implements ObservableExpression {
 			@Override
 			public SettableValue<T> forModelCopy(SettableValue<T> value, ModelSetInstance sourceModels, ModelSetInstance newModels) {
 				SettableValue<T[]> sourceArray = arrayValue.get(sourceModels);
-				SettableValue<T[]> newArray = arrayValue.forModelCopy(sourceArray, sourceModels, newModels);
+				SettableValue<T[]> newArray = arrayValue.get(newModels);
 				SettableValue<Integer> sourceIndex = indexValue.get(sourceModels);
-				SettableValue<Integer> newIndex = indexValue.forModelCopy(sourceIndex, sourceModels, newModels);
+				SettableValue<Integer> newIndex = indexValue.get(newModels);
 				if (sourceArray == newArray && sourceIndex == newIndex)
 					return value;
 				else
