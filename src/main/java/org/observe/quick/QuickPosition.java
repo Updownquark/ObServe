@@ -19,10 +19,18 @@ import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigParseSession;
 import org.qommons.config.QonfigToolkit;
 
+/** Represents the linear offset of one edge of a Quick widget from the same edge of its parent */
 public class QuickPosition {
+	/** Possible position units */
 	public enum PositionUnit {
-		Pixels("px"), Percent("%"), Lexips("xp");
+		/** Pixel size unit, the value represents an absolute offset from the parent's leading edge (top or left) in pixels */
+		Pixels("px"),
+		/** Percent size unit, the value represents a percentage of the parent's length */
+		Percent("%"),
+		/** Reverse pixel size unit, the value represents an absolute offset from the parent's trailing edge (bottom or right) in pixels */
+		Lexips("xp");
 
+		/** The name of this unit */
 		public final String name;
 
 		private PositionUnit(String name) {
@@ -30,9 +38,15 @@ public class QuickPosition {
 		}
 	}
 
+	/** The value of this position */
 	public final float value;
+	/** The unit that this position's value is in */
 	public final PositionUnit type;
 
+	/**
+	 * @param value The value for the position
+	 * @param type The position unit that the value is in
+	 */
 	public QuickPosition(float value, PositionUnit type) {
 		this.type = type;
 		switch (type) {
@@ -48,6 +62,10 @@ public class QuickPosition {
 		}
 	}
 
+	/**
+	 * @param containerSize The length of the same dimension of the parent container
+	 * @return This position offset, in pixels
+	 */
 	public int evaluate(int containerSize) {
 		switch (type) {
 		case Pixels:
@@ -80,21 +98,28 @@ public class QuickPosition {
 		return value + type.name;
 	}
 
-	public static QuickPosition parse(String pos) throws NumberFormatException {
+	/**
+	 * @param text The text to parse
+	 * @return The size represented by the text
+	 * @throws NumberFormatException If the size could not be parsed
+	 */
+	public static QuickPosition parse(String text) throws NumberFormatException {
 		PositionUnit type = PositionUnit.Pixels;
 		for (PositionUnit u : PositionUnit.values()) {
-			if (pos.endsWith(u.name)) {
+			if (text.endsWith(u.name)) {
 				type = u;
-				pos = pos.substring(0, pos.length() - u.name.length());
+				text = text.substring(0, text.length() - u.name.length());
 				break;
 			}
 		}
-		return new QuickPosition(Float.parseFloat(pos), type);
+		return new QuickPosition(Float.parseFloat(text), type);
 	}
 
+	/** A Qonfig value type to parse QuickPosition values */
 	public static class PositionValueType implements CustomValueType {
 		private final ExpressoParser theParser;
 
+		/** @param parser The Expresso parser to parse position values */
 		public PositionValueType(ExpressoParser parser) {
 			theParser = parser;
 		}

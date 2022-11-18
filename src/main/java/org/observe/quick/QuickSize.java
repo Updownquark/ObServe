@@ -19,10 +19,16 @@ import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigParseSession;
 import org.qommons.config.QonfigToolkit;
 
+/** Represents the linear size of one dimension of a Quick widget */
 public class QuickSize {
+	/** Possible size units */
 	public enum SizeUnit {
-		Pixels("px"), Percent("%");
+		/** Pixel size unit, the value represents an absolute length in pixels */
+		Pixels("px"),
+		/** Percent size unit, the value represents a percentage of the parent's length */
+		Percent("%");
 
+		/** The name of this unit */
 		public final String name;
 
 		private SizeUnit(String name) {
@@ -30,9 +36,15 @@ public class QuickSize {
 		}
 	}
 
+	/** The value of this size */
 	public final float value;
+	/** The unit that this size's value is in */
 	public final SizeUnit type;
 
+	/**
+	 * @param value The value for the size
+	 * @param type The size unit that the value is in
+	 */
 	public QuickSize(float value, SizeUnit type) {
 		this.type = type;
 		switch (type) {
@@ -47,6 +59,10 @@ public class QuickSize {
 		}
 	}
 
+	/**
+	 * @param containerSize The length of the same dimension of the parent container
+	 * @return This size, in pixels
+	 */
 	public int evaluate(int containerSize) {
 		switch (type) {
 		case Pixels:
@@ -77,21 +93,28 @@ public class QuickSize {
 		return value + type.name;
 	}
 
-	public static QuickSize parse(String pos) throws NumberFormatException {
+	/**
+	 * @param text The text to parse
+	 * @return The size represented by the text
+	 * @throws NumberFormatException If the size could not be parsed
+	 */
+	public static QuickSize parse(String text) throws NumberFormatException {
 		SizeUnit type = SizeUnit.Pixels;
 		for (SizeUnit u : SizeUnit.values()) {
-			if (pos.endsWith(u.name)) {
+			if (text.endsWith(u.name)) {
 				type = u;
-				pos = pos.substring(0, pos.length() - u.name.length());
+				text = text.substring(0, text.length() - u.name.length());
 				break;
 			}
 		}
-		return new QuickSize(Float.parseFloat(pos), type);
+		return new QuickSize(Float.parseFloat(text), type);
 	}
 
+	/** A Qonfig value type to parse QuickSize values */
 	public static class SizeValueType implements CustomValueType {
 		private final ExpressoParser theParser;
 
+		/** @param parser The Expresso parser to parse size values */
 		public SizeValueType(ExpressoParser parser) {
 			theParser = parser;
 		}

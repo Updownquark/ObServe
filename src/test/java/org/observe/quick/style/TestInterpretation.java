@@ -25,13 +25,12 @@ import org.qommons.config.QonfigInterpreterCore.Builder;
 import org.qommons.config.QonfigToolkit;
 import org.qommons.config.SpecialSession;
 
+/** Interpretation for {@link QuickStyleTests} */
 public class TestInterpretation implements QonfigInterpretation {
 	/** The name of the test toolkit */
 	public static final String TOOLKIT_NAME = "Quick-Style-Test";
 	/** The version of the test toolkit */
 	public static final Version VERSION = new Version(0, 1, 0);
-
-	private QonfigToolkit theToolkit;
 
 	@Override
 	public Set<Class<? extends SpecialSession<?>>> getExpectedAPIs() {
@@ -50,7 +49,6 @@ public class TestInterpretation implements QonfigInterpretation {
 
 	@Override
 	public void init(QonfigToolkit toolkit) {
-		theToolkit = toolkit;
 	}
 
 	@Override
@@ -71,7 +69,9 @@ public class TestInterpretation implements QonfigInterpretation {
 			;
 	}
 
+	/** Entity structure A for testing styles */
 	public static class A {
+		/** ValueContainer for producing instances of {@link A} */
 		public static class Def implements ValueContainer<SettableValue<?>, SettableValue<A>> {
 			private final ExpressoQIS expressoSession;
 			private final ValueContainer<SettableValue<?>, SettableValue<Boolean>> a;
@@ -82,6 +82,10 @@ public class TestInterpretation implements QonfigInterpretation {
 			private final QuickElementStyleAttribute<Integer> s1;
 			private final QuickElementStyleAttribute<Boolean> s2;
 
+			/**
+			 * @param session The session from which to get the data defining the {@link A} instance
+			 * @throws QonfigInterpretationException If the {@link A} instance could not be parsed
+			 */
 			public Def(StyleQIS session) throws QonfigInterpretationException {
 				expressoSession = session.as(ExpressoQIS.class);
 				a = expressoSession.getExpressoEnv().getModels().getValue("a", ModelTypes.Value.BOOLEAN);
@@ -122,12 +126,19 @@ public class TestInterpretation implements QonfigInterpretation {
 			}
 		}
 
+		/** Field a */
 		public final SettableValue<Boolean> a;
+		/** Field b */
 		public final SettableValue<Boolean> b;
+		/** Field c */
 		public final SettableValue<Integer> c;
+		/** Field d */
 		public final SettableValue<Boolean> d;
+		/** Style value s0 */
 		public final ObservableValue<Boolean> s0;
+		/** Style value s1 */
 		public final ObservableValue<Integer> s1;
+		/** Style value s2 */
 		public final ObservableValue<Boolean> s2;
 
 		A(Def def, ModelSetInstance msi) {
@@ -140,6 +151,15 @@ public class TestInterpretation implements QonfigInterpretation {
 			this.s2 = def.s2.evaluate(msi);
 		}
 
+		/**
+		 * @param a Field a
+		 * @param b Field b
+		 * @param c Field c
+		 * @param d Field d
+		 * @param s0 Style value s0
+		 * @param s1 Style value s1
+		 * @param s2 Style value s2
+		 */
 		public A(SettableValue<Boolean> a, SettableValue<Boolean> b, SettableValue<Integer> c, SettableValue<Boolean> d,
 			ObservableValue<Boolean> s0, ObservableValue<Integer> s1, ObservableValue<Boolean> s2) {
 			this.a = a;
@@ -152,7 +172,13 @@ public class TestInterpretation implements QonfigInterpretation {
 		}
 	}
 
+	/** Entity structure B for testing styles */
 	public static class B {
+		/**
+		 * ValueContainer for producing instances of {@link B}
+		 * 
+		 * @param <T> The {@link B} sub-type of this definition
+		 */
 		public static class Def<T extends B> implements ValueContainer<SettableValue<?>, SettableValue<T>> {
 			final Class<T> clazz;
 			final ExpressoQIS expressoSession;
@@ -162,6 +188,11 @@ public class TestInterpretation implements QonfigInterpretation {
 			final QuickElementStyleAttribute<Integer> s4;
 			final List<ValueContainer<SettableValue<?>, SettableValue<A>>> children;
 
+			/**
+			 * @param session The session from which to get the data defining the {@link B} instance
+			 * @throws QonfigInterpretationException If the {@link B} instance could not be parsed
+			 * @return The {@link ValueContainer} to produce the instance
+			 */
 			public static Def<B> create(StyleQIS session) throws QonfigInterpretationException {
 				return new Def<>(session, B.class);
 			}
@@ -207,10 +238,15 @@ public class TestInterpretation implements QonfigInterpretation {
 			}
 		}
 
+		/** Field e */
 		public final SettableValue<Boolean> e;
+		/** Field f */
 		public final SettableValue<Integer> f;
+		/** Style value s3 */
 		public final ObservableValue<Integer> s3;
+		/** Style value s4 */
 		public final ObservableValue<Integer> s4;
+		/** This B entity's {@link A}-typed children */
 		public final List<A> a;
 
 		B(Def<?> def, ModelSetInstance msi, List<A> children) {
@@ -222,11 +258,17 @@ public class TestInterpretation implements QonfigInterpretation {
 		}
 	}
 
+	/** Entity structure C for testing styles */
 	public static class C extends B {
+		/** ValueContainer for producing instances of {@link C} */
 		public static class Def extends B.Def<C> {
 			final ValueContainer<SettableValue<?>, SettableValue<Boolean>> g;
 			final QuickElementStyleAttribute<Boolean> s5;
 
+			/**
+			 * @param session The session from which to get the data defining the {@link C} instance
+			 * @throws QonfigInterpretationException If the {@link C} instance could not be parsed
+			 */
 			public Def(StyleQIS session) throws QonfigInterpretationException {
 				super(session, C.class);
 				g = expressoSession.getExpressoEnv().getModels().getValue("g", ModelTypes.Value.BOOLEAN);
@@ -241,7 +283,9 @@ public class TestInterpretation implements QonfigInterpretation {
 			}
 		}
 
+		/** Field g */
 		public final SettableValue<Boolean> g;
+		/** Style value s5 */
 		public final ObservableValue<Boolean> s5;
 
 		C(Def def, ModelSetInstance msi, List<A> children) {
@@ -251,11 +295,17 @@ public class TestInterpretation implements QonfigInterpretation {
 		}
 	}
 
+	/** Entity structure D for testing styles */
 	public static class D extends B {
+		/** ValueContainer for producing instances of {@link D} */
 		public static class Def extends B.Def<D> {
 			final ValueContainer<SettableValue<?>, SettableValue<Integer>> h;
 			final QuickElementStyleAttribute<Integer> s6;
 
+			/**
+			 * @param session The session from which to get the data defining the {@link D} instance
+			 * @throws QonfigInterpretationException If the {@link D} instance could not be parsed
+			 */
 			public Def(StyleQIS session) throws QonfigInterpretationException {
 				super(session, D.class);
 				h = expressoSession.getExpressoEnv().getModels().getValue("h", ModelTypes.Value.INT);
@@ -270,7 +320,9 @@ public class TestInterpretation implements QonfigInterpretation {
 			}
 		}
 
+		/** Field h */
 		public final SettableValue<Integer> h;
+		/** Style value s6 */
 		public final ObservableValue<Integer> s6;
 
 		D(Def def, ModelSetInstance msi, List<A> children) {

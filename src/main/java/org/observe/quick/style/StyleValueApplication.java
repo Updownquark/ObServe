@@ -38,13 +38,24 @@ import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigToolkit;
 
+/**
+ * Definition structure parsed from a &lt;style> element determining what &lt;styled> {@link QonfigElement}s a {@link QuickStyleValue}
+ * applies to
+ */
 public class StyleValueApplication implements Comparable<StyleValueApplication> {
+	/** Inheritance scheme for {@link QonfigElementOrAddOn}s */
 	public static MultiInheritanceSet.Inheritance<QonfigElementOrAddOn> STYLE_INHERITANCE = QonfigElementOrAddOn::isAssignableFrom;
+	/** An {@link StyleValueApplication} that applies to all {@link QonfigElement}s */
 	public static final StyleValueApplication ALL = new StyleValueApplication(null, null, MultiInheritanceSet.empty(), null,
 		Collections.emptyMap());
 
 	private static final Map<DynamicModelValue.Identity, Integer> MODEL_VALUE_PRIORITY = new HashMap<>();
 
+	/**
+	 * @param modelValue The model value definition
+	 * @param priorityAttr The style-model-value.priority attribute from the Quick-Style toolkit
+	 * @return The priority of the given model value
+	 */
 	public static synchronized int getPriority(DynamicModelValue.Identity modelValue, QonfigAttributeDef.Declared priorityAttr) {
 		Integer priority = MODEL_VALUE_PRIORITY.get(modelValue);
 		if (priority != null)
@@ -57,6 +68,12 @@ public class StyleValueApplication implements Comparable<StyleValueApplication> 
 		return priority;
 	}
 
+	/**
+	 * @param modelValues The model values to prioritize
+	 * @param known Model values for which the priority is already known, an optimization
+	 * @param priorityAttr The style-model-value.priority attribute from the Quick-Style toolkit
+	 * @return All of the given model values, sorted by priority (in the key set, highest first) and mapped to their priority
+	 */
 	public static Map<DynamicModelValue.Identity, Integer> prioritizeModelValues(Collection<DynamicModelValue.Identity> modelValues,
 		Map<DynamicModelValue.Identity, Integer> known, QonfigAttributeDef.Declared priorityAttr) {
 		List<BiTuple<DynamicModelValue.Identity, Integer>> mvList = new ArrayList<>(modelValues.size());
@@ -67,11 +84,8 @@ public class StyleValueApplication implements Comparable<StyleValueApplication> 
 		Collections.sort(mvList, (mv1, mv2) -> -mv1.getValue2().compareTo(mv2.getValue2()));
 
 		Map<DynamicModelValue.Identity, Integer> prioritizedMVs = new LinkedHashMap<>();
-		int complexity = 0;
-		for (BiTuple<DynamicModelValue.Identity, Integer> mv : mvList) {
+		for (BiTuple<DynamicModelValue.Identity, Integer> mv : mvList)
 			prioritizedMVs.put(mv.getValue1(), mv.getValue2());
-			complexity += mv.getValue2();
-		}
 		return Collections.unmodifiableMap(prioritizedMVs);
 	}
 
@@ -116,6 +130,16 @@ public class StyleValueApplication implements Comparable<StyleValueApplication> 
 			addHierarchy(inh, visited);
 	}
 
+	/**
+	 * @param ex The expression to find model values in
+	 * @param modelValues The collection to add the model values into
+	 * @param models The models to use to find referenced model values
+	 * @param expresso A toolkit inheriting Expresso-Core
+	 * @param styleSheet Whether the expression is from a style sheet. Model values that do not declare their
+	 *        {@link org.observe.expresso.DynamicModelValue.Identity#getType() type} cannot be used as conditions in style sheets.
+	 * @return The expression to use in place of the given condition
+	 * @throws QonfigInterpretationException If a type-less condition is used from a style sheet
+	 */
 	public ObservableExpression findModelValues(ObservableExpression ex, Collection<DynamicModelValue.Identity> modelValues,
 		ObservableModelSet models, QonfigToolkit expresso, boolean styleSheet) throws QonfigInterpretationException {
 		if (ex instanceof NameExpression && ((NameExpression) ex).getContext() == null) {
@@ -134,7 +158,7 @@ public class StyleValueApplication implements Comparable<StyleValueApplication> 
 						throw new QonfigInterpretationException(
 							"Cannot use model value " + mv + " from a style-sheet, as its type is not defined here");
 					modelValues.add(mv);
-					return new WrappingObservableExpression(ex, mv);
+					return new ModelValueExpression(ex, mv);
 				}
 			}
 		} else {
@@ -157,19 +181,26 @@ public class StyleValueApplication implements Comparable<StyleValueApplication> 
 		return ex;
 	}
 
-	public static class WrappingObservableExpression implements ObservableExpression {
+	/** Replacement expression for a {@link DynamicModelValue} in a spreadsheet condition */
+	public static class ModelValueExpression implements ObservableExpression {
 		private final ObservableExpression theWrapped;
 		private final DynamicModelValue.Identity theModelValue;
 
-		public WrappingObservableExpression(ObservableExpression wrapped, Identity modelValue) {
+		/**
+		 * @param wrapped The expression from the style sheet referring to the model value
+		 * @param modelValue The model value referred to
+		 */
+		public ModelValueExpression(ObservableExpression wrapped, Identity modelValue) {
 			theWrapped = wrapped;
 			theModelValue = modelValue;
 		}
 
+		/** @return The expression from the style sheet referring to the model value */
 		public ObservableExpression getWrapped() {
 			return theWrapped;
 		}
 
+		/** @return The model value referred to */
 		public DynamicModelValue.Identity getModelValue() {
 			return theModelValue;
 		}
@@ -186,7 +217,7 @@ public class StyleValueApplication implements Comparable<StyleValueApplication> 
 				return newThis;
 			ObservableExpression newW = theWrapped.replaceAll(replace);
 			if (newW != theWrapped)
-				return new WrappingObservableExpression(newW, theModelValue);
+				return new ModelValueExpression(newW, theModelValue);
 			return this;
 		}
 
@@ -204,8 +235,8 @@ public class StyleValueApplication implements Comparable<StyleValueApplication> 
 
 		@Override
 		public boolean equals(Object obj) {
-			return obj instanceof WrappingObservableExpression && theWrapped.equals(((WrappingObservableExpression) obj).theWrapped)
-				&& theModelValue.equals(((WrappingObservableExpression) obj).theModelValue);
+			return obj instanceof ModelValueExpression && theWrapped.equals(((ModelValueExpression) obj).theWrapped)
+				&& theModelValue.equals(((ModelValueExpression) obj).theModelValue);
 		}
 
 		@Override
@@ -214,6 +245,12 @@ public class StyleValueApplication implements Comparable<StyleValueApplication> 
 		}
 	}
 
+	/**
+	 * Conditionless application test
+	 *
+	 * @param element The element to test
+	 * @return Whether the given element should use values from {@link QuickStyleValue style values} with this application
+	 */
 	public boolean applies(QonfigElement element) {
 		QonfigElement parentApply = appliesLocal(element);
 		if (parentApply == null)
@@ -224,7 +261,14 @@ public class StyleValueApplication implements Comparable<StyleValueApplication> 
 		return true;
 	}
 
-	public QonfigElement appliesLocal(QonfigElement element) {
+	/**
+	 * Conditionless, local application test. Tests whether this application applies to the given element, regardless of its
+	 * {@link #getParent()} condition
+	 *
+	 * @param element The element to test
+	 * @return Whether the given element should use values from {@link QuickStyleValue style values} with this application
+	 */
+	protected QonfigElement appliesLocal(QonfigElement element) {
 		for (QonfigElementOrAddOn type : theTypes.values()) {
 			if (!element.isInstance(type))
 				return null;
@@ -242,22 +286,39 @@ public class StyleValueApplication implements Comparable<StyleValueApplication> 
 			return element;
 	}
 
+	/**
+	 * @return The application that an {@link QonfigElement element}'s {@link QonfigElement#getParent() parent} must pass for this
+	 *         application to {@link #applies(QonfigElement) apply} to it
+	 */
 	public StyleValueApplication getParent() {
 		return theParent;
 	}
 
+	/**
+	 * @return All the types that an {@link QonfigElement element} must be an {@link QonfigElement#isInstance(QonfigElementOrAddOn)
+	 *         instance} of for this application to {@link #applies(QonfigElement) apply} to it
+	 */
 	public MultiInheritanceSet<QonfigElementOrAddOn> getTypes() {
 		return theTypes;
 	}
 
+	/**
+	 * @return The child role that an {@link QonfigElement element} must {@link QonfigElement#getParentRoles() fulfill} for this application
+	 *         to {@link #applies(QonfigElement) apply} to it
+	 */
 	public QonfigChildDef getRole() {
 		return theRole;
 	}
 
+	/** @return The condition that an element's model must pass for this application to {@link #applies(QonfigElement) apply} to it */
 	public ObservableExpression getCondition() {
 		return theCondition;
 	}
 
+	/**
+	 * @return All model values that this application's {@link #getCondition() condition} references, sorted by priority (in the key set,
+	 *         highest first) and mapped to their priority
+	 */
 	public Map<DynamicModelValue.Identity, Integer> getModelValues() {
 		return theModelValues;
 	}
@@ -291,6 +352,11 @@ public class StyleValueApplication implements Comparable<StyleValueApplication> 
 		return comp;
 	}
 
+	/**
+	 * @param types The element types to apply to
+	 * @return A {@link StyleValueApplication} that applies to {@link QonfigElement}s that this application applies to <b>AND</b> that are
+	 *         {@link QonfigElement#isInstance(QonfigElementOrAddOn) instances} of <b>ALL</b> of the given types
+	 */
 	public StyleValueApplication forType(QonfigElementOrAddOn... types) {
 		MultiInheritanceSet<QonfigElementOrAddOn> newTypes = null;
 		for (QonfigElementOrAddOn type : types) {
@@ -310,6 +376,11 @@ public class StyleValueApplication implements Comparable<StyleValueApplication> 
 		return new StyleValueApplication(theParent, theRole, newTypes, theCondition, theModelValues);
 	}
 
+	/**
+	 * @param child The child role to apply to
+	 * @return A {@link StyleValueApplication} that applies to {@link QonfigElement}s that this application applies to <b>AND</b> that
+	 *         {@link QonfigElement#getParentRoles() fulfills} the given child role
+	 */
 	public StyleValueApplication forChild(QonfigChildDef child) {
 		MultiInheritanceSet<QonfigElementOrAddOn> types = MultiInheritanceSet.create(STYLE_INHERITANCE);
 		types.add(child.getType());
@@ -317,6 +388,16 @@ public class StyleValueApplication implements Comparable<StyleValueApplication> 
 		return new StyleValueApplication(this, child, types, null, theModelValues);
 	}
 
+	/**
+	 * @param condition The condition to apply to
+	 * @param env The Expresso environment containing model values that the condition may use
+	 * @param priorityAttr The style-model-value.priority attribute from the Quick-Style toolkit
+	 * @param styleSheet Whether the application is defined from a style-sheet, as opposed to inline under the element
+	 * @return A {@link StyleValueApplication} that applies to {@link QonfigElement}s that this application applies to <b>AND</b> whose
+	 *         model passes the given condition
+	 * @throws QonfigInterpretationException If the condition uses any unusable model values, such as un-typed {@link DynamicModelValue
+	 *         model values} from a style-sheet
+	 */
 	public StyleValueApplication forCondition(ObservableExpression condition, ExpressoEnv env, QonfigAttributeDef.Declared priorityAttr,
 		boolean styleSheet) throws QonfigInterpretationException {
 		ObservableExpression newCondition;
@@ -333,6 +414,7 @@ public class StyleValueApplication implements Comparable<StyleValueApplication> 
 			prioritizeModelValues(mvs, theModelValues, priorityAttr));
 	}
 
+	/** @return 1 if this application has no {@link #getParent()}, else its parent's depth plus 1 */
 	public int getDepth() {
 		if (theParent == null)
 			return 1;
@@ -340,10 +422,22 @@ public class StyleValueApplication implements Comparable<StyleValueApplication> 
 			return 1 + theParent.getDepth();
 	}
 
+	/**
+	 * @return A measure of the specificity of this application's {@link #getTypes() types}. A greater value means this application will
+	 *         {@link #applies(QonfigElement) apply} fewer {@link QonfigElement}s
+	 */
 	public int getTypeComplexity() {
 		return theTypeComplexity;
 	}
 
+	/**
+	 *
+	 * @param expressoEnv The Expresso environment in which to {@link ObservableExpression}{@link #evaluate(ExpressoEnv) evaluate}
+	 *        {@link #getCondition() conditions}
+	 * @return An {@link EvaluatedStyleApplication} for this application in the given environment
+	 * @throws QonfigInterpretationException If a condition could not be
+	 *         {@link ObservableExpression#evaluate(ModelInstanceType, ExpressoEnv) evaluated}
+	 */
 	public EvaluatedStyleApplication evaluate(ExpressoEnv expressoEnv) throws QonfigInterpretationException {
 		EvaluatedStyleApplication parent = theParent == null ? null : theParent.evaluate(//
 			expressoEnv.with(getParentModel(expressoEnv.getModels()), null));

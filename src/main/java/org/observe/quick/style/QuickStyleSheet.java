@@ -8,7 +8,9 @@ import java.util.Map;
 
 import org.qommons.config.QonfigElement;
 
+/** A structure containing many {@link #getValues() style values} that may apply to all &lt;styled> elements in a document */
 public class QuickStyleSheet {
+	/** A style sheet with no values */
 	public static final QuickStyleSheet EMPTY = new QuickStyleSheet(null, Collections.emptyMap(), Collections.emptyList(),
 		Collections.emptyMap());
 
@@ -17,6 +19,12 @@ public class QuickStyleSheet {
 	private final List<QuickStyleValue<?>> theValues;
 	private final Map<String, QuickStyleSheet> theImportedStyleSheets;
 
+	/**
+	 * @param ref The location where this external style sheet was defined, or null if it is an inline style sheet
+	 * @param styleSets All style values defined for specific style-sets
+	 * @param values All values defined for the style sheet (not style-set specific)
+	 * @param importedStyleSheets All style sheets imported into this one
+	 */
 	public QuickStyleSheet(URL ref, Map<String, List<QuickStyleValue<?>>> styleSets, List<QuickStyleValue<?>> values,
 		Map<String, QuickStyleSheet> importedStyleSheets) {
 		theReference = ref;
@@ -25,23 +33,33 @@ public class QuickStyleSheet {
 		theImportedStyleSheets = importedStyleSheets;
 	}
 
+	/** @return The location where this standalone style sheet was parsed from */
 	public URL getReference() {
 		return theReference;
 	}
 
+	/** @return This style sheet's style sets, which only apply to elements that declare their style set */
 	public Map<String, List<QuickStyleValue<?>>> getStyleSets() {
 		return theStyleSets;
 	}
 
+	/** @return The style values declared by this style sheet */
 	public List<QuickStyleValue<?>> getValues() {
 		return theValues;
 	}
 
+	/** @return All style sheets referred to by this style sheet */
 	public Map<String, QuickStyleSheet> getImportedStyleSheets() {
 		return theImportedStyleSheets;
 	}
 
-	public List<QuickStyleValue<?>> getStyleSet(String name) {
+	/**
+	 * @param name The name of the style-set. May refer to a style set in an {@link #getImportedStyleSheets() imported} style sheet by using
+	 *        the style sheet's name, dot (.), the style set name.
+	 * @return All style values declared for the given style set
+	 * @throws IllegalArgumentException If no such style-set was found
+	 */
+	public List<QuickStyleValue<?>> getStyleSet(String name) throws IllegalArgumentException {
 		int dot = name.indexOf('.');
 		if (dot >= 0) {
 			QuickStyleSheet ss = theImportedStyleSheets.get(name.substring(0, dot));
@@ -56,6 +74,10 @@ public class QuickStyleSheet {
 		}
 	}
 
+	/**
+	 * @param element The element to get style values for
+	 * @return All style values in this style sheet that {@link StyleValueApplication#applies(QonfigElement) apply} to the given element
+	 */
 	public final List<QuickStyleValue<?>> getValues(QonfigElement element) {
 		List<QuickStyleValue<?>> values = new ArrayList<>();
 		for (QuickStyleValue<?> ssv : theValues) {
@@ -69,6 +91,13 @@ public class QuickStyleSheet {
 		return values;
 	}
 
+	/**
+	 * Prints a representation of this style sheet to a StringBuilder
+	 *
+	 * @param str The string builder to append to. Null to create a new one.
+	 * @param indent The amount by which to indent this style sheet in the string
+	 * @return The string builder
+	 */
 	public StringBuilder print(StringBuilder str, int indent) {
 		if (str == null)
 			str = new StringBuilder();

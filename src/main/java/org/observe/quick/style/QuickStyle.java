@@ -6,7 +6,6 @@ import java.io.InputStream;
 import java.net.URL;
 import java.util.AbstractList;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -41,16 +40,16 @@ import org.qommons.config.QonfigParseException;
 import org.qommons.config.QonfigToolkit;
 import org.qommons.config.SpecialSession;
 
+/** Interpretation for the Quick-Style toolkit */
 public class QuickStyle implements QonfigInterpretation {
-	public static final String TOOLKIT_NAME = "Quick-Style";
-	public static final String STYLE_NAME = "quick-style-name";
-	public static final String STYLE_APPLICATION = "quick-parent-style-application";
-	public static final String STYLE_ATTRIBUTE = "quick-style-attribute";
-	public static final String STYLE_SHEET_REF = "quick-style-sheet-ref";
-	public static final String STYLE_MODEL_VALUE_ELEMENT = "style-model-value";
-	public static final String EXPRESSO_DEPENDENCY = "expresso";
-	public static final String MODEL_ELEMENT_NAME = "MODEL$ELEMENT";
+	static final String STYLE_NAME = "quick-style-name";
+	static final String STYLE_ELEMENT = "quick-style-element";
+	static final String STYLE_APPLICATION = "quick-parent-style-application";
+	static final String STYLE_ATTRIBUTE = "quick-style-attribute";
+	static final String STYLE_SHEET_REF = "quick-style-sheet-ref";
+	static final String MODEL_ELEMENT_NAME = "MODEL$ELEMENT";
 
+	/** Interpretation type for interpreting style information */
 	public static abstract class StyleValues extends AbstractList<QuickStyleValue<?>> {
 		private static final ThreadLocal<LinkedHashSet<IdentityKey<StyleValues>>> STACK = ThreadLocal.withInitial(LinkedHashSet::new);
 
@@ -61,7 +60,13 @@ public class QuickStyle implements QonfigInterpretation {
 			theName = name;
 		}
 
-		public StyleValues init() throws QonfigInterpretationException {
+		/**
+		 * Initializes this style information, performing preliminary interpretation
+		 *
+		 * @return This object
+		 * @throws QonfigInterpretationException If an error exists in this interpreted style information
+		 */
+		protected StyleValues init() throws QonfigInterpretationException {
 			if (theValues != null)
 				return this;
 			LinkedHashSet<IdentityKey<StyleValues>> stack = STACK.get();
@@ -82,6 +87,10 @@ public class QuickStyle implements QonfigInterpretation {
 			return this;
 		}
 
+		/**
+		 * @return All style values interpreted in this structure
+		 * @throws QonfigInterpretationException If an error exists in this interpreted style information
+		 */
 		protected abstract List<QuickStyleValue<?>> get() throws QonfigInterpretationException;
 
 		@Override
@@ -147,11 +156,11 @@ public class QuickStyle implements QonfigInterpretation {
 			@Override
 			public void augmentElementModel(ExpressoQIS session, ObservableModelSet.Builder builder)
 				throws QonfigInterpretationException {
-					builder.withTagValue(StyleQIS.STYLED_ELEMENT_TAG, session.getElement());
+				builder.withTagValue(StyleQIS.STYLED_ELEMENT_TAG, session.getElement());
 				QuickElementStyle parentStyle = session.get(StyleQIS.STYLE_PROP, QuickElementStyle.class);
 				QuickStyleSheet styleSheet = session.get(StyleQIS.STYLE_SHEET_PROP, QuickStyleSheet.class);
 				// Parse style values, if any
-				session.put(StyleQIS.STYLE_ELEMENT, session.getElement());
+				session.put(STYLE_ELEMENT, session.getElement());
 				List<QuickStyleValue<?>> declared = null;
 				for (StyleValues sv : session.interpretChildren("style", StyleValues.class)) {
 					sv.init();
@@ -191,7 +200,7 @@ public class QuickStyle implements QonfigInterpretation {
 		if (application == null)
 			application = StyleValueApplication.ALL;
 		QuickStyleAttribute<?> attr = session.get(STYLE_ATTRIBUTE, QuickStyleAttribute.class);
-		QonfigElement element = (QonfigElement) session.get(StyleQIS.STYLE_ELEMENT);
+		QonfigElement element = (QonfigElement) session.get(STYLE_ELEMENT);
 		modifyForStyle(session);
 
 		String rolePath = session.getAttributeText("child");
@@ -309,21 +318,6 @@ public class QuickStyle implements QonfigInterpretation {
 				return values;
 			}
 		};
-	}
-
-	private static String printElOptions(Collection<QonfigElementOrAddOn> roleEls) {
-		if (roleEls.size() == 1)
-			return roleEls.iterator().next().toString();
-		StringBuilder str = new StringBuilder().append('(');
-		boolean first = true;
-		for (QonfigElementOrAddOn el : roleEls) {
-			if (first)
-				first = false;
-			else
-				str.append('|');
-			str.append(el);
-		}
-		return str.append(')').toString();
 	}
 
 	private QuickStyleSheet interpretStyleSheet(StyleQIS session) throws QonfigInterpretationException {

@@ -15,6 +15,7 @@ import org.observe.util.TypeTokens;
 import org.qommons.LambdaUtils;
 import org.qommons.QommonsUtils;
 import org.qommons.collect.BetterSortedList;
+import org.qommons.config.AbstractQIS;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigInterpretationException;
@@ -30,6 +31,16 @@ public class QuickElementStyle {
 	private final List<EvaluatedStyleValue<?>> theDeclaredValues;
 	private final Map<QuickStyleAttribute<?>, QuickElementStyleAttribute<?>> theValues;
 
+	/**
+	 * @param declaredValues All style values declared specifically on this element
+	 * @param parent The element style for the {@link QonfigElement#getParent() parent} element
+	 * @param styleSheet The style sheet applying to the element
+	 * @param element The element this style is for
+	 * @param session The interpretation session to get the {@link ExpressoQIS#getExpressoEnv() expresso environment} from and for
+	 *        {@link AbstractQIS#withError(String) error reporting}
+	 * @param style The toolkit inheriting Quick-Style
+	 * @throws QonfigInterpretationException If an error occurs evaluating all the style information for the element
+	 */
 	public QuickElementStyle(List<QuickStyleValue<?>> declaredValues, QuickElementStyle parent, QuickStyleSheet styleSheet,
 		QonfigElement element, ExpressoQIS session, QonfigToolkit style) throws QonfigInterpretationException {
 		theParent = parent;
@@ -63,9 +74,10 @@ public class QuickElementStyle {
 		Map<QuickStyleAttribute<?>, QuickElementStyleAttribute<?>> styleValues = new HashMap<>();
 		for (Map.Entry<QuickStyleAttribute<?>, BetterSortedList<? extends EvaluatedStyleValue<?>>> v : values.entrySet()) {
 			QuickStyleAttribute<Object> attr = (QuickStyleAttribute<Object>) v.getKey();
-			styleValues.put(attr, new QuickElementStyleAttribute<>(attr, this,
-				QommonsUtils.unmodifiableCopy((List<EvaluatedStyleValue<Object>>) v.getValue()), //
-				theParent != null && attr.isTrickleDown() ? getInherited(theParent, attr) : null));
+			styleValues.put(attr,
+				new QuickElementStyleAttribute<>(attr, this,
+					QommonsUtils.unmodifiableCopy((List<EvaluatedStyleValue<Object>>) v.getValue()), //
+					theParent != null && attr.isTrickleDown() ? getInherited(theParent, attr) : null));
 		}
 		theValues = Collections.unmodifiableMap(styleValues);
 	}
@@ -76,22 +88,31 @@ public class QuickElementStyle {
 		return parent == null ? null : parent.get(attr);
 	}
 
+	/** @return This element's {@link QonfigElement#getParent() parent}'s style */
 	public QuickElementStyle getParent() {
 		return theParent;
 	}
 
+	/** @return The element this style is for */
 	public QonfigElement getElement() {
 		return theElement;
 	}
 
+	/** @return All style values that may apply to this style */
 	public List<EvaluatedStyleValue<?>> getDeclaredValues() {
 		return theDeclaredValues;
 	}
 
+	/** @return All style attributes that apply to this element */
 	public Set<QuickStyleAttribute<?>> getAttributes() {
 		return theValues.keySet();
 	}
 
+	/**
+	 * @param <T> The type of the attribute
+	 * @param attr The attribute to get the value for
+	 * @return A structure containing all information necessary to get the value of a style attribute for this element
+	 */
 	public <T> QuickElementStyleAttribute<T> get(QuickStyleAttribute<T> attr) {
 		QuickElementStyleAttribute<T> value = (QuickElementStyleAttribute<T>) theValues.get(attr);
 		if (value != null)
@@ -103,12 +124,23 @@ public class QuickElementStyle {
 			theParent != null && attr.isTrickleDown() ? theParent.get(attr) : null);
 	}
 
+	/**
+	 * A structure containing all information necessary to get the value of a style attribute for an element
+	 *
+	 * @param <T> The type of the attribute
+	 */
 	public static class QuickElementStyleAttribute<T> {
 		private final QuickStyleAttribute<T> theAttribute;
 		private final QuickElementStyle theStyle;
 		private final List<EvaluatedStyleValue<T>> theValues;
 		private final QuickElementStyleAttribute<T> theInherited;
 
+		/**
+		 * @param attribute The attribute this structure is for
+		 * @param style The element style this structure is for
+		 * @param values All style values that may apply to the element for teh attribute
+		 * @param inherited The structure for the same attribute for the {@link QuickElementStyle#getParent() parent} style
+		 */
 		public QuickElementStyleAttribute(QuickStyleAttribute<T> attribute, QuickElementStyle style, List<EvaluatedStyleValue<T>> values,
 			QuickElementStyleAttribute<T> inherited) {
 			theAttribute = attribute;
@@ -117,22 +149,30 @@ public class QuickElementStyle {
 			theInherited = inherited;
 		}
 
+		/** @return The attribute this structure is for */
 		public QuickStyleAttribute<T> getAttribute() {
 			return theAttribute;
 		}
 
+		/** @return The element style this structure is for */
 		public QuickElementStyle getStyle() {
 			return theStyle;
 		}
 
+		/** @return All style values that may apply to the element for the attribute */
 		public List<EvaluatedStyleValue<T>> getValues() {
 			return theValues;
 		}
 
+		/** @return The structure for the same attribute for the {@link QuickElementStyle#getParent() parent} style */
 		public QuickElementStyleAttribute<T> getInherited() {
 			return theInherited;
 		}
 
+		/**
+		 * @param models The model instance to get the value for
+		 * @return The value for this style attribute on the element
+		 */
 		public ObservableValue<T> evaluate(ModelSetInstance models) {
 			ObservableValue<ConditionalValue<T>>[] values = new ObservableValue[theValues.size() + (theInherited == null ? 0 : 1)];
 			for (int i = 0; i < theValues.size(); i++) {

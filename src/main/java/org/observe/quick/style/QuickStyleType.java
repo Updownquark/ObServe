@@ -8,8 +8,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-import org.observe.expresso.ExpressoQIS;
 import org.observe.expresso.ExpressoBaseV0_1;
+import org.observe.expresso.ExpressoQIS;
 import org.observe.util.TypeTokens;
 import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterCollections;
@@ -28,10 +28,20 @@ import com.google.common.reflect.TypeToken;
 
 /** Represents style information for a {@link QonfigElementOrAddOn} */
 public class QuickStyleType {
+	/** The name of the &lt;styled> add-on, which all elements that styles apply to inherits */
 	public static final String STYLED = "styled";
+	/** The name of the &lt;style-attribute> element, which defines a style attribute */
 	public static final String STYLE_ATTRIBUTE = "style-attribute";
 	private static final IdentityHashMap<QonfigElementOrAddOn, QuickStyleType> ELEMENT_STYLE_TYPES = new IdentityHashMap<>();
 
+	/**
+	 * @param element The element type to get the style type of
+	 * @param session The session to get the {@link ExpressoQIS#getExpressoEnv() expresso environment} from and for
+	 *        {@link AbstractQIS#withError(String) error reporting}
+	 * @param style The toolkit inheriting Quick-Style
+	 * @return The style type for the given element type
+	 * @throws QonfigInterpretationException If an error occurs synthesizing the style information for the given element
+	 */
 	public static synchronized QuickStyleType of(QonfigElementOrAddOn element, AbstractQIS<?> session, QonfigToolkit style)
 		throws QonfigInterpretationException {
 		QuickStyleType styled = ELEMENT_STYLE_TYPES.get(element);
@@ -91,6 +101,11 @@ public class QuickStyleType {
 		return styled;
 	}
 
+	/**
+	 * @param style The toolkit inheriting Quick-Style
+	 * @return The style-model-value.priority attribute from the Quick-Style toolkit, defining the priority of a model value in a style
+	 *         condition
+	 */
 	public static QonfigAttributeDef.Declared getPriorityAttr(QonfigToolkit style) {
 		return style.getAttribute("style-model-value", "priority").getDeclared();
 	}
@@ -110,27 +125,43 @@ public class QuickStyleType {
 		theAttributes = attributes;
 	}
 
+	/** @return The element type this style type is for */
 	public QonfigElementOrAddOn getElement() {
 		return theElement;
 	}
 
+	/**
+	 * @return Style information for all &lt;styled> element types that this type
+	 *         {@link QonfigElementOrAddOn#isAssignableFrom(QonfigElementOrAddOn) extends/inherits}
+	 */
 	public List<QuickStyleType> getSuperElements() {
 		return theSuperElements;
 	}
 
+	/**
+	 * @return The style-model-value.priority attribute from the Quick-Style toolkit, defining the priority of a model value in a style
+	 *         condition
+	 */
 	public QonfigAttributeDef.Declared getPriorityAttr() {
 		return thePriorityAttr;
 	}
 
+	/** @return All style attributes declared for this type specifically, by name */
 	public Map<String, QuickStyleAttribute<?>> getDeclaredAttributes() {
 		return theDeclaredAttributes;
 	}
 
+	/** @return All style attributes declared for this type and all its {@link #getSuperElements() super types} */
 	public BetterMultiMap<String, QuickStyleAttribute<?>> getAttributes() {
 		return theAttributes;
 	}
 
-	public QuickStyleAttribute<?> getAttribute(String name) {
+	/**
+	 * @param name The name of the attribute (may be qualified by element type)
+	 * @return The attribute referred to by the given name
+	 * @throws IllegalArgumentException If no such attribute could be found, or if multiple attributes match the given name
+	 */
+	public QuickStyleAttribute<?> getAttribute(String name) throws IllegalArgumentException {
 		int dot = name.indexOf('.');
 		if (dot < 0) {
 			QuickStyleAttribute<?> attr = theDeclaredAttributes.get(name);
@@ -159,7 +190,12 @@ public class QuickStyleType {
 		}
 	}
 
-	public Collection<QuickStyleAttribute<?>> getAttributes(String name) {
+	/**
+	 * @param name The name of the attribute(s) to get (may be qualified by element type)
+	 * @return All attributes relevant to this type matching the given name
+	 * @throws IllegalArgumentException If the qualified element type could not be found or is not related to this element
+	 */
+	public Collection<QuickStyleAttribute<?>> getAttributes(String name) throws IllegalArgumentException {
 		int dot = name.indexOf('.');
 		if (dot < 0) {
 			return theAttributes.get(name);
@@ -180,7 +216,14 @@ public class QuickStyleType {
 		}
 	}
 
-	public <T> QuickStyleAttribute<? extends T> getAttribute(String name, TypeToken<T> type) {
+	/**
+	 * @param name The name of the attribute (may be qualified by element type)
+	 * @param type The type of the attribute
+	 * @return The attribute referred to by the given name
+	 * @throws IllegalArgumentException If no such attribute could be found, if multiple attributes match the given name, or if the
+	 *         attribute does not match the given type
+	 */
+	public <T> QuickStyleAttribute<? extends T> getAttribute(String name, TypeToken<T> type) throws IllegalArgumentException {
 		QuickStyleAttribute<?> attr = getAttribute(name);
 		if (!TypeTokens.get().isAssignable(type, attr.getType()))
 			throw new IllegalArgumentException(
@@ -188,6 +231,13 @@ public class QuickStyleType {
 		return (QuickStyleAttribute<? extends T>) attr;
 	}
 
+	/**
+	 * @param name The name of the attribute (may be qualified by element type)
+	 * @param type The type of the attribute
+	 * @return The attribute referred to by the given name
+	 * @throws IllegalArgumentException If no such attribute could be found, if multiple attributes match the given name, or if the
+	 *         attribute does not match the given type
+	 */
 	public <T> QuickStyleAttribute<? extends T> getAttribute(String name, Class<T> type) {
 		return getAttribute(name, TypeTokens.get().of(type));
 	}
