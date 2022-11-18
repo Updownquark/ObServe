@@ -52,6 +52,14 @@ public class ObservableValueEvent<T> extends Causable.AbstractCausable implement
 		return theNewValue;
 	}
 
+	/** @return Whether this event represents an update, i.e. an event that's fired even though the value reference hasn't changed */
+	public boolean isUpdate() {
+		if (isInitial)
+			return false;
+		else
+			return theOldValue == theNewValue;
+	}
+
 	@Override
 	public String toString(){
 		return theOldValue + "->" + theNewValue;

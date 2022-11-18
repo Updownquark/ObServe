@@ -123,6 +123,17 @@ public class CollectionChangeEvent<E> extends Causable.AbstractCausable {
 		return indexes;
 	}
 
+	/** @return Whether this event represents an update, i.e. an event that's fired even though no value references have changed */
+	public boolean isUpdate() {
+		if (type != CollectionChangeType.set)
+			return false;
+		for (ElementChange<E> change : elements) {
+			if (change.oldValue != change.newValue)
+				return false;
+		}
+		return true;
+	}
+
 	@Override
 	public String toString() {
 		StringBuilder ret = new StringBuilder();

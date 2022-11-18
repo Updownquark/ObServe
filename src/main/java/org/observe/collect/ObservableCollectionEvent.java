@@ -90,6 +90,11 @@ public class ObservableCollectionEvent<E> extends ObservableValueEvent<E> {
 	}
 
 	@Override
+	public boolean isUpdate() {
+		return theType == CollectionChangeType.set && super.isUpdate();
+	}
+
+	@Override
 	public String toString() {
 		StringBuilder str = new StringBuilder();
 		str.append('[').append(theIndex).append(']');
