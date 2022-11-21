@@ -1366,27 +1366,33 @@ public class TypeTokens {
 	 * @return The specificity of the type. Sub-types are more specific than super-types.
 	 */
 	public int getTypeSpecificity(Type type) {
+		return getTypeSpecificity(type, new HashSet<>());
+	}
+
+	private int getTypeSpecificity(Type type, Set<Type> stack) {
+		if (!stack.add(type))
+			return 0;
 		if (type instanceof Class)
 			return keyFor((Class<?>) type).getSpecificity();
 		else if (type instanceof ParameterizedType) {
 			ParameterizedType pt = (ParameterizedType) type;
 			int complexity = getTypeSpecificity(pt.getRawType());
 			for (Type p : pt.getActualTypeArguments())
-				complexity += getTypeSpecificity(p);
+				complexity += getTypeSpecificity(p, stack);
 			return complexity;
 		} else if (type instanceof GenericArrayType)
-			return getTypeSpecificity(((GenericArrayType) type).getGenericComponentType()) + 1;
+			return getTypeSpecificity(((GenericArrayType) type).getGenericComponentType(), stack) + 1;
 		else if (type instanceof TypeVariable) {
 			int complexity = 0;
 			for (Type bound : ((TypeVariable<?>) type).getBounds())
-				complexity += getTypeSpecificity(bound);
+				complexity += getTypeSpecificity(bound, stack);
 			return complexity;
 		} else if (type instanceof WildcardType) {
 			int complexity = 0;
 			for (Type bound : ((WildcardType) type).getLowerBounds())
-				complexity += getTypeSpecificity(bound);
+				complexity += getTypeSpecificity(bound, stack);
 			for (Type bound : ((WildcardType) type).getUpperBounds())
-				complexity += getTypeSpecificity(bound);
+				complexity += getTypeSpecificity(bound, stack);
 			return complexity;
 		} else
 			throw new IllegalArgumentException("Unrecognized type: " + type);
