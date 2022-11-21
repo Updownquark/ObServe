@@ -164,16 +164,48 @@ public interface ObservableCellRenderer<M, C> {
 		protected abstract void render(R component, Component parent, ModelCell<? extends M, ? extends C> cell, CellRenderContext ctx);
 	}
 
-	public static class DefaultObservableCellRenderer<M, C> implements ObservableCellRenderer<M, C> {
+	public static abstract class AbstractObservableCellRenderer<M, C> implements ObservableCellRenderer<M, C> {
+		private CellDecorator<M, C> theDecorator;
+		private ComponentDecorator theComponentDecorator;
+		private Runnable theRevert;
+
+		@Override
+		public Component getCellRendererComponent(Component parent, ModelCell<? extends M, ? extends C> cell, CellRenderContext ctx) {
+			if (theRevert != null) {
+				theRevert.run();
+				theRevert = null;
+			}
+			Component c = renderCell(parent, cell, ctx);
+			if (theDecorator != null) {
+				if (theComponentDecorator == null)
+					theComponentDecorator = new ComponentDecorator();
+				else
+					theComponentDecorator.reset();
+				theDecorator.decorate(cell, theComponentDecorator);
+				theRevert = theComponentDecorator.decorate(c);
+			}
+			return tryEmphasize(c, ctx);
+		}
+
+		protected abstract Component renderCell(Component parent, ModelCell<? extends M, ? extends C> cell, CellRenderContext ctx);
+
+		@Override
+		public AbstractObservableCellRenderer<M, C> decorate(CellDecorator<M, C> decorator) {
+			if (theDecorator == null)
+				theDecorator = decorator;
+			else
+				theDecorator = theDecorator.modify(decorator);
+			return this;
+		}
+	}
+
+	public static class DefaultObservableCellRenderer<M, C> extends AbstractObservableCellRenderer<M, C> {
 		private DefaultTableCellRenderer theTableRenderer;
 		private DefaultTreeCellRenderer theTreeRenderer;
 		private DefaultListCellRenderer theListRenderer;
 		private JLabel theLabel;
 
-		private CellDecorator<M, C> theDecorator;
-		private ComponentDecorator theComponentDecorator;
 		private final Function<? super ModelCell<? extends M, ? extends C>, String> theTextRenderer;
-		private Runnable theRevert;
 
 		public DefaultObservableCellRenderer(BiFunction<? super Supplier<? extends M>, C, String> textRenderer) {
 			this(cell -> textRenderer.apply((Supplier<? extends M>) cell::getModelValue, cell.getCellValue()));
@@ -189,11 +221,7 @@ public interface ObservableCellRenderer<M, C> {
 		}
 
 		@Override
-		public Component getCellRendererComponent(Component parent, ModelCell<? extends M, ? extends C> cell, CellRenderContext ctx) {
-			if (theRevert != null) {
-				theRevert.run();
-				theRevert = null;
-			}
+		protected Component renderCell(Component parent, ModelCell<? extends M, ? extends C> cell, CellRenderContext ctx) {
 			String rendered = renderAsText(cell);
 			rendered = tryEmphasize(rendered, ctx);
 			Component c;
@@ -218,24 +246,7 @@ public interface ObservableCellRenderer<M, C> {
 				theLabel.setText(rendered);
 				c = theLabel;
 			}
-			if (theDecorator != null) {
-				if (theComponentDecorator == null)
-					theComponentDecorator = new ComponentDecorator();
-				else
-					theComponentDecorator.reset();
-				theDecorator.decorate(cell, theComponentDecorator);
-				theRevert = theComponentDecorator.decorate(c);
-			}
-			return tryEmphasize(c, ctx);
-		}
-
-		@Override
-		public DefaultObservableCellRenderer<M, C> decorate(CellDecorator<M, C> decorator) {
-			if (theDecorator == null)
-				theDecorator = decorator;
-			else
-				theDecorator = theDecorator.modify(decorator);
-			return this;
+			return c;
 		}
 	}
 

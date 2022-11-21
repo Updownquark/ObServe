@@ -65,7 +65,6 @@ import org.observe.quick.QuickComponent.Builder;
 import org.observe.quick.style.StyleQIS;
 import org.observe.util.TypeTokens;
 import org.observe.util.swing.CategoryRenderStrategy;
-import org.observe.util.swing.CellDecorator;
 import org.observe.util.swing.JustifiedBoxLayout;
 import org.observe.util.swing.ModelCell;
 import org.observe.util.swing.ObservableCellEditor;
@@ -751,12 +750,9 @@ public class QuickBase implements QonfigInterpretation {
 					@Override
 					protected void renderingValue(Object value, boolean selected2, boolean rowHovered, boolean cellHovered,
 						boolean expanded, boolean leaf, int row, int column2) {
-						if (focusV != null)
-							focusV.set(selected2, null);
-						if (selectedV != null)
-							selectedV.set(selected2, null);
-						if (hoveredV != null)
-							hoveredV.set(rowHovered, null);
+						focusV.set(selected2, null);
+						selectedV.set(selected2, null);
+						hoveredV.set(rowHovered, null);
 					}
 				};
 				column.withEditor(oce);
@@ -810,17 +806,14 @@ public class QuickBase implements QonfigInterpretation {
 			DynamicModelValue.satisfyDynamicValue("focused", ModelTypes.Value.BOOLEAN, renderModels, focusV);
 			DynamicModelValue.satisfyDynamicValue("hovered", ModelTypes.Value.BOOLEAN, renderModels, hoveredV);
 			DynamicModelValue.satisfyDynamicValue("selected", ModelTypes.Value.BOOLEAN, renderModels, selectedV);
-			column.withRenderer(new ObservableCellRenderer<M, C>() {
-				private List<CellDecorator<M, C>> theDecorators;
-
+			column.withRenderer(new ObservableCellRenderer.AbstractObservableCellRenderer<M, C>() {
 				@Override
 				public String renderAsText(ModelCell<? extends M, ? extends C> cell) {
 					return textRender.apply(cell);
 				}
 
 				@Override
-				public Component getCellRendererComponent(Component parent, ModelCell<? extends M, ? extends C> cell,
-					CellRenderContext ctx) {
+				protected Component renderCell(Component parent, ModelCell<? extends M, ? extends C> cell, CellRenderContext ctx) {
 					// Not sure if this does any good, but these are what the colors should look like without any styles mucking with them
 					if (cell.isSelected()) {
 						if (c instanceof JComponent)
@@ -833,23 +826,12 @@ public class QuickBase implements QonfigInterpretation {
 						c.setBackground(Color.white);
 						c.setForeground(Color.black);
 					}
-					configCell.accept(renderModels, cell);
-					if (focusV != null)
-						focusV.set(cell.isSelected(), null);
-					if (selectedV != null)
-						selectedV.set(cell.isSelected(), null);
-					if (hoveredV != null)
-						hoveredV.set(cell.isRowHovered(), null);
-					ObservableCellRenderer.tryEmphasize(c, ctx);
-					return c;
-				}
 
-				@Override
-				public ObservableCellRenderer<M, C> decorate(CellDecorator<M, C> decorator) {
-					if (theDecorators == null)
-						theDecorators = new ArrayList<>(3);
-					theDecorators.add(decorator);
-					return this;
+					configCell.accept(renderModels, cell);
+					focusV.set(cell.isSelected(), null);
+					selectedV.set(cell.isSelected(), null);
+					hoveredV.set(cell.isRowHovered(), null);
+					return c;
 				}
 			});
 			if (editing != null) {
@@ -1475,7 +1457,7 @@ public class QuickBase implements QonfigInterpretation {
 			@Override
 			public void makeTree(QuickComponent.Builder builder, PanelPopulator<?, ?> container, ObservableValue<T> root,
 				Function<? super BetterList<T>, ? extends ObservableCollection<? extends T>> children, Consumer<E> treeData) {
-				container.addTree2(root, children, t -> treeData.accept((E) t));
+				container.addTree2(root, children, t -> treeData.accept((E) t.fill().fillV()));
 			}
 		});
 	}
@@ -1651,20 +1633,20 @@ public class QuickBase implements QonfigInterpretation {
 		final QuickComponentDef content;
 		final ValueContainer<SettableValue<?>, SettableValue<T>> tabId;
 		final String renderValueName;
-		final Function<ModelSetInstance, ? extends ObservableValue<String>> tabName;
-		final Function<ModelSetInstance, ? extends ObservableValue<Icon>> tabIcon;
+		final ValueContainer<SettableValue<?>, ? extends SettableValue<String>> tabName;
+		final ValueContainer<SettableValue<?>, ? extends SettableValue<Icon>> tabIcon;
 		final boolean removable;
 		final Function<ModelSetInstance, Consumer<T>> onRemove;
-		final Function<ModelSetInstance, Observable<?>> selectOn;
+		final ValueContainer<Observable<?>, ? extends Observable<?>> selectOn;
 		final Function<ModelSetInstance, Consumer<T>> onSelect;
 
 		private SingleTab(ObservableModelSet models,
 			ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<T>> tabValuePlaceholder, QuickComponentDef content,
 			ValueContainer<SettableValue<?>, SettableValue<T>> tabId, String renderValueName,
-			Function<ModelSetInstance, ? extends ObservableValue<String>> tabName,
-				Function<ModelSetInstance, ? extends SettableValue<Icon>> tabIcon, boolean removable,
-					Function<ModelSetInstance, Consumer<T>> onRemove, Function<ModelSetInstance, Observable<?>> selectOn,
-					Function<ModelSetInstance, Consumer<T>> onSelect) {
+			ValueContainer<SettableValue<?>, ? extends SettableValue<String>> tabName,
+				ValueContainer<SettableValue<?>, ? extends SettableValue<Icon>> tabIcon, boolean removable,
+					Function<ModelSetInstance, Consumer<T>> onRemove, ValueContainer<Observable<?>, ? extends Observable<?>> selectOn,
+						Function<ModelSetInstance, Consumer<T>> onSelect) {
 			this.models = models;
 			this.tabValuePlaceholder = tabValuePlaceholder;
 			this.content = content;
@@ -1703,9 +1685,8 @@ public class QuickBase implements QonfigInterpretation {
 		@Override
 		public ModelSetInstance overrideModels(ModelSetInstance models2, SettableValue<T> tabValue, Observable<?> until) {
 			if (tabValuePlaceholder != null) {
-				ModelSetInstance newModels = ((ObservableModelSet.Wrapped) this.models).wrap(models2)//
+				ModelSetInstance newModels = this.models.createInstance(models2.getUntil()).withAll(models2)//
 					.with(tabValuePlaceholder, tabValue)//
-					.withUntil(until)//
 					.build();
 				return newModels;
 			} else
@@ -1714,9 +1695,9 @@ public class QuickBase implements QonfigInterpretation {
 
 		@Override
 		public void modifyTab(ObservableValue<T> value, TabEditor<?> tabEditor, ModelSetInstance models2) {
-			tabEditor.setName(tabName.apply(models2));
+			tabEditor.setName(tabName.get(models2));
 			if (tabIcon != null)
-				tabEditor.setIcon(tabIcon.apply(models2));
+				tabEditor.setIcon(tabIcon.get(models2));
 			if (removable) {
 				tabEditor.setRemovable(true);
 				if (onRemove != null) {
@@ -1725,7 +1706,7 @@ public class QuickBase implements QonfigInterpretation {
 				}
 			}
 			if (selectOn != null)
-				tabEditor.selectOn(selectOn.apply(models2));
+				tabEditor.selectOn(selectOn.get(models2));
 			if (onSelect != null) {
 				Consumer<T> os = onSelect.apply(models2);
 				tabEditor.onSelect(v -> os.accept((T) v));
@@ -1741,7 +1722,7 @@ public class QuickBase implements QonfigInterpretation {
 			ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<T2>> tvp;
 			if (tab.getElement().isInstance(base.getElementOrAddOn("single-rendering"))) {
 				renderValueName = tab.getAttributeText("render-value-name");
-				ObservableModelSet.WrappedBuilder wb = exTab.getExpressoEnv().getModels().wrap();
+				ObservableModelSet.Builder wb = exTab.getExpressoEnv().getModels().wrap("tab");
 				tvp = wb.withRuntimeValue(renderValueName, ModelTypes.Value.forType((TypeToken<T2>) tabId.getType().getType(0)));
 				exTab.setModels(wb.build(), null);
 			} else {
@@ -1749,7 +1730,7 @@ public class QuickBase implements QonfigInterpretation {
 				tvp = null;
 			}
 
-			Function<ModelSetInstance, ? extends ObservableValue<String>> tabName = exTab.getAttributeAsValue("tab-name", String.class,
+			ValueContainer<SettableValue<?>, SettableValue<String>> tabName = exTab.getAttributeAsValue("tab-name", String.class,
 				() -> msi -> SettableValue.of(String.class, tabId.get(msi).get().toString(), "Not editable"));
 
 			Function<ModelSetInstance, SettableValue<Icon>> tabIcon = QuickCore.parseIcon(exTab.getAttributeExpression("tab-icon"), exTab,
@@ -1772,7 +1753,7 @@ public class QuickBase implements QonfigInterpretation {
 			} else
 				onRemove = null;
 
-			Function<ModelSetInstance, ? extends Observable<?>> selectOn = exTab.getAttribute("select-on",
+			ValueContainer<Observable<?>, ?> selectOn = exTab.getAttribute("select-on",
 				ModelTypes.Event.forType(TypeTokens.get().WILDCARD), null);
 
 			ObservableExpression onSelectEx = exTab.getAttributeExpression("on-select");
@@ -1791,7 +1772,7 @@ public class QuickBase implements QonfigInterpretation {
 	}
 
 	static class MultiTabSet<T> implements TabSet<T> {
-		final ObservableModelSet.Wrapped models;
+		final ObservableModelSet models;
 		final ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<T>> tabValuePlaceholder;
 		final QonfigElement element;
 		final ValueContainer<ObservableCollection<?>, ObservableCollection<T>> values;
@@ -1804,7 +1785,7 @@ public class QuickBase implements QonfigInterpretation {
 		final Function<ModelSetInstance, Function<T, Observable<?>>> selectOn;
 		final Function<ModelSetInstance, Consumer<T>> onSelect;
 
-		MultiTabSet(ObservableModelSet.Wrapped models,
+		MultiTabSet(ObservableModelSet models,
 			ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<T>> tabValuePlaceholder, QonfigElement element,
 			ValueContainer<ObservableCollection<?>, ObservableCollection<T>> values, String renderValueName, QuickComponentDef content,
 			Function<ModelSetInstance, Function<T, String>> tabName, Function<ModelSetInstance, Function<T, Icon>> tabIcon,
@@ -1841,9 +1822,8 @@ public class QuickBase implements QonfigInterpretation {
 
 		@Override
 		public ModelSetInstance overrideModels(ModelSetInstance models2, SettableValue<T> tabValue, Observable<?> until) {
-			ModelSetInstance newModels = this.models.wrap(models2)//
+			ModelSetInstance newModels = this.models.createInstance(models2.getUntil()).withAll(models2)//
 				.with(tabValuePlaceholder, tabValue)//
-				.withUntil(until)//
 				.build();
 			return newModels;
 		}
@@ -1878,7 +1858,7 @@ public class QuickBase implements QonfigInterpretation {
 			ValueContainer<ObservableCollection<?>, ObservableCollection<T>> values = exTabSet.getAttributeAsCollection("values",
 				(TypeToken<T>) TypeTokens.get().WILDCARD, null);
 			String renderValueName = tabSet.getAttributeText("render-value-name");
-			ObservableModelSet.WrappedBuilder wb = exTabSet.getExpressoEnv().getModels().wrap();
+			ObservableModelSet.Builder wb = exTabSet.getExpressoEnv().getModels().wrap("tabs");
 			ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<T>> tvp = wb.withRuntimeValue(renderValueName,
 				ModelTypes.Value.forType((TypeToken<T>) values.getType().getType(0)));
 			exTabSet.setModels(wb.build(), null);
@@ -1995,7 +1975,7 @@ public class QuickBase implements QonfigInterpretation {
 				.withOption0().withOption1((TypeToken<T>) values.getType().getType(0), t -> t)//
 				.find1().andThen(fn -> t -> fn.apply(t));
 
-			return new MultiTabSet<>((ObservableModelSet.Wrapped) exTabSet.getExpressoEnv().getModels(), tvp, tabSet.getElement(), values,
+			return new MultiTabSet<>(exTabSet.getExpressoEnv().getModels(), tvp, tabSet.getElement(), values,
 				tabSet.getAttributeText("render-value-name"), content, tabName, tabIcon, removable, onRemove, selectOn, onSelect);
 		}
 	}
