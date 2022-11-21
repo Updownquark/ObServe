@@ -827,9 +827,7 @@ public class QuickBase implements QonfigInterpretation {
 						c.setForeground(Color.black);
 					}
 
-					System.out.println("rendering " + cell);
 					configCell.accept(renderModels, cell);
-					System.out.println("ps=" + c.getPreferredSize());
 					focusV.set(cell.isSelected(), null);
 					selectedV.set(cell.isSelected(), null);
 					hoveredV.set(cell.isRowHovered(), null);
@@ -1314,7 +1312,6 @@ public class QuickBase implements QonfigInterpretation {
 				else
 					fieldName = null;
 				SettableValue<T> valueV = value.apply(builder.getModels());
-				valueV.noInitChanges().act(v -> System.out.println("Label " + v));
 				SettableValue<Icon> iconV = iconX.apply(builder.getModels());
 				container.addLabel(fieldName == null ? null : fieldName.get(), valueV, //
 					format.apply(builder.getModels()).get(), field -> {
