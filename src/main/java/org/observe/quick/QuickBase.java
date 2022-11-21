@@ -111,8 +111,8 @@ public class QuickBase implements QonfigInterpretation {
 	private static final String MODEL_TYPE_KEY = "model-value-key";
 
 	public interface Column<R, C> {
-		CategoryRenderStrategy<R, C> createColumn(Supplier<ModelSetInstance> modelCreator, BiConsumer<ModelSetInstance, R> configModelValue,
-			BiConsumer<ModelSetInstance, ModelCell<? extends R, ? extends C>> configCell,
+		CategoryRenderStrategy<R, C> createColumn(QuickComponent.Builder parent, Supplier<ModelSetInstance> modelCreator,
+			BiConsumer<ModelSetInstance, R> configModelValue, BiConsumer<ModelSetInstance, ModelCell<? extends R, ? extends C>> configCell,
 			ValueContainer<SettableValue<?>, SettableValue<R>> defaultColumnValue);
 	}
 
@@ -121,8 +121,8 @@ public class QuickBase implements QonfigInterpretation {
 	}
 
 	public interface ColumnEditing<R, C> {
-		public void modifyColumn(CategoryRenderStrategy<R, C>.CategoryMutationStrategy mutation, ModelSetInstance models,
-			BiConsumer<ModelSetInstance, ModelCell<? extends R, ? extends C>> config);
+		public void modifyColumn(QuickComponent.Builder parent, CategoryRenderStrategy<R, C>.CategoryMutationStrategy mutation,
+			ModelSetInstance models, BiConsumer<ModelSetInstance, ModelCell<? extends R, ? extends C>> config);
 	}
 
 	public static class ValueAction<T> {
@@ -697,15 +697,15 @@ public class QuickBase implements QonfigInterpretation {
 					"Use of '" + editorSession.getElement().getType().getName() + "' as a column editor is not implemented");
 			ColumnEditing<M, C> editType = columnEdit.asElement(columnEdit.getAttribute("type", QonfigAddOn.class))
 				.interpret(ColumnEditing.class);
-			editing = (column, models, config) -> {
+			editing = (parent, column, models, config) -> {
 				// Hacky way of synthesizing the component
 				Function<C, String>[] filter = new Function[1];
 				boolean[] currentlyEditing = new boolean[1];
 				SettableValue<C> editorValue = DefaultObservableCellEditor.createEditorValue(columnType, filter,
 					builder -> builder.withDescription("columnValue"));
 
-				editType.modifyColumn(column, models, config);
-				QuickComponent.Builder editorBuilder = QuickComponent.build(editor, null, models);
+				editType.modifyColumn(parent, column, models, config);
+				QuickComponent.Builder editorBuilder = QuickComponent.build(editor, parent, models);
 				QuickComponent editorComp = editor
 					.install(PanelPopulation.populateHPanel(null, new JustifiedBoxLayout(false), models.getUntil()), editorBuilder);
 				SettableValue<Boolean> focusV = SettableValue.build(boolean.class).build();
@@ -770,7 +770,7 @@ public class QuickBase implements QonfigInterpretation {
 		UIDefaults ui = UIManager.getDefaults();
 		Color defaultSelectionBackground = ui.getColor("List.selectionBackground");
 		Color defaultSelectionForeground = ui.getColor("List.selectionForeground");
-		return (modelCreator, configModelValue, configCell, defaultColumnValue) -> {
+		return (parent, modelCreator, configModelValue, configCell, defaultColumnValue) -> {
 			ModelSetInstance callerModels = modelCreator.get();
 			ModelSetInstance renderModels = exS.getExpressoEnv().getModels().createInstance(callerModels.getUntil()).withAll(callerModels)
 				.build();
@@ -786,7 +786,7 @@ public class QuickBase implements QonfigInterpretation {
 				return columnV.get();
 			});
 			// Hacky way of synthesizing the component
-			QuickComponent.Builder renderBuilder = QuickComponent.build(renderer, null, renderModels);
+			QuickComponent.Builder renderBuilder = QuickComponent.build(renderer, parent, renderModels);
 			QuickComponent renderComp = renderer
 				.install(PanelPopulation.populateHPanel(null, new JustifiedBoxLayout(false), renderModels.getUntil()), renderBuilder);
 			Component c = renderComp.getComponent();
@@ -813,7 +813,7 @@ public class QuickBase implements QonfigInterpretation {
 				}
 
 				@Override
-				protected Component renderCell(Component parent, ModelCell<? extends M, ? extends C> cell, CellRenderContext ctx) {
+				protected Component renderCell(Component parentComp, ModelCell<? extends M, ? extends C> cell, CellRenderContext ctx) {
 					// Not sure if this does any good, but these are what the colors should look like without any styles mucking with them
 					if (cell.isSelected()) {
 						if (c instanceof JComponent)
@@ -827,7 +827,9 @@ public class QuickBase implements QonfigInterpretation {
 						c.setForeground(Color.black);
 					}
 
+					System.out.println("rendering " + cell);
 					configCell.accept(renderModels, cell);
+					System.out.println("ps=" + c.getPreferredSize());
 					focusV.set(cell.isSelected(), null);
 					selectedV.set(cell.isSelected(), null);
 					hoveredV.set(cell.isRowHovered(), null);
@@ -843,7 +845,7 @@ public class QuickBase implements QonfigInterpretation {
 					editColumnV = (SettableValue<C>) defaultColumnValue.get(editModels);
 					DynamicModelValue.satisfyDynamicValue("columnValue", ModelTypes.Value.forType(columnType), editModels, editColumnV);
 				}
-				column.withMutation(mut -> editing.modifyColumn(mut, editModels, configCell));
+				column.withMutation(mut -> editing.modifyColumn(parent, mut, editModels, configCell));
 			}
 			if (tooltip != null) {
 				SettableValue<String> tooltipV = tooltip.get(renderModels);
@@ -866,7 +868,7 @@ public class QuickBase implements QonfigInterpretation {
 		ObservableExpression acceptX = exS.getAttributeExpression("accept");
 		ValueContainer<ObservableAction<?>, ObservableAction<?>> commit = commitX.evaluate(ModelTypes.Action.any(), exS.getExpressoEnv());
 		boolean rowUpdate = session.getAttribute("row-update", boolean.class);
-		return (column, models, modelValueName) -> { // TODO Not done here
+		return (parent, column, models, modelValueName) -> { // TODO Not done here
 			ObservableAction<?> commitAction = commit.get(models);
 			column.mutateAttribute((row, cell) -> commitAction.act(null));
 		};
@@ -1312,6 +1314,7 @@ public class QuickBase implements QonfigInterpretation {
 				else
 					fieldName = null;
 				SettableValue<T> valueV = value.apply(builder.getModels());
+				valueV.noInitChanges().act(v -> System.out.println("Label " + v));
 				SettableValue<Icon> iconV = iconX.apply(builder.getModels());
 				container.addLabel(fieldName == null ? null : fieldName.get(), valueV, //
 					format.apply(builder.getModels()).get(), field -> {
@@ -1382,7 +1385,7 @@ public class QuickBase implements QonfigInterpretation {
 		return new AbstractQuickComponentDef(session) {
 			@Override
 			public QuickComponent install(PanelPopulator<?, ?> container, QuickComponent.Builder builder) {
-				Function<Column<R, ?>, CategoryRenderStrategy<R, ?>> columnEval = col -> col.createColumn(() -> {
+				Function<Column<R, ?>, CategoryRenderStrategy<R, ?>> columnEval = col -> col.createColumn(builder, () -> {
 					ModelSetInstance columnModels = builder.getModels().copy().build();
 					SettableValue<R> modelValueI = SettableValue.build(modelType).build();
 					DynamicModelValue.satisfyDynamicValue(valueName, ModelTypes.Value.forType(modelType), columnModels, modelValueI);
@@ -1583,7 +1586,7 @@ public class QuickBase implements QonfigInterpretation {
 							});
 						}
 						if (treeColumn != null)
-							tree.withRender(treeColumn.createColumn(() -> {
+							tree.withRender(treeColumn.createColumn(builder, () -> {
 								ModelSetInstance newModel = builder.getModels().copy().build();
 								SettableValue<BetterList<T>> newPathValue = SettableValue.build(pathType).withDescription(pathName).build();
 								SettableValue<Boolean> selectedV = SettableValue.build(boolean.class).withValue(false)

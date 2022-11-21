@@ -355,9 +355,14 @@ public class SimpleTreeBuilder<F, P extends SimpleTreeBuilder<F, P>> extends Abs
 			int row, boolean hasFocus) {
 			Supplier<BetterList<F>> modelValue = () -> {
 				TreePath path = tree.getPathForRow(row);
-				return path != null//
-					? ObservableTreeModel.betterPath(path)//
-						: BetterList.of((F) tree.getModel().getRoot());
+				if (path == null)
+					return BetterList.of((F) tree.getModel().getRoot());
+				else if (path.getLastPathComponent() == value)
+					return ObservableTreeModel.betterPath(path);
+				else {
+					// This can happen when this is called from an expand/collapse event, as the state may not have been updated
+					return ((ObservableTreeModel<F>) tree.getModel()).getBetterPath((F) value, false);
+				}
 			};
 			boolean hovered = theHoveredRowColumn[0] == row;
 			ModelCell<BetterList<F>, F> cell = new ModelCell.Default<>(modelValue, (F) value, row, 0, selected, hasFocus,
