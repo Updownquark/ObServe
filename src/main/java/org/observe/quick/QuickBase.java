@@ -84,11 +84,13 @@ import org.qommons.QommonsUtils;
 import org.qommons.Version;
 import org.qommons.collect.BetterList;
 import org.qommons.config.DefaultQonfigParser;
+import org.qommons.config.ElementQualifiedParseItem;
 import org.qommons.config.QommonsConfig;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigChildDef;
 import org.qommons.config.QonfigDocument;
 import org.qommons.config.QonfigElement;
+import org.qommons.config.QonfigElementDef;
 import org.qommons.config.QonfigInterpretation;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigInterpreterCore;
@@ -170,6 +172,7 @@ public class QuickBase implements QonfigInterpretation {
 	};
 
 	private QonfigToolkit theToolkit;
+	private QonfigElementDef theLabelElement;
 
 	@Override
 	public Set<Class<? extends SpecialSession<?>>> getExpectedAPIs() {
@@ -189,6 +192,7 @@ public class QuickBase implements QonfigInterpretation {
 	@Override
 	public void init(QonfigToolkit toolkit) {
 		theToolkit = toolkit;
+		theLabelElement = toolkit.getElement("label");
 	}
 
 	StyleQIS wrap(CoreSession session) throws QonfigInterpretationException {
@@ -468,6 +472,7 @@ public class QuickBase implements QonfigInterpretation {
 			(ModelInstanceType<SettableValue<?>, SettableValue<T>>) (ModelInstanceType<?, ?>) ModelTypes.Value.any(), null);
 		ModelInstanceType.SingleTyped<SettableValue<?>, T, SettableValue<T>> type;
 		type = (ModelInstanceType.SingleTyped<SettableValue<?>, T, SettableValue<T>>) value.getType();
+		session.put(ExpressoBaseV0_1.VALUE_TYPE_KEY, value.getType());
 		ObservableExpression formatX = exS.getAttributeExpression("format");
 		ModelInstanceType.SingleTyped<SettableValue<?>, Format<T>, SettableValue<Format<T>>> formatType;
 		formatType = ModelTypes.Value.forType(TypeTokens.get().keyFor(Format.class).<Format<T>> parameterized(type.getValueType()));
@@ -675,14 +680,18 @@ public class QuickBase implements QonfigInterpretation {
 			(ModelInstanceType<SettableValue<?>, SettableValue<C>>) (ModelInstanceType<?, ?>) ModelTypes.Value.any(), null);
 		TypeToken<M> modelType = session.get(MODEL_TYPE_KEY, TypeToken.class);
 		TypeToken<C> columnType = (TypeToken<C>) (columnValue != null ? columnValue.getType().getType(0) : modelType);
+		String columnValueName = session.getAttributeText("column-value-name");
 		if (columnValue != null)
-			DynamicModelValue.satisfyDynamicValue("columnValue", exS.getExpressoEnv().getModels(), () -> columnValue);
+			DynamicModelValue.satisfyDynamicValue(columnValueName, exS.getExpressoEnv().getModels(), () -> columnValue);
 		else
-			DynamicModelValue.satisfyDynamicValueType("columnValue", exS.getExpressoEnv().getModels(),
+			DynamicModelValue.satisfyDynamicValueType(columnValueName, exS.getExpressoEnv().getModels(),
 				ModelTypes.Value.forType(columnType));
 		String name = session.getAttributeText("name");
 
-		QuickComponentDef renderer = session.forChildren("renderer", base.getElement("label"), null).getFirst()
+		QuickComponentDef renderer = session.forChildren("renderer", base.getElement("label"), def -> {
+			def.withAttribute(new ElementQualifiedParseItem(name, "label", theLabelElement, "value"), //
+				(atSession, attr) -> new QonfigExpression(columnValueName));
+		}).getFirst()
 			.interpret(QuickComponentDef.class);
 		ValueContainer<SettableValue<?>, SettableValue<String>> tooltip = exS.getAttribute("tooltip",
 			ModelTypes.Value.forType(String.class), null);
@@ -702,7 +711,7 @@ public class QuickBase implements QonfigInterpretation {
 				Function<C, String>[] filter = new Function[1];
 				boolean[] currentlyEditing = new boolean[1];
 				SettableValue<C> editorValue = DefaultObservableCellEditor.createEditorValue(columnType, filter,
-					builder -> builder.withDescription("columnValue"));
+					builder -> builder.withDescription(columnValueName));
 
 				editType.modifyColumn(parent, column, models, config);
 				QuickComponent.Builder editorBuilder = QuickComponent.build(editor, parent, models);
@@ -779,7 +788,7 @@ public class QuickBase implements QonfigInterpretation {
 				columnV = columnValue.get(renderModels);
 			else {
 				columnV = (SettableValue<C>) defaultColumnValue.get(renderModels);
-				DynamicModelValue.satisfyDynamicValue("columnValue", ModelTypes.Value.forType(columnType), renderModels, columnV);
+				DynamicModelValue.satisfyDynamicValue(columnValueName, ModelTypes.Value.forType(columnType), renderModels, columnV);
 			}
 			CategoryRenderStrategy<M, C> column = new CategoryRenderStrategy<>(name, columnType, mv -> {
 				configModelValue.accept(renderModels, mv);
@@ -835,13 +844,15 @@ public class QuickBase implements QonfigInterpretation {
 				}
 			});
 			if (editing != null) {
-				ModelSetInstance editModels = modelCreator.get();
+				ModelSetInstance editCallerModels = modelCreator.get();
+				ModelSetInstance editModels = exS.getExpressoEnv().getModels().createInstance(editCallerModels.getUntil())
+					.withAll(editCallerModels).build();
 				SettableValue<C> editColumnV;
 				if (columnValue != null)
 					editColumnV = columnValue.get(editModels);
 				else {
 					editColumnV = (SettableValue<C>) defaultColumnValue.get(editModels);
-					DynamicModelValue.satisfyDynamicValue("columnValue", ModelTypes.Value.forType(columnType), editModels, editColumnV);
+					DynamicModelValue.satisfyDynamicValue(columnValueName, ModelTypes.Value.forType(columnType), editModels, editColumnV);
 				}
 				column.withMutation(mut -> editing.modifyColumn(parent, mut, editModels, configCell));
 			}
@@ -1312,6 +1323,8 @@ public class QuickBase implements QonfigInterpretation {
 				else
 					fieldName = null;
 				SettableValue<T> valueV = value.apply(builder.getModels());
+				// For debugging
+				// valueV.noInitChanges().act(evt -> System.out.println("Label " + evt.getNewValue()));
 				SettableValue<Icon> iconV = iconX.apply(builder.getModels());
 				container.addLabel(fieldName == null ? null : fieldName.get(), valueV, //
 					format.apply(builder.getModels()).get(), field -> {
@@ -1378,6 +1391,8 @@ public class QuickBase implements QonfigInterpretation {
 				columns.add(child.interpret(ColumnList.class).getColumns());
 			}
 		}
+		if (simpleColumns != null)
+			columns.add(ObservableCollection.of(columnType, simpleColumns));
 		List<ValueAction<R>> actions = session.interpretChildren("action", ValueAction.class);
 		return new AbstractQuickComponentDef(session) {
 			@Override

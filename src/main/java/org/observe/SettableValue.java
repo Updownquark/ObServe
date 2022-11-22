@@ -163,7 +163,7 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 				String error = accept.apply(value);
 				if (error != null)
 					throw new IllegalArgumentException(error);
-				return theWrapped.set(value, cause);
+				return getWrapped().set(value, cause);
 			}
 
 			@Override
@@ -171,7 +171,7 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 				String error = accept.apply(value);
 				if (error != null)
 					return error;
-				return theWrapped.isAcceptable(value);
+				return getWrapped().isAcceptable(value);
 			}
 		};
 	}
@@ -189,7 +189,7 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 			@Override
 			public <V extends T> T set(V value, Object cause) throws IllegalArgumentException {
 				onSetAction.accept(value);
-				return theWrapped.set(value, cause);
+				return getWrapped().set(value, cause);
 			}
 		};
 	}
@@ -206,7 +206,7 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 				String msg = enabled.get();
 				if (msg != null)
 					return msg;
-				return theWrapped.isAcceptable(value);
+				return getWrapped().isAcceptable(value);
 			}
 
 			@Override
@@ -214,12 +214,12 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 				String msg = enabled.get();
 				if (msg != null)
 					throw new IllegalArgumentException(msg);
-				return theWrapped.set(value, cause);
+				return getWrapped().set(value, cause);
 			}
 
 			@Override
 			public ObservableValue<String> isEnabled() {
-				return ObservableValue.firstValue(TypeTokens.get().STRING, s -> s != null, () -> null, enabled, theWrapped.isEnabled());
+				return ObservableValue.firstValue(TypeTokens.get().STRING, s -> s != null, () -> null, enabled, getWrapped().isEnabled());
 			}
 		};
 	}
@@ -638,11 +638,17 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 	 *
 	 * @param <T> The type of the value
 	 */
-	class WrappingSettableValue<T> implements SettableValue<T> {
-		protected final SettableValue<T> theWrapped;
+	public class WrappingSettableValue<T> implements SettableValue<T> {
+		private final SettableValue<T> theWrapped;
 
+		/** @param wrapped The wrapped value */
 		public WrappingSettableValue(SettableValue<T> wrapped) {
 			theWrapped = wrapped;
+		}
+
+		/** @return The wrapped value */
+		protected SettableValue<T> getWrapped() {
+			return theWrapped;
 		}
 
 		@Override

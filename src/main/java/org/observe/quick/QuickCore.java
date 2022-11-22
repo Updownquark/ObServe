@@ -46,6 +46,8 @@ import org.observe.Subscription;
 import org.observe.expresso.ClassView;
 import org.observe.expresso.DynamicModelValue;
 import org.observe.expresso.Expression.ExpressoParseException;
+import org.observe.expresso.ExpressoBaseV0_1;
+import org.observe.expresso.ExpressoBaseV0_1.AppEnvironment;
 import org.observe.expresso.ExpressoEnv;
 import org.observe.expresso.ExpressoQIS;
 import org.observe.expresso.ModelType.ModelInstanceType;
@@ -293,13 +295,26 @@ public class QuickCore implements QonfigInterpretation {
 	}
 
 	private QuickDocument interpretQuick(StyleQIS session) throws QonfigInterpretationException {
+		QuickDocument[] doc = new QuickDocument[1];
+		AppEnvironment appEnv = new AppEnvironment() {
+			@Override
+			public ValueContainer<SettableValue<?>, ? extends ObservableValue<String>> getTitle() {
+				return doc[0].getTitle();
+			}
+
+			@Override
+			public ValueContainer<SettableValue<?>, ? extends ObservableValue<Image>> getIcon() {
+				return doc[0].getIcon();
+			}
+		};
+		session.put(ExpressoBaseV0_1.APP_ENVIRONMENT_KEY, appEnv);
 		StyleQIS headSession = session.forChildren("head").getFirst();
 		QuickHeadSection head = headSession.interpret(QuickHeadSection.class);
 		session.as(ExpressoQIS.class).setExpressoEnv(headSession.as(ExpressoQIS.class).getExpressoEnv());
 		session.setStyleSheet(head.getStyleSheet());
-		QuickDocument doc = new QuickDocument.QuickDocumentImpl(session.getElement(), head, //
+		doc[0] = new QuickDocument.QuickDocumentImpl(session.getElement(), head, //
 			session.interpretChildren("root", QuickComponentDef.class).getFirst());
-		return doc;
+		return doc[0];
 	}
 
 	private QuickHeadSection interpretHead(StyleQIS session) throws QonfigInterpretationException {

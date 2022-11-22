@@ -169,12 +169,15 @@ public class Expresso {
 	/**
 	 * A {@link QonfigValueModifier modifier} that is capable of adding values into the model set that an element sees (in its
 	 * {@link ExpressoQIS})'s {@link ExpressoQIS#getExpressoEnv() expresso environment}
-	 * 
+	 *
 	 * @param <T> The type to modify
 	 */
 	public interface ElementModelAugmentation<T> extends QonfigInterpreterCore.QonfigValueModifier<T> {
 		@Override
 		default Object prepareSession(CoreSession session) throws QonfigInterpretationException {
+			if (session.get(getClass().getName()) != null)
+				return null;
+			session.putLocal(getClass().getName(), true);
 			ObservableModelSet.Builder builder;
 			boolean createdBuilder;
 			ExpressoQIS exS = session.as(ExpressoQIS.class);
@@ -187,7 +190,18 @@ public class Expresso {
 				exS.setModels(builder, null);
 				createdBuilder = true;
 			}
+			// Clear out any inherited types
+			Object oldValueType = session.get(ExpressoBaseV0_1.VALUE_TYPE_KEY);
+			if (oldValueType != null)
+				session.put(ExpressoBaseV0_1.VALUE_TYPE_KEY, null);
+			Object oldKeyType = session.get(ExpressoBaseV0_1.KEY_TYPE_KEY);
+			if (oldKeyType != null)
+				session.put(ExpressoBaseV0_1.KEY_TYPE_KEY, null);
+
 			augmentElementModel(exS, builder);
+
+			session.put(ExpressoBaseV0_1.VALUE_TYPE_KEY, oldValueType);
+			session.put(ExpressoBaseV0_1.KEY_TYPE_KEY, oldKeyType);
 			return createdBuilder;
 		}
 

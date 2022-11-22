@@ -239,7 +239,8 @@ It builds on the Expresso-Core specification and contains everything needed for 
 			<element-model>
 				<value name="event" />
 			</element-model>
-			<attribute name="on" type="expression" />
+			<!-- If "on" is not specified, the hook's action runs as soon as it is instantiated -->
+			<attribute name="on" type="expression" specify="optional" />
 		</element-def>
 
 		<!-- Just a little bit of code flow structure -->

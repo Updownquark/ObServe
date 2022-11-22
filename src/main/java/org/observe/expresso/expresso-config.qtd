@@ -66,8 +66,12 @@ It builds on the Expresso-Base toolkit and allows specification of persisted con
 		<add-on name="regex-validation" inherits="validate-type">
 			<attribute name="pattern" type="expression" />
 		</add-on>
-		<add-on name="filter-validation" inherits="validate-type">
-			<attribute name="filter" type="expression" />
+		<add-on name="filter-validation" inherits="validate-type,with-element-model">
+			<element-model>
+				<value name-attribute="filter-value-name" />
+			</element-model>
+			<attribute name="filter-value-name" type="identifier" default="filterValue" />
+			<attribute name="test" type="expression" />
 		</add-on>
 	</add-ons>
 

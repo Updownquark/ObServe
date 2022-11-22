@@ -60,6 +60,7 @@ import org.qommons.collect.BetterList;
 import org.qommons.collect.FastFailLockingStrategy;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.config.AbstractQIS;
+import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigChildDef;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigInterpretation;
@@ -88,6 +89,8 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 	 * {@link ModelInstanceType} depending on the API of the thing being parsed
 	 */
 	public static final String KEY_TYPE_KEY = "key-type";
+
+	public static final String APP_ENVIRONMENT_KEY = "ExpressoAppEnvironment";
 
 	/** Represents an application so that various models in this class can provide intelligent interaction with the user */
 	public interface AppEnvironment {
@@ -133,8 +136,10 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 			@Override
 			public void augmentElementModel(ExpressoQIS session, ObservableModelSet.Builder builder)
 				throws QonfigInterpretationException {
-				Map<String, DynamicModelValue.Identity> dynamicValues = DynamicModelValue.getDynamicValues(theExpressoToolkit,
-					session.getElement().getType(), null);
+				Map<String, DynamicModelValue.Identity> dynamicValues = new LinkedHashMap<>();
+				DynamicModelValue.getDynamicValues(theExpressoToolkit, session.getElement().getType(), dynamicValues);
+				for (QonfigAddOn inh : session.getElement().getInheritance().values())
+					DynamicModelValue.getDynamicValues(theExpressoToolkit, inh, dynamicValues);
 				if (!dynamicValues.isEmpty()) {
 					for (DynamicModelValue.Identity dv : dynamicValues.values()) {
 						String name;
@@ -1218,12 +1223,13 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		return ValueCreator.name("hook", () -> {
 			ValueContainer<Observable<?>, Observable<V>> onC;
 			try {
-				onC = onX.evaluate(ModelTypes.Event.<V> anyAs(), session.getExpressoEnv());
+				onC = onX == null ? null : onX.evaluate(ModelTypes.Event.<V> anyAs(), session.getExpressoEnv());
 			} catch (QonfigInterpretationException e) {
 				throw new IllegalStateException(e);
 			}
 			ModelInstanceType.SingleTyped<Observable<?>, V, Observable<V>> eventType;
-			eventType = (ModelInstanceType.SingleTyped<Observable<?>, V, Observable<V>>) onC.getType();
+			eventType = onC == null ? ModelTypes.Event.forType((Class<V>) void.class)
+				: (ModelInstanceType.SingleTyped<Observable<?>, V, Observable<V>>) onC.getType();
 			DynamicModelValue.satisfyDynamicValueType("event", session.getExpressoEnv().getModels(),
 				ModelTypes.Value.forType(eventType.getValueType()));
 			ValueContainer<ObservableAction<?>, ObservableAction<?>> actionC;
@@ -1232,18 +1238,23 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 			} catch (QonfigInterpretationException e) {
 				throw new IllegalStateException(e);
 			}
-			return ValueContainer.of(onC.getType(), msi -> {
+			return ValueContainer.of(eventType, msi -> {
 				msi = session.wrapLocal(msi);
-				Observable<V> on = onC.get(msi);
+				Observable<V> on = onC == null ? null : onC.get(msi);
 				ObservableAction<?> action = actionC.get(msi);
 				SettableValue<V> event = SettableValue.build(eventType.getValueType())//
 					.withValue(TypeTokens.get().getDefaultValue(eventType.getValueType())).build();
 				DynamicModelValue.satisfyDynamicValue("event", ModelTypes.Value.forType(eventType.getValueType()), msi, event);
-				on.takeUntil(msi.getUntil()).act(v -> {
-					event.set(v, null);
-					action.act(v);
-				});
-				return on;
+				if (on != null) {
+					on.takeUntil(msi.getUntil()).act(v -> {
+						event.set(v, null);
+						action.act(v);
+					});
+					return on;
+				} else {
+					action.act(null);
+					return Observable.empty();
+				}
 			});
 		});
 	}
