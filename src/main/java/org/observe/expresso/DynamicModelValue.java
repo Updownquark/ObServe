@@ -1,9 +1,11 @@
 package org.observe.expresso;
 
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.observe.expresso.ModelType.HollowModelValue;
@@ -132,8 +134,7 @@ public interface DynamicModelValue<M, MV extends M> extends ValueContainer<M, MV
 	 * @param values The map to add the dynamic values into
 	 * @return The identities/definitions of all dynamic values defined on the given type, grouped by name/name attribute
 	 */
-	public static Map<String, Identity> getDynamicValues(QonfigToolkit expresso, QonfigElementOrAddOn type,
-		Map<String, Identity> values) {
+	public static Map<String, Identity> getDynamicValues(QonfigToolkit expresso, QonfigElementOrAddOn type, Map<String, Identity> values) {
 		return Impl.getDynamicValues(expresso, null, type, values);
 	}
 
@@ -498,6 +499,7 @@ public interface DynamicModelValue<M, MV extends M> extends ValueContainer<M, MV
 	/** Implementation details in this interface */
 	class Impl {
 		private static class ElementModelData {
+			Set<QonfigElementOrAddOn> types = new HashSet<>();
 			QonfigElementOrAddOn withElementModel;
 			QonfigChildDef elementModel;
 			QonfigChildDef modelValue;
@@ -516,8 +518,9 @@ public interface DynamicModelValue<M, MV extends M> extends ValueContainer<M, MV
 				modelData = new ElementModelData();
 				modelData.withElementModel = expresso.getElementOrAddOn("with-element-model");
 			}
-			if (!modelData.withElementModel.isAssignableFrom(type))
-				return Collections.emptyMap();
+			if (!modelData.types.add(type) || !modelData.withElementModel.isAssignableFrom(type)) {
+				return values == null ? Collections.emptyMap() : values;
+			}
 			Map<String, Identity> found = DYNAMIC_VALUES.get(type);
 			if (found == null) {
 				synchronized (Impl.class) {

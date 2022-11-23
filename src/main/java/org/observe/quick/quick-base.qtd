@@ -175,10 +175,14 @@
 			<child-def name="renderer" type="widget" min="0" />
 			<child-def name="edit" type="column-edit" min="0" />
 		</element-def>
-		<element-def name="column-edit">
+		<element-def name="column-edit" inherits="with-element-model">
+			<element-model>
+				<value name-attribute="column-edit-value-name" />
+			</element-model>
 			<attribute name="type" type="column-edit-type" />
-			<child-def name="editor" type="value-widget" inherits="column-editor" />
+			<attribute name="column-edit-value-name" type="identifier" default="columnEditValue" />
 			<attribute name="clicks" type="int" specify="optional" />
+			<child-def name="editor" type="value-widget" inherits="column-editor" />
 		</element-def>
 		<element-def name="columns-ref">
 			<attribute name="model-value" type="expression" />

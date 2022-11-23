@@ -705,30 +705,37 @@ public class QuickBase implements QonfigInterpretation {
 		ExpressoQIS columnEdit = exS.forChildren("edit").peekFirst();
 		if (columnEdit != null) {
 			columnEdit.put(MODEL_TYPE_KEY, columnType);
+			ColumnEditing<M, C> editType = columnEdit.asElement(columnEdit.getAttribute("type", QonfigAddOn.class))
+				.interpret(ColumnEditing.class);
 			ExpressoQIS editorSession = columnEdit.forChildren("editor").getFirst();
 			QuickComponentDef editor = editorSession.interpret(QuickComponentDef.class);
 			if (!(editor instanceof QuickValueEditorDef))
 				throw new IllegalArgumentException(
 					"Use of '" + editorSession.getElement().getType().getName() + "' as a column editor is not implemented");
-			ColumnEditing<M, C> editType = columnEdit.asElement(columnEdit.getAttribute("type", QonfigAddOn.class))
-				.interpret(ColumnEditing.class);
+			String columnEditValueName = columnEdit.getAttributeText("column-edit-value-name");
 			editing = (parent, column, models, config) -> {
+				ModelSetInstance editorModels = columnEdit.wrapLocal(models);
 				// Hacky way of synthesizing the component
 				Function<C, String>[] filter = new Function[1];
 				boolean[] currentlyEditing = new boolean[1];
 				SettableValue<C> editorValue = DefaultObservableCellEditor.createEditorValue(columnType, filter,
 					builder -> builder.withDescription(columnValueName));
+				DynamicModelValue.satisfyDynamicValue(columnEditValueName, ModelTypes.Value.forType(columnType), editorModels, editorValue);
 
-				editType.modifyColumn(parent, column, models, config);
-				QuickComponent.Builder editorBuilder = QuickComponent.build(editor, parent, models);
+				editType.modifyColumn(parent, column, editorModels, config);
+				/* TODO
+				 * Seems to me this is wrong.
+				 * Since column is styled, the parent passed in here should be something representing the column, not the column's parent
+				 */
+				QuickComponent.Builder editorBuilder = QuickComponent.build(editor, parent, editorModels);
 				QuickComponent editorComp = editor
-					.install(PanelPopulation.populateHPanel(null, new JustifiedBoxLayout(false), models.getUntil()), editorBuilder);
+					.install(PanelPopulation.populateHPanel(null, new JustifiedBoxLayout(false), editorModels.getUntil()), editorBuilder);
 				SettableValue<Boolean> focusV = SettableValue.build(boolean.class).build();
 				SettableValue<Boolean> hoveredV = SettableValue.build(boolean.class).build();
 				SettableValue<Boolean> selectedV = SettableValue.build(boolean.class).build();
-				DynamicModelValue.satisfyDynamicValue("focused", ModelTypes.Value.BOOLEAN, models, focusV);
-				DynamicModelValue.satisfyDynamicValue("hovered", ModelTypes.Value.BOOLEAN, models, hoveredV);
-				DynamicModelValue.satisfyDynamicValue("selected", ModelTypes.Value.BOOLEAN, models, selectedV);
+				DynamicModelValue.satisfyDynamicValue("focused", ModelTypes.Value.BOOLEAN, editorModels, focusV);
+				DynamicModelValue.satisfyDynamicValue("hovered", ModelTypes.Value.BOOLEAN, editorModels, hoveredV);
+				DynamicModelValue.satisfyDynamicValue("selected", ModelTypes.Value.BOOLEAN, editorModels, selectedV);
 				Component c = editorComp.getComponent();
 				Insets defMargin = c instanceof JTextComponent ? ((JTextComponent) c).getMargin() : null;
 				String clicksStr = columnEdit.getAttribute("clicks", String.class);
@@ -739,7 +746,7 @@ public class QuickBase implements QonfigInterpretation {
 					public EditorSubscription install(ObservableCellEditor<?, C> cellEditor, Component component,
 						Function<C, String> valueFilter, String editTooltip, Function<? super C, String> valueToolTip) {
 						ModelCell<M, C> cell = (ModelCell<M, C>) cellEditor.getEditingCell();
-						config.accept(models, cell);
+						config.accept(editorModels, cell);
 						if (defMargin != null && component instanceof JTable) {
 							Insets margin = ((JTextComponent) c).getMargin();
 							if (margin.top != 0 || margin.bottom != 0) {
@@ -876,7 +883,10 @@ public class QuickBase implements QonfigInterpretation {
 	private <M, C> ColumnEditing<M, C> interpretRowModify(StyleQIS session) throws QonfigInterpretationException {
 		ExpressoQIS exS = session.as(ExpressoQIS.class);
 		System.err.println("WARNING: modify-row-value is not fully implemented!!"); // TODO
-		TypeToken<M> modelType = session.get(MODEL_TYPE_KEY, TypeToken.class);
+		TypeToken<C> columnType = session.get(MODEL_TYPE_KEY, TypeToken.class);
+		String columnEditValueName = exS.getAttributeText("column-edit-value-name");
+		DynamicModelValue.satisfyDynamicValueType(columnEditValueName, exS.getExpressoEnv().getModels(),
+			ModelTypes.Value.forType(columnType));
 		String editValueName = (String) session.get("edit-value-name");
 		ObservableExpression commitX = exS.getAttributeExpression("commit");
 		ObservableExpression editableIfX = exS.getAttributeExpression("editable-if");
@@ -1435,8 +1445,8 @@ public class QuickBase implements QonfigInterpretation {
 						ObservableAction<?> a = action.action.get(actionModels);
 						Consumer<DataAction<R, ?>> actionMod = configAction -> {
 							configAction//
-								.displayAsButton(action.asButton).displayAsPopup(action.asPopup)//
-								.allowForEmpty(action.allowForEmpty).allowForMultiple(action.allowForMultiple);
+							.displayAsButton(action.asButton).displayAsPopup(action.asPopup)//
+							.allowForEmpty(action.allowForEmpty).allowForMultiple(action.allowForMultiple);
 							configAction.modifyButton(btn -> {
 								if (action.name != null)
 									btn.withText(action.name.get(builder.getModels()));
