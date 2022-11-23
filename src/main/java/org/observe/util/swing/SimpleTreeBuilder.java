@@ -355,9 +355,7 @@ public class SimpleTreeBuilder<F, P extends SimpleTreeBuilder<F, P>> extends Abs
 			int row, boolean hasFocus) {
 			Supplier<BetterList<F>> modelValue = () -> {
 				TreePath path = tree.getPathForRow(row);
-				if (path == null)
-					return BetterList.of((F) tree.getModel().getRoot());
-				else if (path.getLastPathComponent() == value)
+				if (path != null && path.getLastPathComponent() == value)
 					return ObservableTreeModel.betterPath(path);
 				else {
 					// This can happen when this is called from an expand/collapse event, as the state may not have been updated
