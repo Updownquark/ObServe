@@ -2,6 +2,7 @@ package org.observe.expresso;
 
 import java.util.Collection;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.Set;
 import java.util.SortedMap;
 import java.util.SortedSet;
@@ -27,6 +28,7 @@ import org.observe.collect.ObservableSet;
 import org.observe.collect.ObservableSortedCollection;
 import org.observe.collect.ObservableSortedSet;
 import org.observe.config.ObservableValueSet;
+import org.observe.util.ObservableCollectionWrapper;
 import org.observe.util.TypeTokens;
 import org.qommons.BiTuple;
 import org.qommons.ClassMap;
@@ -37,7 +39,10 @@ import org.qommons.QommonsUtils;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterSortedList;
+import org.qommons.collect.CollectionElement;
+import org.qommons.collect.ElementId;
 import org.qommons.collect.MultiMap;
+import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.collect.SortedMultiMap;
 
 import com.google.common.reflect.TypeToken;
@@ -881,7 +886,35 @@ public class ModelTypes {
 		@Override
 		public <MV extends ObservableCollection<?>> HollowModelValue<ObservableCollection<?>, MV> createHollowValue(String name,
 			ModelInstanceType<ObservableCollection<?>, MV> type) {
-			throw new UnsupportedOperationException(this + ".createHollowValue not implemented");
+			return (HollowModelValue<ObservableCollection<?>, MV>) new HollowCollection<>(name, (TypeToken<Object>) type.getType(0));
+		}
+
+		static class HollowCollection<T> extends ObservableCollectionWrapper<T>
+		implements HollowModelValue<ObservableCollection<?>, ObservableCollection<T>> {
+			private final NamedUniqueIdentity theId;
+			private final SettableValue<ObservableCollection<T>> theContainer;
+
+			public HollowCollection(String name, TypeToken<T> type) {
+				theId = new NamedUniqueIdentity(name);
+				theContainer = SettableValue
+					.build(TypeTokens.get().keyFor(ObservableCollection.class).<ObservableCollection<T>> parameterized(type)).build();
+				init(ObservableCollection.flattenValue(theContainer));
+			}
+
+			@Override
+			public Object getIdentity() {
+				return theId;
+			}
+
+			@Override
+			public void satisfy(ObservableCollection<T> realValue) {
+				theContainer.set(realValue, null);
+			}
+
+			@Override
+			public boolean isSatisfied() {
+				return theContainer.get() != null;
+			}
 		}
 	}
 
@@ -1101,7 +1134,75 @@ public class ModelTypes {
 		@Override
 		public <MV extends ObservableSet<?>> HollowModelValue<ObservableSet<?>, MV> createHollowValue(String name,
 			ModelInstanceType<ObservableSet<?>, MV> type) {
-			throw new UnsupportedOperationException(this + ".createHollowValue not implemented");
+			return (HollowModelValue<ObservableSet<?>, MV>) new HollowSet<>(name, (TypeToken<Object>) type.getType(0));
+		}
+
+		static class HollowSet<T> extends ObservableCollectionWrapper<T>
+		implements HollowModelValue<ObservableSet<?>, ObservableSet<T>>, ObservableSet<T> {
+			private final NamedUniqueIdentity theId;
+			private final SettableValue<ObservableSet<T>> theContainer;
+
+			public HollowSet(String name, TypeToken<T> type) {
+				theId = new NamedUniqueIdentity(name);
+				theContainer = SettableValue.build(TypeTokens.get().keyFor(ObservableSet.class).<ObservableSet<T>> parameterized(type))
+					.build();
+				init(ObservableCollection.flattenValue(theContainer));
+			}
+
+			@Override
+			public Object getIdentity() {
+				return theId;
+			}
+
+			@Override
+			public void satisfy(ObservableSet<T> realValue) {
+				theContainer.set(realValue, null);
+			}
+
+			@Override
+			public boolean isSatisfied() {
+				return theContainer.get() != null;
+			}
+
+			@Override
+			public CollectionElement<T> getOrAdd(T value, ElementId after, ElementId before, boolean first, Runnable added) {
+				ObservableSet<T> set = theContainer.get();
+				if (set == null)
+					throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+				return set.getOrAdd(value, after, before, first, added);
+			}
+
+			@Override
+			public boolean isConsistent(ElementId element) {
+				ObservableSet<T> set = theContainer.get();
+				if (set == null)
+					throw new NoSuchElementException();
+				return set.isConsistent(element);
+			}
+
+			@Override
+			public boolean checkConsistency() {
+				ObservableSet<T> set = theContainer.get();
+				if (set == null)
+					return false;
+				return set.checkConsistency();
+			}
+
+			@Override
+			public <X> boolean repair(ElementId element, RepairListener<T, X> listener) {
+				ObservableSet<T> set = theContainer.get();
+				if (set == null)
+					throw new NoSuchElementException();
+				return set.repair(element, listener);
+			}
+
+			@Override
+			public <X> boolean repair(RepairListener<T, X> listener) {
+				ObservableSet<T> set = theContainer.get();
+				if (set == null)
+					return false;
+				return set.repair(listener);
+			}
 		}
 	}
 

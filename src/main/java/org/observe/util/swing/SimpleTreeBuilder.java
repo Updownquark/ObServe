@@ -37,12 +37,36 @@ import org.qommons.collect.BetterList;
 
 import com.google.common.reflect.TypeToken;
 
+/**
+ * Utility for building a {@link JTree}
+ *
+ * @param <F> The super-type of values in the tree
+ * @param <P> The sub-type of this builder
+ */
 public class SimpleTreeBuilder<F, P extends SimpleTreeBuilder<F, P>> extends AbstractComponentEditor<JTree, P> implements TreeEditor<F, P> {
+	/**
+	 * Creates a tree with a function that accepts the node value
+	 * 
+	 * @param <F> The super-type of values in the tree
+	 * @param root The root value for the tree
+	 * @param children The function to produce children for each tree node value
+	 * @param until The observable which, when it fires, will disconnect all of the tree's listeners to the values
+	 * @return The tree builder to configure
+	 */
 	public static <F> SimpleTreeBuilder<F, ?> createTree(ObservableValue<? extends F> root,
 		Function<? super F, ? extends ObservableCollection<? extends F>> children, Observable<?> until) {
 		return new SimpleTreeBuilder<>(root, new PPTreeModel1<>(root, children), until);
 	}
 
+	/**
+	 * Creates a tree with a function that accepts the node path
+	 * 
+	 * @param <F> The super-type of values in the tree
+	 * @param root The root value for the tree
+	 * @param children The function to produce children for each tree node path
+	 * @param until The observable which, when it fires, will disconnect all of the tree's listeners to the values
+	 * @return The tree builder to configure
+	 */
 	public static <F> SimpleTreeBuilder<F, ?> createTree2(ObservableValue<? extends F> root,
 		Function<? super BetterList<F>, ? extends ObservableCollection<? extends F>> children, Observable<?> until) {
 		return new SimpleTreeBuilder<>(root, new PPTreeModel2<>(root, children), until);

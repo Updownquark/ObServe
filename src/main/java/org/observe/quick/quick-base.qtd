@@ -204,6 +204,8 @@
 		</element-def>
 		<element-def name="abstract-value-action" abstract="true">
 			<attribute name="name" type="expression" specify="optional" />
+			<attribute name="as-button" type="boolean" default="true" />
+			<attribute name="as-popup" type="boolean" default="false" />
 			<attribute name="icon" type="expression" specify="optional" />
 			<attribute name="action" type="expression" specify="required" />
 			<attribute name="enabled" type="expression" specify="optional" />
@@ -219,7 +221,7 @@
 		</element-def>
 		<element-def name="multi-value-action" extends="abstract-value-action" inherits="with-element-model">
 			<element-model>
-				<value name-attribute="values-name"/>
+				<list name-attribute="values-name"/>
 			</element-model>
 			<attribute name="values-name" type="identifier" default="actionValues" />
 		</element-def>

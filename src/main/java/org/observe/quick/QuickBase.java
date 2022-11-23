@@ -135,6 +135,8 @@ public class QuickBase implements QonfigInterpretation {
 		public final Function<ModelSetInstance, SettableValue<Icon>> icon;
 		public final ValueContainer<ObservableAction<?>, ObservableAction<?>> action;
 		public final ValueContainer<SettableValue<?>, SettableValue<String>> enabled;
+		public final boolean asButton;
+		public final boolean asPopup;
 		public final boolean allowForEmpty;
 		public final boolean allowForMultiple;
 		public final ValueContainer<SettableValue<?>, SettableValue<String>> tooltip;
@@ -143,7 +145,8 @@ public class QuickBase implements QonfigInterpretation {
 			BiConsumer<ModelSetInstance, ObservableCollection<T>> valuesInstaller,
 			ValueContainer<SettableValue<?>, SettableValue<String>> name, Function<ModelSetInstance, SettableValue<Icon>> icon,
 			ValueContainer<ObservableAction<?>, ObservableAction<?>> action,
-			ValueContainer<SettableValue<?>, SettableValue<String>> enabled, boolean allowForEmpty, boolean allowForMultiple,
+			ValueContainer<SettableValue<?>, SettableValue<String>> enabled, //
+			boolean asButton, boolean asPopup, boolean allowForEmpty, boolean allowForMultiple,
 			ValueContainer<SettableValue<?>, SettableValue<String>> tooltip) {
 			this.model = model;
 			this.valueInstaller = valueInstaller;
@@ -152,6 +155,8 @@ public class QuickBase implements QonfigInterpretation {
 			this.icon = icon;
 			this.action = action;
 			this.enabled = enabled;
+			this.asButton = asButton;
+			this.asPopup = asPopup;
 			this.allowForEmpty = allowForEmpty;
 			this.allowForMultiple = allowForMultiple;
 			this.tooltip = tooltip;
@@ -444,9 +449,8 @@ public class QuickBase implements QonfigInterpretation {
 		TypeToken<T> valueType = session.get(MODEL_TYPE_KEY, TypeToken.class);
 		// Specify the type here, the value will be specified by the caller
 		String valuesName = session.getAttributeText("values-name");
-		DynamicModelValue.satisfyDynamicValueType(valuesName, exS.getExpressoEnv().getModels(), ModelTypes.Value.forType(valueType));
-
 		ModelInstanceType<ObservableCollection<?>, ObservableCollection<T>> valuesType = ModelTypes.Collection.forType(valueType);
+		DynamicModelValue.satisfyDynamicValueType(valuesName, exS.getExpressoEnv().getModels(), valuesType);
 
 		ValueContainer<SettableValue<?>, SettableValue<String>> name = exS.getAttribute("name", ModelTypes.Value.forType(String.class),
 			null);
@@ -461,6 +465,8 @@ public class QuickBase implements QonfigInterpretation {
 		return new ValueAction<>(exS.getExpressoEnv().getModels(), null, (models, values) -> {
 			DynamicModelValue.satisfyDynamicValue(valuesName, valuesType, models, values);
 		}, name, icon, action, enabled, //
+			session.getAttribute("as-button", boolean.class), //
+			session.getAttribute("as-popup", boolean.class), //
 			session.getAttribute("allow-for-empty", boolean.class), //
 			session.getAttribute("allow-for-multiple", boolean.class), //
 			tooltip);
@@ -1109,7 +1115,6 @@ public class QuickBase implements QonfigInterpretation {
 
 	private QuickComponentDef interpretFieldPanel(StyleQIS session) throws QonfigInterpretationException {
 		List<QuickComponentDef> children = session.interpretChildren("content", QuickComponentDef.class);
-		System.err.println("WARNING: field-panel is not fully implemented!!"); // TODO
 		return new AbstractQuickComponentDef(session) {
 			@Override
 			public QuickComponent install(PanelPopulator<?, ?> container, QuickComponent.Builder builder) {
@@ -1429,7 +1434,9 @@ public class QuickBase implements QonfigInterpretation {
 							.withAll(builder.getModels()).build();
 						ObservableAction<?> a = action.action.get(actionModels);
 						Consumer<DataAction<R, ?>> actionMod = configAction -> {
-							configAction.allowForEmpty(action.allowForEmpty).allowForMultiple(action.allowForMultiple);
+							configAction//
+								.displayAsButton(action.asButton).displayAsPopup(action.asPopup)//
+								.allowForEmpty(action.allowForEmpty).allowForMultiple(action.allowForMultiple);
 							configAction.modifyButton(btn -> {
 								if (action.name != null)
 									btn.withText(action.name.get(builder.getModels()));
