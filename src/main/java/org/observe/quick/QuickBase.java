@@ -451,7 +451,7 @@ public class QuickBase implements QonfigInterpretation {
 		ValueContainer<SettableValue<?>, SettableValue<String>> name = exS.getAttribute("name", ModelTypes.Value.forType(String.class),
 			null);
 		Function<ModelSetInstance, SettableValue<Icon>> icon = QuickCore.parseIcon(//
-			exS.getAttributeExpression("icon"), exS, exS.getExpressoEnv());
+			exS.getAttributeExpression("icon"), exS);
 		ValueContainer<ObservableAction<?>, ObservableAction<?>> action = exS.getAttribute("action", ModelTypes.Action.any(), null);
 		ValueContainer<SettableValue<?>, SettableValue<String>> enabled = exS.getAttribute("enabled",
 			ModelTypes.Value.forType(String.class), null);
@@ -1313,7 +1313,7 @@ public class QuickBase implements QonfigInterpretation {
 					exS.getExpressoEnv())::get;
 		}
 		ObservableExpression iconEx = exS.getAttributeExpression("icon");
-		Function<ModelSetInstance, SettableValue<Icon>> iconX = QuickCore.parseIcon(iconEx, exS, exS.getExpressoEnv());
+		Function<ModelSetInstance, SettableValue<Icon>> iconX = QuickCore.parseIcon(iconEx, exS);
 		return new AbstractQuickField(session) {
 			@Override
 			public QuickComponent install(PanelPopulator<?, ?> container, QuickComponent.Builder builder) {
@@ -1748,8 +1748,7 @@ public class QuickBase implements QonfigInterpretation {
 			ValueContainer<SettableValue<?>, SettableValue<String>> tabName = exTab.getAttributeAsValue("tab-name", String.class,
 				() -> msi -> SettableValue.of(String.class, tabId.get(msi).get().toString(), "Not editable"));
 
-			Function<ModelSetInstance, SettableValue<Icon>> tabIcon = QuickCore.parseIcon(exTab.getAttributeExpression("tab-icon"), exTab,
-				exTab.getExpressoEnv());
+			Function<ModelSetInstance, SettableValue<Icon>> tabIcon = QuickCore.parseIcon(exTab.getAttributeExpression("tab-icon"), exTab);
 
 			boolean removable = tab.getAttribute("removable", boolean.class);
 

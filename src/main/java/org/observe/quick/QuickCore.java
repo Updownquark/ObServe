@@ -48,7 +48,6 @@ import org.observe.expresso.DynamicModelValue;
 import org.observe.expresso.Expression.ExpressoParseException;
 import org.observe.expresso.ExpressoBaseV0_1;
 import org.observe.expresso.ExpressoBaseV0_1.AppEnvironment;
-import org.observe.expresso.ExpressoEnv;
 import org.observe.expresso.ExpressoQIS;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
@@ -81,40 +80,80 @@ import org.qommons.config.QonfigInterpreterCore.CoreSession;
 import org.qommons.config.QonfigToolkit;
 import org.qommons.config.SpecialSession;
 
+/** Interpretation for the Quick-Core toolkit */
 public class QuickCore implements QonfigInterpretation {
 	/** The name of the Quick-Core toolkit */
 	public static final String NAME = "Quick-Core";
 	/** The supported version of the Quick-Core toolkit */
 	public static final Version VERSION = new Version(0, 1, 0);
 
+	/** Interpretation type for a border */
 	public interface QuickBorder {
+		/**
+		 * @param component The component to create the border for
+		 * @param builder The component builder containing model data to use to create the border
+		 * @return The border value
+		 */
 		ObservableValue<Border> createBorder(Component component, QuickComponent.Builder builder);
 	}
 
+	/** Interpretation type for a mouse listener */
 	public interface QuickMouseListener {
+		/** {@link ValueContainer} equivalent for a mouse listener */
 		public interface Container {
+			/** @return Whether this listener needs mouse motion input */
 			boolean isMotionListener();
 
+			/** @return Whether this listener needs mouse wheel input */
 			boolean isWheelListener();
 
+			/**
+			 * @param models The models to use to create the listener
+			 * @return The listener
+			 */
 			QuickMouseListener createListener(ModelSetInstance models);
 		}
 
+		/**
+		 * @param evt The event to test
+		 * @return Whether this listener cares about the given event
+		 */
 		boolean applies(MouseEvent evt);
 
+		/**
+		 * Performs this listener's action for a mouse event
+		 *
+		 * @param evt The mouse event that occurred
+		 */
 		void actionPerformed(MouseEvent evt);
 	}
 
+	/** Interpretation type for a key listener */
 	public interface QuickKeyListener {
+		/** {@link ValueContainer} equivalent for a key listener */
 		public interface Container {
+			/**
+			 * @param models The models to use to create the listener
+			 * @return The listener
+			 */
 			QuickKeyListener createListener(ModelSetInstance models);
 		}
 
+		/**
+		 * @param evt The event to test
+		 * @return Whether this listener cares about the given event
+		 */
 		boolean applies(KeyEvent evt);
 
+		/**
+		 * Performs this listener's action for a key event
+		 *
+		 * @param evt The key event that occurred
+		 */
 		void actionPerformed(KeyEvent evt);
 	}
 
+	@SuppressWarnings("unused")
 	private QonfigToolkit theCoreToolkit;
 
 	@Override
@@ -137,6 +176,14 @@ public class QuickCore implements QonfigInterpretation {
 		return QommonsUtils.unmodifiableDistinctCopy(ExpressoQIS.class, StyleQIS.class);
 	}
 
+	/**
+	 * Parses a position in Quick
+	 *
+	 * @param expression The expression to parse
+	 * @param session The session in which to parse the expression
+	 * @return The ValueContainer to produce the position value
+	 * @throws QonfigInterpretationException If the position could not be parsed
+	 */
 	public static ValueContainer<SettableValue<?>, SettableValue<QuickPosition>> parsePosition(QonfigExpression expression,
 		ExpressoQIS session) throws QonfigInterpretationException {
 		if (expression == null)
@@ -183,6 +230,14 @@ public class QuickCore implements QonfigInterpretation {
 		return positionValue;
 	}
 
+	/**
+	 * Parses a size in Quick
+	 *
+	 * @param expression The expression to parse
+	 * @param session The session in which to parse the expression
+	 * @return The ValueContainer to produce the size value
+	 * @throws QonfigInterpretationException If the size could not be parsed
+	 */
 	public static ValueContainer<SettableValue<?>, SettableValue<QuickSize>> parseSize(QonfigExpression expression, ExpressoQIS session)
 		throws QonfigInterpretationException {
 		if (expression == null)
@@ -229,10 +284,19 @@ public class QuickCore implements QonfigInterpretation {
 		return positionValue;
 	}
 
-	public static Function<ModelSetInstance, SettableValue<Icon>> parseIcon(ObservableExpression expression, ExpressoQIS session,
-		ExpressoEnv env) throws QonfigInterpretationException {
+	/**
+	 * Parses an icon in Quick
+	 *
+	 * @param expression The expression to parse
+	 * @param session The session in which to parse the expression
+	 * @return The ValueContainer to produce the icon value
+	 * @throws QonfigInterpretationException If the icon could not be parsed
+	 */
+	public static Function<ModelSetInstance, SettableValue<Icon>> parseIcon(ObservableExpression expression, ExpressoQIS session)
+		throws QonfigInterpretationException {
 		if (expression != null) {
-			ValueContainer<SettableValue<?>, SettableValue<?>> iconV = expression.evaluate(ModelTypes.Value.any(), env);
+			ValueContainer<SettableValue<?>, SettableValue<?>> iconV = expression.evaluate(ModelTypes.Value.any(),
+				session.getExpressoEnv());
 			Class<?> iconType = TypeTokens.getRawType(iconV.getType().getType(0));
 			if (Icon.class.isAssignableFrom(iconType))
 				return (Function<ModelSetInstance, SettableValue<Icon>>) (ValueContainer<?, ?>) iconV;
@@ -290,6 +354,9 @@ public class QuickCore implements QonfigInterpretation {
 			(listener, session, prep) -> modifyMouseButtonListener(listener, MouseEvent.BUTTON3))//
 		.modifyWith("middle-button", QuickMouseListener.Container.class,
 			(listener, session, prep) -> modifyMouseButtonListener(listener, MouseEvent.BUTTON2))//
+		.createWith("on-key-press", QuickKeyListener.Container.class, session -> createKeyListener(wrap(session), true))//
+		.createWith("on-key-release", QuickKeyListener.Container.class, session -> createKeyListener(wrap(session), false))//
+		.createWith("on-type", QuickKeyListener.Container.class, session -> createKeyTypeListener(wrap(session)))//
 		;
 		return interpreter;
 	}
@@ -876,6 +943,14 @@ public class QuickCore implements QonfigInterpretation {
 		return widget;
 	}
 
+	/**
+	 * @param baseFont The font whose attributes to use when not defined by styles
+	 * @param color The color for the font
+	 * @param size The size for the font
+	 * @param weight The weight for the font
+	 * @param slant The slant for the font
+	 * @return The font value
+	 */
 	public static ObservableValue<Font> getFont(Font baseFont, ObservableValue<? extends Color> color,
 		ObservableValue<? extends Double> size, ObservableValue<? extends Double> weight, ObservableValue<? extends Double> slant) {
 		return ObservableValue.assemble(TypeTokens.get().of(java.awt.Font.class), () -> {
