@@ -10,9 +10,11 @@ import java.util.function.Function;
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.collect.ObservableCollection;
+import org.observe.expresso.DynamicModelValue;
 import org.observe.expresso.ExpressoQIS;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet;
+import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ValueContainer;
 import org.observe.quick.QuickContainer.AbstractQuickContainer;
 import org.observe.quick.style.StyleQIS;
@@ -99,7 +101,13 @@ public class QuickX implements QonfigInterpretation {
 	private <T, E extends PanelPopulation.TreeTableEditor<T, E>> QuickComponentDef interpretTreeTable(StyleQIS session)
 		throws QonfigInterpretationException {
 		ExpressoQIS exS = session.as(ExpressoQIS.class);
+
 		return QuickBase.interpretAbstractTree(session, new QuickBase.TreeMaker<T, E>() {
+			TypeToken<BetterList<T>> modelType;
+			String pathName;
+			ValueContainer<SettableValue<?>, SettableValue<BetterList<T>>> pathValue;
+			ValueContainer<SettableValue<?>, SettableValue<Integer>> columnIndex;
+
 			TypeToken<CategoryRenderStrategy<BetterList<T>, ?>> columnType;
 			ValueContainer<ObservableCollection<?>, ObservableCollection<CategoryRenderStrategy<BetterList<T>, ?>>> columnsAttr;
 			List<QuickBase.Column<BetterList<T>, ?>> columns = new ArrayList<>();
@@ -107,11 +115,18 @@ public class QuickX implements QonfigInterpretation {
 			@Override
 			public void configure(ObservableModelSet model, ValueContainer<SettableValue<?>, ? extends SettableValue<T>> root)
 				throws QonfigInterpretationException {
-				TypeToken<T> type = (TypeToken<T>) root.getType().getType(0);
+				modelType = TypeTokens.get().keyFor(BetterList.class).<BetterList<T>> parameterized(root.getType().getType(0));
+				session.put(QuickBase.MODEL_TYPE_KEY, modelType);
+				pathName = exS.getAttributeText("path-name");
+				pathValue = exS.getExpressoEnv().getModels().getValue(pathName,
+					ModelTypes.Value.forType(TypeTokens.get().keyFor(BetterList.class).<BetterList<T>> parameterized(modelType)));
+				DynamicModelValue.satisfyDynamicValueType(pathName, exS.getExpressoEnv().getModels(), ModelTypes.Value.forType(modelType));
+				columnIndex = exS.getExpressoEnv().getModels().getValue("columnIndex", ModelTypes.Value.INT);
+
 				columnType = TypeTokens.get().keyFor(CategoryRenderStrategy.class).<CategoryRenderStrategy<BetterList<T>, ?>> parameterized(//
-					TypeTokens.get().keyFor(BetterList.class).parameterized(type), TypeTokens.get().WILDCARD);
+					TypeTokens.get().keyFor(BetterList.class).parameterized(modelType), TypeTokens.get().WILDCARD);
 				columnsAttr = exS.getAttribute("columns", ModelTypes.Collection.forType(columnType), null);
-				session.put("model-type", type);
+				session.put("model-type", modelType);
 				for (StyleQIS columnEl : session.forChildren("column"))
 					columns.add(columnEl.interpret(QuickBase.Column.class));
 			}
@@ -129,7 +144,23 @@ public class QuickX implements QonfigInterpretation {
 							ObservableCollection.build(columnType).build()).collect());
 					}
 					for (QuickBase.Column<BetterList<T>, ?> column : columns)
-						t.withColumn(column.createColumn(builder.getModels()));
+						t.withColumn(column.createColumn(builder, () -> {
+							ModelSetInstance columnModels = builder.getModels().copy().build();
+							SettableValue<BetterList<T>> modelValueI = SettableValue.build(modelType).build();
+							DynamicModelValue.satisfyDynamicValue(pathName, ModelTypes.Value.forType(modelType), columnModels,
+								modelValueI);
+							DynamicModelValue.satisfyDynamicValue("rowIndex", ModelTypes.Value.INT, columnModels,
+								SettableValue.build(int.class).withValue(-1).build());
+							DynamicModelValue.satisfyDynamicValue("columnIndex", ModelTypes.Value.INT, columnModels,
+								SettableValue.build(int.class).withValue(-1).build());
+							return columnModels;
+						}, (columnModels, modelValueV) -> {
+							pathValue.get(columnModels).set(modelValueV, null);
+						}, (columnModels, cell) -> {
+							pathValue.get(columnModels).set(cell.getModelValue(), null);
+							columnIndex.get(columnModels).set(cell.getColumnIndex(), null);
+						}, pathValue// builder, builder.getModels()));
+							));
 				});
 			}
 		});
