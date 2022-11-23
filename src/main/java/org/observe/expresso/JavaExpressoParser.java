@@ -904,7 +904,9 @@ public class JavaExpressoParser implements ExpressoParser {
 					str.append('\\');
 					break;
 				case '`':
-					str.append('`');
+				case '\'':
+				case '"':
+					str.append(ch);
 					break;
 				case 'u':
 					unicodeLen = 0;
@@ -915,6 +917,8 @@ public class JavaExpressoParser implements ExpressoParser {
 				case 'f':
 					str.append('\f');
 					break;
+				default:
+					throw new IllegalStateException("Unrecognized escaped character: \\" + ch);
 				}
 			} else if (ch == '\\') {
 				if (str == null)

@@ -62,6 +62,11 @@ public class ExpressoSessionImplV0_1 implements SpecialSessionImplementation<Exp
 		public Object reverse(Object currentSource, Object other, Object value) {
 			throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
 		}
+
+		@Override
+		public String toString() {
+			return "||";
+		}
 	};
 
 	private QonfigToolkit theToolkit;

@@ -25,6 +25,8 @@ import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import javax.swing.JFrame;
 
@@ -119,6 +121,46 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		public ModelInstanceType<M, MV> getType() {
 			return theType;
 		}
+	}
+
+	/**
+	 * Equivalent of a {@link ValueCreator} for a &lt;validate> element
+	 * 
+	 * @param <V> The type to validate
+	 */
+	public interface ValidationProducer<V> {
+		/** @return A Validation to create the actual validator */
+		Validation<V> createValidator();
+	}
+
+	/**
+	 * Equivalent of a {@link ValueContainer} for a &lt;validate> element
+	 * 
+	 * @param <V> The type to validate
+	 */
+	public interface Validation<V> {
+		/**
+		 * @param models The model instance for the test to use
+		 * @return The actual test
+		 */
+		Function<V, String> getTest(ModelSetInstance models);
+
+		/**
+		 * Equivalent of {@link ValueContainer#forModelCopy(Object, ModelSetInstance, ModelSetInstance)}
+		 *
+		 * @param validator The validator from the source models
+		 * @param sourceModels The source models
+		 * @param newModels The new models
+		 * @return The validator for the new models
+		 */
+		Function<V, String> forModelCopy(Function<V, String> validator, ModelSetInstance sourceModels, ModelSetInstance newModels);
+
+		/**
+		 * Equivalent of {@link ValueContainer#getCores()}
+		 * 
+		 * @return The value container cores that are the fundamental sources of value for the test
+		 */
+		BetterList<ValueContainer<?, ?>> getCores();
 	}
 
 	/** The name of the model value to store the {@link ObservableCollection} in the model */
@@ -442,7 +484,18 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 					}
 				}
 				boolean[] closingWithoutSave = new boolean[1];
-				AppEnvironment app = null; // TODO
+				AppEnvironment storedApp = session.get(ExpressoBaseV0_1.APP_ENVIRONMENT_KEY, AppEnvironment.class);
+				AppEnvironment app = storedApp != null ? storedApp : new AppEnvironment() {
+					@Override
+					public ValueContainer<SettableValue<?>, ? extends ObservableValue<String>> getTitle() {
+						return ValueContainer.literal(TypeTokens.get().STRING, "Unspecified Application", "Unspecified Application");
+					}
+
+					@Override
+					public ValueContainer<SettableValue<?>, ? extends ObservableValue<Image>> getIcon() {
+						return ValueContainer.literal(TypeTokens.get().of(Image.class), null, "No Image");
+					}
+				};
 				if (loaded)
 					build2(config, configFile, backups, closingWithoutSave);
 				else if (backups != null && !backups.getBackups().isEmpty()) {
@@ -575,8 +628,8 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			opts -> opts.withMaxResolution(TimeUtils.DateElementType.Second).withEvaluationType(TimeUtils.RelativeInstantEvaluation.Past));
 		JFrame[] frame = new JFrame[1];
 		boolean[] backedUp = new boolean[1];
-		ObservableValue<String> title = app.getTitle().get(msi);
-		ObservableValue<Image> icon = app.getIcon().get(msi);
+		ObservableValue<String> title = app.getTitle() == null ? ObservableValue.of("Unnamed Application") : app.getTitle().get(msi);
+		ObservableValue<Image> icon = app.getIcon() == null ? ObservableValue.of(Image.class, null) : app.getIcon().get(msi);
 		frame[0] = WindowPopulation.populateWindow(null, null, false, false)//
 			.withTitle((app == null || title.get() == null) ? "Backup" : title.get() + " Backup")//
 			.withIcon(app == null ? ObservableValue.of(Image.class, null) : icon)//
@@ -784,13 +837,19 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 
 	private void configureFormats(QonfigInterpreterCore.Builder interpreter) {
 		interpreter.delegateToType("format", "type", ValueCreator.class);
+		interpreter.delegateToType("validate", "type", ValidationProducer.class);
+		interpreter.modifyWith("format",
+			(Class<ValueCreator<SettableValue<?>, SettableValue<Format<Object>>>>) (Class<?>) ValueCreator.class,
+			this::configureFormatValidation);
 		interpreter.createWith("file-source", ValueCreator.class, session -> createFileSource(wrap(session)));
 		interpreter.createWith("text", ValueCreator.class, session -> {
+			session.put(ExpressoBaseV0_1.VALUE_TYPE_KEY, TypeTokens.get().STRING);
 			return ValueCreator.constant(ValueContainer.literal(
 				ModelTypes.Value.forType(TypeTokens.get().keyFor(Format.class).<Format<String>> parameterized(String.class)),
 				SpinnerFormat.NUMERICAL_TEXT, "text"));
 		});
 		interpreter.createWith("int-format", ValueCreator.class, session -> {
+			session.put(ExpressoBaseV0_1.VALUE_TYPE_KEY, TypeTokens.get().INT);
 			SpinnerFormat.IntFormat format = SpinnerFormat.INT;
 			String sep = session.getAttributeText("grouping-separator");
 			if (sep != null) {
@@ -804,6 +863,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 				"int"));
 		});
 		interpreter.createWith("long-format", ValueCreator.class, session -> {
+			session.put(ExpressoBaseV0_1.VALUE_TYPE_KEY, TypeTokens.get().LONG);
 			SpinnerFormat.LongFormat format = SpinnerFormat.LONG;
 			String sep = session.getAttributeText("grouping-separator");
 			if (sep != null) {
@@ -819,10 +879,12 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		interpreter.createWith("instant", ValueCreator.class, session -> createInstantFormat(wrap(session)));
 		interpreter.createWith("file", ValueCreator.class, session -> createFileFormat(wrap(session)));
 		interpreter.createWith("regex-format", ValueCreator.class, session -> {
+			session.put(ExpressoBaseV0_1.VALUE_TYPE_KEY, TypeTokens.get().of(Pattern.class));
 			return ValueCreator.literal(TypeTokens.get().keyFor(Format.class).<Format<Pattern>> parameterized(Pattern.class),
 				Format.PATTERN, "regex-format");
 		});
 		interpreter.createWith("regex-format-string", ValueCreator.class, session -> {
+			session.put(ExpressoBaseV0_1.VALUE_TYPE_KEY, TypeTokens.get().STRING);
 			return ValueCreator.literal(TypeTokens.get().keyFor(Format.class).<Format<String>> parameterized(String.class), //
 				Format.validate(Format.TEXT, str -> {
 					if (str == null || str.isEmpty())
@@ -835,10 +897,159 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 					}
 				}), "regex-format-string");
 		});
+		interpreter.createWith("regex-validation", ValidationProducer.class, session -> {
+			return () -> {
+				ValueContainer<SettableValue<?>, SettableValue<Pattern>> patternC;
+				try {
+					patternC = session.as(ExpressoQIS.class).getAttribute("pattern", ModelTypes.Value.forType(Pattern.class), null);
+				} catch (QonfigInterpretationException e) {
+					throw new IllegalStateException("Could not obtain pattern", e);
+				}
+				class PatternValidator implements Function<Object, String> {
+					final SettableValue<Pattern> patternV;
+
+					PatternValidator(SettableValue<Pattern> patternV) {
+						this.patternV = patternV;
+					}
+
+					@Override
+					public String apply(Object v) {
+						if (v == null)
+							return null;
+						Pattern pattern = patternV.get();
+						if (pattern == null)
+							return null;
+						else if (pattern.matcher(v.toString()).matches())
+							return null;
+						else
+							return "Value must match " + pattern.pattern();
+					}
+				}
+				return new Validation<Object>() {
+					@Override
+					public Function<Object, String> getTest(ModelSetInstance models) {
+						return new PatternValidator(patternC.get(models));
+					}
+
+					@Override
+					public Function<Object, String> forModelCopy(Function<Object, String> validator, ModelSetInstance sourceModels,
+						ModelSetInstance newModels) {
+						SettableValue<Pattern> oldPattern = ((PatternValidator) validator).patternV;
+						SettableValue<Pattern> newPattern = patternC.forModelCopy(oldPattern, sourceModels, newModels);
+						if (newPattern == oldPattern)
+							return validator;
+						return new PatternValidator(newPattern);
+					}
+
+					@Override
+					public BetterList<ValueContainer<?, ?>> getCores() {
+						return patternC.getCores();
+					}
+				};
+			};
+		});
+		interpreter.createWith("filter-validation", ValidationProducer.class,
+			session -> createFilterValidation(session.as(ExpressoQIS.class)));
+	}
+
+	private static <T> SettableValue<Format<T>> createWrappedValidatedFormat(SettableValue<Format<T>> format,
+		List<Function<T, String>> validation) {
+		Function<T, String> validationFn = null;
+		for (Function<T, String> val : validation) {
+			if (validationFn == null)
+				validationFn = val;
+			else {
+				Function<T, String> old = validationFn;
+				validationFn = v -> {
+					String err = old.apply(v);
+					if (err == null)
+						err = val.apply(v);
+					return err;
+				};
+			}
+		}
+		final Function<T, String> finalVal = validationFn;
+		return SettableValue.asSettable(format.map(format.getType(), f -> f == null ? null : Format.validate(f, finalVal)), //
+			__ -> "Not settable");
+	}
+
+	private <T> ValueCreator<SettableValue<?>, SettableValue<Format<T>>> configureFormatValidation(
+		ValueCreator<SettableValue<?>, SettableValue<Format<T>>> formatCreator, CoreSession session, Object prepared)
+			throws QonfigInterpretationException {
+		List<ValidationProducer<T>> validationCreators = session.interpretChildren("validate", ValidationProducer.class);
+		if (validationCreators.isEmpty())
+			return formatCreator;
+		return ValueCreator.name(formatCreator::toString, () -> {
+			ValueContainer<SettableValue<?>, SettableValue<Format<T>>> formatContainer = formatCreator.createValue();
+			List<Validation<T>> validationContainers;
+			validationContainers = validationCreators.stream().map(creator -> creator.createValidator()).collect(Collectors.toList());
+			class ValidatedFormat extends SettableValue.WrappingSettableValue<Format<T>> {
+				private final SettableValue<Format<T>> theFormat;
+				private final List<Function<T, String>> theValidation;
+
+				public ValidatedFormat(SettableValue<Format<T>> format, List<Function<T, String>> validation) {
+					super(createWrappedValidatedFormat(format, validation));
+					theFormat = format;
+					theValidation = validation;
+				}
+
+				ValidatedFormat forModelCopy(ModelSetInstance sourceModels, ModelSetInstance newModels) {
+					SettableValue<Format<T>> newFormat = formatContainer.forModelCopy(theFormat, sourceModels, newModels);
+					boolean different = newFormat != theFormat;
+					List<Function<T, String>> newVal = new ArrayList<>(theValidation.size());
+					for (int v = 0; v < theValidation.size(); v++) {
+						Function<T, String> newValI = validationContainers.get(v).forModelCopy(theValidation.get(v), sourceModels,
+							newModels);
+						different = newValI != theValidation.get(v);
+						newVal.add(newValI);
+					}
+					if (!different)
+						return this;
+					return new ValidatedFormat(newFormat, newVal);
+				}
+			}
+			class ValidatedFormatContainer implements ValueContainer<SettableValue<?>, SettableValue<Format<T>>> {
+				private final ValueContainer<SettableValue<?>, SettableValue<Format<T>>> theFormatContainer;
+				private final List<Validation<T>> theValidationContainers;
+
+				ValidatedFormatContainer(ValueContainer<SettableValue<?>, SettableValue<Format<T>>> format,
+					List<Validation<T>> validation) {
+					theFormatContainer = format;
+					theValidationContainers = validation;
+				}
+
+				@Override
+				public ModelInstanceType<SettableValue<?>, SettableValue<Format<T>>> getType() {
+					return formatContainer.getType();
+				}
+
+				@Override
+				public SettableValue<Format<T>> get(ModelSetInstance models) {
+					return new ValidatedFormat(//
+						theFormatContainer.get(models), //
+						theValidationContainers.stream().map(val -> val.getTest(models)).collect(Collectors.toList()));
+				}
+
+				@Override
+				public SettableValue<Format<T>> forModelCopy(SettableValue<Format<T>> formatV, ModelSetInstance sourceModels,
+					ModelSetInstance newModels) {
+					return ((ValidatedFormat) formatV).forModelCopy(sourceModels, newModels);
+				}
+
+				@Override
+				public BetterList<ValueContainer<?, ?>> getCores() {
+					return BetterList.of(Stream.concat(//
+						formatContainer.getCores().stream(), //
+						validationContainers.stream().flatMap(vc -> vc.getCores().stream())));
+				}
+			}
+			return new ValidatedFormatContainer(formatContainer, validationContainers);
+		});
 	}
 
 	private ValueCreator<SettableValue<?>, SettableValue<BetterFile.FileDataSource>> createFileSource(ExpressoQIS session)
 		throws QonfigInterpretationException {
+		session.put(ExpressoBaseV0_1.VALUE_TYPE_KEY, TypeTokens.get().of(BetterFile.FileDataSource.class));
 		Supplier<ValueContainer<SettableValue<?>, SettableValue<FileDataSource>>> source;
 		switch (session.getAttributeText("type")) {
 		case "native":
@@ -925,6 +1136,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 
 	private ValueCreator<SettableValue<?>, SettableValue<Format<Double>>> createDoubleFormat(ExpressoQIS session)
 		throws QonfigInterpretationException {
+		session.put(ExpressoBaseV0_1.VALUE_TYPE_KEY, TypeTokens.get().DOUBLE);
 		int sigDigs = Integer.parseInt(session.getAttributeText("sig-digs"));
 		Format.SuperDoubleFormatBuilder builder = Format.doubleFormat(sigDigs);
 		String unit = session.getAttributeText("unit");
@@ -966,6 +1178,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 
 	private ValueCreator<SettableValue<?>, SettableValue<Format<Instant>>> createInstantFormat(ExpressoQIS session)
 		throws QonfigInterpretationException {
+		session.put(ExpressoBaseV0_1.VALUE_TYPE_KEY, TypeTokens.get().of(Instant.class));
 		String dayFormat = session.getAttributeText("day-format");
 		TimeEvaluationOptions options = TimeUtils.DEFAULT_OPTIONS;
 		String tzs = session.getAttributeText("time-zone");
@@ -1088,6 +1301,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 
 	private ValueCreator<SettableValue<?>, SettableValue<Format<BetterFile>>> createFileFormat(ExpressoQIS session)
 		throws QonfigInterpretationException {
+		session.put(ExpressoBaseV0_1.VALUE_TYPE_KEY, TypeTokens.get().of(BetterFile.class));
 		ObservableExpression fileSourceEx = session.getAttributeExpression("file-source");
 		ObservableExpression workingDirEx = session.getAttributeExpression("working-dir");
 		boolean allowEmpty = session.getAttribute("allow-empty", boolean.class);
@@ -1157,6 +1371,73 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 				@Override
 				public BetterList<ValueContainer<?, ?>> getCores() {
 					return BetterList.of(this);
+				}
+			};
+		};
+	}
+
+	private <V> ValidationProducer<V> createFilterValidation(ExpressoQIS session) throws QonfigInterpretationException {
+		String filterValue = session.getAttributeText("filter-value-name");
+		return () -> {
+			ModelInstanceType<SettableValue<?>, SettableValue<V>> type;
+			try {
+				type = ModelTypes.Value.forType(ExpressoBaseV0_1.getType(session, ExpressoBaseV0_1.VALUE_TYPE_KEY));
+			} catch (QonfigInterpretationException e) {
+				throw new IllegalStateException("Could not determine filter type", e);
+			}
+			DynamicModelValue.satisfyDynamicValueType(filterValue, session.getExpressoEnv().getModels(), type);
+			ValueContainer<SettableValue<?>, SettableValue<String>> filter;
+			try {
+				filter = session.getAttribute("test", ModelTypes.Value.STRING, null);
+			} catch (QonfigInterpretationException e) {
+				ValueContainer<SettableValue<?>, SettableValue<Boolean>> bFilter;
+				try {
+					bFilter = session.getAttribute("test", ModelTypes.Value.BOOLEAN, null);
+					filter = bFilter.map(ModelTypes.Value.STRING, bv -> SettableValue.asSettable(//
+						bv.map(String.class, b -> b ? null : "Filter does not pass"), __ -> "Not Settable"));
+				} catch (QonfigInterpretationException e2) {
+					throw new IllegalStateException("Could not evaluate filter test", e);
+				}
+			}
+			class FilterValidator implements Function<V, String> {
+				final SettableValue<V> value;
+				final SettableValue<String> testValue;
+
+				public FilterValidator(SettableValue<V> value, SettableValue<String> testValue) {
+					this.value = value;
+					this.testValue = testValue;
+				}
+
+				@Override
+				public String apply(V t) {
+					value.set(t, null);
+					return testValue.get();
+				}
+			}
+			ValueContainer<SettableValue<?>, SettableValue<String>> fFilter = filter;
+			return new Validation<V>() {
+				@Override
+				public Function<V, String> getTest(ModelSetInstance models) {
+					models = session.wrapLocal(models);
+					SettableValue<V> value = SettableValue.build((TypeToken<V>) type.getType(0)).build();
+					DynamicModelValue.satisfyDynamicValue(filterValue, type, models, value);
+					SettableValue<String> testValue = fFilter.get(models);
+					return new FilterValidator(value, testValue);
+				}
+
+				@Override
+				public Function<V, String> forModelCopy(Function<V, String> validator, ModelSetInstance sourceModels,
+					ModelSetInstance newModels) {
+					SettableValue<String> oldTest = ((FilterValidator) validator).testValue;
+					SettableValue<String> newTest = fFilter.forModelCopy(oldTest, sourceModels, newModels);
+					if (oldTest == newTest)
+						return validator;
+					return new FilterValidator(((FilterValidator) validator).value, newTest);
+				}
+
+				@Override
+				public BetterList<ValueContainer<?, ?>> getCores() {
+					return fFilter.getCores();
 				}
 			};
 		};

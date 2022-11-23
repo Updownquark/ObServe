@@ -90,6 +90,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 	 */
 	public static final String KEY_TYPE_KEY = "key-type";
 
+	/** Session key where the {@link AppEnvironment} should be stored if available */
 	public static final String APP_ENVIRONMENT_KEY = "ExpressoAppEnvironment";
 
 	/** Represents an application so that various models in this class can provide intelligent interaction with the user */

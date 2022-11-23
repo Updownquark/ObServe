@@ -1044,14 +1044,16 @@ public class BinaryOperatorSet {
 		ClassMap<ClassMap<ClassMap<BinaryOp<?, ?, ?>>>> ops = theOperators.get(operator);
 		if (ops == null || ops.isEmpty())
 			return null;
+		// Use the most specific type
+		BinaryOp<S, T, ?> ret = null;
 		for (ClassMap<ClassMap<BinaryOp<?, ?, ?>>> targetOps : ops.getAll(targetType, null)) {
 			for (ClassMap<BinaryOp<?, ?, ?>> ops2 : targetOps.getAll(primaryType, TypeMatch.SUPER_TYPE)) {
-				BinaryOp<?, ?, ?> op = ops2.get(secondaryType, TypeMatch.SUPER_TYPE);
+				BinaryOp<?, ?, ?> op = ops2.getAll(secondaryType, TypeMatch.SUPER_TYPE).peekLast();
 				if (op != null)
-					return (BinaryOp<S, T, ?>) op;
+					ret = (BinaryOp<S, T, ?>) op;
 			}
 		}
-		return null;
+		return ret;
 	}
 
 	/** @return A builder pre-configured for all of this operator set's operations */

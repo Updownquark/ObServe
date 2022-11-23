@@ -110,7 +110,7 @@ public class QuickBase implements QonfigInterpretation {
 	public static final String NAME = "Quick-Base";
 	public static final Version VERSION = new Version(0, 1, 0);
 
-	private static final String MODEL_TYPE_KEY = "model-value-key";
+	static final String MODEL_TYPE_KEY = "model-value-key";
 
 	public interface Column<R, C> {
 		CategoryRenderStrategy<R, C> createColumn(QuickComponent.Builder parent, Supplier<ModelSetInstance> modelCreator,
