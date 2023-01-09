@@ -250,11 +250,17 @@ public class AppPopulation {
 					else
 						configDir = new File(configName).getAbsoluteFile();
 				}
-				if (!configDir.exists() && !configDir.mkdirs())
-					throw new IllegalStateException("Could not create config directory " + configDir.getPath());
-				else if (!configDir.isDirectory())
-					throw new IllegalStateException("Not a directory: " + configDir.getPath());
 				File configFile = new File(configDir, configName + ".xml");
+				if (!configDir.exists()) {
+					File oldBak = new File(configDir.getParentFile(), configDir.getName() + ".BAK");
+					File oldConfig = new File(configDir.getParentFile(), configName + ".xml");
+					if (oldBak.exists() && oldConfig.exists()) {
+						oldBak.renameTo(configDir);
+						oldConfig.renameTo(configFile);
+					} else if (!configDir.mkdirs())
+						throw new IllegalStateException("Could not create config directory " + configDir.getPath());
+				} else if (!configDir.isDirectory())
+					throw new IllegalStateException("Not a directory: " + configDir.getPath());
 				if (!configFile.exists()) {
 					File oldConfigFile = new File(configDir.getParentFile(), configName + ".config");
 					if (oldConfigFile.exists())
