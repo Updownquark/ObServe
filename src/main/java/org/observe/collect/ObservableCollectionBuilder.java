@@ -375,7 +375,7 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 
 		/** @return The equivalence for the collection */
 		protected Equivalence<? super E> getEquivalence() {
-			return theEquivalence;
+			return theEquivalence != null ? theEquivalence : Equivalence.DEFAULT;
 		}
 
 		/** @return The element source for the collection */

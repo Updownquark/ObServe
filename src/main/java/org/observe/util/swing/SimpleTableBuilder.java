@@ -492,7 +492,7 @@ implements TableBuilder<R, P> {
 
 	@Override
 	public P withMultiAction(String actionName, Consumer<? super List<? extends R>> action, Consumer<DataAction<R, ?>> actionMod) {
-		SimpleDataAction<R, ?> ta = new SimpleDataAction<>(actionName, this, action, this::getSelection, false);
+		SimpleDataAction<R, ?> ta = new SimpleDataAction<>(actionName, this, action, this::getSelection, true);
 		actionMod.accept(ta);
 		theActions.add(ta);
 		return (P) this;
@@ -1109,6 +1109,21 @@ implements TableBuilder<R, P> {
 							size -= squishMod;
 						}
 					}
+					// Now everything is equally squished. Distribute any extra space equally.
+					for (boolean changed = true; size > 0 && changed; changed = false) {
+						for (int c = 0; c < theColumnWidths.size(); c++) {
+							int[] cw = theColumnWidths.get(c);
+							int extra = (int) Math.ceil(size * 1.0 / (theColumnWidths.size() - c));
+							if (extra <= cw[2] - cw[3])
+								cw[3] += extra;
+							else {
+								extra = cw[2] - cw[3];
+								cw[3] = cw[2];
+							}
+							size -= extra;
+							changed |= extra > 0;
+						}
+					}
 				} else {
 					for (int c = 0; c < squish.size() && size < 0; c++) {
 						int ci = squish.size() - c - 1;
@@ -1133,6 +1148,21 @@ implements TableBuilder<R, P> {
 								squish.set(i, squish.get(i) - squishMod);
 							cw[3] -= squishMod;
 							size += squishMod;
+						}
+					}
+					// Now everything is equally squished. Compress the rest equally.
+					for (boolean changed = true; size < 0 && changed; changed = false) {
+						for (int c = 0; c < theColumnWidths.size(); c++) {
+							int[] cw = theColumnWidths.get(c);
+							int diff = -(int) Math.ceil(size * 1.0 / (theColumnWidths.size() - c));
+							if (diff <= cw[3] - cw[0])
+								cw[3] -= diff;
+							else {
+								diff = cw[3] - cw[0];
+								cw[3] = cw[0];
+							}
+							size += diff;
+							changed |= diff > 0;
 						}
 					}
 				}
@@ -1246,10 +1276,12 @@ implements TableBuilder<R, P> {
 			for (Object action : theActions) {
 				if (!(action instanceof SimpleDataAction))
 					hasButtons = true;
-				else if (((SimpleDataAction<R, ?>) action).isPopup())
-					hasPopups = true;
-				if (((SimpleDataAction<R, ?>) action).isButton())
-					hasButtons = true;
+				else {
+					if (((SimpleDataAction<R, ?>) action).isPopup())
+						hasPopups = true;
+					if (((SimpleDataAction<R, ?>) action).isButton())
+						hasButtons = true;
+				}
 			}
 			ListSelectionListener selListener = e -> {
 				List<R> selection = selectionGetter.get();
@@ -1388,7 +1420,7 @@ implements TableBuilder<R, P> {
 		return comp;
 	}
 
-	private void getColumnWidths(CategoryRenderStrategy<R, ?> column, int columnIndex, int[] widths, CollectionChangeEvent<R> rowEvent) {
+	void getColumnWidths(CategoryRenderStrategy<R, ?> column, int columnIndex, int[] widths, CollectionChangeEvent<R> rowEvent) {
 		if (column.isUsingRenderingForSize()) {
 			ObservableCellRenderer<R, ?> renderer = (ObservableCellRenderer<R, ?>) column.getRenderer();
 			if (renderer == null) {

@@ -917,35 +917,45 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 
 		@Override
 		public CollectionElement<V> getElement(ElementId id) {
+			return new ValueElement(theValues.getElement(strip(id).theValuesId));
+		}
+
+		ValueElementId strip(ElementId id) {
+			if (id == null)
+				return null;
+			else if (!(id instanceof DefaultActiveMultiMap.ValueCollection.ValueElementId))
+				throw new NoSuchElementException();
 			ValueElementId vei = (ValueElementId) id;
 			if (vei.getVC() != this)
 				throw new NoSuchElementException();
-			return new ValueElement(theValues.getElement(vei.theValuesId));
+			return vei;
 		}
 
 		@Override
 		public CollectionElement<V> getAdjacentElement(ElementId elementId, boolean next) {
-			return elementFor(theValues.getAdjacentElement(((ValueElementId) elementId).theValuesId, next));
+			return elementFor(theValues.getAdjacentElement(strip(elementId).theValuesId, next));
 		}
 
 		@Override
 		public MutableCollectionElement<V> mutableElement(ElementId id) {
-			return mutableElementFor(theValues.mutableElement(((ValueElementId) id).theValuesId));
+			return mutableElementFor(theValues.mutableElement(strip(id).theValuesId));
 		}
 
 		@Override
 		public BetterList<CollectionElement<V>> getElementsBySource(ElementId sourceEl, BetterCollection<?> sourceCollection) {
 			if (sourceCollection == this)
 				return BetterList.of(getElement(sourceEl));
-			return BetterList.of(getValueManager().getElementsBySource(sourceEl, sourceCollection).stream().map(el -> elementFor(el))
-				.filter(el -> el != null));
+			return BetterList
+				.of(getValueManager().getElementsBySource(strip(sourceEl).theValuesId, sourceCollection).stream().map(el -> elementFor(el))
+					.filter(el -> el != null));
 		}
 
 		@Override
 		public BetterList<ElementId> getSourceElements(ElementId localElement, BetterCollection<?> sourceCollection) {
 			if (sourceCollection == this || sourceCollection == theValues)
 				return BetterList.of(localElement);
-			return getValueManager().getSourceElements(theValues.getElement(localElement).get().theValueElement, sourceCollection);
+			return getValueManager().getSourceElements(theValues.getElement(strip(localElement).theValuesId).get().theValueElement,
+				sourceCollection);
 		}
 
 		@Override
@@ -961,10 +971,17 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 			return found == null ? null : CollectionElement.getElementId(elementFor(found));
 		}
 
+		ElementId getValueId(ElementId id) {
+			ValueElementId valueId = strip(id);
+			return valueId == null ? null : valueId.theValuesId;
+		}
+
 		@Override
 		public String canAdd(V value, ElementId after, ElementId before) {
-			ObservableCollectionActiveManagers.DerivedCollectionElement<V> afterEl = after == null ? null : theValues.getElement(after).get().theValueElement;
-			ObservableCollectionActiveManagers.DerivedCollectionElement<V> beforeEl = before == null ? null : theValues.getElement(before).get().theValueElement;
+			ObservableCollectionActiveManagers.DerivedCollectionElement<V> afterEl = after == null ? null
+				: theValues.getElement(getValueId(after)).get().theValueElement;
+			ObservableCollectionActiveManagers.DerivedCollectionElement<V> beforeEl = before == null ? null
+				: theValues.getElement(getValueId(before)).get().theValueElement;
 			try (Transaction t = getAddKey().lock()) {
 				getAddKey().accept(theEntry.getKey());
 				return getValueManager().canAdd(value, afterEl, beforeEl);
@@ -974,8 +991,10 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 		@Override
 		public CollectionElement<V> addElement(V value, ElementId after, ElementId before, boolean first)
 			throws UnsupportedOperationException, IllegalArgumentException {
-			ObservableCollectionActiveManagers.DerivedCollectionElement<V> afterEl = after == null ? null : theValues.getElement(after).get().theValueElement;
-			ObservableCollectionActiveManagers.DerivedCollectionElement<V> beforeEl = before == null ? null : theValues.getElement(before).get().theValueElement;
+			ObservableCollectionActiveManagers.DerivedCollectionElement<V> afterEl = after == null ? null
+				: theValues.getElement(getValueId(after)).get().theValueElement;
+			ObservableCollectionActiveManagers.DerivedCollectionElement<V> beforeEl = before == null ? null
+				: theValues.getElement(getValueId(before)).get().theValueElement;
 			try (Transaction t = Lockable.lockAll(//
 				Lockable.lockable(DefaultActiveMultiMap.this, true, null), getAddKey())) {
 				getAddKey().accept(theEntry.getKey());
@@ -985,9 +1004,12 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 
 		@Override
 		public String canMove(ElementId valueEl, ElementId after, ElementId before) {
-			ObservableCollectionActiveManagers.DerivedCollectionElement<V> valueEl2 = theValues.getElement(valueEl).get().theValueElement;
-			ObservableCollectionActiveManagers.DerivedCollectionElement<V> afterEl = after == null ? null : theValues.getElement(after).get().theValueElement;
-			ObservableCollectionActiveManagers.DerivedCollectionElement<V> beforeEl = before == null ? null : theValues.getElement(before).get().theValueElement;
+			ObservableCollectionActiveManagers.DerivedCollectionElement<V> valueEl2 = theValues.getElement(getValueId(valueEl))
+				.get().theValueElement;
+			ObservableCollectionActiveManagers.DerivedCollectionElement<V> afterEl = after == null ? null
+				: theValues.getElement(getValueId(after)).get().theValueElement;
+			ObservableCollectionActiveManagers.DerivedCollectionElement<V> beforeEl = before == null ? null
+				: theValues.getElement(getValueId(before)).get().theValueElement;
 			try (Transaction t = getAddKey().lock()) {
 				getAddKey().accept(theEntry.getKey());
 				return getValueManager().canMove(valueEl2, afterEl, beforeEl);
@@ -997,9 +1019,12 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 		@Override
 		public CollectionElement<V> move(ElementId valueEl, ElementId after, ElementId before, boolean first, Runnable afterRemove)
 			throws UnsupportedOperationException, IllegalArgumentException {
-			ObservableCollectionActiveManagers.DerivedCollectionElement<V> valueEl2 = theValues.getElement(valueEl).get().theValueElement;
-			ObservableCollectionActiveManagers.DerivedCollectionElement<V> afterEl = after == null ? null : theValues.getElement(after).get().theValueElement;
-			ObservableCollectionActiveManagers.DerivedCollectionElement<V> beforeEl = before == null ? null : theValues.getElement(before).get().theValueElement;
+			ObservableCollectionActiveManagers.DerivedCollectionElement<V> valueEl2 = theValues.getElement(getValueId(valueEl))
+				.get().theValueElement;
+			ObservableCollectionActiveManagers.DerivedCollectionElement<V> afterEl = after == null ? null
+				: theValues.getElement(getValueId(after)).get().theValueElement;
+			ObservableCollectionActiveManagers.DerivedCollectionElement<V> beforeEl = before == null ? null
+				: theValues.getElement(getValueId(before)).get().theValueElement;
 			try (Transaction t = Lockable.lockAll(//
 				Lockable.lockable(DefaultActiveMultiMap.this, true, null), getAddKey())) {
 				getAddKey().accept(theEntry.getKey());
