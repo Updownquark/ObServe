@@ -871,14 +871,16 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V>, Eventabl
 		public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends MultiEntryValueHandle<K, V>>> observer) {
 			return getMap().onChange(mapEvt -> {
 				MultiEntryValueHandle<K, V> entry;
-				if (mapEvt.getKeyElement().isPresent() && mapEvt.getElementId().isPresent())
+				if (mapEvt.getKeyElement().isPresent() && mapEvt.getElementId() != null && mapEvt.getElementId().isPresent())
 					entry = getMap().getEntryById(mapEvt.getKeyElement(), mapEvt.getElementId());
+				else if (mapEvt.getElementId() == null) // key update
+					return;
 				else
 					entry = new SyntheticEntry(mapEvt.getKeyElement(), mapEvt.getKey(), mapEvt.getElementId(), mapEvt.getOldValue());
 				ElementId id = entryFor(entry).getElementId();
 
 				ObservableCollectionEvent<MultiEntryValueHandle<K, V>> collEvt = new ObservableCollectionEvent<>(//
-					id, getElementsBefore(id), mapEvt.getType(), true, //
+					id, getElementsBefore(id), mapEvt.getType(), mapEvt.isMove(), //
 					mapEvt.getType() == CollectionChangeType.add ? null : entry, entry, mapEvt);
 				try (Transaction evtT = collEvt.use()) {
 					observer.accept(collEvt);
