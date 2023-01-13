@@ -1352,7 +1352,7 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V>, Eventabl
 				Consumer<ObservableMultiMapEvent<? extends K, ? extends V>> sourceChange = multiEvent -> {
 					boolean[] added = new boolean[1];
 					MapEntryHandle<ElementId, MapEntry> entry = entries.getOrPutEntry(multiEvent.getKeyElement(),
-						ki -> new MapEntry(getSource().watchById(ki)), null, null, false, () -> added[0] = true);
+						ki -> new MapEntry(getSource().watchById(ki)), null, null, false, null, () -> added[0] = true);
 					ObservableMapEvent<K, X> mapEvent;
 					if (added[0])
 						mapEvent = new ObservableMapEvent<>(multiEvent.getKeyElement(), multiEvent.getKeyIndex(), CollectionChangeType.add,

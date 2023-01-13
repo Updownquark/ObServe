@@ -151,7 +151,7 @@ public class DefaultPassiveMultiMap<S, K0, V0, K, V> extends AbstractDerivedObse
 
 	@Override
 	public MultiEntryHandle<K, V> getOrPutEntry(K key, Function<? super K, ? extends Iterable<? extends V>> value, ElementId afterKey,
-		ElementId beforeKey, boolean first, Runnable added) {
+		ElementId beforeKey, boolean first, Runnable preAdd, Runnable postAdd) {
 		try(Transaction t=lock(true, null)){
 			CollectionElement<K> keyEl=keySet().getElement(key, true);
 			if(keyEl!=null)
@@ -189,7 +189,7 @@ public class DefaultPassiveMultiMap<S, K0, V0, K, V> extends AbstractDerivedObse
 							};
 						}
 					};
-				}, afterKey, beforeKey, first^theKeyManager.isReversed(), added));
+				}, afterKey, beforeKey, first ^ theKeyManager.isReversed(), preAdd, postAdd));
 			else if (!reversedKey.isError())
 				return null;
 			else if(reversedKey.getRejectReason().equals(StdMsg.UNSUPPORTED_OPERATION))

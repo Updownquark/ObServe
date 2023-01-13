@@ -2760,7 +2760,8 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public boolean isEventing() {
-			return theListeners.isFiring();
+			return theListeners.isFiring()//
+				|| theFlow.isEventing();
 		}
 
 		@Override

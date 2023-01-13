@@ -350,7 +350,7 @@ public class DSTesting {
 		private boolean shouldBeSatisfied(DependencyService<String> dds, DSComponent<String> comp, BetterSet<Dependency<String, ?>> path) {
 			for (Dependency<String, ?> dep : comp.getDependencies().values()) {
 				boolean[] added = new boolean[1];
-				ElementId el = path.getOrAdd(dep, null, null, false, () -> added[0] = true).getElementId();
+				ElementId el = path.getOrAdd(dep, null, null, false, null, () -> added[0] = true).getElementId();
 				if (!added[0]) {
 					// In a cycle, but is it dynamic?
 					for (CollectionElement<Dependency<String, ?>> dep2 = path.getElement(el); dep2 != null; dep2 = path

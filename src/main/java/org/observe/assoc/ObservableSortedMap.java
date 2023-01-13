@@ -324,9 +324,9 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, BetterSo
 
 		@Override
 		public MapEntryHandle<K, V> getOrPutEntry(K key, Function<? super K, ? extends V> value, ElementId afterKey, ElementId beforeKey,
-			boolean first, Runnable added) {
-			return MapEntryHandle
-				.reverse(theWrapped.getOrPutEntry(key, value, ElementId.reverse(beforeKey), ElementId.reverse(afterKey), !first, added));
+			boolean first, Runnable preAdd, Runnable postAdd) {
+			return MapEntryHandle.reverse(
+				theWrapped.getOrPutEntry(key, value, ElementId.reverse(beforeKey), ElementId.reverse(afterKey), !first, preAdd, postAdd));
 		}
 
 		@Override

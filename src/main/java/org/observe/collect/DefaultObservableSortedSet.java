@@ -74,11 +74,12 @@ public class DefaultObservableSortedSet<E> extends DefaultObservableCollection<E
 	}
 
 	@Override
-	public CollectionElement<E> getOrAdd(E value, ElementId after, ElementId before, boolean first, Runnable added) {
+	public CollectionElement<E> getOrAdd(E value, ElementId after, ElementId before, boolean first, Runnable preAdd, Runnable postAdd) {
 		ValueHolder<Boolean> addedCheck = new ValueHolder<>(false);
-		CollectionElement<E> el = getValues().getOrAdd(value, after, before, first, () -> {
+		CollectionElement<E> el = getValues().getOrAdd(value, after, before, first, preAdd, () -> {
 			addedCheck.accept(true);
-			added.run();
+			if (postAdd != null)
+				postAdd.run();
 		});
 		if (addedCheck.get()) {
 			ObservableCollectionEvent<E> event = new ObservableCollectionEvent<>(el.getElementId(),

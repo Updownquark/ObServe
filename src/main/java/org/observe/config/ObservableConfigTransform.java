@@ -1324,8 +1324,8 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 
 		@Override
 		public MapEntryHandle<K, V> getOrPutEntry(K key, Function<? super K, ? extends V> value, ElementId after, ElementId before,
-			boolean first, Runnable added) {
-			return theWrapped.getOrPutEntry(key, value, after, before, first, added);
+			boolean first, Runnable preAdd, Runnable postAdd) {
+			return theWrapped.getOrPutEntry(key, value, after, before, first, preAdd, postAdd);
 		}
 
 		@Override
@@ -1480,8 +1480,8 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 
 		@Override
 		public MultiEntryHandle<K, V> getOrPutEntry(K key, Function<? super K, ? extends Iterable<? extends V>> value, ElementId afterKey,
-			ElementId beforeKey, boolean first, Runnable added) {
-			return theWrapped.getOrPutEntry(key, value, afterKey, beforeKey, first, added);
+			ElementId beforeKey, boolean first, Runnable preAdd, Runnable postAdd) {
+			return theWrapped.getOrPutEntry(key, value, afterKey, beforeKey, first, preAdd, postAdd);
 		}
 
 		@Override

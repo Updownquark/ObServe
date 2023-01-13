@@ -6,6 +6,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import org.observe.Equivalence;
+import org.observe.Eventable;
 import org.observe.ObservableValueEvent;
 import org.observe.Transformation;
 import org.observe.collect.ObservableCollectionDataFlowImpl.AbstractTransformedManager;
@@ -175,7 +176,7 @@ public class ObservableCollectionActiveManagers {
 	 * @param <I> An intermediate type
 	 * @param <T> The type of the derived collection that this manager can power
 	 */
-	public static interface ActiveCollectionManager<E, I, T> extends CollectionOperation<E, I, T> {
+	public static interface ActiveCollectionManager<E, I, T> extends CollectionOperation<E, I, T>, Eventable {
 		/**
 		 * @param value The value to find
 		 * @return A finder that can navigate a sorted set of elements by collection order to find an element with the given value, or null
@@ -418,6 +419,11 @@ public class ObservableCollectionActiveManagers {
 		@Override
 		public CoreId getCoreId() {
 			return theSource.getCoreId();
+		}
+
+		@Override
+		public boolean isEventing() {
+			return theSource.isEventing();
 		}
 
 		@Override
@@ -834,6 +840,11 @@ public class ObservableCollectionActiveManagers {
 		}
 
 		@Override
+		public boolean isEventing() {
+			return getParent().isEventing();
+		}
+
+		@Override
 		protected boolean areElementsWrapped() {
 			return true;
 		}
@@ -923,6 +934,11 @@ public class ObservableCollectionActiveManagers {
 		@Override
 		public Object getIdentity() {
 			return Identifiable.wrap(getParent().getIdentity(), "sorted", theCompare);
+		}
+
+		@Override
+		public boolean isEventing() {
+			return getParent().isEventing();
 		}
 
 		@Override
@@ -1274,6 +1290,11 @@ public class ObservableCollectionActiveManagers {
 		}
 
 		@Override
+		public boolean isEventing() {
+			return getParent().isEventing();
+		}
+
+		@Override
 		public Object getIdentity() {
 			return Identifiable.wrap(getParent().getIdentity(), "filter", theFilter);
 		}
@@ -1454,6 +1475,11 @@ public class ObservableCollectionActiveManagers {
 		}
 
 		@Override
+		public boolean isEventing() {
+			return getParent().isEventing();
+		}
+
+		@Override
 		public Comparable<DerivedCollectionElement<T>> getElementFinder(T value) {
 			return null;
 		}
@@ -1489,6 +1515,12 @@ public class ObservableCollectionActiveManagers {
 		@Override
 		protected ActiveCollectionManager<E, ?, I> getParent() {
 			return (ActiveCollectionManager<E, ?, I>) super.getParent();
+		}
+
+		@Override
+		public boolean isEventing() {
+			// We don't need to include the transformation engine, because that won't be affected by a modification
+			return getParent().isEventing();
 		}
 
 		@Override

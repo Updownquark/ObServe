@@ -203,7 +203,7 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 
 	@Override
 	public MultiEntryHandle<K, V> getOrPutEntry(K key, Function<? super K, ? extends Iterable<? extends V>> value, ElementId afterKey,
-		ElementId beforeKey, boolean first, Runnable added) {
+		ElementId beforeKey, boolean first, Runnable preAdd, Runnable postAdd) {
 		long stamp = theStamp;
 		MultiEntryHandle<K, V> found = getEntry(key);
 		if (found != null)
@@ -220,6 +220,8 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 			ObservableCollectionActiveManagers.DerivedCollectionElement<V> beforeEl = getValueElement(beforeKey, true);
 			isNeedingNewKey = true;
 			KeyEntry newKeyEntry = null;
+			if (preAdd != null)
+				preAdd.run();
 			getAddKey().accept(key);
 			for (V v : value.apply(key)) {
 				theValueManager.addElement(v, afterEl, beforeEl, first);
@@ -233,8 +235,8 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 				isNeedingNewKey = false;
 			}
 			getAddKey().clear();
-			if (added != null)
-				added.run();
+			if (postAdd != null)
+				postAdd.run();
 			return newKeyEntry;
 		}
 	}
@@ -440,7 +442,7 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 			// Register this key for new source elements
 			for (ElementId source : newSources) {
 				MapEntryHandle<ElementId, Set<KeyEntry>> sourceEntry = theKeysBySourceElement.getOrPutEntry(source, __ -> new HashSet<>(),
-					null, null, false, null);
+					null, null, false, null, null);
 				sourceEntry.getValue().add(this);
 				theSources.add(sourceEntry.getElementId());
 			}
@@ -1367,9 +1369,8 @@ public class DefaultActiveMultiMap<S, K, V> extends AbstractDerivedObservableMul
 		}
 
 		@Override
-		public CollectionElement<K> getOrAdd(K value, ElementId after, ElementId before, boolean first, Runnable added) {
+		public CollectionElement<K> getOrAdd(K value, ElementId after, ElementId before, boolean first, Runnable preAdd, Runnable postAdd) {
 			return getElement(value, first); // Not possible to add to the key set because the values would be empty, which is not allowed
-			// Should we throw an exception if it doesn't exist?
 		}
 
 		@Override

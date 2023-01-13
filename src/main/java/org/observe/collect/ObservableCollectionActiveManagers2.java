@@ -325,6 +325,12 @@ public class ObservableCollectionActiveManagers2 {
 		}
 
 		@Override
+		public boolean isEventing() {
+			return theParent.isEventing()//
+				|| theFilter.isEventing();
+		}
+
+		@Override
 		public boolean clear() {
 			return false;
 		}
@@ -426,7 +432,7 @@ public class ObservableCollectionActiveManagers2 {
 
 		IntersectionElement intersection(X value) {
 			MapEntryHandle<X, IntersectionElement> element = theValues.getOrPutEntry(value, v -> new IntersectionElement(), null, null,
-				false, null);
+				false, null, null);
 			element.getValue().valueEl = element.getElementId();
 			return element.getValue();
 		}
@@ -616,6 +622,11 @@ public class ObservableCollectionActiveManagers2 {
 		}
 
 		@Override
+		public boolean isEventing() {
+			return getParent().isEventing();
+		}
+
+		@Override
 		protected boolean areElementsWrapped() {
 			return true;
 		}
@@ -707,6 +718,11 @@ public class ObservableCollectionActiveManagers2 {
 		@Override
 		public Object getIdentity() {
 			return Identifiable.wrap(getParent().getIdentity(), "filterMod", theFilter);
+		}
+
+		@Override
+		public boolean isEventing() {
+			return getParent().isEventing();
 		}
 
 		@Override
@@ -871,6 +887,12 @@ public class ObservableCollectionActiveManagers2 {
 		@Override
 		public CoreId getCoreId() {
 			return Lockable.getCoreId(Lockable.lockable(getParent(), false, null), theRefresh);
+		}
+
+		@Override
+		public boolean isEventing() {
+			// We don't need to include the refresh, because that won't be affected by a modification
+			return getParent().isEventing();
 		}
 
 		@Override
@@ -1056,6 +1078,12 @@ public class ObservableCollectionActiveManagers2 {
 		@Override
 		public CoreId getCoreId() {
 			return Lockable.getCoreId(Lockable.lockable(getParent(), false, null), Lockable.lockable(theLock, this, ThreadConstraint.ANY));
+		}
+
+		@Override
+		public boolean isEventing() {
+			// We don't need to include the transformation engine, because that won't be affected by a modification
+			return getParent().isEventing();
 		}
 
 		Transaction lockRefresh() {
@@ -1248,6 +1276,19 @@ public class ObservableCollectionActiveManagers2 {
 		@Override
 		public CoreId getCoreId() {
 			return Transactable.getCoreId(theParent, () -> theOuterElements, oe -> oe.manager);
+		}
+
+		@Override
+		public boolean isEventing() {
+			try (Transaction t = theParent.lock(false, null)) {
+				if (theParent.isEventing())
+					return true;
+				for (FlattenedHolder el : theOuterElements) {
+					if (el.manager.isEventing())
+						return true;
+				}
+			}
+			return false;
 		}
 
 		@Override

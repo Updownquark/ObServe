@@ -777,11 +777,11 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
-		public CollectionElement<E> getOrAdd(E value, ElementId after, ElementId before, boolean first, Runnable added) {
+		public CollectionElement<E> getOrAdd(E value, ElementId after, ElementId before, boolean first, Runnable preAdd, Runnable postAdd) {
 			ObservableSortedSet<E> wrapped = getWrapped().get();
 			if (wrapped == null)
 				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
-			return wrapped.getOrAdd(value, before, after, first, added);
+			return wrapped.getOrAdd(value, before, after, first, preAdd, postAdd);
 		}
 
 		@Override

@@ -88,8 +88,8 @@ public class ObservableSetImpl {
 		}
 
 		@Override
-		public CollectionElement<E> getOrAdd(E value, ElementId after, ElementId before, boolean first, Runnable added) {
-			return CollectionElement.reverse(getOrAdd(value, ElementId.reverse(before), ElementId.reverse(after), !first, added));
+		public CollectionElement<E> getOrAdd(E value, ElementId after, ElementId before, boolean first, Runnable preAdd, Runnable postAdd) {
+			return CollectionElement.reverse(getOrAdd(value, ElementId.reverse(before), ElementId.reverse(after), !first, preAdd, postAdd));
 		}
 
 		@Override
@@ -1384,13 +1384,13 @@ public class ObservableSetImpl {
 		}
 
 		@Override
-		public CollectionElement<T> getOrAdd(T value, ElementId after, ElementId before, boolean first, Runnable added) {
+		public CollectionElement<T> getOrAdd(T value, ElementId after, ElementId before, boolean first, Runnable preAdd, Runnable postAdd) {
 			try (Transaction t = lock(true, null)) {
 				// Lock so the reversed value is consistent until it is added
 				FilterMapResult<T, E> reversed = getFlow().reverse(value, true, false);
 				if (reversed.throwIfError(IllegalArgumentException::new) != null)
 					return null;
-				CollectionElement<E> srcEl = getSource().getOrAdd(reversed.result, after, before, first, added);
+				CollectionElement<E> srcEl = getSource().getOrAdd(reversed.result, after, before, first, preAdd, postAdd);
 				return srcEl == null ? null : elementFor(srcEl, null);
 			}
 		}
@@ -1480,14 +1480,16 @@ public class ObservableSetImpl {
 		}
 
 		@Override
-		public CollectionElement<T> getOrAdd(T value, ElementId after, ElementId before, boolean first, Runnable added) {
+		public CollectionElement<T> getOrAdd(T value, ElementId after, ElementId before, boolean first, Runnable preAdd, Runnable postAdd) {
 			// At the moment, the flow doesn't support this operation directly, so we have to do a double-dive
 			try (Transaction t = lock(true, null)) {
 				CollectionElement<T> element = getElement(value, first);
 				if (element == null) {
+					if (preAdd != null && canAdd(value) == null)
+						preAdd.run();
 					element = addElement(value, after, before, first);
-					if (element != null && added != null)
-						added.run();
+					if (element != null && postAdd != null)
+						postAdd.run();
 				}
 				return element;
 			}
@@ -1549,12 +1551,12 @@ public class ObservableSetImpl {
 		}
 
 		@Override
-		public CollectionElement<T> getOrAdd(T value, ElementId after, ElementId before, boolean first, Runnable added) {
+		public CollectionElement<T> getOrAdd(T value, ElementId after, ElementId before, boolean first, Runnable preAdd, Runnable postAdd) {
 			ElementId el = theIndex.get(value);
 			if (el != null)
 				return getElement(el);
 			else
-				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+				return null;
 		}
 
 		@Override
@@ -1593,14 +1595,16 @@ public class ObservableSetImpl {
 		}
 
 		@Override
-		public CollectionElement<E> getOrAdd(E value, ElementId after, ElementId before, boolean first, Runnable added) {
+		public CollectionElement<E> getOrAdd(E value, ElementId after, ElementId before, boolean first, Runnable preAdd, Runnable postAdd) {
 			// *Possibly* could figure out how to do this more efficiently, but for the moment this will work
 			try (Transaction t = lock(true, null)) {
 				CollectionElement<E> element = getElement(value, first);
 				if (element == null) {
+					if (preAdd != null && canAdd(value) == null)
+						preAdd.run();
 					element = addElement(value, after, before, first);
-					if (element != null && added != null)
-						added.run();
+					if (element != null && postAdd != null)
+						postAdd.run();
 				}
 				return element;
 			}
@@ -1707,9 +1711,9 @@ public class ObservableSetImpl {
 		}
 
 		@Override
-		public CollectionElement<E> getOrAdd(E value, ElementId after, ElementId before, boolean first, Runnable added) {
+		public CollectionElement<E> getOrAdd(E value, ElementId after, ElementId before, boolean first, Runnable preAdd, Runnable postAdd) {
 			refresh();
-			return getWrapped().getOrAdd(value, after, before, first, added);
+			return getWrapped().getOrAdd(value, after, before, first, preAdd, postAdd);
 		}
 	}
 }

@@ -248,7 +248,7 @@ public class DefaultDependencyService<C> implements DependencyService<C> {
 	private Satisfaction trySatisfy(DefaultComponent<C> component, BetterSet<DefaultComponent<C>> componentPath, Causable cause,
 		boolean dynamic) {
 		boolean[] added = new boolean[1];
-		ElementId el = componentPath.getOrAdd(component, null, null, false, () -> added[0] = true).getElementId();
+		ElementId el = componentPath.getOrAdd(component, null, null, false, null, () -> added[0] = true).getElementId();
 
 		int satisfiedDeps = 0, dynamicLocalSatisfiedDeps = 0, dynamicAboveSatisfiedDeps = 0;
 		boolean somethingSatisfied = false, hasCycle = false;

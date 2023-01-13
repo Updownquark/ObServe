@@ -878,13 +878,13 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable {
 
 		@Override
 		public MapEntryHandle<K, V> getOrPutEntry(K key, Function<? super K, ? extends V> value, ElementId afterKey, ElementId beforeKey,
-			boolean first, Runnable added) {
+			boolean first, Runnable preAdd, Runnable postAdd) {
 			MapEntry entry = new MapEntry(key, null);
 			CollectionElement<Map.Entry<K, V>> entryEl = theEntries.getOrAdd(entry, afterKey, beforeKey, first, () -> {
 				entry.setValue(value.apply(key));
-				if (added != null)
-					added.run();
-			});
+				if (preAdd != null)
+					preAdd.run();
+			}, postAdd);
 			return entryEl == null ? null : handleFor(entryEl);
 		}
 
@@ -1179,7 +1179,7 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable {
 
 		@Override
 		public MapEntryHandle<K, V> getOrPutEntry(K key, Function<? super K, ? extends V> value, ElementId after, ElementId before,
-			boolean first, Runnable added) {
+			boolean first, Runnable preAdd, Runnable postAdd) {
 			return null;
 		}
 
@@ -1241,11 +1241,8 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable {
 
 		@Override
 		public MapEntryHandle<K, V> getOrPutEntry(K key, Function<? super K, ? extends V> value, ElementId after, ElementId before,
-			boolean first, Runnable added) {
-			MapEntryHandle<K, V> found = theWrapped.getEntry(key);
-			if (found == null)
-				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
-			return found;
+			boolean first, Runnable preAdd, Runnable postAdd) {
+			return theWrapped.getEntry(key);
 		}
 
 		@Override
