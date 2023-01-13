@@ -726,15 +726,20 @@ public class ObservableSwingUtils {
 				int selIdx = 0;
 				callbackLock[0] = true;
 				ListSelectionModel selModel = selectionModel.get();
-				try (Transaction t = safeSelection.lock(true, e)) {
-					for (int i = selModel.getMinSelectionIndex(); i <= selModel.getMaxSelectionIndex() && i <= e.getIndex1(); i++) {
-						if (selModel.isSelectedIndex(i)) {
-							safeSelection.mutableElement(safeSelection.getElement(selIdx).getElementId()).set(model.getElementAt(i));
+				Transaction t = safeSelection.tryLock(true, e);
+				try {
+					if (t != null) {
+						for (int i = selModel.getMinSelectionIndex(); i <= selModel.getMaxSelectionIndex() && i <= e.getIndex1(); i++) {
+							if (selModel.isSelectedIndex(i)) {
+								safeSelection.mutableElement(safeSelection.getElement(selIdx).getElementId()).set(model.getElementAt(i));
+							}
 							selIdx++;
 						}
 					}
 				} finally {
 					callbackLock[0] = false;
+					if (t != null)
+						t.close();
 				}
 			}
 		};
@@ -918,64 +923,6 @@ public class ObservableSwingUtils {
 		return selValues;
 	}
 
-	/**
-	 * <p>
-	 * A cause that is injected into the cause chain to prevent loopback. When selection is updated elsewhere, the synchronization operation
-	 * updates the selected model element, and when the selected model element is updated, the sync operation updates the selection. But it
-	 * is critical that this loop terminates or an infinite loop will result.
-	 * </p>
-	 * <p>
-	 * Due to thread delegation, the causality chain may not be limited to a single thread. In addition, a single value collection or
-	 * selection may be used in multiple tables, further complicating synchronization.
-	 * </p>
-	 * <p>
-	 * Use of this class allows a sync operation to reliably track this situation across threads.
-	 * </p>
-	 */
-	public static class SyncCause extends Causable.AbstractCausable {
-		private final Object theModel;
-		private final Object theSelection;
-
-		/**
-		 * @param model The model object being synchronized
-		 * @param selection The selection object being synchronized
-		 * @param cause The cause to wrap
-		 */
-		public SyncCause(Object model, Object selection, Object cause) {
-			super(cause instanceof Causable && ((Causable) cause).isTerminated() ? Causable.broken(cause) : cause);
-			theModel = model;
-			theSelection = selection;
-		}
-
-		/**
-		 * @param cause The cause to check
-		 * @param model The model to check
-		 * @return Whether the given cause was caused by a change in the given model
-		 */
-		public static boolean isModelCause(Object cause, Object model) {
-			return cause instanceof Causable && ((Causable) cause).getCauseLike(c -> {
-				if (c instanceof SyncCause && ((SyncCause) c).theModel.equals(model))
-					return c;
-				else
-					return null;
-			}) != null;
-		}
-
-		/**
-		 * @param cause The cause to check
-		 * @param selection The selection to check
-		 * @return Whether the given cause was caused by a change in the given selection
-		 */
-		public static boolean isSelectionCause(Object cause, Object selection) {
-			return cause instanceof Causable && ((Causable) cause).getCauseLike(c -> {
-				if (c instanceof SyncCause && ((SyncCause) c).theSelection.equals(selection))
-					return c;
-				else
-					return null;
-			}) != null;
-		}
-	}
-
 	/** Updates the list model at a particular index */
 	public interface ModelUpdater {
 		/**
@@ -1023,8 +970,6 @@ public class ObservableSwingUtils {
 				callbackLock[0] = false;
 			}
 		};
-		Object modelObj = model instanceof ObservableListModel ? ((ObservableListModel<E>) model).getWrapped().getIdentity() : model;
-		Object selObj = selection.getIdentity();
 		ListDataListener modelListener = new ListDataListener() {
 			@Override
 			public void intervalRemoved(ListDataEvent e) {}
@@ -1034,19 +979,22 @@ public class ObservableSwingUtils {
 
 			@Override
 			public void contentsChanged(ListDataEvent e) {
-				if (callbackLock[0] || SyncCause.isSelectionCause(e, selObj) || selection.isEventing())
+				if (callbackLock[0])
 					return;
 				ListSelectionModel selModel = selectionModel.get();
 				if (selModel.getMinSelectionIndex() < 0 || selModel.getMinSelectionIndex() != selModel.getMaxSelectionIndex())
 					return;
 				flushEQCache();
 				callbackLock[0] = true;
-				SyncCause cause = new SyncCause(modelObj, selObj, e);
-				try (Transaction t = cause.use()) {
-					if (e.getIndex0() <= selModel.getMinSelectionIndex() && e.getIndex1() >= selModel.getMinSelectionIndex())
-						selection.set(model.getElementAt(selModel.getMinSelectionIndex()), cause);
-				} finally {
-					callbackLock[0] = false;
+				if (e.getIndex0() <= selModel.getMinSelectionIndex() && e.getIndex1() >= selModel.getMinSelectionIndex()) {
+					Transaction t = selection.tryLock(true, e);
+					if (t != null) {
+						try {
+							selection.set(model.getElementAt(selModel.getMinSelectionIndex()), e);
+						} finally {
+							t.close();
+						}
+					}
 				}
 			}
 		};
@@ -1059,8 +1007,7 @@ public class ObservableSwingUtils {
 			component.addPropertyChangeListener("selectionModel", selModelListener);
 		model.addListDataListener(modelListener);
 		safeSelection.changes().takeUntil(until).act(evt -> {
-			if (callbackLock[0] || SyncCause.isModelCause(evt, modelObj)
-				|| (model instanceof ObservableListModel && ((ObservableListModel<E>) model).getWrapped().isEventing()))
+			if (callbackLock[0] || (model instanceof ObservableListModel && ((ObservableListModel<?>) model).getWrapped().isEventing()))
 				return;
 			onEQ(() -> {
 				flushEQCache();
@@ -1074,9 +1021,16 @@ public class ObservableSwingUtils {
 						&& !selModel.isSelectionEmpty() && selModel.getMinSelectionIndex() == selModel.getMaxSelectionIndex()//
 						&& equivalence.elementEquals(model.getElementAt(selModel.getMinSelectionIndex()), evt.getNewValue())) {
 						if (update != null) {
-							SyncCause cause = new SyncCause(modelObj, selObj, evt);
+							Causable cause = Causable.simpleCause(Causable.broken(evt));
+							Transaction t2 = null;
 							try (Transaction t = cause.use()) {
-								update.update(selModel.getMaxSelectionIndex(), cause);
+								t2 = model instanceof ObservableListModel
+									? ((ObservableListModel<?>) model).getWrapped().tryLock(true, cause) : Transaction.NONE;
+									if (t2 != null)
+										update.update(selModel.getMaxSelectionIndex(), cause);
+							} finally {
+								if (t2 != null)
+									t2.close();
 							}
 						}
 						return;

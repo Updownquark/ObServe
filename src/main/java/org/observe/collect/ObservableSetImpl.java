@@ -240,6 +240,11 @@ public class ObservableSetImpl {
 		}
 
 		@Override
+		public boolean isEventing() {
+			return theWrapped.isEventing();
+		}
+
+		@Override
 		public boolean isContentControlled() {
 			return theWrapped.isContentControlled();
 		}
@@ -689,6 +694,11 @@ public class ObservableSetImpl {
 		@Override
 		public CoreId getCoreId() {
 			return theParent.getCoreId();
+		}
+
+		@Override
+		public boolean isEventing() {
+			return theParent.isEventing();
 		}
 
 		@Override

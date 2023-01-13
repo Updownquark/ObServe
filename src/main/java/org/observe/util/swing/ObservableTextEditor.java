@@ -28,6 +28,7 @@ import org.observe.SimpleObservable;
 import org.observe.util.TypeTokens;
 import org.qommons.BiTuple;
 import org.qommons.ThreadConstraint;
+import org.qommons.Transaction;
 import org.qommons.io.Format;
 import org.qommons.io.SpinnerFormat;
 
@@ -562,7 +563,7 @@ public class ObservableTextEditor<E> {
 
 	private boolean doCommit(E parsed, Object cause, boolean maybeReformat) {
 		isInternallyChanging = true;
-		try {
+		try (Transaction t = theValue.lock(true, cause)) {
 			theValue.set(parsed, cause);
 			isDirty = false;
 			if (maybeReformat && reformatOnCommit) {

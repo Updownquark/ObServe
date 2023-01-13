@@ -1184,18 +1184,26 @@ implements TableBuilder<R, P> {
 				if (theAdaptivePrefRowHeight <= 0)
 					return; // Not adaptive
 				theAnchor.event("adjustHeight", null);
-				int insets = table.getInsets().top + table.getInsets().bottom;
+				int insets = table.getInsets().top + table.getInsets().bottom + scroll.getInsets().top + scroll.getInsets().bottom;
 				int spacing = table.getIntercellSpacing().height;
-				int minHeight = insets + spacing + 4, prefHeight = insets + spacing + 4, maxHeight = insets + spacing + 4;
+				int minHeight = insets, prefHeight = insets, maxHeight = insets;
+				boolean useSpacing = false;
 				if (table.getTableHeader() != null && table.getTableHeader().isVisible()) {
-					minHeight += table.getTableHeader().getPreferredSize().height;
-					maxHeight += table.getTableHeader().getPreferredSize().height;
-					minHeight += spacing;
-					maxHeight += spacing;
+					int headerHeight = table.getTableHeader().getPreferredSize().height;
+					minHeight += headerHeight;
+					prefHeight += headerHeight;
+					maxHeight += headerHeight;
+					useSpacing = true;
 				}
 				int rowCount = model.getRowCount();
 				for (int i = 0; i < theAdaptiveMaxRowHeight && i < rowCount; i++) {
 					int rowHeight = table.getRowHeight(i);
+					if (useSpacing)
+						rowHeight += spacing;
+					else
+						useSpacing = true;
+					if (i > 0)
+						rowHeight += spacing;
 					if (i < theAdaptiveMinRowHeight)
 						minHeight += rowHeight;
 					if (i < theAdaptivePrefRowHeight)
@@ -1210,9 +1218,9 @@ implements TableBuilder<R, P> {
 					prefHeight += sbh;
 					maxHeight += sbh;
 				}
-				minHeight = Math.max(0, minHeight - 4);
-				prefHeight = Math.max(0, prefHeight - 4);
-				maxHeight = Math.max(0, maxHeight - 4);
+				minHeight = Math.max(0, minHeight);
+				prefHeight = Math.max(minHeight, prefHeight);
+				maxHeight = Math.max(minHeight, maxHeight);
 				// Dimension psvs = table.getPreferredScrollableViewportSize();
 				// if (psvs.height != prefHeight) {
 				// // int w = 0;

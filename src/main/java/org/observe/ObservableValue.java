@@ -1863,7 +1863,7 @@ public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>,
 			public CoreId getCoreId() {
 				// Best we can do is a snapshot
 				try (Transaction t = theValue.lock()) {
-					return Lockable.getCoreId(theValue, theValue.get());
+					return Lockable.getCoreId(theValue, theValue::get);
 				}
 			}
 		}

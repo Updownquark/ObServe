@@ -841,8 +841,12 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable {
 		@Override
 		public ObservableSet<Map.Entry<K, V>> entrySet() {
 			if (theExposedEntries == null)
-				theExposedEntries = ObservableMap.super.entrySet();
+				theExposedEntries = createEntrySet();
 			return theExposedEntries;
+		}
+
+		protected ObservableSet<Map.Entry<K, V>> createEntrySet() {
+			return ObservableMap.super.entrySet();
 		}
 
 		@Override
@@ -875,7 +879,7 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable {
 		@Override
 		public MapEntryHandle<K, V> getOrPutEntry(K key, Function<? super K, ? extends V> value, ElementId afterKey, ElementId beforeKey,
 			boolean first, Runnable added) {
-			SimpleMapEntry<K, V> entry = new SimpleMapEntry<>(key, null, true);
+			MapEntry entry = new MapEntry(key, null);
 			CollectionElement<Map.Entry<K, V>> entryEl = theEntries.getOrAdd(entry, afterKey, beforeKey, first, () -> {
 				entry.setValue(value.apply(key));
 				if (added != null)
@@ -905,6 +909,11 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable {
 				@Override
 				public K getKey() {
 					return entryEl.get().getKey();
+				}
+
+				@Override
+				public String toString() {
+					return entryEl.get().toString();
 				}
 			};
 		}
@@ -969,6 +978,11 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable {
 				public ElementId add(V value, boolean before) throws UnsupportedOperationException, IllegalArgumentException {
 					throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
 				}
+
+				@Override
+				public String toString() {
+					return entryEl.get().toString();
+				}
 			};
 		}
 
@@ -986,9 +1000,9 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable {
 		public Subscription onChange(Consumer<? super ObservableMapEvent<? extends K, ? extends V>> action) {
 			return theEntries.onChange(evt -> {
 				V oldValue = ((MapEntry) evt.getNewValue()).getOldValue();
-				ObservableMapEvent<K, V> mapEvent = new ObservableMapEvent<>(evt.getElementId(), evt.getIndex(),
-					evt.getType(), evt.isMove(), evt.getOldValue().getKey(), evt.getNewValue().getKey(), oldValue,
-					evt.getNewValue().getValue(), evt);
+				ObservableMapEvent<K, V> mapEvent = new ObservableMapEvent<>(evt.getElementId(), evt.getIndex(), evt.getType(),
+					evt.isMove(), evt.getOldValue() == null ? null : evt.getOldValue().getKey(), evt.getNewValue().getKey(), oldValue,
+						evt.getNewValue().getValue(), evt);
 				try (Transaction t = mapEvent.use()) {
 					action.accept(mapEvent);
 				}
@@ -1043,10 +1057,26 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable {
 						oldValue = theValue;
 						theOldValue = oldValue;
 						theValue = value;
-						theEntries.mutableElement(theElementId).set(this);
+						if (theElementId != null)
+							theEntries.mutableElement(theElementId).set(this);
 					}
 					return oldValue;
 				}
+			}
+
+			@Override
+			public int hashCode() {
+				return Objects.hashCode(theKey);
+			}
+
+			@Override
+			public boolean equals(Object obj) {
+				return obj instanceof Map.Entry && keySet().equivalence().elementEquals(theKey, ((Map.Entry<?, ?>) obj).getKey());
+			}
+
+			@Override
+			public String toString() {
+				return theKey + "=" + theValue;
 			}
 		}
 	}

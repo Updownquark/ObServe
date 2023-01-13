@@ -494,7 +494,7 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, BetterSo
 	 */
 	class DefaultObservableSortedMap<K, V> extends DefaultObservableMap<K, V> implements ObservableSortedMap<K, V> {
 		public DefaultObservableSortedMap(TypeToken<K> keyType, TypeToken<V> valueType, Comparator<? super K> sorting,
-			ObservableCollection<java.util.Map.Entry<K, V>> entries) {
+			ObservableSortedCollection<java.util.Map.Entry<K, V>> entries) {
 			super(keyType, valueType, Equivalence.DEFAULT.sorted(TypeTokens.getRawType(keyType), sorting, true), entries);
 		}
 
@@ -506,6 +506,11 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, BetterSo
 		@Override
 		public ObservableSortedSet<Map.Entry<K, V>> entrySet() {
 			return (ObservableSortedSet<Map.Entry<K, V>>) super.entrySet();
+		}
+
+		@Override
+		protected ObservableSet<Entry<K, V>> createEntrySet() {
+			return ObservableSortedMap.super.entrySet();
 		}
 
 		@Override

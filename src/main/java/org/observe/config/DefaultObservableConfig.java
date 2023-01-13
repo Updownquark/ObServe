@@ -87,7 +87,9 @@ class DefaultObservableConfig extends AbstractObservableConfig {
 
 	@Override
 	public boolean isEventing() {
-		return theListeners.isFiring();
+		// A child cannot change as a result of a parent event
+		return theListeners.isFiring()//
+			|| (theParentContentRef != null && getParent().isEventing());
 	}
 
 	@Override
