@@ -986,15 +986,19 @@ public class ObservableSwingUtils {
 					return;
 				flushEQCache();
 				callbackLock[0] = true;
-				if (e.getIndex0() <= selModel.getMinSelectionIndex() && e.getIndex1() >= selModel.getMinSelectionIndex()) {
-					Transaction t = selection.tryLock(true, e);
-					if (t != null) {
-						try {
-							selection.set(model.getElementAt(selModel.getMinSelectionIndex()), e);
-						} finally {
-							t.close();
+				try {
+					if (e.getIndex0() <= selModel.getMinSelectionIndex() && e.getIndex1() >= selModel.getMinSelectionIndex()) {
+						Transaction t = selection.tryLock(true, e);
+						if (t != null) {
+							try {
+								selection.set(model.getElementAt(selModel.getMinSelectionIndex()), e);
+							} finally {
+								t.close();
+							}
 						}
 					}
+				} finally {
+					callbackLock[0] = false;
 				}
 			}
 		};
@@ -1026,8 +1030,8 @@ public class ObservableSwingUtils {
 							try (Transaction t = cause.use()) {
 								t2 = model instanceof ObservableListModel
 									? ((ObservableListModel<?>) model).getWrapped().tryLock(true, cause) : Transaction.NONE;
-									if (t2 != null)
-										update.update(selModel.getMaxSelectionIndex(), cause);
+								if (t2 != null)
+									update.update(selModel.getMaxSelectionIndex(), cause);
 							} finally {
 								if (t2 != null)
 									t2.close();
