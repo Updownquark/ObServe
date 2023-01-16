@@ -2,6 +2,7 @@ package org.observe.util;
 
 import java.lang.annotation.Annotation;
 import java.lang.invoke.MethodHandle;
+import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodHandles.Lookup;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationHandler;
@@ -98,16 +99,32 @@ public class EntityReflector<E> {
 		Constructor<Lookup> c;
 		try {
 			c = Lookup.class.getDeclaredConstructor(Class.class);
-			c.setAccessible(true);
+			if (!c.isAccessible())
+				c.setAccessible(true);
 		} catch (NoSuchMethodException e) {
 			System.err.println("Lookup class has changed: unable to call default or Object methods on entities");
 			e.printStackTrace();
 			c = null;
 		} catch (SecurityException e) {
 			System.err.println("Could not access Lookup: unable to call default or Object methods on entities");
+			e.printStackTrace();
+			c = null;
+		} catch (Exception e) {
+			// This may be because we're in a version of java where we can use MethodHandles instead
+			// System.err.println("Could not access Lookup: unable to call default or Object methods on entities");
+			// e.printStackTrace();
 			c = null;
 		}
 		LOOKUP_CONSTRUCTOR = c;
+	}
+
+	static <T> Lookup getLookup(Class<T> type)
+		throws InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException {
+		if (LOOKUP_CONSTRUCTOR != null)
+			return LOOKUP_CONSTRUCTOR.newInstance(type).in(type);
+		else {
+			return MethodHandles.lookup().in(type);
+		}
 	}
 
 	/**
@@ -2023,17 +2040,18 @@ public class EntityReflector<E> {
 					method = new CustomMethod<>(this, m, custom);
 				} else if (m.isDefault()) {
 					MethodHandle handle;
-					if (LOOKUP_CONSTRUCTOR == null) {
-						handle = null;
-					} else {
-						try {
-							handle = LOOKUP_CONSTRUCTOR.newInstance(clazz).in(clazz).unreflectSpecial(m, clazz);
-						} catch (IllegalArgumentException | InstantiationException | InvocationTargetException e) {
-							throw new IllegalStateException("Bad method? " + m + ": " + e);
-						} catch (SecurityException | IllegalAccessException e) {
-							errors.add(new EntityReflectionMessage(EntityReflectionMessageLevel.ERROR, m, "No access to " + m + ": " + e));
-							continue;
+					try {
+						Lookup lookup = getLookup(clazz);
+						if (lookup == null) {
+							handle = null;
+						} else {
+							handle = getLookup(clazz).unreflectSpecial(m, clazz);
 						}
+					} catch (IllegalArgumentException | InstantiationException | InvocationTargetException e) {
+						throw new IllegalStateException("Bad method? " + m + ": " + e);
+					} catch (SecurityException | IllegalAccessException e) {
+						errors.add(new EntityReflectionMessage(EntityReflectionMessageLevel.ERROR, m, "No access to " + m + ": " + e));
+						continue;
 					}
 					String fieldName = theGetterFilter.apply(m);
 					ReflectedField<? super E, ?> field = fieldName == null ? null : fields.getIfPresent(fieldName);
