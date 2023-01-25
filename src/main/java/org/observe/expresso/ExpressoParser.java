@@ -1,7 +1,5 @@
 package org.observe.expresso;
 
-import org.observe.expresso.Expression.ExpressoParseException;
-
 /** An ExpressoParser is a parser that interprets text into {@link ObservableExpression} objects */
 public interface ExpressoParser {
 	/**

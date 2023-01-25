@@ -290,7 +290,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			@Override
 			protected <V> void prepare(TypeToken<V> type, ExpressoQIS session) throws QonfigInterpretationException {
 				theComparator = (ValueContainer<SettableValue<?>, SettableValue<Comparator<Object>>>) (ValueContainer<?, ?>) ExpressoBaseV0_1
-					.parseSorting(type, session.forChildren("sort").peekFirst()).createValue();
+					.parseSorting(type, session.forChildren("sort").peekFirst()).createContainer();
 			}
 
 			@Override
@@ -305,7 +305,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			@Override
 			protected <V> void prepare(TypeToken<V> type, ExpressoQIS session) throws QonfigInterpretationException {
 				theComparator = (ValueContainer<SettableValue<?>, SettableValue<Comparator<Object>>>) (ValueContainer<?, ?>) ExpressoBaseV0_1
-					.parseSorting(type, session.forChildren("sort").peekFirst()).createValue();
+					.parseSorting(type, session.forChildren("sort").peekFirst()).createContainer();
 			}
 
 			@Override
@@ -524,7 +524,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 				String fPath = path;
 				model.withMaker(name, new ValueCreator<Object, Object>() {
 					@Override
-					public ValueContainer<Object, Object> createValue() {
+					public ValueContainer<Object, Object> createContainer() {
 						child.put(VALUE_TYPE_KEY, type);
 						try {
 							ConfigFormatProducer<Object> format = parseConfigFormat(child.getAttributeExpression("format"), null,
@@ -558,7 +558,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 								}
 							};
 						} catch (QonfigInterpretationException e) {
-							child.withError(e.getMessage(), e);
+							child.error(e.getMessage(), e);
 							return null;
 						}
 					}
@@ -745,7 +745,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 				try {
 					format = formatEx.evaluate(formatType, session.getExpressoEnv());
 				} catch (QonfigInterpretationException e) {
-					session.withError(e.getMessage(), e);
+					session.error(e.getMessage(), e);
 					return null;
 				}
 				defaultValue = defaultS == null ? null : msi -> {
@@ -781,7 +781,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 				else if (type == Duration.class)
 					f = SpinnerFormat.flexDuration(false);
 				else {
-					session.withError("No default format available for type " + valueType + " -- please specify a format");
+					session.error("No default format available for type " + valueType + " -- please specify a format");
 					return null;
 				}
 				format = ValueContainer.literal(formatType, (Format<Object>) f, type.getSimpleName());
@@ -792,11 +792,11 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 					try {
 						defaultV = f.parse(defaultS);
 					} catch (ParseException e) {
-						session.withError(e.getMessage(), e);
+						session.error(e.getMessage(), e);
 						return null;
 					}
 					if (!(TypeTokens.get().isInstance(valueType, defaultV))) {
-						session.withError("default value '" + defaultS + ", type " + defaultV.getClass()
+						session.error("default value '" + defaultS + ", type " + defaultV.getClass()
 						+ ", is incompatible with value type " + valueType);
 						return null;
 					}
@@ -980,7 +980,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		if (validationCreators.isEmpty())
 			return formatCreator;
 		return ValueCreator.name(formatCreator::toString, () -> {
-			ValueContainer<SettableValue<?>, SettableValue<Format<T>>> formatContainer = formatCreator.createValue();
+			ValueContainer<SettableValue<?>, SettableValue<Format<T>>> formatContainer = formatCreator.createContainer();
 			List<Validation<T>> validationContainers;
 			validationContainers = validationCreators.stream().map(creator -> creator.createValidator()).collect(Collectors.toList());
 			class ValidatedFormat extends SettableValue.WrappingSettableValue<Format<T>> {
@@ -1086,7 +1086,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 				try {
 					return mad.evaluate(ModelTypes.Value.forType(int.class), session.getExpressoEnv());
 				} catch (QonfigInterpretationException e) {
-					session.withError(e.getMessage(), e);
+					session.error(e.getMessage(), e);
 					return ValueContainer.literal(TypeTokens.get().INT, 10, "10");
 				}
 			};
@@ -1147,7 +1147,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			builder.withUnit(unit, session.getAttribute("unit-required", boolean.class));
 			if (withMetricPrefixes) {
 				if (withMetricPrefixesP2)
-					session.withWarning("Both 'metric-prefixes' and 'metric-prefixes-p2' specified");
+					session.warn("Both 'metric-prefixes' and 'metric-prefixes-p2' specified");
 				builder.withMetricPrefixes();
 			} else if (withMetricPrefixesP2)
 				builder.withMetricPrefixesPower2();
@@ -1157,20 +1157,20 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 				String multS = prefix.getAttributeText("mult");
 				if (expS != null) {
 					if (multS != null)
-						session.withWarning("Both 'exp' and 'mult' specified for prefix '" + prefixName + "'");
+						session.warn("Both 'exp' and 'mult' specified for prefix '" + prefixName + "'");
 					builder.withPrefix(prefixName, Integer.parseInt(expS));
 				} else if (multS != null)
 					builder.withPrefix(prefixName, Double.parseDouble(multS));
 				else
-					session.withWarning("Neither 'exp' nor 'mult' specified for prefix '" + prefixName + "'");
+					session.warn("Neither 'exp' nor 'mult' specified for prefix '" + prefixName + "'");
 			}
 		} else {
 			if (withMetricPrefixes)
-				session.withWarning("'metric-prefixes' specified without a unit");
+				session.warn("'metric-prefixes' specified without a unit");
 			if (withMetricPrefixesP2)
-				session.withWarning("'metric-prefixes-p2' specified without a unit");
+				session.warn("'metric-prefixes-p2' specified without a unit");
 			if (!prefixes.isEmpty())
-				session.withWarning("prefixes specified without a unit");
+				session.warn("prefixes specified without a unit");
 		}
 		return ValueCreator.literal(TypeTokens.get().keyFor(Format.class).<Format<Double>> parameterized(Double.class), builder.build(),
 			"double");
@@ -1192,14 +1192,14 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		try {
 			options = options.withMaxResolution(TimeUtils.DateElementType.valueOf(session.getAttributeText("max-resolution")));
 		} catch (IllegalArgumentException e) {
-			session.withWarning("Unrecognized instant resolution: '" + session.getAttributeText("max-resolution"));
+			session.warn("Unrecognized instant resolution: '" + session.getAttributeText("max-resolution"));
 		}
 		options = options.with24HourFormat(session.getAttribute("format-24h", boolean.class));
 		String rteS = session.getAttributeText("relative-eval-type");
 		try {
 			options = options.withEvaluationType(TimeUtils.RelativeInstantEvaluation.valueOf(rteS));
 		} catch (IllegalArgumentException e) {
-			session.withWarning("Unrecognized relative evaluation type: '" + rteS);
+			session.warn("Unrecognized relative evaluation type: '" + rteS);
 		}
 		TimeEvaluationOptions fOptions = options;
 		TypeToken<Instant> instantType = TypeTokens.get().of(Instant.class);
@@ -1213,7 +1213,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 				try {
 					relativeTo = relativeV.evaluate(instantModelType, session.getExpressoEnv());
 				} catch (QonfigInterpretationException e) {
-					session.withError(e.getMessage(), e);
+					session.error(e.getMessage(), e);
 				}
 			}
 			if (relativeTo == null) {
@@ -1316,7 +1316,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 					fileSource = ValueContainer.literal(ModelTypes.Value.forType(BetterFile.FileDataSource.class), new NativeFileSource(),
 						"native");
 			} catch (QonfigInterpretationException e) {
-				session.withError(e.getMessage(), e);
+				session.error(e.getMessage(), e);
 				fileSource = ValueContainer.literal(ModelTypes.Value.forType(BetterFile.FileDataSource.class), new NativeFileSource(),
 					"native");
 			}
@@ -1326,7 +1326,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 				else
 					workingDir = null;
 			} catch (QonfigInterpretationException e) {
-				session.withError(e.getMessage(), e);
+				session.error(e.getMessage(), e);
 				workingDir = null;
 			}
 			ValueContainer<SettableValue<?>, SettableValue<BetterFile.FileDataSource>> fileSource2 = fileSource;

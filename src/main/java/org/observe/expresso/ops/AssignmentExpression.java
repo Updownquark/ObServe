@@ -8,6 +8,7 @@ import java.util.stream.Stream;
 import org.observe.ObservableAction;
 import org.observe.SettableValue;
 import org.observe.expresso.ExpressoEnv;
+import org.observe.expresso.ExpressoEvaluationException;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
@@ -17,7 +18,7 @@ import org.observe.util.TypeTokens;
 import org.qommons.QommonsUtils;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterList;
-import org.qommons.config.QonfigInterpretationException;
+import org.qommons.config.QonfigEvaluationException;
 
 import com.google.common.reflect.TypeToken;
 
@@ -46,6 +47,16 @@ public class AssignmentExpression implements ObservableExpression {
 	}
 
 	@Override
+	public int getExpressionOffset() {
+		return theTarget.getExpressionOffset();
+	}
+
+	@Override
+	public int getExpressionEnd() {
+		return theValue.getExpressionEnd();
+	}
+
+	@Override
 	public List<? extends ObservableExpression> getChildren() {
 		return QommonsUtils.unmodifiableCopy(theTarget, theValue);
 	}
@@ -64,23 +75,30 @@ public class AssignmentExpression implements ObservableExpression {
 
 	@Override
 	public <M, MV extends M> ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env)
-		throws QonfigInterpretationException {
+		throws ExpressoEvaluationException {
 		if (type.getModelType() != ModelTypes.Action)
-			throw new QonfigInterpretationException("Assignments cannot be used as " + type.getModelType() + "s");
+			throw new ExpressoEvaluationException(getExpressionOffset(), getExpressionEnd(),
+				"Assignments cannot be used as " + type.getModelType() + "s");
 		ValueContainer<SettableValue<?>, SettableValue<Object>> context = theTarget
 			.evaluate((ModelInstanceType<SettableValue<?>, SettableValue<Object>>) (ModelInstanceType<?, ?>) ModelTypes.Value.any(), env);
 		boolean isVoid = type.getType(0).getType() == void.class || type.getType(0).getType() == Void.class;
-		if (!isVoid && !TypeTokens.get().isAssignable(type.getType(0), context.getType().getType(0)))
-			throw new QonfigInterpretationException(
-				"Cannot assign " + context + ", type " + type.getType(0) + " to " + context.getType().getType(0));
+		try {
+			if (!isVoid && !TypeTokens.get().isAssignable(type.getType(0), context.getType().getType(0)))
+				throw new ExpressoEvaluationException(theValue.getExpressionOffset(), theValue.getExpressionEnd(),
+					"Cannot assign " + context + ", type " + type.getType(0) + " to " + context.getType().getType(0));
+		} catch (QonfigEvaluationException e) {
+			throw new ExpressoEvaluationException(theTarget.getExpressionOffset(), theTarget.getExpressionEnd(), e.getMessage(), e);
+		}
 		ValueContainer<SettableValue<?>, SettableValue<Object>> value;
 		try (Transaction t = Invocation.asAction()) {
 			value = theValue.evaluate(
 				ModelTypes.Value.forType((TypeToken<Object>) TypeTokens.get().getExtendsWildcard(context.getType().getType(0))), env);
+		} catch (QonfigEvaluationException e) {
+			throw new ExpressoEvaluationException(theValue.getExpressionOffset(), theValue.getExpressionEnd(), e.getMessage(), e);
 		}
 		return (ValueContainer<M, MV>) new ValueContainer<ObservableAction<?>, ObservableAction<?>>() {
 			@Override
-			public ModelInstanceType<ObservableAction<?>, ObservableAction<?>> getType() {
+			public ModelInstanceType<ObservableAction<?>, ObservableAction<?>> getType() throws QonfigEvaluationException {
 				if (isVoid)
 					return (ModelInstanceType<ObservableAction<?>, ObservableAction<?>>) type;
 				else
@@ -89,14 +107,15 @@ public class AssignmentExpression implements ObservableExpression {
 			}
 
 			@Override
-			public ObservableAction<?> get(ModelSetInstance models) {
+			public ObservableAction<?> get(ModelSetInstance models) throws QonfigEvaluationException {
 				SettableValue<Object> ctxValue = context.get(models);
 				SettableValue<Object> valueValue = value.get(models);
 				return ctxValue.assignmentTo(valueValue);
 			}
 
 			@Override
-			public ObservableAction<?> forModelCopy(ObservableAction<?> value2, ModelSetInstance sourceModels, ModelSetInstance newModels) {
+			public ObservableAction<?> forModelCopy(ObservableAction<?> value2, ModelSetInstance sourceModels, ModelSetInstance newModels)
+				throws QonfigEvaluationException {
 				SettableValue<Object> sourceCtx = context.get(sourceModels);
 				SettableValue<Object> newCtx = context.get(newModels);
 				SettableValue<Object> sourceValue = value.get(sourceModels);
@@ -108,8 +127,8 @@ public class AssignmentExpression implements ObservableExpression {
 			}
 
 			@Override
-			public BetterList<ValueContainer<?, ?>> getCores() {
-				return BetterList.of(Stream.of(context, value).flatMap(vc -> vc.getCores().stream()));
+			public BetterList<ValueContainer<?, ?>> getCores() throws QonfigEvaluationException {
+				return BetterList.of(Stream.of(context, value), vc -> vc.getCores().stream());
 			}
 
 			@Override

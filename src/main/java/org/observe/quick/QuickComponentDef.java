@@ -10,6 +10,7 @@ import org.observe.quick.style.StyleQIS;
 import org.observe.util.swing.PanelPopulation.ComponentEditor;
 import org.observe.util.swing.PanelPopulation.PanelPopulator;
 import org.qommons.config.QonfigElement;
+import org.qommons.config.QonfigEvaluationException;
 
 public interface QuickComponentDef {
 	QonfigElement getElement();
@@ -24,5 +25,5 @@ public interface QuickComponentDef {
 
 	QuickComponentDef modify(BiConsumer<ComponentEditor<?, ?>, QuickComponent.Builder> modification);
 
-	QuickComponent install(PanelPopulator<?, ?> container, QuickComponent.Builder builder);
+	QuickComponent install(PanelPopulator<?, ?> container, QuickComponent.Builder builder) throws QonfigEvaluationException;
 }

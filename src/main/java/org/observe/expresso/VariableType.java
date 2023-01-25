@@ -8,7 +8,10 @@ import java.util.Objects;
 
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.util.TypeTokens;
+import org.qommons.config.QonfigEvaluationException;
+import org.qommons.config.QonfigFilePosition;
 import org.qommons.config.QonfigInterpretationException;
+import org.qommons.io.SimpleXMLParser.ContentPosition;
 
 import com.google.common.reflect.TypeToken;
 
@@ -20,9 +23,9 @@ public interface VariableType {
 	/**
 	 * @param models The models to use to get the type
 	 * @return This type, evaluated for the given models
-	 * @throws QonfigInterpretationException If this type could not be evaluated with the given models
+	 * @throws QonfigEvaluationException If this type could not be evaluated with the given models
 	 */
-	TypeToken<?> getType(ObservableModelSet models) throws QonfigInterpretationException;
+	TypeToken<?> getType(ObservableModelSet models) throws QonfigEvaluationException;
 
 	/**
 	 * Parses a {@link VariableType}
@@ -30,20 +33,23 @@ public interface VariableType {
 	 * @param text The text to parse the type from
 	 * @param cv The class view to get the type from
 	 * @return The new type
-	 * @throws ParseException If the type could not be parsed
+	 * @throws QonfigInterpretationException If the type could not be parsed
 	 */
-	public static VariableType parseType(String text, ClassView cv) throws ParseException {
+	public static VariableType parseType(String text, ClassView cv, String file, ContentPosition position)
+		throws QonfigInterpretationException {
 		text = text.replace(" ", "");
 		int[] start = new int[1];
-		VariableType parsed = Parsing.parseType(text, start, cv);
+		VariableType parsed = Parsing.parseType(text, start, cv, file, position);
 		if (start[0] != text.length())
-			throw new ParseException("Bad type: " + text, start[0]);
+			throw new QonfigInterpretationException("Bad type: " + text, //
+				position == null ? null : new QonfigFilePosition(file, position.getPosition(start[0])), 0);
 		return parsed;
 	}
 
 	/** Parsing logic for the {@link VariableType} class */
 	class Parsing {
-		static VariableType parseType(String text, int[] start, ClassView cv) throws ParseException {
+		static VariableType parseType(String text, int[] start, ClassView cv, String file, ContentPosition position)
+			throws QonfigInterpretationException {
 			int c = start[0];
 			for (; c < text.length(); c++) {
 				switch (text.charAt(c)) {
@@ -57,25 +63,30 @@ public interface VariableType {
 				case '<':
 				case '{':
 					if (c == text.length() - 1)
-						throw new ParseException("Bad type (more expected): " + text, c);
+						throw new QonfigInterpretationException("Bad type (more expected): " + text, //
+							position == null ? null : new QonfigFilePosition(file, position.getPosition(start[0])), c - start[0]);
 					if (text.charAt(c) >= '0' && text.charAt(c) <= '9') {
 						String modelName = text.substring(start[0], c);
 						start[0] = c + 1;
 						int typeIndex = parseInt(text, start);
 						if (start[0] == text.length() || (text.charAt(start[0]) != '>' && text.charAt(start[0]) != '}'))
-							throw new ParseException("'>' or '}' expected", start[0]);
+							throw new QonfigInterpretationException("'>' or '}' expected", //
+								position == null ? null : new QonfigFilePosition(file, position.getPosition(start[0])), c - start[0]);
 						start[0]++;
-						return new ModelType(modelName, typeIndex);
+						return new ModelType(modelName, typeIndex,
+							position == null ? null : new QonfigFilePosition(file, position.getPosition(start[0])), c - start[0]);
 					}
 					Class<?> baseType = cv.getType(text.substring(start[0], c));
 					if (baseType == null)
-						throw new ParseException("Unrecognized type '" + text.substring(start[0], c), start[0]);
+						throw new QonfigInterpretationException("Unrecognized type '" + text.substring(start[0], c), //
+							position == null ? null : new QonfigFilePosition(file, position.getPosition(start[0])), c - start[0]);
 					List<VariableType> params = new ArrayList<>();
 					paramLoop: while (true) {
 						start[0] = c + 1;
-						params.add(parseType(text, start, cv));
+						params.add(parseType(text, start, cv, file, position == null ? null : position));
 						if (start[0] == text.length())
-							throw new ParseException("'>' or '}' expected", start[0]);
+							throw new QonfigInterpretationException("'>' or '}' expected", //
+								position == null ? null : new QonfigFilePosition(file, position.getPosition(start[0])), c - start[0]);
 						c = start[0];
 						switch (text.charAt(c)) {
 						case ',':
@@ -85,7 +96,8 @@ public interface VariableType {
 							start[0]++;
 							break paramLoop;
 						default:
-							throw new ParseException("'>' or '}' expected", c);
+							throw new QonfigInterpretationException("'>' or '}' expected", //
+								position == null ? null : new QonfigFilePosition(file, position.getPosition(c)), 0);
 						}
 					}
 					return new Parameterized(baseType, Collections.unmodifiableList(params));
@@ -94,7 +106,13 @@ public interface VariableType {
 				}
 			}
 
-			VariableType type = new Simple<>(TypeTokens.get().parseType(text.substring(start[0])));
+			VariableType type;
+			try {
+				type = new Simple<>(TypeTokens.get().parseType(text.substring(start[0])));
+			} catch (ParseException e) {
+				throw new QonfigInterpretationException(e.getMessage(), e, //
+					position == null ? null : new QonfigFilePosition(file, position.getPosition(start[0] + e.getErrorOffset())), 0);
+			}
 			start[0] = text.length();
 			return type;
 		}
@@ -119,7 +137,7 @@ public interface VariableType {
 
 		/** @param type The type */
 		public Simple(TypeToken<T> type) {
-			theType=type;
+			theType = type;
 		}
 
 		@Override
@@ -149,14 +167,18 @@ public interface VariableType {
 	class ModelType implements VariableType {
 		private final String thePath;
 		private final int theTypeIndex;
+		private final QonfigFilePosition thePosition;
+		private final int theLength;
 
 		/**
 		 * @param path The path of the model value to get the type of
 		 * @param typeIndex The type parameter index of the type to get
 		 */
-		public ModelType(String path, int typeIndex) {
+		public ModelType(String path, int typeIndex, QonfigFilePosition position, int length) {
 			thePath = path;
 			theTypeIndex = typeIndex;
+			thePosition = position;
+			theLength = length;
 		}
 
 		/** @return The path of the model value to get the type from */
@@ -170,8 +192,13 @@ public interface VariableType {
 		}
 
 		@Override
-		public TypeToken<?> getType(ObservableModelSet models) throws QonfigInterpretationException {
-			ModelInstanceType<?, ?> type = models.getComponent(thePath).getType();
+		public TypeToken<?> getType(ObservableModelSet models) throws QonfigEvaluationException {
+			ModelInstanceType<?, ?> type;
+			try {
+				type = models.getComponent(thePath).getType();
+			} catch (ModelException e) {
+				throw new QonfigEvaluationException(e.getMessage(), e, thePosition, theLength);
+			}
 			return type.getType(theTypeIndex);
 		}
 
@@ -221,7 +248,7 @@ public interface VariableType {
 		}
 
 		@Override
-		public TypeToken<?> getType(ObservableModelSet models) throws QonfigInterpretationException {
+		public TypeToken<?> getType(ObservableModelSet models) throws QonfigEvaluationException {
 			TypeToken<?>[] params = new TypeToken[theParameterTypes.size()];
 			for (int i = 0; i < theParameterTypes.size(); i++)
 				params[i] = theParameterTypes.get(i).getType(models);

@@ -9,9 +9,10 @@ import org.observe.SettableValue;
 import org.observe.SimpleObservable;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ValueContainer;
+import org.observe.expresso.ObservableModelSet.ValueCreator;
 import org.qommons.BreakpointHere;
 import org.qommons.Named;
-import org.qommons.config.QonfigInterpretationException;
+import org.qommons.config.QonfigEvaluationException;
 
 /**
  * A testing structure parsed from a Qonfig XML file for testing expresso or expresso-dependent toolkits
@@ -53,7 +54,7 @@ public class ExpressoTesting<H extends Expresso> {
 		 * @param testingModel The gloal testing model instance
 		 * @return The model instance to use for this test
 		 */
-		public ModelSetInstance createModelInstance(ModelSetInstance testingModel) {
+		public ModelSetInstance createModelInstance(ModelSetInstance testingModel) throws QonfigEvaluationException {
 			return theSession.wrapLocal(//
 				theModel.createInstance(testingModel.getUntil()).withAll(testingModel)//
 				.build());
@@ -70,7 +71,7 @@ public class ExpressoTesting<H extends Expresso> {
 		private final String theName;
 		private final ObservableModelSet theActionModel;
 		private final ExpressoQIS theExpressoSession;
-		private final ValueContainer<ObservableAction<?>, ObservableAction<?>> theAction;
+		private final ValueCreator<ObservableAction<?>, ObservableAction<?>> theAction;
 		private final String theExpectedException;
 		private final boolean isBreakpoint;
 
@@ -83,7 +84,7 @@ public class ExpressoTesting<H extends Expresso> {
 		 * @param breakpoint Whether a {@link BreakpointHere breakpoing} should be caught before executing this action
 		 */
 		public TestAction(String name, ObservableModelSet actionModel, ExpressoQIS expressoSession,
-			ValueContainer<ObservableAction<?>, ObservableAction<?>> action, String expectedException, boolean breakpoint) {
+			ValueCreator<ObservableAction<?>, ObservableAction<?>> action, String expectedException, boolean breakpoint) {
 			theName = name;
 			theActionModel = actionModel;
 			theExpressoSession = expressoSession;
@@ -102,15 +103,15 @@ public class ExpressoTesting<H extends Expresso> {
 		 * @param until An observable that will clean up this action's model instance
 		 * @return The model instance to use for this action
 		 */
-		public ModelSetInstance getActionModel(ModelSetInstance testModel, Observable<?> until) {
+		public ModelSetInstance getActionModel(ModelSetInstance testModel, Observable<?> until) throws QonfigEvaluationException {
 			return theExpressoSession.wrapLocal(//
 				theActionModel.createInstance(until).withAll(testModel)//
 				.build());
 		}
 
 		/** @return The value container to produce this action */
-		public ValueContainer<ObservableAction<?>, ObservableAction<?>> getAction() {
-			return theAction;
+		public ValueContainer<ObservableAction<?>, ObservableAction<?>> getAction() throws QonfigEvaluationException {
+			return theAction.createContainer();
 		}
 
 		/** @return The name of the exception type that is expected to be thrown by this test action */
@@ -118,7 +119,7 @@ public class ExpressoTesting<H extends Expresso> {
 			return theExpectedException;
 		}
 
-		/** @return Whether a {@link BreakpointHere breakpoing} should be caught before executing this action */
+		/** @return Whether a {@link BreakpointHere breakpoint} should be caught before executing this action */
 		public boolean isBreakpoint() {
 			return isBreakpoint;
 		}
@@ -150,7 +151,7 @@ public class ExpressoTesting<H extends Expresso> {
 	 * @param testName The name of the test to execute
 	 * @throws IllegalArgumentException If no such test was found in this test's XML definition
 	 */
-	public void executeTest(String testName) throws IllegalArgumentException {
+	public void executeTest(String testName) throws QonfigEvaluationException {
 		ExpressoTest test = theTests.get(testName);
 		if (test == null)
 			throw new IllegalArgumentException("No such test in markup: " + testName);
@@ -163,7 +164,7 @@ public class ExpressoTesting<H extends Expresso> {
 			extModels = ObservableModelSet.buildExternal(ObservableModelSet.JAVA_NAME_CHECKER)//
 				.withSubModel("ext", ext -> ext.with("actionName", ModelTypes.Value.forType(String.class), actionName))//
 				.build();
-		} catch (QonfigInterpretationException e) {
+		} catch (ModelException e) {
 			throw new IllegalStateException("Could not assemble external models", e);
 		}
 		SimpleObservable<Void> until = new SimpleObservable<>();

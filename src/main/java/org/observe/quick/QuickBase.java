@@ -46,8 +46,8 @@ import org.observe.SettableValue;
 import org.observe.SimpleObservable;
 import org.observe.collect.ObservableCollection;
 import org.observe.expresso.DynamicModelValue;
-import org.observe.expresso.Expression.ExpressoParseException;
 import org.observe.expresso.ExpressoBaseV0_1;
+import org.observe.expresso.ExpressoParseException;
 import org.observe.expresso.ExpressoQIS;
 import org.observe.expresso.JavaExpressoParser;
 import org.observe.expresso.ModelType;
@@ -91,6 +91,7 @@ import org.qommons.config.QonfigChildDef;
 import org.qommons.config.QonfigDocument;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigElementDef;
+import org.qommons.config.QonfigEvaluationException;
 import org.qommons.config.QonfigInterpretation;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigInterpreterCore;
@@ -1300,7 +1301,7 @@ public class QuickBase implements QonfigInterpretation {
 				(ModelInstanceType<SettableValue<?>, SettableValue<T>>) (ModelInstanceType<?, ?>) ModelTypes.Value.any(),
 				exS.getExpressoEnv());
 		else if (session.getElement().getValue() == null) {
-			session.withWarning("No value for label");
+			session.warn("No value for label");
 			valueX = (ValueContainer<SettableValue<?>, SettableValue<T>>) (ValueContainer<?, ?>) ValueContainer
 				.literal(ModelTypes.Value.forType(String.class), "", "");
 		} else
@@ -1499,7 +1500,8 @@ public class QuickBase implements QonfigInterpretation {
 			throws QonfigInterpretationException;
 
 		void makeTree(QuickComponent.Builder builder, PanelPopulator<?, ?> container, ObservableValue<T> root,
-			Function<? super BetterList<T>, ? extends ObservableCollection<? extends T>> children, Consumer<E> treeData);
+			Function<? super BetterList<T>, ? extends ObservableCollection<? extends T>> children, Consumer<E> treeData)
+			throws QonfigEvaluationException;
 	}
 
 	private static final ObservableExpression TREE_VALUE_EXPRESSION;
@@ -1774,7 +1776,7 @@ public class QuickBase implements QonfigInterpretation {
 			if (onRemoveEx != null) {
 				// TODO This should be a value, with the specified renderValueName available
 				if (!removable) {
-					tab.withWarning("on-remove specified, for tab '" + tab.getAttributeText("tab-id") + "' but tab is not removable");
+					tab.warn("on-remove specified, for tab '" + tab.getAttributeText("tab-id") + "' but tab is not removable");
 					return null;
 				} else {
 					onRemove = onRemoveEx.<T2, Object, Object, Void> findMethod(Void.class, exTab.getExpressoEnv())//
@@ -1955,7 +1957,7 @@ public class QuickBase implements QonfigInterpretation {
 						};
 					};
 				} else {
-					tabSet.withWarning("Cannot interpret tab-icon '" + tabSet.getAttributeText("tab-icon") + "', type "
+					tabSet.warn("Cannot interpret tab-icon '" + tabSet.getAttributeText("tab-icon") + "', type "
 						+ finder.getResultType() + " as an image");
 					tabIcon = null;
 				}

@@ -44,6 +44,7 @@ import org.qommons.collect.ElementId;
 import org.qommons.collect.MultiMap;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.collect.SortedMultiMap;
+import org.qommons.config.QonfigEvaluationException;
 
 import com.google.common.reflect.TypeToken;
 
@@ -574,7 +575,7 @@ public class ModelTypes {
 							.parameterized(valueConverter.getType().getTypeList()));
 						return new ModelInstanceConverter<Object, SettableValue<?>>() {
 							@Override
-							public SettableValue<?> convert(Object sourceV) {
+							public SettableValue<?> convert(Object sourceV) throws QonfigEvaluationException {
 								return SettableValue.asSettable(//
 									ObservableValue.of((TypeToken<Object>) type.getType(0), //
 										((ModelInstanceConverter<Object, Object>) valueConverter).convert(sourceV)), //
@@ -603,7 +604,7 @@ public class ModelTypes {
 							return null;
 						return new ModelInstanceConverter<Object, SettableValue<?>>() {
 							@Override
-							public SettableValue<?> convert(Object sourceV) {
+							public SettableValue<?> convert(Object sourceV) throws QonfigEvaluationException {
 								return valueConverter.convert(//
 									SettableValue.of((TypeToken<Object>) sourceType.getType(0), sourceV, "Unmodifiable"));
 							}
@@ -640,7 +641,7 @@ public class ModelTypes {
 							return null;
 						return new ModelInstanceConverter<SettableValue<?>, Object>() {
 							@Override
-							public Object convert(SettableValue<?> sourceV) {
+							public Object convert(SettableValue<?> sourceV) throws QonfigEvaluationException {
 								Object v = flattener.apply(sourceV);
 								return valueConverter.convert(v);
 							}

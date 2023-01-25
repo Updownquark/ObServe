@@ -12,6 +12,7 @@ import org.observe.Transformation;
 import org.observe.Transformation.ReverseQueryResult;
 import org.observe.Transformation.TransformationValues;
 import org.observe.expresso.ExpressoEnv;
+import org.observe.expresso.ExpressoEvaluationException;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
@@ -22,13 +23,14 @@ import org.observe.util.TypeTokens;
 import org.qommons.LambdaUtils;
 import org.qommons.QommonsUtils;
 import org.qommons.collect.BetterList;
-import org.qommons.config.QonfigInterpretationException;
+import org.qommons.config.QonfigEvaluationException;
 
 import com.google.common.reflect.TypeToken;
 
 /** An expression representing an operation that takes 2 inputs */
 public class BinaryOperator implements ObservableExpression {
 	private final String theOperator;
+	private final int theOperatorOffset;
 	private final ObservableExpression theLeft;
 	private final ObservableExpression theRight;
 
@@ -37,8 +39,9 @@ public class BinaryOperator implements ObservableExpression {
 	 * @param left The first operation input
 	 * @param right The second operation input
 	 */
-	public BinaryOperator(String operator, ObservableExpression left, ObservableExpression right) {
+	public BinaryOperator(String operator, int operatorOffset, ObservableExpression left, ObservableExpression right) {
 		theOperator = operator;
+		theOperatorOffset = operatorOffset;
 		theLeft = left;
 		theRight = right;
 	}
@@ -59,6 +62,16 @@ public class BinaryOperator implements ObservableExpression {
 	}
 
 	@Override
+	public int getExpressionOffset() {
+		return theLeft.getExpressionOffset();
+	}
+
+	@Override
+	public int getExpressionEnd() {
+		return theRight.getExpressionEnd();
+	}
+
+	@Override
 	public List<? extends ObservableExpression> getChildren() {
 		return QommonsUtils.unmodifiableCopy(theLeft, theRight);
 	}
@@ -71,17 +84,18 @@ public class BinaryOperator implements ObservableExpression {
 		ObservableExpression left = theLeft.replaceAll(replace);
 		ObservableExpression right = theRight.replaceAll(replace);
 		if (left != theLeft || right != theRight)
-			return new BinaryOperator(theOperator, left, right);
+			return new BinaryOperator(theOperator, theOperatorOffset, left, right);
 		return this;
 	}
 
 	@Override
 	public <M, MV extends M> ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env)
-		throws QonfigInterpretationException {
+		throws ExpressoEvaluationException {
 		if (type.getModelType() == ModelTypes.Action) {//
 		} else if (type.getModelType() == ModelTypes.Value) {//
 		} else
-			throw new QonfigInterpretationException("Binary operator " + theOperator + " can only be evaluated as a value or an action");
+			throw new ExpressoEvaluationException(getExpressionOffset(), getExpressionEnd(),
+				"Binary operator " + theOperator + " can only be evaluated as a value or an action");
 		boolean action = theOperator.charAt(theOperator.length() - 1) == '=';
 		if (action) {
 			switch (theOperator) {
@@ -99,7 +113,7 @@ public class BinaryOperator implements ObservableExpression {
 		TypeToken<?> targetOpType;
 		switch (types.size()) {
 		case 0:
-			throw new QonfigInterpretationException(
+			throw new ExpressoEvaluationException(theOperatorOffset, theOperatorOffset + theOperator.length(),
 				"Unsupported or unimplemented binary operator '" + theOperator + "' targeting type " + targetType.getName());
 		case 1:
 			targetOpType = TypeTokens.get().of(types.iterator().next());
@@ -110,12 +124,18 @@ public class BinaryOperator implements ObservableExpression {
 		}
 		ValueContainer<SettableValue<?>, SettableValue<Object>> left = theLeft
 			.evaluate(ModelTypes.Value.forType((TypeToken<Object>) targetOpType), env);
-		Class<?> leftType = TypeTokens.getRawType(left.getType().getType(0));
+		TypeToken<?> leftTypeT;
+		try {
+			leftTypeT = left.getType().getType(0);
+		} catch (QonfigEvaluationException e) {
+			throw new ExpressoEvaluationException(theLeft.getExpressionOffset(), theLeft.getExpressionEnd(), e.getMessage(), e);
+		}
+		Class<?> leftType = TypeTokens.getRawType(leftTypeT);
 		types = env.getBinaryOperators().getSupportedSecondaryInputTypes(operator, targetType, leftType);
 		switch (types.size()) {
 		case 0:
-			throw new QonfigInterpretationException(
-				"Binary operator '" + theOperator + "' is not supported or implemented for left operand type " + left.getType().getType(0)
+			throw new ExpressoEvaluationException(theOperatorOffset, theOperatorOffset + theOperator.length(),
+				"Binary operator '" + theOperator + "' is not supported or implemented for left operand type " + leftTypeT
 				+ ", target type " + targetType.getName());
 		case 1:
 			targetOpType = TypeTokens.get().of(types.iterator().next());
@@ -126,17 +146,25 @@ public class BinaryOperator implements ObservableExpression {
 		}
 		ValueContainer<SettableValue<?>, SettableValue<Object>> right = theRight
 			.evaluate(ModelTypes.Value.forType((TypeToken<Object>) targetOpType), env);
-		BinaryOp<Object, Object, Object> op = (BinaryOp<Object, Object, Object>) env.getBinaryOperators().getOperator(operator, targetType, //
-			leftType, TypeTokens.getRawType(right.getType().getType(0)));
+		TypeToken<?> rightTypeT;
+		try {
+			rightTypeT = right.getType().getType(0);
+		} catch (QonfigEvaluationException e) {
+			throw new ExpressoEvaluationException(theRight.getExpressionOffset(), theRight.getExpressionEnd(), e.getMessage(), e);
+		}
+		BinaryOp<Object, Object, Object> op;
+		op = (BinaryOp<Object, Object, Object>) env.getBinaryOperators().getOperator(operator, targetType, //
+			leftType, TypeTokens.getRawType(rightTypeT));
 		if (op == null)
-			throw new QonfigInterpretationException(
-				"Binary operator '" + theOperator + "' is not supported or implemented for operand types " + left.getType().getType(0)
-				+ " and " + right.getType().getType(0) + ", target type " + targetType.getName());
+			throw new ExpressoEvaluationException(theOperatorOffset, theOperatorOffset + theOperator.length(),
+				"Binary operator '" + theOperator + "' is not supported or implemented for operand types " + leftTypeT + " and "
+					+ rightTypeT + ", target type " + targetType.getName());
 		TypeToken<Object> resultType = op.getTargetType(//
-			left.getType().getType(0), right.getType().getType(0));
+			leftTypeT, rightTypeT);
 		if (action) {
 			if (type.getModelType() != ModelTypes.Action)
-				throw new QonfigInterpretationException("Binary operator " + theOperator + " can only be evaluated as an action");
+				throw new ExpressoEvaluationException(theOperatorOffset, theOperatorOffset + theOperator.length(),
+					"Binary operator " + theOperator + " can only be evaluated as an action");
 			TypeToken<Object> actionType;
 			boolean voidAction = TypeTokens.get().unwrap(TypeTokens.getRawType(type.getType(0))) == void.class;
 			if (voidAction)
@@ -144,7 +172,7 @@ public class BinaryOperator implements ObservableExpression {
 			else if (TypeTokens.get().isAssignable(type.getType(0), resultType))
 				actionType = resultType;
 			else
-				throw new QonfigInterpretationException(
+				throw new ExpressoEvaluationException(theOperatorOffset, theOperatorOffset + theOperator.length(),
 					this + " cannot be evaluated as an " + ModelTypes.Action.getName() + "<" + type.getType(0) + ">");
 			return (ValueContainer<M, MV>) new ValueContainer<ObservableAction<?>, ObservableAction<Object>>() {
 				@Override
@@ -153,7 +181,7 @@ public class BinaryOperator implements ObservableExpression {
 				}
 
 				@Override
-				public ObservableAction<Object> get(ModelSetInstance msi) {
+				public ObservableAction<Object> get(ModelSetInstance msi) throws QonfigEvaluationException {
 					SettableValue<Object> leftV = left.get(msi);
 					SettableValue<Object> rightV = right.get(msi);
 					return createOpAction(leftV, rightV);
@@ -195,7 +223,7 @@ public class BinaryOperator implements ObservableExpression {
 
 				@Override
 				public ObservableAction<Object> forModelCopy(ObservableAction<Object> value, ModelSetInstance sourceModels,
-					ModelSetInstance newModels) {
+					ModelSetInstance newModels) throws QonfigEvaluationException {
 					SettableValue<Object> sourceLeft = left.get(sourceModels);
 					SettableValue<Object> newLeft = left.get(newModels);
 					SettableValue<Object> sourceRight = right.get(sourceModels);
@@ -207,8 +235,8 @@ public class BinaryOperator implements ObservableExpression {
 				}
 
 				@Override
-				public BetterList<ValueContainer<?, ?>> getCores() {
-					return BetterList.of(Stream.of(left, right).flatMap(vc -> vc.getCores().stream()));
+				public BetterList<ValueContainer<?, ?>> getCores() throws QonfigEvaluationException {
+					return BetterList.of(Stream.of(left, right), vc -> vc.getCores().stream());
 				}
 
 				@Override
@@ -218,7 +246,8 @@ public class BinaryOperator implements ObservableExpression {
 			};
 		} else {
 			if (type.getModelType() != ModelTypes.Value)
-				throw new QonfigInterpretationException("Binary operator " + theOperator + " can only be evaluated as a value");
+				throw new ExpressoEvaluationException(theOperatorOffset, theOperatorOffset + theOperator.length(),
+					"Binary operator " + theOperator + " can only be evaluated as a value");
 			ValueContainer<SettableValue<?>, SettableValue<Object>> operated = new ValueContainer<SettableValue<?>, SettableValue<Object>>() {
 				@Override
 				public ModelInstanceType<SettableValue<?>, SettableValue<Object>> getType() {
@@ -226,7 +255,7 @@ public class BinaryOperator implements ObservableExpression {
 				}
 
 				@Override
-				public SettableValue<Object> get(ModelSetInstance msi) {
+				public SettableValue<Object> get(ModelSetInstance msi) throws QonfigEvaluationException {
 					SettableValue<Object> leftV = left.get(msi);
 					SettableValue<Object> rightV = right.get(msi);
 					return createOpValue(leftV, rightV);
@@ -260,7 +289,7 @@ public class BinaryOperator implements ObservableExpression {
 
 				@Override
 				public SettableValue<Object> forModelCopy(SettableValue<Object> value, ModelSetInstance sourceModels,
-					ModelSetInstance newModels) {
+					ModelSetInstance newModels) throws QonfigEvaluationException {
 					SettableValue<Object> sourceLeft = left.get(sourceModels);
 					SettableValue<Object> newLeft = left.get(newModels);
 					SettableValue<Object> sourceRight = right.get(sourceModels);
@@ -272,8 +301,8 @@ public class BinaryOperator implements ObservableExpression {
 				}
 
 				@Override
-				public BetterList<ValueContainer<?, ?>> getCores() {
-					return BetterList.of(Stream.of(left, right).flatMap(vc -> vc.getCores().stream()));
+				public BetterList<ValueContainer<?, ?>> getCores() throws QonfigEvaluationException {
+					return BetterList.of(Stream.of(left, right), vc -> vc.getCores().stream());
 				}
 
 				@Override
@@ -281,7 +310,7 @@ public class BinaryOperator implements ObservableExpression {
 					return BinaryOperator.this.toString();
 				}
 			};
-			return operated.as(type);
+			return (ValueContainer<M, MV>) operated;
 		}
 	}
 

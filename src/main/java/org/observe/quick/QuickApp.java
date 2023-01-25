@@ -10,6 +10,7 @@ import javax.swing.JOptionPane;
 import org.observe.expresso.ObservableModelSet;
 import org.qommons.ArgumentParsing2;
 import org.qommons.config.QonfigApp;
+import org.qommons.config.QonfigEvaluationException;
 
 /** Runs a Quick application from an application setup file configured as qonfig-app.qtd */
 public class QuickApp {
@@ -71,8 +72,13 @@ public class QuickApp {
 		QuickUiDef ui = quickDoc.createUI(extModels);
 
 		EventQueue.invokeLater(() -> {
-			ui.run(null, null).setVisible(true);
-			// TODO Shut down Splash Screen
+			try {
+				ui.run(null, null).setVisible(true);
+			} catch (QonfigEvaluationException e) {
+				throw new IllegalStateException("Failed to construct user interface", e);
+			} finally {
+				// TODO Shut down Splash Screen
+			}
 		});
 	}
 }

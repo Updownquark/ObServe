@@ -3,14 +3,17 @@ package org.observe.quick.style;
 import org.observe.SettableValue;
 import org.observe.expresso.DynamicModelValue;
 import org.observe.expresso.ExpressoQIS;
+import org.observe.expresso.ModelException;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelTag;
+import org.observe.expresso.TypeConversionException;
 import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigElementOrAddOn;
+import org.qommons.config.QonfigEvaluationException;
 import org.qommons.config.QonfigInterpretation;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigInterpreterCore.CoreSession;
@@ -35,8 +38,12 @@ public class StyleQIS implements SpecialSession<StyleQIS> {
 	 * @param parentModels The model instance for the parent &lt;style> element
 	 */
 	public static void installParentModels(ModelSetInstance models, ModelSetInstance parentModels) {
-		DynamicModelValue.satisfyDynamicValue(PARENT_MODEL_NAME, ModelTypes.Value.forType(ModelSetInstance.class), models, //
-			SettableValue.of(ModelSetInstance.class, parentModels, "Not settable"));
+		try {
+			DynamicModelValue.satisfyDynamicValue(PARENT_MODEL_NAME, ModelTypes.Value.forType(ModelSetInstance.class), models, //
+				SettableValue.of(ModelSetInstance.class, parentModels, "Not settable"));
+		} catch (QonfigEvaluationException | ModelException | TypeConversionException e) {
+			throw new IllegalStateException("Could not install parent models", e);
+		}
 	}
 
 	/**
@@ -46,8 +53,8 @@ public class StyleQIS implements SpecialSession<StyleQIS> {
 	public static ModelSetInstance getParentModels(ModelSetInstance models) {
 		try {
 			return models.getModel().getValue(PARENT_MODEL_NAME, PARENT_MODEL_TYPE).get(models).get();
-		} catch (QonfigInterpretationException e) {
-			throw new IllegalStateException("No parent models installed", e);
+		} catch (QonfigEvaluationException | ModelException | TypeConversionException e) {
+			throw new IllegalStateException("Could not access parent models. Perhaps they have not been installed.", e);
 		}
 	}
 
@@ -104,9 +111,10 @@ public class StyleQIS implements SpecialSession<StyleQIS> {
 		if (element != null) {
 			QonfigElementOrAddOn el = getElement().getDocument().getDocToolkit().getElementOrAddOn(element);
 			if (el == null)
-				throw new QonfigInterpretationException("No such element or add-on '" + element + "'");
+				throw new QonfigInterpretationException("No such element or add-on '" + element + "'", getElement().getPositionInFile(), 0);
 			else if (!getElement().isInstance(el))
-				throw new QonfigInterpretationException("This element is not an instance of  '" + element + "'");
+				throw new QonfigInterpretationException("This element is not an instance of  '" + element + "'",
+					getElement().getPositionInFile(), 0);
 			return QuickStyleType.of(el, as(ExpressoQIS.class), theStyleTK).getAttribute(name, type);
 		}
 		return QuickStyleType.of(getFocusType(), as(ExpressoQIS.class), theStyleTK).getAttribute(name, type);

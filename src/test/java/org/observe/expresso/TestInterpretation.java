@@ -8,8 +8,8 @@ import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ValueContainer;
 import org.qommons.Version;
 import org.qommons.collect.BetterList;
+import org.qommons.config.QonfigEvaluationException;
 import org.qommons.config.QonfigInterpretation;
-import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigInterpreterCore.Builder;
 import org.qommons.config.QonfigToolkit;
 import org.qommons.config.SpecialSession;
@@ -45,33 +45,32 @@ public class TestInterpretation implements QonfigInterpretation {
 		interpreter//
 		.createWith("stateful-struct", ObservableModelSet.ValueCreator.class, session -> {
 			ExpressoQIS exS = session.as(ExpressoQIS.class);
-			ObservableExpression derivedStateX = exS.getAttributeExpression("derived-state");
+			QonfigExpression2 derivedStateX = exS.getAttributeExpression("derived-state");
 			return () -> {
 				ValueContainer<SettableValue<?>, SettableValue<Integer>> derivedStateV;
-				try {
-					derivedStateV = derivedStateX.evaluate(ModelTypes.Value.forType(int.class), exS.getExpressoEnv());
-				} catch (QonfigInterpretationException e) {
-					session.withError("Could not create derived value", e);
-					return null;
-				}
+				derivedStateV = derivedStateX.evaluate(ModelTypes.Value.forType(int.class));
 				return new ObservableModelSet.AbstractValueContainer<SettableValue<?>, SettableValue<StatefulTestStructure>>(
 					ModelTypes.Value.forType(StatefulTestStructure.class)) {
 					@Override
-					public SettableValue<StatefulTestStructure> get(ModelSetInstance models) {
+					public SettableValue<StatefulTestStructure> get(ModelSetInstance models) throws QonfigEvaluationException {
 						models = exS.wrapLocal(models);
 						StatefulTestStructure structure = new StatefulTestStructure(derivedStateV.get(models));
-						DynamicModelValue.satisfyDynamicValue(//
-							"internalState", ModelTypes.Value.forType(int.class), models, structure.getInternalState());
+						try {
+							DynamicModelValue.satisfyDynamicValue(//
+								"internalState", ModelTypes.Value.forType(int.class), models, structure.getInternalState());
+						} catch (ModelException | TypeConversionException e) {
+								throw new QonfigEvaluationException(e, session.getElement().getPositionInFile(), 0);
+						}
 						return SettableValue.of(StatefulTestStructure.class, structure, "Not Settable");
 					}
 
 					@Override
-						public SettableValue<StatefulTestStructure> forModelCopy(SettableValue<StatefulTestStructure> value,
-							ModelSetInstance sourceModels, ModelSetInstance newModels) {
-							return value;
-						}
+					public SettableValue<StatefulTestStructure> forModelCopy(SettableValue<StatefulTestStructure> value,
+						ModelSetInstance sourceModels, ModelSetInstance newModels) {
+						return value;
+					}
 
-						@Override
+					@Override
 					public BetterList<ValueContainer<?, ?>> getCores() {
 						return BetterList.of(this);
 					}
@@ -80,31 +79,25 @@ public class TestInterpretation implements QonfigInterpretation {
 		})//
 		.createWith("dynamic-type-stateful-struct", ObservableModelSet.ValueCreator.class, session -> {
 			ExpressoQIS exS = session.as(ExpressoQIS.class);
-			ObservableExpression internalStateX = exS.getAttributeExpression("internal-state");
-			ObservableExpression derivedStateX = exS.getAttributeExpression("derived-state");
+			QonfigExpression2 internalStateX = exS.getAttributeExpression("internal-state");
+			QonfigExpression2 derivedStateX = exS.getAttributeExpression("derived-state");
 			return () -> {
 				// Satisfy the internalState value with the internalState container
 				DynamicModelValue.satisfyDynamicValue("internalState", exS.getExpressoEnv().getModels(), () -> {
-					try {
-						return internalStateX.evaluate(ModelTypes.Value.any(), exS.getExpressoEnv());
-					} catch (QonfigInterpretationException e) {
-						session.withError("Could not create internal value", e);
-						return null;
-					}
+					return internalStateX.evaluate(ModelTypes.Value.any());
 				});
 				ValueContainer<SettableValue<?>, SettableValue<?>> internalStateV;
-				ValueContainer<SettableValue<?>, SettableValue<?>> derivedStateV;
 				try {
 					internalStateV = exS.getExpressoEnv().getModels().getValue("internalState", ModelTypes.Value.any());
-					derivedStateV = derivedStateX.evaluate(ModelTypes.Value.any(), exS.getExpressoEnv());
-				} catch (QonfigInterpretationException e) {
-					session.withError("Could not create derived value", e);
-					return null;
+				} catch (ModelException | TypeConversionException e) {
+						throw new QonfigEvaluationException(e, session.getElement().getPositionInFile(), 0);
 				}
+				ValueContainer<SettableValue<?>, SettableValue<?>> derivedStateV = derivedStateX.evaluate(ModelTypes.Value.any());
 				return new ObservableModelSet.AbstractValueContainer<SettableValue<?>, SettableValue<DynamicTypeStatefulTestStructure>>(
 					ModelTypes.Value.forType(DynamicTypeStatefulTestStructure.class)) {
 					@Override
-					public SettableValue<DynamicTypeStatefulTestStructure> get(ModelSetInstance models) {
+					public SettableValue<DynamicTypeStatefulTestStructure> get(ModelSetInstance models)
+						throws QonfigEvaluationException {
 						models = exS.wrapLocal(models);
 						DynamicTypeStatefulTestStructure structure = new DynamicTypeStatefulTestStructure(//
 							internalStateV.get(models), derivedStateV.get(models));
@@ -112,13 +105,13 @@ public class TestInterpretation implements QonfigInterpretation {
 					}
 
 					@Override
-						public SettableValue<DynamicTypeStatefulTestStructure> forModelCopy(
-							SettableValue<DynamicTypeStatefulTestStructure> value, ModelSetInstance sourceModels,
-							ModelSetInstance newModels) {
-							return value;
-						}
+					public SettableValue<DynamicTypeStatefulTestStructure> forModelCopy(
+						SettableValue<DynamicTypeStatefulTestStructure> value, ModelSetInstance sourceModels,
+						ModelSetInstance newModels) {
+						return value;
+					}
 
-						@Override
+					@Override
 					public BetterList<ValueContainer<?, ?>> getCores() {
 						return BetterList.of(this);
 					}
@@ -127,21 +120,20 @@ public class TestInterpretation implements QonfigInterpretation {
 		})//
 		.createWith("dynamic-type-stateful-struct2", ObservableModelSet.ValueCreator.class, session -> {
 			ExpressoQIS exS = session.as(ExpressoQIS.class);
-			ObservableExpression derivedStateX = exS.getAttributeExpression("derived-state");
+			QonfigExpression2 derivedStateX = exS.getAttributeExpression("derived-state");
 			return () -> {
 				ValueContainer<SettableValue<?>, SettableValue<?>> internalStateV;
-				ValueContainer<SettableValue<?>, SettableValue<?>> derivedStateV;
 				try {
 					internalStateV = exS.getExpressoEnv().getModels().getValue("internalState", ModelTypes.Value.any());
-					derivedStateV = derivedStateX.evaluate(ModelTypes.Value.any(), exS.getExpressoEnv());
-				} catch (QonfigInterpretationException e) {
-					session.withError("Could not create derived value", e);
-					return null;
+				} catch (ModelException | TypeConversionException e) {
+						throw new QonfigEvaluationException(e, session.getElement().getPositionInFile(), 0);
 				}
+				ValueContainer<SettableValue<?>, SettableValue<?>> derivedStateV = derivedStateX.evaluate(ModelTypes.Value.any());
 				return new ObservableModelSet.AbstractValueContainer<SettableValue<?>, SettableValue<DynamicTypeStatefulTestStructure>>(
 					ModelTypes.Value.forType(DynamicTypeStatefulTestStructure.class)) {
 					@Override
-					public SettableValue<DynamicTypeStatefulTestStructure> get(ModelSetInstance models) {
+					public SettableValue<DynamicTypeStatefulTestStructure> get(ModelSetInstance models)
+						throws QonfigEvaluationException {
 						models = exS.wrapLocal(models);
 						DynamicTypeStatefulTestStructure structure = new DynamicTypeStatefulTestStructure(//
 							internalStateV.get(models), derivedStateV.get(models));
@@ -149,13 +141,13 @@ public class TestInterpretation implements QonfigInterpretation {
 					}
 
 					@Override
-						public SettableValue<DynamicTypeStatefulTestStructure> forModelCopy(
-							SettableValue<DynamicTypeStatefulTestStructure> value, ModelSetInstance sourceModels,
-							ModelSetInstance newModels) {
-							return value;
-						}
+					public SettableValue<DynamicTypeStatefulTestStructure> forModelCopy(
+						SettableValue<DynamicTypeStatefulTestStructure> value, ModelSetInstance sourceModels,
+						ModelSetInstance newModels) {
+						return value;
+					}
 
-						@Override
+					@Override
 					public BetterList<ValueContainer<?, ?>> getCores() {
 						return BetterList.of(this);
 					}

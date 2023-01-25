@@ -19,6 +19,7 @@ import org.observe.ObservableAction;
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.expresso.ExpressoEnv;
+import org.observe.expresso.ExpressoEvaluationException;
 import org.observe.expresso.ModelType.ModelInstanceConverter;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelType.ModelInstanceType.SingleTyped;
@@ -30,7 +31,7 @@ import org.observe.util.TypeTokens;
 import org.qommons.ArrayUtils;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterList;
-import org.qommons.config.QonfigInterpretationException;
+import org.qommons.config.QonfigEvaluationException;
 import org.qommons.ex.CheckedExceptionWrapper;
 
 import com.google.common.reflect.TypeToken;
@@ -39,14 +40,18 @@ import com.google.common.reflect.TypeToken;
 public abstract class Invocation implements ObservableExpression {
 	private final List<String> theTypeArguments;
 	private final List<ObservableExpression> theArguments;
+	private final int theOffset;
+	private final int theEnd;
 
 	/**
 	 * @param typeArguments The type arguments to the invocation
 	 * @param arguments The arguments to use to invoke the invokable
 	 */
-	public Invocation(List<String> typeArguments, List<ObservableExpression> arguments) {
+	public Invocation(List<String> typeArguments, List<ObservableExpression> arguments, int offset, int end) {
 		theTypeArguments = typeArguments;
 		theArguments = arguments;
+		theOffset = offset;
+		theEnd = end;
 	}
 
 	/** @return The type arguments to the invocation */
@@ -60,8 +65,18 @@ public abstract class Invocation implements ObservableExpression {
 	}
 
 	@Override
+	public int getExpressionOffset() {
+		return theOffset;
+	}
+
+	@Override
+	public int getExpressionEnd() {
+		return theEnd;
+	}
+
+	@Override
 	public <M, MV extends M> ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env)
-		throws QonfigInterpretationException {
+		throws ExpressoEvaluationException {
 		if (type.getModelType() == ModelTypes.Action) {
 			try (Transaction t = asAction()) {
 				InvokableResult<?, SettableValue<?>, ? extends SettableValue<?>> result = evaluateInternal2(
@@ -86,16 +101,16 @@ public abstract class Invocation implements ObservableExpression {
 		 * @param arg The index of the argument to check
 		 * @param paramType The type of the input parameter
 		 * @return Whether the given parameter can be matched to the given argument
-		 * @throws QonfigInterpretationException If an error occurs making the determination
+		 * @throws ExpressoEvaluationException If an error occurs making the determination
 		 */
-		boolean matchesType(int arg, TypeToken<?> paramType) throws QonfigInterpretationException;
+		boolean matchesType(int arg, TypeToken<?> paramType) throws ExpressoEvaluationException;
 
 		/**
 		 * @param arg The argument index
 		 * @return The argument type at the given index
-		 * @throws QonfigInterpretationException If an error occurs making the determination
+		 * @throws ExpressoEvaluationException If an error occurs making the determination
 		 */
-		TypeToken<?> resolve(int arg) throws QonfigInterpretationException;
+		TypeToken<?> resolve(int arg) throws ExpressoEvaluationException;
 	}
 
 	/** An {@link Args} option representing a set of arguments to an invokable */
@@ -119,11 +134,18 @@ public abstract class Invocation implements ObservableExpression {
 		}
 
 		@Override
-		public boolean matchesType(int arg, TypeToken<?> paramType) throws QonfigInterpretationException {
+		public boolean matchesType(int arg, TypeToken<?> paramType) throws ExpressoEvaluationException {
 			ValueContainer<SettableValue<?>, SettableValue<?>> c;
 			for (int i = 0; i < args[arg].size(); i++) {
 				c = args[arg].get(i);
-				if (TypeTokens.get().isAssignable(paramType, c.getType().getType(0))) {
+				TypeToken<?> argType;
+				try {
+					argType = c.getType().getType(0);
+				} catch (QonfigEvaluationException e) {
+					throw new ExpressoEvaluationException(theArguments.get(i).getExpressionOffset(),
+						theArguments.get(i).getExpressionEnd(), e.getMessage(), e);
+				}
+				if (TypeTokens.get().isAssignable(paramType, argType)) {
 					// Move to the beginning
 					args[arg].remove(i);
 					args[arg].add(0, c);
@@ -138,14 +160,18 @@ public abstract class Invocation implements ObservableExpression {
 		}
 
 		@Override
-		public TypeToken<?> resolve(int arg) throws QonfigInterpretationException {
+		public TypeToken<?> resolve(int arg) throws ExpressoEvaluationException {
 			if (resolved[arg] == null) {
 				if (args[arg].isEmpty())
 					resolved[arg] = theArguments.get(arg).evaluate(ModelTypes.Value.any(), theEnv);
 				else
 					resolved[arg] = args[arg].get(0);
 			}
-			return resolved[arg].getType().getType(0);
+			try {
+				return resolved[arg].getType().getType(0);
+			} catch (QonfigEvaluationException e) {
+				throw new ExpressoEvaluationException(getExpressionOffset(), getExpressionEnd(), e.getMessage(), e);
+			}
 		}
 
 		@Override
@@ -193,10 +219,10 @@ public abstract class Invocation implements ObservableExpression {
 	 * @param env The expresso environment to use to evaluate this invocation
 	 * @param args The argument option to use to invoke
 	 * @return The result definition
-	 * @throws QonfigInterpretationException If an error occurs evaluating the invokable
+	 * @throws ExpressoEvaluationException If an error occurs evaluating the invokable
 	 */
 	protected abstract <M, MV extends M> InvokableResult<?, M, MV> evaluateInternal2(ModelInstanceType<M, MV> type, ExpressoEnv env,
-		ArgOption args) throws QonfigInterpretationException;
+		ArgOption args) throws ExpressoEvaluationException;
 
 	private <X extends Executable, T> InvocationActionContainer<X, T> createActionContainer(
 		InvokableResult<X, SettableValue<?>, SettableValue<T>> result) {
@@ -250,12 +276,12 @@ public abstract class Invocation implements ObservableExpression {
 	 * @param impl The executable implementation corresponding to the invokable type
 	 * @param invocation The expression that this is being called from, just for inclusion in an error message
 	 * @return The result containing the invokable matching the given options, or null if no such invokable was found in the list
-	 * @throws QonfigInterpretationException If a suitable invokable is found, but there is an error with its invocation
+	 * @throws ExpressoEvaluationException If a suitable invokable is found, but there is an error with its invocation
 	 */
 	public static <X extends Executable, M, MV extends M> MethodResult<X, MV> findMethod(X[] methods, String methodName,
 		TypeToken<?> contextType, boolean arg0Context, List<? extends Args> argOptions, ModelInstanceType<M, MV> targetType,
-		ExpressoEnv env, ExecutableImpl<X> impl, ObservableExpression invocation) throws QonfigInterpretationException {
-		Map<String, QonfigInterpretationException> methodErrors = null;
+		ExpressoEnv env, ExecutableImpl<X> impl, ObservableExpression invocation) throws ExpressoEvaluationException {
+		Map<String, ExpressoEvaluationException> methodErrors = null;
 		MethodResult<X, MV> bestResult = null;
 		for (X m : methods) {
 			if (methodName != null && !m.getName().equals(methodName))
@@ -275,7 +301,7 @@ public abstract class Invocation implements ObservableExpression {
 				if (specificity < bestResult.specificity)
 					continue; // Current result is better than this even if it matches
 			}
-			List<QonfigInterpretationException> errors = null;
+			List<ExpressoEvaluationException> errors = null;
 			for (int o = 0; o < argOptions.size(); o++) {
 				try {
 					TypeTokens.TypeVariableAccumulation tva;
@@ -328,13 +354,13 @@ public abstract class Invocation implements ObservableExpression {
 						TypeToken<?> paramType = paramTypes[p];
 						if (p == paramTypes.length - 1 && m.isVarArgs()) {
 							// Test var-args invocation first
-							QonfigInterpretationException ex = null;
+							ExpressoEvaluationException ex = null;
 							try {
 								TypeToken<?> ptComp = paramType.getComponentType();
 								varArgs = option.matchesType(a, ptComp);
 								if (varArgs && !tva.accumulate(ptComp, option.resolve(a)))
 									ok = false;
-							} catch (QonfigInterpretationException e) {
+							} catch (ExpressoEvaluationException e) {
 								ex = e;
 							}
 							if (!varArgs && option.size() == paramTypes.length) { // Check for non-var-args invocation
@@ -357,8 +383,9 @@ public abstract class Invocation implements ObservableExpression {
 
 						ModelInstanceConverter<?, ?> converter = ModelTypes.Value.forType(returnType).convert(targetType);
 						if (converter == null)
-							throw new QonfigInterpretationException("Return type " + returnType + " of method "
-								+ Invocation.printSignature(m) + " cannot be assigned to type " + targetType);
+							throw new ExpressoEvaluationException(invocation.getExpressionOffset(), invocation.getExpressionEnd(),
+								"Return type " + returnType + " of method " + Invocation.printSignature(m) + " cannot be assigned to type "
+									+ targetType);
 						if (specificity < 0) {
 							specificity = 0;
 							for (TypeToken<?> pt : paramTypes)
@@ -367,7 +394,7 @@ public abstract class Invocation implements ObservableExpression {
 						bestResult = new Invocation.MethodResult<>(m, o, false, specificity,
 							(ModelInstanceConverter<SettableValue<Object>, MV>) converter);
 					}
-				} catch (QonfigInterpretationException e) {
+				} catch (ExpressoEvaluationException e) {
 					if (errors == null)
 						errors = new ArrayList<>(3);
 					errors.add(e);
@@ -386,7 +413,8 @@ public abstract class Invocation implements ObservableExpression {
 						msg.append(errors.get(i).getMessage());
 					}
 
-					QonfigInterpretationException ex = new QonfigInterpretationException(msg.toString(), errors.get(0));
+					ExpressoEvaluationException ex = new ExpressoEvaluationException(//
+						errors.get(0).getErrorOffset(), errors.get(0).getEndIndex(), msg.toString(), errors.get(0));
 					for (int i = 1; i < errors.size(); i++)
 						ex.addSuppressed(errors.get(i));
 					methodErrors.put(m.toString(), ex);
@@ -396,17 +424,19 @@ public abstract class Invocation implements ObservableExpression {
 		if (bestResult == null && methodErrors != null) {
 			String exMsg = methodErrors.values().iterator().next().getMessage();
 			boolean sameMsg = true;
-			for (QonfigInterpretationException ex : methodErrors.values())
+			for (ExpressoEvaluationException ex : methodErrors.values())
 				sameMsg &= exMsg.equals(ex.getMessage());
 			if (sameMsg)
 				throw methodErrors.values().iterator().next();
 			StringBuilder msg = new StringBuilder("Could not find a match for ").append(invocation).append(':');
-			for (Map.Entry<String, QonfigInterpretationException> err : methodErrors.entrySet()) {
+			for (Map.Entry<String, ExpressoEvaluationException> err : methodErrors.entrySet()) {
 				msg.append("\n\t").append(err.getKey()).append(": ").append(err.getValue().getMessage());
 			}
-			QonfigInterpretationException ex = new QonfigInterpretationException(msg.toString(), methodErrors.values().iterator().next());
+			ExpressoEvaluationException firstEx = methodErrors.values().iterator().next();
+			ExpressoEvaluationException ex = new ExpressoEvaluationException(//
+				firstEx.getErrorOffset(), firstEx.getEndIndex(), msg.toString(), firstEx);
 			boolean first = true;
-			for (QonfigInterpretationException err : methodErrors.values()) {
+			for (ExpressoEvaluationException err : methodErrors.values()) {
 				if (first)
 					first = false;
 				else
@@ -469,7 +499,7 @@ public abstract class Invocation implements ObservableExpression {
 		}
 
 		@Override
-		public MV get(ModelSetInstance models) {
+		public MV get(ModelSetInstance models) throws QonfigEvaluationException {
 			SettableValue<?> ctxV = theContext == null ? null : theContext.get(models);
 			SettableValue<?>[] argVs = new SettableValue[theArguments.size()];
 			Observable<?>[] changeSources = new Observable[theContext == null ? argVs.length : argVs.length + 1];
@@ -486,7 +516,7 @@ public abstract class Invocation implements ObservableExpression {
 		}
 
 		@Override
-		public MV forModelCopy(MV value, ModelSetInstance sourceModels, ModelSetInstance newModels) {
+		public MV forModelCopy(MV value, ModelSetInstance sourceModels, ModelSetInstance newModels) throws QonfigEvaluationException {
 			SettableValue<?> sourceCtx = theContext == null ? null : theContext.get(sourceModels);
 			SettableValue<?> newCtx = theContext == null ? null : theContext.get(newModels);
 			SettableValue<?>[] argVs = new SettableValue[theArguments.size()];
@@ -508,13 +538,14 @@ public abstract class Invocation implements ObservableExpression {
 		}
 
 		@Override
-		public BetterList<ValueContainer<?, ?>> getCores() {
+		public BetterList<ValueContainer<?, ?>> getCores() throws QonfigEvaluationException {
 			return BetterList.of(//
-				Stream.concat(Stream.of(theContext), theArguments.stream())
-				.flatMap(vc -> vc == null ? Stream.empty() : vc.getCores().stream()));
+				Stream.concat(Stream.of(theContext), theArguments.stream()), //
+				vc -> vc == null ? Stream.empty() : vc.getCores().stream());
 		}
 
-		protected abstract MV createModelValue(SettableValue<?> ctxV, SettableValue<?>[] argVs, Observable<Object> changes);
+		protected abstract MV createModelValue(SettableValue<?> ctxV, SettableValue<?>[] argVs, Observable<Object> changes)
+			throws QonfigEvaluationException;
 
 		protected <C> Object invoke(SettableValue<C> ctxV, SettableValue<?>[] argVs, boolean asAction)
 			throws IllegalAccessException, IllegalArgumentException, InvocationTargetException, InstantiationException {
@@ -597,8 +628,8 @@ public abstract class Invocation implements ObservableExpression {
 	static class InvocationActionContainer<X extends Executable, T>
 	extends Invocation.InvocationContainer<X, SettableValue<T>, ObservableAction<?>, ObservableAction<T>> {
 		InvocationActionContainer(Invocation.MethodResult<X, SettableValue<T>> method,
-			ValueContainer<SettableValue<?>, SettableValue<?>> context,
-			List<ValueContainer<SettableValue<?>, SettableValue<?>>> arguments, Invocation.ExecutableImpl<X> impl) {
+			ValueContainer<SettableValue<?>, SettableValue<?>> context, List<ValueContainer<SettableValue<?>, SettableValue<?>>> arguments,
+			Invocation.ExecutableImpl<X> impl) {
 			super(method, context, arguments, ModelTypes.Action.forType((TypeToken<T>) method.converter.getType().getType(0)), impl);
 		}
 
@@ -635,7 +666,8 @@ public abstract class Invocation implements ObservableExpression {
 		}
 
 		@Override
-		protected MV createModelValue(SettableValue<?> ctxV, SettableValue<?>[] argVs, Observable<Object> changes) {
+		protected MV createModelValue(SettableValue<?> ctxV, SettableValue<?>[] argVs, Observable<Object> changes)
+			throws QonfigEvaluationException {
 			SettableValue<Object> value = syntheticResultValue(//
 				TypeTokens.get().OBJECT, ctxV, argVs, changes);
 			return getMethod().converter.convert(value);

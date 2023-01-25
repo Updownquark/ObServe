@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 
+import org.observe.expresso.ObservableModelSet.BuiltValueContainer;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ValueContainer;
 import org.observe.util.TypeTokens;
@@ -17,7 +18,6 @@ import org.observe.util.TypeTokens.TypeConverter;
 import org.qommons.LambdaUtils;
 import org.qommons.Named;
 import org.qommons.collect.BetterList;
-import org.qommons.config.QonfigInterpretationException;
 
 import com.google.common.reflect.TypeToken;
 
@@ -205,7 +205,7 @@ public abstract class ModelType<M> implements Named {
 		 * @param source The source value to convert
 		 * @return The converter value
 		 */
-		M2 convert(M1 source);
+		M2 convert(M1 source) throws ModelInstantiationException;
 
 		/** @return The type of value that this convert converts to */
 		ModelInstanceType<M2, ?> getType();
@@ -219,7 +219,7 @@ public abstract class ModelType<M> implements Named {
 			ModelInstanceConverter<M1, M2> self = this;
 			return new ModelInstanceConverter<M1, M3>() {
 				@Override
-				public M3 convert(M1 source) {
+				public M3 convert(M1 source) throws ModelInstantiationException {
 					M2 stage1 = self.convert(source);
 					return next.convert(stage1);
 				}
@@ -453,17 +453,17 @@ public abstract class ModelType<M> implements Named {
 		 * @param source The source value of this type
 		 * @param targetType The type to convert to
 		 * @return A value equivalent to this value, but with the given type
-		 * @throws QonfigInterpretationException If no converter is available for the conversion from this type to the given type
+		 * @throws TypeConversionException If no converter is available for the conversion from this type to the given type
 		 */
-		public <M2, MV2 extends M2> ValueContainer<M2, MV2> as(ValueContainer<M, MV> source, ModelInstanceType<M2, MV2> targetType)
-			throws QonfigInterpretationException {
+		public <M2, MV2 extends M2> BuiltValueContainer<M2, MV2> as(BuiltValueContainer<M, MV> source,
+			ModelInstanceType<M2, MV2> targetType) throws TypeConversionException {
 			ModelInstanceType<M, MV> sourceType = source.getType();
 			ModelType.ModelInstanceConverter<M, M2> converter = sourceType.convert(targetType);
 			if (converter == null) {
 				sourceType.convert(targetType); // TODO DEBUG REMOVE
-				throw new QonfigInterpretationException("Cannot convert " + source + " (" + sourceType + ") to " + targetType);
+				throw new TypeConversionException(source.toString(), sourceType, targetType);
 			} else if (converter instanceof NoOpConverter)
-				return (ValueContainer<M2, MV2>) source;
+				return (BuiltValueContainer<M2, MV2>) source;
 			else
 				return new ConvertedValue<>(source, (ModelInstanceType<M2, MV2>) converter.getType(), converter);
 		}
@@ -1080,8 +1080,8 @@ public abstract class ModelType<M> implements Named {
 	 * @param <MT> The model type of the target value
 	 * @param <MVT> The type of the target value
 	 */
-	public static class ConvertedValue<MS, MVS extends MS, MT, MVT extends MT> implements ValueContainer<MT, MVT> {
-		private final ValueContainer<MS, MVS> theSource;
+	public static class ConvertedValue<MS, MVS extends MS, MT, MVT extends MT> implements BuiltValueContainer<MT, MVT> {
+		private final BuiltValueContainer<MS, MVS> theSource;
 		private final ModelInstanceType<MT, MVT> theType;
 		private final ModelType.ModelInstanceConverter<MS, MT> theConverter;
 
@@ -1090,7 +1090,8 @@ public abstract class ModelType<M> implements Named {
 		 * @param type The type to convert to
 		 * @param converter The convert to convert values of the source type to the target type
 		 */
-		public ConvertedValue(ValueContainer<MS, MVS> source, ModelInstanceType<MT, MVT> type, ModelInstanceConverter<MS, MT> converter) {
+		public ConvertedValue(BuiltValueContainer<MS, MVS> source, ModelInstanceType<MT, MVT> type,
+			ModelInstanceConverter<MS, MT> converter) {
 			if (source == null || type == null || converter == null)
 				throw new NullPointerException();
 			theSource = source;
@@ -1117,14 +1118,14 @@ public abstract class ModelType<M> implements Named {
 		}
 
 		@Override
-		public MVT get(ModelSetInstance extModels) {
+		public MVT get(ModelSetInstance extModels) throws ModelInstantiationException {
 			MVS modelV = theSource.get(extModels);
 			MVT converted = (MVT) theConverter.convert(modelV);
 			return converted;
 		}
 
 		@Override
-		public MVT forModelCopy(MVT value, ModelSetInstance sourceModels, ModelSetInstance newModels) {
+		public MVT forModelCopy(MVT value, ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException {
 			MVS sourceV = theSource.get(sourceModels);
 			MVS newSourceV = theSource.get(newModels);
 			if (sourceV == newSourceV)

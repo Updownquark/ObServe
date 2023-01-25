@@ -9,23 +9,26 @@ import java.util.function.Function;
 
 import org.observe.SettableValue;
 import org.observe.expresso.ExpressoEnv;
+import org.observe.expresso.ExpressoEvaluationException;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet.ValueContainer;
-import org.qommons.config.QonfigInterpretationException;
 
 /** An expression representing the invocation of a constructor to create a new instance of a type */
 public class ConstructorInvocation extends Invocation {
 	private final String theType;
+	private final int theTypeOffset;
 
 	/**
 	 * @param type The string representing the type for which to create an instance
 	 * @param typeArguments The strings representing the type arguments to the constructor
 	 * @param args The arguments to pass to the constructor
 	 */
-	public ConstructorInvocation(String type, List<String> typeArguments, List<ObservableExpression> args) {
-		super(typeArguments, args);
+	public ConstructorInvocation(String type, List<String> typeArguments, List<ObservableExpression> args, int offset, int end,
+		int typeOffset) {
+		super(typeArguments, args, offset, end);
 		theType = type;
+		theTypeOffset = typeOffset;
 	}
 
 	/** @return The string representing the type for which to create an instance */
@@ -52,16 +55,17 @@ public class ConstructorInvocation extends Invocation {
 			different |= newChild != child;
 		}
 		if (different)
-			return new ConstructorInvocation(getType(), getTypeArguments(), Collections.unmodifiableList(newChildren));
+			return new ConstructorInvocation(getType(), getTypeArguments(), Collections.unmodifiableList(newChildren),
+				getExpressionOffset(), getExpressionEnd(), theTypeOffset);
 		return this;
 	}
 
 	@Override
 	protected <M, MV extends M> InvokableResult<?, M, MV> evaluateInternal2(ModelInstanceType<M, MV> type, ExpressoEnv env, ArgOption args)
-		throws QonfigInterpretationException {
+		throws ExpressoEvaluationException {
 		Class<?> constructorType = env.getClassView().getType(theType);
 		if (constructorType == null)
-			throw new QonfigInterpretationException("No such type found: " + theType);
+			throw new ExpressoEvaluationException(theTypeOffset, theTypeOffset + theType.length(), "No such type found: " + theType);
 		Invocation.MethodResult<Constructor<?>, MV> result = Invocation.findMethod(constructorType.getConstructors(), null, null, true,
 			Arrays.asList(args), type, env, Invocation.ExecutableImpl.CONSTRUCTOR, this);
 		if (result != null) {
@@ -70,7 +74,7 @@ public class ConstructorInvocation extends Invocation {
 				realArgs[a] = args.args[a].get(0);
 			return new InvokableResult<>(result, null, Arrays.asList(realArgs), Invocation.ExecutableImpl.CONSTRUCTOR);
 		}
-		throw new QonfigInterpretationException("No such constructor " + printSignature());
+		throw new ExpressoEvaluationException(getExpressionOffset(), getExpressionEnd(), "No such constructor " + printSignature());
 	}
 
 	@Override

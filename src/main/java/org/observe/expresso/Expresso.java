@@ -6,6 +6,7 @@ import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelTag;
 import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElement;
+import org.qommons.config.QonfigEvaluationException;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigInterpreterCore;
 import org.qommons.config.QonfigInterpreterCore.CoreSession;
@@ -34,9 +35,9 @@ public class Expresso {
 		/**
 		 * @param session The session to use to evaluate the type
 		 * @return The type of this model value
-		 * @throws QonfigInterpretationException If the type cannot be evaluated
+		 * @throws QonfigEvaluationException If the type cannot be evaluated
 		 */
-		ModelInstanceType<M, ?> getType(ExpressoQIS session) throws QonfigInterpretationException;
+		ModelInstanceType<M, ?> getType(ExpressoQIS session) throws QonfigEvaluationException;
 
 		/** @return Whether the type of this value specification has been fully specified */
 		boolean isTypeSpecified();
@@ -75,7 +76,7 @@ public class Expresso {
 			}
 
 			@Override
-			public ModelInstanceType<M, ?> getType(ExpressoQIS session) throws QonfigInterpretationException {
+			public ModelInstanceType<M, ?> getType(ExpressoQIS session) throws QonfigEvaluationException {
 				if (theValueType != null)
 					return theModelType.forType((TypeToken<?>) theValueType.getType(session.getExpressoEnv().getModels()));
 				else
@@ -125,7 +126,7 @@ public class Expresso {
 			}
 
 			@Override
-			public ModelInstanceType<M, ?> getType(ExpressoQIS session) throws QonfigInterpretationException {
+			public ModelInstanceType<M, ?> getType(ExpressoQIS session) throws QonfigEvaluationException {
 				if (theValueType1 != null && theValueType2 != null)
 					return theModelType.forType(//
 						(TypeToken<?>) theValueType1.getType(session.getExpressoEnv().getModels()), //

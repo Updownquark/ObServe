@@ -6,6 +6,7 @@ import org.observe.expresso.ExpressoEnv;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ValueContainer;
 import org.qommons.LambdaUtils;
+import org.qommons.config.QonfigEvaluationException;
 
 /** A {@link StyleValueApplication} evaluated for an {@link ExpressoEnv environment} */
 public class EvaluatedStyleApplication {
@@ -46,8 +47,9 @@ public class EvaluatedStyleApplication {
 	/**
 	 * @param model The model instance to evaluate the condition for
 	 * @return The condition returning whether and when this applies to the element
+	 * @throws QonfigEvaluationException If the condition could not be evaluated
 	 */
-	public ObservableValue<Boolean> getCondition(ModelSetInstance model) {
+	public ObservableValue<Boolean> getCondition(ModelSetInstance model) throws QonfigEvaluationException {
 		ObservableValue<Boolean> parentCond;
 		if (theParent == null)
 			parentCond = TRUE;

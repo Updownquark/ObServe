@@ -8,6 +8,7 @@ import java.util.stream.Stream;
 
 import org.observe.SettableValue;
 import org.observe.expresso.ExpressoEnv;
+import org.observe.expresso.ExpressoEvaluationException;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
@@ -15,7 +16,8 @@ import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ValueContainer;
 import org.observe.util.TypeTokens;
 import org.qommons.collect.BetterList;
-import org.qommons.config.QonfigInterpretationException;
+import org.qommons.config.QonfigEvaluationException;
+import org.qommons.ex.CheckedExceptionWrapper;
 
 import com.google.common.reflect.TypeToken;
 
@@ -23,14 +25,16 @@ import com.google.common.reflect.TypeToken;
 public class ArrayAccessExpression implements ObservableExpression {
 	private final ObservableExpression theArray;
 	private final ObservableExpression theIndex;
+	private int theExpressionEnd;
 
 	/**
 	 * @param array The expression representing the array being accessed
 	 * @param index The expression representing the index at which the array is being accessed
 	 */
-	public ArrayAccessExpression(ObservableExpression array, ObservableExpression index) {
+	public ArrayAccessExpression(ObservableExpression array, ObservableExpression index, int end) {
 		theArray = array;
 		theIndex = index;
+		theExpressionEnd = end;
 	}
 
 	/** @return The expression representing the array being accessed */
@@ -41,6 +45,16 @@ public class ArrayAccessExpression implements ObservableExpression {
 	/** @return The expression representing the index at which the array is being accessed */
 	public ObservableExpression getIndex() {
 		return theIndex;
+	}
+
+	@Override
+	public int getExpressionOffset() {
+		return theArray.getExpressionOffset();
+	}
+
+	@Override
+	public int getExpressionEnd() {
+		return theExpressionEnd;
 	}
 
 	@Override
@@ -56,15 +70,16 @@ public class ArrayAccessExpression implements ObservableExpression {
 		ObservableExpression array = theArray.replaceAll(replace);
 		ObservableExpression index = theIndex.replaceAll(replace);
 		if (array != theArray || index != theIndex)
-			return new ArrayAccessExpression(array, index);
+			return new ArrayAccessExpression(array, index, theExpressionEnd);
 		return this;
 	}
 
 	@Override
 	public <M, MV extends M> ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env)
-		throws QonfigInterpretationException {
+		throws ExpressoEvaluationException {
 		if (type.getModelType() != ModelTypes.Value)
-			throw new QonfigInterpretationException("An array access expression can only be evaluated as a value");
+			throw new ExpressoEvaluationException(getExpressionOffset(), getExpressionEnd(),
+				"An array access expression can only be evaluated as a value");
 
 		ValueContainer<SettableValue<?>, SettableValue<Object[]>> arrayValue = theArray.evaluate(ModelTypes.Value.forType(//
 			(TypeToken<Object[]>) TypeTokens.get().getArrayType(type.getType(0), 1)), env);
@@ -72,10 +87,14 @@ public class ArrayAccessExpression implements ObservableExpression {
 		return (ValueContainer<M, MV>) this.<Object> doEval(arrayValue, indexValue, env);
 	}
 
-	private <T> ValueContainer<SettableValue<?>, SettableValue<T>> doEval(
-		ValueContainer<SettableValue<?>, SettableValue<T[]>> arrayValue,
-		ValueContainer<SettableValue<?>, SettableValue<Integer>> indexValue, ExpressoEnv env) {
-		TypeToken<T> targetType = (TypeToken<T>) arrayValue.getType().getType(0).getComponentType();
+	private <T> ValueContainer<SettableValue<?>, SettableValue<T>> doEval(ValueContainer<SettableValue<?>, SettableValue<T[]>> arrayValue,
+		ValueContainer<SettableValue<?>, SettableValue<Integer>> indexValue, ExpressoEnv env) throws ExpressoEvaluationException {
+		TypeToken<T> targetType;
+		try {
+			targetType = (TypeToken<T>) arrayValue.getType().getType(0).getComponentType();
+		} catch (QonfigEvaluationException e) {
+			throw new ExpressoEvaluationException(getExpressionOffset(), getExpressionEnd(), e.getMessage(), e);
+		}
 		ModelInstanceType<SettableValue<?>, SettableValue<T>> targetModelType = ModelTypes.Value.forType(targetType);
 		return new ValueContainer<SettableValue<?>, SettableValue<T>>() {
 			@Override
@@ -84,7 +103,7 @@ public class ArrayAccessExpression implements ObservableExpression {
 			}
 
 			@Override
-			public SettableValue<T> get(ModelSetInstance models) {
+			public SettableValue<T> get(ModelSetInstance models) throws QonfigEvaluationException {
 				SettableValue<T[]> arrayV = arrayValue.get(models);
 				SettableValue<Integer> indexV = indexValue.get(models);
 				return createArrayValue(arrayV, indexV);
@@ -114,7 +133,8 @@ public class ArrayAccessExpression implements ObservableExpression {
 			}
 
 			@Override
-			public SettableValue<T> forModelCopy(SettableValue<T> value, ModelSetInstance sourceModels, ModelSetInstance newModels) {
+			public SettableValue<T> forModelCopy(SettableValue<T> value, ModelSetInstance sourceModels, ModelSetInstance newModels)
+				throws QonfigEvaluationException {
 				SettableValue<T[]> sourceArray = arrayValue.get(sourceModels);
 				SettableValue<T[]> newArray = arrayValue.get(newModels);
 				SettableValue<Integer> sourceIndex = indexValue.get(sourceModels);
@@ -126,8 +146,18 @@ public class ArrayAccessExpression implements ObservableExpression {
 			}
 
 			@Override
-			public BetterList<ValueContainer<?, ?>> getCores() {
-				return BetterList.of(Stream.of(arrayValue, indexValue).flatMap(cv -> cv.getCores().stream()));
+			public BetterList<ValueContainer<?, ?>> getCores() throws QonfigEvaluationException {
+				try {
+					return BetterList.of(Stream.of(arrayValue, indexValue).flatMap(cv -> {
+						try {
+							return cv.getCores().stream();
+						} catch (QonfigEvaluationException e) {
+							throw new CheckedExceptionWrapper(e);
+						}
+					}));
+				} catch (CheckedExceptionWrapper e) {
+					throw (QonfigEvaluationException) e.getCause();
+				}
 			}
 		};
 	}

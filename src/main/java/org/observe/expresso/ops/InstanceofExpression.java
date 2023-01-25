@@ -7,25 +7,27 @@ import java.util.function.Function;
 
 import org.observe.SettableValue;
 import org.observe.expresso.ExpressoEnv;
+import org.observe.expresso.ExpressoEvaluationException;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet.ValueContainer;
 import org.observe.util.TypeTokens;
-import org.qommons.config.QonfigInterpretationException;
 
 /** An expression that returns a boolean for whether a given expression's value is an instance of a constant type */
 public class InstanceofExpression implements ObservableExpression {
 	private final ObservableExpression theLeft;
 	private final String theType;
+	private final int theTypeOffset;
 
 	/**
 	 * @param left The expression whose type to check
 	 * @param type The type to check against
 	 */
-	public InstanceofExpression(ObservableExpression left, String type) {
+	public InstanceofExpression(ObservableExpression left, String type, int typeOffset) {
 		theLeft = left;
 		theType = type;
+		theTypeOffset = typeOffset;
 	}
 
 	/** @return The expression whose type to check */
@@ -36,6 +38,16 @@ public class InstanceofExpression implements ObservableExpression {
 	/** @return The type to check against */
 	public String getType() {
 		return theType;
+	}
+
+	@Override
+	public int getExpressionOffset() {
+		return theLeft.getExpressionOffset();
+	}
+
+	@Override
+	public int getExpressionEnd() {
+		return theTypeOffset + theType.length();
 	}
 
 	@Override
@@ -50,21 +62,23 @@ public class InstanceofExpression implements ObservableExpression {
 			return replacement;
 		ObservableExpression left = theLeft.replaceAll(replace);
 		if (left != theLeft)
-			return new InstanceofExpression(left, theType);
+			return new InstanceofExpression(left, theType, theTypeOffset);
 		return this;
 	}
 
 	@Override
 	public <M, MV extends M> ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env)
-		throws QonfigInterpretationException {
+		throws ExpressoEvaluationException {
 		if (type.getModelType() != ModelTypes.Value && !TypeTokens.get().isAssignable(type.getType(0), TypeTokens.get().BOOLEAN))
-			throw new QonfigInterpretationException("instanceof expressions can only be evaluated to Value<Boolean>");
+			throw new ExpressoEvaluationException(getExpressionOffset(), getExpressionEnd(),
+				"instanceof expressions can only be evaluated to Value<Boolean>");
 		ValueContainer<SettableValue<?>, SettableValue<?>> leftValue = theLeft.evaluate(ModelTypes.Value.any(), env);
 		Class<?> testType;
 		try {
 			testType = TypeTokens.getRawType(TypeTokens.get().parseType(theType));
 		} catch (ParseException e) {
-			throw new QonfigInterpretationException(e.getMessage(), e);
+			int index = theTypeOffset + e.getErrorOffset();
+			throw new ExpressoEvaluationException(index, index, e.getMessage(), e);
 		}
 		ValueContainer<SettableValue<?>, SettableValue<Boolean>> container = leftValue.map(ModelTypes.Value.forType(boolean.class),
 			(lv, msi) -> {

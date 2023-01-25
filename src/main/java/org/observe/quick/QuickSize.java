@@ -6,8 +6,9 @@ import java.util.Objects;
 import java.util.function.Function;
 
 import org.observe.SettableValue;
-import org.observe.expresso.Expression.ExpressoParseException;
 import org.observe.expresso.ExpressoEnv;
+import org.observe.expresso.ExpressoEvaluationException;
+import org.observe.expresso.ExpressoParseException;
 import org.observe.expresso.ExpressoParser;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
@@ -15,8 +16,7 @@ import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet.ValueContainer;
 import org.observe.util.TypeTokens;
 import org.qommons.config.CustomValueType;
-import org.qommons.config.QonfigInterpretationException;
-import org.qommons.config.QonfigParseSession;
+import org.qommons.config.ErrorReporting;
 import org.qommons.config.QonfigToolkit;
 
 /** Represents the linear size of one dimension of a Quick widget */
@@ -125,7 +125,7 @@ public class QuickSize {
 		}
 
 		@Override
-		public ObservableExpression parse(String value, QonfigToolkit tk, QonfigParseSession session) {
+		public ObservableExpression parse(String value, QonfigToolkit tk, ErrorReporting session) {
 			SizeUnit unit = null;
 			for (SizeUnit u : SizeUnit.values()) {
 				if (value.endsWith(u.name)) {
@@ -139,11 +139,11 @@ public class QuickSize {
 			try {
 				valueEx = theParser.parse(value);
 			} catch (ExpressoParseException e) {
-				session.withError(e.getMessage(), e);
+				session.error(e.getMessage(), e);
 				return null;
 			}
 			SizeUnit fUnit = unit == null ? SizeUnit.Pixels : unit;
-			return new SizeExpression(valueEx, fUnit);
+			return new SizeExpression(valueEx, fUnit, value.length() - valueEx.getExpressionEnd() - unit.name.length());
 		}
 
 		@Override
@@ -156,14 +156,27 @@ public class QuickSize {
 	public static class SizeExpression implements ObservableExpression {
 		private final ObservableExpression theValue;
 		private final SizeUnit theUnit;
+		private final int theSpacing;
 
 		/**
 		 * @param value The expression representing the numeric value of the size
 		 * @param unit The size unit
+		 * @param spacing The amount of white space between the value and the unit
 		 */
-		public SizeExpression(ObservableExpression value, SizeUnit unit) {
+		public SizeExpression(ObservableExpression value, SizeUnit unit, int spacing) {
 			theValue = value;
 			theUnit = unit;
+			theSpacing = spacing;
+		}
+
+		@Override
+		public int getExpressionOffset() {
+			return theValue.getExpressionOffset();
+		}
+
+		@Override
+		public int getExpressionEnd() {
+			return theValue.getExpressionEnd() + theSpacing + theUnit.name.length();
 		}
 
 		@Override
@@ -173,11 +186,12 @@ public class QuickSize {
 
 		@Override
 		public <M, MV extends M> ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env)
-			throws QonfigInterpretationException {
+			throws ExpressoEvaluationException {
 			if (type.getModelType() != ModelTypes.Value)
-				throw new QonfigInterpretationException("Only values are supported");
+				throw new ExpressoEvaluationException(getExpressionOffset(), getExpressionEnd(), "Only values are supported");
 			else if (!(TypeTokens.getRawType(type.getType(0)).isAssignableFrom(QuickSize.class)))
-				throw new QonfigInterpretationException("Cannot cast SizeUnit to " + type.getType(0));
+				throw new ExpressoEvaluationException(getExpressionOffset(), getExpressionEnd(),
+					"Cannot cast SizeUnit to " + type.getType(0));
 			ValueContainer<SettableValue<?>, SettableValue<Double>> valueC = theValue
 				.evaluateInternal(ModelTypes.Value.forType(double.class), env);
 			return (ValueContainer<M, MV>) valueC.map(ModelTypes.Value.forType(QuickSize.class),
@@ -193,7 +207,7 @@ public class QuickSize {
 				return replaced;
 			replaced = theValue.replaceAll(replace);
 			if (replaced != null)
-				return new SizeExpression(replaced, theUnit);
+				return new SizeExpression(replaced, theUnit, theSpacing);
 			return this;
 		}
 	}

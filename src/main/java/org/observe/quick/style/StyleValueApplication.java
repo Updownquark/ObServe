@@ -1,6 +1,5 @@
 package org.observe.quick.style;
 
-
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -35,6 +34,7 @@ import org.qommons.config.QonfigAttributeDef;
 import org.qommons.config.QonfigChildDef;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigElementOrAddOn;
+import org.qommons.config.QonfigEvaluationException;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigToolkit;
 
@@ -435,10 +435,10 @@ public class StyleValueApplication implements Comparable<StyleValueApplication> 
 	 * @param expressoEnv The Expresso environment in which to {@link ObservableExpression}{@link #evaluate(ExpressoEnv) evaluate}
 	 *        {@link #getCondition() conditions}
 	 * @return An {@link EvaluatedStyleApplication} for this application in the given environment
-	 * @throws QonfigInterpretationException If a condition could not be
-	 *         {@link ObservableExpression#evaluate(ModelInstanceType, ExpressoEnv) evaluated}
+	 * @throws QonfigEvaluationException If a condition could not be {@link ObservableExpression#evaluate(ModelInstanceType, ExpressoEnv)
+	 *         evaluated}
 	 */
-	public EvaluatedStyleApplication evaluate(ExpressoEnv expressoEnv) throws QonfigInterpretationException {
+	public EvaluatedStyleApplication evaluate(ExpressoEnv expressoEnv) throws QonfigEvaluationException {
 		EvaluatedStyleApplication parent = theParent == null ? null : theParent.evaluate(//
 			expressoEnv.with(getParentModel(expressoEnv.getModels()), null));
 		ValueContainer<SettableValue<?>, SettableValue<Boolean>> conditionV = theCondition == null ? null

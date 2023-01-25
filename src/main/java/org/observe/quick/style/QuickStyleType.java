@@ -8,8 +8,9 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-import org.observe.expresso.ExpressoBaseV0_1;
+import org.observe.expresso.ExpressoEnv;
 import org.observe.expresso.ExpressoQIS;
+import org.observe.expresso.VariableType;
 import org.observe.util.TypeTokens;
 import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterCollections;
@@ -19,6 +20,7 @@ import org.qommons.config.AbstractQIS;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigAttributeDef;
 import org.qommons.config.QonfigElement;
+import org.qommons.config.QonfigElement.QonfigValue;
 import org.qommons.config.QonfigElementDef;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
@@ -37,7 +39,7 @@ public class QuickStyleType {
 	/**
 	 * @param element The element type to get the style type of
 	 * @param session The session to get the {@link ExpressoQIS#getExpressoEnv() expresso environment} from and for
-	 *        {@link AbstractQIS#withError(String) error reporting}
+	 *        {@link AbstractQIS#error(String) error reporting}
 	 * @param style The toolkit inheriting Quick-Style
 	 * @return The style type for the given element type
 	 * @throws QonfigInterpretationException If an error occurs synthesizing the style information for the given element
@@ -85,11 +87,14 @@ public class QuickStyleType {
 			for (QonfigElement styleAttr : stylesEl.getChildrenInRole(style, "styles", "style-attribute")) {
 				String name = styleAttr.getAttributeText(nameAttr);
 				if (declaredAttributes.containsKey(name)) {
-					session.withError("Multiple style attributes named '" + name + "' declared");
+					session.error("Multiple style attributes named '" + name + "' declared");
 					continue;
 				}
-				declaredAttributes.put(name, new QuickStyleAttribute<>(styled, name, //
-					ExpressoBaseV0_1.parseType(styleAttr.getAttributeText(typeAttr), session.as(ExpressoQIS.class).getExpressoEnv()), //
+				QonfigValue typeV = styleAttr.getAttributes().get(typeAttr);
+				ExpressoEnv env = session.as(ExpressoQIS.class).getExpressoEnv();
+				VariableType vblType = VariableType.parseType(typeV.text, env.getClassView(), typeV.fileLocation, typeV.position);
+				TypeToken<?> type = vblType.getType(env.getModels());
+				declaredAttributes.put(name, new QuickStyleAttribute<>(styled, name, type, //
 					styleAttr.getAttribute(trickleAttr, boolean.class)));
 			}
 		}

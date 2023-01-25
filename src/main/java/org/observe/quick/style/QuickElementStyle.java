@@ -18,6 +18,7 @@ import org.qommons.collect.BetterSortedList;
 import org.qommons.config.AbstractQIS;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigElement;
+import org.qommons.config.QonfigEvaluationException;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigToolkit;
 import org.qommons.tree.SortedTreeList;
@@ -37,7 +38,7 @@ public class QuickElementStyle {
 	 * @param styleSheet The style sheet applying to the element
 	 * @param element The element this style is for
 	 * @param session The interpretation session to get the {@link ExpressoQIS#getExpressoEnv() expresso environment} from and for
-	 *        {@link AbstractQIS#withError(String) error reporting}
+	 *        {@link AbstractQIS#error(String) error reporting}
 	 * @param style The toolkit inheriting Quick-Style
 	 * @throws QonfigInterpretationException If an error occurs evaluating all the style information for the element
 	 */
@@ -172,8 +173,9 @@ public class QuickElementStyle {
 		/**
 		 * @param models The model instance to get the value for
 		 * @return The value for this style attribute on the element
+		 * @throws QonfigEvaluationException If the condition or the value could not be evaluated
 		 */
-		public ObservableValue<T> evaluate(ModelSetInstance models) {
+		public ObservableValue<T> evaluate(ModelSetInstance models) throws QonfigEvaluationException {
 			ObservableValue<ConditionalValue<T>>[] values = new ObservableValue[theValues.size() + (theInherited == null ? 0 : 1)];
 			for (int i = 0; i < theValues.size(); i++) {
 				ObservableValue<Boolean> condition = theValues.get(i).getApplication().getCondition(models);

@@ -5,18 +5,32 @@ import java.util.List;
 import java.util.function.Function;
 
 import org.observe.expresso.ExpressoEnv;
+import org.observe.expresso.ExpressoEvaluationException;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet.ValueContainer;
-import org.qommons.config.QonfigInterpretationException;
 
 /** An expression in parentheses */
 public class ParentheticExpression implements ObservableExpression {
 	private final ObservableExpression theContent;
+	private int theOffset;
+	private int theEnd;
 
 	/** @param content The content of this parenthetic */
-	public ParentheticExpression(ObservableExpression content) {
+	public ParentheticExpression(ObservableExpression content, int offset, int end) {
 		theContent = content;
+		theOffset = offset;
+		theEnd = end;
+	}
+
+	@Override
+	public int getExpressionOffset() {
+		return theOffset;
+	}
+
+	@Override
+	public int getExpressionEnd() {
+		return theEnd;
 	}
 
 	@Override
@@ -31,13 +45,13 @@ public class ParentheticExpression implements ObservableExpression {
 			return replacement;
 		replacement = theContent.replaceAll(replace);
 		if (replacement != theContent)
-			return new ParentheticExpression(replacement);
+			return new ParentheticExpression(replacement, theOffset, theEnd);
 		return this;
 	}
 
 	@Override
 	public <M, MV extends M> ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env)
-		throws QonfigInterpretationException {
+		throws ExpressoEvaluationException {
 		return theContent.evaluateInternal(type, env);
 	}
 

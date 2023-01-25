@@ -10,6 +10,7 @@ import org.observe.expresso.ExpressoQIS;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.quick.style.StyleQIS;
 import org.qommons.config.QonfigAttributeDef;
+import org.qommons.config.QonfigEvaluationException;
 import org.qommons.config.QonfigInterpretationException;
 
 public class QuickComponent {
@@ -70,7 +71,8 @@ public class QuickComponent {
 	// public ObservableMultiMap<QuickComponentDef, QuickComponent> getGroupedChildren() {
 	// }
 
-	public static QuickComponent.Builder build(QuickComponentDef def, QuickComponent.Builder parent, ModelSetInstance models) {
+	public static QuickComponent.Builder build(QuickComponentDef def, QuickComponent.Builder parent, ModelSetInstance models)
+		throws QonfigEvaluationException {
 		return new Builder(def, parent, models);
 	}
 
@@ -83,7 +85,7 @@ public class QuickComponent {
 		private final ObservableCollection<QuickComponent> theChildren;
 		private QuickComponent theBuilt;
 
-		public Builder(QuickComponentDef definition, Builder parent, ModelSetInstance models) {
+		public Builder(QuickComponentDef definition, Builder parent, ModelSetInstance models) throws QonfigEvaluationException {
 			theDefinition = definition;
 			theParent = parent;
 			ExpressoQIS exSession;

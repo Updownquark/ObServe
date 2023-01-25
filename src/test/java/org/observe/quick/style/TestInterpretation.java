@@ -1,5 +1,6 @@
 package org.observe.quick.style;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -10,15 +11,18 @@ import org.observe.SettableValue;
 import org.observe.expresso.Expresso;
 import org.observe.expresso.ExpressoQIS;
 import org.observe.expresso.ExpressoTesting.ExpressoTest;
+import org.observe.expresso.ModelException;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ValueContainer;
 import org.observe.expresso.ObservableModelSet.ValueCreator;
+import org.observe.expresso.TypeConversionException;
 import org.observe.quick.style.QuickElementStyle.QuickElementStyleAttribute;
 import org.qommons.QommonsUtils;
 import org.qommons.Version;
 import org.qommons.collect.BetterList;
+import org.qommons.config.QonfigEvaluationException;
 import org.qommons.config.QonfigInterpretation;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigInterpreterCore.Builder;
@@ -88,10 +92,34 @@ public class TestInterpretation implements QonfigInterpretation {
 			 */
 			public Def(StyleQIS session) throws QonfigInterpretationException {
 				expressoSession = session.as(ExpressoQIS.class);
-				a = expressoSession.getExpressoEnv().getModels().getValue("a", ModelTypes.Value.BOOLEAN);
-				b = expressoSession.getExpressoEnv().getModels().getValue("b", ModelTypes.Value.BOOLEAN);
-				c = expressoSession.getExpressoEnv().getModels().getValue("c", ModelTypes.Value.INT);
-				d = expressoSession.getExpressoEnv().getModels().getValue("d", ModelTypes.Value.BOOLEAN);
+				try {
+					a = expressoSession.getExpressoEnv().getModels().getValue("a", ModelTypes.Value.BOOLEAN);
+				} catch (ModelException | TypeConversionException x) {
+					throw new QonfigInterpretationException("Could not interpret a", x, session.getElement().getPositionInFile(), 0);
+				} catch (QonfigEvaluationException x) {
+					throw new QonfigInterpretationException("Could not interpret a", x, x.getPosition(), x.getErrorLength());
+				}
+				try {
+					b = expressoSession.getExpressoEnv().getModels().getValue("b", ModelTypes.Value.BOOLEAN);
+				} catch (ModelException | TypeConversionException x) {
+					throw new QonfigInterpretationException("Could not interpret b", x, session.getElement().getPositionInFile(), 0);
+				} catch (QonfigEvaluationException x) {
+					throw new QonfigInterpretationException("Could not interpret b", x, x.getPosition(), x.getErrorLength());
+				}
+				try {
+					c = expressoSession.getExpressoEnv().getModels().getValue("c", ModelTypes.Value.INT);
+				} catch (ModelException | TypeConversionException x) {
+					throw new QonfigInterpretationException("Could not interpret c", x, session.getElement().getPositionInFile(), 0);
+				} catch (QonfigEvaluationException x) {
+					throw new QonfigInterpretationException("Could not interpret c", x, x.getPosition(), x.getErrorLength());
+				}
+				try {
+					d = expressoSession.getExpressoEnv().getModels().getValue("d", ModelTypes.Value.BOOLEAN);
+				} catch (ModelException | TypeConversionException x) {
+					throw new QonfigInterpretationException("Could not interpret d", x, session.getElement().getPositionInFile(), 0);
+				} catch (QonfigEvaluationException x) {
+					throw new QonfigInterpretationException("Could not interpret d", x, x.getPosition(), x.getErrorLength());
+				}
 
 				Map<String, List<QuickStyleAttribute<?>>> attrs = session.getStyle().getAttributes().stream()
 					.collect(Collectors.groupingBy(QuickStyleAttribute::getName));
@@ -106,7 +134,7 @@ public class TestInterpretation implements QonfigInterpretation {
 			}
 
 			@Override
-			public SettableValue<A> get(ModelSetInstance models) {
+			public SettableValue<A> get(ModelSetInstance models) throws QonfigEvaluationException {
 				return SettableValue.of(A.class, new A(this, expressoSession.wrapLocal(models)), "Immutable");
 			}
 
@@ -141,7 +169,7 @@ public class TestInterpretation implements QonfigInterpretation {
 		/** Style value s2 */
 		public final ObservableValue<Boolean> s2;
 
-		A(Def def, ModelSetInstance msi) {
+		A(Def def, ModelSetInstance msi) throws QonfigEvaluationException {
 			this.a = def.a.get(msi);
 			this.b = def.b.get(msi);
 			this.c = def.c.get(msi);
@@ -176,7 +204,7 @@ public class TestInterpretation implements QonfigInterpretation {
 	public static class B {
 		/**
 		 * ValueContainer for producing instances of {@link B}
-		 * 
+		 *
 		 * @param <T> The {@link B} sub-type of this definition
 		 */
 		public static class Def<T extends B> implements ValueContainer<SettableValue<?>, SettableValue<T>> {
@@ -200,15 +228,32 @@ public class TestInterpretation implements QonfigInterpretation {
 			Def(StyleQIS session, Class<T> clazz) throws QonfigInterpretationException {
 				this.clazz = clazz;
 				expressoSession = session.as(ExpressoQIS.class);
-				e = expressoSession.getExpressoEnv().getModels().getValue("e", ModelTypes.Value.BOOLEAN);
-				f = expressoSession.getExpressoEnv().getModels().getValue("f", ModelTypes.Value.INT);
+				try {
+					e = expressoSession.getExpressoEnv().getModels().getValue("e", ModelTypes.Value.BOOLEAN);
+				} catch (ModelException | TypeConversionException x) {
+					throw new QonfigInterpretationException("Could not interpret e", x, session.getElement().getPositionInFile(), 0);
+				} catch (QonfigEvaluationException x) {
+					throw new QonfigInterpretationException("Could not interpret e", x, x.getPosition(), x.getErrorLength());
+				}
+				try {
+					f = expressoSession.getExpressoEnv().getModels().getValue("f", ModelTypes.Value.INT);
+				} catch (ModelException | TypeConversionException x) {
+					throw new QonfigInterpretationException("Could not interpret f", x, session.getElement().getPositionInFile(), 0);
+				} catch (QonfigEvaluationException x) {
+					throw new QonfigInterpretationException("Could not interpret f", x, x.getPosition(), x.getErrorLength());
+				}
 
 				Map<String, List<QuickStyleAttribute<?>>> attrs = session.getStyle().getAttributes().stream()
 					.collect(Collectors.groupingBy(QuickStyleAttribute::getName));
 				s3 = session.getStyle().get((QuickStyleAttribute<Integer>) attrs.get("s3").get(0));
 				s4 = session.getStyle().get((QuickStyleAttribute<Integer>) attrs.get("s4").get(0));
-				children = session.<ValueCreator<SettableValue<?>, SettableValue<A>>> interpretChildren("a", ValueCreator.class)//
-					.stream().map(ValueCreator::createValue).collect(Collectors.toList());
+				children = new ArrayList<>();
+				try {
+					for (ValueCreator<SettableValue<?>, SettableValue<A>> child : session.interpretChildren("a", ValueCreator.class))
+						children.add(child.createContainer());
+				} catch (QonfigEvaluationException x) {
+					throw new QonfigInterpretationException("Could not evaluate children", x, x.getPosition(), x.getErrorLength());
+				}
 			}
 
 			@Override
@@ -217,13 +262,15 @@ public class TestInterpretation implements QonfigInterpretation {
 			}
 
 			@Override
-			public SettableValue<T> get(ModelSetInstance models) {
+			public SettableValue<T> get(ModelSetInstance models) throws QonfigEvaluationException {
 				ModelSetInstance localModels = expressoSession.wrapLocal(models);
-				return SettableValue.of(clazz, create(localModels, //
-					children.stream().map(def -> def.get(localModels).get()).collect(Collectors.toList())), "Immutable");
+				List<A> childrenInstances = new ArrayList<>();
+				for (ValueContainer<SettableValue<?>, SettableValue<A>> child : children)
+					childrenInstances.add(child.get(localModels).get());
+				return SettableValue.of(clazz, create(localModels, childrenInstances), "Immutable");
 			}
 
-			T create(ModelSetInstance models, List<A> aChildren) {
+			T create(ModelSetInstance models, List<A> aChildren) throws QonfigEvaluationException {
 				return (T) new B(this, models, aChildren);
 			}
 
@@ -249,7 +296,7 @@ public class TestInterpretation implements QonfigInterpretation {
 		/** This B entity's {@link A}-typed children */
 		public final List<A> a;
 
-		B(Def<?> def, ModelSetInstance msi, List<A> children) {
+		B(Def<?> def, ModelSetInstance msi, List<A> children) throws QonfigEvaluationException {
 			this.e = def.e.get(msi);
 			this.f = def.f.get(msi);
 			this.s3 = def.s3.evaluate(msi);
@@ -271,14 +318,20 @@ public class TestInterpretation implements QonfigInterpretation {
 			 */
 			public Def(StyleQIS session) throws QonfigInterpretationException {
 				super(session, C.class);
-				g = expressoSession.getExpressoEnv().getModels().getValue("g", ModelTypes.Value.BOOLEAN);
+				try {
+					g = expressoSession.getExpressoEnv().getModels().getValue("g", ModelTypes.Value.BOOLEAN);
+				} catch (ModelException | TypeConversionException x) {
+					throw new QonfigInterpretationException("Could not interpret g", x, session.getElement().getPositionInFile(), 0);
+				} catch (QonfigEvaluationException x) {
+					throw new QonfigInterpretationException("Could not interpret g", x, x.getPosition(), x.getErrorLength());
+				}
 				Map<String, List<QuickStyleAttribute<?>>> attrs = session.getStyle().getAttributes().stream()
 					.collect(Collectors.groupingBy(QuickStyleAttribute::getName));
 				s5 = session.getStyle().get((QuickStyleAttribute<Boolean>) attrs.get("s5").get(0));
 			}
 
 			@Override
-			C create(ModelSetInstance models, List<A> aChildren) {
+			C create(ModelSetInstance models, List<A> aChildren) throws QonfigEvaluationException {
 				return new C(this, models, aChildren);
 			}
 		}
@@ -288,7 +341,7 @@ public class TestInterpretation implements QonfigInterpretation {
 		/** Style value s5 */
 		public final ObservableValue<Boolean> s5;
 
-		C(Def def, ModelSetInstance msi, List<A> children) {
+		C(Def def, ModelSetInstance msi, List<A> children) throws QonfigEvaluationException {
 			super(def, msi, children);
 			g = def.g.get(msi);
 			s5 = def.s5.evaluate(msi);
@@ -308,14 +361,20 @@ public class TestInterpretation implements QonfigInterpretation {
 			 */
 			public Def(StyleQIS session) throws QonfigInterpretationException {
 				super(session, D.class);
-				h = expressoSession.getExpressoEnv().getModels().getValue("h", ModelTypes.Value.INT);
+				try {
+					h = expressoSession.getExpressoEnv().getModels().getValue("h", ModelTypes.Value.INT);
+				} catch (ModelException | TypeConversionException x) {
+					throw new QonfigInterpretationException("Could not interpret h", x, session.getElement().getPositionInFile(), 0);
+				} catch (QonfigEvaluationException x) {
+					throw new QonfigInterpretationException("Could not interpret h", x, x.getPosition(), x.getErrorLength());
+				}
 				Map<String, List<QuickStyleAttribute<?>>> attrs = session.getStyle().getAttributes().stream()
 					.collect(Collectors.groupingBy(QuickStyleAttribute::getName));
 				s6 = session.getStyle().get((QuickStyleAttribute<Integer>) attrs.get("s6").get(0));
 			}
 
 			@Override
-			D create(ModelSetInstance models, List<A> aChildren) {
+			D create(ModelSetInstance models, List<A> aChildren) throws QonfigEvaluationException {
 				return new D(this, models, aChildren);
 			}
 		}
@@ -325,7 +384,7 @@ public class TestInterpretation implements QonfigInterpretation {
 		/** Style value s6 */
 		public final ObservableValue<Integer> s6;
 
-		D(Def def, ModelSetInstance msi, List<A> children) {
+		D(Def def, ModelSetInstance msi, List<A> children) throws QonfigEvaluationException {
 			super(def, msi, children);
 			h = def.h.get(msi);
 			s6 = def.s6.evaluate(msi);

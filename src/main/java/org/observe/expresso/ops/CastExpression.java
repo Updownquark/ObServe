@@ -7,12 +7,13 @@ import java.util.function.Function;
 
 import org.observe.SettableValue;
 import org.observe.expresso.ExpressoEnv;
+import org.observe.expresso.ExpressoEvaluationException;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet.ValueContainer;
 import org.observe.util.TypeTokens;
-import org.qommons.config.QonfigInterpretationException;
+import org.qommons.config.QonfigEvaluationException;
 
 import com.google.common.reflect.TypeToken;
 
@@ -20,14 +21,16 @@ import com.google.common.reflect.TypeToken;
 public class CastExpression implements ObservableExpression {
 	private final ObservableExpression theValue;
 	private final String theType;
+	private final int theOffset;
 
 	/**
 	 * @param value The expression being cast
 	 * @param type The string representing the type to cast to
 	 */
-	public CastExpression(ObservableExpression value, String type) {
+	public CastExpression(ObservableExpression value, String type, int offset) {
 		theValue = value;
 		theType = type;
+		theOffset = offset;
 	}
 
 	/** @return The expression being cast */
@@ -38,6 +41,16 @@ public class CastExpression implements ObservableExpression {
 	/** @return The string representing the type to cast to */
 	public String getType() {
 		return theType;
+	}
+
+	@Override
+	public int getExpressionOffset() {
+		return theOffset;
+	}
+
+	@Override
+	public int getExpressionEnd() {
+		return theValue.getExpressionEnd();
 	}
 
 	@Override
@@ -52,35 +65,43 @@ public class CastExpression implements ObservableExpression {
 			return replacement;
 		ObservableExpression value = theValue.replaceAll(replace);
 		if (value != theValue)
-			return new CastExpression(value, theType);
+			return new CastExpression(value, theType, theOffset);
 		return this;
 	}
 
 	@Override
 	public <M, MV extends M> ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env)
-		throws QonfigInterpretationException {
+		throws ExpressoEvaluationException {
 		if (type.getModelType() != ModelTypes.Value)
-			throw new QonfigInterpretationException("A cast expression can only be evaluated as a value");
+			throw new ExpressoEvaluationException(theOffset, theValue.getExpressionEnd(),
+				"A cast expression can only be evaluated as a value");
 		return (ValueContainer<M, MV>) doEval((ModelInstanceType<SettableValue<?>, SettableValue<?>>) type, env);
 	}
 
 	private <S, T> ValueContainer<SettableValue<?>, SettableValue<T>> doEval(ModelInstanceType<SettableValue<?>, SettableValue<?>> type,
-		ExpressoEnv env) throws QonfigInterpretationException {
+		ExpressoEnv env) throws ExpressoEvaluationException {
 		TypeToken<T> valueType;
 		try {
 			valueType = (TypeToken<T>) TypeTokens.get().parseType(theType);
 		} catch (ParseException e) {
-			throw new QonfigInterpretationException(e.getMessage(), e);
+			throw new ExpressoEvaluationException(theOffset, theValue.getExpressionOffset(), e.getMessage(), e);
 		}
 		if (!TypeTokens.get().isAssignable(type.getType(0), valueType))
-			throw new QonfigInterpretationException("Cannot assign " + valueType + " to " + type.getType(0));
-		ValueContainer<SettableValue<?>, SettableValue<S>> valueContainer = (ValueContainer<SettableValue<?>, SettableValue<S>>) (ValueContainer<?, ?>) theValue
+			throw new ExpressoEvaluationException(theOffset, getExpressionEnd(),
+				"Cannot assign " + valueType + " to " + type.getType(0));
+		ValueContainer<SettableValue<?>, SettableValue<S>> valueContainer;
+		valueContainer = (ValueContainer<SettableValue<?>, SettableValue<S>>) (ValueContainer<?, ?>) theValue
 			.evaluate(ModelTypes.Value.any(), env);
-		TypeToken<S> sourceType = (TypeToken<S>) valueContainer.getType().getType(0);
+		TypeToken<S> sourceType;
+		try {
+			sourceType = (TypeToken<S>) valueContainer.getType().getType(0);
+		} catch (QonfigEvaluationException e) {
+			throw new ExpressoEvaluationException(theValue.getExpressionOffset(), theValue.getExpressionEnd(), e.getMessage(), e);
+		}
 		if (!TypeTokens.get().isAssignable(sourceType, valueType)//
 			&& !TypeTokens.get().isAssignable(valueType, sourceType))
-			throw new QonfigInterpretationException(
-				"Cannot cast value of type " + valueContainer.getType().getType(0) + " to " + valueType);
+			throw new ExpressoEvaluationException(theOffset, getExpressionEnd(),
+				"Cannot cast value of type " + sourceType + " to " + valueType);
 		Class<T> valueClass = TypeTokens.get().wrap(TypeTokens.getRawType(valueType));
 		Class<S> sourceClass = TypeTokens.getRawType(sourceType);
 		return valueContainer.map(ModelTypes.Value.forType(valueType), vc -> vc.transformReversible(valueType, tx -> tx//

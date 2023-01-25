@@ -2,20 +2,22 @@ package org.observe.quick;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.function.Consumer;
 
 import org.observe.collect.ObservableCollection;
 import org.observe.quick.style.StyleQIS;
 import org.observe.util.swing.PanelPopulation.PanelPopulator;
+import org.qommons.config.QonfigEvaluationException;
 import org.qommons.config.QonfigInterpretationException;
+import org.qommons.ex.ExConsumer;
 
 public interface QuickContainer extends QuickComponentDef {
 	List<QuickComponentDef> getChildren();
 
 	QuickComponent installContainer(PanelPopulator<?, ?> container, QuickComponent.Builder builder,
-		Consumer<PanelPopulator<?, ?>> populator);
+		ExConsumer<PanelPopulator<?, ?>, QonfigEvaluationException> populator) throws QonfigEvaluationException;
 
-	default ObservableCollection<QuickComponent> populateContainer(PanelPopulator<?, ?> thisContainer, QuickComponent.Builder builder) {
+	default ObservableCollection<QuickComponent> populateContainer(PanelPopulator<?, ?> thisContainer, QuickComponent.Builder builder)
+		throws QonfigEvaluationException {
 		List<QuickComponent> children = new ArrayList<>(getChildren().size());
 		for (int c = 0; c < getChildren().size(); c++) {
 			QuickComponentDef childDef = getChildren().get(c);
@@ -26,7 +28,7 @@ public interface QuickContainer extends QuickComponentDef {
 	}
 
 	@Override
-	default QuickComponent install(PanelPopulator<?, ?> container, QuickComponent.Builder builder) {
+	default QuickComponent install(PanelPopulator<?, ?> container, QuickComponent.Builder builder) throws QonfigEvaluationException {
 		return installContainer(container, builder, //
 			thisContainer -> populateContainer(thisContainer, builder));
 	}

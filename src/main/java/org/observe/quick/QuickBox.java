@@ -1,11 +1,13 @@
 package org.observe.quick;
 
 import java.util.List;
-import java.util.function.Consumer;
 
 import org.observe.quick.style.StyleQIS;
 import org.observe.util.swing.PanelPopulation.PanelPopulator;
+import org.qommons.config.QonfigEvaluationException;
 import org.qommons.config.QonfigInterpretationException;
+import org.qommons.ex.CheckedExceptionWrapper;
+import org.qommons.ex.ExConsumer;
 
 public class QuickBox extends QuickContainer.AbstractQuickContainer {
 	private final String theLayoutName;
@@ -23,14 +25,22 @@ public class QuickBox extends QuickContainer.AbstractQuickContainer {
 
 	@Override
 	public QuickComponent installContainer(PanelPopulator<?, ?> container, QuickComponent.Builder builder,
-		Consumer<PanelPopulator<?, ?>> populator) {
+		ExConsumer<PanelPopulator<?, ?>, QonfigEvaluationException> populator) throws QonfigEvaluationException {
 		if (theLayout == null)
 			throw new IllegalStateException("No interpreter configured for layout " + theLayoutName);
 		String fieldName = getFieldName() == null ? null : getFieldName().apply(builder.getModels()).get();
-		container.addHPanel(fieldName, theLayout.create(), thisContainer -> {
-			modify(thisContainer, builder);
-			populator.accept(thisContainer);
-		});
+		try {
+			container.addHPanel(fieldName, theLayout.create(), thisContainer -> {
+				modify(thisContainer, builder);
+				try {
+					populator.accept(thisContainer);
+				} catch (QonfigEvaluationException e) {
+					throw new CheckedExceptionWrapper(e);
+				}
+			});
+		} catch (CheckedExceptionWrapper e) {
+			throw (QonfigEvaluationException) e.getCause();
+		}
 		return builder.build();
 	}
 }

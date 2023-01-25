@@ -21,7 +21,7 @@ import org.qommons.config.QonfigAttributeDef;
 import org.qommons.config.QonfigChildDef;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigElementOrAddOn;
-import org.qommons.config.QonfigInterpretationException;
+import org.qommons.config.QonfigEvaluationException;
 import org.qommons.config.QonfigToolkit;
 import org.qommons.config.QonfigValueType;
 import org.qommons.config.SpecificationType;
@@ -156,11 +156,12 @@ public interface DynamicModelValue<M, MV extends M> extends ValueContainer<M, MV
 	 * @param model The model instance to satisfy the value in (should be {@link ExpressoQIS#wrapLocal(ModelSetInstance) wrapLocal}'ed)
 	 * @param value The value to use to satisfy the model value
 	 */
-	public static <M, MV extends M> void satisfyDynamicValue(String name, ModelInstanceType<M, MV> type, ModelSetInstance model, MV value) {
+	public static <M, MV extends M> void satisfyDynamicValue(String name, ModelInstanceType<M, MV> type, ModelSetInstance model, MV value)
+		throws ModelException, QonfigEvaluationException, TypeConversionException {
 		try { // Check for the value rigorously
 			model.getModel().getValue(name, type);
-		} catch (QonfigInterpretationException e) {
-			throw new IllegalArgumentException("No such dynamic model value: " + model.getModel().getIdentity() + "." + name);
+		} catch (ModelException e) {
+			throw new ModelException("No such dynamic model value: " + model.getModel().getIdentity() + "." + name);
 		}
 		ObservableModelSet.ModelComponentNode<?, ?> modelValue = model.getModel().getComponentIfExists(name);
 		MV dynamicValue = (MV) model.get(modelValue);
@@ -181,12 +182,14 @@ public interface DynamicModelValue<M, MV extends M> extends ValueContainer<M, MV
 	 * @param model The model instance the value may be satisfied in
 	 * @return Whether the given dynamic value has already been satisfied with
 	 *         {@link #satisfyDynamicValue(String, ModelInstanceType, ModelSetInstance, Object)}
+	 * @throws ModelException
 	 */
-	public static <M, MV extends M> boolean isDynamicValueSatisfied(String name, ModelInstanceType<M, MV> type, ModelSetInstance model) {
+	public static <M, MV extends M> boolean isDynamicValueSatisfied(String name, ModelInstanceType<M, MV> type, ModelSetInstance model)
+		throws ModelException, QonfigEvaluationException, TypeConversionException {
 		try { // Check for the value rigorously
 			model.getModel().getValue(name, type);
-		} catch (QonfigInterpretationException e) {
-			throw new IllegalArgumentException("No such dynamic model value: " + model.getModel().getIdentity() + "." + name);
+		} catch (ModelException e) {
+			throw new ModelException("No such dynamic model value: " + model.getModel().getIdentity() + "." + name);
 		}
 		ObservableModelSet.ModelComponentNode<?, ?> modelValue = model.getModel().getComponentIfExists(name);
 		MV dynamicValue = (MV) model.get(modelValue);
@@ -209,11 +212,11 @@ public interface DynamicModelValue<M, MV extends M> extends ValueContainer<M, MV
 	 * @param value The value to use to satisfy the model value
 	 */
 	public static <M, MV extends M> void satisfyDynamicValueIfUnsatisfied(String name, ModelInstanceType<M, MV> type,
-		ModelSetInstance model, MV value) {
+		ModelSetInstance model, MV value) throws ModelException, QonfigEvaluationException, TypeConversionException {
 		try { // Check for the value rigorously
 			model.getModel().getValue(name, type);
-		} catch (QonfigInterpretationException e) {
-			throw new IllegalArgumentException("No such dynamic model value: " + model.getModel().getIdentity() + "." + name);
+		} catch (ModelException e) {
+			throw new ModelException("No such dynamic model value: " + model.getModel().getIdentity() + "." + name);
 		}
 		ObservableModelSet.ModelComponentNode<?, ?> modelValue = model.getModel().getComponentIfExists(name);
 		MV dynamicValue = (MV) model.get(modelValue);
@@ -343,8 +346,18 @@ public interface DynamicModelValue<M, MV extends M> extends ValueContainer<M, MV
 
 		@Override
 		public boolean equals(Object obj) {
-			return obj instanceof DynamicModelValue && theDeclaration.equals(((DynamicModelValue<?, ?>) obj).getDeclaration())
-				&& theType.equals(((DynamicModelValue<?, ?>) obj).getType());
+			if (obj == this)
+				return true;
+			else if (!(obj instanceof DynamicModelValue))
+				return false;
+			DynamicModelValue<?, ?> other = (DynamicModelValue<?, ?>) obj;
+			if (!theDeclaration.equals(other.getDeclaration()))
+				return false;
+			try {
+				return theType.equals(other.getType());
+			} catch (QonfigEvaluationException e) {
+				return false;
+			}
 		}
 
 		@Override
@@ -369,21 +382,21 @@ public interface DynamicModelValue<M, MV extends M> extends ValueContainer<M, MV
 		}
 
 		@Override
-		public ModelInstanceType<M, MV> getType() {
+		public ModelInstanceType<M, MV> getType() throws QonfigEvaluationException {
 			if (theContainer == null)
 				theContainer = theCreator.createDynamicContainer();
 			return theContainer.getType();
 		}
 
 		@Override
-		public MV get(ModelSetInstance models) {
+		public MV get(ModelSetInstance models) throws QonfigEvaluationException {
 			if (theContainer == null)
 				theContainer = theCreator.createDynamicContainer();
 			return theContainer.get(models);
 		}
 
 		@Override
-		public MV forModelCopy(MV value, ModelSetInstance sourceModels, ModelSetInstance newModels) {
+		public MV forModelCopy(MV value, ModelSetInstance sourceModels, ModelSetInstance newModels) throws QonfigEvaluationException {
 			if (theContainer == null)
 				theContainer = theCreator.createDynamicContainer();
 			return theContainer.forModelCopy(value, sourceModels, newModels);
@@ -417,7 +430,7 @@ public interface DynamicModelValue<M, MV extends M> extends ValueContainer<M, MV
 
 	/**
 	 * A dynamic-typed value whose type is not completely specified and must be
-	 * {@link #satisfyDynamicValue(String, ObservableModelSet, ValueCreator) satisfied} before it is {@link ValueCreator#createValue() used}
+	 * {@link #satisfyDynamicValue(String, ObservableModelSet, ValueCreator) satisfied} before it is {@link ValueCreator#createContainer() used}
 	 *
 	 * @param <M> The model type of the value
 	 * @param <MV> The type of the value, as far as it is known
@@ -453,16 +466,16 @@ public interface DynamicModelValue<M, MV extends M> extends ValueContainer<M, MV
 		}
 
 		@Override
-		public DynamicModelValue<M, MV> createValue() {
+		public DynamicModelValue<M, MV> createContainer() {
 			return new DynamicContainerWrapper<>(this);
 		}
 
-		ValueContainer<M, MV> createDynamicContainer() {
+		ValueContainer<M, MV> createDynamicContainer() throws QonfigEvaluationException {
 			if (theSatisfier == null)
 				theSatisfier = ObservableModelSet.IdentifableValueCreator.of(theIdentity,
 					new DynamicModelValue.RuntimeModelValue<>(theIdentity, theDeclaredType));
 			// throw new IllegalStateException("Dynamic model value " + getName() + " requested but not yet satisfied");
-			ValueContainer<M, MV> container = theSatisfier.createValue();
+			ValueContainer<M, MV> container = theSatisfier.createContainer();
 			if (!getDeclaredType().getModelType().equals(container.getType().getModelType()))
 				throw new IllegalStateException(
 					"Dynamic model value " + getName() + "(" + getDeclaredType() + ") satisfied with " + container.getType());

@@ -14,6 +14,8 @@ import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.util.swing.PanelPopulation;
 import org.observe.util.swing.PanelPopulation.WindowBuilder;
 import org.observe.util.swing.WindowPopulation;
+import org.qommons.config.QonfigEvaluationException;
+import org.qommons.ex.CheckedExceptionWrapper;
 
 public class QuickUiDef {
 	private final QuickDocument theDocument;
@@ -43,21 +45,21 @@ public class QuickUiDef {
 		return theUntil;
 	}
 
-	public ModelSetInstance getModels() {
+	public ModelSetInstance getModels() throws QonfigEvaluationException {
 		if (theModels == null)
 			theModels = theDocument.getHead().getModels().createInstance(theExternalModels, getUntil()).build();
 		return theModels;
 	}
 
-	public JFrame createFrame() {
+	public JFrame createFrame() throws QonfigEvaluationException {
 		return install(new JFrame());
 	}
 
-	public JFrame install(JFrame frame) {
+	public JFrame install(JFrame frame) throws QonfigEvaluationException {
 		return install(WindowPopulation.populateWindow(frame, getUntil(), false, false)).getWindow();
 	}
 
-	public JFrame run(JFrame frame, Component relativeTo) {
+	public JFrame run(JFrame frame, Component relativeTo) throws QonfigEvaluationException {
 		if (frame == null)
 			frame = new JFrame();
 		PanelPopulation.WindowBuilder<JFrame, ?> window = WindowPopulation.populateWindow(frame, getUntil(), false, false);
@@ -66,11 +68,11 @@ public class QuickUiDef {
 		return window.getWindow();
 	}
 
-	public JDialog install(JDialog dialog) {
+	public JDialog install(JDialog dialog) throws QonfigEvaluationException {
 		return install(WindowPopulation.populateDialog(dialog, getUntil(), false)).getWindow();
 	}
 
-	public <W extends Window> WindowBuilder<W, ?> install(WindowBuilder<W, ?> builder) {
+	public <W extends Window> WindowBuilder<W, ?> install(WindowBuilder<W, ?> builder) throws QonfigEvaluationException {
 		if (theDocument.getTitle() != null)
 			builder.withTitle(theDocument.getTitle().get(getModels()));
 		if (theDocument.getIcon() != null)
@@ -86,16 +88,26 @@ public class QuickUiDef {
 		if (theDocument.getHeight() != null)
 			builder.withHeight(theDocument.getHeight().get(getModels()));
 		builder.withCloseAction(theDocument.getCloseAction());
-		builder.withHContent(new BorderLayout(), content -> installContent(content));
+		try {
+			builder.withHContent(new BorderLayout(), content -> {
+				try {
+					installContent(content);
+				} catch (QonfigEvaluationException e) {
+					throw new CheckedExceptionWrapper(e);
+				}
+			});
+		} catch (CheckedExceptionWrapper e) {
+			throw (QonfigEvaluationException) e.getCause();
+		}
 		builder.run(null);
 		return builder;
 	}
 
-	public void installContent(Container container) {
+	public void installContent(Container container) throws QonfigEvaluationException {
 		installContent(PanelPopulation.populatePanel(container, getUntil()));
 	}
 
-	public QuickComponent installContent(PanelPopulation.PanelPopulator<?, ?> container) {
+	public QuickComponent installContent(PanelPopulation.PanelPopulator<?, ?> container) throws QonfigEvaluationException {
 		QuickComponent.Builder root = QuickComponent.build(theDocument.getComponent(), null, getModels());
 		theDocument.getComponent().install(container, root);
 		return root.build();

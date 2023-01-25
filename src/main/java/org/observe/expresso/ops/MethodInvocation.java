@@ -9,17 +9,21 @@ import java.util.function.Function;
 
 import org.observe.SettableValue;
 import org.observe.expresso.ExpressoEnv;
+import org.observe.expresso.ExpressoEvaluationException;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet.ValueContainer;
 import org.observe.util.TypeTokens;
-import org.qommons.config.QonfigInterpretationException;
+import org.qommons.config.QonfigEvaluationException;
+
+import com.google.common.reflect.TypeToken;
 
 /** An expression representing the invocation of a method */
 public class MethodInvocation extends Invocation {
 	private final ObservableExpression theContext;
 	private final String theMethodName;
+	private final int theMethodOffset;
 
 	/**
 	 * @param context The expression representing the object on which to invoke the non-static method or the type on which to invoke the
@@ -27,12 +31,15 @@ public class MethodInvocation extends Invocation {
 	 * @param methodName The name of the method
 	 * @param typeArgs The type arguments for the method invocation
 	 * @param arguments The arguments to the method
+	 * @param offset
+	 * @param end
 	 */
-	public MethodInvocation(ObservableExpression context, String methodName, List<String> typeArgs,
-		List<ObservableExpression> arguments) {
-		super(typeArgs, arguments);
+	public MethodInvocation(ObservableExpression context, String methodName, List<String> typeArgs, List<ObservableExpression> arguments,
+		int offset, int end, int methodOffset) {
+		super(typeArgs, arguments, offset, end);
 		theContext = context;
 		theMethodName = methodName;
+		theMethodOffset = methodOffset;
 	}
 
 	/**
@@ -72,13 +79,14 @@ public class MethodInvocation extends Invocation {
 			different |= newArg != arg;
 		}
 		if (different)
-			return new MethodInvocation(ctx, theMethodName, getTypeArguments(), Collections.unmodifiableList(newArgs));
+			return new MethodInvocation(ctx, theMethodName, getTypeArguments(), Collections.unmodifiableList(newArgs),
+				getExpressionOffset(), getExpressionEnd(), theMethodOffset);
 		return this;
 	}
 
 	@Override
 	protected <M, MV extends M> InvokableResult<?, M, MV> evaluateInternal2(ModelInstanceType<M, MV> type, ExpressoEnv env, ArgOption args)
-		throws QonfigInterpretationException {
+		throws ExpressoEvaluationException {
 		if (theContext != null) {
 			if (theContext instanceof NameExpression) {
 				Class<?> clazz = env.getClassView().getType(theContext.toString());
@@ -91,21 +99,28 @@ public class MethodInvocation extends Invocation {
 							realArgs[a] = args.args[a].get(0);
 						return new InvokableResult<>(result, null, Arrays.asList(realArgs), Invocation.ExecutableImpl.METHOD);
 					}
-					throw new QonfigInterpretationException("No such method " + printSignature() + " in class " + clazz.getName());
+					throw new ExpressoEvaluationException(theMethodOffset, theMethodOffset + theMethodName.length(),
+						"No such method " + printSignature() + " in class " + clazz.getName());
 				}
 			}
 			ValueContainer<SettableValue<?>, SettableValue<?>> ctx = theContext.evaluate(ModelTypes.Value.any(), env);
-			Invocation.MethodResult<Method, MV> result = Invocation.findMethod(
-				TypeTokens.getRawType(ctx.getType().getType(0)).getMethods(), theMethodName, ctx.getType().getType(0), false,
-				Arrays.asList(args), type, env, Invocation.ExecutableImpl.METHOD, this);
+			TypeToken<?> ctxType;
+			try {
+				ctxType = ctx.getType().getType(0);
+			} catch (QonfigEvaluationException e) {
+				throw new ExpressoEvaluationException(theContext.getExpressionOffset(), theContext.getExpressionEnd(), e.getMessage(),
+					e);
+			}
+			Invocation.MethodResult<Method, MV> result = Invocation.findMethod(TypeTokens.getRawType(ctxType).getMethods(), theMethodName,
+				ctxType, false, Arrays.asList(args), type, env, Invocation.ExecutableImpl.METHOD, this);
 			if (result != null) {
 				ValueContainer<SettableValue<?>, SettableValue<?>>[] realArgs = new ValueContainer[getArguments().size()];
 				for (int a = 0; a < realArgs.length; a++)
 					realArgs[a] = args.args[a].get(0);
 				return new InvokableResult<>(result, ctx, Arrays.asList(realArgs), Invocation.ExecutableImpl.METHOD);
 			}
-			throw new QonfigInterpretationException(
-				"No such method " + printSignature() + " on " + theContext + "(" + ctx.getType().getType(0) + ")");
+			throw new ExpressoEvaluationException(theMethodOffset, theMethodOffset + theMethodName.length(),
+				"No such method " + printSignature() + " on " + theContext + "(" + ctxType + ")");
 		} else {
 			List<Method> methods = env.getClassView().getImportedStaticMethods(theMethodName);
 			Invocation.MethodResult<Method, MV> result = Invocation.findMethod(methods.toArray(new Method[methods.size()]), theMethodName,
@@ -116,7 +131,8 @@ public class MethodInvocation extends Invocation {
 					realArgs[a] = args.args[a].get(0);
 				return new InvokableResult<>(result, null, Arrays.asList(realArgs), Invocation.ExecutableImpl.METHOD);
 			}
-			throw new QonfigInterpretationException("No such imported method " + printSignature());
+			throw new ExpressoEvaluationException(theMethodOffset, theMethodOffset + theMethodName.length(),
+				"No such imported method " + printSignature());
 		}
 	}
 

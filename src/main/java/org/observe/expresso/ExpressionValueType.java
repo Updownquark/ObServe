@@ -1,7 +1,7 @@
 package org.observe.expresso;
 
 import org.qommons.config.CustomValueType;
-import org.qommons.config.QonfigParseSession;
+import org.qommons.config.ErrorReporting;
 import org.qommons.config.QonfigToolkit;
 
 /** A Qonfig {@link CustomValueType} for parsing expressions */
@@ -15,7 +15,7 @@ public class ExpressionValueType implements CustomValueType {
 	}
 
 	@Override
-	public QonfigExpression parse(String value, QonfigToolkit tk, QonfigParseSession session) {
+	public QonfigExpression parse(String value, QonfigToolkit tk, ErrorReporting session) {
 		return new QonfigExpression(value);
 	}
 

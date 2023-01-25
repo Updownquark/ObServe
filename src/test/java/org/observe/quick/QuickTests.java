@@ -7,6 +7,7 @@ import javax.swing.JFrame;
 
 import org.junit.Test;
 import org.observe.SettableValue;
+import org.observe.expresso.ModelException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet;
 import org.qommons.config.QonfigApp;
@@ -20,11 +21,12 @@ public class QuickTests {
 	 * with it for the test, but it is a test.
 	 *
 	 * @throws IOException If any of the files can't be found or read
+	 * @throws ModelException If the models can't be created
 	 * @throws QonfigParseException If any of the files can't be parsed
 	 * @throws QonfigInterpretationException If the Quick document can't be created
 	 */
 	@Test
-	public void testSuperBasic() throws IOException, QonfigParseException, QonfigInterpretationException {
+	public void testSuperBasic() throws IOException, ModelException, QonfigParseException, QonfigInterpretationException {
 		ObservableModelSet.ExternalModelSetBuilder extModels = ObservableModelSet.buildExternal(ObservableModelSet.JAVA_NAME_CHECKER);
 		extModels.addSubModel("extModel").with("value1", ModelTypes.Value.forType(double.class),
 			SettableValue.build(double.class).withDescription("extModel.value1").withValue(42.0).build());

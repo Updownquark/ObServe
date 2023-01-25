@@ -1,6 +1,5 @@
 package org.observe.expresso;
 
-import java.text.ParseException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedList;
@@ -25,71 +24,6 @@ import org.qommons.collect.BetterList;
 
 /** This class compiles text parsing results from ANTLR v4 into a structure that is easy to navigate and search */
 public interface Expression {
-	/** Thrown from {@link Expression#of(Parser, ParseTree)} in response to text parse errors encountered by ANTLR */
-	public static class ExpressoParseException extends ParseException {
-		private final int theEndIndex;
-		private final String theType;
-		private final String theText;
-
-		/**
-		 * @param errorOffset The start index of the error
-		 * @param endIndex The end index of the error
-		 * @param type The token type of the error
-		 * @param text The text content that is the source of the error
-		 * @param message The message for the exception
-		 */
-		public ExpressoParseException(int errorOffset, int endIndex, String type, String text, String message) {
-			super(message + " ( " + text + ", type " + type + " ) at position " + errorOffset, errorOffset);
-			theEndIndex = endIndex;
-			theType = type;
-			theText = text;
-		}
-
-		/**
-		 * @param errorOffset The start index of the error
-		 * @param endIndex The end index of the error
-		 * @param type The token type of the error
-		 * @param text The text content that is the source of the error
-		 * @param message The message for the exception
-		 * @param cause The cause of the exception
-		 */
-		public ExpressoParseException(int errorOffset, int endIndex, String type, String text, String message, Throwable cause) {
-			super(message + " ( " + text + ", type " + type + " ) at position " + errorOffset, errorOffset);
-			theEndIndex = endIndex;
-			theType = type;
-			theText = text;
-		}
-
-		/**
-		 * @param exp The expression
-		 * @param message The message for the exception
-		 */
-		public ExpressoParseException(Expression exp, String message) {
-			this(exp.getStartIndex(), exp.getEndIndex(), exp.getType(), exp.getText(), message);
-		}
-
-		/** @return The start index of the error */
-		@Override
-		public int getErrorOffset() {
-			return super.getErrorOffset();
-		}
-
-		/** @return The end index of the error */
-		public int getEndIndex() {
-			return theEndIndex;
-		}
-
-		/** @return The token type of the error */
-		public String getType() {
-			return theType;
-		}
-
-		/** @return The text content that is the source of the error */
-		public String getText() {
-			return theText;
-		}
-	}
-
 	/** @return The token type of this expression */
 	String getType();
 
@@ -169,11 +103,10 @@ public interface Expression {
 		} catch (ExpressoAntlrCompiler.InternalExpressoErrorException e) {
 			String displayType = parser.getVocabulary().getDisplayName(e.token.getType());
 			if (e.getCause() != null && e.getCause() != e)
-				throw new ExpressoParseException(e.token.getStartIndex(), e.token.getStopIndex(), displayType, e.token.getText(),
-					e.getMessage(), e.getCause());
+				throw new ExpressoParseException(e.token.getStartIndex(), e.token.getStopIndex(), displayType, e.getMessage(),
+					e.getCause());
 			else
-				throw new ExpressoParseException(e.token.getStartIndex(), e.token.getStopIndex(), displayType, e.token.getText(),
-					e.getMessage());
+				throw new ExpressoParseException(e.token.getStartIndex(), e.token.getStopIndex(), displayType, e.getMessage());
 		}
 		return compiler.getRoot();
 	}

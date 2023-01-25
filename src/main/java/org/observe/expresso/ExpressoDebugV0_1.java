@@ -10,6 +10,7 @@ import org.observe.expresso.ObservableModelSet.ValueCreator;
 import org.qommons.BreakpointHere;
 import org.qommons.Version;
 import org.qommons.collect.BetterList;
+import org.qommons.config.QonfigEvaluationException;
 import org.qommons.config.QonfigInterpretation;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigInterpreterCore.Builder;
@@ -61,24 +62,24 @@ public class ExpressoDebugV0_1 implements QonfigInterpretation {
 			public ValueCreator<?, ?> modifyValue(ValueCreator<?, ?> value, CoreSession session, Object prepared)
 				throws QonfigInterpretationException {
 				String breakpointType = session.getAttributeText("break-on");
-						if (breakpointType == null || "parse".equals(breakpointType))
+				if (breakpointType == null || "parse".equals(breakpointType))
 					return value;
 				return new ValueCreator<Object, Object>() {
 					@Override
-					public ValueContainer<Object, Object> createValue() {
+					public ValueContainer<Object, Object> createContainer() throws QonfigEvaluationException {
 						if ("createContainer".equals(breakpointType)) {
 							BreakpointHere.breakpoint();
-							return (ValueContainer<Object, Object>) value.createValue();
+							return (ValueContainer<Object, Object>) value.createContainer();
 						} else {
-							ValueContainer<Object, Object> wrapped = (ValueContainer<Object, Object>) value.createValue();
+							ValueContainer<Object, Object> wrapped = (ValueContainer<Object, Object>) value.createContainer();
 							return new ValueContainer<Object, Object>() {
 								@Override
-								public ModelInstanceType<Object, Object> getType() {
+								public ModelInstanceType<Object, Object> getType() throws QonfigEvaluationException {
 									return wrapped.getType();
 								}
 
 								@Override
-								public Object get(ModelSetInstance models) {
+								public Object get(ModelSetInstance models) throws QonfigEvaluationException {
 									if ("createValue".equals(breakpointType))
 										BreakpointHere.breakpoint();
 									return wrapped.get(models);
@@ -86,12 +87,12 @@ public class ExpressoDebugV0_1 implements QonfigInterpretation {
 
 								@Override
 								public Object forModelCopy(Object oldValue, ModelSetInstance sourceModels,
-									ModelSetInstance newModels) {
+									ModelSetInstance newModels) throws QonfigEvaluationException {
 									return wrapped.forModelCopy(value, sourceModels, newModels);
 								}
 
 								@Override
-								public BetterList<ValueContainer<?, ?>> getCores() {
+								public BetterList<ValueContainer<?, ?>> getCores() throws QonfigEvaluationException {
 									return wrapped.getCores();
 								}
 

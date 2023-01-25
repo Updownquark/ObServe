@@ -6,6 +6,7 @@ import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet.ValueContainer;
 import org.qommons.StringUtils;
+import org.qommons.config.QonfigEvaluationException;
 import org.qommons.config.QonfigInterpretationException;
 
 /**
@@ -64,7 +65,7 @@ public class QuickStyleValue<T> implements Comparable<QuickStyleValue<?>> {
 	 *         {@link ObservableExpression#evaluate(org.observe.expresso.ModelType.ModelInstanceType, ExpressoEnv) evaluating} this
 	 *         {@link #getValueExpression() value} or its {@link StyleValueApplication#getCondition() condition}
 	 */
-	public EvaluatedStyleValue<T> evaluate(ExpressoEnv expressoEnv) throws QonfigInterpretationException {
+	public EvaluatedStyleValue<T> evaluate(ExpressoEnv expressoEnv) throws QonfigEvaluationException {
 		EvaluatedStyleApplication application = theApplication.evaluate(expressoEnv);
 		ValueContainer<SettableValue<?>, SettableValue<T>> valueV = theValueExpression
 			.evaluate(ModelTypes.Value.forType(theAttribute.getType()), expressoEnv);

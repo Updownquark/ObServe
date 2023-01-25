@@ -26,11 +26,13 @@ import org.observe.util.swing.PanelPopulation.PanelPopulator;
 import org.qommons.QommonsUtils;
 import org.qommons.Version;
 import org.qommons.collect.BetterList;
+import org.qommons.config.QonfigEvaluationException;
 import org.qommons.config.QonfigInterpretation;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigInterpreterCore;
 import org.qommons.config.QonfigToolkit;
 import org.qommons.config.SpecialSession;
+import org.qommons.ex.CheckedExceptionWrapper;
 
 import com.google.common.reflect.TypeToken;
 
@@ -133,35 +135,57 @@ public class QuickX implements QonfigInterpretation {
 
 			@Override
 			public void makeTree(QuickComponent.Builder builder, PanelPopulator<?, ?> container, ObservableValue<T> root,
-				Function<? super BetterList<T>, ? extends ObservableCollection<? extends T>> children, Consumer<E> treeData) {
-				container.addTreeTable2(root, children, t -> {
-					treeData.accept((E) t);
-					if (columnsAttr != null) {
-						// The flatten here is so columns can also be specified on the table.
-						// Without this, additional columns could not be added if, as is likely, the columnsAttr collection is unmodifiable.
-						t.withColumns(ObservableCollection.flattenCollections(columnType, //
-							columnsAttr.get(builder.getModels()), //
-							ObservableCollection.build(columnType).build()).collect());
-					}
-					for (QuickBase.Column<BetterList<T>, ?> column : columns)
-						t.withColumn(column.createColumn(builder, () -> {
-							ModelSetInstance columnModels = builder.getModels().copy().build();
-							SettableValue<BetterList<T>> modelValueI = SettableValue.build(modelType).build();
-							DynamicModelValue.satisfyDynamicValue(pathName, ModelTypes.Value.forType(modelType), columnModels,
-								modelValueI);
-							DynamicModelValue.satisfyDynamicValue("rowIndex", ModelTypes.Value.INT, columnModels,
-								SettableValue.build(int.class).withValue(-1).build());
-							DynamicModelValue.satisfyDynamicValue("columnIndex", ModelTypes.Value.INT, columnModels,
-								SettableValue.build(int.class).withValue(-1).build());
-							return columnModels;
-						}, (columnModels, modelValueV) -> {
-							pathValue.get(columnModels).set(modelValueV, null);
-						}, (columnModels, cell) -> {
-							pathValue.get(columnModels).set(cell.getModelValue(), null);
-							columnIndex.get(columnModels).set(cell.getColumnIndex(), null);
-						}, pathValue// builder, builder.getModels()));
-							));
-				});
+				Function<? super BetterList<T>, ? extends ObservableCollection<? extends T>> children, Consumer<E> treeData)
+					throws QonfigEvaluationException {
+				try {
+					container.addTreeTable2(root, children, t -> {
+						treeData.accept((E) t);
+						if (columnsAttr != null) {
+							// The flatten here is so columns can also be specified on the table.
+							// Without this, additional columns could not be added if, as is likely, the columnsAttr collection is
+							// unmodifiable.
+							try {
+								t.withColumns(ObservableCollection.flattenCollections(columnType, //
+									columnsAttr.get(builder.getModels()), //
+									ObservableCollection.build(columnType).build()).collect());
+							} catch (QonfigEvaluationException e) {
+								throw new CheckedExceptionWrapper(e);
+							}
+						}
+						for (QuickBase.Column<BetterList<T>, ?> column : columns)
+							t.withColumn(column.createColumn(builder, () -> {
+								try {
+									ModelSetInstance columnModels = builder.getModels().copy().build();
+									SettableValue<BetterList<T>> modelValueI = SettableValue.build(modelType).build();
+									DynamicModelValue.satisfyDynamicValue(pathName, ModelTypes.Value.forType(modelType), columnModels,
+										modelValueI);
+									DynamicModelValue.satisfyDynamicValue("rowIndex", ModelTypes.Value.INT, columnModels,
+										SettableValue.build(int.class).withValue(-1).build());
+									DynamicModelValue.satisfyDynamicValue("columnIndex", ModelTypes.Value.INT, columnModels,
+										SettableValue.build(int.class).withValue(-1).build());
+									return columnModels;
+								} catch (QonfigEvaluationException e) {
+									throw new CheckedExceptionWrapper(e);
+								}
+							}, (columnModels, modelValueV) -> {
+								try {
+									pathValue.get(columnModels).set(modelValueV, null);
+								} catch (QonfigEvaluationException e) {
+									throw new CheckedExceptionWrapper(e);
+								}
+							}, (columnModels, cell) -> {
+								try {
+									pathValue.get(columnModels).set(cell.getModelValue(), null);
+									columnIndex.get(columnModels).set(cell.getColumnIndex(), null);
+								} catch (QonfigEvaluationException e) {
+									throw new CheckedExceptionWrapper(e);
+								}
+							}, pathValue// builder, builder.getModels()));
+								));
+					});
+				} catch (CheckedExceptionWrapper e) {
+					throw (QonfigEvaluationException) e.getCause();
+				}
 			}
 		});
 	}
