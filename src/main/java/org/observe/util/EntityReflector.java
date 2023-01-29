@@ -4,6 +4,7 @@ import java.lang.annotation.Annotation;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodHandles.Lookup;
+import java.lang.invoke.MethodType;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.InvocationTargetException;
@@ -94,33 +95,49 @@ import com.google.common.reflect.TypeToken;
  * @param <E> The type of interface entity this reflector is for
  */
 public class EntityReflector<E> {
+	/** Needed to invoke default methods in proxies for Java 16/17 */
+	private static final Method INVOCATION_HANDLER_INVOKE_DEFAULT;
+	/** Needed to invoke default methods in proxies for Java 8 */
 	private static final Constructor<Lookup> LOOKUP_CONSTRUCTOR;
 	static {
-		Constructor<Lookup> c;
+		Method ihid;
 		try {
-			c = Lookup.class.getDeclaredConstructor(Class.class);
-			if (!c.isAccessible())
-				c.setAccessible(true);
+			ihid = InvocationHandler.class.getMethod("invokeDefault", Object.class, Method.class, Object[].class);
 		} catch (NoSuchMethodException e) {
-			System.err.println("Lookup class has changed: unable to call default or Object methods on entities");
-			e.printStackTrace();
-			c = null;
-		} catch (SecurityException e) {
-			System.err.println("Could not access Lookup: unable to call default or Object methods on entities");
-			e.printStackTrace();
-			c = null;
-		} catch (Exception e) {
-			// This may be because we're in a version of java where we can use MethodHandles instead
-			// System.err.println("Could not access Lookup: unable to call default or Object methods on entities");
-			// e.printStackTrace();
-			c = null;
+			ihid = null;
 		}
-		LOOKUP_CONSTRUCTOR = c;
+		INVOCATION_HANDLER_INVOKE_DEFAULT = ihid;
+
+		if (INVOCATION_HANDLER_INVOKE_DEFAULT == null) {
+			Constructor<Lookup> c;
+			try {
+				c = Lookup.class.getDeclaredConstructor(Class.class);
+				if (!c.isAccessible())
+					c.setAccessible(true);
+			} catch (NoSuchMethodException e) {
+				System.err.println("Lookup class has changed: unable to call default or Object methods on entities");
+				e.printStackTrace();
+				c = null;
+			} catch (SecurityException e) {
+				System.err.println("Could not access Lookup: unable to call default or Object methods on entities");
+				e.printStackTrace();
+				c = null;
+			} catch (Exception e) {
+				// This may be because we're in a version of java where we can use MethodHandles instead
+				// System.err.println("Could not access Lookup: unable to call default or Object methods on entities");
+				// e.printStackTrace();
+				c = null;
+			}
+			LOOKUP_CONSTRUCTOR = c;
+		} else
+			LOOKUP_CONSTRUCTOR = null;
 	}
 
 	static <T> Lookup getLookup(Class<T> type)
 		throws InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException {
-		if (LOOKUP_CONSTRUCTOR != null)
+		if (INVOCATION_HANDLER_INVOKE_DEFAULT != null)
+			return null;
+		else if (LOOKUP_CONSTRUCTOR != null)
 			return LOOKUP_CONSTRUCTOR.newInstance(type).in(type);
 		else {
 			return MethodHandles.lookup().in(type);
@@ -1463,8 +1480,13 @@ public class EntityReflector<E> {
 
 		@Override
 		protected R invokeLocal(E proxy, Object[] args, EntityInstanceBacking backing) throws Throwable {
-			if (theHandle == null)
-				throw new IllegalStateException("Unable to reflectively invoke default method " + getInvokable());
+			if (theHandle == null) {
+				if (INVOCATION_HANDLER_INVOKE_DEFAULT != null) {
+					Object[] invArgs = new Object[] { proxy, getMethod(), args };
+					return (R) INVOCATION_HANDLER_INVOKE_DEFAULT.invoke(null, invArgs);
+				} else
+					throw new IllegalStateException("Unable to reflectively invoke default method " + getInvokable());
+			}
 			synchronized (theHandle) {
 				return (R) theHandle.bindTo(proxy).invokeWithArguments(args);
 			}
@@ -2045,11 +2067,16 @@ public class EntityReflector<E> {
 						if (lookup == null) {
 							handle = null;
 						} else {
-							handle = getLookup(clazz).unreflectSpecial(m, clazz);
+							// handle = lookup.unreflectSpecial(m, clazz);
+							handle = lookup.findSpecial(clazz, m.getName(), MethodType.methodType(m.getReturnType(), m.getParameterTypes()),
+								clazz);
 						}
-					} catch (IllegalArgumentException | InstantiationException | InvocationTargetException e) {
+					} catch (IllegalArgumentException | InstantiationException | InvocationTargetException | NoSuchMethodException e) {
 						throw new IllegalStateException("Bad method? " + m + ": " + e);
 					} catch (SecurityException | IllegalAccessException e) {
+						errors.add(new EntityReflectionMessage(EntityReflectionMessageLevel.ERROR, m, "No access to " + m + ": " + e));
+						continue;
+					} catch (RuntimeException | Error e) {
 						errors.add(new EntityReflectionMessage(EntityReflectionMessageLevel.ERROR, m, "No access to " + m + ": " + e));
 						continue;
 					}
