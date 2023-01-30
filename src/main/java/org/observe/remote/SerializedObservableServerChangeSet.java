@@ -48,7 +48,7 @@ public class SerializedObservableServerChangeSet {
 		public Change(ObservableServiceChange change) {
 			theChangeId = change.getChangeId();
 			theType = change.getType();
-			theTargetConfigAddress = change.getTargetConfig() == null ? null : BetterList.of(change.getTargetConfig().getAddressPath());
+			theTargetConfigAddress = change.getTargetConfig() == null ? null : BetterList.of(change.getTargetConfig());
 			theConfigChangeType = change.getConfigChangeType();
 			theTargetValue = change.getTargetValue();
 			if (change.getTargetRole() == null) {

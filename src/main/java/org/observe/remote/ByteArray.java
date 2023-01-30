@@ -7,6 +7,7 @@ import java.util.Arrays;
 
 import org.qommons.StringUtils;
 
+/** An immutable wrapper around a byte array */
 public class ByteArray implements Comparable<ByteArray> {
 	private byte[] bytes;
 
@@ -28,6 +29,7 @@ public class ByteArray implements Comparable<ByteArray> {
 		return bytes[index];
 	}
 
+	/** @return A copy of this byte array */
 	public byte[] copy() {
 		return bytes.clone();
 	}
@@ -36,6 +38,7 @@ public class ByteArray implements Comparable<ByteArray> {
 	 * Copies this address into another byte array
 	 *
 	 * @param into The byte array into which to copy this address
+	 * @param offset The offset in the target array to start copying at
 	 */
 	public void copy(byte[] into, int offset) {
 		copy(into, offset, bytes.length);
@@ -45,11 +48,14 @@ public class ByteArray implements Comparable<ByteArray> {
 	 * Copies this address into another byte array
 	 *
 	 * @param into The byte array into which to copy this address
+	 * @param offset The offset in the target array to start copying at
+	 * @param length The number of bytes in this array to copy
 	 */
 	public void copy(byte[] into, int offset, int length) {
 		System.arraycopy(bytes, 0, into, offset, length);
 	}
 
+	/** @param into The byte buffer to append this array into */
 	public void putInto(ByteBuffer into) {
 		into.put(bytes);
 	}

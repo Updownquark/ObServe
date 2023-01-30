@@ -6,6 +6,7 @@ package org.observe.remote;
  * between them.
  */
 public final class ByteAddress extends ByteArray {
+	/** @param bytes The bytes of the address */
 	public ByteAddress(byte[] bytes) {
 		super(bytes);
 	}

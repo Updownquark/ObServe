@@ -5,6 +5,8 @@ import java.nio.charset.Charset;
 import java.time.Instant;
 import java.util.List;
 
+import org.qommons.collect.BetterList;
+
 public class ObservableServiceChange implements Comparable<ObservableServiceChange> {
 	public static enum ServiceChangeType {
 		ConfigAdd, //
@@ -21,7 +23,7 @@ public class ObservableServiceChange implements Comparable<ObservableServiceChan
 	private final Instant theTimeStamp;
 	private final int theChangeId;
 	private final ServiceChangeType theType;
-	private final ServiceObservableConfig theTargetConfig;
+	private final BetterList<ServerConfigElement> theTargetConfigPath;
 	private final ConfigModificationType theConfigChangeType;
 	private final String theTargetValue;
 	private final ObservableServiceRole theTargetRole;
@@ -30,13 +32,13 @@ public class ObservableServiceChange implements Comparable<ObservableServiceChan
 	private final ByteArray theSignature;
 
 	private ObservableServiceChange(ObservableServiceClient actor, Instant timeStamp, int changeId, ServiceChangeType type,
-		ServiceObservableConfig targetConfig, ConfigModificationType configChangeType, String targetValue, ObservableServiceRole targetRole,
-		ObservableServiceClient grantedClient, ObservableServiceRole inheritedRole, ByteArray signature) {
+		BetterList<ServerConfigElement> targetConfigPath, ConfigModificationType configChangeType, String targetValue,
+		ObservableServiceRole targetRole, ObservableServiceClient grantedClient, ObservableServiceRole inheritedRole, ByteArray signature) {
 		theActor = actor;
 		theTimeStamp = timeStamp;
 		theChangeId = changeId;
 		theType = type;
-		theTargetConfig = targetConfig;
+		theTargetConfigPath = targetConfigPath;
 		theConfigChangeType = configChangeType;
 		theTargetValue = targetValue;
 		theTargetRole = targetRole;
@@ -61,8 +63,8 @@ public class ObservableServiceChange implements Comparable<ObservableServiceChan
 		return theType;
 	}
 
-	public ServiceObservableConfig getTargetConfig() {
-		return theTargetConfig;
+	public BetterList<ServerConfigElement> getTargetConfig() {
+		return theTargetConfigPath;
 	}
 
 	public ConfigModificationType getConfigChangeType() {
@@ -192,7 +194,7 @@ public class ObservableServiceChange implements Comparable<ObservableServiceChan
 
 		byte[] encoded = encodeForSignature(timeStamp, changeId, serviceType, config.getAddressPath(), type, value, null, 0, null, null, 0);
 		byte[] sign = signature.sign(encoded);
-		return new ObservableServiceChange(actor, timeStamp, changeId, serviceType, config, type, value, null, null, null,
+		return new ObservableServiceChange(actor, timeStamp, changeId, serviceType, config.getAddressPath(), type, value, null, null, null,
 			new ByteArray(sign));
 	}
 
@@ -202,8 +204,8 @@ public class ObservableServiceChange implements Comparable<ObservableServiceChan
 		byte[] encoded = encodeForSignature(timeStamp, changeId, ServiceChangeType.RoleAllow, config.getAddressPath(), permissionType, null,
 			role.getOwner().getId(), role.getId(), null, null, 0);
 		byte[] sign = signature.sign(encoded);
-		return new ObservableServiceChange(actor, timeStamp, changeId, ServiceChangeType.RoleAllow, config, permissionType, null, role,
-			null, null, new ByteArray(sign));
+		return new ObservableServiceChange(actor, timeStamp, changeId, ServiceChangeType.RoleAllow, config.getAddressPath(), permissionType,
+			null, role, null, null, new ByteArray(sign));
 	}
 
 	public static ObservableServiceChange createRoleGranted(ObservableServiceRole role, ObservableServiceClient grantee,

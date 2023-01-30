@@ -54,6 +54,18 @@ public class RemoteServiceTest {
 			config1.getContent().getFirst().setValue("test2");
 			Assert.assertFalse("Should have thrown an exception", true);
 		} catch (UnsupportedOperationException e) {}
+		try {
+			config1.getContent().getFirst().remove();
+			Assert.assertFalse("Should have thrown an exception", true);
+		} catch (UnsupportedOperationException e) {}
+
+		// Test delete, also test synchronization when there are un-sync'd changes in the receiver
+		config2.getContent().getFirst().remove();
+		sync(server2, server1);
+		Assert.assertEquals(0, config1.getContent().size());
+
+		sync(server1, server2);
+		Assert.assertEquals("test18", config2.getName());
 	}
 
 	private static void sync(ObservableConfigServer source, ObservableConfigServer dest) {

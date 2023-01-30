@@ -26,6 +26,7 @@ import org.observe.remote.ObservableServiceClient.ClientId;
 import org.qommons.ArrayUtils;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
+import org.qommons.collect.BetterList;
 import org.qommons.collect.BetterSortedList.SortedSearchFilter;
 import org.qommons.collect.BetterSortedSet;
 import org.qommons.collect.CircularArrayList;
@@ -577,8 +578,9 @@ public class ServiceObservableConfig extends DefaultObservableConfig {
 			if (!can(actor, ConfigModificationType.Delete))
 				throw new UnsupportedOperationException(
 					StdMsg.UNSUPPORTED_OPERATION + ": " + actor + " does not have permission to delete this config: " + getPath());
-			super.remove();
+			// This needs to be before the actual remove because its parent is set to null during the call
 			theRootData.deleted(this);
+			super.remove();
 		}
 	}
 
@@ -593,10 +595,11 @@ public class ServiceObservableConfig extends DefaultObservableConfig {
 			theRootData.theCreateAddress = address.address;
 			try {
 				if (getContent().isEmpty())
-					return (ServiceObservableConfig) addChild(name, config -> configure.accept((ServiceObservableConfig) config));
-				else
-					return (ServiceObservableConfig) addChild(null, getContent().get(-index - 1), true, name,
+					return (ServiceObservableConfig) addChild(name, //
 						config -> configure.accept((ServiceObservableConfig) config));
+				else
+					return (ServiceObservableConfig) addChild(//
+						null, getContent().get(-index - 1), true, name, config -> configure.accept((ServiceObservableConfig) config));
 			} finally {
 				theRootData.theCreateAddress = null;
 			}
@@ -611,7 +614,7 @@ public class ServiceObservableConfig extends DefaultObservableConfig {
 		return theAddress;
 	}
 
-	public List<ServerConfigElement> getAddressPath() {
+	public BetterList<ServerConfigElement> getAddressPath() {
 		List<ServerConfigElement> path = new ArrayList<>();
 		ServiceObservableConfig config = this;
 		while (true) {
@@ -623,7 +626,7 @@ public class ServiceObservableConfig extends DefaultObservableConfig {
 				break;
 		}
 		Collections.reverse(path);
-		return path;
+		return BetterList.of(path);
 	}
 
 	private Set<ObservableServiceRole> getInternalRoles(ConfigModificationType type) {
