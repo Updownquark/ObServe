@@ -23,7 +23,7 @@ import org.qommons.collect.StampedLockingStrategy;
 import org.qommons.tree.BetterTreeList;
 
 /** Default, mutable implementation of {@link ObservableConfig} */
-class DefaultObservableConfig extends AbstractObservableConfig {
+public class DefaultObservableConfig extends AbstractObservableConfig {
 	private ElementId theParentContentRef;
 	private final CollectionLockingStrategy theLocking;
 	private List<Object> theCauses;
@@ -34,7 +34,15 @@ class DefaultObservableConfig extends AbstractObservableConfig {
 	private final ListenerList<InternalObservableConfigListener> theListeners;
 	private long theModCount;
 
-	private DefaultObservableConfig(String name, Function<Object, CollectionLockingStrategy> locking) {
+	/**
+	 * Root constructor. This is protected because this class should be instantiated from {@link #createRoot(String, String, Function)} or
+	 * {@link #createRoot(String, ThreadConstraint)}. If this class is inherited, {@link #initialize(DefaultObservableConfig, ElementId)
+	 * initialize(null, null)} must be called on this after {@link #setValue(String)}.
+	 *
+	 * @param name The name for the config
+	 * @param locking Generates a locking strategy for the config
+	 */
+	protected DefaultObservableConfig(String name, Function<Object, CollectionLockingStrategy> locking) {
 		if (name.length() == 0)
 			throw new IllegalArgumentException("Name must not be empty");
 		theLocking = locking.apply(this);
@@ -43,7 +51,23 @@ class DefaultObservableConfig extends AbstractObservableConfig {
 		theListeners = ListenerList.build().build();
 	}
 
-	private void initialize(DefaultObservableConfig parent, ElementId parentContentRef) {
+	/**
+	 * Child constructor. This is protected because it should only be called from {@link #createChild(String)} by this class or an inherited
+	 * class.
+	 *
+	 * @param parent The parent config for this config
+	 * @param name The name of this config
+	 */
+	protected DefaultObservableConfig(DefaultObservableConfig parent, String name) {
+		if (name.length() == 0)
+			throw new IllegalArgumentException("Name must not be empty");
+		theLocking = parent.theLocking;
+		theName = name;
+		theContent = BetterTreeList.<ObservableConfig> build().withLocking(theLocking).build();
+		theListeners = ListenerList.build().build();
+	}
+
+	protected void initialize(DefaultObservableConfig parent, ElementId parentContentRef) {
 		super.initialize(parent);
 		theParentContentRef = parentContentRef;
 		theCauses = parent == null ? new ArrayList<>() : parent.theCauses;
@@ -189,7 +213,7 @@ class DefaultObservableConfig extends AbstractObservableConfig {
 
 	@Override
 	protected AbstractObservableConfig createChild(String name) {
-		return new DefaultObservableConfig(name, __ -> theLocking);
+		return new DefaultObservableConfig(this, name);
 	}
 
 	@Override
