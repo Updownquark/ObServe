@@ -4,10 +4,17 @@ import java.util.Objects;
 
 import org.observe.remote.ObservableServiceClient.ClientId;
 
+/** Represents an address of a {@link ServiceObservableConfig} among its siblings in the tree */
 public class ServerConfigElement implements Comparable<ServerConfigElement> {
+	/** The client that created the element */
 	public final ObservableServiceClient.ClientId owner;
+	/** The ordering address of the element */
 	public final ByteAddress address;
 
+	/**
+	 * @param owner The client that created the element
+	 * @param address The ordering address of the element
+	 */
 	public ServerConfigElement(ClientId owner, ByteAddress address) {
 		this.owner = owner;
 		this.address = address;
@@ -21,6 +28,10 @@ public class ServerConfigElement implements Comparable<ServerConfigElement> {
 		return comp;
 	}
 
+	/**
+	 * @param config The config to compare to
+	 * @return The order of this address compared to the given config
+	 */
 	public int compareTo(ServiceObservableConfig config) {
 		int comp = address.compareTo(config.getAddress());
 		if (comp == 0)

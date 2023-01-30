@@ -30,13 +30,21 @@ import org.qommons.collect.BetterSortedSet;
 import org.qommons.collect.CollectionElement;
 import org.qommons.tree.BetterTreeSet;
 
+/** A class that handles the core logic of synchronizing {@link ServiceObservableConfig}s */
 public class ObservableConfigServer {
-	// com.sun.net.httpserver.HttpServer server;
+	// This is just to remind myself of the class name when I go to implement HTTP functionality com.sun.net.httpserver.HttpServer server
 
+	/** An identifier for a {@link ObservableServiceChange} within the same client */
 	public static class ChangeId implements Comparable<ChangeId> {
+		/** The time stamp of the change */
 		public final Instant timeStamp;
+		/** The ID of the change */
 		public final int changeId;
 
+		/**
+		 * @param timeStamp The time stamp of the change
+		 * @param changeId The ID of the change
+		 */
 		public ChangeId(Instant timeStamp, int changeId) {
 			this.timeStamp = timeStamp;
 			this.changeId = changeId;
@@ -50,6 +58,10 @@ public class ObservableConfigServer {
 			return comp;
 		}
 
+		/**
+		 * @param change The change to compare to
+		 * @return How this ID compares to the given change
+		 */
 		public int compareTo(ObservableServiceChange change) {
 			int comp = timeStamp.compareTo(change.getTimeStamp());
 			if (comp == 0)
@@ -63,6 +75,10 @@ public class ObservableConfigServer {
 	private final SortedMap<ObservableServiceClient.ClientId, ObservableServiceClient> theClients;
 	private final SortedMap<ObservableServiceClient.ClientId, BetterSortedSet<ObservableServiceChange>> theRoleChanges;
 
+	/**
+	 * @param localClient The local client that this server is for
+	 * @param config The config if it is already created. May be null if it is expected to be created from another server.
+	 */
 	public ObservableConfigServer(LocalObservableClient localClient, ServiceObservableConfig config) {
 		theLocalClient = localClient;
 		theConfig = config;
@@ -72,10 +88,17 @@ public class ObservableConfigServer {
 		theClients.put(localClient.getId(), localClient);
 	}
 
+	/** @return The config that this server is managing */
 	public ServiceObservableConfig getConfig() {
 		return theConfig;
 	}
 
+	/**
+	 * Grants the given role to the given client
+	 *
+	 * @param role The role to grant
+	 * @param grantee The client to grant the role to
+	 */
 	public void grantRole(ObservableServiceRole role, ObservableServiceClient grantee) {
 		if (grantee.isGranted(role))
 			return;
@@ -95,6 +118,12 @@ public class ObservableConfigServer {
 			}));
 	}
 
+	/**
+	 * Creates an inheritance relationship between two roles
+	 *
+	 * @param inherited The role to be inherited
+	 * @param heir The role to inherit the other role
+	 */
 	public void inheritRole(ObservableServiceRole inherited, ObservableServiceRole heir) {
 		if (heir.inherits(inherited))
 			return;
@@ -115,6 +144,7 @@ public class ObservableConfigServer {
 			}));
 	}
 
+	/** @return A map defining which changes this client knows about */
 	public Map<ObservableServiceClient.ClientId, ChangeId> getKnownChanges() {
 		Map<ObservableServiceClient.ClientId, ChangeId> knownChanges = theConfig == null ? new HashMap<>()
 			: theConfig.getRootData().getKnownChanges();
@@ -126,6 +156,10 @@ public class ObservableConfigServer {
 		return knownChanges;
 	}
 
+	/**
+	 * @param knownChanges The {@link #getKnownChanges() known changes} map defining which changes a particular client knows about
+	 * @return All changes that have occurred on this client (locally for from other sources) that the other client doesn't know about
+	 */
 	public NavigableSet<ObservableServiceChange> pollChanges(Map<ObservableServiceClient.ClientId, ChangeId> knownChanges) {
 		try (Transaction t = theConfig == null ? Transaction.NONE : theConfig.lock(false, null)) {
 			NavigableSet<ObservableServiceChange> changes = theConfig == null ? new TreeSet<>()
@@ -148,6 +182,11 @@ public class ObservableConfigServer {
 		}
 	}
 
+	/**
+	 * Enacts changes from another server
+	 *
+	 * @param changes The changes from another server to enact
+	 */
 	public void applyChanges(List<SerializedObservableServerChangeSet> changes) {
 		List<SerializedObservableServerChangeSet.Change> addChanges = new ArrayList<>();
 		try (Transaction t = theConfig == null ? Transaction.NONE : theConfig.lock(true, null)) {
