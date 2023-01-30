@@ -90,8 +90,8 @@ public class ObservableServiceClient implements Comparable<ObservableServiceClie
 		thePublicKey = null;
 		theSignatureAlgorithm = null;
 		theSelfRole = null;
-		theDefinedRoles = null;
-		theAssignedRoles = null;
+		theDefinedRoles = Collections.singletonMap(0L, new ObservableServiceRole(this, 0, "ALL"));
+		theAssignedRoles = Collections.emptySet();
 		theEncodedId = new ByteArray(new byte[2]);
 	}
 
@@ -139,6 +139,12 @@ public class ObservableServiceClient implements Comparable<ObservableServiceClie
 	}
 
 	public ObservableServiceRole getOrCreateRole(long roleId, String roleName) {
+		if (this == ALL) {
+			if (roleId != 0)
+				throw new UnsupportedOperationException("ALL may only the ALL role");
+			// Stupid singletonMap not supporting computeIfAbsent
+			return theDefinedRoles.values().iterator().next();
+		}
 		return theDefinedRoles.computeIfAbsent(roleId, __ -> new ObservableServiceRole(this, roleId, roleName));
 	}
 
@@ -147,7 +153,7 @@ public class ObservableServiceClient implements Comparable<ObservableServiceClie
 	}
 
 	public boolean isGranted(ObservableServiceRole role) {
-		if (role == ObservableServiceRole.ALL)
+		if (role == ObservableServiceRole.all())
 			return true;
 		else if (role.getOwner() == this)
 			return true;

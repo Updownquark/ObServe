@@ -5,8 +5,13 @@ import java.util.LinkedHashSet;
 import java.util.Set;
 
 public class ObservableServiceRole {
+	private static ObservableServiceRole ALL;
 	/** The singleton role that all clients always belong to */
-	public static final ObservableServiceRole ALL = new ObservableServiceRole(ObservableServiceClient.ALL, 0, "ALL");
+	public static ObservableServiceRole all() {
+		if (ALL == null)
+			ALL = ObservableServiceClient.ALL.getOrCreateRole(0, "ALL");
+		return ALL;
+	}
 
 	private final ObservableServiceClient theOwner;
 	private final long theId;

@@ -9,17 +9,20 @@ import java.security.spec.InvalidKeySpecException;
 import java.security.spec.X509EncodedKeySpec;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.NavigableSet;
 import java.util.SortedMap;
 import java.util.TreeMap;
+import java.util.TreeSet;
 
 import org.observe.remote.ObservableServiceChange.ServiceChangeType;
 import org.observe.remote.ObservableServiceClient.ClientId;
 import org.observe.remote.SerializedObservableServerChangeSet.Change;
 import org.qommons.ArrayUtils;
+import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.BetterSortedList.SortedSearchFilter;
@@ -55,16 +58,18 @@ public class ObservableConfigServer {
 		}
 	}
 
-	private final ServiceObservableConfig theConfig;
+	private final LocalObservableClient theLocalClient;
+	private ServiceObservableConfig theConfig;
 	private final SortedMap<ObservableServiceClient.ClientId, ObservableServiceClient> theClients;
 	private final SortedMap<ObservableServiceClient.ClientId, BetterSortedSet<ObservableServiceChange>> theRoleChanges;
 
-	public ObservableConfigServer(ServiceObservableConfig config) {
+	public ObservableConfigServer(LocalObservableClient localClient, ServiceObservableConfig config) {
+		theLocalClient = localClient;
 		theConfig = config;
 
 		theClients = new TreeMap<>();
 		theRoleChanges = new TreeMap<>();
-		theClients.put(theConfig.getRootData().getLocalClient().getId(), theConfig.getRootData().getLocalClient());
+		theClients.put(localClient.getId(), localClient);
 	}
 
 	public ServiceObservableConfig getConfig() {
@@ -74,17 +79,16 @@ public class ObservableConfigServer {
 	public void grantRole(ObservableServiceRole role, ObservableServiceClient grantee) {
 		if (grantee.isGranted(role))
 			return;
-		LocalObservableClient localClient = theConfig.getRootData().getLocalClient();
-		if (!localClient.isGranted(role))
+		if (!theLocalClient.isGranted(role))
 			throw new UnsupportedOperationException(
 				theConfig.getRootData().getLocalClient() + " is not a member of " + role + " and cannot grant it to anyone else");
 		grantee.grant(role);
-		NavigableSet<ObservableServiceChange> changes = theRoleChanges.computeIfAbsent(localClient.getId(),
+		NavigableSet<ObservableServiceChange> changes = theRoleChanges.computeIfAbsent(theLocalClient.getId(),
 			__ -> BetterTreeSet.buildTreeSet(ObservableServiceChange::compareTo).build());
-		changes.add(ObservableServiceChange.createRoleGranted(role, grantee, localClient, Instant.now(),
+		changes.add(ObservableServiceChange.createRoleGranted(role, grantee, theLocalClient, Instant.now(),
 			theConfig.getRootData().getNextChangeId(), data -> {
 				try {
-					return localClient.sign(data);
+					return theLocalClient.sign(data);
 				} catch (SignatureException e) {
 					throw new IllegalStateException("Could not sign", e);
 				}
@@ -112,7 +116,8 @@ public class ObservableConfigServer {
 	}
 
 	public Map<ObservableServiceClient.ClientId, ChangeId> getKnownChanges() {
-		Map<ObservableServiceClient.ClientId, ChangeId> knownChanges = theConfig.getRootData().getKnownChanges();
+		Map<ObservableServiceClient.ClientId, ChangeId> knownChanges = theConfig == null ? new HashMap<>()
+			: theConfig.getRootData().getKnownChanges();
 		for (Map.Entry<ObservableServiceClient.ClientId, BetterSortedSet<ObservableServiceChange>> roleChange : theRoleChanges.entrySet()) {
 			ObservableServiceChange last = roleChange.getValue().peekLast();
 			if (last != null)
@@ -122,8 +127,9 @@ public class ObservableConfigServer {
 	}
 
 	public NavigableSet<ObservableServiceChange> pollChanges(Map<ObservableServiceClient.ClientId, ChangeId> knownChanges) {
-		try (Transaction t = theConfig.lock(false, null)) {
-			NavigableSet<ObservableServiceChange> changes = theConfig.getRootData().pollChanges(knownChanges);
+		try (Transaction t = theConfig == null ? Transaction.NONE : theConfig.lock(false, null)) {
+			NavigableSet<ObservableServiceChange> changes = theConfig == null ? new TreeSet<>()
+				: theConfig.getRootData().pollChanges(knownChanges);
 			for (Map.Entry<ObservableServiceClient.ClientId, BetterSortedSet<ObservableServiceChange>> roleChange : theRoleChanges
 				.entrySet()) {
 				ChangeId lastKnown = knownChanges.get(roleChange.getKey());
@@ -144,7 +150,7 @@ public class ObservableConfigServer {
 
 	public void applyChanges(List<SerializedObservableServerChangeSet> changes) {
 		List<SerializedObservableServerChangeSet.Change> addChanges = new ArrayList<>();
-		try (Transaction t = theConfig.lock(true, null)) {
+		try (Transaction t = theConfig == null ? Transaction.NONE : theConfig.lock(true, null)) {
 			for (SerializedObservableServerChangeSet changeSet : changes) {
 				ObservableServiceClient actor = getOrCreateClient(changeSet.getActorId());
 				if (actor == null)
@@ -160,19 +166,23 @@ public class ObservableConfigServer {
 						e.printStackTrace();
 						continue;
 					}
+					if (!addChanges.isEmpty()) {
+						if (change.getTargetConfigAddress() != null
+							&& startsWith(addChanges.get(0).getTargetConfigAddress(), change.getTargetConfigAddress(), 0)) {
+							if (change.getConfigChangeType() == ConfigModificationType.Delete
+								&& change.getTargetConfigAddress().size() == addChanges.get(0).getTargetConfigAddress().size())
+								addChanges.clear();
+							else
+								addChanges.add(change);
+						} else
+							applyAddChanges(actor, changeSet.getTimeStamp(), addChanges);
+					}
 					if (change.getType() == ServiceChangeType.ConfigAdd) {
 						if (!addChanges.isEmpty())
 							applyAddChanges(actor, changeSet.getTimeStamp(), addChanges);
 						addChanges.add(change);
-					} else if (change.getTargetConfigAddress() != null && !addChanges.isEmpty()
-						&& startsWith(addChanges.get(0).getTargetConfigAddress(), change.getTargetConfigAddress(), 0)) {
-						if (change.getConfigChangeType() == ConfigModificationType.Delete)
-							addChanges.clear();
-						else
-							addChanges.add(change);
 						continue;
-					} else if (!addChanges.isEmpty())
-						applyAddChanges(actor, changeSet.getTimeStamp(), addChanges);
+					}
 					try (Transaction changeT = change.getConfigChangeType() == null ? Transaction.NONE
 						: theConfig.lockForMod(actor, changeSet.getTimeStamp(), change.getChangeId(), change.getSignature().copy(), null)) {
 						ServiceObservableConfig config = getConfig(change.getTargetConfigAddress());
@@ -235,9 +245,15 @@ public class ObservableConfigServer {
 								__ -> BetterTreeSet.buildTreeSet(ObservableServiceChange::compareTo).build())//
 							.add(ObservableServiceChange.createRoleInherited(inherited, role, actor, changeSet.getTimeStamp(),
 								change.getChangeId(), data -> change.getSignature().copy()));
+							break;
+						case ClientResign:
+							int todo; // TODO
+							break;
 						}
 					}
 				}
+				if (!addChanges.isEmpty())
+					applyAddChanges(actor, changeSet.getTimeStamp(), addChanges);
 			}
 		}
 	}
@@ -255,7 +271,24 @@ public class ObservableConfigServer {
 	}
 
 	private void applyAddChanges(ObservableServiceClient actor, Instant timeStamp, List<Change> addChanges) {
-		List<ServerConfigElement> address = addChanges.get(0).getTargetConfigAddress();
+		BetterList<ServerConfigElement> address = addChanges.get(0).getTargetConfigAddress();
+		if (address.isEmpty() && theConfig == null) { // Create root
+			theConfig = ServiceObservableConfig.createRoot(theLocalClient, actor, timeStamp, addChanges.get(0).getChangeId(),
+				addChanges.get(0).getSignature().copy(), addChanges.get(0).getTargetValue(), ThreadConstraint.ANY);
+			Transaction[] ts = new Transaction[addChanges.size() - 1];
+			for (int i = 0; i < ts.length; i++) {
+				Change change = addChanges.get(i + 1);
+				ts[i] = theConfig.lockForMod(actor, timeStamp, change.getChangeId(), change.getSignature().copy(), change);
+			}
+			try {
+				applyMods(theConfig, address, addChanges.subList(1, addChanges.size()));
+			} finally {
+				for (int i = ts.length - 1; i >= 0; i--)
+					ts[i].close();
+				addChanges.clear();
+			}
+			return;
+		}
 		List<ServerConfigElement> parentAddress = address.subList(0, address.size() - 1);
 		ServiceObservableConfig parent = getConfig(parentAddress);
 		if (parent == null) { // Already removed
@@ -273,8 +306,8 @@ public class ObservableConfigServer {
 			ts[i] = theConfig.lockForMod(actor, timeStamp, change.getChangeId(), change.getSignature().copy(), change);
 		}
 		try {
-			applyAddChanges2(parent, address.size(), targetAddr, addChanges.get(0).getTargetValue(),
-				addChanges.subList(1, addChanges.size()));
+			parent.addChild(address.getLast(), addChanges.get(0).getTargetValue(),
+				config -> applyMods(config, address, addChanges.subList(1, addChanges.size())));
 		} finally {
 			for (int i = ts.length - 1; i >= 0; i--)
 				ts[i].close();
@@ -282,61 +315,67 @@ public class ObservableConfigServer {
 		}
 	}
 
-	private void applyAddChanges2(ServiceObservableConfig parent, int depth, ServerConfigElement address, String name, List<Change> mods) {
-		parent.addChild(address, name, config -> {
-			BetterList<ServerConfigElement> addAddress = null;
-			String addName = null;
-			List<Change> addChanges = null;
-			for (Change mod : mods) {
-				if (addAddress != null) {
-					if (mod.getTargetConfigAddress() != null && startsWith(addAddress, mod.getTargetConfigAddress(), depth))
-						addChanges.add(mod);
-					else {
-						applyAddChanges2(config, depth + 1, addAddress.getLast(), addName, addChanges);
-						addAddress = null;
+	private void applyMods(ServiceObservableConfig config, BetterList<ServerConfigElement> address, List<Change> mods) {
+		ServiceObservableConfig addParent = null;
+		BetterList<ServerConfigElement> addAddress = null;
+		String addName = null;
+		List<Change> addChanges = null;
+		for (Change mod : mods) {
+			if (addAddress != null) {
+				if (mod.getTargetConfigAddress() != null && startsWith(addAddress, mod.getTargetConfigAddress(), address.size())) {
+					if (mod.getConfigChangeType() == ConfigModificationType.Delete
+						&& mod.getTargetConfigAddress().size() == addAddress.size())
 						addChanges.clear();
-					}
-				}
-				if (mod.getType() == ServiceChangeType.ConfigAdd) {
-					ServiceObservableConfig parent2 = getConfig(config,
-						mod.getTargetConfigAddress().subList(0, mod.getTargetConfigAddress().size() - 1), depth);
-					if (parent2 == null) {
-						System.out.println("Could not add config");
-						continue;
-					} else if (!mod.getTargetConfigAddress().getLast().owner.equals(address.owner)) {
-						System.out.println("Client " + address.owner + " is tring to create a config owned by " + address.owner);
-						continue;
-					}
-
-					if (addChanges == null)
-						addChanges = new ArrayList<>();
-					addAddress = mod.getTargetConfigAddress();
-					addName = mod.getTargetValue();
+					else
+						addChanges.add(mod);
 				} else {
-					ServiceObservableConfig target = getConfig(config, mod.getTargetConfigAddress(), depth);
-					if (target == null)
-						continue;
-					switch (mod.getType()) {
-					case ConfigRename:
-						target.setName(mod.getTargetValue());
-						break;
-					case ConfigModify:
-						target.setValue(mod.getTargetValue());
-						break;
-					case RoleAllow:
-						ObservableServiceRole role = getOrCreateRole(mod.getTargetRoleOwner(), mod.getInheritedRoleId(),
-							mod.getTargetRoleName());
-						if (role == null)
-							continue;
-						target.allow(mod.getConfigChangeType(), role);
-						break;
-					default:
-						System.err.println("Could not interpret event of type " + mod.getType() + " for new child");
-						break;
-					}
+					BetterList<ServerConfigElement> fAddress = addAddress;
+					List<Change> fChanges = addChanges;
+					addParent.addChild(addAddress.getLast(), addName, child -> applyMods(child, fAddress, fChanges));
+					addAddress = null;
+					addChanges.clear();
 				}
 			}
-		});
+			if (mod.getType() == ServiceChangeType.ConfigAdd) {
+				addParent = getConfig(config, mod.getTargetConfigAddress().subList(0, mod.getTargetConfigAddress().size() - 1),
+					address.size());
+				if (addParent == null) {
+					System.out.println("Could not add config");
+					continue;
+				} else if (!mod.getTargetConfigAddress().getLast().owner.equals(address.getLast().owner)) {
+					System.out
+					.println("Client " + address.getLast().owner + " is tring to create a config owned by " + address.getLast().owner);
+					continue;
+				}
+
+				if (addChanges == null)
+					addChanges = new ArrayList<>();
+				addAddress = mod.getTargetConfigAddress();
+				addName = mod.getTargetValue();
+			} else {
+				ServiceObservableConfig target = getConfig(config, mod.getTargetConfigAddress(), address.size());
+				if (target == null)
+					continue;
+				switch (mod.getType()) {
+				case ConfigRename:
+					target.setName(mod.getTargetValue());
+					break;
+				case ConfigModify:
+					target.setValue(mod.getTargetValue());
+					break;
+				case RoleAllow:
+					ObservableServiceRole role = getOrCreateRole(mod.getTargetRoleOwner(), mod.getInheritedRoleId(),
+						mod.getTargetRoleName());
+					if (role == null)
+						continue;
+					target.allow(mod.getConfigChangeType(), role);
+					break;
+				default:
+					System.err.println("Could not interpret event of type " + mod.getType() + " for new child");
+					break;
+				}
+			}
+		}
 	}
 
 	private ObservableServiceClient getOrCreateClient(ClientId clientId) {
@@ -375,6 +414,8 @@ public class ObservableConfigServer {
 
 	private ObservableServiceRole getOrCreateRole(ClientId roleOwner, long roleId, String roleName) {
 		ObservableServiceClient client = theClients.computeIfAbsent(roleOwner, __ -> {
+			if (roleOwner.equals(ObservableServiceClient.ALL.getId()))
+				return ObservableServiceClient.ALL;
 			X509EncodedKeySpec encodedKey = new X509EncodedKeySpec(roleOwner.publicKey.copy());
 			try {
 				KeyFactory keyFactory = KeyFactory.getInstance(roleOwner.keyAlgorithm);

@@ -12,8 +12,6 @@ public class ByteArray implements Comparable<ByteArray> {
 
 	/** @param bytes The address bytes */
 	public ByteArray(byte[] bytes) {
-		if (bytes.length == 0)
-			throw new IllegalArgumentException("Empty address");
 		this.bytes = bytes;
 	}
 

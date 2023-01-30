@@ -138,6 +138,8 @@ public class SerializedObservableServerChangeSet {
 	private final List<Change> theChanges;
 
 	public SerializedObservableServerChangeSet(ObservableServiceClient.ClientId actorId, Instant timeStamp, List<Change> changes) {
+		if (actorId == null || timeStamp == null || changes == null)
+			throw new NullPointerException();
 		theActorId = actorId;
 		theTimeStamp = timeStamp;
 		theChanges = changes;
@@ -163,8 +165,9 @@ public class SerializedObservableServerChangeSet {
 		Instant timeStamp = null;
 		List<Change> setChanges = new ArrayList<>();
 		for (ObservableServiceChange change : changes) {
-			if (!setChanges.isEmpty() && (!change.getActor().getId().equals(actor) || !change.getTimeStamp().equals(timeStamp))) {
-				if (setChanges.size() == 1)
+			if (!change.getActor().getId().equals(actor) || !change.getTimeStamp().equals(timeStamp)) {
+				if (setChanges.isEmpty()) {//
+				} else if (setChanges.size() == 1)
 					changeSets.add(new SerializedObservableServerChangeSet(actor, timeStamp, Collections.singletonList(setChanges.get(0))));
 				else
 					changeSets.add(new SerializedObservableServerChangeSet(actor, timeStamp,

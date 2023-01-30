@@ -5,6 +5,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -23,14 +24,17 @@ import org.observe.config.ObservableConfig;
 import org.observe.remote.ObservableConfigServer.ChangeId;
 import org.observe.remote.ObservableServiceClient.ClientId;
 import org.qommons.ArrayUtils;
+import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterSortedList.SortedSearchFilter;
 import org.qommons.collect.BetterSortedSet;
+import org.qommons.collect.CircularArrayList;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.CollectionLockingStrategy;
 import org.qommons.collect.DequeList;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
+import org.qommons.collect.StampedLockingStrategy;
 import org.qommons.tree.BetterTreeSet;
 
 public class ServiceObservableConfig extends DefaultObservableConfig {
@@ -59,7 +63,7 @@ public class ServiceObservableConfig extends DefaultObservableConfig {
 		private final AtomicInteger theChangeIdGen;
 		private ObservableServiceClient theModifier;
 		private Instant theModificationTimeStamp;
-		private DequeList<ChangeData> theExpectedChangeData;
+		private final DequeList<ChangeData> theExpectedChangeData;
 		private LocalModData theLocalLock;
 		ByteAddress theCreateAddress;
 
@@ -68,14 +72,15 @@ public class ServiceObservableConfig extends DefaultObservableConfig {
 		private Set<ObservableServiceRole> theGlobalDeleteRoles;
 		private Set<ObservableServiceRole> theGlobalAddRoles;
 
-		private final List<ServiceObservableConfig> theLocallyOwnedConfigs;
+		private final Set<ServiceObservableConfig> theLocallyOwnedConfigs;
 		private final SortedMap<ClientId, BetterSortedSet<ObservableServiceChange>> theChanges;
 
 		ServerConfigRootData(LocalObservableClient localClient) {
 			theLocalClient = localClient;
 			theChangeIdGen = new AtomicInteger();
-			theLocallyOwnedConfigs = new ArrayList<>();
+			theLocallyOwnedConfigs = new HashSet<>();
 			theChanges = new TreeMap<>();
+			theExpectedChangeData = new CircularArrayList<>();
 		}
 
 		// public List<ObservableServiceChange> poll(Map<ObservableServiceClient,
@@ -158,10 +163,10 @@ public class ServiceObservableConfig extends DefaultObservableConfig {
 
 		public Map<ObservableServiceClient.ClientId, ObservableConfigServer.ChangeId> getKnownChanges() {
 			Map<ObservableServiceClient.ClientId, ObservableConfigServer.ChangeId> knownChanges = new HashMap<>();
-			for (Map.Entry<ObservableServiceClient.ClientId, BetterSortedSet<ObservableServiceChange>> roleChange : theChanges.entrySet()) {
-				ObservableServiceChange last = roleChange.getValue().peekLast();
+			for (Map.Entry<ObservableServiceClient.ClientId, BetterSortedSet<ObservableServiceChange>> change : theChanges.entrySet()) {
+				ObservableServiceChange last = change.getValue().peekLast();
 				if (last != null)
-					knownChanges.put(roleChange.getKey(), new ChangeId(last.getTimeStamp(), last.getChangeId()));
+					knownChanges.put(change.getKey(), new ChangeId(last.getTimeStamp(), last.getChangeId()));
 			}
 			return knownChanges;
 		}
@@ -169,16 +174,18 @@ public class ServiceObservableConfig extends DefaultObservableConfig {
 		public NavigableSet<ObservableServiceChange> pollChanges(
 			Map<ObservableServiceClient.ClientId, ObservableConfigServer.ChangeId> knownChanges) {
 			NavigableSet<ObservableServiceChange> changes = new TreeSet<>();
-			for (Map.Entry<ObservableServiceClient.ClientId, BetterSortedSet<ObservableServiceChange>> roleChange : theChanges.entrySet()) {
-				ChangeId lastKnown = knownChanges.get(roleChange.getKey());
+			for (Map.Entry<ObservableServiceClient.ClientId, BetterSortedSet<ObservableServiceChange>> change : theChanges.entrySet()) {
+				ChangeId lastKnown = knownChanges.get(change.getKey());
 				if (lastKnown == null)
-					changes.addAll(roleChange.getValue());
+					changes.addAll(change.getValue());
 				else {
-					CollectionElement<ObservableServiceChange> later = roleChange.getValue().search(change -> lastKnown.compareTo(change),
+					CollectionElement<ObservableServiceChange> later = change.getValue().search(change2 -> lastKnown.compareTo(change2),
 						SortedSearchFilter.Greater);
+					if (later != null && lastKnown.compareTo(later.get()) == 0)
+						later = change.getValue().getAdjacentElement(later.getElementId(), true);
 					while (later != null) {
 						changes.add(later.get());
-						later = roleChange.getValue().getAdjacentElement(later.getElementId(), true);
+						later = change.getValue().getAdjacentElement(later.getElementId(), true);
 					}
 				}
 			}
@@ -227,7 +234,7 @@ public class ServiceObservableConfig extends DefaultObservableConfig {
 			byte[] signature;
 			if (theModifier == null) {
 				modifier = theLocalClient;
-				timeStamp = theLocalLock.getTimeStamp();
+				timeStamp = theLocalLock == null ? Instant.now() : theLocalLock.getTimeStamp();
 				changeId = theChangeIdGen.getAndIncrement();
 				signature = null;
 			} else {
@@ -280,6 +287,8 @@ public class ServiceObservableConfig extends DefaultObservableConfig {
 		}
 
 		ObservableServiceChange added(ServiceObservableConfig config) {
+			if (config.getOwner() == theLocalClient)
+				theLocallyOwnedConfigs.add(config);
 			ObservableServiceChange change = createConfigChange(config, ConfigModificationType.Add, config.getName());
 			NavigableSet<ObservableServiceChange> changes = theChanges.computeIfAbsent(getModificationActor().getId(),
 				__ -> BetterTreeSet.buildTreeSet(ObservableServiceChange::compareTo).build());
@@ -341,6 +350,8 @@ public class ServiceObservableConfig extends DefaultObservableConfig {
 		}
 
 		void deleted(ServiceObservableConfig config) {
+			if (config.getOwner() == theLocalClient)
+				theLocallyOwnedConfigs.remove(config);
 			theChanges
 			.computeIfAbsent(getModificationActor().getId(),
 				__ -> BetterTreeSet.buildTreeSet(ObservableServiceChange::compareTo).build())//
@@ -443,17 +454,19 @@ public class ServiceObservableConfig extends DefaultObservableConfig {
 			return true;
 		Set<ObservableServiceRole> roles = getInternalRoles(type);
 		if (roles != null) {
-			if (roles.contains(ObservableServiceRole.ALL))
+			if (roles.contains(ObservableServiceRole.all()))
 				return true;
 			if (can(roles, client.getAssignedRoles()))
 				return true;
 		}
-		roles = theRootData.getInternalRoles(type);
-		if (roles != null) {
-			if (roles.contains(ObservableServiceRole.ALL))
-				return true;
-			if (can(roles, client.getAssignedRoles()))
-				return true;
+		if (theOwner == theRootData.getLocalClient()) {
+			roles = theRootData.getInternalRoles(type);
+			if (roles != null) {
+				if (roles.contains(ObservableServiceRole.all()))
+					return true;
+				if (can(roles, client.getAssignedRoles()))
+					return true;
+			}
 		}
 		return false;
 	}
@@ -675,10 +688,39 @@ public class ServiceObservableConfig extends DefaultObservableConfig {
 		}
 	}
 
-	public static ServiceObservableConfig createRoot(LocalObservableClient localClient, ObservableServiceClient owner, String name,
+	/**
+	 * @param name The name for the root element
+	 * @param threadConstraint The thread constraint for the config to obey
+	 * @return A thread-safe, empty {@link ObservableConfig} object with the given name
+	 */
+	public static ServiceObservableConfig createRoot(LocalObservableClient localClient, String name, ThreadConstraint threadConstraint) {
+		return createRoot(localClient, name, config -> new StampedLockingStrategy(config, threadConstraint));
+	}
+
+	public static ServiceObservableConfig createRoot(LocalObservableClient localClient, String name,
 		Function<Object, CollectionLockingStrategy> locking) {
-		ServiceObservableConfig root = new ServiceObservableConfig(localClient, owner, name, locking);
+		ServiceObservableConfig root = new ServiceObservableConfig(localClient, localClient, name, locking);
 		root.initialize(null, null);
+		return root;
+	}
+
+	/**
+	 * @param name The name for the root element
+	 * @param threadConstraint The thread constraint for the config to obey
+	 * @return A thread-safe, empty {@link ObservableConfig} object with the given name
+	 */
+	public static ServiceObservableConfig createRoot(LocalObservableClient localClient, ObservableServiceClient owner, Instant timeStamp,
+		int changeId, byte[] signature, String name, ThreadConstraint threadConstraint) {
+		return createRoot(localClient, owner, timeStamp, changeId, signature, name,
+			config -> new StampedLockingStrategy(config, threadConstraint));
+	}
+
+	public static ServiceObservableConfig createRoot(LocalObservableClient localClient, ObservableServiceClient owner, Instant timeStamp,
+		int changeId, byte[] signature, String name, Function<Object, CollectionLockingStrategy> locking) {
+		ServiceObservableConfig root = new ServiceObservableConfig(localClient, owner, name, locking);
+		try (Transaction t = root.lockForMod(owner, timeStamp, changeId, signature, root)) {
+			root.initialize(null, null);
+		}
 		return root;
 	}
 }

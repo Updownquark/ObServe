@@ -13,7 +13,8 @@ public class ObservableServiceChange implements Comparable<ObservableServiceChan
 		ConfigDelete, //
 		RoleAllow, //
 		RoleGrant, //
-		RoleInherit//
+		RoleInherit, //
+		ClientResign // TODO XXX
 	}
 
 	private final ObservableServiceClient theActor;
@@ -89,6 +90,11 @@ public class ObservableServiceChange implements Comparable<ObservableServiceChan
 	}
 
 	@Override
+	public String toString() {
+		return theType.name();
+	}
+
+	@Override
 	public int compareTo(ObservableServiceChange o) {
 		int comp = theTimeStamp.compareTo(o.theTimeStamp);
 		if (comp == 0)
@@ -138,7 +144,7 @@ public class ObservableServiceChange implements Comparable<ObservableServiceChan
 		.putInt(changeId)//
 		.put((byte) type.ordinal());
 		if (targetConfigAddress != null) {
-			buffer.putInt(targetConfigAddress.size());
+			buffer.putShort((short) targetConfigAddress.size());
 			for (ServerConfigElement addr : targetConfigAddress) {
 				addr.owner.serialize().putInto(buffer);
 				buffer.put((byte) addr.address.size());
@@ -194,7 +200,7 @@ public class ObservableServiceChange implements Comparable<ObservableServiceChan
 		ConfigModificationType permissionType, ObservableServiceClient actor, Instant timeStamp, int changeId,
 		SignatureGenOrVal signature) {
 		byte[] encoded = encodeForSignature(timeStamp, changeId, ServiceChangeType.RoleAllow, config.getAddressPath(), permissionType, null,
-			null, 0, null, null, 0);
+			role.getOwner().getId(), role.getId(), null, null, 0);
 		byte[] sign = signature.sign(encoded);
 		return new ObservableServiceChange(actor, timeStamp, changeId, ServiceChangeType.RoleAllow, config, permissionType, null, role,
 			null, null, new ByteArray(sign));

@@ -24,6 +24,10 @@ public final class ByteAddress extends ByteArray {
 			return before(before, 0);
 		else if (before == null)
 			return after(after, 0);
+		else if (after.size() == 0)
+			throw new IllegalStateException("Cannot have zero-size byte addresses in collections");
+		else if (before.size() == 0)
+			throw new IllegalStateException("Cannot have zero-size byte addresses in collections");
 
 		for (int i = 0;; i++) {
 			if (i < after.size()) {
