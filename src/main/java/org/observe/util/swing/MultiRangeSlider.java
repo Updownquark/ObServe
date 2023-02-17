@@ -39,6 +39,7 @@ import org.qommons.Causable;
 import org.qommons.Causable.CausableKey;
 import org.qommons.Colors;
 import org.qommons.FloatList;
+import org.qommons.Transaction;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.MutableCollectionElement;
@@ -245,6 +246,89 @@ public class MultiRangeSlider extends ConformingPanel {
 				}
 			}
 		}
+
+		/** A range validator that may only allow the min/max ends of ranges to exist on certain pre-determined values */
+		public static class Default extends NoOverlap {
+			private final FloatList theSnaps;
+
+			/**
+			 * @param enforceAdjacent Whether to prevent ranges from overlapping
+			 * @param enforcingSliderRange Whether to prevent the ranges from moving beyond the slider's bounds
+			 */
+			public Default(boolean enforceAdjacent, boolean enforcingSliderRange) {
+				super(enforceAdjacent, enforcingSliderRange);
+				theSnaps = new FloatList(true, true);
+			}
+
+			/**
+			 * @param snaps The locations that the min/max ends of ranges may exist on
+			 * @return This validator
+			 */
+			public Default snapTo(double... snaps) {
+				theSnaps.clear();
+				for (double snap : snaps)
+					theSnaps.add((float) snap);
+				return this;
+			}
+
+			/**
+			 * Clears the snaps from this validator so that ranges are not thus constrained
+			 *
+			 * @return This validator
+			 */
+			public Default clearSnaps() {
+				theSnaps.clear();
+				return this;
+			}
+
+			@Override
+			public Range validate(MultiRangeSlider slider, CollectionElement<Range> element, Range newValue, RangePoint moved) {
+				if (!theSnaps.isEmpty()) {
+					switch (moved) {
+					case min:
+						int minSnap = getSnapFor(newValue.getMin());
+						double minValue = theSnaps.get(minSnap);
+						if (element.get().getMin() == minValue)
+							return element.get();
+						newValue = Range.forMinMax(minValue, element.get().getMax());
+						break;
+					case mid:
+						minSnap = getSnapFor(newValue.getMin());
+						minValue = theSnaps.get(minSnap);
+						int maxSnap = getSnapFor(newValue.getMax());
+						double maxValue = theSnaps.get(maxSnap);
+						if (element.get().getMin() == minValue && element.get().getMax() == maxValue)
+							return element.get();
+						newValue = Range.forMinMax(minValue, maxValue);
+						break;
+					case max:
+						maxSnap = getSnapFor(newValue.getMax());
+						maxValue = theSnaps.get(maxSnap);
+						if (element.get().getMax() == maxValue)
+							return element.get();
+						newValue = Range.forMinMax(element.get().getMin(), maxValue);
+						break;
+					}
+				}
+				return super.validate(slider, element, newValue, moved);
+			}
+
+			/**
+			 * @param value The min/max end of a range to test
+			 * @return The index in this validator's {@link #snapTo(double...) snaps} that the end should be snapped to
+			 */
+			public int getSnapFor(double value) {
+				int snap = theSnaps.indexFor((float) value);
+				if (snap == 0)
+					return 0;
+				else if (snap == theSnaps.size())
+					return snap - 1;
+				else if ((value - theSnaps.get(snap - 1)) <= (theSnaps.get(snap) - value))
+					return snap - 1;
+				else
+					return snap;
+			}
+		}
 	}
 
 	/**
@@ -269,29 +353,32 @@ public class MultiRangeSlider extends ConformingPanel {
 		public static class Default extends JPanel implements MRSliderRenderer {
 			private static final NumberFormat VALUE_FORMAT = new DecimalFormat("#,##0.##");
 
-			// TODO This is all best-guess and untested
 			private static final int DEFAULT_MAIN_SIZE = 500;
 			private static final int DEFAULT_CROSS_SIZE = 20;
-			private static final int DEFAULT_TICK_WIDTH = 6;
+			private static final int DEFAULT_LABELED_TICK_WIDTH = 8;
+			private static final int DEFAULT_SIMPLE_TICK_WIDTH = 4;
 
 			private MultiRangeSlider theSlider;
 
 			private int theCrossSize;
 			private int theMainSize;
-			private int theTickWidth;
+			private int theLabeledTickWidth;
+			private int theSimpleTickWidth;
+			private double theSimpleTickSpacing;
 
 			private double theMinValue;
 			private double theMaxValue;
-			private final FloatList theTicks;
+			private final FloatList theLabeledTicks;
 			private boolean areTicksSet;
 			private DoubleFunction<String> theValueRenderer;
 
 			/** Creates the renderer */
 			public Default() {
-				theTicks = new FloatList(10);
+				theLabeledTicks = new FloatList(10);
 				setMainSize(DEFAULT_MAIN_SIZE);
 				setCrossSize(DEFAULT_CROSS_SIZE);
-				setTickWidth(DEFAULT_TICK_WIDTH);
+				setLabeledTickWidth(DEFAULT_LABELED_TICK_WIDTH);
+				setSimpleTickWidth(DEFAULT_SIMPLE_TICK_WIDTH);
 				theValueRenderer = VALUE_FORMAT::format;
 			}
 
@@ -320,8 +407,8 @@ public class MultiRangeSlider extends ConformingPanel {
 			}
 
 			/**
-			 * @param crossSize The width (for a vertical slider) or height (for a horizontal slider) that the slider should be, in
-			 *        addition to what the tick labels require.
+			 * @param crossSize The width (for a vertical slider) or height (for a horizontal slider) that the slider should be, in addition
+			 *        to what the tick labels require.
 			 * @return This renderer
 			 */
 			public Default setCrossSize(int crossSize) {
@@ -331,31 +418,73 @@ public class MultiRangeSlider extends ConformingPanel {
 			}
 
 			/**
-			 * Overrides the tick locations for this renderer.  If this is not called, tick locations will be auto-populated.
-			 * 
+			 * Overrides the tick locations for this renderer. If this is not called, tick locations will be auto-populated.
+			 *
 			 * @param ticks The ticks to render
 			 * @return This renderer
 			 */
-			public Default setTicks(double... ticks) {
-				theTicks.clear();
+			public Default setLabeledTicks(double... ticks) {
+				theLabeledTicks.clear();
 				for (double tick : ticks)
-					theTicks.add((float) tick);
+					theLabeledTicks.add((float) tick);
 				areTicksSet = true;
 				return this;
 			}
 
-			/** @return The size of the tick marks rendered on the slider */
-			public int getTickWidth() {
-				return theTickWidth;
+			/**
+			 * Undoes {@link #setLabeledTicks(double...)}, causing this renderer to auto-compute tick locations
+			 *
+			 * @return This renderer
+			 */
+			public Default autoComputeTicks() {
+				areTicksSet = false;
+				return this;
+			}
+
+			/** @return The size of the labeled tick marks rendered on the slider */
+			public int getLabeledTickWidth() {
+				return theLabeledTickWidth;
 			}
 
 			/**
-			 * @param tickWidth The width of ticks markings on the slider. A width of 1 will not show ticks but leave labels, a width of
-			 *        zero will not render labels either
+			 * @param tickWidth The width of labeled tick markings on the slider. A width of 1 will not show ticks but leave labels, a width
+			 *        of zero will not render labels either
 			 * @return This renderer
 			 */
-			public Default setTickWidth(int tickWidth) {
-				theTickWidth = tickWidth;
+			public Default setLabeledTickWidth(int tickWidth) {
+				theLabeledTickWidth = tickWidth;
+				return this;
+			}
+
+			/** @return The size of non-labeled tick marks rendered on the slider */
+			public int getSimpleTickWidth() {
+				return theSimpleTickWidth;
+			}
+
+			/**
+			 * @param tickWidth The width of non-labeled tick markings on the slider. Set to zero to not render simple ticks.
+			 * @return This renderer
+			 */
+			public Default setSimpleTickWidth(int tickWidth) {
+				theSimpleTickWidth = tickWidth;
+				return this;
+			}
+
+			/**
+			 * @return The value spacing between simple tick markings. These are offset from either the first labeled tick mark (if present)
+			 *         or the minimum of the slider's range
+			 */
+			public double getSimpleTickSpacing() {
+				return theSimpleTickSpacing;
+			}
+
+			/**
+			 * @param simpleTickSpacing The value spacing between simple tick markings. These are offset from either the first labeled tick
+			 *        mark (if present) or the minimum of the slider's range
+			 * @return This renderer
+			 */
+			public Default setSimpleTickSpacing(double simpleTickSpacing) {
+				theSimpleTickSpacing = simpleTickSpacing;
 				return this;
 			}
 
@@ -381,7 +510,7 @@ public class MultiRangeSlider extends ConformingPanel {
 			}
 
 			private void computeTicks() {
-				if (theTickWidth == 0 || areTicksSet)
+				if (theLabeledTickWidth == 0 || areTicksSet)
 					return;
 				double minValue = theSlider.getSliderRange().get().getMin(), maxValue = theSlider.getSliderRange().get().getMax();
 				if (theMinValue != minValue || theMaxValue != maxValue) {
@@ -395,9 +524,9 @@ public class MultiRangeSlider extends ConformingPanel {
 						double tick = bin * (int) (minValue / bin);
 						if (tick < minValue)
 							tick += bin;
-						theTicks.clear();
+						theLabeledTicks.clear();
 						while (tick <= maxValue) {
-							theTicks.add((float) tick);
+							theLabeledTicks.add((float) tick);
 							tick += bin;
 						}
 					}
@@ -414,8 +543,8 @@ public class MultiRangeSlider extends ConformingPanel {
 				if (theSlider.isVertical()) {
 					int maxW = 0;
 					int sumH = 0;
-					if (theTickWidth > 0) {
-						for (double tick : theTicks) {
+					if (theLabeledTickWidth > 0) {
+						for (double tick : theLabeledTicks) {
 							String text = theValueRenderer.apply(tick);
 							Rectangle2D bounds = new TextLayout(text, getFont(), fontCtx).getBounds();
 							if (bounds.getWidth() > maxW)
@@ -429,8 +558,8 @@ public class MultiRangeSlider extends ConformingPanel {
 				} else {
 					int sumW = 0;
 					int maxH = 0;
-					if (theTickWidth > 0) {
-						for (double tick : theTicks) {
+					if (theLabeledTickWidth > 0) {
+						for (double tick : theLabeledTicks) {
 							String text = theValueRenderer.apply(tick);
 							Rectangle2D bounds = new TextLayout(text, getFont(), fontCtx).getBounds();
 							if (bounds.getHeight() > maxH)
@@ -458,10 +587,10 @@ public class MultiRangeSlider extends ConformingPanel {
 					g.drawLine(getWidth() - theCrossSize, getHeight() - 1, getWidth(), getHeight() - 1);
 					double min = theSlider.getSliderRange().get().getMin();
 					double extent = theSlider.getSliderRange().get().getExtent();
-					for (double tick : theTicks) {
+					for (double tick : theLabeledTicks) {
 						int pos = getHeight() - (int) Math.round((tick - min) * getHeight() / extent);
-						g.drawLine(getWidth() - theCrossSize / 2 - theTickWidth / 2, pos,
-							getWidth() - theCrossSize / 2 + theTickWidth / 2, pos);
+						g.drawLine(getWidth() - theCrossSize / 2 - theLabeledTickWidth / 2, pos,
+							getWidth() - theCrossSize / 2 + theLabeledTickWidth / 2, pos);
 						String text = theValueRenderer.apply(tick);
 						Rectangle2D bounds = new TextLayout(text, getFont(), ((Graphics2D) g).getFontRenderContext()).getBounds();
 						pos -= bounds.getHeight() / 2 + bounds.getMinY();
@@ -471,15 +600,27 @@ public class MultiRangeSlider extends ConformingPanel {
 							pos = 2 - (int) bounds.getMaxY();
 						((Graphics2D) g).drawString(text, getWidth() - theCrossSize - (int) bounds.getMaxX(), pos);
 					}
+					if (theSimpleTickWidth > 0 && theSimpleTickSpacing > 0) {
+						float simpleTick = theLabeledTicks.isEmpty() ? (float) min : theLabeledTicks.get(0);
+						while (simpleTick > min + theSimpleTickSpacing)
+							simpleTick -= theSimpleTickSpacing;
+						float max = (float) theSlider.getSliderRange().get().getMax();
+						while (simpleTick < max) {
+							int pos = getHeight() - (int) Math.round((simpleTick - min) * getHeight() / extent);
+							g.drawLine(getWidth() - theCrossSize / 2 - theSimpleTickWidth / 2, pos,
+								getWidth() - theCrossSize / 2 + theSimpleTickWidth / 2, pos);
+							simpleTick += theSimpleTickSpacing;
+						}
+					}
 				} else {
 					g.drawLine(0, theCrossSize / 2, getWidth(), theCrossSize / 2);
 					g.drawLine(0, 0, 0, theCrossSize);
 					g.drawLine(getWidth() - 1, 0, getWidth() - 1, theCrossSize);
 					double min = theSlider.getSliderRange().get().getMin();
 					double extent = theSlider.getSliderRange().get().getExtent();
-					for (double tick : theTicks) {
+					for (double tick : theLabeledTicks) {
 						int pos = (int) Math.round((tick - min) * getWidth() / extent);
-						g.drawLine(pos, theCrossSize / 2 - theTickWidth / 2, pos, theCrossSize / 2 + theTickWidth / 2);
+						g.drawLine(pos, theCrossSize / 2 - theLabeledTickWidth / 2, pos, theCrossSize / 2 + theLabeledTickWidth / 2);
 						String text = theValueRenderer.apply(tick);
 						Rectangle2D bounds = new TextLayout(text, getFont(), ((Graphics2D) g).getFontRenderContext()).getBounds();
 						pos -= bounds.getWidth() / 2 + bounds.getMinX() - 1;
@@ -488,6 +629,17 @@ public class MultiRangeSlider extends ConformingPanel {
 						else if (pos + bounds.getMaxX() > getWidth() - 2)
 							pos = getWidth() - (int) bounds.getMaxX() - 2;
 						((Graphics2D) g).drawString(text, pos, theCrossSize + 5 + (int) bounds.getMaxY());
+					}
+					if (theSimpleTickWidth > 0 && theSimpleTickSpacing > 0) {
+						float simpleTick = theLabeledTicks.isEmpty() ? (float) min : theLabeledTicks.get(0);
+						while (simpleTick > min + theSimpleTickSpacing)
+							simpleTick -= theSimpleTickSpacing;
+						float max = (float) theSlider.getSliderRange().get().getMax();
+						while (simpleTick < max) {
+							int pos = (int) Math.round((simpleTick - min) * getWidth() / extent);
+							g.drawLine(pos, theCrossSize / 2 - theSimpleTickWidth / 2, pos, theCrossSize / 2 + theSimpleTickWidth / 2);
+							simpleTick += theSimpleTickSpacing;
+						}
 					}
 				}
 			}
@@ -806,8 +958,8 @@ public class MultiRangeSlider extends ConformingPanel {
 		CausableKey rerender = Causable.key((cause, data) -> {
 			setRenderer(theRenderer);
 		});
-		sliderRange.noInitChanges().takeUntil(until).act(evt -> evt.getRootCausable().onFinish(rerender));
-		ranges.simpleChanges().takeUntil(until).act(evt -> repaint());
+		theSliderRange.noInitChanges().takeUntil(until).act(evt -> evt.getRootCausable().onFinish(rerender));
+		theRanges.simpleChanges().takeUntil(until).act(evt -> repaint());
 
 		QommonsTimer.TaskHandle[] updateTask = new QommonsTimer.TaskHandle[1];
 		theUpdateTask = updateTask[0] = QommonsTimer.getCommonInstance().build(() -> {
@@ -1069,6 +1221,16 @@ public class MultiRangeSlider extends ConformingPanel {
 	 */
 	public MultiRangeSlider setValidator(RangeValidator validator) {
 		theValidator = validator;
+		if (theValidator != null) {
+			// Re-validate all the ranges
+			try (Transaction t = theRanges.lock(true, null)) {
+				for (CollectionElement<Range> range : theRanges.elements()) {
+					Range newRange = theValidator.validate(this, range, range.get(), RangePoint.mid);
+					if (!newRange.equals(range.get()))
+						theRanges.mutableElement(range.getElementId()).set(newRange);
+				}
+			}
+		}
 		return this;
 	}
 
@@ -1620,6 +1782,8 @@ public class MultiRangeSlider extends ConformingPanel {
 			.setValidator(RangeValidator.NO_OVERLAP_ENFORCE_RANGE)//
 			.setMaxUpdateInterval(Duration.ofMillis(250))//
 			;
+		((MRSliderRenderer.Default) vSlider.getRenderer()).setSimpleTickSpacing(10);
+		((MRSliderRenderer.Default) hSlider.getRenderer()).setSimpleTickSpacing(10);
 		panel.add(hSlider);
 		frame.getContentPane().add(panel);
 

@@ -168,7 +168,7 @@ public class ObservableColorEditor extends JPanel {
 				.addHPanel("Red:", new JustifiedBoxLayout(false).mainJustified().crossJustified(), p3 -> p3.fill()//
 					.addSlider(null, redDouble, slider -> slider.withBounds(0, 255).modifyEditor(s -> {
 						s.setValidator(MultiRangeSlider.RangeValidator.ENFORCE_RANGE);
-						((MRSliderRenderer.Default) s.getRenderer()).setMainSize(200).setTicks(0, 64, 128, 192, 255);
+						((MRSliderRenderer.Default) s.getRenderer()).setMainSize(200).setLabeledTicks(0, 64, 128, 192, 255);
 						sliders.add(s);
 					}).withTooltip("The color's red component, between 0 and 255"))//
 					.addTextField(null, red, SpinnerFormat.INT, f -> f.modifyEditor(tf -> tf.withColumns(3))//
@@ -178,7 +178,7 @@ public class ObservableColorEditor extends JPanel {
 				.addHPanel("Green:", new JustifiedBoxLayout(false).mainJustified().crossJustified(), p3 -> p3.fill()//
 					.addSlider(null, greenDouble, slider -> slider.withBounds(0, 255).modifyEditor(s -> {
 						s.setValidator(MultiRangeSlider.RangeValidator.ENFORCE_RANGE);
-						((MRSliderRenderer.Default) s.getRenderer()).setMainSize(200).setTicks(0, 64, 128, 192, 255);
+						((MRSliderRenderer.Default) s.getRenderer()).setMainSize(200).setLabeledTicks(0, 64, 128, 192, 255);
 						sliders.add(s);
 					}).withTooltip("The color's green component, between 0 and 255"))//
 					.addTextField(null, green, SpinnerFormat.INT, f -> f.modifyEditor(tf -> tf.withColumns(3))//
@@ -188,7 +188,7 @@ public class ObservableColorEditor extends JPanel {
 				.addHPanel("Blue:", new JustifiedBoxLayout(false).mainJustified().crossJustified(), p3 -> p3.fill()//
 					.addSlider(null, blueDouble, slider -> slider.withBounds(0, 255).modifyEditor(s -> {
 						s.setValidator(MultiRangeSlider.RangeValidator.ENFORCE_RANGE);
-						((MRSliderRenderer.Default) s.getRenderer()).setMainSize(200).setTicks(0, 64, 128, 192, 255);
+						((MRSliderRenderer.Default) s.getRenderer()).setMainSize(200).setLabeledTicks(0, 64, 128, 192, 255);
 						sliders.add(s);
 					}).withTooltip("The color's blue component, between 0 and 255"))//
 					.addTextField(null, blue, SpinnerFormat.INT, f -> f.modifyEditor(tf -> tf.withColumns(3))//
@@ -198,7 +198,7 @@ public class ObservableColorEditor extends JPanel {
 				.addHPanel("Alpha:", new JustifiedBoxLayout(false).mainJustified().crossJustified(), p3 -> p3.fill().visibleWhen(withAlpha)//
 					.addSlider(null, alphaDouble, slider -> slider.withBounds(0, 255).modifyEditor(s -> {
 						s.setValidator(MultiRangeSlider.RangeValidator.ENFORCE_RANGE);
-						((MRSliderRenderer.Default) s.getRenderer()).setMainSize(200).setTicks(0, 64, 128, 192, 255);
+						((MRSliderRenderer.Default) s.getRenderer()).setMainSize(200).setLabeledTicks(0, 64, 128, 192, 255);
 						sliders.add(s);
 					}).withTooltip("The color's alpha, or opacity, between 0 (completely transparent) and 255 (completely opaque)"))//
 					.addTextField(null, alpha, SpinnerFormat.INT, f -> f//
@@ -212,7 +212,7 @@ public class ObservableColorEditor extends JPanel {
 				.addHPanel("Hue:", new JustifiedBoxLayout(false).mainJustified().crossJustified(), p3 -> p3.fill()//
 					.addSlider(null, huePercent, slider -> slider.withBounds(0, 100).modifyEditor(s -> {
 						s.setValidator(MultiRangeSlider.RangeValidator.ENFORCE_RANGE);
-						((MRSliderRenderer.Default) s.getRenderer()).setMainSize(200).setTicks(0, 25, 50, 75, 100);
+						((MRSliderRenderer.Default) s.getRenderer()).setMainSize(200).setLabeledTicks(0, 25, 50, 75, 100);
 						sliders.add(s);
 					}).withTooltip("The color's hue, on a scale of red-yellow-green-cyan-blue-magenta-red, between 0 and 100%"))//
 					.addTextField(null, huePercent, SpinnerFormat.doubleFormat("0.#", 1.0), f -> f//
@@ -224,7 +224,7 @@ public class ObservableColorEditor extends JPanel {
 				.addHPanel("Saturation:", new JustifiedBoxLayout(false).mainJustified().crossJustified(), p3 -> p3.fill()//
 					.addSlider(null, saturationPercent, slider -> slider.withBounds(0, 100).modifyEditor(s -> {
 						s.setValidator(MultiRangeSlider.RangeValidator.ENFORCE_RANGE);
-						((MRSliderRenderer.Default) s.getRenderer()).setMainSize(200).setTicks(0, 25, 50, 75, 100);
+						((MRSliderRenderer.Default) s.getRenderer()).setMainSize(200).setLabeledTicks(0, 25, 50, 75, 100);
 						sliders.add(s);
 					}).withTooltip("The color's saturation--how \"colored\" it is, as opposed to how \"washed out\""))//
 					.addTextField(null, saturationPercent, SpinnerFormat.doubleFormat("0.#", 1.0), f -> f//
@@ -236,7 +236,7 @@ public class ObservableColorEditor extends JPanel {
 				.addHPanel("Brightness:", new JustifiedBoxLayout(false).mainJustified().crossJustified(), p3 -> p3.fill()//
 					.addSlider(null, brightnessPercent, slider -> slider.withBounds(0, 100).modifyEditor(s -> {
 						s.setValidator(MultiRangeSlider.RangeValidator.ENFORCE_RANGE);
-						((MRSliderRenderer.Default) s.getRenderer()).setMainSize(200).setTicks(0, 25, 50, 75, 100);
+						((MRSliderRenderer.Default) s.getRenderer()).setMainSize(200).setLabeledTicks(0, 25, 50, 75, 100);
 						sliders.add(s);
 					}).withTooltip("The color's brightness, between darkest (black, 0%) and brightest (100%)"))//
 					.addTextField(null, brightnessPercent, SpinnerFormat.doubleFormat("0.#", 1.0), f -> f//
@@ -249,7 +249,7 @@ public class ObservableColorEditor extends JPanel {
 					p3 -> p3.fill().visibleWhen(withAlpha)//
 					.addSlider(null, alphaPercent, slider -> slider.withBounds(0, 100).modifyEditor(s -> {
 						s.setValidator(MultiRangeSlider.RangeValidator.ENFORCE_RANGE);
-						((MRSliderRenderer.Default) s.getRenderer()).setMainSize(200).setTicks(0, 25, 50, 75, 100);
+						((MRSliderRenderer.Default) s.getRenderer()).setMainSize(200).setLabeledTicks(0, 25, 50, 75, 100);
 						sliders.add(s);
 					}).withTooltip("The color's opacity, between 0% (completely transparent) and 100% (completely opaque)"))//
 					.addTextField(null, alphaPercent, SpinnerFormat.doubleFormat("0.#", 1.0), f -> f//
