@@ -4,14 +4,12 @@ import java.awt.EventQueue;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Calendar;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -329,6 +327,11 @@ public interface TableContentControl {
 		return new OrFilter(this, other);
 	}
 
+	/** @return A control that matches exactly those rows that have no matches from this control */
+	default TableContentControl not() {
+		return new NotFilter(this);
+	}
+
 	/**
 	 * @param columnName The column name to sort by
 	 * @param root Whether this control object is the root control
@@ -386,169 +389,131 @@ public interface TableContentControl {
 	}
 
 	/**
-	 * Parses a {@link TableContentControl} from text
+	 * <p>
+	 * Parses a {@link TableContentControl} from text.
+	 * </p>
+	 *
+	 * <p>
+	 * This method parses a set of control elements and combines them into a single control. Elements are separated by whitespace and,
+	 * optionally, a '|' character to denote OR operations for the combination of the controls. When elements are separated by whitespace
+	 * only, the combination shall be AND.
+	 * </p>
+	 * <p>
+	 * Parentheses may surround elements or element combinations to group them. A '!' character may be used before a search element to
+	 * filter on rows that do NOT match the search.
+	 * </p>
+	 *
+	 * <p>
+	 * Many types of control elements may be parsed this way:
+	 * </p>
+	 * <ul>
+	 * <li><b>Simple</b> elements find occurrences of a text string anywhere in the content being searched. As with all the other filters,
+	 * case is insensitive.</li>
+	 * <li><b>Simple pattern</b> elements may use wild card ('*') characters to stand in for any sequence of text. E.g. the search string
+	 * 'co*t' would match 'content', 'couldn't', or the first part of 'cotton'.</li>
+	 * <li><b>Full pattern</b> elements are specified by a leading '\' character and are parsed as java {@link Pattern}s.</li>
+	 * <li><b>Number</b> elements search text for numbers. Number elements differ from number text in that '1.5' matches '1.46' since 1.46
+	 * rounds to 1.5 with 2 significant digits.<br />
+	 * Numbers can also be specified in ranges, e.g. '1.5-3.5' will match any number found in text between those two numbers.</li>
+	 * <li><b>Date</b> elements can be specified with nearly any date format, e.g. '06Feb2013', 'Jan12', or '8:00'. Dates will match any
+	 * date found in text whose similar expression in the format specified is the same. E.g. '8:00' would match '8:00 Dec 15', and 'Jan12'
+	 * would match 'January 12th, 2050 9:15am'.<br />
+	 * Dates may also be specified in ranges, like numbers.</li>
+	 * <li><b>Duration</b> filters are specified in the form of integers with units, such as '1h30m' or '1y3mo'. Similarly to dates,
+	 * durations will match any text whose expression with the same units matches the specified numbers. So '1h30m' will match '90m
+	 * 21s'.<br />
+	 * Durations may also be specified in ranges.</li>
+	 * </ul>
+	 *
+	 * <p>
+	 * Filters may be category-specific, e.g. to search for entries under a particular column. This is done with a colon, in the form
+	 * 'category:filter'. The category portion, like other filter elements, is case-insensitive, may be incomplete (only the start of a
+	 * category name), and may also omit whitespace that is present in the category name. The filter may be any filter element or
+	 * combination.
+	 * </p>
+	 *
+	 * <p>
+	 * The form 'sort:category' is reserved for sorting rows. Using 'sort:a' will not filter on a category named 'sort', but rather will
+	 * cause the rows to be sorted by columns starting with 'a'. Similar to category-specific filtering, the category name is
+	 * case-insensitive, may be incomplete (only the beginning of a category name), and may omit whitespace from the category name.<br />
+	 * To sort rows in descending order, use a '-' character, like 'sort:-name' to sort by name, descending.<br />
+	 * Multiple categories may be specified, e.g. 'sort:a,-b' will sort by a primarily, then b descending secondarily.<br />
+	 * To search on a category named 'sort', one may surround 'sort' with quotes, e.g. '"sort":search'.
+	 * </p>
+	 *
+	 * <p>
+	 * The form 'columns:category' is reserved for sorting columns. Using 'columns:a' will not filter on a category named 'columns', but
+	 * rather will cause the 'a' column of the table to move to the left-most position, followed by the rest of the columns. Multiple
+	 * columns may be separated by commas.<br />
+	 * To search on a category named 'columns', one may surround 'columns' with quotes, e.g. '"columns":search'.
+	 * </p>
+	 *
+	 * <p>
+	 * Quotes may surround a term (a category name or filter element) in order to enable white space in a term. Within a quoted term, quote
+	 * characters may be specified by escaping with a '\' character prefixed.
+	 * </p>
 	 *
 	 * @param controlText The text to parse
 	 * @return The parsed {@link TableContentControl} represented by the text
+	 * @throws ParseException If errors are found in the text
 	 */
-	public static TableContentControl parseContentControl(CharSequence controlText) {
-		if (controlText == null || controlText.length() == 0)
-			return DEFAULT;
-		List<String> splitList = new LinkedList<>();
-		int contentStart = 0;
-		boolean quoted = false;
-		for (int c = 0; c < controlText.length(); c++) {
-			if (controlText.charAt(c) == '"') {
-				if (quoted) {
-					splitList.add(controlText.subSequence(contentStart, c).toString());
-					contentStart = c + 1;
-					continue;
-				} else if (contentStart == c) {
-					quoted = true;
-					contentStart++;
-					continue;
-				}
-			}
-			if (!quoted && Character.isWhitespace(controlText.charAt(c))) {
-				if (contentStart < c) {
-					splitList.add(controlText.subSequence(contentStart, c).toString());
-				}
-				contentStart = c + 1;
-			}
-		}
-		if (contentStart < controlText.length())
-			splitList.add(controlText.subSequence(contentStart, controlText.length()).toString());
-		else if (splitList.isEmpty())
-			splitList.add(controlText.toString()); // If all the text is whitespace, then search for whitespace
-		String[] split = splitList.toArray(new String[splitList.size()]);
-		TableContentControl[] splitFilters = new TableContentControl[split.length];
-		for (int i = 0; i < split.length; i++) {
-			TableContentControl splitFilter;
-			int colonIndex = split[i].indexOf(':');
-			if (colonIndex > 0) {
-				String category = split[i].substring(0, colonIndex);
-				if (colonIndex < split[i].length() - 1) {
-					String catFilter = split[i].substring(colonIndex + 1);
-					if (category.equalsIgnoreCase("sort")) {
-						splitFilter = new RowSorter(Arrays.asList(catFilter.split(",")));
-					} else if (category.equalsIgnoreCase("columns")) {
-						splitFilter = new ColumnSorter(Arrays.asList(catFilter.split(",")));
-					} else {
-						splitFilter = new CategoryFilter(category, _parseFilterElement(catFilter))//
-							.or(_parseFilterElement(split[i])); // Also search as if the colon was part of the search
-					}
-				} else {
-					splitFilter = new CategoryFilter(category, new EmptyFilter())//
-						.or(_parseFilterElement(split[i])); // Also search as if the colon was part of the search
-				}
-			} else
-				splitFilter = _parseFilterElement(split[i]);
-			splitFilters[i] = splitFilter;
-		}
-		if (splitFilters.length == 1)
-			return splitFilters[0];
-		else
-			return new AndFilter(splitFilters);
-	}
-
-	/**
-	 * Parses a single element of a {@link TableContentControl} from text
-	 *
-	 * @param filterText The text to parse
-	 * @return The parsed {@link TableContentControl} element
-	 */
-	public static TableContentControl _parseFilterElement(String filterText) {
-		ArrayList<TableContentControl> filters = new ArrayList<>();
-		filters.add(new SimpleFilter(filterText));
-		Matcher m = INT_RANGE_PATTERN.matcher(filterText);
-		if (m.matches())
-			filters.add(new IntRangeFilter(filterText, m.group("i1"), m.group("i2")));
-		else {
-			FoundDouble flt = TableContentControl.tryParseDouble(filterText, 0);
-			if (flt != null && flt.end == filterText.length()) {
-				if (flt.end == filterText.length())
-					filters.add(new NumberRangeFilter(filterText, flt.minValue, flt.maxValue));
-				else if (filterText.charAt(flt.end) == '-') {
-					FoundDouble maxFlt = TableContentControl.tryParseDouble(filterText, flt.end + 1);
-					if (maxFlt != null && maxFlt.end == filterText.length())
-						filters.add(new NumberRangeFilter(filterText, flt.minValue, maxFlt.maxValue));
-				}
-			}
-		}
-		ParsedInstant time;
-		try {
-			time = TimeUtils.parseInstant(filterText, true, false, null);
-		} catch (ParseException e) {
-			throw new IllegalStateException(e); // Shouldn't happen
-		}
-		if (time != null) {
-			if (time.toString().length() == filterText.length())
-				filters.add(new DateFilter(time));
-			else if (filterText.charAt(time.toString().length()) == '-') {
-				ParsedInstant maxTime;
-				int maxStart = time.toString().length() + 1;
-				try {
-					maxTime = TimeUtils.parseInstant(filterText.substring(maxStart), true, false, null);
-				} catch (ParseException e) {
-					throw new IllegalStateException(e); // Shouldn't happen
-				}
-				if (maxTime != null && maxStart + maxTime.toString().length() == filterText.length()) {
-					filters.add(new DateRangeFilter(filterText, time, maxTime));
-				}
-			}
-		}
-		int dashIdx = -1;
-		for (int i = 0; i < filterText.length(); i++) {
-			if (filterText.charAt(i) == '-') {
-				dashIdx = i;
-				break;
-			}
-		}
-		if (dashIdx <= 0) {
-			ParsedDuration duration;
-			try {
-				duration = TimeUtils.parseDuration(filterText, true);
-			} catch (ParseException e) {
-				duration = null;
-			}
-			if (duration != null)
-				filters.add(new DurationFilter(duration));
-		}
-		if (dashIdx > 0) {
-			try {
-				ParsedDuration minDuration = TimeUtils.parseDuration(filterText.subSequence(0, dashIdx), false);
-				ParsedDuration maxDuration = TimeUtils.parseDuration(filterText.subSequence(dashIdx + 1, filterText.length()), false);
-				filters.add(new DurationRangeFilter(filterText, minDuration, maxDuration));
-			} catch (ParseException e) {
-			}
-		}
-		int starIndex = filterText.indexOf('*');
-		if (starIndex > 0 && starIndex < filterText.length() - 1) {
-			ArrayList<String> sequence = new ArrayList<>();
-			int start = 0;
-			do {
-				if (starIndex > start)
-					sequence.add(filterText.substring(start, starIndex));
-				start = starIndex + 1;
-				starIndex = filterText.indexOf('*', start);
-			} while (starIndex >= 0);
-			if (start < filterText.length())
-				sequence.add(filterText.substring(start));
-			sequence.trimToSize();
-			filters.add(new SimplePatternFilter(sequence));
-		}
-		if (filterText.length() > 1 && filterText.charAt(0) == '\\') {
-			try {
-				Pattern pattern = Pattern.compile(filterText.substring(1), Pattern.CASE_INSENSITIVE | Pattern.DOTALL | Pattern.MULTILINE);
-				filters.add(new FullPatternFilter(pattern));
-			} catch (PatternSyntaxException e) {
-				// Ignore
-			}
-		}
-		if (filters.size() == 1)
-			return filters.get(0);
-		else
-			return new OrFilter(filters.toArray(new TableContentControl[filters.size()]));
+	public static TableContentControl parseContentControl(CharSequence controlText) throws ParseException {
+		return Parsing.parseContentControl(controlText, new int[1], 0);
+		// List<String> splitList = new LinkedList<>();
+		// int contentStart = 0;
+		// boolean quoted = false;
+		// for (int c = 0; c < controlText.length(); c++) {
+		// if (controlText.charAt(c) == '"') {
+		// if (quoted) {
+		// splitList.add(controlText.subSequence(contentStart, c).toString());
+		// contentStart = c + 1;
+		// continue;
+		// } else if (contentStart == c) {
+		// quoted = true;
+		// contentStart++;
+		// continue;
+		// }
+		// }
+		// if (!quoted && Character.isWhitespace(controlText.charAt(c))) {
+		// if (contentStart < c) {
+		// splitList.add(controlText.subSequence(contentStart, c).toString());
+		// }
+		// contentStart = c + 1;
+		// }
+		// }
+		// if (contentStart < controlText.length())
+		// splitList.add(controlText.subSequence(contentStart, controlText.length()).toString());
+		// else if (splitList.isEmpty())
+		// splitList.add(controlText.toString()); // If all the text is whitespace, then search for whitespace
+		// String[] split = splitList.toArray(new String[splitList.size()]);
+		// TableContentControl[] splitFilters = new TableContentControl[split.length];
+		// for (int i = 0; i < split.length; i++) {
+		// TableContentControl splitFilter;
+		// int colonIndex = split[i].indexOf(':');
+		// if (colonIndex > 0) {
+		// String category = split[i].substring(0, colonIndex);
+		// if (colonIndex < split[i].length() - 1) {
+		// String catFilter = split[i].substring(colonIndex + 1);
+		// if (category.equalsIgnoreCase("sort")) {
+		// splitFilter = new RowSorter(Arrays.asList(catFilter.split(",")));
+		// } else if (category.equalsIgnoreCase("columns")) {
+		// splitFilter = new ColumnSorter(Arrays.asList(catFilter.split(",")));
+		// } else {
+		// splitFilter = new CategoryFilter(category, _parseFilterElement(catFilter))//
+		// .or(_parseFilterElement(split[i])); // Also search as if the colon was part of the search
+		// }
+		// } else {
+		// splitFilter = new CategoryFilter(category, new EmptyFilter())//
+		// .or(_parseFilterElement(split[i])); // Also search as if the colon was part of the search
+		// }
+		// } else
+		// splitFilter = _parseFilterElement(split[i]);
+		// splitFilters[i] = splitFilter;
+		// }
+		// if (splitFilters.length == 1)
+		// return splitFilters[0];
+		// else
+		// return new AndFilter(splitFilters);
 	}
 
 	/**
@@ -824,6 +789,9 @@ public interface TableContentControl {
 
 	/** Matches empty text */
 	public static class EmptyFilter implements TableContentControl {
+		/** Singleton instance */
+		public static final EmptyFilter INSTANCE = new EmptyFilter();
+
 		@Override
 		public SortedMatchSet findMatches(ValueRenderer<?> category, CharSequence text) {
 			if (text == null || text.length() == 0)
@@ -955,13 +923,10 @@ public interface TableContentControl {
 
 		@Override
 		public String toString() {
-			StringBuilder str = new StringBuilder().append(theFilter.toString());
-			boolean quote = str.length() >= 2 && str.charAt(0) == '"' && str.charAt(str.length() - 1) == '"';
-			if (quote)
-				str.deleteCharAt(0).deleteCharAt(str.length() - 1);
-			str.insert(0, ':').insert(0, theCategory);
-			if (quote)
-				str.insert(0, '"').append('"');
+			StringBuilder str = new StringBuilder(theCategory);
+			if (str.charAt(0) == '"' || theCategory.equals("sort") || theCategory.equals("columns"))
+				str.insert(0, '"').append(':');
+			str.append(theFilter.toString());
 			return str.toString();
 		}
 	}
@@ -1147,8 +1112,8 @@ public interface TableContentControl {
 		if (end < text.length() && (text.charAt(end) == 'E' || text.charAt(end) == 'e')) {
 			if (trivial)
 				return null;
-			boolean hasExp=false;
-			int preEnd=end;
+			boolean hasExp = false;
+			int preEnd = end;
 			end++;
 			expStart++;
 			expEnd++;
@@ -1157,7 +1122,7 @@ public interface TableContentControl {
 				expEnd++;
 			}
 			while (end < text.length() && text.charAt(end) >= '0' && text.charAt(end) <= '9') {
-				hasExp=true;
+				hasExp = true;
 				end++;
 				expEnd++;
 			}
@@ -1636,65 +1601,31 @@ public interface TableContentControl {
 		}
 	}
 
-	/** A filter that matches rows that are matched by any of its component matchers */
-	public static class OrFilter implements TableContentControl {
+	/** Abstract wrapper implementation composed of multiple controls */
+	public static abstract class JoinControl implements TableContentControl {
 		private final List<TableContentControl> theContent;
 
-		/** @param filters The component filters for this OR filter */
-		public OrFilter(TableContentControl... filters) {
+		/** @param filters The component filters for this filter */
+		public JoinControl(TableContentControl... filters) {
 			theContent = BetterList.of(filters);
 		}
 
-		/** @return This OR filter's component filters */
+		/** @return This filter's component filters */
 		public List<TableContentControl> getContent() {
 			return theContent;
 		}
 
-		@Override
-		public SortedMatchSet[] findMatches(List<? extends ValueRenderer<?>> categories, CharSequence[] texts) {
-			SortedMatchSet[] matches = null;
-			for (TableContentControl content : theContent) {
-				SortedMatchSet[] match = content.findMatches(categories, texts);
-				if (match == null)
-					continue;
-				if (matches == null)
-					matches = new SortedMatchSet[texts.length];
-				for (int i = 0; i < match.length; i++) {
-					SortedMatchSet cm = match[i];
-					if (cm != null) {
-						if (matches[i] == null)
-							matches[i] = cm;
-						else
-							matches[i].addAll(cm);
-					}
-				}
-			}
-			return matches;
-		}
+		/** @return A string representing this join operation */
+		public abstract String getJoin();
+
+		/**
+		 * @param content Components to wrap
+		 * @return A new join control of this type that wraps the given components
+		 */
+		protected abstract JoinControl wrap(TableContentControl[] content);
 
 		@Override
-		public SortedMatchSet findMatches(ValueRenderer<?> category, CharSequence value) {
-			SortedMatchSet matches = null;
-			for (TableContentControl content : theContent) {
-				SortedMatchSet match = content.findMatches(category, value);
-				if (match != null) {
-					if (matches == null)
-						matches = match;
-					else
-						matches.addAll(match);
-				}
-			}
-			return matches == null ? null : matches;
-		}
-
-		@Override
-		public boolean isSearch() {
-			for (TableContentControl c : theContent) {
-				if (!c.isSearch())
-					return false;
-			}
-			return true;
-		}
+		public abstract SortedMatchSet[] findMatches(List<? extends ValueRenderer<?>> categories, CharSequence[] texts);
 
 		@Override
 		public List<String> getRowSorting() {
@@ -1736,52 +1667,144 @@ public interface TableContentControl {
 				}
 			}
 			if (newContent != null)
-				return new OrFilter(newContent);
+				return wrap(newContent);
 			return TableContentControl.super.toggleSort(columnName, root);
 		}
 
 		@Override
-		public TableContentControl or(TableContentControl other) {
-			TableContentControl[] newContent = new TableContentControl[theContent.size() + 1];
-			theContent.toArray(newContent);
-			newContent[theContent.size()] = other;
-			return new OrFilter(newContent);
+		public int hashCode() {
+			return theContent.hashCode();
+		}
+
+		@Override
+		public boolean equals(Object obj) {
+			return obj != null && obj.getClass() == getClass() && theContent.equals(((JoinControl) obj).theContent);
 		}
 
 		@Override
 		public String toString() {
 			Set<String> printed = new HashSet<>();
 			StringBuilder str = new StringBuilder();
+			String join = getJoin();
 			for (int i = 0; i < theContent.size(); i++) {
 				String contentStr = theContent.get(i).toString();
+				if (theContent.get(i) instanceof JoinControl && theContent.get(i).getClass() != getClass())
+					contentStr = '(' + contentStr + ')';
 				if (printed.add(contentStr)) {
-					if (i > 0)
+					if (i > 0) {
 						str.append(' ');
-					str.append(theContent.get(i));
+						if (!join.isEmpty())
+							str.append(join).append(' ');
+					}
+					str.append(contentStr);
 				}
 			}
 			return str.toString();
 		}
 	}
 
-	/** A filter that matches rows that are matched by all of its component matchers */
-	public static class AndFilter implements TableContentControl {
-		private final List<TableContentControl> theContent;
-
-		/** @param filters The component filters for this AND filter */
-		public AndFilter(TableContentControl... filters) {
-			theContent = BetterList.of(filters);
+	/** A filter that matches rows that are matched by any of its component matchers */
+	public static class OrFilter extends JoinControl {
+		/** @param filters The component filters for this OR filter */
+		public OrFilter(TableContentControl... filters) {
+			super(filters);
 		}
 
-		/** @return This AND filter's component filters */
-		public List<TableContentControl> getContent() {
-			return theContent;
+		@Override
+		public String getJoin() {
+			return "|";
+		}
+
+		@Override
+		protected JoinControl wrap(TableContentControl[] content) {
+			return new OrFilter(content);
 		}
 
 		@Override
 		public SortedMatchSet[] findMatches(List<? extends ValueRenderer<?>> categories, CharSequence[] texts) {
 			SortedMatchSet[] matches = null;
-			for (TableContentControl content : theContent) {
+			for (TableContentControl content : getContent()) {
+				SortedMatchSet[] match = content.findMatches(categories, texts);
+				if (match == null)
+					continue;
+				if (matches == null)
+					matches = new SortedMatchSet[texts.length];
+				for (int i = 0; i < match.length; i++) {
+					SortedMatchSet cm = match[i];
+					if (cm != null) {
+						if (matches[i] == null)
+							matches[i] = cm;
+						else
+							matches[i].addAll(cm);
+					}
+				}
+			}
+			return matches;
+		}
+
+		@Override
+		public SortedMatchSet findMatches(ValueRenderer<?> category, CharSequence value) {
+			SortedMatchSet matches = null;
+			for (TableContentControl content : getContent()) {
+				SortedMatchSet match = content.findMatches(category, value);
+				if (match != null) {
+					if (matches == null)
+						matches = match;
+					else
+						matches.addAll(match);
+				}
+			}
+			return matches == null ? null : matches;
+		}
+
+		@Override
+		public boolean isSearch() {
+			for (TableContentControl c : getContent()) {
+				if (!c.isSearch())
+					return false;
+			}
+			return true;
+		}
+
+		@Override
+		public TableContentControl or(TableContentControl other) {
+			TableContentControl[] newContent;
+			if (other instanceof OrFilter) {
+				OrFilter or = (OrFilter) other;
+				newContent = new TableContentControl[getContent().size() + or.getContent().size()];
+				getContent().toArray(newContent);
+				for (int i = 0; i < or.getContent().size(); i++)
+					newContent[getContent().size() + i] = or.getContent().get(i);
+			} else {
+				newContent = new TableContentControl[getContent().size() + 1];
+				getContent().toArray(newContent);
+				newContent[getContent().size()] = other;
+			}
+			return new OrFilter(newContent);
+		}
+	}
+
+	/** A filter that matches rows that are matched by all of its component matchers */
+	public static class AndFilter extends JoinControl {
+		/** @param filters The component filters for this AND filter */
+		public AndFilter(TableContentControl... filters) {
+			super(filters);
+		}
+
+		@Override
+		public String getJoin() {
+			return "";
+		}
+
+		@Override
+		protected JoinControl wrap(TableContentControl[] content) {
+			return new AndFilter(content);
+		}
+
+		@Override
+		public SortedMatchSet[] findMatches(List<? extends ValueRenderer<?>> categories, CharSequence[] texts) {
+			SortedMatchSet[] matches = null;
+			for (TableContentControl content : getContent()) {
 				SortedMatchSet[] match = content.findMatches(categories, texts);
 				if (match == null && content.isSearch())
 					return null;
@@ -1805,7 +1828,7 @@ public interface TableContentControl {
 		@Override
 		public SortedMatchSet findMatches(ValueRenderer<?> category, CharSequence value) {
 			SortedMatchSet matches = null;
-			for (TableContentControl content : theContent) {
+			for (TableContentControl content : getContent()) {
 				SortedMatchSet match = content.findMatches(category, value);
 				if (match == null)
 					return null;
@@ -1821,7 +1844,7 @@ public interface TableContentControl {
 
 		@Override
 		public boolean isSearch() {
-			for (TableContentControl c : theContent) {
+			for (TableContentControl c : getContent()) {
 				if (c.isSearch())
 					return true;
 			}
@@ -1829,70 +1852,173 @@ public interface TableContentControl {
 		}
 
 		@Override
-		public List<String> getRowSorting() {
-			List<String> sorting = null;
-			for (TableContentControl c : theContent) {
-				List<String> cSorting = c.getRowSorting();
-				if (cSorting != null) {
-					if (sorting == null)
-						sorting = new ArrayList<>();
-					sorting.addAll(cSorting);
-				}
+		public TableContentControl and(TableContentControl other) {
+			TableContentControl[] newContent;
+			if (other instanceof AndFilter) {
+				AndFilter and = (AndFilter) other;
+				newContent = new TableContentControl[getContent().size() + and.getContent().size()];
+				getContent().toArray(newContent);
+				for (int i = 0; i < and.getContent().size(); i++)
+					newContent[getContent().size() + i] = and.getContent().get(i);
+			} else {
+				newContent = new TableContentControl[getContent().size() + 1];
+				getContent().toArray(newContent);
+				newContent[getContent().size()] = other;
 			}
-			return sorting;
+			return new AndFilter(newContent);
+		}
+	}
+
+	/** Abstract wrapper implementation that wraps a single control */
+	public static abstract class WrappingControl implements TableContentControl {
+		private final TableContentControl theWrapped;
+
+		/** @param wrapped The wrapped filter */
+		public WrappingControl(TableContentControl wrapped) {
+			theWrapped = wrapped;
+		}
+
+		/** @return The filter that this filter wraps */
+		public TableContentControl getWrapped() {
+			return theWrapped;
+		}
+
+		/**
+		 * @param toWrap The filter to wrap
+		 * @return An instance of of this wrapper that wraps the given control
+		 */
+		protected abstract WrappingControl wrap(TableContentControl toWrap);
+
+		@Override
+		public SortedMatchSet[] findMatches(List<? extends ValueRenderer<?>> categories, CharSequence[] texts) {
+			return theWrapped.findMatches(categories, texts);
+		}
+
+		@Override
+		public SortedMatchSet findMatches(ValueRenderer<?> category, CharSequence text) {
+			return theWrapped.findMatches(category, text);
+		}
+
+		@Override
+		public boolean isSearch() {
+			return theWrapped.isSearch();
+		}
+
+		@Override
+		public List<String> getRowSorting() {
+			return theWrapped.getRowSorting();
 		}
 
 		@Override
 		public List<String> getColumnSorting() {
-			List<String> sorting = null;
-			for (TableContentControl c : theContent) {
-				List<String> cSorting = c.getColumnSorting();
-				if (cSorting != null) {
-					if (sorting == null)
-						sorting = new ArrayList<>();
-					sorting.addAll(cSorting);
-				}
-			}
-			return sorting;
-		}
-
-		@Override
-		public TableContentControl and(TableContentControl other) {
-			TableContentControl[] newContent = new TableContentControl[theContent.size() + 1];
-			theContent.toArray(newContent);
-			newContent[theContent.size()] = other;
-			return new AndFilter(newContent);
+			return theWrapped.getColumnSorting();
 		}
 
 		@Override
 		public TableContentControl toggleSort(String columnName, boolean root) {
-			TableContentControl[] newContent = null;
-			for (int i = 0; i < theContent.size(); i++) {
-				TableContentControl replaced = theContent.get(i).toggleSort(columnName, false);
-				if (replaced != theContent.get(i)) {
-					if (newContent == null)
-						newContent = theContent.toArray(new TableContentControl[theContent.size()]);
-					newContent[i] = replaced;
-				}
-			}
-			if (newContent != null)
-				return new AndFilter(newContent);
-			return TableContentControl.super.toggleSort(columnName, root);
+			TableContentControl toggled = theWrapped.toggleSort(columnName, root);
+			if (toggled != theWrapped)
+				return wrap(toggled);
+			else
+				return this;
+		}
+
+		@Override
+		public int hashCode() {
+			return theWrapped.hashCode();
+		}
+
+		@Override
+		public boolean equals(Object obj) {
+			return obj != null && obj.getClass() == getClass() && theWrapped.equals(((WrappingControl) obj).theWrapped);
+		}
+
+		@Override
+		public abstract String toString();
+	}
+
+	/** Implements {@link TableContentControl#not()} */
+	public static class NotFilter extends WrappingControl {
+		/** @param negated The negated filter */
+		public NotFilter(TableContentControl negated) {
+			super(negated);
+		}
+
+		@Override
+		protected WrappingControl wrap(TableContentControl toWrap) {
+			return new NotFilter(toWrap);
+		}
+
+		@Override
+		public SortedMatchSet[] findMatches(List<? extends ValueRenderer<?>> categories, CharSequence[] texts) {
+			SortedMatchSet[] found = getWrapped().findMatches(categories, texts);
+			if (found == null) {
+				found = new SortedMatchSet[categories.size()];
+				for (int i = 0; i < found.length; i++)
+					found[i] = new SortedMatchSet(1).add(0, 0);
+				return found;
+			} else
+				return null;
+		}
+
+		@Override
+		public SortedMatchSet findMatches(ValueRenderer<?> category, CharSequence text) {
+			SortedMatchSet matched = getWrapped().findMatches(category, text);
+			if (matched == null)
+				return new SortedMatchSet(1).add(0, text.length());
+			else
+				return null;
+		}
+
+		@Override
+		public TableContentControl not() {
+			return getWrapped();
+		}
+
+		@Override
+		public int hashCode() {
+			return getWrapped().hashCode() + 1;
 		}
 
 		@Override
 		public String toString() {
-			Set<String> printed = new HashSet<>();
-			StringBuilder str = new StringBuilder();
-			for (int i = 0; i < theContent.size(); i++) {
-				String contentStr = theContent.get(i).toString();
-				if (printed.add(contentStr)) {
-					if (i > 0)
-						str.append(' ');
-					str.append(theContent.get(i));
-				}
-			}
-			return str.toString();
+			return "!" + getWrapped().toString();
+		}
+	}
+
+	/** A filter that the user enclosed in parentheses */
+	public static class ParenFilter extends WrappingControl {
+		/** @param wrapped The wrapped filter */
+		public ParenFilter(TableContentControl wrapped) {
+			super(wrapped);
+		}
+
+		@Override
+		protected WrappingControl wrap(TableContentControl toWrap) {
+			return new ParenFilter(toWrap);
+		}
+
+		@Override
+		public String toString() {
+			return '(' + getWrapped().toString() + ')';
+		}
+	}
+
+	/** Represents a filter that the user enclosed in quotes */
+	public static class QuotedFilter extends WrappingControl {
+		/** @param wrapped The wrapped filter */
+		public QuotedFilter(TableContentControl wrapped) {
+			super(wrapped);
+		}
+
+		@Override
+		protected WrappingControl wrap(TableContentControl toWrap) {
+			return new QuotedFilter(toWrap);
+		}
+
+		@Override
+		public String toString() {
+			return '"' + getWrapped().toString() + '"';
 		}
 	}
 
@@ -2018,8 +2144,13 @@ public interface TableContentControl {
 		@Override
 		public String toString() {
 			StringBuilder str = new StringBuilder("sort:");
-			StringUtils.print(str, ",", theSorting, StringBuilder::append);
-			if (str.indexOf(" ") >= 0)
+			boolean[] quote = new boolean[1];
+			StringUtils.print(str, ",", theSorting, (sb, cat) -> {
+				String replacedCat = cat.replaceAll(",", "\\,");
+				quote[0] |= cat != replacedCat;
+				sb.append(replacedCat);
+			});
+			if (quote[0] || str.indexOf(" ") >= 0)
 				str.insert(0, '"').append('"');
 			return str.toString();
 		}
@@ -2095,8 +2226,331 @@ public interface TableContentControl {
 		}
 	}
 
+	/** Contains static methods for parsing {@link TableContentControl}s from text */
+	public static class Parsing {
+		/**
+		 * @param controlText The text to parse
+		 * @param c The current position of the text
+		 * @param depth The parenthetical depth of the parsing state
+		 * @return The control parsed out of the text between the starting position and the end or the next unclosed parenthesis (if
+		 *         depth>0)
+		 * @throws ParseException If an error is found in the text
+		 */
+		public static TableContentControl parseContentControl(CharSequence controlText, int[] c, int depth) throws ParseException {
+			if (controlText == null || controlText.length() == 0)
+				return DEFAULT;
+			TableContentControl parsed = null;
+			boolean not = false, or = false;
+			int elementStart = c[0];
+			String category = null;
+			boolean quotedCategory = false;
+			boolean closeParen = false;
+			for (; c[0] < controlText.length(); c[0]++) {
+				char ch = controlText.charAt(c[0]);
+				TableContentControl next = null;
+				switch (ch) {
+				case '|':
+					if (parsed == null || not)
+						throw new ParseException("Misplaced '|'", c[0]);
+					else if (category != null || elementStart < c[0])
+						continue;
+					or = true;
+					elementStart = c[0] + 1;
+					break;
+				case '!':
+					if (not)
+						throw new ParseException("Double negative", c[0]);
+					else if (category != null || elementStart < c[0])
+						continue;
+					not = true;
+					elementStart = c[0] + 1;
+					break;
+				case ':':
+					if (elementStart < c[0]) {
+						category = controlText.subSequence(elementStart, c[0]).toString();
+						if (not && !quotedCategory && (category.equals("sort") || category.equals("columns")))
+							throw new ParseException("Not operator is not valid for sorting", c[0]);
+						elementStart = c[0] + 1;
+					}
+					break;
+				case '"':
+					if (elementStart == c[0]) {
+						c[0]++;
+						String elementText = parseQuotedString(controlText, c);
+						if (category == null && c[0] < controlText.length() && controlText.charAt(c[0] + 1) == ':') {
+							// A category, not a search
+							category = controlText.subSequence(elementStart + 1, c[0] - 1).toString();
+							c[0]++; // Skip the colon
+							elementStart = c[0] + 1;
+							quotedCategory = true;
+						} else
+							next = new QuotedFilter(parseElementText(elementText, c[0], category, quotedCategory));
+					}
+					break;
+				case '(':
+					if (elementStart == c[0]) {
+						c[0]++;
+						next = Parsing.parseContentControl(controlText, c, depth + 1);
+						if (category != null) {
+							next = new CategoryFilter(category, next);
+							category = null;
+						}
+						elementStart = c[0] + 1;
+					}
+					break;
+				case ')':
+					if (depth == 0)
+						throw new ParseException("Illegal ')' placement--no matching open parenthesis", c[0]);
+					if (c[0] == elementStart && parsed == null)
+						throw new ParseException("Illegal ')' placement--no content between parentheses", c[0]);
+					closeParen = true;
+					break;
+				default:
+					if (Character.isWhitespace(ch)) {
+						String elementText = controlText.subSequence(elementStart, c[0]).toString().trim();
+						next = parseElementText(elementText, c[0], category, quotedCategory);
+						elementStart = c[0] + 1; // Move on even if no element was parsed
+					}
+					break;
+				}
+				if (closeParen)
+					break;
+				if (next != null) {
+					parsed = combine(parsed, next, or, not);
+					or = not = false;
+					category = null;
+					quotedCategory = false;
+					elementStart = c[0] + 1;
+				}
+			}
+			if (depth > 0 && c[0] == controlText.length())
+				throw new ParseException("No closing parenthesis", c[0]);
+			String elementText = controlText.subSequence(elementStart, c[0]).toString().trim();
+			TableContentControl next = parseElementText(elementText, c[0], category, quotedCategory);
+			if (next != null) {
+				parsed = combine(parsed, next, or, not);
+				not = or = false;
+				category = null;
+			}
+			if (parsed == null)
+				return DEFAULT;
+			if (closeParen)
+				parsed = new ParenFilter(parsed);
+			return parsed;
+		}
+
+		private static String parseQuotedString(CharSequence controlText, int[] c) throws ParseException {
+			boolean escaped = false;
+			StringBuilder str = new StringBuilder();
+			for (; c[0] < controlText.length(); c[0]++) {
+				char ch = controlText.charAt(c[0]);
+				if (escaped) {
+					switch (ch) {
+					case '"':
+						str.append('"');
+						break;
+					case '\\':
+						str.append('\\');
+						break;
+					case 'n':
+						str.append('\n');
+						break;
+					case 't':
+						str.append('\t');
+						break;
+					case 'r':
+						str.append('\r');
+						break;
+					default:
+						str.append('\\').append(ch);
+						break;
+					}
+					escaped = false;
+				} else if (ch == '\\')
+					escaped = true;
+				else if (ch == '"') {
+					c[0]++;
+					break;
+				} else
+					str.append(ch);
+			}
+			if (escaped)
+				str.append('\\');
+			return str.toString();
+		}
+
+		private static TableContentControl parseElementText(String text, int index, String category, boolean quotedCategory)
+			throws ParseException {
+			if (text.isEmpty()) {//
+				if (!quotedCategory && ("sort".equals(category) || "columns".equals(category)))
+					throw new ParseException("No categories specified", index);
+				else if (category != null)
+					return new CategoryFilter(category, EmptyFilter.INSTANCE);
+				return null;
+			} else if (!quotedCategory && "sort".equals(category)) {
+				return new RowSorter(parseCategories(text));
+			} else if (!quotedCategory && "columns".equals(category)) {
+				return new ColumnSorter(parseCategories(category));
+			} else {
+				TableContentControl parsed = Parsing.parseControlElement(text);
+				if (category != null)
+					return new CategoryFilter(category, parsed);
+				else
+					return parsed;
+			}
+		}
+
+		private static List<String> parseCategories(String categoriesString) {
+			StringBuilder str = new StringBuilder();
+			List<String> categories = new ArrayList<>();
+			boolean escaped = false;
+			for (int c = 0; c < categoriesString.length(); c++) {
+				char ch = categoriesString.charAt(c);
+				if (escaped) {
+					if (ch != ',')
+						str.append('\\');
+					str.append(ch);
+					escaped = false;
+					continue;
+				}
+				switch (ch) {
+				case '\\':
+					escaped = true;
+					break;
+				case ',':
+					categories.add(str.toString());
+					str.setLength(0);
+					break;
+				default:
+					str.append(ch);
+					break;
+				}
+			}
+			if (categories.isEmpty())
+				return Collections.singletonList(str.toString());
+			categories.add(str.toString());
+			return Collections.unmodifiableList(categories);
+		}
+
+		private static TableContentControl combine(TableContentControl previous, TableContentControl next, boolean or, boolean not) {
+			if (next == null)
+				return previous;
+			if (not) {
+				next = next.not();
+				not = false;
+			}
+			if (previous == null)
+				return next;
+			else if (or)
+				return previous.or(next);
+			else
+				return previous.and(next);
+		}
+
+		/**
+		 * Parses a single element of a {@link TableContentControl} from text
+		 *
+		 * @param filterText The text to parse
+		 * @return The parsed {@link TableContentControl} element
+		 */
+		public static TableContentControl parseControlElement(String filterText) {
+			ArrayList<TableContentControl> filters = new ArrayList<>();
+			filters.add(new SimpleFilter(filterText));
+			Matcher m = INT_RANGE_PATTERN.matcher(filterText);
+			if (m.matches())
+				filters.add(new IntRangeFilter(filterText, m.group("i1"), m.group("i2")));
+			else {
+				FoundDouble flt = TableContentControl.tryParseDouble(filterText, 0);
+				if (flt != null && flt.end == filterText.length()) {
+					if (flt.end == filterText.length())
+						filters.add(new NumberRangeFilter(filterText, flt.minValue, flt.maxValue));
+					else if (filterText.charAt(flt.end) == '-') {
+						FoundDouble maxFlt = TableContentControl.tryParseDouble(filterText, flt.end + 1);
+						if (maxFlt != null && maxFlt.end == filterText.length())
+							filters.add(new NumberRangeFilter(filterText, flt.minValue, maxFlt.maxValue));
+					}
+				}
+			}
+			ParsedInstant time;
+			try {
+				time = TimeUtils.parseInstant(filterText, true, false, null);
+			} catch (ParseException e) {
+				throw new IllegalStateException(e); // Shouldn't happen
+			}
+			if (time != null) {
+				if (time.toString().length() == filterText.length())
+					filters.add(new DateFilter(time));
+				else if (filterText.charAt(time.toString().length()) == '-') {
+					ParsedInstant maxTime;
+					int maxStart = time.toString().length() + 1;
+					try {
+						maxTime = TimeUtils.parseInstant(filterText.substring(maxStart), true, false, null);
+					} catch (ParseException e) {
+						throw new IllegalStateException(e); // Shouldn't happen
+					}
+					if (maxTime != null && maxStart + maxTime.toString().length() == filterText.length()) {
+						filters.add(new DateRangeFilter(filterText, time, maxTime));
+					}
+				}
+			}
+			int dashIdx = -1;
+			for (int i = 0; i < filterText.length(); i++) {
+				if (filterText.charAt(i) == '-') {
+					dashIdx = i;
+					break;
+				}
+			}
+			if (dashIdx <= 0) {
+				ParsedDuration duration;
+				try {
+					duration = TimeUtils.parseDuration(filterText, true);
+				} catch (ParseException e) {
+					duration = null;
+				}
+				if (duration != null)
+					filters.add(new DurationFilter(duration));
+			}
+			if (dashIdx > 0) {
+				try {
+					ParsedDuration minDuration = TimeUtils.parseDuration(filterText.subSequence(0, dashIdx), false);
+					ParsedDuration maxDuration = TimeUtils.parseDuration(filterText.subSequence(dashIdx + 1, filterText.length()), false);
+					filters.add(new DurationRangeFilter(filterText, minDuration, maxDuration));
+				} catch (ParseException e) {
+				}
+			}
+			int starIndex = filterText.indexOf('*');
+			if (starIndex > 0 && starIndex < filterText.length() - 1) {
+				ArrayList<String> sequence = new ArrayList<>();
+				int start = 0;
+				do {
+					if (starIndex > start)
+						sequence.add(filterText.substring(start, starIndex));
+					start = starIndex + 1;
+					starIndex = filterText.indexOf('*', start);
+				} while (starIndex >= 0);
+				if (start < filterText.length())
+					sequence.add(filterText.substring(start));
+				sequence.trimToSize();
+				filters.add(new SimplePatternFilter(sequence));
+			}
+			if (filterText.length() > 1 && filterText.charAt(0) == '\\') {
+				try {
+					Pattern pattern = Pattern.compile(filterText.substring(1),
+						Pattern.CASE_INSENSITIVE | Pattern.DOTALL | Pattern.MULTILINE);
+					filters.add(new FullPatternFilter(pattern));
+				} catch (PatternSyntaxException e) {
+					// Ignore
+				}
+			}
+			if (filters.size() == 1)
+				return filters.get(0);
+			else
+				return new OrFilter(filters.toArray(new TableContentControl[filters.size()]));
+		}
+	}
+
 	/**
-	 * Displays a frame containing a filterable table with pre-populated row and column data. For testing
+	 * Displays a frame containing a filterable table with pre-populated row and column data. For testing.
 	 *
 	 * @param args Command-line arguments, ignored
 	 */
@@ -2164,11 +2618,14 @@ public interface TableContentControl {
 				if (random.nextDouble() < 0.99)
 					row.put("B", Long.toHexString(r));
 				if (random.nextDouble() < 0.99) {
-					cal.setTimeInMillis(r);
+					cal.setTimeInMillis(Math.abs(r));
 					int year = cal.get(Calendar.YEAR);
-					if (year > 99999999)
-						year = year % 100000000;
+					cal.set(Calendar.MILLISECOND, 0);
+					if (year > 9999)
+						year = year % 10000;
 					if (year < 1000)
+						year += 1000;
+					if (year < 1970)
 						year += 1000;
 					cal.set(Calendar.YEAR, year);
 					row.put("C", dateFormat.format(cal.getTime()));
