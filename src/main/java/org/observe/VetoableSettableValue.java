@@ -117,10 +117,12 @@ public class VetoableSettableValue<T> implements SettableValue<T> {
 		try (Transaction lock = theLock == null ? Transaction.NONE : theLock.lock(true, cause)) {
 			if (!isAlive)
 				throw new UnsupportedOperationException("This value is no longer alive");
+			T oldValue = theValue;
+			if (value == oldValue && theListeners.isFiring())
+				return oldValue; // Don't throw errors on recursive updates
 			long[] oldStamp = new long[] { theStamp };
 			long newStamp = oldStamp[0] + 1;
 			theStamp = newStamp;
-			T oldValue = theValue;
 			theValue = value;
 			if (!theListeners.isEmpty()) {
 				ObservableValueEvent<T>[] evt = new ObservableValueEvent[] { createChangeEvent(oldValue, value, getCurrentCauses()) };

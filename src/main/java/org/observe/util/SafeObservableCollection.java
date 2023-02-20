@@ -261,8 +261,11 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 	 */
 	protected void handleEvent(ObservableCollectionEvent<? extends E> evt, boolean initial) {
 		if (!theFlushLock.compareAndSet(false, true)) {
-			if (isOnEventThread())
-				throw new ReentrantNotificationException(REENTRANT_EVENT_ERROR);
+			if (isOnEventThread()) {
+				if (!evt.isUpdate())
+					throw new ReentrantNotificationException(REENTRANT_EVENT_ERROR);
+				return;
+			}
 			do {
 				try {
 					Thread.sleep(5);

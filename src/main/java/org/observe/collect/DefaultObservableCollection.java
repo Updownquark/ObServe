@@ -356,6 +356,8 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 					if (thisMoved[0])
 						return;
 				}
+				if (value == old && theObservers.isFiring())
+					return; // Don't throw errors on recursive updates
 				valueEl.set(value);
 				fire(new ObservableCollectionEvent<>(getElementId(), getElementsBefore(getElementId()), CollectionChangeType.set,
 					false, old, value, theLock.getCurrentCauses()));

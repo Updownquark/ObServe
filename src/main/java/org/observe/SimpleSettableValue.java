@@ -102,6 +102,8 @@ public class SimpleSettableValue<T> implements SettableValue<T> {
 			throw new IllegalArgumentException(accept);
 		try (Transaction t = theLock == null ? Transaction.NONE : theLock.lock(true, cause)) {
 			T old = theValue;
+			if (value == old && theEventer.isEventing())
+				return old; // Don't throw errors on recursive updates
 			theStamp++;
 			theValue = value;
 			ObservableValueEvent<T> evt = createChangeEvent(old, value, getCurrentCauses());

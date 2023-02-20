@@ -513,8 +513,11 @@ public class CollectionChangesObservable<E> extends AbstractIdentifiable impleme
 			currentCause[0] = null;
 		});
 		Subscription collSub = collection.onChange(evt -> {
-			if (isFiring)
-				throw new ReentrantNotificationException(ObservableCollection.REENTRANT_EVENT_ERROR);
+			if (isFiring) {
+				if (!evt.isUpdate())
+					throw new ReentrantNotificationException(ObservableCollection.REENTRANT_EVENT_ERROR);
+				return;
+			}
 			Causable cause = evt.getRootCausable();
 			Map<Object, Object> data = cause.onFinish(key);
 			Object newTracker = data.compute(SESSION_TRACKER_PROPERTY, (k, tracker) -> {
