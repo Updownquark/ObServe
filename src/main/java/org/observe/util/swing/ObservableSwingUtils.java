@@ -681,7 +681,8 @@ public class ObservableSwingUtils {
 			try (Transaction selT = safeSelection.lock(true, cause)) {
 				CollectionUtils.SimpleAdjustment<E, E, RuntimeException> adjustment;
 				adjustment = CollectionUtils.synchronize(safeSelection, selValues, (v1, v2) -> equivalence.elementEquals(v1, v2))//
-					.simple(LambdaUtils.identity());
+					.simple(LambdaUtils.identity())//
+					.commonUses(true, false);
 				if (safeSelection.isContentControlled())
 					adjustment.addLast();
 				adjustment.adjust();
@@ -725,6 +726,7 @@ public class ObservableSwingUtils {
 					return;
 				int selIdx = 0;
 				callbackLock[0] = true;
+				flushEQCache();
 				ListSelectionModel selModel = selectionModel.get();
 				Transaction t = safeSelection.tryLock(true, e);
 				try {
@@ -752,7 +754,7 @@ public class ObservableSwingUtils {
 			component.addPropertyChangeListener("selectionModel", selModelListener);
 		model.addListDataListener(modelListener);
 		syncSelection.accept(null);
-		CausableKey key = Causable.key((c, d) -> onEQ(() -> {
+		CausableKey key = Causable.key((c, d) -> {
 			selectionModel.get().setValueIsAdjusting(false);
 			callbackLock[0] = true;
 			try {
@@ -760,138 +762,137 @@ public class ObservableSwingUtils {
 			} finally {
 				callbackLock[0] = false;
 			}
-		}));
+		});
 		safeSelection.changes().takeUntil(until).act(evt -> {
 			if (callbackLock[0])
 				return;
 			ListSelectionModel selModel = selectionModel.get();
-			if (!selModel.getValueIsAdjusting())
-				selModel.setValueIsAdjusting(true);
-			evt.getRootCausable().onFinish(key);
-			onEQ(() -> {
-				if (callbackLock[0])
-					return;
-				callbackLock[0] = true;
-				try {
-					int intervalStart = -1;
-					switch (evt.type) {
-					case add:
-						for (int i = 0; i < model.getSize(); i++) {
-							if (selModel.isSelectedIndex(i)) {
-								if (intervalStart >= 0) {
-									selModel.addSelectionInterval(intervalStart, i - 1);
-									intervalStart = -1;
-								}
-								continue;
-							}
-							boolean added = false;
-							for (E value : evt.getValues()) {
-								if (equivalence.elementEquals(model.getElementAt(i), value)) {
-									added = true;
-									break;
-								}
-							}
-							if (added) {
-								if (intervalStart < 0)
-									intervalStart = i;
-							} else if (intervalStart >= 0) {
+			if (!evt.isUpdate()) {
+				if (!selModel.getValueIsAdjusting())
+					selModel.setValueIsAdjusting(true);
+				evt.getRootCausable().onFinish(key);
+			}
+			flushEQCache();
+			callbackLock[0] = true;
+			try {
+				int intervalStart = -1;
+				switch (evt.type) {
+				case add:
+					for (int i = 0; i < model.getSize(); i++) {
+						if (selModel.isSelectedIndex(i)) {
+							if (intervalStart >= 0) {
 								selModel.addSelectionInterval(intervalStart, i - 1);
 								intervalStart = -1;
 							}
+							continue;
 						}
-						if (intervalStart >= 0)
-							selModel.addSelectionInterval(intervalStart, model.getSize() - 1);
-						break;
-					case remove:
-						for (int i = model.getSize() - 1; i >= 0; i--) {
-							if (!selModel.isSelectedIndex(i)) {
-								if (intervalStart >= 0) {
-									selModel.removeSelectionInterval(i + 1, intervalStart);
-									intervalStart = -1;
-								}
-								continue;
-							}
-							boolean removed = false;
-							for (E value : evt.getValues()) {
-								if (equivalence.elementEquals(model.getElementAt(i), value)) {
-									removed = true;
-									break;
-								}
-							}
-							if (removed) {
-								if (intervalStart < 0)
-									intervalStart = i;
-							} else if (intervalStart >= 0) {
-								selModel.removeSelectionInterval(i + 1, intervalStart);
-								intervalStart = -1;
+						boolean added = false;
+						for (E value : evt.getValues()) {
+							if (equivalence.elementEquals(model.getElementAt(i), value)) {
+								added = true;
+								break;
 							}
 						}
-						if (intervalStart >= 0)
-							selModel.removeSelectionInterval(0, intervalStart);
-						break;
-					case set:
-						if (evt.getOldValues().equals(evt.getValues()))
-							break; // Not relevant
-						// Remove old values
-						for (int i = model.getSize() - 1; i >= 0; i--) {
-							if (!selModel.isSelectedIndex(i)) {
-								if (intervalStart >= 0) {
-									selModel.removeSelectionInterval(i + 1, intervalStart);
-									intervalStart = -1;
-								}
-								continue;
-							}
-							boolean removed = false;
-							for (E value : evt.getOldValues()) {
-								if (!evt.getValues().contains(value) && equivalence.elementEquals(model.getElementAt(i), value)) {
-									removed = true;
-									break;
-								}
-							}
-							if (removed) {
-								if (intervalStart < 0)
-									intervalStart = i;
-							} else if (intervalStart >= 0) {
-								selModel.removeSelectionInterval(i + 1, intervalStart);
-								intervalStart = -1;
-							}
+						if (added) {
+							if (intervalStart < 0)
+								intervalStart = i;
+						} else if (intervalStart >= 0) {
+							selModel.addSelectionInterval(intervalStart, i - 1);
+							intervalStart = -1;
 						}
-						if (intervalStart >= 0)
-							selModel.removeSelectionInterval(0, intervalStart);
-
-						// Add new values
-						intervalStart = -1;
-						for (int i = 0; i < model.getSize(); i++) {
-							if (selModel.isSelectedIndex(i)) {
-								if (intervalStart >= 0) {
-									selModel.addSelectionInterval(intervalStart, i - 1);
-									intervalStart = -1;
-								}
-								continue;
-							}
-							boolean added = false;
-							for (E value : evt.getValues()) {
-								if (!evt.getOldValues().contains(value) && equivalence.elementEquals(model.getElementAt(i), value)) {
-									added = true;
-									break;
-								}
-							}
-							if (added) {
-								if (intervalStart < 0)
-									intervalStart = i;
-							} else if (intervalStart >= 0) {
-								selModel.addSelectionInterval(intervalStart, i - 1);
-								intervalStart = -1;
-							}
-						}
-						if (intervalStart >= 0)
-							selModel.addSelectionInterval(intervalStart, model.getSize() - 1);
-						break;
 					}
-				} finally {
-					callbackLock[0] = false;
+					if (intervalStart >= 0)
+						selModel.addSelectionInterval(intervalStart, model.getSize() - 1);
+					break;
+				case remove:
+					for (int i = model.getSize() - 1; i >= 0; i--) {
+						if (!selModel.isSelectedIndex(i)) {
+							if (intervalStart >= 0) {
+								selModel.removeSelectionInterval(i + 1, intervalStart);
+								intervalStart = -1;
+							}
+							continue;
+						}
+						boolean removed = false;
+						for (E value : evt.getValues()) {
+							if (equivalence.elementEquals(model.getElementAt(i), value)) {
+								removed = true;
+								break;
+							}
+						}
+						if (removed) {
+							if (intervalStart < 0)
+								intervalStart = i;
+						} else if (intervalStart >= 0) {
+							selModel.removeSelectionInterval(i + 1, intervalStart);
+							intervalStart = -1;
+						}
+					}
+					if (intervalStart >= 0)
+						selModel.removeSelectionInterval(0, intervalStart);
+					break;
+				case set:
+					if (evt.getOldValues().equals(evt.getValues()))
+						break; // Not relevant
+					// Remove old values
+					for (int i = model.getSize() - 1; i >= 0; i--) {
+						if (!selModel.isSelectedIndex(i)) {
+							if (intervalStart >= 0) {
+								selModel.removeSelectionInterval(i + 1, intervalStart);
+								intervalStart = -1;
+							}
+							continue;
+						}
+						boolean removed = false;
+						for (E value : evt.getOldValues()) {
+							if (!evt.getValues().contains(value) && equivalence.elementEquals(model.getElementAt(i), value)) {
+								removed = true;
+								break;
+							}
+						}
+						if (removed) {
+							if (intervalStart < 0)
+								intervalStart = i;
+						} else if (intervalStart >= 0) {
+							selModel.removeSelectionInterval(i + 1, intervalStart);
+							intervalStart = -1;
+						}
+					}
+					if (intervalStart >= 0)
+						selModel.removeSelectionInterval(0, intervalStart);
+
+					// Add new values
+					intervalStart = -1;
+					for (int i = 0; i < model.getSize(); i++) {
+						if (selModel.isSelectedIndex(i)) {
+							if (intervalStart >= 0) {
+								selModel.addSelectionInterval(intervalStart, i - 1);
+								intervalStart = -1;
+							}
+							continue;
+						}
+						boolean added = false;
+						for (E value : evt.getValues()) {
+							if (!evt.getOldValues().contains(value) && equivalence.elementEquals(model.getElementAt(i), value)) {
+								added = true;
+								break;
+							}
+						}
+						if (added) {
+							if (intervalStart < 0)
+								intervalStart = i;
+						} else if (intervalStart >= 0) {
+							selModel.addSelectionInterval(intervalStart, i - 1);
+							intervalStart = -1;
+						}
+					}
+					if (intervalStart >= 0)
+						selModel.addSelectionInterval(intervalStart, model.getSize() - 1);
+					break;
 				}
-			});
+			} finally {
+				callbackLock[0] = false;
+			}
 		});
 
 		until.take(1).act(__ -> onEQ(() -> {
@@ -1013,49 +1014,47 @@ public class ObservableSwingUtils {
 		safeSelection.changes().takeUntil(until).act(evt -> {
 			if (callbackLock[0] || (model instanceof ObservableListModel && ((ObservableListModel<?>) model).getWrapped().isEventing()))
 				return;
-			onEQ(() -> {
-				flushEQCache();
-				callbackLock[0] = true;
-				try {
-					ListSelectionModel selModel = selectionModel.get();
-					if (evt.getNewValue() == null) {
-						selModel.clearSelection();
-						return;
-					} else if (evt.getOldValue() == evt.getNewValue()//
-						&& !selModel.isSelectionEmpty() && selModel.getMinSelectionIndex() == selModel.getMaxSelectionIndex()//
-						&& equivalence.elementEquals(model.getElementAt(selModel.getMinSelectionIndex()), evt.getNewValue())) {
-						if (update != null) {
-							Causable cause = Causable.simpleCause(Causable.broken(evt));
-							Transaction t2 = null;
-							try (Transaction t = cause.use()) {
-								t2 = model instanceof ObservableListModel
-									? ((ObservableListModel<?>) model).getWrapped().tryLock(true, cause) : Transaction.NONE;
-								if (t2 != null)
-									update.update(selModel.getMaxSelectionIndex(), cause);
-							} finally {
-								if (t2 != null)
-									t2.close();
-							}
-						}
-						return;
-					}
-					for (int i = 0; i < model.getSize(); i++) {
-						if (equivalence.elementEquals(model.getElementAt(i), evt.getNewValue())) {
-							selModel.setSelectionInterval(i, i);
-							Rectangle rowBounds = null;
-							if (component instanceof JTable)
-								rowBounds = ((JTable) component).getCellRect(((JTable) component).convertRowIndexToModel(i), 0, false);
-							else if (component instanceof JList)
-								rowBounds = ((JList<?>) component).getCellBounds(i, i);
-							if (rowBounds != null)
-								((JComponent) component).scrollRectToVisible(rowBounds);
-							break;
+			flushEQCache();
+			callbackLock[0] = true;
+			try {
+				ListSelectionModel selModel = selectionModel.get();
+				if (evt.getNewValue() == null) {
+					selModel.clearSelection();
+					return;
+				} else if (evt.getOldValue() == evt.getNewValue()//
+					&& !selModel.isSelectionEmpty() && selModel.getMinSelectionIndex() == selModel.getMaxSelectionIndex()//
+					&& equivalence.elementEquals(model.getElementAt(selModel.getMinSelectionIndex()), evt.getNewValue())) {
+					if (update != null) {
+						Causable cause = Causable.simpleCause(Causable.broken(evt));
+						Transaction t2 = null;
+						try (Transaction t = cause.use()) {
+							t2 = model instanceof ObservableListModel ? ((ObservableListModel<?>) model).getWrapped().tryLock(true, cause)
+								: Transaction.NONE;
+							if (t2 != null)
+								update.update(selModel.getMaxSelectionIndex(), cause);
+						} finally {
+							if (t2 != null)
+								t2.close();
 						}
 					}
-				} finally {
-					callbackLock[0] = false;
+					return;
 				}
-			});
+				for (int i = 0; i < model.getSize(); i++) {
+					if (equivalence.elementEquals(model.getElementAt(i), evt.getNewValue())) {
+						selModel.setSelectionInterval(i, i);
+						Rectangle rowBounds = null;
+						if (component instanceof JTable)
+							rowBounds = ((JTable) component).getCellRect(((JTable) component).convertRowIndexToModel(i), 0, false);
+						else if (component instanceof JList)
+							rowBounds = ((JList<?>) component).getCellBounds(i, i);
+						if (rowBounds != null)
+							((JComponent) component).scrollRectToVisible(rowBounds);
+						break;
+					}
+				}
+			} finally {
+				callbackLock[0] = false;
+			}
 		});
 
 		until.take(1).act(__ -> {
