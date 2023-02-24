@@ -509,7 +509,7 @@ public class ObservableTableModel<R> implements TableModel {
 					boolean rowHovered = ml.getHoveredRow() == row;
 					boolean cellHovered = rowHovered && ml.getHoveredColumn() == column;
 					ModelCell<R, C> cell = new ModelCell.Default<>(() -> rowValue, colValue, row, column, selected, selected,
-						rowHovered, cellHovered, true, true);
+						rowHovered, cellHovered, true, true, null);
 					return new KeyTypeStruct<>(cell, category.getKeyListener());
 				}
 			};
@@ -582,7 +582,7 @@ public class ObservableTableModel<R> implements TableModel {
 			boolean rowHovered = theHoveredRow.getAsInt() == row;
 			boolean cellHovered = rowHovered && theHoveredColumn.getAsInt() == column;
 			ModelCell<R, C> cell = new ModelCell.Default<>(() -> theModel.getRow(modelRow), (C) value, //
-				row, column, isSelected, hasFocus, rowHovered, cellHovered, true, true);
+				row, column, isSelected, hasFocus, rowHovered, cellHovered, true, true, null);
 			Component c = renderer.getCellRendererComponent(table, cell,
 				() -> theContext == null ? null : theContext.getEmphaticRegions(modelRow, modelColumn));
 			theLastRender = c;
@@ -856,7 +856,7 @@ public class ObservableTableModel<R> implements TableModel {
 				if (getRowListeners().isEmpty())
 					return new MouseClickStruct<>(null, null, null);
 				boolean selected = isRowSelected(row);
-				return new MouseClickStruct<>(new ModelRow.Default<>(() -> rowValue, row, selected, selected, true, true, true), null,
+				return new MouseClickStruct<>(new ModelRow.Default<>(() -> rowValue, row, selected, selected, true, true, true, null), null,
 					null);
 			}
 			CategoryRenderStrategy<R, C> category = (CategoryRenderStrategy<R, C>) getColumn(column);
@@ -864,7 +864,7 @@ public class ObservableTableModel<R> implements TableModel {
 				if (getRowListeners().isEmpty())
 					return new MouseClickStruct<>(null, null, null);
 				boolean selected = isRowSelected(row);
-				return new MouseClickStruct<>(new ModelRow.Default<>(() -> rowValue, row, selected, selected, true, true, true), null,
+				return new MouseClickStruct<>(new ModelRow.Default<>(() -> rowValue, row, selected, selected, true, true, true, null), null,
 					null);
 			}
 
@@ -879,12 +879,12 @@ public class ObservableTableModel<R> implements TableModel {
 				if (getRowListeners().isEmpty())
 					return new MouseClickStruct<>(null, null, null);
 				boolean selected = isRowSelected(row);
-				return new MouseClickStruct<>(new ModelRow.Default<>(() -> rowValue, row, selected, selected, true, true, true), null,
+				return new MouseClickStruct<>(new ModelRow.Default<>(() -> rowValue, row, selected, selected, true, true, true, null), null,
 					null);
 			}
 			boolean selected = isCellSelected(row, column);
 			ModelCell<R, C> cell = new ModelCell.Default<>(() -> rowValue, colValue, row, column, selected, selected, true, true, true,
-				true);
+				true, null);
 			return new MouseClickStruct<>(cell, cell, category);
 		}
 	}

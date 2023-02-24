@@ -1453,7 +1453,7 @@ implements TableBuilder<R, P> {
 					R row = change.newValue;
 					Object cellValue = column.getCategoryValue(row);
 					ModelCell<R, Object> cell = new ModelCell.Default<>(() -> row, cellValue, change.index, columnIndex,
-						getEditor().isRowSelected(change.index), false, false, false, false, true);
+						getEditor().isRowSelected(change.index), false, false, false, false, true, null);
 					Component render = ((CategoryRenderStrategy<R, Object>) column).getRenderer().getCellRendererComponent(getEditor(),
 						cell, CellRenderContext.DEFAULT);
 					int min = render.getMinimumSize().width;
@@ -1471,7 +1471,7 @@ implements TableBuilder<R, P> {
 				for (R row : theFilteredRows) {
 					Object cellValue = column.getCategoryValue(row);
 					ModelCell<R, Object> cell = new ModelCell.Default<>(() -> row, cellValue, r, columnIndex, getEditor().isRowSelected(r),
-						false, false, false, false, true);
+						false, false, false, false, true, null);
 					Component render = ((CategoryRenderStrategy<R, Object>) column).getRenderer().getCellRendererComponent(getEditor(),
 						cell, CellRenderContext.DEFAULT);
 					int min = render.getMinimumSize().width;
@@ -1702,7 +1702,7 @@ implements TableBuilder<R, P> {
 				return false;
 			boolean selected = theTable.isRowSelected(rowIndex);
 			ModelCell<R, C> cell = new ModelCell.Default<>(rowEl::get, oldValue, rowIndex, theColumns.indexOf(column), selected, selected,
-				false, false, false, true);
+				false, false, false, true, null);
 			if (!column.getMutator().getDragAccepter().canAccept(cell, support, false))
 				return false;
 			BetterList<C> newColValue;

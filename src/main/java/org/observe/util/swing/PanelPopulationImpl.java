@@ -353,7 +353,7 @@ class PanelPopulationImpl {
 			else
 				observableValues = ObservableCollection.of(value.getType(), availableValues);
 
-			SimpleComboEditor<F, ?> fieldPanel = new SimpleComboEditor<>(fieldName, new JComboBox<>(), getUntil());
+			SimpleComboEditor<F, ?> fieldPanel = new SimpleComboEditor<>(fieldName, new JComboBox<>(), value, getUntil());
 			if (modify != null)
 				modify.accept(fieldPanel);
 			ObservableComboBoxModel.ComboHookup hookup = ObservableComboBoxModel.comboFor(fieldPanel.getEditor(), fieldPanel.getTooltip(),
@@ -1603,9 +1603,11 @@ class PanelPopulationImpl {
 	implements ComboEditor<F, P> {
 		private Function<? super F, String> theValueTooltip;
 		private IntSupplier theHoveredItem;
+		private final SettableValue<F> theSelection;
 
-		SimpleComboEditor(String fieldName, JComboBox<F> editor, Observable<?> until) {
+		SimpleComboEditor(String fieldName, JComboBox<F> editor, SettableValue<F> selection, Observable<?> until) {
 			super(fieldName, editor, until);
+			theSelection = selection;
 		}
 
 		void setHoveredItem(IntSupplier hoveredItem) {
@@ -1620,7 +1622,8 @@ class PanelPopulationImpl {
 					boolean cellHasFocus) {
 					boolean hovered = theHoveredItem != null && theHoveredItem.getAsInt() == index;
 					return renderer.getCellRendererComponent(list,
-						new ModelCell.Default<>(() -> value, value, index, 0, isSelected, cellHasFocus, hovered, hovered, true, true),
+						new ModelCell.Default<>(() -> value, value, index, 0, isSelected, cellHasFocus, hovered, hovered, true, true, //
+							theSelection.isAcceptable(value)),
 						CellRenderContext.DEFAULT);
 				}
 			});

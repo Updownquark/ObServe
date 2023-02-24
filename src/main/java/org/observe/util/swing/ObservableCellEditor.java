@@ -488,7 +488,7 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 			}
 			if (category.getMutator().getEditorTooltip() != null || category.getTooltipFn() != null) {
 				ModelCell<E, E> cell = new ModelCell.Default<>(() -> modelValue, modelValue, rowIndex, 0, selected, selected, hovered,
-					hovered, true, true);
+					hovered, true, true, null);
 				if (category.getMutator().getEditorTooltip() != null)
 					tooltip = category.getMutator().getEditorTooltip().apply(cell);
 				else
@@ -496,10 +496,10 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 			} else
 				tooltip = null;
 			valueTooltip = c -> theValueTooltip
-				.apply(new ModelCell.Default<>(() -> modelValue, c, rowIndex, 0, selected, selected, hovered, hovered, true, true));
+				.apply(new ModelCell.Default<>(() -> modelValue, c, rowIndex, 0, selected, selected, hovered, hovered, true, true, null));
 
 			theEditingCell = new ModelCell.Default<>(() -> modelValue, (C) modelValue, rowIndex, 0, selected, selected, hovered, hovered,
-				true, true);
+				true, true, null);
 			if (theEditorValue.get() != modelValue)
 				theEditorValue.set((C) modelValue, null);
 			if (theDecorator != null) {
@@ -543,7 +543,7 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 				};
 				if (category.getMutator().getEditorTooltip() != null || category.getTooltipFn() != null) {
 					ModelCell<M, C> cell = new ModelCell.Default<>(() -> modelValue, (C) value, row, column, isSelected, isSelected,
-						rowHovered, cellHovered, true, true);
+						rowHovered, cellHovered, true, true, null);
 					if (category.getMutator().getEditorTooltip() != null)
 						tooltip = category.getMutator().getEditorTooltip().apply(cell);
 					else
@@ -553,7 +553,7 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 				if (theValueTooltip != null) {
 					valueTooltip = c -> theValueTooltip
 						.apply(new ModelCell.Default<>(() -> modelValue, c, row, column, isSelected, isSelected, rowHovered, cellHovered,
-							true, true));
+							true, true, null));
 				} else
 					valueTooltip = null;
 			} else {
@@ -563,7 +563,7 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 				valueTooltip = null;
 			}
 			theEditingCell = new ModelCell.Default<>(() -> modelValue, (C) value, row, column, isSelected, isSelected, rowHovered,
-				cellHovered, true, true);
+				cellHovered, true, true, null);
 			if (theEditorValue.get() != value)
 				theEditorValue.set((C) value, null);
 			if (theDecorator != null) {
@@ -589,7 +589,7 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 			renderingValue(value, isSelected, hovered, hovered, expanded, leaf, row, 0);
 			// TODO See if there's a way to get the information needed for the value filter and tooltip somewhere
 			theEditingCell = new ModelCell.Default<>(() -> (M) value, (C) value, row, 0, isSelected, isSelected, hovered, hovered, expanded,
-				leaf);
+				leaf, null);
 			theEditorValue.set((C) value, null);
 			if (theDecorator != null) {
 				ComponentDecorator cd = new ComponentDecorator();

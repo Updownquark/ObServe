@@ -148,22 +148,6 @@ public interface ObservableCellRenderer<M, C> {
 		return newText.toString();
 	}
 
-	public static abstract class SimpleObservableCellRenderer<M, C, R extends Component> implements ObservableCellRenderer<M, C> {
-		private final R theComponent;
-
-		public SimpleObservableCellRenderer(R component) {
-			theComponent = component;
-		}
-
-		@Override
-		public Component getCellRendererComponent(Component parent, ModelCell<? extends M, ? extends C> cell, CellRenderContext ctx) {
-			render(theComponent, parent, cell, ctx);
-			return theComponent;
-		}
-
-		protected abstract void render(R component, Component parent, ModelCell<? extends M, ? extends C> cell, CellRenderContext ctx);
-	}
-
 	public static abstract class AbstractObservableCellRenderer<M, C> implements ObservableCellRenderer<M, C> {
 		private CellDecorator<M, C> theDecorator;
 		private ComponentDecorator theComponentDecorator;
@@ -184,7 +168,11 @@ public interface ObservableCellRenderer<M, C> {
 				theDecorator.decorate(cell, theComponentDecorator);
 				theRevert = theComponentDecorator.decorate(c);
 			}
-			return tryEmphasize(c, ctx);
+			c = tryEmphasize(c, ctx);
+			c.setEnabled(cell.isEnabled() == null);
+			if (cell.isEnabled() != null)
+				c.setEnabled(false);
+			return c;
 		}
 
 		protected abstract Component renderCell(Component parent, ModelCell<? extends M, ? extends C> cell, CellRenderContext ctx);
@@ -312,6 +300,7 @@ public interface ObservableCellRenderer<M, C> {
 				theDecorator.decorate(cell, theComponentDecorator);
 				theRevert = theComponentDecorator.decorate(cb);
 			}
+			cb.setEnabled(cell.isEnabled() == null);
 			return cb;
 		}
 	}
@@ -358,6 +347,7 @@ public interface ObservableCellRenderer<M, C> {
 				theDecorator.decorate(cell, theComponentDecorator);
 				theRevert = theComponentDecorator.decorate(button);
 			}
+			button.setEnabled(cell.isEnabled() == null);
 			return button;
 		}
 	}
@@ -374,7 +364,7 @@ public interface ObservableCellRenderer<M, C> {
 		}
 
 		protected void decorateLink() {
-			decorate((cell, deco) -> deco.withForeground(Color.blue).underline());
+			decorate((cell, deco) -> deco.withForeground(cell.isEnabled() == null ? Color.blue : Color.gray).underline());
 		}
 	}
 

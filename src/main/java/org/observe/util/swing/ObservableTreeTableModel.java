@@ -397,7 +397,7 @@ public class ObservableTreeTableModel<T> implements TreeTableModel {
 						boolean cellHovered = rowHovered && ml.getHoveredColumn() == column;
 						table.setToolTipText(category.getTooltip(new ModelCell.Default<>(() -> rowValue,
 							category.getCategoryValue(rowValue), row, column, selected, selected, rowHovered, cellHovered, true,
-							model.isLeaf(rowValue))));
+							model.isLeaf(rowValue), null)));
 					}
 				}
 			};
@@ -473,7 +473,7 @@ public class ObservableTreeTableModel<T> implements TreeTableModel {
 					boolean rowHovered = ml.getHoveredRow() == row;
 					boolean cellHovered = rowHovered && ml.getHoveredColumn() == column;
 					ModelCell<R, C> cell = new ModelCell.Default<>(() -> rowValue, colValue, row, column, selected, selected,
-						rowHovered, cellHovered, true, true);
+						rowHovered, cellHovered, true, true, null);
 					return new KeyTypeStruct<>(cell, category.getKeyListener());
 				}
 			};
@@ -578,7 +578,7 @@ public class ObservableTreeTableModel<T> implements TreeTableModel {
 					else
 						model = (ObservableTreeTableModel<R>) ((JTree) component).getModel();
 					return model.getTreeModel().getBetterPath(modelValue, false);
-				}, (C) value, row, column, isSelected, hasFocus, rowHovered, cellHovered, expanded, leaf);
+				}, (C) value, row, column, isSelected, hasFocus, rowHovered, cellHovered, expanded, leaf, null);
 			Component c = renderer.getCellRendererComponent(component, cell,
 				() -> theContext == null ? null : theContext.getEmphaticRegions(modelRow, modelColumn));
 			theLastRender = c;

@@ -15,8 +15,8 @@ public interface ModelCell<R, C> extends ModelRow<R> {
 		private final boolean isCellHovered;
 
 		public Default(Supplier<? extends M> modelValue, C cellValue, int rowIndex, int columnIndex, boolean selected, boolean focused,
-			boolean rowHovered, boolean cellHovered, boolean expanded, boolean leaf) {
-			super(modelValue, rowIndex, selected, focused, rowHovered, expanded, leaf);
+			boolean rowHovered, boolean cellHovered, boolean expanded, boolean leaf, String enabled) {
+			super(modelValue, rowIndex, selected, focused, rowHovered, expanded, leaf, enabled);
 			theCellValue = cellValue;
 			theColumnIndex = columnIndex;
 			isCellHovered = cellHovered;

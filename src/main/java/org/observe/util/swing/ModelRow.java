@@ -12,6 +12,7 @@ public interface ModelRow<R> {
 	boolean isRowHovered();
 	boolean isExpanded();
 	boolean isLeaf();
+	String isEnabled();
 
 	public static class Default<M> implements ModelRow<M> {
 		private final Supplier<? extends M> theModelValue;
@@ -21,9 +22,10 @@ public interface ModelRow<R> {
 		private final boolean isRowHovered;
 		private final boolean isExpanded;
 		private final boolean isLeaf;
+		private final String isEnabled;
 
 		public Default(Supplier<? extends M> modelValue, int rowIndex, boolean selected, boolean focused, boolean rowHovered,
-			boolean expanded, boolean leaf) {
+			boolean expanded, boolean leaf, String enabled) {
 			theModelValue = modelValue;
 			theRowIndex = rowIndex;
 			isSelected = selected;
@@ -31,6 +33,7 @@ public interface ModelRow<R> {
 			isRowHovered = rowHovered;
 			isExpanded = expanded;
 			isLeaf = leaf;
+			isEnabled = enabled;
 		}
 
 		@Override
@@ -66,6 +69,11 @@ public interface ModelRow<R> {
 		@Override
 		public boolean isLeaf() {
 			return isLeaf;
+		}
+
+		@Override
+		public String isEnabled() {
+			return isEnabled;
 		}
 	}
 }

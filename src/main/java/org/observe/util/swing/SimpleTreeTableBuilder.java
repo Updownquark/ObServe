@@ -706,7 +706,7 @@ implements TreeTableEditor<F, P> {
 				boolean selected = theTable.isRowSelected(rowIndex);
 				ModelCell<BetterList<F>, C> cell = new ModelCell.Default<>(() -> BetterCollections.unmodifiableList(parentPath), oldValue,
 					rowIndex, theColumns.indexOf(column), selected, selected, false, false, theTable.isExpanded(rowIndex),
-					theLeafTest.test(rowEl.get()));
+					theLeafTest.test(rowEl.get()), null);
 				if (!column.getMutator().getDragAccepter().canAccept(cell, support, false))
 					return false;
 				BetterList<C> newColValue;
@@ -751,7 +751,7 @@ implements TreeTableEditor<F, P> {
 					return false;
 				boolean selected = theTable.isRowSelected(rowIndex);
 				ModelCell<BetterList<F>, C> cell = new ModelCell.Default<>(() -> root, oldValue, rowIndex, theColumns.indexOf(column),
-					selected, selected, false, false, theTable.isExpanded(rowIndex), theLeafTest.test(root.getLast()));
+					selected, selected, false, false, theTable.isExpanded(rowIndex), theLeafTest.test(root.getLast()), null);
 				if (!column.getMutator().getDragAccepter().canAccept(cell, support, false))
 					return false;
 				BetterList<C> newColValue;
