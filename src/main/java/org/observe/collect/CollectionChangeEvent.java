@@ -24,18 +24,22 @@ public class CollectionChangeEvent<E> extends Causable.AbstractCausable {
 		public final E oldValue;
 		/** The index of the element in the collection */
 		public final int index;
+		/** The movement operation this change is a part of */
+		public final CollectionElementMove movement;
 
 		/**
 		 * @param value The new value of the element
 		 * @param oldValue The old value of the element, if the event is of type {@link CollectionChangeType#set}
 		 * @param index The index of the element in the collection
+		 * @param movement The movement operation this change is a part of
 		 */
-		public ElementChange(E value, E oldValue, int index) {
+		public ElementChange(E value, E oldValue, int index, CollectionElementMove movement) {
 			if (index < 0)
 				throw new IndexOutOfBoundsException("" + index);
 			this.newValue = value;
 			this.oldValue = oldValue;
 			this.index = index;
+			this.movement = movement;
 		}
 
 		@Override
@@ -113,6 +117,27 @@ public class CollectionChangeEvent<E> extends Causable.AbstractCausable {
 				return elements.get(elements.size() - index - 1);
 			}
 		};
+	}
+
+	/**
+	 * @param index The index in the collection to get the change for
+	 * @return The change in this event to the given element, or null if no change to the given element is recorded in this event
+	 */
+	public ElementChange<E> getChangeFor(int index) {
+		int minIdx = 0, maxIdx = elements.size() - 1;
+		while (minIdx < maxIdx) {
+			int changeIdx = (minIdx + maxIdx) / 2;
+			if (index < elements.get(changeIdx).index)
+				maxIdx = changeIdx - 1;
+			else if (index > elements.get(changeIdx).index)
+				minIdx = changeIdx + 1;
+			else
+				return elements.get(changeIdx);
+		}
+		if (minIdx == maxIdx && elements.get(minIdx).index == index)
+			return elements.get(minIdx);
+		else
+			return null;
 	}
 
 	/** @return The indexes of this change's {@link #elements} */

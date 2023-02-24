@@ -3,6 +3,7 @@ package org.observe.config;
 import java.util.function.Consumer;
 
 import org.observe.Observable;
+import org.observe.collect.CollectionElementMove;
 import org.qommons.Identifiable;
 import org.qommons.Lockable.CoreId;
 import org.qommons.QommonsUtils;
@@ -88,7 +89,7 @@ public class UnmodifiableObservableConfig extends AbstractObservableConfig {
 	@Override
 	public Observable<ObservableConfigEvent> watch(ObservableConfigPath path) {
 		return theWrapped.watch(path).map(evt -> {
-			return new ObservableConfig.ObservableConfigEvent(evt.changeType, evt.isMove, evt.eventTarget.unmodifiable(), evt.oldName,
+			return new ObservableConfig.ObservableConfigEvent(evt.changeType, evt.movement, evt.eventTarget.unmodifiable(), evt.oldName,
 				evt.oldValue, //
 				QommonsUtils.map2(evt.relativePath, ObservableConfig::unmodifiable), evt);
 		});
@@ -150,12 +151,13 @@ public class UnmodifiableObservableConfig extends AbstractObservableConfig {
 	}
 
 	@Override
-	protected void addChild(AbstractObservableConfig child, ObservableConfig after, ObservableConfig before, boolean first, boolean move) {
+	protected void addChild(AbstractObservableConfig child, ObservableConfig after, ObservableConfig before, boolean first,
+		CollectionElementMove move) {
 		throw new IllegalStateException("Should not be here");
 	}
 
 	@Override
-	protected void doRemove(boolean move) {
+	protected void doRemove(CollectionElementMove move) {
 		throw new IllegalStateException("Should not be here");
 	}
 

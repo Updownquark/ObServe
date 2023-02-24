@@ -1,6 +1,7 @@
 package org.observe.assoc;
 
 import org.observe.collect.CollectionChangeType;
+import org.observe.collect.CollectionElementMove;
 import org.observe.collect.ObservableCollectionEvent;
 import org.qommons.collect.ElementId;
 
@@ -18,8 +19,9 @@ public class ObservableMapEvent<K, V> extends ObservableCollectionEvent<V> {
 	 * @param elementId The element ID of the entry in the map entry's value collection that was added/removed changed
 	 * @param index The index in the entry's value collection of the element that was added/removed/changed
 	 * @param type The type of the change (addition/removal/change)
-	 * @param move Whether this event represents either the removal of an entry in preparation for a move, or the re-addition of an entry
-	 *        that was just removed in the same move operation
+	 * @param movement If this event represents either the removal of an element in preparation for a move, or the re-addition of an element
+	 *        that was just removed in the same move operation, this will be an identifier that links the two operations. A movement
+	 *        operation happens in a single transaction on a single thread.
 	 * @param oldKey The previous key. This will only be different from <code>key</code> if this event represents a modification to a key
 	 *        value that does not affect the contents of the key's values. In this case, {@link #getIndex()} will be -1
 	 * @param key The key under which a value was added/removed/changed
@@ -28,8 +30,8 @@ public class ObservableMapEvent<K, V> extends ObservableCollectionEvent<V> {
 	 * @param cause The cause of the change
 	 */
 	public ObservableMapEvent(ElementId elementId, int index, CollectionChangeType type,
-		boolean move, K oldKey, K key, V oldValue, V newValue, Object cause) {
-		super(elementId, index, type, move, oldValue, newValue, cause);
+		CollectionElementMove movement, K oldKey, K key, V oldValue, V newValue, Object cause) {
+		super(elementId, index, type, movement, oldValue, newValue, cause);
 		theOldKey = oldKey;
 		theKey = key;
 	}

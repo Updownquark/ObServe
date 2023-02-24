@@ -9,6 +9,7 @@ import java.util.Objects;
 import java.util.WeakHashMap;
 import java.util.function.Consumer;
 
+import org.observe.collect.CollectionElementMove;
 import org.qommons.Lockable;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterList;
@@ -74,11 +75,11 @@ public abstract class AbstractObservableConfig implements ObservableConfig {
 	@Override
 	public ObservableConfig addChild(ObservableConfig after, ObservableConfig before, boolean first, String name,
 		Consumer<ObservableConfig> preAddMod) {
-		return addChild(after, before, first, name, preAddMod, false);
+		return addChild(after, before, first, name, preAddMod, null);
 	}
 
 	private AbstractObservableConfig addChild(ObservableConfig after, ObservableConfig before, boolean first, String name,
-		Consumer<? super AbstractObservableConfig> preAddMod, boolean move) {
+		Consumer<? super AbstractObservableConfig> preAddMod, CollectionElementMove move) {
 		try (Transaction t = lock(true, null)) {
 			AbstractObservableConfig child = createChild(name);
 			child.theParent = this;
@@ -98,7 +99,7 @@ public abstract class AbstractObservableConfig implements ObservableConfig {
 	 * @param move Whether the addition is the last step in a move operation of a child from one position in this parent to another
 	 */
 	protected abstract void addChild(AbstractObservableConfig child, ObservableConfig after, ObservableConfig before, boolean first,
-		boolean move);
+		CollectionElementMove move);
 
 	@Override
 	public ObservableConfig moveChild(ObservableConfig child, ObservableConfig after, ObservableConfig before, boolean first,
@@ -109,10 +110,14 @@ public abstract class AbstractObservableConfig implements ObservableConfig {
 			if (!child.getParentChildRef().isPresent())
 				throw new NoSuchElementException("Config has already been removed");
 
-			((AbstractObservableConfig) child)._remove(true);
+			CollectionElementMove move = new CollectionElementMove();
+			((AbstractObservableConfig) child)._remove(move);
 			if (afterRemove != null)
 				afterRemove.run();
-			return addChild(after, before, first, child.getName(), newChild -> newChild._copyFrom(child, true, true), true);
+			ObservableConfig added = addChild(after, before, first, child.getName(), newChild -> newChild._copyFrom(child, true, true),
+				move);
+			move.moved();
+			return added;
 		}
 	}
 
@@ -159,7 +164,7 @@ public abstract class AbstractObservableConfig implements ObservableConfig {
 			public ElementSyncAction rightOnly(ElementSyncInput<AbstractObservableConfig, ObservableConfig> element) {
 				ObservableConfig before = element.getTargetIndex() == children.size() ? null : children.get(element.getTargetIndex());
 				return element.useValue(addChild(null, before, false, element.getRightValue().getName(),
-					newChild -> newChild._copyFrom(element.getRightValue(), removeExtras, withParsedItems), false));
+					newChild -> newChild._copyFrom(element.getRightValue(), removeExtras, withParsedItems), null));
 			}
 
 			@Override
@@ -172,10 +177,10 @@ public abstract class AbstractObservableConfig implements ObservableConfig {
 
 	@Override
 	public void remove() {
-		_remove(false);
+		_remove(null);
 	}
 
-	private void _remove(boolean move) {
+	private void _remove(CollectionElementMove move) {
 		try (Transaction t = lock(true, null)) {
 			ElementId pcr = getParentChildRef();
 			if (pcr == null || !pcr.isPresent())
@@ -183,7 +188,7 @@ public abstract class AbstractObservableConfig implements ObservableConfig {
 			doRemove(move);
 		}
 		Map<?, ?> parsedItems = theParsedItems;
-		if (parsedItems != null && !move)
+		if (parsedItems != null && move == null)
 			parsedItems.clear();
 		theParent = null;
 		_postRemove();
@@ -195,7 +200,7 @@ public abstract class AbstractObservableConfig implements ObservableConfig {
 	 * @param move Whether this is the first step in a movement operation of this child from one position to another in its parent's
 	 *        children
 	 */
-	protected abstract void doRemove(boolean move);
+	protected abstract void doRemove(CollectionElementMove move);
 
 	/** Called after a remove operation */
 	protected abstract void _postRemove();

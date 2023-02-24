@@ -3,6 +3,7 @@ package org.observe.collect;
 import java.util.Collection;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 import org.observe.Equivalence;
 import org.observe.Subscription;
@@ -42,13 +43,14 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 	private final BiFunction<ElementId, BetterCollection<?>, BetterList<ElementId>> theElementsBySource;
 	private final BiFunction<ElementId, BetterCollection<?>, BetterList<ElementId>> theSourceElements;
 	private final Equivalence<? super E> theEquivalence;
+	private final Supplier<CollectionElementMove> theMovement;
 
 	/**
 	 * @param type The type for this collection
 	 * @param list The list to hold this collection's elements
 	 */
 	public DefaultObservableCollection(TypeToken<E> type, BetterList<E> list) {
-		this(type, list, null, null, null);
+		this(type, list, null, null, null, null);
 	}
 
 	/**
@@ -63,7 +65,7 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 	DefaultObservableCollection(TypeToken<E> type, BetterList<E> list, //
 		BiFunction<ElementId, BetterCollection<?>, BetterList<ElementId>> elementsBySource,
 		BiFunction<ElementId, BetterCollection<?>, BetterList<ElementId>> sourceElements, //
-		Equivalence<? super E> equivalence) {
+		Equivalence<? super E> equivalence, Supplier<CollectionElementMove> movement) {
 		theType = type;
 		if (list instanceof ObservableCollection)
 			throw new UnsupportedOperationException("The backing for an ObservableCollection cannot be observable");
@@ -73,11 +75,20 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 		theElementsBySource = elementsBySource;
 		theSourceElements = sourceElements;
 		theEquivalence = equivalence == null ? Equivalence.DEFAULT : equivalence;
+		theMovement = movement;
 	}
 
 	/** @return This collection's backing values */
 	protected BetterList<E> getValues() {
 		return theValues;
+	}
+
+	/**
+	 * @return The current movement operation, as defined by this collection's creator
+	 * @see ObservableCollectionBuilder#withMovement(Supplier)
+	 */
+	protected CollectionElementMove getMovement() {
+		return theMovement == null ? null : theMovement.get();
 	}
 
 	@Override
@@ -223,11 +234,15 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 	public CollectionElement<E> addElement(E value, ElementId after, ElementId before, boolean first)
 		throws UnsupportedOperationException, IllegalArgumentException {
 		try (Transaction t = lock(true, null)) {
+			CollectionElementMove move = getMovement();
 			CollectionElement<E> el = theValues.addElement(value, after, before, first);
+			if (move != null)
+				move.moved();
 			if (el == null)
 				return null;
 			ObservableCollectionEvent<E> event = new ObservableCollectionEvent<>(el.getElementId(),
-				theValues.getElementsBefore(el.getElementId()), CollectionChangeType.add, false, null, value, theLock.getCurrentCauses());
+				theValues.getElementsBefore(el.getElementId()), CollectionChangeType.add, //
+				move, null, value, theLock.getCurrentCauses());
 			fire(event);
 			return el;
 		}
@@ -243,17 +258,19 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 		throws UnsupportedOperationException, IllegalArgumentException {
 		try (Transaction t = lock(true, null)) {
 			E value = theValues.getElement(valueEl).get();
+			CollectionElementMove move = new CollectionElementMove();
 			CollectionElement<E> el = theValues.move(valueEl, after, before, first, () -> {
-				ObservableCollectionEvent<E> event = new ObservableCollectionEvent<>(valueEl,
-					theValues.getElementsBefore(valueEl), CollectionChangeType.remove, true, value, value, theLock.getCurrentCauses());
+				ObservableCollectionEvent<E> event = new ObservableCollectionEvent<>(valueEl, theValues.getElementsBefore(valueEl),
+					CollectionChangeType.remove, move, value, value, theLock.getCurrentCauses());
 				fire(event);
 				if (afterRemove != null)
 					afterRemove.run();
 			});
+			move.moved();
 			if (el.getElementId().equals(valueEl))
 				return getElement(valueEl);
 			ObservableCollectionEvent<E> event = new ObservableCollectionEvent<>(el.getElementId(),
-				theValues.getElementsBefore(el.getElementId()), CollectionChangeType.add, true, null, value, theLock.getCurrentCauses());
+				theValues.getElementsBefore(el.getElementId()), CollectionChangeType.add, move, null, value, theLock.getCurrentCauses());
 			fire(event);
 			return el;
 		}
@@ -327,28 +344,28 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 					RepairOperation op = new RepairOperation(theLock.getCurrentCauses());
 					try (Transaction opT = op.use(); Transaction vt = lock(true, op)) {
 						((ValueStoredCollection<E>) theValues).repair(valueEl.getElementId(),
-							new ValueStoredCollection.RepairListener<E, Void>() {
+							new ValueStoredCollection.RepairListener<E, CollectionElementMove>() {
 							@Override
-							public Void removed(CollectionElement<E> element) {
+							public CollectionElementMove removed(CollectionElement<E> element) {
 								if (element.getElementId().equals(valueEl.getElementId()))
 									thisMoved[0] = true;
-								// We can't set the move boolean here because it's only for atomic moves
-								// --moves of a single element from one place to another.
-								// This operation may remove multiple elements before re-adding them in the appropriate position
+								CollectionElementMove move = new CollectionElementMove();
 								fire(new ObservableCollectionEvent<>(element.getElementId(),
-									theValues.getElementsBefore(element.getElementId()), CollectionChangeType.remove, false,
+									theValues.getElementsBefore(element.getElementId()), CollectionChangeType.remove, move,
 									element.get(), element.get(), op));
-								return null;
+								return move;
 							}
 
 							@Override
-							public void disposed(E oldValue, Void data) {
+							public void disposed(E oldValue, CollectionElementMove data) {
+								data.moveFinished();
 							}
 
 							@Override
-							public void transferred(CollectionElement<E> element, Void data) {
+							public void transferred(CollectionElement<E> element, CollectionElementMove data) {
+								data.moved();
 								fire(new ObservableCollectionEvent<>(element.getElementId(),
-									theValues.getElementsBefore(element.getElementId()), CollectionChangeType.add, false, null,
+									theValues.getElementsBefore(element.getElementId()), CollectionChangeType.add, data, null,
 									element.get(), op));
 							}
 						});
@@ -359,8 +376,8 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 				if (value == old && theObservers.isFiring())
 					return; // Don't throw errors on recursive updates
 				valueEl.set(value);
-				fire(new ObservableCollectionEvent<>(getElementId(), getElementsBefore(getElementId()), CollectionChangeType.set,
-					false, old, value, theLock.getCurrentCauses()));
+				fire(new ObservableCollectionEvent<>(getElementId(), getElementsBefore(getElementId()), CollectionChangeType.set, null, old,
+					value, theLock.getCurrentCauses()));
 			}
 
 			@Override
@@ -371,10 +388,11 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 			@Override
 			public void remove() throws UnsupportedOperationException {
 				try (Transaction t = lock(true, null)) {
+					CollectionElementMove move = getMovement();
 					E old = get();
 					valueEl.remove();
-					fire(new ObservableCollectionEvent<>(getElementId(), getElementsBefore(getElementId()),
-						CollectionChangeType.remove, false, old, old, theLock.getCurrentCauses()));
+					fire(new ObservableCollectionEvent<>(getElementId(), getElementsBefore(getElementId()), CollectionChangeType.remove,
+						move, old, old, theLock.getCurrentCauses()));
 				}
 			}
 

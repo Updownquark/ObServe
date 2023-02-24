@@ -9,6 +9,7 @@ import org.observe.Observable;
 import org.observe.Observer;
 import org.observe.Subscription;
 import org.observe.collect.CollectionChangeType;
+import org.observe.collect.CollectionElementMove;
 import org.qommons.Causable;
 import org.qommons.Identifiable;
 import org.qommons.Lockable.CoreId;
@@ -195,7 +196,7 @@ public class DefaultObservableConfig extends AbstractObservableConfig {
 		try (Transaction t = lock(true, null)) {
 			String oldName = theName;
 			theName = name;
-			fire(CollectionChangeType.set, false, BetterList.empty(), oldName, theValue);
+			fire(CollectionChangeType.set, null, BetterList.empty(), oldName, theValue);
 		}
 		return this;
 	}
@@ -205,7 +206,7 @@ public class DefaultObservableConfig extends AbstractObservableConfig {
 		try (Transaction t = lock(true, null)) {
 			String oldValue = theValue;
 			theValue = value;
-			fire(CollectionChangeType.set, false, //
+			fire(CollectionChangeType.set, null, //
 				BetterList.empty(), theName, oldValue);
 		}
 		return this;
@@ -217,7 +218,8 @@ public class DefaultObservableConfig extends AbstractObservableConfig {
 	}
 
 	@Override
-	protected void addChild(AbstractObservableConfig child, ObservableConfig after, ObservableConfig before, boolean first, boolean move) {
+	protected void addChild(AbstractObservableConfig child, ObservableConfig after, ObservableConfig before, boolean first,
+		CollectionElementMove move) {
 		ElementId el = theContent.addElement(child, //
 			after == null ? null : Objects.requireNonNull(after.getParentChildRef()),
 				before == null ? null : Objects.requireNonNull(before.getParentChildRef()), //
@@ -227,7 +229,7 @@ public class DefaultObservableConfig extends AbstractObservableConfig {
 	}
 
 	@Override
-	protected void doRemove(boolean move) {
+	protected void doRemove(CollectionElementMove move) {
 		getParent().theContent.mutableElement(theParentContentRef).remove();
 		fire(CollectionChangeType.remove, move, BetterList.empty(), theName, theValue);
 	}
@@ -253,13 +255,13 @@ public class DefaultObservableConfig extends AbstractObservableConfig {
 		return config;
 	}
 
-	private void fire(CollectionChangeType eventType, boolean move, BetterList<ObservableConfig> relativePath, String oldName,
+	private void fire(CollectionChangeType eventType, CollectionElementMove move, BetterList<ObservableConfig> relativePath, String oldName,
 		String oldValue) {
 		_fire(eventType, move, relativePath, oldName, oldValue);
 	}
 
-	private void _fire(CollectionChangeType eventType, boolean move, BetterList<ObservableConfig> relativePath, String oldName,
-		String oldValue) {
+	private void _fire(CollectionChangeType eventType, CollectionElementMove move, BetterList<ObservableConfig> relativePath,
+		String oldName, String oldValue) {
 		theModCount++;
 		if (!theListeners.isEmpty()) {
 			ObservableConfigEvent event = new ObservableConfigEvent(eventType, move, this, oldName, oldValue, relativePath,

@@ -14,25 +14,35 @@ public class ObservableCollectionEvent<E> extends ObservableValueEvent<E> {
 	private final ElementId theElementId;
 	private final int theIndex;
 	private final CollectionChangeType theType;
-	private final boolean isMove;
+	private final CollectionElementMove theMovement;
 
 	/**
 	 * @param elementId The ID of the element that was changed
 	 * @param index The index of the element in the collection
 	 * @param type The type of the change
-	 * @param move Whether this event represents either the removal of an element in preparation for a move, or the re-addition of an
-	 *        element that was just removed in the same move operation
+	 * @param movement If this event represents either the removal of an element in preparation for a move, or the re-addition of an element
+	 *        that was just removed in the same move operation, this will be an identifier that links the two operations. A movement
+	 *        operation happens in a single transaction on a single thread.
 	 * @param oldValue The old value for the element ({@link CollectionChangeType#set}-type only)
 	 * @param newValue The new value for the element
 	 * @param causes The causes of the change
 	 */
-	public ObservableCollectionEvent(ElementId elementId, int index, CollectionChangeType type, boolean move, E oldValue, E newValue,
-		Object... causes) {
+	public ObservableCollectionEvent(ElementId elementId, int index, CollectionChangeType type, CollectionElementMove movement, E oldValue,
+		E newValue, Object... causes) {
 		super(type == CollectionChangeType.add, oldValue, newValue, causes);
 		theElementId = elementId;
 		theIndex = index;
 		theType = type;
-		isMove = move;
+		// A movement can also be specified as one of the event's direct causes
+		if (movement == null) {
+			for (Object cause : causes) {
+				if (cause instanceof CollectionElementMove) {
+					movement = (CollectionElementMove) cause;
+					break;
+				}
+			}
+		}
+		theMovement = movement;
 		checkIndex(index);
 	}
 
@@ -50,15 +60,16 @@ public class ObservableCollectionEvent<E> extends ObservableValueEvent<E> {
 	 * @param elementId The ID of the element that was changed
 	 * @param index The index of the element in the collection
 	 * @param type The type of the change
-	 * @param move Whether this event represents either the removal of an element in preparation for a move, or the re-addition of an
-	 *        element that was just removed in the same move operation
+	 * @param movement If this event represents either the removal of an element in preparation for a move, or the re-addition of an element
+	 *        that was just removed in the same move operation, this will be an identifier that links the two operations. A movement
+	 *        operation happens in a single transaction on a single thread.
 	 * @param oldValue The old value for the element ({@link CollectionChangeType#set}-type only)
 	 * @param newValue The new value for the element
 	 * @param causes The causes of the change
 	 */
-	public ObservableCollectionEvent(ElementId elementId, int index, CollectionChangeType type, boolean move, E oldValue, E newValue,
-		Collection<?> causes) {
-		this(elementId, index, type, move, oldValue, newValue, causes.toArray());
+	public ObservableCollectionEvent(ElementId elementId, int index, CollectionChangeType type, CollectionElementMove movement, E oldValue,
+		E newValue, Collection<?> causes) {
+		this(elementId, index, type, movement, oldValue, newValue, causes.toArray());
 	}
 
 	/** @return The ID of the element that was changed */
@@ -77,11 +88,12 @@ public class ObservableCollectionEvent<E> extends ObservableValueEvent<E> {
 	}
 
 	/**
-	 * @return Whether this event represents either the removal of an element in preparation for a move, or the re-addition of an element
-	 *         that was just removed in the same move operation
+	 * @return If this event represents either the removal of an element in preparation for a move, or the re-addition of an element that
+	 *         was just removed in the same move operation, this will be an identifier that links the two operations. A movement operation
+	 *         happens in a single transaction.
 	 */
-	public boolean isMove() {
-		return isMove;
+	public CollectionElementMove getMovement() {
+		return theMovement;
 	}
 
 	/** @return true for type {@link CollectionChangeType#remove}, false otherwise */
@@ -109,7 +121,7 @@ public class ObservableCollectionEvent<E> extends ObservableValueEvent<E> {
 			str.append(':').append(getOldValue()).append("->").append(getNewValue());
 			break;
 		}
-		if (isMove)
+		if (theMovement != null)
 			str.append("(move)");
 		return str.toString();
 	}

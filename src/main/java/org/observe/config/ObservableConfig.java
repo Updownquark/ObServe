@@ -37,6 +37,7 @@ import org.observe.Subscription;
 import org.observe.assoc.ObservableMap;
 import org.observe.assoc.ObservableMultiMap;
 import org.observe.collect.CollectionChangeType;
+import org.observe.collect.CollectionElementMove;
 import org.observe.collect.ObservableCollection;
 import org.observe.config.ObservableConfigContent.FullObservableConfigContent;
 import org.observe.config.ObservableConfigContent.ObservableChildSet;
@@ -96,10 +97,10 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped, Event
 		 */
 		public final CollectionChangeType changeType;
 		/**
-		 * Whether this event is one part of an operation in which a config element is being moved from one position to another under the
-		 * same parent
+		 * This change's movement identifier, if this event is one part of an operation in which a config element is being moved from one
+		 * position to another under the same parent
 		 */
-		public final boolean isMove;
+		public final CollectionElementMove movement;
 		/** The config element that the event is being fired on (may not be the same as the element being added/removed/changed) */
 		public final ObservableConfig eventTarget;
 		/** The child path, relative to this element, of the actual element being added/removed/changed */
@@ -112,8 +113,8 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped, Event
 		/**
 		 * @param changeType Whether this event is one part of an operation in which a config element is being moved from one position to
 		 *        another under the same parent
-		 * @param move Whether this event is one part of an operation in which a config element is being moved from one position to another
-		 *        under the same parent
+		 * @param movement This change's movement identifier if this event is one part of an operation in which a config element is being
+		 *        moved from one position to another under the same parent
 		 * @param eventTarget The config element that the event is being fired on (may not be the same as the element being
 		 *        added/removed/changed)
 		 * @param oldName The name of the target element before this change
@@ -121,11 +122,11 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped, Event
 		 * @param relativePath The child path, relative to this element, of the actual element being added/removed/changed
 		 * @param cause The cause of this event
 		 */
-		public ObservableConfigEvent(CollectionChangeType changeType, boolean move, ObservableConfig eventTarget, String oldName,
-			String oldValue, BetterList<ObservableConfig> relativePath, Object cause) {
+		public ObservableConfigEvent(CollectionChangeType changeType, CollectionElementMove movement, ObservableConfig eventTarget,
+			String oldName, String oldValue, BetterList<ObservableConfig> relativePath, Object cause) {
 			super(cause);
 			this.changeType = changeType;
-			this.isMove = move;
+			this.movement = movement;
 			this.eventTarget = eventTarget;
 			this.relativePath = relativePath;
 			this.oldName = oldName;
@@ -153,7 +154,7 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped, Event
 
 		/** @return This event, as an event on the first element in the {@link #relativePath} */
 		public ObservableConfigEvent asFromChild() {
-			return new ObservableConfigEvent(changeType, isMove, relativePath.get(0), oldName, oldValue,
+			return new ObservableConfigEvent(changeType, movement, relativePath.get(0), oldName, oldValue,
 				relativePath.subList(1, relativePath.size()), getCauses());
 		}
 
@@ -624,10 +625,8 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped, Event
 		 * @return The built value
 		 */
 		public SettableValue<T> buildValue(Consumer<SettableValue<T>> preReturnGet) {
-			return build(
-				findRefs -> new ObservableConfigTransform.ObservableConfigValue<>(theConfig, getSession(),
-					getDescendant(false), createDescendant(false)::apply, getUntil(), theType, getFormat(), true, findRefs),
-				preReturnGet);
+			return build(findRefs -> new ObservableConfigTransform.ObservableConfigValue<>(theConfig, getSession(), getDescendant(false),
+				createDescendant(false)::apply, getUntil(), theType, getFormat(), true, findRefs), preReturnGet);
 		}
 
 		/**
@@ -1640,8 +1639,7 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped, Event
 				for (i = childrenAsAttributes.nextSetBit(0); i >= 0; i = childrenAsAttributes.nextSetBit(i + 1)) {
 					ObservableConfig child = config.getContent().get(i);
 					out.append(' ').append(encoding.encode(child.getName())).append("=\"")
-					.append(escapeXml(child.getValue(), encoding, false))
-					.append('"');
+					.append(escapeXml(child.getValue(), encoding, false)).append('"');
 				}
 			}
 			if (withChildren)

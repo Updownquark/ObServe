@@ -22,6 +22,7 @@ import org.observe.assoc.ObservableMapEvent;
 import org.observe.assoc.ObservableMultiMap;
 import org.observe.assoc.ObservableMultiMapEvent;
 import org.observe.collect.CollectionChangeType;
+import org.observe.collect.CollectionElementMove;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollectionEvent;
 import org.observe.collect.ObservableSet;
@@ -478,7 +479,7 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 					cveIter.remove();
 					cve.dispose();
 					fire(new ObservableCollectionEvent<>(cve.getElementId(), theElements.size(), CollectionChangeType.remove,
-						false, cve.get(), cve.get(), cause));
+						null, cve.get(), cve.get(), cause));
 				}
 			}
 			if (collectionElement != null) {
@@ -486,7 +487,7 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 					ConfigElement cve = createElement(child, null, findRefs);
 					cve.theElement = theElements.putEntry(child.getParentChildRef(), cve, false).getElementId();
 					fire(new ObservableCollectionEvent<>(cve.getElementId(), theElements.size() - 1, CollectionChangeType.add,
-						false, null, cve.get(), cause));
+						null, null, cve.get(), cause));
 				}
 			}
 		}
@@ -528,7 +529,7 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 					theElements.mutableEntry(el.getElementId()).remove();
 					el.get().dispose();
 					fire(new ObservableCollectionEvent<>(el.getElementId(),
-						theElements.keySet().getElementsBefore(el.getElementId()), CollectionChangeType.remove, collectionChange.isMove,
+						theElements.keySet().getElementsBefore(el.getElementId()), CollectionChangeType.remove, collectionChange.movement,
 						el.get().get(), el.get().get(), collectionChange));
 				} else {
 					try {
@@ -550,7 +551,7 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 						if (newValue != oldValue)
 							el.get()._set(newValue);
 						fire(new ObservableCollectionEvent<>(el.getElementId(),
-							theElements.keySet().getElementsBefore(el.getElementId()), CollectionChangeType.set, false, oldValue, newValue,
+							theElements.keySet().getElementsBefore(el.getElementId()), CollectionChangeType.set, null, oldValue, newValue,
 							collectionChange));
 					} catch (ParseException e) {
 						e.printStackTrace();
@@ -576,7 +577,7 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 				newElId = theElements.putEntry(config.getParentChildRef(), newEl, null, el.getElementId(), false).getElementId();
 			newEl.theElement = newElId;
 			incrementStamp();
-			boolean move = cause instanceof ObservableConfigEvent && ((ObservableConfigEvent) cause).isMove;
+			CollectionElementMove move = cause instanceof ObservableConfigEvent ? ((ObservableConfigEvent) cause).movement : null;
 			fire(new ObservableCollectionEvent<>(newElId, theElements.keySet().getElementsBefore(newElId),
 				CollectionChangeType.add, move, null, newEl.get(), cause));
 		}

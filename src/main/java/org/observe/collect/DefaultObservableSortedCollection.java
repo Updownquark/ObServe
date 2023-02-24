@@ -2,6 +2,7 @@ package org.observe.collect;
 
 import java.util.Comparator;
 import java.util.function.BiFunction;
+import java.util.function.Supplier;
 
 import org.observe.Equivalence;
 import org.observe.util.TypeTokens;
@@ -37,13 +38,14 @@ public class DefaultObservableSortedCollection<E> extends DefaultObservableColle
 	 * @param sortedSet The backing sorted list to hold this observable set's values
 	 */
 	public DefaultObservableSortedCollection(TypeToken<E> type, BetterSortedList<E> sortedSet) {
-		this(type, sortedSet, null, null);
+		this(type, sortedSet, null, null, null);
 	}
 
 	DefaultObservableSortedCollection(TypeToken<E> type, BetterSortedList<E> list,
 		BiFunction<ElementId, BetterCollection<?>, BetterList<ElementId>> elementSource,
-		BiFunction<ElementId, BetterCollection<?>, BetterList<ElementId>> sourceElements) {
-		super(type, list, elementSource, sourceElements, Equivalence.DEFAULT.sorted(TypeTokens.getRawType(type), list.comparator(), false));
+		BiFunction<ElementId, BetterCollection<?>, BetterList<ElementId>> sourceElements, Supplier<CollectionElementMove> movement) {
+		super(type, list, elementSource, sourceElements, Equivalence.DEFAULT.sorted(TypeTokens.getRawType(type), list.comparator(), false),
+			movement);
 	}
 
 	@Override
@@ -74,14 +76,17 @@ public class DefaultObservableSortedCollection<E> extends DefaultObservableColle
 	@Override
 	public CollectionElement<E> getOrAdd(E value, ElementId after, ElementId before, boolean first, Runnable preAdd, Runnable postAdd) {
 		ValueHolder<Boolean> addedCheck = new ValueHolder<>(false);
+		CollectionElementMove move = getMovement();
 		CollectionElement<E> el = getValues().getOrAdd(value, after, before, first, preAdd, () -> {
 			addedCheck.accept(true);
 			if (postAdd != null)
 				postAdd.run();
 		});
+		if (move != null)
+			move.moved();
 		if (addedCheck.get()) {
 			ObservableCollectionEvent<E> event = new ObservableCollectionEvent<>(el.getElementId(),
-				getValues().getElementsBefore(el.getElementId()), CollectionChangeType.add, false, null, value, getCurrentCauses());
+				getValues().getElementsBefore(el.getElementId()), CollectionChangeType.add, move, null, value, getCurrentCauses());
 			fire(event);
 		}
 		return el;
@@ -125,25 +130,25 @@ public class DefaultObservableSortedCollection<E> extends DefaultObservableColle
 			RepairEvent<X> repair = new RepairEvent<>(getCurrentCauses());
 			boolean success = false;
 			try {
-				// We can't set the move boolean here because it's only for atomic moves
-				// --moves of a single element from one place to another.
-				// This operation may remove multiple elements before re-adding them in the appropriate position
 				ObservableCollectionEvent<E> event = new ObservableCollectionEvent<>(element.getElementId(),
-					getValues().getElementsBefore(element.getElementId()), CollectionChangeType.remove, false, element.get(), element.get(),
-					repair);
+					getValues().getElementsBefore(element.getElementId()), CollectionChangeType.remove, repair.move, element.get(),
+					element.get(), repair);
 				fire(event);
 				repair.wrappedData = theWrapped == null ? null : theWrapped.removed(element);
 				success = true;
 				return repair;
 			} finally {
-				if (!success)
+				if (!success) {
 					repair.finish.close();
+					repair.move.moveFinished();
+				}
 			}
 		}
 
 		@Override
 		public void disposed(E value, RepairEvent<X> data) {
 			try {
+				data.move.moveFinished();
 				if (theWrapped != null)
 					theWrapped.disposed(value, data.wrappedData);
 			} finally {
@@ -154,8 +159,9 @@ public class DefaultObservableSortedCollection<E> extends DefaultObservableColle
 		@Override
 		public void transferred(CollectionElement<E> element, RepairEvent<X> data) {
 			try {
+				data.move.moved();
 				ObservableCollectionEvent<E> event = new ObservableCollectionEvent<>(element.getElementId(),
-					getValues().getElementsBefore(element.getElementId()), CollectionChangeType.add, false, null, element.get(), data);
+					getValues().getElementsBefore(element.getElementId()), CollectionChangeType.add, data.move, null, element.get(), data);
 				fire(event);
 				if (theWrapped != null) {
 					theWrapped.transferred(element, data.wrappedData);
@@ -169,11 +175,13 @@ public class DefaultObservableSortedCollection<E> extends DefaultObservableColle
 
 	private static class RepairEvent<X> extends Causable.AbstractCausable {
 		final Transaction finish;
+		final CollectionElementMove move;
 		X wrappedData;
 
 		RepairEvent(Object cause) {
 			super(cause);
 			finish = use();
+			move = new CollectionElementMove();
 		}
 	}
 }

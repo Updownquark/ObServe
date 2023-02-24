@@ -64,7 +64,7 @@ public class CollectionChangesObservable<E> extends AbstractIdentifiable impleme
 	private interface ChangeList<E> {
 		int size();
 
-		ChangeList<E> add(int collectionIndex, E oldValue, E newValue);
+		ChangeList<E> add(int collectionIndex, E oldValue, E newValue, CollectionElementMove move);
 
 		E remove(int collectionIndex);
 
@@ -77,12 +77,14 @@ public class CollectionChangesObservable<E> extends AbstractIdentifiable impleme
 		static class Add<E> {
 			final int collectionIndex;
 			final int changeIndex;
+			final CollectionElementMove move;
 			E value;
 
-			Add(int collectionIndex, int changeIndex, E value) {
+			Add(int collectionIndex, int changeIndex, E value, CollectionElementMove move) {
 				this.collectionIndex = collectionIndex;
 				this.changeIndex = changeIndex;
 				this.value = value;
+				this.move = move;
 			}
 
 			@Override
@@ -99,10 +101,10 @@ public class CollectionChangesObservable<E> extends AbstractIdentifiable impleme
 		}
 
 		@Override
-		public ChangeList<E> add(int collectionIndex, E oldValue, E newValue) {
+		public ChangeList<E> add(int collectionIndex, E oldValue, E newValue, CollectionElementMove move) {
 			RedBlackNode<Add<E>> node = changes.getRoot();
 			if (node == null) {
-				changes.setRoot(new RedBlackNode<>(changes, new Add<>(collectionIndex, 0, newValue)));
+				changes.setRoot(new RedBlackNode<>(changes, new Add<>(collectionIndex, 0, newValue, move)));
 				return this;
 			}
 			int lastComp = 0;
@@ -128,7 +130,7 @@ public class CollectionChangesObservable<E> extends AbstractIdentifiable impleme
 				}
 			}
 			boolean left = lastComp <= 0;
-			node.add(new RedBlackNode<>(changes, new Add<>(collectionIndex, changeIndex, newValue)), left);
+			node.add(new RedBlackNode<>(changes, new Add<>(collectionIndex, changeIndex, newValue, move)), left);
 			return this;
 		}
 
@@ -191,7 +193,7 @@ public class CollectionChangesObservable<E> extends AbstractIdentifiable impleme
 			int index = 0;
 			while (node != null) {
 				dump[index] = new ElementChange<>(node.getValue().value, node.getValue().value,
-					node.getValue().collectionIndex + index - node.getValue().changeIndex);
+					node.getValue().collectionIndex + index - node.getValue().changeIndex, node.getValue().move);
 				node = node.getClosest(false);
 				index++;
 			}
@@ -216,11 +218,13 @@ public class CollectionChangesObservable<E> extends AbstractIdentifiable impleme
 	static class RemoveList<E> implements ChangeList<E> {
 		static class Remove<E> {
 			final int collectionIndex;
+			final CollectionElementMove move;
 			E value;
 
-			Remove(int collectionIndex, E value) {
+			Remove(int collectionIndex, E value, CollectionElementMove move) {
 				this.collectionIndex = collectionIndex;
 				this.value = value;
+				this.move = move;
 			}
 
 			@Override
@@ -237,10 +241,10 @@ public class CollectionChangesObservable<E> extends AbstractIdentifiable impleme
 		}
 
 		@Override
-		public ChangeList<E> add(int collectionIndex, E oldValue, E newValue) {
+		public ChangeList<E> add(int collectionIndex, E oldValue, E newValue, CollectionElementMove move) {
 			RedBlackNode<Remove<E>> node = changes.getRoot();
 			if (node == null) {
-				changes.setRoot(new RedBlackNode<>(changes, new Remove<>(collectionIndex, oldValue)));
+				changes.setRoot(new RedBlackNode<>(changes, new Remove<>(collectionIndex, oldValue, move)));
 				return this;
 			}
 			int lastComp = 0;
@@ -262,7 +266,7 @@ public class CollectionChangesObservable<E> extends AbstractIdentifiable impleme
 				}
 			}
 			boolean left = lastComp < 0;
-			node.add(new RedBlackNode<>(changes, new Remove<>(collectionIndex, oldValue)), left);
+			node.add(new RedBlackNode<>(changes, new Remove<>(collectionIndex, oldValue, move)), left);
 			return this;
 		}
 
@@ -324,7 +328,8 @@ public class CollectionChangesObservable<E> extends AbstractIdentifiable impleme
 			RedBlackNode<Remove<E>> node = changes.getFirst();
 			int index = 0;
 			while (node != null) {
-				dump[index] = new ElementChange<>(node.getValue().value, node.getValue().value, node.getValue().collectionIndex);
+				dump[index] = new ElementChange<>(node.getValue().value, node.getValue().value, node.getValue().collectionIndex,
+					node.getValue().move);
 				node = node.getClosest(false);
 				index++;
 			}
@@ -370,7 +375,7 @@ public class CollectionChangesObservable<E> extends AbstractIdentifiable impleme
 		}
 
 		@Override
-		public ChangeList<E> add(int collectionIndex, E oldValue, E newValue) {
+		public ChangeList<E> add(int collectionIndex, E oldValue, E newValue, CollectionElementMove move) {
 			RedBlackNode<Set<E>> node = changes.getRoot();
 			if (node == null) {
 				changes.setRoot(new RedBlackNode<>(changes, new Set<>(collectionIndex, oldValue, newValue)));
@@ -445,7 +450,8 @@ public class CollectionChangesObservable<E> extends AbstractIdentifiable impleme
 			RedBlackNode<Set<E>> node = changes.getFirst();
 			int index = 0;
 			while (node != null) {
-				dump[index] = new ElementChange<>(node.getValue().newValue, node.getValue().oldValue, node.getValue().collectionIndex);
+				dump[index] = new ElementChange<>(node.getValue().newValue, node.getValue().oldValue, node.getValue().collectionIndex,
+					null);
 				node = node.getClosest(false);
 				index++;
 			}
@@ -587,7 +593,7 @@ public class CollectionChangesObservable<E> extends AbstractIdentifiable impleme
 			switch (event.getType()) {
 			case add:
 				debug(s -> s.append("\tAdding ").append(event));
-				tracker.changes.add(collIndex, event.getOldValue(), event.getNewValue());
+				tracker.changes.add(collIndex, event.getOldValue(), event.getNewValue(), event.getMovement());
 				break;
 			case remove:
 				int oldSize = tracker.changes.size();
@@ -623,7 +629,7 @@ public class CollectionChangesObservable<E> extends AbstractIdentifiable impleme
 						replace = false;
 						debug(s -> s.append("\tChanging remove ").append(collIndex).append(" to set ").append(event.getNewValue()));
 						newTracker = new CollectionChangesObservable.SessionChangeTracker<>(CollectionChangeType.set);
-						newTracker.changes.add(collIndex, oldValue, event.getNewValue());
+						newTracker.changes.add(collIndex, oldValue, event.getNewValue(), null);
 					}
 				}
 				if (replace) {
@@ -632,7 +638,7 @@ public class CollectionChangesObservable<E> extends AbstractIdentifiable impleme
 				}
 				break;
 			case remove:
-				tracker.changes.add(collIndex, event.getOldValue(), event.getNewValue());
+				tracker.changes.add(collIndex, event.getOldValue(), event.getNewValue(), event.getMovement());
 				if (collection.isEmpty() && newTracker.changes.size() > 1) {
 					// If the collection is empty, no more elements can be removed and any other change will just call a replace,
 					// so there's no more information we can possibly accumulate in this session.
@@ -662,12 +668,12 @@ public class CollectionChangesObservable<E> extends AbstractIdentifiable impleme
 				if (oldSize == 1 && tracker.changes.size() == 0) {
 					debug(s -> s.append("\tSet element removed, replacing ").append(tracker).append(" with remove"));
 					newTracker = new CollectionChangesObservable.SessionChangeTracker<>(CollectionChangeType.remove);
-					newTracker.changes.add(collIndex, oldValue, oldValue);
+					newTracker.changes.add(collIndex, oldValue, oldValue, event.getMovement());
 				} else if (tracker.changes.size() < oldSize) {
 					debug(s -> s.append("\tRemove after sets, flushing ").append(tracker).append(", now tracking remove [")
 						.append(collIndex).append("] ").append(oldValue));
 					newTracker = new CollectionChangesObservable.SessionChangeTracker<>(CollectionChangeType.remove);
-					newTracker.changes.add(collIndex, oldValue, oldValue);
+					newTracker.changes.add(collIndex, oldValue, oldValue, event.getMovement());
 					fireEventsFromSessionData(tracker, event, observer);
 				} else {
 					debug(s -> s.append("Remove after sets, flushing ").append(tracker).append(", now tracking ").append(event));
@@ -676,7 +682,7 @@ public class CollectionChangesObservable<E> extends AbstractIdentifiable impleme
 				break;
 			case set:
 				debug(s -> s.append("\tAdding set ").append(collIndex).append(event.getNewValue()));
-				tracker.changes.add(collIndex, event.getOldValue(), event.getNewValue());
+				tracker.changes.add(collIndex, event.getOldValue(), event.getNewValue(), null);
 				break;
 			}
 			break;
@@ -684,11 +690,11 @@ public class CollectionChangesObservable<E> extends AbstractIdentifiable impleme
 		return newTracker;
 	}
 
-	private CollectionChangesObservable.SessionChangeTracker<E> replace(CollectionChangesObservable.SessionChangeTracker<E> tracker, ObservableCollectionEvent<? extends E> event,
-		Observer<? super CollectionChangeEvent<E>> observer) {
+	private CollectionChangesObservable.SessionChangeTracker<E> replace(CollectionChangesObservable.SessionChangeTracker<E> tracker,
+		ObservableCollectionEvent<? extends E> event, Observer<? super CollectionChangeEvent<E>> observer) {
 		fireEventsFromSessionData(tracker, event, observer);
 		tracker = new CollectionChangesObservable.SessionChangeTracker<>(event.getType());
-		tracker.changes.add(event.getIndex(), event.getOldValue(), event.getNewValue());
+		tracker.changes.add(event.getIndex(), event.getOldValue(), event.getNewValue(), event.getMovement());
 		return tracker;
 	}
 

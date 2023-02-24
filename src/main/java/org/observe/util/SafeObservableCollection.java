@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -12,6 +13,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.observe.Observable;
 import org.observe.Subscription;
+import org.observe.collect.CollectionElementMove;
 import org.observe.collect.DefaultObservableCollection;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollectionBuilder;
@@ -28,6 +30,7 @@ import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterList;
+import org.qommons.collect.BetterMap;
 import org.qommons.collect.BetterSortedList;
 import org.qommons.collect.BetterSortedList.SortedSearchFilter;
 import org.qommons.collect.CollectionElement;
@@ -139,6 +142,8 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 	private long theStamp;
 	private volatile boolean isFinished;
 
+	CollectionElementMove movement;
+
 	/**
 	 * @param collection The backing collection
 	 * @param threading The thread constraint for this collection
@@ -159,6 +164,11 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 			.build((TypeToken<ElementRef<E>>) (TypeToken<?>) TypeTokens.get().of(ElementRef.class))//
 			.withBacking(theSyntheticBacking);
 		builder.withSourceElements(this::_getSourceElements).withElementsBySource(this::_getElementsBySource);
+		builder.withMovement(() -> {
+			CollectionElementMove m = movement;
+			movement = null;
+			return m;
+		});
 		theSyntheticCollection = builder.build();
 
 		theSyntheticCollection.onChange(evt -> {
@@ -346,11 +356,27 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 		boolean flushed = false;
 		try (Transaction t = theSyntheticCollection.lock(true, null)) {
 			// First, the removals
+			Map<ElementId, CollectionElementMove> moves = BetterMap.empty();
 			if (!theRemovedElements.isEmpty()) {
+				Map<E, ElementId> added;
+				if (theAddedElements.isEmpty())
+					added = BetterMap.empty();
+				else {
+					moves = new HashMap<>();
+					added = new IdentityHashMap<>();
+					for (ElementId add : theAddedElements)
+						added.putIfAbsent(theCollection.getElement(add).get(), add);
+				}
 				flushed = true;
 				for (ElementRef<E> removedEl : theRemovedElements) {
-					theSyntheticCollection.mutableElement(removedEl.getSynthId()).remove();
 					theElementsBySource.remove(removedEl.sourceId);
+					ElementId moved = added.remove(removedEl.getValue());
+					CollectionElementMove move = moved == null ? null : new CollectionElementMove();
+					if (moved != null) {
+						moves.put(moved, move);
+						movement = move;
+					}
+					theSyntheticCollection.mutableElement(removedEl.getSynthId()).remove();
 				}
 				theRemovedElements.clear();
 			}
@@ -377,10 +403,16 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 					CollectionElement<ElementRef<E>> before = theSyntheticBacking.search(el -> addedEl.compareTo(el.sourceId),
 						SortedSearchFilter.Greater);
 					ElementRef<E> newEl = createElement(addedEl, theCollection.getElement(addedEl).get());
+					CollectionElementMove move = moves.remove(addedEl);
+					movement = move;
 					if (before == null)
 						theSyntheticCollection.addElement(newEl, false);
 					else
 						theSyntheticCollection.addElement(newEl, null, before.get().getSynthId(), false);
+					if (move != null) {
+						System.out.println("SOC moved");
+						move.moved();
+					}
 				}
 				theAddedElements.clear();
 			}

@@ -242,7 +242,7 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V>, Eventabl
 					CollectionElement<V> value = entry.get().getValues().getTerminalElement(valueForward);
 					while (value != null) {
 						ObservableMultiMapEvent<K, V> mapEvent = new ObservableMultiMapEvent<>(entry.getElementId(), value.getElementId(),
-							keyIndex, valueIndex, CollectionChangeType.add, false, entry.get().getKey(), entry.get().getKey(), null,
+							keyIndex, valueIndex, CollectionChangeType.add, null, entry.get().getKey(), entry.get().getKey(), null,
 							value.get(), subCause);
 						try (Transaction mt = mapEvent.use()) {
 							action.accept(mapEvent);
@@ -271,7 +271,7 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V>, Eventabl
 							CollectionElement<V> value = entry.get().getValues().getTerminalElement(!valueForward);
 							while (value != null) {
 								ObservableMultiMapEvent<K, V> mapEvent = new ObservableMultiMapEvent<>(entry.getElementId(),
-									value.getElementId(), keyIndex, valueIndex, CollectionChangeType.remove, false, //
+									value.getElementId(), keyIndex, valueIndex, CollectionChangeType.remove, null, //
 									entry.get().getKey(), entry.get().getKey(), value.get(), value.get(), subCause);
 								try (Transaction mt = mapEvent.use()) {
 									action.accept(mapEvent);
@@ -540,8 +540,7 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V>, Eventabl
 				() -> "value-set", null);
 			Function<V, MapEntry<K, V>> addition = LambdaUtils.printableFn(value -> new MapEntry<>(value), "addition", null);
 			if (theKeyEquivalence instanceof Equivalence.SortedEquivalence) {
-				mapFlow = backing.flow().groupSorted(
-					entries -> entries.transform(theKeyType, tx -> tx.map(keyMap).modifySource(keySet))//
+				mapFlow = backing.flow().groupSorted(entries -> entries.transform(theKeyType, tx -> tx.map(keyMap).modifySource(keySet))//
 					.distinctSorted(((Equivalence.SortedEquivalence<K>) theKeyEquivalence).comparator(), true), //
 					keyReverse);
 			} else {
@@ -551,12 +550,10 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V>, Eventabl
 						.transform(theKeyType, tx -> tx.map(keyMap).modifySource(keySet).withEquivalence(theKeyEquivalence)).distinct(),
 						keyReverse);
 			}
-			return mapFlow
-				.withValues(entries -> entries.transform(theValueType, //
-					tx -> tx.map(valueMap)
-					.modifySource(valueSet, //
-						rvrs -> rvrs.createWith(addition))//
-					.withEquivalence(theValueEquivalence)))//
+			return mapFlow.withValues(entries -> entries.transform(theValueType, //
+				tx -> tx.map(valueMap).modifySource(valueSet, //
+					rvrs -> rvrs.createWith(addition))//
+				.withEquivalence(theValueEquivalence)))//
 				.gatherActive(until);
 		}
 	}
@@ -641,7 +638,7 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V>, Eventabl
 					changeType = CollectionChangeType.set;
 
 				ObservableCollectionEvent<MultiEntryHandle<K, V>> collEvt = new ObservableCollectionEvent<>(//
-					mapEvt.getKeyElement(), mapEvt.getKeyIndex(), changeType, mapEvt.isMove(), //
+					mapEvt.getKeyElement(), mapEvt.getKeyIndex(), changeType, mapEvt.getMovement(), //
 					changeType == CollectionChangeType.add ? null : entry, entry, mapEvt);
 				try (Transaction evtT = collEvt.use()) {
 					observer.accept(collEvt);
@@ -746,6 +743,7 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V>, Eventabl
 			throw new IndexOutOfBoundsException(index + " of " + (index - remaining));
 		}
 	}
+
 	/**
 	 * Implements {@link ObservableMultiMap#singleEntries()}
 	 *
@@ -880,7 +878,7 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V>, Eventabl
 				ElementId id = entryFor(entry).getElementId();
 
 				ObservableCollectionEvent<MultiEntryValueHandle<K, V>> collEvt = new ObservableCollectionEvent<>(//
-					id, getElementsBefore(id), mapEvt.getType(), mapEvt.isMove(), //
+					id, getElementsBefore(id), mapEvt.getType(), mapEvt.getMovement(), //
 					mapEvt.getType() == CollectionChangeType.add ? null : entry, entry, mapEvt);
 				try (Transaction evtT = collEvt.use()) {
 					observer.accept(collEvt);
@@ -1012,7 +1010,7 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V>, Eventabl
 						valueSize++; // May have just been removed
 					int valueIndex = valueSize - evt.getIndex() - 1;
 					ObservableMultiMapEvent<K, V> event = new ObservableMultiMapEvent<>(//
-						evt.getKeyElement().reverse(), evt.getElementId().reverse(), keyIndex, valueIndex, evt.getType(), evt.isMove(),
+						evt.getKeyElement().reverse(), evt.getElementId().reverse(), keyIndex, valueIndex, evt.getType(), evt.getMovement(),
 						evt.getOldKey(), evt.getKey(), evt.getOldValue(), evt.getNewValue(), evt);
 					try (Transaction mt = event.use()) {
 						action.accept(event);
@@ -1108,11 +1106,11 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V>, Eventabl
 					V newValue = CollectionElement.get(//
 						getSource().getEntryById(multiMapEvt.getKeyElement()).getValues().getTerminalElement(isFirstValue()));
 					mapEvt = new ObservableMapEvent<>(multiMapEvt.getKeyElement(), multiMapEvt.getKeyIndex(), //
-						CollectionChangeType.set, multiMapEvt.isMove(), multiMapEvt.getOldKey(), multiMapEvt.getKey(),
+						CollectionChangeType.set, multiMapEvt.getMovement(), multiMapEvt.getOldKey(), multiMapEvt.getKey(),
 						multiMapEvt.getOldValue(), newValue, multiMapEvt);
 				} else {
 					mapEvt = new ObservableMapEvent<>(multiMapEvt.getKeyElement(), multiMapEvt.getKeyIndex(), //
-						multiMapEvt.getType(), multiMapEvt.isMove(), multiMapEvt.getOldKey(), multiMapEvt.getKey(),
+						multiMapEvt.getType(), multiMapEvt.getMovement(), multiMapEvt.getOldKey(), multiMapEvt.getKey(),
 						multiMapEvt.getOldValue(), multiMapEvt.getNewValue(), multiMapEvt);
 				}
 				try (Transaction evtT = mapEvt.use()) {
@@ -1316,8 +1314,8 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V>, Eventabl
 					return combined.changes().map(valueEvent -> {
 						ElementId oldId = id[0];
 						id[0] = sourceValues.getKeyId();
-						ObservableElementEvent<X> elementEvent = new ObservableElementEvent<>(valueEvent.isInitial(), oldId,
-							id[0], valueEvent.getOldValue(), valueEvent.getNewValue(), valueEvent);
+						ObservableElementEvent<X> elementEvent = new ObservableElementEvent<>(valueEvent.isInitial(), oldId, id[0],
+							valueEvent.getOldValue(), valueEvent.getNewValue(), valueEvent);
 						Transaction elEvtFinish = elementEvent.use();
 						valueEvent.onFinish(Causable.key((__, ___) -> elEvtFinish.close()));
 						return elementEvent;
@@ -1358,8 +1356,7 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V>, Eventabl
 					ObservableMapEvent<K, X> mapEvent;
 					if (added[0])
 						mapEvent = new ObservableMapEvent<>(multiEvent.getKeyElement(), multiEvent.getKeyIndex(), CollectionChangeType.add,
-							multiEvent.isMove(), multiEvent.getOldKey(), multiEvent.getKey(), null,
-							entry.get().value, multiEvent);
+							multiEvent.getMovement(), multiEvent.getOldKey(), multiEvent.getKey(), null, entry.get().value, multiEvent);
 					else {
 						X oldValue = entry.get().value;
 						boolean removed = false;
@@ -1379,11 +1376,11 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V>, Eventabl
 							entry.get().sub.unsubscribe();
 							entries.mutableEntry(entry.getElementId()).remove();
 							mapEvent = new ObservableMapEvent<>(multiEvent.getKeyElement(), multiEvent.getKeyIndex(),
-								CollectionChangeType.remove, multiEvent.isMove(), multiEvent.getOldKey(), multiEvent.getKey(), oldValue,
-								oldValue, multiEvent);
+								CollectionChangeType.remove, multiEvent.getMovement(), multiEvent.getOldKey(), multiEvent.getKey(),
+								oldValue, oldValue, multiEvent);
 						} else
 							mapEvent = new ObservableMapEvent<>(multiEvent.getKeyElement(), multiEvent.getKeyIndex(),
-								CollectionChangeType.set, multiEvent.isMove(), multiEvent.getOldKey(), multiEvent.getKey(), oldValue,
+								CollectionChangeType.set, multiEvent.getMovement(), multiEvent.getOldKey(), multiEvent.getKey(), oldValue,
 								entry.get().value, multiEvent);
 					}
 					try (Transaction evtT = mapEvent.use()) {

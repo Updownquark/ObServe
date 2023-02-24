@@ -1358,7 +1358,7 @@ public final class ObservableCollectionImpl {
 				int index = 0;
 				while (el != null) {
 					value = update(value, new ObservableCollectionEvent<>(el.getElementId(), index++, //
-						CollectionChangeType.add, false, null, el.get()));
+						CollectionChangeType.add, null, null, el.get()));
 					el = getCollection().getAdjacentElement(el.getElementId(), true);
 				}
 				return value;
@@ -1910,8 +1910,8 @@ public final class ObservableCollectionImpl {
 				int index = theSize - evt.getIndex() - 1;
 				if (evt.getType() == CollectionChangeType.remove)
 					theSize--;
-				ObservableCollectionEvent<E> reversed = new ObservableCollectionEvent<>(evt.getElementId().reverse(), index,
-					evt.getType(), evt.isMove(), evt.getOldValue(), evt.getNewValue(), evt);
+				ObservableCollectionEvent<E> reversed = new ObservableCollectionEvent<>(evt.getElementId().reverse(), index, evt.getType(),
+					evt.getMovement(), evt.getOldValue(), evt.getNewValue(), evt);
 				try (Transaction t = reversed.use()) {
 					theObserver.accept(reversed);
 				}
@@ -2398,7 +2398,7 @@ public final class ObservableCollectionImpl {
 									e.printStackTrace();
 								}
 								ObservableCollectionEvent<? extends T> evt2 = new ObservableCollectionEvent<>(mapId(el.getElementId()),
-									index++, CollectionChangeType.set, false, oldVal, newVal, evt);
+									index++, CollectionChangeType.set, null, oldVal, newVal, evt);
 								try (Transaction evtT = evt2.use()) {
 									observer.accept(evt2);
 								}
@@ -2467,7 +2467,7 @@ public final class ObservableCollectionImpl {
 											theSize--;
 									}
 									ObservableCollectionEvent<? extends T> evt2 = new ObservableCollectionEvent<>(mapId(evt.getElementId()),
-										index, evt.getType(), evt.isMove(), oldValue, newValue, evt);
+										index, evt.getType(), evt.getMovement(), oldValue, newValue, evt);
 									try (Transaction evtT = evt2.use()) {
 										observer.accept(evt2);
 									}
@@ -2595,82 +2595,86 @@ public final class ObservableCollectionImpl {
 				holder[0].treeNode = theDerivedElements.addElement(holder[0], false);
 				if (holder[0].treeNode == null)
 					throw new IllegalStateException("Element already exists: " + holder[0]);
-				boolean initMove = cause instanceof ObservableCollectionEvent && ((ObservableCollectionEvent<?>) cause).isMove();
-				fireListeners(new ObservableCollectionEvent<>(holder[0], holder[0].treeNode.getNodesBefore(),
-					CollectionChangeType.add, initMove, null, el.get(), cause));
-				el.setListener(new CollectionElementListener<T>() {
-					@Override
-					public void update(T oldValue, T newValue, Object elCause, boolean internalOnly) {
-						if (internalOnly)
-							return;
-						while (holder[0].successor != null)
-							holder[0] = holder[0].successor;
-						theStamp.incrementAndGet();
-						BinaryTreeNode<DerivedElementHolder<T>> left = holder[0].treeNode.getClosest(true);
-						BinaryTreeNode<DerivedElementHolder<T>> right = holder[0].treeNode.getClosest(false);
-						if ((left != null && left.get().element.compareTo(holder[0].element) > 0)
-							|| (right != null && right.get().element.compareTo(holder[0].element) < 0)) {
-							// Element is out-of-order. This may indicate that only this element has changed,
-							// or it could indicate that the ordering scheme of the elements has changed.
-							// We need to do a repair operation to be safe.
-							theDerivedElements.repair(holder[0].treeNode.getElementId(),
-								new BetterTreeSet.RepairListener<DerivedElementHolder<T>, Void>() {
-								@Override
-								public Void removed(CollectionElement<DerivedElementHolder<T>> element) {
-									int index = theDerivedElements.getElementsBefore(element.getElementId());
-									T value = element.get()==holder[0] ? oldValue : element.get().get();
-									// We know this is a move because elements are always distinct
-									fireListeners(new ObservableCollectionEvent<>(element.get(), index, CollectionChangeType.remove,
-										true, value, value, elCause));
-									return null;
-								}
+				CollectionElementMove initMove = cause instanceof ObservableCollectionEvent
+					? ((ObservableCollectionEvent<?>) cause).getMovement() : null;
+					fireListeners(new ObservableCollectionEvent<>(holder[0], holder[0].treeNode.getNodesBefore(), CollectionChangeType.add,
+						initMove, null, el.get(), cause));
+					el.setListener(new CollectionElementListener<T>() {
+						@Override
+						public void update(T oldValue, T newValue, Object elCause, boolean internalOnly) {
+							if (internalOnly)
+								return;
+							while (holder[0].successor != null)
+								holder[0] = holder[0].successor;
+							theStamp.incrementAndGet();
+							BinaryTreeNode<DerivedElementHolder<T>> left = holder[0].treeNode.getClosest(true);
+							BinaryTreeNode<DerivedElementHolder<T>> right = holder[0].treeNode.getClosest(false);
+							if ((left != null && left.get().element.compareTo(holder[0].element) > 0)
+								|| (right != null && right.get().element.compareTo(holder[0].element) < 0)) {
+								// Element is out-of-order. This may indicate that only this element has changed,
+								// or it could indicate that the ordering scheme of the elements has changed.
+								// We need to do a repair operation to be safe.
+								theDerivedElements.repair(holder[0].treeNode.getElementId(),
+								new BetterTreeSet.RepairListener<DerivedElementHolder<T>, CollectionElementMove>() {
+									@Override
+									public CollectionElementMove removed(CollectionElement<DerivedElementHolder<T>> element) {
+										int index = theDerivedElements.getElementsBefore(element.getElementId());
+										T value = element.get() == holder[0] ? oldValue : element.get().get();
+										// We know this is a move because elements are always distinct
+										CollectionElementMove move = new CollectionElementMove();
+										fireListeners(new ObservableCollectionEvent<>(element.get(), index, CollectionChangeType.remove,
+											move, value, value, elCause));
+										return move;
+									}
 
-								@Override
-								public void disposed(DerivedElementHolder<T> value, Void data) {
-									throw new IllegalStateException("This should never happen in a repair");
-								}
+									@Override
+									public void disposed(DerivedElementHolder<T> value, CollectionElementMove data) {
+										throw new IllegalStateException("This should never happen in a repair");
+									}
 
-								@Override
-								public void transferred(CollectionElement<DerivedElementHolder<T>> element, Void data) {
-									// Don't re-use elements, as this violates the BetterCollection API wrt element removal
-									// See ElementId#isPresent()
-									DerivedElementHolder<T> newHolder = createHolder(element.get().element);
-									newHolder.treeNode = (BinaryTreeNode<DerivedElementHolder<T>>) element;
-									// Instruct the element's listener how to find the new holder
-									element.get().successor = newHolder;
-									theDerivedElements.mutableElement(element.getElementId()).set(newHolder);
-									int index = theDerivedElements.getElementsBefore(element.getElementId());
-									T value = element.get().get();
-									fireListeners(new ObservableCollectionEvent<>(newHolder, index, CollectionChangeType.add, true, null,
-										value, elCause));
-								}
-							});
-							if (holder[0].successor != null) {
-								while (holder[0].successor != null)
-									holder[0] = holder[0].successor;
-							} else // Since we weren't actually moved in the repair, we need to fire the listener
+									@Override
+									public void transferred(CollectionElement<DerivedElementHolder<T>> element,
+										CollectionElementMove data) {
+										// Don't re-use elements, as this violates the BetterCollection API wrt element removal
+										// See ElementId#isPresent()
+										DerivedElementHolder<T> newHolder = createHolder(element.get().element);
+										newHolder.treeNode = (BinaryTreeNode<DerivedElementHolder<T>>) element;
+										// Instruct the element's listener how to find the new holder
+										element.get().successor = newHolder;
+										theDerivedElements.mutableElement(element.getElementId()).set(newHolder);
+										int index = theDerivedElements.getElementsBefore(element.getElementId());
+										T value = element.get().get();
+										data.moved();
+										fireListeners(new ObservableCollectionEvent<>(newHolder, index, CollectionChangeType.add, data,
+											null, value, elCause));
+									}
+								});
+								if (holder[0].successor != null) {
+									while (holder[0].successor != null)
+										holder[0] = holder[0].successor;
+								} else // Since we weren't actually moved in the repair, we need to fire the listener
+									fireListeners(new ObservableCollectionEvent<>(holder[0], holder[0].treeNode.getNodesBefore(),
+										CollectionChangeType.set, null, oldValue, newValue, elCause));
+							} else {
 								fireListeners(new ObservableCollectionEvent<>(holder[0], holder[0].treeNode.getNodesBefore(),
-									CollectionChangeType.set, false, oldValue, newValue, elCause));
-						} else {
-							fireListeners(new ObservableCollectionEvent<>(holder[0], holder[0].treeNode.getNodesBefore(),
-								CollectionChangeType.set, false, oldValue, newValue, elCause));
+									CollectionChangeType.set, null, oldValue, newValue, elCause));
+							}
 						}
-					}
 
-					@Override
-					public void removed(T value, Object elCause) {
-						while (holder[0].successor != null)
-							holder[0] = holder[0].successor;
-						theStamp.incrementAndGet();
-						int index = holder[0].treeNode.getNodesBefore();
-						if (holder[0].treeNode.getElementId().isPresent()) // May have been removed already
-							theDerivedElements.mutableElement(holder[0].treeNode.getElementId()).remove();
-						boolean terminalMove = elCause instanceof ObservableCollectionEvent
-							&& ((ObservableCollectionEvent<?>) elCause).isMove();
-						fireListeners(new ObservableCollectionEvent<>(holder[0], index,
-							CollectionChangeType.remove, terminalMove, value, value, elCause));
-					}
-				});
+						@Override
+						public void removed(T value, Object elCause) {
+							while (holder[0].successor != null)
+								holder[0] = holder[0].successor;
+							theStamp.incrementAndGet();
+							int index = holder[0].treeNode.getNodesBefore();
+							if (holder[0].treeNode.getElementId().isPresent()) // May have been removed already
+								theDerivedElements.mutableElement(holder[0].treeNode.getElementId()).remove();
+							CollectionElementMove terminalMove = elCause instanceof ObservableCollectionEvent
+								? ((ObservableCollectionEvent<?>) elCause).getMovement() : null;
+								fireListeners(new ObservableCollectionEvent<>(holder[0], index, CollectionChangeType.remove, terminalMove, value,
+									value, elCause));
+						}
+					});
 			};
 			// Must maintain a strong reference to the event listening so it is not GC'd while the collection is still alive
 			theWeakListening = WeakListening.build().withUntil(r -> until.act(v -> r.run()));
@@ -3440,7 +3444,7 @@ public final class ObservableCollectionImpl {
 											List<CollectionChangeEvent.ElementChange<E>> elements = new ArrayList<>(collection.size());
 											int index = 0;
 											for (E v : collection)
-												elements.add(new CollectionChangeEvent.ElementChange<>(v, v, index++));
+												elements.add(new CollectionChangeEvent.ElementChange<>(v, v, index++, null));
 											CollectionChangeEvent<E> clearEvt = new CollectionChangeEvent<>(CollectionChangeType.remove, //
 												elements, collEvt);
 											debug(s -> s.append("clear: ").append(clearEvt));
@@ -3463,7 +3467,7 @@ public final class ObservableCollectionImpl {
 										List<CollectionChangeEvent.ElementChange<E>> elements = new ArrayList<>(collection.size());
 										int index = 0;
 										for (E v : collection)
-											elements.add(new CollectionChangeEvent.ElementChange<>(v, null, index++));
+											elements.add(new CollectionChangeEvent.ElementChange<>(v, null, index++, null));
 										CollectionChangeEvent<E> populateEvt = new CollectionChangeEvent<>(CollectionChangeType.add, //
 											elements, collEvt);
 										debug(s -> s.append("populate: ").append(populateEvt));
@@ -3587,8 +3591,8 @@ public final class ObservableCollectionImpl {
 				@Override
 				public void accept(ObservableCollectionEvent<? extends E> event) {
 					ObservableCollectionEvent<E> mapped = new ObservableCollectionEvent<>(//
-						new FlattenedElementId(theCollection, event.getElementId()), event.getIndex(), event.getType(),
-						event.isMove(), event.getOldValue(), event.getNewValue(), event);
+						new FlattenedElementId(theCollection, event.getElementId()), event.getIndex(), event.getType(), event.getMovement(),
+						event.getOldValue(), event.getNewValue(), event);
 					theWrapped.accept(mapped);
 				}
 			}

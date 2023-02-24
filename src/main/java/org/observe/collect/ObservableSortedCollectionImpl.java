@@ -227,7 +227,7 @@ public class ObservableSortedCollectionImpl {
 									presentEl = thePresentElements.getElement(evt.getElementId(), true);// Get by value
 									int index = thePresentElements.getElementsBefore(presentEl.getElementId());
 									thePresentElements.mutableElement(presentEl.getElementId()).remove();
-									fire(evt, CollectionChangeType.remove, false, index, evt.getOldValue(), evt.getOldValue());
+									fire(evt, CollectionChangeType.remove, null, index, evt.getOldValue(), evt.getOldValue());
 								}
 								break;
 							default:
@@ -237,32 +237,32 @@ public class ObservableSortedCollectionImpl {
 							case add:
 								presentEl = thePresentElements.addElement(evt.getElementId(), false);
 								int index = thePresentElements.getElementsBefore(presentEl.getElementId());
-								fire(evt, evt.getType(), evt.isMove(), index, null, evt.getNewValue());
+								fire(evt, evt.getType(), evt.getMovement(), index, null, evt.getNewValue());
 								break;
 							case remove:
 								presentEl = thePresentElements.getElement(evt.getElementId(), true);// Get by value
 								index = thePresentElements.getElementsBefore(presentEl.getElementId());
 								thePresentElements.mutableElement(presentEl.getElementId()).remove();
-								fire(evt, evt.getType(), evt.isMove(), index, evt.getOldValue(), evt.getNewValue());
+								fire(evt, evt.getType(), evt.getMovement(), index, evt.getOldValue(), evt.getNewValue());
 								break;
 							case set:
 								if (oldInRange != 0) {
 									presentEl = thePresentElements.addElement(evt.getElementId(), false);
 									index = thePresentElements.getElementsBefore(presentEl.getElementId());
-									fire(evt, CollectionChangeType.add, evt.isMove(), index, null, evt.getNewValue());
+									fire(evt, CollectionChangeType.add, null, index, null, evt.getNewValue());
 								} else {
 									presentEl = thePresentElements.getElement(evt.getElementId(), true);// Get by value
 									index = thePresentElements.getElementsBefore(presentEl.getElementId());
-									fire(evt, CollectionChangeType.set, evt.isMove(), index, evt.getOldValue(), evt.getNewValue());
+									fire(evt, CollectionChangeType.set, null, index, evt.getOldValue(), evt.getNewValue());
 								}
 							}
 						}
 					}
 
-					void fire(ObservableCollectionEvent<? extends E> evt, CollectionChangeType type, boolean move, int index, E oldValue,
-						E newValue) {
-						ObservableCollectionEvent<? extends E> evt2 = new ObservableCollectionEvent<>(wrap(evt.getElementId()),
-							index, type, move, oldValue, newValue, evt);
+					void fire(ObservableCollectionEvent<? extends E> evt, CollectionChangeType type, CollectionElementMove move, int index,
+						E oldValue, E newValue) {
+						ObservableCollectionEvent<? extends E> evt2 = new ObservableCollectionEvent<>(wrap(evt.getElementId()), index, type,
+							move, oldValue, newValue, evt);
 						try (Transaction evtT = evt2.use()) {
 							observer.accept(evt2);
 						}
@@ -866,7 +866,7 @@ public class ObservableSortedCollectionImpl {
 		 */
 		public ActiveDerivedSortedCollection(ActiveValueStoredManager<?, ?, T> flow, Comparator<? super T> compare, Observable<?> until) {
 			super(flow, until);
-			theCompare=compare;
+			theCompare = compare;
 		}
 
 		@Override
