@@ -3,6 +3,7 @@ package org.observe.util.swing;
 import java.awt.EventQueue;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Collection;
@@ -35,7 +36,9 @@ import org.qommons.TimeUtils;
 import org.qommons.TimeUtils.ParsedDuration;
 import org.qommons.TimeUtils.ParsedInstant;
 import org.qommons.collect.BetterList;
+import org.qommons.collect.CollectionElement;
 import org.qommons.io.Format;
+import org.qommons.threading.QommonsTimer;
 
 import com.google.common.reflect.TypeToken;
 
@@ -2565,13 +2568,26 @@ public interface TableContentControl {
 			.build(TypeTokens.get().keyFor(CategoryRenderStrategy.class)
 				.<CategoryRenderStrategy<Map<String, String>, String>> parameterized(rows.getType(), TypeTokens.get().STRING))
 			.onEdt().build();
+		SettableValue<Boolean> updating = SettableValue.build(boolean.class).withValue(false).build();
+		Random random = new Random();
+		QommonsTimer.TaskHandle updateHandle = QommonsTimer.getCommonInstance().build(() -> {
+			int updatedRows = random.nextInt(rows.size() / 10);
+			for (int r = 0; r < updatedRows; r++) {
+				int index = random.nextInt(rows.size());
+				CollectionElement<Map<String, String>> row = rows.getElement(index);
+				row.get().put("A", "" + random.nextLong());
+
+				rows.mutableElement(row.getElementId()).set(row.get());
+			}
+		}, Duration.ofSeconds(1), false).onEDT();
+		updating.changes().act(evt -> updateHandle.setActive(evt.getNewValue()));
 		EventQueue.invokeLater(() -> {
 			columns.add(new CategoryRenderStrategy<Map<String, String>, String>("A", TypeTokens.get().STRING, map -> {
 				return map.get("A");
 			})//
 				.formatText(v -> v == null ? "" : v).withMutation(mut -> {
 					mut.mutateAttribute((map, v) -> map.put("A", v)).asText(Format.TEXT).withRowUpdate(true);
-				}).withWidths(50, 100, 150));
+				}).withWidths(50, 100, 150).withMutation(mut -> mut.mutateAttribute((map, a) -> map.put("A", a)).asText(Format.TEXT)));
 			columns.add(new CategoryRenderStrategy<Map<String, String>, String>("B", TypeTokens.get().STRING, map -> {
 				return map.get("B");
 			})//
@@ -2598,7 +2614,6 @@ public interface TableContentControl {
 				}).withWidths(50, 100, 150));
 			SimpleDateFormat dateFormat = new SimpleDateFormat("EEE MMM dd, yyyy HH:mm:ss");
 			Calendar cal = Calendar.getInstance();
-			Random random = new Random();
 			int rowCount = 10_000;
 			int lastPct = 0;
 			for (int i = 0; i < rowCount; i++) {
@@ -2681,6 +2696,7 @@ public interface TableContentControl {
 					.withAdd(() -> new HashMap<>(), null)//
 					;
 				})//
+				.addHPanel(null, new JustifiedBoxLayout(false).mainCenter(), bp -> bp.addToggleButton(null, updating, "Update", null))//
 				).run(null);
 		});
 	}

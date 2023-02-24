@@ -9,10 +9,12 @@ import java.text.SimpleDateFormat;
 import java.time.Duration;
 import java.util.Calendar;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -30,6 +32,7 @@ import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.SimpleObservable;
 import org.observe.Subscription;
+import org.observe.collect.CollectionElementMove;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableSortedSet;
 import org.observe.dbug.Dbug;
@@ -205,6 +208,8 @@ public class ObservableValueSelector<T, X> extends JPanel {
 			Subscription.forAll(subs);
 			subs.clear();
 		});
+		boolean[] selectCallbackLock = new boolean[1];
+		Set<CollectionElementMove> moves = new HashSet<>(); // Re-add included values if they are moved in the source collection
 		subs.add(theSourceRows.subscribe(evt -> {
 			CollectionElement<SelectableValue<T, X>> selectableEl;
 			switch (evt.getType()) {
@@ -213,10 +218,22 @@ public class ObservableValueSelector<T, X> extends JPanel {
 				newSV.theDestValue = theMap.apply(evt.getNewValue());
 				selectableEl = theSelectableValues.addElement(newSV, false);
 				selectableEl.get().selectableElement = theSelectableValues.mutableElement(selectableEl.getElementId());
+				if (evt.getMovement() != null && moves.remove(evt.getMovement())) {
+					selectCallbackLock[0] = true;
+					try {
+						selectableEl.get().setIncluded(true);
+					} finally {
+						selectCallbackLock[0] = false;
+					}
+				}
 				break;
 			case remove:
 				selectableEl = theSelectableValues.search(sv -> evt.getElementId().compareTo(sv.sourceElement.getElementId()),
 					BetterSortedList.SortedSearchFilter.OnlyMatch);
+				if (evt.getMovement() != null && selectableEl.get().included) {
+					moves.add(evt.getMovement());
+					evt.getMovement().onDiscard(moves::remove);
+				}
 				selectableEl.get().remove();
 				break;
 			case set:
@@ -229,10 +246,15 @@ public class ObservableValueSelector<T, X> extends JPanel {
 			}
 		}, true));
 
+		String pluralItemName = StringUtils.pluralize(theItemName);
 		theIncludeAllButton = new JButton(">>");
 		theIncludeButton = new JButton(">");
 		theExcludeButton = new JButton("<");
 		theExcludeAllButton = new JButton("<<");
+		theIncludeAllButton.setToolTipText("Include all displayed " + pluralItemName);
+		theIncludeButton.setToolTipText("Include selected " + pluralItemName);
+		theExcludeButton.setToolTipText("Exclude selected " + pluralItemName);
+		theExcludeAllButton.setToolTipText("Exclude all " + pluralItemName);
 		theIncludeAllButton.setCursor(Cursor.getDefaultCursor());
 		theIncludeButton.setCursor(Cursor.getDefaultCursor());
 		theExcludeButton.setCursor(Cursor.getDefaultCursor());
@@ -398,7 +420,6 @@ public class ObservableValueSelector<T, X> extends JPanel {
 
 		theSelectionChanges = new SimpleObservable<>();
 
-		boolean[] selectCallbackLock = new boolean[1];
 		int[] minMaxSelectionChange = new int[] { -1, -1 };
 		Object selectionUpdateId = new Object();
 		ListSelectionListener leftLSL = evt -> {

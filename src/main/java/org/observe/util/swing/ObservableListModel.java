@@ -86,6 +86,11 @@ public class ObservableListModel<E> implements ListModel<E> {
 			return theWrapped.get(index);
 	}
 
+	/** @return Whether this list model is currently firing a data event or set of events in response to changes in the collection */
+	public boolean isEventing() {
+		return isEventing;
+	}
+
 	@Override
 	public void addListDataListener(ListDataListener l) {
 		if (!EventQueue.isDispatchThread())
@@ -202,43 +207,31 @@ public class ObservableListModel<E> implements ListModel<E> {
 	}
 
 	/** Allows causable-aware listeners to this class to inspect the causality chain */
-	static class CausableListEvent extends ListDataEvent implements Causable {
-		private final BetterList<Object> theCauses;
-		private final Causable theRootCausable;
+	public static class CausableListEvent extends ListDataEvent implements Causable {
+		private final CollectionChangeEvent<?> theCause;
 		private LinkedHashMap<CausableKey, Supplier<Transaction>> theKeys;
 		private boolean isStarted;
 		private boolean isFinished;
 		private boolean isTerminated;
 
-		public CausableListEvent(Object source, int type, int index0, int index1, Object... causes) {
+		CausableListEvent(Object source, int type, int index0, int index1, CollectionChangeEvent<?> cause) {
 			super(source, type, index0, index1);
-			theCauses = BetterList.of(causes);
-			if (causes == null)
-				theRootCausable = this;
-			else {
-				Causable root = this;
-				for (Object cause : causes) {
-					if (cause instanceof Causable && !(cause instanceof ChainBreak)) {
-						if (((Causable) cause).isTerminated())
-							throw new IllegalStateException("Cannot use a finished Causable as a cause");
-						root = ((Causable) cause).getRootCausable();
-						if (root.isTerminated())
-							throw new IllegalStateException("Cannot use a finished Causable as a cause");
-						break;
-					}
-				}
-				theRootCausable = root;
-			}
+			theCause = cause;
+		}
+
+		/** @return The collection event that caused this list event */
+		public CollectionChangeEvent<?> getCause() {
+			return theCause;
 		}
 
 		@Override
 		public BetterList<Object> getCauses() {
-			return theCauses;
+			return BetterList.of(theCause);
 		}
 
 		@Override
 		public Causable getRootCausable() {
-			return theRootCausable;
+			return theCause.getRootCausable();
 		}
 
 		@Override
