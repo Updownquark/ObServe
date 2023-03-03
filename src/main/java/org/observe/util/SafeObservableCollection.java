@@ -71,6 +71,7 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 		boolean isChanged;
 		boolean isRemoved;
 		private E value;
+		CollectionElementMove move;
 
 		/**
 		 * @param sourceId The element ID in the source
@@ -141,8 +142,8 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 	private boolean isFlushing;
 	private long theStamp;
 	private volatile boolean isFinished;
-
-	CollectionElementMove movement;
+	private final Map<CollectionElementMove, ElementId> theAddMoves;
+	int theMidMoveCount;
 
 	/**
 	 * @param collection The backing collection
@@ -164,11 +165,6 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 			.build((TypeToken<ElementRef<E>>) (TypeToken<?>) TypeTokens.get().of(ElementRef.class))//
 			.withBacking(theSyntheticBacking);
 		builder.withSourceElements(this::_getSourceElements).withElementsBySource(this::_getElementsBySource);
-		builder.withMovement(() -> {
-			CollectionElementMove m = movement;
-			movement = null;
-			return m;
-		});
 		theSyntheticCollection = builder.build();
 
 		theSyntheticCollection.onChange(evt -> {
@@ -205,6 +201,7 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 		theAddedElements = new HashSet<>();
 		theRemovedElements = new ArrayList<>();
 		theChangedElements = new ArrayList<>();
+		theAddMoves = new HashMap<>();
 		try (Transaction t = collection.lock(false, null)) {
 			theStamp = theCollection.getStamp();
 			init(until);
@@ -299,11 +296,18 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 		switch (evt.getType()) {
 		case add:
 			theAddedElements.add(evt.getElementId());
+			if (evt.getMovement() != null) {
+				theMidMoveCount--;
+				theAddMoves.put(evt.getMovement(), evt.getElementId());
+			}
 			break;
 		case remove:
 			if (theAddedElements.remove(evt.getElementId()))
 				return;
+			if (evt.getMovement() != null)
+				theMidMoveCount++;
 			ElementRef<E> found = findRef(evt.getElementId());
+			found.move = evt.getMovement();
 			found.isRemoved = true;
 			theRemovedElements.add(found);
 			// Adjust next/previous pointers
@@ -340,7 +344,7 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 	 * @return Whether anything was flushed, or also if the state of changes prevented flushing from occurring (should try again)
 	 */
 	protected boolean doFlush() {
-		if (isFinished)
+		if (isFinished || theMidMoveCount > 0)
 			return false;
 		ObservableSwingUtils.flushEQCache();
 		while (!theFlushLock.compareAndSet(false, true)) {
@@ -370,13 +374,20 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 				flushed = true;
 				for (ElementRef<E> removedEl : theRemovedElements) {
 					theElementsBySource.remove(removedEl.sourceId);
-					ElementId moved = added.remove(removedEl.getValue());
+					ElementId moved;
+					if (removedEl.move != null) {
+						moved = theAddMoves.remove(removedEl.move);
+						removedEl.move = null;
+					} else
+						moved = added.remove(removedEl.getValue());
 					CollectionElementMove move = moved == null ? null : new CollectionElementMove();
 					if (moved != null) {
 						moves.put(moved, move);
-						movement = move;
-					}
-					theSyntheticCollection.mutableElement(removedEl.getSynthId()).remove();
+						try (Transaction t2 = theSyntheticCollection.lock(true, move)) {
+							theSyntheticCollection.mutableElement(removedEl.getSynthId()).remove();
+						}
+					} else
+						theSyntheticCollection.mutableElement(removedEl.getSynthId()).remove();
 				}
 				theRemovedElements.clear();
 			}
@@ -404,14 +415,18 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 						SortedSearchFilter.Greater);
 					ElementRef<E> newEl = createElement(addedEl, theCollection.getElement(addedEl).get());
 					CollectionElementMove move = moves.remove(addedEl);
-					movement = move;
-					if (before == null)
-						theSyntheticCollection.addElement(newEl, false);
-					else
-						theSyntheticCollection.addElement(newEl, null, before.get().getSynthId(), false);
 					if (move != null) {
-						System.out.println("SOC moved");
-						move.moved();
+						try (Transaction t2 = theSyntheticCollection.lock(true, move)) {
+							if (before == null)
+								theSyntheticCollection.addElement(newEl, false);
+							else
+								theSyntheticCollection.addElement(newEl, null, before.get().getSynthId(), false);
+						}
+					} else {
+						if (before == null)
+							theSyntheticCollection.addElement(newEl, false);
+						else
+							theSyntheticCollection.addElement(newEl, null, before.get().getSynthId(), false);
 					}
 				}
 				theAddedElements.clear();

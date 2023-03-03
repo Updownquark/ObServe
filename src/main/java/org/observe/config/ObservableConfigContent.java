@@ -705,7 +705,7 @@ public class ObservableConfigContent {
 				ObservableConfig child = evt.relativePath.get(0);
 				ObservableConfig oldValue = evt.changeType == CollectionChangeType.add ? null : child;
 				ObservableCollectionEvent<ObservableConfig> collEvt = new ObservableCollectionEvent<>(child.getParentChildRef(),
-					child.getIndexInParent(), evt.changeType, evt.movement, oldValue, child, evt);
+					child.getIndexInParent(), evt.changeType, oldValue, child, evt, evt.movement);
 				observer.accept(collEvt);
 			});
 		}
@@ -1031,7 +1031,7 @@ public class ObservableConfigContent {
 
 					ObservableConfig oldValue = changeType == CollectionChangeType.add ? null : child;
 					ObservableCollectionEvent<ObservableConfig> collEvt = new ObservableCollectionEvent<>(child.getParentChildRef(),
-						index, changeType, preMatches ? evt.movement : null, oldValue, child, evt);
+						index, changeType, oldValue, child, evt, preMatches ? evt.movement : null);
 					try (Transaction t = collEvt.use()) {
 						observer.accept(collEvt);
 					}

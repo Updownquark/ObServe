@@ -1,5 +1,6 @@
 package org.observe.collect;
 
+import org.qommons.CausalLock;
 import org.qommons.Ternian;
 import org.qommons.collect.ListenerList;
 
@@ -28,8 +29,10 @@ import org.qommons.collect.ListenerList;
  * Movement operations must be accomplished in a single {@link ObservableCollection#lock(boolean, Object) transaction} on a single thread.
  * </p>
  */
-public class CollectionElementMove {
+public class CollectionElementMove implements CausalLock.Cause {
+	/** A listener to be notified when something happens to a movement operation */
 	public interface MovementListener {
+		/** @param movement The movement that is now {@link CollectionElementMove#isFinished() finished} */
 		void moveComplete(CollectionElementMove movement);
 	}
 
@@ -49,17 +52,30 @@ public class CollectionElementMove {
 	private boolean wasMoved;
 	private boolean isFinished;
 
+	/** Creates the move */
 	public CollectionElementMove() {
 	}
 
+	/**
+	 * @param listener The listener to be notified when a movement operation terminates in a re-addition
+	 * @return This movement
+	 */
 	public CollectionElementMove onMove(MovementListener listener) {
 		return listen(listener, Ternian.TRUE);
 	}
 
+	/**
+	 * @param listener The listener to be notified when a movement operation terminates without a re-addition
+	 * @return This movement
+	 */
 	public CollectionElementMove onDiscard(MovementListener listener) {
 		return listen(listener, Ternian.FALSE);
 	}
 
+	/**
+	 * @param listener The listener to be notified when a movement operation terminates with or without a re-addition
+	 * @return This movement
+	 */
 	public CollectionElementMove onFinish(MovementListener listener) {
 		return listen(listener, Ternian.NONE);
 	}
@@ -74,12 +90,14 @@ public class CollectionElementMove {
 		return this;
 	}
 
+	/** @return Whether this movement operation terminated in a re-addition */
 	public boolean wasMoved() {
 		if (!isFinished)
 			throw new IllegalStateException("Movement is not finished");
 		return wasMoved;
 	}
 
+	/** @return Whether this movement operation has finished, one way or another */
 	public boolean isFinished() {
 		return isFinished;
 	}
@@ -87,7 +105,7 @@ public class CollectionElementMove {
 	/** Signifies that the removed element has been re-added to the collection */
 	public void moved() {
 		if (isFinished)
-			throw new IllegalStateException("Finished twice?");
+			throw new IllegalStateException((wasMoved ? "Moved" : "Finished") + " twice?");
 		wasMoved = true;
 		fire(true);
 	}

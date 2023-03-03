@@ -479,7 +479,7 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 					cveIter.remove();
 					cve.dispose();
 					fire(new ObservableCollectionEvent<>(cve.getElementId(), theElements.size(), CollectionChangeType.remove,
-						null, cve.get(), cve.get(), cause));
+						cve.get(), cve.get(), cause));
 				}
 			}
 			if (collectionElement != null) {
@@ -487,7 +487,7 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 					ConfigElement cve = createElement(child, null, findRefs);
 					cve.theElement = theElements.putEntry(child.getParentChildRef(), cve, false).getElementId();
 					fire(new ObservableCollectionEvent<>(cve.getElementId(), theElements.size() - 1, CollectionChangeType.add,
-						null, null, cve.get(), cause));
+						null, cve.get(), cause));
 				}
 			}
 		}
@@ -528,9 +528,8 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 					incrementStamp();
 					theElements.mutableEntry(el.getElementId()).remove();
 					el.get().dispose();
-					fire(new ObservableCollectionEvent<>(el.getElementId(),
-						theElements.keySet().getElementsBefore(el.getElementId()), CollectionChangeType.remove, collectionChange.movement,
-						el.get().get(), el.get().get(), collectionChange));
+					fire(new ObservableCollectionEvent<>(el.getElementId(), theElements.keySet().getElementsBefore(el.getElementId()),
+						CollectionChangeType.remove, el.get().get(), el.get().get(), collectionChange, collectionChange.movement));
 				} else {
 					try {
 						E newValue;
@@ -579,7 +578,7 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 			incrementStamp();
 			CollectionElementMove move = cause instanceof ObservableConfigEvent ? ((ObservableConfigEvent) cause).movement : null;
 			fire(new ObservableCollectionEvent<>(newElId, theElements.keySet().getElementsBefore(newElId),
-				CollectionChangeType.add, move, null, newEl.get(), cause));
+				CollectionChangeType.add, null, newEl.get(), cause, move));
 		}
 
 		private void fire(ObservableCollectionEvent<E> event) {

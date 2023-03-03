@@ -400,7 +400,7 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, BetterSo
 					if (evt.getType() == CollectionChangeType.remove)
 						size[0]--;
 					ObservableMapEvent<K, V> mapEvent = new ObservableMapEvent<>(evt.getElementId().reverse(), index, evt.getType(),
-						evt.getMovement(), evt.getOldKey(), evt.getKey(), evt.getOldValue(), evt.getNewValue(), evt);
+						evt.getOldKey(), evt.getKey(), evt.getOldValue(), evt.getNewValue(), evt, evt.getMovement());
 					try (Transaction mt = mapEvent.use()) {
 						action.accept(mapEvent);
 					}
@@ -476,8 +476,8 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, BetterSo
 				if (!keySet().belongs(evt.getKey()))
 					return;
 				int index = keySet().getElementsBefore(evt.getElementId());
-				ObservableMapEvent<K, V> mapEvent = new ObservableMapEvent<>(evt.getElementId(), index, evt.getType(), evt.getMovement(),
-					evt.getOldKey(), evt.getKey(), evt.getOldValue(), evt.getNewValue(), evt);
+				ObservableMapEvent<K, V> mapEvent = new ObservableMapEvent<>(evt.getElementId(), index, evt.getType(), evt.getOldKey(),
+					evt.getKey(), evt.getOldValue(), evt.getNewValue(), evt, evt.getMovement());
 				try (Transaction t = mapEvent.use()) {
 					action.accept(mapEvent);
 				}

@@ -20,9 +20,13 @@ public class ObservableUtils {
 	 * {@link ObservableCollection#subscribe(Consumer, boolean) subscription}
 	 */
 	public static class SubscriptionCause extends Causable.AbstractCausable {
-		/** Creates a subscription cause */
-		public SubscriptionCause() {
-			super();
+		/**
+		 * Creates a subscription cause
+		 *
+		 * @param otherCause The cause of the subscribe/unsubscribe action, if any
+		 */
+		public SubscriptionCause(Object otherCause) {
+			super(otherCause);
 		}
 	}
 
@@ -33,19 +37,20 @@ public class ObservableUtils {
 	 * @param collection The collection whose elements to populate into the listener
 	 * @param observer The listener to populate the collection events into
 	 * @param forward Whether to populate the values from the beginning first or end first
+	 * @param cause The cause of the unsubscription, if any
 	 */
 	public static <E> void populateValues(ObservableCollection<E> collection,
-		Consumer<? super ObservableCollectionEvent<? extends E>> observer, boolean forward) {
+		Consumer<? super ObservableCollectionEvent<? extends E>> observer, boolean forward, Object cause) {
 		if (collection == null || collection.isEmpty())
 			return;
 		int index = 0;
 		// Assume the collection is already read-locked
-		SubscriptionCause cause = new SubscriptionCause();
-		try (Transaction ct = cause.use()) {
+		SubscriptionCause subCause = new SubscriptionCause(cause);
+		try (Transaction ct = subCause.use()) {
 			CollectionElement<E> el = collection.getTerminalElement(forward);
 			while (el != null) {
 				ObservableCollectionEvent<E> event = new ObservableCollectionEvent<>(el.getElementId(), index,
-					CollectionChangeType.add, null, null, el.get(), cause);
+					CollectionChangeType.add, null, el.get(), subCause);
 				try (Transaction evtT = event.use()) {
 					observer.accept(event);
 				}
@@ -63,19 +68,20 @@ public class ObservableUtils {
 	 * @param collection The collection whose elements to de-populate from the listener
 	 * @param observer The listener to de-populate the collection events from
 	 * @param forward Whether to de-populate the values from the beginning first or end first
+	 * @param cause The cause of the subscription, if any
 	 */
 	public static <E> void depopulateValues(ObservableCollection<E> collection,
-		Consumer<? super ObservableCollectionEvent<? extends E>> observer, boolean forward) {
+		Consumer<? super ObservableCollectionEvent<? extends E>> observer, boolean forward, Object cause) {
 		if (collection == null || collection.isEmpty())
 			return;
 		int index = forward ? 0 : collection.size() - 1;
-		SubscriptionCause cause = new SubscriptionCause();
-		try (Transaction ct = cause.use()) {
+		SubscriptionCause subCause = new SubscriptionCause(cause);
+		try (Transaction ct = subCause.use()) {
 			CollectionElement<E> el = collection.getTerminalElement(forward);
 			while (el != null) {
 				E value = el.get();
 				ObservableCollectionEvent<E> event = new ObservableCollectionEvent<>(el.getElementId(), index,
-					CollectionChangeType.remove, null, value, value, cause);
+					CollectionChangeType.remove, value, value, subCause);
 				try (Transaction evtT = event.use()) {
 					observer.accept(event);
 				}

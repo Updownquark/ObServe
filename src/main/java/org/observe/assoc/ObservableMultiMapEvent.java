@@ -1,7 +1,6 @@
 package org.observe.assoc;
 
 import org.observe.collect.CollectionChangeType;
-import org.observe.collect.CollectionElementMove;
 import org.qommons.collect.ElementId;
 
 /**
@@ -20,20 +19,17 @@ public class ObservableMultiMapEvent<K, V> extends ObservableMapEvent<K, V> {
 	 * @param keyIndex The index in the key set of the key under which a value was added/removed/changed
 	 * @param valueIndex The index in the entry's value collection of the element that was added/removed/changed
 	 * @param type The type of the change (addition/removal/change)
-	 * @param movement If this event represents either the removal of an element in preparation for a move, or the re-addition of an element
-	 *        that was just removed in the same move operation, this will be an identifier that links the two operations. A movement
-	 *        operation happens in a single transaction on a single thread.
 	 * @param oldKey The previous key. This will only be different from <code>key</code> if this event represents a modification to a key
 	 *        value that does not affect the contents of the key's values. In this case, {@link #getIndex()} will be -1 and
 	 *        {@link #getElementId()} will be null.
 	 * @param key The key under which a value was added/removed/changed
 	 * @param oldValue The value of the element before the change (for change type of {@link CollectionChangeType#set set} only)
 	 * @param newValue The value of the element after the change
-	 * @param cause The cause of the change
+	 * @param causes The causes of the change
 	 */
 	public ObservableMultiMapEvent(ElementId keyElementId, ElementId valueElementId, int keyIndex, int valueIndex,
-		CollectionChangeType type, CollectionElementMove movement, K oldKey, K key, V oldValue, V newValue, Object cause) {
-		super(valueElementId, valueIndex, type, movement, oldKey, key, oldValue, newValue, cause);
+		CollectionChangeType type, K oldKey, K key, V oldValue, V newValue, Object... causes) {
+		super(valueElementId, valueIndex, type, oldKey, key, oldValue, newValue, causes);
 		theKeyElement = keyElementId;
 		theKeyIndex = keyIndex;
 	}

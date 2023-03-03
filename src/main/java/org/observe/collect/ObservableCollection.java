@@ -193,7 +193,7 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 		Subscription changeSub;
 		try (Transaction t = lock(false, null)) {
 			// Initial events
-			ObservableUtils.populateValues(this, observer, forward);
+			ObservableUtils.populateValues(this, observer, forward, null);
 			// Subscribe changes
 			changeSub = onChange(observer);
 		}
@@ -204,7 +204,7 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 				if (removeAll) {
 					// Remove events
 					// Remove elements in reverse order from how they were subscribed
-					ObservableUtils.depopulateValues(this, observer, !forward);
+					ObservableUtils.depopulateValues(this, observer, !forward, null);
 				}
 			}
 		};

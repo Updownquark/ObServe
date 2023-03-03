@@ -119,8 +119,6 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 	 */
 	B withSourceElements(BiFunction<ElementId, BetterCollection<?>, BetterList<ElementId>> sourceElements);
 
-	B withMovement(Supplier<CollectionElementMove> movement);
-
 	/** @return A builder to build an {@link ObservableSet} with these characteristics */
 	DistinctBuilder<E, ?> distinct();
 
@@ -292,7 +290,6 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 		private BiFunction<ElementId, BetterCollection<?>, BetterList<ElementId>> theElementSource;
 		private BiFunction<ElementId, BetterCollection<?>, BetterList<ElementId>> theSourceElements;
 		private Equivalence<? super E> theEquivalence;
-		private Supplier<CollectionElementMove> theMovement;
 
 		/**
 		 * @param type The type of elements in the collection
@@ -348,12 +345,6 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 		}
 
 		@Override
-		public B withMovement(Supplier<CollectionElementMove> movement) {
-			theMovement = movement;
-			return (B) this;
-		}
-
-		@Override
 		public DistinctBuilder<E, ?> distinct() {
 			if (theSorting != null)
 				return new DistinctSortedBuilderImpl<>(this, theSorting);
@@ -397,10 +388,6 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 			return theSourceElements;
 		}
 
-		protected Supplier<CollectionElementMove> getMovement() {
-			return theMovement;
-		}
-
 		/** @return The sorting for the collection */
 		protected Comparator<? super E> getSorting() {
 			return theSorting;
@@ -414,7 +401,7 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 					: BetterTreeList.build();
 				backing = builder.withDescription(getDescription()).withCollectionLocking(getLocker()).build();
 			}
-			return new DefaultObservableCollection<>(theType, backing, theElementSource, theSourceElements, theEquivalence, theMovement);
+			return new DefaultObservableCollection<>(theType, backing, theElementSource, theSourceElements, theEquivalence);
 		}
 
 		@Override
@@ -595,7 +582,7 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 			else if (!(backing instanceof BetterSortedList))
 				throw new IllegalStateException("An ObservableSortedCollection must be backed by an instance of BetterSortedList");
 			return new DefaultObservableSortedCollection<>(getType(), (BetterSortedList<E>) backing, getElementsBySource(),
-				getSourceElements(), getMovement());
+				getSourceElements());
 		}
 
 		@Override
@@ -737,8 +724,7 @@ public interface ObservableCollectionBuilder<E, B extends ObservableCollectionBu
 				.build();
 			else if (!(backing instanceof BetterSortedSet))
 				throw new IllegalStateException("An ObservableSortedCollection must be backed by an instance of BetterSortedList");
-			return new DefaultObservableSortedSet<>(getType(), (BetterSortedSet<E>) backing, getElementsBySource(), getSourceElements(),
-				getMovement());
+			return new DefaultObservableSortedSet<>(getType(), (BetterSortedSet<E>) backing, getElementsBySource(), getSourceElements());
 		}
 
 		@Override

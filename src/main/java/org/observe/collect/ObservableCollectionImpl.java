@@ -1358,7 +1358,7 @@ public final class ObservableCollectionImpl {
 				int index = 0;
 				while (el != null) {
 					value = update(value, new ObservableCollectionEvent<>(el.getElementId(), index++, //
-						CollectionChangeType.add, null, null, el.get()));
+						CollectionChangeType.add, null, el.get()));
 					el = getCollection().getAdjacentElement(el.getElementId(), true);
 				}
 				return value;
@@ -1911,7 +1911,7 @@ public final class ObservableCollectionImpl {
 				if (evt.getType() == CollectionChangeType.remove)
 					theSize--;
 				ObservableCollectionEvent<E> reversed = new ObservableCollectionEvent<>(evt.getElementId().reverse(), index, evt.getType(),
-					evt.getMovement(), evt.getOldValue(), evt.getNewValue(), evt);
+					evt.getOldValue(), evt.getNewValue(), evt, evt.getMovement());
 				try (Transaction t = reversed.use()) {
 					theObserver.accept(reversed);
 				}
@@ -2287,7 +2287,12 @@ public final class ObservableCollectionImpl {
 
 				@Override
 				public String toString() {
-					return new StringBuilder("[").append(getElementsBefore(getElementId())).append("]: ").append(get()).toString();
+					StringBuilder str = new StringBuilder("[");
+					if (getElementId().isPresent())
+						str.append(getElementsBefore(getElementId()));
+					else
+						str.append("removed");
+					return str.append("]: ").append(get()).toString();
 				}
 			};
 		}
@@ -2398,7 +2403,7 @@ public final class ObservableCollectionImpl {
 									e.printStackTrace();
 								}
 								ObservableCollectionEvent<? extends T> evt2 = new ObservableCollectionEvent<>(mapId(el.getElementId()),
-									index++, CollectionChangeType.set, null, oldVal, newVal, evt);
+									index++, CollectionChangeType.set, oldVal, newVal, evt);
 								try (Transaction evtT = evt2.use()) {
 									observer.accept(evt2);
 								}
@@ -2467,7 +2472,7 @@ public final class ObservableCollectionImpl {
 											theSize--;
 									}
 									ObservableCollectionEvent<? extends T> evt2 = new ObservableCollectionEvent<>(mapId(evt.getElementId()),
-										index, evt.getType(), evt.getMovement(), oldValue, newValue, evt);
+										index, evt.getType(), oldValue, newValue, evt, evt.getMovement());
 									try (Transaction evtT = evt2.use()) {
 										observer.accept(evt2);
 									}
@@ -2598,7 +2603,7 @@ public final class ObservableCollectionImpl {
 				CollectionElementMove initMove = cause instanceof ObservableCollectionEvent
 					? ((ObservableCollectionEvent<?>) cause).getMovement() : null;
 					fireListeners(new ObservableCollectionEvent<>(holder[0], holder[0].treeNode.getNodesBefore(), CollectionChangeType.add,
-						initMove, null, el.get(), cause));
+						null, el.get(), cause, initMove));
 					el.setListener(new CollectionElementListener<T>() {
 						@Override
 						public void update(T oldValue, T newValue, Object elCause, boolean internalOnly) {
@@ -2615,7 +2620,7 @@ public final class ObservableCollectionImpl {
 								// or it could indicate that the ordering scheme of the elements has changed.
 								// We need to do a repair operation to be safe.
 								theDerivedElements.repair(holder[0].treeNode.getElementId(),
-								new BetterTreeSet.RepairListener<DerivedElementHolder<T>, CollectionElementMove>() {
+									new BetterTreeSet.RepairListener<DerivedElementHolder<T>, CollectionElementMove>() {
 									@Override
 									public CollectionElementMove removed(CollectionElement<DerivedElementHolder<T>> element) {
 										int index = theDerivedElements.getElementsBefore(element.getElementId());
@@ -2623,7 +2628,7 @@ public final class ObservableCollectionImpl {
 										// We know this is a move because elements are always distinct
 										CollectionElementMove move = new CollectionElementMove();
 										fireListeners(new ObservableCollectionEvent<>(element.get(), index, CollectionChangeType.remove,
-											move, value, value, elCause));
+											value, value, elCause, move));
 										return move;
 									}
 
@@ -2645,8 +2650,8 @@ public final class ObservableCollectionImpl {
 										int index = theDerivedElements.getElementsBefore(element.getElementId());
 										T value = element.get().get();
 										data.moved();
-										fireListeners(new ObservableCollectionEvent<>(newHolder, index, CollectionChangeType.add, data,
-											null, value, elCause));
+										fireListeners(new ObservableCollectionEvent<>(newHolder, index, CollectionChangeType.add, null,
+											value, elCause, data));
 									}
 								});
 								if (holder[0].successor != null) {
@@ -2654,10 +2659,10 @@ public final class ObservableCollectionImpl {
 										holder[0] = holder[0].successor;
 								} else // Since we weren't actually moved in the repair, we need to fire the listener
 									fireListeners(new ObservableCollectionEvent<>(holder[0], holder[0].treeNode.getNodesBefore(),
-										CollectionChangeType.set, null, oldValue, newValue, elCause));
+										CollectionChangeType.set, oldValue, newValue, elCause));
 							} else {
 								fireListeners(new ObservableCollectionEvent<>(holder[0], holder[0].treeNode.getNodesBefore(),
-									CollectionChangeType.set, null, oldValue, newValue, elCause));
+									CollectionChangeType.set, oldValue, newValue, elCause));
 							}
 						}
 
@@ -2671,8 +2676,8 @@ public final class ObservableCollectionImpl {
 								theDerivedElements.mutableElement(holder[0].treeNode.getElementId()).remove();
 							CollectionElementMove terminalMove = elCause instanceof ObservableCollectionEvent
 								? ((ObservableCollectionEvent<?>) elCause).getMovement() : null;
-								fireListeners(new ObservableCollectionEvent<>(holder[0], index, CollectionChangeType.remove, terminalMove, value,
-									value, elCause));
+								fireListeners(new ObservableCollectionEvent<>(holder[0], index, CollectionChangeType.remove, value, value, elCause,
+									terminalMove));
 						}
 					});
 			};
@@ -3591,8 +3596,8 @@ public final class ObservableCollectionImpl {
 				@Override
 				public void accept(ObservableCollectionEvent<? extends E> event) {
 					ObservableCollectionEvent<E> mapped = new ObservableCollectionEvent<>(//
-						new FlattenedElementId(theCollection, event.getElementId()), event.getIndex(), event.getType(), event.getMovement(),
-						event.getOldValue(), event.getNewValue(), event);
+						new FlattenedElementId(theCollection, event.getElementId()), event.getIndex(), event.getType(), event.getOldValue(),
+						event.getNewValue(), event, event.getMovement());
 					theWrapped.accept(mapped);
 				}
 			}
@@ -3622,12 +3627,13 @@ public final class ObservableCollectionImpl {
 						clearAndAdd = true;
 					if (collection != null) {
 						if (clearAndAdd) {
+							// The collection in the value is not changing--we just don't want it to while we're working
 							try (Transaction t = collection.lock(false, null)) {
 								collectionSub.unsubscribe();
 								collectionSub = null;
 								// De-populate in opposite direction
 								ObservableUtils.depopulateValues(collection, new ElementMappingChangeObserver(collection, observer),
-									!forward);
+									!forward, collEvt);
 							}
 						} else { // Don't need to lock
 							collectionSub.unsubscribe();
@@ -3636,10 +3642,13 @@ public final class ObservableCollectionImpl {
 					}
 					collection = collEvt.getNewValue();
 					if (collection != null) {
-						if (clearAndAdd) {
-							collectionSub = collection.subscribe(new ElementMappingChangeObserver(collection, observer), forward);
-						} else // Don't need to lock
+						// The collection in the value is not changing--we just don't want it to while we're working
+						try (Transaction t = collection.lock(false, null)) {
+							if (clearAndAdd)
+								ObservableUtils.populateValues(collection, new ElementMappingChangeObserver(collection, observer), forward,
+									collEvt);
 							collectionSub = collection.onChange(new ElementMappingChangeObserver(collection, observer));
+						}
 					}
 				}
 
@@ -3651,12 +3660,13 @@ public final class ObservableCollectionImpl {
 				void unsubscribe(boolean removeAll) {
 					if (collection != null) {
 						if (removeAll) {
+							// The collection in the value is not changing--we just don't want it to while we're working
 							try (Transaction t = collection.lock(false, null)) {
 								collectionSub.unsubscribe();
 								collectionSub = null;
 								// De-populate in opposite direction
 								ObservableUtils.depopulateValues(collection, new ElementMappingChangeObserver(collection, observer),
-									!forward);
+									!forward, null);
 							}
 						} else { // Don't need to lock
 							collectionSub.unsubscribe();
