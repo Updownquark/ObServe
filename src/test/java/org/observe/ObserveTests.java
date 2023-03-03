@@ -10,6 +10,7 @@ import org.observe.ds.DSTesting;
 import org.observe.expresso.ExpressoTests;
 import org.observe.quick.style.QuickStyleTests;
 import org.observe.remote.ByteAddressTest;
+import org.observe.util.CollectionSynchronizationTest;
 import org.observe.util.CsvEntitySetTest;
 import org.observe.util.EntityArgumentsTest;
 import org.observe.util.EntityReflectorTest;
@@ -23,6 +24,7 @@ import org.qommons.QommonsTests;
 	ObservableTest.class, //
 	ObservableValueTest.class, //
 	ObservableCollectionsTest.class, //
+	CollectionSynchronizationTest.class, //
 	ObservableAssocTest.class, //
 	EntityReflectorTest.class, //
 	EntityArgumentsTest.class, //
