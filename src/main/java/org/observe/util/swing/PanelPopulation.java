@@ -808,6 +808,8 @@ public class PanelPopulation {
 			});
 		}
 
+		P withInitialSelection(Predicate<? super R> initSelection);
+
 		P withIndexColumn(String columnName, Consumer<CategoryRenderStrategy<R, Integer>> column);
 
 		<C> P withDynamicColumns(Function<? super R, ? extends Collection<? extends C>> columnValues, //

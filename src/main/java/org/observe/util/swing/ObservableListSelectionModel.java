@@ -1,16 +1,13 @@
 package org.observe.util.swing;
 
-import java.awt.EventQueue;
 import java.beans.Transient;
-import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EventListener;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.function.Consumer;
+import java.util.function.Predicate;
 
 import javax.swing.DefaultListSelectionModel;
 import javax.swing.ListSelectionModel;
@@ -20,30 +17,37 @@ import javax.swing.event.ListDataListener;
 import javax.swing.event.ListSelectionEvent;
 import javax.swing.event.ListSelectionListener;
 
-import org.observe.Equivalence;
 import org.observe.Observable;
 import org.observe.collect.CollectionChangeEvent;
 import org.observe.collect.CollectionElementMove;
 import org.observe.collect.ObservableCollection;
+import org.observe.util.ObservableCollectionWrapper;
 import org.qommons.Causable;
-import org.qommons.LambdaUtils;
-import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterBitSet;
+import org.qommons.collect.BetterCollection;
 import org.qommons.collect.CollectionElement;
-import org.qommons.collect.CollectionUtils;
+import org.qommons.collect.ElementId;
+import org.qommons.collect.MutableCollectionElement;
+import org.qommons.collect.MutableCollectionElement.StdMsg;
 
 /**
- * A copy of {@link DefaultListSelectionModel} that is able to efficiently synchronize selection to an {@link ObservableCollection}.
+ * A copy of {@link DefaultListSelectionModel} that is also presents the selection as an {@link ObservableCollection}.
  *
  * @param <E> The type of elements in the list model that this selection model manages the selection of
  */
-@SuppressWarnings("serial") // Same-version serialization only
-public class ObservableListSelectionModel<E> implements ListSelectionModel, Cloneable, Serializable {
+public class ObservableListSelectionModel<E> extends ObservableCollectionWrapper<E> implements ListSelectionModel, Cloneable {
+	/**
+	 * Returned from such as {@link #canAdd(Object, ElementId, ElementId)} when a suitable model value is not found in the provided element
+	 * range
+	 */
+	public static final String NO_SUCH_MODEL_VALUE = "No such model value to select";
+
 	private static final int MIN = -1;
 	private static final int MAX = Integer.MAX_VALUE;
 
 	private final ObservableListModel<E> theListModel;
+	private final Predicate<? super E> theInitialSelection;
 	private int selectionMode = MULTIPLE_INTERVAL_SELECTION;
 	private int minIndex = MAX;
 	private int maxIndex = MIN;
@@ -69,9 +73,20 @@ public class ObservableListSelectionModel<E> implements ListSelectionModel, Clon
 	 */
 	protected boolean leadAnchorNotificationEnabled = true;
 
-	/** @param listModel The list model to manage selection of */
-	public ObservableListSelectionModel(ObservableListModel<E> listModel) {
+	private final Map<CollectionElementMove, CollectionElementMove> theMovements = new HashMap<>();
+	private CollectionChangeEvent<E> theCurrentAdd;
+
+	/**
+	 * @param listModel The list model to manage selection of
+	 * @param initialSelection An optional predicate to determine whether a newly added model value should be selected
+	 * @param until An observable to release all of this model's listeners
+	 */
+	public ObservableListSelectionModel(ObservableListModel<E> listModel, Predicate<? super E> initialSelection, Observable<?> until) {
 		theListModel = listModel;
+		theInitialSelection = initialSelection;
+
+		init(ObservableCollection.build(theListModel.getWrapped().getType()).withEquivalence(theListModel.getWrapped().equivalence())
+			.build(), until);
 	}
 
 	/** @return The list model that this selection model manages selection of */
@@ -195,406 +210,229 @@ public class ObservableListSelectionModel<E> implements ListSelectionModel, Clon
 	}
 
 	/**
-	 * <p>
-	 * Creates a dynamic link between this selection model, its {@link #getListModel() data model}, and the given selection collection.
-	 * </p>
-	 * <p>
-	 * When the data model or the user's selection changes in a way that affects selection (e.g. a selected value is removed or moved), the
-	 * corresponding change will be made in the given collection. When values are removed externally in the given collection, those values
-	 * will be de-selected in this model. When updates come from the data model, those will be propagated as updates in the selection
-	 * collection.
-	 * </p>
-	 * <p>
-	 * When values are added to the collection, a search will be made for an unselected value in the model and that value will be selected.
-	 * If no such value can be found, that value will be removed from the collection. A value will first be sought in a range that is
-	 * consistent with the location in which the new value is added. If the value cannot be found there but is found elsewhere, it will be
-	 * moved unless the collection is {@link org.qommons.collect.BetterList#isContentControlled() content controlled}.
-	 * </p>
-	 * <p>
-	 * This method works best with a collection with no restrictions--no internally-enforced ordering or filtering. This method may be used
-	 * with ordered collections (if they advertise via {@link org.qommons.collect.BetterList#isContentControlled()}), but performance may be
-	 * degraded, especially if many items are selected at once. This link will break, throwing exceptions and becoming out-of-sync if it is
-	 * prevented from managing the collection by adding to or removing from it.
-	 * </p>
+	 * Initializes this model
 	 *
-	 * @param selection The collection to populate with this model's selection
-	 * @param until The observable that will terminate the synchronization when it fires
+	 * @param wrapped The collection to back up this model
+	 * @param until The observable to use to release all resources
 	 */
-	public void synchronize(ObservableCollection<E> selection, Observable<?> until) {
-		/*
-		 * One of the things this code does it propagate updates from the data model to the selection collection and vice versa.
-		 * However, this is problematic because this has the potential to create an infinite loop.
-		 * Compounding this is the fact that the loop may not be detectable with a simple boolean because the safe collections
-		 * may batch incoming changes and then flush them with an invokeLater.
-		 */
-		if (until == null)
-			until = Observable.empty();
-		selection.changes().act(evt -> System.out.println(selection.size() + " selected"));
-		ObservableCollection<E> safeSelection = selection.safe(ThreadConstraint.EDT, until);
-		class ListSynchronization implements ListDataListener, ListSelectionListener, Consumer<CollectionChangeEvent<E>> {
-			BetterBitSet previousValue = new BetterBitSet().replaceWith(value);
-			private final Map<CollectionElementMove, CollectionElementMove> movements = new HashMap<>();
-			private boolean isCollectionChanging;
-			private boolean isModelChanging;
-			private int isOutOfSync;
-
+	protected void init(ObservableCollection<E> wrapped, Observable<?> until) {
+		super.init(wrapped);
+		class ListSynchronization implements ListDataListener {
 			@Override
 			public void intervalRemoved(ListDataEvent e) {
 				/* Handle elements removed from the model.
 				 * Biggest job here is to catch selected elements which are part of a move operation and record this
 				 * for when they're re-added so we can select them again.
 				 */
-				if (isOutOfSync > 0) {
-					EventQueue.invokeLater(() -> intervalRemoved(e));
-					return;
-				}
 				CollectionChangeEvent<?> cause = ((ObservableListModel.CausableListEvent) e).getCause();
 				Transaction selectionLock = null;
-				isModelChanging = true;
 				try {
-					int start = previousValue.nextSetBit(e.getIndex0());
+					int start = value.nextSetBit(e.getIndex0());
 					if (start < 0)
 						return;
-					int end = previousValue.previousSetBit(e.getIndex1());
+					int end = value.previousSetBit(e.getIndex1());
 					if (end < 0)
 						return;
-					for (int i = end; i >= start; i--) {
-						if (!previousValue.get(i))
-							continue;
+					for (int i = end; i >= start; i = value.previousSetBit(i - 1)) {
 						// else This index was selected before it was removed
 						if (selectionLock == null)
-							selectionLock = safeSelection.lock(true, cause);
+							selectionLock = wrapped.lock(true, cause.isTerminated() ? Causable.broken(cause) : cause);
 						CollectionChangeEvent.ElementChange<?> change = cause.getChangeFor(i);
 						if (change.movement != null) {
 							CollectionElementMove selMove = new CollectionElementMove();
-							movements.put(change.movement.onDiscard(m -> {
-								CollectionElementMove selMove2 = movements.remove(m);
+							theMovements.put(change.movement.onDiscard(m -> {
+								CollectionElementMove selMove2 = theMovements.remove(m);
 								if (selMove2 != null)
 									selMove2.moveFinished();
 							}), selMove);
-							try (Transaction moveT = safeSelection.lock(true, selMove)) {
-								int selectionIndex = previousValue.countBitsSetBetween(0, i);
-								if (selectionIndex >= previousValue.cardinality()) // TODO Debugging, remove
-									previousValue.countBitsSetBetween(0, i);
-								safeSelection.remove(selectionIndex);
+							try (Transaction moveT = wrapped.lock(true, selMove)) {
+								int selectionIndex = value.countBitsSetBetween(0, i);
+								wrapped.remove(selectionIndex);
 							}
+						} else {
+							int selectionIndex = value.countBitsSetBetween(0, i);
+							wrapped.remove(selectionIndex);
 						}
+						value.clear(i);
 					}
 				} finally {
 					if (selectionLock != null)
 						selectionLock.close();
-					previousValue.replaceWith(value);
-					isModelChanging = false;
 				}
 			}
 
 			@Override
 			public void intervalAdded(ListDataEvent e) {
-				/* Handle elements added from the model.
-				 * Biggest job here is to catch elements which are part of a move operation and re-select them
-				 */
-				if (isOutOfSync > 0) {
-					EventQueue.invokeLater(() -> intervalAdded(e));
-					return;
-				}
-				CollectionChangeEvent<?> cause = ((ObservableListModel.CausableListEvent) e).getCause();
-				Transaction selectionLock = null;
-				isModelChanging = true;
-				try {
-					CollectionElement<E> lastSelectionAdded = null;
-					boolean selectionInOrder = !selection.isContentControlled();
-					for (int i = e.getIndex0(); i <= e.getIndex1(); i++) {
-						CollectionChangeEvent.ElementChange<?> change = cause.getChangeFor(i);
-						CollectionElementMove selMove = change.movement == null ? null : movements.remove(change.movement);
-						if (selMove != null) {
-							if (!value.get(i)) {
-								if (selectionLock == null)
-									selectionLock = safeSelection.lock(true, cause);
-								addSelectionInterval(i, i);
-								try (Transaction moveT = safeSelection.lock(true, selMove)) {
-									if (!selectionInOrder)
-										safeSelection.add(getListModel().getElementAt(i));
-									else if (lastSelectionAdded == null) {
-										int selectionAddIndex = previousValue.countBitsSetBetween(0, e.getIndex0());
-										lastSelectionAdded = safeSelection.addElement(selectionAddIndex, getListModel().getElementAt(i));
-									} else
-										lastSelectionAdded = safeSelection.addElement(getListModel().getElementAt(i),
-											lastSelectionAdded.getElementId(), null, true);
-								}
-							}
-						}
-					}
-				} finally {
-					if (selectionLock != null)
-						selectionLock.close();
-					// Too complicated trying to insert the new indices and the model has already done it
-					previousValue.replaceWith(value);
-					isModelChanging = false;
-					if (isAddSelectionOnInsert()) {
-						// Indexes besides the movements may have been added, and the selection event was ignored
-						syncSelectionWithSledgehammer(e);
-					}
-				}
+				// We get the events first, so hold onto this for when insertIndexInterval(int, int) is called
+				theCurrentAdd = (CollectionChangeEvent<E>) ((ObservableListModel.CausableListEvent) e).getCause();
 			}
 
 			@Override
 			public void contentsChanged(ListDataEvent e) {
-				if (isOutOfSync > 0) {
-					EventQueue.invokeLater(() -> contentsChanged(e));
-					return;
-				}
 				CollectionChangeEvent<?> cause = ((ObservableListModel.CausableListEvent) e).getCause();
 				Transaction selectionLock = null;
-				isModelChanging = true;
 				try {
-					int start = previousValue.nextSetBit(e.getIndex0());
+					int start = value.nextSetBit(e.getIndex0());
 					if (start < 0)
 						return;
-					int end = previousValue.previousSetBit(e.getIndex1());
+					int end = value.previousSetBit(e.getIndex1());
 					if (end < 0)
 						return;
 					for (int i = start; i <= start; i++) {
-						if (!previousValue.get(i))
+						if (!value.get(i))
 							continue;
 						// else This index was selected before it was removed
 						if (selectionLock == null)
-							selectionLock = safeSelection.lock(true, cause);
-						int selectionIndex = previousValue.countBitsSetBetween(0, i);
-						if (selectionIndex >= previousValue.cardinality()) // TODO Debugging, remove
-							previousValue.countBitsSetBetween(0, i);
-						safeSelection.set(selectionIndex, getListModel().getElementAt(i));
+							selectionLock = wrapped.lock(true, cause.isTerminated() ? Causable.broken(cause) : cause);
+						int selectionIndex = value.countBitsSetBetween(0, i);
+						wrapped.set(selectionIndex, getListModel().getElementAt(i));
 					}
 				} finally {
 					if (selectionLock != null)
 						selectionLock.close();
-					isModelChanging = false;
 				}
-			}
-
-			@Override
-			public void valueChanged(ListSelectionEvent e) {
-				if (isCollectionChanging || getListModel().isEventing() || getValueIsAdjusting())
-					return;
-				// User selection
-				userSelectionChanged(e);
-			}
-
-			private void userSelectionChanged(ListSelectionEvent e) {
-				if (isOutOfSync > 0) {
-					EventQueue.invokeLater(() -> userSelectionChanged(e));
-					return;
-				}
-				Transaction selectionLock = null;
-				if (!selection.isContentControlled()) {
-					// In this case we can track things better and keep the selection in the proper order.
-					// Therefore we have the ability to be smarter and faster here.
-					BetterBitSet currentValue = value;
-					int nextPrev = previousValue.nextSetBit(e.getFirstIndex());
-					if (nextPrev < 0)
-						nextPrev = e.getLastIndex() + 1;
-					int nextCurr = currentValue.nextSetBit(e.getFirstIndex());
-					if (nextCurr < 0)
-						nextCurr = e.getLastIndex() + 1;
-					CollectionElement<E> lastSelection = null;
-					ObservableListModel<E> listModel = getListModel();
-					isModelChanging = true;
-					try {
-						while (nextPrev <= e.getLastIndex() || nextCurr <= e.getLastIndex()) {
-							if (nextPrev == nextCurr) { // Both selected, no change, move on
-								nextPrev = previousValue.nextSetBit(nextPrev + 1);
-								if (nextPrev < 0)
-									nextPrev = e.getLastIndex() + 1;
-								nextCurr = currentValue.nextSetBit(nextCurr + 1);
-								if (nextCurr < 0)
-									nextCurr = e.getLastIndex() + 1;
-								if (lastSelection != null)
-									lastSelection = safeSelection.getAdjacentElement(lastSelection.getElementId(), true);
-							} else if (nextPrev < nextCurr) { // Value de-selected
-								if (selectionLock == null)
-									selectionLock = safeSelection.lock(true, e);
-								CollectionElement<E> toRemove;
-								if (lastSelection != null)
-									toRemove = safeSelection.getAdjacentElement(lastSelection.getElementId(), true);
-								else {
-									int selectionIndex = previousValue.countBitsSetBetween(0, nextPrev);
-									toRemove = safeSelection.getElement(selectionIndex);
-									lastSelection = safeSelection.getAdjacentElement(toRemove.getElementId(), false);
-								}
-								safeSelection.mutableElement(toRemove.getElementId()).remove();
-								previousValue.clear(nextPrev);
-								nextPrev = previousValue.nextSetBit(nextPrev + 1);
-								if (nextPrev < 0)
-									nextPrev = e.getLastIndex() + 1;
-							} else { // Value selected
-								if (selectionLock == null)
-									selectionLock = safeSelection.lock(true, e);
-								E newSelected = listModel.getElementAt(nextCurr);
-								if (lastSelection != null)
-									lastSelection = safeSelection.addElement(newSelected, lastSelection.getElementId(), null, true);
-								else {
-									int selectionIndex = previousValue.countBitsSetBetween(0, nextPrev);
-									if (selectionIndex == 0)
-										lastSelection = safeSelection.addElement(newSelected, null, null, true);
-									else
-										lastSelection = safeSelection.addElement(newSelected,
-											safeSelection.getElement(selectionIndex - 1).getElementId(), null, true);
-								}
-								previousValue.set(nextCurr);
-								nextCurr = currentValue.nextSetBit(nextCurr + 1);
-								if (nextCurr < 0)
-									nextCurr = e.getLastIndex() + 1;
-							}
-						}
-					} finally {
-						if (selectionLock != null)
-							selectionLock.close();
-						isModelChanging = false;
-					}
-				} else {
-					// We may not be able to keep the selection in the proper order, so the best we can do is a sledgehammer
-					syncSelectionWithSledgehammer(e);
-					previousValue.replaceWith(value);
-				}
-			}
-
-			/**
-			 * This method resets the selection collection to what's in the model.
-			 *
-			 * It's very expensive when the selection is large, so we only do this when we have no other choice.
-			 */
-			private void syncSelectionWithSledgehammer(Object cause) {
-				Equivalence<? super E> equivalence = selection.equivalence();
-				if (!selection.isContentControlled() && safeSelection.size() == value.cardinality()) {
-					// Let's see if we actually have to do anything first, since this case is much cheaper
-					ObservableListModel<E> listModel = getListModel();
-					Iterator<E> selectionIter = safeSelection.iterator();
-					boolean equal = true;
-					for (int i = getMinSelectionIndex(); equal && i >= 0; i = value.nextSetBit(i + 1))
-						equal = equivalence.elementEquals(selectionIter.next(), listModel.getElementAt(i));
-					if (equal)
-						return;
-				}
-				List<E> selValues = getSelectedValues();
-				isModelChanging = true;
-				try (Transaction t = safeSelection.lock(true, cause)) {
-					CollectionUtils.SimpleAdjustment<E, E, RuntimeException> adjustment;
-					adjustment = CollectionUtils.synchronize(safeSelection, selValues, (v1, v2) -> equivalence.elementEquals(v1, v2))//
-						.simple(LambdaUtils.identity())//
-						.commonUses(true, false);
-					if (safeSelection.isContentControlled())
-						adjustment.addLast();
-					adjustment.adjust();
-				} finally {
-					isModelChanging = false;
-				}
-			}
-
-			@Override
-			public void accept(CollectionChangeEvent<E> event) {
-				// Even though the safe collections sometimes batch incoming changes and flush them on an invokeLater,
-				// we don't have to worry about that here. If the changes are coming from the model, the model is operating
-				// on the safe collection, and the contract says that the events have to be fired before an operation returns.
-				if (isModelChanging)
-					return;
-				// Something besides this model has triggered a change in the selection. See if we can update the selection to reflect it.
-				ObservableSwingUtils.flushEQCache();
-				BetterBitSet current = value;
-				isCollectionChanging = true;
-				boolean needsSledgehammerSync = false;
-				try {
-					switch (event.type) {
-					case add:
-						for (CollectionChangeEvent.ElementChange<E> change : event.elements)
-							needsSledgehammerSync = addToSelection(change, current);
-						break;
-					case remove:
-						for (CollectionChangeEvent.ElementChange<E> change : event.getElements()) {
-							int modelIdx = current.indexOfNthSetBit(change.index);
-							removeFromSelection(modelIdx);
-						}
-						break;
-					case set:
-						Equivalence<? super E> equivalence = selection.equivalence();
-						for (CollectionChangeEvent.ElementChange<E> change : event.elements) {
-							if (equivalence.elementEquals(change.oldValue, change.newValue))
-								continue;
-							int modelIdx = current.indexOfNthSetBit(change.index);
-							removeFromSelection(modelIdx);
-							needsSledgehammerSync = addToSelection(change, current);
-						}
-						break;
-					}
-					if (needsSledgehammerSync) {
-						isOutOfSync++;
-						EventQueue.invokeLater(() -> {
-							syncSelectionWithSledgehammer(Causable.broken(event));
-							isOutOfSync--;
-						});
-					}
-				} finally {
-					isCollectionChanging = false;
-				}
-			}
-
-			private boolean addToSelection(CollectionChangeEvent.ElementChange<E> change, BetterBitSet current) {
-				ObservableListModel<E> listModel = getListModel();
-				Equivalence<? super E> equivalence = selection.equivalence();
-				int minModelIdx = change.index == 0 ? 0 : current.indexOfNthSetBit(change.index - 1);
-				int maxModelIdx = current.nextSetBit(minModelIdx + 1);
-				if (maxModelIdx < 0)
-					maxModelIdx = listModel.getSize();
-				int found = -1;
-				for (int i = minModelIdx; found < 0 && i < maxModelIdx; i++) {
-					if (equivalence.elementEquals(change.newValue, listModel.getElementAt(i)))
-						found = i;
-				}
-				if (found >= 0) {
-					addSelectionInterval(found, found);
-					previousValue.set(found);
-					return false;
-				} else {
-					// Not found in the region where we'd like it. Seek elsewhere
-					// TODO How to do movement.
-					for (int i = 0; found < 0 && i < minModelIdx; i++) {
-						if (equivalence.elementEquals(change.newValue, listModel.getElementAt(i)))
-							found = i;
-					}
-					for (int i = maxModelIdx; found < 0 && i < listModel.getSize(); i++) {
-						if (equivalence.elementEquals(change.newValue, listModel.getElementAt(i)))
-							found = i;
-					}
-					if (found >= 0) {
-						// Found it.
-						addSelectionInterval(found, found);
-						previousValue.set(found);
-						// If we can't control the locations, then nothing to do and it's as good as it can be
-						// Otherwise we need to move it, but we can't do it directly as it's illegal to modify a collection
-						// in response to a change event on that collection
-						return !selection.isContentControlled();
-					} else {
-						// Not found, so this is an illegal value. We need to remove it, but we can't do it directly
-						// as it's illegal to modify a collection in response to a change event on that collection
-						return !selection.isContentControlled();
-					}
-				}
-			}
-
-			private void removeFromSelection(int modelIndex) {
-				removeSelectionInterval(modelIndex, modelIndex);
-				previousValue.clear(modelIndex);
 			}
 		}
 		ListSynchronization syncListener = new ListSynchronization();
-		try (Transaction t = safeSelection.lock(true, null)) {
-			syncListener.syncSelectionWithSledgehammer(null);
-			theListModel.addListDataListener(syncListener);
-			addListSelectionListener(syncListener);
-			until.take(1).act(__ -> {
-				removeListSelectionListener(syncListener);
-				theListModel.removeListDataListener(syncListener);
-			});
-			safeSelection.changes().takeUntil(until).act(syncListener);
+		theListModel.addListDataListener(syncListener, true);
+		until.take(1).act(__ -> theListModel.removeListDataListener(syncListener));
+	}
+
+	@Override
+	public String canAdd(E newValue, ElementId after, ElementId before) {
+		try (Transaction t = lock(false, null)) {
+			int minAddIndex = after == null ? 0 : value.indexOfNthSetBit(getWrapped().getElementsBefore(after));
+			int maxAddIndex = before == null ? theListModel.getSize() : value.indexOfNthSetBit(getWrapped().getElementsBefore(before));
+			for (int i = value.nextClearBit(minAddIndex + 1); i < maxAddIndex; i = value.nextClearBit(i + 1)) {
+				E modelValue = theListModel.getElementAt(i);
+				if (getWrapped().equivalence().elementEquals(modelValue, newValue))
+					return null;
+			}
 		}
+		return NO_SUCH_MODEL_VALUE;
+	}
+
+	@Override
+	public CollectionElement<E> addElement(E newValue, ElementId after, ElementId before, boolean first)
+		throws UnsupportedOperationException, IllegalArgumentException {
+		try (Transaction t = lock(true, null)) {
+			int minAddIndex = after == null ? 0 : value.indexOfNthSetBit(getWrapped().getElementsBefore(after));
+			int maxAddIndex = before == null ? theListModel.getSize() : value.indexOfNthSetBit(getWrapped().getElementsBefore(before));
+			if (first) {
+				for (int i = value.nextClearBit(minAddIndex + 1); i < maxAddIndex; i = value.nextClearBit(i + 1)) {
+					if (i > minAddIndex && value.get(i - 1))
+						after = CollectionElement.getElementId(
+							after == null ? getWrapped().getTerminalElement(true) : getWrapped().getAdjacentElement(after, true));
+					E modelValue = theListModel.getElementAt(i);
+					if (getWrapped().equivalence().elementEquals(modelValue, newValue)) {
+						addSelectionInterval(i, i);
+						return getWrapped().getAdjacentElement(after, true);
+					}
+				}
+			}
+		}
+		throw new IllegalArgumentException(NO_SUCH_MODEL_VALUE);
+	}
+
+	@Override
+	public String canMove(ElementId valueEl, ElementId after, ElementId before) {
+		// Only support the trivial case
+		if (after != null && valueEl.compareTo(after) < 0)
+			return StdMsg.ILLEGAL_ELEMENT_POSITION;
+		else if (before != null && valueEl.compareTo(before) > 0)
+			return StdMsg.ILLEGAL_ELEMENT_POSITION;
+		else
+			return null;
+	}
+
+	@Override
+	public CollectionElement<E> move(ElementId valueEl, ElementId after, ElementId before, boolean first, Runnable afterRemove)
+		throws UnsupportedOperationException, IllegalArgumentException {
+		// Only support the trivial case
+		if (after != null && valueEl.compareTo(after) < 0)
+			throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT_POSITION);
+		else if (before != null && valueEl.compareTo(before) > 0)
+			throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT_POSITION);
+		else
+			return getElement(valueEl);
+	}
+
+	@Override
+	public void clear() {
+		clearSelection();
+	}
+
+	@Override
+	public MutableCollectionElement<E> mutableElement(ElementId id) {
+		class MutableSelectionElement implements MutableCollectionElement<E> {
+			private final MutableCollectionElement<E> theWrapped;
+
+			MutableSelectionElement(MutableCollectionElement<E> wrapped) {
+				theWrapped = wrapped;
+			}
+
+			@Override
+			public ElementId getElementId() {
+				return theWrapped.getElementId();
+			}
+
+			@Override
+			public E get() {
+				return theWrapped.get();
+			}
+
+			@Override
+			public BetterCollection<E> getCollection() {
+				return ObservableListSelectionModel.this;
+			}
+
+			@Override
+			public String isEnabled() {
+				return null; // We allow updates
+			}
+
+			@Override
+			public String isAcceptable(E newValue) {
+				if (newValue == get())
+					return null;
+				return StdMsg.ILLEGAL_ELEMENT;
+			}
+
+			@Override
+			public void set(E newValue) throws UnsupportedOperationException, IllegalArgumentException {
+				if (newValue == get())
+					theWrapped.set(newValue);
+				else
+					throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
+			}
+
+			@Override
+			public String canRemove() {
+				return null;
+			}
+
+			@Override
+			public void remove() throws UnsupportedOperationException {
+				int modelIndex = value.indexOfNthSetBit(ObservableListSelectionModel.this.getWrapped().getElementsBefore(getElementId()));
+				removeSelectionInterval(modelIndex, modelIndex);
+			}
+
+			@Override
+			public int hashCode() {
+				return theWrapped.hashCode();
+			}
+
+			@Override
+			public boolean equals(Object obj) {
+				return obj instanceof CollectionElement && getElementId().equals(((CollectionElement<?>) obj).getElementId());
+			}
+
+			@Override
+			public String toString() {
+				return theWrapped.toString();
+			}
+		}
+		return new MutableSelectionElement(getWrapped().mutableElement(id));
 	}
 
 	/**
@@ -846,6 +684,8 @@ public class ObservableListSelectionModel<E> implements ListSelectionModel, Clon
 	}
 
 	private void changeSelection(int clearMin, int clearMax, int setMin, int setMax, boolean clearFirst) {
+		ElementId lastSelected = null;
+		boolean lastSelectedAccurate = false;
 		for (int i = Math.min(setMin, clearMin); i <= Math.max(setMax, clearMax); i++) {
 
 			boolean shouldClear = contains(clearMin, clearMax, i);
@@ -860,9 +700,28 @@ public class ObservableListSelectionModel<E> implements ListSelectionModel, Clon
 			}
 
 			if (shouldSet) {
+				if (!value.get(i)) {
+					if (!lastSelectedAccurate) {
+						int selIndex = value.countBitsSetBetween(0, i);
+						lastSelected = selIndex == 0 ? null : getWrapped().getElement(selIndex - 1).getElementId();
+						lastSelectedAccurate = true;
+					}
+					lastSelected = getWrapped().addElement(theListModel.getElementAt(i), lastSelected, null, true).getElementId();
+				}
 				set(i);
-			}
+			} else if (lastSelectedAccurate && value.get(i))
+				lastSelected = getWrapped().getAdjacentElement(lastSelected, true).getElementId();
 			if (shouldClear) {
+				if (value.get(i)) {
+					if (!lastSelectedAccurate) {
+						int selIndex = value.countBitsSetBetween(0, i);
+						lastSelected = getWrapped().getElement(selIndex).getElementId();
+						lastSelectedAccurate = true;
+					}
+					ElementId prevSelected = CollectionElement.getElementId(getWrapped().getAdjacentElement(lastSelected, false));
+					getWrapped().mutableElement(lastSelected).remove();
+					lastSelected = prevSelected;
+				}
 				clear(i);
 			}
 		}
@@ -880,7 +739,6 @@ public class ObservableListSelectionModel<E> implements ListSelectionModel, Clon
 	/** {@inheritDoc} */
 	@Override
 	public void clearSelection() {
-		System.out.println("clear");
 		removeSelectionIntervalImpl(minIndex, maxIndex, false);
 	}
 
@@ -1035,6 +893,8 @@ public class ObservableListSelectionModel<E> implements ListSelectionModel, Clon
 	 */
 	@Override
 	public void insertIndexInterval(int index, int length, boolean before) {
+		if (length < 0)
+			return;
 		/* The first new index will appear at insMinIndex and the last
 		 * one will appear at insMaxIndex
 		 */
@@ -1066,6 +926,55 @@ public class ObservableListSelectionModel<E> implements ListSelectionModel, Clon
 		}
 		if (leadIndex2 != this.leadIndex || anchorIndex2 != this.anchorIndex) {
 			updateLeadAnchorIndices(anchorIndex2, leadIndex2);
+		}
+		if (theInitialSelection != null) {
+			for (int i = index; i < index + length; i++)
+				setState(i, theInitialSelection.test(theListModel.getElementAt(i)));
+		}
+
+		/* Handle elements added from the model.
+		 * We need to do 2 things here:
+		 * * Catch elements which are part of a move operation and re-select them
+		 * * For inserted elements that are initially selected, add them to the selection
+		 */
+		CollectionChangeEvent<?> cause = theCurrentAdd;
+		if (cause != null) {
+			theCurrentAdd = null;
+			Transaction selectionLock = null;
+			try {
+				CollectionElement<E> lastSelectionAdded = null;
+				for (int i = insMinIndex; i <= insMaxIndex; i++) {
+					CollectionChangeEvent.ElementChange<?> change = cause.getChangeFor(i);
+					CollectionElementMove selMove = change.movement == null ? null : theMovements.remove(change.movement);
+					if (selMove != null) {
+						setState(i, true);
+						if (selectionLock == null)
+							selectionLock = getWrapped().lock(true, cause.isTerminated() ? Causable.broken(cause) : cause);
+						try (Transaction moveT = getWrapped().lock(true, selMove)) {
+							if (lastSelectionAdded == null) {
+								int selectionAddIndex = value.countBitsSetBetween(0, i);
+								lastSelectionAdded = getWrapped().addElement(selectionAddIndex, getListModel().getElementAt(i));
+							} else
+								lastSelectionAdded = getWrapped().addElement(getListModel().getElementAt(i),
+									lastSelectionAdded.getElementId(), null, true);
+						}
+					} else if (value.get(i)) {
+						if (selectionLock == null)
+							selectionLock = getWrapped().lock(true, cause.isTerminated() ? Causable.broken(cause) : cause);
+						try (Transaction moveT = getWrapped().lock(true, selMove)) {
+							if (lastSelectionAdded == null) {
+								int selectionAddIndex = value.countBitsSetBetween(0, i);
+								lastSelectionAdded = getWrapped().addElement(selectionAddIndex, getListModel().getElementAt(i));
+							} else
+								lastSelectionAdded = getWrapped().addElement(getListModel().getElementAt(i),
+									lastSelectionAdded.getElementId(), null, true);
+						}
+					}
+				}
+			} finally {
+				if (selectionLock != null)
+					selectionLock.close();
+			}
 		}
 
 		fireValueChanged();

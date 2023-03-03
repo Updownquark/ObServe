@@ -30,6 +30,7 @@ import java.util.Map;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 import javax.swing.BorderFactory;
@@ -58,6 +59,7 @@ import org.observe.collect.CollectionSubscription;
 import org.observe.collect.ObservableCollection;
 import org.observe.dbug.DbugAnchor;
 import org.observe.dbug.DbugAnchor.InstantiationTransaction;
+import org.observe.util.ObservableCollectionSynchronization;
 import org.observe.util.TypeTokens;
 import org.observe.util.swing.CategoryRenderStrategy.CategoryClickAdapter;
 import org.observe.util.swing.Dragging.SimpleTransferAccepter;
@@ -112,6 +114,7 @@ implements TableBuilder<R, P> {
 	private final List<DynamicColumnSet<R, ?>> theDynamicColumns;
 	private SettableValue<R> theSelectionValue;
 	private ObservableCollection<R> theSelectionValues;
+	private Predicate<? super R> theInitialSelection;
 	private List<Object> theActions;
 	private boolean theActionsOnTop;
 	private ObservableValue<? extends TableContentControl> theFilter;
@@ -236,6 +239,12 @@ implements TableBuilder<R, P> {
 	@Override
 	public P withSelection(ObservableCollection<R> selection) {
 		theSelectionValues = selection;
+		return (P) this;
+	}
+
+	@Override
+	public P withInitialSelection(Predicate<? super R> initSelection) {
+		theInitialSelection = initSelection;
 		return (P) this;
 	}
 
@@ -707,12 +716,15 @@ implements TableBuilder<R, P> {
 						}
 					}
 				}, false);
-		// The syncSelection call here also manages selection better than table default
-		if (theSelectionValues == null)
-			theSelectionValues = ObservableCollection.build(theRows.getType()).onEdt().build();
-		ObservableListSelectionModel<R> selectionModel = new ObservableListSelectionModel<>(model.getRowModel());
+		ObservableListSelectionModel<R> selectionModel = new ObservableListSelectionModel<>(model.getRowModel(), theInitialSelection,
+			getUntil());
 		table.setSelectionModel(selectionModel);
-		selectionModel.synchronize(theSelectionValues, getUntil());
+		if (theSelectionValues != null) {
+			Subscription syncSub = ObservableCollectionSynchronization.synchronize(theSelectionValues, selectionModel).strictOrder()
+				.synchronize();
+			getUntil().take(1).act(__ -> syncSub.unsubscribe());
+		}
+		// selectionModel.synchronize(theSelectionValues, getUntil());
 		// ObservableSwingUtils.syncSelection(table, model.getRowModel(), table::getSelectionModel, model.getRows().equivalence(),
 		// theSelectionValues, getUntil());
 

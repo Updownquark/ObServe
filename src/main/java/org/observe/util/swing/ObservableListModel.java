@@ -93,11 +93,26 @@ public class ObservableListModel<E> implements ListModel<E> {
 
 	@Override
 	public void addListDataListener(ListDataListener l) {
-		if (!EventQueue.isDispatchThread())
-			EventQueue.invokeLater(() -> addListDataListener(l));
+		addListDataListener(l, false);
+	}
+
+	/**
+	 * Adds a data listener to be notified to changes to the data in this model
+	 *
+	 * @param l The listener to add
+	 * @param first Whether to add the listener in first position (to be notified before any previously-added listeners), or last position
+	 */
+	public void addListDataListener(ListDataListener l, boolean first) {
+		if (!EventQueue.isDispatchThread()) {
+			EventQueue.invokeLater(() -> addListDataListener(l, first));
+			return;
+		}
 		if (theListeners.isEmpty())
 			beginListening();
-		theListeners.add(l);
+		if (first)
+			theListeners.add(0, l);
+		else
+			theListeners.add(l);
 	}
 
 	@Override
