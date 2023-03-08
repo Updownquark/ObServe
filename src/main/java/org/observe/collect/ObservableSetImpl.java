@@ -849,7 +849,7 @@ public class ObservableSetImpl {
 					CollectionElement<T> newValueId = theElementsByValue.keySet().move(ue.theValueId, //
 						after == null ? null : ((UniqueElement) after).theValueId,
 							before == null ? null : ((UniqueElement) before).theValueId, first, () -> {
-								ObservableCollectionActiveManagers.removed(ue.theListener, ue.theValue, null);
+							ObservableCollectionActiveManagers.removed(ue.theListener, ue.theValue);
 							});
 					if (newValueId.getElementId().equals(ue.theValueId))
 						return ue;
@@ -859,7 +859,7 @@ public class ObservableSetImpl {
 						newEl.theValueId = newValueId.getElementId();
 						theElementsByValue.mutableEntry(newValueId.getElementId()).setValue(newEl);
 						for (DerivedCollectionElement<T> parentEl : ue.theParentElements.keySet())
-							newEl.addParent(parentEl, null);
+							newEl.addParent(parentEl);
 						newEl.theActiveElement = ue.theActiveElement;
 						return newEl;
 					}
@@ -1001,10 +1001,10 @@ public class ObservableSetImpl {
 			 * values)
 			 *
 			 * @param parentEl The added source element
-			 * @param cause The cause of the addition
+			 * @param causes The causes of the addition
 			 * @return The entry in the {@link #theParentElements element map} map where the parent was added
 			 */
-			protected BinaryTreeEntry<DerivedCollectionElement<T>, T> addParent(DerivedCollectionElement<T> parentEl, Object cause) {
+			protected BinaryTreeEntry<DerivedCollectionElement<T>, T> addParent(DerivedCollectionElement<T> parentEl, Object... causes) {
 				if (theValueId == null)
 					theValueId = theElementsByValue.getEntry(theValue).getElementId();
 				boolean only = theParentElements.isEmpty();
@@ -1017,7 +1017,7 @@ public class ObservableSetImpl {
 					// The parent is the first representing this element
 					theDebug.act("add:new").param("value", theValue).exec();
 					theActiveElement = parentEl;
-					theAccepter.accept(this, cause);
+					theAccepter.accept(this, causes);
 				} else if (isAlwaysUsingFirst && node.getClosest(true) == null) {
 					theDebug.act("add:repChange").param("value", theValue).exec();
 					// The new element takes precedence over the current one
@@ -1025,26 +1025,26 @@ public class ObservableSetImpl {
 					T newActiveValue = parentEl.get();
 					theActiveElement = parentEl;
 					//Fire an internal-only event if there's not actually a change
-					ObservableCollectionActiveManagers.update(theListener, oldValue, newActiveValue, cause, oldValue == newActiveValue);
+					ObservableCollectionActiveManagers.update(theListener, oldValue, newActiveValue, oldValue == newActiveValue, causes);
 				} else {
 					theDebug.act("add:no-effect").param("value", theValue).exec();
 					T value = theActiveElement.get();
-					ObservableCollectionActiveManagers.update(theListener, value, value, cause, true);
+					ObservableCollectionActiveManagers.update(theListener, value, value, true, causes);
 				}
 
 				parentEl.setListener(new CollectionElementListener<T>() {
 					@Override
-					public void update(T oldValue, T newValue, Object innerCause, boolean internalOnly) {
+					public void update(T oldValue, T newValue, boolean internalOnly, Object... innerCauses) {
 						T realOldValue = node.getValue();
 						theDebug.act("update").param("@", theValue).param("newValue", newValue).exec();
 						if (isInternallySetting) {
 							if (theActiveElement == parentEl) {
 								theDebug.act("update:trueUpdate").exec();
-								ObservableCollectionActiveManagers.update(theListener, realOldValue, newValue, innerCause, internalOnly);
+								ObservableCollectionActiveManagers.update(theListener, realOldValue, newValue, internalOnly, innerCauses);
 							} else
 								theDebug.act("update:no-effect").exec();
 							theParentElements.mutableEntry(node.getElementId()).setValue(newValue);
-							parentUpdated(node, realOldValue, newValue, innerCause);
+							parentUpdated(node, realOldValue, newValue, innerCauses);
 							return;
 						}
 						/* As originally written, this code made the assumption that at the time of an update event, only that element may
@@ -1085,7 +1085,7 @@ public class ObservableSetImpl {
 								if (consistent.getAsBoolean()) {
 									theDebug.act("update:trueUpdate").exec();
 									theValue = newValue;
-									ObservableCollectionActiveManagers.update(theListener, realOldValue, newValue, innerCause, false);
+									ObservableCollectionActiveManagers.update(theListener, realOldValue, newValue, false, innerCauses);
 								} else
 									reInsert = true;
 							} else {
@@ -1094,8 +1094,8 @@ public class ObservableSetImpl {
 							}
 							if (!reInsert) {
 								theParentElements.mutableEntry(node.getElementId()).setValue(newValue);
-								ObservableCollectionActiveManagers.update(theListener, realOldValue, newValue, innerCause, true);
-								parentUpdated(node, realOldValue, newValue, innerCause);
+								ObservableCollectionActiveManagers.update(theListener, realOldValue, newValue, true, innerCauses);
+								parentUpdated(node, realOldValue, newValue, innerCauses);
 							}
 						} else if (ue == null && theParentElements.size() == 1
 							&& theElementsByValue.keySet().mutableElement(theValueId).isAcceptable(newValue) == null
@@ -1104,8 +1104,8 @@ public class ObservableSetImpl {
 							theDebug.act("update:move").exec();
 							moveTo(newValue);
 							theParentElements.mutableEntry(node.getElementId()).setValue(newValue);
-							ObservableCollectionActiveManagers.update(theListener, realOldValue, newValue, innerCause, false);
-							parentUpdated(node, realOldValue, newValue, innerCause);
+							ObservableCollectionActiveManagers.update(theListener, realOldValue, newValue, false, innerCauses);
+							parentUpdated(node, realOldValue, newValue, innerCauses);
 							reInsert = false;
 						} else
 							reInsert = true;
@@ -1120,8 +1120,8 @@ public class ObservableSetImpl {
 								theDebug.act("update:remove").param("value", theValue).exec();
 								// This element is no longer represented
 								theElementsByValue.mutableEntry(theValueId).remove();
-								ObservableCollectionActiveManagers.removed(theListener, realOldValue, innerCause);
-								parentRemoved(node, realOldValue, innerCause);
+								ObservableCollectionActiveManagers.removed(theListener, realOldValue, innerCauses);
+								parentRemoved(node, realOldValue, innerCauses);
 							} else {
 								updateActive = true;
 								if (theActiveElement == parentEl) {
@@ -1129,7 +1129,7 @@ public class ObservableSetImpl {
 									theActiveElement = activeEntry.getKey();
 									theDebug.act("update:remove:repChange").exec();
 									theValue = activeEntry.getValue();
-									parentUpdated(node, realOldValue, newValue, innerCause);
+									parentUpdated(node, realOldValue, newValue, innerCauses);
 								} else
 									theDebug.act("update:remove:no-effect").exec();
 							}
@@ -1141,19 +1141,19 @@ public class ObservableSetImpl {
 							if (ue != UniqueElement.this) {
 								// The new UniqueElement will call setListener and we won't get its events anymore
 								theDebug.setField("internalAdd", true);
-								ue.addParent(parentEl, innerCause);
+								ue.addParent(parentEl, innerCauses);
 								theDebug.setField("internalAdd", null);
 							}
 							if (updateActive) {
 								// Fire an internal-only event if there's no actual change
-								ObservableCollectionActiveManagers.update(theListener, realOldValue, theValue, innerCause,
-									realOldValue == theValue);
+								ObservableCollectionActiveManagers.update(theListener, realOldValue, theValue, realOldValue == theValue,
+									innerCauses);
 							}
 						}
 					}
 
 					@Override
-					public void removed(T value, Object innerCause) {
+					public void removed(T value, Object... innerCauses) {
 						theParentElements.mutableEntry(//
 							node.getElementId())//
 						.remove();
@@ -1161,7 +1161,7 @@ public class ObservableSetImpl {
 							theDebug.act("remove:remove").param("value", theValue).exec();
 							// This element is no longer represented
 							theElementsByValue.mutableEntry(theValueId).remove();
-							ObservableCollectionActiveManagers.removed(theListener, theValue, innerCause);
+							ObservableCollectionActiveManagers.removed(theListener, theValue, innerCauses);
 						} else if (theActiveElement == parentEl) {
 							theDebug.act("remove:repChange").exec();
 							Map.Entry<DerivedCollectionElement<T>, T> activeEntry = theParentElements.firstEntry();
@@ -1176,13 +1176,13 @@ public class ObservableSetImpl {
 								// Since the manager doesn't attempt to keep the elements in source order (which would be expensive),
 								// there's no quick way to determine if the new active element actually is out of order.
 								// So we need to just remove and re-add this element
-								ObservableCollectionActiveManagers.removed(theListener, theValue, innerCause);
-								theAccepter.accept(UniqueElement.this, innerCause);
+								ObservableCollectionActiveManagers.removed(theListener, theValue, innerCauses);
+								theAccepter.accept(UniqueElement.this, innerCauses);
 							} else //Fire an internal-only event if there's no actual change
-								ObservableCollectionActiveManagers.update(theListener, oldValue, theValue, innerCause,
-									oldValue == theValue);
+								ObservableCollectionActiveManagers.update(theListener, oldValue, theValue, oldValue == theValue,
+								innerCauses);
 						} else
-							ObservableCollectionActiveManagers.update(theListener, theValue, theValue, innerCause, true);
+							ObservableCollectionActiveManagers.update(theListener, theValue, theValue, true, innerCauses);
 					}
 				});
 				return node;
@@ -1195,9 +1195,9 @@ public class ObservableSetImpl {
 			 * @param node The tree entry of the source element
 			 * @param oldValue The source element's previously-reported value
 			 * @param newValue The source element's new value
-			 * @param cause The cause of the change
+			 * @param causes The causes of the change
 			 */
-			protected void parentUpdated(BinaryTreeEntry<DerivedCollectionElement<T>, T> node, T oldValue, T newValue, Object cause) {
+			protected void parentUpdated(BinaryTreeEntry<DerivedCollectionElement<T>, T> node, T oldValue, T newValue, Object... causes) {
 			}
 
 			/**
@@ -1206,9 +1206,9 @@ public class ObservableSetImpl {
 			 *
 			 * @param parentEl The (already removed) tree entry of the source element
 			 * @param value The source element's previously-reported value
-			 * @param cause The cause of the removal
+			 * @param causes The causes of the removal
 			 */
-			protected void parentRemoved(BinaryTreeEntry<DerivedCollectionElement<T>, T> parentEl, T value, Object cause) {
+			protected void parentRemoved(BinaryTreeEntry<DerivedCollectionElement<T>, T> parentEl, T value, Object... causes) {
 			}
 
 			/**

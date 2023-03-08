@@ -327,9 +327,9 @@ public class ObservableCollectionActiveManagers {
 	public static interface ElementAccepter<E> {
 		/**
 		 * @param element The initial or added element in the collection
-		 * @param cause The cause of the addition
+		 * @param causes The causes of the addition
 		 */
-		void accept(DerivedCollectionElement<E> element, Object cause);
+		void accept(DerivedCollectionElement<E> element, Object... causes);
 	}
 
 	/**
@@ -353,29 +353,29 @@ public class ObservableCollectionActiveManagers {
 		 *        the content of the derived flow. Notification of the change may nevertheless be needed downstream for some purposes,
 		 *        especially derived gathered multi-maps. When this is true, most managers may simply pass it along, and most termination
 		 *        points may ignore it.
-		 * @param cause The cause of the change
+		 * @param causes The causes of the change
 		 */
-		void update(E oldValue, E newValue, Object cause, boolean internalOnly);
+		void update(E oldValue, E newValue, boolean internalOnly, Object... causes);
 
 		/**
 		 * Alerts the derived collection that the element has been removed from the source flow
 		 *
 		 * @param value The element's previous value before it was removed. As with <code>oldValue</code> in the
-		 *        {@link #update(Object, Object, Object, boolean) update} method, this value is not guaranteed to be the last that the
+		 *        {@link #update(Object, Object, boolean, Object[]) update} method, this value is not guaranteed to be the last that the
 		 *        listener knew about.
-		 * @param cause The cause of the element's removal
+		 * @param causes The causes of the element's removal
 		 */
-		void removed(E value, Object cause);
+		void removed(E value, Object... causes);
 	}
 
-	static <T> void update(CollectionElementListener<T> listener, T oldValue, T newValue, Object cause, boolean internalOnly) {
+	static <T> void update(CollectionElementListener<T> listener, T oldValue, T newValue, boolean internalOnly, Object... causes) {
 		if (listener != null)
-			listener.update(oldValue, newValue, cause, internalOnly);
+			listener.update(oldValue, newValue, internalOnly, causes);
 	}
 
-	static <T> void removed(CollectionElementListener<T> listener, T value, Object cause) {
+	static <T> void removed(CollectionElementListener<T> listener, T value, Object... causes) {
 		if (listener != null)
-			listener.removed(value, cause);
+			listener.removed(value, causes);
 	}
 
 	static class BaseCollectionManager<E> implements ActiveCollectionManager<E, E, E> {
@@ -530,7 +530,7 @@ public class ObservableCollectionActiveManagers {
 				case set:
 					listener = theElementListeners.get(evt.getElementId());
 					if (listener != null)
-						listener.update(evt.getOldValue(), evt.getNewValue(), evt, false);
+						listener.update(evt.getOldValue(), evt.getNewValue(), false, evt);
 					break;
 				}
 			}, action -> theSource.subscribe(action, fromStart).removeAll());
@@ -1120,11 +1120,11 @@ public class ObservableCollectionActiveManagers {
 					theValueElement = theValues.addElement(this, false).getElementId();
 					theParentEl.setListener(new CollectionElementListener<T>() {
 						@Override
-						public void update(T oldValue, T newValue, Object cause, boolean internalOnly) {
+						public void update(T oldValue, T newValue, boolean internalOnly, Object... causes) {
 							T realOldValue = theValue;
 							theValue = newValue;
 							if (internalOnly) {
-								ObservableCollectionActiveManagers.update(theListener, realOldValue, newValue, cause, true);
+								ObservableCollectionActiveManagers.update(theListener, realOldValue, newValue, true, causes);
 								return;
 							}
 							if (!isInCorrectOrder(newValue, theParentEl)) {
@@ -1184,14 +1184,14 @@ public class ObservableCollectionActiveManagers {
 								// ObservableCollectionActiveManagers.removed(theListener, realOldValue, cause);
 								// theAccepter.accept(SortedElement.this, cause);
 							} // else {
-							ObservableCollectionActiveManagers.update(theListener, realOldValue, newValue, cause, false);
+							ObservableCollectionActiveManagers.update(theListener, realOldValue, newValue, false, causes);
 							// }
 						}
 
 						@Override
-						public void removed(T value, Object cause) {
+						public void removed(T value, Object... causes) {
 							theValues.mutableElement(theValueElement).remove();
-							ObservableCollectionActiveManagers.removed(theListener, theValue, cause);
+							ObservableCollectionActiveManagers.removed(theListener, theValue, causes);
 						}
 					});
 				}
@@ -1395,9 +1395,9 @@ public class ObservableCollectionActiveManagers {
 				if (!isSynthetic) {
 					theParentEl.setListener(new CollectionElementListener<T>() {
 						@Override
-						public void update(T oldValue, T newValue, Object cause, boolean internalOnly) {
+						public void update(T oldValue, T newValue, boolean internalOnly, Object... causes) {
 							if (internalOnly) {
-								ObservableCollectionActiveManagers.update(theListener, oldValue, newValue, cause, internalOnly);
+								ObservableCollectionActiveManagers.update(theListener, oldValue, newValue, internalOnly, causes);
 								return;
 							}
 							boolean oldIncluded = FilteredElement.this.included;
@@ -1410,18 +1410,18 @@ public class ObservableCollectionActiveManagers {
 							}
 							FilteredElement.this.included = newIncluded;
 							if (!oldIncluded && newIncluded) {
-								theElementAccepter.accept(FilteredElement.this, cause);
+								theElementAccepter.accept(FilteredElement.this, causes);
 							} else if (oldIncluded && !newIncluded && theListener != null) {
-								theListener.removed(oldValue, cause);
+								theListener.removed(oldValue, causes);
 								theListener = null;
 							} else if (oldIncluded && newIncluded && theListener != null)
-								theListener.update(oldValue, newValue, cause, false);
+								theListener.update(oldValue, newValue, false, causes);
 						}
 
 						@Override
-						public void removed(T value, Object cause) {
+						public void removed(T value, Object... causes) {
 							if (FilteredElement.this.included && theListener != null) {
-								theListener.removed(value, cause);
+								theListener.removed(value, causes);
 								theListener = null;
 							}
 						}
@@ -1659,24 +1659,24 @@ public class ObservableCollectionActiveManagers {
 				if (!synthetic) {
 					theParentEl.setListener(new CollectionElementListener<I>() {
 						@Override
-						public void update(I oldSource, I newSource, Object cause, boolean internalOnly) {
+						public void update(I oldSource, I newSource, boolean internalOnly, Object... causes) {
 							if (internalOnly) {
 								T value = transformElement.getCurrentValue(getEngine().get());
-								ObservableCollectionActiveManagers.update(theListener, value, value, cause, true);
+								ObservableCollectionActiveManagers.update(theListener, value, value, true, causes);
 								return;
 							}
 							BiTuple<T, T> values = transformElement.sourceChanged(oldSource, newSource, getEngine().get());
 							if (values != null)
-								ObservableCollectionActiveManagers.update(theListener, values.getValue1(), values.getValue2(), cause,
-									false);
+								ObservableCollectionActiveManagers.update(theListener, values.getValue1(), values.getValue2(), false,
+									causes);
 						}
 
 						@Override
-						public void removed(I value, Object cause) {
+						public void removed(I value, Object... causes) {
 							T val = transformElement.getCurrentValue(value, getEngine().get());
 							theElements.mutableElement(theStoreElement).remove();
 							theStoreElement = null;
-							ObservableCollectionActiveManagers.removed(theListener, val, cause);
+							ObservableCollectionActiveManagers.removed(theListener, val, causes);
 							theListener = null;
 						}
 					});
@@ -1759,7 +1759,7 @@ public class ObservableCollectionActiveManagers {
 			void updated(Transformation.TransformationState oldState, Transformation.TransformationState newState, Object cause) {
 				BiTuple<T, T> values = transformElement.transformationStateChanged(oldState, newState);
 				if (values != null)
-					ObservableCollectionActiveManagers.update(theListener, values.getValue1(), values.getValue2(), cause, false);
+					ObservableCollectionActiveManagers.update(theListener, values.getValue1(), values.getValue2(), false, cause);
 			}
 
 			@Override

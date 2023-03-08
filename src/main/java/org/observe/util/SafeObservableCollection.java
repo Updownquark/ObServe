@@ -46,7 +46,8 @@ import org.qommons.tree.BetterTreeList;
 import com.google.common.reflect.TypeToken;
 
 /**
- * An {@link ObservableCollection} that only fires updates on a particular thread
+ * An {@link ObservableCollection} that only fires updates on a particular thread. This collection also batches events for performance, e.g.
+ * for use in UI models.
  *
  * @param <E> The type of elements in the collection
  */

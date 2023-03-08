@@ -144,9 +144,9 @@ public class ObservableCollectionActiveManagers2 {
 				if (!synthetic)
 					theParentEl.setListener(new CollectionElementListener<T>() {
 						@Override
-						public void update(T oldValue, T newValue, Object cause, boolean internalOnly) {
+						public void update(T oldValue, T newValue, boolean internalOnly, Object... causes) {
 							if (internalOnly) {
-								ObservableCollectionActiveManagers.update(theListener, oldValue, newValue, cause, true);
+								ObservableCollectionActiveManagers.update(theListener, oldValue, newValue, true, causes);
 							} else {
 								boolean oldPresent;
 								if (intersection == null)
@@ -164,26 +164,26 @@ public class ObservableCollectionActiveManagers2 {
 								else
 									newPresent = intersection.isPresent();
 								if (oldPresent && newPresent)
-									ObservableCollectionActiveManagers.update(theListener, oldValue, newValue, cause, false);
+									ObservableCollectionActiveManagers.update(theListener, oldValue, newValue, false, causes);
 								else if (oldPresent && !newPresent) {
-									ObservableCollectionActiveManagers.removed(theListener, oldValue, cause);
+									ObservableCollectionActiveManagers.removed(theListener, oldValue, causes);
 									theListener = null;
 								} else if (!oldPresent && newPresent)
-									theAccepter.accept(IntersectedCollectionElement.this, cause);
+									theAccepter.accept(IntersectedCollectionElement.this, causes);
 								else { // Wasn't present before, still isn't present. Nothing to do.
 								}
 							}
 						}
 
 						@Override
-						public void removed(T value, Object cause) {
+						public void removed(T value, Object... causes) {
 							boolean wasPresent;
 							if (intersection == null)
 								wasPresent = isExclude;
 							else
 								wasPresent = intersection.isPresent();
 							if (wasPresent)
-								ObservableCollectionActiveManagers.removed(theListener, value, cause);
+								ObservableCollectionActiveManagers.removed(theListener, value, causes);
 							if (intersection != null)
 								intersection.sourceRemoved(IntersectedCollectionElement.this);
 							intersection = null;
@@ -702,7 +702,7 @@ public class ObservableCollectionActiveManagers2 {
 
 			private void update(T value, Object cause) {
 				if (theListener != null)
-					theListener.update(value, value, cause, false);
+					theListener.update(value, value, false, cause);
 			}
 		}
 	}
@@ -953,17 +953,17 @@ public class ObservableCollectionActiveManagers2 {
 					theElementId = theElements.addElement(this, false).getElementId();
 					theParentEl.setListener(new CollectionElementListener<T>() {
 						@Override
-						public void update(T oldValue, T newValue, Object cause, boolean internalOnly) {
+						public void update(T oldValue, T newValue, boolean internalOnly, Object... causes) {
 							try (Transaction t = theRefresh.lock()) {
-								ObservableCollectionActiveManagers.update(theListener, oldValue, newValue, cause, internalOnly);
+								ObservableCollectionActiveManagers.update(theListener, oldValue, newValue, internalOnly, causes);
 							}
 						}
 
 						@Override
-						public void removed(T value, Object cause) {
+						public void removed(T value, Object... causes) {
 							theElements.mutableElement(theElementId).remove();
 							try (Transaction t = theRefresh.lock()) {
-								ObservableCollectionActiveManagers.removed(theListener, value, cause);
+								ObservableCollectionActiveManagers.removed(theListener, value, causes);
 							}
 						}
 					});
@@ -973,7 +973,7 @@ public class ObservableCollectionActiveManagers2 {
 
 			void refresh(Object cause) {
 				T value = get();
-				ObservableCollectionActiveManagers.update(theListener, value, value, cause, false);
+				ObservableCollectionActiveManagers.update(theListener, value, value, false, cause);
 			}
 
 			@Override
@@ -1158,16 +1158,16 @@ public class ObservableCollectionActiveManagers2 {
 					updated(theParentEl.get()); // Subscribe to the initial refresh value
 					theParentEl.setListener(new CollectionElementListener<T>() {
 						@Override
-						public void update(T oldValue, T newValue, Object cause, boolean internalOnly) {
+						public void update(T oldValue, T newValue, boolean internalOnly, Object... causes) {
 							try (Transaction t = lockRefresh()) {
-								ObservableCollectionActiveManagers.update(theListener, oldValue, newValue, cause, internalOnly);
+								ObservableCollectionActiveManagers.update(theListener, oldValue, newValue, internalOnly, causes);
 								if (!internalOnly)
 									updated(newValue);
 							}
 						}
 
 						@Override
-						public void removed(T value, Object cause) {
+						public void removed(T value, Object... causes) {
 							try (Transaction t = lockRefresh()) {
 								if (theCurrentHolder != null) { // Remove from old refresh if non-null
 									theCurrentHolder.remove(theElementId);
@@ -1175,7 +1175,7 @@ public class ObservableCollectionActiveManagers2 {
 									theCurrentHolder = null;
 								}
 								theCurrentRefresh = null;
-								ObservableCollectionActiveManagers.removed(theListener, value, cause);
+								ObservableCollectionActiveManagers.removed(theListener, value, causes);
 							}
 						}
 					});
@@ -1192,7 +1192,7 @@ public class ObservableCollectionActiveManagers2 {
 
 			void refresh(Object cause) {
 				T value = get();
-				ObservableCollectionActiveManagers.update(theListener, value, value, cause, false);
+				ObservableCollectionActiveManagers.update(theListener, value, value, false, cause);
 			}
 
 			@Override
@@ -1771,14 +1771,14 @@ public class ObservableCollectionActiveManagers2 {
 				updated(null, getValue(), cause, false);
 				theParentEl.setListener(new CollectionElementListener<I>() {
 					@Override
-					public void update(I oldValue, I newValue, Object innerCause, boolean internalOnly) {
-						updated(oldValue, newValue, innerCause, internalOnly);
+					public void update(I oldValue, I newValue, boolean internalOnly, Object... innerCauses) {
+						updated(oldValue, newValue, innerCauses, internalOnly);
 					}
 
 					@Override
-					public void removed(I value, Object innerCause) {
+					public void removed(I value, Object... innerCauses) {
 						try (Transaction parentT = theParent.lock(false, null); Transaction innerT = lockLocal()) {
-							clearSubElements(innerCause);
+							clearSubElements(innerCauses);
 							theOuterElements.mutableElement(holderElement).remove();
 						}
 					}
@@ -1830,12 +1830,25 @@ public class ObservableCollectionActiveManagers2 {
 				}
 			}
 
-			void clearSubElements(Object cause) {
+			void clearSubElements(Object... causes) {
 				if (manager == null)
 					return;
-				try (Transaction t = manager.lock(true, cause)) {
+				Transaction t;
+				if (causes.length == 0)
+					t = manager.lock(true, null);
+				else if (causes.length == 1)
+					t = manager.lock(true, causes[0]);
+				else {
+					Transaction[] ts = new Transaction[causes.length];
+					for (int i = 0; i < ts.length; i++)
+						ts[i] = manager.lock(true, causes[i]);
+					t = Transaction.and(ts);
+				}
+				try {
 					theChildListening.unsubscribe(); // unsubscribe here removes all elements
 					manager = null;
+				} finally {
+					t.close();
 				}
 			}
 
@@ -1930,25 +1943,25 @@ public class ObservableCollectionActiveManagers2 {
 			<X extends V> void installListener(DerivedCollectionElement<X> parentEl) {
 				parentEl.setListener(new CollectionElementListener<X>() {
 					@Override
-					public void update(X oldValue, X newValue, Object cause, boolean internalOnly) {
+					public void update(X oldValue, X newValue, boolean internalOnly, Object... causes) {
 						// Need to make sure that the flattened collection isn't firing at the same time as the child collection
 						try (Transaction parentT = Lockable.lockAll(Lockable.lockable(theParent),
 							() -> Arrays.asList(Lockable.lockable(theHolder)), LambdaUtils.identity())) {
 							if (internalOnly) {
-								valueUpdated(oldValue, newValue, cause, true);
+								valueUpdated(oldValue, newValue, causes, true);
 								return;
 							}
 							if (!wasPriorityNotified && priorityUpdateReceiver != null) {
 								wasPriorityNotified = true;
-								priorityUpdateReceiver.valueUpdated(oldValue, newValue, cause, false);
+								priorityUpdateReceiver.valueUpdated(oldValue, newValue, causes, false);
 							}
 							if (priorityUpdateReceiver != FlattenedElement.this && theElementId.isPresent())
-								valueUpdated(oldValue, newValue, cause, false);
+								valueUpdated(oldValue, newValue, causes, false);
 						}
 					}
 
 					@Override
-					public void removed(X value, Object cause) {
+					public void removed(X value, Object... causes) {
 						theHolder.theElements.mutableElement(theElementId).remove();
 						// Need to make sure that the flattened collection isn't firing at the same time as the child collection
 						try (Transaction parentT = theParent.lock(false, null); Transaction localT = lockLocal()) {
@@ -1959,7 +1972,7 @@ public class ObservableCollectionActiveManagers2 {
 								val = theDestCache;
 							else
 								val = theOptions.map(theHolder.getValue(), value, null);
-							ObservableCollectionActiveManagers.removed(theListener, val, cause);
+							ObservableCollectionActiveManagers.removed(theListener, val, causes);
 							theListener = null;
 						}
 					}
@@ -1978,17 +1991,17 @@ public class ObservableCollectionActiveManagers2 {
 					newValue = theOptions.map(newSource, theCacheHandler.getSourceCache(), theDestCache);
 				else
 					newValue = theOptions.map(newSource, theParentEl.get(), null);
-				ObservableCollectionActiveManagers.update(theListener, oldValue, newValue, cause, internalOnly);
+				ObservableCollectionActiveManagers.update(theListener, oldValue, newValue, internalOnly, cause);
 			}
 
 			void valueUpdated(V oldValue, V newValue, Object cause, boolean internalOnly) {
 				if (internalOnly || theOptions == null) {
-					ObservableCollectionActiveManagers.update(theListener, (T) oldValue, (T) newValue, cause, internalOnly);
+					ObservableCollectionActiveManagers.update(theListener, (T) oldValue, (T) newValue, internalOnly, cause);
 					return;
 				}
 				BiTuple<T, T> values = theCacheHandler.handleSourceChange(oldValue, newValue);
 				if (values != null)
-					ObservableCollectionActiveManagers.update(theListener, values.getValue1(), values.getValue2(), cause, false);
+					ObservableCollectionActiveManagers.update(theListener, values.getValue1(), values.getValue2(), false, cause);
 			}
 
 			@Override
