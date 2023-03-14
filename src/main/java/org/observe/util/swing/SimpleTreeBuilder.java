@@ -46,7 +46,7 @@ import com.google.common.reflect.TypeToken;
 public class SimpleTreeBuilder<F, P extends SimpleTreeBuilder<F, P>> extends AbstractComponentEditor<JTree, P> implements TreeEditor<F, P> {
 	/**
 	 * Creates a tree with a function that accepts the node value
-	 * 
+	 *
 	 * @param <F> The super-type of values in the tree
 	 * @param root The root value for the tree
 	 * @param children The function to produce children for each tree node value
@@ -60,7 +60,7 @@ public class SimpleTreeBuilder<F, P extends SimpleTreeBuilder<F, P>> extends Abs
 
 	/**
 	 * Creates a tree with a function that accepts the node path
-	 * 
+	 *
 	 * @param <F> The super-type of values in the tree
 	 * @param root The root value for the tree
 	 * @param children The function to produce children for each tree node path
@@ -82,6 +82,7 @@ public class SimpleTreeBuilder<F, P extends SimpleTreeBuilder<F, P>> extends Abs
 	private boolean isSingleSelection;
 	private ObservableCollection<F> theValueMultiSelection;
 	private ObservableCollection<BetterList<F>> thePathMultiSelection;
+	private ObservableValue<String> theDisablement;
 	private List<SimpleDataAction<BetterList<F>, ?>> theActions;
 	private boolean theActionsOnTop;
 
@@ -153,6 +154,15 @@ public class SimpleTreeBuilder<F, P extends SimpleTreeBuilder<F, P>> extends Abs
 			return BetterList.empty();
 		return BetterList.of(Arrays.stream(selection)//
 			.map(path -> (BetterList<F>) BetterList.of(path.getPath())));
+	}
+
+	@Override
+	public P disableWith(ObservableValue<String> disabled) {
+		if (theDisablement == null)
+			theDisablement = disabled;
+		else
+			theDisablement = ObservableValue.firstValue(TypeTokens.get().STRING, msg -> msg != null, () -> null, theDisablement, disabled);
+		return (P) this;
 	}
 
 	@Override
@@ -308,6 +318,12 @@ public class SimpleTreeBuilder<F, P extends SimpleTreeBuilder<F, P>> extends Abs
 		if (isSingleSelection)
 			getEditor().getSelectionModel().setSelectionMode(TreeSelectionModel.SINGLE_TREE_SELECTION);
 
+		if (theDisablement != null) {
+			theDisablement.changes().takeUntil(getUntil()).act(evt -> {
+				// Let's not worry about tooltip here. We could mess up cell tooltips and stuff.
+				getEditor().setEnabled(evt.getNewValue() == null);
+			});
+		}
 		getEditor().setExpandsSelectedPaths(true);
 		JScrollPane scroll = new JScrollPane(getEditor());
 		Component comp = scroll;

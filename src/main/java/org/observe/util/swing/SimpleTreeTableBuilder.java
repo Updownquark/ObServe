@@ -90,6 +90,7 @@ implements TreeTableEditor<F, P> {
 	private boolean isSingleSelection;
 	private ObservableCollection<F> theValueMultiSelection;
 	private ObservableCollection<BetterList<F>> thePathMultiSelection;
+	private ObservableValue<String> theDisablement;
 	private List<SimpleDataAction<BetterList<F>, ?>> theActions;
 	private boolean theActionsOnTop;
 
@@ -145,6 +146,15 @@ implements TreeTableEditor<F, P> {
 		TreePath[] selection = getEditor().getTreeSelectionModel().getSelectionPaths();
 		return BetterList.of(Arrays.stream(selection)//
 			.map(path -> (BetterList<F>) BetterList.of(path.getPath())));
+	}
+
+	@Override
+	public P disableWith(ObservableValue<String> disabled) {
+		if (theDisablement == null)
+			theDisablement = disabled;
+		else
+			theDisablement = ObservableValue.firstValue(TypeTokens.get().STRING, msg -> msg != null, () -> null, theDisablement, disabled);
+		return (P) this;
 	}
 
 	@Override
@@ -314,6 +324,12 @@ implements TreeTableEditor<F, P> {
 		ObservableTreeTableModel<F> model = new ObservableTreeTableModel<>(new PPTreeModel(), columns);
 		JXTreeTable table = getEditor();
 		table.setTreeTableModel(model);
+		if (theDisablement != null) {
+			theDisablement.changes().takeUntil(getUntil()).act(evt -> {
+				// Let's not worry about tooltip here. We could mess up cell tooltips and stuff.
+				table.setEnabled(evt.getNewValue() == null);
+			});
+		}
 		if (theMouseListeners != null) {
 			for (ObservableTableModel.RowMouseListener<? super BetterList<F>> listener : theMouseListeners)
 				model.addMouseListener(listener);

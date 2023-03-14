@@ -2743,6 +2743,7 @@ class PanelPopulationImpl {
 		private String theItemName;
 		private SettableValue<R> theSelectionValue;
 		private ObservableCollection<R> theSelectionValues;
+		private ObservableValue<String> theDisablement;
 		private List<ListItemAction<?>> theActions;
 
 		SimpleListBuilder(ObservableCollection<R> rows, Observable<?> until) {
@@ -2802,6 +2803,16 @@ class PanelPopulationImpl {
 				}
 			}
 			return el;
+		}
+
+		@Override
+		public P disableWith(ObservableValue<String> disabled) {
+			if (theDisablement == null)
+				theDisablement = disabled;
+			else
+				theDisablement = ObservableValue.firstValue(TypeTokens.get().STRING, msg -> msg != null, () -> null, theDisablement,
+					disabled);
+			return (P) this;
 		}
 
 		@Override
@@ -2900,6 +2911,12 @@ class PanelPopulationImpl {
 			if (theSelectionValues != null)
 				ObservableSwingUtils.syncSelection(getEditor(), model, getEditor()::getSelectionModel, model.getWrapped().equivalence(),
 					theSelectionValues, getUntil());
+			if (theDisablement != null) {
+				theDisablement.changes().takeUntil(getUntil()).act(evt -> {
+					// Let's not worry about tooltip here. We could mess up cell tooltips and stuff.
+					getEditor().setEnabled(evt.getNewValue() == null);
+				});
+			}
 
 			if (theActions != null) {
 				for (ListItemAction<?> action : theActions) {

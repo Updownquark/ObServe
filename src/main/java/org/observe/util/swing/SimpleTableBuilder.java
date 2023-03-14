@@ -115,6 +115,7 @@ implements TableBuilder<R, P> {
 	private SettableValue<R> theSelectionValue;
 	private ObservableCollection<R> theSelectionValues;
 	private Predicate<? super R> theInitialSelection;
+	private ObservableValue<String> theDisablement;
 	private List<Object> theActions;
 	private boolean theActionsOnTop;
 	private ObservableValue<? extends TableContentControl> theFilter;
@@ -245,6 +246,15 @@ implements TableBuilder<R, P> {
 	@Override
 	public P withInitialSelection(Predicate<? super R> initSelection) {
 		theInitialSelection = initSelection;
+		return (P) this;
+	}
+
+	@Override
+	public P disableWith(ObservableValue<String> disabled) {
+		if (theDisablement == null)
+			theDisablement = disabled;
+		else
+			theDisablement = ObservableValue.firstValue(TypeTokens.get().STRING, msg -> msg != null, () -> null, theDisablement, disabled);
 		return (P) this;
 	}
 
@@ -659,6 +669,12 @@ implements TableBuilder<R, P> {
 		instantiating.watchFor(ObservableTableModel.DBUG, "model", tk -> tk.applyTo(1));
 		model = new ObservableTableModel<>(theFilteredRows, columns);
 		JTable table = getEditor();
+		if (theDisablement != null) {
+			theDisablement.changes().takeUntil(getUntil()).act(evt -> {
+				// Let's not worry about tooltip here. We could mess up cell tooltips and stuff.
+				table.setEnabled(evt.getNewValue() == null);
+			});
+		}
 		if (!withColumnHeader)
 			table.setTableHeader(null);
 		table.setModel(model);

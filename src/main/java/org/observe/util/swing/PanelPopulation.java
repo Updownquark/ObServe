@@ -716,6 +716,8 @@ public class PanelPopulation {
 
 		List<R> getSelection();
 
+		P disableWith(ObservableValue<String> disabled);
+
 		P withRemove(Consumer<? super List<? extends R>> deletion, Consumer<DataAction<R, ?>> actionMod);
 
 		default P withAction(String actionName, Consumer<? super R> action, Consumer<DataAction<R, ?>> actionMod) {
