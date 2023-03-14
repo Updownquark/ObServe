@@ -29,8 +29,6 @@ import org.observe.SettableValue;
 import org.observe.Subscription;
 import org.observe.util.TypeTokens;
 import org.qommons.ThreadConstraint;
-import org.qommons.io.BetterFile;
-import org.qommons.io.FileUtils;
 import org.qommons.threading.QommonsTimer;
 
 import com.google.common.reflect.TypeToken;
@@ -86,7 +84,7 @@ public class ObservableFileButton extends JButton {
 	private String theTooltip;
 	private boolean isExternallyEnabled;
 	private String theApproveText;
-	private BetterFile theInitDirectory;
+	private File theInitDirectory;
 	private String theFileFilterDescrip;
 
 	/**
@@ -219,7 +217,7 @@ public class ObservableFileButton extends JButton {
 	 * @param initDirectory The initial directory for the file chooser, if the value is absent
 	 * @return This button
 	 */
-	public ObservableFileButton startAt(BetterFile initDirectory) {
+	public ObservableFileButton startAt(File initDirectory) {
 		theInitDirectory = initDirectory;
 		return this;
 	}
@@ -351,7 +349,7 @@ public class ObservableFileButton extends JButton {
 			chooser.setCurrentDirectory(file.getParentFile());
 			chooser.setSelectedFile(file);
 		} else if (theInitDirectory != null)
-			chooser.setCurrentDirectory(new FileUtils.SyntheticFile(theInitDirectory));
+			chooser.setCurrentDirectory(theInitDirectory);
 	}
 
 	@Override
