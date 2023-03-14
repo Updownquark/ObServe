@@ -318,7 +318,8 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V>, Eventabl
 		Subscription sub = subscribe(evt -> {
 			if (evt.getElementId() == null)
 				return; // Key update only, no effect on values
-			try (Transaction t = values.lock(true, evt)) {
+			try (Transaction t = values.lock(true, evt); //
+				Transaction moveT = evt.getMovement() != null ? values.lock(true, evt.getMovement()) : Transaction.NONE) {
 				switch (evt.getType()) {
 				case add:
 					CollectionElement<BiTuple<ElementId, ElementId>> el = elements
@@ -1416,6 +1417,15 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V>, Eventabl
 		 * @return The derived flow
 		 */
 		<V2> MultiMapFlow<K, V2> withValues(Function<CollectionDataFlow<?, ?, V>, CollectionDataFlow<?, ?, V2>> valueMap);
+
+		/**
+		 * @param allowUpdates Whether to allow updates in the resulting map
+		 * @return A flow that forbids modifications to the source map
+		 */
+		default MultiMapFlow<K, V> unmodifiable(boolean allowUpdates) {
+			return withKeys(keys -> keys.unmodifiable(allowUpdates))//
+				.withValues(values -> values.unmodifiable(allowUpdates));
+		}
 
 		/**
 		 * @return A flow identical to this flow, but whose keys are reversed in the key set and whose values are reversed in each key's
