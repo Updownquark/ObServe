@@ -461,7 +461,7 @@ public interface TableContentControl {
 	 * @throws ParseException If errors are found in the text
 	 */
 	public static TableContentControl parseContentControl(CharSequence controlText) throws ParseException {
-		return Parsing.parseContentControl(controlText, new int[1], 0);
+		return Parsing.parseContentControl(controlText, new int[1], 0, false);
 		// List<String> splitList = new LinkedList<>();
 		// int contentStart = 0;
 		// boolean quoted = false;
@@ -557,7 +557,7 @@ public interface TableContentControl {
 				while (rendererList.size() > i)
 					rendererList.remove(rendererList.size() - 1);
 				FilteredValue<E> v;
-				if (cv.hasPreviousResult()) {
+				if (cv.hasPreviousResult() && cv.getPreviousResult() != null) {
 					v = cv.getPreviousResult();
 					v.setValue(x);
 				} else
@@ -928,7 +928,8 @@ public interface TableContentControl {
 		public String toString() {
 			StringBuilder str = new StringBuilder(theCategory);
 			if (str.charAt(0) == '"' || theCategory.equals("sort") || theCategory.equals("columns"))
-				str.insert(0, '"').append(':');
+				str.insert(0, '"').append('"');
+			str.append(':');
 			str.append(theFilter.toString());
 			return str.toString();
 		}
@@ -2235,11 +2236,14 @@ public interface TableContentControl {
 		 * @param controlText The text to parse
 		 * @param c The current position of the text
 		 * @param depth The parenthetical depth of the parsing state
+		 * @param inCategory Whether the text being parsed is already category-specific, so that this method should not parse categorical
+		 *        filters
 		 * @return The control parsed out of the text between the starting position and the end or the next unclosed parenthesis (if
 		 *         depth>0)
 		 * @throws ParseException If an error is found in the text
 		 */
-		public static TableContentControl parseContentControl(CharSequence controlText, int[] c, int depth) throws ParseException {
+		public static TableContentControl parseContentControl(CharSequence controlText, int[] c, int depth, boolean inCategory)
+			throws ParseException {
 			if (controlText == null || controlText.length() == 0)
 				return DEFAULT;
 			TableContentControl parsed = null;
@@ -2269,8 +2273,9 @@ public interface TableContentControl {
 					elementStart = c[0] + 1;
 					break;
 				case ':':
-					if (elementStart < c[0]) {
+					if (elementStart < c[0] && !inCategory) {
 						category = controlText.subSequence(elementStart, c[0]).toString();
+						inCategory = true;
 						if (not && !quotedCategory && (category.equals("sort") || category.equals("columns")))
 							throw new ParseException("Not operator is not valid for sorting", c[0]);
 						elementStart = c[0] + 1;
@@ -2293,7 +2298,7 @@ public interface TableContentControl {
 				case '(':
 					if (elementStart == c[0]) {
 						c[0]++;
-						next = Parsing.parseContentControl(controlText, c, depth + 1);
+						next = Parsing.parseContentControl(controlText, c, depth + 1, inCategory);
 						if (category != null) {
 							next = new CategoryFilter(category, next);
 							category = null;
@@ -2312,6 +2317,8 @@ public interface TableContentControl {
 					if (Character.isWhitespace(ch)) {
 						String elementText = controlText.subSequence(elementStart, c[0]).toString().trim();
 						next = parseElementText(elementText, c[0], category, quotedCategory);
+						if (category != null)
+							inCategory = false;
 						elementStart = c[0] + 1; // Move on even if no element was parsed
 					}
 					break;
@@ -2330,11 +2337,8 @@ public interface TableContentControl {
 				throw new ParseException("No closing parenthesis", c[0]);
 			String elementText = controlText.subSequence(elementStart, c[0]).toString().trim();
 			TableContentControl next = parseElementText(elementText, c[0], category, quotedCategory);
-			if (next != null) {
+			if (next != null)
 				parsed = combine(parsed, next, or, not);
-				not = or = false;
-				category = null;
-			}
 			if (parsed == null)
 				return DEFAULT;
 			if (closeParen)
@@ -2393,14 +2397,12 @@ public interface TableContentControl {
 			} else if (!quotedCategory && "sort".equals(category)) {
 				return new RowSorter(parseCategories(text));
 			} else if (!quotedCategory && "columns".equals(category)) {
-				return new ColumnSorter(parseCategories(category));
-			} else {
-				TableContentControl parsed = Parsing.parseControlElement(text);
-				if (category != null)
-					return new CategoryFilter(category, parsed);
-				else
-					return parsed;
-			}
+				return new ColumnSorter(parseCategories(text));
+			} else if (category != null) {
+				TableContentControl parsed = Parsing.parseContentControl(text, new int[1], 0, true);
+				return new CategoryFilter(category, parsed);
+			} else
+				return Parsing.parseControlElement(text);
 		}
 
 		private static List<String> parseCategories(String categoriesString) {
