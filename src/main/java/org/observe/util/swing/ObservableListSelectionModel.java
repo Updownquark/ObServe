@@ -301,37 +301,57 @@ public class ObservableListSelectionModel<E> extends ObservableCollectionWrapper
 	@Override
 	public String canAdd(E newValue, ElementId after, ElementId before) {
 		try (Transaction t = lock(false, null)) {
-			int minAddIndex = after == null ? 0 : value.indexOfNthSetBit(getWrapped().getElementsBefore(after));
-			int maxAddIndex = before == null ? theListModel.getSize() : value.indexOfNthSetBit(getWrapped().getElementsBefore(before));
+			int index = getAddIndex(newValue, after, before, true);
+			if (index < 0)
+				return NO_SUCH_MODEL_VALUE;
+			return null;
+		}
+	}
+
+	private int getAddIndex(E newValue, ElementId after, ElementId before, boolean first) {
+		int minAddIndex = after == null ? -1 : value.indexOfNthSetBit(getWrapped().getElementsBefore(after));
+		int maxAddIndex = before == null ? theListModel.getSize() : value.indexOfNthSetBit(getWrapped().getElementsBefore(before));
+		try (Transaction t = theListModel.getWrapped().lock(false, null)) {
+			CollectionElement<E> listEl = theListModel.getWrapped().subList(minAddIndex + 1, maxAddIndex).getElement(newValue, first);
+			if (listEl == null)
+				return -1;
+			int index = theListModel.getWrapped().getElementsBefore(listEl.getElementId());
+			if (listEl.get() == theListModel.getElementAt(index))
+				return index;
+		}
+		// Means the model is out-of-sync with the collection, so we have to do this linearly
+		if (first) {
 			for (int i = value.nextClearBit(minAddIndex + 1); i < maxAddIndex; i = value.nextClearBit(i + 1)) {
+				if (i > 0 && value.get(i - 1))
+					after = CollectionElement
+					.getElementId(after == null ? getWrapped().getTerminalElement(true) : getWrapped().getAdjacentElement(after, true));
 				E modelValue = theListModel.getElementAt(i);
 				if (getWrapped().equivalence().elementEquals(modelValue, newValue))
-					return null;
+					return i;
+			}
+		} else {
+			for (int i = value.previousClearBit(maxAddIndex - 1); i > minAddIndex; i = value.previousClearBit(i - 1)) {
+				if (value.get(i + 1))
+					before = CollectionElement.getElementId(
+						before == null ? getWrapped().getTerminalElement(false) : getWrapped().getAdjacentElement(before, false));
+				E modelValue = theListModel.getElementAt(i);
+				if (getWrapped().equivalence().elementEquals(modelValue, newValue))
+					return i;
 			}
 		}
-		return NO_SUCH_MODEL_VALUE;
+		return -1;
 	}
 
 	@Override
 	public CollectionElement<E> addElement(E newValue, ElementId after, ElementId before, boolean first)
 		throws UnsupportedOperationException, IllegalArgumentException {
 		try (Transaction t = lock(true, null)) {
-			int minAddIndex = after == null ? 0 : value.indexOfNthSetBit(getWrapped().getElementsBefore(after));
-			int maxAddIndex = before == null ? theListModel.getSize() : value.indexOfNthSetBit(getWrapped().getElementsBefore(before));
-			if (first) {
-				for (int i = value.nextClearBit(minAddIndex + 1); i < maxAddIndex; i = value.nextClearBit(i + 1)) {
-					if (i > minAddIndex && value.get(i - 1))
-						after = CollectionElement.getElementId(
-							after == null ? getWrapped().getTerminalElement(true) : getWrapped().getAdjacentElement(after, true));
-					E modelValue = theListModel.getElementAt(i);
-					if (getWrapped().equivalence().elementEquals(modelValue, newValue)) {
-						addSelectionInterval(i, i);
-						return getWrapped().getAdjacentElement(after, true);
-					}
-				}
-			}
+			int index = getAddIndex(newValue, after, before, first);
+			if (index < 0)
+				throw new IllegalArgumentException(NO_SUCH_MODEL_VALUE);
+			addSelectionInterval(index, index);
+			return getElement(value.countBitsSetBetween(0, index));
 		}
-		throw new IllegalArgumentException(NO_SUCH_MODEL_VALUE);
 	}
 
 	@Override
@@ -686,44 +706,63 @@ public class ObservableListSelectionModel<E> extends ObservableCollectionWrapper
 	private void changeSelection(int clearMin, int clearMax, int setMin, int setMax, boolean clearFirst) {
 		ElementId lastSelected = null;
 		boolean lastSelectedAccurate = false;
-		for (int i = Math.min(setMin, clearMin); i <= Math.max(setMax, clearMax); i++) {
+		Causable cause = null;
+		Transaction t = null;
+		try {
+			for (int i = Math.min(setMin, clearMin); i <= Math.max(setMax, clearMax); i++) {
 
-			boolean shouldClear = contains(clearMin, clearMax, i);
-			boolean shouldSet = contains(setMin, setMax, i);
+				boolean shouldClear = contains(clearMin, clearMax, i);
+				boolean shouldSet = contains(setMin, setMax, i);
 
-			if (shouldSet && shouldClear) {
-				if (clearFirst) {
-					shouldClear = false;
-				} else {
-					shouldSet = false;
+				if (shouldSet && shouldClear) {
+					if (clearFirst) {
+						shouldClear = false;
+					} else {
+						shouldSet = false;
+					}
+				}
+
+				if (shouldSet) {
+					if (!value.get(i)) {
+						if (!lastSelectedAccurate) {
+							int selIndex = value.countBitsSetBetween(0, i);
+							lastSelected = selIndex == 0 ? null : getWrapped().getElement(selIndex - 1).getElementId();
+							lastSelectedAccurate = true;
+						}
+						if (t == null) {
+							cause = Causable.simpleCause();
+							t = Transaction.and(cause.use(), getWrapped().lock(true, cause));
+						}
+						lastSelected = getWrapped().addElement(theListModel.getElementAt(i), lastSelected, null, true).getElementId();
+					}
+					set(i);
+				} else if (lastSelectedAccurate && value.get(i)) {
+					if (lastSelected != null)
+						lastSelected = getWrapped().getAdjacentElement(lastSelected, true).getElementId();
+					else
+						lastSelected = getWrapped().getTerminalElement(true).getElementId();
+				}
+				if (shouldClear) {
+					if (value.get(i)) {
+						if (!lastSelectedAccurate) {
+							int selIndex = value.countBitsSetBetween(0, i);
+							lastSelected = getWrapped().getElement(selIndex).getElementId();
+							lastSelectedAccurate = true;
+						}
+						ElementId prevSelected = CollectionElement.getElementId(getWrapped().getAdjacentElement(lastSelected, false));
+						if (t == null) {
+							cause = Causable.simpleCause();
+							t = Transaction.and(cause.use(), getWrapped().lock(true, cause));
+						}
+						getWrapped().mutableElement(lastSelected).remove();
+						lastSelected = prevSelected;
+					}
+					clear(i);
 				}
 			}
-
-			if (shouldSet) {
-				if (!value.get(i)) {
-					if (!lastSelectedAccurate) {
-						int selIndex = value.countBitsSetBetween(0, i);
-						lastSelected = selIndex == 0 ? null : getWrapped().getElement(selIndex - 1).getElementId();
-						lastSelectedAccurate = true;
-					}
-					lastSelected = getWrapped().addElement(theListModel.getElementAt(i), lastSelected, null, true).getElementId();
-				}
-				set(i);
-			} else if (lastSelectedAccurate && value.get(i))
-				lastSelected = getWrapped().getAdjacentElement(lastSelected, true).getElementId();
-			if (shouldClear) {
-				if (value.get(i)) {
-					if (!lastSelectedAccurate) {
-						int selIndex = value.countBitsSetBetween(0, i);
-						lastSelected = getWrapped().getElement(selIndex).getElementId();
-						lastSelectedAccurate = true;
-					}
-					ElementId prevSelected = CollectionElement.getElementId(getWrapped().getAdjacentElement(lastSelected, false));
-					getWrapped().mutableElement(lastSelected).remove();
-					lastSelected = prevSelected;
-				}
-				clear(i);
-			}
+		} finally {
+			if (t != null)
+				t.close();
 		}
 		fireValueChanged();
 	}

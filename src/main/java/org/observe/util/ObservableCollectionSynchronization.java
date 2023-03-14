@@ -332,12 +332,7 @@ public class ObservableCollectionSynchronization<V> implements Subscription {
 			ObservableCollection<V> opp = getCollection(!left);
 			MutableCollectionElement<V> oppEl = opp.mutableElement(common.getId(!left));
 			int oppIndex = opp.getElementsBefore(oppEl.getElementId());
-			// See if there's another unmatched value in the modified collection that we can match up to the newly-orphaned element
-			// instead of removing it
-			if (added(!left, oppIndex, //
-				oppEl.getElementId(), oppEl.get(), true, () -> getElements(!left).remove(oppIndex).setId(!left, null)) != null) {
-				// Re-matched, brilliant, no need to remove it now
-			} else if (oppEl.canRemove() == null && !opp.isEventing()) {
+			if (oppEl.canRemove() == null && !opp.isEventing()) {
 				try {
 					oppEl.remove();
 					getElements(!left).remove(oppIndex).setId(!left, null);
