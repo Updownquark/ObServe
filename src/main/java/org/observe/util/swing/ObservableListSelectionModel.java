@@ -607,33 +607,6 @@ public class ObservableListSelectionModel<E> extends ObservableCollectionWrapper
 		value.clear(r);
 		markAsDirty(r);
 
-		// Update minimum and maximum indices
-		/*
-		   If (r > minIndex) the minimum has not changed.
-		   The case (r < minIndex) is not possible because r'th value was set.
-		   We only need to check for the case when lowest entry has been cleared,
-		   and in this case we need to search for the first value set above it.
-		 */
-		if (r == minIndex) {
-			for (minIndex = minIndex + 1; minIndex <= maxIndex; minIndex++) {
-				if (value.get(minIndex)) {
-					break;
-				}
-			}
-		}
-		/*
-		   If (r < maxIndex) the maximum has not changed.
-		   The case (r > maxIndex) is not possible because r'th value was set.
-		   We only need to check for the case when highest entry has been cleared,
-		   and in this case we need to search for the first value set below it.
-		 */
-		if (r == maxIndex) {
-			for (maxIndex = maxIndex - 1; minIndex <= maxIndex; maxIndex--) {
-				if (value.get(maxIndex)) {
-					break;
-				}
-			}
-		}
 		/* Performance note: This method is called from inside a loop in
 		   changeSelection() but we will only iterate in the loops
 		   above on the basis of one iteration per deselected cell - in total.
@@ -652,6 +625,36 @@ public class ObservableListSelectionModel<E> extends ObservableCollectionWrapper
 		if (isSelectionEmpty()) {
 			minIndex = MAX;
 			maxIndex = MIN;
+		} else {
+			// Update minimum and maximum indices
+			/*
+			   If (r > minIndex) the minimum has not changed.
+			   The case (r < minIndex) is not possible because r'th value was set.
+			   We only need to check for the case when lowest entry has been cleared,
+			   and in this case we need to search for the first value set above it.
+			 */
+			if (r == minIndex) {
+				minIndex = value.nextSetBit(minIndex + 1);
+				// for (minIndex = minIndex + 1; minIndex <= maxIndex; minIndex++) {
+				// if (value.get(minIndex)) {
+				// break;
+				// }
+				// }
+			}
+			/*
+			   If (r < maxIndex) the maximum has not changed.
+			   The case (r > maxIndex) is not possible because r'th value was set.
+			   We only need to check for the case when highest entry has been cleared,
+			   and in this case we need to search for the first value set below it.
+			 */
+			if (r == maxIndex) {
+				maxIndex = value.length();
+				// for (maxIndex = maxIndex - 1; minIndex <= maxIndex; maxIndex--) {
+				// if (value.get(maxIndex)) {
+				// break;
+				// }
+				// }
+			}
 		}
 	}
 
@@ -734,29 +737,27 @@ public class ObservableListSelectionModel<E> extends ObservableCollectionWrapper
 							t = Transaction.and(cause.use(), getWrapped().lock(true, cause));
 						}
 						lastSelected = getWrapped().addElement(theListModel.getElementAt(i), lastSelected, null, true).getElementId();
+						set(i);
 					}
-					set(i);
 				} else if (lastSelectedAccurate && value.get(i)) {
 					if (lastSelected != null)
 						lastSelected = getWrapped().getAdjacentElement(lastSelected, true).getElementId();
 					else
 						lastSelected = getWrapped().getTerminalElement(true).getElementId();
 				}
-				if (shouldClear) {
-					if (value.get(i)) {
-						if (!lastSelectedAccurate) {
-							int selIndex = value.countBitsSetBetween(0, i);
-							lastSelected = getWrapped().getElement(selIndex).getElementId();
-							lastSelectedAccurate = true;
-						}
-						ElementId prevSelected = CollectionElement.getElementId(getWrapped().getAdjacentElement(lastSelected, false));
-						if (t == null) {
-							cause = Causable.simpleCause();
-							t = Transaction.and(cause.use(), getWrapped().lock(true, cause));
-						}
-						getWrapped().mutableElement(lastSelected).remove();
-						lastSelected = prevSelected;
+				if (shouldClear && value.get(i)) {
+					if (!lastSelectedAccurate) {
+						int selIndex = value.countBitsSetBetween(0, i);
+						lastSelected = getWrapped().getElement(selIndex).getElementId();
+						lastSelectedAccurate = true;
 					}
+					ElementId prevSelected = CollectionElement.getElementId(getWrapped().getAdjacentElement(lastSelected, false));
+					if (t == null) {
+						cause = Causable.simpleCause();
+						t = Transaction.and(cause.use(), getWrapped().lock(true, cause));
+					}
+					getWrapped().mutableElement(lastSelected).remove();
+					lastSelected = prevSelected;
 					clear(i);
 				}
 			}
@@ -944,16 +945,27 @@ public class ObservableListSelectionModel<E> extends ObservableCollectionWrapper
 		 * index-1 if before is true, index+1 if it's false (i.e. with
 		 * insMinIndex).
 		 */
-		for (int i = maxIndex; i >= insMinIndex; i--) {
-			setState(i + length, value.get(i));
+		if (!isSelectionEmpty()) {
+			if (minIndex >= index)
+				minIndex += length;
+			if (maxIndex >= index)
+				maxIndex += length;
+			value.insertInterval(insMinIndex, length);
+			markAsDirty(maxIndex);
+			markAsDirty(insMaxIndex);
 		}
+		// for (int i = maxIndex; i >= insMinIndex; i--) {
+		// setState(i + length, value.get(i));
+		// }
 
 		/* Initialize the newly inserted indices.
 		 */
 		boolean setInsertedValues = ((!addSelectionOnInsert || getSelectionMode() == SINGLE_SELECTION) ? false : value.get(index));
-		for (int i = insMinIndex; i <= insMaxIndex; i++) {
-			setState(i, setInsertedValues);
-		}
+		if (setInsertedValues)
+			value.set(insMinIndex, insMinIndex + length);
+		// for (int i = insMinIndex; i <= insMaxIndex; i++) {
+		// setState(i, setInsertedValues);
+		// }
 
 		int leadIndex2 = this.leadIndex;
 		if (leadIndex2 > index || (before && leadIndex2 == index)) {
@@ -1033,9 +1045,22 @@ public class ObservableListSelectionModel<E> extends ObservableCollectionWrapper
 		/* Shift the entire bitset to the left to close the index0, index1
 		 * gap.
 		 */
-		for (int i = rmMinIndex; i <= maxIndex; i++) {
-			setState(i, value.get(i + gapLength));
+		if (!isSelectionEmpty() && rmMinIndex <= maxIndex && rmMaxIndex >= minIndex) {
+			removeSelectionInterval(rmMinIndex, rmMaxIndex);
+			value.removeInterval(rmMinIndex, gapLength);
+			if (minIndex > rmMinIndex)
+				minIndex -= gapLength;
+			if (maxIndex > rmMinIndex)
+				maxIndex -= gapLength;
+			int minInRange = value.nextSetBit(rmMinIndex);
+			if (minInRange >= 0) {
+				markAsDirty(minInRange);
+				markAsDirty(maxIndex);
+			}
 		}
+		// for (int i = rmMinIndex; i <= maxIndex; i++) {
+		// setState(i, value.get(i + gapLength));
+		// }
 
 		int leadIndex2 = this.leadIndex;
 		if (leadIndex2 == 0 && rmMinIndex == 0) {
