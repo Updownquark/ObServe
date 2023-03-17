@@ -885,6 +885,8 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable {
 				if (preAdd != null)
 					preAdd.run();
 			}, postAdd);
+			if (entryEl != null)
+				((MapEntry) entryEl.get()).theElementId = entryEl.getElementId();
 			return entryEl == null ? null : handleFor(entryEl);
 		}
 
