@@ -327,7 +327,7 @@ public interface TableContentControl {
 	 * @return A control object that displays rows when either this or the other control display them
 	 */
 	default TableContentControl or(TableContentControl other) {
-		return new OrFilter(this, other);
+		return new OrFilter(false, this, other);
 	}
 
 	/** @return A control that matches exactly those rows that have no matches from this control */
@@ -1631,6 +1631,8 @@ public interface TableContentControl {
 		@Override
 		public abstract SortedMatchSet[] findMatches(List<? extends ValueRenderer<?>> categories, CharSequence[] texts);
 
+		protected abstract boolean isTrivialOr();
+
 		@Override
 		public List<String> getRowSorting() {
 			List<String> sorting = null;
@@ -1692,7 +1694,8 @@ public interface TableContentControl {
 			String join = getJoin();
 			for (int i = 0; i < theContent.size(); i++) {
 				String contentStr = theContent.get(i).toString();
-				if (theContent.get(i) instanceof JoinControl && theContent.get(i).getClass() != getClass())
+				if (theContent.get(i) instanceof JoinControl && theContent.get(i).getClass() != getClass()
+					&& !((JoinControl) theContent.get(i)).isTrivialOr())
 					contentStr = '(' + contentStr + ')';
 				if (printed.add(contentStr)) {
 					if (i > 0) {
@@ -1709,9 +1712,12 @@ public interface TableContentControl {
 
 	/** A filter that matches rows that are matched by any of its component matchers */
 	public static class OrFilter extends JoinControl {
+		private final boolean isTrivialOr;
+
 		/** @param filters The component filters for this OR filter */
-		public OrFilter(TableContentControl... filters) {
+		public OrFilter(boolean trivial, TableContentControl... filters) {
 			super(filters);
+			isTrivialOr = trivial;
 		}
 
 		@Override
@@ -1721,7 +1727,7 @@ public interface TableContentControl {
 
 		@Override
 		protected JoinControl wrap(TableContentControl[] content) {
-			return new OrFilter(content);
+			return new OrFilter(isTrivialOr, content);
 		}
 
 		@Override
@@ -1771,6 +1777,11 @@ public interface TableContentControl {
 		}
 
 		@Override
+		protected boolean isTrivialOr() {
+			return isTrivialOr;
+		}
+
+		@Override
 		public TableContentControl or(TableContentControl other) {
 			TableContentControl[] newContent;
 			if (other instanceof OrFilter) {
@@ -1784,7 +1795,7 @@ public interface TableContentControl {
 				getContent().toArray(newContent);
 				newContent[getContent().size()] = other;
 			}
-			return new OrFilter(newContent);
+			return new OrFilter(false, newContent);
 		}
 	}
 
@@ -1852,6 +1863,11 @@ public interface TableContentControl {
 				if (c.isSearch())
 					return true;
 			}
+			return false;
+		}
+
+		@Override
+		protected boolean isTrivialOr() {
 			return false;
 		}
 
@@ -2302,6 +2318,7 @@ public interface TableContentControl {
 						if (category != null) {
 							next = new CategoryFilter(category, next);
 							category = null;
+							inCategory = false;
 						}
 						elementStart = c[0] + 1;
 					}
@@ -2315,10 +2332,14 @@ public interface TableContentControl {
 					break;
 				default:
 					if (Character.isWhitespace(ch)) {
-						String elementText = controlText.subSequence(elementStart, c[0]).toString().trim();
-						next = parseElementText(elementText, c[0], category, quotedCategory);
-						if (category != null)
-							inCategory = false;
+						if (c[0] > elementStart) {
+							String elementText = controlText.subSequence(elementStart, c[0]).toString().trim();
+							next = parseElementText(elementText, c[0], category, quotedCategory);
+							if (next == null && inCategory)
+								next = new EmptyFilter();
+							if (category != null)
+								inCategory = false;
+						}
 						elementStart = c[0] + 1; // Move on even if no element was parsed
 					}
 					break;
@@ -2335,10 +2356,14 @@ public interface TableContentControl {
 			}
 			if (depth > 0 && c[0] == controlText.length())
 				throw new ParseException("No closing parenthesis", c[0]);
-			String elementText = controlText.subSequence(elementStart, c[0]).toString().trim();
-			TableContentControl next = parseElementText(elementText, c[0], category, quotedCategory);
-			if (next != null)
-				parsed = combine(parsed, next, or, not);
+			if (c[0] > elementStart || not || or) {
+				String elementText = controlText.subSequence(elementStart, c[0]).toString().trim();
+				TableContentControl next = parseElementText(elementText, c[0], category, quotedCategory);
+				if (next == null && inCategory)
+					next = new EmptyFilter();
+				if (next != null)
+					parsed = combine(parsed, next, or, not);
+			}
 			if (parsed == null)
 				return DEFAULT;
 			if (closeParen)
@@ -2550,7 +2575,7 @@ public interface TableContentControl {
 			if (filters.size() == 1)
 				return filters.get(0);
 			else
-				return new OrFilter(filters.toArray(new TableContentControl[filters.size()]));
+				return new OrFilter(true, filters.toArray(new TableContentControl[filters.size()]));
 		}
 	}
 
@@ -2571,6 +2596,7 @@ public interface TableContentControl {
 				.<CategoryRenderStrategy<Map<String, String>, String>> parameterized(rows.getType(), TypeTokens.get().STRING))
 			.onEdt().build();
 		SettableValue<Boolean> updating = SettableValue.build(boolean.class).withValue(false).build();
+		ObservableCollection<Map<String, String>> selectedRows = ObservableCollection.build(rows.getType()).build();
 		Random random = new Random();
 		QommonsTimer.TaskHandle updateHandle = QommonsTimer.getCommonInstance().build(() -> {
 			int updatedRows = random.nextInt(rows.size() / 10);
@@ -2694,11 +2720,16 @@ public interface TableContentControl {
 				.<TableContentControl> addTextField("Filter", control, FORMAT, tf -> configureSearchField(tf.fill(), false))//
 				.addTable(rows, table -> {
 					table.fill().fillV().withCountTitle("displayed").withItemName("row").fill().withFiltering(control)
+					.withSelection(selectedRows)//
 					.withColumns(columns)//
 					.withAdd(() -> new HashMap<>(), null)//
 					;
 				})//
 				.addHPanel(null, new JustifiedBoxLayout(false).mainCenter(), bp -> bp.addToggleButton(null, updating, "Update", null))//
+				.addHPanel(null, new JustifiedBoxLayout(false).mainCenter(), lp -> lp//
+					.addLabel(null, selectedRows.observeSize().map(sz -> sz + " row" + (sz == 1 ? "" : "s") + " selected"), Format.TEXT,
+						null)//
+					)//
 				).run(null);
 		});
 	}
