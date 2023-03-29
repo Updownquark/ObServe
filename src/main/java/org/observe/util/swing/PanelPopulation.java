@@ -377,9 +377,9 @@ public class PanelPopulation {
 
 		P withFieldName(ObservableValue<String> fieldName);
 
-		P modifyFieldLabel(Consumer<ObservableSwingUtils.FontAdjuster<?>> font);
+		P modifyFieldLabel(Consumer<FontAdjuster> font);
 
-		P withFont(Consumer<ObservableSwingUtils.FontAdjuster<?>> font);
+		P withFont(Consumer<FontAdjuster> font);
 
 		E getEditor();
 

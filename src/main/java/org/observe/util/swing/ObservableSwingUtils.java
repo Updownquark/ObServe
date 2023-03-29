@@ -1,10 +1,8 @@
 package org.observe.util.swing;
 
-import java.awt.Color;
 import java.awt.Component;
 import java.awt.Container;
 import java.awt.EventQueue;
-import java.awt.Font;
 import java.awt.GraphicsConfiguration;
 import java.awt.GraphicsDevice;
 import java.awt.GraphicsEnvironment;
@@ -42,18 +40,15 @@ import javax.swing.ImageIcon;
 import javax.swing.JCheckBox;
 import javax.swing.JComponent;
 import javax.swing.JFrame;
-import javax.swing.JLabel;
 import javax.swing.JList;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JSlider;
 import javax.swing.JSpinner;
 import javax.swing.JTable;
-import javax.swing.JTextField;
 import javax.swing.JToggleButton;
 import javax.swing.ListModel;
 import javax.swing.ListSelectionModel;
-import javax.swing.SwingConstants;
 import javax.swing.ToolTipManager;
 import javax.swing.UIManager;
 import javax.swing.UnsupportedLookAndFeelException;
@@ -61,7 +56,6 @@ import javax.swing.event.ChangeListener;
 import javax.swing.event.ListDataEvent;
 import javax.swing.event.ListDataListener;
 import javax.swing.event.ListSelectionListener;
-import javax.swing.text.JTextComponent;
 
 import org.observe.Equivalence;
 import org.observe.Observable;
@@ -74,12 +68,9 @@ import org.observe.collect.ObservableCollection;
 import org.observe.config.ObservableConfig;
 import org.observe.util.TypeTokens;
 import org.qommons.Causable;
-import org.qommons.Causable.CausableKey;
-import org.qommons.LambdaUtils;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
 import org.qommons.TriFunction;
-import org.qommons.collect.CollectionUtils;
 import org.xml.sax.SAXException;
 
 import com.google.common.reflect.TypeToken;
@@ -103,174 +94,9 @@ public class ObservableSwingUtils {
 		ThreadConstraint.EDT.invoke(FLUSH_TASK);
 	}
 
-	/**
-	 * @param text The text to create the label with
-	 * @return The LabelHolder to use to configure the label
-	 */
-	public static FontAdjuster<Component> label(String text) {
-		return new FontAdjuster<>(new JLabel(text));
-	}
-
-	/**
-	 * @param label The label to create the holder with
-	 * @return The LabelHolder to use to configure the label
-	 */
-	public static FontAdjuster<Component> label(JLabel label) {
-		return new FontAdjuster<>(label);
-	}
-
-	/**
-	 * A holder of a Component that contains many chain-compatible methods for font configuration
-	 *
-	 * @param <C> The type of the component held by the holder
-	 */
-	public static class FontAdjuster<C extends Component> implements Supplier<C> {
-		/** The label */
-		public C label;
-
-		/** @param label The component to create the holder with */
-		public FontAdjuster(C label) {
-			this.label = label;
-		}
-
-		/**
-		 * @param label The label to adjust
-		 * @return This holder
-		 */
-		public FontAdjuster<C> setLabel(C label) {
-			this.label = label;
-			return this;
-		}
-
-		/**
-		 * Performs a generic operation on the label
-		 *
-		 * @param adjustment The operation
-		 * @return This holder
-		 */
-		public FontAdjuster<C> adjust(Consumer<C> adjustment) {
-			adjustment.accept(label);
-			return this;
-		}
-
-		/**
-		 * Makes the label's font {@link Font#BOLD bold}
-		 *
-		 * @return This holder
-		 */
-		public FontAdjuster<C> bold() {
-			return withStyle(Font.BOLD);
-		}
-
-		/**
-		 * @param bold Whether the label should be {@link Font#BOLD bold}
-		 * @return This holder
-		 */
-		public FontAdjuster<C> bold(boolean bold) {
-			if (bold)
-				bold();
-			else
-				plain();
-			return this;
-		}
-
-		/**
-		 * Makes the label's font {@link Font#PLAIN plain}
-		 *
-		 * @return This holder
-		 */
-		public FontAdjuster<C> plain() {
-			return withStyle(Font.PLAIN);
-		}
-
-		/**
-		 * @param fontSize The point size for the label's font
-		 * @return This holder
-		 */
-		public FontAdjuster<C> withFontSize(float fontSize) {
-			Font newFont = label.getFont().deriveFont(fontSize);
-			if (!Objects.equals(newFont, label.getFont()))
-				label.setFont(newFont);
-			return this;
-		}
-
-		/**
-		 * @param style The font {@link Font#getStyle() style} for the label
-		 * @return This holder
-		 */
-		public FontAdjuster<C> withStyle(int style) {
-			Font newFont = label.getFont().deriveFont(style);
-			if (!Objects.equals(newFont, label.getFont()))
-				label.setFont(newFont);
-			return this;
-		}
-
-		/**
-		 * @param style The font {@link Font#getStyle() style} for the label
-		 * @param fontSize The point size for the label's font
-		 * @return This holder
-		 */
-		public FontAdjuster<C> withSizeAndStyle(int style, float fontSize) {
-			Font newFont = label.getFont().deriveFont(style, fontSize);
-			if (!Objects.equals(newFont, label.getFont()))
-				label.setFont(newFont);
-			return this;
-		}
-
-		/**
-		 * @param color The font color for the label
-		 * @return This holder
-		 */
-		public FontAdjuster<C> withColor(Color color) {
-			if (!label.isForegroundSet() || !Objects.equals(label.getForeground(), color))
-				label.setForeground(color);
-			return this;
-		}
-
-		/**
-		 * Changes the horizontal alignment of the component (if supported)
-		 *
-		 * @param align Negative for left, zero for center, positive for right
-		 * @return This holder
-		 */
-		public FontAdjuster<C> alignH(int align) {
-			int swingAlign = align < 0 ? SwingConstants.LEADING : (align > 0 ? SwingConstants.TRAILING : SwingConstants.CENTER);
-			if (label instanceof JLabel)
-				((JLabel) label).setHorizontalAlignment(swingAlign);
-			else if (label instanceof JTextField)
-				((JTextField) label).setHorizontalAlignment(//
-					align < 0 ? JTextField.LEADING : (align > 0 ? JTextField.TRAILING : JLabel.CENTER));
-			else if (label instanceof JTextComponent)
-				((JTextComponent) label).setAlignmentX(//
-					align < 0 ? 0f : (align > 0 ? 1f : 0.5f));
-			return this;
-		}
-
-		/**
-		 * Changes the horizontal alignment of the component (if supported)
-		 *
-		 * @param align Negative for left, zero for center, positive for right
-		 * @return This holder
-		 */
-		public FontAdjuster<C> alignV(int align) {
-			int swingAlign = align < 0 ? SwingConstants.LEADING : (align > 0 ? SwingConstants.TRAILING : SwingConstants.CENTER);
-			if (label instanceof JLabel)
-				((JLabel) label).setVerticalAlignment(swingAlign);
-			else if (label instanceof JTextComponent)
-				((JTextComponent) label).setAlignmentX(//
-					align < 0 ? 0f : (align > 0 ? 1f : 0.5f));
-			return this;
-		}
-
-		@Override
-		public C get() {
-			return label;
-		}
-
-		@Override
-		public String toString() {
-			return label.toString();
-		}
+	/** @return The {@link FontAdjuster} to use to configure the label */
+	public static FontAdjuster label() {
+		return new FontAdjuster();
 	}
 
 	/**
@@ -650,262 +476,6 @@ public class ObservableSwingUtils {
 	}
 
 	/**
-	 * Synchronizes the selection of a list model with an observable collection. The synchronization works in both ways: UI changes to the
-	 * selection will cause value changes in the table, and external changes to the selection will affect UI selection, if possible. Some
-	 * external changes are incompatible with selection synchronization, including adding values that are not present in the model, adding
-	 * duplicate values that are not present multiple times in the model, and set operations. When such operations occur, they will be
-	 * undone when their transaction ends.
-	 *
-	 * <p>
-	 * If multiple equivalent values are present in the model and they are selected via external change to the selection collection, (or if
-	 * multiple equivalent values are selected and then are unselected externally) the position of the (un)selected value is undetermined.
-	 * </p>
-	 *
-	 * @param component The component (such as a JTable or JList) containing the selection model
-	 * @param model The list model with data that may be selected
-	 * @param selectionModel Supplies the selected model, which may change at any time
-	 * @param equivalence The equivalence by which to synchronize the 2 selection mechanisms
-	 * @param selection The collection to synchronize with the UI selection
-	 * @param until An observable whose firing will release all resources and listeners installed by this sync operation
-	 * @return The selection collection
-	 */
-	public static <E> ObservableCollection<E> syncSelection(Component component, //
-		ListModel<E> model, Supplier<ListSelectionModel> selectionModel, Equivalence<? super E> equivalence,
-		ObservableCollection<E> selection, Observable<?> until) {
-		ObservableCollection<E> safeSelection = selection.safe(ThreadConstraint.EDT, until);
-		Supplier<List<E>> selectionGetter = () -> getSelection(model, selectionModel.get(), null);
-		boolean[] callbackLock = new boolean[1];
-		boolean[] asyncSelection = new boolean[1];
-		Consumer<Object> syncSelection = cause -> {
-			List<E> selValues = selectionGetter.get();
-			try (Transaction selT = safeSelection.lock(true, cause)) {
-				CollectionUtils.SimpleAdjustment<E, E, RuntimeException> adjustment;
-				adjustment = CollectionUtils.synchronize(safeSelection, selValues, (v1, v2) -> equivalence.elementEquals(v1, v2))//
-					.simple(LambdaUtils.identity())//
-					.commonUses(true, false);
-				if (safeSelection.isContentControlled())
-					adjustment.addLast();
-				adjustment.adjust();
-				asyncSelection[0] = false;
-			}
-		};
-		ListSelectionListener[] selListener = new ListSelectionListener[1];
-		selListener[0] = e -> {
-			ListSelectionModel selModel = selectionModel.get();
-			if (selModel.getValueIsAdjusting() || callbackLock[0]) {
-				asyncSelection[0] = true;
-				EventQueue.invokeLater(() -> selListener[0].valueChanged(e));
-				return;
-			}
-			callbackLock[0] = true;
-			try {
-				if (selModel.getMinSelectionIndex() < 0) {
-					safeSelection.clear();
-					return;
-				}
-				syncSelection.accept(e);
-			} finally {
-				callbackLock[0] = false;
-			}
-		};
-		ListDataListener modelListener = new ListDataListener() {
-			@Override
-			public void intervalRemoved(ListDataEvent e) {}
-
-			@Override
-			public void intervalAdded(ListDataEvent e) {}
-
-			@Override
-			public void contentsChanged(ListDataEvent e) {
-				if (asyncSelection[0]) {
-					// If the table model changes at the same time as the selection (e.g. when the user types something
-					// in the non-commit-on-type filter field and then clicks the table without pressing enter),
-					// the callbackLock will prevent the selection from updating while the contents change.
-					return;
-				} else if (safeSelection.isEventing())
-					return;
-				int selIdx = 0;
-				callbackLock[0] = true;
-				flushEQCache();
-				ListSelectionModel selModel = selectionModel.get();
-				Transaction t = safeSelection.tryLock(true, e);
-				try {
-					if (t != null) {
-						for (int i = selModel.getMinSelectionIndex(); i <= selModel.getMaxSelectionIndex() && i <= e.getIndex1(); i++) {
-							if (selModel.isSelectedIndex(i)) {
-								safeSelection.mutableElement(safeSelection.getElement(selIdx).getElementId()).set(model.getElementAt(i));
-							}
-							selIdx++;
-						}
-					}
-				} finally {
-					callbackLock[0] = false;
-					if (t != null)
-						t.close();
-				}
-			}
-		};
-		PropertyChangeListener selModelListener = evt -> {
-			((ListSelectionModel) evt.getOldValue()).removeListSelectionListener(selListener[0]);
-			((ListSelectionModel) evt.getNewValue()).addListSelectionListener(selListener[0]);
-		};
-		selectionModel.get().addListSelectionListener(selListener[0]);
-		if (component != null)
-			component.addPropertyChangeListener("selectionModel", selModelListener);
-		model.addListDataListener(modelListener);
-		syncSelection.accept(null);
-		CausableKey key = Causable.key((c, d) -> {
-			selectionModel.get().setValueIsAdjusting(false);
-			callbackLock[0] = true;
-			try {
-				syncSelection.accept(null);
-			} finally {
-				callbackLock[0] = false;
-			}
-		});
-		safeSelection.changes().takeUntil(until).act(evt -> {
-			if (callbackLock[0])
-				return;
-			ListSelectionModel selModel = selectionModel.get();
-			if (!evt.isUpdate()) {
-				if (!selModel.getValueIsAdjusting())
-					selModel.setValueIsAdjusting(true);
-				evt.getRootCausable().onFinish(key);
-			}
-			flushEQCache();
-			callbackLock[0] = true;
-			try {
-				int intervalStart = -1;
-				switch (evt.type) {
-				case add:
-					for (int i = 0; i < model.getSize(); i++) {
-						if (selModel.isSelectedIndex(i)) {
-							if (intervalStart >= 0) {
-								selModel.addSelectionInterval(intervalStart, i - 1);
-								intervalStart = -1;
-							}
-							continue;
-						}
-						boolean added = false;
-						for (E value : evt.getValues()) {
-							if (equivalence.elementEquals(model.getElementAt(i), value)) {
-								added = true;
-								break;
-							}
-						}
-						if (added) {
-							if (intervalStart < 0)
-								intervalStart = i;
-						} else if (intervalStart >= 0) {
-							selModel.addSelectionInterval(intervalStart, i - 1);
-							intervalStart = -1;
-						}
-					}
-					if (intervalStart >= 0)
-						selModel.addSelectionInterval(intervalStart, model.getSize() - 1);
-					break;
-				case remove:
-					for (int i = model.getSize() - 1; i >= 0; i--) {
-						if (!selModel.isSelectedIndex(i)) {
-							if (intervalStart >= 0) {
-								selModel.removeSelectionInterval(i + 1, intervalStart);
-								intervalStart = -1;
-							}
-							continue;
-						}
-						boolean removed = false;
-						for (E value : evt.getValues()) {
-							if (equivalence.elementEquals(model.getElementAt(i), value)) {
-								removed = true;
-								break;
-							}
-						}
-						if (removed) {
-							if (intervalStart < 0)
-								intervalStart = i;
-						} else if (intervalStart >= 0) {
-							selModel.removeSelectionInterval(i + 1, intervalStart);
-							intervalStart = -1;
-						}
-					}
-					if (intervalStart >= 0)
-						selModel.removeSelectionInterval(0, intervalStart);
-					break;
-				case set:
-					if (evt.getOldValues().equals(evt.getValues()))
-						break; // Not relevant
-					// Remove old values
-					for (int i = model.getSize() - 1; i >= 0; i--) {
-						if (!selModel.isSelectedIndex(i)) {
-							if (intervalStart >= 0) {
-								selModel.removeSelectionInterval(i + 1, intervalStart);
-								intervalStart = -1;
-							}
-							continue;
-						}
-						boolean removed = false;
-						for (E value : evt.getOldValues()) {
-							if (!evt.getValues().contains(value) && equivalence.elementEquals(model.getElementAt(i), value)) {
-								removed = true;
-								break;
-							}
-						}
-						if (removed) {
-							if (intervalStart < 0)
-								intervalStart = i;
-						} else if (intervalStart >= 0) {
-							selModel.removeSelectionInterval(i + 1, intervalStart);
-							intervalStart = -1;
-						}
-					}
-					if (intervalStart >= 0)
-						selModel.removeSelectionInterval(0, intervalStart);
-
-					// Add new values
-					intervalStart = -1;
-					for (int i = 0; i < model.getSize(); i++) {
-						if (selModel.isSelectedIndex(i)) {
-							if (intervalStart >= 0) {
-								selModel.addSelectionInterval(intervalStart, i - 1);
-								intervalStart = -1;
-							}
-							continue;
-						}
-						boolean added = false;
-						for (E value : evt.getValues()) {
-							if (!evt.getOldValues().contains(value) && equivalence.elementEquals(model.getElementAt(i), value)) {
-								added = true;
-								break;
-							}
-						}
-						if (added) {
-							if (intervalStart < 0)
-								intervalStart = i;
-						} else if (intervalStart >= 0) {
-							selModel.addSelectionInterval(intervalStart, i - 1);
-							intervalStart = -1;
-						}
-					}
-					if (intervalStart >= 0)
-						selModel.addSelectionInterval(intervalStart, model.getSize() - 1);
-					break;
-				}
-			} finally {
-				callbackLock[0] = false;
-			}
-		});
-
-		until.take(1).act(__ -> onEQ(() -> {
-			if (component != null)
-				component.removePropertyChangeListener("selectionModel", selModelListener);
-			selectionModel.get().removeListSelectionListener(selListener[0]);
-			model.removeListDataListener(modelListener);
-		}));
-
-		return selection;
-	}
-
-	/**
 	 * @param <E> The type of the values in the list model
 	 * @param <V> The type of the mapped values
 	 * @param model The list model to get selection for
@@ -962,7 +532,8 @@ public class ObservableSwingUtils {
 			flushEQCache();
 			callbackLock[0] = true;
 			try {
-				if (selModel.getMinSelectionIndex() >= 0 && selModel.getMinSelectionIndex() == selModel.getMaxSelectionIndex()) {
+				if (selModel.getMinSelectionIndex() >= 0 && selModel.getMinSelectionIndex() == selModel.getMaxSelectionIndex()
+					&& selModel.getMinSelectionIndex() < model.getSize()) {
 					E selectedValue = model.getElementAt(selModel.getMinSelectionIndex());
 					safeSelection.set(selectedValue, e);
 				} else if (safeSelection.get() != null)

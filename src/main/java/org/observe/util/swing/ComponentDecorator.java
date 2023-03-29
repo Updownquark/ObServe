@@ -5,13 +5,10 @@ import java.awt.Component;
 import java.awt.Cursor;
 import java.awt.Font;
 import java.awt.Graphics2D;
-import java.awt.font.TextAttribute;
 import java.awt.image.BufferedImage;
 import java.text.AttributedCharacterIterator.Attribute;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -29,13 +26,10 @@ import javax.swing.border.LineBorder;
 import javax.swing.border.TitledBorder;
 import javax.swing.text.JTextComponent;
 
-public class ComponentDecorator {
+public class ComponentDecorator extends FontAdjuster {
 	private Border theBorder;
 	private Color theBackground;
-	private Color theForeground;
 	private Function<Font, Font> theFont;
-	private Integer theHAlign;
-	private Integer theVAlign;
 	private Icon theIcon;
 	private Boolean isEnabled;
 	private Cursor theCursor;
@@ -51,23 +45,101 @@ public class ComponentDecorator {
 		return theBackground;
 	}
 
-	public Color getForeground() {
-		return theForeground;
-	}
-
-	public Function<Font, Font> getFont() {
-		return theFont;
-	}
-
+	@Override
 	public ComponentDecorator reset() {
+		super.reset();
 		theBorder = null;
-		theBackground = theForeground = null;
+		theBackground = null;
 		theFont = null;
-		theHAlign = theVAlign = null;
 		theIcon = null;
 		isEnabled = null;
 		isUsingImage = false;
 		return this;
+	}
+
+	@Override
+	public ComponentDecorator deriveFont(Function<Font, Font> font) {
+		return (ComponentDecorator) super.deriveFont(font);
+	}
+
+	@Override
+	public ComponentDecorator deriveFont(int style, float size) {
+		return (ComponentDecorator) super.deriveFont(style, size);
+	}
+
+	@Override
+	public ComponentDecorator deriveFont(Attribute attr, Object value) {
+		return (ComponentDecorator) super.deriveFont(attr, value);
+	}
+
+	@Override
+	public ComponentDecorator withFontStyle(int style) {
+		return (ComponentDecorator) super.withFontStyle(style);
+	}
+
+	@Override
+	public ComponentDecorator withFontSize(float size) {
+		return (ComponentDecorator) super.withFontSize(size);
+	}
+
+	@Override
+	public ComponentDecorator withSizeAndStyle(int style, float fontSize) {
+		return (ComponentDecorator) super.withSizeAndStyle(style, fontSize);
+	}
+
+	@Override
+	public ComponentDecorator bold() {
+		return (ComponentDecorator) super.bold();
+	}
+
+	@Override
+	public ComponentDecorator bold(boolean bold) {
+		return (ComponentDecorator) super.bold(bold);
+	}
+
+	@Override
+	public ComponentDecorator underline() {
+		return (ComponentDecorator) super.underline();
+	}
+
+	@Override
+	public ComponentDecorator underline(boolean underline) {
+		return (ComponentDecorator) super.underline(underline);
+	}
+
+	@Override
+	public ComponentDecorator strikethrough() {
+		return (ComponentDecorator) super.strikethrough();
+	}
+
+	@Override
+	public ComponentDecorator strikethrough(boolean strikethrough) {
+		return (ComponentDecorator) super.strikethrough(strikethrough);
+	}
+
+	@Override
+	public ComponentDecorator plain() {
+		return (ComponentDecorator) super.plain();
+	}
+
+	@Override
+	public ComponentDecorator withForeground(Color foreground) {
+		return (ComponentDecorator) super.withForeground(foreground);
+	}
+
+	@Override
+	public ComponentDecorator alignH(int align) {
+		return (ComponentDecorator) super.alignH(align);
+	}
+
+	@Override
+	public ComponentDecorator alignV(int align) {
+		return (ComponentDecorator) super.alignV(align);
+	}
+
+	@Override
+	public ComponentDecorator align(int hAlign, int vAlign) {
+		return (ComponentDecorator) super.align(hAlign, vAlign);
 	}
 
 	public ComponentDecorator withBorder(Border border) {
@@ -76,15 +148,21 @@ public class ComponentDecorator {
 	}
 
 	public ComponentDecorator withTitledBorder(String title, Color color) {
-		TitledBorder border;
+		return withTitledBorder(title, color, null);
+	}
+
+	public ComponentDecorator withTitledBorder(String title, Color color, Consumer<FontAdjuster> border) {
+		TitledBorder b;
 		if (theBorder instanceof TitledBorder) {
-			border = (TitledBorder) theBorder;
-			border.setTitle(title);
+			b = (TitledBorder) theBorder;
+			b.setTitle(title);
 		} else
-			border = BorderFactory.createTitledBorder(title);
+			b = BorderFactory.createTitledBorder(title);
 		if (color != null)
-			border.setTitleColor(color);
-		theBorder = border;
+			b.setTitleColor(color);
+		if (border != null)
+			new FontAdjuster().configure(border).adjust(b);
+		theBorder = b;
 		return this;
 	}
 
@@ -127,92 +205,6 @@ public class ComponentDecorator {
 		return this;
 	}
 
-	public ComponentDecorator withForeground(Color fg) {
-		theForeground = fg;
-		return this;
-	}
-
-	public ComponentDecorator deriveFont(Function<Font, Font> font) {
-		if (theFont == null)
-			theFont = font;
-		else if (font != null) {
-			Function<Font, Font> oldFont = theFont;
-			theFont = f -> font.apply(oldFont.apply(f));
-		}
-		return this;
-	}
-
-	public ComponentDecorator deriveFont(int style, float size) {
-		return deriveFont(font -> font.deriveFont(style, size));
-	}
-
-	public ComponentDecorator deriveFont(Attribute attr, Object value) {
-		Map<Attribute, Object> attrs = new HashMap<>(1);
-		attrs.put(attr, value);
-		return deriveFont(font -> font.deriveFont(attrs));
-	}
-
-	public ComponentDecorator withFontStyle(int style) {
-		return deriveFont(font -> font.deriveFont(style));
-	}
-
-	public ComponentDecorator withFontSize(float size) {
-		return deriveFont(font -> font.deriveFont(size));
-	}
-
-	public ComponentDecorator bold() {
-		return bold(true);
-	}
-
-	public ComponentDecorator bold(boolean bold) {
-		return withFontStyle(bold ? Font.BOLD : Font.PLAIN);
-	}
-
-	public ComponentDecorator underline() {
-		return underline(true);
-	}
-
-	public ComponentDecorator underline(boolean underline) {
-		return deriveFont(TextAttribute.UNDERLINE, underline ? TextAttribute.UNDERLINE_ON : -1);
-	}
-
-	public ComponentDecorator strikethrough() {
-		return strikethrough(true);
-	}
-
-	public ComponentDecorator strikethrough(boolean strikethrough) {
-		return deriveFont(TextAttribute.STRIKETHROUGH, strikethrough ? TextAttribute.STRIKETHROUGH_ON : false);
-	}
-
-	/**
-	 * @param align -1 for left, 0 for center, 1 for right
-	 * @return This decorator
-	 */
-	public ComponentDecorator alignH(int align) {
-		theHAlign = align;
-		return this;
-	}
-
-	/**
-	 * @param align -1 for top, 0 for center, 1 for bottom
-	 * @return This decorator
-	 */
-	public ComponentDecorator alignV(int align) {
-		theVAlign = align;
-		return this;
-	}
-
-	/**
-	 * @param hAlign -1 for left, 0 for center, 1 for right
-	 * @param vAlign -1 for top, 0 for center, 1 for bottom
-	 * @return This decorator
-	 */
-	public ComponentDecorator align(int hAlign, int vAlign) {
-		theHAlign = hAlign;
-		theVAlign = vAlign;
-		return this;
-	}
-
 	public ComponentDecorator withIcon(Icon icon) {
 		theIcon = icon;
 		return this;
@@ -248,8 +240,10 @@ public class ComponentDecorator {
 		return this;
 	}
 
-	public <C extends Component> Runnable decorate(C c) {
+	@Override
+	public Runnable decorate(Component c) {
 		List<Runnable> revert = new ArrayList<>();
+		revert.add(super.decorate(c));
 		if (c instanceof JComponent && theBorder != null) {
 			Border oldBorder = ((JComponent) c).getBorder();
 			((JComponent) c).setBorder(theBorder);
@@ -259,60 +253,6 @@ public class ComponentDecorator {
 			Color oldBG = c.getBackground();
 			c.setBackground(theBackground);
 			revert.add(() -> c.setBackground(oldBG));
-		}
-		if (theForeground != null) {
-			Color oldFG = c.getForeground();
-			c.setForeground(theForeground);
-			revert.add(() -> c.setForeground(oldFG));
-		}
-		if (theFont != null) {
-			Font oldFont = c.getFont();
-			c.setFont(theFont.apply(c.getFont()));
-			revert.add(() -> c.setFont(oldFont));
-		}
-
-		if (theHAlign != null) {
-			int align = theHAlign;
-			int swingAlign = align < 0 ? SwingConstants.LEADING : (align > 0 ? SwingConstants.TRAILING : SwingConstants.CENTER);
-			if (c instanceof JLabel) {
-				int oldAlign = ((JLabel) c).getHorizontalAlignment();
-				((JLabel) c).setHorizontalAlignment(swingAlign);
-				revert.add(() -> ((JLabel) c).setHorizontalAlignment(oldAlign));
-			} else if (c instanceof JTextField) {
-				int oldAlign = ((JTextField) c).getHorizontalAlignment();
-				((JTextField) c).setHorizontalAlignment(//
-					align < 0 ? JTextField.LEADING : (align > 0 ? JTextField.TRAILING : JLabel.CENTER));
-				revert.add(() -> ((JTextField) c).setHorizontalAlignment(oldAlign));
-			} else if (c instanceof JTextComponent) {
-				float oldAlign = ((JTextComponent) c).getAlignmentX();
-				((JTextComponent) c).setAlignmentX(//
-					align < 0 ? 0f : (align > 0 ? 1f : 0.5f));
-				revert.add(() -> ((JTextComponent) c).setAlignmentX(oldAlign));
-			} else if (c instanceof AbstractButton) {
-				float oldAlign = ((AbstractButton) c).getAlignmentX();
-				((AbstractButton) c).setAlignmentY(//
-					align < 0 ? 0f : (align > 0 ? 1f : 0.5f));
-				revert.add(() -> ((AbstractButton) c).setAlignmentX(oldAlign));
-			}
-		}
-		if (theVAlign != null) {
-			int align = theVAlign;
-			int swingAlign = align < 0 ? SwingConstants.LEADING : (align > 0 ? SwingConstants.TRAILING : SwingConstants.CENTER);
-			if (c instanceof JLabel) {
-				int oldAlign = ((JLabel) c).getVerticalAlignment();
-				((JLabel) c).setVerticalAlignment(swingAlign);
-				revert.add(() -> ((JLabel) c).setVerticalAlignment(oldAlign));
-			} else if (c instanceof JTextComponent) {
-				float oldAlign = ((JTextComponent) c).getAlignmentY();
-				((JTextComponent) c).setAlignmentX(//
-					align < 0 ? 0f : (align > 0 ? 1f : 0.5f));
-				revert.add(() -> ((JTextComponent) c).setAlignmentY(oldAlign));
-			} else if (c instanceof AbstractButton) {
-				float oldAlign = ((AbstractButton) c).getAlignmentY();
-				((AbstractButton) c).setAlignmentX(//
-					align < 0 ? 0f : (align > 0 ? 1f : 0.5f));
-				revert.add(() -> ((AbstractButton) c).setAlignmentY(oldAlign));
-			}
 		}
 
 		if (c instanceof JLabel) {

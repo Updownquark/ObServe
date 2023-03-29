@@ -768,7 +768,7 @@ public class LittleList<E> extends JComponent implements Scrollable {
 			Object font = theAction.getValue("font");
 			if (font instanceof Consumer) {
 				try {
-					((Consumer<Object>) font).accept(ObservableSwingUtils.label(actionLabel));
+					new FontAdjuster().configure(((Consumer<? super FontAdjuster>) font)).adjust(actionLabel);
 				} catch (ClassCastException e) {}
 			} else if (font instanceof Font) {
 				if (!font.equals(actionLabel.getFont()))

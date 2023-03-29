@@ -81,9 +81,9 @@ import org.observe.SimpleObservable;
 import org.observe.Subscription;
 import org.observe.collect.CollectionChangeEvent;
 import org.observe.collect.ObservableCollection;
+import org.observe.util.ObservableCollectionSynchronization;
 import org.observe.util.TypeTokens;
 import org.observe.util.swing.ObservableCellRenderer.CellRenderContext;
-import org.observe.util.swing.ObservableSwingUtils.FontAdjuster;
 import org.observe.util.swing.PanelPopulation.ActionEnablement;
 import org.observe.util.swing.PanelPopulation.Alert;
 import org.observe.util.swing.PanelPopulation.ButtonEditor;
@@ -564,7 +564,7 @@ class PanelPopulationImpl {
 		private final Observable<?> theUntil;
 		private final E theEditor;
 		private ObservableValue<String> theFieldName;
-		private Consumer<FontAdjuster<?>> theFieldLabelModifier;
+		private Consumer<FontAdjuster> theFieldLabelModifier;
 		private Object theLayoutConstraints;
 		private boolean isFillH;
 		private boolean isFillV;
@@ -580,7 +580,7 @@ class PanelPopulationImpl {
 		private PanelPopulator<?, ?> theGlassPane;
 		private Component theBuiltComponent;
 
-		protected Consumer<FontAdjuster<?>> theFont;
+		protected Consumer<FontAdjuster> theFont;
 		private ObservableValue<Boolean> isVisible;
 		private Consumer<MenuBuilder<JPopupMenu, ?>> thePopupMenu;
 
@@ -610,11 +610,11 @@ class PanelPopulationImpl {
 		}
 
 		@Override
-		public P modifyFieldLabel(Consumer<FontAdjuster<?>> labelModifier) {
+		public P modifyFieldLabel(Consumer<FontAdjuster> labelModifier) {
 			if (theFieldLabelModifier == null)
 				theFieldLabelModifier = labelModifier;
 			else {
-				Consumer<FontAdjuster<?>> prev = theFieldLabelModifier;
+				Consumer<FontAdjuster> prev = theFieldLabelModifier;
 				theFieldLabelModifier = f -> {
 					prev.accept(f);
 					labelModifier.accept(f);
@@ -624,11 +624,11 @@ class PanelPopulationImpl {
 		}
 
 		@Override
-		public P withFont(Consumer<FontAdjuster<?>> font) {
+		public P withFont(Consumer<FontAdjuster> font) {
 			if (theFont == null)
 				theFont = font;
 			else {
-				Consumer<FontAdjuster<?>> prev = theFont;
+				Consumer<FontAdjuster> prev = theFont;
 				theFont = f -> {
 					prev.accept(f);
 					font.accept(f);
@@ -763,9 +763,9 @@ class PanelPopulationImpl {
 				return null;
 			theFieldName.changes().takeUntil(until).act(evt -> fieldName.accept(evt.getNewValue()));
 			if (fieldNameComponent != null && theFieldLabelModifier != null)
-				theFieldLabelModifier.accept(new FontAdjuster<>(fieldNameComponent));
+				new FontAdjuster().configure(theFieldLabelModifier).adjust(fieldNameComponent);
 			if (fieldNameComponent != null && theFont != null)
-				theFont.accept(new FontAdjuster<>(fieldNameComponent));
+				new FontAdjuster().configure(theFont).adjust(fieldNameComponent);
 			return fieldNameComponent;
 		}
 
@@ -1237,7 +1237,7 @@ class PanelPopulationImpl {
 				JLabel postLabel = new JLabel(thePostLabel.get());
 				thePostLabel.changes().takeUntil(until).act(evt -> postLabel.setText(evt.getNewValue()));
 				if (theFont != null)
-					theFont.accept(new FontAdjuster<>(postLabel));
+					new FontAdjuster().configure(theFont).adjust(postLabel);
 				return postLabel;
 			} else if (thePostButton != null)
 				return thePostButton.getComponent();
@@ -1248,7 +1248,7 @@ class PanelPopulationImpl {
 		@Override
 		protected Component decorate(Component c) {
 			if (theFont != null)
-				theFont.accept(new FontAdjuster<>(c));
+				new FontAdjuster().configure(theFont).adjust(c);
 			return super.decorate(c);
 		}
 	}
@@ -1464,7 +1464,7 @@ class PanelPopulationImpl {
 		}
 
 		@Override
-		public P modifyFieldLabel(Consumer<FontAdjuster<?>> labelModifier) {
+		public P modifyFieldLabel(Consumer<FontAdjuster> labelModifier) {
 			if (isPostButton)
 				throw new IllegalStateException("No field label for a post-button");
 			return super.modifyFieldLabel(labelModifier);
@@ -2811,7 +2811,7 @@ class PanelPopulationImpl {
 				theDisablement = disabled;
 			else
 				theDisablement = ObservableValue.firstValue(TypeTokens.get().STRING, msg -> msg != null, () -> null, theDisablement,
-					disabled);
+				disabled);
 			return (P) this;
 		}
 
@@ -2908,9 +2908,13 @@ class PanelPopulationImpl {
 							}
 						}
 					}, false);
-			if (theSelectionValues != null)
-				ObservableSwingUtils.syncSelection(getEditor(), model, getEditor()::getSelectionModel, model.getWrapped().equivalence(),
-					theSelectionValues, getUntil());
+			ObservableListSelectionModel<R> selectionModel = new ObservableListSelectionModel<>(model, null, getUntil());
+			getEditor().setSelectionModel(selectionModel);
+			if (theSelectionValues != null) {
+				Subscription syncSub = ObservableCollectionSynchronization.synchronize(theSelectionValues, selectionModel).strictOrder()
+					.synchronize();
+				getUntil().take(1).act(__ -> syncSub.unsubscribe());
+			}
 			if (theDisablement != null) {
 				theDisablement.changes().takeUntil(getUntil()).act(evt -> {
 					// Let's not worry about tooltip here. We could mess up cell tooltips and stuff.
@@ -3005,12 +3009,12 @@ class PanelPopulationImpl {
 				}
 
 				@Override
-				public P2 modifyFieldLabel(Consumer<FontAdjuster<?>> font) {
+				public P2 modifyFieldLabel(Consumer<FontAdjuster> font) {
 					return (P2) this;
 				}
 
 				@Override
-				public P2 withFont(Consumer<FontAdjuster<?>> font) {
+				public P2 withFont(Consumer<FontAdjuster> font) {
 					if (theAction != null)
 						theAction.putValue("font", font);
 					return (P2) this;
@@ -3688,7 +3692,7 @@ class PanelPopulationImpl {
 				COLOR_EDITOR = new ObservableColorEditor(selected, true,
 					SettableValue.build(boolean.class).withValue(withAlpha).build(), Observable.empty());
 				COLOR_EDITING_MESSAGE = new JLabel(theMessage, theImage == null ? null : theImage.getIcon().get(), JLabel.LEADING);
-				ObservableSwingUtils.label(COLOR_EDITING_MESSAGE).withFontSize(16);
+				new FontAdjuster().withFontSize(16).adjust(COLOR_EDITING_MESSAGE);
 			} else {
 				((SwitchableFilterValue<Color>) COLOR_EDITOR.getSelectedColor()).setFilter(filter);
 				((SettableValue<Boolean>) COLOR_EDITOR.isWithAlpha()).set(withAlpha, null);
