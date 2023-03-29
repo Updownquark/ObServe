@@ -220,6 +220,8 @@ public class ObservableListSelectionModel<E> extends ObservableCollectionWrapper
 		class ListSynchronization implements ListDataListener {
 			@Override
 			public void intervalRemoved(ListDataEvent e) {
+				if (isSelectionEmpty() || e.getIndex0() > maxIndex || e.getIndex1() < minIndex)
+					return; // No removed items are selected
 				/* Handle elements removed from the model.
 				 * Biggest job here is to catch selected elements which are part of a move operation and record this
 				 * for when they're re-added so we can select them again.
@@ -255,6 +257,12 @@ public class ObservableListSelectionModel<E> extends ObservableCollectionWrapper
 						}
 						value.clear(i);
 					}
+					minIndex = value.nextSetBit(0);
+					if (minIndex < 0) {
+						minIndex = MAX;
+						maxIndex = MIN;
+					} else
+						maxIndex = value.length();
 				} finally {
 					if (selectionLock != null)
 						selectionLock.close();
@@ -622,7 +630,7 @@ public class ObservableListSelectionModel<E> extends ObservableCollectionWrapper
 		   to their cannonical values so that the next set command always works
 		   just by using Math.min and Math.max.
 		 */
-		if (isSelectionEmpty()) {
+		if (value.isEmpty()) {
 			minIndex = MAX;
 			maxIndex = MIN;
 		} else {
@@ -635,6 +643,8 @@ public class ObservableListSelectionModel<E> extends ObservableCollectionWrapper
 			 */
 			if (r == minIndex) {
 				minIndex = value.nextSetBit(minIndex + 1);
+				if (minIndex < 0)
+					minIndex = MAX;
 				// for (minIndex = minIndex + 1; minIndex <= maxIndex; minIndex++) {
 				// if (value.get(minIndex)) {
 				// break;
@@ -649,6 +659,8 @@ public class ObservableListSelectionModel<E> extends ObservableCollectionWrapper
 			 */
 			if (r == maxIndex) {
 				maxIndex = value.length();
+				if (maxIndex == 0)
+					maxIndex = MIN;
 				// for (maxIndex = maxIndex - 1; minIndex <= maxIndex; maxIndex--) {
 				// if (value.get(maxIndex)) {
 				// break;
@@ -895,7 +907,6 @@ public class ObservableListSelectionModel<E> extends ObservableCollectionWrapper
 	// private implementation allowing the selection interval
 	// to be removed without affecting the lead and anchor
 	private void removeSelectionIntervalImpl(int index0, int index1, boolean changeLeadAnchor) {
-
 		if (index0 == -1 || index1 == -1) {
 			return;
 		}
@@ -933,7 +944,7 @@ public class ObservableListSelectionModel<E> extends ObservableCollectionWrapper
 	 */
 	@Override
 	public void insertIndexInterval(int index, int length, boolean before) {
-		if (length < 0)
+		if (isSelectionEmpty() || length < 0)
 			return;
 		/* The first new index will appear at insMinIndex and the last
 		 * one will appear at insMaxIndex
@@ -945,15 +956,13 @@ public class ObservableListSelectionModel<E> extends ObservableCollectionWrapper
 		 * index-1 if before is true, index+1 if it's false (i.e. with
 		 * insMinIndex).
 		 */
-		if (!isSelectionEmpty()) {
-			if (minIndex >= index)
-				minIndex += length;
-			if (maxIndex >= index)
-				maxIndex += length;
-			value.insertInterval(insMinIndex, length);
-			markAsDirty(maxIndex);
-			markAsDirty(insMaxIndex);
-		}
+		if (minIndex >= index)
+			minIndex += length;
+		if (maxIndex >= index)
+			maxIndex += length;
+		value.insertInterval(insMinIndex, length);
+		markAsDirty(maxIndex);
+		markAsDirty(insMaxIndex);
 		// for (int i = maxIndex; i >= insMinIndex; i--) {
 		// setState(i + length, value.get(i));
 		// }
@@ -1038,14 +1047,18 @@ public class ObservableListSelectionModel<E> extends ObservableCollectionWrapper
 	 */
 	@Override
 	public void removeIndexInterval(int index0, int index1) {
+		if (isSelectionEmpty())
+			return;
 		int rmMinIndex = Math.min(index0, index1);
+		if (rmMinIndex > maxIndex)
+			return; // Irrelevant
 		int rmMaxIndex = Math.max(index0, index1);
 		int gapLength = (rmMaxIndex - rmMinIndex) + 1;
 
 		/* Shift the entire bitset to the left to close the index0, index1
 		 * gap.
 		 */
-		if (!isSelectionEmpty() && rmMinIndex <= maxIndex && rmMaxIndex >= minIndex) {
+		if (rmMinIndex <= maxIndex && rmMaxIndex >= minIndex) {
 			removeSelectionInterval(rmMinIndex, rmMaxIndex);
 			value.removeInterval(rmMinIndex, gapLength);
 			if (minIndex > rmMinIndex)
