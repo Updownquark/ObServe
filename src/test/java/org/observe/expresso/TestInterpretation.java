@@ -8,7 +8,6 @@ import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ValueContainer;
 import org.qommons.Version;
 import org.qommons.collect.BetterList;
-import org.qommons.config.QonfigEvaluationException;
 import org.qommons.config.QonfigInterpretation;
 import org.qommons.config.QonfigInterpreterCore.Builder;
 import org.qommons.config.QonfigToolkit;
@@ -52,14 +51,16 @@ public class TestInterpretation implements QonfigInterpretation {
 				return new ObservableModelSet.AbstractValueContainer<SettableValue<?>, SettableValue<StatefulTestStructure>>(
 					ModelTypes.Value.forType(StatefulTestStructure.class)) {
 					@Override
-					public SettableValue<StatefulTestStructure> get(ModelSetInstance models) throws QonfigEvaluationException {
+					public SettableValue<StatefulTestStructure> get(ModelSetInstance models) throws ModelInstantiationException {
 						models = exS.wrapLocal(models);
 						StatefulTestStructure structure = new StatefulTestStructure(derivedStateV.get(models));
 						try {
 							DynamicModelValue.satisfyDynamicValue(//
 								"internalState", ModelTypes.Value.forType(int.class), models, structure.getInternalState());
+						} catch (ExpressoInterpretationException e) {
+							throw new ModelInstantiationException(e.getMessage(), e.getPosition(), e.getErrorLength(), e);
 						} catch (ModelException | TypeConversionException e) {
-								throw new QonfigEvaluationException(e, session.getElement().getPositionInFile(), 0);
+							throw new ModelInstantiationException(e.getMessage(), session.getElement().getPositionInFile(), 0, e);
 						}
 						return SettableValue.of(StatefulTestStructure.class, structure, "Not Settable");
 					}
@@ -90,14 +91,14 @@ public class TestInterpretation implements QonfigInterpretation {
 				try {
 					internalStateV = exS.getExpressoEnv().getModels().getValue("internalState", ModelTypes.Value.any());
 				} catch (ModelException | TypeConversionException e) {
-						throw new QonfigEvaluationException(e, session.getElement().getPositionInFile(), 0);
+					throw new ExpressoInterpretationException(e.getMessage(), session.getElement().getPositionInFile(), 0, e);
 				}
 				ValueContainer<SettableValue<?>, SettableValue<?>> derivedStateV = derivedStateX.evaluate(ModelTypes.Value.any());
 				return new ObservableModelSet.AbstractValueContainer<SettableValue<?>, SettableValue<DynamicTypeStatefulTestStructure>>(
 					ModelTypes.Value.forType(DynamicTypeStatefulTestStructure.class)) {
 					@Override
 					public SettableValue<DynamicTypeStatefulTestStructure> get(ModelSetInstance models)
-						throws QonfigEvaluationException {
+						throws ModelInstantiationException {
 						models = exS.wrapLocal(models);
 						DynamicTypeStatefulTestStructure structure = new DynamicTypeStatefulTestStructure(//
 							internalStateV.get(models), derivedStateV.get(models));
@@ -126,14 +127,14 @@ public class TestInterpretation implements QonfigInterpretation {
 				try {
 					internalStateV = exS.getExpressoEnv().getModels().getValue("internalState", ModelTypes.Value.any());
 				} catch (ModelException | TypeConversionException e) {
-						throw new QonfigEvaluationException(e, session.getElement().getPositionInFile(), 0);
+					throw new ExpressoInterpretationException(e.getMessage(), session.getElement().getPositionInFile(), 0, e);
 				}
 				ValueContainer<SettableValue<?>, SettableValue<?>> derivedStateV = derivedStateX.evaluate(ModelTypes.Value.any());
 				return new ObservableModelSet.AbstractValueContainer<SettableValue<?>, SettableValue<DynamicTypeStatefulTestStructure>>(
 					ModelTypes.Value.forType(DynamicTypeStatefulTestStructure.class)) {
 					@Override
 					public SettableValue<DynamicTypeStatefulTestStructure> get(ModelSetInstance models)
-						throws QonfigEvaluationException {
+						throws ModelInstantiationException {
 						models = exS.wrapLocal(models);
 						DynamicTypeStatefulTestStructure structure = new DynamicTypeStatefulTestStructure(//
 							internalStateV.get(models), derivedStateV.get(models));

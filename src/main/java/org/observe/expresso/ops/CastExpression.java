@@ -8,12 +8,13 @@ import java.util.function.Function;
 import org.observe.SettableValue;
 import org.observe.expresso.ExpressoEnv;
 import org.observe.expresso.ExpressoEvaluationException;
+import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet.ValueContainer;
+import org.observe.expresso.TypeConversionException;
 import org.observe.util.TypeTokens;
-import org.qommons.config.QonfigEvaluationException;
 
 import com.google.common.reflect.TypeToken;
 
@@ -26,6 +27,7 @@ public class CastExpression implements ObservableExpression {
 	/**
 	 * @param value The expression being cast
 	 * @param type The string representing the type to cast to
+	 * @param offset The offset position of the start of this expression
 	 */
 	public CastExpression(ObservableExpression value, String type, int offset) {
 		theValue = value;
@@ -71,7 +73,7 @@ public class CastExpression implements ObservableExpression {
 
 	@Override
 	public <M, MV extends M> ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env)
-		throws ExpressoEvaluationException {
+		throws ExpressoEvaluationException, ExpressoInterpretationException {
 		if (type.getModelType() != ModelTypes.Value)
 			throw new ExpressoEvaluationException(theOffset, theValue.getExpressionEnd(),
 				"A cast expression can only be evaluated as a value");
@@ -79,7 +81,7 @@ public class CastExpression implements ObservableExpression {
 	}
 
 	private <S, T> ValueContainer<SettableValue<?>, SettableValue<T>> doEval(ModelInstanceType<SettableValue<?>, SettableValue<?>> type,
-		ExpressoEnv env) throws ExpressoEvaluationException {
+		ExpressoEnv env) throws ExpressoEvaluationException, ExpressoInterpretationException {
 		TypeToken<T> valueType;
 		try {
 			valueType = (TypeToken<T>) TypeTokens.get().parseType(theType);
@@ -90,14 +92,13 @@ public class CastExpression implements ObservableExpression {
 			throw new ExpressoEvaluationException(theOffset, getExpressionEnd(),
 				"Cannot assign " + valueType + " to " + type.getType(0));
 		ValueContainer<SettableValue<?>, SettableValue<S>> valueContainer;
-		valueContainer = (ValueContainer<SettableValue<?>, SettableValue<S>>) (ValueContainer<?, ?>) theValue
-			.evaluate(ModelTypes.Value.any(), env);
-		TypeToken<S> sourceType;
 		try {
-			sourceType = (TypeToken<S>) valueContainer.getType().getType(0);
-		} catch (QonfigEvaluationException e) {
+			valueContainer = (ValueContainer<SettableValue<?>, SettableValue<S>>) (ValueContainer<?, ?>) theValue
+				.evaluate(ModelTypes.Value.any(), env);
+		} catch (TypeConversionException e) {
 			throw new ExpressoEvaluationException(theValue.getExpressionOffset(), theValue.getExpressionEnd(), e.getMessage(), e);
 		}
+		TypeToken<S> sourceType = (TypeToken<S>) valueContainer.getType().getType(0);
 		if (!TypeTokens.get().isAssignable(sourceType, valueType)//
 			&& !TypeTokens.get().isAssignable(valueType, sourceType))
 			throw new ExpressoEvaluationException(theOffset, getExpressionEnd(),

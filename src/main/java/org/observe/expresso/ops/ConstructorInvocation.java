@@ -10,6 +10,7 @@ import java.util.function.Function;
 import org.observe.SettableValue;
 import org.observe.expresso.ExpressoEnv;
 import org.observe.expresso.ExpressoEvaluationException;
+import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet.ValueContainer;
@@ -23,6 +24,9 @@ public class ConstructorInvocation extends Invocation {
 	 * @param type The string representing the type for which to create an instance
 	 * @param typeArguments The strings representing the type arguments to the constructor
 	 * @param args The arguments to pass to the constructor
+	 * @param offset The starting position of this expression in the root sequence
+	 * @param end The ending position of this expression in the root sequence
+	 * @param typeOffset The starting position of the type sequence of this expression in the root sequence
 	 */
 	public ConstructorInvocation(String type, List<String> typeArguments, List<ObservableExpression> args, int offset, int end,
 		int typeOffset) {
@@ -62,7 +66,7 @@ public class ConstructorInvocation extends Invocation {
 
 	@Override
 	protected <M, MV extends M> InvokableResult<?, M, MV> evaluateInternal2(ModelInstanceType<M, MV> type, ExpressoEnv env, ArgOption args)
-		throws ExpressoEvaluationException {
+		throws ExpressoEvaluationException, ExpressoInterpretationException {
 		Class<?> constructorType = env.getClassView().getType(theType);
 		if (constructorType == null)
 			throw new ExpressoEvaluationException(theTypeOffset, theTypeOffset + theType.length(), "No such type found: " + theType);

@@ -1,18 +1,38 @@
 package org.observe.expresso;
 
 import org.qommons.config.QonfigException;
-import org.qommons.config.QonfigFilePosition;
+import org.qommons.io.LocatedFilePosition;
 
+/**
+ * Thrown from {@link ObservableModelSet.ValueContainer#get(org.observe.expresso.ObservableModelSet.ModelSetInstance)} if an instance of the
+ * model value could not be created
+ */
 public class ModelInstantiationException extends QonfigException {
-	public ModelInstantiationException(String message, QonfigFilePosition position, int errorLength) {
+	/**
+	 * @param message A message describing the failure
+	 * @param position The position of the error within the Qonfig element defining the model value
+	 * @param errorLength The length of the character sequence where the error occurred
+	 */
+	public ModelInstantiationException(String message, LocatedFilePosition position, int errorLength) {
 		super(message, position, errorLength);
 	}
 
-	public ModelInstantiationException(String message, Throwable cause, QonfigFilePosition position, int errorLength) {
-		super(message, cause, position, errorLength);
+	/**
+	 * @param message A message describing the failure
+	 * @param position The position of the error within the Qonfig element defining the model value
+	 * @param errorLength The length of the character sequence where the error occurred
+	 * @param cause The cause of this exception
+	 */
+	public ModelInstantiationException(String message, LocatedFilePosition position, int errorLength, Throwable cause) {
+		super(message, position, errorLength, cause);
 	}
 
-	public ModelInstantiationException(Throwable cause, QonfigFilePosition position, int errorLength) {
-		super(cause, position, errorLength);
+	/**
+	 * @param position The position of the error within the Qonfig element defining the model value
+	 * @param errorLength The length of the character sequence where the error occurred
+	 * @param cause The cause of this exception
+	 */
+	public ModelInstantiationException(LocatedFilePosition position, int errorLength, Throwable cause) {
+		super(position, errorLength, cause);
 	}
 }

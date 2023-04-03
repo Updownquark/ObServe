@@ -21,10 +21,10 @@ import org.qommons.config.QonfigAttributeDef;
 import org.qommons.config.QonfigChildDef;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigElementOrAddOn;
-import org.qommons.config.QonfigEvaluationException;
 import org.qommons.config.QonfigToolkit;
 import org.qommons.config.QonfigValueType;
 import org.qommons.config.SpecificationType;
+import org.qommons.ex.ExSupplier;
 
 /**
  * A dynamic (interpreted-value-specific) model value
@@ -155,9 +155,13 @@ public interface DynamicModelValue<M, MV extends M> extends ValueContainer<M, MV
 	 * @param type The type of the value
 	 * @param model The model instance to satisfy the value in (should be {@link ExpressoQIS#wrapLocal(ModelSetInstance) wrapLocal}'ed)
 	 * @param value The value to use to satisfy the model value
+	 * @throws ModelException If the given model value does not exist
+	 * @throws ExpressoInterpretationException If the value cannot be evaluated
+	 * @throws ModelInstantiationException If the value cannot be instantiated
+	 * @throws TypeConversionException If the value does not match the specified type
 	 */
 	public static <M, MV extends M> void satisfyDynamicValue(String name, ModelInstanceType<M, MV> type, ModelSetInstance model, MV value)
-		throws ModelException, QonfigEvaluationException, TypeConversionException {
+		throws ModelException, ExpressoInterpretationException, ModelInstantiationException, TypeConversionException {
 		try { // Check for the value rigorously
 			model.getModel().getValue(name, type);
 		} catch (ModelException e) {
@@ -182,10 +186,13 @@ public interface DynamicModelValue<M, MV extends M> extends ValueContainer<M, MV
 	 * @param model The model instance the value may be satisfied in
 	 * @return Whether the given dynamic value has already been satisfied with
 	 *         {@link #satisfyDynamicValue(String, ModelInstanceType, ModelSetInstance, Object)}
-	 * @throws ModelException
+	 * @throws ModelException If the given model value does not exist
+	 * @throws ExpressoInterpretationException If the value cannot be evaluated
+	 * @throws ModelInstantiationException If the value cannot be instantiated
+	 * @throws TypeConversionException If the value does not match the specified type
 	 */
 	public static <M, MV extends M> boolean isDynamicValueSatisfied(String name, ModelInstanceType<M, MV> type, ModelSetInstance model)
-		throws ModelException, QonfigEvaluationException, TypeConversionException {
+		throws ModelException, ExpressoInterpretationException, ModelInstantiationException, TypeConversionException {
 		try { // Check for the value rigorously
 			model.getModel().getValue(name, type);
 		} catch (ModelException e) {
@@ -210,9 +217,14 @@ public interface DynamicModelValue<M, MV extends M> extends ValueContainer<M, MV
 	 * @param type The type of the value
 	 * @param model The model instance to satisfy the value in (should be {@link ExpressoQIS#wrapLocal(ModelSetInstance) wrapLocal}'ed)
 	 * @param value The value to use to satisfy the model value
+	 * @throws ModelException If the given model value does not exist
+	 * @throws ExpressoInterpretationException If the value cannot be evaluated
+	 * @throws ModelInstantiationException If the value cannot be instantiated
+	 * @throws TypeConversionException If the value does not match the specified type
 	 */
 	public static <M, MV extends M> void satisfyDynamicValueIfUnsatisfied(String name, ModelInstanceType<M, MV> type,
-		ModelSetInstance model, MV value) throws ModelException, QonfigEvaluationException, TypeConversionException {
+		ModelSetInstance model, MV value)
+			throws ModelException, ExpressoInterpretationException, ModelInstantiationException, TypeConversionException {
 		try { // Check for the value rigorously
 			model.getModel().getValue(name, type);
 		} catch (ModelException e) {
@@ -355,7 +367,7 @@ public interface DynamicModelValue<M, MV extends M> extends ValueContainer<M, MV
 				return false;
 			try {
 				return theType.equals(other.getType());
-			} catch (QonfigEvaluationException e) {
+			} catch (ExpressoInterpretationException e) {
 				return false;
 			}
 		}
@@ -382,24 +394,35 @@ public interface DynamicModelValue<M, MV extends M> extends ValueContainer<M, MV
 		}
 
 		@Override
-		public ModelInstanceType<M, MV> getType() throws QonfigEvaluationException {
+		public ModelInstanceType<M, MV> getType() throws ExpressoInterpretationException {
 			if (theContainer == null)
 				theContainer = theCreator.createDynamicContainer();
 			return theContainer.getType();
 		}
 
-		@Override
-		public MV get(ModelSetInstance models) throws QonfigEvaluationException {
-			if (theContainer == null)
-				theContainer = theCreator.createDynamicContainer();
-			return theContainer.get(models);
+		/**
+		 * @return Creates or retrieves the value container from this wrapper
+		 * @throws ModelInstantiationException If the model value could not be instantiated
+		 */
+		protected ValueContainer<M, MV> getContainer() throws ModelInstantiationException {
+			if (theContainer == null) {
+				try {
+					theContainer = theCreator.createDynamicContainer();
+				} catch (ExpressoInterpretationException e) {
+					throw new ModelInstantiationException(e.getPosition(), e.getErrorLength(), e);
+				}
+			}
+			return theContainer;
 		}
 
 		@Override
-		public MV forModelCopy(MV value, ModelSetInstance sourceModels, ModelSetInstance newModels) throws QonfigEvaluationException {
-			if (theContainer == null)
-				theContainer = theCreator.createDynamicContainer();
-			return theContainer.forModelCopy(value, sourceModels, newModels);
+		public MV get(ModelSetInstance models) throws ModelInstantiationException {
+			return getContainer().get(models);
+		}
+
+		@Override
+		public MV forModelCopy(MV value, ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException {
+			return getContainer().forModelCopy(value, sourceModels, newModels);
 		}
 
 		@Override
@@ -437,17 +460,19 @@ public interface DynamicModelValue<M, MV extends M> extends ValueContainer<M, MV
 	 */
 	public class DynamicTypedModelValueCreator<M, MV extends M> implements Creator<M, MV>, Named {
 		private final Identity theIdentity;
-		private final ModelInstanceType<M, MV> theDeclaredType;
+		private final ExSupplier<ModelInstanceType<M, MV>, ExpressoInterpretationException> theTypeGetter;
+		private ModelInstanceType<M, MV> theDeclaredType;
 
 		private ValueCreator<M, MV> theSatisfier;
 
 		/**
 		 * @param declaration The declared definition of the dynamic value
-		 * @param declaredType The type of the value, as far as it is known
+		 * @param declaredType Supplies the type of the value, as far as it is known
 		 */
-		public DynamicTypedModelValueCreator(Identity declaration, ModelInstanceType<M, MV> declaredType) {
+		public DynamicTypedModelValueCreator(Identity declaration,
+			ExSupplier<ModelInstanceType<M, MV>, ExpressoInterpretationException> declaredType) {
 			theIdentity = declaration;
-			theDeclaredType = declaredType;
+			theTypeGetter = declaredType;
 		}
 
 		@Override
@@ -470,7 +495,9 @@ public interface DynamicModelValue<M, MV extends M> extends ValueContainer<M, MV
 			return new DynamicContainerWrapper<>(this);
 		}
 
-		ValueContainer<M, MV> createDynamicContainer() throws QonfigEvaluationException {
+		ValueContainer<M, MV> createDynamicContainer() throws ExpressoInterpretationException {
+			if (theDeclaredType == null)
+				theDeclaredType = theTypeGetter.get();
 			if (theSatisfier == null)
 				theSatisfier = ObservableModelSet.IdentifableValueCreator.of(theIdentity,
 					new DynamicModelValue.RuntimeModelValue<>(theIdentity, theDeclaredType));

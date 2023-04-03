@@ -34,6 +34,8 @@ public class ExternalLiteral implements ObservableExpression {
 	/**
 	 * @param expression The expression containing the literal
 	 * @param text The text of the literal
+	 * @param offset The starting position of this expression in the root sequence
+	 * @param end The ending position of this expression in the root sequence
 	 */
 	public ExternalLiteral(Expression expression, String text, int offset, int end) {
 		theExpression = expression;

@@ -8,12 +8,12 @@ import java.util.function.Predicate;
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.expresso.ModelType.ModelInstanceType;
+import org.observe.expresso.ObservableModelSet.InterpretedValueContainer;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ValueContainer;
 import org.observe.util.TypeTokens;
 import org.qommons.LambdaUtils;
 import org.qommons.collect.BetterList;
-import org.qommons.config.QonfigEvaluationException;
 
 import com.google.common.reflect.TypeToken;
 
@@ -56,8 +56,10 @@ public interface ObservableExpression {
 	/** @return All expressions that are components of this expression */
 	List<? extends ObservableExpression> getChildren();
 
+	/** @return The starting position of this expression within the expression root */
 	int getExpressionOffset();
 
+	/** @return The ending position of this expression in the root sequence */
 	int getExpressionEnd();
 
 	/**
@@ -104,21 +106,19 @@ public interface ObservableExpression {
 	 * @param env The environment in which to evaluate the expression
 	 * @return A value container to generate the expression's value from a {@link ModelSetInstance model instance}
 	 * @throws ExpressoEvaluationException If the expression cannot be evaluated in the given environment as the given type
+	 * @throws ExpressoInterpretationException If an expression on which this expression depends fails to evaluate
+	 * @throws TypeConversionException If this expression could not be interpreted as the given type
 	 */
-	default <M, MV extends M> ValueContainer<M, MV> evaluate(ModelInstanceType<M, MV> type, ExpressoEnv env)
-		throws ExpressoEvaluationException {
+	default <M, MV extends M> InterpretedValueContainer<M, MV> evaluate(ModelInstanceType<M, MV> type, ExpressoEnv env)
+		throws ExpressoEvaluationException, ExpressoInterpretationException, TypeConversionException {
 		ValueContainer<M, MV> value = evaluateInternal(type, env);
 		if (value == null)
 			return null;
-		try {
-			return value.as(type);
-		} catch (TypeConversionException | QonfigEvaluationException e) {
-			throw new ExpressoEvaluationException(getExpressionOffset(), getExpressionEnd(), e.getMessage(), e);
-		}
+		return value.as(type);
 	}
 
 	/**
-	 * Same as {@link #evaluate(ModelInstanceType, ExpressoEnv)}, but not type-checked or converted
+	 * Does the work of interpreting this expression, but without type-checking or conversion
 	 *
 	 * @param <M> The model type to evaluate the expression as
 	 * @param <MV> The model instance type to evaluate the expression as
@@ -126,9 +126,10 @@ public interface ObservableExpression {
 	 * @param env The environment in which to evaluate the expression
 	 * @return A value container to generate the expression's value from a {@link ModelSetInstance model instance}
 	 * @throws ExpressoEvaluationException If the expression cannot be evaluated in the given environment as the given type
+	 * @throws ExpressoInterpretationException If a dependency
 	 */
 	<M, MV extends M> ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env)
-		throws ExpressoEvaluationException;
+		throws ExpressoEvaluationException, ExpressoInterpretationException;
 
 	/**
 	 * An expression that always returns a constant value

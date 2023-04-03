@@ -10,12 +10,13 @@ import java.util.function.Function;
 import org.observe.SettableValue;
 import org.observe.expresso.ExpressoEnv;
 import org.observe.expresso.ExpressoEvaluationException;
+import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet.ValueContainer;
+import org.observe.expresso.TypeConversionException;
 import org.observe.util.TypeTokens;
-import org.qommons.config.QonfigEvaluationException;
 
 import com.google.common.reflect.TypeToken;
 
@@ -31,8 +32,9 @@ public class MethodInvocation extends Invocation {
 	 * @param methodName The name of the method
 	 * @param typeArgs The type arguments for the method invocation
 	 * @param arguments The arguments to the method
-	 * @param offset
-	 * @param end
+	 * @param offset The starting position of this expression in the root sequence
+	 * @param end The ending position of this expression in the root sequence
+	 * @param methodOffset The starting position of the method name of this expression in the root sequence
 	 */
 	public MethodInvocation(ObservableExpression context, String methodName, List<String> typeArgs, List<ObservableExpression> arguments,
 		int offset, int end, int methodOffset) {
@@ -86,7 +88,7 @@ public class MethodInvocation extends Invocation {
 
 	@Override
 	protected <M, MV extends M> InvokableResult<?, M, MV> evaluateInternal2(ModelInstanceType<M, MV> type, ExpressoEnv env, ArgOption args)
-		throws ExpressoEvaluationException {
+		throws ExpressoEvaluationException, ExpressoInterpretationException {
 		if (theContext != null) {
 			if (theContext instanceof NameExpression) {
 				Class<?> clazz = env.getClassView().getType(theContext.toString());
@@ -103,13 +105,17 @@ public class MethodInvocation extends Invocation {
 						"No such method " + printSignature() + " in class " + clazz.getName());
 				}
 			}
-			ValueContainer<SettableValue<?>, SettableValue<?>> ctx = theContext.evaluate(ModelTypes.Value.any(), env);
+			ValueContainer<SettableValue<?>, SettableValue<?>> ctx;
+			try {
+				ctx = theContext.evaluate(ModelTypes.Value.any(), env);
+			} catch (TypeConversionException e) {
+				throw new ExpressoEvaluationException(theContext.getExpressionOffset(), theContext.getExpressionEnd(), e.getMessage(), e);
+			}
 			TypeToken<?> ctxType;
 			try {
 				ctxType = ctx.getType().getType(0);
-			} catch (QonfigEvaluationException e) {
-				throw new ExpressoEvaluationException(theContext.getExpressionOffset(), theContext.getExpressionEnd(), e.getMessage(),
-					e);
+			} catch (ExpressoInterpretationException e) {
+				throw new ExpressoEvaluationException(theContext.getExpressionOffset(), theContext.getExpressionEnd(), e.getMessage(), e);
 			}
 			Invocation.MethodResult<Method, MV> result = Invocation.findMethod(TypeTokens.getRawType(ctxType).getMethods(), theMethodName,
 				ctxType, false, Arrays.asList(args), type, env, Invocation.ExecutableImpl.METHOD, this);

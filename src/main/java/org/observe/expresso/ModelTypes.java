@@ -44,7 +44,6 @@ import org.qommons.collect.ElementId;
 import org.qommons.collect.MultiMap;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.collect.SortedMultiMap;
-import org.qommons.config.QonfigEvaluationException;
 
 import com.google.common.reflect.TypeToken;
 
@@ -575,7 +574,7 @@ public class ModelTypes {
 							.parameterized(valueConverter.getType().getTypeList()));
 						return new ModelInstanceConverter<Object, SettableValue<?>>() {
 							@Override
-							public SettableValue<?> convert(Object sourceV) throws QonfigEvaluationException {
+							public SettableValue<?> convert(Object sourceV) throws ModelInstantiationException {
 								return SettableValue.asSettable(//
 									ObservableValue.of((TypeToken<Object>) type.getType(0), //
 										((ModelInstanceConverter<Object, Object>) valueConverter).convert(sourceV)), //
@@ -604,7 +603,7 @@ public class ModelTypes {
 							return null;
 						return new ModelInstanceConverter<Object, SettableValue<?>>() {
 							@Override
-							public SettableValue<?> convert(Object sourceV) throws QonfigEvaluationException {
+							public SettableValue<?> convert(Object sourceV) throws ModelInstantiationException {
 								return valueConverter.convert(//
 									SettableValue.of((TypeToken<Object>) sourceType.getType(0), sourceV, "Unmodifiable"));
 							}
@@ -641,7 +640,7 @@ public class ModelTypes {
 							return null;
 						return new ModelInstanceConverter<SettableValue<?>, Object>() {
 							@Override
-							public Object convert(SettableValue<?> sourceV) throws QonfigEvaluationException {
+							public Object convert(SettableValue<?> sourceV) throws ModelInstantiationException {
 								Object v = flattener.apply(sourceV);
 								return valueConverter.convert(v);
 							}
@@ -1166,11 +1165,12 @@ public class ModelTypes {
 			}
 
 			@Override
-			public CollectionElement<T> getOrAdd(T value, ElementId after, ElementId before, boolean first, Runnable added) {
+			public CollectionElement<T> getOrAdd(T value, ElementId after, ElementId before, boolean first, Runnable preAdd,
+				Runnable postAdd) {
 				ObservableSet<T> set = theContainer.get();
 				if (set == null)
 					throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
-				return set.getOrAdd(value, after, before, first, added);
+				return set.getOrAdd(value, after, before, first, preAdd, postAdd);
 			}
 
 			@Override

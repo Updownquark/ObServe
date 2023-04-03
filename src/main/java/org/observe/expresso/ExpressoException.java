@@ -24,6 +24,7 @@ public abstract class ExpressoException extends ParseException {
 	 */
 	public ExpressoException(int errorOffset, int endIndex, String message, Throwable cause) {
 		super(message + " at position " + errorOffset, errorOffset);
+		initCause(cause);
 		theEndIndex = endIndex;
 	}
 
@@ -33,6 +34,15 @@ public abstract class ExpressoException extends ParseException {
 	 */
 	public ExpressoException(Expression exp, String message) {
 		this(exp.getStartIndex(), exp.getEndIndex(), message);
+	}
+
+	/**
+	 * @param exp The expression
+	 * @param message The message for the exception
+	 * @param cause The cause of the exception
+	 */
+	public ExpressoException(Expression exp, String message, Throwable cause) {
+		this(exp.getStartIndex(), exp.getEndIndex(), message, cause);
 	}
 
 	/** @return The start index of the error */

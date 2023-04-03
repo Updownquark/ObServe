@@ -3,12 +3,12 @@ package org.observe.expresso;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.qommons.config.QonfigAttributeDef;
 import org.qommons.config.QonfigElement.QonfigValue;
-import org.qommons.config.QonfigEvaluationException;
-import org.qommons.config.QonfigFilePosition;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigInterpreterCore.CoreSession;
 import org.qommons.config.QonfigValueDef;
+import org.qommons.config.QonfigValueType;
 import org.qommons.config.SpecialSession;
+import org.qommons.io.LocatedFilePosition;
 
 /** A special session with extra utility for the Expresso toolkits */
 public class ExpressoQIS implements SpecialSession<ExpressoQIS> {
@@ -63,6 +63,13 @@ public class ExpressoQIS implements SpecialSession<ExpressoQIS> {
 		return this;
 	}
 
+	/** @throws ExpressoInterpretationException If the local model could not be interpreted */
+	public void interpretLocalModel() throws ExpressoInterpretationException {
+		ObservableModelSet.Built elementModel = (ObservableModelSet.Built) get(ELEMENT_MODEL_KEY);
+		if (elementModel != null)
+			put(ELEMENT_MODEL_KEY, elementModel.interpret());
+	}
+
 	/**
 	 * All {@link ObservableModelSet.ValueContainer}s for expressions parsed under this session should be
 	 * {@link ObservableModelSet.ValueContainer#get(ModelSetInstance) satisfied} with a model set wrapped by this method if this element
@@ -70,11 +77,16 @@ public class ExpressoQIS implements SpecialSession<ExpressoQIS> {
 	 *
 	 * @param models The model instance
 	 * @return The wrapped model instance containing data for this element's local models
+	 * @throws ModelInstantiationException If the local model instantiation fails
 	 */
-	public ModelSetInstance wrapLocal(ModelSetInstance models) throws QonfigEvaluationException {
-		ObservableModelSet elementModel = (ObservableModelSet) get(ELEMENT_MODEL_KEY);
-		if (elementModel != null && !models.getModel().isRelated(elementModel.getIdentity()))
-			models = elementModel.createInstance(models.getUntil()).withAll(models).build();
+	public ModelSetInstance wrapLocal(ModelSetInstance models) throws ModelInstantiationException {
+		ObservableModelSet.Built elementModel = (ObservableModelSet.Built) get(ELEMENT_MODEL_KEY);
+		if (elementModel != null && !models.getModel().isRelated(elementModel.getIdentity())) {
+			if (!(elementModel instanceof ObservableModelSet.InterpretedModelSet))
+				throw new ModelInstantiationException("Local element model was not interpreted.  Should have called interpretLocalModel()",
+					getElement().getPositionInFile(), 0);
+			models = ((ObservableModelSet.InterpretedModelSet) elementModel).createInstance(models.getUntil()).withAll(models).build();
+		}
 		return models;
 	}
 
@@ -91,7 +103,8 @@ public class ExpressoQIS implements SpecialSession<ExpressoQIS> {
 	QonfigExpression2 getExpression(QonfigValueDef type) throws QonfigInterpretationException {
 		if (type == null)
 			error("This element has no value definition");
-		else if (!(type.getType() instanceof ExpressionValueType))
+		else if (!(type.getType() instanceof QonfigValueType.Custom)
+			|| !(((QonfigValueType.Custom) type.getType()).getCustomType() instanceof ExpressionValueType))
 			error("Attribute " + type + " is not an expression");
 		QonfigValue value;
 		if (type instanceof QonfigAttributeDef)
@@ -105,12 +118,12 @@ public class ExpressoQIS implements SpecialSession<ExpressoQIS> {
 		try {
 			expression = getExpressoParser().parse(((QonfigExpression) value.value).text);
 		} catch (ExpressoParseException e) {
-			QonfigFilePosition position;
+			LocatedFilePosition position;
 			if (value.position == null || e.getErrorOffset() < 0)
 				position = null;
 			else
-				position = new QonfigFilePosition(getElement().getDocument().getLocation(), value.position.getPosition(e.getErrorOffset()));
-			throw new QonfigInterpretationException("Could not parse attribute " + type, e, position, e.getEndIndex() - e.getErrorOffset());
+				position = new LocatedFilePosition(getElement().getDocument().getLocation(), value.position.getPosition(e.getErrorOffset()));
+			throw new QonfigInterpretationException("Could not parse attribute " + type, position, e.getEndIndex() - e.getErrorOffset(), e);
 		}
 		return new QonfigExpression2(expression, getElement(), type, value.position, this);
 	}

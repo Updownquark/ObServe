@@ -36,6 +36,16 @@ public class ExpressoParseException extends ExpressoException {
 		theType = exp.getType();
 	}
 
+	/**
+	 * @param exp The expression
+	 * @param message The message for the exception
+	 * @param cause The cause of the exception
+	 */
+	public ExpressoParseException(Expression exp, String message, Throwable cause) {
+		super(exp, message, cause);
+		theType = exp.getType();
+	}
+
 	/** @return The token type of the error */
 	public String getType() {
 		return theType;

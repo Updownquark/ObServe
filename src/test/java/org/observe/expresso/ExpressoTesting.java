@@ -7,12 +7,12 @@ import org.observe.Observable;
 import org.observe.ObservableAction;
 import org.observe.SettableValue;
 import org.observe.SimpleObservable;
+import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ValueContainer;
 import org.observe.expresso.ObservableModelSet.ValueCreator;
 import org.qommons.BreakpointHere;
 import org.qommons.Named;
-import org.qommons.config.QonfigEvaluationException;
 
 /**
  * A testing structure parsed from a Qonfig XML file for testing expresso or expresso-dependent toolkits
@@ -23,7 +23,8 @@ public class ExpressoTesting<H extends Expresso> {
 	/** A test to execute */
 	public static class ExpressoTest implements Named {
 		private final String theName;
-		private final ObservableModelSet theModel;
+		private final ObservableModelSet.Built theModel;
+		private InterpretedModelSet theInterpretedModel;
 		private final ExpressoQIS theSession;
 		private final List<TestAction> theActions;
 
@@ -33,7 +34,7 @@ public class ExpressoTesting<H extends Expresso> {
 		 * @param session The test's expresso session
 		 * @param actions The test actions
 		 */
-		public ExpressoTest(String name, ObservableModelSet model, ExpressoQIS session, List<TestAction> actions) {
+		public ExpressoTest(String name, ObservableModelSet.Built model, ExpressoQIS session, List<TestAction> actions) {
 			theName = name;
 			theModel = model;
 			theSession = session;
@@ -46,7 +47,7 @@ public class ExpressoTesting<H extends Expresso> {
 		}
 
 		/** @return This test's models */
-		public ObservableModelSet getModel() {
+		public ObservableModelSet.Built getModel() {
 			return theModel;
 		}
 
@@ -54,9 +55,12 @@ public class ExpressoTesting<H extends Expresso> {
 		 * @param testingModel The gloal testing model instance
 		 * @return The model instance to use for this test
 		 */
-		public ModelSetInstance createModelInstance(ModelSetInstance testingModel) throws QonfigEvaluationException {
+		public ModelSetInstance createModelInstance(ModelSetInstance testingModel)
+			throws ExpressoInterpretationException, ModelInstantiationException {
+			if (theInterpretedModel == null)
+				theInterpretedModel = theModel.interpret();
 			return theSession.wrapLocal(//
-				theModel.createInstance(testingModel.getUntil()).withAll(testingModel)//
+				theInterpretedModel.createInstance(testingModel.getUntil()).withAll(testingModel)//
 				.build());
 		}
 
@@ -69,7 +73,8 @@ public class ExpressoTesting<H extends Expresso> {
 	/** An action to execute for a test */
 	public static class TestAction {
 		private final String theName;
-		private final ObservableModelSet theActionModel;
+		private final ObservableModelSet.Built theActionModel;
+		private InterpretedModelSet theInterpretedModel;
 		private final ExpressoQIS theExpressoSession;
 		private final ValueCreator<ObservableAction<?>, ObservableAction<?>> theAction;
 		private final String theExpectedException;
@@ -83,7 +88,7 @@ public class ExpressoTesting<H extends Expresso> {
 		 * @param expectedException The exception type expected to be thrown
 		 * @param breakpoint Whether a {@link BreakpointHere breakpoing} should be caught before executing this action
 		 */
-		public TestAction(String name, ObservableModelSet actionModel, ExpressoQIS expressoSession,
+		public TestAction(String name, ObservableModelSet.Built actionModel, ExpressoQIS expressoSession,
 			ValueCreator<ObservableAction<?>, ObservableAction<?>> action, String expectedException, boolean breakpoint) {
 			theName = name;
 			theActionModel = actionModel;
@@ -103,14 +108,16 @@ public class ExpressoTesting<H extends Expresso> {
 		 * @param until An observable that will clean up this action's model instance
 		 * @return The model instance to use for this action
 		 */
-		public ModelSetInstance getActionModel(ModelSetInstance testModel, Observable<?> until) throws QonfigEvaluationException {
+		public ModelSetInstance getActionModel(ModelSetInstance testModel, Observable<?> until) throws ModelInstantiationException {
 			return theExpressoSession.wrapLocal(//
-				theActionModel.createInstance(until).withAll(testModel)//
+				theInterpretedModel.createInstance(until).withAll(testModel)//
 				.build());
 		}
 
 		/** @return The value container to produce this action */
-		public ValueContainer<ObservableAction<?>, ObservableAction<?>> getAction() throws QonfigEvaluationException {
+		public ValueContainer<ObservableAction<?>, ObservableAction<?>> getAction() throws ExpressoInterpretationException {
+			if (theInterpretedModel == null)
+				theInterpretedModel = theActionModel.interpret();
 			return theAction.createContainer();
 		}
 
@@ -151,7 +158,7 @@ public class ExpressoTesting<H extends Expresso> {
 	 * @param testName The name of the test to execute
 	 * @throws IllegalArgumentException If no such test was found in this test's XML definition
 	 */
-	public void executeTest(String testName) throws QonfigEvaluationException {
+	public void executeTest(String testName) throws ExpressoInterpretationException, ModelInstantiationException {
 		ExpressoTest test = theTests.get(testName);
 		if (test == null)
 			throw new IllegalArgumentException("No such test in markup: " + testName);
@@ -168,10 +175,11 @@ public class ExpressoTesting<H extends Expresso> {
 			throw new IllegalStateException("Could not assemble external models", e);
 		}
 		SimpleObservable<Void> until = new SimpleObservable<>();
+		InterpretedModelSet interpretedModels = theHead.getModels().interpret();
 		try {
 			System.out.print("global models...");
 			System.out.flush();
-			ModelSetInstance globalModels = theHead.getModels().createInstance(extModels, until).build();
+			ModelSetInstance globalModels = interpretedModels.createInstance(extModels, until).build();
 
 			System.out.print("test models...");
 			System.out.flush();
@@ -180,10 +188,11 @@ public class ExpressoTesting<H extends Expresso> {
 
 			for (TestAction action : test.getActions()) {
 				actionName.set(action.getName(), null);
+				ValueContainer<ObservableAction<?>, ObservableAction<?>> actionContainer = action.getAction();
 				ModelSetInstance actionModels = action.getActionModel(testModels, actionName.noInitChanges());
 				System.out.print(action.getName());
 				System.out.flush();
-				ObservableAction<?> testAction = action.getAction().get(actionModels);
+				ObservableAction<?> testAction = actionContainer.get(actionModels);
 				System.out.println(":");
 				if (action.isBreakpoint())
 					BreakpointHere.breakpoint();

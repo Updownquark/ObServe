@@ -11,14 +11,15 @@ import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.expresso.ExpressoEnv;
 import org.observe.expresso.ExpressoEvaluationException;
+import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet.ValueContainer;
+import org.observe.expresso.TypeConversionException;
 import org.observe.expresso.ops.UnaryOperatorSet.UnaryOp;
 import org.observe.util.TypeTokens;
 import org.qommons.LambdaUtils;
-import org.qommons.config.QonfigEvaluationException;
 
 import com.google.common.reflect.TypeToken;
 
@@ -33,6 +34,7 @@ public class UnaryOperator implements ObservableExpression {
 	 * @param operator The name of the operator
 	 * @param operand The operand
 	 * @param prefix Whether the operator is a prefix or suffix operation
+	 * @param separatorSpaces The number of spaces between the operator and the operand
 	 */
 	public UnaryOperator(String operator, ObservableExpression operand, boolean prefix, int separatorSpaces) {
 		theOperator = operator;
@@ -72,6 +74,7 @@ public class UnaryOperator implements ObservableExpression {
 			return theOperand.getExpressionEnd() + theSeparatorSpaces + theOperator.length();
 	}
 
+	/** @return The starting position of this expression's operator in the root sequence */
 	public int getOperatorOffset() {
 		if (isPrefix)
 			return 0;
@@ -97,7 +100,7 @@ public class UnaryOperator implements ObservableExpression {
 
 	@Override
 	public <M, MV extends M> ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env)
-		throws ExpressoEvaluationException {
+		throws ExpressoEvaluationException, ExpressoInterpretationException {
 		Set<Class<?>> types = env.getUnaryOperators().getSupportedInputTypes(theOperator);
 		TypeToken<?> targetOpType;
 		switch (types.size()) {
@@ -111,16 +114,19 @@ public class UnaryOperator implements ObservableExpression {
 			targetOpType = TypeTokens.get().WILDCARD;
 			break;
 		}
-		return (ValueContainer<M, MV>) doOperation(type, //
-			theOperand.evaluate(ModelTypes.Value.forType(targetOpType), env), env);
+		try {
+			return (ValueContainer<M, MV>) doOperation(type, theOperand.evaluate(ModelTypes.Value.forType(targetOpType), env), env);
+		} catch (TypeConversionException e) {
+			throw new ExpressoEvaluationException(theOperand.getExpressionOffset(), theOperand.getExpressionEnd(), e.getMessage(), e);
+		}
 	}
 
 	private <M, MV extends M, S> MV doOperation(ModelInstanceType<M, MV> type, ValueContainer<SettableValue<?>, SettableValue<S>> op,
-		ExpressoEnv env) throws ExpressoEvaluationException {
+		ExpressoEnv env) throws ExpressoEvaluationException, ExpressoInterpretationException {
 		TypeToken<S> opType;
 		try {
 			opType = (TypeToken<S>) op.getType().getType(0);
-		} catch (QonfigEvaluationException e) {
+		} catch (ExpressoInterpretationException e) {
 			throw new ExpressoEvaluationException(theOperand.getExpressionOffset(), theOperand.getExpressionEnd(), e.getMessage(), e);
 		}
 		UnaryOp<S, ?> operator = env.getUnaryOperators().getOperator(theOperator, TypeTokens.getRawType(opType));

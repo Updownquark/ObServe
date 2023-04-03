@@ -10,7 +10,6 @@ import org.observe.expresso.ObservableModelSet.ValueCreator;
 import org.qommons.BreakpointHere;
 import org.qommons.Version;
 import org.qommons.collect.BetterList;
-import org.qommons.config.QonfigEvaluationException;
 import org.qommons.config.QonfigInterpretation;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigInterpreterCore.Builder;
@@ -66,7 +65,7 @@ public class ExpressoDebugV0_1 implements QonfigInterpretation {
 					return value;
 				return new ValueCreator<Object, Object>() {
 					@Override
-					public ValueContainer<Object, Object> createContainer() throws QonfigEvaluationException {
+					public ValueContainer<Object, Object> createContainer() throws ExpressoInterpretationException {
 						if ("createContainer".equals(breakpointType)) {
 							BreakpointHere.breakpoint();
 							return (ValueContainer<Object, Object>) value.createContainer();
@@ -74,12 +73,12 @@ public class ExpressoDebugV0_1 implements QonfigInterpretation {
 							ValueContainer<Object, Object> wrapped = (ValueContainer<Object, Object>) value.createContainer();
 							return new ValueContainer<Object, Object>() {
 								@Override
-								public ModelInstanceType<Object, Object> getType() throws QonfigEvaluationException {
+								public ModelInstanceType<Object, Object> getType() throws ExpressoInterpretationException {
 									return wrapped.getType();
 								}
 
 								@Override
-								public Object get(ModelSetInstance models) throws QonfigEvaluationException {
+								public Object get(ModelSetInstance models) throws ModelInstantiationException {
 									if ("createValue".equals(breakpointType))
 										BreakpointHere.breakpoint();
 									return wrapped.get(models);
@@ -87,12 +86,12 @@ public class ExpressoDebugV0_1 implements QonfigInterpretation {
 
 								@Override
 								public Object forModelCopy(Object oldValue, ModelSetInstance sourceModels,
-									ModelSetInstance newModels) throws QonfigEvaluationException {
+									ModelSetInstance newModels) throws ModelInstantiationException {
 									return wrapped.forModelCopy(value, sourceModels, newModels);
 								}
 
 								@Override
-								public BetterList<ValueContainer<?, ?>> getCores() throws QonfigEvaluationException {
+								public BetterList<ValueContainer<?, ?>> getCores() throws ExpressoInterpretationException {
 									return wrapped.getCores();
 								}
 

@@ -74,8 +74,7 @@ public class JavaExpressoParser implements ExpressoParser {
 		try {
 			result = parse(expression);
 		} catch (RuntimeException e) {
-			e.printStackTrace();
-			throw new ExpressoParseException(expression, "Expression parsing failed: " + e);
+			throw new ExpressoParseException(expression, "Expression parsing failed", e);
 		}
 		return result;
 	}
@@ -340,12 +339,13 @@ public class JavaExpressoParser implements ExpressoParser {
 			return literalExpression(expression, stringText);
 		case "EXTERNAL_LITERAL":
 			Expression extChars = expression.search().get("StringCharacters").findAny();
-			String extText;
-			if (extChars != null)
-				extText = compileString(extChars.getComponents());
-			else
-				extText = parseString(expression.getText().substring(1, expression.getText().length() - 1));
-			return new ExternalLiteral(expression, extText, extChars.getStartIndex(), extChars.getEndIndex());
+			if (extChars != null) {
+				String extText = compileString(extChars.getComponents());
+				return new ExternalLiteral(expression, extText, extChars.getStartIndex(), extChars.getEndIndex());
+			} else {
+				String extText = parseString(expression.getText().substring(1, expression.getText().length() - 1));
+				return new ExternalLiteral(expression, extText, 1, expression.getText().length() - 1);
+			}
 		case "NULL_LITERAL":
 		case "'null'": // That's weird, but ok
 			return literalExpression(expression, null);

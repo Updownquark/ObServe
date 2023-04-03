@@ -10,7 +10,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 
-import org.observe.expresso.ObservableModelSet.BuiltValueContainer;
+import org.observe.expresso.ObservableModelSet.InterpretedValueContainer;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ValueContainer;
 import org.observe.util.TypeTokens;
@@ -204,6 +204,7 @@ public abstract class ModelType<M> implements Named {
 		/**
 		 * @param source The source value to convert
 		 * @return The converter value
+		 * @throws ModelInstantiationException If the conversion fails
 		 */
 		M2 convert(M1 source) throws ModelInstantiationException;
 
@@ -455,7 +456,7 @@ public abstract class ModelType<M> implements Named {
 		 * @return A value equivalent to this value, but with the given type
 		 * @throws TypeConversionException If no converter is available for the conversion from this type to the given type
 		 */
-		public <M2, MV2 extends M2> BuiltValueContainer<M2, MV2> as(BuiltValueContainer<M, MV> source,
+		public <M2, MV2 extends M2> InterpretedValueContainer<M2, MV2> as(InterpretedValueContainer<M, MV> source,
 			ModelInstanceType<M2, MV2> targetType) throws TypeConversionException {
 			ModelInstanceType<M, MV> sourceType = source.getType();
 			ModelType.ModelInstanceConverter<M, M2> converter = sourceType.convert(targetType);
@@ -463,7 +464,7 @@ public abstract class ModelType<M> implements Named {
 				sourceType.convert(targetType); // TODO DEBUG REMOVE
 				throw new TypeConversionException(source.toString(), sourceType, targetType);
 			} else if (converter instanceof NoOpConverter)
-				return (BuiltValueContainer<M2, MV2>) source;
+				return (InterpretedValueContainer<M2, MV2>) source;
 			else
 				return new ConvertedValue<>(source, (ModelInstanceType<M2, MV2>) converter.getType(), converter);
 		}
@@ -1080,8 +1081,8 @@ public abstract class ModelType<M> implements Named {
 	 * @param <MT> The model type of the target value
 	 * @param <MVT> The type of the target value
 	 */
-	public static class ConvertedValue<MS, MVS extends MS, MT, MVT extends MT> implements BuiltValueContainer<MT, MVT> {
-		private final BuiltValueContainer<MS, MVS> theSource;
+	public static class ConvertedValue<MS, MVS extends MS, MT, MVT extends MT> implements InterpretedValueContainer<MT, MVT> {
+		private final InterpretedValueContainer<MS, MVS> theSource;
 		private final ModelInstanceType<MT, MVT> theType;
 		private final ModelType.ModelInstanceConverter<MS, MT> theConverter;
 
@@ -1090,7 +1091,7 @@ public abstract class ModelType<M> implements Named {
 		 * @param type The type to convert to
 		 * @param converter The convert to convert values of the source type to the target type
 		 */
-		public ConvertedValue(BuiltValueContainer<MS, MVS> source, ModelInstanceType<MT, MVT> type,
+		public ConvertedValue(InterpretedValueContainer<MS, MVS> source, ModelInstanceType<MT, MVT> type,
 			ModelInstanceConverter<MS, MT> converter) {
 			if (source == null || type == null || converter == null)
 				throw new NullPointerException();

@@ -10,15 +10,17 @@ import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableSet;
 import org.observe.expresso.ExpressoEnv;
 import org.observe.expresso.ExpressoEvaluationException;
+import org.observe.expresso.ExpressoInterpretationException;
+import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ValueContainer;
+import org.observe.expresso.TypeConversionException;
 import org.observe.util.TypeTokens;
 import org.qommons.QommonsUtils;
 import org.qommons.collect.BetterList;
-import org.qommons.config.QonfigEvaluationException;
 
 import com.google.common.reflect.TypeToken;
 
@@ -84,30 +86,34 @@ public class ConditionalExpression implements ObservableExpression {
 
 	@Override
 	public <M, MV extends M> ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env)
-		throws ExpressoEvaluationException {
+		throws ExpressoEvaluationException, ExpressoInterpretationException {
 		if (type != null && (type.getModelType() == ModelTypes.Value || type.getModelType() == ModelTypes.Collection
 			|| type.getModelType() == ModelTypes.Set)) {//
 		} else
 			throw new ExpressoEvaluationException(getExpressionOffset(), getExpressionEnd(),
 				"Conditional expressions not supported for model type " + type.getModelType() + " (" + this + ")");
-		ValueContainer<SettableValue<?>, SettableValue<Boolean>> conditionV = theCondition.evaluate(//
-			ModelTypes.Value.forType(boolean.class), env);
-		ValueContainer<M, MV> primaryV = thePrimary.evaluate(type, env);
-		ValueContainer<M, MV> secondaryV = theSecondary.evaluate(type, env);
-		// TODO reconcile compatible model types, like Collection and Set
-		ModelInstanceType<M, MV> primaryType;
+		ValueContainer<SettableValue<?>, SettableValue<Boolean>> conditionV;
 		try {
-			primaryType = primaryV.getType();
-		} catch (QonfigEvaluationException e) {
+			conditionV = theCondition.evaluate(//
+				ModelTypes.Value.forType(boolean.class), env);
+		} catch (TypeConversionException e) {
+			throw new ExpressoEvaluationException(theCondition.getExpressionOffset(), theCondition.getExpressionEnd(), e.getMessage(), e);
+		}
+		ValueContainer<M, MV> primaryV;
+		try {
+			primaryV = thePrimary.evaluate(type, env);
+		} catch (TypeConversionException e) {
 			throw new ExpressoEvaluationException(thePrimary.getExpressionOffset(), thePrimary.getExpressionEnd(), e.getMessage(), e);
 		}
-		ModelInstanceType<M, MV> secondaryType;
+		ValueContainer<M, MV> secondaryV;
 		try {
-			secondaryType = secondaryV.getType();
-		} catch (QonfigEvaluationException e) {
-			throw new ExpressoEvaluationException(theSecondary.getExpressionOffset(), theSecondary.getExpressionEnd(), e.getMessage(),
-				e);
+			secondaryV = theSecondary.evaluate(type, env);
+		} catch (TypeConversionException e) {
+			throw new ExpressoEvaluationException(theSecondary.getExpressionOffset(), theSecondary.getExpressionEnd(), e.getMessage(), e);
 		}
+		// TODO reconcile compatible model types, like Collection and Set
+		ModelInstanceType<M, MV> primaryType = primaryV.getType();
+		ModelInstanceType<M, MV> secondaryType = secondaryV.getType();
 		if (primaryType.getModelType() != secondaryType.getModelType())
 			throw new ExpressoEvaluationException(getExpressionOffset(), getExpressionEnd(), "Incompatible expressions: " + thePrimary
 				+ ", evaluated to " + primaryType + " and " + theSecondary + ", evaluated to " + secondaryType);
@@ -137,7 +143,7 @@ public class ConditionalExpression implements ObservableExpression {
 			}
 
 			@Override
-			public MV get(ModelSetInstance msi) throws QonfigEvaluationException {
+			public MV get(ModelSetInstance msi) throws ModelInstantiationException {
 				SettableValue<Boolean> conditionX = conditionV.get(msi);
 				Object primaryX = primaryV.get(msi);
 				Object secondaryX = secondaryV.get(msi);
@@ -174,7 +180,7 @@ public class ConditionalExpression implements ObservableExpression {
 			}
 
 			@Override
-			public MV forModelCopy(MV value, ModelSetInstance sourceModels, ModelSetInstance newModels) throws QonfigEvaluationException {
+			public MV forModelCopy(MV value, ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException {
 				SettableValue<Boolean> sourceCondition = conditionV.get(sourceModels);
 				SettableValue<Boolean> newCondition = conditionV.get(newModels);
 				Object sourcePrimary = primaryV.get(sourceModels);
@@ -187,7 +193,7 @@ public class ConditionalExpression implements ObservableExpression {
 			}
 
 			@Override
-			public BetterList<ValueContainer<?, ?>> getCores() throws QonfigEvaluationException {
+			public BetterList<ValueContainer<?, ?>> getCores() throws ExpressoInterpretationException {
 				return BetterList.of(Stream.of(conditionV, primaryV, secondaryV), vc -> vc.getCores().stream());
 			}
 		};

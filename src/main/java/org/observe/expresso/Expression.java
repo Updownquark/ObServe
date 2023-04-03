@@ -568,7 +568,7 @@ public interface Expression {
 			int childCount = arg0.getChildCount();
 
 			List<Expression> children = new ArrayList<>(childCount);
-			Expression ex = new Composite(ruleName, arg0.getText(), BetterList.of(children));
+			Expression ex = new Composite(ruleName, arg0.getText(), new BetterList.ConstantList<>(children));
 			if (!theStack.isEmpty())
 				theStack.getLast().add(ex);
 			theStack.add(children);

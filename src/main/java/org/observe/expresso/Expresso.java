@@ -6,7 +6,6 @@ import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelTag;
 import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElement;
-import org.qommons.config.QonfigEvaluationException;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigInterpreterCore;
 import org.qommons.config.QonfigInterpreterCore.CoreSession;
@@ -32,12 +31,15 @@ public class Expresso {
 	 * @param <M> The model type of the result
 	 */
 	public interface ExtModelValue<M> {
+		/** @return The model type of this model value */
+		ModelType<M> getModelType();
+
 		/**
 		 * @param session The session to use to evaluate the type
 		 * @return The type of this model value
-		 * @throws QonfigEvaluationException If the type cannot be evaluated
+		 * @throws ExpressoInterpretationException If the type cannot be evaluated
 		 */
-		ModelInstanceType<M, ?> getType(ExpressoQIS session) throws QonfigEvaluationException;
+		ModelInstanceType<M, ?> getType(ExpressoQIS session) throws ExpressoInterpretationException;
 
 		/** @return Whether the type of this value specification has been fully specified */
 		boolean isTypeSpecified();
@@ -60,7 +62,7 @@ public class Expresso {
 				theValueType = valueType;
 			}
 
-			/** @return The model type of this value */
+			@Override
 			public ModelType.SingleTyped<M> getModelType() {
 				return theModelType;
 			}
@@ -76,7 +78,7 @@ public class Expresso {
 			}
 
 			@Override
-			public ModelInstanceType<M, ?> getType(ExpressoQIS session) throws QonfigEvaluationException {
+			public ModelInstanceType<M, ?> getType(ExpressoQIS session) throws ExpressoInterpretationException {
 				if (theValueType != null)
 					return theModelType.forType((TypeToken<?>) theValueType.getType(session.getExpressoEnv().getModels()));
 				else
@@ -105,8 +107,8 @@ public class Expresso {
 				theValueType2 = valueType2;
 			}
 
-			/** @return The model type of this value */
-			public ModelType.DoubleTyped<M> getType() {
+			@Override
+			public ModelType.DoubleTyped<M> getModelType() {
 				return theModelType;
 			}
 
@@ -126,7 +128,7 @@ public class Expresso {
 			}
 
 			@Override
-			public ModelInstanceType<M, ?> getType(ExpressoQIS session) throws QonfigEvaluationException {
+			public ModelInstanceType<M, ?> getType(ExpressoQIS session) throws ExpressoInterpretationException {
 				if (theValueType1 != null && theValueType2 != null)
 					return theModelType.forType(//
 						(TypeToken<?>) theValueType1.getType(session.getExpressoEnv().getModels()), //
@@ -211,7 +213,7 @@ public class Expresso {
 			if (Boolean.TRUE.equals(prepared)) {
 				ExpressoQIS exS = session.as(ExpressoQIS.class);
 				if (exS.getExpressoEnv().getModels() instanceof ObservableModelSet.Builder) {
-					ObservableModelSet wrapped = ((ObservableModelSet.Builder) exS.getExpressoEnv().getModels()).build();
+					ObservableModelSet.Built wrapped = ((ObservableModelSet.Builder) exS.getExpressoEnv().getModels()).build();
 					exS.setModels(wrapped, null);
 					session.putLocal(ExpressoQIS.ELEMENT_MODEL_KEY, wrapped);
 				}
@@ -233,13 +235,13 @@ public class Expresso {
 	}
 
 	private final ClassView theClassView;
-	private final ObservableModelSet theModels;
+	private final ObservableModelSet.Built theModels;
 
 	/**
 	 * @param classView The class view for this expresso structure
 	 * @param models The models for this expresso structure
 	 */
-	public Expresso(ClassView classView, ObservableModelSet models) {
+	public Expresso(ClassView classView, ObservableModelSet.Built models) {
 		theClassView = classView;
 		theModels = models;
 	}
@@ -250,7 +252,7 @@ public class Expresso {
 	}
 
 	/** @return The models of this expresso structure */
-	public ObservableModelSet getModels() {
+	public ObservableModelSet.Built getModels() {
 		return theModels;
 	}
 }

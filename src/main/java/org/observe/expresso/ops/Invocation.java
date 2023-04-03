@@ -20,6 +20,8 @@ import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.expresso.ExpressoEnv;
 import org.observe.expresso.ExpressoEvaluationException;
+import org.observe.expresso.ExpressoInterpretationException;
+import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelType.ModelInstanceConverter;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelType.ModelInstanceType.SingleTyped;
@@ -27,11 +29,11 @@ import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ValueContainer;
+import org.observe.expresso.TypeConversionException;
 import org.observe.util.TypeTokens;
 import org.qommons.ArrayUtils;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterList;
-import org.qommons.config.QonfigEvaluationException;
 import org.qommons.ex.CheckedExceptionWrapper;
 
 import com.google.common.reflect.TypeToken;
@@ -46,6 +48,8 @@ public abstract class Invocation implements ObservableExpression {
 	/**
 	 * @param typeArguments The type arguments to the invocation
 	 * @param arguments The arguments to use to invoke the invokable
+	 * @param offset The offset position of the start of this expression
+	 * @param end The offset position of the end of this expression
 	 */
 	public Invocation(List<String> typeArguments, List<ObservableExpression> arguments, int offset, int end) {
 		theTypeArguments = typeArguments;
@@ -76,7 +80,7 @@ public abstract class Invocation implements ObservableExpression {
 
 	@Override
 	public <M, MV extends M> ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env)
-		throws ExpressoEvaluationException {
+		throws ExpressoEvaluationException, ExpressoInterpretationException {
 		if (type.getModelType() == ModelTypes.Action) {
 			try (Transaction t = asAction()) {
 				InvokableResult<?, SettableValue<?>, ? extends SettableValue<?>> result = evaluateInternal2(
@@ -102,15 +106,20 @@ public abstract class Invocation implements ObservableExpression {
 		 * @param paramType The type of the input parameter
 		 * @return Whether the given parameter can be matched to the given argument
 		 * @throws ExpressoEvaluationException If an error occurs making the determination
+		 * @throws ExpressoInterpretationException If the argument could not be interpreted
+		 * @throws TypeConversionException If the argument could not be interpreted as the given type
 		 */
-		boolean matchesType(int arg, TypeToken<?> paramType) throws ExpressoEvaluationException;
+		boolean matchesType(int arg, TypeToken<?> paramType)
+			throws ExpressoEvaluationException, ExpressoInterpretationException, TypeConversionException;
 
 		/**
 		 * @param arg The argument index
 		 * @return The argument type at the given index
 		 * @throws ExpressoEvaluationException If an error occurs making the determination
+		 * @throws ExpressoInterpretationException If the argument could not be interpreted
+		 * @throws TypeConversionException If the argument could not be interpreted as a value
 		 */
-		TypeToken<?> resolve(int arg) throws ExpressoEvaluationException;
+		TypeToken<?> resolve(int arg) throws ExpressoEvaluationException, ExpressoInterpretationException, TypeConversionException;
 	}
 
 	/** An {@link Args} option representing a set of arguments to an invokable */
@@ -134,17 +143,12 @@ public abstract class Invocation implements ObservableExpression {
 		}
 
 		@Override
-		public boolean matchesType(int arg, TypeToken<?> paramType) throws ExpressoEvaluationException {
+		public boolean matchesType(int arg, TypeToken<?> paramType)
+			throws ExpressoEvaluationException, ExpressoInterpretationException, TypeConversionException {
 			ValueContainer<SettableValue<?>, SettableValue<?>> c;
 			for (int i = 0; i < args[arg].size(); i++) {
 				c = args[arg].get(i);
-				TypeToken<?> argType;
-				try {
-					argType = c.getType().getType(0);
-				} catch (QonfigEvaluationException e) {
-					throw new ExpressoEvaluationException(theArguments.get(i).getExpressionOffset(),
-						theArguments.get(i).getExpressionEnd(), e.getMessage(), e);
-				}
+				TypeToken<?> argType = c.getType().getType(0);
 				if (TypeTokens.get().isAssignable(paramType, argType)) {
 					// Move to the beginning
 					args[arg].remove(i);
@@ -160,7 +164,7 @@ public abstract class Invocation implements ObservableExpression {
 		}
 
 		@Override
-		public TypeToken<?> resolve(int arg) throws ExpressoEvaluationException {
+		public TypeToken<?> resolve(int arg) throws ExpressoEvaluationException, ExpressoInterpretationException, TypeConversionException {
 			if (resolved[arg] == null) {
 				if (args[arg].isEmpty())
 					resolved[arg] = theArguments.get(arg).evaluate(ModelTypes.Value.any(), theEnv);
@@ -169,7 +173,7 @@ public abstract class Invocation implements ObservableExpression {
 			}
 			try {
 				return resolved[arg].getType().getType(0);
-			} catch (QonfigEvaluationException e) {
+			} catch (ExpressoInterpretationException e) {
 				throw new ExpressoEvaluationException(getExpressionOffset(), getExpressionEnd(), e.getMessage(), e);
 			}
 		}
@@ -220,9 +224,10 @@ public abstract class Invocation implements ObservableExpression {
 	 * @param args The argument option to use to invoke
 	 * @return The result definition
 	 * @throws ExpressoEvaluationException If an error occurs evaluating the invokable
+	 * @throws ExpressoInterpretationException If an expression on which this expression depends could not be interpreted
 	 */
 	protected abstract <M, MV extends M> InvokableResult<?, M, MV> evaluateInternal2(ModelInstanceType<M, MV> type, ExpressoEnv env,
-		ArgOption args) throws ExpressoEvaluationException;
+		ArgOption args) throws ExpressoEvaluationException, ExpressoInterpretationException;
 
 	private <X extends Executable, T> InvocationActionContainer<X, T> createActionContainer(
 		InvokableResult<X, SettableValue<?>, SettableValue<T>> result) {
@@ -277,11 +282,13 @@ public abstract class Invocation implements ObservableExpression {
 	 * @param invocation The expression that this is being called from, just for inclusion in an error message
 	 * @return The result containing the invokable matching the given options, or null if no such invokable was found in the list
 	 * @throws ExpressoEvaluationException If a suitable invokable is found, but there is an error with its invocation
+	 * @throws ExpressoInterpretationException If a method argument could not be interpreted
 	 */
 	public static <X extends Executable, M, MV extends M> MethodResult<X, MV> findMethod(X[] methods, String methodName,
 		TypeToken<?> contextType, boolean arg0Context, List<? extends Args> argOptions, ModelInstanceType<M, MV> targetType,
-		ExpressoEnv env, ExecutableImpl<X> impl, ObservableExpression invocation) throws ExpressoEvaluationException {
-		Map<String, ExpressoEvaluationException> methodErrors = null;
+		ExpressoEnv env, ExecutableImpl<X> impl, ObservableExpression invocation)
+			throws ExpressoEvaluationException, ExpressoInterpretationException {
+		Map<String, Exception> methodErrors = null;
 		MethodResult<X, MV> bestResult = null;
 		for (X m : methods) {
 			if (methodName != null && !m.getName().equals(methodName))
@@ -301,7 +308,7 @@ public abstract class Invocation implements ObservableExpression {
 				if (specificity < bestResult.specificity)
 					continue; // Current result is better than this even if it matches
 			}
-			List<ExpressoEvaluationException> errors = null;
+			List<Exception> errors = null;
 			for (int o = 0; o < argOptions.size(); o++) {
 				try {
 					TypeTokens.TypeVariableAccumulation tva;
@@ -354,13 +361,13 @@ public abstract class Invocation implements ObservableExpression {
 						TypeToken<?> paramType = paramTypes[p];
 						if (p == paramTypes.length - 1 && m.isVarArgs()) {
 							// Test var-args invocation first
-							ExpressoEvaluationException ex = null;
+							Exception ex = null;
 							try {
 								TypeToken<?> ptComp = paramType.getComponentType();
 								varArgs = option.matchesType(a, ptComp);
 								if (varArgs && !tva.accumulate(ptComp, option.resolve(a)))
 									ok = false;
-							} catch (ExpressoEvaluationException e) {
+							} catch (ExpressoEvaluationException | ExpressoInterpretationException | TypeConversionException e) {
 								ex = e;
 							}
 							if (!varArgs && option.size() == paramTypes.length) { // Check for non-var-args invocation
@@ -370,7 +377,7 @@ public abstract class Invocation implements ObservableExpression {
 								} else {
 									ok = false;
 									if (ex != null)
-										throw ex;
+										_throw(ex, invocation);
 								}
 							}
 						} else if (!option.matchesType(a, paramType))
@@ -394,7 +401,7 @@ public abstract class Invocation implements ObservableExpression {
 						bestResult = new Invocation.MethodResult<>(m, o, false, specificity,
 							(ModelInstanceConverter<SettableValue<Object>, MV>) converter);
 					}
-				} catch (ExpressoEvaluationException e) {
+				} catch (ExpressoEvaluationException | ExpressoInterpretationException | TypeConversionException e) {
 					if (errors == null)
 						errors = new ArrayList<>(3);
 					errors.add(e);
@@ -414,7 +421,7 @@ public abstract class Invocation implements ObservableExpression {
 					}
 
 					ExpressoEvaluationException ex = new ExpressoEvaluationException(//
-						errors.get(0).getErrorOffset(), errors.get(0).getEndIndex(), msg.toString(), errors.get(0));
+						invocation.getExpressionOffset(), invocation.getExpressionEnd(), msg.toString(), errors.get(0));
 					for (int i = 1; i < errors.size(); i++)
 						ex.addSuppressed(errors.get(i));
 					methodErrors.put(m.toString(), ex);
@@ -422,21 +429,32 @@ public abstract class Invocation implements ObservableExpression {
 			}
 		}
 		if (bestResult == null && methodErrors != null) {
+			if (methodErrors.size() == 1) {
+				Exception ex = methodErrors.values().iterator().next();
+				if (ex instanceof ExpressoInterpretationException)
+					throw (ExpressoInterpretationException) ex;
+			}
 			String exMsg = methodErrors.values().iterator().next().getMessage();
 			boolean sameMsg = true;
-			for (ExpressoEvaluationException ex : methodErrors.values())
+			for (Exception ex : methodErrors.values())
 				sameMsg &= exMsg.equals(ex.getMessage());
 			if (sameMsg)
-				throw methodErrors.values().iterator().next();
+				_throw(methodErrors.values().iterator().next(), invocation);
 			StringBuilder msg = new StringBuilder("Could not find a match for ").append(invocation).append(':');
-			for (Map.Entry<String, ExpressoEvaluationException> err : methodErrors.entrySet()) {
+			for (Map.Entry<String, Exception> err : methodErrors.entrySet()) {
 				msg.append("\n\t").append(err.getKey()).append(": ").append(err.getValue().getMessage());
 			}
-			ExpressoEvaluationException firstEx = methodErrors.values().iterator().next();
-			ExpressoEvaluationException ex = new ExpressoEvaluationException(//
-				firstEx.getErrorOffset(), firstEx.getEndIndex(), msg.toString(), firstEx);
+			Exception firstEx = methodErrors.values().iterator().next();
+			ExpressoEvaluationException ex;
+			if (firstEx instanceof ExpressoEvaluationException)
+				ex = new ExpressoEvaluationException(//
+					((ExpressoEvaluationException) firstEx).getErrorOffset(), ((ExpressoEvaluationException) firstEx).getEndIndex(),
+					msg.toString(), firstEx);
+			else
+				ex = new ExpressoEvaluationException(invocation.getExpressionOffset(), invocation.getExpressionEnd(), msg.toString(),
+					firstEx);
 			boolean first = true;
-			for (ExpressoEvaluationException err : methodErrors.values()) {
+			for (Exception err : methodErrors.values()) {
 				if (first)
 					first = false;
 				else
@@ -445,6 +463,15 @@ public abstract class Invocation implements ObservableExpression {
 			throw ex;
 		}
 		return bestResult;
+	}
+
+	static void _throw(Exception ex, ObservableExpression invocation) throws ExpressoEvaluationException, ExpressoInterpretationException {
+		if (ex instanceof ExpressoEvaluationException)
+			throw (ExpressoEvaluationException) ex;
+		else if (ex instanceof ExpressoInterpretationException)
+			throw (ExpressoInterpretationException) ex;
+		else
+			throw new ExpressoEvaluationException(invocation.getExpressionOffset(), invocation.getExpressionEnd(), ex.getMessage(), ex);
 	}
 
 	private static ThreadLocal<Boolean> AS_ACTION = new ThreadLocal<>();
@@ -499,7 +526,7 @@ public abstract class Invocation implements ObservableExpression {
 		}
 
 		@Override
-		public MV get(ModelSetInstance models) throws QonfigEvaluationException {
+		public MV get(ModelSetInstance models) throws ModelInstantiationException {
 			SettableValue<?> ctxV = theContext == null ? null : theContext.get(models);
 			SettableValue<?>[] argVs = new SettableValue[theArguments.size()];
 			Observable<?>[] changeSources = new Observable[theContext == null ? argVs.length : argVs.length + 1];
@@ -516,7 +543,7 @@ public abstract class Invocation implements ObservableExpression {
 		}
 
 		@Override
-		public MV forModelCopy(MV value, ModelSetInstance sourceModels, ModelSetInstance newModels) throws QonfigEvaluationException {
+		public MV forModelCopy(MV value, ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException {
 			SettableValue<?> sourceCtx = theContext == null ? null : theContext.get(sourceModels);
 			SettableValue<?> newCtx = theContext == null ? null : theContext.get(newModels);
 			SettableValue<?>[] argVs = new SettableValue[theArguments.size()];
@@ -538,14 +565,14 @@ public abstract class Invocation implements ObservableExpression {
 		}
 
 		@Override
-		public BetterList<ValueContainer<?, ?>> getCores() throws QonfigEvaluationException {
+		public BetterList<ValueContainer<?, ?>> getCores() throws ExpressoInterpretationException {
 			return BetterList.of(//
 				Stream.concat(Stream.of(theContext), theArguments.stream()), //
 				vc -> vc == null ? Stream.empty() : vc.getCores().stream());
 		}
 
 		protected abstract MV createModelValue(SettableValue<?> ctxV, SettableValue<?>[] argVs, Observable<Object> changes)
-			throws QonfigEvaluationException;
+			throws ModelInstantiationException;
 
 		protected <C> Object invoke(SettableValue<C> ctxV, SettableValue<?>[] argVs, boolean asAction)
 			throws IllegalAccessException, IllegalArgumentException, InvocationTargetException, InstantiationException {
@@ -667,7 +694,7 @@ public abstract class Invocation implements ObservableExpression {
 
 		@Override
 		protected MV createModelValue(SettableValue<?> ctxV, SettableValue<?>[] argVs, Observable<Object> changes)
-			throws QonfigEvaluationException {
+			throws ModelInstantiationException {
 			SettableValue<Object> value = syntheticResultValue(//
 				TypeTokens.get().OBJECT, ctxV, argVs, changes);
 			return getMethod().converter.convert(value);

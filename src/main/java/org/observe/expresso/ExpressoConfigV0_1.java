@@ -2,8 +2,6 @@ package org.observe.expresso;
 
 import static org.observe.expresso.ExpressoBaseV0_1.KEY_TYPE_KEY;
 import static org.observe.expresso.ExpressoBaseV0_1.VALUE_TYPE_KEY;
-import static org.observe.expresso.ExpressoBaseV0_1.parseType;
-import static org.observe.expresso.ExpressoBaseV0_1.parseValue;
 
 import java.awt.Image;
 import java.awt.event.ComponentAdapter;
@@ -66,7 +64,9 @@ import org.qommons.collect.BetterList;
 import org.qommons.collect.BetterSortedSet;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.config.QommonsConfig;
+import org.qommons.config.QonfigAttributeDef;
 import org.qommons.config.QonfigElement;
+import org.qommons.config.QonfigElement.QonfigValue;
 import org.qommons.config.QonfigInterpretation;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigInterpreterCore;
@@ -79,6 +79,7 @@ import org.qommons.io.BetterFile;
 import org.qommons.io.BetterFile.FileDataSource;
 import org.qommons.io.FileBackups;
 import org.qommons.io.Format;
+import org.qommons.io.LocatedFilePosition;
 import org.qommons.io.NativeFileSource;
 import org.qommons.io.SpinnerFormat;
 import org.qommons.threading.QommonsTimer;
@@ -125,7 +126,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 
 	/**
 	 * Equivalent of a {@link ValueCreator} for a &lt;validate> element
-	 * 
+	 *
 	 * @param <V> The type to validate
 	 */
 	public interface ValidationProducer<V> {
@@ -135,7 +136,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 
 	/**
 	 * Equivalent of a {@link ValueContainer} for a &lt;validate> element
-	 * 
+	 *
 	 * @param <V> The type to validate
 	 */
 	public interface Validation<V> {
@@ -157,7 +158,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 
 		/**
 		 * Equivalent of {@link ValueContainer#getCores()}
-		 * 
+		 *
 		 * @return The value container cores that are the fundamental sources of value for the test
 		 */
 		BetterList<ValueContainer<?, ?>> getCores();
@@ -246,7 +247,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 				};
 				if (format != null)
 					exS.getExpressoEnv().withNonStructuredParser(TypeTokens.getRawType(type), nsp);
-				defaultV = defaultX == null ? null : parseValue(exS.getExpressoEnv(), type, defaultX);
+					defaultV = defaultX == null ? null : ExpressoBaseV0_1.parseValue(exS.getExpressoEnv(), type, defaultX);
 				if (format != null)
 					exS.getExpressoEnv().removeNonStructuredParser(TypeTokens.getRawType(type), nsp);
 			} else
@@ -345,7 +346,8 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 				}
 			};
 		}).createWith("sorted-map", Expresso.ConfigModelValue.class, session -> {
-			throw new QonfigInterpretationException("config-based sorted-maps are not yet supported");
+			throw new QonfigInterpretationException("config-based sorted-maps are not yet supported",
+				session.getElement().getPositionInFile(), 0);
 		}).createWith("multi-map", Expresso.ConfigModelValue.class, session -> {
 			ExpressoQIS exS = wrap(session);
 			return new Expresso.ConfigModelValue<ObservableMultiMap<?, ?>, ObservableMultiMap<Object, Object>>() {
@@ -378,7 +380,8 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 				}
 			};
 		}).createWith("sorted-multi-map", Expresso.ConfigModelValue.class, session -> {
-			throw new QonfigInterpretationException("config-based sorted-multi-maps are not yet supported");
+			throw new QonfigInterpretationException("config-based sorted-multi-maps are not yet supported",
+				session.getElement().getPositionInFile(), 0);
 		});
 	}
 
@@ -1181,12 +1184,16 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		session.put(ExpressoBaseV0_1.VALUE_TYPE_KEY, TypeTokens.get().of(Instant.class));
 		String dayFormat = session.getAttributeText("day-format");
 		TimeEvaluationOptions options = TimeUtils.DEFAULT_OPTIONS;
+		QonfigAttributeDef tzAttr = session.getAttributeDef(null, null, "time-zone");
 		String tzs = session.getAttributeText("time-zone");
 		if (tzs != null) {
 			TimeZone timeZone = TimeZone.getTimeZone(tzs);
 			if (timeZone.getRawOffset() == 0 && !timeZone.useDaylightTime()//
-				&& !(tzs.equalsIgnoreCase("GMT") || tzs.equalsIgnoreCase("Z")))
-				throw new QonfigInterpretationException("Unrecognized time-zone '" + tzs + "'");
+				&& !(tzs.equalsIgnoreCase("GMT") || tzs.equalsIgnoreCase("Z"))) {
+				QonfigValue tzAttrV = session.getElement().getAttributes().get(tzAttr);
+				throw new QonfigInterpretationException("Unrecognized time-zone '" + tzs + "'",
+					new LocatedFilePosition(tzAttrV.fileLocation, tzAttrV.position.getPosition(0)), tzs.length());
+			}
 			options = options.withTimeZone(timeZone);
 		}
 		try {
@@ -1415,6 +1422,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 				}
 			}
 			ValueContainer<SettableValue<?>, SettableValue<String>> fFilter = filter;
+			session.interpretLocalModel();
 			return new Validation<V>() {
 				@Override
 				public Function<V, String> getTest(ModelSetInstance models) {

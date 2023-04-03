@@ -23,7 +23,7 @@ public class ExpressoTests extends AbstractExpressoTest<Expresso> {
 	 * @throws QonfigEvaluationException If an error occurs executing the test
 	 */
 	@Test
-	public void testConstant() throws QonfigEvaluationException {
+	public void testConstant() throws ExpressoInterpretationException, ModelInstantiationException {
 		getTesting().executeTest("constant");
 	}
 
@@ -33,7 +33,7 @@ public class ExpressoTests extends AbstractExpressoTest<Expresso> {
 	 * @throws QonfigEvaluationException If an error occurs executing the test
 	 */
 	@Test
-	public void testSimpleValue() throws QonfigEvaluationException {
+	public void testSimpleValue() throws ExpressoInterpretationException, ModelInstantiationException {
 		getTesting().executeTest("simpleValue");
 	}
 
@@ -43,7 +43,7 @@ public class ExpressoTests extends AbstractExpressoTest<Expresso> {
 	 * @throws QonfigEvaluationException If an error occurs executing the test
 	 */
 	@Test
-	public void testDerivedValue() throws QonfigEvaluationException {
+	public void testDerivedValue() throws ExpressoInterpretationException, ModelInstantiationException {
 		getTesting().executeTest("derivedValue");
 	}
 
@@ -53,7 +53,7 @@ public class ExpressoTests extends AbstractExpressoTest<Expresso> {
 	 * @throws QonfigEvaluationException If an error occurs executing the test
 	 */
 	@Test
-	public void testList() throws QonfigEvaluationException {
+	public void testList() throws ExpressoInterpretationException, ModelInstantiationException {
 		getTesting().executeTest("list");
 	}
 
@@ -63,7 +63,7 @@ public class ExpressoTests extends AbstractExpressoTest<Expresso> {
 	 * @throws QonfigEvaluationException If an error occurs executing the test
 	 */
 	@Test
-	public void testMapTo() throws QonfigEvaluationException {
+	public void testMapTo() throws ExpressoInterpretationException, ModelInstantiationException {
 		getTesting().executeTest("mapTo");
 	}
 
@@ -73,7 +73,7 @@ public class ExpressoTests extends AbstractExpressoTest<Expresso> {
 	 * @throws QonfigEvaluationException If an error occurs executing the test
 	 */
 	@Test
-	public void testSort() throws QonfigEvaluationException {
+	public void testSort() throws ExpressoInterpretationException, ModelInstantiationException {
 		getTesting().executeTest("sort");
 	}
 
@@ -83,7 +83,7 @@ public class ExpressoTests extends AbstractExpressoTest<Expresso> {
 	 * @throws QonfigEvaluationException If an error occurs executing the test
 	 */
 	@Test
-	public void testAssignInt() throws QonfigEvaluationException {
+	public void testAssignInt() throws ExpressoInterpretationException, ModelInstantiationException {
 		getTesting().executeTest("assignInt");
 	}
 
@@ -93,7 +93,7 @@ public class ExpressoTests extends AbstractExpressoTest<Expresso> {
 	 * @throws QonfigEvaluationException If an error occurs executing the test
 	 */
 	@Test
-	public void testAssignInstant() throws QonfigEvaluationException {
+	public void testAssignInstant() throws ExpressoInterpretationException, ModelInstantiationException {
 		getTesting().executeTest("assignInstant");
 	}
 
@@ -103,7 +103,7 @@ public class ExpressoTests extends AbstractExpressoTest<Expresso> {
 	 * @throws QonfigEvaluationException If an error occurs executing the test
 	 */
 	@Test
-	public void testStaticInternalState() throws QonfigEvaluationException {
+	public void testStaticInternalState() throws ExpressoInterpretationException, ModelInstantiationException {
 		getTesting().executeTest("staticInternalState");
 	}
 
@@ -113,7 +113,7 @@ public class ExpressoTests extends AbstractExpressoTest<Expresso> {
 	 * @throws QonfigEvaluationException If an error occurs executing the test
 	 */
 	@Test
-	public void testDynamicTypeInternalState() throws QonfigEvaluationException {
+	public void testDynamicTypeInternalState() throws ExpressoInterpretationException, ModelInstantiationException {
 		getTesting().executeTest("dynamicTypeInternalState");
 	}
 
@@ -123,7 +123,7 @@ public class ExpressoTests extends AbstractExpressoTest<Expresso> {
 	 * @throws QonfigEvaluationException If an error occurs executing the test
 	 */
 	@Test
-	public void testDynamicTypeInternalState2() throws QonfigEvaluationException {
+	public void testDynamicTypeInternalState2() throws ExpressoInterpretationException, ModelInstantiationException {
 		getTesting().executeTest("dynamicTypeInternalState2");
 	}
 

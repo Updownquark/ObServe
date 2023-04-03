@@ -13,6 +13,7 @@ import org.observe.SettableValue;
 import org.observe.SimpleObservable;
 import org.observe.expresso.ExpressoEnv;
 import org.observe.expresso.ExpressoEvaluationException;
+import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
@@ -25,7 +26,6 @@ import org.qommons.QommonsUtils;
 import org.qommons.StringUtils;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterList;
-import org.qommons.config.QonfigEvaluationException;
 
 import com.google.common.reflect.TypeToken;
 
@@ -38,6 +38,7 @@ public class NameExpression implements ObservableExpression {
 	/**
 	 * @param ctx The expression representing the object the model in which to get the value
 	 * @param names The subsequent names in the expression
+	 * @param nameOffsets The starting position of each name in this expression in the root sequence
 	 */
 	public NameExpression(ObservableExpression ctx, BetterList<String> names, int[] nameOffsets) {
 		theContext = ctx;
@@ -55,6 +56,7 @@ public class NameExpression implements ObservableExpression {
 		return theNames;
 	}
 
+	/** @return The starting position of each name in this expression in the root sequence */
 	public int[] getNameOffsets() {
 		return theNameOffsets.clone();
 	}
@@ -96,10 +98,14 @@ public class NameExpression implements ObservableExpression {
 
 	@Override
 	public <M, MV extends M> ObservableModelSet.ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env)
-		throws ExpressoEvaluationException {
+		throws ExpressoEvaluationException, ExpressoInterpretationException {
 		ValueContainer<?, ?> mv = null;
 		if (theContext != null) {
-			mv = theContext.evaluate(ModelTypes.Value.any(), env);
+			try {
+				mv = theContext.evaluate(ModelTypes.Value.any(), env);
+			} catch (TypeConversionException e) {
+				throw new ExpressoEvaluationException(theContext.getExpressionOffset(), theContext.getExpressionEnd(), e.getMessage(), e);
+			}
 			return evaluateModel(//
 				mv, 0, new StringBuilder(), type, env.getModels());
 		} else {
@@ -149,7 +155,7 @@ public class NameExpression implements ObservableExpression {
 		ModelInstanceType<?, ?> mvType;
 		try {
 			mvType = mv.getType();
-		} catch (QonfigEvaluationException e) {
+		} catch (ExpressoInterpretationException e) {
 			throw new ExpressoEvaluationException(getExpressionOffset(),
 				theNameOffsets[nameIndex - 1] + theNames.get(nameIndex).length(), e.getMessage(), e);
 		}
@@ -204,7 +210,7 @@ public class NameExpression implements ObservableExpression {
 			else {
 				try {
 					return getFieldValue(field, fieldType, context, TypeTokens.get().WILDCARD, nameIndex).as(type);
-				} catch (QonfigEvaluationException | TypeConversionException e) {
+				} catch (ExpressoInterpretationException | TypeConversionException e) {
 					throw new ExpressoEvaluationException(getExpressionOffset(), getExpressionEnd(), e.getMessage(), e);
 				}
 			}
@@ -250,7 +256,7 @@ public class NameExpression implements ObservableExpression {
 			msi -> new FieldValue<>(context == null ? null : context.get(msi), field, fieldType));
 		try {
 			return fieldValue.as(targetModelType);
-		} catch (QonfigEvaluationException | TypeConversionException e) {
+		} catch (ExpressoInterpretationException | TypeConversionException e) {
 			throw new ExpressoEvaluationException(getExpressionOffset(), theNameOffsets[nameIndex] + theNames.get(nameIndex).length(),
 				e.getMessage(), e);
 		}

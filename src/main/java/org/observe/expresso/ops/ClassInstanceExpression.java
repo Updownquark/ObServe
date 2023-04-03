@@ -21,7 +21,11 @@ public class ClassInstanceExpression implements ObservableExpression {
 	private final int theOffset;
 	private final int theEnd;
 
-	/** @param type The name of the type to get the class value for */
+	/**
+	 * @param type The name of the type to get the class value for
+	 * @param offset The offset position of the start of this expression
+	 * @param end The offset position of the end of this expression
+	 */
 	public ClassInstanceExpression(String type, int offset, int end) {
 		theType = type;
 		theOffset = offset;

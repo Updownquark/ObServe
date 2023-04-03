@@ -18,7 +18,6 @@ import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ObservableModelSet.ExtValueRef.ExtValueCreator;
-import org.observe.expresso.ObservableModelSet.ExternalModelSet;
 import org.observe.util.TypeTokens;
 import org.qommons.BreakpointHere;
 import org.qommons.Identifiable;
@@ -27,11 +26,9 @@ import org.qommons.Named;
 import org.qommons.QommonsUtils;
 import org.qommons.StringUtils;
 import org.qommons.collect.BetterList;
-import org.qommons.config.QonfigEvaluationException;
-import org.qommons.config.QonfigFilePosition;
-import org.qommons.config.QonfigInterpretationException;
 import org.qommons.ex.ExConsumer;
 import org.qommons.ex.ExFunction;
+import org.qommons.io.LocatedFilePosition;
 
 import com.google.common.reflect.TypeToken;
 
@@ -63,8 +60,11 @@ public interface ObservableModelSet extends Identifiable {
 	 * @param <MV> The type of the value
 	 */
 	public interface ValueCreator<M, MV extends M> {
-		/** @return The created value container */
-		ValueContainer<M, MV> createContainer() throws QonfigEvaluationException;
+		/**
+		 * @return The created value container
+		 * @throws ExpressoInterpretationException If this value could not be interpreted
+		 */
+		ValueContainer<M, MV> createContainer() throws ExpressoInterpretationException;
 
 		/**
 		 * @param <M> The model type of the value
@@ -119,7 +119,7 @@ public interface ObservableModelSet extends Identifiable {
 		static <M, MV extends M> ValueCreator<M, MV> name(Supplier<String> name, ValueCreator<M, MV> creator) {
 			return new ValueCreator<M, MV>() {
 				@Override
-				public ValueContainer<M, MV> createContainer() throws QonfigEvaluationException {
+				public ValueContainer<M, MV> createContainer() throws ExpressoInterpretationException {
 					return creator.createContainer();
 				}
 
@@ -173,18 +173,36 @@ public interface ObservableModelSet extends Identifiable {
 	 * @param <MV> The type of the value
 	 */
 	public interface ValueContainer<M, MV extends M> {
-		default BuiltValueContainer<M, MV> evaluate() throws QonfigEvaluationException {
-			return new BuiltValueContainer.SimpleWrapper<>(this);
+		/**
+		 * Creates an {@link IdentifableValueCreator} from this value container, which has been pre-interpreted and cannot throw
+		 * {@link ExpressoInterpretationException}s.
+		 *
+		 * @return The interpreted value container
+		 * @throws ExpressoInterpretationException If this value cannot be interpreted
+		 */
+		default InterpretedValueContainer<M, MV> interpret() throws ExpressoInterpretationException {
+			return new InterpretedValueContainer.SimpleWrapper<>(this);
 		}
 
-		/** @return The type of the value */
-		ModelInstanceType<M, MV> getType() throws QonfigEvaluationException;
+		/**
+		 * @return The type of the value
+		 * @throws ExpressoInterpretationException If ths value cannot be interpreted
+		 */
+		ModelInstanceType<M, MV> getType() throws ExpressoInterpretationException;
 
 		/**
 		 * @param models The model instance set to get the model value for this container from
 		 * @return The model value for this container in the given model instance set
+		 * @throws ModelInstantiationException If this value could not be instantiated
+		 * @throws IllegalStateException If this value is a part of a dependency cycle, depending on values that depend upon it
 		 */
 		MV get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException;
+
+		/**
+		 * @return All the self-sufficient containers that compose this value container
+		 * @throws ExpressoInterpretationException If this value cannot be interpreted
+		 */
+		BetterList<ValueContainer<?, ?>> getCores() throws ExpressoInterpretationException;
 
 		/**
 		 * @param value The value to copy
@@ -193,23 +211,22 @@ public interface ObservableModelSet extends Identifiable {
 		 * @return A copy of the given value for the new model instance. Often this will be exactly the source <code>value</code>, but if
 		 *         the value is a composite of values that have been replaced in the target models, the return value will be a re-built
 		 *         composite using the copied components.
+		 * @throws ModelInstantiationException If the value could not be copied
 		 */
 		MV forModelCopy(MV value, ModelSetInstance sourceModels, ModelSetInstance newModels)
-			throws ModelInstantiationException, IllegalStateException;
-
-		/** @return All the self-sufficient containers that compose this value container */
-		BetterList<ValueContainer<?, ?>> getCores() throws QonfigEvaluationException;
+			throws ModelInstantiationException;
 
 		/**
 		 * @param <M2> The model type to convert to
 		 * @param <MV2> The type to convert to
 		 * @param type The type to convert to
 		 * @return This value, converted to the given type
+		 * @throws ExpressoInterpretationException If this value could not be interpreted
 		 * @throws TypeConversionException If the conversion to the given type is not possible
 		 */
-		default <M2, MV2 extends M2> BuiltValueContainer<M2, MV2> as(ModelInstanceType<M2, MV2> type)
-			throws QonfigEvaluationException, TypeConversionException {
-			return evaluate().as(type);
+		default <M2, MV2 extends M2> InterpretedValueContainer<M2, MV2> as(ModelInstanceType<M2, MV2> type)
+			throws ExpressoInterpretationException, TypeConversionException {
+			return interpret().as(type);
 		}
 
 		/**
@@ -250,6 +267,7 @@ public interface ObservableModelSet extends Identifiable {
 				return theSource;
 			}
 
+
 			@Override
 			public MV2 get(ModelSetInstance models) throws ModelInstantiationException {
 				return theMap.apply(theSource.get(models), models);
@@ -266,7 +284,7 @@ public interface ObservableModelSet extends Identifiable {
 			}
 
 			@Override
-			public BetterList<ValueContainer<?, ?>> getCores() throws QonfigEvaluationException {
+			public BetterList<ValueContainer<?, ?>> getCores() throws ExpressoInterpretationException {
 				return theSource.getCores();
 			}
 
@@ -300,7 +318,7 @@ public interface ObservableModelSet extends Identifiable {
 			}
 
 			@Override
-			public ModelInstanceType<M, MV> getType() throws QonfigEvaluationException {
+			public ModelInstanceType<M, MV> getType() throws ExpressoInterpretationException {
 				return theSource.getType();
 			}
 
@@ -317,7 +335,7 @@ public interface ObservableModelSet extends Identifiable {
 			}
 
 			@Override
-			public BetterList<ValueContainer<?, ?>> getCores() throws QonfigEvaluationException {
+			public BetterList<ValueContainer<?, ?>> getCores() throws ExpressoInterpretationException {
 				return theSource.getCores();
 			}
 
@@ -344,9 +362,9 @@ public interface ObservableModelSet extends Identifiable {
 		 * @param text The text to represent the value
 		 * @return A ValueContainer that always produces a constant value for the given value
 		 */
-		static <T> BuiltValueContainer<SettableValue<?>, SettableValue<T>> literal(
+		static <T> InterpretedValueContainer<SettableValue<?>, SettableValue<T>> literal(
 			ModelInstanceType<SettableValue<?>, SettableValue<T>> type, T value, String text) {
-			return new BuiltValueContainer<SettableValue<?>, SettableValue<T>>() {
+			return new InterpretedValueContainer<SettableValue<?>, SettableValue<T>>() {
 				private final SettableValue<T> theValue = ObservableModelSet.literal((TypeToken<T>) type.getType(0), value, text);
 
 				@Override
@@ -383,8 +401,8 @@ public interface ObservableModelSet extends Identifiable {
 		 * @param text The text to represent the value
 		 * @return A ValueContainer that always produces a constant value for the given value
 		 */
-		static <T> ObservableModelSet.ValueContainer<SettableValue<?>, SettableValue<T>> literal(TypeToken<T> type, T value, String text) {
-			return new BuiltValueContainer<SettableValue<?>, SettableValue<T>>() {
+		static <T> InterpretedValueContainer<SettableValue<?>, SettableValue<T>> literal(TypeToken<T> type, T value, String text) {
+			return new InterpretedValueContainer<SettableValue<?>, SettableValue<T>>() {
 				private final SettableValue<T> theValue = ObservableModelSet.literal(type, value, text);
 
 				@Override
@@ -421,9 +439,9 @@ public interface ObservableModelSet extends Identifiable {
 		 * @param value Produces the value from a model instance set
 		 * @return A value container with the given type, implemented by the given function
 		 */
-		static <M, MV extends M> ValueContainer<M, MV> of(ModelInstanceType<M, MV> type,
+		static <M, MV extends M> InterpretedValueContainer<M, MV> of(ModelInstanceType<M, MV> type,
 			ExFunction<ModelSetInstance, MV, ModelInstantiationException> value) {
-			class SimpleVC implements BuiltValueContainer<M, MV> {
+			class SimpleVC implements InterpretedValueContainer<M, MV> {
 				@Override
 				public ModelInstanceType<M, MV> getType() {
 					return type;
@@ -454,9 +472,13 @@ public interface ObservableModelSet extends Identifiable {
 		}
 	}
 
-	public interface BuiltValueContainer<M, MV extends M> extends ValueContainer<M, MV> {
+	/**
+	 * A {@link ValueContainer} that has already been interpreted, so that its methods no longer need to throw
+	 * {@link ExpressoInterpretationException}
+	 */
+	public interface InterpretedValueContainer<M, MV extends M> extends ValueContainer<M, MV> {
 		@Override
-		default BuiltValueContainer<M, MV> evaluate() {
+		default InterpretedValueContainer<M, MV> interpret() {
 			return this;
 		}
 
@@ -467,41 +489,43 @@ public interface ObservableModelSet extends Identifiable {
 		BetterList<ValueContainer<?, ?>> getCores();
 
 		@Override
-		default <M2, MV2 extends M2> BuiltValueContainer<M2, MV2> as(ModelInstanceType<M2, MV2> type) throws TypeConversionException {
+		default <M2, MV2 extends M2> InterpretedValueContainer<M2, MV2> as(ModelInstanceType<M2, MV2> type) throws TypeConversionException {
 			return getType().as(this, type);
 		}
 
 		@Override
-		default <M2, MV2 extends M2> BuiltValueContainer<M2, MV2> map(ModelInstanceType<M2, MV2> type,
+		default <M2, MV2 extends M2> InterpretedValueContainer<M2, MV2> map(ModelInstanceType<M2, MV2> type,
 			Function<? super MV, ? extends MV2> map) {
-			return (BuiltValueContainer<M2, MV2>) ValueContainer.super.map(type, map);
+			return (InterpretedValueContainer<M2, MV2>) ValueContainer.super.map(type, map);
 		}
 
 		@Override
-		default <M2, MV2 extends M2> BuiltValueContainer<M2, MV2> map(ModelInstanceType<M2, MV2> type,
+		default <M2, MV2 extends M2> InterpretedValueContainer<M2, MV2> map(ModelInstanceType<M2, MV2> type,
 			BiFunction<? super MV, ModelSetInstance, ? extends MV2> map) {
 			return new MappedBVC<>(this, type, map);
 		}
 
-		class MappedBVC<M, MV extends M, M2, MV2 extends M2> extends MappedVC<M, MV, M2, MV2> implements BuiltValueContainer<M2, MV2> {
-			public MappedBVC(BuiltValueContainer<M, MV> source, ModelInstanceType<M2, MV2> type,
+		class MappedBVC<M, MV extends M, M2, MV2 extends M2> extends MappedVC<M, MV, M2, MV2>
+		implements InterpretedValueContainer<M2, MV2> {
+			public MappedBVC(InterpretedValueContainer<M, MV> source, ModelInstanceType<M2, MV2> type,
 				BiFunction<? super MV, ModelSetInstance, ? extends MV2> map) {
 				super(source, type, map);
 			}
 
 			@Override
-			protected BuiltValueContainer<M, MV> getSource() {
-				return (BuiltValueContainer<M, MV>) super.getSource();
+			protected InterpretedValueContainer<M, MV> getSource() {
+				return (InterpretedValueContainer<M, MV>) super.getSource();
 			}
 
 			@Override
-			public BuiltValueContainer<M2, MV2> evaluate() {
-				return BuiltValueContainer.super.evaluate();
+			public InterpretedValueContainer<M2, MV2> interpret() {
+				return InterpretedValueContainer.super.interpret();
 			}
 
 			@Override
-			public <M3, MV3 extends M3> BuiltValueContainer<M3, MV3> as(ModelInstanceType<M3, MV3> type) throws TypeConversionException {
-				return BuiltValueContainer.super.as(type);
+			public <M3, MV3 extends M3> InterpretedValueContainer<M3, MV3> as(ModelInstanceType<M3, MV3> type)
+				throws TypeConversionException {
+				return InterpretedValueContainer.super.as(type);
 			}
 
 			@Override
@@ -511,20 +535,20 @@ public interface ObservableModelSet extends Identifiable {
 		}
 
 		@Override
-		default BuiltValueContainer<M, MV> wrapModels(
+		default InterpretedValueContainer<M, MV> wrapModels(
 			ExFunction<ModelSetInstance, ModelSetInstance, ModelInstantiationException> modelWrapper) {
 			return new MappedMWVC<>(this, modelWrapper);
 		}
 
-		class MappedMWVC<M, MV extends M> extends ModelWrappedVC<M, MV> implements BuiltValueContainer<M, MV> {
-			public MappedMWVC(BuiltValueContainer<M, MV> source,
+		class MappedMWVC<M, MV extends M> extends ModelWrappedVC<M, MV> implements InterpretedValueContainer<M, MV> {
+			public MappedMWVC(InterpretedValueContainer<M, MV> source,
 				ExFunction<ModelSetInstance, ModelSetInstance, ModelInstantiationException> modelWrapper) {
 				super(source, modelWrapper);
 			}
 
 			@Override
-			protected BuiltValueContainer<M, MV> getSource() {
-				return (BuiltValueContainer<M, MV>) super.getSource();
+			protected InterpretedValueContainer<M, MV> getSource() {
+				return (InterpretedValueContainer<M, MV>) super.getSource();
 			}
 
 			@Override
@@ -538,10 +562,10 @@ public interface ObservableModelSet extends Identifiable {
 			}
 		}
 
-		public static class SimpleWrapper<M, MV extends M> implements BuiltValueContainer<M, MV> {
+		public static class SimpleWrapper<M, MV extends M> implements InterpretedValueContainer<M, MV> {
 			private final ValueContainer<M, MV> theContainer;
 
-			public SimpleWrapper(ValueContainer<M, MV> container) throws QonfigEvaluationException {
+			public SimpleWrapper(ValueContainer<M, MV> container) throws ExpressoInterpretationException {
 				container.getType();
 				theContainer = container;
 			}
@@ -550,7 +574,7 @@ public interface ObservableModelSet extends Identifiable {
 			public ModelInstanceType<M, MV> getType() {
 				try {
 					return theContainer.getType();
-				} catch (QonfigEvaluationException e) {
+				} catch (ExpressoInterpretationException e) {
 					throw new IllegalStateException(e);
 				}
 			}
@@ -570,7 +594,7 @@ public interface ObservableModelSet extends Identifiable {
 			public BetterList<ValueContainer<?, ?>> getCores() {
 				try {
 					return theContainer.getCores();
-				} catch (QonfigEvaluationException e) {
+				} catch (ExpressoInterpretationException e) {
 					throw new IllegalStateException(e);
 				}
 			}
@@ -679,8 +703,9 @@ public interface ObservableModelSet extends Identifiable {
 		 * @param modelSet The model set instance to create the value for
 		 * @param extModels The external model set to retrieve the value from
 		 * @return The value to use for this component for the model set instance
+		 * @throws ModelInstantiationException If this node's model value could not be created
 		 */
-		MV create(ModelSetInstance modelSet, ExternalModelSet extModels) throws QonfigEvaluationException, ModelInstantiationException;
+		MV create(ModelSetInstance modelSet, ExternalModelSet extModels) throws ModelInstantiationException;
 
 		/**
 		 * @return One of:
@@ -700,18 +725,28 @@ public interface ObservableModelSet extends Identifiable {
 		 */
 		Object getThing();
 
-		ValueContainer<M, MV> getValue() throws QonfigEvaluationException;
+		/**
+		 * @return This node's value container
+		 * @throws ExpressoInterpretationException If the container could not be {@link ValueCreator#createContainer() created}
+		 */
+		ValueContainer<M, MV> getValue() throws ExpressoInterpretationException;
 	}
 
-	public interface BuiltModelComponentNode<M, MV extends M> extends ModelComponentNode<M, MV>, BuiltValueContainer<M, MV> {
+	/**
+	 * A {@link ModelComponentNode} that has been {@link InterpretedValueContainer interpreted}
+	 *
+	 * @param <M> The model type of this node
+	 * @param <MV> The instance type of this node
+	 */
+	public interface InterpretedModelComponentNode<M, MV extends M> extends ModelComponentNode<M, MV>, InterpretedValueContainer<M, MV> {
 		@Override
 		MV create(ModelSetInstance modelSet, ExternalModelSet extModels) throws ModelInstantiationException;
 
 		@Override
-		Built getModel();
+		InterpretedModelSet getModel();
 
 		@Override
-		BuiltValueContainer<M, MV> getValue();
+		InterpretedValueContainer<M, MV> getValue();
 	}
 
 	/** Checks names of model components to ensure they are accessible as identifiers from expressions */
@@ -776,6 +811,10 @@ public interface ObservableModelSet extends Identifiable {
 		/**
 		 * @param extModels The external model set to get the value from
 		 * @return The value represented by this reference in the given external model set
+		 * @throws ModelException If this reference is not specified by the given model set
+		 * @throws TypeConversionException If the corresponding component of the given model set cannot be converted to this reference's
+		 *         type
+		 * @throws ModelInstantiationException If the corresponding component of the given model set could not be instantiated
 		 */
 		MV get(ExternalModelSet extModels) throws ModelException, TypeConversionException, ModelInstantiationException;
 
@@ -785,19 +824,25 @@ public interface ObservableModelSet extends Identifiable {
 		 *
 		 * @param models The model set to use to get the default value for this unsatisfied external reference
 		 * @return The default value for this external reference, or null if this reference does not specify a default value
+		 * @throws ModelException If the default for this reference is not specified by the given model set
+		 * @throws TypeConversionException If the corresponding component of the given model set cannot be converted to this reference's
+		 *         type
+		 * @throws ModelInstantiationException If the corresponding component of the given model set could not be instantiated
 		 */
 		MV getDefault(ModelSetInstance models) throws ModelException, TypeConversionException, ModelInstantiationException;
 
-		QonfigFilePosition getFilePosition();
+		/** @return This reference's location in its source file */
+		LocatedFilePosition getFilePosition();
 
 		/**
 		 * @param <M> The model type for the reference
 		 * @param <MV> The type for the reference
 		 * @param type The type for the reference
+		 * @param filePosition The location of the reference in its source file
 		 * @param value Retrieves the external value from the external model set
 		 * @return The external reference
 		 */
-		public static <M, MV extends M> ExtValueRef<M, MV> of(ModelInstanceType<M, MV> type, QonfigFilePosition filePosition,
+		public static <M, MV extends M> ExtValueRef<M, MV> of(ModelInstanceType<M, MV> type, LocatedFilePosition filePosition,
 			ExtValueCreator<ExternalModelSet, MV> value) {
 			return of(type, filePosition, value, null);
 		}
@@ -810,11 +855,12 @@ public interface ObservableModelSet extends Identifiable {
 		 * @param <M> The model type for the reference
 		 * @param <MV> The type for the reference
 		 * @param type The type for the reference
+		 * @param filePosition The location of the reference in its source file
 		 * @param value Retrieves the external value from the external model set
 		 * @param defaultValue Retrieves or constructs a default value for the external reference (may be null)
 		 * @return The external reference
 		 */
-		public static <M, MV extends M> ExtValueRef<M, MV> of(ModelInstanceType<M, MV> type, QonfigFilePosition filePosition,
+		public static <M, MV extends M> ExtValueRef<M, MV> of(ModelInstanceType<M, MV> type, LocatedFilePosition filePosition,
 			ExtValueCreator<ExternalModelSet, MV> value, ExtValueCreator<ModelSetInstance, MV> defaultValue) {
 			class SimpleEVR implements ExtValueRef<M, MV> {
 				@Override
@@ -823,7 +869,7 @@ public interface ObservableModelSet extends Identifiable {
 				}
 
 				@Override
-				public QonfigFilePosition getFilePosition() {
+				public LocatedFilePosition getFilePosition() {
 					return filePosition;
 				}
 
@@ -882,8 +928,9 @@ public interface ObservableModelSet extends Identifiable {
 	}
 
 	/**
-	 * A tag on a model set. This tag is not used by the {@link ObservableModelSet#createInstance(ExternalModelSet, Observable) instance},
-	 * but just serves as a marker on the model set itself.
+	 * A tag on a model set. This tag is not used by the
+	 * {@link ObservableModelSet.InterpretedModelSet#createInstance(ObservableModelSet.ExternalModelSet, Observable) instance}, but just
+	 * serves as a marker on the model set itself.
 	 *
 	 * @param <T> The type of values for the tag
 	 */
@@ -1095,7 +1142,7 @@ public interface ObservableModelSet extends Identifiable {
 	/**
 	 * @param path The dot-separated path of the sub-model to get
 	 * @return The node representing the target sub-model
-	 * @throws QonfigInterpretationException If no such sub-model exists accessible to this model
+	 * @throws ModelException If no such sub-model exists accessible to this model
 	 */
 	default ObservableModelSet getSubModel(String path) throws ModelException {
 		ObservableModelSet refModel = this;
@@ -1146,11 +1193,11 @@ public interface ObservableModelSet extends Identifiable {
 	 * @param type The type of the value to get
 	 * @return The container of the value in this model at the given path, converted to the given type if needed
 	 * @throws ModelException If no such value exists accessible at the given path
-	 * @throws QonfigEvaluationException If the value at the path could not be evaluated
+	 * @throws ExpressoInterpretationException If the value at the path could not be evaluated
 	 * @throws TypeConversionException If the value at the path could not be converted to the target type
 	 */
-	default <M, MV extends M> BuiltValueContainer<M, MV> getValue(String path, ModelInstanceType<M, MV> type)
-		throws ModelException, QonfigEvaluationException, TypeConversionException {
+	default <M, MV extends M> InterpretedValueContainer<M, MV> getValue(String path, ModelInstanceType<M, MV> type)
+		throws ModelException, ExpressoInterpretationException, TypeConversionException {
 		ModelComponentNode<Object, Object> node = (ModelComponentNode<Object, Object>) getComponent(path);
 		if (node.getModel() != null)
 			throw new ModelException("'" + path + "' is a sub-model, not a value");
@@ -1184,7 +1231,7 @@ public interface ObservableModelSet extends Identifiable {
 	}
 
 	/**
-	 * Builds a new {@link ExternalModelSet}
+	 * Builds a new {@link ObservableModelSet.ExternalModelSet}
 	 *
 	 * @param nameChecker The {@link ObservableModelSet#getNameChecker() name checker} for the new model
 	 * @return A builder for the new external model set
@@ -1206,13 +1253,13 @@ public interface ObservableModelSet extends Identifiable {
 		<T> Builder withTagValue(ModelTag<T> tag, T value);
 
 		/**
-		 * Declares a dependency on a value from an {@link ExternalModelSet}
+		 * Declares a dependency on a value from an {@link ObservableModelSet.ExternalModelSet}
 		 *
 		 * @param <M> The model type of the value
 		 * @param <MV> The type of the value
 		 * @param name The name of the value in this model set
-		 * @param extGetter The reference to retrieve the value from an {@link ExternalModelSet} passed to
-		 *        {@link Built#createInstance(ExternalModelSet, Observable)}
+		 * @param extGetter The reference to retrieve the value from an {@link ObservableModelSet.ExternalModelSet} passed to
+		 *        {@link InterpretedModelSet#createInstance(ObservableModelSet.ExternalModelSet, Observable)}
 		 * @return This builder
 		 */
 		<M, MV extends M> Builder withExternal(String name, ExtValueRef<M, MV> extGetter);
@@ -1255,34 +1302,37 @@ public interface ObservableModelSet extends Identifiable {
 		Builder withAll(ObservableModelSet other);
 
 		/**
-		 * Declares a dependency on a value from an {@link ExternalModelSet}
+		 * Declares a dependency on a value from an {@link ObservableModelSet.ExternalModelSet}
 		 *
 		 * @param <M> The model type of the value
 		 * @param <MV> The type of the value
 		 * @param name The name of the value in this model set
 		 * @param type The type of the external value
-		 * @param value The function to retrieve the value from an {@link ExternalModelSet} passed to
-		 *        {@link Built#createInstance(ExternalModelSet, Observable)}
+		 * @param filePosition The file position of the external reference
+		 * @param value The function to retrieve the value from an {@link ObservableModelSet.ExternalModelSet} passed to
+		 *        {@link ObservableModelSet.InterpretedModelSet#createInstance(ObservableModelSet.ExternalModelSet, Observable)}
 		 * @return This builder
 		 */
-		default <M, MV extends M> Builder withExternal(String name, ModelInstanceType<M, MV> type, QonfigFilePosition filePosition,
+		default <M, MV extends M> Builder withExternal(String name, ModelInstanceType<M, MV> type, LocatedFilePosition filePosition,
 			ExtValueCreator<ExternalModelSet, MV> value) {
 			return withExternal(name, ExtValueRef.of(type, filePosition, value));
 		}
 
 		/**
-		 * Declares a dependency on a value from an {@link ExternalModelSet}
+		 * Declares a dependency on a value from an {@link ObservableModelSet.ExternalModelSet}
 		 *
 		 * @param <M> The model type of the value
 		 * @param <MV> The type of the value
 		 * @param name The name of the value in this model set
 		 * @param type The type of the external value
-		 * @param value The function to retrieve the value from an {@link ExternalModelSet} passed to
-		 *        {@link Built#createInstance(ExternalModelSet, Observable)}
-		 * @param defaultValue Produces a default value if there is no such reference in the {@link ExternalModelSet} (may be null)
+		 * @param filePosition The file position of the external reference
+		 * @param value The function to retrieve the value from an {@link ObservableModelSet.ExternalModelSet} passed to
+		 *        {@link ObservableModelSet.InterpretedModelSet#createInstance(ObservableModelSet.ExternalModelSet, Observable)}
+		 * @param defaultValue Produces a default value if there is no such reference in the {@link ObservableModelSet.ExternalModelSet}
+		 *        (may be null)
 		 * @return This builder
 		 */
-		default <M, MV extends M> Builder withExternal(String name, ModelInstanceType<M, MV> type, QonfigFilePosition filePosition,
+		default <M, MV extends M> Builder withExternal(String name, ModelInstanceType<M, MV> type, LocatedFilePosition filePosition,
 			ExtValueCreator<ExternalModelSet, MV> value, ExtValueCreator<ModelSetInstance, MV> defaultValue) {
 			return withExternal(name, ExtValueRef.of(type, filePosition, value, defaultValue));
 		}
@@ -1312,9 +1362,12 @@ public interface ObservableModelSet extends Identifiable {
 		}
 
 		/** @return The immutable {@link ObservableModelSet} configured with this builder */
-		Built build() throws QonfigEvaluationException;
+		Built build();
 	}
 
+	/**
+	 * An immutable {@link ObservableModelSet} {@link ObservableModelSet.Builder#build() build} from a {@link ObservableModelSet.Builder}
+	 */
 	public interface Built extends ObservableModelSet {
 		@Override
 		Built getParent();
@@ -1322,35 +1375,58 @@ public interface ObservableModelSet extends Identifiable {
 		@Override
 		Built getRoot();
 
+		/**
+		 * Interprets all of this model set's components
+		 *
+		 * @return An {@link ObservableModelSet.InterpretedModelSet} with all the components of this model set interpreted
+		 * @throws ExpressoInterpretationException If any of this model set's components could not be {@link ValueContainer#interpret()
+		 *         interpreted}
+		 */
+		InterpretedModelSet interpret() throws ExpressoInterpretationException;
+	}
+
+	/** An {@link ObservableModelSet} whose components are all {@link InterpretedModelComponentNode interpreted} */
+	public interface InterpretedModelSet extends Built {
 		@Override
-		Map<String, ? extends BuiltModelComponentNode<?, ?>> getComponents();
+		InterpretedModelSet getParent();
 
 		@Override
-		default BuiltModelComponentNode<?, ?> getComponentIfExists(String path) {
-			return (BuiltModelComponentNode<?, ?>) ObservableModelSet.super.getComponentIfExists(path);
+		InterpretedModelSet getRoot();
+
+		@Override
+		Map<String, ? extends InterpretedModelComponentNode<?, ?>> getComponents();
+
+		@Override
+		default InterpretedModelComponentNode<?, ?> getComponentIfExists(String path) {
+			return (InterpretedModelComponentNode<?, ?>) Built.super.getComponentIfExists(path);
 		}
 
 		@Override
-		default BuiltModelComponentNode<?, ?> getComponent(String path) throws ModelException {
-			return (BuiltModelComponentNode<?, ?>) ObservableModelSet.super.getComponent(path);
+		default InterpretedModelComponentNode<?, ?> getComponent(String path) throws ModelException {
+			return (InterpretedModelComponentNode<?, ?>) Built.super.getComponent(path);
 		}
 
 		@Override
-		Map<Object, ? extends BuiltModelComponentNode<?, ?>> getIdentifiedComponents();
+		Map<Object, ? extends InterpretedModelComponentNode<?, ?>> getIdentifiedComponents();
 
 		@Override
-		default BuiltModelComponentNode<?, ?> getIdentifiedValue(Object valueIdentifier) throws ModelException {
-			return (BuiltModelComponentNode<?, ?>) ObservableModelSet.super.getIdentifiedValue(valueIdentifier);
+		default InterpretedModelComponentNode<?, ?> getIdentifiedValue(Object valueIdentifier) throws ModelException {
+			return (InterpretedModelComponentNode<?, ?>) Built.super.getIdentifiedValue(valueIdentifier);
 		}
 
 		@Override
-		default <M, MV extends M> BuiltValueContainer<M, MV> getValue(String path, ModelInstanceType<M, MV> type)
+		default <M, MV extends M> InterpretedValueContainer<M, MV> getValue(String path, ModelInstanceType<M, MV> type)
 			throws ModelException, TypeConversionException {
 			try {
-				return ObservableModelSet.super.getValue(path, type);
-			} catch (QonfigEvaluationException e) {
+				return Built.super.getValue(path, type);
+			} catch (ExpressoInterpretationException e) {
 				throw new IllegalStateException("Should not be possible", e);
 			}
+		}
+
+		@Override
+		default InterpretedModelSet interpret() throws ExpressoInterpretationException {
+			return this;
 		}
 
 		/**
@@ -1381,7 +1457,9 @@ public interface ObservableModelSet extends Identifiable {
 	/** A set of actual values created by the containers declared in an {@link ObservableModelSet} */
 	public interface ModelSetInstance {
 		/**
-		 * @return The model set that this instance was {@link ObservableModelSet#createInstance(ExternalModelSet, Observable) created} for
+		 * @return The model set that this instance was
+		 *         {@link ObservableModelSet.InterpretedModelSet#createInstance(ObservableModelSet.ExternalModelSet, Observable) created}
+		 *         for
 		 */
 		ObservableModelSet getModel();
 
@@ -1393,10 +1471,14 @@ public interface ObservableModelSet extends Identifiable {
 		 * @param <MV> The type of the component to get the value for
 		 * @param component The component to get the value for
 		 * @return The model value in this model instance set for the given component
+		 * @throws ModelInstantiationException If the model component could not be instantiated
 		 */
 		<M, MV extends M> MV get(ModelComponentNode<M, MV> component) throws ModelInstantiationException;
 
-		/** @return A builder containing all of this model's data, but whose runtime components may be replaced */
+		/**
+		 * @return A builder containing all of this model's data, but whose runtime components may be replaced
+		 * @throws ModelInstantiationException If any of this model's components could not be copied
+		 */
 		ModelSetInstanceBuilder copy() throws ModelInstantiationException;
 	}
 
@@ -1418,16 +1500,22 @@ public interface ObservableModelSet extends Identifiable {
 		 * @param other The model instance set created for one of the {@link ObservableModelSet#getInheritance() inherited} models of the
 		 *        model that this instance set is being built for
 		 * @return This builder
+		 * @throws ModelInstantiationException If any of the components from the other model could not be copied into this one
 		 */
 		ModelSetInstanceBuilder withAll(ModelSetInstance other) throws ModelInstantiationException;
 
-		/** @return The model instance set configured with this builder */
+		/**
+		 * @return The model instance set configured with this builder
+		 * @throws ModelInstantiationException If any model components could not be instantiated
+		 */
 		ModelSetInstance build() throws ModelInstantiationException;
 	}
 
 	/**
-	 * A set of values supplied to {@link ObservableModelSet#createInstance(ExternalModelSet, Observable)} to satisfy placeholders installed
-	 * in the {@link ObservableModelSet} with {@link Builder#withExternal(String, ExtValueRef)} or another external value method
+	 * A set of values supplied to
+	 * {@link ObservableModelSet.InterpretedModelSet#createInstance(ObservableModelSet.ExternalModelSet, Observable)} to satisfy
+	 * placeholders installed in the {@link ObservableModelSet} with {@link Builder#withExternal(String, ExtValueRef)} or another external
+	 * value method
 	 */
 	public interface ExternalModelSet {
 		/**
@@ -1464,7 +1552,7 @@ public interface ObservableModelSet extends Identifiable {
 			throws ModelException, TypeConversionException, ModelInstantiationException;
 	}
 
-	/** Default {@link ExternalModelSet} implementation */
+	/** Default {@link ObservableModelSet.ExternalModelSet} implementation */
 	public class DefaultExternalModelSet implements ExternalModelSet {
 		final DefaultExternalModelSet theRoot;
 		private final String thePath;
@@ -1585,7 +1673,7 @@ public interface ObservableModelSet extends Identifiable {
 		}
 	}
 
-	/** Builds an {@link ExternalModelSet} */
+	/** Builds an {@link ObservableModelSet.ExternalModelSet} */
 	public class ExternalModelSetBuilder extends DefaultExternalModelSet {
 		ExternalModelSetBuilder(ExternalModelSetBuilder root, String path, NameChecker nameChecker) {
 			super(root, path, new LinkedHashMap<>(), nameChecker);
@@ -1641,7 +1729,7 @@ public interface ObservableModelSet extends Identifiable {
 			return subModel;
 		}
 
-		/** @return An {@link ExternalModelSet} configured with values from this builder */
+		/** @return An {@link ObservableModelSet.ExternalModelSet} configured with values from this builder */
 		public ExternalModelSet build() {
 			return _build(null, getPath());
 		}
@@ -1771,7 +1859,7 @@ public interface ObservableModelSet extends Identifiable {
 				String type;
 				try {
 					type = thing.getValue().getType().toString();
-				} catch (QonfigEvaluationException e) {
+				} catch (ExpressoInterpretationException e) {
 					type = e.toString();
 				}
 				str.append(thing.getKey()).append(": ").append(type);
@@ -1813,7 +1901,7 @@ public interface ObservableModelSet extends Identifiable {
 			}
 
 			@Override
-			public ModelInstanceType<M, MV> getType() throws QonfigEvaluationException {
+			public ModelInstanceType<M, MV> getType() throws ExpressoInterpretationException {
 				if (theCreator != null)
 					return getOfValue(v -> v.getType());
 				else if (theRuntimePlaceholder != null)
@@ -1827,7 +1915,7 @@ public interface ObservableModelSet extends Identifiable {
 			}
 
 			private <T, X extends Throwable> T getOfValue(ExFunction<ValueContainer<M, MV>, T, X> value)
-				throws QonfigEvaluationException, X {
+				throws ExpressoInterpretationException, X {
 				if (!theCycleChecker.add(this)) {
 					String depPath;
 					if (theCycleChecker.size() == 1)
@@ -1876,7 +1964,7 @@ public interface ObservableModelSet extends Identifiable {
 						if (value == null)
 							value = theExtRef.getDefault(modelSet);
 					} catch (ModelException | TypeConversionException e) {
-						throw new ModelInstantiationException(e, theExtRef.getFilePosition(), 0);
+						throw new ModelInstantiationException(theExtRef.getFilePosition(), 0, e);
 					}
 					if (value == null) {
 						if (extModels == null)
@@ -1890,7 +1978,7 @@ public interface ObservableModelSet extends Identifiable {
 			}
 
 			@Override
-			public BetterList<ValueContainer<?, ?>> getCores() throws QonfigEvaluationException {
+			public BetterList<ValueContainer<?, ?>> getCores() throws ExpressoInterpretationException {
 				if (theCreator != null) {
 					return getOfValue(v -> v.getCores());
 				} else
@@ -1910,7 +1998,7 @@ public interface ObservableModelSet extends Identifiable {
 			}
 
 			@Override
-			public ValueContainer<M, MV> getValue() throws QonfigEvaluationException {
+			public ValueContainer<M, MV> getValue() throws ExpressoInterpretationException {
 				if (theCreator != null)
 					return getOfValue(v -> v);
 				else
@@ -2010,7 +2098,7 @@ public interface ObservableModelSet extends Identifiable {
 					String type;
 					try {
 						type = " of type " + theComponents.get(name).getType();
-					} catch (QonfigEvaluationException e) {
+					} catch (ExpressoInterpretationException e) {
 						type = "";
 					}
 					throw new IllegalArgumentException("A value" + type + " has already been added as '" + name + "'");
@@ -2100,15 +2188,15 @@ public interface ObservableModelSet extends Identifiable {
 			}
 
 			@Override
-			public Built build() throws QonfigEvaluationException {
+			public Built build() {
 				if (getParent() != null)
 					throw new IllegalStateException("Cannot build a model that is not the root");
 				return _build(null, null);
 			}
 
-			private DefaultBuilt _build(DefaultBuilt root, DefaultBuilt parent) throws QonfigEvaluationException {
-				Map<String, BuiltModelComponentNode<?, ?>> components = new LinkedHashMap<>(theComponents.size() * 3 / 2 + 1);
-				Map<String, BuiltModelComponentNode<?, ?>> idComponents = new LinkedHashMap<>(getIdentifiedComponents().size() * 3 / 2 + 1);
+			private DefaultBuilt _build(DefaultBuilt root, DefaultBuilt parent) {
+				Map<String, ModelComponentNode<?, ?>> components = new LinkedHashMap<>(theComponents.size() * 3 / 2 + 1);
+				Map<String, ModelComponentNode<?, ?>> idComponents = new LinkedHashMap<>(getIdentifiedComponents().size() * 3 / 2 + 1);
 				DefaultBuilt model = createModel(root, parent, components, idComponents);
 				if (root == null)
 					root = model;
@@ -2124,32 +2212,110 @@ public interface ObservableModelSet extends Identifiable {
 				return model;
 			}
 
-			protected <M, MV extends M> BuiltModelComponentNode<M, MV> createBuiltComponent(ModelComponentNode<M, MV> node,
-				DefaultBuilt subModel) throws QonfigEvaluationException {
+			protected <M, MV extends M> ModelComponentNode<M, MV> createBuiltComponent(ModelComponentNode<M, MV> node,
+				DefaultBuilt subModel) {
 				if (subModel != null)
-					return new BuiltModelNodeImpl<>(node.getIdentity(), null, null, null, null, subModel);
+					return createPlaceholder(node.getIdentity(), null, null, null, subModel);
 				else if (node.getThing() instanceof ValueCreator)
-					return new BuiltModelNodeImpl<>(node.getIdentity(), (ValueCreator<M, MV>) node.getThing(), //
-						node.getValue().evaluate(), null, null, null);
+					return createPlaceholder(node.getIdentity(), (ValueCreator<M, MV>) node.getThing(), null, null, null);
 				else if (node.getThing() instanceof RuntimeValuePlaceholder)
-					return new BuiltModelNodeImpl<>(node.getIdentity(), null, null, (RuntimeValuePlaceholder<M, MV>) node.getThing(), null,
-						null);
+					return createPlaceholder(node.getIdentity(), null, (RuntimeValuePlaceholder<M, MV>) node.getThing(), null, null);
 				else if (node.getThing() instanceof ExtValueRef)
-					return new BuiltModelNodeImpl<>(node.getIdentity(), null, null, null, (ExtValueRef<M, MV>) node.getThing(), null);
+					return createPlaceholder(node.getIdentity(), null, null, (ExtValueRef<M, MV>) node.getThing(), null);
 				else
 					throw new IllegalArgumentException("Unrecognized node value: " + node.getThing().getClass().getName());
 			}
 
-			static class BuiltModelNodeImpl<M, MV extends M> implements BuiltModelComponentNode<M, MV> {
+			/**
+			 * Creates a {@link DefaultModelSet} from {@link #build()}
+			 *
+			 * @param root The root model, or null if the new model is to be the root
+			 * @param parent The parent model, or null if the new model is to be the root
+			 * @param components The component map for the new model
+			 * @return The new model
+			 */
+			protected DefaultBuilt createModel(DefaultBuilt root, DefaultBuilt parent, Map<String, ModelComponentNode<?, ?>> components,
+				Map<String, ModelComponentNode<?, ?>> idComponents) {
+				return new DefaultBuilt(getIdentity(), root, parent, //
+					QommonsUtils.unmodifiableCopy(getTagValues()), //
+					QommonsUtils.unmodifiableCopy(super.getInheritance()), //
+					Collections.unmodifiableMap(components), //
+					QommonsUtils.unmodifiableCopy(idComponents), //
+					getNameChecker());
+			}
+		}
+
+		public static class DefaultBuilt extends DefaultModelSet implements Built {
+			public DefaultBuilt(ModelComponentId id, DefaultBuilt root, DefaultBuilt parent, Map<ModelTag<?>, Object> tagValues,
+				Map<ModelComponentId, ObservableModelSet> inheritance, Map<String, ? extends ModelComponentNode<?, ?>> components,
+					Map<Object, ? extends ModelComponentNode<?, ?>> identifiedComponents, NameChecker nameChecker) {
+				super(id, root, parent, tagValues, inheritance, components, identifiedComponents, nameChecker);
+			}
+
+			@Override
+			public DefaultBuilt getRoot() {
+				return (DefaultBuilt) super.getRoot();
+			}
+
+			@Override
+			public DefaultBuilt getParent() {
+				return (DefaultBuilt) super.getParent();
+			}
+
+			@Override
+			public InterpretedModelSet interpret() throws ExpressoInterpretationException {
+				if (getParent() != null)
+					throw new IllegalStateException("Cannot interpret a model that is not the root");
+				return _interpret(null, null);
+			}
+
+			private DefaultInterpreted _interpret(DefaultInterpreted root, DefaultInterpreted parent)
+				throws ExpressoInterpretationException {
+				Map<String, InterpretedModelComponentNode<?, ?>> components = new LinkedHashMap<>(theComponents.size() * 3 / 2 + 1);
+				Map<String, InterpretedModelComponentNode<?, ?>> idComponents = new LinkedHashMap<>(
+					getIdentifiedComponents().size() * 3 / 2 + 1);
+				DefaultInterpreted model = createModel(root, parent, components, idComponents);
+				if (root == null)
+					root = model;
+				for (Map.Entry<String, ? extends ModelComponentNode<?, ?>> component : theComponents.entrySet()) {
+					if (component.getValue().getModel() != null) {
+						DefaultInterpreted subModel = ((DefaultBuilt) component.getValue().getModel())._interpret(root, model);
+						components.put(component.getKey(),
+							createInterpretedComponent((ModelComponentNode<Object, Object>) component.getValue(), subModel));
+					} else
+						components.put(component.getKey(),
+							createInterpretedComponent((ModelComponentNode<Object, Object>) component.getValue(), null));
+				}
+				return model;
+			}
+
+			protected <M, MV extends M> InterpretedModelComponentNode<M, MV> createInterpretedComponent(ModelComponentNode<M, MV> node,
+				DefaultInterpreted subModel) throws ExpressoInterpretationException {
+				if (subModel != null)
+					return new InterpretedModelNodeImpl<>(node.getIdentity(), null, null, null, null, subModel);
+				else if (node.getThing() instanceof ValueCreator)
+					return new InterpretedModelNodeImpl<>(node.getIdentity(), (ValueCreator<M, MV>) node.getThing(), //
+						node.getValue().interpret(), null, null, null);
+				else if (node.getThing() instanceof RuntimeValuePlaceholder)
+					return new InterpretedModelNodeImpl<>(node.getIdentity(), null, null, (RuntimeValuePlaceholder<M, MV>) node.getThing(),
+						null, null);
+				else if (node.getThing() instanceof ExtValueRef)
+					return new InterpretedModelNodeImpl<>(node.getIdentity(), null, null, null, (ExtValueRef<M, MV>) node.getThing(), null);
+				else
+					throw new IllegalArgumentException("Unrecognized node value: " + node.getThing().getClass().getName());
+			}
+
+			static class InterpretedModelNodeImpl<M, MV extends M> implements InterpretedModelComponentNode<M, MV> {
 				private final ModelComponentId theNodeId;
 				private final ValueCreator<M, MV> theCreator;
-				private final BuiltValueContainer<M, MV> theValue;
+				private final InterpretedValueContainer<M, MV> theValue;
 				private final RuntimeValuePlaceholder<M, MV> theRuntimePlaceholder;
 				private final ExtValueRef<M, MV> theExtRef;
-				private final DefaultBuilt theModel;
+				private final DefaultInterpreted theModel;
 
-				public BuiltModelNodeImpl(ModelComponentId nodeId, ValueCreator<M, MV> creator, BuiltValueContainer<M, MV> value,
-					RuntimeValuePlaceholder<M, MV> runtimePlaceholder, ExtValueRef<M, MV> extRef, DefaultBuilt model) {
+				public InterpretedModelNodeImpl(ModelComponentId nodeId, ValueCreator<M, MV> creator,
+					InterpretedValueContainer<M, MV> value, RuntimeValuePlaceholder<M, MV> runtimePlaceholder, ExtValueRef<M, MV> extRef,
+					DefaultInterpreted model) {
 					theNodeId = nodeId;
 					theCreator = creator;
 					theValue = value;
@@ -2225,7 +2391,7 @@ public interface ObservableModelSet extends Identifiable {
 							if (value == null)
 								value = theExtRef.getDefault(modelSet);
 						} catch (ModelException | TypeConversionException e) {
-							throw new ModelInstantiationException(e, theExtRef.getFilePosition(), 0);
+							throw new ModelInstantiationException(theExtRef.getFilePosition(), 0, e);
 						}
 						if (value == null) {
 							if (extModels == null)
@@ -2239,12 +2405,12 @@ public interface ObservableModelSet extends Identifiable {
 				}
 
 				@Override
-				public Built getModel() {
+				public InterpretedModelSet getModel() {
 					return theModel;
 				}
 
 				@Override
-				public BuiltValueContainer<M, MV> getValue() {
+				public InterpretedValueContainer<M, MV> getValue() {
 					return theValue;
 				}
 			}
@@ -2257,9 +2423,10 @@ public interface ObservableModelSet extends Identifiable {
 			 * @param components The component map for the new model
 			 * @return The new model
 			 */
-			protected DefaultBuilt createModel(DefaultBuilt root, DefaultBuilt parent,
-				Map<String, BuiltModelComponentNode<?, ?>> components, Map<String, BuiltModelComponentNode<?, ?>> idComponents) {
-				return new DefaultBuilt(getIdentity(), root, parent, //
+			protected DefaultInterpreted createModel(DefaultInterpreted root, DefaultInterpreted parent,
+				Map<String, InterpretedModelComponentNode<?, ?>> components,
+				Map<String, InterpretedModelComponentNode<?, ?>> idComponents) {
+				return new DefaultInterpreted(getIdentity(), root, parent, //
 					QommonsUtils.unmodifiableCopy(getTagValues()), //
 					QommonsUtils.unmodifiableCopy(super.getInheritance()), //
 					Collections.unmodifiableMap(components), //
@@ -2268,31 +2435,32 @@ public interface ObservableModelSet extends Identifiable {
 			}
 		}
 
-		public static class DefaultBuilt extends DefaultModelSet implements Built {
-			public DefaultBuilt(ModelComponentId id, DefaultBuilt root, DefaultBuilt parent, Map<ModelTag<?>, Object> tagValues,
-				Map<ModelComponentId, ObservableModelSet> inheritance, Map<String, ? extends BuiltModelComponentNode<?, ?>> components,
-					Map<Object, ? extends BuiltModelComponentNode<?, ?>> identifiedComponents, NameChecker nameChecker) {
+		public static class DefaultInterpreted extends DefaultModelSet implements InterpretedModelSet {
+			public DefaultInterpreted(ModelComponentId id, DefaultInterpreted root, DefaultInterpreted parent,
+				Map<ModelTag<?>, Object> tagValues, Map<ModelComponentId, ObservableModelSet> inheritance,
+				Map<String, ? extends InterpretedModelComponentNode<?, ?>> components,
+					Map<Object, ? extends InterpretedModelComponentNode<?, ?>> identifiedComponents, NameChecker nameChecker) {
 				super(id, root, parent, tagValues, inheritance, components, identifiedComponents, nameChecker);
 			}
 
 			@Override
-			public DefaultBuilt getRoot() {
-				return (DefaultBuilt) super.getRoot();
+			public DefaultInterpreted getRoot() {
+				return (DefaultInterpreted) super.getRoot();
 			}
 
 			@Override
-			public DefaultBuilt getParent() {
-				return (DefaultBuilt) super.getParent();
+			public DefaultInterpreted getParent() {
+				return (DefaultInterpreted) super.getParent();
 			}
 
 			@Override
-			public Map<String, ? extends BuiltModelComponentNode<?, ?>> getComponents() {
-				return (Map<String, ? extends BuiltModelComponentNode<?, ?>>) super.getComponents();
+			public Map<String, ? extends InterpretedModelComponentNode<?, ?>> getComponents() {
+				return (Map<String, ? extends InterpretedModelComponentNode<?, ?>>) super.getComponents();
 			}
 
 			@Override
-			public Map<Object, ? extends BuiltModelComponentNode<?, ?>> getIdentifiedComponents() {
-				return (Map<Object, ? extends BuiltModelComponentNode<?, ?>>) super.getIdentifiedComponents();
+			public Map<Object, ? extends InterpretedModelComponentNode<?, ?>> getIdentifiedComponents() {
+				return (Map<Object, ? extends InterpretedModelComponentNode<?, ?>>) super.getIdentifiedComponents();
 			}
 
 			@Override
@@ -2307,7 +2475,7 @@ public interface ObservableModelSet extends Identifiable {
 			private final Map<RuntimeValuePlaceholder<?, ?>, Boolean> theRuntimeVariables;
 			private final DefaultMSI theMSI;
 
-			DefaultMSIBuilder(Built models, ModelSetInstance sourceModel, ExternalModelSet extModels, Observable<?> until) {
+			DefaultMSIBuilder(InterpretedModelSet models, ModelSetInstance sourceModel, ExternalModelSet extModels, Observable<?> until) {
 				theComponents = new HashMap<>();
 				theInheritance = new LinkedHashMap<>();
 				theRuntimeVariables = new HashMap<>();
@@ -2404,7 +2572,7 @@ public interface ObservableModelSet extends Identifiable {
 		}
 
 		static class DefaultMSI implements ModelSetInstance {
-			private final Built theModel;
+			private final InterpretedModelSet theModel;
 			private final ModelSetInstance theSourceModel;
 			private final ExternalModelSet theExtModels;
 			private final Observable<?> theUntil;
@@ -2412,7 +2580,7 @@ public interface ObservableModelSet extends Identifiable {
 			private final Map<ModelComponentId, ModelSetInstance> theInheritance;
 			private Set<ModelComponentNode<?, ?>> theCircularityDetector;
 
-			protected DefaultMSI(Built models, ModelSetInstance sourceModel, ExternalModelSet extModels, Observable<?> until,
+			protected DefaultMSI(InterpretedModelSet models, ModelSetInstance sourceModel, ExternalModelSet extModels, Observable<?> until,
 				Map<ModelComponentId, Object> components, Map<ModelComponentId, ModelSetInstance> inheritance) {
 				theModel = models;
 				theSourceModel = sourceModel;

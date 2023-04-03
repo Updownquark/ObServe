@@ -5,6 +5,7 @@ import java.util.Set;
 
 import org.observe.Observable;
 import org.observe.SettableValue;
+import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ops.BinaryOperatorSet;
 import org.observe.expresso.ops.UnaryOperatorSet;
 import org.observe.util.TypeTokens;
@@ -15,7 +16,6 @@ import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigAttributeDef;
 import org.qommons.config.QonfigChildDef;
 import org.qommons.config.QonfigElement;
-import org.qommons.config.QonfigEvaluationException;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigInterpreterCore.CoreSession;
 import org.qommons.config.QonfigToolkit;
@@ -163,7 +163,7 @@ public class ExpressoSessionImplV0_1 implements SpecialSessionImplementation<Exp
 			try {
 				newParser = parseValue(parserEl.getValueText(), ExpressoParser.class, session.getElement(),
 					session.getExpressoEnv());
-			} catch (ExpressoException | QonfigEvaluationException e) {
+			} catch (ModelInstantiationException | ExpressoException | ExpressoInterpretationException | TypeConversionException e) {
 				session.error("Could not interpret expresso parser for " + parserEl, e);
 				throw new IllegalStateException(e); // Shouldn't get here
 			}
@@ -182,7 +182,7 @@ public class ExpressoSessionImplV0_1 implements SpecialSessionImplementation<Exp
 				try {
 					ops = parseValue(uo.getValueText(),
 						UnaryOperatorSet.UnaryOperatorConfiguration.class, uo, session.getExpressoEnv());
-				} catch (ExpressoException | QonfigEvaluationException e) {
+				} catch (ModelInstantiationException | ExpressoException | ExpressoInterpretationException | TypeConversionException e) {
 					session.error("Could not interpret unary operator for " + uo, e);
 					throw new IllegalStateException(e); // Shouldn't get here
 				}
@@ -193,7 +193,7 @@ public class ExpressoSessionImplV0_1 implements SpecialSessionImplementation<Exp
 				try {
 					ops = parseValue(bo.getValueText(),
 						BinaryOperatorSet.BinaryOperatorConfiguration.class, bo, session.getExpressoEnv());
-				} catch (ExpressoException | QonfigEvaluationException e) {
+				} catch (ModelInstantiationException | ExpressoException | ExpressoInterpretationException | TypeConversionException e) {
 					session.error("Could not interpret binary operator for " + bo, e);
 					throw new IllegalStateException(e); // Shouldn't get here
 				}
@@ -210,22 +210,27 @@ public class ExpressoSessionImplV0_1 implements SpecialSessionImplementation<Exp
 	 * @param element The element to parse the value for
 	 * @param sourceEnv The Expresso environment to use to evaluate the parsed expression
 	 * @return The parsed and evaluated expression
-	 * @throws ExpressoException If the expression could not be parsed or evaluated as a value of the given type
+	 * @throws ExpressoException If the expression could not be parsed
+	 * @throws ExpressoInterpretationException If the expression could not be evaluated as a value of the given type
+	 * @throws ModelInstantiationException If the expression's resulting value could not be instantiated
+	 * @throws TypeConversionException If the expression's type does not match the given type
 	 */
 	protected <T> T parseValue(String parseText, Class<T> type, QonfigElement element, ExpressoEnv sourceEnv)
-		throws ExpressoException, QonfigEvaluationException {
-		ObservableModelSet models = ObservableModelSet.build(element.getType().getName() + "_value", ObservableModelSet.JAVA_NAME_CHECKER)//
+		throws ExpressoException, ExpressoInterpretationException, ModelInstantiationException, TypeConversionException {
+		InterpretedModelSet models = ObservableModelSet
+			.build(element.getType().getName() + "_value", ObservableModelSet.JAVA_NAME_CHECKER)//
 			.with("toolkit", ModelTypes.Value.forType(QonfigToolkit.class),
 				m -> SettableValue.of(QonfigToolkit.class, theToolkit, "Not modifiable"))//
 			.with("element", ModelTypes.Value.forType(QonfigElement.class),
 				m -> SettableValue.of(QonfigElement.class, element, "Not modifiable"))//
-			.build();
+			.build()//
+			.interpret();
 		ExpressoEnv env = sourceEnv.with(models, null);
 
 		return new JavaExpressoParser().parse(parseText)//
 			.evaluate(ModelTypes.Value.forType(type), env)//
-			.get(env.getModels()
-				.createInstance(ObservableModelSet.buildExternal(ObservableModelSet.JAVA_NAME_CHECKER).build(), Observable.empty()).build())//
+			.get(models.createInstance(ObservableModelSet.buildExternal(ObservableModelSet.JAVA_NAME_CHECKER).build(), Observable.empty())
+				.build())//
 			.get();
 	}
 }

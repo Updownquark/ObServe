@@ -13,17 +13,19 @@ import org.observe.Transformation.ReverseQueryResult;
 import org.observe.Transformation.TransformationValues;
 import org.observe.expresso.ExpressoEnv;
 import org.observe.expresso.ExpressoEvaluationException;
+import org.observe.expresso.ExpressoInterpretationException;
+import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ValueContainer;
+import org.observe.expresso.TypeConversionException;
 import org.observe.expresso.ops.BinaryOperatorSet.BinaryOp;
 import org.observe.util.TypeTokens;
 import org.qommons.LambdaUtils;
 import org.qommons.QommonsUtils;
 import org.qommons.collect.BetterList;
-import org.qommons.config.QonfigEvaluationException;
 
 import com.google.common.reflect.TypeToken;
 
@@ -36,6 +38,7 @@ public class BinaryOperator implements ObservableExpression {
 
 	/**
 	 * @param operator The name of the operation
+	 * @param operatorOffset The position offset of the start of the operator in the expression
 	 * @param left The first operation input
 	 * @param right The second operation input
 	 */
@@ -90,7 +93,7 @@ public class BinaryOperator implements ObservableExpression {
 
 	@Override
 	public <M, MV extends M> ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env)
-		throws ExpressoEvaluationException {
+		throws ExpressoEvaluationException, ExpressoInterpretationException {
 		if (type.getModelType() == ModelTypes.Action) {//
 		} else if (type.getModelType() == ModelTypes.Value) {//
 		} else
@@ -122,12 +125,16 @@ public class BinaryOperator implements ObservableExpression {
 			targetOpType = TypeTokens.get().WILDCARD;
 			break;
 		}
-		ValueContainer<SettableValue<?>, SettableValue<Object>> left = theLeft
-			.evaluate(ModelTypes.Value.forType((TypeToken<Object>) targetOpType), env);
+		ValueContainer<SettableValue<?>, SettableValue<Object>> left;
+		try {
+			left = theLeft.evaluate(ModelTypes.Value.forType((TypeToken<Object>) targetOpType), env);
+		} catch (TypeConversionException e) {
+			throw new ExpressoEvaluationException(theLeft.getExpressionOffset(), theLeft.getExpressionEnd(), e.getMessage(), e);
+		}
 		TypeToken<?> leftTypeT;
 		try {
 			leftTypeT = left.getType().getType(0);
-		} catch (QonfigEvaluationException e) {
+		} catch (ExpressoInterpretationException e) {
 			throw new ExpressoEvaluationException(theLeft.getExpressionOffset(), theLeft.getExpressionEnd(), e.getMessage(), e);
 		}
 		Class<?> leftType = TypeTokens.getRawType(leftTypeT);
@@ -144,12 +151,16 @@ public class BinaryOperator implements ObservableExpression {
 			targetOpType = TypeTokens.get().WILDCARD;
 			break;
 		}
-		ValueContainer<SettableValue<?>, SettableValue<Object>> right = theRight
-			.evaluate(ModelTypes.Value.forType((TypeToken<Object>) targetOpType), env);
+		ValueContainer<SettableValue<?>, SettableValue<Object>> right;
+		try {
+			right = theRight.evaluate(ModelTypes.Value.forType((TypeToken<Object>) targetOpType), env);
+		} catch (TypeConversionException e) {
+			throw new ExpressoEvaluationException(theRight.getExpressionOffset(), theRight.getExpressionEnd(), e.getMessage(), e);
+		}
 		TypeToken<?> rightTypeT;
 		try {
 			rightTypeT = right.getType().getType(0);
-		} catch (QonfigEvaluationException e) {
+		} catch (ExpressoInterpretationException e) {
 			throw new ExpressoEvaluationException(theRight.getExpressionOffset(), theRight.getExpressionEnd(), e.getMessage(), e);
 		}
 		BinaryOp<Object, Object, Object> op;
@@ -181,7 +192,7 @@ public class BinaryOperator implements ObservableExpression {
 				}
 
 				@Override
-				public ObservableAction<Object> get(ModelSetInstance msi) throws QonfigEvaluationException {
+				public ObservableAction<Object> get(ModelSetInstance msi) throws ModelInstantiationException {
 					SettableValue<Object> leftV = left.get(msi);
 					SettableValue<Object> rightV = right.get(msi);
 					return createOpAction(leftV, rightV);
@@ -223,7 +234,7 @@ public class BinaryOperator implements ObservableExpression {
 
 				@Override
 				public ObservableAction<Object> forModelCopy(ObservableAction<Object> value, ModelSetInstance sourceModels,
-					ModelSetInstance newModels) throws QonfigEvaluationException {
+					ModelSetInstance newModels) throws ModelInstantiationException {
 					SettableValue<Object> sourceLeft = left.get(sourceModels);
 					SettableValue<Object> newLeft = left.get(newModels);
 					SettableValue<Object> sourceRight = right.get(sourceModels);
@@ -235,7 +246,7 @@ public class BinaryOperator implements ObservableExpression {
 				}
 
 				@Override
-				public BetterList<ValueContainer<?, ?>> getCores() throws QonfigEvaluationException {
+				public BetterList<ValueContainer<?, ?>> getCores() throws ExpressoInterpretationException {
 					return BetterList.of(Stream.of(left, right), vc -> vc.getCores().stream());
 				}
 
@@ -255,7 +266,7 @@ public class BinaryOperator implements ObservableExpression {
 				}
 
 				@Override
-				public SettableValue<Object> get(ModelSetInstance msi) throws QonfigEvaluationException {
+				public SettableValue<Object> get(ModelSetInstance msi) throws ModelInstantiationException {
 					SettableValue<Object> leftV = left.get(msi);
 					SettableValue<Object> rightV = right.get(msi);
 					return createOpValue(leftV, rightV);
@@ -289,7 +300,7 @@ public class BinaryOperator implements ObservableExpression {
 
 				@Override
 				public SettableValue<Object> forModelCopy(SettableValue<Object> value, ModelSetInstance sourceModels,
-					ModelSetInstance newModels) throws QonfigEvaluationException {
+					ModelSetInstance newModels) throws ModelInstantiationException {
 					SettableValue<Object> sourceLeft = left.get(sourceModels);
 					SettableValue<Object> newLeft = left.get(newModels);
 					SettableValue<Object> sourceRight = right.get(sourceModels);
@@ -301,7 +312,7 @@ public class BinaryOperator implements ObservableExpression {
 				}
 
 				@Override
-				public BetterList<ValueContainer<?, ?>> getCores() throws QonfigEvaluationException {
+				public BetterList<ValueContainer<?, ?>> getCores() throws ExpressoInterpretationException {
 					return BetterList.of(Stream.of(left, right), vc -> vc.getCores().stream());
 				}
 

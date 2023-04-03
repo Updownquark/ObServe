@@ -6,6 +6,7 @@ import java.util.function.Function;
 
 import org.observe.expresso.ExpressoEnv;
 import org.observe.expresso.ExpressoEvaluationException;
+import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet.ValueContainer;
@@ -16,7 +17,11 @@ public class ParentheticExpression implements ObservableExpression {
 	private int theOffset;
 	private int theEnd;
 
-	/** @param content The content of this parenthetic */
+	/**
+	 * @param content The content of this parenthetic
+	 * @param offset The starting position of this expression in the root sequence
+	 * @param end The ending position of this expression in the root sequence
+	 */
 	public ParentheticExpression(ObservableExpression content, int offset, int end) {
 		theContent = content;
 		theOffset = offset;
@@ -51,7 +56,7 @@ public class ParentheticExpression implements ObservableExpression {
 
 	@Override
 	public <M, MV extends M> ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env)
-		throws ExpressoEvaluationException {
+		throws ExpressoEvaluationException, ExpressoInterpretationException {
 		return theContent.evaluateInternal(type, env);
 	}
 

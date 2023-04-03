@@ -9,6 +9,7 @@ import java.util.function.Function;
 import org.qommons.BiTuple;
 import org.qommons.ClassMap;
 import org.qommons.ClassMap.TypeMatch;
+import org.qommons.QommonsUtils;
 
 /** A set of unary operations that a {@link UnaryOperator} can use to evaluate itself */
 public class UnaryOperatorSet {
@@ -249,6 +250,17 @@ public class UnaryOperatorSet {
 
 	private UnaryOperatorSet(Map<String, ClassMap<UnaryOp<?, ?>>> operators) {
 		theOperators = operators;
+	}
+
+	/**
+	 * @param operator The name of the operator(s) to get
+	 * @return All operators in this operator set with the given name
+	 */
+	public Set<UnaryOp<?, ?>> getOperators(String operator) {
+		ClassMap<UnaryOp<?, ?>> ops = theOperators.get(operator);
+		if (ops == null)
+			return Collections.emptySet();
+		return QommonsUtils.unmodifiableDistinctCopy(ops.getAllValues());
 	}
 
 	/**
