@@ -252,6 +252,14 @@ public interface ObservableModelSet extends Identifiable {
 			return new MappedVC<>(this, type, map);
 		}
 
+		/**
+		 * A value container that is a map of another
+		 *
+		 * @param <M> The source model type
+		 * @param <MV> The source instance type
+		 * @param <M2> The target model type
+		 * @param <MV2> The target instance type
+		 */
 		class MappedVC<M, MV extends M, M2, MV2 extends M2> extends AbstractValueContainer<M2, MV2> {
 			private final ValueContainer<M, MV> theSource;
 			private final BiFunction<? super MV, ModelSetInstance, ? extends MV2> theMap;
@@ -303,6 +311,12 @@ public interface ObservableModelSet extends Identifiable {
 			return new ModelWrappedVC<>(this, modelWrapper);
 		}
 
+		/**
+		 * A value container that wraps the input model instance passed to {@link #get(ModelSetInstance)} before handing it off to another
+		 *
+		 * @param <M> The model type of the container
+		 * @param <MV> The instance type of the container
+		 */
 		class ModelWrappedVC<M, MV extends M> implements ValueContainer<M, MV> {
 			private final ValueContainer<M, MV> theSource;
 			private final ExFunction<ModelSetInstance, ModelSetInstance, ModelInstantiationException> theModelWrapper;
@@ -475,6 +489,9 @@ public interface ObservableModelSet extends Identifiable {
 	/**
 	 * A {@link ValueContainer} that has already been interpreted, so that its methods no longer need to throw
 	 * {@link ExpressoInterpretationException}
+	 *
+	 * @param <M> The model type of the value
+	 * @param <MV> The type of the value
 	 */
 	public interface InterpretedValueContainer<M, MV extends M> extends ValueContainer<M, MV> {
 		@Override
@@ -502,12 +519,20 @@ public interface ObservableModelSet extends Identifiable {
 		@Override
 		default <M2, MV2 extends M2> InterpretedValueContainer<M2, MV2> map(ModelInstanceType<M2, MV2> type,
 			BiFunction<? super MV, ModelSetInstance, ? extends MV2> map) {
-			return new MappedBVC<>(this, type, map);
+			return new MappedIVC<>(this, type, map);
 		}
 
-		class MappedBVC<M, MV extends M, M2, MV2 extends M2> extends MappedVC<M, MV, M2, MV2>
+		/**
+		 * An interpreted value container that is a map of another
+		 *
+		 * @param <M> The source model type
+		 * @param <MV> The source instance type
+		 * @param <M2> The target model type
+		 * @param <MV2> The target instance type
+		 */
+		class MappedIVC<M, MV extends M, M2, MV2 extends M2> extends MappedVC<M, MV, M2, MV2>
 		implements InterpretedValueContainer<M2, MV2> {
-			public MappedBVC(InterpretedValueContainer<M, MV> source, ModelInstanceType<M2, MV2> type,
+			public MappedIVC(InterpretedValueContainer<M, MV> source, ModelInstanceType<M2, MV2> type,
 				BiFunction<? super MV, ModelSetInstance, ? extends MV2> map) {
 				super(source, type, map);
 			}
@@ -537,11 +562,18 @@ public interface ObservableModelSet extends Identifiable {
 		@Override
 		default InterpretedValueContainer<M, MV> wrapModels(
 			ExFunction<ModelSetInstance, ModelSetInstance, ModelInstantiationException> modelWrapper) {
-			return new MappedMWVC<>(this, modelWrapper);
+			return new ModelMappedIVC<>(this, modelWrapper);
 		}
 
-		class MappedMWVC<M, MV extends M> extends ModelWrappedVC<M, MV> implements InterpretedValueContainer<M, MV> {
-			public MappedMWVC(InterpretedValueContainer<M, MV> source,
+		/**
+		 * An interpreted value container that wraps the input model instance passed to {@link #get(ModelSetInstance)} before handing it off
+		 * to another
+		 *
+		 * @param <M> The model type of the container
+		 * @param <MV> The instance type of the container
+		 */
+		class ModelMappedIVC<M, MV extends M> extends ModelWrappedVC<M, MV> implements InterpretedValueContainer<M, MV> {
+			public ModelMappedIVC(InterpretedValueContainer<M, MV> source,
 				ExFunction<ModelSetInstance, ModelSetInstance, ModelInstantiationException> modelWrapper) {
 				super(source, modelWrapper);
 			}
@@ -562,9 +594,19 @@ public interface ObservableModelSet extends Identifiable {
 			}
 		}
 
+		/**
+		 * A simple interpreted value container that wraps a {@link ValueContainer}, forcing it to interpret as soon as this is created
+		 *
+		 * @param <M> The model type of the container
+		 * @param <MV> The value type of the container
+		 */
 		public static class SimpleWrapper<M, MV extends M> implements InterpretedValueContainer<M, MV> {
 			private final ValueContainer<M, MV> theContainer;
 
+			/**
+			 * @param container The container to wrap
+			 * @throws ExpressoInterpretationException If the container cannot be interpreted
+			 */
 			public SimpleWrapper(ValueContainer<M, MV> container) throws ExpressoInterpretationException {
 				container.getType();
 				theContainer = container;
@@ -730,6 +772,9 @@ public interface ObservableModelSet extends Identifiable {
 		 * @throws ExpressoInterpretationException If the container could not be {@link ValueCreator#createContainer() created}
 		 */
 		ValueContainer<M, MV> getValue() throws ExpressoInterpretationException;
+
+		@Override
+		InterpretedModelComponentNode<M, MV> interpret() throws ExpressoInterpretationException;
 	}
 
 	/**
@@ -747,6 +792,11 @@ public interface ObservableModelSet extends Identifiable {
 
 		@Override
 		InterpretedValueContainer<M, MV> getValue();
+
+		@Override
+		default InterpretedModelComponentNode<M, MV> interpret() {
+			return this;
+		}
 	}
 
 	/** Checks names of model components to ensure they are accessible as identifiers from expressions */
@@ -2006,6 +2056,23 @@ public interface ObservableModelSet extends Identifiable {
 			}
 
 			@Override
+			public InterpretedModelComponentNode<M, MV> interpret() throws ExpressoInterpretationException {
+				if (theModel != null)
+					throw new IllegalStateException("Cannot interpret a model element here");
+				else if (theCreator!=null) {
+					if (!(theValue instanceof InterpretedValueContainer))
+						theValue = getOfValue(vc -> vc.interpret());
+					return new InterpretedModelNodeImpl<>(theNodeId, theCreator, //
+						(InterpretedValueContainer<M, MV>) theValue, null, null, null);
+				} else if (theRuntimePlaceholder != null)
+					return new InterpretedModelNodeImpl<>(theNodeId, null, null, theRuntimePlaceholder, null, null);
+				else if (theExtRef != null)
+					return new InterpretedModelNodeImpl<>(theNodeId, null, null, null, theExtRef, null);
+				else
+					throw new IllegalArgumentException("Unrecognized node value: " + getThing().getClass().getName());
+			}
+
+			@Override
 			public String toString() {
 				if (theCreator != null)
 					return theCreator + "@" + theNodeId;
@@ -2015,6 +2082,116 @@ public interface ObservableModelSet extends Identifiable {
 					return "runtime:" + theRuntimePlaceholder.getType() + "@" + theNodeId;
 				else
 					return theNodeId.toString();
+			}
+		}
+
+		static class InterpretedModelNodeImpl<M, MV extends M> implements InterpretedModelComponentNode<M, MV> {
+			private final ModelComponentId theNodeId;
+			private final ValueCreator<M, MV> theCreator;
+			private final InterpretedValueContainer<M, MV> theValue;
+			private final RuntimeValuePlaceholder<M, MV> theRuntimePlaceholder;
+			private final ExtValueRef<M, MV> theExtRef;
+			private final DefaultInterpreted theModel;
+
+			public InterpretedModelNodeImpl(ModelComponentId nodeId, ValueCreator<M, MV> creator,
+				InterpretedValueContainer<M, MV> value, RuntimeValuePlaceholder<M, MV> runtimePlaceholder, ExtValueRef<M, MV> extRef,
+				DefaultInterpreted model) {
+				theNodeId = nodeId;
+				theCreator = creator;
+				theValue = value;
+				theRuntimePlaceholder = runtimePlaceholder;
+				theExtRef = extRef;
+				theModel = model;
+			}
+
+			@Override
+			public ModelComponentId getIdentity() {
+				return theNodeId;
+			}
+
+			@Override
+			public Object getValueIdentity() {
+				return theCreator instanceof IdentifableValueCreator ? ((IdentifableValueCreator<M, MV>) theCreator).getIdentity()
+					: null;
+			}
+
+			@Override
+			public Object getThing() {
+				if (theCreator != null)
+					return theCreator;
+				else if (theRuntimePlaceholder != null)
+					return theRuntimePlaceholder;
+				else if (theExtRef != null)
+					return theExtRef;
+				else
+					return theModel;
+			}
+
+			@Override
+			public ModelInstanceType<M, MV> getType() {
+				if (theCreator != null)
+					return theValue.getType();
+				else if (theRuntimePlaceholder != null)
+					return theRuntimePlaceholder.getType();
+				else if (theExtRef != null)
+					return theExtRef.getType();
+				else if (theModel != null)
+					return (ModelInstanceType<M, MV>) ModelTypes.Model.instance();
+				else
+					throw new IllegalStateException();
+			}
+
+			@Override
+			public MV get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
+				return models.get(this);
+			}
+
+			@Override
+			public MV forModelCopy(MV value, ModelSetInstance sourceModels, ModelSetInstance newModels)
+				throws ModelInstantiationException, IllegalStateException {
+				if (theValue != null)
+					return theValue.forModelCopy(value, sourceModels, newModels);
+				else
+					return value;
+			}
+
+			@Override
+			public BetterList<ValueContainer<?, ?>> getCores() {
+				return theValue == null ? BetterList.empty() : theValue.getCores();
+			}
+
+			@Override
+			public MV create(ModelSetInstance modelSet, ExternalModelSet extModels) throws ModelInstantiationException {
+				if (theCreator != null)
+					return theValue.get(modelSet);
+				else if (theExtRef != null) {
+					MV value;
+					try {
+						value = extModels == null ? null : theExtRef.get(extModels);
+						if (value == null)
+							value = theExtRef.getDefault(modelSet);
+					} catch (ModelException | TypeConversionException e) {
+						throw new ModelInstantiationException(theExtRef.getFilePosition(), 0, e);
+					}
+					if (value == null) {
+						if (extModels == null)
+							throw new IllegalArgumentException("No such external model: " + theNodeId.getOwnerId());
+						else
+							throw new IllegalArgumentException("No such external value specified: " + theNodeId);
+					} else
+						return value;
+				} else
+					throw new IllegalStateException(theNodeId + " is not an internal value");
+			}
+
+			@Override
+			public InterpretedModelSet getModel() {
+				return theModel;
+			}
+
+			@Override
+			public InterpretedValueContainer<M, MV> getValue() {
+				return theValue;
 			}
 		}
 
@@ -2071,10 +2248,12 @@ public interface ObservableModelSet extends Identifiable {
 				return Collections.unmodifiableMap(super.getIdentifiedComponents());
 			}
 
+			/** @return The modifiable component map */
 			protected Map<String, ModelComponentNode<?, ?>> getAddableComponents() {
 				return (Map<String, ModelComponentNode<?, ?>>) super.getComponents();
 			}
 
+			/** @return The modifiable identified component map */
 			protected Map<Object, ModelComponentNode<?, ?>> getAddableIdComponents() {
 				return (Map<Object, ModelComponentNode<?, ?>>) super.getIdentifiedComponents();
 			}
@@ -2204,26 +2383,11 @@ public interface ObservableModelSet extends Identifiable {
 					if (component.getValue().getModel() != null) {
 						DefaultBuilt subModel = ((DefaultBuilder) component.getValue().getModel())._build(root, model);
 						components.put(component.getKey(),
-							createBuiltComponent((ModelComponentNode<Object, Object>) component.getValue(), subModel));
+							createPlaceholder(component.getValue().getIdentity(), null, null, null, subModel));
 					} else
-						components.put(component.getKey(),
-							createBuiltComponent((ModelComponentNode<Object, Object>) component.getValue(), null));
+						components.put(component.getKey(), component.getValue());
 				}
 				return model;
-			}
-
-			protected <M, MV extends M> ModelComponentNode<M, MV> createBuiltComponent(ModelComponentNode<M, MV> node,
-				DefaultBuilt subModel) {
-				if (subModel != null)
-					return createPlaceholder(node.getIdentity(), null, null, null, subModel);
-				else if (node.getThing() instanceof ValueCreator)
-					return createPlaceholder(node.getIdentity(), (ValueCreator<M, MV>) node.getThing(), null, null, null);
-				else if (node.getThing() instanceof RuntimeValuePlaceholder)
-					return createPlaceholder(node.getIdentity(), null, (RuntimeValuePlaceholder<M, MV>) node.getThing(), null, null);
-				else if (node.getThing() instanceof ExtValueRef)
-					return createPlaceholder(node.getIdentity(), null, null, (ExtValueRef<M, MV>) node.getThing(), null);
-				else
-					throw new IllegalArgumentException("Unrecognized node value: " + node.getThing().getClass().getName());
 			}
 
 			/**
@@ -2232,6 +2396,7 @@ public interface ObservableModelSet extends Identifiable {
 			 * @param root The root model, or null if the new model is to be the root
 			 * @param parent The parent model, or null if the new model is to be the root
 			 * @param components The component map for the new model
+			 * @param idComponents The identified component map for the new model
 			 * @return The new model
 			 */
 			protected DefaultBuilt createModel(DefaultBuilt root, DefaultBuilt parent, Map<String, ModelComponentNode<?, ?>> components,
@@ -2281,146 +2446,20 @@ public interface ObservableModelSet extends Identifiable {
 					if (component.getValue().getModel() != null) {
 						DefaultInterpreted subModel = ((DefaultBuilt) component.getValue().getModel())._interpret(root, model);
 						components.put(component.getKey(),
-							createInterpretedComponent((ModelComponentNode<Object, Object>) component.getValue(), subModel));
+							new InterpretedModelNodeImpl<>(component.getValue().getIdentity(), null, null, null, null, subModel));
 					} else
-						components.put(component.getKey(),
-							createInterpretedComponent((ModelComponentNode<Object, Object>) component.getValue(), null));
+						components.put(component.getKey(), component.getValue().interpret());
 				}
 				return model;
 			}
 
-			protected <M, MV extends M> InterpretedModelComponentNode<M, MV> createInterpretedComponent(ModelComponentNode<M, MV> node,
-				DefaultInterpreted subModel) throws ExpressoInterpretationException {
-				if (subModel != null)
-					return new InterpretedModelNodeImpl<>(node.getIdentity(), null, null, null, null, subModel);
-				else if (node.getThing() instanceof ValueCreator)
-					return new InterpretedModelNodeImpl<>(node.getIdentity(), (ValueCreator<M, MV>) node.getThing(), //
-						node.getValue().interpret(), null, null, null);
-				else if (node.getThing() instanceof RuntimeValuePlaceholder)
-					return new InterpretedModelNodeImpl<>(node.getIdentity(), null, null, (RuntimeValuePlaceholder<M, MV>) node.getThing(),
-						null, null);
-				else if (node.getThing() instanceof ExtValueRef)
-					return new InterpretedModelNodeImpl<>(node.getIdentity(), null, null, null, (ExtValueRef<M, MV>) node.getThing(), null);
-				else
-					throw new IllegalArgumentException("Unrecognized node value: " + node.getThing().getClass().getName());
-			}
-
-			static class InterpretedModelNodeImpl<M, MV extends M> implements InterpretedModelComponentNode<M, MV> {
-				private final ModelComponentId theNodeId;
-				private final ValueCreator<M, MV> theCreator;
-				private final InterpretedValueContainer<M, MV> theValue;
-				private final RuntimeValuePlaceholder<M, MV> theRuntimePlaceholder;
-				private final ExtValueRef<M, MV> theExtRef;
-				private final DefaultInterpreted theModel;
-
-				public InterpretedModelNodeImpl(ModelComponentId nodeId, ValueCreator<M, MV> creator,
-					InterpretedValueContainer<M, MV> value, RuntimeValuePlaceholder<M, MV> runtimePlaceholder, ExtValueRef<M, MV> extRef,
-					DefaultInterpreted model) {
-					theNodeId = nodeId;
-					theCreator = creator;
-					theValue = value;
-					theRuntimePlaceholder = runtimePlaceholder;
-					theExtRef = extRef;
-					theModel = model;
-				}
-
-				@Override
-				public ModelComponentId getIdentity() {
-					return theNodeId;
-				}
-
-				@Override
-				public Object getValueIdentity() {
-					return theCreator instanceof IdentifableValueCreator ? ((IdentifableValueCreator<M, MV>) theCreator).getIdentity()
-						: null;
-				}
-
-				@Override
-				public Object getThing() {
-					if (theCreator != null)
-						return theCreator;
-					else if (theRuntimePlaceholder != null)
-						return theRuntimePlaceholder;
-					else if (theExtRef != null)
-						return theExtRef;
-					else
-						return theModel;
-				}
-
-				@Override
-				public ModelInstanceType<M, MV> getType() {
-					if (theCreator != null)
-						return theValue.getType();
-					else if (theRuntimePlaceholder != null)
-						return theRuntimePlaceholder.getType();
-					else if (theExtRef != null)
-						return theExtRef.getType();
-					else if (theModel != null)
-						return (ModelInstanceType<M, MV>) ModelTypes.Model.instance();
-					else
-						throw new IllegalStateException();
-				}
-
-				@Override
-				public MV get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
-					return models.get(this);
-				}
-
-				@Override
-				public MV forModelCopy(MV value, ModelSetInstance sourceModels, ModelSetInstance newModels)
-					throws ModelInstantiationException, IllegalStateException {
-					if (theValue != null)
-						return theValue.forModelCopy(value, sourceModels, newModels);
-					else
-						return value;
-				}
-
-				@Override
-				public BetterList<ValueContainer<?, ?>> getCores() {
-					return theValue == null ? BetterList.empty() : theValue.getCores();
-				}
-
-				@Override
-				public MV create(ModelSetInstance modelSet, ExternalModelSet extModels) throws ModelInstantiationException {
-					if (theCreator != null)
-						return theValue.get(modelSet);
-					else if (theExtRef != null) {
-						MV value;
-						try {
-							value = extModels == null ? null : theExtRef.get(extModels);
-							if (value == null)
-								value = theExtRef.getDefault(modelSet);
-						} catch (ModelException | TypeConversionException e) {
-							throw new ModelInstantiationException(theExtRef.getFilePosition(), 0, e);
-						}
-						if (value == null) {
-							if (extModels == null)
-								throw new IllegalArgumentException("No such external model: " + theNodeId.getOwnerId());
-							else
-								throw new IllegalArgumentException("No such external value specified: " + theNodeId);
-						} else
-							return value;
-					} else
-						throw new IllegalStateException(theNodeId + " is not an internal value");
-				}
-
-				@Override
-				public InterpretedModelSet getModel() {
-					return theModel;
-				}
-
-				@Override
-				public InterpretedValueContainer<M, MV> getValue() {
-					return theValue;
-				}
-			}
-
 			/**
-			 * Creates a {@link DefaultModelSet} from {@link #build()}
+			 * Creates a {@link DefaultModelSet} from {@link #interpret()}
 			 *
 			 * @param root The root model, or null if the new model is to be the root
 			 * @param parent The parent model, or null if the new model is to be the root
 			 * @param components The component map for the new model
+			 * @param idComponents The identified component map for the new model
 			 * @return The new model
 			 */
 			protected DefaultInterpreted createModel(DefaultInterpreted root, DefaultInterpreted parent,

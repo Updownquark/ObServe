@@ -48,6 +48,7 @@ public class TestInterpretation implements QonfigInterpretation {
 			return () -> {
 				ValueContainer<SettableValue<?>, SettableValue<Integer>> derivedStateV;
 				derivedStateV = derivedStateX.evaluate(ModelTypes.Value.forType(int.class));
+				exS.interpretLocalModel();
 				return new ObservableModelSet.AbstractValueContainer<SettableValue<?>, SettableValue<StatefulTestStructure>>(
 					ModelTypes.Value.forType(StatefulTestStructure.class)) {
 					@Override
@@ -83,6 +84,7 @@ public class TestInterpretation implements QonfigInterpretation {
 			QonfigExpression2 internalStateX = exS.getAttributeExpression("internal-state");
 			QonfigExpression2 derivedStateX = exS.getAttributeExpression("derived-state");
 			return () -> {
+					System.out.println("Interpret " + exS.getAttributeText("name"));
 				// Satisfy the internalState value with the internalState container
 				DynamicModelValue.satisfyDynamicValue("internalState", exS.getExpressoEnv().getModels(), () -> {
 					return internalStateX.evaluate(ModelTypes.Value.any());
@@ -94,6 +96,7 @@ public class TestInterpretation implements QonfigInterpretation {
 					throw new ExpressoInterpretationException(e.getMessage(), session.getElement().getPositionInFile(), 0, e);
 				}
 				ValueContainer<SettableValue<?>, SettableValue<?>> derivedStateV = derivedStateX.evaluate(ModelTypes.Value.any());
+				exS.interpretLocalModel();
 				return new ObservableModelSet.AbstractValueContainer<SettableValue<?>, SettableValue<DynamicTypeStatefulTestStructure>>(
 					ModelTypes.Value.forType(DynamicTypeStatefulTestStructure.class)) {
 					@Override
@@ -130,6 +133,7 @@ public class TestInterpretation implements QonfigInterpretation {
 					throw new ExpressoInterpretationException(e.getMessage(), session.getElement().getPositionInFile(), 0, e);
 				}
 				ValueContainer<SettableValue<?>, SettableValue<?>> derivedStateV = derivedStateX.evaluate(ModelTypes.Value.any());
+				exS.interpretLocalModel();
 				return new ObservableModelSet.AbstractValueContainer<SettableValue<?>, SettableValue<DynamicTypeStatefulTestStructure>>(
 					ModelTypes.Value.forType(DynamicTypeStatefulTestStructure.class)) {
 					@Override
