@@ -3,6 +3,7 @@ package org.observe.expresso;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ObservableModelSet.ValueContainer;
 import org.qommons.config.QonfigElement;
+import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigValueDef;
 import org.qommons.io.LocatedFilePosition;
 import org.qommons.io.SimpleXMLParser.ContentPosition;
@@ -109,6 +110,25 @@ public class QonfigExpression2 {
 			throw new ExpressoInterpretationException("Could not interpret " + theDef, position,
 				theExpression.getExpressionEnd() - theExpression.getExpressionOffset(), e);
 		}
+	}
+
+	/**
+	 * Throws an {@link QonfigInterpretationException}
+	 *
+	 * @param message The message for the exception
+	 * @param cause The cause of the exception (may be null)
+	 * @throws QonfigInterpretationException The {@link QonfigInterpretationException}
+	 */
+	public void throwQonfigException(String message, Throwable cause) throws QonfigInterpretationException {
+		LocatedFilePosition position = thePosition == null ? null
+			: new LocatedFilePosition(theElement.getDocument().getLocation(), thePosition.getPosition(theExpression.getExpressionOffset()));
+		int length = length();
+		if (cause == null)
+			throw new QonfigInterpretationException(message, position, length);
+		else if (message == null)
+			throw new QonfigInterpretationException(cause.getMessage(), position, length, cause);
+		else
+			throw new QonfigInterpretationException(message, position, length, cause);
 	}
 
 	/**

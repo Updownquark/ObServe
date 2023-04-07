@@ -155,7 +155,9 @@ public class Expresso {
 	 * @param <M> The model type of the result
 	 * @param <MV> The value type of the result
 	 */
-	public interface ConfigModelValue<M, MV extends M> {
+	public interface ConfigModelValue<M, MV extends M, T> {
+		void init() throws ExpressoInterpretationException;
+
 		/** @return The type of this value */
 		ModelInstanceType<M, MV> getType();
 
@@ -166,7 +168,7 @@ public class Expresso {
 		 * @param msi The model set to use to build the structure
 		 * @return The created value
 		 */
-		MV create(ObservableConfig.ObservableConfigValueBuilder<?> config, ModelSetInstance msi);
+		MV create(ObservableConfig.ObservableConfigValueBuilder<T> config, ModelSetInstance msi) throws ModelInstantiationException;
 	}
 
 	/**

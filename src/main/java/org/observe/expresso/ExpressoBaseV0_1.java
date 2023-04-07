@@ -1334,8 +1334,6 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 					.withValue(TypeTokens.get().getDefaultValue(eventType.getValueType())).build();
 				try {
 					DynamicModelValue.satisfyDynamicValue("event", ModelTypes.Value.forType(eventType.getValueType()), msi, event);
-				} catch (ExpressoInterpretationException e) {
-					throw new ModelInstantiationException("Could not satisfy event variable", e.getPosition(), 0);
 				} catch (ModelException | TypeConversionException e) {
 					throw new ModelInstantiationException("Could not satisfy event variable", session.getElement().getPositionInFile(), 0);
 				}

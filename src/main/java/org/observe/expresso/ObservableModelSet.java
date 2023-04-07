@@ -897,7 +897,21 @@ public interface ObservableModelSet extends Identifiable {
 			return of(type, filePosition, value, null);
 		}
 
+		/**
+		 * Creates a model value in an {@link ObservableModelSet.ExternalModelSet}
+		 * 
+		 * @param <M> The type of model this creator knows how to create values from (either {@link ObservableModelSet.ExternalModelSet} or
+		 *        {@link ObservableModelSet.ModelSetInstance}
+		 * @param <MV> The type of the value
+		 */
 		public interface ExtValueCreator<M, MV> {
+			/**
+			 * @param models The models to create the value from
+			 * @return The model value
+			 * @throws ModelException If this creator relies on a model value that is missing
+			 * @throws TypeConversionException If this creator requires conversion of one of its dependencies which fails
+			 * @throws ModelInstantiationException If this creator is unable to create its value
+			 */
 			MV getValue(M models) throws ModelException, TypeConversionException, ModelInstantiationException;
 		}
 
@@ -1251,8 +1265,6 @@ public interface ObservableModelSet extends Identifiable {
 		ModelComponentNode<Object, Object> node = (ModelComponentNode<Object, Object>) getComponent(path);
 		if (node.getModel() != null)
 			throw new ModelException("'" + path + "' is a sub-model, not a value");
-		if (node.getIdentity().toString().equals("models.tests.internalState.struct1"))
-			BreakpointHere.breakpoint();
 		return node.as(type);
 	}
 
@@ -1511,7 +1523,7 @@ public interface ObservableModelSet extends Identifiable {
 		 *         {@link ObservableModelSet.InterpretedModelSet#createInstance(ObservableModelSet.ExternalModelSet, Observable) created}
 		 *         for
 		 */
-		ObservableModelSet getModel();
+		InterpretedModelSet getModel();
 
 		/** @return An observable that will fire when this model instance set's lifetime expires */
 		Observable<?> getUntil();
@@ -2410,7 +2422,18 @@ public interface ObservableModelSet extends Identifiable {
 			}
 		}
 
+		/** Default {@link Built} implementation */
 		public static class DefaultBuilt extends DefaultModelSet implements Built {
+			/**
+			 * @param id The component id for the new model
+			 * @param root The root model for the new model, or null if the new model is to be the root
+			 * @param parent The parent model for the new model, or null if the new model is to be the root
+			 * @param tagValues Model tag values for this model
+			 * @param inheritance The new model's {@link ObservableModelSet#getInheritance() inheritance}
+			 * @param components The {@link ObservableModelSet#getComponents() components} for the new model
+			 * @param identifiedComponents All {@link IdentifableValueCreator identified} values in the model
+			 * @param nameChecker The {@link ObservableModelSet#getNameChecker() name checker} for the new model
+			 */
 			public DefaultBuilt(ModelComponentId id, DefaultBuilt root, DefaultBuilt parent, Map<ModelTag<?>, Object> tagValues,
 				Map<ModelComponentId, ObservableModelSet> inheritance, Map<String, ? extends ModelComponentNode<?, ?>> components,
 					Map<Object, ? extends ModelComponentNode<?, ?>> identifiedComponents, NameChecker nameChecker) {
@@ -2474,7 +2497,18 @@ public interface ObservableModelSet extends Identifiable {
 			}
 		}
 
+		/** Default {@link InterpretedModelSet} implementation */
 		public static class DefaultInterpreted extends DefaultModelSet implements InterpretedModelSet {
+			/**
+			 * @param id The component id for the new model
+			 * @param root The root model for the new model, or null if the new model is to be the root
+			 * @param parent The parent model for the new model, or null if the new model is to be the root
+			 * @param tagValues Model tag values for this model
+			 * @param inheritance The new model's {@link ObservableModelSet#getInheritance() inheritance}
+			 * @param components The {@link ObservableModelSet#getComponents() components} for the new model
+			 * @param identifiedComponents All {@link IdentifableValueCreator identified} values in the model
+			 * @param nameChecker The {@link ObservableModelSet#getNameChecker() name checker} for the new model
+			 */
 			public DefaultInterpreted(ModelComponentId id, DefaultInterpreted root, DefaultInterpreted parent,
 				Map<ModelTag<?>, Object> tagValues, Map<ModelComponentId, ObservableModelSet> inheritance,
 				Map<String, ? extends InterpretedModelComponentNode<?, ?>> components,
@@ -2631,7 +2665,7 @@ public interface ObservableModelSet extends Identifiable {
 			}
 
 			@Override
-			public ObservableModelSet getModel() {
+			public InterpretedModelSet getModel() {
 				return theModel;
 			}
 

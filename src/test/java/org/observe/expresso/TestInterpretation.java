@@ -58,8 +58,6 @@ public class TestInterpretation implements QonfigInterpretation {
 						try {
 							DynamicModelValue.satisfyDynamicValue(//
 								"internalState", ModelTypes.Value.forType(int.class), models, structure.getInternalState());
-						} catch (ExpressoInterpretationException e) {
-							throw new ModelInstantiationException(e.getMessage(), e.getPosition(), e.getErrorLength(), e);
 						} catch (ModelException | TypeConversionException e) {
 							throw new ModelInstantiationException(e.getMessage(), session.getElement().getPositionInFile(), 0, e);
 						}

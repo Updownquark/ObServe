@@ -156,12 +156,11 @@ public interface DynamicModelValue<M, MV extends M> extends ValueContainer<M, MV
 	 * @param model The model instance to satisfy the value in (should be {@link ExpressoQIS#wrapLocal(ModelSetInstance) wrapLocal}'ed)
 	 * @param value The value to use to satisfy the model value
 	 * @throws ModelException If the given model value does not exist
-	 * @throws ExpressoInterpretationException If the value cannot be evaluated
 	 * @throws ModelInstantiationException If the value cannot be instantiated
 	 * @throws TypeConversionException If the value does not match the specified type
 	 */
 	public static <M, MV extends M> void satisfyDynamicValue(String name, ModelInstanceType<M, MV> type, ModelSetInstance model, MV value)
-		throws ModelException, ExpressoInterpretationException, ModelInstantiationException, TypeConversionException {
+		throws ModelException, ModelInstantiationException, TypeConversionException {
 		try { // Check for the value rigorously
 			model.getModel().getValue(name, type);
 		} catch (ModelException e) {
@@ -187,12 +186,11 @@ public interface DynamicModelValue<M, MV extends M> extends ValueContainer<M, MV
 	 * @return Whether the given dynamic value has already been satisfied with
 	 *         {@link #satisfyDynamicValue(String, ModelInstanceType, ModelSetInstance, Object)}
 	 * @throws ModelException If the given model value does not exist
-	 * @throws ExpressoInterpretationException If the value cannot be evaluated
 	 * @throws ModelInstantiationException If the value cannot be instantiated
 	 * @throws TypeConversionException If the value does not match the specified type
 	 */
 	public static <M, MV extends M> boolean isDynamicValueSatisfied(String name, ModelInstanceType<M, MV> type, ModelSetInstance model)
-		throws ModelException, ExpressoInterpretationException, ModelInstantiationException, TypeConversionException {
+		throws ModelException, ModelInstantiationException, TypeConversionException {
 		try { // Check for the value rigorously
 			model.getModel().getValue(name, type);
 		} catch (ModelException e) {
@@ -218,13 +216,12 @@ public interface DynamicModelValue<M, MV extends M> extends ValueContainer<M, MV
 	 * @param model The model instance to satisfy the value in (should be {@link ExpressoQIS#wrapLocal(ModelSetInstance) wrapLocal}'ed)
 	 * @param value The value to use to satisfy the model value
 	 * @throws ModelException If the given model value does not exist
-	 * @throws ExpressoInterpretationException If the value cannot be evaluated
 	 * @throws ModelInstantiationException If the value cannot be instantiated
 	 * @throws TypeConversionException If the value does not match the specified type
 	 */
 	public static <M, MV extends M> void satisfyDynamicValueIfUnsatisfied(String name, ModelInstanceType<M, MV> type,
 		ModelSetInstance model, MV value)
-			throws ModelException, ExpressoInterpretationException, ModelInstantiationException, TypeConversionException {
+		throws ModelException, ModelInstantiationException, TypeConversionException {
 		try { // Check for the value rigorously
 			model.getModel().getValue(name, type);
 		} catch (ModelException e) {

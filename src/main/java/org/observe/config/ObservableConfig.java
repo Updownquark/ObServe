@@ -389,6 +389,11 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped, Event
 			return thePath;
 		}
 
+		/** @return The type that this builder was created for */
+		public TypeToken<T> getType() {
+			return theType;
+		}
+
 		/**
 		 * @param format The format to use to persist and format the value from config
 		 * @return This builder
