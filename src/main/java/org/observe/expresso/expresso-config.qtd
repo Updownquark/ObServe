@@ -10,7 +10,7 @@ It builds on the Expresso-Base toolkit and allows specification of persisted con
 		<add-on name="allow-config-model" abstract="true" />
 		<add-on name="config-model-value" requires="model-value" inherits="type-required">
 			<attribute name="config-path" type="string" specify="optional" />
-			<attribute name="format" type="expression" specify="optional" />
+			<child-def name="format" type="config-format" min="0" />
 		</add-on>
 		<add-on name="config-value" requires="value" inherits="config-model-value">
 			<attribute name="default" type="expression" specify="optional" />
@@ -19,59 +19,8 @@ It builds on the Expresso-Base toolkit and allows specification of persisted con
 			<attribute name="key-format" type="expression" specify="optional" />
 		</add-on>
 
-		<add-on name="file-source-type" requires="file-source" abstract="true" />
-		<add-on name="native" inherits="file-source-type" requires="file-source" />
-		<add-on name="sftp" inherits="file-source-type" requires="file-source">
-			<attribute name="host" type="expression" />
-			<attribute name="user" type="expression" />
-			<attribute name="password" type="expression" />
-			<attribute name="connecting" type="expression" />
-		</add-on>
-		<add-on name="archive-type" requires="archive-method" />
-		<add-on name="zip" inherits="archive-type" requires="archive-method" />
-		<add-on name="tar" inherits="archive-type" requires="archive-method" />
-		<add-on name="gz" inherits="archive-type" requires="archive-method" />
-
-		<add-on name="format-type" requires="format" abstract="true" />
-		<add-on name="text" inherits="format-type" requires="format" />
-		<add-on name="file" inherits="format-type" requires="format">
-			<attribute name="file-source" type="expression" specify="optional" />
-			<attribute name="working-dir" type="expression" specify="optional" />
-			<attribute name="allow-empty" type="boolean" default="false" />
-		</add-on>
-		<add-on name="int-format" inherits="format-type" requires="format">
-			<attribute name="grouping-separator" type="string" specify="optional" />
-		</add-on>
-		<add-on name="long-format" inherits="int-format" requires="format" />
-		<add-on name="double" inherits="format-type" requires="format">
-			<attribute name="sig-digs" type="int" />
-			<attribute name="unit" type="string" specify="optional" />
-			<attribute name="unit-required" type="boolean" default="true" />
-			<attribute name="metric-prefixes" type="boolean" default="false" />
-			<attribute name="metric-prefixes-p2" type="boolean" default="false" />
-			<child-def name="prefix" type="prefix" min="0" max="inf" />
-			<!-- TODO -->
-		</add-on>
-		<add-on name="instant" inherits="format-type" requires="format">
-			<attribute name="day-format" type="string" default="EEE MMM dd, yyyy" />
-			<attribute name="time-zone" type="string" specify="optional" />
-			<attribute name="max-resolution" type="string" default="Second" />
-			<attribute name="format-24h" type="boolean" default="false" />
-			<attribute name="relative-eval-type" type="string" default="Closest" />
-			<attribute name="relative-to" type="expression" specify="optional" />
-		</add-on>
-		<add-on name="regex-format" inherits="format-type" requires="format" />
-		<add-on name="regex-format-string" inherits="format-type" requires="format" />
-		<add-on name="validate-type" abstract="true" />
-		<add-on name="regex-validation" inherits="validate-type">
-			<attribute name="pattern" type="expression" />
-		</add-on>
-		<add-on name="filter-validation" inherits="validate-type,with-element-model">
-			<element-model>
-				<value name-attribute="filter-value-name" />
-			</element-model>
-			<attribute name="filter-value-name" type="identifier" default="filterValue" />
-			<attribute name="test" type="expression" />
+		<add-on name="model-reference" requires="model-value">
+			<attribute name="ref" type="expression" />
 		</add-on>
 	</add-ons>
 
@@ -97,27 +46,97 @@ It builds on the Expresso-Base toolkit and allows specification of persisted con
 		<element-def name="file-source" extends="model-value">
 			<attr-mod name="model-value.type" specify="forbidden" default="" />
 			<attribute name="type" type="file-source-type" default="native" />
-			<attribute name="max-archive-depth" type="expression" default="10" />
 			<child-def name="archive" type="archive-method" min="0" max="inf" />
 		</element-def>
 
-		<element-def name="validate">
-			<attribute name="type" type="validate-type" />
-		</element-def>
-		<element-def name="format" extends="model-value">
-			<attr-mod name="model-value.type" specify="forbidden" default="" />
-			<attribute name="type" type="format-type" />
+		<element-def name="format" extends="model-value" abstract="true">
 			<child-def name="validate" type="validate" min="0" max="inf" />
+		</element-def>
+		<element-def name="validate" abstract="true" />
+		<element-def name="format-from-model" extends="format" inherits="from-model" />
+		<element-def name="text-format" extends="format" />
+		<element-def name="file-format" extends="format">
+			<!-- Default is native -->
+			<child-def name="file-source" type="file-source" specify="optional" />
+			<attribute name="working-dir" type="expression" specify="optional" />
+			<attribute name="allow-empty" type="boolean" default="false" />
+		</element-def>
+		<element-def name="file-source" extends="model-value" abstract="true">
+			<attr-mod name="model-value.type" specify="forbidden" default="" />
+		</element-def>
+		<element-def name="file-source-from-model" extends="file-source" inherits="model-reference" />
+		<element-def name="native-file-source" extends="file-source" />
+		<element-def name="sftp-file-source" extends="file-source">
+			<attribute name="host" type="expression" />
+			<attribute name="user" type="expression" />
+			<attribute name="password" type="expression" />
+			<attribute name="connecting" type="expression" />
+			<attribute name="connected" type="expression" />
+			<attribute name="timeout" type="expression" default="100ms" />
+			<attribute name="retry" type="expression" default="1" />
+		</element-def>
+		<element-def name="archive-enabled-file-source" extends="file-source">
+			<attribute name="max-archive-depth" type="expression" default="10" />
+			<!-- Default is native -->
+			<child-def name="wrapped" type="file-source" min="0" />
+			<child-def name="archive-method" type="archive-method" min="0" max="inf" />
+		</element-def>
+		<element-def name="archive-method" extends="model-value">
+			<attr-mod name="model-value.type" specify="forbidden" default="" />
+		</element-def>
+		<element-def name="zip-archival" extends="archive-method" />
+		<element-def name="tar-archival" extends="archive-method" />
+		<element-def name="gz-archival" extends="archive-method" />
+		<element-def name="int-format" extends="format">
+			<attribute name="grouping-separator" type="string" specify="optional" />
+		</element-def>
+		<element-def name="long-format" inherits="int-format" />
+		<element-def name="double-format" extends="format">
+			<attribute name="sig-digs" type="int" />
+			<attribute name="unit" type="string" specify="optional" />
+			<attribute name="unit-required" type="boolean" default="true" />
+			<attribute name="metric-prefixes" type="boolean" default="false" />
+			<attribute name="metric-prefixes-p2" type="boolean" default="false" />
+			<child-def name="prefix" type="prefix" min="0" max="inf" />
+			<!-- TODO -->
 		</element-def>
 		<element-def name="prefix">
 			<attribute name="name" type="string" />
 			<attribute name="exp" type="int" specify="optional" />
 			<attribute name="multiplier" type="float" specify="optional" />
 		</element-def>
-		<element-def name="simple-config-format" extends="model-value">
-			<!-- Optional because this can be supplied for some types -->
-			<attribute name="format" type="expression" specify="optional" />
-			<attribute name="default" type="string" specify="optional" />
+		<element-def name="instant-format" extends="format">
+			<attribute name="day-format" type="string" default="EEE MMM dd, yyyy" />
+			<attribute name="time-zone" type="string" specify="optional" />
+			<attribute name="max-resolution" type="string" default="Second" />
+			<attribute name="format-24h" type="boolean" default="false" />
+			<attribute name="relative-eval-type" type="string" default="Closest" />
+			<attribute name="relative-to" type="expression" specify="optional" />
+		</element-def>
+		<element-def name="regex-format" extends="format" />
+		<element-def name="regex-format-string" extends="format" />
+		<element-def name="validate-type" abstract="true" />
+		
+		<element-def name="regex-validation" extends="validate">
+			<attribute name="pattern" type="expression" />
+		</element-def>
+		<element-def name="filter-validation" extends="validate" inherits="with-element-model">
+			<element-model>
+				<value name-attribute="filter-value-name" />
+			</element-model>
+			<attribute name="filter-value-name" type="identifier" default="filterValue" />
+			<attribute name="test" type="expression" />
+		</element-def>
+		
+		<element-def name="config-format" extends="model-value" abstract="true">
+		</element-def>
+		<element-def name="config-format-from-model" extends="model-reference">
+			<attribute name="ref" type="expression" />
+		</element-def>
+		<element-def name="text-config-format" extends="config-format">
+			<child-def name="text-format" type="format" />
+			<attribute name="default" type="expression" specify="optional" />
+			<attribute name="default-text" type="string" specify="optional" />
 		</element-def>
 	</elements>
 
