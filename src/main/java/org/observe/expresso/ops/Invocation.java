@@ -40,26 +40,20 @@ import com.google.common.reflect.TypeToken;
 
 /** An expression representing the invocation of a {@link MethodInvocation method} or {@link ConstructorInvocation constructor} */
 public abstract class Invocation implements ObservableExpression {
-	private final List<String> theTypeArguments;
+	private final List<BufferedType> theTypeArguments;
 	private final List<ObservableExpression> theArguments;
-	private final int theOffset;
-	private final int theEnd;
 
 	/**
 	 * @param typeArguments The type arguments to the invocation
 	 * @param arguments The arguments to use to invoke the invokable
-	 * @param offset The offset position of the start of this expression
-	 * @param end The offset position of the end of this expression
 	 */
-	public Invocation(List<String> typeArguments, List<ObservableExpression> arguments, int offset, int end) {
+	public Invocation(List<BufferedType> typeArguments, List<ObservableExpression> arguments) {
 		theTypeArguments = typeArguments;
 		theArguments = arguments;
-		theOffset = offset;
-		theEnd = end;
 	}
 
 	/** @return The type arguments to the invocation */
-	public List<String> getTypeArguments() {
+	public List<BufferedType> getTypeArguments() {
 		return theTypeArguments;
 	}
 
@@ -68,34 +62,29 @@ public abstract class Invocation implements ObservableExpression {
 		return theArguments;
 	}
 
-	@Override
-	public int getExpressionOffset() {
-		return theOffset;
-	}
+	/** @return The offset in this expression of the initial parameter argument expression */
+	protected abstract int getInitialArgOffset();
 
 	@Override
-	public int getExpressionEnd() {
-		return theEnd;
-	}
-
-	@Override
-	public <M, MV extends M> ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env)
+	public <M, MV extends M> ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env, int expressionOffset)
 		throws ExpressoEvaluationException, ExpressoInterpretationException {
 		if (type.getModelType() == ModelTypes.Action) {
 			try (Transaction t = asAction()) {
 				InvokableResult<?, SettableValue<?>, ? extends SettableValue<?>> result = evaluateInternal2(
-					ModelTypes.Value.forType(type.getType(0)), env, new ArgOption(env));
+					ModelTypes.Value.forType(type.getType(0)), env, new ArgOption(env, expressionOffset + getInitialArgOffset()),
+					expressionOffset);
 				return (ValueContainer<M, MV>) createActionContainer((InvokableResult<?, SettableValue<?>, SettableValue<Object>>) result);
 			}
 		} else {
-			InvokableResult<?, M, MV> result = evaluateInternal2(type, env, new ArgOption(env));
+			InvokableResult<?, M, MV> result = evaluateInternal2(type, env, new ArgOption(env, expressionOffset + getInitialArgOffset()),
+				expressionOffset);
 			return createValueContainer(result);
 		}
 	}
 
 	/**
 	 * Represents an argument option supplied to
-	 * {@link Invocation#findMethod(Executable[], String, TypeToken, boolean, List, ModelInstanceType, ExpressoEnv, ExecutableImpl, ObservableExpression)}
+	 * {@link Invocation#findMethod(Executable[], String, TypeToken, boolean, List, ModelInstanceType, ExpressoEnv, ExecutableImpl, ObservableExpression, int)}
 	 */
 	public interface Args {
 		/** @return The number of arguments in the option */
@@ -128,13 +117,15 @@ public abstract class Invocation implements ObservableExpression {
 		/** The arguments */
 		public final List<ValueContainer<SettableValue<?>, SettableValue<?>>>[] args;
 		private final ValueContainer<SettableValue<?>, SettableValue<?>>[] resolved;
+		private final int theExpressionOffset;
 
-		ArgOption(ExpressoEnv env) {
+		ArgOption(ExpressoEnv env, int argOffset) {
 			theEnv = env;
 			args = new List[theArguments.size()];
 			resolved = new ValueContainer[theArguments.size()];
 			for (int a = 0; a < theArguments.size(); a++)
 				args[a] = new ArrayList<>(2);
+			theExpressionOffset = argOffset;
 		}
 
 		@Override
@@ -157,8 +148,14 @@ public abstract class Invocation implements ObservableExpression {
 				}
 			}
 			// Not found, try to evaluate it
+			int argOffset = theExpressionOffset;
+			for (int i = 0; i < arg; i++) {
+				if (i > 0)
+					argOffset++;
+				argOffset += theArguments.get(i).getExpressionLength();
+			}
 			c = (ValueContainer<SettableValue<?>, SettableValue<?>>) (ValueContainer<?, ?>) theArguments.get(arg)
-				.evaluate(ModelTypes.Value.forType(paramType), theEnv);
+				.evaluate(ModelTypes.Value.forType(paramType), theEnv, argOffset);
 			args[arg].add(0, c);
 			return true;
 		}
@@ -166,15 +163,21 @@ public abstract class Invocation implements ObservableExpression {
 		@Override
 		public TypeToken<?> resolve(int arg) throws ExpressoEvaluationException, ExpressoInterpretationException, TypeConversionException {
 			if (resolved[arg] == null) {
-				if (args[arg].isEmpty())
-					resolved[arg] = theArguments.get(arg).evaluate(ModelTypes.Value.any(), theEnv);
-				else
+				if (args[arg].isEmpty()) {
+					int argOffset = theExpressionOffset;
+					for (int i = 0; i < arg; i++) {
+						if (i > 0)
+							argOffset++;
+						argOffset += theArguments.get(i).getExpressionLength();
+					}
+					resolved[arg] = theArguments.get(arg).evaluate(ModelTypes.Value.any(), theEnv, argOffset);
+				} else
 					resolved[arg] = args[arg].get(0);
 			}
 			try {
 				return resolved[arg].getType().getType(0);
 			} catch (ExpressoInterpretationException e) {
-				throw new ExpressoEvaluationException(getExpressionOffset(), getExpressionEnd(), e.getMessage(), e);
+				throw new ExpressoEvaluationException(e.getErrorOffset(), e.getErrorLength(), e.getMessage(), e);
 			}
 		}
 
@@ -222,12 +225,13 @@ public abstract class Invocation implements ObservableExpression {
 	 * @param type The model instance type of the value container to create
 	 * @param env The expresso environment to use to evaluate this invocation
 	 * @param args The argument option to use to invoke
+	 * @param expressionOffset The offset of this expression in the evaluated root
 	 * @return The result definition
 	 * @throws ExpressoEvaluationException If an error occurs evaluating the invokable
 	 * @throws ExpressoInterpretationException If an expression on which this expression depends could not be interpreted
 	 */
 	protected abstract <M, MV extends M> InvokableResult<?, M, MV> evaluateInternal2(ModelInstanceType<M, MV> type, ExpressoEnv env,
-		ArgOption args) throws ExpressoEvaluationException, ExpressoInterpretationException;
+		ArgOption args, int expressionOffset) throws ExpressoEvaluationException, ExpressoInterpretationException;
 
 	private <X extends Executable, T> InvocationActionContainer<X, T> createActionContainer(
 		InvokableResult<X, SettableValue<?>, SettableValue<T>> result) {
@@ -280,13 +284,14 @@ public abstract class Invocation implements ObservableExpression {
 	 * @param env The expresso environment to use for the invocation
 	 * @param impl The executable implementation corresponding to the invokable type
 	 * @param invocation The expression that this is being called from, just for inclusion in an error message
+	 * @param expressionOffset The offset of this expression in the evaluated root
 	 * @return The result containing the invokable matching the given options, or null if no such invokable was found in the list
 	 * @throws ExpressoEvaluationException If a suitable invokable is found, but there is an error with its invocation
 	 * @throws ExpressoInterpretationException If a method argument could not be interpreted
 	 */
 	public static <X extends Executable, M, MV extends M> MethodResult<X, MV> findMethod(X[] methods, String methodName,
 		TypeToken<?> contextType, boolean arg0Context, List<? extends Args> argOptions, ModelInstanceType<M, MV> targetType,
-		ExpressoEnv env, ExecutableImpl<X> impl, ObservableExpression invocation)
+		ExpressoEnv env, ExecutableImpl<X> impl, ObservableExpression invocation, int expressionOffset)
 			throws ExpressoEvaluationException, ExpressoInterpretationException {
 		Map<String, Exception> methodErrors = null;
 		MethodResult<X, MV> bestResult = null;
@@ -377,7 +382,7 @@ public abstract class Invocation implements ObservableExpression {
 								} else {
 									ok = false;
 									if (ex != null)
-										_throw(ex, invocation);
+										_throw(ex, invocation, expressionOffset);
 								}
 							}
 						} else if (!option.matchesType(a, paramType))
@@ -390,9 +395,8 @@ public abstract class Invocation implements ObservableExpression {
 
 						ModelInstanceConverter<?, ?> converter = ModelTypes.Value.forType(returnType).convert(targetType);
 						if (converter == null)
-							throw new ExpressoEvaluationException(invocation.getExpressionOffset(), invocation.getExpressionEnd(),
-								"Return type " + returnType + " of method " + Invocation.printSignature(m) + " cannot be assigned to type "
-									+ targetType);
+							throw new ExpressoEvaluationException(expressionOffset, invocation.getExpressionLength(), "Return type "
+								+ returnType + " of method " + Invocation.printSignature(m) + " cannot be assigned to type " + targetType);
 						if (specificity < 0) {
 							specificity = 0;
 							for (TypeToken<?> pt : paramTypes)
@@ -420,8 +424,8 @@ public abstract class Invocation implements ObservableExpression {
 						msg.append(errors.get(i).getMessage());
 					}
 
-					ExpressoEvaluationException ex = new ExpressoEvaluationException(//
-						invocation.getExpressionOffset(), invocation.getExpressionEnd(), msg.toString(), errors.get(0));
+					ExpressoEvaluationException ex = new ExpressoEvaluationException(expressionOffset, invocation.getExpressionLength(),
+						msg.toString(), errors.get(0));
 					for (int i = 1; i < errors.size(); i++)
 						ex.addSuppressed(errors.get(i));
 					methodErrors.put(m.toString(), ex);
@@ -439,7 +443,7 @@ public abstract class Invocation implements ObservableExpression {
 			for (Exception ex : methodErrors.values())
 				sameMsg &= exMsg.equals(ex.getMessage());
 			if (sameMsg)
-				_throw(methodErrors.values().iterator().next(), invocation);
+				_throw(methodErrors.values().iterator().next(), invocation, expressionOffset);
 			StringBuilder msg = new StringBuilder("Could not find a match for ").append(invocation).append(':');
 			for (Map.Entry<String, Exception> err : methodErrors.entrySet()) {
 				msg.append("\n\t").append(err.getKey()).append(": ").append(err.getValue().getMessage());
@@ -448,11 +452,10 @@ public abstract class Invocation implements ObservableExpression {
 			ExpressoEvaluationException ex;
 			if (firstEx instanceof ExpressoEvaluationException)
 				ex = new ExpressoEvaluationException(//
-					((ExpressoEvaluationException) firstEx).getErrorOffset(), ((ExpressoEvaluationException) firstEx).getEndIndex(),
+					((ExpressoEvaluationException) firstEx).getErrorOffset(), ((ExpressoEvaluationException) firstEx).getErrorLength(),
 					msg.toString(), firstEx);
 			else
-				ex = new ExpressoEvaluationException(invocation.getExpressionOffset(), invocation.getExpressionEnd(), msg.toString(),
-					firstEx);
+				ex = new ExpressoEvaluationException(expressionOffset, invocation.getExpressionLength(), msg.toString(), firstEx);
 			boolean first = true;
 			for (Exception err : methodErrors.values()) {
 				if (first)
@@ -465,13 +468,14 @@ public abstract class Invocation implements ObservableExpression {
 		return bestResult;
 	}
 
-	static void _throw(Exception ex, ObservableExpression invocation) throws ExpressoEvaluationException, ExpressoInterpretationException {
+	static void _throw(Exception ex, ObservableExpression invocation, int expressionOffset)
+		throws ExpressoEvaluationException, ExpressoInterpretationException {
 		if (ex instanceof ExpressoEvaluationException)
 			throw (ExpressoEvaluationException) ex;
 		else if (ex instanceof ExpressoInterpretationException)
 			throw (ExpressoInterpretationException) ex;
 		else
-			throw new ExpressoEvaluationException(invocation.getExpressionOffset(), invocation.getExpressionEnd(), ex.getMessage(), ex);
+			throw new ExpressoEvaluationException(expressionOffset, invocation.getExpressionLength(), ex.getMessage(), ex);
 	}
 
 	private static ThreadLocal<Boolean> AS_ACTION = new ThreadLocal<>();
@@ -796,7 +800,7 @@ public abstract class Invocation implements ObservableExpression {
 		public final M method;
 		/**
 		 * The index of the option passed to
-		 * {@link Invocation#findMethod(Executable[], String, TypeToken, boolean, List, ModelInstanceType, ExpressoEnv, ExecutableImpl, ObservableExpression)}
+		 * {@link Invocation#findMethod(Executable[], String, TypeToken, boolean, List, ModelInstanceType, ExpressoEnv, ExecutableImpl, ObservableExpression, int)}
 		 * whose arguments match this invocation
 		 */
 		public final int argListOption;

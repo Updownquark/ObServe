@@ -19,18 +19,15 @@ import org.observe.util.TypeTokens;
 /** An expression that returns a boolean for whether a given expression's value is an instance of a constant type */
 public class InstanceofExpression implements ObservableExpression {
 	private final ObservableExpression theLeft;
-	private final String theType;
-	private final int theTypeOffset;
+	private final BufferedType theType;
 
 	/**
 	 * @param left The expression whose type to check
 	 * @param type The type to check against
-	 * @param typeOffset The starting position of the type of this expression in the root sequence
 	 */
-	public InstanceofExpression(ObservableExpression left, String type, int typeOffset) {
+	public InstanceofExpression(ObservableExpression left, BufferedType type) {
 		theLeft = left;
 		theType = type;
-		theTypeOffset = typeOffset;
 	}
 
 	/** @return The expression whose type to check */
@@ -39,18 +36,20 @@ public class InstanceofExpression implements ObservableExpression {
 	}
 
 	/** @return The type to check against */
-	public String getType() {
+	public BufferedType getType() {
 		return theType;
 	}
 
 	@Override
-	public int getExpressionOffset() {
-		return theLeft.getExpressionOffset();
+	public int getChildOffset(int childIndex) {
+		if (childIndex != 0)
+			throw new IndexOutOfBoundsException(childIndex + " of 1");
+		return 0;
 	}
 
 	@Override
-	public int getExpressionEnd() {
-		return theTypeOffset + theType.length();
+	public int getExpressionLength() {
+		return theLeft.getExpressionLength() + 12 + theType.length();
 	}
 
 	@Override
@@ -65,28 +64,32 @@ public class InstanceofExpression implements ObservableExpression {
 			return replacement;
 		ObservableExpression left = theLeft.replaceAll(replace);
 		if (left != theLeft)
-			return new InstanceofExpression(left, theType, theTypeOffset);
+			return new InstanceofExpression(left, theType);
 		return this;
 	}
 
 	@Override
-	public <M, MV extends M> ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env)
+	public <M, MV extends M> ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env, int expressionOffset)
 		throws ExpressoEvaluationException, ExpressoInterpretationException {
 		if (type.getModelType() != ModelTypes.Value && !TypeTokens.get().isAssignable(type.getType(0), TypeTokens.get().BOOLEAN))
-			throw new ExpressoEvaluationException(getExpressionOffset(), getExpressionEnd(),
+			throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(),
 				"instanceof expressions can only be evaluated to Value<Boolean>");
 		ValueContainer<SettableValue<?>, SettableValue<?>> leftValue;
 		try {
-			leftValue = theLeft.evaluate(ModelTypes.Value.any(), env);
+			leftValue = theLeft.evaluate(ModelTypes.Value.any(), env, expressionOffset);
 		} catch (TypeConversionException e) {
-			throw new ExpressoEvaluationException(theLeft.getExpressionOffset(), theLeft.getExpressionEnd(), e.getMessage(), e);
+			throw new ExpressoEvaluationException(expressionOffset, theLeft.getExpressionLength(), e.getMessage(), e);
 		}
 		Class<?> testType;
 		try {
-			testType = TypeTokens.getRawType(TypeTokens.get().parseType(theType));
+			testType = TypeTokens.getRawType(TypeTokens.get().parseType(theType.getName()));
 		} catch (ParseException e) {
-			int index = theTypeOffset + e.getErrorOffset();
-			throw new ExpressoEvaluationException(index, index, e.getMessage(), e);
+			if (e.getErrorOffset() == 0)
+				throw new ExpressoEvaluationException(expressionOffset + theLeft.getExpressionLength() + 12, theType.length(),
+					e.getMessage(), e);
+			else
+				throw new ExpressoEvaluationException(expressionOffset + theLeft.getExpressionLength() + 12 + e.getErrorOffset(), 0,
+					e.getMessage(), e);
 		}
 		ValueContainer<SettableValue<?>, SettableValue<Boolean>> container = leftValue.map(ModelTypes.Value.forType(boolean.class),
 			(lv, msi) -> {

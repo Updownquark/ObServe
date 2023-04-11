@@ -63,7 +63,7 @@ public class QonfigExpression2 {
 
 	/** @return The length of the expression */
 	public int length() {
-		return theExpression.getExpressionEnd() - theExpression.getExpressionOffset();
+		return theExpression.getExpressionLength();
 	}
 
 	/**
@@ -92,23 +92,21 @@ public class QonfigExpression2 {
 	public <M, MV extends M> ValueContainer<M, MV> evaluate(ModelInstanceType<M, MV> type, ExpressoEnv env)
 		throws ExpressoInterpretationException {
 		try {
-			return theExpression.evaluate(type, env);
+			return theExpression.evaluate(type, env, 0);
 		} catch (ExpressoEvaluationException e) {
 			LocatedFilePosition position;
 			if (thePosition == null || e.getErrorOffset() < 0)
 				position = null;
 			else
 				position = new LocatedFilePosition(theElement.getDocument().getLocation(), thePosition.getPosition(e.getErrorOffset()));
-			throw new ExpressoInterpretationException("Could not interpret " + theDef, position, e.getEndIndex() - e.getErrorOffset(), e);
+			throw new ExpressoInterpretationException("Could not interpret " + theDef, position, e.getErrorLength(), e);
 		} catch (TypeConversionException e) {
 			LocatedFilePosition position;
 			if (thePosition == null)
 				position = null;
 			else
-				position = new LocatedFilePosition(theElement.getDocument().getLocation(),
-					thePosition.getPosition(theExpression.getExpressionOffset()));
-			throw new ExpressoInterpretationException("Could not interpret " + theDef, position,
-				theExpression.getExpressionEnd() - theExpression.getExpressionOffset(), e);
+				position = new LocatedFilePosition(theElement.getDocument().getLocation(), thePosition.getPosition(0));
+			throw new ExpressoInterpretationException("Could not interpret " + theDef, position, theExpression.getExpressionLength(), e);
 		}
 	}
 
@@ -121,7 +119,7 @@ public class QonfigExpression2 {
 	 */
 	public void throwQonfigException(String message, Throwable cause) throws QonfigInterpretationException {
 		LocatedFilePosition position = thePosition == null ? null
-			: new LocatedFilePosition(theElement.getDocument().getLocation(), thePosition.getPosition(theExpression.getExpressionOffset()));
+			: new LocatedFilePosition(theElement.getDocument().getLocation(), thePosition.getPosition(0));
 		int length = length();
 		if (cause == null)
 			throw new QonfigInterpretationException(message, position, length);
@@ -140,7 +138,7 @@ public class QonfigExpression2 {
 	 */
 	public void throwException(String message, Throwable cause) throws ExpressoInterpretationException {
 		LocatedFilePosition position = thePosition == null ? null
-			: new LocatedFilePosition(theElement.getDocument().getLocation(), thePosition.getPosition(theExpression.getExpressionOffset()));
+			: new LocatedFilePosition(theElement.getDocument().getLocation(), thePosition.getPosition(0));
 		int length = length();
 		if (cause == null)
 			throw new ExpressoInterpretationException(message, position, length);

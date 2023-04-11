@@ -228,7 +228,7 @@ public class ExpressoSessionImplV0_1 implements SpecialSessionImplementation<Exp
 		ExpressoEnv env = sourceEnv.with(models, null);
 
 		return new JavaExpressoParser().parse(parseText)//
-			.evaluate(ModelTypes.Value.forType(type), env)//
+			.evaluate(ModelTypes.Value.forType(type), env, 0)//
 			.get(models.createInstance(ObservableModelSet.buildExternal(ObservableModelSet.JAVA_NAME_CHECKER).build(), Observable.empty())
 				.build())//
 			.get();

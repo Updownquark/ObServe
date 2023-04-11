@@ -57,13 +57,22 @@ public class ConditionalExpression implements ObservableExpression {
 	}
 
 	@Override
-	public int getExpressionOffset() {
-		return theCondition.getExpressionOffset();
+	public int getChildOffset(int childIndex) {
+		switch (childIndex) {
+		case 0:
+			return 0;
+		case 1:
+			return theCondition.getExpressionLength() + 1;
+		case 2:
+			return theCondition.getExpressionLength() + thePrimary.getExpressionLength() + 2;
+		default:
+			throw new IndexOutOfBoundsException(childIndex + " of 3");
+		}
 	}
 
 	@Override
-	public int getExpressionEnd() {
-		return theSecondary.getExpressionEnd();
+	public int getExpressionLength() {
+		return theCondition.getExpressionLength() + thePrimary.getExpressionLength() + theSecondary.getExpressionLength() + 1;
 	}
 
 	@Override
@@ -85,42 +94,44 @@ public class ConditionalExpression implements ObservableExpression {
 	}
 
 	@Override
-	public <M, MV extends M> ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env)
+	public <M, MV extends M> ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env, int expressionOffset)
 		throws ExpressoEvaluationException, ExpressoInterpretationException {
 		if (type != null && (type.getModelType() == ModelTypes.Value || type.getModelType() == ModelTypes.Collection
 			|| type.getModelType() == ModelTypes.Set)) {//
 		} else
-			throw new ExpressoEvaluationException(getExpressionOffset(), getExpressionEnd(),
+			throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(),
 				"Conditional expressions not supported for model type " + type.getModelType() + " (" + this + ")");
 		ValueContainer<SettableValue<?>, SettableValue<Boolean>> conditionV;
 		try {
 			conditionV = theCondition.evaluate(//
-				ModelTypes.Value.forType(boolean.class), env);
+				ModelTypes.Value.forType(boolean.class), env, expressionOffset);
 		} catch (TypeConversionException e) {
-			throw new ExpressoEvaluationException(theCondition.getExpressionOffset(), theCondition.getExpressionEnd(), e.getMessage(), e);
+			throw new ExpressoEvaluationException(expressionOffset, theCondition.getExpressionLength(), e.getMessage(), e);
 		}
+		int primaryOffset = expressionOffset + theCondition.getExpressionLength() + 1;
 		ValueContainer<M, MV> primaryV;
 		try {
-			primaryV = thePrimary.evaluate(type, env);
+			primaryV = thePrimary.evaluate(type, env, primaryOffset);
 		} catch (TypeConversionException e) {
-			throw new ExpressoEvaluationException(thePrimary.getExpressionOffset(), thePrimary.getExpressionEnd(), e.getMessage(), e);
+			throw new ExpressoEvaluationException(primaryOffset, thePrimary.getExpressionLength(), e.getMessage(), e);
 		}
+		int secondaryOffset = primaryOffset + thePrimary.getExpressionLength() + 1;
 		ValueContainer<M, MV> secondaryV;
 		try {
-			secondaryV = theSecondary.evaluate(type, env);
+			secondaryV = theSecondary.evaluate(type, env, secondaryOffset);
 		} catch (TypeConversionException e) {
-			throw new ExpressoEvaluationException(theSecondary.getExpressionOffset(), theSecondary.getExpressionEnd(), e.getMessage(), e);
+			throw new ExpressoEvaluationException(secondaryOffset, theSecondary.getExpressionLength(), e.getMessage(), e);
 		}
 		// TODO reconcile compatible model types, like Collection and Set
 		ModelInstanceType<M, MV> primaryType = primaryV.getType();
 		ModelInstanceType<M, MV> secondaryType = secondaryV.getType();
 		if (primaryType.getModelType() != secondaryType.getModelType())
-			throw new ExpressoEvaluationException(getExpressionOffset(), getExpressionEnd(), "Incompatible expressions: " + thePrimary
+			throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(), "Incompatible expressions: " + thePrimary
 				+ ", evaluated to " + primaryType + " and " + theSecondary + ", evaluated to " + secondaryType);
 		if (primaryType.getModelType() == ModelTypes.Value || primaryType.getModelType() == ModelTypes.Collection
 			|| primaryType.getModelType() == ModelTypes.Set) {//
 		} else
-			throw new ExpressoEvaluationException(getExpressionOffset(), getExpressionEnd(),
+			throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(),
 				"Conditional expressions not supported for model type " + primaryType.getModelType() + " (" + this + ")");
 
 		ModelInstanceType<M, MV> resultType;

@@ -17,34 +17,36 @@ import com.google.common.reflect.TypeToken;
 
 /** An expression that produces a {@link Class} instance from a type literal */
 public class ClassInstanceExpression implements ObservableExpression {
-	private final String theType;
-	private final int theOffset;
-	private final int theEnd;
+	private final BufferedType theType;
+	private final int theOpSpacing;
 
 	/**
 	 * @param type The name of the type to get the class value for
-	 * @param offset The offset position of the start of this expression
-	 * @param end The offset position of the end of this expression
+	 * @param opSpacing The number of spaces between '.' and 'class' in this expression
 	 */
-	public ClassInstanceExpression(String type, int offset, int end) {
+	public ClassInstanceExpression(BufferedType type, int opSpacing) {
 		theType = type;
-		theOffset = offset;
-		theEnd = end;
+		theOpSpacing = opSpacing;
 	}
 
 	/** @return The name of the type to get the class value for */
-	public String getType() {
+	public BufferedType getType() {
 		return theType;
 	}
 
-	@Override
-	public int getExpressionOffset() {
-		return theOffset;
+	/** @return The number of spaces between '.' and 'class' in this expression */
+	public int getOpSpacing() {
+		return theOpSpacing;
 	}
 
 	@Override
-	public int getExpressionEnd() {
-		return theEnd;
+	public int getChildOffset(int childIndex) {
+		throw new IndexOutOfBoundsException(childIndex + " of 0");
+	}
+
+	@Override
+	public int getExpressionLength() {
+		return theType.length() + 6 + theOpSpacing;
 	}
 
 	@Override
@@ -58,24 +60,33 @@ public class ClassInstanceExpression implements ObservableExpression {
 	}
 
 	@Override
-	public <M, MV extends M> ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env)
+	public <M, MV extends M> ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env, int expressionOffset)
 		throws ExpressoEvaluationException {
 		if (type.getModelType() != ModelTypes.Value)
-			throw new ExpressoEvaluationException(theOffset, theEnd, "A class instance expression can only be evaluated to a value");
+			throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(),
+				"A class instance expression can only be evaluated to a value");
 		Class<?> clazz;
 		try {
-			clazz = TypeTokens.getRawType(TypeTokens.get().parseType(theType));
+			clazz = TypeTokens.getRawType(TypeTokens.get().parseType(theType.getName()));
 		} catch (ParseException e) {
-			throw new ExpressoEvaluationException(theOffset, theEnd, e.getMessage(), e);
+			if (e.getErrorOffset() == 0)
+				throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(), e.getMessage(), e);
+			else
+				throw new ExpressoEvaluationException(expressionOffset + e.getErrorOffset(), 0, e.getMessage(), e);
 		}
 		TypeToken<Class<?>> classType = TypeTokens.get().keyFor(Class.class).parameterized(clazz);
 		if (!TypeTokens.get().isAssignable(type.getType(0), classType))
-			throw new ExpressoEvaluationException(theOffset, theEnd, theType + ".class cannot be evaluated as a " + type.getType(0));
+			throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(),
+				theType + ".class cannot be evaluated as a " + type.getType(0));
 		return (ValueContainer<M, MV>) ValueContainer.literal(ModelTypes.Value.forType(classType), clazz, theType + ".class");
 	}
 
 	@Override
 	public String toString() {
-		return theType + ".class";
+		StringBuilder str = new StringBuilder();
+		str.append(theType).append('.');
+		for (int i = 0; i < theOpSpacing; i++)
+			str.append(' ');
+		return str.append("class").toString();
 	}
 }

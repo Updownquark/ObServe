@@ -27,6 +27,9 @@ public interface VariableType {
 	 */
 	TypeToken<?> getType(ObservableModelSet models) throws ExpressoInterpretationException;
 
+	/** @return Whether this type depends on the models passed to {@link #getType(ObservableModelSet)} */
+	boolean isModelDependent();
+
 	/**
 	 * Parses a {@link VariableType}
 	 *
@@ -154,6 +157,11 @@ public interface VariableType {
 		}
 
 		@Override
+		public boolean isModelDependent() {
+			return false;
+		}
+
+		@Override
 		public int hashCode() {
 			return theType.hashCode();
 		}
@@ -213,6 +221,11 @@ public interface VariableType {
 		}
 
 		@Override
+		public boolean isModelDependent() {
+			return true;
+		}
+
+		@Override
 		public int hashCode() {
 			return Objects.hash(thePath, theTypeIndex);
 		}
@@ -263,6 +276,15 @@ public interface VariableType {
 			for (int i = 0; i < theParameterTypes.size(); i++)
 				params[i] = theParameterTypes.get(i).getType(models);
 			return TypeTokens.get().keyFor(theBaseType).parameterized(params);
+		}
+
+		@Override
+		public boolean isModelDependent() {
+			for (VariableType param : theParameterTypes) {
+				if (param.isModelDependent())
+					return true;
+			}
+			return false;
 		}
 
 		@Override

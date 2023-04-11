@@ -14,28 +14,22 @@ import org.observe.expresso.ObservableModelSet.ValueContainer;
 /** An expression in parentheses */
 public class ParentheticExpression implements ObservableExpression {
 	private final ObservableExpression theContent;
-	private int theOffset;
-	private int theEnd;
 
-	/**
-	 * @param content The content of this parenthetic
-	 * @param offset The starting position of this expression in the root sequence
-	 * @param end The ending position of this expression in the root sequence
-	 */
-	public ParentheticExpression(ObservableExpression content, int offset, int end) {
+	/** @param content The content of this parenthetic */
+	public ParentheticExpression(ObservableExpression content) {
 		theContent = content;
-		theOffset = offset;
-		theEnd = end;
 	}
 
 	@Override
-	public int getExpressionOffset() {
-		return theOffset;
+	public int getChildOffset(int childIndex) {
+		if (childIndex != 0)
+			throw new IndexOutOfBoundsException(childIndex + " of 1");
+		return 1;
 	}
 
 	@Override
-	public int getExpressionEnd() {
-		return theEnd;
+	public int getExpressionLength() {
+		return theContent.getExpressionLength() + 2;
 	}
 
 	@Override
@@ -50,14 +44,14 @@ public class ParentheticExpression implements ObservableExpression {
 			return replacement;
 		replacement = theContent.replaceAll(replace);
 		if (replacement != theContent)
-			return new ParentheticExpression(replacement, theOffset, theEnd);
+			return new ParentheticExpression(replacement);
 		return this;
 	}
 
 	@Override
-	public <M, MV extends M> ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env)
+	public <M, MV extends M> ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env, int expressionOffset)
 		throws ExpressoEvaluationException, ExpressoInterpretationException {
-		return theContent.evaluateInternal(type, env);
+		return theContent.evaluateInternal(type, env, expressionOffset);
 	}
 
 	@Override

@@ -205,7 +205,8 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 									try {
 										valueType = (ModelInstanceType<Object, Object>) spec.getType(session);
 									} catch (ExpressoInterpretationException e) {
-										throw new ExpressoInterpretationException("Could not interpret type", e.getPosition(), e.getErrorLength(), e);
+										throw new ExpressoInterpretationException("Could not interpret type", e.getPosition(),
+											e.getErrorLength(), e);
 									}
 									try {
 										return sourceAttrX.evaluate(valueType);
@@ -226,7 +227,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 							// wrappedBuilder.withMaker(name, ObservableModelSet.IdentifableValueCreator.of(dv,
 							// new DynamicModelValue.RuntimeModelValue<>(dv, valueType)));
 						} else {
-							builder.withMaker(name, new DynamicModelValue.DynamicTypedModelValueCreator<>(dv, ()-> {
+							builder.withMaker(name, new DynamicModelValue.DynamicTypedModelValueCreator<>(dv, () -> {
 								return (ModelInstanceType<Object, Object>) spec.getType(session);
 							}));
 						}
@@ -2375,8 +2376,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 			throw new QonfigInterpretationException("Could not parse map", e.getPosition(), e.getErrorLength(), e);
 		} catch (ExpressoEvaluationException e) {
 			// TODO How to use the relative position in the exception to augment the file position?
-			throw new QonfigInterpretationException("Could not parse map", op.getElement().getPositionInFile(),
-				e.getEndIndex() - e.getErrorOffset(), e);
+			throw new QonfigInterpretationException("Could not parse map", op.getElement().getPositionInFile(), e.getErrorLength(), e);
 		}
 		if (ptx.isReversible()) {
 			return ValueTransform.of(ptx.getTargetType(), (v, models) -> v.transformReversible(ptx.getTargetType(), tx -> {
@@ -2488,8 +2488,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 			throw new QonfigInterpretationException("Could not parse map", e.getPosition(), e.getErrorLength(), e);
 		} catch (ExpressoEvaluationException e) {
 			// TODO How to use the relative position in the exception to augment the file position?
-			throw new QonfigInterpretationException("Could not parse map", op.getElement().getPositionInFile(),
-				e.getEndIndex() - e.getErrorOffset(), e);
+			throw new QonfigInterpretationException("Could not parse map", op.getElement().getPositionInFile(), e.getErrorLength(), e);
 		}
 		if (ptx.isReversible()) {
 			if (sourceType.getModelType() == ModelTypes.SortedSet)

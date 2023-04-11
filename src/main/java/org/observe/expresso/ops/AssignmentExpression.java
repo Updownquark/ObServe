@@ -49,13 +49,20 @@ public class AssignmentExpression implements ObservableExpression {
 	}
 
 	@Override
-	public int getExpressionOffset() {
-		return theTarget.getExpressionOffset();
+	public int getChildOffset(int childIndex) {
+		switch (childIndex) {
+		case 0:
+			return 0;
+		case 1:
+			return theTarget.getExpressionLength() + 1;
+		default:
+			throw new IndexOutOfBoundsException(childIndex + " of 2");
+		}
 	}
 
 	@Override
-	public int getExpressionEnd() {
-		return theValue.getExpressionEnd();
+	public int getExpressionLength() {
+		return theTarget.getExpressionLength() + 1 + theValue.getExpressionLength();
 	}
 
 	@Override
@@ -76,28 +83,31 @@ public class AssignmentExpression implements ObservableExpression {
 	}
 
 	@Override
-	public <M, MV extends M> ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env)
+	public <M, MV extends M> ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env, int expressionOffset)
 		throws ExpressoEvaluationException, ExpressoInterpretationException {
 		if (type.getModelType() != ModelTypes.Action)
-			throw new ExpressoEvaluationException(getExpressionOffset(), getExpressionEnd(),
+			throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(),
 				"Assignments cannot be used as " + type.getModelType() + "s");
 		ValueContainer<SettableValue<?>, SettableValue<Object>> context;
 		try {
 			context = theTarget.evaluate(
-				(ModelInstanceType<SettableValue<?>, SettableValue<Object>>) (ModelInstanceType<?, ?>) ModelTypes.Value.any(), env);
+				(ModelInstanceType<SettableValue<?>, SettableValue<Object>>) (ModelInstanceType<?, ?>) ModelTypes.Value.any(), env,
+				expressionOffset);
 		} catch (TypeConversionException e) {
-			throw new ExpressoEvaluationException(getExpressionOffset(), getExpressionEnd(), e.getMessage(), e);
+			throw new ExpressoEvaluationException(expressionOffset, theTarget.getExpressionLength(), e.getMessage(), e);
 		}
 		boolean isVoid = type.getType(0).getType() == void.class || type.getType(0).getType() == Void.class;
 		if (!isVoid && !TypeTokens.get().isAssignable(type.getType(0), context.getType().getType(0)))
-			throw new ExpressoEvaluationException(theValue.getExpressionOffset(), theValue.getExpressionEnd(),
+			throw new ExpressoEvaluationException(expressionOffset, theTarget.getExpressionLength(),
 				"Cannot assign " + context + ", type " + type.getType(0) + " to " + context.getType().getType(0));
 		ValueContainer<SettableValue<?>, SettableValue<Object>> value;
+		int valueOffset = expressionOffset + theTarget.getExpressionLength() + 1;
 		try (Transaction t = Invocation.asAction()) {
 			value = theValue.evaluate(
-				ModelTypes.Value.forType((TypeToken<Object>) TypeTokens.get().getExtendsWildcard(context.getType().getType(0))), env);
+				ModelTypes.Value.forType((TypeToken<Object>) TypeTokens.get().getExtendsWildcard(context.getType().getType(0))), env,
+				valueOffset);
 		} catch (TypeConversionException e) {
-			throw new ExpressoEvaluationException(theValue.getExpressionOffset(), theValue.getExpressionEnd(), e.getMessage(), e);
+			throw new ExpressoEvaluationException(valueOffset, theValue.getExpressionLength(), e.getMessage(), e);
 		}
 		return (ValueContainer<M, MV>) new ValueContainer<ObservableAction<?>, ObservableAction<?>>() {
 			@Override

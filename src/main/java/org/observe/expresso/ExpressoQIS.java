@@ -123,7 +123,7 @@ public class ExpressoQIS implements SpecialSession<ExpressoQIS> {
 				position = null;
 			else
 				position = new LocatedFilePosition(getElement().getDocument().getLocation(), value.position.getPosition(e.getErrorOffset()));
-			throw new QonfigInterpretationException("Could not parse attribute " + type, position, e.getEndIndex() - e.getErrorOffset(), e);
+			throw new QonfigInterpretationException("Could not parse attribute " + type, position, e.getErrorLength(), e);
 		}
 		return new QonfigExpression2(expression, getElement(), type, value.position, this);
 	}

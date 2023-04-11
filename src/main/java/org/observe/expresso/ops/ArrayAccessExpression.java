@@ -26,17 +26,14 @@ import com.google.common.reflect.TypeToken;
 public class ArrayAccessExpression implements ObservableExpression {
 	private final ObservableExpression theArray;
 	private final ObservableExpression theIndex;
-	private int theExpressionEnd;
 
 	/**
 	 * @param array The expression representing the array being accessed
 	 * @param index The expression representing the index at which the array is being accessed
-	 * @param end The position of the end of this expression
 	 */
-	public ArrayAccessExpression(ObservableExpression array, ObservableExpression index, int end) {
+	public ArrayAccessExpression(ObservableExpression array, ObservableExpression index) {
 		theArray = array;
 		theIndex = index;
-		theExpressionEnd = end;
 	}
 
 	/** @return The expression representing the array being accessed */
@@ -50,13 +47,20 @@ public class ArrayAccessExpression implements ObservableExpression {
 	}
 
 	@Override
-	public int getExpressionOffset() {
-		return theArray.getExpressionOffset();
+	public int getChildOffset(int childIndex) {
+		switch (childIndex) {
+		case 0:
+			return 0;
+		case 1:
+			return theArray.getExpressionLength() + 1;
+		default:
+			throw new IndexOutOfBoundsException(childIndex + " of 2");
+		}
 	}
 
 	@Override
-	public int getExpressionEnd() {
-		return theExpressionEnd;
+	public int getExpressionLength() {
+		return theArray.getExpressionLength() + theIndex.getExpressionLength() + 2;
 	}
 
 	@Override
@@ -72,30 +76,31 @@ public class ArrayAccessExpression implements ObservableExpression {
 		ObservableExpression array = theArray.replaceAll(replace);
 		ObservableExpression index = theIndex.replaceAll(replace);
 		if (array != theArray || index != theIndex)
-			return new ArrayAccessExpression(array, index, theExpressionEnd);
+			return new ArrayAccessExpression(array, index);
 		return this;
 	}
 
 	@Override
-	public <M, MV extends M> ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env)
+	public <M, MV extends M> ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env, int expressionOffset)
 		throws ExpressoEvaluationException, ExpressoInterpretationException {
 		if (type.getModelType() != ModelTypes.Value)
-			throw new ExpressoEvaluationException(getExpressionOffset(), getExpressionEnd(),
+			throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(),
 				"An array access expression can only be evaluated as a value");
 
 		ValueContainer<SettableValue<?>, SettableValue<Object[]>> arrayValue;
 		try {
 			arrayValue = theArray.evaluate(ModelTypes.Value.forType(//
-				(TypeToken<Object[]>) TypeTokens.get().getArrayType(type.getType(0), 1)), env);
+				(TypeToken<Object[]>) TypeTokens.get().getArrayType(type.getType(0), 1)), env, expressionOffset);
 		} catch (TypeConversionException e) {
-			throw new ExpressoEvaluationException(getExpressionOffset(), getExpressionEnd(),
+			throw new ExpressoEvaluationException(expressionOffset, theArray.getExpressionLength(),
 				"array " + theArray + " cannot be evaluated as a " + type.getType(0) + "[]", e);
 		}
+		int indexOffset = expressionOffset + theArray.getExpressionLength() + 1;
 		ValueContainer<SettableValue<?>, SettableValue<Integer>> indexValue;
 		try {
-			indexValue = theIndex.evaluate(ModelTypes.Value.forType(int.class), env);
+			indexValue = theIndex.evaluate(ModelTypes.Value.forType(int.class), env, indexOffset);
 		} catch (TypeConversionException e) {
-			throw new ExpressoEvaluationException(getExpressionOffset(), getExpressionEnd(),
+			throw new ExpressoEvaluationException(indexOffset, theIndex.getExpressionLength(),
 				"index " + theArray + " cannot be evaluated as an integer", e);
 		}
 		return (ValueContainer<M, MV>) this.<Object> doEval(arrayValue, indexValue, env);

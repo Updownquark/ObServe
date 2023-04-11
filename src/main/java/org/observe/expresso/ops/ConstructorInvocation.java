@@ -17,27 +17,43 @@ import org.observe.expresso.ObservableModelSet.ValueContainer;
 
 /** An expression representing the invocation of a constructor to create a new instance of a type */
 public class ConstructorInvocation extends Invocation {
-	private final String theType;
-	private final int theTypeOffset;
+	private final BufferedType theType;
 
 	/**
 	 * @param type The string representing the type for which to create an instance
 	 * @param typeArguments The strings representing the type arguments to the constructor
 	 * @param args The arguments to pass to the constructor
-	 * @param offset The starting position of this expression in the root sequence
-	 * @param end The ending position of this expression in the root sequence
-	 * @param typeOffset The starting position of the type sequence of this expression in the root sequence
 	 */
-	public ConstructorInvocation(String type, List<String> typeArguments, List<ObservableExpression> args, int offset, int end,
-		int typeOffset) {
-		super(typeArguments, args, offset, end);
+	public ConstructorInvocation(BufferedType type, List<BufferedType> typeArguments, List<ObservableExpression> args) {
+		super(typeArguments, args);
 		theType = type;
-		theTypeOffset = typeOffset;
 	}
 
 	/** @return The string representing the type for which to create an instance */
-	public String getType() {
+	public BufferedType getType() {
 		return theType;
+	}
+
+	@Override
+	public int getChildOffset(int childIndex) {
+		if (childIndex >= getChildren().size())
+			throw new IndexOutOfBoundsException(childIndex + " of " + getChildren().size());
+		int offset = 4 + theType.length();
+		if (childIndex > 0)
+			offset += childIndex - 1;
+		for (int i = 0; i < childIndex; i++)
+			offset += getChildren().get(childIndex).getExpressionLength();
+		return offset;
+	}
+
+	@Override
+	public int getExpressionLength() {
+		int length = 5 + theType.length();
+		if (getChildren().size() > 0)
+			length += getChildren().size() - 1;
+		for (ObservableExpression arg : getChildren())
+			length = arg.getExpressionLength();
+		return length;
 	}
 
 	@Override
@@ -59,26 +75,30 @@ public class ConstructorInvocation extends Invocation {
 			different |= newChild != child;
 		}
 		if (different)
-			return new ConstructorInvocation(getType(), getTypeArguments(), Collections.unmodifiableList(newChildren),
-				getExpressionOffset(), getExpressionEnd(), theTypeOffset);
+			return new ConstructorInvocation(getType(), getTypeArguments(), Collections.unmodifiableList(newChildren));
 		return this;
 	}
 
 	@Override
-	protected <M, MV extends M> InvokableResult<?, M, MV> evaluateInternal2(ModelInstanceType<M, MV> type, ExpressoEnv env, ArgOption args)
-		throws ExpressoEvaluationException, ExpressoInterpretationException {
-		Class<?> constructorType = env.getClassView().getType(theType);
+	protected int getInitialArgOffset() {
+		return theType.length() + 4;
+	}
+
+	@Override
+	protected <M, MV extends M> InvokableResult<?, M, MV> evaluateInternal2(ModelInstanceType<M, MV> type, ExpressoEnv env, ArgOption args,
+		int expressionOffset) throws ExpressoEvaluationException, ExpressoInterpretationException {
+		Class<?> constructorType = env.getClassView().getType(theType.getName());
 		if (constructorType == null)
-			throw new ExpressoEvaluationException(theTypeOffset, theTypeOffset + theType.length(), "No such type found: " + theType);
+			throw new ExpressoEvaluationException(expressionOffset + 3, theType.length(), "No such type found: " + theType);
 		Invocation.MethodResult<Constructor<?>, MV> result = Invocation.findMethod(constructorType.getConstructors(), null, null, true,
-			Arrays.asList(args), type, env, Invocation.ExecutableImpl.CONSTRUCTOR, this);
+			Arrays.asList(args), type, env, Invocation.ExecutableImpl.CONSTRUCTOR, this, expressionOffset);
 		if (result != null) {
 			ValueContainer<SettableValue<?>, SettableValue<?>>[] realArgs = new ValueContainer[getArguments().size()];
 			for (int a = 0; a < realArgs.length; a++)
 				realArgs[a] = args.args[a].get(0);
 			return new InvokableResult<>(result, null, Arrays.asList(realArgs), Invocation.ExecutableImpl.CONSTRUCTOR);
 		}
-		throw new ExpressoEvaluationException(getExpressionOffset(), getExpressionEnd(), "No such constructor " + printSignature());
+		throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(), "No such constructor " + printSignature());
 	}
 
 	@Override
@@ -88,13 +108,13 @@ public class ConstructorInvocation extends Invocation {
 
 	/** @return A string representing this constructor invocation */
 	public String printSignature() {
-		StringBuilder str = new StringBuilder("new ").append(theType).append('(');
+		StringBuilder str = new StringBuilder("new").append(theType).append('(');
 		boolean first = true;
 		for (ObservableExpression arg : getArguments()) {
 			if (first)
 				first = false;
 			else
-				str.append(", ");
+				str.append(',');
 			str.append(arg);
 		}
 		return str.append(')').toString();
