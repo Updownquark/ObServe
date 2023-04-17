@@ -4,7 +4,7 @@ import org.qommons.io.LocatedFilePosition;
 import org.qommons.io.TextParseException;
 
 /**
- * Thrown from {@link ObservableModelSet.ValueCreator#createContainer()} if an error occurs creating the structure to create a model value
+ * Thrown from {@link ObservableModelSet.CompiledModelValue#createSynthesizer()} if an error occurs creating the structure to create a model value
  */
 public class ExpressoInterpretationException extends TextParseException {
 	private final int theLength;

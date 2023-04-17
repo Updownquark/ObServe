@@ -12,11 +12,12 @@ import org.observe.expresso.ExpressoEnv;
 import org.observe.expresso.ExpressoEvaluationException;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ModelInstantiationException;
+import org.observe.expresso.ModelType;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
-import org.observe.expresso.ObservableModelSet.ValueContainer;
+import org.observe.expresso.ObservableModelSet.ModelValueSynth;
 import org.observe.expresso.TypeConversionException;
 import org.observe.util.TypeTokens;
 import org.qommons.QommonsUtils;
@@ -94,14 +95,19 @@ public class ConditionalExpression implements ObservableExpression {
 	}
 
 	@Override
-	public <M, MV extends M> ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env, int expressionOffset)
+	public ModelType<?> getModelType(ExpressoEnv env) {
+		return thePrimary.getModelType(env).getCommonType(theSecondary.getModelType(env));
+	}
+
+	@Override
+	public <M, MV extends M> ModelValueSynth<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env, int expressionOffset)
 		throws ExpressoEvaluationException, ExpressoInterpretationException {
 		if (type != null && (type.getModelType() == ModelTypes.Value || type.getModelType() == ModelTypes.Collection
 			|| type.getModelType() == ModelTypes.Set)) {//
 		} else
 			throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(),
 				"Conditional expressions not supported for model type " + type.getModelType() + " (" + this + ")");
-		ValueContainer<SettableValue<?>, SettableValue<Boolean>> conditionV;
+		ModelValueSynth<SettableValue<?>, SettableValue<Boolean>> conditionV;
 		try {
 			conditionV = theCondition.evaluate(//
 				ModelTypes.Value.forType(boolean.class), env, expressionOffset);
@@ -109,14 +115,14 @@ public class ConditionalExpression implements ObservableExpression {
 			throw new ExpressoEvaluationException(expressionOffset, theCondition.getExpressionLength(), e.getMessage(), e);
 		}
 		int primaryOffset = expressionOffset + theCondition.getExpressionLength() + 1;
-		ValueContainer<M, MV> primaryV;
+		ModelValueSynth<M, MV> primaryV;
 		try {
 			primaryV = thePrimary.evaluate(type, env, primaryOffset);
 		} catch (TypeConversionException e) {
 			throw new ExpressoEvaluationException(primaryOffset, thePrimary.getExpressionLength(), e.getMessage(), e);
 		}
 		int secondaryOffset = primaryOffset + thePrimary.getExpressionLength() + 1;
-		ValueContainer<M, MV> secondaryV;
+		ModelValueSynth<M, MV> secondaryV;
 		try {
 			secondaryV = theSecondary.evaluate(type, env, secondaryOffset);
 		} catch (TypeConversionException e) {
@@ -147,7 +153,12 @@ public class ConditionalExpression implements ObservableExpression {
 				types[i] = TypeTokens.get().getCommonType(primaryType.getType(i), secondaryType.getType(i));
 			resultType = (ModelInstanceType<M, MV>) primaryType.getModelType().forTypes(types);
 		}
-		return new ValueContainer<M, MV>() {
+		return new ModelValueSynth<M, MV>() {
+			@Override
+			public ModelType<M> getModelType() {
+				return resultType.getModelType();
+			}
+
 			@Override
 			public ModelInstanceType<M, MV> getType() {
 				return resultType;
@@ -195,16 +206,16 @@ public class ConditionalExpression implements ObservableExpression {
 				SettableValue<Boolean> sourceCondition = conditionV.get(sourceModels);
 				SettableValue<Boolean> newCondition = conditionV.get(newModels);
 				Object sourcePrimary = primaryV.get(sourceModels);
-				Object newPrimary = ((ValueContainer<Object, Object>) primaryV).get(newModels);
+				Object newPrimary = ((ModelValueSynth<Object, Object>) primaryV).get(newModels);
 				Object sourceSecondary = secondaryV.get(sourceModels);
-				Object newSecondary = ((ValueContainer<Object, Object>) secondaryV).get(newModels);
+				Object newSecondary = ((ModelValueSynth<Object, Object>) secondaryV).get(newModels);
 				if (sourceCondition == newCondition && sourcePrimary == newPrimary && sourceSecondary == newSecondary)
 					return value;
 				return createValue(newCondition, newPrimary, newSecondary);
 			}
 
 			@Override
-			public BetterList<ValueContainer<?, ?>> getCores() throws ExpressoInterpretationException {
+			public BetterList<ModelValueSynth<?, ?>> getCores() throws ExpressoInterpretationException {
 				return BetterList.of(Stream.of(conditionV, primaryV, secondaryV), vc -> vc.getCores().stream());
 			}
 		};

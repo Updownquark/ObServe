@@ -10,9 +10,9 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import org.observe.expresso.ModelType.HollowModelValue;
 import org.observe.expresso.ModelType.ModelInstanceType;
+import org.observe.expresso.ObservableModelSet.CompiledModelValue;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
-import org.observe.expresso.ObservableModelSet.ValueContainer;
-import org.observe.expresso.ObservableModelSet.ValueCreator;
+import org.observe.expresso.ObservableModelSet.ModelValueSynth;
 import org.observe.util.TypeTokens;
 import org.qommons.Named;
 import org.qommons.collect.BetterList;
@@ -32,7 +32,7 @@ import org.qommons.ex.ExSupplier;
  * @param <M> The model type of the value
  * @param <MV> The type of the value
  */
-public interface DynamicModelValue<M, MV extends M> extends ValueContainer<M, MV>, Named {
+public interface DynamicModelValue<M, MV extends M> extends ModelValueSynth<M, MV>, Named {
 	/** The definition of a dynamic model value */
 	public static class Identity implements Named {
 		private final QonfigElementOrAddOn theOwner;
@@ -117,13 +117,13 @@ public interface DynamicModelValue<M, MV extends M> extends ValueContainer<M, MV
 	}
 
 	/**
-	 * Dynamic values in models should always be {@link ObservableModelSet.Builder#withMaker(String, ValueCreator) added} as an instance of
+	 * Dynamic values in models should always be {@link ObservableModelSet.Builder#withMaker(String, CompiledModelValue) added} as an instance of
 	 * this type.
 	 *
 	 * @param <M> The model type of the dynamic value
 	 * @param <MV> The type of the dynamic value
 	 */
-	public interface Creator<M, MV extends M> extends ObservableModelSet.IdentifableValueCreator<M, MV> {
+	public interface Compiled<M, MV extends M> extends ObservableModelSet.IdentifableCompiledValue<M, MV> {
 		@Override
 		Identity getIdentity();
 	}
@@ -221,7 +221,7 @@ public interface DynamicModelValue<M, MV extends M> extends ValueContainer<M, MV
 	 */
 	public static <M, MV extends M> void satisfyDynamicValueIfUnsatisfied(String name, ModelInstanceType<M, MV> type,
 		ModelSetInstance model, MV value)
-		throws ModelException, ModelInstantiationException, TypeConversionException {
+			throws ModelException, ModelInstantiationException, TypeConversionException {
 		try { // Check for the value rigorously
 			model.getModel().getValue(name, type);
 		} catch (ModelException e) {
@@ -253,7 +253,7 @@ public interface DynamicModelValue<M, MV extends M> extends ValueContainer<M, MV
 
 	/**
 	 * For metadata-declared dynamic model values with no type specified, this method may be called to specify the type of the model,
-	 * instead of specifying the value creator with {@link #satisfyDynamicValue(String, ObservableModelSet, ValueCreator)}. If this method
+	 * instead of specifying the value creator with {@link #satisfyDynamicValue(String, ObservableModelSet, CompiledModelValue)}. If this method
 	 * is called, {@link #satisfyDynamicValue(String, ModelInstanceType, ModelSetInstance, Object)} must be called for the model instance
 	 * set.
 	 *
@@ -265,8 +265,23 @@ public interface DynamicModelValue<M, MV extends M> extends ValueContainer<M, MV
 	 */
 	public static <M, MV extends M> void satisfyDynamicValueType(String name, ObservableModelSet models, ModelInstanceType<M, MV> type) {
 		ObservableModelSet.ModelComponentNode<?, ?> component = getDynamicValueComponent(name, models);
-		satisfyDynamicValue(name, models,
-			() -> new RuntimeModelValue<>(((DynamicTypedModelValueCreator<?, ?>) component.getThing()).getIdentity(), type));
+		satisfyDynamicValue(name, models, CompiledModelValue.of(name, type.getModelType(),
+			() -> new RuntimeModelValue<>(((DynamicTypedModelValueCreator<?, ?>) component.getThing()).getIdentity(), type)));
+	}
+
+	/**
+	 *
+	 * @param <M> The model type of the value
+	 * @param <MV> The type of the value
+	 * @param name The name of the value
+	 * @param models The models to satisfy the value's type in
+	 * @param modelType The model type to satisfy the value as
+	 * @param satisfier A function to satisfy the dynamic value each time it is evaluated
+	 * @throws IllegalStateException If the value has already been satisfied
+	 */
+	public static <M, MV extends M> void satisfyDynamicValue(String name, ObservableModelSet models, ModelType<M> modelType,
+		ExSupplier<ModelValueSynth<M, MV>, ExpressoInterpretationException> satisfier) throws IllegalStateException {
+		DynamicTypedModelValueCreator.satisfyDynamicValue(name, models, CompiledModelValue.of(name, modelType, satisfier), false);
 	}
 
 	/**
@@ -279,7 +294,7 @@ public interface DynamicModelValue<M, MV extends M> extends ValueContainer<M, MV
 	 * @param satisfier The value creator to use to satisfy the model value
 	 * @throws IllegalStateException If the value has already been satisfied for the given model set
 	 */
-	public static <M, MV extends M> void satisfyDynamicValue(String name, ObservableModelSet models, ValueCreator<M, MV> satisfier)
+	public static <M, MV extends M> void satisfyDynamicValue(String name, ObservableModelSet models, CompiledModelValue<M, MV> satisfier)
 		throws IllegalStateException {
 		DynamicTypedModelValueCreator.satisfyDynamicValue(name, models, satisfier, false);
 	}
@@ -296,7 +311,7 @@ public interface DynamicModelValue<M, MV extends M> extends ValueContainer<M, MV
 	 * @return Whether the value was newly satisfied as a result of this call
 	 */
 	public static <M, MV extends M> boolean satisfyDynamicValueIfUnsatisfied(String name, ObservableModelSet models,
-		ValueCreator<M, MV> satisfier) {
+		CompiledModelValue<M, MV> satisfier) {
 		return DynamicTypedModelValueCreator.satisfyDynamicValue(name, models, satisfier, true);
 	}
 
@@ -327,6 +342,11 @@ public interface DynamicModelValue<M, MV extends M> extends ValueContainer<M, MV
 		}
 
 		@Override
+		public ModelType<M> getModelType() {
+			return theType.getModelType();
+		}
+
+		@Override
 		public ModelInstanceType<M, MV> getType() {
 			return theType;
 		}
@@ -344,7 +364,7 @@ public interface DynamicModelValue<M, MV extends M> extends ValueContainer<M, MV
 		}
 
 		@Override
-		public BetterList<ValueContainer<?, ?>> getCores() {
+		public BetterList<ModelValueSynth<?, ?>> getCores() {
 			return BetterList.of(this);
 		}
 
@@ -377,17 +397,22 @@ public interface DynamicModelValue<M, MV extends M> extends ValueContainer<M, MV
 
 	/**
 	 * A value container created by {@link DynamicTypedModelValueCreator} that wraps the dynamic value's
-	 * {@link DynamicModelValue#satisfyDynamicValue(String, ObservableModelSet, ValueCreator) satisfier} (after satisfaction occurs)
+	 * {@link DynamicModelValue#satisfyDynamicValue(String, ObservableModelSet, CompiledModelValue) satisfier} (after satisfaction occurs)
 	 *
 	 * @param <M> The model type of the value
 	 * @param <MV> The type of the value
 	 */
 	public class DynamicContainerWrapper<M, MV extends M> implements DynamicModelValue<M, MV> {
 		private final DynamicTypedModelValueCreator<M, MV> theCreator;
-		private ValueContainer<M, MV> theContainer;
+		private ModelValueSynth<M, MV> theContainer;
 
 		DynamicContainerWrapper(DynamicTypedModelValueCreator<M, MV> creator) {
 			theCreator = creator;
+		}
+
+		@Override
+		public ModelType<M> getModelType() {
+			return theCreator.getModelType();
 		}
 
 		@Override
@@ -401,7 +426,7 @@ public interface DynamicModelValue<M, MV extends M> extends ValueContainer<M, MV
 		 * @return Creates or retrieves the value container from this wrapper
 		 * @throws ModelInstantiationException If the model value could not be instantiated
 		 */
-		protected ValueContainer<M, MV> getContainer() throws ModelInstantiationException {
+		protected ModelValueSynth<M, MV> getContainer() throws ModelInstantiationException {
 			if (theContainer == null) {
 				try {
 					theContainer = theCreator.createDynamicContainer();
@@ -423,7 +448,7 @@ public interface DynamicModelValue<M, MV extends M> extends ValueContainer<M, MV
 		}
 
 		@Override
-		public BetterList<ValueContainer<?, ?>> getCores() {
+		public BetterList<ModelValueSynth<?, ?>> getCores() {
 			return BetterList.of(this);
 		}
 
@@ -450,17 +475,17 @@ public interface DynamicModelValue<M, MV extends M> extends ValueContainer<M, MV
 
 	/**
 	 * A dynamic-typed value whose type is not completely specified and must be
-	 * {@link #satisfyDynamicValue(String, ObservableModelSet, ValueCreator) satisfied} before it is {@link ValueCreator#createContainer() used}
+	 * {@link #satisfyDynamicValue(String, ObservableModelSet, CompiledModelValue) satisfied} before it is {@link CompiledModelValue#createSynthesizer() used}
 	 *
 	 * @param <M> The model type of the value
 	 * @param <MV> The type of the value, as far as it is known
 	 */
-	public class DynamicTypedModelValueCreator<M, MV extends M> implements Creator<M, MV>, Named {
+	public class DynamicTypedModelValueCreator<M, MV extends M> implements Compiled<M, MV>, Named {
 		private final Identity theIdentity;
 		private final ExSupplier<ModelInstanceType<M, MV>, ExpressoInterpretationException> theTypeGetter;
 		private ModelInstanceType<M, MV> theDeclaredType;
 
-		private ValueCreator<M, MV> theSatisfier;
+		private CompiledModelValue<M, MV> theSatisfier;
 
 		/**
 		 * @param declaration The declared definition of the dynamic value
@@ -477,6 +502,11 @@ public interface DynamicModelValue<M, MV extends M> extends ValueContainer<M, MV
 			return theIdentity.getName();
 		}
 
+		@Override
+		public ModelType<M> getModelType() {
+			return theDeclaredType.getModelType();
+		}
+
 		/** @return The type that this value creator was declared with */
 		public ModelInstanceType<M, MV> getDeclaredType() {
 			return theDeclaredType;
@@ -488,18 +518,18 @@ public interface DynamicModelValue<M, MV extends M> extends ValueContainer<M, MV
 		}
 
 		@Override
-		public DynamicModelValue<M, MV> createContainer() {
+		public DynamicModelValue<M, MV> createSynthesizer() {
 			return new DynamicContainerWrapper<>(this);
 		}
 
-		ValueContainer<M, MV> createDynamicContainer() throws ExpressoInterpretationException {
+		ModelValueSynth<M, MV> createDynamicContainer() throws ExpressoInterpretationException {
 			if (theDeclaredType == null)
 				theDeclaredType = theTypeGetter.get();
 			if (theSatisfier == null)
-				theSatisfier = ObservableModelSet.IdentifableValueCreator.of(theIdentity,
+				theSatisfier = ObservableModelSet.IdentifableCompiledValue.of(theIdentity,
 					new DynamicModelValue.RuntimeModelValue<>(theIdentity, theDeclaredType));
 			// throw new IllegalStateException("Dynamic model value " + getName() + " requested but not yet satisfied");
-			ValueContainer<M, MV> container = theSatisfier.createContainer();
+			ModelValueSynth<M, MV> container = theSatisfier.createSynthesizer();
 			if (!getDeclaredType().getModelType().equals(container.getType().getModelType()))
 				throw new IllegalStateException(
 					"Dynamic model value " + getName() + "(" + getDeclaredType() + ") satisfied with " + container.getType());
@@ -511,7 +541,7 @@ public interface DynamicModelValue<M, MV extends M> extends ValueContainer<M, MV
 			return container;
 		}
 
-		static <M, MV extends M> boolean satisfyDynamicValue(String name, ObservableModelSet model, ValueCreator<M, MV> satisfier,
+		static <M, MV extends M> boolean satisfyDynamicValue(String name, ObservableModelSet model, CompiledModelValue<M, MV> satisfier,
 			boolean ignoreIfSatified) {
 			ObservableModelSet.ModelComponentNode<?, ?> modelValue = getDynamicValueComponent(name, model);
 			DynamicTypedModelValueCreator<M, MV> dmv = (DynamicTypedModelValueCreator<M, MV>) modelValue.getThing();

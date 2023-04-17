@@ -13,7 +13,7 @@ import org.observe.expresso.ExpressoEvaluationException;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ObservableExpression;
-import org.observe.expresso.ObservableModelSet.ValueContainer;
+import org.observe.expresso.ObservableModelSet.ModelValueSynth;
 
 /** An expression representing the invocation of a constructor to create a new instance of a type */
 public class ConstructorInvocation extends Invocation {
@@ -93,7 +93,7 @@ public class ConstructorInvocation extends Invocation {
 		Invocation.MethodResult<Constructor<?>, MV> result = Invocation.findMethod(constructorType.getConstructors(), null, null, true,
 			Arrays.asList(args), type, env, Invocation.ExecutableImpl.CONSTRUCTOR, this, expressionOffset);
 		if (result != null) {
-			ValueContainer<SettableValue<?>, SettableValue<?>>[] realArgs = new ValueContainer[getArguments().size()];
+			ModelValueSynth<SettableValue<?>, SettableValue<?>>[] realArgs = new ModelValueSynth[getArguments().size()];
 			for (int a = 0; a < realArgs.length; a++)
 				realArgs[a] = args.args[a].get(0);
 			return new InvokableResult<>(result, null, Arrays.asList(realArgs), Invocation.ExecutableImpl.CONSTRUCTOR);

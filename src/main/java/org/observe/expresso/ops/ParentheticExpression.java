@@ -7,9 +7,10 @@ import java.util.function.Function;
 import org.observe.expresso.ExpressoEnv;
 import org.observe.expresso.ExpressoEvaluationException;
 import org.observe.expresso.ExpressoInterpretationException;
+import org.observe.expresso.ModelType;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ObservableExpression;
-import org.observe.expresso.ObservableModelSet.ValueContainer;
+import org.observe.expresso.ObservableModelSet.ModelValueSynth;
 
 /** An expression in parentheses */
 public class ParentheticExpression implements ObservableExpression {
@@ -49,7 +50,12 @@ public class ParentheticExpression implements ObservableExpression {
 	}
 
 	@Override
-	public <M, MV extends M> ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env, int expressionOffset)
+	public ModelType<?> getModelType(ExpressoEnv env) {
+		return theContent.getModelType(env);
+	}
+
+	@Override
+	public <M, MV extends M> ModelValueSynth<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env, int expressionOffset)
 		throws ExpressoEvaluationException, ExpressoInterpretationException {
 		return theContent.evaluateInternal(type, env, expressionOffset);
 	}

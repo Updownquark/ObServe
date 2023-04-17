@@ -10,11 +10,12 @@ import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.expresso.ExpressoEnv;
 import org.observe.expresso.ExpressoEvaluationException;
+import org.observe.expresso.ModelType;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.NonStructuredParser;
 import org.observe.expresso.ObservableExpression;
-import org.observe.expresso.ObservableModelSet.ValueContainer;
+import org.observe.expresso.ObservableModelSet.ModelValueSynth;
 import org.observe.util.TypeTokens;
 import org.qommons.LambdaUtils;
 
@@ -58,13 +59,18 @@ public class ExternalLiteral implements ObservableExpression {
 	}
 
 	@Override
-	public <M, MV extends M> ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env, int expressionOffset)
+	public ModelType<?> getModelType(ExpressoEnv env) {
+		return ModelTypes.Value;
+	}
+
+	@Override
+	public <M, MV extends M> ModelValueSynth<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env, int expressionOffset)
 		throws ExpressoEvaluationException {
 		if (type.getModelType() != ModelTypes.Value)
 			throw new ExpressoEvaluationException(expressionOffset, theText.length(),
 				"'" + theText + "' cannot be evaluated as a " + type);
 		ObservableValue<?> value = parseValue(type.getType(0), env, expressionOffset);
-		return ValueContainer.of((ModelInstanceType<M, MV>) ModelTypes.Value.forType(value.getType()), //
+		return ModelValueSynth.of((ModelInstanceType<M, MV>) ModelTypes.Value.forType(value.getType()), //
 			LambdaUtils.constantExFn(//
 				(MV) SettableValue.asSettable(value, __ -> "Literal value cannot be modified"), theText, null));
 	}

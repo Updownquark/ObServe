@@ -4,8 +4,9 @@ import java.util.Collections;
 import java.util.Set;
 
 import org.observe.SettableValue;
+import org.observe.expresso.ObservableModelSet.CompiledModelValue;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
-import org.observe.expresso.ObservableModelSet.ValueContainer;
+import org.observe.expresso.ObservableModelSet.ModelValueSynth;
 import org.qommons.Version;
 import org.qommons.collect.BetterList;
 import org.qommons.config.QonfigInterpretation;
@@ -42,11 +43,11 @@ public class TestInterpretation implements QonfigInterpretation {
 	@Override
 	public Builder configureInterpreter(Builder interpreter) {
 		interpreter//
-		.createWith("stateful-struct", ObservableModelSet.ValueCreator.class, session -> {
+		.createWith("stateful-struct", ObservableModelSet.CompiledModelValue.class, session -> {
 			ExpressoQIS exS = session.as(ExpressoQIS.class);
-			QonfigExpression2 derivedStateX = exS.getAttributeExpression("derived-state");
-			return () -> {
-				ValueContainer<SettableValue<?>, SettableValue<Integer>> derivedStateV;
+			CompiledExpression derivedStateX = exS.getAttributeExpression("derived-state");
+			return CompiledModelValue.of("stateful-struct", ModelTypes.Value, () -> {
+				ModelValueSynth<SettableValue<?>, SettableValue<Integer>> derivedStateV;
 				derivedStateV = derivedStateX.evaluate(ModelTypes.Value.forType(int.class));
 				exS.interpretLocalModel();
 				return new ObservableModelSet.AbstractValueContainer<SettableValue<?>, SettableValue<StatefulTestStructure>>(
@@ -71,29 +72,29 @@ public class TestInterpretation implements QonfigInterpretation {
 					}
 
 					@Override
-					public BetterList<ValueContainer<?, ?>> getCores() {
+					public BetterList<ModelValueSynth<?, ?>> getCores() {
 						return BetterList.of(this);
 					}
 				};
-			};
-		})//
-		.createWith("dynamic-type-stateful-struct", ObservableModelSet.ValueCreator.class, session -> {
+			});
+		});
+		interpreter.createWith("dynamic-type-stateful-struct", ObservableModelSet.CompiledModelValue.class, session -> {
 			ExpressoQIS exS = session.as(ExpressoQIS.class);
-			QonfigExpression2 internalStateX = exS.getAttributeExpression("internal-state");
-			QonfigExpression2 derivedStateX = exS.getAttributeExpression("derived-state");
-			return () -> {
-					System.out.println("Interpret " + exS.getAttributeText("name"));
+			CompiledExpression internalStateX = exS.getAttributeExpression("internal-state");
+			CompiledExpression derivedStateX = exS.getAttributeExpression("derived-state");
+			return CompiledModelValue.of("dynamic-type-stateful-struct", ModelTypes.Value, () -> {
+				System.out.println("Interpret " + exS.getAttributeText("name"));
 				// Satisfy the internalState value with the internalState container
-				DynamicModelValue.satisfyDynamicValue("internalState", exS.getExpressoEnv().getModels(), () -> {
+				DynamicModelValue.satisfyDynamicValue("internalState", exS.getExpressoEnv().getModels(), ModelTypes.Value, () -> {
 					return internalStateX.evaluate(ModelTypes.Value.any());
 				});
-				ValueContainer<SettableValue<?>, SettableValue<?>> internalStateV;
+				ModelValueSynth<SettableValue<?>, SettableValue<?>> internalStateV;
 				try {
 					internalStateV = exS.getExpressoEnv().getModels().getValue("internalState", ModelTypes.Value.any());
 				} catch (ModelException | TypeConversionException e) {
 					throw new ExpressoInterpretationException(e.getMessage(), session.getElement().getPositionInFile(), 0, e);
 				}
-				ValueContainer<SettableValue<?>, SettableValue<?>> derivedStateV = derivedStateX.evaluate(ModelTypes.Value.any());
+				ModelValueSynth<SettableValue<?>, SettableValue<?>> derivedStateV = derivedStateX.evaluate(ModelTypes.Value.any());
 				exS.interpretLocalModel();
 				return new ObservableModelSet.AbstractValueContainer<SettableValue<?>, SettableValue<DynamicTypeStatefulTestStructure>>(
 					ModelTypes.Value.forType(DynamicTypeStatefulTestStructure.class)) {
@@ -114,23 +115,23 @@ public class TestInterpretation implements QonfigInterpretation {
 					}
 
 					@Override
-					public BetterList<ValueContainer<?, ?>> getCores() {
+					public BetterList<ModelValueSynth<?, ?>> getCores() {
 						return BetterList.of(this);
 					}
 				};
-			};
-		})//
-		.createWith("dynamic-type-stateful-struct2", ObservableModelSet.ValueCreator.class, session -> {
+			});
+		});
+		interpreter.createWith("dynamic-type-stateful-struct2", ObservableModelSet.CompiledModelValue.class, session -> {
 			ExpressoQIS exS = session.as(ExpressoQIS.class);
-			QonfigExpression2 derivedStateX = exS.getAttributeExpression("derived-state");
-			return () -> {
-				ValueContainer<SettableValue<?>, SettableValue<?>> internalStateV;
+			CompiledExpression derivedStateX = exS.getAttributeExpression("derived-state");
+			return CompiledModelValue.of("dynamic-type-stateful-struct2", ModelTypes.Value, () -> {
+				ModelValueSynth<SettableValue<?>, SettableValue<?>> internalStateV;
 				try {
 					internalStateV = exS.getExpressoEnv().getModels().getValue("internalState", ModelTypes.Value.any());
 				} catch (ModelException | TypeConversionException e) {
 					throw new ExpressoInterpretationException(e.getMessage(), session.getElement().getPositionInFile(), 0, e);
 				}
-				ValueContainer<SettableValue<?>, SettableValue<?>> derivedStateV = derivedStateX.evaluate(ModelTypes.Value.any());
+				ModelValueSynth<SettableValue<?>, SettableValue<?>> derivedStateV = derivedStateX.evaluate(ModelTypes.Value.any());
 				exS.interpretLocalModel();
 				return new ObservableModelSet.AbstractValueContainer<SettableValue<?>, SettableValue<DynamicTypeStatefulTestStructure>>(
 					ModelTypes.Value.forType(DynamicTypeStatefulTestStructure.class)) {
@@ -151,11 +152,11 @@ public class TestInterpretation implements QonfigInterpretation {
 					}
 
 					@Override
-					public BetterList<ValueContainer<?, ?>> getCores() {
+					public BetterList<ModelValueSynth<?, ?>> getCores() {
 						return BetterList.of(this);
 					}
 				};
-			};
+			});
 		})//
 		;
 		return interpreter;

@@ -11,11 +11,12 @@ import org.observe.expresso.ExpressoEnv;
 import org.observe.expresso.ExpressoEvaluationException;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ModelInstantiationException;
+import org.observe.expresso.ModelType;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
-import org.observe.expresso.ObservableModelSet.ValueContainer;
+import org.observe.expresso.ObservableModelSet.ModelValueSynth;
 import org.observe.expresso.TypeConversionException;
 import org.observe.util.TypeTokens;
 import org.qommons.QommonsUtils;
@@ -83,12 +84,17 @@ public class AssignmentExpression implements ObservableExpression {
 	}
 
 	@Override
-	public <M, MV extends M> ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env, int expressionOffset)
+	public ModelType<?> getModelType(ExpressoEnv env) {
+		return ModelTypes.Action;
+	}
+
+	@Override
+	public <M, MV extends M> ModelValueSynth<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env, int expressionOffset)
 		throws ExpressoEvaluationException, ExpressoInterpretationException {
 		if (type.getModelType() != ModelTypes.Action)
 			throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(),
 				"Assignments cannot be used as " + type.getModelType() + "s");
-		ValueContainer<SettableValue<?>, SettableValue<Object>> context;
+		ModelValueSynth<SettableValue<?>, SettableValue<Object>> context;
 		try {
 			context = theTarget.evaluate(
 				(ModelInstanceType<SettableValue<?>, SettableValue<Object>>) (ModelInstanceType<?, ?>) ModelTypes.Value.any(), env,
@@ -100,7 +106,7 @@ public class AssignmentExpression implements ObservableExpression {
 		if (!isVoid && !TypeTokens.get().isAssignable(type.getType(0), context.getType().getType(0)))
 			throw new ExpressoEvaluationException(expressionOffset, theTarget.getExpressionLength(),
 				"Cannot assign " + context + ", type " + type.getType(0) + " to " + context.getType().getType(0));
-		ValueContainer<SettableValue<?>, SettableValue<Object>> value;
+		ModelValueSynth<SettableValue<?>, SettableValue<Object>> value;
 		int valueOffset = expressionOffset + theTarget.getExpressionLength() + 1;
 		try (Transaction t = Invocation.asAction()) {
 			value = theValue.evaluate(
@@ -109,7 +115,12 @@ public class AssignmentExpression implements ObservableExpression {
 		} catch (TypeConversionException e) {
 			throw new ExpressoEvaluationException(valueOffset, theValue.getExpressionLength(), e.getMessage(), e);
 		}
-		return (ValueContainer<M, MV>) new ValueContainer<ObservableAction<?>, ObservableAction<?>>() {
+		return (ModelValueSynth<M, MV>) new ModelValueSynth<ObservableAction<?>, ObservableAction<?>>() {
+			@Override
+			public ModelType<ObservableAction<?>> getModelType() {
+				return ModelTypes.Action;
+			}
+
 			@Override
 			public ModelInstanceType<ObservableAction<?>, ObservableAction<?>> getType() throws ExpressoInterpretationException {
 				if (isVoid)
@@ -140,7 +151,7 @@ public class AssignmentExpression implements ObservableExpression {
 			}
 
 			@Override
-			public BetterList<ValueContainer<?, ?>> getCores() throws ExpressoInterpretationException {
+			public BetterList<ModelValueSynth<?, ?>> getCores() throws ExpressoInterpretationException {
 				return BetterList.of(Stream.of(context, value), vc -> vc.getCores().stream());
 			}
 

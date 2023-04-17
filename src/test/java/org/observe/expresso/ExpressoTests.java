@@ -3,7 +3,6 @@ package org.observe.expresso;
 import java.util.List;
 
 import org.junit.Test;
-import org.qommons.config.QonfigEvaluationException;
 
 /** Some tests for Expresso functionality */
 public class ExpressoTests extends AbstractExpressoTest<Expresso> {
@@ -19,8 +18,9 @@ public class ExpressoTests extends AbstractExpressoTest<Expresso> {
 
 	/**
 	 * Tests the constant model type
-	 *
-	 * @throws QonfigEvaluationException If an error occurs executing the test
+	 * 
+	 * @throws ExpressoInterpretationException If an error occurs compiling the test
+	 * @throws ModelInstantiationException If an error occurs instantiating the test values
 	 */
 	@Test
 	public void testConstant() throws ExpressoInterpretationException, ModelInstantiationException {
@@ -30,7 +30,8 @@ public class ExpressoTests extends AbstractExpressoTest<Expresso> {
 	/**
 	 * Tests the value model type, initialized with or set to a simple value
 	 *
-	 * @throws QonfigEvaluationException If an error occurs executing the test
+	 * @throws ExpressoInterpretationException If an error occurs compiling the test
+	 * @throws ModelInstantiationException If an error occurs instantiating the test values
 	 */
 	@Test
 	public void testSimpleValue() throws ExpressoInterpretationException, ModelInstantiationException {
@@ -40,7 +41,8 @@ public class ExpressoTests extends AbstractExpressoTest<Expresso> {
 	/**
 	 * Tests the value model type, slaved to an expression
 	 *
-	 * @throws QonfigEvaluationException If an error occurs executing the test
+	 * @throws ExpressoInterpretationException If an error occurs compiling the test
+	 * @throws ModelInstantiationException If an error occurs instantiating the test values
 	 */
 	@Test
 	public void testDerivedValue() throws ExpressoInterpretationException, ModelInstantiationException {
@@ -50,7 +52,8 @@ public class ExpressoTests extends AbstractExpressoTest<Expresso> {
 	/**
 	 * Tests the list model type
 	 *
-	 * @throws QonfigEvaluationException If an error occurs executing the test
+	 * @throws ExpressoInterpretationException If an error occurs compiling the test
+	 * @throws ModelInstantiationException If an error occurs instantiating the test values
 	 */
 	@Test
 	public void testList() throws ExpressoInterpretationException, ModelInstantiationException {
@@ -60,7 +63,8 @@ public class ExpressoTests extends AbstractExpressoTest<Expresso> {
 	/**
 	 * Tests the mapping transformation type
 	 *
-	 * @throws QonfigEvaluationException If an error occurs executing the test
+	 * @throws ExpressoInterpretationException If an error occurs compiling the test
+	 * @throws ModelInstantiationException If an error occurs instantiating the test values
 	 */
 	@Test
 	public void testMapTo() throws ExpressoInterpretationException, ModelInstantiationException {
@@ -70,7 +74,8 @@ public class ExpressoTests extends AbstractExpressoTest<Expresso> {
 	/**
 	 * Tests the sort transformation type
 	 *
-	 * @throws QonfigEvaluationException If an error occurs executing the test
+	 * @throws ExpressoInterpretationException If an error occurs compiling the test
+	 * @throws ModelInstantiationException If an error occurs instantiating the test values
 	 */
 	@Test
 	public void testSort() throws ExpressoInterpretationException, ModelInstantiationException {
@@ -80,7 +85,8 @@ public class ExpressoTests extends AbstractExpressoTest<Expresso> {
 	/**
 	 * Tests int assignment
 	 *
-	 * @throws QonfigEvaluationException If an error occurs executing the test
+	 * @throws ExpressoInterpretationException If an error occurs compiling the test
+	 * @throws ModelInstantiationException If an error occurs instantiating the test values
 	 */
 	@Test
 	public void testAssignInt() throws ExpressoInterpretationException, ModelInstantiationException {
@@ -90,7 +96,8 @@ public class ExpressoTests extends AbstractExpressoTest<Expresso> {
 	/**
 	 * Tests instant assignment
 	 *
-	 * @throws QonfigEvaluationException If an error occurs executing the test
+	 * @throws ExpressoInterpretationException If an error occurs compiling the test
+	 * @throws ModelInstantiationException If an error occurs instantiating the test values
 	 */
 	@Test
 	public void testAssignInstant() throws ExpressoInterpretationException, ModelInstantiationException {
@@ -100,7 +107,8 @@ public class ExpressoTests extends AbstractExpressoTest<Expresso> {
 	/**
 	 * Tests value-derived model values (see {@link DynamicModelValue})
 	 *
-	 * @throws QonfigEvaluationException If an error occurs executing the test
+	 * @throws ExpressoInterpretationException If an error occurs compiling the test
+	 * @throws ModelInstantiationException If an error occurs instantiating the test values
 	 */
 	@Test
 	public void testStaticInternalState() throws ExpressoInterpretationException, ModelInstantiationException {
@@ -110,7 +118,8 @@ public class ExpressoTests extends AbstractExpressoTest<Expresso> {
 	/**
 	 * Tests dynamically-typed value-derived model values (see {@link DynamicModelValue})
 	 *
-	 * @throws QonfigEvaluationException If an error occurs executing the test
+	 * @throws ExpressoInterpretationException If an error occurs compiling the test
+	 * @throws ModelInstantiationException If an error occurs instantiating the test values
 	 */
 	@Test
 	public void testDynamicTypeInternalState() throws ExpressoInterpretationException, ModelInstantiationException {
@@ -120,7 +129,8 @@ public class ExpressoTests extends AbstractExpressoTest<Expresso> {
 	/**
 	 * Tests dynamically-typed value-derived model values where the model value is tied to the attribute via API
 	 *
-	 * @throws QonfigEvaluationException If an error occurs executing the test
+	 * @throws ExpressoInterpretationException If an error occurs compiling the test
+	 * @throws ModelInstantiationException If an error occurs instantiating the test values
 	 */
 	@Test
 	public void testDynamicTypeInternalState2() throws ExpressoInterpretationException, ModelInstantiationException {

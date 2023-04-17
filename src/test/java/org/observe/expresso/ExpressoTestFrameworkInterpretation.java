@@ -11,8 +11,8 @@ import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.expresso.ExpressoTesting.ExpressoTest;
 import org.observe.expresso.ExpressoTesting.TestAction;
-import org.observe.expresso.ObservableModelSet.ValueContainer;
-import org.observe.expresso.ObservableModelSet.ValueCreator;
+import org.observe.expresso.ObservableModelSet.CompiledModelValue;
+import org.observe.expresso.ObservableModelSet.ModelValueSynth;
 import org.qommons.QommonsUtils;
 import org.qommons.Version;
 import org.qommons.config.QonfigInterpretation;
@@ -60,31 +60,31 @@ public class ExpressoTestFrameworkInterpretation implements QonfigInterpretation
 				tests.put(test.getName(), test);
 			}
 			return new ExpressoTesting<>(head, Collections.unmodifiableMap(tests));
-		})//
-		.createWith("test", ExpressoTest.class, session -> {
+		});
+		interpreter.createWith("test", ExpressoTest.class, session -> {
 			ExpressoQIS exS = session.as(ExpressoQIS.class);
 			List<TestAction> actions = new ArrayList<>();
 			for (ExpressoQIS actionS : exS.forChildren("test-action")) {
 				ExpressoQIS testActionS = actionS.asElement("test-action");
-				actions.add(new TestAction(testActionS.getAttributeText("name"),
-					(ObservableModelSet.Built) exS.getExpressoEnv().getModels(), exS, //
-					actionS.interpret(ValueCreator.class), //
-					testActionS.getAttributeText("expect-throw"), testActionS.getAttribute("breakpoint", boolean.class)));
+				actions.add(
+					new TestAction(testActionS.getAttributeText("name"), (ObservableModelSet.Built) exS.getExpressoEnv().getModels(), exS, //
+						actionS.interpret(CompiledModelValue.class), //
+						testActionS.getAttributeText("expect-throw"), testActionS.getAttribute("breakpoint", boolean.class)));
 			}
-				return new ExpressoTest(session.getAttributeText("name"), (ObservableModelSet.Built) exS.getExpressoEnv().getModels(), exS,
+			return new ExpressoTest(session.getAttributeText("name"), (ObservableModelSet.Built) exS.getExpressoEnv().getModels(), exS,
 				Collections.unmodifiableList(actions));
-		})//
-		.createWith("watch", ValueCreator.class, session -> {
-			QonfigExpression2 valueX = session.as(ExpressoQIS.class).getValueExpression();
-			return () -> {
-				ValueContainer<SettableValue<?>, SettableValue<?>> watching = valueX.evaluate(ModelTypes.Value.any());
-				return ValueContainer.of(watching.getType(), msi -> {
+		});
+		interpreter.createWith("watch", CompiledModelValue.class, session -> {
+			CompiledExpression valueX = session.as(ExpressoQIS.class).getValueExpression();
+			return CompiledModelValue.of("watch", ModelTypes.Value, () -> {
+				ModelValueSynth<SettableValue<?>, SettableValue<?>> watching = valueX.evaluate(ModelTypes.Value.any());
+				return ModelValueSynth.of(watching.getType(), msi -> {
 					SettableValue<Object> value = (SettableValue<Object>) watching.get(msi);
 					SettableValue<Object> copy = SettableValue.build(value.getType()).withValue(value.get()).build();
 					value.noInitChanges().takeUntil(msi.getUntil()).act(evt -> copy.set(evt.getNewValue(), evt));
 					return value.disableWith(ObservableValue.of("A watched value cannot be modified"));
 				});
-			};
+			});
 		})//
 		;
 		return interpreter;

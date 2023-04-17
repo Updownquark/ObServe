@@ -9,10 +9,11 @@ import org.observe.SettableValue;
 import org.observe.expresso.ExpressoEnv;
 import org.observe.expresso.ExpressoEvaluationException;
 import org.observe.expresso.ExpressoInterpretationException;
+import org.observe.expresso.ModelType;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
-import org.observe.expresso.ObservableModelSet.ValueContainer;
+import org.observe.expresso.ObservableModelSet.ModelValueSynth;
 import org.observe.expresso.TypeConversionException;
 import org.observe.util.TypeTokens;
 
@@ -71,15 +72,20 @@ public class CastExpression implements ObservableExpression {
 	}
 
 	@Override
-	public <M, MV extends M> ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env, int expressionOffset)
+	public ModelType<?> getModelType(ExpressoEnv env) {
+		return ModelTypes.Value;
+	}
+
+	@Override
+	public <M, MV extends M> ModelValueSynth<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env, int expressionOffset)
 		throws ExpressoEvaluationException, ExpressoInterpretationException {
 		if (type.getModelType() != ModelTypes.Value)
 			throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(),
 				"A cast expression can only be evaluated as a value");
-		return (ValueContainer<M, MV>) doEval((ModelInstanceType<SettableValue<?>, SettableValue<?>>) type, env, expressionOffset);
+		return (ModelValueSynth<M, MV>) doEval((ModelInstanceType<SettableValue<?>, SettableValue<?>>) type, env, expressionOffset);
 	}
 
-	private <S, T> ValueContainer<SettableValue<?>, SettableValue<T>> doEval(ModelInstanceType<SettableValue<?>, SettableValue<?>> type,
+	private <S, T> ModelValueSynth<SettableValue<?>, SettableValue<T>> doEval(ModelInstanceType<SettableValue<?>, SettableValue<?>> type,
 		ExpressoEnv env, int expressionOffset) throws ExpressoEvaluationException, ExpressoInterpretationException {
 		TypeToken<T> valueType;
 		try {
@@ -91,9 +97,9 @@ public class CastExpression implements ObservableExpression {
 			throw new ExpressoEvaluationException(expressionOffset + 1, theType.length(),
 				"Cannot assign " + valueType + " to " + type.getType(0));
 		int valueOffset = expressionOffset + theType.length() + 2;
-		ValueContainer<SettableValue<?>, SettableValue<S>> valueContainer;
+		ModelValueSynth<SettableValue<?>, SettableValue<S>> valueContainer;
 		try {
-			valueContainer = (ValueContainer<SettableValue<?>, SettableValue<S>>) (ValueContainer<?, ?>) theValue
+			valueContainer = (ModelValueSynth<SettableValue<?>, SettableValue<S>>) (ModelValueSynth<?, ?>) theValue
 				.evaluate(ModelTypes.Value.any(), env, valueOffset);
 		} catch (TypeConversionException e) {
 			throw new ExpressoEvaluationException(valueOffset, theValue.getExpressionLength(), e.getMessage(), e);

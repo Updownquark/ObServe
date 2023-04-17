@@ -14,7 +14,7 @@ import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
-import org.observe.expresso.ObservableModelSet.ValueContainer;
+import org.observe.expresso.ObservableModelSet.ModelValueSynth;
 import org.observe.expresso.TypeConversionException;
 import org.observe.util.TypeTokens;
 
@@ -132,7 +132,7 @@ public class MethodInvocation extends Invocation {
 						TypeTokens.get().of(clazz), true, Arrays.asList(args), type, env, Invocation.ExecutableImpl.METHOD, this,
 						expressionOffset);
 					if (result != null) {
-						ValueContainer<SettableValue<?>, SettableValue<?>>[] realArgs = new ValueContainer[getArguments().size()];
+						ModelValueSynth<SettableValue<?>, SettableValue<?>>[] realArgs = new ModelValueSynth[getArguments().size()];
 						for (int a = 0; a < realArgs.length; a++)
 							realArgs[a] = args.args[a].get(0);
 						return new InvokableResult<>(result, null, Arrays.asList(realArgs), Invocation.ExecutableImpl.METHOD);
@@ -141,7 +141,7 @@ public class MethodInvocation extends Invocation {
 						"No such method " + printSignature() + " in class " + clazz.getName());
 				}
 			}
-			ValueContainer<SettableValue<?>, SettableValue<?>> ctx;
+			ModelValueSynth<SettableValue<?>, SettableValue<?>> ctx;
 			try {
 				ctx = theContext.evaluate(ModelTypes.Value.any(), env, expressionOffset);
 			} catch (TypeConversionException e) {
@@ -157,7 +157,7 @@ public class MethodInvocation extends Invocation {
 				theMethodName.getName(), ctxType, false, Arrays.asList(args), type, env, Invocation.ExecutableImpl.METHOD, this,
 				expressionOffset);
 			if (result != null) {
-				ValueContainer<SettableValue<?>, SettableValue<?>>[] realArgs = new ValueContainer[getArguments().size()];
+				ModelValueSynth<SettableValue<?>, SettableValue<?>>[] realArgs = new ModelValueSynth[getArguments().size()];
 				for (int a = 0; a < realArgs.length; a++)
 					realArgs[a] = args.args[a].get(0);
 				return new InvokableResult<>(result, ctx, Arrays.asList(realArgs), Invocation.ExecutableImpl.METHOD);
@@ -170,7 +170,7 @@ public class MethodInvocation extends Invocation {
 				theMethodName.getName(), null, true, Arrays.asList(args), type, env, Invocation.ExecutableImpl.METHOD, this,
 				expressionOffset);
 			if (result != null) {
-				ValueContainer<SettableValue<?>, SettableValue<?>>[] realArgs = new ValueContainer[getArguments().size()];
+				ModelValueSynth<SettableValue<?>, SettableValue<?>>[] realArgs = new ModelValueSynth[getArguments().size()];
 				for (int a = 0; a < realArgs.length; a++)
 					realArgs[a] = args.args[a].get(0);
 				return new InvokableResult<>(result, null, Arrays.asList(realArgs), Invocation.ExecutableImpl.METHOD);

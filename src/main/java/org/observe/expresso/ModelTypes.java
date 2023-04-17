@@ -68,6 +68,13 @@ public class ModelTypes {
 			ModelInstanceType<ObservableModelSet, MV> type) {
 			throw new IllegalStateException("Hollow values not supported for models");
 		}
+
+		@Override
+		public ModelType<?> getCommonType(ModelType<?> other) {
+			if (other == this)
+				return this;
+			return null;
+		}
 	};
 	/** An {@link Observable} */
 	public static final EventModelType Event = new EventModelType();
@@ -280,6 +287,14 @@ public class ModelTypes {
 				return theFlatObservable.tryLock();
 			}
 		}
+
+		@Override
+		public ModelType<?> getCommonType(ModelType<?> other) {
+			if (other == Action || other == Value || other == Collection || other == SortedCollection || other == Set || other == SortedSet
+				|| other == Map || other == SortedMap || other == MultiMap || other == SortedMultiMap || other == ValueSet)
+				return this;
+			return null;
+		}
 	}
 
 	/** See {@link ModelTypes#Action} */
@@ -434,6 +449,13 @@ public class ModelTypes {
 			public String toString() {
 				return theName;
 			}
+		}
+
+		@Override
+		public ModelType<?> getCommonType(ModelType<?> other) {
+			if (other == this)
+				return this;
+			return null;
 		}
 	}
 
@@ -783,6 +805,16 @@ public class ModelTypes {
 				return theContainer.get() != null;
 			}
 		}
+
+		@Override
+		public ModelType<?> getCommonType(ModelType<?> other) {
+			if (other == Event)
+				return other;
+			else if (other == this || other == Collection || other == SortedCollection || other == Set || other == SortedSet || other == Map
+				|| other == SortedMap || other == MultiMap || other == SortedMultiMap || other == ValueSet)
+				return this;
+			return null;
+		}
 	}
 
 	/** See {@link ModelTypes#Collection} */
@@ -916,6 +948,15 @@ public class ModelTypes {
 				return theContainer.get() != null;
 			}
 		}
+
+		@Override
+		public ModelType<?> getCommonType(ModelType<?> other) {
+			if (other == Event || other == Value)
+				return other;
+			else if (other == this || other == SortedCollection || other == Set || other == SortedSet || other == ValueSet)
+				return this;
+			return null;
+		}
 	}
 
 	/** See {@link ModelTypes#SortedCollection} */
@@ -1031,6 +1072,19 @@ public class ModelTypes {
 		public <MV extends ObservableSortedCollection<?>> HollowModelValue<ObservableSortedCollection<?>, MV> createHollowValue(String name,
 			ModelInstanceType<ObservableSortedCollection<?>, MV> type) {
 			throw new UnsupportedOperationException(this + ".createHollowValue not implemented");
+		}
+
+		@Override
+		public ModelType<?> getCommonType(ModelType<?> other) {
+			if (other == Event || other == Value || other == Collection)
+				return other;
+			else if (other == this || other == SortedSet)
+				return this;
+			else if (other == Set)
+				return Collection;
+			else if (other == ValueSet)
+				return Collection;
+			return null;
 		}
 	}
 
@@ -1205,6 +1259,19 @@ public class ModelTypes {
 				return set.repair(listener);
 			}
 		}
+
+		@Override
+		public ModelType<?> getCommonType(ModelType<?> other) {
+			if (other == Event || other == Value || other == Collection)
+				return other;
+			else if (other == this || other == SortedSet)
+				return this;
+			else if (other == SortedCollection)
+				return Collection;
+			else if (other == ValueSet)
+				return Collection;
+			return null;
+		}
 	}
 
 	/** See {@link ModelTypes#SortedSet} */
@@ -1319,6 +1386,17 @@ public class ModelTypes {
 			ModelInstanceType<ObservableSortedSet<?>, MV> type) {
 			throw new UnsupportedOperationException(this + ".createHollowValue not implemented");
 		}
+
+		@Override
+		public ModelType<?> getCommonType(ModelType<?> other) {
+			if (other == Event || other == Value || other == Collection || other == Set || other == SortedCollection)
+				return other;
+			else if (other == this)
+				return this;
+			else if (other == ValueSet)
+				return Collection;
+			return null;
+		}
 	}
 
 	/** See {@link ModelTypes#ValueSet} */
@@ -1408,6 +1486,17 @@ public class ModelTypes {
 		public <MV extends ObservableValueSet<?>> HollowModelValue<ObservableValueSet<?>, MV> createHollowValue(String name,
 			ModelInstanceType<ObservableValueSet<?>, MV> type) {
 			throw new UnsupportedOperationException(this + ".createHollowValue not implemented");
+		}
+
+		@Override
+		public ModelType<?> getCommonType(ModelType<?> other) {
+			if (other == Event || other == Value || other == Collection)
+				return other;
+			else if (other == SortedCollection || other == Set || other == SortedSet)
+				return Collection;
+			else if (other == this)
+				return this;
+			return null;
 		}
 	}
 
@@ -1503,6 +1592,17 @@ public class ModelTypes {
 		public <MV extends ObservableMap<?, ?>> HollowModelValue<ObservableMap<?, ?>, MV> createHollowValue(String name,
 			ModelInstanceType<ObservableMap<?, ?>, MV> type) {
 			throw new UnsupportedOperationException(this + ".createHollowValue not implemented");
+		}
+
+		@Override
+		public ModelType<?> getCommonType(ModelType<?> other) {
+			if (other == Event || other == Value)
+				return other;
+			else if (other == this || other == SortedMap)
+				return this;
+			else if (other == MultiMap || other == SortedMultiMap)
+				return MultiMap;
+			return null;
 		}
 	}
 
@@ -1606,6 +1706,15 @@ public class ModelTypes {
 		public <MV extends ObservableSortedMap<?, ?>> HollowModelValue<ObservableSortedMap<?, ?>, MV> createHollowValue(String name,
 			ModelInstanceType<ObservableSortedMap<?, ?>, MV> type) {
 			throw new UnsupportedOperationException(this + ".createHollowValue not implemented");
+		}
+
+		@Override
+		public ModelType<?> getCommonType(ModelType<?> other) {
+			if (other == Event || other == Value || other == Map || other == MultiMap || other == SortedMultiMap)
+				return other;
+			else if (other == this)
+				return this;
+			return null;
 		}
 	}
 
@@ -1723,6 +1832,15 @@ public class ModelTypes {
 		public <MV extends ObservableMultiMap<?, ?>> HollowModelValue<ObservableMultiMap<?, ?>, MV> createHollowValue(String name,
 			ModelInstanceType<ObservableMultiMap<?, ?>, MV> type) {
 			throw new UnsupportedOperationException(this + ".createHollowValue not implemented");
+		}
+
+		@Override
+		public ModelType<?> getCommonType(ModelType<?> other) {
+			if (other == Event || other == Value)
+				return other;
+			else if (other == this || other == SortedMultiMap || other == Map || other == SortedMap)
+				return this;
+			return null;
 		}
 	}
 
@@ -1845,6 +1963,15 @@ public class ModelTypes {
 		public <MV extends ObservableSortedMultiMap<?, ?>> HollowModelValue<ObservableSortedMultiMap<?, ?>, MV> createHollowValue(
 			String name, ModelInstanceType<ObservableSortedMultiMap<?, ?>, MV> type) {
 			throw new UnsupportedOperationException(this + ".createHollowValue not implemented");
+		}
+
+		@Override
+		public ModelType<?> getCommonType(ModelType<?> other) {
+			if (other == Event || other == Value || other == MultiMap)
+				return other;
+			else if (other == this || other == Map || other == SortedMap)
+				return this;
+			return null;
 		}
 	}
 

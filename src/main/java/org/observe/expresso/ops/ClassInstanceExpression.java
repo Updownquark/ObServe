@@ -7,10 +7,11 @@ import java.util.function.Function;
 
 import org.observe.expresso.ExpressoEnv;
 import org.observe.expresso.ExpressoEvaluationException;
+import org.observe.expresso.ModelType;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
-import org.observe.expresso.ObservableModelSet.ValueContainer;
+import org.observe.expresso.ObservableModelSet.ModelValueSynth;
 import org.observe.util.TypeTokens;
 
 import com.google.common.reflect.TypeToken;
@@ -60,7 +61,12 @@ public class ClassInstanceExpression implements ObservableExpression {
 	}
 
 	@Override
-	public <M, MV extends M> ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env, int expressionOffset)
+	public ModelType<?> getModelType(ExpressoEnv env) {
+		return ModelTypes.Value;
+	}
+
+	@Override
+	public <M, MV extends M> ModelValueSynth<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env, int expressionOffset)
 		throws ExpressoEvaluationException {
 		if (type.getModelType() != ModelTypes.Value)
 			throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(),
@@ -78,7 +84,7 @@ public class ClassInstanceExpression implements ObservableExpression {
 		if (!TypeTokens.get().isAssignable(type.getType(0), classType))
 			throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(),
 				theType + ".class cannot be evaluated as a " + type.getType(0));
-		return (ValueContainer<M, MV>) ValueContainer.literal(ModelTypes.Value.forType(classType), clazz, theType + ".class");
+		return (ModelValueSynth<M, MV>) ModelValueSynth.literal(ModelTypes.Value.forType(classType), clazz, theType + ".class");
 	}
 
 	@Override

@@ -9,10 +9,11 @@ import org.observe.SettableValue;
 import org.observe.expresso.ExpressoEnv;
 import org.observe.expresso.ExpressoEvaluationException;
 import org.observe.expresso.ExpressoInterpretationException;
+import org.observe.expresso.ModelType;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
-import org.observe.expresso.ObservableModelSet.ValueContainer;
+import org.observe.expresso.ObservableModelSet.ModelValueSynth;
 import org.observe.expresso.TypeConversionException;
 import org.observe.util.TypeTokens;
 
@@ -69,12 +70,17 @@ public class InstanceofExpression implements ObservableExpression {
 	}
 
 	@Override
-	public <M, MV extends M> ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env, int expressionOffset)
+	public ModelType<?> getModelType(ExpressoEnv env) {
+		return ModelTypes.Value;
+	}
+
+	@Override
+	public <M, MV extends M> ModelValueSynth<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env, int expressionOffset)
 		throws ExpressoEvaluationException, ExpressoInterpretationException {
 		if (type.getModelType() != ModelTypes.Value && !TypeTokens.get().isAssignable(type.getType(0), TypeTokens.get().BOOLEAN))
 			throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(),
 				"instanceof expressions can only be evaluated to Value<Boolean>");
-		ValueContainer<SettableValue<?>, SettableValue<?>> leftValue;
+		ModelValueSynth<SettableValue<?>, SettableValue<?>> leftValue;
 		try {
 			leftValue = theLeft.evaluate(ModelTypes.Value.any(), env, expressionOffset);
 		} catch (TypeConversionException e) {
@@ -91,12 +97,12 @@ public class InstanceofExpression implements ObservableExpression {
 				throw new ExpressoEvaluationException(expressionOffset + theLeft.getExpressionLength() + 12 + e.getErrorOffset(), 0,
 					e.getMessage(), e);
 		}
-		ValueContainer<SettableValue<?>, SettableValue<Boolean>> container = leftValue.map(ModelTypes.Value.forType(boolean.class),
+		ModelValueSynth<SettableValue<?>, SettableValue<Boolean>> container = leftValue.map(ModelTypes.Value.forType(boolean.class),
 			(lv, msi) -> {
 				return SettableValue.asSettable(lv.map(TypeTokens.get().BOOLEAN, v -> v != null && testType.isInstance(v)),
 					__ -> "instanceof expressions are not reversible");
 			});
-		return (ValueContainer<M, MV>) container;
+		return (ModelValueSynth<M, MV>) container;
 	}
 
 	@Override

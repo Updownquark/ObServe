@@ -71,8 +71,8 @@ public class ExpressoQIS implements SpecialSession<ExpressoQIS> {
 	}
 
 	/**
-	 * All {@link ObservableModelSet.ValueContainer}s for expressions parsed under this session should be
-	 * {@link ObservableModelSet.ValueContainer#get(ModelSetInstance) satisfied} with a model set wrapped by this method if this element
+	 * All {@link ObservableModelSet.ModelValueSynth}s for expressions parsed under this session should be
+	 * {@link ObservableModelSet.ModelValueSynth#get(ModelSetInstance) satisfied} with a model set wrapped by this method if this element
 	 * extends with-local-models.
 	 *
 	 * @param models The model instance
@@ -95,12 +95,12 @@ public class ExpressoQIS implements SpecialSession<ExpressoQIS> {
 	 * @return The observable expression at the given attribute
 	 * @throws QonfigInterpretationException If the attribute expression could not be parsed
 	 */
-	public QonfigExpression2 getAttributeExpression(String attrName) throws QonfigInterpretationException {
+	public CompiledExpression getAttributeExpression(String attrName) throws QonfigInterpretationException {
 		QonfigAttributeDef attr = getAttributeDef(null, null, attrName);
 		return getExpression(attr);
 	}
 
-	QonfigExpression2 getExpression(QonfigValueDef type) throws QonfigInterpretationException {
+	CompiledExpression getExpression(QonfigValueDef type) throws QonfigInterpretationException {
 		if (type == null)
 			error("This element has no value definition");
 		else if (!(type.getType() instanceof QonfigValueType.Custom)
@@ -125,7 +125,7 @@ public class ExpressoQIS implements SpecialSession<ExpressoQIS> {
 				position = new LocatedFilePosition(getElement().getDocument().getLocation(), value.position.getPosition(e.getErrorOffset()));
 			throw new QonfigInterpretationException("Could not parse attribute " + type, position, e.getErrorLength(), e);
 		}
-		return new QonfigExpression2(expression, getElement(), type, value.position, this);
+		return new CompiledExpression(expression, getElement(), type, value.position, this);
 	}
 
 	/**
@@ -133,7 +133,7 @@ public class ExpressoQIS implements SpecialSession<ExpressoQIS> {
 	 * @return The observable expression at the given attribute
 	 * @throws QonfigInterpretationException If the attribute expression could not be parsed
 	 */
-	public QonfigExpression2 getAttributeExpression(QonfigAttributeDef attr) throws QonfigInterpretationException {
+	public CompiledExpression getAttributeExpression(QonfigAttributeDef attr) throws QonfigInterpretationException {
 		return getExpression(attr);
 	}
 
@@ -146,13 +146,13 @@ public class ExpressoQIS implements SpecialSession<ExpressoQIS> {
 	// * @return The parsed and evaluated attribute expression
 	// * @throws QonfigInterpretationException If the attribute expression could not be parsed or evaluated
 	// */
-	// public <M, MV extends M> ValueContainer<M, MV> getAttribute(String attrName, ModelInstanceType<M, MV> type,
+	// public <M, MV extends M> ModelValueSynth<M, MV> getAttribute(String attrName, ModelInstanceType<M, MV> type,
 	// Supplier<Function<ModelSetInstance, MV>> defaultValue) throws QonfigInterpretationException {
 	// QonfigExpression expression = getAttribute(attrName, QonfigExpression.class);
 	// if (expression == null) {
 	// if (defaultValue == null)
 	// return null;
-	// return new ValueContainer<M, MV>() {
+	// return new ModelValueSynth<M, MV>() {
 	// final Function<ModelSetInstance, MV> def = defaultValue == null ? null : defaultValue.get();
 	//
 	// @Override
@@ -171,7 +171,7 @@ public class ExpressoQIS implements SpecialSession<ExpressoQIS> {
 	// }
 	//
 	// @Override
-	// public BetterList<ValueContainer<?, ?>> getCores() {
+	// public BetterList<ModelValueSynth<?, ?>> getCores() {
 	// return BetterList.of(this);
 	// }
 	// };
@@ -184,7 +184,7 @@ public class ExpressoQIS implements SpecialSession<ExpressoQIS> {
 	 * @return The observable expression in this element's value
 	 * @throws QonfigInterpretationException If the value expression could not be parsed
 	 */
-	public QonfigExpression2 getValueExpression() throws QonfigInterpretationException {
+	public CompiledExpression getValueExpression() throws QonfigInterpretationException {
 		return getExpression(getValueDef());
 	}
 
@@ -197,13 +197,13 @@ public class ExpressoQIS implements SpecialSession<ExpressoQIS> {
 	// * @throws IllegalArgumentException If the value is not an expression
 	// * @throws QonfigInterpretationException If the value expression could not be parsed or evaluated as a value
 	// */
-	// public <M, MV extends M> ValueContainer<M, MV> getValue(ModelInstanceType<M, MV> type,
+	// public <M, MV extends M> ModelValueSynth<M, MV> getValue(ModelInstanceType<M, MV> type,
 	// Supplier<Function<ModelSetInstance, MV>> defaultValue) throws IllegalArgumentException, QonfigInterpretationException {
 	// QonfigValue value = getElement().getValue();
 	// if (value == null) {
 	// if (defaultValue == null)
 	// return null;
-	// return new ValueContainer<M, MV>() {
+	// return new ModelValueSynth<M, MV>() {
 	// final Function<ModelSetInstance, MV> def = defaultValue.get();
 	//
 	// @Override
@@ -222,7 +222,7 @@ public class ExpressoQIS implements SpecialSession<ExpressoQIS> {
 	// }
 	//
 	// @Override
-	// public BetterList<ValueContainer<?, ?>> getCores() {
+	// public BetterList<ModelValueSynth<?, ?>> getCores() {
 	// return BetterList.of(this);
 	// }
 	// };
@@ -251,7 +251,7 @@ public class ExpressoQIS implements SpecialSession<ExpressoQIS> {
 	// * @throws IllegalArgumentException If the attribute value is not an expression
 	// * @throws QonfigInterpretationException If the attribute expression could not be parsed or evaluated
 	// */
-	// public <T> ValueContainer<SettableValue<?>, SettableValue<T>> getAttributeAsValue(String attrName, TypeToken<T> type,
+	// public <T> ModelValueSynth<SettableValue<?>, SettableValue<T>> getAttributeAsValue(String attrName, TypeToken<T> type,
 	// Supplier<Function<ModelSetInstance, SettableValue<T>>> defaultValue)
 	// throws IllegalArgumentException, QonfigInterpretationException {
 	// return getAttribute(attrName, ModelTypes.Value.forType(type), defaultValue);
@@ -268,7 +268,7 @@ public class ExpressoQIS implements SpecialSession<ExpressoQIS> {
 	// * @throws IllegalArgumentException If the attribute value is not an expression
 	// * @throws QonfigInterpretationException If the attribute expression could not be parsed or evaluated as a value
 	// */
-	// public <T> ValueContainer<SettableValue<?>, SettableValue<T>> getAttributeAsValue(String attrName, Class<T> type,
+	// public <T> ModelValueSynth<SettableValue<?>, SettableValue<T>> getAttributeAsValue(String attrName, Class<T> type,
 	// Supplier<Function<ModelSetInstance, SettableValue<T>>> defaultValue)
 	// throws IllegalArgumentException, QonfigInterpretationException {
 	// return getAttributeAsValue(attrName, TypeTokens.get().of(type), defaultValue);
@@ -284,7 +284,7 @@ public class ExpressoQIS implements SpecialSession<ExpressoQIS> {
 	// * @throws IllegalArgumentException If the value is not an expression
 	// * @throws QonfigInterpretationException If the value expression could not be parsed or evaluated as a value
 	// */
-	// public <T> ValueContainer<SettableValue<?>, SettableValue<T>> getValueAsValue(TypeToken<T> type,
+	// public <T> ModelValueSynth<SettableValue<?>, SettableValue<T>> getValueAsValue(TypeToken<T> type,
 	// Supplier<Function<ModelSetInstance, SettableValue<T>>> defaultValue)
 	// throws IllegalArgumentException, QonfigInterpretationException {
 	// return getValue(ModelTypes.Value.forType(type), defaultValue);
@@ -300,7 +300,7 @@ public class ExpressoQIS implements SpecialSession<ExpressoQIS> {
 	// * @throws IllegalArgumentException If the value is not an expression
 	// * @throws QonfigInterpretationException If the value expression could not be parsed or evaluated as a value
 	// */
-	// public <T> ValueContainer<SettableValue<?>, SettableValue<T>> getValueAsValue(Class<T> type,
+	// public <T> ModelValueSynth<SettableValue<?>, SettableValue<T>> getValueAsValue(Class<T> type,
 	// Supplier<Function<ModelSetInstance, SettableValue<T>>> defaultValue)
 	// throws IllegalArgumentException, QonfigInterpretationException {
 	// return getValueAsValue(TypeTokens.get().of(type), defaultValue);
@@ -317,7 +317,7 @@ public class ExpressoQIS implements SpecialSession<ExpressoQIS> {
 	// * @throws IllegalArgumentException If the attribute value is not an expression
 	// * @throws QonfigInterpretationException If the attribute expression could not be parsed or evaluated as a value
 	// */
-	// public <T> ValueContainer<ObservableCollection<?>, ObservableCollection<T>> getAttributeAsCollection(String attrName, TypeToken<T>
+	// public <T> ModelValueSynth<ObservableCollection<?>, ObservableCollection<T>> getAttributeAsCollection(String attrName, TypeToken<T>
 	// type,
 	// Supplier<Function<ModelSetInstance, ObservableCollection<T>>> defaultValue)
 	// throws IllegalArgumentException, QonfigInterpretationException {
@@ -335,7 +335,7 @@ public class ExpressoQIS implements SpecialSession<ExpressoQIS> {
 	// * @throws IllegalArgumentException If the attribute value is not an expression
 	// * @throws QonfigInterpretationException If the attribute expression could not be parsed or evaluated as a value
 	// */
-	// public <T> ValueContainer<ObservableCollection<?>, ObservableCollection<T>> getAttributeAsCollection(String attrName, Class<T> type,
+	// public <T> ModelValueSynth<ObservableCollection<?>, ObservableCollection<T>> getAttributeAsCollection(String attrName, Class<T> type,
 	// Supplier<Function<ModelSetInstance, ObservableCollection<T>>> defaultValue)
 	// throws IllegalArgumentException, QonfigInterpretationException {
 	// return getAttributeAsCollection(attrName, TypeTokens.get().of(type), defaultValue);
@@ -351,7 +351,7 @@ public class ExpressoQIS implements SpecialSession<ExpressoQIS> {
 	// * @throws IllegalArgumentException If the value is not an expression
 	// * @throws QonfigInterpretationException If the value expression could not be parsed or evaluated as a collection
 	// */
-	// public <T> ValueContainer<ObservableCollection<?>, ObservableCollection<T>> getValueAsCollection(TypeToken<T> type,
+	// public <T> ModelValueSynth<ObservableCollection<?>, ObservableCollection<T>> getValueAsCollection(TypeToken<T> type,
 	// Supplier<Function<ModelSetInstance, ObservableCollection<T>>> defaultValue)
 	// throws IllegalArgumentException, QonfigInterpretationException {
 	// return getValue(ModelTypes.Collection.forType(type), defaultValue);
@@ -367,7 +367,7 @@ public class ExpressoQIS implements SpecialSession<ExpressoQIS> {
 	// * @throws IllegalArgumentException If the value is not an expression
 	// * @throws QonfigInterpretationException If the value expression could not be parsed or evaluated as a collection
 	// */
-	// public <T> ValueContainer<ObservableCollection<?>, ObservableCollection<T>> getValueAsCollection(Class<T> type,
+	// public <T> ModelValueSynth<ObservableCollection<?>, ObservableCollection<T>> getValueAsCollection(Class<T> type,
 	// Supplier<Function<ModelSetInstance, ObservableCollection<T>>> defaultValue)
 	// throws IllegalArgumentException, QonfigInterpretationException {
 	// return getValueAsCollection(TypeTokens.get().of(type), defaultValue);

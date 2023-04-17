@@ -12,10 +12,11 @@ import org.observe.SettableValue;
 import org.observe.expresso.ExpressoEnv;
 import org.observe.expresso.ExpressoEvaluationException;
 import org.observe.expresso.ExpressoInterpretationException;
+import org.observe.expresso.ModelType;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
-import org.observe.expresso.ObservableModelSet.ValueContainer;
+import org.observe.expresso.ObservableModelSet.ModelValueSynth;
 import org.observe.expresso.TypeConversionException;
 import org.observe.expresso.ops.UnaryOperatorSet.UnaryOp;
 import org.observe.util.TypeTokens;
@@ -95,7 +96,15 @@ public class UnaryOperator implements ObservableExpression {
 	}
 
 	@Override
-	public <M, MV extends M> ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env, int expressionOffset)
+	public ModelType<?> getModelType(ExpressoEnv env) {
+		Set<UnaryOp<?, ?>> operators = env.getUnaryOperators().getOperators(theOperator);
+		if (operators.isEmpty())
+			throw new IllegalStateException("No such operator found: " + theOperator);
+		return operators.iterator().next().isActionOnly() ? ModelTypes.Action : ModelTypes.Value;
+	}
+
+	@Override
+	public <M, MV extends M> ModelValueSynth<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env, int expressionOffset)
 		throws ExpressoEvaluationException, ExpressoInterpretationException {
 		Set<Class<?>> types = env.getUnaryOperators().getSupportedInputTypes(theOperator);
 		TypeToken<?> targetOpType;
@@ -112,14 +121,14 @@ public class UnaryOperator implements ObservableExpression {
 		}
 		int operandOffset = expressionOffset + getChildOffset(0);
 		try {
-			return (ValueContainer<M, MV>) doOperation(type,
+			return (ModelValueSynth<M, MV>) doOperation(type,
 				theOperand.evaluate(ModelTypes.Value.forType(targetOpType), env, operandOffset), env, expressionOffset);
 		} catch (TypeConversionException e) {
 			throw new ExpressoEvaluationException(operandOffset, theOperand.getExpressionLength(), e.getMessage(), e);
 		}
 	}
 
-	private <M, MV extends M, S> MV doOperation(ModelInstanceType<M, MV> type, ValueContainer<SettableValue<?>, SettableValue<S>> op,
+	private <M, MV extends M, S> MV doOperation(ModelInstanceType<M, MV> type, ModelValueSynth<SettableValue<?>, SettableValue<S>> op,
 		ExpressoEnv env, int expressionOffset) throws ExpressoEvaluationException, ExpressoInterpretationException {
 		TypeToken<S> opType;
 		int operandOffset = expressionOffset + getChildOffset(0);
@@ -146,8 +155,8 @@ public class UnaryOperator implements ObservableExpression {
 		}
 	}
 
-	private <T, A> ValueContainer<ObservableAction<?>, ObservableAction<A>> evaluateAction(TypeToken<A> actionType,
-		ValueContainer<SettableValue<?>, SettableValue<T>> op, UnaryOp<T, T> operator, ExpressoEnv env, int expressionOffset)
+	private <T, A> ModelValueSynth<ObservableAction<?>, ObservableAction<A>> evaluateAction(TypeToken<A> actionType,
+		ModelValueSynth<SettableValue<?>, SettableValue<T>> op, UnaryOp<T, T> operator, ExpressoEnv env, int expressionOffset)
 			throws ExpressoEvaluationException {
 		boolean voidAction = TypeTokens.get().unwrap(TypeTokens.getRawType(actionType)) == void.class;
 		if (!voidAction) {
@@ -187,8 +196,8 @@ public class UnaryOperator implements ObservableExpression {
 		});
 	}
 
-	private <S, T> ValueContainer<SettableValue<?>, SettableValue<T>> evaluateValue(TypeToken<S> opType, TypeToken<T> type,
-		ValueContainer<SettableValue<?>, SettableValue<S>> op, UnaryOp<S, T> operator, ExpressoEnv env, int expressionOffset)
+	private <S, T> ModelValueSynth<SettableValue<?>, SettableValue<T>> evaluateValue(TypeToken<S> opType, TypeToken<T> type,
+		ModelValueSynth<SettableValue<?>, SettableValue<S>> op, UnaryOp<S, T> operator, ExpressoEnv env, int expressionOffset)
 			throws ExpressoEvaluationException {
 		if (TypeTokens.get().isAssignable(type, TypeTokens.get().of(operator.getTargetType())))
 			type = TypeTokens.get().of(operator.getTargetType());

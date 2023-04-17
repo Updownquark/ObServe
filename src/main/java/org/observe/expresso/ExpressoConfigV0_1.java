@@ -51,10 +51,10 @@ import org.observe.expresso.Expresso.ConfigModelValue;
 import org.observe.expresso.ExpressoBaseV0_1.AppEnvironment;
 import org.observe.expresso.ExpressoBaseV0_1.ParsedSorting;
 import org.observe.expresso.ModelType.ModelInstanceType;
-import org.observe.expresso.ObservableModelSet.InterpretedValueContainer;
+import org.observe.expresso.ObservableModelSet.CompiledModelValue;
+import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
-import org.observe.expresso.ObservableModelSet.ValueContainer;
-import org.observe.expresso.ObservableModelSet.ValueCreator;
+import org.observe.expresso.ObservableModelSet.ModelValueSynth;
 import org.observe.util.TypeTokens;
 import org.observe.util.swing.WindowPopulation;
 import org.qommons.Identifiable;
@@ -94,7 +94,7 @@ import com.google.common.reflect.TypeToken;
 
 /** Qonfig Interpretation for the ExpressoConfigV0_1 API */
 public class ExpressoConfigV0_1 implements QonfigInterpretation {
-	/** Equivalent of a {@link ValueCreator} for a &lt;validate> element */
+	/** Equivalent of a {@link CompiledModelValue} for a &lt;validate> element */
 	public interface ValidationProducer {
 		/**
 		 * @param <T> The type to validate
@@ -106,7 +106,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 	}
 
 	/**
-	 * Equivalent of a {@link ValueContainer} for a &lt;validate> element
+	 * Equivalent of a {@link ModelValueSynth} for a &lt;validate> element
 	 *
 	 * @param <V> The type to validate
 	 */
@@ -119,7 +119,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		Function<V, String> getTest(ModelSetInstance models) throws ModelInstantiationException;
 
 		/**
-		 * Equivalent of {@link ValueContainer#forModelCopy(Object, ModelSetInstance, ModelSetInstance)}
+		 * Equivalent of {@link ModelValueSynth#forModelCopy(Object, ModelSetInstance, ModelSetInstance)}
 		 *
 		 * @param validator The validator from the source models
 		 * @param sourceModels The source models
@@ -131,12 +131,12 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			throws ModelInstantiationException;
 
 		/**
-		 * Equivalent of {@link ValueContainer#getCores()}
+		 * Equivalent of {@link ModelValueSynth#getCores()}
 		 *
 		 * @return The value container cores that are the fundamental sources of value for the test
 		 * @throws ExpressoInterpretationException If an error occurs retrieving the cores
 		 */
-		BetterList<ValueContainer<?, ?>> getCores() throws ExpressoInterpretationException;
+		BetterList<ModelValueSynth<?, ?>> getCores() throws ExpressoInterpretationException;
 	}
 
 	/** The name of the model value to store the {@link ObservableConfig} in the model */
@@ -192,7 +192,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			ExpressoQIS eqis = wrap(session);
 			ObservableModelSet.Builder model = (ObservableModelSet.Builder) eqis.getExpressoEnv().getModels();
 			String configName = session.getAttributeText("config-name");
-			QonfigExpression2 configDirX = eqis.getAttributeExpression("config-dir");
+			CompiledExpression configDirX = eqis.getAttributeExpression("config-dir");
 			List<String> oldConfigNames = new ArrayList<>(2);
 			for (QonfigElement ch : session.getChildren("old-config-name"))
 				oldConfigNames.add(ch.getValueText());
@@ -201,18 +201,23 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 
 			List<ConfigModelValue<?, ?, ?>> values = eqis.interpretChildren("value", ConfigModelValue.class);
 
-			model.withMaker(CONFIG_NAME, new ValueCreator<SettableValue<?>, SettableValue<ObservableConfig>>() {
+			model.withMaker(CONFIG_NAME, new CompiledModelValue<SettableValue<?>, SettableValue<ObservableConfig>>() {
 				private final ModelInstanceType<SettableValue<?>, SettableValue<ObservableConfig>> theType = ModelTypes.Value
 					.forType(ObservableConfig.class);
 
 				@Override
-				public ValueContainer<SettableValue<?>, SettableValue<ObservableConfig>> createContainer()
+				public ModelType<SettableValue<?>> getModelType() {
+					return ModelTypes.Value;
+				}
+
+				@Override
+				public ModelValueSynth<SettableValue<?>, SettableValue<ObservableConfig>> createSynthesizer()
 					throws ExpressoInterpretationException {
-					ValueContainer<SettableValue<?>, SettableValue<BetterFile>> configDir;
+					ModelValueSynth<SettableValue<?>, SettableValue<BetterFile>> configDir;
 					if (configDirX != null)
 						configDir = configDirX.evaluate(ModelTypes.Value.forType(BetterFile.class));
 					else {
-						configDir = ValueContainer.of(ModelTypes.Value.forType(BetterFile.class), msi -> {
+						configDir = ModelValueSynth.of(ModelTypes.Value.forType(BetterFile.class), msi -> {
 							String prop = System.getProperty(configName + ".config");
 							if (prop != null)
 								return ObservableModelSet.literal(BetterFile.at(new NativeFileSource(), prop), prop);
@@ -222,7 +227,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 						});
 					}
 
-					return ValueContainer.of(theType, msi -> {
+					return ModelValueSynth.of(theType, msi -> {
 						BetterFile configDirFile = configDir == null ? null : configDir.get(msi).get();
 						if (configDirFile == null) {
 							String configProp = System.getProperty(configName + ".config");
@@ -309,14 +314,14 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 						AppEnvironment storedApp = session.get(ExpressoBaseV0_1.APP_ENVIRONMENT_KEY, AppEnvironment.class);
 						AppEnvironment app = storedApp != null ? storedApp : new AppEnvironment() {
 							@Override
-							public ValueContainer<SettableValue<?>, ? extends ObservableValue<String>> getTitle() {
-								return ValueContainer.literal(TypeTokens.get().STRING, "Unspecified Application",
+							public ModelValueSynth<SettableValue<?>, ? extends ObservableValue<String>> getTitle() {
+								return ModelValueSynth.literal(TypeTokens.get().STRING, "Unspecified Application",
 									"Unspecified Application");
 							}
 
 							@Override
-							public ValueContainer<SettableValue<?>, ? extends ObservableValue<Image>> getIcon() {
-								return ValueContainer.literal(TypeTokens.get().of(Image.class), null, "No Image");
+							public ModelValueSynth<SettableValue<?>, ? extends ObservableValue<Image>> getIcon() {
+								return ModelValueSynth.literal(TypeTokens.get().of(Image.class), null, "No Image");
 							}
 						};
 						if (loaded)
@@ -337,9 +342,9 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 					});
 				}
 			});
-			ValueContainer<SettableValue<?>, SettableValue<ObservableConfig>> configV;
+			ModelValueSynth<SettableValue<?>, SettableValue<ObservableConfig>> configV;
 			try {
-				configV = (ValueContainer<SettableValue<?>, SettableValue<ObservableConfig>>) model.getComponent(CONFIG_NAME);
+				configV = (ModelValueSynth<SettableValue<?>, SettableValue<ObservableConfig>>) model.getComponent(CONFIG_NAME);
 			} catch (ModelException e) {
 				throw new QonfigInterpretationException("But we just installed it!", session.getElement().getPositionInFile(), 0, e);
 			}
@@ -357,21 +362,21 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			return model;
 		}
 
-		private <T, M, MV extends M> ValueCreator<M, MV> createConfigValue(ConfigModelValue<T, M, MV> configValue,
-			ValueContainer<SettableValue<?>, SettableValue<ObservableConfig>> configV, String path, ExpressoQIS session)
+		private <T, M, MV extends M> CompiledModelValue<M, MV> createConfigValue(ConfigModelValue<T, M, MV> configValue,
+			ModelValueSynth<SettableValue<?>, SettableValue<ObservableConfig>> configV, String path, ExpressoQIS session)
 				throws QonfigInterpretationException {
 			ExpressoQIS formatSession = session.forChildren("format").peekFirst();
-			ValueCreator<?, ?> formatCreator = formatSession == null ? null : formatSession.interpret(ValueCreator.class);
-			return () -> {
+			CompiledModelValue<?, ?> formatCreator = formatSession == null ? null : formatSession.interpret(CompiledModelValue.class);
+			return CompiledModelValue.of("value", configValue.getType().getModelType(), () -> {
 				configValue.init();
-				InterpretedValueContainer<SettableValue<?>, SettableValue<ObservableConfig>> iConfigV = configV.interpret();
+				InterpretedValueSynth<SettableValue<?>, SettableValue<ObservableConfig>> iConfigV = configV.interpret();
 				TypeToken<T> formatType = (TypeToken<T>) configValue.getType()
 					.getType(configValue.getType().getModelType().getTypeCount() - 1);
-				ValueContainer<SettableValue<?>, SettableValue<ObservableConfigFormat<T>>> formatContainer;
+				ModelValueSynth<SettableValue<?>, SettableValue<ObservableConfigFormat<T>>> formatContainer;
 				ObservableConfigFormat<T> defaultFormat;
 				if (formatCreator != null) {
 					try {
-						formatContainer = formatCreator.createContainer().as(ModelTypes.Value.forType(
+						formatContainer = formatCreator.createSynthesizer().as(ModelTypes.Value.forType(
 							TypeTokens.get().keyFor(ObservableConfigFormat.class).<ObservableConfigFormat<T>> parameterized(formatType)));
 					} catch (TypeConversionException e) {
 						LocatedFilePosition position;
@@ -390,7 +395,12 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 						throw new ExpressoInterpretationException("No default config format available for type " + formatType,
 							session.getElement().getPositionInFile(), 0);
 				}
-				return new ValueContainer<M, MV>() {
+				return new ModelValueSynth<M, MV>() {
+					@Override
+					public ModelType<M> getModelType() {
+						return configValue.getType().getModelType();
+					}
+
 					@Override
 					public ModelInstanceType<M, MV> getType() throws ExpressoInterpretationException {
 						return configValue.getType();
@@ -416,11 +426,11 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 					}
 
 					@Override
-					public BetterList<ValueContainer<?, ?>> getCores() {
+					public BetterList<ModelValueSynth<?, ?>> getCores() {
 						return BetterList.of(this);
 					}
 				};
-			};
+			});
 		}
 
 		private void build2(ObservableConfig config, BetterFile configFile, FileBackups backups, boolean[] closingWithoutSave) {
@@ -473,12 +483,12 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 
 	private <T> ConfigModelValue<T, SettableValue<?>, SettableValue<T>> createConfigValue(ExpressoQIS session)
 		throws QonfigInterpretationException {
-		QonfigExpression2 defaultX = session.asElement("config-value").getAttributeExpression("default");
+		CompiledExpression defaultX = session.asElement("config-value").getAttributeExpression("default");
 		VariableType type = (VariableType) session.get(VALUE_TYPE_KEY);
 		return new ConfigModelValue<T, SettableValue<?>, SettableValue<T>>() {
 			private TypeToken<T> theValueType;
 			private Format<T> theTextFormat;
-			private ValueContainer<SettableValue<?>, SettableValue<T>> defaultV;
+			private ModelValueSynth<SettableValue<?>, SettableValue<T>> defaultV;
 
 			@Override
 			public void init() throws ExpressoInterpretationException {
@@ -570,8 +580,8 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 
 	abstract class ConfigMapCreator<K, V, M, MV extends M> implements QonfigValueCreator<Expresso.ConfigModelValue<V, M, MV>> {
 		private final ModelType<M> theModelType;
-		ValueCreator<?, ?> keyFormatCreator;
-		ValueContainer<SettableValue<?>, SettableValue<ObservableConfigFormat<K>>> keyFormatContainer;
+		CompiledModelValue<?, ?> keyFormatCreator;
+		ModelValueSynth<SettableValue<?>, SettableValue<ObservableConfigFormat<K>>> keyFormatContainer;
 		ObservableConfigFormat<K> defaultKeyFormat;
 
 		public ConfigMapCreator(ModelType<M> modelType) {
@@ -582,7 +592,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		public ConfigModelValue<V, M, MV> createValue(CoreSession session) throws QonfigInterpretationException {
 			ExpressoQIS exS = session.as(ExpressoQIS.class);
 			ExpressoQIS formatSession = exS.forChildren("key-format").peekFirst();
-			keyFormatCreator = formatSession == null ? null : formatSession.interpret(ValueCreator.class);
+			keyFormatCreator = formatSession == null ? null : formatSession.interpret(CompiledModelValue.class);
 
 			VariableType vblKeyType = (VariableType) exS.get(KEY_TYPE_KEY);
 			VariableType vblValueype = (VariableType) exS.get(VALUE_TYPE_KEY);
@@ -598,7 +608,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 
 					if (keyFormatCreator != null) {
 						try {
-							keyFormatContainer = keyFormatCreator.createContainer().as(ModelTypes.Value.forType(
+							keyFormatContainer = keyFormatCreator.createSynthesizer().as(ModelTypes.Value.forType(
 								TypeTokens.get().keyFor(ObservableConfigFormat.class).<ObservableConfigFormat<K>> parameterized(keyType)));
 						} catch (TypeConversionException e) {
 							LocatedFilePosition position;
@@ -686,7 +696,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 	private <T> ConfigValueCreator<T, ObservableSortedCollection<?>, ObservableSortedCollection<T>> sortedCollectionCreator() {
 		return new ConfigValueCreator<T, ObservableSortedCollection<?>, ObservableSortedCollection<T>>(ModelTypes.SortedCollection) {
 			private ParsedSorting theSortingCreator;
-			private ValueContainer<SettableValue<?>, SettableValue<Comparator<T>>> theSortingContainer;
+			private ModelValueSynth<SettableValue<?>, SettableValue<Comparator<T>>> theSortingContainer;
 
 			@Override
 			protected void prepare(ExpressoQIS exS) throws QonfigInterpretationException {
@@ -735,7 +745,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 	private <T> ConfigValueCreator<T, ObservableSortedSet<?>, ObservableSortedSet<T>> sortedSetCreator() {
 		return new ConfigValueCreator<T, ObservableSortedSet<?>, ObservableSortedSet<T>>(ModelTypes.SortedSet) {
 			private ParsedSorting theSortingCreator;
-			private ValueContainer<SettableValue<?>, SettableValue<Comparator<T>>> theSortingContainer;
+			private ModelValueSynth<SettableValue<?>, SettableValue<Comparator<T>>> theSortingContainer;
 
 			@Override
 			protected void prepare(ExpressoQIS exS) throws QonfigInterpretationException {
@@ -948,32 +958,32 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 	}
 
 	private void configureFormats(QonfigInterpreterCore.Builder interpreter) {
-		interpreter.createWith("model-reference", ValueCreator.class, session -> {
+		interpreter.createWith("model-reference", CompiledModelValue.class, session -> {
 			ExpressoQIS exS = wrap(session);
-			QonfigExpression2 ref = exS.getAttributeExpression("ref");
-			return () -> ref.evaluate(ModelTypes.Value.any());
+			CompiledExpression ref = exS.getAttributeExpression("ref");
+			return CompiledModelValue.of("model-reference", ModelTypes.Value, () -> ref.evaluate(ModelTypes.Value.any()));
 		});
 		// File sources
-		interpreter.createWith("native-file-source", ValueCreator.class,
-			session -> ValueCreator.literal(TypeTokens.get().of(NativeFileSource.class), new NativeFileSource(), "native-file-source"));
-		interpreter.createWith("sftp-file-source", ValueCreator.class, session -> createSftpFileSource(wrap(session)));
-		interpreter.createWith("archive-enabled-file-source", ValueCreator.class, session -> createArchiveEnabledFileSource(wrap(session)));
-		interpreter.createWith("zip-archival", ValueCreator.class,
-			session -> ValueCreator.literal(TypeTokens.get().of(ArchiveEnabledFileSource.ZipCompression.class),
+		interpreter.createWith("native-file-source", CompiledModelValue.class,
+			session -> CompiledModelValue.literal(TypeTokens.get().of(NativeFileSource.class), new NativeFileSource(), "native-file-source"));
+		interpreter.createWith("sftp-file-source", CompiledModelValue.class, session -> createSftpFileSource(wrap(session)));
+		interpreter.createWith("archive-enabled-file-source", CompiledModelValue.class, session -> createArchiveEnabledFileSource(wrap(session)));
+		interpreter.createWith("zip-archival", CompiledModelValue.class,
+			session -> CompiledModelValue.literal(TypeTokens.get().of(ArchiveEnabledFileSource.ZipCompression.class),
 				new ArchiveEnabledFileSource.ZipCompression(), "zip-archival"));
-		interpreter.createWith("tar-archival", ValueCreator.class,
-			session -> ValueCreator.literal(TypeTokens.get().of(ArchiveEnabledFileSource.TarArchival.class),
+		interpreter.createWith("tar-archival", CompiledModelValue.class,
+			session -> CompiledModelValue.literal(TypeTokens.get().of(ArchiveEnabledFileSource.TarArchival.class),
 				new ArchiveEnabledFileSource.TarArchival(), "tar-archival"));
-		interpreter.createWith("gz-archival", ValueCreator.class,
-			session -> ValueCreator.literal(TypeTokens.get().of(ArchiveEnabledFileSource.GZipCompression.class),
+		interpreter.createWith("gz-archival", CompiledModelValue.class,
+			session -> CompiledModelValue.literal(TypeTokens.get().of(ArchiveEnabledFileSource.GZipCompression.class),
 				new ArchiveEnabledFileSource.GZipCompression(), "gz-archival"));
 
 		// Text formats
-		interpreter.createWith("text-format", ValueCreator.class,
-			session -> ValueCreator.literal(
+		interpreter.createWith("text-format", CompiledModelValue.class,
+			session -> CompiledModelValue.literal(
 				TypeTokens.get().keyFor(SpinnerFormat.class).<SpinnerFormat<String>> parameterized(String.class),
 				SpinnerFormat.NUMERICAL_TEXT, "text-format"));
-		interpreter.createWith("int-format", ValueCreator.class, session -> {
+		interpreter.createWith("int-format", CompiledModelValue.class, session -> {
 			SpinnerFormat.IntFormat format = SpinnerFormat.INT;
 			String sep = session.getAttributeText("grouping-separator");
 			if (sep != null) {
@@ -982,10 +992,10 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 				else
 					format = format.withGroupingSeparator(sep.charAt(0));
 			}
-			return ValueCreator.constant(ValueContainer
+			return CompiledModelValue.constant(ModelValueSynth
 				.literal(TypeTokens.get().keyFor(Format.class).<Format<Integer>> parameterized(Integer.class), format, "int-format"));
 		});
-		interpreter.createWith("long-format", ValueCreator.class, session -> {
+		interpreter.createWith("long-format", CompiledModelValue.class, session -> {
 			session.put(ExpressoBaseV0_1.VALUE_TYPE_KEY, TypeTokens.get().LONG);
 			SpinnerFormat.LongFormat format = SpinnerFormat.LONG;
 			String sep = session.getAttributeText("grouping-separator");
@@ -995,16 +1005,16 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 				else
 					format = format.withGroupingSeparator(sep.charAt(0));
 			}
-			return ValueCreator.constant(ValueContainer
+			return CompiledModelValue.constant(ModelValueSynth
 				.literal(TypeTokens.get().keyFor(Format.class).<Format<Long>> parameterized(Long.class), format, "long-format"));
 		});
-		interpreter.createWith("double-format", ValueCreator.class, session -> createDoubleFormat(wrap(session)));
-		interpreter.createWith("instant-format", ValueCreator.class, session -> createInstantFormat(wrap(session)));
-		interpreter.createWith("file-format", ValueCreator.class, session -> createFileFormat(wrap(session)));
-		interpreter.createWith("regex-format", ValueCreator.class, session -> ValueCreator
+		interpreter.createWith("double-format", CompiledModelValue.class, session -> createDoubleFormat(wrap(session)));
+		interpreter.createWith("instant-format", CompiledModelValue.class, session -> createInstantFormat(wrap(session)));
+		interpreter.createWith("file-format", CompiledModelValue.class, session -> createFileFormat(wrap(session)));
+		interpreter.createWith("regex-format", CompiledModelValue.class, session -> CompiledModelValue
 			.literal(TypeTokens.get().keyFor(Format.class).<Format<Pattern>> parameterized(Pattern.class), Format.PATTERN, "regex-format"));
-		interpreter.createWith("regex-format-string", ValueCreator.class,
-			session -> ValueCreator.literal(TypeTokens.get().keyFor(Format.class).<Format<String>> parameterized(String.class), //
+		interpreter.createWith("regex-format-string", CompiledModelValue.class,
+			session -> CompiledModelValue.literal(TypeTokens.get().keyFor(Format.class).<Format<String>> parameterized(String.class), //
 				Format.validate(Format.TEXT, str -> {
 					if (str == null || str.isEmpty())
 						return null; // That's fine
@@ -1017,28 +1027,28 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 				}), "regex-format-string"));
 
 		interpreter.modifyWith("format",
-			(Class<ValueCreator<SettableValue<?>, SettableValue<Format<Object>>>>) (Class<?>) ValueCreator.class,
+			(Class<CompiledModelValue<SettableValue<?>, SettableValue<Format<Object>>>>) (Class<?>) CompiledModelValue.class,
 			this::configureFormatValidation);
 		interpreter.createWith("regex-validation", ValidationProducer.class, session -> createRegexValidation(wrap(session)));
 		interpreter.createWith("filter-validation", ValidationProducer.class,
 			session -> createFilterValidation(session.as(ExpressoQIS.class)));
 
 		// ObservableConfigFormats
-		interpreter.createWith("text-config-format", ValueCreator.class, session -> createTextConfigFormat(wrap(session)));
+		interpreter.createWith("text-config-format", CompiledModelValue.class, session -> createTextConfigFormat(wrap(session)));
 	}
 
-	private <T> ValueCreator<SettableValue<?>, SettableValue<ObservableConfigFormat<T>>> createTextConfigFormat(ExpressoQIS session)
+	private <T> CompiledModelValue<SettableValue<?>, SettableValue<ObservableConfigFormat<T>>> createTextConfigFormat(ExpressoQIS session)
 		throws QonfigInterpretationException {
-		ValueCreator<SettableValue<?>, SettableValue<Format<T>>> textFormatCreator = session
-			.interpretChildren("text-format", ValueCreator.class).getFirst();
-		QonfigExpression2 defaultV = session.getAttributeExpression("default");
+		CompiledModelValue<SettableValue<?>, SettableValue<Format<T>>> textFormatCreator = session
+			.interpretChildren("text-format", CompiledModelValue.class).getFirst();
+		CompiledExpression defaultV = session.getAttributeExpression("default");
 		String defaultS = session.getAttributeText("default-text");
 		if (defaultV != null && defaultS != null)
 			defaultV.throwQonfigException("default and default-text cannot both be specified", null);
-		return () -> {
-			ValueContainer<SettableValue<?>, SettableValue<Format<T>>> textFormatContainer;
+		return CompiledModelValue.of(session.getElement().getType().getName(), ModelTypes.Value, () -> {
+			ModelValueSynth<SettableValue<?>, SettableValue<Format<T>>> textFormatContainer;
 			try {
-				textFormatContainer = textFormatCreator.createContainer()
+				textFormatContainer = textFormatCreator.createSynthesizer()
 					.as(ModelTypes.Value.forType(TypeTokens.get().keyFor(Format.class).<Format<T>> wildCard()));
 			} catch (TypeConversionException e) {
 				throw new ExpressoInterpretationException("Could not interpret " + textFormatCreator + " as a format",
@@ -1046,7 +1056,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			}
 			TypeToken<T> formattedType = (TypeToken<T>) textFormatContainer.getType().getType(0)
 				.resolveType(Format.class.getTypeParameters()[0]);
-			ValueContainer<SettableValue<?>, SettableValue<T>> defaultValueContainer;
+			ModelValueSynth<SettableValue<?>, SettableValue<T>> defaultValueContainer;
 			if (defaultV != null)
 				defaultValueContainer = defaultV.evaluate(ModelTypes.Value.forType(formattedType));
 			else if (defaultS != null)
@@ -1069,9 +1079,14 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 				defaultValueContainer = null;
 			TypeToken<ObservableConfigFormat<T>> cfType = TypeTokens.get().keyFor(ObservableConfigFormat.class)
 				.<ObservableConfigFormat<T>> parameterized(formattedType);
-			return new ValueContainer<SettableValue<?>, SettableValue<ObservableConfigFormat<T>>>() {
+			return new ModelValueSynth<SettableValue<?>, SettableValue<ObservableConfigFormat<T>>>() {
 				private final ModelInstanceType<SettableValue<?>, SettableValue<ObservableConfigFormat<T>>> theType = ModelTypes.Value
 					.forType(cfType);
+
+				@Override
+				public ModelType<SettableValue<?>> getModelType() {
+					return theType.getModelType();
+				}
 
 				@Override
 				public ModelInstanceType<SettableValue<?>, SettableValue<ObservableConfigFormat<T>>> getType()
@@ -1090,7 +1105,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 				}
 
 				@Override
-				public BetterList<ValueContainer<?, ?>> getCores() throws ExpressoInterpretationException {
+				public BetterList<ModelValueSynth<?, ?>> getCores() throws ExpressoInterpretationException {
 					return textFormatContainer.getCores();
 				}
 
@@ -1107,32 +1122,37 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 						__ -> "Unsettable");
 				}
 			};
-		};
+		});
 	}
 
-	private static ValueCreator<SettableValue<?>, SettableValue<SftpFileSource>> createSftpFileSource(ExpressoQIS exS)
+	private static CompiledModelValue<SettableValue<?>, SettableValue<SftpFileSource>> createSftpFileSource(ExpressoQIS exS)
 		throws QonfigInterpretationException {
-		QonfigExpression2 hostX = exS.getAttributeExpression("host");
-		QonfigExpression2 userX = exS.getAttributeExpression("user");
-		QonfigExpression2 passwordX = exS.getAttributeExpression("password");
-		QonfigExpression2 connectingX = exS.getAttributeExpression("connecting");
-		QonfigExpression2 connectedX = exS.getAttributeExpression("connected");
-		QonfigExpression2 timeoutX = exS.getAttributeExpression("timeout");
-		QonfigExpression2 retryX = exS.getAttributeExpression("retry");
-		return () -> {
-			ValueContainer<SettableValue<?>, SettableValue<String>> hostVC = hostX.evaluate(ModelTypes.Value.STRING);
-			ValueContainer<SettableValue<?>, SettableValue<String>> userVC = userX.evaluate(ModelTypes.Value.STRING);
-			ValueContainer<SettableValue<?>, SettableValue<String>> passwordVC = passwordX.evaluate(ModelTypes.Value.STRING);
-			ValueContainer<SettableValue<?>, SettableValue<Boolean>> connectingVC = connectingX == null ? null
+		CompiledExpression hostX = exS.getAttributeExpression("host");
+		CompiledExpression userX = exS.getAttributeExpression("user");
+		CompiledExpression passwordX = exS.getAttributeExpression("password");
+		CompiledExpression connectingX = exS.getAttributeExpression("connecting");
+		CompiledExpression connectedX = exS.getAttributeExpression("connected");
+		CompiledExpression timeoutX = exS.getAttributeExpression("timeout");
+		CompiledExpression retryX = exS.getAttributeExpression("retry");
+		return CompiledModelValue.of(exS.getElement().getType().getName(), ModelTypes.Value, () -> {
+			ModelValueSynth<SettableValue<?>, SettableValue<String>> hostVC = hostX.evaluate(ModelTypes.Value.STRING);
+			ModelValueSynth<SettableValue<?>, SettableValue<String>> userVC = userX.evaluate(ModelTypes.Value.STRING);
+			ModelValueSynth<SettableValue<?>, SettableValue<String>> passwordVC = passwordX.evaluate(ModelTypes.Value.STRING);
+			ModelValueSynth<SettableValue<?>, SettableValue<Boolean>> connectingVC = connectingX == null ? null
 				: connectingX.evaluate(ModelTypes.Value.BOOLEAN);
-			ValueContainer<SettableValue<?>, SettableValue<Boolean>> connectedVC = connectedX == null ? null
+			ModelValueSynth<SettableValue<?>, SettableValue<Boolean>> connectedVC = connectedX == null ? null
 				: connectedX.evaluate(ModelTypes.Value.BOOLEAN);
-			ValueContainer<SettableValue<?>, SettableValue<Duration>> timeoutVC = timeoutX
+			ModelValueSynth<SettableValue<?>, SettableValue<Duration>> timeoutVC = timeoutX
 				.evaluate(ModelTypes.Value.forType(Duration.class));
-			ValueContainer<SettableValue<?>, SettableValue<Integer>> retryVC = retryX.evaluate(ModelTypes.Value.INT);
-			return new ValueContainer<SettableValue<?>, SettableValue<SftpFileSource>>() {
+			ModelValueSynth<SettableValue<?>, SettableValue<Integer>> retryVC = retryX.evaluate(ModelTypes.Value.INT);
+			return new ModelValueSynth<SettableValue<?>, SettableValue<SftpFileSource>>() {
 				private final ModelInstanceType<SettableValue<?>, SettableValue<SftpFileSource>> theType = ModelTypes.Value
 					.forType(SftpFileSource.class);
+
+				@Override
+				public ModelType<SettableValue<?>> getModelType() {
+					return ModelTypes.Value;
+				}
 
 				@Override
 				public ModelInstanceType<SettableValue<?>, SettableValue<SftpFileSource>> getType() throws ExpressoInterpretationException {
@@ -1153,7 +1173,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 				}
 
 				@Override
-				public BetterList<ValueContainer<?, ?>> getCores() throws ExpressoInterpretationException {
+				public BetterList<ModelValueSynth<?, ?>> getCores() throws ExpressoInterpretationException {
 					return BetterList.of(Stream.of(hostVC, userVC, passwordVC, connectingVC, connectedVC, timeoutVC, retryVC)//
 						.filter(vc -> vc != null), vc -> vc.getCores().stream());
 				}
@@ -1231,25 +1251,25 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 						})), __ -> "Unsettable");
 				}
 			};
-		};
+		});
 	}
 
-	private static ValueCreator<SettableValue<?>, SettableValue<ArchiveEnabledFileSource>> createArchiveEnabledFileSource(ExpressoQIS exS)
+	private static CompiledModelValue<SettableValue<?>, SettableValue<ArchiveEnabledFileSource>> createArchiveEnabledFileSource(ExpressoQIS exS)
 		throws QonfigInterpretationException {
-		ValueCreator<SettableValue<?>, SettableValue<BetterFile.FileDataSource>> wrappedCreator;
+		CompiledModelValue<SettableValue<?>, SettableValue<BetterFile.FileDataSource>> wrappedCreator;
 		ExpressoQIS wrappedSession = exS.forChildren("wrapped").peekFirst();
 		if (wrappedSession == null)
-			wrappedCreator = ValueCreator.literal(TypeTokens.get().of(BetterFile.FileDataSource.class), new NativeFileSource(),
+			wrappedCreator = CompiledModelValue.literal(TypeTokens.get().of(BetterFile.FileDataSource.class), new NativeFileSource(),
 				"native-file-source");
 		else
-			wrappedCreator = wrappedSession.interpret(ValueCreator.class);
-		QonfigExpression2 archiveDepthX = exS.getAttributeExpression("max-archive-depth");
-		List<ValueCreator<SettableValue<?>, SettableValue<ArchiveEnabledFileSource.FileArchival>>> archiveMethodCreators;
-		archiveMethodCreators = exS.interpretChildren("archive-method", ValueCreator.class);
-		return () -> {
-			ValueContainer<SettableValue<?>, SettableValue<BetterFile.FileDataSource>> wrappedContainer;
+			wrappedCreator = wrappedSession.interpret(CompiledModelValue.class);
+		CompiledExpression archiveDepthX = exS.getAttributeExpression("max-archive-depth");
+		List<CompiledModelValue<SettableValue<?>, SettableValue<ArchiveEnabledFileSource.FileArchival>>> archiveMethodCreators;
+		archiveMethodCreators = exS.interpretChildren("archive-method", CompiledModelValue.class);
+		return CompiledModelValue.of(exS.getElement().getType().getName(), ModelTypes.Value, () -> {
+			ModelValueSynth<SettableValue<?>, SettableValue<BetterFile.FileDataSource>> wrappedContainer;
 			try {
-				wrappedContainer = wrappedCreator.createContainer().as(ModelTypes.Value.forType(BetterFile.FileDataSource.class));
+				wrappedContainer = wrappedCreator.createSynthesizer().as(ModelTypes.Value.forType(BetterFile.FileDataSource.class));
 			} catch (TypeConversionException e) {
 				LocatedFilePosition position;
 				if (wrappedSession != null)
@@ -1259,23 +1279,28 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 				throw new ExpressoInterpretationException("Could not evaluate " + wrappedCreator + " as a file source", //
 					position, 0, e);
 			}
-			ValueContainer<SettableValue<?>, SettableValue<Integer>> archiveDepthVC = archiveDepthX.evaluate(ModelTypes.Value.INT);
-			List<ValueContainer<SettableValue<?>, SettableValue<ArchiveEnabledFileSource.FileArchival>>> archiveMethodContainers = new ArrayList<>(
+			ModelValueSynth<SettableValue<?>, SettableValue<Integer>> archiveDepthVC = archiveDepthX.evaluate(ModelTypes.Value.INT);
+			List<ModelValueSynth<SettableValue<?>, SettableValue<ArchiveEnabledFileSource.FileArchival>>> archiveMethodContainers = new ArrayList<>(
 				archiveMethodCreators.size());
 			int i = 0;
-			for (ValueCreator<SettableValue<?>, SettableValue<ArchiveEnabledFileSource.FileArchival>> amc : archiveMethodCreators) {
+			for (CompiledModelValue<SettableValue<?>, SettableValue<ArchiveEnabledFileSource.FileArchival>> amc : archiveMethodCreators) {
 				try {
 					archiveMethodContainers
-					.add(amc.createContainer().as(ModelTypes.Value.forType(ArchiveEnabledFileSource.FileArchival.class)));
+					.add(amc.createSynthesizer().as(ModelTypes.Value.forType(ArchiveEnabledFileSource.FileArchival.class)));
 				} catch (TypeConversionException e) {
 					LocatedFilePosition position = exS.getChildren("archive-method").get(i).getPositionInFile();
 					throw new ExpressoInterpretationException("Could not interpret archive method", position, 0, e);
 				}
 				i++;
 			}
-			return new ValueContainer<SettableValue<?>, SettableValue<ArchiveEnabledFileSource>>() {
+			return new ModelValueSynth<SettableValue<?>, SettableValue<ArchiveEnabledFileSource>>() {
 				private final ModelInstanceType<SettableValue<?>, SettableValue<ArchiveEnabledFileSource>> theType = ModelTypes.Value
 					.forType(ArchiveEnabledFileSource.class);
+
+				@Override
+				public ModelType<SettableValue<?>> getModelType() {
+					return ModelTypes.Value;
+				}
 
 				@Override
 				public ModelInstanceType<SettableValue<?>, SettableValue<ArchiveEnabledFileSource>> getType() {
@@ -1289,13 +1314,13 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 					SettableValue<Integer> archiveDepth = archiveDepthVC.get(models);
 					List<SettableValue<ArchiveEnabledFileSource.FileArchival>> archiveMethods = new ArrayList<>(
 						archiveMethodContainers.size());
-					for (ValueContainer<SettableValue<?>, SettableValue<ArchiveEnabledFileSource.FileArchival>> amc : archiveMethodContainers)
+					for (ModelValueSynth<SettableValue<?>, SettableValue<ArchiveEnabledFileSource.FileArchival>> amc : archiveMethodContainers)
 						archiveMethods.add(amc.get(models));
 					return createFileSource(wrappedV, archiveDepth, archiveMethods);
 				}
 
 				@Override
-				public BetterList<ValueContainer<?, ?>> getCores() throws ExpressoInterpretationException {
+				public BetterList<ModelValueSynth<?, ?>> getCores() throws ExpressoInterpretationException {
 					return BetterList.of(Stream.concat(Stream.of(wrappedContainer, archiveDepthVC), //
 						archiveMethodContainers.stream()), vc -> vc.getCores().stream());
 				}
@@ -1315,7 +1340,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 					List<SettableValue<ArchiveEnabledFileSource.FileArchival>> newArchiveMethods = new ArrayList<>(
 						archiveMethodContainers.size());
 					boolean identical = srcWrapped == newWrapped && srcArchiveDepth == newArchiveDepth;
-					for (ValueContainer<SettableValue<?>, SettableValue<ArchiveEnabledFileSource.FileArchival>> amc : archiveMethodContainers) {
+					for (ModelValueSynth<SettableValue<?>, SettableValue<ArchiveEnabledFileSource.FileArchival>> amc : archiveMethodContainers) {
 						SettableValue<ArchiveEnabledFileSource.FileArchival> srcAM = amc.get(sourceModels);
 						SettableValue<ArchiveEnabledFileSource.FileArchival> newAM = amc.forModelCopy(srcAM, sourceModels, newModels);
 						srcArchiveMethods.add(srcAM);
@@ -1349,7 +1374,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 					}), __ -> "Unsettable");
 				}
 			};
-		};
+		});
 	}
 
 	private static <T> SettableValue<Format<T>> createWrappedValidatedFormat(SettableValue<Format<T>> format,
@@ -1373,14 +1398,14 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			__ -> "Not settable");
 	}
 
-	private <T> ValueCreator<SettableValue<?>, SettableValue<Format<T>>> configureFormatValidation(
-		ValueCreator<SettableValue<?>, SettableValue<Format<T>>> formatCreator, CoreSession session, Object prepared)
+	private <T> CompiledModelValue<SettableValue<?>, SettableValue<Format<T>>> configureFormatValidation(
+		CompiledModelValue<SettableValue<?>, SettableValue<Format<T>>> formatCreator, CoreSession session, Object prepared)
 			throws QonfigInterpretationException {
 		List<ValidationProducer> validatorProducers = new ArrayList<>();
 		for (ExpressoQIS valSession : session.as(ExpressoQIS.class).forChildren())
 			validatorProducers.add(valSession.interpret(ValidationProducer.class));
-		return ValueCreator.name(formatCreator::toString, () -> {
-			ValueContainer<SettableValue<?>, SettableValue<Format<T>>> formatContainer = formatCreator.createContainer();
+		return CompiledModelValue.of(formatCreator::toString, ModelTypes.Value, () -> {
+			ModelValueSynth<SettableValue<?>, SettableValue<Format<T>>> formatContainer = formatCreator.createSynthesizer();
 			TypeToken<T> formattedType = (TypeToken<T>) formatContainer.getType().getType(0)
 				.resolveType(Format.class.getTypeParameters()[0]);
 			List<Validation<T>> validationContainers = new ArrayList<>();
@@ -1412,14 +1437,19 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 					return new ValidatedFormat(newFormat, newVal);
 				}
 			}
-			class ValidatedFormatContainer implements ValueContainer<SettableValue<?>, SettableValue<Format<T>>> {
-				private final ValueContainer<SettableValue<?>, SettableValue<Format<T>>> theFormatContainer;
+			class ValidatedFormatContainer implements ModelValueSynth<SettableValue<?>, SettableValue<Format<T>>> {
+				private final ModelValueSynth<SettableValue<?>, SettableValue<Format<T>>> theFormatContainer;
 				private final List<Validation<T>> theValidationContainers;
 
-				ValidatedFormatContainer(ValueContainer<SettableValue<?>, SettableValue<Format<T>>> format,
+				ValidatedFormatContainer(ModelValueSynth<SettableValue<?>, SettableValue<Format<T>>> format,
 					List<Validation<T>> validation) {
 					theFormatContainer = format;
 					theValidationContainers = validation;
+				}
+
+				@Override
+				public ModelType<SettableValue<?>> getModelType() {
+					return formatContainer.getModelType();
 				}
 
 				@Override
@@ -1441,9 +1471,9 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 				}
 
 				@Override
-				public BetterList<ValueContainer<?, ?>> getCores() throws ExpressoInterpretationException {
-					List<ValueContainer<?, ?>> formatCores = formatContainer.getCores();
-					List<ValueContainer<?, ?>> validationCores = BetterList.of(validationContainers.stream(), vc -> vc.getCores().stream());
+				public BetterList<ModelValueSynth<?, ?>> getCores() throws ExpressoInterpretationException {
+					List<ModelValueSynth<?, ?>> formatCores = formatContainer.getCores();
+					List<ModelValueSynth<?, ?>> validationCores = BetterList.of(validationContainers.stream(), vc -> vc.getCores().stream());
 					return BetterList.of(Stream.concat(formatCores.stream(), validationCores.stream()));
 				}
 			}
@@ -1451,7 +1481,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		});
 	}
 
-	private ValueCreator<SettableValue<?>, SettableValue<Format<Double>>> createDoubleFormat(ExpressoQIS session)
+	private CompiledModelValue<SettableValue<?>, SettableValue<Format<Double>>> createDoubleFormat(ExpressoQIS session)
 		throws QonfigInterpretationException {
 		int sigDigs = Integer.parseInt(session.getAttributeText("sig-digs"));
 		Format.SuperDoubleFormatBuilder builder = Format.doubleFormat(sigDigs);
@@ -1488,11 +1518,11 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			if (!prefixes.isEmpty())
 				session.warn("prefixes specified without a unit");
 		}
-		return ValueCreator.literal(TypeTokens.get().keyFor(Format.class).<Format<Double>> parameterized(Double.class), builder.build(),
+		return CompiledModelValue.literal(TypeTokens.get().keyFor(Format.class).<Format<Double>> parameterized(Double.class), builder.build(),
 			"double");
 	}
 
-	private ValueCreator<SettableValue<?>, SettableValue<Format<Instant>>> createInstantFormat(ExpressoQIS session)
+	private CompiledModelValue<SettableValue<?>, SettableValue<Format<Instant>>> createInstantFormat(ExpressoQIS session)
 		throws QonfigInterpretationException {
 		String dayFormat = session.getAttributeText("day-format");
 		TimeEvaluationOptions options = TimeUtils.DEFAULT_OPTIONS;
@@ -1525,13 +1555,13 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		TypeToken<Format<Instant>> formatType = TypeTokens.get().keyFor(Format.class).<Format<Instant>> parameterized(instantType);
 		ModelInstanceType<SettableValue<?>, SettableValue<Instant>> instantModelType = ModelTypes.Value.forType(instantType);
 		ModelInstanceType<SettableValue<?>, SettableValue<Format<Instant>>> formatInstanceType = ModelTypes.Value.forType(formatType);
-		QonfigExpression2 relativeX = session.getAttributeExpression("relative-to");
-		return () -> {
-			ValueContainer<SettableValue<?>, SettableValue<Instant>> relativeTo;
+		CompiledExpression relativeX = session.getAttributeExpression("relative-to");
+		return CompiledModelValue.of(session.getElement().getType().getName(), ModelTypes.Value, () -> {
+			ModelValueSynth<SettableValue<?>, SettableValue<Instant>> relativeTo;
 			if (relativeX != null)
 				relativeTo = relativeX.evaluate(instantModelType);
 			else {
-				relativeTo = ValueContainer.of(instantModelType, msi -> new SettableValue<Instant>() {
+				relativeTo = ModelValueSynth.of(instantModelType, msi -> new SettableValue<Instant>() {
 					private long theStamp;
 
 					@Override
@@ -1590,7 +1620,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 					}
 				});
 			}
-			ValueContainer<SettableValue<?>, SettableValue<Instant>> relativeTo2 = relativeTo;
+			ModelValueSynth<SettableValue<?>, SettableValue<Instant>> relativeTo2 = relativeTo;
 			return new ObservableModelSet.AbstractValueContainer<SettableValue<?>, SettableValue<Format<Instant>>>(formatInstanceType) {
 				@Override
 				public SettableValue<Format<Instant>> get(ModelSetInstance models) throws ModelInstantiationException {
@@ -1606,28 +1636,28 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 				}
 
 				@Override
-				public BetterList<ValueContainer<?, ?>> getCores() {
+				public BetterList<ModelValueSynth<?, ?>> getCores() {
 					return BetterList.of(this);
 				}
 			};
-		};
+		});
 	}
 
-	private ValueCreator<SettableValue<?>, SettableValue<Format<BetterFile>>> createFileFormat(ExpressoQIS session)
+	private CompiledModelValue<SettableValue<?>, SettableValue<Format<BetterFile>>> createFileFormat(ExpressoQIS session)
 		throws QonfigInterpretationException {
 		ExpressoQIS fileSourceSession = session.forChildren("file-source").peekFirst();
-		ValueCreator<SettableValue<?>, SettableValue<BetterFile.FileDataSource>> fileSourceCreator;
+		CompiledModelValue<SettableValue<?>, SettableValue<BetterFile.FileDataSource>> fileSourceCreator;
 		if (fileSourceSession == null)
-			fileSourceCreator = ValueCreator.literal(TypeTokens.get().of(BetterFile.FileDataSource.class), new NativeFileSource(),
+			fileSourceCreator = CompiledModelValue.literal(TypeTokens.get().of(BetterFile.FileDataSource.class), new NativeFileSource(),
 				"native-file-source");
 		else
-			fileSourceCreator = fileSourceSession.interpret(ValueCreator.class);
+			fileSourceCreator = fileSourceSession.interpret(CompiledModelValue.class);
 		String workingDir = session.getAttributeText("working-dir");
 		boolean allowEmpty = session.getAttribute("allow-empty", boolean.class);
-		return () -> {
-			ValueContainer<SettableValue<?>, SettableValue<BetterFile.FileDataSource>> fileSource;
+		return CompiledModelValue.of(session.getElement().getType().getName(), ModelTypes.Value, () -> {
+			ModelValueSynth<SettableValue<?>, SettableValue<BetterFile.FileDataSource>> fileSource;
 			try {
-				fileSource = fileSourceCreator.createContainer().as(ModelTypes.Value.forType(BetterFile.FileDataSource.class));
+				fileSource = fileSourceCreator.createSynthesizer().as(ModelTypes.Value.forType(BetterFile.FileDataSource.class));
 			} catch (TypeConversionException e) {
 				LocatedFilePosition position;
 				if (fileSourceSession != null)
@@ -1668,19 +1698,19 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 				}
 
 				@Override
-				public BetterList<ValueContainer<?, ?>> getCores() throws ExpressoInterpretationException {
+				public BetterList<ModelValueSynth<?, ?>> getCores() throws ExpressoInterpretationException {
 					return fileSource.getCores();
 				}
 			};
-		};
+		});
 	}
 
 	private ValidationProducer createRegexValidation(ExpressoQIS session) throws QonfigInterpretationException {
-		QonfigExpression2 patternX = session.getAttributeExpression("pattern");
+		CompiledExpression patternX = session.getAttributeExpression("pattern");
 		return new ValidationProducer() {
 			@Override
 			public <T> Validation<T> createValidator(TypeToken<T> formatType) throws ExpressoInterpretationException {
-				ValueContainer<SettableValue<?>, SettableValue<Pattern>> patternC = patternX
+				ModelValueSynth<SettableValue<?>, SettableValue<Pattern>> patternC = patternX
 					.evaluate(ModelTypes.Value.forType(Pattern.class));
 				class PatternValidator implements Function<T, String> {
 					final SettableValue<Pattern> patternV;
@@ -1719,7 +1749,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 					}
 
 					@Override
-					public BetterList<ValueContainer<?, ?>> getCores() throws ExpressoInterpretationException {
+					public BetterList<ModelValueSynth<?, ?>> getCores() throws ExpressoInterpretationException {
 						return patternC.getCores();
 					}
 				};
@@ -1729,17 +1759,17 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 
 	private ValidationProducer createFilterValidation(ExpressoQIS session) throws QonfigInterpretationException {
 		String filterValue = session.getAttributeText("filter-value-name");
-		QonfigExpression2 testX = session.getAttributeExpression("test");
+		CompiledExpression testX = session.getAttributeExpression("test");
 		return new ValidationProducer() {
 			@Override
 			public <T> Validation<T> createValidator(TypeToken<T> formatType) throws ExpressoInterpretationException {
 				ModelInstanceType<SettableValue<?>, SettableValue<T>> type = ModelTypes.Value.forType(formatType);
 				DynamicModelValue.satisfyDynamicValueType(filterValue, session.getExpressoEnv().getModels(), type);
-				ValueContainer<SettableValue<?>, SettableValue<String>> filter;
+				ModelValueSynth<SettableValue<?>, SettableValue<String>> filter;
 				try {
 					filter = testX.evaluate(ModelTypes.Value.STRING);
 				} catch (ExpressoInterpretationException e) {
-					ValueContainer<SettableValue<?>, SettableValue<Boolean>> bFilter;
+					ModelValueSynth<SettableValue<?>, SettableValue<Boolean>> bFilter;
 					try {
 						bFilter = testX.evaluate(ModelTypes.Value.BOOLEAN);
 						filter = bFilter.map(ModelTypes.Value.STRING, bv -> SettableValue.asSettable(//
@@ -1764,7 +1794,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 						return testValue.get();
 					}
 				}
-				ValueContainer<SettableValue<?>, SettableValue<String>> fFilter = filter;
+				ModelValueSynth<SettableValue<?>, SettableValue<String>> fFilter = filter;
 				session.interpretLocalModel();
 				return new Validation<T>() {
 					@Override
@@ -1792,7 +1822,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 					}
 
 					@Override
-					public BetterList<ValueContainer<?, ?>> getCores() throws ExpressoInterpretationException {
+					public BetterList<ModelValueSynth<?, ?>> getCores() throws ExpressoInterpretationException {
 						return fFilter.getCores();
 					}
 				};

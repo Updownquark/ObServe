@@ -7,10 +7,10 @@ import org.observe.Observable;
 import org.observe.ObservableAction;
 import org.observe.SettableValue;
 import org.observe.SimpleObservable;
+import org.observe.expresso.ObservableModelSet.CompiledModelValue;
 import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
-import org.observe.expresso.ObservableModelSet.ValueContainer;
-import org.observe.expresso.ObservableModelSet.ValueCreator;
+import org.observe.expresso.ObservableModelSet.ModelValueSynth;
 import org.qommons.BreakpointHere;
 import org.qommons.Named;
 
@@ -54,6 +54,8 @@ public class ExpressoTesting<H extends Expresso> {
 		/**
 		 * @param testingModel The gloal testing model instance
 		 * @return The model instance to use for this test
+		 * @throws ExpressoInterpretationException If the test could not be evaluated
+		 * @throws ModelInstantiationException If the test could not be instantiated
 		 */
 		public ModelSetInstance createModelInstance(ModelSetInstance testingModel)
 			throws ExpressoInterpretationException, ModelInstantiationException {
@@ -76,7 +78,7 @@ public class ExpressoTesting<H extends Expresso> {
 		private final ObservableModelSet.Built theActionModel;
 		private InterpretedModelSet theInterpretedModel;
 		private final ExpressoQIS theExpressoSession;
-		private final ValueCreator<ObservableAction<?>, ObservableAction<?>> theAction;
+		private final CompiledModelValue<ObservableAction<?>, ObservableAction<?>> theAction;
 		private final String theExpectedException;
 		private final boolean isBreakpoint;
 
@@ -86,10 +88,10 @@ public class ExpressoTesting<H extends Expresso> {
 		 * @param expressoSession The action's expresso session
 		 * @param action The value container to produce the action
 		 * @param expectedException The exception type expected to be thrown
-		 * @param breakpoint Whether a {@link BreakpointHere breakpoing} should be caught before executing this action
+		 * @param breakpoint Whether a {@link BreakpointHere breakpoint} should be caught before executing this action
 		 */
 		public TestAction(String name, ObservableModelSet.Built actionModel, ExpressoQIS expressoSession,
-			ValueCreator<ObservableAction<?>, ObservableAction<?>> action, String expectedException, boolean breakpoint) {
+			CompiledModelValue<ObservableAction<?>, ObservableAction<?>> action, String expectedException, boolean breakpoint) {
 			theName = name;
 			theActionModel = actionModel;
 			theExpressoSession = expressoSession;
@@ -107,6 +109,7 @@ public class ExpressoTesting<H extends Expresso> {
 		 * @param testModel The test's model instance
 		 * @param until An observable that will clean up this action's model instance
 		 * @return The model instance to use for this action
+		 * @throws ModelInstantiationException If the action could not be instantiated
 		 */
 		public ModelSetInstance getActionModel(ModelSetInstance testModel, Observable<?> until) throws ModelInstantiationException {
 			return theExpressoSession.wrapLocal(//
@@ -114,11 +117,14 @@ public class ExpressoTesting<H extends Expresso> {
 				.build());
 		}
 
-		/** @return The value container to produce this action */
-		public ValueContainer<ObservableAction<?>, ObservableAction<?>> getAction() throws ExpressoInterpretationException {
+		/**
+		 * @return The value container to produce this action
+		 * @throws ExpressoInterpretationException If the action could not be evaluated
+		 */
+		public ModelValueSynth<ObservableAction<?>, ObservableAction<?>> getAction() throws ExpressoInterpretationException {
 			if (theInterpretedModel == null)
 				theInterpretedModel = theActionModel.interpret();
-			return theAction.createContainer();
+			return theAction.createSynthesizer();
 		}
 
 		/** @return The name of the exception type that is expected to be thrown by this test action */
@@ -156,6 +162,8 @@ public class ExpressoTesting<H extends Expresso> {
 
 	/**
 	 * @param testName The name of the test to execute
+	 * @throws ExpressoInterpretationException If the test structures could not be evaluated
+	 * @throws ModelInstantiationException If the test structures could not be instantiated
 	 * @throws IllegalArgumentException If no such test was found in this test's XML definition
 	 */
 	public void executeTest(String testName) throws ExpressoInterpretationException, ModelInstantiationException {
@@ -188,7 +196,7 @@ public class ExpressoTesting<H extends Expresso> {
 
 			for (TestAction action : test.getActions()) {
 				actionName.set(action.getName(), null);
-				ValueContainer<ObservableAction<?>, ObservableAction<?>> actionContainer = action.getAction();
+				ModelValueSynth<ObservableAction<?>, ObservableAction<?>> actionContainer = action.getAction();
 				ModelSetInstance actionModels = action.getActionModel(testModels, actionName.noInitChanges());
 				System.out.print(action.getName());
 				System.out.flush();

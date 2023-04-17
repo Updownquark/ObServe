@@ -10,9 +10,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 
-import org.observe.expresso.ObservableModelSet.InterpretedValueContainer;
+import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
-import org.observe.expresso.ObservableModelSet.ValueContainer;
+import org.observe.expresso.ObservableModelSet.ModelValueSynth;
 import org.observe.util.TypeTokens;
 import org.observe.util.TypeTokens.TypeConverter;
 import org.qommons.LambdaUtils;
@@ -456,7 +456,7 @@ public abstract class ModelType<M> implements Named {
 		 * @return A value equivalent to this value, but with the given type
 		 * @throws TypeConversionException If no converter is available for the conversion from this type to the given type
 		 */
-		public <M2, MV2 extends M2> InterpretedValueContainer<M2, MV2> as(InterpretedValueContainer<M, MV> source,
+		public <M2, MV2 extends M2> InterpretedValueSynth<M2, MV2> as(InterpretedValueSynth<M, MV> source,
 			ModelInstanceType<M2, MV2> targetType) throws TypeConversionException {
 			ModelInstanceType<M, MV> sourceType = source.getType();
 			ModelType.ModelInstanceConverter<M, M2> converter = sourceType.convert(targetType);
@@ -464,7 +464,7 @@ public abstract class ModelType<M> implements Named {
 				sourceType.convert(targetType); // TODO DEBUG REMOVE
 				throw new TypeConversionException(source.toString(), sourceType, targetType);
 			} else if (converter instanceof NoOpConverter)
-				return (InterpretedValueContainer<M2, MV2>) source;
+				return (InterpretedValueSynth<M2, MV2>) source;
 			else
 				return new ConvertedValue<>(source, (ModelInstanceType<M2, MV2>) converter.getType(), converter);
 		}
@@ -740,6 +740,12 @@ public abstract class ModelType<M> implements Named {
 	 *         satisfied} with a value that it shall then reflect
 	 */
 	public abstract <MV extends M> HollowModelValue<M, MV> createHollowValue(String name, ModelInstanceType<M, MV> type);
+
+	/**
+	 * @param other The model type to compare to
+	 * @return A model type that both this and the <code>other</code> model type can be converted to
+	 */
+	public abstract ModelType<?> getCommonType(ModelType<?> other);
 
 	@Override
 	public String toString() {
@@ -1074,15 +1080,15 @@ public abstract class ModelType<M> implements Named {
 	}
 
 	/**
-	 * A ValueContainer, converted from one type to another
+	 * A ModelValueSynth, converted from one type to another
 	 *
 	 * @param <MS> The model type of the source value
 	 * @param <MVS> The type of the source value
 	 * @param <MT> The model type of the target value
 	 * @param <MVT> The type of the target value
 	 */
-	public static class ConvertedValue<MS, MVS extends MS, MT, MVT extends MT> implements InterpretedValueContainer<MT, MVT> {
-		private final InterpretedValueContainer<MS, MVS> theSource;
+	public static class ConvertedValue<MS, MVS extends MS, MT, MVT extends MT> implements InterpretedValueSynth<MT, MVT> {
+		private final InterpretedValueSynth<MS, MVS> theSource;
 		private final ModelInstanceType<MT, MVT> theType;
 		private final ModelType.ModelInstanceConverter<MS, MT> theConverter;
 
@@ -1091,7 +1097,7 @@ public abstract class ModelType<M> implements Named {
 		 * @param type The type to convert to
 		 * @param converter The convert to convert values of the source type to the target type
 		 */
-		public ConvertedValue(InterpretedValueContainer<MS, MVS> source, ModelInstanceType<MT, MVT> type,
+		public ConvertedValue(InterpretedValueSynth<MS, MVS> source, ModelInstanceType<MT, MVT> type,
 			ModelInstanceConverter<MS, MT> converter) {
 			if (source == null || type == null || converter == null)
 				throw new NullPointerException();
@@ -1101,7 +1107,7 @@ public abstract class ModelType<M> implements Named {
 		}
 
 		/** @return The lowest-level source value that is converted by this value */
-		public ValueContainer<?, ?> getSourceRoot() {
+		public ModelValueSynth<?, ?> getSourceRoot() {
 			if (theSource instanceof ConvertedValue)
 				return ((ConvertedValue<?, ?, ?, ?>) theSource).getSourceRoot();
 			else
@@ -1136,7 +1142,7 @@ public abstract class ModelType<M> implements Named {
 		}
 
 		@Override
-		public BetterList<ValueContainer<?, ?>> getCores() {
+		public BetterList<ModelValueSynth<?, ?>> getCores() {
 			return theSource.getCores();
 		}
 

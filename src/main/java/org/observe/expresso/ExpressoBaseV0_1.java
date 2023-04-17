@@ -22,13 +22,16 @@ import org.observe.ObservableValueEvent;
 import org.observe.SettableValue;
 import org.observe.Transformation;
 import org.observe.Transformation.MaybeReversibleTransformation;
+import org.observe.Transformation.TransformReverse;
 import org.observe.Transformation.TransformationPrecursor;
 import org.observe.assoc.ObservableMap;
 import org.observe.assoc.ObservableMultiMap;
 import org.observe.assoc.ObservableSortedMap;
-import org.observe.assoc.ObservableSortedMultiMap;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
+import org.observe.collect.ObservableCollection.DistinctDataFlow;
+import org.observe.collect.ObservableCollection.DistinctSortedDataFlow;
+import org.observe.collect.ObservableCollection.SortedDataFlow;
 import org.observe.collect.ObservableCollectionBuilder;
 import org.observe.collect.ObservableSet;
 import org.observe.collect.ObservableSortedCollection;
@@ -37,13 +40,14 @@ import org.observe.config.ObservableConfig;
 import org.observe.config.ObservableValueSet;
 import org.observe.expresso.DynamicModelValue.Identity;
 import org.observe.expresso.ModelType.ModelInstanceType;
+import org.observe.expresso.ModelType.ModelInstanceType.SingleTyped;
 import org.observe.expresso.ObservableModelSet.AbstractValueContainer;
+import org.observe.expresso.ObservableModelSet.CompiledModelValue;
 import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
-import org.observe.expresso.ObservableModelSet.InterpretedValueContainer;
+import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.ObservableModelSet.ModelValueSynth;
 import org.observe.expresso.ObservableModelSet.RuntimeValuePlaceholder;
-import org.observe.expresso.ObservableModelSet.ValueContainer;
-import org.observe.expresso.ObservableModelSet.ValueCreator;
 import org.observe.expresso.ops.NameExpression;
 import org.observe.util.TypeTokens;
 import org.qommons.BiTuple;
@@ -63,7 +67,6 @@ import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigChildDef;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigElement.QonfigValue;
-import org.qommons.config.QonfigException;
 import org.qommons.config.QonfigInterpretation;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigInterpreterCore;
@@ -75,6 +78,7 @@ import org.qommons.config.SpecialSession;
 import org.qommons.ex.CheckedExceptionWrapper;
 import org.qommons.ex.ExBiFunction;
 import org.qommons.ex.ExBiPredicate;
+import org.qommons.ex.ExFunction;
 import org.qommons.io.SimpleXMLParser.ContentPosition;
 import org.qommons.tree.BetterTreeList;
 
@@ -101,10 +105,10 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 	/** Represents an application so that various models in this class can provide intelligent interaction with the user */
 	public interface AppEnvironment {
 		/** @return A function to provide the title of the application */
-		ValueContainer<SettableValue<?>, ? extends ObservableValue<String>> getTitle();
+		ModelValueSynth<SettableValue<?>, ? extends ObservableValue<String>> getTitle();
 
 		/** @return A function to provide the icon representing the application */
-		ValueContainer<SettableValue<?>, ? extends ObservableValue<Image>> getIcon();
+		ModelValueSynth<SettableValue<?>, ? extends ObservableValue<Image>> getIcon();
 	}
 
 	/** A structure parsed from a {@link QonfigElement} that is capable of generating a {@link Comparator} for sorting */
@@ -115,7 +119,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		 * @return A value container capable
 		 * @throws ExpressoInterpretationException
 		 */
-		<T> ValueContainer<SettableValue<?>, SettableValue<Comparator<T>>> evaluate(TypeToken<T> type)
+		<T> ModelValueSynth<SettableValue<?>, SettableValue<Comparator<T>>> evaluate(TypeToken<T> type)
 			throws ExpressoInterpretationException;
 	}
 
@@ -175,7 +179,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 							name = session.getElement().getAttributeText(dv.getNameAttribute());
 						ExpressoQIS dvSession = session.interpretChild(dv.getDeclaration(), dv.getDeclaration().getType());
 						Expresso.ExtModelValue<Object> spec = dvSession.interpret(Expresso.ExtModelValue.class);
-						QonfigExpression2 sourceAttrX;
+						CompiledExpression sourceAttrX;
 						try {
 							if (dv.isSourceValue())
 								sourceAttrX = session.asElement(dv.getOwner()).getValueExpression();
@@ -193,14 +197,19 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 									e.getErrorLength(), e);
 						}
 						if (sourceAttrX != null) {
-							builder.withMaker(name, new DynamicModelValue.Creator<Object, Object>() {
+							builder.withMaker(name, new DynamicModelValue.Compiled<Object, Object>() {
 								@Override
 								public Identity getIdentity() {
 									return dv;
 								}
 
 								@Override
-								public ValueContainer<Object, Object> createContainer() throws ExpressoInterpretationException {
+								public ModelType<Object> getModelType() {
+									return spec.getModelType();
+								}
+
+								@Override
+								public ModelValueSynth<Object, Object> createSynthesizer() throws ExpressoInterpretationException {
 									ModelInstanceType<Object, Object> valueType;
 									try {
 										valueType = (ModelInstanceType<Object, Object>) spec.getType(session);
@@ -224,7 +233,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 								}
 							});
 							// } else if (dv.getType() != null) {
-							// wrappedBuilder.withMaker(name, ObservableModelSet.IdentifableValueCreator.of(dv,
+							// wrappedBuilder.withMaker(name, ObservableModelSet.IdentifableCompiledValue.of(dv,
 							// new DynamicModelValue.RuntimeModelValue<>(dv, valueType)));
 						} else {
 							builder.withMaker(name, new DynamicModelValue.DynamicTypedModelValueCreator<>(dv, () -> {
@@ -249,8 +258,8 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		configureExternalModels(interpreter);
 		configureInternalModels(interpreter);
 		interpreter//
-		.createWith("first-value", ValueCreator.class, session -> createFirstValue(wrap(session)))//
-		.createWith("hook", ValueCreator.class, session -> createHook(wrap(session)))//
+		.createWith("first-value", CompiledModelValue.class, session -> createFirstValue(wrap(session)))//
+		.createWith("hook", CompiledModelValue.class, session -> createHook(wrap(session)))//
 		.createWith("sort", ParsedSorting.class, session -> parseSorting(wrap(session)))//
 		.createWith("sort-by", ParsedSorting.class, session -> parseSorting(wrap(session)))//
 		;
@@ -351,7 +360,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 				} catch (ExpressoInterpretationException e) {
 					throw new QonfigInterpretationException("Could not interpret type", e.getPosition(), e.getErrorLength(), e);
 				}
-				QonfigExpression2 defaultX = valueEl.getAttributeExpression("default");
+				CompiledExpression defaultX = valueEl.getAttributeExpression("default");
 				model.withExternal(name, childType, valueEl.getElement().getPositionInFile(), extModels -> {
 					try {
 						return extModels.getValue(childPath, childType);
@@ -373,7 +382,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 				}, models -> {
 					if (defaultX == null)
 						return null;
-					ValueContainer<Object, Object> defaultV;
+					ModelValueSynth<Object, Object> defaultV;
 					try {
 						defaultV = defaultX.evaluate(childType);
 					} catch (ExpressoInterpretationException e) {
@@ -421,7 +430,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		;
 	}
 
-	abstract class InternalCollectionValue<C extends ObservableCollection<?>> implements QonfigValueCreator<ValueCreator<C, C>> {
+	abstract class InternalCollectionValue<C extends ObservableCollection<?>> implements QonfigValueCreator<CompiledModelValue<C, C>> {
 		private final ModelType<C> theType;
 
 		protected InternalCollectionValue(ModelType<C> type) {
@@ -429,13 +438,13 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		}
 
 		@Override
-		public ValueCreator<C, C> createValue(CoreSession session) throws QonfigInterpretationException {
+		public CompiledModelValue<C, C> createValue(CoreSession session) throws QonfigInterpretationException {
 			ExpressoQIS exS = wrap(session);
 			VariableType vblType = session.get(VALUE_TYPE_KEY, VariableType.class);
-			List<ValueCreator<SettableValue<?>, SettableValue<Object>>> elCreators = session.asElement("int-list")
-				.interpretChildren("element", ValueCreator.class);
+			List<CompiledModelValue<SettableValue<?>, SettableValue<Object>>> elCreators = session.asElement("int-list")
+				.interpretChildren("element", CompiledModelValue.class);
 			Object preI = preInterpret(vblType, exS);
-			return () -> {
+			return CompiledModelValue.of(session.getElement().getType().getName(), theType, () -> {
 				TypeToken<Object> type;
 				try {
 					type = TypeTokens.get().wrap((TypeToken<Object>) vblType.getType(exS.getExpressoEnv().getModels()));
@@ -448,15 +457,15 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 				} catch (ExpressoInterpretationException e) {
 					throw new ExpressoInterpretationException("Could not prepare values", e.getPosition(), e.getErrorLength(), e);
 				}
-				List<ValueContainer<SettableValue<?>, SettableValue<Object>>> elContainers = new ArrayList<>(elCreators.size());
-				for (ValueCreator<SettableValue<?>, SettableValue<Object>> creator : elCreators)
-					elContainers.add(creator.createContainer());
+				List<ModelValueSynth<SettableValue<?>, SettableValue<Object>>> elContainers = new ArrayList<>(elCreators.size());
+				for (CompiledModelValue<SettableValue<?>, SettableValue<Object>> creator : elCreators)
+					elContainers.add(creator.createSynthesizer());
 				TypeToken<Object> fType = type;
 				return new AbstractValueContainer<C, C>((ModelInstanceType<C, C>) theType.forTypes(type)) {
 					@Override
 					public C get(ModelSetInstance models) throws ModelInstantiationException {
 						C collection = (C) create(fType, models, prep).withDescription(session.get(PATH_KEY, String.class)).build();
-						for (ValueContainer<SettableValue<?>, SettableValue<Object>> value : elContainers) {
+						for (ModelValueSynth<SettableValue<?>, SettableValue<Object>> value : elContainers) {
 							if (!((ObservableCollection<Object>) collection).add(value.get(models).get()))
 								session.warn("Warning: Value " + value + " already added to " + session.get(PATH_KEY));
 						}
@@ -471,11 +480,11 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 					}
 
 					@Override
-					public BetterList<ValueContainer<?, ?>> getCores() {
+					public BetterList<ModelValueSynth<?, ?>> getCores() {
 						return BetterList.of(this);
 					}
 				};
-			};
+			});
 		}
 
 		protected Object preInterpret(VariableType type, ExpressoQIS session) throws QonfigInterpretationException {
@@ -517,7 +526,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		@Override
 		protected <V> ObservableCollectionBuilder<V, ?> create(TypeToken<V> type, ModelSetInstance models, Object prep)
 			throws ModelInstantiationException {
-			Comparator<V> sorting = ((ValueContainer<SettableValue<?>, SettableValue<Comparator<V>>>) prep).get(models).get();
+			Comparator<V> sorting = ((ModelValueSynth<SettableValue<?>, SettableValue<Comparator<V>>>) prep).get(models).get();
 			return create(type, sorting);
 		}
 
@@ -525,7 +534,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 			throws ModelInstantiationException;
 	}
 
-	abstract class InternalMapValue<M extends ObservableMap<?, ?>> implements QonfigValueCreator<ValueCreator<M, M>> {
+	abstract class InternalMapValue<M extends ObservableMap<?, ?>> implements QonfigValueCreator<CompiledModelValue<M, M>> {
 		private final ModelType<M> theType;
 
 		protected InternalMapValue(ModelType<M> type) {
@@ -533,14 +542,14 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		}
 
 		@Override
-		public ValueCreator<M, M> createValue(CoreSession session) throws QonfigInterpretationException {
+		public CompiledModelValue<M, M> createValue(CoreSession session) throws QonfigInterpretationException {
 			ExpressoQIS exS = wrap(session);
 			VariableType vblKeyType = session.get(KEY_TYPE_KEY, VariableType.class);
 			VariableType vblValueType = session.get(VALUE_TYPE_KEY, VariableType.class);
 			Object preI = preInterpret(vblKeyType, vblValueType, exS);
-			List<BiTuple<ValueCreator<SettableValue<?>, SettableValue<Object>>, ValueCreator<SettableValue<?>, SettableValue<Object>>>> entryCreators;
+			List<BiTuple<CompiledModelValue<SettableValue<?>, SettableValue<Object>>, CompiledModelValue<SettableValue<?>, SettableValue<Object>>>> entryCreators;
 			entryCreators = session.asElement("int-map").interpretChildren("entry", BiTuple.class);
-			return () -> {
+			return CompiledModelValue.of(session.getElement().getType().getName(), theType, () -> {
 				TypeToken<Object> keyType;
 				try {
 					keyType = TypeTokens.get().wrap((TypeToken<Object>) vblKeyType.getType(exS.getExpressoEnv().getModels()));
@@ -553,10 +562,10 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 				} catch (ExpressoInterpretationException e) {
 					throw new ExpressoInterpretationException("Could not parse value type", e.getPosition(), e.getErrorLength(), e);
 				}
-				List<BiTuple<ValueContainer<SettableValue<?>, SettableValue<Object>>, ValueContainer<SettableValue<?>, SettableValue<Object>>>> entryContainers;
+				List<BiTuple<ModelValueSynth<SettableValue<?>, SettableValue<Object>>, ModelValueSynth<SettableValue<?>, SettableValue<Object>>>> entryContainers;
 				entryContainers = new ArrayList<>(entryCreators.size());
-				for (BiTuple<ValueCreator<SettableValue<?>, SettableValue<Object>>, ValueCreator<SettableValue<?>, SettableValue<Object>>> entry : entryCreators)
-					entryContainers.add(new BiTuple<>(entry.getValue1().createContainer(), entry.getValue2().createContainer()));
+				for (BiTuple<CompiledModelValue<SettableValue<?>, SettableValue<Object>>, CompiledModelValue<SettableValue<?>, SettableValue<Object>>> entry : entryCreators)
+					entryContainers.add(new BiTuple<>(entry.getValue1().createSynthesizer(), entry.getValue2().createSynthesizer()));
 				Object prep;
 				try {
 					prep = prepare(keyType, valueType, exS, preI);
@@ -569,7 +578,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 					public M get(ModelSetInstance models) throws ModelInstantiationException {
 						M map = (M) create(fKeyType, fValueType, models, prep).withDescription(session.get(PATH_KEY, String.class))
 							.buildMap();
-						for (BiTuple<ValueContainer<SettableValue<?>, SettableValue<Object>>, ValueContainer<SettableValue<?>, SettableValue<Object>>> entry : entryContainers) {
+						for (BiTuple<ModelValueSynth<SettableValue<?>, SettableValue<Object>>, ModelValueSynth<SettableValue<?>, SettableValue<Object>>> entry : entryContainers) {
 							Object key = entry.getValue1().get(models).get();
 							if (map.containsKey(key))
 								System.err
@@ -588,11 +597,11 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 					}
 
 					@Override
-					public BetterList<ValueContainer<?, ?>> getCores() {
+					public BetterList<ModelValueSynth<?, ?>> getCores() {
 						return BetterList.of(this);
 					}
 				};
-			};
+			});
 		}
 
 		protected Object preInterpret(VariableType keyType, VariableType valueType, ExpressoQIS session)
@@ -614,7 +623,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		}
 	}
 
-	abstract class InternalMultiMapValue<M extends ObservableMultiMap<?, ?>> implements QonfigValueCreator<ValueCreator<M, M>> {
+	abstract class InternalMultiMapValue<M extends ObservableMultiMap<?, ?>> implements QonfigValueCreator<CompiledModelValue<M, M>> {
 		private final ModelType<M> theType;
 
 		protected InternalMultiMapValue(ModelType<M> type) {
@@ -622,14 +631,14 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		}
 
 		@Override
-		public ValueCreator<M, M> createValue(CoreSession session) throws QonfigInterpretationException {
+		public CompiledModelValue<M, M> createValue(CoreSession session) throws QonfigInterpretationException {
 			ExpressoQIS exS = wrap(session);
 			VariableType vblKeyType = session.get(KEY_TYPE_KEY, VariableType.class);
 			VariableType vblValueType = session.get(VALUE_TYPE_KEY, VariableType.class);
 			Object preI = preInterpret(vblKeyType, vblValueType, exS);
-			List<BiTuple<ValueCreator<SettableValue<?>, SettableValue<Object>>, ValueCreator<SettableValue<?>, SettableValue<Object>>>> entryCreators;
+			List<BiTuple<CompiledModelValue<SettableValue<?>, SettableValue<Object>>, CompiledModelValue<SettableValue<?>, SettableValue<Object>>>> entryCreators;
 			entryCreators = session.asElement("int-map").interpretChildren("entry", BiTuple.class);
-			return () -> {
+			return CompiledModelValue.of(session.getElement().getType().getName(), theType, () -> {
 				TypeToken<Object> keyType;
 				try {
 					keyType = TypeTokens.get().wrap((TypeToken<Object>) vblKeyType.getType(exS.getExpressoEnv().getModels()));
@@ -642,10 +651,10 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 				} catch (ExpressoInterpretationException e) {
 					throw new ExpressoInterpretationException("Could not parse value type", e.getPosition(), e.getErrorLength(), e);
 				}
-				List<BiTuple<ValueContainer<SettableValue<?>, SettableValue<Object>>, ValueContainer<SettableValue<?>, SettableValue<Object>>>> entryContainers;
+				List<BiTuple<ModelValueSynth<SettableValue<?>, SettableValue<Object>>, ModelValueSynth<SettableValue<?>, SettableValue<Object>>>> entryContainers;
 				entryContainers = new ArrayList<>(entryCreators.size());
-				for (BiTuple<ValueCreator<SettableValue<?>, SettableValue<Object>>, ValueCreator<SettableValue<?>, SettableValue<Object>>> entry : entryCreators)
-					entryContainers.add(new BiTuple<>(entry.getValue1().createContainer(), entry.getValue2().createContainer()));
+				for (BiTuple<CompiledModelValue<SettableValue<?>, SettableValue<Object>>, CompiledModelValue<SettableValue<?>, SettableValue<Object>>> entry : entryCreators)
+					entryContainers.add(new BiTuple<>(entry.getValue1().createSynthesizer(), entry.getValue2().createSynthesizer()));
 				Object prep;
 				try {
 					prep = prepare(keyType, valueType, exS, preI);
@@ -658,7 +667,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 					public M get(ModelSetInstance models) throws ModelInstantiationException {
 						M map = (M) create(fKeyType, fValueType, models, prep).withDescription(session.get(PATH_KEY, String.class))
 							.build(models.getUntil());
-						for (BiTuple<ValueContainer<SettableValue<?>, SettableValue<Object>>, ValueContainer<SettableValue<?>, SettableValue<Object>>> entry : entryContainers) {
+						for (BiTuple<ModelValueSynth<SettableValue<?>, SettableValue<Object>>, ModelValueSynth<SettableValue<?>, SettableValue<Object>>> entry : entryContainers) {
 							((ObservableMultiMap<Object, Object>) map).add(entry.getValue1().get(models), entry.getValue2().get(models));
 						}
 						return map;
@@ -672,11 +681,11 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 					}
 
 					@Override
-					public BetterList<ValueContainer<?, ?>> getCores() {
+					public BetterList<ModelValueSynth<?, ?>> getCores() {
 						return BetterList.of(this);
 					}
 				};
-			};
+			});
 		}
 
 		protected Object preInterpret(VariableType keyType, VariableType valueType, ExpressoQIS session)
@@ -706,7 +715,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 			QonfigChildDef valueRole = session.getRole("value");
 			for (ExpressoQIS child : eqis.forChildren()) {
 				if (child.fulfills(valueRole)) {
-					ValueCreator<?, ?> container = child.setModels(model, null).interpret(ValueCreator.class);
+					CompiledModelValue<?, ?> container = child.setModels(model, null).interpret(CompiledModelValue.class);
 					model.withMaker(child.getAttributeText("model-element", "name"), container);
 				} else if (child.fulfills(subModelRole)) {
 					ObservableModelSet.Builder subModel = model.createSubModel(child.getAttributeText("named", "name"));
@@ -716,32 +725,37 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 			}
 			return model;
 		});
-		interpreter.createWith("constant", ValueCreator.class, session -> interpretConstant(wrap(session)));
-		interpreter.createWith("value", ValueCreator.class, session -> interpretValue(wrap(session)));
-		interpreter.createWith("action", ValueCreator.class, session -> {
+		interpreter.createWith("constant", CompiledModelValue.class, session -> interpretConstant(wrap(session)));
+		interpreter.createWith("value", CompiledModelValue.class, session -> interpretValue(wrap(session)));
+		interpreter.createWith("action", CompiledModelValue.class, session -> {
 			ExpressoQIS exS = wrap(session);
-			QonfigExpression2 valueX = exS.getValueExpression();
+			CompiledExpression valueX = exS.getValueExpression();
 			VariableType vblType = session.get(VALUE_TYPE_KEY, VariableType.class);
-			return ValueCreator.name(valueX::toString, () -> {
+			return CompiledModelValue.of(valueX::toString, ModelTypes.Action, () -> {
 				TypeToken<Object> type = vblType == null ? null : (TypeToken<Object>) vblType.getType(exS.getExpressoEnv().getModels());
-				ValueContainer<ObservableAction<?>, ObservableAction<Object>> action = valueX.evaluate(
+				ModelValueSynth<ObservableAction<?>, ObservableAction<Object>> action = valueX.evaluate(
 					ModelTypes.Action.forType(type == null ? (TypeToken<Object>) (TypeToken<?>) TypeTokens.get().WILDCARD : type));
 				exS.interpretLocalModel();
 				return action.wrapModels(exS::wrapLocal);
 			});
-		}).createWith("action-group", ValueCreator.class, session -> interpretActionGroup(wrap(session)));
-		interpreter.createWith("loop", ValueCreator.class, session -> interpretLoop(wrap(session)));
-		interpreter.createWith("value-set", ValueCreator.class, session -> {
+		}).createWith("action-group", CompiledModelValue.class, session -> interpretActionGroup(wrap(session)));
+		interpreter.createWith("loop", CompiledModelValue.class, session -> interpretLoop(wrap(session)));
+		interpreter.createWith("value-set", CompiledModelValue.class, session -> {
 			ExpressoQIS exS = wrap(session);
 			VariableType vblType = session.get(VALUE_TYPE_KEY, VariableType.class);
-			return ValueCreator.name(() -> "value-set<" + vblType + ">", () -> {
+			return CompiledModelValue.of(() -> "value-set<" + vblType + ">", ModelTypes.ValueSet, () -> {
 				ModelInstanceType<ObservableValueSet<?>, ObservableValueSet<Object>> type;
 				try {
 					type = ModelTypes.ValueSet.forType((TypeToken<Object>) vblType.getType(exS.getExpressoEnv().getModels()));
 				} catch (ExpressoInterpretationException e) {
 					throw new ExpressoInterpretationException("Could not evaluate type", e.getPosition(), e.getErrorLength(), e);
 				}
-				return new ValueContainer<ObservableValueSet<?>, ObservableValueSet<Object>>() {
+				return new ModelValueSynth<ObservableValueSet<?>, ObservableValueSet<Object>>() {
+					@Override
+					public ModelType<ObservableValueSet<?>> getModelType() {
+						return ModelTypes.ValueSet;
+					}
+
 					@Override
 					public ModelInstanceType<ObservableValueSet<?>, ObservableValueSet<Object>> getType()
 						throws ExpressoInterpretationException {
@@ -766,43 +780,44 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 					}
 
 					@Override
-					public BetterList<ValueContainer<?, ?>> getCores() {
+					public BetterList<ModelValueSynth<?, ?>> getCores() {
 						return BetterList.of(this);
 					}
 				};
 			});
 		});
-		interpreter.createWith("element", ValueCreator.class, session -> {
+		interpreter.createWith("element", CompiledModelValue.class, session -> {
 			ExpressoQIS exS = wrap(session);
 			VariableType vblType = session.get(VALUE_TYPE_KEY, VariableType.class);
 			if (vblType == null)
 				throw new QonfigInterpretationException("No " + VALUE_TYPE_KEY + " available", session.getElement().getPositionInFile(), 0);
-			QonfigExpression2 valueX = exS.getValueExpression();
-			return () -> {
+			CompiledExpression valueX = exS.getValueExpression();
+			return CompiledModelValue.of("element", ModelTypes.Value, () -> {
 				TypeToken<?> type = vblType.getType(exS.getExpressoEnv().getModels());
 				return valueX.evaluate(ModelTypes.Value.forType(type));
-			};
+			});
 		});
-		interpreter.createWith("list", ValueCreator.class, new InternalCollectionValue<ObservableCollection<?>>(ModelTypes.Collection) {
+		interpreter.createWith("list", CompiledModelValue.class,
+			new InternalCollectionValue<ObservableCollection<?>>(ModelTypes.Collection) {
 			@Override
 			protected <V> ObservableCollectionBuilder<V, ?> create(TypeToken<V> type, ModelSetInstance models, Object prep) {
 				return ObservableCollection.build(type);
 			}
 		});
-		interpreter.createWith("set", ValueCreator.class, new InternalCollectionValue<ObservableSet<?>>(ModelTypes.Set) {
+		interpreter.createWith("set", CompiledModelValue.class, new InternalCollectionValue<ObservableSet<?>>(ModelTypes.Set) {
 			@Override
 			protected <V> ObservableCollectionBuilder<V, ?> create(TypeToken<V> type, ModelSetInstance models, Object prep) {
 				return ObservableSet.build(type);
 			}
 		});
 		// class SortedCollectionCreator<C extends ObservableSortedCollection<?>> extends InternalCollectionValue
-		interpreter
-		.createWith("sorted-set", ValueCreator.class, new InternalSortedCollectionValue<ObservableSortedSet<?>>(ModelTypes.SortedSet) {
+		interpreter.createWith("sorted-set", CompiledModelValue.class,
+			new InternalSortedCollectionValue<ObservableSortedSet<?>>(ModelTypes.SortedSet) {
 			@Override
 			protected <V> ObservableCollectionBuilder<V, ?> create(TypeToken<V> type, Comparator<V> comparator) {
 				return ObservableSortedSet.build(type, comparator);
 			}
-		}).createWith("sorted-list", ValueCreator.class,
+		}).createWith("sorted-list", CompiledModelValue.class,
 			new InternalSortedCollectionValue<ObservableSortedCollection<?>>(ModelTypes.SortedCollection) {
 			@Override
 			protected <V> ObservableCollectionBuilder<V, ?> create(TypeToken<V> type, Comparator<V> comparator) {
@@ -819,26 +834,26 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 			if (vblValueType == null)
 				throw new QonfigInterpretationException("No " + VALUE_TYPE_KEY + " available", session.getElement().getPositionInFile(),
 					0);
-			QonfigExpression2 keyX = exS.getAttributeExpression("key");
-			QonfigExpression2 valueX = exS.getAttributeExpression("value");
-			ValueCreator<SettableValue<?>, SettableValue<Object>> key = () -> {
+			CompiledExpression keyX = exS.getAttributeExpression("key");
+			CompiledExpression valueX = exS.getAttributeExpression("value");
+			CompiledModelValue<SettableValue<?>, SettableValue<Object>> key = CompiledModelValue.of("key", ModelTypes.Value, () -> {
 				TypeToken<?> keyType = vblKeyType.getType(exS.getExpressoEnv().getModels());
-				return (ValueContainer<SettableValue<?>, SettableValue<Object>>) (ValueContainer<?, ?>) keyX
+				return (ModelValueSynth<SettableValue<?>, SettableValue<Object>>) (ModelValueSynth<?, ?>) keyX
 					.evaluate(ModelTypes.Value.forType(keyType));
-			};
-			ValueCreator<SettableValue<?>, SettableValue<Object>> value = () -> {
+			});
+			CompiledModelValue<SettableValue<?>, SettableValue<Object>> value = CompiledModelValue.of("value", ModelTypes.Value, () -> {
 				TypeToken<?> valueType = vblValueType.getType(exS.getExpressoEnv().getModels());
-				return (ValueContainer<SettableValue<?>, SettableValue<Object>>) (ValueContainer<?, ?>) valueX
+				return (ModelValueSynth<SettableValue<?>, SettableValue<Object>>) (ModelValueSynth<?, ?>) valueX
 					.evaluate(ModelTypes.Value.forType(valueType));
-			};
+			});
 			return new BiTuple<>(key, value);
-		}).createWith("map", ValueCreator.class, new InternalMapValue<ObservableMap<?, ?>>(ModelTypes.Map) {
+		}).createWith("map", CompiledModelValue.class, new InternalMapValue<ObservableMap<?, ?>>(ModelTypes.Map) {
 			@Override
 			protected <K, V> ObservableMap.Builder<K, V, ?> create(TypeToken<K> keyType, TypeToken<V> valueType,
 				ModelSetInstance models, Object prep) {
 				return ObservableMap.build(keyType, valueType);
 			}
-		}).createWith("sorted-map", ValueCreator.class, new InternalMapValue<ObservableSortedMap<?, ?>>(ModelTypes.SortedMap) {
+		}).createWith("sorted-map", CompiledModelValue.class, new InternalMapValue<ObservableSortedMap<?, ?>>(ModelTypes.SortedMap) {
 			@Override
 			protected Object preInterpret(VariableType keyType, VariableType valueType, ExpressoQIS session)
 				throws QonfigInterpretationException {
@@ -858,16 +873,17 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 			@Override
 			protected <K, V> ObservableMap.Builder<K, V, ?> create(TypeToken<K> keyType, TypeToken<V> valueType,
 				ModelSetInstance models, Object prep) throws ModelInstantiationException {
-				Comparator<K> sorting = ((ValueContainer<SettableValue<?>, SettableValue<Comparator<K>>>) prep).get(models).get();
+				Comparator<K> sorting = ((ModelValueSynth<SettableValue<?>, SettableValue<Comparator<K>>>) prep).get(models).get();
 				return ObservableSortedMap.build(keyType, valueType, sorting);
 			}
-		}).createWith("multi-map", ValueCreator.class, new InternalMultiMapValue<ObservableMultiMap<?, ?>>(ModelTypes.MultiMap) {
+		}).createWith("multi-map", CompiledModelValue.class, new InternalMultiMapValue<ObservableMultiMap<?, ?>>(ModelTypes.MultiMap) {
 			@Override
 			protected <K, V> ObservableMultiMap.Builder<K, V, ?> create(TypeToken<K> keyType, TypeToken<V> valueType,
 				ModelSetInstance models, Object prep) {
 				return ObservableMultiMap.build(keyType, valueType);
 			}
-		}).createWith("sorted-multi-map", ValueCreator.class, new InternalMultiMapValue<ObservableMultiMap<?, ?>>(ModelTypes.MultiMap) {
+		}).createWith("sorted-multi-map", CompiledModelValue.class,
+			new InternalMultiMapValue<ObservableMultiMap<?, ?>>(ModelTypes.MultiMap) {
 			@Override
 			protected Object preInterpret(VariableType keyType, VariableType valueType, ExpressoQIS session)
 				throws QonfigInterpretationException {
@@ -887,140 +903,138 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 			@Override
 			protected <K, V> ObservableMultiMap.Builder<K, V, ?> create(TypeToken<K> keyType, TypeToken<V> valueType,
 				ModelSetInstance models, Object prep) throws ModelInstantiationException {
-				Comparator<K> sorting = ((ValueContainer<SettableValue<?>, SettableValue<Comparator<K>>>) prep).get(models).get();
+				Comparator<K> sorting = ((ModelValueSynth<SettableValue<?>, SettableValue<Comparator<K>>>) prep).get(models).get();
 				return ObservableMultiMap.build(keyType, valueType).sortedBy(sorting);
 			}
 		});
 	}
 
-	private ValueCreator<SettableValue<?>, SettableValue<Object>> interpretConstant(ExpressoQIS exS) throws QonfigInterpretationException {
+	private CompiledModelValue<SettableValue<?>, SettableValue<Object>> interpretConstant(ExpressoQIS exS)
+		throws QonfigInterpretationException {
 		TypeToken<Object> valueType = (TypeToken<Object>) exS.get(VALUE_TYPE_KEY);
-		QonfigExpression2 value = exS.getValueExpression();
-		return new ValueCreator<SettableValue<?>, SettableValue<Object>>() {
-			@Override
-			public ValueContainer<SettableValue<?>, SettableValue<Object>> createContainer() throws ExpressoInterpretationException {
-				InterpretedValueContainer<SettableValue<?>, SettableValue<Object>> valueC;
-				try {
-					valueC = value.evaluate(valueType == null ? ModelTypes.Value.anyAs() : ModelTypes.Value.forType(valueType))//
-						.interpret();
-				} catch (ExpressoInterpretationException e) {
-					throw new ExpressoInterpretationException("Could not interpret value of constant: " + value, e.getPosition(),
-						e.getErrorLength(), e);
+		CompiledExpression value = exS.getValueExpression();
+		return CompiledModelValue.of(() -> "constant:" + valueType, ModelTypes.Value, () -> {
+			InterpretedValueSynth<SettableValue<?>, SettableValue<Object>> valueC;
+			try {
+				valueC = value.evaluate(valueType == null ? ModelTypes.Value.anyAs() : ModelTypes.Value.forType(valueType))//
+					.interpret();
+			} catch (ExpressoInterpretationException e) {
+				throw new ExpressoInterpretationException("Could not interpret value of constant: " + value, e.getPosition(),
+					e.getErrorLength(), e);
+			}
+			return new ModelValueSynth<SettableValue<?>, SettableValue<Object>>() {
+				@Override
+				public ModelType<SettableValue<?>> getModelType() {
+					return ModelTypes.Value;
 				}
-				return new ValueContainer<SettableValue<?>, SettableValue<Object>>() {
-					@Override
-					public ModelInstanceType<SettableValue<?>, SettableValue<Object>> getType() {
-						return valueC.getType();
-					}
 
-					@Override
-					public SettableValue<Object> get(ModelSetInstance models) throws ModelInstantiationException {
-						Object v = valueC.get(models).get();
-						class ConstantValue<T> extends AbstractIdentifiable implements SettableValue<T> {
-							private final TypeToken<T> theType;
-							private final T theValue;
+				@Override
+				public ModelInstanceType<SettableValue<?>, SettableValue<Object>> getType() {
+					return valueC.getType();
+				}
 
-							public ConstantValue(TypeToken<T> type, T value2) {
-								theType = type;
-								theValue = value2;
-							}
+				@Override
+				public SettableValue<Object> get(ModelSetInstance models) throws ModelInstantiationException {
+					Object v = valueC.get(models).get();
+					class ConstantValue<T> extends AbstractIdentifiable implements SettableValue<T> {
+						private final TypeToken<T> theType;
+						private final T theValue;
 
-							@Override
-							public TypeToken<T> getType() {
-								return theType;
-							}
-
-							@Override
-							public long getStamp() {
-								return 0;
-							}
-
-							@Override
-							public T get() {
-								return theValue;
-							}
-
-							@Override
-							public Observable<ObservableValueEvent<T>> noInitChanges() {
-								return Observable.empty();
-							}
-
-							@Override
-							public boolean isLockSupported() {
-								return true;
-							}
-
-							@Override
-							public Transaction lock(boolean write, Object cause) {
-								return Transaction.NONE;
-							}
-
-							@Override
-							public Transaction tryLock(boolean write, Object cause) {
-								return Transaction.NONE;
-							}
-
-							@Override
-							public <V extends T> T set(V value2, Object cause)
-								throws IllegalArgumentException, UnsupportedOperationException {
-								throw new UnsupportedOperationException("Constant value");
-							}
-
-							@Override
-							public <V extends T> String isAcceptable(V value2) {
-								return "Constant value";
-							}
-
-							@Override
-							public ObservableValue<String> isEnabled() {
-								return ObservableValue.of("Constant value");
-							}
-
-							@Override
-							protected Object createIdentity() {
-								return exS.get(PATH_KEY);
-							}
+						public ConstantValue(TypeToken<T> type, T value2) {
+							theType = type;
+							theValue = value2;
 						}
-						return new ConstantValue<>((TypeToken<Object>) getType().getType(0), v);
-					}
 
-					@Override
-					public SettableValue<Object> forModelCopy(SettableValue<Object> value2, ModelSetInstance sourceModels,
-						ModelSetInstance newModels) {
-						return value2;
-					}
+						@Override
+						public TypeToken<T> getType() {
+							return theType;
+						}
 
-					@Override
-					public BetterList<ValueContainer<?, ?>> getCores() {
-						return BetterList.of(this);
-					}
-				};
-			}
+						@Override
+						public long getStamp() {
+							return 0;
+						}
 
-			@Override
-			public String toString() {
-				return "constant:" + valueType;
-			}
-		};
+						@Override
+						public T get() {
+							return theValue;
+						}
+
+						@Override
+						public Observable<ObservableValueEvent<T>> noInitChanges() {
+							return Observable.empty();
+						}
+
+						@Override
+						public boolean isLockSupported() {
+							return true;
+						}
+
+						@Override
+						public Transaction lock(boolean write, Object cause) {
+							return Transaction.NONE;
+						}
+
+						@Override
+						public Transaction tryLock(boolean write, Object cause) {
+							return Transaction.NONE;
+						}
+
+						@Override
+						public <V extends T> T set(V value2, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
+							throw new UnsupportedOperationException("Constant value");
+						}
+
+						@Override
+						public <V extends T> String isAcceptable(V value2) {
+							return "Constant value";
+						}
+
+						@Override
+						public ObservableValue<String> isEnabled() {
+							return ObservableValue.of("Constant value");
+						}
+
+						@Override
+						protected Object createIdentity() {
+							return exS.get(PATH_KEY);
+						}
+					}
+					return new ConstantValue<>((TypeToken<Object>) getType().getType(0), v);
+				}
+
+				@Override
+				public SettableValue<Object> forModelCopy(SettableValue<Object> value2, ModelSetInstance sourceModels,
+					ModelSetInstance newModels) {
+					return value2;
+				}
+
+				@Override
+				public BetterList<ModelValueSynth<?, ?>> getCores() {
+					return BetterList.of(this);
+				}
+			};
+		});
 	}
 
-	private ValueCreator<SettableValue<?>, SettableValue<Object>> interpretValue(ExpressoQIS exS) throws QonfigInterpretationException {
-		QonfigExpression2 valueX = exS.getValueExpression();
-		QonfigExpression2 initX = exS.isInstance("int-value") ? exS.asElement("int-value").getAttributeExpression("init") : null;
+	private CompiledModelValue<SettableValue<?>, SettableValue<Object>> interpretValue(ExpressoQIS exS)
+		throws QonfigInterpretationException {
+		CompiledExpression valueX = exS.getValueExpression();
+		CompiledExpression initX = exS.isInstance("int-value") ? exS.asElement("int-value").getAttributeExpression("init") : null;
 		if (initX != null && valueX != null)
 			exS.warn("Either a value or an init value may be specified, but not both.  Initial value will be ignored.");
 		VariableType vblType = exS.get(VALUE_TYPE_KEY, VariableType.class);
 		if (vblType == null && valueX == null && initX == null)
 			throw new QonfigInterpretationException("A type, a value, or an initializer must be specified",
 				exS.getElement().getPositionInFile(), 0);
-		return ValueCreator.name(() -> {
+		return CompiledModelValue.of(() -> {
 			if (valueX != null)
 				return valueX.toString();
 			else if (vblType != null)
 				return vblType.toString();
 			else
 				return "init:" + initX.toString();
-		}, () -> {
+		}, ModelTypes.Value, () -> {
 			TypeToken<Object> type;
 			try {
 				type = vblType == null ? null : (TypeToken<Object>) vblType.getType(exS.getExpressoEnv().getModels());
@@ -1029,14 +1043,14 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 			}
 			ModelInstanceType<SettableValue<?>, SettableValue<Object>> modelType = type == null ? ModelTypes.Value.anyAs()
 				: ModelTypes.Value.forType(type);
-			ValueContainer<SettableValue<?>, SettableValue<Object>> value = valueX == null ? null : valueX.evaluate(modelType);
-			ValueContainer<SettableValue<?>, SettableValue<Object>> init;
+			ModelValueSynth<SettableValue<?>, SettableValue<Object>> value = valueX == null ? null : valueX.evaluate(modelType);
+			ModelValueSynth<SettableValue<?>, SettableValue<Object>> init;
 			if (value != null)
 				init = null;
 			else if (initX != null)
 				init = initX.evaluate(modelType);
 			else
-				init = ValueContainer.literal(type, TypeTokens.get().getDefaultValue(type), "<default>");
+				init = ModelValueSynth.literal(type, TypeTokens.get().getDefaultValue(type), "<default>");
 			ModelInstanceType<SettableValue<?>, SettableValue<Object>> fType;
 			if (type != null)
 				fType = modelType;
@@ -1066,7 +1080,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 				}
 
 				@Override
-				public BetterList<ValueContainer<?, ?>> getCores() throws ExpressoInterpretationException {
+				public BetterList<ModelValueSynth<?, ?>> getCores() throws ExpressoInterpretationException {
 					if (value != null)
 						return value.getCores();
 					else
@@ -1076,14 +1090,20 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		});
 	}
 
-	private ValueCreator<ObservableAction<?>, ObservableAction<Object>> interpretActionGroup(ExpressoQIS exS)
+	private CompiledModelValue<ObservableAction<?>, ObservableAction<Object>> interpretActionGroup(ExpressoQIS exS)
 		throws QonfigInterpretationException {
-		List<ValueCreator<ObservableAction<?>, ObservableAction<Object>>> actions = exS.interpretChildren("action", ValueCreator.class);
-		return ValueCreator.name("action-group", () -> {
-			BetterList<ValueContainer<ObservableAction<?>, ObservableAction<Object>>> actionVs = BetterList.of2(actions.stream(), //
-				a -> a.createContainer());
+		List<CompiledModelValue<ObservableAction<?>, ObservableAction<Object>>> actions = exS.interpretChildren("action",
+			CompiledModelValue.class);
+		return CompiledModelValue.of("action-group", ModelTypes.Action, () -> {
+			BetterList<ModelValueSynth<ObservableAction<?>, ObservableAction<Object>>> actionVs = BetterList.of2(actions.stream(), //
+				a -> a.createSynthesizer());
 			exS.interpretLocalModel();
-			return new ValueContainer<ObservableAction<?>, ObservableAction<Object>>() {
+			return new ModelValueSynth<ObservableAction<?>, ObservableAction<Object>>() {
+				@Override
+				public ModelType<ObservableAction<?>> getModelType() {
+					return ModelTypes.Action;
+				}
+
 				@Override
 				public ModelInstanceType<ObservableAction<?>, ObservableAction<Object>> getType() {
 					return ModelTypes.Action.forType(Object.class);
@@ -1102,7 +1122,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 					ModelSetInstance wrappedNew = exS.wrapLocal(newModels);
 					List<ObservableAction<Object>> realActions = new ArrayList<>(actionVs.size());
 					boolean different = false;
-					for (ValueContainer<ObservableAction<?>, ObservableAction<Object>> actionV : actionVs) {
+					for (ModelValueSynth<ObservableAction<?>, ObservableAction<Object>> actionV : actionVs) {
 						ObservableAction<Object> sourceAction = actionV.get(sourceModels);
 						ObservableAction<Object> copyAction = actionV.get(wrappedNew);
 						different |= sourceAction != copyAction;
@@ -1121,36 +1141,42 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 				}
 
 				@Override
-				public BetterList<ValueContainer<?, ?>> getCores() throws ExpressoInterpretationException {
+				public BetterList<ModelValueSynth<?, ?>> getCores() throws ExpressoInterpretationException {
 					return BetterList.of(actionVs.stream(), vc -> vc.getCores().stream());
 				}
 			};
 		});
 	}
 
-	private ValueCreator<ObservableAction<?>, ObservableAction<Object>> interpretLoop(ExpressoQIS exS)
+	private CompiledModelValue<ObservableAction<?>, ObservableAction<Object>> interpretLoop(ExpressoQIS exS)
 		throws QonfigInterpretationException {
-		QonfigExpression2 init = exS.getAttributeExpression("init");
-		QonfigExpression2 before = exS.getAttributeExpression("before-while");
-		QonfigExpression2 whileX = exS.getAttributeExpression("while");
-		QonfigExpression2 beforeBody = exS.getAttributeExpression("before-body");
-		QonfigExpression2 afterBody = exS.getAttributeExpression("after-body");
-		QonfigExpression2 finallly = exS.getAttributeExpression("finally");
-		List<ValueCreator<ObservableAction<?>, ObservableAction<?>>> exec = exS.interpretChildren("body", ValueCreator.class);
-		return ValueCreator.name("loop", () -> {
-			ValueContainer<ObservableAction<?>, ObservableAction<?>> initV = init == null ? null : init.evaluate(ModelTypes.Action.any());
-			ValueContainer<ObservableAction<?>, ObservableAction<?>> beforeV = before == null ? null
+		CompiledExpression init = exS.getAttributeExpression("init");
+		CompiledExpression before = exS.getAttributeExpression("before-while");
+		CompiledExpression whileX = exS.getAttributeExpression("while");
+		CompiledExpression beforeBody = exS.getAttributeExpression("before-body");
+		CompiledExpression afterBody = exS.getAttributeExpression("after-body");
+		CompiledExpression finallly = exS.getAttributeExpression("finally");
+		List<CompiledModelValue<ObservableAction<?>, ObservableAction<?>>> exec = exS.interpretChildren("body", CompiledModelValue.class);
+		return CompiledModelValue.of("loop", ModelTypes.Action, () -> {
+			ModelValueSynth<ObservableAction<?>, ObservableAction<?>> initV = init == null ? null : init.evaluate(ModelTypes.Action.any());
+			ModelValueSynth<ObservableAction<?>, ObservableAction<?>> beforeV = before == null ? null
 				: before.evaluate(ModelTypes.Action.any());
-			ValueContainer<SettableValue<?>, SettableValue<Boolean>> whileV = whileX.evaluate(ModelTypes.Value.forType(boolean.class));
-			ValueContainer<ObservableAction<?>, ObservableAction<?>> beforeBodyV = beforeBody == null ? null
+			ModelValueSynth<SettableValue<?>, SettableValue<Boolean>> whileV = whileX.evaluate(ModelTypes.Value.forType(boolean.class));
+			ModelValueSynth<ObservableAction<?>, ObservableAction<?>> beforeBodyV = beforeBody == null ? null
 				: beforeBody.evaluate(ModelTypes.Action.any());
-			ValueContainer<ObservableAction<?>, ObservableAction<?>> afterBodyV = afterBody == null ? null
+			ModelValueSynth<ObservableAction<?>, ObservableAction<?>> afterBodyV = afterBody == null ? null
 				: afterBody.evaluate(ModelTypes.Action.any());
-			ValueContainer<ObservableAction<?>, ObservableAction<?>> finallyV = finallly == null ? null
+			ModelValueSynth<ObservableAction<?>, ObservableAction<?>> finallyV = finallly == null ? null
 				: finallly.evaluate(ModelTypes.Action.any());
-			List<ValueContainer<ObservableAction<?>, ObservableAction<?>>> execVs = BetterList.of2(exec.stream(), v -> v.createContainer());
+			List<ModelValueSynth<ObservableAction<?>, ObservableAction<?>>> execVs = BetterList.of2(exec.stream(),
+				v -> v.createSynthesizer());
 			exS.interpretLocalModel();
-			return new ValueContainer<ObservableAction<?>, ObservableAction<Object>>() {
+			return new ModelValueSynth<ObservableAction<?>, ObservableAction<Object>>() {
+				@Override
+				public ModelType<ObservableAction<?>> getModelType() {
+					return ModelTypes.Action;
+				}
+
 				@Override
 				public ModelInstanceType<ObservableAction<?>, ObservableAction<Object>> getType() {
 					return ModelTypes.Action.forType(Object.class);
@@ -1183,7 +1209,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 					ObservableAction<?> beforeBodyA = beforeBodyV == null ? null : beforeBodyV.get(newModels);
 					boolean different = initS != initA || beforeS != beforeA || whileS != whileC || beforeBodyS != beforeBodyA;
 					List<ObservableAction<?>> execAs = new ArrayList<>(execVs.size());
-					for (ValueContainer<ObservableAction<?>, ObservableAction<?>> execV : execVs) {
+					for (ModelValueSynth<ObservableAction<?>, ObservableAction<?>> execV : execVs) {
 						ObservableAction<?> execS = execV.get(sourceModels);
 						ObservableAction<?> execA = execV.get(newModels);
 						different |= execS != execA;
@@ -1200,7 +1226,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 				}
 
 				@Override
-				public BetterList<ValueContainer<?, ?>> getCores() throws ExpressoInterpretationException {
+				public BetterList<ModelValueSynth<?, ?>> getCores() throws ExpressoInterpretationException {
 					return BetterList.of(Stream.concat(//
 						Stream.of(initV, beforeV, whileV, beforeBodyV, afterBodyV, finallyV), //
 						execVs.stream()), cv -> cv == null ? Stream.empty() : cv.getCores().stream());
@@ -1270,14 +1296,15 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		}
 	}
 
-	private ValueCreator<SettableValue<?>, SettableValue<Object>> createFirstValue(ExpressoQIS session)
+	private CompiledModelValue<SettableValue<?>, SettableValue<Object>> createFirstValue(ExpressoQIS session)
 		throws QonfigInterpretationException {
-		List<ValueCreator<SettableValue<?>, SettableValue<?>>> valueCreators = session.interpretChildren("value", ValueCreator.class);
-		return ValueCreator.name("first", () -> {
-			List<ValueContainer<SettableValue<?>, SettableValue<?>>> valueContainers = new ArrayList<>(valueCreators.size());
+		List<CompiledModelValue<SettableValue<?>, SettableValue<?>>> valueCreators = session.interpretChildren("value",
+			CompiledModelValue.class);
+		return CompiledModelValue.of("first", ModelTypes.Value, () -> {
+			List<ModelValueSynth<SettableValue<?>, SettableValue<?>>> valueContainers = new ArrayList<>(valueCreators.size());
 			List<TypeToken<?>> valueTypes = new ArrayList<>(valueCreators.size());
-			for (ValueCreator<SettableValue<?>, SettableValue<?>> creator : valueCreators) {
-				valueContainers.add(creator.createContainer());
+			for (CompiledModelValue<SettableValue<?>, SettableValue<?>> creator : valueCreators) {
+				valueContainers.add(creator.createSynthesizer());
 				valueTypes.add(valueContainers.get(valueContainers.size() - 1).getType().getType(0));
 			}
 			TypeToken<Object> commonType = TypeTokens.get().getCommonType(valueTypes);
@@ -1308,26 +1335,26 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 				}
 
 				@Override
-				public BetterList<ValueContainer<?, ?>> getCores() throws ExpressoInterpretationException {
+				public BetterList<ModelValueSynth<?, ?>> getCores() throws ExpressoInterpretationException {
 					return BetterList.of(valueContainers.stream(), vc -> vc.getCores().stream());
 				}
 			};
 		});
 	}
 
-	private <V> ValueCreator<Observable<?>, Observable<V>> createHook(ExpressoQIS session) throws QonfigInterpretationException {
-		QonfigExpression2 onX = session.getAttributeExpression("on");
-		QonfigExpression2 actionX = session.getValueExpression();
-		return ValueCreator.name("hook", () -> {
-			ValueContainer<Observable<?>, Observable<V>> onC = onX == null ? null : onX.evaluate(ModelTypes.Event.<V> anyAs());
+	private <V> CompiledModelValue<Observable<?>, Observable<V>> createHook(ExpressoQIS session) throws QonfigInterpretationException {
+		CompiledExpression onX = session.getAttributeExpression("on");
+		CompiledExpression actionX = session.getValueExpression();
+		return CompiledModelValue.of("hook", ModelTypes.Event, () -> {
+			ModelValueSynth<Observable<?>, Observable<V>> onC = onX == null ? null : onX.evaluate(ModelTypes.Event.<V> anyAs());
 			ModelInstanceType.SingleTyped<Observable<?>, V, Observable<V>> eventType;
 			eventType = onC == null ? ModelTypes.Event.forType((Class<V>) void.class)
 				: (ModelInstanceType.SingleTyped<Observable<?>, V, Observable<V>>) onC.getType();
 			DynamicModelValue.satisfyDynamicValueType("event", session.getExpressoEnv().getModels(),
 				ModelTypes.Value.forType(eventType.getValueType()));
-			ValueContainer<ObservableAction<?>, ObservableAction<?>> actionC = actionX.evaluate(ModelTypes.Action.any());
+			ModelValueSynth<ObservableAction<?>, ObservableAction<?>> actionC = actionX.evaluate(ModelTypes.Action.any());
 			session.interpretLocalModel();
-			return ValueContainer.of(eventType, msi -> {
+			return ModelValueSynth.of(eventType, msi -> {
 				msi = session.wrapLocal(msi);
 				Observable<V> on = onC == null ? null : onC.get(msi);
 				ObservableAction<?> action = actionC.get(msi);
@@ -1374,7 +1401,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 	}
 
 	void configureTransformation(QonfigInterpreterCore.Builder interpreter) {
-		interpreter.createWith("transform", ValueCreator.class, session -> createTransform(wrap(session)));
+		interpreter.createWith("transform", CompiledModelValue.class, session -> createTransform(wrap(session)));
 		interpreter//
 		.createWith("no-init", ObservableTransform.class, session -> noInitObservable(wrap(session)))//
 		.createWith("skip", ObservableTransform.class, session -> skipObservable(wrap(session)))//
@@ -1415,142 +1442,162 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		.createWith("collect", CollectionTransform.class, session -> collectCollection(wrap(session)))//
 		;
 
-		interpreter.delegateToType("map-reverse", "type", MapReverse.class)//
-		.createWith("replace-source", MapReverse.class, session -> createSourceReplace(wrap(session)))//
-		.createWith("modify-source", MapReverse.class, session -> createSourceModifier(wrap(session)));
+		interpreter.delegateToType("map-reverse", "type", CompiledMapReverse.class)//
+		.createWith("replace-source", CompiledMapReverse.class, session -> createSourceReplace(wrap(session)))//
+		.createWith("modify-source", CompiledMapReverse.class, session -> createSourceModifier(wrap(session)));
 	}
 
-	private ValueCreator<?, ?> createTransform(ExpressoQIS session) throws QonfigInterpretationException {
-		QonfigExpression2 sourceX = session.getAttributeExpression("source");
-		/*
-		 * We'd really like to interpret the transformation operations here to conform with the architecture,
-		 * since in general all Qonfig elements should be parsed at this level.
-		 * But the interpretation of the transformations depends on the model type of the source (or previous step),
-		 * and this can't be known until we evaluate it.
-		 *
-		 * This can't be done during Qonfig interpretation even in principle, e.g. by adding a ModelType<?> ValueContainer.getModelType()
-		 * method, because some operations, e.g. flatten, produce different model types depending on the run-time type of the source.
-		 *
-		 * Therefore we use the Qonfig intepretation mechanism inside the createContainer() method
-		 * and wrap any QonfigInterpretationExceptions thrown with ExpressoInterpretationExceptions
-		 */
-		return new ValueCreator<Object, Object>() {
-			@Override
-			public ValueContainer<Object, Object> createContainer() throws ExpressoInterpretationException {
-				ValueContainer<SettableValue<?>, SettableValue<?>> source;
-				try {
-					source = sourceX.evaluate(ModelTypes.Value.any());
-				} catch (ExpressoInterpretationException e) {
-					throw new ExpressoInterpretationException("Could not interpret source " + sourceX, e.getPosition(), e.getErrorLength(),
-						e);
-				}
-				Class<?> raw = TypeTokens.getRawType(source.getType().getType(0));
-				ModelType<?> modelType = getModelType(raw);
-				ValueContainer<Object, Object> firstStep;
-				@SuppressWarnings("rawtypes")
-				Class<? extends ObservableStructureTransform> transformType;
-				if (modelType != null) {
-					transformType = getTransformFor(modelType);
-					if (transformType != null) {
-						TypeToken<?>[] types = new TypeToken[raw.getTypeParameters().length];
-						for (int t = 0; t < types.length; t++)
-							types[t] = source.getType().getType(0).resolveType(raw.getTypeParameters()[t]);
-						ModelInstanceType<Object, Object> mit = (ModelInstanceType<Object, Object>) modelType.forTypes(types);
-						try {
-							firstStep = source.as(mit);
-						} catch (ExpressoInterpretationException e) {
-							throw new ExpressoInterpretationException("Could not interpret source " + sourceX, e.getPosition(),
-								e.getErrorLength(), e);
-						} catch (TypeConversionException e) {
-							sourceX.throwException("Could not convert source " + sourceX + ", type " + source.getType() + " to type " + mit,
-								e);
-							throw new IllegalStateException(); // Shouldn't get here
-						}
-					} else {
-						firstStep = (ValueContainer<Object, Object>) (ValueContainer<?, ?>) source;
-						transformType = getTransformFor(ModelTypes.Value);
-					}
-				} else {
-					firstStep = (ValueContainer<Object, Object>) (ValueContainer<?, ?>) source;
-					transformType = getTransformFor(ModelTypes.Value);
-				}
-				ObservableStructureTransform<Object, Object, Object, Object> transform = ObservableStructureTransform
-					.unity(firstStep.getType());
-				List<ExpressoQIS> ops;
-				try {
-					ops = session.forChildren("op");
-				} catch (QonfigInterpretationException e) {
-					throw new ExpressoInterpretationException("Could not interpret transformation operations", e.getPosition(),
-						e.getErrorLength(), e);
-				}
-				for (ExpressoQIS op : ops) {
-					transformType = getTransformFor(transform.getTargetType().getModelType());
-					if (transformType == null) {
-						throw new ExpressoInterpretationException(
-							"No transform supported for model type " + transform.getTargetType().getModelType(),
-							op.getElement().getPositionInFile(), 0);
-					} else if (!op.supportsInterpretation(transformType)) {
-						throw new ExpressoInterpretationException("No transform supported for operation type " + op.getFocusType().getName()
-							+ " for model type " + transform.getTargetType().getModelType(), op.getElement().getPositionInFile(), 0);
-					}
-					ObservableStructureTransform<Object, Object, Object, Object> next;
-					try {
-						next = op.put(VALUE_TYPE_KEY, transform.getTargetType())//
-							.interpret(transformType);
-					} catch (QonfigInterpretationException e) {
-						throw new ExpressoInterpretationException("Could not interpret operation " + op.toString()
-						+ " as a transformation from " + transform.getTargetType() + " via " + transformType.getName(), e.getPosition(),
-						e.getErrorLength(), e);
-					} catch (CheckedExceptionWrapper e) {
-						if (e.getCause() instanceof QonfigException) {
-							throw new ExpressoInterpretationException(
-								"Could not interpret operation " + op.toString() + " as a transformation from " + transform.getTargetType()
-								+ " via " + transformType.getName(),
-								((QonfigException) e.getCause()).getPosition(), ((QonfigException) e.getCause()).getErrorLength(),
-								e.getCause());
-						} else
-							throw new ExpressoInterpretationException("Could not interpret operation " + op.toString()
-							+ " as a transformation from " + transform.getTargetType() + " via " + transformType.getName(),
-							op.getElement().getPositionInFile(), 0, e.getCause());
-					} catch (RuntimeException e) {
-						throw new ExpressoInterpretationException("Could not interpret operation " + op.toString()
-						+ " as a transformation from " + transform.getTargetType() + " via " + transformType.getName(),
-						op.getElement().getPositionInFile(), 0, e.getCause());
-					}
-					transform = next.after(transform);
-				}
-				ObservableStructureTransform<Object, Object, Object, Object> fTransform = transform;
-				return new ValueContainer<Object, Object>() {
-					@Override
-					public ModelInstanceType<Object, Object> getType() {
-						return fTransform.getTargetType();
-					}
-
-					@Override
-					public Object get(ModelSetInstance models) throws ModelInstantiationException {
-						return fTransform.transform(//
-							firstStep.get(models), models);
-					}
-
-					@Override
-					public Object forModelCopy(Object value, ModelSetInstance sourceModels, ModelSetInstance newModels)
-						throws ModelInstantiationException {
-						Object firstStepS = firstStep.get(sourceModels);
-						Object firstStepN = firstStep.get(newModels);
-						if (firstStepS != firstStepN || fTransform.isDifferent(sourceModels, newModels))
-							return fTransform.transform(//
-								firstStepN, newModels);
-						else
-							return value;
-					}
-
-					@Override
-					public BetterList<ValueContainer<?, ?>> getCores() throws ExpressoInterpretationException {
-						return firstStep.getCores();
-					}
-				};
+	private CompiledModelValue<?, ?> createTransform(ExpressoQIS session) throws QonfigInterpretationException {
+		CompiledExpression sourceX = session.getAttributeExpression("source");
+		ModelType<Object> modelType = (ModelType<Object>) sourceX.getModelType();
+		ObservableCompiledTransform<Object, Object> compiledTransform = ObservableCompiledTransform.unity(modelType);
+		List<ExpressoQIS> ops = session.forChildren("op");
+		for (ExpressoQIS op : ops) {
+			@SuppressWarnings("rawtypes")
+			Class<? extends ObservableCompiledTransform> transformType = getTransformFor(modelType);
+			if (transformType == null) {
+				throw new QonfigInterpretationException("No transform supported for model type " + modelType,
+					op.getElement().getPositionInFile(), 0);
+			} else if (!op.supportsInterpretation(transformType)) {
+				throw new QonfigInterpretationException(
+					"No transform supported for operation type " + op.getFocusType().getName() + " for model type " + modelType,
+					op.getElement().getPositionInFile(), 0);
 			}
-		};
+			ObservableCompiledTransform<Object, Object> next;
+			try {
+				op.put(VALUE_TYPE_KEY, modelType);
+				next = op.interpret(transformType);
+			} catch (RuntimeException e) {
+				throw new QonfigInterpretationException("Could not interpret operation " + op.toString() + " as a transformation from "
+					+ modelType + " via " + transformType.getName(), op.getElement().getPositionInFile(), 0, e.getCause());
+			}
+			compiledTransform = next.after(compiledTransform);
+			modelType = (ModelType<Object>) compiledTransform.getTargetModelType();
+		}
+		ObservableCompiledTransform<Object, Object> fTransform = compiledTransform;
+		return CompiledModelValue.of("transform", modelType, () -> {
+			ModelValueSynth<Object, Object> compiledSource = sourceX
+				.evaluate((ModelInstanceType<Object, Object>) sourceX.getModelType().any());
+			ObservableStructureTransform<Object, Object, ?, ?> transform = fTransform.createTransform(compiledSource.getType());
+			return new ModelValueSynth<Object, Object>() {
+				@Override
+				public ModelType<Object> getModelType() {
+					return (ModelType<Object>) transform.getTargetType().getModelType();
+				}
+
+				@Override
+				public ModelInstanceType<Object, Object> getType() throws ExpressoInterpretationException {
+					return (ModelInstanceType<Object, Object>) transform.getTargetType();
+				}
+
+				@Override
+				public Object get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
+					Object sourceV = compiledSource.get(models);
+					try {
+						return transform.transform(sourceV, models);
+					} catch (CheckedExceptionWrapper e) {
+						if (e.getCause() instanceof ModelInstantiationException)
+							throw (ModelInstantiationException) e.getCause();
+						else
+							throw new ModelInstantiationException(e.getCause().getMessage(), session.getElement().getPositionInFile(), 0,
+								e.getCause());
+					} catch (RuntimeException | Error e) {
+						throw new ModelInstantiationException(e.getCause().getMessage(), session.getElement().getPositionInFile(), 0,
+							e.getCause());
+					}
+				}
+
+				@Override
+				public BetterList<ModelValueSynth<?, ?>> getCores() throws ExpressoInterpretationException {
+					return BetterList.of(Stream.concat(compiledSource.getCores().stream(), transform.getCores().stream()));
+				}
+
+				@Override
+				public Object forModelCopy(Object value, ModelSetInstance sourceModels, ModelSetInstance newModels)
+					throws ModelInstantiationException {
+					Object sourceS = compiledSource.get(sourceModels);
+					Object sourceN = compiledSource.forModelCopy(sourceS, sourceModels, newModels);
+					if (sourceS != sourceN || transform.isDifferent(sourceModels, newModels))
+						return transform.transform(sourceN, newModels);
+					else
+						return value;
+				}
+			};
+		});
+	}
+
+	/**
+	 * A compiled struct capable of generating an {@link ObservableStructureTransform}
+	 *
+	 * @param <M1> The model type of the source value that this transformation accepts
+	 * @param <M2> The model type of the target value that this transformation produces
+	 */
+	public interface ObservableCompiledTransform<M1, M2> {
+		/** @return The model type of the target value that this transformation produces */
+		ModelType<? extends M2> getTargetModelType();
+
+		/**
+		 * @param <MV1> The model type of the source value
+		 * @param sourceType The model type of the source value
+		 * @return A transformer for transforming actual values
+		 * @throws ExpressoInterpretationException If the transformer could not be produced
+		 */
+		<MV1 extends M1> ObservableStructureTransform<M1, MV1, ? extends M2, ?> createTransform(
+			ModelInstanceType<? extends M1, ? extends MV1> sourceType) throws ExpressoInterpretationException;
+
+		/**
+		 * @param <M0> The original source model type
+		 * @param previous The original transformation which this transform comes after
+		 * @return A transformation capable of transforming a source observable structure for <code>previous</code> to this transformation's
+		 *         structure
+		 */
+		default <M0> ObservableCompiledTransform<M0, M2> after(ObservableCompiledTransform<M0, M1> previous) {
+			ObservableCompiledTransform<M1, M2> next = this;
+			return new ObservableCompiledTransform<M0, M2>() {
+				@Override
+				public ModelType<? extends M2> getTargetModelType() {
+					return next.getTargetModelType();
+				}
+
+				@Override
+				public <MV0 extends M0> ObservableStructureTransform<M0, MV0, ? extends M2, ?> createTransform(
+					ModelInstanceType<? extends M0, ? extends MV0> sourceType) throws ExpressoInterpretationException {
+					ObservableStructureTransform<M0, MV0, ? extends M1, ?> intermediate = previous.createTransform(sourceType);
+					return _after(intermediate);
+				}
+
+				private <MV0 extends M0, MV1 extends M1> ObservableStructureTransform<M0, MV0, ? extends M2, ?> _after(
+					ObservableStructureTransform<M0, MV0, ? extends M1, MV1> intermediate) throws ExpressoInterpretationException {
+					ObservableStructureTransform<M1, MV1, ? extends M2, ?> nextOST = next.createTransform(intermediate.getTargetType());
+					return nextOST.after(intermediate);
+				}
+
+				@Override
+				public String toString() {
+					return previous + "->" + next;
+				}
+			};
+		}
+
+		/**
+		 * @param <M> The model type of the source value
+		 * @param modelType The model type of the source value
+		 * @return A trivial transformer that returns the source value
+		 */
+		public static <M> ObservableCompiledTransform<M, M> unity(ModelType<M> modelType) {
+			return new ObservableCompiledTransform<M, M>() {
+				@Override
+				public ModelType<M> getTargetModelType() {
+					return modelType;
+				}
+
+				@Override
+				public <MV1 extends M> ObservableStructureTransform<M, MV1, ? extends M, ?> createTransform(
+					ModelInstanceType<? extends M, ? extends MV1> sourceType) throws ExpressoInterpretationException {
+					return ObservableStructureTransform.unity(sourceType);
+				}
+			};
+		}
 	}
 
 	/**
@@ -1563,7 +1610,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 	 */
 	public interface ObservableStructureTransform<M1, MV1 extends M1, M2, MV2 extends M2> {
 		/** @return The type of the transformed observable */
-		ModelInstanceType<M2, MV2> getTargetType();
+		ModelInstanceType<? extends M2, ? extends MV2> getTargetType();
 
 		/**
 		 * @param source The source observable
@@ -1574,7 +1621,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		MV2 transform(MV1 source, ModelSetInstance models) throws ModelInstantiationException;
 
 		/**
-		 * Helps support the {@link ValueContainer#forModelCopy(Object, ModelSetInstance, ModelSetInstance)} method
+		 * Helps support the {@link ModelValueSynth#forModelCopy(Object, ModelSetInstance, ModelSetInstance)} method
 		 *
 		 * @param sourceModels The source model instance
 		 * @param newModels The new model instance
@@ -1584,6 +1631,12 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		boolean isDifferent(ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException;
 
 		/**
+		 * @return The cores of any model values that compose this transform
+		 * @throws ExpressoInterpretationException If the cores cannot be retrieved
+		 */
+		BetterList<ModelValueSynth<?, ?>> getCores() throws ExpressoInterpretationException;
+
+		/**
 		 * @param <M0> The original source model type
 		 * @param <MV0> The original source type
 		 * @param previous The original transformation which this transform comes after
@@ -1591,11 +1644,11 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		 *         structure
 		 */
 		default <M0, MV0 extends M0> ObservableStructureTransform<M0, MV0, M2, MV2> after(
-			ObservableStructureTransform<M0, MV0, M1, MV1> previous) {
+			ObservableStructureTransform<M0, MV0, ? extends M1, ? extends MV1> previous) {
 			ObservableStructureTransform<M1, MV1, M2, MV2> next = this;
 			return new ObservableStructureTransform<M0, MV0, M2, MV2>() {
 				@Override
-				public ModelInstanceType<M2, MV2> getTargetType() {
+				public ModelInstanceType<? extends M2, ? extends MV2> getTargetType() {
 					return next.getTargetType();
 				}
 
@@ -1611,6 +1664,11 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 				}
 
 				@Override
+				public BetterList<ModelValueSynth<?, ?>> getCores() throws ExpressoInterpretationException {
+					return BetterList.of(Stream.concat(previous.getCores().stream(), next.getCores().stream()));
+				}
+
+				@Override
 				public String toString() {
 					return previous + "->" + next;
 				}
@@ -1623,10 +1681,10 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		 * @param type The observable type
 		 * @return A transformation that is a no-op
 		 */
-		static <M, MV extends M> ObservableStructureTransform<M, MV, M, MV> unity(ModelInstanceType<M, MV> type) {
+		static <M, MV extends M> ObservableStructureTransform<M, MV, M, MV> unity(ModelInstanceType<? extends M, ? extends MV> type) {
 			return new ObservableStructureTransform<M, MV, M, MV>() {
 				@Override
-				public ModelInstanceType<M, MV> getTargetType() {
+				public ModelInstanceType<? extends M, ? extends MV> getTargetType() {
 					return type;
 				}
 
@@ -1641,43 +1699,16 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 				}
 
 				@Override
+				public BetterList<ModelValueSynth<?, ?>> getCores() {
+					return BetterList.empty();
+				}
+
+				@Override
 				public String toString() {
 					return "init";
 				}
 			};
 		}
-	}
-
-	/**
-	 * @param <M> The model type
-	 * @param modelType The model type class
-	 * @return The {@link ModelType} whose {@link ModelType#modelType modelType} class is the given class
-	 */
-	protected <M> ModelType<M> getModelType(Class<M> modelType) {
-		if (Observable.class.isAssignableFrom(modelType))
-			return (ModelType<M>) ModelTypes.Event;
-		else if (ObservableAction.class.isAssignableFrom(modelType))
-			return (ModelType<M>) ModelTypes.Action;
-		else if (SettableValue.class.isAssignableFrom(modelType))
-			return (ModelType<M>) ModelTypes.Value;
-		else if (ObservableSortedSet.class.isAssignableFrom(modelType))
-			return (ModelType<M>) ModelTypes.SortedSet;
-		else if (ObservableSortedCollection.class.isAssignableFrom(modelType))
-			return (ModelType<M>) ModelTypes.SortedCollection;
-		else if (ObservableSet.class.isAssignableFrom(modelType))
-			return (ModelType<M>) ModelTypes.Set;
-		else if (ObservableCollection.class.isAssignableFrom(modelType))
-			return (ModelType<M>) ModelTypes.Collection;
-		else if (ObservableSortedMap.class.isAssignableFrom(modelType))
-			return (ModelType<M>) ModelTypes.SortedMap;
-		else if (ObservableMap.class.isAssignableFrom(modelType))
-			return (ModelType<M>) ModelTypes.Map;
-		else if (ObservableSortedMultiMap.class.isAssignableFrom(modelType))
-			return (ModelType<M>) ModelTypes.SortedMultiMap;
-		else if (ObservableMultiMap.class.isAssignableFrom(modelType))
-			return (ModelType<M>) ModelTypes.MultiMap;
-		else
-			return null;
 	}
 
 	/**
@@ -1687,17 +1718,16 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 	 * @param modelType The model type to get the transform type for
 	 * @return The type of transformation known to be able to handle observable structures of the given model type
 	 */
-	@SuppressWarnings("rawtypes")
-	protected Class<? extends ObservableStructureTransform> getTransformFor(ModelType modelType) {
+	protected <M> Class<? extends ObservableCompiledTransform<M, ?>> getTransformFor(ModelType<M> modelType) {
 		if (modelType == ModelTypes.Event)
-			return ObservableTransform.class;
+			return (Class<? extends ObservableCompiledTransform<M, ?>>) ObservableTransform.class;
 		else if (modelType == ModelTypes.Action)
-			return ActionTransform.class;
+			return (Class<? extends ObservableCompiledTransform<M, ?>>) ActionTransform.class;
 		else if (modelType == ModelTypes.Value)
-			return ValueTransform.class;
+			return (Class<? extends ObservableCompiledTransform<M, ?>>) ValueTransform.class;
 		else if (modelType == ModelTypes.Collection || modelType == ModelTypes.Set || modelType == ModelTypes.SortedCollection
 			|| modelType == ModelTypes.SortedSet)
-			return CollectionTransform.class;
+			return (Class<? extends ObservableCompiledTransform<M, ?>>) CollectionTransform.class;
 		else
 			return null;
 	}
@@ -1705,12 +1735,35 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 	/**
 	 * A transformer capable of transforming an {@link Observable}
 	 *
-	 * @param <S> The type of the observable
 	 * @param <M> The model type of the target observable structure
-	 * @param <MV> The type of the target observable structure
 	 */
+	public interface ObservableTransform<M> extends ObservableCompiledTransform<Observable<?>, M> {
+		/**
+		 * Creates an {@link ObservableTransform}
+		 *
+		 * @param <S> The value type of the source observable
+		 * @param <M2> The model type of the target observable structure
+		 * @param modelType The model type of the target observable structure
+		 * @param transform Function to produce the transformer given type information
+		 * @return The {@link ObservableTransform}
+		 */
+		public static <S, M2> ObservableTransform<M2> create(ModelType<M2> modelType,
+			ExFunction<SingleTyped<Observable<?>, S, Observable<S>>, ObservableStructureTransform<Observable<?>, Observable<S>, M2, ?>, ExpressoInterpretationException> transform) {
+			return new ObservableTransform<M2>() {
+				@Override
+				public ModelType<M2> getTargetModelType() {
+					return modelType;
+				}
 
-	public interface ObservableTransform<S, M, MV extends M> extends ObservableStructureTransform<Observable<?>, Observable<S>, M, MV> {
+				@Override
+				public <MV1 extends Observable<?>> ObservableStructureTransform<Observable<?>, MV1, M2, ?> createTransform(
+					ModelInstanceType<? extends Observable<?>, ? extends MV1> sourceType) throws ExpressoInterpretationException {
+					return (ObservableStructureTransform<Observable<?>, MV1, M2, ?>) transform
+						.apply((SingleTyped<Observable<?>, S, Observable<S>>) sourceType);
+				}
+			};
+		}
+
 		/**
 		 * Creates an observable->observable transformer
 		 *
@@ -1718,14 +1771,17 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		 * @param <T> The type of the target observable
 		 * @param type The type of the target observable
 		 * @param transform A function to do the transformation
-		 * @param difference Implementation for the {@link ObservableTransform#isDifferent(ModelSetInstance, ModelSetInstance)} method
+		 * @param difference Implementation for the {@link ObservableStructureTransform#isDifferent(ModelSetInstance, ModelSetInstance)}
+		 *        method
 		 * @param name The name for the transformation (just for {@link #toString()})
+		 * @param components Component values that contribute to the transformation
 		 * @return The transformer
 		 */
-		static <S, T> ObservableTransform<S, Observable<?>, Observable<T>> of(TypeToken<T> type,
+		static <S, T> ObservableStructureTransform<Observable<?>, Observable<S>, Observable<?>, Observable<T>> of(TypeToken<T> type,
 			ExBiFunction<Observable<S>, ModelSetInstance, Observable<T>, ModelInstantiationException> transform,
-			ExBiPredicate<ModelSetInstance, ModelSetInstance, ModelInstantiationException> difference, Supplier<String> name) {
-			return new ObservableTransform<S, Observable<?>, Observable<T>>() {
+			ExBiPredicate<ModelSetInstance, ModelSetInstance, ModelInstantiationException> difference, Supplier<String> name,
+			ModelValueSynth<?, ?>... components) {
+			return new ObservableStructureTransform<Observable<?>, Observable<S>, Observable<?>, Observable<T>>() {
 				@Override
 				public ModelInstanceType<Observable<?>, Observable<T>> getTargetType() {
 					return ModelTypes.Event.forType(type);
@@ -1739,6 +1795,11 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 				@Override
 				public boolean isDifferent(ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException {
 					return difference != null && difference.test(sourceModels, newModels);
+				}
+
+				@Override
+				public BetterList<ModelValueSynth<?, ?>> getCores() throws ExpressoInterpretationException {
+					return BetterList.of(Stream.of(components), c -> c.getCores().stream());
 				}
 
 				@Override
@@ -1756,14 +1817,17 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		 * @param <MV> The type of the target structure
 		 * @param type The type of the target structure
 		 * @param transform A function to do the transformation
-		 * @param difference Implementation for the {@link ObservableTransform#isDifferent(ModelSetInstance, ModelSetInstance)} method
+		 * @param difference Implementation for the {@link ObservableStructureTransform#isDifferent(ModelSetInstance, ModelSetInstance)}
+		 *        method
 		 * @param name The name for the transformation (just for {@link #toString()})
+		 * @param components Component values that contribute to the transformation
 		 * @return The transformer
 		 */
-		static <S, M, MV extends M> ObservableTransform<S, M, MV> of(ModelInstanceType<M, MV> type,
+		static <S, M, MV extends M> ObservableStructureTransform<Observable<?>, Observable<S>, M, MV> of(ModelInstanceType<M, MV> type,
 			ExBiFunction<Observable<S>, ModelSetInstance, MV, ModelInstantiationException> transform,
-			ExBiPredicate<ModelSetInstance, ModelSetInstance, ModelInstantiationException> difference, Supplier<String> name) {
-			return new ObservableTransform<S, M, MV>() {
+			ExBiPredicate<ModelSetInstance, ModelSetInstance, ModelInstantiationException> difference, Supplier<String> name,
+			ModelValueSynth<?, ?>... components) {
+			return new ObservableStructureTransform<Observable<?>, Observable<S>, M, MV>() {
 				@Override
 				public ModelInstanceType<M, MV> getTargetType() {
 					return type;
@@ -1780,6 +1844,11 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 				}
 
 				@Override
+				public BetterList<ModelValueSynth<?, ?>> getCores() throws ExpressoInterpretationException {
+					return BetterList.of(Stream.of(components), c -> c.getCores().stream());
+				}
+
+				@Override
 				public String toString() {
 					return name.get();
 				}
@@ -1790,13 +1859,35 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 	/**
 	 * A transformer capable of transforming an {@link ObservableAction}
 	 *
-	 * @param <S> The type of the action
 	 * @param <M> The model type of the target observable structure
-	 * @param <MV> The type of the target observable structure
 	 */
+	public interface ActionTransform<M> extends ObservableCompiledTransform<ObservableAction<?>, M> {
+		/**
+		 * Creates an {@link ActionTransform}
+		 *
+		 * @param <S> The value type of the source action
+		 * @param <M2> The model type of the target observable structure
+		 * @param modelType The model type of the target observable structure
+		 * @param transform Function to produce the transformer given type information
+		 * @return The {@link ActionTransform}
+		 */
+		public static <S, M2> ActionTransform<M2> create(ModelType<M2> modelType,
+			ExFunction<SingleTyped<ObservableAction<?>, S, ObservableAction<S>>, ObservableStructureTransform<ObservableAction<?>, ObservableAction<S>, M2, ?>, ExpressoInterpretationException> transform) {
+			return new ActionTransform<M2>() {
+				@Override
+				public ModelType<M2> getTargetModelType() {
+					return modelType;
+				}
 
-	public interface ActionTransform<S, M, MV extends M>
-	extends ObservableStructureTransform<ObservableAction<?>, ObservableAction<S>, M, MV> {
+				@Override
+				public <MV1 extends ObservableAction<?>> ObservableStructureTransform<ObservableAction<?>, MV1, M2, ?> createTransform(
+					ModelInstanceType<? extends ObservableAction<?>, ? extends MV1> sourceType) throws ExpressoInterpretationException {
+					return (ObservableStructureTransform<ObservableAction<?>, MV1, M2, ?>) transform
+						.apply((SingleTyped<ObservableAction<?>, S, ObservableAction<S>>) sourceType);
+				}
+			};
+		}
+
 		/**
 		 * Creates an action->action transformer
 		 *
@@ -1804,14 +1895,18 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		 * @param <T> The type of the target action
 		 * @param type The type of the target action
 		 * @param transform A function to do the transformation
-		 * @param difference Implementation for the {@link ObservableTransform#isDifferent(ModelSetInstance, ModelSetInstance)} method
+		 * @param difference Implementation for the {@link ObservableStructureTransform#isDifferent(ModelSetInstance, ModelSetInstance)}
+		 *        method
 		 * @param name The name for the transformation (just for {@link #toString()})
+		 * @param components Component values that contribute to the transformation
 		 * @return The transformer
 		 */
-		static <S, T> ActionTransform<S, ObservableAction<?>, ObservableAction<T>> of(TypeToken<T> type,
+		static <S, T> ObservableStructureTransform<ObservableAction<?>, ObservableAction<S>, ObservableAction<?>, ObservableAction<T>> of(
+			TypeToken<T> type,
 			ExBiFunction<ObservableAction<S>, ModelSetInstance, ObservableAction<T>, ModelInstantiationException> transform,
-			ExBiPredicate<ModelSetInstance, ModelSetInstance, ModelInstantiationException> difference, Supplier<String> name) {
-			return new ActionTransform<S, ObservableAction<?>, ObservableAction<T>>() {
+			ExBiPredicate<ModelSetInstance, ModelSetInstance, ModelInstantiationException> difference, Supplier<String> name,
+			ModelValueSynth<?, ?>... components) {
+			return new ObservableStructureTransform<ObservableAction<?>, ObservableAction<S>, ObservableAction<?>, ObservableAction<T>>() {
 				@Override
 				public ModelInstanceType<ObservableAction<?>, ObservableAction<T>> getTargetType() {
 					return ModelTypes.Action.forType(type);
@@ -1829,6 +1924,11 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 				}
 
 				@Override
+				public BetterList<ModelValueSynth<?, ?>> getCores() throws ExpressoInterpretationException {
+					return BetterList.of(Stream.of(components), c -> c.getCores().stream());
+				}
+
+				@Override
 				public String toString() {
 					return name.get();
 				}
@@ -1843,14 +1943,17 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		 * @param <MV> The type of the target structure
 		 * @param type The type of the target structure
 		 * @param transform A function to do the transformation
-		 * @param difference Implementation for the {@link ObservableTransform#isDifferent(ModelSetInstance, ModelSetInstance)} method
+		 * @param difference Implementation for the {@link ObservableStructureTransform#isDifferent(ModelSetInstance, ModelSetInstance)}
+		 *        method
 		 * @param name The name for the transformation (just for {@link #toString()})
+		 * @param components Component values that contribute to the transformation
 		 * @return The transformer
 		 */
-		static <S, M, MV extends M> ActionTransform<S, M, MV> of(ModelInstanceType<M, MV> type,
-			ExBiFunction<ObservableAction<S>, ModelSetInstance, MV, ModelInstantiationException> transform,
-			ExBiPredicate<ModelSetInstance, ModelSetInstance, ModelInstantiationException> difference, Supplier<String> name) {
-			return new ActionTransform<S, M, MV>() {
+		static <S, M, MV extends M> ObservableStructureTransform<ObservableAction<?>, ObservableAction<S>, M, MV> of(
+			ModelInstanceType<M, MV> type, ExBiFunction<ObservableAction<S>, ModelSetInstance, MV, ModelInstantiationException> transform,
+			ExBiPredicate<ModelSetInstance, ModelSetInstance, ModelInstantiationException> difference, Supplier<String> name,
+			ModelValueSynth<?, ?>... components) {
+			return new ObservableStructureTransform<ObservableAction<?>, ObservableAction<S>, M, MV>() {
 				@Override
 				public ModelInstanceType<M, MV> getTargetType() {
 					return type;
@@ -1867,6 +1970,11 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 				}
 
 				@Override
+				public BetterList<ModelValueSynth<?, ?>> getCores() throws ExpressoInterpretationException {
+					return BetterList.of(Stream.of(components), c -> c.getCores().stream());
+				}
+
+				@Override
 				public String toString() {
 					return name.get();
 				}
@@ -1877,11 +1985,35 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 	/**
 	 * A transformer capable of transforming a {@link SettableValue}
 	 *
-	 * @param <S> The type of the value
 	 * @param <M> The model type of the target observable structure
-	 * @param <MV> The type of the target observable structure
 	 */
-	public interface ValueTransform<S, M, MV extends M> extends ObservableStructureTransform<SettableValue<?>, SettableValue<S>, M, MV> {
+	public interface ValueTransform<M> extends ObservableCompiledTransform<SettableValue<?>, M> {
+		/**
+		 * Creates n {@link ValueTransform}
+		 *
+		 * @param <S> The value type of the source value
+		 * @param <M2> The model type of the target observable structure
+		 * @param modelType The model type of the target observable structure
+		 * @param transform Function to produce the transformer given type information
+		 * @return The {@link ValueTransform}
+		 */
+		public static <S, M2> ValueTransform<M2> create(ModelType<M2> modelType,
+			ExFunction<SingleTyped<SettableValue<?>, S, SettableValue<S>>, ObservableStructureTransform<SettableValue<?>, SettableValue<S>, M2, ?>, ExpressoInterpretationException> transform) {
+			return new ValueTransform<M2>() {
+				@Override
+				public ModelType<M2> getTargetModelType() {
+					return modelType;
+				}
+
+				@Override
+				public <MV1 extends SettableValue<?>> ObservableStructureTransform<SettableValue<?>, MV1, M2, ?> createTransform(
+					ModelInstanceType<? extends SettableValue<?>, ? extends MV1> sourceType) throws ExpressoInterpretationException {
+					return (ObservableStructureTransform<SettableValue<?>, MV1, M2, ?>) transform
+						.apply((SingleTyped<SettableValue<?>, S, SettableValue<S>>) sourceType);
+				}
+			};
+		}
+
 		/**
 		 * Creates a value->value transformer
 		 *
@@ -1889,14 +2021,17 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		 * @param <T> The type of the target value
 		 * @param type The type of the target value
 		 * @param transform A function to do the transformation
-		 * @param difference Implementation for the {@link ObservableTransform#isDifferent(ModelSetInstance, ModelSetInstance)} method
+		 * @param difference Implementation for the {@link ObservableStructureTransform#isDifferent(ModelSetInstance, ModelSetInstance)}
+		 *        method
 		 * @param name The name for the transformation (just for {@link #toString()})
+		 * @param components Component values that contribute to the transformation
 		 * @return The transformer
 		 */
-		static <S, T> ValueTransform<S, SettableValue<?>, SettableValue<T>> of(TypeToken<T> type,
-			ExBiFunction<SettableValue<S>, ModelSetInstance, SettableValue<T>, ModelInstantiationException> transform,
-			ExBiPredicate<ModelSetInstance, ModelSetInstance, ModelInstantiationException> difference, Supplier<String> name) {
-			return new ValueTransform<S, SettableValue<?>, SettableValue<T>>() {
+		static <S, T> ObservableStructureTransform<SettableValue<?>, SettableValue<S>, SettableValue<?>, SettableValue<T>> of(
+			TypeToken<T> type, ExBiFunction<SettableValue<S>, ModelSetInstance, SettableValue<T>, ModelInstantiationException> transform,
+			ExBiPredicate<ModelSetInstance, ModelSetInstance, ModelInstantiationException> difference, Supplier<String> name,
+			ModelValueSynth<?, ?>... components) {
+			return new ObservableStructureTransform<SettableValue<?>, SettableValue<S>, SettableValue<?>, SettableValue<T>>() {
 				@Override
 				public ModelInstanceType<SettableValue<?>, SettableValue<T>> getTargetType() {
 					return ModelTypes.Value.forType(type);
@@ -1910,6 +2045,11 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 				@Override
 				public boolean isDifferent(ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException {
 					return difference != null && difference.test(sourceModels, newModels);
+				}
+
+				@Override
+				public BetterList<ModelValueSynth<?, ?>> getCores() throws ExpressoInterpretationException {
+					return BetterList.of(Stream.of(components), c -> c.getCores().stream());
 				}
 
 				@Override
@@ -1927,14 +2067,17 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		 * @param <MV> The type of the target structure
 		 * @param type The type of the target structure
 		 * @param transform A function to do the transformation
-		 * @param difference Implementation for the {@link ObservableTransform#isDifferent(ModelSetInstance, ModelSetInstance)} method
+		 * @param difference Implementation for the {@link ObservableStructureTransform#isDifferent(ModelSetInstance, ModelSetInstance)}
+		 *        method
 		 * @param name The name for the transformation (just for {@link #toString()})
+		 * @param components Component values that contribute to the transformation
 		 * @return The transformer
 		 */
-		static <S, M, MV extends M> ValueTransform<S, M, MV> of(ModelInstanceType<M, MV> type,
-			ExBiFunction<SettableValue<S>, ModelSetInstance, MV, ModelInstantiationException> transform,
-			ExBiPredicate<ModelSetInstance, ModelSetInstance, ModelInstantiationException> difference, Supplier<String> name) {
-			return new ValueTransform<S, M, MV>() {
+		static <S, M, MV extends M> ObservableStructureTransform<SettableValue<?>, SettableValue<S>, M, MV> of(
+			ModelInstanceType<M, MV> type, ExBiFunction<SettableValue<S>, ModelSetInstance, MV, ModelInstantiationException> transform,
+			ExBiPredicate<ModelSetInstance, ModelSetInstance, ModelInstantiationException> difference, Supplier<String> name,
+			ModelValueSynth<?, ?>... components) {
+			return new ObservableStructureTransform<SettableValue<?>, SettableValue<S>, M, MV>() {
 				@Override
 				public ModelInstanceType<M, MV> getTargetType() {
 					return type;
@@ -1951,6 +2094,11 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 				}
 
 				@Override
+				public BetterList<ModelValueSynth<?, ?>> getCores() throws ExpressoInterpretationException {
+					return BetterList.of(Stream.of(components), c -> c.getCores().stream());
+				}
+
+				@Override
 				public String toString() {
 					return name.get();
 				}
@@ -1961,32 +2109,61 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 	/**
 	 * A transformer capable of transforming an {@link ObservableCollection}
 	 *
-	 * @param <S> The type of the collection
-	 * @param <M> The model type of the target observable structure
-	 * @param <MV> The type of the target observable structure
+	 * @param <M1> The model type of the source collection
+	 * @param <M2> The model type of the target observable structure
 	 */
-	public interface CollectionTransform<S, M, MV extends M>
-	extends ObservableStructureTransform<ObservableCollection<?>, ObservableCollection<S>, M, MV> {
+	public interface CollectionTransform<M1 extends ObservableCollection<?>, M2> extends ObservableCompiledTransform<M1, M2> {
 		/**
-		 * Creates a collection->collection transformer
+		 * Creates n {@link CollectionTransform}
+		 *
+		 * @param <M1> The model type of the source collection
+		 * @param <S> The value type of the source collection
+		 * @param <M2> The model type of the target observable structure
+		 * @param sourceModelType The model type of the source collection
+		 * @param targetModelType The model type of the target observable structure
+		 * @param transform Function to produce the transformer given type information
+		 * @return The {@link CollectionTransform}
+		 */
+		public static <M1 extends ObservableCollection<?>, S, MV1 extends M1, M2> CollectionTransform<M1, M2> create(
+			ModelType<M1> sourceModelType, ModelType<M2> targetModelType,
+			ExFunction<SingleTyped<M1, S, MV1>, ? extends ObservableStructureTransform<? super M1, ? super MV1, ? extends M2, ?>, ExpressoInterpretationException> transform) {
+			return new CollectionTransform<M1, M2>() {
+				@Override
+				public ModelType<M2> getTargetModelType() {
+					return targetModelType;
+				}
+
+				@Override
+				public <MV11 extends M1> ObservableStructureTransform<M1, MV11, M2, ?> createTransform(
+					ModelInstanceType<? extends M1, ? extends MV11> sourceType) throws ExpressoInterpretationException {
+					return (ObservableStructureTransform<M1, MV11, M2, ?>) transform.apply((SingleTyped<M1, S, MV1>) sourceType);
+				}
+			};
+		}
+
+		/**
+		 * Creates a collection transformer
 		 *
 		 * @param <S> The type of the source collection
-		 * @param <T> The type of the target collection
-		 * @param modelType the sub-model type of the target collection
-		 * @param type The type of the target collection
+		 * @param <M2> the model type of the target structure
+		 * @param <MV2> The type of the target structure
+		 * @param targetType The type of the target structure
 		 * @param transform A function to do the transformation
-		 * @param difference Implementation for the {@link ObservableTransform#isDifferent(ModelSetInstance, ModelSetInstance)} method
+		 * @param difference Implementation for the {@link ObservableStructureTransform#isDifferent(ModelSetInstance, ModelSetInstance)}
+		 *        method
 		 * @param name The name for the transformation (just for {@link #toString()})
+		 * @param components Component values that contribute to the transformation
 		 * @return The transformer
 		 */
-		static <S, T> FlowCollectionTransform<S, T, ObservableCollection<?>, ObservableCollection<T>> of(
-			ModelType.SingleTyped<? extends ObservableCollection<?>> modelType, TypeToken<T> type,
-				ExBiFunction<CollectionDataFlow<?, ?, S>, ModelSetInstance, CollectionDataFlow<?, ?, T>, ModelInstantiationException> transform,
-				ExBiPredicate<ModelSetInstance, ModelSetInstance, ModelInstantiationException> difference, Supplier<String> name) {
-			return new FlowCollectionTransform<S, T, ObservableCollection<?>, ObservableCollection<T>>() {
+		static <S, T, M2 extends ObservableCollection<?>, MV2 extends M2> FlowCollectionTransform<S, T, ObservableCollection<?>, ObservableCollection<S>, M2, MV2> flowTransform(
+			ModelInstanceType<M2, MV2> targetType,
+			ExBiFunction<CollectionDataFlow<?, ?, S>, ModelSetInstance, ? extends CollectionDataFlow<?, ?, T>, ModelInstantiationException> transform,
+			ExBiPredicate<ModelSetInstance, ModelSetInstance, ModelInstantiationException> difference, Supplier<String> name,
+			ModelValueSynth<?, ?>... components) {
+			return new FlowCollectionTransform<S, T, ObservableCollection<?>, ObservableCollection<S>, M2, MV2>() {
 				@Override
-				public ModelInstanceType<ObservableCollection<?>, ObservableCollection<T>> getTargetType() {
-					return (ModelInstanceType<ObservableCollection<?>, ObservableCollection<T>>) modelType.forType(type);
+				public ModelInstanceType<M2, MV2> getTargetType() {
+					return targetType;
 				}
 
 				@Override
@@ -2007,6 +2184,11 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 				}
 
 				@Override
+				public BetterList<ModelValueSynth<?, ?>> getCores() throws ExpressoInterpretationException {
+					return BetterList.of(Stream.of(components), c -> c.getCores().stream());
+				}
+
+				@Override
 				public String toString() {
 					return name.get();
 				}
@@ -2014,29 +2196,39 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		}
 
 		/**
-		 * Creates a collection transformer
+		 * Creates a collection transformer that creates a non-sorted, non-distinct result
 		 *
 		 * @param <S> The type of the source collection
-		 * @param <M> The model type of the target structure
-		 * @param <MV> The type of the target structure
+		 * @param <T> The type of the target collection
 		 * @param type The type of the target structure
 		 * @param transform A function to do the transformation
-		 * @param difference Implementation for the {@link ObservableTransform#isDifferent(ModelSetInstance, ModelSetInstance)} method
+		 * @param difference Implementation for the {@link ObservableStructureTransform#isDifferent(ModelSetInstance, ModelSetInstance)}
+		 *        method
 		 * @param name The name for the transformation (just for {@link #toString()})
+		 * @param components Component values that contribute to the transformation
 		 * @return The transformer
 		 */
-		static <S, M, MV extends M> CollectionTransform<S, M, MV> of(ModelInstanceType<M, MV> type,
-			ExBiFunction<ObservableCollection<S>, ModelSetInstance, MV, ModelInstantiationException> transform,
-			ExBiPredicate<ModelSetInstance, ModelSetInstance, ModelInstantiationException> difference, Supplier<String> name) {
-			return new CollectionTransform<S, M, MV>() {
+		static <S, T> FlowCollectionTransform<S, T, ObservableCollection<?>, ObservableCollection<S>, ObservableCollection<?>, ObservableCollection<T>> flowTransform(
+			TypeToken<T> type,
+			ExBiFunction<CollectionDataFlow<?, ?, S>, ModelSetInstance, ? extends CollectionDataFlow<?, ?, T>, ModelInstantiationException> transform,
+			ExBiPredicate<ModelSetInstance, ModelSetInstance, ModelInstantiationException> difference, Supplier<String> name,
+			ModelValueSynth<?, ?>... components) {
+			return new FlowCollectionTransform<S, T, ObservableCollection<?>, ObservableCollection<S>, ObservableCollection<?>, ObservableCollection<T>>() {
 				@Override
-				public ModelInstanceType<M, MV> getTargetType() {
-					return type;
+				public ModelInstanceType<ObservableCollection<?>, ObservableCollection<T>> getTargetType() {
+					return ModelTypes.Collection.forType(type);
 				}
 
 				@Override
-				public MV transform(ObservableCollection<S> source, ModelSetInstance models) throws ModelInstantiationException {
+				public CollectionDataFlow<?, ?, T> transformFlow(CollectionDataFlow<?, ?, S> source, ModelSetInstance models)
+					throws ModelInstantiationException {
 					return transform.apply(source, models);
+				}
+
+				@Override
+				public CollectionDataFlow<?, ?, T> transformToFlow(ObservableCollection<S> source, ModelSetInstance models)
+					throws ModelInstantiationException {
+					return transform.apply(source.flow(), models);
 				}
 
 				@Override
@@ -2045,8 +2237,194 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 				}
 
 				@Override
+				public BetterList<ModelValueSynth<?, ?>> getCores() throws ExpressoInterpretationException {
+					return BetterList.of(Stream.of(components), c -> c.getCores().stream());
+				}
+
+				@Override
 				public String toString() {
 					return name.get();
+				}
+			};
+		}
+
+		/**
+		 * Creates a collection transformer that creates a sorted, non-distinct result
+		 *
+		 * @param <S> The type of the source collection
+		 * @param <T> The type of the target collection
+		 * @param type The type of the target structure
+		 * @param transform A function to do the transformation
+		 * @param difference Implementation for the {@link ObservableStructureTransform#isDifferent(ModelSetInstance, ModelSetInstance)}
+		 *        method
+		 * @param name The name for the transformation (just for {@link #toString()})
+		 * @param components Component values that contribute to the transformation
+		 * @return The transformer
+		 */
+		static <S, T> FlowCollectionTransform<S, T, ObservableCollection<?>, ObservableCollection<S>, ObservableSortedCollection<?>, ObservableSortedCollection<T>> sortedFlowTransform(
+			TypeToken<T> type,
+			ExBiFunction<CollectionDataFlow<?, ?, S>, ModelSetInstance, ? extends SortedDataFlow<?, ?, T>, ModelInstantiationException> transform,
+			ExBiPredicate<ModelSetInstance, ModelSetInstance, ModelInstantiationException> difference, Supplier<String> name,
+			ModelValueSynth<?, ?>... components) {
+			return new FlowCollectionTransform<S, T, ObservableCollection<?>, ObservableCollection<S>, ObservableSortedCollection<?>, ObservableSortedCollection<T>>() {
+				@Override
+				public ModelInstanceType<ObservableSortedCollection<?>, ObservableSortedCollection<T>> getTargetType() {
+					return ModelTypes.SortedCollection.forType(type);
+				}
+
+				@Override
+				public CollectionDataFlow<?, ?, T> transformFlow(CollectionDataFlow<?, ?, S> source, ModelSetInstance models)
+					throws ModelInstantiationException {
+					return transform.apply(source, models);
+				}
+
+				@Override
+				public CollectionDataFlow<?, ?, T> transformToFlow(ObservableCollection<S> source, ModelSetInstance models)
+					throws ModelInstantiationException {
+					return transform.apply(source.flow(), models);
+				}
+
+				@Override
+				public boolean isDifferent(ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException {
+					return difference != null && difference.test(sourceModels, newModels);
+				}
+
+				@Override
+				public BetterList<ModelValueSynth<?, ?>> getCores() throws ExpressoInterpretationException {
+					return BetterList.of(Stream.of(components), c -> c.getCores().stream());
+				}
+
+				@Override
+				public String toString() {
+					return name.get();
+				}
+			};
+		}
+
+		/**
+		 * Creates a collection transformer that creates a non-sorted, distinct result
+		 *
+		 * @param <S> The type of the source collection
+		 * @param <T> The type of the target collection
+		 * @param type The type of the target structure
+		 * @param transform A function to do the transformation
+		 * @param difference Implementation for the {@link ObservableStructureTransform#isDifferent(ModelSetInstance, ModelSetInstance)}
+		 *        method
+		 * @param name The name for the transformation (just for {@link #toString()})
+		 * @param components Component values that contribute to the transformation
+		 * @return The transformer
+		 */
+		static <S, T> FlowCollectionTransform<S, T, ObservableCollection<?>, ObservableCollection<S>, ObservableSet<?>, ObservableSet<T>> distinctFlowTransform(
+			TypeToken<T> type,
+			ExBiFunction<CollectionDataFlow<?, ?, S>, ModelSetInstance, ? extends DistinctDataFlow<?, ?, T>, ModelInstantiationException> transform,
+			ExBiPredicate<ModelSetInstance, ModelSetInstance, ModelInstantiationException> difference, Supplier<String> name,
+			ModelValueSynth<?, ?>... components) {
+			return new FlowCollectionTransform<S, T, ObservableCollection<?>, ObservableCollection<S>, ObservableSet<?>, ObservableSet<T>>() {
+				@Override
+				public ModelInstanceType<ObservableSet<?>, ObservableSet<T>> getTargetType() {
+					return ModelTypes.Set.forType(type);
+				}
+
+				@Override
+				public CollectionDataFlow<?, ?, T> transformFlow(CollectionDataFlow<?, ?, S> source, ModelSetInstance models)
+					throws ModelInstantiationException {
+					return transform.apply(source, models);
+				}
+
+				@Override
+				public CollectionDataFlow<?, ?, T> transformToFlow(ObservableCollection<S> source, ModelSetInstance models)
+					throws ModelInstantiationException {
+					return transform.apply(source.flow(), models);
+				}
+
+				@Override
+				public boolean isDifferent(ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException {
+					return difference != null && difference.test(sourceModels, newModels);
+				}
+
+				@Override
+				public BetterList<ModelValueSynth<?, ?>> getCores() throws ExpressoInterpretationException {
+					return BetterList.of(Stream.of(components), c -> c.getCores().stream());
+				}
+
+				@Override
+				public String toString() {
+					return name.get();
+				}
+			};
+		}
+
+		/**
+		 * Creates a collection transformer that creates a sorted, distinct result
+		 *
+		 * @param <S> The type of the source collection
+		 * @param <T> The type of the target collection
+		 * @param type The type of the target structure
+		 * @param transform A function to do the transformation
+		 * @param difference Implementation for the {@link ObservableStructureTransform#isDifferent(ModelSetInstance, ModelSetInstance)}
+		 *        method
+		 * @param name The name for the transformation (just for {@link #toString()})
+		 * @param components Component values that contribute to the transformation
+		 * @return The transformer
+		 */
+		static <S, T> FlowCollectionTransform<S, T, ObservableCollection<?>, ObservableCollection<S>, ObservableSortedSet<?>, ObservableSortedSet<T>> distinctSortedFlowTransform(
+			TypeToken<T> type,
+			ExBiFunction<CollectionDataFlow<?, ?, S>, ModelSetInstance, ? extends DistinctSortedDataFlow<?, ?, T>, ModelInstantiationException> transform,
+			ExBiPredicate<ModelSetInstance, ModelSetInstance, ModelInstantiationException> difference, Supplier<String> name,
+			ModelValueSynth<?, ?>... components) {
+			return new FlowCollectionTransform<S, T, ObservableCollection<?>, ObservableCollection<S>, ObservableSortedSet<?>, ObservableSortedSet<T>>() {
+				@Override
+				public ModelInstanceType<ObservableSortedSet<?>, ObservableSortedSet<T>> getTargetType() {
+					return ModelTypes.SortedSet.forType(type);
+				}
+
+				@Override
+				public CollectionDataFlow<?, ?, T> transformFlow(CollectionDataFlow<?, ?, S> source, ModelSetInstance models)
+					throws ModelInstantiationException {
+					return transform.apply(source, models);
+				}
+
+				@Override
+				public CollectionDataFlow<?, ?, T> transformToFlow(ObservableCollection<S> source, ModelSetInstance models)
+					throws ModelInstantiationException {
+					return transform.apply(source.flow(), models);
+				}
+
+				@Override
+				public boolean isDifferent(ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException {
+					return difference != null && difference.test(sourceModels, newModels);
+				}
+
+				@Override
+				public BetterList<ModelValueSynth<?, ?>> getCores() throws ExpressoInterpretationException {
+					return BetterList.of(Stream.of(components), c -> c.getCores().stream());
+				}
+
+				@Override
+				public String toString() {
+					return name.get();
+				}
+			};
+		}
+
+		/**
+		 * @param <S> The value type of the source collection
+		 * @param <C> The type of the source collection
+		 * @param modelType The model type of the source
+		 * @return A trivial transform that simply returns the source
+		 */
+		static <S, C extends ObservableCollection<?>> CollectionTransform<C, C> trivial(ModelType<C> modelType) {
+			return new CollectionTransform<C, C>() {
+				@Override
+				public ModelType<? extends C> getTargetModelType() {
+					return modelType;
+				}
+
+				@Override
+				public <MV1 extends C> ObservableStructureTransform<C, MV1, ? extends C, ?> createTransform(
+					ModelInstanceType<? extends C, ? extends MV1> sourceType) throws ExpressoInterpretationException {
+					return (ObservableStructureTransform<C, MV1, C, ?>) FlowCollectionTransform
+						.trivial((ModelInstanceType<C, C>) sourceType);
 				}
 			};
 		}
@@ -2093,14 +2471,14 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 
 		@Override
 		default <M0, MV0 extends M0> ObservableStructureTransform<M0, MV0, M, MV> after(
-			ObservableStructureTransform<M0, MV0, M1, MV1> previous) {
+			ObservableStructureTransform<M0, MV0, ? extends M1, ? extends MV1> previous) {
 			if (previous instanceof CollectionTransform) {
 				FlowTransform<M0, MV0, Object, S, ObservableCollection<?>, ObservableCollection<?>> prevTCT;
 				prevTCT = (FlowTransform<M0, MV0, Object, S, ObservableCollection<?>, ObservableCollection<?>>) previous;
 				FlowTransform<M1, MV1, S, T, M, MV> next = this;
 				return new FlowTransform<M0, MV0, Object, T, M, MV>() {
 					@Override
-					public ModelInstanceType<M, MV> getTargetType() {
+					public ModelInstanceType<? extends M, ? extends MV> getTargetType() {
 						return next.getTargetType();
 					}
 
@@ -2125,6 +2503,11 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 					}
 
 					@Override
+					public BetterList<ModelValueSynth<?, ?>> getCores() throws ExpressoInterpretationException {
+						return BetterList.of(Stream.concat(previous.getCores().stream(), next.getCores().stream()));
+					}
+
+					@Override
 					public String toString() {
 						return previous + "->" + next;
 					}
@@ -2135,131 +2518,156 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 	}
 
 	/**
-	 * A {@link CollectionTransform} that is also a {@link FlowTransform}. A {@link CollectionTransform} is inefficient at
+	 * A collection transformation that is also a {@link FlowTransform}. A simple collection transformation is inefficient at
 	 * chain-transforming collections and a {@link FlowTransform} is capable of transforming source observable structures other than
-	 * collections, but implementations of collection transform operations must return {@link CollectionTransform}. Generally, if a
+	 * collections, but compiled collection transforms must return a structure transform that accepts collections. Generally, if a
 	 * collection transform operation produces a collection, an instance of this interface should be returned.
 	 *
 	 * @param <S> The type of the collection
 	 * @param <T> The type of the target collection
-	 * @param <M> The model type of the target observable structure
-	 * @param <MV> The type of the target observable structure
+	 * @param <M1> The model type of the source collection
+	 * @param <MV1> The type of the source collection
+	 * @param <M2> The model type of the target observable structure
+	 * @param <MV2> The type of the target observable structure
 	 */
 
-	public interface FlowCollectionTransform<S, T, M extends ObservableCollection<?>, MV extends M>
-	extends CollectionTransform<S, M, MV>, FlowTransform<ObservableCollection<?>, ObservableCollection<S>, S, T, M, MV> {
+	public interface FlowCollectionTransform<S, T, M1 extends ObservableCollection<?>, MV1 extends M1, M2 extends ObservableCollection<?>, MV2 extends M2>
+	extends FlowTransform<M1, MV1, S, T, M2, MV2> {
+		/**
+		 * @param <S> The value type of the source collection
+		 * @param <C> The type of the source collection
+		 * @param modelType The model type of the source
+		 * @return A trivial transform that simply returns the source
+		 */
+		static <S, C extends ObservableCollection<?>> FlowCollectionTransform<S, S, C, C, C, C> trivial(ModelInstanceType<C, C> modelType) {
+			return new FlowCollectionTransform<S, S, C, C, C, C>() {
+				@Override
+				public CollectionDataFlow<?, ?, S> transformFlow(CollectionDataFlow<?, ?, S> source, ModelSetInstance models)
+					throws ModelInstantiationException {
+					return source;
+				}
+
+				@Override
+				public CollectionDataFlow<?, ?, S> transformToFlow(C source, ModelSetInstance models) throws ModelInstantiationException {
+					return (CollectionDataFlow<?, ?, S>) source.flow();
+				}
+
+				@Override
+				public ModelInstanceType<? extends C, ? extends C> getTargetType() {
+					return modelType;
+				}
+
+				@Override
+				public boolean isDifferent(ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException {
+					return false;
+				}
+
+				@Override
+				public BetterList<ModelValueSynth<?, ?>> getCores() {
+					return BetterList.empty();
+				}
+			};
+		}
 	}
 
 	// Event transform
 
-	private <T> ObservableTransform<T, Observable<?>, Observable<T>> noInitObservable(ExpressoQIS op) throws QonfigInterpretationException {
-		ModelInstanceType.SingleTyped<Observable<?>, T, Observable<T>> sourceType;
-		sourceType = (ModelInstanceType.SingleTyped<Observable<?>, T, Observable<T>>) op.get(VALUE_TYPE_KEY);
-		return ObservableTransform.of(sourceType.getValueType(), (source, models) -> source.noInit(), null, () -> "noInit");
+	private ObservableTransform<Observable<?>> noInitObservable(ExpressoQIS op) throws QonfigInterpretationException {
+		return ObservableTransform.create(ModelTypes.Event,
+			sourceType -> ObservableTransform.of(sourceType.getValueType(), (source, models) -> source.noInit(), null, () -> "noInit"));
 	}
 
-	private <T> ObservableTransform<T, Observable<?>, Observable<T>> skipObservable(ExpressoQIS op) throws QonfigInterpretationException {
-		ModelInstanceType.SingleTyped<Observable<?>, T, Observable<T>> sourceType;
-		sourceType = (ModelInstanceType.SingleTyped<Observable<?>, T, Observable<T>>) op.get(VALUE_TYPE_KEY);
+	private ObservableTransform<Observable<?>> skipObservable(ExpressoQIS op) throws QonfigInterpretationException {
 		int times = Integer.parseInt(op.getAttributeText("times"));
-		return ObservableTransform.of(sourceType.getValueType(), (source, models) -> source.skip(times), null, () -> "skip(" + times + ")");
+		return ObservableTransform.create(ModelTypes.Event, sourceType -> ObservableTransform.of(sourceType.getValueType(),
+			(source, models) -> source.skip(times), null, () -> "skip(" + times + ")"));
 	}
 
-	private <T> ObservableTransform<T, Observable<?>, Observable<T>> takeObservable(ExpressoQIS op) throws QonfigInterpretationException {
-		ModelInstanceType.SingleTyped<Observable<?>, T, Observable<T>> sourceType;
-		sourceType = (ModelInstanceType.SingleTyped<Observable<?>, T, Observable<T>>) op.get(VALUE_TYPE_KEY);
+	private ObservableTransform<Observable<?>> takeObservable(ExpressoQIS op) throws QonfigInterpretationException {
 		int times = Integer.parseInt(op.getAttributeText("times"));
-		return ObservableTransform.of(sourceType.getValueType(), (source, models) -> source.take(times), null, () -> "take(" + times + ")");
+		return ObservableTransform.create(ModelTypes.Event, sourceType -> ObservableTransform.of(sourceType.getValueType(),
+			(source, models) -> source.take(times), null, () -> "take(" + times + ")"));
 	}
 
-	private <T> ObservableTransform<T, Observable<?>, Observable<T>> takeUntilObservable(ExpressoQIS op)
-		throws QonfigInterpretationException {
-		ModelInstanceType.SingleTyped<Observable<?>, T, Observable<T>> sourceType;
-		sourceType = (ModelInstanceType.SingleTyped<Observable<?>, T, Observable<T>>) op.get(VALUE_TYPE_KEY);
-		QonfigExpression2 untilX = op.getAttributeExpression("until");
-		ValueContainer<Observable<?>, Observable<?>> until;
-		try {
-			until = untilX.evaluate(ModelTypes.Event.any());
-		} catch (ExpressoInterpretationException e) {
-			throw new QonfigInterpretationException("Could not parse until", e.getPosition(), e.getErrorLength(), e);
-		}
-		return ObservableTransform.of(sourceType.getValueType(), (source, models) -> source.takeUntil(until.get(models)),
-			(sourceModels, newModels) -> until.get(sourceModels) != until.get(newModels), () -> "takeUntil(" + until + ")");
+	private ObservableTransform<Observable<?>> takeUntilObservable(ExpressoQIS op) throws QonfigInterpretationException {
+		CompiledExpression untilX = op.getAttributeExpression("until");
+		return ObservableTransform.create(ModelTypes.Event, sourceType -> {
+			ModelValueSynth<Observable<?>, Observable<?>> until;
+			try {
+				until = untilX.evaluate(ModelTypes.Event.any());
+			} catch (ExpressoInterpretationException e) {
+				throw new ExpressoInterpretationException("Could not parse until", e.getPosition(), e.getErrorLength(), e);
+			}
+			return ObservableTransform.of(sourceType.getValueType(), (source, models) -> source.takeUntil(until.get(models)),
+				(sourceModels, newModels) -> until.get(sourceModels) != until.get(newModels), () -> "takeUntil(" + until + ")", until);
+		});
 	}
 
-	private <S, T> ObservableTransform<S, Observable<?>, Observable<T>> mapObservableTo(ExpressoQIS op)
-		throws QonfigInterpretationException {
-		ModelInstanceType.SingleTyped<SettableValue<?>, S, SettableValue<S>> sourceType;
-		sourceType = (ModelInstanceType.SingleTyped<SettableValue<?>, S, SettableValue<S>>) op.get(VALUE_TYPE_KEY);
-
+	private <S, T> ObservableTransform<Observable<?>> mapObservableTo(ExpressoQIS op) throws QonfigInterpretationException {
 		String sourceAs = op.getAttributeText("source-as");
-		ObservableModelSet.Builder wrappedBuilder = op.getExpressoEnv().getModels().wrap("mapModel");
-		RuntimeValuePlaceholder<SettableValue<?>, SettableValue<S>> sourcePlaceholder = wrappedBuilder.withRuntimeValue(sourceAs,
-			ModelTypes.Value.forType(sourceType.getValueType()));
-		ObservableModelSet.Built wrapped = wrappedBuilder.build();
 
-		QonfigExpression2 mapX = op.getAttributeExpression("map");
-		ValueContainer<SettableValue<?>, SettableValue<T>> map;
-		TypeToken<T> targetType;
-		try {
-			map = mapX.evaluate((ModelInstanceType<SettableValue<?>, SettableValue<T>>) (ModelInstanceType<?, ?>) ModelTypes.Value.any(),
-				op.getExpressoEnv().with(wrapped, null));
-			targetType = (TypeToken<T>) map.getType().getType(0).resolveType(SettableValue.class.getTypeParameters()[0]);
-		} catch (ExpressoInterpretationException e) {
-			throw new QonfigInterpretationException("Could not parse map", e.getPosition(), e.getErrorLength(), e);
-		}
-		InterpretedModelSet interpretedWrapped;
-		try {
-			interpretedWrapped = wrapped.interpret();
-		} catch (ExpressoInterpretationException e) {
-			throw new QonfigInterpretationException(e.getMessage(), e.getPosition(), e.getErrorLength(), e);
-		}
-		return ObservableTransform.of(targetType, (source, models) -> {
-			SettableValue<S> sourceV = SettableValue.build(sourceType.getValueType()).build();
-			ModelSetInstance wrappedModel = interpretedWrapped.createInstance(models.getUntil()).withAll(models)//
-				.with(sourcePlaceholder, sourceV)//
-				.build();
-			SettableValue<T> mappedV = map.get(wrappedModel);
-			return source.map(s -> {
-				sourceV.set(s, null);
-				return mappedV.get();
-			});
-		}, null, () -> "map(" + map + ")");
+		CompiledExpression mapX = op.getAttributeExpression("map");
+		return ObservableTransform.create(ModelTypes.Event, sourceType -> {
+			ObservableModelSet.Builder wrappedBuilder = op.getExpressoEnv().getModels().wrap("mapModel");
+			RuntimeValuePlaceholder<SettableValue<?>, SettableValue<S>> sourcePlaceholder = wrappedBuilder.withRuntimeValue(sourceAs,
+				ModelTypes.Value.forType((TypeToken<S>) sourceType.getValueType()));
+			ObservableModelSet.Built wrapped = wrappedBuilder.build();
+			InterpretedModelSet interpretedWrapped = wrapped.interpret();
+
+			ModelValueSynth<SettableValue<?>, SettableValue<T>> map;
+			TypeToken<T> targetType;
+			try {
+				map = mapX.evaluate(
+					(ModelInstanceType<SettableValue<?>, SettableValue<T>>) (ModelInstanceType<?, ?>) ModelTypes.Value.any(),
+					op.getExpressoEnv().with(wrapped, null));
+				targetType = (TypeToken<T>) map.getType().getType(0).resolveType(SettableValue.class.getTypeParameters()[0]);
+			} catch (ExpressoInterpretationException e) {
+				throw new ExpressoInterpretationException("Could not parse map", e.getPosition(), e.getErrorLength(), e);
+			}
+			return ObservableTransform.of(targetType, (source, models) -> {
+				SettableValue<S> sourceV = SettableValue.build((TypeToken<S>) sourceType.getValueType()).build();
+				ModelSetInstance wrappedModel = interpretedWrapped.createInstance(models.getUntil()).withAll(models)//
+					.with(sourcePlaceholder, sourceV)//
+					.build();
+				SettableValue<T> mappedV = map.get(wrappedModel);
+				return source.map(s -> {
+					sourceV.set((S) s, null);
+					return mappedV.get();
+				});
+			}, null, () -> "map(" + map + ")", map);
+		});
 	}
 
-	private <T> ObservableTransform<T, Observable<?>, Observable<T>> filterObservable(ExpressoQIS op) throws QonfigInterpretationException {
-		ModelInstanceType.SingleTyped<Observable<?>, T, Observable<T>> sourceType;
-		sourceType = (ModelInstanceType.SingleTyped<Observable<?>, T, Observable<T>>) op.get(VALUE_TYPE_KEY);
+	private <T> ObservableTransform<Observable<?>> filterObservable(ExpressoQIS op) throws QonfigInterpretationException {
 		String sourceAs = op.getAttributeText("source-as");
-		ObservableModelSet.Builder wrappedBuilder = op.getExpressoEnv().getModels().wrap("filterModel");
-		RuntimeValuePlaceholder<SettableValue<?>, SettableValue<T>> sourcePlaceholder = wrappedBuilder.withRuntimeValue(sourceAs,
-			ModelTypes.Value.forType(sourceType.getValueType()));
-		ObservableModelSet.Built wrapped = wrappedBuilder.build();
+		CompiledExpression testX = op.getAttributeExpression("test");
+		return ObservableTransform.create(ModelTypes.Event, sourceType -> {
+			ObservableModelSet.Builder wrappedBuilder = op.getExpressoEnv().getModels().wrap("filterModel");
+			RuntimeValuePlaceholder<SettableValue<?>, SettableValue<T>> sourcePlaceholder = wrappedBuilder.withRuntimeValue(sourceAs,
+				ModelTypes.Value.forType((TypeToken<T>) sourceType.getValueType()));
+			ObservableModelSet.Built wrapped = wrappedBuilder.build();
 
-		ValueContainer<SettableValue<?>, SettableValue<String>> test = parseFilter(op.getAttributeExpression("test"),
-			op.getExpressoEnv().with(wrapped, null), false);
-		InterpretedModelSet interpretedWrapped;
-		try {
-			interpretedWrapped = wrapped.interpret();
-		} catch (ExpressoInterpretationException e) {
-			throw new QonfigInterpretationException(e.getMessage(), e.getPosition(), e.getErrorLength(), e);
-		}
-		return ObservableTransform.of(sourceType.getValueType(), (source, models) -> {
-			SettableValue<T> sourceV = SettableValue.build(sourceType.getValueType()).build();
-			ModelSetInstance wrappedMSI = interpretedWrapped.createInstance(models.getUntil()).withAll(models)//
-				.with(sourcePlaceholder, sourceV)//
-				.build();
-			SettableValue<String> message = test.get(wrappedMSI);
-			return source.filter(v -> {
-				sourceV.set(v, null);
-				return message.get() == null;
-			});
-		}, null, () -> "filter(" + test + ")");
+			ModelValueSynth<SettableValue<?>, SettableValue<String>> test = parseFilter(testX, op.getExpressoEnv().with(wrapped, null),
+				false);
+			InterpretedModelSet interpretedWrapped = wrapped.interpret();
+
+			return ObservableTransform.of(sourceType.getValueType(), (source, models) -> {
+				SettableValue<T> sourceV = SettableValue.build((TypeToken<T>) sourceType.getValueType()).build();
+				ModelSetInstance wrappedMSI = interpretedWrapped.createInstance(models.getUntil()).withAll(models)//
+					.with(sourcePlaceholder, sourceV)//
+					.build();
+				SettableValue<String> message = test.get(wrappedMSI);
+				return source.filter(v -> {
+					sourceV.set((T) v, null);
+					return message.get() == null;
+				});
+			}, null, () -> "filter(" + test + ")", test, test);
+		});
 	}
 
-	private static ValueContainer<SettableValue<?>, SettableValue<String>> parseFilter(QonfigExpression2 testX, ExpressoEnv env,
-		boolean preferMessage) throws QonfigInterpretationException {
-		ValueContainer<SettableValue<?>, SettableValue<String>> test;
+	private static ModelValueSynth<SettableValue<?>, SettableValue<String>> parseFilter(CompiledExpression testX, ExpressoEnv env,
+		boolean preferMessage) throws ExpressoInterpretationException {
+		ModelValueSynth<SettableValue<?>, SettableValue<String>> test;
 		try {
 			if (preferMessage)
 				test = testX.evaluate(ModelTypes.Value.forType(String.class), env);
@@ -2277,724 +2685,809 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 				} else
 					test = testX.evaluate(ModelTypes.Value.forType(String.class), env);
 			} catch (ExpressoInterpretationException e2) {
-				throw new QonfigInterpretationException("Could not interpret '" + testX + "' as a String or a boolean", e.getPosition(),
+				throw new ExpressoInterpretationException("Could not interpret '" + testX + "' as a String or a boolean", e.getPosition(),
 					e.getErrorLength(), e);
 			}
 		}
 		return test;
 	}
 
-	private <S, T> ObservableTransform<S, Observable<?>, Observable<T>> filterObservableByType(ExpressoQIS op)
-		throws QonfigInterpretationException {
-		QonfigExpression2 typeX = op.getAttributeExpression("type");
-		ValueContainer<SettableValue<?>, SettableValue<Class<T>>> typeC;
-		TypeToken<T> targetType;
-		try {
-			typeC = typeX.evaluate(ModelTypes.Value.forType(TypeTokens.get().keyFor(Class.class).wildCard()));
-			targetType = (TypeToken<T>) typeC.getType().getType(0).resolveType(Class.class.getTypeParameters()[0]);
-		} catch (ExpressoInterpretationException e) {
-			throw new QonfigInterpretationException("Could not parse type", e.getPosition(), e.getErrorLength(), e);
-		}
-		return ObservableTransform.of(targetType, (source, models) -> {
-			Class<T> type = typeC.get(models).get();
-			return source.filter(type);
-		}, null, () -> "filter(" + targetType + ")");
+	private <S, T> ObservableTransform<Observable<?>> filterObservableByType(ExpressoQIS op) throws QonfigInterpretationException {
+		CompiledExpression typeX = op.getAttributeExpression("type");
+		return ObservableTransform.create(ModelTypes.Event, sourceType -> {
+			ModelValueSynth<SettableValue<?>, SettableValue<Class<T>>> typeC;
+			TypeToken<T> targetType;
+			try {
+				typeC = typeX.evaluate(ModelTypes.Value.forType(TypeTokens.get().keyFor(Class.class).wildCard()));
+				targetType = (TypeToken<T>) typeC.getType().getType(0).resolveType(Class.class.getTypeParameters()[0]);
+			} catch (ExpressoInterpretationException e) {
+				throw new ExpressoInterpretationException("Could not parse type", e.getPosition(), e.getErrorLength(), e);
+			}
+			return ObservableTransform.of(targetType, (source, models) -> {
+				Class<T> type = typeC.get(models).get();
+				return source.filter(type);
+			}, null, () -> "filter(" + targetType + ")", typeC);
+		});
 	}
 
 	// Action transform
 
-	private <T> ActionTransform<T, ObservableAction<?>, ObservableAction<T>> disabledAction(ExpressoQIS op)
-		throws QonfigInterpretationException {
-		ModelInstanceType.SingleTyped<ObservableAction<?>, T, ObservableAction<T>> sourceType;
-		sourceType = (ModelInstanceType.SingleTyped<ObservableAction<?>, T, ObservableAction<T>>) op.get(VALUE_TYPE_KEY);
-		QonfigExpression2 enabledX = op.getAttributeExpression("with");
-		ValueContainer<SettableValue<?>, SettableValue<String>> enabled;
-		try {
-			enabled = enabledX.evaluate(ModelTypes.Value.forType(String.class), op.getExpressoEnv());
-		} catch (ExpressoInterpretationException e) {
-			throw new QonfigInterpretationException("Could not parse enabled", e.getPosition(), e.getErrorLength(), e);
-		}
-		return ActionTransform.of(sourceType.getValueType(), (source, models) -> {
-			return source.disableWith(enabled.get(models));
-		}, (sourceModels, newModels) -> enabled.get(sourceModels) != enabled.get(newModels), () -> "disable(" + enabled + ")");
+	private ActionTransform<ObservableAction<?>> disabledAction(ExpressoQIS op) throws QonfigInterpretationException {
+		CompiledExpression enabledX = op.getAttributeExpression("with");
+		return ActionTransform.create(ModelTypes.Action, sourceType -> {
+			ModelValueSynth<SettableValue<?>, SettableValue<String>> enabled;
+			try {
+				enabled = enabledX.evaluate(ModelTypes.Value.forType(String.class), op.getExpressoEnv());
+			} catch (ExpressoInterpretationException e) {
+				throw new ExpressoInterpretationException("Could not parse enabled", e.getPosition(), e.getErrorLength(), e);
+			}
+			return ActionTransform.of(sourceType.getValueType(), (source, models) -> {
+				return source.disableWith(enabled.get(models));
+			}, (sourceModels, newModels) -> enabled.get(sourceModels) != enabled.get(newModels), () -> "disable(" + enabled + ")", enabled);
+		});
 	}
 
 	// Value transform
 
-	private <T> ValueTransform<T, SettableValue<?>, SettableValue<T>> disabledValue(ExpressoQIS op) throws QonfigInterpretationException {
-		ModelInstanceType.SingleTyped<SettableValue<?>, T, SettableValue<T>> sourceType;
-		sourceType = (ModelInstanceType.SingleTyped<SettableValue<?>, T, SettableValue<T>>) op.get(VALUE_TYPE_KEY);
-		QonfigExpression2 enabledX = op.getAttributeExpression("with");
-		ValueContainer<SettableValue<?>, SettableValue<String>> enabled;
-		try {
-			enabled = enabledX.evaluate(ModelTypes.Value.forType(String.class), op.getExpressoEnv());
-		} catch (ExpressoInterpretationException e) {
-			throw new QonfigInterpretationException("Could not parse enabled", e.getPosition(), e.getErrorLength(), e);
-		}
-		return ValueTransform.of(sourceType.getValueType(), (source, models) -> source.disableWith(enabled.get(models)),
-			(sourceModels, newModels) -> enabled.get(sourceModels) != enabled.get(newModels), () -> "disable(" + enabled + ")");
+	private ValueTransform<SettableValue<?>> disabledValue(ExpressoQIS op) throws QonfigInterpretationException {
+		CompiledExpression enabledX = op.getAttributeExpression("with");
+		return ValueTransform.create(ModelTypes.Value, sourceType -> {
+			ModelValueSynth<SettableValue<?>, SettableValue<String>> enabled;
+			try {
+				enabled = enabledX.evaluate(ModelTypes.Value.forType(String.class), op.getExpressoEnv());
+			} catch (ExpressoInterpretationException e) {
+				throw new ExpressoInterpretationException("Could not parse enabled", e.getPosition(), e.getErrorLength(), e);
+			}
+			return ValueTransform.of(sourceType.getValueType(), (source, models) -> source.disableWith(enabled.get(models)),
+				(sourceModels, newModels) -> enabled.get(sourceModels) != enabled.get(newModels), () -> "disable(" + enabled + ")",
+				enabled);
+		});
 	}
 
-	private <T> ValueTransform<T, SettableValue<?>, SettableValue<T>> filterAcceptValue(ExpressoQIS op)
-		throws QonfigInterpretationException {
-		ModelInstanceType.SingleTyped<SettableValue<?>, T, SettableValue<T>> sourceType;
-		sourceType = (ModelInstanceType.SingleTyped<SettableValue<?>, T, SettableValue<T>>) op.get(VALUE_TYPE_KEY);
+	private <T> ValueTransform<SettableValue<?>> filterAcceptValue(ExpressoQIS op) throws QonfigInterpretationException {
 		String sourceAs = op.getAttributeText("source-as");
-		ObservableModelSet.Builder wrappedBuilder = op.getExpressoEnv().getModels().wrap("filterAcceptModel");
-		RuntimeValuePlaceholder<SettableValue<?>, SettableValue<T>> sourcePlaceholder = wrappedBuilder.withRuntimeValue(sourceAs,
-			sourceType);
-		ObservableModelSet.Built wrapped = wrappedBuilder.build();
+		CompiledExpression testX = op.getAttributeExpression("test");
+		return ValueTransform.<T, SettableValue<?>> create(ModelTypes.Value, sourceType -> {
+			ObservableModelSet.Builder wrappedBuilder = op.getExpressoEnv().getModels().wrap("filterAcceptModel");
+			RuntimeValuePlaceholder<SettableValue<?>, SettableValue<T>> sourcePlaceholder = wrappedBuilder.withRuntimeValue(sourceAs,
+				sourceType);
+			ObservableModelSet.Built wrapped = wrappedBuilder.build();
 
-		ValueContainer<SettableValue<?>, SettableValue<String>> test = parseFilter(op.getAttributeExpression("test"),
-			op.getExpressoEnv().with(wrapped, null), true);
-		InterpretedModelSet interpretedWrapped;
-		try {
-			interpretedWrapped = wrapped.interpret();
-		} catch (ExpressoInterpretationException e) {
-			throw new QonfigInterpretationException(e.getMessage(), e.getPosition(), e.getErrorLength(), e);
-		}
-		return ValueTransform.of(sourceType.getValueType(), (source, models) -> {
-			SettableValue<T> sourceV = SettableValue.build(sourceType.getValueType()).build();
-			ModelSetInstance wrappedMSI = interpretedWrapped.createInstance(models.getUntil()).withAll(models)//
-				.with(sourcePlaceholder, sourceV)//
-				.build();
-			SettableValue<String> message = test.get(wrappedMSI);
-			return source.filterAccept(v -> {
-				sourceV.set(v, null);
-				return message.get();
-			});
-		}, null, () -> "filterAccept(" + test + ")");
+			ModelValueSynth<SettableValue<?>, SettableValue<String>> test = parseFilter(testX, op.getExpressoEnv().with(wrapped, null),
+				true);
+			InterpretedModelSet interpretedWrapped = wrapped.interpret();
+			return ValueTransform.<T, T> of(sourceType.getValueType(), (source, models) -> {
+				SettableValue<T> sourceV = SettableValue.build(sourceType.getValueType()).build();
+				ModelSetInstance wrappedMSI = interpretedWrapped.createInstance(models.getUntil()).withAll(models)//
+					.with(sourcePlaceholder, sourceV)//
+					.build();
+				SettableValue<String> message = test.get(wrappedMSI);
+				return source.filterAccept(v -> {
+					sourceV.set(v, null);
+					return message.get();
+				});
+			}, null, () -> "filterAccept(" + test + ")", test);
+		});
 	}
 
-	private <S, T> ValueTransform<S, SettableValue<?>, SettableValue<T>> mapValueTo(ExpressoQIS op) throws QonfigInterpretationException {
-		ModelInstanceType.SingleTyped<SettableValue<?>, S, SettableValue<S>> sourceType = (ModelInstanceType.SingleTyped<SettableValue<?>, S, SettableValue<S>>) op
-			.get(VALUE_TYPE_KEY);
-		ParsedTransformation<S, T> ptx;
+	private <S, T> ValueTransform<SettableValue<?>> mapValueTo(ExpressoQIS op) throws QonfigInterpretationException {
+		CompiledTransformation ctx;
 		try {
-			ptx = mapTransformation(sourceType.getValueType(), op);
-		} catch (ExpressoInterpretationException e) {
+			ctx = mapTransformation(op);
+		} catch (QonfigInterpretationException e) {
 			throw new QonfigInterpretationException("Could not parse map", e.getPosition(), e.getErrorLength(), e);
-		} catch (ExpressoEvaluationException e) {
-			// TODO How to use the relative position in the exception to augment the file position?
-			throw new QonfigInterpretationException("Could not parse map", op.getElement().getPositionInFile(), e.getErrorLength(), e);
 		}
-		if (ptx.isReversible()) {
-			return ValueTransform.of(ptx.getTargetType(), (v, models) -> v.transformReversible(ptx.getTargetType(), tx -> {
+		if (ctx.isReversible()) {
+			return ValueTransform.<S, SettableValue<?>> create(ModelTypes.Value, sourceType -> {
+				InterpretedTransformation<S, T> ptx;
 				try {
-					return (Transformation.ReversibleTransformation<S, T>) ptx.transform(tx, models);
-				} catch (ModelInstantiationException e) {
-					throw new CheckedExceptionWrapper(e);
+					ptx = (InterpretedTransformation<S, T>) ctx.interpret(sourceType.getValueType());
+				} catch (ExpressoInterpretationException e) {
+					throw new ExpressoInterpretationException("Could not parse map", e.getPosition(), e.getErrorLength(), e);
 				}
-			}), ptx::isDifferent, ptx::toString);
-		} else {
-			return ValueTransform.of(ptx.getTargetType(), (v, models) -> {
-				ObservableValue<T> value = v.transform(ptx.getTargetType(), tx -> {
+				return ValueTransform.of(ptx.getTargetType(), (v, models) -> v.transformReversible(ptx.getTargetType(), tx -> {
 					try {
-						return ptx.transform(tx, models);
+						return (Transformation.ReversibleTransformation<S, T>) ptx.transform(tx, models);
 					} catch (ModelInstantiationException e) {
 						throw new CheckedExceptionWrapper(e);
 					}
-				});
-				return SettableValue.asSettable(value, __ -> "No reverse configured for " + op.toString());
-			}, ptx::isDifferent, ptx::toString);
+				}), ptx::isDifferent, ptx::toString, ptx.getComponents());
+			});
+		} else {
+			return ValueTransform.<S, SettableValue<?>> create(ModelTypes.Value, sourceType -> {
+				InterpretedTransformation<S, T> ptx;
+				try {
+					ptx = (InterpretedTransformation<S, T>) ctx.interpret(sourceType.getValueType());
+				} catch (ExpressoInterpretationException e) {
+					throw new ExpressoInterpretationException("Could not parse map", e.getPosition(), e.getErrorLength(), e);
+				}
+				return ValueTransform.of(ptx.getTargetType(), (v, models) -> {
+					ObservableValue<T> value = v.transform(ptx.getTargetType(), tx -> {
+						try {
+							return ptx.transform(tx, models);
+						} catch (ModelInstantiationException e) {
+							throw new CheckedExceptionWrapper(e);
+						}
+					});
+					return SettableValue.asSettable(value, __ -> "No reverse configured for " + op.toString());
+				}, ptx::isDifferent, ptx::toString, ptx.getComponents());
+			});
 		}
 	}
 
-	private <T> ValueTransform<T, SettableValue<?>, SettableValue<T>> refreshValue(ExpressoQIS op) throws QonfigInterpretationException {
-		ModelInstanceType.SingleTyped<SettableValue<?>, T, SettableValue<T>> sourceType = (ModelInstanceType.SingleTyped<SettableValue<?>, T, SettableValue<T>>) op
-			.get(VALUE_TYPE_KEY);
-		QonfigExpression2 onX = op.getAttributeExpression("on");
-		ValueContainer<Observable<?>, Observable<?>> refresh;
-		try {
-			refresh = onX.evaluate(ModelTypes.Event.any(), op.getExpressoEnv());
-		} catch (ExpressoInterpretationException e) {
-			throw new QonfigInterpretationException("Could not parse refresh", e.getPosition(), e.getErrorLength(), e);
-		}
-		return ValueTransform.of(sourceType, (v, models) -> v.refresh(refresh.get(models)),
-			(sourceModels, newModels) -> refresh.get(sourceModels) != refresh.get(newModels), () -> "refresh(" + refresh + ")");
+	private <T> ValueTransform<SettableValue<?>> refreshValue(ExpressoQIS op) throws QonfigInterpretationException {
+		CompiledExpression onX = op.getAttributeExpression("on");
+		return ValueTransform.create(ModelTypes.Value, sourceType -> {
+			ModelValueSynth<Observable<?>, Observable<?>> refresh;
+			try {
+				refresh = onX.evaluate(ModelTypes.Event.any(), op.getExpressoEnv());
+			} catch (ExpressoInterpretationException e) {
+				throw new ExpressoInterpretationException("Could not parse refresh", e.getPosition(), e.getErrorLength(), e);
+			}
+			return ValueTransform.of(sourceType.getValueType(), (v, models) -> v.refresh(refresh.get(models)),
+				(sourceModels, newModels) -> refresh.get(sourceModels) != refresh.get(newModels), () -> "refresh(" + refresh + ")",
+				refresh);
+		});
 	}
 
-	private <T> ValueTransform<T, SettableValue<?>, SettableValue<T>> unmodifiableValue(ExpressoQIS op)
-		throws QonfigInterpretationException {
-		ModelInstanceType.SingleTyped<SettableValue<?>, T, SettableValue<T>> sourceType = (ModelInstanceType.SingleTyped<SettableValue<?>, T, SettableValue<T>>) op
-			.get(VALUE_TYPE_KEY);
+	private <T> ValueTransform<SettableValue<?>> unmodifiableValue(ExpressoQIS op) throws QonfigInterpretationException {
 		boolean allowUpdates = op.getAttribute("allow-updates", Boolean.class);
 		if (!allowUpdates) {
-			return ValueTransform.of(sourceType, (v, models) -> v.disableWith(ObservableValue.of(StdMsg.UNSUPPORTED_OPERATION)), null,
-				() -> "unmodifiable(" + allowUpdates + ")");
+			return ValueTransform.create(ModelTypes.Value,
+				sourceType -> ValueTransform.of(sourceType, (v, models) -> v.disableWith(ObservableValue.of(StdMsg.UNSUPPORTED_OPERATION)),
+					null, () -> "unmodifiable(" + allowUpdates + ")"));
 		} else {
-			return ValueTransform.of(sourceType, (v, models) -> {
+			return ValueTransform.create(ModelTypes.Value, sourceType -> ValueTransform.of(sourceType, (v, models) -> {
 				return v.filterAccept(input -> {
 					if (v.get() == input)
 						return null;
 					else
 						return StdMsg.ILLEGAL_ELEMENT;
 				});
-			}, null, () -> "unmodifiable(" + allowUpdates + ")");
+			}, null, () -> "unmodifiable(" + allowUpdates + ")"));
 		}
 	}
 
-	private <S, T> ValueTransform<S, ?, ?> flattenValue(ExpressoQIS op) throws QonfigInterpretationException {
-		System.err.println("WARNING: Value.flatten is not fully implemented!!  Some options may be ignored.");
-		ModelInstanceType.SingleTyped<SettableValue<?>, S, SettableValue<S>> sourceType;
-		sourceType = (ModelInstanceType.SingleTyped<SettableValue<?>, S, SettableValue<S>>) op.get(VALUE_TYPE_KEY);
-		TypeToken<T> resultType;
-		Class<S> rawType = TypeTokens.getRawType(sourceType.getValueType());
-		ExpressoQIS sort = op.forChildren("sort").peekFirst();
-		if (SettableValue.class.isAssignableFrom(rawType)) {
-			return ValueTransform.of((TypeToken<T>) sourceType.getValueType().resolveType(SettableValue.class.getTypeParameters()[0]),
-				(v, models) -> SettableValue.flatten((ObservableValue<SettableValue<T>>) (ObservableValue<?>) v), null, () -> "flatValue");
-		} else if (ObservableValue.class.isAssignableFrom(rawType)) {
-			return ValueTransform.of((TypeToken<T>) sourceType.getValueType().resolveType(ObservableValue.class.getTypeParameters()[0]),
-				(v, models) -> SettableValue.flattenAsSettable((ObservableValue<ObservableValue<T>>) (ObservableValue<?>) v, () -> null),
-				null, () -> "flatValue");
-		} else if (ObservableSortedSet.class.isAssignableFrom(rawType) && sort != null) {
-			ValueContainer<SettableValue<?>, SettableValue<Comparator<T>>> compare = sort.interpret(ValueContainer.class);
-			resultType = (TypeToken<T>) sourceType.getValueType().resolveType(ObservableCollection.class.getTypeParameters()[0]);
-			return ValueTransform.of(ModelTypes.SortedSet.forType(resultType), (value, models) -> ObservableSortedSet
-				.flattenValue((ObservableValue<ObservableSortedSet<T>>) value, compare.get(models).get()), null, () -> "flatSortedSet");
-		} else if (ObservableSortedCollection.class.isAssignableFrom(rawType) && sort != null) {
-			ValueContainer<SettableValue<?>, SettableValue<Comparator<T>>> compare = sort.interpret(ValueContainer.class);
-			resultType = (TypeToken<T>) sourceType.getValueType().resolveType(ObservableCollection.class.getTypeParameters()[0]);
-			return ValueTransform.of(
-				ModelTypes.SortedCollection.forType(resultType), (value, models) -> ObservableSortedCollection
-				.flattenValue((ObservableValue<ObservableSortedCollection<T>>) value, compare.get(models).get()),
-				null, () -> "flatSortedCollection");
-		} else if (ObservableSet.class.isAssignableFrom(rawType)) {
-			resultType = (TypeToken<T>) sourceType.getValueType().resolveType(ObservableCollection.class.getTypeParameters()[0]);
-			return ValueTransform.of(ModelTypes.Set.forType(resultType),
-				(value, models) -> ObservableSet.flattenValue((ObservableValue<ObservableSet<T>>) value), null, () -> "flatSet");
-		} else if (ObservableCollection.class.isAssignableFrom(rawType)) {
-			resultType = (TypeToken<T>) sourceType.getValueType().resolveType(ObservableCollection.class.getTypeParameters()[0]);
-			return ValueTransform.of(ModelTypes.Collection.forType(resultType),
-				(value, models) -> ObservableCollection.flattenValue((ObservableValue<ObservableCollection<T>>) value), null,
-				() -> "flatCollection");
-		} else
-			throw new QonfigInterpretationException("Cannot flatten value of type " + sourceType, op.getElement().getPositionInFile(), 0);
+	private <S, T> ValueTransform<?> flattenValue(ExpressoQIS op) throws QonfigInterpretationException {
+		if (op.getAttribute("propagate-update-to-parent", Boolean.class, null) != null)
+			op.warn("'propagate-update-to-parent' attribute not usable for value flattening");
+		ExpressoQIS reverse = op.forChildren("reverse").peekFirst();
+		if (reverse != null)
+			reverse.warn("reverse is not usable for value flattening");
+		String targetModelTypeName = op.getAttributeText("to");
+		ExpressoQIS sortSession = op.forChildren("sort").peekFirst();
+		ParsedSorting sort = sortSession == null ? null : sortSession.interpret(ParsedSorting.class);
+		ModelType.SingleTyped<? extends ObservableCollection<?>> collectionModel;
+		switch (targetModelTypeName.toLowerCase()) {
+		case "value":
+			if (sort != null)
+				sortSession.warn("Sorting specified, but not usable");
+			return flattenValueToValue(op);
+		case "list":
+			collectionModel = ModelTypes.Collection;
+			break;
+		case "sorted-list":
+			collectionModel = ModelTypes.SortedCollection;
+			break;
+		case "set":
+			collectionModel = ModelTypes.Set;
+			break;
+		case "sorted-set":
+			collectionModel = ModelTypes.SortedSet;
+			break;
+		case "event":
+		case "action":
+		case "value-set":
+		case "map":
+		case "sorted-map":
+		case "multi-map":
+		case "sorted-multi-map":
+			throw new QonfigInterpretationException("Unsupported value flatten target: '" + targetModelTypeName + "'",
+				op.getAttributeValuePosition("to", 0), targetModelTypeName.length());
+		default:
+			throw new QonfigInterpretationException("Unrecognized model type target: '" + targetModelTypeName + "'",
+				op.getAttributeValuePosition("to", 0), targetModelTypeName.length());
+		}
+		return flattenValueToCollection(op, collectionModel, sort, sortSession);
+	}
+
+	private <T> ValueTransform<SettableValue<?>> flattenValueToValue(ExpressoQIS op) throws QonfigInterpretationException {
+		return ValueTransform.create(ModelTypes.Value, sourceType -> {
+			Class<?> rawType = TypeTokens.getRawType(sourceType.getValueType());
+			if (SettableValue.class.isAssignableFrom(rawType)) {
+				return ValueTransform.of((TypeToken<T>) sourceType.getValueType().resolveType(SettableValue.class.getTypeParameters()[0]),
+					(v, models) -> SettableValue.flatten((ObservableValue<SettableValue<T>>) (ObservableValue<?>) v), null,
+					() -> "flatValue");
+			} else if (ObservableValue.class.isAssignableFrom(rawType)) {
+				return ValueTransform.of((TypeToken<T>) sourceType.getValueType().resolveType(ObservableValue.class.getTypeParameters()[0]),
+					(v, models) -> SettableValue.flattenAsSettable((ObservableValue<ObservableValue<T>>) (ObservableValue<?>) v,
+						() -> null),
+					null, () -> "flatValue");
+			} else
+				throw new ExpressoInterpretationException("Cannot flatten type " + sourceType.getValueType() + " to a value",
+					op.getElement().getPositionInFile(), 0);
+		});
+	}
+
+	private <T, C extends ObservableCollection<?>> ValueTransform<C> flattenValueToCollection(ExpressoQIS op,
+		ModelType.SingleTyped<C> collectionType, ParsedSorting sort, ExpressoQIS sortSession) throws QonfigInterpretationException {
+		return ValueTransform.<C, C> create(collectionType, sourceType -> {
+			Class<?> rawType = TypeTokens.getRawType(sourceType.getValueType());
+			if (!collectionType.modelType.isAssignableFrom(rawType))
+				throw new ExpressoInterpretationException("Cannot flatten type " + sourceType.getValueType() + " to a " + collectionType,
+					op.getElement().getPositionInFile(), 0);
+			TypeToken<T> resultType = (TypeToken<T>) sourceType.getValueType()
+				.resolveType(ObservableCollection.class.getTypeParameters()[0]);
+			if (collectionType == ModelTypes.Collection) {
+				if (sort != null)
+					sortSession.warn("Sorting specified, but not usable");
+				return ValueTransform.of((ModelInstanceType<C, C>) collectionType.forType(resultType),
+					(value, models) -> (C) ObservableCollection.flattenValue((ObservableValue<ObservableCollection<T>>) value), null,
+					() -> "flatCollection");
+			} else if (collectionType == ModelTypes.SortedCollection) {
+				ModelValueSynth<SettableValue<?>, SettableValue<Comparator<T>>> evaluatedSort = sort.evaluate(resultType);
+				return ValueTransform.of((ModelInstanceType<C, C>) collectionType.forType(resultType), (value, models) -> {
+					Comparator<T> instantiatedSort = evaluatedSort.get(models).get();
+					return (C) ObservableSortedCollection.flattenValue((ObservableValue<ObservableSortedCollection<T>>) value,
+						instantiatedSort);
+				}, null, () -> "flatSortedCollection");
+			} else if (collectionType == ModelTypes.Set) {
+				if (sort != null)
+					sortSession.warn("Sorting specified, but not usable");
+				return ValueTransform.of((ModelInstanceType<C, C>) collectionType.forType(resultType),
+					(value, models) -> (C) ObservableSet.flattenValue((ObservableValue<ObservableSet<T>>) value), null, () -> "flatSet");
+			} else if (collectionType == ModelTypes.SortedSet) {
+				ModelValueSynth<SettableValue<?>, SettableValue<Comparator<T>>> evaluatedSort = sort.evaluate(resultType);
+				return ValueTransform.of((ModelInstanceType<C, C>) collectionType.forType(resultType), (value, models) -> {
+					Comparator<T> instantiatedSort = evaluatedSort.get(models).get();
+					return (C) ObservableSortedSet.flattenValue((ObservableValue<ObservableSortedSet<T>>) value, instantiatedSort);
+				}, null, () -> "flatSortedCollection");
+			} else
+				throw new IllegalStateException("Unrecognized collection type: " + collectionType);
+		});
 	}
 
 	// Collection transform
 
-	private <S, T> FlowCollectionTransform<S, T, ObservableCollection<?>, ObservableCollection<T>> mapCollectionTo(ExpressoQIS op)
-		throws QonfigInterpretationException {
-		ModelInstanceType.SingleTyped<? extends ObservableCollection<?>, S, ? extends ObservableCollection<S>> sourceType;
-		sourceType = (ModelInstanceType.SingleTyped<? extends ObservableCollection<?>, S, ? extends ObservableCollection<S>>) op
+	private <S, SC extends ObservableCollection<?>, T> CollectionTransform<? extends ObservableCollection<?>, ? extends ObservableCollection<?>> mapCollectionTo(
+		ExpressoQIS op) throws QonfigInterpretationException {
+		ModelType<? extends ObservableCollection<?>> sourceModelType = (ModelType<? extends ObservableCollection<?>>) op
 			.get(VALUE_TYPE_KEY);
-
-		ParsedTransformation<S, T> ptx;
+		CompiledTransformation ctx;
 		try {
-			ptx = mapTransformation(sourceType.getValueType(), op);
-		} catch (ExpressoInterpretationException e) {
+			ctx = mapTransformation(op);
+		} catch (QonfigInterpretationException e) {
 			throw new QonfigInterpretationException("Could not parse map", e.getPosition(), e.getErrorLength(), e);
-		} catch (ExpressoEvaluationException e) {
-			// TODO How to use the relative position in the exception to augment the file position?
-			throw new QonfigInterpretationException("Could not parse map", op.getElement().getPositionInFile(), e.getErrorLength(), e);
 		}
-		if (ptx.isReversible()) {
-			if (sourceType.getModelType() == ModelTypes.SortedSet)
-				return CollectionTransform.of(ModelTypes.SortedSet, ptx.getTargetType(), (c,
-					models) -> ((ObservableCollection.DistinctSortedDataFlow<?, ?, S>) c).transformEquivalent(ptx.getTargetType(), tx -> {
+		if (ctx.isReversible()) {
+			if (sourceModelType == ModelTypes.SortedSet) {
+				return CollectionTransform.<ObservableSortedSet<?>, S, ObservableSortedSet<S>, ObservableSortedSet<?>> create(
+					ModelTypes.SortedSet, ModelTypes.SortedSet, sourceType -> {
+						InterpretedTransformation<S, T> ptx;
 						try {
-							return (Transformation.ReversibleTransformation<S, T>) ptx.transform(tx, models);
-						} catch (ModelInstantiationException e) {
-							throw new CheckedExceptionWrapper(e);
+							ptx = (InterpretedTransformation<S, T>) ctx.interpret(sourceType.getValueType());
+						} catch (ExpressoInterpretationException e) {
+							throw new ExpressoInterpretationException("Could not parse map", e.getPosition(), e.getErrorLength(), e);
 						}
-					}), ptx::isDifferent, ptx::toString);
-			else if (sourceType.getModelType() == ModelTypes.SortedCollection)
-				return CollectionTransform.of(ModelTypes.SortedCollection, ptx.getTargetType(),
-					(c, models) -> ((ObservableCollection.SortedDataFlow<?, ?, S>) c).transformEquivalent(ptx.getTargetType(), tx -> {
+						return CollectionTransform.distinctSortedFlowTransform(ptx.getTargetType(),
+							(c, models) -> ((ObservableCollection.DistinctSortedDataFlow<?, ?, S>) c)
+							.transformEquivalent(ptx.getTargetType(), tx -> {
+								try {
+									return (Transformation.ReversibleTransformation<S, T>) ptx.transform(tx, models);
+								} catch (ModelInstantiationException e) {
+									throw new CheckedExceptionWrapper(e);
+								}
+							}),
+							ptx::isDifferent, ptx::toString, ptx.getComponents());
+					});
+			} else if (sourceModelType == ModelTypes.SortedCollection) {
+				return CollectionTransform
+					.<ObservableSortedCollection<?>, S, ObservableSortedCollection<S>, ObservableSortedCollection<?>> create(
+						ModelTypes.SortedCollection, ModelTypes.SortedCollection, sourceType -> {
+							InterpretedTransformation<S, T> ptx;
+							try {
+								ptx = (InterpretedTransformation<S, T>) ctx.interpret(sourceType.getValueType());
+							} catch (ExpressoInterpretationException e) {
+								throw new ExpressoInterpretationException("Could not parse map", e.getPosition(), e.getErrorLength(), e);
+							}
+							return CollectionTransform.sortedFlowTransform(ptx.getTargetType(),
+								(c, models) -> ((ObservableCollection.SortedDataFlow<?, ?, S>) c).transformEquivalent(ptx.getTargetType(),
+									tx -> {
+										try {
+											return (Transformation.ReversibleTransformation<S, T>) ptx.transform(tx, models);
+										} catch (ModelInstantiationException e) {
+											throw new CheckedExceptionWrapper(e);
+										}
+									}),
+								ptx::isDifferent, ptx::toString, ptx.getComponents());
+						});
+			} else if (sourceModelType == ModelTypes.Set) {
+				return CollectionTransform.<ObservableSet<?>, S, ObservableSet<S>, ObservableSet<?>> create(ModelTypes.Set, ModelTypes.Set,
+					sourceType -> {
+						InterpretedTransformation<S, T> ptx;
 						try {
-							return (Transformation.ReversibleTransformation<S, T>) ptx.transform(tx, models);
-						} catch (ModelInstantiationException e) {
-							throw new CheckedExceptionWrapper(e);
+							ptx = (InterpretedTransformation<S, T>) ctx.interpret(sourceType.getValueType());
+						} catch (ExpressoInterpretationException e) {
+							throw new ExpressoInterpretationException("Could not parse map", e.getPosition(), e.getErrorLength(), e);
 						}
-					}), ptx::isDifferent, ptx::toString);
-			else if (sourceType.getModelType() == ModelTypes.Set)
-				return CollectionTransform.of(ModelTypes.Set, ptx.getTargetType(),
-					(c, models) -> ((ObservableCollection.DistinctDataFlow<?, ?, S>) c).transformEquivalent(ptx.getTargetType(), tx -> {
+						return CollectionTransform.distinctFlowTransform(ptx.getTargetType(),
+							(c, models) -> ((DistinctDataFlow<?, ?, S>) c).transformEquivalent(ptx.getTargetType(), tx -> {
+								try {
+									return (Transformation.ReversibleTransformation<S, T>) ptx.transform(tx, models);
+								} catch (ModelInstantiationException e) {
+									throw new CheckedExceptionWrapper(e);
+								}
+							}), ptx::isDifferent, ptx::toString, ptx.getComponents());
+					});
+			} else {
+				return CollectionTransform.<ObservableCollection<?>, S, ObservableCollection<S>, ObservableCollection<?>> create(
+					ModelTypes.Collection, ModelTypes.Collection, sourceType -> {
+						InterpretedTransformation<S, T> ptx;
 						try {
-							return (Transformation.ReversibleTransformation<S, T>) ptx.transform(tx, models);
-						} catch (ModelInstantiationException e) {
-							throw new CheckedExceptionWrapper(e);
+							ptx = (InterpretedTransformation<S, T>) ctx.interpret(sourceType.getValueType());
+						} catch (ExpressoInterpretationException e) {
+							throw new ExpressoInterpretationException("Could not parse map", e.getPosition(), e.getErrorLength(), e);
 						}
-					}), ptx::isDifferent, ptx::toString);
-			else
-				return CollectionTransform.of(ModelTypes.Collection, ptx.getTargetType(),
-					(c, models) -> c.transform(ptx.getTargetType(), tx -> {
-						try {
-							return (Transformation.ReversibleTransformation<S, T>) ptx.transform(tx, models);
-						} catch (ModelInstantiationException e) {
-							throw new CheckedExceptionWrapper(e);
-						}
-					}), ptx::isDifferent, ptx::toString);
+						return CollectionTransform.flowTransform(ptx.getTargetType(),
+							(c, models) -> c.transform(ptx.getTargetType(), tx -> {
+								try {
+									return (Transformation.ReversibleTransformation<S, T>) ptx.transform(tx, models);
+								} catch (ModelInstantiationException e) {
+									throw new CheckedExceptionWrapper(e);
+								}
+							}), ptx::isDifferent, ptx::toString, ptx.getComponents());
+					});
+			}
 		} else {
-			return CollectionTransform.of(ModelTypes.Collection, ptx.getTargetType(),
-				(f, models) -> f.transform(ptx.getTargetType(), tx -> {
+			return CollectionTransform.<ObservableCollection<?>, S, ObservableCollection<S>, ObservableCollection<?>> create(
+				ModelTypes.Collection, ModelTypes.Collection, sourceType -> {
+					InterpretedTransformation<S, T> ptx;
 					try {
-						return ptx.transform(tx, models);
-					} catch (ModelInstantiationException e) {
-						throw new CheckedExceptionWrapper(e);
+						ptx = (InterpretedTransformation<S, T>) ctx.interpret(sourceType.getValueType());
+					} catch (ExpressoInterpretationException e) {
+						throw new ExpressoInterpretationException("Could not parse map", e.getPosition(), e.getErrorLength(), e);
 					}
-				}), ptx::isDifferent, ptx::toString);
+					return CollectionTransform.flowTransform(ptx.getTargetType(), (c, models) -> c.transform(ptx.getTargetType(), tx -> {
+						try {
+							return ptx.transform(tx, models);
+						} catch (ModelInstantiationException e) {
+							throw new CheckedExceptionWrapper(e);
+						}
+					}), ptx::isDifferent, ptx::toString, ptx.getComponents());
+				});
 		}
 	}
 
-	private <T> FlowCollectionTransform<T, T, ObservableCollection<?>, ObservableCollection<T>> filterCollection(ExpressoQIS op)
+	private <T, C extends ObservableCollection<?>> CollectionTransform<C, C> filterCollection(ExpressoQIS op)
 		throws QonfigInterpretationException {
-		ModelInstanceType.SingleTyped<ObservableCollection<?>, T, ObservableCollection<T>> sourceType;
-		sourceType = (ModelInstanceType.SingleTyped<ObservableCollection<?>, T, ObservableCollection<T>>) op.get(VALUE_TYPE_KEY);
+		ModelType.SingleTyped<C> sourceModelType = (ModelType.SingleTyped<C>) op.get(VALUE_TYPE_KEY);
 		String sourceAs = op.getAttributeText("source-as");
-		ObservableModelSet.Builder wrappedBuilder = op.getExpressoEnv().getModels().wrap("filterModel");
-		RuntimeValuePlaceholder<SettableValue<?>, SettableValue<T>> sourcePlaceholder = wrappedBuilder.withRuntimeValue(sourceAs,
-			ModelTypes.Value.forType(sourceType.getValueType()));
-		ObservableModelSet.Built wrapped = wrappedBuilder.build();
+		CompiledExpression testX = op.getAttributeExpression("test");
+		return CollectionTransform.<C, T, C, C> create(sourceModelType, sourceModelType, sourceType -> {
+			ObservableModelSet.Builder wrappedBuilder = op.getExpressoEnv().getModels().wrap("filterModel");
+			RuntimeValuePlaceholder<SettableValue<?>, SettableValue<T>> sourcePlaceholder = wrappedBuilder.withRuntimeValue(sourceAs,
+				ModelTypes.Value.forType(sourceType.getValueType()));
+			ObservableModelSet.Built wrapped = wrappedBuilder.build();
 
-		ValueContainer<SettableValue<?>, SettableValue<String>> test = parseFilter(op.getAttributeExpression("test"),
-			op.getExpressoEnv().with(wrapped, null), false);
-		InterpretedModelSet wrappedInterpreted;
-		try {
-			wrappedInterpreted = wrapped.interpret();
-		} catch (ExpressoInterpretationException e) {
-			throw new QonfigInterpretationException(e.getMessage(), e.getPosition(), e.getErrorLength(), e);
-		}
-		return CollectionTransform.of(sourceType.getModelType(), sourceType.getValueType(), (source, models) -> {
-			SettableValue<T> sourceV = SettableValue.build(sourceType.getValueType()).build();
-			ModelSetInstance wrappedMSI = wrappedInterpreted.createInstance(models.getUntil()).withAll(models)//
-				.with(sourcePlaceholder, sourceV)//
-				.build();
-			SettableValue<String> message = test.get(wrappedMSI);
-			return source.filter(v -> {
-				sourceV.set(v, null);
-				return message.get();
-			});
-		}, null, () -> "filter(" + test + ")");
+			ModelValueSynth<SettableValue<?>, SettableValue<String>> test = parseFilter(testX, op.getExpressoEnv().with(wrapped, null),
+				false);
+			InterpretedModelSet wrappedInterpreted;
+			try {
+				wrappedInterpreted = wrapped.interpret();
+			} catch (ExpressoInterpretationException e) {
+				throw new ExpressoInterpretationException(e.getMessage(), e.getPosition(), e.getErrorLength(), e);
+			}
+			return (ObservableStructureTransform<C, C, C, C>) CollectionTransform.flowTransform(sourceType, (source, models) -> {
+				SettableValue<T> sourceV = SettableValue.build(sourceType.getValueType()).build();
+				ModelSetInstance wrappedMSI = wrappedInterpreted.createInstance(models.getUntil()).withAll(models)//
+					.with(sourcePlaceholder, sourceV)//
+					.build();
+				SettableValue<String> message = test.get(wrappedMSI);
+				return source.filter(v -> {
+					sourceV.set((T) v, null);
+					return message.get();
+				});
+			}, null, () -> "filter(" + test + ")", test);
+		});
 	}
 
-	private <S, T> FlowCollectionTransform<T, T, ObservableCollection<?>, ObservableCollection<T>> filterCollectionByType(ExpressoQIS op)
+	private <S, T, C extends ObservableCollection<?>> CollectionTransform<C, C> filterCollectionByType(ExpressoQIS op)
 		throws QonfigInterpretationException {
-		ModelInstanceType.SingleTyped<ObservableCollection<?>, S, ObservableCollection<S>> sourceType;
-		sourceType = (ModelInstanceType.SingleTyped<ObservableCollection<?>, S, ObservableCollection<S>>) op.get(VALUE_TYPE_KEY);
-
-		QonfigExpression2 typeX = op.getAttributeExpression("type");
-		ValueContainer<SettableValue<?>, SettableValue<Class<T>>> typeC;
-		TypeToken<T> targetType;
-		try {
-			typeC = typeX.evaluate(ModelTypes.Value.forType(TypeTokens.get().keyFor(Class.class).wildCard()), op.getExpressoEnv());
-			targetType = (TypeToken<T>) typeC.getType().getType(0).resolveType(Class.class.getTypeParameters()[0]);
-		} catch (ExpressoInterpretationException e) {
-			throw new QonfigInterpretationException("Could not parse type", e.getPosition(), e.getErrorLength(), e);
-		}
-		return CollectionTransform.of(sourceType.getModelType(), targetType, (source, models) -> {
-			Class<T> type = typeC.get(models).get();
-			return source.filter(type);
-		}, null, () -> "filter(" + targetType + ")");
+		ModelType.SingleTyped<C> sourceModelType = (ModelType.SingleTyped<C>) op.get(VALUE_TYPE_KEY);
+		CompiledExpression typeX = op.getAttributeExpression("type");
+		return CollectionTransform.<C, S, C, C> create(sourceModelType, sourceModelType, sourceType -> {
+			ModelValueSynth<SettableValue<?>, SettableValue<Class<T>>> typeC;
+			TypeToken<T> targetType;
+			try {
+				typeC = typeX.evaluate(ModelTypes.Value.forType(TypeTokens.get().keyFor(Class.class).wildCard()), op.getExpressoEnv());
+				targetType = (TypeToken<T>) typeC.getType().getType(0).resolveType(Class.class.getTypeParameters()[0]);
+			} catch (ExpressoInterpretationException e) {
+				throw new ExpressoInterpretationException("Could not parse type", e.getPosition(), e.getErrorLength(), e);
+			}
+			return (ObservableStructureTransform<C, C, C, C>) CollectionTransform
+				.flowTransform((ModelInstanceType<C, C>) sourceType.getModelType().forType(targetType), (source, models) -> {
+					Class<T> type = typeC.get(models).get();
+					return source.filter(type);
+				}, null, () -> "filter(" + targetType + ")", typeC);
+		});
 	}
 
-	private <T> FlowCollectionTransform<T, T, ObservableCollection<?>, ObservableCollection<T>> reverseCollection(ExpressoQIS op)
+	private <T, C extends ObservableCollection<?>> CollectionTransform<C, C> reverseCollection(ExpressoQIS op)
 		throws QonfigInterpretationException {
-		ModelInstanceType.SingleTyped<? extends ObservableCollection<?>, T, ? extends ObservableCollection<T>> sourceType;
-		sourceType = (ModelInstanceType.SingleTyped<? extends ObservableCollection<?>, T, ? extends ObservableCollection<T>>) op
-			.get(VALUE_TYPE_KEY);
+		ModelType.SingleTyped<C> sourceModelType = (ModelType.SingleTyped<C>) op.get(VALUE_TYPE_KEY);
+		return CollectionTransform.<C, T, C, C> create(sourceModelType, sourceModelType, sourceType -> {
+			return new FlowCollectionTransform<T, T, C, C, C, C>() {
+				@Override
+				public ModelInstanceType<C, C> getTargetType() {
+					return sourceType;
+				}
 
-		return new FlowCollectionTransform<T, T, ObservableCollection<?>, ObservableCollection<T>>() {
-			@Override
-			public ModelInstanceType<ObservableCollection<?>, ObservableCollection<T>> getTargetType() {
-				return (ModelInstanceType<ObservableCollection<?>, ObservableCollection<T>>) sourceType;
-			}
+				@Override
+				public CollectionDataFlow<?, ?, T> transformFlow(CollectionDataFlow<?, ?, T> source, ModelSetInstance models) {
+					return source.reverse();
+				}
 
-			@Override
-			public CollectionDataFlow<?, ?, T> transformFlow(CollectionDataFlow<?, ?, T> source, ModelSetInstance models) {
-				return source.reverse();
-			}
+				@Override
+				public CollectionDataFlow<?, ?, T> transformToFlow(C source, ModelSetInstance models) {
+					return (CollectionDataFlow<?, ?, T>) source.flow().reverse();
+				}
 
-			@Override
-			public CollectionDataFlow<?, ?, T> transformToFlow(ObservableCollection<T> source, ModelSetInstance models) {
-				return source.flow().reverse();
-			}
+				@Override
+				public C transform(C source, ModelSetInstance models) {
+					return (C) source.reverse();
+				}
 
-			@Override
-			public ObservableCollection<T> transform(ObservableCollection<T> source, ModelSetInstance models) {
-				return source.reverse();
-			}
+				@Override
+				public boolean isDifferent(ModelSetInstance sourceModels, ModelSetInstance newModels) {
+					return false;
+				}
 
-			@Override
-			public boolean isDifferent(ModelSetInstance sourceModels, ModelSetInstance newModels) {
-				return false;
-			}
+				@Override
+				public BetterList<ModelValueSynth<?, ?>> getCores() {
+					return BetterList.empty();
+				}
 
-			@Override
-			public String toString() {
-				return "reverse";
-			}
-		};
+				@Override
+				public String toString() {
+					return "reverse";
+				}
+			};
+		});
 	}
 
-	private <T> FlowCollectionTransform<T, T, ObservableCollection<?>, ObservableCollection<T>> refreshCollection(ExpressoQIS op)
+	private <T, C extends ObservableCollection<?>> CollectionTransform<C, C> refreshCollection(ExpressoQIS op)
 		throws QonfigInterpretationException {
-		ModelInstanceType.SingleTyped<? extends ObservableCollection<?>, T, ? extends ObservableCollection<T>> sourceType;
-		sourceType = (ModelInstanceType.SingleTyped<? extends ObservableCollection<?>, T, ? extends ObservableCollection<T>>) op
-			.get(VALUE_TYPE_KEY);
-
-		QonfigExpression2 refreshX = op.getAttributeExpression("on");
-		ValueContainer<Observable<?>, Observable<?>> refreshV;
-		try {
-			refreshV = refreshX.evaluate(ModelTypes.Event.any(), op.getExpressoEnv());
-		} catch (ExpressoInterpretationException e) {
-			throw new QonfigInterpretationException("Could not parse refresh", e.getPosition(), e.getErrorLength(), e);
-		}
-		return CollectionTransform.of(sourceType.getModelType(), sourceType.getValueType(), (f, models) -> {
-			Observable<?> refresh = refreshV.get(models);
-			return f.refresh(refresh);
-		}, (sourceModels, newModels) -> refreshV.get(sourceModels) != refreshV.get(newModels), () -> "refresh(" + refreshV + ")");
+		ModelType.SingleTyped<C> sourceModelType = (ModelType.SingleTyped<C>) op.get(VALUE_TYPE_KEY);
+		CompiledExpression refreshX = op.getAttributeExpression("on");
+		return CollectionTransform.<C, T, C, C> create(sourceModelType, sourceModelType, sourceType -> {
+			ModelValueSynth<Observable<?>, Observable<?>> refreshV;
+			try {
+				refreshV = refreshX.evaluate(ModelTypes.Event.any(), op.getExpressoEnv());
+			} catch (ExpressoInterpretationException e) {
+				throw new ExpressoInterpretationException("Could not parse refresh", e.getPosition(), e.getErrorLength(), e);
+			}
+			return (ObservableStructureTransform<C, C, C, ?>) CollectionTransform.flowTransform((ModelInstanceType<C, C>) sourceType,
+				(f, models) -> {
+					Observable<?> refresh = refreshV.get(models);
+					return f.refresh(refresh);
+				}, (sourceModels, newModels) -> refreshV.get(sourceModels) != refreshV.get(newModels), () -> "refresh(" + refreshV + ")",
+					refreshV);
+		});
 	}
 
-	private <T> FlowCollectionTransform<T, T, ObservableCollection<?>, ObservableCollection<T>> refreshCollectionEach(ExpressoQIS op)
+	private <T, C extends ObservableCollection<?>> CollectionTransform<C, C> refreshCollectionEach(ExpressoQIS op)
 		throws QonfigInterpretationException {
-		ModelInstanceType.SingleTyped<? extends ObservableCollection<?>, T, ? extends ObservableCollection<T>> sourceType;
-		sourceType = (ModelInstanceType.SingleTyped<? extends ObservableCollection<?>, T, ? extends ObservableCollection<T>>) op
-			.get(VALUE_TYPE_KEY);
-
+		ModelType.SingleTyped<C> sourceModelType = (ModelType.SingleTyped<C>) op.get(VALUE_TYPE_KEY);
 		String sourceAs = op.getAttributeText("source-as");
-		ObservableModelSet.Builder refreshModelBuilder = op.getExpressoEnv().getModels().wrap("refreshEachModel");
-		RuntimeValuePlaceholder<SettableValue<?>, SettableValue<T>> sourcePlaceholder = refreshModelBuilder.withRuntimeValue(sourceAs,
-			ModelTypes.Value.forType(sourceType.getValueType()));
-		ObservableModelSet.Built refreshModel = refreshModelBuilder.build();
-		QonfigExpression2 refreshX = op.getAttributeExpression("on");
-		ValueContainer<SettableValue<?>, SettableValue<Observable<?>>> refreshV;
-		try {
-			refreshV = refreshX.evaluate(ModelTypes.Value.forType(TypeTokens.get().keyFor(Observable.class).wildCard()),
-				op.getExpressoEnv().with(refreshModel, null));
-		} catch (ExpressoInterpretationException e) {
-			throw new QonfigInterpretationException("Could not parse refresh", e.getPosition(), e.getErrorLength(), e);
-		}
-		InterpretedModelSet refreshModelInterpreted;
-		try {
-			refreshModelInterpreted = refreshModel.interpret();
-		} catch (ExpressoInterpretationException e) {
-			throw new QonfigInterpretationException(e.getMessage(), e.getPosition(), e.getErrorLength(), e);
-		}
-		return CollectionTransform.of(sourceType.getModelType(), sourceType.getValueType(), (f, models) -> {
-			SettableValue<T> sourceValue = SettableValue.build(sourceType.getValueType()).build();
-			ModelSetInstance refreshModelInstance = refreshModelInterpreted.createInstance(models.getUntil()).withAll(models)//
-				.with(sourcePlaceholder, sourceValue)//
-				.build();
-			SettableValue<Observable<?>> refresh = refreshV.get(refreshModelInstance);
-			return f.refreshEach(v -> {
-				sourceValue.set(v, null);
-				return refresh.get();
-			});
-		}, null, () -> "refresh(" + refreshV + ")");
+		CompiledExpression refreshX = op.getAttributeExpression("on");
+		return CollectionTransform.<C, T, C, C> create(sourceModelType, sourceModelType, sourceType -> {
+			ObservableModelSet.Builder refreshModelBuilder = op.getExpressoEnv().getModels().wrap("refreshEachModel");
+			RuntimeValuePlaceholder<SettableValue<?>, SettableValue<T>> sourcePlaceholder = refreshModelBuilder.withRuntimeValue(sourceAs,
+				ModelTypes.Value.forType(sourceType.getValueType()));
+			ObservableModelSet.Built refreshModel = refreshModelBuilder.build();
+			ModelValueSynth<SettableValue<?>, SettableValue<Observable<?>>> refreshV;
+			try {
+				refreshV = refreshX.evaluate(ModelTypes.Value.forType(TypeTokens.get().keyFor(Observable.class).wildCard()),
+					op.getExpressoEnv().with(refreshModel, null));
+			} catch (ExpressoInterpretationException e) {
+				throw new ExpressoInterpretationException("Could not parse refresh", e.getPosition(), e.getErrorLength(), e);
+			}
+			InterpretedModelSet refreshModelInterpreted;
+			try {
+				refreshModelInterpreted = refreshModel.interpret();
+			} catch (ExpressoInterpretationException e) {
+				throw new ExpressoInterpretationException(e.getMessage(), e.getPosition(), e.getErrorLength(), e);
+			}
+			return (ObservableStructureTransform<C, C, C, ?>) CollectionTransform.flowTransform(sourceType, (f, models) -> {
+				SettableValue<T> sourceValue = SettableValue.build(sourceType.getValueType()).build();
+				ModelSetInstance refreshModelInstance = refreshModelInterpreted.createInstance(models.getUntil()).withAll(models)//
+					.with(sourcePlaceholder, sourceValue)//
+					.build();
+				SettableValue<Observable<?>> refresh = refreshV.get(refreshModelInstance);
+				return f.refreshEach(v -> {
+					sourceValue.set((T) v, null);
+					return refresh.get();
+				});
+			}, null, () -> "refresh(" + refreshV + ")", refreshV);
+		});
 	}
 
-	private <T> FlowCollectionTransform<T, T, ObservableCollection<?>, ObservableCollection<T>> distinctCollection(ExpressoQIS op)
+	private <T, C extends ObservableCollection<C>> CollectionTransform<C, ? extends ObservableSet<?>> distinctCollection(ExpressoQIS op)
 		throws QonfigInterpretationException {
-		ModelInstanceType.SingleTyped<? extends ObservableCollection<?>, T, ? extends ObservableCollection<T>> sourceType;
-		sourceType = (ModelInstanceType.SingleTyped<? extends ObservableCollection<?>, T, ? extends ObservableCollection<T>>) op
-			.get(VALUE_TYPE_KEY);
-
+		ModelType.SingleTyped<C> sourceModelType = (ModelType.SingleTyped<C>) op.get(VALUE_TYPE_KEY);
 		boolean useFirst = op.getAttribute("use-first", Boolean.class);
 		boolean preserveSourceOrder = op.getAttribute("preserve-source-order", Boolean.class);
-		ExpressoQIS sort = op.forChildren("sort").peekFirst();
-		ValueContainer<SettableValue<?>, SettableValue<Comparator<T>>> compare = sort == null ? null
-			: sort.put(VALUE_TYPE_KEY, sourceType.getValueType()).interpret(ValueContainer.class);
-		if (compare != null) {
-			return CollectionTransform.of(ModelTypes.SortedSet, sourceType.getValueType(), (f, models) -> {
-				Comparator<T> comparator = compare.get(models).get();
-				return f.distinctSorted(comparator, useFirst);
-			}, null, () -> "distinct");
-		} else {
-			return CollectionTransform.of(ModelTypes.Set, sourceType.getValueType(),
-				(f, models) -> f.distinct(opts -> opts.useFirst(useFirst).preserveSourceOrder(preserveSourceOrder)), null,
-				() -> "distinct");
+		ExpressoQIS sortSession = op.forChildren("sort").peekFirst();
+		ParsedSorting sort = sortSession == null ? null : sortSession.interpret(ParsedSorting.class);
+		if (sort != null || sourceModelType == ModelTypes.SortedCollection) {
+			if (preserveSourceOrder)
+				op.warn("'preserve-source-order' is not applicable for sorted transformations");
+			return CollectionTransform.<C, T, C, ObservableSortedSet<?>> create(sourceModelType, ModelTypes.SortedSet, sourceType -> {
+				ModelValueSynth<SettableValue<?>, SettableValue<Comparator<T>>> compare = sort.evaluate(sourceType.getValueType());
+				return (ObservableStructureTransform<C, C, ObservableSortedSet<?>, ?>) CollectionTransform
+					.<T, T> distinctSortedFlowTransform(sourceType.getValueType(), (f, models) -> {
+						Comparator<T> comparator = compare.get(models).get();
+						return f.distinctSorted(comparator, useFirst);
+					}, null, () -> "distinct", compare);
+			});
+		} else if (sourceModelType == ModelTypes.SortedSet || sourceModelType == ModelTypes.Set)
+			return (CollectionTransform<C, ObservableSet<?>>) CollectionTransform.trivial(sourceModelType);
+		else {
+			return CollectionTransform.<C, T, C, ObservableSet<?>> create(sourceModelType, ModelTypes.Set, sourceType -> {
+				return (ObservableStructureTransform<C, C, ObservableSet<?>, ?>) CollectionTransform
+					.<T, T> distinctFlowTransform(sourceType.getValueType(), (f, models) -> {
+						return f.distinct(opts -> opts.useFirst(useFirst).preserveSourceOrder(preserveSourceOrder));
+					}, null, () -> "distinct");
+			});
 		}
 	}
 
-	private <T> FlowCollectionTransform<T, T, ObservableCollection<?>, ObservableCollection<T>> sortedCollection(ExpressoQIS op)
-		throws QonfigInterpretationException {
-		ModelInstanceType.SingleTyped<? extends ObservableCollection<?>, T, ? extends ObservableCollection<T>> sourceType;
-		sourceType = (ModelInstanceType.SingleTyped<? extends ObservableCollection<?>, T, ? extends ObservableCollection<T>>) op
-			.get(VALUE_TYPE_KEY);
-
-		ParsedSorting sorting = op.interpret(ParsedSorting.class);
-		return CollectionTransform.of(ModelTypes.SortedCollection, sourceType.getValueType(), (f, models) -> {
-			Comparator<T> comparator;
-			try {
-				comparator = sorting.evaluate(sourceType.getValueType()).get(models).get();
-			} catch (ExpressoInterpretationException e) {
-				throw new ModelInstantiationException("Could not initialize sorting", e.getPosition(), e.getErrorLength(), e);
-			}
-			return f.sorted(comparator);
-		}, null, () -> "sorted");
+	private <T, C extends ObservableCollection<C>> CollectionTransform<C, ? extends ObservableSortedCollection<?>> sortedCollection(
+		ExpressoQIS op) throws QonfigInterpretationException {
+		ModelType.SingleTyped<C> sourceModelType = (ModelType.SingleTyped<C>) op.get(VALUE_TYPE_KEY);
+		ParsedSorting sort = op.interpret(ParsedSorting.class);
+		return CollectionTransform.<C, T, C, ObservableSortedCollection<?>> create(sourceModelType, ModelTypes.SortedCollection,
+			sourceType -> {
+				ModelValueSynth<SettableValue<?>, SettableValue<Comparator<T>>> compare = sort.evaluate(sourceType.getValueType());
+				return (ObservableStructureTransform<C, C, ObservableSortedCollection<?>, ?>) CollectionTransform
+					.<T, T> sortedFlowTransform(sourceType.getValueType(), (f, models) -> {
+						Comparator<T> comparator = compare.get(models).get();
+						return f.sorted(comparator);
+					}, null, () -> "sorted", compare);
+			});
 	}
 
-	private <T> FlowCollectionTransform<T, T, ObservableCollection<?>, ObservableCollection<T>> withCollectionEquivalence(ExpressoQIS op)
-		throws QonfigInterpretationException {
+	private <T, C extends ObservableCollection<?>> CollectionTransform<C, ? extends ObservableCollection<?>> withCollectionEquivalence(
+		ExpressoQIS op) throws QonfigInterpretationException {
 		throw new QonfigInterpretationException("Not yet implemented", op.getElement().getPositionInFile(), 0); // TODO
 	}
 
-	private <T> FlowCollectionTransform<T, T, ObservableCollection<?>, ObservableCollection<T>> unmodifiableCollection(ExpressoQIS op)
+	private <T, C extends ObservableCollection<?>> CollectionTransform<C, C> unmodifiableCollection(ExpressoQIS op)
 		throws QonfigInterpretationException {
-		ModelInstanceType.SingleTyped<? extends ObservableCollection<?>, T, ? extends ObservableCollection<T>> sourceType;
-		sourceType = (ModelInstanceType.SingleTyped<? extends ObservableCollection<?>, T, ? extends ObservableCollection<T>>) op
-			.get(VALUE_TYPE_KEY);
-
+		ModelType.SingleTyped<C> sourceModelType = (ModelType.SingleTyped<C>) op.get(VALUE_TYPE_KEY);
 		boolean allowUpdates = op.getAttribute("allow-updates", boolean.class);
-		return CollectionTransform.of(ModelTypes.Collection, sourceType.getValueType(), (f, models) -> f.unmodifiable(allowUpdates), null,
-			() -> "unmodifiable(" + allowUpdates + ")");
+		return CollectionTransform.<C, T, C, C> create(sourceModelType, sourceModelType, sourceType -> {
+			return (ObservableStructureTransform<C, C, C, ?>) CollectionTransform.<C, C, C, C> flowTransform(sourceType,
+				(f, models) -> f.unmodifiable(allowUpdates), null, () -> "unmodifiable(" + allowUpdates + ")");
+		});
 	}
 
-	private <T> FlowCollectionTransform<T, T, ObservableCollection<?>, ObservableCollection<T>> filterCollectionModification(ExpressoQIS op)
+	private <T, C extends ObservableCollection<?>> CollectionTransform<C, C> filterCollectionModification(ExpressoQIS op)
 		throws QonfigInterpretationException {
 		throw new QonfigInterpretationException("Not yet implemented", op.getElement().getPositionInFile(), 0); // TODO
 	}
 
-	private <S, T> FlowCollectionTransform<S, T, ObservableCollection<?>, ObservableCollection<T>> mapEquivalentCollectionTo(ExpressoQIS op)
+	private <S, T, C extends ObservableCollection<?>> CollectionTransform<C, C> mapEquivalentCollectionTo(ExpressoQIS op)
 		throws QonfigInterpretationException {
 		throw new QonfigInterpretationException("Not yet implemented", op.getElement().getPositionInFile(), 0); // TODO
 	}
 
-	private <S, T> FlowCollectionTransform<S, T, ObservableCollection<?>, ObservableCollection<T>> flattenCollection(ExpressoQIS op)
-		throws QonfigInterpretationException {
-		ModelInstanceType.SingleTyped<? extends ObservableCollection<?>, T, ? extends ObservableCollection<T>> sourceType;
-		sourceType = (ModelInstanceType.SingleTyped<? extends ObservableCollection<?>, T, ? extends ObservableCollection<T>>) op
-			.get(VALUE_TYPE_KEY);
-
-		Class<?> raw = TypeTokens.getRawType(sourceType.getValueType());
-		if (ObservableValue.class.isAssignableFrom(raw)) {
-			TypeToken<T> resultType = (TypeToken<T>) sourceType.getValueType().resolveType(ObservableValue.class.getTypeParameters()[0]);
-			return CollectionTransform.of(ModelTypes.Collection, resultType, //
-				(flow, models) -> flow.flattenValues(resultType, v -> (ObservableValue<? extends T>) v), null, () -> "flatValues");
-		} else if (ObservableCollection.class.isAssignableFrom(raw)) {
-			System.err.println("WARNING: Collection flatten is not fully implemented.  Many options are unsupported.");
-			// TODO Use sort, map options, reverse
-			TypeToken<T> resultType = (TypeToken<T>) sourceType.getValueType()
-				.resolveType(ObservableCollection.class.getTypeParameters()[0]);
-			return CollectionTransform.of(ModelTypes.Collection, resultType, //
-				(flow, models) -> flow.flatMap(resultType, v -> ((ObservableCollection<? extends T>) v).flow()), null,
-				() -> "flatCollections");
-		} else if (CollectionDataFlow.class.isAssignableFrom(raw)) {
-			System.err.println("WARNING: Collection flatten is not fully implemented.  Many options are unsupported.");
-			// TODO Use sort, map options, reverse
-			TypeToken<T> resultType = (TypeToken<T>) sourceType.getValueType().resolveType(CollectionDataFlow.class.getTypeParameters()[2]);
-			return CollectionTransform.of(ModelTypes.Collection, resultType, //
-				(flow, models) -> flow.flatMap(resultType, v -> (CollectionDataFlow<?, ?, ? extends T>) v), null, () -> "flatFlows");
-		} else
-			throw new QonfigInterpretationException("Cannot flatten a collection of type " + sourceType.getValueType(),
-				op.getElement().getPositionInFile(), 0);
-	}
-
-	private <T> FlowCollectionTransform<T, T, ObservableCollection<?>, ObservableCollection<T>> crossCollection(ExpressoQIS op)
-		throws QonfigInterpretationException {
-		throw new QonfigInterpretationException("Not yet implemented", op.getElement().getPositionInFile(), 0); // TODO
-	}
-
-	private <T> FlowCollectionTransform<T, T, ObservableCollection<?>, ObservableCollection<T>> whereCollectionContained(ExpressoQIS op)
-		throws QonfigInterpretationException {
-		ModelInstanceType.SingleTyped<? extends ObservableCollection<?>, T, ? extends ObservableCollection<T>> sourceType;
-		sourceType = (ModelInstanceType.SingleTyped<? extends ObservableCollection<?>, T, ? extends ObservableCollection<T>>) op
-			.get(VALUE_TYPE_KEY);
-
-		QonfigExpression2 filterX = op.getAttributeExpression("filter");
-		ValueContainer<ObservableCollection<?>, ObservableCollection<?>> filter;
-		try {
-			filter = filterX.evaluate(ModelTypes.Collection.any(), op.getExpressoEnv());
-		} catch (ExpressoInterpretationException e) {
-			throw new QonfigInterpretationException("Could not parse filter", e.getPosition(), e.getErrorLength(), e);
-		}
-		boolean inclusive = op.getAttribute("inclusive", boolean.class);
-		return CollectionTransform.of(sourceType.getModelType(), sourceType.getValueType(), (flow, models) -> flow.whereContained(//
-			filter.get(models).flow(), inclusive), //
-			(sourceModels, newModels) -> filter.get(sourceModels) != filter.get(newModels),
-			() -> "whereContained(" + filter + ", " + inclusive + ")");
-	}
-
-	private <K, V> CollectionTransform<V, ObservableMultiMap<?, ?>, ObservableMultiMap<K, V>> groupCollectionBy(ExpressoQIS op)
-		throws QonfigInterpretationException {
-		throw new QonfigInterpretationException("Not yet implemented", op.getElement().getPositionInFile(), 0); // TODO
-	}
-
-	private <T> FlowCollectionTransform<T, T, ObservableCollection<?>, ObservableCollection<T>> collectCollection(ExpressoQIS op)
-		throws QonfigInterpretationException {
-		ModelInstanceType.SingleTyped<? extends ObservableCollection<?>, T, ? extends ObservableCollection<T>> sourceType;
-		sourceType = (ModelInstanceType.SingleTyped<? extends ObservableCollection<?>, T, ? extends ObservableCollection<T>>) op
-			.get(VALUE_TYPE_KEY);
-
-		Boolean active = op.getAttribute("active", Boolean.class);
-		return CollectionTransform.of(sourceType.getModelType(), sourceType.getValueType(), (flow, models) -> {
-			boolean reallyActive;
-			if (active != null)
-				reallyActive = active.booleanValue();
-			else
-				reallyActive = !flow.prefersPassive();
-			if (reallyActive)
-				return flow.collectActive(models.getUntil()).flow();
-			else
-				return flow.collectPassive().flow();
-		}, null, () -> "collect(" + active + ")");
-	}
-
-	private <S, T> ParsedTransformation<S, T> mapTransformation(TypeToken<S> currentType, ExpressoQIS op)
-		throws QonfigInterpretationException, ExpressoInterpretationException, ExpressoEvaluationException {
-		List<? extends ExpressoQIS> combinedValues = op.forChildren("combined-value");
-		ExpressoQIS map = op.forChildren("map").getFirst();
-		ObservableModelSet.Builder mapModelsBuilder = map.getExpressoEnv().getModels().wrap("mapModel");
-		Map<String, InterpretedValueContainer<SettableValue<?>, SettableValue<Object>>> combined = new LinkedHashMap<>(
-			combinedValues.size() * 2);
-		Map<String, ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<Object>>> combinedPlaceholders = new LinkedHashMap<>();
-		for (ExpressoQIS combine : combinedValues) {
-			String name = combine.getAttributeText("name");
-			op.getExpressoEnv().getModels().getNameChecker().checkName(name);
-			QonfigExpression2 value = combine.getValueExpression();
-			ValueContainer<SettableValue<?>, SettableValue<Object>> combineV = value
-				.evaluate((ModelInstanceType<SettableValue<?>, SettableValue<Object>>) (ModelInstanceType<?, ?>) ModelTypes.Value.any());
-			combined.put(name, combineV.interpret());
-			combinedPlaceholders.put(name, mapModelsBuilder.withRuntimeValue(name, combineV.getType()));
-		}
-		String sourceName = op.getAttributeText("source-as");
-		ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<S>> sourcePlaceholder = mapModelsBuilder
-			.withRuntimeValue(sourceName, ModelTypes.Value.forType(currentType));
-		ObservableModelSet.Built mapModels = mapModelsBuilder.build();
-		map.setModels(mapModels, null);
-		QonfigExpression2 mapEx = map.getValueExpression();
-		QonfigValue targetTypeV = op.getElement().getAttributes().get(op.getAttributeDef(null, null, "type"));
-		TypeToken<T> targetType;
-		ValueContainer<SettableValue<?>, SettableValue<T>> mapped;
-		if (targetTypeV != null) {
-			targetType = (TypeToken<T>) VariableType
-				.parseType(targetTypeV.text, map.getExpressoEnv().getClassView(), op.getElement().getDocument().getLocation(),
-					targetTypeV.position)//
-				.getType(map.getExpressoEnv().getModels());
-			mapped = mapEx.evaluate(ModelTypes.Value.forType(targetType));
-		} else {
-			mapped = mapEx.evaluate(
-				(ModelInstanceType<SettableValue<?>, SettableValue<T>>) (ModelInstanceType<?, ?>) ModelTypes.Value.any(),
-				map.getExpressoEnv());
-			targetType = (TypeToken<T>) mapped.getType().getType(0);
-		}
-
-		boolean cached = op.getAttribute("cache", boolean.class);
-		boolean reEval = op.getAttribute("re-eval-on-update", boolean.class);
-		boolean fireIfUnchanged = op.getAttribute("fire-if-unchanged", boolean.class);
-		boolean nullToNull = op.getAttribute("null-to-null", boolean.class);
-		boolean manyToOne = op.getAttribute("many-to-one", boolean.class);
-		boolean oneToMany = op.getAttribute("one-to-many", boolean.class);
-
-		MapReverse<S, T> mapReverse;
+	private <T, C1 extends ObservableCollection<?>, C2 extends ObservableCollection<?>> CollectionTransform<C1, C2> flattenCollection(
+		ExpressoQIS op)
+			throws QonfigInterpretationException {
+		ModelType.SingleTyped<C1> sourceModelType = (ModelType.SingleTyped<C1>) op.get(VALUE_TYPE_KEY);
+		String targetModelTypeName = op.getAttributeText("to");
+		ExpressoQIS sortSession = op.forChildren("sort").peekFirst();
+		ParsedSorting sort = sortSession == null ? null : sortSession.interpret(ParsedSorting.class);
+		@SuppressWarnings("unused")
 		ExpressoQIS reverse = op.forChildren("reverse").peekFirst();
-		if (reverse != null) {
-			Map<String, TypeToken<Object>> combinedTypes = new LinkedHashMap<>();
-			for (Map.Entry<String, InterpretedValueContainer<SettableValue<?>, SettableValue<Object>>> combinedV : combined.entrySet()) {
-				combinedTypes.put(combinedV.getKey(), (TypeToken<Object>) combinedV.getValue().getType().getType(0));
-			}
-			reverse.put(REVERSE_CONFIG, new MapReverseConfig<>(sourceName, currentType, targetType, combinedTypes));
-			mapReverse = reverse.interpret(MapReverse.class);
-		} else
-			mapReverse = null;
-
-		InterpretedModelSet mapModelsInterpreted;
-		try {
-			mapModelsInterpreted = mapModels.interpret();
-		} catch (ExpressoInterpretationException e) {
-			throw new QonfigInterpretationException(e.getMessage(), e.getPosition(), e.getErrorLength(), e);
+		@SuppressWarnings("unused")
+		boolean propagateToParent = op.getAttribute("propagate-to-parent", boolean.class, false);
+		ModelType.SingleTyped<C2> collectionModel;
+		switch (targetModelTypeName.toLowerCase()) {
+		case "list":
+			if (sort != null)
+				collectionModel = (ModelType.SingleTyped<C2>) ModelTypes.SortedCollection;
+			else
+				collectionModel = (ModelType.SingleTyped<C2>) ModelTypes.Collection;
+			break;
+		case "sorted-list":
+			collectionModel = (ModelType.SingleTyped<C2>) ModelTypes.SortedCollection;
+			break;
+		case "set":
+			if (sort != null)
+				collectionModel = (ModelType.SingleTyped<C2>) ModelTypes.SortedSet;
+			else
+				collectionModel = (ModelType.SingleTyped<C2>) ModelTypes.Set;
+			break;
+		case "sorted-set":
+			collectionModel = (ModelType.SingleTyped<C2>) ModelTypes.SortedSet;
+			break;
+		case "event":
+		case "action":
+		case "value":
+		case "value-set":
+		case "map":
+		case "sorted-map":
+		case "multi-map":
+		case "sorted-multi-map":
+			throw new QonfigInterpretationException("Unsupported collection flatten target: '" + targetModelTypeName + "'",
+				op.getAttributeValuePosition("to", 0), targetModelTypeName.length());
+		default:
+			throw new QonfigInterpretationException("Unrecognized model type target: '" + targetModelTypeName + "'",
+				op.getAttributeValuePosition("to", 0), targetModelTypeName.length());
 		}
-		return new ParsedTransformation<S, T>() {
-			@Override
-			public TypeToken<T> getTargetType() {
-				return targetType;
-			}
+		return CollectionTransform.<C1, T, C1, C2> create(sourceModelType, collectionModel, sourceType -> {
+			Class<?> raw = TypeTokens.getRawType(sourceType.getValueType());
+			TypeToken<T> resultType;
+			ExBiFunction<CollectionDataFlow<?, ?, ?>, ModelSetInstance, CollectionDataFlow<?, ?, T>, ModelInstantiationException> flatten;
+			String txName;
+			if (ObservableValue.class.isAssignableFrom(raw)) {
+				resultType = (TypeToken<T>) sourceType.getValueType().resolveType(ObservableValue.class.getTypeParameters()[0]);
+				flatten = (flow, models) -> flow.flattenValues(resultType, v -> (ObservableValue<? extends T>) v);
+				txName = "flatValues";
+			} else if (ObservableCollection.class.isAssignableFrom(raw)) {
+				System.err.println("WARNING: Collection flatten is not fully implemented.  Many options are unsupported.");
+				// TODO Use map options, reverse
+				resultType = (TypeToken<T>) sourceType.getValueType().resolveType(ObservableCollection.class.getTypeParameters()[0]);
+				flatten = (flow, models) -> flow.flatMap(resultType, v -> ((ObservableCollection<? extends T>) v).flow());
+				txName = "flatCollections";
+			} else if (CollectionDataFlow.class.isAssignableFrom(raw)) {
+				System.err.println("WARNING: Collection flatten is not fully implemented.  Many options are unsupported.");
+				// TODO Use map options, reverse
+				resultType = (TypeToken<T>) sourceType.getValueType().resolveType(CollectionDataFlow.class.getTypeParameters()[2]);
+				flatten = (flow, models) -> flow.flatMap(resultType, v -> (CollectionDataFlow<?, ?, ? extends T>) v);
+				txName = "flatFlows";
+			} else
+				throw new ExpressoInterpretationException("Cannot flatten a collection of type " + sourceType.getValueType(),
+					op.getElement().getPositionInFile(), 0);
+			ModelValueSynth<SettableValue<?>, SettableValue<Comparator<T>>> sortSynth;
+			List<ModelValueSynth<?, ?>> components = new ArrayList<>();
+			if (sort != null) {
+				sortSynth = sort.evaluate(resultType);
+				components.add(sortSynth);
+			} else if (collectionModel == ModelTypes.SortedSet || collectionModel == ModelTypes.SortedCollection)
+				sortSynth = getDefaultSorting(op.getElement()).evaluate(resultType);
+			else
+				sortSynth = null;
+			boolean distinct = collectionModel == ModelTypes.SortedSet || collectionModel == ModelTypes.Set;
+			return (ObservableStructureTransform<? super C1, ? super C1, ? extends C2, ?>) CollectionTransform
+				.flowTransform(collectionModel.forType(resultType), (source, models) -> {
+					Comparator<T> compare = sortSynth == null ? null : sortSynth.get(models).get();
+					CollectionDataFlow<?, ?, T> mapped = flatten.apply(source, models);
+					if (distinct) {
+						if (sortSynth != null)
+							mapped = mapped.distinctSorted(compare, false);
+						else
+							mapped = mapped.distinct();
+					} else if (sortSynth != null)
+						mapped = mapped.sorted(compare);
+					return mapped;
+				}, null, () -> txName, components.toArray(new ModelValueSynth[0]));
+		});
+	}
 
-			@Override
-			public boolean isReversible() {
-				return mapReverse != null;
-			}
+	private CollectionTransform<?, ?> crossCollection(ExpressoQIS op) throws QonfigInterpretationException {
+		throw new QonfigInterpretationException("Not yet implemented", op.getElement().getPositionInFile(), 0); // TODO
+	}
 
-			@Override
-			public Transformation<S, T> transform(Transformation.TransformationPrecursor<S, T, ?> precursor, ModelSetInstance modelSet)
-				throws ModelInstantiationException {
-				SettableValue<S> sourceV = SettableValue.build(currentType).build();
-				Map<String, SettableValue<Object>> combinedSourceVs = new LinkedHashMap<>();
-				Map<String, SettableValue<Object>> combinedTransformVs = new LinkedHashMap<>();
-				Transformation.TransformationBuilder<S, T, ?> builder = precursor//
-					.cache(cached).reEvalOnUpdate(reEval).fireIfUnchanged(fireIfUnchanged).nullToNull(nullToNull).manyToOne(manyToOne)
-					.oneToMany(oneToMany);
-				ObservableModelSet.ModelSetInstanceBuilder mapMSIBuilder = mapModelsInterpreted.createInstance(modelSet.getUntil())
-					.withAll(modelSet)//
-					.with(sourcePlaceholder, sourceV.disableWith(ObservableValue.of(StdMsg.UNSUPPORTED_OPERATION)));
-				for (Map.Entry<String, InterpretedValueContainer<SettableValue<?>, SettableValue<Object>>> cv : combined.entrySet()) {
-					SettableValue<Object> v = cv.getValue().get(modelSet);
-					combinedSourceVs.put(cv.getKey(), v);
-					builder = builder.combineWith(v);
-					SettableValue<Object> cv2 = SettableValue.build((TypeToken<Object>) cv.getValue().getType().getType(0)).build();
-					combinedTransformVs.put(cv.getKey(), cv2);
-					mapMSIBuilder.with(combinedPlaceholders.get(cv.getKey()), cv2);
-				}
-				ModelSetInstance mapMSI = mapMSIBuilder.build();
-				SettableValue<T> mappedV = mapped.get(mapMSI);
-				BiFunction<S, Transformation.TransformationValues<? extends S, ? extends T>, T> mapFn = (source, tvs) -> {
-					sourceV.set(source, null);
-					for (Map.Entry<String, SettableValue<Object>> cv : combinedTransformVs.entrySet())
-						cv.getValue().set(tvs.get(combinedSourceVs.get(cv.getKey())), null);
-					return mappedV.get();
-				};
-				Transformation<S, T> transformation = builder.build(mapFn);
-				if (mapReverse != null)
-					transformation = ((MaybeReversibleTransformation<S, T>) transformation).withReverse(//
-						mapReverse.reverse(transformation, modelSet));
-				return transformation;
+	private <T, C extends ObservableCollection<?>> CollectionTransform<C, C> whereCollectionContained(ExpressoQIS op)
+		throws QonfigInterpretationException {
+		ModelType.SingleTyped<C> sourceModelType = (ModelType.SingleTyped<C>) op.get(VALUE_TYPE_KEY);
+		CompiledExpression filterX = op.getAttributeExpression("filter");
+		boolean inclusive = op.getAttribute("inclusive", boolean.class);
+		return CollectionTransform.create(sourceModelType, sourceModelType, sourceType -> {
+			ModelValueSynth<ObservableCollection<?>, ObservableCollection<?>> filter;
+			try {
+				filter = filterX.evaluate(ModelTypes.Collection.any(), op.getExpressoEnv());
+			} catch (ExpressoInterpretationException e) {
+				throw new ExpressoInterpretationException("Could not parse filter", e.getPosition(), e.getErrorLength(), e);
 			}
+			return (ObservableStructureTransform<? super C, ? super C, ? extends C, ?>) CollectionTransform.flowTransform(sourceType,
+				(flow, models) -> flow.whereContained(//
+					filter.get(models).flow(), inclusive), //
+				(sourceModels, newModels) -> filter.get(sourceModels) != filter.get(newModels),
+				() -> "whereContained(" + filter + ", " + inclusive + ")");
+		});
+	}
 
-			@Override
-			public boolean isDifferent(ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException {
-				for (ValueContainer<SettableValue<?>, SettableValue<Object>> combinedSourceV : combined.values()) {
-					if (combinedSourceV.get(sourceModels) != combinedSourceV.get(newModels))
-						return true;
-				}
-				return false;
-			}
+	private <K, V> CollectionTransform<ObservableCollection<?>, ObservableMultiMap<?, ?>> groupCollectionBy(ExpressoQIS op)
+		throws QonfigInterpretationException {
+		throw new QonfigInterpretationException("Not yet implemented", op.getElement().getPositionInFile(), 0); // TODO
+	}
 
-			@Override
-			public String toString() {
-				StringBuilder str = new StringBuilder("map(").append(mapEx);
-				if (!combined.isEmpty())
-					str.append("with ").append(combined.values());
-				return str.append(")").toString();
-			}
-		};
+	private <T, C extends ObservableCollection<C>> CollectionTransform<C, C> collectCollection(ExpressoQIS op)
+		throws QonfigInterpretationException {
+		ModelType.SingleTyped<C> sourceModelType = (ModelType.SingleTyped<C>) op.get(VALUE_TYPE_KEY);
+		Boolean active = op.getAttribute("active", Boolean.class);
+		return CollectionTransform.create(sourceModelType, sourceModelType, sourceType -> {
+			return CollectionTransform.flowTransform(sourceType, (flow, models) -> {
+				boolean reallyActive;
+				if (active != null)
+					reallyActive = active.booleanValue();
+				else
+					reallyActive = !flow.prefersPassive();
+				if (reallyActive)
+					return flow.collectActive(models.getUntil()).flow();
+				else
+					return flow.collectPassive().flow();
+			}, null, () -> "collect(" + active + ")");
+		});
+	}
+
+	/** A compiled structure capable of generating an {@link InterpretedTransformation} */
+	public interface CompiledTransformation {
+		/**
+		 * @param <S> The type of the source values to transform
+		 * @param sourceType The type of the source values to transform
+		 * @return The interpreted transformer
+		 * @throws ExpressoInterpretationException If the transformer could not be produced
+		 */
+		<S> InterpretedTransformation<S, ?> interpret(TypeToken<S> sourceType) throws ExpressoInterpretationException;
+
+		/** @return Whether this transformation is reversible */
+		boolean isReversible();
 	}
 
 	/**
-	 * Provided to a {@link MapReverse} implementation via the {@link ExpressoBaseV0_1#REVERSE_CONFIG} key
+	 * Interface to provide via {@link org.qommons.config.QonfigInterpreterCore.Builder#createWith(String, Class, QonfigValueCreator)} to
+	 * support a new transformation type
 	 *
 	 * @param <S> The type of the source value
 	 * @param <T> The type of the transformed value
 	 */
-	public static class MapReverseConfig<S, T> {
-		/** The name for the source value in expressions */
-		public final String sourceName;
-		/** The type of the source value */
-		public final TypeToken<S> sourceType;
-		/** The type of the transformed value */
-		public final TypeToken<T> targetType;
-		/** The name and type of each value combined */
-		public final Map<String, TypeToken<Object>> combinedValues;
+	public interface InterpretedTransformation<S, T> {
+		/** @return The type of value that this transformation produces */
+		TypeToken<T> getTargetType();
 
 		/**
-		 * @param sourceName The name for the source value in expressions
-		 * @param sourceType The type of the source value
-		 * @param targetType The type of the transformed value
-		 * @param combinedValues The name and type of each value combined
+		 * @param precursor The observable transformation precursor to configure
+		 * @param modelSet The model instances to use
+		 * @return The observable transformation
+		 * @throws ModelInstantiationException If the transformation could not be produced
 		 */
-		public MapReverseConfig(String sourceName, TypeToken<S> sourceType, TypeToken<T> targetType,
-			Map<String, TypeToken<Object>> combinedValues) {
-			this.sourceName = sourceName;
-			this.sourceType = sourceType;
-			this.targetType = targetType;
-			this.combinedValues = combinedValues;
-		}
+		Transformation<S, T> transform(TransformationPrecursor<S, T, ?> precursor, ModelSetInstance modelSet)
+			throws ModelInstantiationException;
+
+		/**
+		 * Helps support the {@link ModelValueSynth#forModelCopy(Object, ModelSetInstance, ModelSetInstance)} method
+		 *
+		 * @param sourceModels The source model instance
+		 * @param newModels The new model instance
+		 * @return Whether observables produced by this transform would be different between the two models
+		 * @throws ModelInstantiationException If the inspection fails
+		 */
+		boolean isDifferent(ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException;
+
+		/** @return Any component model values that are used by this transformation */
+		ModelValueSynth<?, ?>[] getComponents();
 	}
 
-	/** The session key for the {@link MapReverseConfig} provided to the map-reverse session */
-	public static final String REVERSE_CONFIG = "reverse-config";
+	/** A compiled structure capable of generating an {@link InterpretedMapReverse} */
+	public interface CompiledMapReverse {
+		/**
+		 * @param <S> The type of the source values to produce
+		 * @param <T> The type of the mapped values to reverse-transform
+		 * @param sourceName The name of the source model value
+		 * @param sourceType The source type of the transformation
+		 * @param targetType The target type of the transformation
+		 * @param combinedTypes The names and types of all combined values incorporated into the transform
+		 * @return The interpreted map reverse
+		 * @throws ExpressoInterpretationException If the reverse transformation could not be produced
+		 */
+		<S, T> InterpretedMapReverse<S, T> interpret(String sourceName, TypeToken<S> sourceType, TypeToken<T> targetType,
+			Map<String, TypeToken<?>> combinedTypes) throws ExpressoInterpretationException;
+	}
 
 	/**
 	 * Interface to provide via {@link org.qommons.config.QonfigInterpreterCore.Builder#createWith(String, Class, QonfigValueCreator)} to
@@ -3003,7 +3496,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 	 * @param <S> The type of the source value
 	 * @param <T> The type of the transformed value
 	 */
-	public interface MapReverse<S, T> {
+	public interface InterpretedMapReverse<S, T> {
 		/**
 		 * @param transformation The transformation to reverse
 		 * @param modelSet The model instance
@@ -3012,318 +3505,607 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		 */
 		Transformation.TransformReverse<S, T> reverse(Transformation<S, T> transformation, ModelSetInstance modelSet)
 			throws ModelInstantiationException;
+
+		/**
+		 * Helps support the {@link ModelValueSynth#forModelCopy(Object, ModelSetInstance, ModelSetInstance)} method
+		 *
+		 * @param sourceModels The source model instance
+		 * @param newModels The new model instance
+		 * @return Whether observables produced by this reverse would be different between the two models
+		 * @throws ModelInstantiationException If the inspection fails
+		 */
+		boolean isDifferent(ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException;
+
+		/** @return Any component model values that are used by this reverse */
+		List<? extends ModelValueSynth<?, ?>> getComponents();
 	}
 
-	<S, T> MapReverse<S, T> createSourceReplace(ExpressoQIS reverse) throws QonfigInterpretationException {
-		MapReverseConfig<S, T> reverseConfig = (MapReverseConfig<S, T>) reverse.get(REVERSE_CONFIG);
-		QonfigExpression2 reverseX = reverse.getValueExpression();
-		QonfigExpression2 enabled = reverse.getAttributeExpression("enabled");
-		QonfigExpression2 accept = reverse.getAttributeExpression("accept");
-		QonfigExpression2 add = reverse.getAttributeExpression("add");
-		QonfigExpression2 addAccept = reverse.getAttributeExpression("add-accept");
-		String targetName = reverse.getAttributeText("target-as");
-		reverse.getExpressoEnv().getModels().getNameChecker().checkName(targetName);
+	private <T> CompiledTransformation mapTransformation(ExpressoQIS op) throws QonfigInterpretationException {
+		ExpressoQIS mapQIS = op.forChildren("map").getFirst();
+		CompiledExpression mapX = mapQIS.getValueExpression();
 
-		boolean stateful = refersToSource(reverseX.getExpression(), reverseConfig.sourceName)//
-			|| (enabled != null && refersToSource(enabled.getExpression(), reverseConfig.sourceName))
-			|| (accept != null && refersToSource(accept.getExpression(), reverseConfig.sourceName));
-		boolean inexact = reverse.getAttribute("inexact", boolean.class);
+		QonfigValue targetTypeQV = op.getElement().getAttributes().get(op.getAttributeDef(null, null, "type"));
+		VariableType targetTypeV = targetTypeQV == null ? null : VariableType.parseType(targetTypeQV.text,
+			op.getExpressoEnv().getClassView(), targetTypeQV.fileLocation, targetTypeQV.position);
 
-		ObservableModelSet.Builder reverseModelBuilder = reverse.getExpressoEnv().getModels().wrap("mapRepReverseModel");
-		ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<S>> sourcePlaceholder = reverseModelBuilder
-			.withRuntimeValue(reverseConfig.sourceName, ModelTypes.Value.forType(reverseConfig.sourceType));
-		ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<T>> targetPlaceholder = reverseModelBuilder
-			.withRuntimeValue(targetName, ModelTypes.Value.forType(reverseConfig.targetType));
-		Map<String, ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<Object>>> combinedValues = new LinkedHashMap<>();
-		for (Map.Entry<String, TypeToken<Object>> combined : reverseConfig.combinedValues.entrySet())
-			combinedValues.put(combined.getKey(),
-				reverseModelBuilder.withRuntimeValue(combined.getKey(), ModelTypes.Value.forType(combined.getValue())));
-
-		ObservableModelSet.Built reverseModels = reverseModelBuilder.build();
-		reverse.setModels(reverseModels, null);
-
-		InterpretedModelSet reverseModelsInterpreted;
-		try {
-			reverseModelsInterpreted = reverseModels.interpret();
-		} catch (ExpressoInterpretationException e) {
-			throw new QonfigInterpretationException(e.getMessage(), e.getPosition(), e.getErrorLength(), e);
-		}
-		ValueContainer<SettableValue<?>, SettableValue<S>> reversedV;
-		try {
-			reversedV = reverseX.evaluate(ModelTypes.Value.forType(reverseConfig.sourceType));
-		} catch (ExpressoInterpretationException e) {
-			throw new QonfigInterpretationException("Could not interpret reversed value", e.getPosition(), e.getErrorLength(), e);
-		}
-		ValueContainer<SettableValue<?>, SettableValue<String>> enabledV;
-		try {
-			enabledV = enabled == null ? null : enabled.evaluate(ModelTypes.Value.forType(String.class));
-		} catch (ExpressoInterpretationException e) {
-			throw new QonfigInterpretationException("Could not interpret reversed enablement", e.getPosition(), e.getErrorLength(), e);
-		}
-		ValueContainer<SettableValue<?>, SettableValue<String>> acceptV;
-		try {
-			acceptV = accept == null ? null : accept.evaluate(ModelTypes.Value.forType(String.class));
-		} catch (ExpressoInterpretationException e) {
-			throw new QonfigInterpretationException("Could not interpret reversed acceptance", e.getPosition(), e.getErrorLength(), e);
-		}
-		ValueContainer<SettableValue<?>, SettableValue<S>> addV;
-		try {
-			addV = add == null ? null : add.evaluate(ModelTypes.Value.forType(reverseConfig.sourceType));
-		} catch (ExpressoInterpretationException e) {
-			throw new QonfigInterpretationException("Could not interpret reversed add", e.getPosition(), e.getErrorLength(), e);
-		}
-		ValueContainer<SettableValue<?>, SettableValue<String>> addAcceptV;
-		try {
-			addAcceptV = addAccept == null ? null : addAccept.evaluate(ModelTypes.Value.forType(String.class));
-		} catch (ExpressoInterpretationException e) {
-			throw new QonfigInterpretationException("Could not interpret reversed add acceptance", e.getPosition(), e.getErrorLength(), e);
-		}
-		return (transformation, modelSet) -> {
-			SettableValue<S> sourceV = SettableValue.build(reverseConfig.sourceType).build();
-			SettableValue<T> targetV = SettableValue.build(reverseConfig.targetType).build();
-			ObservableModelSet.ModelSetInstanceBuilder reverseMSIBuilder = reverseModelsInterpreted.createInstance(modelSet.getUntil())
-				.withAll(modelSet)//
-				.with(sourcePlaceholder, sourceV.disableWith(ObservableValue.of(StdMsg.UNSUPPORTED_OPERATION)))//
-				.with(targetPlaceholder, targetV.disableWith(ObservableValue.of(StdMsg.UNSUPPORTED_OPERATION)));
-			Map<String, SettableValue<Object>> combinedVs = new LinkedHashMap<>();
-			for (Map.Entry<String, ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<Object>>> cv : combinedValues
-				.entrySet()) {
-				SettableValue<Object> value = SettableValue.build((TypeToken<Object>) cv.getValue().getType().getType(0)).build();
-				combinedVs.put(cv.getKey(), value);
-				reverseMSIBuilder.with(cv.getValue(), value.disableWith(ObservableValue.of(StdMsg.UNSUPPORTED_OPERATION)));
+		Map<String, CompiledExpression> combinedXs = new LinkedHashMap<>();
+		for (ExpressoQIS combinedQIS : op.forChildren("combined-value")) {
+			String name = combinedQIS.getAttributeText("name");
+			try {
+				op.getExpressoEnv().getModels().getNameChecker().checkName(name);
+			} catch (IllegalArgumentException e) {
+				throw new QonfigInterpretationException("Illegal name for combined-value: '" + name + "'",
+					combinedQIS.getAttributeValuePosition("name", 0), name.length(), e);
 			}
-			ModelSetInstance reverseMSI = reverseMSIBuilder.build();
+			combinedXs.put(name, combinedQIS.getValueExpression());
+		}
+		String sourceName = op.getAttributeText("source-as");
+		boolean cached = op.getAttribute("cache", boolean.class);
+		boolean reEval = op.getAttribute("re-eval-on-update", boolean.class);
+		boolean fireIfUnchanged = op.getAttribute("fire-if-unchanged", boolean.class);
+		boolean nullToNull = op.getAttribute("null-to-null", boolean.class);
+		boolean manyToOne = op.getAttribute("many-to-one", boolean.class);
+		boolean oneToMany = op.getAttribute("one-to-many", boolean.class);
 
-			SettableValue<S> reversedEvld = reversedV.get(reverseMSI);
-			SettableValue<String> enabledEvld = enabledV == null ? null : enabledV.get(reverseMSI);
-			SettableValue<String> acceptEvld = acceptV == null ? null : acceptV.get(reverseMSI);
-			SettableValue<S> addEvld = addV == null ? null : addV.get(reverseMSI);
-			SettableValue<String> addAcceptEvld = addAcceptV == null ? null : addAcceptV.get(reverseMSI);
+		CompiledMapReverse compiledReverse = op.interpretChildren("reverse", CompiledMapReverse.class).peekFirst();
 
-			BiFunction<T, Transformation.TransformationValues<? extends S, ? extends T>, S> reverseFn;
-			Function<Transformation.TransformationValues<? extends S, ? extends T>, String> enabledFn;
-			BiFunction<T, Transformation.TransformationValues<? extends S, ? extends T>, String> acceptFn;
-			TriFunction<T, Transformation.TransformationValues<? extends S, ? extends T>, Boolean, S> addFn;
-			BiFunction<T, Transformation.TransformationValues<? extends S, ? extends T>, String> addAcceptFn;
-			reverseFn = (target, tvs) -> {
-				if (stateful)
-					sourceV.set(tvs.getCurrentSource(), null);
-				targetV.set(target, null);
-				int cvIdx = 0;
-				for (Map.Entry<String, ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<Object>>> cv : combinedValues
-					.entrySet()) {
-					combinedVs.get(cv.getKey()).set(tvs.get(transformation.getArg(cvIdx)), null);
-					cvIdx++;
+		return new CompiledTransformation() {
+			@Override
+			public boolean isReversible() {
+				return compiledReverse != null;
+			}
+
+			@Override
+			public <S> InterpretedTransformation<S, ?> interpret(TypeToken<S> sourceType) throws ExpressoInterpretationException {
+				ObservableModelSet.Builder mapModelsBuilder = mapQIS.getExpressoEnv().getModels().wrap("mapModel");
+				Map<String, InterpretedValueSynth<SettableValue<?>, SettableValue<Object>>> combinedSynths = new LinkedHashMap<>(
+					combinedXs.size() * 2);
+				Map<String, ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<Object>>> combinedPlaceholders = new LinkedHashMap<>();
+				for (Map.Entry<String, CompiledExpression> combinedX : combinedXs.entrySet()) {
+					ModelValueSynth<SettableValue<?>, SettableValue<Object>> combineV = combinedX.getValue().evaluate(
+						(ModelInstanceType<SettableValue<?>, SettableValue<Object>>) (ModelInstanceType<?, ?>) ModelTypes.Value.any());
+					combinedSynths.put(combinedX.getKey(), combineV.interpret());
+					combinedPlaceholders.put(combinedX.getKey(), mapModelsBuilder.withRuntimeValue(combinedX.getKey(), combineV.getType()));
 				}
-				return reversedEvld.get();
-			};
-			enabledFn = enabledEvld == null ? null : tvs -> {
-				if (stateful)
-					sourceV.set(tvs.getCurrentSource(), null);
-				targetV.set(null, null);
-				int cvIdx = 0;
-				for (Map.Entry<String, ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<Object>>> cv : combinedValues
-					.entrySet()) {
-					combinedVs.get(cv.getKey()).set(tvs.get(transformation.getArg(cvIdx)), null);
-					cvIdx++;
+				ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<S>> sourcePlaceholder = mapModelsBuilder
+					.withRuntimeValue(sourceName, ModelTypes.Value.forType(sourceType));
+				ObservableModelSet.Built mapModels = mapModelsBuilder.build();
+				mapQIS.setModels(mapModels, null);
+				TypeToken<T> targetType;
+				ModelValueSynth<SettableValue<?>, SettableValue<T>> mapped;
+				if (targetTypeV != null) {
+					targetType = (TypeToken<T>) targetTypeV.getType(mapQIS.getExpressoEnv().getModels());
+					mapped = mapX.evaluate(ModelTypes.Value.forType(targetType));
+				} else {
+					mapped = mapX.evaluate(
+						(ModelInstanceType<SettableValue<?>, SettableValue<T>>) (ModelInstanceType<?, ?>) ModelTypes.Value.any(),
+						mapQIS.getExpressoEnv());
+					targetType = (TypeToken<T>) mapped.getType().getType(0);
 				}
-				return acceptEvld.get();
-			};
-			acceptFn = enabledEvld == null ? null : (target, tvs) -> {
-				if (stateful)
-					sourceV.set(tvs.getCurrentSource(), null);
-				targetV.set(target, null);
-				int cvIdx = 0;
-				for (Map.Entry<String, ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<Object>>> cv : combinedValues
-					.entrySet()) {
-					combinedVs.get(cv.getKey()).set(tvs.get(transformation.getArg(cvIdx)), null);
-					cvIdx++;
-				}
-				return acceptEvld.get();
-			};
-			addFn = addEvld == null ? null : (target, tvs, test) -> {
-				if (stateful)
-					sourceV.set(tvs.getCurrentSource(), null);
-				targetV.set(target, null);
-				int cvIdx = 0;
-				for (Map.Entry<String, ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<Object>>> cv : combinedValues
-					.entrySet()) {
-					combinedVs.get(cv.getKey()).set(tvs.get(transformation.getArg(cvIdx)), null);
-					cvIdx++;
-				}
-				return addEvld.get();
-			};
-			addAcceptFn = addAcceptEvld == null ? null : (target, tvs) -> {
-				if (stateful)
-					sourceV.set(tvs.getCurrentSource(), null);
-				targetV.set(target, null);
-				int cvIdx = 0;
-				for (Map.Entry<String, ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<Object>>> cv : combinedValues
-					.entrySet()) {
-					combinedVs.get(cv.getKey()).set(tvs.get(transformation.getArg(cvIdx)), null);
-					cvIdx++;
-				}
-				return addAcceptEvld.get();
-			};
-			return new Transformation.SourceReplacingReverse<>(transformation, reverseFn, enabledFn, acceptFn, addFn, addAcceptFn, stateful,
-				inexact);
+
+				InterpretedMapReverse<S, T> interpretedReverse;
+				if (compiledReverse != null) {
+					Map<String, TypeToken<?>> combinedTypes = new LinkedHashMap<>();
+					for (Map.Entry<String, InterpretedValueSynth<SettableValue<?>, SettableValue<Object>>> combinedV : combinedSynths
+						.entrySet()) {
+						combinedTypes.put(combinedV.getKey(), combinedV.getValue().getType().getType(0));
+					}
+					interpretedReverse = compiledReverse.interpret(sourceName, sourceType, targetType, combinedTypes);
+				} else
+					interpretedReverse = null;
+
+				InterpretedModelSet mapModelsInterpreted = mapModels.interpret();
+				return new InterpretedTransformation<S, T>() {
+					@Override
+					public TypeToken<T> getTargetType() {
+						return targetType;
+					}
+
+					@Override
+					public Transformation<S, T> transform(Transformation.TransformationPrecursor<S, T, ?> precursor,
+						ModelSetInstance modelSet) throws ModelInstantiationException {
+						SettableValue<S> sourceV = SettableValue.build(sourceType).build();
+						Map<String, SettableValue<Object>> combinedSourceVs = new LinkedHashMap<>();
+						Map<String, SettableValue<Object>> combinedTransformVs = new LinkedHashMap<>();
+						Transformation.TransformationBuilder<S, T, ?> builder = precursor//
+							.cache(cached).reEvalOnUpdate(reEval).fireIfUnchanged(fireIfUnchanged).nullToNull(nullToNull)
+							.manyToOne(manyToOne).oneToMany(oneToMany);
+						ObservableModelSet.ModelSetInstanceBuilder mapMSIBuilder = mapModelsInterpreted.createInstance(modelSet.getUntil())
+							.withAll(modelSet)//
+							.with(sourcePlaceholder, sourceV.disableWith(ObservableValue.of(StdMsg.UNSUPPORTED_OPERATION)));
+						for (Map.Entry<String, InterpretedValueSynth<SettableValue<?>, SettableValue<Object>>> cv : combinedSynths
+							.entrySet()) {
+							SettableValue<Object> v = cv.getValue().get(modelSet);
+							combinedSourceVs.put(cv.getKey(), v);
+							builder = builder.combineWith(v);
+							SettableValue<Object> cv2 = SettableValue.build((TypeToken<Object>) cv.getValue().getType().getType(0)).build();
+							combinedTransformVs.put(cv.getKey(), cv2);
+							mapMSIBuilder.with(combinedPlaceholders.get(cv.getKey()), cv2);
+						}
+						ModelSetInstance mapMSI = mapMSIBuilder.build();
+						SettableValue<T> mappedV = mapped.get(mapMSI);
+						BiFunction<S, Transformation.TransformationValues<? extends S, ? extends T>, T> mapFn = (source, tvs) -> {
+							sourceV.set(source, null);
+							for (Map.Entry<String, SettableValue<Object>> cv : combinedTransformVs.entrySet())
+								cv.getValue().set(tvs.get(combinedSourceVs.get(cv.getKey())), null);
+							return mappedV.get();
+						};
+						Transformation<S, T> transformation = builder.build(mapFn);
+						if (interpretedReverse != null)
+							transformation = ((MaybeReversibleTransformation<S, T>) transformation).withReverse(//
+								interpretedReverse.reverse(transformation, modelSet));
+						return transformation;
+					}
+
+					@Override
+					public boolean isDifferent(ModelSetInstance sourceModels, ModelSetInstance newModels)
+						throws ModelInstantiationException {
+						for (ModelValueSynth<SettableValue<?>, SettableValue<Object>> combinedSourceV : combinedSynths.values()) {
+							if (combinedSourceV.get(sourceModels) != combinedSourceV.get(newModels))
+								return true;
+						}
+						if (interpretedReverse != null && interpretedReverse.isDifferent(sourceModels, newModels))
+							return true;
+						return false;
+					}
+
+					@Override
+					public ModelValueSynth<?, ?>[] getComponents() {
+						List<ModelValueSynth<?, ?>> components = new ArrayList<>();
+						components.add(mapped);
+						components.addAll(combinedSynths.values());
+						if (interpretedReverse != null)
+							components.addAll(interpretedReverse.getComponents());
+						return components.toArray(new ModelValueSynth[components.size()]);
+					}
+
+					@Override
+					public String toString() {
+						StringBuilder str = new StringBuilder("map(").append(mapX);
+						if (!combinedSynths.isEmpty())
+							str.append("with ").append(combinedSynths.values());
+						return str.append(")").toString();
+					}
+				};
+			}
 		};
 	}
 
-	<S, T> MapReverse<S, T> createSourceModifier(ExpressoQIS reverse) throws QonfigInterpretationException {
-		MapReverseConfig<S, T> reverseConfig = (MapReverseConfig<S, T>) reverse.get(REVERSE_CONFIG);
-		QonfigExpression2 reverseX = reverse.getValueExpression();
-		QonfigExpression2 enabled = reverse.getAttributeExpression("enabled");
-		QonfigExpression2 accept = reverse.getAttributeExpression("accept");
-		QonfigExpression2 add = reverse.getAttributeExpression("add");
-		QonfigExpression2 addAccept = reverse.getAttributeExpression("add-accept");
+
+	CompiledMapReverse createSourceReplace(ExpressoQIS reverse) throws QonfigInterpretationException {
+		CompiledExpression reverseX = reverse.getValueExpression();
+		CompiledExpression enabled = reverse.getAttributeExpression("enabled");
+		CompiledExpression accept = reverse.getAttributeExpression("accept");
+		CompiledExpression add = reverse.getAttributeExpression("add");
+		CompiledExpression addAccept = reverse.getAttributeExpression("add-accept");
 		String targetName = reverse.getAttributeText("target-as");
-		reverse.getExpressoEnv().getModels().getNameChecker().checkName(targetName);
-
-		ObservableModelSet.Builder reverseModelBuilder = reverse.getExpressoEnv().getModels().wrap("mapModReverseModel");
-		ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<S>> sourcePlaceholder = reverseModelBuilder
-			.withRuntimeValue(reverseConfig.sourceName, ModelTypes.Value.forType(reverseConfig.sourceType));
-		ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<T>> targetPlaceholder = reverseModelBuilder
-			.withRuntimeValue(targetName, ModelTypes.Value.forType(reverseConfig.targetType));
-		Map<String, ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<Object>>> combinedValues = new LinkedHashMap<>();
-		for (Map.Entry<String, TypeToken<Object>> combined : reverseConfig.combinedValues.entrySet())
-			combinedValues.put(combined.getKey(),
-				reverseModelBuilder.withRuntimeValue(combined.getKey(), ModelTypes.Value.forType(combined.getValue())));
-
-		ObservableModelSet.Built reverseModels = reverseModelBuilder.build();
-		reverse.setModels(reverseModels, null);
-
-		InterpretedModelSet reverseModelsWrapped;
 		try {
-			reverseModelsWrapped = reverseModels.interpret();
-		} catch (ExpressoInterpretationException e) {
-			throw new QonfigInterpretationException(e.getMessage(), e.getPosition(), e.getErrorLength(), e);
+			reverse.getExpressoEnv().getModels().getNameChecker().checkName(targetName);
+		} catch (IllegalArgumentException e) {
+			throw new QonfigInterpretationException("Illegal name for target-as: '" + targetName + "'",
+				reverse.getAttributeValuePosition("target-as", 0), targetName.length(), e);
 		}
 
-		ValueContainer<ObservableAction<?>, ObservableAction<?>> reversedV;
-		try {
-			reversedV = reverseX.evaluate(ModelTypes.Action.any());
-		} catch (ExpressoInterpretationException e) {
-			throw new QonfigInterpretationException("Could not interpret reversed value", e.getPosition(), e.getErrorLength(), e);
-		}
-		ValueContainer<SettableValue<?>, SettableValue<String>> enabledV;
-		try {
-			enabledV = enabled == null ? null : enabled.evaluate(ModelTypes.Value.forType(String.class));
-		} catch (ExpressoInterpretationException e) {
-			throw new QonfigInterpretationException("Could not interpret reversed enablement", e.getPosition(), e.getErrorLength(), e);
-		}
-		ValueContainer<SettableValue<?>, SettableValue<String>> acceptV;
-		try {
-			acceptV = accept == null ? null : accept.evaluate(ModelTypes.Value.forType(String.class));
-		} catch (ExpressoInterpretationException e) {
-			throw new QonfigInterpretationException("Could not interpret reversed acceptance", e.getPosition(), e.getErrorLength(), e);
-		}
-		ValueContainer<SettableValue<?>, SettableValue<S>> addV;
-		try {
-			addV = add == null ? null : add.evaluate(ModelTypes.Value.forType(reverseConfig.sourceType));
-		} catch (ExpressoInterpretationException e) {
-			throw new QonfigInterpretationException("Could not interpret reversed add", e.getPosition(), e.getErrorLength(), e);
-		}
-		ValueContainer<SettableValue<?>, SettableValue<String>> addAcceptV;
-		try {
-			addAcceptV = addAccept == null ? null : addAccept.evaluate(ModelTypes.Value.forType(String.class));
-		} catch (ExpressoInterpretationException e) {
-			throw new QonfigInterpretationException("Could not interpret reversed add acceptance", e.getPosition(), e.getErrorLength(), e);
-		}
-		return (transformation, modelSet) -> {
-			SettableValue<S> sourceV = SettableValue.build(reverseConfig.sourceType).build();
-			SettableValue<T> targetV = SettableValue.build(reverseConfig.targetType).build();
-			ObservableModelSet.ModelSetInstanceBuilder reverseMSIBuilder = reverseModelsWrapped.createInstance(modelSet.getUntil())
-				.withAll(modelSet)//
-				.with(sourcePlaceholder, sourceV.disableWith(ObservableValue.of(StdMsg.UNSUPPORTED_OPERATION)))//
-				.with(targetPlaceholder, targetV.disableWith(ObservableValue.of(StdMsg.UNSUPPORTED_OPERATION)));
-			Map<String, SettableValue<Object>> combinedVs = new LinkedHashMap<>();
-			for (Map.Entry<String, ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<Object>>> cv : combinedValues
-				.entrySet()) {
-				SettableValue<Object> value = SettableValue.build((TypeToken<Object>) cv.getValue().getType().getType(0)).build();
-				combinedVs.put(cv.getKey(), value);
-				reverseMSIBuilder.with(cv.getValue(), value.disableWith(ObservableValue.of(StdMsg.UNSUPPORTED_OPERATION)));
+		boolean inexact = reverse.getAttribute("inexact", boolean.class);
+		return new CompiledMapReverse() {
+			@Override
+			public <S, T> InterpretedMapReverse<S, T> interpret(String sourceName, TypeToken<S> sourceType, TypeToken<T> targetType,
+				Map<String, TypeToken<?>> combinedTypes) throws ExpressoInterpretationException {
+				boolean stateful = refersToSource(reverseX.getExpression(), sourceName)//
+					|| (enabled != null && refersToSource(enabled.getExpression(), sourceName))
+					|| (accept != null && refersToSource(accept.getExpression(), sourceName));
+
+				ObservableModelSet.Builder reverseModelBuilder = reverse.getExpressoEnv().getModels().wrap("mapRepReverseModel");
+				RuntimeValuePlaceholder<SettableValue<?>, SettableValue<S>> sourcePlaceholder = reverseModelBuilder
+					.withRuntimeValue(sourceName, ModelTypes.Value.forType(sourceType));
+				RuntimeValuePlaceholder<SettableValue<?>, SettableValue<T>> targetPlaceholder = reverseModelBuilder
+					.withRuntimeValue(targetName, ModelTypes.Value.forType(targetType));
+				Map<String, ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, ? extends SettableValue<?>>> combinedValues = new LinkedHashMap<>();
+				for (Map.Entry<String, TypeToken<?>> combined : combinedTypes.entrySet())
+					combinedValues.put(combined.getKey(),
+						reverseModelBuilder.withRuntimeValue(combined.getKey(), ModelTypes.Value.forType(combined.getValue())));
+
+				InterpretedModelSet reverseModels = reverseModelBuilder.build().interpret();
+				reverse.setModels(reverseModels, null);
+
+				ModelValueSynth<SettableValue<?>, SettableValue<S>> reversedV;
+				try {
+					reversedV = reverseX.evaluate(ModelTypes.Value.forType(sourceType));
+				} catch (ExpressoInterpretationException e) {
+					throw new ExpressoInterpretationException("Could not interpret reversed value", e.getPosition(), e.getErrorLength(), e);
+				}
+				ModelValueSynth<SettableValue<?>, SettableValue<String>> enabledV;
+				try {
+					enabledV = enabled == null ? null : enabled.evaluate(ModelTypes.Value.forType(String.class));
+				} catch (ExpressoInterpretationException e) {
+					throw new ExpressoInterpretationException("Could not interpret reversed enablement", e.getPosition(),
+						e.getErrorLength(), e);
+				}
+				ModelValueSynth<SettableValue<?>, SettableValue<String>> acceptV;
+				try {
+					acceptV = accept == null ? null : accept.evaluate(ModelTypes.Value.forType(String.class));
+				} catch (ExpressoInterpretationException e) {
+					throw new ExpressoInterpretationException("Could not interpret reversed acceptance", e.getPosition(),
+						e.getErrorLength(), e);
+				}
+				ModelValueSynth<SettableValue<?>, SettableValue<S>> addV;
+				try {
+					addV = add == null ? null : add.evaluate(ModelTypes.Value.forType(sourceType));
+				} catch (ExpressoInterpretationException e) {
+					throw new ExpressoInterpretationException("Could not interpret reversed add", e.getPosition(), e.getErrorLength(), e);
+				}
+				ModelValueSynth<SettableValue<?>, SettableValue<String>> addAcceptV;
+				try {
+					addAcceptV = addAccept == null ? null : addAccept.evaluate(ModelTypes.Value.forType(String.class));
+				} catch (ExpressoInterpretationException e) {
+					throw new ExpressoInterpretationException("Could not interpret reversed add acceptance", e.getPosition(),
+						e.getErrorLength(), e);
+				}
+				return new InterpretedMapReverse<S, T>() {
+					@Override
+					public TransformReverse<S, T> reverse(Transformation<S, T> transformation, ModelSetInstance modelSet)
+						throws ModelInstantiationException {
+						SettableValue<S> sourceV = SettableValue.build(sourceType).build();
+						SettableValue<T> targetV = SettableValue.build(targetType).build();
+						ObservableModelSet.ModelSetInstanceBuilder reverseMSIBuilder = reverseModels.createInstance(modelSet.getUntil())
+							.withAll(modelSet)//
+							.with(sourcePlaceholder, sourceV.disableWith(ObservableValue.of(StdMsg.UNSUPPORTED_OPERATION)))//
+							.with(targetPlaceholder, targetV.disableWith(ObservableValue.of(StdMsg.UNSUPPORTED_OPERATION)));
+						Map<String, SettableValue<Object>> combinedVs = new LinkedHashMap<>();
+						for (Map.Entry<String, RuntimeValuePlaceholder<SettableValue<?>, ? extends SettableValue<?>>> cv : combinedValues
+							.entrySet()) {
+							SettableValue<Object> value = SettableValue.build((TypeToken<Object>) cv.getValue().getType().getType(0))
+								.build();
+							combinedVs.put(cv.getKey(), value);
+							reverseMSIBuilder.with(//
+								(RuntimeValuePlaceholder<SettableValue<?>, SettableValue<Object>>) cv.getValue(), //
+								value.disableWith(ObservableValue.of(StdMsg.UNSUPPORTED_OPERATION)));
+						}
+						ModelSetInstance reverseMSI = reverseMSIBuilder.build();
+
+						SettableValue<S> reversedEvld = reversedV.get(reverseMSI);
+						SettableValue<String> enabledEvld = enabledV == null ? null : enabledV.get(reverseMSI);
+						SettableValue<String> acceptEvld = acceptV == null ? null : acceptV.get(reverseMSI);
+						SettableValue<S> addEvld = addV == null ? null : addV.get(reverseMSI);
+						SettableValue<String> addAcceptEvld = addAcceptV == null ? null : addAcceptV.get(reverseMSI);
+
+						BiFunction<T, Transformation.TransformationValues<? extends S, ? extends T>, S> reverseFn;
+						Function<Transformation.TransformationValues<? extends S, ? extends T>, String> enabledFn;
+						BiFunction<T, Transformation.TransformationValues<? extends S, ? extends T>, String> acceptFn;
+						TriFunction<T, Transformation.TransformationValues<? extends S, ? extends T>, Boolean, S> addFn;
+						BiFunction<T, Transformation.TransformationValues<? extends S, ? extends T>, String> addAcceptFn;
+						reverseFn = (target, tvs) -> {
+							if (stateful)
+								sourceV.set(tvs.getCurrentSource(), null);
+							targetV.set(target, null);
+							int cvIdx = 0;
+							for (Map.Entry<String, RuntimeValuePlaceholder<SettableValue<?>, ? extends SettableValue<?>>> cv : combinedValues
+								.entrySet()) {
+								combinedVs.get(cv.getKey()).set(tvs.get(transformation.getArg(cvIdx)), null);
+								cvIdx++;
+							}
+							return reversedEvld.get();
+						};
+						enabledFn = enabledEvld == null ? null : tvs -> {
+							if (stateful)
+								sourceV.set(tvs.getCurrentSource(), null);
+							targetV.set(null, null);
+							int cvIdx = 0;
+							for (Map.Entry<String, RuntimeValuePlaceholder<SettableValue<?>, ? extends SettableValue<?>>> cv : combinedValues
+								.entrySet()) {
+								combinedVs.get(cv.getKey()).set(tvs.get(transformation.getArg(cvIdx)), null);
+								cvIdx++;
+							}
+							return acceptEvld.get();
+						};
+						acceptFn = enabledEvld == null ? null : (target, tvs) -> {
+							if (stateful)
+								sourceV.set(tvs.getCurrentSource(), null);
+							targetV.set(target, null);
+							int cvIdx = 0;
+							for (Map.Entry<String, RuntimeValuePlaceholder<SettableValue<?>, ? extends SettableValue<?>>> cv : combinedValues
+								.entrySet()) {
+								combinedVs.get(cv.getKey()).set(tvs.get(transformation.getArg(cvIdx)), null);
+								cvIdx++;
+							}
+							return acceptEvld.get();
+						};
+						addFn = addEvld == null ? null : (target, tvs, test) -> {
+							if (stateful)
+								sourceV.set(tvs.getCurrentSource(), null);
+							targetV.set(target, null);
+							int cvIdx = 0;
+							for (Map.Entry<String, RuntimeValuePlaceholder<SettableValue<?>, ? extends SettableValue<?>>> cv : combinedValues
+								.entrySet()) {
+								combinedVs.get(cv.getKey()).set(tvs.get(transformation.getArg(cvIdx)), null);
+								cvIdx++;
+							}
+							return addEvld.get();
+						};
+						addAcceptFn = addAcceptEvld == null ? null : (target, tvs) -> {
+							if (stateful)
+								sourceV.set(tvs.getCurrentSource(), null);
+							targetV.set(target, null);
+							int cvIdx = 0;
+							for (Map.Entry<String, RuntimeValuePlaceholder<SettableValue<?>, ? extends SettableValue<?>>> cv : combinedValues
+								.entrySet()) {
+								combinedVs.get(cv.getKey()).set(tvs.get(transformation.getArg(cvIdx)), null);
+								cvIdx++;
+							}
+							return addAcceptEvld.get();
+						};
+						return new Transformation.SourceReplacingReverse<>(transformation, reverseFn, enabledFn, acceptFn, addFn,
+							addAcceptFn, stateful, inexact);
+					}
+
+					@Override
+					public boolean isDifferent(ModelSetInstance sourceModels, ModelSetInstance newModels)
+						throws ModelInstantiationException {
+						SettableValue<S> srcReversed = reversedV.get(sourceModels);
+						SettableValue<S> newReversed = reversedV.forModelCopy(srcReversed, sourceModels, newModels);
+						if (srcReversed != newReversed)
+							return true;
+						if (enabledV != null) {
+							SettableValue<String> srcEnabled = enabledV.get(sourceModels);
+							SettableValue<String> newEnabled = enabledV.forModelCopy(srcEnabled, sourceModels, newModels);
+							if (srcEnabled != newEnabled)
+								return true;
+						}
+						if (acceptV != null) {
+							SettableValue<String> srcAccept = acceptV.get(sourceModels);
+							SettableValue<String> newAccept = acceptV.forModelCopy(srcAccept, sourceModels, newModels);
+							if (srcAccept != newAccept)
+								return true;
+						}
+						if (addV != null) {
+							SettableValue<S> srcAdd = addV.get(sourceModels);
+							SettableValue<S> newAdd = addV.forModelCopy(srcAdd, sourceModels, newModels);
+							if (srcAdd != newAdd)
+								return true;
+						}
+						if (addAcceptV != null) {
+							SettableValue<String> srcAccept = addAcceptV.get(sourceModels);
+							SettableValue<String> newAccept = addAcceptV.forModelCopy(srcAccept, sourceModels, newModels);
+							if (srcAccept != newAccept)
+								return true;
+						}
+						return false;
+					}
+
+					@Override
+					public List<? extends ModelValueSynth<?, ?>> getComponents() {
+						ArrayList<ModelValueSynth<?, ?>> components = new ArrayList<>();
+						components.add(reversedV);
+						if (enabledV != null)
+							components.add(enabledV);
+						if (acceptV != null)
+							components.add(acceptV);
+						if (addV != null)
+							components.add(addV);
+						if (addAcceptV != null)
+							components.add(addAcceptV);
+						return components;
+					}
+				};
 			}
-			ModelSetInstance reverseMSI = reverseMSIBuilder.build();
+		};
+	}
 
-			ObservableAction<?> reversedEvld = reversedV.get(reverseMSI);
-			SettableValue<String> enabledEvld = enabledV == null ? null : enabledV.get(reverseMSI);
-			SettableValue<String> acceptEvld = acceptV == null ? null : acceptV.get(reverseMSI);
-			SettableValue<S> addEvld = addV == null ? null : addV.get(reverseMSI);
-			SettableValue<String> addAcceptEvld = addAcceptV == null ? null : addAcceptV.get(reverseMSI);
+	CompiledMapReverse createSourceModifier(ExpressoQIS reverse) throws QonfigInterpretationException {
+		CompiledExpression reverseX = reverse.getValueExpression();
+		CompiledExpression enabled = reverse.getAttributeExpression("enabled");
+		CompiledExpression accept = reverse.getAttributeExpression("accept");
+		CompiledExpression add = reverse.getAttributeExpression("add");
+		CompiledExpression addAccept = reverse.getAttributeExpression("add-accept");
+		String targetName = reverse.getAttributeText("target-as");
+		try {
+			reverse.getExpressoEnv().getModels().getNameChecker().checkName(targetName);
+		} catch (IllegalArgumentException e) {
+			throw new QonfigInterpretationException("Illegal name for target-as: '" + targetName + "'",
+				reverse.getAttributeValuePosition("target-as", 0), targetName.length(), e);
+		}
+		return new CompiledMapReverse() {
+			@Override
+			public <S, T> InterpretedMapReverse<S, T> interpret(String sourceName, TypeToken<S> sourceType, TypeToken<T> targetType,
+				Map<String, TypeToken<?>> combinedTypes) throws ExpressoInterpretationException {
+				ObservableModelSet.Builder reverseModelBuilder = reverse.getExpressoEnv().getModels().wrap("mapModReverseModel");
+				RuntimeValuePlaceholder<SettableValue<?>, SettableValue<S>> sourcePlaceholder = reverseModelBuilder
+					.withRuntimeValue(sourceName, ModelTypes.Value.forType(sourceType));
+				RuntimeValuePlaceholder<SettableValue<?>, SettableValue<T>> targetPlaceholder = reverseModelBuilder
+					.withRuntimeValue(targetName, ModelTypes.Value.forType(targetType));
+				Map<String, RuntimeValuePlaceholder<SettableValue<?>, ? extends SettableValue<?>>> combinedValues = new LinkedHashMap<>();
+				for (Map.Entry<String, TypeToken<?>> combined : combinedTypes.entrySet())
+					combinedValues.put(combined.getKey(),
+						reverseModelBuilder.withRuntimeValue(combined.getKey(), ModelTypes.Value.forType(combined.getValue())));
 
-			BiConsumer<T, Transformation.TransformationValues<? extends S, ? extends T>> reverseFn;
-			Function<Transformation.TransformationValues<? extends S, ? extends T>, String> enabledFn;
-			BiFunction<T, Transformation.TransformationValues<? extends S, ? extends T>, String> acceptFn;
-			TriFunction<T, Transformation.TransformationValues<? extends S, ? extends T>, Boolean, S> addFn;
-			BiFunction<T, Transformation.TransformationValues<? extends S, ? extends T>, String> addAcceptFn;
-			reverseFn = (target, tvs) -> {
-				sourceV.set(tvs.getCurrentSource(), null);
-				targetV.set(target, null);
-				int cvIdx = 0;
-				for (Map.Entry<String, ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<Object>>> cv : combinedValues
-					.entrySet()) {
-					combinedVs.get(cv.getKey()).set(tvs.get(transformation.getArg(cvIdx)), null);
-					cvIdx++;
+				InterpretedModelSet reverseModels = reverseModelBuilder.build().interpret();
+				reverse.setModels(reverseModels, null);
+
+				ModelValueSynth<ObservableAction<?>, ObservableAction<?>> reversedV;
+				try {
+					reversedV = reverseX.evaluate(ModelTypes.Action.any());
+				} catch (ExpressoInterpretationException e) {
+					throw new ExpressoInterpretationException("Could not interpret reversed value", e.getPosition(), e.getErrorLength(), e);
 				}
-				reversedEvld.act(null);
-			};
-			enabledFn = enabledEvld == null ? null : tvs -> {
-				sourceV.set(tvs.getCurrentSource(), null);
-				targetV.set(null, null);
-				int cvIdx = 0;
-				for (Map.Entry<String, ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<Object>>> cv : combinedValues
-					.entrySet()) {
-					combinedVs.get(cv.getKey()).set(tvs.get(transformation.getArg(cvIdx)), null);
-					cvIdx++;
+				ModelValueSynth<SettableValue<?>, SettableValue<String>> enabledV;
+				try {
+					enabledV = enabled == null ? null : enabled.evaluate(ModelTypes.Value.forType(String.class));
+				} catch (ExpressoInterpretationException e) {
+					throw new ExpressoInterpretationException("Could not interpret reversed enablement", e.getPosition(),
+						e.getErrorLength(), e);
 				}
-				return acceptEvld.get();
-			};
-			acceptFn = enabledEvld == null ? null : (target, tvs) -> {
-				sourceV.set(tvs.getCurrentSource(), null);
-				targetV.set(target, null);
-				int cvIdx = 0;
-				for (Map.Entry<String, ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<Object>>> cv : combinedValues
-					.entrySet()) {
-					combinedVs.get(cv.getKey()).set(tvs.get(transformation.getArg(cvIdx)), null);
-					cvIdx++;
+				ModelValueSynth<SettableValue<?>, SettableValue<String>> acceptV;
+				try {
+					acceptV = accept == null ? null : accept.evaluate(ModelTypes.Value.forType(String.class));
+				} catch (ExpressoInterpretationException e) {
+					throw new ExpressoInterpretationException("Could not interpret reversed acceptance", e.getPosition(),
+						e.getErrorLength(), e);
 				}
-				return acceptEvld.get();
-			};
-			addFn = addEvld == null ? null : (target, tvs, test) -> {
-				sourceV.set(tvs.getCurrentSource(), null);
-				targetV.set(target, null);
-				int cvIdx = 0;
-				for (Map.Entry<String, ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<Object>>> cv : combinedValues
-					.entrySet()) {
-					combinedVs.get(cv.getKey()).set(tvs.get(transformation.getArg(cvIdx)), null);
-					cvIdx++;
+				ModelValueSynth<SettableValue<?>, SettableValue<S>> addV;
+				try {
+					addV = add == null ? null : add.evaluate(ModelTypes.Value.forType(sourceType));
+				} catch (ExpressoInterpretationException e) {
+					throw new ExpressoInterpretationException("Could not interpret reversed add", e.getPosition(), e.getErrorLength(), e);
 				}
-				return addEvld.get();
-			};
-			addAcceptFn = addAcceptEvld == null ? null : (target, tvs) -> {
-				sourceV.set(tvs.getCurrentSource(), null);
-				targetV.set(target, null);
-				int cvIdx = 0;
-				for (Map.Entry<String, ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<Object>>> cv : combinedValues
-					.entrySet()) {
-					combinedVs.get(cv.getKey()).set(tvs.get(transformation.getArg(cvIdx)), null);
-					cvIdx++;
+				ModelValueSynth<SettableValue<?>, SettableValue<String>> addAcceptV;
+				try {
+					addAcceptV = addAccept == null ? null : addAccept.evaluate(ModelTypes.Value.forType(String.class));
+				} catch (ExpressoInterpretationException e) {
+					throw new ExpressoInterpretationException("Could not interpret reversed add acceptance", e.getPosition(),
+						e.getErrorLength(), e);
 				}
-				return addAcceptEvld.get();
-			};
-			return new Transformation.SourceModifyingReverse<>(reverseFn, enabledFn, acceptFn, addFn, addAcceptFn);
+				return new InterpretedMapReverse<S, T>() {
+					@Override
+					public TransformReverse<S, T> reverse(Transformation<S, T> transformation, ModelSetInstance modelSet)
+						throws ModelInstantiationException {
+						SettableValue<S> sourceV = SettableValue.build(sourceType).build();
+						SettableValue<T> targetV = SettableValue.build(targetType).build();
+						ObservableModelSet.ModelSetInstanceBuilder reverseMSIBuilder = reverseModels.createInstance(modelSet.getUntil())
+							.withAll(modelSet)//
+							.with(sourcePlaceholder, sourceV.disableWith(ObservableValue.of(StdMsg.UNSUPPORTED_OPERATION)))//
+							.with(targetPlaceholder, targetV.disableWith(ObservableValue.of(StdMsg.UNSUPPORTED_OPERATION)));
+						Map<String, SettableValue<Object>> combinedVs = new LinkedHashMap<>();
+						for (Map.Entry<String, RuntimeValuePlaceholder<SettableValue<?>, ? extends SettableValue<?>>> cv : combinedValues
+							.entrySet()) {
+							SettableValue<Object> value = SettableValue.build((TypeToken<Object>) cv.getValue().getType().getType(0))
+								.build();
+							combinedVs.put(cv.getKey(), value);
+							reverseMSIBuilder.with((RuntimeValuePlaceholder<SettableValue<?>, SettableValue<Object>>) cv.getValue(),
+								value.disableWith(ObservableValue.of(StdMsg.UNSUPPORTED_OPERATION)));
+						}
+						ModelSetInstance reverseMSI = reverseMSIBuilder.build();
+
+						ObservableAction<?> reversedEvld = reversedV.get(reverseMSI);
+						SettableValue<String> enabledEvld = enabledV == null ? null : enabledV.get(reverseMSI);
+						SettableValue<String> acceptEvld = acceptV == null ? null : acceptV.get(reverseMSI);
+						SettableValue<S> addEvld = addV == null ? null : addV.get(reverseMSI);
+						SettableValue<String> addAcceptEvld = addAcceptV == null ? null : addAcceptV.get(reverseMSI);
+
+						BiConsumer<T, Transformation.TransformationValues<? extends S, ? extends T>> reverseFn;
+						Function<Transformation.TransformationValues<? extends S, ? extends T>, String> enabledFn;
+						BiFunction<T, Transformation.TransformationValues<? extends S, ? extends T>, String> acceptFn;
+						TriFunction<T, Transformation.TransformationValues<? extends S, ? extends T>, Boolean, S> addFn;
+						BiFunction<T, Transformation.TransformationValues<? extends S, ? extends T>, String> addAcceptFn;
+						reverseFn = (target, tvs) -> {
+							sourceV.set(tvs.getCurrentSource(), null);
+							targetV.set(target, null);
+							int cvIdx = 0;
+							for (Map.Entry<String, RuntimeValuePlaceholder<SettableValue<?>, ? extends SettableValue<?>>> cv : combinedValues
+								.entrySet()) {
+								combinedVs.get(cv.getKey()).set(tvs.get(transformation.getArg(cvIdx)), null);
+								cvIdx++;
+							}
+							reversedEvld.act(null);
+						};
+						enabledFn = enabledEvld == null ? null : tvs -> {
+							sourceV.set(tvs.getCurrentSource(), null);
+							targetV.set(null, null);
+							int cvIdx = 0;
+							for (Map.Entry<String, RuntimeValuePlaceholder<SettableValue<?>, ? extends SettableValue<?>>> cv : combinedValues
+								.entrySet()) {
+								combinedVs.get(cv.getKey()).set(tvs.get(transformation.getArg(cvIdx)), null);
+								cvIdx++;
+							}
+							return acceptEvld.get();
+						};
+						acceptFn = enabledEvld == null ? null : (target, tvs) -> {
+							sourceV.set(tvs.getCurrentSource(), null);
+							targetV.set(target, null);
+							int cvIdx = 0;
+							for (Map.Entry<String, RuntimeValuePlaceholder<SettableValue<?>, ? extends SettableValue<?>>> cv : combinedValues
+								.entrySet()) {
+								combinedVs.get(cv.getKey()).set(tvs.get(transformation.getArg(cvIdx)), null);
+								cvIdx++;
+							}
+							return acceptEvld.get();
+						};
+						addFn = addEvld == null ? null : (target, tvs, test) -> {
+							sourceV.set(tvs.getCurrentSource(), null);
+							targetV.set(target, null);
+							int cvIdx = 0;
+							for (Map.Entry<String, RuntimeValuePlaceholder<SettableValue<?>, ? extends SettableValue<?>>> cv : combinedValues
+								.entrySet()) {
+								combinedVs.get(cv.getKey()).set(tvs.get(transformation.getArg(cvIdx)), null);
+								cvIdx++;
+							}
+							return addEvld.get();
+						};
+						addAcceptFn = addAcceptEvld == null ? null : (target, tvs) -> {
+							sourceV.set(tvs.getCurrentSource(), null);
+							targetV.set(target, null);
+							int cvIdx = 0;
+							for (Map.Entry<String, RuntimeValuePlaceholder<SettableValue<?>, ? extends SettableValue<?>>> cv : combinedValues
+								.entrySet()) {
+								combinedVs.get(cv.getKey()).set(tvs.get(transformation.getArg(cvIdx)), null);
+								cvIdx++;
+							}
+							return addAcceptEvld.get();
+						};
+						return new Transformation.SourceModifyingReverse<>(reverseFn, enabledFn, acceptFn, addFn, addAcceptFn);
+					}
+
+					@Override
+					public boolean isDifferent(ModelSetInstance sourceModels, ModelSetInstance newModels)
+						throws ModelInstantiationException {
+						ObservableAction<?> srcReversed = reversedV.get(sourceModels);
+						ObservableAction<?> newReversed = reversedV.forModelCopy(srcReversed, sourceModels, newModels);
+						if (srcReversed != newReversed)
+							return true;
+						if (enabledV != null) {
+							SettableValue<String> srcEnabled = enabledV.get(sourceModels);
+							SettableValue<String> newEnabled = enabledV.forModelCopy(srcEnabled, sourceModels, newModels);
+							if (srcEnabled != newEnabled)
+								return true;
+						}
+						if (acceptV != null) {
+							SettableValue<String> srcAccept = acceptV.get(sourceModels);
+							SettableValue<String> newAccept = acceptV.forModelCopy(srcAccept, sourceModels, newModels);
+							if (srcAccept != newAccept)
+								return true;
+						}
+						if (addV != null) {
+							SettableValue<S> srcAdd = addV.get(sourceModels);
+							SettableValue<S> newAdd = addV.forModelCopy(srcAdd, sourceModels, newModels);
+							if (srcAdd != newAdd)
+								return true;
+						}
+						if (addAcceptV != null) {
+							SettableValue<String> srcAccept = addAcceptV.get(sourceModels);
+							SettableValue<String> newAccept = addAcceptV.forModelCopy(srcAccept, sourceModels, newModels);
+							if (srcAccept != newAccept)
+								return true;
+						}
+						return false;
+					}
+
+					@Override
+					public List<? extends ModelValueSynth<?, ?>> getComponents() {
+						ArrayList<ModelValueSynth<?, ?>> components = new ArrayList<>();
+						components.add(reversedV);
+						if (enabledV != null)
+							components.add(enabledV);
+						if (acceptV != null)
+							components.add(acceptV);
+						if (addV != null)
+							components.add(addV);
+						if (addAcceptV != null)
+							components.add(addAcceptV);
+						return components;
+					}
+				};
+			}
 		};
 	}
 
 	private static boolean refersToSource(ObservableExpression ex, String sourceName) {
-		return !ex.find(ex2 -> ex2 instanceof NameExpression && ((NameExpression) ex2).getNames().getFirst().equals(sourceName)).isEmpty();
+		return !ex.find(ex2 -> ex2 instanceof NameExpression && ((NameExpression) ex2).getNames().getFirst().getName().equals(sourceName))
+			.isEmpty();
 	}
 
 	private ParsedSorting parseSorting(ExpressoQIS session) throws QonfigInterpretationException {
 		String valueAs = session.getAttributeText("sort-value-as");
 		String compareValueAs = session.getAttributeText("sort-compare-value-as");
-		QonfigExpression2 sortWith = session.getAttributeExpression("sort-with");
+		CompiledExpression sortWith = session.getAttributeExpression("sort-with");
 		List<ExpressoQIS> sortBy = session.forChildren("sort-by");
 		boolean ascending = session.getAttribute("ascending", boolean.class);
 		// ModelInstanceType.SingleTyped<SettableValue<?>, Comparator<T>, SettableValue<Comparator<T>>> compareType = ModelTypes.Value
@@ -3339,7 +4121,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 					sortWith.getElement().getPositionInFile(), 0);
 			return new ParsedSorting() {
 				@Override
-				public <T> ValueContainer<SettableValue<?>, SettableValue<Comparator<T>>> evaluate(TypeToken<T> type)
+				public <T> ModelValueSynth<SettableValue<?>, SettableValue<Comparator<T>>> evaluate(TypeToken<T> type)
 					throws ExpressoInterpretationException {
 					ModelInstanceType.SingleTyped<SettableValue<?>, Comparator<T>, SettableValue<Comparator<T>>> compareType = ModelTypes.Value
 						.forType(TypeTokens.get().keyFor(Comparator.class).parameterized(type));
@@ -3349,7 +4131,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 					ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<T>> compareValuePlaceholder = cModelBuilder
 						.withRuntimeValue(compareValueAs, ModelTypes.Value.forType(type));
 					ObservableModelSet.Built cModel = cModelBuilder.build();
-					ValueContainer<SettableValue<?>, SettableValue<Integer>> comparison;
+					ModelValueSynth<SettableValue<?>, SettableValue<Integer>> comparison;
 					try {
 						comparison = sortWith.evaluate(ModelTypes.Value.forType(int.class), session.getExpressoEnv().with(cModel, null));
 					} catch (ExpressoInterpretationException e) {
@@ -3361,7 +4143,12 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 					} catch (ExpressoInterpretationException e) {
 						throw new ExpressoInterpretationException(e.getMessage(), e.getPosition(), e.getErrorLength(), e);
 					}
-					return new ValueContainer<SettableValue<?>, SettableValue<Comparator<T>>>() {
+					return new ModelValueSynth<SettableValue<?>, SettableValue<Comparator<T>>>() {
+						@Override
+						public ModelType<SettableValue<?>> getModelType() {
+							return ModelTypes.Value;
+						}
+
 						@Override
 						public ModelInstanceType<SettableValue<?>, SettableValue<Comparator<T>>> getType() {
 							return compareType;
@@ -3399,7 +4186,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 						}
 
 						@Override
-						public BetterList<ValueContainer<?, ?>> getCores() throws ExpressoInterpretationException {
+						public BetterList<ModelValueSynth<?, ?>> getCores() throws ExpressoInterpretationException {
 							return comparison.getCores();
 						}
 					};
@@ -3414,14 +4201,14 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 
 			return new ParsedSorting() {
 				@Override
-				public <T> ValueContainer<SettableValue<?>, SettableValue<Comparator<T>>> evaluate(TypeToken<T> type)
+				public <T> ModelValueSynth<SettableValue<?>, SettableValue<Comparator<T>>> evaluate(TypeToken<T> type)
 					throws ExpressoInterpretationException {
 					ObservableModelSet.Builder cModelBuilder = session.getExpressoEnv().getModels().wrap("sortByModel");
 					ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<T>> valuePlaceholder = cModelBuilder
 						.withRuntimeValue(valueAs, ModelTypes.Value.forType(type));
 					ObservableModelSet.Built cModel = cModelBuilder.build();
 
-					List<QonfigExpression2> subSortingXs = new ArrayList<>(sortBy.size());
+					List<CompiledExpression> subSortingXs = new ArrayList<>(sortBy.size());
 					List<ParsedSorting> subSorting = new ArrayList<>(sortBy.size());
 					try {
 						// Can't parse these outside because the value expression is populated with the models,
@@ -3435,10 +4222,10 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 						throw new ExpressoInterpretationException(e.getMessage(), e.getPosition(), e.getErrorLength(), e);
 					}
 
-					List<ValueContainer<SettableValue<?>, SettableValue<Object>>> sortByMaps = new ArrayList<>(sortBy.size());
-					List<ValueContainer<SettableValue<?>, SettableValue<Comparator<Object>>>> sortByCVs = new ArrayList<>(sortBy.size());
+					List<ModelValueSynth<SettableValue<?>, SettableValue<Object>>> sortByMaps = new ArrayList<>(sortBy.size());
+					List<ModelValueSynth<SettableValue<?>, SettableValue<Comparator<Object>>>> sortByCVs = new ArrayList<>(sortBy.size());
 					for (int s = 0; s < sortBy.size(); s++) {
-						ValueContainer<SettableValue<?>, SettableValue<Object>> sortByMap = subSortingXs.get(s)
+						ModelValueSynth<SettableValue<?>, SettableValue<Object>> sortByMap = subSortingXs.get(s)
 							.evaluate(ModelTypes.Value.anyAs());
 						sortByMaps.add(sortByMap);
 						sortByCVs.add(subSorting.get(s).evaluate((TypeToken<Object>) sortByMap.getType().getType(0)));
@@ -3447,7 +4234,12 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 
 					ModelInstanceType.SingleTyped<SettableValue<?>, Comparator<T>, SettableValue<Comparator<T>>> compareType = ModelTypes.Value
 						.forType(TypeTokens.get().keyFor(Comparator.class).parameterized(type));
-					return new ValueContainer<SettableValue<?>, SettableValue<Comparator<T>>>() {
+					return new ModelValueSynth<SettableValue<?>, SettableValue<Comparator<T>>>() {
+						@Override
+						public ModelType<SettableValue<?>> getModelType() {
+							return ModelTypes.Value;
+						}
+
 						@Override
 						public ModelInstanceType<SettableValue<?>, SettableValue<Comparator<T>>> getType() {
 							return compareType;
@@ -3460,10 +4252,10 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 								.with(valuePlaceholder, value)//
 								.build();
 							List<SettableValue<Object>> sortByMapVs = new ArrayList<>(sortBy.size());
-							for (ValueContainer<SettableValue<?>, SettableValue<Object>> sortByMapV : sortByMaps)
+							for (ModelValueSynth<SettableValue<?>, SettableValue<Object>> sortByMapV : sortByMaps)
 								sortByMapVs.add(sortByMapV.get(cModelInstance));
 							List<Comparator<Object>> sortByComps = new ArrayList<>(sortBy.size());
-							for (ValueContainer<SettableValue<?>, SettableValue<Comparator<Object>>> sortByCV : sortByCVs)
+							for (ModelValueSynth<SettableValue<?>, SettableValue<Comparator<Object>>> sortByCV : sortByCVs)
 								sortByComps.add(sortByCV.get(cModelInstance).get());
 							return SettableValue.of(compareType.getValueType(), (v1, v2) -> {
 								// Put nulls last regardless of ascending
@@ -3495,7 +4287,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 						}
 
 						@Override
-						public BetterList<ValueContainer<?, ?>> getCores() throws ExpressoInterpretationException {
+						public BetterList<ModelValueSynth<?, ?>> getCores() throws ExpressoInterpretationException {
 							return BetterList.of(sortByMaps.stream(), vc -> vc.getCores().stream());
 						}
 					};
@@ -3508,11 +4300,11 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 	static ParsedSorting getDefaultSorting(QonfigElement element) {
 		return new ParsedSorting() {
 			@Override
-			public <T> ValueContainer<SettableValue<?>, SettableValue<Comparator<T>>> evaluate(TypeToken<T> type)
+			public <T> ModelValueSynth<SettableValue<?>, SettableValue<Comparator<T>>> evaluate(TypeToken<T> type)
 				throws ExpressoInterpretationException {
 				Comparator<T> compare = getDefaultSorting(TypeTokens.getRawType(type));
 				if (compare != null)
-					return ValueContainer.literal(TypeTokens.get().keyFor(Comparator.class).parameterized(type), compare,
+					return ModelValueSynth.literal(TypeTokens.get().keyFor(Comparator.class).parameterized(type), compare,
 						compare.toString());
 				else
 					throw new ExpressoInterpretationException(type + " is not Comparable, use either sort-with or sort-by",
@@ -3542,16 +4334,5 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 
 	static BetterList<TypeToken<?>> argList(TypeToken<?>... init) {
 		return BetterTreeList.<TypeToken<?>> build().build().with(init);
-	}
-
-	private interface ParsedTransformation<S, T> {
-		TypeToken<T> getTargetType();
-
-		boolean isReversible();
-
-		Transformation<S, T> transform(TransformationPrecursor<S, T, ?> precursor, ModelSetInstance modelSet)
-			throws ModelInstantiationException;
-
-		boolean isDifferent(ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException;
 	}
 }

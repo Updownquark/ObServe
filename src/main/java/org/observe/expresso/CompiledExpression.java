@@ -1,7 +1,7 @@
 package org.observe.expresso;
 
 import org.observe.expresso.ModelType.ModelInstanceType;
-import org.observe.expresso.ObservableModelSet.ValueContainer;
+import org.observe.expresso.ObservableModelSet.ModelValueSynth;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigValueDef;
@@ -12,7 +12,7 @@ import org.qommons.io.SimpleXMLParser.ContentPosition;
  * Returned by {@link ExpressoQIS#getValueExpression()} and other methods e.g. for attributes. This structure contains all the information
  * needed to evaluate an expression, including its environment, position, etc.
  */
-public class QonfigExpression2 {
+public class CompiledExpression {
 	private final ObservableExpression theExpression;
 	private final QonfigElement theElement;
 	private final QonfigValueDef theDef;
@@ -27,7 +27,7 @@ public class QonfigExpression2 {
 	 * @param position The position in the Qonfig file of the start of the expression
 	 * @param session The Expresso session in which to evaluate the expression
 	 */
-	public QonfigExpression2(ObservableExpression expression, QonfigElement element, QonfigValueDef def, ContentPosition position,
+	public CompiledExpression(ObservableExpression expression, QonfigElement element, QonfigValueDef def, ContentPosition position,
 		ExpressoQIS session) {
 		theExpression = expression;
 		theElement = element;
@@ -66,6 +66,15 @@ public class QonfigExpression2 {
 		return theExpression.getExpressionLength();
 	}
 
+	/** @return The model type of this expression */
+	public ModelType<?> getModelType() {
+		if (theEnv == null) {
+			theEnv = theSession.getExpressoEnv();
+			theSession = null; // Don't need it anymore--release it
+		}
+		return theExpression.getModelType(theEnv);
+	}
+
 	/**
 	 * @param <M> The model type to evaluate the expression as
 	 * @param <MV> The instance type to evaluate the expression as
@@ -73,7 +82,7 @@ public class QonfigExpression2 {
 	 * @return The evaluated expression
 	 * @throws ExpressoInterpretationException If the expression could not be evaluated as the given type
 	 */
-	public <M, MV extends M> ValueContainer<M, MV> evaluate(ModelInstanceType<M, MV> type) throws ExpressoInterpretationException {
+	public <M, MV extends M> ModelValueSynth<M, MV> evaluate(ModelInstanceType<M, MV> type) throws ExpressoInterpretationException {
 		if (theEnv == null) {
 			theEnv = theSession.getExpressoEnv();
 			theSession = null; // Don't need it anymore--release it
@@ -89,7 +98,7 @@ public class QonfigExpression2 {
 	 * @return The evaluated expression
 	 * @throws ExpressoInterpretationException If the expression could not be evaluated as the given type
 	 */
-	public <M, MV extends M> ValueContainer<M, MV> evaluate(ModelInstanceType<M, MV> type, ExpressoEnv env)
+	public <M, MV extends M> ModelValueSynth<M, MV> evaluate(ModelInstanceType<M, MV> type, ExpressoEnv env)
 		throws ExpressoInterpretationException {
 		try {
 			return theExpression.evaluate(type, env, 0);

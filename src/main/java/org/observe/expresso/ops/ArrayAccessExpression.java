@@ -11,11 +11,12 @@ import org.observe.expresso.ExpressoEnv;
 import org.observe.expresso.ExpressoEvaluationException;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ModelInstantiationException;
+import org.observe.expresso.ModelType;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
-import org.observe.expresso.ObservableModelSet.ValueContainer;
+import org.observe.expresso.ObservableModelSet.ModelValueSynth;
 import org.observe.expresso.TypeConversionException;
 import org.observe.util.TypeTokens;
 import org.qommons.collect.BetterList;
@@ -81,13 +82,18 @@ public class ArrayAccessExpression implements ObservableExpression {
 	}
 
 	@Override
-	public <M, MV extends M> ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env, int expressionOffset)
+	public ModelType<?> getModelType(ExpressoEnv env) {
+		return ModelTypes.Value;
+	}
+
+	@Override
+	public <M, MV extends M> ModelValueSynth<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env, int expressionOffset)
 		throws ExpressoEvaluationException, ExpressoInterpretationException {
 		if (type.getModelType() != ModelTypes.Value)
 			throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(),
 				"An array access expression can only be evaluated as a value");
 
-		ValueContainer<SettableValue<?>, SettableValue<Object[]>> arrayValue;
+		ModelValueSynth<SettableValue<?>, SettableValue<Object[]>> arrayValue;
 		try {
 			arrayValue = theArray.evaluate(ModelTypes.Value.forType(//
 				(TypeToken<Object[]>) TypeTokens.get().getArrayType(type.getType(0), 1)), env, expressionOffset);
@@ -96,22 +102,27 @@ public class ArrayAccessExpression implements ObservableExpression {
 				"array " + theArray + " cannot be evaluated as a " + type.getType(0) + "[]", e);
 		}
 		int indexOffset = expressionOffset + theArray.getExpressionLength() + 1;
-		ValueContainer<SettableValue<?>, SettableValue<Integer>> indexValue;
+		ModelValueSynth<SettableValue<?>, SettableValue<Integer>> indexValue;
 		try {
 			indexValue = theIndex.evaluate(ModelTypes.Value.forType(int.class), env, indexOffset);
 		} catch (TypeConversionException e) {
 			throw new ExpressoEvaluationException(indexOffset, theIndex.getExpressionLength(),
 				"index " + theArray + " cannot be evaluated as an integer", e);
 		}
-		return (ValueContainer<M, MV>) this.<Object> doEval(arrayValue, indexValue, env);
+		return (ModelValueSynth<M, MV>) this.<Object> doEval(arrayValue, indexValue, env);
 	}
 
-	private <T> ValueContainer<SettableValue<?>, SettableValue<T>> doEval(ValueContainer<SettableValue<?>, SettableValue<T[]>> arrayValue,
-		ValueContainer<SettableValue<?>, SettableValue<Integer>> indexValue, ExpressoEnv env)
+	private <T> ModelValueSynth<SettableValue<?>, SettableValue<T>> doEval(ModelValueSynth<SettableValue<?>, SettableValue<T[]>> arrayValue,
+		ModelValueSynth<SettableValue<?>, SettableValue<Integer>> indexValue, ExpressoEnv env)
 			throws ExpressoEvaluationException, ExpressoInterpretationException {
 		TypeToken<T> targetType = (TypeToken<T>) arrayValue.getType().getType(0).getComponentType();
 		ModelInstanceType<SettableValue<?>, SettableValue<T>> targetModelType = ModelTypes.Value.forType(targetType);
-		return new ValueContainer<SettableValue<?>, SettableValue<T>>() {
+		return new ModelValueSynth<SettableValue<?>, SettableValue<T>>() {
+			@Override
+			public ModelType<SettableValue<?>> getModelType() {
+				return ModelTypes.Value;
+			}
+
 			@Override
 			public ModelInstanceType<SettableValue<?>, SettableValue<T>> getType() {
 				return targetModelType;
@@ -161,7 +172,7 @@ public class ArrayAccessExpression implements ObservableExpression {
 			}
 
 			@Override
-			public BetterList<ValueContainer<?, ?>> getCores() throws ExpressoInterpretationException {
+			public BetterList<ModelValueSynth<?, ?>> getCores() throws ExpressoInterpretationException {
 				return BetterList.of(Stream.of(arrayValue, indexValue), cv -> cv.getCores().stream());
 			}
 		};

@@ -28,6 +28,7 @@ import org.qommons.StringUtils;
 import org.qommons.collect.BetterList;
 import org.qommons.ex.ExConsumer;
 import org.qommons.ex.ExFunction;
+import org.qommons.ex.ExSupplier;
 import org.qommons.io.LocatedFilePosition;
 
 import com.google.common.reflect.TypeToken;
@@ -44,38 +45,83 @@ import com.google.common.reflect.TypeToken;
 public interface ObservableModelSet extends Identifiable {
 	/**
 	 * <p>
-	 * A value added to an {@link ObservableModelSet} via {@link Builder#with(String, ValueContainer)},
-	 * {@link Builder#withMaker(String, ValueCreator)}, or another value method.
+	 * A value added to an {@link ObservableModelSet} via {@link Builder#with(String, ModelValueSynth)},
+	 * {@link Builder#withMaker(String, CompiledModelValue)}, or another value method.
 	 * </p>
 	 * <p>
-	 * If I were going to name this perfectly accurately, I would call this <code>ValueCreatorCreator</code>. Its role is to create a
-	 * {@link ValueContainer}, which could more accurately be called a <code>ValueCreator</code>, at the moment it is needed. This allows
-	 * values that depend on each other to be added to a model in any order.
-	 * </p>
-	 * <p>
-	 * I find the name <code>ValueCreatorCreator</code> obnoxious, so I'll stick with what I've got for now.
+	 * Its role is to create a {@link ModelValueSynth} at the moment it is needed. This allows values that depend on each other to be added
+	 * to a model in any order.
 	 * </p>
 	 *
 	 * @param <M> The model type of the value
 	 * @param <MV> The type of the value
 	 */
-	public interface ValueCreator<M, MV extends M> {
+	public interface CompiledModelValue<M, MV extends M> {
+		/** @return The model type of the values that this compiled structure creates */
+		ModelType<M> getModelType();
+
 		/**
 		 * @return The created value container
 		 * @throws ExpressoInterpretationException If this value could not be interpreted
 		 */
-		ValueContainer<M, MV> createContainer() throws ExpressoInterpretationException;
+		ModelValueSynth<M, MV> createSynthesizer() throws ExpressoInterpretationException;
+
+		/**
+		 * @param <M> The model type of the new value
+		 * @param <MV> The type of the new value
+		 * @param name The name of the value (for {@link Object#toString()})
+		 * @param modelType The type of the new value
+		 * @param synth The function to create the value synthesizer
+		 * @return The new compiled model value
+		 */
+		static <M, MV extends M> CompiledModelValue<M, MV> of(String name, ModelType<M> modelType,
+			ExSupplier<ModelValueSynth<M, MV>, ExpressoInterpretationException> synth) {
+			return of(LambdaUtils.constantSupplier(name, name, null), modelType, synth);
+		}
+
+		/**
+		 * @param <M> The model type of the new value
+		 * @param <MV> The type of the new value
+		 * @param name The name of the value (for {@link Object#toString()})
+		 * @param modelType The type of the new value
+		 * @param synth The function to create the value synthesizer
+		 * @return The new compiled model value
+		 */
+		static <M, MV extends M> CompiledModelValue<M, MV> of(Supplier<String> name, ModelType<M> modelType,
+			ExSupplier<ModelValueSynth<M, MV>, ExpressoInterpretationException> synth) {
+			return new CompiledModelValue<M, MV>() {
+				@Override
+				public ModelType<M> getModelType() {
+					return modelType;
+				}
+
+				@Override
+				public ModelValueSynth<M, MV> createSynthesizer() throws ExpressoInterpretationException {
+					return synth.get();
+				}
+
+				@Override
+				public String toString() {
+					return name.get();
+				}
+			};
+		}
 
 		/**
 		 * @param <M> The model type of the value
 		 * @param <MV> The type of the value
 		 * @param container The value container to return
-		 * @return A {@link ValueCreator} that always {@link #createContainer() returns} the given container
+		 * @return A {@link CompiledModelValue} that always {@link #createSynthesizer() returns} the given container
 		 */
-		static <M, MV extends M> ValueCreator<M, MV> constant(ValueContainer<M, MV> container) {
-			return new ValueCreator<M, MV>() {
+		static <M, MV extends M> CompiledModelValue<M, MV> constant(ModelValueSynth<M, MV> container) {
+			return new CompiledModelValue<M, MV>() {
 				@Override
-				public ValueContainer<M, MV> createContainer() {
+				public ModelType<M> getModelType() {
+					return container.getModelType();
+				}
+
+				@Override
+				public ModelValueSynth<M, MV> createSynthesizer() {
 					return container;
 				}
 
@@ -91,54 +137,21 @@ public interface ObservableModelSet extends Identifiable {
 		 * @param type The type of the value
 		 * @param value The value
 		 * @param text The text representing the value
-		 * @return A {@link ValueCreator} that always returns a value container which produces a constant value for the given value
+		 * @return A {@link CompiledModelValue} that always returns a value container which produces a constant value for the given value
 		 */
-		static <T> ValueCreator<SettableValue<?>, SettableValue<T>> literal(TypeToken<T> type, T value, String text) {
-			return constant(ValueContainer.literal(ModelTypes.Value.forType(type), value, text));
-		}
-
-		/**
-		 * @param <M> The model type of the value
-		 * @param <MV> The type of the value
-		 * @param name The name of the value
-		 * @param creator The creator to wrap
-		 * @return A ValueCreator functionally identical to <code>creator</code>, but with the given name as its {@link #toString()}
-		 */
-		static <M, MV extends M> ValueCreator<M, MV> name(String name, ValueCreator<M, MV> creator) {
-			return name(() -> name, creator);
-		}
-
-		/**
-		 * @param <M> The model type of the value
-		 * @param <MV> The type of the value
-		 * @param name The name of the value
-		 * @param creator The creator to wrap
-		 * @return A ValueCreator functionally identical to <code>creator</code>, but which uses the given name supplier for its
-		 *         {@link #toString()}
-		 */
-		static <M, MV extends M> ValueCreator<M, MV> name(Supplier<String> name, ValueCreator<M, MV> creator) {
-			return new ValueCreator<M, MV>() {
-				@Override
-				public ValueContainer<M, MV> createContainer() throws ExpressoInterpretationException {
-					return creator.createContainer();
-				}
-
-				@Override
-				public String toString() {
-					return name.get();
-				}
-			};
+		static <T> CompiledModelValue<SettableValue<?>, SettableValue<T>> literal(TypeToken<T> type, T value, String text) {
+			return constant(ModelValueSynth.literal(ModelTypes.Value.forType(type), value, text));
 		}
 	}
 
 	/**
-	 * A value creator for a value that has an identity outside of this model. Such values can be
+	 * A compiled value for a value that has an identity outside of this model. Such values can be
 	 * {@link ObservableModelSet#getIdentifiedValue(Object) retrieved} by their value ID.
 	 *
 	 * @param <M> The model type of the value
 	 * @param <MV> The type of the value
 	 */
-	public interface IdentifableValueCreator<M, MV extends M> extends ValueCreator<M, MV>, Identifiable {
+	public interface IdentifableCompiledValue<M, MV extends M> extends CompiledModelValue<M, MV>, Identifiable {
 		/**
 		 * @param <M> The model type of the value
 		 * @param <MV> The type of the value
@@ -146,15 +159,20 @@ public interface ObservableModelSet extends Identifiable {
 		 * @param container The value
 		 * @return An identifiable value container for the given value
 		 */
-		static <M, MV extends M> IdentifableValueCreator<M, MV> of(Object identity, ValueContainer<M, MV> container) {
-			return new IdentifableValueCreator<M, MV>() {
+		static <M, MV extends M> IdentifableCompiledValue<M, MV> of(Object identity, ModelValueSynth<M, MV> container) {
+			return new IdentifableCompiledValue<M, MV>() {
 				@Override
 				public Object getIdentity() {
 					return identity;
 				}
 
 				@Override
-				public ValueContainer<M, MV> createContainer() {
+				public ModelType<M> getModelType() {
+					return container.getModelType();
+				}
+
+				@Override
+				public ModelValueSynth<M, MV> createSynthesizer() {
 					return container;
 				}
 
@@ -167,21 +185,24 @@ public interface ObservableModelSet extends Identifiable {
 	}
 
 	/**
-	 * Represents a model value that is ready to be, but may not have been, instantiated in a {@link ModelSetInstance}
+	 * Represents a model value that is ready to be instantiated in a {@link ModelSetInstance}
 	 *
 	 * @param <M> The model type of the value
 	 * @param <MV> The type of the value
 	 */
-	public interface ValueContainer<M, MV extends M> {
+	public interface ModelValueSynth<M, MV extends M> {
+		/** @return The model type of the values that this synthesizer creates */
+		ModelType<M> getModelType();
+
 		/**
-		 * Creates an {@link IdentifableValueCreator} from this value container, which has been pre-interpreted and cannot throw
+		 * Creates an {@link IdentifableCompiledValue} from this value container, which has been pre-interpreted and cannot throw
 		 * {@link ExpressoInterpretationException}s.
 		 *
 		 * @return The interpreted value container
 		 * @throws ExpressoInterpretationException If this value cannot be interpreted
 		 */
-		default InterpretedValueContainer<M, MV> interpret() throws ExpressoInterpretationException {
-			return new InterpretedValueContainer.SimpleWrapper<>(this);
+		default InterpretedValueSynth<M, MV> interpret() throws ExpressoInterpretationException {
+			return new InterpretedValueSynth.SimpleWrapper<>(this);
 		}
 
 		/**
@@ -202,7 +223,7 @@ public interface ObservableModelSet extends Identifiable {
 		 * @return All the self-sufficient containers that compose this value container
 		 * @throws ExpressoInterpretationException If this value cannot be interpreted
 		 */
-		BetterList<ValueContainer<?, ?>> getCores() throws ExpressoInterpretationException;
+		BetterList<ModelValueSynth<?, ?>> getCores() throws ExpressoInterpretationException;
 
 		/**
 		 * @param value The value to copy
@@ -224,7 +245,7 @@ public interface ObservableModelSet extends Identifiable {
 		 * @throws ExpressoInterpretationException If this value could not be interpreted
 		 * @throws TypeConversionException If the conversion to the given type is not possible
 		 */
-		default <M2, MV2 extends M2> InterpretedValueContainer<M2, MV2> as(ModelInstanceType<M2, MV2> type)
+		default <M2, MV2 extends M2> InterpretedValueSynth<M2, MV2> as(ModelInstanceType<M2, MV2> type)
 			throws ExpressoInterpretationException, TypeConversionException {
 			return interpret().as(type);
 		}
@@ -234,9 +255,9 @@ public interface ObservableModelSet extends Identifiable {
 		 * @param <MV2> The type for the mapped value
 		 * @param type The type for the mapped value
 		 * @param map The function to take a value of this container's type and transform it to the target type
-		 * @return A ValueContainer that returns this container's value, transformed to the given type
+		 * @return A ModelValueSynth that returns this container's value, transformed to the given type
 		 */
-		default <M2, MV2 extends M2> ValueContainer<M2, MV2> map(ModelInstanceType<M2, MV2> type, Function<? super MV, ? extends MV2> map) {
+		default <M2, MV2 extends M2> ModelValueSynth<M2, MV2> map(ModelInstanceType<M2, MV2> type, Function<? super MV, ? extends MV2> map) {
 			return map(type, LambdaUtils.printableBiFn((mv, msi) -> map.apply(mv), map::toString, map));
 		}
 
@@ -245,11 +266,11 @@ public interface ObservableModelSet extends Identifiable {
 		 * @param <MV2> The type for the mapped value
 		 * @param type The type for the mapped value
 		 * @param map The function to take a value of this container's type and transform it to the target type
-		 * @return A ValueContainer that returns this container's value, transformed to the given type
+		 * @return A ModelValueSynth that returns this container's value, transformed to the given type
 		 */
-		default <M2, MV2 extends M2> ValueContainer<M2, MV2> map(ModelInstanceType<M2, MV2> type,
+		default <M2, MV2 extends M2> ModelValueSynth<M2, MV2> map(ModelInstanceType<M2, MV2> type,
 			BiFunction<? super MV, ModelSetInstance, ? extends MV2> map) {
-			return new MappedVC<>(this, type, map);
+			return new MappedVS<>(this, type, map);
 		}
 
 		/**
@@ -260,21 +281,20 @@ public interface ObservableModelSet extends Identifiable {
 		 * @param <M2> The target model type
 		 * @param <MV2> The target instance type
 		 */
-		class MappedVC<M, MV extends M, M2, MV2 extends M2> extends AbstractValueContainer<M2, MV2> {
-			private final ValueContainer<M, MV> theSource;
+		class MappedVS<M, MV extends M, M2, MV2 extends M2> extends AbstractValueContainer<M2, MV2> {
+			private final ModelValueSynth<M, MV> theSource;
 			private final BiFunction<? super MV, ModelSetInstance, ? extends MV2> theMap;
 
-			public MappedVC(ValueContainer<M, MV> source, ModelInstanceType<M2, MV2> type,
+			public MappedVS(ModelValueSynth<M, MV> source, ModelInstanceType<M2, MV2> type,
 				BiFunction<? super MV, ModelSetInstance, ? extends MV2> map) {
 				super(type);
 				theSource = source;
 				theMap = map;
 			}
 
-			protected ValueContainer<M, MV> getSource() {
+			protected ModelValueSynth<M, MV> getSource() {
 				return theSource;
 			}
-
 
 			@Override
 			public MV2 get(ModelSetInstance models) throws ModelInstantiationException {
@@ -292,7 +312,7 @@ public interface ObservableModelSet extends Identifiable {
 			}
 
 			@Override
-			public BetterList<ValueContainer<?, ?>> getCores() throws ExpressoInterpretationException {
+			public BetterList<ModelValueSynth<?, ?>> getCores() throws ExpressoInterpretationException {
 				return theSource.getCores();
 			}
 
@@ -304,11 +324,11 @@ public interface ObservableModelSet extends Identifiable {
 
 		/**
 		 * @param modelWrapper The function to wrap the model instance set passed to {@link #get(ModelSetInstance)}
-		 * @return A ValueContainer that is the same as this one, but which uses the given function to wrap the model set instance before
+		 * @return A ModelValueSynth that is the same as this one, but which uses the given function to wrap the model set instance before
 		 *         passing it to this container's {@link #get(ModelSetInstance)} method
 		 */
-		default ValueContainer<M, MV> wrapModels(ExFunction<ModelSetInstance, ModelSetInstance, ModelInstantiationException> modelWrapper) {
-			return new ModelWrappedVC<>(this, modelWrapper);
+		default ModelValueSynth<M, MV> wrapModels(ExFunction<ModelSetInstance, ModelSetInstance, ModelInstantiationException> modelWrapper) {
+			return new ModelWrappedVS<>(this, modelWrapper);
 		}
 
 		/**
@@ -317,18 +337,23 @@ public interface ObservableModelSet extends Identifiable {
 		 * @param <M> The model type of the container
 		 * @param <MV> The instance type of the container
 		 */
-		class ModelWrappedVC<M, MV extends M> implements ValueContainer<M, MV> {
-			private final ValueContainer<M, MV> theSource;
+		class ModelWrappedVS<M, MV extends M> implements ModelValueSynth<M, MV> {
+			private final ModelValueSynth<M, MV> theSource;
 			private final ExFunction<ModelSetInstance, ModelSetInstance, ModelInstantiationException> theModelWrapper;
 
-			public ModelWrappedVC(ValueContainer<M, MV> source,
+			public ModelWrappedVS(ModelValueSynth<M, MV> source,
 				ExFunction<ModelSetInstance, ModelSetInstance, ModelInstantiationException> modelWrapper) {
 				theSource = source;
 				theModelWrapper = modelWrapper;
 			}
 
-			protected ValueContainer<M, MV> getSource() {
+			protected ModelValueSynth<M, MV> getSource() {
 				return theSource;
+			}
+
+			@Override
+			public ModelType<M> getModelType() {
+				return theSource.getModelType();
 			}
 
 			@Override
@@ -349,7 +374,7 @@ public interface ObservableModelSet extends Identifiable {
 			}
 
 			@Override
-			public BetterList<ValueContainer<?, ?>> getCores() throws ExpressoInterpretationException {
+			public BetterList<ModelValueSynth<?, ?>> getCores() throws ExpressoInterpretationException {
 				return theSource.getCores();
 			}
 
@@ -374,12 +399,17 @@ public interface ObservableModelSet extends Identifiable {
 		 * @param type The type of the value
 		 * @param value The value to wrap
 		 * @param text The text to represent the value
-		 * @return A ValueContainer that always produces a constant value for the given value
+		 * @return A ModelValueSynth that always produces a constant value for the given value
 		 */
-		static <T> InterpretedValueContainer<SettableValue<?>, SettableValue<T>> literal(
+		static <T> InterpretedValueSynth<SettableValue<?>, SettableValue<T>> literal(
 			ModelInstanceType<SettableValue<?>, SettableValue<T>> type, T value, String text) {
-			return new InterpretedValueContainer<SettableValue<?>, SettableValue<T>>() {
+			return new InterpretedValueSynth<SettableValue<?>, SettableValue<T>>() {
 				private final SettableValue<T> theValue = ObservableModelSet.literal((TypeToken<T>) type.getType(0), value, text);
+
+				@Override
+				public ModelType<SettableValue<?>> getModelType() {
+					return type.getModelType();
+				}
 
 				@Override
 				public ModelInstanceType<SettableValue<?>, SettableValue<T>> getType() {
@@ -397,7 +427,7 @@ public interface ObservableModelSet extends Identifiable {
 				}
 
 				@Override
-				public BetterList<ObservableModelSet.ValueContainer<?, ?>> getCores() {
+				public BetterList<ObservableModelSet.ModelValueSynth<?, ?>> getCores() {
 					return BetterList.of(this);
 				}
 
@@ -413,11 +443,16 @@ public interface ObservableModelSet extends Identifiable {
 		 * @param type The type of the value
 		 * @param value The value to wrap
 		 * @param text The text to represent the value
-		 * @return A ValueContainer that always produces a constant value for the given value
+		 * @return A ModelValueSynth that always produces a constant value for the given value
 		 */
-		static <T> InterpretedValueContainer<SettableValue<?>, SettableValue<T>> literal(TypeToken<T> type, T value, String text) {
-			return new InterpretedValueContainer<SettableValue<?>, SettableValue<T>>() {
+		static <T> InterpretedValueSynth<SettableValue<?>, SettableValue<T>> literal(TypeToken<T> type, T value, String text) {
+			return new InterpretedValueSynth<SettableValue<?>, SettableValue<T>>() {
 				private final SettableValue<T> theValue = ObservableModelSet.literal(type, value, text);
+
+				@Override
+				public ModelType<SettableValue<?>> getModelType() {
+					return ModelTypes.Value;
+				}
 
 				@Override
 				public ModelInstanceType<SettableValue<?>, SettableValue<T>> getType() {
@@ -425,7 +460,7 @@ public interface ObservableModelSet extends Identifiable {
 				}
 
 				@Override
-				public BetterList<ObservableModelSet.ValueContainer<?, ?>> getCores() {
+				public BetterList<ObservableModelSet.ModelValueSynth<?, ?>> getCores() {
 					return BetterList.of(this);
 				}
 
@@ -453,9 +488,14 @@ public interface ObservableModelSet extends Identifiable {
 		 * @param value Produces the value from a model instance set
 		 * @return A value container with the given type, implemented by the given function
 		 */
-		static <M, MV extends M> InterpretedValueContainer<M, MV> of(ModelInstanceType<M, MV> type,
+		static <M, MV extends M> InterpretedValueSynth<M, MV> of(ModelInstanceType<M, MV> type,
 			ExFunction<ModelSetInstance, MV, ModelInstantiationException> value) {
-			class SimpleVC implements InterpretedValueContainer<M, MV> {
+			class SimpleVC implements InterpretedValueSynth<M, MV> {
+				@Override
+				public ModelType<M> getModelType() {
+					return type.getModelType();
+				}
+
 				@Override
 				public ModelInstanceType<M, MV> getType() {
 					return type;
@@ -473,7 +513,7 @@ public interface ObservableModelSet extends Identifiable {
 				}
 
 				@Override
-				public BetterList<ValueContainer<?, ?>> getCores() {
+				public BetterList<ModelValueSynth<?, ?>> getCores() {
 					return BetterList.of(this);
 				}
 
@@ -487,37 +527,42 @@ public interface ObservableModelSet extends Identifiable {
 	}
 
 	/**
-	 * A {@link ValueContainer} that has already been interpreted, so that its methods no longer need to throw
+	 * A {@link ModelValueSynth} that has already been interpreted, so that its methods no longer need to throw
 	 * {@link ExpressoInterpretationException}
 	 *
 	 * @param <M> The model type of the value
 	 * @param <MV> The type of the value
 	 */
-	public interface InterpretedValueContainer<M, MV extends M> extends ValueContainer<M, MV> {
+	public interface InterpretedValueSynth<M, MV extends M> extends ModelValueSynth<M, MV> {
 		@Override
-		default InterpretedValueContainer<M, MV> interpret() {
+		default InterpretedValueSynth<M, MV> interpret() {
 			return this;
+		}
+
+		@Override
+		default ModelType<M> getModelType() {
+			return getType().getModelType();
 		}
 
 		@Override
 		ModelInstanceType<M, MV> getType();
 
 		@Override
-		BetterList<ValueContainer<?, ?>> getCores();
+		BetterList<ModelValueSynth<?, ?>> getCores();
 
 		@Override
-		default <M2, MV2 extends M2> InterpretedValueContainer<M2, MV2> as(ModelInstanceType<M2, MV2> type) throws TypeConversionException {
+		default <M2, MV2 extends M2> InterpretedValueSynth<M2, MV2> as(ModelInstanceType<M2, MV2> type) throws TypeConversionException {
 			return getType().as(this, type);
 		}
 
 		@Override
-		default <M2, MV2 extends M2> InterpretedValueContainer<M2, MV2> map(ModelInstanceType<M2, MV2> type,
+		default <M2, MV2 extends M2> InterpretedValueSynth<M2, MV2> map(ModelInstanceType<M2, MV2> type,
 			Function<? super MV, ? extends MV2> map) {
-			return (InterpretedValueContainer<M2, MV2>) ValueContainer.super.map(type, map);
+			return (InterpretedValueSynth<M2, MV2>) ModelValueSynth.super.map(type, map);
 		}
 
 		@Override
-		default <M2, MV2 extends M2> InterpretedValueContainer<M2, MV2> map(ModelInstanceType<M2, MV2> type,
+		default <M2, MV2 extends M2> InterpretedValueSynth<M2, MV2> map(ModelInstanceType<M2, MV2> type,
 			BiFunction<? super MV, ModelSetInstance, ? extends MV2> map) {
 			return new MappedIVC<>(this, type, map);
 		}
@@ -530,37 +575,37 @@ public interface ObservableModelSet extends Identifiable {
 		 * @param <M2> The target model type
 		 * @param <MV2> The target instance type
 		 */
-		class MappedIVC<M, MV extends M, M2, MV2 extends M2> extends MappedVC<M, MV, M2, MV2>
-		implements InterpretedValueContainer<M2, MV2> {
-			public MappedIVC(InterpretedValueContainer<M, MV> source, ModelInstanceType<M2, MV2> type,
+		class MappedIVC<M, MV extends M, M2, MV2 extends M2> extends MappedVS<M, MV, M2, MV2>
+		implements InterpretedValueSynth<M2, MV2> {
+			public MappedIVC(InterpretedValueSynth<M, MV> source, ModelInstanceType<M2, MV2> type,
 				BiFunction<? super MV, ModelSetInstance, ? extends MV2> map) {
 				super(source, type, map);
 			}
 
 			@Override
-			protected InterpretedValueContainer<M, MV> getSource() {
-				return (InterpretedValueContainer<M, MV>) super.getSource();
+			protected InterpretedValueSynth<M, MV> getSource() {
+				return (InterpretedValueSynth<M, MV>) super.getSource();
 			}
 
 			@Override
-			public InterpretedValueContainer<M2, MV2> interpret() {
-				return InterpretedValueContainer.super.interpret();
+			public InterpretedValueSynth<M2, MV2> interpret() {
+				return InterpretedValueSynth.super.interpret();
 			}
 
 			@Override
-			public <M3, MV3 extends M3> InterpretedValueContainer<M3, MV3> as(ModelInstanceType<M3, MV3> type)
+			public <M3, MV3 extends M3> InterpretedValueSynth<M3, MV3> as(ModelInstanceType<M3, MV3> type)
 				throws TypeConversionException {
-				return InterpretedValueContainer.super.as(type);
+				return InterpretedValueSynth.super.as(type);
 			}
 
 			@Override
-			public BetterList<ValueContainer<?, ?>> getCores() {
+			public BetterList<ModelValueSynth<?, ?>> getCores() {
 				return getSource().getCores();
 			}
 		}
 
 		@Override
-		default InterpretedValueContainer<M, MV> wrapModels(
+		default InterpretedValueSynth<M, MV> wrapModels(
 			ExFunction<ModelSetInstance, ModelSetInstance, ModelInstantiationException> modelWrapper) {
 			return new ModelMappedIVC<>(this, modelWrapper);
 		}
@@ -572,15 +617,15 @@ public interface ObservableModelSet extends Identifiable {
 		 * @param <M> The model type of the container
 		 * @param <MV> The instance type of the container
 		 */
-		class ModelMappedIVC<M, MV extends M> extends ModelWrappedVC<M, MV> implements InterpretedValueContainer<M, MV> {
-			public ModelMappedIVC(InterpretedValueContainer<M, MV> source,
+		class ModelMappedIVC<M, MV extends M> extends ModelWrappedVS<M, MV> implements InterpretedValueSynth<M, MV> {
+			public ModelMappedIVC(InterpretedValueSynth<M, MV> source,
 				ExFunction<ModelSetInstance, ModelSetInstance, ModelInstantiationException> modelWrapper) {
 				super(source, modelWrapper);
 			}
 
 			@Override
-			protected InterpretedValueContainer<M, MV> getSource() {
-				return (InterpretedValueContainer<M, MV>) super.getSource();
+			protected InterpretedValueSynth<M, MV> getSource() {
+				return (InterpretedValueSynth<M, MV>) super.getSource();
 			}
 
 			@Override
@@ -589,25 +634,25 @@ public interface ObservableModelSet extends Identifiable {
 			}
 
 			@Override
-			public BetterList<ValueContainer<?, ?>> getCores() {
+			public BetterList<ModelValueSynth<?, ?>> getCores() {
 				return getSource().getCores();
 			}
 		}
 
 		/**
-		 * A simple interpreted value container that wraps a {@link ValueContainer}, forcing it to interpret as soon as this is created
+		 * A simple interpreted value container that wraps a {@link ModelValueSynth}, forcing it to interpret as soon as this is created
 		 *
 		 * @param <M> The model type of the container
 		 * @param <MV> The value type of the container
 		 */
-		public static class SimpleWrapper<M, MV extends M> implements InterpretedValueContainer<M, MV> {
-			private final ValueContainer<M, MV> theContainer;
+		public static class SimpleWrapper<M, MV extends M> implements InterpretedValueSynth<M, MV> {
+			private final ModelValueSynth<M, MV> theContainer;
 
 			/**
 			 * @param container The container to wrap
 			 * @throws ExpressoInterpretationException If the container cannot be interpreted
 			 */
-			public SimpleWrapper(ValueContainer<M, MV> container) throws ExpressoInterpretationException {
+			public SimpleWrapper(ModelValueSynth<M, MV> container) throws ExpressoInterpretationException {
 				container.getType();
 				theContainer = container;
 			}
@@ -633,7 +678,7 @@ public interface ObservableModelSet extends Identifiable {
 			}
 
 			@Override
-			public BetterList<ValueContainer<?, ?>> getCores() {
+			public BetterList<ModelValueSynth<?, ?>> getCores() {
 				try {
 					return theContainer.getCores();
 				} catch (ExpressoInterpretationException e) {
@@ -729,11 +774,11 @@ public interface ObservableModelSet extends Identifiable {
 	 * @param <M> The model type of the component
 	 * @param <MV> The value type of the component
 	 */
-	public interface ModelComponentNode<M, MV extends M> extends ValueContainer<M, MV>, Identifiable {
+	public interface ModelComponentNode<M, MV extends M> extends ModelValueSynth<M, MV>, Identifiable {
 		@Override
 		ModelComponentId getIdentity();
 
-		/** @return The {@link IdentifableValueCreator#getIdentity() identity} of the value itself, independent of this model */
+		/** @return The {@link IdentifableCompiledValue#getIdentity() identity} of the value itself, independent of this model */
 		Object getValueIdentity();
 
 		/** @return The sub-model held by this component, or null if this component is not a sub-model */
@@ -752,9 +797,9 @@ public interface ObservableModelSet extends Identifiable {
 		/**
 		 * @return One of:
 		 *         <ul>
-		 *         <li>A {@link ValueCreator} if this component represents a model value installed with
-		 *         {@link ObservableModelSet.Builder#withMaker(String, ValueCreator)},
-		 *         {@link ObservableModelSet.Builder#with(String, ValueContainer)}, or another value method</li>
+		 *         <li>A {@link CompiledModelValue} if this component represents a model value installed with
+		 *         {@link ObservableModelSet.Builder#withMaker(String, CompiledModelValue)},
+		 *         {@link ObservableModelSet.Builder#with(String, ModelValueSynth)}, or another value method</li>
 		 *         <li>A {@link ExtValueRef} if this component represents a placeholder for an external model value installed with
 		 *         {@link ObservableModelSet.Builder#withExternal(String, ExtValueRef)} or another external value method</li>
 		 *         <li>A {@link RuntimeValuePlaceholder} if this component represents a placeholder for a model value to be
@@ -769,21 +814,21 @@ public interface ObservableModelSet extends Identifiable {
 
 		/**
 		 * @return This node's value container
-		 * @throws ExpressoInterpretationException If the container could not be {@link ValueCreator#createContainer() created}
+		 * @throws ExpressoInterpretationException If the container could not be {@link CompiledModelValue#createSynthesizer() created}
 		 */
-		ValueContainer<M, MV> getValue() throws ExpressoInterpretationException;
+		ModelValueSynth<M, MV> getValue() throws ExpressoInterpretationException;
 
 		@Override
 		InterpretedModelComponentNode<M, MV> interpret() throws ExpressoInterpretationException;
 	}
 
 	/**
-	 * A {@link ModelComponentNode} that has been {@link InterpretedValueContainer interpreted}
+	 * A {@link ModelComponentNode} that has been {@link InterpretedValueSynth interpreted}
 	 *
 	 * @param <M> The model type of this node
 	 * @param <MV> The instance type of this node
 	 */
-	public interface InterpretedModelComponentNode<M, MV extends M> extends ModelComponentNode<M, MV>, InterpretedValueContainer<M, MV> {
+	public interface InterpretedModelComponentNode<M, MV extends M> extends ModelComponentNode<M, MV>, InterpretedValueSynth<M, MV> {
 		@Override
 		MV create(ModelSetInstance modelSet, ExternalModelSet extModels) throws ModelInstantiationException;
 
@@ -791,7 +836,7 @@ public interface ObservableModelSet extends Identifiable {
 		InterpretedModelSet getModel();
 
 		@Override
-		InterpretedValueContainer<M, MV> getValue();
+		InterpretedValueSynth<M, MV> getValue();
 
 		@Override
 		default InterpretedModelComponentNode<M, MV> interpret() {
@@ -899,7 +944,7 @@ public interface ObservableModelSet extends Identifiable {
 
 		/**
 		 * Creates a model value in an {@link ObservableModelSet.ExternalModelSet}
-		 * 
+		 *
 		 * @param <M> The type of model this creator knows how to create values from (either {@link ObservableModelSet.ExternalModelSet} or
 		 *        {@link ObservableModelSet.ModelSetInstance}
 		 * @param <MV> The type of the value
@@ -972,17 +1017,22 @@ public interface ObservableModelSet extends Identifiable {
 	}
 
 	/**
-	 * Abstract {@link ValueContainer} implementation
+	 * Abstract {@link ModelValueSynth} implementation
 	 *
 	 * @param <M> The model type of the value
 	 * @param <MV> The type of the value
 	 */
-	public abstract class AbstractValueContainer<M, MV extends M> implements ValueContainer<M, MV> {
+	public abstract class AbstractValueContainer<M, MV extends M> implements ModelValueSynth<M, MV> {
 		private final ModelInstanceType<M, MV> theType;
 
 		/** @param type The type of the value */
 		public AbstractValueContainer(ModelInstanceType<M, MV> type) {
 			theType = type;
+		}
+
+		@Override
+		public ModelType<M> getModelType() {
+			return theType.getModelType();
 		}
 
 		@Override
@@ -1148,12 +1198,12 @@ public interface ObservableModelSet extends Identifiable {
 		return node;
 	}
 
-	/** @return All {@link IdentifableValueCreator identified} components in this model */
+	/** @return All {@link IdentifableCompiledValue identified} components in this model */
 	Map<Object, ? extends ModelComponentNode<?, ?>> getIdentifiedComponents();
 
 	/**
 	 * @param valueIdentifier The identifier of the value
-	 * @return The {@link IdentifableValueCreator identified} value in this model with the given value ID
+	 * @return The {@link IdentifableCompiledValue identified} value in this model with the given value ID
 	 * @throws ModelException If no such identified value exists in this model
 	 */
 	default ModelComponentNode<?, ?> getIdentifiedValue(Object valueIdentifier) throws ModelException {
@@ -1260,7 +1310,7 @@ public interface ObservableModelSet extends Identifiable {
 	 * @throws ExpressoInterpretationException If the value at the path could not be evaluated
 	 * @throws TypeConversionException If the value at the path could not be converted to the target type
 	 */
-	default <M, MV extends M> InterpretedValueContainer<M, MV> getValue(String path, ModelInstanceType<M, MV> type)
+	default <M, MV extends M> InterpretedValueSynth<M, MV> getValue(String path, ModelInstanceType<M, MV> type)
 		throws ModelException, ExpressoInterpretationException, TypeConversionException {
 		ModelComponentNode<Object, Object> node = (ModelComponentNode<Object, Object>) getComponent(path);
 		if (node.getModel() != null)
@@ -1333,7 +1383,7 @@ public interface ObservableModelSet extends Identifiable {
 		 * @param maker The creator to create the model value
 		 * @return This builder
 		 */
-		Builder withMaker(String name, ValueCreator<?, ?> maker);
+		Builder withMaker(String name, CompiledModelValue<?, ?> maker);
 
 		/**
 		 * Declares a value to be satisfied with {@link ModelSetInstanceBuilder#with(RuntimeValuePlaceholder, Object)}
@@ -1406,8 +1456,8 @@ public interface ObservableModelSet extends Identifiable {
 		 * @param value The container to create the model value
 		 * @return This builder
 		 */
-		default <M, MV extends M> Builder with(String name, ValueContainer<M, MV> value) {
-			return withMaker(name, ValueCreator.constant(value));
+		default <M, MV extends M> Builder with(String name, ModelValueSynth<M, MV> value) {
+			return withMaker(name, CompiledModelValue.constant(value));
 		}
 
 		/**
@@ -1420,7 +1470,7 @@ public interface ObservableModelSet extends Identifiable {
 		 */
 		default <M, MV extends M> Builder with(String name, ModelInstanceType<M, MV> type,
 			ExFunction<ModelSetInstance, MV, ModelInstantiationException> value) {
-			return with(name, ValueContainer.of(type, value));
+			return with(name, ModelValueSynth.of(type, value));
 		}
 
 		/** @return The immutable {@link ObservableModelSet} configured with this builder */
@@ -1441,7 +1491,7 @@ public interface ObservableModelSet extends Identifiable {
 		 * Interprets all of this model set's components
 		 *
 		 * @return An {@link ObservableModelSet.InterpretedModelSet} with all the components of this model set interpreted
-		 * @throws ExpressoInterpretationException If any of this model set's components could not be {@link ValueContainer#interpret()
+		 * @throws ExpressoInterpretationException If any of this model set's components could not be {@link ModelValueSynth#interpret()
 		 *         interpreted}
 		 */
 		InterpretedModelSet interpret() throws ExpressoInterpretationException;
@@ -1477,7 +1527,7 @@ public interface ObservableModelSet extends Identifiable {
 		}
 
 		@Override
-		default <M, MV extends M> InterpretedValueContainer<M, MV> getValue(String path, ModelInstanceType<M, MV> type)
+		default <M, MV extends M> InterpretedValueSynth<M, MV> getValue(String path, ModelInstanceType<M, MV> type)
 			throws ModelException, TypeConversionException {
 			try {
 				return Built.super.getValue(path, type);
@@ -1833,7 +1883,7 @@ public interface ObservableModelSet extends Identifiable {
 		 * @param tagValues Model tag values for this model
 		 * @param inheritance The new model's {@link ObservableModelSet#getInheritance() inheritance}
 		 * @param components The {@link ObservableModelSet#getComponents() components} for the new model
-		 * @param identifiedComponents All {@link IdentifableValueCreator identified} values in the model
+		 * @param identifiedComponents All {@link IdentifableCompiledValue identified} values in the model
 		 * @param nameChecker The {@link ObservableModelSet#getNameChecker() name checker} for the new model
 		 */
 		protected DefaultModelSet(ModelComponentId id, DefaultModelSet root, DefaultModelSet parent, Map<ModelTag<?>, Object> tagValues,
@@ -1932,13 +1982,13 @@ public interface ObservableModelSet extends Identifiable {
 
 		class ModelNodeImpl<M, MV extends M> implements ModelComponentNode<M, MV> {
 			private final ModelComponentId theNodeId;
-			private final ValueCreator<M, MV> theCreator;
+			private final CompiledModelValue<M, MV> theCreator;
 			private final RuntimeValuePlaceholder<M, MV> theRuntimePlaceholder;
-			private ValueContainer<M, MV> theValue;
+			private ModelValueSynth<M, MV> theValue;
 			private final ExtValueRef<M, MV> theExtRef;
 			private final DefaultModelSet theModel;
 
-			ModelNodeImpl(ModelComponentId id, ValueCreator<M, MV> creator, RuntimeValuePlaceholder<M, MV> runtimePlaceholder,
+			ModelNodeImpl(ModelComponentId id, CompiledModelValue<M, MV> creator, RuntimeValuePlaceholder<M, MV> runtimePlaceholder,
 				ExtValueRef<M, MV> extRef, DefaultModelSet model) {
 				theNodeId = id;
 				theCreator = creator;
@@ -1954,12 +2004,26 @@ public interface ObservableModelSet extends Identifiable {
 
 			@Override
 			public Object getValueIdentity() {
-				return theCreator instanceof IdentifableValueCreator ? ((IdentifableValueCreator<M, MV>) theCreator).getIdentity() : null;
+				return theCreator instanceof IdentifableCompiledValue ? ((IdentifableCompiledValue<M, MV>) theCreator).getIdentity() : null;
 			}
 
 			@Override
 			public DefaultModelSet getModel() {
 				return theModel;
+			}
+
+			@Override
+			public ModelType<M> getModelType() {
+				if (theCreator != null)
+					return theCreator.getModelType();
+				else if (theRuntimePlaceholder != null)
+					return theRuntimePlaceholder.getType().getModelType();
+				else if (theExtRef != null)
+					return theExtRef.getType().getModelType();
+				else if (theModel != null)
+					return (ModelType<M>) ModelTypes.Model;
+				else
+					throw new IllegalStateException();
 			}
 
 			@Override
@@ -1976,7 +2040,7 @@ public interface ObservableModelSet extends Identifiable {
 					throw new IllegalStateException();
 			}
 
-			private <T, X extends Throwable> T getOfValue(ExFunction<ValueContainer<M, MV>, T, X> value)
+			private <T, X extends Throwable> T getOfValue(ExFunction<ModelValueSynth<M, MV>, T, X> value)
 				throws ExpressoInterpretationException, X {
 				if (!theCycleChecker.add(this)) {
 					String depPath;
@@ -1988,7 +2052,7 @@ public interface ObservableModelSet extends Identifiable {
 				}
 				try {
 					if (theValue == null) {
-						theValue = theCreator.createContainer();
+						theValue = theCreator.createSynthesizer();
 						if (theValue == null)
 							return null;
 					}
@@ -2040,7 +2104,7 @@ public interface ObservableModelSet extends Identifiable {
 			}
 
 			@Override
-			public BetterList<ValueContainer<?, ?>> getCores() throws ExpressoInterpretationException {
+			public BetterList<ModelValueSynth<?, ?>> getCores() throws ExpressoInterpretationException {
 				if (theCreator != null) {
 					return getOfValue(v -> v.getCores());
 				} else
@@ -2060,7 +2124,7 @@ public interface ObservableModelSet extends Identifiable {
 			}
 
 			@Override
-			public ValueContainer<M, MV> getValue() throws ExpressoInterpretationException {
+			public ModelValueSynth<M, MV> getValue() throws ExpressoInterpretationException {
 				if (theCreator != null)
 					return getOfValue(v -> v);
 				else
@@ -2072,10 +2136,10 @@ public interface ObservableModelSet extends Identifiable {
 				if (theModel != null)
 					throw new IllegalStateException("Cannot interpret a model element here");
 				else if (theCreator!=null) {
-					if (!(theValue instanceof InterpretedValueContainer))
+					if (!(theValue instanceof InterpretedValueSynth))
 						theValue = getOfValue(vc -> vc.interpret());
 					return new InterpretedModelNodeImpl<>(theNodeId, theCreator, //
-						(InterpretedValueContainer<M, MV>) theValue, null, null, null);
+						(InterpretedValueSynth<M, MV>) theValue, null, null, null);
 				} else if (theRuntimePlaceholder != null)
 					return new InterpretedModelNodeImpl<>(theNodeId, null, null, theRuntimePlaceholder, null, null);
 				else if (theExtRef != null)
@@ -2099,14 +2163,14 @@ public interface ObservableModelSet extends Identifiable {
 
 		static class InterpretedModelNodeImpl<M, MV extends M> implements InterpretedModelComponentNode<M, MV> {
 			private final ModelComponentId theNodeId;
-			private final ValueCreator<M, MV> theCreator;
-			private final InterpretedValueContainer<M, MV> theValue;
+			private final CompiledModelValue<M, MV> theCreator;
+			private final InterpretedValueSynth<M, MV> theValue;
 			private final RuntimeValuePlaceholder<M, MV> theRuntimePlaceholder;
 			private final ExtValueRef<M, MV> theExtRef;
 			private final DefaultInterpreted theModel;
 
-			public InterpretedModelNodeImpl(ModelComponentId nodeId, ValueCreator<M, MV> creator,
-				InterpretedValueContainer<M, MV> value, RuntimeValuePlaceholder<M, MV> runtimePlaceholder, ExtValueRef<M, MV> extRef,
+			public InterpretedModelNodeImpl(ModelComponentId nodeId, CompiledModelValue<M, MV> creator,
+				InterpretedValueSynth<M, MV> value, RuntimeValuePlaceholder<M, MV> runtimePlaceholder, ExtValueRef<M, MV> extRef,
 				DefaultInterpreted model) {
 				theNodeId = nodeId;
 				theCreator = creator;
@@ -2123,7 +2187,7 @@ public interface ObservableModelSet extends Identifiable {
 
 			@Override
 			public Object getValueIdentity() {
-				return theCreator instanceof IdentifableValueCreator ? ((IdentifableValueCreator<M, MV>) theCreator).getIdentity()
+				return theCreator instanceof IdentifableCompiledValue ? ((IdentifableCompiledValue<M, MV>) theCreator).getIdentity()
 					: null;
 			}
 
@@ -2168,7 +2232,7 @@ public interface ObservableModelSet extends Identifiable {
 			}
 
 			@Override
-			public BetterList<ValueContainer<?, ?>> getCores() {
+			public BetterList<ModelValueSynth<?, ?>> getCores() {
 				return theValue == null ? BetterList.empty() : theValue.getCores();
 			}
 
@@ -2202,7 +2266,7 @@ public interface ObservableModelSet extends Identifiable {
 			}
 
 			@Override
-			public InterpretedValueContainer<M, MV> getValue() {
+			public InterpretedValueSynth<M, MV> getValue() {
 				return theValue;
 			}
 		}
@@ -2305,7 +2369,7 @@ public interface ObservableModelSet extends Identifiable {
 			}
 
 			@Override
-			public Builder withMaker(String name, ValueCreator<?, ?> maker) {
+			public Builder withMaker(String name, CompiledModelValue<?, ?> maker) {
 				getNameChecker().checkName(name);
 				checkNameForAdd(name);
 				ModelComponentNode<?, ?> node = createPlaceholder(new ModelComponentId(getIdentity(), name), maker, null, null, null);
@@ -2373,7 +2437,7 @@ public interface ObservableModelSet extends Identifiable {
 			 * @return The new component node
 			 */
 			protected <M, MV extends M> ModelComponentNode<M, MV> createPlaceholder(ModelComponentId componentId,
-				ValueCreator<M, MV> creator, RuntimeValuePlaceholder<M, MV> runtimeValue, ExtValueRef<M, MV> extRef,
+				CompiledModelValue<M, MV> creator, RuntimeValuePlaceholder<M, MV> runtimeValue, ExtValueRef<M, MV> extRef,
 				DefaultModelSet subModel) {
 				return new ModelNodeImpl<>(componentId, creator, runtimeValue, extRef, subModel);
 			}
@@ -2431,7 +2495,7 @@ public interface ObservableModelSet extends Identifiable {
 			 * @param tagValues Model tag values for this model
 			 * @param inheritance The new model's {@link ObservableModelSet#getInheritance() inheritance}
 			 * @param components The {@link ObservableModelSet#getComponents() components} for the new model
-			 * @param identifiedComponents All {@link IdentifableValueCreator identified} values in the model
+			 * @param identifiedComponents All {@link IdentifableCompiledValue identified} values in the model
 			 * @param nameChecker The {@link ObservableModelSet#getNameChecker() name checker} for the new model
 			 */
 			public DefaultBuilt(ModelComponentId id, DefaultBuilt root, DefaultBuilt parent, Map<ModelTag<?>, Object> tagValues,
@@ -2506,7 +2570,7 @@ public interface ObservableModelSet extends Identifiable {
 			 * @param tagValues Model tag values for this model
 			 * @param inheritance The new model's {@link ObservableModelSet#getInheritance() inheritance}
 			 * @param components The {@link ObservableModelSet#getComponents() components} for the new model
-			 * @param identifiedComponents All {@link IdentifableValueCreator identified} values in the model
+			 * @param identifiedComponents All {@link IdentifableCompiledValue identified} values in the model
 			 * @param nameChecker The {@link ObservableModelSet#getNameChecker() name checker} for the new model
 			 */
 			public DefaultInterpreted(ModelComponentId id, DefaultInterpreted root, DefaultInterpreted parent,

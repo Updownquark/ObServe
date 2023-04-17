@@ -202,6 +202,7 @@ It builds on the Expresso-Core specification and contains everything needed for 
 			<attribute name="type" type="flatten-reverse-type" />
 		</element-def>
 		<element-def name="flatten" extends="operation" inherits="abst-map-op">
+			<attribute name="to" type="string" specify="required" />
 			<!-- This option requires caching, so the default will be the same as the cached attribute and cannot be specified here -->
 			<attribute name="propagate-update-to-parent" type="boolean" specify="optional" />
 			<child-def name="reverse" type="flatten-reverse" min="0" />
