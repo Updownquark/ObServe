@@ -7,6 +7,7 @@ import java.net.URL;
 import java.util.AbstractList;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -14,12 +15,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import org.observe.expresso.CompiledExpression;
 import org.observe.expresso.DynamicModelValue;
 import org.observe.expresso.Expresso;
 import org.observe.expresso.ExpressoQIS;
+import org.observe.expresso.LocatedExpression;
 import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet;
-import org.observe.expresso.QonfigExpression2;
 import org.observe.util.TypeTokens;
 import org.qommons.IdentityKey;
 import org.qommons.QommonsUtils;
@@ -33,7 +35,6 @@ import org.qommons.config.QonfigDocument;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigElement.QonfigValue;
 import org.qommons.config.QonfigElementOrAddOn;
-import org.qommons.config.QonfigFilePosition;
 import org.qommons.config.QonfigInterpretation;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigInterpreterCore.Builder;
@@ -42,9 +43,11 @@ import org.qommons.config.QonfigInterpreterCore.QonfigValueModifier;
 import org.qommons.config.QonfigParseException;
 import org.qommons.config.QonfigToolkit;
 import org.qommons.config.SpecialSession;
+import org.qommons.io.LocatedFilePosition;
+import org.qommons.io.SimpleXMLParser;
 
 /** Interpretation for the Quick-Style toolkit */
-public class QuickStyle implements QonfigInterpretation {
+public class QuickStyleInterpretation implements QonfigInterpretation {
 	static final String STYLE_NAME = "quick-style-name";
 	static final String STYLE_ELEMENT = "quick-style-element";
 	static final String STYLE_APPLICATION = "quick-parent-style-application";
@@ -66,6 +69,7 @@ public class QuickStyle implements QonfigInterpretation {
 		/**
 		 * Initializes this style information, performing preliminary interpretation
 		 *
+		 * @param element The element for error throwing
 		 * @return This object
 		 * @throws QonfigInterpretationException If an error exists in this interpreted style information
 		 */
@@ -127,7 +131,7 @@ public class QuickStyle implements QonfigInterpretation {
 	@Override
 	public void init(QonfigToolkit toolkit) {
 		theToolkit = toolkit;
-		thePriorityAttr = QuickStyleType.getPriorityAttr(theToolkit);
+		thePriorityAttr = QuickTypeStyle.getPriorityAttr(theToolkit);
 	}
 
 	@Override
@@ -160,13 +164,13 @@ public class QuickStyle implements QonfigInterpretation {
 			public void augmentElementModel(ExpressoQIS session, ObservableModelSet.Builder builder)
 				throws QonfigInterpretationException {
 				builder.withTagValue(StyleQIS.STYLED_ELEMENT_TAG, session.getElement());
-				QuickElementStyle parentStyle = session.get(StyleQIS.STYLE_PROP, QuickElementStyle.class);
+				QuickCompiledStyle parentStyle = session.get(StyleQIS.STYLE_PROP, QuickCompiledStyle.class);
 				QuickStyleSheet styleSheet = session.get(StyleQIS.STYLE_SHEET_PROP, QuickStyleSheet.class);
 				// Parse style values, if any
 				session.put(STYLE_ELEMENT, session.getElement());
 				List<QuickStyleValue<?>> declared = null;
 				for (StyleValues sv : session.interpretChildren("style", StyleValues.class)) {
-						sv.init(session.getElement());
+					sv.init(session.getElement());
 					if (declared == null)
 						declared = new ArrayList<>();
 					declared.addAll(sv);
@@ -175,13 +179,13 @@ public class QuickStyle implements QonfigInterpretation {
 					declared = Collections.emptyList();
 				Collections.sort(declared);
 
-				// Create QuickElementStyle and put into session
+				// Create QuickInterpretedStyle and put into session
 				ExpressoQIS exS = session.as(ExpressoQIS.class);
 				DynamicModelValue.satisfyDynamicValue(MODEL_ELEMENT_NAME, exS.getExpressoEnv().getModels(), //
-					ObservableModelSet.ValueCreator.literal(TypeTokens.get().of(QonfigElement.class), session.getElement(),
+					ObservableModelSet.CompiledModelValue.literal(TypeTokens.get().of(QonfigElement.class), session.getElement(),
 						MODEL_ELEMENT_NAME));
-				session.put(StyleQIS.STYLE_PROP, new QuickElementStyle(Collections.unmodifiableList(declared), parentStyle, styleSheet,
-					session.getElement(), exS, theToolkit));
+				session.put(StyleQIS.STYLE_PROP, new QuickCompiledStyle(Collections.unmodifiableList(declared), parentStyle, styleSheet,
+					session.getElement(), exS, theToolkit, new HashMap<>()));
 			}
 		})//
 		.createWith("style", StyleValues.class, session -> interpretStyle(wrap(session)))//
@@ -199,9 +203,9 @@ public class QuickStyle implements QonfigInterpretation {
 	private StyleValues interpretStyle(StyleQIS session) throws QonfigInterpretationException {
 		ExpressoQIS exS = session.as(ExpressoQIS.class);
 		QuickStyleSheet styleSheet = session.getStyleSheet();
-		StyleValueApplication application = session.get(STYLE_APPLICATION, StyleValueApplication.class);
+		StyleApplicationDef application = session.get(STYLE_APPLICATION, StyleApplicationDef.class);
 		if (application == null)
-			application = StyleValueApplication.ALL;
+			application = StyleApplicationDef.ALL;
 		QuickStyleAttribute<?> attr = session.get(STYLE_ATTRIBUTE, QuickStyleAttribute.class);
 		QonfigElement element = (QonfigElement) session.get(STYLE_ELEMENT);
 		modifyForStyle(session);
@@ -210,7 +214,7 @@ public class QuickStyle implements QonfigInterpretation {
 		if (rolePath != null) {
 			if (application == null)
 				throw new QonfigInterpretationException("Cannot specify a style role without a type above it", //
-					rolePath.position == null ? null : new QonfigFilePosition(rolePath.fileLocation, rolePath.position.getPosition(0)),
+					rolePath.position == null ? null : new LocatedFilePosition(rolePath.fileLocation, rolePath.position.getPosition(0)),
 						rolePath.text.length());
 			for (String roleName : rolePath.text.split("\\.")) {
 				roleName = roleName.trim();
@@ -224,7 +228,7 @@ public class QuickStyle implements QonfigInterpretation {
 				}
 				if (child == null)
 					throw new QonfigInterpretationException("No such role '" + roleName + "' for parent style " + application, //
-						rolePath.position == null ? null : new QonfigFilePosition(rolePath.fileLocation, rolePath.position.getPosition(0)),
+						rolePath.position == null ? null : new LocatedFilePosition(rolePath.fileLocation, rolePath.position.getPosition(0)),
 							rolePath.text.length());
 				application = application.forChild(child);
 			}
@@ -236,16 +240,16 @@ public class QuickStyle implements QonfigInterpretation {
 				el = session.getElement().getDocument().getDocToolkit().getElementOrAddOn(elName.text);
 				if (el == null)
 					throw new QonfigInterpretationException("No such element found: " + elName, //
-						elName.position == null ? null : new QonfigFilePosition(elName.fileLocation, elName.position.getPosition(0)),
+						elName.position == null ? null : new LocatedFilePosition(elName.fileLocation, elName.position.getPosition(0)),
 							elName.text.length());
 			} catch (IllegalArgumentException e) {
-				throw new QonfigInterpretationException(e.getMessage(), e, //
-					elName.position == null ? null : new QonfigFilePosition(elName.fileLocation, elName.position.getPosition(0)),
-						elName.text.length());
+				throw new QonfigInterpretationException(e.getMessage(),
+					elName.position == null ? null : new LocatedFilePosition(elName.fileLocation, elName.position.getPosition(0)), //
+						elName.text.length(), e);
 			}
 			application = application.forType(el);
 		}
-		ObservableExpression newCondition = exS.getAttributeExpression("condition").getExpression();
+		CompiledExpression newCondition = exS.getAttributeExpression("condition");
 		if (newCondition != null)
 			application = application.forCondition(newCondition, exS.getExpressoEnv(), thePriorityAttr, styleSheet != null);
 		session.put(STYLE_APPLICATION, application);
@@ -255,52 +259,52 @@ public class QuickStyle implements QonfigInterpretation {
 			if (attr != null)
 				throw new QonfigInterpretationException(
 					"Cannot specify an attribute (" + attrName.text + ") if an ancestor style has (" + attr + ")",
-					attrName.position == null ? null : new QonfigFilePosition(attrName.fileLocation, attrName.position.getPosition(0)),
+					attrName.position == null ? null : new LocatedFilePosition(attrName.fileLocation, attrName.position.getPosition(0)),
 						attrName.text.length());
 
 			Set<QuickStyleAttribute<?>> attrs = new HashSet<>();
 			if (element != null) {
-				QuickStyleType styled = QuickStyleType.of(element.getType(), exS, theToolkit);
+				QuickTypeStyle styled = QuickTypeStyle.of(element.getType(), exS, theToolkit);
 				if (styled != null)
-					attrs.addAll(QuickStyleType.of(element.getType(), exS, theToolkit).getAttributes(attrName.text));
+					attrs.addAll(QuickTypeStyle.of(element.getType(), exS, theToolkit).getAttributes(attrName.text));
 				for (QonfigAddOn inh : element.getInheritance().values()) {
 					if (attrs.size() > 1)
 						break;
-					styled = QuickStyleType.of(inh, exS, theToolkit);
+					styled = QuickTypeStyle.of(inh, exS, theToolkit);
 					if (styled != null)
 						attrs.addAll(styled.getAttributes(attrName.text));
 				}
 				if (attrs.isEmpty())
 					throw new QonfigInterpretationException("No such style attribute: " + element + "." + attrName, //
-						attrName.position == null ? null : new QonfigFilePosition(attrName.fileLocation, attrName.position.getPosition(0)),
+						attrName.position == null ? null : new LocatedFilePosition(attrName.fileLocation, attrName.position.getPosition(0)),
 							attrName.text.length());
 				else if (attrs.size() > 1)
 					throw new QonfigInterpretationException("Multiple style attributes found matching " + element + "." + attrName, //
-						attrName.position == null ? null : new QonfigFilePosition(attrName.fileLocation, attrName.position.getPosition(0)),
+						attrName.position == null ? null : new LocatedFilePosition(attrName.fileLocation, attrName.position.getPosition(0)),
 							attrName.text.length());
 			} else {
 				for (QonfigElementOrAddOn type : application.getTypes().values()) {
 					if (attrs.size() > 1)
 						break;
-					QuickStyleType styled = QuickStyleType.of(type, exS, theToolkit);
+					QuickTypeStyle styled = QuickTypeStyle.of(type, exS, theToolkit);
 					if (styled != null)
 						attrs.addAll(styled.getAttributes(attrName.text));
 				}
 				if (attrs.isEmpty())
 					throw new QonfigInterpretationException("No such style attribute: " + application.getTypes() + "." + attrName, //
-						attrName.position == null ? null : new QonfigFilePosition(attrName.fileLocation, attrName.position.getPosition(0)),
+						attrName.position == null ? null : new LocatedFilePosition(attrName.fileLocation, attrName.position.getPosition(0)),
 							attrName.text.length());
 				else if (attrs.size() > 1)
 					throw new QonfigInterpretationException(
 						"Multiple style attributes found matching " + application.getTypes() + "." + attrName, //
-						attrName.position == null ? null : new QonfigFilePosition(attrName.fileLocation, attrName.position.getPosition(0)),
+						attrName.position == null ? null : new LocatedFilePosition(attrName.fileLocation, attrName.position.getPosition(0)),
 							attrName.text.length());
 			}
 			attr = attrs.iterator().next();
 			session.put(STYLE_ATTRIBUTE, attr);
 		}
-		QonfigExpression2 value = exS.getValueExpression();
-		if ((value != null && value != ObservableExpression.EMPTY) && attr == null)
+		CompiledExpression value = exS.getValueExpression();
+		if ((value != null && value.getExpression() != ObservableExpression.EMPTY) && attr == null)
 			throw new QonfigInterpretationException("Cannot specify a style value without an attribute", value.getFilePosition(),
 				value.length());
 		QonfigValue styleSetName = session.getAttributeQV("style-set");
@@ -309,14 +313,14 @@ public class QuickStyle implements QonfigInterpretation {
 			if (attr != null)
 				throw new QonfigInterpretationException("Cannot refer to a style set when an attribute is specified", //
 					styleSetName.position == null ? null
-						: new QonfigFilePosition(styleSetName.fileLocation, styleSetName.position.getPosition(0)),
+						: new LocatedFilePosition(styleSetName.fileLocation, styleSetName.position.getPosition(0)),
 						styleSetName.text.length());
 			try {
 				styleSetRef = styleSheet.getStyleSet(styleSetName.text);
 			} catch (IllegalArgumentException e) {
 				throw new QonfigInterpretationException(e.getMessage(), //
 					styleSetName.position == null ? null
-						: new QonfigFilePosition(styleSetName.fileLocation, styleSetName.position.getPosition(0)),
+						: new LocatedFilePosition(styleSetName.fileLocation, styleSetName.position.getPosition(0)),
 						styleSetName.text.length());
 			}
 			if (styleSetRef instanceof StyleValues)
@@ -329,7 +333,7 @@ public class QuickStyle implements QonfigInterpretation {
 			subStyle.init(subStyleEl.getElement());
 		}
 
-		StyleValueApplication theApplication = application;
+		StyleApplicationDef theApplication = application;
 		QuickStyleAttribute<?> theAttr = attr;
 		return new StyleValues((String) session.get(STYLE_NAME)) {
 			@Override
@@ -337,7 +341,7 @@ public class QuickStyle implements QonfigInterpretation {
 				List<QuickStyleValue<?>> values = new ArrayList<>();
 				if (value != null && value != ObservableExpression.EMPTY) {
 					Set<DynamicModelValue.Identity> mvs = new LinkedHashSet<>();
-					ObservableExpression replacedValue = theApplication.findModelValues(value.getExpression(), mvs,
+					LocatedExpression replacedValue = theApplication.findModelValues(value, mvs,
 						exS.getExpressoEnv().getModels(), theToolkit, styleSheet != null);
 					values.add(new QuickStyleValue<>(styleSheet, theApplication, theAttr, replacedValue));
 				}
@@ -368,26 +372,30 @@ public class QuickStyle implements QonfigInterpretation {
 				String urlStr = QommonsConfig.resolve(address.text, session.getElement().getDocument().getLocation());
 				ref = new URL(urlStr);
 			} catch (IOException e) {
-				throw new QonfigInterpretationException("Bad style-sheet reference: " + sse.getAttributeText("ref"), e, //
-					address.position == null ? null : new QonfigFilePosition(address.fileLocation, address.position.getPosition(0)),
-						address.text.length());
+				throw new QonfigInterpretationException("Bad style-sheet reference: " + sse.getAttributeText("ref"),
+					address.position == null ? null : new LocatedFilePosition(address.fileLocation, address.position.getPosition(0)), //
+						address.text.length(), e);
 			}
 			QonfigDocument ssDoc;
 			try (InputStream in = new BufferedInputStream(ref.openStream())) {
 				ssDoc = parser.parseDocument(ref.toString(), in);
 			} catch (IOException e) {
-				throw new QonfigInterpretationException("Could not access style-sheet reference " + ref, e, //
-					address.position == null ? null : new QonfigFilePosition(address.fileLocation, address.position.getPosition(0)),
-						address.text.length());
+				throw new QonfigInterpretationException("Could not access style-sheet reference " + ref,
+					address.position == null ? null : new LocatedFilePosition(address.fileLocation, address.position.getPosition(0)), //
+						address.text.length(), e);
+			} catch (SimpleXMLParser.XmlParseException e) {
+				throw new QonfigInterpretationException("Could not parse style-sheet reference " + ref,
+					address.position == null ? null : new LocatedFilePosition(address.fileLocation, address.position.getPosition(0)), //
+						address.text.length(), e);
 			} catch (QonfigParseException e) {
-				throw new QonfigInterpretationException("Malformed style-sheet reference " + ref, e, //
-					address.position == null ? null : new QonfigFilePosition(address.fileLocation, address.position.getPosition(0)),
-						address.text.length());
+				throw new QonfigInterpretationException("Malformed style-sheet reference " + ref,
+					address.position == null ? null : new LocatedFilePosition(address.fileLocation, address.position.getPosition(0)), //
+						address.text.length(), e);
 			}
 			if (!session.getFocusType().getDeclarer().getElement("style-sheet").isAssignableFrom(ssDoc.getRoot().getType()))
 				throw new QonfigInterpretationException(
 					"Style-sheet reference does not parse to a style-sheet (" + ssDoc.getRoot().getType() + "): " + ref, //
-					address.position == null ? null : new QonfigFilePosition(address.fileLocation, address.position.getPosition(0)),
+					address.position == null ? null : new LocatedFilePosition(address.fileLocation, address.position.getPosition(0)),
 						address.text.length());
 			StyleQIS importSession = session.intepretRoot(ssDoc.getRoot())//
 				.put(STYLE_SHEET_REF, ref);
@@ -418,10 +426,10 @@ public class QuickStyle implements QonfigInterpretation {
 		QuickStyleSheet styleSheet = new QuickStyleSheet((URL) session.get(STYLE_SHEET_REF), Collections.unmodifiableMap(styleSets),
 			Collections.unmodifiableList(values), Collections.unmodifiableMap(imports));
 		session.setStyleSheet(styleSheet);
-		List<StyleValues> subStyles = new ArrayList<>();
-		for (StyleQIS subStyleEl : session.forChildren("sub-style")) {
+		for (StyleQIS subStyleEl : session.forChildren("style")) {
 			StyleValues subStyle = subStyleEl.interpret(StyleValues.class);
 			subStyle.init(subStyleEl.getElement());
+			subStyle.addAll(values);
 		}
 
 		// Replace the StyleValues instances in the styleSets map with regular lists. Don't keep that silly type around.

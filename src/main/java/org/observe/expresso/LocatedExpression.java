@@ -1,0 +1,44 @@
+package org.observe.expresso;
+
+import org.observe.expresso.ModelType.ModelInstanceType;
+import org.observe.expresso.ObservableModelSet.ModelValueSynth;
+import org.qommons.io.LocatedFilePosition;
+
+/** A structure containing an {@link ObservableExpression} and exposes the location in the file where the expression occurred */
+public interface LocatedExpression {
+	/** @return The observable expression */
+	ObservableExpression getExpression();
+
+	/** @return The position in the Qonfig file of the start of the expression */
+	default LocatedFilePosition getFilePosition() {
+		return getFilePosition(0);
+	}
+
+	/**
+	 * @param offset The offset in the expression of the location to get
+	 * @return The location in the file where the portion of this expression at the given offset occurred
+	 */
+	LocatedFilePosition getFilePosition(int offset);
+
+	/** @return The length of the expression */
+	int length();
+
+	/**
+	 * @param <M> The model type to evaluate the expression as
+	 * @param <MV> The instance type to evaluate the expression as
+	 * @param type The type to evaluate the expression as
+	 * @param env The expresso environment to use instead of the one retrieved from the session
+	 * @return The evaluated expression
+	 * @throws ExpressoInterpretationException If the expression could not be evaluated as the given type
+	 */
+	default <M, MV extends M> ModelValueSynth<M, MV> evaluate(ModelInstanceType<M, MV> type, ExpressoEnv env)
+		throws ExpressoInterpretationException {
+		try {
+			return getExpression().evaluate(type, env, 0);
+		} catch (TypeConversionException e) {
+			throw new ExpressoInterpretationException(e.getMessage(), getFilePosition(0), 0, e);
+		} catch (ExpressoEvaluationException e) {
+			throw new ExpressoInterpretationException(e.getMessage(), getFilePosition(e.getErrorOffset()), e.getErrorLength(), e);
+		}
+	}
+}

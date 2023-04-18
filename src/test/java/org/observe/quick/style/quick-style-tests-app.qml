@@ -12,6 +12,6 @@
 	<special-session>org.observe.quick.style.StyleSessionImplV0_1</special-session>
 	<interpretation>org.observe.expresso.ExpressoBaseV0_1</interpretation>
 	<interpretation>org.observe.expresso.ExpressoTestFrameworkInterpretation</interpretation>
-	<interpretation>org.observe.quick.style.QuickStyle</interpretation>
+	<interpretation>org.observe.quick.style.QuickStyleInterpretation</interpretation>
 	<interpretation>org.observe.quick.style.TestInterpretation</interpretation>
 </qonfig-app>

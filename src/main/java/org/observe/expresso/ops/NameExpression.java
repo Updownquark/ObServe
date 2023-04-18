@@ -163,11 +163,11 @@ public class NameExpression implements ObservableExpression, Named {
 		Field field = env.getClassView().getImportedStaticField(theNames.getFirst().getName());
 		if (field != null)
 			return evaluateField(field, TypeTokens.get().of(field.getGenericType()), null, 1, type, expressionOffset);
-		StringBuilder typeName = new StringBuilder().append(theNames.get(0));
+		StringBuilder typeName = new StringBuilder().append(theNames.get(0).getName());
 		Class<?> clazz = env.getClassView().getType(typeName.toString());
 		int i;
 		for (i = 1; i < theNames.size() - 1; i++) {
-			typeName.append(theNames.get(i));
+			typeName.append(theNames.get(i).getName());
 			clazz = env.getClassView().getType(typeName.toString());
 		}
 		if (clazz == null)

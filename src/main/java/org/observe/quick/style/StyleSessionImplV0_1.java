@@ -65,7 +65,7 @@ public class StyleSessionImplV0_1 implements SpecialSessionImplementation<StyleQ
 	}
 
 	private void checkStyled(StyleQIS qis) {
-		boolean styled = qis.getElement().isInstance(theToolkit.getAddOn(QuickStyleType.STYLED));
+		boolean styled = qis.getElement().isInstance(theToolkit.getAddOn(QuickTypeStyle.STYLED));
 		qis.put(StyleQIS.STYLED_PROP, styled);
 	}
 
@@ -103,9 +103,9 @@ public class StyleSessionImplV0_1 implements SpecialSessionImplementation<StyleQ
 		// Collections.sort(declared);
 		//
 		// // Find parent
-		// QuickElementStyle parent = parentSession == null ? null : parentSession.getStyle();
-		// // Create QuickElementStyle and put into session
-		// session.put(StyleQIS.STYLE_PROP, new QuickElementStyle(Collections.unmodifiableList(declared), parent, session.getStyleSheet(),
+		// QuickInterpretedStyle parent = parentSession == null ? null : parentSession.getStyle();
+		// // Create QuickInterpretedStyle and put into session
+		// session.put(StyleQIS.STYLE_PROP, new QuickInterpretedStyle(Collections.unmodifiableList(declared), parent, session.getStyleSheet(),
 		// session.getElement(), exS, theToolkit));
 	}
 }

@@ -4,13 +4,13 @@ import com.google.common.reflect.TypeToken;
 
 /**
  * An attribute whose value for a given element will be determined by the
- * highest-{@link StyleValueApplication#compareTo(StyleValueApplication) priority} {@link QuickStyleValue} that
- * {@link StyleValueApplication#applies(org.qommons.config.QonfigElement) applies} to it.
+ * highest-{@link StyleApplicationDef#compareTo(StyleApplicationDef) priority} {@link QuickStyleValue} that
+ * {@link StyleApplicationDef#applies(org.qommons.config.QonfigElement) applies} to it.
  *
  * @param <T> The type of the attribute's values
  */
 public class QuickStyleAttribute<T> {
-	private final QuickStyleType theDeclarer;
+	private final QuickTypeStyle theDeclarer;
 	private final String theName;
 	private final TypeToken<T> theType;
 	private final boolean isTrickleDown;
@@ -19,10 +19,10 @@ public class QuickStyleAttribute<T> {
 	 * @param declarer The type that declared this style attribute
 	 * @param name The name for the attribute
 	 * @param type The type of the attribute
-	 * @param trickleDown Whether, if not {@link QuickStyleValue} {@link StyleValueApplication#applies(org.qommons.config.QonfigElement)
+	 * @param trickleDown Whether, if not {@link QuickStyleValue} {@link StyleApplicationDef#applies(org.qommons.config.QonfigElement)
 	 *        applies} to an element, its value will be that of its most recent ancestor element that for which this attribute also applies
 	 */
-	public QuickStyleAttribute(QuickStyleType declarer, String name, TypeToken<T> type, boolean trickleDown) {
+	public QuickStyleAttribute(QuickTypeStyle declarer, String name, TypeToken<T> type, boolean trickleDown) {
 		theDeclarer=declarer;
 		theName=name;
 		theType=type;
@@ -30,7 +30,7 @@ public class QuickStyleAttribute<T> {
 	}
 
 	/** @return The type that declared this style attribute */
-	public QuickStyleType getDeclarer() {
+	public QuickTypeStyle getDeclarer() {
 		return theDeclarer;
 	}
 
@@ -45,7 +45,7 @@ public class QuickStyleAttribute<T> {
 	}
 
 	/**
-	 * @return Whether, if not {@link QuickStyleValue} {@link StyleValueApplication#applies(org.qommons.config.QonfigElement) applies} to an
+	 * @return Whether, if not {@link QuickStyleValue} {@link StyleApplicationDef#applies(org.qommons.config.QonfigElement) applies} to an
 	 *         element, its value will be that of its most recent ancestor element that for which this attribute also applies
 	 */
 	public boolean isTrickleDown() {

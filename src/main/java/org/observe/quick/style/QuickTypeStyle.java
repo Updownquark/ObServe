@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Map;
 
 import org.observe.expresso.ExpressoEnv;
+import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ExpressoQIS;
 import org.observe.expresso.VariableType;
 import org.observe.util.TypeTokens;
@@ -29,12 +30,12 @@ import org.qommons.config.QonfigToolkit;
 import com.google.common.reflect.TypeToken;
 
 /** Represents style information for a {@link QonfigElementOrAddOn} */
-public class QuickStyleType {
+public class QuickTypeStyle {
 	/** The name of the &lt;styled> add-on, which all elements that styles apply to inherits */
 	public static final String STYLED = "styled";
 	/** The name of the &lt;style-attribute> element, which defines a style attribute */
 	public static final String STYLE_ATTRIBUTE = "style-attribute";
-	private static final IdentityHashMap<QonfigElementOrAddOn, QuickStyleType> ELEMENT_STYLE_TYPES = new IdentityHashMap<>();
+	private static final IdentityHashMap<QonfigElementOrAddOn, QuickTypeStyle> ELEMENT_STYLE_TYPES = new IdentityHashMap<>();
 
 	/**
 	 * @param element The element type to get the style type of
@@ -44,9 +45,9 @@ public class QuickStyleType {
 	 * @return The style type for the given element type
 	 * @throws QonfigInterpretationException If an error occurs synthesizing the style information for the given element
 	 */
-	public static synchronized QuickStyleType of(QonfigElementOrAddOn element, AbstractQIS<?> session, QonfigToolkit style)
+	public static synchronized QuickTypeStyle of(QonfigElementOrAddOn element, AbstractQIS<?> session, QonfigToolkit style)
 		throws QonfigInterpretationException {
-		QuickStyleType styled = ELEMENT_STYLE_TYPES.get(element);
+		QuickTypeStyle styled = ELEMENT_STYLE_TYPES.get(element);
 		if (styled != null)
 			return styled;
 		else if (session == null || style == null)
@@ -54,15 +55,15 @@ public class QuickStyleType {
 		QonfigAddOn styledAddOn = style.getAddOn(STYLED);
 		if (!styledAddOn.isAssignableFrom(element))
 			return null;
-		List<QuickStyleType> parents = new ArrayList<>();
+		List<QuickTypeStyle> parents = new ArrayList<>();
 		QonfigElementOrAddOn superEl = element.getSuperElement();
 		if (superEl != null) {
-			QuickStyleType parent = of(superEl, session, style);
+			QuickTypeStyle parent = of(superEl, session, style);
 			if (parent != null)
 				parents.add(parent);
 		}
 		for (QonfigAddOn inh : element.getInheritance()) {
-			QuickStyleType parent = of(inh, session, style);
+			QuickTypeStyle parent = of(inh, session, style);
 			if (parent != null)
 				parents.add(parent);
 		}
@@ -74,7 +75,7 @@ public class QuickStyleType {
 		BetterMultiMap<String, QuickStyleAttribute<?>> attributes = BetterHashMultiMap.<String, QuickStyleAttribute<?>> build()
 			.buildMultiMap();
 		QonfigAttributeDef.Declared priorityAttr = getPriorityAttr(style);
-		styled = new QuickStyleType(element, parents, priorityAttr, Collections.unmodifiableMap(declaredAttributes),
+		styled = new QuickTypeStyle(element, parents, priorityAttr, Collections.unmodifiableMap(declaredAttributes),
 			BetterCollections.unmodifiableMultiMap(attributes));
 
 		QonfigElementDef styleAttrEl = style.getElement(STYLE_ATTRIBUTE);
@@ -93,14 +94,24 @@ public class QuickStyleType {
 				QonfigValue typeV = styleAttr.getAttributes().get(typeAttr);
 				ExpressoEnv env = session.as(ExpressoQIS.class).getExpressoEnv();
 				VariableType vblType = VariableType.parseType(typeV.text, env.getClassView(), typeV.fileLocation, typeV.position);
-				TypeToken<?> type = vblType.getType(env.getModels());
+				if (vblType.isModelDependent()) {
+					session.error("Style attributes (like '" + name + "') must be statically-typed");
+					continue;
+				}
+				TypeToken<?> type;
+				try {
+					type = vblType.getType(env.getModels());
+				} catch (ExpressoInterpretationException e) {
+					throw new QonfigInterpretationException("Could not interpret type of attribute '" + name + "'", e.getPosition(),
+						e.getErrorLength());
+				}
 				declaredAttributes.put(name, new QuickStyleAttribute<>(styled, name, type, //
 					styleAttr.getAttribute(trickleAttr, boolean.class)));
 			}
 		}
 		attributes.putAll(declaredAttributes);
 
-		for (QuickStyleType parent : parents)
+		for (QuickTypeStyle parent : parents)
 			attributes.putAll(parent.getAttributes());
 		ELEMENT_STYLE_TYPES.put(element, styled);
 		return styled;
@@ -116,12 +127,12 @@ public class QuickStyleType {
 	}
 
 	private final QonfigElementOrAddOn theElement;
-	private final List<QuickStyleType> theSuperElements;
+	private final List<QuickTypeStyle> theSuperElements;
 	private final Map<String, QuickStyleAttribute<?>> theDeclaredAttributes;
 	private final BetterMultiMap<String, QuickStyleAttribute<?>> theAttributes;
 	private final QonfigAttributeDef.Declared thePriorityAttr;
 
-	QuickStyleType(QonfigElementOrAddOn element, List<QuickStyleType> superElements, QonfigAttributeDef.Declared priorityAttr, //
+	QuickTypeStyle(QonfigElementOrAddOn element, List<QuickTypeStyle> superElements, QonfigAttributeDef.Declared priorityAttr, //
 		Map<String, QuickStyleAttribute<?>> declaredAttributes, BetterMultiMap<String, QuickStyleAttribute<?>> attributes) {
 		theElement = element;
 		theSuperElements = superElements;
@@ -139,7 +150,7 @@ public class QuickStyleType {
 	 * @return Style information for all &lt;styled> element types that this type
 	 *         {@link QonfigElementOrAddOn#isAssignableFrom(QonfigElementOrAddOn) extends/inherits}
 	 */
-	public List<QuickStyleType> getSuperElements() {
+	public List<QuickTypeStyle> getSuperElements() {
 		return theSuperElements;
 	}
 
@@ -183,7 +194,7 @@ public class QuickStyleType {
 			QonfigElementOrAddOn el = theElement.getDeclarer().getElementOrAddOn(elName);
 			if (el == null)
 				throw new IllegalArgumentException("No such element or add-on '" + elName + "'");
-			QuickStyleType styled;
+			QuickTypeStyle styled;
 			try {
 				styled = of(el, null, null);
 			} catch (QonfigInterpretationException e) {
@@ -209,7 +220,7 @@ public class QuickStyleType {
 			QonfigElementOrAddOn el = theElement.getDeclarer().getElementOrAddOn(elName);
 			if (el == null)
 				throw new IllegalArgumentException("No such element or add-on '" + elName + "'");
-			QuickStyleType styled;
+			QuickTypeStyle styled;
 			try {
 				styled = of(el, null, null);
 			} catch (QonfigInterpretationException e) {

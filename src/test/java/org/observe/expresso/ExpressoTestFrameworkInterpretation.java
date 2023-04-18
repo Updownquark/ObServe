@@ -69,7 +69,8 @@ public class ExpressoTestFrameworkInterpretation implements QonfigInterpretation
 				actions.add(
 					new TestAction(testActionS.getAttributeText("name"), (ObservableModelSet.Built) exS.getExpressoEnv().getModels(), exS, //
 						actionS.interpret(CompiledModelValue.class), //
-						testActionS.getAttributeText("expect-throw"), testActionS.getAttribute("breakpoint", boolean.class)));
+						testActionS.getAttributeText("expect-throw"), testActionS.getAttribute("breakpoint", boolean.class),
+						testActionS.getElement().getPositionInFile()));
 			}
 			return new ExpressoTest(session.getAttributeText("name"), (ObservableModelSet.Built) exS.getExpressoEnv().getModels(), exS,
 				Collections.unmodifiableList(actions));

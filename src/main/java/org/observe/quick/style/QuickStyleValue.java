@@ -1,24 +1,26 @@
 package org.observe.quick.style;
 
+import java.util.Map;
+
 import org.observe.SettableValue;
 import org.observe.expresso.ExpressoEnv;
+import org.observe.expresso.LocatedExpression;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
-import org.observe.expresso.ObservableModelSet.ValueContainer;
+import org.observe.expresso.ObservableModelSet.CompiledModelValue;
 import org.qommons.StringUtils;
-import org.qommons.config.QonfigEvaluationException;
 import org.qommons.config.QonfigInterpretationException;
 
 /**
- * Represents a conditional value for a style attribute in quick
+ * The definition of a conditional value for a style attribute in quick
  *
  * @param <T> The type of the value
  */
 public class QuickStyleValue<T> implements Comparable<QuickStyleValue<?>> {
 	private final QuickStyleSheet theStyleSheet;
-	private final StyleValueApplication theApplication;
+	private final StyleApplicationDef theApplication;
 	private final QuickStyleAttribute<T> theAttribute;
-	private final ObservableExpression theValueExpression;
+	private final LocatedExpression theValueExpression;
 
 	/**
 	 * @param styleSheet The style sheet that defined this value
@@ -26,8 +28,8 @@ public class QuickStyleValue<T> implements Comparable<QuickStyleValue<?>> {
 	 * @param attribute THe attribute this value is for
 	 * @param value The expression defining this style value's value
 	 */
-	public QuickStyleValue(QuickStyleSheet styleSheet, StyleValueApplication application, QuickStyleAttribute<T> attribute,
-		ObservableExpression value) {
+	public QuickStyleValue(QuickStyleSheet styleSheet, StyleApplicationDef application, QuickStyleAttribute<T> attribute,
+		LocatedExpression value) {
 		theStyleSheet = styleSheet;
 		theApplication = application;
 		theAttribute = attribute;
@@ -41,10 +43,10 @@ public class QuickStyleValue<T> implements Comparable<QuickStyleValue<?>> {
 
 	/**
 	 * @return The application of this value, determining which elements it
-	 *         {@link StyleValueApplication#applies(org.qommons.config.QonfigElement) applies} to and
-	 *         {@link StyleValueApplication#getCondition() when}
+	 *         {@link StyleApplicationDef#applies(org.qommons.config.QonfigElement) applies} to and
+	 *         {@link StyleApplicationDef#getCondition() when}
 	 */
-	public StyleValueApplication getApplication() {
+	public StyleApplicationDef getApplication() {
 		return theApplication;
 	}
 
@@ -54,22 +56,24 @@ public class QuickStyleValue<T> implements Comparable<QuickStyleValue<?>> {
 	}
 
 	/** @return The expression defining this style value's value */
-	public ObservableExpression getValueExpression() {
+	public LocatedExpression getValueExpression() {
 		return theValueExpression;
 	}
 
 	/**
-	 * @param expressoEnv The environment in which to evaluate this value
-	 * @return An {@link EvaluatedStyleValue} of this style value evaluated for the given environment
-	 * @throws QonfigInterpretationException If an error occurs
-	 *         {@link ObservableExpression#evaluate(org.observe.expresso.ModelType.ModelInstanceType, ExpressoEnv) evaluating} this
-	 *         {@link #getValueExpression() value} or its {@link StyleValueApplication#getCondition() condition}
+	 * @param expressoEnv The expresso environment in which to
+	 *        {@link ObservableExpression#evaluate(org.observe.expresso.ModelType.ModelInstanceType, ExpressoEnv, int) evaluate} this
+	 *        value's expressions when the compiled result is {@link CompiledStyleValue#interpret(Map) interpreted}
+	 * @param applications A set of compiled style applications for re-use
+	 * @return The compiled style value
+	 * @throws QonfigInterpretationException If the expressions could not be compiled
 	 */
-	public EvaluatedStyleValue<T> evaluate(ExpressoEnv expressoEnv) throws QonfigEvaluationException {
-		EvaluatedStyleApplication application = theApplication.evaluate(expressoEnv);
-		ValueContainer<SettableValue<?>, SettableValue<T>> valueV = theValueExpression
-			.evaluate(ModelTypes.Value.forType(theAttribute.getType()), expressoEnv);
-		return new EvaluatedStyleValue<>(this, application, valueV);
+	public CompiledStyleValue<T> compile(ExpressoEnv expressoEnv, Map<StyleApplicationDef, CompiledStyleApplication> applications)
+		throws QonfigInterpretationException {
+		CompiledStyleApplication application = theApplication.compile(expressoEnv, applications);
+		CompiledModelValue<SettableValue<?>, SettableValue<T>> valueV = CompiledModelValue.of(theAttribute.getName(), ModelTypes.Value,
+			() -> theValueExpression.evaluate(ModelTypes.Value.forType(theAttribute.getType()), expressoEnv));
+		return new CompiledStyleValue<>(this, application, valueV);
 	}
 
 	@Override

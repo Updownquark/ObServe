@@ -237,7 +237,8 @@
 					.setInstant(java.time.Instant.ofEpochMilli(random.getLong(0, maxInstant.toEpochMilli())))
 					.setString(random.getAlphaNumericString(0, 10))
 				</action>
-				<!-- DEBUG <action>System.out.println("index="+index+", list="+models.sortedEntityList)</action>-->
+				<!-- This println is both for debugging as well as to give evidence that the tests are indeed executing -->
+				<action>System.out.println("index="+index+", list="+models.sortedEntityList)</action>
 			</action-group>
 			<loop name="modifyList" init="i=0" while="i&lt;25" after-body="i++">
 				<model>

@@ -13,6 +13,7 @@ import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueSynth;
 import org.qommons.BreakpointHere;
 import org.qommons.Named;
+import org.qommons.io.LocatedFilePosition;
 
 /**
  * A testing structure parsed from a Qonfig XML file for testing expresso or expresso-dependent toolkits
@@ -81,6 +82,7 @@ public class ExpressoTesting<H extends Expresso> {
 		private final CompiledModelValue<ObservableAction<?>, ObservableAction<?>> theAction;
 		private final String theExpectedException;
 		private final boolean isBreakpoint;
+		private final LocatedFilePosition thePosition;
 
 		/**
 		 * @param name The name of the test action
@@ -89,15 +91,18 @@ public class ExpressoTesting<H extends Expresso> {
 		 * @param action The value container to produce the action
 		 * @param expectedException The exception type expected to be thrown
 		 * @param breakpoint Whether a {@link BreakpointHere breakpoint} should be caught before executing this action
+		 * @param position The position in the file where this test action was defined
 		 */
 		public TestAction(String name, ObservableModelSet.Built actionModel, ExpressoQIS expressoSession,
-			CompiledModelValue<ObservableAction<?>, ObservableAction<?>> action, String expectedException, boolean breakpoint) {
+			CompiledModelValue<ObservableAction<?>, ObservableAction<?>> action, String expectedException, boolean breakpoint,
+			LocatedFilePosition position) {
 			theName = name;
 			theActionModel = actionModel;
 			theExpressoSession = expressoSession;
 			theAction = action;
 			theExpectedException = expectedException;
 			isBreakpoint = breakpoint;
+			thePosition = position;
 		}
 
 		/** @return This action's name */
@@ -135,6 +140,11 @@ public class ExpressoTesting<H extends Expresso> {
 		/** @return Whether a {@link BreakpointHere breakpoint} should be caught before executing this action */
 		public boolean isBreakpoint() {
 			return isBreakpoint;
+		}
+
+		/** @return The position in the file where this test action was defined */
+		public LocatedFilePosition getPosition() {
+			return thePosition;
 		}
 	}
 
@@ -210,7 +220,9 @@ public class ExpressoTesting<H extends Expresso> {
 						throw new AssertionError("Expected action " + actionName + " to throw " + action.getExpectedException());
 				} catch (RuntimeException e) {
 					if (action.getExpectedException() == null || !action.getExpectedException().equals(e.getClass().getSimpleName()))
-						throw new IllegalStateException("Unexpected exception on test action " + actionName, e);
+						throw new IllegalStateException(action.getPosition() + ": Unexpected exception on test action " + actionName, e);
+				} catch (AssertionError e) {
+					throw new AssertionError(action.getPosition() + ":\n\t" + e.getMessage(), e);
 				}
 			}
 		} finally {

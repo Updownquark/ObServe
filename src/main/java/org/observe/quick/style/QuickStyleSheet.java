@@ -76,7 +76,7 @@ public class QuickStyleSheet {
 
 	/**
 	 * @param element The element to get style values for
-	 * @return All style values in this style sheet that {@link StyleValueApplication#applies(QonfigElement) apply} to the given element
+	 * @return All style values in this style sheet that {@link StyleApplicationDef#applies(QonfigElement) apply} to the given element
 	 */
 	public final List<QuickStyleValue<?>> getValues(QonfigElement element) {
 		List<QuickStyleValue<?>> values = new ArrayList<>();
