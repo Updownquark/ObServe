@@ -30,6 +30,10 @@ public class QuickStyleValue<T> implements Comparable<QuickStyleValue<?>> {
 	 */
 	public QuickStyleValue(QuickStyleSheet styleSheet, StyleApplicationDef application, QuickStyleAttribute<T> attribute,
 		LocatedExpression value) {
+		if (attribute == null)
+			throw new NullPointerException("Attribute is null");
+		else if (value == null)
+			throw new NullPointerException("Value is null");
 		theStyleSheet = styleSheet;
 		theApplication = application;
 		theAttribute = attribute;

@@ -331,6 +331,7 @@ public class QuickStyleInterpretation implements QonfigInterpretation {
 		for (StyleQIS subStyleEl : session.forChildren("sub-style")) {
 			StyleValues subStyle = subStyleEl.interpret(StyleValues.class);
 			subStyle.init(subStyleEl.getElement());
+			subStyles.add(subStyle);
 		}
 
 		StyleApplicationDef theApplication = application;
@@ -339,7 +340,7 @@ public class QuickStyleInterpretation implements QonfigInterpretation {
 			@Override
 			protected List<QuickStyleValue<?>> get() throws QonfigInterpretationException {
 				List<QuickStyleValue<?>> values = new ArrayList<>();
-				if (value != null && value != ObservableExpression.EMPTY) {
+				if (value != null && value.getExpression() != ObservableExpression.EMPTY) {
 					Set<DynamicModelValue.Identity> mvs = new LinkedHashSet<>();
 					LocatedExpression replacedValue = theApplication.findModelValues(value, mvs,
 						exS.getExpressoEnv().getModels(), theToolkit, styleSheet != null);
@@ -429,7 +430,7 @@ public class QuickStyleInterpretation implements QonfigInterpretation {
 		for (StyleQIS subStyleEl : session.forChildren("style")) {
 			StyleValues subStyle = subStyleEl.interpret(StyleValues.class);
 			subStyle.init(subStyleEl.getElement());
-			subStyle.addAll(values);
+			values.addAll(subStyle.get());
 		}
 
 		// Replace the StyleValues instances in the styleSets map with regular lists. Don't keep that silly type around.
