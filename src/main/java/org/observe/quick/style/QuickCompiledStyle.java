@@ -68,10 +68,12 @@ public class QuickCompiledStyle {
 		for (CompiledStyleValue<?> sv : theDeclaredValues)
 			((List<CompiledStyleValue<?>>) values.computeIfAbsent(sv.getStyleValue().getAttribute(),
 				__ -> SortedTreeList.<CompiledStyleValue<?>> buildTreeList(CompiledStyleValue::compareTo).build())).add(sv);
-		for (QuickStyleValue<?> sv : styleSheet.getValues(element))
-			((List<CompiledStyleValue<?>>) values.computeIfAbsent(sv.getAttribute(),
-				__ -> SortedTreeList.<CompiledStyleValue<?>> buildTreeList(CompiledStyleValue::compareTo).build()))
-			.add(sv.compile(session.getExpressoEnv(), applications));
+		if (styleSheet != null) {
+			for (QuickStyleValue<?> sv : styleSheet.getValues(element))
+				((List<CompiledStyleValue<?>>) values.computeIfAbsent(sv.getAttribute(),
+					__ -> SortedTreeList.<CompiledStyleValue<?>> buildTreeList(CompiledStyleValue::compareTo).build()))
+						.add(sv.compile(session.getExpressoEnv(), applications));
+		}
 		Map<QuickStyleAttribute<?>, QuickCompiledStyleAttribute<?>> styleValues = new HashMap<>();
 		for (Map.Entry<QuickStyleAttribute<?>, BetterSortedList<? extends CompiledStyleValue<?>>> v : values.entrySet()) {
 			QuickStyleAttribute<Object> attr = (QuickStyleAttribute<Object>) v.getKey();

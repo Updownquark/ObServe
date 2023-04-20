@@ -10,8 +10,8 @@
 
 	<add-ons>
 		<add-on name="element-style" requires="style">
-			<attr-mod name="element" specify="forbidden" />
-			<attr-mod name="child" specify="forbidden" />
+			<attr-mod name="style.element" specify="forbidden" />
+			<attr-mod name="style.child" specify="forbidden" />
 			<child-mod child="sub-style" inherits="element-style" />
 		</add-on>
 

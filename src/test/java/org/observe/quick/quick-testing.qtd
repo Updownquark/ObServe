@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<qonfig-def name="Quick-Testing" version="0.1" extends:expresso="Expresso-Testing v0.1" extends:style="Quick-Base v0.1">
+	<add-ons>
+		<add-on name="quick-test" requires="test">
+			<child-def name="body" type="widget" inherits="quick-test-body" />
+		</add-on>
+		<add-on name="quick-test-body" requires="widget">
+			<attr-mod name="widget.name" specify="required" />
+		</add-on>
+	</add-ons>
+
+	<auto-inheritance>
+		<auto-inherit inherits="quick-test">
+			<target element="test" />
+		</auto-inherit>
+	</auto-inheritance>
+</qonfig-def>
