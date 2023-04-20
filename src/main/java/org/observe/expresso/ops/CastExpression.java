@@ -85,7 +85,7 @@ public class CastExpression implements ObservableExpression {
 		return (ModelValueSynth<M, MV>) doEval((ModelInstanceType<SettableValue<?>, SettableValue<?>>) type, env, expressionOffset);
 	}
 
-	private <S, T> ModelValueSynth<SettableValue<?>, SettableValue<T>> doEval(ModelInstanceType<SettableValue<?>, SettableValue<?>> type,
+	private <T> ModelValueSynth<SettableValue<?>, SettableValue<T>> doEval(ModelInstanceType<SettableValue<?>, SettableValue<?>> type,
 		ExpressoEnv env, int expressionOffset) throws ExpressoEvaluationException, ExpressoInterpretationException {
 		TypeToken<T> valueType;
 		try {
@@ -97,33 +97,13 @@ public class CastExpression implements ObservableExpression {
 			throw new ExpressoEvaluationException(expressionOffset + 1, theType.length(),
 				"Cannot assign " + valueType + " to " + type.getType(0));
 		int valueOffset = expressionOffset + theType.length() + 2;
-		ModelValueSynth<SettableValue<?>, SettableValue<S>> valueContainer;
+		ModelValueSynth<SettableValue<?>, SettableValue<T>> valueContainer;
 		try {
-			valueContainer = (ModelValueSynth<SettableValue<?>, SettableValue<S>>) (ModelValueSynth<?, ?>) theValue
-				.evaluate(ModelTypes.Value.any(), env, valueOffset);
+			valueContainer = theValue.evaluate(ModelTypes.Value.forType(valueType), env, valueOffset);
 		} catch (TypeConversionException e) {
 			throw new ExpressoEvaluationException(valueOffset, theValue.getExpressionLength(), e.getMessage(), e);
 		}
-		TypeToken<S> sourceType = (TypeToken<S>) valueContainer.getType().getType(0);
-		if (!TypeTokens.get().isAssignable(sourceType, valueType)//
-			&& !TypeTokens.get().isAssignable(valueType, sourceType))
-			throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(),
-				"Cannot cast value of type " + sourceType + " to " + valueType);
-		Class<T> valueClass = TypeTokens.get().wrap(TypeTokens.getRawType(valueType));
-		Class<S> sourceClass = TypeTokens.getRawType(sourceType);
-		return valueContainer.map(ModelTypes.Value.forType(valueType), vc -> vc.transformReversible(valueType, tx -> tx//
-			.map(v -> {
-				if (v == null || valueClass.isInstance(v))
-					return (T) v;
-				else {
-					System.err.println("Cast failed: " + v + " (" + v.getClass().getName() + ") to " + valueType);
-					return null;
-				}
-			}).replaceSource(v -> (S) v, replace -> replace.rejectWith(v -> {
-				if (v != null && !sourceClass.isInstance(v))
-					return theValue + " (" + v.getClass().getName() + ") is not an instance of " + sourceType;
-				return null;
-			}))));
+		return valueContainer;
 	}
 
 	@Override
