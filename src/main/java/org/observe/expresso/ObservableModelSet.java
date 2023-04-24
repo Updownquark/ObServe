@@ -2272,6 +2272,11 @@ public interface ObservableModelSet extends Identifiable {
 			public InterpretedValueSynth<M, MV> getValue() {
 				return theValue;
 			}
+
+			@Override
+			public String toString() {
+				return getThing().toString();
+			}
 		}
 
 		static class RVPI<M, MV extends M> implements RuntimeValuePlaceholder<M, MV> {

@@ -12,6 +12,7 @@
 			<model name="model">
 				<value name="intValue" type="int" />
 				<value name="stringValue" type="String" />
+				<value name="intValue2" type="int" />
 			</model>
 		</models>
 	</test:head>
@@ -43,7 +44,12 @@
 				<model>
 					<value name="compositeString">model.stringValue+" "+intTimes2</value>
 				</model>
-				<label name="label2" value="compositeString" />
+				<label name="label2" value="compositeString">
+					<model>
+						<value name="textLength">value.length()</value>
+						<hook name="assignLength" on="textLength">model.intValue2=textLength</hook>
+					</model>
+				</label>
 			</box>
 		</box>
 
@@ -54,8 +60,10 @@
 
 		<action name="setStringV_0">model.stringValue="Some string"</action>
 		<action name="checkLabel2_0">assertEquals("Some string 152", (String) ui.label2.getValue())</action>
+		<action name="checkLabel2Len_0">assertEquals(15, model.intValue2)</action>
 		<action name="setIntV_2">model.intValue=15</action>
 		<action name="setStringV_1">model.stringValue="Some other string"</action>
 		<action name="checkLabel2_1">assertEquals("Some other string 30", (String) ui.label2.getValue())</action>
+		<action name="checkLabel2Len_1">assertEquals(20, model.intValue2)</action>
 	</test>
 </testing>

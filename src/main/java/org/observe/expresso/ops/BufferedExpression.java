@@ -68,6 +68,17 @@ public class BufferedExpression implements ObservableExpression {
 		return theExpression.evaluateInternal(type, env, expressionOffset + theBefore);
 	}
 
+	@Override
+	public String toString() {
+		StringBuilder str = new StringBuilder();
+		for (int i = 0; i < theBefore; i++)
+			str.append(' ');
+		str.append(theExpression);
+		for (int i = 0; i < theAfter; i++)
+			str.append(' ');
+		return str.toString();
+	}
+
 	/**
 	 * @param before The number of whitespace characters before the expression
 	 * @param expression The expression content
