@@ -31,7 +31,7 @@ import org.qommons.config.QonfigInterpreterCore.Builder;
 import org.qommons.config.QonfigToolkit;
 import org.qommons.config.SpecialSession;
 
-/** Interpretation for {@link QuickTests2} */
+/** Interpretation for {@link QuickStyleTests} */
 public class TestInterpretation implements QonfigInterpretation {
 	/** The name of the test toolkit */
 	public static final String TOOLKIT_NAME = "Quick-Style-Test";

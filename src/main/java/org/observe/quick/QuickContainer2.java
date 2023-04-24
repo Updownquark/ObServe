@@ -6,6 +6,7 @@ import java.util.List;
 import org.observe.collect.ObservableCollection;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ModelInstantiationException;
+import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.qommons.config.AbstractQIS;
 import org.qommons.config.QonfigInterpretationException;
@@ -15,8 +16,7 @@ public interface QuickContainer2<C extends QuickWidget> extends QuickWidget {
 		List<? extends QuickWidget.Def<C>> getContents();
 
 		@Override
-		Interpreted<? extends W, ? extends C> interpret(Interpreted<?, ?> parent, QuickInterpretationCache cache)
-			throws ExpressoInterpretationException;
+		Interpreted<? extends W, ? extends C> interpret(Interpreted<?, ?> parent) throws ExpressoInterpretationException;
 
 		public abstract class Abstract<W extends QuickContainer2<C>, C extends QuickWidget> extends QuickWidget.Def.Abstract<W>
 		implements Def<W, C> {
@@ -31,6 +31,16 @@ public interface QuickContainer2<C extends QuickWidget> extends QuickWidget {
 			public List<QuickWidget.Def<C>> getContents() {
 				return theContents;
 			}
+
+			@Override
+			public Def.Abstract<W, C> update(AbstractQIS<?> session) throws QonfigInterpretationException {
+				super.update(session);
+				// TODO At some point, it would be better to adjust the collection instead of this sledgehammer
+				theContents.clear();
+				for (AbstractQIS<?> child : session.forChildren("content"))
+					theContents.add(child.interpret(QuickWidget.Def.class).update(child));
+				return this;
+			}
 		}
 	}
 
@@ -38,15 +48,14 @@ public interface QuickContainer2<C extends QuickWidget> extends QuickWidget {
 		@Override
 		Def<? super W, ? super C> getDefinition();
 
-		List<? extends QuickWidget.Interpreted<C>> getContents();
+		List<? extends QuickWidget.Interpreted<? extends C>> getContents();
 
 		public abstract class Abstract<W extends QuickContainer2<C>, C extends QuickWidget> extends QuickWidget.Interpreted.Abstract<W>
 		implements Interpreted<W, C> {
-			private final List<QuickWidget.Interpreted<C>> theContents;
+			private final List<QuickWidget.Interpreted<? extends C>> theContents;
 
-			public Abstract(Def<? super W, ? super C> definition, Interpreted<?, ?> parent, QuickInterpretationCache cache)
-				throws ExpressoInterpretationException {
-				super(definition, parent, cache);
+			public Abstract(Def<? super W, ? super C> definition, Interpreted<?, ?> parent) throws ExpressoInterpretationException {
+				super(definition, parent);
 				theContents = new ArrayList<>();
 			}
 
@@ -56,8 +65,19 @@ public interface QuickContainer2<C extends QuickWidget> extends QuickWidget {
 			}
 
 			@Override
-			public List<QuickWidget.Interpreted<C>> getContents() {
+			public List<QuickWidget.Interpreted<? extends C>> getContents() {
 				return theContents;
+			}
+
+			@Override
+			public Interpreted.Abstract<W, C> update(InterpretedModelSet models, QuickInterpretationCache cache)
+				throws ExpressoInterpretationException {
+				super.update(models, cache);
+				// TODO At some point, it would be better to adjust the collection instead of this sledgehammer
+				theContents.clear();
+				for (QuickWidget.Def<? super C> child : getDefinition().getContents())
+					theContents.add((QuickWidget.Interpreted<? extends C>) child.interpret(this).update(models, cache));
+				return this;
 			}
 		}
 	}
@@ -87,13 +107,18 @@ public interface QuickContainer2<C extends QuickWidget> extends QuickWidget {
 		}
 
 		@Override
-		public void update(ModelSetInstance models) throws ModelInstantiationException {
-			super.update(models);
+		public QuickContainer2.Abstract<C> update(ModelSetInstance models, QuickInstantiationCache cache)
+			throws ModelInstantiationException {
+			super.update(models, cache);
 
-			// TODO Adjust contents with parent
-
-			for (C content : theContents)
-				content.update(getModels());
+			// TODO At some point, it would be better to adjust the collection instead of this sledgehammer
+			theContents.clear();
+			for (QuickWidget.Interpreted<? extends C> child : getInterpreted().getContents())
+				theContents.add((C) child.create(this, models).update(getModels(), cache));
+			//
+			// for (C content : theContents)
+			// content.update(getModels());
+			return this;
 		}
 	}
 }

@@ -43,7 +43,7 @@ public class QuickDocument2 {
 		}
 
 		public Interpreted interpret() throws ExpressoInterpretationException {
-			return new Interpreted(theHead.interpret(), theBody.interpret(null, new QuickWidget.QuickInterpretationCache()));
+			return new Interpreted(theHead.interpret(), theBody.interpret(null));
 		}
 	}
 
@@ -65,7 +65,7 @@ public class QuickDocument2 {
 		}
 
 		public QuickDocument2 create(ModelSetInstance models) throws ModelInstantiationException {
-			return new QuickDocument2(this, models, theBody.create(null, models, new QuickWidget.QuickInstantiationCache()));
+			return new QuickDocument2(this, models, theBody.create(null, models));
 		}
 	}
 

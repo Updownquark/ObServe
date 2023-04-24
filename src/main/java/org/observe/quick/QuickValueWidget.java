@@ -5,6 +5,7 @@ import org.observe.expresso.CompiledExpression;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
+import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueSynth;
@@ -21,8 +22,7 @@ public interface QuickValueWidget<T> extends QuickWidget {
 		CompiledExpression getDisabled();
 
 		@Override
-		Interpreted<?, ? extends W> interpret(QuickContainer2.Interpreted<?, ?> parent, QuickInterpretationCache cache)
-			throws ExpressoInterpretationException;
+		Interpreted<?, ? extends W> interpret(QuickContainer2.Interpreted<?, ?> parent) throws ExpressoInterpretationException;
 
 		public abstract class Abstract<T, W extends QuickValueWidget<T>> extends QuickWidget.Def.Abstract<W> implements Def<W> {
 			private CompiledExpression theValue;
@@ -43,10 +43,11 @@ public interface QuickValueWidget<T> extends QuickWidget {
 			}
 
 			@Override
-			public void update(AbstractQIS<?> session) throws QonfigInterpretationException {
+			public Def.Abstract<T, W> update(AbstractQIS<?> session) throws QonfigInterpretationException {
 				super.update(session);
 				theValue = getExpressoSession().getAttributeExpression("value");
 				theDisabled = getExpressoSession().getAttributeExpression("disable-with");
+				return this;
 			}
 		}
 	}
@@ -65,9 +66,9 @@ public interface QuickValueWidget<T> extends QuickWidget {
 		implements Interpreted<T, W> {
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<T>> theValue;
 
-			public Abstract(QuickValueWidget.Def<? super W> definition, QuickContainer2.Interpreted<?, ?> parent,
-				QuickInterpretationCache cache) throws ExpressoInterpretationException {
-				super(definition, parent, cache);
+			public Abstract(QuickValueWidget.Def<? super W> definition, QuickContainer2.Interpreted<?, ?> parent)
+				throws ExpressoInterpretationException {
+				super(definition, parent);
 			}
 
 			@Override
@@ -81,8 +82,9 @@ public interface QuickValueWidget<T> extends QuickWidget {
 			}
 
 			@Override
-			public void update(QuickInterpretationCache cache) throws ExpressoInterpretationException {
-				super.update(cache);
+			public Interpreted.Abstract<T, W> update(InterpretedModelSet models, QuickInterpretationCache cache)
+				throws ExpressoInterpretationException {
+				super.update(models, cache);
 				InterpretedValueSynth<SettableValue<?>, SettableValue<T>> value = getDefinition().getValue()
 					.evaluate(ModelTypes.Value.<T> anyAs()).interpret();
 				InterpretedValueSynth<SettableValue<?>, SettableValue<String>> disabled = getDefinition().getDisabled() == null ? null
@@ -94,6 +96,7 @@ public interface QuickValueWidget<T> extends QuickWidget {
 					SettableValue<String> disabledInst = disabled.get(msi);
 					return valueInst.disableWith(disabledInst);
 				}).interpret();
+				return this;
 			}
 		}
 	}
@@ -120,9 +123,11 @@ public interface QuickValueWidget<T> extends QuickWidget {
 		}
 
 		@Override
-		public void update(ModelSetInstance models) throws ModelInstantiationException {
-			super.update(models);
+		public QuickValueWidget.Abstract<T> update(ModelSetInstance models, QuickInstantiationCache cache)
+			throws ModelInstantiationException {
+			super.update(models, cache);
 			theValue.set(getInterpreted().getValue().get(models), null);
+			return this;
 		}
 	}
 }

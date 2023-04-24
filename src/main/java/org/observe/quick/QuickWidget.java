@@ -9,7 +9,6 @@ import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ExpressoQIS;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
-import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
@@ -30,8 +29,6 @@ public interface QuickWidget {
 	public interface Def<W extends QuickWidget> extends QuickCompiledStructure {
 		QuickContainer2.Def<?, ?> getParent();
 
-		ObservableModelSet.Built getModels();
-
 		QuickCompiledStyle getStyle();
 
 		String getName();
@@ -40,14 +37,14 @@ public interface QuickWidget {
 
 		CompiledExpression isVisible();
 
-		Interpreted<? extends W> interpret(QuickContainer2.Interpreted<?, ?> parent, QuickInterpretationCache cache)
-			throws ExpressoInterpretationException;
+		Def<W> update(AbstractQIS<?> session) throws QonfigInterpretationException;
+
+		Interpreted<? extends W> interpret(QuickContainer2.Interpreted<?, ?> parent) throws ExpressoInterpretationException;
 
 		public abstract class Abstract<W extends QuickWidget> implements Def<W> {
 			private final QuickContainer2.Def<?, ?> theParent;
 			private StyleQIS theStyleSession;
 			private ExpressoQIS theExpressoSession;
-			private ObservableModelSet.Built theModels;
 			private QuickCompiledStyle theStyle;
 			private String theName;
 			private CompiledExpression theTooltip;
@@ -57,7 +54,6 @@ public interface QuickWidget {
 				QuickContainer2.Def<?, ?> parent = (QuickContainer2.Def<?, ?>) session.get(QUICK_DEF);
 				session.put(QUICK_DEF, this);
 				theParent = parent;
-				update(session);
 			}
 
 			@Override
@@ -73,11 +69,6 @@ public interface QuickWidget {
 			@Override
 			public QuickContainer2.Def<?, ?> getParent() {
 				return theParent;
-			}
-
-			@Override
-			public ObservableModelSet.Built getModels() {
-				return theModels;
 			}
 
 			@Override
@@ -100,14 +91,15 @@ public interface QuickWidget {
 				return isVisible;
 			}
 
-			public void update(AbstractQIS<?> session) throws QonfigInterpretationException {
+			@Override
+			public Abstract<W> update(AbstractQIS<?> session) throws QonfigInterpretationException {
 				theStyleSession = session.as(StyleQIS.class);
 				theExpressoSession = session.as(ExpressoQIS.class);
-				theModels = (ObservableModelSet.Built) theExpressoSession.getExpressoEnv().getModels();
 				theStyle = theStyleSession.getStyle();
 				theName = theExpressoSession.getAttributeText("name");
 				theTooltip = theExpressoSession.getAttributeExpression("tooltip");
 				isVisible = theExpressoSession.getAttributeExpression("visible");
+				return this;
 			}
 		}
 	}
@@ -121,39 +113,31 @@ public interface QuickWidget {
 
 		TypeToken<W> getWidgetType();
 
-		InterpretedModelSet getModels();
-
 		QuickInterpretedStyle getStyle();
 
 		InterpretedValueSynth<SettableValue<?>, SettableValue<String>> getTooltip();
 
 		InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> isVisible();
 
-		W create(QuickContainer2<?> parent, ModelSetInstance models, QuickInstantiationCache cache) throws ModelInstantiationException;
+		Interpreted<W> update(InterpretedModelSet models, QuickInterpretationCache cache) throws ExpressoInterpretationException;
+
+		W create(QuickContainer2<?> parent, ModelSetInstance models) throws ModelInstantiationException;
 
 		public abstract class Abstract<W extends QuickWidget> implements Interpreted<W> {
 			private final Def<? super W> theDefinition;
 			private final QuickContainer2.Interpreted<?, ?> theParent;
-			private InterpretedModelSet theModels;
 			private QuickInterpretedStyle theStyle;
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<String>> theTooltip;
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> isVisible;
 
-			public Abstract(Def<? super W> definition, QuickContainer2.Interpreted<?, ?> parent, QuickInterpretationCache cache)
-				throws ExpressoInterpretationException {
+			public Abstract(Def<? super W> definition, QuickContainer2.Interpreted<?, ?> parent) throws ExpressoInterpretationException {
 				theDefinition = definition;
 				theParent = parent;
-				update(cache);
 			}
 
 			@Override
 			public Def<? super W> getDefinition() {
 				return theDefinition;
-			}
-
-			@Override
-			public InterpretedModelSet getModels() {
-				return theModels;
 			}
 
 			@Override
@@ -171,13 +155,15 @@ public interface QuickWidget {
 				return isVisible;
 			}
 
-			public void update(QuickInterpretationCache cache) throws ExpressoInterpretationException {
-				theModels = theDefinition.getModels().interpret();
+			@Override
+			public Abstract<W> update(InterpretedModelSet models, QuickInterpretationCache cache) throws ExpressoInterpretationException {
+				theDefinition.getExpressoSession().interpretLocalModel();
 				theStyle = theDefinition.getStyle().interpret(theParent == null ? null : theParent.getStyle(), cache.applications);
 				theTooltip = theDefinition.getTooltip() == null ? null
 					: theDefinition.getTooltip().evaluate(ModelTypes.Value.STRING).interpret();
 				isVisible = theDefinition.isVisible() == null ? null
 					: theDefinition.isVisible().evaluate(ModelTypes.Value.BOOLEAN).interpret();
+				return this;
 			}
 		}
 	}
@@ -196,7 +182,7 @@ public interface QuickWidget {
 
 	SettableValue<Boolean> isVisible();
 
-	void update(ModelSetInstance models) throws ModelInstantiationException;
+	QuickWidget update(ModelSetInstance models, QuickInstantiationCache cache) throws ModelInstantiationException;
 
 	// TODO border
 
@@ -219,7 +205,7 @@ public interface QuickWidget {
 		}
 
 		@Override
-		public void update(ModelSetInstance models) throws ModelInstantiationException {
+		public QuickWidget update(ModelSetInstance models, QuickInstantiationCache cache) throws ModelInstantiationException {
 			models = theInterpreted.getDefinition().getExpressoSession().wrapLocal(models);
 			StyleQIS.installParentModels(models, theParent == null ? null : theParent.getModels());
 			theModels = models;
@@ -227,6 +213,7 @@ public interface QuickWidget {
 				theTooltip.set(theInterpreted.getTooltip().get(models), null);
 			if (theInterpreted.isVisible() != null)
 				isVisible.set(theInterpreted.isVisible().get(models), null);
+			return this;
 		}
 
 		@Override

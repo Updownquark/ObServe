@@ -9,6 +9,7 @@ import org.observe.expresso.CompiledExpression;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
+import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueSynth;
@@ -52,8 +53,7 @@ public interface QuickTextWidget<T> extends QuickValueWidget<T> {
 		boolean isEditable();
 
 		@Override
-		Interpreted<?, ? extends W> interpret(QuickContainer2.Interpreted<?, ?> parent, QuickInterpretationCache cache)
-			throws ExpressoInterpretationException;
+		Interpreted<?, ? extends W> interpret(QuickContainer2.Interpreted<?, ?> parent) throws ExpressoInterpretationException;
 
 		public abstract class Abstract<T, W extends QuickTextWidget<T>> extends QuickValueWidget.Def.Abstract<T, W> implements Def<W> {
 			private CompiledExpression theFormat;
@@ -68,14 +68,15 @@ public interface QuickTextWidget<T> extends QuickValueWidget<T> {
 			}
 
 			@Override
-			public void update(AbstractQIS<?> session) throws QonfigInterpretationException {
+			public Def.Abstract<T, W> update(AbstractQIS<?> session) throws QonfigInterpretationException {
 				super.update(session);
-				theFormat=getExpressoSession().getAttributeExpression("format");
+				theFormat = getExpressoSession().getAttributeExpression("format");
+				return this;
 			}
 		}
 	}
 
-	public interface Interpreted<T, W extends QuickTextWidget<T>> extends QuickValueWidget.Interpreted<T, W>{
+	public interface Interpreted<T, W extends QuickTextWidget<T>> extends QuickValueWidget.Interpreted<T, W> {
 		@Override
 		Def<? super W> getDefinition();
 
@@ -85,9 +86,8 @@ public interface QuickTextWidget<T> extends QuickValueWidget<T> {
 		implements Interpreted<T, W> {
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<Format<T>>> theFormat;
 
-			public Abstract(Def<? super W> definition, QuickContainer2.Interpreted<?, ?> parent, QuickInterpretationCache cache)
-				throws ExpressoInterpretationException {
-				super(definition, parent, cache);
+			public Abstract(Def<? super W> definition, QuickContainer2.Interpreted<?, ?> parent) throws ExpressoInterpretationException {
+				super(definition, parent);
 			}
 
 			@Override
@@ -101,26 +101,26 @@ public interface QuickTextWidget<T> extends QuickValueWidget<T> {
 			}
 
 			@Override
-			public void update(QuickInterpretationCache cache) throws ExpressoInterpretationException {
-				super.update(cache);
+			public Interpreted.Abstract<T, W> update(InterpretedModelSet models, QuickInterpretationCache cache)
+				throws ExpressoInterpretationException {
+				super.update(models, cache);
 				TypeToken<T> valueType = getValueType();
-				TypeToken<Format<T>> formatType=TypeTokens.get().keyFor(Format.class).<Format<T>> parameterized(valueType);
+				TypeToken<Format<T>> formatType = TypeTokens.get().keyFor(Format.class).<Format<T>> parameterized(valueType);
 				if (getDefinition().getFormat() != null) {
-					theFormat = getDefinition().getFormat()
-						.evaluate(ModelTypes.Value.forType(formatType))						.interpret();
+					theFormat = getDefinition().getFormat().evaluate(ModelTypes.Value.forType(formatType)).interpret();
 				} else {
-					Class<T> raw=TypeTokens.get().unwrap(TypeTokens.getRawType(valueType));
+					Class<T> raw = TypeTokens.get().unwrap(TypeTokens.getRawType(valueType));
 					Format<T> defaultFormat;
-					if(raw==String.class)
-						defaultFormat=(Format<T>) Format.TEXT;
-					else if(raw==int.class)
-						defaultFormat=(Format<T>) SpinnerFormat.INT;
-					else if(raw==long.class)
-						defaultFormat=(Format<T>) SpinnerFormat.LONG;
-					else if(raw==double.class)
-						defaultFormat=(Format<T>) DEFAULT_DOUBLE_FORMAT;
-					else if(raw==float.class)
-						defaultFormat=(Format<T>) DEFAULT_FLOAT_FORMAT;
+					if (raw == String.class)
+						defaultFormat = (Format<T>) Format.TEXT;
+					else if (raw == int.class)
+						defaultFormat = (Format<T>) SpinnerFormat.INT;
+					else if (raw == long.class)
+						defaultFormat = (Format<T>) SpinnerFormat.LONG;
+					else if (raw == double.class)
+						defaultFormat = (Format<T>) DEFAULT_DOUBLE_FORMAT;
+					else if (raw == float.class)
+						defaultFormat = (Format<T>) DEFAULT_FLOAT_FORMAT;
 					else if (raw == Instant.class)
 						defaultFormat = (Format<T>) DEFAULT_INSTANT_FORMAT;
 					else if (raw == Duration.class)
@@ -132,6 +132,7 @@ public interface QuickTextWidget<T> extends QuickValueWidget<T> {
 						defaultFormat = (Format<T>) TO_STRING_FORMAT;
 					theFormat = ModelValueSynth.literal(formatType, defaultFormat, "default-" + raw.getSimpleName() + "-format");
 				}
+				return this;
 			}
 		}
 	}
@@ -162,9 +163,11 @@ public interface QuickTextWidget<T> extends QuickValueWidget<T> {
 		}
 
 		@Override
-		public void update(ModelSetInstance models) throws ModelInstantiationException {
-			super.update(models);
+		public QuickTextWidget.Abstract<T> update(ModelSetInstance models, QuickInstantiationCache cache)
+			throws ModelInstantiationException {
+			super.update(models, cache);
 			theFormat.set(getInterpreted().getFormat().get(getModels()), null);
+			return this;
 		}
 	}
 }

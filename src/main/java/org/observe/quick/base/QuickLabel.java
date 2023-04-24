@@ -23,16 +23,15 @@ public class QuickLabel<T> extends QuickTextWidget.Abstract<T> {
 		}
 
 		@Override
-		public Interpreted<T, ? extends W> interpret(QuickContainer2.Interpreted<?, ?> parent, QuickInterpretationCache cache)
-			throws ExpressoInterpretationException {
-			return new Interpreted<>(this, parent, cache);
+		public Interpreted<T, ? extends W> interpret(QuickContainer2.Interpreted<?, ?> parent) throws ExpressoInterpretationException {
+			return new Interpreted<>(this, parent);
 		}
 	}
 
 	public static class Interpreted<T, W extends QuickLabel<T>> extends QuickTextWidget.Interpreted.Abstract<T, W> {
-		public Interpreted(QuickLabel.Def<T, ? super W> definition, QuickContainer2.Interpreted<?, ?> parent,
-			QuickInterpretationCache cache) throws ExpressoInterpretationException {
-			super(definition, parent, cache);
+		public Interpreted(QuickLabel.Def<T, ? super W> definition, QuickContainer2.Interpreted<?, ?> parent)
+			throws ExpressoInterpretationException {
+			super(definition, parent);
 		}
 
 		@Override
@@ -41,8 +40,7 @@ public class QuickLabel<T> extends QuickTextWidget.Abstract<T> {
 		}
 
 		@Override
-		public W create(QuickContainer2<?> parent, ModelSetInstance models, QuickInstantiationCache cache)
-			throws ModelInstantiationException {
+		public W create(QuickContainer2<?> parent, ModelSetInstance models) throws ModelInstantiationException {
 			return (W) new QuickLabel<>(this, parent, models);
 		}
 	}
