@@ -8,6 +8,7 @@ import org.observe.collect.ObservableCollectionsTest;
 import org.observe.config.ObservableConfigTest;
 import org.observe.ds.DSTesting;
 import org.observe.expresso.ExpressoTests;
+import org.observe.quick.QuickTests;
 import org.observe.quick.style.QuickStyleTests;
 import org.observe.remote.ByteAddressTest;
 import org.observe.util.CollectionSynchronizationTest;
@@ -36,6 +37,7 @@ import org.qommons.QommonsTests;
 	CsvEntitySetTest.class, //
 	ExpressoTests.class, //
 	QuickStyleTests.class, //
+	QuickTests.class, //
 	QommonsTests.class
 })
 public class ObserveTests {

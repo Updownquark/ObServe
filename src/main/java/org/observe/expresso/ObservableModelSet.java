@@ -1596,6 +1596,9 @@ public interface ObservableModelSet extends Identifiable {
 
 	/** Builds a {@link ModelSetInstance} */
 	public interface ModelSetInstanceBuilder {
+		/** @return The observable that the model set instance {@link #build() built} with this builder will die with */
+		Observable<?> getUntil();
+
 		/**
 		 * Satisfies a runtime value declared with {@link ObservableModelSet.Builder#withRuntimeValue(String, ModelInstanceType)}
 		 *
@@ -2629,6 +2632,11 @@ public interface ObservableModelSet extends Identifiable {
 					else if (component.getModel() != null)
 						lookForRuntimeVars(component.getModel());
 				}
+			}
+
+			@Override
+			public Observable<?> getUntil() {
+				return theMSI.getUntil();
 			}
 
 			@Override

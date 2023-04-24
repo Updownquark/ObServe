@@ -230,13 +230,13 @@
 		<!-- TODO Include local styles also-->
 	</test>
 	<test name="importedStyleSheet">
-		<!-- Test styles that are prescribed by a style sheet imported from outside this document -->
+		<!-- TODO Test styles that are prescribed by a style sheet imported from outside this document -->
 		<model>
 		</model>
 		<action name="blank">models.m0=true</action>
 	</test>
 	<test name="inheritedStyle">
-		<!-- Test inheritance of styles from parent elements -->
+		<!-- TODO Test inheritance of styles from parent elements -->
 		<model>
 		</model>
 		<action name="blank">models.m0=true</action>

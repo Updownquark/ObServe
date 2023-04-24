@@ -53,7 +53,7 @@ public class ExpressoTesting<H extends Expresso> {
 		}
 
 		/**
-		 * @param testingModel The gloal testing model instance
+		 * @param testingModel The global testing model instance
 		 * @return The model instance to use for this test
 		 * @throws ExpressoInterpretationException If the test could not be evaluated
 		 * @throws ModelInstantiationException If the test could not be instantiated
@@ -62,9 +62,7 @@ public class ExpressoTesting<H extends Expresso> {
 			throws ExpressoInterpretationException, ModelInstantiationException {
 			if (theInterpretedModel == null)
 				theInterpretedModel = theModel.interpret();
-			return theSession.wrapLocal(//
-				theInterpretedModel.createInstance(testingModel.getUntil()).withAll(testingModel)//
-				.build());
+			return theSession.wrapLocal(theInterpretedModel.createInstance(testingModel.getUntil()).withAll(testingModel).build());
 		}
 
 		/** @return All the actions to execute for this test */
