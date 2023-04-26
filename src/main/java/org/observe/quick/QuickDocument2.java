@@ -1,37 +1,26 @@
 package org.observe.quick;
 
+import java.lang.reflect.Type;
+
 import org.observe.expresso.ClassView;
-import org.observe.expresso.Expresso;
 import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.ExpressoQIS;
-import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.quick.style.QuickStyleSheet;
-import org.observe.quick.style.StyleQIS;
+import org.observe.util.TypeTokens;
+import org.qommons.config.AbstractQIS;
+import org.qommons.config.QonfigInterpretationException;
 
-public class QuickDocument2 {
-	public static class Def implements QuickCompiledStructure {
-		private StyleQIS theStyleSession;
-		private ExpressoQIS theExpressoSession;
+public class QuickDocument2 extends QuickElement.Abstract {
+	public static class Def extends QuickElement.Def.Abstract<QuickDocument2> {
 		private final QuickHeadSection.Def theHead;
 		private final QuickWidget.Def<?> theBody;
 
-		public Def(StyleQIS styleSession, ExpressoQIS expressoSession, QuickHeadSection.Def head, QuickWidget.Def<?> body) {
-			theStyleSession = styleSession;
-			theHead = head;
-			theBody = body;
-		}
-
-		@Override
-		public StyleQIS getStyleSession() {
-			return theStyleSession;
-		}
-
-		@Override
-		public ExpressoQIS getExpressoSession() {
-			return theExpressoSession;
+		public Def(AbstractQIS<?> session) throws QonfigInterpretationException {
+			super(session);
+			theHead = session.interpretChildren("head", QuickHeadSection.Def.class).peekFirst();
+			theBody = session.interpretChildren("body", QuickWidget.Def.class).peekFirst();
 		}
 
 		public QuickHeadSection.Def getHead() {
@@ -42,18 +31,31 @@ public class QuickDocument2 {
 			return theBody;
 		}
 
+		@Override
+		public Def update(AbstractQIS<?> session) throws QonfigInterpretationException {
+			super.update(session);
+			theBody.update(session.forChildren("body").getFirst());
+			return this;
+		}
+
 		public Interpreted interpret() throws ExpressoInterpretationException {
-			return new Interpreted(theHead.interpret(), theBody.interpret(null));
+			return new Interpreted(this, theHead.interpret(), theBody.interpret(null));
 		}
 	}
 
-	public static class Interpreted {
+	public static class Interpreted extends QuickElement.Interpreted.Abstract<QuickDocument2> {
 		private final QuickHeadSection theHead;
 		private final QuickWidget.Interpreted<?> theBody;
 
-		public Interpreted(QuickHeadSection head, QuickWidget.Interpreted<?> body) {
+		public Interpreted(Def def, QuickHeadSection head, QuickWidget.Interpreted<?> body) {
+			super(def);
 			theHead = head;
 			theBody = body;
+		}
+
+		@Override
+		public Def getDefinition() {
+			return (Def) super.getDefinition();
 		}
 
 		public QuickHeadSection getHead() {
@@ -64,17 +66,18 @@ public class QuickDocument2 {
 			return theBody;
 		}
 
-		public QuickDocument2 create(ModelSetInstance models) throws ModelInstantiationException {
-			return new QuickDocument2(this, models, theBody.create(null, models));
+		public QuickDocument2 create(ModelSetInstance models) {
+			return new QuickDocument2(this, models, theBody.create(null));
 		}
 	}
 
-	public static class QuickHeadSection {
+	public static class QuickHeadSection extends QuickElement.Interpreted.Abstract<QuickElement> {
 		private final ClassView theClassView;
 		private final InterpretedModelSet theModels;
 		private final QuickStyleSheet theStyleSheet;
 
-		public QuickHeadSection(ClassView classView, InterpretedModelSet models, QuickStyleSheet styleSheet) {
+		public QuickHeadSection(Def def, ClassView classView, InterpretedModelSet models, QuickStyleSheet styleSheet) {
+			super(def);
 			theClassView = classView;
 			theModels = models;
 			theStyleSheet = styleSheet;
@@ -92,27 +95,38 @@ public class QuickDocument2 {
 			return theStyleSheet;
 		}
 
-		public static class Def extends Expresso implements QuickCompiledStructure {
-			private final StyleQIS theStyleSession;
-			private final ExpressoQIS theExpressoSession;
+		public static class Def extends QuickElement.Def.Abstract<QuickElement> {
+			private final ClassView theClassView;
+			private final ObservableModelSet.Built theModels;
 			private final QuickStyleSheet theStyleSheet;
 
-			public Def(StyleQIS styleSession, ExpressoQIS expressoSession, ClassView classView, ObservableModelSet.Built models,
-				QuickStyleSheet styleSheet) {
-				super(classView, models);
-				theStyleSession = styleSession;
-				theExpressoSession = expressoSession;
-				theStyleSheet = styleSheet;
+			public Def(AbstractQIS<?> session) throws QonfigInterpretationException {
+				super(session);
+				ClassView cv = session.interpretChildren("imports", ClassView.class).peekFirst();
+				if (cv == null) {
+					ClassView defaultCV = ClassView.build().withWildcardImport("java.lang").build();
+					TypeTokens.get().addClassRetriever(new TypeTokens.TypeRetriever() {
+						@Override
+						public Type getType(String typeName) {
+							return defaultCV.getType(typeName);
+						}
+					});
+					cv = defaultCV;
+				}
+				theClassView = cv;
+				ObservableModelSet.Built model = session.interpretChildren("models", ObservableModelSet.Built.class).peekFirst();
+				if (model == null)
+					model = ObservableModelSet.build("models", ObservableModelSet.JAVA_NAME_CHECKER).build();
+				theModels = model;
+				theStyleSheet = getStyleSession().getStyleSheet();
 			}
 
-			@Override
-			public StyleQIS getStyleSession() {
-				return theStyleSession;
+			public ClassView getClassView() {
+				return theClassView;
 			}
 
-			@Override
-			public ExpressoQIS getExpressoSession() {
-				return theExpressoSession;
+			public ObservableModelSet.Built getModels() {
+				return theModels;
 			}
 
 			public QuickStyleSheet getStyleSheet() {
@@ -120,27 +134,21 @@ public class QuickDocument2 {
 			}
 
 			public QuickHeadSection interpret() throws ExpressoInterpretationException {
-				return new QuickHeadSection(getClassView(), getModels().interpret(), theStyleSheet);
+				return new QuickHeadSection(this, getClassView(), getModels().interpret(), theStyleSheet);
 			}
 		}
 	}
 
-	private final Interpreted theInterpreted;
-	private final ModelSetInstance theModels;
 	private final QuickWidget theBody;
 
 	public QuickDocument2(Interpreted interpreted, ModelSetInstance models, QuickWidget body) {
-		theInterpreted = interpreted;
-		theModels = models;
+		super(interpreted, null);
 		theBody = body;
 	}
 
+	@Override
 	public Interpreted getInterpreted() {
-		return theInterpreted;
-	}
-
-	public ModelSetInstance getModels() {
-		return theModels;
+		return (Interpreted) super.getInterpreted();
 	}
 
 	public QuickWidget getBody() {

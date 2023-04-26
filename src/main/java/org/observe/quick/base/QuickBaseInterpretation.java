@@ -41,6 +41,8 @@ public class QuickBaseInterpretation implements QonfigInterpretation {
 		interpreter.createWith("box", QuickBox.Def.class, session -> new QuickBox.Def<>(session));
 		interpreter.createWith("label", QuickLabel.Def.class, session -> new QuickLabel.Def<>(session));
 		interpreter.createWith("inline", InlineLayout.Def.class, session -> new InlineLayout.Def(session));
+		interpreter.createWith("text-field", QuickTextField.Def.class, session -> new QuickTextField.Def<>(session));
+		// TODO Field
 		return interpreter;
 	}
 }

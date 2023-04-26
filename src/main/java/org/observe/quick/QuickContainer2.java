@@ -1,34 +1,32 @@
 package org.observe.quick;
 
-import java.util.ArrayList;
-import java.util.List;
-
-import org.observe.collect.ObservableCollection;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.qommons.collect.BetterList;
 import org.qommons.config.AbstractQIS;
 import org.qommons.config.QonfigInterpretationException;
+import org.qommons.tree.BetterTreeList;
 
 public interface QuickContainer2<C extends QuickWidget> extends QuickWidget {
 	public interface Def<W extends QuickContainer2<C>, C extends QuickWidget> extends QuickWidget.Def<W> {
-		List<? extends QuickWidget.Def<C>> getContents();
+		BetterList<? extends QuickWidget.Def<? extends C>> getContents();
 
 		@Override
-		Interpreted<? extends W, ? extends C> interpret(Interpreted<?, ?> parent) throws ExpressoInterpretationException;
+		Interpreted<? extends W, ? extends C> interpret(Interpreted<?, ?> parent);
 
 		public abstract class Abstract<W extends QuickContainer2<C>, C extends QuickWidget> extends QuickWidget.Def.Abstract<W>
 		implements Def<W, C> {
-			private final List<QuickWidget.Def<C>> theContents;
+			private final BetterList<QuickWidget.Def<? extends C>> theContents;
 
 			public Abstract(AbstractQIS<?> session) throws QonfigInterpretationException {
 				super(session);
-				theContents = new ArrayList<>();
+				theContents = BetterTreeList.<QuickWidget.Def<? extends C>> build().build();
 			}
 
 			@Override
-			public List<QuickWidget.Def<C>> getContents() {
+			public BetterList<QuickWidget.Def<? extends C>> getContents() {
 				return theContents;
 			}
 
@@ -48,15 +46,15 @@ public interface QuickContainer2<C extends QuickWidget> extends QuickWidget {
 		@Override
 		Def<? super W, ? super C> getDefinition();
 
-		List<? extends QuickWidget.Interpreted<? extends C>> getContents();
+		BetterList<? extends QuickWidget.Interpreted<? extends C>> getContents();
 
 		public abstract class Abstract<W extends QuickContainer2<C>, C extends QuickWidget> extends QuickWidget.Interpreted.Abstract<W>
 		implements Interpreted<W, C> {
-			private final List<QuickWidget.Interpreted<? extends C>> theContents;
+			private final BetterList<QuickWidget.Interpreted<? extends C>> theContents;
 
-			public Abstract(Def<? super W, ? super C> definition, Interpreted<?, ?> parent) throws ExpressoInterpretationException {
+			public Abstract(Def<? super W, ? super C> definition, Interpreted<?, ?> parent) {
 				super(definition, parent);
-				theContents = new ArrayList<>();
+				theContents = BetterTreeList.<QuickWidget.Interpreted<? extends C>> build().build();
 			}
 
 			@Override
@@ -65,7 +63,7 @@ public interface QuickContainer2<C extends QuickWidget> extends QuickWidget {
 			}
 
 			@Override
-			public List<QuickWidget.Interpreted<? extends C>> getContents() {
+			public BetterList<QuickWidget.Interpreted<? extends C>> getContents() {
 				return theContents;
 			}
 
@@ -75,8 +73,9 @@ public interface QuickContainer2<C extends QuickWidget> extends QuickWidget {
 				super.update(models, cache);
 				// TODO At some point, it would be better to adjust the collection instead of this sledgehammer
 				theContents.clear();
-				for (QuickWidget.Def<? super C> child : getDefinition().getContents())
-					theContents.add((QuickWidget.Interpreted<? extends C>) child.interpret(this).update(models, cache));
+				for (QuickWidget.Def<? extends C> child : (BetterList<? extends QuickWidget.Def<? extends C>>) getDefinition()
+					.getContents())
+					theContents.add(child.interpret(this).update(models, cache));
 				return this;
 			}
 		}
@@ -85,15 +84,14 @@ public interface QuickContainer2<C extends QuickWidget> extends QuickWidget {
 	@Override
 	Interpreted<?, C> getInterpreted();
 
-	ObservableCollection<? extends C> getContents();
+	BetterList<? extends C> getContents();
 
 	public abstract class Abstract<C extends QuickWidget> extends QuickWidget.Abstract implements QuickContainer2<C> {
-		private final ObservableCollection<C> theContents;
+		private final BetterList<C> theContents;
 
-		public Abstract(QuickContainer2.Interpreted<?, ?> interpreted, QuickContainer2<?> parent, ModelSetInstance models, Class<C> type)
-			throws ModelInstantiationException {
-			super(interpreted, parent, models);
-			theContents = ObservableCollection.build(type).build();
+		public Abstract(QuickContainer2.Interpreted<?, ?> interpreted, QuickContainer2<?> parent) {
+			super(interpreted, parent);
+			theContents = BetterTreeList.<C> build().build();
 		}
 
 		@Override
@@ -102,7 +100,7 @@ public interface QuickContainer2<C extends QuickWidget> extends QuickWidget {
 		}
 
 		@Override
-		public ObservableCollection<C> getContents() {
+		public BetterList<C> getContents() {
 			return theContents;
 		}
 
@@ -114,7 +112,7 @@ public interface QuickContainer2<C extends QuickWidget> extends QuickWidget {
 			// TODO At some point, it would be better to adjust the collection instead of this sledgehammer
 			theContents.clear();
 			for (QuickWidget.Interpreted<? extends C> child : getInterpreted().getContents())
-				theContents.add((C) child.create(this, models).update(getModels(), cache));
+				theContents.add((C) child.create(this).update(getModels(), cache));
 			//
 			// for (C content : theContents)
 			// content.update(getModels());

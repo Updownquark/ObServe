@@ -43,7 +43,7 @@ public class QuickBox extends QuickContainer2.Abstract<QuickWidget> {
 		}
 
 		@Override
-		public Interpreted<W> interpret(QuickContainer2.Interpreted<?, ?> parent) throws ExpressoInterpretationException {
+		public Interpreted<W> interpret(QuickContainer2.Interpreted<?, ?> parent) {
 			return new Interpreted<>(this, parent);
 		}
 	}
@@ -52,8 +52,7 @@ public class QuickBox extends QuickContainer2.Abstract<QuickWidget> {
 		private QuickLayout.Interpreted theLayout;
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<Double>> theOpacity;
 
-		public Interpreted(Def<? super W> definition, QuickContainer2.Interpreted<?, ?> parent)
-			throws ExpressoInterpretationException {
+		public Interpreted(Def<? super W> definition, QuickContainer2.Interpreted<?, ?> parent) {
 			super(definition, parent);
 		}
 
@@ -78,24 +77,23 @@ public class QuickBox extends QuickContainer2.Abstract<QuickWidget> {
 		@Override
 		public Interpreted<W> update(InterpretedModelSet models, QuickInterpretationCache cache) throws ExpressoInterpretationException {
 			super.update(models, cache);
-			theLayout = getDefinition().getLayout().interpret();
+			theLayout = getDefinition().getLayout().interpret(models);
 			theOpacity = getDefinition().getOpacity() == null ? null
 				: getDefinition().getOpacity().evaluate(ModelTypes.Value.DOUBLE).interpret();
 			return this;
 		}
 
 		@Override
-		public W create(QuickContainer2<?> parent, ModelSetInstance models)
-			throws ModelInstantiationException {
-			return (W) new QuickBox(this, parent, models);
+		public W create(QuickContainer2<?> parent) {
+			return (W) new QuickBox(this, parent);
 		}
 	}
 
 	private QuickLayout theLayout;
 	private SettableValue<Double> theOpacity;
 
-	public QuickBox(Interpreted<?> interpreted, QuickContainer2<?> parent, ModelSetInstance models) throws ModelInstantiationException {
-		super(interpreted, parent, models, QuickWidget.class);
+	public QuickBox(Interpreted<?> interpreted, QuickContainer2<?> parent) {
+		super(interpreted, parent);
 	}
 
 	@Override

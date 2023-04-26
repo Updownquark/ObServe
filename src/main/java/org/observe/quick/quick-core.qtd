@@ -73,7 +73,7 @@
 	<elements>
 		<element-def name="quick">
 			<child-def name="head" type="head" min="0" />
-			<child-def name="root" type="widget" min="1" />
+			<child-def name="body" type="widget" min="1" />
 		</element-def>
 		<element-def name="head" extends="expresso" inherits="with-style-sheet" />
 

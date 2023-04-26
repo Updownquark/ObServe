@@ -1,8 +1,5 @@
 package org.observe.quick.base;
 
-import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.ModelInstantiationException;
-import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.quick.QuickContainer2;
 import org.observe.quick.QuickTextWidget;
 import org.observe.util.TypeTokens;
@@ -23,14 +20,13 @@ public class QuickLabel<T> extends QuickTextWidget.Abstract<T> {
 		}
 
 		@Override
-		public Interpreted<T, ? extends W> interpret(QuickContainer2.Interpreted<?, ?> parent) throws ExpressoInterpretationException {
+		public Interpreted<T, ? extends W> interpret(QuickContainer2.Interpreted<?, ?> parent) {
 			return new Interpreted<>(this, parent);
 		}
 	}
 
 	public static class Interpreted<T, W extends QuickLabel<T>> extends QuickTextWidget.Interpreted.Abstract<T, W> {
-		public Interpreted(QuickLabel.Def<T, ? super W> definition, QuickContainer2.Interpreted<?, ?> parent)
-			throws ExpressoInterpretationException {
+		public Interpreted(QuickLabel.Def<T, ? super W> definition, QuickContainer2.Interpreted<?, ?> parent) {
 			super(definition, parent);
 		}
 
@@ -40,14 +36,13 @@ public class QuickLabel<T> extends QuickTextWidget.Abstract<T> {
 		}
 
 		@Override
-		public W create(QuickContainer2<?> parent, ModelSetInstance models) throws ModelInstantiationException {
-			return (W) new QuickLabel<>(this, parent, models);
+		public W create(QuickContainer2<?> parent) {
+			return (W) new QuickLabel<>(this, parent);
 		}
 	}
 
-	public QuickLabel(Interpreted<T, ?> interpreted, QuickContainer2<?> parent, ModelSetInstance models)
-		throws ModelInstantiationException {
-		super(interpreted, parent, models);
+	public QuickLabel(Interpreted<T, ?> interpreted, QuickContainer2<?> parent) {
+		super(interpreted, parent);
 	}
 
 	@Override

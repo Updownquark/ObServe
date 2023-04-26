@@ -149,17 +149,9 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 	public QonfigInterpreterCore.Builder configureInterpreter(QonfigInterpreterCore.Builder interpreter) {
 		interpreter.createWith("expresso", Expresso.class, session -> {
 			ClassView classView = wrap(session).interpretChildren("imports", ClassView.class).peekFirst();
-			ObservableModelSet models = wrap(session).setModels(null, classView)//
-				.interpretChildren("models", ObservableModelSet.class).peekFirst();
-			ObservableModelSet.Built built;
-			if (models instanceof ObservableModelSet.Built)
-				built = (ObservableModelSet.Built) models;
-			else if (models instanceof ObservableModelSet.Builder)
-				built = ((ObservableModelSet.Builder) models).build();
-			else
-				throw new IllegalStateException(
-					"Interpreted a " + models.getClass().getName() + " as a model set, which is not either built or a builder");
-			return new Expresso(classView, built);
+			ObservableModelSet.Built models = wrap(session).setModels(null, classView)//
+				.interpretChildren("models", ObservableModelSet.Built.class).peekFirst();
+			return new Expresso(classView, models);
 		});
 		interpreter//
 		.modifyWith("with-element-model", Object.class, new Expresso.ElementModelAugmentation<Object>() {
@@ -289,7 +281,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 				}
 			});
 			return cv;
-		}).createWith("models", ObservableModelSet.class, session -> {
+		}).createWith("models", ObservableModelSet.Built.class, session -> {
 			ExpressoQIS expressoSession = wrap(session);
 			ObservableModelSet.Builder builder = ObservableModelSet.build("models", ObservableModelSet.JAVA_NAME_CHECKER);
 			for (ExpressoQIS model : expressoSession.forChildren("model")) {

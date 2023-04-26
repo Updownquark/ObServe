@@ -68,7 +68,7 @@ public class TestInterpretation implements QonfigInterpretation {
 						new QuickWidget.QuickInterpretationCache());
 					TypeToken<QuickWidget> widgetType = (TypeToken<QuickWidget>) bodyInterpreted[0].getWidgetType();
 					return ModelValueSynth.of(ModelTypes.Value.forType(widgetType), //
-						msi -> SettableValue.of(widgetType, bodyInterpreted[0].create(null, msi)//
+						msi -> SettableValue.of(widgetType, bodyInterpreted[0].create(null)//
 							.update(msi, new QuickWidget.QuickInstantiationCache()),
 							"Widgets are not settable"));
 				}));

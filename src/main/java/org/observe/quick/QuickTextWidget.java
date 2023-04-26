@@ -53,7 +53,7 @@ public interface QuickTextWidget<T> extends QuickValueWidget<T> {
 		boolean isEditable();
 
 		@Override
-		Interpreted<?, ? extends W> interpret(QuickContainer2.Interpreted<?, ?> parent) throws ExpressoInterpretationException;
+		Interpreted<?, ? extends W> interpret(QuickContainer2.Interpreted<?, ?> parent);
 
 		public abstract class Abstract<T, W extends QuickTextWidget<T>> extends QuickValueWidget.Def.Abstract<T, W> implements Def<W> {
 			private CompiledExpression theFormat;
@@ -86,7 +86,7 @@ public interface QuickTextWidget<T> extends QuickValueWidget<T> {
 		implements Interpreted<T, W> {
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<Format<T>>> theFormat;
 
-			public Abstract(Def<? super W> definition, QuickContainer2.Interpreted<?, ?> parent) throws ExpressoInterpretationException {
+			public Abstract(Def<? super W> definition, QuickContainer2.Interpreted<?, ?> parent) {
 				super(definition, parent);
 			}
 
@@ -145,9 +145,8 @@ public interface QuickTextWidget<T> extends QuickValueWidget<T> {
 	public abstract class Abstract<T> extends QuickValueWidget.Abstract<T> implements QuickTextWidget<T> {
 		private final SettableValue<SettableValue<Format<T>>> theFormat;
 
-		public Abstract(QuickTextWidget.Interpreted<T, ?> interpreted, QuickContainer2<?> parent, ModelSetInstance models)
-			throws ModelInstantiationException {
-			super(interpreted, parent, models);
+		public Abstract(QuickTextWidget.Interpreted<T, ?> interpreted, QuickContainer2<?> parent) {
+			super(interpreted, parent);
 			theFormat = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Format<T>>> parameterized(//
 				interpreted.getFormat().getType().getType(0))).build();
 		}
