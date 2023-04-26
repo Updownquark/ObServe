@@ -13,6 +13,7 @@ import org.observe.expresso.ModelType;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
+import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelValueSynth;
 import org.observe.expresso.TypeConversionException;
 import org.observe.util.TypeTokens;
@@ -97,13 +98,44 @@ public class CastExpression implements ObservableExpression {
 			throw new ExpressoEvaluationException(expressionOffset + 1, theType.length(),
 				"Cannot assign " + valueType + " to " + type.getType(0));
 		int valueOffset = expressionOffset + theType.length() + 2;
-		ModelValueSynth<SettableValue<?>, SettableValue<T>> valueContainer;
 		try {
-			valueContainer = theValue.evaluate(ModelTypes.Value.forType(valueType), env, valueOffset);
-		} catch (TypeConversionException e) {
-			throw new ExpressoEvaluationException(valueOffset, theValue.getExpressionLength(), e.getMessage(), e);
+			// First, see if we can evaluate the expression as the cast type.
+			// This can work around some issues such as where flattening is needed, and if it succeeds it's simpler and less troublesome
+			return theValue.evaluate(ModelTypes.Value.forType(valueType), env, valueOffset);
+		} catch (ExpressoEvaluationException | ExpressoInterpretationException | TypeConversionException e) {
+			// If the result can't be evaluated as the given type, evaluate it as any value and cast it dynamically
+			try {
+				return evalAsDynamicCast(theValue.evaluate(ModelTypes.Value.anyAs(), env, valueOffset), valueType, expressionOffset);
+			} catch (TypeConversionException e2) {
+				throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(), "'" + theValue + "' is not a scalar value",
+					e2);
+			}
 		}
-		return valueContainer;
+	}
+
+	private <S, T> ModelValueSynth<SettableValue<?>, SettableValue<T>> evalAsDynamicCast(
+		InterpretedValueSynth<SettableValue<?>, SettableValue<S>> valueContainer, TypeToken<T> valueType, int expressionOffset)
+			throws ExpressoEvaluationException {
+		TypeToken<S> sourceType = (TypeToken<S>) valueContainer.getType().getType(0);
+		if (!TypeTokens.get().isAssignable(sourceType, valueType)//
+			&& !TypeTokens.get().isAssignable(valueType, sourceType))
+			throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(),
+				"Cannot cast value of type " + sourceType + " to " + valueType);
+		Class<T> valueClass = TypeTokens.get().wrap(TypeTokens.getRawType(valueType));
+		Class<S> sourceClass = TypeTokens.getRawType(sourceType);
+		return valueContainer.map(ModelTypes.Value.forType(valueType), vc -> vc.transformReversible(valueType, tx -> tx//
+			.map(v -> {
+				if (v == null || valueClass.isInstance(v))
+					return (T) v;
+				else {
+					System.err.println("Cast failed: " + v + " (" + v.getClass().getName() + ") to " + valueType);
+					return null;
+				}
+			}).replaceSource(v -> (S) v, replace -> replace.rejectWith(v -> {
+				if (v != null && !sourceClass.isInstance(v))
+					return theValue + " (" + v.getClass().getName() + ") is not an instance of " + sourceType;
+				return null;
+			}))));
 	}
 
 	@Override
