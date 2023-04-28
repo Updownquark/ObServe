@@ -204,6 +204,16 @@ public class ObservableFile implements BetterFile {
 	}
 
 	@Override
+	public boolean isDirectory() {
+		return theFile.isDirectory();
+	}
+
+	@Override
+	public boolean isFile() {
+		return theFile.isFile();
+	}
+
+	@Override
 	public boolean get(FileBooleanAttribute attribute) {
 		return theFile.get(attribute);
 	}
