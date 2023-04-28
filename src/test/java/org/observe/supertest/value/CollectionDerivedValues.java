@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.function.Function;
 
 import org.junit.Assert;
+import org.observe.Equivalence;
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.collect.ObservableCollection;
@@ -62,6 +63,16 @@ public class CollectionDerivedValues {
 				return 0;
 			else if (targetType != null && targetType != TestValueType.BOOLEAN)
 				return 0;
+			else if (((ObservableCollectionLink<?, ?>) sourceLink).getCollection()
+				.equivalence() instanceof Equivalence.ComparatorEquivalence) {
+				// The test link for sorted collections sometimes switches out the comparator to test the ability of the collection
+				// to re-sort itself. Turns out this actually violates the contract of a collection, because its equivalence
+				// should never change.
+				// It's still a really good way to test that collections can re-sort themselves though.
+				// But the mechanism for keeping track of containment here and elsewhere breaks when equivalence changes
+				// So until I implement a contract-keeping way of testing that, we can't use this link on top of sorted collections
+				return 0;
+			}
 			ObservableCollectionLink<?, T> sourceCL = (ObservableCollectionLink<?, T>) sourceLink;
 			if (sourceCL.getValueSupplier() == null//
 				|| !sourceCL.getDef().checkOldValues) // This derived value relies on the old values
@@ -87,6 +98,16 @@ public class CollectionDerivedValues {
 				return 0;
 			else if (targetType != null && targetType != TestValueType.BOOLEAN)
 				return 0;
+			else if (((ObservableCollectionLink<?, ?>) sourceLink).getCollection()
+				.equivalence() instanceof Equivalence.ComparatorEquivalence) {
+				// The test link for sorted collections sometimes switches out the comparator to test the ability of the collection
+				// to re-sort itself. Turns out this actually violates the contract of a collection, because its equivalence
+				// should never change.
+				// It's still a really good way to test that collections can re-sort themselves though.
+				// But the mechanism for keeping track of containment here and elsewhere breaks when equivalence changes
+				// So until I implement a contract-keeping way of testing that, we can't use this link on top of sorted collections
+				return 0;
+			}
 			ObservableCollectionLink<?, T> sourceCL = (ObservableCollectionLink<?, T>) sourceLink;
 			if (sourceCL.getValueSupplier() == null//
 				|| !sourceCL.getDef().checkOldValues) // This derived value relies on the old values

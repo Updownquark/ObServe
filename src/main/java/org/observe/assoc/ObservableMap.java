@@ -972,16 +972,6 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable {
 				}
 
 				@Override
-				public String canAdd(V value, boolean before) {
-					return StdMsg.UNSUPPORTED_OPERATION;
-				}
-
-				@Override
-				public ElementId add(V value, boolean before) throws UnsupportedOperationException, IllegalArgumentException {
-					throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
-				}
-
-				@Override
 				public String toString() {
 					return entryEl.get().toString();
 				}
@@ -1004,7 +994,7 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable {
 				V oldValue = ((MapEntry) evt.getNewValue()).getOldValue();
 				ObservableMapEvent<K, V> mapEvent = new ObservableMapEvent<>(evt.getElementId(), evt.getIndex(), evt.getType(),
 					evt.getOldValue() == null ? null : evt.getOldValue().getKey(), evt.getNewValue().getKey(), oldValue,
-					evt.getNewValue().getValue(), evt, evt.getMovement());
+						evt.getNewValue().getValue(), evt, evt.getMovement());
 				try (Transaction t = mapEvent.use()) {
 					action.accept(mapEvent);
 				}

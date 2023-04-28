@@ -474,7 +474,7 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 	private CollectionOpContext getStandardContext() {
 		return new CollectionOpContext(getCollection(), false, 0, getCollection().size());
 	}
-	
+
 	public void tryAdd(T value, TestHelper helper, Function<Boolean, CollectionElement<T>> subExecute) {
 		tryAdd(getStandardContext(), value, helper, subExecute);
 	}
@@ -731,9 +731,7 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 			} else
 				targetIndex = op.before.getIndex() - op.context.subListStart;
 		}
-		boolean addByElement;
 		if (op.minIndex < 0 || modify.isEmpty()) {
-			addByElement = false;
 			msg = modify.canAdd(op.value);
 			// Test simple add value
 			try {
@@ -749,34 +747,19 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 				element = null;
 			}
 		} else if (op.minIndex == op.maxIndex) {
-			boolean addLeft;
-			if (op.minIndex == 0)
-				addLeft = true;
-			else if (op.minIndex == modify.size())
-				addLeft = false;
-			else
-				addLeft = helper.getBoolean();
-			MutableCollectionElement<T> adjacent = modify
-				.mutableElement(modify.getElement(addLeft ? op.minIndex : op.minIndex - 1).getElementId());
-			msg = adjacent.canAdd(op.value, addLeft);
-			addByElement = op.towardBeginning != addLeft && helper.getBoolean();
-			if (addByElement) {
-				// Test add by element
-				try {
-					if (subExecute != null)
-						element = subExecute.apply(op.towardBeginning);
-					else {
-						ElementId elementId = adjacent.add(op.value, addLeft);
-						element = modify.getElement(elementId);
-					}
-					error = false;
-				} catch (UnsupportedOperationException | IllegalArgumentException e) {
-					if (msg == null)
-						throw new AssertionError("Unexpected operation exception", e);
-					error = true;
-					element = null;
-				}
-			} else if (op.towardBeginning) {
+			ElementId after, before;
+			if (op.minIndex == 0) {
+				after = null;
+				before = CollectionElement.getElementId(modify.getTerminalElement(true));
+			} else if (op.minIndex == modify.size()) {
+				after = modify.getTerminalElement(false).getElementId();
+				before = null;
+			} else {
+				before = modify.getElement(op.minIndex).getElementId();
+				after = modify.getAdjacentElement(before, false).getElementId();
+			}
+			msg = modify.canAdd(op.value, after, before);
+			if (op.towardBeginning) {
 				// Test simple add by index
 				// Adding by this method uses an implicit towards-beginning boolean of true
 				try {
@@ -810,7 +793,6 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 			if (element != null && getCollection().size() == preSize + 1)
 				Assert.assertEquals(op.minIndex, modify.getElementsBefore(element.getElementId()));
 		} else {
-			addByElement = false;
 			ElementId after, before;
 			if (op.maxIndex == 0) {
 				after = null;
@@ -862,10 +844,7 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 		else if (msg != null && el.getRejection() == null)
 			throw new AssertionError("Unexpected rejection with " + msg);
 		Assert.assertEquals(el.getRejection() == null, msg == null);
-		if (addByElement) {
-			if (msg != null && !error)
-				throw new AssertionError("Rejection with " + msg + " was expected to generate an error");
-		} else if (msg != null && !error) {
+		if (msg != null && !error) {
 			Assert.assertEquals(StdMsg.ELEMENT_EXISTS, msg);
 			// If inexact reverse is allowed, the exact value may not be present even though it cannot be added
 			if (!is(ChainLinkFlag.INEXACT_REVERSIBLE) && !modify.contains(op.value))

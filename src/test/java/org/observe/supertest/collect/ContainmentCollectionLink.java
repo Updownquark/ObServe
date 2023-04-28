@@ -2,6 +2,7 @@ package org.observe.supertest.collect;
 
 import java.util.Set;
 
+import org.observe.Equivalence;
 import org.observe.collect.ObservableCollection;
 import org.observe.supertest.ChainLinkGenerator.CollectionLinkGenerator;
 import org.observe.supertest.CollectionOpType;
@@ -28,6 +29,16 @@ public class ContainmentCollectionLink<T> extends ObservableCollectionLink<T, T>
 				return 0;
 			else if (targetType != null && targetType != sourceLink.getType())
 				return 0;
+			else if (((ObservableCollectionLink<?, ?>) sourceLink).getCollection()
+				.equivalence() instanceof Equivalence.ComparatorEquivalence) {
+				// The test link for sorted collections sometimes switches out the comparator to test the ability of the collection
+				// to re-sort itself. Turns out this actually violates the contract of a collection, because its equivalence
+				// should never change.
+				// It's still a really good way to test that collections can re-sort themselves though.
+				// But the mechanism for keeping track of containment here and elsewhere breaks when equivalence changes
+				// So until I implement a contract-keeping way of testing that, we can't use this link on top of sorted collections
+				return 0;
+			}
 			ObservableCollectionLink<?, T> sourceCL = (ObservableCollectionLink<?, T>) sourceLink;
 			if (sourceCL.getValueSupplier() == null)
 				return 0;
