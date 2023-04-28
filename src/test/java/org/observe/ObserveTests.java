@@ -7,6 +7,7 @@ import org.observe.assoc.ObservableAssocTest;
 import org.observe.collect.ObservableCollectionsTest;
 import org.observe.config.ObservableConfigTest;
 import org.observe.ds.DSTesting;
+import org.observe.supertest.ShortChainTester;
 import org.observe.expresso.ExpressoTests;
 import org.observe.quick.QuickTests;
 import org.observe.quick.style.QuickStyleTests;
@@ -25,6 +26,7 @@ import org.qommons.QommonsTests;
 	ObservableTest.class, //
 	ObservableValueTest.class, //
 	ObservableCollectionsTest.class, //
+	ShortChainTester.class, //
 	CollectionSynchronizationTest.class, //
 	ObservableAssocTest.class, //
 	EntityReflectorTest.class, //
