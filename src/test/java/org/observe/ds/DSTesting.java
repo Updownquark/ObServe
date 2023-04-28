@@ -386,11 +386,13 @@ public class DSTesting {
 
 	static ComponentController<String> validate(ComponentController<String> comp) {
 		CausableKey key = Causable.key((__, ___) -> checkComponent(comp));
+		Observable<?> removed = comp.getStage().noInitChanges().filter(evt -> evt.getNewValue() == ComponentStage.Removed).take(1);
 		Observable.or(comp.getStage().changes(), comp.isAvailable().noInitChanges(), //
 			Observable.or(comp.getDependencies().values().stream().map(dep -> dep.getProviders().flow().refreshEach(comp2 -> {
 				return Observable.or(comp2.getStage().noInitChanges(), comp2.isAvailable().noInitChanges());
 			}).collect().simpleChanges())
 				.collect(Collectors.toList()).toArray(new Observable[0])))
+			.takeUntil(removed)//
 		.act(cause -> {
 			// All providers known to the dependencies must be available and satisfied (or pre-satisfied) at all times
 			for (Dependency<String, ?> dep : comp.getDependencies().values()) {

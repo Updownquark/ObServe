@@ -14,6 +14,7 @@ import org.observe.collect.ObservableCollectionDataFlowImpl.CollectionOperation;
 import org.observe.collect.ObservableCollectionDataFlowImpl.FlowElementSetter;
 import org.observe.collect.ObservableCollectionDataFlowImpl.RepairListener;
 import org.observe.collect.ObservableCollectionImpl.ActiveDerivedCollection;
+import org.observe.util.TypeTokens;
 import org.observe.util.WeakListening;
 import org.qommons.BiTuple;
 import org.qommons.Identifiable;
@@ -920,6 +921,7 @@ public class ObservableCollectionActiveManagers {
 		private final Comparator<? super T> theCompare;
 		// Need to keep track of the values to enforce the set-does-not-reorder policy
 		private final SortedTreeList<SortedElement> theValues;
+		private final Equivalence.SortedEquivalence<? super T> theEquivalence;
 
 		/**
 		 * @param parent The parent manager
@@ -929,11 +931,19 @@ public class ObservableCollectionActiveManagers {
 			super(parent);
 			theCompare = compare;
 			theValues = SortedTreeList.<SortedElement> buildTreeList(SortedElement::compareWithValue).build();
+			theEquivalence = parent.equivalence().sorted(//
+				TypeTokens.getRawType(parent.getTargetType()), //
+				theCompare, true);
 		}
 
 		@Override
 		public Object getIdentity() {
 			return Identifiable.wrap(getParent().getIdentity(), "sorted", theCompare);
+		}
+
+		@Override
+		public Equivalence<? super T> equivalence() {
+			return theEquivalence;
 		}
 
 		@Override

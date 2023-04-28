@@ -2308,7 +2308,7 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 		T transform(boolean sourceChange, Supplier<S> oldSource, S newSource, Function<S, T> oldResult, TransformationState state,
 			boolean stateChanged) {
 			if (state == null)
-				throw new NullPointerException();
+				return null; // No previous state--first time we've evaluated
 			if (newSource == null && theTransformation.isNullToNull())
 				return null;
 			TransformationValuesImpl tv = new TransformationValuesImpl(oldSource, oldResult, state);

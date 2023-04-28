@@ -641,20 +641,6 @@ public class ObservableCollectionPassiveManagers {
 			}
 
 			@Override
-			public String canAdd(T value, boolean before) {
-				Transformation.ReverseQueryResult<I> rq = getEngine().reverse(value, true, true);
-				if (rq.getError() != null)
-					return rq.getError();
-				return theParentEl.canAdd(rq.getReversed(), before);
-			}
-
-			@Override
-			public ElementId add(T value, boolean before) throws UnsupportedOperationException, IllegalArgumentException {
-				I reversed = getEngine().reverse(value, true, false).getReversed();
-				return theParentEl.add(reversed, before);
-			}
-
-			@Override
 			public String toString() {
 				return theParentEl.toString();
 			}
@@ -967,20 +953,6 @@ public class ObservableCollectionPassiveManagers {
 				theFilter.assertRemove(//
 					this::get);
 				theParentMapped.remove();
-			}
-
-			@Override
-			public String canAdd(T value, boolean before) {
-				String msg = theFilter.canAdd(value);
-				if (msg == null)
-					msg = theParentMapped.canAdd(value, before);
-				return msg;
-			}
-
-			@Override
-			public ElementId add(T value, boolean before) throws UnsupportedOperationException, IllegalArgumentException {
-				theFilter.assertAdd(value);
-				return theParentMapped.add(value, before);
 			}
 
 			@Override
