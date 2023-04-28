@@ -355,6 +355,71 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable {
 		}
 
 		@Override
+		public Observable<Object> completed() {
+			return this;
+		}
+
+		@Override
+		public Observable<Object> fireOnComplete() {
+			return this;
+		}
+
+		@Override
+		public Observable<Object> filter(Function<? super Object, Boolean> func) {
+			return this;
+		}
+
+		@Override
+		public <X> Observable<X> filter(Class<X> type) {
+			return (Observable<X>) this;
+		}
+
+		@Override
+		public <R> Observable<R> map(Function<? super Object, R> func) {
+			return (Observable<R>) this;
+		}
+
+		@Override
+		public <R> Observable<R> flatMap(Function<? super Object, ? extends Observable<? extends R>> map) {
+			return (Observable<R>) this;
+		}
+
+		@Override
+		public <R> Observable<R> filterMap(Function<? super Object, R> func) {
+			return (Observable<R>) this;
+		}
+
+		@Override
+		public Observable<Object> takeUntil(Observable<?> until) {
+			return this;
+		}
+
+		@Override
+		public Observable<Object> unsubscribeOn(Observable<?> until) {
+			return this;
+		}
+
+		@Override
+		public Observable<Object> take(int times) {
+			return this;
+		}
+
+		@Override
+		public Observable<Object> skip(int times) {
+			return this;
+		}
+
+		@Override
+		public Observable<Object> skip(Supplier<Integer> times) {
+			return this;
+		}
+
+		@Override
+		public Observable<Object> safe(ThreadConstraint threading) {
+			return this;
+		}
+
+		@Override
 		public String toString() {
 			return "empty";
 		}
@@ -1283,12 +1348,14 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable {
 				}
 				theTask.setActive(inUse);
 			}).build();
-			if (initDelay.isNegative())
-				throw new IllegalArgumentException("Initial delay must be >=0");
-			theInitDelay = initDelay;
+			if (theInitDelay != null) {
+				if (initDelay.isNegative())
+					throw new IllegalArgumentException("Initial delay must be >=0");
+				theInitDelay = initDelay;
+			}
 			if (interval.compareTo(Duration.ofMillis(1)) < 0)
 				throw new IllegalArgumentException("Interval must be >=1ms");
-			if (until != null && until.compareTo(theInitDelay.plus(interval)) < 0)
+			if (until != null && theInitDelay != null && until.compareTo(theInitDelay.plus(interval)) < 0)
 				throw new IllegalArgumentException("Until, if specified (not null), must be >=initial delay + interval");
 			theValue = value;
 			thePostAction = postAction;
@@ -1337,7 +1404,7 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable {
 				valueTime = TimeUtils.between(theStartTime, theTimer.getClock().now());
 			else
 				valueTime = theTask.getFrequency().multipliedBy(theTask.getExecutionCount());
-			T value = theValue.apply(valueTime);
+			T value = theValue == null ? null : theValue.apply(valueTime);
 			try {
 				theObservers.forEach(//
 					o -> o.onNext(value));

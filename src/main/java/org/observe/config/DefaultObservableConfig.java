@@ -68,6 +68,10 @@ public class DefaultObservableConfig extends AbstractObservableConfig {
 		theListeners = ListenerList.build().build();
 	}
 
+	/**
+	 * @param parent The parent config
+	 * @param parentContentRef The id of this child's element in its parent
+	 */
 	protected void initialize(DefaultObservableConfig parent, ElementId parentContentRef) {
 		super.initialize(parent);
 		theParentContentRef = parentContentRef;

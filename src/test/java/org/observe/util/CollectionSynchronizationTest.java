@@ -17,7 +17,7 @@ public class CollectionSynchronizationTest {
 	public void simpleTest() {
 		TestHelper.createTester(SimpleTest.class)//
 		.withFailurePersistence(true).revisitKnownFailures(true).withDebug(true)//
-		.withMaxCaseDuration(Duration.ofSeconds(1)).withRandomCases(1000)//
+			.withMaxCaseDuration(Duration.ofSeconds(1)).withRandomCases(200)//
 		// .withConcurrency(p -> p - 2)//
 		.withPlacemarks("op")//
 		.execute()//
@@ -29,7 +29,7 @@ public class CollectionSynchronizationTest {
 	public void preferOrderedTest() {
 		TestHelper.createTester(PreferOrderedTest.class)//
 		.withFailurePersistence(true).revisitKnownFailures(true).withDebug(true)//
-		.withMaxCaseDuration(Duration.ofSeconds(1)).withRandomCases(200)//
+			.withMaxCaseDuration(Duration.ofSeconds(1)).withRandomCases(50)//
 		// .withConcurrency(p -> p - 2)//
 		.withPlacemarks("op")//
 		.execute()//

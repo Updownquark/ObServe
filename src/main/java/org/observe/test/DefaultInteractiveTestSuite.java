@@ -17,10 +17,12 @@ import java.util.stream.Collectors;
 import org.observe.SimpleObservable;
 import org.observe.collect.CollectionChangeType;
 import org.observe.collect.ObservableCollection;
+import org.observe.collect.ObservableSortedCollection;
 import org.observe.config.ObservableConfig;
 import org.observe.config.ObservableConfig.XmlEncoding;
 import org.observe.config.ObservableConfigPath;
 import org.observe.config.SyncValueSet;
+import org.qommons.Named;
 import org.qommons.ThreadConstraint;
 import org.qommons.collect.BetterCollections;
 import org.qommons.collect.BetterList;
@@ -38,7 +40,7 @@ class DefaultInteractiveTestSuite implements InteractiveTestSuite {
 	private final String theName;
 	private final boolean isSequential;
 	private final CollectionLockingStrategy theLocker;
-	private final ObservableCollection<InteractiveTestOrSuite> theContent;
+	private final ObservableSortedCollection<InteractiveTestOrSuite> theContent;
 	private final Map<String, ObservableConfig> theConfigs;
 	private final Map<String, ObservableCollection<TestResult>> theResults;
 	private final ObservableCollection<TestResult> theAllTestResults;
@@ -49,7 +51,8 @@ class DefaultInteractiveTestSuite implements InteractiveTestSuite {
 		theName = name;
 		isSequential = sequential;
 		theLocker = locker;
-		theContent = ObservableCollection.build(InteractiveTestOrSuite.class).withLocking(locker).build();
+		theContent = ObservableSortedCollection.build(InteractiveTestOrSuite.class, Named.DISTINCT_NUMBER_TOLERANT).withLocking(locker)
+			.build();
 		theConfigLocations = new HashMap<>();
 		theConfigs = new HashMap<>();
 		theResults = new HashMap<>();
@@ -117,7 +120,7 @@ class DefaultInteractiveTestSuite implements InteractiveTestSuite {
 	}
 
 	@Override
-	public ObservableCollection<InteractiveTestOrSuite> getContent() {
+	public ObservableSortedCollection<InteractiveTestOrSuite> getContent() {
 		return theContent.flow().unmodifiable().collect();
 	}
 
