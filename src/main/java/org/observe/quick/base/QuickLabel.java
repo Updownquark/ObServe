@@ -77,7 +77,7 @@ public class QuickLabel<T> extends QuickTextWidget.Abstract<T> {
 		}
 	}
 
-	public QuickLabel(Interpreted<T, ?> interpreted, QuickContainer2<?> parent) {
+	public QuickLabel(Interpreted<T, ?> interpreted, QuickElement parent) {
 		super(interpreted, parent);
 	}
 

@@ -16,7 +16,7 @@ import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
 public class QuickField extends QuickAddOn.Abstract<QuickWidget> {
-	public class Def extends QuickAddOn.Def.Abstract<QuickWidget, QuickField> {
+	public static class Def extends QuickAddOn.Def.Abstract<QuickWidget, QuickField> {
 		private CompiledExpression theName;
 		private boolean isFill;
 
@@ -45,7 +45,7 @@ public class QuickField extends QuickAddOn.Abstract<QuickWidget> {
 		}
 	}
 
-	public class Interpreted extends QuickAddOn.Interpreted.Abstract<QuickWidget, QuickField> {
+	public static class Interpreted extends QuickAddOn.Interpreted.Abstract<QuickWidget, QuickField> {
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<String>> theName;
 
 		public Interpreted(Def definition, QuickWidget.Interpreted<?> element) {

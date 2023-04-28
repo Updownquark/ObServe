@@ -12,12 +12,22 @@ import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
-public class QuickWindow extends QuickAddOn.Abstract<QuickDocument2> {
+/** An add-on for an element that is to be a window */
+public class QuickWindow extends QuickAddOn.Abstract<QuickElement> {
+	/** An action to perform when the user closes the window (e.g. clicks the "X") */
 	public enum CloseAction {
-		DoNothing, Hide, Dispose, Exit
+		/** Do nothing when the user attempts to close */
+		DoNothing,
+		/** Hide the window, but keep it ready */
+		Hide,
+		/** Dispose of the window, releasing all its resources */
+		Dispose,
+		/** Exit the application/process */
+		Exit
 	}
 
-	public static class Def extends QuickAddOn.Def.Abstract<QuickDocument2, QuickWindow> {
+	/** The definition of a {@link QuickWindow} */
+	public static class Def extends QuickAddOn.Def.Abstract<QuickElement, QuickWindow> {
 		private CompiledExpression theX;
 		private CompiledExpression theY;
 		private CompiledExpression theWidth;
@@ -26,34 +36,45 @@ public class QuickWindow extends QuickAddOn.Abstract<QuickDocument2> {
 		private CompiledExpression theVisible;
 		private CloseAction theCloseAction;
 
+		/**
+		 * @param type The add-on that the Qonfig toolkit uses to represent this type
+		 * @param element The element that this add-on is added onto
+		 */
 		public Def(QonfigAddOn type, QuickElement.Def<? extends QuickDocument2> element) {
 			super(type, element);
 		}
 
+		/** @return The expression defining the x-coordinate of the window--to move and be updated when the user moves it */
 		public CompiledExpression getX() {
 			return theX;
 		}
 
+		/** @return The expression defining the y-coordinate of the window--to move and be updated when the user moves it */
 		public CompiledExpression getY() {
 			return theY;
 		}
 
+		/** @return The expression defining the width of the window--to size and be updated when the user resizes it */
 		public CompiledExpression getWidth() {
 			return theWidth;
 		}
 
+		/** @return The expression defining the height of the window--to size and be updated when the user resizes it */
 		public CompiledExpression getHeight() {
 			return theHeight;
 		}
 
+		/** @return The expression defining the title for the window */
 		public CompiledExpression getTitle() {
 			return theTitle;
 		}
 
+		/** @return The expression defining when the window is visible--to hide/show and to be updated when the user closes the window */
 		public CompiledExpression getVisible() {
 			return theVisible;
 		}
 
+		/** @return The action to perform when the user closes the window */
 		public CloseAction getCloseAction() {
 			return theCloseAction;
 		}
@@ -84,12 +105,13 @@ public class QuickWindow extends QuickAddOn.Abstract<QuickDocument2> {
 		}
 
 		@Override
-		public Interpreted interpret(QuickElement.Interpreted<? extends QuickDocument2> element) {
+		public Interpreted interpret(QuickElement.Interpreted<? extends QuickElement> element) {
 			return new Interpreted(this, (QuickDocument2.Interpreted) element);
 		}
 	}
 
-	public static class Interpreted extends QuickAddOn.Interpreted.Abstract<QuickDocument2, QuickWindow> {
+	/** An interpretation of a {@link QuickWindow} */
+	public static class Interpreted extends QuickAddOn.Interpreted.Abstract<QuickElement, QuickWindow> {
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> theX;
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> theY;
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> theWidth;
@@ -97,6 +119,10 @@ public class QuickWindow extends QuickAddOn.Abstract<QuickDocument2> {
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<String>> theTitle;
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> theVisible;
 
+		/**
+		 * @param definition The definition producing this interpretation
+		 * @param element The element interpretation that this add-on is added onto
+		 */
 		public Interpreted(Def definition, QuickDocument2.Interpreted element) {
 			super(definition, element);
 		}
@@ -111,26 +137,32 @@ public class QuickWindow extends QuickAddOn.Abstract<QuickDocument2> {
 			return (QuickDocument2.Interpreted) super.getElement();
 		}
 
+		/** @return The expression defining the x-coordinate of the window--to move and be updated when the user moves it */
 		public InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> getX() {
 			return theX;
 		}
 
+		/** @return The expression defining the y-coordinate of the window--to move and be updated when the user moves it */
 		public InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> getY() {
 			return theY;
 		}
 
+		/** @return The expression defining the width of the window--to size and be updated when the user resizes it */
 		public InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> getWidth() {
 			return theWidth;
 		}
 
+		/** @return The expression defining the height of the window--to size and be updated when the user resizes it */
 		public InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> getHeight() {
 			return theHeight;
 		}
 
+		/** @return The expression defining the title for the window */
 		public InterpretedValueSynth<SettableValue<?>, SettableValue<String>> getTitle() {
 			return theTitle;
 		}
 
+		/** @return The expression defining when the window is visible--to hide/show and to be updated when the user closes the window */
 		public InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> getVisible() {
 			return theVisible;
 		}
@@ -148,7 +180,7 @@ public class QuickWindow extends QuickAddOn.Abstract<QuickDocument2> {
 		}
 
 		@Override
-		public QuickWindow create(QuickDocument2 element) {
+		public QuickWindow create(QuickElement element) {
 			return new QuickWindow(this, element);
 		}
 	}
@@ -160,7 +192,11 @@ public class QuickWindow extends QuickAddOn.Abstract<QuickDocument2> {
 	private SettableValue<String> theTitle;
 	private SettableValue<Boolean> theVisible;
 
-	public QuickWindow(Interpreted interpreted, QuickDocument2 element) {
+	/**
+	 * @param interpreted The interpretation producing this window
+	 * @param element The element that this add-on is added onto
+	 */
+	public QuickWindow(Interpreted interpreted, QuickElement element) {
 		super(interpreted, element);
 	}
 
@@ -169,26 +205,32 @@ public class QuickWindow extends QuickAddOn.Abstract<QuickDocument2> {
 		return (Interpreted) super.getInterpreted();
 	}
 
+	/** @return The value defining the x-coordinate of the window--to move and be updated when the user moves it */
 	public SettableValue<Integer> getX() {
 		return theX;
 	}
 
+	/** @return The value defining the y-coordinate of the window--to move and be updated when the user moves it */
 	public SettableValue<Integer> getY() {
 		return theY;
 	}
 
+	/** @return The value defining the width of the window--to size and be updated when the user resizes it */
 	public SettableValue<Integer> getWidth() {
 		return theWidth;
 	}
 
+	/** @return The value defining the height of the window--to size and be updated when the user resizes it */
 	public SettableValue<Integer> getHeight() {
 		return theHeight;
 	}
 
+	/** @return The value defining the title for the window */
 	public SettableValue<String> getTitle() {
 		return theTitle;
 	}
 
+	/** @return The value defining when the window is visible--to hide/show and to be updated when the user closes the window */
 	public SettableValue<Boolean> getVisible() {
 		return theVisible;
 	}

@@ -5,7 +5,7 @@ A bunch of this random junk is in here just to test out the XML parser
 blah -->
 
 <quick uses:base="Quick-Base v0.1" uses:expresso="Expresso-Base v0.1" with-extension="window"
-	title="`Super Simple Quick Demo`" close-action="exit">
+	title="`Super Simple Quick Demo`" close-action="exit" x="app.x" y="app.y" width="app.w" height="app.h">
 	<head>
 		<?CONTENTLESS-INTRUCTION?>
 		<?INSTRUCTION ?>
@@ -15,6 +15,10 @@ blah -->
 				<value name="text" type="String" init="`This is some text`" />
 				<value name="i1" type="int" />
 				<value name="i2" type="int" />
+				<value name="x" type="int" />
+				<value name="y" type="int" />
+				<value name="w" type="int" />
+				<value name="h" type="int" />
 			</model>
 		</models>
 		<style-sheet>
@@ -41,6 +45,18 @@ blah -->
 			<text-field value="app.i2" />
 			<label>=</label>
 			<text-field value="app.i1+app.i2" />
+		</box>
+		<box layout="inline" orientation="horizontal" main-align="center">
+			<label>x=</label>
+			<label value="app.x" />
+			<label>y=</label>
+			<label value="app.y" />
+		</box>
+		<box layout="inline" orientation="horizontal" main-align="center">
+			<label>Size=</label>
+			<label value="app.w" />
+			<label>x</label>
+			<label value="app.h" />
 		</box>
 	</box>
 </quick>

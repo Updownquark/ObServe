@@ -96,7 +96,7 @@ public interface EditableTextWidget<T> extends QuickTextWidget<T> {
 	EditableTextWidget<T> setContext(EditableWidgetContext ctx) throws ModelInstantiationException;
 
 	public static abstract class Abstract<T> extends QuickTextWidget.Abstract<T> implements EditableTextWidget<T> {
-		public Abstract(EditableTextWidget.Interpreted<T, ?> interpreted, QuickContainer2<?> parent) {
+		public Abstract(EditableTextWidget.Interpreted<T, ?> interpreted, QuickElement parent) {
 			super(interpreted, parent);
 		}
 

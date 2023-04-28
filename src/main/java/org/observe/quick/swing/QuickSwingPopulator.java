@@ -119,7 +119,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 					}
 				};
 			});
-			// TODO Window
+			// TODO Tooltip, visibility, style
 		}
 	}
 

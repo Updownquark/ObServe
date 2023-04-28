@@ -88,7 +88,7 @@ public class QuickBox extends QuickContainer2.Abstract<QuickWidget> {
 
 	private SettableValue<Double> theOpacity;
 
-	public QuickBox(Interpreted<?> interpreted, QuickContainer2<?> parent) {
+	public QuickBox(Interpreted<?> interpreted, QuickElement parent) {
 		super(interpreted, parent);
 	}
 
@@ -102,8 +102,8 @@ public class QuickBox extends QuickContainer2.Abstract<QuickWidget> {
 	}
 
 	@Override
-	public QuickBox update(ModelSetInstance models, QuickInstantiationCache cache) throws ModelInstantiationException {
-		super.update(models, cache);
+	public QuickBox update(ModelSetInstance models) throws ModelInstantiationException {
+		super.update(models);
 		theOpacity = getInterpreted().getOpacity() == null ? null : getInterpreted().getOpacity().get(getModels());
 		return this;
 	}

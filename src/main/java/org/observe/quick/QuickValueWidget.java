@@ -106,7 +106,7 @@ public interface QuickValueWidget<T> extends QuickWidget {
 	public abstract class Abstract<T> extends QuickWidget.Abstract implements QuickValueWidget<T> {
 		private final SettableValue<SettableValue<T>> theValue;
 
-		public Abstract(QuickValueWidget.Interpreted<T, ?> interpreted, QuickContainer2<?> parent) {
+		public Abstract(QuickValueWidget.Interpreted<T, ?> interpreted, QuickElement parent) {
 			super(interpreted, parent);
 			theValue = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class)
 				.<SettableValue<T>> parameterized((TypeToken<T>) interpreted.getValue().getType().getType(0))).build();
@@ -123,9 +123,8 @@ public interface QuickValueWidget<T> extends QuickWidget {
 		}
 
 		@Override
-		public QuickValueWidget.Abstract<T> update(ModelSetInstance models, QuickInstantiationCache cache)
-			throws ModelInstantiationException {
-			super.update(models, cache);
+		public QuickValueWidget.Abstract<T> update(ModelSetInstance models) throws ModelInstantiationException {
+			super.update(models);
 			theValue.set(getInterpreted().getValue().get(models), null);
 			return this;
 		}

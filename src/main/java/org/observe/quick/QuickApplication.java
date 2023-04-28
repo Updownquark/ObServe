@@ -28,8 +28,15 @@ import org.qommons.io.TextParseException;
 
 /** Runs a Quick application from an application setup file configured as quick-app.qtd */
 public interface QuickApplication {
+	/** The name of the Quick-App toolkit */
 	public static final String TOOLKIT_NAME = "Quick-App";
 
+	/**
+	 * Runs the application
+	 *
+	 * @param doc The document containing the Quick configuration for the application
+	 * @throws ModelInstantiationException If an error occurs initializing the application
+	 */
 	void runApplication(QuickDocument2 doc) throws ModelInstantiationException;
 
 	/**
@@ -100,7 +107,7 @@ public interface QuickApplication {
 			throw new IllegalStateException("Could not locate Quick App toolkit quick-app.qtd");
 
 		QonfigDocument quickApp = QonfigApp.parseApp(quickAppUrl, quickAppToolkitUrl);
-		QonfigToolkit quickAppTk = findQuickAppTk(quickApp.getDocToolkit());
+		QonfigToolkit quickAppTk = Impl.findQuickAppTk(quickApp.getDocToolkit());
 		if (quickAppTk == null)
 			throw new IllegalStateException("Quick application file '" + quickAppFile + "' does not use the Quick-App toolkit");
 
@@ -134,14 +141,17 @@ public interface QuickApplication {
 		app.runApplication(doc);
 	}
 
-	static QonfigToolkit findQuickAppTk(QonfigToolkit toolkit) {
-		if (TOOLKIT_NAME.equals(toolkit.getName()))
-			return toolkit;
-		for (QonfigToolkit dep : toolkit.getDependencies().values()) {
-			QonfigToolkit found = findQuickAppTk(dep);
-			if (found != null)
-				return found;
+	/** Implementation details */
+	class Impl {
+		static QonfigToolkit findQuickAppTk(QonfigToolkit toolkit) {
+			if (TOOLKIT_NAME.equals(toolkit.getName()))
+				return toolkit;
+			for (QonfigToolkit dep : toolkit.getDependencies().values()) {
+				QonfigToolkit found = findQuickAppTk(dep);
+				if (found != null)
+					return found;
+			}
+			return null;
 		}
-		return null;
 	}
 }

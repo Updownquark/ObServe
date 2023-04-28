@@ -60,7 +60,7 @@ public class QuickTextField<T> extends EditableTextWidget.Abstract<T> {
 		}
 	}
 
-	public QuickTextField(Interpreted<T> interpreted, QuickContainer2<?> parent) {
+	public QuickTextField(Interpreted<T> interpreted, QuickElement parent) {
 		super(interpreted, parent);
 	}
 
