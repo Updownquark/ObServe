@@ -9,6 +9,7 @@ import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
 public class QuickWindow extends QuickAddOn.Abstract<QuickDocument2> {
@@ -24,6 +25,10 @@ public class QuickWindow extends QuickAddOn.Abstract<QuickDocument2> {
 		private CompiledExpression theTitle;
 		private CompiledExpression theVisible;
 		private CloseAction theCloseAction;
+
+		public Def(QonfigAddOn type, QuickElement.Def<? extends QuickDocument2> element) {
+			super(type, element);
+		}
 
 		public CompiledExpression getX() {
 			return theX;
@@ -79,7 +84,7 @@ public class QuickWindow extends QuickAddOn.Abstract<QuickDocument2> {
 		}
 
 		@Override
-		public Interpreted interpret(QuickElement.Interpreted<?> element) {
+		public Interpreted interpret(QuickElement.Interpreted<? extends QuickDocument2> element) {
 			return new Interpreted(this, (QuickDocument2.Interpreted) element);
 		}
 	}

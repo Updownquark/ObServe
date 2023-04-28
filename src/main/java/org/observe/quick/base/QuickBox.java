@@ -9,25 +9,25 @@ import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.quick.QuickContainer2;
+import org.observe.quick.QuickElement;
 import org.observe.quick.QuickWidget;
 import org.observe.util.TypeTokens;
 import org.qommons.config.AbstractQIS;
-import org.qommons.config.QonfigAddOn;
+import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigInterpretationException;
 
 import com.google.common.reflect.TypeToken;
 
 public class QuickBox extends QuickContainer2.Abstract<QuickWidget> {
 	public static class Def<W extends QuickBox> extends QuickContainer2.Def.Abstract<W, QuickWidget> {
-		private QuickLayout.Def theLayout;
 		private CompiledExpression theOpacity;
 
-		public Def(AbstractQIS<?> session) throws QonfigInterpretationException {
-			super(session);
+		public Def(QuickElement.Def<?> parent, QonfigElement element) {
+			super(parent, element);
 		}
 
-		public QuickLayout.Def getLayout() {
-			return theLayout;
+		public QuickLayout.Def<?> getLayout() {
+			return getAddOn(QuickLayout.Def.class);
 		}
 
 		public CompiledExpression getOpacity() {
@@ -37,7 +37,6 @@ public class QuickBox extends QuickContainer2.Abstract<QuickWidget> {
 		@Override
 		public Def<W> update(AbstractQIS<?> session) throws QonfigInterpretationException {
 			super.update(session);
-			theLayout = session.asElement(session.getAttribute("layout", QonfigAddOn.class)).interpret(QuickLayout.Def.class);
 			theOpacity = getExpressoSession().getAttributeExpression("opacity");
 			return this;
 		}
@@ -49,7 +48,6 @@ public class QuickBox extends QuickContainer2.Abstract<QuickWidget> {
 	}
 
 	public static class Interpreted<W extends QuickBox> extends QuickContainer2.Interpreted.Abstract<W, QuickWidget> {
-		private QuickLayout.Interpreted theLayout;
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<Double>> theOpacity;
 
 		public Interpreted(Def<? super W> definition, QuickContainer2.Interpreted<?, ?> parent) {
@@ -66,8 +64,8 @@ public class QuickBox extends QuickContainer2.Abstract<QuickWidget> {
 			return (TypeToken<W>) TypeTokens.get().of(QuickBox.class);
 		}
 
-		public QuickLayout.Interpreted getLayout() {
-			return theLayout;
+		public QuickLayout.Interpreted<?> getLayout() {
+			return getAddOn(QuickLayout.Interpreted.class);
 		}
 
 		public InterpretedValueSynth<SettableValue<?>, SettableValue<Double>> getOpacity() {
@@ -77,7 +75,6 @@ public class QuickBox extends QuickContainer2.Abstract<QuickWidget> {
 		@Override
 		public Interpreted<W> update(InterpretedModelSet models, QuickInterpretationCache cache) throws ExpressoInterpretationException {
 			super.update(models, cache);
-			theLayout = getDefinition().getLayout().interpret(models);
 			theOpacity = getDefinition().getOpacity() == null ? null
 				: getDefinition().getOpacity().evaluate(ModelTypes.Value.DOUBLE).interpret();
 			return this;
@@ -89,7 +86,6 @@ public class QuickBox extends QuickContainer2.Abstract<QuickWidget> {
 		}
 	}
 
-	private QuickLayout theLayout;
 	private SettableValue<Double> theOpacity;
 
 	public QuickBox(Interpreted<?> interpreted, QuickContainer2<?> parent) {
@@ -101,16 +97,15 @@ public class QuickBox extends QuickContainer2.Abstract<QuickWidget> {
 		return (Interpreted<?>) super.getInterpreted();
 	}
 
+	public QuickLayout getLayout() {
+		return getAddOn(QuickLayout.class);
+	}
+
 	@Override
 	public QuickBox update(ModelSetInstance models, QuickInstantiationCache cache) throws ModelInstantiationException {
 		super.update(models, cache);
-		theLayout = getInterpreted().getLayout().create(getModels());
 		theOpacity = getInterpreted().getOpacity() == null ? null : getInterpreted().getOpacity().get(getModels());
 		return this;
-	}
-
-	public QuickLayout getLayout() {
-		return theLayout;
 	}
 
 	public SettableValue<Double> getOpacity() {

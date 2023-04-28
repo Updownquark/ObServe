@@ -15,6 +15,7 @@ import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueSynth;
 import org.observe.util.TypeTokens;
 import org.qommons.config.AbstractQIS;
+import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.io.Format;
 import org.qommons.io.SpinnerFormat;
@@ -58,8 +59,8 @@ public interface QuickTextWidget<T> extends QuickValueWidget<T> {
 		public abstract class Abstract<T, W extends QuickTextWidget<T>> extends QuickValueWidget.Def.Abstract<T, W> implements Def<W> {
 			private CompiledExpression theFormat;
 
-			public Abstract(AbstractQIS<?> session) throws QonfigInterpretationException {
-				super(session);
+			public Abstract(QuickElement.Def<?> parent, QonfigElement element) {
+				super(parent, element);
 			}
 
 			@Override

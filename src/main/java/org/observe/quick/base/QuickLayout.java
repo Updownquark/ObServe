@@ -1,56 +1,61 @@
 package org.observe.quick.base;
 
 import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.ExpressoQIS;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
-import org.observe.quick.style.StyleQIS;
-import org.qommons.config.AbstractQIS;
-import org.qommons.config.QonfigInterpretationException;
+import org.observe.quick.QuickAddOn;
+import org.observe.quick.QuickElement;
+import org.qommons.config.QonfigAddOn;
 
-public interface QuickLayout {
-	public abstract class Def<L extends QuickLayout> {
-		private StyleQIS theStyleSession;
-		private ExpressoQIS theExpressoSession;
-
-		public Def(AbstractQIS<?> session) throws QonfigInterpretationException {
-			update(session);
+public interface QuickLayout extends QuickAddOn<QuickBox> {
+	public abstract class Def<L extends QuickLayout> extends QuickAddOn.Def.Abstract<QuickBox, QuickLayout> {
+		public Def(QonfigAddOn type, QuickElement.Def<? extends QuickBox> element) {
+			super(type, element);
 		}
 
-		public StyleQIS getStyleSession() {
-			return theStyleSession;
-		}
-
-		public ExpressoQIS getExpressoSession() {
-			return theExpressoSession;
-		}
-
-		public void update(AbstractQIS<?> session) throws QonfigInterpretationException {
-			theStyleSession = session.as(StyleQIS.class);
-			theExpressoSession = session.as(ExpressoQIS.class);
-		}
-
-		public abstract Interpreted interpret(InterpretedModelSet models) throws ExpressoInterpretationException;
+		@Override
+		public abstract Interpreted<L> interpret(QuickElement.Interpreted<? extends QuickBox> element);
 	}
 
-	public abstract class Interpreted<L extends QuickLayout> {
-		private final Def<L> theDefinition;
+	public abstract class Interpreted<L extends QuickLayout> extends QuickAddOn.Interpreted.Abstract<QuickBox, L> {
 
-		public Interpreted(Def<L> definition) throws ExpressoInterpretationException {
-			theDefinition = definition;
+		public Interpreted(Def<L> definition, QuickElement.Interpreted<? extends QuickBox> element) {
+			super(definition, element);
 		}
 
+		@Override
 		public Def<L> getDefinition() {
-			return theDefinition;
+			return (Def<L>) super.getDefinition();
 		}
 
-		public abstract void update(InterpretedModelSet models) throws ExpressoInterpretationException;
-
-		public abstract QuickLayout create(ModelSetInstance models) throws ModelInstantiationException;
+		@Override
+		public abstract Interpreted<L> update(InterpretedModelSet models) throws ExpressoInterpretationException;
 	}
 
-	Interpreted<?> getIntepreted();
+	@Override
+	Interpreted<?> getInterpreted();
 
-	void update(ModelSetInstance models) throws ModelInstantiationException;
+	@Override
+	QuickLayout update(ModelSetInstance models) throws ModelInstantiationException;
+
+	public abstract class Abstract implements QuickLayout {
+		private final QuickLayout.Interpreted<?> theInterpreted;
+		private final QuickBox theElement;
+
+		public Abstract(Interpreted<?> interpreted, QuickBox element) {
+			theInterpreted = interpreted;
+			theElement = element;
+		}
+
+		@Override
+		public Interpreted<?> getInterpreted() {
+			return theInterpreted;
+		}
+
+		@Override
+		public QuickBox getElement() {
+			return theElement;
+		}
+	}
 }

@@ -3,6 +3,7 @@ package org.observe.quick.base;
 import java.util.Set;
 
 import org.observe.expresso.ExpressoQIS;
+import org.observe.quick.QuickCoreInterpretation;
 import org.observe.quick.style.StyleQIS;
 import org.qommons.QommonsUtils;
 import org.qommons.Version;
@@ -13,9 +14,9 @@ import org.qommons.config.QonfigToolkit;
 import org.qommons.config.SpecialSession;
 
 public class QuickBaseInterpretation implements QonfigInterpretation {
-	public static final String TOOLKIT_NAME="Quick-Base";
+	public static final String TOOLKIT_NAME = "Quick-Base";
 
-	public static final Version TOOLKIT_VERSION=new Version(0, 1, 0);
+	public static final Version TOOLKIT_VERSION = new Version(0, 1, 0);
 
 	@Override
 	public Set<Class<? extends SpecialSession<?>>> getExpectedAPIs() {
@@ -38,10 +39,13 @@ public class QuickBaseInterpretation implements QonfigInterpretation {
 
 	@Override
 	public QonfigInterpreterCore.Builder configureInterpreter(Builder interpreter) {
-		interpreter.createWith("box", QuickBox.Def.class, session -> new QuickBox.Def<>(session));
-		interpreter.createWith("label", QuickLabel.Def.class, session -> new QuickLabel.Def<>(session));
-		interpreter.createWith("inline", InlineLayout.Def.class, session -> new InlineLayout.Def(session));
-		interpreter.createWith("text-field", QuickTextField.Def.class, session -> new QuickTextField.Def<>(session));
+		interpreter.createWith("box", QuickBox.Def.class, session -> QuickCoreInterpretation.interpretQuick(session, QuickBox.Def::new));
+		interpreter.createWith("label", QuickLabel.Def.class,
+			session -> QuickCoreInterpretation.interpretQuick(session, QuickLabel.Def::new));
+		interpreter.createWith("inline", InlineLayout.Def.class, session -> QuickCoreInterpretation.interpretAddOn(session,
+			(p, ao) -> new InlineLayout.Def(ao, (QuickBox.Def<?>) p)));
+		interpreter.createWith("text-field", QuickTextField.Def.class,
+			session -> QuickCoreInterpretation.interpretQuick(session, QuickTextField.Def::new));
 		// TODO Field
 		return interpreter;
 	}

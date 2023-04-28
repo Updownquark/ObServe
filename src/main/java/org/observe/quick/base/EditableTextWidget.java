@@ -8,8 +8,10 @@ import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.TypeConversionException;
 import org.observe.quick.QuickContainer2;
+import org.observe.quick.QuickElement;
 import org.observe.quick.QuickTextWidget;
 import org.qommons.config.AbstractQIS;
+import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigInterpretationException;
 
 public interface EditableTextWidget<T> extends QuickTextWidget<T> {
@@ -22,8 +24,8 @@ public interface EditableTextWidget<T> extends QuickTextWidget<T> {
 		public abstract class Abstract<T, W extends EditableTextWidget<T>> extends QuickTextWidget.Def.Abstract<T, W> implements Def<W> {
 			private boolean isCommitOnType;
 
-			public Abstract(AbstractQIS<?> session) throws QonfigInterpretationException {
-				super(session);
+			public Abstract(QuickElement.Def<?> parent, QonfigElement element) {
+				super(parent, element);
 			}
 
 			@Override

@@ -1,6 +1,8 @@
 package org.observe.quick.swing;
 
+import java.awt.EventQueue;
 import java.awt.LayoutManager;
+import java.lang.reflect.InvocationTargetException;
 
 import javax.swing.JFrame;
 
@@ -29,13 +31,39 @@ import org.qommons.ex.CheckedExceptionWrapper;
 import org.qommons.ex.ExBiFunction;
 import org.qommons.io.Format;
 
+/**
+ * <p>
+ * Populates a {@link PanelPopulator} for a Quick widget.
+ * </p>
+ * <p>
+ * This class contains lots of {@link Transformer} interpretation utilities for turning standard Quick libraries into Java Swing components.
+ * </p>
+ *
+ * @param <W> The type of the Quick widget
+ */
 public interface QuickSwingPopulator<W extends QuickWidget> {
+	/**
+	 * @param panel The panel to populate
+	 * @param quick The Quick widget to populate for
+	 * @throws ModelInstantiationException If an problem occurs instantiating any components
+	 */
 	void populate(PanelPopulator<?, ?> panel, W quick) throws ModelInstantiationException;
 
+	/**
+	 * Creates a Swing layout from a {@link QuickLayout}
+	 *
+	 * @param <L> The type of the Quick layout
+	 */
 	public interface QuickSwingLayout<L extends QuickLayout> {
+		/**
+		 * @param quick The Quick layout to create the layout for
+		 * @return The swing layout interpretation of the Quick layout
+		 * @throws ModelInstantiationException If a problem occurs instantiating the layout
+		 */
 		LayoutManager create(L quick) throws ModelInstantiationException;
 	}
 
+	/** Quick interpretation of the core toolkit for Swing */
 	public class QuickCoreSwing implements QuickInterpretation {
 		@Override
 		public void configure(Builder<ExpressoInterpretationException> tx) {
@@ -43,48 +71,51 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 				QuickSwingPopulator<QuickWidget> interpretedBody = tx2.transform(interpretedDoc.getBody(), QuickSwingPopulator.class);
 				return doc -> {
 					try {
-						QuickWindow window = doc.getAddOn(QuickWindow.class);
-						WindowBuilder<?, ?> w = WindowPopulation.populateWindow(new JFrame(), doc.getModels().getUntil(), true, true);
-						if (window != null) {
-							switch (window.getInterpreted().getDefinition().getCloseAction()) {
-							case DoNothing:
-								w.withCloseAction(JFrame.DO_NOTHING_ON_CLOSE);
-								break;
-							case Hide:
-								w.withCloseAction(JFrame.HIDE_ON_CLOSE);
-								break;
-							case Dispose:
-								w.withCloseAction(JFrame.DISPOSE_ON_CLOSE);
-								break;
-							case Exit:
-								w.withCloseAction(JFrame.EXIT_ON_CLOSE);
-								break;
+						EventQueue.invokeAndWait(() -> {
+							QuickWindow window = doc.getAddOn(QuickWindow.class);
+							WindowBuilder<?, ?> w = WindowPopulation.populateWindow(new JFrame(), doc.getModels().getUntil(), true, true);
+							if (window != null) {
+								switch (window.getInterpreted().getDefinition().getCloseAction()) {
+								case DoNothing:
+									w.withCloseAction(JFrame.DO_NOTHING_ON_CLOSE);
+									break;
+								case Hide:
+									w.withCloseAction(JFrame.HIDE_ON_CLOSE);
+									break;
+								case Dispose:
+									w.withCloseAction(JFrame.DISPOSE_ON_CLOSE);
+									break;
+								case Exit:
+									w.withCloseAction(JFrame.EXIT_ON_CLOSE);
+									break;
+								}
+								if (window.getX() != null)
+									w.withX(window.getX());
+								if (window.getY() != null)
+									w.withY(window.getY());
+								if (window.getWidth() != null)
+									w.withWidth(window.getWidth());
+								if (window.getHeight() != null)
+									w.withHeight(window.getHeight());
+								if (window.getTitle() != null)
+									w.withTitle(window.getTitle());
+								if (window.getVisible() != null)
+									w.withVisible(window.getVisible());
 							}
-							if (window.getX() != null)
-								w.withX(window.getX());
-							if (window.getY() != null)
-								w.withY(window.getY());
-							if (window.getWidth() != null)
-								w.withWidth(window.getWidth());
-							if (window.getHeight() != null)
-								w.withHeight(window.getHeight());
-							if (window.getTitle() != null)
-								w.withTitle(window.getTitle());
-							if (window.getVisible() != null)
-								w.withVisible(window.getVisible());
-						}
-						w.withHContent(new JustifiedBoxLayout(true).mainJustified().crossJustified(), content -> {
-							try {
-								interpretedBody.populate(content, doc.getBody());
-							} catch (ModelInstantiationException e) {
-								throw new CheckedExceptionWrapper(e);
-							}
+							w.withHContent(new JustifiedBoxLayout(true).mainJustified().crossJustified(), content -> {
+								try {
+									interpretedBody.populate(content, doc.getBody());
+								} catch (ModelInstantiationException e) {
+									throw new CheckedExceptionWrapper(e);
+								}
+							});
+							w.run(null);
 						});
-						w.run(null);
-					} catch (CheckedExceptionWrapper e) {
-						if (e.getCause() instanceof ModelInstantiationException)
-							throw (ModelInstantiationException) e.getCause();
-						throw e;
+					} catch (InterruptedException e) {
+					} catch (InvocationTargetException e) {
+						if (e.getTargetException() instanceof CheckedExceptionWrapper
+							&& e.getTargetException().getCause() instanceof ModelInstantiationException)
+							throw (ModelInstantiationException) e.getTargetException().getCause();
 					}
 				};
 			});
@@ -92,13 +123,13 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 		}
 	}
 
+	/** Quick interpretation of the base toolkit for Swing */
 	public class QuickBaseSwing implements QuickInterpretation {
 		@Override
 		public void configure(Transformer.Builder<ExpressoInterpretationException> tx) {
 			QuickSwingPopulator.<QuickBox, QuickBox.Interpreted<?>> interpret(tx, gen(QuickBox.Interpreted.class),
 				QuickBaseSwing::interpretBox);
-			QuickSwingPopulator.<InlineLayout, InlineLayout.Interpreted> interpretLayout(tx,
-				QuickBaseSwing.gen(InlineLayout.Interpreted.class), QuickBaseSwing::interpretInlineLayout);
+			tx.with(InlineLayout.Interpreted.class, QuickSwingLayout.class, QuickBaseSwing::interpretInlineLayout);
 			QuickSwingPopulator.<QuickLabel<?>, QuickLabel.Interpreted<?, ?>> interpret(tx,
 				QuickBaseSwing.gen(QuickLabel.Interpreted.class), QuickBaseSwing::interpretLabel);
 			QuickSwingPopulator.<QuickTextField<?>, QuickTextField.Interpreted<?>> interpret(tx,
@@ -195,6 +226,16 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 		}
 	}
 
+	/**
+	 * Utility for interpretation of swing widgets
+	 *
+	 * @param <W> The type of the Quick widget to interpret
+	 * @param <I> The type of the interpreted quick widget
+	 *
+	 * @param transformer The transformer builder to populate
+	 * @param interpretedType The type of the interpreted quick widget
+	 * @param interpreter Produces a {@link QuickSwingPopulator} for interpreted widgets of the given type
+	 */
 	public static <W extends QuickWidget, I extends QuickWidget.Interpreted<? extends W>> void interpret(//
 		Transformer.Builder<ExpressoInterpretationException> transformer, Class<I> interpretedType,
 		ExBiFunction<? super I, Transformer<ExpressoInterpretationException>, ? extends QuickSwingPopulator<? extends W>, ExpressoInterpretationException> interpreter) {
@@ -203,23 +244,6 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 			return (panel, quick) -> {
 				try {
 					qsw.populate(panel, (W) quick);
-				} catch (CheckedExceptionWrapper e) {
-					if (e.getCause() instanceof ModelInstantiationException)
-						throw (ModelInstantiationException) e.getCause();
-					throw e;
-				}
-			};
-		});
-	}
-
-	public static <L extends QuickLayout, I extends QuickLayout.Interpreted<? extends L>> void interpretLayout(//
-		Transformer.Builder<ExpressoInterpretationException> transformer, Class<I> interpretedType,
-		ExBiFunction<? super I, Transformer<ExpressoInterpretationException>, ? extends QuickSwingLayout<? extends L>, ExpressoInterpretationException> interpreter) {
-		transformer.with(interpretedType, QuickSwingPopulator.class, (interpreted, tx) -> {
-			QuickSwingLayout<L> qsw = (QuickSwingLayout<L>) interpreter.apply(interpreted, tx);
-			return (panel, quick) -> {
-				try {
-					qsw.create((L) quick);
 				} catch (CheckedExceptionWrapper e) {
 					if (e.getCause() instanceof ModelInstantiationException)
 						throw (ModelInstantiationException) e.getCause();

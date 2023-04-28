@@ -13,11 +13,23 @@ public class QuickTests extends AbstractExpressoTest<Expresso> {
 		return "quick-tests-app.qml";
 	}
 
+	/**
+	 * The super-basic test
+	 *
+	 * @throws ExpressoInterpretationException If an exception occurs interpreting the test
+	 * @throws ModelInstantiationException If an exception occurs instantiating the test
+	 */
 	@Test
 	public void testSuperBasic() throws ExpressoInterpretationException, ModelInstantiationException {
 		getTesting().executeTest("superBasic");
 	}
 
+	/**
+	 * Test with internal model values
+	 *
+	 * @throws ExpressoInterpretationException If an exception occurs interpreting the test
+	 * @throws ModelInstantiationException If an exception occurs instantiating the test
+	 */
 	@Test
 	public void testWithElementModels() throws ExpressoInterpretationException, ModelInstantiationException {
 		getTesting().executeTest("withElementModels");

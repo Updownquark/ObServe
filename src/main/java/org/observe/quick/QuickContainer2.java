@@ -5,7 +5,9 @@ import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.qommons.collect.BetterList;
+import org.qommons.collect.CollectionUtils;
 import org.qommons.config.AbstractQIS;
+import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.tree.BetterTreeList;
 
@@ -20,8 +22,8 @@ public interface QuickContainer2<C extends QuickWidget> extends QuickWidget {
 		implements Def<W, C> {
 			private final BetterList<QuickWidget.Def<? extends C>> theContents;
 
-			public Abstract(AbstractQIS<?> session) throws QonfigInterpretationException {
-				super(session);
+			public Abstract(QuickElement.Def<?> parent, QonfigElement element) {
+				super(parent, element);
 				theContents = BetterTreeList.<QuickWidget.Def<? extends C>> build().build();
 			}
 
@@ -33,10 +35,13 @@ public interface QuickContainer2<C extends QuickWidget> extends QuickWidget {
 			@Override
 			public Def.Abstract<W, C> update(AbstractQIS<?> session) throws QonfigInterpretationException {
 				super.update(session);
-				// TODO At some point, it would be better to adjust the collection instead of this sledgehammer
-				theContents.clear();
-				for (AbstractQIS<?> child : session.forChildren("content"))
-					theContents.add(child.interpret(QuickWidget.Def.class).update(child));
+				CollectionUtils.synchronize(theContents, session.forChildren("content"), //
+					(widget, child) -> QuickElement.typesEqual(widget.getElement(), child.getElement()))//
+				.simpleE(child -> child.interpret(QuickWidget.Def.class))//
+				.rightOrder()//
+				.onRightX(element -> element.getLeftValue().update(element.getRightValue()))//
+				.onCommonX(element -> element.getLeftValue().update(element.getRightValue()))//
+				.adjust();
 				return this;
 			}
 		}
@@ -71,11 +76,14 @@ public interface QuickContainer2<C extends QuickWidget> extends QuickWidget {
 			public Interpreted.Abstract<W, C> update(InterpretedModelSet models, QuickInterpretationCache cache)
 				throws ExpressoInterpretationException {
 				super.update(models, cache);
-				// TODO At some point, it would be better to adjust the collection instead of this sledgehammer
-				theContents.clear();
-				for (QuickWidget.Def<? extends C> child : (BetterList<? extends QuickWidget.Def<? extends C>>) getDefinition()
-					.getContents())
-					theContents.add(child.interpret(this).update(models, cache));
+				CollectionUtils.synchronize(theContents, getDefinition().getContents(), //
+					(widget, child) -> widget.getDefinition() == child)//
+				.<ExpressoInterpretationException> simpleE(
+					child -> (QuickWidget.Interpreted<? extends C>) child.interpret(Interpreted.Abstract.this))//
+				.rightOrder()//
+				.onRightX(element -> element.getLeftValue().update(models, cache))//
+				.onCommonX(element -> element.getLeftValue().update(models, cache))//
+				.adjust();
 				return this;
 			}
 		}

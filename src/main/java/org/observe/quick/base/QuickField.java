@@ -12,12 +12,17 @@ import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.quick.QuickAddOn;
 import org.observe.quick.QuickElement;
 import org.observe.quick.QuickWidget;
+import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
 public class QuickField extends QuickAddOn.Abstract<QuickWidget> {
 	public class Def extends QuickAddOn.Def.Abstract<QuickWidget, QuickField> {
 		private CompiledExpression theName;
 		private boolean isFill;
+
+		public Def(QonfigAddOn type, QuickElement.Def<? extends QuickWidget> element) {
+			super(type, element);
+		}
 
 		public CompiledExpression getName() {
 			return theName;
@@ -35,7 +40,7 @@ public class QuickField extends QuickAddOn.Abstract<QuickWidget> {
 		}
 
 		@Override
-		public Interpreted interpret(QuickElement.Interpreted<?> element) {
+		public Interpreted interpret(QuickElement.Interpreted<? extends QuickWidget> element) {
 			return new Interpreted(this, (QuickWidget.Interpreted<?>) element);
 		}
 	}

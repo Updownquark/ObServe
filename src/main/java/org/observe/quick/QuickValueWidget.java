@@ -11,6 +11,7 @@ import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueSynth;
 import org.observe.util.TypeTokens;
 import org.qommons.config.AbstractQIS;
+import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigInterpretationException;
 
 import com.google.common.reflect.TypeToken;
@@ -28,8 +29,8 @@ public interface QuickValueWidget<T> extends QuickWidget {
 			private CompiledExpression theValue;
 			private CompiledExpression theDisabled;
 
-			public Abstract(AbstractQIS<?> session) throws QonfigInterpretationException {
-				super(session);
+			public Abstract(QuickElement.Def<?> parent, QonfigElement element) {
+				super(parent, element);
 			}
 
 			@Override

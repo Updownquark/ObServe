@@ -12,17 +12,21 @@ public interface QuickAddOn<E extends QuickElement> {
 	public interface Def<E extends QuickElement, AO extends QuickAddOn<E>> {
 		QonfigAddOn getType();
 
-		QuickElement.Def<?> getElement();
-
-		void init(QonfigAddOn addOn, QuickElement.Def<?> element);
+		QuickElement.Def<? extends E> getElement();
 
 		Def<E, AO> update(ExpressoQIS session) throws QonfigInterpretationException;
 
-		Interpreted<? extends E, ? extends AO> interpret(QuickElement.Interpreted<?> element);
+		Interpreted<? extends E, ? extends AO> interpret(QuickElement.Interpreted<? extends E> element);
 
 		public abstract class Abstract<E extends QuickElement, AO extends QuickAddOn<E>> implements Def<E, AO> {
-			private QonfigAddOn theType;
-			private QuickElement.Def<?> theElement;
+			private final QonfigAddOn theType;
+			private final QuickElement.Def<? extends E> theElement;
+			private ExpressoQIS theExpressoSession;
+
+			public Abstract(QonfigAddOn type, QuickElement.Def<? extends E> element) {
+				theType = type;
+				theElement = element;
+			}
 
 			@Override
 			public QonfigAddOn getType() {
@@ -30,14 +34,18 @@ public interface QuickAddOn<E extends QuickElement> {
 			}
 
 			@Override
-			public QuickElement.Def<?> getElement() {
+			public QuickElement.Def<? extends E> getElement() {
 				return theElement;
 			}
 
+			public ExpressoQIS getExpressoSession() {
+				return theExpressoSession;
+			}
+
 			@Override
-			public void init(QonfigAddOn addOn, QuickElement.Def<?> element) {
-				theType = addOn;
-				theElement = element;
+			public Def<E, AO> update(ExpressoQIS session) throws QonfigInterpretationException {
+				theExpressoSession = session;
+				return this;
 			}
 		}
 	}

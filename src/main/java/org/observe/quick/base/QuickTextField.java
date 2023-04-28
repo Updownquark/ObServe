@@ -1,8 +1,10 @@
 package org.observe.quick.base;
 
 import org.observe.quick.QuickContainer2;
+import org.observe.quick.QuickElement;
 import org.observe.util.TypeTokens;
 import org.qommons.config.AbstractQIS;
+import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigInterpretationException;
 
 import com.google.common.reflect.TypeToken;
@@ -11,8 +13,8 @@ public class QuickTextField<T> extends EditableTextWidget.Abstract<T> {
 	public static class Def<T> extends EditableTextWidget.Def.Abstract<T, QuickTextField<T>> {
 		private Integer theColumns;
 
-		public Def(AbstractQIS<?> session) throws QonfigInterpretationException {
-			super(session);
+		public Def(QuickElement.Def<?> parent, QonfigElement element) {
+			super(parent, element);
 		}
 
 		@Override

@@ -11,11 +11,14 @@ import javax.swing.JOptionPane;
 
 import org.observe.Observable;
 import org.observe.expresso.ExpressoInterpretationException;
+import org.observe.expresso.ExpressoQIS;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.qommons.ArgumentParsing2;
 import org.qommons.Transformer;
+import org.qommons.ValueHolder;
+import org.qommons.config.AbstractQIS;
 import org.qommons.config.QonfigApp;
 import org.qommons.config.QonfigDocument;
 import org.qommons.config.QonfigInterpretationException;
@@ -101,8 +104,9 @@ public interface QuickApplication {
 		if (quickAppTk == null)
 			throw new IllegalStateException("Quick application file '" + quickAppFile + "' does not use the Quick-App toolkit");
 
-		QuickDocument2.Def quickDocDef = QonfigApp.interpretApp(quickApp, QuickDocument2.Def.class);
-		quickDocDef.update(quickDocDef.getExpressoSession());
+		ValueHolder<AbstractQIS<?>> docSession = new ValueHolder<>();
+		QuickDocument2.Def quickDocDef = QonfigApp.interpretApp(quickApp, QuickDocument2.Def.class, docSession);
+		quickDocDef.update(docSession.get().as(ExpressoQIS.class));
 
 		ObservableModelSet.ExternalModelSet extModels = ObservableModelSet.buildExternal(ObservableModelSet.JAVA_NAME_CHECKER).build();
 		/* TODO
@@ -118,14 +122,14 @@ public interface QuickApplication {
 			interp.configure(transformBuilder);
 		Transformer<ExpressoInterpretationException> transformer = transformBuilder.build();
 
-		QuickDocument2.Interpreted interpretedDoc = quickDocDef.interpret();
-		interpretedDoc.getBody().update(interpretedDoc.getHead().getModels(), new QuickWidget.QuickInterpretationCache());
+		QuickDocument2.Interpreted interpretedDoc = quickDocDef.interpret(null);
+		interpretedDoc.update(null);
 
 		QuickApplication app = transformer.transform(interpretedDoc, QuickApplication.class);
 
 		ModelSetInstance msi = interpretedDoc.getHead().getModels().createInstance(extModels, Observable.empty()).build();
-		QuickDocument2 doc = interpretedDoc.create(msi);
-		doc.getBody().update(doc.getModels(), new QuickWidget.QuickInstantiationCache());
+		QuickDocument2 doc = interpretedDoc.create();
+		doc.update(msi);
 
 		app.runApplication(doc);
 	}

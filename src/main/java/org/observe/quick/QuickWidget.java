@@ -17,15 +17,15 @@ import org.observe.quick.style.CompiledStyleApplication;
 import org.observe.quick.style.InterpretedStyleApplication;
 import org.observe.quick.style.QuickCompiledStyle;
 import org.observe.quick.style.QuickInterpretedStyle;
+import org.observe.quick.style.StyleQIS;
 import org.observe.util.TypeTokens;
 import org.qommons.config.AbstractQIS;
+import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigInterpretationException;
 
 import com.google.common.reflect.TypeToken;
 
 public interface QuickWidget extends QuickElement {
-	public static final String QUICK_DEF = "QuickWidgetDef";
-
 	public interface Def<W extends QuickWidget> extends QuickElement.Def<W> {
 		QuickContainer2.Def<?, ?> getParent();
 
@@ -43,22 +43,19 @@ public interface QuickWidget extends QuickElement {
 		Interpreted<? extends W> interpret(QuickContainer2.Interpreted<?, ?> parent);
 
 		public abstract class Abstract<W extends QuickWidget> extends QuickElement.Def.Abstract<W> implements Def<W> {
-			private final QuickContainer2.Def<?, ?> theParent;
 			private QuickCompiledStyle theStyle;
 			private String theName;
 			private CompiledExpression theTooltip;
 			private CompiledExpression isVisible;
 
-			public Abstract(AbstractQIS<?> session) throws QonfigInterpretationException {
-				super(session);
-				QuickContainer2.Def<?, ?> parent = (QuickContainer2.Def<?, ?>) session.get(QUICK_DEF);
-				session.put(QUICK_DEF, this);
-				theParent = parent;
+			public Abstract(QuickElement.Def<?> parent, QonfigElement element) {
+				super(parent, element);
 			}
 
 			@Override
 			public QuickContainer2.Def<?, ?> getParent() {
-				return theParent;
+				QuickElement.Def<?> parent = getParentElement();
+				return parent instanceof QuickContainer2.Def ? (QuickContainer2.Def<?, ?>) parent : null;
 			}
 
 			@Override
@@ -101,6 +98,8 @@ public interface QuickWidget extends QuickElement {
 		@Override
 		Def<? super W> getDefinition();
 
+		QuickContainer2.Interpreted<?, ?> getParent();
+
 		TypeToken<W> getWidgetType();
 
 		QuickInterpretedStyle getStyle();
@@ -127,19 +126,23 @@ public interface QuickWidget extends QuickElement {
 		W create(QuickContainer2<?> parent);
 
 		public abstract class Abstract<W extends QuickWidget> extends QuickElement.Interpreted.Abstract<W> implements Interpreted<W> {
-			private final QuickContainer2.Interpreted<?, ?> theParent;
 			private QuickInterpretedStyle theStyle;
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<String>> theTooltip;
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> isVisible;
 
-			public Abstract(Def<? super W> definition, QuickContainer2.Interpreted<?, ?> parent) {
-				super(definition);
-				theParent = parent;
+			public Abstract(Def<? super W> definition, QuickElement.Interpreted<?> parent) {
+				super(definition, parent);
 			}
 
 			@Override
 			public Def<? super W> getDefinition() {
 				return (Def<? super W>) super.getDefinition();
+			}
+
+			@Override
+			public QuickContainer2.Interpreted<?, ?> getParent() {
+				QuickElement.Interpreted<?> parent = getParentElement();
+				return parent instanceof QuickContainer2.Interpreted ? (QuickContainer2.Interpreted<?, ?>) parent : null;
 			}
 
 			@Override
@@ -161,7 +164,8 @@ public interface QuickWidget extends QuickElement {
 			public Interpreted.Abstract<W> update(InterpretedModelSet models, QuickInterpretationCache cache)
 				throws ExpressoInterpretationException {
 				super.update(models);
-				theStyle = getDefinition().getStyle().interpret(theParent == null ? null : theParent.getStyle(), cache.applications);
+				QuickContainer2.Interpreted<?, ?> parent = getParent();
+				theStyle = getDefinition().getStyle().interpret(parent == null ? null : parent.getStyle(), cache.applications);
 				theTooltip = getDefinition().getTooltip() == null ? null
 					: getDefinition().getTooltip().evaluate(ModelTypes.Value.STRING).interpret();
 				isVisible = getDefinition().isVisible() == null ? null
@@ -178,7 +182,6 @@ public interface QuickWidget extends QuickElement {
 	@Override
 	Interpreted<?> getInterpreted();
 
-	@Override
 	QuickContainer2<?> getParent();
 
 	@Override
@@ -225,7 +228,8 @@ public interface QuickWidget extends QuickElement {
 
 		@Override
 		public QuickContainer2<?> getParent() {
-			return (QuickContainer2<?>) super.getParent();
+			QuickElement parent = getParentElement();
+			return parent instanceof QuickContainer2 ? (QuickContainer2<?>) parent : null;
 		}
 
 		@Override
@@ -241,6 +245,8 @@ public interface QuickWidget extends QuickElement {
 		@Override
 		public QuickWidget update(ModelSetInstance models, QuickInstantiationCache cache) throws ModelInstantiationException {
 			super.update(models);
+			QuickWidget parent = getParent();
+			StyleQIS.installParentModels(getModels(), parent == null ? null : parent.getModels());
 			if (getInterpreted().getTooltip() != null)
 				theTooltip.set(getInterpreted().getTooltip().get(models), null);
 			if (getInterpreted().isVisible() != null)
