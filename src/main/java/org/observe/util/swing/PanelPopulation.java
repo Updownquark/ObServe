@@ -171,7 +171,54 @@ public class PanelPopulation {
 		end.onNext(null);
 	}
 
-	public interface PanelPopulator<C extends Container, P extends PanelPopulator<C, P>> extends ComponentEditor<C, P> {
+	public interface ContainerPopulator<C extends Container, P extends ContainerPopulator<C, P>> extends ComponentEditor<C, P> {
+		<R> P addTable(ObservableCollection<R> rows, Consumer<TableBuilder<R, ?>> table);
+
+		<F> P addTree(ObservableValue<? extends F> root, Function<? super F, ? extends ObservableCollection<? extends F>> children,
+			Consumer<TreeEditor<F, ?>> modify);
+
+		<F> P addTree2(ObservableValue<? extends F> root,
+			Function<? super BetterList<F>, ? extends ObservableCollection<? extends F>> children, Consumer<TreeEditor<F, ?>> modify);
+
+		<F> P addTreeTable(ObservableValue<F> root, Function<? super F, ? extends ObservableCollection<? extends F>> children,
+			Consumer<TreeTableEditor<F, ?>> modify);
+
+		<F> P addTreeTable2(ObservableValue<F> root, Function<? super BetterList<F>, ? extends ObservableCollection<? extends F>> children,
+			Consumer<TreeTableEditor<F, ?>> modify);
+
+		P addTabs(Consumer<TabPaneEditor<JTabbedPane, ?>> tabs);
+
+		P addSplit(boolean vertical, Consumer<SplitPane<?>> split);
+
+		P addScroll(String fieldName, Consumer<ScrollPane<?>> scroll);
+
+		<S> P addComponent(String fieldName, S component, Consumer<FieldEditor<S, ?>> modify);
+
+		P addVPanel(Consumer<PanelPopulator<JPanel, ?>> panel);
+
+		default P addHPanel(String fieldName, String layoutType, Consumer<PanelPopulator<JPanel, ?>> panel) {
+			return addHPanel(fieldName, makeLayout(layoutType), panel);
+		}
+
+		P addHPanel(String fieldName, LayoutManager layout, Consumer<PanelPopulator<JPanel, ?>> panel);
+
+		default P addCollapsePanel(boolean vertical, String layoutType, Consumer<CollapsePanel<JXCollapsiblePane, JXPanel, ?>> panel) {
+			return addCollapsePanel(vertical, makeLayout(layoutType), panel);
+		}
+
+		P addCollapsePanel(boolean vertical, LayoutManager layout, Consumer<CollapsePanel<JXCollapsiblePane, JXPanel, ?>> panel);
+
+		P withGlassPane(LayoutManager layout, Consumer<PanelPopulator<?, ?>> panel);
+
+		@Override
+		default Alert alert(String title, String message) {
+			return new SimpleAlert(getContainer(), title, message);
+		}
+
+		C getContainer();
+	}
+
+	public interface PanelPopulator<C extends Container, P extends PanelPopulator<C, P>> extends ContainerPopulator<C, P> {
 		<F> P addTextField(String fieldName, SettableValue<F> field, Format<F> format,
 			Consumer<FieldEditor<ObservableTextField<F>, ?>> modify);
 
@@ -309,26 +356,6 @@ public class PanelPopulation {
 
 		<R> P addList(ObservableCollection<R> rows, Consumer<ListBuilder<R, ?>> list);
 
-		<R> P addTable(ObservableCollection<R> rows, Consumer<TableBuilder<R, ?>> table);
-
-		<F> P addTree(ObservableValue<? extends F> root, Function<? super F, ? extends ObservableCollection<? extends F>> children,
-			Consumer<TreeEditor<F, ?>> modify);
-
-		<F> P addTree2(ObservableValue<? extends F> root,
-			Function<? super BetterList<F>, ? extends ObservableCollection<? extends F>> children, Consumer<TreeEditor<F, ?>> modify);
-
-		<F> P addTreeTable(ObservableValue<F> root, Function<? super F, ? extends ObservableCollection<? extends F>> children,
-			Consumer<TreeTableEditor<F, ?>> modify);
-
-		<F> P addTreeTable2(ObservableValue<F> root, Function<? super BetterList<F>, ? extends ObservableCollection<? extends F>> children,
-			Consumer<TreeTableEditor<F, ?>> modify);
-
-		P addTabs(Consumer<TabPaneEditor<JTabbedPane, ?>> tabs);
-
-		P addSplit(boolean vertical, Consumer<SplitPane<?>> split);
-
-		P addScroll(String fieldName, Consumer<ScrollPane<?>> scroll);
-
 		default P spacer(int size) {
 			return spacer(size, null);
 		}
@@ -340,32 +367,7 @@ public class PanelPopulation {
 			return addComponent(null, box, null);
 		}
 
-		<S> P addComponent(String fieldName, S component, Consumer<FieldEditor<S, ?>> modify);
-
-		P addVPanel(Consumer<PanelPopulator<JPanel, ?>> panel);
-
-		default P addHPanel(String fieldName, String layoutType, Consumer<PanelPopulator<JPanel, ?>> panel) {
-			return addHPanel(fieldName, makeLayout(layoutType), panel);
-		}
-
-		P addHPanel(String fieldName, LayoutManager layout, Consumer<PanelPopulator<JPanel, ?>> panel);
-
 		P addSettingsMenu(Consumer<SettingsMenu<JPanel, ?>> menu);
-
-		default P addCollapsePanel(boolean vertical, String layoutType, Consumer<CollapsePanel<JXCollapsiblePane, JXPanel, ?>> panel) {
-			return addCollapsePanel(vertical, makeLayout(layoutType), panel);
-		}
-
-		P addCollapsePanel(boolean vertical, LayoutManager layout, Consumer<CollapsePanel<JXCollapsiblePane, JXPanel, ?>> panel);
-
-		P withGlassPane(LayoutManager layout, Consumer<PanelPopulator<?, ?>> panel);
-
-		@Override
-		default Alert alert(String title, String message) {
-			return new SimpleAlert(getContainer(), title, message);
-		}
-
-		C getContainer();
 	}
 
 	public interface ComponentEditor<E, P extends ComponentEditor<E, P>> extends Tooltipped<P> {

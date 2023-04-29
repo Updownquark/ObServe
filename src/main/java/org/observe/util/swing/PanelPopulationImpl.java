@@ -684,6 +684,8 @@ class PanelPopulationImpl {
 			}
 			decoration.accept(theDecorator);
 			theDecorators.add(decoration);
+			if (theBuiltComponent != null)
+				theDecorator.adjust(theBuiltComponent);
 			return (P) this;
 		}
 
@@ -715,7 +717,9 @@ class PanelPopulationImpl {
 
 		@Override
 		public P modifyComponent(Consumer<Component> component) {
-			if (theComponentModifier == null)
+			if (theBuiltComponent != null)
+				component.accept(theBuiltComponent);
+			else if (theComponentModifier == null)
 				theComponentModifier = component;
 			else {
 				Consumer<Component> old = theComponentModifier;

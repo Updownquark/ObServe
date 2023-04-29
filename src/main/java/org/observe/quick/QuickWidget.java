@@ -132,7 +132,7 @@ public interface QuickWidget extends QuickElement {
 		/** @return The parent container of this widget interpretation, if any */
 		QuickContainer2.Interpreted<?, ?> getParent();
 
-		/** @return The type of the wigdet produced by this interpretation */
+		/** @return The type of the widget produced by this interpretation */
 		TypeToken<W> getWidgetType();
 
 		/** @return This widget's interpreted style */
@@ -319,9 +319,9 @@ public interface QuickWidget extends QuickElement {
 			QuickWidget parent = getParent();
 			StyleQIS.installParentModels(getModels(), parent == null ? null : parent.getModels());
 			if (getInterpreted().getTooltip() != null)
-				theTooltip.set(getInterpreted().getTooltip().get(models), null);
+				theTooltip.set(getInterpreted().getTooltip().get(getModels()), null);
 			if (getInterpreted().isVisible() != null)
-				isVisible.set(getInterpreted().isVisible().get(models), null);
+				isVisible.set(getInterpreted().isVisible().get(getModels()), null);
 			return this;
 		}
 	}

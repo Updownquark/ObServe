@@ -136,7 +136,7 @@ public interface QuickContainer2<C extends QuickWidget> extends QuickWidget {
 
 	/**
 	 * An abstract {@link QuickContainer2} implementation
-	 * 
+	 *
 	 * @param <C> The type of the contained widgets
 	 */
 	public abstract class Abstract<C extends QuickWidget> extends QuickWidget.Abstract implements QuickContainer2<C> {
@@ -169,8 +169,8 @@ public interface QuickContainer2<C extends QuickWidget> extends QuickWidget {
 				(widget, child) -> widget.getInterpreted() == child)//
 			.<ModelInstantiationException> simpleE(child -> (C) child.create(QuickContainer2.Abstract.this))//
 			.rightOrder()//
-			.onRightX(element -> element.getLeftValue().update(models))//
-			.onCommonX(element -> element.getLeftValue().update(models))//
+			.onRightX(element -> element.getLeftValue().update(getModels()))//
+			.onCommonX(element -> element.getLeftValue().update(getModels()))//
 			.adjust();
 			return this;
 		}

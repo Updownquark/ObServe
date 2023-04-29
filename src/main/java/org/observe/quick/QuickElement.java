@@ -255,6 +255,11 @@ public interface QuickElement {
 					addOn.update(models);
 				return this;
 			}
+
+			@Override
+			public String toString() {
+				return getDefinition().toString();
+			}
 		}
 	}
 
@@ -347,6 +352,11 @@ public interface QuickElement {
 			for (QuickAddOn<?> addOn : theAddOns.getAllValues())
 				addOn.update(getModels());
 			return this;
+		}
+
+		@Override
+		public String toString() {
+			return getInterpreted().toString();
 		}
 	}
 
