@@ -15,6 +15,7 @@ blah -->
 				<value name="text" type="String" init="`This is some text`" />
 				<value name="i1" type="int" />
 				<value name="i2" type="int" />
+				<value name="b" type="boolean" init="true" />
 				<value name="x" type="int" />
 				<value name="y" type="int" />
 				<value name="w" type="int" />
@@ -25,7 +26,7 @@ blah -->
 			<!--<import-style-sheet name="searcher" ref="quick-testing.qss" />-->
 		</style-sheet>
 	</head>
-	<box layout="inline" orientation="vertical" main-align="justify" cross-align="justify" name="root">
+	<box layout="inline" orientation="vertical" cross-align="justify" name="root">
 		<box layout="inline" orientation="horizontal" main-align="center" name="box1">
 			<label name="label1">The value from the text field should be reflected in the label to the right</label>
 		</box>
@@ -46,18 +47,22 @@ blah -->
 			<label>=</label>
 			<text-field value="app.i1+app.i2" tooltip="app.i1+&quot;-&quot;+app.i2+&quot;=&quot;+(app.i1+app.i2)" />
 		</box>
-		<box layout="inline" orientation="horizontal" main-align="center">
-			<label>x=</label>
-			<label value="app.x" />
-			<label>y=</label>
-			<label value="app.y" />
+		<box layout="inline" orientation="horizontal">
+			<label>Window: </label>
+			<check-box value="app.b" />
 		</box>
-		<box layout="inline" orientation="horizontal" main-align="center">
-			<label>Size=</label>
-			<label value="app.w" />
-			<label>x</label>
-			<label value="app.h" />
-		</box>
+		<field-panel>
+			<box field-name="`Position: `" layout="inline" orientation="horizontal" visible="app.b">
+				<label value="app.x" />
+				<label>, </label>
+				<label value="app.y" />
+			</box>
+			<box field-name="`Size: `" layout="inline" orientation="horizontal" visible="app.b">
+				<label value="app.w" />
+				<label>x</label>
+				<label value="app.h" />
+			</box>
+		</field-panel>
 	</box>
 </quick>
 

@@ -1,6 +1,5 @@
 package org.observe.quick.base;
 
-import org.observe.quick.QuickContainer2;
 import org.observe.quick.QuickElement;
 import org.observe.util.TypeTokens;
 import org.qommons.config.AbstractQIS;
@@ -9,8 +8,8 @@ import org.qommons.config.QonfigInterpretationException;
 
 import com.google.common.reflect.TypeToken;
 
-public class QuickTextField<T> extends EditableTextWidget.Abstract<T> {
-	public static class Def<T> extends EditableTextWidget.Def.Abstract<T, QuickTextField<T>> {
+public class QuickTextField<T> extends QuickEditableTextWidget.Abstract<T> {
+	public static class Def<T> extends QuickEditableTextWidget.Def.Abstract<T, QuickTextField<T>> {
 		private Integer theColumns;
 
 		public Def(QuickElement.Def<?> parent, QonfigElement element) {
@@ -34,13 +33,13 @@ public class QuickTextField<T> extends EditableTextWidget.Abstract<T> {
 		}
 
 		@Override
-		public Interpreted<T> interpret(org.observe.quick.QuickContainer2.Interpreted<?, ?> parent) {
+		public Interpreted<T> interpret(QuickElement.Interpreted<?> parent) {
 			return new Interpreted<>(this, parent);
 		}
 	}
 
-	public static class Interpreted<T> extends EditableTextWidget.Interpreted.Abstract<T, QuickTextField<T>> {
-		public Interpreted(Def<T> definition, QuickContainer2.Interpreted<?, ?> parent) {
+	public static class Interpreted<T> extends QuickEditableTextWidget.Interpreted.Abstract<T, QuickTextField<T>> {
+		public Interpreted(Def<T> definition, QuickElement.Interpreted<?> parent) {
 			super(definition, parent);
 		}
 
@@ -55,7 +54,7 @@ public class QuickTextField<T> extends EditableTextWidget.Abstract<T> {
 		}
 
 		@Override
-		public QuickTextField<T> create(QuickContainer2<?> parent) {
+		public QuickTextField<T> create(QuickElement parent) {
 			return new QuickTextField<>(this, parent);
 		}
 	}

@@ -23,7 +23,7 @@ public interface QuickValueWidget<T> extends QuickWidget {
 		CompiledExpression getDisabled();
 
 		@Override
-		Interpreted<?, ? extends W> interpret(QuickContainer2.Interpreted<?, ?> parent);
+		Interpreted<?, ? extends W> interpret(QuickElement.Interpreted<?> parent);
 
 		public abstract class Abstract<T, W extends QuickValueWidget<T>> extends QuickWidget.Def.Abstract<W> implements Def<W> {
 			private CompiledExpression theValue;
@@ -67,7 +67,7 @@ public interface QuickValueWidget<T> extends QuickWidget {
 		implements Interpreted<T, W> {
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<T>> theValue;
 
-			public Abstract(QuickValueWidget.Def<? super W> definition, QuickContainer2.Interpreted<?, ?> parent) {
+			public Abstract(QuickValueWidget.Def<? super W> definition, QuickElement.Interpreted<?> parent) {
 				super(definition, parent);
 			}
 

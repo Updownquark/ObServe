@@ -2,7 +2,6 @@ package org.observe.quick.base;
 
 import org.observe.expresso.CompiledExpression;
 import org.observe.expresso.ObservableExpression;
-import org.observe.quick.QuickContainer2;
 import org.observe.quick.QuickElement;
 import org.observe.quick.QuickTextWidget;
 import org.observe.util.TypeTokens;
@@ -56,13 +55,13 @@ public class QuickLabel<T> extends QuickTextWidget.Abstract<T> {
 		}
 
 		@Override
-		public Interpreted<T, ? extends W> interpret(QuickContainer2.Interpreted<?, ?> parent) {
+		public Interpreted<T, ? extends W> interpret(QuickElement.Interpreted<?> parent) {
 			return new Interpreted<>(this, parent);
 		}
 	}
 
 	public static class Interpreted<T, W extends QuickLabel<T>> extends QuickTextWidget.Interpreted.Abstract<T, W> {
-		public Interpreted(QuickLabel.Def<T, ? super W> definition, QuickContainer2.Interpreted<?, ?> parent) {
+		public Interpreted(QuickLabel.Def<T, ? super W> definition, QuickElement.Interpreted<?> parent) {
 			super(definition, parent);
 		}
 
@@ -72,7 +71,7 @@ public class QuickLabel<T> extends QuickTextWidget.Abstract<T> {
 		}
 
 		@Override
-		public W create(QuickContainer2<?> parent) {
+		public W create(QuickElement parent) {
 			return (W) new QuickLabel<>(this, parent);
 		}
 	}

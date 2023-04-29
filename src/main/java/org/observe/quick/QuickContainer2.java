@@ -28,7 +28,7 @@ public interface QuickContainer2<C extends QuickWidget> extends QuickWidget {
 		BetterList<? extends QuickWidget.Def<? extends C>> getContents();
 
 		@Override
-		Interpreted<? extends W, ? extends C> interpret(Interpreted<?, ?> parent);
+		Interpreted<? extends W, ? extends C> interpret(QuickElement.Interpreted<?> parent);
 
 		/**
 		 * An abstract {@link Def} implementation
@@ -96,7 +96,7 @@ public interface QuickContainer2<C extends QuickWidget> extends QuickWidget {
 			 * @param definition The definition producing this interpretation
 			 * @param parent The parent interpretation
 			 */
-			public Abstract(Def<? super W, ? super C> definition, Interpreted<?, ?> parent) {
+			public Abstract(Def<? super W, ? super C> definition, QuickElement.Interpreted<?> parent) {
 				super(definition, parent);
 				theContents = BetterTreeList.<QuickWidget.Interpreted<? extends C>> build().build();
 			}

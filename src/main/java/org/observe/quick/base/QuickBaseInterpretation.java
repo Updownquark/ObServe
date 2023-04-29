@@ -46,12 +46,16 @@ public class QuickBaseInterpretation implements QonfigInterpretation {
 		interpreter.createWith("box", QuickBox.Def.class, session -> QuickCoreInterpretation.interpretQuick(session, QuickBox.Def::new));
 		interpreter.createWith("label", QuickLabel.Def.class,
 			session -> QuickCoreInterpretation.interpretQuick(session, QuickLabel.Def::new));
-		interpreter.createWith("inline", InlineLayout.Def.class, session -> QuickCoreInterpretation.interpretAddOn(session,
-			(p, ao) -> new InlineLayout.Def(ao, (QuickBox.Def<?>) p)));
+		interpreter.createWith("inline", QuickInlineLayout.Def.class,
+			session -> QuickCoreInterpretation.interpretAddOn(session, (p, ao) -> new QuickInlineLayout.Def(ao, (QuickBox.Def<?>) p)));
 		interpreter.createWith("text-field", QuickTextField.Def.class,
 			session -> QuickCoreInterpretation.interpretQuick(session, QuickTextField.Def::new));
 		interpreter.createWith("field", QuickField.Def.class,
 			session -> QuickCoreInterpretation.interpretAddOn(session, (p, ao) -> new QuickField.Def(ao, (QuickWidget.Def<?>) p)));
+		interpreter.createWith("check-box", QuickCheckBox.Def.class,
+			session -> QuickCoreInterpretation.interpretQuick(session, QuickCheckBox.Def::new));
+		interpreter.createWith("field-panel", QuickFieldPanel.Def.class,
+			session -> QuickCoreInterpretation.interpretQuick(session, QuickFieldPanel.Def::new));
 		return interpreter;
 	}
 }

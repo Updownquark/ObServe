@@ -216,6 +216,10 @@ public class PanelPopulation {
 		}
 
 		C getContainer();
+
+		void addModifier(Consumer<ComponentEditor<?, ?>> modifier);
+
+		void removeModifier(Consumer<ComponentEditor<?, ?>> modifier);
 	}
 
 	public interface PanelPopulator<C extends Container, P extends PanelPopulator<C, P>> extends ContainerPopulator<C, P> {

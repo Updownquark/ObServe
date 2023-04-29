@@ -10,8 +10,8 @@ import org.observe.util.swing.JustifiedBoxLayout;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
-public class InlineLayout extends QuickLayout.Abstract {
-	public static class Def extends QuickLayout.Def<InlineLayout> {
+public class QuickInlineLayout extends QuickLayout.Abstract {
+	public static class Def extends QuickLayout.Def<QuickInlineLayout> {
 		private boolean isVertical;
 		private JustifiedBoxLayout.Alignment theMainAlign;
 		private JustifiedBoxLayout.Alignment theCrossAlign;
@@ -63,7 +63,7 @@ public class InlineLayout extends QuickLayout.Abstract {
 		}
 	}
 
-	public static class Interpreted extends QuickLayout.Interpreted<InlineLayout> {
+	public static class Interpreted extends QuickLayout.Interpreted<QuickInlineLayout> {
 		public Interpreted(Def definition, QuickElement.Interpreted<? extends QuickBox> element) {
 			super(definition, element);
 		}
@@ -79,8 +79,8 @@ public class InlineLayout extends QuickLayout.Abstract {
 		}
 
 		@Override
-		public InlineLayout create(QuickBox element) {
-			return new InlineLayout(this, element);
+		public QuickInlineLayout create(QuickBox element) {
+			return new QuickInlineLayout(this, element);
 		}
 	}
 
@@ -88,7 +88,7 @@ public class InlineLayout extends QuickLayout.Abstract {
 	private JustifiedBoxLayout.Alignment theMainAlign;
 	private JustifiedBoxLayout.Alignment theCrossAlign;
 
-	public InlineLayout(Interpreted interpreted, QuickBox element) {
+	public QuickInlineLayout(Interpreted interpreted, QuickBox element) {
 		super(interpreted, element);
 	}
 
@@ -110,7 +110,7 @@ public class InlineLayout extends QuickLayout.Abstract {
 	}
 
 	@Override
-	public InlineLayout update(ModelSetInstance models) throws ModelInstantiationException {
+	public QuickInlineLayout update(ModelSetInstance models) throws ModelInstantiationException {
 		isVertical = getInterpreted().getDefinition().isVertical();
 		theMainAlign = getInterpreted().getDefinition().getMainAlign();
 		theCrossAlign = getInterpreted().getDefinition().getCrossAlign();

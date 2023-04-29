@@ -34,8 +34,8 @@ public class QuickField extends QuickAddOn.Abstract<QuickWidget> {
 
 		@Override
 		public Def update(ExpressoQIS session) throws QonfigInterpretationException {
-			theName = session.getAttributeExpression("name");
-			isFill = session.getAttribute("fill", boolean.class);
+			theName = session.getAttributeExpression("field-name");
+			isFill = Boolean.TRUE.equals(session.getAttribute("fill", Boolean.class));
 			return this;
 		}
 

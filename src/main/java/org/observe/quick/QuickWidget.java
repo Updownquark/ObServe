@@ -55,7 +55,7 @@ public interface QuickWidget extends QuickElement {
 		 * @param parent The parent container interpretation
 		 * @return The new widget interpretation
 		 */
-		Interpreted<? extends W> interpret(QuickContainer2.Interpreted<?, ?> parent);
+		Interpreted<? extends W> interpret(QuickElement.Interpreted<?> parent);
 
 		/**
 		 * An abstract {@link Def} implementation
@@ -174,7 +174,7 @@ public interface QuickWidget extends QuickElement {
 		 * @param parent The parent container, if any
 		 * @return The new widget
 		 */
-		W create(QuickContainer2<?> parent);
+		W create(QuickElement parent);
 
 		/**
 		 * An abstract {@link Interpreted} implementation
@@ -310,7 +310,7 @@ public interface QuickWidget extends QuickElement {
 
 		@Override
 		public SettableValue<Boolean> isVisible() {
-			return SettableValue.flatten(isVisible);
+			return SettableValue.flatten(isVisible, () -> true);
 		}
 
 		@Override

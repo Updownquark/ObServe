@@ -42,7 +42,7 @@ public class QuickBox extends QuickContainer2.Abstract<QuickWidget> {
 		}
 
 		@Override
-		public Interpreted<W> interpret(QuickContainer2.Interpreted<?, ?> parent) {
+		public Interpreted<W> interpret(QuickElement.Interpreted<?> parent) {
 			return new Interpreted<>(this, parent);
 		}
 	}
@@ -50,7 +50,7 @@ public class QuickBox extends QuickContainer2.Abstract<QuickWidget> {
 	public static class Interpreted<W extends QuickBox> extends QuickContainer2.Interpreted.Abstract<W, QuickWidget> {
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<Double>> theOpacity;
 
-		public Interpreted(Def<? super W> definition, QuickContainer2.Interpreted<?, ?> parent) {
+		public Interpreted(Def<? super W> definition, QuickElement.Interpreted<?> parent) {
 			super(definition, parent);
 		}
 
@@ -81,7 +81,7 @@ public class QuickBox extends QuickContainer2.Abstract<QuickWidget> {
 		}
 
 		@Override
-		public W create(QuickContainer2<?> parent) {
+		public W create(QuickElement parent) {
 			return (W) new QuickBox(this, parent);
 		}
 	}

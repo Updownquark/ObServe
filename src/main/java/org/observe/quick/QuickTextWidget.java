@@ -54,7 +54,7 @@ public interface QuickTextWidget<T> extends QuickValueWidget<T> {
 		boolean isEditable();
 
 		@Override
-		Interpreted<?, ? extends W> interpret(QuickContainer2.Interpreted<?, ?> parent);
+		Interpreted<?, ? extends W> interpret(QuickElement.Interpreted<?> parent);
 
 		public abstract class Abstract<T, W extends QuickTextWidget<T>> extends QuickValueWidget.Def.Abstract<T, W> implements Def<W> {
 			private CompiledExpression theFormat;
@@ -87,7 +87,7 @@ public interface QuickTextWidget<T> extends QuickValueWidget<T> {
 		implements Interpreted<T, W> {
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<Format<T>>> theFormat;
 
-			public Abstract(Def<? super W> definition, QuickContainer2.Interpreted<?, ?> parent) {
+			public Abstract(Def<? super W> definition, QuickElement.Interpreted<?> parent) {
 				super(definition, parent);
 			}
 

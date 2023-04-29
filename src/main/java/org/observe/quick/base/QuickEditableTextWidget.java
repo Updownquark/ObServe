@@ -7,21 +7,20 @@ import org.observe.expresso.ModelException;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.TypeConversionException;
-import org.observe.quick.QuickContainer2;
 import org.observe.quick.QuickElement;
 import org.observe.quick.QuickTextWidget;
 import org.qommons.config.AbstractQIS;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigInterpretationException;
 
-public interface EditableTextWidget<T> extends QuickTextWidget<T> {
-	public interface Def<W extends EditableTextWidget<?>> extends QuickTextWidget.Def<W> {
+public interface QuickEditableTextWidget<T> extends QuickTextWidget<T> {
+	public interface Def<W extends QuickEditableTextWidget<?>> extends QuickTextWidget.Def<W> {
 		boolean isCommitOnType();
 
 		@Override
-		Interpreted<?, ? extends W> interpret(QuickContainer2.Interpreted<?, ?> parent);
+		Interpreted<?, ? extends W> interpret(QuickElement.Interpreted<?> parent);
 
-		public abstract class Abstract<T, W extends EditableTextWidget<T>> extends QuickTextWidget.Def.Abstract<T, W> implements Def<W> {
+		public abstract class Abstract<T, W extends QuickEditableTextWidget<T>> extends QuickTextWidget.Def.Abstract<T, W> implements Def<W> {
 			private boolean isCommitOnType;
 
 			public Abstract(QuickElement.Def<?> parent, QonfigElement element) {
@@ -42,13 +41,13 @@ public interface EditableTextWidget<T> extends QuickTextWidget<T> {
 		}
 	}
 
-	public interface Interpreted<T, W extends EditableTextWidget<T>> extends QuickTextWidget.Interpreted<T, W> {
+	public interface Interpreted<T, W extends QuickEditableTextWidget<T>> extends QuickTextWidget.Interpreted<T, W> {
 		@Override
 		Def<? super W> getDefinition();
 
-		public abstract class Abstract<T, W extends EditableTextWidget<T>> extends QuickTextWidget.Interpreted.Abstract<T, W>
+		public abstract class Abstract<T, W extends QuickEditableTextWidget<T>> extends QuickTextWidget.Interpreted.Abstract<T, W>
 		implements Interpreted<T, W> {
-			public Abstract(EditableTextWidget.Def<? super W> definition, QuickContainer2.Interpreted<?, ?> parent) {
+			public Abstract(QuickEditableTextWidget.Def<? super W> definition, QuickElement.Interpreted<?> parent) {
 				super(definition, parent);
 			}
 
@@ -93,20 +92,20 @@ public interface EditableTextWidget<T> extends QuickTextWidget<T> {
 	@Override
 	Interpreted<T, ?> getInterpreted();
 
-	EditableTextWidget<T> setContext(EditableWidgetContext ctx) throws ModelInstantiationException;
+	QuickEditableTextWidget<T> setContext(EditableWidgetContext ctx) throws ModelInstantiationException;
 
-	public static abstract class Abstract<T> extends QuickTextWidget.Abstract<T> implements EditableTextWidget<T> {
-		public Abstract(EditableTextWidget.Interpreted<T, ?> interpreted, QuickElement parent) {
+	public static abstract class Abstract<T> extends QuickTextWidget.Abstract<T> implements QuickEditableTextWidget<T> {
+		public Abstract(QuickEditableTextWidget.Interpreted<T, ?> interpreted, QuickElement parent) {
 			super(interpreted, parent);
 		}
 
 		@Override
-		public EditableTextWidget.Interpreted<T, ?> getInterpreted() {
-			return (EditableTextWidget.Interpreted<T, ?>) super.getInterpreted();
+		public QuickEditableTextWidget.Interpreted<T, ?> getInterpreted() {
+			return (QuickEditableTextWidget.Interpreted<T, ?>) super.getInterpreted();
 		}
 
 		@Override
-		public EditableTextWidget<T> setContext(EditableWidgetContext ctx) throws ModelInstantiationException {
+		public QuickEditableTextWidget<T> setContext(EditableWidgetContext ctx) throws ModelInstantiationException {
 			SettableValue<String> error = ctx.getError();
 			if (error == null) {
 				try {
