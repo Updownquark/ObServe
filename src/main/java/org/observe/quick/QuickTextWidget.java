@@ -9,7 +9,6 @@ import org.observe.expresso.CompiledExpression;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
-import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueSynth;
@@ -102,9 +101,8 @@ public interface QuickTextWidget<T> extends QuickValueWidget<T> {
 			}
 
 			@Override
-			public Interpreted.Abstract<T, W> update(InterpretedModelSet models, QuickInterpretationCache cache)
-				throws ExpressoInterpretationException {
-				super.update(models, cache);
+			public Interpreted.Abstract<T, W> update(QuickInterpretationCache cache) throws ExpressoInterpretationException {
+				super.update(cache);
 				TypeToken<T> valueType = getValueType();
 				TypeToken<Format<T>> formatType = TypeTokens.get().keyFor(Format.class).<Format<T>> parameterized(valueType);
 				if (getDefinition().getFormat() != null) {

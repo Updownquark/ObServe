@@ -6,6 +6,7 @@ import java.util.function.Function;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ExpressoQIS;
 import org.observe.expresso.ModelInstantiationException;
+import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.quick.style.StyleQIS;
@@ -38,6 +39,8 @@ public interface QuickElement {
 
 		/** @return The style session supporting this element definition */
 		StyleQIS getStyleSession();
+
+		ObservableModelSet.Built getModels();
 
 		/**
 		 * @param <AO> The type of the add-on to get
@@ -81,6 +84,7 @@ public interface QuickElement {
 			private ExpressoQIS theExpressoSession;
 			private StyleQIS theStyleSession;
 			private final ClassMap<QuickAddOn.Def<? super E, ?>> theAddOns;
+			private ObservableModelSet.Built theModels;
 
 			/**
 			 * @param parent The definition interpreted from the parent element
@@ -123,11 +127,19 @@ public interface QuickElement {
 			}
 
 			@Override
+			public ObservableModelSet.Built getModels() {
+				return theModels;
+			}
+
+			@Override
 			public Abstract<E> update(AbstractQIS<?> session) throws QonfigInterpretationException {
 				session.put(SESSION_QUICK_ELEMENT, this);
 				theElement = session.getElement();
 				theExpressoSession = session.as(ExpressoQIS.class);
 				theStyleSession = session.as(StyleQIS.class);
+				ObservableModelSet models = theExpressoSession.getExpressoEnv().getModels();
+				theModels = models instanceof ObservableModelSet.Builder ? ((ObservableModelSet.Builder) models).build()
+					: (ObservableModelSet.Built) models;
 
 				if (theAddOns.isEmpty()) {
 					// Add-ons can't change, because if they do, the Quick definition should be re-interpreted from the session
@@ -170,6 +182,8 @@ public interface QuickElement {
 		/** @return The interpretation from the parent element */
 		Interpreted<?> getParentElement();
 
+		InterpretedModelSet getModels();
+
 		/**
 		 * @param <AO> The type of the add-on to get
 		 * @param addOn The type of the add-on to get
@@ -202,6 +216,7 @@ public interface QuickElement {
 			private final Def<? super E> theDefinition;
 			private final Interpreted<?> theParent;
 			private final ClassMap<QuickAddOn.Interpreted<? super E, ?>> theAddOns;
+			private InterpretedModelSet theModels;
 
 			/**
 			 * @param definition The definition that is producing this interpretation
@@ -228,6 +243,11 @@ public interface QuickElement {
 			}
 
 			@Override
+			public InterpretedModelSet getModels() {
+				return theModels;
+			}
+
+			@Override
 			public <AO extends QuickAddOn.Interpreted<? super E, ?>> AO getAddOn(Class<AO> addOn) {
 				return (AO) theAddOns.get(addOn, ClassMap.TypeMatch.SUB_TYPE);
 			}
@@ -241,18 +261,17 @@ public interface QuickElement {
 			 * Updates this element interpretation. Must be called at least once after the {@link #getDefinition() definition} produces this
 			 * object.
 			 *
-			 * @param models The models interpreted from the {@link #getDefinition() definition's} {@link Def#getExpressoSession() expresso
-			 *        session}
 			 * @return This interpretation
 			 * @throws ExpressoInterpretationException If any model values in this element or any of its content fail to be interpreted
 			 */
-			protected Abstract<E> update(InterpretedModelSet models) throws ExpressoInterpretationException {
+			protected Abstract<E> update() throws ExpressoInterpretationException {
 				// Do I need this?
+				theModels = getDefinition().getModels().interpret();
 				// theDefinition.getExpressoSession().setExpressoEnv(theDefinition.getExpressoSession().getExpressoEnv().with(models,
 				// null));
 				theDefinition.getExpressoSession().interpretLocalModel();
 				for (QuickAddOn.Interpreted<?, ?> addOn : theAddOns.getAllValues())
-					addOn.update(models);
+					addOn.update(theModels);
 				return this;
 			}
 

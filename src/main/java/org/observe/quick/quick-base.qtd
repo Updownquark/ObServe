@@ -102,6 +102,7 @@
 		</element-def>
 		<element-def name="button" extends="widget">
 			<value type="expression" specify="optional" />
+			<attribute name="icon" type="expression" specify="optional" />
 			<attribute name="action" type="expression" specify="required" />
 		</element-def>
 
@@ -112,7 +113,8 @@
 		</element-def>
 		<element-def name="toggle-button" extends="value-widget">
 			<!-- value here is the toggle button's text -->
-			<value type="expression" />
+			<value type="expression" specify="optional" />
+			<attribute name="icon" type="expression" specify="optional" />
 		</element-def>
 		<element-def name="file-button" extends="value-widget">
 			<attribute name="open" type="boolean" />
@@ -159,6 +161,7 @@
 
 		<element-def name="multi-value-widget" extends="widget" inherits="multi-value-renderable">
 			<attribute name="selection" type="expression" specify="optional" />
+			<attribute name="multi-selection" type="expression" specify="optional" />
 		</element-def>
 		<element-def name="little-list" extends="multi-value-widget">
 			<attribute name="values" type="expression" specify="required" />
@@ -167,7 +170,7 @@
 			<element-model>
 				<value name-attribute="column-value-name" priority="2" />
 			</element-model>
-			<attribute name="name" type="string" />
+			<attribute name="name" type="expression" />
 			<!-- Unspecified column-value means to use the model value for the column value -->
 			<attribute name="value" type="expression" specify="optional" />
 			<attribute name="column-value-name" type="identifier" default="columnValue" />

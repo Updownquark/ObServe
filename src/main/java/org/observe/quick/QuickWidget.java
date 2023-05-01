@@ -160,13 +160,12 @@ public interface QuickWidget extends QuickElement {
 		/**
 		 * Populates and updates this interpretation. Must be called once after being produced by the {@link #getDefinition() definition}.
 		 *
-		 * @param models The interpreted model set for this widget
 		 * @param cache The cache to use to interpret the widget
 		 * @return This interpretation
 		 * @throws ExpressoInterpretationException If any models could not be interpreted from their expressions in this widget or its
 		 *         content
 		 */
-		Interpreted<W> update(InterpretedModelSet models, QuickInterpretationCache cache) throws ExpressoInterpretationException;
+		Interpreted<W> update(QuickInterpretationCache cache) throws ExpressoInterpretationException;
 
 		/**
 		 * Produces a widget instance
@@ -221,9 +220,8 @@ public interface QuickWidget extends QuickElement {
 			}
 
 			@Override
-			public Interpreted.Abstract<W> update(InterpretedModelSet models, QuickInterpretationCache cache)
-				throws ExpressoInterpretationException {
-				super.update(models);
+			public Interpreted.Abstract<W> update(QuickInterpretationCache cache) throws ExpressoInterpretationException {
+				super.update();
 				QuickContainer2.Interpreted<?, ?> parent = getParent();
 				theStyle = getDefinition().getStyle().interpret(parent == null ? null : parent.getStyle(), cache.applications);
 				theTooltip = getDefinition().getTooltip() == null ? null

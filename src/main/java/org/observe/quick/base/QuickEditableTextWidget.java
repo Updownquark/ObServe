@@ -58,12 +58,12 @@ public interface QuickEditableTextWidget<T> extends QuickTextWidget<T> {
 		}
 	}
 
-	public interface EditableWidgetContext {
+	public interface EditableTextWidgetContext {
 		SettableValue<String> getError();
 
 		SettableValue<String> getWarning();
 
-		public class Default implements EditableWidgetContext {
+		public class Default implements EditableTextWidgetContext {
 			private final SettableValue<String> theError;
 			private final SettableValue<String> theWarning;
 
@@ -92,7 +92,7 @@ public interface QuickEditableTextWidget<T> extends QuickTextWidget<T> {
 	@Override
 	Interpreted<T, ?> getInterpreted();
 
-	QuickEditableTextWidget<T> setContext(EditableWidgetContext ctx) throws ModelInstantiationException;
+	QuickEditableTextWidget<T> setContext(EditableTextWidgetContext ctx) throws ModelInstantiationException;
 
 	public static abstract class Abstract<T> extends QuickTextWidget.Abstract<T> implements QuickEditableTextWidget<T> {
 		public Abstract(QuickEditableTextWidget.Interpreted<T, ?> interpreted, QuickElement parent) {
@@ -105,9 +105,9 @@ public interface QuickEditableTextWidget<T> extends QuickTextWidget<T> {
 		}
 
 		@Override
-		public QuickEditableTextWidget<T> setContext(EditableWidgetContext ctx) throws ModelInstantiationException {
+		public QuickEditableTextWidget<T> setContext(EditableTextWidgetContext ctx) throws ModelInstantiationException {
 			SettableValue<String> error = ctx.getError();
-			if (error == null) {
+			if (error != null) {
 				try {
 					DynamicModelValue.satisfyDynamicValue("error", ModelTypes.Value.STRING, getModels(), error);
 				} catch (ModelException e) {
@@ -118,7 +118,7 @@ public interface QuickEditableTextWidget<T> extends QuickTextWidget<T> {
 				}
 			}
 			SettableValue<String> warn = ctx.getWarning();
-			if (warn == null) {
+			if (warn != null) {
 				try {
 					DynamicModelValue.satisfyDynamicValue("warning", ModelTypes.Value.STRING, getModels(), warn);
 				} catch (ModelException e) {

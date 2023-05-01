@@ -2,7 +2,6 @@ package org.observe.quick;
 
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ModelInstantiationException;
-import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.CollectionUtils;
@@ -112,16 +111,15 @@ public interface QuickContainer2<C extends QuickWidget> extends QuickWidget {
 			}
 
 			@Override
-			public Interpreted.Abstract<W, C> update(InterpretedModelSet models, QuickInterpretationCache cache)
-				throws ExpressoInterpretationException {
-				super.update(models, cache);
+			public Interpreted.Abstract<W, C> update(QuickInterpretationCache cache) throws ExpressoInterpretationException {
+				super.update(cache);
 				CollectionUtils.synchronize(theContents, getDefinition().getContents(), //
 					(widget, child) -> widget.getDefinition() == child)//
 				.<ExpressoInterpretationException> simpleE(
 					child -> (QuickWidget.Interpreted<? extends C>) child.interpret(Interpreted.Abstract.this))//
 				.rightOrder()//
-				.onRightX(element -> element.getLeftValue().update(models, cache))//
-				.onCommonX(element -> element.getLeftValue().update(models, cache))//
+					.onRightX(element -> element.getLeftValue().update(cache))//
+					.onCommonX(element -> element.getLeftValue().update(cache))//
 				.adjust();
 				return this;
 			}

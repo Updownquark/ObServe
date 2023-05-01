@@ -5,7 +5,6 @@ import org.observe.expresso.CompiledExpression;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
-import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueSynth;
@@ -82,9 +81,9 @@ public interface QuickValueWidget<T> extends QuickWidget {
 			}
 
 			@Override
-			public Interpreted.Abstract<T, W> update(InterpretedModelSet models, QuickInterpretationCache cache)
+			public Interpreted.Abstract<T, W> update(QuickInterpretationCache cache)
 				throws ExpressoInterpretationException {
-				super.update(models, cache);
+				super.update(cache);
 				InterpretedValueSynth<SettableValue<?>, SettableValue<T>> value = getDefinition().getValue()
 					.evaluate(ModelTypes.Value.<T> anyAs()).interpret();
 				InterpretedValueSynth<SettableValue<?>, SettableValue<String>> disabled = getDefinition().getDisabled() == null ? null

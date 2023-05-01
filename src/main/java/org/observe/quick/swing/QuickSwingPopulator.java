@@ -10,6 +10,8 @@ import java.util.function.Consumer;
 
 import javax.swing.JFrame;
 
+import org.observe.SettableValue;
+import org.observe.collect.ObservableCollection;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.quick.QuickAddOn;
@@ -19,19 +21,12 @@ import org.observe.quick.QuickInterpretation;
 import org.observe.quick.QuickWidget;
 import org.observe.quick.QuickWidget.Interpreted;
 import org.observe.quick.QuickWindow;
-import org.observe.quick.base.QuickBox;
-import org.observe.quick.base.QuickCheckBox;
-import org.observe.quick.base.QuickEditableTextWidget;
-import org.observe.quick.base.QuickField;
-import org.observe.quick.base.QuickFieldPanel;
-import org.observe.quick.base.QuickInlineLayout;
-import org.observe.quick.base.QuickLabel;
-import org.observe.quick.base.QuickLayout;
-import org.observe.quick.base.QuickTextField;
+import org.observe.quick.base.*;
+import org.observe.util.TypeTokens;
+import org.observe.util.swing.CategoryRenderStrategy;
 import org.observe.util.swing.JustifiedBoxLayout;
 import org.observe.util.swing.PanelPopulation.ComponentEditor;
 import org.observe.util.swing.PanelPopulation.ContainerPopulator;
-import org.observe.util.swing.PanelPopulation.FieldEditor;
 import org.observe.util.swing.PanelPopulation.PanelPopulator;
 import org.observe.util.swing.PanelPopulation.WindowBuilder;
 import org.observe.util.swing.WindowPopulation;
@@ -78,7 +73,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 			return theInterpreted;
 		}
 
-		protected abstract ComponentEditor<?, ?> doPopulate(PanelPopulator<?, ?> panel, W quick) throws ModelInstantiationException;
+		protected abstract void doPopulate(PanelPopulator<?, ?> panel, W quick) throws ModelInstantiationException;
 
 		@Override
 		public void populate(PanelPopulator<?, ?> panel, W quick) throws ModelInstantiationException {
@@ -132,8 +127,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 				super(interpreted);
 			}
 
-			protected abstract ComponentEditor<?, ?> doPopulateContainer(ContainerPopulator<?, ?> panel, W quick)
-				throws ModelInstantiationException;
+			protected abstract void doPopulateContainer(ContainerPopulator<?, ?> panel, W quick) throws ModelInstantiationException;
 
 			@Override
 			public void populateContainer(ContainerPopulator<?, ?> panel, W quick) throws ModelInstantiationException {
@@ -142,8 +136,8 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 			}
 
 			@Override
-			protected ComponentEditor<?, ?> doPopulate(PanelPopulator<?, ?> panel, W quick) throws ModelInstantiationException {
-				return doPopulateContainer(panel, quick);
+			protected void doPopulate(PanelPopulator<?, ?> panel, W quick) throws ModelInstantiationException {
+				doPopulateContainer(panel, quick);
 			}
 		}
 	}
@@ -253,6 +247,10 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 						comp.fill();
 				});
 			});
+			QuickSwingPopulator.<QuickButton, QuickButton.Interpreted> interpretWidget(tx, gen(QuickButton.Interpreted.class),
+				QuickBaseSwing::interpretButton);
+			QuickSwingPopulator.<QuickTable<?>, QuickTable.Interpreted<?>> interpretWidget(tx, gen(QuickTable.Interpreted.class),
+				QuickBaseSwing::interpretTable);
 		}
 
 		static <T> Class<T> gen(Class<? super T> rawClass) {
@@ -266,16 +264,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 				interpreted.getContents().stream(), content -> tx.transform(content, QuickSwingPopulator.class));
 			return createContainer(interpreted, (panel, quick) -> {
 				LayoutManager layoutInst = layout.create(quick.getLayout());
-				QuickField field = quick.getAddOn(QuickField.class);
-				PanelPopulator<?, ?>[] ret = new PanelPopulator[1];
 				panel.addHPanel(null, layoutInst, p -> {
-					ret[0] = p;
-					if (field != null) {
-						if (field.getName() != null)
-							p.withFieldName(field.getName());
-						if (field.getInterpreted().getDefinition().isFill())
-							p.fill();
-					}
 					int c = 0;
 					for (QuickWidget content : quick.getContents()) {
 						try {
@@ -286,7 +275,6 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 						c++;
 					}
 				});
-				return ret[0];
 			});
 		}
 
@@ -303,42 +291,23 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 
 		static <T> QuickSwingPopulator<QuickLabel<T>> interpretLabel(QuickLabel.Interpreted<T, ?> interpreted,
 			Transformer<ExpressoInterpretationException> tx) throws ExpressoInterpretationException {
-			return createWidget(interpreted, (panel, quick) -> {
-				QuickField field = quick.getAddOn(QuickField.class);
-				Format<T> format = quick.getFormat().get();
-				FieldEditor<T, ?>[] editor = new FieldEditor[1];
-				panel.addLabel(null, quick.getValue(), format, lbl -> {
-					editor[0] = (FieldEditor<T, ?>) lbl;
-					if (field != null) {
-						if (field.getName() != null)
-							lbl.withFieldName(field.getName());
-						if (field.getInterpreted().getDefinition().isFill())
-							lbl.fill();
-					}
+			return QuickSwingPopulator.<QuickLabel<T>, QuickLabel.Interpreted<T, QuickLabel<T>>> createWidget(
+				(QuickLabel.Interpreted<T, QuickLabel<T>>) interpreted, (panel, quick) -> {
+					Format<T> format = quick.getFormat().get();
+					panel.addLabel(null, quick.getValue(), format, null);
 				});
-				return editor[0];
-			});
 		}
 
 		static <T> QuickSwingPopulator<QuickTextField<T>> interpretTextField(QuickTextField.Interpreted<T> interpreted,
 			Transformer<ExpressoInterpretationException> tx) throws ExpressoInterpretationException {
-			FieldEditor<T, ?>[] editor = new FieldEditor[1];
 			return createWidget(interpreted, (panel, quick) -> {
-				QuickField field = quick.getAddOn(QuickField.class);
 				Format<T> format = quick.getFormat().get();
 				boolean commitOnType = quick.getInterpreted().getDefinition().isCommitOnType();
 				Integer columns = quick.getInterpreted().getDefinition().getColumns();
 				panel.addTextField(null, quick.getValue(), format, tf -> {
-					editor[0] = (FieldEditor<T, ?>) tf;
-					if (field != null) {
-						if (field.getName() != null)
-							tf.withFieldName(field.getName());
-						if (field.getInterpreted().getDefinition().isFill())
-							tf.fill();
-					}
 					tf.modifyEditor(tf2 -> {
 						try {
-							quick.setContext(new QuickEditableTextWidget.EditableWidgetContext.Default(//
+							quick.setContext(new QuickEditableTextWidget.EditableTextWidgetContext.Default(//
 								tf2.getErrorState(), tf2.getWarningState()));
 						} catch (ModelInstantiationException e) {
 							throw new CheckedExceptionWrapper(e);
@@ -349,25 +318,13 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 							tf2.withColumns(columns);
 					});
 				});
-				return editor[0];
 			});
 		}
 
-		static <T> QuickSwingPopulator<QuickCheckBox> interpretCheckBox(QuickCheckBox.Interpreted interpreted,
+		static QuickSwingPopulator<QuickCheckBox> interpretCheckBox(QuickCheckBox.Interpreted interpreted,
 			Transformer<ExpressoInterpretationException> tx) throws ExpressoInterpretationException {
 			return createWidget(interpreted, (panel, quick) -> {
-				QuickField field = quick.getAddOn(QuickField.class);
-				FieldEditor<T, ?>[] editor = new FieldEditor[1];
-				panel.addCheckField(null, quick.getValue(), chk -> {
-					editor[0] = (FieldEditor<T, ?>) chk;
-					if (field != null) {
-						if (field.getName() != null)
-							chk.withFieldName(field.getName());
-						if (field.getInterpreted().getDefinition().isFill())
-							chk.fill();
-					}
-				});
-				return editor[0];
+				panel.addCheckField(null, quick.getValue(), null);
 			});
 		}
 
@@ -376,9 +333,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 			BetterList<QuickSwingPopulator<QuickWidget>> contents = BetterList.<QuickWidget.Interpreted<?>, QuickSwingPopulator<QuickWidget>, ExpressoInterpretationException> of2(
 				interpreted.getContents().stream(), content -> tx.transform(content, QuickSwingPopulator.class));
 			return createContainer(interpreted, (panel, quick) -> {
-				PanelPopulator<?, ?>[] ret = new PanelPopulator[1];
 				panel.addVPanel(p -> {
-					ret[0] = p;
 					int c = 0;
 					for (QuickWidget content : quick.getContents()) {
 						try {
@@ -389,8 +344,49 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 						c++;
 					}
 				});
-				return ret[0];
 			});
+		}
+
+		static QuickSwingPopulator<QuickButton> interpretButton(QuickButton.Interpreted interpreted,
+			Transformer<ExpressoInterpretationException> tx) throws ExpressoInterpretationException {
+			boolean withCause = TypeTokens.get().isAssignable(interpreted.getAction().getType().getType(0), TypeTokens.get().OBJECT);
+			return createWidget(interpreted, (panel, quick) -> {
+				panel.addButton(null, cause -> {
+					quick.getAction().act(withCause ? cause : null);
+				}, btn -> {
+					if (quick.getText() != null)
+						btn.withText(quick.getText());
+				});
+			});
+		}
+
+		static <R> QuickSwingPopulator<QuickTable<R>> interpretTable(QuickTable.Interpreted<R> interpreted,
+			Transformer<ExpressoInterpretationException> tx) throws ExpressoInterpretationException {
+			return createWidget(interpreted, (panel, quick) -> {
+				TabularWidget.TabularContext<R> ctx = new TabularWidget.TabularContext.Default<>(//
+					SettableValue.build(quick.getInterpreted().getRowType()).build(), //
+					SettableValue.build(boolean.class).withValue(false).build(), //
+					SettableValue.build(int.class).withValue(0).build(), //
+					SettableValue.build(int.class).withValue(0).build()//
+					);
+				quick.setContext(ctx);
+				ObservableCollection<CategoryRenderStrategy<R, ?>> columns = quick.getColumns().flow()//
+					.map((Class<CategoryRenderStrategy<R, ?>>) (Class<?>) CategoryRenderStrategy.class, //
+						column -> createRenderStrategy(column, ctx.getRenderValue()))//
+					.collect();
+				panel.addTable(quick.getRows(), table -> {
+					table.withColumns(columns);
+				});
+			});
+		}
+
+		static <R, C> CategoryRenderStrategy<R, C> createRenderStrategy(QuickTableColumn<R, C> column, SettableValue<R> rowValue) {
+			CategoryRenderStrategy<R, C> crs = new CategoryRenderStrategy<>(column.getName().get(), column.getType(), row -> {
+				rowValue.set(row, null);
+				return column.getValue().get();
+			});
+			column.getName().noInitChanges().act(evt -> crs.setName(evt.getNewValue()));
+			return crs;
 		}
 	}
 
@@ -410,12 +406,12 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 		transformer.with(interpretedType, QuickSwingPopulator.class, interpreter);
 	}
 
-	public static <W extends QuickWidget, I extends QuickWidget.Interpreted<? extends W>> QuickSwingPopulator<W> createWidget(I interpreted,
-		ExBiFunction<PanelPopulator<?, ?>, W, ComponentEditor<?, ?>, ModelInstantiationException> populator) {
+	public static <W extends QuickWidget, I extends QuickWidget.Interpreted<W>> QuickSwingPopulator<W> createWidget(I interpreted,
+		ExBiConsumer<PanelPopulator<?, ?>, W, ModelInstantiationException> populator) {
 		return new Abstract<W>(interpreted) {
 			@Override
-			protected ComponentEditor<?, ?> doPopulate(PanelPopulator<?, ?> panel, W quick) throws ModelInstantiationException {
-				return populator.apply(panel, quick);
+			protected void doPopulate(PanelPopulator<?, ?> panel, W quick) throws ModelInstantiationException {
+				populator.accept(panel, quick);
 			}
 		};
 	}
@@ -437,18 +433,17 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 	}
 
 	public static <W extends QuickWidget, I extends QuickWidget.Interpreted<? extends W>> QuickSwingContainerPopulator<W> createContainer(
-		I interpreted, ExBiFunction<ContainerPopulator<?, ?>, W, ComponentEditor<?, ?>, ModelInstantiationException> populator) {
+		I interpreted, ExBiConsumer<ContainerPopulator<?, ?>, W, ModelInstantiationException> populator) {
 		return new QuickSwingContainerPopulator.Abstract<W>(interpreted) {
 			@Override
-			protected ComponentEditor<?, ?> doPopulateContainer(ContainerPopulator<?, ?> panel, W quick)
-				throws ModelInstantiationException {
-				return populator.apply(panel, quick);
+			protected void doPopulateContainer(ContainerPopulator<?, ?> panel, W quick) throws ModelInstantiationException {
+				populator.accept(panel, quick);
 			}
 		};
 	}
 
 	/**
-	 * Utility for interpretation of swing widgets
+	 * Utility for modification of swing widgets by Quick abstract widgets
 	 *
 	 * @param <W> The type of the Quick widget to interpret
 	 * @param <I> The type of the interpreted quick widget
@@ -472,7 +467,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 	}
 
 	/**
-	 * Utility for interpretation of swing widgets
+	 * Utility for modification of swing widgets by Quick add-ons
 	 *
 	 * @param <W> The type of the Quick widget to interpret
 	 * @param <I> The type of the interpreted quick widget
@@ -484,7 +479,8 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 	public static <W extends QuickWidget, AO extends QuickAddOn<W>, I extends QuickAddOn.Interpreted<W, ? extends AO>> void modifyForAddOn(//
 		Transformer.Builder<ExpressoInterpretationException> transformer, Class<I> interpretedType,
 		ExTriConsumer<? super I, QuickSwingPopulator<W>, Transformer<ExpressoInterpretationException>, ExpressoInterpretationException> modifier) {
-		transformer.modifyWith(interpretedType, (Class<QuickSwingPopulator<W>>) (Class<?>) QuickSwingPopulator.class, new Transformer.Modifier<I, QuickSwingPopulator<W>, ExpressoInterpretationException>(){
+		transformer.modifyWith(interpretedType, (Class<QuickSwingPopulator<W>>) (Class<?>) QuickSwingPopulator.class,
+			new Transformer.Modifier<I, QuickSwingPopulator<W>, ExpressoInterpretationException>() {
 			@Override
 			public <T2 extends QuickSwingPopulator<W>> T2 modify(I source, T2 value, Transformer<ExpressoInterpretationException> tx)
 				throws ExpressoInterpretationException {

@@ -130,7 +130,7 @@ public interface QuickApplication {
 		Transformer<ExpressoInterpretationException> transformer = transformBuilder.build();
 
 		QuickDocument2.Interpreted interpretedDoc = quickDocDef.interpret(null);
-		interpretedDoc.update(null);
+		interpretedDoc.update();
 
 		QuickApplication app = transformer.transform(interpretedDoc, QuickApplication.class);
 

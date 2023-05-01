@@ -88,19 +88,19 @@ public class QuickDocument2 extends QuickElement.Abstract {
 		}
 
 		@Override
-		public Interpreted update(InterpretedModelSet models) throws ExpressoInterpretationException {
-			super.update(models);
+		public Interpreted update() throws ExpressoInterpretationException {
+			super.update();
 
 			if (getDefinition().getHead() == null)
 				theHead = null;
 			else if (theHead == null || theHead.getDefinition() != getDefinition().getHead())
 				theHead = getDefinition().getHead().interpret(this);
 			if (theHead != null)
-				theHead.update(models);
+				theHead.update();
 
 			if (theBody == null || theBody.getDefinition() != getDefinition().getBody())
 				theBody = getDefinition().getBody().interpret(null);
-			theBody.update(models, new QuickWidget.QuickInterpretationCache());
+			theBody.update(new QuickWidget.QuickInterpretationCache());
 			return this;
 		}
 
@@ -137,6 +137,7 @@ public class QuickDocument2 extends QuickElement.Abstract {
 		}
 
 		/** @return The models defined in this head section */
+		@Override
 		public InterpretedModelSet getModels() {
 			return theModels;
 		}
@@ -166,6 +167,7 @@ public class QuickDocument2 extends QuickElement.Abstract {
 			}
 
 			/** @return The models defined in this head section */
+			@Override
 			public ObservableModelSet.Built getModels() {
 				return theModels;
 			}
