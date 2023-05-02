@@ -111,7 +111,7 @@ public interface QuickContainer2<C extends QuickWidget> extends QuickWidget {
 			}
 
 			@Override
-			public Interpreted.Abstract<W, C> update(QuickInterpretationCache cache) throws ExpressoInterpretationException {
+			public Interpreted.Abstract<W, C> update(QuickStyled.QuickInterpretationCache cache) throws ExpressoInterpretationException {
 				super.update(cache);
 				CollectionUtils.synchronize(theContents, getDefinition().getContents(), //
 					(widget, child) -> widget.getDefinition() == child)//

@@ -12,7 +12,6 @@
 	<special-session>org.observe.quick.style.StyleSessionImplV0_1</special-session>
 	<interpretation>org.observe.expresso.ExpressoBaseV0_1</interpretation>
 	<interpretation>org.observe.quick.style.QuickStyleInterpretation</interpretation>
-	<interpretation>org.observe.quick.QuickCore</interpretation>
 	<interpretation>org.observe.quick.QuickCoreInterpretation</interpretation>
 	<interpretation>org.observe.quick.base.QuickBaseInterpretation</interpretation>
 	<quick-interpretation>org.observe.quick.swing.QuickSwingPopulator$QuickCoreSwing</quick-interpretation>

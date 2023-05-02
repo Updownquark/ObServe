@@ -11,6 +11,7 @@ import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.quick.QuickElement;
+import org.observe.quick.QuickStyled;
 import org.observe.quick.QuickWidget;
 import org.observe.util.TypeTokens;
 import org.qommons.config.AbstractQIS;
@@ -89,7 +90,7 @@ public class QuickButton extends QuickWidget.Abstract {
 		}
 
 		@Override
-		public Interpreted update(QuickInterpretationCache cache) throws ExpressoInterpretationException {
+		public Interpreted update(QuickStyled.QuickInterpretationCache cache) throws ExpressoInterpretationException {
 			super.update(cache);
 			theText = getDefinition().getText() == null ? null : getDefinition().getText().evaluate(ModelTypes.Value.STRING).interpret();
 			theIcon = getDefinition().getIcon() == null ? null

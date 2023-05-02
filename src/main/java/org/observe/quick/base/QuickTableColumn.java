@@ -10,7 +10,8 @@ import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.quick.QuickElement;
-import org.observe.quick.QuickWidget.QuickInterpretationCache;
+import org.observe.quick.QuickStyled;
+import org.observe.quick.QuickStyled.QuickInterpretationCache;
 import org.observe.util.TypeTokens;
 import org.qommons.config.AbstractQIS;
 import org.qommons.config.QonfigElement;
@@ -25,7 +26,7 @@ public interface QuickTableColumn<R, C> {
 		}
 
 		public interface Interpreted<R, CC extends TableColumnSet<R>> extends QuickElement.Interpreted<CC> {
-			void update(InterpretedModelSet models, QuickInterpretationCache cache) throws ExpressoInterpretationException;
+			void update(InterpretedModelSet models, QuickStyled.QuickInterpretationCache cache) throws ExpressoInterpretationException;
 
 			CC create(QuickElement parent);
 		}
@@ -104,7 +105,7 @@ public interface QuickTableColumn<R, C> {
 			}
 
 			@Override
-			public void update(InterpretedModelSet models, QuickInterpretationCache cache) throws ExpressoInterpretationException {
+			public void update(InterpretedModelSet models, QuickStyled.QuickInterpretationCache cache) throws ExpressoInterpretationException {
 				super.update();
 				theName = getDefinition().getName().evaluate(ModelTypes.Value.STRING).interpret();
 				theValue = getDefinition().getValue().evaluate(ModelTypes.Value.<C> anyAs()).interpret();

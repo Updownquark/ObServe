@@ -63,7 +63,7 @@ public class TestInterpretation implements QonfigInterpretation {
 				ObservableModelSet.Builder quickModel = builder.createSubModel(quickModelName);
 				QuickWidget.Interpreted<?>[] bodyInterpreted = new QuickWidget.Interpreted[1];
 				quickModel.withMaker("$body$", CompiledModelValue.of("$body$", ModelTypes.Value, () -> {
-					bodyInterpreted[0] = bodyDef.interpret(null).update(new QuickWidget.QuickInterpretationCache());
+					bodyInterpreted[0] = bodyDef.interpret(null).update(new QuickStyled.QuickInterpretationCache());
 					TypeToken<QuickWidget> widgetType = (TypeToken<QuickWidget>) bodyInterpreted[0].getWidgetType();
 					return ModelValueSynth.of(ModelTypes.Value.forType(widgetType), //
 						msi -> SettableValue.of(widgetType, bodyInterpreted[0].create(null)//

@@ -1,8 +1,6 @@
 package org.observe.quick;
 
 import java.util.Collection;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.function.Function;
 
 import org.observe.SettableValue;
@@ -10,14 +8,8 @@ import org.observe.expresso.CompiledExpression;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
-import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
-import org.observe.quick.style.CompiledStyleApplication;
-import org.observe.quick.style.InterpretedStyleApplication;
-import org.observe.quick.style.QuickCompiledStyle;
-import org.observe.quick.style.QuickInterpretedStyle;
-import org.observe.quick.style.StyleQIS;
 import org.observe.util.TypeTokens;
 import org.qommons.config.AbstractQIS;
 import org.qommons.config.QonfigElement;
@@ -26,18 +18,17 @@ import org.qommons.config.QonfigInterpretationException;
 import com.google.common.reflect.TypeToken;
 
 /** The base class for widgets in Quick */
-public interface QuickWidget extends QuickElement {
+public interface QuickWidget extends QuickStyled {
 	/**
 	 * The definition of a {@link QuickWidget}
 	 *
 	 * @param <W> The type of widget that this definition is for
 	 */
-	public interface Def<W extends QuickWidget> extends QuickElement.Def<W> {
+	public interface Def<W extends QuickWidget> extends QuickStyled.Def<W> {
 		/** @return The container definition that this widget is a child of */
 		QuickContainer2.Def<?, ?> getParent();
 
-		/** @return This widget's style */
-		QuickCompiledStyle getStyle();
+		QuickBorder.Def<?> getBorder();
 
 		/** @return This widget's name, typically for debugging */
 		String getName();
@@ -62,8 +53,8 @@ public interface QuickWidget extends QuickElement {
 		 *
 		 * @param <W> The type of widget that this definition is for
 		 */
-		public abstract class Abstract<W extends QuickWidget> extends QuickElement.Def.Abstract<W> implements Def<W> {
-			private QuickCompiledStyle theStyle;
+		public abstract class Abstract<W extends QuickWidget> extends QuickStyled.Def.Abstract<W> implements Def<W> {
+			private QuickBorder.Def<?> theBorder;
 			private String theName;
 			private CompiledExpression theTooltip;
 			private CompiledExpression isVisible;
@@ -83,8 +74,8 @@ public interface QuickWidget extends QuickElement {
 			}
 
 			@Override
-			public QuickCompiledStyle getStyle() {
-				return theStyle;
+			public QuickBorder.Def<?> getBorder() {
+				return theBorder;
 			}
 
 			@Override
@@ -105,7 +96,7 @@ public interface QuickWidget extends QuickElement {
 			@Override
 			public Def.Abstract<W> update(AbstractQIS<?> session) throws QonfigInterpretationException {
 				super.update(session);
-				theStyle = getStyleSession().getStyle();
+				theBorder = QuickElement.useOrReplace(QuickBorder.Def.class, theBorder, session, "border");
 				theName = getExpressoSession().getAttributeText("name");
 				theTooltip = getExpressoSession().getAttributeExpression("tooltip");
 				isVisible = getExpressoSession().getAttributeExpression("visible");
@@ -114,58 +105,28 @@ public interface QuickWidget extends QuickElement {
 		}
 	}
 
-	/** Needed to {@link Interpreted#update(InterpretedModelSet, QuickInterpretationCache) update} an interpreted widget */
-	public static class QuickInterpretationCache {
-		/** A cache of interpreted style applications */
-		public final Map<CompiledStyleApplication, InterpretedStyleApplication> applications = new HashMap<>();
-	}
-
 	/**
 	 * An interpretation of a {@link QuickWidget}
 	 *
 	 * @param <W> The type of widget that this interpretation is for
 	 */
-	public interface Interpreted<W extends QuickWidget> extends QuickElement.Interpreted<W> {
+	public interface Interpreted<W extends QuickWidget> extends QuickStyled.Interpreted<W> {
 		@Override
 		Def<? super W> getDefinition();
 
 		/** @return The parent container of this widget interpretation, if any */
 		QuickContainer2.Interpreted<?, ?> getParent();
 
+		QuickBorder.Interpreted<?> getBorder();
+
 		/** @return The type of the widget produced by this interpretation */
 		TypeToken<W> getWidgetType();
-
-		/** @return This widget's interpreted style */
-		QuickInterpretedStyle getStyle();
 
 		/** @return The tool tip to display when the user hovers over this widget */
 		InterpretedValueSynth<SettableValue<?>, SettableValue<String>> getTooltip();
 
 		/** @return The value determining when this widget is to be visible */
 		InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> isVisible();
-
-		@Override
-		<AO extends QuickAddOn.Interpreted<? super W, ?>> AO getAddOn(Class<AO> addOn);
-
-		@Override
-		Collection<QuickAddOn.Interpreted<? super W, ?>> getAddOns();
-
-		@Override
-		default <AO extends QuickAddOn.Interpreted<? super W, ?>, T> T getAddOnValue(Class<AO> addOn,
-			Function<? super AO, ? extends T> fn) {
-			AO ao = getAddOn(addOn);
-			return ao == null ? null : fn.apply(ao);
-		}
-
-		/**
-		 * Populates and updates this interpretation. Must be called once after being produced by the {@link #getDefinition() definition}.
-		 *
-		 * @param cache The cache to use to interpret the widget
-		 * @return This interpretation
-		 * @throws ExpressoInterpretationException If any models could not be interpreted from their expressions in this widget or its
-		 *         content
-		 */
-		Interpreted<W> update(QuickInterpretationCache cache) throws ExpressoInterpretationException;
 
 		/**
 		 * Produces a widget instance
@@ -175,13 +136,16 @@ public interface QuickWidget extends QuickElement {
 		 */
 		W create(QuickElement parent);
 
+		@Override
+		Interpreted<W> update(QuickStyled.QuickInterpretationCache cache) throws ExpressoInterpretationException;
+
 		/**
 		 * An abstract {@link Interpreted} implementation
 		 *
 		 * @param <W> The type of widget that this interpretation is for
 		 */
-		public abstract class Abstract<W extends QuickWidget> extends QuickElement.Interpreted.Abstract<W> implements Interpreted<W> {
-			private QuickInterpretedStyle theStyle;
+		public abstract class Abstract<W extends QuickWidget> extends QuickStyled.Interpreted.Abstract<W> implements Interpreted<W> {
+			private QuickBorder.Interpreted<?> theBorder;
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<String>> theTooltip;
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> isVisible;
 
@@ -205,8 +169,8 @@ public interface QuickWidget extends QuickElement {
 			}
 
 			@Override
-			public QuickInterpretedStyle getStyle() {
-				return theStyle;
+			public QuickBorder.Interpreted<?> getBorder() {
+				return theBorder;
 			}
 
 			@Override
@@ -220,10 +184,14 @@ public interface QuickWidget extends QuickElement {
 			}
 
 			@Override
-			public Interpreted.Abstract<W> update(QuickInterpretationCache cache) throws ExpressoInterpretationException {
-				super.update();
-				QuickContainer2.Interpreted<?, ?> parent = getParent();
-				theStyle = getDefinition().getStyle().interpret(parent == null ? null : parent.getStyle(), cache.applications);
+			public Interpreted.Abstract<W> update(QuickStyled.QuickInterpretationCache cache) throws ExpressoInterpretationException {
+				super.update(cache);
+				if (getDefinition().getBorder() == null)
+					theBorder = null;
+				else if (theBorder == null || theBorder.getDefinition() != getDefinition().getBorder())
+					theBorder = getDefinition().getBorder().interpret(this);
+				if (theBorder != null)
+					theBorder.update(cache);
 				theTooltip = getDefinition().getTooltip() == null ? null
 					: getDefinition().getTooltip().evaluate(ModelTypes.Value.STRING).interpret();
 				isVisible = getDefinition().isVisible() == null ? null
@@ -269,12 +237,13 @@ public interface QuickWidget extends QuickElement {
 	 */
 	QuickWidget update(ModelSetInstance models) throws ModelInstantiationException;
 
-	// TODO border
+	QuickBorder getBorder();
 
 	// TODO mouse and key listeners
 
 	/** An abstract {@link QuickWidget} implementation */
-	public abstract class Abstract extends QuickElement.Abstract implements QuickWidget {
+	public abstract class Abstract extends QuickStyled.Abstract implements QuickWidget {
+		private QuickBorder theBorder;
 		private final SettableValue<SettableValue<String>> theTooltip;
 		private final SettableValue<SettableValue<Boolean>> isVisible;
 
@@ -302,6 +271,11 @@ public interface QuickWidget extends QuickElement {
 		}
 
 		@Override
+		public QuickBorder getBorder() {
+			return theBorder;
+		}
+
+		@Override
 		public SettableValue<String> getTooltip() {
 			return SettableValue.flatten(theTooltip);
 		}
@@ -314,8 +288,9 @@ public interface QuickWidget extends QuickElement {
 		@Override
 		public QuickWidget.Abstract update(ModelSetInstance models) throws ModelInstantiationException {
 			super.update(models);
-			QuickWidget parent = getParent();
-			StyleQIS.installParentModels(getModels(), parent == null ? null : parent.getModels());
+			theBorder = getInterpreted().getBorder() == null ? null : getInterpreted().getBorder().create(this);
+			if (theBorder != null)
+				theBorder.update(getModels());
 			if (getInterpreted().getTooltip() != null)
 				theTooltip.set(getInterpreted().getTooltip().get(getModels()), null);
 			if (getInterpreted().isVisible() != null)

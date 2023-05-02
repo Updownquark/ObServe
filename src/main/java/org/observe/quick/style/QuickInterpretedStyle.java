@@ -161,7 +161,7 @@ public class QuickInterpretedStyle {
 		 * @return The value for this style attribute on the element
 		 * @throws ModelInstantiationException If the condition or the value could not be evaluated
 		 */
-		public ObservableValue<T> evaluate(ModelSetInstance models) throws ModelInstantiationException {
+		public ObservableValue<T> evaluate(ModelSetInstance models, T defaultValue) throws ModelInstantiationException {
 			ObservableValue<ConditionalValue<T>>[] values = new ObservableValue[theValues.size() + (theInherited == null ? 0 : 1)];
 			for (int i = 0; i < theValues.size(); i++) {
 				ObservableValue<Boolean> condition = theValues.get(i).getApplication().getCondition(models);
@@ -170,7 +170,7 @@ public class QuickInterpretedStyle {
 					.map(LambdaUtils.printableFn(pass -> new ConditionalValue<>(pass, value), "ifPass(" + value + ")", null));
 			}
 			if (theInherited != null) {
-				ObservableValue<T> value = theInherited.evaluate(StyleQIS.getParentModels(models));
+				ObservableValue<T> value = theInherited.evaluate(StyleQIS.getParentModels(models), null);
 				values[theValues.size()] = ObservableValue.of(new ConditionalValue<>(true, value));
 			}
 			ConditionalValue<T> defaultCV = new ConditionalValue<>(true, null);
@@ -179,7 +179,7 @@ public class QuickInterpretedStyle {
 				LambdaUtils.printablePred(cv -> cv.pass, "pass", null), //
 				LambdaUtils.printableSupplier(() -> defaultCV, () -> "null", null), values);
 			ObservableValue<T> value = ObservableValue
-				.flatten(conditionalValue.map(LambdaUtils.printableFn(cv -> cv.value, "value", null)));
+				.flatten(conditionalValue.map(LambdaUtils.printableFn(cv -> cv.value, "value", null)), () -> defaultValue);
 			return value;
 		}
 

@@ -53,6 +53,10 @@ public class QuickCoreInterpretation implements QonfigInterpretation {
 				session.getElement()));
 		interpreter.createWith("window", QuickWindow.Def.class,
 			session -> interpretAddOn(session, (p, ao) -> new QuickWindow.Def(ao, (QuickDocument2.Def) p)));
+		interpreter.createWith("line-border", QuickBorder.LineBorder.Def.class,
+			session -> interpretQuick(session, QuickBorder.LineBorder.Def::new));
+		interpreter.createWith("titled-border", QuickBorder.TitledBorder.Def.class,
+			session -> interpretQuick(session, QuickBorder.TitledBorder.Def::new));
 		return interpreter;
 	}
 

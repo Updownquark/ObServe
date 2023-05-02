@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
 <quick uses:base="Quick-Base v0.1" uses:expresso="Expresso-Base v0.1" with-extension="window"
-	title="`Simple Quick TableDemo`" close-action="exit">
+	title="`Simple Quick Table Demo`" close-action="exit">
 	<head>
 		<models>
 			<model name="app">
@@ -24,6 +24,7 @@
 	</head>
 	<box layout="inline" orientation="vertical" cross-align="justify">
 		<table rows="app.values">
+			<titled-border title="`Factored Values`" />
 			<column name="`Value`" value="value" />
 			<column name="`Factorization`" value="app.primes.factorize(value, 100_000)" />
 		</table>
@@ -33,7 +34,3 @@
 		</box>
 	</box>
 </quick>
-
-<!-- This is a footer comment
-blah -->
-

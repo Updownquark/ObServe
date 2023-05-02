@@ -13,7 +13,6 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 
 import javax.swing.AbstractButton;
-import javax.swing.BorderFactory;
 import javax.swing.Icon;
 import javax.swing.ImageIcon;
 import javax.swing.JButton;
@@ -157,7 +156,7 @@ public class ComponentDecorator extends FontAdjuster {
 			b = (TitledBorder) theBorder;
 			b.setTitle(title);
 		} else
-			b = BorderFactory.createTitledBorder(title);
+			b = new TitledBorder(new ModifiableLineBorder(color, 1, false), title);
 		if (color != null)
 			b.setTitleColor(color);
 		if (border != null)
@@ -169,11 +168,12 @@ public class ComponentDecorator extends FontAdjuster {
 	public ComponentDecorator withLineBorder(Color color, int thickness, boolean rounded) {
 		ModifiableLineBorder border;
 		if (theBorder instanceof ModifiableLineBorder) {
-			border = (ModifiableLineBorder) theBorder;
+			theBorder = border = (ModifiableLineBorder) theBorder;
 			border.set(color, thickness, rounded);
-		} else
-			border = new ModifiableLineBorder(color, thickness, rounded);
-		theBorder = border;
+		} else if (theBorder instanceof TitledBorder && ((TitledBorder) theBorder).getBorder() instanceof ModifiableLineBorder)
+			border = (ModifiableLineBorder) ((TitledBorder) theBorder).getBorder();
+		else
+			theBorder = border = new ModifiableLineBorder(color, thickness, rounded);
 		return this;
 	}
 

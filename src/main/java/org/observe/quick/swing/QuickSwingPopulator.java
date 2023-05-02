@@ -1,5 +1,6 @@
 package org.observe.quick.swing;
 
+import java.awt.Color;
 import java.awt.EventQueue;
 import java.awt.LayoutManager;
 import java.lang.reflect.InvocationTargetException;
@@ -10,12 +11,15 @@ import java.util.function.Consumer;
 
 import javax.swing.JFrame;
 
+import org.observe.Observable;
+import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.collect.ObservableCollection;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.quick.QuickAddOn;
 import org.observe.quick.QuickApplication;
+import org.observe.quick.QuickBorder;
 import org.observe.quick.QuickDocument2;
 import org.observe.quick.QuickInterpretation;
 import org.observe.quick.QuickWidget;
@@ -24,6 +28,7 @@ import org.observe.quick.QuickWindow;
 import org.observe.quick.base.*;
 import org.observe.util.TypeTokens;
 import org.observe.util.swing.CategoryRenderStrategy;
+import org.observe.util.swing.ComponentDecorator;
 import org.observe.util.swing.JustifiedBoxLayout;
 import org.observe.util.swing.PanelPopulation.ComponentEditor;
 import org.observe.util.swing.PanelPopulation.ContainerPopulator;
@@ -156,6 +161,10 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 		LayoutManager create(L quick) throws ModelInstantiationException;
 	}
 
+	public interface QuickSwingBorder<B extends QuickBorder> {
+		void decorate(ComponentDecorator deco, QuickBorder border) throws ModelInstantiationException;
+	}
+
 	/** Quick interpretation of the core toolkit for Swing */
 	public class QuickCoreSwing implements QuickInterpretation {
 		@Override
@@ -213,13 +222,51 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 				};
 			});
 			modifyForWidget(tx, QuickWidget.Interpreted.class, (qw, qsp, tx2) -> {
+				QuickSwingBorder<QuickBorder> border = tx2.transform(qw.getBorder(), QuickSwingBorder.class);
 				qsp.addModifier((comp, w) -> {
 					if (w.getTooltip() != null)
 						comp.withTooltip(w.getTooltip());
 					if (w.isVisible() != null)
 						comp.visibleWhen(w.isVisible());
+					if (border != null) {
+						try {
+							comp.decorate(deco -> {
+								try {
+									border.decorate(deco, w.getBorder());
+								} catch (ModelInstantiationException e) {
+									throw new CheckedExceptionWrapper(e);
+								}
+							});
+						} catch (CheckedExceptionWrapper e) {
+							if (e.getCause() instanceof ModelInstantiationException)
+								throw (ModelInstantiationException) e.getCause();
+							throw e;
+						}
+					}
 					// TODO Style
 				});
+			});
+			tx.with(QuickBorder.LineBorder.Interpreted.class, QuickSwingBorder.class, (iBorder, tx2) -> {
+				return (deco, border) -> {
+					ObservableValue<Color> color = border.getColor();
+					ObservableValue<Integer> thick = border.getThickness();
+					Observable.or(color.noInitChanges(), thick.changes()).act(__ -> {
+						deco.withLineBorder(color.get(), thick.get(), false);
+					});
+				};
+			});
+			tx.with(QuickBorder.TitledBorder.Interpreted.class, QuickSwingBorder.class, (iBorder, tx2) -> {
+				return (deco, border) -> {
+					ObservableValue<Color> color = border.getColor();
+					ObservableValue<Integer> thick = border.getThickness();
+					ObservableValue<String> title = ((QuickBorder.TitledBorder) border).getTitle();
+					Observable.or(color.noInitChanges(), thick.noInitChanges(), title.changes()).act(__ -> {
+						// TODO font style
+						deco.withTitledBorder(title.get(), color.get(), null);
+						// This call will just modify the thickness of the titled border
+						deco.withLineBorder(color.get(), thick.get(), false);
+					});
+				};
 			});
 		}
 	}

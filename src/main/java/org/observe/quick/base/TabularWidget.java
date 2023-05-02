@@ -13,6 +13,7 @@ import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.TypeConversionException;
 import org.observe.quick.QuickElement;
+import org.observe.quick.QuickStyled;
 import org.observe.quick.QuickWidget;
 import org.observe.quick.base.QuickTableColumn.TableColumnSet;
 import org.observe.util.TypeTokens;
@@ -117,7 +118,7 @@ public interface TabularWidget<R> extends MultiValueWidget<R> {
 			}
 
 			@Override
-			public Interpreted.Abstract<R, W> update(QuickInterpretationCache cache)
+			public Interpreted.Abstract<R, W> update(QuickStyled.QuickInterpretationCache cache)
 				throws ExpressoInterpretationException {
 				DynamicModelValue.satisfyDynamicValueType(getDefinition().getValueName(), getDefinition().getModels(),
 					ModelTypes.Value.forType(getRowType()));
