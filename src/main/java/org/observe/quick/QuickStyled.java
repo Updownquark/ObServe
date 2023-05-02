@@ -15,7 +15,13 @@ import org.qommons.config.AbstractQIS;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigInterpretationException;
 
+/** A Quick element that has style */
 public interface QuickStyled extends QuickElement {
+	/**
+	 * The definition of a styled element
+	 *
+	 * @param <S> The type of the styled element that this definition is for
+	 */
 	public interface Def<S extends QuickStyled> extends QuickElement.Def<S> {
 		/** @return This element's style */
 		QuickCompiledStyle getStyle();
@@ -56,6 +62,11 @@ public interface QuickStyled extends QuickElement {
 		public final Map<CompiledStyleApplication, InterpretedStyleApplication> applications = new HashMap<>();
 	}
 
+	/**
+	 * An interpretation of a styled element
+	 *
+	 * @param <S> The type of styled element that this interpretation creates
+	 */
 	public interface Interpreted<S extends QuickStyled> extends QuickElement.Interpreted<S> {
 		@Override
 		Def<? super S> getDefinition();
@@ -115,7 +126,12 @@ public interface QuickStyled extends QuickElement {
 	@Override
 	Interpreted<?> getInterpreted();
 
+	/** An abstract {@link QuickStyled} implementation */
 	public abstract class Abstract extends QuickElement.Abstract implements QuickStyled {
+		/**
+		 * @param interpreted The interpretation that is creating this element
+		 * @param parent The parent element
+		 */
 		public Abstract(QuickStyled.Interpreted<?> interpreted, QuickElement parent) {
 			super(interpreted, parent);
 		}

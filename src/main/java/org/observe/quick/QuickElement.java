@@ -40,6 +40,7 @@ public interface QuickElement {
 		/** @return The style session supporting this element definition */
 		StyleQIS getStyleSession();
 
+		/** @return This element's models */
 		ObservableModelSet.Built getModels();
 
 		/**
@@ -182,6 +183,7 @@ public interface QuickElement {
 		/** @return The interpretation from the parent element */
 		Interpreted<?> getParentElement();
 
+		/** @return This element's models */
 		InterpretedModelSet getModels();
 
 		/**

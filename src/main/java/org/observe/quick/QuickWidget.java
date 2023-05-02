@@ -28,6 +28,7 @@ public interface QuickWidget extends QuickStyled {
 		/** @return The container definition that this widget is a child of */
 		QuickContainer2.Def<?, ?> getParent();
 
+		/** @return This widget's border */
 		QuickBorder.Def<?> getBorder();
 
 		/** @return This widget's name, typically for debugging */
@@ -117,6 +118,7 @@ public interface QuickWidget extends QuickStyled {
 		/** @return The parent container of this widget interpretation, if any */
 		QuickContainer2.Interpreted<?, ?> getParent();
 
+		/** @return This widget's border */
 		QuickBorder.Interpreted<?> getBorder();
 
 		/** @return The type of the widget produced by this interpretation */
@@ -237,6 +239,7 @@ public interface QuickWidget extends QuickStyled {
 	 */
 	QuickWidget update(ModelSetInstance models) throws ModelInstantiationException;
 
+	/** @return This widget's border */
 	QuickBorder getBorder();
 
 	// TODO mouse and key listeners
