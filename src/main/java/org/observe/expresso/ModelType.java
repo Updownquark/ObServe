@@ -56,7 +56,7 @@ public abstract class ModelType<M> implements Named {
 				return new ModelInstanceConverter<M1, M2>() {
 					@Override
 					public M2 convert(M1 src) {
-						return convert(src);
+						return SimpleUnTyped.this.convert(src);
 					}
 
 					@Override

@@ -4,6 +4,7 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -143,7 +144,7 @@ public class AnnotatedDependencyService extends DefaultTypedDependencyService<Ob
 		Component(ComponentMethod<T> creator) {
 			this.creator = creator;
 			dependencies = new HashMap<>();
-			stageChanges = new HashMap<>();
+			stageChanges = new EnumMap<>(StageChangeType.class);
 			disposes = new ArrayList<>();
 			until = new SimpleObservable<>();
 		}
@@ -168,8 +169,7 @@ public class AnnotatedDependencyService extends DefaultTypedDependencyService<Ob
 					for (ComponentMethod<T> listener : listeners)
 						listener.invoke(controller, null);
 			});
-			Object value = creator.invoke(controller, null);
-			return value;
+			return creator.invoke(controller, null);
 		}
 
 		void dispose() {
@@ -303,9 +303,7 @@ public class AnnotatedDependencyService extends DefaultTypedDependencyService<Ob
 				CDependency<T, ?> cdep = new CDependency<>(depMethod, dep.max());
 				if (null != comp.dependencies.put(depMethod.getType(), cdep))
 					throw new IllegalArgumentException(componentType + ": Duplicate dependency methods for service " + depMethod.getType());
-				builder.depends(cdep.service, dependency -> {
-					dependency.minimum(dep.min()).dynamic(dep.dynamic());
-				});
+				builder.depends(cdep.service, dependency -> dependency.minimum(dep.min()).dynamic(dep.dynamic()));
 				continue;
 			}
 			Activate activate = m.getAnnotation(Activate.class);
@@ -342,8 +340,7 @@ public class AnnotatedDependencyService extends DefaultTypedDependencyService<Ob
 			}
 		}
 		builder.disposeWhenInactive(__ -> comp.dispose());
-		ComponentController<Object> built = builder.build();
-		return built;
+		return builder.build();
 	}
 
 	private <T> void provide(DSComponent.Builder<Object> builder, Class<T> componentType) {

@@ -144,9 +144,8 @@ public abstract class AbstractObservableConfig implements ObservableConfig {
 			setValue(source.getValue());
 		List<AbstractObservableConfig> children = new ArrayList<>(getContent().size());
 		children.addAll((BetterList<AbstractObservableConfig>) (BetterList<?>) getContent());
-		CollectionUtils.synchronize(children, source.getContent(), (o1, o2) -> {
-			return o1.getName().equals(o2.getName());
-		}).adjust(new CollectionUtils.CollectionSynchronizer<AbstractObservableConfig, ObservableConfig>() {
+		CollectionUtils.synchronize(children, source.getContent(), (o1, o2) -> o1.getName().equals(o2.getName()))//
+			.adjust(new CollectionUtils.CollectionSynchronizer<AbstractObservableConfig, ObservableConfig>() {
 			@Override
 			public boolean getOrder(ElementSyncInput<AbstractObservableConfig, ObservableConfig> element) {
 				return false;

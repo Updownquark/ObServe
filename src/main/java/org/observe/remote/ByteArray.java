@@ -92,9 +92,9 @@ public class ByteArray implements Comparable<ByteArray> {
 		int hash = 0;
 		for (int i = 0; i < bytes.length / 4; i++) {
 			int fourByteHash = bytes[i];
-			fourByteHash = (fourByteHash << 8) | bytes[i + 1];
-			fourByteHash = (fourByteHash << 8) | bytes[i + 2];
-			fourByteHash = (fourByteHash << 8) | bytes[i + 3];
+			fourByteHash = (fourByteHash << 8) | (bytes[i + 1] + 0xff) % 0xff;
+			fourByteHash = (fourByteHash << 8) | (bytes[i + 2] + 0xff) % 0xff;
+			fourByteHash = (fourByteHash << 8) | (bytes[i + 3] + 0xff) % 0xff;
 			hash ^= fourByteHash;
 		}
 		return hash;

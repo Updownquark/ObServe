@@ -38,7 +38,7 @@ import org.observe.dbug.DbugAnchor;
 import org.observe.dbug.DbugAnchorType;
 import org.observe.util.TypeTokens;
 import org.observe.util.swing.PanelPopulation.TableBuilder;
-import org.qommons.ArgumentParsing2;
+import org.qommons.ArgumentParsing;
 import org.qommons.Causable;
 import org.qommons.Colors;
 import org.qommons.QommonsUtils;
@@ -727,7 +727,7 @@ public class ObservableValueSelector<T, X> extends JPanel {
 		theIncludeAllButton.setEnabled(excluded > 0);
 		if (excluded == 0)
 			theIncludeAllButton.setToolTipText("All " + plurItem + " included");
-		else if (excluded == 0)
+		else if (excluded == 1)
 			theIncludeAllButton.setToolTipText("Include 1 " + singItem);
 		else
 			theIncludeAllButton.setToolTipText("Include all " + excluded + " excluded " + plurItem);
@@ -745,7 +745,7 @@ public class ObservableValueSelector<T, X> extends JPanel {
 		theExcludeAllButton.setEnabled(includedCount > 0);
 		if (includedCount == 0)
 			theExcludeAllButton.setToolTipText("No " + plurItem + " included");
-		else if (includedCount == 0)
+		else if (includedCount == 1)
 			theExcludeAllButton.setToolTipText("Exclude 1 included " + singItem);
 		else
 			theExcludeAllButton.setToolTipText("Exclude all " + includedCount + " included " + plurItem);
@@ -1006,7 +1006,7 @@ public class ObservableValueSelector<T, X> extends JPanel {
 				((JComponent) w.getContentPane()).setOpaque(true);
 			w.getContentPane().setBackground(Colors.orange);
 
-			Qonsole.getSystemConsole().addPlugin("ovs", ArgumentParsing2.build()//
+			Qonsole.getSystemConsole().addPlugin("ovs", ArgumentParsing.build()//
 				.forValuePattern(patt -> patt//
 					.addPatternArgument("move", "(?<src>\\d+)\\-\\>(?<dest>\\d+)", null)//
 					)//

@@ -102,8 +102,8 @@ public class ConditionalExpression implements ObservableExpression {
 	@Override
 	public <M, MV extends M> ModelValueSynth<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env, int expressionOffset)
 		throws ExpressoEvaluationException, ExpressoInterpretationException {
-		if (type != null && (type.getModelType() == ModelTypes.Value || type.getModelType() == ModelTypes.Collection
-			|| type.getModelType() == ModelTypes.Set)) {//
+		if (type.getModelType() == ModelTypes.Value || type.getModelType() == ModelTypes.Collection
+			|| type.getModelType() == ModelTypes.Set) {//
 		} else
 			throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(),
 				"Conditional expressions not supported for model type " + type.getModelType() + " (" + this + ")");

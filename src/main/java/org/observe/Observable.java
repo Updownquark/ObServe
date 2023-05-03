@@ -1035,7 +1035,7 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable {
 		protected Object createIdentity() {
 			return Identifiable.idFor(theObservables, () -> {
 				return StringUtils.conversational(", ", null).print(theObservables, StringBuilder::append).toString();
-			}, () -> theObservables.hashCode(), other -> theObservables.equals(other));
+			}, () -> Arrays.hashCode(theObservables), other -> theObservables.equals(other));
 		}
 
 		@Override
@@ -1341,6 +1341,7 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable {
 			Function<? super Duration, ? extends T> value, Consumer<? super T> postAction) {
 			theTimer = timer;
 			theTask = QommonsTimer.getCommonInstance().build(this::fire, interval, true);
+			theInitDelay = initDelay;
 			theObservers = ListenerList.build().withInUse(inUse -> {
 				if (inUse) {
 					theStartTime = QommonsTimer.getCommonInstance().getClock().now();

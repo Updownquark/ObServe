@@ -556,14 +556,9 @@ public class ObservableCollectionSynchronization<V> implements Subscription {
 	static Comparator<CommonElement> RIGHT_COMPARE = (el1, el2) -> el1.theRight.compareTo(el2.theRight);
 
 	static class ValueElements {
-		private ElementId theId;
 		private int theMatches;
 		private BetterSortedSet<CommonElement> theUnmatchedLeft;
 		private BetterSortedSet<CommonElement> theUnmatchedRight;
-
-		ElementId getId() {
-			return theId;
-		}
 
 		boolean isEmpty() {
 			if (theMatches > 0)

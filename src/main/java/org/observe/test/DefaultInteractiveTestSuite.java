@@ -253,7 +253,7 @@ class DefaultInteractiveTestSuite implements InteractiveTestSuite {
 				break;
 			}
 		}
-		if (test.get() instanceof InteractiveTest) {
+		if (test != null && test.get() instanceof InteractiveTest) {
 			BetterFile testFailFile = getTestResultsFile(test.get().getClass());
 			try {
 				if (testFailFile.exists() && results.isEmpty())

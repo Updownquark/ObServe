@@ -11,19 +11,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.Proxy;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.IdentityHashMap;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
+import java.util.*;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -2185,7 +2173,8 @@ public class EntityReflector<E> {
 						}
 					}
 				}
-				method.setElement(methods.addElement(method, false).getElementId());
+				if (method != null)
+					method.setElement(methods.addElement(method, false).getElementId());
 			}
 			ObjectMethodOverride override = m.getAnnotation(ObjectMethodOverride.class);
 			if (override != null) {

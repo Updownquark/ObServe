@@ -868,8 +868,10 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			opts -> opts.withMaxResolution(TimeUtils.DateElementType.Second).withEvaluationType(TimeUtils.RelativeInstantEvaluation.Past));
 		JFrame[] frame = new JFrame[1];
 		boolean[] backedUp = new boolean[1];
-		ObservableValue<String> title = app.getTitle() == null ? ObservableValue.of("Unnamed Application") : app.getTitle().get(msi);
-		ObservableValue<Image> icon = app.getIcon() == null ? ObservableValue.of(Image.class, null) : app.getIcon().get(msi);
+		ObservableValue<String> title = (app == null || app.getTitle() == null) ? ObservableValue.of("Unnamed Application")
+			: app.getTitle().get(msi);
+		ObservableValue<Image> icon = (app == null || app.getIcon() == null) ? ObservableValue.of(Image.class, null)
+			: app.getIcon().get(msi);
 		frame[0] = WindowPopulation.populateWindow(null, null, false, false)//
 			.withTitle((app == null || title.get() == null) ? "Backup" : title.get() + " Backup")//
 			.withIcon(app == null ? ObservableValue.of(Image.class, null) : icon)//

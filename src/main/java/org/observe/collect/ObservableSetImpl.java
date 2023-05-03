@@ -89,7 +89,8 @@ public class ObservableSetImpl {
 
 		@Override
 		public CollectionElement<E> getOrAdd(E value, ElementId after, ElementId before, boolean first, Runnable preAdd, Runnable postAdd) {
-			return CollectionElement.reverse(getOrAdd(value, ElementId.reverse(before), ElementId.reverse(after), !first, preAdd, postAdd));
+			return CollectionElement
+				.reverse(getWrapped().getOrAdd(value, ElementId.reverse(before), ElementId.reverse(after), !first, preAdd, postAdd));
 		}
 
 		@Override
@@ -849,7 +850,7 @@ public class ObservableSetImpl {
 					CollectionElement<T> newValueId = theElementsByValue.keySet().move(ue.theValueId, //
 						after == null ? null : ((UniqueElement) after).theValueId,
 							before == null ? null : ((UniqueElement) before).theValueId, first, () -> {
-							ObservableCollectionActiveManagers.removed(ue.theListener, ue.theValue);
+								ObservableCollectionActiveManagers.removed(ue.theListener, ue.theValue);
 							});
 					if (newValueId.getElementId().equals(ue.theValueId))
 						return ue;

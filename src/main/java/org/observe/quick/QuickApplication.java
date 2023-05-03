@@ -15,7 +15,7 @@ import org.observe.expresso.ExpressoQIS;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
-import org.qommons.ArgumentParsing2;
+import org.qommons.ArgumentParsing;
 import org.qommons.Transformer;
 import org.qommons.ValueHolder;
 import org.qommons.config.AbstractQIS;
@@ -70,7 +70,7 @@ public interface QuickApplication {
 		// TODO Status (replace Splash Screen a la OSGi)
 
 		// Find the app definition
-		ArgumentParsing2.Arguments args = ArgumentParsing2.build()//
+		ArgumentParsing.Arguments args = ArgumentParsing.build()//
 			.forValuePattern(p -> p//
 				.addStringArgument("quick-app", a -> a.optional())//
 				)//

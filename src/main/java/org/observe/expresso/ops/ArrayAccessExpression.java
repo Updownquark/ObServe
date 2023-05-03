@@ -109,12 +109,12 @@ public class ArrayAccessExpression implements ObservableExpression {
 			throw new ExpressoEvaluationException(indexOffset, theIndex.getExpressionLength(),
 				"index " + theArray + " cannot be evaluated as an integer", e);
 		}
-		return (ModelValueSynth<M, MV>) this.<Object> doEval(arrayValue, indexValue, env);
+		return (ModelValueSynth<M, MV>) this.<Object> doEval(arrayValue, indexValue);
 	}
 
 	private <T> ModelValueSynth<SettableValue<?>, SettableValue<T>> doEval(ModelValueSynth<SettableValue<?>, SettableValue<T[]>> arrayValue,
-		ModelValueSynth<SettableValue<?>, SettableValue<Integer>> indexValue, ExpressoEnv env)
-			throws ExpressoEvaluationException, ExpressoInterpretationException {
+		ModelValueSynth<SettableValue<?>, SettableValue<Integer>> indexValue)
+			throws ExpressoInterpretationException {
 		TypeToken<T> targetType = (TypeToken<T>) arrayValue.getType().getType(0).getComponentType();
 		ModelInstanceType<SettableValue<?>, SettableValue<T>> targetModelType = ModelTypes.Value.forType(targetType);
 		return new ModelValueSynth<SettableValue<?>, SettableValue<T>>() {

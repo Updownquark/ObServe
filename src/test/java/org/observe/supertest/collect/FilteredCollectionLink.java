@@ -291,8 +291,8 @@ public class FilteredCollectionLink<T> extends ObservableCollectionLink<T, T> im
 			case INT:
 				typeFilters.add(filter((Integer i) -> i > 500, ">500 only"));
 				typeFilters.add(filter((Integer i) -> i < 500, "<500 only"));
-				typeFilters.add(filter((Integer i) -> i % 3 == 0, "x3 only"));
-				typeFilters.add(filter((Integer i) -> i % 2 == 1, "odd only"));
+				typeFilters.add(filter((Integer i) -> Math.abs(i % 3) == 0, "x3 only"));
+				typeFilters.add(filter((Integer i) -> Math.abs(i % 2) == 1, "odd only"));
 				break;
 			case DOUBLE:
 				typeFilters.add(filter((Double d) -> d == Math.floor(d), "round numbers only"));

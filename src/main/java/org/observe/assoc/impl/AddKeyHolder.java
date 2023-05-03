@@ -77,15 +77,15 @@ public interface AddKeyHolder<K> extends Consumer<K>, Lockable {
 		@Override
 		public Transaction lock() {
 			theLock.lock();
-			return () -> theLock.unlock();
+			return theLock::unlock;
 		}
 
 		@Override
 		public Transaction tryLock() {
 			if (theLock.tryLock())
-				return () -> theLock.unlock();
-				else
-					return null;
+				return theLock::unlock;
+			else
+				return null;
 		}
 
 		@Override

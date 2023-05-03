@@ -207,7 +207,6 @@ public class NameExpression implements ObservableExpression, Named {
 			ModelValueSynth<?, ?> nextMV = models.getComponentIfExists(pathStr);
 			if (nextMV != null)
 				return evaluateModel(nextMV, nameIndex + 1, path, type, models, expressionOffset);
-			models.getComponentIfExists(pathStr);// DEBUGGING
 			throw new ExpressoEvaluationException(getNameOffset(nameIndex), getNameOffset(0) + theNames.get(nameIndex).length(), //
 				"'" + theNames.get(nameIndex) + "' cannot be resolved or is not a model value");
 		} else if (mvType.getModelType() == ModelTypes.Value) {
@@ -286,15 +285,18 @@ public class NameExpression implements ObservableExpression, Named {
 		ModelValueSynth<SettableValue<?>, ? extends SettableValue<?>> context, TypeToken<M> targetType, int nameIndex, int expressionOffset)
 			throws ExpressoEvaluationException {
 		ModelInstanceType<SettableValue<?>, SettableValue<F>> fieldModelType = ModelTypes.Value.forType(fieldType);
-		ModelInstanceType<SettableValue<?>, SettableValue<M>> targetModelType = ModelTypes.Value.forType(targetType);
 		ModelValueSynth<SettableValue<?>, SettableValue<F>> fieldValue = ModelValueSynth.of(fieldModelType,
 			msi -> new FieldValue<>(context == null ? null : context.get(msi), field, fieldType));
-		try {
-			return fieldValue.as(targetModelType);
-		} catch (ExpressoInterpretationException | TypeConversionException e) {
-			throw new ExpressoEvaluationException(expressionOffset, getNameOffset(nameIndex) + theNames.get(nameIndex).length(),
-				e.getMessage(), e);
-		}
+		if (targetType != null) {
+			ModelInstanceType<SettableValue<?>, SettableValue<M>> targetModelType = ModelTypes.Value.forType(targetType);
+			try {
+				return fieldValue.as(targetModelType);
+			} catch (ExpressoInterpretationException | TypeConversionException e) {
+				throw new ExpressoEvaluationException(expressionOffset, getNameOffset(nameIndex) + theNames.get(nameIndex).length(),
+					e.getMessage(), e);
+			}
+		} else
+			return (ModelValueSynth<SettableValue<?>, SettableValue<M>>) (ModelValueSynth<?, ?>) fieldValue;
 	}
 
 	static class FieldValue<M, F> extends Identifiable.AbstractIdentifiable implements SettableValue<F> {

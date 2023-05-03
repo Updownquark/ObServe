@@ -37,24 +37,10 @@ import org.observe.util.ObservableCollectionWrapper;
 import org.observe.util.ObservableUtils;
 import org.observe.util.TypeTokens;
 import org.observe.util.WeakListening;
-import org.qommons.ArrayUtils;
-import org.qommons.BiTuple;
-import org.qommons.Causable;
+import org.qommons.*;
 import org.qommons.Causable.CausableKey;
-import org.qommons.ConcurrentHashSet;
-import org.qommons.Identifiable;
 import org.qommons.Identifiable.AbstractIdentifiable;
-import org.qommons.IdentityKey;
-import org.qommons.LambdaUtils;
-import org.qommons.Lockable;
 import org.qommons.Lockable.CoreId;
-import org.qommons.QommonsUtils;
-import org.qommons.Ternian;
-import org.qommons.ThreadConstrained;
-import org.qommons.ThreadConstraint;
-import org.qommons.Transactable;
-import org.qommons.Transaction;
-import org.qommons.ValueHolder;
 import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterCollections;
 import org.qommons.collect.BetterList;
@@ -522,16 +508,16 @@ public final class ObservableCollectionImpl {
 				if (stamp == theLastMatchStamp
 					|| (theLastMatch != null && theLastMatch.isPresent() && useCachedMatch(getCollection().getElement(theLastMatch).get())))
 					return theLastMatch == null ? theDefault.get() : getCollection().getElement(theLastMatch).get();
-					ValueHolder<CollectionElement<E>> element = new ValueHolder<>();
-					find(el -> element.accept(new SimpleElement(el.getElementId(), el.get())));
-					theLastMatchStamp = stamp;
-					if (element.get() != null) {
-						theLastMatch = element.get().getElementId();
-						return element.get().get();
-					} else {
-						theLastMatch = null;
-						return theDefault.get();
-					}
+				ValueHolder<CollectionElement<E>> element = new ValueHolder<>();
+				find(el -> element.accept(new SimpleElement(el.getElementId(), el.get())));
+				theLastMatchStamp = stamp;
+				if (element.get() != null) {
+					theLastMatch = element.get().getElementId();
+					return element.get().get();
+				} else {
+					theLastMatch = null;
+					return theDefault.get();
+				}
 			}
 		}
 
@@ -3425,8 +3411,11 @@ public final class ObservableCollectionImpl {
 		public void setValue(Collection<ElementId> elements, E value) {
 			try (Transaction t = lock(true, null)) {
 				ObservableCollection<? extends E> coll = theCollectionObservable.get();
-				if (coll == null && !elements.isEmpty())
-					throw new NoSuchElementException(StdMsg.ELEMENT_REMOVED);
+				if (coll == null) {
+					if (!elements.isEmpty())
+						throw new NoSuchElementException(StdMsg.ELEMENT_REMOVED);
+					return;
+				}
 				List<ElementId> sourceEls = elements.stream().map(el -> strip(coll, el)).collect(Collectors.toList());
 				((ObservableCollection<E>) coll).setValue(sourceEls, value);
 			}

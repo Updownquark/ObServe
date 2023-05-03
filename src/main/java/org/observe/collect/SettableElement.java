@@ -46,10 +46,9 @@ public interface SettableElement<E> extends ObservableElement<E>, SettableValue<
 			super(value);
 		}
 
-		/** @return The source value */
 		@Override
 		protected SettableElement<E> getSource() {
-			return getSource();
+			return (SettableElement<E>) super.getSource();
 		}
 
 		@Override

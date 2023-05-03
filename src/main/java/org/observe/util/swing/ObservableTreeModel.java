@@ -446,8 +446,10 @@ public abstract class ObservableTreeModel<T> implements TreeModel {
 				}
 			}
 
-			for (int i : indexes)
-				theChildNodes.get(i).changed();
+			if (indexes != null) {
+				for (int i : indexes)
+					theChildNodes.get(i).changed();
+			}
 		}
 
 		private void sort(int[] indexes, Object[] values) {

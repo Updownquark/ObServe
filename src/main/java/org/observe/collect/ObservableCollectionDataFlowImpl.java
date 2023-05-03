@@ -1152,7 +1152,7 @@ public class ObservableCollectionDataFlowImpl {
 
 				@Override
 				public boolean equals(Object obj) {
-					return obj.getClass() == getClass();
+					return obj != null && obj.getClass() == getClass();
 				}
 
 				@Override

@@ -1452,7 +1452,7 @@ public class BinaryOperatorSet {
 	}
 
 	static boolean unwrapBool(Boolean b) {
-		return b == null ? false : b.booleanValue();
+		return b != null && b.booleanValue();
 	}
 
 	static int unwrapI(Number i) {

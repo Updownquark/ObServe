@@ -217,8 +217,11 @@ public interface ObservableConfigFormat<E> {
 
 				@Override
 				public ObservableConfig getChild(ObservableConfig parent, boolean create, boolean trivial) {
-					if (parent == null && !create)
-						return null;
+					if (parent == null) {
+						if (!create)
+							return null;
+						throw new IllegalArgumentException("No parent given");
+					}
 					return parent.getChild(childName, create, child -> child.setTrivial(trivial));
 				}
 			}, () -> childName), childChange, previousValue, delayedAccept);
@@ -2468,7 +2471,7 @@ public interface ObservableConfigFormat<E> {
 			protected E create(ObservableConfigParseContext<E> ctx, QuickMap<String, Object> fieldValues) {
 				if (!theEntityType.getIdFields().isEmpty()) {
 					ObservableConfig config = ctx.getConfig(false, false);
-					if (config != null && !tryPopulateNewId(theEntityType, fieldValues, config, ctx.getSession()) && ctx != null) {
+					if (config != null && !tryPopulateNewId(theEntityType, fieldValues, config, ctx.getSession())) {
 						ctx.findReferences().act(__ -> {
 							tryPopulateNewId(theEntityType, fieldValues, config, ctx.getSession());
 						});

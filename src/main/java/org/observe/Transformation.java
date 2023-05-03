@@ -16,17 +16,7 @@ import java.util.function.Function;
 import java.util.function.Supplier;
 
 import org.observe.util.TypeTokens;
-import org.qommons.BiTuple;
-import org.qommons.Identifiable;
-import org.qommons.LambdaUtils;
-import org.qommons.Lockable;
-import org.qommons.Stamped;
-import org.qommons.StringUtils;
-import org.qommons.ThreadConstrained;
-import org.qommons.ThreadConstraint;
-import org.qommons.Transaction;
-import org.qommons.TriConsumer;
-import org.qommons.TriFunction;
+import org.qommons.*;
 import org.qommons.collect.ListenerList;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 
@@ -1217,7 +1207,7 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 		public boolean equals(Object obj) {
 			if (this == obj)
 				return true;
-			else if (!(obj instanceof SourceReplacingReverse))
+			else if (!(obj instanceof SourceModifyingReverse))
 				return false;
 			SourceModifyingReverse<?, ?> other = (SourceModifyingReverse<?, ?>) obj;
 			return theModifier.equals(other.theModifier)//
@@ -2461,11 +2451,11 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 				T oldResult = getCachedOrEvaluate(oldSource, state);
 				T newResult = reEval ? transform(true, //
 					() -> oldSource, newSource, __ -> oldResult, state, false) : oldResult;
-					boolean fireChange = theTransformation.isFireIfUnchanged()
-						|| (oldResult != newResult && !theTransformation.equivalence().elementEquals(oldResult, newResult));
-					cacheSource(newSource);
-					cacheResult(newResult);
-					return fireChange ? new BiTuple<>(oldResult, newResult) : null;
+				boolean fireChange = theTransformation.isFireIfUnchanged()
+					|| (oldResult != newResult && !theTransformation.equivalence().elementEquals(oldResult, newResult));
+				cacheSource(newSource);
+				cacheResult(newResult);
+				return fireChange ? new BiTuple<>(oldResult, newResult) : null;
 			}
 
 			@Override

@@ -29,7 +29,7 @@ public abstract class AbstractChainLink<S, T> implements ObservableChainLink<S, 
 	 * @param path The path for this link
 	 * @param sourceLink The source for this link
 	 */
-	public AbstractChainLink(String path, ObservableChainLink<?, S> sourceLink) {
+	protected AbstractChainLink(String path, ObservableChainLink<?, S> sourceLink) {
 		thePath = path;
 		theSourceLink = sourceLink;
 		theDerivedLinks = new ArrayList<>();

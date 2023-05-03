@@ -43,12 +43,10 @@ public abstract class AbstractMappedCollectionLink<S, T> extends OneToOneCollect
 
 	@Override
 	public boolean is(ObservableChainLink.ChainLinkFlag flag) {
-		switch (flag) {
-		case INEXACT_REVERSIBLE:
+		if (flag == ObservableChainLink.ChainLinkFlag.INEXACT_REVERSIBLE)
 			return isInexactReversible;
-		default:
+		else
 			return super.is(flag);
-		}
 	}
 
 	@Override

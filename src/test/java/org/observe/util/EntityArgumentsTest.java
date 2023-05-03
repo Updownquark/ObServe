@@ -17,12 +17,12 @@ import org.observe.util.EntityArguments.Arguments;
 import org.observe.util.EntityArguments.FileField;
 import org.observe.util.EntityArguments.Flag;
 import org.observe.util.EntityArguments.Pattern;
-import org.qommons.ArgumentParsing2;
+import org.qommons.ArgumentParsing;
 import org.qommons.collect.BetterList;
 
 /** Tests {@link EntityArguments} */
 public class EntityArgumentsTest {
-	private static final SimpleDateFormat DATE_FORMAT = new SimpleDateFormat("ddMMMyyyy HH:mm:ss");
+	private static final String DATE_FORMAT = "ddMMMyyyy HH:mm:ss";
 
 	@SuppressWarnings("javadoc")
 	public enum TestEnum {
@@ -81,9 +81,9 @@ public class EntityArgumentsTest {
 	@SuppressWarnings("javadoc")
 	@Arguments(singleValuePattern = "singleValuePattern", multiValuePattern = "multiValuePattern")
 	public interface SplitTestArgs {
-		ArgumentParsing2.ArgumentPattern singleValuePattern = ArgumentParsing2.SPLIT_VALUE_PATTERN;
-		ArgumentParsing2.ArgumentPattern notSplitValuePattern = ArgumentParsing2.DEFAULT_VALUE_PATTERN;
-		ArgumentParsing2.ArgumentPattern multiValuePattern = ArgumentParsing2.SPLIT_MULTI_VALUE_PATTERN;
+		ArgumentParsing.ArgumentPattern singleValuePattern = ArgumentParsing.SPLIT_VALUE_PATTERN;
+		ArgumentParsing.ArgumentPattern notSplitValuePattern = ArgumentParsing.DEFAULT_VALUE_PATTERN;
+		ArgumentParsing.ArgumentPattern multiValuePattern = ArgumentParsing.SPLIT_MULTI_VALUE_PATTERN;
 
 		@Flag
 		boolean isFlag();
@@ -132,6 +132,7 @@ public class EntityArgumentsTest {
 	public void testArgumentParsing() {
 		EntityArguments<TestArgs> parser = new EntityArguments<>(TestArgs.class).initParser();
 		parser.getParser().printHelpOnEmpty(false).printHelpOnError(false);
+		SimpleDateFormat dateFormat = new SimpleDateFormat(DATE_FORMAT);
 
 		// Round 1
 		TestArgs args = parser.parse("--flag", "--long-arg=5", "--long-arg=6", "--enum-arg=One", "--string-arg=str",
@@ -148,7 +149,7 @@ public class EntityArgumentsTest {
 		Assert.assertNull(args.getFileArg1());
 		Assert.assertEquals(20, args.getIntArg());
 		try {
-			Assert.assertEquals(DATE_FORMAT.parse("25Dec2020 00:30:00").toInstant(), args.getTimeArg());
+			Assert.assertEquals(dateFormat.parse("25Dec2020 00:30:00").toInstant(), args.getTimeArg());
 		} catch (ParseException e) {
 			throw new IllegalStateException(e);
 		}
@@ -184,6 +185,7 @@ public class EntityArgumentsTest {
 	public void testSplitArgumentParsing() {
 		EntityArguments<SplitTestArgs> parser = new EntityArguments<>(SplitTestArgs.class).initParser();
 		parser.getParser().printHelpOnEmpty(false).printHelpOnError(false);
+		SimpleDateFormat dateFormat = new SimpleDateFormat(DATE_FORMAT);
 
 		// Round 1
 		SplitTestArgs args = parser.parse("--flag", "--long-arg", "5", "--long-arg", "6", "--enum-arg", "One", "--string-arg", "str",
@@ -200,7 +202,7 @@ public class EntityArgumentsTest {
 		Assert.assertNull(args.getFileArg1());
 		Assert.assertEquals(20, args.getIntArg());
 		try {
-			Assert.assertEquals(DATE_FORMAT.parse("25Dec2020 00:30:00").toInstant(), args.getTimeArg());
+			Assert.assertEquals(dateFormat.parse("25Dec2020 00:30:00").toInstant(), args.getTimeArg());
 		} catch (ParseException e) {
 			throw new IllegalStateException(e);
 		}

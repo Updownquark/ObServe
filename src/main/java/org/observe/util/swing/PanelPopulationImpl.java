@@ -1,16 +1,6 @@
 package org.observe.util.swing;
 
-import java.awt.BorderLayout;
-import java.awt.Color;
-import java.awt.Component;
-import java.awt.Container;
-import java.awt.Dimension;
-import java.awt.EventQueue;
-import java.awt.Image;
-import java.awt.Insets;
-import java.awt.LayoutManager;
-import java.awt.LayoutManager2;
-import java.awt.Point;
+import java.awt.*;
 import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
 import java.awt.event.KeyAdapter;
@@ -40,34 +30,7 @@ import java.util.function.Function;
 import java.util.function.IntSupplier;
 import java.util.function.Supplier;
 
-import javax.swing.AbstractButton;
-import javax.swing.Action;
-import javax.swing.BorderFactory;
-import javax.swing.Icon;
-import javax.swing.ImageIcon;
-import javax.swing.JButton;
-import javax.swing.JCheckBox;
-import javax.swing.JComboBox;
-import javax.swing.JComponent;
-import javax.swing.JDialog;
-import javax.swing.JLabel;
-import javax.swing.JList;
-import javax.swing.JMenu;
-import javax.swing.JMenuItem;
-import javax.swing.JOptionPane;
-import javax.swing.JPanel;
-import javax.swing.JPopupMenu;
-import javax.swing.JProgressBar;
-import javax.swing.JScrollPane;
-import javax.swing.JSpinner;
-import javax.swing.JSplitPane;
-import javax.swing.JTabbedPane;
-import javax.swing.JToggleButton;
-import javax.swing.ListCellRenderer;
-import javax.swing.ListSelectionModel;
-import javax.swing.SpinnerNumberModel;
-import javax.swing.SwingConstants;
-import javax.swing.SwingUtilities;
+import javax.swing.*;
 import javax.swing.event.ChangeListener;
 
 import org.jdesktop.swingx.JXCollapsiblePane;
@@ -84,33 +47,8 @@ import org.observe.collect.ObservableCollection;
 import org.observe.util.ObservableCollectionSynchronization;
 import org.observe.util.TypeTokens;
 import org.observe.util.swing.ObservableCellRenderer.CellRenderContext;
-import org.observe.util.swing.PanelPopulation.ActionEnablement;
-import org.observe.util.swing.PanelPopulation.Alert;
-import org.observe.util.swing.PanelPopulation.ButtonEditor;
-import org.observe.util.swing.PanelPopulation.CollapsePanel;
-import org.observe.util.swing.PanelPopulation.CollectionWidgetBuilder;
-import org.observe.util.swing.PanelPopulation.ComboButtonBuilder;
-import org.observe.util.swing.PanelPopulation.ComboEditor;
-import org.observe.util.swing.PanelPopulation.ComponentEditor;
-import org.observe.util.swing.PanelPopulation.DataAction;
-import org.observe.util.swing.PanelPopulation.FieldEditor;
-import org.observe.util.swing.PanelPopulation.ImageControl;
-import org.observe.util.swing.PanelPopulation.ListBuilder;
-import org.observe.util.swing.PanelPopulation.MenuBuilder;
-import org.observe.util.swing.PanelPopulation.PanelPopulator;
-import org.observe.util.swing.PanelPopulation.ProgressEditor;
+import org.observe.util.swing.PanelPopulation.*;
 import org.observe.util.swing.PanelPopulation.ScrollPane;
-import org.observe.util.swing.PanelPopulation.SettingsMenu;
-import org.observe.util.swing.PanelPopulation.SliderEditor;
-import org.observe.util.swing.PanelPopulation.SplitPane;
-import org.observe.util.swing.PanelPopulation.SteppedFieldEditor;
-import org.observe.util.swing.PanelPopulation.TabEditor;
-import org.observe.util.swing.PanelPopulation.TabPaneEditor;
-import org.observe.util.swing.PanelPopulation.TableBuilder;
-import org.observe.util.swing.PanelPopulation.ToggleEditor;
-import org.observe.util.swing.PanelPopulation.TreeEditor;
-import org.observe.util.swing.PanelPopulation.TreeTableEditor;
-import org.observe.util.swing.PanelPopulation.WindowBuilder;
 import org.observe.util.swing.WindowPopulation.JMenuBuilder;
 import org.qommons.BiTuple;
 import org.qommons.Identifiable;
@@ -1357,10 +1295,8 @@ class PanelPopulationImpl {
 				getContainer().add(component, constraints);
 			if (postLabel != null)
 				getContainer().add(postLabel);
-			if (field.isVisible() != null) {
-				if (field.isVisible() != null)
-					field.isVisible().changes().takeUntil(getUntil()).act(new VizChanger(component, fieldLabel, postLabel));
-			}
+			if (field.isVisible() != null)
+				field.isVisible().changes().takeUntil(getUntil()).act(new VizChanger(component, fieldLabel, postLabel));
 		}
 
 		@Override
@@ -3208,7 +3144,7 @@ class PanelPopulationImpl {
 				@Override
 				public P2 disableWith(ObservableValue<String> disabled) {
 					String msg = disabled.get();
-					isEnabled &= (msg != null);
+					isEnabled = isEnabled && (msg != null);
 					if (theAction != null) {
 						theAction.setEnabled(msg == null);
 						if (msg != null)
@@ -3719,7 +3655,7 @@ class PanelPopulationImpl {
 				result = JOptionPane.showConfirmDialog(theComponent, theMessage, theTitle, ct, getJOptionType(), icon);
 			else
 				result = JOptionPane.showConfirmDialog(theComponent, theMessage, theTitle, ct, getJOptionType());
-			return (result == JOptionPane.OK_OPTION || result == JOptionPane.YES_OPTION);
+			return result == JOptionPane.OK_OPTION;
 		}
 
 		@Override

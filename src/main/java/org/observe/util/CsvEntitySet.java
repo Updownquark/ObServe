@@ -2323,7 +2323,7 @@ public class CsvEntitySet implements AutoCloseable {
 			case '"':
 				hasQuote = true;
 				if (hasDelimiter) { // Double the quote
-					if (escaped != null) {
+					if (escaped == null) {
 						escaped = new StringBuilder();
 						escaped.append(entry, 0, c);
 					}
@@ -2332,16 +2332,23 @@ public class CsvEntitySet implements AutoCloseable {
 				break;
 			case '\n':
 				ch = 'n';
-				//$FALL-THROUGH$
-			case '\r':
-				ch = 'r';
-				//$FALL-THROUGH$
-			case '\\':
-				if (escaped != null) {
+				if (escaped == null) {
 					escaped = new StringBuilder();
 					escaped.append(entry, 0, c);
 				}
-				escaped.append('\\');
+				break;
+			case '\r':
+				ch = 'r';
+				if (escaped == null) {
+					escaped = new StringBuilder();
+					escaped.append(entry, 0, c);
+				}
+				break;
+			case '\\':
+				if (escaped == null) {
+					escaped = new StringBuilder();
+					escaped.append(entry, 0, c);
+				}
 				break;
 			}
 			if (escaped != null)

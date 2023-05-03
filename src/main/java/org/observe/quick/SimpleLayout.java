@@ -335,7 +335,7 @@ public class SimpleLayout implements LayoutManager2 {
 				} else
 					sz += componentLayoutDim;
 			}
-		} else if (size != null && withPercent || size.type != SizeUnit.Percent)
+		} else if (size != null && (withPercent || size.type != SizeUnit.Percent))
 			sz = size.evaluate(containerSize);
 		else
 			sz = componentLayoutDim;

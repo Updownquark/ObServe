@@ -16,10 +16,10 @@ import java.util.function.Predicate;
 import java.util.regex.Matcher;
 
 import org.observe.util.EntityReflector.ReflectedField;
-import org.qommons.ArgumentParsing2;
-import org.qommons.ArgumentParsing2.ArgumentPattern;
-import org.qommons.ArgumentParsing2.ArgumentType;
-import org.qommons.ArgumentParsing2.ValuedArgumentSetBuilder;
+import org.qommons.ArgumentParsing;
+import org.qommons.ArgumentParsing.ArgumentPattern;
+import org.qommons.ArgumentParsing.ArgumentType;
+import org.qommons.ArgumentParsing.ValuedArgumentSetBuilder;
 import org.qommons.LambdaUtils;
 import org.qommons.StringUtils;
 import org.qommons.collect.BetterList;
@@ -40,19 +40,19 @@ public class EntityArguments<E> {
 		String description() default "";
 
 		/**
-		 * The name of a field in the entity type containing the {@link org.qommons.ArgumentParsing2.ArgumentPattern argument pattern} to
+		 * The name of a field in the entity type containing the {@link org.qommons.ArgumentParsing.ArgumentPattern argument pattern} to
 		 * use for {@link Flag flag} arguments by default
 		 */
 		String flagPattern() default "";
 
 		/**
-		 * The name of a field in the entity type containing the {@link org.qommons.ArgumentParsing2.ArgumentPattern argument pattern} to
+		 * The name of a field in the entity type containing the {@link org.qommons.ArgumentParsing.ArgumentPattern argument pattern} to
 		 * use for single-valued arguments by default
 		 */
 		String singleValuePattern() default "";
 
 		/**
-		 * The name of a field in the entity type containing the {@link org.qommons.ArgumentParsing2.ArgumentPattern argument pattern} to
+		 * The name of a field in the entity type containing the {@link org.qommons.ArgumentParsing.ArgumentPattern argument pattern} to
 		 * use for multi-valued arguments by default
 		 */
 		String multiValuePattern() default "";
@@ -84,7 +84,7 @@ public class EntityArguments<E> {
 		String maxValue() default "";
 
 		/**
-		 * The name of a field in the entity type containing the {@link org.qommons.ArgumentParsing2.ArgumentPattern argument pattern} to
+		 * The name of a field in the entity type containing the {@link org.qommons.ArgumentParsing.ArgumentPattern argument pattern} to
 		 * use for this argument
 		 */
 		String argPattern() default "";
@@ -175,7 +175,7 @@ public class EntityArguments<E> {
 	}
 
 	private final EntityReflector<E> theEntityType;
-	private ArgumentParsing2.ArgumentParser theParser;
+	private ArgumentParsing.ArgumentParser theParser;
 	private final QuickMap<String, String> theArgNames;
 
 	/** @param entityType The entity class to parse arguments for */
@@ -197,7 +197,7 @@ public class EntityArguments<E> {
 	public EntityArguments<E> initParser() {
 		if (theParser != null)
 			return this;
-		ArgumentParsing2.ParserBuilder builder = ArgumentParsing2.build();
+		ArgumentParsing.ParserBuilder builder = ArgumentParsing.build();
 		return defineArguments(builder).setParser(builder.build());
 	}
 
@@ -209,11 +209,11 @@ public class EntityArguments<E> {
 	 * @param builder The builder to define arguments on
 	 * @return This parser
 	 */
-	public EntityArguments<E> defineArguments(ArgumentParsing2.ParserBuilder builder){
+	public EntityArguments<E> defineArguments(ArgumentParsing.ParserBuilder builder){
 		Arguments argsAnn = TypeTokens.getRawType(theEntityType.getType()).getAnnotation(Arguments.class);
-		ArgumentParsing2.ArgumentPattern flagPattern = ArgumentParsing2.DEFAULT_FLAG_PATTERN;
-		ArgumentParsing2.ArgumentPattern svPattern = ArgumentParsing2.DEFAULT_VALUE_PATTERN;
-		ArgumentParsing2.ArgumentPattern mvPattern = ArgumentParsing2.DEFAULT_MULTI_VALUE_PATTERN;
+		ArgumentParsing.ArgumentPattern flagPattern = ArgumentParsing.DEFAULT_FLAG_PATTERN;
+		ArgumentParsing.ArgumentPattern svPattern = ArgumentParsing.DEFAULT_VALUE_PATTERN;
+		ArgumentParsing.ArgumentPattern mvPattern = ArgumentParsing.DEFAULT_MULTI_VALUE_PATTERN;
 		if (argsAnn != null) {
 			if (argsAnn.description().length() > 0 && builder.getDescription() == null)
 				builder.withDescription(argsAnn.description());
@@ -244,7 +244,7 @@ public class EntityArguments<E> {
 				checkArgument(oldArg, argType, flag, multi);
 				continue;
 			}
-			ArgumentParsing2.ArgumentPattern pattern;
+			ArgumentParsing.ArgumentPattern pattern;
 			if (flag)
 				pattern = flagPattern;
 			else if (multi)
@@ -279,12 +279,12 @@ public class EntityArguments<E> {
 	}
 
 	/**
-	 * @param parser The parser to use to parse arguments. This should have been {@link org.qommons.ArgumentParsing2.ParserBuilder#build()
-	 *        built} from a builder on which this instance's {@link #defineArguments(org.qommons.ArgumentParsing2.ParserBuilder)
+	 * @param parser The parser to use to parse arguments. This should have been {@link org.qommons.ArgumentParsing.ParserBuilder#build()
+	 *        built} from a builder on which this instance's {@link #defineArguments(org.qommons.ArgumentParsing.ParserBuilder)
 	 *        defineArguments} method was called to ensure arguments for each field in this entity have been defined.
 	 * @return This argument parser
 	 */
-	public EntityArguments<E> setParser(ArgumentParsing2.ArgumentParser parser) {
+	public EntityArguments<E> setParser(ArgumentParsing.ArgumentParser parser) {
 		theParser = parser;
 		for (int f = 0; f < theEntityType.getFields().keySize(); f++) {
 			ReflectedField<E, ?> field = theEntityType.getFields().get(f);
@@ -308,9 +308,9 @@ public class EntityArguments<E> {
 		return this;
 	}
 
-	private ArgumentParsing2.ArgumentPattern getArgPattern(String argPattern, char type) {
+	private ArgumentParsing.ArgumentPattern getArgPattern(String argPattern, char type) {
 		// Lookup static field from annotation value
-		ArgumentParsing2.ArgumentPattern pattern;
+		ArgumentParsing.ArgumentPattern pattern;
 		try {
 			pattern = (ArgumentPattern) TypeTokens.getRawType(theEntityType.getType()).getDeclaredField(argPattern).get(null);
 		} catch (IllegalAccessException e) {
@@ -371,7 +371,7 @@ public class EntityArguments<E> {
 					if (m.getParameterTypes().length == 1) {
 						parseMethod[0] = m;
 						break;
-					} else if (m.getParameterTypes()[1] == ArgumentParsing2.Arguments.class) {
+					} else if (m.getParameterTypes()[1] == ArgumentParsing.Arguments.class) {
 						withArgs[0] = true;
 						parseMethod[0] = m;
 						break;
@@ -463,7 +463,7 @@ public class EntityArguments<E> {
 			throw new IllegalArgumentException("Unrecognized argument field type: " + type.getName() + " (" + field.getName() + ")");
 	}
 
-	private <T> void configureArg(ArgumentParsing2.ArgumentBuilder<T, ?> ab, Argument argAnn, boolean required, boolean multi, int index) {
+	private <T> void configureArg(ArgumentParsing.ArgumentBuilder<T, ?> ab, Argument argAnn, boolean required, boolean multi, int index) {
 		if (multi && argAnn != null) {
 			if (argAnn.minTimes() > 0 || argAnn.maxTimes() < Integer.MAX_VALUE)
 				ab.times(argAnn.minTimes(), argAnn.maxTimes());
@@ -520,9 +520,9 @@ public class EntityArguments<E> {
 
 	/**
 	 * @return The underlying command-line arg parser. This will be null if the parser has not been either {@link #initParser() initialized}
-	 *         or {@link #setParser(org.qommons.ArgumentParsing2.ArgumentParser) set}.
+	 *         or {@link #setParser(org.qommons.ArgumentParsing.ArgumentParser) set}.
 	 */
-	public ArgumentParsing2.ArgumentParser getParser() {
+	public ArgumentParsing.ArgumentParser getParser() {
 		return theParser;
 	}
 
@@ -541,7 +541,7 @@ public class EntityArguments<E> {
 	public E parse(Collection<String> args) {
 		if (theParser == null)
 			initParser();
-		ArgumentParsing2.Arguments parsedArgs = theParser.parse(args);
+		ArgumentParsing.Arguments parsedArgs = theParser.parse(args);
 		QuickMap<String, Object> fieldValues = theEntityType.getFields().keySet().createMap();
 		for (int a = 0; a < fieldValues.keySize(); a++) {
 			Class<?> type = TypeTokens.getRawType(theEntityType.getFields().get(a).getType());

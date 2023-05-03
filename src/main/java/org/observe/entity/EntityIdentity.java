@@ -93,7 +93,7 @@ public class EntityIdentity<E> implements Comparable<EntityIdentity<?>> {
 		else if (!(obj instanceof EntityIdentity))
 			return false;
 		EntityIdentity<?> other = (EntityIdentity<?>) obj;
-		if (!theEntityType.equals(theEntityType))
+		if (!theEntityType.equals(other.theEntityType))
 			return false;
 		for (int i = 0; i < theFields.keySet().size(); i++)
 			if (!Objects.equals(theFields.get(i), other.theFields.get(i)))
