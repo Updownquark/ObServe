@@ -81,7 +81,7 @@ public interface QuickValueWidget<T> extends QuickWidget {
 			}
 
 			@Override
-			public Interpreted.Abstract<T, W> update(QuickStyled.QuickInterpretationCache cache)
+			public Interpreted.Abstract<T, W> update(QuickStyledElement.QuickInterpretationCache cache)
 				throws ExpressoInterpretationException {
 				super.update(cache);
 				InterpretedValueSynth<SettableValue<?>, SettableValue<T>> value = getDefinition().getValue()

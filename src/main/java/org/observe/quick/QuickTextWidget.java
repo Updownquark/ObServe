@@ -101,7 +101,7 @@ public interface QuickTextWidget<T> extends QuickValueWidget<T> {
 			}
 
 			@Override
-			public Interpreted.Abstract<T, W> update(QuickStyled.QuickInterpretationCache cache) throws ExpressoInterpretationException {
+			public Interpreted.Abstract<T, W> update(QuickStyledElement.QuickInterpretationCache cache) throws ExpressoInterpretationException {
 				super.update(cache);
 				TypeToken<T> valueType = getValueType();
 				TypeToken<Format<T>> formatType = TypeTokens.get().keyFor(Format.class).<Format<T>> parameterized(valueType);

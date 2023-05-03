@@ -100,7 +100,7 @@ public class QuickDocument2 extends QuickElement.Abstract {
 
 			if (theBody == null || theBody.getDefinition() != getDefinition().getBody())
 				theBody = getDefinition().getBody().interpret(null);
-			theBody.update(new QuickStyled.QuickInterpretationCache());
+			theBody.update(new QuickStyledElement.QuickInterpretationCache());
 			return this;
 		}
 

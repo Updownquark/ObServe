@@ -213,9 +213,9 @@ public class TestInterpretation implements QonfigInterpretation {
 			this.b = synth.b.get(msi);
 			this.c = synth.c.get(msi);
 			this.d = synth.d.get(msi);
-			this.s0 = synth.s0.evaluate(msi, null);
-			this.s1 = synth.s1.evaluate(msi, null);
-			this.s2 = synth.s2.evaluate(msi, null);
+			this.s0 = synth.s0.evaluate(msi);
+			this.s1 = synth.s1.evaluate(msi);
+			this.s2 = synth.s2.evaluate(msi);
 		}
 
 		/**
@@ -385,8 +385,8 @@ public class TestInterpretation implements QonfigInterpretation {
 		B(Synth<?> synth, ModelSetInstance msi, List<A> children) throws ModelInstantiationException {
 			this.e = synth.e.get(msi);
 			this.f = synth.f.get(msi);
-			this.s3 = synth.s3.evaluate(msi, null);
-			this.s4 = synth.s4.evaluate(msi, null);
+			this.s3 = synth.s3.evaluate(msi);
+			this.s4 = synth.s4.evaluate(msi);
 			this.a = children;
 		}
 	}
@@ -441,7 +441,7 @@ public class TestInterpretation implements QonfigInterpretation {
 		C(Synth synth, ModelSetInstance msi, List<A> children) throws ModelInstantiationException {
 			super(synth, msi, children);
 			g = synth.g.get(msi);
-			s5 = synth.s5.evaluate(msi, null);
+			s5 = synth.s5.evaluate(msi);
 		}
 	}
 
@@ -495,7 +495,7 @@ public class TestInterpretation implements QonfigInterpretation {
 		D(Synth synth, ModelSetInstance msi, List<A> children) throws ModelInstantiationException {
 			super(synth, msi, children);
 			h = synth.h.get(msi);
-			s6 = synth.s6.evaluate(msi, null);
+			s6 = synth.s6.evaluate(msi);
 		}
 	}
 }

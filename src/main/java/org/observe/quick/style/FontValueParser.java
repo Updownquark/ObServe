@@ -55,7 +55,7 @@ public class FontValueParser implements NonStructuredParser {
 		.with("bold", bold)//
 		.with("heavy", heavy)//
 		.with("extra-bold", extraBold)//
-		.with("ulter-bold", ultraBold)//
+		.with("ultra-bold", ultraBold)//
 		.getUnmodifiable();
 	/** All font slants in this class, stored by the name the user can use to refer to them */
 	public static final Map<String, Double> NAMED_SLANTS = QommonsUtils.<String, Double> buildMap(null)//

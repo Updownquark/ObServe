@@ -39,31 +39,38 @@ public class QuickTypeStyle {
 
 	/**
 	 * @param element The element type to get the style type of
+	 * @return The style type for the given element type, or null if it has not been
+	 *         {@link #getOrCompile(QonfigElementOrAddOn, AbstractQIS, QonfigToolkit) compiled}
+	 */
+	public static synchronized QuickTypeStyle get(QonfigElementOrAddOn element) {
+		return ELEMENT_STYLE_TYPES.get(element);
+	}
+
+	/**
+	 * @param element The element type to get the style type of
 	 * @param session The session to get the {@link ExpressoQIS#getExpressoEnv() expresso environment} from and for
 	 *        {@link AbstractQIS#error(String) error reporting}
 	 * @param style The toolkit inheriting Quick-Style
 	 * @return The style type for the given element type
 	 * @throws QonfigInterpretationException If an error occurs synthesizing the style information for the given element
 	 */
-	public static synchronized QuickTypeStyle of(QonfigElementOrAddOn element, AbstractQIS<?> session, QonfigToolkit style)
+	public static synchronized QuickTypeStyle getOrCompile(QonfigElementOrAddOn element, AbstractQIS<?> session, QonfigToolkit style)
 		throws QonfigInterpretationException {
-		QuickTypeStyle styled = ELEMENT_STYLE_TYPES.get(element);
+		QuickTypeStyle styled = get(element);
 		if (styled != null)
 			return styled;
-		else if (session == null || style == null)
-			return null;
 		QonfigAddOn styledAddOn = style.getAddOn(STYLED);
 		if (!styledAddOn.isAssignableFrom(element))
 			return null;
 		List<QuickTypeStyle> parents = new ArrayList<>();
 		QonfigElementOrAddOn superEl = element.getSuperElement();
 		if (superEl != null) {
-			QuickTypeStyle parent = of(superEl, session, style);
+			QuickTypeStyle parent = getOrCompile(superEl, session, style);
 			if (parent != null)
 				parents.add(parent);
 		}
 		for (QonfigAddOn inh : element.getInheritance()) {
-			QuickTypeStyle parent = of(inh, session, style);
+			QuickTypeStyle parent = getOrCompile(inh, session, style);
 			if (parent != null)
 				parents.add(parent);
 		}
@@ -85,7 +92,7 @@ public class QuickTypeStyle {
 		QonfigElement stylesEl = element.getMetadata().getRoot().getChildrenByRole()
 			.get(styledAddOn.getMetaSpec().getChild("styles").getDeclared()).peekFirst();
 		if (stylesEl != null) {
-			for (QonfigElement styleAttr : stylesEl.getChildrenInRole(style, "styles", "style-attribute")) {
+			for (QonfigElement styleAttr : stylesEl.getChildrenInRole(style, "styles", STYLE_ATTRIBUTE)) {
 				String name = styleAttr.getAttributeText(nameAttr);
 				if (declaredAttributes.containsKey(name)) {
 					session.error("Multiple style attributes named '" + name + "' declared");
@@ -194,12 +201,7 @@ public class QuickTypeStyle {
 			QonfigElementOrAddOn el = theElement.getDeclarer().getElementOrAddOn(elName);
 			if (el == null)
 				throw new IllegalArgumentException("No such element or add-on '" + elName + "'");
-			QuickTypeStyle styled;
-			try {
-				styled = of(el, null, null);
-			} catch (QonfigInterpretationException e) {
-				throw new IllegalStateException("Shouldn't happen", e);
-			}
+			QuickTypeStyle styled = get(el);
 			if (styled == null)
 				throw new IllegalArgumentException(theElement + " is not related to " + elName);
 			return styled.getAttribute(name.substring(dot + 1));
@@ -220,12 +222,7 @@ public class QuickTypeStyle {
 			QonfigElementOrAddOn el = theElement.getDeclarer().getElementOrAddOn(elName);
 			if (el == null)
 				throw new IllegalArgumentException("No such element or add-on '" + elName + "'");
-			QuickTypeStyle styled;
-			try {
-				styled = of(el, null, null);
-			} catch (QonfigInterpretationException e) {
-				throw new IllegalStateException("Shouldn't happen", e);
-			}
+			QuickTypeStyle styled = get(el);
 			if (styled == null)
 				throw new IllegalArgumentException(theElement + " is not related to " + elName);
 			return styled.getAttributes(name.substring(dot + 1));

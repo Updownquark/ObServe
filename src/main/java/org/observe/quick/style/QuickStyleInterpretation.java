@@ -26,23 +26,11 @@ import org.observe.util.TypeTokens;
 import org.qommons.IdentityKey;
 import org.qommons.QommonsUtils;
 import org.qommons.Version;
-import org.qommons.config.DefaultQonfigParser;
-import org.qommons.config.QommonsConfig;
-import org.qommons.config.QonfigAddOn;
-import org.qommons.config.QonfigAttributeDef;
-import org.qommons.config.QonfigChildDef;
-import org.qommons.config.QonfigDocument;
-import org.qommons.config.QonfigElement;
+import org.qommons.config.*;
 import org.qommons.config.QonfigElement.QonfigValue;
-import org.qommons.config.QonfigElementOrAddOn;
-import org.qommons.config.QonfigInterpretation;
-import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigInterpreterCore.Builder;
 import org.qommons.config.QonfigInterpreterCore.CoreSession;
 import org.qommons.config.QonfigInterpreterCore.QonfigValueModifier;
-import org.qommons.config.QonfigParseException;
-import org.qommons.config.QonfigToolkit;
-import org.qommons.config.SpecialSession;
 import org.qommons.io.LocatedFilePosition;
 import org.qommons.io.SimpleXMLParser;
 
@@ -184,8 +172,8 @@ public class QuickStyleInterpretation implements QonfigInterpretation {
 				DynamicModelValue.satisfyDynamicValue(MODEL_ELEMENT_NAME, exS.getExpressoEnv().getModels(), //
 					ObservableModelSet.CompiledModelValue.literal(TypeTokens.get().of(QonfigElement.class), session.getElement(),
 						MODEL_ELEMENT_NAME));
-				session.put(StyleQIS.STYLE_PROP, new QuickCompiledStyle(Collections.unmodifiableList(declared), parentStyle, styleSheet,
-					session.getElement(), exS, theToolkit, new HashMap<>()));
+				session.put(StyleQIS.STYLE_PROP, new QuickCompiledStyle.Default(Collections.unmodifiableList(declared), parentStyle,
+					styleSheet, session.getElement(), exS, theToolkit, new HashMap<>()));
 			}
 		})//
 		.createWith("style", StyleValues.class, session -> interpretStyle(wrap(session)))//
@@ -211,7 +199,7 @@ public class QuickStyleInterpretation implements QonfigInterpretation {
 		modifyForStyle(session);
 
 		QonfigValue rolePath = session.getAttributeQV("child");
-		if (rolePath != null) {
+		if (rolePath != null && rolePath.value != null) { // Role path may be defaulted
 			if (application == null)
 				throw new QonfigInterpretationException("Cannot specify a style role without a type above it", //
 					rolePath.position == null ? null : new LocatedFilePosition(rolePath.fileLocation, rolePath.position.getPosition(0)),
@@ -234,7 +222,7 @@ public class QuickStyleInterpretation implements QonfigInterpretation {
 			}
 		}
 		QonfigValue elName = session.getAttributeQV("element");
-		if (elName != null) {
+		if (elName != null && elName.text != null) {
 			QonfigElementOrAddOn el;
 			try {
 				el = session.getElement().getDocument().getDocToolkit().getElementOrAddOn(elName.text);
@@ -264,13 +252,13 @@ public class QuickStyleInterpretation implements QonfigInterpretation {
 
 			Set<QuickStyleAttribute<?>> attrs = new HashSet<>();
 			if (element != null) {
-				QuickTypeStyle styled = QuickTypeStyle.of(element.getType(), exS, theToolkit);
+				QuickTypeStyle styled = QuickTypeStyle.getOrCompile(element.getType(), exS, theToolkit);
 				if (styled != null)
-					attrs.addAll(QuickTypeStyle.of(element.getType(), exS, theToolkit).getAttributes(attrName.text));
+					attrs.addAll(QuickTypeStyle.getOrCompile(element.getType(), exS, theToolkit).getAttributes(attrName.text));
 				for (QonfigAddOn inh : element.getInheritance().values()) {
 					if (attrs.size() > 1)
 						break;
-					styled = QuickTypeStyle.of(inh, exS, theToolkit);
+					styled = QuickTypeStyle.getOrCompile(inh, exS, theToolkit);
 					if (styled != null)
 						attrs.addAll(styled.getAttributes(attrName.text));
 				}
@@ -286,7 +274,7 @@ public class QuickStyleInterpretation implements QonfigInterpretation {
 				for (QonfigElementOrAddOn type : application.getTypes().values()) {
 					if (attrs.size() > 1)
 						break;
-					QuickTypeStyle styled = QuickTypeStyle.of(type, exS, theToolkit);
+					QuickTypeStyle styled = QuickTypeStyle.getOrCompile(type, exS, theToolkit);
 					if (styled != null)
 						attrs.addAll(styled.getAttributes(attrName.text));
 				}
@@ -342,8 +330,8 @@ public class QuickStyleInterpretation implements QonfigInterpretation {
 				List<QuickStyleValue<?>> values = new ArrayList<>();
 				if (value != null && value.getExpression() != ObservableExpression.EMPTY) {
 					Set<DynamicModelValue.Identity> mvs = new LinkedHashSet<>();
-					LocatedExpression replacedValue = theApplication.findModelValues(value, mvs,
-						exS.getExpressoEnv().getModels(), theToolkit, styleSheet != null);
+					LocatedExpression replacedValue = theApplication.findModelValues(value, mvs, exS.getExpressoEnv().getModels(),
+						theToolkit, styleSheet != null);
 					values.add(new QuickStyleValue<>(styleSheet, theApplication, theAttr, replacedValue));
 				}
 				if (styleSetRef != null)

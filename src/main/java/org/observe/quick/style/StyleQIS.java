@@ -115,9 +115,9 @@ public class StyleQIS implements SpecialSession<StyleQIS> {
 			else if (!getElement().isInstance(el))
 				throw new QonfigInterpretationException("This element is not an instance of  '" + element + "'",
 					getElement().getPositionInFile(), 0);
-			return QuickTypeStyle.of(el, as(ExpressoQIS.class), theStyleTK).getAttribute(name, type);
+			return QuickTypeStyle.getOrCompile(el, as(ExpressoQIS.class), theStyleTK).getAttribute(name, type);
 		}
-		return QuickTypeStyle.of(getFocusType(), as(ExpressoQIS.class), theStyleTK).getAttribute(name, type);
+		return QuickTypeStyle.getOrCompile(getFocusType(), as(ExpressoQIS.class), theStyleTK).getAttribute(name, type);
 	}
 
 	@Override

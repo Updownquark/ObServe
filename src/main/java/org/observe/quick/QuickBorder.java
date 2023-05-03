@@ -1,6 +1,7 @@
 package org.observe.quick;
 
 import java.awt.Color;
+import java.util.Map;
 
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
@@ -10,44 +11,62 @@ import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
-import org.observe.quick.style.QuickInterpretedStyle.QuickElementStyleAttribute;
+import org.observe.quick.QuickTextElement.QuickTextStyle;
+import org.observe.quick.style.CompiledStyleApplication;
+import org.observe.quick.style.InterpretedStyleApplication;
+import org.observe.quick.style.QuickCompiledStyle;
+import org.observe.quick.style.QuickInterpretedStyle;
+import org.observe.quick.style.QuickStyleAttribute;
+import org.observe.quick.style.QuickTypeStyle;
 import org.observe.util.TypeTokens;
 import org.qommons.config.AbstractQIS;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigInterpretationException;
 
-public interface QuickBorder extends QuickStyled {
-	public interface Def<B extends QuickBorder> extends QuickStyled.Def<B> {
+public interface QuickBorder extends QuickStyledElement {
+	public interface Def<B extends QuickBorder> extends QuickStyledElement.Def<B> {
+		@Override
+		QuickBorderStyle.Def getStyle();
+
 		Interpreted<? extends B> interpret(QuickElement.Interpreted<?> parent);
 	}
 
-	public interface Interpreted<B extends QuickBorder> extends QuickStyled.Interpreted<B> {
+	public interface Interpreted<B extends QuickBorder> extends QuickStyledElement.Interpreted<B> {
+		@Override
+		QuickBorderStyle.Interpreted getStyle();
+
 		B create(QuickElement parent);
 	}
 
-	ObservableValue<Color> getColor();
-
-	ObservableValue<Integer> getThickness();
+	@Override
+	QuickBorderStyle getStyle();
 
 	QuickBorder update(ModelSetInstance models) throws ModelInstantiationException;
 
-	public class LineBorder extends QuickElement.Abstract implements QuickBorder {
-		public static class Def<B extends LineBorder> extends QuickStyled.Def.Abstract<B> implements QuickBorder.Def<B> {
+	public class LineBorder extends QuickStyledElement.Abstract implements QuickBorder {
+		public static class Def<B extends LineBorder> extends QuickStyledElement.Def.Abstract<B> implements QuickBorder.Def<B> {
 			public Def(QuickElement.Def<?> parent, QonfigElement element) {
 				super(parent, element);
+			}
+
+			@Override
+			public QuickBorderStyle.Def getStyle() {
+				return (QuickBorderStyle.Def) super.getStyle();
 			}
 
 			@Override
 			public Interpreted<B> interpret(QuickElement.Interpreted<?> parent) {
 				return new Interpreted<>(this, parent);
 			}
+
+			@Override
+			protected QuickBorderStyle.Def wrap(QuickInstanceStyle.Def parentStyle, QuickCompiledStyle style) {
+				return new QuickBorderStyle.Def.Default(parentStyle, style);
+			}
 		}
 
-		public static class Interpreted<B extends LineBorder> extends QuickStyled.Interpreted.Abstract<B>
+		public static class Interpreted<B extends LineBorder> extends QuickStyledElement.Interpreted.Abstract<B>
 		implements QuickBorder.Interpreted<B> {
-			private QuickElementStyleAttribute<Color> theColor;
-			private QuickElementStyleAttribute<Integer> theThickness;
-
 			public Interpreted(Def<? super B> definition, QuickElement.Interpreted<?> parent) {
 				super(definition, parent);
 			}
@@ -57,19 +76,14 @@ public interface QuickBorder extends QuickStyled {
 				return (Def<? super B>) super.getDefinition();
 			}
 
-			public QuickElementStyleAttribute<Color> getColor() {
-				return theColor;
-			}
-
-			public QuickElementStyleAttribute<Integer> getThickness() {
-				return theThickness;
+			@Override
+			public QuickBorderStyle.Interpreted getStyle() {
+				return (QuickBorderStyle.Interpreted) super.getStyle();
 			}
 
 			@Override
 			public Interpreted<B> update(QuickInterpretationCache cache) throws ExpressoInterpretationException {
 				super.update(cache);
-				theColor = getStyle().get("border-color", Color.class);
-				theThickness = getStyle().get("thickness", int.class);
 				return this;
 			}
 
@@ -79,15 +93,8 @@ public interface QuickBorder extends QuickStyled {
 			}
 		}
 
-		private final SettableValue<ObservableValue<Color>> theColor;
-		private final SettableValue<ObservableValue<Integer>> theThickness;
-
 		public LineBorder(Interpreted<?> interpreted, QuickElement parent) {
 			super(interpreted, parent);
-			theColor = SettableValue
-				.build(TypeTokens.get().keyFor(ObservableValue.class).<ObservableValue<Color>> parameterized(Color.class)).build();
-			theThickness = SettableValue
-				.build(TypeTokens.get().keyFor(ObservableValue.class).<ObservableValue<Integer>> parameterized(int.class)).build();
 		}
 
 		@Override
@@ -96,20 +103,13 @@ public interface QuickBorder extends QuickStyled {
 		}
 
 		@Override
-		public ObservableValue<Color> getColor() {
-			return ObservableValue.flatten(theColor, () -> Color.black);
-		}
-
-		@Override
-		public ObservableValue<Integer> getThickness() {
-			return ObservableValue.flatten(theThickness, () -> 1);
+		public QuickBorderStyle getStyle() {
+			return (QuickBorderStyle) super.getStyle();
 		}
 
 		@Override
 		public LineBorder update(ModelSetInstance models) throws ModelInstantiationException {
 			super.update(models);
-			theColor.set(getInterpreted().getColor().evaluate(models, Color.black), null);
-			theThickness.set(getInterpreted().getThickness().evaluate(models, 1), null);
 			return this;
 		}
 	}
@@ -137,12 +137,17 @@ public interface QuickBorder extends QuickStyled {
 			public Interpreted<B> interpret(QuickElement.Interpreted<?> parent) {
 				return new Interpreted<>(this, parent);
 			}
+
+			@Override
+			protected QuickTitledBorderStyle.Def wrap(QuickStyledElement.QuickInstanceStyle.Def parentStyle, QuickCompiledStyle style) {
+				return new QuickTitledBorderStyle.Def(parentStyle, style);
+			}
 		}
 
 		public static class Interpreted<B extends TitledBorder> extends LineBorder.Interpreted<B> {
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<String>> theTitle;
 
-			public Interpreted(LineBorder.Def<? super B> definition, QuickElement.Interpreted<?> parent) {
+			public Interpreted(TitledBorder.Def<? super B> definition, QuickElement.Interpreted<?> parent) {
 				super(definition, parent);
 			}
 
@@ -168,6 +173,11 @@ public interface QuickBorder extends QuickStyled {
 			}
 		}
 
+		@Override
+		public QuickTitledBorderStyle getStyle() {
+			return (QuickTitledBorderStyle) super.getStyle();
+		}
+
 		private final SettableValue<SettableValue<String>> theTitle;
 
 		public TitledBorder(TitledBorder.Interpreted<?> interpreted, QuickElement parent) {
@@ -190,6 +200,226 @@ public interface QuickBorder extends QuickStyled {
 			super.update(models);
 			theTitle.set(getInterpreted().getTitle().get(models), null);
 			return this;
+		}
+
+		public static class QuickTitledBorderStyle extends QuickTextStyle.Abstract implements QuickBorderStyle {
+			public static class Def extends QuickTextStyle.Def.Abstract implements QuickBorderStyle.Def {
+				private final QuickStyleAttribute<Color> theBorderColor;
+				private final QuickStyleAttribute<Integer> theBorderThickness;
+
+				public Def(QuickCompiledStyle parent, QuickCompiledStyle wrapped) {
+					super(parent, wrapped);
+					QuickTypeStyle typeStyle = QuickStyledElement.getTypeStyle(getElement(), QuickCore.NAME, QuickCore.VERSION, "border");
+					theBorderColor = (QuickStyleAttribute<Color>) typeStyle.getAttribute("border-color", Color.class);
+					theBorderThickness = (QuickStyleAttribute<Integer>) typeStyle.getAttribute("thickness", Integer.class);
+				}
+
+				@Override
+				public QuickStyleAttribute<Color> getBorderColor() {
+					return theBorderColor;
+				}
+
+				@Override
+				public QuickStyleAttribute<Integer> getBorderThickness() {
+					return theBorderThickness;
+				}
+
+				@Override
+				public Interpreted interpret(QuickInterpretedStyle parent,
+					Map<CompiledStyleApplication, InterpretedStyleApplication> applications) throws ExpressoInterpretationException {
+					return new Interpreted(this, parent, getWrapped().interpret(parent, applications));
+				}
+			}
+
+			public static class Interpreted extends QuickTextStyle.Interpreted.Abstract implements QuickBorderStyle.Interpreted {
+				private final QuickElementStyleAttribute<Color> theBorderColor;
+				private final QuickElementStyleAttribute<Integer> theBorderThickness;
+
+				public Interpreted(Def definition, QuickInterpretedStyle parent, QuickInterpretedStyle wrapped) {
+					super(definition, parent, wrapped);
+					theBorderColor = get(getCompiled().getBorderColor());
+					theBorderThickness = get(getCompiled().getBorderThickness());
+				}
+
+				@Override
+				public QuickTitledBorderStyle.Def getCompiled() {
+					return (QuickTitledBorderStyle.Def) super.getCompiled();
+				}
+
+				@Override
+				public QuickElementStyleAttribute<Color> getBorderColor() {
+					return theBorderColor;
+				}
+
+				@Override
+				public QuickElementStyleAttribute<Integer> getBorderThickness() {
+					return theBorderThickness;
+				}
+
+				@Override
+				public QuickTitledBorderStyle create() {
+					return new QuickTitledBorderStyle(this);
+				}
+			}
+
+			private final SettableValue<ObservableValue<Color>> theBorderColor;
+			private final SettableValue<ObservableValue<Integer>> theBorderThickness;
+
+			public QuickTitledBorderStyle(Interpreted interpreted) {
+				super(interpreted);
+				theBorderColor = SettableValue
+					.build(TypeTokens.get().keyFor(ObservableValue.class).<ObservableValue<Color>> parameterized(Color.class)).build();
+				theBorderThickness = SettableValue
+					.build(TypeTokens.get().keyFor(ObservableValue.class).<ObservableValue<Integer>> parameterized(Integer.class)).build();
+			}
+
+			@Override
+			public QuickTitledBorderStyle.Interpreted getInterpreted() {
+				return (QuickTitledBorderStyle.Interpreted) super.getInterpreted();
+			}
+
+			@Override
+			public ObservableValue<Color> getBorderColor() {
+				return ObservableValue.flatten(theBorderColor);
+			}
+
+			@Override
+			public ObservableValue<Integer> getBorderThickness() {
+				return ObservableValue.flatten(theBorderThickness);
+			}
+
+			@Override
+			public void update(ModelSetInstance models) throws ModelInstantiationException {
+				theBorderColor.set(getInterpreted().getBorderColor().evaluate(models), null);
+				theBorderThickness.set(getInterpreted().getBorderThickness().evaluate(models), null);
+			}
+		}
+	}
+
+	public interface QuickBorderStyle extends QuickInstanceStyle {
+		public interface Def extends QuickInstanceStyle.Def {
+			QuickStyleAttribute<Color> getBorderColor();
+
+			QuickStyleAttribute<Integer> getBorderThickness();
+
+			@Override
+			Interpreted interpret(QuickInterpretedStyle parent, Map<CompiledStyleApplication, InterpretedStyleApplication> applications)
+				throws ExpressoInterpretationException;
+
+			public class Default extends QuickCompiledStyle.Wrapper implements Def {
+				private final QuickStyleAttribute<Color> theBorderColor;
+				private final QuickStyleAttribute<Integer> theBorderThickness;
+
+				public Default(QuickCompiledStyle parent, QuickCompiledStyle wrapped) {
+					super(parent, wrapped);
+					QuickTypeStyle typeStyle = QuickStyledElement.getTypeStyle(getElement(), QuickCore.NAME, QuickCore.VERSION, "border");
+					theBorderColor = (QuickStyleAttribute<Color>) typeStyle.getAttribute("border-color", Color.class);
+					theBorderThickness = (QuickStyleAttribute<Integer>) typeStyle.getAttribute("thickness", Integer.class);
+				}
+
+				@Override
+				public QuickStyleAttribute<Color> getBorderColor() {
+					return theBorderColor;
+				}
+
+				@Override
+				public QuickStyleAttribute<Integer> getBorderThickness() {
+					return theBorderThickness;
+				}
+
+				@Override
+				public Interpreted interpret(QuickInterpretedStyle parent,
+					Map<CompiledStyleApplication, InterpretedStyleApplication> applications) throws ExpressoInterpretationException {
+					return new Interpreted.Default(this, parent, getWrapped().interpret(parent, applications));
+				}
+			}
+		}
+
+		public interface Interpreted extends QuickInstanceStyle.Interpreted {
+			@Override
+			Def getCompiled();
+
+			QuickElementStyleAttribute<Color> getBorderColor();
+
+			QuickElementStyleAttribute<Integer> getBorderThickness();
+
+			@Override
+			QuickBorderStyle create();
+
+			public class Default extends QuickInterpretedStyle.Wrapper implements Interpreted {
+				private final Def theDefinition;
+				private final QuickElementStyleAttribute<Color> theBorderColor;
+				private final QuickElementStyleAttribute<Integer> theBorderThickness;
+
+				public Default(Def definition, QuickInterpretedStyle parent, QuickInterpretedStyle wrapped) {
+					super(parent, wrapped);
+					theDefinition = definition;
+					theBorderColor = get(getCompiled().getBorderColor());
+					theBorderThickness = get(getCompiled().getBorderThickness());
+				}
+
+				@Override
+				public Def getCompiled() {
+					return theDefinition;
+				}
+
+				@Override
+				public QuickElementStyleAttribute<Color> getBorderColor() {
+					return theBorderColor;
+				}
+
+				@Override
+				public QuickElementStyleAttribute<Integer> getBorderThickness() {
+					return theBorderThickness;
+				}
+
+				@Override
+				public QuickBorderStyle create() {
+					return new QuickBorderStyle.Default(this);
+				}
+			}
+		}
+
+		@Override
+		Interpreted getInterpreted();
+
+		ObservableValue<Color> getBorderColor();
+
+		ObservableValue<Integer> getBorderThickness();
+
+		public class Default implements QuickBorderStyle {
+			private final Interpreted theInterpreted;
+			private final SettableValue<ObservableValue<Color>> theBorderColor;
+			private final SettableValue<ObservableValue<Integer>> theBorderThickness;
+
+			public Default(Interpreted interpreted) {
+				theInterpreted = interpreted;
+				theBorderColor = SettableValue
+					.build(TypeTokens.get().keyFor(ObservableValue.class).<ObservableValue<Color>> parameterized(Color.class)).build();
+				theBorderThickness = SettableValue
+					.build(TypeTokens.get().keyFor(ObservableValue.class).<ObservableValue<Integer>> parameterized(Integer.class)).build();
+			}
+
+			@Override
+			public Interpreted getInterpreted() {
+				return theInterpreted;
+			}
+
+			@Override
+			public ObservableValue<Color> getBorderColor() {
+				return ObservableValue.flatten(theBorderColor);
+			}
+
+			@Override
+			public ObservableValue<Integer> getBorderThickness() {
+				return ObservableValue.flatten(theBorderThickness);
+			}
+
+			@Override
+			public void update(ModelSetInstance models) throws ModelInstantiationException {
+				theBorderColor.set(getInterpreted().getBorderColor().evaluate(models), null);
+				theBorderThickness.set(getInterpreted().getBorderThickness().evaluate(models), null);
+			}
 		}
 	}
 }

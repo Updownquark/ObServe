@@ -7,13 +7,11 @@ import org.observe.SettableValue;
 import org.observe.collect.ObservableCollection;
 import org.observe.expresso.DynamicModelValue;
 import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.ModelException;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
-import org.observe.expresso.TypeConversionException;
 import org.observe.quick.QuickElement;
-import org.observe.quick.QuickStyled;
+import org.observe.quick.QuickStyledElement;
 import org.observe.quick.QuickWidget;
 import org.observe.quick.base.QuickTableColumn.TableColumnSet;
 import org.observe.util.TypeTokens;
@@ -118,7 +116,7 @@ public interface TabularWidget<R> extends MultiValueWidget<R> {
 			}
 
 			@Override
-			public Interpreted.Abstract<R, W> update(QuickStyled.QuickInterpretationCache cache)
+			public Interpreted.Abstract<R, W> update(QuickStyledElement.QuickInterpretationCache cache)
 				throws ExpressoInterpretationException {
 				DynamicModelValue.satisfyDynamicValueType(getDefinition().getValueName(), getDefinition().getModels(),
 					ModelTypes.Value.forType(getRowType()));
@@ -227,62 +225,22 @@ public interface TabularWidget<R> extends MultiValueWidget<R> {
 		@Override
 		public void setContext(TabularContext<R> ctx) throws ModelInstantiationException {
 			setContext((MultiValueRenderContext<R>) ctx);
-			SettableValue<Integer> row = ctx.getRowIndex();
-			if (row != null) {
-				try {
-					DynamicModelValue.satisfyDynamicValue("rowIndex", ModelTypes.Value.INT, getModels(), row);
-				} catch (ModelException e) {
-					throw new ModelInstantiationException("No rowIndex value?",
-						getInterpreted().getDefinition().getExpressoSession().getElement().getPositionInFile(), 0, e);
-				} catch (TypeConversionException e) {
-					throw new IllegalStateException("rowIndex is not an integer?", e);
-				}
-			}
-			SettableValue<Integer> col = ctx.getColumnIndex();
-			if (col != null) {
-				try {
-					DynamicModelValue.satisfyDynamicValue("columnIndex", ModelTypes.Value.INT, getModels(), col);
-				} catch (ModelException e) {
-					throw new ModelInstantiationException("No columnIndex value?",
-						getInterpreted().getDefinition().getExpressoSession().getElement().getPositionInFile(), 0, e);
-				} catch (TypeConversionException e) {
-					throw new IllegalStateException("columnIndex is not an integer?", e);
-				}
-			}
+			satisfyContextValue("rowIndex", ModelTypes.Value.INT, ctx.getRowIndex());
+			satisfyContextValue("columnIndex", ModelTypes.Value.INT, ctx.getColumnIndex());
 		}
 
 		@Override
 		public void setContext(MultiValueRenderContext<R> ctx) throws ModelInstantiationException {
 			theRowValue = ctx.getRenderValue();
-			if (theRowValue != null) {
-				try {
-					DynamicModelValue.satisfyDynamicValue(getInterpreted().getDefinition().getValueName(),
-						ModelTypes.Value.forType(getInterpreted().getRowType()), getModels(), theRowValue);
-				} catch (ModelException e) {
-					throw new ModelInstantiationException("No " + getInterpreted().getDefinition().getValueName() + " value?",
-						getInterpreted().getDefinition().getExpressoSession().getElement().getPositionInFile(), 0, e);
-				} catch (TypeConversionException e) {
-					throw new IllegalStateException(
-						getInterpreted().getDefinition().getValueName() + " is not a " + getInterpreted().getRowType() + "?", e);
-				}
-			}
-			SettableValue<Boolean> selected = ctx.isSelected();
-			if (selected != null) {
-				try {
-					DynamicModelValue.satisfyDynamicValue("selected", ModelTypes.Value.BOOLEAN, getModels(), selected);
-				} catch (ModelException e) {
-					throw new ModelInstantiationException("No selected value?",
-						getInterpreted().getDefinition().getExpressoSession().getElement().getPositionInFile(), 0, e);
-				} catch (TypeConversionException e) {
-					throw new IllegalStateException("selected is not a boolean?", e);
-				}
-			}
+			satisfyContextValue(getInterpreted().getDefinition().getValueName(), ModelTypes.Value.forType(getInterpreted().getRowType()),
+				ctx.getRenderValue());
+			satisfyContextValue("selected", ModelTypes.Value.BOOLEAN, ctx.isSelected());
 		}
 
 		@Override
 		public TabularWidget.Abstract<R> update(ModelSetInstance models) throws ModelInstantiationException {
 			super.update(models);
-			CollectionUtils.synchronize(theColumnSets, getInterpreted().getColumns(), (v, i) -> v.getInterpreted() == v)//
+			CollectionUtils.synchronize(theColumnSets, getInterpreted().getColumns(), (v, i) -> v.getInterpreted() == i)//
 			.adjust(
 				new CollectionUtils.CollectionSynchronizerE<QuickTableColumn.TableColumnSet<R>, QuickTableColumn.TableColumnSet.Interpreted<R, ?>, ModelInstantiationException>() {
 					@Override

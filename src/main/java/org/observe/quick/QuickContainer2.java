@@ -3,6 +3,7 @@ package org.observe.quick;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.quick.style.QuickCompiledStyle;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.CollectionUtils;
 import org.qommons.config.AbstractQIS;
@@ -43,7 +44,7 @@ public interface QuickContainer2<C extends QuickWidget> extends QuickWidget {
 			 * @param parent The parent definition
 			 * @param element The element that this definition is interpreted from
 			 */
-			public Abstract(QuickElement.Def<?> parent, QonfigElement element) {
+			protected Abstract(QuickElement.Def<?> parent, QonfigElement element) {
 				super(parent, element);
 				theContents = BetterTreeList.<QuickWidget.Def<? extends C>> build().build();
 			}
@@ -64,6 +65,11 @@ public interface QuickContainer2<C extends QuickWidget> extends QuickWidget {
 				.onCommonX(element -> element.getLeftValue().update(element.getRightValue()))//
 				.adjust();
 				return this;
+			}
+
+			@Override
+			protected QuickWidgetStyle.Def wrap(QuickInstanceStyle.Def parentStyle, QuickCompiledStyle style) {
+				return new QuickWidgetStyle.Def.Default(parentStyle, style);
 			}
 		}
 	}
@@ -95,7 +101,7 @@ public interface QuickContainer2<C extends QuickWidget> extends QuickWidget {
 			 * @param definition The definition producing this interpretation
 			 * @param parent The parent interpretation
 			 */
-			public Abstract(Def<? super W, ? super C> definition, QuickElement.Interpreted<?> parent) {
+			protected Abstract(Def<? super W, ? super C> definition, QuickElement.Interpreted<?> parent) {
 				super(definition, parent);
 				theContents = BetterTreeList.<QuickWidget.Interpreted<? extends C>> build().build();
 			}
@@ -111,15 +117,15 @@ public interface QuickContainer2<C extends QuickWidget> extends QuickWidget {
 			}
 
 			@Override
-			public Interpreted.Abstract<W, C> update(QuickStyled.QuickInterpretationCache cache) throws ExpressoInterpretationException {
+			public Interpreted.Abstract<W, C> update(QuickStyledElement.QuickInterpretationCache cache) throws ExpressoInterpretationException {
 				super.update(cache);
 				CollectionUtils.synchronize(theContents, getDefinition().getContents(), //
 					(widget, child) -> widget.getDefinition() == child)//
 				.<ExpressoInterpretationException> simpleE(
 					child -> (QuickWidget.Interpreted<? extends C>) child.interpret(Interpreted.Abstract.this))//
 				.rightOrder()//
-					.onRightX(element -> element.getLeftValue().update(cache))//
-					.onCommonX(element -> element.getLeftValue().update(cache))//
+				.onRightX(element -> element.getLeftValue().update(cache))//
+				.onCommonX(element -> element.getLeftValue().update(cache))//
 				.adjust();
 				return this;
 			}

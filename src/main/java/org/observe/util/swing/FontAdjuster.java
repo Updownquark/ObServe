@@ -6,11 +6,13 @@ import java.awt.Font;
 import java.awt.font.TextAttribute;
 import java.text.AttributedCharacterIterator.Attribute;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.UnaryOperator;
 
 import javax.swing.AbstractButton;
 import javax.swing.JLabel;
@@ -21,7 +23,7 @@ import javax.swing.text.JTextComponent;
 
 /** Allows for simple chained modification of a font */
 public class FontAdjuster {
-	private Function<Font, Font> theFont;
+	private UnaryOperator<Font> theFont;
 	private Color theForeground;
 	private Integer theHAlign;
 	private Integer theVAlign;
@@ -54,11 +56,11 @@ public class FontAdjuster {
 		return this;
 	}
 
-	public FontAdjuster deriveFont(Function<Font, Font> font) {
+	public FontAdjuster deriveFont(UnaryOperator<Font> font) {
 		if (theFont == null)
 			theFont = font;
 		else if (font != null) {
-			Function<Font, Font> oldFont = theFont;
+			UnaryOperator<Font> oldFont = theFont;
 			theFont = f -> font.apply(oldFont.apply(f));
 		}
 		return this;
@@ -72,6 +74,10 @@ public class FontAdjuster {
 		Map<Attribute, Object> attrs = new HashMap<>(1);
 		attrs.put(attr, value);
 		return deriveFont(font -> font.deriveFont(attrs));
+	}
+
+	public FontAdjuster withFontWeight(float weight) {
+		return deriveFont(font -> font.deriveFont(Collections.singletonMap(TextAttribute.WEIGHT, weight)));
 	}
 
 	/**
@@ -139,6 +145,10 @@ public class FontAdjuster {
 	 */
 	public FontAdjuster plain() {
 		return withFontStyle(Font.PLAIN);
+	}
+
+	public Color getForeground() {
+		return theForeground;
 	}
 
 	/**
@@ -256,15 +266,33 @@ public class FontAdjuster {
 		};
 	}
 
-	public TitledBorder adjust(TitledBorder border) {
-		if (theFont != null)
+	public Runnable adjust(TitledBorder border) {
+		List<Runnable> revert = new ArrayList<>();
+		if (theForeground != null) {
+			Color oldFG = border.getTitleColor();
+			border.setTitleColor(theForeground);
+			revert.add(() -> border.setTitleColor(oldFG));
+		}
+		if (theFont != null) {
+			Font oldFont = border.getTitleFont();
 			border.setTitleFont(theFont.apply(border.getTitleFont()));
-		if (theHAlign != null)
+			revert.add(() -> border.setTitleFont(oldFont));
+		}
+		if (theHAlign != null) {
+			int oldJ = border.getTitleJustification();
 			border.setTitleJustification(theHAlign < 0 ? TitledBorder.LEFT : (theHAlign > 0 ? TitledBorder.RIGHT : TitledBorder.CENTER));
-		if (theVAlign != null)
+			revert.add(() -> border.setTitleJustification(oldJ));
+		}
+		if (theVAlign != null) {
+			int oldAlign = border.getTitlePosition();
 			border
-				.setTitlePosition(theVAlign < 0 ? TitledBorder.TOP : (theVAlign > 0 ? TitledBorder.BOTTOM : TitledBorder.DEFAULT_POSITION));
-		return border;
+			.setTitlePosition(theVAlign < 0 ? TitledBorder.TOP : (theVAlign > 0 ? TitledBorder.BOTTOM : TitledBorder.DEFAULT_POSITION));
+			revert.add(() -> border.setTitlePosition(oldAlign));
+		}
+		return () -> {
+			for (Runnable r : revert)
+				r.run();
+		};
 	}
 
 	@Override

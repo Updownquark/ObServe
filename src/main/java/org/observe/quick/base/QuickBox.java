@@ -9,7 +9,7 @@ import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.quick.QuickContainer2;
 import org.observe.quick.QuickElement;
-import org.observe.quick.QuickStyled;
+import org.observe.quick.QuickStyledElement;
 import org.observe.quick.QuickWidget;
 import org.observe.util.TypeTokens;
 import org.qommons.config.AbstractQIS;
@@ -73,7 +73,7 @@ public class QuickBox extends QuickContainer2.Abstract<QuickWidget> {
 		}
 
 		@Override
-		public Interpreted<W> update(QuickStyled.QuickInterpretationCache cache) throws ExpressoInterpretationException {
+		public Interpreted<W> update(QuickStyledElement.QuickInterpretationCache cache) throws ExpressoInterpretationException {
 			super.update(cache);
 			theOpacity = getDefinition().getOpacity() == null ? null
 				: getDefinition().getOpacity().evaluate(ModelTypes.Value.DOUBLE).interpret();

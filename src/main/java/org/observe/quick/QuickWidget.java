@@ -1,15 +1,28 @@
 package org.observe.quick;
 
+import java.awt.Color;
 import java.util.Collection;
+import java.util.Map;
 import java.util.function.Function;
 
+import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.expresso.CompiledExpression;
+import org.observe.expresso.DynamicModelValue;
 import org.observe.expresso.ExpressoInterpretationException;
+import org.observe.expresso.ModelException;
 import org.observe.expresso.ModelInstantiationException;
+import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.TypeConversionException;
+import org.observe.quick.style.CompiledStyleApplication;
+import org.observe.quick.style.InterpretedStyleApplication;
+import org.observe.quick.style.QuickCompiledStyle;
+import org.observe.quick.style.QuickInterpretedStyle;
+import org.observe.quick.style.QuickStyleAttribute;
+import org.observe.quick.style.QuickTypeStyle;
 import org.observe.util.TypeTokens;
 import org.qommons.config.AbstractQIS;
 import org.qommons.config.QonfigElement;
@@ -18,13 +31,16 @@ import org.qommons.config.QonfigInterpretationException;
 import com.google.common.reflect.TypeToken;
 
 /** The base class for widgets in Quick */
-public interface QuickWidget extends QuickStyled {
+public interface QuickWidget extends QuickTextElement {
 	/**
 	 * The definition of a {@link QuickWidget}
 	 *
 	 * @param <W> The type of widget that this definition is for
 	 */
-	public interface Def<W extends QuickWidget> extends QuickStyled.Def<W> {
+	public interface Def<W extends QuickWidget> extends QuickTextElement.Def<W> {
+		@Override
+		QuickWidgetStyle.Def getStyle();
+
 		/** @return The container definition that this widget is a child of */
 		QuickContainer2.Def<?, ?> getParent();
 
@@ -54,7 +70,7 @@ public interface QuickWidget extends QuickStyled {
 		 *
 		 * @param <W> The type of widget that this definition is for
 		 */
-		public abstract class Abstract<W extends QuickWidget> extends QuickStyled.Def.Abstract<W> implements Def<W> {
+		public abstract class Abstract<W extends QuickWidget> extends QuickStyledElement.Def.Abstract<W> implements Def<W> {
 			private QuickBorder.Def<?> theBorder;
 			private String theName;
 			private CompiledExpression theTooltip;
@@ -64,8 +80,13 @@ public interface QuickWidget extends QuickStyled {
 			 * @param parent The parent container definition
 			 * @param element The element that this widget is interpreted from
 			 */
-			public Abstract(QuickElement.Def<?> parent, QonfigElement element) {
+			protected Abstract(QuickElement.Def<?> parent, QonfigElement element) {
 				super(parent, element);
+			}
+
+			@Override
+			public QuickWidgetStyle.Def getStyle() {
+				return (QuickWidgetStyle.Def) super.getStyle();
 			}
 
 			@Override
@@ -103,6 +124,11 @@ public interface QuickWidget extends QuickStyled {
 				isVisible = getExpressoSession().getAttributeExpression("visible");
 				return this;
 			}
+
+			@Override
+			protected QuickWidgetStyle.Def wrap(QuickInstanceStyle.Def parentStyle, QuickCompiledStyle style) {
+				return new QuickWidgetStyle.Def.Default(parentStyle, style);
+			}
 		}
 	}
 
@@ -111,9 +137,12 @@ public interface QuickWidget extends QuickStyled {
 	 *
 	 * @param <W> The type of widget that this interpretation is for
 	 */
-	public interface Interpreted<W extends QuickWidget> extends QuickStyled.Interpreted<W> {
+	public interface Interpreted<W extends QuickWidget> extends QuickTextElement.Interpreted<W> {
 		@Override
 		Def<? super W> getDefinition();
+
+		@Override
+		QuickWidgetStyle.Interpreted getStyle();
 
 		/** @return The parent container of this widget interpretation, if any */
 		QuickContainer2.Interpreted<?, ?> getParent();
@@ -139,14 +168,14 @@ public interface QuickWidget extends QuickStyled {
 		W create(QuickElement parent);
 
 		@Override
-		Interpreted<W> update(QuickStyled.QuickInterpretationCache cache) throws ExpressoInterpretationException;
+		Interpreted<W> update(QuickStyledElement.QuickInterpretationCache cache) throws ExpressoInterpretationException;
 
 		/**
 		 * An abstract {@link Interpreted} implementation
 		 *
 		 * @param <W> The type of widget that this interpretation is for
 		 */
-		public abstract class Abstract<W extends QuickWidget> extends QuickStyled.Interpreted.Abstract<W> implements Interpreted<W> {
+		public abstract class Abstract<W extends QuickWidget> extends QuickStyledElement.Interpreted.Abstract<W> implements Interpreted<W> {
 			private QuickBorder.Interpreted<?> theBorder;
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<String>> theTooltip;
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> isVisible;
@@ -155,13 +184,18 @@ public interface QuickWidget extends QuickStyled {
 			 * @param definition The definition producing this interpretation
 			 * @param parent The interpreted parent
 			 */
-			public Abstract(Def<? super W> definition, QuickElement.Interpreted<?> parent) {
+			protected Abstract(Def<? super W> definition, QuickElement.Interpreted<?> parent) {
 				super(definition, parent);
 			}
 
 			@Override
 			public Def<? super W> getDefinition() {
 				return (Def<? super W>) super.getDefinition();
+			}
+
+			@Override
+			public QuickWidgetStyle.Interpreted getStyle() {
+				return (QuickWidgetStyle.Interpreted) super.getStyle();
 			}
 
 			@Override
@@ -186,7 +220,7 @@ public interface QuickWidget extends QuickStyled {
 			}
 
 			@Override
-			public Interpreted.Abstract<W> update(QuickStyled.QuickInterpretationCache cache) throws ExpressoInterpretationException {
+			public Interpreted.Abstract<W> update(QuickStyledElement.QuickInterpretationCache cache) throws ExpressoInterpretationException {
 				super.update(cache);
 				if (getDefinition().getBorder() == null)
 					theBorder = null;
@@ -203,14 +237,65 @@ public interface QuickWidget extends QuickStyled {
 		}
 	}
 
+	public interface WidgetContext {
+		SettableValue<Boolean> isHovered();
+
+		SettableValue<Boolean> isFocused();
+
+		SettableValue<Boolean> isPressed();
+
+		SettableValue<Boolean> isRightPressed();
+
+		public class Default implements WidgetContext {
+			private final SettableValue<Boolean> isHovered;
+			private final SettableValue<Boolean> isFocused;
+			private final SettableValue<Boolean> isPressed;
+			private final SettableValue<Boolean> isRightPressed;
+
+			public Default(SettableValue<Boolean> hovered, SettableValue<Boolean> focused, SettableValue<Boolean> pressed,
+				SettableValue<Boolean> rightPressed) {
+				isHovered = hovered;
+				isFocused = focused;
+				isPressed = pressed;
+				isRightPressed = rightPressed;
+			}
+
+			@Override
+			public SettableValue<Boolean> isHovered() {
+				return isHovered;
+			}
+
+			@Override
+			public SettableValue<Boolean> isFocused() {
+				return isFocused;
+			}
+
+			@Override
+			public SettableValue<Boolean> isPressed() {
+				return isPressed;
+			}
+
+			@Override
+			public SettableValue<Boolean> isRightPressed() {
+				return isRightPressed;
+			}
+		}
+	}
+
 	@Override
 	Interpreted<?> getInterpreted();
+
+	@Override
+	QuickWidgetStyle getStyle();
 
 	/** @return The parent container, if any */
 	QuickContainer2<?> getParent();
 
 	@Override
 	ModelSetInstance getModels();
+
+	/** @return This widget's border */
+	QuickBorder getBorder();
 
 	/** @return The tool tip to display when the user hovers over this widget */
 	SettableValue<String> getTooltip();
@@ -230,6 +315,8 @@ public interface QuickWidget extends QuickStyled {
 		return ao == null ? null : fn.apply(ao);
 	}
 
+	void setContext(WidgetContext ctx) throws ModelInstantiationException;
+
 	/**
 	 * Populates and updates this widget instance. Must be called once after being instantiated.
 	 *
@@ -239,13 +326,10 @@ public interface QuickWidget extends QuickStyled {
 	 */
 	QuickWidget update(ModelSetInstance models) throws ModelInstantiationException;
 
-	/** @return This widget's border */
-	QuickBorder getBorder();
-
 	// TODO mouse and key listeners
 
 	/** An abstract {@link QuickWidget} implementation */
-	public abstract class Abstract extends QuickStyled.Abstract implements QuickWidget {
+	public abstract class Abstract extends QuickStyledElement.Abstract implements QuickWidget {
 		private QuickBorder theBorder;
 		private final SettableValue<SettableValue<String>> theTooltip;
 		private final SettableValue<SettableValue<Boolean>> isVisible;
@@ -265,6 +349,11 @@ public interface QuickWidget extends QuickStyled {
 		@Override
 		public QuickWidget.Interpreted<?> getInterpreted() {
 			return (QuickWidget.Interpreted<?>) super.getInterpreted();
+		}
+
+		@Override
+		public QuickWidgetStyle getStyle() {
+			return (QuickWidgetStyle) super.getStyle();
 		}
 
 		@Override
@@ -289,6 +378,28 @@ public interface QuickWidget extends QuickStyled {
 		}
 
 		@Override
+		public void setContext(WidgetContext ctx) throws ModelInstantiationException {
+			satisfyContextValue("hovered", ModelTypes.Value.BOOLEAN, ctx.isHovered());
+			satisfyContextValue("focused", ModelTypes.Value.BOOLEAN, ctx.isFocused());
+			satisfyContextValue("pressed", ModelTypes.Value.BOOLEAN, ctx.isPressed());
+			satisfyContextValue("rightPressed", ModelTypes.Value.BOOLEAN, ctx.isRightPressed());
+		}
+
+		protected <M, MV extends M> void satisfyContextValue(String valueName, ModelInstanceType<M, MV> type, MV value)
+			throws ModelInstantiationException {
+			if (value != null) {
+				try {
+					DynamicModelValue.satisfyDynamicValue(valueName, type, getModels(), value);
+				} catch (ModelException e) {
+					throw new ModelInstantiationException("No " + valueName + " value?",
+						getInterpreted().getDefinition().getExpressoSession().getElement().getPositionInFile(), 0, e);
+				} catch (TypeConversionException e) {
+					throw new IllegalStateException(valueName + " is not a " + type + "?", e);
+				}
+			}
+		}
+
+		@Override
 		public QuickWidget.Abstract update(ModelSetInstance models) throws ModelInstantiationException {
 			super.update(models);
 			theBorder = getInterpreted().getBorder() == null ? null : getInterpreted().getBorder().create(this);
@@ -299,6 +410,92 @@ public interface QuickWidget extends QuickStyled {
 			if (getInterpreted().isVisible() != null)
 				isVisible.set(getInterpreted().isVisible().get(getModels()), null);
 			return this;
+		}
+	}
+
+	public interface QuickWidgetStyle extends QuickTextStyle {
+		public interface Def extends QuickTextStyle.Def {
+			QuickStyleAttribute<Color> getColor();
+
+			public class Default extends QuickTextStyle.Def.Abstract implements QuickWidgetStyle.Def {
+				private final QuickStyleAttribute<Color> theColor;
+
+				public Default(QuickCompiledStyle parent, QuickCompiledStyle wrapped) {
+					super(parent, wrapped);
+					QuickTypeStyle typeStyle = QuickStyledElement.getTypeStyle(getElement(), QuickCore.NAME, QuickCore.VERSION, "widget");
+					theColor = (QuickStyleAttribute<Color>) typeStyle.getAttribute("color", Color.class);
+				}
+
+				@Override
+				public QuickStyleAttribute<Color> getColor() {
+					return theColor;
+				}
+
+				@Override
+				public QuickWidgetStyle.Interpreted interpret(QuickInterpretedStyle parent,
+					Map<CompiledStyleApplication, InterpretedStyleApplication> applications) throws ExpressoInterpretationException {
+					return new Interpreted.Default(this, parent, getWrapped().interpret(parent, applications));
+				}
+			}
+		}
+
+		public interface Interpreted extends QuickTextStyle.Interpreted {
+			@Override
+			Def getCompiled();
+
+			QuickElementStyleAttribute<Color> getColor();
+
+			@Override
+			QuickWidgetStyle create();
+
+			public class Default extends QuickTextStyle.Interpreted.Abstract implements QuickWidgetStyle.Interpreted {
+				private QuickElementStyleAttribute<Color> theColor;
+
+				public Default(Def definition, QuickInterpretedStyle parent, QuickInterpretedStyle wrapped) {
+					super(definition, parent, wrapped);
+					theColor = wrapped.get(getCompiled().getColor());
+				}
+
+				@Override
+				public QuickWidgetStyle.Def getCompiled() {
+					return (QuickWidgetStyle.Def) super.getCompiled();
+				}
+
+				@Override
+				public QuickElementStyleAttribute<Color> getColor() {
+					return theColor;
+				}
+
+				@Override
+				public QuickWidgetStyle create() {
+					return new QuickWidgetStyle.Default(this);
+				}
+			}
+		}
+
+		@Override
+		QuickWidgetStyle.Interpreted getInterpreted();
+
+		public ObservableValue<Color> getColor();
+
+		public class Default extends QuickTextStyle.Abstract implements QuickWidgetStyle {
+			private final SettableValue<ObservableValue<Color>> theColor;
+
+			public Default(QuickWidgetStyle.Interpreted interpreted) {
+				super(interpreted);
+				theColor = SettableValue
+					.build(TypeTokens.get().keyFor(ObservableValue.class).<ObservableValue<Color>> parameterized(Color.class)).build();
+			}
+
+			@Override
+			public QuickWidgetStyle.Interpreted getInterpreted() {
+				return (QuickWidgetStyle.Interpreted) super.getInterpreted();
+			}
+
+			@Override
+			public ObservableValue<Color> getColor() {
+				return ObservableValue.flatten(theColor);
+			}
 		}
 	}
 }

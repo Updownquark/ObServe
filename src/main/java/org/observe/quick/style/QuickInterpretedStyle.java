@@ -17,62 +17,25 @@ import org.qommons.config.QonfigElement;
 import com.google.common.reflect.TypeToken;
 
 /** Represents style information for a {@link QonfigElement} */
-public class QuickInterpretedStyle {
-	private final QuickInterpretedStyle theParent;
-	private final QuickCompiledStyle theCompiledStyle;
-	private final List<InterpretedStyleValue<?>> theDeclaredValues;
-	private final Map<QuickStyleAttribute<?>, QuickElementStyleAttribute<?>> theValues;
-
-	/**
-	 *
-	 * @param parent The element style for the {@link QonfigElement#getParent() parent} element
-	 * @param compiled The compiled style that {@link QuickCompiledStyle#interpret(QuickInterpretedStyle, Map) interpreted} this style
-	 * @param declaredValues All style values declared specifically on this element
-	 * @param values All values for style attributes that vary on this style
-	 */
-	public QuickInterpretedStyle(QuickInterpretedStyle parent, QuickCompiledStyle compiled, List<InterpretedStyleValue<?>> declaredValues,
-		Map<QuickStyleAttribute<?>, QuickElementStyleAttribute<?>> values) {
-		theParent = parent;
-		theCompiledStyle = compiled;
-		theDeclaredValues = declaredValues;
-		theValues = values;
-	}
-
+public interface QuickInterpretedStyle {
 	/** @return This element's {@link QonfigElement#getParent() parent}'s style */
-	public QuickInterpretedStyle getParent() {
-		return theParent;
-	}
+	QuickInterpretedStyle getParent();
 
 	/** @return The compiled style that {@link QuickCompiledStyle#interpret(QuickInterpretedStyle, Map) interpreted} this style */
-	public QuickCompiledStyle getCompiled() {
-		return theCompiledStyle;
-	}
+	QuickCompiledStyle getCompiled();
 
 	/** @return All style values that may apply to this style */
-	public List<InterpretedStyleValue<?>> getDeclaredValues() {
-		return theDeclaredValues;
-	}
+	List<InterpretedStyleValue<?>> getDeclaredValues();
 
 	/** @return All style attributes that apply to this element */
-	public Set<QuickStyleAttribute<?>> getAttributes() {
-		return theValues.keySet();
-	}
+	public Set<QuickStyleAttribute<?>> getAttributes();
 
 	/**
 	 * @param <T> The type of the attribute
 	 * @param attr The attribute to get the value for
 	 * @return A structure containing all information necessary to get the value of a style attribute for this element
 	 */
-	public <T> QuickElementStyleAttribute<T> get(QuickStyleAttribute<T> attr) {
-		QuickElementStyleAttribute<T> value = (QuickElementStyleAttribute<T>) theValues.get(attr);
-		if (value != null)
-			return value;
-		else if (!theCompiledStyle.getElement().isInstance(attr.getDeclarer().getElement()))
-			throw new IllegalArgumentException(
-				"Attribute " + attr + " is not valid for this element (" + theCompiledStyle.getElement().getType().getName() + ")");
-		return new QuickElementStyleAttribute<>(attr, this, Collections.emptyList(), //
-			theParent != null && attr.isTrickleDown() ? theParent.get(attr) : null);
-	}
+	<T> QuickElementStyleAttribute<T> get(QuickStyleAttribute<T> attr);
 
 	/**
 	 * Gets a style value in this style by name
@@ -84,8 +47,8 @@ public class QuickInterpretedStyle {
 	 * @throws IllegalArgumentException If there is no such attribute with the given name applicable to this style's element, there are
 	 *         multiple such styles, or the applicable style's {@link QuickStyleAttribute#getType() type} is not the same as that given
 	 */
-	public <T> QuickElementStyleAttribute<T> get(String attributeName, TypeToken<T> type) throws IllegalArgumentException {
-		BetterCollection<QuickStyleAttribute<?>> attrs = theCompiledStyle.getAttributesByName().get(attributeName);
+	default <T> QuickElementStyleAttribute<T> get(String attributeName, TypeToken<T> type) throws IllegalArgumentException {
+		BetterCollection<QuickStyleAttribute<?>> attrs = getCompiled().getAttributesByName().get(attributeName);
 		if (attrs.isEmpty())
 			throw new IllegalArgumentException("No such attribute: '" + attributeName + "'");
 		else if (attrs.size() > 1)
@@ -107,8 +70,114 @@ public class QuickInterpretedStyle {
 	 * @throws IllegalArgumentException If there is no such attribute with the given name applicable to this style's element, there are
 	 *         multiple such styles, or the applicable style's {@link QuickStyleAttribute#getType() type} is not the same as that given
 	 */
-	public <T> QuickElementStyleAttribute<T> get(String attributeName, Class<T> type) {
+	default <T> QuickElementStyleAttribute<T> get(String attributeName, Class<T> type) {
 		return get(attributeName, TypeTokens.get().of(type));
+	}
+
+	/** Default implementation */
+	public class Default implements QuickInterpretedStyle {
+		private final QuickInterpretedStyle theParent;
+		private final QuickCompiledStyle theCompiledStyle;
+		private final List<InterpretedStyleValue<?>> theDeclaredValues;
+		private final Map<QuickStyleAttribute<?>, QuickElementStyleAttribute<?>> theValues;
+
+		/**
+		 * @param parent The element style for the {@link QonfigElement#getParent() parent} element
+		 * @param compiled The compiled style that {@link QuickCompiledStyle#interpret(QuickInterpretedStyle, Map) interpreted} this style
+		 * @param declaredValues All style values declared specifically on this element
+		 * @param values All values for style attributes that vary on this style
+		 */
+		public Default(QuickInterpretedStyle parent, QuickCompiledStyle compiled, List<InterpretedStyleValue<?>> declaredValues,
+			Map<QuickStyleAttribute<?>, QuickElementStyleAttribute<?>> values) {
+			theParent = parent;
+			theCompiledStyle = compiled;
+			theDeclaredValues = declaredValues;
+			theValues = values;
+		}
+
+		@Override
+		public QuickInterpretedStyle getParent() {
+			return theParent;
+		}
+
+		@Override
+		public QuickCompiledStyle getCompiled() {
+			return theCompiledStyle;
+		}
+
+		@Override
+		public List<InterpretedStyleValue<?>> getDeclaredValues() {
+			return theDeclaredValues;
+		}
+
+		@Override
+		public Set<QuickStyleAttribute<?>> getAttributes() {
+			return theValues.keySet();
+		}
+
+		@Override
+		public <T> QuickElementStyleAttribute<T> get(QuickStyleAttribute<T> attr) {
+			QuickElementStyleAttribute<T> value = (QuickElementStyleAttribute<T>) theValues.get(attr);
+			if (value != null)
+				return value;
+			else if (!theCompiledStyle.getElement().isInstance(attr.getDeclarer().getElement()))
+				throw new IllegalArgumentException(
+					"Attribute " + attr + " is not valid for this element (" + theCompiledStyle.getElement().getType().getName() + ")");
+			return new QuickElementStyleAttribute<>(attr, this, Collections.emptyList(), //
+				theParent != null && attr.isTrickleDown() ? theParent.get(attr) : null);
+		}
+	}
+
+	/**
+	 * <p>
+	 * A wrapper around another {@link QuickInterpretedStyle} that delegates most of its methods to the wrapped style.
+	 * </p>
+	 * <p>
+	 * This serves as an abstract class for style extensions which provide added utility over a standard {@link QuickInterpretedStyle}.
+	 * </p>
+	 */
+	public abstract class Wrapper implements QuickInterpretedStyle {
+		private final QuickInterpretedStyle theParent;
+		private final QuickInterpretedStyle theWrapped;
+
+		/**
+		 * @param parent The parent for this style
+		 * @param wrapped The style to wrap
+		 */
+		protected Wrapper(QuickInterpretedStyle parent, QuickInterpretedStyle wrapped) {
+			theParent = parent;
+			theWrapped = wrapped;
+		}
+
+		@Override
+		public QuickInterpretedStyle getParent() {
+			return theParent;
+		}
+
+		@Override
+		public QuickCompiledStyle getCompiled() {
+			return theWrapped.getCompiled();
+		}
+
+		@Override
+		public List<InterpretedStyleValue<?>> getDeclaredValues() {
+			return theWrapped.getDeclaredValues();
+		}
+
+		@Override
+		public Set<QuickStyleAttribute<?>> getAttributes() {
+			return theWrapped.getAttributes();
+		}
+
+		@Override
+		public <T> QuickElementStyleAttribute<T> get(QuickStyleAttribute<T> attr) {
+			return theWrapped.get(attr);
+		}
+
+		@Override
+		public String toString() {
+			return theWrapped.toString();
+		}
 	}
 
 	/**
@@ -161,7 +230,7 @@ public class QuickInterpretedStyle {
 		 * @return The value for this style attribute on the element
 		 * @throws ModelInstantiationException If the condition or the value could not be evaluated
 		 */
-		public ObservableValue<T> evaluate(ModelSetInstance models, T defaultValue) throws ModelInstantiationException {
+		public ObservableValue<T> evaluate(ModelSetInstance models) throws ModelInstantiationException {
 			ObservableValue<ConditionalValue<T>>[] values = new ObservableValue[theValues.size() + (theInherited == null ? 0 : 1)];
 			for (int i = 0; i < theValues.size(); i++) {
 				ObservableValue<Boolean> condition = theValues.get(i).getApplication().getCondition(models);
@@ -170,7 +239,7 @@ public class QuickInterpretedStyle {
 					.map(LambdaUtils.printableFn(pass -> new ConditionalValue<>(pass, value), "ifPass(" + value + ")", null));
 			}
 			if (theInherited != null) {
-				ObservableValue<T> value = theInherited.evaluate(StyleQIS.getParentModels(models), null);
+				ObservableValue<T> value = theInherited.evaluate(StyleQIS.getParentModels(models));
 				values[theValues.size()] = ObservableValue.of(new ConditionalValue<>(true, value));
 			}
 			ConditionalValue<T> defaultCV = new ConditionalValue<>(true, null);
@@ -178,9 +247,8 @@ public class QuickInterpretedStyle {
 				(TypeToken<ConditionalValue<T>>) (TypeToken<?>) TypeTokens.get().of(ConditionalValue.class), //
 				LambdaUtils.printablePred(cv -> cv.pass, "pass", null), //
 				LambdaUtils.printableSupplier(() -> defaultCV, () -> "null", null), values);
-			ObservableValue<T> value = ObservableValue
-				.flatten(conditionalValue.map(LambdaUtils.printableFn(cv -> cv.value, "value", null)), () -> defaultValue);
-			return value;
+			return ObservableValue
+				.flatten(conditionalValue.map(LambdaUtils.printableFn(cv -> cv.value, "value", null)));
 		}
 
 		private static class ConditionalValue<T> {

@@ -1,27 +1,43 @@
 package org.observe.quick.swing;
 
+import java.awt.AWTEvent;
 import java.awt.Color;
+import java.awt.Component;
 import java.awt.EventQueue;
+import java.awt.Font;
+import java.awt.IllegalComponentStateException;
 import java.awt.LayoutManager;
+import java.awt.Point;
+import java.awt.Toolkit;
+import java.awt.event.FocusEvent;
+import java.awt.event.FocusListener;
+import java.awt.event.MouseEvent;
+import java.awt.event.MouseListener;
 import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
+import javax.swing.JComponent;
 import javax.swing.JFrame;
+import javax.swing.SwingUtilities;
 
 import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
+import org.observe.Subscription;
 import org.observe.collect.ObservableCollection;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.quick.QuickAddOn;
 import org.observe.quick.QuickApplication;
 import org.observe.quick.QuickBorder;
+import org.observe.quick.QuickCore;
 import org.observe.quick.QuickDocument2;
 import org.observe.quick.QuickInterpretation;
+import org.observe.quick.QuickTextElement.QuickTextStyle;
 import org.observe.quick.QuickWidget;
 import org.observe.quick.QuickWidget.Interpreted;
 import org.observe.quick.QuickWindow;
@@ -29,15 +45,21 @@ import org.observe.quick.base.*;
 import org.observe.util.TypeTokens;
 import org.observe.util.swing.CategoryRenderStrategy;
 import org.observe.util.swing.ComponentDecorator;
+import org.observe.util.swing.FontAdjuster;
 import org.observe.util.swing.JustifiedBoxLayout;
 import org.observe.util.swing.PanelPopulation.ComponentEditor;
 import org.observe.util.swing.PanelPopulation.ContainerPopulator;
 import org.observe.util.swing.PanelPopulation.PanelPopulator;
 import org.observe.util.swing.PanelPopulation.WindowBuilder;
 import org.observe.util.swing.WindowPopulation;
+import org.qommons.Identifiable;
+import org.qommons.ThreadConstraint;
+import org.qommons.Transactable;
+import org.qommons.Transaction;
 import org.qommons.Transformer;
 import org.qommons.Transformer.Builder;
 import org.qommons.collect.BetterList;
+import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.ex.CheckedExceptionWrapper;
 import org.qommons.ex.ExBiConsumer;
 import org.qommons.ex.ExBiFunction;
@@ -161,8 +183,8 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 		LayoutManager create(L quick) throws ModelInstantiationException;
 	}
 
-	public interface QuickSwingBorder<B extends QuickBorder> {
-		void decorate(ComponentDecorator deco, QuickBorder border) throws ModelInstantiationException;
+	public interface QuickSwingBorder {
+		void decorate(ComponentDecorator deco, QuickBorder border, Component[] component) throws ModelInstantiationException;
 	}
 
 	/** Quick interpretation of the core toolkit for Swing */
@@ -222,53 +244,405 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 				};
 			});
 			modifyForWidget(tx, QuickWidget.Interpreted.class, (qw, qsp, tx2) -> {
-				QuickSwingBorder<QuickBorder> border = tx2.transform(qw.getBorder(), QuickSwingBorder.class);
+				QuickSwingBorder border = tx2.transform(qw.getBorder(), QuickSwingBorder.class);
 				qsp.addModifier((comp, w) -> {
-					if (w.getTooltip() != null)
-						comp.withTooltip(w.getTooltip());
-					if (w.isVisible() != null)
-						comp.visibleWhen(w.isVisible());
-					if (border != null) {
-						try {
-							comp.decorate(deco -> {
+					ComponentDecorator deco = new ComponentDecorator();
+					Runnable[] revert = new Runnable[1];
+					Component[] component = new Component[1];
+					try {
+						comp.modifyComponent(c -> {
+							revert[0] = deco.decorate(c);
+							component[0] = c;
+							try {
+								w.setContext(new QuickWidget.WidgetContext.Default(//
+									new MouseValueSupport(c, "hovered", null), //
+									new FocusSupport(c), //
+									new MouseValueSupport(c, "pressed", true), //
+									new MouseValueSupport(c, "rightPressed", false)));
+							} catch (ModelInstantiationException e) {
+								throw new CheckedExceptionWrapper(e);
+							}
+						});
+						if (w.getTooltip() != null)
+							comp.withTooltip(w.getTooltip());
+						if (w.isVisible() != null)
+							comp.visibleWhen(w.isVisible());
+						if (border != null) {
+							comp.decorate(deco2 -> {
 								try {
-									border.decorate(deco, w.getBorder());
+									border.decorate(deco2, w.getBorder(), component);
 								} catch (ModelInstantiationException e) {
 									throw new CheckedExceptionWrapper(e);
 								}
 							});
-						} catch (CheckedExceptionWrapper e) {
-							if (e.getCause() instanceof ModelInstantiationException)
-								throw (ModelInstantiationException) e.getCause();
-							throw e;
 						}
+					} catch (CheckedExceptionWrapper e) {
+						if (e.getCause() instanceof ModelInstantiationException)
+							throw (ModelInstantiationException) e.getCause();
+						throw e;
 					}
-					// TODO Style
+					adjustFont(deco, w.getStyle());
+					ObservableValue<Color> color = w.getStyle().getColor();
+					deco.withBackground(color.get());
+					Observable.or(color.noInitChanges(), fontChanges(w.getStyle())).act(__ -> {
+						adjustFont(deco.reset(), w.getStyle());
+						System.out.println(w + " font=" + deco.getForeground());
+						deco.withBackground(color.get());
+						if (component[0] != null) {
+							revert[0].run();
+							revert[0] = deco.decorate(component[0]);
+							component[0].repaint();
+						}
+					});
 				});
 			});
 			tx.with(QuickBorder.LineBorder.Interpreted.class, QuickSwingBorder.class, (iBorder, tx2) -> {
-				return (deco, border) -> {
-					ObservableValue<Color> color = border.getColor();
-					ObservableValue<Integer> thick = border.getThickness();
-					Observable.or(color.noInitChanges(), thick.changes()).act(__ -> {
+				return (deco, border, component) -> {
+					ObservableValue<Color> color = border.getStyle().getBorderColor().map(c -> c != null ? c : Color.black);
+					ObservableValue<Integer> thick = border.getStyle().getBorderThickness().map(t -> t != null ? t : 1);
+					deco.withLineBorder(color.get(), thick.get(), false);
+					Observable.or(color.noInitChanges(), thick.noInitChanges()).act(__ -> {
 						deco.withLineBorder(color.get(), thick.get(), false);
+						if (component[0] != null)
+							component[0].repaint();
 					});
 				};
 			});
 			tx.with(QuickBorder.TitledBorder.Interpreted.class, QuickSwingBorder.class, (iBorder, tx2) -> {
-				return (deco, border) -> {
-					ObservableValue<Color> color = border.getColor();
-					ObservableValue<Integer> thick = border.getThickness();
-					ObservableValue<String> title = ((QuickBorder.TitledBorder) border).getTitle();
-					Observable.or(color.noInitChanges(), thick.noInitChanges(), title.changes()).act(__ -> {
-						// TODO font style
-						deco.withTitledBorder(title.get(), color.get(), null);
+				return (deco, border, component) -> {
+					QuickBorder.TitledBorder titled = (QuickBorder.TitledBorder) border;
+					ObservableValue<Color> color = titled.getStyle().getBorderColor().map(c -> c != null ? c : Color.black);
+					ObservableValue<Integer> thick = titled.getStyle().getBorderThickness().map(t -> t != null ? t : 1);
+					ObservableValue<String> title = titled.getTitle();
+					Runnable[] revert = new Runnable[1];
+					FontAdjuster font = new FontAdjuster();
+					adjustFont(font, titled.getStyle());
+					revert[0] = deco.withTitledBorder(title.get(), color.get(), font);
+					Observable.or(color.noInitChanges(), thick.noInitChanges(), title.noInitChanges(), fontChanges(titled.getStyle()))
+					.act(__ -> {
+						revert[0].run();
+							adjustFont(font.reset(), titled.getStyle());
+						System.out.println("Border font=" + font.getForeground());
+						revert[0] = deco.withTitledBorder(title.get(), color.get(), font);
 						// This call will just modify the thickness of the titled border
 						deco.withLineBorder(color.get(), thick.get(), false);
+						if (component[0] != null)
+							component[0].repaint();
 					});
 				};
 			});
 		}
+
+		static void adjustFont(FontAdjuster font, QuickTextStyle style) {
+			Color color = style.getFontColor().get();
+			if (color != null)
+				font.withForeground(color);
+			Double size = style.getFontSize().get();
+			if (size != null)
+				font.withFontSize(size.floatValue());
+			Double weight = style.getFontWeight().get();
+			if (weight != null)
+				font.withFontWeight(weight.floatValue());
+			Double slant = style.getFontSlant().get();
+			if (slant != null && slant > 0)
+				font.withFontStyle(Font.ITALIC);
+
+		}
+
+		static Observable<?> fontChanges(QuickTextStyle style) {
+			return Observable.or(style.getFontColor().noInitChanges(), style.getFontSize().noInitChanges(),
+				style.getFontWeight().noInitChanges(), style.getFontSlant().noInitChanges());
+		}
+
+		private static boolean isMouseListening;
+		private static volatile Point theMouseLocation;
+		private static volatile boolean isLeftPressed;
+		private static volatile boolean isRightPressed;
+
+		private void initMouseListening() {
+			if (isMouseListening)
+				return;
+			synchronized (QuickCore.class) {
+				if (isMouseListening)
+					return;
+				Toolkit.getDefaultToolkit().addAWTEventListener(event -> {
+					MouseEvent mouse = (MouseEvent) event;
+					theMouseLocation = mouse.getLocationOnScreen();
+					switch (mouse.getID()) {
+					case MouseEvent.MOUSE_PRESSED:
+						isLeftPressed |= SwingUtilities.isLeftMouseButton(mouse);
+						isRightPressed |= SwingUtilities.isRightMouseButton(mouse);
+						break;
+					case MouseEvent.MOUSE_RELEASED:
+						if (SwingUtilities.isLeftMouseButton(mouse))
+							isLeftPressed = false;
+						if (SwingUtilities.isRightMouseButton(mouse))
+							isRightPressed = false;
+						break;
+					}
+				}, AWTEvent.MOUSE_EVENT_MASK | AWTEvent.MOUSE_MOTION_EVENT_MASK);
+				isMouseListening = true;
+			}
+		}
+
+		static class MouseValueSupport extends ObservableValue.LazyObservableValue<Boolean>
+		implements SettableValue<Boolean>, MouseListener {
+			private final Component theComponent;
+			private final String theName;
+			private final Boolean theButton;
+			private BiConsumer<Boolean, Object> theListener;
+			private boolean isListening;
+
+			public MouseValueSupport(Component component, String name, Boolean button) {
+				super(TypeTokens.get().BOOLEAN, Transactable.noLock(ThreadConstraint.EDT));
+				theComponent = component;
+				theName = name;
+				theButton = button;
+			}
+
+			@Override
+			protected Object createIdentity() {
+				return Identifiable.wrap(theComponent, theName);
+			}
+
+			@Override
+			protected Boolean getSpontaneous() {
+				if (theComponent == null)
+					return false;
+				boolean compVisible;
+				if (theComponent instanceof JComponent)
+					compVisible = ((JComponent) theComponent).isShowing();
+				else
+					compVisible = theComponent.isVisible();
+				if (!compVisible)
+					return false;
+				if (theButton == null) { // No button filter
+				} else if (theButton) { // Left
+					if (!isLeftPressed)
+						return false;
+				} else { // Right
+					if (!isRightPressed)
+						return false;
+				}
+				Point screenPos;
+				try {
+					screenPos = theComponent.getLocationOnScreen();
+				} catch (IllegalComponentStateException e) {
+					return false;
+				}
+				if (screenPos == null)
+					return false;
+				Point mousePos = theMouseLocation;
+				if (mousePos == null || mousePos.x < screenPos.x || mousePos.y < screenPos.y)
+					return false;
+				if (mousePos.x >= screenPos.x + theComponent.getWidth() || mousePos.y >= screenPos.y + theComponent.getHeight())
+					return false;
+				Component child = theComponent.getComponentAt(mousePos.x - screenPos.x, mousePos.y - screenPos.y);
+				return child == null || !child.isVisible();
+			}
+
+			@Override
+			protected Subscription subscribe(BiConsumer<Boolean, Object> listener) {
+				theListener = listener;
+				setListening(true);
+				return () -> setListening(false);
+			}
+
+			@Override
+			public Transaction lock(boolean write, Object cause) {
+				return Transaction.NONE;
+			}
+
+			@Override
+			public Transaction tryLock(boolean write, Object cause) {
+				return Transaction.NONE;
+			}
+
+			@Override
+			public boolean isLockSupported() {
+				return false;
+			}
+
+			@Override
+			public Boolean set(Boolean value, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
+				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+			}
+
+			@Override
+			public String isAcceptable(Boolean value) {
+				return StdMsg.UNSUPPORTED_OPERATION;
+			}
+
+			@Override
+			public ObservableValue<String> isEnabled() {
+				return SettableValue.ALWAYS_DISABLED;
+			}
+
+			private void setListening(boolean listening) {
+				if (listening == isListening)
+					return;
+				if (listening && theListener == null)
+					return;
+				isListening = listening;
+				if (listening)
+					theComponent.addMouseListener(this);
+				else if (theComponent != null)
+					theComponent.removeMouseListener(this);
+				if (!listening)
+					theListener = null;
+			}
+
+			@Override
+			public void mousePressed(MouseEvent e) {
+				if (theListener == null)
+					return;
+				if (theButton == null) { // No button filter
+					return;
+				} else if (theButton.booleanValue()) { // Left
+					if (!SwingUtilities.isLeftMouseButton(e))
+						return;
+				} else { // Right
+					if (!SwingUtilities.isRightMouseButton(e))
+						return;
+				}
+				theListener.accept(true, e);
+			}
+
+			@Override
+			public void mouseReleased(MouseEvent e) {
+				if (theListener == null)
+					return;
+				if (theButton == null) { // No button filter
+					return;
+				} else if (theButton.booleanValue()) { // Left
+					if (!SwingUtilities.isLeftMouseButton(e))
+						return;
+				} else { // Right
+					if (!SwingUtilities.isRightMouseButton(e))
+						return;
+				}
+				theListener.accept(false, e);
+			}
+
+			@Override
+			public void mouseEntered(MouseEvent e) {
+				if (theListener == null)
+					return;
+				if (theButton == null) { // No button filter
+				} else if (theButton.booleanValue()) { // Left
+					if (!isLeftPressed)
+						return;
+				} else { // Right
+					if (!isRightPressed)
+						return;
+				}
+				theListener.accept(true, e);
+			}
+
+			@Override
+			public void mouseExited(MouseEvent e) {
+				if (theListener == null)
+					return;
+				if (theButton == null) { // No button filter
+				} else if (theButton) { // Left
+					if (!isLeftPressed)
+						return;
+				} else { // Right
+					if (!isRightPressed)
+						return;
+				}
+				theListener.accept(false, e);
+			}
+
+			@Override
+			public void mouseClicked(MouseEvent e) { // No state change due to clicked
+			}
+		}
+
+		class FocusSupport extends ObservableValue.LazyObservableValue<Boolean> implements SettableValue<Boolean>, FocusListener {
+			private final Component theComponent;
+			private BiConsumer<Boolean, Object> theListener;
+			private boolean isListening;
+
+			FocusSupport(Component component) {
+				super(TypeTokens.get().BOOLEAN, Transactable.noLock(ThreadConstraint.EDT));
+				theComponent = component;
+			}
+
+			@Override
+			protected Object createIdentity() {
+				return Identifiable.wrap(theComponent, "focused");
+			}
+
+			@Override
+			protected Boolean getSpontaneous() {
+				return theComponent.isFocusOwner();
+			}
+
+			@Override
+			protected Subscription subscribe(BiConsumer<Boolean, Object> listener) {
+				theListener = listener;
+				setListening(true);
+				return () -> setListening(false);
+			}
+
+			@Override
+			public Transaction lock(boolean write, Object cause) {
+				return Transaction.NONE;
+			}
+
+			@Override
+			public Transaction tryLock(boolean write, Object cause) {
+				return Transaction.NONE;
+			}
+
+			@Override
+			public boolean isLockSupported() {
+				return false;
+			}
+
+			@Override
+			public Boolean set(Boolean value, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
+				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+			}
+
+			@Override
+			public String isAcceptable(Boolean value) {
+				return StdMsg.UNSUPPORTED_OPERATION;
+			}
+
+			@Override
+			public ObservableValue<String> isEnabled() {
+				return SettableValue.ALWAYS_DISABLED;
+			}
+
+			private void setListening(boolean listening) {
+				if (listening == isListening)
+					return;
+				if (listening && theListener == null)
+					return;
+				isListening = listening;
+				if (listening)
+					theComponent.addFocusListener(this);
+				else if (theComponent != null)
+					theComponent.removeFocusListener(this);
+				if (!listening)
+					theListener = null;
+			}
+
+			@Override
+			public void focusGained(FocusEvent e) {
+				if (theListener != null)
+					theListener.accept(true, e);
+			}
+
+			@Override
+			public void focusLost(FocusEvent e) {
+				if (theListener != null)
+					theListener.accept(false, e);
+			}
+		}
+
 	}
 
 	/** Quick interpretation of the base toolkit for Swing */

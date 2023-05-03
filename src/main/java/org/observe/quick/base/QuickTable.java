@@ -9,7 +9,7 @@ import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.quick.QuickElement;
-import org.observe.quick.QuickStyled;
+import org.observe.quick.QuickStyledElement;
 import org.observe.util.TypeTokens;
 import org.qommons.config.AbstractQIS;
 import org.qommons.config.QonfigElement;
@@ -102,7 +102,7 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 		}
 
 		@Override
-		public Interpreted<R> update(QuickStyled.QuickInterpretationCache cache) throws ExpressoInterpretationException {
+		public Interpreted<R> update(QuickStyledElement.QuickInterpretationCache cache) throws ExpressoInterpretationException {
 			// Do this first so we have the row type
 			theRows = getDefinition().getRows().evaluate(ModelTypes.Collection.<R> anyAs()).interpret();
 			super.update(cache);
