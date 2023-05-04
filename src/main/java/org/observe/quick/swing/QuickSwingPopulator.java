@@ -3,6 +3,7 @@ package org.observe.quick.swing;
 import java.awt.AWTEvent;
 import java.awt.Color;
 import java.awt.Component;
+import java.awt.Container;
 import java.awt.EventQueue;
 import java.awt.IllegalComponentStateException;
 import java.awt.LayoutManager;
@@ -18,6 +19,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 import javax.swing.JComponent;
 import javax.swing.JFrame;
@@ -190,6 +192,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 	public class QuickCoreSwing implements QuickInterpretation {
 		@Override
 		public void configure(Builder<ExpressoInterpretationException> tx) {
+			initMouseListening();
 			tx.with(QuickDocument2.Interpreted.class, QuickApplication.class, (interpretedDoc, tx2) -> {
 				QuickSwingPopulator<QuickWidget> interpretedBody = tx2.transform(interpretedDoc.getBody(), QuickSwingPopulator.class);
 				return doc -> {
@@ -674,15 +677,19 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 	public class QuickBaseSwing implements QuickInterpretation {
 		@Override
 		public void configure(Transformer.Builder<ExpressoInterpretationException> tx) {
-			QuickSwingPopulator.<QuickBox, QuickBox.Interpreted<?>> interpretContainer(tx, gen(QuickBox.Interpreted.class),
-				QuickBaseSwing::interpretBox);
-			tx.with(QuickInlineLayout.Interpreted.class, QuickSwingLayout.class, QuickBaseSwing::interpretInlineLayout);
+			// Simple widgets
 			QuickSwingPopulator.<QuickLabel<?>, QuickLabel.Interpreted<?, ?>> interpretWidget(tx,
 				QuickBaseSwing.gen(QuickLabel.Interpreted.class), QuickBaseSwing::interpretLabel);
 			QuickSwingPopulator.<QuickTextField<?>, QuickTextField.Interpreted<?>> interpretWidget(tx,
 				QuickBaseSwing.gen(QuickTextField.Interpreted.class), QuickBaseSwing::interpretTextField);
 			QuickSwingPopulator.<QuickCheckBox, QuickCheckBox.Interpreted> interpretWidget(tx,
 				QuickBaseSwing.gen(QuickCheckBox.Interpreted.class), QuickBaseSwing::interpretCheckBox);
+			QuickSwingPopulator.<QuickButton, QuickButton.Interpreted> interpretWidget(tx, gen(QuickButton.Interpreted.class),
+				QuickBaseSwing::interpretButton);
+
+			// Containers
+			QuickSwingPopulator.<QuickBox, QuickBox.Interpreted<?>> interpretContainer(tx, gen(QuickBox.Interpreted.class),
+				QuickBaseSwing::interpretBox);
 			QuickSwingPopulator.<QuickFieldPanel, QuickFieldPanel.Interpreted> interpretContainer(tx,
 				gen(QuickFieldPanel.Interpreted.class), QuickBaseSwing::interpretFieldPanel);
 			modifyForAddOn(tx, QuickField.Interpreted.class, (qw, qsp, tx2) -> {
@@ -693,8 +700,26 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 						comp.fill();
 				});
 			});
-			QuickSwingPopulator.<QuickButton, QuickButton.Interpreted> interpretWidget(tx, gen(QuickButton.Interpreted.class),
-				QuickBaseSwing::interpretButton);
+
+			// Box layouts
+			tx.with(QuickInlineLayout.Interpreted.class, QuickSwingLayout.class, QuickBaseSwing::interpretInlineLayout);
+			tx.with(QuickSimpleLayout.Interpreted.class, QuickSwingLayout.class, QuickBaseSwing::interpretSimpleLayout);
+			modifyForAddOn(tx, QuickSimpleLayout.Child.Interpreted.class, (qw, qsp, tx2) -> {
+				qsp.addModifier((comp, w) -> {
+					Component[] component = new Component[1];
+					comp.modifyComponent(c -> component[0] = c);
+					Positionable h = w.getAddOn(Positionable.Horizontal.class);
+					Positionable v = w.getAddOn(Positionable.Vertical.class);
+					Sizeable width = w.getAddOn(Sizeable.Horizontal.class);
+					Sizeable height = w.getAddOn(Sizeable.Vertical.class);
+					comp.withLayoutConstraints(simpleConstraints(h, v, width, height));
+					Observable.or(h.changes(), v.changes(), width.changes(), height.changes()).act(evt -> {
+						constraintChanged(component[0], simpleConstraints(h, v, width, height));
+					});
+				});
+			});
+
+			// Table
 			QuickSwingPopulator.<QuickTable<?>, QuickTable.Interpreted<?>> interpretWidget(tx, gen(QuickTable.Interpreted.class),
 				QuickBaseSwing::interpretTable);
 		}
@@ -730,6 +755,47 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 			return quick -> new JustifiedBoxLayout(vertical)//
 				.setMainAlignment(interpreted.getDefinition().getMainAlign())//
 				.setCrossAlignment(interpreted.getDefinition().getCrossAlign());
+		}
+
+		static QuickSwingLayout<QuickSimpleLayout> interpretSimpleLayout(QuickSimpleLayout.Interpreted interpreted,
+			Transformer<ExpressoInterpretationException> tx) {
+			return quick -> new SimpleLayout();
+		}
+
+		static void constraintChanged(Component component, SimpleLayout.SimpleConstraints constraints) {
+			if (component == null)
+				return;
+			Container container = component.getParent();
+			if (container == null)
+				return;
+			if (container.getLayout() instanceof SimpleLayout) {
+				((SimpleLayout) container.getLayout()).addLayoutComponent(component, constraints);
+				// TODO Do we need the invalidate part?
+				container.invalidate();
+				container.revalidate();
+			}
+		}
+
+		static SimpleLayout.SimpleConstraints simpleConstraints(Positionable h, Positionable v, Sizeable width, Sizeable height) {
+			return new SimpleLayout.SimpleConstraints(//
+				h.getLeading(), h.getCenter(), h.getTrailing(), //
+				v.getLeading(), v.getCenter(), v.getTrailing(), //
+				first(width.getSize(), width.getMinimum()), first(width.getSize(), width.getPreferred()),
+				first(width.getSize(), width.getMaximum()), //
+				first(height.getSize(), height.getMinimum()), first(height.getSize(), height.getPreferred()),
+				first(height.getSize(), height.getMaximum())//
+				);
+		}
+
+		static <T> Supplier<T> first(Supplier<T>... suppliers) {
+			return () -> {
+				for (Supplier<T> supplier : suppliers) {
+					T value = supplier.get();
+					if (value != null)
+						return value;
+				}
+				return null;
+			};
 		}
 
 		static <T> QuickSwingPopulator<QuickLabel<T>> interpretLabel(QuickLabel.Interpreted<T, ?> interpreted,

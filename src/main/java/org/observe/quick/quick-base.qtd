@@ -14,6 +14,40 @@
 		<add-on name="east" inherits="border-layout-region,h-sizeable" />
 		<add-on name="west" inherits="border-layout-region,h-sizeable" />
 
+		<add-on name="h-positionable">
+			<attribute name="left" type="expression" specify="optional" />
+			<attribute name="h-center" type="expression" specify="optional" />
+			<attribute name="right" type="expression" specify="optional" />
+		</add-on>
+		<add-on name="v-positionable">
+			<attribute name="top" type="expression" specify="optional" />
+			<attribute name="v-center" type="expression" specify="optional" />
+			<attribute name="bottom" type="expression" specify="optional" />
+		</add-on>
+		<add-on name="h-sizeable">
+			<attribute name="width" type="expression" specify="optional" />
+			<attribute name="min-width" type="expression" specify="optional" />
+			<!--<attribute name="min-pref-width" type="expression" specify="optional" />-->
+			<attribute name="pref-width" type="expression" specify="optional" />
+			<!--<attribute name="max-pref-width" type="expression" specify="optional" />-->
+			<attribute name="max-width" type="expression" specify="optional" />
+		</add-on>
+		<add-on name="v-sizeable">
+			<attribute name="height" type="expression" specify="optional" />
+			<attribute name="min-height" type="expression" specify="optional" />
+			<!--<attribute name="min-pref-height" type="expression" specify="optional" />-->
+			<attribute name="pref-height" type="expression" specify="optional" />
+			<!--<attribute name="max-pref-height" type="expression" specify="optional" />-->
+			<attribute name="max-height" type="expression" specify="optional" />
+		</add-on>
+		<add-on name="generic-sizeable">
+			<attribute name="min-length" type="expression" specify="optional" />
+			<attribute name="min-pref-length" type="expression" specify="optional" />
+			<attribute name="pref-length" type="expression" specify="optional" />
+			<attribute name="max-pref-length" type="expression" specify="optional" />
+			<attribute name="max-length" type="expression" specify="optional" />
+		</add-on>
+
 		<!-- Layouts -->
 		<add-on name="layout" />
 
@@ -33,7 +67,7 @@
 			<!--<child-mod child="box.content" inherits="generic-sizeable" />-->
 		</add-on>
 		<add-on name="simple-layout-child" inherits="h-positionable,v-positionable,h-sizeable,v-sizeable" />
-		<add-on name="simple" requires="box" inherits="layout">
+		<add-on name="simple-layout" requires="box" inherits="layout">
 			<child-mod child="box.content" inherits="simple-layout-child" />
 		</add-on>
 
