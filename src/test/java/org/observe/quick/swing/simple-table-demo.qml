@@ -12,10 +12,13 @@
 				</list>
 				<value name="newValue" type="int" />
 				<value name="primes">new org.qommons.Primes()</value>
-				<action-group name="addPrime">
+				<action-group name="_addPrime">
 					<action>app.values.add(app.newValue)</action>
 					<action>app.newValue=1</action>
 				</action-group>
+				<transform name="addPrime" source="_addPrime">
+					<disable with="newValue&lt;=1 ? `Value must be greater than 1` : null" />
+				</transform>
 			</model>
 		</models>
 		<style-sheet>
@@ -24,12 +27,23 @@
 	</head>
 	<box layout="inline" orientation="vertical" cross-align="justify">
 		<table rows="app.values">
-			<titled-border title="`Factored Values`" />
+			<titled-border title="`Factored Values`">
+				<style attr="border-color" condition="hovered">`green`</style>
+				<style condition="pressed">
+					<style attr="font-slant">`italic`</style>
+					<style attr="font-color">`orange`</style>
+				</style>
+			</titled-border>
 			<column name="`Value`" value="value" />
 			<column name="`Factorization`" value="app.primes.factorize(value, 100_000)" />
 		</table>
 		<box layout="inline" orientation="horizontal" main-align="justify">
-			<text-field value="app.newValue" />
+			<text-field value="app.newValue">
+				<style condition="pressed">
+					<style attr="font-weight">`ultra-bold`</style>
+					<style attr="font-color">`purple`</style>
+				</style>
+			</text-field>
 			<button action="app.addPrime">`Add`</button>
 		</box>
 	</box>

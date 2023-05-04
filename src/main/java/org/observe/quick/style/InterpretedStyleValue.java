@@ -6,7 +6,7 @@ import org.observe.expresso.ObservableModelSet.ModelValueSynth;
 
 /**
  * A {@link QuickStyleValue style value} evaluated for an {@link ExpressoEnv environment}
- * 
+ *
  * @param <T> The type of the value
  */
 public class InterpretedStyleValue<T> implements Comparable<InterpretedStyleValue<?>> {
@@ -44,5 +44,10 @@ public class InterpretedStyleValue<T> implements Comparable<InterpretedStyleValu
 	@Override
 	public int compareTo(InterpretedStyleValue<?> o) {
 		return theStyleValue.compareTo(o.theStyleValue);
+	}
+
+	@Override
+	public String toString() {
+		return theStyleValue.toString();
 	}
 }

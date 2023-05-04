@@ -185,12 +185,12 @@ public interface QuickTextElement extends QuickStyledElement {
 
 			@Override
 			public ObservableValue<Double> getFontWeight() {
-				return ObservableValue.flatten(theFontSize);
+				return ObservableValue.flatten(theFontWeight);
 			}
 
 			@Override
 			public ObservableValue<Double> getFontSlant() {
-				return ObservableValue.flatten(theFontSize);
+				return ObservableValue.flatten(theFontSlant);
 			}
 
 			@Override
@@ -199,6 +199,11 @@ public interface QuickTextElement extends QuickStyledElement {
 				theFontSize.set(getInterpreted().getFontSize().evaluate(models), null);
 				theFontWeight.set(getInterpreted().getFontWeight().evaluate(models), null);
 				theFontSlant.set(getInterpreted().getFontSlant().evaluate(models), null);
+			}
+
+			@Override
+			public String toString() {
+				return theInterpreted.toString();
 			}
 		}
 	}

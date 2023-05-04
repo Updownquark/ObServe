@@ -78,7 +78,7 @@ class PanelPopulationImpl {
 
 		void doAdd(AbstractComponentEditor<?, ?> field, Component fieldLabel, Component postLabel, boolean scrolled);
 
-		<C extends ComponentEditor<?, ?>> C modify(C component);
+		<C2 extends ComponentEditor<?, ?>> C2 modify(C2 component);
 
 		default void doAdd(AbstractComponentEditor<?, ?> field) {
 			doAdd(field, false);
@@ -1439,7 +1439,7 @@ class PanelPopulationImpl {
 				theDisablement = disabled;
 			else {
 				ObservableValue<String> old = theDisablement;
-				theDisablement = ObservableValue.firstValue(TypeTokens.get().STRING, msg -> msg != null, () -> null, old, disabled);
+				theDisablement = ObservableValue.firstValue(TypeTokens.get().STRING, Objects::nonNull, () -> null, old, disabled);
 			}
 			return (P) this;
 		}
@@ -1447,7 +1447,7 @@ class PanelPopulationImpl {
 		@Override
 		protected Component createComponent() {
 			if (theAction != null)
-				getEditor().addActionListener(evt -> theAction.act(evt));
+				getEditor().addActionListener(theAction::act);
 			ObservableValue<String> enabled;
 			if (theDisablement != null)
 				enabled = theDisablement;

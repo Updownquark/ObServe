@@ -4,7 +4,6 @@ import java.awt.AWTEvent;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.EventQueue;
-import java.awt.Font;
 import java.awt.IllegalComponentStateException;
 import java.awt.LayoutManager;
 import java.awt.Point;
@@ -321,8 +320,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 					Observable.or(color.noInitChanges(), thick.noInitChanges(), title.noInitChanges(), fontChanges(titled.getStyle()))
 					.act(__ -> {
 						revert[0].run();
-							adjustFont(font.reset(), titled.getStyle());
-						System.out.println("Border font=" + font.getForeground());
+						adjustFont(font.reset(), titled.getStyle());
 						revert[0] = deco.withTitledBorder(title.get(), color.get(), font);
 						// This call will just modify the thickness of the titled border
 						deco.withLineBorder(color.get(), thick.get(), false);
@@ -344,8 +342,8 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 			if (weight != null)
 				font.withFontWeight(weight.floatValue());
 			Double slant = style.getFontSlant().get();
-			if (slant != null && slant > 0)
-				font.withFontStyle(Font.ITALIC);
+			if (slant != null)
+				font.withFontSlant(slant.floatValue());
 
 		}
 
@@ -385,6 +383,33 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 			}
 		}
 
+		static class ComponentIdentity {
+			private final Component theComponent;
+
+			ComponentIdentity(Component component) {
+				theComponent = component;
+			}
+
+			@Override
+			public int hashCode() {
+				return theComponent.hashCode();
+			}
+
+			@Override
+			public boolean equals(Object obj) {
+				return obj instanceof ComponentIdentity && theComponent.equals(((ComponentIdentity) obj).theComponent);
+			}
+
+			@Override
+			public String toString() {
+				String name = theComponent.getName();
+				if (name != null)
+					return theComponent.getClass().getSimpleName() + ":" + name;
+				else
+					return theComponent.getClass().getSimpleName();
+			}
+		}
+
 		static class MouseValueSupport extends ObservableValue.LazyObservableValue<Boolean>
 		implements SettableValue<Boolean>, MouseListener {
 			private final Component theComponent;
@@ -402,7 +427,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 
 			@Override
 			protected Object createIdentity() {
-				return Identifiable.wrap(theComponent, theName);
+				return Identifiable.wrap(new ComponentIdentity(theComponent), theName);
 			}
 
 			@Override
@@ -417,7 +442,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 				if (!compVisible)
 					return false;
 				if (theButton == null) { // No button filter
-				} else if (theButton) { // Left
+				} else if (theButton.booleanValue()) { // Left
 					if (!isLeftPressed)
 						return false;
 				} else { // Right
@@ -544,7 +569,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 				if (theListener == null)
 					return;
 				if (theButton == null) { // No button filter
-				} else if (theButton) { // Left
+				} else if (theButton.booleanValue()) { // Left
 					if (!isLeftPressed)
 						return;
 				} else { // Right
@@ -700,18 +725,15 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 		}
 
 		static QuickSwingLayout<QuickInlineLayout> interpretInlineLayout(QuickInlineLayout.Interpreted interpreted,
-			Transformer<ExpressoInterpretationException> tx) throws ExpressoInterpretationException {
+			Transformer<ExpressoInterpretationException> tx) {
 			boolean vertical = interpreted.getDefinition().isVertical();
-			return quick -> {
-				JustifiedBoxLayout layout = new JustifiedBoxLayout(vertical)//
-					.setMainAlignment(interpreted.getDefinition().getMainAlign())//
-					.setCrossAlignment(interpreted.getDefinition().getCrossAlign());
-				return layout;
-			};
+			return quick -> new JustifiedBoxLayout(vertical)//
+				.setMainAlignment(interpreted.getDefinition().getMainAlign())//
+				.setCrossAlignment(interpreted.getDefinition().getCrossAlign());
 		}
 
 		static <T> QuickSwingPopulator<QuickLabel<T>> interpretLabel(QuickLabel.Interpreted<T, ?> interpreted,
-			Transformer<ExpressoInterpretationException> tx) throws ExpressoInterpretationException {
+			Transformer<ExpressoInterpretationException> tx) {
 			return QuickSwingPopulator.<QuickLabel<T>, QuickLabel.Interpreted<T, QuickLabel<T>>> createWidget(
 				(QuickLabel.Interpreted<T, QuickLabel<T>>) interpreted, (panel, quick) -> {
 					Format<T> format = quick.getFormat().get();
@@ -720,7 +742,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 		}
 
 		static <T> QuickSwingPopulator<QuickTextField<T>> interpretTextField(QuickTextField.Interpreted<T> interpreted,
-			Transformer<ExpressoInterpretationException> tx) throws ExpressoInterpretationException {
+			Transformer<ExpressoInterpretationException> tx) {
 			return createWidget(interpreted, (panel, quick) -> {
 				Format<T> format = quick.getFormat().get();
 				boolean commitOnType = quick.getInterpreted().getDefinition().isCommitOnType();
@@ -743,7 +765,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 		}
 
 		static QuickSwingPopulator<QuickCheckBox> interpretCheckBox(QuickCheckBox.Interpreted interpreted,
-			Transformer<ExpressoInterpretationException> tx) throws ExpressoInterpretationException {
+			Transformer<ExpressoInterpretationException> tx) {
 			return createWidget(interpreted, (panel, quick) -> {
 				panel.addCheckField(null, quick.getValue(), null);
 			});
@@ -769,12 +791,9 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 		}
 
 		static QuickSwingPopulator<QuickButton> interpretButton(QuickButton.Interpreted interpreted,
-			Transformer<ExpressoInterpretationException> tx) throws ExpressoInterpretationException {
-			boolean withCause = TypeTokens.get().isAssignable(interpreted.getAction().getType().getType(0), TypeTokens.get().OBJECT);
+			Transformer<ExpressoInterpretationException> tx) {
 			return createWidget(interpreted, (panel, quick) -> {
-				panel.addButton(null, cause -> {
-					quick.getAction().act(withCause ? cause : null);
-				}, btn -> {
+				panel.addButton(null, quick.getAction(), btn -> {
 					if (quick.getText() != null)
 						btn.withText(quick.getText());
 				});
@@ -782,7 +801,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 		}
 
 		static <R> QuickSwingPopulator<QuickTable<R>> interpretTable(QuickTable.Interpreted<R> interpreted,
-			Transformer<ExpressoInterpretationException> tx) throws ExpressoInterpretationException {
+			Transformer<ExpressoInterpretationException> tx) {
 			return createWidget(interpreted, (panel, quick) -> {
 				TabularWidget.TabularContext<R> ctx = new TabularWidget.TabularContext.Default<>(//
 					SettableValue.build(quick.getInterpreted().getRowType()).build(), //

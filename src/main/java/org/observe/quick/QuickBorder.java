@@ -290,6 +290,7 @@ public interface QuickBorder extends QuickStyledElement {
 
 			@Override
 			public void update(ModelSetInstance models) throws ModelInstantiationException {
+				super.update(models);
 				theBorderColor.set(getInterpreted().getBorderColor().evaluate(models), null);
 				theBorderThickness.set(getInterpreted().getBorderThickness().evaluate(models), null);
 			}

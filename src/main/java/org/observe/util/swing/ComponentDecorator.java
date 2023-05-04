@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.UnaryOperator;
 
 import javax.swing.AbstractButton;
 import javax.swing.Icon;
@@ -57,7 +58,7 @@ public class ComponentDecorator extends FontAdjuster {
 	}
 
 	@Override
-	public ComponentDecorator deriveFont(Function<Font, Font> font) {
+	public ComponentDecorator deriveFont(UnaryOperator<Font> font) {
 		return (ComponentDecorator) super.deriveFont(font);
 	}
 
@@ -147,33 +148,44 @@ public class ComponentDecorator extends FontAdjuster {
 	}
 
 	public ComponentDecorator withTitledBorder(String title, Color color) {
-		return withTitledBorder(title, color, null);
+		withTitledBorder(title, color, font -> font.withForeground(color));
+		return this;
 	}
 
-	public ComponentDecorator withTitledBorder(String title, Color color, Consumer<FontAdjuster> border) {
+	public ComponentDecorator withTitledBorder(String title, Color borderColor, Consumer<FontAdjuster> font) {
+		FontAdjuster adjuster;
+		if (font != null) {
+			adjuster = new FontAdjuster();
+			font.accept(adjuster);
+		} else
+			adjuster = null;
+		withTitledBorder(title, borderColor, adjuster);
+		return this;
+	}
+
+	public Runnable withTitledBorder(String title, Color borderColor, FontAdjuster font) {
 		TitledBorder b;
 		if (theBorder instanceof TitledBorder) {
 			b = (TitledBorder) theBorder;
 			b.setTitle(title);
-		} else
-			b = new TitledBorder(new ModifiableLineBorder(color, 1, false), title);
-		if (color != null)
-			b.setTitleColor(color);
-		if (border != null)
-			new FontAdjuster().configure(border).adjust(b);
-		theBorder = b;
-		return this;
+		} else if (theBorder instanceof ModifiableLineBorder)
+			theBorder = b = new TitledBorder(theBorder, title);
+		else
+			theBorder = b = new TitledBorder(new ModifiableLineBorder(Color.black, 1, false), title);
+		((ModifiableLineBorder) b.getBorder()).setColor(borderColor);
+		return font.adjust(b);
 	}
 
 	public ComponentDecorator withLineBorder(Color color, int thickness, boolean rounded) {
 		ModifiableLineBorder border;
 		if (theBorder instanceof ModifiableLineBorder) {
-			theBorder = border = (ModifiableLineBorder) theBorder;
+			border = (ModifiableLineBorder) theBorder;
 			border.set(color, thickness, rounded);
 		} else if (theBorder instanceof TitledBorder && ((TitledBorder) theBorder).getBorder() instanceof ModifiableLineBorder)
 			border = (ModifiableLineBorder) ((TitledBorder) theBorder).getBorder();
 		else
 			theBorder = border = new ModifiableLineBorder(color, thickness, rounded);
+		border.set(color, thickness, rounded);
 		return this;
 	}
 

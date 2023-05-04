@@ -23,17 +23,7 @@ import org.observe.Transformation.TransformationState;
 import org.observe.Transformation.TransformedElement;
 import org.observe.collect.ObservableCollection;
 import org.observe.util.TypeTokens;
-import org.qommons.BiTuple;
-import org.qommons.Causable;
-import org.qommons.Identifiable;
-import org.qommons.LambdaUtils;
-import org.qommons.Lockable;
-import org.qommons.Stamped;
-import org.qommons.ThreadConstrained;
-import org.qommons.ThreadConstraint;
-import org.qommons.Transactable;
-import org.qommons.Transaction;
-import org.qommons.TriFunction;
+import org.qommons.*;
 import org.qommons.collect.ListenerList;
 
 import com.google.common.reflect.TypeToken;
@@ -1764,9 +1754,9 @@ public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>,
 													if (event.isInitial() && event2.isInitial())
 														toFire = withInitialEvent
 														? retObs.createInitialEvent(event2.getNewValue(), event2.getCauses()) : null;
-														else
-															toFire = retObs.createChangeEvent(innerOld, event2.getNewValue(),
-																event2.getCauses());
+													else
+														toFire = retObs.createChangeEvent(innerOld, event2.getNewValue(),
+															event2.getCauses());
 													if (toFire != null) {
 														try (Transaction t = toFire.use()) {
 															observer.onNext(toFire);
@@ -1789,8 +1779,8 @@ public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>,
 									ObservableValueEvent<T> toFire;
 									if (event.isInitial())
 										toFire = withInitialEvent ? retObs.createInitialEvent(newValue, event.getCauses()) : null;
-										else
-											toFire = retObs.createChangeEvent((T) old[0], newValue, event.getCauses());
+									else
+										toFire = retObs.createChangeEvent((T) old[0], newValue, event.getCauses());
 									old[0] = newValue;
 									if (toFire != null) {
 										try (Transaction t = toFire.use()) {
@@ -2114,6 +2104,11 @@ public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>,
 			public CoreId getCoreId() {
 				return Lockable.getCoreId(null, () -> Arrays.asList(theValues), ObservableValue::noInitChanges);
 			}
+		}
+
+		@Override
+		public String toString() {
+			return getIdentity().toString();
 		}
 	}
 

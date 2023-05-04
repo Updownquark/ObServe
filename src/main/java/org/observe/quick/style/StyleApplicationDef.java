@@ -1,37 +1,15 @@
 package org.observe.quick.style;
 
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.IdentityHashMap;
-import java.util.Iterator;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
+import java.util.*;
 import java.util.function.Function;
 
 import org.observe.SettableValue;
-import org.observe.expresso.DynamicModelValue;
+import org.observe.expresso.*;
 import org.observe.expresso.DynamicModelValue.Identity;
-import org.observe.expresso.ExpressoEnv;
-import org.observe.expresso.ExpressoEvaluationException;
-import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.LocatedExpression;
-import org.observe.expresso.ModelException;
-import org.observe.expresso.ModelType;
 import org.observe.expresso.ModelType.ModelInstanceType;
-import org.observe.expresso.ModelTypes;
-import org.observe.expresso.ObservableExpression;
-import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.CompiledModelValue;
 import org.observe.expresso.ObservableModelSet.ModelComponentNode;
 import org.observe.expresso.ObservableModelSet.ModelValueSynth;
-import org.observe.expresso.TypeConversionException;
 import org.observe.expresso.ops.BinaryOperator;
 import org.observe.expresso.ops.BufferedExpression;
 import org.observe.expresso.ops.NameExpression;
@@ -183,6 +161,21 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 					throw new ExpressoInterpretationException(e.getMessage(), ex.getFilePosition(e.getErrorOffset()), e.getErrorLength(),
 						e);
 				}
+			}
+
+			@Override
+			public int hashCode() {
+				return ex.hashCode();
+			}
+
+			@Override
+			public boolean equals(Object obj) {
+				return ex.equals(obj);
+			}
+
+			@Override
+			public String toString() {
+				return ex.toString();
 			}
 		};
 	}

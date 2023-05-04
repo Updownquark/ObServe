@@ -7,7 +7,6 @@ import java.awt.font.TextAttribute;
 import java.text.AttributedCharacterIterator.Attribute;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
@@ -71,13 +70,16 @@ public class FontAdjuster {
 	}
 
 	public FontAdjuster deriveFont(Attribute attr, Object value) {
-		Map<Attribute, Object> attrs = new HashMap<>(1);
-		attrs.put(attr, value);
+		Map<Attribute, Object> attrs = Collections.singletonMap(attr, value);
 		return deriveFont(font -> font.deriveFont(attrs));
 	}
 
 	public FontAdjuster withFontWeight(float weight) {
-		return deriveFont(font -> font.deriveFont(Collections.singletonMap(TextAttribute.WEIGHT, weight)));
+		return deriveFont(TextAttribute.WEIGHT, weight);
+	}
+
+	public FontAdjuster withFontSlant(float slant) {
+		return deriveFont(TextAttribute.POSTURE, slant);
 	}
 
 	/**
@@ -275,7 +277,7 @@ public class FontAdjuster {
 		}
 		if (theFont != null) {
 			Font oldFont = border.getTitleFont();
-			border.setTitleFont(theFont.apply(border.getTitleFont()));
+			border.setTitleFont(theFont.apply(oldFont));
 			revert.add(() -> border.setTitleFont(oldFont));
 		}
 		if (theHAlign != null) {

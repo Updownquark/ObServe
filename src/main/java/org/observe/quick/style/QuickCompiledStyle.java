@@ -168,17 +168,32 @@ public interface QuickCompiledStyle {
 				parent = parent.getParent();
 			return parent == null ? null : parent.get(attr);
 		}
+
+		@Override
+		public String toString() {
+			StringBuilder str = new StringBuilder();
+			str.append(theElement.getType().getName() + " style:");
+			for (CompiledStyleValue<?> value : theDeclaredValues)
+				str.append("\n\t").append(value);
+			return str.toString();
+		}
 	}
 
+	/** A wrapper around another compiled style */
 	public abstract class Wrapper implements QuickCompiledStyle {
 		private final QuickCompiledStyle theParent;
 		private final QuickCompiledStyle theWrapped;
 
+		/**
+		 * @param parent The parent style
+		 * @param wrapped The style to wrap
+		 */
 		protected Wrapper(QuickCompiledStyle parent, QuickCompiledStyle wrapped) {
 			theParent = parent;
 			theWrapped = wrapped;
 		}
 
+		/** @return The wrapped style */
 		protected QuickCompiledStyle getWrapped() {
 			return theWrapped;
 		}

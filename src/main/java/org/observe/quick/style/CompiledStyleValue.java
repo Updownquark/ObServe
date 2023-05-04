@@ -74,4 +74,9 @@ public class CompiledStyleValue<T> implements Comparable<CompiledStyleValue<?>> 
 	public int compareTo(CompiledStyleValue<?> o) {
 		return theStyleValue.compareTo(o.theStyleValue);
 	}
+
+	@Override
+	public String toString() {
+		return theStyleValue.toString();
+	}
 }

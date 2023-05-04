@@ -126,6 +126,11 @@ public interface QuickInterpretedStyle {
 			return new QuickElementStyleAttribute<>(attr, this, Collections.emptyList(), //
 				theParent != null && attr.isTrickleDown() ? theParent.get(attr) : null);
 		}
+
+		@Override
+		public String toString() {
+			return theCompiledStyle.toString();
+		}
 	}
 
 	/**
