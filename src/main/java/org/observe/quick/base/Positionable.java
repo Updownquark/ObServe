@@ -56,12 +56,13 @@ public abstract class Positionable extends QuickAddOn.Abstract<QuickElement> {
 		@Override
 		public Def<P> update(ExpressoQIS session) throws QonfigInterpretationException {
 			super.update(session);
-			theCenter = parsePosition(session.getAttributeQV("center"), session);
 			if (isVertical) {
 				theLeading = parsePosition(session.getAttributeQV("top"), session);
+				theCenter = parsePosition(session.getAttributeQV("v-center"), session);
 				theTrailing = parsePosition(session.getAttributeQV("bottom"), session);
 			} else {
 				theLeading = parsePosition(session.getAttributeQV("left"), session);
+				theCenter = parsePosition(session.getAttributeQV("h-center"), session);
 				theTrailing = parsePosition(session.getAttributeQV("right"), session);
 			}
 			return this;
@@ -80,7 +81,7 @@ public abstract class Positionable extends QuickAddOn.Abstract<QuickElement> {
 
 		public static class Horizontal extends Def<Positionable.Horizontal> {
 			public Horizontal(QonfigAddOn type, QuickElement.Def<?> element) {
-				super(true, type, element);
+				super(false, type, element);
 			}
 
 			@Override

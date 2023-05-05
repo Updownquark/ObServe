@@ -30,18 +30,23 @@ public class QuickSimpleLayout extends QuickLayout.Abstract {
 
 		@Override
 		public Interpreted interpret(QuickElement.Interpreted<? extends QuickBox> element) {
-			return new Interpreted(this, element);
+			return new Interpreted(this, (QuickBox.Interpreted<?>) element);
 		}
 	}
 
 	public static class Interpreted extends QuickLayout.Interpreted<QuickSimpleLayout> {
-		public Interpreted(Def definition, QuickElement.Interpreted<? extends QuickBox> element) {
+		public Interpreted(Def definition, QuickBox.Interpreted<? extends QuickBox> element) {
 			super(definition, element);
 		}
 
 		@Override
 		public Def getDefinition() {
 			return (Def) super.getDefinition();
+		}
+
+		@Override
+		public QuickBox.Interpreted<?> getElement() {
+			return (QuickBox.Interpreted<?>) super.getElement();
 		}
 
 		@Override

@@ -144,7 +144,7 @@ public interface QuickElement {
 
 				if (theAddOns.isEmpty()) {
 					// Add-ons can't change, because if they do, the Quick definition should be re-interpreted from the session
-					for (QonfigAddOn addOn : session.getElement().getInheritance().values())
+					for (QonfigAddOn addOn : session.getElement().getInheritance().getExpanded(QonfigAddOn::getInheritance))
 						addAddOn(session.asElementOnly(addOn));
 
 					for (QuickAddOn.Def<? super E, ?> addOn : theAddOns.getAllValues())

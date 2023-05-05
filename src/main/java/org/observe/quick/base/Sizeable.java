@@ -88,7 +88,7 @@ public abstract class Sizeable extends QuickAddOn.Abstract<QuickElement> {
 
 		public static class Horizontal extends Def<Sizeable.Horizontal> {
 			public Horizontal(QonfigAddOn type, QuickElement.Def<?> element) {
-				super(true, type, element);
+				super(false, type, element);
 			}
 
 			@Override

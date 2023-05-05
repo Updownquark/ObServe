@@ -65,7 +65,7 @@ public class QuickBaseInterpretation implements QonfigInterpretation {
 	@Override
 	public QonfigInterpreterCore.Builder configureInterpreter(Builder interpreter) {
 		// General setup
-		interpreter.modifyWith("quick", QuickDocument2.class, new QonfigInterpreterCore.QonfigValueModifier<QuickDocument2>() {
+		interpreter.modifyWith("quick", QuickDocument2.Def.class, new QonfigInterpreterCore.QonfigValueModifier<QuickDocument2.Def>() {
 			@Override
 			public Object prepareSession(CoreSession session) throws QonfigInterpretationException {
 				ExpressoQIS exS = session.as(ExpressoQIS.class);
@@ -79,7 +79,7 @@ public class QuickBaseInterpretation implements QonfigInterpretation {
 			}
 
 			@Override
-			public QuickDocument2 modifyValue(QuickDocument2 value, CoreSession session, Object prepared)
+			public QuickDocument2.Def modifyValue(QuickDocument2.Def value, CoreSession session, Object prepared)
 				throws QonfigInterpretationException {
 				return value;
 			}

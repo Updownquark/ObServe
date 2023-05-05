@@ -3,7 +3,6 @@ package org.observe.quick.swing;
 import java.awt.AWTEvent;
 import java.awt.Color;
 import java.awt.Component;
-import java.awt.Container;
 import java.awt.EventQueue;
 import java.awt.IllegalComponentStateException;
 import java.awt.LayoutManager;
@@ -54,6 +53,7 @@ import org.observe.util.swing.PanelPopulation.PanelPopulator;
 import org.observe.util.swing.PanelPopulation.WindowBuilder;
 import org.observe.util.swing.WindowPopulation;
 import org.qommons.Identifiable;
+import org.qommons.LambdaUtils;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
@@ -182,6 +182,8 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 		 * @throws ModelInstantiationException If a problem occurs instantiating the layout
 		 */
 		LayoutManager create(L quick) throws ModelInstantiationException;
+
+		void modifyChild(QuickSwingPopulator<?> child) throws ExpressoInterpretationException;
 	}
 
 	public interface QuickSwingBorder {
@@ -242,6 +244,11 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 						if (e.getTargetException() instanceof CheckedExceptionWrapper
 							&& e.getTargetException().getCause() instanceof ModelInstantiationException)
 							throw (ModelInstantiationException) e.getTargetException().getCause();
+						System.err.println("Unhandled error");
+						e.printStackTrace();
+					} catch (RuntimeException | Error e) {
+						System.err.println("Unhandled error");
+						e.printStackTrace();
 					}
 				};
 			});
@@ -704,20 +711,6 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 			// Box layouts
 			tx.with(QuickInlineLayout.Interpreted.class, QuickSwingLayout.class, QuickBaseSwing::interpretInlineLayout);
 			tx.with(QuickSimpleLayout.Interpreted.class, QuickSwingLayout.class, QuickBaseSwing::interpretSimpleLayout);
-			modifyForAddOn(tx, QuickSimpleLayout.Child.Interpreted.class, (qw, qsp, tx2) -> {
-				qsp.addModifier((comp, w) -> {
-					Component[] component = new Component[1];
-					comp.modifyComponent(c -> component[0] = c);
-					Positionable h = w.getAddOn(Positionable.Horizontal.class);
-					Positionable v = w.getAddOn(Positionable.Vertical.class);
-					Sizeable width = w.getAddOn(Sizeable.Horizontal.class);
-					Sizeable height = w.getAddOn(Sizeable.Vertical.class);
-					comp.withLayoutConstraints(simpleConstraints(h, v, width, height));
-					Observable.or(h.changes(), v.changes(), width.changes(), height.changes()).act(evt -> {
-						constraintChanged(component[0], simpleConstraints(h, v, width, height));
-					});
-				});
-			});
 
 			// Table
 			QuickSwingPopulator.<QuickTable<?>, QuickTable.Interpreted<?>> interpretWidget(tx, gen(QuickTable.Interpreted.class),
@@ -733,6 +726,8 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 			QuickSwingLayout<QuickLayout> layout = tx.transform(interpreted.getLayout(), QuickSwingLayout.class);
 			BetterList<QuickSwingPopulator<QuickWidget>> contents = BetterList.<QuickWidget.Interpreted<?>, QuickSwingPopulator<QuickWidget>, ExpressoInterpretationException> of2(
 				interpreted.getContents().stream(), content -> tx.transform(content, QuickSwingPopulator.class));
+			for (QuickSwingPopulator<QuickWidget> content : contents)
+				layout.modifyChild(content);
 			return createContainer(interpreted, (panel, quick) -> {
 				LayoutManager layoutInst = layout.create(quick.getLayout());
 				panel.addHPanel(null, layoutInst, p -> {
@@ -752,50 +747,73 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 		static QuickSwingLayout<QuickInlineLayout> interpretInlineLayout(QuickInlineLayout.Interpreted interpreted,
 			Transformer<ExpressoInterpretationException> tx) {
 			boolean vertical = interpreted.getDefinition().isVertical();
-			return quick -> new JustifiedBoxLayout(vertical)//
-				.setMainAlignment(interpreted.getDefinition().getMainAlign())//
-				.setCrossAlignment(interpreted.getDefinition().getCrossAlign());
+			return new QuickSwingLayout<QuickInlineLayout>() {
+				@Override
+				public LayoutManager create(QuickInlineLayout quick) throws ModelInstantiationException {
+					return new JustifiedBoxLayout(vertical)//
+						.setMainAlignment(interpreted.getDefinition().getMainAlign())//
+						.setCrossAlignment(interpreted.getDefinition().getCrossAlign());
+				}
+
+				@Override
+				public void modifyChild(QuickSwingPopulator<?> child) throws ExpressoInterpretationException {
+				}
+			};
 		}
 
 		static QuickSwingLayout<QuickSimpleLayout> interpretSimpleLayout(QuickSimpleLayout.Interpreted interpreted,
 			Transformer<ExpressoInterpretationException> tx) {
-			return quick -> new SimpleLayout();
-		}
+			return new QuickSwingLayout<QuickSimpleLayout>() {
+				@Override
+				public LayoutManager create(QuickSimpleLayout quick) throws ModelInstantiationException {
+					return new SimpleLayout();
+				}
 
-		static void constraintChanged(Component component, SimpleLayout.SimpleConstraints constraints) {
-			if (component == null)
-				return;
-			Container container = component.getParent();
-			if (container == null)
-				return;
-			if (container.getLayout() instanceof SimpleLayout) {
-				((SimpleLayout) container.getLayout()).addLayoutComponent(component, constraints);
-				// TODO Do we need the invalidate part?
-				container.invalidate();
-				container.revalidate();
-			}
+				@Override
+				public void modifyChild(QuickSwingPopulator<?> child) throws ExpressoInterpretationException {
+					child.addModifier((comp, w) -> {
+						Component[] component = new Component[1];
+						comp.modifyComponent(c -> component[0] = c);
+						Positionable h = w.getAddOn(Positionable.Horizontal.class);
+						Positionable v = w.getAddOn(Positionable.Vertical.class);
+						Sizeable width = w.getAddOn(Sizeable.Horizontal.class);
+						Sizeable height = w.getAddOn(Sizeable.Vertical.class);
+						SimpleLayout.SimpleConstraints childConstraint = simpleConstraints(h, v, width, height);
+						comp.withLayoutConstraints(childConstraint);
+						Observable.or(h.changes(), v.changes(), width.changes(), height.changes()).act(evt -> {
+							if (component[0].getParent() != null)
+								component[0].getParent().invalidate();
+						});
+					});
+				}
+			};
 		}
 
 		static SimpleLayout.SimpleConstraints simpleConstraints(Positionable h, Positionable v, Sizeable width, Sizeable height) {
 			return new SimpleLayout.SimpleConstraints(//
 				h.getLeading(), h.getCenter(), h.getTrailing(), //
 				v.getLeading(), v.getCenter(), v.getTrailing(), //
-				first(width.getSize(), width.getMinimum()), first(width.getSize(), width.getPreferred()),
-				first(width.getSize(), width.getMaximum()), //
-				first(height.getSize(), height.getMinimum()), first(height.getSize(), height.getPreferred()),
-				first(height.getSize(), height.getMaximum())//
+				width.getSize(), enforceAbsolute(width.getMinimum()), enforceAbsolute(width.getPreferred()),
+				enforceAbsolute(width.getMaximum()), //
+				height.getSize(), enforceAbsolute(height.getMinimum()), enforceAbsolute(height.getPreferred()),
+				enforceAbsolute(height.getMaximum())//
 				);
 		}
 
-		static <T> Supplier<T> first(Supplier<T>... suppliers) {
-			return () -> {
-				for (Supplier<T> supplier : suppliers) {
-					T value = supplier.get();
-					if (value != null)
-						return value;
+		static Supplier<Integer> enforceAbsolute(Supplier<QuickSize> size) {
+			if (size == null)
+				return LambdaUtils.constantSupplier(null, "null", null);
+			return LambdaUtils.printableSupplier(() -> {
+				QuickSize sz = size.get();
+				if (sz == null)
+					return null;
+				else if (sz.type == QuickSize.SizeUnit.Pixels)
+					return Math.round(sz.value);
+				else {
+					System.err.println("min/pref/max size constraints must be absolute: " + sz);
+					return null;
 				}
-				return null;
-			};
+			}, size::toString, null);
 		}
 
 		static <T> QuickSwingPopulator<QuickLabel<T>> interpretLabel(QuickLabel.Interpreted<T, ?> interpreted,
