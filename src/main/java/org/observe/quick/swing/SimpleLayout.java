@@ -348,20 +348,13 @@ public class SimpleLayout implements LayoutManager2 {
 			relSize += trail.percent;
 		}
 		if (absSize > 0 && relSize != 0)
-			return resolveExponential(absSize, relSize);
+			return new QuickSize(relSize, absSize).resolveExponential();
 		else if (type > 0)
 			return Integer.MAX_VALUE;
 		else if (absSize != 0)
 			return absSize;
 		else
 			return 0;
-	}
-
-	private static int resolveExponential(int absSize, float percent) {
-		if (percent <= 0 || percent >= 100)
-			return absSize;
-		// Solve absSize+percent/100*totalSize = totalSize
-		return Math.round(absSize / (1 - percent / 100));
 	}
 
 	private static int getComponentSize(Component c, boolean vertical, int type) {

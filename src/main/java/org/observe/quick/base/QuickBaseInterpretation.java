@@ -102,12 +102,16 @@ public class QuickBaseInterpretation implements QonfigInterpretation {
 			session -> QuickCoreInterpretation.interpretAddOn(session, (p, ao) -> new QuickField.Def(ao, (QuickWidget.Def<?>) p)));
 
 		// Box layouts
-		interpreter.createWith("inline", QuickInlineLayout.Def.class,
+		interpreter.createWith("inline-layout", QuickInlineLayout.Def.class,
 			session -> QuickCoreInterpretation.interpretAddOn(session, (p, ao) -> new QuickInlineLayout.Def(ao, (QuickBox.Def<?>) p)));
 		interpreter.createWith("simple-layout", QuickSimpleLayout.Def.class,
 			session -> QuickCoreInterpretation.interpretAddOn(session, (p, ao) -> new QuickSimpleLayout.Def(ao, (QuickBox.Def<?>) p)));
 		interpreter.createWith("simple-layout-child", QuickSimpleLayout.Child.Def.class, session -> QuickCoreInterpretation
 			.interpretAddOn(session, (p, ao) -> new QuickSimpleLayout.Child.Def(ao, (QuickWidget.Def<?>) p)));
+		interpreter.createWith("border-layout", QuickBorderLayout.Def.class,
+			session -> QuickCoreInterpretation.interpretAddOn(session, (p, ao) -> new QuickBorderLayout.Def(ao, (QuickBox.Def<?>) p)));
+		interpreter.createWith("border-layout-child", QuickBorderLayout.Child.Def.class, session -> QuickCoreInterpretation
+			.interpretAddOn(session, (p, ao) -> new QuickBorderLayout.Child.Def(ao, (QuickWidget.Def<?>) p)));
 		interpreter.createWith("h-positionable", Positionable.Def.class,
 			session -> QuickCoreInterpretation.interpretAddOn(session, (p, ao) -> new Positionable.Def.Horizontal(ao, p)));
 		interpreter.createWith("v-positionable", Positionable.Def.class,
@@ -137,9 +141,9 @@ public class QuickBaseInterpretation implements QonfigInterpretation {
 				(s, d, o) -> new QuickSize(s.percent, s.pixels - (int) Math.round(d)), null)//
 			.with("-", QuickSize.class, Double.class, (p, d) -> new QuickSize(p.percent, p.pixels - (int) Math.round(d)),
 				(s1, s2, o) -> new QuickSize(s1.percent, s1.pixels + (int) Math.round(s2)), null)//
-			.with("+", QuickSize.class, QuickSize.class, (s1, s2) -> new QuickSize(s1.percent + s2.percent, s1.pixels + s2.pixels),
+			.with("+", QuickSize.class, QuickSize.class, QuickSize::plus,
 				(s1, s2, o) -> new QuickSize(s1.percent - s2.percent, s1.pixels - s2.pixels), null)//
-			.with("-", QuickSize.class, QuickSize.class, (s1, s2) -> new QuickSize(s1.percent - s2.percent, s1.pixels - s2.pixels),
+			.with("-", QuickSize.class, QuickSize.class, QuickSize::minus,
 				(s1, s2, o) -> new QuickSize(s1.percent + s2.percent, s1.pixels + s2.pixels), null)//
 			.with("*", QuickSize.class, Double.class, (s, d) -> new QuickSize((float) (s.percent * d), (int) Math.round(s.pixels * d)),
 				(s, d, o) -> new QuickSize((float) (s.percent / d), (int) Math.round(s.pixels / d)), null)//

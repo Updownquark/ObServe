@@ -711,6 +711,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 			// Box layouts
 			tx.with(QuickInlineLayout.Interpreted.class, QuickSwingLayout.class, QuickBaseSwing::interpretInlineLayout);
 			tx.with(QuickSimpleLayout.Interpreted.class, QuickSwingLayout.class, QuickBaseSwing::interpretSimpleLayout);
+			tx.with(QuickBorderLayout.Interpreted.class, QuickSwingLayout.class, QuickBaseSwing::interpretBorderLayout);
 
 			// Table
 			QuickSwingPopulator.<QuickTable<?>, QuickTable.Interpreted<?>> interpretWidget(tx, gen(QuickTable.Interpreted.class),
@@ -807,13 +808,50 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 				QuickSize sz = size.get();
 				if (sz == null)
 					return null;
-				else if (sz.type == QuickSize.SizeUnit.Pixels)
-					return Math.round(sz.value);
+				else if (sz.percent == 0.0f)
+					return sz.pixels;
 				else {
 					System.err.println("min/pref/max size constraints must be absolute: " + sz);
 					return null;
 				}
 			}, size::toString, null);
+		}
+
+		static QuickSwingLayout<QuickBorderLayout> interpretBorderLayout(QuickBorderLayout.Interpreted interpreted,
+			Transformer<ExpressoInterpretationException> tx) {
+			return new QuickSwingLayout<QuickBorderLayout>() {
+				@Override
+				public LayoutManager create(QuickBorderLayout quick) throws ModelInstantiationException {
+					return new BorderLayout();
+				}
+
+				@Override
+				public void modifyChild(QuickSwingPopulator<?> child) throws ExpressoInterpretationException {
+					child.addModifier((comp, w) -> {
+						QuickBorderLayout.Region region = w.getAddOn(QuickBorderLayout.Child.class).getInterpreted().getDefinition()
+							.getRegion();
+						Component[] component = new Component[1];
+						comp.modifyComponent(c -> component[0] = c);
+						Sizeable size = w.getAddOn(Sizeable.class);
+						BorderLayout.Constraints childConstraint = borderConstraints(region, size);
+						comp.withLayoutConstraints(childConstraint);
+						if (size != null) {
+							size.changes().act(evt -> {
+								if (component[0].getParent() != null)
+									component[0].getParent().invalidate();
+							});
+						}
+					});
+				}
+			};
+		}
+
+		static BorderLayout.Constraints borderConstraints(QuickBorderLayout.Region region, Sizeable size) {
+			if (size == null)
+				return new BorderLayout.Constraints(region, null, null, null, null);
+			return new BorderLayout.Constraints(region, //
+				size.getSize(), enforceAbsolute(size.getMinimum()), enforceAbsolute(size.getPreferred()),
+				enforceAbsolute(size.getMaximum()));
 		}
 
 		static <T> QuickSwingPopulator<QuickLabel<T>> interpretLabel(QuickLabel.Interpreted<T, ?> interpreted,

@@ -6,7 +6,7 @@
 		<add-on name="horizontal" inherits="orientation" />
 		<add-on name="vertical" inherits="orientation" />
 
-		<add-on name="border-layout-region" />
+		<add-on name="border-layout-region" abstract="true" />
 		<add-on name="inline-alignment" />
 		<add-on name="center" inherits="border-layout-region,inline-alignment" />
 		<add-on name="north" inherits="border-layout-region,v-sizeable" />
@@ -15,52 +15,55 @@
 		<add-on name="west" inherits="border-layout-region,h-sizeable" />
 
 		<add-on name="h-positionable">
+			<!-- These positions can be in pixels (px), percent (%), or lexips (pixels from trailing edge, xp) -->
 			<attribute name="left" type="expression" specify="optional" />
 			<attribute name="h-center" type="expression" specify="optional" />
 			<attribute name="right" type="expression" specify="optional" />
 		</add-on>
 		<add-on name="v-positionable">
+			<!-- These positions can be in pixels (px), percent (%), or lexips (pixels from trailing edge, xp) -->
 			<attribute name="top" type="expression" specify="optional" />
 			<attribute name="v-center" type="expression" specify="optional" />
 			<attribute name="bottom" type="expression" specify="optional" />
 		</add-on>
 		<add-on name="h-sizeable">
+			<!-- Width can be in pixels (px) or percent (%) -->
 			<attribute name="width" type="expression" specify="optional" />
+			<!-- The types of the min/max/pref sizes are in pixels - not relative -->
 			<attribute name="min-width" type="expression" specify="optional" />
-			<!--<attribute name="min-pref-width" type="expression" specify="optional" />-->
 			<attribute name="pref-width" type="expression" specify="optional" />
-			<!--<attribute name="max-pref-width" type="expression" specify="optional" />-->
 			<attribute name="max-width" type="expression" specify="optional" />
 		</add-on>
 		<add-on name="v-sizeable">
+			<!-- Height can be in pixels (px) or percent (%) -->
 			<attribute name="height" type="expression" specify="optional" />
+			<!-- The types of the min/max/pref sizes are in pixels - not relative -->
 			<attribute name="min-height" type="expression" specify="optional" />
-			<!--<attribute name="min-pref-height" type="expression" specify="optional" />-->
 			<attribute name="pref-height" type="expression" specify="optional" />
-			<!--<attribute name="max-pref-height" type="expression" specify="optional" />-->
 			<attribute name="max-height" type="expression" specify="optional" />
 		</add-on>
 		<add-on name="generic-sizeable">
-			<attribute name="min-length" type="expression" specify="optional" />
-			<attribute name="min-pref-length" type="expression" specify="optional" />
-			<attribute name="pref-length" type="expression" specify="optional" />
-			<attribute name="max-pref-length" type="expression" specify="optional" />
-			<attribute name="max-length" type="expression" specify="optional" />
+			<!-- Size can be in pixels (px) or percent (%) -->
+			<attribute name="size" type="expression" specify="optional" />
+			<!-- The types of the min/max/pref sizes are in pixels - not relative -->
+			<attribute name="min-size" type="expression" specify="optional" />
+			<attribute name="pref-size" type="expression" specify="optional" />
+			<attribute name="max-size" type="expression" specify="optional" />
 		</add-on>
 
 		<!-- Layouts -->
 		<add-on name="layout" />
 
 		<add-on name="border-layout-child">
-			<attribute name="region" type="border-layout-region" default="center" />
+			<attribute name="region" type="border-layout-region" />
 		</add-on>
-		<add-on name="border" requires="box" inherits="layout">
+		<add-on name="border-layout" requires="box" inherits="layout">
 			<child-mod child="box.content" inherits="border-layout-child" />
 		</add-on>
 		<add-on name="leading" inherits="inline-alignment" />
 		<add-on name="trailing" inherits="inline-alignment" />
 		<add-on name="justify" inherits="inline-alignment" />
-		<add-on name="inline" requires="box" inherits="layout">
+		<add-on name="inline-layout" requires="box" inherits="layout">
 			<attribute name="orientation" type="orientation" />
 			<attribute name="main-align" type="inline-alignment" default="leading" />
 			<attribute name="cross-align" type="inline-alignment" default="justify" />

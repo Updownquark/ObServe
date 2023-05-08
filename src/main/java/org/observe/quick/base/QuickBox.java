@@ -37,6 +37,11 @@ public class QuickBox extends QuickContainer2.Abstract<QuickWidget> {
 		@Override
 		public Def<W> update(AbstractQIS<?> session) throws QonfigInterpretationException {
 			super.update(session);
+			if (getAddOn(QuickLayout.Def.class) == null) {
+				String layout = session.getAttributeText("layout");
+				throw new QonfigInterpretationException("No Quick interpretationfor layout " + layout,
+					session.getAttributeValuePosition("layout", 0), layout.length());
+			}
 			theOpacity = getExpressoSession().getAttributeExpression("opacity");
 			return this;
 		}

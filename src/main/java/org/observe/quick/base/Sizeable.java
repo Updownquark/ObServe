@@ -22,6 +22,7 @@ import org.observe.expresso.TypeConversionException;
 import org.observe.quick.QuickAddOn;
 import org.observe.quick.QuickElement;
 import org.observe.util.TypeTokens;
+import org.qommons.Ternian;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigElement.QonfigValue;
 import org.qommons.config.QonfigInterpretationException;
@@ -29,18 +30,18 @@ import org.qommons.io.LocatedFilePosition;
 
 public abstract class Sizeable extends QuickAddOn.Abstract<QuickElement> {
 	public static abstract class Def<S extends Sizeable> extends QuickAddOn.Def.Abstract<QuickElement, S> {
-		private final boolean isVertical;
+		private final Ternian isVertical;
 		private CompiledModelValue<SettableValue<?>, SettableValue<QuickSize>> theSize;
 		private CompiledModelValue<SettableValue<?>, SettableValue<QuickSize>> theMinimum;
 		private CompiledModelValue<SettableValue<?>, SettableValue<QuickSize>> thePreferred;
 		private CompiledModelValue<SettableValue<?>, SettableValue<QuickSize>> theMaximum;
 
-		protected Def(boolean vertical, QonfigAddOn type, QuickElement.Def<? extends QuickElement> element) {
+		protected Def(Ternian vertical, QonfigAddOn type, QuickElement.Def<? extends QuickElement> element) {
 			super(type, element);
 			isVertical = vertical;
 		}
 
-		public boolean isVertical() {
+		public Ternian isVertical() {
 			return isVertical;
 		}
 
@@ -63,23 +64,32 @@ public abstract class Sizeable extends QuickAddOn.Abstract<QuickElement> {
 		@Override
 		public Def<S> update(ExpressoQIS session) throws QonfigInterpretationException {
 			super.update(session);
-			if (isVertical) {
+			switch (isVertical) {
+			case TRUE:
 				theSize = parseSize(session.getAttributeQV("height"), session, false);
 				theMinimum = parseSize(session.getAttributeQV("min-height"), session, false);
 				thePreferred = parseSize(session.getAttributeQV("pref-height"), session, false);
 				theMaximum = parseSize(session.getAttributeQV("max-height"), session, false);
-			} else {
+				break;
+			case FALSE:
 				theSize = parseSize(session.getAttributeQV("width"), session, false);
 				theMinimum = parseSize(session.getAttributeQV("min-width"), session, false);
 				thePreferred = parseSize(session.getAttributeQV("pref-width"), session, false);
 				theMaximum = parseSize(session.getAttributeQV("max-width"), session, false);
+				break;
+			default:
+				theSize = parseSize(session.getAttributeQV("size"), session, false);
+				theMinimum = parseSize(session.getAttributeQV("min-size"), session, false);
+				thePreferred = parseSize(session.getAttributeQV("pref-size"), session, false);
+				theMaximum = parseSize(session.getAttributeQV("max-size"), session, false);
+				break;
 			}
 			return this;
 		}
 
 		public static class Vertical extends Def<Sizeable.Vertical> {
 			public Vertical(QonfigAddOn type, QuickElement.Def<?> element) {
-				super(true, type, element);
+				super(Ternian.TRUE, type, element);
 			}
 
 			@Override
@@ -90,12 +100,23 @@ public abstract class Sizeable extends QuickAddOn.Abstract<QuickElement> {
 
 		public static class Horizontal extends Def<Sizeable.Horizontal> {
 			public Horizontal(QonfigAddOn type, QuickElement.Def<?> element) {
-				super(false, type, element);
+				super(Ternian.FALSE, type, element);
 			}
 
 			@Override
 			public Interpreted.Horizontal interpret(QuickElement.Interpreted<?> element) {
 				return new Interpreted.Horizontal(this, element);
+			}
+		}
+
+		public static class Generic extends Def<Sizeable.Generic> {
+			public Generic(QonfigAddOn type, QuickElement.Def<?> element) {
+				super(Ternian.NONE, type, element);
+			}
+
+			@Override
+			public Interpreted.Generic interpret(QuickElement.Interpreted<?> element) {
+				return new Interpreted.Generic(this, element);
 			}
 		}
 	}
@@ -169,6 +190,22 @@ public abstract class Sizeable extends QuickAddOn.Abstract<QuickElement> {
 			@Override
 			public Sizeable.Horizontal create(QuickElement element) {
 				return new Sizeable.Horizontal(this, element);
+			}
+		}
+
+		public static class Generic extends Interpreted<Sizeable.Generic> {
+			public Generic(Def.Generic definition, QuickElement.Interpreted<?> element) {
+				super(definition, element);
+			}
+
+			@Override
+			public Def.Generic getDefinition() {
+				return (Def.Generic) super.getDefinition();
+			}
+
+			@Override
+			public Sizeable.Generic create(QuickElement element) {
+				return new Sizeable.Generic(this, element);
 			}
 		}
 	}
@@ -346,6 +383,17 @@ public abstract class Sizeable extends QuickAddOn.Abstract<QuickElement> {
 		@Override
 		public Interpreted.Horizontal getInterpreted() {
 			return (Interpreted.Horizontal) super.getInterpreted();
+		}
+	}
+
+	public static class Generic extends Sizeable {
+		public Generic(Interpreted.Generic interpreted, QuickElement element) {
+			super(interpreted, element);
+		}
+
+		@Override
+		public Interpreted.Generic getInterpreted() {
+			return (Interpreted.Generic) super.getInterpreted();
 		}
 	}
 }

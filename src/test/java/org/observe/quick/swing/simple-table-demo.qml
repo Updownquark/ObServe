@@ -25,7 +25,7 @@
 			<!--<import-style-sheet name="searcher" ref="quick-testing.qss" />-->
 		</style-sheet>
 	</head>
-	<box layout="inline" orientation="vertical" cross-align="justify">
+	<box layout="inline-layout" orientation="vertical" cross-align="justify">
 		<table rows="app.values">
 			<titled-border title="`Factored Values`">
 				<style attr="border-color" condition="hovered">`green`</style>
@@ -37,7 +37,7 @@
 			<column name="`Value`" value="value" />
 			<column name="`Factorization`" value="app.primes.factorize(value, 100_000)" />
 		</table>
-		<box layout="inline" orientation="horizontal" main-align="justify">
+		<box layout="inline-layout" orientation="horizontal" main-align="justify">
 			<text-field value="app.newValue">
 				<style condition="pressed">
 					<style attr="font-weight">`ultra-bold`</style>

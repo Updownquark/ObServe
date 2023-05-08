@@ -10,6 +10,8 @@ import com.google.common.reflect.TypeToken;
 
 /** Represents the linear size of one dimension of a widget */
 public class QuickSize {
+	public static final QuickSize ZERO = new QuickSize(0.0f, 0);
+
 	/** The size relative to the container size */
 	public final float percent;
 
@@ -38,6 +40,25 @@ public class QuickSize {
 		return value;
 	}
 
+	public QuickSize plus(QuickSize other) {
+		return new QuickSize(percent + other.percent, pixels + other.pixels);
+	}
+
+	public QuickSize minus(QuickSize other) {
+		return new QuickSize(percent - other.percent, pixels - other.pixels);
+	}
+
+	public QuickSize plus(int adjPixels) {
+		return new QuickSize(percent, pixels + adjPixels);
+	}
+
+	public int resolveExponential() {
+		if (percent <= 0 || percent >= 100 || pixels <= 0)
+			return pixels;
+		// Solve absSize+percent/100*totalSize = totalSize
+		return Math.round(pixels / (1 - percent / 100));
+	}
+
 	@Override
 	public int hashCode() {
 		return Objects.hash(percent, pixels);
@@ -63,6 +84,12 @@ public class QuickSize {
 				return percent + "%";
 		} else
 			return pixels + "px";
+	}
+
+	public static QuickSize ofPixels(int pixels) {
+		if (pixels == 0)
+			return ZERO;
+		return new QuickSize(0.0f, pixels);
 	}
 
 	/**
