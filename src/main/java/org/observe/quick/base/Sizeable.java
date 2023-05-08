@@ -1,5 +1,7 @@
 package org.observe.quick.base;
 
+import java.util.function.Function;
+
 import org.observe.Observable;
 import org.observe.ObservableValueEvent;
 import org.observe.SettableValue;
@@ -33,7 +35,7 @@ public abstract class Sizeable extends QuickAddOn.Abstract<QuickElement> {
 		private CompiledModelValue<SettableValue<?>, SettableValue<QuickSize>> thePreferred;
 		private CompiledModelValue<SettableValue<?>, SettableValue<QuickSize>> theMaximum;
 
-		public Def(boolean vertical, QonfigAddOn type, QuickElement.Def<? extends QuickElement> element) {
+		protected Def(boolean vertical, QonfigAddOn type, QuickElement.Def<? extends QuickElement> element) {
 			super(type, element);
 			isVertical = vertical;
 		}
@@ -62,15 +64,15 @@ public abstract class Sizeable extends QuickAddOn.Abstract<QuickElement> {
 		public Def<S> update(ExpressoQIS session) throws QonfigInterpretationException {
 			super.update(session);
 			if (isVertical) {
-				theSize = parseSize(session.getAttributeQV("height"), session);
-				theMinimum = parseSize(session.getAttributeQV("min-height"), session);
-				thePreferred = parseSize(session.getAttributeQV("pref-height"), session);
-				theMaximum = parseSize(session.getAttributeQV("max-height"), session);
+				theSize = parseSize(session.getAttributeQV("height"), session, false);
+				theMinimum = parseSize(session.getAttributeQV("min-height"), session, false);
+				thePreferred = parseSize(session.getAttributeQV("pref-height"), session, false);
+				theMaximum = parseSize(session.getAttributeQV("max-height"), session, false);
 			} else {
-				theSize = parseSize(session.getAttributeQV("width"), session);
-				theMinimum = parseSize(session.getAttributeQV("min-width"), session);
-				thePreferred = parseSize(session.getAttributeQV("pref-width"), session);
-				theMaximum = parseSize(session.getAttributeQV("max-width"), session);
+				theSize = parseSize(session.getAttributeQV("width"), session, false);
+				theMinimum = parseSize(session.getAttributeQV("min-width"), session, false);
+				thePreferred = parseSize(session.getAttributeQV("pref-width"), session, false);
+				theMaximum = parseSize(session.getAttributeQV("max-width"), session, false);
 			}
 			return this;
 		}
@@ -98,13 +100,13 @@ public abstract class Sizeable extends QuickAddOn.Abstract<QuickElement> {
 		}
 	}
 
-	public static abstract class Interpreted<S extends Sizeable> extends QuickAddOn.Interpreted.Abstract<QuickElement, S> {
+	public abstract static class Interpreted<S extends Sizeable> extends QuickAddOn.Interpreted.Abstract<QuickElement, S> {
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<QuickSize>> theSize;
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<QuickSize>> theMaximum;
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<QuickSize>> thePreferred;
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<QuickSize>> theMinimum;
 
-		public Interpreted(Def<S> definition, QuickElement.Interpreted<?> element) {
+		protected Interpreted(Def<S> definition, QuickElement.Interpreted<?> element) {
 			super(definition, element);
 		}
 
@@ -176,7 +178,7 @@ public abstract class Sizeable extends QuickAddOn.Abstract<QuickElement> {
 	private final SettableValue<SettableValue<QuickSize>> thePreferred;
 	private final SettableValue<SettableValue<QuickSize>> theMaximum;
 
-	public Sizeable(Interpreted interpreted, QuickElement element) {
+	protected Sizeable(Interpreted interpreted, QuickElement element) {
 		super(interpreted, element);
 		theSize = SettableValue
 			.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<QuickSize>> parameterized(QuickSize.class)).build();
@@ -220,6 +222,111 @@ public abstract class Sizeable extends QuickAddOn.Abstract<QuickElement> {
 			getMaximum().noInitChanges());
 	}
 
+	/**
+	 * Parses a position in Quick
+	 *
+	 * @param value The expression to parse
+	 * @param session The session in which to parse the expression
+	 * @return The ModelValueSynth to produce the position value
+	 * @throws QonfigInterpretationException If the position could not be parsed
+	 */
+	public static CompiledModelValue<SettableValue<?>, SettableValue<QuickSize>> parseSize(QonfigValue value, ExpressoQIS session,
+		boolean position)
+			throws QonfigInterpretationException {
+		if (value == null)
+			return null;
+		else if (!(value.value instanceof QonfigExpression))
+			throw new IllegalArgumentException("Not an expression");
+		QonfigExpression expression = (QonfigExpression) value.value;
+		boolean pct, xp;
+		int unit;
+		if (expression.text.endsWith("%") && Character.isWhitespace(expression.text.charAt(expression.text.length() - 2))) {
+			unit = 1;
+			pct = true;
+			xp = false;
+		} else if (expression.text.endsWith("px") && Character.isWhitespace(expression.text.charAt(expression.text.length() - 3))) {
+			unit = 2;
+			pct = false;
+			xp = false;
+		} else if (position && expression.text.endsWith("xp")
+			&& Character.isWhitespace(expression.text.charAt(expression.text.length() - 3))) {
+			unit = 2;
+			pct = false;
+			xp = true;
+		} else {
+			pct = xp = false;
+			unit = 0;
+		}
+		ObservableExpression parsed;
+		try {
+			if (unit > 0)
+				parsed = session.getExpressoParser().parse(expression.text.substring(0, expression.text.length() - unit).trim());
+			else
+				parsed = session.getExpressoParser().parse(expression.text);
+		} catch (ExpressoParseException e) {
+			throw new QonfigInterpretationException("Could not parse position expression: " + expression,
+				value.position == null ? null : new LocatedFilePosition(value.fileLocation, value.position.getPosition(e.getErrorOffset())),
+					e.getErrorLength(), e);
+		}
+		boolean fPct = pct, fXp = xp;
+		int fUnit = unit;
+		return CompiledModelValue.of(expression::toString, ModelTypes.Value, () -> {
+			ModelValueSynth<SettableValue<?>, SettableValue<QuickSize>> positionValue;
+			if (fUnit > 0) {
+				ModelValueSynth<SettableValue<?>, SettableValue<Double>> num;
+				try {
+					num = parsed.evaluate(ModelTypes.Value.forType(double.class), session.getExpressoEnv(), 0);
+				} catch (ExpressoEvaluationException e) {
+					throw new ExpressoInterpretationException(e.getMessage(),
+						new LocatedFilePosition(value.fileLocation, value.position.getPosition(e.getErrorOffset())), e.getErrorLength(), e);
+				} catch (TypeConversionException e) {
+					throw new ExpressoInterpretationException(e.getMessage(),
+						new LocatedFilePosition(value.fileLocation, value.position.getPosition(0)), value.text.length(), e);
+				}
+				Function<Double, QuickSize> map;
+				Function<QuickSize, Double> reverse;
+				if (fPct) {
+					map = v -> v == null ? null : new QuickSize(v.floatValue(), 0);
+					reverse = s -> s == null ? null : Double.valueOf(s.percent);
+				} else if (fXp) {
+					map = v -> v == null ? null : new QuickSize(100.0f, -Math.round(v.floatValue()));
+					reverse = s -> s == null ? null : Double.valueOf(-s.pixels);
+				} else {
+					map = v -> v == null ? null : new QuickSize(0.0f, Math.round(v.floatValue()));
+					reverse = s -> s == null ? null : Double.valueOf(s.pixels);
+				}
+				positionValue = ModelValueSynth.of(ModelTypes.Value.forType(QuickSize.class), msi -> {
+					SettableValue<Double> numV = num.get(msi);
+					return numV.transformReversible(QuickSize.class, tx -> tx//
+						.map(map)//
+						.replaceSource(reverse, rev -> rev.allowInexactReverse(true)));
+				});
+			} else {
+				try {
+					positionValue = parsed.evaluate(ModelTypes.Value.forType(QuickSize.class), session.getExpressoEnv(), 0);
+				} catch (ExpressoEvaluationException e1) {
+					// If it doesn't parse as a position, try parsing as a number.
+					try {
+						positionValue = parsed.evaluate(ModelTypes.Value.forType(int.class), session.getExpressoEnv(), 0)//
+							.map(ModelTypes.Value.forType(QuickSize.class), v -> v.transformReversible(QuickSize.class,
+								tx -> tx.map(d -> new QuickSize(0.0f, d)).withReverse(pos -> pos.pixels)));
+					} catch (ExpressoEvaluationException e2) {
+						throw new ExpressoInterpretationException(e2.getMessage(),
+							new LocatedFilePosition(value.fileLocation, value.position.getPosition(e2.getErrorOffset())),
+							e1.getErrorLength(), e1);
+					} catch (TypeConversionException e2) {
+						throw new ExpressoInterpretationException(e2.getMessage(),
+							new LocatedFilePosition(value.fileLocation, value.position.getPosition(0)), value.text.length(), e2);
+					}
+				} catch (TypeConversionException e) {
+					throw new ExpressoInterpretationException(e.getMessage(),
+						new LocatedFilePosition(value.fileLocation, value.position.getPosition(0)), value.text.length(), e);
+				}
+			}
+			return positionValue;
+		});
+	}
+
 	public static class Vertical extends Sizeable {
 		public Vertical(Interpreted.Vertical interpreted, QuickElement element) {
 			super(interpreted, element);
@@ -240,90 +347,5 @@ public abstract class Sizeable extends QuickAddOn.Abstract<QuickElement> {
 		public Interpreted.Horizontal getInterpreted() {
 			return (Interpreted.Horizontal) super.getInterpreted();
 		}
-	}
-
-	/**
-	 * Parses a position in Quick
-	 *
-	 * @param value The expression to parse
-	 * @param session The session in which to parse the expression
-	 * @return The ModelValueSynth to produce the position value
-	 * @throws QonfigInterpretationException If the position could not be parsed
-	 */
-	public static CompiledModelValue<SettableValue<?>, SettableValue<QuickSize>> parseSize(QonfigValue value, ExpressoQIS session)
-		throws QonfigInterpretationException {
-		if (value == null)
-			return null;
-		else if (!(value.value instanceof QonfigExpression))
-			throw new IllegalArgumentException("Not an expression");
-		QonfigExpression expression = (QonfigExpression) value.value;
-		QuickSize.SizeUnit unit = null;
-		for (QuickSize.SizeUnit u : QuickSize.SizeUnit.values()) {
-			if (expression.text.length() > u.name.length() && expression.text.endsWith(u.name)
-				&& Character.isWhitespace(expression.text.charAt(expression.text.length() - u.name.length() - 1))) {
-				unit = u;
-				break;
-			}
-		}
-		ObservableExpression parsed;
-		try {
-			if (unit != null)
-				parsed = session.getExpressoParser().parse(expression.text.substring(0, expression.text.length() - unit.name.length()));
-			else
-				parsed = session.getExpressoParser().parse(expression.text);
-		} catch (ExpressoParseException e) {
-			throw new QonfigInterpretationException("Could not parse size expression: " + expression,
-				value.position == null ? null : new LocatedFilePosition(value.fileLocation, value.position.getPosition(e.getErrorOffset())),
-					e.getErrorLength(), e);
-		}
-		QuickSize.SizeUnit fUnit = unit;
-		return CompiledModelValue.of(expression::toString, ModelTypes.Value, () -> {
-			ModelValueSynth<SettableValue<?>, SettableValue<QuickSize>> positionValue;
-			if (fUnit != null) {
-				ModelValueSynth<SettableValue<?>, SettableValue<Double>> num;
-				try {
-					num = parsed.evaluate(ModelTypes.Value.forType(double.class), session.getExpressoEnv(), 0);
-				} catch (ExpressoEvaluationException e) {
-					throw new ExpressoInterpretationException(e.getMessage(),
-						new LocatedFilePosition(value.fileLocation, value.position.getPosition(e.getErrorOffset())), e.getErrorLength(), e);
-				} catch (TypeConversionException e) {
-					throw new ExpressoInterpretationException(e.getMessage(),
-						new LocatedFilePosition(value.fileLocation, value.position.getPosition(0)), value.text.length(), e);
-				}
-				positionValue = ModelValueSynth.of(ModelTypes.Value.forType(QuickSize.class), msi -> {
-					SettableValue<Double> numV = num.get(msi);
-					return numV.transformReversible(QuickSize.class, tx -> tx//
-						.map(n -> new QuickSize(n.floatValue(), fUnit))//
-						.replaceSource(p -> (double) p.value, rev -> rev//
-							.allowInexactReverse(true).rejectWith(
-								p -> p.type == fUnit ? null : "Only size with the same unit as the source (" + fUnit + ") can be set")//
-							)//
-						);
-				});
-			} else {
-				try {
-					positionValue = parsed.evaluate(ModelTypes.Value.forType(QuickSize.class), session.getExpressoEnv(), 0);
-				} catch (ExpressoEvaluationException e1) {
-					// If it doesn't parse as a position, try parsing as a number.
-					try {
-						positionValue = parsed.evaluate(ModelTypes.Value.forType(int.class), session.getExpressoEnv(), 0)//
-							.map(ModelTypes.Value.forType(QuickSize.class), v -> v.transformReversible(QuickSize.class,
-								tx -> tx.map(d -> new QuickSize(d, QuickSize.SizeUnit.Pixels))
-								.withReverse(pos -> Math.round(pos.value))));
-					} catch (ExpressoEvaluationException e2) {
-						throw new ExpressoInterpretationException(e2.getMessage(),
-							new LocatedFilePosition(value.fileLocation, value.position.getPosition(e2.getErrorOffset())),
-							e1.getErrorLength(), e1);
-					} catch (TypeConversionException e2) {
-						throw new ExpressoInterpretationException(e2.getMessage(),
-							new LocatedFilePosition(value.fileLocation, value.position.getPosition(0)), value.text.length(), e2);
-					}
-				} catch (TypeConversionException e) {
-					throw new ExpressoInterpretationException(e.getMessage(),
-						new LocatedFilePosition(value.fileLocation, value.position.getPosition(0)), value.text.length(), e);
-				}
-			}
-			return positionValue;
-		});
 	}
 }

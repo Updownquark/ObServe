@@ -8,44 +8,21 @@ import org.observe.expresso.NonStructuredParser;
 
 import com.google.common.reflect.TypeToken;
 
-/** Represents the linear size of one dimension of a Quick widget */
+/** Represents the linear size of one dimension of a widget */
 public class QuickSize {
-	/** Possible size units */
-	public enum SizeUnit {
-		/** Pixel size unit, the value represents an absolute length in pixels */
-		Pixels("px"),
-		/** Percent size unit, the value represents a percentage of the parent's length */
-		Percent("%");
+	/** The size relative to the container size */
+	public final float percent;
 
-		/** The name of this unit */
-		public final String name;
-
-		private SizeUnit(String name) {
-			this.name = name;
-		}
-	}
-
-	/** The value of this size */
-	public final float value;
-	/** The unit that this size's value is in */
-	public final SizeUnit type;
+	/** The size in pixels */
+	public final int pixels;
 
 	/**
-	 * @param value The value for the size
-	 * @param type The size unit that the value is in
+	 * @param percent The size relative to the container size
+	 * @param pixels The size in pixels
 	 */
-	public QuickSize(float value, SizeUnit type) {
-		this.type = type;
-		switch (type) {
-		case Pixels:
-			this.value = Math.round(value);
-			break;
-		case Percent:
-			this.value = value;
-			break;
-		default:
-			throw new IllegalStateException("Unrecognized size type: " + type);
-		}
+	public QuickSize(float percent, int pixels) {
+		this.percent = percent;
+		this.pixels = pixels;
 	}
 
 	/**
@@ -53,19 +30,17 @@ public class QuickSize {
 	 * @return This size, in pixels
 	 */
 	public int evaluate(int containerSize) {
-		switch (type) {
-		case Pixels:
-			return (int) value;
-		case Percent:
-			return Math.round(containerSize * value / 100);
-		default:
-			throw new IllegalStateException("Unrecognized position type: " + type);
-		}
+		int value;
+		if (percent != 0.0f)
+			value = Math.round(containerSize / 100.0f * percent) + pixels;
+		else
+			value = pixels;
+		return value;
 	}
 
 	@Override
 	public int hashCode() {
-		return Objects.hash(value, type);
+		return Objects.hash(percent, pixels);
 	}
 
 	@Override
@@ -74,45 +49,85 @@ public class QuickSize {
 			return true;
 		else if (!(obj instanceof QuickSize))
 			return false;
-		return value == ((QuickSize) obj).value && type == ((QuickSize) obj).type;
+		return percent == ((QuickSize) obj).percent && pixels == ((QuickSize) obj).pixels;
 	}
 
 	@Override
 	public String toString() {
-		return value + type.name;
+		if (percent != 0.0f) {
+			if (pixels > 0)
+				return percent + "% +" + pixels + "px";
+			else if (pixels < 0)
+				return percent + "%" + pixels + "px";
+			else
+				return percent + "%";
+		} else
+			return pixels + "px";
 	}
+
+	/**
+	 * @param text The text to parse
+	 * @return The position represented by the text
+	 * @throws NumberFormatException If the position could not be parsed
+	 */
+	public static QuickSize parsePosition(String text) throws NumberFormatException {
+		if (text.endsWith("px"))
+			return new QuickSize(0.0f, Integer.parseInt(text.substring(0, text.length() - 2)));
+		else if (text.endsWith("%"))
+			return new QuickSize(Float.parseFloat(text.substring(0, text.length() - 1)), 0);
+		else if (text.endsWith("xp"))
+			return new QuickSize(100.0f, -Integer.parseInt(text.substring(0, text.length() - 2)));
+		else
+			return new QuickSize(0.0f, Integer.parseInt(text));
+	}
+
 
 	/**
 	 * @param text The text to parse
 	 * @return The size represented by the text
 	 * @throws NumberFormatException If the size could not be parsed
 	 */
-	public static QuickSize parse(String text) throws NumberFormatException {
-		SizeUnit type = SizeUnit.Pixels;
-		for (SizeUnit u : SizeUnit.values()) {
-			if (text.endsWith(u.name)) {
-				type = u;
-				text = text.substring(0, text.length() - u.name.length());
-				break;
-			}
-		}
-		return new QuickSize(Float.parseFloat(text), type);
+	public static QuickSize parseSize(String text) throws NumberFormatException {
+		if (text.endsWith("px"))
+			return new QuickSize(0.0f, Integer.parseInt(text.substring(0, text.length() - 2)));
+		else if (text.endsWith("%"))
+			return new QuickSize(Float.parseFloat(text.substring(0, text.length() - 1)), 0);
+		else
+			return new QuickSize(0.0f, Integer.parseInt(text));
 	}
 
 	/** Parses {@link QuickSize}s for Expresso */
 	public static class Parser implements NonStructuredParser {
+		private final boolean isPosition;
+
+		/** @param position Whether this parser should parse positions (potentially with "xp" unit) or sizes */
+		public Parser(boolean position) {
+			this.isPosition = position;
+		}
+
 		@Override
 		public <T> ObservableValue<? extends T> parse(TypeToken<T> type, String text) throws ParseException {
-			SizeUnit unit = null;
-			for (SizeUnit u : SizeUnit.values()) {
-				if (text.endsWith(u.name)) {
-					unit = u;
-					break;
-				}
+			boolean pct, xp;
+			int unit;
+			if (text.endsWith("%")) {
+				unit = 1;
+				pct = true;
+				xp = false;
+			} else if (text.endsWith("px")) {
+				unit = 2;
+				pct = false;
+				xp = false;
+			} else if (isPosition && text.endsWith("xp")) {
+				unit = 2;
+				pct = false;
+				xp = true;
+			} else {
+				pct = xp = false;
+				unit = 0;
 			}
 			String numberStr;
-			if (unit != null)
-				numberStr = text.substring(0, text.length() - unit.name.length()).trim();
+			if (unit > 0)
+				numberStr = text.substring(0, text.length() - unit).trim();
 			else {
 				numberStr = text.trim();
 				int lastDig;
@@ -123,16 +138,30 @@ public class QuickSize {
 				}
 				lastDig++;
 				if (lastDig < numberStr.length())
-					throw new ParseException("Unrecognized size unit: '" + numberStr.substring(lastDig), lastDig);
+					throw new ParseException(
+						"Unrecognized " + (isPosition ? "position" : "size") + " unit: '" + numberStr.substring(lastDig), lastDig);
 			}
 
-			float value;
-			try {
-				value = Float.parseFloat(numberStr);
-			} catch (NumberFormatException e) {
-				throw new ParseException("Could not parse size value: '" + numberStr + "'", 0);
+			if (pct) {
+				float value;
+				try {
+					value = Float.parseFloat(numberStr);
+				} catch (NumberFormatException e) {
+					throw new ParseException("Could not parse " + (isPosition ? "position" : "size") + " value: '" + numberStr + "'", 0);
+				}
+				return (ObservableValue<? extends T>) ObservableValue.of(QuickSize.class, new QuickSize(value, 0));
+			} else {
+				int value;
+				try {
+					value = Integer.parseInt(numberStr);
+				} catch (NumberFormatException e) {
+					throw new ParseException("Could not parse " + (isPosition ? "position" : "size") + " value: '" + numberStr + "'", 0);
+				}
+				if (xp)
+					return (ObservableValue<? extends T>) ObservableValue.of(QuickSize.class, new QuickSize(100.0f, -value));
+				else
+					return (ObservableValue<? extends T>) ObservableValue.of(QuickSize.class, new QuickSize(0.0f, value));
 			}
-			return (ObservableValue<? extends T>) ObservableValue.of(QuickSize.class, new QuickSize(value, unit));
 		}
 	}
 }

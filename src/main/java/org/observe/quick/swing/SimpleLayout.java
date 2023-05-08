@@ -11,20 +11,17 @@ import java.util.function.Supplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import org.observe.quick.base.QuickPosition;
-import org.observe.quick.base.QuickPosition.PositionUnit;
 import org.observe.quick.base.QuickSize;
-import org.observe.quick.base.QuickSize.SizeUnit;
 import org.qommons.LambdaUtils;
 
 public class SimpleLayout implements LayoutManager2 {
 	public static class SimpleConstraints {
-		public final Supplier<QuickPosition> left;
-		public final Supplier<QuickPosition> hCenter;
-		public final Supplier<QuickPosition> right;
-		public final Supplier<QuickPosition> top;
-		public final Supplier<QuickPosition> vCenter;
-		public final Supplier<QuickPosition> bottom;
+		public final Supplier<QuickSize> left;
+		public final Supplier<QuickSize> hCenter;
+		public final Supplier<QuickSize> right;
+		public final Supplier<QuickSize> top;
+		public final Supplier<QuickSize> vCenter;
+		public final Supplier<QuickSize> bottom;
 		public final Supplier<QuickSize> width;
 		public final Supplier<Integer> minWidth;
 		public final Supplier<Integer> prefWidth;
@@ -34,8 +31,8 @@ public class SimpleLayout implements LayoutManager2 {
 		public final Supplier<Integer> prefHeight;
 		public final Supplier<Integer> maxHeight;
 
-		public SimpleConstraints(Supplier<QuickPosition> left, Supplier<QuickPosition> hCenter, Supplier<QuickPosition> right, //
-			Supplier<QuickPosition> top, Supplier<QuickPosition> vCenter, Supplier<QuickPosition> bottom, //
+		public SimpleConstraints(Supplier<QuickSize> left, Supplier<QuickSize> hCenter, Supplier<QuickSize> right, //
+			Supplier<QuickSize> top, Supplier<QuickSize> vCenter, Supplier<QuickSize> bottom, //
 			Supplier<QuickSize> width, Supplier<Integer> minWidth, Supplier<Integer> prefWidth, Supplier<Integer> maxWidth, //
 			Supplier<QuickSize> height, Supplier<Integer> minHeight, Supplier<Integer> prefHeight, Supplier<Integer> maxHeight)
 				throws IllegalArgumentException {
@@ -55,8 +52,8 @@ public class SimpleLayout implements LayoutManager2 {
 			this.maxHeight = maxHeight;
 		}
 
-		QuickPosition getPos(boolean vertical, int type) {
-			Supplier<QuickPosition> pos;
+		QuickSize getPos(boolean vertical, int type) {
+			Supplier<QuickSize> pos;
 			if (vertical) {
 				if (type < 0)
 					pos = top;
@@ -97,15 +94,15 @@ public class SimpleLayout implements LayoutManager2 {
 			return size == null ? null : size.get();
 		}
 
-		private static Pattern CONSTRAINT_PATTERN = Pattern.compile("(?<type>[a-zA-Z]+)[=:](?<value>.+)");
+		private static final Pattern CONSTRAINT_PATTERN = Pattern.compile("(?<type>[a-zA-Z]+)[=:](?<value>.+)");
 
 		public static SimpleConstraints parse(String constraints) throws IllegalArgumentException {
-			QuickPosition left = null;
-			QuickPosition hCenter = null;
-			QuickPosition right = null;
-			QuickPosition top = null;
-			QuickPosition vCenter = null;
-			QuickPosition bottom = null;
+			QuickSize left = null;
+			QuickSize hCenter = null;
+			QuickSize right = null;
+			QuickSize top = null;
+			QuickSize vCenter = null;
+			QuickSize bottom = null;
 			QuickSize width = null;
 			Integer minWidth = null, prefWidth = null, maxWidth = null;
 			QuickSize height = null;
@@ -120,106 +117,106 @@ public class SimpleLayout implements LayoutManager2 {
 				case "x":
 					if (left != null)
 						throw new IllegalArgumentException("left/x specified twice as " + left + " and " + m.group("value"));
-					left = QuickPosition.parse(m.group("value"));
+					left = QuickSize.parsePosition(m.group("value"));
 					break;
 				case "h-center":
 					if (hCenter != null)
 						throw new IllegalArgumentException("h-center specified twice as " + hCenter + " and " + m.group("value"));
-					hCenter = QuickPosition.parse(m.group("value"));
+					hCenter = QuickSize.parsePosition(m.group("value"));
 					break;
 				case "right":
 					if (right != null)
 						throw new IllegalArgumentException("right specified twice as " + right + " and " + m.group("value"));
-					right = QuickPosition.parse(m.group("value"));
+					right = QuickSize.parsePosition(m.group("value"));
 					break;
 				case "top":
 				case "y":
 					if (top != null)
 						throw new IllegalArgumentException("top/y specified twice as " + top + " and " + m.group("value"));
-					top = QuickPosition.parse(m.group("value"));
+					top = QuickSize.parsePosition(m.group("value"));
 					break;
 				case "v-center":
 					if (vCenter != null)
 						throw new IllegalArgumentException("v-center specified twice as " + vCenter + " and " + m.group("value"));
-					vCenter = QuickPosition.parse(m.group("value"));
+					vCenter = QuickSize.parsePosition(m.group("value"));
 					break;
 				case "bottom":
 					if (bottom != null)
 						throw new IllegalArgumentException("bottom specified twice as " + bottom + " and " + m.group("value"));
-					bottom = QuickPosition.parse(m.group("value"));
+					bottom = QuickSize.parsePosition(m.group("value"));
 					break;
 				case "min-width":
 				case "min-w":
 					if (minWidth != null)
 						throw new IllegalArgumentException("min-width specified twice as " + minWidth + " and " + m.group("value"));
-					else if (width != null && width.type == QuickSize.SizeUnit.Pixels)
+					else if (width != null && width.percent == 0.0f)
 						throw new IllegalArgumentException("min-width specified, but width is absolute");
-					QuickSize size = QuickSize.parse(m.group("value"));
-					if (size.type != QuickSize.SizeUnit.Pixels)
+					QuickSize size = QuickSize.parsePosition(m.group("value"));
+					if (size.percent != 0.0f)
 						throw new IllegalArgumentException("min-width must be specified in pixels");
-					minWidth = Math.round(size.value);
+					minWidth = size.pixels;
 					break;
 				case "pref-width":
 				case "pref-w":
 					if (prefWidth != null)
 						throw new IllegalArgumentException("pref-width specified twice as " + prefWidth + " and " + m.group("value"));
-					else if (width != null && width.type == QuickSize.SizeUnit.Pixels)
+					else if (width != null && width.percent == 0.0f)
 						throw new IllegalArgumentException("pref-width specified, but width is absolute");
-					size = QuickSize.parse(m.group("value"));
-					if (size.type != QuickSize.SizeUnit.Pixels)
+					size = QuickSize.parsePosition(m.group("value"));
+					if (size.percent != 0.0f)
 						throw new IllegalArgumentException("pref-width must be specified in pixels");
-					prefWidth = Math.round(size.value);
+					prefWidth = size.pixels;
 					break;
 				case "max-width":
 				case "max-w":
 					if (maxWidth != null)
 						throw new IllegalArgumentException("max-width specified twice as " + maxWidth + " and " + m.group("value"));
-					else if (width != null && width.type == QuickSize.SizeUnit.Pixels)
+					else if (width != null && width.percent == 0.0f)
 						throw new IllegalArgumentException("max-width specified, but width is absolute");
-					size = QuickSize.parse(m.group("value"));
-					if (size.type != QuickSize.SizeUnit.Pixels)
+					size = QuickSize.parsePosition(m.group("value"));
+					if (size.percent != 0.0f)
 						throw new IllegalArgumentException("max-width must be specified in pixels");
-					maxWidth = Math.round(size.value);
+					maxWidth = size.pixels;
 					break;
 				case "min-height":
 				case "min-h":
 					if (minHeight != null)
 						throw new IllegalArgumentException("min-height specified twice as " + minHeight + " and " + m.group("value"));
-					else if (height != null && height.type == QuickSize.SizeUnit.Pixels)
+					else if (height != null && height.percent == 0.0f)
 						throw new IllegalArgumentException("min-height specified, but height is absolute");
-					size = QuickSize.parse(m.group("value"));
-					if (size.type != QuickSize.SizeUnit.Pixels)
+					size = QuickSize.parsePosition(m.group("value"));
+					if (size.percent != 0.0f)
 						throw new IllegalArgumentException("min-height must be specified in pixels");
-					minHeight = Math.round(size.value);
+					minHeight = size.pixels;
 					break;
 				case "pref-height":
 				case "pref-h":
 					if (prefHeight != null)
 						throw new IllegalArgumentException("pref-height specified twice as " + prefHeight + " and " + m.group("value"));
-					else if (height != null && height.type == QuickSize.SizeUnit.Pixels)
+					else if (height != null && height.percent == 0.0f)
 						throw new IllegalArgumentException("pref-height specified, but height is absolute");
-					size = QuickSize.parse(m.group("value"));
-					if (size.type != QuickSize.SizeUnit.Pixels)
+					size = QuickSize.parsePosition(m.group("value"));
+					if (size.percent != 0.0f)
 						throw new IllegalArgumentException("pref-height must be specified in pixels");
-					prefHeight = Math.round(size.value);
+					prefHeight = size.pixels;
 					break;
 				case "max-height":
 				case "max-h":
 					if (maxHeight != null)
 						throw new IllegalArgumentException("max-height specified twice as " + maxHeight + " and " + m.group("value"));
-					else if (height != null && height.type == QuickSize.SizeUnit.Pixels)
+					else if (height != null && height.percent == 0.0f)
 						throw new IllegalArgumentException("max-height specified, but height is absolute");
-					size = QuickSize.parse(m.group("value"));
-					if (size.type != QuickSize.SizeUnit.Pixels)
+					size = QuickSize.parsePosition(m.group("value"));
+					if (size.percent != 0.0f)
 						throw new IllegalArgumentException("max-height must be specified in pixels");
-					maxHeight = Math.round(size.value);
+					maxHeight = size.pixels;
 					break;
 				case "width":
 				case "w":
 					if (width != null)
 						throw new IllegalArgumentException("width specified twice as " + width + " and " + m.group("value"));
-					width = QuickSize.parse(m.group("value"));
-					if (width.type == QuickSize.SizeUnit.Pixels) {
+					width = QuickSize.parsePosition(m.group("value"));
+					if (width.percent != 0.0f) {
 						if (minWidth != null)
 							throw new IllegalArgumentException("min-width specified, but width is absolute");
 						else if (prefWidth != null)
@@ -232,8 +229,8 @@ public class SimpleLayout implements LayoutManager2 {
 				case "h":
 					if (height != null)
 						throw new IllegalArgumentException("height specified twice as " + width + " and " + m.group("value"));
-					height = QuickSize.parse(m.group("value"));
-					if (height.type == QuickSize.SizeUnit.Pixels) {
+					height = QuickSize.parsePosition(m.group("value"));
+					if (height.percent != 0.0f) {
 						if (minHeight != null)
 							throw new IllegalArgumentException("min-height specified, but width is absolute");
 						else if (prefHeight != null)
@@ -246,7 +243,7 @@ public class SimpleLayout implements LayoutManager2 {
 					throw new IllegalArgumentException("Unrecognized constraint type: " + type);
 				}
 			}
-			QuickPosition fLeft = left, fHCenter = hCenter, fRight = right, fTop = top, fVCenter = vCenter, fBottom = bottom;
+			QuickSize fLeft = left, fHCenter = hCenter, fRight = right, fTop = top, fVCenter = vCenter, fBottom = bottom;
 			QuickSize fWidth = width, fHeight = height;
 			Integer fMinW = minWidth, fPrefW = prefWidth, fMaxW = maxWidth, fMinH = minHeight, fPrefH = prefHeight, fMaxH = maxHeight;
 			return new SimpleConstraints(//
@@ -290,8 +287,6 @@ public class SimpleLayout implements LayoutManager2 {
 		theConstraints.remove(comp);
 	}
 
-	// Priorities here are min, max, preferred for leading edge, trailing edge, and size
-
 	@Override
 	public Dimension minimumLayoutSize(Container parent) {
 		return layoutSize(parent, -1);
@@ -326,95 +321,40 @@ public class SimpleLayout implements LayoutManager2 {
 	private int getContainerSizeFor(Component c, boolean vertical, int type, SimpleConstraints constraints) {
 		if (constraints == null)
 			return getComponentSize(c, vertical, type);
-		QuickPosition trail = constraints.getPos(vertical, 1);
-		if (trail != null && trail.type == PositionUnit.Pixels)
-			return Math.round(trail.value);
-		QuickPosition lead = constraints.getPos(vertical, -1);
-		if (lead != null && lead.type == PositionUnit.Lexips)
-			return Math.round(lead.value);
-		QuickPosition center = constraints.getPos(vertical, 0);
+		QuickSize trail = constraints.getPos(vertical, 1);
+		if (trail != null && trail.percent == 0.0f)
+			return trail.pixels;
+		QuickSize lead = constraints.getPos(vertical, -1);
+		if (lead != null && lead.percent == 100.0f)
+			return lead.pixels;
+		QuickSize center = constraints.getPos(vertical, 0);
 		QuickSize size = constraints.getSize(vertical);
 		Integer absSize = null;
-		Float relSize = null;
+		float relSize = 0.0f;
 		if (size != null) {
-			if (size.type == SizeUnit.Pixels)
-				absSize = Math.round(size.value);
-			else
-				relSize = size.value;
+			absSize = size.pixels;
+			relSize = size.percent;
 		} else {
 			absSize = constraints.getSize(vertical, type);
 			if (absSize == null)
 				absSize = getComponentSize(c, vertical, type);
 		}
-		if (relSize != null) {
-			if (lead != null && trail != null) {
-				if (lead.type == PositionUnit.Pixels) {
-					if (trail.type == PositionUnit.Lexips)
-						return resolveExponential(Math.round(lead.value + trail.value), relSize);
-					else // Percent, because we handled Pixels at the top
-						return resolveExponential(Math.round(lead.value), relSize + trail.value);
-				} else { // Percent, because we handled Lexips at the top
-					if (trail.type == PositionUnit.Lexips)
-						return resolveExponential(Math.round(trail.value), lead.value + relSize);
-					else { // Percent
-						if (type <= 0)
-							return 0;
-						else
-							return Integer.MAX_VALUE;
-					}
-				}
-			} else if (type > 0)
-				return Integer.MAX_VALUE;
-			else if (lead != null) {
-				if (lead.type == PositionUnit.Pixels)
-					return resolveExponential(Math.round(lead.value), relSize);
-				else // Percent
-					return 0;
-			} else if (trail != null) {
-				if (trail.type == PositionUnit.Lexips)
-					return resolveExponential(Math.round(trail.value), relSize);
-				else // Percent
-					return 0;
-			} else if (center != null) {
-				if (center.type == PositionUnit.Percent)
-					return 0;
-				else
-					return resolveExponential(Math.round(center.value), relSize);
-			} else
-				return 0;
-		} else {
-			if (lead != null && trail != null) {
-				if (lead.type == PositionUnit.Pixels) {
-					if (trail.type == PositionUnit.Lexips)
-						return Math.round(lead.value + trail.value) + absSize;
-					else // Percent, because we handled Pixels at the top
-						return resolveExponential(Math.round(lead.value) + absSize, trail.value);
-				} else { // Percent, because we handled Lexips at the top
-					if (trail.type == PositionUnit.Lexips)
-						return resolveExponential(absSize + Math.round(trail.value), lead.value);
-					else // Percent
-						return resolveExponential(absSize, lead.value + trail.value);
-				}
-			} else if (type > 0)
-				return Integer.MAX_VALUE;
-			else if (lead != null) {
-				if (lead.type == PositionUnit.Pixels)
-					return Math.round(lead.value) + absSize;
-				else // Percent
-					return resolveExponential(absSize, lead.value);
-			} else if (trail != null) {
-				if (trail.type == PositionUnit.Lexips)
-					return absSize + Math.round(trail.value);
-				else // Percent
-					return resolveExponential(absSize, trail.value);
-			} else if (center != null) {
-				if (center.type == PositionUnit.Percent)
-					return absSize;
-				else
-					return Math.round(center.value) + absSize / 2;
-			} else
-				return absSize;
+		if (lead != null) {
+			absSize += Math.abs(lead.pixels);
+			relSize += lead.percent;
 		}
+		if (trail != null) {
+			absSize += Math.abs(trail.pixels);
+			relSize += trail.percent;
+		}
+		if (absSize > 0 && relSize != 0)
+			return resolveExponential(absSize, relSize);
+		else if (type > 0)
+			return Integer.MAX_VALUE;
+		else if (absSize != 0)
+			return absSize;
+		else
+			return 0;
 	}
 
 	private static int resolveExponential(int absSize, float percent) {
@@ -461,10 +401,10 @@ public class SimpleLayout implements LayoutManager2 {
 		}
 	}
 
-	public void layoutChild(Component c, SimpleConstraints constraints, int parentSize, boolean vertical, Rectangle childBounds) {
-		QuickPosition lead = constraints.getPos(vertical, -1);
-		QuickPosition center = constraints.getPos(vertical, 0);
-		QuickPosition trail = constraints.getPos(vertical, 1);
+	private void layoutChild(Component c, SimpleConstraints constraints, int parentSize, boolean vertical, Rectangle childBounds) {
+		QuickSize lead = constraints.getPos(vertical, -1);
+		QuickSize center = constraints.getPos(vertical, 0);
+		QuickSize trail = constraints.getPos(vertical, 1);
 		QuickSize size = constraints.getSize(vertical);
 		if (size != null) {
 			int absSize = size.evaluate(parentSize);

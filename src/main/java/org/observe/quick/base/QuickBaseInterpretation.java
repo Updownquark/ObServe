@@ -71,8 +71,7 @@ public class QuickBaseInterpretation implements QonfigInterpretation {
 				ExpressoQIS exS = session.as(ExpressoQIS.class);
 				ExpressoEnv env = exS.getExpressoEnv();
 				exS.setExpressoEnv(env//
-					.withNonStructuredParser(QuickPosition.class, new QuickPosition.Parser())//
-					.withNonStructuredParser(QuickSize.class, new QuickSize.Parser())//
+					.withNonStructuredParser(QuickSize.class, new QuickSize.Parser(true))//
 					.withOperators(unaryOps(env.getUnaryOperators()), binaryOps(env.getBinaryOperators()))//
 					);
 				return null;
@@ -128,30 +127,24 @@ public class QuickBaseInterpretation implements QonfigInterpretation {
 
 	private static UnaryOperatorSet unaryOps(UnaryOperatorSet unaryOps) {
 		return unaryOps.copy()//
-			.with("-", QuickPosition.class, p -> new QuickPosition(-p.value, p.type), p -> new QuickPosition(-p.value, p.type))//
-			.with("-", QuickSize.class, p -> new QuickSize(-p.value, p.type), p -> new QuickSize(-p.value, p.type))//
+			.with("-", QuickSize.class, s -> new QuickSize(-s.percent, s.pixels), s -> new QuickSize(-s.percent, s.pixels))//
 			.build();
 	}
 
 	private static BinaryOperatorSet binaryOps(BinaryOperatorSet binaryOps) {
 		return binaryOps.copy()//
-			.with("+", QuickPosition.class, Double.class, (p, d) -> new QuickPosition((float) (p.value + d), p.type),
-				(p, d, o) -> new QuickPosition((float) (p.value - d), p.type), null)//
-			.with("-", QuickPosition.class, Double.class, (p, d) -> new QuickPosition((float) (p.value - d), p.type),
-				(p, d, o) -> new QuickPosition((float) (p.value + d), p.type), null)//
-			.with("*", QuickPosition.class, Double.class, (p, d) -> new QuickPosition((float) (p.value * d), p.type),
-				(p, d, o) -> new QuickPosition((float) (p.value / d), p.type), null)//
-			.with("/", QuickPosition.class, Double.class, (p, d) -> new QuickPosition((float) (p.value / d), p.type),
-				(p, d, o) -> new QuickPosition((float) (p.value * d), p.type), null)//
-			//
-			.with("+", QuickSize.class, Double.class, (p, d) -> new QuickSize((float) (p.value + d), p.type),
-				(p, d, o) -> new QuickSize((float) (p.value - d), p.type), null)//
-			.with("-", QuickSize.class, Double.class, (p, d) -> new QuickSize((float) (p.value - d), p.type),
-				(p, d, o) -> new QuickSize((float) (p.value + d), p.type), null)//
-			.with("*", QuickSize.class, Double.class, (p, d) -> new QuickSize((float) (p.value * d), p.type),
-				(p, d, o) -> new QuickSize((float) (p.value / d), p.type), null)//
-			.with("/", QuickSize.class, Double.class, (p, d) -> new QuickSize((float) (p.value / d), p.type),
-				(p, d, o) -> new QuickSize((float) (p.value * d), p.type), null)//
+			.with("+", QuickSize.class, Double.class, (s, d) -> new QuickSize(s.percent, s.pixels + (int) Math.round(d)),
+				(s, d, o) -> new QuickSize(s.percent, s.pixels - (int) Math.round(d)), null)//
+			.with("-", QuickSize.class, Double.class, (p, d) -> new QuickSize(p.percent, p.pixels - (int) Math.round(d)),
+				(s1, s2, o) -> new QuickSize(s1.percent, s1.pixels + (int) Math.round(s2)), null)//
+			.with("+", QuickSize.class, QuickSize.class, (s1, s2) -> new QuickSize(s1.percent + s2.percent, s1.pixels + s2.pixels),
+				(s1, s2, o) -> new QuickSize(s1.percent - s2.percent, s1.pixels - s2.pixels), null)//
+			.with("-", QuickSize.class, QuickSize.class, (s1, s2) -> new QuickSize(s1.percent - s2.percent, s1.pixels - s2.pixels),
+				(s1, s2, o) -> new QuickSize(s1.percent + s2.percent, s1.pixels + s2.pixels), null)//
+			.with("*", QuickSize.class, Double.class, (s, d) -> new QuickSize((float) (s.percent * d), (int) Math.round(s.pixels * d)),
+				(s, d, o) -> new QuickSize((float) (s.percent / d), (int) Math.round(s.pixels / d)), null)//
+			.with("/", QuickSize.class, Double.class, (s, d) -> new QuickSize((float) (s.percent / d), (int) Math.round(s.pixels / d)),
+				(s, d, o) -> new QuickSize((float) (s.percent * d), (int) Math.round(s.pixels * d)), null)//
 			.build();
 	}
 

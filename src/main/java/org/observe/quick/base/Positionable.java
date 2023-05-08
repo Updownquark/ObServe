@@ -3,34 +3,25 @@ package org.observe.quick.base;
 import org.observe.Observable;
 import org.observe.ObservableValueEvent;
 import org.observe.SettableValue;
-import org.observe.expresso.ExpressoEvaluationException;
 import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.ExpressoParseException;
 import org.observe.expresso.ExpressoQIS;
 import org.observe.expresso.ModelInstantiationException;
-import org.observe.expresso.ModelTypes;
-import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet.CompiledModelValue;
 import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
-import org.observe.expresso.ObservableModelSet.ModelValueSynth;
-import org.observe.expresso.QonfigExpression;
-import org.observe.expresso.TypeConversionException;
 import org.observe.quick.QuickAddOn;
 import org.observe.quick.QuickElement;
 import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigAddOn;
-import org.qommons.config.QonfigElement.QonfigValue;
 import org.qommons.config.QonfigInterpretationException;
-import org.qommons.io.LocatedFilePosition;
 
 public abstract class Positionable extends QuickAddOn.Abstract<QuickElement> {
 	public static abstract class Def<P extends Positionable> extends QuickAddOn.Def.Abstract<QuickElement, P> {
 		private final boolean isVertical;
-		private CompiledModelValue<SettableValue<?>, SettableValue<QuickPosition>> theLeading;
-		private CompiledModelValue<SettableValue<?>, SettableValue<QuickPosition>> theCenter;
-		private CompiledModelValue<SettableValue<?>, SettableValue<QuickPosition>> theTrailing;
+		private CompiledModelValue<SettableValue<?>, SettableValue<QuickSize>> theLeading;
+		private CompiledModelValue<SettableValue<?>, SettableValue<QuickSize>> theCenter;
+		private CompiledModelValue<SettableValue<?>, SettableValue<QuickSize>> theTrailing;
 
 		protected Def(boolean vertical, QonfigAddOn type, QuickElement.Def<? extends QuickElement> element) {
 			super(type, element);
@@ -41,15 +32,15 @@ public abstract class Positionable extends QuickAddOn.Abstract<QuickElement> {
 			return isVertical;
 		}
 
-		public CompiledModelValue<SettableValue<?>, SettableValue<QuickPosition>> getLeading() {
+		public CompiledModelValue<SettableValue<?>, SettableValue<QuickSize>> getLeading() {
 			return theLeading;
 		}
 
-		public CompiledModelValue<SettableValue<?>, SettableValue<QuickPosition>> getCenter() {
+		public CompiledModelValue<SettableValue<?>, SettableValue<QuickSize>> getCenter() {
 			return theCenter;
 		}
 
-		public CompiledModelValue<SettableValue<?>, SettableValue<QuickPosition>> getTrailing() {
+		public CompiledModelValue<SettableValue<?>, SettableValue<QuickSize>> getTrailing() {
 			return theTrailing;
 		}
 
@@ -57,13 +48,13 @@ public abstract class Positionable extends QuickAddOn.Abstract<QuickElement> {
 		public Def<P> update(ExpressoQIS session) throws QonfigInterpretationException {
 			super.update(session);
 			if (isVertical) {
-				theLeading = parsePosition(session.getAttributeQV("top"), session);
-				theCenter = parsePosition(session.getAttributeQV("v-center"), session);
-				theTrailing = parsePosition(session.getAttributeQV("bottom"), session);
+				theLeading = Sizeable.parseSize(session.getAttributeQV("top"), session, true);
+				theCenter = Sizeable.parseSize(session.getAttributeQV("v-center"), session, true);
+				theTrailing = Sizeable.parseSize(session.getAttributeQV("bottom"), session, true);
 			} else {
-				theLeading = parsePosition(session.getAttributeQV("left"), session);
-				theCenter = parsePosition(session.getAttributeQV("h-center"), session);
-				theTrailing = parsePosition(session.getAttributeQV("right"), session);
+				theLeading = Sizeable.parseSize(session.getAttributeQV("left"), session, true);
+				theCenter = Sizeable.parseSize(session.getAttributeQV("h-center"), session, true);
+				theTrailing = Sizeable.parseSize(session.getAttributeQV("right"), session, true);
 			}
 			return this;
 		}
@@ -92,9 +83,9 @@ public abstract class Positionable extends QuickAddOn.Abstract<QuickElement> {
 	}
 
 	public static abstract class Interpreted<P extends Positionable> extends QuickAddOn.Interpreted.Abstract<QuickElement, P> {
-		private InterpretedValueSynth<SettableValue<?>, SettableValue<QuickPosition>> theLeading;
-		private InterpretedValueSynth<SettableValue<?>, SettableValue<QuickPosition>> theCenter;
-		private InterpretedValueSynth<SettableValue<?>, SettableValue<QuickPosition>> theTrailing;
+		private InterpretedValueSynth<SettableValue<?>, SettableValue<QuickSize>> theLeading;
+		private InterpretedValueSynth<SettableValue<?>, SettableValue<QuickSize>> theCenter;
+		private InterpretedValueSynth<SettableValue<?>, SettableValue<QuickSize>> theTrailing;
 
 		protected Interpreted(Def<P> definition, QuickElement.Interpreted<?> element) {
 			super(definition, element);
@@ -105,15 +96,15 @@ public abstract class Positionable extends QuickAddOn.Abstract<QuickElement> {
 			return (Def<P>) super.getDefinition();
 		}
 
-		public InterpretedValueSynth<SettableValue<?>, SettableValue<QuickPosition>> getLeading() {
+		public InterpretedValueSynth<SettableValue<?>, SettableValue<QuickSize>> getLeading() {
 			return theLeading;
 		}
 
-		public InterpretedValueSynth<SettableValue<?>, SettableValue<QuickPosition>> getCenter() {
+		public InterpretedValueSynth<SettableValue<?>, SettableValue<QuickSize>> getCenter() {
 			return theCenter;
 		}
 
-		public InterpretedValueSynth<SettableValue<?>, SettableValue<QuickPosition>> getTrailing() {
+		public InterpretedValueSynth<SettableValue<?>, SettableValue<QuickSize>> getTrailing() {
 			return theTrailing;
 		}
 
@@ -158,14 +149,14 @@ public abstract class Positionable extends QuickAddOn.Abstract<QuickElement> {
 		}
 	}
 
-	private final SettableValue<SettableValue<QuickPosition>> theLeading;
-	private final SettableValue<SettableValue<QuickPosition>> theCenter;
-	private final SettableValue<SettableValue<QuickPosition>> theTrailing;
+	private final SettableValue<SettableValue<QuickSize>> theLeading;
+	private final SettableValue<SettableValue<QuickSize>> theCenter;
+	private final SettableValue<SettableValue<QuickSize>> theTrailing;
 
 	protected Positionable(Interpreted<?> interpreted, QuickElement element) {
 		super(interpreted, element);
 		theLeading = SettableValue
-			.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<QuickPosition>> parameterized(QuickPosition.class)).build();
+			.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<QuickSize>> parameterized(QuickSize.class)).build();
 		theCenter = SettableValue.build(theLeading.getType()).build();
 		theTrailing = SettableValue.build(theLeading.getType()).build();
 	}
@@ -175,15 +166,15 @@ public abstract class Positionable extends QuickAddOn.Abstract<QuickElement> {
 		return (Interpreted<?>) super.getInterpreted();
 	}
 
-	public SettableValue<QuickPosition> getLeading() {
+	public SettableValue<QuickSize> getLeading() {
 		return SettableValue.flatten(theLeading);
 	}
 
-	public SettableValue<QuickPosition> getCenter() {
+	public SettableValue<QuickSize> getCenter() {
 		return SettableValue.flatten(theCenter);
 	}
 
-	public SettableValue<QuickPosition> getTrailing() {
+	public SettableValue<QuickSize> getTrailing() {
 		return SettableValue.flatten(theTrailing);
 	}
 
@@ -195,7 +186,7 @@ public abstract class Positionable extends QuickAddOn.Abstract<QuickElement> {
 		return this;
 	}
 
-	public Observable<ObservableValueEvent<QuickPosition>> changes() {
+	public Observable<ObservableValueEvent<QuickSize>> changes() {
 		return Observable.or(getLeading().noInitChanges(), getCenter().noInitChanges(), getTrailing().noInitChanges());
 	}
 
@@ -219,91 +210,5 @@ public abstract class Positionable extends QuickAddOn.Abstract<QuickElement> {
 		public Interpreted.Horizontal getInterpreted() {
 			return (Interpreted.Horizontal) super.getInterpreted();
 		}
-	}
-
-	/**
-	 * Parses a position in Quick
-	 *
-	 * @param value The expression to parse
-	 * @param session The session in which to parse the expression
-	 * @return The ModelValueSynth to produce the position value
-	 * @throws QonfigInterpretationException If the position could not be parsed
-	 */
-	public static CompiledModelValue<SettableValue<?>, SettableValue<QuickPosition>> parsePosition(QonfigValue value, ExpressoQIS session)
-		throws QonfigInterpretationException {
-		if (value == null)
-			return null;
-		else if (!(value.value instanceof QonfigExpression))
-			throw new IllegalArgumentException("Not an expression");
-		QonfigExpression expression = (QonfigExpression) value.value;
-		QuickPosition.PositionUnit unit = null;
-		for (QuickPosition.PositionUnit u : QuickPosition.PositionUnit.values()) {
-			if (expression.text.length() > u.name.length() && expression.text.endsWith(u.name)
-				&& Character.isWhitespace(expression.text.charAt(expression.text.length() - u.name.length() - 1))) {
-				unit = u;
-				break;
-			}
-		}
-		ObservableExpression parsed;
-		try {
-			if (unit != null)
-				parsed = session.getExpressoParser().parse(expression.text.substring(0, expression.text.length() - unit.name.length()));
-			else
-				parsed = session.getExpressoParser().parse(expression.text);
-		} catch (ExpressoParseException e) {
-			throw new QonfigInterpretationException("Could not parse position expression: " + expression,
-				value.position == null ? null : new LocatedFilePosition(value.fileLocation, value.position.getPosition(e.getErrorOffset())),
-					e.getErrorLength(), e);
-		}
-		QuickPosition.PositionUnit fUnit = unit;
-		return CompiledModelValue.of(expression::toString, ModelTypes.Value, () -> {
-			ModelValueSynth<SettableValue<?>, SettableValue<QuickPosition>> positionValue;
-			if (fUnit != null) {
-				ModelValueSynth<SettableValue<?>, SettableValue<Double>> num;
-				try {
-					num = parsed.evaluate(ModelTypes.Value.forType(double.class), session.getExpressoEnv(), 0);
-				} catch (ExpressoEvaluationException e) {
-					throw new ExpressoInterpretationException(e.getMessage(),
-						new LocatedFilePosition(value.fileLocation, value.position.getPosition(e.getErrorOffset())), e.getErrorLength(), e);
-				} catch (TypeConversionException e) {
-					throw new ExpressoInterpretationException(e.getMessage(),
-						new LocatedFilePosition(value.fileLocation, value.position.getPosition(0)), value.text.length(), e);
-				}
-				positionValue = ModelValueSynth.of(ModelTypes.Value.forType(QuickPosition.class), msi -> {
-					SettableValue<Double> numV = num.get(msi);
-					return numV.transformReversible(QuickPosition.class, tx -> tx//
-						.map(n -> new QuickPosition(n.floatValue(), fUnit))//
-						.replaceSource(p -> (double) p.value, rev -> rev//
-							.allowInexactReverse(true).rejectWith(
-								p -> p.type == fUnit ? null : "Only positions with the same unit as the source (" + fUnit + ") can be set")//
-							)//
-						);
-				});
-			} else {
-				try {
-					positionValue = parsed.evaluate(ModelTypes.Value.forType(QuickPosition.class), session.getExpressoEnv(), 0);
-				} catch (ExpressoEvaluationException e1) {
-					// If it doesn't parse as a position, try parsing as a number.
-					try {
-						positionValue = parsed.evaluate(ModelTypes.Value.forType(int.class), session.getExpressoEnv(), 0)//
-							.map(ModelTypes.Value.forType(QuickPosition.class),
-								v -> v.transformReversible(QuickPosition.class,
-									tx -> tx.map(d -> new QuickPosition(d, QuickPosition.PositionUnit.Pixels))
-									.withReverse(pos -> Math.round(pos.value))));
-					} catch (ExpressoEvaluationException e2) {
-						throw new ExpressoInterpretationException(e2.getMessage(),
-							new LocatedFilePosition(value.fileLocation, value.position.getPosition(e2.getErrorOffset())),
-							e1.getErrorLength(), e1);
-					} catch (TypeConversionException e2) {
-						throw new ExpressoInterpretationException(e2.getMessage(),
-							new LocatedFilePosition(value.fileLocation, value.position.getPosition(0)), value.text.length(), e2);
-					}
-				} catch (TypeConversionException e) {
-					throw new ExpressoInterpretationException(e.getMessage(),
-						new LocatedFilePosition(value.fileLocation, value.position.getPosition(0)), value.text.length(), e);
-				}
-			}
-			return positionValue;
-		});
 	}
 }
