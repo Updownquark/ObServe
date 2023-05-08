@@ -496,6 +496,12 @@ public interface QuickWidget extends QuickTextElement {
 			public ObservableValue<Color> getColor() {
 				return ObservableValue.flatten(theColor);
 			}
+
+			@Override
+			public void update(ModelSetInstance models) throws ModelInstantiationException {
+				super.update(models);
+				theColor.set(getInterpreted().getColor().evaluate(models), null);
+			}
 		}
 	}
 }

@@ -228,6 +228,11 @@ public interface QuickCompiledStyle {
 			Map<CompiledStyleApplication, InterpretedStyleApplication> applications) throws ExpressoInterpretationException {
 			return theWrapped.interpret(parent, applications);
 		}
+
+		@Override
+		public String toString() {
+			return theWrapped.toString();
+		}
 	}
 
 	/**

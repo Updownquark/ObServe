@@ -28,7 +28,9 @@
 		<box layout="simple-layout" region="south" height="`20%`">
 			<style attr="color">`blue`</style>
 			<line-border />
-			<label h-center="`50%`" v-center="`50%`">S</label>
+			<label h-center="`50%`" v-center="`50%`">S
+				<style attr="font-color">`white`</style>
+			</label>
 		</box>
 		<box layout="simple-layout" region="west" width="`15%`">
 			<style attr="color">`yellow`</style>
@@ -38,7 +40,9 @@
 		<box layout="simple-layout" region="north" height="`20%`">
 			<style attr="color">`purple`</style>
 			<line-border />
-			<label h-center="`50%`" v-center="`50%`">N</label>
+			<label h-center="`50%`" v-center="`50%`">N
+				<style attr="font-color">`white`</style>
+			</label>
 		</box>
 		<box layout="simple-layout" region="east" width="`15%`">
 			<style attr="color">`aqua`</style>
