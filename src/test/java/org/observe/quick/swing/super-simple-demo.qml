@@ -49,7 +49,7 @@ blah -->
 		</box>
 		<box layout="inline-layout" orientation="horizontal">
 			<label>Window: </label>
-			<check-box value="app.b" />
+			<check-box value="app.b" tooltip="`Whether to show the position and size of this window`" />
 		</box>
 		<field-panel>
 			<box field-name="`Position: `" layout="inline-layout" orientation="horizontal" visible="app.b">

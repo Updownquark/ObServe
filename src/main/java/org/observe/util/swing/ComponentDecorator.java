@@ -16,7 +16,6 @@ import java.util.function.UnaryOperator;
 import javax.swing.AbstractButton;
 import javax.swing.Icon;
 import javax.swing.ImageIcon;
-import javax.swing.JButton;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JTextField;
@@ -262,9 +261,16 @@ public class ComponentDecorator extends FontAdjuster {
 			revert.add(() -> ((JComponent) c).setBorder(oldBorder));
 		}
 		if (theBackground != null) {
+			boolean oldNonOpaque = c instanceof JComponent && !c.isOpaque();
 			Color oldBG = c.getBackground();
+			if (c instanceof JComponent)
+				((JComponent) c).setOpaque(true);
 			c.setBackground(theBackground);
-			revert.add(() -> c.setBackground(oldBG));
+			revert.add(() -> {
+				if (!oldNonOpaque)
+					((JComponent) c).setOpaque(false);
+				c.setBackground(oldBG);
+			});
 		}
 
 		if (c instanceof JLabel) {
@@ -277,14 +283,14 @@ public class ComponentDecorator extends FontAdjuster {
 				((JLabel) c).setIcon(null);
 			revert.add(() -> ((JLabel) c).setIcon(oldIcon));
 		} else if (c instanceof AbstractButton) {
-			Icon oldIcon = ((JButton) c).getIcon();
+			Icon oldIcon = ((AbstractButton) c).getIcon();
 			if (theIcon != null)
-				((JButton) c).setIcon(theIcon);
+				((AbstractButton) c).setIcon(theIcon);
 			else if (isUsingImage)
-				((JButton) c).setIcon(new ImageIcon(theImage));
+				((AbstractButton) c).setIcon(new ImageIcon(theImage));
 			else
-				((JButton) c).setIcon(null);
-			revert.add(() -> ((JButton) c).setIcon(oldIcon));
+				((AbstractButton) c).setIcon(null);
+			revert.add(() -> ((AbstractButton) c).setIcon(oldIcon));
 		}
 
 		if (theCursor != null) {

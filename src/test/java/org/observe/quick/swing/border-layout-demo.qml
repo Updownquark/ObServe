@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
 <quick uses:base="Quick-Base v0.1" uses:expresso="Expresso-Base v0.1" with-extension="window"
-	title="`Simple Quick Layout Demo`" close-action="exit" width="window.width" height="window.height">
+	title="`Quick Border Layout Demo`" close-action="exit" width="window.width" height="window.height">
 	<head>
 		<models>
 			<model name="app">
