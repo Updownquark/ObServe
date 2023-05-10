@@ -181,11 +181,7 @@ public class MethodInvocation extends Invocation {
 
 	@Override
 	public String toString() {
-		StringBuilder str = new StringBuilder();
-		if (theContext != null)
-			str.append(theContext).append('.');
-		str.append(printSignature());
-		return str.toString();
+		return printSignature();
 	}
 
 	/** @return A string representing the method signature */

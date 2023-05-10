@@ -9,6 +9,12 @@
 			<literal>exit</literal>
 		</one-of>
 
+		<one-of name="mouse-button">
+			<literal>left</literal>
+			<literal>right</literal>
+			<literal>middle</literal>
+		</one-of>
+
 		<pattern name="widget-name">((?&lt;ns&gt;[a-zA-Z_\\-]+)\:)?(?&lt;widget&gt;[a-zA-Z_\\-]+)</pattern>
 	</value-types>
 
@@ -25,17 +31,12 @@
 
 		<add-on name="with-text" inherits="styled" abstract="true">
 			<styles>
-				<style-attribute name="font-color" type="java.awt.Color" />
-				<style-attribute name="font-size" type="double" />
-				<style-attribute name="font-weight" type="double" />
-				<style-attribute name="font-slant" type="double" />
+				<style-attribute name="font-color" type="java.awt.Color" trickle-down="true" />
+				<style-attribute name="font-size" type="double" trickle-down="true" />
+				<style-attribute name="font-weight" type="double" trickle-down="true" />
+				<style-attribute name="font-slant" type="double" trickle-down="true" />
 			</styles>
 		</add-on>
-
-		<add-on name="mouse-button" requires="mouse-button-listener" abstract="true" />
-		<add-on name="left-button" requires="mouse-button-listener" inherits="mouse-button" />
-		<add-on name="right-button" requires="mouse-button-listener" inherits="mouse-button" />
-		<add-on name="middle-button" requires="mouse-button-listener" inherits="mouse-button" />
 	</add-ons>
 
 	<elements>
@@ -60,11 +61,10 @@
 			<attribute name="tooltip" type="expression" specify="optional" />
 			<attribute name="visible" type="expression" specify="optional" />
 			<child-def name="border" type="border" min="0" />
-			<child-def name="mouse-listener" type="mouse-listener" min="0" max="inf" />
-			<child-def name="key-listener" type="key-listener" min="0" max="inf" />
+			<child-def name="event-listener" type="event-listener" min="0" max="inf" />
 		</element-def>
 
-		<element-def name="event-listener" inherits="with-element-model" abstract="true">
+		<element-def name="event-listener" inherits="with-element-model,with-local-model" abstract="true">
 			<element-model>
 				<value name="altPressed" type="boolean" />
 				<value name="ctrlPressed" type="boolean" />
@@ -83,6 +83,9 @@
 			</element-model>
 		</element-def>
 		<element-def name="mouse-button-listener" extends="mouse-listener" abstract="true">
+			<element-model>
+				<value name="button" />
+			</element-model>
 			<attribute name="button" type="mouse-button" specify="optional" />
 		</element-def>
 		<element-def name="on-click" extends="mouse-button-listener">
@@ -93,7 +96,7 @@
 		</element-def>
 		<element-def name="on-mouse-press" extends="mouse-button-listener" />
 		<element-def name="on-mouse-release" extends="mouse-button-listener" />
-		<element-def name="on-hover" extends="mouse-listener" />
+		<element-def name="on-mouse-move" extends="mouse-listener" />
 		<element-def name="on-mouse-enter" extends="mouse-listener" />
 		<element-def name="on-mouse-exit" extends="mouse-listener" />
 		<element-def name="on-scroll" extends="mouse-listener">

@@ -348,8 +348,6 @@ public class JustifiedBoxLayout implements LayoutManager2 {
 					minOfMaxCross = Math.min(minOfMaxCross, getCross(max));
 					Dimension min = getMinSize(comp);
 					maxOfMinCross = Math.max(maxOfMinCross, getCross(min));
-					if (minOfMaxCross <= maxOfMinCross)
-						computeCross = false;
 				}
 				first = false;
 			} else {
@@ -360,8 +358,6 @@ public class JustifiedBoxLayout implements LayoutManager2 {
 				compCross = getCross(min);
 				if (compCross > maxOfMinCross)
 					maxOfMinCross = compCross;
-				if (minOfMaxCross <= maxOfMinCross)
-					computeCross = false;
 				if (computeMain && main < Integer.MAX_VALUE)
 					main += thePadding;
 			}

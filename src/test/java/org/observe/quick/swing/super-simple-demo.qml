@@ -52,12 +52,12 @@ blah -->
 			<check-box value="app.b" tooltip="`Whether to show the position and size of this window`" />
 		</box>
 		<field-panel>
-			<box field-name="`Position: `" layout="inline-layout" orientation="horizontal" visible="app.b">
+			<box field-label="`Position: `" layout="inline-layout" orientation="horizontal" visible="app.b">
 				<label value="app.x" />
 				<label>, </label>
 				<label value="app.y" />
 			</box>
-			<box field-name="`Size: `" layout="inline-layout" orientation="horizontal" visible="app.b">
+			<box field-label="`Size: `" layout="inline-layout" orientation="horizontal" visible="app.b">
 				<label value="app.w" />
 				<label>x</label>
 				<label value="app.h" />

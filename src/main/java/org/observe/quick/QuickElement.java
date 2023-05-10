@@ -3,12 +3,16 @@ package org.observe.quick;
 import java.util.Collection;
 import java.util.function.Function;
 
+import org.observe.expresso.DynamicModelValue;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ExpressoQIS;
+import org.observe.expresso.ModelException;
 import org.observe.expresso.ModelInstantiationException;
+import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.TypeConversionException;
 import org.observe.quick.style.StyleQIS;
 import org.qommons.ClassMap;
 import org.qommons.config.AbstractQIS;
@@ -91,7 +95,7 @@ public interface QuickElement {
 			 * @param parent The definition interpreted from the parent element
 			 * @param element The element that this definition is being interpreted from
 			 */
-			public Abstract(QuickElement.Def<?> parent, QonfigElement element) {
+			protected Abstract(QuickElement.Def<?> parent, QonfigElement element) {
 				theParent = parent;
 				theElement = element;
 				theAddOns = new ClassMap<>();
@@ -224,7 +228,7 @@ public interface QuickElement {
 			 * @param definition The definition that is producing this interpretation
 			 * @param parent The interpretation from the parent element
 			 */
-			public Abstract(Def<? super E> definition, Interpreted<?> parent) {
+			protected Abstract(Def<? super E> definition, Interpreted<?> parent) {
 				theDefinition = definition;
 				theParent = parent;
 				theAddOns = new ClassMap<>();
@@ -326,7 +330,7 @@ public interface QuickElement {
 		 * @param interpreted The interpretation producing this element
 		 * @param parent The parent element
 		 */
-		public Abstract(Interpreted<?> interpreted, QuickElement parent) {
+		protected Abstract(Interpreted<?> interpreted, QuickElement parent) {
 			theInterpreted = interpreted;
 			theParent = parent;
 			theAddOns = new ClassMap<>();
@@ -379,6 +383,11 @@ public interface QuickElement {
 		public String toString() {
 			return getInterpreted().toString();
 		}
+
+		protected <M, MV extends M> void satisfyContextValue(String valueName, ModelInstanceType<M, MV> type, MV value)
+			throws ModelInstantiationException {
+			QuickElement.satisfyContextValue(valueName, type, value, this);
+		}
 	}
 
 	/**
@@ -388,6 +397,20 @@ public interface QuickElement {
 	 */
 	public static boolean typesEqual(QonfigElement element1, QonfigElement element2) {
 		return element1.getType() == element2.getType() && element1.getInheritance().equals(element2.getInheritance());
+	}
+
+	static <M, MV extends M> void satisfyContextValue(String valueName, ModelInstanceType<M, MV> type, MV value, QuickElement element)
+		throws ModelInstantiationException {
+		if (value != null) {
+			try {
+				DynamicModelValue.satisfyDynamicValue(valueName, type, element.getModels(), value);
+			} catch (ModelException e) {
+				throw new ModelInstantiationException("No " + valueName + " value?",
+					element.getInterpreted().getDefinition().getExpressoSession().getElement().getPositionInFile(), 0, e);
+			} catch (TypeConversionException e) {
+				throw new IllegalStateException(valueName + " is not a " + type + "?", e);
+			}
+		}
 	}
 
 	/**

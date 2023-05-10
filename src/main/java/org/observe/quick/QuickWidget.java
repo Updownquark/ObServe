@@ -1,22 +1,20 @@
 package org.observe.quick;
 
 import java.awt.Color;
-import java.util.Collection;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.Map;
-import java.util.function.Function;
 
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
+import org.observe.collect.ObservableCollection;
 import org.observe.expresso.CompiledExpression;
-import org.observe.expresso.DynamicModelValue;
 import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.ModelException;
 import org.observe.expresso.ModelInstantiationException;
-import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
-import org.observe.expresso.TypeConversionException;
 import org.observe.quick.style.CompiledStyleApplication;
 import org.observe.quick.style.InterpretedStyleApplication;
 import org.observe.quick.style.QuickCompiledStyle;
@@ -24,6 +22,8 @@ import org.observe.quick.style.QuickInterpretedStyle;
 import org.observe.quick.style.QuickStyleAttribute;
 import org.observe.quick.style.QuickTypeStyle;
 import org.observe.util.TypeTokens;
+import org.qommons.Transaction;
+import org.qommons.collect.CollectionUtils;
 import org.qommons.config.AbstractQIS;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigInterpretationException;
@@ -56,6 +56,8 @@ public interface QuickWidget extends QuickTextElement {
 		/** @return The expression determining when this widget is to be visible */
 		CompiledExpression isVisible();
 
+		List<QuickEventListener.Def<?>> getEventListeners();
+
 		@Override
 		Def<W> update(AbstractQIS<?> session) throws QonfigInterpretationException;
 
@@ -75,6 +77,7 @@ public interface QuickWidget extends QuickTextElement {
 			private String theName;
 			private CompiledExpression theTooltip;
 			private CompiledExpression isVisible;
+			private final List<QuickEventListener.Def<?>> theEventListeners;
 
 			/**
 			 * @param parent The parent container definition
@@ -82,6 +85,7 @@ public interface QuickWidget extends QuickTextElement {
 			 */
 			protected Abstract(QuickElement.Def<?> parent, QonfigElement element) {
 				super(parent, element);
+				theEventListeners = new ArrayList<>();
 			}
 
 			@Override
@@ -116,12 +120,22 @@ public interface QuickWidget extends QuickTextElement {
 			}
 
 			@Override
+			public List<QuickEventListener.Def<?>> getEventListeners() {
+				return Collections.unmodifiableList(theEventListeners);
+			}
+
+			@Override
 			public Def.Abstract<W> update(AbstractQIS<?> session) throws QonfigInterpretationException {
 				super.update(session);
 				theBorder = QuickElement.useOrReplace(QuickBorder.Def.class, theBorder, session, "border");
 				theName = getExpressoSession().getAttributeText("name");
 				theTooltip = getExpressoSession().getAttributeExpression("tooltip");
 				isVisible = getExpressoSession().getAttributeExpression("visible");
+				CollectionUtils
+					.synchronize(theEventListeners, session.forChildren("event-listener"),
+					(l, s) -> QuickElement.typesEqual(l.getElement(), s.getElement()))
+				.simpleE(s -> s.interpret(QuickEventListener.Def.class).update(s))//
+				.onCommonX(el -> el.getLeftValue().update(el.getRightValue())).adjust();
 				return this;
 			}
 
@@ -159,6 +173,8 @@ public interface QuickWidget extends QuickTextElement {
 		/** @return The value determining when this widget is to be visible */
 		InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> isVisible();
 
+		List<QuickEventListener.Interpreted<?>> getEventListeners();
+
 		/**
 		 * Produces a widget instance
 		 *
@@ -179,6 +195,7 @@ public interface QuickWidget extends QuickTextElement {
 			private QuickBorder.Interpreted<?> theBorder;
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<String>> theTooltip;
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> isVisible;
+			private final List<QuickEventListener.Interpreted<?>> theEventListeners;
 
 			/**
 			 * @param definition The definition producing this interpretation
@@ -186,6 +203,7 @@ public interface QuickWidget extends QuickTextElement {
 			 */
 			protected Abstract(Def<? super W> definition, QuickElement.Interpreted<?> parent) {
 				super(definition, parent);
+				theEventListeners = new ArrayList<>();
 			}
 
 			@Override
@@ -220,7 +238,13 @@ public interface QuickWidget extends QuickTextElement {
 			}
 
 			@Override
-			public Interpreted.Abstract<W> update(QuickStyledElement.QuickInterpretationCache cache) throws ExpressoInterpretationException {
+			public List<QuickEventListener.Interpreted<?>> getEventListeners() {
+				return Collections.unmodifiableList(theEventListeners);
+			}
+
+			@Override
+			public Interpreted.Abstract<W> update(QuickStyledElement.QuickInterpretationCache cache)
+				throws ExpressoInterpretationException {
 				super.update(cache);
 				if (getDefinition().getBorder() == null)
 					theBorder = null;
@@ -232,6 +256,10 @@ public interface QuickWidget extends QuickTextElement {
 					: getDefinition().getTooltip().evaluate(ModelTypes.Value.STRING).interpret();
 				isVisible = getDefinition().isVisible() == null ? null
 					: getDefinition().isVisible().evaluate(ModelTypes.Value.BOOLEAN).interpret();
+				CollectionUtils.synchronize(theEventListeners, getDefinition().getEventListeners(), (l, d) -> l.getDefinition() == d)//
+				.simpleE(l -> l.interpret(this).update())//
+				.onCommonX(el -> el.getLeftValue().update())//
+				.adjust();
 				return this;
 			}
 		}
@@ -303,17 +331,7 @@ public interface QuickWidget extends QuickTextElement {
 	/** @return The value determining when this widget is to be visible */
 	SettableValue<Boolean> isVisible();
 
-	@Override
-	<AO extends QuickAddOn<?>> AO getAddOn(Class<AO> addOn);
-
-	@Override
-	Collection<QuickAddOn<?>> getAddOns();
-
-	@Override
-	default <AO extends QuickAddOn<?>, T> T getAddOnValue(Class<AO> addOn, Function<? super AO, ? extends T> fn) {
-		AO ao = getAddOn(addOn);
-		return ao == null ? null : fn.apply(ao);
-	}
+	ObservableCollection<QuickEventListener> getEventListeners();
 
 	void setContext(WidgetContext ctx) throws ModelInstantiationException;
 
@@ -326,13 +344,12 @@ public interface QuickWidget extends QuickTextElement {
 	 */
 	QuickWidget update(ModelSetInstance models) throws ModelInstantiationException;
 
-	// TODO mouse and key listeners
-
 	/** An abstract {@link QuickWidget} implementation */
 	public abstract class Abstract extends QuickStyledElement.Abstract implements QuickWidget {
 		private QuickBorder theBorder;
 		private final SettableValue<SettableValue<String>> theTooltip;
 		private final SettableValue<SettableValue<Boolean>> isVisible;
+		private final ObservableCollection<QuickEventListener> theEventListeners;
 
 		/**
 		 * @param interpreted The interpretation instantiating this widget
@@ -344,6 +361,7 @@ public interface QuickWidget extends QuickTextElement {
 				.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<String>> parameterized(String.class)).build();
 			isVisible = SettableValue
 				.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Boolean>> parameterized(boolean.class)).build();
+			theEventListeners = ObservableCollection.build(QuickEventListener.class).build();
 		}
 
 		@Override
@@ -378,25 +396,16 @@ public interface QuickWidget extends QuickTextElement {
 		}
 
 		@Override
+		public ObservableCollection<QuickEventListener> getEventListeners() {
+			return theEventListeners.flow().unmodifiable(false).collect();
+		}
+
+		@Override
 		public void setContext(WidgetContext ctx) throws ModelInstantiationException {
 			satisfyContextValue("hovered", ModelTypes.Value.BOOLEAN, ctx.isHovered());
 			satisfyContextValue("focused", ModelTypes.Value.BOOLEAN, ctx.isFocused());
 			satisfyContextValue("pressed", ModelTypes.Value.BOOLEAN, ctx.isPressed());
 			satisfyContextValue("rightPressed", ModelTypes.Value.BOOLEAN, ctx.isRightPressed());
-		}
-
-		protected <M, MV extends M> void satisfyContextValue(String valueName, ModelInstanceType<M, MV> type, MV value)
-			throws ModelInstantiationException {
-			if (value != null) {
-				try {
-					DynamicModelValue.satisfyDynamicValue(valueName, type, getModels(), value);
-				} catch (ModelException e) {
-					throw new ModelInstantiationException("No " + valueName + " value?",
-						getInterpreted().getDefinition().getExpressoSession().getElement().getPositionInFile(), 0, e);
-				} catch (TypeConversionException e) {
-					throw new IllegalStateException(valueName + " is not a " + type + "?", e);
-				}
-			}
 		}
 
 		@Override
@@ -409,6 +418,12 @@ public interface QuickWidget extends QuickTextElement {
 				theTooltip.set(getInterpreted().getTooltip().get(getModels()), null);
 			if (getInterpreted().isVisible() != null)
 				isVisible.set(getInterpreted().isVisible().get(getModels()), null);
+			try (Transaction t = theEventListeners.lock(true, null)) {
+				CollectionUtils.synchronize(theEventListeners, getInterpreted().getEventListeners(), (l, i) -> l.getInterpreted() == i)//
+				.<ModelInstantiationException> simpleE(l -> l.create(this).update(getModels()))//
+				.onCommonX(el -> el.getLeftValue().update(getModels()))//
+				.adjust();
+			}
 			return this;
 		}
 	}

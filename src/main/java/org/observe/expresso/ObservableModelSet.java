@@ -1144,6 +1144,15 @@ public interface ObservableModelSet extends Identifiable {
 	 * @return The node representing the target component, or null if no such component exists accessible to this model
 	 */
 	default ModelComponentNode<?, ?> getComponentIfExists(String path) {
+		return getComponentIfExists(path, true);
+	}
+
+	/**
+	 * @param path The dot-separated path of the component to get
+	 * @param inheritFromParent Whether values should be inherited from parent models by simple name
+	 * @return The node representing the target component, or null if no such component exists accessible to this model
+	 */
+	default ModelComponentNode<?, ?> getComponentIfExists(String path, boolean inheritFromParent) {
 		ModelComponentNode<?, ?> node;
 		int dot = path.lastIndexOf('.');
 		if (dot >= 0) {
@@ -1151,14 +1160,15 @@ public interface ObservableModelSet extends Identifiable {
 			if (subModel == null)
 				return null;
 			String name = path.substring(dot + 1);
-			node = subModel.getComponentIfExists(name);
+			// If the value is asked for by path, don't inherit from parents
+			node = subModel.getComponentIfExists(name, false);
 		} else {
 			node = getComponents().get(path);
-			if (node == null && getParent() != null)
+			if (node == null && inheritFromParent && getParent() != null)
 				node = getParent().getComponentIfExists(path);
 			if (node == null) {
 				for (ObservableModelSet inh : getInheritance().values()) {
-					node = inh.getComponentIfExists(path);
+					node = inh.getComponentIfExists(path, inheritFromParent);
 					if (node != null)
 						break;
 				}

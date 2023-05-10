@@ -27,7 +27,7 @@ public class ExpressoEnv {
 	 */
 	public static final ExpressoEnv STANDARD_JAVA = new ExpressoEnv(
 		ObservableModelSet.build("StandardJava", ObservableModelSet.JAVA_NAME_CHECKER),
-		ClassView.build().withWildcardImport("java.lang.*").build(), null, UnaryOperatorSet.STANDARD_JAVA, BinaryOperatorSet.STANDARD_JAVA)//
+		ClassView.build().withWildcardImport("java.lang").build(), null, UnaryOperatorSet.STANDARD_JAVA, BinaryOperatorSet.STANDARD_JAVA)//
 		.withDefaultNonStructuredParsing();
 
 	private final ObservableModelSet theModels;

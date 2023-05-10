@@ -57,6 +57,21 @@ public class QuickCoreInterpretation implements QonfigInterpretation {
 			session -> interpretQuick(session, QuickBorder.LineBorder.Def::new));
 		interpreter.createWith("titled-border", QuickBorder.TitledBorder.Def.class,
 			session -> interpretQuick(session, QuickBorder.TitledBorder.Def::new));
+
+		interpreter.createWith("on-click", QuickMouseListener.QuickMouseButtonListener.Def.class, session -> interpretQuick(session,
+			(p, el) -> new QuickMouseListener.QuickMouseButtonListener.Def(p, el, QuickMouseListener.MouseButtonEventType.Click)));
+		interpreter.createWith("on-mouse-press", QuickMouseListener.QuickMouseButtonListener.Def.class, session -> interpretQuick(session,
+			(p, el) -> new QuickMouseListener.QuickMouseButtonListener.Def(p, el, QuickMouseListener.MouseButtonEventType.Press)));
+		interpreter.createWith("on-mouse-release", QuickMouseListener.QuickMouseButtonListener.Def.class, session -> interpretQuick(session,
+			(p, el) -> new QuickMouseListener.QuickMouseButtonListener.Def(p, el, QuickMouseListener.MouseButtonEventType.Release)));
+		interpreter.createWith("on-mouse-move", QuickMouseListener.QuickMouseMoveListener.Def.class, session -> interpretQuick(session,
+			(p, el) -> new QuickMouseListener.QuickMouseMoveListener.Def(p, el, QuickMouseListener.MouseMoveEventType.Move)));
+		interpreter.createWith("on-mouse-enter", QuickMouseListener.QuickMouseMoveListener.Def.class, session -> interpretQuick(session,
+			(p, el) -> new QuickMouseListener.QuickMouseMoveListener.Def(p, el, QuickMouseListener.MouseMoveEventType.Enter)));
+		interpreter.createWith("on-mouse-exit", QuickMouseListener.QuickMouseMoveListener.Def.class, session -> interpretQuick(session,
+			(p, el) -> new QuickMouseListener.QuickMouseMoveListener.Def(p, el, QuickMouseListener.MouseMoveEventType.Exit)));
+		interpreter.createWith("on-scroll", QuickMouseListener.QuickScrollListener.Def.class,
+			session -> interpretQuick(session, QuickMouseListener.QuickScrollListener.Def::new));
 		return interpreter;
 	}
 

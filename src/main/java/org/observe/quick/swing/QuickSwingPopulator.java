@@ -10,8 +10,10 @@ import java.awt.Point;
 import java.awt.Toolkit;
 import java.awt.event.FocusEvent;
 import java.awt.event.FocusListener;
+import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseListener;
+import java.awt.event.MouseWheelEvent;
 import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.LinkedList;
@@ -36,7 +38,9 @@ import org.observe.quick.QuickApplication;
 import org.observe.quick.QuickBorder;
 import org.observe.quick.QuickCore;
 import org.observe.quick.QuickDocument2;
+import org.observe.quick.QuickEventListener;
 import org.observe.quick.QuickInterpretation;
+import org.observe.quick.QuickMouseListener;
 import org.observe.quick.QuickTextElement.QuickTextStyle;
 import org.observe.quick.QuickWidget;
 import org.observe.quick.QuickWidget.Interpreted;
@@ -190,6 +194,10 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 		void decorate(ComponentDecorator deco, QuickBorder border, Component[] component) throws ModelInstantiationException;
 	}
 
+	public interface QuickSwingEventListener<L extends QuickEventListener> {
+		void addListener(Component c, L listener) throws ModelInstantiationException;
+	}
+
 	/** Quick interpretation of the core toolkit for Swing */
 	public class QuickCoreSwing implements QuickInterpretation {
 		@Override
@@ -253,6 +261,9 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 				};
 			});
 			modifyForWidget(tx, QuickWidget.Interpreted.class, (qw, qsp, tx2) -> {
+				List<QuickSwingEventListener<QuickEventListener>> listeners = BetterList.of2(//
+					qw.getEventListeners().stream(), //
+					l -> tx2.transform(l, QuickSwingEventListener.class));
 				QuickSwingBorder border = tx2.transform(qw.getBorder(), QuickSwingBorder.class);
 				qsp.addModifier((comp, w) -> {
 					ComponentDecorator deco = new ComponentDecorator();
@@ -268,6 +279,9 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 									new FocusSupport(c), //
 									new MouseValueSupport(c, "pressed", true), //
 									new MouseValueSupport(c, "rightPressed", false)));
+
+								for (int i = 0; i < listeners.size(); i++)
+									listeners.get(i).addListener(c, w.getEventListeners().get(i));
 							} catch (ModelInstantiationException e) {
 								throw new CheckedExceptionWrapper(e);
 							}
@@ -339,6 +353,192 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 					});
 				};
 			});
+			tx.with(QuickMouseListener.QuickMouseButtonListener.Interpreted.class, QuickSwingEventListener.class, (qil, tx2) -> {
+				return (component, ql) -> {
+					SettableValue<Boolean> altPressed = SettableValue.build(boolean.class).withValue(false).build();
+					SettableValue<Boolean> ctrlPressed = SettableValue.build(boolean.class).withValue(false).build();
+					SettableValue<Boolean> shiftPressed = SettableValue.build(boolean.class).withValue(false).build();
+					SettableValue<QuickMouseListener.MouseButton> button = SettableValue.build(QuickMouseListener.MouseButton.class)
+						.build();
+					SettableValue<Integer> x = SettableValue.build(int.class).withValue(0).build();
+					SettableValue<Integer> y = SettableValue.build(int.class).withValue(0).build();
+
+					QuickMouseListener.QuickMouseButtonListener mbl = (QuickMouseListener.QuickMouseButtonListener) ql;
+					QuickMouseListener.MouseButton listenerButton = mbl.getInterpreted().getDefinition().getButton();
+					mbl.setListenerContext(
+						new QuickMouseListener.MouseButtonListenerContext.Default(altPressed, ctrlPressed, shiftPressed, x, y, button));
+					switch (mbl.getInterpreted().getDefinition().getEventType()) {
+					case Click:
+						component.addMouseListener(new MouseAdapter() {
+							@Override
+							public void mouseClicked(MouseEvent evt) {
+								QuickMouseListener.MouseButton eventButton = checkMouseEventType(evt, listenerButton);
+								if (eventButton == null)
+									return;
+								button.set(eventButton, evt);
+								altPressed.set(evt.isAltDown(), evt);
+								ctrlPressed.set(evt.isControlDown(), evt);
+								shiftPressed.set(evt.isShiftDown(), evt);
+								x.set(evt.getX(), evt);
+								y.set(evt.getY(), evt);
+								if (Boolean.FALSE.equals(ql.getFilter().get()))
+									return;
+								ql.getAction().act(evt);
+							}
+						});
+						break;
+					case Press:
+						component.addMouseListener(new MouseAdapter() {
+							@Override
+							public void mousePressed(MouseEvent evt) {
+								QuickMouseListener.MouseButton eventButton = checkMouseEventType(evt, listenerButton);
+								if (eventButton == null)
+									return;
+								button.set(eventButton, evt);
+								altPressed.set(evt.isAltDown(), evt);
+								ctrlPressed.set(evt.isControlDown(), evt);
+								shiftPressed.set(evt.isShiftDown(), evt);
+								x.set(evt.getX(), evt);
+								y.set(evt.getY(), evt);
+								if (Boolean.FALSE.equals(ql.getFilter().get()))
+									return;
+								ql.getAction().act(evt);
+							}
+						});
+						break;
+					case Release:
+						component.addMouseListener(new MouseAdapter() {
+							@Override
+							public void mouseReleased(MouseEvent evt) {
+								QuickMouseListener.MouseButton eventButton = checkMouseEventType(evt, listenerButton);
+								if (eventButton == null)
+									return;
+								button.set(eventButton, evt);
+								altPressed.set(evt.isAltDown(), evt);
+								ctrlPressed.set(evt.isControlDown(), evt);
+								shiftPressed.set(evt.isShiftDown(), evt);
+								x.set(evt.getX(), evt);
+								y.set(evt.getY(), evt);
+								if (Boolean.FALSE.equals(ql.getFilter().get()))
+									return;
+								ql.getAction().act(evt);
+							}
+						});
+						break;
+					default:
+						throw new ModelInstantiationException(
+							"Unrecognized mouse button event type: " + mbl.getInterpreted().getDefinition().getEventType(),
+							mbl.getInterpreted().getDefinition().getElement().getPositionInFile(), 0);
+					}
+				};
+			});
+			tx.with(QuickMouseListener.QuickMouseMoveListener.Interpreted.class, QuickSwingEventListener.class, (qil, tx2) -> {
+				return (component, ql) -> {
+					SettableValue<Boolean> altPressed = SettableValue.build(boolean.class).withValue(false).build();
+					SettableValue<Boolean> ctrlPressed = SettableValue.build(boolean.class).withValue(false).build();
+					SettableValue<Boolean> shiftPressed = SettableValue.build(boolean.class).withValue(false).build();
+					SettableValue<Integer> x = SettableValue.build(int.class).withValue(0).build();
+					SettableValue<Integer> y = SettableValue.build(int.class).withValue(0).build();
+
+					QuickMouseListener.QuickMouseMoveListener mml = (QuickMouseListener.QuickMouseMoveListener) ql;
+					mml.setListenerContext(
+						new QuickMouseListener.MouseListenerContext.Default(altPressed, ctrlPressed, shiftPressed, x, y));
+					switch (mml.getInterpreted().getDefinition().getEventType()) {
+					case Move:
+						component.addMouseMotionListener(new MouseAdapter() {
+							@Override
+							public void mouseMoved(MouseEvent evt) {
+								altPressed.set(evt.isAltDown(), evt);
+								ctrlPressed.set(evt.isControlDown(), evt);
+								shiftPressed.set(evt.isShiftDown(), evt);
+								x.set(evt.getX(), evt);
+								y.set(evt.getY(), evt);
+								if (Boolean.FALSE.equals(ql.getFilter().get()))
+									return;
+								ql.getAction().act(evt);
+							}
+						});
+						break;
+					case Enter:
+						component.addMouseListener(new MouseAdapter() {
+							@Override
+							public void mouseEntered(MouseEvent evt) {
+								altPressed.set(evt.isAltDown(), evt);
+								ctrlPressed.set(evt.isControlDown(), evt);
+								shiftPressed.set(evt.isShiftDown(), evt);
+								x.set(evt.getX(), evt);
+								y.set(evt.getY(), evt);
+								if (Boolean.FALSE.equals(ql.getFilter().get()))
+									return;
+								ql.getAction().act(evt);
+							}
+						});
+						break;
+					case Exit:
+						component.addMouseListener(new MouseAdapter() {
+							@Override
+							public void mouseExited(MouseEvent evt) {
+								altPressed.set(evt.isAltDown(), evt);
+								ctrlPressed.set(evt.isControlDown(), evt);
+								shiftPressed.set(evt.isShiftDown(), evt);
+								x.set(evt.getX(), evt);
+								y.set(evt.getY(), evt);
+								if (Boolean.FALSE.equals(ql.getFilter().get()))
+									return;
+								ql.getAction().act(evt);
+							}
+						});
+						break;
+					default:
+						throw new ModelInstantiationException(
+							"Unrecognized mouse move event type: " + mml.getInterpreted().getDefinition().getEventType(),
+							mml.getInterpreted().getDefinition().getElement().getPositionInFile(), 0);
+					}
+				};
+			});
+			tx.with(QuickMouseListener.QuickScrollListener.Interpreted.class, QuickSwingEventListener.class, (qil, tx2) -> {
+				return (component, ql) -> {
+					SettableValue<Boolean> altPressed = SettableValue.build(boolean.class).withValue(false).build();
+					SettableValue<Boolean> ctrlPressed = SettableValue.build(boolean.class).withValue(false).build();
+					SettableValue<Boolean> shiftPressed = SettableValue.build(boolean.class).withValue(false).build();
+					SettableValue<Integer> x = SettableValue.build(int.class).withValue(0).build();
+					SettableValue<Integer> y = SettableValue.build(int.class).withValue(0).build();
+					SettableValue<Integer> scrollAmount = SettableValue.build(int.class).withValue(0).build();
+
+					QuickMouseListener.QuickScrollListener sl = (QuickMouseListener.QuickScrollListener) ql;
+					sl.setListenerContext(
+						new QuickMouseListener.ScrollListenerContext.Default(altPressed, ctrlPressed, shiftPressed, x, y, scrollAmount));
+					component.addMouseWheelListener(new MouseAdapter() {
+						@Override
+						public void mouseWheelMoved(MouseWheelEvent evt) {
+							altPressed.set(evt.isAltDown(), evt);
+							ctrlPressed.set(evt.isControlDown(), evt);
+							shiftPressed.set(evt.isShiftDown(), evt);
+							x.set(evt.getX(), evt);
+							y.set(evt.getY(), evt);
+							scrollAmount.set(evt.getUnitsToScroll(), evt);
+							if (Boolean.FALSE.equals(ql.getFilter().get()))
+								return;
+							ql.getAction().act(evt);
+						}
+					});
+				};
+			});
+		}
+
+		static QuickMouseListener.MouseButton checkMouseEventType(MouseEvent evt, QuickMouseListener.MouseButton listenerButton) {
+			QuickMouseListener.MouseButton eventButton;
+			if (SwingUtilities.isLeftMouseButton(evt))
+				eventButton = QuickMouseListener.MouseButton.Left;
+			else if (SwingUtilities.isRightMouseButton(evt))
+				eventButton = QuickMouseListener.MouseButton.Right;
+			else if (SwingUtilities.isMiddleMouseButton(evt))
+				eventButton = QuickMouseListener.MouseButton.Middle;
+			else
+				return null; // I dunno, can't handle it
+			if (listenerButton != null && eventButton != listenerButton)
+				return null;
+			return eventButton;
 		}
 
 		static void adjustFont(FontAdjuster font, QuickTextStyle style) {
@@ -699,14 +899,15 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 				QuickBaseSwing::interpretBox);
 			QuickSwingPopulator.<QuickFieldPanel, QuickFieldPanel.Interpreted> interpretContainer(tx,
 				gen(QuickFieldPanel.Interpreted.class), QuickBaseSwing::interpretFieldPanel);
-			modifyForAddOn(tx, QuickField.Interpreted.class, (qw, qsp, tx2) -> {
-				qsp.addModifier((comp, w) -> {
-					if (w.getAddOn(QuickField.class).getName() != null)
-						comp.withFieldName(w.getAddOn(QuickField.class).getName());
-					if (qw.getDefinition().isFill())
-						comp.fill();
+			QuickSwingPopulator.<QuickWidget, QuickField, QuickField.Interpreted> modifyForAddOn(tx, QuickField.Interpreted.class,
+				(Class<QuickWidget.Interpreted<QuickWidget>>) (Class<?>) QuickWidget.Interpreted.class, (ao, qsp, tx2) -> {
+					qsp.addModifier((comp, w) -> {
+						if (w.getAddOn(QuickField.class).getFieldLabel() != null)
+							comp.withFieldName(w.getAddOn(QuickField.class).getFieldLabel());
+						if (ao.getDefinition().isFill())
+							comp.fill();
+					});
 				});
-			});
 
 			// Box layouts
 			tx.with(QuickInlineLayout.Interpreted.class, QuickSwingLayout.class, QuickBaseSwing::interpretInlineLayout);
@@ -1032,21 +1233,24 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 	 * Utility for modification of swing widgets by Quick add-ons
 	 *
 	 * @param <W> The type of the Quick widget to interpret
-	 * @param <I> The type of the interpreted quick widget
+	 * @param <AOI> The type of the interpreted quick widget
 	 *
 	 * @param transformer The transformer builder to populate
-	 * @param interpretedType The type of the interpreted quick widget
+	 * @param widgetType The type of the interpreted quick widget
 	 * @param modifier Modifies a {@link QuickSwingPopulator} for interpreted widgets of the given type
 	 */
-	public static <W extends QuickWidget, AO extends QuickAddOn<W>, I extends QuickAddOn.Interpreted<W, ? extends AO>> void modifyForAddOn(//
-		Transformer.Builder<ExpressoInterpretationException> transformer, Class<I> interpretedType,
-		ExTriConsumer<? super I, QuickSwingPopulator<W>, Transformer<ExpressoInterpretationException>, ExpressoInterpretationException> modifier) {
-		transformer.modifyWith(interpretedType, (Class<QuickSwingPopulator<W>>) (Class<?>) QuickSwingPopulator.class,
-			new Transformer.Modifier<I, QuickSwingPopulator<W>, ExpressoInterpretationException>() {
+	public static <W extends QuickWidget, AO extends QuickAddOn<? super W>, AOI extends QuickAddOn.Interpreted<? super W, ? extends AO>> void modifyForAddOn(//
+		Transformer.Builder<ExpressoInterpretationException> transformer, Class<AOI> interpretedType,
+		Class<? extends QuickWidget.Interpreted<W>> widgetType,
+			ExTriConsumer<? super AOI, QuickSwingPopulator<?>, Transformer<ExpressoInterpretationException>, ExpressoInterpretationException> modifier) {
+		transformer.modifyWith(widgetType, (Class<QuickSwingPopulator<W>>) (Class<?>) QuickSwingPopulator.class,
+			new Transformer.Modifier<QuickWidget.Interpreted<W>, QuickSwingPopulator<W>, ExpressoInterpretationException>() {
 			@Override
-			public <T2 extends QuickSwingPopulator<W>> T2 modify(I source, T2 value, Transformer<ExpressoInterpretationException> tx)
-				throws ExpressoInterpretationException {
-				modifier.accept(source, value, tx);
+			public <T2 extends QuickSwingPopulator<W>> T2 modify(QuickWidget.Interpreted<W> source, T2 value,
+				Transformer<ExpressoInterpretationException> tx) throws ExpressoInterpretationException {
+				AOI addOn = source.getAddOn(interpretedType);
+				if (addOn != null)
+					modifier.accept(addOn, value, tx);
 				return value;
 			}
 		});

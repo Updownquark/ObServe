@@ -103,7 +103,7 @@
 		<add-on name="column-editor" requires="value-widget" />
 
 		<add-on name="field" requires="widget">
-			<attribute name="field-name" type="expression" specify="optional" />
+			<attribute name="field-label" type="expression" specify="optional" />
 			<attribute name="fill" type="boolean" specify="optional" />
 		</add-on>
 		
