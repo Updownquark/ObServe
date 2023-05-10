@@ -124,7 +124,7 @@ public interface QuickValueWidget<T> extends QuickWidget {
 		@Override
 		public QuickValueWidget.Abstract<T> update(ModelSetInstance models) throws ModelInstantiationException {
 			super.update(models);
-			theValue.set(getInterpreted().getValue().get(models), null);
+			theValue.set(getInterpreted().getValue().get(getModels()), null);
 			return this;
 		}
 	}

@@ -72,6 +72,12 @@ public class QuickCoreInterpretation implements QonfigInterpretation {
 			(p, el) -> new QuickMouseListener.QuickMouseMoveListener.Def(p, el, QuickMouseListener.MouseMoveEventType.Exit)));
 		interpreter.createWith("on-scroll", QuickMouseListener.QuickScrollListener.Def.class,
 			session -> interpretQuick(session, QuickMouseListener.QuickScrollListener.Def::new));
+		interpreter.createWith("on-type", QuickKeyListener.QuickKeyTypedListener.Def.class,
+			session -> interpretQuick(session, QuickKeyListener.QuickKeyTypedListener.Def::new));
+		interpreter.createWith("on-key-press", QuickKeyListener.QuickKeyCodeListener.Def.class,
+			session -> interpretQuick(session, (p, el) -> new QuickKeyListener.QuickKeyCodeListener.Def(p, el, true)));
+		interpreter.createWith("on-key-release", QuickKeyListener.QuickKeyCodeListener.Def.class,
+			session -> interpretQuick(session, (p, el) -> new QuickKeyListener.QuickKeyCodeListener.Def(p, el, false)));
 		return interpreter;
 	}
 

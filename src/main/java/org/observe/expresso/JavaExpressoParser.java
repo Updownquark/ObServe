@@ -10,22 +10,7 @@ import java.util.List;
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CommonTokenStream;
 import org.antlr.v4.runtime.tree.ParseTree;
-import org.observe.expresso.ops.ArrayAccessExpression;
-import org.observe.expresso.ops.AssignmentExpression;
-import org.observe.expresso.ops.BinaryOperator;
-import org.observe.expresso.ops.BufferedExpression;
-import org.observe.expresso.ops.BufferedName;
-import org.observe.expresso.ops.BufferedType;
-import org.observe.expresso.ops.CastExpression;
-import org.observe.expresso.ops.ClassInstanceExpression;
-import org.observe.expresso.ops.ConditionalExpression;
-import org.observe.expresso.ops.ConstructorInvocation;
-import org.observe.expresso.ops.ExternalLiteral;
-import org.observe.expresso.ops.InstanceofExpression;
-import org.observe.expresso.ops.MethodInvocation;
-import org.observe.expresso.ops.NameExpression;
-import org.observe.expresso.ops.ParentheticExpression;
-import org.observe.expresso.ops.UnaryOperator;
+import org.observe.expresso.ops.*;
 import org.qommons.StringUtils;
 import org.qommons.collect.BetterList;
 
@@ -536,7 +521,7 @@ public class JavaExpressoParser implements ExpressoParser {
 
 	private static int getWhiteSpaceBefore(String text, int index) {
 		int start;
-		for (start = index - 1; start >= 0 && Character.isWhitespace(text.charAt(start)); start--) {
+		for (start = index; start > 0 && Character.isWhitespace(text.charAt(start - 1)); start--) {
 		}
 		return index - start; // TODO -1
 	}

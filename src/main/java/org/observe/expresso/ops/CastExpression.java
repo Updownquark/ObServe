@@ -121,6 +121,22 @@ public class CastExpression implements ObservableExpression {
 			&& !TypeTokens.get().isAssignable(valueType, sourceType))
 			throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(),
 				"Cannot cast value of type " + sourceType + " to " + valueType);
+		TypeTokens.TypeConverter<S, T> converter;
+		try {
+			converter = TypeTokens.get().getCast(sourceType, valueType, true, false);
+			TypeTokens.TypeConverter<T, S> reverse;
+			try {
+				reverse = TypeTokens.get().getCast(valueType, sourceType, true, false);
+				return valueContainer.map(ModelTypes.Value.forType(valueType), vc -> vc.transformReversible(valueType, tx -> tx//
+					.map(converter).withReverse(reverse)));
+			} catch (IllegalArgumentException e) {
+				String reverseError = "Cannot convert from " + valueType + " to " + sourceType;
+				return valueContainer.map(ModelTypes.Value.forType(valueType),
+					vc -> SettableValue.asSettable(vc.transform(valueType, tx -> tx//
+						.map(converter)), __ -> reverseError));
+			}
+		} catch (IllegalArgumentException e) {
+		}
 		Class<T> valueClass = TypeTokens.get().wrap(TypeTokens.getRawType(valueType));
 		Class<S> sourceClass = TypeTokens.getRawType(sourceType);
 		return valueContainer.map(ModelTypes.Value.forType(valueType), vc -> vc.transformReversible(valueType, tx -> tx//

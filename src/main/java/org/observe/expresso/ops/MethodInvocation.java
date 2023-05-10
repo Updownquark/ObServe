@@ -17,6 +17,7 @@ import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet.ModelValueSynth;
 import org.observe.expresso.TypeConversionException;
 import org.observe.util.TypeTokens;
+import org.qommons.ArrayUtils;
 
 import com.google.common.reflect.TypeToken;
 
@@ -153,9 +154,12 @@ public class MethodInvocation extends Invocation {
 			} catch (ExpressoInterpretationException e) {
 				throw new ExpressoEvaluationException(expressionOffset, theContext.getExpressionLength(), e.getMessage(), e);
 			}
-			Invocation.MethodResult<Method, MV> result = Invocation.findMethod(TypeTokens.getRawType(ctxType).getMethods(),
-				theMethodName.getName(), ctxType, false, Arrays.asList(args), type, env, Invocation.ExecutableImpl.METHOD, this,
-				expressionOffset);
+			Class<?> rawCtxType = TypeTokens.getRawType(ctxType);
+			Method[] methods = rawCtxType.getMethods();
+			if (rawCtxType.isInterface())
+				methods = ArrayUtils.addAll(methods, Object.class.getMethods());
+			Invocation.MethodResult<Method, MV> result = Invocation.findMethod(methods, theMethodName.getName(), ctxType, false,
+				Arrays.asList(args), type, env, Invocation.ExecutableImpl.METHOD, this, expressionOffset);
 			if (result != null) {
 				ModelValueSynth<SettableValue<?>, SettableValue<?>>[] realArgs = new ModelValueSynth[getArguments().size()];
 				for (int a = 0; a < realArgs.length; a++)

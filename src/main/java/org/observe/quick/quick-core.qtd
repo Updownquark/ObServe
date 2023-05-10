@@ -107,20 +107,17 @@
 		<element-def name="key-listener" extends="event-listener" abstract="true" />
 		<element-def name="key-code-listener" extends="key-listener" abstract="true">
 			<element-model>
-				<value name="key" type="KeyCode" />
+				<value name="keyCode" type="org.observe.quick.KeyCode" />
 			</element-model>
+			<attribute name="key" type="identifier" specify="optional" />
 		</element-def>
-		<element-def name="on-key-press" extends="key-code-listener">
-			<attribute name="key" type="identifier" />
-		</element-def>
-		<element-def name="on-key-release" extends="key-code-listener">
-			<attribute name="key" type="identifier" />
-		</element-def>
+		<element-def name="on-key-press" extends="key-code-listener" />
+		<element-def name="on-key-release" extends="key-code-listener" />
 		<element-def name="on-type" extends="key-listener">
 			<element-model>
 				<value name="typedChar" type="char" />
 			</element-model>
-			<attribute name="char" type="string" />
+			<attribute name="char" type="string" specify="optional" />
 		</element-def>
 
 		<element-def name="container" extends="widget" abstract="true">

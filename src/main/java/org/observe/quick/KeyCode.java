@@ -1,5 +1,8 @@
 package org.observe.quick;
 
+import java.util.HashMap;
+import java.util.Map;
+
 /** Keyboard keys that may be represented by key events */
 public enum KeyCode {
 	/** The letter a on the keyboard */
@@ -248,4 +251,34 @@ public enum KeyCode {
 	META,
 	/** The help key */
 	HELP;
+
+	public final String quickName;
+
+	private KeyCode() {
+		quickName = name().toLowerCase().replaceAll("_", "-");
+	}
+
+	@Override
+	public String toString() {
+		return quickName;
+	}
+
+	private static boolean ARE_KEY_CODES_NAMED;
+	private static final Map<String, KeyCode> KEY_CODES_BY_NAME = new HashMap<>();
+
+	public static KeyCode parse(String keyCodeName) throws IllegalArgumentException {
+		if (!ARE_KEY_CODES_NAMED)
+			nameKeyCodes();
+		KeyCode found = KEY_CODES_BY_NAME.get(keyCodeName.toLowerCase());
+		if (found == null)
+			throw new IllegalArgumentException("Unrecognized key code: '" + keyCodeName + "'");
+		return found;
+	}
+
+	private static synchronized void nameKeyCodes() {
+		if (ARE_KEY_CODES_NAMED)
+			return;
+		for (KeyCode code : values())
+			KEY_CODES_BY_NAME.put(code.quickName, code);
+	}
 }

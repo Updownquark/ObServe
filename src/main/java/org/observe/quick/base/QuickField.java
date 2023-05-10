@@ -34,7 +34,7 @@ public class QuickField extends QuickAddOn.Abstract<QuickWidget> {
 
 		@Override
 		public Def update(ExpressoQIS session) throws QonfigInterpretationException {
-			theName = session.getAttributeExpression("field-name");
+			theName = session.getAttributeExpression("field-label");
 			isFill = Boolean.TRUE.equals(session.getAttribute("fill", Boolean.class));
 			return this;
 		}
@@ -78,7 +78,7 @@ public class QuickField extends QuickAddOn.Abstract<QuickWidget> {
 		}
 	}
 
-	private SettableValue<String> theName;
+	private SettableValue<String> theFieldLabel;
 
 	public QuickField(Interpreted interpreted, QuickWidget widget) {
 		super(interpreted, widget);
@@ -94,13 +94,13 @@ public class QuickField extends QuickAddOn.Abstract<QuickWidget> {
 		return super.getElement();
 	}
 
-	public SettableValue<String> getName() {
-		return theName;
+	public SettableValue<String> getFieldLabel() {
+		return theFieldLabel;
 	}
 
 	@Override
 	public QuickField update(ModelSetInstance models) throws ModelInstantiationException {
-		theName = getInterpreted().getName() == null ? null : getInterpreted().getName().get(models);
+		theFieldLabel = getInterpreted().getName() == null ? null : getInterpreted().getName().get(models);
 		return this;
 	}
 }

@@ -170,6 +170,7 @@
 			<attribute name="commit-on-type" type="boolean" default="false" />
 		</element-def>
 		<element-def name="text-field" extends="editable-text-widget">
+			<attribute name="empty-text" type="expression" specify="optional" />
 			<attribute name="columns" type="int" specify="optional" />
 		</element-def>
 		<element-def name="text-area" extends="editable-text-widget">

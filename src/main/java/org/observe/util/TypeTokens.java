@@ -9,18 +9,7 @@ import java.lang.reflect.Type;
 import java.lang.reflect.TypeVariable;
 import java.lang.reflect.WildcardType;
 import java.text.ParseException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -978,6 +967,22 @@ public class TypeTokens {
 	 * @throws IllegalArgumentException If values of the right type cannot be cast to the left type in general
 	 */
 	public <S, T> TypeConverter<S, T> getCast(TypeToken<S> source, TypeToken<T> target, boolean safe) throws IllegalArgumentException {
+		return getCast(source, target, safe, true);
+	}
+
+	/**
+	 * @param <S> The compile-time type to cast from
+	 * @param <T> The compile-time type to cast to
+	 * @param source The type to cast from
+	 * @param target The type to cast to
+	 * @param safe For primitive right types, whether to use a safe value (0 or false) if the left value is null, as opposed to throwing a
+	 *        {@link NullPointerException}
+	 * @return A function that takes an instance of the right type and returns it as an instance of the left type, throwing a a
+	 *         {@link NullPointerException} if the right value is null and the left type is primitive
+	 * @throws IllegalArgumentException If values of the right type cannot be cast to the left type in general
+	 */
+	public <S, T> TypeConverter<S, T> getCast(TypeToken<S> source, TypeToken<T> target, boolean safe, boolean downCastOnly)
+		throws IllegalArgumentException {
 		if (target.getType() instanceof TypeVariable && ((TypeVariable<?>) target.getType()).getBounds().length == 1)
 			target = (TypeToken<T>) of(((TypeVariable<?>) target.getType()).getBounds()[0]);
 		if (target.isAssignableFrom(source)) {
@@ -1045,7 +1050,7 @@ public class TypeTokens {
 				};
 				// Now left!=right and left!=double.class
 			} else if (primitiveSource == double.class || primitiveSource == float.class || primitiveSource == long.class)
-				throw new IllegalArgumentException("Cannot cast " + source + " to " + target);
+				fn = null;
 			// Now right can only be int, short, byte, or char
 			else if (primitiveTarget == long.class) {
 				fn = v -> {
@@ -1072,10 +1077,45 @@ public class TypeTokens {
 							return Character.valueOf((char) n.byteValue());
 					};
 				} else
-					throw new IllegalArgumentException("Cannot cast " + target + " to " + source);
+					fn = null;
 			} else
-				throw new IllegalArgumentException("Cannot cast " + target + " to " + source);
+				fn = null;
 
+			if (fn == null) {
+				if (downCastOnly)
+					throw new IllegalArgumentException("Cannot cast " + target + " to " + source);
+				if (primitiveTarget == float.class) {
+					fn = v -> {
+						Number n = toNumber.apply(v);
+						return n == null ? null : n.floatValue();
+					};
+				} else if (primitiveTarget == long.class) {
+					fn = v -> {
+						Number n = toNumber.apply(v);
+						return n == null ? null : n.longValue();
+					};
+				} else if (primitiveTarget == int.class) {
+					fn = v -> {
+						Number n = toNumber.apply(v);
+						return n == null ? null : n.intValue();
+					};
+				} else if (primitiveTarget == short.class) {
+					fn = v -> {
+						Number n = toNumber.apply(v);
+						return n == null ? null : n.shortValue();
+					};
+				} else if (primitiveTarget == byte.class) {
+					fn = v -> {
+						Number n = toNumber.apply(v);
+						return n == null ? null : n.byteValue();
+					};
+				} else if (primitiveTarget == char.class) {
+					fn = v -> {
+						Number n = toNumber.apply(v);
+						return n == null ? null : Character.valueOf((char) n.intValue());
+					};
+				}
+			}
 			return new TypeConverter<>(target, "primitive-cast", (Function<S, T>) fn);
 		} else if (isAssignable(target, source))
 			return new TypeConverter<>((TypeToken<T>) source, "no-op", v -> (T) v);

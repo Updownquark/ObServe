@@ -216,9 +216,14 @@ public interface ObservableExpression {
 				MV value = (MV) createValue(type.getType(0), convert.apply(theValue));
 				return ModelValueSynth.of((ModelInstanceType<M, MV>) ModelTypes.Value.forType(theValue.getClass()),
 					LambdaUtils.constantExFn(value, theText, null));
-			} else
-				throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(),
-					"'" + theText + "' cannot be evaluated as a " + type);
+			} else {
+				// Don't throw this. Maybe the type architecture can convert it.
+				// throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(),
+				// "'" + theText + "' cannot be evaluated as a " + type);
+				MV value = (MV) createValue(TypeTokens.get().of(theValue.getClass()), theValue);
+				return ModelValueSynth.of((ModelInstanceType<M, MV>) ModelTypes.Value.forType(theValue.getClass()),
+					LambdaUtils.constantExFn(value, theText, null));
+			}
 		}
 
 		SettableValue<?> createValue(TypeToken<?> type, Object value) {
