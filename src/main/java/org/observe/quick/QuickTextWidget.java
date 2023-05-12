@@ -50,13 +50,16 @@ public interface QuickTextWidget<T> extends QuickValueWidget<T> {
 	public interface Def<W extends QuickTextWidget<?>> extends QuickValueWidget.Def<W> {
 		CompiledExpression getFormat();
 
-		boolean isEditable();
+		boolean isTypeEditable();
+
+		CompiledExpression isEditable();
 
 		@Override
 		Interpreted<?, ? extends W> interpret(QuickElement.Interpreted<?> parent);
 
 		public abstract class Abstract<T, W extends QuickTextWidget<T>> extends QuickValueWidget.Def.Abstract<T, W> implements Def<W> {
 			private CompiledExpression theFormat;
+			private CompiledExpression isEditable;
 
 			public Abstract(QuickElement.Def<?> parent, QonfigElement element) {
 				super(parent, element);
@@ -68,9 +71,15 @@ public interface QuickTextWidget<T> extends QuickValueWidget<T> {
 			}
 
 			@Override
+			public CompiledExpression isEditable() {
+				return isEditable;
+			}
+
+			@Override
 			public Def.Abstract<T, W> update(AbstractQIS<?> session) throws QonfigInterpretationException {
 				super.update(session);
 				theFormat = getExpressoSession().getAttributeExpression("format");
+				isEditable = getExpressoSession().getAttributeExpression("editable");
 				return this;
 			}
 		}
@@ -82,9 +91,12 @@ public interface QuickTextWidget<T> extends QuickValueWidget<T> {
 
 		InterpretedValueSynth<SettableValue<?>, SettableValue<Format<T>>> getFormat();
 
+		InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> isEditable();
+
 		public abstract class Abstract<T, W extends QuickTextWidget<T>> extends QuickValueWidget.Interpreted.Abstract<T, W>
 		implements Interpreted<T, W> {
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<Format<T>>> theFormat;
+			private InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> isEditable;
 
 			public Abstract(Def<? super W> definition, QuickElement.Interpreted<?> parent) {
 				super(definition, parent);
@@ -98,6 +110,11 @@ public interface QuickTextWidget<T> extends QuickValueWidget<T> {
 			@Override
 			public InterpretedValueSynth<SettableValue<?>, SettableValue<Format<T>>> getFormat() {
 				return theFormat;
+			}
+
+			@Override
+			public InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> isEditable() {
+				return isEditable;
 			}
 
 			@Override
@@ -124,13 +141,15 @@ public interface QuickTextWidget<T> extends QuickValueWidget<T> {
 						defaultFormat = (Format<T>) DEFAULT_INSTANT_FORMAT;
 					else if (raw == Duration.class)
 						defaultFormat = (Format<T>) DEFAULT_DURATION_FORMAT;
-					else if (getDefinition().isEditable())
+					else if (getDefinition().isTypeEditable())
 						throw new ExpressoInterpretationException("No format specified and no default available for type " + valueType,
 							getDefinition().getExpressoSession().getElement().getPositionInFile(), 0);
 					else
 						defaultFormat = (Format<T>) TO_STRING_FORMAT;
 					theFormat = ModelValueSynth.literal(formatType, defaultFormat, "default-" + raw.getSimpleName() + "-format");
 				}
+				isEditable = getDefinition().isEditable() == null ? null
+					: getDefinition().isEditable().evaluate(ModelTypes.Value.BOOLEAN).interpret();
 				return this;
 			}
 		}
@@ -141,18 +160,39 @@ public interface QuickTextWidget<T> extends QuickValueWidget<T> {
 
 	SettableValue<Format<T>> getFormat();
 
+	SettableValue<Boolean> isEditable();
+
+	default String getCurrentText() {
+		T value = getValue().get();
+		Format<T> format = getFormat().get();
+		if (format != null)
+			return format.format(value);
+		else if (value == null)
+			return "";
+		else
+			return value.toString();
+	}
+
 	public abstract class Abstract<T> extends QuickValueWidget.Abstract<T> implements QuickTextWidget<T> {
 		private final SettableValue<SettableValue<Format<T>>> theFormat;
+		private final SettableValue<SettableValue<Boolean>> isEditable;
 
 		public Abstract(QuickTextWidget.Interpreted<T, ?> interpreted, QuickElement parent) {
 			super(interpreted, parent);
 			theFormat = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Format<T>>> parameterized(//
 				interpreted.getFormat().getType().getType(0))).build();
+			isEditable = SettableValue
+				.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Boolean>> parameterized(boolean.class)).build();
 		}
 
 		@Override
 		public SettableValue<Format<T>> getFormat() {
 			return SettableValue.flatten(theFormat);
+		}
+
+		@Override
+		public SettableValue<Boolean> isEditable() {
+			return SettableValue.flatten(isEditable);
 		}
 
 		@Override
@@ -164,6 +204,7 @@ public interface QuickTextWidget<T> extends QuickValueWidget<T> {
 		public QuickTextWidget.Abstract<T> update(ModelSetInstance models) throws ModelInstantiationException {
 			super.update(models);
 			theFormat.set(getInterpreted().getFormat().get(getModels()), null);
+			isEditable.set(getInterpreted().isEditable() == null ? null : getInterpreted().isEditable().get(getModels()), null);
 			return this;
 		}
 	}

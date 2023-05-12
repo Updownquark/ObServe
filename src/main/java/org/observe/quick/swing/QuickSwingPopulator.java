@@ -3,11 +3,13 @@ package org.observe.quick.swing;
 import java.awt.AWTEvent;
 import java.awt.Color;
 import java.awt.Component;
+import java.awt.Container;
 import java.awt.EventQueue;
 import java.awt.IllegalComponentStateException;
 import java.awt.LayoutManager;
 import java.awt.Point;
 import java.awt.Toolkit;
+import java.awt.Window;
 import java.awt.event.FocusEvent;
 import java.awt.event.FocusListener;
 import java.awt.event.KeyAdapter;
@@ -22,18 +24,27 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
+import javax.swing.Icon;
+import javax.swing.JButton;
+import javax.swing.JCheckBox;
 import javax.swing.JComponent;
 import javax.swing.JFrame;
+import javax.swing.JLabel;
+import javax.swing.JPopupMenu;
 import javax.swing.SwingUtilities;
 
 import org.observe.Observable;
+import org.observe.ObservableAction;
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
+import org.observe.SimpleObservable;
 import org.observe.Subscription;
 import org.observe.collect.ObservableCollection;
 import org.observe.expresso.ExpressoInterpretationException;
+import org.observe.expresso.ExpressoRuntimeException;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.quick.*;
 import org.observe.quick.QuickTextElement.QuickTextStyle;
@@ -44,11 +55,22 @@ import org.observe.quick.base.QuickLayout;
 import org.observe.quick.base.QuickSize;
 import org.observe.util.TypeTokens;
 import org.observe.util.swing.CategoryRenderStrategy;
+import org.observe.util.swing.CategoryRenderStrategy.CategoryKeyListener;
+import org.observe.util.swing.CategoryRenderStrategy.CategoryMouseListener;
 import org.observe.util.swing.ComponentDecorator;
 import org.observe.util.swing.FontAdjuster;
 import org.observe.util.swing.JustifiedBoxLayout;
+import org.observe.util.swing.ModelCell;
+import org.observe.util.swing.ObservableCellRenderer;
+import org.observe.util.swing.ObservableCellRenderer.AbstractObservableCellRenderer;
+import org.observe.util.swing.PanelPopulation;
+import org.observe.util.swing.PanelPopulation.AbstractComponentEditor;
+import org.observe.util.swing.PanelPopulation.Alert;
+import org.observe.util.swing.PanelPopulation.ButtonEditor;
 import org.observe.util.swing.PanelPopulation.ComponentEditor;
 import org.observe.util.swing.PanelPopulation.ContainerPopulator;
+import org.observe.util.swing.PanelPopulation.FieldEditor;
+import org.observe.util.swing.PanelPopulation.MenuBuilder;
 import org.observe.util.swing.PanelPopulation.PanelPopulator;
 import org.observe.util.swing.PanelPopulation.WindowBuilder;
 import org.observe.util.swing.WindowPopulation;
@@ -61,7 +83,8 @@ import org.qommons.Transformer;
 import org.qommons.Transformer.Builder;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
-import org.qommons.ex.CheckedExceptionWrapper;
+import org.qommons.config.QonfigAddOn;
+import org.qommons.config.QonfigElement;
 import org.qommons.ex.ExBiConsumer;
 import org.qommons.ex.ExBiFunction;
 import org.qommons.ex.ExRunnable;
@@ -116,7 +139,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 					try {
 						modifier.accept(comp, quick);
 					} catch (ModelInstantiationException e) {
-						throw new CheckedExceptionWrapper(e);
+						throw new ExpressoRuntimeException(e);
 					}
 				};
 				modifiers.add(populationModifier);
@@ -125,7 +148,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 
 			try {
 				populate.run();
-			} catch (CheckedExceptionWrapper e) {
+			} catch (ExpressoRuntimeException e) {
 				if (e.getCause() instanceof ModelInstantiationException)
 					throw (ModelInstantiationException) e.getCause();
 				throw e;
@@ -238,14 +261,14 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 								try {
 									interpretedBody.populate(content, doc.getBody());
 								} catch (ModelInstantiationException e) {
-									throw new CheckedExceptionWrapper(e);
+									throw new ExpressoRuntimeException(e);
 								}
 							});
 							w.run(null);
 						});
 					} catch (InterruptedException e) {
 					} catch (InvocationTargetException e) {
-						if (e.getTargetException() instanceof CheckedExceptionWrapper
+						if (e.getTargetException() instanceof ExpressoRuntimeException
 							&& e.getTargetException().getCause() instanceof ModelInstantiationException)
 							throw (ModelInstantiationException) e.getTargetException().getCause();
 						System.err.println("Unhandled error");
@@ -257,6 +280,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 				};
 			});
 			modifyForWidget(tx, QuickWidget.Interpreted.class, (qw, qsp, tx2) -> {
+				boolean renderer = isRenderer(qw.getDefinition().getElement());
 				List<QuickSwingEventListener<QuickEventListener>> listeners = BetterList.of2(//
 					qw.getEventListeners().stream(), //
 					l -> tx2.transform(l, QuickSwingEventListener.class));
@@ -269,33 +293,37 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 						comp.modifyComponent(c -> {
 							revert[0] = deco.decorate(c);
 							component[0] = c;
-							try {
-								w.setContext(new QuickWidget.WidgetContext.Default(//
-									new MouseValueSupport(c, "hovered", null), //
-									new FocusSupport(c), //
-									new MouseValueSupport(c, "pressed", true), //
-									new MouseValueSupport(c, "rightPressed", false)));
+							if (!renderer) {
+								try {
+									w.setContext(new QuickWidget.WidgetContext.Default(//
+										new MouseValueSupport(c, "hovered", null), //
+										new FocusSupport(c), //
+										new MouseValueSupport(c, "pressed", true), //
+										new MouseValueSupport(c, "rightPressed", false)));
 
-								for (int i = 0; i < listeners.size(); i++)
-									listeners.get(i).addListener(c, w.getEventListeners().get(i));
-							} catch (ModelInstantiationException e) {
-								throw new CheckedExceptionWrapper(e);
+									for (int i = 0; i < listeners.size(); i++)
+										listeners.get(i).addListener(c, w.getEventListeners().get(i));
+								} catch (ModelInstantiationException e) {
+									throw new ExpressoRuntimeException(e);
+								}
 							}
 						});
-						if (w.getTooltip() != null)
-							comp.withTooltip(w.getTooltip());
-						if (w.isVisible() != null)
-							comp.visibleWhen(w.isVisible());
+						if (!renderer) {
+							if (w.getTooltip() != null)
+								comp.withTooltip(w.getTooltip());
+							if (w.isVisible() != null)
+								comp.visibleWhen(w.isVisible());
+						}
 						if (border != null) {
 							comp.decorate(deco2 -> {
 								try {
 									border.decorate(deco2, w.getBorder(), component);
 								} catch (ModelInstantiationException e) {
-									throw new CheckedExceptionWrapper(e);
+									throw new ExpressoRuntimeException(e);
 								}
 							});
 						}
-					} catch (CheckedExceptionWrapper e) {
+					} catch (ExpressoRuntimeException e) {
 						if (e.getCause() instanceof ModelInstantiationException)
 							throw (ModelInstantiationException) e.getCause();
 						throw e;
@@ -305,7 +333,6 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 					deco.withBackground(color.get());
 					Observable.or(color.noInitChanges(), fontChanges(w.getStyle())).act(__ -> {
 						adjustFont(deco.reset(), w.getStyle());
-						System.out.println(w + " font=" + deco.getForeground());
 						deco.withBackground(color.get());
 						if (component[0] != null) {
 							revert[0].run();
@@ -582,6 +609,18 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 					});
 				};
 			});
+		}
+
+		private boolean isRenderer(QonfigElement element) {
+			for (QonfigAddOn inh : element.getType().getFullInheritance().values()) {
+				if (inh.getDeclarer().getName().equals(QuickCoreInterpretation.NAME) && inh.getName().equals("renderer"))
+					return true;
+			}
+			for (QonfigAddOn inh : element.getInheritance().values()) {
+				if (inh.getDeclarer().getName().equals(QuickCoreInterpretation.NAME) && inh.getName().equals("renderer"))
+					return true;
+			}
+			return false;
 		}
 
 		static QuickMouseListener.MouseButton checkMouseEventType(MouseEvent evt, QuickMouseListener.MouseButton listenerButton) {
@@ -1183,12 +1222,24 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 
 			@Override
 			public Boolean set(Boolean value, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
+				if (value.booleanValue()) {
+					if (theComponent.isFocusable())
+						throw new IllegalArgumentException("This component cannot be focused");
+					else if (!theComponent.isFocusOwner())
+						theComponent.requestFocus();
+				} else if (theComponent.isFocusOwner()) {
+					Window w = SwingUtilities.getWindowAncestor(theComponent);
+					if (w != null)
+						w.requestFocus();
+				}
 				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
 			}
 
 			@Override
 			public String isAcceptable(Boolean value) {
-				return StdMsg.UNSUPPORTED_OPERATION;
+				if (value.booleanValue() && !theComponent.isFocusable())
+					return "This component cannot be focused";
+				return null;
 			}
 
 			@Override
@@ -1283,7 +1334,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 						try {
 							contents.get(c).populate(p, content);
 						} catch (ModelInstantiationException e) {
-							throw new CheckedExceptionWrapper(e);
+							throw new ExpressoRuntimeException(e);
 						}
 						c++;
 					}
@@ -1421,13 +1472,15 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 							quick.setContext(new QuickEditableTextWidget.EditableTextWidgetContext.Default(//
 								tf2.getErrorState(), tf2.getWarningState()));
 						} catch (ModelInstantiationException e) {
-							throw new CheckedExceptionWrapper(e);
+							throw new ExpressoRuntimeException(e);
 						}
 						if (commitOnType)
 							tf2.setCommitOnType(commitOnType);
 						if (columns != null)
 							tf2.withColumns(columns);
 						quick.getEmptyText().changes().takeUntil(tf.getUntil()).act(evt -> tf2.setEmptyText(evt.getNewValue()));
+						quick.isEditable().changes().takeUntil(tf.getUntil())
+						.act(evt -> tf2.setEditable(!Boolean.FALSE.equals(evt.getNewValue())));
 					});
 				});
 			});
@@ -1451,7 +1504,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 						try {
 							contents.get(c).populate(p, content);
 						} catch (ModelInstantiationException e) {
-							throw new CheckedExceptionWrapper(e);
+							throw new ExpressoRuntimeException(e);
 						}
 						c++;
 					}
@@ -1479,23 +1532,781 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 					SettableValue.build(int.class).withValue(0).build()//
 					);
 				quick.setContext(ctx);
+				ComponentEditor<?, ?>[] parent = new ComponentEditor[1];
 				ObservableCollection<CategoryRenderStrategy<R, ?>> columns = quick.getColumns().flow()//
 					.map((Class<CategoryRenderStrategy<R, ?>>) (Class<?>) CategoryRenderStrategy.class, //
-						column -> createRenderStrategy(column, ctx.getRenderValue()))//
+						column -> createRenderStrategy(column, ctx, tx, panel.getUntil(), () -> parent[0]))//
 					.collect();
 				panel.addTable(quick.getRows(), table -> {
+					parent[0] = table;
 					table.withColumns(columns);
 				});
 			});
 		}
 
-		static <R, C> CategoryRenderStrategy<R, C> createRenderStrategy(QuickTableColumn<R, C> column, SettableValue<R> rowValue) {
+		static <R, C> CategoryRenderStrategy<R, C> createRenderStrategy(QuickTableColumn<R, C> column,
+			TabularWidget.TabularContext<R> ctx, Transformer<ExpressoInterpretationException> tx, Observable<?> until,
+			Supplier<ComponentEditor<?, ?>> parent) {
 			CategoryRenderStrategy<R, C> crs = new CategoryRenderStrategy<>(column.getName().get(), column.getType(), row -> {
-				rowValue.set(row, null);
-				return column.getValue().get();
+				ctx.getRenderValue().set(row, null);
+				C columnValue = column.getValue().get();
+				// System.out.println("Row " + row + ", " + column.getName().get() + " " + columnValue);
+				return columnValue;
 			});
 			column.getName().noInitChanges().act(evt -> crs.setName(evt.getNewValue()));
+			// TODO All this change listening isn't going to work, because all the settings are put into effect when the table is
+			// instantiated and when the category collection changes
+			// We'd need to fire an event in the category collection to enact any changes here
+			column.getRenderer().changes().act(evt -> {
+				if (evt.getNewValue() == null)
+					crs.withRenderer(null);
+				else {
+					try {
+						QuickCellRenderer<R, C> renderer=new QuickCellRenderer<>(column, evt.getNewValue(), ctx, tx, until, parent);
+						crs.withRenderer(renderer);
+						crs.withValueTooltip(renderer::getTooltip);
+						// The listeners may take a performance hit, so only add listening if they're there
+						boolean[] mouseKey = new boolean[2];
+						Consumer<Object> evalMouseKey = __ -> {
+							boolean oldMouse = mouseKey[0];
+							boolean oldKey = mouseKey[1];
+							for (QuickEventListener listener : evt.getNewValue().getEventListeners()) {
+								if (listener instanceof QuickMouseListener)
+									mouseKey[0] = true;
+								else if (listener instanceof QuickKeyListener)
+									mouseKey[1] = true;
+							}
+							if (oldMouse == mouseKey[0]) {//
+							} else if (mouseKey[0])
+								crs.addMouseListener(renderer);
+							else
+								crs.removeMouseListener(renderer);
+							if (oldKey == mouseKey[1]) { //
+							} else if (mouseKey[1])
+								crs.withKeyListener(renderer);
+							else
+								crs.withKeyListener(null);
+						};
+						evalMouseKey.accept(null);
+						evt.getNewValue().getEventListeners().simpleChanges().takeUntil(column.getRenderer().noInitChanges())
+						.act(evalMouseKey);
+					} catch (ExpressoInterpretationException | ModelInstantiationException e) {
+						throw new ExpressoRuntimeException(e);
+					}
+				}
+			});
 			return crs;
+		}
+
+		static class QuickCellRenderer<R, C> extends AbstractObservableCellRenderer<R, C>
+		implements CategoryMouseListener<R, C>, CategoryKeyListener<R, C> {
+			private final QuickTableColumn<R, C> theColumn;
+			private final QuickWidget theRenderer;
+			private final TabularWidget.TabularContext<R> theContext;
+			private final QuickSwingPopulator<QuickWidget> theSwingRenderer;
+			private final Supplier<ComponentEditor<?, ?>> theParent;
+			private final SimpleObservable<Void> theRenderUntil;
+			private ObservableCellRenderer<R, C> theDelegate;
+			private AbstractComponentEditor<?, ?> theComponent;
+			private Runnable thePreRender;
+
+			private ObservableValue<String> theTooltip;
+			private final QuickMouseListener.MouseButtonListenerContext theMouseContext;
+			private final QuickKeyListener.KeyTypedContext theKeyTypeContext;
+			private final QuickKeyListener.KeyCodeContext theKeyCodeContext;
+
+			QuickCellRenderer(QuickTableColumn<R, C> column, QuickWidget widget, TabularWidget.TabularContext<R> ctx,
+				Transformer<ExpressoInterpretationException> tx, Observable<?> until, Supplier<ComponentEditor<?, ?>> parent)
+					throws ExpressoInterpretationException, ModelInstantiationException {
+				theColumn = column;
+				theRenderer = widget;
+				theContext = ctx;
+				theParent = parent;
+				theRenderUntil = new SimpleObservable<>();
+				theSwingRenderer = tx.transform(theRenderer.getInterpreted(), QuickSwingPopulator.class);
+				theSwingRenderer.populate(new CellRendererPopulator<>(this, Observable.or(until, theRenderUntil)), theRenderer);
+
+				theMouseContext = new QuickMouseListener.MouseButtonListenerContext.Default();
+				theKeyTypeContext = new QuickKeyListener.KeyTypedContext.Default();
+				theKeyCodeContext = new QuickKeyListener.KeyCodeContext.Default();
+
+				for (QuickEventListener listener : widget.getEventListeners()) {
+					if (listener instanceof QuickMouseListener.QuickMouseButtonListener)
+						((QuickMouseListener.QuickMouseButtonListener) listener).setListenerContext(theMouseContext);
+					else if (listener instanceof QuickMouseListener)
+						((QuickMouseListener) listener).setListenerContext(theMouseContext);
+					else if (listener instanceof QuickKeyListener.QuickKeyTypedListener)
+						((QuickKeyListener.QuickKeyTypedListener) listener).setListenerContext(theKeyTypeContext);
+					else if (listener instanceof QuickKeyListener.QuickKeyCodeListener)
+						((QuickKeyListener.QuickKeyCodeListener) listener).setListenerContext(theKeyCodeContext);
+					else
+						System.err.println("Unhandled cell renderer listener type: " + listener.getClass().getName());
+				}
+			}
+
+			public QuickTableColumn<R, C> getColumn() {
+				return theColumn;
+			}
+
+			public QuickWidget getRenderer() {
+				return theRenderer;
+			}
+
+			public TabularWidget.TabularContext<R> getContext() {
+				return theContext;
+			}
+
+			public ComponentEditor<?, ?> getParent() {
+				return theParent.get();
+			}
+
+			void delegateTo(ObservableCellRenderer<R, C> delegate) {
+				theDelegate = delegate;
+			}
+
+			void renderWith(AbstractComponentEditor<?, ?> component, Runnable preRender) {
+				theComponent = component;
+				thePreRender = preRender;
+			}
+
+			public void setTooltip(ObservableValue<String> tooltip) {
+				theTooltip = tooltip;
+			}
+
+			void setCellContext(ModelCell<? extends R, ? extends C> cell) {
+				theContext.isSelected().set(cell.isSelected(), null);
+				theContext.getRowIndex().set(cell.getRowIndex(), null);
+				theContext.getColumnIndex().set(cell.getColumnIndex(), null);
+			}
+
+			String getTooltip(R modelValue, C columnValue) {
+				if (theTooltip == null)
+					return null;
+				theContext.getRenderValue().set(modelValue, null);
+				return theTooltip.get();
+			}
+
+			@Override
+			public String renderAsText(ModelCell<? extends R, ? extends C> cell) {
+				setCellContext(cell);
+				if (theRenderer instanceof QuickTextWidget) {
+					if (thePreRender != null)
+						thePreRender.run();
+					String text = ((QuickTextWidget<C>) theRenderer).getCurrentText();
+					theRenderUntil.onNext(null);
+					return text;
+				} else {
+					C colValue = theColumn.getValue().get();
+					return colValue == null ? "" : colValue.toString();
+				}
+			}
+
+			@Override
+			protected Component renderCell(Component parent, ModelCell<? extends R, ? extends C> cell, CellRenderContext ctx) {
+				setCellContext(cell);
+				if (thePreRender != null)
+					thePreRender.run();
+				Component render;
+				if (theDelegate != null)
+					render = theDelegate.getCellRendererComponent(parent, cell, ctx);
+				else
+					render = theComponent.getComponent();
+				theRenderUntil.onNext(null);
+				return render;
+			}
+
+			@Override
+			public void keyPressed(ModelCell<? extends R, ? extends C> cell, KeyEvent e) {
+				setCellContext(cell);
+				KeyCode code = QuickCoreSwing.getKeyCodeFromAWT(e.getKeyCode(), e.getKeyLocation());
+				if (code == null)
+					return;
+				theKeyCodeContext.getKeyCode().set(code, e);
+				for (QuickEventListener listener : theRenderer.getEventListeners()) {
+					if (listener instanceof QuickKeyListener.QuickKeyCodeListener) {
+						QuickKeyListener.QuickKeyCodeListener keyL = (QuickKeyListener.QuickKeyCodeListener) listener;
+						QuickKeyListener.QuickKeyCodeListener.Def def = keyL.getInterpreted().getDefinition();
+						if (!def.isPressed() || (def.getKeyCode() != null && def.getKeyCode() != code))
+							continue;
+						else if (!keyL.getFilter().get().booleanValue())
+							continue;
+						keyL.getAction().act(e);
+					}
+				}
+			}
+
+			@Override
+			public void keyReleased(ModelCell<? extends R, ? extends C> cell, KeyEvent e) {
+				setCellContext(cell);
+				KeyCode code = QuickCoreSwing.getKeyCodeFromAWT(e.getKeyCode(), e.getKeyLocation());
+				if (code == null)
+					return;
+				theKeyCodeContext.getKeyCode().set(code, e);
+				for (QuickEventListener listener : theRenderer.getEventListeners()) {
+					if (listener instanceof QuickKeyListener.QuickKeyCodeListener) {
+						QuickKeyListener.QuickKeyCodeListener keyL = (QuickKeyListener.QuickKeyCodeListener) listener;
+						QuickKeyListener.QuickKeyCodeListener.Def def = keyL.getInterpreted().getDefinition();
+						if (!def.isPressed() || (def.getKeyCode() != null && def.getKeyCode() != code))
+							continue;
+						else if (!keyL.getFilter().get().booleanValue())
+							continue;
+						keyL.getAction().act(e);
+					}
+				}
+			}
+
+			@Override
+			public void keyTyped(ModelCell<? extends R, ? extends C> cell, KeyEvent e) {
+				setCellContext(cell);
+				char ch = e.getKeyChar();
+				theKeyTypeContext.getTypedChar().set(ch, e);
+				for (QuickEventListener listener : theRenderer.getEventListeners()) {
+					if (listener instanceof QuickKeyListener.QuickKeyTypedListener) {
+						QuickKeyListener.QuickKeyTypedListener keyL = (QuickKeyListener.QuickKeyTypedListener) listener;
+						QuickKeyListener.QuickKeyTypedListener.Def def = keyL.getInterpreted().getDefinition();
+						if (def.getCharFilter() != 0 && def.getCharFilter() != ch)
+							continue;
+						else if (!keyL.getFilter().get().booleanValue())
+							continue;
+						keyL.getAction().act(e);
+					}
+				}
+			}
+
+			@Override
+			public boolean isMovementListener() {
+				for (QuickEventListener listener : theRenderer.getEventListeners()) {
+					if (listener instanceof QuickMouseListener.QuickMouseMoveListener)
+						return true;
+				}
+				return false;
+			}
+
+			@Override
+			public void mouseClicked(ModelCell<? extends R, ? extends C> cell, MouseEvent e) {
+				QuickMouseListener.MouseButton eventButton = QuickCoreSwing.checkMouseEventType(e, null);
+				if (eventButton == null)
+					return;
+				theMouseContext.getMouseButton().set(eventButton, e);
+				theMouseContext.getX().set(e.getX(), e);
+				theMouseContext.getY().set(e.getY(), e);
+				for (QuickEventListener listener : theRenderer.getEventListeners()) {
+					if (listener instanceof QuickMouseListener.QuickMouseButtonListener) {
+						QuickMouseListener.QuickMouseButtonListener mouseL = (QuickMouseListener.QuickMouseButtonListener) listener;
+						QuickMouseListener.QuickMouseButtonListener.Def def = mouseL.getInterpreted().getDefinition();
+						if (def.getEventType() != QuickMouseListener.MouseButtonEventType.Click
+							|| (def.getButton() != null && def.getButton() != eventButton))
+							continue;
+						else if (!mouseL.getFilter().get().booleanValue())
+							continue;
+						mouseL.getAction().act(e);
+					}
+				}
+			}
+
+			@Override
+			public void mousePressed(ModelCell<? extends R, ? extends C> cell, MouseEvent e) {
+				QuickMouseListener.MouseButton eventButton = QuickCoreSwing.checkMouseEventType(e, null);
+				if (eventButton == null)
+					return;
+				theMouseContext.getMouseButton().set(eventButton, e);
+				theMouseContext.getX().set(e.getX(), e);
+				theMouseContext.getY().set(e.getY(), e);
+				for (QuickEventListener listener : theRenderer.getEventListeners()) {
+					if (listener instanceof QuickMouseListener.QuickMouseButtonListener) {
+						QuickMouseListener.QuickMouseButtonListener mouseL = (QuickMouseListener.QuickMouseButtonListener) listener;
+						QuickMouseListener.QuickMouseButtonListener.Def def = mouseL.getInterpreted().getDefinition();
+						if (def.getEventType() != QuickMouseListener.MouseButtonEventType.Press
+							|| (def.getButton() != null && def.getButton() != eventButton))
+							continue;
+						else if (!mouseL.getFilter().get().booleanValue())
+							continue;
+						mouseL.getAction().act(e);
+					}
+				}
+			}
+
+			@Override
+			public void mouseReleased(ModelCell<? extends R, ? extends C> cell, MouseEvent e) {
+				QuickMouseListener.MouseButton eventButton = QuickCoreSwing.checkMouseEventType(e, null);
+				if (eventButton == null)
+					return;
+				theMouseContext.getMouseButton().set(eventButton, e);
+				theMouseContext.getX().set(e.getX(), e);
+				theMouseContext.getY().set(e.getY(), e);
+				for (QuickEventListener listener : theRenderer.getEventListeners()) {
+					if (listener instanceof QuickMouseListener.QuickMouseButtonListener) {
+						QuickMouseListener.QuickMouseButtonListener mouseL = (QuickMouseListener.QuickMouseButtonListener) listener;
+						QuickMouseListener.QuickMouseButtonListener.Def def = mouseL.getInterpreted().getDefinition();
+						if (def.getEventType() != QuickMouseListener.MouseButtonEventType.Release
+							|| (def.getButton() != null && def.getButton() != eventButton))
+							continue;
+						else if (!mouseL.getFilter().get().booleanValue())
+							continue;
+						mouseL.getAction().act(e);
+					}
+				}
+			}
+
+			@Override
+			public void mouseEntered(ModelCell<? extends R, ? extends C> cell, MouseEvent e) {
+				theMouseContext.getX().set(e.getX(), e);
+				theMouseContext.getY().set(e.getY(), e);
+				for (QuickEventListener listener : theRenderer.getEventListeners()) {
+					if (listener instanceof QuickMouseListener.QuickMouseButtonListener) {
+						QuickMouseListener.QuickMouseMoveListener mouseL = (QuickMouseListener.QuickMouseMoveListener) listener;
+						QuickMouseListener.QuickMouseMoveListener.Def def = mouseL.getInterpreted().getDefinition();
+						if (def.getEventType() != QuickMouseListener.MouseMoveEventType.Enter)
+							continue;
+						else if (!mouseL.getFilter().get().booleanValue())
+							continue;
+						mouseL.getAction().act(e);
+					}
+				}
+			}
+
+			@Override
+			public void mouseExited(ModelCell<? extends R, ? extends C> cell, MouseEvent e) {
+				theMouseContext.getX().set(e.getX(), e);
+				theMouseContext.getY().set(e.getY(), e);
+				for (QuickEventListener listener : theRenderer.getEventListeners()) {
+					if (listener instanceof QuickMouseListener.QuickMouseButtonListener) {
+						QuickMouseListener.QuickMouseMoveListener mouseL = (QuickMouseListener.QuickMouseMoveListener) listener;
+						QuickMouseListener.QuickMouseMoveListener.Def def = mouseL.getInterpreted().getDefinition();
+						if (def.getEventType() != QuickMouseListener.MouseMoveEventType.Exit)
+							continue;
+						else if (!mouseL.getFilter().get().booleanValue())
+							continue;
+						mouseL.getAction().act(e);
+					}
+				}
+			}
+
+			@Override
+			public void mouseMoved(ModelCell<? extends R, ? extends C> cell, MouseEvent e) {
+				theMouseContext.getX().set(e.getX(), e);
+				theMouseContext.getY().set(e.getY(), e);
+				for (QuickEventListener listener : theRenderer.getEventListeners()) {
+					if (listener instanceof QuickMouseListener.QuickMouseButtonListener) {
+						QuickMouseListener.QuickMouseMoveListener mouseL = (QuickMouseListener.QuickMouseMoveListener) listener;
+						QuickMouseListener.QuickMouseMoveListener.Def def = mouseL.getInterpreted().getDefinition();
+						if (def.getEventType() != QuickMouseListener.MouseMoveEventType.Move)
+							continue;
+						else if (!mouseL.getFilter().get().booleanValue())
+							continue;
+						mouseL.getAction().act(e);
+					}
+				}
+			}
+		}
+
+		static class CellRendererPopulator<R, C>
+		implements PanelPopulation.PartialPanelPopulatorImpl<Container, CellRendererPopulator<R, C>> {
+			private final QuickCellRenderer<R, C> theRenderer;
+			private final Observable<?> theUntil;
+			private final List<Consumer<ComponentEditor<?, ?>>> theModifiers;
+
+			public CellRendererPopulator(QuickCellRenderer<R, C> renderer, Observable<?> until) {
+				theRenderer = renderer;
+				theUntil = until;
+				theModifiers = new ArrayList<>();
+			}
+
+			CellRendererPopulator<R, C> unsupported(String message) {
+				theRenderer.getRenderer().getInterpreted().getDefinition().getExpressoSession().error(message);
+				return this;
+			}
+
+			@Override
+			public CellRendererPopulator<R, C> withGlassPane(LayoutManager layout, Consumer<PanelPopulator<?, ?>> panel) {
+				return unsupported("Glass pane unsupported for cell renderer holder");
+			}
+
+			@Override
+			public Container getContainer() {
+				throw new IllegalStateException("Container retrieval unsupported for cell renderer holder");
+			}
+
+			@Override
+			public void addModifier(Consumer<ComponentEditor<?, ?>> modifier) {
+				theModifiers.add(modifier);
+			}
+
+			@Override
+			public void removeModifier(Consumer<ComponentEditor<?, ?>> modifier) {
+				theModifiers.remove(modifier);
+			}
+
+			@Override
+			public CellRendererPopulator<R, C> withFieldName(ObservableValue<String> fieldName) {
+				return unsupported("Field name unsupported for cell renderer holder");
+			}
+
+			@Override
+			public CellRendererPopulator<R, C> modifyFieldLabel(Consumer<FontAdjuster> font) {
+				return unsupported("Field label unsupported for cell renderer holder");
+			}
+
+			@Override
+			public CellRendererPopulator<R, C> withFont(Consumer<FontAdjuster> font) {
+				return unsupported("Font unsupported for cell renderer holder");
+			}
+
+			@Override
+			public Container getEditor() {
+				throw new IllegalStateException("Container retrieval unsupported for cell renderer holder");
+			}
+
+			@Override
+			public CellRendererPopulator<R, C> visibleWhen(ObservableValue<Boolean> visible) {
+				return this;
+			}
+
+			@Override
+			public CellRendererPopulator<R, C> fill() {
+				return unsupported("Fill unsupported for cell renderer holder");
+			}
+
+			@Override
+			public CellRendererPopulator<R, C> fillV() {
+				return unsupported("Fill unsupported for cell renderer holder");
+			}
+
+			@Override
+			public CellRendererPopulator<R, C> decorate(Consumer<ComponentDecorator> decoration) {
+				return unsupported("Decorate unsupported for cell renderer holder");
+			}
+
+			@Override
+			public CellRendererPopulator<R, C> repaintOn(Observable<?> repaint) {
+				return unsupported("Repaint unsupported for cell renderer holder");
+			}
+
+			@Override
+			public CellRendererPopulator<R, C> modifyEditor(Consumer<? super Container> modify) {
+				return unsupported("General editor modifier unsupported for cell renderer holder");
+			}
+
+			@Override
+			public CellRendererPopulator<R, C> modifyComponent(Consumer<Component> component) {
+				return unsupported("General component modifier unsupported for cell renderer holder");
+			}
+
+			@Override
+			public Component getComponent() {
+				throw new IllegalStateException("Container retrieval unsupported for cell renderer holder");
+			}
+
+			@Override
+			public CellRendererPopulator<R, C> withLayoutConstraints(Object constraints) {
+				return unsupported("Layout constraints for cell renderer holder");
+			}
+
+			@Override
+			public CellRendererPopulator<R, C> withPopupMenu(Consumer<MenuBuilder<JPopupMenu, ?>> menu) {
+				return unsupported("Popup menu unsupported for cell renderer holder");
+			}
+
+			@Override
+			public CellRendererPopulator<R, C> onMouse(Consumer<MouseEvent> onMouse) {
+				return unsupported("Mouse events unsupported for cell renderer holder");
+			}
+
+			@Override
+			public CellRendererPopulator<R, C> withName(String name) {
+				return unsupported("Name unsupported for cell renderer holder");
+			}
+
+			@Override
+			public CellRendererPopulator<R, C> withTooltip(ObservableValue<String> tooltip) {
+				return unsupported("Tooltip unsupported for cell renderer holder");
+			}
+
+			@Override
+			public Observable<?> getUntil() {
+				return theUntil;
+			}
+
+			@Override
+			public <C2 extends ComponentEditor<?, ?>> C2 modify(C2 component) {
+				unsupported("General component modifier unsupported for cell renderer holder");
+				return component;
+			}
+
+			@Override
+			public void doAdd(AbstractComponentEditor<?, ?> field, Component fieldLabel, Component postLabel, boolean scrolled) {
+				theRenderer.renderWith(field, field::reset);
+			}
+
+			@Override
+			public <F> CellRendererPopulator<R, C> addLabel(String fieldName, ObservableValue<F> field, Function<? super F, String> format,
+				Consumer<FieldEditor<JLabel, ?>> modify) {
+				ObservableCellRenderer<R, C> delegate = ObservableCellRenderer.formatted((r, c) -> {
+					theRenderer.getContext().getRenderValue().set(r, null);
+					F fieldValue = field.get();
+					return format.apply(fieldValue);
+				});
+				FieldRenderEditor<JLabel> editor = new FieldRenderEditor<>(theRenderer);
+				if (modify != null)
+					modify.accept(editor);
+				for (Consumer<ComponentEditor<?, ?>> modifier : theModifiers)
+					modifier.accept(editor);
+				theRenderer.delegateTo(delegate);
+				return this;
+			}
+
+			@Override
+			public CellRendererPopulator<R, C> addIcon(String fieldName, ObservableValue<Icon> icon,
+				Consumer<FieldEditor<JLabel, ?>> modify) {
+				ObservableCellRenderer<R, C> delegate = ObservableCellRenderer.<R, C> formatted(c -> "").setIcon(cell -> {
+					theRenderer.getContext().getRenderValue().set(cell.getModelValue(), null);
+					return icon.get();
+				});
+				FieldRenderEditor<JLabel> editor = new FieldRenderEditor<>(theRenderer);
+				if (modify != null)
+					modify.accept(editor);
+				for (Consumer<ComponentEditor<?, ?>> modifier : theModifiers)
+					modifier.accept(editor);
+				theRenderer.delegateTo(delegate);
+				return this;
+			}
+
+			@Override
+			public <F> CellRendererPopulator<R, C> addLink(String fieldName, ObservableValue<F> field, Function<? super F, String> format,
+				Consumer<Object> action, Consumer<FieldEditor<JLabel, ?>> modify) {
+				ObservableCellRenderer<R, C> delegate = ObservableCellRenderer.linkRenderer(cell -> {
+					theRenderer.getContext().getRenderValue().set(cell.getModelValue(), null);
+					F fieldValue = field.get();
+					return format.apply(fieldValue);
+				});
+				FieldRenderEditor<JLabel> editor = new FieldRenderEditor<>(theRenderer);
+				if (modify != null)
+					modify.accept(editor);
+				for (Consumer<ComponentEditor<?, ?>> modifier : theModifiers)
+					modifier.accept(editor);
+				theRenderer.delegateTo(delegate);
+				return this;
+			}
+
+			@Override
+			public CellRendererPopulator<R, C> addCheckField(String fieldName, SettableValue<Boolean> field,
+				Consumer<FieldEditor<JCheckBox, ?>> modify) {
+				ObservableCellRenderer<R, C> delegate = ObservableCellRenderer.checkRenderer(cell -> {
+					return Boolean.TRUE.equals(field.get());
+				});
+				FieldRenderEditor<JCheckBox> editor = new FieldRenderEditor<>(theRenderer);
+				if (modify != null)
+					modify.accept(editor);
+				for (Consumer<ComponentEditor<?, ?>> modifier : theModifiers)
+					modifier.accept(editor);
+				theRenderer.delegateTo(delegate);
+				return this;
+			}
+
+			@Override
+			public CellRendererPopulator<R, C> addButton(String buttonText, ObservableAction<?> action,
+				Consumer<ButtonEditor<JButton, ?>> modify) {
+				ButtonRenderEditor[] editor = new CellRendererPopulator.ButtonRenderEditor[1];
+				ObservableCellRenderer<R, C> delegate = ObservableCellRenderer.buttonRenderer(cell -> {
+					return editor[0].theButtonText == null ? null : editor[0].theButtonText.get();
+				});
+				editor[0] = new ButtonRenderEditor(buttonText, delegate);
+				delegate.modify(comp -> editor[0].decorateButton((JButton) comp));
+				if (modify != null)
+					modify.accept(editor[0]);
+				for (Consumer<ComponentEditor<?, ?>> modifier : theModifiers)
+					modifier.accept(editor[0]);
+				theRenderer.delegateTo(delegate);
+				return this;
+			}
+
+			abstract class AbstractFieldRenderEditor<COMP extends Component, E extends AbstractFieldRenderEditor<COMP, E>>
+			implements FieldEditor<COMP, E> {
+				private final ObservableCellRenderer<R, C> theCellRenderer;
+
+				public AbstractFieldRenderEditor(ObservableCellRenderer<R, C> cellRenderer) {
+					theCellRenderer = cellRenderer;
+				}
+
+				@Override
+				public E withTooltip(ObservableValue<String> tooltip) {
+					theRenderer.setTooltip(tooltip);
+					return (E) this;
+				}
+
+				@Override
+				public Observable<?> getUntil() {
+					return theUntil;
+				}
+
+				@Override
+				public E withFieldName(ObservableValue<String> fieldName) {
+					unsupported("Field name unsupported for cell renderer");
+					return (E) this;
+				}
+
+				@Override
+				public E modifyFieldLabel(Consumer<FontAdjuster> font) {
+					unsupported("Field label unsupported for cell renderer");
+					return (E) this;
+				}
+
+				@Override
+				public E withFont(Consumer<FontAdjuster> font) {
+					theCellRenderer.decorate((cell, deco) -> font.accept(deco));
+					return (E) this;
+				}
+
+				@Override
+				public COMP getEditor() {
+					unsupported("Editor retrieval unsupported for cell renderer");
+					return null;
+				}
+
+				@Override
+				public E visibleWhen(ObservableValue<Boolean> visible) {
+					unsupported("Visible unsupported for cell renderer");
+					return (E) this;
+				}
+
+				@Override
+				public E fill() {
+					unsupported("Fill unsupported for cell renderer");
+					return (E) this;
+				}
+
+				@Override
+				public E fillV() {
+					unsupported("Fill unsupported for cell renderer");
+					return (E) this;
+				}
+
+				@Override
+				public E decorate(Consumer<ComponentDecorator> decoration) {
+					theCellRenderer.decorate((cell, deco) -> decoration.accept(deco));
+					return (E) this;
+				}
+
+				@Override
+				public E repaintOn(Observable<?> repaint) {
+					unsupported("Repaint unsupported for cell renderer");
+					return (E) this;
+				}
+
+				@Override
+				public E modifyEditor(Consumer<? super COMP> modify) {
+					theCellRenderer.modify(comp -> {
+						modify.accept((COMP) comp);
+						return null;
+					});
+					return (E) this;
+				}
+
+				@Override
+				public E modifyComponent(Consumer<Component> component) {
+					theCellRenderer.modify(comp -> {
+						component.accept(comp);
+						return null;
+					});
+					return (E) this;
+				}
+
+				@Override
+				public Component getComponent() {
+					unsupported("Comonent retrieval nsupported for cell renderer");
+					return null;
+				}
+
+				@Override
+				public Alert alert(String title, String message) {
+					return theRenderer.getParent().alert(title, message);
+				}
+
+				@Override
+				public E withLayoutConstraints(Object constraints) {
+					unsupported("Layout constraints unsupported for cell renderer");
+					return (E) this;
+				}
+
+				@Override
+				public E withPopupMenu(Consumer<MenuBuilder<JPopupMenu, ?>> menu) {
+					theRenderer.getParent().withPopupMenu(menu);
+					return (E) this;
+				}
+
+				@Override
+				public E onMouse(Consumer<MouseEvent> onMouse) {
+					unsupported("Mouse events unsupported for cell renderer");
+					return (E) this;
+				}
+
+				@Override
+				public E withName(String name) {
+					return (E) this;
+				}
+
+				@Override
+				public E withPostLabel(ObservableValue<String> postLabel) {
+					unsupported("Post label unsupported for cell renderer");
+					return (E) this;
+				}
+
+				@Override
+				public E withPostButton(String buttonText, ObservableAction<?> action, Consumer<ButtonEditor<JButton, ?>> modify) {
+					unsupported("Post button unsupported for cell renderer");
+					return (E) this;
+				}
+			}
+
+			class FieldRenderEditor<COMP extends Component> extends AbstractFieldRenderEditor<COMP, FieldRenderEditor<COMP>> {
+				FieldRenderEditor(ObservableCellRenderer<R, C> cellRenderer) {
+					super(cellRenderer);
+				}
+			}
+
+			class ButtonRenderEditor extends AbstractFieldRenderEditor<JButton, ButtonRenderEditor>
+			implements ButtonEditor<JButton, ButtonRenderEditor> {
+				ObservableValue<String> theButtonText;
+				private ObservableValue<? extends Icon> theIcon;
+				private ObservableValue<String> theDisabled;
+
+				ButtonRenderEditor(String buttonText, ObservableCellRenderer<R, C> cellRenderer) {
+					super(cellRenderer);
+					theButtonText = ObservableValue.of(String.class, buttonText);
+				}
+
+				@Override
+				public ButtonRenderEditor withIcon(ObservableValue<? extends Icon> icon) {
+					theIcon = icon;
+					return this;
+				}
+
+				@Override
+				public ButtonRenderEditor withText(ObservableValue<String> text) {
+					theButtonText = text;
+					return this;
+				}
+
+				@Override
+				public ButtonRenderEditor disableWith(ObservableValue<String> disabled) {
+					if (theDisabled == null)
+						theDisabled = disabled;
+					else {
+						ObservableValue<String> old = theDisabled;
+						theDisabled = ObservableValue.firstValue(TypeTokens.get().STRING, msg -> msg != null, () -> null, old, disabled);
+					}
+					return this;
+				}
+
+				public Runnable decorateButton(JButton button) {
+					button.setIcon(theIcon == null ? null : theIcon.get());
+					String disabled = theDisabled == null ? null : theDisabled.get();
+					button.setEnabled(disabled == null);
+					if (disabled != null)
+						button.setToolTipText(disabled);
+					return null;
+				}
+			}
 		}
 	}
 

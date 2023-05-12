@@ -37,6 +37,8 @@
 				<style-attribute name="font-slant" type="double" trickle-down="true" />
 			</styles>
 		</add-on>
+
+		<add-on name="renderer" requires="widget" abstract="true" />
 	</add-ons>
 
 	<elements>

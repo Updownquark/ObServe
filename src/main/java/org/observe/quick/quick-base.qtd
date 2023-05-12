@@ -86,9 +86,9 @@
 				<value name="rowIndex" type="int" priority="2" />
 				<value name="columnIndex" type="int" priority="2" />
 			</element-model>
-			<child-def name="column" type="column" min="0" max="inf" />
-			<child-def name="columns" type="columns-ref" min="0" max="inf" />
+			<child-def name="columns" requires="column-set" max="inf" /> <!-- Need at least one column -->
 		</add-on>
+		<add-on name="column-set" abstract="true"/>
 		<add-on name="column-edit-type" requires="column-edit" abstract="true">
 			<attribute name="commit" type="expression" />
 			<attribute name="editable-if" type="expression" specify="optional" />
@@ -160,6 +160,7 @@
 			<!-- The value is the text for the label.  If this text is specified, it takes the place of both value and format. -->
 			<value type="string" specify="optional" />
 			<attr-mod name="value-widget.value" specify="optional" default="" />
+			<attr-mod name="text-widget.editable" specify="forbidden" default="false" />
 			<attribute name="icon" type="expression" specify="optional" />
 		</element-def>
 		<element-def name="editable-text-widget" extends="text-widget">
@@ -204,7 +205,7 @@
 		<element-def name="little-list" extends="multi-value-widget">
 			<attribute name="values" type="expression" specify="required" />
 		</element-def>
-		<element-def name="column" inherits="styled">
+		<element-def name="column" inherits="column-set,styled">
 			<element-model>
 				<value name-attribute="column-value-name" priority="2" />
 			</element-model>
@@ -212,8 +213,8 @@
 			<!-- Unspecified column-value means to use the model value for the column value -->
 			<attribute name="value" type="expression" specify="optional" />
 			<attribute name="column-value-name" type="identifier" default="columnValue" />
-			<attribute name="tooltip" type="expression" specify="optional" />
-			<child-def name="renderer" type="widget" min="0" />
+			<attribute name="header-tooltip" type="expression" specify="optional" />
+			<child-def name="renderer" type="widget" inherits="renderer" min="0" />
 			<child-def name="edit" type="column-edit" min="0" />
 		</element-def>
 		<element-def name="column-edit" inherits="with-element-model">
@@ -225,7 +226,7 @@
 			<attribute name="clicks" type="int" specify="optional" />
 			<child-def name="editor" type="value-widget" inherits="column-editor" />
 		</element-def>
-		<element-def name="columns-ref">
+		<element-def name="columns-ref" inherits="column-set">
 			<attribute name="model-value" type="expression" />
 			<value type="expression" />
 		</element-def>
@@ -239,7 +240,7 @@
 		<element-def name="columns" extends="abstract-column-set">
 			<child-def name="column" type="column" min="0" max="inf" />
 		</element-def>
-		<element-def name="variable-columns" extends="abstract-column-set">
+		<element-def name="variable-columns" extends="abstract-column-set" inherits="column-set">
 			<element-model>
 				<value name-attribute="column-variable-name" />
 			</element-model>

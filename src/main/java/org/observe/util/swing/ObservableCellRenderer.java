@@ -8,6 +8,7 @@ import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 import javax.swing.DefaultListCellRenderer;
+import javax.swing.Icon;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JLabel;
@@ -37,42 +38,22 @@ public interface ObservableCellRenderer<M, C> {
 
 	ObservableCellRenderer<M, C> decorate(CellDecorator<M, C> decorator);
 
+	ObservableCellRenderer<M, C> modify(Function<Component, Runnable> rendered);
+
 	Component getCellRendererComponent(Component parent, ModelCell<? extends M, ? extends C> cell, CellRenderContext ctx);
 
 	public static <M, C> ObservableCellRenderer<M, C> fromTableRenderer(TableCellRenderer renderer,
 		BiFunction<Supplier<? extends M>, C, String> asText) {
-		class FlatTableCellRenderer implements ObservableCellRenderer<M, C> {
-			private CellDecorator<M, C> theDecorator;
-			private ComponentDecorator theComponentDecorator;
-			private Runnable theDecorationUndo;
-
+		class FlatTableCellRenderer extends AbstractObservableCellRenderer<M, C> {
 			@Override
 			public String renderAsText(ModelCell<? extends M, ? extends C> cell) {
 				return asText.apply(cell::getModelValue, cell.getCellValue());
 			}
 
 			@Override
-			public ObservableCellRenderer<M, C> decorate(CellDecorator<M, C> decorator) {
-				theDecorator = decorator;
-				return this;
-			}
-
-			@Override
-			public Component getCellRendererComponent(Component parent, ModelCell<? extends M, ? extends C> cell, CellRenderContext ctx) {
-				Component rendered = renderer.getTableCellRendererComponent(parent instanceof JTable ? (JTable) parent : null,
+			protected Component renderCell(Component parent, ModelCell<? extends M, ? extends C> cell, CellRenderContext ctx) {
+				return renderer.getTableCellRendererComponent(parent instanceof JTable ? (JTable) parent : null,
 					cell.getCellValue(), cell.isSelected(), cell.hasFocus(), cell.getRowIndex(), cell.getColumnIndex());
-				rendered = tryEmphasize(rendered, ctx);
-				if (theDecorationUndo != null) {
-					theDecorationUndo.run();
-					theDecorationUndo = null;
-				}
-				if (theDecorator != null) {
-					if (theComponentDecorator == null)
-						theComponentDecorator = new ComponentDecorator();
-					theDecorator.decorate(cell, theComponentDecorator);
-					theDecorationUndo = theComponentDecorator.decorate(rendered);
-				}
-				return rendered;
 			}
 		}
 		return new FlatTableCellRenderer();
@@ -80,38 +61,16 @@ public interface ObservableCellRenderer<M, C> {
 
 	public static <M, C> ObservableCellRenderer<M, C> fromTreeRenderer(TreeCellRenderer renderer,
 		BiFunction<Supplier<? extends M>, C, String> asText) {
-		class FlatTreeCellRenderer implements ObservableCellRenderer<M, C> {
-			private CellDecorator<M, C> theDecorator;
-			private ComponentDecorator theComponentDecorator;
-			private Runnable theDecorationUndo;
-
+		class FlatTreeCellRenderer extends AbstractObservableCellRenderer<M, C> {
 			@Override
 			public String renderAsText(ModelCell<? extends M, ? extends C> cell) {
 				return asText.apply(cell::getModelValue, cell.getCellValue());
 			}
 
 			@Override
-			public ObservableCellRenderer<M, C> decorate(CellDecorator<M, C> decorator) {
-				theDecorator = decorator;
-				return this;
-			}
-
-			@Override
-			public Component getCellRendererComponent(Component parent, ModelCell<? extends M, ? extends C> cell, CellRenderContext ctx) {
-				Component rendered = renderer.getTreeCellRendererComponent(parent instanceof JTree ? (JTree) parent : null,
+			protected Component renderCell(Component parent, ModelCell<? extends M, ? extends C> cell, CellRenderContext ctx) {
+				return renderer.getTreeCellRendererComponent(parent instanceof JTree ? (JTree) parent : null,
 					cell.getCellValue(), cell.isSelected(), cell.isExpanded(), cell.isLeaf(), cell.getRowIndex(), cell.hasFocus());
-				rendered = tryEmphasize(rendered, ctx);
-				if (theDecorationUndo != null) {
-					theDecorationUndo.run();
-					theDecorationUndo = null;
-				}
-				if (theDecorator != null) {
-					if (theComponentDecorator == null)
-						theComponentDecorator = new ComponentDecorator();
-					theDecorator.decorate(cell, theComponentDecorator);
-					theDecorationUndo = theComponentDecorator.decorate(rendered);
-				}
-				return rendered;
 			}
 		}
 		return new FlatTreeCellRenderer();
@@ -152,6 +111,7 @@ public interface ObservableCellRenderer<M, C> {
 		private CellDecorator<M, C> theDecorator;
 		private ComponentDecorator theComponentDecorator;
 		private Runnable theRevert;
+		private Function<Component, Runnable> theModifier;
 
 		@Override
 		public Component getCellRendererComponent(Component parent, ModelCell<? extends M, ? extends C> cell, CellRenderContext ctx) {
@@ -160,19 +120,53 @@ public interface ObservableCellRenderer<M, C> {
 				theRevert = null;
 			}
 			Component c = renderCell(parent, cell, ctx);
+			Runnable revert = null;
 			if (theDecorator != null) {
 				if (theComponentDecorator == null)
 					theComponentDecorator = new ComponentDecorator();
 				else
 					theComponentDecorator.reset();
 				theDecorator.decorate(cell, theComponentDecorator);
-				theRevert = theComponentDecorator.decorate(c);
+				revert = theComponentDecorator.decorate(c);
 			}
+			if (theModifier != null) {
+				Runnable modRevert = theModifier.apply(c);
+				if (revert == null)
+					revert = modRevert;
+				else if (modRevert != null) {
+					Runnable decoRevert = revert;
+					revert = () -> {
+						modRevert.run();
+						decoRevert.run();
+					};
+				}
+			}
+			theRevert = revert;
 			c = tryEmphasize(c, ctx);
 			c.setEnabled(cell.isEnabled() == null);
 			if (cell.isEnabled() != null)
 				c.setEnabled(false);
 			return c;
+		}
+
+		@Override
+		public AbstractObservableCellRenderer<M, C> modify(Function<Component, Runnable> modifier) {
+			if (theModifier == null)
+				theModifier = modifier;
+			else {
+				Function<Component, Runnable> old = theModifier;
+				theModifier = comp -> {
+					Runnable oldRevert = old.apply(comp);
+					Runnable newRevert = modifier.apply(comp);
+					return () -> {
+						if (newRevert != null)
+							newRevert.run();
+						if (oldRevert != null)
+							oldRevert.run();
+					};
+				};
+			}
+			return this;
 		}
 
 		protected abstract Component renderCell(Component parent, ModelCell<? extends M, ? extends C> cell, CellRenderContext ctx);
@@ -194,6 +188,7 @@ public interface ObservableCellRenderer<M, C> {
 		private JLabel theLabel;
 
 		private final Function<? super ModelCell<? extends M, ? extends C>, String> theTextRenderer;
+		private Function<? super ModelCell<? extends M, ? extends C>, Icon> theIcon;
 
 		public DefaultObservableCellRenderer(BiFunction<? super Supplier<? extends M>, C, String> textRenderer) {
 			this(cell -> textRenderer.apply((Supplier<? extends M>) cell::getModelValue, cell.getCellValue()));
@@ -201,6 +196,11 @@ public interface ObservableCellRenderer<M, C> {
 
 		public DefaultObservableCellRenderer(Function<? super ModelCell<? extends M, ? extends C>, String> textRenderer) {
 			theTextRenderer = textRenderer;
+		}
+
+		public DefaultObservableCellRenderer<M, C> setIcon(Function<? super ModelCell<? extends M, ? extends C>, Icon> icon) {
+			theIcon = icon;
+			return this;
 		}
 
 		@Override
@@ -218,34 +218,39 @@ public interface ObservableCellRenderer<M, C> {
 					theTableRenderer = new DefaultTableCellRenderer();
 				c = theTableRenderer.getTableCellRendererComponent((JTable) parent, rendered, cell.isSelected(), cell.hasFocus(),
 					cell.getRowIndex(), cell.getColumnIndex());
+				if (theIcon != null)
+					theTableRenderer.setIcon(theIcon.apply(cell));
 			} else if (parent instanceof JTree) {
 				if (theTreeRenderer == null)
 					theTreeRenderer = new DefaultTreeCellRenderer();
 				c = theTreeRenderer.getTreeCellRendererComponent((JTree) parent, rendered, cell.isSelected(), cell.isExpanded(),
 					cell.isLeaf(), cell.getRowIndex(), cell.hasFocus());
+				if (theIcon != null)
+					theTreeRenderer.setIcon(theIcon.apply(cell));
 			} else if (parent instanceof JList) {
 				if (theListRenderer == null)
 					theListRenderer = new DefaultListCellRenderer();
 				c = theListRenderer.getListCellRendererComponent((JList<? extends C>) parent, rendered, cell.getRowIndex(),
 					cell.isSelected(), cell.hasFocus());
+				if (theIcon != null)
+					theListRenderer.setIcon(theIcon.apply(cell));
 			} else {
 				if (theLabel == null)
 					theLabel = new JLabel();
 				theLabel.setText(rendered);
+				if (theIcon != null)
+					theLabel.setIcon(theIcon.apply(cell));
 				c = theLabel;
 			}
 			return c;
 		}
 	}
 
-	class CheckCellRenderer<M, C> implements ObservableCellRenderer<M, C> {
+	class CheckCellRenderer<M, C> extends AbstractObservableCellRenderer<M, C> {
 		private final Predicate<? super ModelCell<? extends M, ? extends C>> theRender;
 		private final JCheckBox theCheckBox;
 
 		private Function<? super ModelCell<? extends M, ? extends C>, String> theText;
-		private CellDecorator<M, C> theDecorator;
-		private ComponentDecorator theComponentDecorator;
-		private Runnable theRevert;
 
 		public CheckCellRenderer(Predicate<? super ModelCell<? extends M, ? extends C>> render) {
 			theRender = render;
@@ -274,47 +279,27 @@ public interface ObservableCellRenderer<M, C> {
 		}
 
 		@Override
-		public CheckCellRenderer<M, C> decorate(CellDecorator<M, C> decorator) {
-			if (theDecorator == null)
-				theDecorator = decorator;
-			else
-				theDecorator = theDecorator.modify(decorator);
-			return this;
-		}
-
-		@Override
-		public Component getCellRendererComponent(Component parent, ModelCell<? extends M, ? extends C> cell, CellRenderContext ctx) {
-			if (theRevert != null) {
-				theRevert.run();
-				theRevert = null;
-			}
+		protected Component renderCell(Component parent, ModelCell<? extends M, ? extends C> cell, CellRenderContext ctx) {
 			JCheckBox cb = theCheckBox;
 			if (theText != null)
 				cb.setText(theText.apply(cell));
 			cb.setSelected(theRender.test(cell));
-			if (theDecorator != null) {
-				if (theComponentDecorator == null)
-					theComponentDecorator = new ComponentDecorator();
-				else
-					theComponentDecorator.reset();
-				theDecorator.decorate(cell, theComponentDecorator);
-				theRevert = theComponentDecorator.decorate(cb);
-			}
 			cb.setEnabled(cell.isEnabled() == null);
 			return cb;
 		}
 	}
 
-	class ButtonCellRenderer<M, C> implements ObservableCellRenderer<M, C> {
+	public class ButtonCellRenderer<M, C> extends AbstractObservableCellRenderer<M, C> {
 		private final Function<? super ModelCell<? extends M, ? extends C>, String> theText;
 		private final JButton theButton;
-		private CellDecorator<M, C> theDecorator;
-		private ComponentDecorator theComponentDecorator;
-		private Runnable theRevert;
 
 		public ButtonCellRenderer(Function<? super ModelCell<? extends M, ? extends C>, String> text) {
 			theText = text;
 			theButton = new JButton();
+		}
+
+		public JButton getButton() {
+			return theButton;
 		}
 
 		@Override
@@ -323,30 +308,9 @@ public interface ObservableCellRenderer<M, C> {
 		}
 
 		@Override
-		public ObservableCellRenderer<M, C> decorate(CellDecorator<M, C> decorator) {
-			if (theDecorator == null)
-				theDecorator = decorator;
-			else
-				theDecorator = theDecorator.modify(decorator);
-			return this;
-		}
-
-		@Override
-		public Component getCellRendererComponent(Component parent, ModelCell<? extends M, ? extends C> cell, CellRenderContext ctx) {
-			if (theRevert != null) {
-				theRevert.run();
-				theRevert = null;
-			}
+		protected Component renderCell(Component parent, ModelCell<? extends M, ? extends C> cell, CellRenderContext ctx) {
 			JButton button = theButton;
 			button.setText(theText.apply(cell));
-			if (theDecorator != null) {
-				if (theComponentDecorator == null)
-					theComponentDecorator = new ComponentDecorator();
-				else
-					theComponentDecorator.reset();
-				theDecorator.decorate(cell, theComponentDecorator);
-				theRevert = theComponentDecorator.decorate(button);
-			}
 			button.setEnabled(cell.isEnabled() == null);
 			return button;
 		}
@@ -410,7 +374,7 @@ public interface ObservableCellRenderer<M, C> {
 		return new CheckCellRenderer<>(value);
 	}
 
-	public static <M, C> ObservableCellRenderer<M, C> buttonRenderer(Function<? super ModelCell<? extends M, ? extends C>, String> text) {
+	public static <M, C> ButtonCellRenderer<M, C> buttonRenderer(Function<? super ModelCell<? extends M, ? extends C>, String> text) {
 		return new ButtonCellRenderer<>(text);
 	}
 

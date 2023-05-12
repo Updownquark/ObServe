@@ -11,10 +11,10 @@ import org.observe.collect.ObservableCollection;
 import org.observe.expresso.CompiledExpression;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ExpressoQIS;
+import org.observe.expresso.ExpressoRuntimeException;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
-import org.observe.expresso.ExpressoRuntimeException;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.util.TypeTokens;
@@ -131,6 +131,12 @@ public interface QuickEventListener extends QuickElement {
 				isAltPressed = altPressed;
 				isCtrlPressed = ctrlPressed;
 				isShiftPressed = shiftPressed;
+			}
+
+			public Default() {
+				isAltPressed = SettableValue.build(boolean.class).withValue(false).build();
+				isCtrlPressed = SettableValue.build(boolean.class).withValue(false).build();
+				isShiftPressed = SettableValue.build(boolean.class).withValue(false).build();
 			}
 
 			@Override

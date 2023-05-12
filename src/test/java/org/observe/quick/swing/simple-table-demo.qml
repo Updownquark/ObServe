@@ -35,10 +35,13 @@
 				</style>
 			</titled-border>
 			<column name="`Value`" value="value" />
-			<column name="`Factorization`" value="app.primes.factorize(value, 100_000)" />
+			<column name="`Prime`" value="app.primes.factorize(value, 100_000).size()==1">
+				<check-box value="columnValue" />
+			</column>
+			<column name="`Factorization`" value="org.qommons.Primes.formatFactorization(app.primes.factorize(value, 100_000))" />
 		</table>
 		<box layout="inline-layout" orientation="horizontal" main-align="justify">
-			<text-field value="app.newValue">
+			<text-field value="app.newValue" commit-on-type="true">
 				<style condition="pressed">
 					<style attr="font-weight">`ultra-bold`</style>
 					<style attr="font-color">`purple`</style>

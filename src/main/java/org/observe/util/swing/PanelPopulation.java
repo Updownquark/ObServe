@@ -12,11 +12,14 @@ import java.awt.LayoutManager2;
 import java.awt.Window;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
+import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.awt.event.MouseListener;
 import java.io.File;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Comparator;
@@ -28,30 +31,7 @@ import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
-import javax.swing.Box;
-import javax.swing.Icon;
-import javax.swing.ImageIcon;
-import javax.swing.JButton;
-import javax.swing.JCheckBox;
-import javax.swing.JComboBox;
-import javax.swing.JComponent;
-import javax.swing.JDialog;
-import javax.swing.JLabel;
-import javax.swing.JMenu;
-import javax.swing.JMenuItem;
-import javax.swing.JPanel;
-import javax.swing.JPopupMenu;
-import javax.swing.JProgressBar;
-import javax.swing.JRadioButton;
-import javax.swing.JScrollPane;
-import javax.swing.JSpinner;
-import javax.swing.JSplitPane;
-import javax.swing.JTabbedPane;
-import javax.swing.JTable;
-import javax.swing.JToggleButton;
-import javax.swing.JTree;
-import javax.swing.SpinnerNumberModel;
-import javax.swing.WindowConstants;
+import javax.swing.*;
 
 import org.jdesktop.swingx.JXCollapsiblePane;
 import org.jdesktop.swingx.JXPanel;
@@ -61,14 +41,17 @@ import org.observe.ObservableAction;
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.SimpleObservable;
+import org.observe.Subscription;
 import org.observe.collect.ObservableCollection;
 import org.observe.config.ObservableConfig;
 import org.observe.dbug.Dbug;
 import org.observe.dbug.DbugAnchorType;
 import org.observe.util.TypeTokens;
-import org.observe.util.swing.PanelPopulationImpl.SimpleAlert;
+import org.observe.util.swing.PanelPopulationImpl.*;
+import org.observe.util.swing.WindowPopulation.JMenuBuilder;
 import org.qommons.BreakpointHere;
 import org.qommons.StringUtils;
+import org.qommons.ThreadConstraint;
 import org.qommons.collect.BetterList;
 import org.qommons.io.Format;
 import org.qommons.threading.QommonsTimer;
@@ -374,6 +357,467 @@ public class PanelPopulation {
 		P addSettingsMenu(Consumer<SettingsMenu<JPanel, ?>> menu);
 	}
 
+	public interface PartialPanelPopulatorImpl<C extends Container, P extends PartialPanelPopulatorImpl<C, P>>
+	extends PanelPopulator<C, P> {
+		@Override
+		Observable<?> getUntil();
+
+		void doAdd(AbstractComponentEditor<?, ?> field, Component fieldLabel, Component postLabel, boolean scrolled);
+
+		<C2 extends ComponentEditor<?, ?>> C2 modify(C2 component);
+
+		default void doAdd(AbstractComponentEditor<?, ?> field) {
+			doAdd(field, false);
+		}
+
+		default void doAdd(AbstractComponentEditor<?, ?> field, boolean scrolled) {
+			doAdd(field, field.createFieldNameLabel(getUntil()), field.createPostLabel(getUntil()), scrolled);
+		}
+
+		@Override
+		default <F> P addTextField(String fieldName, SettableValue<F> field, Format<F> format,
+			Consumer<FieldEditor<ObservableTextField<F>, ?>> modify) {
+			SimpleFieldEditor<ObservableTextField<F>, ?> fieldPanel = new SimpleFieldEditor<>(fieldName,
+				new ObservableTextField<>(field, format, getUntil()), getUntil());
+			modify(fieldPanel);
+			fieldPanel.getTooltip().changes().takeUntil(getUntil()).act(evt -> fieldPanel.getEditor().setToolTipText(evt.getNewValue()));
+			if (modify != null)
+				modify.accept(fieldPanel);
+			if (fieldPanel.isDecorated())
+				field.noInitChanges().safe(ThreadConstraint.EDT).takeUntil(getUntil())
+				.act(__ -> fieldPanel.decorate(fieldPanel.getComponent()));
+			doAdd(fieldPanel);
+			return (P) this;
+		}
+
+		@Override
+		default <F> P addTextArea(String fieldName, SettableValue<F> field, Format<F> format,
+			Consumer<FieldEditor<ObservableTextArea<F>, ?>> modify) {
+			SimpleFieldEditor<ObservableTextArea<F>, ?> fieldPanel = new SimpleFieldEditor<>(fieldName,
+				new ObservableTextArea<>(field, format, getUntil()), getUntil());
+			modify(fieldPanel);
+			fieldPanel.getTooltip().changes().takeUntil(getUntil()).act(evt -> fieldPanel.getEditor().setToolTipText(evt.getNewValue()));
+			if (modify != null)
+				modify.accept(fieldPanel);
+			if (fieldPanel.isDecorated())
+				field.noInitChanges().safe(ThreadConstraint.EDT).takeUntil(getUntil())
+				.act(__ -> fieldPanel.decorate(fieldPanel.getComponent()));
+			doAdd(fieldPanel, true);
+			return (P) this;
+		}
+
+		@Override
+		default <F> P addLabel(String fieldName, ObservableValue<F> field, Function<? super F, String> format,
+			Consumer<FieldEditor<JLabel, ?>> modify) {
+			JLabel label = new JLabel();
+			field.changes().takeUntil(getUntil()).act(evt -> {
+				label.setText(format.apply(evt.getNewValue()));
+			});
+			SimpleFieldEditor<JLabel, ?> fieldPanel = new SimpleFieldEditor<>(fieldName, label, getUntil());
+			modify(fieldPanel);
+			fieldPanel.getTooltip().changes().takeUntil(getUntil()).act(evt -> fieldPanel.getEditor().setToolTipText(evt.getNewValue()));
+			if (modify != null)
+				modify.accept(fieldPanel);
+			if (fieldPanel.isDecorated())
+				field.noInitChanges().safe(ThreadConstraint.EDT).takeUntil(getUntil())
+				.act(__ -> fieldPanel.decorate(fieldPanel.getComponent()));
+			doAdd(fieldPanel);
+			return (P) this;
+		}
+
+		@Override
+		default P addIcon(String fieldName, ObservableValue<Icon> icon, Consumer<FieldEditor<JLabel, ?>> modify) {
+			JLabel label = new JLabel();
+			icon.changes().takeUntil(getUntil()).act(evt -> label.setIcon(evt.getNewValue()));
+			SimpleFieldEditor<JLabel, ?> fieldPanel = new SimpleFieldEditor<>(fieldName, label, getUntil());
+			modify(fieldPanel);
+			fieldPanel.getTooltip().changes().takeUntil(getUntil()).act(evt -> fieldPanel.getEditor().setToolTipText(evt.getNewValue()));
+			if (icon instanceof SettableValue) {
+				((SettableValue<Icon>) icon).isEnabled().combine((enabled, tt) -> enabled == null ? tt : enabled, fieldPanel.getTooltip())
+				.changes().takeUntil(getUntil()).act(evt -> label.setToolTipText(evt.getNewValue()));
+			}
+			if (modify != null)
+				modify.accept(fieldPanel);
+			if (fieldPanel.isDecorated())
+				icon.noInitChanges().safe(ThreadConstraint.EDT).takeUntil(getUntil())
+				.act(__ -> fieldPanel.decorate(fieldPanel.getComponent()));
+			doAdd(fieldPanel);
+			return (P) this;
+		}
+
+		@Override
+		default <F> P addLink(String fieldName, ObservableValue<F> field, Function<? super F, String> format, Consumer<Object> action,
+			Consumer<FieldEditor<JLabel, ?>> modify) {
+			return addLabel(fieldName, field, format, label -> {
+				modify(label);
+				ComponentDecorator normalDeco = new ComponentDecorator().withForeground(Color.blue);
+				ComponentDecorator hoverDeco = new ComponentDecorator().withForeground(Color.blue).underline();
+				label.modifyComponent(comp -> {
+					normalDeco.decorate(comp);
+					MouseAdapter mouse = new MouseAdapter() {
+						@Override
+						public void mouseClicked(MouseEvent e) {
+							action.accept(e);
+						}
+
+						@Override
+						public void mouseEntered(MouseEvent e) {
+							hoverDeco.decorate(comp);
+						}
+
+						@Override
+						public void mouseExited(MouseEvent e) {
+							normalDeco.decorate(comp);
+						}
+					};
+					comp.addMouseListener(mouse);
+					comp.addMouseMotionListener(mouse);
+				});
+				if (modify != null)
+					modify.accept(label);
+			});
+		}
+
+		@Override
+		default P addCheckField(String fieldName, SettableValue<Boolean> field, Consumer<FieldEditor<JCheckBox, ?>> modify) {
+			SimpleFieldEditor<JCheckBox, ?> fieldPanel = new SimpleFieldEditor<>(fieldName, new JCheckBox(), getUntil());
+			Subscription sub = ObservableSwingUtils.checkFor(fieldPanel.getEditor(), fieldPanel.getTooltip(), field);
+			getUntil().take(1).act(__ -> sub.unsubscribe());
+			modify(fieldPanel);
+			if (modify != null)
+				modify.accept(fieldPanel);
+			if (fieldPanel.isDecorated())
+				field.noInitChanges().safe(ThreadConstraint.EDT).takeUntil(getUntil())
+				.act(__ -> fieldPanel.decorate(fieldPanel.getComponent()));
+			doAdd(fieldPanel);
+			return (P) this;
+		}
+
+		@Override
+		default P addToggleButton(String fieldName, SettableValue<Boolean> field, String text,
+			Consumer<ButtonEditor<JToggleButton, ?>> modify) {
+			SimpleButtonEditor<JToggleButton, ?> fieldPanel = new SimpleButtonEditor<>(fieldName, new JToggleButton(), text,
+				ObservableAction.nullAction(TypeTokens.get().WILDCARD, null), false, getUntil());
+			Subscription sub = ObservableSwingUtils.checkFor(fieldPanel.getEditor(), fieldPanel.getTooltip(), field);
+			getUntil().take(1).act(__ -> sub.unsubscribe());
+			modify(fieldPanel);
+			if (modify != null)
+				modify.accept(fieldPanel);
+			if (fieldPanel.isDecorated())
+				field.noInitChanges().safe(ThreadConstraint.EDT).takeUntil(getUntil())
+				.act(__ -> fieldPanel.decorate(fieldPanel.getComponent()));
+			doAdd(fieldPanel);
+			return (P) this;
+		}
+
+		@Override
+		default <F> P addSpinnerField(String fieldName, JSpinner spinner, SettableValue<F> value, Function<? super F, ? extends F> purifier,
+			Consumer<SteppedFieldEditor<JSpinner, F, ?>> modify) {
+			SimpleSteppedFieldEditor<JSpinner, F, ?> fieldPanel = new SimpleSteppedFieldEditor<>(fieldName, spinner, stepSize -> {
+				((SpinnerNumberModel) spinner.getModel()).setStepSize((Number) stepSize);
+			}, getUntil());
+			ObservableSwingUtils.spinnerFor(spinner, fieldPanel.getTooltip().get(), value, purifier);
+			modify(fieldPanel);
+			if (modify != null)
+				modify.accept(fieldPanel);
+			if (fieldPanel.isDecorated())
+				value.noInitChanges().safe(ThreadConstraint.EDT).takeUntil(getUntil())
+				.act(__ -> fieldPanel.decorate(fieldPanel.getComponent()));
+			doAdd(fieldPanel);
+			return (P) this;
+		}
+
+		@Override
+		default P addSlider(String fieldName, SettableValue<Double> value, Consumer<SliderEditor<MultiRangeSlider, ?>> modify) {
+			SimpleMultiSliderEditor<?> compEditor = SimpleMultiSliderEditor.createForValue(fieldName, value, getUntil());
+			modify(compEditor);
+			if (modify != null)
+				modify.accept(compEditor);
+			if (compEditor.isDecorated())
+				value.noInitChanges().safe(ThreadConstraint.EDT).takeUntil(getUntil())//
+				.act(__ -> compEditor.decorate(compEditor.getComponent()));
+			doAdd(compEditor);
+			return (P) this;
+		}
+
+		@Override
+		default P addMultiSlider(String fieldName, ObservableCollection<Double> values,
+			Consumer<SliderEditor<MultiRangeSlider, ?>> modify) {
+			SimpleMultiSliderEditor<?> compEditor = SimpleMultiSliderEditor.createForValues(fieldName, values, getUntil());
+			modify(compEditor);
+			if (modify != null)
+				modify.accept(compEditor);
+			if (compEditor.isDecorated())
+				values.simpleChanges().safe(ThreadConstraint.EDT).takeUntil(getUntil())//
+				.act(__ -> compEditor.decorate(compEditor.getComponent()));
+			doAdd(compEditor);
+			return (P) this;
+		}
+
+		@Override
+		default P addRangeSlider(String fieldName, SettableValue<MultiRangeSlider.Range> range,
+			Consumer<SliderEditor<MultiRangeSlider, ?>> modify) {
+			SimpleMultiSliderEditor<?> compEditor = SimpleMultiSliderEditor.createForRange(fieldName, range, getUntil());
+			modify(compEditor);
+			if (modify != null)
+				modify.accept(compEditor);
+			if (compEditor.isDecorated())
+				range.noInitChanges().safe(ThreadConstraint.EDT).takeUntil(getUntil())//
+				.act(__ -> compEditor.decorate(compEditor.getComponent()));
+			doAdd(compEditor);
+			return (P) this;
+		}
+
+		@Override
+		default P addMultiRangeSlider(String fieldName, ObservableCollection<MultiRangeSlider.Range> values,
+			Consumer<SliderEditor<MultiRangeSlider, ?>> modify) {
+			SimpleMultiSliderEditor<?> compEditor = SimpleMultiSliderEditor.createForRanges(fieldName, values, getUntil());
+			modify(compEditor);
+			if (modify != null)
+				modify.accept(compEditor);
+			if (compEditor.isDecorated())
+				values.simpleChanges().safe(ThreadConstraint.EDT).takeUntil(getUntil())//
+				.act(__ -> compEditor.decorate(compEditor.getComponent()));
+			doAdd(compEditor);
+			return (P) this;
+		}
+
+		@Override
+		default <F> P addComboField(String fieldName, SettableValue<F> value, List<? extends F> availableValues,
+			Consumer<ComboEditor<F, ?>> modify) {
+			ObservableCollection<? extends F> observableValues;
+			if (availableValues instanceof ObservableCollection)
+				observableValues = (ObservableCollection<F>) availableValues;
+			else
+				observableValues = ObservableCollection.of(value.getType(), availableValues);
+
+			SimpleComboEditor<F, ?> fieldPanel = new SimpleComboEditor<>(fieldName, new JComboBox<>(), value, getUntil());
+			modify(fieldPanel);
+			if (modify != null)
+				modify.accept(fieldPanel);
+			ObservableComboBoxModel.ComboHookup hookup = ObservableComboBoxModel.comboFor(fieldPanel.getEditor(), fieldPanel.getTooltip(),
+				fieldPanel::getTooltip, observableValues, value);
+			fieldPanel.setHoveredItem(hookup::getHoveredItem);
+			getUntil().take(1).act(__ -> hookup.unsubscribe());
+			if (fieldPanel.isDecorated())
+				value.noInitChanges().safe(ThreadConstraint.EDT).takeUntil(getUntil())
+				.act(__ -> fieldPanel.decorate(fieldPanel.getComponent()));
+			doAdd(fieldPanel);
+			return (P) this;
+		}
+
+		@Override
+		default <F, TB extends JToggleButton> P addToggleField(String fieldName, SettableValue<F> value, List<? extends F> values,
+			Class<TB> buttonType, Function<? super F, ? extends TB> buttonCreator, Consumer<ToggleEditor<F, TB, ?>> modify) {
+			ObservableCollection<? extends F> observableValues;
+			if (values instanceof ObservableCollection)
+				observableValues = (ObservableCollection<F>) values;
+			else
+				observableValues = ObservableCollection.of(value.getType(), values);
+			SimpleToggleButtonPanel<F, TB, ?> radioPanel = new SimpleToggleButtonPanel<>(fieldName, observableValues, value, //
+				buttonType, buttonCreator, getUntil());
+			modify(radioPanel);
+			if (modify != null)
+				modify.accept(radioPanel);
+			if (radioPanel.isDecorated())
+				value.noInitChanges().safe(ThreadConstraint.EDT).takeUntil(getUntil())
+				.act(__ -> radioPanel.decorate(radioPanel.getComponent()));
+			doAdd(radioPanel);
+			return (P) this;
+		}
+
+		@Override
+		default P addFileField(String fieldName, SettableValue<File> value, boolean open,
+			Consumer<FieldEditor<ObservableFileButton, ?>> modify) {
+			SimpleFieldEditor<ObservableFileButton, ?> fieldPanel = new SimpleFieldEditor<>(fieldName,
+				new ObservableFileButton(value, open, getUntil()), getUntil());
+			modify(fieldPanel);
+			fieldPanel.getTooltip().changes().takeUntil(getUntil()).act(evt -> fieldPanel.getEditor().setToolTipText(evt.getNewValue()));
+			if (modify != null)
+				modify.accept(fieldPanel);
+			if (fieldPanel.isDecorated())
+				value.noInitChanges().safe(ThreadConstraint.EDT).takeUntil(getUntil())
+				.act(__ -> fieldPanel.decorate(fieldPanel.getComponent()));
+			doAdd(fieldPanel);
+			return (P) this;
+		}
+
+		@Override
+		default P addButton(String buttonText, ObservableAction<?> action, Consumer<ButtonEditor<JButton, ?>> modify) {
+			SimpleButtonEditor<JButton, ?> field = new SimpleButtonEditor<>(null, new JButton(), buttonText, action, false, getUntil())
+				.withText(buttonText);
+			modify(field);
+			if (modify != null)
+				modify.accept(field);
+			doAdd(field);
+			return (P) this;
+		}
+
+		@Override
+		default <F> P addComboButton(String buttonText, ObservableCollection<F> values, BiConsumer<? super F, Object> action,
+			Consumer<ComboButtonBuilder<F, ComboButton<F>, ?>> modify) {
+			SimpleComboButtonEditor<F, ComboButton<F>, ?> field = new SimpleComboButtonEditor<>(null, buttonText, values, action,
+				getUntil());
+			modify(field);
+			if (modify != null)
+				modify.accept(field);
+			doAdd(field);
+			return (P) this;
+		}
+
+		@Override
+		default P addProgressBar(String fieldName, Consumer<ProgressEditor<?>> progress) {
+			SimpleProgressEditor<?> editor = new SimpleProgressEditor<>(fieldName, getUntil());
+			modify(editor);
+			progress.accept(editor);
+			if (editor.isDecorated())
+				editor.getProgress().noInitChanges().safe(ThreadConstraint.EDT).takeUntil(getUntil())
+				.act(__ -> editor.decorate(editor.getComponent()));
+			doAdd(editor);
+			return (P) this;
+		}
+
+		@Override
+		default P addTabs(Consumer<TabPaneEditor<JTabbedPane, ?>> tabs) {
+			SimpleTabPaneEditor<?> tabPane = new SimpleTabPaneEditor<>(getUntil());
+			modify(tabPane);
+			tabs.accept(tabPane);
+			doAdd(tabPane, null, null, false);
+			return (P) this;
+		}
+
+		@Override
+		default P addSplit(boolean vertical, Consumer<SplitPane<?>> split) {
+			SimpleSplitEditor<?> splitPane = new SimpleSplitEditor<>(vertical, getUntil());
+			modify(splitPane);
+			split.accept(splitPane);
+			doAdd(splitPane, null, null, false);
+			return (P) this;
+		}
+
+		@Override
+		default P addScroll(String fieldName, Consumer<ScrollPane<?>> scroll) {
+			SimpleScrollEditor<?> scrollPane = new SimpleScrollEditor<>(fieldName, getUntil());
+			modify(scrollPane);
+			scroll.accept(scrollPane);
+			doAdd(scrollPane);
+			return (P) this;
+		}
+
+		@Override
+		default <R> P addList(ObservableCollection<R> rows, Consumer<ListBuilder<R, ?>> list) {
+			SimpleListBuilder<R, ?> tb = new SimpleListBuilder<>(rows.safe(ThreadConstraint.EDT, getUntil()), getUntil());
+			modify(tb);
+			list.accept(tb);
+			doAdd(tb);
+			return (P) this;
+		}
+
+		@Override
+		default <R> P addTable(ObservableCollection<R> rows, Consumer<TableBuilder<R, ?>> table) {
+			SimpleTableBuilder<R, ?> tb = new SimpleTableBuilder<>(rows, getUntil());
+			modify(tb);
+			table.accept(tb);
+			doAdd(tb, null, null, false);
+			return (P) this;
+		}
+
+		@Override
+		default <F> P addTree(ObservableValue<? extends F> root, Function<? super F, ? extends ObservableCollection<? extends F>> children,
+			Consumer<TreeEditor<F, ?>> modify) {
+			SimpleTreeBuilder<F, ?> treeEditor = SimpleTreeBuilder.createTree(root, children, getUntil());
+			modify(treeEditor);
+			if (modify != null)
+				modify.accept(treeEditor);
+			doAdd(treeEditor, null, null, false);
+			return (P) this;
+		}
+
+		@Override
+		default <F> P addTree2(ObservableValue<? extends F> root,
+			Function<? super BetterList<F>, ? extends ObservableCollection<? extends F>> children, Consumer<TreeEditor<F, ?>> modify) {
+			SimpleTreeBuilder<F, ?> treeEditor = SimpleTreeBuilder.createTree2(root, children, getUntil());
+			modify(treeEditor);
+			if (modify != null)
+				modify.accept(treeEditor);
+			doAdd(treeEditor, null, null, false);
+			return (P) this;
+		}
+
+		@Override
+		default <F> P addTreeTable(ObservableValue<F> root, Function<? super F, ? extends ObservableCollection<? extends F>> children,
+			Consumer<TreeTableEditor<F, ?>> modify) {
+			SimpleTreeTableBuilder<F, ?> treeTableEditor = SimpleTreeTableBuilder.createTreeTable(root, children, getUntil());
+			modify(treeTableEditor);
+			if (modify != null)
+				modify.accept(treeTableEditor);
+			doAdd(treeTableEditor, null, null, false);
+			return (P) this;
+		}
+
+		@Override
+		default <F> P addTreeTable2(ObservableValue<F> root,
+			Function<? super BetterList<F>, ? extends ObservableCollection<? extends F>> children, Consumer<TreeTableEditor<F, ?>> modify) {
+			SimpleTreeTableBuilder<F, ?> treeTableEditor = SimpleTreeTableBuilder.createTreeTable2(root, children, getUntil());
+			modify(treeTableEditor);
+			if (modify != null)
+				modify.accept(treeTableEditor);
+			doAdd(treeTableEditor, null, null, false);
+			return (P) this;
+		}
+
+		@Override
+		default <S> P addComponent(String fieldName, S component, Consumer<FieldEditor<S, ?>> modify) {
+			SimpleFieldEditor<S, ?> subPanel = new SimpleFieldEditor<>(fieldName, component, getUntil());
+			modify(subPanel);
+			if (modify != null)
+				modify.accept(subPanel);
+			doAdd(subPanel);
+			return (P) this;
+		}
+
+		@Override
+		default P addHPanel(String fieldName, LayoutManager layout, Consumer<PanelPopulator<JPanel, ?>> panel) {
+			SimpleHPanel<JPanel, ?> subPanel = new SimpleHPanel<>(fieldName, new ConformingPanel(layout), getUntil());
+			modify(subPanel);
+			if (panel != null)
+				panel.accept(subPanel);
+			doAdd(subPanel);
+			return (P) this;
+		}
+
+		@Override
+		default P addVPanel(Consumer<PanelPopulator<JPanel, ?>> panel) {
+			MigFieldPanel<JPanel, ?> subPanel = new MigFieldPanel<>(null, new ConformingPanel(), getUntil());
+			modify(subPanel);
+			if (panel != null)
+				panel.accept(subPanel);
+			doAdd(subPanel);
+			return (P) this;
+		}
+
+		@Override
+		default P addSettingsMenu(Consumer<SettingsMenu<JPanel, ?>> menu) {
+			SettingsMenuImpl<JPanel, ?> settingsMenu = new SettingsMenuImpl<>(null, new ConformingPanel(), getUntil());
+			modify(settingsMenu);
+			if (menu != null)
+				menu.accept(settingsMenu);
+			doAdd(settingsMenu, null, null, false);
+			return (P) this;
+		}
+
+		@Override
+		default P addCollapsePanel(boolean vertical, LayoutManager layout, Consumer<CollapsePanel<JXCollapsiblePane, JXPanel, ?>> panel) {
+			JXCollapsiblePane cp = new JXCollapsiblePane();
+			cp.setLayout(layout);
+			SimpleCollapsePane collapsePanel = new SimpleCollapsePane(cp, getUntil(), vertical, layout);
+			modify(collapsePanel);
+			panel.accept(collapsePanel);
+			doAdd(collapsePanel, null, null, false);
+			return (P) this;
+		}
+	}
+
 	public interface ComponentEditor<E, P extends ComponentEditor<E, P>> extends Tooltipped<P> {
 		Observable<?> getUntil();
 
@@ -470,6 +914,426 @@ public class PanelPopulation {
 		 * @return This editor
 		 */
 		P withName(String name);
+	}
+
+	public static abstract class AbstractComponentEditor<E, P extends AbstractComponentEditor<E, P>> implements ComponentEditor<E, P> {
+		private final Observable<?> theUntil;
+		private final E theEditor;
+		private ObservableValue<String> theFieldName;
+		private Consumer<FontAdjuster> theFieldLabelModifier;
+		private Object theLayoutConstraints;
+		private boolean isFillH;
+		private boolean isFillV;
+		private Consumer<Component> theComponentModifier;
+		private ObservableValue<String> theTooltip;
+		private boolean isTooltipHandled;
+		private SettableValue<ObservableValue<String>> theSettableTooltip;
+		private ComponentDecorator theDecorator;
+		private List<Consumer<ComponentDecorator>> theDecorators;
+		private Observable<?> theRepaint;
+		private Consumer<MouseEvent> theMouseListener;
+		private String theName;
+		private PanelPopulator<?, ?> theGlassPane;
+		private Component theBuiltComponent;
+
+		protected Consumer<FontAdjuster> theFont;
+		private ObservableValue<Boolean> isVisible;
+		private Consumer<MenuBuilder<JPopupMenu, ?>> thePopupMenu;
+
+		protected AbstractComponentEditor(String fieldName, E editor, Observable<?> until) {
+			theFieldName = fieldName == null ? null : ObservableValue.of(fieldName);
+			theEditor = editor;
+			theUntil = until == null ? Observable.empty() : until;
+			theSettableTooltip = SettableValue
+				.build(TypeTokens.get().keyFor(ObservableValue.class).<ObservableValue<String>> parameterized(String.class)).build();
+			theTooltip = ObservableValue.flatten(theSettableTooltip);
+		}
+
+		@Override
+		public Observable<?> getUntil() {
+			return theUntil;
+		}
+
+		@Override
+		public E getEditor() {
+			return theEditor;
+		}
+
+		@Override
+		public P withFieldName(ObservableValue<String> fieldName) {
+			theFieldName = fieldName;
+			return (P) this;
+		}
+
+		@Override
+		public P modifyFieldLabel(Consumer<FontAdjuster> labelModifier) {
+			if (theFieldLabelModifier == null)
+				theFieldLabelModifier = labelModifier;
+			else {
+				Consumer<FontAdjuster> prev = theFieldLabelModifier;
+				theFieldLabelModifier = f -> {
+					prev.accept(f);
+					labelModifier.accept(f);
+				};
+			}
+			return (P) this;
+		}
+
+		@Override
+		public P withFont(Consumer<FontAdjuster> font) {
+			if (theFont == null)
+				theFont = font;
+			else {
+				Consumer<FontAdjuster> prev = theFont;
+				theFont = f -> {
+					prev.accept(f);
+					font.accept(f);
+				};
+			}
+			return (P) this;
+		}
+
+		@Override
+		public P visibleWhen(ObservableValue<Boolean> visible) {
+			isVisible = visible;
+			return (P) this;
+		}
+
+		@Override
+		public P withLayoutConstraints(Object constraints) {
+			theLayoutConstraints = constraints;
+			return (P) this;
+		}
+
+		Object getLayoutConstraints() {
+			return theLayoutConstraints;
+		}
+
+		@Override
+		public P fill() {
+			isFillH = true;
+			return (P) this;
+		}
+
+		@Override
+		public P fillV() {
+			isFillV = true;
+			return (P) this;
+		}
+
+		@Override
+		public P withTooltip(ObservableValue<String> tooltip) {
+			theSettableTooltip.set(tooltip, null);
+			return (P) this;
+		}
+
+		ObservableValue<String> getTooltip() {
+			isTooltipHandled = true;
+			return theTooltip;
+		}
+
+		@Override
+		public P decorate(Consumer<ComponentDecorator> decoration) {
+			if (theDecorator == null) {
+				theDecorator = new ComponentDecorator();
+				theDecorators = new ArrayList<>();
+			}
+			decoration.accept(theDecorator);
+			theDecorators.add(decoration);
+			if (theBuiltComponent != null)
+				theDecorator.adjust(theBuiltComponent);
+			return (P) this;
+		}
+
+		@Override
+		public P repaintOn(Observable<?> repaint) {
+			if (theRepaint == null)
+				theRepaint = repaint;
+			else
+				theRepaint = Observable.or(theRepaint, repaint);
+			return (P) this;
+		}
+
+		protected P withGlassPane(LayoutManager layout, Consumer<PanelPopulator<?, ?>> panel) {
+			if (theGlassPane == null)
+				theGlassPane = new SimpleHPanel<>(null, new JPanel(layout), getUntil());
+			panel.accept(theGlassPane);
+			return (P) this;
+		}
+
+		boolean isDecorated() {
+			return theDecorator != null;
+		}
+
+		@Override
+		public P modifyEditor(Consumer<? super E> modify) {
+			modify.accept(getEditor());
+			return (P) this;
+		}
+
+		@Override
+		public P modifyComponent(Consumer<Component> component) {
+			if (theBuiltComponent != null)
+				component.accept(theBuiltComponent);
+			else if (theComponentModifier == null)
+				theComponentModifier = component;
+			else {
+				Consumer<Component> old = theComponentModifier;
+				theComponentModifier = comp -> {
+					old.accept(comp);
+					component.accept(comp);
+				};
+			}
+			return (P) this;
+		}
+
+		@Override
+		public Alert alert(String title, String message) {
+			return new SimpleAlert(getComponent(), title, message);
+		}
+
+		@Override
+		public P withPopupMenu(Consumer<MenuBuilder<JPopupMenu, ?>> menu) {
+			thePopupMenu = menu;
+			return (P) this;
+		}
+
+		@Override
+		public P onMouse(Consumer<MouseEvent> onMouse) {
+			if (theMouseListener == null)
+				theMouseListener = onMouse;
+			else {
+				Consumer<MouseEvent> old = theMouseListener;
+				theMouseListener = event -> {
+					old.accept(event);
+					onMouse.accept(event);
+				};
+			}
+			return (P) this;
+		}
+
+		@Override
+		public P withName(String name) {
+			theName = name;
+			return (P) this;
+		}
+
+		protected <C extends JComponent> C onFieldName(C fieldNameComponent, Consumer<String> fieldName, Observable<?> until) {
+			if (theFieldName == null)
+				return null;
+			theFieldName.changes().takeUntil(until).act(evt -> fieldName.accept(evt.getNewValue()));
+			if (fieldNameComponent != null && theFieldLabelModifier != null)
+				new FontAdjuster().configure(theFieldLabelModifier).adjust(fieldNameComponent);
+			if (fieldNameComponent != null && theFont != null)
+				new FontAdjuster().configure(theFont).adjust(fieldNameComponent);
+			return fieldNameComponent;
+		}
+
+		protected Component createFieldNameLabel(Observable<?> until) {
+			if (theFieldName == null)
+				return null;
+			JLabel fieldNameLabel = new JLabel(theFieldName.get());
+			return onFieldName(fieldNameLabel, fieldNameLabel::setText, until);
+		}
+
+		private boolean decorated = false;
+
+		protected Component decorate(Component c) {
+			if (!isTooltipHandled && theEditor instanceof JComponent)
+				theTooltip.changes().takeUntil(getUntil()).act(evt -> ((JComponent) theEditor).setToolTipText(evt.getNewValue()));
+			if (theDecorator != null)
+				theDecorator.decorate(c);
+			if (theRepaint != null) {
+				Component fc = c;
+				theRepaint.takeUntil(theUntil).act(__ -> {
+					if (theDecorator != null) {
+						for (Consumer<ComponentDecorator> deco : theDecorators)
+							deco.accept(theDecorator);
+						theDecorator.decorate(fc);
+					}
+					fc.repaint();
+				});
+			}
+			if (decorated)
+				return c;
+			decorated = true;
+			if (theName != null)
+				c.setName(theName);
+			class JPMBuilder extends AbstractComponentEditor<JPopupMenu, JPMBuilder> implements MenuBuilder<JPopupMenu, JPMBuilder> {
+				ObservableValue<String> theDisablement;
+
+				public JPMBuilder(Observable<?> until) {
+					super(null, new JPopupMenu(), until);
+				}
+
+				@Override
+				public JPMBuilder withText(ObservableValue<String> text) {
+					System.err.println("Text cannot be set for a popup menu");
+					return this;
+				}
+
+				@Override
+				public JPMBuilder disableWith(ObservableValue<String> disabled) {
+					if (theDisablement == null)
+						theDisablement = disabled;
+					else
+						theDisablement = ObservableValue.firstValue(TypeTokens.get().STRING, e -> e != null, null, theDisablement,
+						disabled);
+					return this;
+				}
+
+				@Override
+				public JPMBuilder withPostLabel(ObservableValue<String> postLabel) {
+					System.err.println("Post label cannot be set for a popup menu");
+					return this;
+				}
+
+				@Override
+				public JPMBuilder withPostButton(String buttonText, ObservableAction<?> action, Consumer<ButtonEditor<JButton, ?>> modify) {
+					System.err.println("Post Button cannot be set for a popup menu");
+					return this;
+				}
+
+				@Override
+				public JPMBuilder withIcon(ObservableValue<? extends Icon> icon) {
+					System.err.println("Icon not supported for a popup menu");
+					return this;
+				}
+
+				@Override
+				protected Component createPostLabel(Observable<?> until) {
+					return null;
+				}
+
+				@Override
+				public JPMBuilder withSubMenu(String name, Consumer<MenuBuilder<JMenu, ?>> subMenu) {
+					JMenu jmenu = null;
+					for (int m = 0; m < getEditor().getComponentCount(); m++) {
+						if (getEditor().getComponent(m) instanceof JMenu && ((JMenu) getEditor().getComponent(m)).getText().equals(name)) {
+							jmenu = (JMenu) getEditor().getComponent(m);
+							break;
+						}
+					}
+					boolean found = jmenu != null;
+					if (!found)
+						jmenu = new JMenu(name);
+					JMenuBuilder<?> builder = new JMenuBuilder<>(jmenu, getUntil());
+					subMenu.accept(builder);
+					if (!found)
+						getEditor().add((JMenu) builder.getComponent());
+					return this;
+				}
+
+				@Override
+				public JPMBuilder withAction(String name, ObservableAction<?> action, Consumer<ButtonEditor<JMenuItem, ?>> ui) {
+					JMenuItem item = new JMenuItem(name);
+					ButtonEditor<JMenuItem, ?> button = new PanelPopulationImpl.SimpleButtonEditor<>(name, item, name, action, false,
+						getUntil());
+					if (ui != null) {
+						ui.accept(button);
+					}
+					getEditor().add((JMenuItem) button.getComponent());
+					return this;
+				}
+			}
+			JPMBuilder menuBuilder;
+			JPopupMenu popup;
+			if (thePopupMenu != null) {
+				menuBuilder = new JPMBuilder(getUntil());
+				thePopupMenu.accept(menuBuilder);
+				popup = (JPopupMenu) menuBuilder.createComponent();
+			} else {
+				menuBuilder = null;
+				popup = null;
+			}
+			if (theMouseListener != null || popup != null) {
+				Component finalC = c;
+				c.addMouseListener(new MouseListener() {
+					@Override
+					public void mouseClicked(MouseEvent e) {
+						if (theMouseListener != null)
+							theMouseListener.accept(e);
+						if (popup != null //
+							&& e.getClickCount() == 1 && SwingUtilities.isRightMouseButton(e)) {
+							boolean anyActionsVisible = false;
+							for (Component item : popup.getComponents()) {
+								if (item.isVisible()) {
+									anyActionsVisible = true;
+									break;
+								}
+							}
+							if (anyActionsVisible)
+								popup.show(finalC, e.getX(), e.getY());
+						}
+					}
+
+					@Override
+					public void mousePressed(MouseEvent e) {
+						if (theMouseListener != null)
+							theMouseListener.accept(e);
+					}
+
+					@Override
+					public void mouseReleased(MouseEvent e) {
+						if (theMouseListener != null)
+							theMouseListener.accept(e);
+					}
+
+					@Override
+					public void mouseEntered(MouseEvent e) {
+						if (theMouseListener != null)
+							theMouseListener.accept(e);
+					}
+
+					@Override
+					public void mouseExited(MouseEvent e) {
+						if (theMouseListener != null)
+							theMouseListener.accept(e);
+					}
+				});
+			}
+			if (theComponentModifier != null)
+				theComponentModifier.accept(c);
+			if (theGlassPane != null) {
+				JPanel panel = new JPanel(new LayerLayout());
+				panel.add(c);
+				panel.add(theGlassPane.getComponent());
+				c = panel;
+			}
+			return c;
+		}
+
+		protected Component createComponent() {
+			if (!(theEditor instanceof Component))
+				throw new IllegalStateException("Editor is not a component, this should be overridden");
+			return (Component) theEditor;
+		}
+
+		public void reset() {
+			theBuiltComponent = null;
+		}
+
+		@Override
+		public final Component getComponent() {
+			if (theBuiltComponent == null) {
+				theBuiltComponent = decorate(createComponent());
+			}
+			return theBuiltComponent;
+		}
+
+		protected boolean isFill() {
+			return isFillH;
+		}
+
+		protected boolean isFillV() {
+			return isFillV;
+		}
+
+		protected ObservableValue<Boolean> isVisible() {
+			return isVisible;
+		}
+
+		protected abstract Component createPostLabel(Observable<?> until);
 	}
 
 	public interface SettingsMenu<C extends Container, P extends SettingsMenu<C, P>> extends PanelPopulator<C, P>, Iconized<P> {

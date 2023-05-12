@@ -36,9 +36,9 @@ import org.observe.SettableValue;
 import org.observe.Subscription;
 import org.observe.collect.ObservableCollection;
 import org.observe.util.TypeTokens;
+import org.observe.util.swing.PanelPopulation.AbstractComponentEditor;
 import org.observe.util.swing.PanelPopulation.DataAction;
 import org.observe.util.swing.PanelPopulation.TreeTableEditor;
-import org.observe.util.swing.PanelPopulationImpl.AbstractComponentEditor;
 import org.observe.util.swing.PanelPopulationImpl.SimpleDataAction;
 import org.observe.util.swing.PanelPopulationImpl.SimpleHPanel;
 import org.qommons.LambdaUtils;
@@ -104,9 +104,8 @@ implements TreeTableEditor<F, P> {
 	private int theAdaptiveMaxRowHeight;
 	private boolean isScrollable;
 
-	private SimpleTreeTableBuilder(ObservableValue<F> root,
-		Function<? super F, ? extends ObservableCollection<? extends F>> children1,
-			Function<? super BetterList<F>, ? extends ObservableCollection<? extends F>> children2, Observable<?> until) {
+	private SimpleTreeTableBuilder(ObservableValue<F> root, Function<? super F, ? extends ObservableCollection<? extends F>> children1,
+		Function<? super BetterList<F>, ? extends ObservableCollection<? extends F>> children2, Observable<?> until) {
 		super(null, new JXTreeTable(), until);
 		theRoot = root;
 		theChildren1 = children1;

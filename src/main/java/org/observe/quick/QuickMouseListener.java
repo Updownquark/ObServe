@@ -44,6 +44,11 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 				theY = y;
 			}
 
+			Default() {
+				theX = SettableValue.build(int.class).withValue(0).build();
+				theY = SettableValue.build(int.class).withValue(0).build();
+			}
+
 			@Override
 			public SettableValue<Integer> getX() {
 				return theX;
@@ -93,6 +98,10 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 				SettableValue<Integer> x, SettableValue<Integer> y, SettableValue<MouseButton> mouseButton) {
 				super(altPressed, ctrlPressed, shiftPressed, x, y);
 				theMouseButton = mouseButton;
+			}
+
+			public Default() {
+				theMouseButton = SettableValue.build(MouseButton.class).build();
 			}
 
 			@Override

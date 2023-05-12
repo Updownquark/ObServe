@@ -1,6 +1,7 @@
 package org.observe.quick;
 
 import org.observe.expresso.ExpressoInterpretationException;
+import org.observe.expresso.ExpressoRuntimeException;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.quick.style.QuickCompiledStyle;
@@ -117,7 +118,8 @@ public interface QuickContainer2<C extends QuickWidget> extends QuickWidget {
 			}
 
 			@Override
-			public Interpreted.Abstract<W, C> update(QuickStyledElement.QuickInterpretationCache cache) throws ExpressoInterpretationException {
+			public Interpreted.Abstract<W, C> update(QuickStyledElement.QuickInterpretationCache cache)
+				throws ExpressoInterpretationException {
 				super.update(cache);
 				CollectionUtils.synchronize(theContents, getDefinition().getContents(), //
 					(widget, child) -> widget.getDefinition() == child)//
@@ -173,8 +175,26 @@ public interface QuickContainer2<C extends QuickWidget> extends QuickWidget {
 				(widget, child) -> widget.getInterpreted() == child)//
 			.<ModelInstantiationException> simpleE(child -> (C) child.create(QuickContainer2.Abstract.this))//
 			.rightOrder()//
-			.onRightX(element -> element.getLeftValue().update(getModels()))//
-			.onCommonX(element -> element.getLeftValue().update(getModels()))//
+			.onRightX(element -> {
+				try {
+					element.getLeftValue().update(getModels());
+				} catch (ExpressoRuntimeException e) {
+					throw e;
+				} catch (RuntimeException | Error e) {
+					throw new ExpressoRuntimeException(e.getMessage() == null ? e.toString() : e.getMessage(),
+						element.getRightValue().getDefinition().getElement().getPositionInFile(), e);
+				}
+			})//
+			.onCommonX(element -> {
+				try {
+					element.getLeftValue().update(getModels());
+				} catch (ExpressoRuntimeException e) {
+					throw e;
+				} catch (RuntimeException | Error e) {
+					throw new ExpressoRuntimeException(e.getMessage() == null ? e.toString() : e.getMessage(),
+						element.getRightValue().getDefinition().getElement().getPositionInFile(), e);
+				}
+			})//
 			.adjust();
 			return this;
 		}

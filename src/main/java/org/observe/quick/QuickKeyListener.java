@@ -28,6 +28,10 @@ public interface QuickKeyListener extends QuickEventListener {
 				theTypedChar = typedChar;
 			}
 
+			public Default() {
+				theTypedChar = SettableValue.build(char.class).withValue((char) 0).build();
+			}
+
 			@Override
 			public SettableValue<Character> getTypedChar() {
 				return theTypedChar;
@@ -45,6 +49,10 @@ public interface QuickKeyListener extends QuickEventListener {
 				SettableValue<KeyCode> keyCode) {
 				super(altPressed, ctrlPressed, shiftPressed);
 				theKeyCode = keyCode;
+			}
+
+			public Default() {
+				theKeyCode = SettableValue.build(KeyCode.class).build();
 			}
 
 			@Override

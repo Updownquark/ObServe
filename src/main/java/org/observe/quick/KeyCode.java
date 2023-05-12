@@ -252,6 +252,7 @@ public enum KeyCode {
 	/** The help key */
 	HELP;
 
+	/** The name by which this key code can be specified from Quick */
 	public final String quickName;
 
 	private KeyCode() {
@@ -266,6 +267,11 @@ public enum KeyCode {
 	private static boolean ARE_KEY_CODES_NAMED;
 	private static final Map<String, KeyCode> KEY_CODES_BY_NAME = new HashMap<>();
 
+	/**
+	 * @param keyCodeName The Quick name of the key code
+	 * @return The key code with the given name
+	 * @throws IllegalArgumentException If no such key code exists
+	 */
 	public static KeyCode parse(String keyCodeName) throws IllegalArgumentException {
 		if (!ARE_KEY_CODES_NAMED)
 			nameKeyCodes();

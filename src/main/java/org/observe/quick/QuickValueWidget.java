@@ -105,7 +105,7 @@ public interface QuickValueWidget<T> extends QuickWidget {
 	public abstract class Abstract<T> extends QuickWidget.Abstract implements QuickValueWidget<T> {
 		private final SettableValue<SettableValue<T>> theValue;
 
-		public Abstract(QuickValueWidget.Interpreted<T, ?> interpreted, QuickElement parent) {
+		protected Abstract(QuickValueWidget.Interpreted<T, ?> interpreted, QuickElement parent) {
 			super(interpreted, parent);
 			theValue = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class)
 				.<SettableValue<T>> parameterized((TypeToken<T>) interpreted.getValue().getType().getType(0))).build();

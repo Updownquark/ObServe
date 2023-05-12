@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
+import java.util.function.BinaryOperator;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
@@ -104,6 +105,16 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 	 *         property and the current value's {@link #isAcceptable(Object) acceptability} for this settable.
 	 */
 	default <V extends T> ObservableAction<V> assignmentTo(ObservableValue<V> value) {
+		return assignmentTo(value, null);
+	}
+
+	/**
+	 * @param value The value to assign this settable to
+	 * @param onError The error handler for when the assignment fails
+	 * @return An action whose {@link ObservableAction#isEnabled() enabled} property is tied to this settable's {@link #isEnabled() enabled}
+	 *         property and the current value's {@link #isAcceptable(Object) acceptability} for this settable.
+	 */
+	default <V extends T> ObservableAction<V> assignmentTo(ObservableValue<V> value, Consumer<IllegalArgumentException> onError){
 		return new ObservableAction<V>() {
 			@Override
 			public TypeToken<V> getType() {
@@ -117,13 +128,15 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 					set(newValue, cause);
 					return newValue;
 				} catch (IllegalArgumentException e) {
+					if(onError!=null)
+						onError.accept(e);
 					throw new IllegalStateException(e.getMessage(), e);
 				}
 			}
 
 			@Override
 			public ObservableValue<String> isEnabled() {
-				BiFunction<String, String, String> combineFn = (str1, str2) -> str1 != null ? str1 : str2;
+				BinaryOperator<String> combineFn = (str1, str2) -> str1 != null ? str1 : str2;
 				return SettableValue.this.isEnabled().combine(STRING_TYPE, combineFn,
 					value.refresh(SettableValue.this.noInitChanges()).map(STRING_TYPE, v -> isAcceptable(v)),
 					options -> options.fireIfUnchanged(false));

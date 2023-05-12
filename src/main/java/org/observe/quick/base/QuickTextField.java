@@ -25,7 +25,7 @@ public class QuickTextField<T> extends QuickEditableTextWidget.Abstract<T> {
 		}
 
 		@Override
-		public boolean isEditable() {
+		public boolean isTypeEditable() {
 			return true;
 		}
 

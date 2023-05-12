@@ -8,6 +8,7 @@ import org.observe.util.TypeTokens;
 import org.qommons.config.AbstractQIS;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigInterpretationException;
+import org.qommons.io.LocatedContentPosition;
 
 import com.google.common.reflect.TypeToken;
 
@@ -21,7 +22,7 @@ public class QuickLabel<T> extends QuickTextWidget.Abstract<T> {
 		}
 
 		@Override
-		public boolean isEditable() {
+		public boolean isTypeEditable() {
 			return false;
 		}
 
@@ -49,7 +50,8 @@ public class QuickLabel<T> extends QuickTextWidget.Abstract<T> {
 			if (theStaticText != null) {
 				theTextExpression = new CompiledExpression(//
 					new ObservableExpression.LiteralExpression<>(theStaticText, theStaticText), session.getElement(), session.getValueDef(),
-					session.getElement().getValue().position, getExpressoSession());
+					LocatedContentPosition.of(session.getElement().getDocument().getLocation(), session.getElement().getValue().position),
+					getExpressoSession());
 			}
 			return this;
 		}
