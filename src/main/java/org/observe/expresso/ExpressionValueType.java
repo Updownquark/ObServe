@@ -1,8 +1,8 @@
 package org.observe.expresso;
 
 import org.qommons.config.CustomValueType;
-import org.qommons.config.ErrorReporting;
 import org.qommons.config.QonfigToolkit;
+import org.qommons.io.ErrorReporting;
 
 /** A Qonfig {@link CustomValueType} for parsing expressions */
 public class ExpressionValueType implements CustomValueType {

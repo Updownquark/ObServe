@@ -101,11 +101,12 @@ public class CastExpression implements ObservableExpression {
 		try {
 			// First, see if we can evaluate the expression as the cast type.
 			// This can work around some issues such as where flattening is needed, and if it succeeds it's simpler and less troublesome
-			return theValue.evaluate(ModelTypes.Value.forType(valueType), env, valueOffset);
+			return theValue.evaluate(ModelTypes.Value.forType(valueType), env.at(theType.length() + 2), valueOffset);
 		} catch (ExpressoEvaluationException | ExpressoInterpretationException | TypeConversionException e) {
 			// If the result can't be evaluated as the given type, evaluate it as any value and cast it dynamically
 			try {
-				return evalAsDynamicCast(theValue.evaluate(ModelTypes.Value.anyAs(), env, valueOffset), valueType, expressionOffset);
+				return evalAsDynamicCast(theValue.evaluate(ModelTypes.Value.anyAs(), env.at(theType.length() + 2), valueOffset), valueType,
+					valueOffset);
 			} catch (TypeConversionException e2) {
 				throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(), "'" + theValue + "' is not a scalar value",
 					e2);

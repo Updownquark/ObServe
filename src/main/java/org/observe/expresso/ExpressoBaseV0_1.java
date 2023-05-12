@@ -79,7 +79,6 @@ import org.qommons.ex.CheckedExceptionWrapper;
 import org.qommons.ex.ExBiFunction;
 import org.qommons.ex.ExBiPredicate;
 import org.qommons.ex.ExFunction;
-import org.qommons.io.SimpleXMLParser.ContentPosition;
 import org.qommons.tree.BetterTreeList;
 
 import com.google.common.reflect.TypeToken;
@@ -228,7 +227,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 							// wrappedBuilder.withMaker(name, ObservableModelSet.IdentifableCompiledValue.of(dv,
 							// new DynamicModelValue.RuntimeModelValue<>(dv, valueType)));
 						} else {
-							builder.withMaker(name, new DynamicModelValue.DynamicTypedModelValueCreator<>(dv, () -> {
+								builder.withMaker(name, new DynamicModelValue.DynamicTypedModelValueCreator<>(dv, session, () -> {
 								return (ModelInstanceType<Object, Object>) spec.getType(session);
 							}));
 						}
@@ -301,7 +300,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 					if (typeV != null && !typeV.text.isEmpty()) {
 						session.put(VALUE_TYPE_KEY, VariableType.parseType(typeV.text, wrap(session).getExpressoEnv().getClassView(),
 							session.getElement().getDocument().getLocation(), //
-							typeV.position != null ? typeV.position : new ContentPosition.Fixed(session.getElement().getFilePosition())));
+							typeV.position != null ? typeV.position : session.getElement().getFilePosition()));
 					}
 				}
 				if (session.isInstance("model-element"))

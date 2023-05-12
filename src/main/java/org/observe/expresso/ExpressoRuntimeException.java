@@ -50,12 +50,9 @@ public class ExpressoRuntimeException extends RuntimeException {
 		thePosition = position;
 	}
 
-	/**
-	 * @param s The message for the exception
-	 * @param cause The cause of the exception
-	 */
-	public ExpressoRuntimeException(String s, TextParseException cause) {
-		super(s);
+	/** @param cause The cause of the exception */
+	public ExpressoRuntimeException(TextParseException cause) {
+		super(cause.getMessage());
 		initCause(cause);
 		thePosition = cause.getPosition();
 	}

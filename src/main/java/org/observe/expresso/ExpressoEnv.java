@@ -16,18 +16,22 @@ import org.observe.util.TypeTokens;
 import org.qommons.ClassMap;
 import org.qommons.Colors;
 import org.qommons.TimeUtils;
+import org.qommons.io.ContentPosition;
+import org.qommons.io.ErrorReporting;
+import org.qommons.io.LocatedContentPosition;
 
 import com.google.common.reflect.TypeToken;
 
 /** An environment in which to evaluate {@link ObservableExpression}s */
-public class ExpressoEnv {
+public class ExpressoEnv implements ErrorReporting {
 	/**
 	 * Standard java environment, including imported java.lang.* and standard java operators, plus some
 	 * {@link #withDefaultNonStructuredParsing() default} non-structured parsing
 	 */
 	public static final ExpressoEnv STANDARD_JAVA = new ExpressoEnv(
 		ObservableModelSet.build("StandardJava", ObservableModelSet.JAVA_NAME_CHECKER),
-		ClassView.build().withWildcardImport("java.lang").build(), null, UnaryOperatorSet.STANDARD_JAVA, BinaryOperatorSet.STANDARD_JAVA)//
+		ClassView.build().withWildcardImport("java.lang").build(), null, UnaryOperatorSet.STANDARD_JAVA, BinaryOperatorSet.STANDARD_JAVA,
+		new ErrorReporting.Default(null, null))//
 		.withDefaultNonStructuredParsing();
 
 	private final ObservableModelSet theModels;
@@ -35,19 +39,22 @@ public class ExpressoEnv {
 	private final ClassMap<Set<NonStructuredParser>> theNonStructuredParsers;
 	private final UnaryOperatorSet theUnaryOperators;
 	private final BinaryOperatorSet theBinaryOperators;
+	private final ErrorReporting theErrorReporting;
 
 	/**
 	 * @param models The model set containing all values and sub-models available to expressions
 	 * @param classView The class view for expressions to obtain types with
 	 * @param unaryOperators The set of unary operators available for expressions
 	 * @param binaryOperators The set of binary operators available for expressions
+	 * @param reporting The error reporting for this environment
 	 */
-	public ExpressoEnv(ObservableModelSet models, ClassView classView, UnaryOperatorSet unaryOperators, BinaryOperatorSet binaryOperators) {
-		this(models, classView, null, unaryOperators, binaryOperators);
+	public ExpressoEnv(ObservableModelSet models, ClassView classView, UnaryOperatorSet unaryOperators, BinaryOperatorSet binaryOperators,
+		ErrorReporting reporting) {
+		this(models, classView, null, unaryOperators, binaryOperators, reporting);
 	}
 
 	ExpressoEnv(ObservableModelSet models, ClassView classView, ClassMap<Set<NonStructuredParser>> nonStructuredParsers,
-		UnaryOperatorSet unaryOperators, BinaryOperatorSet binaryOperators) {
+		UnaryOperatorSet unaryOperators, BinaryOperatorSet binaryOperators, ErrorReporting reporting) {
 		theModels = models;
 		theClassView = classView;
 		theNonStructuredParsers = new ClassMap<>();
@@ -55,6 +62,7 @@ public class ExpressoEnv {
 			theNonStructuredParsers.putAll(nonStructuredParsers);
 		theUnaryOperators = unaryOperators;
 		theBinaryOperators = binaryOperators;
+		theErrorReporting = reporting;
 	}
 
 	/** @return The model set containing all values and sub-models available to expressions */
@@ -133,7 +141,7 @@ public class ExpressoEnv {
 			return this;
 		return new ExpressoEnv(models == null ? theModels : models, //
 			classView == null ? theClassView : classView, //
-				theNonStructuredParsers, theUnaryOperators, theBinaryOperators);
+				theNonStructuredParsers, theUnaryOperators, theBinaryOperators, theErrorReporting);
 	}
 
 	/**
@@ -146,19 +154,50 @@ public class ExpressoEnv {
 			return this;
 		return new ExpressoEnv(theModels, theClassView, theNonStructuredParsers, //
 			unaryOps == null ? theUnaryOperators : unaryOps, //
-				binaryOps == null ? theBinaryOperators : binaryOps);
+				binaryOps == null ? theBinaryOperators : binaryOps, theErrorReporting);
+	}
+
+	@Override
+	public ErrorReporting report(Issue issue) {
+		return theErrorReporting.report(issue);
+	}
+
+	@Override
+	public LocatedContentPosition getFrame() {
+		return theErrorReporting.getFrame();
+	}
+
+	@Override
+	public ErrorReporting getParent() {
+		return theErrorReporting.getParent();
+	}
+
+	@Override
+	public ExpressoEnv at(ContentPosition position) {
+		return (ExpressoEnv) ErrorReporting.super.at(position);
+	}
+
+	@Override
+	public ExpressoEnv at(LocatedContentPosition position) {
+		return new ExpressoEnv(theModels, theClassView, theNonStructuredParsers, theUnaryOperators, theBinaryOperators,
+			theErrorReporting.at(position));
+	}
+
+	@Override
+	public ExpressoEnv at(int positionOffset) {
+		return (ExpressoEnv) ErrorReporting.super.at(positionOffset);
 	}
 
 	/** @return A new environment with null model and class view */
 	public ExpressoEnv clearModels() {
-		return new ExpressoEnv(null, null, theNonStructuredParsers, theUnaryOperators, theBinaryOperators);
+		return new ExpressoEnv(null, null, theNonStructuredParsers, theUnaryOperators, theBinaryOperators, theErrorReporting);
 	}
 
 	/** @return An independent copy of this environment */
 	public ExpressoEnv copy() {
 		return new ExpressoEnv(theModels, theClassView, //
 			theNonStructuredParsers == null ? null : theNonStructuredParsers.copy(), //
-				theUnaryOperators, theBinaryOperators);
+				theUnaryOperators, theBinaryOperators, theErrorReporting);
 	}
 
 	@Override

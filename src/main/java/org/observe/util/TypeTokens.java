@@ -1617,6 +1617,31 @@ public class TypeTokens {
 		return (TypeToken<? super X>) TypeToken.of(new WildcardTypeImpl(new Type[] { type.getType() }, new Type[0]));
 	}
 
+	public boolean isTrivialType(Type type) {
+		if (type instanceof WildcardType) {
+			WildcardType wildcard = (WildcardType) type;
+			if (wildcard.getLowerBounds().length > 0)
+				return false;
+			for (Type bound : wildcard.getUpperBounds()) {
+				if (bound instanceof Class) {
+					if (bound != Object.class)
+						return false;
+				} else if (!isTrivialType(bound))
+					return false;
+			}
+		} else if (type instanceof TypeVariable) {
+			TypeVariable<?> vbl = (TypeVariable<?>) type;
+			for (Type bound : vbl.getBounds()) {
+				if (bound instanceof Class) {
+					if (bound != Object.class)
+						return false;
+				} else if (!isTrivialType(bound))
+					return false;
+			}
+		}
+		return false;
+	}
+
 	/**
 	 * Parses a type from a string
 	 *

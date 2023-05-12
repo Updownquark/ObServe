@@ -25,6 +25,9 @@ import org.qommons.config.QonfigToolkit;
 import org.qommons.config.QonfigValueType;
 import org.qommons.config.SpecificationType;
 import org.qommons.ex.ExSupplier;
+import org.qommons.io.ErrorReporting;
+
+import com.google.common.reflect.TypeToken;
 
 /**
  * A dynamic (interpreted-value-specific) model value
@@ -266,6 +269,9 @@ public interface DynamicModelValue<M, MV extends M> extends ModelValueSynth<M, M
 	public static <M, MV extends M> void satisfyDynamicValueType(String name, ObservableModelSet models, ModelInstanceType<M, MV> type) {
 		ObservableModelSet.ModelComponentNode<?, ?> component = getDynamicValueComponent(name, models);
 		satisfyDynamicValue(name, models, CompiledModelValue.of(name, type.getModelType(),
+			// LambdaUtils.printableExSupplier(
+			// () -> new RuntimeModelValue<>(((DynamicTypedModelValueCreator<?, ?>) component.getThing()).getIdentity(), type),
+			// () -> "Dynamic " + type, null)));
 			() -> new RuntimeModelValue<>(((DynamicTypedModelValueCreator<?, ?>) component.getThing()).getIdentity(), type)));
 	}
 
@@ -482,6 +488,7 @@ public interface DynamicModelValue<M, MV extends M> extends ModelValueSynth<M, M
 	 */
 	public class DynamicTypedModelValueCreator<M, MV extends M> implements Compiled<M, MV>, Named {
 		private final Identity theIdentity;
+		private final ErrorReporting theReporting;
 		private final ExSupplier<ModelInstanceType<M, MV>, ExpressoInterpretationException> theTypeGetter;
 		private ModelInstanceType<M, MV> theDeclaredType;
 
@@ -489,11 +496,13 @@ public interface DynamicModelValue<M, MV extends M> extends ModelValueSynth<M, M
 
 		/**
 		 * @param declaration The declared definition of the dynamic value
+		 * @param reporting The error reporting for if this dynamic value's type is not satisfied in time
 		 * @param declaredType Supplies the type of the value, as far as it is known
 		 */
-		public DynamicTypedModelValueCreator(Identity declaration,
+		public DynamicTypedModelValueCreator(Identity declaration, ErrorReporting reporting,
 			ExSupplier<ModelInstanceType<M, MV>, ExpressoInterpretationException> declaredType) {
 			theIdentity = declaration;
+			theReporting = reporting;
 			theTypeGetter = declaredType;
 		}
 
@@ -528,16 +537,22 @@ public interface DynamicModelValue<M, MV extends M> extends ModelValueSynth<M, M
 			if (theSatisfier == null)
 				theSatisfier = ObservableModelSet.IdentifableCompiledValue.of(theIdentity,
 					new DynamicModelValue.RuntimeModelValue<>(theIdentity, theDeclaredType));
-			// throw new IllegalStateException("Dynamic model value " + getName() + " requested but not yet satisfied");
 			ModelValueSynth<M, MV> container = theSatisfier.createSynthesizer();
 			if (!getDeclaredType().getModelType().equals(container.getType().getModelType()))
 				throw new IllegalStateException(
 					"Dynamic model value " + getName() + "(" + getDeclaredType() + ") satisfied with " + container.getType());
+			boolean wildcard = false;
 			for (int t = 0; t < getDeclaredType().getModelType().getTypeCount(); t++) {
-				if (!TypeTokens.get().isAssignable(getDeclaredType().getType(t), container.getType().getType(t)))
+				TypeToken<?> pt = container.getType().getType(t);
+				if (!TypeTokens.get().isAssignable(getDeclaredType().getType(t), pt))
 					throw new IllegalStateException(
 						"Dynamic model value " + getName() + "(" + getDeclaredType() + ") satisfied with " + container.getType());
+				else if (TypeTokens.get().isTrivialType(pt.getType()))
+					wildcard = true;
 			}
+			if (wildcard)
+				theReporting
+					.error("Type not specified for dynamic model value " + getName() + "(" + theDeclaredType + ") before being needed");
 			return container;
 		}
 

@@ -112,6 +112,7 @@ public class ExpressoSessionImplV0_1 implements SpecialSessionImplementation<Exp
 		ExpressoQIS qis = new ExpressoQIS(coreSession);
 		qis.setExpressoParser(new JavaExpressoParser());
 		qis.setExpressoEnv(ExpressoEnv.STANDARD_JAVA//
+			.at(coreSession.getElement().getFilePosition())//
 			.withOperators(null, BinaryOperatorSet.STANDARD_JAVA.copy()//
 				.with("||", Object.class, Object.class, OBJECT_OR)//
 				.build()));

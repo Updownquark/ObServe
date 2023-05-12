@@ -123,6 +123,13 @@ public class MethodInvocation extends Invocation {
 	}
 
 	@Override
+	protected int getMethodNameOffset() {
+		if (theContext != null)
+			return theContext.getExpressionLength() + 1;
+		return 0;
+	}
+
+	@Override
 	protected <M, MV extends M> InvokableResult<?, M, MV> evaluateInternal2(ModelInstanceType<M, MV> type, ExpressoEnv env, ArgOption args,
 		int expressionOffset) throws ExpressoEvaluationException, ExpressoInterpretationException {
 		if (theContext != null) {

@@ -36,6 +36,7 @@ import org.qommons.ArrayUtils;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterList;
 import org.qommons.ex.CheckedExceptionWrapper;
+import org.qommons.io.ErrorReporting;
 
 import com.google.common.reflect.TypeToken;
 
@@ -63,6 +64,9 @@ public abstract class Invocation implements ObservableExpression {
 		return theArguments;
 	}
 
+	/** @return The offset in this expression of the method name */
+	protected abstract int getMethodNameOffset();
+
 	/** @return The offset in this expression of the initial parameter argument expression */
 	protected abstract int getInitialArgOffset();
 
@@ -79,12 +83,13 @@ public abstract class Invocation implements ObservableExpression {
 				InvokableResult<?, SettableValue<?>, ? extends SettableValue<?>> result = evaluateInternal2(
 					ModelTypes.Value.forType(type.getType(0)), env, new ArgOption(env, expressionOffset + getInitialArgOffset()),
 					expressionOffset);
-				return (ModelValueSynth<M, MV>) createActionContainer((InvokableResult<?, SettableValue<?>, SettableValue<Object>>) result);
+				return (ModelValueSynth<M, MV>) createActionContainer((InvokableResult<?, SettableValue<?>, SettableValue<Object>>) result,
+					env.at(getMethodNameOffset()));
 			}
 		} else {
 			InvokableResult<?, M, MV> result = evaluateInternal2(type, env, new ArgOption(env, expressionOffset + getInitialArgOffset()),
 				expressionOffset);
-			return createValueContainer(result);
+			return createValueContainer(result, env.at(getMethodNameOffset()));
 		}
 	}
 
@@ -154,14 +159,14 @@ public abstract class Invocation implements ObservableExpression {
 				}
 			}
 			// Not found, try to evaluate it
-			int argOffset = theExpressionOffset;
+			int argOffset = 0;
 			for (int i = 0; i < arg; i++) {
 				if (i > 0)
 					argOffset++;
 				argOffset += theArguments.get(i).getExpressionLength();
 			}
 			c = (ModelValueSynth<SettableValue<?>, SettableValue<?>>) (ModelValueSynth<?, ?>) theArguments.get(arg)
-				.evaluate(ModelTypes.Value.forType(paramType), theEnv, argOffset);
+				.evaluate(ModelTypes.Value.forType(paramType), theEnv.at(argOffset), theExpressionOffset + argOffset);
 			args[arg].add(0, c);
 			return true;
 		}
@@ -170,13 +175,14 @@ public abstract class Invocation implements ObservableExpression {
 		public TypeToken<?> resolve(int arg) throws ExpressoEvaluationException, ExpressoInterpretationException, TypeConversionException {
 			if (resolved[arg] == null) {
 				if (args[arg].isEmpty()) {
-					int argOffset = theExpressionOffset;
+					int argOffset = 0;
 					for (int i = 0; i < arg; i++) {
 						if (i > 0)
 							argOffset++;
 						argOffset += theArguments.get(i).getExpressionLength();
 					}
-					resolved[arg] = theArguments.get(arg).evaluate(ModelTypes.Value.any(), theEnv, argOffset);
+					resolved[arg] = theArguments.get(arg).evaluate(ModelTypes.Value.any(), theEnv.at(argOffset),
+						theExpressionOffset + argOffset);
 				} else
 					resolved[arg] = args[arg].get(0);
 			}
@@ -240,12 +246,13 @@ public abstract class Invocation implements ObservableExpression {
 		ArgOption args, int expressionOffset) throws ExpressoEvaluationException, ExpressoInterpretationException;
 
 	private <X extends Executable, T> InvocationActionContainer<X, T> createActionContainer(
-		InvokableResult<X, SettableValue<?>, SettableValue<T>> result) {
-		return new InvocationActionContainer<>(result.method, result.context, result.arguments, result.impl);
+		InvokableResult<X, SettableValue<?>, SettableValue<T>> result, ErrorReporting reporting) {
+		return new InvocationActionContainer<>(result.method, result.context, result.arguments, result.impl, reporting);
 	}
 
-	private <X extends Executable, M, MV extends M> ModelValueSynth<M, MV> createValueContainer(InvokableResult<X, M, MV> result) {
-		return new InvocationThingContainer<>(result.method, result.context, result.arguments, result.impl);
+	private <X extends Executable, M, MV extends M> ModelValueSynth<M, MV> createValueContainer(InvokableResult<X, M, MV> result,
+		ErrorReporting reporting) {
+		return new InvocationThingContainer<>(result.method, result.context, result.arguments, result.impl, reporting);
 	}
 
 	/**
@@ -504,12 +511,13 @@ public abstract class Invocation implements ObservableExpression {
 		private final ModelInstanceType<M, MV> theType;
 		private final Invocation.ExecutableImpl<X> theImpl;
 		private final boolean isCaching;
+		private final ErrorReporting theReporting;
 		private boolean isUpdatingContext;
 		private Object theCachedValue;
 
 		InvocationContainer(Invocation.MethodResult<X, R> method, ModelValueSynth<SettableValue<?>, SettableValue<?>> context,
 			List<ModelValueSynth<SettableValue<?>, SettableValue<?>>> arguments, ModelInstanceType<M, MV> type,
-			Invocation.ExecutableImpl<X> impl) {
+			Invocation.ExecutableImpl<X> impl, ErrorReporting reporting) {
 			theMethod = method;
 			theArguments = arguments;
 			theType = type;
@@ -524,6 +532,7 @@ public abstract class Invocation implements ObservableExpression {
 			}
 			theImpl = impl;
 			isCaching = !Boolean.TRUE.equals(AS_ACTION.get());
+			theReporting = reporting;
 		}
 
 		@Override
@@ -595,6 +604,7 @@ public abstract class Invocation implements ObservableExpression {
 				return theCachedValue;
 			Object ctx = ctxV == null ? null : ctxV.get();
 			if (ctx == null && ctxV != null) {
+				theReporting.error(ctxV + " is null, cannot call " + theMethod);
 				// Although throwing an exception is better in theory, all the conditionals needed to work around this are obnoxious
 				// throw new NullPointerException(ctxV + " is null, cannot call " + theMethod);
 				return null;
@@ -609,7 +619,7 @@ public abstract class Invocation implements ObservableExpression {
 				try {
 					ctxV.set(ctxV.get(), null);
 				} catch (RuntimeException e) {
-					System.err.println("Could not update context after method invocation " + this);
+					theReporting.error("Could not update context after method invocation " + this);
 					e.printStackTrace();
 				} finally {
 					isUpdatingContext = false;
@@ -625,7 +635,7 @@ public abstract class Invocation implements ObservableExpression {
 				try {
 					return (X2) invoke(ctxV, argVs, false);
 				} catch (Throwable e) {
-					e.printStackTrace();
+					theReporting.error(null, e);
 					return null;
 				}
 			}, () -> {
@@ -671,8 +681,9 @@ public abstract class Invocation implements ObservableExpression {
 	extends Invocation.InvocationContainer<X, SettableValue<T>, ObservableAction<?>, ObservableAction<T>> {
 		InvocationActionContainer(Invocation.MethodResult<X, SettableValue<T>> method,
 			ModelValueSynth<SettableValue<?>, SettableValue<?>> context, List<ModelValueSynth<SettableValue<?>, SettableValue<?>>> arguments,
-			Invocation.ExecutableImpl<X> impl) {
-			super(method, context, arguments, ModelTypes.Action.forType((TypeToken<T>) method.converter.getType().getType(0)), impl);
+			Invocation.ExecutableImpl<X> impl, ErrorReporting reporting) {
+			super(method, context, arguments, ModelTypes.Action.forType((TypeToken<T>) method.converter.getType().getType(0)), impl,
+				reporting);
 		}
 
 		@Override
@@ -703,8 +714,9 @@ public abstract class Invocation implements ObservableExpression {
 
 	static class InvocationThingContainer<X extends Executable, M, MV extends M> extends Invocation.InvocationContainer<X, MV, M, MV> {
 		InvocationThingContainer(Invocation.MethodResult<X, MV> method, ModelValueSynth<SettableValue<?>, SettableValue<?>> context,
-			List<ModelValueSynth<SettableValue<?>, SettableValue<?>>> arguments, Invocation.ExecutableImpl<X> impl) {
-			super(method, context, arguments, (ModelInstanceType<M, MV>) method.converter.getType(), impl);
+			List<ModelValueSynth<SettableValue<?>, SettableValue<?>>> arguments, Invocation.ExecutableImpl<X> impl,
+			ErrorReporting reporting) {
+			super(method, context, arguments, (ModelInstanceType<M, MV>) method.converter.getType(), impl, reporting);
 		}
 
 		@Override

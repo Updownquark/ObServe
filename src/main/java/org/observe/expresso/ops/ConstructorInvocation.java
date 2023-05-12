@@ -85,6 +85,11 @@ public class ConstructorInvocation extends Invocation {
 	}
 
 	@Override
+	protected int getMethodNameOffset() {
+		return 4;
+	}
+
+	@Override
 	protected <M, MV extends M> InvokableResult<?, M, MV> evaluateInternal2(ModelInstanceType<M, MV> type, ExpressoEnv env, ArgOption args,
 		int expressionOffset) throws ExpressoEvaluationException, ExpressoInterpretationException {
 		Class<?> constructorType = env.getClassView().getType(theType.getName());

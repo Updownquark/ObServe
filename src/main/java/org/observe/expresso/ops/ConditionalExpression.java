@@ -115,16 +115,18 @@ public class ConditionalExpression implements ObservableExpression {
 			throw new ExpressoEvaluationException(expressionOffset, theCondition.getExpressionLength(), e.getMessage(), e);
 		}
 		int primaryOffset = expressionOffset + theCondition.getExpressionLength() + 1;
+		ExpressoEnv primaryEnv = env.at(theCondition.getExpressionLength() + 1);
 		ModelValueSynth<M, MV> primaryV;
 		try {
-			primaryV = thePrimary.evaluate(type, env, primaryOffset);
+			primaryV = thePrimary.evaluate(type, primaryEnv, primaryOffset);
 		} catch (TypeConversionException e) {
 			throw new ExpressoEvaluationException(primaryOffset, thePrimary.getExpressionLength(), e.getMessage(), e);
 		}
 		int secondaryOffset = primaryOffset + thePrimary.getExpressionLength() + 1;
+		ExpressoEnv secondaryEnv = primaryEnv.at(thePrimary.getExpressionLength() + 1);
 		ModelValueSynth<M, MV> secondaryV;
 		try {
-			secondaryV = theSecondary.evaluate(type, env, secondaryOffset);
+			secondaryV = theSecondary.evaluate(type, secondaryEnv, secondaryOffset);
 		} catch (TypeConversionException e) {
 			throw new ExpressoEvaluationException(secondaryOffset, theSecondary.getExpressionLength(), e.getMessage(), e);
 		}

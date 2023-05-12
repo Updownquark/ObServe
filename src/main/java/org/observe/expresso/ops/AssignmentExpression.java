@@ -94,24 +94,24 @@ public class AssignmentExpression implements ObservableExpression {
 		if (type.getModelType() != ModelTypes.Action)
 			throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(),
 				"Assignments cannot be used as " + type.getModelType() + "s");
-		ModelValueSynth<SettableValue<?>, SettableValue<Object>> context;
+		ModelValueSynth<SettableValue<?>, SettableValue<Object>> target;
 		try {
-			context = theTarget.evaluate(
+			target = theTarget.evaluate(
 				(ModelInstanceType<SettableValue<?>, SettableValue<Object>>) (ModelInstanceType<?, ?>) ModelTypes.Value.any(), env,
 				expressionOffset);
 		} catch (TypeConversionException e) {
 			throw new ExpressoEvaluationException(expressionOffset, theTarget.getExpressionLength(), e.getMessage(), e);
 		}
 		boolean isVoid = type.getType(0).getType() == void.class || type.getType(0).getType() == Void.class;
-		if (!isVoid && !TypeTokens.get().isAssignable(type.getType(0), context.getType().getType(0)))
+		if (!isVoid && !TypeTokens.get().isAssignable(type.getType(0), target.getType().getType(0)))
 			throw new ExpressoEvaluationException(expressionOffset, theTarget.getExpressionLength(),
-				"Cannot assign " + context + ", type " + type.getType(0) + " to " + context.getType().getType(0));
+				"Cannot assign " + target + ", type " + type.getType(0) + " to " + target.getType().getType(0));
 		ModelValueSynth<SettableValue<?>, SettableValue<Object>> value;
 		int valueOffset = expressionOffset + theTarget.getExpressionLength() + 1;
 		try (Transaction t = Invocation.asAction()) {
 			value = theValue.evaluate(
-				ModelTypes.Value.forType((TypeToken<Object>) TypeTokens.get().getExtendsWildcard(context.getType().getType(0))), env,
-				valueOffset);
+				ModelTypes.Value.forType((TypeToken<Object>) TypeTokens.get().getExtendsWildcard(target.getType().getType(0))),
+				env.at(theTarget.getExpressionLength() + 1), valueOffset);
 		} catch (TypeConversionException e) {
 			throw new ExpressoEvaluationException(valueOffset, theValue.getExpressionLength(), e.getMessage(), e);
 		}
@@ -127,21 +127,21 @@ public class AssignmentExpression implements ObservableExpression {
 					return (ModelInstanceType<ObservableAction<?>, ObservableAction<?>>) type;
 				else
 					return (ModelInstanceType<ObservableAction<?>, ObservableAction<?>>) (ModelInstanceType<?, ?>) ModelTypes.Action
-						.forType(context.getType().getType(0));
+						.forType(target.getType().getType(0));
 			}
 
 			@Override
 			public ObservableAction<?> get(ModelSetInstance models) throws ModelInstantiationException {
-				SettableValue<Object> ctxValue = context.get(models);
+				SettableValue<Object> ctxValue = target.get(models);
 				SettableValue<Object> valueValue = value.get(models);
-				return ctxValue.assignmentTo(valueValue);
+				return ctxValue.assignmentTo(valueValue, err -> env.error(null, err));
 			}
 
 			@Override
 			public ObservableAction<?> forModelCopy(ObservableAction<?> value2, ModelSetInstance sourceModels, ModelSetInstance newModels)
 				throws ModelInstantiationException {
-				SettableValue<Object> sourceCtx = context.get(sourceModels);
-				SettableValue<Object> newCtx = context.get(newModels);
+				SettableValue<Object> sourceCtx = target.get(sourceModels);
+				SettableValue<Object> newCtx = target.get(newModels);
 				SettableValue<Object> sourceValue = value.get(sourceModels);
 				SettableValue<Object> newValue = value.get(newModels);
 				if (sourceCtx == newCtx && sourceValue == newValue)
@@ -152,7 +152,7 @@ public class AssignmentExpression implements ObservableExpression {
 
 			@Override
 			public BetterList<ModelValueSynth<?, ?>> getCores() throws ExpressoInterpretationException {
-				return BetterList.of(Stream.of(context, value), vc -> vc.getCores().stream());
+				return BetterList.of(Stream.of(target, value), vc -> vc.getCores().stream());
 			}
 
 			@Override

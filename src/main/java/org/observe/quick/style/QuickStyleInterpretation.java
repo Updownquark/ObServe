@@ -207,8 +207,15 @@ public class QuickStyleInterpretation implements QonfigInterpretation {
 			for (String roleName : rolePath.text.split("\\.")) {
 				roleName = roleName.trim();
 				QonfigChildDef child = null;
-				if (application.getRole() != null)
-					child = application.getRole().getType().getChild(roleName);
+				if (application.getRole() != null) {
+					if (application.getRole().getType() != null)
+						child = application.getRole().getType().getChild(roleName);
+					else
+						throw new QonfigInterpretationException("No such role '" + roleName + "' for parent style " + application, //
+							rolePath.position == null ? null
+								: new LocatedFilePosition(rolePath.fileLocation, rolePath.position.getPosition(0)),
+								rolePath.text.length());
+				}
 				for (QonfigElementOrAddOn type : application.getTypes().values()) {
 					if (child != null)
 						break;
@@ -293,7 +300,8 @@ public class QuickStyleInterpretation implements QonfigInterpretation {
 		}
 		CompiledExpression value = exS.getValueExpression();
 		if ((value != null && value.getExpression() != ObservableExpression.EMPTY) && attr == null)
-			throw new QonfigInterpretationException("Cannot specify a style value without an attribute", value.getFilePosition(),
+			throw new QonfigInterpretationException("Cannot specify a style value without an attribute",
+				value.getFilePosition().getPosition(0),
 				value.length());
 		QonfigValue styleSetName = session.getAttributeQV("style-set");
 		List<QuickStyleValue<?>> styleSetRef;

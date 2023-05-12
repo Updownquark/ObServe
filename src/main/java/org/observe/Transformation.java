@@ -2276,7 +2276,7 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 		@Override
 		public TransformedElement<S, T> createElement(Supplier<S> source) {
 			if (theTransformation.isCached())
-				return new CachedTransformedElement(source.get(), get());
+				return new CachedTransformedElement(source, get());
 			else
 				return new DynamicTransformedElement(source);
 		}
@@ -2495,23 +2495,40 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 		}
 
 		class CachedTransformedElement extends AbstractTransformedElement {
+			private final Supplier<S> theSourceSupplier;
+			private TransformationState theInitialTransformation;
 			volatile S theSource;
 			volatile T theResult;
 
-			CachedTransformedElement(S source, TransformationState state) {
-				S sourceVal = source;
+			CachedTransformedElement(Supplier<S> source, TransformationState state) {
+				theSourceSupplier = source;
+				theInitialTransformation = state;
+				// this.theSource = sourceVal;
+				// this.theResult = transform(false, //
+				// () -> sourceVal, sourceVal, null, state, false);
+			}
+
+			private void init() {
+				TransformationState initState = theInitialTransformation;
+				if (initState == null)
+					return;
+				theInitialTransformation = null;
+				S sourceVal = theSourceSupplier.get();
 				this.theSource = sourceVal;
 				this.theResult = transform(false, //
-					() -> sourceVal, sourceVal, null, state, false);
+					() -> sourceVal, sourceVal, null, initState, false);
 			}
+
 
 			@Override
 			public S getSourceValue() {
+				init();
 				return theSource;
 			}
 
 			@Override
 			public T getCurrentValue(TransformationState state) {
+				init();
 				return theResult;
 			}
 
@@ -2522,6 +2539,7 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 
 			@Override
 			public BiTuple<T, T> transformationStateChanged(TransformationState oldState, TransformationState newState) {
+				init();
 				S sourceVal = theSource;
 				T oldResult = theResult;
 				T newResult = transform(false, //
@@ -2540,6 +2558,7 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 
 			@Override
 			T getCachedOrEvaluate(S oldSource, TransformationState state) {
+				init();
 				return theResult;
 			}
 

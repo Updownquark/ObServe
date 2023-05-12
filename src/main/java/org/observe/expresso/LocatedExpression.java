@@ -2,6 +2,7 @@ package org.observe.expresso;
 
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ObservableModelSet.ModelValueSynth;
+import org.qommons.io.LocatedContentPosition;
 import org.qommons.io.LocatedFilePosition;
 
 /** A structure containing an {@link ObservableExpression} and exposes the location in the file where the expression occurred */
@@ -10,15 +11,16 @@ public interface LocatedExpression {
 	ObservableExpression getExpression();
 
 	/** @return The position in the Qonfig file of the start of the expression */
-	default LocatedFilePosition getFilePosition() {
-		return getFilePosition(0);
-	}
+	LocatedContentPosition getFilePosition();
 
 	/**
 	 * @param offset The offset in the expression of the location to get
 	 * @return The location in the file where the portion of this expression at the given offset occurred
 	 */
-	LocatedFilePosition getFilePosition(int offset);
+	default LocatedFilePosition getFilePosition(int offset) {
+		LocatedContentPosition pos = getFilePosition();
+		return pos == null ? null : getFilePosition().getPosition(offset);
+	}
 
 	/** @return The length of the expression */
 	int length();
@@ -34,7 +36,7 @@ public interface LocatedExpression {
 	default <M, MV extends M> ModelValueSynth<M, MV> evaluate(ModelInstanceType<M, MV> type, ExpressoEnv env)
 		throws ExpressoInterpretationException {
 		try {
-			return getExpression().evaluate(type, env, 0);
+			return getExpression().evaluate(type, env.at(getFilePosition()), 0);
 		} catch (TypeConversionException e) {
 			throw new ExpressoInterpretationException(e.getMessage(), getFilePosition(0), 0, e);
 		} catch (ExpressoEvaluationException e) {

@@ -175,7 +175,8 @@ public class BinaryOperator implements ObservableExpression {
 		int rightOffset = expressionOffset + theLeft.getExpressionLength() + 1;
 		ModelValueSynth<SettableValue<?>, SettableValue<Object>> right;
 		try {
-			right = theRight.evaluate(ModelTypes.Value.forType((TypeToken<Object>) targetOpType), env, rightOffset);
+			right = theRight.evaluate(ModelTypes.Value.forType((TypeToken<Object>) targetOpType), env.at(theLeft.getExpressionLength() + 1),
+				rightOffset);
 		} catch (TypeConversionException e) {
 			throw new ExpressoEvaluationException(rightOffset, theRight.getExpressionLength(), e.getMessage(), e);
 		}
@@ -194,6 +195,7 @@ public class BinaryOperator implements ObservableExpression {
 					+ rightTypeT + ", target type " + targetType.getName());
 		TypeToken<Object> resultType = op.getTargetType(//
 			leftTypeT, rightTypeT);
+		ExpressoEnv operatorReporting = env.at(theLeft.getExpressionLength());
 		if (action) {
 			if (type.getModelType() != ModelTypes.Action)
 				throw new ExpressoEvaluationException(expressionOffset + theLeft.getExpressionLength(), theOperator.length(),
@@ -226,20 +228,22 @@ public class BinaryOperator implements ObservableExpression {
 				}
 
 				private ObservableAction<Object> createOpAction(SettableValue<Object> leftV, SettableValue<Object> rightV) {
-					ObservableValue<Object> result = leftV.transform(resultType, tx -> tx.combineWith(rightV)//
-						.combine((lft, rgt) -> op.apply(lft, rgt)));
-					ObservableValue<String> leftEnabled = leftV.isEnabled();
-					ObservableValue<String> enabled = result.transform(String.class, tx -> tx.combineWith(leftEnabled)//
-						.combine((res, le) -> {
-							if (le != null)
-								return le;
-							Object leftVV = leftV.get();
-							Object rightVV = rightV.get();
-							String msg = op.canReverse(leftVV, rightVV, res);
+					ObservableValue<String> enabled = leftV.isEnabled().transform(String.class, tx -> tx//
+						.combineWith(leftV).combineWith(rightV)//
+						.combine((en, lft, rgt) -> {
+							if (en != null)
+								return en;
+							Object res;
+							try {
+								res = op.apply(lft, rgt);
+							} catch (RuntimeException | Error e) {
+								operatorReporting.error(null, e);
+								return "Error";
+							}
+							String msg = op.canReverse(lft, rgt, res);
 							if (msg != null)
 								return msg;
-							Object lft = op.reverse(leftVV, rightVV, res);
-							return leftV.isAcceptable(lft);
+							return leftV.isAcceptable(res);
 						}));
 					return new ObservableAction<Object>() {
 						@Override
@@ -248,8 +252,20 @@ public class BinaryOperator implements ObservableExpression {
 						}
 
 						@Override
-						public Object act(Object cause) throws IllegalStateException {
-							return leftV.set(result.get(), cause);
+						public Object act(Object cause) {
+							Object res;
+							try {
+								res = op.apply(leftV.get(), rightV.get());
+							} catch (RuntimeException | Error e) {
+								operatorReporting.error(null, e);
+								return null;
+							}
+							try {
+								return leftV.set(res, cause);
+							} catch (RuntimeException | Error e) {
+								env.error(null, e);
+								return null;
+							}
 						}
 
 						@Override
@@ -306,7 +322,14 @@ public class BinaryOperator implements ObservableExpression {
 
 				private SettableValue<Object> createOpValue(SettableValue<Object> leftV, SettableValue<Object> rightV) {
 					return leftV.transformReversible(resultType, tx -> tx.combineWith(rightV)//
-						.combine(LambdaUtils.printableBiFn((lft, rgt) -> op.apply(lft, rgt), op::toString, op))//
+						.combine(LambdaUtils.printableBiFn((lft, rgt) -> {
+							try {
+								return op.apply(lft, rgt);
+							} catch (RuntimeException | Error e) {
+								env.error(null, e);
+								return null;
+							}
+						}, op::toString, op))//
 						.withReverse(new Transformation.TransformReverse<Object, Object>() {
 							@Override
 							public boolean isStateful() {
@@ -325,7 +348,12 @@ public class BinaryOperator implements ObservableExpression {
 								String msg = op.canReverse(transformValues.getCurrentSource(), rgt, newValue);
 								if (msg != null)
 									return ReverseQueryResult.reject(msg);
-								return ReverseQueryResult.value(op.reverse(transformValues.getCurrentSource(), rgt, newValue));
+								try {
+									return ReverseQueryResult.value(op.reverse(transformValues.getCurrentSource(), rgt, newValue));
+								} catch (RuntimeException | Error e) {
+									env.error(null, e);
+									return ReverseQueryResult.value(null);
+								}
 							}
 						}));
 				}

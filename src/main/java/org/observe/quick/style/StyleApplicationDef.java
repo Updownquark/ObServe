@@ -22,6 +22,7 @@ import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigToolkit;
+import org.qommons.io.LocatedContentPosition;
 import org.qommons.io.LocatedFilePosition;
 
 /**
@@ -108,7 +109,7 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 	}
 
 	private static void addHierarchy(QonfigElementOrAddOn type, Set<QonfigElementOrAddOn> visited) {
-		if (!visited.add(type))
+		if (type == null || !visited.add(type))
 			return;
 		if (type.getSuperElement() != null)
 			addHierarchy(type.getSuperElement(), visited);
@@ -146,15 +147,15 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 			}
 
 			@Override
-			public LocatedFilePosition getFilePosition(int offset) {
-				return ex.getFilePosition(offset);
+			public LocatedContentPosition getFilePosition() {
+				return ex.getFilePosition();
 			}
 
 			@Override
 			public <M, MV extends M> ModelValueSynth<M, MV> evaluate(ModelInstanceType<M, MV> type, ExpressoEnv env)
 				throws ExpressoInterpretationException {
 				try {
-					return expression.evaluate(type, env, 0);
+					return expression.evaluate(type, env.at(getFilePosition()), 0);
 				} catch (TypeConversionException e) {
 					throw new ExpressoInterpretationException(e.getMessage(), ex.getFilePosition(0), 0, e);
 				} catch (ExpressoEvaluationException e) {
@@ -343,7 +344,7 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 				return null;
 		}
 		if (theRole != null) {
-			if (!element.isInstance(theRole.getType()))
+			if (theRole.getType() != null && !element.isInstance(theRole.getType()))
 				return null;
 			if (!element.getDeclaredRoles().contains(theRole.getDeclared()))
 				return null;
@@ -429,7 +430,7 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 	public StyleApplicationDef forType(QonfigElementOrAddOn... types) {
 		MultiInheritanceSet<QonfigElementOrAddOn> newTypes = null;
 		for (QonfigElementOrAddOn type : types) {
-			if (theRole != null && type.isAssignableFrom(theRole.getType()))
+			if (theRole != null && theRole.getType() != null && type.isAssignableFrom(theRole.getType()))
 				continue;
 			if (!theTypes.contains(type)) {
 				if (newTypes == null) {
@@ -437,7 +438,7 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 					newTypes.addAll(theTypes.values());
 				}
 				newTypes.add(type);
-				break;
+				// break; Don't know why I was breaking here, doesn't seem right
 			}
 		}
 		if (newTypes == null)
@@ -452,7 +453,8 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 	 */
 	public StyleApplicationDef forChild(QonfigChildDef child) {
 		MultiInheritanceSet<QonfigElementOrAddOn> types = MultiInheritanceSet.create(STYLE_INHERITANCE);
-		types.add(child.getType());
+		if (child.getType() != null)
+			types.add(child.getType());
 		types.addAll(child.getInheritance());
 		return new StyleApplicationDef(this, child, types, null, theModelValues);
 	}
@@ -507,6 +509,11 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 		}
 
 		@Override
+		public LocatedContentPosition getFilePosition() {
+			return new LocatedAndLocation(theLeft.getFilePosition(), " && ", theRight.getFilePosition());
+		}
+
+		@Override
 		public LocatedFilePosition getFilePosition(int offset) {
 			if (offset < theLeft.length())
 				return theLeft.getFilePosition(offset);
@@ -514,6 +521,73 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 				return new LocatedFilePosition("StyleApplicationDef.java", 0, 0, 0);
 			else
 				return theRight.getFilePosition(offset - theLeft.length() - 4);
+		}
+	}
+
+	private static class LocatedAndLocation implements LocatedContentPosition {
+		private final LocatedContentPosition theLeft;
+		private final String theOperator;
+		private final LocatedContentPosition theRight;
+
+		LocatedAndLocation(LocatedContentPosition left, String operator, LocatedContentPosition right) {
+			theLeft = left;
+			theOperator = operator;
+			theRight = right;
+		}
+
+		@Override
+		public int length() {
+			return theLeft.length() + theOperator.length() + theRight.length();
+		}
+
+		@Override
+		public String getFileLocation() {
+			return theLeft.getFileLocation();
+		}
+
+		@Override
+		public LocatedFilePosition getPosition(int index) {
+			if (index < theLeft.length())
+				return theLeft.getPosition(index);
+			else if (index < theLeft.length() + theOperator.length())
+				return theRight.getPosition(0);
+			else
+				return theRight.getPosition(index);
+		}
+
+		@Override
+		public LocatedContentPosition subSequence(int startIndex) {
+			if (startIndex < theLeft.length())
+				return new LocatedAndLocation(theLeft.subSequence(startIndex), theOperator, theRight);
+			else if (startIndex < theLeft.length() + theOperator.length())
+				return theRight;
+			else
+				return theRight.subSequence(startIndex - theLeft.length() - theOperator.length());
+		}
+
+		@Override
+		public LocatedContentPosition subSequence(int startIndex, int endIndex) {
+			int leftLen = theLeft.length();
+			if (startIndex < leftLen) {
+				if (endIndex <= leftLen)
+					return theLeft.subSequence(startIndex, endIndex);
+				else if (endIndex <= leftLen + theOperator.length())
+					return theLeft.subSequence(startIndex);
+				else
+					return new LocatedAndLocation(theLeft.subSequence(startIndex), theOperator,
+						theRight.subSequence(0, endIndex - leftLen - theOperator.length()));
+			} else if (startIndex < theLeft.length() + theOperator.length()) {
+				if (endIndex < leftLen + theOperator.length())
+					return theRight.subSequence(0, 0);
+				else
+					return theRight.subSequence(startIndex - leftLen - theOperator.length(), endIndex - leftLen - theOperator.length());
+			} else
+				return theRight.subSequence(startIndex - leftLen - theOperator.length(), endIndex - leftLen - theOperator.length());
+		}
+
+		@Override
+		public String toString() {
+			return theLeft.toString();
 		}
 	}
 
@@ -608,7 +682,7 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 			for (QonfigElementOrAddOn type : theTypes.values()) {
 				boolean isInRole = theRole != null;
 				if (isInRole) {
-					isInRole = type.isAssignableFrom(theRole.getType());
+					isInRole = theRole.getType() == null || type.isAssignableFrom(theRole.getType());
 					for (QonfigAddOn inh : theRole.getInheritance()) {
 						if (isInRole)
 							break;

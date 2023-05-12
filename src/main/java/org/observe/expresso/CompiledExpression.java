@@ -5,8 +5,8 @@ import org.observe.expresso.ObservableModelSet.ModelValueSynth;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigValueDef;
+import org.qommons.io.LocatedContentPosition;
 import org.qommons.io.LocatedFilePosition;
-import org.qommons.io.SimpleXMLParser.ContentPosition;
 
 /**
  * Returned by {@link ExpressoQIS#getValueExpression()} and other methods e.g. for attributes. This structure contains all the information
@@ -16,7 +16,7 @@ public class CompiledExpression implements LocatedExpression {
 	private final ObservableExpression theExpression;
 	private final QonfigElement theElement;
 	private final QonfigValueDef theDef;
-	private final ContentPosition thePosition;
+	private final LocatedContentPosition thePosition;
 	private ExpressoQIS theSession;
 	private ExpressoEnv theEnv;
 
@@ -27,7 +27,7 @@ public class CompiledExpression implements LocatedExpression {
 	 * @param position The position in the Qonfig file of the start of the expression
 	 * @param session The Expresso session in which to evaluate the expression
 	 */
-	public CompiledExpression(ObservableExpression expression, QonfigElement element, QonfigValueDef def, ContentPosition position,
+	public CompiledExpression(ObservableExpression expression, QonfigElement element, QonfigValueDef def, LocatedContentPosition position,
 		ExpressoQIS session) {
 		theExpression = expression;
 		theElement = element;
@@ -51,15 +51,9 @@ public class CompiledExpression implements LocatedExpression {
 		return theDef;
 	}
 
-	/** @return The position in the Qonfig file of the start of the expression */
-	public ContentPosition getPosition() {
-		return thePosition;
-	}
-
 	@Override
-	public LocatedFilePosition getFilePosition(int offset) {
-		return thePosition == null ? null
-			: new LocatedFilePosition(theElement.getDocument().getLocation(), thePosition.getPosition(offset));
+	public LocatedContentPosition getFilePosition() {
+		return thePosition;
 	}
 
 	@Override
@@ -88,7 +82,7 @@ public class CompiledExpression implements LocatedExpression {
 			theEnv = theSession.getExpressoEnv();
 			theSession = null; // Don't need it anymore--release it
 		}
-		return evaluate(type, theEnv);
+		return evaluate(type, theEnv.at(getFilePosition()));
 	}
 
 	/**

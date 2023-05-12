@@ -10,8 +10,8 @@ import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.util.TypeTokens;
 import org.qommons.StringUtils;
 import org.qommons.config.QonfigInterpretationException;
+import org.qommons.io.ContentPosition;
 import org.qommons.io.LocatedFilePosition;
-import org.qommons.io.SimpleXMLParser.ContentPosition;
 
 import com.google.common.reflect.TypeToken;
 

@@ -20,6 +20,7 @@ import org.observe.expresso.ObservableModelSet.ModelValueSynth;
 import org.observe.expresso.TypeConversionException;
 import org.observe.util.TypeTokens;
 import org.qommons.collect.BetterList;
+import org.qommons.io.ErrorReporting;
 
 import com.google.common.reflect.TypeToken;
 
@@ -102,18 +103,19 @@ public class ArrayAccessExpression implements ObservableExpression {
 				"array " + theArray + " cannot be evaluated as a " + type.getType(0) + "[]", e);
 		}
 		int indexOffset = expressionOffset + theArray.getExpressionLength() + 1;
+		ExpressoEnv indexEnv = env.at(theArray.getExpressionLength() + 1);
 		ModelValueSynth<SettableValue<?>, SettableValue<Integer>> indexValue;
 		try {
-			indexValue = theIndex.evaluate(ModelTypes.Value.forType(int.class), env, indexOffset);
+			indexValue = theIndex.evaluate(ModelTypes.Value.forType(int.class), indexEnv, indexOffset);
 		} catch (TypeConversionException e) {
 			throw new ExpressoEvaluationException(indexOffset, theIndex.getExpressionLength(),
 				"index " + theArray + " cannot be evaluated as an integer", e);
 		}
-		return (ModelValueSynth<M, MV>) this.<Object> doEval(arrayValue, indexValue);
+		return (ModelValueSynth<M, MV>) this.<Object> doEval(arrayValue, indexValue, env, indexEnv);
 	}
 
 	private <T> ModelValueSynth<SettableValue<?>, SettableValue<T>> doEval(ModelValueSynth<SettableValue<?>, SettableValue<T[]>> arrayValue,
-		ModelValueSynth<SettableValue<?>, SettableValue<Integer>> indexValue)
+		ModelValueSynth<SettableValue<?>, SettableValue<Integer>> indexValue, ErrorReporting arrayReporting, ErrorReporting indexReporting)
 			throws ExpressoInterpretationException {
 		TypeToken<T> targetType = (TypeToken<T>) arrayValue.getType().getType(0).getComponentType();
 		ModelInstanceType<SettableValue<?>, SettableValue<T>> targetModelType = ModelTypes.Value.forType(targetType);
@@ -139,19 +141,19 @@ public class ArrayAccessExpression implements ObservableExpression {
 				return arrayV.transformReversible(targetType, tx -> tx.combineWith(indexV)//
 					.combine((a, idx) -> {
 						if (a == null) {
-							System.err.println("Array " + theArray + " is null");
+							arrayReporting.error("Array " + theArray + " is null");
 							return null;
 						} else if (idx < 0 || idx >= a.length) {
-							System.err.println("Index " + theIndex + " evaluates to " + idx + ", which is outside the array length of "
+							indexReporting.error("Index " + theIndex + " evaluates to " + idx + ", which is outside the array length of "
 								+ theArray + "(" + a.length + ")");
 							return null;
 						} else
 							return a[idx];
 					}).modifySource((a, idx, newValue) -> {
 						if (a == null) {
-							System.err.println("Array " + theArray + " is null");
+							arrayReporting.error("Array " + theArray + " is null");
 						} else if (idx < 0 || idx >= a.length) {
-							System.err.println("Index " + theIndex + " evaluates to " + idx + ", which is outside the array length of "
+							indexReporting.error("Index " + theIndex + " evaluates to " + idx + ", which is outside the array length of "
 								+ theArray + "(" + a.length + ")");
 						} else
 							a[idx] = newValue;
