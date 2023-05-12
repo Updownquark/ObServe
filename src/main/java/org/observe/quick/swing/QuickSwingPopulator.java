@@ -308,9 +308,9 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 								}
 							}
 						});
+						if (w.getTooltip() != null)
+							comp.withTooltip(w.getTooltip());
 						if (!renderer) {
-							if (w.getTooltip() != null)
-								comp.withTooltip(w.getTooltip());
 							if (w.isVisible() != null)
 								comp.visibleWhen(w.isVisible());
 						}
@@ -1853,7 +1853,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 				theMouseContext.getX().set(e.getX(), e);
 				theMouseContext.getY().set(e.getY(), e);
 				for (QuickEventListener listener : theRenderer.getEventListeners()) {
-					if (listener instanceof QuickMouseListener.QuickMouseButtonListener) {
+					if (listener instanceof QuickMouseListener.QuickMouseMoveListener) {
 						QuickMouseListener.QuickMouseMoveListener mouseL = (QuickMouseListener.QuickMouseMoveListener) listener;
 						QuickMouseListener.QuickMouseMoveListener.Def def = mouseL.getInterpreted().getDefinition();
 						if (def.getEventType() != QuickMouseListener.MouseMoveEventType.Enter)
@@ -1870,7 +1870,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 				theMouseContext.getX().set(e.getX(), e);
 				theMouseContext.getY().set(e.getY(), e);
 				for (QuickEventListener listener : theRenderer.getEventListeners()) {
-					if (listener instanceof QuickMouseListener.QuickMouseButtonListener) {
+					if (listener instanceof QuickMouseListener.QuickMouseMoveListener) {
 						QuickMouseListener.QuickMouseMoveListener mouseL = (QuickMouseListener.QuickMouseMoveListener) listener;
 						QuickMouseListener.QuickMouseMoveListener.Def def = mouseL.getInterpreted().getDefinition();
 						if (def.getEventType() != QuickMouseListener.MouseMoveEventType.Exit)
@@ -1887,7 +1887,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 				theMouseContext.getX().set(e.getX(), e);
 				theMouseContext.getY().set(e.getY(), e);
 				for (QuickEventListener listener : theRenderer.getEventListeners()) {
-					if (listener instanceof QuickMouseListener.QuickMouseButtonListener) {
+					if (listener instanceof QuickMouseListener.QuickMouseMoveListener) {
 						QuickMouseListener.QuickMouseMoveListener mouseL = (QuickMouseListener.QuickMouseMoveListener) listener;
 						QuickMouseListener.QuickMouseMoveListener.Def def = mouseL.getInterpreted().getDefinition();
 						if (def.getEventType() != QuickMouseListener.MouseMoveEventType.Move)

@@ -36,7 +36,10 @@
 			</titled-border>
 			<column name="`Value`" value="value" />
 			<column name="`Prime`" value="app.primes.factorize(value, 100_000).size()==1">
-				<check-box value="columnValue" />
+				<check-box value="columnValue" tooltip="columnValue ? `Prime` : `Not Prime`">
+					<on-mouse-move>System.out.println("Move on check "+x+", "+y)</on-mouse-move>
+					<on-type>System.out.println("Typed "+typedChar)</on-type>
+				</check-box>
 			</column>
 			<column name="`Factorization`" value="org.qommons.Primes.formatFactorization(app.primes.factorize(value, 100_000))" />
 		</table>

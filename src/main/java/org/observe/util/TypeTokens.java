@@ -977,6 +977,7 @@ public class TypeTokens {
 	 * @param target The type to cast to
 	 * @param safe For primitive right types, whether to use a safe value (0 or false) if the left value is null, as opposed to throwing a
 	 *        {@link NullPointerException}
+	 * @param downCastOnly Whether to only allow down casts (e.g. int->double) or to also facilitate upcasts (e.g. double->int)
 	 * @return A function that takes an instance of the right type and returns it as an instance of the left type, throwing a a
 	 *         {@link NullPointerException} if the right value is null and the left type is primitive
 	 * @throws IllegalArgumentException If values of the right type cannot be cast to the left type in general
@@ -1617,6 +1618,10 @@ public class TypeTokens {
 		return (TypeToken<? super X>) TypeToken.of(new WildcardTypeImpl(new Type[] { type.getType() }, new Type[0]));
 	}
 
+	/**
+	 * @param type The type to test
+	 * @return Whether the type is a trival one, like ? extends Object
+	 */
 	public boolean isTrivialType(Type type) {
 		if (type instanceof WildcardType) {
 			WildcardType wildcard = (WildcardType) type;
