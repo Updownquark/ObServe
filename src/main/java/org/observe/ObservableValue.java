@@ -2176,9 +2176,10 @@ public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>,
 			if (isValueUpToDate)
 				return theLastRememberedValue;
 			T value = getSpontaneous();
-			theLastRememberedValue = value;
-			if (theStamp < 0)
-				theStamp = 0;
+			if (value != theLastRememberedValue) {
+				theLastRememberedValue = value;
+				theStamp++;
+			}
 			return value;
 		}
 

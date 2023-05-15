@@ -278,11 +278,9 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 						if (e.getTargetException() instanceof ExpressoRuntimeException
 							&& e.getTargetException().getCause() instanceof ModelInstantiationException)
 							throw (ModelInstantiationException) e.getTargetException().getCause();
-						System.err.println("Unhandled error");
-						e.printStackTrace();
+						interpretedDoc.getDefinition().getExpressoSession().error("Unhandled error", e);
 					} catch (RuntimeException | Error e) {
-						System.err.println("Unhandled error");
-						e.printStackTrace();
+						interpretedDoc.getDefinition().getExpressoSession().error("Unhandled error", e);
 					}
 				};
 			});
@@ -293,19 +291,27 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 					l -> tx2.transform(l, QuickSwingEventListener.class));
 				QuickSwingBorder border = tx2.transform(qw.getBorder(), QuickSwingBorder.class);
 				qsp.addModifier((comp, w) -> {
+					comp.withName(qw.getDefinition().getName());
 					ComponentDecorator deco = new ComponentDecorator();
 					Runnable[] revert = new Runnable[1];
 					Component[] component = new Component[1];
 					ObservableValue<Color> color = w.getStyle().getColor();
 					try {
 						comp.modifyComponent(c -> {
-							QUICK_SWING_WIDGETS.put(c, w);
+							if (renderer) {
+								if (revert[0] == null)
+									QUICK_SWING_WIDGETS.put(c, w); // first time
+								else
+									revert[0].run();
+							} else
+								QUICK_SWING_WIDGETS.put(c, w);
+
 							component[0] = c;
 							if (renderer) {
 								// We can just do all this dynamically for renderers
-								adjustFont(deco, w.getStyle());
+								adjustFont(deco.reset(), w.getStyle());
 								deco.withBackground(color.get());
-								deco.decorate(c);
+								revert[0] = deco.decorate(c);
 							} else {
 								revert[0] = deco.decorate(c);
 								try {
@@ -1052,32 +1058,38 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 					compVisible = theComponent.isVisible();
 				if (!compVisible)
 					return false;
-				if (theButton == null) { // No button filter
-				} else if (theButton.booleanValue()) { // Left
-					if (!isLeftPressed)
-						return false;
-				} else { // Right
-					if (!isRightPressed)
-						return false;
-				}
-				Point screenPos;
+				System.out.print(theComponent.getName() + " " + (theButton.booleanValue() ? "left" : "right"));
 				try {
-					screenPos = theComponent.getLocationOnScreen();
-				} catch (IllegalComponentStateException e) {
-					return false;
+					if (theButton == null) { // No button filter
+					} else if (theButton.booleanValue()) { // Left
+						if (!isLeftPressed)
+							return false;
+					} else { // Right
+						if (!isRightPressed)
+							return false;
+					}
+					Point screenPos;
+					try {
+						screenPos = theComponent.getLocationOnScreen();
+					} catch (IllegalComponentStateException e) {
+						return false;
+					}
+					if (screenPos == null)
+						return false;
+					Point mousePos = theMouseLocation;
+					if (mousePos == null || mousePos.x < screenPos.x || mousePos.y < screenPos.y)
+						return false;
+					if (mousePos.x >= screenPos.x + theComponent.getWidth() || mousePos.y >= screenPos.y + theComponent.getHeight())
+						return false;
+					Component child = theComponent.getComponentAt(mousePos.x - screenPos.x, mousePos.y - screenPos.y);
+					// If the mouse is over one of our visible Quick-sourced children, then we're not clicked ourselves
+					while (child != null && child != theComponent && (!child.isVisible() || QUICK_SWING_WIDGETS.get(child) == null))
+						child = child.getParent();
+					System.out.print(" pressed");
+					return child == null || child == theComponent;
+				} finally {
+					System.out.println();
 				}
-				if (screenPos == null)
-					return false;
-				Point mousePos = theMouseLocation;
-				if (mousePos == null || mousePos.x < screenPos.x || mousePos.y < screenPos.y)
-					return false;
-				if (mousePos.x >= screenPos.x + theComponent.getWidth() || mousePos.y >= screenPos.y + theComponent.getHeight())
-					return false;
-				Component child = theComponent.getComponentAt(mousePos.x - screenPos.x, mousePos.y - screenPos.y);
-				//If the mouse is over one of our visible Quick-sourced children, then we're not clicked ourselves
-				while(child!=null && child!=theComponent && (!child.isVisible() || QUICK_SWING_WIDGETS.get(child)==null))
-					child=child.getParent();
-				return child == null || child == theComponent;
 			}
 
 			@Override
@@ -1758,6 +1770,8 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 							theRendererContext.isPressed().set(false, cause);
 							theRendererContext.isRightPressed().set(false, cause);
 						}
+						System.out.println(
+							"[" + cell.getRowIndex() + "," + cell.getColumnIndex() + "]: " + theRenderer.getStyle().getFontWeight().get());
 					}
 				}
 			}
