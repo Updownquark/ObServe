@@ -9,10 +9,13 @@ public interface ModelCell<R, C> extends ModelRow<R> {
 
 	boolean isCellHovered();
 
+	boolean isCellFocused();
+
 	public static class Default<M, C> extends ModelRow.Default<M> implements ModelCell<M, C> {
 		private final C theCellValue;
 		private final int theColumnIndex;
 		private final boolean isCellHovered;
+		private final boolean isCellFocused;
 
 		public Default(Supplier<? extends M> modelValue, C cellValue, int rowIndex, int columnIndex, boolean selected, boolean focused,
 			boolean rowHovered, boolean cellHovered, boolean expanded, boolean leaf, String enabled) {
@@ -20,6 +23,7 @@ public interface ModelCell<R, C> extends ModelRow<R> {
 			theCellValue = cellValue;
 			theColumnIndex = columnIndex;
 			isCellHovered = cellHovered;
+			isCellFocused = focused;
 		}
 
 		@Override
@@ -35,6 +39,11 @@ public interface ModelCell<R, C> extends ModelRow<R> {
 		@Override
 		public boolean isCellHovered() {
 			return isCellHovered;
+		}
+
+		@Override
+		public boolean isCellFocused() {
+			return isCellFocused;
 		}
 
 		@Override

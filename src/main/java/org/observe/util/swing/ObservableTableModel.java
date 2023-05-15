@@ -1,6 +1,7 @@
 package org.observe.util.swing;
 
 import java.awt.Component;
+import java.awt.Point;
 import java.awt.Rectangle;
 import java.awt.event.HierarchyEvent;
 import java.awt.event.HierarchyListener;
@@ -33,8 +34,10 @@ import org.observe.dbug.DbugAnchor;
 import org.observe.dbug.DbugAnchorType;
 import org.observe.util.TypeTokens;
 import org.observe.util.swing.CategoryRenderStrategy.CategoryKeyListener;
+import org.observe.util.swing.CategoryRenderStrategy.CategoryMouseListener;
 import org.qommons.IntList;
 import org.qommons.Transaction;
+import org.qommons.TriConsumer;
 import org.qommons.collect.ListenerList;
 import org.qommons.collect.MutableCollectionElement;
 
@@ -317,6 +320,12 @@ public class ObservableTableModel<R> implements TableModel {
 			}
 
 			@Override
+			protected Point getCellOffset(int row, int column) {
+				Rectangle bounds = table.getCellRect(row, column, false);
+				return bounds == null ? null : bounds.getLocation();
+			}
+
+			@Override
 			protected R getRowValue(int rowIndex) {
 				return model.getRowModel().getElementAt(rowIndex);
 			}
@@ -342,22 +351,48 @@ public class ObservableTableModel<R> implements TableModel {
 			}
 
 			@Override
+			public void mousePressed(MouseEvent e) {
+				super.mousePressed(e);
+				// Re-render hovered cell for state change
+				int r = getHoveredRow();
+				int c = getHoveredColumn();
+				if (r >= 0 && c >= 0)
+					table.repaint(table.getCellRect(r, c, false));
+			}
+
+			@Override
+			public void mouseReleased(MouseEvent e) {
+				super.mouseReleased(e);
+				// Re-render hovered cell for state change
+				int r = getHoveredRow();
+				int c = getHoveredColumn();
+				if (r >= 0 && c >= 0)
+					table.repaint(table.getCellRect(r, c, false));
+			}
+
+			@Override
 			protected void hoverChanged(int preHoveredRow, int preHoveredColumn, int newHoveredRow, int newHoveredColumn) {
 				// Repaint the rows, in case they change due to hover
 				if (preHoveredRow != newHoveredRow) {
 					if (preHoveredRow >= 0) {
+						// System.out.println("Row exited " + preHoveredRow);
 						Rectangle bounds = table.getCellRect(preHoveredRow, 0, false);
 						table.repaint(0, bounds.y, table.getWidth(), bounds.height);
 					}
 					if (newHoveredRow >= 0) {
+						// System.out.println("Row entered " + newHoveredRow);
 						Rectangle bounds = table.getCellRect(newHoveredRow, 0, false);
 						table.repaint(0, bounds.y, table.getWidth(), bounds.height);
 					}
 				} else if (preHoveredColumn != newHoveredColumn) {
-					if (preHoveredColumn >= 0)
+					if (preHoveredColumn >= 0) {
+						// System.out.println("Cell exited " + preHoveredColumn);
 						table.repaint(table.getCellRect(preHoveredRow, preHoveredColumn, false));
-					if (newHoveredColumn >= 0)
+					}
+					if (newHoveredColumn >= 0) {
+						// System.out.println("Cell entered " + newHoveredColumn);
 						table.repaint(table.getCellRect(preHoveredRow, newHoveredColumn, false));
+					}
 				}
 			}
 		};
@@ -668,35 +703,27 @@ public class ObservableTableModel<R> implements TableModel {
 			}
 
 			MouseClickStruct<C> clicked(MouseEvent e, MouseClickStruct<?> previous) {
-				if (theRow != null)
-					getRowListeners().forEach(listener -> listener.mouseClicked(theRow, e));
-				if (theCategory != null && theCategory.getMouseListener() != null)
-					theCategory.getMouseListener().mouseClicked(theCell, e);
+				fireRowEvent(e, RowMouseListener::mouseClicked);
+				fireCellEvent(e, CategoryMouseListener::mouseClicked);
 				return this;
 			}
 
 			MouseClickStruct<C> pressed(MouseEvent e, MouseClickStruct<?> previous) {
-				if (theRow != null)
-					getRowListeners().forEach(listener -> listener.mousePressed(theRow, e));
-				if (theCategory != null && theCategory.getMouseListener() != null)
-					theCategory.getMouseListener().mousePressed(theCell, e);
+				fireRowEvent(e, RowMouseListener::mousePressed);
+				fireCellEvent(e, CategoryMouseListener::mousePressed);
 				return this;
 			}
 
 			MouseClickStruct<C> released(MouseEvent e, MouseClickStruct<?> previous) {
-				if (theRow != null)
-					getRowListeners().forEach(listener -> listener.mouseReleased(theRow, e));
-				if (theCategory != null && theCategory.getMouseListener() != null)
-					theCategory.getMouseListener().mouseReleased(theCell, e);
+				fireRowEvent(e, RowMouseListener::mouseReleased);
+				fireCellEvent(e, CategoryMouseListener::mouseReleased);
 				return this;
 			}
 
 			MouseClickStruct<C> entered(MouseEvent e, MouseClickStruct<?> previous) {
 				checkToolTip(theRow, theCell, theCategory);
-				if (theRow != null)
-					getRowListeners().forEach(listener -> listener.mouseEntered(theRow, e));
-				if (theCategory != null && theCategory.getMouseListener() != null)
-					theCategory.getMouseListener().mouseEntered(theCell, e);
+				fireRowEvent(e, RowMouseListener::mouseEntered);
+				fireCellEvent(e, CategoryMouseListener::mouseEntered);
 				return this;
 			}
 
@@ -708,10 +735,8 @@ public class ObservableTableModel<R> implements TableModel {
 			}
 
 			MouseClickStruct<C> exited(MouseEvent e, MouseClickStruct<?> previous) {
-				if (theRow != null)
-					getRowListeners().forEach(listener -> listener.mouseExited(theRow, e));
-				if (theCategory != null && theCategory.getMouseListener() != null)
-					theCategory.getMouseListener().mouseExited(theCell, e);
+				fireRowEvent(e, RowMouseListener::mouseExited);
+				fireCellEvent(e, CategoryMouseListener::mouseExited);
 				return this;
 			}
 
@@ -719,29 +744,25 @@ public class ObservableTableModel<R> implements TableModel {
 				boolean checkToolTip;
 				if (previous != null && previous.theRow != null) {
 					if (theRow != null && theRow.getModelValue() == previous.theRow.getModelValue()) {
-						getRowListeners().forEach(listener -> listener.mouseMoved(theRow, e));
+						fireRowEvent(e, RowMouseListener::mouseMoved);
 						if (previous.theCategory != null && previous.theCategory == theCategory) {
 							checkToolTip = false;
-							if (theCategory != null && theCategory.getMouseListener() != null)
-								theCategory.getMouseListener().mouseMoved(theCell, e);
+							fireCellEvent(e, CategoryMouseListener::mouseMoved);
 						} else {
 							checkToolTip = true;
 							previous.exitCell(e);
-							if (theCategory != null && theCategory.getMouseListener() != null)
-								theCategory.getMouseListener().mouseEntered(theCell, e);
+							fireCellEvent(e, CategoryMouseListener::mouseEntered);
 						}
 					} else {
 						checkToolTip = true;
 						previous.exitRow(e);
-						getRowListeners().forEach(listener -> listener.mouseEntered(theRow, e));
-						if (theCategory != null && theCategory.getMouseListener() != null)
-							theCategory.getMouseListener().mouseEntered(theCell, e);
+						fireRowEvent(e, RowMouseListener::mouseEntered);
+						fireCellEvent(e, CategoryMouseListener::mouseEntered);
 					}
 				} else {
 					checkToolTip = true;
-					getRowListeners().forEach(listener -> listener.mouseEntered(theRow, e));
-					if (theCategory != null && theCategory.getMouseListener() != null)
-						theCategory.getMouseListener().mouseEntered(theCell, e);
+					fireRowEvent(e, RowMouseListener::mouseEntered);
+					fireCellEvent(e, CategoryMouseListener::mouseEntered);
 				}
 				if (checkToolTip)
 					checkToolTip(theRow, theCell, theCategory);
@@ -749,13 +770,41 @@ public class ObservableTableModel<R> implements TableModel {
 			}
 
 			void exitCell(MouseEvent e) {
-				if (theCategory != null && theCategory.getMouseListener() != null)
-					theCategory.getMouseListener().mouseExited(theCell, e);
+				fireCellEvent(e, CategoryMouseListener::mouseExited);
 			}
 
 			void exitRow(MouseEvent e) {
 				exitCell(e);
-				getRowListeners().forEach(listener -> listener.mouseExited(theRow, e));
+				fireRowEvent(e, RowMouseListener::mouseExited);
+			}
+
+			private void fireRowEvent(MouseEvent e, TriConsumer<RowMouseListener<? super R>, ModelRow<R>, MouseEvent> call) {
+				if (theRow == null || getRowListeners().isEmpty())
+					return;
+				Point offset = getCellOffset(theCell.getRowIndex(), theCell.getColumnIndex());
+				if (offset == null)
+					return;
+				e.translatePoint(0, -offset.y);
+				try {
+					getRowListeners().forEach(listener -> call.accept(listener, theRow, e));
+				} finally {
+					e.translatePoint(0, offset.y);
+				}
+			}
+
+			private void fireCellEvent(MouseEvent e,
+				TriConsumer<CategoryMouseListener<? super R, ? super C>, ModelCell<R, C>, MouseEvent> call) {
+				if (theCell == null || theCategory == null || theCategory.getMouseListener() == null)
+					return;
+				Point offset = getCellOffset(theCell.getRowIndex(), theCell.getColumnIndex());
+				if (offset == null)
+					return;
+				e.translatePoint(-offset.x, -offset.y);
+				try {
+					call.accept(theCategory.getMouseListener(), theCell, e);
+				} finally {
+					e.translatePoint(offset.x, offset.y);
+				}
 			}
 		}
 
@@ -771,6 +820,8 @@ public class ObservableTableModel<R> implements TableModel {
 		protected abstract ListenerList<RowMouseListener<? super R>> getRowListeners();
 
 		protected abstract int getModelRow(MouseEvent evt);
+
+		protected abstract Point getCellOffset(int row, int column);
 
 		protected abstract int getModelColumn(MouseEvent evt);
 
@@ -823,6 +874,9 @@ public class ObservableTableModel<R> implements TableModel {
 		@Override
 		public void mouseMoved(MouseEvent e) {
 			thePrevious = getValue(e, false).moved(e, thePrevious);
+			if (thePrevious != null)
+				setHover(thePrevious.theRow == null ? -1 : thePrevious.theRow.getRowIndex(), //
+					thePrevious.theCell == null ? -1 : thePrevious.theCell.getColumnIndex());
 		}
 
 		@Override
@@ -832,10 +886,12 @@ public class ObservableTableModel<R> implements TableModel {
 		}
 
 		private void setHover(int row, int column) {
-			if (theHoveredRow != row || theHoveredColumn != column)
-				hoverChanged(theHoveredRow, theHoveredColumn, row, column);
+			int preR = theHoveredRow, preC = theHoveredColumn;
+			boolean changed = preR != row || preC != column;
 			theHoveredRow = row;
 			theHoveredColumn = column;
+			if (changed)
+				hoverChanged(preR, preC, row, column);
 		}
 
 		private <C> MouseClickStruct<C> getValue(MouseEvent evt, boolean movement) {

@@ -132,7 +132,7 @@ public interface QuickWidget extends QuickTextElement {
 				theTooltip = getExpressoSession().getAttributeExpression("tooltip");
 				isVisible = getExpressoSession().getAttributeExpression("visible");
 				CollectionUtils
-					.synchronize(theEventListeners, session.forChildren("event-listener"),
+				.synchronize(theEventListeners, session.forChildren("event-listener"),
 					(l, s) -> QuickElement.typesEqual(l.getElement(), s.getElement()))
 				.simpleE(s -> s.interpret(QuickEventListener.Def.class).update(s))//
 				.onCommonX(el -> el.getLeftValue().update(el.getRightValue())).adjust();
@@ -288,6 +288,13 @@ public interface QuickWidget extends QuickTextElement {
 				isRightPressed = rightPressed;
 			}
 
+			public Default() {
+				this(SettableValue.build(boolean.class).withValue(false).build(), //
+					SettableValue.build(boolean.class).withValue(false).build(), //
+					SettableValue.build(boolean.class).withValue(false).build(), //
+					SettableValue.build(boolean.class).withValue(false).build());
+			}
+
 			@Override
 			public SettableValue<Boolean> isHovered() {
 				return isHovered;
@@ -335,6 +342,8 @@ public interface QuickWidget extends QuickTextElement {
 
 	void setContext(WidgetContext ctx) throws ModelInstantiationException;
 
+	WidgetContext getContext();
+
 	/**
 	 * Populates and updates this widget instance. Must be called once after being instantiated.
 	 *
@@ -349,6 +358,7 @@ public interface QuickWidget extends QuickTextElement {
 		private QuickBorder theBorder;
 		private final SettableValue<SettableValue<String>> theTooltip;
 		private final SettableValue<SettableValue<Boolean>> isVisible;
+		private WidgetContext theContext;
 		private final ObservableCollection<QuickEventListener> theEventListeners;
 
 		/**
@@ -402,10 +412,16 @@ public interface QuickWidget extends QuickTextElement {
 
 		@Override
 		public void setContext(WidgetContext ctx) throws ModelInstantiationException {
+			theContext = ctx;
 			satisfyContextValue("hovered", ModelTypes.Value.BOOLEAN, ctx.isHovered());
 			satisfyContextValue("focused", ModelTypes.Value.BOOLEAN, ctx.isFocused());
 			satisfyContextValue("pressed", ModelTypes.Value.BOOLEAN, ctx.isPressed());
 			satisfyContextValue("rightPressed", ModelTypes.Value.BOOLEAN, ctx.isRightPressed());
+		}
+
+		@Override
+		public WidgetContext getContext() {
+			return theContext;
 		}
 
 		@Override

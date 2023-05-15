@@ -20,6 +20,7 @@ import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueSynth;
 import org.observe.expresso.TypeConversionException;
 import org.observe.util.TypeTokens;
+import org.qommons.LambdaUtils;
 import org.qommons.QommonsUtils;
 import org.qommons.collect.BetterList;
 
@@ -177,28 +178,30 @@ public class ConditionalExpression implements ObservableExpression {
 			private MV createValue(SettableValue<Boolean> conditionX, Object primaryX, Object secondaryX) {
 				if (primaryType.getModelType() == ModelTypes.Value) {
 					return (MV) SettableValue.flattenAsSettable(conditionX.map(
-						TypeTokens.get().keyFor(ObservableValue.class).<SettableValue<Object>> parameterized(resultType.getType(0)), c -> {
+						TypeTokens.get().keyFor(ObservableValue.class).<SettableValue<Object>> parameterized(resultType.getType(0)),
+						LambdaUtils.printableFn(c -> {
 							if (c != null && c)
 								return (SettableValue<Object>) primaryX;
 							else
 								return (SettableValue<Object>) secondaryX;
-						}), null);
+						}, () -> "? " + primaryX + ": " + secondaryX, null)), null);
 				} else if (primaryType.getModelType() == ModelTypes.Collection) {
 					return (MV) ObservableCollection.flattenValue(conditionX.map(TypeTokens.get().keyFor(ObservableCollection.class)
-						.<ObservableCollection<Object>> parameterized(resultType.getType(0)), c -> {
+						.<ObservableCollection<Object>> parameterized(resultType.getType(0)), LambdaUtils.printableFn(c -> {
 							if (c != null && c)
 								return (ObservableCollection<Object>) primaryX;
 							else
 								return (ObservableCollection<Object>) secondaryX;
-						}));
+						}, () -> "? " + primaryX + ": " + secondaryX, null)));
 				} else if (primaryType.getModelType() == ModelTypes.Set) {
 					return (MV) ObservableSet.flattenValue(conditionX.map(
-						TypeTokens.get().keyFor(ObservableSet.class).<ObservableSet<Object>> parameterized(resultType.getType(0)), c -> {
+						TypeTokens.get().keyFor(ObservableSet.class).<ObservableSet<Object>> parameterized(resultType.getType(0)),
+						LambdaUtils.printableFn(c -> {
 							if (c != null && c)
 								return (ObservableSet<Object>) primaryX;
 							else
 								return (ObservableSet<Object>) secondaryX;
-						}));
+						}, () -> "? " + primaryX + ": " + secondaryX, null)));
 				} else
 					throw new IllegalStateException("Conditional expressions not supported for model type " + primaryType.getModelType());
 			}

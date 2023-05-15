@@ -36,8 +36,10 @@ public class QuickLabel<T> extends QuickTextWidget.Abstract<T> {
 		@Override
 		public Def<T, W> update(AbstractQIS<?> session) throws QonfigInterpretationException {
 			super.update(session);
-			theStaticText = session.getValueText();
-			if (theStaticText != null) {
+			String staticText = session.getValueText();
+			if (staticText.isEmpty())
+				staticText = null;
+			if (staticText != null) {
 				if (super.getValue().getExpression() != ObservableExpression.EMPTY)
 					throw new QonfigInterpretationException("Cannot specify both 'value' attribute and element value",
 						session.getValuePosition(0), 0);
@@ -47,6 +49,7 @@ public class QuickLabel<T> extends QuickTextWidget.Abstract<T> {
 			} else if (super.getValue().getExpression() == ObservableExpression.EMPTY)
 				throw new QonfigInterpretationException("Must specify either 'value' attribute or element value",
 					session.getElement().getPositionInFile(), 0);
+			theStaticText = staticText;
 			if (theStaticText != null) {
 				theTextExpression = new CompiledExpression(//
 					new ObservableExpression.LiteralExpression<>(theStaticText, theStaticText), session.getElement(), session.getValueDef(),

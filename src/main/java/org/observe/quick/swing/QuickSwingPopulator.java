@@ -22,6 +22,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.WeakHashMap;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -53,6 +54,8 @@ import org.observe.quick.base.*;
 import org.observe.quick.base.QuickBox;
 import org.observe.quick.base.QuickLayout;
 import org.observe.quick.base.QuickSize;
+import org.observe.quick.base.TabularWidget.TabularContext;
+import org.observe.util.ObservableCollectionSynchronization;
 import org.observe.util.TypeTokens;
 import org.observe.util.swing.CategoryRenderStrategy;
 import org.observe.util.swing.CategoryRenderStrategy.CategoryKeyListener;
@@ -74,6 +77,7 @@ import org.observe.util.swing.PanelPopulation.MenuBuilder;
 import org.observe.util.swing.PanelPopulation.PanelPopulator;
 import org.observe.util.swing.PanelPopulation.WindowBuilder;
 import org.observe.util.swing.WindowPopulation;
+import org.qommons.Causable;
 import org.qommons.Identifiable;
 import org.qommons.LambdaUtils;
 import org.qommons.ThreadConstraint;
@@ -82,6 +86,7 @@ import org.qommons.Transaction;
 import org.qommons.Transformer;
 import org.qommons.Transformer.Builder;
 import org.qommons.collect.BetterList;
+import org.qommons.collect.ElementId;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigElement;
@@ -219,6 +224,8 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 
 	/** Quick interpretation of the core toolkit for Swing */
 	public class QuickCoreSwing implements QuickInterpretation {
+		private static final WeakHashMap<Component, QuickWidget> QUICK_SWING_WIDGETS = new WeakHashMap<>();
+
 		@Override
 		public void configure(Builder<ExpressoInterpretationException> tx) {
 			initMouseListening();
@@ -289,11 +296,18 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 					ComponentDecorator deco = new ComponentDecorator();
 					Runnable[] revert = new Runnable[1];
 					Component[] component = new Component[1];
+					ObservableValue<Color> color = w.getStyle().getColor();
 					try {
 						comp.modifyComponent(c -> {
-							revert[0] = deco.decorate(c);
+							QUICK_SWING_WIDGETS.put(c, w);
 							component[0] = c;
-							if (!renderer) {
+							if (renderer) {
+								// We can just do all this dynamically for renderers
+								adjustFont(deco, w.getStyle());
+								deco.withBackground(color.get());
+								deco.decorate(c);
+							} else {
+								revert[0] = deco.decorate(c);
 								try {
 									w.setContext(new QuickWidget.WidgetContext.Default(//
 										new MouseValueSupport(c, "hovered", null), //
@@ -328,18 +342,20 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 							throw (ModelInstantiationException) e.getCause();
 						throw e;
 					}
-					adjustFont(deco, w.getStyle());
-					ObservableValue<Color> color = w.getStyle().getColor();
-					deco.withBackground(color.get());
-					Observable.or(color.noInitChanges(), fontChanges(w.getStyle())).act(__ -> {
-						adjustFont(deco.reset(), w.getStyle());
+					if (!renderer) { // Don't keep any subscriptions for renderers
+						adjustFont(deco, w.getStyle());
 						deco.withBackground(color.get());
-						if (component[0] != null) {
-							revert[0].run();
-							revert[0] = deco.decorate(component[0]);
-							component[0].repaint();
-						}
-					});
+						Observable.onRootFinish(Observable.or(color.noInitChanges(), fontChanges(w.getStyle()))).act(__ -> {
+							adjustFont(deco.reset(), w.getStyle());
+							deco.withBackground(color.get());
+							if (component[0] != null) {
+								revert[0].run();
+								revert[0] = deco.decorate(component[0]);
+								if (!renderer)
+									component[0].repaint();
+							}
+						});
+					}
 				});
 			});
 			tx.with(QuickBorder.LineBorder.Interpreted.class, QuickSwingBorder.class, (iBorder, tx2) -> {
@@ -364,7 +380,8 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 					FontAdjuster font = new FontAdjuster();
 					adjustFont(font, titled.getStyle());
 					revert[0] = deco.withTitledBorder(title.get(), color.get(), font);
-					Observable.or(color.noInitChanges(), thick.noInitChanges(), title.noInitChanges(), fontChanges(titled.getStyle()))
+					Observable.onRootFinish(
+						Observable.or(color.noInitChanges(), thick.noInitChanges(), title.noInitChanges(), fontChanges(titled.getStyle())))
 					.act(__ -> {
 						revert[0].run();
 						adjustFont(font.reset(), titled.getStyle());
@@ -941,7 +958,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 
 		}
 
-		static Observable<?> fontChanges(QuickTextStyle style) {
+		static Observable<Causable> fontChanges(QuickTextStyle style) {
 			return Observable.or(style.getFontColor().noInitChanges(), style.getFontSize().noInitChanges(),
 				style.getFontWeight().noInitChanges(), style.getFontSlant().noInitChanges());
 		}
@@ -1057,7 +1074,10 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 				if (mousePos.x >= screenPos.x + theComponent.getWidth() || mousePos.y >= screenPos.y + theComponent.getHeight())
 					return false;
 				Component child = theComponent.getComponentAt(mousePos.x - screenPos.x, mousePos.y - screenPos.y);
-				return child == null || !child.isVisible();
+				//If the mouse is over one of our visible Quick-sourced children, then we're not clicked ourselves
+				while(child!=null && child!=theComponent && (!child.isVisible() || QUICK_SWING_WIDGETS.get(child)==null))
+					child=child.getParent();
+				return child == null || child == theComponent;
 			}
 
 			@Override
@@ -1533,76 +1553,118 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 					);
 				quick.setContext(ctx);
 				ComponentEditor<?, ?>[] parent = new ComponentEditor[1];
-				ObservableCollection<CategoryRenderStrategy<R, ?>> columns = quick.getColumns().flow()//
+				ObservableCollection<SwingTableColumn<R, ?>> columns = quick.getColumns().flow()//
+					.map((Class<SwingTableColumn<R, ?>>) (Class<?>) SwingTableColumn.class, //
+						column -> new SwingTableColumn<>(quick, column, ctx, tx, panel.getUntil(), () -> parent[0]))//
+					.collect();
+				// The quick columns can't be updated, but we need to be able to update. So we need to make a new collection and sync it.
+				ObservableCollection<SwingTableColumn<R, ?>> clonedColumns = ObservableCollection.build(columns.getType()).build();
+				Subscription syncSub = ObservableCollectionSynchronization.synchronize(columns, clonedColumns).synchronize();
+				Subscription columnsSub = clonedColumns.subscribe(evt -> {
+					if (evt.getNewValue() != null)
+						evt.getNewValue().init(clonedColumns, evt.getElementId());
+				}, true);
+				panel.getUntil().take(1).act(__ -> {
+					syncSub.unsubscribe();
+					columnsSub.unsubscribe();
+				});
+				ObservableCollection<CategoryRenderStrategy<R, ?>> crss = clonedColumns.flow()//
 					.map((Class<CategoryRenderStrategy<R, ?>>) (Class<?>) CategoryRenderStrategy.class, //
-						column -> createRenderStrategy(column, ctx, tx, panel.getUntil(), () -> parent[0]))//
+						column -> column.theCRS)//
 					.collect();
 				panel.addTable(quick.getRows(), table -> {
 					parent[0] = table;
-					table.withColumns(columns);
+					table.withColumns(crss);
 				});
 			});
 		}
 
-		static <R, C> CategoryRenderStrategy<R, C> createRenderStrategy(QuickTableColumn<R, C> column,
-			TabularWidget.TabularContext<R> ctx, Transformer<ExpressoInterpretationException> tx, Observable<?> until,
-			Supplier<ComponentEditor<?, ?>> parent) {
-			CategoryRenderStrategy<R, C> crs = new CategoryRenderStrategy<>(column.getName().get(), column.getType(), row -> {
-				ctx.getRenderValue().set(row, null);
-				C columnValue = column.getValue().get();
-				// System.out.println("Row " + row + ", " + column.getName().get() + " " + columnValue);
-				return columnValue;
-			});
-			column.getName().noInitChanges().act(evt -> crs.setName(evt.getNewValue()));
-			// TODO All this change listening isn't going to work, because all the settings are put into effect when the table is
-			// instantiated and when the category collection changes
-			// We'd need to fire an event in the category collection to enact any changes here
-			column.getRenderer().changes().act(evt -> {
-				if (evt.getNewValue() == null)
-					crs.withRenderer(null);
-				else {
-					try {
-						QuickCellRenderer<R, C> renderer=new QuickCellRenderer<>(column, evt.getNewValue(), ctx, tx, until, parent);
-						crs.withRenderer(renderer);
-						crs.withValueTooltip(renderer::getTooltip);
-						// The listeners may take a performance hit, so only add listening if they're there
-						boolean[] mouseKey = new boolean[2];
-						Consumer<Object> evalMouseKey = __ -> {
-							boolean oldMouse = mouseKey[0];
-							boolean oldKey = mouseKey[1];
-							for (QuickEventListener listener : evt.getNewValue().getEventListeners()) {
-								if (listener instanceof QuickMouseListener)
-									mouseKey[0] = true;
-								else if (listener instanceof QuickKeyListener)
-									mouseKey[1] = true;
-							}
-							if (oldMouse == mouseKey[0]) {//
-							} else if (mouseKey[0])
-								crs.addMouseListener(renderer);
-							else
-								crs.removeMouseListener(renderer);
-							if (oldKey == mouseKey[1]) { //
-							} else if (mouseKey[1])
-								crs.withKeyListener(renderer);
-							else
-								crs.withKeyListener(null);
-						};
-						evalMouseKey.accept(null);
-						evt.getNewValue().getEventListeners().simpleChanges().takeUntil(column.getRenderer().noInitChanges())
-						.act(evalMouseKey);
-					} catch (ExpressoInterpretationException | ModelInstantiationException e) {
-						throw new ExpressoRuntimeException(e);
+		static class SwingTableColumn<R, C> {
+			private final QuickTableColumn<R, C> theColumn;
+			final CategoryRenderStrategy<R, C> theCRS;
+			private ObservableCollection<SwingTableColumn<R, ?>> theColumns;
+			private ElementId theElementId;
+
+			SwingTableColumn(QuickWidget quickParent, QuickTableColumn<R, C> column, TabularContext<R> context,
+				Transformer<ExpressoInterpretationException> tx, Observable<?> until, Supplier<ComponentEditor<?, ?>> parent) {
+				theColumn = column;
+				theCRS = new CategoryRenderStrategy<>(column.getName().get(), column.getType(), row -> {
+					context.getRenderValue().set(row, null);
+					return column.getValue().get();
+					// System.out.println("Row " + row + ", " + column.getName().get() + " " + columnValue);
+				});
+
+				theColumn.getName().noInitChanges().takeUntil(until).act(evt -> {
+					theCRS.setName(evt.getNewValue());
+					refresh();
+				});
+				column.getHeaderTooltip().changes().takeUntil(until).act(evt -> {
+					theCRS.withHeaderTooltip(evt.getNewValue());
+					refresh();
+				});
+				// TODO All this change listening isn't going to work, because all the settings are put into effect when the table is
+				// instantiated and when the category collection changes
+				// We'd need to fire an event in the category collection to enact any changes here
+				column.getRenderer().changes().takeUntil(until).act(evt -> {
+					if (evt.getNewValue() == null)
+						theCRS.withRenderer(null);
+					else {
+						try {
+							QuickCellRenderer<R, C> renderer = new QuickCellRenderer<>(quickParent, column, evt.getNewValue(), context, tx,
+								until, parent);
+							theCRS.withRenderer(renderer);
+							theCRS.withValueTooltip(renderer::getTooltip);
+							// The listeners may take a performance hit, so only add listening if they're there
+							boolean[] mouseKey = new boolean[2];
+							Consumer<Object> evalMouseKey = __ -> {
+								boolean oldMouse = mouseKey[0];
+								boolean oldKey = mouseKey[1];
+								for (QuickEventListener listener : evt.getNewValue().getEventListeners()) {
+									if (listener instanceof QuickMouseListener)
+										mouseKey[0] = true;
+									else if (listener instanceof QuickKeyListener)
+										mouseKey[1] = true;
+								}
+								if (oldMouse == mouseKey[0]) {//
+								} else if (mouseKey[0])
+									theCRS.addMouseListener(renderer);
+								else
+									theCRS.removeMouseListener(renderer);
+								if (oldKey == mouseKey[1]) { //
+								} else if (mouseKey[1])
+									theCRS.withKeyListener(renderer);
+								else
+									theCRS.withKeyListener(null);
+							};
+							evalMouseKey.accept(null);
+							evt.getNewValue().getEventListeners().simpleChanges().takeUntil(column.getRenderer().noInitChanges())
+							.act(evalMouseKey);
+						} catch (ExpressoInterpretationException | ModelInstantiationException e) {
+							throw new ExpressoRuntimeException(e);
+						}
 					}
-				}
-			});
-			return crs;
+					refresh();
+				});
+			}
+
+			public void init(ObservableCollection<SwingTableColumn<R, ?>> columns, ElementId id) {
+				theColumns = columns;
+				theElementId = id;
+			}
+
+			void refresh() {
+				if (theElementId != null)
+					theColumns.mutableElement(theElementId).set(this);
+			}
 		}
 
 		static class QuickCellRenderer<R, C> extends AbstractObservableCellRenderer<R, C>
 		implements CategoryMouseListener<R, C>, CategoryKeyListener<R, C> {
+			private final QuickWidget theQuickParent;
 			private final QuickTableColumn<R, C> theColumn;
 			private final QuickWidget theRenderer;
-			private final TabularWidget.TabularContext<R> theContext;
+			private final QuickWidget.WidgetContext theRendererContext;
+			private final TabularWidget.TabularContext<R> theTableContext;
 			private final QuickSwingPopulator<QuickWidget> theSwingRenderer;
 			private final Supplier<ComponentEditor<?, ?>> theParent;
 			private final SimpleObservable<Void> theRenderUntil;
@@ -1615,22 +1677,30 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 			private final QuickKeyListener.KeyTypedContext theKeyTypeContext;
 			private final QuickKeyListener.KeyCodeContext theKeyCodeContext;
 
-			QuickCellRenderer(QuickTableColumn<R, C> column, QuickWidget widget, TabularWidget.TabularContext<R> ctx,
-				Transformer<ExpressoInterpretationException> tx, Observable<?> until, Supplier<ComponentEditor<?, ?>> parent)
+			QuickCellRenderer(QuickWidget quickParent, QuickTableColumn<R, C> column, QuickWidget renderer,
+				TabularWidget.TabularContext<R> ctx, Transformer<ExpressoInterpretationException> tx, Observable<?> until,
+				Supplier<ComponentEditor<?, ?>> parent)
 					throws ExpressoInterpretationException, ModelInstantiationException {
+				theQuickParent = quickParent;
 				theColumn = column;
-				theRenderer = widget;
-				theContext = ctx;
+				theRenderer = renderer;
+				theTableContext = ctx;
 				theParent = parent;
 				theRenderUntil = new SimpleObservable<>();
 				theSwingRenderer = tx.transform(theRenderer.getInterpreted(), QuickSwingPopulator.class);
 				theSwingRenderer.populate(new CellRendererPopulator<>(this, Observable.or(until, theRenderUntil)), theRenderer);
 
+				if (theRenderer != null) {
+					theRendererContext = new QuickWidget.WidgetContext.Default();
+					theRenderer.setContext(theRendererContext);
+				} else
+					theRendererContext = null;
+
 				theMouseContext = new QuickMouseListener.MouseButtonListenerContext.Default();
 				theKeyTypeContext = new QuickKeyListener.KeyTypedContext.Default();
 				theKeyCodeContext = new QuickKeyListener.KeyCodeContext.Default();
 
-				for (QuickEventListener listener : widget.getEventListeners()) {
+				for (QuickEventListener listener : renderer.getEventListeners()) {
 					if (listener instanceof QuickMouseListener.QuickMouseButtonListener)
 						((QuickMouseListener.QuickMouseButtonListener) listener).setListenerContext(theMouseContext);
 					else if (listener instanceof QuickMouseListener)
@@ -1653,7 +1723,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 			}
 
 			public TabularWidget.TabularContext<R> getContext() {
-				return theContext;
+				return theTableContext;
 			}
 
 			public ComponentEditor<?, ?> getParent() {
@@ -1674,15 +1744,28 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 			}
 
 			void setCellContext(ModelCell<? extends R, ? extends C> cell) {
-				theContext.isSelected().set(cell.isSelected(), null);
-				theContext.getRowIndex().set(cell.getRowIndex(), null);
-				theContext.getColumnIndex().set(cell.getColumnIndex(), null);
+				try (Causable.CausableInUse cause = Causable.cause()) {
+					theTableContext.isSelected().set(cell.isSelected(), cause);
+					theTableContext.getRowIndex().set(cell.getRowIndex(), cause);
+					theTableContext.getColumnIndex().set(cell.getColumnIndex(), cause);
+					if (theRendererContext != null) {
+						theRendererContext.isHovered().set(cell.isCellHovered(), cause);
+						theRendererContext.isFocused().set(cell.isCellFocused(), cause);
+						if (cell.isCellHovered() && theQuickParent.getContext() != null) {
+							theRendererContext.isPressed().set(theQuickParent.getContext().isPressed().get(), cause);
+							theRendererContext.isRightPressed().set(theQuickParent.getContext().isRightPressed().get(), cause);
+						} else {
+							theRendererContext.isPressed().set(false, cause);
+							theRendererContext.isRightPressed().set(false, cause);
+						}
+					}
+				}
 			}
 
 			String getTooltip(R modelValue, C columnValue) {
 				if (theTooltip == null)
 					return null;
-				theContext.getRenderValue().set(modelValue, null);
+				theTableContext.getRenderValue().set(modelValue, null);
 				return theTooltip.get();
 			}
 
@@ -1717,6 +1800,8 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 
 			@Override
 			public void keyPressed(ModelCell<? extends R, ? extends C> cell, KeyEvent e) {
+				if (cell == null)
+					return;
 				setCellContext(cell);
 				KeyCode code = QuickCoreSwing.getKeyCodeFromAWT(e.getKeyCode(), e.getKeyLocation());
 				if (code == null)
@@ -1737,6 +1822,8 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 
 			@Override
 			public void keyReleased(ModelCell<? extends R, ? extends C> cell, KeyEvent e) {
+				if (cell == null)
+					return;
 				setCellContext(cell);
 				KeyCode code = QuickCoreSwing.getKeyCodeFromAWT(e.getKeyCode(), e.getKeyLocation());
 				if (code == null)
@@ -1757,6 +1844,8 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 
 			@Override
 			public void keyTyped(ModelCell<? extends R, ? extends C> cell, KeyEvent e) {
+				if (cell == null)
+					return;
 				setCellContext(cell);
 				char ch = e.getKeyChar();
 				theKeyTypeContext.getTypedChar().set(ch, e);
@@ -1784,9 +1873,12 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 
 			@Override
 			public void mouseClicked(ModelCell<? extends R, ? extends C> cell, MouseEvent e) {
+				if (cell == null)
+					return;
 				QuickMouseListener.MouseButton eventButton = QuickCoreSwing.checkMouseEventType(e, null);
 				if (eventButton == null)
 					return;
+				setCellContext(cell);
 				theMouseContext.getMouseButton().set(eventButton, e);
 				theMouseContext.getX().set(e.getX(), e);
 				theMouseContext.getY().set(e.getY(), e);
@@ -1806,9 +1898,12 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 
 			@Override
 			public void mousePressed(ModelCell<? extends R, ? extends C> cell, MouseEvent e) {
+				if (cell == null)
+					return;
 				QuickMouseListener.MouseButton eventButton = QuickCoreSwing.checkMouseEventType(e, null);
 				if (eventButton == null)
 					return;
+				setCellContext(cell);
 				theMouseContext.getMouseButton().set(eventButton, e);
 				theMouseContext.getX().set(e.getX(), e);
 				theMouseContext.getY().set(e.getY(), e);
@@ -1828,9 +1923,12 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 
 			@Override
 			public void mouseReleased(ModelCell<? extends R, ? extends C> cell, MouseEvent e) {
+				if (cell == null)
+					return;
 				QuickMouseListener.MouseButton eventButton = QuickCoreSwing.checkMouseEventType(e, null);
 				if (eventButton == null)
 					return;
+				setCellContext(cell);
 				theMouseContext.getMouseButton().set(eventButton, e);
 				theMouseContext.getX().set(e.getX(), e);
 				theMouseContext.getY().set(e.getY(), e);
@@ -1850,6 +1948,9 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 
 			@Override
 			public void mouseEntered(ModelCell<? extends R, ? extends C> cell, MouseEvent e) {
+				if (cell == null)
+					return;
+				setCellContext(cell);
 				theMouseContext.getX().set(e.getX(), e);
 				theMouseContext.getY().set(e.getY(), e);
 				for (QuickEventListener listener : theRenderer.getEventListeners()) {
@@ -1867,6 +1968,9 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 
 			@Override
 			public void mouseExited(ModelCell<? extends R, ? extends C> cell, MouseEvent e) {
+				if (cell == null)
+					return;
+				setCellContext(cell);
 				theMouseContext.getX().set(e.getX(), e);
 				theMouseContext.getY().set(e.getY(), e);
 				for (QuickEventListener listener : theRenderer.getEventListeners()) {
@@ -1884,6 +1988,9 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 
 			@Override
 			public void mouseMoved(ModelCell<? extends R, ? extends C> cell, MouseEvent e) {
+				if (cell == null)
+					return;
+				setCellContext(cell);
 				theMouseContext.getX().set(e.getX(), e);
 				theMouseContext.getY().set(e.getY(), e);
 				for (QuickEventListener listener : theRenderer.getEventListeners()) {
