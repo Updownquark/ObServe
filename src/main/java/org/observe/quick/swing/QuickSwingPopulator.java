@@ -2020,7 +2020,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 			}
 
 			CellRendererPopulator<R, C> unsupported(String message) {
-				theRenderer.getRenderer().getInterpreted().getDefinition().getExpressoSession().error(message);
+				theRenderer.getRenderer().getInterpreted().getDefinition().getExpressoSession().warn(message);
 				return this;
 			}
 
@@ -2066,7 +2066,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 
 			@Override
 			public CellRendererPopulator<R, C> visibleWhen(ObservableValue<Boolean> visible) {
-				return this;
+				return unsupported("Visibility unsupported for cell renderer holder");
 			}
 
 			@Override

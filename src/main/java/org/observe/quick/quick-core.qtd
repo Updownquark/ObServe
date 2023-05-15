@@ -52,8 +52,8 @@
 			<element-model>
 				<value name="hovered" type="boolean" priority="5" />
 				<value name="focused" type="boolean" priority="1" />
-				<value name="pressed" type="boolean" priority="10" />
-				<value name="rightPressed" type="boolean" priority="11" />
+				<value name="pressed" type="boolean" priority="1000" />
+				<value name="rightPressed" type="boolean" priority="1001" />
 			</element-model>
 			<styles>
 				<style-attribute name="color" type="java.awt.Color" />
