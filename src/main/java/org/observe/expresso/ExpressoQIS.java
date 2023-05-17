@@ -66,9 +66,18 @@ public class ExpressoQIS implements SpecialSession<ExpressoQIS> {
 
 	/** @throws ExpressoInterpretationException If the local model could not be interpreted */
 	public void interpretLocalModel() throws ExpressoInterpretationException {
-		ObservableModelSet.Built elementModel = (ObservableModelSet.Built) get(ELEMENT_MODEL_KEY);
-		if (elementModel != null)
-			put(ELEMENT_MODEL_KEY, elementModel.interpret());
+		ObservableModelSet elementModel = (ObservableModelSet) get(ELEMENT_MODEL_KEY);
+		ObservableModelSet.Built built;
+		if (elementModel instanceof ObservableModelSet.Built)
+			built = (ObservableModelSet.Built) elementModel;
+		else if (elementModel instanceof ObservableModelSet.Builder)
+			built = ((ObservableModelSet.Builder) elementModel).build();
+		else if (elementModel == null)
+			built = null;
+		else
+			throw new IllegalStateException("Local model is " + elementModel.getClass().getName() + ", not either built or a builder");
+		if (built != null)
+			put(ELEMENT_MODEL_KEY, built.interpret());
 	}
 
 	/**
@@ -81,12 +90,21 @@ public class ExpressoQIS implements SpecialSession<ExpressoQIS> {
 	 * @throws ModelInstantiationException If the local model instantiation fails
 	 */
 	public ModelSetInstance wrapLocal(ModelSetInstance models) throws ModelInstantiationException {
-		ObservableModelSet.Built elementModel = (ObservableModelSet.Built) get(ELEMENT_MODEL_KEY);
-		if (elementModel != null && !models.getModel().isRelated(elementModel.getIdentity())) {
-			if (!(elementModel instanceof ObservableModelSet.InterpretedModelSet))
+		ObservableModelSet elementModel = (ObservableModelSet) get(ELEMENT_MODEL_KEY);
+		ObservableModelSet.Built built;
+		if (elementModel instanceof ObservableModelSet.Built)
+			built = (ObservableModelSet.Built) elementModel;
+		else if (elementModel instanceof ObservableModelSet.Builder)
+			built = ((ObservableModelSet.Builder) elementModel).build();
+		else if (elementModel == null)
+			built = null;
+		else
+			throw new IllegalStateException("Local model is " + elementModel.getClass().getName() + ", not either built or a builder");
+		if (built != null && !models.getModel().isRelated(built.getIdentity())) {
+			if (!(built instanceof ObservableModelSet.InterpretedModelSet))
 				throw new ModelInstantiationException("Local element model was not interpreted.  Should have called interpretLocalModel()",
 					getElement().getPositionInFile(), 0);
-			models = ((ObservableModelSet.InterpretedModelSet) elementModel).createInstance(models.getUntil()).withAll(models).build();
+			models = ((ObservableModelSet.InterpretedModelSet) built).createInstance(models.getUntil()).withAll(models).build();
 		}
 		return models;
 	}

@@ -70,6 +70,15 @@ public class ExpressoEnv implements ErrorReporting {
 		return theModels;
 	}
 
+	public ObservableModelSet.Built getBuiltModels() {
+		if (theModels instanceof ObservableModelSet.Built)
+			return (ObservableModelSet.Built) theModels;
+		else if (theModels instanceof ObservableModelSet.Builder)
+			return ((ObservableModelSet.Builder) theModels).build();
+		else
+			throw new IllegalStateException("Models is a " + theModels.getClass().getName() + ", not either built or a builder");
+	}
+
 	/** @return The class view for expressions to obtain types with */
 	public ClassView getClassView() {
 		return theClassView;

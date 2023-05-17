@@ -227,9 +227,10 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 							// wrappedBuilder.withMaker(name, ObservableModelSet.IdentifableCompiledValue.of(dv,
 							// new DynamicModelValue.RuntimeModelValue<>(dv, valueType)));
 						} else {
-								builder.withMaker(name, new DynamicModelValue.DynamicTypedModelValueCreator<>(dv, session, () -> {
-								return (ModelInstanceType<Object, Object>) spec.getType(session);
-							}));
+							builder.withMaker(name,
+								new DynamicModelValue.DynamicTypedModelValueCreator<>(dv, spec.getModelType(), session, () -> {
+									return (ModelInstanceType<Object, Object>) spec.getType(session);
+								}));
 						}
 					}
 				}
@@ -907,7 +908,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		return CompiledModelValue.of(() -> "constant:" + valueType, ModelTypes.Value, () -> {
 			InterpretedValueSynth<SettableValue<?>, SettableValue<Object>> valueC;
 			try {
-				valueC = value.evaluate(valueType == null ? ModelTypes.Value.anyAs() : ModelTypes.Value.forType(valueType))//
+				valueC = value.evaluate(valueType == null ? ModelTypes.Value.anyAsV() : ModelTypes.Value.forType(valueType))//
 					.interpret();
 			} catch (ExpressoInterpretationException e) {
 				throw new ExpressoInterpretationException("Could not interpret value of constant: " + value, e.getPosition(),
@@ -1032,7 +1033,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 			} catch (ExpressoInterpretationException e) {
 				throw new ExpressoInterpretationException("Could not parse type", e.getPosition(), e.getErrorLength(), e);
 			}
-			ModelInstanceType<SettableValue<?>, SettableValue<Object>> modelType = type == null ? ModelTypes.Value.anyAs()
+			ModelInstanceType<SettableValue<?>, SettableValue<Object>> modelType = type == null ? ModelTypes.Value.anyAsV()
 				: ModelTypes.Value.forType(type);
 			ModelValueSynth<SettableValue<?>, SettableValue<Object>> value = valueX == null ? null : valueX.evaluate(modelType);
 			ModelValueSynth<SettableValue<?>, SettableValue<Object>> init;
@@ -1337,7 +1338,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		CompiledExpression onX = session.getAttributeExpression("on");
 		CompiledExpression actionX = session.getValueExpression();
 		return CompiledModelValue.of("hook", ModelTypes.Event, () -> {
-			ModelValueSynth<Observable<?>, Observable<V>> onC = onX == null ? null : onX.evaluate(ModelTypes.Event.<V> anyAs());
+			ModelValueSynth<Observable<?>, Observable<V>> onC = onX == null ? null : onX.evaluate(ModelTypes.Event.<V> anyAsV());
 			ModelInstanceType.SingleTyped<Observable<?>, V, Observable<V>> eventType;
 			eventType = onC == null ? ModelTypes.Event.forType((Class<V>) void.class)
 				: (ModelInstanceType.SingleTyped<Observable<?>, V, Observable<V>>) onC.getType();
@@ -4217,7 +4218,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 					List<ModelValueSynth<SettableValue<?>, SettableValue<Comparator<Object>>>> sortByCVs = new ArrayList<>(sortBy.size());
 					for (int s = 0; s < sortBy.size(); s++) {
 						ModelValueSynth<SettableValue<?>, SettableValue<Object>> sortByMap = subSortingXs.get(s)
-							.evaluate(ModelTypes.Value.anyAs());
+							.evaluate(ModelTypes.Value.anyAsV());
 						sortByMaps.add(sortByMap);
 						sortByCVs.add(subSorting.get(s).evaluate((TypeToken<Object>) sortByMap.getType().getType(0)));
 					}

@@ -488,6 +488,7 @@ public interface DynamicModelValue<M, MV extends M> extends ModelValueSynth<M, M
 	 */
 	public class DynamicTypedModelValueCreator<M, MV extends M> implements Compiled<M, MV>, Named {
 		private final Identity theIdentity;
+		private final ModelType<M> theModelType;
 		private final ErrorReporting theReporting;
 		private final ExSupplier<ModelInstanceType<M, MV>, ExpressoInterpretationException> theTypeGetter;
 		private ModelInstanceType<M, MV> theDeclaredType;
@@ -499,9 +500,10 @@ public interface DynamicModelValue<M, MV extends M> extends ModelValueSynth<M, M
 		 * @param reporting The error reporting for if this dynamic value's type is not satisfied in time
 		 * @param declaredType Supplies the type of the value, as far as it is known
 		 */
-		public DynamicTypedModelValueCreator(Identity declaration, ErrorReporting reporting,
+		public DynamicTypedModelValueCreator(Identity declaration, ModelType<M> modelType, ErrorReporting reporting,
 			ExSupplier<ModelInstanceType<M, MV>, ExpressoInterpretationException> declaredType) {
 			theIdentity = declaration;
+			theModelType = modelType;
 			theReporting = reporting;
 			theTypeGetter = declaredType;
 		}
@@ -513,7 +515,7 @@ public interface DynamicModelValue<M, MV extends M> extends ModelValueSynth<M, M
 
 		@Override
 		public ModelType<M> getModelType() {
-			return theDeclaredType.getModelType();
+			return theModelType;
 		}
 
 		/** @return The type that this value creator was declared with */
@@ -552,7 +554,7 @@ public interface DynamicModelValue<M, MV extends M> extends ModelValueSynth<M, M
 			}
 			if (wildcard)
 				theReporting
-					.error("Type not specified for dynamic model value " + getName() + "(" + theDeclaredType + ") before being needed");
+				.error("Type not specified for dynamic model value " + getName() + "(" + theDeclaredType + ") before being needed");
 			return container;
 		}
 

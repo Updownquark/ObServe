@@ -714,6 +714,13 @@ public abstract class ModelType<M> implements Named {
 		return forTypes(types);
 	}
 
+	/** @return A {@link ModelInstanceType} of this model type with wildcard parameter types */
+	public <MV extends M> ModelInstanceType<M, MV> anyAs() {
+		TypeToken<?>[] types = new TypeToken[theTypeCount];
+		Arrays.fill(types, TypeTokens.get().WILDCARD);
+		return (ModelInstanceType<M, MV>) forTypes(types);
+	}
+
 	/**
 	 * @param target The type to convert to
 	 * @param casts Functions to convert values of each of this model type's parameter types to values of the target type's parameter types

@@ -198,7 +198,8 @@ public class Expresso {
 				builder = (ObservableModelSet.Builder) model;
 				createdBuilder = false;
 			} else {
-				builder = model.wrap("element-model:" + session.getElement()).withTagValue(QONFIG_ELEMENT_TAG, session.getElement());
+				builder = model.wrap("element-model:" + session.getElement().printLocation()).withTagValue(QONFIG_ELEMENT_TAG,
+					session.getElement());
 				exS.setModels(builder, null);
 				createdBuilder = true;
 			}
@@ -221,11 +222,7 @@ public class Expresso {
 		default Object postPrepare(CoreSession session, Object prepared) throws QonfigInterpretationException {
 			if (Boolean.TRUE.equals(prepared)) {
 				ExpressoQIS exS = session.as(ExpressoQIS.class);
-				if (exS.getExpressoEnv().getModels() instanceof ObservableModelSet.Builder) {
-					ObservableModelSet.Built wrapped = ((ObservableModelSet.Builder) exS.getExpressoEnv().getModels()).build();
-					exS.setModels(wrapped, null);
-					session.putLocal(ExpressoQIS.ELEMENT_MODEL_KEY, wrapped);
-				}
+				session.putLocal(ExpressoQIS.ELEMENT_MODEL_KEY, exS.getExpressoEnv().getModels());
 			}
 			return prepared;
 		}

@@ -19,7 +19,7 @@ public interface LocatedExpression {
 	 */
 	default LocatedFilePosition getFilePosition(int offset) {
 		LocatedContentPosition pos = getFilePosition();
-		return pos == null ? null : getFilePosition().getPosition(offset);
+		return pos == null ? null : pos.getPosition(offset);
 	}
 
 	/** @return The length of the expression */

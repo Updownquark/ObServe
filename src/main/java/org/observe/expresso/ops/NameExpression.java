@@ -72,9 +72,9 @@ public class NameExpression implements ObservableExpression, Named {
 		int offset = 0;
 		if (theContext != null)
 			offset += theContext.getExpressionLength() + 1;
-		if (name > 1)
-			offset += name - 1;
-		for (int n = 0; n < name - 1; n++)
+		if (name > 0)
+			offset += name;
+		for (int n = 0; n < name; n++)
 			offset += theNames.get(n).length();
 		return offset;
 	}
@@ -211,24 +211,28 @@ public class NameExpression implements ObservableExpression, Named {
 			if (nextMV != null)
 				return evaluateModel(nextMV, nameIndex + 1, path, type, models, expressionOffset,
 					reporting.at(theNames.get(nameIndex).length()));
-			throw new ExpressoEvaluationException(getNameOffset(nameIndex), getNameOffset(0) + theNames.get(nameIndex).length(), //
+			throw new ExpressoEvaluationException(expressionOffset + getNameOffset(nameIndex),
+				getNameOffset(0) + theNames.get(nameIndex).length(), //
 				"'" + theNames.get(nameIndex) + "' cannot be resolved or is not a model value");
 		} else if (mvType.getModelType() == ModelTypes.Value) {
 			Field field;
 			try {
 				field = TypeTokens.getRawType(mvType.getType(0)).getField(theNames.get(nameIndex).getName());
 			} catch (NoSuchFieldException e) {
-				throw new ExpressoEvaluationException(getNameOffset(nameIndex), getNameOffset(0) + theNames.get(nameIndex).length(), //
+				throw new ExpressoEvaluationException(expressionOffset + getNameOffset(nameIndex),
+					getNameOffset(0) + theNames.get(nameIndex).length(), //
 					getPath(nameIndex) + "' cannot be resolved or is not a field");
 			} catch (SecurityException e) {
-				throw new ExpressoEvaluationException(getNameOffset(nameIndex), getNameOffset(0) + theNames.get(nameIndex).length(), //
+				throw new ExpressoEvaluationException(expressionOffset + getNameOffset(nameIndex),
+					getNameOffset(0) + theNames.get(nameIndex).length(), //
 					getPath(nameIndex) + " cannot be accessed", e);
 			}
 			return evaluateField(field, mvType.getType(0).resolveType(field.getGenericType()), //
 				(ModelValueSynth<SettableValue<?>, ? extends SettableValue<?>>) mv, nameIndex, type, expressionOffset,
 				reporting.at(theNames.get(nameIndex).length() + 1));
 		} else
-			throw new ExpressoEvaluationException(getNameOffset(nameIndex + 1), getNameOffset(0) + theNames.get(nameIndex + 1).length(), //
+			throw new ExpressoEvaluationException(expressionOffset + getNameOffset(nameIndex + 1),
+				getNameOffset(0) + theNames.get(nameIndex + 1).length(), //
 				"Cannot evaluate field '" + theNames.get(nameIndex + 1) + "' against model of type " + mvType);
 	}
 
@@ -239,7 +243,8 @@ public class NameExpression implements ObservableExpression, Named {
 			try {
 				field.setAccessible(true);
 			} catch (SecurityException e) {
-				throw new ExpressoEvaluationException(getNameOffset(nameIndex), getNameOffset(0) + theNames.get(nameIndex).length(), //
+				throw new ExpressoEvaluationException(expressionOffset + getNameOffset(nameIndex),
+					getNameOffset(0) + theNames.get(nameIndex).length(), //
 					"Could not access field " + getPath(nameIndex), e);
 			}
 		}
@@ -260,10 +265,12 @@ public class NameExpression implements ObservableExpression, Named {
 		try {
 			newField = TypeTokens.getRawType(fieldType).getField(theNames.get(nameIndex).getName());
 		} catch (NoSuchFieldException e) {
-			throw new ExpressoEvaluationException(getNameOffset(nameIndex), getNameOffset(0) + theNames.get(nameIndex).length(), //
+			throw new ExpressoEvaluationException(expressionOffset + getNameOffset(nameIndex),
+				getNameOffset(0) + theNames.get(nameIndex).length(), //
 				getPath(nameIndex) + "' cannot be resolved or is not a field");
 		} catch (SecurityException e) {
-			throw new ExpressoEvaluationException(getNameOffset(nameIndex), getNameOffset(0) + theNames.get(nameIndex).length(), //
+			throw new ExpressoEvaluationException(expressionOffset + getNameOffset(nameIndex),
+				getNameOffset(0) + theNames.get(nameIndex).length(), //
 				getPath(nameIndex) + " cannot be accessed", e);
 		}
 		return evaluateField(newField, fieldType.resolveType(newField.getGenericType()), //
@@ -291,8 +298,7 @@ public class NameExpression implements ObservableExpression, Named {
 
 	private <F, M> ModelValueSynth<SettableValue<?>, SettableValue<M>> getFieldValue(Field field, TypeToken<F> fieldType,
 		ModelValueSynth<SettableValue<?>, ? extends SettableValue<?>> context, TypeToken<M> targetType, int nameIndex, int expressionOffset,
-			ErrorReporting reporting)
-				throws ExpressoEvaluationException {
+			ErrorReporting reporting) throws ExpressoEvaluationException {
 		ModelInstanceType<SettableValue<?>, SettableValue<F>> fieldModelType = ModelTypes.Value.forType(fieldType);
 		ModelValueSynth<SettableValue<?>, SettableValue<F>> fieldValue = ModelValueSynth.of(fieldModelType,
 			msi -> new FieldValue<>(context == null ? null : context.get(msi), field, fieldType, reporting));

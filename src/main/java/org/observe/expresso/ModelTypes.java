@@ -178,7 +178,7 @@ public class ModelTypes {
 		 * @param <V> The type to assign as
 		 * @return A ModelInstanceType of this model type with wildcard parameter types, as the given type
 		 */
-		public <V> ModelInstanceType<Observable<?>, Observable<V>> anyAs() {
+		public <V> ModelInstanceType<Observable<?>, Observable<V>> anyAsV() {
 			return (ModelInstanceType<Observable<?>, Observable<V>>) super.any();
 		}
 
@@ -323,7 +323,7 @@ public class ModelTypes {
 		 * @param <V> The type to assign as
 		 * @return A ModelInstanceType of this model type with wildcard parameter types, as the given type
 		 */
-		public <V> ModelInstanceType<ObservableAction<?>, ObservableAction<V>> anyAs() {
+		public <V> ModelInstanceType<ObservableAction<?>, ObservableAction<V>> anyAsV() {
 			return (ModelInstanceType<ObservableAction<?>, ObservableAction<V>>) super.any();
 		}
 
@@ -498,7 +498,7 @@ public class ModelTypes {
 		 * @param <V> The type to assign as
 		 * @return A ModelInstanceType of this model type with wildcard parameter types, as the given type
 		 */
-		public <V> ModelInstanceType<SettableValue<?>, SettableValue<V>> anyAs() {
+		public <V> ModelInstanceType<SettableValue<?>, SettableValue<V>> anyAsV() {
 			return (ModelInstanceType<SettableValue<?>, SettableValue<V>>) super.any();
 		}
 
@@ -843,7 +843,7 @@ public class ModelTypes {
 		 * @param <V> The type to assign as
 		 * @return A ModelInstanceType of this model type with wildcard parameter types, as the given type
 		 */
-		public <V> ModelInstanceType<ObservableCollection<?>, ObservableCollection<V>> anyAs() {
+		public <V> ModelInstanceType<ObservableCollection<?>, ObservableCollection<V>> anyAsV() {
 			return (ModelInstanceType<ObservableCollection<?>, ObservableCollection<V>>) super.any();
 		}
 
@@ -985,7 +985,7 @@ public class ModelTypes {
 		 * @param <V> The type to assign as
 		 * @return A ModelInstanceType of this model type with wildcard parameter types, as the given type
 		 */
-		public <V> ModelInstanceType<ObservableSortedCollection<?>, ObservableSortedCollection<V>> anyAs() {
+		public <V> ModelInstanceType<ObservableSortedCollection<?>, ObservableSortedCollection<V>> anyAsV() {
 			return (ModelInstanceType<ObservableSortedCollection<?>, ObservableSortedCollection<V>>) super.any();
 		}
 
@@ -1114,7 +1114,7 @@ public class ModelTypes {
 		 * @param <V> The type to assign as
 		 * @return A ModelInstanceType of this model type with wildcard parameter types, as the given type
 		 */
-		public <V> ModelInstanceType<ObservableSet<?>, ObservableSet<V>> anyAs() {
+		public <V> ModelInstanceType<ObservableSet<?>, ObservableSet<V>> anyAsV() {
 			return (ModelInstanceType<ObservableSet<?>, ObservableSet<V>>) super.any();
 		}
 
@@ -1300,7 +1300,7 @@ public class ModelTypes {
 		 * @param <V> The type to assign as
 		 * @return A ModelInstanceType of this model type with wildcard parameter types, as the given type
 		 */
-		public <V> ModelInstanceType<ObservableSortedSet<?>, ObservableSortedSet<V>> anyAs() {
+		public <V> ModelInstanceType<ObservableSortedSet<?>, ObservableSortedSet<V>> anyAsV() {
 			return (ModelInstanceType<ObservableSortedSet<?>, ObservableSortedSet<V>>) super.any();
 		}
 

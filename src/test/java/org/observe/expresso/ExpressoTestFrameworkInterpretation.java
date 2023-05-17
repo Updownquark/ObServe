@@ -67,12 +67,12 @@ public class ExpressoTestFrameworkInterpretation implements QonfigInterpretation
 			for (ExpressoQIS actionS : exS.forChildren("test-action")) {
 				ExpressoQIS testActionS = actionS.asElement("test-action");
 				actions.add(
-					new TestAction(testActionS.getAttributeText("name"), (ObservableModelSet.Built) exS.getExpressoEnv().getModels(), exS, //
+					new TestAction(testActionS.getAttributeText("name"), exS.getExpressoEnv().getBuiltModels(), exS, //
 						actionS.interpret(CompiledModelValue.class), //
 						testActionS.getAttributeText("expect-throw"), testActionS.getAttribute("breakpoint", boolean.class),
 						testActionS.getElement().getPositionInFile()));
 			}
-			return new ExpressoTest(session.getAttributeText("name"), (ObservableModelSet.Built) exS.getExpressoEnv().getModels(), exS,
+			return new ExpressoTest(session.getAttributeText("name"), exS.getExpressoEnv().getBuiltModels(), exS,
 				Collections.unmodifiableList(actions));
 		});
 		interpreter.createWith("watch", CompiledModelValue.class, session -> {
