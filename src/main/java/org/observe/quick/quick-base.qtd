@@ -89,18 +89,17 @@
 			<child-def name="columns" requires="column-set" max="inf" /> <!-- Need at least one column -->
 		</add-on>
 		<add-on name="column-set" abstract="true"/>
-		<add-on name="column-edit-type" requires="column-edit" abstract="true">
-			<attribute name="commit" type="expression" />
-			<attribute name="editable-if" type="expression" specify="optional" />
-			<attribute name="accept" type="expression" specify="optional" />
-		</add-on>
+		<add-on name="column-edit-type" requires="column-edit" abstract="true" />
 		<add-on name="modify-row-value" requires="column-edit" inherits="column-edit-type">
+			<attribute name="commit" type="expression" specify="optional" />
 			<attribute name="row-update" type="boolean" default="false" />
 		</add-on>
 		<add-on name="replace-row-value" requires="column-edit" inherits="column-edit-type">
-			<attr-mod name="column-edit-type.commit" specify="optional" default="" />
+			<attribute name="replacement" type="expression" />
 		</add-on>
-		<add-on name="column-editor" requires="value-widget" />
+		<add-on name="cell-editor" requires="value-widget">
+			<attr-mod name="value-widget.value" specify="forbidden" default="" />
+		</add-on>
 
 		<add-on name="field" requires="widget">
 			<attribute name="field-label" type="expression" specify="optional" />
@@ -223,8 +222,10 @@
 			</element-model>
 			<attribute name="type" type="column-edit-type" />
 			<attribute name="column-edit-value-name" type="identifier" default="columnEditValue" />
+			<attribute name="editable-if" type="expression" specify="optional" />
+			<attribute name="accept" type="expression" specify="optional" />
 			<attribute name="clicks" type="int" specify="optional" />
-			<child-def name="editor" type="value-widget" inherits="column-editor" />
+			<child-def name="editor" type="value-widget" min="0" inherits="cell-editor" />
 		</element-def>
 		<element-def name="columns-ref" inherits="column-set">
 			<attribute name="model-value" type="expression" />

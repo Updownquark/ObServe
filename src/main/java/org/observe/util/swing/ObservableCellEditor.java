@@ -56,6 +56,8 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 
 	ObservableCellEditor<M, C> decorate(CellDecorator<M, C> decorator);
 
+	ObservableCellEditor<M, C> modify(Function<Component, Runnable> modify);
+
 	default ObservableCellEditor<M, C> decorateAll(Consumer<ComponentDecorator> decorator) {
 		return decorate(CellDecorator.constant(decorator));
 	}
@@ -338,6 +340,7 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 		private final EditorInstallation<C> theInstallation;
 		private Predicate<EventObject> theEditTest;
 		private CellDecorator<M, C> theDecorator;
+		private Function<Component, Runnable> theModifier;
 		private IntSupplier theHoveredRow;
 		private IntSupplier theHoveredColumn;
 		private Function<? super ModelCell<? extends M, ? extends C>, String> theValueTooltip;
@@ -369,6 +372,24 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 				theDecorator = decorator;
 			else
 				theDecorator = theDecorator.modify(decorator);
+			return this;
+		}
+
+		@Override
+		public ObservableCellEditor<M, C> modify(Function<Component, Runnable> modify) {
+			if (theModifier == null)
+				theModifier = modify;
+			else {
+				Function<Component, Runnable> old = theModifier;
+				theModifier = comp -> {
+					Runnable oldReset = old.apply(comp);
+					Runnable newReset = modify.apply(comp);
+					return () -> {
+						newReset.run();
+						oldReset.run();
+					};
+				};
+			}
 			return this;
 		}
 
@@ -502,11 +523,26 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 				true, true, null);
 			if (theEditorValue.get() != modelValue)
 				theEditorValue.set((C) modelValue, null);
+			Runnable revert = null;
 			if (theDecorator != null) {
 				ComponentDecorator cd = new ComponentDecorator();
 				theDecorator.decorate(theEditingCell, cd);
-				theRevert = cd.decorate(theEditorComponent);
+				revert = cd.decorate(theEditorComponent);
 			}
+			if (theModifier != null) {
+				Runnable modRevert = theModifier.apply(theEditorComponent);
+				if (revert == null)
+					revert = modRevert;
+				else if (modRevert != null) {
+					Runnable decoRevert = revert;
+					revert = () -> {
+						modRevert.run();
+						decoRevert.run();
+					};
+				}
+			}
+			theRevert = revert;
+
 			theEditorSubscription = theInstallation.install(this, list, valueFilter, tooltip, valueTooltip);
 			return theEditorComponent;
 		}
@@ -660,6 +696,14 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 			theDefaultEditor.decorate(decorator);
 			for (ComponentEditor component : theComponents)
 				component.editor.decorate(decorator);
+			return this;
+		}
+
+		@Override
+		public ObservableCellEditor<M, C> modify(Function<Component, Runnable> modify) {
+			theDefaultEditor.modify(modify);
+			for (ComponentEditor component : theComponents)
+				component.editor.modify(modify);
 			return this;
 		}
 

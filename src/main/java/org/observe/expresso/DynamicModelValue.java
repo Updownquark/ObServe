@@ -268,11 +268,37 @@ public interface DynamicModelValue<M, MV extends M> extends ModelValueSynth<M, M
 	 */
 	public static <M, MV extends M> void satisfyDynamicValueType(String name, ObservableModelSet models, ModelInstanceType<M, MV> type) {
 		ObservableModelSet.ModelComponentNode<?, ?> component = getDynamicValueComponent(name, models);
-		satisfyDynamicValue(name, models, CompiledModelValue.of(name, type.getModelType(),
-			// LambdaUtils.printableExSupplier(
-			// () -> new RuntimeModelValue<>(((DynamicTypedModelValueCreator<?, ?>) component.getThing()).getIdentity(), type),
-			// () -> "Dynamic " + type, null)));
-			() -> new RuntimeModelValue<>(((DynamicTypedModelValueCreator<?, ?>) component.getThing()).getIdentity(), type)));
+		class TypeSatisfiedDynamicCompiledValue implements CompiledModelValue<M, MV> {
+			ModelInstanceType<M, MV> getType() {
+				return type;
+			}
+
+			@Override
+			public ModelType<M> getModelType() {
+				return type.getModelType();
+			}
+
+			@Override
+			public ModelValueSynth<M, MV> createSynthesizer() throws ExpressoInterpretationException {
+				return new RuntimeModelValue<>(((DynamicTypedModelValueCreator<?, ?>) component.getThing()).getIdentity(), type);
+			}
+
+			@Override
+			public int hashCode() {
+				return type.hashCode();
+			}
+
+			@Override
+			public boolean equals(Object obj) {
+				return obj instanceof TypeSatisfiedDynamicCompiledValue && type.equals(((TypeSatisfiedDynamicCompiledValue) obj).getType());
+			}
+
+			@Override
+			public String toString() {
+				return "Dynamic " + type;
+			}
+		}
+		satisfyDynamicValue(name, models, new TypeSatisfiedDynamicCompiledValue());
 	}
 
 	/**
@@ -497,6 +523,7 @@ public interface DynamicModelValue<M, MV extends M> extends ModelValueSynth<M, M
 
 		/**
 		 * @param declaration The declared definition of the dynamic value
+		 * @param modelType The model type of the dynamic value
 		 * @param reporting The error reporting for if this dynamic value's type is not satisfied in time
 		 * @param declaredType Supplies the type of the value, as far as it is known
 		 */
@@ -542,19 +569,19 @@ public interface DynamicModelValue<M, MV extends M> extends ModelValueSynth<M, M
 			ModelValueSynth<M, MV> container = theSatisfier.createSynthesizer();
 			if (!getDeclaredType().getModelType().equals(container.getType().getModelType()))
 				throw new IllegalStateException(
-					"Dynamic model value " + getName() + "(" + getDeclaredType() + ") satisfied with " + container.getType());
+					"Dynamic model value '" + getName() + "' (" + getDeclaredType() + ") satisfied with " + container.getType());
 			boolean wildcard = false;
 			for (int t = 0; t < getDeclaredType().getModelType().getTypeCount(); t++) {
 				TypeToken<?> pt = container.getType().getType(t);
 				if (!TypeTokens.get().isAssignable(getDeclaredType().getType(t), pt))
 					throw new IllegalStateException(
-						"Dynamic model value " + getName() + "(" + getDeclaredType() + ") satisfied with " + container.getType());
+						"Dynamic model value '" + getName() + "' (" + getDeclaredType() + ") satisfied with " + container.getType());
 				else if (TypeTokens.get().isTrivialType(pt.getType()))
 					wildcard = true;
 			}
 			if (wildcard)
 				theReporting
-				.error("Type not specified for dynamic model value " + getName() + "(" + theDeclaredType + ") before being needed");
+				.error("Type not specified for dynamic model value '" + getName() + "' (" + theDeclaredType + ") before being needed");
 			return container;
 		}
 
@@ -565,10 +592,10 @@ public interface DynamicModelValue<M, MV extends M> extends ModelValueSynth<M, M
 			if (dmv.theSatisfier == null) {
 				dmv.theSatisfier = satisfier;
 				return true;
-			} else if (ignoreIfSatified || dmv.theSatisfier == satisfier)
+			} else if (ignoreIfSatified || dmv.theSatisfier.equals(satisfier))
 				return false;
 			else
-				throw new IllegalStateException("Dynamic model value " + name + " has already been satisfied");
+				throw new IllegalStateException("Dynamic model value '" + name + "' has already been satisfied");
 		}
 
 		@Override

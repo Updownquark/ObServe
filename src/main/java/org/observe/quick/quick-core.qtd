@@ -140,7 +140,7 @@
 		<!-- Now a basic outline of abstract Quick widgets -->
 		<element-def name="value-widget" extends="widget" abstract="true" >
 			<element-model>
-				<value name-attribute="value-name" source-attribute="value" priority="1" />
+				<value name-attribute="value-name" priority="1" />
 			</element-model>
 			<attribute name="value-name" type="identifier" default="value" />
 			<attribute name="value" type="expression" specify="required" />

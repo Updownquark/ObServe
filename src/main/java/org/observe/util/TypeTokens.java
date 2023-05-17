@@ -13,7 +13,9 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import java.util.function.Supplier;
+import java.util.function.UnaryOperator;
 
+import org.qommons.ClassMap;
 import org.qommons.QommonsUtils;
 import org.qommons.StringUtils;
 
@@ -337,8 +339,15 @@ public class TypeTokens {
 		Type getType(String typeName);
 	}
 
+	public interface SupplementaryCast<S, T> {
+		TypeToken<? extends T> getCastType(TypeToken<? extends S> sourceType);
+
+		T cast(S source);
+	}
+
 	private final ConcurrentHashMap<Class<?>, TypeKey<?>> TYPES;
 	private final Set<TypeRetriever> theClassRetrievers;
+	private final ClassMap<ClassMap<SupplementaryCast<?, ?>>> theSupplementaryCasts;
 
 	/** TypeToken&lt;String> */
 	public final TypeToken<String> STRING;
@@ -389,6 +398,7 @@ public class TypeTokens {
 	protected TypeTokens() {
 		TYPES = new ConcurrentHashMap<>();
 		theClassRetrievers = new LinkedHashSet<>();
+		theSupplementaryCasts = new ClassMap<>();
 
 		STRING = of(String.class);
 		BOOLEAN = of(Boolean.class);
@@ -473,6 +483,24 @@ public class TypeTokens {
 	 */
 	public boolean removeClassRetriever(TypeRetriever classRetriever) {
 		return theClassRetrievers.remove(classRetriever);
+	}
+
+	public <S, T> TypeTokens addSupplementaryCast(Class<S> sourceType, Class<T> targetType, SupplementaryCast<S, T> cast) {
+		theSupplementaryCasts.computeIfAbsent(targetType, ClassMap::new).put(sourceType, cast);
+		return this;
+	}
+
+	public boolean removeSupplementaryCast(Class<?> sourceType, Class<?> targetType, SupplementaryCast<?, ?> cast) {
+		ClassMap<SupplementaryCast<?, ?>> srcCasts = theSupplementaryCasts.get(targetType, ClassMap.TypeMatch.EXACT);
+		boolean[] match = new boolean[1];
+		srcCasts.compute(sourceType, existing -> {
+			if (existing == cast) {
+				match[0] = true;
+				return null;
+			} else
+				return existing;
+		});
+		return match[0];
 	}
 
 	/**
@@ -984,6 +1012,7 @@ public class TypeTokens {
 	 */
 	public <S, T> TypeConverter<S, T> getCast(TypeToken<S> source, TypeToken<T> target, boolean safe, boolean downCastOnly)
 		throws IllegalArgumentException {
+
 		if (target.getType() instanceof TypeVariable && ((TypeVariable<?>) target.getType()).getBounds().length == 1)
 			target = (TypeToken<T>) of(((TypeVariable<?>) target.getType()).getBounds()[0]);
 		if (target.isAssignableFrom(source)) {
@@ -1000,21 +1029,21 @@ public class TypeTokens {
 			} else
 				return new TypeConverter<>((TypeToken<T>) source, "no-op", v -> (T) v);
 		}
+		Class<S> wrappedSource = getRawType(wrap(source));
+		Class<T> wrappedTarget = getRawType(wrap(target));
 		if (target.isArray()) {
 			if (!source.isArray() || source.isPrimitive() || target.isPrimitive())
-				throw new IllegalArgumentException("Cannot cast " + source + " to " + target);
+				return specialCast(source, target, wrappedSource, wrappedTarget);
 			try {
 				getCast(source.getComponentType(), target.getComponentType()); // Don't need the actual cast, just the check
 				return new TypeConverter<>((TypeToken<T>) source, "no-op", v -> (T) v);
 			} catch (IllegalArgumentException e) {
-				throw new IllegalArgumentException("Cannot cast " + source + " to " + target);
+				return specialCast(source, target, wrappedSource, wrappedTarget);
 			}
 		}
 		Class<?> primitiveTarget = getRawType(unwrap(target));
 		Class<?> primitiveSource = getRawType(unwrap(source));
-		Class<?> wrappedTarget = getRawType(wrap(target));
-		Class<?> wrappedSource = getRawType(wrap(source));
-		Function<S, S> nullCheck;
+		UnaryOperator<S> nullCheck;
 		if (target.isPrimitive() && !source.isPrimitive()) {
 			S safeValue = safe ? (S) SAFE_VALUES.get(primitiveSource) : null;
 			nullCheck = v -> {
@@ -1034,12 +1063,12 @@ public class TypeTokens {
 			else if (wrappedTarget.isAssignableFrom(wrappedSource))
 				return new TypeConverter<>((TypeToken<T>) TypeTokens.get().of(wrappedSource), "wrapping-cast", v -> (T) nullCheck.apply(v));
 			else if (!primitiveTarget.isPrimitive())
-				throw new IllegalArgumentException("Cannot cast " + source + " to " + target);
+				return specialCast(source, target, wrappedSource, wrappedTarget);
 			else if (primitiveSource == boolean.class)
-				throw new IllegalArgumentException("Cannot cast " + source + " to " + target);
+				return specialCast(source, target, wrappedSource, wrappedTarget);
 			Function<S, Number> toNumber;
 			if (primitiveSource == char.class) {
-				toNumber = v -> Integer.valueOf(((Character) nullCheck.apply(v)).charValue());
+				toNumber = v -> Integer.valueOf((Character) nullCheck.apply(v));
 			} else {
 				toNumber = v -> (Number) nullCheck.apply(v);
 			}
@@ -1121,7 +1150,17 @@ public class TypeTokens {
 		} else if (isAssignable(target, source))
 			return new TypeConverter<>((TypeToken<T>) source, "no-op", v -> (T) v);
 		else
-			throw new IllegalArgumentException("Cannot cast " + target + " to " + source);
+			return specialCast(source, target, wrappedSource, wrappedTarget);
+	}
+
+	private <S, T> TypeConverter<S, T> specialCast(TypeToken<S> sourceType, TypeToken<T> targetType, Class<S> sourceClass,
+		Class<T> targetClass) {
+		ClassMap<SupplementaryCast<?, ?>> sourceCasts = theSupplementaryCasts.get(targetClass, ClassMap.TypeMatch.SUB_TYPE);
+		SupplementaryCast<S, T> suppCast = sourceCasts == null ? null
+			: (SupplementaryCast<S, T>) sourceCasts.get(sourceClass, ClassMap.TypeMatch.SUPER_TYPE);
+		if (suppCast != null)
+			return new TypeConverter<>((TypeToken<T>) suppCast.getCastType(sourceType), suppCast.toString(), suppCast::cast);
+		throw new IllegalArgumentException("Cannot cast " + sourceType + " to " + targetType);
 	}
 
 	/**

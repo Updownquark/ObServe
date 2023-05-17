@@ -25,8 +25,8 @@ import org.qommons.config.QonfigInterpretationException;
 
 import com.google.common.reflect.TypeToken;
 
-public interface TabularWidget<R> extends MultiValueWidget<R> {
-	public interface Def<W extends TabularWidget<?>> extends MultiValueWidget.Def<W> {
+public interface TabularWidget<R> extends MultiValueWidget<R>, RowTyped<R> {
+	public interface Def<W extends TabularWidget<?>> extends MultiValueWidget.Def<W>, RowTyped.Def<W> {
 		List<QuickTableColumn.TableColumnSet.Def<?>> getColumns();
 
 		public abstract class Abstract<W extends TabularWidget<?>> extends QuickWidget.Def.Abstract<W> implements Def<W> {
@@ -90,10 +90,11 @@ public interface TabularWidget<R> extends MultiValueWidget<R> {
 		}
 	}
 
-	public interface Interpreted<R, W extends TabularWidget<R>> extends MultiValueWidget.Interpreted<R, W> {
+	public interface Interpreted<R, W extends TabularWidget<R>> extends MultiValueWidget.Interpreted<R, W>, RowTyped.Interpreted<R, W> {
 		@Override
 		Def<? super W> getDefinition();
 
+		@Override
 		TypeToken<R> getRowType();
 
 		List<QuickTableColumn.TableColumnSet.Interpreted<R, ?>> getColumns();
@@ -183,6 +184,13 @@ public interface TabularWidget<R> extends MultiValueWidget<R> {
 				theColumnIndex = columnIndex;
 			}
 
+			public Default(TypeToken<T> rowType, String descrip) {
+				this(SettableValue.build(rowType).withDescription(descrip + ".rowValue").build(), //
+					SettableValue.build(boolean.class).withValue(false).withDescription(descrip + ".selected").build(),
+					SettableValue.build(int.class).withValue(0).withDescription(descrip + ".rowIndex").build(), //
+					SettableValue.build(int.class).withValue(0).withDescription(descrip + ".columnIndex").build());
+			}
+
 			@Override
 			public SettableValue<Integer> getRowIndex() {
 				return theRowIndex;
@@ -194,6 +202,9 @@ public interface TabularWidget<R> extends MultiValueWidget<R> {
 			}
 		}
 	}
+
+	@Override
+	Interpreted<R, ?> getInterpreted();
 
 	void setContext(TabularContext<R> ctx) throws ModelInstantiationException;
 

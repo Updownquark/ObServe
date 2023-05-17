@@ -20,12 +20,14 @@ import org.observe.expresso.ops.BinaryOperatorSet;
 import org.observe.expresso.ops.UnaryOperatorSet;
 import org.observe.quick.QuickCoreInterpretation;
 import org.observe.quick.QuickDocument2;
+import org.observe.quick.QuickElement;
 import org.observe.quick.QuickWidget;
 import org.observe.quick.style.StyleQIS;
 import org.observe.util.TypeTokens;
 import org.observe.util.swing.ObservableSwingUtils;
 import org.qommons.QommonsUtils;
 import org.qommons.Version;
+import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigInterpretation;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigInterpreterCore;
@@ -35,6 +37,8 @@ import org.qommons.config.QonfigToolkit;
 import org.qommons.config.SpecialSession;
 import org.qommons.ex.ExFunction;
 
+import com.google.common.reflect.TypeToken;
+
 /** {@link QonfigInterpretation} for the Quick-Base toolkit */
 public class QuickBaseInterpretation implements QonfigInterpretation {
 	/** The name of the toolkit */
@@ -42,6 +46,20 @@ public class QuickBaseInterpretation implements QonfigInterpretation {
 
 	/** The version of the toolkit */
 	public static final Version TOOLKIT_VERSION = new Version(0, 1, 0);
+
+	static {
+		TypeTokens.get().addSupplementaryCast(Integer.class, QuickSize.class, new TypeTokens.SupplementaryCast<Integer, QuickSize>() {
+			@Override
+			public TypeToken<? extends QuickSize> getCastType(TypeToken<? extends Integer> sourceType) {
+				return TypeTokens.get().of(QuickSize.class);
+			}
+
+			@Override
+			public QuickSize cast(Integer source) {
+				return QuickSize.ofPixels(source.intValue());
+			}
+		});
+	}
 
 	@Override
 	public Set<Class<? extends SpecialSession<?>>> getExpectedAPIs() {
@@ -125,7 +143,16 @@ public class QuickBaseInterpretation implements QonfigInterpretation {
 		interpreter.createWith("table", QuickTable.Def.class,
 			session -> QuickCoreInterpretation.interpretQuick(session, QuickTable.Def::new));
 		interpreter.createWith("column", QuickTableColumn.SingleColumnSet.Def.class,
-			session -> QuickCoreInterpretation.interpretQuick(session, QuickTableColumn.SingleColumnSet.Def::new));
+			session -> QuickCoreInterpretation.interpretQuick(session,
+				(p, el) -> new QuickTableColumn.SingleColumnSet.Def((RowTyped.Def<?>) p, el)));
+		interpreter.createWith("column-edit", QuickTableColumn.ColumnEditing.Def.class, session -> QuickCoreInterpretation
+			.interpretQuick(session, (p, el) -> new QuickTableColumn.ColumnEditing.Def((QuickTableColumn.TableColumnSet.Def<?>) p, el)));
+		interpreter.createWith("modify-row-value", QuickTableColumn.ColumnEditType.RowModifyEditType.Def.class,
+			session -> new QuickTableColumn.ColumnEditType.RowModifyEditType.Def((QonfigAddOn) session.getFocusType(),
+				(QuickTableColumn.ColumnEditing.Def) session.get(QuickElement.SESSION_QUICK_ELEMENT)));
+		interpreter.createWith("replace-row-value", QuickTableColumn.ColumnEditType.RowReplaceEditType.Def.class,
+			session -> new QuickTableColumn.ColumnEditType.RowReplaceEditType.Def((QonfigAddOn) session.getFocusType(),
+				(QuickTableColumn.ColumnEditing.Def) session.get(QuickElement.SESSION_QUICK_ELEMENT)));
 		return interpreter;
 	}
 

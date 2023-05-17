@@ -3,6 +3,7 @@ package org.observe.quick.base;
 import org.observe.SettableValue;
 import org.observe.collect.ObservableCollection;
 import org.observe.expresso.CompiledExpression;
+import org.observe.expresso.DynamicModelValue;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
@@ -104,7 +105,9 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 		@Override
 		public Interpreted<R> update(QuickStyledElement.QuickInterpretationCache cache) throws ExpressoInterpretationException {
 			// Do this first so we have the row type
-			theRows = getDefinition().getRows().evaluate(ModelTypes.Collection.<R> anyAs()).interpret();
+			theRows = getDefinition().getRows().evaluate(ModelTypes.Collection.<R> anyAsV()).interpret();
+			DynamicModelValue.satisfyDynamicValueType(getDefinition().getValueName(), getDefinition().getModels(),
+				ModelTypes.Value.forType(theRows.getType().getType(0)));
 			super.update(cache);
 			theSelection = getDefinition().getSelection() == null ? null
 				: getDefinition().getSelection().evaluate(ModelTypes.Value.forType(getRowType())).interpret();

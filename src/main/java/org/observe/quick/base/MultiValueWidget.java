@@ -14,6 +14,9 @@ public interface MultiValueWidget<T> extends MultiValueRenderable<T> {
 	}
 
 	public interface Interpreted<T, W extends MultiValueWidget<T>> extends MultiValueRenderable.Interpreted<T, W> {
+		@Override
+		Def<? super W> getDefinition();
+
 		InterpretedValueSynth<SettableValue<?>, SettableValue<T>> getSelection();
 
 		InterpretedValueSynth<ObservableCollection<?>, ObservableCollection<T>> getMultiSelection();

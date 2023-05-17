@@ -12,6 +12,9 @@ public interface MultiValueRenderable<T> extends QuickWidget {
 
 	public interface Interpreted<T, W extends MultiValueRenderable<T>> extends QuickWidget.Interpreted<W> {
 		@Override
+		Def<? super W> getDefinition();
+
+		@Override
 		W create(QuickElement parent);
 	}
 

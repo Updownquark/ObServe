@@ -20,7 +20,7 @@ public interface QuickAddOn<E extends QuickElement> {
 	 * @param <E> The super type of element that this type of add-on may be added onto
 	 * @param <AO> The type of add-on that this definition is for
 	 */
-	public interface Def<E extends QuickElement, AO extends QuickAddOn<E>> {
+	public interface Def<E extends QuickElement, AO extends QuickAddOn<? super E>> {
 		/** @return The add-on that the Qonfig toolkit uses to represent this type */
 		QonfigAddOn getType();
 
@@ -49,7 +49,7 @@ public interface QuickAddOn<E extends QuickElement> {
 		 * @param <E> The super type of element that this type of add-on may be added onto
 		 * @param <AO> The type of add-on that this definition is for
 		 */
-		public abstract class Abstract<E extends QuickElement, AO extends QuickAddOn<E>> implements Def<E, AO> {
+		public abstract class Abstract<E extends QuickElement, AO extends QuickAddOn<? super E>> implements Def<E, AO> {
 			private final QonfigAddOn theType;
 			private final QuickElement.Def<? extends E> theElement;
 			private ExpressoQIS theExpressoSession;
@@ -58,7 +58,7 @@ public interface QuickAddOn<E extends QuickElement> {
 			 * @param type The add-on that the Qonfig toolkit uses to represent this type
 			 * @param element The element definition that this add-on is added onto
 			 */
-			public Abstract(QonfigAddOn type, QuickElement.Def<? extends E> element) {
+			protected Abstract(QonfigAddOn type, QuickElement.Def<? extends E> element) {
 				theType = type;
 				theElement = element;
 			}
@@ -91,7 +91,7 @@ public interface QuickAddOn<E extends QuickElement> {
 	 * @param <E> The super type of element that this type of add-on may be added onto
 	 * @param <AO> The type of add-on that this interpretation is for
 	 */
-	public interface Interpreted<E extends QuickElement, AO extends QuickAddOn<E>> {
+	public interface Interpreted<E extends QuickElement, AO extends QuickAddOn<? super E>> {
 		/** @return The definition that produce this interpretation */
 		Def<? super E, ? super AO> getDefinition();
 
@@ -120,7 +120,7 @@ public interface QuickAddOn<E extends QuickElement> {
 		 * @param <E> The super type of element that this type of add-on may be added onto
 		 * @param <AO> The type of add-on that this interpretation is for
 		 */
-		public abstract class Abstract<E extends QuickElement, AO extends QuickAddOn<E>> implements Interpreted<E, AO> {
+		public abstract class Abstract<E extends QuickElement, AO extends QuickAddOn<? super E>> implements Interpreted<E, AO> {
 			private final Def<? super E, ? super AO> theDefinition;
 			private final QuickElement.Interpreted<?> theElement;
 
@@ -128,7 +128,7 @@ public interface QuickAddOn<E extends QuickElement> {
 			 * @param definition The definition producing this interpretation
 			 * @param element The element interpretation that this add-on is added onto
 			 */
-			public Abstract(Def<? super E, ? super AO> definition, QuickElement.Interpreted<?> element) {
+			protected Abstract(Def<? super E, ? super AO> definition, QuickElement.Interpreted<?> element) {
 				theDefinition = definition;
 				theElement = element;
 			}
@@ -153,7 +153,7 @@ public interface QuickAddOn<E extends QuickElement> {
 
 	/**
 	 * Called by the {@link #getElement() element's} update, initializes or updates this add-on
-	 * 
+	 *
 	 * @param models The models to support this add-on
 	 * @return This add-on
 	 * @throws ModelInstantiationException If any models in this add-on could not be instantiated

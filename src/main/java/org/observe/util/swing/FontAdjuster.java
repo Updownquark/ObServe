@@ -215,8 +215,13 @@ public class FontAdjuster {
 		}
 		if (theFont != null) {
 			Font oldFont = c.getFont();
-			c.setFont(theFont.apply(c.getFont()));
-			revert.add(() -> c.setFont(oldFont));
+			Font newFont = theFont.apply(c.getFont());
+			c.setFont(newFont);
+			System.out.println("Setting font " + newFont.getStyle());
+			revert.add(() -> {
+				System.out.println("reverting font to " + oldFont.getStyle());
+				c.setFont(oldFont);
+			});
 		}
 
 		if (theHAlign != null) {

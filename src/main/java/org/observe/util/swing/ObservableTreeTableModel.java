@@ -2,6 +2,7 @@ package org.observe.util.swing;
 
 import java.awt.Component;
 import java.awt.EventQueue;
+import java.awt.Point;
 import java.awt.Rectangle;
 import java.awt.event.KeyEvent;
 import java.awt.event.KeyListener;
@@ -269,6 +270,12 @@ public class ObservableTreeTableModel<T> implements TreeTableModel {
 				int col = table.columnAtPoint(evt.getPoint());
 				col = col < 0 ? col : table.convertColumnIndexToModel(col);
 				return col;
+			}
+
+			@Override
+			protected Point getCellOffset(int row, int column) {
+				Rectangle bounds = table.getCellRect(row, column, false);
+				return bounds == null ? null : bounds.getLocation();
 			}
 
 			@Override

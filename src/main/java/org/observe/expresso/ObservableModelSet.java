@@ -1497,6 +1497,16 @@ public interface ObservableModelSet extends Identifiable {
 		@Override
 		Built getRoot();
 
+		@Override
+		default Built getSubModelIfExists(String path) {
+			return (Built) ObservableModelSet.super.getSubModelIfExists(path);
+		}
+
+		@Override
+		default Built getSubModel(String path) throws ModelException {
+			return (Built) ObservableModelSet.super.getSubModel(path);
+		}
+
 		/**
 		 * Interprets all of this model set's components
 		 *
@@ -1520,6 +1530,16 @@ public interface ObservableModelSet extends Identifiable {
 
 		@Override
 		Map<String, ? extends InterpretedModelComponentNode<?, ?>> getComponents();
+
+		@Override
+		default InterpretedModelSet getSubModelIfExists(String path) {
+			return (InterpretedModelSet) Built.super.getSubModelIfExists(path);
+		}
+
+		@Override
+		default InterpretedModelSet getSubModel(String path) throws ModelException {
+			return (InterpretedModelSet) Built.super.getSubModel(path);
+		}
 
 		@Override
 		default InterpretedModelComponentNode<?, ?> getComponentIfExists(String path) {
@@ -1981,28 +2001,31 @@ public interface ObservableModelSet extends Identifiable {
 
 		private void print(StringBuilder str, int indent) {
 			Set<String> components = new LinkedHashSet<>();
-			components.addAll(theComponents.keySet());
-			for (ObservableModelSet inh : getInheritance().values())
-				components.addAll(inh.getComponents().keySet());
+			addComponents(components, this);
 			for (String component : components) {
 				str.append('\n');
 				for (int i = 0; i < indent; i++)
 					str.append('\t');
-				ModelComponentNode<?, ?> thing = getComponentIfExists(component, true);
-				str.append(component).append(": ");
-				if (thing.getModel() != null) {
-					str.append("Model");
+				ModelComponentNode<?, ?> thing = getComponentIfExists(component, false);
+				str.append(component).append(':');
+				if (thing.getModel() != null)
 					((DefaultModelSet) thing.getModel()).print(str, indent + 1);
-				} else {
+				else {
 					String type;
 					try {
 						type = thing.getType().toString();
 					} catch (ExpressoInterpretationException e) {
 						type = e.toString();
 					}
-					str.append(type);
+					str.append(' ').append(type);
 				}
 			}
+		}
+
+		private static void addComponents(Set<String> components, ObservableModelSet model) {
+			components.addAll(model.getComponents().keySet());
+			for (ObservableModelSet inh : model.getInheritance().values())
+				addComponents(components, inh);
 		}
 
 		class ModelNodeImpl<M, MV extends M> implements ModelComponentNode<M, MV> {
@@ -2511,12 +2534,8 @@ public interface ObservableModelSet extends Identifiable {
 				for (Map.Entry<ModelComponentId, ? extends ObservableModelSet> inh : getInheritance().entrySet()) {
 					if (inh.getValue() instanceof ObservableModelSet.Built)
 						inheritance.put(inh.getKey(), (ObservableModelSet.Built) inh.getValue());
-					else if (inh.getValue() instanceof ObservableModelSet.Builder) {
-						if (parent != null)
-							inheritance.put(inh.getKey(), parent.getInheritance().get(inh.getKey()));
-						else
-							inheritance.put(inh.getKey(), ((ObservableModelSet.Builder) inh.getValue()).build());
-					}
+					else if (inh.getValue() instanceof ObservableModelSet.Builder)
+						inheritance.put(inh.getKey(), ((ObservableModelSet.Builder) inh.getValue()).build());
 				}
 				DefaultBuilt model = createModel(root, parent, components, idComponents, inheritance);
 				theBuilt = model;
@@ -2540,6 +2559,7 @@ public interface ObservableModelSet extends Identifiable {
 			 * @param parent The parent model, or null if the new model is to be the root
 			 * @param components The component map for the new model
 			 * @param idComponents The identified component map for the new model
+			 * @param inheritance The inheritance for the new model
 			 * @return The new model
 			 */
 			protected DefaultBuilt createModel(DefaultBuilt root, DefaultBuilt parent, Map<String, ModelComponentNode<?, ?>> components,
@@ -2629,6 +2649,7 @@ public interface ObservableModelSet extends Identifiable {
 			 * @param parent The parent model, or null if the new model is to be the root
 			 * @param components The component map for the new model
 			 * @param idComponents The identified component map for the new model
+			 * @param inheritance The inheritance for the new model
 			 * @return The new model
 			 */
 			protected DefaultInterpreted createModel(DefaultInterpreted root, DefaultInterpreted parent,

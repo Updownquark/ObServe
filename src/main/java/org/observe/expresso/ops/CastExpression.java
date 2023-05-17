@@ -105,7 +105,7 @@ public class CastExpression implements ObservableExpression {
 		} catch (ExpressoEvaluationException | ExpressoInterpretationException | TypeConversionException e) {
 			// If the result can't be evaluated as the given type, evaluate it as any value and cast it dynamically
 			try {
-				return evalAsDynamicCast(theValue.evaluate(ModelTypes.Value.anyAs(), env.at(theType.length() + 2), valueOffset), valueType,
+				return evalAsDynamicCast(theValue.evaluate(ModelTypes.Value.anyAsV(), env.at(theType.length() + 2), valueOffset), valueType,
 					valueOffset);
 			} catch (TypeConversionException e2) {
 				throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(), "'" + theValue + "' is not a scalar value",

@@ -34,7 +34,7 @@
 		</style-sheet>
 	</head>
 	<box layout="inline-layout" orientation="vertical" cross-align="justify">
-		<table rows="app.values">
+		<table rows="app.values" name="Simple Table">
 			<titled-border title="`Factored Values`">
 				<style attr="border-color" condition="hovered">`green`</style>
 				<style condition="pressed">
@@ -46,8 +46,9 @@
 				<label value="columnValue">
 					<style attr="color" condition="rowIndex % 2 == 1">`light-gray`</style>
 				</label>
-				<!--<column-edit>
-				</column-edit>-->
+				<column-edit type="replace-row-value" replacement="columnEditValue">
+					<text-field />
+				</column-edit>
 			</column>
 			<column name="`Prime`" value="app.primes.factorize(value, 100_000).size()==1" column-value-name="prime"
 				header-tooltip="`Whether the value is prime`">

@@ -2,9 +2,12 @@ package org.observe.quick;
 
 import org.observe.SettableValue;
 import org.observe.expresso.CompiledExpression;
+import org.observe.expresso.DynamicModelValue;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
+import org.observe.expresso.ObservableExpression;
+import org.observe.expresso.ObservableModelSet.CompiledModelValue;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueSynth;
@@ -17,6 +20,8 @@ import com.google.common.reflect.TypeToken;
 
 public interface QuickValueWidget<T> extends QuickWidget {
 	public interface Def<W extends QuickValueWidget<?>> extends QuickWidget.Def<W> {
+		String getValueName();
+
 		CompiledExpression getValue();
 
 		CompiledExpression getDisabled();
@@ -25,11 +30,17 @@ public interface QuickValueWidget<T> extends QuickWidget {
 		Interpreted<?, ? extends W> interpret(QuickElement.Interpreted<?> parent);
 
 		public abstract class Abstract<T, W extends QuickValueWidget<T>> extends QuickWidget.Def.Abstract<W> implements Def<W> {
+			private String theValueName;
 			private CompiledExpression theValue;
 			private CompiledExpression theDisabled;
 
-			public Abstract(QuickElement.Def<?> parent, QonfigElement element) {
+			protected Abstract(QuickElement.Def<?> parent, QonfigElement element) {
 				super(parent, element);
+			}
+
+			@Override
+			public String getValueName() {
+				return theValueName;
 			}
 
 			@Override
@@ -45,7 +56,10 @@ public interface QuickValueWidget<T> extends QuickWidget {
 			@Override
 			public Def.Abstract<T, W> update(AbstractQIS<?> session) throws QonfigInterpretationException {
 				super.update(session);
+				theValueName = session.getAttributeText("value-name");
 				theValue = getExpressoSession().getAttributeExpression("value");
+				if (theValue.getExpression() == ObservableExpression.EMPTY && getParentElement() instanceof WidgetValueSupplier.Def)
+					theValue = null; // Value supplied by parent
 				theDisabled = getExpressoSession().getAttributeExpression("disable-with");
 				return this;
 			}
@@ -66,7 +80,7 @@ public interface QuickValueWidget<T> extends QuickWidget {
 		implements Interpreted<T, W> {
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<T>> theValue;
 
-			public Abstract(QuickValueWidget.Def<? super W> definition, QuickElement.Interpreted<?> parent) {
+			protected Abstract(QuickValueWidget.Def<? super W> definition, QuickElement.Interpreted<?> parent) {
 				super(definition, parent);
 			}
 
@@ -83,9 +97,11 @@ public interface QuickValueWidget<T> extends QuickWidget {
 			@Override
 			public Interpreted.Abstract<T, W> update(QuickStyledElement.QuickInterpretationCache cache)
 				throws ExpressoInterpretationException {
-				super.update(cache);
-				InterpretedValueSynth<SettableValue<?>, SettableValue<T>> value = getDefinition().getValue()
-					.evaluate(ModelTypes.Value.<T> anyAs()).interpret();
+				InterpretedValueSynth<SettableValue<?>, SettableValue<T>> value;
+				if (getDefinition().getValue() != null)
+					value = getDefinition().getValue().evaluate(ModelTypes.Value.<T> anyAsV()).interpret();
+				else
+					value = ((WidgetValueSupplier.Interpreted<T, ?>) getParentElement()).getValue();
 				InterpretedValueSynth<SettableValue<?>, SettableValue<String>> disabled = getDefinition().getDisabled() == null ? null
 					: getDefinition().getDisabled().evaluate(ModelTypes.Value.STRING).interpret();
 				theValue = ModelValueSynth.of(value.getType(), msi -> {
@@ -95,6 +111,9 @@ public interface QuickValueWidget<T> extends QuickWidget {
 					SettableValue<String> disabledInst = disabled.get(msi);
 					return valueInst.disableWith(disabledInst);
 				}).interpret();
+				DynamicModelValue.satisfyDynamicValue(getDefinition().getValueName(), getDefinition().getModels(),
+					CompiledModelValue.constant(theValue));
+				super.update(cache);
 				return this;
 			}
 		}
@@ -126,6 +145,18 @@ public interface QuickValueWidget<T> extends QuickWidget {
 			super.update(models);
 			theValue.set(getInterpreted().getValue().get(getModels()), null);
 			return this;
+		}
+	}
+
+	public interface WidgetValueSupplier<T> extends QuickElement {
+		public interface Def<VS extends WidgetValueSupplier<?>> extends QuickElement.Def<VS> {
+		}
+
+		public interface Interpreted<T, VS extends WidgetValueSupplier<T>> extends QuickElement.Interpreted<VS> {
+			@Override
+			Def<? super VS> getDefinition();
+
+			InterpretedValueSynth<SettableValue<?>, SettableValue<T>> getValue() throws ExpressoInterpretationException;
 		}
 	}
 }
