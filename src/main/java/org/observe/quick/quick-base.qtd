@@ -1,11 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
 <qonfig-def name="Quick-Base" version="0.1" extends:core="Quick-Core v0.1">
-	<add-ons>
-		<add-on name="orientation" />
-		<add-on name="horizontal" inherits="orientation" />
-		<add-on name="vertical" inherits="orientation" />
+	<value-types>
+		<one-of name="orientation">
+			<literal>horizontal</literal>
+			<literal>vertical</literal>
+		</one-of>
+	</value-types>
 
+	<add-ons>
 		<add-on name="border-layout-region" abstract="true" />
 		<add-on name="inline-alignment" />
 		<add-on name="center" inherits="border-layout-region,inline-alignment" />

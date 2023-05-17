@@ -837,7 +837,7 @@ class QuickSwingTablePopulation {
 		public <F> SwingCellPopulator<R, C> addTextField(String fieldName, SettableValue<F> field, Format<F> format,
 			Consumer<FieldEditor<ObservableTextField<F>, ?>> modify) {
 			if (isRenderer)
-				org.observe.util.swing.PanelPopulation.PartialPanelPopulatorImpl.super.addTextField(fieldName, field, format, modify);
+				PanelPopulation.PartialPanelPopulatorImpl.super.addTextField(fieldName, field, format, modify);
 			else {
 				FieldRenderEditor<ObservableTextField<C>> fieldEditor = new FieldRenderEditor<>(
 					ObservableCellEditor.createTextEditor(format));
@@ -852,7 +852,7 @@ class QuickSwingTablePopulation {
 		public SwingCellPopulator<R, C> addSlider(String fieldName, SettableValue<Double> value,
 			Consumer<SliderEditor<MultiRangeSlider, ?>> modify) {
 			if (isRenderer)
-				org.observe.util.swing.PanelPopulation.PartialPanelPopulatorImpl.super.addSlider(fieldName, value, modify);
+				PanelPopulation.PartialPanelPopulatorImpl.super.addSlider(fieldName, value, modify);
 			else { // TODO
 				theCell.getColumn().getEditing().getEditor().getInterpreted().getDefinition().getExpressoSession()
 				.error("Slider cell editing is not implemented");
@@ -869,8 +869,7 @@ class QuickSwingTablePopulation {
 			else
 				values = ObservableCollection.of(theCell.getColumn().getType(), (List<C>) availableValues);
 			if (isRenderer)
-				org.observe.util.swing.PanelPopulation.PartialPanelPopulatorImpl.super.addComboField(fieldName, value, availableValues,
-					modify);
+				PanelPopulation.PartialPanelPopulatorImpl.super.addComboField(fieldName, value, availableValues, modify);
 			else {
 				ComboRenderEditor[] editor = new SwingCellPopulator.ComboRenderEditor[1];
 				editor[0] = new ComboRenderEditor(ObservableCellEditor.createComboEditor(String::valueOf, (v, until) -> values));
