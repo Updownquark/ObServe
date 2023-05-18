@@ -27,9 +27,6 @@ public interface QuickEventListener extends QuickElement {
 
 		CompiledExpression getAction();
 
-		@Override
-		Def<L> update(ExpressoQIS session) throws QonfigInterpretationException;
-
 		Interpreted<? extends L> interpret(QuickElement.Interpreted<?> parent);
 
 		public abstract class Abstract<L extends QuickEventListener> extends QuickElement.Def.Abstract<L> implements Def<L> {
@@ -52,7 +49,7 @@ public interface QuickEventListener extends QuickElement {
 			}
 
 			@Override
-			public Def.Abstract<L> update(ExpressoQIS session) throws QonfigInterpretationException {
+			public void update(ExpressoQIS session) throws QonfigInterpretationException {
 				super.update(session);
 				theFilters.clear();
 				for (ExpressoQIS filter : session.forChildren("filter"))
@@ -60,7 +57,6 @@ public interface QuickEventListener extends QuickElement {
 				theAction = session.getValueExpression();
 				if (theAction.getExpression() == ObservableExpression.EMPTY)
 					throw new QonfigInterpretationException("No action for event listener", session.getElement().getPositionInFile(), 0);
-				return this;
 			}
 		}
 	}
@@ -73,7 +69,7 @@ public interface QuickEventListener extends QuickElement {
 
 		InterpretedValueSynth<ObservableAction<?>, ObservableAction<?>> getAction();
 
-		Interpreted<L> update() throws ExpressoInterpretationException;
+		void update() throws ExpressoInterpretationException;
 
 		L create(QuickElement parent);
 
@@ -82,7 +78,7 @@ public interface QuickEventListener extends QuickElement {
 			private final List<InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>>> theFilters;
 			private InterpretedValueSynth<ObservableAction<?>, ObservableAction<?>> theAction;
 
-			public Abstract(Def<? super L> definition, QuickElement.Interpreted<?> parent) {
+			protected Abstract(Def<? super L> definition, QuickElement.Interpreted<?> parent) {
 				super(definition, parent);
 				theFilters = new ArrayList<>();
 			}
@@ -103,13 +99,12 @@ public interface QuickEventListener extends QuickElement {
 			}
 
 			@Override
-			public Interpreted.Abstract<L> update() throws ExpressoInterpretationException {
+			public void update() throws ExpressoInterpretationException {
 				super.update();
 				theFilters.clear();
 				for (CompiledExpression filter : getDefinition().getFilters())
 					theFilters.add(filter.evaluate(ModelTypes.Value.BOOLEAN).interpret());
 				theAction = getDefinition().getAction().evaluate(ModelTypes.Action.any()).interpret();
-				return this;
 			}
 		}
 	}
@@ -164,7 +159,7 @@ public interface QuickEventListener extends QuickElement {
 
 	ObservableAction<?> getAction();
 
-	QuickEventListener update(ModelSetInstance models) throws ModelInstantiationException;
+	void update(ModelSetInstance models) throws ModelInstantiationException;
 
 	public abstract class Abstract extends QuickElement.Abstract implements QuickEventListener {
 		private final ObservableCollection<SettableValue<Boolean>> theFilters;
@@ -218,13 +213,12 @@ public interface QuickEventListener extends QuickElement {
 		}
 
 		@Override
-		public QuickEventListener.Abstract update(ModelSetInstance models) throws ModelInstantiationException {
+		public void update(ModelSetInstance models) throws ModelInstantiationException {
 			super.update(models);
 			theFilters.clear();
 			for (InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> filter : getInterpreted().getFilters())
 				theFilters.add(filter.get(models));
 			theAction = getInterpreted().getAction().get(getModels());
-			return this;
 		}
 	}
 }

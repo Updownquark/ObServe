@@ -49,13 +49,12 @@ public class QuickButton extends QuickWidget.Abstract {
 		}
 
 		@Override
-		public Def update(ExpressoQIS session) throws QonfigInterpretationException {
+		public void update(ExpressoQIS session) throws QonfigInterpretationException {
 			super.update(session);
 			theCallingClass = session.getWrapped().getInterpreter().getCallingClass();
 			theText = session.getValueExpression();
 			theIcon = session.getAttributeExpression("icon");
 			theAction = session.getAttributeExpression("action");
-			return this;
 		}
 
 		@Override
@@ -96,14 +95,13 @@ public class QuickButton extends QuickWidget.Abstract {
 		}
 
 		@Override
-		public Interpreted update(QuickStyledElement.QuickInterpretationCache cache) throws ExpressoInterpretationException {
+		public void update(QuickStyledElement.QuickInterpretationCache cache) throws ExpressoInterpretationException {
 			super.update(cache);
 			theText = getDefinition().getText() == null ? null : getDefinition().getText().evaluate(ModelTypes.Value.STRING).interpret();
 			theIcon = getDefinition().getIcon() == null ? null
 				: QuickBaseInterpretation.evaluateIcon(getDefinition().getIcon(), getDefinition().getExpressoEnv(),
 					getDefinition().getCallingClass());
 			theAction = getDefinition().getAction().evaluate(ModelTypes.Action.any()).interpret();
-			return this;
 		}
 
 		@Override
@@ -138,11 +136,10 @@ public class QuickButton extends QuickWidget.Abstract {
 	}
 
 	@Override
-	public QuickButton update(ModelSetInstance models) throws ModelInstantiationException {
+	public void update(ModelSetInstance models) throws ModelInstantiationException {
 		super.update(models);
 		theText = getInterpreted().getText() == null ? null : getInterpreted().getText().get(getModels());
 		theIcon = getInterpreted().getIcon() == null ? null : getInterpreted().getIcon().apply(getModels());
 		theAction = getInterpreted().getAction().get(getModels());
-		return this;
 	}
 }

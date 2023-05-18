@@ -41,13 +41,12 @@ public class QuickDocument2 extends QuickElement.Abstract {
 		}
 
 		@Override
-		public Def update(ExpressoQIS session) throws QonfigInterpretationException {
+		public void update(ExpressoQIS session) throws QonfigInterpretationException {
 			super.update(session);
 			theHead = QuickElement.useOrReplace(QuickHeadSection.Def.class, theHead, session, "head");
 			if (theHead != null)
 				session.setExpressoEnv(getExpressoEnv().with(theHead.getModels(), theHead.getClassView()));
 			theBody = QuickElement.useOrReplace(QuickWidget.Def.class, theBody, session, "body");
-			return this;
 		}
 
 		/**
@@ -88,7 +87,7 @@ public class QuickDocument2 extends QuickElement.Abstract {
 		}
 
 		@Override
-		public Interpreted update() throws ExpressoInterpretationException {
+		public void update() throws ExpressoInterpretationException {
 			super.update();
 
 			if (getDefinition().getHead() == null)
@@ -101,7 +100,6 @@ public class QuickDocument2 extends QuickElement.Abstract {
 			if (theBody == null || theBody.getDefinition() != getDefinition().getBody())
 				theBody = getDefinition().getBody().interpret(null);
 			theBody.update(new QuickStyledElement.QuickInterpretationCache());
-			return this;
 		}
 
 		/** @return The new document */
@@ -178,7 +176,7 @@ public class QuickDocument2 extends QuickElement.Abstract {
 			}
 
 			@Override
-			public Def update(ExpressoQIS session) throws QonfigInterpretationException {
+			public void update(ExpressoQIS session) throws QonfigInterpretationException {
 				super.update(session);
 				ClassView cv = session.interpretChildren("imports", ClassView.class).peekFirst();
 				if (cv == null) {
@@ -198,7 +196,6 @@ public class QuickDocument2 extends QuickElement.Abstract {
 				theModels = model;
 				session.setExpressoEnv(getExpressoEnv().with(model, cv));
 				theStyleSheet = session.as(StyleQIS.class).getStyleSheet();
-				return this;
 			}
 
 			/**
@@ -231,11 +228,10 @@ public class QuickDocument2 extends QuickElement.Abstract {
 	}
 
 	@Override
-	public QuickDocument2 update(ModelSetInstance models) throws ModelInstantiationException {
+	public void update(ModelSetInstance models) throws ModelInstantiationException {
 		super.update(models);
 		if (theBody == null)
 			theBody = getInterpreted().getBody().create(null);
 		theBody.update(getModels());
-		return this;
 	}
 }

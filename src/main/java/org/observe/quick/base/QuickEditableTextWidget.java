@@ -33,10 +33,9 @@ public interface QuickEditableTextWidget<T> extends QuickTextWidget<T> {
 			}
 
 			@Override
-			public Def.Abstract<T, W> update(ExpressoQIS session) throws QonfigInterpretationException {
+			public void update(ExpressoQIS session) throws QonfigInterpretationException {
 				super.update(session);
 				isCommitOnType = session.getAttribute("commit-on-type", boolean.class);
-				return this;
 			}
 		}
 	}

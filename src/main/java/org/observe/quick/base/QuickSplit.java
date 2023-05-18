@@ -35,7 +35,7 @@ public class QuickSplit extends QuickContainer2.Abstract<QuickWidget> {
 		}
 
 		@Override
-		public Def<S> update(ExpressoQIS session) throws QonfigInterpretationException {
+		public void update(ExpressoQIS session) throws QonfigInterpretationException {
 			super.update(session);
 			switch (session.getAttributeText("orientation")) {
 			case "horizontal":
@@ -51,7 +51,6 @@ public class QuickSplit extends QuickContainer2.Abstract<QuickWidget> {
 			}
 			if (getContents().size() != 2)
 				session.reporting().error("Expected exactly 2 children, not " + getContents().size());
-			return this;
 		}
 
 		@Override
@@ -82,11 +81,10 @@ public class QuickSplit extends QuickContainer2.Abstract<QuickWidget> {
 		}
 
 		@Override
-		public Interpreted<S> update(QuickWidget.QuickInterpretationCache cache) throws ExpressoInterpretationException {
+		public void update(QuickWidget.QuickInterpretationCache cache) throws ExpressoInterpretationException {
 			super.update(cache);
 			theSplitPosition = getDefinition().getSplitPosition() == null ? null
 				: getDefinition().getSplitPosition().evaluate(ModelTypes.Value.forType(QuickSize.class)).interpret();
-			return this;
 		}
 
 		@Override
@@ -109,7 +107,7 @@ public class QuickSplit extends QuickContainer2.Abstract<QuickWidget> {
 	}
 
 	@Override
-	public QuickSplit update(ModelSetInstance models) throws ModelInstantiationException {
+	public void update(ModelSetInstance models) throws ModelInstantiationException {
 		super.update(models);
 		if (getInterpreted().getSplitPosition() != null)
 			theSplitPosition.set(getInterpreted().getSplitPosition().get(getModels()), null);
@@ -119,6 +117,5 @@ public class QuickSplit extends QuickContainer2.Abstract<QuickWidget> {
 				splitPos.set(theSplitPosition.get().get(), null);
 			theSplitPosition.set(splitPos, null);
 		}
-		return this;
 	}
 }

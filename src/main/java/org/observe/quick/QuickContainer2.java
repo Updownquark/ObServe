@@ -56,7 +56,7 @@ public interface QuickContainer2<C extends QuickWidget> extends QuickWidget {
 			}
 
 			@Override
-			public Def.Abstract<W, C> update(ExpressoQIS session) throws QonfigInterpretationException {
+			public void update(ExpressoQIS session) throws QonfigInterpretationException {
 				super.update(session);
 				CollectionUtils.synchronize(theContents, session.forChildren("content"), //
 					(widget, child) -> QuickElement.typesEqual(widget.getElement(), child.getElement()))//
@@ -65,7 +65,6 @@ public interface QuickContainer2<C extends QuickWidget> extends QuickWidget {
 				.onRightX(element -> element.getLeftValue().update(element.getRightValue()))//
 				.onCommonX(element -> element.getLeftValue().update(element.getRightValue()))//
 				.adjust();
-				return this;
 			}
 
 			@Override
@@ -118,7 +117,7 @@ public interface QuickContainer2<C extends QuickWidget> extends QuickWidget {
 			}
 
 			@Override
-			public Interpreted.Abstract<W, C> update(QuickStyledElement.QuickInterpretationCache cache)
+			public void update(QuickStyledElement.QuickInterpretationCache cache)
 				throws ExpressoInterpretationException {
 				super.update(cache);
 				CollectionUtils.synchronize(theContents, getDefinition().getContents(), //
@@ -129,7 +128,6 @@ public interface QuickContainer2<C extends QuickWidget> extends QuickWidget {
 				.onRightX(element -> element.getLeftValue().update(cache))//
 				.onCommonX(element -> element.getLeftValue().update(cache))//
 				.adjust();
-				return this;
 			}
 		}
 	}
@@ -168,7 +166,7 @@ public interface QuickContainer2<C extends QuickWidget> extends QuickWidget {
 		}
 
 		@Override
-		public QuickContainer2.Abstract<C> update(ModelSetInstance models) throws ModelInstantiationException {
+		public void update(ModelSetInstance models) throws ModelInstantiationException {
 			super.update(models);
 
 			CollectionUtils.synchronize(theContents, getInterpreted().getContents(), //
@@ -196,7 +194,6 @@ public interface QuickContainer2<C extends QuickWidget> extends QuickWidget {
 				}
 			})//
 			.adjust();
-			return this;
 		}
 	}
 }

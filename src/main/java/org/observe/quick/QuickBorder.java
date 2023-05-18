@@ -41,7 +41,7 @@ public interface QuickBorder extends QuickStyledElement {
 	@Override
 	QuickBorderStyle getStyle();
 
-	QuickBorder update(ModelSetInstance models) throws ModelInstantiationException;
+	void update(ModelSetInstance models) throws ModelInstantiationException;
 
 	public class LineBorder extends QuickStyledElement.Abstract implements QuickBorder {
 		public static class Def<B extends LineBorder> extends QuickStyledElement.Def.Abstract<B> implements QuickBorder.Def<B> {
@@ -82,12 +82,6 @@ public interface QuickBorder extends QuickStyledElement {
 			}
 
 			@Override
-			public Interpreted<B> update(QuickInterpretationCache cache) throws ExpressoInterpretationException {
-				super.update(cache);
-				return this;
-			}
-
-			@Override
 			public B create(QuickElement parent) {
 				return (B) new LineBorder(this, parent);
 			}
@@ -106,12 +100,6 @@ public interface QuickBorder extends QuickStyledElement {
 		public QuickBorderStyle getStyle() {
 			return (QuickBorderStyle) super.getStyle();
 		}
-
-		@Override
-		public LineBorder update(ModelSetInstance models) throws ModelInstantiationException {
-			super.update(models);
-			return this;
-		}
 	}
 
 	public class TitledBorder extends LineBorder {
@@ -127,10 +115,9 @@ public interface QuickBorder extends QuickStyledElement {
 			}
 
 			@Override
-			public Def<B> update(ExpressoQIS session) throws QonfigInterpretationException {
+			public void update(ExpressoQIS session) throws QonfigInterpretationException {
 				super.update(session);
 				theTitle = session.getAttributeExpression("title");
-				return this;
 			}
 
 			@Override
@@ -161,10 +148,9 @@ public interface QuickBorder extends QuickStyledElement {
 			}
 
 			@Override
-			public Interpreted<B> update(QuickInterpretationCache cache) throws ExpressoInterpretationException {
+			public void update(QuickInterpretationCache cache) throws ExpressoInterpretationException {
 				super.update(cache);
 				theTitle = getDefinition().getTitle().evaluate(ModelTypes.Value.STRING).interpret();
-				return this;
 			}
 
 			@Override
@@ -196,10 +182,9 @@ public interface QuickBorder extends QuickStyledElement {
 		}
 
 		@Override
-		public TitledBorder update(ModelSetInstance models) throws ModelInstantiationException {
+		public void update(ModelSetInstance models) throws ModelInstantiationException {
 			super.update(models);
 			theTitle.set(getInterpreted().getTitle().get(models), null);
-			return this;
 		}
 
 		public static class QuickTitledBorderStyle extends QuickTextStyle.Abstract implements QuickBorderStyle {

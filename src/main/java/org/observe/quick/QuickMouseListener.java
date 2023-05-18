@@ -194,7 +194,7 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 			}
 
 			@Override
-			public Def update(ExpressoQIS session) throws QonfigInterpretationException {
+			public void update(ExpressoQIS session) throws QonfigInterpretationException {
 				super.update(session);
 				String button = session.getAttributeText("button");
 				if (button == null)
@@ -215,7 +215,6 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 					}
 				}
 				DynamicModelValue.satisfyDynamicValueType("button", getModels(), ModelTypes.Value.forType(MouseButton.class));
-				return this;
 			}
 
 			@Override

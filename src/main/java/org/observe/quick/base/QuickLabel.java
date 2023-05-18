@@ -34,7 +34,7 @@ public class QuickLabel<T> extends QuickTextWidget.Abstract<T> {
 		}
 
 		@Override
-		public Def<T, W> update(ExpressoQIS session) throws QonfigInterpretationException {
+		public void update(ExpressoQIS session) throws QonfigInterpretationException {
 			super.update(session);
 			String staticText = session.getValueText();
 			if (staticText.isEmpty())
@@ -56,7 +56,6 @@ public class QuickLabel<T> extends QuickTextWidget.Abstract<T> {
 					LocatedContentPosition.of(session.getElement().getDocument().getLocation(), session.getElement().getValue().position),
 					session);
 			}
-			return this;
 		}
 
 		@Override

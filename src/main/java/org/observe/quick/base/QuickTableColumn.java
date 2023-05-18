@@ -44,7 +44,7 @@ public interface QuickTableColumn<R, C> {
 
 		ObservableCollection<? extends QuickTableColumn<R, ?>> getColumns();
 
-		TableColumnSet<R> update(ModelSetInstance models) throws ModelInstantiationException;
+		void update(ModelSetInstance models) throws ModelInstantiationException;
 	}
 
 	SettableValue<String> getName();
@@ -126,14 +126,13 @@ public interface QuickTableColumn<R, C> {
 			}
 
 			@Override
-			public Def update(ExpressoQIS session) throws QonfigInterpretationException {
+			public void update(ExpressoQIS session) throws QonfigInterpretationException {
 				super.update(session);
 				theEditor = QuickElement.useOrReplace(QuickWidget.Def.class, theEditor, session, "editor");
 				theColumnEditValueName = session.getAttributeText("column-edit-value-name");
 				isEditable = session.getAttributeExpression("editable-if");
 				isAcceptable = session.getAttributeExpression("accept");
 				theClicks = session.getAttribute("clicks", Integer.class);
-				return this;
 			}
 
 			public Interpreted<?, ?> interpret(TableColumnSet.Interpreted<?, ?> parent) {
@@ -279,7 +278,7 @@ public interface QuickTableColumn<R, C> {
 		}
 
 		@Override
-		protected ColumnEditing<R, C> update(ModelSetInstance models) throws ModelInstantiationException {
+		protected void update(ModelSetInstance models) throws ModelInstantiationException {
 			// The context values in the editor's models need to be independent from the render models
 			super.update(models.copy().build());
 
@@ -292,7 +291,6 @@ public interface QuickTableColumn<R, C> {
 				theEditor = getInterpreted().getEditor().create(this);
 			if (theEditor != null)
 				theEditor.update(getModels());
-			return this;
 		}
 	}
 
@@ -550,7 +548,7 @@ public interface QuickTableColumn<R, C> {
 			}
 
 			@Override
-			public Def update(ExpressoQIS session) throws QonfigInterpretationException {
+			public void update(ExpressoQIS session) throws QonfigInterpretationException {
 				super.update(session);
 				theName = session.getAttributeExpression("name");
 				theColumnValueName = session.getAttributeText("column-value-name");
@@ -558,7 +556,6 @@ public interface QuickTableColumn<R, C> {
 				theHeaderTooltip = session.getAttributeExpression("header-tooltip");
 				theRenderer = QuickElement.useOrReplace(QuickWidget.Def.class, theRenderer, session, "renderer");
 				theEditing = QuickElement.useOrReplace(ColumnEditing.Def.class, theEditing, session, "edit");
-				return this;
 			}
 
 			@Override
@@ -686,7 +683,7 @@ public interface QuickTableColumn<R, C> {
 		}
 
 		@Override
-		public SingleColumnSet<R, C> update(ModelSetInstance models) throws ModelInstantiationException {
+		public void update(ModelSetInstance models) throws ModelInstantiationException {
 			super.update(models);
 			try {
 				DynamicModelValue.satisfyDynamicValueIfUnsatisfied(getInterpreted().getDefinition().getColumnValueName(),
@@ -729,8 +726,6 @@ public interface QuickTableColumn<R, C> {
 				theEditing = getInterpreted().getEditing().create(this, theColumn.getFirst());
 			if (theEditing != null)
 				theEditing.update(getModels());
-
-			return this;
 		}
 
 		public class SingleColumn implements QuickTableColumn<R, C> {

@@ -35,7 +35,7 @@ public class QuickBox extends QuickContainer2.Abstract<QuickWidget> {
 		}
 
 		@Override
-		public Def<W> update(ExpressoQIS session) throws QonfigInterpretationException {
+		public void update(ExpressoQIS session) throws QonfigInterpretationException {
 			super.update(session);
 			if (getAddOn(QuickLayout.Def.class) == null) {
 				String layout = session.getAttributeText("layout");
@@ -43,7 +43,6 @@ public class QuickBox extends QuickContainer2.Abstract<QuickWidget> {
 					session.getAttributeValuePosition("layout", 0), layout.length());
 			}
 			theOpacity = session.getAttributeExpression("opacity");
-			return this;
 		}
 
 		@Override
@@ -78,11 +77,10 @@ public class QuickBox extends QuickContainer2.Abstract<QuickWidget> {
 		}
 
 		@Override
-		public Interpreted<W> update(QuickStyledElement.QuickInterpretationCache cache) throws ExpressoInterpretationException {
+		public void update(QuickStyledElement.QuickInterpretationCache cache) throws ExpressoInterpretationException {
 			super.update(cache);
 			theOpacity = getDefinition().getOpacity() == null ? null
 				: getDefinition().getOpacity().evaluate(ModelTypes.Value.DOUBLE).interpret();
-			return this;
 		}
 
 		@Override
@@ -107,10 +105,9 @@ public class QuickBox extends QuickContainer2.Abstract<QuickWidget> {
 	}
 
 	@Override
-	public QuickBox update(ModelSetInstance models) throws ModelInstantiationException {
+	public void update(ModelSetInstance models) throws ModelInstantiationException {
 		super.update(models);
 		theOpacity = getInterpreted().getOpacity() == null ? null : getInterpreted().getOpacity().get(getModels());
-		return this;
 	}
 
 	public SettableValue<Double> getOpacity() {

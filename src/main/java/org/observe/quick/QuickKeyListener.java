@@ -76,7 +76,7 @@ public interface QuickKeyListener extends QuickEventListener {
 			}
 
 			@Override
-			public Def update(ExpressoQIS session) throws QonfigInterpretationException {
+			public void update(ExpressoQIS session) throws QonfigInterpretationException {
 				super.update(session);
 				String charFilterStr = session.getAttributeText("char");
 				if (charFilterStr == null || charFilterStr.isEmpty())
@@ -86,7 +86,6 @@ public interface QuickKeyListener extends QuickEventListener {
 						session.getAttributeValuePosition("char", 1), charFilterStr.length() - 1);
 				else
 					theCharFilter = charFilterStr.charAt(0);
-				return this;
 			}
 
 			@Override
@@ -148,7 +147,7 @@ public interface QuickKeyListener extends QuickEventListener {
 			}
 
 			@Override
-			public Def update(ExpressoQIS session) throws QonfigInterpretationException {
+			public void update(ExpressoQIS session) throws QonfigInterpretationException {
 				super.update(session);
 				String keyCodeStr = session.getAttributeText("key");
 				if (keyCodeStr == null || keyCodeStr.isEmpty())
@@ -161,7 +160,6 @@ public interface QuickKeyListener extends QuickEventListener {
 							keyCodeStr.length(), e);
 					}
 				}
-				return this;
 			}
 
 			@Override

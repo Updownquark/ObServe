@@ -58,9 +58,6 @@ public interface QuickWidget extends QuickTextElement {
 
 		List<QuickEventListener.Def<?>> getEventListeners();
 
-		@Override
-		Def<W> update(ExpressoQIS session) throws QonfigInterpretationException;
-
 		/**
 		 * @param parent The parent container interpretation
 		 * @return The new widget interpretation
@@ -125,7 +122,7 @@ public interface QuickWidget extends QuickTextElement {
 			}
 
 			@Override
-			public Def.Abstract<W> update(ExpressoQIS session) throws QonfigInterpretationException {
+			public void update(ExpressoQIS session) throws QonfigInterpretationException {
 				super.update(session);
 				theBorder = QuickElement.useOrReplace(QuickBorder.Def.class, theBorder, session, "border");
 				theName = session.getAttributeText("name");
@@ -134,9 +131,12 @@ public interface QuickWidget extends QuickTextElement {
 				CollectionUtils
 				.synchronize(theEventListeners, session.forChildren("event-listener"),
 					(l, s) -> QuickElement.typesEqual(l.getElement(), s.getElement()))
-				.simpleE(s -> s.interpret(QuickEventListener.Def.class).update(s))//
+				.simpleE(s -> {
+					QuickEventListener.Def<?> listener = s.interpret(QuickEventListener.Def.class);
+					listener.update(s);
+					return listener;
+				})//
 				.onCommonX(el -> el.getLeftValue().update(el.getRightValue())).adjust();
-				return this;
 			}
 
 			@Override
@@ -182,9 +182,6 @@ public interface QuickWidget extends QuickTextElement {
 		 * @return The new widget
 		 */
 		W create(QuickElement parent);
-
-		@Override
-		Interpreted<W> update(QuickStyledElement.QuickInterpretationCache cache) throws ExpressoInterpretationException;
 
 		/**
 		 * An abstract {@link Interpreted} implementation
@@ -243,7 +240,7 @@ public interface QuickWidget extends QuickTextElement {
 			}
 
 			@Override
-			public Interpreted.Abstract<W> update(QuickStyledElement.QuickInterpretationCache cache)
+			public void update(QuickStyledElement.QuickInterpretationCache cache)
 				throws ExpressoInterpretationException {
 				super.update(cache);
 				if (getDefinition().getBorder() == null)
@@ -257,10 +254,13 @@ public interface QuickWidget extends QuickTextElement {
 				isVisible = getDefinition().isVisible() == null ? null
 					: getDefinition().isVisible().evaluate(ModelTypes.Value.BOOLEAN).interpret();
 				CollectionUtils.synchronize(theEventListeners, getDefinition().getEventListeners(), (l, d) -> l.getDefinition() == d)//
-				.simpleE(l -> l.interpret(this).update())//
+				.simpleE(l -> {
+					QuickEventListener.Interpreted<?> listener = l.interpret(this);
+					listener.update();
+					return listener;
+				})//
 				.onCommonX(el -> el.getLeftValue().update())//
 				.adjust();
-				return this;
 			}
 		}
 	}
@@ -348,10 +348,9 @@ public interface QuickWidget extends QuickTextElement {
 	 * Populates and updates this widget instance. Must be called once after being instantiated.
 	 *
 	 * @param models The model instance for this widget
-	 * @return This widget
 	 * @throws ModelInstantiationException If any of the models in this widget or its content cannot be instantiated
 	 */
-	QuickWidget update(ModelSetInstance models) throws ModelInstantiationException;
+	void update(ModelSetInstance models) throws ModelInstantiationException;
 
 	/** An abstract {@link QuickWidget} implementation */
 	public abstract class Abstract extends QuickStyledElement.Abstract implements QuickWidget {
@@ -425,7 +424,7 @@ public interface QuickWidget extends QuickTextElement {
 		}
 
 		@Override
-		public QuickWidget.Abstract update(ModelSetInstance models) throws ModelInstantiationException {
+		public void update(ModelSetInstance models) throws ModelInstantiationException {
 			super.update(models);
 			theBorder = getInterpreted().getBorder() == null ? null : getInterpreted().getBorder().create(this);
 			if (theBorder != null)
@@ -436,11 +435,14 @@ public interface QuickWidget extends QuickTextElement {
 				isVisible.set(getInterpreted().isVisible().get(getModels()), null);
 			try (Transaction t = theEventListeners.lock(true, null)) {
 				CollectionUtils.synchronize(theEventListeners, getInterpreted().getEventListeners(), (l, i) -> l.getInterpreted() == i)//
-				.<ModelInstantiationException> simpleE(l -> l.create(this).update(getModels()))//
+				.<ModelInstantiationException> simpleE(l -> {
+					QuickEventListener listener = l.create(this);
+					listener.update(getModels());
+					return listener;
+				})//
 				.onCommonX(el -> el.getLeftValue().update(getModels()))//
 				.adjust();
 			}
-			return this;
 		}
 	}
 

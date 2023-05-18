@@ -72,10 +72,9 @@ public interface QuickElement {
 		 * Updates this element definition. Must be called at least once after interpretation produces this object.
 		 *
 		 * @param session The session supporting this element definition
-		 * @return This element definition
 		 * @throws QonfigInterpretationException If an error occurs interpreting some of this element's fields or content
 		 */
-		Def<E> update(ExpressoQIS session) throws QonfigInterpretationException;
+		void update(ExpressoQIS session) throws QonfigInterpretationException;
 
 		/**
 		 * An abstract implementation of {@link Def}
@@ -136,7 +135,7 @@ public interface QuickElement {
 			}
 
 			@Override
-			public Abstract<E> update(ExpressoQIS session) throws QonfigInterpretationException {
+			public void update(ExpressoQIS session) throws QonfigInterpretationException {
 				theReporting = session.reporting();
 				session.put(SESSION_QUICK_ELEMENT, this);
 				theElement = session.getElement();
@@ -153,7 +152,6 @@ public interface QuickElement {
 					for (QuickAddOn.Def<? super E, ?> addOn : theAddOns.getAllValues())
 						addOn.update(session.asElement(addOn.getType()));
 				}
-				return this;
 			}
 
 			private void addAddOn(AbstractQIS<?> session) throws QonfigInterpretationException {
@@ -266,10 +264,9 @@ public interface QuickElement {
 			 * Updates this element interpretation. Must be called at least once after the {@link #getDefinition() definition} produces this
 			 * object.
 			 *
-			 * @return This interpretation
 			 * @throws ExpressoInterpretationException If any model values in this element or any of its content fail to be interpreted
 			 */
-			protected Abstract<E> update() throws ExpressoInterpretationException {
+			protected void update() throws ExpressoInterpretationException {
 				// Do I need this?
 				theModels = getDefinition().getModels().interpret();
 				// theDefinition.getExpressoSession().setExpressoEnv(theDefinition.getExpressoSession().getExpressoEnv().with(models,
@@ -277,7 +274,6 @@ public interface QuickElement {
 				theDefinition.getExpressoEnv().interpretLocalModel();
 				for (QuickAddOn.Interpreted<?, ?> addOn : theAddOns.getAllValues())
 					addOn.update(theModels);
-				return this;
 			}
 
 			@Override
@@ -368,14 +364,12 @@ public interface QuickElement {
 		 * Updates this element. Must be called at least once after being produced by its {@link #getInterpreted() interpretation}.
 		 *
 		 * @param models The model instance for this element
-		 * @return This element
 		 * @throws ModelInstantiationException If an error occurs instantiating any model values needed by this element or its content
 		 */
-		protected Abstract update(ModelSetInstance models) throws ModelInstantiationException {
+		protected void update(ModelSetInstance models) throws ModelInstantiationException {
 			theModels = theInterpreted.getDefinition().getExpressoEnv().wrapLocal(models);
 			for (QuickAddOn<?> addOn : theAddOns.getAllValues())
 				addOn.update(getModels());
-			return this;
 		}
 
 		@Override

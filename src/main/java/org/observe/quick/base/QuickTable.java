@@ -49,13 +49,12 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 		}
 
 		@Override
-		public Def update(ExpressoQIS session) throws QonfigInterpretationException {
+		public void update(ExpressoQIS session) throws QonfigInterpretationException {
 			super.update(session);
 			theRows = session.getAttributeExpression("rows");
 			theValueName = session.getAttributeText("value-name");
 			theSelection = session.getAttributeExpression("selection");
 			theMultiSelection = session.getAttributeExpression("multi-selection");
-			return this;
 		}
 
 		@Override
@@ -103,7 +102,7 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 		}
 
 		@Override
-		public Interpreted<R> update(QuickStyledElement.QuickInterpretationCache cache) throws ExpressoInterpretationException {
+		public void update(QuickStyledElement.QuickInterpretationCache cache) throws ExpressoInterpretationException {
 			// Do this first so we have the row type
 			theRows = getDefinition().getRows().evaluate(ModelTypes.Collection.<R> anyAsV()).interpret();
 			DynamicModelValue.satisfyDynamicValueType(getDefinition().getValueName(), getDefinition().getModels(),
@@ -113,7 +112,6 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 				: getDefinition().getSelection().evaluate(ModelTypes.Value.forType(getRowType())).interpret();
 			theMultiSelection = getDefinition().getMultiSelection() == null ? null
 				: getDefinition().getMultiSelection().evaluate(ModelTypes.Collection.forType(getRowType())).interpret();
-			return this;
 		}
 
 		@Override
@@ -160,12 +158,11 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 	}
 
 	@Override
-	public QuickTable<R> update(ModelSetInstance models) throws ModelInstantiationException {
+	public void update(ModelSetInstance models) throws ModelInstantiationException {
 		super.update(models);
 		theRows.set(getInterpreted().getRows().get(getModels()), null);
 		theSelection.set(getInterpreted().getSelection() == null ? null : getInterpreted().getSelection().get(getModels()), null);
 		theMultiSelection.set(getInterpreted().getMultiSelection() == null ? null : getInterpreted().getMultiSelection().get(getModels()),
 			null);
-		return this;
 	}
 }

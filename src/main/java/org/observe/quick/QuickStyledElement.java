@@ -54,14 +54,13 @@ public interface QuickStyledElement extends QuickElement {
 			}
 
 			@Override
-			public Def.Abstract<S> update(ExpressoQIS session) throws QonfigInterpretationException {
+			public void update(ExpressoQIS session) throws QonfigInterpretationException {
 				super.update(session);
 				QuickElement.Def<?> parent = getParentElement();
 				while (parent != null && !(parent instanceof QuickStyledElement.Def))
 					parent = parent.getParentElement();
 				theStyle = wrap(parent == null ? null : ((QuickStyledElement.Def<?>) parent).getStyle(),
 					session.as(StyleQIS.class).getStyle());
-				return this;
 			}
 
 			/**
@@ -100,7 +99,7 @@ public interface QuickStyledElement extends QuickElement {
 		 * @throws ExpressoInterpretationException If any models could not be interpreted from their expressions in this widget or its
 		 *         content
 		 */
-		Interpreted<S> update(QuickStyledElement.QuickInterpretationCache cache) throws ExpressoInterpretationException;
+		void update(QuickStyledElement.QuickInterpretationCache cache) throws ExpressoInterpretationException;
 
 		/**
 		 * An abstract {@link Interpreted} implementation
@@ -130,7 +129,7 @@ public interface QuickStyledElement extends QuickElement {
 			}
 
 			@Override
-			public Interpreted.Abstract<S> update(QuickStyledElement.QuickInterpretationCache cache)
+			public void update(QuickStyledElement.QuickInterpretationCache cache)
 				throws ExpressoInterpretationException {
 				super.update();
 				if (theStyle == null || theStyle.getCompiled() != getDefinition().getStyle()) {
@@ -140,7 +139,6 @@ public interface QuickStyledElement extends QuickElement {
 					theStyle = getDefinition().getStyle()
 						.interpret(parent == null ? null : ((QuickStyledElement.Interpreted<?>) parent).getStyle(), cache.applications);
 				}
-				return this;
 			}
 		}
 	}
@@ -173,14 +171,13 @@ public interface QuickStyledElement extends QuickElement {
 		}
 
 		@Override
-		public QuickStyledElement.Abstract update(ModelSetInstance models) throws ModelInstantiationException {
+		public void update(ModelSetInstance models) throws ModelInstantiationException {
 			super.update(models);
 			QuickElement parent = getParentElement();
 			StyleQIS.installParentModels(getModels(), parent == null ? null : parent.getModels());
 			if (theStyle == null || theStyle.getInterpreted() != getInterpreted().getStyle())
 				theStyle = getInterpreted().getStyle().create();
 			theStyle.update(getModels());
-			return this;
 		}
 	}
 

@@ -43,22 +43,22 @@ public interface TabularWidget<R> extends MultiValueWidget<R>, RowTyped<R> {
 			}
 
 			@Override
-			public Def.Abstract<W> update(ExpressoQIS session) throws QonfigInterpretationException {
+			public void update(ExpressoQIS session) throws QonfigInterpretationException {
 				super.update(session);
 				CollectionUtils
 				.synchronize(theColumns, session.forChildren("columns"),
 					(c, s) -> QuickElement.typesEqual(c.getElement(), s.getElement()))//
 				.adjust(
-						new CollectionUtils.CollectionSynchronizerE<QuickTableColumn.TableColumnSet.Def<?>, ExpressoQIS, QonfigInterpretationException>() {
+					new CollectionUtils.CollectionSynchronizerE<QuickTableColumn.TableColumnSet.Def<?>, ExpressoQIS, QonfigInterpretationException>() {
 						@Override
-							public boolean getOrder(ElementSyncInput<QuickTableColumn.TableColumnSet.Def<?>, ExpressoQIS> element)
+						public boolean getOrder(ElementSyncInput<QuickTableColumn.TableColumnSet.Def<?>, ExpressoQIS> element)
 							throws QonfigInterpretationException {
 							return true;
 						}
 
 						@Override
 						public ElementSyncAction leftOnly(
-								ElementSyncInput<QuickTableColumn.TableColumnSet.Def<?>, ExpressoQIS> element)
+							ElementSyncInput<QuickTableColumn.TableColumnSet.Def<?>, ExpressoQIS> element)
 								throws QonfigInterpretationException {
 							// TODO dispose the column set?
 							return element.remove();
@@ -66,7 +66,7 @@ public interface TabularWidget<R> extends MultiValueWidget<R>, RowTyped<R> {
 
 						@Override
 						public ElementSyncAction rightOnly(
-								ElementSyncInput<QuickTableColumn.TableColumnSet.Def<?>, ExpressoQIS> element)
+							ElementSyncInput<QuickTableColumn.TableColumnSet.Def<?>, ExpressoQIS> element)
 								throws QonfigInterpretationException {
 							TableColumnSet.Def<?> column = element.getRightValue()//
 								.interpret(QuickTableColumn.TableColumnSet.Def.class);
@@ -76,13 +76,12 @@ public interface TabularWidget<R> extends MultiValueWidget<R>, RowTyped<R> {
 
 						@Override
 						public ElementSyncAction common(
-								ElementSyncInput<QuickTableColumn.TableColumnSet.Def<?>, ExpressoQIS> element)
+							ElementSyncInput<QuickTableColumn.TableColumnSet.Def<?>, ExpressoQIS> element)
 								throws QonfigInterpretationException {
 							element.getLeftValue().update(element.getRightValue());
 							return element.useValue(element.getLeftValue());
 						}
 					}, CollectionUtils.AdjustmentOrder.RightOrder);
-				return this;
 			}
 
 			@Override
@@ -119,7 +118,7 @@ public interface TabularWidget<R> extends MultiValueWidget<R>, RowTyped<R> {
 			}
 
 			@Override
-			public Interpreted.Abstract<R, W> update(QuickStyledElement.QuickInterpretationCache cache)
+			public void update(QuickStyledElement.QuickInterpretationCache cache)
 				throws ExpressoInterpretationException {
 				DynamicModelValue.satisfyDynamicValueType(getDefinition().getValueName(), getDefinition().getModels(),
 					ModelTypes.Value.forType(getRowType()));
@@ -160,7 +159,6 @@ public interface TabularWidget<R> extends MultiValueWidget<R>, RowTyped<R> {
 							return element.useValue(element.getLeftValue());
 						}
 					}, CollectionUtils.AdjustmentOrder.RightOrder);
-				return this;
 			}
 
 			@Override
@@ -258,7 +256,7 @@ public interface TabularWidget<R> extends MultiValueWidget<R>, RowTyped<R> {
 		}
 
 		@Override
-		public TabularWidget.Abstract<R> update(ModelSetInstance models) throws ModelInstantiationException {
+		public void update(ModelSetInstance models) throws ModelInstantiationException {
 			super.update(models);
 			CollectionUtils.synchronize(theColumnSets, getInterpreted().getColumns(), (v, i) -> v.getInterpreted() == i)//
 			.adjust(
@@ -332,7 +330,6 @@ public interface TabularWidget<R> extends MultiValueWidget<R>, RowTyped<R> {
 						return element.useValue(element.getLeftValue());
 					}
 				}, CollectionUtils.AdjustmentOrder.RightOrder);
-			return this;
 		}
 	}
 }

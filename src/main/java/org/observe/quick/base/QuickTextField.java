@@ -38,11 +38,10 @@ public class QuickTextField<T> extends QuickEditableTextWidget.Abstract<T> {
 		}
 
 		@Override
-		public Def<T> update(ExpressoQIS session) throws QonfigInterpretationException {
+		public void update(ExpressoQIS session) throws QonfigInterpretationException {
 			super.update(session);
 			theColumns = session.getAttribute("columns", Integer.class);
 			theEmptyText = session.getAttributeExpression("empty-text");
-			return this;
 		}
 
 		@Override
@@ -73,11 +72,10 @@ public class QuickTextField<T> extends QuickEditableTextWidget.Abstract<T> {
 		}
 
 		@Override
-		public Interpreted<T> update(QuickInterpretationCache cache) throws ExpressoInterpretationException {
+		public void update(QuickInterpretationCache cache) throws ExpressoInterpretationException {
 			super.update(cache);
 			theEmptyText = getDefinition().getEmptyText() == null ? null
 				: getDefinition().getEmptyText().evaluate(ModelTypes.Value.forType(String.class)).interpret();
-			return this;
 		}
 
 		@Override
@@ -104,9 +102,8 @@ public class QuickTextField<T> extends QuickEditableTextWidget.Abstract<T> {
 	}
 
 	@Override
-	public QuickTextField<T> update(ModelSetInstance models) throws ModelInstantiationException {
+	public void update(ModelSetInstance models) throws ModelInstantiationException {
 		super.update(models);
 		theEmptyText.set(getInterpreted().getEmptyText() == null ? null : getInterpreted().getEmptyText().get(getModels()), null);
-		return this;
 	}
 }

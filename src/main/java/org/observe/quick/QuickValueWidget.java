@@ -54,14 +54,13 @@ public interface QuickValueWidget<T> extends QuickWidget {
 			}
 
 			@Override
-			public Def.Abstract<T, W> update(ExpressoQIS session) throws QonfigInterpretationException {
+			public void update(ExpressoQIS session) throws QonfigInterpretationException {
 				super.update(session);
 				theValueName = session.getAttributeText("value-name");
 				theValue = session.getAttributeExpression("value");
 				if (theValue.getExpression() == ObservableExpression.EMPTY && getParentElement() instanceof WidgetValueSupplier.Def)
 					theValue = null; // Value supplied by parent
 				theDisabled = session.getAttributeExpression("disable-with");
-				return this;
 			}
 		}
 	}
@@ -95,7 +94,7 @@ public interface QuickValueWidget<T> extends QuickWidget {
 			}
 
 			@Override
-			public Interpreted.Abstract<T, W> update(QuickStyledElement.QuickInterpretationCache cache)
+			public void update(QuickStyledElement.QuickInterpretationCache cache)
 				throws ExpressoInterpretationException {
 				InterpretedValueSynth<SettableValue<?>, SettableValue<T>> value;
 				if (getDefinition().getValue() != null)
@@ -114,7 +113,6 @@ public interface QuickValueWidget<T> extends QuickWidget {
 				DynamicModelValue.satisfyDynamicValue(getDefinition().getValueName(), getDefinition().getModels(),
 					CompiledModelValue.constant(theValue));
 				super.update(cache);
-				return this;
 			}
 		}
 	}
@@ -141,10 +139,9 @@ public interface QuickValueWidget<T> extends QuickWidget {
 		}
 
 		@Override
-		public QuickValueWidget.Abstract<T> update(ModelSetInstance models) throws ModelInstantiationException {
+		public void update(ModelSetInstance models) throws ModelInstantiationException {
 			super.update(models);
 			theValue.set(getInterpreted().getValue().get(getModels()), null);
-			return this;
 		}
 	}
 
