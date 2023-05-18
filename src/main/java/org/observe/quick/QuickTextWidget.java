@@ -142,7 +142,7 @@ public interface QuickTextWidget<T> extends QuickValueWidget<T> {
 						defaultFormat = (Format<T>) DEFAULT_DURATION_FORMAT;
 					else if (getDefinition().isTypeEditable())
 						throw new ExpressoInterpretationException("No format specified and no default available for type " + valueType,
-							getDefinition().getElement().getPositionInFile(), 0);
+							getDefinition().reporting().getFileLocation().getPosition(0), 0);
 					else
 						defaultFormat = (Format<T>) TO_STRING_FORMAT;
 					theFormat = ModelValueSynth.literal(formatType, defaultFormat, "default-" + raw.getSimpleName() + "-format");

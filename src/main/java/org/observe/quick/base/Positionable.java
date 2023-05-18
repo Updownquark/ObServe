@@ -45,7 +45,7 @@ public abstract class Positionable extends QuickAddOn.Abstract<QuickElement> {
 		}
 
 		@Override
-		public Def<P> update(ExpressoQIS session) throws QonfigInterpretationException {
+		public void update(ExpressoQIS session) throws QonfigInterpretationException {
 			super.update(session);
 			if (isVertical) {
 				theLeading = Sizeable.parseSize(session.getAttributeQV("top"), session, true);
@@ -56,7 +56,6 @@ public abstract class Positionable extends QuickAddOn.Abstract<QuickElement> {
 				theCenter = Sizeable.parseSize(session.getAttributeQV("h-center"), session, true);
 				theTrailing = Sizeable.parseSize(session.getAttributeQV("right"), session, true);
 			}
-			return this;
 		}
 
 		public static class Vertical extends Def<Positionable.Vertical> {
@@ -109,11 +108,10 @@ public abstract class Positionable extends QuickAddOn.Abstract<QuickElement> {
 		}
 
 		@Override
-		public Interpreted<P> update(InterpretedModelSet models) throws ExpressoInterpretationException {
+		public void update(InterpretedModelSet models) throws ExpressoInterpretationException {
 			theLeading = getDefinition().getLeading() == null ? null : getDefinition().getLeading().createSynthesizer().interpret();
 			theCenter = getDefinition().getCenter() == null ? null : getDefinition().getCenter().createSynthesizer().interpret();
 			theTrailing = getDefinition().getTrailing() == null ? null : getDefinition().getTrailing().createSynthesizer().interpret();
-			return this;
 		}
 
 		public static class Vertical extends Interpreted<Positionable.Vertical> {
@@ -179,11 +177,10 @@ public abstract class Positionable extends QuickAddOn.Abstract<QuickElement> {
 	}
 
 	@Override
-	public Positionable update(ModelSetInstance models) throws ModelInstantiationException {
+	public void update(ModelSetInstance models) throws ModelInstantiationException {
 		theLeading.set(getInterpreted().getLeading() == null ? null : getInterpreted().getLeading().get(models), null);
 		theCenter.set(getInterpreted().getCenter() == null ? null : getInterpreted().getCenter().get(models), null);
 		theTrailing.set(getInterpreted().getTrailing() == null ? null : getInterpreted().getTrailing().get(models), null);
-		return this;
 	}
 
 	public Observable<ObservableValueEvent<QuickSize>> changes() {

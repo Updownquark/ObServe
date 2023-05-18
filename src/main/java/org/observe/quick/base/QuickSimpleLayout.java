@@ -1,15 +1,9 @@
 package org.observe.quick.base;
 
-import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.ExpressoQIS;
-import org.observe.expresso.ModelInstantiationException;
-import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
-import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.quick.QuickAddOn;
 import org.observe.quick.QuickElement;
 import org.observe.quick.QuickWidget;
 import org.qommons.config.QonfigAddOn;
-import org.qommons.config.QonfigInterpretationException;
 
 public class QuickSimpleLayout extends QuickLayout.Abstract {
 	public static class Def extends QuickLayout.Def<QuickSimpleLayout> {
@@ -20,12 +14,6 @@ public class QuickSimpleLayout extends QuickLayout.Abstract {
 		@Override
 		public QuickBox.Def<?> getElement() {
 			return (QuickBox.Def<?>) super.getElement();
-		}
-
-		@Override
-		public Def update(ExpressoQIS session) throws QonfigInterpretationException {
-			super.update(session);
-			return this;
 		}
 
 		@Override
@@ -50,11 +38,6 @@ public class QuickSimpleLayout extends QuickLayout.Abstract {
 		}
 
 		@Override
-		public Interpreted update(InterpretedModelSet models) throws ExpressoInterpretationException {
-			return this;
-		}
-
-		@Override
 		public QuickSimpleLayout create(QuickBox element) {
 			return new QuickSimpleLayout(this, element);
 		}
@@ -67,11 +50,6 @@ public class QuickSimpleLayout extends QuickLayout.Abstract {
 	@Override
 	public Interpreted getInterpreted() {
 		return (Interpreted) super.getInterpreted();
-	}
-
-	@Override
-	public QuickSimpleLayout update(ModelSetInstance models) throws ModelInstantiationException {
-		return this;
 	}
 
 	public static class Child extends QuickAddOn.Abstract<QuickWidget> {
@@ -92,11 +70,6 @@ public class QuickSimpleLayout extends QuickLayout.Abstract {
 			}
 
 			@Override
-			public Interpreted update(InterpretedModelSet models) throws ExpressoInterpretationException {
-				return this;
-			}
-
-			@Override
 			public Child create(QuickWidget element) {
 				return new Child(this, element);
 			}
@@ -104,11 +77,6 @@ public class QuickSimpleLayout extends QuickLayout.Abstract {
 
 		public Child(Interpreted interpreted, QuickWidget element) {
 			super(interpreted, element);
-		}
-
-		@Override
-		public Child update(ModelSetInstance models) throws ModelInstantiationException {
-			return this;
 		}
 	}
 }

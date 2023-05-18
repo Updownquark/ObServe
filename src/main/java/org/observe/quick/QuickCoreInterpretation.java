@@ -78,6 +78,9 @@ public class QuickCoreInterpretation implements QonfigInterpretation {
 			session -> interpretQuick(session, (p, el) -> new QuickKeyListener.QuickKeyCodeListener.Def(p, el, true)));
 		interpreter.createWith("on-key-release", QuickKeyListener.QuickKeyCodeListener.Def.class,
 			session -> interpretQuick(session, (p, el) -> new QuickKeyListener.QuickKeyCodeListener.Def(p, el, false)));
+
+		interpreter.createWith("renderer", QuickRenderer.Def.class,
+			session -> interpretAddOn(session, (p, ao) -> new QuickRenderer.Def(ao, (QuickWidget.Def<?>) p)));
 		return interpreter;
 	}
 

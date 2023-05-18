@@ -80,7 +80,7 @@ public class QuickWindow extends QuickAddOn.Abstract<QuickElement> {
 		}
 
 		@Override
-		public Def update(ExpressoQIS session) throws QonfigInterpretationException {
+		public void update(ExpressoQIS session) throws QonfigInterpretationException {
 			theX = session.getAttributeExpression("x");
 			theY = session.getAttributeExpression("y");
 			theWidth = session.getAttributeExpression("width");
@@ -101,7 +101,6 @@ public class QuickWindow extends QuickAddOn.Abstract<QuickElement> {
 				theCloseAction = CloseAction.Exit;
 				break;
 			}
-			return this;
 		}
 
 		@Override
@@ -168,7 +167,7 @@ public class QuickWindow extends QuickAddOn.Abstract<QuickElement> {
 		}
 
 		@Override
-		public Interpreted update(InterpretedModelSet models) throws ExpressoInterpretationException {
+		public void update(InterpretedModelSet models) throws ExpressoInterpretationException {
 			theX = getDefinition().getX() == null ? null : getDefinition().getX().evaluate(ModelTypes.Value.INT).interpret();
 			theY = getDefinition().getY() == null ? null : getDefinition().getY().evaluate(ModelTypes.Value.INT).interpret();
 			theWidth = getDefinition().getWidth() == null ? null : getDefinition().getWidth().evaluate(ModelTypes.Value.INT).interpret();
@@ -176,7 +175,6 @@ public class QuickWindow extends QuickAddOn.Abstract<QuickElement> {
 			theTitle = getDefinition().getTitle() == null ? null : getDefinition().getTitle().evaluate(ModelTypes.Value.STRING).interpret();
 			theVisible = getDefinition().getVisible() == null ? null
 				: getDefinition().getVisible().evaluate(ModelTypes.Value.BOOLEAN).interpret();
-			return this;
 		}
 
 		@Override
@@ -236,13 +234,12 @@ public class QuickWindow extends QuickAddOn.Abstract<QuickElement> {
 	}
 
 	@Override
-	public QuickWindow update(ModelSetInstance models) throws ModelInstantiationException {
+	public void update(ModelSetInstance models) throws ModelInstantiationException {
 		theX = getInterpreted().getX() == null ? null : getInterpreted().getX().get(models);
 		theY = getInterpreted().getY() == null ? null : getInterpreted().getY().get(models);
 		theWidth = getInterpreted().getWidth() == null ? null : getInterpreted().getWidth().get(models);
 		theHeight = getInterpreted().getHeight() == null ? null : getInterpreted().getHeight().get(models);
 		theTitle = getInterpreted().getTitle() == null ? null : getInterpreted().getTitle().get(models);
 		theVisible = getInterpreted().getVisible() == null ? null : getInterpreted().getVisible().get(models);
-		return this;
 	}
 }

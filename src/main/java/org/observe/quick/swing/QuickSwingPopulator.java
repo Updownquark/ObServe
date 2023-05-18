@@ -65,8 +65,6 @@ import org.qommons.Transformer;
 import org.qommons.Transformer.Builder;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
-import org.qommons.config.QonfigAddOn;
-import org.qommons.config.QonfigElement;
 import org.qommons.ex.CheckedExceptionWrapper;
 import org.qommons.ex.ExBiConsumer;
 import org.qommons.ex.ExBiFunction;
@@ -263,7 +261,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 				};
 			});
 			modifyForWidget(tx, QuickWidget.Interpreted.class, (qw, qsp, tx2) -> {
-				boolean renderer = isRenderer(qw.getDefinition().getElement());
+				boolean renderer = qw.getAddOn(QuickRenderer.Interpreted.class) != null;
 				List<QuickSwingEventListener<QuickEventListener>> listeners = BetterList.of2(//
 					qw.getEventListeners().stream(), //
 					l -> tx2.transform(l, QuickSwingEventListener.class));
@@ -452,7 +450,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 					default:
 						throw new ModelInstantiationException(
 							"Unrecognized mouse button event type: " + mbl.getInterpreted().getDefinition().getEventType(),
-							mbl.getInterpreted().getDefinition().getElement().getPositionInFile(), 0);
+							mbl.getInterpreted().getDefinition().reporting().getFileLocation().getPosition(0), 0);
 					}
 				};
 			});
@@ -516,7 +514,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 					default:
 						throw new ModelInstantiationException(
 							"Unrecognized mouse move event type: " + mml.getInterpreted().getDefinition().getEventType(),
-							mml.getInterpreted().getDefinition().getElement().getPositionInFile(), 0);
+							mml.getInterpreted().getDefinition().reporting().getFileLocation().getPosition(0), 0);
 					}
 				};
 			});
@@ -610,18 +608,6 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 					});
 				};
 			});
-		}
-
-		private boolean isRenderer(QonfigElement element) {
-			for (QonfigAddOn inh : element.getType().getFullInheritance().values()) {
-				if (inh.getDeclarer().getName().equals(QuickCoreInterpretation.NAME) && inh.getName().equals("renderer"))
-					return true;
-			}
-			for (QonfigAddOn inh : element.getInheritance().values()) {
-				if (inh.getDeclarer().getName().equals(QuickCoreInterpretation.NAME) && inh.getName().equals("renderer"))
-					return true;
-			}
-			return false;
 		}
 
 		public static QuickMouseListener.MouseButton checkMouseEventType(MouseEvent evt, QuickMouseListener.MouseButton listenerButton) {
@@ -1532,7 +1518,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 			Transformer<ExpressoInterpretationException> tx) {
 			return createWidget(interpreted, (panel, quick) -> {
 				TabularWidget.TabularContext<R> ctx = new TabularWidget.TabularContext.Default<>(quick.getInterpreted().getRowType(),
-					interpreted.getDefinition().getElement().printLocation());
+					interpreted.getDefinition().reporting().getFileLocation().getPosition(0).toShortString());
 				quick.setContext(ctx);
 				ComponentEditor<?, ?>[] parent = new ComponentEditor[1];
 				ObservableCollection<SwingTableColumn<R, ?>> columns = quick.getColumns()

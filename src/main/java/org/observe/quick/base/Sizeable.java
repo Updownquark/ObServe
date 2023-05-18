@@ -62,7 +62,7 @@ public abstract class Sizeable extends QuickAddOn.Abstract<QuickElement> {
 		}
 
 		@Override
-		public Def<S> update(ExpressoQIS session) throws QonfigInterpretationException {
+		public void update(ExpressoQIS session) throws QonfigInterpretationException {
 			super.update(session);
 			switch (isVertical) {
 			case TRUE:
@@ -84,7 +84,6 @@ public abstract class Sizeable extends QuickAddOn.Abstract<QuickElement> {
 				theMaximum = parseSize(session.getAttributeQV("max-size"), session, false);
 				break;
 			}
-			return this;
 		}
 
 		public static class Vertical extends Def<Sizeable.Vertical> {
@@ -153,12 +152,11 @@ public abstract class Sizeable extends QuickAddOn.Abstract<QuickElement> {
 		}
 
 		@Override
-		public Interpreted<S> update(InterpretedModelSet models) throws ExpressoInterpretationException {
+		public void update(InterpretedModelSet models) throws ExpressoInterpretationException {
 			theSize = getDefinition().getSize() == null ? null : getDefinition().getSize().createSynthesizer().interpret();
 			theMinimum = getDefinition().getMinimum() == null ? null : getDefinition().getMinimum().createSynthesizer().interpret();
 			thePreferred = getDefinition().getPreferred() == null ? null : getDefinition().getPreferred().createSynthesizer().interpret();
 			theMaximum = getDefinition().getMaximum() == null ? null : getDefinition().getMaximum().createSynthesizer().interpret();
-			return this;
 		}
 
 		public static class Vertical extends Interpreted<Sizeable.Vertical> {
@@ -246,12 +244,11 @@ public abstract class Sizeable extends QuickAddOn.Abstract<QuickElement> {
 	}
 
 	@Override
-	public Sizeable update(ModelSetInstance models) throws ModelInstantiationException {
+	public void update(ModelSetInstance models) throws ModelInstantiationException {
 		theSize.set(getInterpreted().getSize() == null ? null : getInterpreted().getSize().get(models), null);
 		theMinimum.set(getInterpreted().getMinimum() == null ? null : getInterpreted().getMinimum().get(models), null);
 		thePreferred.set(getInterpreted().getPreferred() == null ? null : getInterpreted().getPreferred().get(models), null);
 		theMaximum.set(getInterpreted().getMaximum() == null ? null : getInterpreted().getMaximum().get(models), null);
-		return this;
 	}
 
 	public Observable<ObservableValueEvent<QuickSize>> changes() {

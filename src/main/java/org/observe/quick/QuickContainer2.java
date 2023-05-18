@@ -180,7 +180,7 @@ public interface QuickContainer2<C extends QuickWidget> extends QuickWidget {
 					throw e;
 				} catch (RuntimeException | Error e) {
 					throw new ExpressoRuntimeException(e.getMessage() == null ? e.toString() : e.getMessage(),
-						element.getRightValue().getDefinition().getElement().getPositionInFile(), e);
+							element.getRightValue().getDefinition().reporting().getFileLocation().getPosition(0), e);
 				}
 			})//
 			.onCommonX(element -> {
@@ -190,7 +190,7 @@ public interface QuickContainer2<C extends QuickWidget> extends QuickWidget {
 					throw e;
 				} catch (RuntimeException | Error e) {
 					throw new ExpressoRuntimeException(e.getMessage() == null ? e.toString() : e.getMessage(),
-						element.getRightValue().getDefinition().getElement().getPositionInFile(), e);
+							element.getRightValue().getDefinition().reporting().getFileLocation().getPosition(0), e);
 				}
 			})//
 			.adjust();

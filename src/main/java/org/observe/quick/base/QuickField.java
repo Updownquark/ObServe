@@ -17,15 +17,15 @@ import org.qommons.config.QonfigInterpretationException;
 
 public class QuickField extends QuickAddOn.Abstract<QuickWidget> {
 	public static class Def extends QuickAddOn.Def.Abstract<QuickWidget, QuickField> {
-		private CompiledExpression theName;
+		private CompiledExpression theFieldLabel;
 		private boolean isFill;
 
 		public Def(QonfigAddOn type, QuickElement.Def<? extends QuickWidget> element) {
 			super(type, element);
 		}
 
-		public CompiledExpression getName() {
-			return theName;
+		public CompiledExpression getFieldLabel() {
+			return theFieldLabel;
 		}
 
 		public boolean isFill() {
@@ -33,10 +33,9 @@ public class QuickField extends QuickAddOn.Abstract<QuickWidget> {
 		}
 
 		@Override
-		public Def update(ExpressoQIS session) throws QonfigInterpretationException {
-			theName = session.getAttributeExpression("field-label");
+		public void update(ExpressoQIS session) throws QonfigInterpretationException {
+			theFieldLabel = session.getAttributeExpression("field-label");
 			isFill = Boolean.TRUE.equals(session.getAttribute("fill", Boolean.class));
-			return this;
 		}
 
 		@Override
@@ -62,14 +61,14 @@ public class QuickField extends QuickAddOn.Abstract<QuickWidget> {
 			return (QuickWidget.Interpreted<?>) super.getElement();
 		}
 
-		public InterpretedValueSynth<SettableValue<?>, SettableValue<String>> getName() {
+		public InterpretedValueSynth<SettableValue<?>, SettableValue<String>> getFieldLabel() {
 			return theName;
 		}
 
 		@Override
-		public Interpreted update(InterpretedModelSet models) throws ExpressoInterpretationException {
-			theName = getDefinition().getName() == null ? null : getDefinition().getName().evaluate(ModelTypes.Value.STRING).interpret();
-			return this;
+		public void update(InterpretedModelSet models) throws ExpressoInterpretationException {
+			theName = getDefinition().getFieldLabel() == null ? null
+				: getDefinition().getFieldLabel().evaluate(ModelTypes.Value.STRING).interpret();
 		}
 
 		@Override
@@ -99,8 +98,7 @@ public class QuickField extends QuickAddOn.Abstract<QuickWidget> {
 	}
 
 	@Override
-	public QuickField update(ModelSetInstance models) throws ModelInstantiationException {
-		theFieldLabel = getInterpreted().getName() == null ? null : getInterpreted().getName().get(models);
-		return this;
+	public void update(ModelSetInstance models) throws ModelInstantiationException {
+		theFieldLabel = getInterpreted().getFieldLabel() == null ? null : getInterpreted().getFieldLabel().get(models);
 	}
 }

@@ -213,7 +213,6 @@ public interface TabularWidget<R> extends MultiValueWidget<R>, RowTyped<R> {
 	public abstract class Abstract<R> extends QuickWidget.Abstract implements TabularWidget<R> {
 		private final ObservableCollection<QuickTableColumn.TableColumnSet<R>> theColumnSets;
 		private final ObservableCollection<QuickTableColumn<R, ?>> theColumns;
-		private SettableValue<R> theRowValue;
 
 		protected Abstract(TabularWidget.Interpreted<R, ?> interpreted, QuickElement parent) {
 			super(interpreted, parent);
@@ -249,9 +248,8 @@ public interface TabularWidget<R> extends MultiValueWidget<R>, RowTyped<R> {
 
 		@Override
 		public void setContext(MultiValueRenderContext<R> ctx) throws ModelInstantiationException {
-			theRowValue = ctx.getRenderValue();
 			satisfyContextValue(getInterpreted().getDefinition().getValueName(), ModelTypes.Value.forType(getInterpreted().getRowType()),
-				theRowValue);
+				ctx.getRenderValue());
 			satisfyContextValue("selected", ModelTypes.Value.BOOLEAN, ctx.isSelected());
 		}
 
@@ -289,7 +287,7 @@ public interface TabularWidget<R> extends MultiValueWidget<R>, RowTyped<R> {
 							throw e;
 						} catch (RuntimeException | Error e) {
 							throw new ExpressoRuntimeException(e.getMessage() == null ? e.toString() : e.getMessage(),
-								element.getRightValue().getDefinition().getElement().getPositionInFile(), e);
+								element.getRightValue().getDefinition().reporting().getFileLocation().getPosition(0), e);
 						}
 						for (QuickTableColumn<R, ?> column : created.getColumns()) {
 							try {
@@ -298,7 +296,8 @@ public interface TabularWidget<R> extends MultiValueWidget<R>, RowTyped<R> {
 								throw e;
 							} catch (RuntimeException | Error e) {
 								throw new ExpressoRuntimeException(e.getMessage() == null ? e.toString() : e.getMessage(),
-									column.getColumnSet().getInterpreted().getDefinition().getElement().getPositionInFile(), e);
+									column.getColumnSet().getInterpreted().getDefinition().reporting().getFileLocation().getPosition(0),
+									e);
 							}
 						}
 
@@ -315,7 +314,7 @@ public interface TabularWidget<R> extends MultiValueWidget<R>, RowTyped<R> {
 							throw e;
 						} catch (RuntimeException | Error e) {
 							throw new ExpressoRuntimeException(e.getMessage() == null ? e.toString() : e.getMessage(),
-								element.getRightValue().getDefinition().getElement().getPositionInFile(), e);
+								element.getRightValue().getDefinition().reporting().getFileLocation().getPosition(0), e);
 						}
 						for (QuickTableColumn<R, ?> column : element.getLeftValue().getColumns()) {
 							try {
@@ -324,7 +323,8 @@ public interface TabularWidget<R> extends MultiValueWidget<R>, RowTyped<R> {
 								throw e;
 							} catch (RuntimeException | Error e) {
 								throw new ExpressoRuntimeException(e.getMessage() == null ? e.toString() : e.getMessage(),
-									column.getColumnSet().getInterpreted().getDefinition().getElement().getPositionInFile(), e);
+									column.getColumnSet().getInterpreted().getDefinition().reporting().getFileLocation().getPosition(0),
+									e);
 							}
 						}
 						return element.useValue(element.getLeftValue());

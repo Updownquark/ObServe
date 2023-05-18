@@ -205,7 +205,8 @@ public interface QuickEventListener extends QuickElement {
 					try {
 						return theAction.act(cause);
 					} catch (RuntimeException | Error e) {
-						throw new ExpressoRuntimeException(e.toString(), getInterpreted().getDefinition().getElement().getPositionInFile(), e);
+						throw new ExpressoRuntimeException(e.toString(),
+							getInterpreted().getDefinition().reporting().getFileLocation().getPosition(0), e);
 					}
 				} else
 					return null;

@@ -181,11 +181,11 @@ public interface QuickTableColumn<R, C> {
 				} catch (ModelException e) {
 					throw new ExpressoInterpretationException(
 						"Could not get column value '" + getDefinition().getColumnEditValueName() + "'",
-						getDefinition().getElement().getPositionInFile(), 0, e);
+						getDefinition().reporting().getFileLocation().getPosition(0), 0, e);
 				} catch (TypeConversionException e) {
 					throw new ExpressoInterpretationException(
 						"Could not convert column value '" + getDefinition().getColumnEditValueName() + "'",
-						getDefinition().getElement().getPositionInFile(), 0, e);
+						getDefinition().reporting().getFileLocation().getPosition(0), 0, e);
 				}
 			}
 
@@ -306,12 +306,6 @@ public interface QuickTableColumn<R, C> {
 			}
 
 			@Override
-			public Def<CET> update(ExpressoQIS session) throws QonfigInterpretationException {
-				super.update(session);
-				return this;
-			}
-
-			@Override
 			public abstract Interpreted<?, ?, ? extends CET> interpret(QuickElement.Interpreted<? extends ColumnEditing<?, ?>> element);
 		}
 
@@ -359,11 +353,10 @@ public interface QuickTableColumn<R, C> {
 				}
 
 				@Override
-				public Def update(ExpressoQIS session) throws QonfigInterpretationException {
+				public void update(ExpressoQIS session) throws QonfigInterpretationException {
 					super.update(session);
 					theCommit = session.getAttributeExpression("commit");
 					isRowUpdate = session.getAttribute("row-update", boolean.class);
-					return this;
 				}
 
 				@Override
@@ -389,10 +382,9 @@ public interface QuickTableColumn<R, C> {
 				}
 
 				@Override
-				public Interpreted<R, C> update(InterpretedModelSet models) throws ExpressoInterpretationException {
+				public void update(InterpretedModelSet models) throws ExpressoInterpretationException {
 					theCommit = getDefinition().getCommit() == null ? null
 						: getDefinition().getCommit().evaluate(ModelTypes.Action.any()).interpret();
-					return this;
 				}
 
 				@Override
@@ -418,9 +410,8 @@ public interface QuickTableColumn<R, C> {
 			}
 
 			@Override
-			public RowModifyEditType<R, C> update(ModelSetInstance models) throws ModelInstantiationException {
+			public void update(ModelSetInstance models) throws ModelInstantiationException {
 				theCommit.set(getInterpreted().getCommit() == null ? null : getInterpreted().getCommit().get(models), null);
-				return this;
 			}
 		}
 
@@ -437,10 +428,9 @@ public interface QuickTableColumn<R, C> {
 				}
 
 				@Override
-				public Def update(ExpressoQIS session) throws QonfigInterpretationException {
+				public void update(ExpressoQIS session) throws QonfigInterpretationException {
 					super.update(session);
 					theReplacement = session.getAttributeExpression("replacement");
-					return this;
 				}
 
 				@Override
@@ -466,11 +456,10 @@ public interface QuickTableColumn<R, C> {
 				}
 
 				@Override
-				public Interpreted<R, C> update(InterpretedModelSet models) throws ExpressoInterpretationException {
+				public void update(InterpretedModelSet models) throws ExpressoInterpretationException {
 					theReplacement = getDefinition().getReplacement() == null ? null
 						: getDefinition().getReplacement().evaluate(ModelTypes.Value.forType(getElement().getParentElement().getRowType()))
 						.interpret();
-					return this;
 				}
 
 				@Override
@@ -497,9 +486,8 @@ public interface QuickTableColumn<R, C> {
 			}
 
 			@Override
-			public RowReplaceEditType<R, C> update(ModelSetInstance models) throws ModelInstantiationException {
+			public void update(ModelSetInstance models) throws ModelInstantiationException {
 				theReplacement.set(getInterpreted().getReplacement() == null ? null : getInterpreted().getReplacement().get(models), null);
-				return this;
 			}
 		}
 	}
@@ -690,7 +678,7 @@ public interface QuickTableColumn<R, C> {
 					getInterpreted().getValue().getType(), getModels(), getValue());
 			} catch (ModelException | TypeConversionException e) {
 				throw new ExpressoRuntimeException("Install of column value failed",
-					getInterpreted().getDefinition().getElement().getPositionInFile());
+					getInterpreted().getDefinition().reporting().getFileLocation().getPosition(0));
 			}
 			theName.set(getInterpreted().getName().get(getModels()), null);
 			theValue.set(getInterpreted().getValue().get(getModels()), null);
@@ -706,7 +694,7 @@ public interface QuickTableColumn<R, C> {
 					throw e;
 				} catch (RuntimeException | Error e) {
 					throw new ExpressoRuntimeException(e.getMessage() == null ? e.toString() : e.getMessage(),
-						getInterpreted().getRenderer().getDefinition().getElement().getPositionInFile(), e);
+						getInterpreted().getRenderer().getDefinition().reporting().getFileLocation().getPosition(0), e);
 				}
 			}
 			if (theRenderer.get() != null) {
@@ -716,7 +704,7 @@ public interface QuickTableColumn<R, C> {
 					throw e;
 				} catch (RuntimeException | Error e) {
 					throw new ExpressoRuntimeException(e.getMessage() == null ? e.toString() : e.getMessage(),
-						getInterpreted().getRenderer().getDefinition().getElement().getPositionInFile(), e);
+						getInterpreted().getRenderer().getDefinition().reporting().getFileLocation().getPosition(0), e);
 				}
 			}
 

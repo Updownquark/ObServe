@@ -1,9 +1,7 @@
 package org.observe.quick.base;
 
-import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ExpressoQIS;
 import org.observe.expresso.ModelInstantiationException;
-import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.quick.QuickElement;
 import org.observe.util.swing.JustifiedBoxLayout;
@@ -33,15 +31,15 @@ public class QuickInlineLayout extends QuickLayout.Abstract {
 		}
 
 		@Override
-		public Def update(ExpressoQIS session) throws QonfigInterpretationException {
+		public void update(ExpressoQIS session) throws QonfigInterpretationException {
 			super.update(session);
 			isVertical = "vertical".equals(session.getAttributeText("orientation"));
-			theMainAlign = jblAlign("main-align", session.getAttributeText("main-align"));
-			theCrossAlign = jblAlign("cross-align", session.getAttributeText("cross-align"));
-			return this;
+			theMainAlign = jblAlign("main-align", session.getAttributeText("main-align"), session);
+			theCrossAlign = jblAlign("cross-align", session.getAttributeText("cross-align"), session);
 		}
 
-		public JustifiedBoxLayout.Alignment jblAlign(String attributeName, String attributeText) throws QonfigInterpretationException {
+		public JustifiedBoxLayout.Alignment jblAlign(String attributeName, String attributeText, ExpressoQIS session)
+			throws QonfigInterpretationException {
 			switch (attributeText) {
 			case "leading":
 				return JustifiedBoxLayout.Alignment.LEADING;
@@ -53,7 +51,7 @@ public class QuickInlineLayout extends QuickLayout.Abstract {
 				return JustifiedBoxLayout.Alignment.JUSTIFIED;
 			default:
 				throw new QonfigInterpretationException("Unrecognized " + attributeName + ": '" + attributeText + "'",
-					getExpressoSession().getAttributeValuePosition(attributeName, 0), attributeText.length());
+					session.getAttributeValuePosition(attributeName, 0), attributeText.length());
 			}
 		}
 
@@ -71,11 +69,6 @@ public class QuickInlineLayout extends QuickLayout.Abstract {
 		@Override
 		public Def getDefinition() {
 			return (Def) super.getDefinition();
-		}
-
-		@Override
-		public Interpreted update(InterpretedModelSet models) throws ExpressoInterpretationException {
-			return this;
 		}
 
 		@Override
@@ -110,10 +103,9 @@ public class QuickInlineLayout extends QuickLayout.Abstract {
 	}
 
 	@Override
-	public QuickInlineLayout update(ModelSetInstance models) throws ModelInstantiationException {
+	public void update(ModelSetInstance models) throws ModelInstantiationException {
 		isVertical = getInterpreted().getDefinition().isVertical();
 		theMainAlign = getInterpreted().getDefinition().getMainAlign();
 		theCrossAlign = getInterpreted().getDefinition().getCrossAlign();
-		return this;
 	}
 }

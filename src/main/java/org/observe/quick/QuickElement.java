@@ -400,7 +400,7 @@ public interface QuickElement {
 				DynamicModelValue.satisfyDynamicValue(valueName, type, element.getModels(), value);
 			} catch (ModelException e) {
 				throw new ModelInstantiationException("No " + valueName + " value?",
-					element.getInterpreted().getDefinition().getElement().getPositionInFile(), 0, e);
+					element.getInterpreted().getDefinition().reporting().getFileLocation().getPosition(0), 0, e);
 			} catch (TypeConversionException e) {
 				throw new IllegalStateException(valueName + " is not a " + type + "?", e);
 			}

@@ -1,10 +1,6 @@
 package org.observe.quick.base;
 
-import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ExpressoQIS;
-import org.observe.expresso.ModelInstantiationException;
-import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
-import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.quick.QuickAddOn;
 import org.observe.quick.QuickElement;
 import org.observe.quick.QuickWidget;
@@ -20,12 +16,6 @@ public class QuickBorderLayout extends QuickLayout.Abstract {
 		@Override
 		public QuickBox.Def<?> getElement() {
 			return (QuickBox.Def<?>) super.getElement();
-		}
-
-		@Override
-		public Def update(ExpressoQIS session) throws QonfigInterpretationException {
-			super.update(session);
-			return this;
 		}
 
 		@Override
@@ -50,11 +40,6 @@ public class QuickBorderLayout extends QuickLayout.Abstract {
 		}
 
 		@Override
-		public Interpreted update(InterpretedModelSet models) throws ExpressoInterpretationException {
-			return this;
-		}
-
-		@Override
 		public QuickBorderLayout create(QuickBox element) {
 			return new QuickBorderLayout(this, element);
 		}
@@ -67,11 +52,6 @@ public class QuickBorderLayout extends QuickLayout.Abstract {
 	@Override
 	public Interpreted getInterpreted() {
 		return (Interpreted) super.getInterpreted();
-	}
-
-	@Override
-	public QuickBorderLayout update(ModelSetInstance models) throws ModelInstantiationException {
-		return this;
 	}
 
 	public enum Region {
@@ -91,7 +71,7 @@ public class QuickBorderLayout extends QuickLayout.Abstract {
 			}
 
 			@Override
-			public Def update(ExpressoQIS session) throws QonfigInterpretationException {
+			public void update(ExpressoQIS session) throws QonfigInterpretationException {
 				super.update(session);
 				String regionStr = session.getAttributeText("region");
 				switch (regionStr) {
@@ -114,7 +94,6 @@ public class QuickBorderLayout extends QuickLayout.Abstract {
 					throw new QonfigInterpretationException("Unrecognized region attribute: '" + regionStr,
 						session.getAttributeValuePosition("region", 0), regionStr.length());
 				}
-				return this;
 			}
 
 			@Override
@@ -134,11 +113,6 @@ public class QuickBorderLayout extends QuickLayout.Abstract {
 			}
 
 			@Override
-			public Interpreted update(InterpretedModelSet models) throws ExpressoInterpretationException {
-				return this;
-			}
-
-			@Override
 			public Child create(QuickWidget element) {
 				return new Child(this, element);
 			}
@@ -151,11 +125,6 @@ public class QuickBorderLayout extends QuickLayout.Abstract {
 		@Override
 		public Interpreted getInterpreted() {
 			return (Interpreted) super.getInterpreted();
-		}
-
-		@Override
-		public Child update(ModelSetInstance models) throws ModelInstantiationException {
-			return this;
 		}
 	}
 }

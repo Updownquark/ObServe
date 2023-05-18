@@ -111,7 +111,7 @@ public interface QuickEditableTextWidget<T> extends QuickTextWidget<T> {
 					DynamicModelValue.satisfyDynamicValue("error", ModelTypes.Value.STRING, getModels(), error);
 				} catch (ModelException e) {
 					throw new ModelInstantiationException("No error value?",
-						getInterpreted().getDefinition().getElement().getPositionInFile(), 0, e);
+						getInterpreted().getDefinition().reporting().getFileLocation().getPosition(0), 0, e);
 				} catch (TypeConversionException e) {
 					throw new IllegalStateException("error is not a string?", e);
 				}
@@ -122,7 +122,7 @@ public interface QuickEditableTextWidget<T> extends QuickTextWidget<T> {
 					DynamicModelValue.satisfyDynamicValue("warning", ModelTypes.Value.STRING, getModels(), warn);
 				} catch (ModelException e) {
 					throw new ModelInstantiationException("No warning value?",
-						getInterpreted().getDefinition().getElement().getPositionInFile(), 0, e);
+						getInterpreted().getDefinition().reporting().getFileLocation().getPosition(0), 0, e);
 				} catch (TypeConversionException e) {
 					throw new IllegalStateException("warning is not a string?", e);
 				}

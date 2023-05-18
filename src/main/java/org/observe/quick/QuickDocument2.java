@@ -45,7 +45,7 @@ public class QuickDocument2 extends QuickElement.Abstract {
 			super.update(session);
 			theHead = QuickElement.useOrReplace(QuickHeadSection.Def.class, theHead, session, "head");
 			if (theHead != null)
-				session.setExpressoEnv(getExpressoEnv().with(theHead.getModels(), theHead.getClassView()));
+				session.setExpressoEnv(session.getExpressoEnv().with(theHead.getModels(), theHead.getClassView()));
 			theBody = QuickElement.useOrReplace(QuickWidget.Def.class, theBody, session, "body");
 		}
 
@@ -194,7 +194,7 @@ public class QuickDocument2 extends QuickElement.Abstract {
 				if (model == null)
 					model = ObservableModelSet.build("models", ObservableModelSet.JAVA_NAME_CHECKER).build();
 				theModels = model;
-				session.setExpressoEnv(getExpressoEnv().with(model, cv));
+				session.setExpressoEnv(session.getExpressoEnv().with(model, cv));
 				theStyleSheet = session.as(StyleQIS.class).getStyleSheet();
 			}
 

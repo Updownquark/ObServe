@@ -28,14 +28,13 @@ public interface QuickAddOn<E extends QuickElement> {
 		QuickElement.Def<? extends E> getElement();
 
 		/**
-		 * Called from the {@link #getElement() element}'s {@link QuickElement.Def#update(org.qommons.config.AbstractQIS) update},
-		 * initializes or updates this add-on definition
+		 * Called from the {@link #getElement() element}'s {@link QuickElement.Def#update(ExpressoQIS) update}, initializes or updates this
+		 * add-on definition
 		 *
 		 * @param session The session to support this add-on
-		 * @return This add-on definition
 		 * @throws QonfigInterpretationException
 		 */
-		Def<E, AO> update(ExpressoQIS session) throws QonfigInterpretationException;
+		void update(ExpressoQIS session) throws QonfigInterpretationException;
 
 		/**
 		 * @param element The element interpretation
@@ -52,7 +51,6 @@ public interface QuickAddOn<E extends QuickElement> {
 		public abstract class Abstract<E extends QuickElement, AO extends QuickAddOn<? super E>> implements Def<E, AO> {
 			private final QonfigAddOn theType;
 			private final QuickElement.Def<? extends E> theElement;
-			private ExpressoQIS theExpressoSession;
 
 			/**
 			 * @param type The add-on that the Qonfig toolkit uses to represent this type
@@ -73,15 +71,8 @@ public interface QuickAddOn<E extends QuickElement> {
 				return theElement;
 			}
 
-			/** @return The session supporting this add-on */
-			public ExpressoQIS getExpressoSession() {
-				return theExpressoSession;
-			}
-
 			@Override
-			public Def<E, AO> update(ExpressoQIS session) throws QonfigInterpretationException {
-				theExpressoSession = session;
-				return this;
+			public void update(ExpressoQIS session) throws QonfigInterpretationException {
 			}
 		}
 	}
@@ -96,17 +87,16 @@ public interface QuickAddOn<E extends QuickElement> {
 		Def<? super E, ? super AO> getDefinition();
 
 		/** @return The element interpretation that this add-on is added onto */
-		QuickElement.Interpreted<?> getElement();
+		QuickElement.Interpreted<? extends E> getElement();
 
 		/**
 		 * Called from the {@link #getElement() element}'s update, initializes or updates this add-on interpretation
 		 *
 		 * @param models The models to support this add-on
 		 * @param session The session to support this add-on
-		 * @return This add-on interpretation
 		 * @throws ExpressoInterpretationException If any models in this add on could not be interpreted
 		 */
-		Interpreted<E, AO> update(InterpretedModelSet models) throws ExpressoInterpretationException;
+		void update(InterpretedModelSet models) throws ExpressoInterpretationException;
 
 		/**
 		 * @param element The QuickElement
@@ -122,13 +112,13 @@ public interface QuickAddOn<E extends QuickElement> {
 		 */
 		public abstract class Abstract<E extends QuickElement, AO extends QuickAddOn<? super E>> implements Interpreted<E, AO> {
 			private final Def<? super E, ? super AO> theDefinition;
-			private final QuickElement.Interpreted<?> theElement;
+			private final QuickElement.Interpreted<? extends E> theElement;
 
 			/**
 			 * @param definition The definition producing this interpretation
 			 * @param element The element interpretation that this add-on is added onto
 			 */
-			protected Abstract(Def<? super E, ? super AO> definition, QuickElement.Interpreted<?> element) {
+			protected Abstract(Def<? super E, ? super AO> definition, QuickElement.Interpreted<? extends E> element) {
 				theDefinition = definition;
 				theElement = element;
 			}
@@ -139,8 +129,12 @@ public interface QuickAddOn<E extends QuickElement> {
 			}
 
 			@Override
-			public QuickElement.Interpreted<?> getElement() {
+			public QuickElement.Interpreted<? extends E> getElement() {
 				return theElement;
+			}
+
+			@Override
+			public void update(InterpretedModelSet models) throws ExpressoInterpretationException {
 			}
 		}
 	}
@@ -155,10 +149,9 @@ public interface QuickAddOn<E extends QuickElement> {
 	 * Called by the {@link #getElement() element's} update, initializes or updates this add-on
 	 *
 	 * @param models The models to support this add-on
-	 * @return This add-on
 	 * @throws ModelInstantiationException If any models in this add-on could not be instantiated
 	 */
-	QuickAddOn<E> update(ModelSetInstance models) throws ModelInstantiationException;
+	void update(ModelSetInstance models) throws ModelInstantiationException;
 
 	/**
 	 * An abstract {@link QuickAddOn} implementation
@@ -186,6 +179,10 @@ public interface QuickAddOn<E extends QuickElement> {
 		@Override
 		public E getElement() {
 			return theElement;
+		}
+
+		@Override
+		public void update(ModelSetInstance models) throws ModelInstantiationException {
 		}
 	}
 }
