@@ -21,6 +21,7 @@ import java.util.TimeZone;
 import java.util.function.Function;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import javax.swing.JFrame;
@@ -81,6 +82,7 @@ import org.qommons.io.ArchiveEnabledFileSource;
 import org.qommons.io.ArchiveEnabledFileSource.FileArchival;
 import org.qommons.io.BetterFile;
 import org.qommons.io.BetterFile.FileDataSource;
+import org.qommons.io.ErrorReporting;
 import org.qommons.io.FileBackups;
 import org.qommons.io.Format;
 import org.qommons.io.LocatedFilePosition;
@@ -485,6 +487,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		throws QonfigInterpretationException {
 		CompiledExpression defaultX = session.asElement("config-value").getAttributeExpression("default");
 		VariableType type = (VariableType) session.get(VALUE_TYPE_KEY);
+		ExpressoEnv env = session.getExpressoEnv();
 		return new ConfigModelValue<T, SettableValue<?>, SettableValue<T>>() {
 			private TypeToken<T> theValueType;
 			private Format<T> theTextFormat;
@@ -492,7 +495,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 
 			@Override
 			public void init() throws ExpressoInterpretationException {
-				theValueType = (TypeToken<T>) type.getType(session.getExpressoEnv().getModels());
+				theValueType = (TypeToken<T>) type.getType(env.getModels());
 				if (defaultX != null) {
 					// If the format is a simple text format, add the ability to parse the default value with it as an external literal
 					NonStructuredParser nsp = theTextFormat == null ? null : new NonStructuredParser() {
@@ -507,11 +510,11 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 						}
 					};
 					Class<T> raw = TypeTokens.getRawType(theValueType);
-					session.getExpressoEnv().withNonStructuredParser(raw, nsp);
+					env.withNonStructuredParser(raw, nsp);
 					try {
 						defaultV = defaultX == null ? null : defaultX.evaluate(ModelTypes.Value.forType(theValueType));
 					} finally {
-						session.getExpressoEnv().removeNonStructuredParser(raw, nsp);
+						env.removeNonStructuredParser(raw, nsp);
 					}
 				} else
 					defaultV = null;
@@ -549,14 +552,15 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			ExpressoQIS exS = session.as(ExpressoQIS.class);
 			VariableType type = (VariableType) exS.get(VALUE_TYPE_KEY);
 			prepare(exS);
+			ExpressoEnv env = exS.getExpressoEnv();
 			return new ConfigModelValue<T, M, MV>() {
 				private ModelInstanceType<M, MV> theInstanceType;
 
 				@Override
 				public void init() throws ExpressoInterpretationException {
-					TypeToken<T> valueType = (TypeToken<T>) type.getType(exS.getExpressoEnv().getModels());
+					TypeToken<T> valueType = (TypeToken<T>) type.getType(env.getModels());
 					theInstanceType = (ModelInstanceType<M, MV>) theModelType.forTypes(valueType);
-					prepare(exS, theInstanceType);
+					prepare(env, theInstanceType);
 				}
 
 				@Override
@@ -573,7 +577,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 
 		protected abstract void prepare(ExpressoQIS exS) throws QonfigInterpretationException;
 
-		protected abstract void prepare(ExpressoQIS exS, ModelInstanceType<M, MV> instanceType) throws ExpressoInterpretationException;
+		protected abstract void prepare(ExpressoEnv env, ModelInstanceType<M, MV> instanceType) throws ExpressoInterpretationException;
 
 		protected abstract MV create(ObservableConfigValueBuilder<T> builder, ModelSetInstance msi) throws ModelInstantiationException;
 	}
@@ -662,7 +666,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			}
 
 			@Override
-			protected void prepare(ExpressoQIS exS, ModelInstanceType<ObservableValueSet<?>, ObservableValueSet<T>> instanceType)
+			protected void prepare(ExpressoEnv env, ModelInstanceType<ObservableValueSet<?>, ObservableValueSet<T>> instanceType)
 				throws ExpressoInterpretationException {
 			}
 
@@ -681,7 +685,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			}
 
 			@Override
-			protected void prepare(ExpressoQIS exS, ModelInstanceType<ObservableCollection<?>, ObservableCollection<T>> instanceType)
+			protected void prepare(ExpressoEnv env, ModelInstanceType<ObservableCollection<?>, ObservableCollection<T>> instanceType)
 				throws ExpressoInterpretationException {
 			}
 
@@ -708,7 +712,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			}
 
 			@Override
-			protected void prepare(ExpressoQIS exS,
+			protected void prepare(ExpressoEnv env,
 				ModelInstanceType<ObservableSortedCollection<?>, ObservableSortedCollection<T>> instanceType)
 					throws ExpressoInterpretationException {
 				theSortingContainer = theSortingCreator.evaluate((TypeToken<T>) instanceType.getType(0));
@@ -730,7 +734,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			}
 
 			@Override
-			protected void prepare(ExpressoQIS exS, ModelInstanceType<ObservableSet<?>, ObservableSet<T>> instanceType)
+			protected void prepare(ExpressoEnv env, ModelInstanceType<ObservableSet<?>, ObservableSet<T>> instanceType)
 				throws ExpressoInterpretationException {
 			}
 
@@ -757,7 +761,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			}
 
 			@Override
-			protected void prepare(ExpressoQIS exS, ModelInstanceType<ObservableSortedSet<?>, ObservableSortedSet<T>> instanceType)
+			protected void prepare(ExpressoEnv env, ModelInstanceType<ObservableSortedSet<?>, ObservableSortedSet<T>> instanceType)
 				throws ExpressoInterpretationException {
 				theSortingContainer = theSortingCreator.evaluate((TypeToken<T>) instanceType.getType(0));
 			}
@@ -820,7 +824,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			}
 
 			@Override
-			protected void prepare(ExpressoQIS exS, ModelInstanceType<ObservableMultiMap<?, ?>, ObservableMultiMap<K, V>> instanceType)
+			protected void prepare(ExpressoEnv env, ModelInstanceType<ObservableMultiMap<?, ?>, ObservableMultiMap<K, V>> instanceType)
 				throws ExpressoInterpretationException {
 				theKeyType = (TypeToken<K>) instanceType.getType(0);
 			}
@@ -990,7 +994,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			String sep = session.getAttributeText("grouping-separator");
 			if (sep != null) {
 				if (sep.length() != 0)
-					System.err.println("WARNING: grouping-separator must be a single character");
+					session.reporting().warn("WARNING: grouping-separator must be a single character");
 				else
 					format = format.withGroupingSeparator(sep.charAt(0));
 			}
@@ -1003,7 +1007,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			String sep = session.getAttributeText("grouping-separator");
 			if (sep != null) {
 				if (sep.length() != 0)
-					System.err.println("WARNING: grouping-separator must be a single character");
+					session.reporting().warn("WARNING: grouping-separator must be a single character");
 				else
 					format = format.withGroupingSeparator(sep.charAt(0));
 			}
@@ -1047,14 +1051,17 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		String defaultS = session.getAttributeText("default-text");
 		if (defaultV != null && defaultS != null)
 			defaultV.throwQonfigException("default and default-text cannot both be specified", null);
+		LocatedFilePosition formatPosition = session.forChildren("text-format").getFirst().getElement().getPositionInFile();
+		ErrorReporting defaultReporting = defaultS == null ? null
+			: session.reporting().at(session.getAttributeValuePosition("default-text"));
 		return CompiledModelValue.of(session.getElement().getType().getName(), ModelTypes.Value, () -> {
 			ModelValueSynth<SettableValue<?>, SettableValue<Format<T>>> textFormatContainer;
 			try {
 				textFormatContainer = textFormatCreator.createSynthesizer()
 					.as(ModelTypes.Value.forType(TypeTokens.get().keyFor(Format.class).<Format<T>> wildCard()));
 			} catch (TypeConversionException e) {
-				throw new ExpressoInterpretationException("Could not interpret " + textFormatCreator + " as a format",
-					session.getChildren("text-format").getFirst().getPositionInFile(), 0, e);
+				throw new ExpressoInterpretationException("Could not interpret " + textFormatCreator + " as a format", formatPosition, 0,
+					e);
 			}
 			TypeToken<T> formattedType = (TypeToken<T>) textFormatContainer.getType().getType(0)
 				.resolveType(Format.class.getTypeParameters()[0]);
@@ -1069,10 +1076,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 						try {
 							return f.parse(defaultS);
 						} catch (ParseException e) {
-							System.out.println(session.getElement().getAttributes()
-								.get(session.getAttributeDef(null, defaultS, "default-text")).fileLocation + ": Could not parse '"
-								+ defaultS + "'");
-							e.printStackTrace();
+							defaultReporting.error("Could not parse '" + defaultS + "'", e);
 							return TypeTokens.get().getDefaultValue(formattedType);
 						}
 					}), __ -> "Unsettable");
@@ -1268,16 +1272,18 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		CompiledExpression archiveDepthX = exS.getAttributeExpression("max-archive-depth");
 		List<CompiledModelValue<SettableValue<?>, SettableValue<ArchiveEnabledFileSource.FileArchival>>> archiveMethodCreators;
 		archiveMethodCreators = exS.interpretChildren("archive-method", CompiledModelValue.class);
+		LocatedFilePosition position;
+		if (wrappedSession != null)
+			position = wrappedSession.getElement().getPositionInFile();
+		else
+			position = exS.getElement().getPositionInFile();
+		List<LocatedFilePosition> archivePositions = exS.getChildren("archive-method").stream().map(s -> s.getPositionInFile())
+			.collect(Collectors.toList());
 		return CompiledModelValue.of(exS.getElement().getType().getName(), ModelTypes.Value, () -> {
 			ModelValueSynth<SettableValue<?>, SettableValue<BetterFile.FileDataSource>> wrappedContainer;
 			try {
 				wrappedContainer = wrappedCreator.createSynthesizer().as(ModelTypes.Value.forType(BetterFile.FileDataSource.class));
 			} catch (TypeConversionException e) {
-				LocatedFilePosition position;
-				if (wrappedSession != null)
-					position = wrappedSession.getElement().getPositionInFile();
-				else
-					position = exS.getElement().getPositionInFile();
 				throw new ExpressoInterpretationException("Could not evaluate " + wrappedCreator + " as a file source", //
 					position, 0, e);
 			}
@@ -1290,8 +1296,8 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 					archiveMethodContainers
 					.add(amc.createSynthesizer().as(ModelTypes.Value.forType(ArchiveEnabledFileSource.FileArchival.class)));
 				} catch (TypeConversionException e) {
-					LocatedFilePosition position = exS.getChildren("archive-method").get(i).getPositionInFile();
-					throw new ExpressoInterpretationException("Could not interpret archive method", position, 0, e);
+					throw new ExpressoInterpretationException("Could not interpret archive method", //
+						archivePositions.get(i), 0, e);
 				}
 				i++;
 			}
@@ -1656,16 +1662,16 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			fileSourceCreator = fileSourceSession.interpret(CompiledModelValue.class);
 		String workingDir = session.getAttributeText("working-dir");
 		boolean allowEmpty = session.getAttribute("allow-empty", boolean.class);
+		LocatedFilePosition position;
+		if (fileSourceSession != null)
+			position = fileSourceSession.getElement().getPositionInFile();
+		else
+			position = session.getElement().getPositionInFile();
 		return CompiledModelValue.of(session.getElement().getType().getName(), ModelTypes.Value, () -> {
 			ModelValueSynth<SettableValue<?>, SettableValue<BetterFile.FileDataSource>> fileSource;
 			try {
 				fileSource = fileSourceCreator.createSynthesizer().as(ModelTypes.Value.forType(BetterFile.FileDataSource.class));
 			} catch (TypeConversionException e) {
-				LocatedFilePosition position;
-				if (fileSourceSession != null)
-					position = fileSourceSession.getElement().getPositionInFile();
-				else
-					position = session.getElement().getPositionInFile();
 				throw new ExpressoInterpretationException("Could not interpret " + fileSourceCreator + " as a file source", position, 0, e);
 			}
 
