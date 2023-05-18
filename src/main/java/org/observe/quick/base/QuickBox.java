@@ -3,6 +3,7 @@ package org.observe.quick.base;
 import org.observe.SettableValue;
 import org.observe.expresso.CompiledExpression;
 import org.observe.expresso.ExpressoInterpretationException;
+import org.observe.expresso.ExpressoQIS;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
@@ -12,7 +13,6 @@ import org.observe.quick.QuickElement;
 import org.observe.quick.QuickStyledElement;
 import org.observe.quick.QuickWidget;
 import org.observe.util.TypeTokens;
-import org.qommons.config.AbstractQIS;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigInterpretationException;
 
@@ -35,14 +35,14 @@ public class QuickBox extends QuickContainer2.Abstract<QuickWidget> {
 		}
 
 		@Override
-		public Def<W> update(AbstractQIS<?> session) throws QonfigInterpretationException {
+		public Def<W> update(ExpressoQIS session) throws QonfigInterpretationException {
 			super.update(session);
 			if (getAddOn(QuickLayout.Def.class) == null) {
 				String layout = session.getAttributeText("layout");
 				throw new QonfigInterpretationException("No Quick interpretationfor layout " + layout,
 					session.getAttributeValuePosition("layout", 0), layout.length());
 			}
-			theOpacity = getExpressoSession().getAttributeExpression("opacity");
+			theOpacity = session.getAttributeExpression("opacity");
 			return this;
 		}
 

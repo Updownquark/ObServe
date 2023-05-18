@@ -4,13 +4,14 @@ import java.lang.reflect.Type;
 
 import org.observe.expresso.ClassView;
 import org.observe.expresso.ExpressoInterpretationException;
+import org.observe.expresso.ExpressoQIS;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.quick.style.QuickStyleSheet;
+import org.observe.quick.style.StyleQIS;
 import org.observe.util.TypeTokens;
-import org.qommons.config.AbstractQIS;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigInterpretationException;
 
@@ -40,12 +41,11 @@ public class QuickDocument2 extends QuickElement.Abstract {
 		}
 
 		@Override
-		public Def update(AbstractQIS<?> session) throws QonfigInterpretationException {
+		public Def update(ExpressoQIS session) throws QonfigInterpretationException {
 			super.update(session);
 			theHead = QuickElement.useOrReplace(QuickHeadSection.Def.class, theHead, session, "head");
 			if (theHead != null)
-				getExpressoSession()
-				.setExpressoEnv(getExpressoSession().getExpressoEnv().with(theHead.getModels(), theHead.getClassView()));
+				session.setExpressoEnv(getExpressoEnv().with(theHead.getModels(), theHead.getClassView()));
 			theBody = QuickElement.useOrReplace(QuickWidget.Def.class, theBody, session, "body");
 			return this;
 		}
@@ -178,7 +178,7 @@ public class QuickDocument2 extends QuickElement.Abstract {
 			}
 
 			@Override
-			public Def update(AbstractQIS<?> session) throws QonfigInterpretationException {
+			public Def update(ExpressoQIS session) throws QonfigInterpretationException {
 				super.update(session);
 				ClassView cv = session.interpretChildren("imports", ClassView.class).peekFirst();
 				if (cv == null) {
@@ -196,8 +196,8 @@ public class QuickDocument2 extends QuickElement.Abstract {
 				if (model == null)
 					model = ObservableModelSet.build("models", ObservableModelSet.JAVA_NAME_CHECKER).build();
 				theModels = model;
-				getExpressoSession().setExpressoEnv(getExpressoSession().getExpressoEnv().with(model, cv));
-				theStyleSheet = getStyleSession().getStyleSheet();
+				session.setExpressoEnv(getExpressoEnv().with(model, cv));
+				theStyleSheet = session.as(StyleQIS.class).getStyleSheet();
 				return this;
 			}
 

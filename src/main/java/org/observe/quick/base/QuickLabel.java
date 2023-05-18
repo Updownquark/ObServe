@@ -1,11 +1,11 @@
 package org.observe.quick.base;
 
 import org.observe.expresso.CompiledExpression;
+import org.observe.expresso.ExpressoQIS;
 import org.observe.expresso.ObservableExpression;
 import org.observe.quick.QuickElement;
 import org.observe.quick.QuickTextWidget;
 import org.observe.util.TypeTokens;
-import org.qommons.config.AbstractQIS;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.io.LocatedContentPosition;
@@ -34,7 +34,7 @@ public class QuickLabel<T> extends QuickTextWidget.Abstract<T> {
 		}
 
 		@Override
-		public Def<T, W> update(AbstractQIS<?> session) throws QonfigInterpretationException {
+		public Def<T, W> update(ExpressoQIS session) throws QonfigInterpretationException {
 			super.update(session);
 			String staticText = session.getValueText();
 			if (staticText.isEmpty())
@@ -54,7 +54,7 @@ public class QuickLabel<T> extends QuickTextWidget.Abstract<T> {
 				theTextExpression = new CompiledExpression(//
 					new ObservableExpression.LiteralExpression<>(theStaticText, theStaticText), session.getElement(), session.getValueDef(),
 					LocatedContentPosition.of(session.getElement().getDocument().getLocation(), session.getElement().getValue().position),
-					getExpressoSession());
+					session);
 			}
 			return this;
 		}

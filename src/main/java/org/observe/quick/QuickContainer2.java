@@ -1,13 +1,13 @@
 package org.observe.quick;
 
 import org.observe.expresso.ExpressoInterpretationException;
+import org.observe.expresso.ExpressoQIS;
 import org.observe.expresso.ExpressoRuntimeException;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.quick.style.QuickCompiledStyle;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.CollectionUtils;
-import org.qommons.config.AbstractQIS;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.tree.BetterTreeList;
@@ -56,7 +56,7 @@ public interface QuickContainer2<C extends QuickWidget> extends QuickWidget {
 			}
 
 			@Override
-			public Def.Abstract<W, C> update(AbstractQIS<?> session) throws QonfigInterpretationException {
+			public Def.Abstract<W, C> update(ExpressoQIS session) throws QonfigInterpretationException {
 				super.update(session);
 				CollectionUtils.synchronize(theContents, session.forChildren("content"), //
 					(widget, child) -> QuickElement.typesEqual(widget.getElement(), child.getElement()))//

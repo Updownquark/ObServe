@@ -7,6 +7,7 @@ import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.expresso.CompiledExpression;
 import org.observe.expresso.ExpressoInterpretationException;
+import org.observe.expresso.ExpressoQIS;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
@@ -19,7 +20,6 @@ import org.observe.quick.style.QuickInterpretedStyle;
 import org.observe.quick.style.QuickStyleAttribute;
 import org.observe.quick.style.QuickTypeStyle;
 import org.observe.util.TypeTokens;
-import org.qommons.config.AbstractQIS;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigInterpretationException;
 
@@ -127,9 +127,9 @@ public interface QuickBorder extends QuickStyledElement {
 			}
 
 			@Override
-			public Def<B> update(AbstractQIS<?> session) throws QonfigInterpretationException {
+			public Def<B> update(ExpressoQIS session) throws QonfigInterpretationException {
 				super.update(session);
-				theTitle = getExpressoSession().getAttributeExpression("title");
+				theTitle = session.getAttributeExpression("title");
 				return this;
 			}
 

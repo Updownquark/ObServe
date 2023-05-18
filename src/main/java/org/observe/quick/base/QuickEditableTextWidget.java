@@ -3,13 +3,13 @@ package org.observe.quick.base;
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.expresso.DynamicModelValue;
+import org.observe.expresso.ExpressoQIS;
 import org.observe.expresso.ModelException;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.TypeConversionException;
 import org.observe.quick.QuickElement;
 import org.observe.quick.QuickTextWidget;
-import org.qommons.config.AbstractQIS;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigInterpretationException;
 
@@ -23,7 +23,7 @@ public interface QuickEditableTextWidget<T> extends QuickTextWidget<T> {
 		public abstract class Abstract<T, W extends QuickEditableTextWidget<T>> extends QuickTextWidget.Def.Abstract<T, W> implements Def<W> {
 			private boolean isCommitOnType;
 
-			public Abstract(QuickElement.Def<?> parent, QonfigElement element) {
+			protected Abstract(QuickElement.Def<?> parent, QonfigElement element) {
 				super(parent, element);
 			}
 
@@ -33,7 +33,7 @@ public interface QuickEditableTextWidget<T> extends QuickTextWidget<T> {
 			}
 
 			@Override
-			public Def.Abstract<T, W> update(AbstractQIS<?> session) throws QonfigInterpretationException {
+			public Def.Abstract<T, W> update(ExpressoQIS session) throws QonfigInterpretationException {
 				super.update(session);
 				isCommitOnType = session.getAttribute("commit-on-type", boolean.class);
 				return this;
@@ -47,7 +47,7 @@ public interface QuickEditableTextWidget<T> extends QuickTextWidget<T> {
 
 		public abstract class Abstract<T, W extends QuickEditableTextWidget<T>> extends QuickTextWidget.Interpreted.Abstract<T, W>
 		implements Interpreted<T, W> {
-			public Abstract(QuickEditableTextWidget.Def<? super W> definition, QuickElement.Interpreted<?> parent) {
+			protected Abstract(QuickEditableTextWidget.Def<? super W> definition, QuickElement.Interpreted<?> parent) {
 				super(definition, parent);
 			}
 
@@ -95,7 +95,7 @@ public interface QuickEditableTextWidget<T> extends QuickTextWidget<T> {
 	QuickEditableTextWidget<T> setContext(EditableTextWidgetContext ctx) throws ModelInstantiationException;
 
 	public static abstract class Abstract<T> extends QuickTextWidget.Abstract<T> implements QuickEditableTextWidget<T> {
-		public Abstract(QuickEditableTextWidget.Interpreted<T, ?> interpreted, QuickElement parent) {
+		protected Abstract(QuickEditableTextWidget.Interpreted<T, ?> interpreted, QuickElement parent) {
 			super(interpreted, parent);
 		}
 
@@ -112,7 +112,7 @@ public interface QuickEditableTextWidget<T> extends QuickTextWidget<T> {
 					DynamicModelValue.satisfyDynamicValue("error", ModelTypes.Value.STRING, getModels(), error);
 				} catch (ModelException e) {
 					throw new ModelInstantiationException("No error value?",
-						getInterpreted().getDefinition().getExpressoSession().getElement().getPositionInFile(), 0, e);
+						getInterpreted().getDefinition().getElement().getPositionInFile(), 0, e);
 				} catch (TypeConversionException e) {
 					throw new IllegalStateException("error is not a string?", e);
 				}
@@ -123,7 +123,7 @@ public interface QuickEditableTextWidget<T> extends QuickTextWidget<T> {
 					DynamicModelValue.satisfyDynamicValue("warning", ModelTypes.Value.STRING, getModels(), warn);
 				} catch (ModelException e) {
 					throw new ModelInstantiationException("No warning value?",
-						getInterpreted().getDefinition().getExpressoSession().getElement().getPositionInFile(), 0, e);
+						getInterpreted().getDefinition().getElement().getPositionInFile(), 0, e);
 				} catch (TypeConversionException e) {
 					throw new IllegalStateException("warning is not a string?", e);
 				}

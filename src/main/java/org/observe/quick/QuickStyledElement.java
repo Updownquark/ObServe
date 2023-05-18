@@ -5,6 +5,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 import org.observe.expresso.ExpressoInterpretationException;
+import org.observe.expresso.ExpressoQIS;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.quick.style.CompiledStyleApplication;
@@ -14,7 +15,6 @@ import org.observe.quick.style.QuickInterpretedStyle;
 import org.observe.quick.style.QuickTypeStyle;
 import org.observe.quick.style.StyleQIS;
 import org.qommons.Version;
-import org.qommons.config.AbstractQIS;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigElementOrAddOn;
@@ -54,12 +54,13 @@ public interface QuickStyledElement extends QuickElement {
 			}
 
 			@Override
-			public Def.Abstract<S> update(AbstractQIS<?> session) throws QonfigInterpretationException {
+			public Def.Abstract<S> update(ExpressoQIS session) throws QonfigInterpretationException {
 				super.update(session);
 				QuickElement.Def<?> parent = getParentElement();
 				while (parent != null && !(parent instanceof QuickStyledElement.Def))
 					parent = parent.getParentElement();
-				theStyle = wrap(parent == null ? null : ((QuickStyledElement.Def<?>) parent).getStyle(), getStyleSession().getStyle());
+				theStyle = wrap(parent == null ? null : ((QuickStyledElement.Def<?>) parent).getStyle(),
+					session.as(StyleQIS.class).getStyle());
 				return this;
 			}
 

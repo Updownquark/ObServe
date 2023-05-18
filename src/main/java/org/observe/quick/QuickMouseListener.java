@@ -2,9 +2,9 @@ package org.observe.quick;
 
 import org.observe.SettableValue;
 import org.observe.expresso.DynamicModelValue;
+import org.observe.expresso.ExpressoQIS;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
-import org.qommons.config.AbstractQIS;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigInterpretationException;
 
@@ -194,7 +194,7 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 			}
 
 			@Override
-			public Def update(AbstractQIS<?> session) throws QonfigInterpretationException {
+			public Def update(ExpressoQIS session) throws QonfigInterpretationException {
 				super.update(session);
 				String button = session.getAttributeText("button");
 				if (button == null)

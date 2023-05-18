@@ -3,6 +3,7 @@ package org.observe.quick.base;
 import org.observe.SettableValue;
 import org.observe.expresso.CompiledExpression;
 import org.observe.expresso.ExpressoInterpretationException;
+import org.observe.expresso.ExpressoQIS;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
@@ -11,7 +12,6 @@ import org.observe.quick.QuickContainer2;
 import org.observe.quick.QuickElement;
 import org.observe.quick.QuickWidget;
 import org.observe.util.TypeTokens;
-import org.qommons.config.AbstractQIS;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigInterpretationException;
 
@@ -35,7 +35,7 @@ public class QuickSplit extends QuickContainer2.Abstract<QuickWidget> {
 		}
 
 		@Override
-		public Def<S> update(AbstractQIS<?> session) throws QonfigInterpretationException {
+		public Def<S> update(ExpressoQIS session) throws QonfigInterpretationException {
 			super.update(session);
 			switch (session.getAttributeText("orientation")) {
 			case "horizontal":

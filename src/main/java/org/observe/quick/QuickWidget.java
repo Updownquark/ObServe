@@ -11,6 +11,7 @@ import org.observe.SettableValue;
 import org.observe.collect.ObservableCollection;
 import org.observe.expresso.CompiledExpression;
 import org.observe.expresso.ExpressoInterpretationException;
+import org.observe.expresso.ExpressoQIS;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
@@ -24,7 +25,6 @@ import org.observe.quick.style.QuickTypeStyle;
 import org.observe.util.TypeTokens;
 import org.qommons.Transaction;
 import org.qommons.collect.CollectionUtils;
-import org.qommons.config.AbstractQIS;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigInterpretationException;
 
@@ -59,7 +59,7 @@ public interface QuickWidget extends QuickTextElement {
 		List<QuickEventListener.Def<?>> getEventListeners();
 
 		@Override
-		Def<W> update(AbstractQIS<?> session) throws QonfigInterpretationException;
+		Def<W> update(ExpressoQIS session) throws QonfigInterpretationException;
 
 		/**
 		 * @param parent The parent container interpretation
@@ -125,12 +125,12 @@ public interface QuickWidget extends QuickTextElement {
 			}
 
 			@Override
-			public Def.Abstract<W> update(AbstractQIS<?> session) throws QonfigInterpretationException {
+			public Def.Abstract<W> update(ExpressoQIS session) throws QonfigInterpretationException {
 				super.update(session);
 				theBorder = QuickElement.useOrReplace(QuickBorder.Def.class, theBorder, session, "border");
-				theName = getExpressoSession().getAttributeText("name");
-				theTooltip = getExpressoSession().getAttributeExpression("tooltip");
-				isVisible = getExpressoSession().getAttributeExpression("visible");
+				theName = session.getAttributeText("name");
+				theTooltip = session.getAttributeExpression("tooltip");
+				isVisible = session.getAttributeExpression("visible");
 				CollectionUtils
 				.synchronize(theEventListeners, session.forChildren("event-listener"),
 					(l, s) -> QuickElement.typesEqual(l.getElement(), s.getElement()))

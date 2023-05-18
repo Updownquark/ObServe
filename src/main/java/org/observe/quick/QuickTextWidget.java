@@ -7,13 +7,13 @@ import java.time.Instant;
 import org.observe.SettableValue;
 import org.observe.expresso.CompiledExpression;
 import org.observe.expresso.ExpressoInterpretationException;
+import org.observe.expresso.ExpressoQIS;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueSynth;
 import org.observe.util.TypeTokens;
-import org.qommons.config.AbstractQIS;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.io.Format;
@@ -76,10 +76,10 @@ public interface QuickTextWidget<T> extends QuickValueWidget<T> {
 			}
 
 			@Override
-			public Def.Abstract<T, W> update(AbstractQIS<?> session) throws QonfigInterpretationException {
+			public Def.Abstract<T, W> update(ExpressoQIS session) throws QonfigInterpretationException {
 				super.update(session);
-				theFormat = getExpressoSession().getAttributeExpression("format");
-				isEditable = getExpressoSession().getAttributeExpression("editable");
+				theFormat = session.getAttributeExpression("format");
+				isEditable = session.getAttributeExpression("editable");
 				return this;
 			}
 		}
@@ -143,7 +143,7 @@ public interface QuickTextWidget<T> extends QuickValueWidget<T> {
 						defaultFormat = (Format<T>) DEFAULT_DURATION_FORMAT;
 					else if (getDefinition().isTypeEditable())
 						throw new ExpressoInterpretationException("No format specified and no default available for type " + valueType,
-							getDefinition().getExpressoSession().getElement().getPositionInFile(), 0);
+							getDefinition().getElement().getPositionInFile(), 0);
 					else
 						defaultFormat = (Format<T>) TO_STRING_FORMAT;
 					theFormat = ModelValueSynth.literal(formatType, defaultFormat, "default-" + raw.getSimpleName() + "-format");

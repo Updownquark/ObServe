@@ -18,7 +18,6 @@ import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.util.TypeTokens;
-import org.qommons.config.AbstractQIS;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigInterpretationException;
 
@@ -29,7 +28,7 @@ public interface QuickEventListener extends QuickElement {
 		CompiledExpression getAction();
 
 		@Override
-		Def<L> update(AbstractQIS<?> session) throws QonfigInterpretationException;
+		Def<L> update(ExpressoQIS session) throws QonfigInterpretationException;
 
 		Interpreted<? extends L> interpret(QuickElement.Interpreted<?> parent);
 
@@ -53,12 +52,12 @@ public interface QuickEventListener extends QuickElement {
 			}
 
 			@Override
-			public Def.Abstract<L> update(AbstractQIS<?> session) throws QonfigInterpretationException {
+			public Def.Abstract<L> update(ExpressoQIS session) throws QonfigInterpretationException {
 				super.update(session);
 				theFilters.clear();
-				for (ExpressoQIS filter : getExpressoSession().forChildren("filter"))
+				for (ExpressoQIS filter : session.forChildren("filter"))
 					theFilters.add(filter.getValueExpression());
-				theAction = getExpressoSession().getValueExpression();
+				theAction = session.getValueExpression();
 				if (theAction.getExpression() == ObservableExpression.EMPTY)
 					throw new QonfigInterpretationException("No action for event listener", session.getElement().getPositionInFile(), 0);
 				return this;

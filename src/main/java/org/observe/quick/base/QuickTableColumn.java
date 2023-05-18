@@ -24,7 +24,6 @@ import org.observe.quick.QuickStyledElement.QuickInterpretationCache;
 import org.observe.quick.QuickValueWidget;
 import org.observe.quick.QuickWidget;
 import org.observe.util.TypeTokens;
-import org.qommons.config.AbstractQIS;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigInterpretationException;
@@ -127,12 +126,12 @@ public interface QuickTableColumn<R, C> {
 			}
 
 			@Override
-			public Def update(AbstractQIS<?> session) throws QonfigInterpretationException {
+			public Def update(ExpressoQIS session) throws QonfigInterpretationException {
 				super.update(session);
 				theEditor = QuickElement.useOrReplace(QuickWidget.Def.class, theEditor, session, "editor");
 				theColumnEditValueName = session.getAttributeText("column-edit-value-name");
-				isEditable = getExpressoSession().getAttributeExpression("editable-if");
-				isAcceptable = getExpressoSession().getAttributeExpression("accept");
+				isEditable = session.getAttributeExpression("editable-if");
+				isAcceptable = session.getAttributeExpression("accept");
 				theClicks = session.getAttribute("clicks", Integer.class);
 				return this;
 			}
@@ -551,12 +550,12 @@ public interface QuickTableColumn<R, C> {
 			}
 
 			@Override
-			public Def update(AbstractQIS<?> session) throws QonfigInterpretationException {
+			public Def update(ExpressoQIS session) throws QonfigInterpretationException {
 				super.update(session);
-				theName = getExpressoSession().getAttributeExpression("name");
-				theColumnValueName = getExpressoSession().getAttributeText("column-value-name");
-				theValue = getExpressoSession().getAttributeExpression("value");
-				theHeaderTooltip = getExpressoSession().getAttributeExpression("header-tooltip");
+				theName = session.getAttributeExpression("name");
+				theColumnValueName = session.getAttributeText("column-value-name");
+				theValue = session.getAttributeExpression("value");
+				theHeaderTooltip = session.getAttributeExpression("header-tooltip");
 				theRenderer = QuickElement.useOrReplace(QuickWidget.Def.class, theRenderer, session, "renderer");
 				theEditing = QuickElement.useOrReplace(ColumnEditing.Def.class, theEditing, session, "edit");
 				return this;
@@ -697,14 +696,7 @@ public interface QuickTableColumn<R, C> {
 					getInterpreted().getDefinition().getElement().getPositionInFile());
 			}
 			theName.set(getInterpreted().getName().get(getModels()), null);
-			try {
-				theValue.set(getInterpreted().getValue().get(getModels()), null);
-			} catch (ExpressoRuntimeException e) {
-				throw e;
-			} catch (RuntimeException | Error e) {
-				throw new ExpressoRuntimeException(e.getMessage() == null ? e.toString() : e.getMessage(),
-					getInterpreted().getDefinition().getExpressoSession().getAttributeValuePosition("value", 0), e);
-			}
+			theValue.set(getInterpreted().getValue().get(getModels()), null);
 			theHeaderTooltip.set(getInterpreted().getHeaderTooltip() == null ? null : getInterpreted().getHeaderTooltip().get(getModels()),
 				null);
 

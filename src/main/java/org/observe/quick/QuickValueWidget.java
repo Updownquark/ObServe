@@ -4,6 +4,7 @@ import org.observe.SettableValue;
 import org.observe.expresso.CompiledExpression;
 import org.observe.expresso.DynamicModelValue;
 import org.observe.expresso.ExpressoInterpretationException;
+import org.observe.expresso.ExpressoQIS;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
@@ -12,7 +13,6 @@ import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueSynth;
 import org.observe.util.TypeTokens;
-import org.qommons.config.AbstractQIS;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigInterpretationException;
 
@@ -54,13 +54,13 @@ public interface QuickValueWidget<T> extends QuickWidget {
 			}
 
 			@Override
-			public Def.Abstract<T, W> update(AbstractQIS<?> session) throws QonfigInterpretationException {
+			public Def.Abstract<T, W> update(ExpressoQIS session) throws QonfigInterpretationException {
 				super.update(session);
 				theValueName = session.getAttributeText("value-name");
-				theValue = getExpressoSession().getAttributeExpression("value");
+				theValue = session.getAttributeExpression("value");
 				if (theValue.getExpression() == ObservableExpression.EMPTY && getParentElement() instanceof WidgetValueSupplier.Def)
 					theValue = null; // Value supplied by parent
-				theDisabled = getExpressoSession().getAttributeExpression("disable-with");
+				theDisabled = session.getAttributeExpression("disable-with");
 				return this;
 			}
 		}

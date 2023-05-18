@@ -4,6 +4,7 @@ import java.util.Collection;
 import java.util.function.Function;
 
 import org.observe.expresso.DynamicModelValue;
+import org.observe.expresso.ExpressoEnv;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ExpressoQIS;
 import org.observe.expresso.ModelException;
@@ -13,13 +14,13 @@ import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.TypeConversionException;
-import org.observe.quick.style.StyleQIS;
 import org.qommons.ClassMap;
 import org.qommons.config.AbstractQIS;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigInterpreterCore;
+import org.qommons.io.ErrorReporting;
 
 /** The base type of values interpreted from Quick-typed {@link QonfigElement}s */
 public interface QuickElement {
@@ -38,11 +39,9 @@ public interface QuickElement {
 		/** @return The QonfigElement that this definition was interpreted from */
 		QonfigElement getElement();
 
-		/** @return The Expresso session supporting this element definition */
-		ExpressoQIS getExpressoSession();
+		ErrorReporting reporting();
 
-		/** @return The style session supporting this element definition */
-		StyleQIS getStyleSession();
+		ExpressoEnv getExpressoEnv();
 
 		/** @return This element's models */
 		ObservableModelSet.Built getModels();
@@ -76,7 +75,7 @@ public interface QuickElement {
 		 * @return This element definition
 		 * @throws QonfigInterpretationException If an error occurs interpreting some of this element's fields or content
 		 */
-		Def<E> update(AbstractQIS<?> session) throws QonfigInterpretationException;
+		Def<E> update(ExpressoQIS session) throws QonfigInterpretationException;
 
 		/**
 		 * An abstract implementation of {@link Def}
@@ -86,10 +85,10 @@ public interface QuickElement {
 		public abstract class Abstract<E extends QuickElement> implements Def<E> {
 			private final QuickElement.Def<?> theParent;
 			private QonfigElement theElement;
-			private ExpressoQIS theExpressoSession;
-			private StyleQIS theStyleSession;
 			private final ClassMap<QuickAddOn.Def<? super E, ?>> theAddOns;
+			private ExpressoEnv theExpressoEnv;
 			private ObservableModelSet.Built theModels;
+			private ErrorReporting theReporting;
 
 			/**
 			 * @param parent The definition interpreted from the parent element
@@ -112,13 +111,8 @@ public interface QuickElement {
 			}
 
 			@Override
-			public ExpressoQIS getExpressoSession() {
-				return theExpressoSession;
-			}
-
-			@Override
-			public StyleQIS getStyleSession() {
-				return theStyleSession;
+			public ErrorReporting reporting() {
+				return theReporting;
 			}
 
 			@Override
@@ -132,17 +126,22 @@ public interface QuickElement {
 			}
 
 			@Override
+			public ExpressoEnv getExpressoEnv() {
+				return theExpressoEnv;
+			}
+
+			@Override
 			public ObservableModelSet.Built getModels() {
 				return theModels;
 			}
 
 			@Override
-			public Abstract<E> update(AbstractQIS<?> session) throws QonfigInterpretationException {
+			public Abstract<E> update(ExpressoQIS session) throws QonfigInterpretationException {
+				theReporting = session.reporting();
 				session.put(SESSION_QUICK_ELEMENT, this);
 				theElement = session.getElement();
-				theExpressoSession = session.as(ExpressoQIS.class);
-				theStyleSession = session.as(StyleQIS.class);
-				ObservableModelSet models = theExpressoSession.getExpressoEnv().getModels();
+				theExpressoEnv = session.getExpressoEnv();
+				ObservableModelSet models = theExpressoEnv.getModels();
 				theModels = models instanceof ObservableModelSet.Builder ? ((ObservableModelSet.Builder) models).build()
 					: (ObservableModelSet.Built) models;
 
@@ -152,7 +151,7 @@ public interface QuickElement {
 						addAddOn(session.asElementOnly(addOn));
 
 					for (QuickAddOn.Def<? super E, ?> addOn : theAddOns.getAllValues())
-						addOn.update(theExpressoSession.asElement(addOn.getType()));
+						addOn.update(session.asElement(addOn.getType()));
 				}
 				return this;
 			}
@@ -275,7 +274,7 @@ public interface QuickElement {
 				theModels = getDefinition().getModels().interpret();
 				// theDefinition.getExpressoSession().setExpressoEnv(theDefinition.getExpressoSession().getExpressoEnv().with(models,
 				// null));
-				theDefinition.getExpressoSession().getExpressoEnv().interpretLocalModel();
+				theDefinition.getExpressoEnv().interpretLocalModel();
 				for (QuickAddOn.Interpreted<?, ?> addOn : theAddOns.getAllValues())
 					addOn.update(theModels);
 				return this;
@@ -373,7 +372,7 @@ public interface QuickElement {
 		 * @throws ModelInstantiationException If an error occurs instantiating any model values needed by this element or its content
 		 */
 		protected Abstract update(ModelSetInstance models) throws ModelInstantiationException {
-			theModels = theInterpreted.getDefinition().getExpressoSession().getExpressoEnv().wrapLocal(models);
+			theModels = theInterpreted.getDefinition().getExpressoEnv().wrapLocal(models);
 			for (QuickAddOn<?> addOn : theAddOns.getAllValues())
 				addOn.update(getModels());
 			return this;
@@ -401,13 +400,13 @@ public interface QuickElement {
 
 	public static <M, MV extends M> void satisfyContextValue(String valueName, ModelInstanceType<M, MV> type, MV value,
 		QuickElement element)
-		throws ModelInstantiationException {
+			throws ModelInstantiationException {
 		if (value != null) {
 			try {
 				DynamicModelValue.satisfyDynamicValue(valueName, type, element.getModels(), value);
 			} catch (ModelException e) {
 				throw new ModelInstantiationException("No " + valueName + " value?",
-					element.getInterpreted().getDefinition().getExpressoSession().getElement().getPositionInFile(), 0, e);
+					element.getInterpreted().getDefinition().getElement().getPositionInFile(), 0, e);
 			} catch (TypeConversionException e) {
 				throw new IllegalStateException(valueName + " is not a " + type + "?", e);
 			}
@@ -425,13 +424,13 @@ public interface QuickElement {
 	 * @throws IllegalArgumentException If no such child role exists
 	 */
 	public static <D extends QuickElement.Def<?>> D useOrReplace(Class<? extends D> type, D def,
-		AbstractQIS<?> session, String childName) throws QonfigInterpretationException, IllegalArgumentException {
+		ExpressoQIS session, String childName) throws QonfigInterpretationException, IllegalArgumentException {
 		QonfigElement element = session.getChildren(childName).peekFirst();
 		if (element == null)
 			return null;
 		else if (def != null && typesEqual(def.getElement(), element))
 			return def;
-		AbstractQIS<?> childSession = session.forChildren(childName).getFirst();
+		ExpressoQIS childSession = session.forChildren(childName).getFirst();
 		def = childSession.interpret(type);
 		def.update(childSession);
 		return def;

@@ -5,6 +5,7 @@ import org.observe.collect.ObservableCollection;
 import org.observe.expresso.CompiledExpression;
 import org.observe.expresso.DynamicModelValue;
 import org.observe.expresso.ExpressoInterpretationException;
+import org.observe.expresso.ExpressoQIS;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
@@ -12,7 +13,6 @@ import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.quick.QuickElement;
 import org.observe.quick.QuickStyledElement;
 import org.observe.util.TypeTokens;
-import org.qommons.config.AbstractQIS;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigInterpretationException;
 
@@ -49,12 +49,12 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 		}
 
 		@Override
-		public Def update(AbstractQIS<?> session) throws QonfigInterpretationException {
+		public Def update(ExpressoQIS session) throws QonfigInterpretationException {
 			super.update(session);
-			theRows = getExpressoSession().getAttributeExpression("rows");
+			theRows = session.getAttributeExpression("rows");
 			theValueName = session.getAttributeText("value-name");
-			theSelection = getExpressoSession().getAttributeExpression("selection");
-			theMultiSelection = getExpressoSession().getAttributeExpression("multi-selection");
+			theSelection = session.getAttributeExpression("selection");
+			theMultiSelection = session.getAttributeExpression("multi-selection");
 			return this;
 		}
 

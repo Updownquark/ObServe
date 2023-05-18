@@ -6,6 +6,7 @@ import org.observe.ObservableAction;
 import org.observe.SettableValue;
 import org.observe.expresso.CompiledExpression;
 import org.observe.expresso.ExpressoInterpretationException;
+import org.observe.expresso.ExpressoQIS;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
@@ -14,7 +15,6 @@ import org.observe.quick.QuickElement;
 import org.observe.quick.QuickStyledElement;
 import org.observe.quick.QuickWidget;
 import org.observe.util.TypeTokens;
-import org.qommons.config.AbstractQIS;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.ex.ExFunction;
@@ -23,12 +23,17 @@ import com.google.common.reflect.TypeToken;
 
 public class QuickButton extends QuickWidget.Abstract {
 	public static class Def extends QuickWidget.Def.Abstract<QuickButton> {
+		private Class<?> theCallingClass;
 		private CompiledExpression theText;
 		private CompiledExpression theIcon;
 		private CompiledExpression theAction;
 
 		public Def(QuickElement.Def<?> parent, QonfigElement element) {
 			super(parent, element);
+		}
+
+		public Class<?> getCallingClass() {
+			return theCallingClass;
 		}
 
 		public CompiledExpression getText() {
@@ -44,11 +49,12 @@ public class QuickButton extends QuickWidget.Abstract {
 		}
 
 		@Override
-		public Def update(AbstractQIS<?> session) throws QonfigInterpretationException {
+		public Def update(ExpressoQIS session) throws QonfigInterpretationException {
 			super.update(session);
-			theText = getExpressoSession().getValueExpression();
-			theIcon = getExpressoSession().getAttributeExpression("icon");
-			theAction = getExpressoSession().getAttributeExpression("action");
+			theCallingClass = session.getWrapped().getInterpreter().getCallingClass();
+			theText = session.getValueExpression();
+			theIcon = session.getAttributeExpression("icon");
+			theAction = session.getAttributeExpression("action");
 			return this;
 		}
 
@@ -94,8 +100,8 @@ public class QuickButton extends QuickWidget.Abstract {
 			super.update(cache);
 			theText = getDefinition().getText() == null ? null : getDefinition().getText().evaluate(ModelTypes.Value.STRING).interpret();
 			theIcon = getDefinition().getIcon() == null ? null
-				: QuickBaseInterpretation.evaluateIcon(getDefinition().getIcon(), getDefinition().getExpressoSession().getExpressoEnv(),
-					getDefinition().getExpressoSession().getWrapped().getInterpreter().getCallingClass());
+				: QuickBaseInterpretation.evaluateIcon(getDefinition().getIcon(), getDefinition().getExpressoEnv(),
+					getDefinition().getCallingClass());
 			theAction = getDefinition().getAction().evaluate(ModelTypes.Action.any()).interpret();
 			return this;
 		}
