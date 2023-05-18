@@ -22,6 +22,7 @@ import org.observe.util.TypeTokens;
 import org.qommons.QommonsUtils;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterList;
+import org.qommons.io.ErrorReporting;
 
 import com.google.common.reflect.TypeToken;
 
@@ -115,6 +116,7 @@ public class AssignmentExpression implements ObservableExpression {
 		} catch (TypeConversionException e) {
 			throw new ExpressoEvaluationException(valueOffset, theValue.getExpressionLength(), e.getMessage(), e);
 		}
+		ErrorReporting reporting = env.reporting();
 		return (ModelValueSynth<M, MV>) new ModelValueSynth<ObservableAction<?>, ObservableAction<?>>() {
 			@Override
 			public ModelType<ObservableAction<?>> getModelType() {
@@ -134,7 +136,7 @@ public class AssignmentExpression implements ObservableExpression {
 			public ObservableAction<?> get(ModelSetInstance models) throws ModelInstantiationException {
 				SettableValue<Object> ctxValue = target.get(models);
 				SettableValue<Object> valueValue = value.get(models);
-				return ctxValue.assignmentTo(valueValue, err -> env.error(null, err));
+				return ctxValue.assignmentTo(valueValue, err -> reporting.error(null, err));
 			}
 
 			@Override

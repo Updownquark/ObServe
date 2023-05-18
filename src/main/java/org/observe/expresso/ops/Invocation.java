@@ -84,12 +84,12 @@ public abstract class Invocation implements ObservableExpression {
 					ModelTypes.Value.forType(type.getType(0)), env, new ArgOption(env, expressionOffset + getInitialArgOffset()),
 					expressionOffset);
 				return (ModelValueSynth<M, MV>) createActionContainer((InvokableResult<?, SettableValue<?>, SettableValue<Object>>) result,
-					env.at(getMethodNameOffset()));
+					env.reporting().at(getMethodNameOffset()));
 			}
 		} else {
 			InvokableResult<?, M, MV> result = evaluateInternal2(type, env, new ArgOption(env, expressionOffset + getInitialArgOffset()),
 				expressionOffset);
-			return createValueContainer(result, env.at(getMethodNameOffset()));
+			return createValueContainer(result, env.reporting().at(getMethodNameOffset()));
 		}
 	}
 

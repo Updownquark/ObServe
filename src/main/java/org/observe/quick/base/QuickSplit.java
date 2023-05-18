@@ -46,11 +46,11 @@ public class QuickSplit extends QuickContainer2.Abstract<QuickWidget> {
 				break;
 			default:
 				isVertical = true;
-				session.at(session.getAttributeValuePosition("orientation"))
+				session.reporting().at(session.getAttributeValuePosition("orientation"))
 				.error("Unrecognized orientation: '" + session.getAttributeText("orientation"));
 			}
 			if (getContents().size() != 2)
-				session.error("Expected exactly 2 children, not " + getContents().size());
+				session.reporting().error("Expected exactly 2 children, not " + getContents().size());
 			return this;
 		}
 

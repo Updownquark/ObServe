@@ -118,6 +118,8 @@ public class QuickBaseInterpretation implements QonfigInterpretation {
 			session -> QuickCoreInterpretation.interpretQuick(session, QuickFieldPanel.Def::new));
 		interpreter.createWith("field", QuickField.Def.class,
 			session -> QuickCoreInterpretation.interpretAddOn(session, (p, ao) -> new QuickField.Def(ao, (QuickWidget.Def<?>) p)));
+		interpreter.createWith("split", QuickSplit.Def.class,
+			session -> QuickCoreInterpretation.interpretQuick(session, QuickSplit.Def::new));
 
 		// Box layouts
 		interpreter.createWith("inline-layout", QuickInlineLayout.Def.class,
@@ -183,15 +185,14 @@ public class QuickBaseInterpretation implements QonfigInterpretation {
 	 * Evaluates an icon in Quick
 	 *
 	 * @param expression The expression to parse
-	 * @param session The session in which to parse the expression
+	 * @param env The expresso environment in which to parse the expression
 	 * @return The ModelValueSynth to produce the icon value
 	 * @throws ExpressoInterpretationException If the icon could not be evaluated
 	 */
 	public static ExFunction<ModelSetInstance, SettableValue<Icon>, ModelInstantiationException> evaluateIcon(CompiledExpression expression,
-		ExpressoQIS session) throws ExpressoInterpretationException {
+		ExpressoEnv env, Class<?> callingClass) throws ExpressoInterpretationException {
 		if (expression != null) {
-			ModelValueSynth<SettableValue<?>, SettableValue<?>> iconV = expression.evaluate(ModelTypes.Value.any(),
-				session.getExpressoEnv());
+			ModelValueSynth<SettableValue<?>, SettableValue<?>> iconV = expression.evaluate(ModelTypes.Value.any(), env);
 			Class<?> iconType = TypeTokens.getRawType(iconV.getType().getType(0));
 			if (Icon.class.isAssignableFrom(iconType))
 				return msi -> (SettableValue<Icon>) iconV.get(msi);
@@ -202,11 +203,10 @@ public class QuickBaseInterpretation implements QonfigInterpretation {
 					return msi -> SettableValue.asSettable(iconV.get(msi).map(url -> url == null ? null : new ImageIcon((URL) url)),
 						__ -> "unsettable");
 				} else if (String.class.isAssignableFrom(iconType)) {
-					Class<?> callingClass = session.getWrapped().getInterpreter().getCallingClass();
 					return msi -> SettableValue.asSettable(iconV.get(msi).map(loc -> loc == null ? null//
 						: ObservableSwingUtils.getFixedIcon(callingClass, (String) loc, 16, 16)), __ -> "unsettable");
 				} else {
-					session.warn("Cannot use value " + expression + ", type " + iconV.getType().getType(0) + " as an icon");
+					env.reporting().warn("Cannot use value " + expression + ", type " + iconV.getType().getType(0) + " as an icon");
 					return msi -> SettableValue.of(Icon.class, null, "unsettable");
 				}
 		} else {

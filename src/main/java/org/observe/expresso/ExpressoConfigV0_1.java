@@ -1495,7 +1495,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			builder.withUnit(unit, session.getAttribute("unit-required", boolean.class));
 			if (withMetricPrefixes) {
 				if (withMetricPrefixesP2)
-					session.warn("Both 'metric-prefixes' and 'metric-prefixes-p2' specified");
+					session.reporting().warn("Both 'metric-prefixes' and 'metric-prefixes-p2' specified");
 				builder.withMetricPrefixes();
 			} else if (withMetricPrefixesP2)
 				builder.withMetricPrefixesPower2();
@@ -1505,20 +1505,20 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 				String multS = prefix.getAttributeText("mult");
 				if (expS != null) {
 					if (multS != null)
-						session.warn("Both 'exp' and 'mult' specified for prefix '" + prefixName + "'");
+						session.reporting().warn("Both 'exp' and 'mult' specified for prefix '" + prefixName + "'");
 					builder.withPrefix(prefixName, Integer.parseInt(expS));
 				} else if (multS != null)
 					builder.withPrefix(prefixName, Double.parseDouble(multS));
 				else
-					session.warn("Neither 'exp' nor 'mult' specified for prefix '" + prefixName + "'");
+					session.reporting().warn("Neither 'exp' nor 'mult' specified for prefix '" + prefixName + "'");
 			}
 		} else {
 			if (withMetricPrefixes)
-				session.warn("'metric-prefixes' specified without a unit");
+				session.reporting().warn("'metric-prefixes' specified without a unit");
 			if (withMetricPrefixesP2)
-				session.warn("'metric-prefixes-p2' specified without a unit");
+				session.reporting().warn("'metric-prefixes-p2' specified without a unit");
 			if (!prefixes.isEmpty())
-				session.warn("prefixes specified without a unit");
+				session.reporting().warn("prefixes specified without a unit");
 		}
 		return CompiledModelValue.literal(TypeTokens.get().keyFor(Format.class).<Format<Double>> parameterized(Double.class), builder.build(),
 			"double");
@@ -1543,14 +1543,14 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		try {
 			options = options.withMaxResolution(TimeUtils.DateElementType.valueOf(session.getAttributeText("max-resolution")));
 		} catch (IllegalArgumentException e) {
-			session.warn("Unrecognized instant resolution: '" + session.getAttributeText("max-resolution"));
+			session.reporting().warn("Unrecognized instant resolution: '" + session.getAttributeText("max-resolution"));
 		}
 		options = options.with24HourFormat(session.getAttribute("format-24h", boolean.class));
 		String rteS = session.getAttributeText("relative-eval-type");
 		try {
 			options = options.withEvaluationType(TimeUtils.RelativeInstantEvaluation.valueOf(rteS));
 		} catch (IllegalArgumentException e) {
-			session.warn("Unrecognized relative evaluation type: '" + rteS);
+			session.reporting().warn("Unrecognized relative evaluation type: '" + rteS);
 		}
 		TimeEvaluationOptions fOptions = options;
 		TypeToken<Instant> instantType = TypeTokens.get().of(Instant.class);
@@ -1623,7 +1623,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 				});
 			}
 			ModelValueSynth<SettableValue<?>, SettableValue<Instant>> relativeTo2 = relativeTo;
-			return new ObservableModelSet.AbstractValueContainer<SettableValue<?>, SettableValue<Format<Instant>>>(formatInstanceType) {
+			return new ObservableModelSet.AbstractValueSynth<SettableValue<?>, SettableValue<Format<Instant>>>(formatInstanceType) {
 				@Override
 				public SettableValue<Format<Instant>> get(ModelSetInstance models) throws ModelInstantiationException {
 					return ObservableModelSet.literal(SpinnerFormat.flexDate(relativeTo2.get(models), dayFormat, __ -> fOptions),
@@ -1671,7 +1671,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 
 			TypeToken<Format<BetterFile>> fileFormatType = TypeTokens.get().keyFor(Format.class)
 				.<Format<BetterFile>> parameterized(BetterFile.class);
-			return new ObservableModelSet.AbstractValueContainer<SettableValue<?>, SettableValue<Format<BetterFile>>>(
+			return new ObservableModelSet.AbstractValueSynth<SettableValue<?>, SettableValue<Format<BetterFile>>>(
 				ModelTypes.Value.forType(fileFormatType)) {
 				@Override
 				public SettableValue<Format<BetterFile>> get(ModelSetInstance models) throws ModelInstantiationException {

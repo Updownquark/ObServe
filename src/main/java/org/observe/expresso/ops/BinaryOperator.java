@@ -27,6 +27,7 @@ import org.observe.util.TypeTokens;
 import org.qommons.LambdaUtils;
 import org.qommons.QommonsUtils;
 import org.qommons.collect.BetterList;
+import org.qommons.io.ErrorReporting;
 
 import com.google.common.reflect.TypeToken;
 
@@ -195,7 +196,8 @@ public class BinaryOperator implements ObservableExpression {
 					+ rightTypeT + ", target type " + targetType.getName());
 		TypeToken<Object> resultType = op.getTargetType(//
 			leftTypeT, rightTypeT);
-		ExpressoEnv operatorReporting = env.at(theLeft.getExpressionLength());
+		ErrorReporting reporting = env.reporting();
+		ErrorReporting operatorReporting = env.reporting().at(theLeft.getExpressionLength());
 		if (action) {
 			if (type.getModelType() != ModelTypes.Action)
 				throw new ExpressoEvaluationException(expressionOffset + theLeft.getExpressionLength(), theOperator.length(),
@@ -263,7 +265,7 @@ public class BinaryOperator implements ObservableExpression {
 							try {
 								return leftV.set(res, cause);
 							} catch (RuntimeException | Error e) {
-								env.error(null, e);
+								reporting.error(null, e);
 								return null;
 							}
 						}
@@ -326,7 +328,7 @@ public class BinaryOperator implements ObservableExpression {
 							try {
 								return op.apply(lft, rgt);
 							} catch (RuntimeException | Error e) {
-								env.error(null, e);
+								reporting.error(null, e);
 								return null;
 							}
 						}, op::toString, op))//
@@ -351,7 +353,7 @@ public class BinaryOperator implements ObservableExpression {
 								try {
 									return ReverseQueryResult.value(op.reverse(transformValues.getCurrentSource(), rgt, newValue));
 								} catch (RuntimeException | Error e) {
-									env.error(null, e);
+									reporting.error(null, e);
 									return ReverseQueryResult.value(null);
 								}
 							}

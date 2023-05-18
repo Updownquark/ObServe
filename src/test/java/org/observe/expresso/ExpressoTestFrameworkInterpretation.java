@@ -56,7 +56,7 @@ public class ExpressoTestFrameworkInterpretation implements QonfigInterpretation
 			Map<String, ExpressoTest> tests = new LinkedHashMap<>();
 			for (ExpressoTest test : exS.interpretChildren("test", ExpressoTest.class)) {
 				if (tests.containsKey(test.getName()))
-					session.error("Duplicate tests named " + test.getName());
+						session.reporting().error("Duplicate tests named " + test.getName());
 				tests.put(test.getName(), test);
 			}
 			return new ExpressoTesting<>(head, Collections.unmodifiableMap(tests));

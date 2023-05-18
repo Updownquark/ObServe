@@ -144,12 +144,12 @@ public class NameExpression implements ObservableExpression, Named {
 			}
 			return evaluateModel(//
 				mv, 0, new StringBuilder(), type, env.getModels(), expressionOffset + theContext.getExpressionLength() + 1,
-				env.at(theContext.getExpressionLength() + 1));
+				env.reporting().at(theContext.getExpressionLength() + 1));
 		} else {
 			mv = env.getModels().getComponentIfExists(theNames.getFirst().getName());
 			if (mv != null)
 				return evaluateModel(//
-					mv, 1, new StringBuilder(theNames.get(0).getName()), type, env.getModels(), expressionOffset, env);
+					mv, 1, new StringBuilder(theNames.get(0).getName()), type, env.getModels(), expressionOffset, env.reporting());
 		}
 		// Allow unqualified enum value references
 		if (theNames.size() == 1 && type.getModelType() == ModelTypes.Value) {
@@ -165,7 +165,7 @@ public class NameExpression implements ObservableExpression, Named {
 		Field field = env.getClassView().getImportedStaticField(theNames.getFirst().getName());
 		if (field != null)
 			return evaluateField(field, TypeTokens.get().of(field.getGenericType()), null, 1, type, expressionOffset,
-				env.at(theNames.getFirst().length() + 1));
+				env.reporting().at(theNames.getFirst().length() + 1));
 		StringBuilder typeName = new StringBuilder().append(theNames.get(0).getName());
 		Class<?> clazz = env.getClassView().getType(typeName.toString());
 		int i;
@@ -185,7 +185,7 @@ public class NameExpression implements ObservableExpression, Named {
 			throw new ExpressoEvaluationException(getNameOffset(i), getNameOffset(i) + theNames.get(0).length(), //
 				clazz.getName() + "." + theNames.get(i) + " cannot be accessed", e);
 		}
-		return evaluateField(field, TypeTokens.get().of(field.getGenericType()), null, 1, type, expressionOffset, env);
+		return evaluateField(field, TypeTokens.get().of(field.getGenericType()), null, 1, type, expressionOffset, env.reporting());
 	}
 
 	private <M, MV extends M> ObservableModelSet.ModelValueSynth<M, MV> evaluateModel(ModelValueSynth<?, ?> mv, int nameIndex,

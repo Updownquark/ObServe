@@ -165,7 +165,7 @@ public class ExpressoSessionImplV0_1 implements SpecialSessionImplementation<Exp
 				newParser = parseValue(parserEl.getValueText(), ExpressoParser.class, session.getElement(),
 					session.getExpressoEnv());
 			} catch (ModelInstantiationException | ExpressoException | ExpressoInterpretationException | TypeConversionException e) {
-				session.error("Could not interpret expresso parser for " + parserEl, e);
+				session.reporting().error("Could not interpret expresso parser for " + parserEl, e);
 				throw new IllegalStateException(e); // Shouldn't get here
 			}
 			session.setExpressoParser(newParser);
@@ -184,7 +184,7 @@ public class ExpressoSessionImplV0_1 implements SpecialSessionImplementation<Exp
 					ops = parseValue(uo.getValueText(),
 						UnaryOperatorSet.UnaryOperatorConfiguration.class, uo, session.getExpressoEnv());
 				} catch (ModelInstantiationException | ExpressoException | ExpressoInterpretationException | TypeConversionException e) {
-					session.error("Could not interpret unary operator for " + uo, e);
+					session.reporting().error("Could not interpret unary operator for " + uo, e);
 					throw new IllegalStateException(e); // Shouldn't get here
 				}
 				unaryOpsBuilder = ops.configure(unaryOpsBuilder);
@@ -195,7 +195,7 @@ public class ExpressoSessionImplV0_1 implements SpecialSessionImplementation<Exp
 					ops = parseValue(bo.getValueText(),
 						BinaryOperatorSet.BinaryOperatorConfiguration.class, bo, session.getExpressoEnv());
 				} catch (ModelInstantiationException | ExpressoException | ExpressoInterpretationException | TypeConversionException e) {
-					session.error("Could not interpret binary operator for " + bo, e);
+					session.reporting().error("Could not interpret binary operator for " + bo, e);
 					throw new IllegalStateException(e); // Shouldn't get here
 				}
 				binaryOpsBuilder = ops.configure(binaryOpsBuilder);

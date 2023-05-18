@@ -224,7 +224,7 @@ class QuickSwingTablePopulation {
 					else if (listener instanceof QuickKeyListener.QuickKeyCodeListener)
 						((QuickKeyListener.QuickKeyCodeListener) listener).setListenerContext(theKeyCodeContext);
 					else
-						listener.getInterpreted().getDefinition().getExpressoSession()
+						listener.getInterpreted().getDefinition().getExpressoSession().reporting()
 						.error("Unhandled cell renderer listener type: " + listener.getClass().getName());
 				}
 			}
@@ -283,7 +283,7 @@ class QuickSwingTablePopulation {
 						return editType.getReplacement().get();
 					});
 				} else
-					theColumn.getEditing().getInterpreted().getDefinition().getExpressoSession().error(
+					theColumn.getEditing().getInterpreted().getDefinition().getExpressoSession().reporting().error(
 						"Unhandled column edit type: " + theColumn.getEditing().getType().getInterpreted().getDefinition().getType());
 				if (theCellEditor != null)
 					mutation.withEditor(theCellEditor);
@@ -589,7 +589,7 @@ class QuickSwingTablePopulation {
 		}
 
 		SwingCellPopulator<R, C> unsupported(String message) {
-			theCell.getRenderer().getInterpreted().getDefinition().getExpressoSession()
+			theCell.getRenderer().getInterpreted().getDefinition().getExpressoSession().reporting()
 			.warn(message + " unsupported for cell " + (isRenderer ? "renderer" : "editor") + " holder");
 			return this;
 		}
@@ -791,7 +791,7 @@ class QuickSwingTablePopulation {
 				theCell.delegateTo(delegate);
 			} else {
 				if (TypeTokens.getRawType(TypeTokens.get().unwrap(theCell.getColumn().getType())) != boolean.class)
-					theCell.getColumn().getEditing().getEditor().getInterpreted().getDefinition().getExpressoSession()
+					theCell.getColumn().getEditing().getEditor().getInterpreted().getDefinition().getExpressoSession().reporting()
 					.error("Check box editor can only be used for boolean-type columns, not " + theCell.getColumn().getType());
 				else {
 					FieldRenderEditor<JCheckBox> fieldEditor = new FieldRenderEditor<>(ObservableCellEditor.createCheckBoxEditor());
@@ -854,7 +854,7 @@ class QuickSwingTablePopulation {
 			if (isRenderer)
 				PanelPopulation.PartialPanelPopulatorImpl.super.addSlider(fieldName, value, modify);
 			else { // TODO
-				theCell.getColumn().getEditing().getEditor().getInterpreted().getDefinition().getExpressoSession()
+				theCell.getColumn().getEditing().getEditor().getInterpreted().getDefinition().getExpressoSession().reporting()
 				.error("Slider cell editing is not implemented");
 			}
 			return this;
@@ -904,7 +904,7 @@ class QuickSwingTablePopulation {
 			}
 
 			E unsupported(String message) {
-				theCell.getRenderer().getInterpreted().getDefinition().getExpressoSession()
+				theCell.getRenderer().getInterpreted().getDefinition().getExpressoSession().reporting()
 				.warn(message + " unsupported for cell " + (theCellRenderer == null ? "editor" : "renderer"));
 				return (E) this;
 			}

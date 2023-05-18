@@ -256,9 +256,9 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 						if (e.getTargetException() instanceof ExpressoRuntimeException
 							&& e.getTargetException().getCause() instanceof ModelInstantiationException)
 							throw (ModelInstantiationException) e.getTargetException().getCause();
-						interpretedDoc.getDefinition().getExpressoSession().error("Unhandled error", e);
+						interpretedDoc.getDefinition().getExpressoSession().reporting().error("Unhandled error", e);
 					} catch (RuntimeException | Error e) {
-						interpretedDoc.getDefinition().getExpressoSession().error("Unhandled error", e);
+						interpretedDoc.getDefinition().getExpressoSession().reporting().error("Unhandled error", e);
 					}
 				};
 			});

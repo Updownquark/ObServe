@@ -16,11 +16,11 @@ import org.qommons.collect.BetterCollections;
 import org.qommons.collect.BetterHashMultiMap;
 import org.qommons.collect.BetterMultiMap;
 import org.qommons.collect.BetterSortedList;
-import org.qommons.config.AbstractQIS;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigToolkit;
+import org.qommons.io.ErrorReporting;
 import org.qommons.tree.SortedTreeList;
 
 /** A compiled structure of all style values that may under any circumstance apply to a particular {@link QonfigElement element} */
@@ -67,7 +67,7 @@ public interface QuickCompiledStyle {
 		 * @param styleSheet The style sheet applying to the element
 		 * @param element The element this style is for
 		 * @param session The interpretation session to get the {@link ExpressoQIS#getExpressoEnv() expresso environment} from and for
-		 *        {@link AbstractQIS#error(String) error reporting}
+		 *        {@link ErrorReporting#error(String) error reporting}
 		 * @param style The toolkit inheriting Quick-Style
 		 * @param applications A cache of compiled style applications for re-use
 		 * @throws QonfigInterpretationException If an error occurs evaluating all the style information for the element

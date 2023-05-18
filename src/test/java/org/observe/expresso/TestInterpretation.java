@@ -50,7 +50,7 @@ public class TestInterpretation implements QonfigInterpretation {
 				ModelValueSynth<SettableValue<?>, SettableValue<Integer>> derivedStateV;
 				derivedStateV = derivedStateX.evaluate(ModelTypes.Value.forType(int.class));
 				exS.interpretLocalModel();
-				return new ObservableModelSet.AbstractValueContainer<SettableValue<?>, SettableValue<StatefulTestStructure>>(
+				return new ObservableModelSet.AbstractValueSynth<SettableValue<?>, SettableValue<StatefulTestStructure>>(
 					ModelTypes.Value.forType(StatefulTestStructure.class)) {
 					@Override
 					public SettableValue<StatefulTestStructure> get(ModelSetInstance models) throws ModelInstantiationException {
@@ -96,7 +96,7 @@ public class TestInterpretation implements QonfigInterpretation {
 				}
 				ModelValueSynth<SettableValue<?>, SettableValue<?>> derivedStateV = derivedStateX.evaluate(ModelTypes.Value.any());
 				exS.interpretLocalModel();
-				return new ObservableModelSet.AbstractValueContainer<SettableValue<?>, SettableValue<DynamicTypeStatefulTestStructure>>(
+				return new ObservableModelSet.AbstractValueSynth<SettableValue<?>, SettableValue<DynamicTypeStatefulTestStructure>>(
 					ModelTypes.Value.forType(DynamicTypeStatefulTestStructure.class)) {
 					@Override
 					public SettableValue<DynamicTypeStatefulTestStructure> get(ModelSetInstance models)
@@ -133,7 +133,7 @@ public class TestInterpretation implements QonfigInterpretation {
 				}
 				ModelValueSynth<SettableValue<?>, SettableValue<?>> derivedStateV = derivedStateX.evaluate(ModelTypes.Value.any());
 				exS.interpretLocalModel();
-				return new ObservableModelSet.AbstractValueContainer<SettableValue<?>, SettableValue<DynamicTypeStatefulTestStructure>>(
+				return new ObservableModelSet.AbstractValueSynth<SettableValue<?>, SettableValue<DynamicTypeStatefulTestStructure>>(
 					ModelTypes.Value.forType(DynamicTypeStatefulTestStructure.class)) {
 					@Override
 					public SettableValue<DynamicTypeStatefulTestStructure> get(ModelSetInstance models)

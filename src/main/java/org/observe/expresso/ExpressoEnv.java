@@ -16,14 +16,13 @@ import org.observe.util.TypeTokens;
 import org.qommons.ClassMap;
 import org.qommons.Colors;
 import org.qommons.TimeUtils;
-import org.qommons.io.ContentPosition;
 import org.qommons.io.ErrorReporting;
 import org.qommons.io.LocatedContentPosition;
 
 import com.google.common.reflect.TypeToken;
 
 /** An environment in which to evaluate {@link ObservableExpression}s */
-public class ExpressoEnv implements ErrorReporting {
+public class ExpressoEnv {
 	/**
 	 * Standard java environment, including imported java.lang.* and standard java operators, plus some
 	 * {@link #withDefaultNonStructuredParsing() default} non-structured parsing
@@ -31,7 +30,7 @@ public class ExpressoEnv implements ErrorReporting {
 	public static final ExpressoEnv STANDARD_JAVA = new ExpressoEnv(
 		ObservableModelSet.build("StandardJava", ObservableModelSet.JAVA_NAME_CHECKER),
 		ClassView.build().withWildcardImport("java.lang").build(), null, UnaryOperatorSet.STANDARD_JAVA, BinaryOperatorSet.STANDARD_JAVA,
-		new ErrorReporting.Default(null, null))//
+		new ErrorReporting.Default(null))//
 		.withDefaultNonStructuredParsing();
 
 	private final ObservableModelSet theModels;
@@ -92,6 +91,10 @@ public class ExpressoEnv implements ErrorReporting {
 	/** @return The set of binary operators available for expressions */
 	public BinaryOperatorSet getBinaryOperators() {
 		return theBinaryOperators;
+	}
+
+	public ErrorReporting reporting() {
+		return theErrorReporting;
 	}
 
 	/**
@@ -166,35 +169,14 @@ public class ExpressoEnv implements ErrorReporting {
 				binaryOps == null ? theBinaryOperators : binaryOps, theErrorReporting);
 	}
 
-	@Override
-	public ErrorReporting report(Issue issue) {
-		return theErrorReporting.report(issue);
-	}
-
-	@Override
-	public LocatedContentPosition getFrame() {
-		return theErrorReporting.getFrame();
-	}
-
-	@Override
-	public ErrorReporting getParent() {
-		return theErrorReporting.getParent();
-	}
-
-	@Override
-	public ExpressoEnv at(ContentPosition position) {
-		return (ExpressoEnv) ErrorReporting.super.at(position);
-	}
-
-	@Override
 	public ExpressoEnv at(LocatedContentPosition position) {
 		return new ExpressoEnv(theModels, theClassView, theNonStructuredParsers, theUnaryOperators, theBinaryOperators,
 			theErrorReporting.at(position));
 	}
 
-	@Override
 	public ExpressoEnv at(int positionOffset) {
-		return (ExpressoEnv) ErrorReporting.super.at(positionOffset);
+		return new ExpressoEnv(theModels, theClassView, theNonStructuredParsers, theUnaryOperators, theBinaryOperators,
+			theErrorReporting.at(positionOffset));
 	}
 
 	/** @return A new environment with null model and class view */

@@ -281,7 +281,7 @@ public interface ObservableModelSet extends Identifiable {
 		 * @param <M2> The target model type
 		 * @param <MV2> The target instance type
 		 */
-		class MappedVS<M, MV extends M, M2, MV2 extends M2> extends AbstractValueContainer<M2, MV2> {
+		class MappedVS<M, MV extends M, M2, MV2 extends M2> extends AbstractValueSynth<M2, MV2> {
 			private final ModelValueSynth<M, MV> theSource;
 			private final BiFunction<? super MV, ModelSetInstance, ? extends MV2> theMap;
 
@@ -1022,11 +1022,11 @@ public interface ObservableModelSet extends Identifiable {
 	 * @param <M> The model type of the value
 	 * @param <MV> The type of the value
 	 */
-	public abstract class AbstractValueContainer<M, MV extends M> implements ModelValueSynth<M, MV> {
+	public abstract class AbstractValueSynth<M, MV extends M> implements ModelValueSynth<M, MV> {
 		private final ModelInstanceType<M, MV> theType;
 
 		/** @param type The type of the value */
-		public AbstractValueContainer(ModelInstanceType<M, MV> type) {
+		protected AbstractValueSynth(ModelInstanceType<M, MV> type) {
 			theType = type;
 		}
 

@@ -41,7 +41,7 @@ import org.observe.config.ObservableValueSet;
 import org.observe.expresso.DynamicModelValue.Identity;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelType.ModelInstanceType.SingleTyped;
-import org.observe.expresso.ObservableModelSet.AbstractValueContainer;
+import org.observe.expresso.ObservableModelSet.AbstractValueSynth;
 import org.observe.expresso.ObservableModelSet.CompiledModelValue;
 import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
@@ -213,7 +213,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 									} catch (ExpressoInterpretationException e) {
 										String msg = "Could not interpret source" + (dv.isSourceValue() ? " value for " + dv.getOwner()
 										: "-attribute " + dv.getSourceAttribute());
-										session.error(msg, e);
+										session.reporting().error(msg, e);
 										throw new ExpressoInterpretationException(msg, e.getPosition(), e.getErrorLength(), e);
 									}
 								}
@@ -228,9 +228,10 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 							// new DynamicModelValue.RuntimeModelValue<>(dv, valueType)));
 						} else {
 							builder.withMaker(name,
-								new DynamicModelValue.DynamicTypedModelValueCreator<>(dv, spec.getModelType(), session, () -> {
-									return (ModelInstanceType<Object, Object>) spec.getType(session);
-								}));
+								new DynamicModelValue.DynamicTypedModelValueCreator<>(dv, spec.getModelType(), session.reporting(),
+									() -> {
+										return (ModelInstanceType<Object, Object>) spec.getType(session);
+									}));
 						}
 					}
 				}
@@ -453,13 +454,13 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 				for (CompiledModelValue<SettableValue<?>, SettableValue<Object>> creator : elCreators)
 					elContainers.add(creator.createSynthesizer());
 				TypeToken<Object> fType = type;
-				return new AbstractValueContainer<C, C>((ModelInstanceType<C, C>) theType.forTypes(type)) {
+				return new AbstractValueSynth<C, C>((ModelInstanceType<C, C>) theType.forTypes(type)) {
 					@Override
 					public C get(ModelSetInstance models) throws ModelInstantiationException {
 						C collection = (C) create(fType, models, prep).withDescription(session.get(PATH_KEY, String.class)).build();
 						for (ModelValueSynth<SettableValue<?>, SettableValue<Object>> value : elContainers) {
 							if (!((ObservableCollection<Object>) collection).add(value.get(models).get()))
-								session.warn("Warning: Value " + value + " already added to " + session.get(PATH_KEY));
+								session.reporting().warn("Warning: Value " + value + " already added to " + session.get(PATH_KEY));
 						}
 						return collection;
 					}
@@ -565,7 +566,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 					throw new ExpressoInterpretationException("Could not prepare values", e.getPosition(), e.getErrorLength(), e);
 				}
 				TypeToken<Object> fKeyType = keyType, fValueType = valueType;
-				return new AbstractValueContainer<M, M>((ModelInstanceType<M, M>) theType.forTypes(keyType, valueType)) {
+				return new AbstractValueSynth<M, M>((ModelInstanceType<M, M>) theType.forTypes(keyType, valueType)) {
 					@Override
 					public M get(ModelSetInstance models) throws ModelInstantiationException {
 						M map = (M) create(fKeyType, fValueType, models, prep).withDescription(session.get(PATH_KEY, String.class))
@@ -654,7 +655,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 					throw new ExpressoInterpretationException("Could not prepare values", e.getPosition(), e.getErrorLength(), e);
 				}
 				TypeToken<Object> fKeyType = keyType, fValueType = valueType;
-				return new AbstractValueContainer<M, M>((ModelInstanceType<M, M>) theType.forTypes(keyType, valueType)) {
+				return new AbstractValueSynth<M, M>((ModelInstanceType<M, M>) theType.forTypes(keyType, valueType)) {
 					@Override
 					public M get(ModelSetInstance models) throws ModelInstantiationException {
 						M map = (M) create(fKeyType, fValueType, models, prep).withDescription(session.get(PATH_KEY, String.class))
@@ -1014,7 +1015,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		CompiledExpression valueX = exS.getValueExpression();
 		CompiledExpression initX = exS.isInstance("int-value") ? exS.asElement("int-value").getAttributeExpression("init") : null;
 		if (initX != null && valueX != null)
-			exS.warn("Either a value or an init value may be specified, but not both.  Initial value will be ignored.");
+			exS.reporting().warn("Either a value or an init value may be specified, but not both.  Initial value will be ignored.");
 		VariableType vblType = exS.get(VALUE_TYPE_KEY, VariableType.class);
 		if (vblType == null && valueX == null && initX == null)
 			throw new QonfigInterpretationException("A type, a value, or an initializer must be specified",
@@ -1050,7 +1051,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 				fType = value.getType();
 			else
 				fType = init.getType();
-			return new ObservableModelSet.AbstractValueContainer<SettableValue<?>, SettableValue<Object>>(fType) {
+			return new ObservableModelSet.AbstractValueSynth<SettableValue<?>, SettableValue<Object>>(fType) {
 				@Override
 				public SettableValue<Object> get(ModelSetInstance models) throws ModelInstantiationException {
 					if (value != null)
@@ -1300,7 +1301,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 				valueTypes.add(valueContainers.get(valueContainers.size() - 1).getType().getType(0));
 			}
 			TypeToken<Object> commonType = TypeTokens.get().getCommonType(valueTypes);
-			return new AbstractValueContainer<SettableValue<?>, SettableValue<Object>>(ModelTypes.Value.forType(commonType)) {
+			return new AbstractValueSynth<SettableValue<?>, SettableValue<Object>>(ModelTypes.Value.forType(commonType)) {
 				@Override
 				public SettableValue<Object> get(ModelSetInstance models) throws ModelInstantiationException {
 					SettableValue<?>[] vs = new SettableValue[valueCreators.size()];
@@ -2842,10 +2843,10 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 
 	private <S, T> ValueTransform<?> flattenValue(ExpressoQIS op) throws QonfigInterpretationException {
 		if (op.getAttribute("propagate-update-to-parent", Boolean.class, null) != null)
-			op.warn("'propagate-update-to-parent' attribute not usable for value flattening");
+			op.reporting().warn("'propagate-update-to-parent' attribute not usable for value flattening");
 		ExpressoQIS reverse = op.forChildren("reverse").peekFirst();
 		if (reverse != null)
-			reverse.warn("reverse is not usable for value flattening");
+			reverse.reporting().warn("reverse is not usable for value flattening");
 		String targetModelTypeName = op.getAttributeText("to");
 		ExpressoQIS sortSession = op.forChildren("sort").peekFirst();
 		ParsedSorting sort = sortSession == null ? null : sortSession.interpret(ParsedSorting.class);
@@ -2853,7 +2854,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		switch (targetModelTypeName.toLowerCase()) {
 		case "value":
 			if (sort != null)
-				sortSession.warn("Sorting specified, but not usable");
+				sortSession.reporting().warn("Sorting specified, but not usable");
 			return flattenValueToValue(op);
 		case "list":
 			collectionModel = ModelTypes.Collection;
@@ -2912,7 +2913,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 				.resolveType(ObservableCollection.class.getTypeParameters()[0]);
 			if (collectionType == ModelTypes.Collection) {
 				if (sort != null)
-					sortSession.warn("Sorting specified, but not usable");
+					sortSession.reporting().warn("Sorting specified, but not usable");
 				return ValueTransform.of((ModelInstanceType<C, C>) collectionType.forType(resultType),
 					(value, models) -> (C) ObservableCollection.flattenValue((ObservableValue<ObservableCollection<T>>) value), null,
 					() -> "flatCollection");
@@ -2925,7 +2926,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 				}, null, () -> "flatSortedCollection");
 			} else if (collectionType == ModelTypes.Set) {
 				if (sort != null)
-					sortSession.warn("Sorting specified, but not usable");
+					sortSession.reporting().warn("Sorting specified, but not usable");
 				return ValueTransform.of((ModelInstanceType<C, C>) collectionType.forType(resultType),
 					(value, models) -> (C) ObservableSet.flattenValue((ObservableValue<ObservableSet<T>>) value), null, () -> "flatSet");
 			} else if (collectionType == ModelTypes.SortedSet) {
@@ -3213,7 +3214,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		ParsedSorting sort = sortSession == null ? null : sortSession.interpret(ParsedSorting.class);
 		if (sort != null || sourceModelType == ModelTypes.SortedCollection) {
 			if (preserveSourceOrder)
-				op.warn("'preserve-source-order' is not applicable for sorted transformations");
+				op.reporting().warn("'preserve-source-order' is not applicable for sorted transformations");
 			return CollectionTransform.<C, T, C, ObservableSortedSet<?>> create(sourceModelType, ModelTypes.SortedSet, sourceType -> {
 				ModelValueSynth<SettableValue<?>, SettableValue<Comparator<T>>> compare = sort.evaluate(sourceType.getValueType());
 				return (ObservableStructureTransform<C, C, ObservableSortedSet<?>, ?>) CollectionTransform
@@ -4104,7 +4105,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		// .forType(TypeTokens.get().keyFor(Comparator.class).parameterized(type));
 		if (sortWith != null) {
 			if (!sortBy.isEmpty())
-				session.error("sort-with or sort-by may be used, but not both");
+				session.reporting().error("sort-with or sort-by may be used, but not both");
 			if (valueAs == null)
 				throw new QonfigInterpretationException("sort-with must be used with sort-value-as",
 					sortWith.getElement().getPositionInFile(), 0);
@@ -4189,7 +4190,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 				throw new QonfigInterpretationException("sort-by must be used with sort-value-as", session.getElement().getPositionInFile(),
 					0);
 			if (compareValueAs != null)
-				session.warn("sort-compare-value-as is not used with sort-by");
+				session.reporting().warn("sort-compare-value-as is not used with sort-by");
 
 			return new ParsedSorting() {
 				@Override

@@ -26,6 +26,7 @@ import org.qommons.config.QonfigElementDef;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigToolkit;
+import org.qommons.io.ErrorReporting;
 
 import com.google.common.reflect.TypeToken;
 
@@ -49,7 +50,7 @@ public class QuickTypeStyle {
 	/**
 	 * @param element The element type to get the style type of
 	 * @param session The session to get the {@link ExpressoQIS#getExpressoEnv() expresso environment} from and for
-	 *        {@link AbstractQIS#error(String) error reporting}
+	 *        {@link ErrorReporting#error(String) error reporting}
 	 * @param style The toolkit inheriting Quick-Style
 	 * @return The style type for the given element type
 	 * @throws QonfigInterpretationException If an error occurs synthesizing the style information for the given element
@@ -95,14 +96,14 @@ public class QuickTypeStyle {
 			for (QonfigElement styleAttr : stylesEl.getChildrenInRole(style, "styles", STYLE_ATTRIBUTE)) {
 				String name = styleAttr.getAttributeText(nameAttr);
 				if (declaredAttributes.containsKey(name)) {
-					session.error("Multiple style attributes named '" + name + "' declared");
+					session.reporting().error("Multiple style attributes named '" + name + "' declared");
 					continue;
 				}
 				QonfigValue typeV = styleAttr.getAttributes().get(typeAttr);
 				ExpressoEnv env = session.as(ExpressoQIS.class).getExpressoEnv();
 				VariableType vblType = VariableType.parseType(typeV.text, env.getClassView(), typeV.fileLocation, typeV.position);
 				if (vblType.isModelDependent()) {
-					session.error("Style attributes (like '" + name + "') must be statically-typed");
+					session.reporting().error("Style attributes (like '" + name + "') must be statically-typed");
 					continue;
 				}
 				TypeToken<?> type;

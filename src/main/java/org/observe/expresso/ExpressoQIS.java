@@ -121,10 +121,10 @@ public class ExpressoQIS implements SpecialSession<ExpressoQIS> {
 
 	CompiledExpression getExpression(QonfigValueDef type) throws QonfigInterpretationException {
 		if (type == null)
-			error("This element has no value definition");
+			reporting().error("This element has no value definition");
 		else if (!(type.getType() instanceof QonfigValueType.Custom)
 			|| !(((QonfigValueType.Custom) type.getType()).getCustomType() instanceof ExpressionValueType))
-			error("Attribute " + type + " is not an expression");
+			reporting().error("Attribute " + type + " is not an expression");
 		QonfigValue value;
 		if (type instanceof QonfigAttributeDef)
 			value = getElement().getAttributes().get(type.getDeclared());

@@ -94,7 +94,8 @@ public class QuickButton extends QuickWidget.Abstract {
 			super.update(cache);
 			theText = getDefinition().getText() == null ? null : getDefinition().getText().evaluate(ModelTypes.Value.STRING).interpret();
 			theIcon = getDefinition().getIcon() == null ? null
-				: QuickBaseInterpretation.evaluateIcon(getDefinition().getIcon(), getDefinition().getExpressoSession());
+				: QuickBaseInterpretation.evaluateIcon(getDefinition().getIcon(), getDefinition().getExpressoSession().getExpressoEnv(),
+					getDefinition().getExpressoSession().getWrapped().getInterpreter().getCallingClass());
 			theAction = getDefinition().getAction().evaluate(ModelTypes.Action.any()).interpret();
 			return this;
 		}
