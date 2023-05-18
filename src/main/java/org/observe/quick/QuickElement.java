@@ -275,7 +275,7 @@ public interface QuickElement {
 				theModels = getDefinition().getModels().interpret();
 				// theDefinition.getExpressoSession().setExpressoEnv(theDefinition.getExpressoSession().getExpressoEnv().with(models,
 				// null));
-				theDefinition.getExpressoSession().interpretLocalModel();
+				theDefinition.getExpressoSession().getExpressoEnv().interpretLocalModel();
 				for (QuickAddOn.Interpreted<?, ?> addOn : theAddOns.getAllValues())
 					addOn.update(theModels);
 				return this;
@@ -310,7 +310,7 @@ public interface QuickElement {
 	/**
 	 * @param <AO> The type of the add on
 	 * @param <T> The type of the value
-	 * @param addOn The type of the addon
+	 * @param addOn The type of the add-on
 	 * @param fn Produces the value from the add on if it exists
 	 * @return The value from the given add on in this element definition, or null if no such add-on is present
 	 */
@@ -373,7 +373,7 @@ public interface QuickElement {
 		 * @throws ModelInstantiationException If an error occurs instantiating any model values needed by this element or its content
 		 */
 		protected Abstract update(ModelSetInstance models) throws ModelInstantiationException {
-			theModels = theInterpreted.getDefinition().getExpressoSession().wrapLocal(models);
+			theModels = theInterpreted.getDefinition().getExpressoSession().getExpressoEnv().wrapLocal(models);
 			for (QuickAddOn<?> addOn : theAddOns.getAllValues())
 				addOn.update(getModels());
 			return this;
@@ -399,7 +399,8 @@ public interface QuickElement {
 		return element1.getType() == element2.getType() && element1.getInheritance().equals(element2.getInheritance());
 	}
 
-	static <M, MV extends M> void satisfyContextValue(String valueName, ModelInstanceType<M, MV> type, MV value, QuickElement element)
+	public static <M, MV extends M> void satisfyContextValue(String valueName, ModelInstanceType<M, MV> type, MV value,
+		QuickElement element)
 		throws ModelInstantiationException {
 		if (value != null) {
 			try {

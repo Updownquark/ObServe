@@ -35,11 +35,11 @@ public class Expresso {
 		ModelType<M> getModelType();
 
 		/**
-		 * @param session The session to use to evaluate the type
+		 * @param models The models to use to evaluate the type
 		 * @return The type of this model value
 		 * @throws ExpressoInterpretationException If the type cannot be evaluated
 		 */
-		ModelInstanceType<M, ?> getType(ExpressoQIS session) throws ExpressoInterpretationException;
+		ModelInstanceType<M, ?> getType(ObservableModelSet models) throws ExpressoInterpretationException;
 
 		/** @return Whether the type of this value specification has been fully specified */
 		boolean isTypeSpecified();
@@ -78,9 +78,9 @@ public class Expresso {
 			}
 
 			@Override
-			public ModelInstanceType<M, ?> getType(ExpressoQIS session) throws ExpressoInterpretationException {
+			public ModelInstanceType<M, ?> getType(ObservableModelSet models) throws ExpressoInterpretationException {
 				if (theValueType != null)
-					return theModelType.forType((TypeToken<?>) theValueType.getType(session.getExpressoEnv().getModels()));
+					return theModelType.forType((TypeToken<?>) theValueType.getType(models));
 				else
 					return theModelType.any();
 			}
@@ -128,20 +128,18 @@ public class Expresso {
 			}
 
 			@Override
-			public ModelInstanceType<M, ?> getType(ExpressoQIS session) throws ExpressoInterpretationException {
+			public ModelInstanceType<M, ?> getType(ObservableModelSet models) throws ExpressoInterpretationException {
 				if (theValueType1 != null && theValueType2 != null)
 					return theModelType.forType(//
-						(TypeToken<?>) theValueType1.getType(session.getExpressoEnv().getModels()), //
-						(TypeToken<?>) theValueType2.getType(session.getExpressoEnv().getModels())//
+						(TypeToken<?>) theValueType1.getType(models), //
+						(TypeToken<?>) theValueType2.getType(models)//
 						);
 				else if (theValueType1 == null && theValueType2 == null)
 					return theModelType.any();
 				else
 					return theModelType.forType(//
-						(TypeToken<?>) (theValueType1 == null ? TypeTokens.get().WILDCARD
-							: theValueType1.getType(session.getExpressoEnv().getModels())), //
-						(TypeToken<?>) (theValueType2 == null ? TypeTokens.get().WILDCARD
-							: theValueType2.getType(session.getExpressoEnv().getModels()))//
+						(TypeToken<?>) (theValueType1 == null ? TypeTokens.get().WILDCARD : theValueType1.getType(models)), //
+						(TypeToken<?>) (theValueType2 == null ? TypeTokens.get().WILDCARD : theValueType2.getType(models))//
 						);
 			}
 		}
@@ -220,10 +218,8 @@ public class Expresso {
 
 		@Override
 		default Object postPrepare(CoreSession session, Object prepared) throws QonfigInterpretationException {
-			if (Boolean.TRUE.equals(prepared)) {
-				ExpressoQIS exS = session.as(ExpressoQIS.class);
-				session.putLocal(ExpressoQIS.ELEMENT_MODEL_KEY, exS.getExpressoEnv().getModels());
-			}
+			if (Boolean.TRUE.equals(prepared))
+				session.as(ExpressoQIS.class).getExpressoEnv().saveLocalModel();
 			return prepared;
 		}
 

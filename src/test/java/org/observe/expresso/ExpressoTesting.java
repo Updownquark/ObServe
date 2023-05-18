@@ -62,7 +62,8 @@ public class ExpressoTesting<H extends Expresso> {
 			throws ExpressoInterpretationException, ModelInstantiationException {
 			if (theInterpretedModel == null)
 				theInterpretedModel = theModel.interpret();
-			return theSession.wrapLocal(theInterpretedModel.createInstance(testingModel.getUntil()).withAll(testingModel).build());
+			return theSession.getExpressoEnv()
+				.wrapLocal(theInterpretedModel.createInstance(testingModel.getUntil()).withAll(testingModel).build());
 		}
 
 		/** @return All the actions to execute for this test */
@@ -115,7 +116,7 @@ public class ExpressoTesting<H extends Expresso> {
 		 * @throws ModelInstantiationException If the action could not be instantiated
 		 */
 		public ModelSetInstance getActionModel(ModelSetInstance testModel, Observable<?> until) throws ModelInstantiationException {
-			return theExpressoSession.wrapLocal(//
+			return theExpressoSession.getExpressoEnv().wrapLocal(//
 				theInterpretedModel.createInstance(until).withAll(testModel)//
 				.build());
 		}

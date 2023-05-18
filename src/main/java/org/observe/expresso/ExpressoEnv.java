@@ -9,6 +9,7 @@ import java.util.LinkedHashSet;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ops.BinaryOperatorSet;
 import org.observe.expresso.ops.ExternalLiteral;
 import org.observe.expresso.ops.UnaryOperatorSet;
@@ -39,6 +40,8 @@ public class ExpressoEnv {
 	private final UnaryOperatorSet theUnaryOperators;
 	private final BinaryOperatorSet theBinaryOperators;
 	private final ErrorReporting theErrorReporting;
+
+	private ObservableModelSet theElementModel;
 
 	/**
 	 * @param models The model set containing all values and sub-models available to expressions
@@ -95,6 +98,55 @@ public class ExpressoEnv {
 
 	public ErrorReporting reporting() {
 		return theErrorReporting;
+	}
+
+	public void saveLocalModel() {
+		theElementModel = theModels;
+	}
+
+	/** @throws ExpressoInterpretationException If the local model could not be interpreted */
+	public void interpretLocalModel() throws ExpressoInterpretationException {
+		ObservableModelSet elementModel = theElementModel;
+		ObservableModelSet.Built built;
+		if (elementModel instanceof ObservableModelSet.Built)
+			built = (ObservableModelSet.Built) elementModel;
+		else if (elementModel instanceof ObservableModelSet.Builder)
+			built = ((ObservableModelSet.Builder) elementModel).build();
+		else if (elementModel == null)
+			built = null;
+		else
+			throw new IllegalStateException("Local model is " + elementModel.getClass().getName() + ", not either built or a builder");
+		if (built != null)
+			theElementModel = built.interpret();
+	}
+
+	/**
+	 * All {@link ObservableModelSet.ModelValueSynth}s for expressions parsed under this session should be
+	 * {@link ObservableModelSet.ModelValueSynth#get(ModelSetInstance) satisfied} with a model set wrapped by this method if this element
+	 * extends with-local-models.
+	 *
+	 * @param models The model instance
+	 * @return The wrapped model instance containing data for this element's local models
+	 * @throws ModelInstantiationException If the local model instantiation fails
+	 */
+	public ModelSetInstance wrapLocal(ModelSetInstance models) throws ModelInstantiationException {
+		ObservableModelSet elementModel = theElementModel;
+		ObservableModelSet.Built built;
+		if (elementModel instanceof ObservableModelSet.Built)
+			built = (ObservableModelSet.Built) elementModel;
+		else if (elementModel instanceof ObservableModelSet.Builder)
+			built = ((ObservableModelSet.Builder) elementModel).build();
+		else if (elementModel == null)
+			built = null;
+		else
+			throw new IllegalStateException("Local model is " + elementModel.getClass().getName() + ", not either built or a builder");
+		if (built != null && !models.getModel().isRelated(built.getIdentity())) {
+			if (!(built instanceof ObservableModelSet.InterpretedModelSet))
+				throw new ModelInstantiationException("Local element model was not interpreted.  Should have called interpretLocalModel()",
+					theErrorReporting.getFileLocation().getPosition(0), 0);
+			models = ((ObservableModelSet.InterpretedModelSet) built).createInstance(models.getUntil()).withAll(models).build();
+		}
+		return models;
 	}
 
 	/**

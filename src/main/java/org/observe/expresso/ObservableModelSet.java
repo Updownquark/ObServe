@@ -838,6 +838,18 @@ public interface ObservableModelSet extends Identifiable {
 		@Override
 		InterpretedValueSynth<M, MV> getValue();
 
+		/**
+		 * Identical to {@link ObservableModelSet.ModelComponentNode#getThing()}, except that:<br />
+		 * <ul>
+		 * <li>If the component is a sub-model installed with {@link ObservableModelSet.Builder#createSubModel(String)}, the value will also
+		 * be an instance of {@link InterpretedModelSet}</li>
+		 * <li>If the component is a runtime value installed with {@link ModelSetInstanceBuilder#with(RuntimeValuePlaceholder, Object)
+		 * installed}, the value will also be an instance of {@link ObservableModelSet.RuntimeValuePlaceholder.Interpreted}</li>
+		 * </ul>
+		 */
+		@Override
+		Object getThing();
+
 		@Override
 		default InterpretedModelComponentNode<M, MV> interpret() {
 			return this;
@@ -1003,7 +1015,7 @@ public interface ObservableModelSet extends Identifiable {
 
 	/**
 	 * A placeholder returned by {@link Builder#withRuntimeValue(String, ModelInstanceType)}. This placeholder can be used to satisfy the
-	 * value in a {@link ModelSetInstance} with {@link ModelSetInstanceBuilder#with(RuntimeValuePlaceholder, Object)}.
+	 * value in a {@link ObservableModelSet.ModelSetInstance} with {@link ModelSetInstanceBuilder#with(RuntimeValuePlaceholder, Object)}.
 	 *
 	 * @param <M> The model type of the runtime value
 	 * @param <MV> The type of the runtime value
@@ -1012,8 +1024,41 @@ public interface ObservableModelSet extends Identifiable {
 		@Override
 		ModelComponentId getIdentity();
 
-		/** @return The declared type of the runtime value */
-		ModelInstanceType<M, MV> getType();
+		/** @return The model type of the runtime value */
+		ModelType<M> getModelType();
+
+		/**
+		 * @return The type of the runtime value
+		 * @throws ExpressoInterpretationException If an exception occurs trying to determine the type
+		 */
+		ModelInstanceType<M, MV> getType() throws ExpressoInterpretationException;
+
+		/**
+		 * @return An interpreted version of this runtime value placeholder
+		 * @throws ExpressoInterpretationException If an exception occurs trying to determine the type
+		 */
+		Interpreted<M, MV> interpret() throws ExpressoInterpretationException;
+
+		/**
+		 * An interpreted runtime value placeholder, which does not need to throw {@link ExpressoInterpretationException}s
+		 *
+		 * @param <M> The model type of the runtime value
+		 * @param <MV> The type of the runtime value
+		 */
+		public interface Interpreted<M, MV extends M> extends RuntimeValuePlaceholder<M, MV> {
+			@Override
+			ModelInstanceType<M, MV> getType();
+
+			@Override
+			default ModelType<M> getModelType() {
+				return getType().getModelType();
+			}
+
+			@Override
+			default Interpreted<M, MV> interpret() {
+				return this;
+			}
+		}
 	}
 
 	/**
@@ -1404,7 +1449,22 @@ public interface ObservableModelSet extends Identifiable {
 		 * @param type The type of the runtime value
 		 * @return This builder
 		 */
-		<M, MV extends M> RuntimeValuePlaceholder<M, MV> withRuntimeValue(String name, ModelInstanceType<M, MV> type);
+		default <M, MV extends M> RuntimeValuePlaceholder<M, MV> withRuntimeValue(String name, ModelInstanceType<M, MV> type) {
+			return withRuntimeValue(name, type.getModelType(), LambdaUtils.printableExSupplier(() -> type, type::toString, null));
+		}
+
+		/**
+		 * Declares a value to be satisfied with {@link ModelSetInstanceBuilder#with(RuntimeValuePlaceholder, Object)}
+		 *
+		 * @param <M> The model type of the runtime value
+		 * @param <MV> The type of the runtime value
+		 * @param name The name of the value in this model set
+		 * @param modelType The model type of the runtime value
+		 * @param type The type of the runtime value
+		 * @return This builder
+		 */
+		<M, MV extends M> RuntimeValuePlaceholder<M, MV> withRuntimeValue(String name, ModelType<M> modelType,
+			ExSupplier<ModelInstanceType<M, MV>, ExpressoInterpretationException> type);
 
 		/**
 		 * Retrieves or creates a builder for a sub-model under this model set
@@ -2013,7 +2073,10 @@ public interface ObservableModelSet extends Identifiable {
 				else {
 					String type;
 					try {
-						type = thing.getType().toString();
+						if (this instanceof InterpretedModelSet)
+							type = thing.getType().toString();
+						else
+							type = thing.getModelType().toString();
 					} catch (ExpressoInterpretationException e) {
 						type = e.toString();
 					}
@@ -2065,7 +2128,7 @@ public interface ObservableModelSet extends Identifiable {
 				if (theCreator != null)
 					return theCreator.getModelType();
 				else if (theRuntimePlaceholder != null)
-					return theRuntimePlaceholder.getType().getModelType();
+					return theRuntimePlaceholder.getModelType();
 				else if (theExtRef != null)
 					return theExtRef.getType().getModelType();
 				else if (theModel != null)
@@ -2079,7 +2142,8 @@ public interface ObservableModelSet extends Identifiable {
 				if (theValue != null)
 					return theValue.getType();
 				else if (theCreator != null)
-					return theCreator.getModelType().anyAs();
+					return getOfValue(ModelValueSynth::getType);
+				// return theCreator.getModelType().anyAs();
 				else if (theRuntimePlaceholder != null)
 					return theRuntimePlaceholder.getType();
 				else if (theExtRef != null)
@@ -2191,7 +2255,7 @@ public interface ObservableModelSet extends Identifiable {
 					return new InterpretedModelNodeImpl<>(theNodeId, theCreator, //
 						(InterpretedValueSynth<M, MV>) theValue, null, null, null);
 				} else if (theRuntimePlaceholder != null)
-					return new InterpretedModelNodeImpl<>(theNodeId, null, null, theRuntimePlaceholder, null, null);
+					return new InterpretedModelNodeImpl<>(theNodeId, null, null, theRuntimePlaceholder.interpret(), null, null);
 				else if (theExtRef != null)
 					return new InterpretedModelNodeImpl<>(theNodeId, null, null, null, theExtRef, null);
 				else
@@ -2205,7 +2269,7 @@ public interface ObservableModelSet extends Identifiable {
 				else if (theExtRef != null)
 					return "ext:" + theExtRef.getType() + "@" + theNodeId;
 				else if (theRuntimePlaceholder != null)
-					return "runtime:" + theRuntimePlaceholder.getType() + "@" + theNodeId;
+					return "runtime:" + theRuntimePlaceholder + "@" + theNodeId;
 				else
 					return theNodeId.toString();
 			}
@@ -2215,12 +2279,13 @@ public interface ObservableModelSet extends Identifiable {
 			private final ModelComponentId theNodeId;
 			private final CompiledModelValue<M, MV> theCreator;
 			private final InterpretedValueSynth<M, MV> theValue;
-			private final RuntimeValuePlaceholder<M, MV> theRuntimePlaceholder;
+			private final RuntimeValuePlaceholder.Interpreted<M, MV> theRuntimePlaceholder;
 			private final ExtValueRef<M, MV> theExtRef;
 			private final DefaultInterpreted theModel;
 
 			public InterpretedModelNodeImpl(ModelComponentId nodeId, CompiledModelValue<M, MV> creator,
-				InterpretedValueSynth<M, MV> value, RuntimeValuePlaceholder<M, MV> runtimePlaceholder, ExtValueRef<M, MV> extRef,
+				InterpretedValueSynth<M, MV> value, RuntimeValuePlaceholder.Interpreted<M, MV> runtimePlaceholder,
+				ExtValueRef<M, MV> extRef,
 				DefaultInterpreted model) {
 				theNodeId = nodeId;
 				theCreator = creator;
@@ -2328,9 +2393,59 @@ public interface ObservableModelSet extends Identifiable {
 
 		static class RVPI<M, MV extends M> implements RuntimeValuePlaceholder<M, MV> {
 			private final ModelComponentId theId;
-			private final ModelInstanceType<M, MV> theType;
+			private final ModelType<M> theModelType;
+			private final ExSupplier<ModelInstanceType<M, MV>, ExpressoInterpretationException> theTypeGetter;
+			private ModelInstanceType<M, MV> theType;
 
-			RVPI(ModelComponentId id, ModelInstanceType<M, MV> type) {
+			RVPI(ModelComponentId id, ModelType<M> modelType, ExSupplier<ModelInstanceType<M, MV>, ExpressoInterpretationException> type) {
+				theId = id;
+				theModelType = modelType;
+				theTypeGetter = type;
+			}
+
+			@Override
+			public ModelComponentId getIdentity() {
+				return theId;
+			}
+
+			@Override
+			public String getName() {
+				return theId.getName();
+			}
+
+			@Override
+			public ModelType<M> getModelType() {
+				return theModelType;
+			}
+
+			@Override
+			public ModelInstanceType<M, MV> getType() throws ExpressoInterpretationException {
+				if (theType == null)
+					theType = theTypeGetter.get();
+				return theType;
+			}
+
+			@Override
+			public Interpreted<M, MV> interpret() throws ExpressoInterpretationException {
+				return new IRVPI<>(theId, getType());
+			}
+
+			@Override
+			public String toString() {
+				StringBuilder str = new StringBuilder().append(theId).append(':');
+				if (theType != null)
+					str.append(theType);
+				else
+					str.append(theModelType);
+				return str.toString();
+			}
+		}
+
+		static class IRVPI<M, MV extends M> implements RuntimeValuePlaceholder.Interpreted<M, MV> {
+			private final ModelComponentId theId;
+			private ModelInstanceType<M, MV> theType;
+
+			IRVPI(ModelComponentId id, ModelInstanceType<M, MV> type) {
 				theId = id;
 				theType = type;
 			}
@@ -2348,11 +2463,6 @@ public interface ObservableModelSet extends Identifiable {
 			@Override
 			public ModelInstanceType<M, MV> getType() {
 				return theType;
-			}
-
-			@Override
-			public String toString() {
-				return theId + ":" + theType.toString();
 			}
 		}
 
@@ -2448,11 +2558,12 @@ public interface ObservableModelSet extends Identifiable {
 			}
 
 			@Override
-			public <M, MV extends M> RuntimeValuePlaceholder<M, MV> withRuntimeValue(String name, ModelInstanceType<M, MV> type) {
+			public <M, MV extends M> RuntimeValuePlaceholder<M, MV> withRuntimeValue(String name, ModelType<M> modelType,
+				ExSupplier<ModelInstanceType<M, MV>, ExpressoInterpretationException> type) {
 				getNameChecker().checkName(name);
 				checkNameForAdd(name);
 				ModelComponentId id = new ModelComponentId(getIdentity(), name);
-				RVPI<M, MV> rvp = new RVPI<>(id, type);
+				RVPI<M, MV> rvp = new RVPI<>(id, modelType, type);
 				getAddableComponents().put(name, createPlaceholder(id, null, rvp, null, null));
 				return rvp;
 			}
@@ -2587,7 +2698,7 @@ public interface ObservableModelSet extends Identifiable {
 			 * @param identifiedComponents All {@link IdentifableCompiledValue identified} values in the model
 			 * @param nameChecker The {@link ObservableModelSet#getNameChecker() name checker} for the new model
 			 */
-			public DefaultBuilt(ModelComponentId id, DefaultBuilt root, DefaultBuilt parent, Map<ModelTag<?>, Object> tagValues,
+			protected DefaultBuilt(ModelComponentId id, DefaultBuilt root, DefaultBuilt parent, Map<ModelTag<?>, Object> tagValues,
 				Map<ModelComponentId, ObservableModelSet.Built> inheritance, Map<String, ? extends ModelComponentNode<?, ?>> components,
 					Map<Object, ? extends ModelComponentNode<?, ?>> identifiedComponents, NameChecker nameChecker) {
 				super(id, root, parent, tagValues, inheritance, components, identifiedComponents, nameChecker);
@@ -2722,7 +2833,8 @@ public interface ObservableModelSet extends Identifiable {
 		static class DefaultMSIBuilder implements ModelSetInstanceBuilder {
 			private final Map<ModelComponentId, Object> theComponents;
 			private final Map<ModelComponentId, ModelSetInstance> theInheritance;
-			private final Map<RuntimeValuePlaceholder<?, ?>, Boolean> theRuntimeVariables;
+			private final Map<ModelComponentId, RuntimeValuePlaceholder.Interpreted<?, ?>> theRuntimeVariables;
+			private final Set<ModelComponentId> theRuntimeVariablesNotInstalled;
 			private final DefaultMSI theMSI;
 
 			DefaultMSIBuilder(InterpretedModelSet models, ModelSetInstance sourceModel, ExternalModelSet extModels, Observable<?> until) {
@@ -2732,13 +2844,14 @@ public interface ObservableModelSet extends Identifiable {
 				theMSI = new DefaultMSI(models.getRoot(), sourceModel, extModels, until, theComponents,
 					Collections.unmodifiableMap(theInheritance));
 				lookForRuntimeVars(models);
+				theRuntimeVariablesNotInstalled = new HashSet<>(theRuntimeVariables.keySet());
 			}
 
-			private void lookForRuntimeVars(ObservableModelSet models) {
-				for (ModelComponentNode<?, ?> component : models.getComponents().values()) {
+			private void lookForRuntimeVars(InterpretedModelSet models) {
+				for (InterpretedModelComponentNode<?, ?> component : models.getComponents().values()) {
 					if (component.getThing() instanceof RuntimeValuePlaceholder
 						&& component.getIdentity().getRootId() == theMSI.getModel().getIdentity())
-						theRuntimeVariables.put((RuntimeValuePlaceholder<?, ?>) component.getThing(), false);
+						theRuntimeVariables.put(component.getIdentity(), (RuntimeValuePlaceholder.Interpreted<?, ?>) component.getThing());
 					else if (component.getModel() != null)
 						lookForRuntimeVars(component.getModel());
 				}
@@ -2751,10 +2864,13 @@ public interface ObservableModelSet extends Identifiable {
 
 			@Override
 			public <M, MV extends M> ModelSetInstanceBuilder with(RuntimeValuePlaceholder<M, MV> placeholder, MV value) {
-				if (null == theRuntimeVariables.computeIfPresent(placeholder, (p, b) -> true))
+				RuntimeValuePlaceholder.Interpreted<M, MV> rvp = (RuntimeValuePlaceholder.Interpreted<M, MV>) theRuntimeVariables
+					.get(placeholder.getIdentity());
+				if (rvp == null)
 					throw new IllegalStateException(
 						"Runtime value " + placeholder.getName() + " not recognized for model " + theMSI.getModel().getIdentity());
-				if (!placeholder.getType().isInstance(value))
+				theRuntimeVariablesNotInstalled.remove(rvp.getIdentity());
+				if (!rvp.getType().isInstance(value))
 					throw new IllegalArgumentException("Cannot satisfy runtime value " + placeholder + " with " + value);
 				theComponents.put(placeholder.getIdentity(), value);
 				return this;
@@ -2795,12 +2911,10 @@ public interface ObservableModelSet extends Identifiable {
 						error.append("Inherited model " + inh.getKey() + " not satisfied");
 					}
 				}
-				for (Map.Entry<RuntimeValuePlaceholder<?, ?>, Boolean> rv : theRuntimeVariables.entrySet()) {
-					if (!rv.getValue()) {
-						if (error == null)
-							error = new StringBuilder();
-						error.append("Runtime value " + rv.getKey() + " not satisfied");
-					}
+				for (ModelComponentId rv : theRuntimeVariablesNotInstalled) {
+					if (error == null)
+						error = new StringBuilder();
+					error.append("Runtime value " + rv + " not satisfied");
 				}
 				if (error != null)
 					throw new IllegalStateException(error.toString());

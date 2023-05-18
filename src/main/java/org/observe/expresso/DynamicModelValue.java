@@ -156,7 +156,7 @@ public interface DynamicModelValue<M, MV extends M> extends ModelValueSynth<M, M
 	 * @param <MV> The type of the value
 	 * @param name The name of the value
 	 * @param type The type of the value
-	 * @param model The model instance to satisfy the value in (should be {@link ExpressoQIS#wrapLocal(ModelSetInstance) wrapLocal}'ed)
+	 * @param model The model instance to satisfy the value in (should be {@link ExpressoEnv#wrapLocal(ModelSetInstance) wrapLocal}'ed)
 	 * @param value The value to use to satisfy the model value
 	 * @throws ModelException If the given model value does not exist
 	 * @throws ModelInstantiationException If the value cannot be instantiated
@@ -216,7 +216,7 @@ public interface DynamicModelValue<M, MV extends M> extends ModelValueSynth<M, M
 	 * @param <MV> The type of the value
 	 * @param name The name of the value
 	 * @param type The type of the value
-	 * @param model The model instance to satisfy the value in (should be {@link ExpressoQIS#wrapLocal(ModelSetInstance) wrapLocal}'ed)
+	 * @param model The model instance to satisfy the value in (should be {@link ExpressoEnv#wrapLocal(ModelSetInstance) wrapLocal}'ed)
 	 * @param value The value to use to satisfy the model value
 	 * @throws ModelException If the given model value does not exist
 	 * @throws ModelInstantiationException If the value cannot be instantiated

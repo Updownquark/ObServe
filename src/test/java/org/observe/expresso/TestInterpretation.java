@@ -49,12 +49,12 @@ public class TestInterpretation implements QonfigInterpretation {
 			return CompiledModelValue.of("stateful-struct", ModelTypes.Value, () -> {
 				ModelValueSynth<SettableValue<?>, SettableValue<Integer>> derivedStateV;
 				derivedStateV = derivedStateX.evaluate(ModelTypes.Value.forType(int.class));
-				exS.interpretLocalModel();
+					exS.getExpressoEnv().interpretLocalModel();
 				return new ObservableModelSet.AbstractValueSynth<SettableValue<?>, SettableValue<StatefulTestStructure>>(
 					ModelTypes.Value.forType(StatefulTestStructure.class)) {
 					@Override
 					public SettableValue<StatefulTestStructure> get(ModelSetInstance models) throws ModelInstantiationException {
-						models = exS.wrapLocal(models);
+							models = exS.getExpressoEnv().wrapLocal(models);
 						StatefulTestStructure structure = new StatefulTestStructure(derivedStateV.get(models));
 						try {
 							DynamicModelValue.satisfyDynamicValue(//
@@ -95,13 +95,13 @@ public class TestInterpretation implements QonfigInterpretation {
 					throw new ExpressoInterpretationException(e.getMessage(), session.getElement().getPositionInFile(), 0, e);
 				}
 				ModelValueSynth<SettableValue<?>, SettableValue<?>> derivedStateV = derivedStateX.evaluate(ModelTypes.Value.any());
-				exS.interpretLocalModel();
+				exS.getExpressoEnv().interpretLocalModel();
 				return new ObservableModelSet.AbstractValueSynth<SettableValue<?>, SettableValue<DynamicTypeStatefulTestStructure>>(
 					ModelTypes.Value.forType(DynamicTypeStatefulTestStructure.class)) {
 					@Override
 					public SettableValue<DynamicTypeStatefulTestStructure> get(ModelSetInstance models)
 						throws ModelInstantiationException {
-						models = exS.wrapLocal(models);
+						models = exS.getExpressoEnv().wrapLocal(models);
 						DynamicTypeStatefulTestStructure structure = new DynamicTypeStatefulTestStructure(//
 							internalStateV.get(models), derivedStateV.get(models));
 						return SettableValue.of(DynamicTypeStatefulTestStructure.class, structure, "Not Settable");
@@ -132,13 +132,13 @@ public class TestInterpretation implements QonfigInterpretation {
 					throw new ExpressoInterpretationException(e.getMessage(), session.getElement().getPositionInFile(), 0, e);
 				}
 				ModelValueSynth<SettableValue<?>, SettableValue<?>> derivedStateV = derivedStateX.evaluate(ModelTypes.Value.any());
-				exS.interpretLocalModel();
+				exS.getExpressoEnv().interpretLocalModel();
 				return new ObservableModelSet.AbstractValueSynth<SettableValue<?>, SettableValue<DynamicTypeStatefulTestStructure>>(
 					ModelTypes.Value.forType(DynamicTypeStatefulTestStructure.class)) {
 					@Override
 					public SettableValue<DynamicTypeStatefulTestStructure> get(ModelSetInstance models)
 						throws ModelInstantiationException {
-						models = exS.wrapLocal(models);
+						models = exS.getExpressoEnv().wrapLocal(models);
 						DynamicTypeStatefulTestStructure structure = new DynamicTypeStatefulTestStructure(//
 							internalStateV.get(models), derivedStateV.get(models));
 						return SettableValue.of(DynamicTypeStatefulTestStructure.class, structure, "Not Settable");

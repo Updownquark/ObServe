@@ -135,7 +135,7 @@ public class TestInterpretation implements QonfigInterpretation {
 			Synth(ExpressoQIS session, ModelComponentNode<?, ?> a, ModelComponentNode<?, ?> b, ModelComponentNode<?, ?> c,
 				ModelComponentNode<?, ?> d, QuickInterpretedStyle style) throws ExpressoInterpretationException {
 				expressoSession = session;
-				expressoSession.interpretLocalModel();
+				expressoSession.getExpressoEnv().interpretLocalModel();
 				try {
 					this.a = a.interpret().as(ModelTypes.Value.BOOLEAN);
 				} catch (TypeConversionException x) {
@@ -174,7 +174,7 @@ public class TestInterpretation implements QonfigInterpretation {
 
 			@Override
 			public SettableValue<A> get(ModelSetInstance models) throws ModelInstantiationException {
-				return SettableValue.of(A.class, new A(this, expressoSession.wrapLocal(models)), "Immutable");
+				return SettableValue.of(A.class, new A(this, expressoSession.getExpressoEnv().wrapLocal(models)), "Immutable");
 			}
 
 			@Override
@@ -310,7 +310,7 @@ public class TestInterpretation implements QonfigInterpretation {
 			Synth(Def<T> def) throws ExpressoInterpretationException {
 				this.clazz = def.clazz;
 				expressoSession = def.expressoSession;
-				expressoSession.interpretLocalModel();
+				expressoSession.getExpressoEnv().interpretLocalModel();
 				style = def.style.interpret(null, new HashMap<>());
 				try {
 					this.e = def.e.interpret().as(ModelTypes.Value.BOOLEAN);
@@ -349,7 +349,7 @@ public class TestInterpretation implements QonfigInterpretation {
 
 			@Override
 			public SettableValue<T> get(ModelSetInstance models) throws ModelInstantiationException {
-				ModelSetInstance localModels = expressoSession.wrapLocal(models);
+				ModelSetInstance localModels = expressoSession.getExpressoEnv().wrapLocal(models);
 				List<A> childrenInstances = new ArrayList<>();
 				for (ModelValueSynth<SettableValue<?>, SettableValue<A>> child : children)
 					childrenInstances.add(child.get(localModels).get());

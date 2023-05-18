@@ -704,7 +704,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 				if (sorting != null)
 					theSortingCreator = sorting.interpret(ParsedSorting.class);
 				else
-					theSortingCreator = ExpressoBaseV0_1.getDefaultSorting(exS.getElement());
+					theSortingCreator = ExpressoBaseV0_1.getDefaultSorting(exS.getElement().getPositionInFile());
 			}
 
 			@Override
@@ -753,7 +753,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 				if (sorting != null)
 					theSortingCreator = sorting.interpret(ParsedSorting.class);
 				else
-					theSortingCreator = ExpressoBaseV0_1.getDefaultSorting(exS.getElement());
+					theSortingCreator = ExpressoBaseV0_1.getDefaultSorting(exS.getElement().getPositionInFile());
 			}
 
 			@Override
@@ -1762,11 +1762,13 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 	private ValidationProducer createFilterValidation(ExpressoQIS session) throws QonfigInterpretationException {
 		String filterValue = session.getAttributeText("filter-value-name");
 		CompiledExpression testX = session.getAttributeExpression("test");
+		ExpressoEnv env = session.getExpressoEnv();
+		LocatedFilePosition position = session.getElement().getPositionInFile();
 		return new ValidationProducer() {
 			@Override
 			public <T> Validation<T> createValidator(TypeToken<T> formatType) throws ExpressoInterpretationException {
 				ModelInstanceType<SettableValue<?>, SettableValue<T>> type = ModelTypes.Value.forType(formatType);
-				DynamicModelValue.satisfyDynamicValueType(filterValue, session.getExpressoEnv().getModels(), type);
+				DynamicModelValue.satisfyDynamicValueType(filterValue, env.getModels(), type);
 				ModelValueSynth<SettableValue<?>, SettableValue<String>> filter;
 				try {
 					filter = testX.evaluate(ModelTypes.Value.STRING);
@@ -1797,17 +1799,16 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 					}
 				}
 				ModelValueSynth<SettableValue<?>, SettableValue<String>> fFilter = filter;
-				session.interpretLocalModel();
+				env.interpretLocalModel();
 				return new Validation<T>() {
 					@Override
 					public Function<T, String> getTest(ModelSetInstance models) throws ModelInstantiationException {
-						models = session.wrapLocal(models);
+						models = env.wrapLocal(models);
 						SettableValue<T> value = SettableValue.build((TypeToken<T>) type.getType(0)).build();
 						try {
 							DynamicModelValue.satisfyDynamicValue(filterValue, type, models, value);
 						} catch (ModelException | TypeConversionException e) {
-							throw new ModelInstantiationException("Could not satisfy " + filterValue,
-								session.getElement().getPositionInFile(), 0, e);
+							throw new ModelInstantiationException("Could not satisfy " + filterValue, position, 0, e);
 						}
 						SettableValue<String> testValue = fFilter.get(models);
 						return new FilterValidator(value, testValue);

@@ -1,6 +1,5 @@
 package org.observe.expresso;
 
-import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.qommons.config.QonfigAttributeDef;
 import org.qommons.config.QonfigElement.QonfigValue;
 import org.qommons.config.QonfigInterpretationException;
@@ -13,8 +12,6 @@ import org.qommons.io.LocatedFilePosition;
 
 /** A special session with extra utility for the Expresso toolkits */
 public class ExpressoQIS implements SpecialSession<ExpressoQIS> {
-	static final String ELEMENT_MODEL_KEY = "ExpressoElementModel";
-
 	private final CoreSession theWrapped;
 
 	ExpressoQIS(CoreSession session) {
@@ -62,51 +59,6 @@ public class ExpressoQIS implements SpecialSession<ExpressoQIS> {
 	public ExpressoQIS setModels(ObservableModelSet models, ClassView classView) {
 		setExpressoEnv(getExpressoEnv().with(models, classView));
 		return this;
-	}
-
-	/** @throws ExpressoInterpretationException If the local model could not be interpreted */
-	public void interpretLocalModel() throws ExpressoInterpretationException {
-		ObservableModelSet elementModel = (ObservableModelSet) get(ELEMENT_MODEL_KEY);
-		ObservableModelSet.Built built;
-		if (elementModel instanceof ObservableModelSet.Built)
-			built = (ObservableModelSet.Built) elementModel;
-		else if (elementModel instanceof ObservableModelSet.Builder)
-			built = ((ObservableModelSet.Builder) elementModel).build();
-		else if (elementModel == null)
-			built = null;
-		else
-			throw new IllegalStateException("Local model is " + elementModel.getClass().getName() + ", not either built or a builder");
-		if (built != null)
-			put(ELEMENT_MODEL_KEY, built.interpret());
-	}
-
-	/**
-	 * All {@link ObservableModelSet.ModelValueSynth}s for expressions parsed under this session should be
-	 * {@link ObservableModelSet.ModelValueSynth#get(ModelSetInstance) satisfied} with a model set wrapped by this method if this element
-	 * extends with-local-models.
-	 *
-	 * @param models The model instance
-	 * @return The wrapped model instance containing data for this element's local models
-	 * @throws ModelInstantiationException If the local model instantiation fails
-	 */
-	public ModelSetInstance wrapLocal(ModelSetInstance models) throws ModelInstantiationException {
-		ObservableModelSet elementModel = (ObservableModelSet) get(ELEMENT_MODEL_KEY);
-		ObservableModelSet.Built built;
-		if (elementModel instanceof ObservableModelSet.Built)
-			built = (ObservableModelSet.Built) elementModel;
-		else if (elementModel instanceof ObservableModelSet.Builder)
-			built = ((ObservableModelSet.Builder) elementModel).build();
-		else if (elementModel == null)
-			built = null;
-		else
-			throw new IllegalStateException("Local model is " + elementModel.getClass().getName() + ", not either built or a builder");
-		if (built != null && !models.getModel().isRelated(built.getIdentity())) {
-			if (!(built instanceof ObservableModelSet.InterpretedModelSet))
-				throw new ModelInstantiationException("Local element model was not interpreted.  Should have called interpretLocalModel()",
-					getElement().getPositionInFile(), 0);
-			models = ((ObservableModelSet.InterpretedModelSet) built).createInstance(models.getUntil()).withAll(models).build();
-		}
-		return models;
 	}
 
 	/**
