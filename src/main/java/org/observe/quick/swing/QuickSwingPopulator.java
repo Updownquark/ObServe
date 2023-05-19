@@ -201,6 +201,10 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 		void addListener(Component c, L listener) throws ModelInstantiationException;
 	}
 
+	public interface QuickSwingTableAction<R, A extends ValueAction<R>> {
+		void addAction(PanelPopulation.CollectionWidgetBuilder<R, ?, ?> table, A action) throws ModelInstantiationException;
+	}
+
 	/** Quick interpretation of the core toolkit for Swing */
 	public class QuickCoreSwing implements QuickInterpretation {
 		private static final WeakHashMap<Component, QuickWidget> QUICK_SWING_WIDGETS = new WeakHashMap<>();
@@ -1308,6 +1312,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 			// Table
 			QuickSwingPopulator.<QuickTable<?>, QuickTable.Interpreted<?>> interpretWidget(tx, gen(QuickTable.Interpreted.class),
 				QuickBaseSwing::interpretTable);
+			tx.with(ValueAction.Single.Interpreted.class, QuickSwingTableAction.class, QuickSwingTablePopulation::interpretValueAction);
 		}
 
 		static <T> Class<T> gen(Class<? super T> rawClass) {
@@ -1576,6 +1581,9 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 			renderersInitialized[0] = true;
 			interpreted.destroyed().act(__ -> sub.unsubscribe());
 			boolean[] tableInitialized = new boolean[1];
+			// TODO Changes to actions collection?
+			List<QuickSwingTableAction<R, ?>> interpretedActions = BetterList.<ValueAction.Interpreted<R, ?>, QuickSwingTableAction<R, ?>, ExpressoInterpretationException> of2(
+				interpreted.getActions().stream(), a -> (QuickSwingTableAction<R, ?>) tx.transform(a, QuickSwingTableAction.class));
 			QuickSwingPopulator<QuickTable<R>> swingTable = createWidget(interpreted, (panel, quick) -> {
 				TabularWidget.TabularContext<R> ctx = new TabularWidget.TabularContext.Default<>(rowType,
 					quick.reporting().getFileLocation().getPosition(0).toShortString());
@@ -1615,6 +1623,13 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 						table.withSelection(quick.getSelection(), false);
 					if (quick.getMultiSelection() != null)
 						table.withSelection(quick.getMultiSelection());
+					try {
+						for (int a = 0; a < interpretedActions.size(); a++)
+							((QuickSwingTableAction<R, ValueAction<R>>) interpretedActions.get(a)).addAction(table,
+								quick.getActions().get(a));
+					} catch (ModelInstantiationException e) {
+						throw new CheckedExceptionWrapper(e);
+					}
 				});
 			});
 			tableInitialized[0] = true;

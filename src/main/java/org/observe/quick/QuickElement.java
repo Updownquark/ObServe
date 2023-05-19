@@ -1,6 +1,7 @@
 package org.observe.quick;
 
 import java.util.Collection;
+import java.util.List;
 import java.util.function.Function;
 
 import org.observe.Observable;
@@ -19,6 +20,7 @@ import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.TypeConversionException;
 import org.qommons.ClassMap;
+import org.qommons.collect.CollectionUtils;
 import org.qommons.config.AbstractQIS;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigElement;
@@ -49,6 +51,8 @@ public interface QuickElement {
 
 		/** @return This element's models */
 		ObservableModelSet.Built getModels();
+
+		Class<?> getCallingClass();
 
 		/**
 		 * @param <AO> The type of the add-on to get
@@ -92,6 +96,7 @@ public interface QuickElement {
 			private ExpressoEnv theExpressoEnv;
 			private ObservableModelSet.Built theModels;
 			private ErrorReporting theReporting;
+			private Class<?> theCallingClass;
 
 			/**
 			 * @param parent The definition interpreted from the parent element
@@ -119,6 +124,11 @@ public interface QuickElement {
 			}
 
 			@Override
+			public Class<?> getCallingClass() {
+				return theCallingClass;
+			}
+
+			@Override
 			public <AO extends QuickAddOn.Def<? super E, ?>> AO getAddOn(Class<AO> addOn) {
 				return (AO) theAddOns.get(addOn, ClassMap.TypeMatch.SUB_TYPE);
 			}
@@ -141,6 +151,7 @@ public interface QuickElement {
 			@Override
 			public void update(ExpressoQIS session) throws QonfigInterpretationException {
 				theReporting = session.reporting();
+				theCallingClass = session.getWrapped().getInterpreter().getCallingClass();
 				session.put(SESSION_QUICK_ELEMENT, this);
 				theElement = session.getElement();
 				theExpressoEnv = session.getExpressoEnv();
@@ -485,5 +496,16 @@ public interface QuickElement {
 		def = childSession.interpret(type);
 		def.update(childSession);
 		return def;
+	}
+
+	public static <T extends QuickElement.Def<?>> void syncDefs(Class<T> defType, List<? extends T> defs, List<ExpressoQIS> sessions)
+		throws QonfigInterpretationException {
+		CollectionUtils.synchronize((List<T>) defs, sessions, //
+			(widget, child) -> QuickElement.typesEqual(widget.getElement(), child.getElement()))//
+		.simpleE(child -> child.interpret(defType))//
+		.rightOrder()//
+		.onRightX(element -> element.getLeftValue().update(element.getRightValue()))//
+		.onCommonX(element -> element.getLeftValue().update(element.getRightValue()))//
+		.adjust();
 	}
 }

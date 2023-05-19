@@ -38,7 +38,9 @@ import org.observe.quick.QuickWidget;
 import org.observe.quick.base.QuickTableColumn;
 import org.observe.quick.base.TabularWidget;
 import org.observe.quick.base.TabularWidget.TabularContext;
+import org.observe.quick.base.ValueAction;
 import org.observe.quick.swing.QuickSwingPopulator.QuickCoreSwing;
+import org.observe.quick.swing.QuickSwingPopulator.QuickSwingTableAction;
 import org.observe.util.TypeTokens;
 import org.observe.util.swing.CategoryRenderStrategy;
 import org.observe.util.swing.CategoryRenderStrategy.CategoryKeyListener;
@@ -78,7 +80,7 @@ class QuickSwingTablePopulation {
 		public InterpretedSwingTableColumn(QuickWidget quickParent, QuickTableColumn<R, C> column, TabularContext<R> context,
 			Transformer<ExpressoInterpretationException> tx, Observable<?> until, Supplier<ComponentEditor<?, ?>> parent,
 			QuickSwingPopulator<QuickWidget> swingRenderer, QuickSwingPopulator<QuickWidget> swingEditor)
-			throws ModelInstantiationException {
+				throws ModelInstantiationException {
 			theColumn = column;
 			theCRS = new CategoryRenderStrategy<>(column.getName().get(), column.getType(), row -> {
 				context.getRenderValue().set(row, null);
@@ -1118,5 +1120,27 @@ class QuickSwingTablePopulation {
 				return theValueTooltip == null ? null : theValueTooltip.apply(value);
 			}
 		}
+	}
+
+	static <R> QuickSwingTableAction<R, ValueAction.Single<R>> interpretValueAction(ValueAction.Single.Interpreted<R, ?> interpreted,
+		Transformer<ExpressoInterpretationException> tx) throws ExpressoInterpretationException {
+		return (table, action) -> {
+			ValueAction.SingleValueActionContext<R> ctx = new ValueAction.SingleValueActionContext.Default<>(action.getValueType());
+			action.setActionContext(ctx);
+			table.withAction(null, cause -> action.getAction().act(cause), ta -> {
+				ta.allowForEmpty(action.allowForEmpty());
+				ta.allowForMultiple(action.allowForMultiple());
+				ta.displayAsButton(action.isButton());
+				ta.displayAsPopup(action.isPopup());
+				ta.allowWhen(v -> {
+					ctx.getActionValue().set(v, null);
+					return action.isEnabled().get();
+				}, null);
+				ta.modifyButton(btn -> {
+					btn.withText(action.getName());
+					btn.withIcon(action.getIcon());
+				});
+			});
+		};
 	}
 }

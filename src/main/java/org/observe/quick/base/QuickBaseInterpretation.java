@@ -155,6 +155,10 @@ public class QuickBaseInterpretation implements QonfigInterpretation {
 		interpreter.createWith("replace-row-value", QuickTableColumn.ColumnEditType.RowReplaceEditType.Def.class,
 			session -> new QuickTableColumn.ColumnEditType.RowReplaceEditType.Def((QonfigAddOn) session.getFocusType(),
 				(QuickTableColumn.ColumnEditing.Def) session.get(QuickElement.SESSION_QUICK_ELEMENT)));
+		interpreter.createWith("value-action", ValueAction.Single.Def.class,
+			session -> QuickCoreInterpretation.interpretQuick(session, (p, el) -> new ValueAction.Single.Def<>(p, el)));
+		interpreter.createWith("multi-value-action", ValueAction.Multi.Def.class,
+			session -> QuickCoreInterpretation.interpretQuick(session, (p, el) -> new ValueAction.Multi.Def<>(p, el)));
 		return interpreter;
 	}
 

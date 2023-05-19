@@ -35,9 +35,6 @@
 				<hook name="hook" on="valueSize">System.out.println(valueSize+" values")</hook>
 			</model>
 		</models>
-		<style-sheet>
-			<!--<import-style-sheet name="searcher" ref="quick-testing.qss" />-->
-		</style-sheet>
 	</head>
 	<box layout="inline-layout" orientation="vertical" cross-align="justify">
 		<table rows="app.values" name="Simple Table" selection="app.selected" multi-selection="app.allSelected">
@@ -74,6 +71,9 @@
 					<style attr="font-weight" condition="rightPressed">`bold`</style>
 				</label>
 			</column>
+			<value-action icon="&quot;icons/remove.png&quot;">
+				app.values.remove((Object) actionValue)
+			</value-action>
 		</table>
 		<box layout="inline-layout" orientation="horizontal" main-align="justify">
 			<text-field value="app.newValue" commit-on-type="true">

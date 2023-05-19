@@ -23,17 +23,12 @@ import com.google.common.reflect.TypeToken;
 
 public class QuickButton extends QuickWidget.Abstract {
 	public static class Def<B extends QuickButton> extends QuickWidget.Def.Abstract<B> {
-		private Class<?> theCallingClass;
 		private CompiledExpression theText;
 		private CompiledExpression theIcon;
 		private CompiledExpression theAction;
 
 		public Def(QuickElement.Def<?> parent, QonfigElement element) {
 			super(parent, element);
-		}
-
-		public Class<?> getCallingClass() {
-			return theCallingClass;
 		}
 
 		public CompiledExpression getText() {
@@ -51,7 +46,6 @@ public class QuickButton extends QuickWidget.Abstract {
 		@Override
 		public void update(ExpressoQIS session) throws QonfigInterpretationException {
 			super.update(session);
-			theCallingClass = session.getWrapped().getInterpreter().getCallingClass();
 			theText = session.getValueExpression();
 			theIcon = session.getAttributeExpression("icon");
 			theAction = session.getAttributeExpression("action");

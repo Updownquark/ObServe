@@ -58,13 +58,7 @@ public interface QuickContainer2<C extends QuickWidget> extends QuickWidget {
 			@Override
 			public void update(ExpressoQIS session) throws QonfigInterpretationException {
 				super.update(session);
-				CollectionUtils.synchronize(theContents, session.forChildren("content"), //
-					(widget, child) -> QuickElement.typesEqual(widget.getElement(), child.getElement()))//
-				.simpleE(child -> child.interpret(QuickWidget.Def.class))//
-				.rightOrder()//
-				.onRightX(element -> element.getLeftValue().update(element.getRightValue()))//
-				.onCommonX(element -> element.getLeftValue().update(element.getRightValue()))//
-				.adjust();
+				QuickElement.syncDefs(QuickWidget.Def.class, theContents, session.forChildren("content"));
 			}
 
 			@Override
