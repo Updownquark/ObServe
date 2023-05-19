@@ -266,7 +266,7 @@
 				<value name-attribute="value-name"/>
 			</element-model>
 			<attribute name="value-name" type="identifier" default="actionValue" />
-			<attribute name="allow-for-multiple" type="boolean" default="true" />
+			<attribute name="allow-for-multiple" type="boolean" default="false" />
 		</element-def>
 		<element-def name="multi-value-action" extends="abstract-value-action" inherits="with-element-model">
 			<element-model>

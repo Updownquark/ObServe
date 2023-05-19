@@ -1247,8 +1247,14 @@ public class PanelPopulation {
 				popup = null;
 			}
 			if (theMouseListener != null || popup != null) {
-				Component finalC = c;
-				c.addMouseListener(new MouseListener() {
+				// The popup needs to be added to the editor if possible.
+				// If it's added to a parent, it may not appear for the editor itself
+				Component finalC;
+				if (theEditor instanceof Component)
+					finalC = (Component) theEditor;
+				else
+					finalC = c;
+				finalC.addMouseListener(new MouseListener() {
 					@Override
 					public void mouseClicked(MouseEvent e) {
 						if (theMouseListener != null)

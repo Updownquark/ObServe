@@ -71,7 +71,7 @@
 					<style attr="font-weight" condition="rightPressed">`bold`</style>
 				</label>
 			</column>
-			<multi-value-action icon="&quot;icons/remove.png&quot;" as-popup="true">
+			<multi-value-action icon="&quot;icons/remove.png&quot;" as-popup="true" tooltip="`Remove selected rows`">
 				app.values.removeAll(actionValues)
 			</multi-value-action>
 		</table>
