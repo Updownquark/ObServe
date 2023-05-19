@@ -26,6 +26,12 @@
 						<map-with>v.size()</map-with>
 					</map-to>
 				</transform>
+				<value name="selected" type="Integer" />
+				<list name="allSelected" type="Integer" />
+				<value name="_allSelectedV">allSelected</value>
+				<transform name="allSelectedValue" source="_allSelectedV">
+					<refresh on="allSelected" />
+				</transform>
 				<hook name="hook" on="valueSize">System.out.println(valueSize+" values")</hook>
 			</model>
 		</models>
@@ -34,7 +40,7 @@
 		</style-sheet>
 	</head>
 	<box layout="inline-layout" orientation="vertical" cross-align="justify">
-		<table rows="app.values" name="Simple Table">
+		<table rows="app.values" name="Simple Table" selection="app.selected" multi-selection="app.allSelected">
 			<titled-border title="`Factored Values`">
 				<style attr="border-color" condition="hovered">`green`</style>
 				<style condition="pressed">
@@ -77,6 +83,14 @@
 				</style>
 			</text-field>
 			<button action="app.addPrime">`Add`</button>
+		</box>
+		<box layout="inline-layout" orientation="horizontal">
+			<label>Selection:</label>
+			<label value="app.selected" />
+		</box>
+		<box layout="inline-layout" orientation="horizontal">
+			<label>All Selection:</label>
+			<label value="app.allSelectedValue" />
 		</box>
 	</box>
 </quick>
