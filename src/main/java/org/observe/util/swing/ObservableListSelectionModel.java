@@ -658,8 +658,8 @@ public class ObservableListSelectionModel<E> extends ObservableCollectionWrapper
 			   and in this case we need to search for the first value set below it.
 			 */
 			if (r == maxIndex) {
-				maxIndex = value.length();
-				if (maxIndex == 0)
+				maxIndex = value.length() - 1;
+				if (maxIndex < 0)
 					maxIndex = MIN;
 				// for (maxIndex = maxIndex - 1; minIndex <= maxIndex; maxIndex--) {
 				// if (value.get(maxIndex)) {

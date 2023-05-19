@@ -1611,6 +1611,10 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 				panel.addTable(quick.getRows(), table -> {
 					parent[0] = table;
 					table.withColumns(crss);
+					if (quick.getSelection() != null)
+						table.withSelection(quick.getSelection(), false);
+					if (quick.getMultiSelection() != null)
+						table.withSelection(quick.getMultiSelection());
 				});
 			});
 			tableInitialized[0] = true;
