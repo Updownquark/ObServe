@@ -159,11 +159,6 @@ public abstract class Positionable extends QuickAddOn.Abstract<QuickElement> {
 		theTrailing = SettableValue.build(theLeading.getType()).build();
 	}
 
-	@Override
-	public Interpreted<?> getInterpreted() {
-		return (Interpreted<?>) super.getInterpreted();
-	}
-
 	public SettableValue<QuickSize> getLeading() {
 		return SettableValue.flatten(theLeading);
 	}
@@ -177,10 +172,12 @@ public abstract class Positionable extends QuickAddOn.Abstract<QuickElement> {
 	}
 
 	@Override
-	public void update(ModelSetInstance models) throws ModelInstantiationException {
-		theLeading.set(getInterpreted().getLeading() == null ? null : getInterpreted().getLeading().get(models), null);
-		theCenter.set(getInterpreted().getCenter() == null ? null : getInterpreted().getCenter().get(models), null);
-		theTrailing.set(getInterpreted().getTrailing() == null ? null : getInterpreted().getTrailing().get(models), null);
+	public void update(QuickAddOn.Interpreted<?, ?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
+		super.update(interpreted, models);
+		Positionable.Interpreted<?> myInterpreted = (Positionable.Interpreted<?>) interpreted;
+		theLeading.set(myInterpreted.getLeading() == null ? null : myInterpreted.getLeading().get(models), null);
+		theCenter.set(myInterpreted.getCenter() == null ? null : myInterpreted.getCenter().get(models), null);
+		theTrailing.set(myInterpreted.getTrailing() == null ? null : myInterpreted.getTrailing().get(models), null);
 	}
 
 	public Observable<ObservableValueEvent<QuickSize>> changes() {
@@ -191,21 +188,11 @@ public abstract class Positionable extends QuickAddOn.Abstract<QuickElement> {
 		public Vertical(Interpreted.Vertical interpreted, QuickElement element) {
 			super(interpreted, element);
 		}
-
-		@Override
-		public Interpreted.Vertical getInterpreted() {
-			return (Interpreted.Vertical) super.getInterpreted();
-		}
 	}
 
 	public static class Horizontal extends Positionable {
 		public Horizontal(Interpreted.Horizontal interpreted, QuickElement element) {
 			super(interpreted, element);
-		}
-
-		@Override
-		public Interpreted.Horizontal getInterpreted() {
-			return (Interpreted.Horizontal) super.getInterpreted();
 		}
 	}
 }

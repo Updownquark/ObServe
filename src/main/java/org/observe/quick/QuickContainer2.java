@@ -117,8 +117,7 @@ public interface QuickContainer2<C extends QuickWidget> extends QuickWidget {
 			}
 
 			@Override
-			public void update(QuickStyledElement.QuickInterpretationCache cache)
-				throws ExpressoInterpretationException {
+			public void update(QuickStyledElement.QuickInterpretationCache cache) throws ExpressoInterpretationException {
 				super.update(cache);
 				CollectionUtils.synchronize(theContents, getDefinition().getContents(), //
 					(widget, child) -> widget.getDefinition() == child)//
@@ -129,11 +128,16 @@ public interface QuickContainer2<C extends QuickWidget> extends QuickWidget {
 				.onCommonX(element -> element.getLeftValue().update(cache))//
 				.adjust();
 			}
+
+			@Override
+			public void destroy() {
+				for (QuickWidget.Interpreted<? extends C> content : theContents.reverse())
+					content.destroy();
+				theContents.clear();
+				super.destroy();
+			}
 		}
 	}
-
-	@Override
-	Interpreted<?, C> getInterpreted();
 
 	/** @return The widgets contained in this container */
 	BetterList<? extends C> getContents();
@@ -150,14 +154,9 @@ public interface QuickContainer2<C extends QuickWidget> extends QuickWidget {
 		 * @param interpreted The interpretation producing this container
 		 * @param parent The parent element
 		 */
-		public Abstract(QuickContainer2.Interpreted<?, ?> interpreted, QuickElement parent) {
+		protected Abstract(QuickContainer2.Interpreted<?, ?> interpreted, QuickElement parent) {
 			super(interpreted, parent);
 			theContents = BetterTreeList.<C> build().build();
-		}
-
-		@Override
-		public QuickContainer2.Interpreted<?, C> getInterpreted() {
-			return (QuickContainer2.Interpreted<?, C>) super.getInterpreted();
 		}
 
 		@Override
@@ -166,31 +165,31 @@ public interface QuickContainer2<C extends QuickWidget> extends QuickWidget {
 		}
 
 		@Override
-		public void update(ModelSetInstance models) throws ModelInstantiationException {
-			super.update(models);
-
-			CollectionUtils.synchronize(theContents, getInterpreted().getContents(), //
-				(widget, child) -> widget.getInterpreted() == child)//
+		public void update(QuickElement.Interpreted<?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
+			super.update(interpreted, models);
+			QuickContainer2.Interpreted<?, C> myInterpreted = (QuickContainer2.Interpreted<?, C>) interpreted;
+			CollectionUtils.synchronize(theContents, myInterpreted.getContents(), //
+				(widget, child) -> widget.getId() == child.getId())//
 			.<ModelInstantiationException> simpleE(child -> (C) child.create(QuickContainer2.Abstract.this))//
 			.rightOrder()//
 			.onRightX(element -> {
 				try {
-					element.getLeftValue().update(getModels());
+					element.getLeftValue().update(element.getRightValue(), getModels());
 				} catch (ExpressoRuntimeException e) {
 					throw e;
 				} catch (RuntimeException | Error e) {
 					throw new ExpressoRuntimeException(e.getMessage() == null ? e.toString() : e.getMessage(),
-							element.getRightValue().getDefinition().reporting().getFileLocation().getPosition(0), e);
+						element.getRightValue().getDefinition().reporting().getFileLocation().getPosition(0), e);
 				}
 			})//
 			.onCommonX(element -> {
 				try {
-					element.getLeftValue().update(getModels());
+					element.getLeftValue().update(element.getRightValue(), getModels());
 				} catch (ExpressoRuntimeException e) {
 					throw e;
 				} catch (RuntimeException | Error e) {
 					throw new ExpressoRuntimeException(e.getMessage() == null ? e.toString() : e.getMessage(),
-							element.getRightValue().getDefinition().reporting().getFileLocation().getPosition(0), e);
+						element.getRightValue().getDefinition().reporting().getFileLocation().getPosition(0), e);
 				}
 			})//
 			.adjust();

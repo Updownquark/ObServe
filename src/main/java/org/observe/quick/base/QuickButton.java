@@ -22,7 +22,7 @@ import org.qommons.ex.ExFunction;
 import com.google.common.reflect.TypeToken;
 
 public class QuickButton extends QuickWidget.Abstract {
-	public static class Def extends QuickWidget.Def.Abstract<QuickButton> {
+	public static class Def<B extends QuickButton> extends QuickWidget.Def.Abstract<B> {
 		private Class<?> theCallingClass;
 		private CompiledExpression theText;
 		private CompiledExpression theIcon;
@@ -58,28 +58,28 @@ public class QuickButton extends QuickWidget.Abstract {
 		}
 
 		@Override
-		public Interpreted interpret(QuickElement.Interpreted<?> parent) {
-			return new Interpreted(this, parent);
+		public Interpreted<? extends B> interpret(QuickElement.Interpreted<?> parent) {
+			return new Interpreted<>(this, parent);
 		}
 	}
 
-	public static class Interpreted extends QuickWidget.Interpreted.Abstract<QuickButton> {
+	public static class Interpreted<B extends QuickButton> extends QuickWidget.Interpreted.Abstract<B> {
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<String>> theText;
 		private ExFunction<ModelSetInstance, SettableValue<Icon>, ModelInstantiationException> theIcon;
 		private InterpretedValueSynth<ObservableAction<?>, ObservableAction<?>> theAction;
 
-		public Interpreted(Def definition, QuickElement.Interpreted<?> parent) {
+		public Interpreted(Def<? super B> definition, QuickElement.Interpreted<?> parent) {
 			super(definition, parent);
 		}
 
 		@Override
-		public Def getDefinition() {
-			return (Def) super.getDefinition();
+		public Def<? super B> getDefinition() {
+			return (Def<? super B>) super.getDefinition();
 		}
 
 		@Override
-		public TypeToken<QuickButton> getWidgetType() {
-			return TypeTokens.get().of(QuickButton.class);
+		public TypeToken<B> getWidgetType() {
+			return (TypeToken<B>) TypeTokens.get().of(QuickButton.class);
 		}
 
 		public InterpretedValueSynth<SettableValue<?>, SettableValue<String>> getText() {
@@ -105,8 +105,8 @@ public class QuickButton extends QuickWidget.Abstract {
 		}
 
 		@Override
-		public QuickButton create(QuickElement parent) {
-			return new QuickButton(this, parent);
+		public B create(QuickElement parent) {
+			return (B) new QuickButton(this, parent);
 		}
 	}
 
@@ -114,13 +114,8 @@ public class QuickButton extends QuickWidget.Abstract {
 	private SettableValue<Icon> theIcon;
 	private ObservableAction<?> theAction;
 
-	public QuickButton(Interpreted interpreted, QuickElement parent) {
+	public QuickButton(Interpreted<?> interpreted, QuickElement parent) {
 		super(interpreted, parent);
-	}
-
-	@Override
-	public Interpreted getInterpreted() {
-		return (Interpreted) super.getInterpreted();
 	}
 
 	public SettableValue<String> getText() {
@@ -136,10 +131,11 @@ public class QuickButton extends QuickWidget.Abstract {
 	}
 
 	@Override
-	public void update(ModelSetInstance models) throws ModelInstantiationException {
-		super.update(models);
-		theText = getInterpreted().getText() == null ? null : getInterpreted().getText().get(getModels());
-		theIcon = getInterpreted().getIcon() == null ? null : getInterpreted().getIcon().apply(getModels());
-		theAction = getInterpreted().getAction().get(getModels());
+	public void update(QuickElement.Interpreted<?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
+		super.update(interpreted, models);
+		QuickButton.Interpreted<?> myInterpreted = (QuickButton.Interpreted<?>) interpreted;
+		theText = myInterpreted.getText() == null ? null : myInterpreted.getText().get(getModels());
+		theIcon = myInterpreted.getIcon() == null ? null : myInterpreted.getIcon().apply(getModels());
+		theAction = myInterpreted.getAction().get(getModels());
 	}
 }

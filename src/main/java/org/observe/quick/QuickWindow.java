@@ -183,6 +183,7 @@ public class QuickWindow extends QuickAddOn.Abstract<QuickElement> {
 		}
 	}
 
+	private CloseAction theCloseAction;
 	private SettableValue<Integer> theX;
 	private SettableValue<Integer> theY;
 	private SettableValue<Integer> theWidth;
@@ -198,9 +199,8 @@ public class QuickWindow extends QuickAddOn.Abstract<QuickElement> {
 		super(interpreted, element);
 	}
 
-	@Override
-	public Interpreted getInterpreted() {
-		return (Interpreted) super.getInterpreted();
+	public CloseAction getCloseAction() {
+		return theCloseAction;
 	}
 
 	/** @return The value defining the x-coordinate of the window--to move and be updated when the user moves it */
@@ -234,12 +234,15 @@ public class QuickWindow extends QuickAddOn.Abstract<QuickElement> {
 	}
 
 	@Override
-	public void update(ModelSetInstance models) throws ModelInstantiationException {
-		theX = getInterpreted().getX() == null ? null : getInterpreted().getX().get(models);
-		theY = getInterpreted().getY() == null ? null : getInterpreted().getY().get(models);
-		theWidth = getInterpreted().getWidth() == null ? null : getInterpreted().getWidth().get(models);
-		theHeight = getInterpreted().getHeight() == null ? null : getInterpreted().getHeight().get(models);
-		theTitle = getInterpreted().getTitle() == null ? null : getInterpreted().getTitle().get(models);
-		theVisible = getInterpreted().getVisible() == null ? null : getInterpreted().getVisible().get(models);
+	public void update(QuickAddOn.Interpreted<?, ?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
+		super.update(interpreted, models);
+		QuickWindow.Interpreted myInterpreted = (QuickWindow.Interpreted) interpreted;
+		theCloseAction = myInterpreted.getDefinition().getCloseAction();
+		theX = myInterpreted.getX() == null ? null : myInterpreted.getX().get(models);
+		theY = myInterpreted.getY() == null ? null : myInterpreted.getY().get(models);
+		theWidth = myInterpreted.getWidth() == null ? null : myInterpreted.getWidth().get(models);
+		theHeight = myInterpreted.getHeight() == null ? null : myInterpreted.getHeight().get(models);
+		theTitle = myInterpreted.getTitle() == null ? null : myInterpreted.getTitle().get(models);
+		theVisible = myInterpreted.getVisible() == null ? null : myInterpreted.getVisible().get(models);
 	}
 }

@@ -93,6 +93,7 @@ public class QuickSplit extends QuickContainer2.Abstract<QuickWidget> {
 		}
 	}
 
+	private boolean isVertical;
 	private final SettableValue<SettableValue<QuickSize>> theSplitPosition;
 
 	public QuickSplit(Interpreted<?> interpreted, QuickElement parent) {
@@ -101,16 +102,17 @@ public class QuickSplit extends QuickContainer2.Abstract<QuickWidget> {
 			.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<QuickSize>> parameterized(QuickSize.class)).build();
 	}
 
-	@Override
-	public Interpreted<?> getInterpreted() {
-		return (Interpreted<?>) super.getInterpreted();
+	public boolean isVertical() {
+		return isVertical;
 	}
 
 	@Override
-	public void update(ModelSetInstance models) throws ModelInstantiationException {
-		super.update(models);
-		if (getInterpreted().getSplitPosition() != null)
-			theSplitPosition.set(getInterpreted().getSplitPosition().get(getModels()), null);
+	public void update(QuickElement.Interpreted<?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
+		super.update(interpreted, models);
+		QuickSplit.Interpreted<?> myInterpreted = (QuickSplit.Interpreted<?>) interpreted;
+		isVertical = myInterpreted.getDefinition().isVertical();
+		if (myInterpreted.getSplitPosition() != null)
+			theSplitPosition.set(myInterpreted.getSplitPosition().get(getModels()), null);
 		else {
 			SettableValue<QuickSize> splitPos = SettableValue.build(QuickSize.class).build();
 			if (theSplitPosition.get() != null)

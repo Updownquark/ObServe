@@ -129,19 +129,15 @@ public interface QuickValueWidget<T> extends QuickWidget {
 		}
 
 		@Override
-		public QuickValueWidget.Interpreted<T, ?> getInterpreted() {
-			return (QuickValueWidget.Interpreted<T, ?>) super.getInterpreted();
-		}
-
-		@Override
 		public SettableValue<T> getValue() {
 			return SettableValue.flatten(theValue);
 		}
 
 		@Override
-		public void update(ModelSetInstance models) throws ModelInstantiationException {
-			super.update(models);
-			theValue.set(getInterpreted().getValue().get(getModels()), null);
+		public void update(QuickElement.Interpreted<?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
+			super.update(interpreted, models);
+			QuickValueWidget.Interpreted<T, ?> myInterpreted = (QuickValueWidget.Interpreted<T, ?>) interpreted;
+			theValue.set(myInterpreted.getValue().get(getModels()), null);
 		}
 	}
 

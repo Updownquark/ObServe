@@ -222,11 +222,6 @@ public abstract class Sizeable extends QuickAddOn.Abstract<QuickElement> {
 		theMaximum = SettableValue.build(theSize.getType()).build();
 	}
 
-	@Override
-	public Interpreted<?> getInterpreted() {
-		return (Interpreted<?>) super.getInterpreted();
-	}
-
 	public SettableValue<QuickSize> getSize() {
 		return SettableValue.flatten(theSize);
 	}
@@ -244,11 +239,12 @@ public abstract class Sizeable extends QuickAddOn.Abstract<QuickElement> {
 	}
 
 	@Override
-	public void update(ModelSetInstance models) throws ModelInstantiationException {
-		theSize.set(getInterpreted().getSize() == null ? null : getInterpreted().getSize().get(models), null);
-		theMinimum.set(getInterpreted().getMinimum() == null ? null : getInterpreted().getMinimum().get(models), null);
-		thePreferred.set(getInterpreted().getPreferred() == null ? null : getInterpreted().getPreferred().get(models), null);
-		theMaximum.set(getInterpreted().getMaximum() == null ? null : getInterpreted().getMaximum().get(models), null);
+	public void update(QuickAddOn.Interpreted<?, ?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
+		Sizeable.Interpreted<?> myInterpreted = (Sizeable.Interpreted<?>) interpreted;
+		theSize.set(myInterpreted.getSize() == null ? null : myInterpreted.getSize().get(models), null);
+		theMinimum.set(myInterpreted.getMinimum() == null ? null : myInterpreted.getMinimum().get(models), null);
+		thePreferred.set(myInterpreted.getPreferred() == null ? null : myInterpreted.getPreferred().get(models), null);
+		theMaximum.set(myInterpreted.getMaximum() == null ? null : myInterpreted.getMaximum().get(models), null);
 	}
 
 	public Observable<ObservableValueEvent<QuickSize>> changes() {
@@ -365,32 +361,17 @@ public abstract class Sizeable extends QuickAddOn.Abstract<QuickElement> {
 		public Vertical(Interpreted.Vertical interpreted, QuickElement element) {
 			super(interpreted, element);
 		}
-
-		@Override
-		public Interpreted.Vertical getInterpreted() {
-			return (Interpreted.Vertical) super.getInterpreted();
-		}
 	}
 
 	public static class Horizontal extends Sizeable {
 		public Horizontal(Interpreted.Horizontal interpreted, QuickElement element) {
 			super(interpreted, element);
 		}
-
-		@Override
-		public Interpreted.Horizontal getInterpreted() {
-			return (Interpreted.Horizontal) super.getInterpreted();
-		}
 	}
 
 	public static class Generic extends Sizeable {
 		public Generic(Interpreted.Generic interpreted, QuickElement element) {
 			super(interpreted, element);
-		}
-
-		@Override
-		public Interpreted.Generic getInterpreted() {
-			return (Interpreted.Generic) super.getInterpreted();
 		}
 	}
 }

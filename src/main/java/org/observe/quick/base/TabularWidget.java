@@ -100,11 +100,10 @@ public interface TabularWidget<R> extends MultiValueWidget<R>, RowTyped<R> {
 
 		public abstract class Abstract<R, W extends TabularWidget<R>> extends QuickWidget.Interpreted.Abstract<W>
 		implements Interpreted<R, W> {
-			private final List<QuickTableColumn.TableColumnSet.Interpreted<R, ?>> theColumns;
+			private ObservableCollection<QuickTableColumn.TableColumnSet.Interpreted<R, ?>> theColumns;
 
 			protected Abstract(Def<? super W> definition, QuickElement.Interpreted<?> parent) {
 				super(definition, parent);
-				theColumns = new ArrayList<>();
 			}
 
 			@Override
@@ -113,13 +112,18 @@ public interface TabularWidget<R> extends MultiValueWidget<R>, RowTyped<R> {
 			}
 
 			@Override
-			public List<QuickTableColumn.TableColumnSet.Interpreted<R, ?>> getColumns() {
+			public ObservableCollection<QuickTableColumn.TableColumnSet.Interpreted<R, ?>> getColumns() {
 				return theColumns;
 			}
 
 			@Override
 			public void update(QuickStyledElement.QuickInterpretationCache cache)
 				throws ExpressoInterpretationException {
+				if (theColumns == null)
+					theColumns = ObservableCollection.build(TypeTokens.get().keyFor(
+						QuickTableColumn.TableColumnSet.Interpreted.class).<QuickTableColumn.TableColumnSet.Interpreted<R, ?>> parameterized(
+							getRowType(), TypeTokens.get().WILDCARD))//
+					.build();
 				DynamicModelValue.satisfyDynamicValueType(getDefinition().getValueName(), getDefinition().getModels(),
 					ModelTypes.Value.forType(getRowType()));
 				super.update(cache);
@@ -162,6 +166,14 @@ public interface TabularWidget<R> extends MultiValueWidget<R>, RowTyped<R> {
 			}
 
 			@Override
+			public void destroy() {
+				for (QuickTableColumn.TableColumnSet.Interpreted<R, ?> columnSet : theColumns.reverse())
+					columnSet.destroy();
+				theColumns.clear();
+				super.destroy();
+			}
+
+			@Override
 			public abstract W create(QuickElement parent);
 		}
 	}
@@ -201,9 +213,6 @@ public interface TabularWidget<R> extends MultiValueWidget<R>, RowTyped<R> {
 		}
 	}
 
-	@Override
-	Interpreted<R, ?> getInterpreted();
-
 	void setContext(TabularContext<R> ctx) throws ModelInstantiationException;
 
 	ObservableCollection<QuickTableColumn.TableColumnSet<R>> getColumnSets();
@@ -211,22 +220,21 @@ public interface TabularWidget<R> extends MultiValueWidget<R>, RowTyped<R> {
 	ObservableCollection<QuickTableColumn<R, ?>> getColumns();
 
 	public abstract class Abstract<R> extends QuickWidget.Abstract implements TabularWidget<R> {
+		private final TypeToken<R> theRowType;
 		private final ObservableCollection<QuickTableColumn.TableColumnSet<R>> theColumnSets;
 		private final ObservableCollection<QuickTableColumn<R, ?>> theColumns;
 
+		private String theValueName;
+
 		protected Abstract(TabularWidget.Interpreted<R, ?> interpreted, QuickElement parent) {
 			super(interpreted, parent);
+			theRowType = interpreted.getRowType();
 			theColumnSets = ObservableCollection
 				.build((Class<QuickTableColumn.TableColumnSet<R>>) (Class<?>) QuickTableColumn.TableColumnSet.class).build();
 			theColumns = theColumnSets.flow()//
 				.<QuickTableColumn<R, ?>> flatMap(TypeTokens.get().keyFor(QuickTableColumn.class).<QuickTableColumn<R, ?>> parameterized(
-					getInterpreted().getRowType(), TypeTokens.get().WILDCARD), columnSet -> columnSet.getColumns().flow())//
+					theRowType, TypeTokens.get().WILDCARD), columnSet -> columnSet.getColumns().flow())//
 				.collect();
-		}
-
-		@Override
-		public TabularWidget.Interpreted<R, ?> getInterpreted() {
-			return (TabularWidget.Interpreted<R, ?>) super.getInterpreted();
 		}
 
 		@Override
@@ -239,6 +247,14 @@ public interface TabularWidget<R> extends MultiValueWidget<R>, RowTyped<R> {
 			return theColumns.flow().unmodifiable(false).collect();
 		}
 
+		public TypeToken<R> getRowType() {
+			return theRowType;
+		}
+
+		public String getValueName() {
+			return theValueName;
+		}
+
 		@Override
 		public void setContext(TabularContext<R> ctx) throws ModelInstantiationException {
 			setContext((MultiValueRenderContext<R>) ctx);
@@ -248,15 +264,16 @@ public interface TabularWidget<R> extends MultiValueWidget<R>, RowTyped<R> {
 
 		@Override
 		public void setContext(MultiValueRenderContext<R> ctx) throws ModelInstantiationException {
-			satisfyContextValue(getInterpreted().getDefinition().getValueName(), ModelTypes.Value.forType(getInterpreted().getRowType()),
-				ctx.getRenderValue());
+			satisfyContextValue(theValueName, ModelTypes.Value.forType(theRowType), ctx.getRenderValue());
 			satisfyContextValue("selected", ModelTypes.Value.BOOLEAN, ctx.isSelected());
 		}
 
 		@Override
-		public void update(ModelSetInstance models) throws ModelInstantiationException {
-			super.update(models);
-			CollectionUtils.synchronize(theColumnSets, getInterpreted().getColumns(), (v, i) -> v.getInterpreted() == i)//
+		public void update(QuickElement.Interpreted<?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
+			super.update(interpreted, models);
+			TabularWidget.Interpreted<R, ?> myInterpreted = (TabularWidget.Interpreted<R, ?>) interpreted;
+			theValueName = myInterpreted.getDefinition().getValueName();
+			CollectionUtils.synchronize(theColumnSets, myInterpreted.getColumns(), (v, i) -> v.getId() == i.getId())//
 			.adjust(
 				new CollectionUtils.CollectionSynchronizerE<QuickTableColumn.TableColumnSet<R>, QuickTableColumn.TableColumnSet.Interpreted<R, ?>, ModelInstantiationException>() {
 					@Override
@@ -282,7 +299,7 @@ public interface TabularWidget<R> extends MultiValueWidget<R>, RowTyped<R> {
 						try {
 							created = element.getRightValue()//
 								.create(TabularWidget.Abstract.this);
-							created.update(getModels());
+							created.update(element.getRightValue(), getModels());
 						} catch (ExpressoRuntimeException e) {
 							throw e;
 						} catch (RuntimeException | Error e) {
@@ -296,7 +313,7 @@ public interface TabularWidget<R> extends MultiValueWidget<R>, RowTyped<R> {
 								throw e;
 							} catch (RuntimeException | Error e) {
 								throw new ExpressoRuntimeException(e.getMessage() == null ? e.toString() : e.getMessage(),
-									column.getColumnSet().getInterpreted().getDefinition().reporting().getFileLocation().getPosition(0),
+									column.getColumnSet().reporting().getFileLocation().getPosition(0),
 									e);
 							}
 						}
@@ -309,7 +326,7 @@ public interface TabularWidget<R> extends MultiValueWidget<R>, RowTyped<R> {
 						ElementSyncInput<QuickTableColumn.TableColumnSet<R>, QuickTableColumn.TableColumnSet.Interpreted<R, ?>> element)
 							throws ModelInstantiationException {
 						try {
-							element.getLeftValue().update(getModels());
+							element.getLeftValue().update(element.getRightValue(), getModels());
 						} catch (ExpressoRuntimeException e) {
 							throw e;
 						} catch (RuntimeException | Error e) {
@@ -323,7 +340,7 @@ public interface TabularWidget<R> extends MultiValueWidget<R>, RowTyped<R> {
 								throw e;
 							} catch (RuntimeException | Error e) {
 								throw new ExpressoRuntimeException(e.getMessage() == null ? e.toString() : e.getMessage(),
-									column.getColumnSet().getInterpreted().getDefinition().reporting().getFileLocation().getPosition(0),
+									column.getColumnSet().reporting().getFileLocation().getPosition(0),
 									e);
 							}
 						}

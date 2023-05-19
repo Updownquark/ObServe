@@ -1,7 +1,6 @@
 package org.observe.quick.base;
 
 import org.observe.ObservableAction;
-import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.collect.ObservableCollection;
 import org.observe.expresso.CompiledExpression;
@@ -33,18 +32,29 @@ import com.google.common.reflect.TypeToken;
 public interface QuickTableColumn<R, C> {
 	public interface TableColumnSet<R> extends QuickElement, RowTyped<R> {
 		public interface Def<CC extends TableColumnSet<?>> extends QuickElement.Def<CC>, RowTyped.Def<CC> {
+			QuickWidget.Def<?> getRenderer();
+
+			ColumnEditing.Def getEditing();
+
 			<R> Interpreted<R, ? extends CC> interpret(QuickElement.Interpreted<?> parent);
 		}
 
 		public interface Interpreted<R, CC extends TableColumnSet<R>> extends QuickElement.Interpreted<CC>, RowTyped.Interpreted<R, CC> {
+			@Override
+			Def<? super CC> getDefinition();
+
+			QuickWidget.Interpreted<?> getRenderer();
+
+			ColumnEditing.Interpreted<R, ?> getEditing();
+
 			void update(InterpretedModelSet models, QuickStyledElement.QuickInterpretationCache cache) throws ExpressoInterpretationException;
 
 			CC create(QuickElement parent);
 		}
 
-		ObservableCollection<? extends QuickTableColumn<R, ?>> getColumns();
+		TypeToken<R> getRowType();
 
-		void update(ModelSetInstance models) throws ModelInstantiationException;
+		ObservableCollection<? extends QuickTableColumn<R, ?>> getColumns();
 	}
 
 	SettableValue<String> getName();
@@ -57,7 +67,7 @@ public interface QuickTableColumn<R, C> {
 
 	SettableValue<String> getHeaderTooltip();
 
-	ObservableValue<QuickWidget> getRenderer();
+	QuickWidget getRenderer();
 
 	ColumnEditing<R, C> getEditing();
 
@@ -214,6 +224,9 @@ public interface QuickTableColumn<R, C> {
 			}
 		}
 
+		private String theColumnEditValueName;
+		private String theValueName;
+		private Integer theClicks;
 		private final SettableValue<C> theRawColumnEditValue;
 		private final SettableValue<C> theFilteredColumnEditValue;
 		private final SettableValue<SettableValue<String>> isEditable;
@@ -239,11 +252,6 @@ public interface QuickTableColumn<R, C> {
 		}
 
 		@Override
-		public Interpreted<R, C> getInterpreted() {
-			return (Interpreted<R, C>) super.getInterpreted();
-		}
-
-		@Override
 		public TableColumnSet<R> getParentElement() {
 			return (TableColumnSet<R>) super.getParentElement();
 		}
@@ -260,17 +268,17 @@ public interface QuickTableColumn<R, C> {
 			return theFilteredColumnEditValue;
 		}
 
+		public Integer getClicks() {
+			return theClicks;
+		}
+
 		public void setEditorContext(ColumnEditContext<R, C> ctx) throws ModelInstantiationException {
 			ModelInstanceType<SettableValue<?>, SettableValue<C>> rowType = ModelTypes.Value.forType(ctx.getEditColumnValue().getType());
-			QuickElement.satisfyContextValue(getInterpreted().getDefinition().getColumnEditValueName(), rowType, ctx.getEditColumnValue(),
+			QuickElement.satisfyContextValue(theColumnEditValueName, rowType, ctx.getEditColumnValue(),
 				this);
 			if (theEditor != null) {
-				QuickElement parent = getParentElement();
-				while (parent != null && !(parent instanceof MultiValueWidget))
-					parent = parent.getParentElement();
-				if (parent != null)
-					QuickElement.satisfyContextValue(((MultiValueWidget<?>) parent).getInterpreted().getDefinition().getValueName(),
-						rowType, ctx.getEditColumnValue(), theEditor);
+				if (theValueName != null)
+					QuickElement.satisfyContextValue(theValueName, rowType, ctx.getEditColumnValue(), theEditor);
 				QuickElement.satisfyContextValue("rowIndex", ModelTypes.Value.INT, ctx.getRowIndex(), theEditor);
 				QuickElement.satisfyContextValue("columnIndex", ModelTypes.Value.INT, ctx.getColumnIndex(), theEditor);
 				QuickElement.satisfyContextValue("selected", ModelTypes.Value.BOOLEAN, ctx.isSelected(), theEditor);
@@ -278,19 +286,30 @@ public interface QuickTableColumn<R, C> {
 		}
 
 		@Override
-		protected void update(ModelSetInstance models) throws ModelInstantiationException {
+		public void update(QuickElement.Interpreted<?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
 			// The context values in the editor's models need to be independent from the render models
-			super.update(models.copy().build());
+			super.update(interpreted, models.copy().build());
+			ColumnEditing.Interpreted<R, C> myInterpreted = (ColumnEditing.Interpreted<R, C>) interpreted;
+			theColumnEditValueName = myInterpreted.getDefinition().getColumnEditValueName();
+			theClicks = myInterpreted.getDefinition().getClicks();
+			isEditable.set(myInterpreted.isEditable() == null ? null : myInterpreted.isEditable().get(models), null);
+			isAcceptable.set(myInterpreted.isAcceptable() == null ? null : myInterpreted.isAcceptable().get(models), null);
 
-			isEditable.set(getInterpreted().isEditable() == null ? null : getInterpreted().isEditable().get(models), null);
-			isAcceptable.set(getInterpreted().isAcceptable() == null ? null : getInterpreted().isAcceptable().get(models), null);
-
-			if (getInterpreted().getEditor() == null)
+			if (myInterpreted.getEditor() == null)
 				theEditor = null;
-			else if (theEditor == null || !theEditor.getInterpreted().equals(getInterpreted().getEditor()))
-				theEditor = getInterpreted().getEditor().create(this);
-			if (theEditor != null)
-				theEditor.update(getModels());
+			else if (theEditor == null || theEditor.getId() != myInterpreted.getEditor())
+				theEditor = myInterpreted.getEditor().create(this);
+			theValueName = null;
+			if (theEditor != null) {
+				theEditor.update(myInterpreted.getEditor(), getModels());
+
+				// Find the name of the row value variable we need to spoof
+				QuickElement.Interpreted<?> parent = interpreted.getParentElement();
+				while (parent != null && !(parent instanceof MultiValueWidget.Interpreted))
+					parent = parent.getParentElement();
+				if (parent != null)
+					theValueName = ((MultiValueWidget.Interpreted<?, ?>) parent).getDefinition().getValueName();
+			}
 		}
 	}
 
@@ -328,11 +347,6 @@ public interface QuickTableColumn<R, C> {
 
 		protected ColumnEditType(Interpreted<R, C, ?> interpreted, ColumnEditing<R, C> element) {
 			super(interpreted, element);
-		}
-
-		@Override
-		public Interpreted<R, C, ?> getInterpreted() {
-			return (Interpreted<R, C, ?>) super.getInterpreted();
 		}
 
 		public static class RowModifyEditType<R, C> extends ColumnEditType<R, C> {
@@ -394,15 +408,15 @@ public interface QuickTableColumn<R, C> {
 			}
 
 			private final SettableValue<ObservableAction<?>> theCommit;
+			private boolean isRowUpdate;
 
 			public RowModifyEditType(Interpreted<R, C> interpreted, ColumnEditing<R, C> element) {
 				super(interpreted, element);
 				theCommit = SettableValue.build(TypeTokens.get().keyFor(ObservableAction.class).<ObservableAction<?>> wildCard()).build();
 			}
 
-			@Override
-			public Interpreted<R, C> getInterpreted() {
-				return (Interpreted<R, C>) super.getInterpreted();
+			public boolean isRowUpdate() {
+				return isRowUpdate;
 			}
 
 			public ObservableAction<?> getCommit() {
@@ -410,8 +424,11 @@ public interface QuickTableColumn<R, C> {
 			}
 
 			@Override
-			public void update(ModelSetInstance models) throws ModelInstantiationException {
-				theCommit.set(getInterpreted().getCommit() == null ? null : getInterpreted().getCommit().get(models), null);
+			public void update(QuickAddOn.Interpreted<?, ?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
+				super.update(interpreted, models);
+				RowModifyEditType.Interpreted<R, C> myInterpreted = (RowModifyEditType.Interpreted<R, C>) interpreted;
+				isRowUpdate = myInterpreted.getDefinition().isRowUpdate();
+				theCommit.set(myInterpreted.getCommit() == null ? null : myInterpreted.getCommit().get(models), null);
 			}
 		}
 
@@ -473,12 +490,7 @@ public interface QuickTableColumn<R, C> {
 			public RowReplaceEditType(Interpreted<R, C> interpreted, ColumnEditing<R, C> element) {
 				super(interpreted, element);
 				theReplacement = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class)
-					.<SettableValue<R>> parameterized(element.getInterpreted().getParentElement().getRowType())).build();
-			}
-
-			@Override
-			public Interpreted<R, C> getInterpreted() {
-				return (Interpreted<R, C>) super.getInterpreted();
+					.<SettableValue<R>> parameterized(element.getParentElement().getRowType())).build();
 			}
 
 			public SettableValue<R> getReplacement() {
@@ -486,8 +498,10 @@ public interface QuickTableColumn<R, C> {
 			}
 
 			@Override
-			public void update(ModelSetInstance models) throws ModelInstantiationException {
-				theReplacement.set(getInterpreted().getReplacement() == null ? null : getInterpreted().getReplacement().get(models), null);
+			public void update(QuickAddOn.Interpreted<?, ?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
+				super.update(interpreted, models);
+				RowReplaceEditType.Interpreted<R, C> myInterpreted = (RowReplaceEditType.Interpreted<R, C>) interpreted;
+				theReplacement.set(myInterpreted.getReplacement() == null ? null : myInterpreted.getReplacement().get(models), null);
 			}
 		}
 	}
@@ -527,10 +541,12 @@ public interface QuickTableColumn<R, C> {
 				return theHeaderTooltip;
 			}
 
+			@Override
 			public QuickWidget.Def<?> getRenderer() {
 				return theRenderer;
 			}
 
+			@Override
 			public ColumnEditing.Def getEditing() {
 				return theEditing;
 			}
@@ -586,10 +602,12 @@ public interface QuickTableColumn<R, C> {
 				return theHeaderTooltip;
 			}
 
+			@Override
 			public QuickWidget.Interpreted<?> getRenderer() {
 				return theRenderer;
 			}
 
+			@Override
 			public ColumnEditing.Interpreted<R, C> getEditing() {
 				return theEditing;
 			}
@@ -613,21 +631,42 @@ public interface QuickTableColumn<R, C> {
 				theHeaderTooltip = getDefinition().getHeaderTooltip() == null ? null
 					: getDefinition().getHeaderTooltip().evaluate(ModelTypes.Value.STRING).interpret();
 
-				if (getDefinition().getRenderer() == null)
-					theRenderer = null; // TODO Dispose?
-				else if (theRenderer == null || theRenderer.getDefinition() != getDefinition().getRenderer()) {
-					// TODO Dispose?
+				if (getDefinition().getRenderer() == null) {
+					if (theRenderer != null)
+						theRenderer.destroy();
+					theRenderer = null;
+				} else if (theRenderer == null || theRenderer.getDefinition() != getDefinition().getRenderer()) {
+					if (theRenderer != null)
+						theRenderer.destroy();
 					theRenderer = getDefinition().getRenderer().interpret(this);
 				}
 				if (theRenderer != null)
 					theRenderer.update(cache);
 
-				if (getDefinition().getEditing() == null)
-					theEditing = null; // TODO Dispose?
-				else if (theEditing == null || theEditing.getDefinition() != getDefinition().getEditing())
+				if (getDefinition().getEditing() == null) {
+					if (theEditing != null)
+						theEditing.destroy();
+					theEditing = null;
+				} else if (theEditing == null || theEditing.getDefinition() != getDefinition().getEditing()) {
+					if (theEditing != null)
+						theEditing.destroy();
 					theEditing = (ColumnEditing.Interpreted<R, C>) getDefinition().getEditing().interpret(this);
+				}
 				if (theEditing != null)
 					theEditing.update(getType(), cache);
+			}
+
+			@Override
+			public void destroy() {
+				if(theRenderer!=null) {
+					theRenderer.destroy();
+					theRenderer=null;
+				}
+				if(theEditing!=null) {
+					theEditing.destroy();
+					theEditing=null;
+				}
+				super.destroy();
 			}
 
 			@Override
@@ -636,12 +675,14 @@ public interface QuickTableColumn<R, C> {
 			}
 		}
 
+		private final TypeToken<R> theRowType;
+		private final TypeToken<C> theColumnType;
 		private final ObservableCollection<SingleColumn> theColumn;
 
 		private final SettableValue<SettableValue<String>> theName;
 		private final SettableValue<SettableValue<C>> theValue;
 		private final SettableValue<SettableValue<String>> theHeaderTooltip;
-		private final SettableValue<QuickWidget> theRenderer;
+		private QuickWidget theRenderer;
 		private ColumnEditing<R, C> theEditing;
 
 		public SingleColumnSet(Interpreted<R, C> interpreted, QuickElement parent) {
@@ -649,16 +690,17 @@ public interface QuickTableColumn<R, C> {
 			theName = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<String>> parameterized(String.class))
 				.build();
 			theValue = SettableValue
-				.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<C>> parameterized(getInterpreted().getType())).build();
+				.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<C>> parameterized(interpreted.getType())).build();
+			theRowType = interpreted.getRowType();
+			theColumnType = interpreted.getType();
 			theColumn = ObservableCollection.of((Class<SingleColumnSet<R, C>.SingleColumn>) (Class<?>) SingleColumn.class,
 				new SingleColumn());
 			theHeaderTooltip = SettableValue.build(theName.getType()).build();
-			theRenderer = SettableValue.build(QuickWidget.class).build();
 		}
 
 		@Override
-		public Interpreted<R, C> getInterpreted() {
-			return (Interpreted<R, C>) super.getInterpreted();
+		public TypeToken<R> getRowType() {
+			return theRowType;
 		}
 
 		@Override
@@ -671,49 +713,50 @@ public interface QuickTableColumn<R, C> {
 		}
 
 		@Override
-		public void update(ModelSetInstance models) throws ModelInstantiationException {
-			super.update(models);
+		public void update(QuickElement.Interpreted<?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
+			super.update(interpreted, models);
+			SingleColumnSet.Interpreted<R, C> myInterpreted = (SingleColumnSet.Interpreted<R, C>) interpreted;
 			try {
-				DynamicModelValue.satisfyDynamicValueIfUnsatisfied(getInterpreted().getDefinition().getColumnValueName(),
-					getInterpreted().getValue().getType(), getModels(), getValue());
+				DynamicModelValue.satisfyDynamicValueIfUnsatisfied(myInterpreted.getDefinition().getColumnValueName(),
+					myInterpreted.getValue().getType(), getModels(), getValue());
 			} catch (ModelException | TypeConversionException e) {
 				throw new ExpressoRuntimeException("Install of column value failed",
-					getInterpreted().getDefinition().reporting().getFileLocation().getPosition(0));
+					myInterpreted.getDefinition().reporting().getFileLocation().getPosition(0));
 			}
-			theName.set(getInterpreted().getName().get(getModels()), null);
-			theValue.set(getInterpreted().getValue().get(getModels()), null);
-			theHeaderTooltip.set(getInterpreted().getHeaderTooltip() == null ? null : getInterpreted().getHeaderTooltip().get(getModels()),
+			theName.set(myInterpreted.getName().get(getModels()), null);
+			theValue.set(myInterpreted.getValue().get(getModels()), null);
+			theHeaderTooltip.set(myInterpreted.getHeaderTooltip() == null ? null : myInterpreted.getHeaderTooltip().get(getModels()),
 				null);
 
-			if (getInterpreted().getRenderer() == null)
-				theRenderer.set(null, null); // TODO Dispose?
-			else if (theRenderer.get() == null || theRenderer.get().getInterpreted() != getInterpreted().getRenderer()) {
+			if (myInterpreted.getRenderer() == null)
+				theRenderer = null; // TODO Dispose?
+			else if (theRenderer == null || theRenderer.getId() != myInterpreted.getRenderer().getId()) {
 				try {
-					theRenderer.set(getInterpreted().getRenderer().create(this), null);
+					theRenderer = myInterpreted.getRenderer().create(this);
 				} catch (ExpressoRuntimeException e) {
 					throw e;
 				} catch (RuntimeException | Error e) {
 					throw new ExpressoRuntimeException(e.getMessage() == null ? e.toString() : e.getMessage(),
-						getInterpreted().getRenderer().getDefinition().reporting().getFileLocation().getPosition(0), e);
+						myInterpreted.getRenderer().getDefinition().reporting().getFileLocation().getPosition(0), e);
 				}
 			}
-			if (theRenderer.get() != null) {
+			if (theRenderer != null) {
 				try {
-					theRenderer.get().update(getModels());
+					theRenderer.update(myInterpreted.getRenderer(), getModels());
 				} catch (ExpressoRuntimeException e) {
 					throw e;
 				} catch (RuntimeException | Error e) {
 					throw new ExpressoRuntimeException(e.getMessage() == null ? e.toString() : e.getMessage(),
-						getInterpreted().getRenderer().getDefinition().reporting().getFileLocation().getPosition(0), e);
+						myInterpreted.getRenderer().getDefinition().reporting().getFileLocation().getPosition(0), e);
 				}
 			}
 
-			if (getInterpreted().getEditing() == null)
+			if (myInterpreted.getEditing() == null)
 				theEditing = null; // TODO Dispose?
-			else if (theEditing == null || theEditing.getInterpreted() != getInterpreted().getEditing())
-				theEditing = getInterpreted().getEditing().create(this, theColumn.getFirst());
+			else if (theEditing == null || theEditing.getId() != myInterpreted.getEditing().getId())
+				theEditing = myInterpreted.getEditing().create(this, theColumn.getFirst());
 			if (theEditing != null)
-				theEditing.update(getModels());
+				theEditing.update(myInterpreted.getEditing(), getModels());
 		}
 
 		public class SingleColumn implements QuickTableColumn<R, C> {
@@ -729,7 +772,7 @@ public interface QuickTableColumn<R, C> {
 
 			@Override
 			public TypeToken<C> getType() {
-				return getInterpreted().getType();
+				return theColumnType;
 			}
 
 			@Override
@@ -743,8 +786,8 @@ public interface QuickTableColumn<R, C> {
 			}
 
 			@Override
-			public ObservableValue<QuickWidget> getRenderer() {
-				return theRenderer.unsettable();
+			public QuickWidget getRenderer() {
+				return theRenderer;
 			}
 
 			@Override

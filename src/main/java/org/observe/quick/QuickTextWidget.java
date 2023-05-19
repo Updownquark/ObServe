@@ -153,9 +153,6 @@ public interface QuickTextWidget<T> extends QuickValueWidget<T> {
 		}
 	}
 
-	@Override
-	Interpreted<T, ?> getInterpreted();
-
 	SettableValue<Format<T>> getFormat();
 
 	SettableValue<Boolean> isEditable();
@@ -194,15 +191,11 @@ public interface QuickTextWidget<T> extends QuickValueWidget<T> {
 		}
 
 		@Override
-		public QuickTextWidget.Interpreted<T, ?> getInterpreted() {
-			return (QuickTextWidget.Interpreted<T, ?>) super.getInterpreted();
-		}
-
-		@Override
-		public void update(ModelSetInstance models) throws ModelInstantiationException {
-			super.update(models);
-			theFormat.set(getInterpreted().getFormat().get(getModels()), null);
-			isEditable.set(getInterpreted().isEditable() == null ? null : getInterpreted().isEditable().get(getModels()), null);
+		public void update(QuickElement.Interpreted<?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
+			super.update(interpreted, models);
+			QuickTextWidget.Interpreted<T, ?> myInterpreted = (QuickTextWidget.Interpreted<T, ?>) interpreted;
+			theFormat.set(myInterpreted.getFormat().get(getModels()), null);
+			isEditable.set(myInterpreted.isEditable() == null ? null : myInterpreted.isEditable().get(getModels()), null);
 		}
 	}
 }

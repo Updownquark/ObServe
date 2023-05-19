@@ -20,8 +20,10 @@ import java.awt.event.MouseWheelEvent;
 import java.io.File;
 import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 import java.util.WeakHashMap;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
@@ -49,8 +51,7 @@ import org.observe.quick.base.QuickBox;
 import org.observe.quick.base.QuickLayout;
 import org.observe.quick.base.QuickSize;
 import org.observe.quick.base.SimpleLayout;
-import org.observe.quick.swing.QuickSwingTablePopulation.SwingTableColumn;
-import org.observe.util.ObservableCollectionSynchronization;
+import org.observe.quick.swing.QuickSwingTablePopulation.InterpretedSwingTableColumn;
 import org.observe.util.TypeTokens;
 import org.observe.util.swing.*;
 import org.observe.util.swing.MultiRangeSlider.Range;
@@ -71,6 +72,8 @@ import org.qommons.ex.ExBiFunction;
 import org.qommons.ex.ExRunnable;
 import org.qommons.ex.ExTriConsumer;
 import org.qommons.io.Format;
+
+import com.google.common.reflect.TypeToken;
 
 /**
  * <p>
@@ -213,7 +216,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 							QuickWindow window = doc.getAddOn(QuickWindow.class);
 							WindowBuilder<?, ?> w = WindowPopulation.populateWindow(new JFrame(), doc.getModels().getUntil(), true, true);
 							if (window != null) {
-								switch (window.getInterpreted().getDefinition().getCloseAction()) {
+								switch (window.getCloseAction()) {
 								case DoNothing:
 									w.withCloseAction(JFrame.DO_NOTHING_ON_CLOSE);
 									break;
@@ -386,10 +389,10 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 					SettableValue<Integer> y = SettableValue.build(int.class).withValue(0).build();
 
 					QuickMouseListener.QuickMouseButtonListener mbl = (QuickMouseListener.QuickMouseButtonListener) ql;
-					QuickMouseListener.MouseButton listenerButton = mbl.getInterpreted().getDefinition().getButton();
+					QuickMouseListener.MouseButton listenerButton = mbl.getButton();
 					mbl.setListenerContext(
 						new QuickMouseListener.MouseButtonListenerContext.Default(altPressed, ctrlPressed, shiftPressed, x, y, button));
-					switch (mbl.getInterpreted().getDefinition().getEventType()) {
+					switch (mbl.getEventType()) {
 					case Click:
 						component.addMouseListener(new MouseAdapter() {
 							@Override
@@ -449,8 +452,8 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 						break;
 					default:
 						throw new ModelInstantiationException(
-							"Unrecognized mouse button event type: " + mbl.getInterpreted().getDefinition().getEventType(),
-							mbl.getInterpreted().getDefinition().reporting().getFileLocation().getPosition(0), 0);
+							"Unrecognized mouse button event type: " + mbl.getEventType(), mbl.reporting().getFileLocation().getPosition(0),
+							0);
 					}
 				};
 			});
@@ -465,7 +468,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 					QuickMouseListener.QuickMouseMoveListener mml = (QuickMouseListener.QuickMouseMoveListener) ql;
 					mml.setListenerContext(
 						new QuickMouseListener.MouseListenerContext.Default(altPressed, ctrlPressed, shiftPressed, x, y));
-					switch (mml.getInterpreted().getDefinition().getEventType()) {
+					switch (mml.getEventType()) {
 					case Move:
 						component.addMouseMotionListener(new MouseAdapter() {
 							@Override
@@ -513,8 +516,8 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 						break;
 					default:
 						throw new ModelInstantiationException(
-							"Unrecognized mouse move event type: " + mml.getInterpreted().getDefinition().getEventType(),
-							mml.getInterpreted().getDefinition().reporting().getFileLocation().getPosition(0), 0);
+							"Unrecognized mouse move event type: " + mml.getEventType(), mml.reporting().getFileLocation().getPosition(0),
+							0);
 					}
 				};
 			});
@@ -1417,8 +1420,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 				@Override
 				public void modifyChild(QuickSwingPopulator<?> child) throws ExpressoInterpretationException {
 					child.addModifier((comp, w) -> {
-						QuickBorderLayout.Region region = w.getAddOn(QuickBorderLayout.Child.class).getInterpreted().getDefinition()
-							.getRegion();
+						QuickBorderLayout.Region region = w.getAddOn(QuickBorderLayout.Child.class).getRegion();
 						Component[] component = new Component[1];
 						comp.modifyComponent(c -> component[0] = c);
 						Sizeable size = w.getAddOn(Sizeable.class);
@@ -1456,8 +1458,8 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 			Transformer<ExpressoInterpretationException> tx) {
 			return createWidget(interpreted, (panel, quick) -> {
 				Format<T> format = quick.getFormat().get();
-				boolean commitOnType = quick.getInterpreted().getDefinition().isCommitOnType();
-				Integer columns = quick.getInterpreted().getDefinition().getColumns();
+				boolean commitOnType = quick.isCommitOnType();
+				Integer columns = quick.getColumns();
 				panel.addTextField(null, quick.getValue(), format, tf -> {
 					tf.modifyEditor(tf2 -> {
 						try {
@@ -1504,7 +1506,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 			});
 		}
 
-		static QuickSwingPopulator<QuickButton> interpretButton(QuickButton.Interpreted interpreted,
+		static QuickSwingPopulator<QuickButton> interpretButton(QuickButton.Interpreted<QuickButton> interpreted,
 			Transformer<ExpressoInterpretationException> tx) {
 			return createWidget(interpreted, (panel, quick) -> {
 				panel.addButton(null, quick.getAction(), btn -> {
@@ -1515,29 +1517,94 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 		}
 
 		static <R> QuickSwingPopulator<QuickTable<R>> interpretTable(QuickTable.Interpreted<R> interpreted,
-			Transformer<ExpressoInterpretationException> tx) {
-			return createWidget(interpreted, (panel, quick) -> {
-				TabularWidget.TabularContext<R> ctx = new TabularWidget.TabularContext.Default<>(quick.getInterpreted().getRowType(),
-					interpreted.getDefinition().reporting().getFileLocation().getPosition(0).toShortString());
+			Transformer<ExpressoInterpretationException> tx) throws ExpressoInterpretationException {
+			TypeToken<R> rowType = interpreted.getRowType();
+			Map<Object, QuickSwingPopulator<QuickWidget>> renderers = new HashMap<>();
+			Map<Object, QuickSwingPopulator<QuickWidget>> editors = new HashMap<>();
+			boolean[] renderersInitialized = new boolean[1];
+			Subscription sub;
+			try {
+				sub = interpreted.getColumns().subscribe(evt -> {
+					boolean renderer = false;
+					try {
+						switch (evt.getType()) {
+						case add:
+							renderer = true;
+							if (evt.getNewValue().getRenderer() != null)
+								renderers.put(evt.getNewValue().getId(),
+									tx.transform(evt.getNewValue().getRenderer(), QuickSwingPopulator.class));
+							renderer = false;
+							if (evt.getNewValue().getEditing() != null && evt.getNewValue().getEditing().getEditor() != null)
+								editors.put(evt.getNewValue().getId(),
+									tx.transform(evt.getNewValue().getEditing().getEditor(), QuickSwingPopulator.class));
+							break;
+						case remove:
+							renderers.remove(evt.getOldValue().getId());
+							editors.remove(evt.getOldValue().getId());
+							break;
+						case set:
+							if (evt.getOldValue().getId() != evt.getNewValue().getId()) {
+								renderers.remove(evt.getOldValue().getId());
+								editors.remove(evt.getOldValue().getId());
+							}
+							renderer = true;
+							if (evt.getNewValue().getRenderer() != null)
+								renderers.put(evt.getNewValue().getId(),
+									tx.transform(evt.getNewValue().getRenderer(), QuickSwingPopulator.class));
+							renderer = false;
+							if (evt.getNewValue().getEditing() != null && evt.getNewValue().getEditing().getEditor() != null)
+								editors.put(evt.getNewValue().getId(),
+									tx.transform(evt.getNewValue().getEditing().getEditor(), QuickSwingPopulator.class));
+							break;
+						}
+					} catch (ExpressoInterpretationException e) {
+						if (renderersInitialized[0])
+							(renderer ? evt.getNewValue().getDefinition().getRenderer()
+								: evt.getNewValue().getDefinition().getEditing().getEditor()).reporting().at(e.getErrorOffset())
+							.error(e.getMessage(), e);
+						else
+							throw new CheckedExceptionWrapper(e);
+					}
+				}, true);
+			} catch (CheckedExceptionWrapper e) {
+				if (e.getCause() instanceof ExpressoInterpretationException)
+					throw (ExpressoInterpretationException) e.getCause();
+				else
+					throw new ExpressoRuntimeException(e.getMessage(),
+						interpreted.getDefinition().reporting().getFileLocation().getPosition(0), e);
+			}
+			renderersInitialized[0] = true;
+			interpreted.destroyed().act(__ -> sub.unsubscribe());
+			boolean[] tableInitialized = new boolean[1];
+			QuickSwingPopulator<QuickTable<R>> swingTable = createWidget(interpreted, (panel, quick) -> {
+				TabularWidget.TabularContext<R> ctx = new TabularWidget.TabularContext.Default<>(rowType,
+					quick.reporting().getFileLocation().getPosition(0).toShortString());
 				quick.setContext(ctx);
 				ComponentEditor<?, ?>[] parent = new ComponentEditor[1];
-				ObservableCollection<SwingTableColumn<R, ?>> columns = quick.getColumns()
+				ObservableCollection<InterpretedSwingTableColumn<R, ?>> columns = quick.getColumns()
 					.flow()//
-					.map((Class<SwingTableColumn<R, ?>>) (Class<?>) SwingTableColumn.class, //
-						column -> new SwingTableColumn<>(quick, column, ctx, tx, panel.getUntil(), () -> parent[0]))//
+					.map((Class<InterpretedSwingTableColumn<R, ?>>) (Class<?>) InterpretedSwingTableColumn.class, column -> {
+						try {
+							return new InterpretedSwingTableColumn<>(quick, column, ctx, tx, panel.getUntil(), () -> parent[0],
+								renderers.get(column.getColumnSet().getId()), editors.get(column.getColumnSet().getId()));
+						} catch (ModelInstantiationException e) {
+							if (tableInitialized[0]) {
+								column.getColumnSet().reporting().error(e.getMessage(), e);
+								return null;
+							} else
+								throw new CheckedExceptionWrapper(e);
+						}
+					})//
+					.filter(column -> column == null ? "Column failed to create" : null)//
+					.catchUpdates(ThreadConstraint.ANY)//
+					// TODO collectActive(onWhat?)
 					.collect();
-				// The quick columns can't be updated, but we need to be able to update. So we need to make a new collection and sync it.
-				ObservableCollection<SwingTableColumn<R, ?>> clonedColumns = ObservableCollection.build(columns.getType()).build();
-				Subscription syncSub = ObservableCollectionSynchronization.synchronize(columns, clonedColumns).synchronize();
-				Subscription columnsSub = clonedColumns.subscribe(evt -> {
+				Subscription columnsSub = columns.subscribe(evt -> {
 					if (evt.getNewValue() != null)
-						evt.getNewValue().init(clonedColumns, evt.getElementId());
+						evt.getNewValue().init(columns, evt.getElementId());
 				}, true);
-				panel.getUntil().take(1).act(__ -> {
-					syncSub.unsubscribe();
-					columnsSub.unsubscribe();
-				});
-				ObservableCollection<CategoryRenderStrategy<R, ?>> crss = clonedColumns.flow()//
+				panel.getUntil().take(1).act(__ -> columnsSub.unsubscribe());
+				ObservableCollection<CategoryRenderStrategy<R, ?>> crss = columns.flow()//
 					.map((Class<CategoryRenderStrategy<R, ?>>) (Class<?>) CategoryRenderStrategy.class, //
 						column -> column.getCRS())//
 					.collect();
@@ -1546,6 +1613,8 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 					table.withColumns(crss);
 				});
 			});
+			tableInitialized[0] = true;
+			return swingTable;
 		}
 
 		static QuickSwingContainerPopulator<QuickSplit> interpretSplit(QuickSplit.Interpreted<?> interpreted,
@@ -1553,7 +1622,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 			BetterList<QuickSwingPopulator<QuickWidget>> contents = BetterList.<QuickWidget.Interpreted<?>, QuickSwingPopulator<QuickWidget>, ExpressoInterpretationException> of2(
 				interpreted.getContents().stream(), content -> tx.transform(content, QuickSwingPopulator.class));
 			return createContainer(interpreted, (panel, quick) -> {
-				panel.addSplit(quick.getInterpreted().getDefinition().isVertical(), s -> {
+				panel.addSplit(quick.isVertical(), s -> {
 					AbstractQuickContainerPopulator populator = new AbstractQuickContainerPopulator() {
 						private boolean isFirst;
 

@@ -4,6 +4,7 @@ import org.observe.SettableValue;
 import org.observe.expresso.ExpressoQIS;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
+import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigInterpretationException;
 
@@ -112,18 +113,26 @@ public interface QuickKeyListener extends QuickEventListener {
 			}
 		}
 
+		private char theCharFilter;
+
 		public QuickKeyTypedListener(Interpreted interpreted, QuickElement parent) {
 			super(interpreted, parent);
 		}
 
-		@Override
-		public Interpreted getInterpreted() {
-			return (Interpreted) super.getInterpreted();
+		public char getCharFilter() {
+			return theCharFilter;
 		}
 
 		public void setListenerContext(KeyTypedContext ctx) throws ModelInstantiationException {
 			setListenerContext((ListenerContext) ctx);
 			QuickElement.satisfyContextValue("typedChar", ModelTypes.Value.forType(char.class), ctx.getTypedChar(), this);
+		}
+
+		@Override
+		public void update(QuickElement.Interpreted<?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
+			super.update(interpreted, models);
+			QuickKeyTypedListener.Interpreted myInterpreted = (QuickKeyTypedListener.Interpreted) interpreted;
+			theCharFilter = myInterpreted.getDefinition().getCharFilter();
 		}
 	}
 
@@ -185,21 +194,32 @@ public interface QuickKeyListener extends QuickEventListener {
 			}
 		}
 
+		private boolean isPressed;
+		private KeyCode theKeyCode;
+
 		public QuickKeyCodeListener(Interpreted interpreted, QuickElement parent) {
 			super(interpreted, parent);
-		}
-
-		@Override
-		public Interpreted getInterpreted() {
-			return (Interpreted) super.getInterpreted();
 		}
 
 		public void setListenerContext(KeyCodeContext ctx) throws ModelInstantiationException {
 			setListenerContext((ListenerContext) ctx);
 			QuickElement.satisfyContextValue("keyCode", ModelTypes.Value.forType(KeyCode.class), ctx.getKeyCode(), this);
 		}
-	}
 
-	@Override
-	Interpreted<?> getInterpreted();
+		public boolean isPressed() {
+			return isPressed;
+		}
+
+		public KeyCode getKeyCode() {
+			return theKeyCode;
+		}
+
+		@Override
+		public void update(QuickElement.Interpreted<?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
+			super.update(interpreted, models);
+			QuickKeyCodeListener.Interpreted myInterpreted = (QuickKeyCodeListener.Interpreted) interpreted;
+			isPressed = myInterpreted.getDefinition().isPressed();
+			theKeyCode = myInterpreted.getDefinition().getKeyCode();
+		}
+	}
 }

@@ -83,22 +83,14 @@ public class QuickField extends QuickAddOn.Abstract<QuickWidget> {
 		super(interpreted, widget);
 	}
 
-	@Override
-	public Interpreted getInterpreted() {
-		return (Interpreted) super.getInterpreted();
-	}
-
-	@Override
-	public QuickWidget getElement() {
-		return super.getElement();
-	}
-
 	public SettableValue<String> getFieldLabel() {
 		return theFieldLabel;
 	}
 
 	@Override
-	public void update(ModelSetInstance models) throws ModelInstantiationException {
-		theFieldLabel = getInterpreted().getFieldLabel() == null ? null : getInterpreted().getFieldLabel().get(models);
+	public void update(QuickAddOn.Interpreted<?, ?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
+		super.update(interpreted, models);
+		QuickField.Interpreted myInterpreted = (QuickField.Interpreted) interpreted;
+		theFieldLabel = myInterpreted.getFieldLabel() == null ? null : myInterpreted.getFieldLabel().get(models);
 	}
 }

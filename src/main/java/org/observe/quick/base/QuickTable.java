@@ -128,19 +128,14 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 		super(interpreted, parent);
 		theRows = SettableValue
 			.build(
-				TypeTokens.get().keyFor(ObservableCollection.class).<ObservableCollection<R>> parameterized(getInterpreted().getRowType()))
+				TypeTokens.get().keyFor(ObservableCollection.class).<ObservableCollection<R>> parameterized(getRowType()))
 			.build();
 		theSelection = SettableValue
-			.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<R>> parameterized(getInterpreted().getRowType())).build();
+			.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<R>> parameterized(getRowType())).build();
 		theMultiSelection = SettableValue
 			.build(
-				TypeTokens.get().keyFor(ObservableCollection.class).<ObservableCollection<R>> parameterized(getInterpreted().getRowType()))
+				TypeTokens.get().keyFor(ObservableCollection.class).<ObservableCollection<R>> parameterized(getRowType()))
 			.build();
-	}
-
-	@Override
-	public Interpreted<R> getInterpreted() {
-		return (Interpreted<R>) super.getInterpreted();
 	}
 
 	public ObservableCollection<R> getRows() {
@@ -158,11 +153,12 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 	}
 
 	@Override
-	public void update(ModelSetInstance models) throws ModelInstantiationException {
-		super.update(models);
-		theRows.set(getInterpreted().getRows().get(getModels()), null);
-		theSelection.set(getInterpreted().getSelection() == null ? null : getInterpreted().getSelection().get(getModels()), null);
-		theMultiSelection.set(getInterpreted().getMultiSelection() == null ? null : getInterpreted().getMultiSelection().get(getModels()),
+	public void update(QuickElement.Interpreted<?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
+		super.update(interpreted, models);
+		QuickTable.Interpreted<R> myInterpreted = (QuickTable.Interpreted<R>) interpreted;
+		theRows.set(myInterpreted.getRows().get(getModels()), null);
+		theSelection.set(myInterpreted.getSelection() == null ? null : myInterpreted.getSelection().get(getModels()), null);
+		theMultiSelection.set(myInterpreted.getMultiSelection() == null ? null : myInterpreted.getMultiSelection().get(getModels()),
 			null);
 	}
 }

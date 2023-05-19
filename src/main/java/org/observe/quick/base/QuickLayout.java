@@ -25,17 +25,9 @@ public interface QuickLayout extends QuickAddOn<QuickBox> {
 		}
 	}
 
-	@Override
-	Interpreted<?> getInterpreted();
-
 	public abstract class Abstract extends QuickAddOn.Abstract<QuickBox> implements QuickLayout {
 		protected Abstract(QuickLayout.Interpreted<?> interpreted, QuickBox element) {
 			super(interpreted, element);
-		}
-
-		@Override
-		public QuickLayout.Interpreted<?> getInterpreted() {
-			return (QuickLayout.Interpreted<?>) super.getInterpreted();
 		}
 	}
 }

@@ -262,6 +262,18 @@ public interface QuickWidget extends QuickTextElement {
 				.onCommonX(el -> el.getLeftValue().update())//
 				.adjust();
 			}
+
+			@Override
+			public void destroy() {
+				if (theBorder != null) {
+					theBorder.destroy();
+					theBorder = null;
+				}
+				for (QuickEventListener.Interpreted<?> listener : theEventListeners)
+					listener.destroy();
+				theEventListeners.clear();
+				super.destroy();
+			}
 		}
 	}
 
@@ -318,9 +330,6 @@ public interface QuickWidget extends QuickTextElement {
 	}
 
 	@Override
-	Interpreted<?> getInterpreted();
-
-	@Override
 	QuickWidgetStyle getStyle();
 
 	/** @return The parent container, if any */
@@ -344,14 +353,6 @@ public interface QuickWidget extends QuickTextElement {
 
 	WidgetContext getContext();
 
-	/**
-	 * Populates and updates this widget instance. Must be called once after being instantiated.
-	 *
-	 * @param models The model instance for this widget
-	 * @throws ModelInstantiationException If any of the models in this widget or its content cannot be instantiated
-	 */
-	void update(ModelSetInstance models) throws ModelInstantiationException;
-
 	/** An abstract {@link QuickWidget} implementation */
 	public abstract class Abstract extends QuickStyledElement.Abstract implements QuickWidget {
 		private QuickBorder theBorder;
@@ -364,18 +365,13 @@ public interface QuickWidget extends QuickTextElement {
 		 * @param interpreted The interpretation instantiating this widget
 		 * @param parent The parent element
 		 */
-		public Abstract(QuickWidget.Interpreted<?> interpreted, QuickElement parent) {
+		protected Abstract(QuickWidget.Interpreted<?> interpreted, QuickElement parent) {
 			super(interpreted, parent);
 			theTooltip = SettableValue
 				.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<String>> parameterized(String.class)).build();
 			isVisible = SettableValue
 				.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Boolean>> parameterized(boolean.class)).build();
 			theEventListeners = ObservableCollection.build(QuickEventListener.class).build();
-		}
-
-		@Override
-		public QuickWidget.Interpreted<?> getInterpreted() {
-			return (QuickWidget.Interpreted<?>) super.getInterpreted();
 		}
 
 		@Override
@@ -424,23 +420,23 @@ public interface QuickWidget extends QuickTextElement {
 		}
 
 		@Override
-		public void update(ModelSetInstance models) throws ModelInstantiationException {
-			super.update(models);
-			theBorder = getInterpreted().getBorder() == null ? null : getInterpreted().getBorder().create(this);
+		public void update(QuickElement.Interpreted<?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
+			super.update(interpreted, models);
+			QuickWidget.Interpreted<?> myInterpreted = (QuickWidget.Interpreted<?>) interpreted;
+			theBorder = myInterpreted.getBorder() == null ? null : myInterpreted.getBorder().create(this);
 			if (theBorder != null)
-				theBorder.update(getModels());
-			if (getInterpreted().getTooltip() != null)
-				theTooltip.set(getInterpreted().getTooltip().get(getModels()), null);
-			if (getInterpreted().isVisible() != null)
-				isVisible.set(getInterpreted().isVisible().get(getModels()), null);
+				theBorder.update(myInterpreted.getBorder(), getModels());
+			theTooltip.set(myInterpreted.getTooltip() == null ? null : myInterpreted.getTooltip().get(getModels()), null);
+			if (myInterpreted.isVisible() != null)
+				isVisible.set(myInterpreted.isVisible().get(getModels()), null);
 			try (Transaction t = theEventListeners.lock(true, null)) {
-				CollectionUtils.synchronize(theEventListeners, getInterpreted().getEventListeners(), (l, i) -> l.getInterpreted() == i)//
+				CollectionUtils.synchronize(theEventListeners, myInterpreted.getEventListeners(), (l, i) -> l.getId() == i.getId())//
 				.<ModelInstantiationException> simpleE(l -> {
 					QuickEventListener listener = l.create(this);
-					listener.update(getModels());
+					listener.update(l, getModels());
 					return listener;
 				})//
-				.onCommonX(el -> el.getLeftValue().update(getModels()))//
+				.onCommonX(el -> el.getLeftValue().update(el.getRightValue(), getModels()))//
 				.adjust();
 			}
 		}

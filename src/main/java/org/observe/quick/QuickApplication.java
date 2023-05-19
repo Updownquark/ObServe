@@ -114,6 +114,7 @@ public interface QuickApplication {
 		ValueHolder<AbstractQIS<?>> docSession = new ValueHolder<>();
 		QuickDocument2.Def quickDocDef = QonfigApp.interpretApp(quickApp, QuickDocument2.Def.class, docSession);
 		quickDocDef.update(docSession.get().as(ExpressoQIS.class));
+		docSession.clear(); // Free up memory
 
 		ObservableModelSet.ExternalModelSet extModels = ObservableModelSet.buildExternal(ObservableModelSet.JAVA_NAME_CHECKER).build();
 		/* TODO
@@ -124,19 +125,26 @@ public interface QuickApplication {
 
 		List<QuickInterpretation> quickInterpretation = QonfigApp.create(//
 			quickApp.getRoot().getChildrenInRole(quickAppTk, "quick-app", "quick-interpretation"), QuickInterpretation.class);
+		quickApp = null; // Free up memory
+		quickAppTk = null;
 		Transformer.Builder<ExpressoInterpretationException> transformBuilder = Transformer.build();
 		for (QuickInterpretation interp : quickInterpretation)
 			interp.configure(transformBuilder);
 		Transformer<ExpressoInterpretationException> transformer = transformBuilder.build();
 
 		QuickDocument2.Interpreted interpretedDoc = quickDocDef.interpret(null);
+		quickDocDef = null; // Free up memory
 		interpretedDoc.update();
 
 		QuickApplication app = transformer.transform(interpretedDoc, QuickApplication.class);
 
 		ModelSetInstance msi = interpretedDoc.getHead().getModels().createInstance(extModels, Observable.empty()).build();
 		QuickDocument2 doc = interpretedDoc.create();
-		doc.update(msi);
+		doc.update(interpretedDoc, msi);
+
+		// Clean up to free memory
+		interpretedDoc.destroy();
+		interpretedDoc = null;
 
 		app.runApplication(doc);
 	}

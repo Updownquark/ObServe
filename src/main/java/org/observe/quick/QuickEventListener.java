@@ -150,16 +150,11 @@ public interface QuickEventListener extends QuickElement {
 		}
 	}
 
-	@Override
-	Interpreted<?> getInterpreted();
-
 	void setListenerContext(ListenerContext ctx) throws ModelInstantiationException;
 
 	ObservableValue<Boolean> getFilter();
 
 	ObservableAction<?> getAction();
-
-	void update(ModelSetInstance models) throws ModelInstantiationException;
 
 	public abstract class Abstract extends QuickElement.Abstract implements QuickEventListener {
 		private final ObservableCollection<SettableValue<Boolean>> theFilters;
@@ -177,11 +172,6 @@ public interface QuickEventListener extends QuickElement {
 				.anywhere()//
 				.withDefault(() -> false).find()//
 				.map(found -> !found);
-		}
-
-		@Override
-		public QuickEventListener.Interpreted<?> getInterpreted() {
-			return (QuickEventListener.Interpreted<?>) super.getInterpreted();
 		}
 
 		@Override
@@ -205,8 +195,7 @@ public interface QuickEventListener extends QuickElement {
 					try {
 						return theAction.act(cause);
 					} catch (RuntimeException | Error e) {
-						throw new ExpressoRuntimeException(e.toString(),
-							getInterpreted().getDefinition().reporting().getFileLocation().getPosition(0), e);
+						throw new ExpressoRuntimeException(e.toString(), reporting().getFileLocation().getPosition(0), e);
 					}
 				} else
 					return null;
@@ -214,12 +203,13 @@ public interface QuickEventListener extends QuickElement {
 		}
 
 		@Override
-		public void update(ModelSetInstance models) throws ModelInstantiationException {
-			super.update(models);
+		public void update(QuickElement.Interpreted<?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
+			super.update(interpreted, models);
+			QuickEventListener.Interpreted<?> myInterpreted = (QuickEventListener.Interpreted<?>) interpreted;
 			theFilters.clear();
-			for (InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> filter : getInterpreted().getFilters())
+			for (InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> filter : myInterpreted.getFilters())
 				theFilters.add(filter.get(models));
-			theAction = getInterpreted().getAction().get(getModels());
+			theAction = myInterpreted.getAction().get(getModels());
 		}
 	}
 }

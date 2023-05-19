@@ -11,7 +11,4 @@ public interface RowTyped<R> extends QuickElement {
 	public interface Interpreted<R, E extends RowTyped<R>> extends QuickElement.Interpreted<E> {
 		TypeToken<R> getRowType();
 	}
-
-	@Override
-	Interpreted<R, ?> getInterpreted();
 }

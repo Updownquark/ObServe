@@ -3,6 +3,10 @@ package org.observe.quick;
 import java.util.Collection;
 import java.util.function.Function;
 
+import org.observe.Observable;
+import org.observe.ObservableValue;
+import org.observe.ObservableValueEvent;
+import org.observe.SettableValue;
 import org.observe.expresso.DynamicModelValue;
 import org.observe.expresso.ExpressoEnv;
 import org.observe.expresso.ExpressoInterpretationException;
@@ -59,7 +63,7 @@ public interface QuickElement {
 		/**
 		 * @param <AO> The type of the add on
 		 * @param <T> The type of the value
-		 * @param addOn The type of the addon
+		 * @param addOn The type of the add-on
 		 * @param fn Produces the value from the add on if it exists
 		 * @return The value from the given add on in this element definition, or null if no such add-on is present
 		 */
@@ -178,6 +182,8 @@ public interface QuickElement {
 	 * @param <E> The type of element that this interpretation is for
 	 */
 	public interface Interpreted<E extends QuickElement> {
+		Object getId();
+
 		/** @return The definition that produced this interpretation */
 		Def<? super E> getDefinition();
 
@@ -210,15 +216,25 @@ public interface QuickElement {
 			return ao == null ? null : fn.apply(ao);
 		}
 
+		ObservableValue<Boolean> isDestroyed();
+
+		default Observable<ObservableValueEvent<Boolean>> destroyed() {
+			return isDestroyed().changes().filter(evt -> Boolean.TRUE.equals(evt.getNewValue())).take(1);
+		}
+
+		void destroy();
+
 		/**
 		 * An abstract implementation of {@link Interpreted}
 		 *
 		 * @param <E> The type of element that this interpretation is for
 		 */
 		public abstract class Abstract<E extends QuickElement> implements Interpreted<E> {
+			private final Object theId;
 			private final Def<? super E> theDefinition;
 			private final Interpreted<?> theParent;
 			private final ClassMap<QuickAddOn.Interpreted<? super E, ?>> theAddOns;
+			private final SettableValue<Boolean> isDestroyed;
 			private InterpretedModelSet theModels;
 
 			/**
@@ -226,6 +242,7 @@ public interface QuickElement {
 			 * @param parent The interpretation from the parent element
 			 */
 			protected Abstract(Def<? super E> definition, Interpreted<?> parent) {
+				theId = new Object();
 				theDefinition = definition;
 				theParent = parent;
 				theAddOns = new ClassMap<>();
@@ -233,6 +250,12 @@ public interface QuickElement {
 					QuickAddOn.Interpreted<? super E, ?> interp = (QuickAddOn.Interpreted<? super E, ?>) addOn.interpret(this);
 					theAddOns.put(interp.getClass(), interp);
 				}
+				isDestroyed = SettableValue.build(boolean.class).withValue(false).build();
+			}
+
+			@Override
+			public Object getId() {
+				return theId;
 			}
 
 			@Override
@@ -260,6 +283,20 @@ public interface QuickElement {
 				return theAddOns.getAllValues();
 			}
 
+			@Override
+			public ObservableValue<Boolean> isDestroyed() {
+				return isDestroyed.unsettable();
+			}
+
+			@Override
+			public void destroy() {
+				for (QuickAddOn.Interpreted<?, ?> addOn : theAddOns.getAllValues())
+					addOn.destroy();
+				theAddOns.clear();
+				if (!isDestroyed.get().booleanValue())
+					isDestroyed.set(true, null);
+			}
+
 			/**
 			 * Updates this element interpretation. Must be called at least once after the {@link #getDefinition() definition} produces this
 			 * object.
@@ -283,8 +320,7 @@ public interface QuickElement {
 		}
 	}
 
-	/** @return The interpretation that produced this element */
-	Interpreted<?> getInterpreted();
+	Object getId();
 
 	/** @return The parent element */
 	QuickElement getParentElement();
@@ -314,11 +350,24 @@ public interface QuickElement {
 		return ao == null ? null : fn.apply(ao);
 	}
 
+	ErrorReporting reporting();
+
+	/**
+	 * Updates this element. Must be called at least once after being produced by its interpretation.
+	 *
+	 * @param interpreted The interpretation producing this element
+	 * @param models The model instance for this element
+	 * @throws ModelInstantiationException If an error occurs instantiating any model values needed by this element or its content
+	 */
+	void update(Interpreted<?> interpreted, ModelSetInstance models) throws ModelInstantiationException;
+
 	/** Abstract {@link QuickElement} implementation */
 	public abstract class Abstract implements QuickElement {
-		private final Interpreted<?> theInterpreted;
+		private final Object theId;
 		private final QuickElement theParent;
 		private final ClassMap<QuickAddOn<?>> theAddOns;
+		private final ClassMap<Class<? extends QuickAddOn.Interpreted<?, ?>>> theAddOnInterpretations;
+		private final ErrorReporting theReporting;
 		private ModelSetInstance theModels;
 
 		/**
@@ -326,18 +375,21 @@ public interface QuickElement {
 		 * @param parent The parent element
 		 */
 		protected Abstract(Interpreted<?> interpreted, QuickElement parent) {
-			theInterpreted = interpreted;
+			theId = interpreted.getId();
 			theParent = parent;
 			theAddOns = new ClassMap<>();
-			for (QuickAddOn.Interpreted<?, ?> addOn : theInterpreted.getAddOns()) {
+			theAddOnInterpretations = new ClassMap<>();
+			for (QuickAddOn.Interpreted<?, ?> addOn : interpreted.getAddOns()) {
 				QuickAddOn<?> inst = ((QuickAddOn.Interpreted<QuickElement, ?>) addOn).create(this);
 				theAddOns.put(inst.getClass(), inst);
+				theAddOnInterpretations.put(inst.getClass(), (Class<? extends QuickAddOn.Interpreted<?, ?>>) addOn.getClass());
 			}
+			theReporting = interpreted.getDefinition().reporting();
 		}
 
 		@Override
-		public Interpreted<?> getInterpreted() {
-			return theInterpreted;
+		public Object getId() {
+			return theId;
 		}
 
 		@Override
@@ -360,21 +412,26 @@ public interface QuickElement {
 			return theAddOns.getAllValues();
 		}
 
-		/**
-		 * Updates this element. Must be called at least once after being produced by its {@link #getInterpreted() interpretation}.
-		 *
-		 * @param models The model instance for this element
-		 * @throws ModelInstantiationException If an error occurs instantiating any model values needed by this element or its content
-		 */
-		protected void update(ModelSetInstance models) throws ModelInstantiationException {
-			theModels = theInterpreted.getDefinition().getExpressoEnv().wrapLocal(models);
-			for (QuickAddOn<?> addOn : theAddOns.getAllValues())
-				addOn.update(getModels());
+		@Override
+		public ErrorReporting reporting() {
+			return theReporting;
+		}
+
+		@Override
+		public void update(Interpreted<?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
+			theModels = interpreted.getDefinition().getExpressoEnv().wrapLocal(models);
+			for (QuickAddOn<?> addOn : theAddOns.getAllValues()) {
+				Class<? extends QuickAddOn.Interpreted<QuickElement, ?>> addOnInterpType;
+				addOnInterpType = (Class<? extends QuickAddOn.Interpreted<QuickElement, ?>>) theAddOnInterpretations.get(addOn.getClass(),
+					ClassMap.TypeMatch.EXACT);
+				QuickAddOn.Interpreted<?, ?> interpretedAddOn = interpreted.getAddOn(addOnInterpType);
+				((QuickAddOn<QuickElement>) addOn).update(interpretedAddOn, getModels());
+			}
 		}
 
 		@Override
 		public String toString() {
-			return getInterpreted().toString();
+			return getClass().getSimpleName() + " " + theReporting.getFileLocation().getPosition(0);
 		}
 
 		protected <M, MV extends M> void satisfyContextValue(String valueName, ModelInstanceType<M, MV> type, MV value)
@@ -400,7 +457,7 @@ public interface QuickElement {
 				DynamicModelValue.satisfyDynamicValue(valueName, type, element.getModels(), value);
 			} catch (ModelException e) {
 				throw new ModelInstantiationException("No " + valueName + " value?",
-					element.getInterpreted().getDefinition().reporting().getFileLocation().getPosition(0), 0, e);
+					element.reporting().getFileLocation().getPosition(0), 0, e);
 			} catch (TypeConversionException e) {
 				throw new IllegalStateException(valueName + " is not a " + type + "?", e);
 			}

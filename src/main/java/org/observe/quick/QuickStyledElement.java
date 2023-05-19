@@ -95,7 +95,6 @@ public interface QuickStyledElement extends QuickElement {
 		 * Populates and updates this interpretation. Must be called once after being produced by the {@link #getDefinition() definition}.
 		 *
 		 * @param cache The cache to use to interpret the widget
-		 * @return This interpretation
 		 * @throws ExpressoInterpretationException If any models could not be interpreted from their expressions in this widget or its
 		 *         content
 		 */
@@ -143,9 +142,6 @@ public interface QuickStyledElement extends QuickElement {
 		}
 	}
 
-	@Override
-	Interpreted<?> getInterpreted();
-
 	QuickInstanceStyle getStyle();
 
 	/** An abstract {@link QuickStyledElement} implementation */
@@ -161,22 +157,18 @@ public interface QuickStyledElement extends QuickElement {
 		}
 
 		@Override
-		public QuickStyledElement.Interpreted<?> getInterpreted() {
-			return (QuickStyledElement.Interpreted<?>) super.getInterpreted();
-		}
-
-		@Override
 		public QuickInstanceStyle getStyle() {
 			return theStyle;
 		}
 
 		@Override
-		public void update(ModelSetInstance models) throws ModelInstantiationException {
-			super.update(models);
+		public void update(QuickElement.Interpreted<?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
+			super.update(interpreted, models);
+			QuickStyledElement.Interpreted<?> myInterpreted = (QuickStyledElement.Interpreted<?>) interpreted;
 			QuickElement parent = getParentElement();
 			StyleQIS.installParentModels(getModels(), parent == null ? null : parent.getModels());
-			if (theStyle == null || theStyle.getInterpreted() != getInterpreted().getStyle())
-				theStyle = getInterpreted().getStyle().create();
+			if (theStyle == null || theStyle.getInterpreted() != myInterpreted.getStyle())
+				theStyle = myInterpreted.getStyle().create();
 			theStyle.update(getModels());
 		}
 	}

@@ -28,7 +28,6 @@ import org.observe.SettableValue;
 import org.observe.SimpleObservable;
 import org.observe.collect.ObservableCollection;
 import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.ExpressoRuntimeException;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.quick.KeyCode;
 import org.observe.quick.QuickEventListener;
@@ -70,19 +69,20 @@ import org.qommons.io.Format;
 
 /** Code to populate Quick-sourced tables in Java wing */
 class QuickSwingTablePopulation {
-	static class SwingTableColumn<R, C> {
+	static class InterpretedSwingTableColumn<R, C> {
 		private final QuickTableColumn<R, C> theColumn;
 		final CategoryRenderStrategy<R, C> theCRS;
-		private ObservableCollection<SwingTableColumn<R, ?>> theColumns;
+		private ObservableCollection<InterpretedSwingTableColumn<R, ?>> theColumns;
 		private ElementId theElementId;
 
-		public SwingTableColumn(QuickWidget quickParent, QuickTableColumn<R, C> column, TabularContext<R> context,
-			Transformer<ExpressoInterpretationException> tx, Observable<?> until, Supplier<ComponentEditor<?, ?>> parent) {
+		public InterpretedSwingTableColumn(QuickWidget quickParent, QuickTableColumn<R, C> column, TabularContext<R> context,
+			Transformer<ExpressoInterpretationException> tx, Observable<?> until, Supplier<ComponentEditor<?, ?>> parent,
+			QuickSwingPopulator<QuickWidget> swingRenderer, QuickSwingPopulator<QuickWidget> swingEditor)
+			throws ModelInstantiationException {
 			theColumn = column;
 			theCRS = new CategoryRenderStrategy<>(column.getName().get(), column.getType(), row -> {
 				context.getRenderValue().set(row, null);
 				return column.getValue().get();
-				// System.out.println("Row " + row + ", " + column.getName().get() + " " + columnValue);
 			});
 
 			theColumn.getName().noInitChanges().takeUntil(until).act(evt -> {
@@ -93,53 +93,31 @@ class QuickSwingTablePopulation {
 				theCRS.withHeaderTooltip(evt.getNewValue());
 				refresh();
 			});
-			// TODO All this change listening isn't going to work, because all the settings are put into effect when the table is
-			// instantiated and when the category collection changes
-			// We'd need to fire an event in the category collection to enact any changes here
-			column.getRenderer().changes().takeUntil(until).act(evt -> {
-				if (evt.getNewValue() == null)
-					theCRS.withRenderer(null);
-				else {
-					try {
-						QuickCellRenderer<R, C> renderer = new QuickCellRenderer<>(quickParent, column, context, tx, until, parent);
-						theCRS.withRenderer(renderer);
-						theCRS.withValueTooltip(renderer::getTooltip);
-						// The listeners may take a performance hit, so only add listening if they're there
-						boolean[] mouseKey = new boolean[2];
-						Consumer<Object> evalMouseKey = __ -> {
-							boolean oldMouse = mouseKey[0];
-							boolean oldKey = mouseKey[1];
-							for (QuickEventListener listener : evt.getNewValue().getEventListeners()) {
-								if (listener instanceof QuickMouseListener)
-									mouseKey[0] = true;
-								else if (listener instanceof QuickKeyListener)
-									mouseKey[1] = true;
-							}
-							if (oldMouse == mouseKey[0]) {//
-							} else if (mouseKey[0])
-								theCRS.addMouseListener(renderer);
-							else
-								theCRS.removeMouseListener(renderer);
-							if (oldKey == mouseKey[1]) { //
-							} else if (mouseKey[1])
-								theCRS.withKeyListener(renderer);
-							else
-								theCRS.withKeyListener(null);
-						};
-						evalMouseKey.accept(null);
-						evt.getNewValue().getEventListeners().simpleChanges().takeUntil(column.getRenderer().noInitChanges())
-						.act(evalMouseKey);
-						if (column.getEditing() != null)
-							theCRS.withMutation(renderer::mutation);
-					} catch (ExpressoInterpretationException | ModelInstantiationException e) {
-						throw new ExpressoRuntimeException(e);
-					}
-				}
-				refresh();
-			});
+			QuickSwingTableColumn<R, C> renderer = new QuickSwingTableColumn<>(quickParent, column, context, tx, until, parent,
+				swingRenderer, swingEditor);
+			theCRS.withRenderer(renderer);
+			theCRS.withValueTooltip(renderer::getTooltip);
+			// The listeners may take a performance hit, so only add listening if they're there
+			boolean[] mouseKey = new boolean[2];
+			for (QuickEventListener listener : column.getRenderer().getEventListeners()) {
+				if (listener instanceof QuickMouseListener)
+					mouseKey[0] = true;
+				else if (listener instanceof QuickKeyListener)
+					mouseKey[1] = true;
+			}
+			if (mouseKey[0])
+				theCRS.addMouseListener(renderer);
+			else
+				theCRS.removeMouseListener(renderer);
+			if (mouseKey[1])
+				theCRS.withKeyListener(renderer);
+			else
+				theCRS.withKeyListener(null);
+			if (column.getEditing() != null)
+				theCRS.withMutation(renderer::mutation);
 		}
 
-		public void init(ObservableCollection<SwingTableColumn<R, ?>> columns, ElementId id) {
+		public void init(ObservableCollection<InterpretedSwingTableColumn<R, ?>> columns, ElementId id) {
 			theColumns = columns;
 			theElementId = id;
 		}
@@ -154,9 +132,7 @@ class QuickSwingTablePopulation {
 		}
 	}
 
-	// TODO I feel like this class and the one above have overlapping scope and should probably be combined,
-	// or else a bunch of this class's functionality transferred to the one above
-	static class QuickCellRenderer<R, C> extends AbstractObservableCellRenderer<R, C>
+	static class QuickSwingTableColumn<R, C> extends AbstractObservableCellRenderer<R, C>
 	implements CategoryMouseListener<R, C>, CategoryKeyListener<R, C> {
 		private final QuickWidget theQuickParent;
 		private final QuickTableColumn<R, C> theColumn;
@@ -177,19 +153,19 @@ class QuickSwingTablePopulation {
 		private final QuickKeyListener.KeyTypedContext theKeyTypeContext;
 		private final QuickKeyListener.KeyCodeContext theKeyCodeContext;
 
-		QuickCellRenderer(QuickWidget quickParent, QuickTableColumn<R, C> column, TabularWidget.TabularContext<R> ctx,
-			Transformer<ExpressoInterpretationException> tx, Observable<?> until, Supplier<ComponentEditor<?, ?>> parent)
-				throws ExpressoInterpretationException, ModelInstantiationException {
+		QuickSwingTableColumn(QuickWidget quickParent, QuickTableColumn<R, C> column, TabularWidget.TabularContext<R> ctx,
+			Transformer<ExpressoInterpretationException> tx, Observable<?> until, Supplier<ComponentEditor<?, ?>> parent,
+			QuickSwingPopulator<QuickWidget> swingRenderer, QuickSwingPopulator<QuickWidget> swingEditor)
+				throws ModelInstantiationException {
 			theQuickParent = quickParent;
 			theColumn = column;
-			theRenderer = column.getRenderer().get();
+			theRenderer = column.getRenderer();
 			theRenderTableContext = ctx;
 			theParent = parent;
 			theRenderUntil = new SimpleObservable<>();
 
 			// TODO The interpretation/transformation of the renderer and editor should be done elsewhere
-			if (theRenderer != null) {
-				QuickSwingPopulator<QuickWidget> swingRenderer = tx.transform(theRenderer.getInterpreted(), QuickSwingPopulator.class);
+			if (swingRenderer != null) {
 				swingRenderer.populate(new SwingCellPopulator<>(this, true, Observable.or(until, theRenderUntil)), theRenderer);
 
 				theRendererContext = new QuickWidget.WidgetContext.Default();
@@ -197,15 +173,13 @@ class QuickSwingTablePopulation {
 			} else
 				theRendererContext = null;
 			if (theColumn.getEditing() != null) {
-				if (theColumn.getEditing().getEditor() != null) {
-					QuickSwingPopulator<QuickWidget> swingEditor = tx.transform(theColumn.getEditing().getEditor().getInterpreted(),
-						QuickSwingPopulator.class);
+				if (swingEditor != null) {
 					swingEditor.populate(new SwingCellPopulator<>(this, false, Observable.or(until, theRenderUntil)),
 						theColumn.getEditing().getEditor());
 				}
-				theEditContext = new QuickTableColumn.ColumnEditContext.Default<>(theColumn.getColumnSet().getInterpreted().getRowType(),
+				theEditContext = new QuickTableColumn.ColumnEditContext.Default<>(theColumn.getColumnSet().getRowType(),
 					theColumn.getType(),
-					theColumn.getEditing().getInterpreted().getDefinition().reporting().getFileLocation().getPosition(0).toShortString());
+					theColumn.getEditing().reporting().getFileLocation().getPosition(0).toShortString());
 				theColumn.getEditing().setEditorContext(theEditContext);
 			} else
 				theEditContext = null;
@@ -225,8 +199,7 @@ class QuickSwingTablePopulation {
 					else if (listener instanceof QuickKeyListener.QuickKeyCodeListener)
 						((QuickKeyListener.QuickKeyCodeListener) listener).setListenerContext(theKeyCodeContext);
 					else
-						listener.getInterpreted().getDefinition().reporting()
-						.error("Unhandled cell renderer listener type: " + listener.getClass().getName());
+						listener.reporting().error("Unhandled cell renderer listener type: " + listener.getClass().getName());
 				}
 			}
 		}
@@ -274,7 +247,7 @@ class QuickSwingTablePopulation {
 						theEditContext.getRenderValue().set(rowValue, null);
 						editType.getCommit().act(null);
 					});
-					mutation.withRowUpdate(editType.getInterpreted().getDefinition().isRowUpdate());
+					mutation.withRowUpdate(editType.isRowUpdate());
 				} else if (theColumn.getEditing().getType() instanceof QuickTableColumn.ColumnEditType.RowReplaceEditType) {
 					QuickTableColumn.ColumnEditType.RowReplaceEditType<R, C> editType = (QuickTableColumn.ColumnEditType.RowReplaceEditType<R, C>) theColumn
 						.getEditing().getType();
@@ -284,11 +257,10 @@ class QuickSwingTablePopulation {
 						return editType.getReplacement().get();
 					});
 				} else
-					theColumn.getEditing().getInterpreted().getDefinition().reporting().error(
-						"Unhandled column edit type: " + theColumn.getEditing().getType().getInterpreted().getDefinition().getType());
+					theColumn.getEditing().reporting().error("Unhandled column edit type: " + theColumn.getEditing().getType());
 				if (theCellEditor != null)
 					mutation.withEditor(theCellEditor);
-				Integer clicks = theColumn.getEditing().getInterpreted().getDefinition().getClicks();
+				Integer clicks = theColumn.getEditing().getClicks();
 				if (clicks != null)
 					mutation.clicks(clicks);
 			}
@@ -379,8 +351,7 @@ class QuickSwingTablePopulation {
 			for (QuickEventListener listener : theRenderer.getEventListeners()) {
 				if (listener instanceof QuickKeyListener.QuickKeyCodeListener) {
 					QuickKeyListener.QuickKeyCodeListener keyL = (QuickKeyListener.QuickKeyCodeListener) listener;
-					QuickKeyListener.QuickKeyCodeListener.Def def = keyL.getInterpreted().getDefinition();
-					if (!def.isPressed() || (def.getKeyCode() != null && def.getKeyCode() != code))
+					if (!keyL.isPressed() || (keyL.getKeyCode() != null && keyL.getKeyCode() != code))
 						continue;
 					else if (!keyL.getFilter().get().booleanValue())
 						continue;
@@ -401,8 +372,7 @@ class QuickSwingTablePopulation {
 			for (QuickEventListener listener : theRenderer.getEventListeners()) {
 				if (listener instanceof QuickKeyListener.QuickKeyCodeListener) {
 					QuickKeyListener.QuickKeyCodeListener keyL = (QuickKeyListener.QuickKeyCodeListener) listener;
-					QuickKeyListener.QuickKeyCodeListener.Def def = keyL.getInterpreted().getDefinition();
-					if (!def.isPressed() || (def.getKeyCode() != null && def.getKeyCode() != code))
+					if (!keyL.isPressed() || (keyL.getKeyCode() != null && keyL.getKeyCode() != code))
 						continue;
 					else if (!keyL.getFilter().get().booleanValue())
 						continue;
@@ -421,8 +391,7 @@ class QuickSwingTablePopulation {
 			for (QuickEventListener listener : theRenderer.getEventListeners()) {
 				if (listener instanceof QuickKeyListener.QuickKeyTypedListener) {
 					QuickKeyListener.QuickKeyTypedListener keyL = (QuickKeyListener.QuickKeyTypedListener) listener;
-					QuickKeyListener.QuickKeyTypedListener.Def def = keyL.getInterpreted().getDefinition();
-					if (def.getCharFilter() != 0 && def.getCharFilter() != ch)
+					if (keyL.getCharFilter() != 0 && keyL.getCharFilter() != ch)
 						continue;
 					else if (!keyL.getFilter().get().booleanValue())
 						continue;
@@ -454,9 +423,8 @@ class QuickSwingTablePopulation {
 			for (QuickEventListener listener : theRenderer.getEventListeners()) {
 				if (listener instanceof QuickMouseListener.QuickMouseButtonListener) {
 					QuickMouseListener.QuickMouseButtonListener mouseL = (QuickMouseListener.QuickMouseButtonListener) listener;
-					QuickMouseListener.QuickMouseButtonListener.Def def = mouseL.getInterpreted().getDefinition();
-					if (def.getEventType() != QuickMouseListener.MouseButtonEventType.Click
-						|| (def.getButton() != null && def.getButton() != eventButton))
+					if (mouseL.getEventType() != QuickMouseListener.MouseButtonEventType.Click
+						|| (mouseL.getButton() != null && mouseL.getButton() != eventButton))
 						continue;
 					else if (!mouseL.getFilter().get().booleanValue())
 						continue;
@@ -479,9 +447,8 @@ class QuickSwingTablePopulation {
 			for (QuickEventListener listener : theRenderer.getEventListeners()) {
 				if (listener instanceof QuickMouseListener.QuickMouseButtonListener) {
 					QuickMouseListener.QuickMouseButtonListener mouseL = (QuickMouseListener.QuickMouseButtonListener) listener;
-					QuickMouseListener.QuickMouseButtonListener.Def def = mouseL.getInterpreted().getDefinition();
-					if (def.getEventType() != QuickMouseListener.MouseButtonEventType.Press
-						|| (def.getButton() != null && def.getButton() != eventButton))
+					if (mouseL.getEventType() != QuickMouseListener.MouseButtonEventType.Press
+						|| (mouseL.getButton() != null && mouseL.getButton() != eventButton))
 						continue;
 					else if (!mouseL.getFilter().get().booleanValue())
 						continue;
@@ -504,9 +471,8 @@ class QuickSwingTablePopulation {
 			for (QuickEventListener listener : theRenderer.getEventListeners()) {
 				if (listener instanceof QuickMouseListener.QuickMouseButtonListener) {
 					QuickMouseListener.QuickMouseButtonListener mouseL = (QuickMouseListener.QuickMouseButtonListener) listener;
-					QuickMouseListener.QuickMouseButtonListener.Def def = mouseL.getInterpreted().getDefinition();
-					if (def.getEventType() != QuickMouseListener.MouseButtonEventType.Release
-						|| (def.getButton() != null && def.getButton() != eventButton))
+					if (mouseL.getEventType() != QuickMouseListener.MouseButtonEventType.Release
+						|| (mouseL.getButton() != null && mouseL.getButton() != eventButton))
 						continue;
 					else if (!mouseL.getFilter().get().booleanValue())
 						continue;
@@ -525,8 +491,7 @@ class QuickSwingTablePopulation {
 			for (QuickEventListener listener : theRenderer.getEventListeners()) {
 				if (listener instanceof QuickMouseListener.QuickMouseMoveListener) {
 					QuickMouseListener.QuickMouseMoveListener mouseL = (QuickMouseListener.QuickMouseMoveListener) listener;
-					QuickMouseListener.QuickMouseMoveListener.Def def = mouseL.getInterpreted().getDefinition();
-					if (def.getEventType() != QuickMouseListener.MouseMoveEventType.Enter)
+					if (mouseL.getEventType() != QuickMouseListener.MouseMoveEventType.Enter)
 						continue;
 					else if (!mouseL.getFilter().get().booleanValue())
 						continue;
@@ -545,8 +510,7 @@ class QuickSwingTablePopulation {
 			for (QuickEventListener listener : theRenderer.getEventListeners()) {
 				if (listener instanceof QuickMouseListener.QuickMouseMoveListener) {
 					QuickMouseListener.QuickMouseMoveListener mouseL = (QuickMouseListener.QuickMouseMoveListener) listener;
-					QuickMouseListener.QuickMouseMoveListener.Def def = mouseL.getInterpreted().getDefinition();
-					if (def.getEventType() != QuickMouseListener.MouseMoveEventType.Exit)
+					if (mouseL.getEventType() != QuickMouseListener.MouseMoveEventType.Exit)
 						continue;
 					else if (!mouseL.getFilter().get().booleanValue())
 						continue;
@@ -565,8 +529,7 @@ class QuickSwingTablePopulation {
 			for (QuickEventListener listener : theRenderer.getEventListeners()) {
 				if (listener instanceof QuickMouseListener.QuickMouseMoveListener) {
 					QuickMouseListener.QuickMouseMoveListener mouseL = (QuickMouseListener.QuickMouseMoveListener) listener;
-					QuickMouseListener.QuickMouseMoveListener.Def def = mouseL.getInterpreted().getDefinition();
-					if (def.getEventType() != QuickMouseListener.MouseMoveEventType.Move)
+					if (mouseL.getEventType() != QuickMouseListener.MouseMoveEventType.Move)
 						continue;
 					else if (!mouseL.getFilter().get().booleanValue())
 						continue;
@@ -577,12 +540,12 @@ class QuickSwingTablePopulation {
 	}
 
 	static class SwingCellPopulator<R, C> implements PanelPopulation.PartialPanelPopulatorImpl<Container, SwingCellPopulator<R, C>> {
-		private final QuickCellRenderer<R, C> theCell;
+		private final QuickSwingTableColumn<R, C> theCell;
 		private final boolean isRenderer;
 		private final Observable<?> theUntil;
 		private final List<Consumer<ComponentEditor<?, ?>>> theModifiers;
 
-		public SwingCellPopulator(QuickCellRenderer<R, C> cell, boolean renderer, Observable<?> until) {
+		public SwingCellPopulator(QuickSwingTableColumn<R, C> cell, boolean renderer, Observable<?> until) {
 			theCell = cell;
 			isRenderer = renderer;
 			theUntil = until;
@@ -590,8 +553,7 @@ class QuickSwingTablePopulation {
 		}
 
 		SwingCellPopulator<R, C> unsupported(String message) {
-			theCell.getRenderer().getInterpreted().getDefinition().reporting()
-			.warn(message + " unsupported for cell " + (isRenderer ? "renderer" : "editor") + " holder");
+			theCell.getRenderer().reporting().warn(message + " unsupported for cell " + (isRenderer ? "renderer" : "editor") + " holder");
 			return this;
 		}
 
@@ -792,7 +754,7 @@ class QuickSwingTablePopulation {
 				theCell.delegateTo(delegate);
 			} else {
 				if (TypeTokens.getRawType(TypeTokens.get().unwrap(theCell.getColumn().getType())) != boolean.class)
-					theCell.getColumn().getEditing().getEditor().getInterpreted().getDefinition().reporting()
+					theCell.getColumn().getEditing().getEditor().reporting()
 					.error("Check box editor can only be used for boolean-type columns, not " + theCell.getColumn().getType());
 				else {
 					FieldRenderEditor<JCheckBox> fieldEditor = new FieldRenderEditor<>(ObservableCellEditor.createCheckBoxEditor());
@@ -855,8 +817,7 @@ class QuickSwingTablePopulation {
 			if (isRenderer)
 				PanelPopulation.PartialPanelPopulatorImpl.super.addSlider(fieldName, value, modify);
 			else { // TODO
-				theCell.getColumn().getEditing().getEditor().getInterpreted().getDefinition().reporting()
-				.error("Slider cell editing is not implemented");
+				theCell.getColumn().getEditing().getEditor().reporting().error("Slider cell editing is not implemented");
 			}
 			return this;
 		}
@@ -905,7 +866,7 @@ class QuickSwingTablePopulation {
 			}
 
 			E unsupported(String message) {
-				theCell.getRenderer().getInterpreted().getDefinition().reporting()
+				theCell.getRenderer().reporting()
 				.warn(message + " unsupported for cell " + (theCellRenderer == null ? "editor" : "renderer"));
 				return (E) this;
 			}

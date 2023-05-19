@@ -88,19 +88,11 @@ public interface QuickEditableTextWidget<T> extends QuickTextWidget<T> {
 		}
 	}
 
-	@Override
-	Interpreted<T, ?> getInterpreted();
-
 	QuickEditableTextWidget<T> setContext(EditableTextWidgetContext ctx) throws ModelInstantiationException;
 
 	public static abstract class Abstract<T> extends QuickTextWidget.Abstract<T> implements QuickEditableTextWidget<T> {
 		protected Abstract(QuickEditableTextWidget.Interpreted<T, ?> interpreted, QuickElement parent) {
 			super(interpreted, parent);
-		}
-
-		@Override
-		public QuickEditableTextWidget.Interpreted<T, ?> getInterpreted() {
-			return (QuickEditableTextWidget.Interpreted<T, ?>) super.getInterpreted();
 		}
 
 		@Override
@@ -110,8 +102,7 @@ public interface QuickEditableTextWidget<T> extends QuickTextWidget<T> {
 				try {
 					DynamicModelValue.satisfyDynamicValue("error", ModelTypes.Value.STRING, getModels(), error);
 				} catch (ModelException e) {
-					throw new ModelInstantiationException("No error value?",
-						getInterpreted().getDefinition().reporting().getFileLocation().getPosition(0), 0, e);
+					throw new ModelInstantiationException("No error value?", reporting().getFileLocation().getPosition(0), 0, e);
 				} catch (TypeConversionException e) {
 					throw new IllegalStateException("error is not a string?", e);
 				}
@@ -121,8 +112,7 @@ public interface QuickEditableTextWidget<T> extends QuickTextWidget<T> {
 				try {
 					DynamicModelValue.satisfyDynamicValue("warning", ModelTypes.Value.STRING, getModels(), warn);
 				} catch (ModelException e) {
-					throw new ModelInstantiationException("No warning value?",
-						getInterpreted().getDefinition().reporting().getFileLocation().getPosition(0), 0, e);
+					throw new ModelInstantiationException("No warning value?", reporting().getFileLocation().getPosition(0), 0, e);
 				} catch (TypeConversionException e) {
 					throw new IllegalStateException("warning is not a string?", e);
 				}

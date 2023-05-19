@@ -37,7 +37,7 @@ public class QuickLabel<T> extends QuickTextWidget.Abstract<T> {
 		public void update(ExpressoQIS session) throws QonfigInterpretationException {
 			super.update(session);
 			String staticText = session.getValueText();
-			if (staticText.isEmpty())
+			if (staticText != null && staticText.isEmpty())
 				staticText = null;
 			if (staticText != null) {
 				if (super.getValue().getExpression() != ObservableExpression.EMPTY)
@@ -82,10 +82,5 @@ public class QuickLabel<T> extends QuickTextWidget.Abstract<T> {
 
 	public QuickLabel(Interpreted<T, ?> interpreted, QuickElement parent) {
 		super(interpreted, parent);
-	}
-
-	@Override
-	public QuickLabel.Interpreted<T, ?> getInterpreted() {
-		return (Interpreted<T, ?>) super.getInterpreted();
 	}
 }

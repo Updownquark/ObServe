@@ -44,8 +44,5 @@ public interface MultiValueRenderable<T> extends QuickWidget {
 		}
 	}
 
-	@Override
-	Interpreted<? super T, ?> getInterpreted();
-
 	public void setContext(MultiValueRenderContext<T> ctx) throws ModelInstantiationException;
 }

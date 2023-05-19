@@ -3,6 +3,7 @@ package org.observe.quick.base;
 import org.observe.expresso.ExpressoQIS;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.quick.QuickAddOn;
 import org.observe.quick.QuickElement;
 import org.observe.util.swing.JustifiedBoxLayout;
 import org.qommons.config.QonfigAddOn;
@@ -85,11 +86,6 @@ public class QuickInlineLayout extends QuickLayout.Abstract {
 		super(interpreted, element);
 	}
 
-	@Override
-	public Interpreted getInterpreted() {
-		return (Interpreted) super.getInterpreted();
-	}
-
 	public Boolean getVertical() {
 		return isVertical;
 	}
@@ -103,9 +99,11 @@ public class QuickInlineLayout extends QuickLayout.Abstract {
 	}
 
 	@Override
-	public void update(ModelSetInstance models) throws ModelInstantiationException {
-		isVertical = getInterpreted().getDefinition().isVertical();
-		theMainAlign = getInterpreted().getDefinition().getMainAlign();
-		theCrossAlign = getInterpreted().getDefinition().getCrossAlign();
+	public void update(QuickAddOn.Interpreted<?, ?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
+		super.update(interpreted, models);
+		QuickInlineLayout.Interpreted myInterpreted = (QuickInlineLayout.Interpreted) interpreted;
+		isVertical = myInterpreted.getDefinition().isVertical();
+		theMainAlign = myInterpreted.getDefinition().getMainAlign();
+		theCrossAlign = myInterpreted.getDefinition().getCrossAlign();
 	}
 }

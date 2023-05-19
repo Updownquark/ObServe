@@ -104,6 +104,9 @@ public interface QuickAddOn<E extends QuickElement> {
 		 */
 		AO create(E element);
 
+		/** Destroys this add-on interpretation, releasing resources */
+		void destroy();
+
 		/**
 		 * An abstract {@link Interpreted} implementation
 		 *
@@ -136,11 +139,12 @@ public interface QuickAddOn<E extends QuickElement> {
 			@Override
 			public void update(InterpretedModelSet models) throws ExpressoInterpretationException {
 			}
+
+			@Override
+			public void destroy() {
+			}
 		}
 	}
-
-	/** @return The interpretation that produced this add-on */
-	Interpreted<? super E, ?> getInterpreted();
 
 	/** @return The element that this add-on is added onto */
 	E getElement();
@@ -148,10 +152,11 @@ public interface QuickAddOn<E extends QuickElement> {
 	/**
 	 * Called by the {@link #getElement() element's} update, initializes or updates this add-on
 	 *
+	 * @param interpreted The interpretation producing this add-on
 	 * @param models The models to support this add-on
 	 * @throws ModelInstantiationException If any models in this add-on could not be instantiated
 	 */
-	void update(ModelSetInstance models) throws ModelInstantiationException;
+	void update(QuickAddOn.Interpreted<?, ?> interpreted, ModelSetInstance models) throws ModelInstantiationException;
 
 	/**
 	 * An abstract {@link QuickAddOn} implementation
@@ -159,21 +164,14 @@ public interface QuickAddOn<E extends QuickElement> {
 	 * @param <E> The type of element that this add-on is added onto
 	 */
 	public abstract class Abstract<E extends QuickElement> implements QuickAddOn<E> {
-		private final Interpreted<? super E, ?> theInterpreted;
 		private final E theElement;
 
 		/**
 		 * @param interpreted The interpretation producing this add-on
 		 * @param element The element that this add-on is added onto
 		 */
-		public Abstract(Interpreted<? super E, ?> interpreted, E element) {
-			theInterpreted = interpreted;
+		protected Abstract(Interpreted<? super E, ?> interpreted, E element) {
 			theElement = element;
-		}
-
-		@Override
-		public Interpreted<? super E, ?> getInterpreted() {
-			return theInterpreted;
 		}
 
 		@Override
@@ -182,7 +180,7 @@ public interface QuickAddOn<E extends QuickElement> {
 		}
 
 		@Override
-		public void update(ModelSetInstance models) throws ModelInstantiationException {
+		public void update(QuickAddOn.Interpreted<?, ?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
 		}
 	}
 }

@@ -47,11 +47,6 @@ public class QuickSimpleLayout extends QuickLayout.Abstract {
 		super(interpreted, element);
 	}
 
-	@Override
-	public Interpreted getInterpreted() {
-		return (Interpreted) super.getInterpreted();
-	}
-
 	public static class Child extends QuickAddOn.Abstract<QuickWidget> {
 		public static class Def extends QuickAddOn.Def.Abstract<QuickWidget, Child> {
 			public Def(QonfigAddOn type, QuickWidget.Def<?> element) {

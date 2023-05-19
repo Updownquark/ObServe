@@ -25,9 +25,6 @@ public interface MultiValueWidget<T> extends MultiValueRenderable<T> {
 		W create(QuickElement parent);
 	}
 
-	@Override
-	Interpreted<? super T, ?> getInterpreted();
-
 	SettableValue<T> getSelection();
 
 	ObservableCollection<T> getMultiSelection();

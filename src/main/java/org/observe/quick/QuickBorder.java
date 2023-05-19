@@ -41,8 +41,6 @@ public interface QuickBorder extends QuickStyledElement {
 	@Override
 	QuickBorderStyle getStyle();
 
-	void update(ModelSetInstance models) throws ModelInstantiationException;
-
 	public class LineBorder extends QuickStyledElement.Abstract implements QuickBorder {
 		public static class Def<B extends LineBorder> extends QuickStyledElement.Def.Abstract<B> implements QuickBorder.Def<B> {
 			public Def(QuickElement.Def<?> parent, QonfigElement element) {
@@ -89,11 +87,6 @@ public interface QuickBorder extends QuickStyledElement {
 
 		public LineBorder(Interpreted<?> interpreted, QuickElement parent) {
 			super(interpreted, parent);
-		}
-
-		@Override
-		public Interpreted<?> getInterpreted() {
-			return (Interpreted<?>) super.getInterpreted();
 		}
 
 		@Override
@@ -172,19 +165,15 @@ public interface QuickBorder extends QuickStyledElement {
 				.build();
 		}
 
-		@Override
-		public Interpreted<?> getInterpreted() {
-			return (Interpreted<?>) super.getInterpreted();
-		}
-
 		public SettableValue<String> getTitle() {
 			return SettableValue.flatten(theTitle);
 		}
 
 		@Override
-		public void update(ModelSetInstance models) throws ModelInstantiationException {
-			super.update(models);
-			theTitle.set(getInterpreted().getTitle().get(models), null);
+		public void update(QuickElement.Interpreted<?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
+			super.update(interpreted, models);
+			TitledBorder.Interpreted<?> myInterpreted = (TitledBorder.Interpreted<?>) interpreted;
+			theTitle.set(myInterpreted.getTitle().get(models), null);
 		}
 
 		public static class QuickTitledBorderStyle extends QuickTextStyle.Abstract implements QuickBorderStyle {
