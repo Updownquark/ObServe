@@ -819,8 +819,6 @@ implements TableBuilder<R, P> {
 					if (action instanceof SimpleDataAction) {
 						if (((SimpleDataAction<?, ?>) action).isButton())
 							((SimpleDataAction<R, ?>) action).addButton(buttonPanel);
-						if (((SimpleDataAction<?, ?>) action).isPopup())
-							System.err.println("Popup-type actions are not implemented for tables");
 					} else if (action instanceof Consumer)
 						buttonPanel.addHPanel(null, "box", (Consumer<PanelPopulator<JPanel, ?>>) action);
 				}

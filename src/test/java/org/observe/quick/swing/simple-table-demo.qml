@@ -71,9 +71,9 @@
 					<style attr="font-weight" condition="rightPressed">`bold`</style>
 				</label>
 			</column>
-			<value-action icon="&quot;icons/remove.png&quot;">
-				app.values.remove((Object) actionValue)
-			</value-action>
+			<multi-value-action icon="&quot;icons/remove.png&quot;" as-popup="true">
+				app.values.removeAll(actionValues)
+			</multi-value-action>
 		</table>
 		<box layout="inline-layout" orientation="horizontal" main-align="justify">
 			<text-field value="app.newValue" commit-on-type="true">

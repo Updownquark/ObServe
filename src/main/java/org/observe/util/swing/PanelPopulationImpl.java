@@ -1621,7 +1621,7 @@ class PanelPopulationImpl {
 	}
 
 	static class SimpleScrollEditor<P extends SimpleScrollEditor<P>> extends SimpleFieldEditor<JScrollPane, P>
-		implements PanelPopulation.ScrollPane<P> {
+	implements PanelPopulation.ScrollPane<P> {
 		private boolean isContentSet;
 
 		public SimpleScrollEditor(String fieldName, Observable<?> until) {
@@ -2319,6 +2319,7 @@ class PanelPopulationImpl {
 					if (theEnablement != null)
 						selected = QommonsUtils.filterMap(selected, v -> theEnablement.apply(v) == null, null);
 					theAction.accept(selected);
+					updateSelection(getActionItems(), cause);
 					return null;
 				}
 

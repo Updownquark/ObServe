@@ -258,8 +258,6 @@
 			<attribute name="as-popup" type="boolean" default="false" />
 			<attribute name="icon" type="expression" specify="optional" />
 			<attribute name="enabled" type="expression" specify="optional" />
-			<attribute name="allow-for-empty" type="boolean" default="false" />
-			<attribute name="allow-for-multiple" type="boolean" default="true" />
 			<attribute name="tooltip" type="expression" specify="optional" />
 			<value type="expression" specify="required" />
 		</element-def>
@@ -268,12 +266,14 @@
 				<value name-attribute="value-name"/>
 			</element-model>
 			<attribute name="value-name" type="identifier" default="actionValue" />
+			<attribute name="allow-for-multiple" type="boolean" default="true" />
 		</element-def>
 		<element-def name="multi-value-action" extends="abstract-value-action" inherits="with-element-model">
 			<element-model>
 				<list name-attribute="values-name"/>
 			</element-model>
 			<attribute name="values-name" type="identifier" default="actionValues" />
+			<attribute name="allow-for-empty" type="boolean" default="false" />
 		</element-def>
 		<element-def name="table" extends="multi-value-widget" inherits="tabular-widget">
 			<attribute name="rows" type="expression" specify="required" />

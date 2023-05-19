@@ -1127,14 +1127,50 @@ class QuickSwingTablePopulation {
 		return (table, action) -> {
 			ValueAction.SingleValueActionContext<R> ctx = new ValueAction.SingleValueActionContext.Default<>(action.getValueType());
 			action.setActionContext(ctx);
-			table.withAction(null, cause -> action.getAction().act(cause), ta -> {
-				ta.allowForEmpty(action.allowForEmpty());
+			table.withAction(null, v -> {
+				ctx.getActionValue().set(v, null);
+				action.getAction().act(null);
+			}, ta -> {
+				ta.allowForEmpty(false);
 				ta.allowForMultiple(action.allowForMultiple());
 				ta.displayAsButton(action.isButton());
 				ta.displayAsPopup(action.isPopup());
 				ta.allowWhen(v -> {
 					ctx.getActionValue().set(v, null);
 					return action.isEnabled().get();
+				}, null);
+				ta.modifyButton(btn -> {
+					btn.withText(action.getName());
+					btn.withIcon(action.getIcon());
+				});
+			});
+		};
+	}
+
+	static <R> QuickSwingTableAction<R, ValueAction.Multi<R>> interpretMultiValueAction(ValueAction.Multi.Interpreted<R, ?> interpreted,
+		Transformer<ExpressoInterpretationException> tx) throws ExpressoInterpretationException {
+		return (table, action) -> {
+			ValueAction.MultiValueActionContext<R> ctx = new ValueAction.MultiValueActionContext.Default<>(action.getValueType());
+			action.setActionContext(ctx);
+			table.withMultiAction(null, values -> {
+				ctx.getActionValues().addAll(values);
+				try {
+					action.getAction().act(null);
+				} finally {
+					ctx.getActionValues().clear();
+				}
+			}, ta -> {
+				ta.allowForEmpty(false);
+				ta.allowForMultiple(true);
+				ta.displayAsButton(action.isButton());
+				ta.displayAsPopup(action.isPopup());
+				ta.allowWhenMulti(values -> {
+					ctx.getActionValues().addAll(values);
+					try {
+						return action.isEnabled().get();
+					} finally {
+						ctx.getActionValues().clear();
+					}
 				}, null);
 				ta.modifyButton(btn -> {
 					btn.withText(action.getName());

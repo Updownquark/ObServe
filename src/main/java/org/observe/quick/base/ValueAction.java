@@ -34,10 +34,6 @@ public interface ValueAction<T> extends QuickElement {
 
 		CompiledExpression isEnabled();
 
-		boolean allowForEmpty();
-
-		boolean allowForMultiple();
-
 		CompiledExpression getTooltip();
 
 		CompiledExpression getAction();
@@ -50,8 +46,6 @@ public interface ValueAction<T> extends QuickElement {
 			private boolean isPopup;
 			private CompiledExpression theIcon;
 			private CompiledExpression isEnabled;
-			private boolean allowForEmpty;
-			private boolean allowForMultiple;
 			private CompiledExpression theTooltip;
 			private CompiledExpression theAction;
 
@@ -85,16 +79,6 @@ public interface ValueAction<T> extends QuickElement {
 			}
 
 			@Override
-			public boolean allowForEmpty() {
-				return allowForEmpty;
-			}
-
-			@Override
-			public boolean allowForMultiple() {
-				return allowForMultiple;
-			}
-
-			@Override
 			public CompiledExpression getTooltip() {
 				return theTooltip;
 			}
@@ -112,8 +96,6 @@ public interface ValueAction<T> extends QuickElement {
 				isPopup = session.getAttribute("as-popup", boolean.class);
 				theIcon = session.getAttributeExpression("icon");
 				isEnabled = session.getAttributeExpression("enabled");
-				allowForEmpty = session.getAttribute("allow-for-empty", boolean.class);
-				allowForMultiple = session.getAttribute("allow-for-multiple", boolean.class);
 				theTooltip = session.getAttributeExpression("tooltip");
 				theAction = session.getValueExpression();
 			}
@@ -215,10 +197,6 @@ public interface ValueAction<T> extends QuickElement {
 
 	SettableValue<String> isEnabled();
 
-	boolean allowForEmpty();
-
-	boolean allowForMultiple();
-
 	SettableValue<String> getTooltip();
 
 	ObservableAction<?> getAction();
@@ -230,8 +208,6 @@ public interface ValueAction<T> extends QuickElement {
 		private boolean isPopup;
 		private final SettableValue<SettableValue<Icon>> theIcon;
 		private final SettableValue<SettableValue<String>> isEnabled;
-		private boolean allowForEmpty;
-		private boolean allowForMultiple;
 		private final SettableValue<SettableValue<String>> theTooltip;
 		private ObservableAction<?> theAction;
 
@@ -276,16 +252,6 @@ public interface ValueAction<T> extends QuickElement {
 		}
 
 		@Override
-		public boolean allowForEmpty() {
-			return allowForEmpty;
-		}
-
-		@Override
-		public boolean allowForMultiple() {
-			return allowForMultiple;
-		}
-
-		@Override
 		public SettableValue<String> getTooltip() {
 			return SettableValue.flatten(theTooltip);
 		}
@@ -304,8 +270,6 @@ public interface ValueAction<T> extends QuickElement {
 			isPopup = myInterpreted.getDefinition().isPopup();
 			theIcon.set(myInterpreted.getIcon() == null ? null : myInterpreted.getIcon().apply(getModels()), null);
 			isEnabled.set(myInterpreted.isEnabled() == null ? null : myInterpreted.isEnabled().get(getModels()), null);
-			allowForEmpty = myInterpreted.getDefinition().allowForEmpty();
-			allowForMultiple = myInterpreted.getDefinition().allowForMultiple();
 			theTooltip.set(myInterpreted.getTooltip() == null ? null : myInterpreted.getTooltip().get(getModels()), null);
 			theAction = myInterpreted.getAction().get(getModels());
 		}
@@ -356,6 +320,7 @@ public interface ValueAction<T> extends QuickElement {
 	public class Single<T> extends ValueAction.Abstract<T> {
 		public static class Def<T, A extends Single<T>> extends ValueAction.Def.Abstract<T, A> {
 			private String theValueName;
+			private boolean allowForMultiple;
 
 			public Def(QuickElement.Def<?> parent, QonfigElement element) {
 				super(parent, element);
@@ -365,10 +330,15 @@ public interface ValueAction<T> extends QuickElement {
 				return theValueName;
 			}
 
+			public boolean allowForMultiple() {
+				return allowForMultiple;
+			}
+
 			@Override
 			public void update(ExpressoQIS session) throws QonfigInterpretationException {
 				super.update(session);
 				theValueName = session.getAttributeText("value-name");
+				allowForMultiple = session.getAttribute("allow-for-multiple", boolean.class);
 			}
 
 			@Override
@@ -401,6 +371,7 @@ public interface ValueAction<T> extends QuickElement {
 		}
 
 		private String theValueName;
+		private boolean allowForMultiple;
 
 		public Single(Interpreted<T, ?> interpreted, QuickElement parent) {
 			super(interpreted, parent);
@@ -408,6 +379,10 @@ public interface ValueAction<T> extends QuickElement {
 
 		public String getValueName() {
 			return theValueName;
+		}
+
+		public boolean allowForMultiple() {
+			return allowForMultiple;
 		}
 
 		public void setActionContext(SingleValueActionContext<T> ctx) throws ModelInstantiationException {
@@ -419,12 +394,14 @@ public interface ValueAction<T> extends QuickElement {
 			super.update(interpreted, models);
 			Interpreted<T, ?> myInterpreted = (Interpreted<T, ?>) interpreted;
 			theValueName = myInterpreted.getDefinition().getValueName();
+			allowForMultiple = myInterpreted.getDefinition().allowForMultiple();
 		}
 	}
 
 	public class Multi<T> extends ValueAction.Abstract<T> {
 		public static class Def<T, A extends Multi<T>> extends ValueAction.Def.Abstract<T, A> {
 			private String theValuesName;
+			private boolean allowForEmpty;
 
 			public Def(QuickElement.Def<?> parent, QonfigElement element) {
 				super(parent, element);
@@ -434,10 +411,15 @@ public interface ValueAction<T> extends QuickElement {
 				return theValuesName;
 			}
 
+			public boolean allowForEmpty() {
+				return allowForEmpty;
+			}
+
 			@Override
 			public void update(ExpressoQIS session) throws QonfigInterpretationException {
 				super.update(session);
 				theValuesName = session.getAttributeText("values-name");
+				allowForEmpty = session.getAttribute("allow-for-empty", boolean.class);
 			}
 
 			@Override
@@ -471,6 +453,7 @@ public interface ValueAction<T> extends QuickElement {
 		}
 
 		private String theValuesName;
+		private boolean allowForEmpty;
 
 		public Multi(Interpreted<T, ?> interpreted, QuickElement parent) {
 			super(interpreted, parent);
@@ -478,6 +461,10 @@ public interface ValueAction<T> extends QuickElement {
 
 		public String getValueName() {
 			return theValuesName;
+		}
+
+		public boolean allowForEmpty() {
+			return allowForEmpty;
 		}
 
 		public void setActionContext(MultiValueActionContext<T> ctx) throws ModelInstantiationException {
@@ -489,6 +476,7 @@ public interface ValueAction<T> extends QuickElement {
 			super.update(interpreted, models);
 			Interpreted<T, ?> myInterpreted = (Interpreted<T, ?>) interpreted;
 			theValuesName = myInterpreted.getDefinition().getValuesName();
+			allowForEmpty = myInterpreted.getDefinition().allowForEmpty();
 		}
 	}
 }
