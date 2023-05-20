@@ -66,6 +66,7 @@ import org.observe.util.swing.PanelPopulation.PanelPopulator;
 import org.observe.util.swing.PanelPopulation.SliderEditor;
 import org.qommons.Causable;
 import org.qommons.Transformer;
+import org.qommons.collect.CollectionUtils;
 import org.qommons.collect.ElementId;
 import org.qommons.io.Format;
 
@@ -1142,6 +1143,7 @@ class QuickSwingTablePopulation {
 				ta.modifyButton(btn -> {
 					btn.withText(action.getName());
 					btn.withIcon(action.getIcon());
+					btn.withTooltip(action.getTooltip());
 				});
 			});
 		};
@@ -1152,29 +1154,25 @@ class QuickSwingTablePopulation {
 		return (table, action) -> {
 			ValueAction.MultiValueActionContext<R> ctx = new ValueAction.MultiValueActionContext.Default<>(action.getValueType());
 			action.setActionContext(ctx);
+			Supplier<List<R>>[] actionValues = new Supplier[1];
 			table.withMultiAction(null, values -> {
 				ctx.getActionValues().addAll(values);
-				try {
-					action.getAction().act(null);
-				} finally {
-					ctx.getActionValues().clear();
-				}
+				action.getAction().act(null);
+				CollectionUtils.synchronize(ctx.getActionValues(), actionValues[0].get()).simple(r -> r).adjust();
 			}, ta -> {
+				actionValues[0] = ta::getActionItems;
 				ta.allowForEmpty(false);
 				ta.allowForMultiple(true);
 				ta.displayAsButton(action.isButton());
 				ta.displayAsPopup(action.isPopup());
 				ta.allowWhenMulti(values -> {
-					ctx.getActionValues().addAll(values);
-					try {
-						return action.isEnabled().get();
-					} finally {
-						ctx.getActionValues().clear();
-					}
+					CollectionUtils.synchronize(ctx.getActionValues(), values).simple(r -> r).adjust();
+					return action.isEnabled().get();
 				}, null);
 				ta.modifyButton(btn -> {
 					btn.withText(action.getName());
 					btn.withIcon(action.getIcon());
+					btn.withTooltip(action.getTooltip());
 				});
 			});
 		};

@@ -3,6 +3,7 @@ package org.observe.quick.swing;
 import java.awt.AWTEvent;
 import java.awt.Color;
 import java.awt.Component;
+import java.awt.Container;
 import java.awt.EventQueue;
 import java.awt.IllegalComponentStateException;
 import java.awt.LayoutManager;
@@ -1000,33 +1001,33 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 
 		static class MouseValueSupport extends ObservableValue.LazyObservableValue<Boolean>
 		implements SettableValue<Boolean>, MouseListener {
-			private final Component theComponent;
+			private final Component theParent;
 			private final String theName;
 			private final Boolean theButton;
 			private BiConsumer<Boolean, Object> theListener;
 			private boolean isListening;
 
-			public MouseValueSupport(Component component, String name, Boolean button) {
+			public MouseValueSupport(Component parent, String name, Boolean button) {
 				super(TypeTokens.get().BOOLEAN, Transactable.noLock(ThreadConstraint.EDT));
-				theComponent = component;
+				theParent = parent;
 				theName = name;
 				theButton = button;
 			}
 
 			@Override
 			protected Object createIdentity() {
-				return Identifiable.wrap(new ComponentIdentity(theComponent), theName);
+				return Identifiable.wrap(new ComponentIdentity(theParent), theName);
 			}
 
 			@Override
 			protected Boolean getSpontaneous() {
-				if (theComponent == null)
+				if (theParent == null)
 					return false;
 				boolean compVisible;
-				if (theComponent instanceof JComponent)
-					compVisible = ((JComponent) theComponent).isShowing();
+				if (theParent instanceof JComponent)
+					compVisible = ((JComponent) theParent).isShowing();
 				else
-					compVisible = theComponent.isVisible();
+					compVisible = theParent.isVisible();
 				if (!compVisible)
 					return false;
 				if (theButton == null) { // No button filter
@@ -1039,7 +1040,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 				}
 				Point screenPos;
 				try {
-					screenPos = theComponent.getLocationOnScreen();
+					screenPos = theParent.getLocationOnScreen();
 				} catch (IllegalComponentStateException e) {
 					return false;
 				}
@@ -1048,13 +1049,13 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 				Point mousePos = theMouseLocation;
 				if (mousePos == null || mousePos.x < screenPos.x || mousePos.y < screenPos.y)
 					return false;
-				if (mousePos.x >= screenPos.x + theComponent.getWidth() || mousePos.y >= screenPos.y + theComponent.getHeight())
+				if (mousePos.x >= screenPos.x + theParent.getWidth() || mousePos.y >= screenPos.y + theParent.getHeight())
 					return false;
-				Component child = theComponent.getComponentAt(mousePos.x - screenPos.x, mousePos.y - screenPos.y);
+				Component child = theParent.getComponentAt(mousePos.x - screenPos.x, mousePos.y - screenPos.y);
 				// If the mouse is over one of our visible Quick-sourced children, then we're not clicked ourselves
-				while (child != null && child != theComponent && (!child.isVisible() || QUICK_SWING_WIDGETS.get(child) == null))
+				while (child != null && child != theParent && (!child.isVisible() || QUICK_SWING_WIDGETS.get(child) == null))
 					child = child.getParent();
-				return child == null || child == theComponent;
+				return child == null || child == theParent;
 			}
 
 			@Override
@@ -1100,12 +1101,22 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 				if (listening && theListener == null)
 					return;
 				isListening = listening;
-				if (listening)
-					theComponent.addMouseListener(this);
-				else if (theComponent != null)
-					theComponent.removeMouseListener(this);
+				setListening(theParent, listening);
 				if (!listening)
 					theListener = null;
+			}
+
+			private void setListening(Component component, boolean listening) {
+				if (listening)
+					component.addMouseListener(this);
+				else
+					component.removeMouseListener(this);
+				if (component instanceof Container) {
+					for (Component child : ((Container) component).getComponents()) {
+						if (QUICK_SWING_WIDGETS.get(child) == null)
+							setListening(child, listening);
+					}
+				}
 			}
 
 			@Override
@@ -1121,7 +1132,25 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 					if (!SwingUtilities.isRightMouseButton(e))
 						return;
 				}
-				theListener.accept(true, e);
+				fire(e, true);
+			}
+
+			private void fire(MouseEvent e, boolean pressOrEnter) {
+				int offsetX = 0, offsetY = 0;
+				Component parent = e.getComponent();
+				while (parent != null && parent != theParent) {
+					offsetX += parent.getX();
+					offsetY += parent.getY();
+					parent = parent.getParent();
+				}
+				if (parent != null)
+					e.translatePoint(offsetX, offsetY);
+				try {
+					theListener.accept(pressOrEnter, e);
+				} finally {
+					if (parent != null)
+						e.translatePoint(-offsetX, -offsetY);
+				}
 			}
 
 			@Override
@@ -1137,7 +1166,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 					if (!SwingUtilities.isRightMouseButton(e))
 						return;
 				}
-				theListener.accept(false, e);
+				fire(e, false);
 			}
 
 			@Override
@@ -1152,7 +1181,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 					if (!isRightPressed)
 						return;
 				}
-				theListener.accept(true, e);
+				fire(e, true);
 			}
 
 			@Override
@@ -1167,7 +1196,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 					if (!isRightPressed)
 						return;
 				}
-				theListener.accept(false, e);
+				fire(e, false);
 			}
 
 			@Override

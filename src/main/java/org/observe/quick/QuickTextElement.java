@@ -100,6 +100,7 @@ public interface QuickTextElement extends QuickStyledElement {
 
 			public abstract class Abstract extends QuickInterpretedStyle.Wrapper implements Interpreted {
 				private final Def theDefinition;
+				private final Object theId;
 				private final QuickElementStyleAttribute<Color> theFontColor;
 				private final QuickElementStyleAttribute<Double> theFontSize;
 				private final QuickElementStyleAttribute<Double> theFontWeight;
@@ -107,6 +108,7 @@ public interface QuickTextElement extends QuickStyledElement {
 
 				protected Abstract(Def definition, QuickInterpretedStyle parent, QuickInterpretedStyle wrapped) {
 					super(parent, wrapped);
+					theId = new Object();
 					theDefinition = definition;
 					theFontColor = wrapped.get(getCompiled().getFontColor());
 					theFontSize = wrapped.get(getCompiled().getFontSize());
@@ -117,6 +119,11 @@ public interface QuickTextElement extends QuickStyledElement {
 				@Override
 				public Def getCompiled() {
 					return theDefinition;
+				}
+
+				@Override
+				public Object getId() {
+					return theId;
 				}
 
 				@Override
@@ -150,14 +157,14 @@ public interface QuickTextElement extends QuickStyledElement {
 		ObservableValue<Double> getFontSlant();
 
 		public abstract class Abstract implements QuickTextStyle {
-			private final Interpreted theInterpreted;
+			private final Object theId;
 			private final SettableValue<ObservableValue<Color>> theFontColor;
 			private final SettableValue<ObservableValue<Double>> theFontSize;
 			private final SettableValue<ObservableValue<Double>> theFontWeight;
 			private final SettableValue<ObservableValue<Double>> theFontSlant;
 
 			protected Abstract(Interpreted interpreted) {
-				theInterpreted = interpreted;
+				theId = interpreted.getId();
 				theFontColor = SettableValue
 					.build(TypeTokens.get().keyFor(ObservableValue.class).<ObservableValue<Color>> parameterized(Color.class)).build();
 				theFontSize = SettableValue
@@ -169,8 +176,8 @@ public interface QuickTextElement extends QuickStyledElement {
 			}
 
 			@Override
-			public Interpreted getInterpreted() {
-				return theInterpreted;
+			public Object getId() {
+				return theId;
 			}
 
 			@Override
@@ -194,16 +201,12 @@ public interface QuickTextElement extends QuickStyledElement {
 			}
 
 			@Override
-			public void update(ModelSetInstance models) throws ModelInstantiationException {
-				theFontColor.set(getInterpreted().getFontColor().evaluate(models), null);
-				theFontSize.set(getInterpreted().getFontSize().evaluate(models), null);
-				theFontWeight.set(getInterpreted().getFontWeight().evaluate(models), null);
-				theFontSlant.set(getInterpreted().getFontSlant().evaluate(models), null);
-			}
-
-			@Override
-			public String toString() {
-				return theInterpreted.toString();
+			public void update(QuickInstanceStyle.Interpreted interpreted, ModelSetInstance models) throws ModelInstantiationException {
+				QuickTextStyle.Interpreted myInterpreted = (QuickTextStyle.Interpreted) interpreted;
+				theFontColor.set(myInterpreted.getFontColor().evaluate(models), null);
+				theFontSize.set(myInterpreted.getFontSize().evaluate(models), null);
+				theFontWeight.set(myInterpreted.getFontWeight().evaluate(models), null);
+				theFontSlant.set(myInterpreted.getFontSlant().evaluate(models), null);
 			}
 		}
 	}

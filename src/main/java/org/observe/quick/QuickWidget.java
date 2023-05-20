@@ -502,9 +502,6 @@ public interface QuickWidget extends QuickTextElement {
 			}
 		}
 
-		@Override
-		QuickWidgetStyle.Interpreted getInterpreted();
-
 		public ObservableValue<Color> getColor();
 
 		public class Default extends QuickTextStyle.Abstract implements QuickWidgetStyle {
@@ -517,19 +514,15 @@ public interface QuickWidget extends QuickTextElement {
 			}
 
 			@Override
-			public QuickWidgetStyle.Interpreted getInterpreted() {
-				return (QuickWidgetStyle.Interpreted) super.getInterpreted();
-			}
-
-			@Override
 			public ObservableValue<Color> getColor() {
 				return ObservableValue.flatten(theColor);
 			}
 
 			@Override
-			public void update(ModelSetInstance models) throws ModelInstantiationException {
-				super.update(models);
-				theColor.set(getInterpreted().getColor().evaluate(models), null);
+			public void update(QuickInstanceStyle.Interpreted interpreted, ModelSetInstance models) throws ModelInstantiationException {
+				super.update(interpreted, models);
+				QuickWidgetStyle.Interpreted myInterpreted = (QuickWidgetStyle.Interpreted) interpreted;
+				theColor.set(myInterpreted.getColor().evaluate(models), null);
 			}
 		}
 	}

@@ -167,9 +167,9 @@ public interface QuickStyledElement extends QuickElement {
 			QuickStyledElement.Interpreted<?> myInterpreted = (QuickStyledElement.Interpreted<?>) interpreted;
 			QuickElement parent = getParentElement();
 			StyleQIS.installParentModels(getModels(), parent == null ? null : parent.getModels());
-			if (theStyle == null || theStyle.getInterpreted() != myInterpreted.getStyle())
+			if (theStyle == null || theStyle.getId() != myInterpreted.getStyle().getId())
 				theStyle = myInterpreted.getStyle().create();
-			theStyle.update(getModels());
+			theStyle.update(myInterpreted.getStyle(), getModels());
 		}
 	}
 
@@ -184,12 +184,14 @@ public interface QuickStyledElement extends QuickElement {
 			@Override
 			Def getCompiled();
 
+			Object getId();
+
 			QuickInstanceStyle create();
 		}
 
-		Interpreted getInterpreted();
+		Object getId();
 
-		void update(ModelSetInstance models) throws ModelInstantiationException;
+		void update(Interpreted interpreted, ModelSetInstance models) throws ModelInstantiationException;
 	}
 
 	static QuickTypeStyle getTypeStyle(QonfigElement element, String toolkitName, Version toolkitVersion, String elementName) {
