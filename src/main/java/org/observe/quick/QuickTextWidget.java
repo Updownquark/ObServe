@@ -191,11 +191,13 @@ public interface QuickTextWidget<T> extends QuickValueWidget<T> {
 		}
 
 		@Override
-		public void update(QuickElement.Interpreted<?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
-			super.update(interpreted, models);
+		public ModelSetInstance update(QuickElement.Interpreted<?> interpreted, ModelSetInstance models)
+			throws ModelInstantiationException {
+			ModelSetInstance myModels = super.update(interpreted, models);
 			QuickTextWidget.Interpreted<T, ?> myInterpreted = (QuickTextWidget.Interpreted<T, ?>) interpreted;
-			theFormat.set(myInterpreted.getFormat().get(getModels()), null);
-			isEditable.set(myInterpreted.isEditable() == null ? null : myInterpreted.isEditable().get(getModels()), null);
+			theFormat.set(myInterpreted.getFormat().get(myModels), null);
+			isEditable.set(myInterpreted.isEditable() == null ? null : myInterpreted.isEditable().get(myModels), null);
+			return myModels;
 		}
 	}
 }

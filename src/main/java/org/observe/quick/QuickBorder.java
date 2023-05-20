@@ -170,10 +170,12 @@ public interface QuickBorder extends QuickStyledElement {
 		}
 
 		@Override
-		public void update(QuickElement.Interpreted<?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
-			super.update(interpreted, models);
+		public ModelSetInstance update(QuickElement.Interpreted<?> interpreted, ModelSetInstance models)
+			throws ModelInstantiationException {
+			ModelSetInstance myModels = super.update(interpreted, models);
 			TitledBorder.Interpreted<?> myInterpreted = (TitledBorder.Interpreted<?>) interpreted;
-			theTitle.set(myInterpreted.getTitle().get(models), null);
+			theTitle.set(myInterpreted.getTitle().get(myModels), null);
+			return myModels;
 		}
 
 		public static class QuickTitledBorderStyle extends QuickTextStyle.Abstract implements QuickBorderStyle {

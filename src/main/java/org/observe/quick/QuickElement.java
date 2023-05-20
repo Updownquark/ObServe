@@ -370,7 +370,7 @@ public interface QuickElement {
 	 * @param models The model instance for this element
 	 * @throws ModelInstantiationException If an error occurs instantiating any model values needed by this element or its content
 	 */
-	void update(Interpreted<?> interpreted, ModelSetInstance models) throws ModelInstantiationException;
+	ModelSetInstance update(Interpreted<?> interpreted, ModelSetInstance models) throws ModelInstantiationException;
 
 	/** Abstract {@link QuickElement} implementation */
 	public abstract class Abstract implements QuickElement {
@@ -429,15 +429,16 @@ public interface QuickElement {
 		}
 
 		@Override
-		public void update(Interpreted<?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
+		public ModelSetInstance update(Interpreted<?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
 			theModels = interpreted.getDefinition().getExpressoEnv().wrapLocal(models);
 			for (QuickAddOn<?> addOn : theAddOns.getAllValues()) {
 				Class<? extends QuickAddOn.Interpreted<QuickElement, ?>> addOnInterpType;
 				addOnInterpType = (Class<? extends QuickAddOn.Interpreted<QuickElement, ?>>) theAddOnInterpretations.get(addOn.getClass(),
 					ClassMap.TypeMatch.EXACT);
 				QuickAddOn.Interpreted<?, ?> interpretedAddOn = interpreted.getAddOn(addOnInterpType);
-				((QuickAddOn<QuickElement>) addOn).update(interpretedAddOn, getModels());
+				((QuickAddOn<QuickElement>) addOn).update(interpretedAddOn, theModels);
 			}
+			return theModels;
 		}
 
 		@Override
@@ -445,9 +446,9 @@ public interface QuickElement {
 			return getClass().getSimpleName() + " " + theReporting.getFileLocation().getPosition(0);
 		}
 
-		protected <M, MV extends M> void satisfyContextValue(String valueName, ModelInstanceType<M, MV> type, MV value)
-			throws ModelInstantiationException {
-			QuickElement.satisfyContextValue(valueName, type, value, this);
+		protected <M, MV extends M> void satisfyContextValue(String valueName, ModelInstanceType<M, MV> type, MV value,
+			ModelSetInstance models) throws ModelInstantiationException {
+			QuickElement.satisfyContextValue(valueName, type, value, models, this);
 		}
 	}
 
@@ -461,11 +462,10 @@ public interface QuickElement {
 	}
 
 	public static <M, MV extends M> void satisfyContextValue(String valueName, ModelInstanceType<M, MV> type, MV value,
-		QuickElement element)
-			throws ModelInstantiationException {
+		ModelSetInstance models, QuickElement element) throws ModelInstantiationException {
 		if (value != null) {
 			try {
-				DynamicModelValue.satisfyDynamicValue(valueName, type, element.getModels(), value);
+				DynamicModelValue.satisfyDynamicValue(valueName, type, models, value);
 			} catch (ModelException e) {
 				throw new ModelInstantiationException("No " + valueName + " value?",
 					element.reporting().getFileLocation().getPosition(0), 0, e);

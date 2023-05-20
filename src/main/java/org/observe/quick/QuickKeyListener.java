@@ -5,6 +5,7 @@ import org.observe.expresso.ExpressoQIS;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigInterpretationException;
 
@@ -113,10 +114,13 @@ public interface QuickKeyListener extends QuickEventListener {
 			}
 		}
 
+		private final SettableValue<SettableValue<Character>> theTypedChar;
 		private char theCharFilter;
 
 		public QuickKeyTypedListener(Interpreted interpreted, QuickElement parent) {
 			super(interpreted, parent);
+			theTypedChar = SettableValue
+				.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Character>> parameterized(Character.class)).build();
 		}
 
 		public char getCharFilter() {
@@ -125,14 +129,18 @@ public interface QuickKeyListener extends QuickEventListener {
 
 		public void setListenerContext(KeyTypedContext ctx) throws ModelInstantiationException {
 			setListenerContext((ListenerContext) ctx);
-			QuickElement.satisfyContextValue("typedChar", ModelTypes.Value.forType(char.class), ctx.getTypedChar(), this);
+			theTypedChar.set(ctx.getTypedChar(), null);
 		}
 
 		@Override
-		public void update(QuickElement.Interpreted<?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
-			super.update(interpreted, models);
+		public ModelSetInstance update(QuickElement.Interpreted<?> interpreted, ModelSetInstance models)
+			throws ModelInstantiationException {
+			ModelSetInstance myModels = super.update(interpreted, models);
+			QuickElement.satisfyContextValue("typedChar", ModelTypes.Value.forType(char.class), SettableValue.flatten(theTypedChar),
+				myModels, this);
 			QuickKeyTypedListener.Interpreted myInterpreted = (QuickKeyTypedListener.Interpreted) interpreted;
 			theCharFilter = myInterpreted.getDefinition().getCharFilter();
+			return myModels;
 		}
 	}
 
@@ -194,16 +202,19 @@ public interface QuickKeyListener extends QuickEventListener {
 			}
 		}
 
+		private final SettableValue<SettableValue<KeyCode>> theEventKeyCode;
 		private boolean isPressed;
 		private KeyCode theKeyCode;
 
 		public QuickKeyCodeListener(Interpreted interpreted, QuickElement parent) {
 			super(interpreted, parent);
+			theEventKeyCode = SettableValue
+				.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<KeyCode>> parameterized(KeyCode.class)).build();
 		}
 
 		public void setListenerContext(KeyCodeContext ctx) throws ModelInstantiationException {
 			setListenerContext((ListenerContext) ctx);
-			QuickElement.satisfyContextValue("keyCode", ModelTypes.Value.forType(KeyCode.class), ctx.getKeyCode(), this);
+			theEventKeyCode.set(ctx.getKeyCode(), null);
 		}
 
 		public boolean isPressed() {
@@ -215,11 +226,15 @@ public interface QuickKeyListener extends QuickEventListener {
 		}
 
 		@Override
-		public void update(QuickElement.Interpreted<?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
-			super.update(interpreted, models);
+		public ModelSetInstance update(QuickElement.Interpreted<?> interpreted, ModelSetInstance models)
+			throws ModelInstantiationException {
+			ModelSetInstance myModels = super.update(interpreted, models);
+			QuickElement.satisfyContextValue("keyCode", ModelTypes.Value.forType(KeyCode.class), SettableValue.flatten(theEventKeyCode),
+				myModels, this);
 			QuickKeyCodeListener.Interpreted myInterpreted = (QuickKeyCodeListener.Interpreted) interpreted;
 			isPressed = myInterpreted.getDefinition().isPressed();
 			theKeyCode = myInterpreted.getDefinition().getKeyCode();
+			return myModels;
 		}
 	}
 }

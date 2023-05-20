@@ -186,18 +186,19 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 	}
 
 	@Override
-	public void update(QuickElement.Interpreted<?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
-		super.update(interpreted, models);
+	public ModelSetInstance update(QuickElement.Interpreted<?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
+		ModelSetInstance myModels = super.update(interpreted, models);
 		QuickTable.Interpreted<R> myInterpreted = (QuickTable.Interpreted<R>) interpreted;
-		theRows.set(myInterpreted.getRows().get(getModels()), null);
-		theSelection.set(myInterpreted.getSelection() == null ? null : myInterpreted.getSelection().get(getModels()), null);
-		theMultiSelection.set(myInterpreted.getMultiSelection() == null ? null : myInterpreted.getMultiSelection().get(getModels()),
+		theRows.set(myInterpreted.getRows().get(myModels), null);
+		theSelection.set(myInterpreted.getSelection() == null ? null : myInterpreted.getSelection().get(myModels), null);
+		theMultiSelection.set(myInterpreted.getMultiSelection() == null ? null : myInterpreted.getMultiSelection().get(myModels),
 			null);
 		CollectionUtils.synchronize(theActions, myInterpreted.getActions(), //
 			(a, i) -> a.getId() == i.getId()).<ModelInstantiationException> simpleE(action -> action.create(this))//
-			.rightOrder()//
-			.onRightX(element -> element.getLeftValue().update(element.getRightValue(), getModels()))//
-			.onCommonX(element -> element.getLeftValue().update(element.getRightValue(), getModels()))//
-			.adjust();
+		.rightOrder()//
+		.onRightX(element -> element.getLeftValue().update(element.getRightValue(), myModels))//
+		.onCommonX(element -> element.getLeftValue().update(element.getRightValue(), myModels))//
+		.adjust();
+		return myModels;
 	}
 }

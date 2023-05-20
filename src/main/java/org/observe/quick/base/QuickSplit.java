@@ -107,17 +107,18 @@ public class QuickSplit extends QuickContainer2.Abstract<QuickWidget> {
 	}
 
 	@Override
-	public void update(QuickElement.Interpreted<?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
-		super.update(interpreted, models);
+	public ModelSetInstance update(QuickElement.Interpreted<?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
+		ModelSetInstance myModels = super.update(interpreted, models);
 		QuickSplit.Interpreted<?> myInterpreted = (QuickSplit.Interpreted<?>) interpreted;
 		isVertical = myInterpreted.getDefinition().isVertical();
 		if (myInterpreted.getSplitPosition() != null)
-			theSplitPosition.set(myInterpreted.getSplitPosition().get(getModels()), null);
+			theSplitPosition.set(myInterpreted.getSplitPosition().get(myModels), null);
 		else {
 			SettableValue<QuickSize> splitPos = SettableValue.build(QuickSize.class).build();
 			if (theSplitPosition.get() != null)
 				splitPos.set(theSplitPosition.get().get(), null);
 			theSplitPosition.set(splitPos, null);
 		}
+		return myModels;
 	}
 }

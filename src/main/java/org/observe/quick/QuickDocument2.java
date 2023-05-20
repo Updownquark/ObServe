@@ -223,11 +223,12 @@ public class QuickDocument2 extends QuickElement.Abstract {
 	}
 
 	@Override
-	public void update(QuickElement.Interpreted<?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
-		super.update(interpreted, models);
+	public ModelSetInstance update(QuickElement.Interpreted<?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
+		ModelSetInstance myModels = super.update(interpreted, models);
 		QuickDocument2.Interpreted myInterpreted = (QuickDocument2.Interpreted) interpreted;
 		if (theBody == null)
 			theBody = myInterpreted.getBody().create(null);
-		theBody.update(myInterpreted.getBody(), getModels());
+		theBody.update(myInterpreted.getBody(), myModels);
+		return myModels;
 	}
 }

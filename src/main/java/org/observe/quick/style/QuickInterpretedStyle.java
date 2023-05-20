@@ -199,7 +199,7 @@ public interface QuickInterpretedStyle {
 		/**
 		 * @param attribute The attribute this structure is for
 		 * @param style The element style this structure is for
-		 * @param values All style values that may apply to the element for teh attribute
+		 * @param values All style values that may apply to the element for the attribute
 		 * @param inherited The structure for the same attribute for the {@link QuickInterpretedStyle#getParent() parent} style
 		 */
 		public QuickElementStyleAttribute(QuickStyleAttribute<T> attribute, QuickInterpretedStyle style, List<InterpretedStyleValue<T>> values,
@@ -240,8 +240,8 @@ public interface QuickInterpretedStyle {
 			for (int i = 0; i < theValues.size(); i++) {
 				ObservableValue<Boolean> condition = theValues.get(i).getApplication().getCondition(models);
 				SettableValue<? extends T> value = theValues.get(i).getValue().get(models);
-				values[i] = condition
-					.map(LambdaUtils.printableFn(pass -> new ConditionalValue<>(pass, value), "ifPass(" + value + ")", null));
+				values[i] = condition.map(LambdaUtils.printableFn(pass -> new ConditionalValue<>(Boolean.TRUE.equals(pass), value),
+					"ifPass(" + value + ")", null));
 			}
 			if (theInherited != null) {
 				ObservableValue<T> value = theInherited.evaluate(StyleQIS.getParentModels(models));

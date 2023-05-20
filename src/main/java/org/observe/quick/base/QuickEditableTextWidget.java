@@ -2,14 +2,13 @@ package org.observe.quick.base;
 
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
-import org.observe.expresso.DynamicModelValue;
 import org.observe.expresso.ExpressoQIS;
-import org.observe.expresso.ModelException;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
-import org.observe.expresso.TypeConversionException;
+import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.quick.QuickElement;
 import org.observe.quick.QuickTextWidget;
+import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigInterpretationException;
 
@@ -91,32 +90,29 @@ public interface QuickEditableTextWidget<T> extends QuickTextWidget<T> {
 	QuickEditableTextWidget<T> setContext(EditableTextWidgetContext ctx) throws ModelInstantiationException;
 
 	public static abstract class Abstract<T> extends QuickTextWidget.Abstract<T> implements QuickEditableTextWidget<T> {
+		private final SettableValue<SettableValue<String>> theErrorStatus;
+		private final SettableValue<SettableValue<String>> theWarningStatus;
+
 		protected Abstract(QuickEditableTextWidget.Interpreted<T, ?> interpreted, QuickElement parent) {
 			super(interpreted, parent);
+			theErrorStatus = SettableValue
+				.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<String>> parameterized(String.class)).build();
+			theWarningStatus = SettableValue.build(theErrorStatus.getType()).build();
+		}
+
+		@Override
+		public ModelSetInstance update(QuickElement.Interpreted<?> interpreted, ModelSetInstance models)
+			throws ModelInstantiationException {
+			ModelSetInstance myModels = super.update(interpreted, models);
+			QuickElement.satisfyContextValue("error", ModelTypes.Value.STRING, SettableValue.flatten(theErrorStatus), myModels, this);
+			QuickElement.satisfyContextValue("warning", ModelTypes.Value.STRING, SettableValue.flatten(theWarningStatus), myModels, this);
+			return myModels;
 		}
 
 		@Override
 		public QuickEditableTextWidget<T> setContext(EditableTextWidgetContext ctx) throws ModelInstantiationException {
-			SettableValue<String> error = ctx.getError();
-			if (error != null) {
-				try {
-					DynamicModelValue.satisfyDynamicValue("error", ModelTypes.Value.STRING, getModels(), error);
-				} catch (ModelException e) {
-					throw new ModelInstantiationException("No error value?", reporting().getFileLocation().getPosition(0), 0, e);
-				} catch (TypeConversionException e) {
-					throw new IllegalStateException("error is not a string?", e);
-				}
-			}
-			SettableValue<String> warn = ctx.getWarning();
-			if (warn != null) {
-				try {
-					DynamicModelValue.satisfyDynamicValue("warning", ModelTypes.Value.STRING, getModels(), warn);
-				} catch (ModelException e) {
-					throw new ModelInstantiationException("No warning value?", reporting().getFileLocation().getPosition(0), 0, e);
-				} catch (TypeConversionException e) {
-					throw new IllegalStateException("warning is not a string?", e);
-				}
-			}
+			theErrorStatus.set(ctx.getError(), null);
+			theWarningStatus.set(ctx.getWarning(), null);
 			return this;
 		}
 	}

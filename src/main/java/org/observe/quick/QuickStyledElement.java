@@ -162,14 +162,16 @@ public interface QuickStyledElement extends QuickElement {
 		}
 
 		@Override
-		public void update(QuickElement.Interpreted<?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
-			super.update(interpreted, models);
+		public ModelSetInstance update(QuickElement.Interpreted<?> interpreted, ModelSetInstance models)
+			throws ModelInstantiationException {
+			ModelSetInstance myModels = super.update(interpreted, models);
 			QuickStyledElement.Interpreted<?> myInterpreted = (QuickStyledElement.Interpreted<?>) interpreted;
 			QuickElement parent = getParentElement();
-			StyleQIS.installParentModels(getModels(), parent == null ? null : parent.getModels());
+			StyleQIS.installParentModels(myModels, parent == null ? null : parent.getModels());
 			if (theStyle == null || theStyle.getId() != myInterpreted.getStyle().getId())
 				theStyle = myInterpreted.getStyle().create();
-			theStyle.update(myInterpreted.getStyle(), getModels());
+			theStyle.update(myInterpreted.getStyle(), myModels);
+			return myModels;
 		}
 	}
 

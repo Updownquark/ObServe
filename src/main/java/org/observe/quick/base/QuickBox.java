@@ -100,10 +100,11 @@ public class QuickBox extends QuickContainer2.Abstract<QuickWidget> {
 	}
 
 	@Override
-	public void update(QuickElement.Interpreted<?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
-		super.update(interpreted, models);
+	public ModelSetInstance update(QuickElement.Interpreted<?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
+		ModelSetInstance myModels = super.update(interpreted, models);
 		QuickBox.Interpreted<?> myInterpreted = (QuickBox.Interpreted<?>) interpreted;
-		theOpacity = myInterpreted.getOpacity() == null ? null : myInterpreted.getOpacity().get(getModels());
+		theOpacity = myInterpreted.getOpacity() == null ? null : myInterpreted.getOpacity().get(myModels);
+		return myModels;
 	}
 
 	public SettableValue<Double> getOpacity() {

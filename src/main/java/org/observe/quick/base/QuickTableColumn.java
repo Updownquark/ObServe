@@ -10,7 +10,6 @@ import org.observe.expresso.ExpressoQIS;
 import org.observe.expresso.ExpressoRuntimeException;
 import org.observe.expresso.ModelException;
 import org.observe.expresso.ModelInstantiationException;
-import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
@@ -183,6 +182,10 @@ public interface QuickTableColumn<R, C> {
 				return theEditor;
 			}
 
+			public TypeToken<C> getColumnType() {
+				return theColumnType;
+			}
+
 			@Override
 			public InterpretedValueSynth<SettableValue<?>, SettableValue<C>> getValue() throws ExpressoInterpretationException {
 				try {
@@ -224,6 +227,10 @@ public interface QuickTableColumn<R, C> {
 			}
 		}
 
+		private final SettableValue<SettableValue<C>> theEditColumnValue;
+		private final SettableValue<SettableValue<Boolean>> isSelected;
+		private final SettableValue<SettableValue<Integer>> theRowIndex;
+		private final SettableValue<SettableValue<Integer>> theColumnIndex;
 		private String theColumnEditValueName;
 		private String theValueName;
 		private Integer theClicks;
@@ -249,6 +256,13 @@ public interface QuickTableColumn<R, C> {
 					theRawColumnEditValue.set(v, null);
 					return accept == null ? null : accept.get();
 				});
+			theEditColumnValue = SettableValue
+				.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<C>> parameterized(interpreted.getColumnType())).build();
+			isSelected = SettableValue
+				.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Boolean>> parameterized(boolean.class)).build();
+			theRowIndex = SettableValue
+				.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Integer>> parameterized(int.class)).build();
+			theColumnIndex = SettableValue.build(theRowIndex.getType()).build();
 		}
 
 		@Override
@@ -273,22 +287,17 @@ public interface QuickTableColumn<R, C> {
 		}
 
 		public void setEditorContext(ColumnEditContext<R, C> ctx) throws ModelInstantiationException {
-			ModelInstanceType<SettableValue<?>, SettableValue<C>> rowType = ModelTypes.Value.forType(ctx.getEditColumnValue().getType());
-			QuickElement.satisfyContextValue(theColumnEditValueName, rowType, ctx.getEditColumnValue(),
-				this);
-			if (theEditor != null) {
-				if (theValueName != null)
-					QuickElement.satisfyContextValue(theValueName, rowType, ctx.getEditColumnValue(), theEditor);
-				QuickElement.satisfyContextValue("rowIndex", ModelTypes.Value.INT, ctx.getRowIndex(), theEditor);
-				QuickElement.satisfyContextValue("columnIndex", ModelTypes.Value.INT, ctx.getColumnIndex(), theEditor);
-				QuickElement.satisfyContextValue("selected", ModelTypes.Value.BOOLEAN, ctx.isSelected(), theEditor);
-			}
+			theEditColumnValue.set(ctx.getEditColumnValue(), null);
+			isSelected.set(ctx.isSelected(), null);
+			theRowIndex.set(ctx.getRowIndex(), null);
+			theColumnIndex.set(ctx.getColumnIndex(), null);
 		}
 
 		@Override
-		public void update(QuickElement.Interpreted<?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
+		public ModelSetInstance update(QuickElement.Interpreted<?> interpreted, ModelSetInstance models)
+			throws ModelInstantiationException {
 			// The context values in the editor's models need to be independent from the render models
-			super.update(interpreted, models.copy().build());
+			ModelSetInstance myModels = super.update(interpreted, models.copy().build());
 			ColumnEditing.Interpreted<R, C> myInterpreted = (ColumnEditing.Interpreted<R, C>) interpreted;
 			theColumnEditValueName = myInterpreted.getDefinition().getColumnEditValueName();
 			theClicks = myInterpreted.getDefinition().getClicks();
@@ -300,8 +309,19 @@ public interface QuickTableColumn<R, C> {
 			else if (theEditor == null || theEditor.getId() != myInterpreted.getEditor())
 				theEditor = myInterpreted.getEditor().create(this);
 			theValueName = null;
+			QuickElement.satisfyContextValue(theColumnEditValueName, ModelTypes.Value.forType(myInterpreted.getColumnType()),
+				SettableValue.flatten(theEditColumnValue), myModels, this);
 			if (theEditor != null) {
-				theEditor.update(myInterpreted.getEditor(), getModels());
+				ModelSetInstance editorModels = theEditor.update(myInterpreted.getEditor(), myModels);
+				if (theValueName != null)
+					QuickElement.satisfyContextValue(theValueName, ModelTypes.Value.forType(myInterpreted.getColumnType()),
+						SettableValue.flatten(theEditColumnValue), editorModels, theEditor);
+				QuickElement.satisfyContextValue("selected", ModelTypes.Value.BOOLEAN, SettableValue.flatten(isSelected), editorModels,
+					theEditor);
+				QuickElement.satisfyContextValue("rowIndex", ModelTypes.Value.INT, SettableValue.flatten(theRowIndex), editorModels,
+					theEditor);
+				QuickElement.satisfyContextValue("columnIndex", ModelTypes.Value.INT, SettableValue.flatten(theColumnIndex), editorModels,
+					theEditor);
 
 				// Find the name of the row value variable we need to spoof
 				QuickElement.Interpreted<?> parent = interpreted.getParentElement();
@@ -310,6 +330,7 @@ public interface QuickTableColumn<R, C> {
 				if (parent != null)
 					theValueName = ((MultiValueWidget.Interpreted<?, ?>) parent).getDefinition().getValueName();
 			}
+			return myModels;
 		}
 	}
 
@@ -713,19 +734,20 @@ public interface QuickTableColumn<R, C> {
 		}
 
 		@Override
-		public void update(QuickElement.Interpreted<?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
-			super.update(interpreted, models);
+		public ModelSetInstance update(QuickElement.Interpreted<?> interpreted, ModelSetInstance models)
+			throws ModelInstantiationException {
+			ModelSetInstance myModels = super.update(interpreted, models);
 			SingleColumnSet.Interpreted<R, C> myInterpreted = (SingleColumnSet.Interpreted<R, C>) interpreted;
 			try {
 				DynamicModelValue.satisfyDynamicValueIfUnsatisfied(myInterpreted.getDefinition().getColumnValueName(),
-					myInterpreted.getValue().getType(), getModels(), getValue());
+					myInterpreted.getValue().getType(), myModels, getValue());
 			} catch (ModelException | TypeConversionException e) {
 				throw new ExpressoRuntimeException("Install of column value failed",
 					myInterpreted.getDefinition().reporting().getFileLocation().getPosition(0));
 			}
-			theName.set(myInterpreted.getName().get(getModels()), null);
-			theValue.set(myInterpreted.getValue().get(getModels()), null);
-			theHeaderTooltip.set(myInterpreted.getHeaderTooltip() == null ? null : myInterpreted.getHeaderTooltip().get(getModels()),
+			theName.set(myInterpreted.getName().get(myModels), null);
+			theValue.set(myInterpreted.getValue().get(myModels), null);
+			theHeaderTooltip.set(myInterpreted.getHeaderTooltip() == null ? null : myInterpreted.getHeaderTooltip().get(myModels),
 				null);
 
 			if (myInterpreted.getRenderer() == null)
@@ -742,7 +764,7 @@ public interface QuickTableColumn<R, C> {
 			}
 			if (theRenderer != null) {
 				try {
-					theRenderer.update(myInterpreted.getRenderer(), getModels());
+					theRenderer.update(myInterpreted.getRenderer(), myModels);
 				} catch (ExpressoRuntimeException e) {
 					throw e;
 				} catch (RuntimeException | Error e) {
@@ -756,7 +778,8 @@ public interface QuickTableColumn<R, C> {
 			else if (theEditing == null || theEditing.getId() != myInterpreted.getEditing().getId())
 				theEditing = myInterpreted.getEditing().create(this, theColumn.getFirst());
 			if (theEditing != null)
-				theEditing.update(myInterpreted.getEditing(), getModels());
+				theEditing.update(myInterpreted.getEditing(), myModels);
+			return myModels;
 		}
 
 		public class SingleColumn implements QuickTableColumn<R, C> {

@@ -335,9 +335,6 @@ public interface QuickWidget extends QuickTextElement {
 	/** @return The parent container, if any */
 	QuickContainer2<?> getParent();
 
-	@Override
-	ModelSetInstance getModels();
-
 	/** @return This widget's border */
 	QuickBorder getBorder();
 
@@ -347,18 +344,28 @@ public interface QuickWidget extends QuickTextElement {
 	/** @return The value determining when this widget is to be visible */
 	SettableValue<Boolean> isVisible();
 
+	SettableValue<Boolean> isHovered();
+
+	SettableValue<Boolean> isFocused();
+
+	SettableValue<Boolean> isPressed();
+
+	SettableValue<Boolean> isRightPressed();
+
 	ObservableCollection<QuickEventListener> getEventListeners();
 
 	void setContext(WidgetContext ctx) throws ModelInstantiationException;
 
-	WidgetContext getContext();
-
 	/** An abstract {@link QuickWidget} implementation */
 	public abstract class Abstract extends QuickStyledElement.Abstract implements QuickWidget {
+		private final SettableValue<SettableValue<Boolean>> isHovered;
+		private final SettableValue<SettableValue<Boolean>> isFocused;
+		private final SettableValue<SettableValue<Boolean>> isPressed;
+		private final SettableValue<SettableValue<Boolean>> isRightPressed;
+
 		private QuickBorder theBorder;
 		private final SettableValue<SettableValue<String>> theTooltip;
 		private final SettableValue<SettableValue<Boolean>> isVisible;
-		private WidgetContext theContext;
 		private final ObservableCollection<QuickEventListener> theEventListeners;
 
 		/**
@@ -372,6 +379,12 @@ public interface QuickWidget extends QuickTextElement {
 			isVisible = SettableValue
 				.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Boolean>> parameterized(boolean.class)).build();
 			theEventListeners = ObservableCollection.build(QuickEventListener.class).build();
+
+			isHovered = SettableValue
+				.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Boolean>> parameterized(boolean.class)).build();
+			isFocused = SettableValue.build(isHovered.getType()).build();
+			isPressed = SettableValue.build(isHovered.getType()).build();
+			isRightPressed = SettableValue.build(isHovered.getType()).build();
 		}
 
 		@Override
@@ -401,44 +414,64 @@ public interface QuickWidget extends QuickTextElement {
 		}
 
 		@Override
+		public SettableValue<Boolean> isHovered() {
+			return SettableValue.flatten(isHovered);
+		}
+
+		@Override
+		public SettableValue<Boolean> isFocused() {
+			return SettableValue.flatten(isFocused);
+		}
+
+		@Override
+		public SettableValue<Boolean> isPressed() {
+			return SettableValue.flatten(isPressed);
+		}
+
+		@Override
+		public SettableValue<Boolean> isRightPressed() {
+			return SettableValue.flatten(isRightPressed);
+		}
+
+		@Override
 		public ObservableCollection<QuickEventListener> getEventListeners() {
 			return theEventListeners.flow().unmodifiable(false).collect();
 		}
 
 		@Override
 		public void setContext(WidgetContext ctx) throws ModelInstantiationException {
-			theContext = ctx;
-			satisfyContextValue("hovered", ModelTypes.Value.BOOLEAN, ctx.isHovered());
-			satisfyContextValue("focused", ModelTypes.Value.BOOLEAN, ctx.isFocused());
-			satisfyContextValue("pressed", ModelTypes.Value.BOOLEAN, ctx.isPressed());
-			satisfyContextValue("rightPressed", ModelTypes.Value.BOOLEAN, ctx.isRightPressed());
+			isHovered.set(ctx.isHovered(), null);
+			isFocused.set(ctx.isFocused(), null);
+			isPressed.set(ctx.isPressed(), null);
+			isRightPressed.set(ctx.isRightPressed(), null);
 		}
 
 		@Override
-		public WidgetContext getContext() {
-			return theContext;
-		}
-
-		@Override
-		public void update(QuickElement.Interpreted<?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
-			super.update(interpreted, models);
+		public ModelSetInstance update(QuickElement.Interpreted<?> interpreted, ModelSetInstance models)
+			throws ModelInstantiationException {
+			ModelSetInstance myModels = super.update(interpreted, models);
+			satisfyContextValue("hovered", ModelTypes.Value.BOOLEAN, SettableValue.flatten(isHovered), myModels);
+			satisfyContextValue("focused", ModelTypes.Value.BOOLEAN, SettableValue.flatten(isFocused), myModels);
+			satisfyContextValue("pressed", ModelTypes.Value.BOOLEAN, SettableValue.flatten(isPressed), myModels);
+			satisfyContextValue("rightPressed", ModelTypes.Value.BOOLEAN, SettableValue.flatten(isRightPressed), myModels);
 			QuickWidget.Interpreted<?> myInterpreted = (QuickWidget.Interpreted<?>) interpreted;
 			theBorder = myInterpreted.getBorder() == null ? null : myInterpreted.getBorder().create(this);
 			if (theBorder != null)
-				theBorder.update(myInterpreted.getBorder(), getModels());
-			theTooltip.set(myInterpreted.getTooltip() == null ? null : myInterpreted.getTooltip().get(getModels()), null);
+				theBorder.update(myInterpreted.getBorder(), myModels);
+			theTooltip.set(myInterpreted.getTooltip() == null ? null : myInterpreted.getTooltip().get(myModels), null);
 			if (myInterpreted.isVisible() != null)
-				isVisible.set(myInterpreted.isVisible().get(getModels()), null);
+				isVisible.set(myInterpreted.isVisible().get(myModels), null);
 			try (Transaction t = theEventListeners.lock(true, null)) {
 				CollectionUtils.synchronize(theEventListeners, myInterpreted.getEventListeners(), (l, i) -> l.getId() == i.getId())//
 				.<ModelInstantiationException> simpleE(l -> {
 					QuickEventListener listener = l.create(this);
-					listener.update(l, getModels());
+					listener.update(l, myModels);
 					return listener;
 				})//
-				.onCommonX(el -> el.getLeftValue().update(el.getRightValue(), getModels()))//
+				.onCommonX(el -> el.getLeftValue().update(el.getRightValue(), myModels))//
 				.adjust();
 			}
+			return myModels;
 		}
 	}
 

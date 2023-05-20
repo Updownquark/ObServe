@@ -295,9 +295,9 @@ class QuickSwingTablePopulation {
 				if (tableCtx == theRenderTableContext && theRendererContext != null) {
 					theRendererContext.isHovered().set(cell.isCellHovered(), cause);
 					theRendererContext.isFocused().set(cell.isCellFocused(), cause);
-					if (cell.isCellHovered() && theQuickParent.getContext() != null) {
-						theRendererContext.isPressed().set(theQuickParent.getContext().isPressed().get(), cause);
-						theRendererContext.isRightPressed().set(theQuickParent.getContext().isRightPressed().get(), cause);
+					if (cell.isCellHovered()) {
+						theRendererContext.isPressed().set(theQuickParent.isPressed().get(), cause);
+						theRendererContext.isRightPressed().set(theQuickParent.isRightPressed().get(), cause);
 					} else {
 						theRendererContext.isPressed().set(false, cause);
 						theRendererContext.isRightPressed().set(false, cause);

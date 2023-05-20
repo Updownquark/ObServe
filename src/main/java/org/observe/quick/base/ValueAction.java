@@ -262,16 +262,18 @@ public interface ValueAction<T> extends QuickElement {
 		}
 
 		@Override
-		public void update(QuickElement.Interpreted<?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
-			super.update(interpreted, models);
+		public ModelSetInstance update(QuickElement.Interpreted<?> interpreted, ModelSetInstance models)
+			throws ModelInstantiationException {
+			ModelSetInstance myModels = super.update(interpreted, models);
 			ValueAction.Interpreted<T, ?> myInterpreted = (ValueAction.Interpreted<T, ?>) interpreted;
-			theName.set(myInterpreted.getName() == null ? null : myInterpreted.getName().get(getModels()), null);
+			theName.set(myInterpreted.getName() == null ? null : myInterpreted.getName().get(myModels), null);
 			isButton = myInterpreted.getDefinition().isButton();
 			isPopup = myInterpreted.getDefinition().isPopup();
-			theIcon.set(myInterpreted.getIcon() == null ? null : myInterpreted.getIcon().apply(getModels()), null);
-			isEnabled.set(myInterpreted.isEnabled() == null ? null : myInterpreted.isEnabled().get(getModels()), null);
-			theTooltip.set(myInterpreted.getTooltip() == null ? null : myInterpreted.getTooltip().get(getModels()), null);
-			theAction = myInterpreted.getAction().get(getModels());
+			theIcon.set(myInterpreted.getIcon() == null ? null : myInterpreted.getIcon().apply(myModels), null);
+			isEnabled.set(myInterpreted.isEnabled() == null ? null : myInterpreted.isEnabled().get(myModels), null);
+			theTooltip.set(myInterpreted.getTooltip() == null ? null : myInterpreted.getTooltip().get(myModels), null);
+			theAction = myInterpreted.getAction().get(myModels);
+			return myModels;
 		}
 	}
 
@@ -370,11 +372,14 @@ public interface ValueAction<T> extends QuickElement {
 			}
 		}
 
+		private final SettableValue<SettableValue<T>> theActionValue;
 		private String theValueName;
 		private boolean allowForMultiple;
 
 		public Single(Interpreted<T, ?> interpreted, QuickElement parent) {
 			super(interpreted, parent);
+			theActionValue = SettableValue
+				.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<T>> parameterized(interpreted.getValueType())).build();
 		}
 
 		public String getValueName() {
@@ -386,15 +391,19 @@ public interface ValueAction<T> extends QuickElement {
 		}
 
 		public void setActionContext(SingleValueActionContext<T> ctx) throws ModelInstantiationException {
-			QuickElement.satisfyContextValue(theValueName, ModelTypes.Value.forType(getValueType()), ctx.getActionValue(), this);
+			theActionValue.set(ctx.getActionValue(), null);
 		}
 
 		@Override
-		public void update(QuickElement.Interpreted<?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
-			super.update(interpreted, models);
+		public ModelSetInstance update(QuickElement.Interpreted<?> interpreted, ModelSetInstance models)
+			throws ModelInstantiationException {
+			ModelSetInstance myModels = super.update(interpreted, models);
 			Interpreted<T, ?> myInterpreted = (Interpreted<T, ?>) interpreted;
 			theValueName = myInterpreted.getDefinition().getValueName();
 			allowForMultiple = myInterpreted.getDefinition().allowForMultiple();
+			QuickElement.satisfyContextValue(theValueName, ModelTypes.Value.forType(getValueType()), SettableValue.flatten(theActionValue),
+				myModels, this);
+			return myModels;
 		}
 	}
 
@@ -452,11 +461,16 @@ public interface ValueAction<T> extends QuickElement {
 			}
 		}
 
+		private final SettableValue<ObservableCollection<T>> theActionValues;
 		private String theValuesName;
 		private boolean allowForEmpty;
 
 		public Multi(Interpreted<T, ?> interpreted, QuickElement parent) {
 			super(interpreted, parent);
+			theActionValues = SettableValue
+				.build(
+					TypeTokens.get().keyFor(ObservableCollection.class).<ObservableCollection<T>> parameterized(interpreted.getValueType()))
+				.build();
 		}
 
 		public String getValueName() {
@@ -468,15 +482,19 @@ public interface ValueAction<T> extends QuickElement {
 		}
 
 		public void setActionContext(MultiValueActionContext<T> ctx) throws ModelInstantiationException {
-			QuickElement.satisfyContextValue(theValuesName, ModelTypes.Collection.forType(getValueType()), ctx.getActionValues(), this);
+			theActionValues.set(ctx.getActionValues(), null);
 		}
 
 		@Override
-		public void update(QuickElement.Interpreted<?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
-			super.update(interpreted, models);
+		public ModelSetInstance update(QuickElement.Interpreted<?> interpreted, ModelSetInstance models)
+			throws ModelInstantiationException {
+			ModelSetInstance myModels = super.update(interpreted, models);
 			Interpreted<T, ?> myInterpreted = (Interpreted<T, ?>) interpreted;
 			theValuesName = myInterpreted.getDefinition().getValuesName();
 			allowForEmpty = myInterpreted.getDefinition().allowForEmpty();
+			QuickElement.satisfyContextValue(theValuesName, ModelTypes.Collection.forType(getValueType()),
+				ObservableCollection.flattenValue(theActionValues), myModels, this);
+			return myModels;
 		}
 	}
 }

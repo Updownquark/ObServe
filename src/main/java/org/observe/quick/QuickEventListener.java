@@ -160,6 +160,9 @@ public interface QuickEventListener extends QuickElement {
 		private final ObservableCollection<SettableValue<Boolean>> theFilters;
 		private final ObservableValue<Boolean> theCondensedFilter;
 		private ObservableAction<?> theAction;
+		private final SettableValue<SettableValue<Boolean>> isAltPressed;
+		private final SettableValue<SettableValue<Boolean>> isCtrlPressed;
+		private final SettableValue<SettableValue<Boolean>> isShiftPressed;
 
 		protected Abstract(QuickEventListener.Interpreted<?> interpreted, QuickElement parent) {
 			super(interpreted, parent);
@@ -172,15 +175,19 @@ public interface QuickEventListener extends QuickElement {
 				.anywhere()//
 				.withDefault(() -> false).find()//
 				.map(found -> !found);
+			isAltPressed = SettableValue
+				.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Boolean>> parameterized(boolean.class)).build();
+			isCtrlPressed = SettableValue.build(isAltPressed.getType()).build();
+			isShiftPressed = SettableValue.build(isAltPressed.getType()).build();
 		}
 
 		@Override
 		public void setListenerContext(ListenerContext ctx) throws ModelInstantiationException {
 			if (ctx == null)
 				return;
-			satisfyContextValue("altPressed", ModelTypes.Value.BOOLEAN, ctx.isAltPressed());
-			satisfyContextValue("ctrlPressed", ModelTypes.Value.BOOLEAN, ctx.isCtrlPressed());
-			satisfyContextValue("shiftPressed", ModelTypes.Value.BOOLEAN, ctx.isShiftPressed());
+			isAltPressed.set(ctx.isAltPressed(), null);
+			isCtrlPressed.set(ctx.isCtrlPressed(), null);
+			isShiftPressed.set(ctx.isShiftPressed(), null);
 		}
 
 		@Override
@@ -203,13 +210,19 @@ public interface QuickEventListener extends QuickElement {
 		}
 
 		@Override
-		public void update(QuickElement.Interpreted<?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
-			super.update(interpreted, models);
+		public ModelSetInstance update(QuickElement.Interpreted<?> interpreted, ModelSetInstance models)
+			throws ModelInstantiationException {
+			ModelSetInstance myModels = super.update(interpreted, models);
+			QuickElement.satisfyContextValue("altPressed", ModelTypes.Value.BOOLEAN, SettableValue.flatten(isAltPressed), myModels, this);
+			QuickElement.satisfyContextValue("ctrlPressed", ModelTypes.Value.BOOLEAN, SettableValue.flatten(isCtrlPressed), myModels, this);
+			QuickElement.satisfyContextValue("shiftPressed", ModelTypes.Value.BOOLEAN, SettableValue.flatten(isShiftPressed), myModels,
+				this);
 			QuickEventListener.Interpreted<?> myInterpreted = (QuickEventListener.Interpreted<?>) interpreted;
 			theFilters.clear();
 			for (InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> filter : myInterpreted.getFilters())
 				theFilters.add(filter.get(models));
-			theAction = myInterpreted.getAction().get(getModels());
+			theAction = myInterpreted.getAction().get(myModels);
+			return myModels;
 		}
 	}
 }

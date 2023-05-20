@@ -107,11 +107,12 @@ public class QuickTextField<T> extends QuickEditableTextWidget.Abstract<T> {
 	}
 
 	@Override
-	public void update(QuickElement.Interpreted<?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
-		super.update(interpreted, models);
+	public ModelSetInstance update(QuickElement.Interpreted<?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
+		ModelSetInstance myModels = super.update(interpreted, models);
 		QuickTextField.Interpreted<T> myInterpreted = (QuickTextField.Interpreted<T>) interpreted;
 		isCommitOnType = myInterpreted.getDefinition().isCommitOnType();
 		theColumns = myInterpreted.getDefinition().getColumns();
-		theEmptyText.set(myInterpreted.getEmptyText() == null ? null : myInterpreted.getEmptyText().get(getModels()), null);
+		theEmptyText.set(myInterpreted.getEmptyText() == null ? null : myInterpreted.getEmptyText().get(myModels), null);
+		return myModels;
 	}
 }
