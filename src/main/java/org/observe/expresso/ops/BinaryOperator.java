@@ -247,34 +247,7 @@ public class BinaryOperator implements ObservableExpression {
 								return msg;
 							return leftV.isAcceptable(res);
 						}));
-					return new ObservableAction<Object>() {
-						@Override
-						public TypeToken<Object> getType() {
-							return resultType;
-						}
-
-						@Override
-						public Object act(Object cause) {
-							Object res;
-							try {
-								res = op.apply(leftV.get(), rightV.get());
-							} catch (RuntimeException | Error e) {
-								operatorReporting.error(null, e);
-								return null;
-							}
-							try {
-								return leftV.set(res, cause);
-							} catch (RuntimeException | Error e) {
-								reporting.error(null, e);
-								return null;
-							}
-						}
-
-						@Override
-						public ObservableValue<String> isEnabled() {
-							return enabled;
-						}
-					};
+					return new BinaryOperatorAction(resultType, leftV, rightV, op, enabled, reporting, operatorReporting);
 				}
 
 				@Override
@@ -332,32 +305,7 @@ public class BinaryOperator implements ObservableExpression {
 								return null;
 							}
 						}, op::toString, op))//
-						.withReverse(new Transformation.TransformReverse<Object, Object>() {
-							@Override
-							public boolean isStateful() {
-								return true;
-							}
-
-							@Override
-							public String isEnabled(TransformationValues<Object, Object> transformValues) {
-								return null;
-							}
-
-							@Override
-							public ReverseQueryResult<Object> reverse(Object newValue, TransformationValues<Object, Object> transformValues,
-								boolean add, boolean test) {
-								Object rgt = transformValues.get(rightV);
-								String msg = op.canReverse(transformValues.getCurrentSource(), rgt, newValue);
-								if (msg != null)
-									return ReverseQueryResult.reject(msg);
-								try {
-									return ReverseQueryResult.value(op.reverse(transformValues.getCurrentSource(), rgt, newValue));
-								} catch (RuntimeException | Error e) {
-									reporting.error(null, e);
-									return ReverseQueryResult.value(null);
-								}
-							}
-						}));
+						.withReverse(new BinaryOperatorReverse(rightV, op, reporting)));
 				}
 
 				@Override
@@ -384,6 +332,94 @@ public class BinaryOperator implements ObservableExpression {
 				}
 			};
 			return (ModelValueSynth<M, MV>) operated;
+		}
+	}
+
+	// These classes can't be anonymous because they'll keep references to compiled objects that we don't want to keep
+
+	static class BinaryOperatorReverse implements Transformation.TransformReverse<Object, Object> {
+		private final SettableValue<Object> theRight;
+		private final BinaryOp<Object, Object, Object> theOperator;
+		private final ErrorReporting theReporting;
+
+		BinaryOperatorReverse(SettableValue<Object> right, BinaryOp<Object, Object, Object> operator, ErrorReporting reporting) {
+			theRight = right;
+			theOperator = operator;
+			theReporting = reporting;
+		}
+
+		@Override
+		public boolean isStateful() {
+			return true;
+		}
+
+		@Override
+		public String isEnabled(TransformationValues<Object, Object> transformValues) {
+			return null;
+		}
+
+		@Override
+		public ReverseQueryResult<Object> reverse(Object newValue, TransformationValues<Object, Object> transformValues, boolean add,
+			boolean test) {
+			Object rgt = transformValues.get(theRight);
+			String msg = theOperator.canReverse(transformValues.getCurrentSource(), rgt, newValue);
+			if (msg != null)
+				return ReverseQueryResult.reject(msg);
+			try {
+				return ReverseQueryResult.value(theOperator.reverse(transformValues.getCurrentSource(), rgt, newValue));
+			} catch (RuntimeException | Error e) {
+				theReporting.error(null, e);
+				return ReverseQueryResult.value(null);
+			}
+		}
+	}
+
+	static class BinaryOperatorAction implements ObservableAction<Object> {
+		private final TypeToken<Object> theResultType;
+		private final SettableValue<Object> theLeft;
+		private final SettableValue<Object> theRight;
+		private final BinaryOp<Object, Object, Object> theOperator;
+		private final ObservableValue<String> isEnabled;
+		private final ErrorReporting theLeftReporting;
+		private final ErrorReporting theOperatorReporting;
+
+		BinaryOperatorAction(TypeToken<Object> resultType, SettableValue<Object> left, SettableValue<Object> right,
+			BinaryOp<Object, Object, Object> operator, ObservableValue<String> enabled, ErrorReporting leftReporting,
+			ErrorReporting operatorReporting) {
+			theResultType = resultType;
+			theLeft = left;
+			theRight = right;
+			theOperator = operator;
+			isEnabled = enabled;
+			theLeftReporting = leftReporting;
+			theOperatorReporting = operatorReporting;
+		}
+
+		@Override
+		public TypeToken<Object> getType() {
+			return theResultType;
+		}
+
+		@Override
+		public Object act(Object cause) throws IllegalStateException {
+			Object res;
+			try {
+				res = theOperator.apply(theLeft.get(), theRight.get());
+			} catch (RuntimeException | Error e) {
+				theOperatorReporting.error(null, e);
+				return null;
+			}
+			try {
+				return theLeft.set(res, cause);
+			} catch (RuntimeException | Error e) {
+				theLeftReporting.error(null, e);
+				return null;
+			}
+		}
+
+		@Override
+		public ObservableValue<String> isEnabled() {
+			return isEnabled;
 		}
 	}
 

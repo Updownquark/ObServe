@@ -35,7 +35,6 @@ import org.observe.util.TypeTokens;
 import org.qommons.ArrayUtils;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterList;
-import org.qommons.ex.CheckedExceptionWrapper;
 import org.qommons.io.ErrorReporting;
 
 import com.google.common.reflect.TypeToken;
@@ -509,11 +508,9 @@ public abstract class Invocation implements ObservableExpression {
 		private final ModelValueSynth<SettableValue<?>, SettableValue<?>> theContext;
 		private final List<ModelValueSynth<SettableValue<?>, SettableValue<?>>> theArguments;
 		private final ModelInstanceType<M, MV> theType;
-		private final Invocation.ExecutableImpl<X> theImpl;
-		private final boolean isCaching;
-		private final ErrorReporting theReporting;
-		private boolean isUpdatingContext;
-		private Object theCachedValue;
+		protected final Invocation.ExecutableImpl<X> theImpl;
+		protected final boolean isCaching;
+		protected final ErrorReporting theReporting;
 
 		InvocationContainer(Invocation.MethodResult<X, R> method, ModelValueSynth<SettableValue<?>, SettableValue<?>> context,
 			List<ModelValueSynth<SettableValue<?>, SettableValue<?>>> arguments, ModelInstanceType<M, MV> type,
@@ -547,6 +544,10 @@ public abstract class Invocation implements ObservableExpression {
 
 		protected Invocation.MethodResult<X, R> getMethod() {
 			return theMethod;
+		}
+
+		public ErrorReporting getReporting() {
+			return theReporting;
 		}
 
 		@Override
@@ -598,70 +599,6 @@ public abstract class Invocation implements ObservableExpression {
 		protected abstract MV createModelValue(SettableValue<?> ctxV, SettableValue<?>[] argVs, Observable<Object> changes)
 			throws ModelInstantiationException;
 
-		protected <C> Object invoke(SettableValue<C> ctxV, SettableValue<?>[] argVs, boolean asAction)
-			throws IllegalAccessException, IllegalArgumentException, InvocationTargetException, InstantiationException {
-			if (isUpdatingContext)
-				return theCachedValue;
-			Object ctx = ctxV == null ? null : ctxV.get();
-			if (ctx == null && ctxV != null) {
-				theReporting.error(ctxV + " is null, cannot call " + theMethod);
-				// Although throwing an exception is better in theory, all the conditionals needed to work around this are obnoxious
-				// throw new NullPointerException(ctxV + " is null, cannot call " + theMethod);
-				return null;
-			}
-			Object[] args = new Object[argVs.length];
-			for (int a = 0; a < args.length; a++)
-				args[a] = argVs[a].get();
-			Object returnValue = theMethod.invoke(ctx, args, theImpl);
-			if (asAction && !isUpdatingContext && ctxV != null && theImpl.updateContext() && ctxV.isAcceptable(ctxV.get()) == null) {
-				isUpdatingContext = true;
-				theCachedValue = returnValue;
-				try {
-					ctxV.set(ctxV.get(), null);
-				} catch (RuntimeException e) {
-					theReporting.error("Could not update context after method invocation " + this);
-					e.printStackTrace();
-				} finally {
-					isUpdatingContext = false;
-					theCachedValue = null;
-				}
-			}
-			return returnValue;
-		}
-
-		protected <X2> SettableValue<X2> syntheticResultValue(TypeToken<X2> type, SettableValue<?> ctxV, SettableValue<?>[] argVs,
-			Observable<?> changes) {
-			ObservableValue.SyntheticObservable<X2> backing = ObservableValue.of(type, () -> {
-				try {
-					return (X2) invoke(ctxV, argVs, false);
-				} catch (Throwable e) {
-					theReporting.error(null, e);
-					return null;
-				}
-			}, () -> {
-				long stamp = ctxV == null ? 0 : ctxV.getStamp();
-				for (SettableValue<?> argV : argVs) {
-					if (argV != null)
-						stamp = Long.rotateLeft(stamp, 13) ^ argV.getStamp();
-				}
-				return stamp;
-			}, changes, () -> this);
-			if (isCaching) {
-				return SettableValue.asSettable(backing.cached(), //
-					__ -> theImpl + "s are not reversible");
-			} else {
-				long[] stamp = new long[1];
-				return SettableValue.asSettable(ObservableValue.of(type, //
-					() -> {
-						stamp[0]++;
-						return backing.get();
-					}, () -> {
-						return backing.getStamp() ^ stamp[0];
-					}, changes, () -> this), //
-					__ -> theImpl + "s are not reversible");
-			}
-		}
-
 		@Override
 		public String toString() {
 			StringBuilder str = new StringBuilder();
@@ -674,6 +611,100 @@ public abstract class Invocation implements ObservableExpression {
 				str.append(theArguments.get(i));
 			}
 			return str.append(')').toString();
+		}
+
+		static class InvocationThing<X extends Executable, R> {
+			private final Invocation.MethodResult<X, R> theMethod;
+			private boolean isUpdatingContext;
+			private final boolean isCaching;
+			private Object theCachedValue;
+			protected final ErrorReporting theReporting;
+			private final Invocation.ExecutableImpl<X> theImpl;
+			private final SettableValue<Object> theContext;
+			private final SettableValue<?>[] theArguments;
+
+			protected InvocationThing(MethodResult<X, R> method, boolean caching, ErrorReporting reporting, ExecutableImpl<X> impl,
+				SettableValue<Object> context, SettableValue<?>[] arguments) {
+				theMethod = method;
+				isCaching = caching;
+				theReporting = reporting;
+				theImpl = impl;
+				theContext = context;
+				theArguments = arguments;
+			}
+
+			protected Object invoke(boolean asAction)
+				throws IllegalAccessException, IllegalArgumentException, InvocationTargetException, InstantiationException {
+				if (isUpdatingContext)
+					return theCachedValue;
+				Object ctx = theContext == null ? null : theContext.get();
+				if (ctx == null && theContext != null) {
+					theReporting.error(theContext + " is null, cannot call " + theMethod);
+					// Although throwing an exception is better in theory, all the conditionals needed to work around this are obnoxious
+					// throw new NullPointerException(ctxV + " is null, cannot call " + theMethod);
+					return null;
+				}
+				Object[] args = new Object[theArguments.length];
+				for (int a = 0; a < args.length; a++)
+					args[a] = theArguments[a].get();
+				Object returnValue = theMethod.invoke(ctx, args, theImpl);
+				if (asAction && !isUpdatingContext && theContext != null && theImpl.updateContext()
+					&& theContext.isAcceptable(theContext.get()) == null) {
+					isUpdatingContext = true;
+					theCachedValue = returnValue;
+					try {
+						theContext.set(theContext.get(), null);
+					} catch (RuntimeException e) {
+						theReporting.error("Could not update context after method invocation " + this);
+						e.printStackTrace();
+					} finally {
+						isUpdatingContext = false;
+						theCachedValue = null;
+					}
+				}
+				return returnValue;
+			}
+
+			protected <X2> SettableValue<X2> syntheticResultValue(TypeToken<X2> type, SettableValue<?> ctxV, SettableValue<?>[] argVs,
+				Observable<?> changes) {
+				ObservableValue.SyntheticObservable<X2> backing = ObservableValue.of(type, () -> {
+					try {
+						return (X2) invoke(false);
+					} catch (Throwable e) {
+						theReporting.error(null, e);
+						return null;
+					}
+				}, () -> {
+					long stamp = ctxV == null ? 0 : ctxV.getStamp();
+					for (SettableValue<?> argV : argVs) {
+						if (argV != null)
+							stamp = Long.rotateLeft(stamp, 13) ^ argV.getStamp();
+					}
+					return stamp;
+				}, changes, () -> this);
+				if (isCaching) {
+					return SettableValue.asSettable(backing.cached(), //
+						__ -> theImpl + "s are not reversible");
+				} else {
+					long[] stamp = new long[1];
+					return SettableValue.asSettable(ObservableValue.of(type, //
+						() -> {
+							stamp[0]++;
+							return backing.get();
+						}, () -> {
+							return backing.getStamp() ^ stamp[0];
+						}, changes, () -> this), //
+						__ -> theImpl + "s are not reversible");
+				}
+			}
+
+			public Invocation.MethodResult<X, R> getMethod() {
+				return theMethod;
+			}
+
+			public ErrorReporting getReporting() {
+				return theReporting;
+			}
 		}
 	}
 
@@ -693,22 +724,42 @@ public abstract class Invocation implements ObservableExpression {
 
 		@Override
 		protected ObservableAction<T> createModelValue(SettableValue<?> ctxV, SettableValue<?>[] argVs, Observable<Object> changes) {
-			return ObservableAction.of(getType().getValueType(), __ -> {
+			return new InvocationAction<>(getMethod(), isCaching, theReporting, theImpl, (SettableValue<Object>) ctxV, argVs,
+				getType().getValueType());
+		}
+
+		static class InvocationAction<X extends Executable, R> extends InvocationThing<X, SettableValue<R>> implements ObservableAction<R> {
+			private final TypeToken<R> theType;
+
+			protected InvocationAction(MethodResult<X, SettableValue<R>> method, boolean caching, ErrorReporting reporting,
+				ExecutableImpl<X> impl, SettableValue<Object> context, SettableValue<?>[] arguments, TypeToken<R> type) {
+				super(method, caching, reporting, impl, context, arguments);
+				theType = type;
+			}
+
+			@Override
+			public TypeToken<R> getType() {
+				return theType;
+			}
+
+			@Override
+			public R act(Object cause) throws IllegalStateException {
 				try {
-					Object retValue = invoke(ctxV, argVs, true);
+					Object retValue = invoke(true);
 					return getMethod().converter.convert(SettableValue.of(Object.class, retValue, "")).get();
 				} catch (InvocationTargetException e) {
-					if (e.getTargetException() instanceof RuntimeException)
-						throw (RuntimeException) e.getTargetException();
-					else if (e.getTargetException() instanceof Error)
-						throw (Error) e.getTargetException();
-					else
-						throw new CheckedExceptionWrapper(e.getTargetException());
+					getReporting().error(e.getTargetException().getMessage(), e.getTargetException());
+					return null;
 				} catch (Throwable e) {
-					e.printStackTrace();
+					getReporting().error(e.getMessage(), e);
 					return null;
 				}
-			});
+			}
+
+			@Override
+			public ObservableValue<String> isEnabled() {
+				return SettableValue.ALWAYS_ENABLED;
+			}
 		}
 	}
 
@@ -722,8 +773,8 @@ public abstract class Invocation implements ObservableExpression {
 		@Override
 		protected MV createModelValue(SettableValue<?> ctxV, SettableValue<?>[] argVs, Observable<Object> changes)
 			throws ModelInstantiationException {
-			SettableValue<Object> value = syntheticResultValue(//
-				TypeTokens.get().OBJECT, ctxV, argVs, changes);
+			SettableValue<Object> value = new InvocationThing<>(getMethod(), isCaching, theReporting, theImpl, (SettableValue<Object>) ctxV,
+				argVs).syntheticResultValue(TypeTokens.get().OBJECT, ctxV, argVs, changes);
 			return getMethod().converter.convert(value);
 		}
 	}
