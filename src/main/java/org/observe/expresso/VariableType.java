@@ -119,7 +119,7 @@ public interface VariableType {
 
 			VariableType type;
 			try {
-				type = new Simple<>(TypeTokens.get().parseType(text.substring(start[0])));
+				type = new Simple<>(cv.parseType(text.substring(start[0])));
 			} catch (ParseException e) {
 				throw new QonfigInterpretationException(e.getMessage(), position == null ? null : new LocatedFilePosition(file, position.getPosition(start[0] + e.getErrorOffset())), //
 					0, e);

@@ -3,6 +3,7 @@ package org.observe.expresso;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
+import java.text.ParseException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -14,14 +15,20 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
+import org.observe.util.TypeParser;
+import org.observe.util.TypeTokens;
+import org.observe.util.TypeTokens.TypeRetriever;
 import org.qommons.QommonsUtils;
 import org.qommons.ValueHolder;
 
+import com.google.common.reflect.TypeToken;
+
 /** A perspective from which to load classes by name, qualified or not, as well as statically-imported fields and methods */
-public class ClassView {
+public class ClassView implements TypeParser {
 	private static final Class<?> NOT_FOUND = new Object() {
 	}.getClass();
 
+	private final TypeParser theParser;
 	private final List<ClassLoader> theClassLoaders;
 	private final Map<String, String> theImportedTypes;
 	private final Set<String> theWildcardImports;
@@ -42,6 +49,9 @@ public class ClassView {
 			if (type == null)
 				System.err.println("Import '" + theImportedTypes.get(imp) + "' cannot be resolved");
 		}
+
+		theParser = TypeTokens.get().newParser();
+		theParser.addTypeRetriever(typeName -> ClassView.this.getType(typeName));
 	}
 
 	/**
@@ -165,6 +175,22 @@ public class ClassView {
 			dot = name.lastIndexOf('.', dot - 1);
 		}
 		return null;
+	}
+
+	@Override
+	public TypeToken<?> parseType(CharSequence text) throws ParseException {
+		return theParser.parseType(text);
+	}
+
+	@Override
+	public TypeParser addTypeRetriever(TypeRetriever typeRetriever) {
+		theParser.addTypeRetriever(typeRetriever);
+		return this;
+	}
+
+	@Override
+	public boolean removeTypeRetriever(TypeRetriever typeRetriever) {
+		return theParser.removeTypeRetriever(typeRetriever);
 	}
 
 	/** @return A builder to create a new class view */

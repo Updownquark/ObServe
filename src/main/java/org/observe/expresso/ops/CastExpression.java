@@ -90,7 +90,7 @@ public class CastExpression implements ObservableExpression {
 		ExpressoEnv env, int expressionOffset) throws ExpressoEvaluationException, ExpressoInterpretationException {
 		TypeToken<T> valueType;
 		try {
-			valueType = (TypeToken<T>) TypeTokens.get().parseType(theType.getName());
+			valueType = (TypeToken<T>) env.getClassView().parseType(theType.getName());
 		} catch (ParseException e) {
 			throw new ExpressoEvaluationException(expressionOffset + 1, theType.length(), e.getMessage(), e);
 		}

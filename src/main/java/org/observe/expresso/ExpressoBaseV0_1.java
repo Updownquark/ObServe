@@ -278,7 +278,6 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 			}
 			ClassView cv = builder.build();
 			wrap(session).setModels(null, cv);
-			TypeTokens.get().addClassRetriever(typeName -> cv.getType(typeName));
 			return cv;
 		}).createWith("models", ObservableModelSet.Built.class, session -> {
 			ExpressoQIS expressoSession = wrap(session);

@@ -26,7 +26,7 @@ import com.google.common.reflect.TypeToken;
  * It turns out that {@link TypeToken} is quite slow for many basic operations, like creation and {@link TypeToken#getRawType()
  * getRawType()}. This class provides some optimizations as well as boilerplate-reducing utilities.
  */
-public class TypeTokens {
+public class TypeTokens implements TypeParser {
 	private static final TypeTokens instance = new TypeTokens();
 
 	/** @return The common instance of this class */
@@ -197,8 +197,8 @@ public class TypeTokens {
 	}
 
 	/**
-	 * May be {@link TypeTokens#addClassRetriever(TypeRetriever) added} to {@link TypeTokens} to enable retrieval of non-Class types or
-	 * types that may not be retrievable by the {@link TypeTokens} class using {@link Class#forName(String)}
+	 * May be {@link TypeTokens#addTypeRetriever(TypeRetriever) added} to {@link TypeTokens} to enable retrieval of non-Class types or types
+	 * that may not be retrievable by the {@link TypeTokens} class using {@link Class#forName(String)}
 	 */
 	public interface TypeRetriever {
 		/**
@@ -218,8 +218,8 @@ public class TypeTokens {
 	}
 
 	private final ConcurrentHashMap<Class<?>, TypeKey<?>> TYPES;
-	private final Set<TypeRetriever> theClassRetrievers;
 	private final ClassMap<ClassMap<SupplementaryCast<?, ?>>> theSupplementaryCasts;
+	private final TypeTokensParser theParser;
 
 	/** TypeToken&lt;String> */
 	public final TypeToken<String> STRING;
@@ -269,7 +269,7 @@ public class TypeTokens {
 	/** Creates a new instance */
 	protected TypeTokens() {
 		TYPES = new ConcurrentHashMap<>();
-		theClassRetrievers = new LinkedHashSet<>();
+		theParser = new TypeTokensParser();
 		theSupplementaryCasts = new ClassMap<>();
 
 		STRING = of(String.class);
@@ -340,21 +340,15 @@ public class TypeTokens {
 			return TypeToken.of(type);
 	}
 
-	/**
-	 * @param classRetriever The class retriever to retrieve classes by name (for {@link #parseType(String)}
-	 * @return This instance
-	 */
-	public TypeTokens addClassRetriever(TypeRetriever classRetriever) {
-		theClassRetrievers.add(classRetriever);
+	@Override
+	public TypeTokens addTypeRetriever(TypeRetriever typeRetriever) {
+		theParser.addTypeRetriever(typeRetriever);
 		return this;
 	}
 
-	/**
-	 * @param classRetriever The class retriever (added with {@link #addClassRetriever(TypeRetriever)}) to remove
-	 * @return Whether the class retriever was found in the list
-	 */
-	public boolean removeClassRetriever(TypeRetriever classRetriever) {
-		return theClassRetrievers.remove(classRetriever);
+	@Override
+	public boolean removeTypeRetriever(TypeRetriever typeRetriever) {
+		return theParser.removeTypeRetriever(typeRetriever);
 	}
 
 	public <S, T> TypeTokens addSupplementaryCast(Class<S> sourceType, Class<T> targetType, SupplementaryCast<S, T> cast) {
@@ -1565,8 +1559,9 @@ public class TypeTokens {
 	 * @return The parsed type
 	 * @throws ParseException If the string cannot be parsed as a type
 	 */
-	public TypeToken<?> parseType(String typeName) throws ParseException {
-		return parseType(typeName, 0);
+	@Override
+	public TypeToken<?> parseType(CharSequence typeName) throws ParseException {
+		return theParser.parseType(typeName);
 	}
 
 	/**
@@ -1578,141 +1573,13 @@ public class TypeTokens {
 	 * @return The parsed type
 	 * @throws ParseException If the string cannot be parsed as a type
 	 */
-	public TypeToken<?> parseType(String typeName, int offset) throws ParseException {
-		StringBuilder name = new StringBuilder();
-		List<TypeToken<?>> componentTypes = null;
-		int componentStart = 0, depth = 0, firstComponentStart = -1;
-		boolean wasWS = false;
-		Boolean extendsOrSuper = null;
-		int array = 0;
-		for (int c = 0; c < typeName.length(); c++) {
-			switch (typeName.charAt(c)) {
-			case '<':
-				if (name.length() == 0)
-					throw new ParseException("Unexpected '" + typeName.charAt(c) + "'", offset + c);
-				if (depth == 0) {
-					if (componentTypes != null)
-						throw new ParseException("Unexpected '" + typeName.charAt(c) + "'", offset + c);
-					componentStart = c + 1;
-				}
-				depth++;
-				break;
-			case '[':
-				if (name.length() == 0)
-					throw new ParseException("Unexpected '" + typeName.charAt(c) + "'", offset + c);
-				if (depth == 0) {
-					array++;
-				}
-				depth++;
-				break;
-			case '>':
-			case ']':
-				if (depth == 0)
-					throw new ParseException("Unexpected '" + typeName.charAt(c) + "'", offset + c);
-				depth--;
-				if (depth == 0 && array == 0) {
-					if (componentTypes == null)
-						componentTypes = new ArrayList<>(4);
-					componentTypes.add(//
-						parseType(//
-							typeName.substring(componentStart, c), offset + componentStart));
-				}
-				break;
-			case ',':
-				if (depth == 0) {
-					throw new ParseException("Unexpected '" + typeName.charAt(c) + "'", offset + c);
-				} else if (depth == 1) {
-					if (componentTypes == null)
-						componentTypes = new ArrayList<>(4);
-					componentTypes.add(//
-						parseType(//
-							typeName.substring(componentStart, c), offset + componentStart));
-					componentStart = c + 1;
-				}
-				break;
-			case '?':
-				if (depth == 0) {
-					for (c++; c < typeName.length(); c++) {
-						if (typeName.charAt(c) != ' ')
-							break;
-					}
-					if (typeName.regionMatches(c, "extends", 0, "extends".length())) {
-						extendsOrSuper = Boolean.TRUE;
-						c += "extends".length();
-					} else if (typeName.regionMatches(c, "super", 0, "super".length())) {
-						extendsOrSuper = Boolean.FALSE;
-						c += "super".length();
-					} else if (typeName.length() == 1)
-						return WILDCARD;
-					else
-						throw new ParseException("Expected 'extends' or 'super' after '?'", c);
-				}
-				break;
-			case ' ':
-				break;
-			default:
-				if (depth == 0) {
-					if (array > 0)
-						throw new ParseException("Unexpected content after array specification", offset + c);
-					if ((wasWS || componentTypes != null) && name.length() > 0)
-						throw new ParseException("Unexpected content after whitespace/component types", offset + c);
-					name.append(typeName.charAt(c));
-				}
-				break;
-			}
-			wasWS = typeName.charAt(c) == ' ';
-			if (wasWS) {
-				wasWS = true;
-				if (componentStart == c)
-					componentStart++;
-			}
-		}
-		Type baseType = parseClass(name.toString(), offset);
-		TypeToken<?> type;
-		if (componentTypes != null) {
-			if (!(baseType instanceof Class))
-				throw new ParseException("Only Class types may be parameterized, not " + baseType.getClass().getName() + " instances",
-					firstComponentStart);
-			type = keyFor((Class<?>) baseType).parameterized(componentTypes.toArray(new TypeToken[componentTypes.size()]));
-		} else
-			type = of(baseType);
-		if (array > 0)
-			type = getArrayType(type, array);
-		if (extendsOrSuper != null) {
-			type = extendsOrSuper ? getExtendsWildcard(type) : getSuperWildcard(type);
-		}
-		return type;
+	public TypeToken<?> parseType(CharSequence typeName, int offset) throws ParseException {
+		return theParser.parseType(typeName, offset);
 	}
 
-	private Type parseClass(String typeName, int offset) throws ParseException {
-		switch (typeName) {
-		case "boolean":
-			return boolean.class;
-		case "char":
-			return char.class;
-		case "byte":
-			return byte.class;
-		case "short":
-			return short.class;
-		case "int":
-			return int.class;
-		case "long":
-			return long.class;
-		case "float":
-			return float.class;
-		case "double":
-			return double.class;
-		}
-		for (TypeRetriever retriever : theClassRetrievers) {
-			Type found = retriever.getType(typeName);
-			if (found != null)
-				return found;
-		}
-		try {
-			return Class.forName(typeName);
-		} catch (ClassNotFoundException e) {
-			throw new ParseException("No such class found: " + typeName, offset);
-		}
+	/** @return A new TypeParser */
+	public TypeParser newParser() {
+		return new TypeTokensParser();
 	}
 
 	private static class ParameterizedTypeImpl implements ParameterizedType {
@@ -1882,6 +1749,186 @@ public class TypeTokens {
 		@Override
 		public String toString() {
 			return theName;
+		}
+	}
+
+	class TypeTokensParser implements TypeParser {
+		private final Set<TypeRetriever> theTypeRetrievers;
+
+		TypeTokensParser() {
+			theTypeRetrievers = new LinkedHashSet<>();
+		}
+
+		@Override
+		public TypeParser addTypeRetriever(TypeRetriever typeRetriever) {
+			theTypeRetrievers.add(typeRetriever);
+			return this;
+		}
+
+		@Override
+		public boolean removeTypeRetriever(TypeRetriever typeRetriever) {
+			return theTypeRetrievers.remove(typeRetriever);
+		}
+
+		@Override
+		public TypeToken<?> parseType(CharSequence typeName) throws ParseException {
+			return parseType(typeName, 0);
+		}
+
+		/**
+		 * Parses a type from a string
+		 *
+		 * @param typeName The string to parse
+		 * @param offset The offset to add to the {@link ParseException#getErrorOffset() error offset} if a {@link ParseException} must be
+		 *        thrown
+		 * @return The parsed type
+		 * @throws ParseException If the string cannot be parsed as a type
+		 */
+		public TypeToken<?> parseType(CharSequence typeName, int offset) throws ParseException {
+			StringBuilder name = new StringBuilder();
+			List<TypeToken<?>> componentTypes = null;
+			int componentStart = 0, depth = 0, firstComponentStart = -1;
+			boolean wasWS = false;
+			Boolean extendsOrSuper = null;
+			int array = 0;
+			for (int c = 0; c < typeName.length(); c++) {
+				switch (typeName.charAt(c)) {
+				case '<':
+					if (name.length() == 0)
+						throw new ParseException("Unexpected '" + typeName.charAt(c) + "'", offset + c);
+					if (depth == 0) {
+						if (componentTypes != null)
+							throw new ParseException("Unexpected '" + typeName.charAt(c) + "'", offset + c);
+						componentStart = c + 1;
+					}
+					depth++;
+					break;
+				case '[':
+					if (name.length() == 0)
+						throw new ParseException("Unexpected '" + typeName.charAt(c) + "'", offset + c);
+					if (depth == 0) {
+						array++;
+					}
+					depth++;
+					break;
+				case '>':
+				case ']':
+					if (depth == 0)
+						throw new ParseException("Unexpected '" + typeName.charAt(c) + "'", offset + c);
+					depth--;
+					if (depth == 0 && array == 0) {
+						if (componentTypes == null)
+							componentTypes = new ArrayList<>(4);
+						componentTypes.add(//
+							parseType(//
+								typeName.subSequence(componentStart, c), offset + componentStart));
+					}
+					break;
+				case ',':
+					if (depth == 0) {
+						throw new ParseException("Unexpected '" + typeName.charAt(c) + "'", offset + c);
+					} else if (depth == 1) {
+						if (componentTypes == null)
+							componentTypes = new ArrayList<>(4);
+						componentTypes.add(//
+							parseType(//
+								typeName.subSequence(componentStart, c), offset + componentStart));
+						componentStart = c + 1;
+					}
+					break;
+				case '?':
+					if (depth == 0) {
+						for (c++; c < typeName.length(); c++) {
+							if (typeName.charAt(c) != ' ')
+								break;
+						}
+						if (offsetMatch(typeName, c, "extends")) {
+							extendsOrSuper = Boolean.TRUE;
+							c += "extends".length();
+						} else if (offsetMatch(typeName, c, "super")) {
+							extendsOrSuper = Boolean.FALSE;
+							c += "super".length();
+						} else if (typeName.length() == 1)
+							return WILDCARD;
+						else
+							throw new ParseException("Expected 'extends' or 'super' after '?'", c);
+					}
+					break;
+				case ' ':
+					break;
+				default:
+					if (depth == 0) {
+						if (array > 0)
+							throw new ParseException("Unexpected content after array specification", offset + c);
+						if ((wasWS || componentTypes != null) && name.length() > 0)
+							throw new ParseException("Unexpected content after whitespace/component types", offset + c);
+						name.append(typeName.charAt(c));
+					}
+					break;
+				}
+				wasWS = typeName.charAt(c) == ' ';
+				if (wasWS) {
+					wasWS = true;
+					if (componentStart == c)
+						componentStart++;
+				}
+			}
+			Type baseType = parseClass(name.toString(), offset);
+			TypeToken<?> type;
+			if (componentTypes != null) {
+				if (!(baseType instanceof Class))
+					throw new ParseException("Only Class types may be parameterized, not " + baseType.getClass().getName() + " instances",
+						firstComponentStart);
+				type = keyFor((Class<?>) baseType).parameterized(componentTypes.toArray(new TypeToken[componentTypes.size()]));
+			} else
+				type = of(baseType);
+			if (array > 0)
+				type = getArrayType(type, array);
+			if (extendsOrSuper != null) {
+				type = extendsOrSuper ? getExtendsWildcard(type) : getSuperWildcard(type);
+			}
+			return type;
+		}
+
+		private boolean offsetMatch(CharSequence seq, int offset, String test) {
+			if (seq.length() < offset + test.length())
+				return false;
+			for (int i = 0; i < test.length(); i++) {
+				if (seq.charAt(offset + i) != test.charAt(i))
+					return false;
+			}
+			return true;
+		}
+
+		private Type parseClass(String typeName, int offset) throws ParseException {
+			switch (typeName) {
+			case "boolean":
+				return boolean.class;
+			case "char":
+				return char.class;
+			case "byte":
+				return byte.class;
+			case "short":
+				return short.class;
+			case "int":
+				return int.class;
+			case "long":
+				return long.class;
+			case "float":
+				return float.class;
+			case "double":
+				return double.class;
+			}
+			for (TypeRetriever retriever : theTypeRetrievers) {
+				Type found = retriever.getType(typeName);
+				if (found != null)
+					return found;
+			}
+			try {
+				return Class.forName(typeName);
+			} catch (ClassNotFoundException e) {
+				throw new ParseException("No such class found: " + typeName, offset);
+			}
 		}
 	}
 }

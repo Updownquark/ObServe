@@ -88,7 +88,7 @@ public class InstanceofExpression implements ObservableExpression {
 		}
 		Class<?> testType;
 		try {
-			testType = TypeTokens.getRawType(TypeTokens.get().parseType(theType.getName()));
+			testType = TypeTokens.getRawType(env.getClassView().parseType(theType.getName()));
 		} catch (ParseException e) {
 			if (e.getErrorOffset() == 0)
 				throw new ExpressoEvaluationException(expressionOffset + theLeft.getExpressionLength() + 12, theType.length(),

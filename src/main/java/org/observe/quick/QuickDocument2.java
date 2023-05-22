@@ -1,7 +1,5 @@
 package org.observe.quick;
 
-import java.lang.reflect.Type;
-
 import org.observe.expresso.ClassView;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ExpressoQIS;
@@ -11,7 +9,6 @@ import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.quick.style.QuickStyleSheet;
 import org.observe.quick.style.StyleQIS;
-import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigInterpretationException;
 
@@ -181,12 +178,6 @@ public class QuickDocument2 extends QuickElement.Abstract {
 				ClassView cv = session.interpretChildren("imports", ClassView.class).peekFirst();
 				if (cv == null) {
 					ClassView defaultCV = ClassView.build().withWildcardImport("java.lang").build();
-					TypeTokens.get().addClassRetriever(new TypeTokens.TypeRetriever() {
-						@Override
-						public Type getType(String typeName) {
-							return defaultCV.getType(typeName);
-						}
-					});
 					cv = defaultCV;
 				}
 				theClassView = cv;

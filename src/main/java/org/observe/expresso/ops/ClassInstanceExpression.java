@@ -73,7 +73,7 @@ public class ClassInstanceExpression implements ObservableExpression {
 				"A class instance expression can only be evaluated to a value");
 		Class<?> clazz;
 		try {
-			clazz = TypeTokens.getRawType(TypeTokens.get().parseType(theType.getName()));
+			clazz = TypeTokens.getRawType(env.getClassView().parseType(theType.getName()));
 		} catch (ParseException e) {
 			if (e.getErrorOffset() == 0)
 				throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(), e.getMessage(), e);
