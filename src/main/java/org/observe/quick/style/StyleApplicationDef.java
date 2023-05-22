@@ -36,7 +36,7 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 	public static final StyleApplicationDef ALL = new StyleApplicationDef(null, null, MultiInheritanceSet.empty(), null,
 		Collections.emptyMap());
 
-	private static final Map<DynamicModelValue.Identity, Integer> MODEL_VALUE_PRIORITY = new HashMap<>();
+	private static final Map<DynamicModelValue.Identity, Integer> MODEL_VALUE_PRIORITY = new WeakHashMap<>();
 
 	/**
 	 * @param modelValue The model value definition
