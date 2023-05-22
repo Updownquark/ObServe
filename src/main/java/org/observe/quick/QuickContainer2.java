@@ -159,9 +159,8 @@ public interface QuickContainer2<C extends QuickWidget> extends QuickWidget {
 		}
 
 		@Override
-		public ModelSetInstance update(QuickElement.Interpreted<?> interpreted, ModelSetInstance models)
-			throws ModelInstantiationException {
-			ModelSetInstance myModels = super.update(interpreted, models);
+		protected void updateModel(QuickElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
+			super.updateModel(interpreted, myModels);
 			QuickContainer2.Interpreted<?, C> myInterpreted = (QuickContainer2.Interpreted<?, C>) interpreted;
 			CollectionUtils.synchronize(theContents, myInterpreted.getContents(), //
 				(widget, child) -> widget.getId() == child.getId())//
@@ -169,7 +168,7 @@ public interface QuickContainer2<C extends QuickWidget> extends QuickWidget {
 			.rightOrder()//
 			.onRightX(element -> {
 				try {
-						element.getLeftValue().update(element.getRightValue(), myModels);
+					element.getLeftValue().update(element.getRightValue(), myModels);
 				} catch (ExpressoRuntimeException e) {
 					throw e;
 				} catch (RuntimeException | Error e) {
@@ -179,7 +178,7 @@ public interface QuickContainer2<C extends QuickWidget> extends QuickWidget {
 			})//
 			.onCommonX(element -> {
 				try {
-						element.getLeftValue().update(element.getRightValue(), myModels);
+					element.getLeftValue().update(element.getRightValue(), myModels);
 				} catch (ExpressoRuntimeException e) {
 					throw e;
 				} catch (RuntimeException | Error e) {
@@ -188,7 +187,6 @@ public interface QuickContainer2<C extends QuickWidget> extends QuickWidget {
 				}
 			})//
 			.adjust();
-			return myModels;
 		}
 	}
 }

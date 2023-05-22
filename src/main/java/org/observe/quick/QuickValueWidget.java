@@ -134,12 +134,10 @@ public interface QuickValueWidget<T> extends QuickWidget {
 		}
 
 		@Override
-		public ModelSetInstance update(QuickElement.Interpreted<?> interpreted, ModelSetInstance models)
-			throws ModelInstantiationException {
-			ModelSetInstance myModels = super.update(interpreted, models);
+		protected void updateModel(QuickElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
+			super.updateModel(interpreted, myModels);
 			QuickValueWidget.Interpreted<T, ?> myInterpreted = (QuickValueWidget.Interpreted<T, ?>) interpreted;
 			theValue.set(myInterpreted.getValue().get(myModels), null);
-			return myModels;
 		}
 	}
 

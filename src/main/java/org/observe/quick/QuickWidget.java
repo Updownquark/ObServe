@@ -447,9 +447,8 @@ public interface QuickWidget extends QuickTextElement {
 		}
 
 		@Override
-		public ModelSetInstance update(QuickElement.Interpreted<?> interpreted, ModelSetInstance models)
-			throws ModelInstantiationException {
-			ModelSetInstance myModels = super.update(interpreted, models);
+		protected void updateModel(QuickElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
+			super.updateModel(interpreted, myModels);
 			satisfyContextValue("hovered", ModelTypes.Value.BOOLEAN, SettableValue.flatten(isHovered), myModels);
 			satisfyContextValue("focused", ModelTypes.Value.BOOLEAN, SettableValue.flatten(isFocused), myModels);
 			satisfyContextValue("pressed", ModelTypes.Value.BOOLEAN, SettableValue.flatten(isPressed), myModels);
@@ -471,7 +470,6 @@ public interface QuickWidget extends QuickTextElement {
 				.onCommonX(el -> el.getLeftValue().update(el.getRightValue(), myModels))//
 				.adjust();
 			}
-			return myModels;
 		}
 	}
 

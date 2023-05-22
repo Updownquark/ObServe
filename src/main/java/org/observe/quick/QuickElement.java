@@ -336,9 +336,6 @@ public interface QuickElement {
 	/** @return The parent element */
 	QuickElement getParentElement();
 
-	/** @return This element's model instance */
-	ModelSetInstance getModels();
-
 	/**
 	 * @param <AO> The type of the add-on to get
 	 * @param addOn The type of the add-on to get
@@ -379,7 +376,6 @@ public interface QuickElement {
 		private final ClassMap<QuickAddOn<?>> theAddOns;
 		private final ClassMap<Class<? extends QuickAddOn.Interpreted<?, ?>>> theAddOnInterpretations;
 		private final ErrorReporting theReporting;
-		private ModelSetInstance theModels;
 
 		/**
 		 * @param interpreted The interpretation producing this element
@@ -409,11 +405,6 @@ public interface QuickElement {
 		}
 
 		@Override
-		public ModelSetInstance getModels() {
-			return theModels;
-		}
-
-		@Override
 		public <AO extends QuickAddOn<?>> AO getAddOn(Class<AO> addOn) {
 			return (AO) theAddOns.get(addOn, ClassMap.TypeMatch.SUB_TYPE);
 		}
@@ -430,15 +421,24 @@ public interface QuickElement {
 
 		@Override
 		public ModelSetInstance update(Interpreted<?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
-			theModels = interpreted.getDefinition().getExpressoEnv().wrapLocal(models);
+			ModelSetInstance myModels = createElementModel(interpreted, models);
+			updateModel(interpreted, myModels);
+			return myModels;
+		}
+
+		protected ModelSetInstance createElementModel(Interpreted<?> interpreted, ModelSetInstance parentModels)
+			throws ModelInstantiationException {
+			return interpreted.getDefinition().getExpressoEnv().wrapLocal(parentModels);
+		}
+
+		protected void updateModel(Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
 			for (QuickAddOn<?> addOn : theAddOns.getAllValues()) {
 				Class<? extends QuickAddOn.Interpreted<QuickElement, ?>> addOnInterpType;
 				addOnInterpType = (Class<? extends QuickAddOn.Interpreted<QuickElement, ?>>) theAddOnInterpretations.get(addOn.getClass(),
 					ClassMap.TypeMatch.EXACT);
 				QuickAddOn.Interpreted<?, ?> interpretedAddOn = interpreted.getAddOn(addOnInterpType);
-				((QuickAddOn<QuickElement>) addOn).update(interpretedAddOn, theModels);
+				((QuickAddOn<QuickElement>) addOn).update(interpretedAddOn, myModels);
 			}
-			return theModels;
 		}
 
 		@Override

@@ -133,14 +133,12 @@ public interface QuickKeyListener extends QuickEventListener {
 		}
 
 		@Override
-		public ModelSetInstance update(QuickElement.Interpreted<?> interpreted, ModelSetInstance models)
-			throws ModelInstantiationException {
-			ModelSetInstance myModels = super.update(interpreted, models);
+		protected void updateModel(QuickElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
+			super.updateModel(interpreted, myModels);
 			QuickElement.satisfyContextValue("typedChar", ModelTypes.Value.forType(char.class), SettableValue.flatten(theTypedChar),
 				myModels, this);
 			QuickKeyTypedListener.Interpreted myInterpreted = (QuickKeyTypedListener.Interpreted) interpreted;
 			theCharFilter = myInterpreted.getDefinition().getCharFilter();
-			return myModels;
 		}
 	}
 
@@ -226,15 +224,13 @@ public interface QuickKeyListener extends QuickEventListener {
 		}
 
 		@Override
-		public ModelSetInstance update(QuickElement.Interpreted<?> interpreted, ModelSetInstance models)
-			throws ModelInstantiationException {
-			ModelSetInstance myModels = super.update(interpreted, models);
+		protected void updateModel(QuickElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
+			super.updateModel(interpreted, myModels);
 			QuickElement.satisfyContextValue("keyCode", ModelTypes.Value.forType(KeyCode.class), SettableValue.flatten(theEventKeyCode),
 				myModels, this);
 			QuickKeyCodeListener.Interpreted myInterpreted = (QuickKeyCodeListener.Interpreted) interpreted;
 			isPressed = myInterpreted.getDefinition().isPressed();
 			theKeyCode = myInterpreted.getDefinition().getKeyCode();
-			return myModels;
 		}
 	}
 }

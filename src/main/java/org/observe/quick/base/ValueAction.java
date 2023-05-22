@@ -395,15 +395,13 @@ public interface ValueAction<T> extends QuickElement {
 		}
 
 		@Override
-		public ModelSetInstance update(QuickElement.Interpreted<?> interpreted, ModelSetInstance models)
-			throws ModelInstantiationException {
-			ModelSetInstance myModels = super.update(interpreted, models);
+		protected void updateModel(QuickElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
+			super.updateModel(interpreted, myModels);
 			Interpreted<T, ?> myInterpreted = (Interpreted<T, ?>) interpreted;
 			theValueName = myInterpreted.getDefinition().getValueName();
 			allowForMultiple = myInterpreted.getDefinition().allowForMultiple();
 			QuickElement.satisfyContextValue(theValueName, ModelTypes.Value.forType(getValueType()), SettableValue.flatten(theActionValue),
 				myModels, this);
-			return myModels;
 		}
 	}
 
@@ -486,15 +484,13 @@ public interface ValueAction<T> extends QuickElement {
 		}
 
 		@Override
-		public ModelSetInstance update(QuickElement.Interpreted<?> interpreted, ModelSetInstance models)
-			throws ModelInstantiationException {
-			ModelSetInstance myModels = super.update(interpreted, models);
+		protected void updateModel(QuickElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
+			super.updateModel(interpreted, myModels);
 			Interpreted<T, ?> myInterpreted = (Interpreted<T, ?>) interpreted;
 			theValuesName = myInterpreted.getDefinition().getValuesName();
 			allowForEmpty = myInterpreted.getDefinition().allowForEmpty();
 			QuickElement.satisfyContextValue(theValuesName, ModelTypes.Collection.forType(getValueType()),
 				ObservableCollection.flattenValue(theActionValues), myModels, this);
-			return myModels;
 		}
 	}
 }

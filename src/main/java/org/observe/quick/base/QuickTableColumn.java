@@ -294,15 +294,20 @@ public interface QuickTableColumn<R, C> {
 		}
 
 		@Override
-		public ModelSetInstance update(QuickElement.Interpreted<?> interpreted, ModelSetInstance models)
+		protected ModelSetInstance createElementModel(QuickElement.Interpreted<?> interpreted, ModelSetInstance parentModels)
 			throws ModelInstantiationException {
 			// The context values in the editor's models need to be independent from the render models
-			ModelSetInstance myModels = super.update(interpreted, models.copy().build());
+			return super.createElementModel(interpreted, parentModels).copy().build();
+		}
+
+		@Override
+		protected void updateModel(QuickElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
+			super.updateModel(interpreted, myModels);
 			ColumnEditing.Interpreted<R, C> myInterpreted = (ColumnEditing.Interpreted<R, C>) interpreted;
 			theColumnEditValueName = myInterpreted.getDefinition().getColumnEditValueName();
 			theClicks = myInterpreted.getDefinition().getClicks();
-			isEditable.set(myInterpreted.isEditable() == null ? null : myInterpreted.isEditable().get(models), null);
-			isAcceptable.set(myInterpreted.isAcceptable() == null ? null : myInterpreted.isAcceptable().get(models), null);
+			isEditable.set(myInterpreted.isEditable() == null ? null : myInterpreted.isEditable().get(myModels), null);
+			isAcceptable.set(myInterpreted.isAcceptable() == null ? null : myInterpreted.isAcceptable().get(myModels), null);
 
 			if (myInterpreted.getEditor() == null)
 				theEditor = null;
@@ -330,7 +335,6 @@ public interface QuickTableColumn<R, C> {
 				if (parent != null)
 					theValueName = ((MultiValueWidget.Interpreted<?, ?>) parent).getDefinition().getValueName();
 			}
-			return myModels;
 		}
 	}
 

@@ -80,11 +80,10 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 	}
 
 	@Override
-	public ModelSetInstance update(QuickElement.Interpreted<?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
-		ModelSetInstance myModels = super.update(interpreted, models);
+	protected void updateModel(QuickElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
+		super.updateModel(interpreted, myModels);
 		satisfyContextValue("x", ModelTypes.Value.INT, SettableValue.flatten(theEventX), myModels);
 		satisfyContextValue("y", ModelTypes.Value.INT, SettableValue.flatten(theEventY), myModels);
-		return myModels;
 	}
 
 	public enum MouseButton {
@@ -187,12 +186,10 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 		}
 
 		@Override
-		public ModelSetInstance update(QuickElement.Interpreted<?> interpreted, ModelSetInstance models)
-			throws ModelInstantiationException {
-			ModelSetInstance myModels = super.update(interpreted, models);
+		protected void updateModel(QuickElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
+			super.updateModel(interpreted, myModels);
 			QuickMouseMoveListener.Interpreted myInterpreted = (QuickMouseMoveListener.Interpreted) interpreted;
 			theEventType = myInterpreted.getDefinition().getEventType();
-			return myModels;
 		}
 	}
 
@@ -284,14 +281,12 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 		}
 
 		@Override
-		public ModelSetInstance update(QuickElement.Interpreted<?> interpreted, ModelSetInstance models)
-			throws ModelInstantiationException {
-			ModelSetInstance myModels = super.update(interpreted, models);
+		protected void updateModel(QuickElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
+			super.updateModel(interpreted, myModels);
 			satisfyContextValue("button", ModelTypes.Value.forType(MouseButton.class), SettableValue.flatten(theEventButton), myModels);
 			QuickMouseButtonListener.Interpreted myInterpreted = (QuickMouseButtonListener.Interpreted) interpreted;
 			theEventType = myInterpreted.getDefinition().getEventType();
 			theButton = myInterpreted.getDefinition().getButton();
-			return myModels;
 		}
 	}
 
@@ -337,11 +332,9 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 		}
 
 		@Override
-		public ModelSetInstance update(org.observe.quick.QuickElement.Interpreted<?> interpreted, ModelSetInstance models)
-			throws ModelInstantiationException {
-			ModelSetInstance myModels = super.update(interpreted, models);
+		protected void updateModel(QuickElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
+			super.updateModel(interpreted, myModels);
 			satisfyContextValue("scrollAmount", ModelTypes.Value.INT, SettableValue.flatten(theScrollAmount), myModels);
-			return myModels;
 		}
 	}
 }

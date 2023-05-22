@@ -147,6 +147,7 @@ public interface QuickStyledElement extends QuickElement {
 	/** An abstract {@link QuickStyledElement} implementation */
 	public abstract class Abstract extends QuickElement.Abstract implements QuickStyledElement {
 		private QuickInstanceStyle theStyle;
+		private ModelSetInstance theUpdatingModels;
 
 		/**
 		 * @param interpreted The interpretation that is creating this element
@@ -164,14 +165,30 @@ public interface QuickStyledElement extends QuickElement {
 		@Override
 		public ModelSetInstance update(QuickElement.Interpreted<?> interpreted, ModelSetInstance models)
 			throws ModelInstantiationException {
-			ModelSetInstance myModels = super.update(interpreted, models);
+			try {
+				return super.update(interpreted, models);
+			} finally {
+				theUpdatingModels = null;
+			}
+		}
+
+		@Override
+		protected ModelSetInstance createElementModel(QuickElement.Interpreted<?> interpreted, ModelSetInstance parentModels)
+			throws ModelInstantiationException {
+			return theUpdatingModels = super.createElementModel(interpreted, parentModels);
+		}
+
+		@Override
+		protected void updateModel(QuickElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
+			super.updateModel(interpreted, myModels);
 			QuickStyledElement.Interpreted<?> myInterpreted = (QuickStyledElement.Interpreted<?>) interpreted;
 			QuickElement parent = getParentElement();
-			StyleQIS.installParentModels(myModels, parent == null ? null : parent.getModels());
+			while (parent != null && !(parent instanceof QuickStyledElement.Abstract))
+				parent = parent.getParentElement();
+			StyleQIS.installParentModels(myModels, parent == null ? null : ((QuickStyledElement.Abstract) parent).theUpdatingModels);
 			if (theStyle == null || theStyle.getId() != myInterpreted.getStyle().getId())
 				theStyle = myInterpreted.getStyle().create();
 			theStyle.update(myInterpreted.getStyle(), myModels);
-			return myModels;
 		}
 	}
 

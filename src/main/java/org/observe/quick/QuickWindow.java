@@ -87,7 +87,8 @@ public class QuickWindow extends QuickAddOn.Abstract<QuickElement> {
 			theHeight = session.getAttributeExpression("height");
 			theTitle = session.getAttributeExpression("title");
 			theVisible = session.getAttributeExpression("visible");
-			switch (session.getAttributeText("close-action")) {
+			String closeAction = session.getAttributeText("close-action");
+			switch (closeAction) {
 			case "do-nothing":
 				theCloseAction = CloseAction.DoNothing;
 				break;
@@ -100,6 +101,9 @@ public class QuickWindow extends QuickAddOn.Abstract<QuickElement> {
 			case "exit":
 				theCloseAction = CloseAction.Exit;
 				break;
+			default:
+				throw new QonfigInterpretationException("Unrecognized close action: " + closeAction,
+					session.getAttributeValuePosition("close-action", 0), closeAction.length());
 			}
 		}
 

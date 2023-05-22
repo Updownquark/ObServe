@@ -210,9 +210,8 @@ public interface QuickEventListener extends QuickElement {
 		}
 
 		@Override
-		public ModelSetInstance update(QuickElement.Interpreted<?> interpreted, ModelSetInstance models)
-			throws ModelInstantiationException {
-			ModelSetInstance myModels = super.update(interpreted, models);
+		protected void updateModel(QuickElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
+			super.updateModel(interpreted, myModels);
 			QuickElement.satisfyContextValue("altPressed", ModelTypes.Value.BOOLEAN, SettableValue.flatten(isAltPressed), myModels, this);
 			QuickElement.satisfyContextValue("ctrlPressed", ModelTypes.Value.BOOLEAN, SettableValue.flatten(isCtrlPressed), myModels, this);
 			QuickElement.satisfyContextValue("shiftPressed", ModelTypes.Value.BOOLEAN, SettableValue.flatten(isShiftPressed), myModels,
@@ -220,9 +219,8 @@ public interface QuickEventListener extends QuickElement {
 			QuickEventListener.Interpreted<?> myInterpreted = (QuickEventListener.Interpreted<?>) interpreted;
 			theFilters.clear();
 			for (InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> filter : myInterpreted.getFilters())
-				theFilters.add(filter.get(models));
+				theFilters.add(filter.get(myModels));
 			theAction = myInterpreted.getAction().get(myModels);
-			return myModels;
 		}
 	}
 }

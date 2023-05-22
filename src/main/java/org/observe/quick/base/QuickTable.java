@@ -186,8 +186,8 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 	}
 
 	@Override
-	public ModelSetInstance update(QuickElement.Interpreted<?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
-		ModelSetInstance myModels = super.update(interpreted, models);
+	protected void updateModel(QuickElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
+		super.updateModel(interpreted, myModels);
 		QuickTable.Interpreted<R> myInterpreted = (QuickTable.Interpreted<R>) interpreted;
 		theRows.set(myInterpreted.getRows().get(myModels), null);
 		theSelection.set(myInterpreted.getSelection() == null ? null : myInterpreted.getSelection().get(myModels), null);
@@ -199,6 +199,5 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 		.onRightX(element -> element.getLeftValue().update(element.getRightValue(), myModels))//
 		.onCommonX(element -> element.getLeftValue().update(element.getRightValue(), myModels))//
 		.adjust();
-		return myModels;
 	}
 }

@@ -280,9 +280,8 @@ public interface TabularWidget<R> extends MultiValueWidget<R>, RowTyped<R> {
 		}
 
 		@Override
-		public ModelSetInstance update(QuickElement.Interpreted<?> interpreted, ModelSetInstance models)
-			throws ModelInstantiationException {
-			ModelSetInstance myModels = super.update(interpreted, models);
+		protected void updateModel(QuickElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
+			super.updateModel(interpreted, myModels);
 			TabularWidget.Interpreted<R, ?> myInterpreted = (TabularWidget.Interpreted<R, ?>) interpreted;
 			theValueName = myInterpreted.getDefinition().getValueName();
 			satisfyContextValue(theValueName, ModelTypes.Value.forType(theRowType), SettableValue.flatten(theRenderValue), myModels);
@@ -363,7 +362,6 @@ public interface TabularWidget<R> extends MultiValueWidget<R>, RowTyped<R> {
 						return element.useValue(element.getLeftValue());
 					}
 				}, CollectionUtils.AdjustmentOrder.RightOrder);
-			return myModels;
 		}
 	}
 }

@@ -86,7 +86,7 @@ public class QuickInlineLayout extends QuickLayout.Abstract {
 		super(interpreted, element);
 	}
 
-	public Boolean getVertical() {
+	public boolean isVertical() {
 		return isVertical;
 	}
 
