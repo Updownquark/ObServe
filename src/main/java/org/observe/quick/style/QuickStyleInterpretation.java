@@ -167,13 +167,13 @@ public class QuickStyleInterpretation implements QonfigInterpretation {
 					declared = Collections.emptyList();
 				Collections.sort(declared);
 
-				// Create QuickInterpretedStyle and put into session
-				ExpressoQIS exS = session.as(ExpressoQIS.class);
-				DynamicModelValue.satisfyDynamicValue(MODEL_ELEMENT_NAME, exS.getExpressoEnv().getModels(), //
+				DynamicModelValue.satisfyDynamicValue(MODEL_ELEMENT_NAME, session.getExpressoEnv().getModels(), //
 					ObservableModelSet.CompiledModelValue.literal(TypeTokens.get().of(QonfigElement.class), session.getElement(),
 						MODEL_ELEMENT_NAME));
-				session.put(StyleQIS.STYLE_PROP, new QuickCompiledStyle.Default(Collections.unmodifiableList(declared), parentStyle,
-					styleSheet, session.getElement(), exS, theToolkit, new HashMap<>()));
+				StyleQIS styleSession = session.as(StyleQIS.class);
+				session.put(StyleQIS.STYLE_PROP,
+					new QuickCompiledStyle.Default(styleSession.getStyleSet(), Collections.unmodifiableList(declared), parentStyle,
+						styleSheet, session.getElement(), session, theToolkit, new HashMap<>()));
 			}
 		})//
 		.createWith("style", StyleValues.class, session -> interpretStyle(wrap(session)))//
@@ -259,13 +259,13 @@ public class QuickStyleInterpretation implements QonfigInterpretation {
 
 			Set<QuickStyleAttribute<?>> attrs = new HashSet<>();
 			if (element != null) {
-				QuickTypeStyle styled = QuickTypeStyle.getOrCompile(element.getType(), exS, theToolkit);
+				QuickTypeStyle styled = session.getStyleSet().getOrCompile(element.getType(), exS, theToolkit);
 				if (styled != null)
-					attrs.addAll(QuickTypeStyle.getOrCompile(element.getType(), exS, theToolkit).getAttributes(attrName.text));
+					attrs.addAll(session.getStyleSet().getOrCompile(element.getType(), exS, theToolkit).getAttributes(attrName.text));
 				for (QonfigAddOn inh : element.getInheritance().values()) {
 					if (attrs.size() > 1)
 						break;
-					styled = QuickTypeStyle.getOrCompile(inh, exS, theToolkit);
+					styled = session.getStyleSet().getOrCompile(inh, exS, theToolkit);
 					if (styled != null)
 						attrs.addAll(styled.getAttributes(attrName.text));
 				}
@@ -281,7 +281,7 @@ public class QuickStyleInterpretation implements QonfigInterpretation {
 				for (QonfigElementOrAddOn type : application.getTypes().values()) {
 					if (attrs.size() > 1)
 						break;
-					QuickTypeStyle styled = QuickTypeStyle.getOrCompile(type, exS, theToolkit);
+					QuickTypeStyle styled = session.getStyleSet().getOrCompile(type, exS, theToolkit);
 					if (styled != null)
 						attrs.addAll(styled.getAttributes(attrName.text));
 				}
@@ -301,8 +301,7 @@ public class QuickStyleInterpretation implements QonfigInterpretation {
 		CompiledExpression value = exS.getValueExpression();
 		if ((value != null && value.getExpression() != ObservableExpression.EMPTY) && attr == null)
 			throw new QonfigInterpretationException("Cannot specify a style value without an attribute",
-				value.getFilePosition().getPosition(0),
-				value.length());
+				value.getFilePosition().getPosition(0), value.length());
 		QonfigValue styleSetName = session.getAttributeQV("style-set");
 		List<QuickStyleValue<?>> styleSetRef;
 		if (styleSetName != null) {

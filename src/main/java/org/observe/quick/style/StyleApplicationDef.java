@@ -135,6 +135,8 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 		} catch (ExpressoEvaluationException e) {
 			throw new QonfigInterpretationException(e.getMessage(), ex.getFilePosition(e.getErrorOffset()), e.getErrorLength(), e);
 		}
+		if (expression == ex.getExpression())
+			return ex;
 		return new LocatedExpression() {
 			@Override
 			public int length() {
@@ -193,7 +195,7 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 				Map<String, DynamicModelValue.Identity> typeValues = null;
 				for (QonfigElementOrAddOn type : theTypes.values())
 					typeValues = DynamicModelValue.getDynamicValues(expresso, type, typeValues);
-				DynamicModelValue.Identity mv = typeValues.get(name);
+				DynamicModelValue.Identity mv = typeValues == null ? null : typeValues.get(name);
 				if (mv != null) {
 					if (mv.getType() == null)
 						throw new ExpressoEvaluationException(expressionOffset, ex.getExpressionLength(),

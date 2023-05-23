@@ -11,6 +11,7 @@ import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ExpressoQIS;
 import org.observe.expresso.ObservableExpression;
 import org.observe.quick.style.QuickInterpretedStyle.QuickElementStyleAttribute;
+import org.observe.quick.style.QuickTypeStyle.StyleSet;
 import org.qommons.QommonsUtils;
 import org.qommons.collect.BetterCollections;
 import org.qommons.collect.BetterHashMultiMap;
@@ -25,6 +26,9 @@ import org.qommons.tree.SortedTreeList;
 
 /** A compiled structure of all style values that may under any circumstance apply to a particular {@link QonfigElement element} */
 public interface QuickCompiledStyle {
+	/** @return The style set that this compiled style belongs to */
+	QuickTypeStyle.StyleSet getStyleSet();
+
 	/** @return This element's {@link QonfigElement#getParent() parent}'s style */
 	QuickCompiledStyle getParent();
 
@@ -55,6 +59,7 @@ public interface QuickCompiledStyle {
 
 	/** Default {@link QuickCompiledStyle} implementation */
 	public class Default implements QuickCompiledStyle {
+		private final QuickTypeStyle.StyleSet theStyleSet;
 		private final QuickCompiledStyle theParent;
 		private final QonfigElement theElement;
 		private final List<CompiledStyleValue<?>> theDeclaredValues;
@@ -62,6 +67,7 @@ public interface QuickCompiledStyle {
 		private final BetterMultiMap<String, QuickStyleAttribute<?>> theAttributesByName;
 
 		/**
+		 * @param styleSet The style set for this compiled style
 		 * @param declaredValues All style values declared specifically on this element
 		 * @param parent The element style for the {@link QonfigElement#getParent() parent} element
 		 * @param styleSheet The style sheet applying to the element
@@ -72,9 +78,10 @@ public interface QuickCompiledStyle {
 		 * @param applications A cache of compiled style applications for re-use
 		 * @throws QonfigInterpretationException If an error occurs evaluating all the style information for the element
 		 */
-		public Default(List<QuickStyleValue<?>> declaredValues, QuickCompiledStyle parent, QuickStyleSheet styleSheet,
-			QonfigElement element, ExpressoQIS session, QonfigToolkit style,
+		public Default(QuickTypeStyle.StyleSet styleSet, List<QuickStyleValue<?>> declaredValues, QuickCompiledStyle parent,
+			QuickStyleSheet styleSheet, QonfigElement element, ExpressoQIS session, QonfigToolkit style,
 			Map<StyleApplicationDef, CompiledStyleApplication> applications) throws QonfigInterpretationException {
+			theStyleSet = styleSet;
 			theParent = parent;
 			theElement = element;
 			List<CompiledStyleValue<?>> evaldValues = new ArrayList<>(declaredValues.size());
@@ -84,12 +91,12 @@ public interface QuickCompiledStyle {
 
 			Map<QuickStyleAttribute<?>, BetterSortedList<? extends CompiledStyleValue<?>>> values = new HashMap<>();
 			// Compile all attributes applicable to this element
-			QuickTypeStyle type = QuickTypeStyle.getOrCompile(element.getType(), session, style);
+			QuickTypeStyle type = styleSet.getOrCompile(element.getType(), session, style);
 			for (QuickStyleAttribute<?> attr : type.getAttributes().values())
 				values.computeIfAbsent(attr,
 					__ -> SortedTreeList.<CompiledStyleValue<?>> buildTreeList(CompiledStyleValue::compareTo).build());
 			for (QonfigAddOn inh : element.getInheritance().getExpanded(QonfigAddOn::getInheritance)) {
-				type = QuickTypeStyle.getOrCompile(inh, session, style);
+				type = styleSet.getOrCompile(inh, session, style);
 				if (type == null)
 					continue;
 				for (QuickStyleAttribute<?> attr : type.getAttributes().values())
@@ -117,6 +124,11 @@ public interface QuickCompiledStyle {
 			for (QuickStyleAttribute<?> attr : theValues.keySet())
 				attrsByName.add(attr.getName(), attr);
 			theAttributesByName = BetterCollections.unmodifiableMultiMap(attrsByName);
+		}
+
+		@Override
+		public QuickTypeStyle.StyleSet getStyleSet() {
+			return theStyleSet;
 		}
 
 		@Override
@@ -196,6 +208,11 @@ public interface QuickCompiledStyle {
 		/** @return The wrapped style */
 		protected QuickCompiledStyle getWrapped() {
 			return theWrapped;
+		}
+
+		@Override
+		public StyleSet getStyleSet() {
+			return theWrapped.getStyleSet();
 		}
 
 		@Override

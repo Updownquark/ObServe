@@ -482,7 +482,8 @@ public interface QuickWidget extends QuickTextElement {
 
 				public Default(QuickCompiledStyle parent, QuickCompiledStyle wrapped) {
 					super(parent, wrapped);
-					QuickTypeStyle typeStyle = QuickStyledElement.getTypeStyle(getElement(), QuickCore.NAME, QuickCore.VERSION, "widget");
+					QuickTypeStyle typeStyle = QuickStyledElement.getTypeStyle(wrapped.getStyleSet(), getElement(), QuickCore.NAME,
+						QuickCore.VERSION, "widget");
 					theColor = (QuickStyleAttribute<Color>) typeStyle.getAttribute("color", Color.class);
 				}
 

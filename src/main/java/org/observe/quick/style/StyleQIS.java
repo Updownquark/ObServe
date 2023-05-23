@@ -25,6 +25,7 @@ public class StyleQIS implements SpecialSession<StyleQIS> {
 	/** {@link ObservableModelSet} model tag on local models for elements that are instances of &lt;styled> */
 	public static final ModelTag<QonfigElement> STYLED_ELEMENT_TAG = ModelTag.of(QonfigElement.class.getSimpleName(),
 		TypeTokens.get().of(QonfigElement.class));
+	static final String STYLE_SET_PROP = "quick-interpreter-style-type-set";
 	static final String STYLED_PROP = "quick-interpreter-styled";
 	static final String STYLE_PROP = "quick-interpreter-style";
 	static final String STYLE_SHEET_PROP = "quick-interpreter-style-sheet";
@@ -79,6 +80,11 @@ public class StyleQIS implements SpecialSession<StyleQIS> {
 		return (Boolean) getWrapped().get(STYLED_PROP);
 	}
 
+	/** @return The set of style types for this style session */
+	public QuickTypeStyle.StyleSet getStyleSet() {
+		return get(STYLE_SET_PROP, QuickTypeStyle.StyleSet.class);
+	}
+
 	/** @return The style sheet applying to this element */
 	public QuickStyleSheet getStyleSheet() {
 		return (QuickStyleSheet) getWrapped().get(STYLE_SHEET_PROP);
@@ -115,9 +121,9 @@ public class StyleQIS implements SpecialSession<StyleQIS> {
 			else if (!getElement().isInstance(el))
 				throw new QonfigInterpretationException("This element is not an instance of  '" + element + "'",
 					getElement().getPositionInFile(), 0);
-			return QuickTypeStyle.getOrCompile(el, as(ExpressoQIS.class), theStyleTK).getAttribute(name, type);
+			return getStyleSet().getOrCompile(el, as(ExpressoQIS.class), theStyleTK).getAttribute(name, type);
 		}
-		return QuickTypeStyle.getOrCompile(getFocusType(), as(ExpressoQIS.class), theStyleTK).getAttribute(name, type);
+		return getStyleSet().getOrCompile(getFocusType(), as(ExpressoQIS.class), theStyleTK).getAttribute(name, type);
 	}
 
 	@Override

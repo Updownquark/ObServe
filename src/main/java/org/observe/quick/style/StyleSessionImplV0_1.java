@@ -19,6 +19,7 @@ public class StyleSessionImplV0_1 implements SpecialSessionImplementation<StyleQ
 	public static final Version VERSION = new Version(0, 1, 0);
 
 	private QonfigToolkit theToolkit;
+	private QuickTypeStyle.StyleSet theStyleSet;
 
 	@Override
 	public String getToolkitName() {
@@ -40,6 +41,17 @@ public class StyleSessionImplV0_1 implements SpecialSessionImplementation<StyleQ
 		return Collections.singleton(ExpressoQIS.class);
 	}
 
+	/**
+	 * Configures this session implementation with a style set to use in place of a fresh one
+	 *
+	 * @param styleSet The style set to use
+	 * @return This session implementation
+	 */
+	public StyleSessionImplV0_1 withStyleSet(QuickTypeStyle.StyleSet styleSet) {
+		theStyleSet = styleSet;
+		return this;
+	}
+
 	@Override
 	public void init(QonfigToolkit toolkit) {
 		theToolkit = toolkit;
@@ -47,6 +59,10 @@ public class StyleSessionImplV0_1 implements SpecialSessionImplementation<StyleQ
 
 	@Override
 	public StyleQIS viewOfRoot(CoreSession coreSession, StyleQIS source) throws QonfigInterpretationException {
+		if (theStyleSet == null)
+			theStyleSet = new QuickTypeStyle.StyleSet();
+		if (coreSession.get(StyleQIS.STYLE_SET_PROP) == null)
+			coreSession.put(StyleQIS.STYLE_SET_PROP, theStyleSet);
 		StyleQIS qis = new StyleQIS(coreSession, theToolkit);
 		checkStyled(qis);
 		return qis;

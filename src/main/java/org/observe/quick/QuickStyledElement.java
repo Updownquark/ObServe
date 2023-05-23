@@ -213,7 +213,8 @@ public interface QuickStyledElement extends QuickElement {
 		void update(Interpreted interpreted, ModelSetInstance models) throws ModelInstantiationException;
 	}
 
-	static QuickTypeStyle getTypeStyle(QonfigElement element, String toolkitName, Version toolkitVersion, String elementName) {
+	static QuickTypeStyle getTypeStyle(QuickTypeStyle.StyleSet styleSet, QonfigElement element, String toolkitName, Version toolkitVersion,
+		String elementName) {
 		QonfigToolkit.ToolkitDefVersion tdv = new QonfigToolkit.ToolkitDefVersion(toolkitVersion.major, toolkitVersion.minor);
 		QonfigToolkit toolkit;
 		if (element.getType().getDeclarer().getName().equals(toolkitName)//
@@ -236,6 +237,6 @@ public interface QuickStyledElement extends QuickElement {
 			throw new IllegalArgumentException(
 				"No such toolkit " + toolkitName + " " + toolkitVersion + " found in type information of element " + element);
 		type = toolkit.getElementOrAddOn(elementName);
-		return QuickTypeStyle.get(type); // Should be available
+		return styleSet.get(type); // Should be available
 	}
 }
