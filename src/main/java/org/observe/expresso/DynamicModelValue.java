@@ -597,7 +597,7 @@ public interface DynamicModelValue<M, MV extends M> extends ModelValueSynth<M, M
 		}
 	}
 
-	/** Implementation details in this interface */
+	/** A cache of dynamic model values for a document */
 	public class Cache {
 		private static class ElementModelData {
 			Set<QonfigElementOrAddOn> types = new HashSet<>();
