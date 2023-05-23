@@ -738,16 +738,15 @@ public interface QuickTableColumn<R, C> {
 		}
 
 		@Override
-		public ModelSetInstance update(QuickElement.Interpreted<?> interpreted, ModelSetInstance models)
-			throws ModelInstantiationException {
-			ModelSetInstance myModels = super.update(interpreted, models);
+		protected void updateModel(QuickElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
+			super.updateModel(interpreted, myModels);
 			SingleColumnSet.Interpreted<R, C> myInterpreted = (SingleColumnSet.Interpreted<R, C>) interpreted;
 			try {
 				DynamicModelValue.satisfyDynamicValueIfUnsatisfied(myInterpreted.getDefinition().getColumnValueName(),
 					myInterpreted.getValue().getType(), myModels, getValue());
 			} catch (ModelException | TypeConversionException e) {
-				throw new ExpressoRuntimeException("Install of column value failed",
-					myInterpreted.getDefinition().reporting().getFileLocation().getPosition(0));
+				reporting().error("Install of column value failed");
+				return;
 			}
 			theName.set(myInterpreted.getName().get(myModels), null);
 			theValue.set(myInterpreted.getValue().get(myModels), null);
@@ -783,7 +782,6 @@ public interface QuickTableColumn<R, C> {
 				theEditing = myInterpreted.getEditing().create(this, theColumn.getFirst());
 			if (theEditing != null)
 				theEditing.update(myInterpreted.getEditing(), myModels);
-			return myModels;
 		}
 
 		public class SingleColumn implements QuickTableColumn<R, C> {

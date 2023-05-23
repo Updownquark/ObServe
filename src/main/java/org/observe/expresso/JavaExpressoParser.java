@@ -37,11 +37,11 @@ public class JavaExpressoParser implements ExpressoParser {
 		PrintStream oldErr = System.err;
 		System.setErr(new PrintStream(new OutputStream() {
 			@Override
-			public void write(int b) throws IOException {
+			public void write(int b) throws IOException { // Suppress ANTLR printout
 			}
 
 			@Override
-			public void write(byte[] b, int off, int len) throws IOException {
+			public void write(byte[] b, int off, int len) throws IOException { // Suppress ANTLR printout
 			}
 		}));
 		ExpressoAntlrParser parser;
@@ -123,7 +123,8 @@ public class JavaExpressoParser implements ExpressoParser {
 							}
 						}
 						if (creator.getComponent("arrayCreatorRest") != null) {
-							throw new ExpressoParseException(expression, "Array creation is not yet implemented"); // TODO
+							// TODO
+							throw new ExpressoParseException(expression, "Array creation is not yet implemented");
 						} else {
 							args = new ArrayList<>();
 							for (Expression arg : creator.getComponents("classCreatorRest", "arguments", "expressionList", "expression")) {
@@ -136,15 +137,17 @@ public class JavaExpressoParser implements ExpressoParser {
 								typeArgs == null ? null : Collections.unmodifiableList(typeArgs), args);
 						}
 					}
+				default:
+					switch (expression.getComponents().getLast().getText()) {
+					case "++":
+					case "--":
+						operand = _parse(firstChild, fullText);
+						operand = BufferedExpression.buffer(0, operand, getWhiteSpaceAt(fullText, firstChild.getEndIndex() + 1));
+						return new UnaryOperator(expression.getComponents().getLast().getText(), operand, false);
+					default:
+						throw new IllegalStateException("Unhandled expression type: " + expression.getType() + " " + expression);
+					}
 				}
-				switch (expression.getComponents().getLast().getText()) {
-				case "++":
-				case "--":
-					ObservableExpression operand = _parse(firstChild, fullText);
-					operand = BufferedExpression.buffer(0, operand, getWhiteSpaceAt(fullText, firstChild.getEndIndex() + 1));
-					return new UnaryOperator(expression.getComponents().getLast().getText(), operand, false);
-				}
-				throw new IllegalStateException("Unhandled expression type: " + expression.getType() + " " + expression);
 			default:
 				if ("(".equals(firstChild.getText())) {
 					BufferedType type = parseType(expression);
@@ -189,6 +192,8 @@ public class JavaExpressoParser implements ExpressoParser {
 						throw new ExpressoParseException(expression, "Non-static member constructors are not supported yet");
 					case "explicitGenericInvocation":
 						throw new ExpressoParseException(expression, expression.getType() + " expressions are not supported yet");
+					default:
+						break;
 					}
 					break;
 				case "=":
@@ -263,24 +268,14 @@ public class JavaExpressoParser implements ExpressoParser {
 					return new ArrayAccessExpression(array, index);
 				case "::":
 					throw new ExpressoParseException(expression, "Method references are not supported");
-					/*context = _parse(firstChild);
-					if (expression.getComponent("typeArguments") != null) {
-						List<Expression> typeArgExprs = expression.getComponents("typeArguments", "typeArgumentList", "typeArgument");
-						typeArgs = new ArrayList<>(typeArgExprs.size());
-						for (Expression tae : typeArgExprs) {
-							for (Expression taeChild : tae.getComponents())
-								typeArgs.add(taeChild.getText());
-						}
-					} else
-						typeArgs = null;
-					return new MethodReferenceExpression(context, expression.getComponents().getLast().toString(), typeArgs);*/
+				default:
+					break;
 				}
 			}
 			// TODO
 			throw new IllegalStateException("Unhandled expression type: " + expression.getType() + " " + expression);
 		case "primary":
-			switch (expression.getComponents().size()) {
-			case 1:
+			if (expression.getComponents().size() == 1) {
 				Expression child = firstChild;
 				switch (child.getText()) {
 				case "this":
@@ -289,6 +284,8 @@ public class JavaExpressoParser implements ExpressoParser {
 						child.getText(), //
 						getWhiteSpaceAt(fullText, child.getEndIndex() + 1));
 					return new NameExpression(null, BetterList.of(name));
+				default:
+					break;
 				}
 				switch (child.getType()) {
 				case "literal":
@@ -298,9 +295,10 @@ public class JavaExpressoParser implements ExpressoParser {
 						child.getText(), //
 						getWhiteSpaceAt(fullText, child.getEndIndex() + 1));
 					return new NameExpression(null, BetterList.of(name));
+				default:
+					break;
 				}
-				break;
-			case 3:
+			} else if (expression.getComponents().size() == 3) {
 				switch (expression.getComponents().get(2).getText()) {
 				case ")":
 					Expression valueX = expression.getComponents().get(1);
@@ -309,11 +307,12 @@ public class JavaExpressoParser implements ExpressoParser {
 						getWhiteSpaceAt(fullText, valueX.getEndIndex() + 1));
 					return new ParentheticExpression(value);
 				case "class":
-					child = firstChild;
+					Expression child = firstChild;
 					int ws = getWhiteSpaceBefore(fullText, expression.getComponents().get(2).getStartIndex());
 					return new ClassInstanceExpression(parseType(child), ws);
+				default:
+					break;
 				}
-				break;
 			}
 			throw new IllegalStateException("Unhandled " + expression.getType() + " expression: " + expression);
 		case "methodCall":
@@ -344,18 +343,18 @@ public class JavaExpressoParser implements ExpressoParser {
 			} else
 				radix = 10;
 			if (isLong)
-				return literalExpression(expression, Long.parseLong(text.replaceAll("_", ""), radix));
+				return literalExpression(expression, Long.parseLong(text.replace("_", ""), radix));
 			else
-				return literalExpression(expression, Integer.parseInt(text.replaceAll("_", ""), radix));
+				return literalExpression(expression, Integer.parseInt(text.replace("_", ""), radix));
 		case "floatLiteral":
 			Expression type = expression.search().get("FloatingTypeSuffix").findAny();
 			text = expression.toString();
 			if (type != null)
 				text = text.substring(0, text.length() - 1);
 			if (type == null || type.toString().equalsIgnoreCase("d"))
-				return literalExpression(expression, Double.parseDouble(text.replaceAll("_", "")));
+				return literalExpression(expression, Double.parseDouble(text.replace("_", "")));
 			else
-				return literalExpression(expression, Float.parseFloat(text.replaceAll("_", "")));
+				return literalExpression(expression, Float.parseFloat(text.replace("_", "")));
 		case "BOOL_LITERAL":
 			return literalExpression(expression, "true".equals(expression.toString()));
 		case "CHAR_LITERAL":
@@ -414,8 +413,9 @@ public class JavaExpressoParser implements ExpressoParser {
 			return '\b';
 		case 'f':
 			return '\f';
+		default:
+			throw new IllegalArgumentException("Unrecognized escape sequence: " + escaped);
 		}
-		throw new IllegalArgumentException("Unrecognized escape sequence: " + escaped);
 	}
 
 	private static String compileString(List<Expression> contents) {
@@ -513,16 +513,16 @@ public class JavaExpressoParser implements ExpressoParser {
 	}
 
 	private static int getWhiteSpaceAt(String text, int index) {
-		int end;
-		for (end = index; end < text.length() && Character.isWhitespace(text.charAt(end)); end++) {
-		}
+		int end = index;
+		while (end < text.length() && Character.isWhitespace(text.charAt(end)))
+			end++;
 		return end - index;
 	}
 
 	private static int getWhiteSpaceBefore(String text, int index) {
-		int start;
-		for (start = index; start > 0 && Character.isWhitespace(text.charAt(start - 1)); start--) {
-		}
-		return index - start; // TODO -1
+		int start = index;
+		while (start > 0 && Character.isWhitespace(text.charAt(start - 1)))
+			start--;
+		return index - start;
 	}
 }

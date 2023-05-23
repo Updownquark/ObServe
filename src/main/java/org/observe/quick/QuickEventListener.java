@@ -11,7 +11,6 @@ import org.observe.collect.ObservableCollection;
 import org.observe.expresso.CompiledExpression;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ExpressoQIS;
-import org.observe.expresso.ExpressoRuntimeException;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
@@ -202,7 +201,8 @@ public interface QuickEventListener extends QuickElement {
 					try {
 						return theAction.act(cause);
 					} catch (RuntimeException | Error e) {
-						throw new ExpressoRuntimeException(e.toString(), reporting().getFileLocation().getPosition(0), e);
+						reporting().error(e.toString(), e);
+						return null;
 					}
 				} else
 					return null;

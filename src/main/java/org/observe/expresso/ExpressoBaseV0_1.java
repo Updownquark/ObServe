@@ -270,11 +270,11 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 	void configureBaseModels(QonfigInterpreterCore.Builder interpreter) {
 		interpreter.createWith("imports", ClassView.class, session -> {
 			ClassView.Builder builder = ClassView.build().withWildcardImport("java.lang");
-			for (QonfigElement imp : session.getChildren("import")) {
+			for (CoreSession imp : session.forChildren("import")) {
 				if (imp.getValueText().endsWith(".*"))
 					builder.withWildcardImport(imp.getValueText().substring(0, imp.getValueText().length() - 2));
 				else
-					builder.withImport(imp.getValueText());
+					builder.withImport(imp.getValueText(), imp.reporting().at(imp.getValuePosition()));
 			}
 			ClassView cv = builder.build();
 			wrap(session).setModels(null, cv);
@@ -2780,7 +2780,6 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		} catch (QonfigInterpretationException e) {
 			throw new QonfigInterpretationException("Could not parse map", e.getPosition(), e.getErrorLength(), e);
 		}
-		ExpressoEnv env = op.getExpressoEnv();
 		LocatedFilePosition position = op.getElement().getPositionInFile();
 		if (ctx.isReversible()) {
 			return ValueTransform.<S, SettableValue<?>> create(ModelTypes.Value, sourceType -> {
@@ -3483,6 +3482,12 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 
 	/** A compiled structure capable of generating an {@link InterpretedMapReverse} */
 	public interface CompiledMapReverse {
+		/**
+		 * @param session The expresso session for the reverse
+		 * @param sourceName The name of the source variable
+		 * @param combinedVariables The names of the combined variables
+		 * @throws QonfigInterpretationException If an exception occurs compiling this reverse
+		 */
 		void compile(ExpressoQIS session, String sourceName, Set<String> combinedVariables) throws QonfigInterpretationException;
 
 		/**

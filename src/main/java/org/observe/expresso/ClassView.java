@@ -20,6 +20,7 @@ import org.observe.util.TypeTokens;
 import org.observe.util.TypeTokens.TypeRetriever;
 import org.qommons.QommonsUtils;
 import org.qommons.ValueHolder;
+import org.qommons.io.ErrorReporting;
 
 import com.google.common.reflect.TypeToken;
 
@@ -37,21 +38,22 @@ public class ClassView implements TypeParser {
 	private Map<String, ValueHolder<Field>> theFieldCache;
 	private Map<String, List<Method>> theMethodCache;
 
-	private ClassView(List<ClassLoader> classLoaders, Map<String, String> importedTypes, Set<String> wildcardImports) {
+	private ClassView(List<ClassLoader> classLoaders, Map<String, String> importedTypes, Map<String, ErrorReporting> importTypeErrors,
+		Set<String> wildcardImports) {
 		theClassLoaders = classLoaders;
 		theImportedTypes = importedTypes;
 		theWildcardImports = wildcardImports;
 		theFieldCache = new ConcurrentHashMap<>();
 		theMethodCache = new ConcurrentHashMap<>();
 
-		for (String imp : theImportedTypes.keySet()) {
-			Class<?> type = getType(imp);
+		for (Map.Entry<String, String> imp : theImportedTypes.entrySet()) {
+			Class<?> type = getType(imp.getKey());
 			if (type == null)
-				System.err.println("Import '" + theImportedTypes.get(imp) + "' cannot be resolved");
+				importTypeErrors.get(imp.getKey()).error("Import '" + imp.getValue() + "' cannot be resolved");
 		}
 
 		theParser = TypeTokens.get().newParser();
-		theParser.addTypeRetriever(typeName -> ClassView.this.getType(typeName));
+		theParser.addTypeRetriever(ClassView.this::getType);
 	}
 
 	/**
@@ -160,7 +162,7 @@ public class ClassView implements TypeParser {
 		for (ClassLoader cl : theClassLoaders) {
 			try {
 				return cl.loadClass(name);
-			} catch (ClassNotFoundException e) {
+			} catch (ClassNotFoundException e) { // It's fine, we'll try with the configured class loaders
 			}
 		}
 		int dot = name.lastIndexOf('.');
@@ -169,7 +171,7 @@ public class ClassView implements TypeParser {
 			for (ClassLoader cl : theClassLoaders) {
 				try {
 					return cl.loadClass(name);
-				} catch (ClassNotFoundException e) {
+				} catch (ClassNotFoundException e) { // We don't throw exceptions, just return null
 				}
 			}
 			dot = name.lastIndexOf('.', dot - 1);
@@ -202,11 +204,13 @@ public class ClassView implements TypeParser {
 	public static class Builder {
 		private final List<ClassLoader> theClassLoaders;
 		private final Map<String, String> theImportedTypes;
+		private final Map<String, ErrorReporting> theImportTypeErrors;
 		private final Set<String> theWildcardImports;
 
 		Builder() {
 			theClassLoaders = new ArrayList<>(3);
 			theImportedTypes = new LinkedHashMap<>();
+			theImportTypeErrors = new LinkedHashMap<>();
 			theWildcardImports = new LinkedHashSet<>();
 		}
 
@@ -221,9 +225,10 @@ public class ClassView implements TypeParser {
 
 		/**
 		 * @param importedType The imported type. The given type will be available for load by its simple name.
+		 * @param onError Error reporting if this type cannot be resolved after the class view is built
 		 * @return This builder
 		 */
-		public Builder withImport(String importedType) {
+		public Builder withImport(String importedType, ErrorReporting onError) {
 			int lastDot = importedType.lastIndexOf('.');
 			if (lastDot >= 0)
 				theImportedTypes.put(importedType.substring(lastDot + 1), importedType);
@@ -247,7 +252,7 @@ public class ClassView implements TypeParser {
 			return new ClassView(//
 				theClassLoaders.isEmpty() ? Collections.unmodifiableList(Arrays.asList(Thread.currentThread().getContextClassLoader()))
 					: QommonsUtils.unmodifiableCopy(theClassLoaders), //
-					QommonsUtils.unmodifiableCopy(theImportedTypes), //
+				QommonsUtils.unmodifiableCopy(theImportedTypes), theImportTypeErrors, //
 					QommonsUtils.unmodifiableDistinctCopy(theWildcardImports));
 		}
 	}
