@@ -37,6 +37,7 @@ public class QuickTypeStyle {
 	/** The name of the &lt;style-attribute> element, which defines a style attribute */
 	public static final String STYLE_ATTRIBUTE = "style-attribute";
 
+	/** A set of {@link QuickTypeStyle}s */
 	public static class StyleSet {
 		private final Map<QonfigElementOrAddOn, QuickTypeStyle> theElementStyleTypes = new ConcurrentHashMap<>();
 

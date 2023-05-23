@@ -124,12 +124,13 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 	 * @param expresso A toolkit inheriting Expresso-Core
 	 * @param styleSheet Whether the expression is from a style sheet. Model values that do not declare their
 	 *        {@link org.observe.expresso.DynamicModelValue.Identity#getType() type} cannot be used as conditions in style sheets.
+	 * @param dmvCache The model value cache to use
 	 * @return The expression to use in place of the given condition
 	 * @throws QonfigInterpretationException If a type-less condition is used from a style sheet
 	 */
 	public LocatedExpression findModelValues(LocatedExpression ex, Collection<DynamicModelValue.Identity> modelValues,
 		ObservableModelSet models, QonfigToolkit expresso, boolean styleSheet, DynamicModelValue.Cache dmvCache)
-		throws QonfigInterpretationException {
+			throws QonfigInterpretationException {
 		ObservableExpression expression;
 		try {
 			expression = _findModelValues(ex.getExpression(), modelValues, models, expresso, styleSheet, dmvCache, 0);
@@ -468,8 +469,9 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 	 * @param env The Expresso environment containing model values that the condition may use
 	 * @param priorityAttr The style-model-value.priority attribute from the Quick-Style toolkit
 	 * @param styleSheet Whether the application is defined from a style-sheet, as opposed to inline under the element
-	 * @return A {@link StyleApplicationDef} that applies to {@link QonfigElement}s that this application applies to <b>AND</b> whose
-	 *         model passes the given condition
+	 * @param dmvCache The model value cache to use
+	 * @return A {@link StyleApplicationDef} that applies to {@link QonfigElement}s that this application applies to <b>AND</b> whose model
+	 *         passes the given condition
 	 * @throws QonfigInterpretationException If the condition uses any unusable model values, such as un-typed {@link DynamicModelValue
 	 *         model values} from a style-sheet
 	 */
