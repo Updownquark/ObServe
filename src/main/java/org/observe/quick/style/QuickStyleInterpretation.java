@@ -244,9 +244,10 @@ public class QuickStyleInterpretation implements QonfigInterpretation {
 			}
 			application = application.forType(el);
 		}
+		DynamicModelValue.Cache dmvCache = exS.getDynamicValueCache();
 		CompiledExpression newCondition = exS.getAttributeExpression("condition");
 		if (newCondition != null)
-			application = application.forCondition(newCondition, exS.getExpressoEnv(), thePriorityAttr, styleSheet != null);
+			application = application.forCondition(newCondition, exS.getExpressoEnv(), thePriorityAttr, styleSheet != null, dmvCache);
 		session.put(STYLE_APPLICATION, application);
 
 		QonfigValue attrName = session.getAttributeQV("attr");
@@ -338,7 +339,7 @@ public class QuickStyleInterpretation implements QonfigInterpretation {
 				if (value != null && value.getExpression() != ObservableExpression.EMPTY) {
 					Set<DynamicModelValue.Identity> mvs = new LinkedHashSet<>();
 					LocatedExpression replacedValue = theApplication.findModelValues(value, mvs, exS.getExpressoEnv().getModels(),
-						theToolkit, styleSheet != null);
+						theToolkit, styleSheet != null, dmvCache);
 					values.add(new QuickStyleValue<>(styleSheet, theApplication, theAttr, replacedValue));
 				}
 				if (styleSetRef != null)

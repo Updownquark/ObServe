@@ -12,6 +12,8 @@ import org.qommons.io.LocatedFilePosition;
 
 /** A special session with extra utility for the Expresso toolkits */
 public class ExpressoQIS implements SpecialSession<ExpressoQIS> {
+	/** The session key for storing the dynamic value cache */
+	public static final String DYNAMIC_VALUE_CACHE = "DYNAMIC_VALUE_CACHE";
 	private final CoreSession theWrapped;
 
 	ExpressoQIS(CoreSession session) {
@@ -59,6 +61,11 @@ public class ExpressoQIS implements SpecialSession<ExpressoQIS> {
 	public ExpressoQIS setModels(ObservableModelSet models, ClassView classView) {
 		setExpressoEnv(getExpressoEnv().with(models, classView));
 		return this;
+	}
+
+	/** @return This session's dynamic value cache */
+	public DynamicModelValue.Cache getDynamicValueCache() {
+		return theWrapped.get(DYNAMIC_VALUE_CACHE, DynamicModelValue.Cache.class);
 	}
 
 	/**

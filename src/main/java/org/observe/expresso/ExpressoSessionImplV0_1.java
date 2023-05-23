@@ -70,6 +70,7 @@ public class ExpressoSessionImplV0_1 implements SpecialSessionImplementation<Exp
 	};
 
 	private QonfigToolkit theToolkit;
+	private DynamicModelValue.Cache theDyamicValueCache;
 
 	private QonfigAddOn theParseableEl;
 	private QonfigChildDef.Declared theParserChild;
@@ -97,6 +98,11 @@ public class ExpressoSessionImplV0_1 implements SpecialSessionImplementation<Exp
 		return Collections.emptySet(); // No dependencies
 	}
 
+	public ExpressoSessionImplV0_1 withDynamicValueCache(DynamicModelValue.Cache dmvCache) {
+		theDyamicValueCache = dmvCache;
+		return this;
+	}
+
 	@Override
 	public void init(QonfigToolkit toolkit) {
 		theToolkit = toolkit;
@@ -109,6 +115,11 @@ public class ExpressoSessionImplV0_1 implements SpecialSessionImplementation<Exp
 
 	@Override
 	public ExpressoQIS viewOfRoot(CoreSession coreSession, ExpressoQIS source) throws QonfigInterpretationException {
+		if (coreSession.get(ExpressoQIS.DYNAMIC_VALUE_CACHE) == null) {
+			if (theDyamicValueCache == null)
+				theDyamicValueCache = new DynamicModelValue.Cache();
+			coreSession.put(ExpressoQIS.DYNAMIC_VALUE_CACHE, theDyamicValueCache);
+		}
 		ExpressoQIS qis = new ExpressoQIS(coreSession);
 		qis.setExpressoParser(new JavaExpressoParser());
 		qis.setExpressoEnv(ExpressoEnv.STANDARD_JAVA//

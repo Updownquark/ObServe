@@ -131,16 +131,6 @@ public interface DynamicModelValue<M, MV extends M> extends ModelValueSynth<M, M
 		Identity getIdentity();
 	}
 
-	/**
-	 * @param expresso The toolkit to get expresso types from
-	 * @param type The element type to get the dynamic values for
-	 * @param values The map to add the dynamic values into
-	 * @return The identities/definitions of all dynamic values defined on the given type, grouped by name/name attribute
-	 */
-	public static Map<String, Identity> getDynamicValues(QonfigToolkit expresso, QonfigElementOrAddOn type, Map<String, Identity> values) {
-		return Impl.getDynamicValues(expresso, null, type, values);
-	}
-
 	/** @return The declared definition of this dynamic value */
 	public Identity getDeclaration();
 
@@ -608,7 +598,7 @@ public interface DynamicModelValue<M, MV extends M> extends ModelValueSynth<M, M
 	}
 
 	/** Implementation details in this interface */
-	class Impl {
+	public class Cache {
 		private static class ElementModelData {
 			Set<QonfigElementOrAddOn> types = new HashSet<>();
 			QonfigElementOrAddOn withElementModel;
@@ -621,9 +611,20 @@ public interface DynamicModelValue<M, MV extends M> extends ModelValueSynth<M, M
 			QonfigAttributeDef sourceAttr;
 		}
 
-		private static ConcurrentHashMap<QonfigElementOrAddOn, Map<String, Identity>> DYNAMIC_VALUES = new ConcurrentHashMap<>();
+		private ConcurrentHashMap<QonfigElementOrAddOn, Map<String, Identity>> theDynamicValues = new ConcurrentHashMap<>();
 
-		static Map<String, Identity> getDynamicValues(QonfigToolkit expresso, ElementModelData modelData, QonfigElementOrAddOn type,
+		/**
+		 * @param expresso The toolkit to get expresso types from
+		 * @param type The element type to get the dynamic values for
+		 * @param values The map to add the dynamic values into
+		 * @return The identities/definitions of all dynamic values defined on the given type, grouped by name/name attribute
+		 */
+		public Map<String, Identity> getDynamicValues(QonfigToolkit expresso, QonfigElementOrAddOn type,
+			Map<String, Identity> values) {
+			return getDynamicValues(expresso, null, type, values);
+		}
+
+		Map<String, Identity> getDynamicValues(QonfigToolkit expresso, ElementModelData modelData, QonfigElementOrAddOn type,
 			Map<String, Identity> values) {
 			if (modelData == null) {
 				modelData = new ElementModelData();
@@ -632,13 +633,13 @@ public interface DynamicModelValue<M, MV extends M> extends ModelValueSynth<M, M
 			if (!modelData.types.add(type) || !modelData.withElementModel.isAssignableFrom(type)) {
 				return values == null ? Collections.emptyMap() : values;
 			}
-			Map<String, Identity> found = DYNAMIC_VALUES.get(type);
+			Map<String, Identity> found = theDynamicValues.get(type);
 			if (found == null) {
-				synchronized (Impl.class) {
-					found = DYNAMIC_VALUES.get(type);
+				synchronized (Cache.class) {
+					found = theDynamicValues.get(type);
 					if (found == null) {
 						found = compileDynamicValues(expresso, modelData, type);
-						DYNAMIC_VALUES.put(type, found);
+						theDynamicValues.put(type, found);
 					}
 				}
 			}
@@ -648,7 +649,7 @@ public interface DynamicModelValue<M, MV extends M> extends ModelValueSynth<M, M
 			return values;
 		}
 
-		private static Map<String, Identity> compileDynamicValues(QonfigToolkit expresso, ElementModelData modelData,
+		private Map<String, Identity> compileDynamicValues(QonfigToolkit expresso, ElementModelData modelData,
 			QonfigElementOrAddOn type) {
 			Map<String, Identity> values = new LinkedHashMap<>();
 			if (type.getSuperElement() != null)

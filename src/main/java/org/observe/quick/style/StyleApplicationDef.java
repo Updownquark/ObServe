@@ -128,10 +128,11 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 	 * @throws QonfigInterpretationException If a type-less condition is used from a style sheet
 	 */
 	public LocatedExpression findModelValues(LocatedExpression ex, Collection<DynamicModelValue.Identity> modelValues,
-		ObservableModelSet models, QonfigToolkit expresso, boolean styleSheet) throws QonfigInterpretationException {
+		ObservableModelSet models, QonfigToolkit expresso, boolean styleSheet, DynamicModelValue.Cache dmvCache)
+		throws QonfigInterpretationException {
 		ObservableExpression expression;
 		try {
-			expression = _findModelValues(ex.getExpression(), modelValues, models, expresso, styleSheet, 0);
+			expression = _findModelValues(ex.getExpression(), modelValues, models, expresso, styleSheet, dmvCache, 0);
 		} catch (ExpressoEvaluationException e) {
 			throw new QonfigInterpretationException(e.getMessage(), ex.getFilePosition(e.getErrorOffset()), e.getErrorLength(), e);
 		}
@@ -184,7 +185,8 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 	}
 
 	private ObservableExpression _findModelValues(ObservableExpression ex, Collection<DynamicModelValue.Identity> modelValues,
-		ObservableModelSet models, QonfigToolkit expresso, boolean styleSheet, int expressionOffset) throws ExpressoEvaluationException {
+		ObservableModelSet models, QonfigToolkit expresso, boolean styleSheet, DynamicModelValue.Cache dmvCache, int expressionOffset)
+			throws ExpressoEvaluationException {
 		if (ex instanceof NameExpression && ((NameExpression) ex).getContext() == null) {
 			String name = ((NameExpression) ex).getNames().getFirst().getName();
 			ModelComponentNode<?, ?> node = models.getComponentIfExists(name);
@@ -194,7 +196,7 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 			} else if (styleSheet) {
 				Map<String, DynamicModelValue.Identity> typeValues = null;
 				for (QonfigElementOrAddOn type : theTypes.values())
-					typeValues = DynamicModelValue.getDynamicValues(expresso, type, typeValues);
+					typeValues = dmvCache.getDynamicValues(expresso, type, typeValues);
 				DynamicModelValue.Identity mv = typeValues == null ? null : typeValues.get(name);
 				if (mv != null) {
 					if (mv.getType() == null)
@@ -208,7 +210,7 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 			IdentityHashMap<ObservableExpression, ObservableExpression>[] replace = new IdentityHashMap[1];
 			int c = 0;
 			for (ObservableExpression child : ex.getChildren()) {
-				ObservableExpression newChild = _findModelValues(child, modelValues, models, expresso, styleSheet, //
+				ObservableExpression newChild = _findModelValues(child, modelValues, models, expresso, styleSheet, dmvCache, //
 					ex.getChildOffset(c));
 				if (newChild != child) {
 					if (replace[0] == null)
@@ -472,7 +474,7 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 	 *         model values} from a style-sheet
 	 */
 	public StyleApplicationDef forCondition(LocatedExpression condition, ExpressoEnv env, QonfigAttributeDef.Declared priorityAttr,
-		boolean styleSheet) throws QonfigInterpretationException {
+		boolean styleSheet, DynamicModelValue.Cache dmvCache) throws QonfigInterpretationException {
 		LocatedExpression newCondition;
 		if (theCondition == null)
 			newCondition = condition;
@@ -481,7 +483,7 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 
 		Set<DynamicModelValue.Identity> mvs = new LinkedHashSet<>();
 		// We don't need to worry about satisfying anything here. The model values just need to be available for the link level.
-		newCondition = findModelValues(newCondition, mvs, env.getModels(), priorityAttr.getDeclarer(), styleSheet);
+		newCondition = findModelValues(newCondition, mvs, env.getModels(), priorityAttr.getDeclarer(), styleSheet, dmvCache);
 		mvs.addAll(theModelValues.keySet());
 		return new StyleApplicationDef(theParent, theRole, theTypes, newCondition,
 			prioritizeModelValues(mvs, theModelValues, priorityAttr));

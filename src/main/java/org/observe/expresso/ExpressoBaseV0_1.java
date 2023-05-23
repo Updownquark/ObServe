@@ -159,10 +159,11 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 			@Override
 			public void augmentElementModel(ExpressoQIS session, ObservableModelSet.Builder builder)
 				throws QonfigInterpretationException {
+				DynamicModelValue.Cache dmvCache = session.getDynamicValueCache();
 				Map<String, DynamicModelValue.Identity> dynamicValues = new LinkedHashMap<>();
-				DynamicModelValue.getDynamicValues(theExpressoToolkit, session.getElement().getType(), dynamicValues);
+				dmvCache.getDynamicValues(theExpressoToolkit, session.getElement().getType(), dynamicValues);
 				for (QonfigAddOn inh : session.getElement().getInheritance().values())
-					DynamicModelValue.getDynamicValues(theExpressoToolkit, inh, dynamicValues);
+					dmvCache.getDynamicValues(theExpressoToolkit, inh, dynamicValues);
 				if (!dynamicValues.isEmpty()) {
 					for (DynamicModelValue.Identity dv : dynamicValues.values()) {
 						String name;
@@ -2756,8 +2757,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 				sourceType);
 			ObservableModelSet.Built wrapped = wrappedBuilder.build();
 
-			ModelValueSynth<SettableValue<?>, SettableValue<String>> test = parseFilter(testX, env.with(wrapped, null),
-				true);
+			ModelValueSynth<SettableValue<?>, SettableValue<String>> test = parseFilter(testX, env.with(wrapped, null), true);
 			InterpretedModelSet interpretedWrapped = wrapped.interpret();
 			return ValueTransform.<T, T> of(sourceType.getValueType(), (source, models) -> {
 				SettableValue<T> sourceV = SettableValue.build(sourceType.getValueType()).build();
@@ -3712,7 +3712,8 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 					}
 				};
 			}
-		};
+		}
+		;
 		return new CompiledMapTransformation(mapQIS, reverseQIS);
 	}
 

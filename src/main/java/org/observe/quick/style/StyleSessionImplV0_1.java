@@ -59,10 +59,11 @@ public class StyleSessionImplV0_1 implements SpecialSessionImplementation<StyleQ
 
 	@Override
 	public StyleQIS viewOfRoot(CoreSession coreSession, StyleQIS source) throws QonfigInterpretationException {
-		if (theStyleSet == null)
-			theStyleSet = new QuickTypeStyle.StyleSet();
-		if (coreSession.get(StyleQIS.STYLE_SET_PROP) == null)
+		if (coreSession.get(StyleQIS.STYLE_SET_PROP) == null) {
+			if (theStyleSet == null)
+				theStyleSet = new QuickTypeStyle.StyleSet();
 			coreSession.put(StyleQIS.STYLE_SET_PROP, theStyleSet);
+		}
 		StyleQIS qis = new StyleQIS(coreSession, theToolkit);
 		checkStyled(qis);
 		return qis;
