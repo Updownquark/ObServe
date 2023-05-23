@@ -22,7 +22,10 @@ import org.qommons.io.LocatedContentPosition;
 
 import com.google.common.reflect.TypeToken;
 
-/** An environment in which to evaluate {@link ObservableExpression}s */
+/**
+ * An environment in which to {@link ObservableExpression#evaluate(org.observe.expresso.ModelType.ModelInstanceType, ExpressoEnv, int)
+ * evaluate} {@link ObservableExpression}s
+ */
 public class ExpressoEnv {
 	/**
 	 * Standard java environment, including imported java.lang.* and standard java operators, plus some
@@ -72,6 +75,7 @@ public class ExpressoEnv {
 		return theModels;
 	}
 
+	/** @return This environment's {@link #getModels() model}, built if it is a {@link ObservableModelSet.Builder} */
 	public ObservableModelSet.Built getBuiltModels() {
 		if (theModels instanceof ObservableModelSet.Built)
 			return (ObservableModelSet.Built) theModels;
@@ -96,11 +100,12 @@ public class ExpressoEnv {
 		return theBinaryOperators;
 	}
 
+	/** @return The error reporting for expressions evaluated in this environment to use */
 	public ErrorReporting reporting() {
 		return theErrorReporting;
 	}
 
-	public void saveLocalModel() {
+	void saveLocalModel() {
 		theElementModel = theModels;
 	}
 
@@ -221,14 +226,26 @@ public class ExpressoEnv {
 				binaryOps == null ? theBinaryOperators : binaryOps, theErrorReporting);
 	}
 
+	/**
+	 * @param position The position at which to report errors for the new expresso environment
+	 * @return The new environment
+	 */
 	public ExpressoEnv at(LocatedContentPosition position) {
-		return new ExpressoEnv(theModels, theClassView, theNonStructuredParsers, theUnaryOperators, theBinaryOperators,
-			theErrorReporting.at(position));
+		ErrorReporting reporting = theErrorReporting.at(position);
+		if (reporting == theErrorReporting)
+			return this;
+		return new ExpressoEnv(theModels, theClassView, theNonStructuredParsers, theUnaryOperators, theBinaryOperators, reporting);
 	}
 
+	/**
+	 * @param positionOffset The relative position offset at which to report errors for the new expresso environment
+	 * @return The new environment
+	 */
 	public ExpressoEnv at(int positionOffset) {
-		return new ExpressoEnv(theModels, theClassView, theNonStructuredParsers, theUnaryOperators, theBinaryOperators,
-			theErrorReporting.at(positionOffset));
+		ErrorReporting reporting = theErrorReporting.at(positionOffset);
+		if (reporting == theErrorReporting)
+			return this;
+		return new ExpressoEnv(theModels, theClassView, theNonStructuredParsers, theUnaryOperators, theBinaryOperators, reporting);
 	}
 
 	/** @return A new environment with null model and class view */
