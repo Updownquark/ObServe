@@ -98,6 +98,10 @@ public class ExpressoSessionImplV0_1 implements SpecialSessionImplementation<Exp
 		return Collections.emptySet(); // No dependencies
 	}
 
+	/**
+	 * @param dmvCache The dynamic value cache for this session implementation to use, instead of creating a fresh one
+	 * @return This session implementation
+	 */
 	public ExpressoSessionImplV0_1 withDynamicValueCache(DynamicModelValue.Cache dmvCache) {
 		theDyamicValueCache = dmvCache;
 		return this;

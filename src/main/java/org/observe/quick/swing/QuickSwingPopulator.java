@@ -42,7 +42,6 @@ import org.observe.SettableValue;
 import org.observe.Subscription;
 import org.observe.collect.ObservableCollection;
 import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.ExpressoRuntimeException;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.quick.*;
 import org.observe.quick.QuickTextElement.QuickTextStyle;
@@ -117,7 +116,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 					try {
 						modifier.accept(comp, quick);
 					} catch (ModelInstantiationException e) {
-						throw new ExpressoRuntimeException(e);
+						throw new CheckedExceptionWrapper(e);
 					}
 				};
 				modifiers.add(populationModifier);
@@ -126,7 +125,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 
 			try {
 				populate.run();
-			} catch (ExpressoRuntimeException e) {
+			} catch (CheckedExceptionWrapper e) {
 				if (e.getCause() instanceof ModelInstantiationException)
 					throw (ModelInstantiationException) e.getCause();
 				throw e;
@@ -243,14 +242,14 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 								try {
 									interpretedBody.populate(content, doc.getBody());
 								} catch (ModelInstantiationException e) {
-									throw new ExpressoRuntimeException(e);
+									throw new CheckedExceptionWrapper(e);
 								}
 							});
 							w.run(null);
 						});
 					} catch (InterruptedException e) {
 					} catch (InvocationTargetException e) {
-						if (e.getTargetException() instanceof ExpressoRuntimeException
+						if (e.getTargetException() instanceof CheckedExceptionWrapper
 							&& e.getTargetException().getCause() instanceof ModelInstantiationException)
 							throw (ModelInstantiationException) e.getTargetException().getCause();
 						doc.reporting().error("Unhandled error", e);
@@ -300,7 +299,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 									for (int i = 0; i < listeners.size(); i++)
 										listeners.get(i).addListener(c, w.getEventListeners().get(i));
 								} catch (ModelInstantiationException e) {
-									throw new ExpressoRuntimeException(e);
+									throw new CheckedExceptionWrapper(e);
 								}
 							}
 						});
@@ -315,11 +314,11 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 								try {
 									border.decorate(deco2, w.getBorder(), component);
 								} catch (ModelInstantiationException e) {
-									throw new ExpressoRuntimeException(e);
+									throw new CheckedExceptionWrapper(e);
 								}
 							});
 						}
-					} catch (ExpressoRuntimeException e) {
+					} catch (CheckedExceptionWrapper e) {
 						if (e.getCause() instanceof ModelInstantiationException)
 							throw (ModelInstantiationException) e.getCause();
 						throw e;
@@ -448,9 +447,8 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 						});
 						break;
 					default:
-						throw new ModelInstantiationException(
-							"Unrecognized mouse button event type: " + mbl.getEventType(), mbl.reporting().getFileLocation().getPosition(0),
-							0);
+						throw new ModelInstantiationException("Unrecognized mouse button event type: " + mbl.getEventType(),
+							mbl.reporting().getFileLocation().getPosition(0), 0);
 					}
 				};
 			});
@@ -512,9 +510,8 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 						});
 						break;
 					default:
-						throw new ModelInstantiationException(
-							"Unrecognized mouse move event type: " + mml.getEventType(), mml.reporting().getFileLocation().getPosition(0),
-							0);
+						throw new ModelInstantiationException("Unrecognized mouse move event type: " + mml.getEventType(),
+							mml.reporting().getFileLocation().getPosition(0), 0);
 					}
 				};
 			});
@@ -1356,7 +1353,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 						try {
 							contents.get(c).populate(p, content);
 						} catch (ModelInstantiationException e) {
-							throw new ExpressoRuntimeException(e);
+							content.reporting().error(e.getMessage(), e);
 						}
 						c++;
 					}
@@ -1491,7 +1488,8 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 							quick.setContext(new QuickEditableTextWidget.EditableTextWidgetContext.Default(//
 								tf2.getErrorState(), tf2.getWarningState()));
 						} catch (ModelInstantiationException e) {
-							throw new ExpressoRuntimeException(e);
+							quick.reporting().error(e.getMessage(), e);
+							return;
 						}
 						if (commitOnType)
 							tf2.setCommitOnType(commitOnType);
@@ -1523,7 +1521,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 						try {
 							contents.get(c).populate(p, content);
 						} catch (ModelInstantiationException e) {
-							throw new ExpressoRuntimeException(e);
+							content.reporting().error(e.getMessage(), e);
 						}
 						c++;
 					}
@@ -1595,8 +1593,8 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 				if (e.getCause() instanceof ExpressoInterpretationException)
 					throw (ExpressoInterpretationException) e.getCause();
 				else
-					throw new ExpressoRuntimeException(e.getMessage(),
-						interpreted.getDefinition().reporting().getFileLocation().getPosition(0), e);
+					throw new ExpressoInterpretationException(e.getMessage(),
+						interpreted.getDefinition().reporting().getFileLocation().getPosition(0), 0, e.getCause());
 			}
 			renderersInitialized[0] = true;
 			interpreted.destroyed().act(__ -> sub.unsubscribe());
@@ -1609,8 +1607,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 					quick.reporting().getFileLocation().getPosition(0).toShortString());
 				quick.setContext(ctx);
 				ComponentEditor<?, ?>[] parent = new ComponentEditor[1];
-				ObservableCollection<InterpretedSwingTableColumn<R, ?>> columns = quick.getColumns()
-					.flow()//
+				ObservableCollection<InterpretedSwingTableColumn<R, ?>> columns = quick.getColumns().flow()//
 					.map((Class<InterpretedSwingTableColumn<R, ?>>) (Class<?>) InterpretedSwingTableColumn.class, column -> {
 						try {
 							return new InterpretedSwingTableColumn<>(quick, column, ctx, tx, panel.getUntil(), () -> parent[0],

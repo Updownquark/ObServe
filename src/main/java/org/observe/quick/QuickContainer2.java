@@ -2,7 +2,6 @@ package org.observe.quick;
 
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ExpressoQIS;
-import org.observe.expresso.ExpressoRuntimeException;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.quick.style.QuickCompiledStyle;
@@ -169,21 +168,17 @@ public interface QuickContainer2<C extends QuickWidget> extends QuickWidget {
 			.onRightX(element -> {
 				try {
 					element.getLeftValue().update(element.getRightValue(), myModels);
-				} catch (ExpressoRuntimeException e) {
-					throw e;
 				} catch (RuntimeException | Error e) {
-					throw new ExpressoRuntimeException(e.getMessage() == null ? e.toString() : e.getMessage(),
-						element.getRightValue().getDefinition().reporting().getFileLocation().getPosition(0), e);
+					element.getRightValue().getDefinition().reporting().error(e.getMessage() == null ? e.toString() : e.getMessage(),
+						e);
 				}
 			})//
 			.onCommonX(element -> {
 				try {
 					element.getLeftValue().update(element.getRightValue(), myModels);
-				} catch (ExpressoRuntimeException e) {
-					throw e;
 				} catch (RuntimeException | Error e) {
-					throw new ExpressoRuntimeException(e.getMessage() == null ? e.toString() : e.getMessage(),
-						element.getRightValue().getDefinition().reporting().getFileLocation().getPosition(0), e);
+					element.getRightValue().getDefinition().reporting().error(e.getMessage() == null ? e.toString() : e.getMessage(),
+						e);
 				}
 			})//
 			.adjust();

@@ -7,7 +7,6 @@ import org.observe.expresso.CompiledExpression;
 import org.observe.expresso.DynamicModelValue;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ExpressoQIS;
-import org.observe.expresso.ExpressoRuntimeException;
 import org.observe.expresso.ModelException;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
@@ -46,7 +45,8 @@ public interface QuickTableColumn<R, C> {
 
 			ColumnEditing.Interpreted<R, ?> getEditing();
 
-			void update(InterpretedModelSet models, QuickStyledElement.QuickInterpretationCache cache) throws ExpressoInterpretationException;
+			void update(InterpretedModelSet models, QuickStyledElement.QuickInterpretationCache cache)
+				throws ExpressoInterpretationException;
 
 			CC create(QuickElement parent);
 		}
@@ -499,9 +499,8 @@ public interface QuickTableColumn<R, C> {
 
 				@Override
 				public void update(InterpretedModelSet models) throws ExpressoInterpretationException {
-					theReplacement = getDefinition().getReplacement() == null ? null
-						: getDefinition().getReplacement().evaluate(ModelTypes.Value.forType(getElement().getParentElement().getRowType()))
-						.interpret();
+					theReplacement = getDefinition().getReplacement() == null ? null : getDefinition().getReplacement()
+						.evaluate(ModelTypes.Value.forType(getElement().getParentElement().getRowType())).interpret();
 				}
 
 				@Override
@@ -514,8 +513,9 @@ public interface QuickTableColumn<R, C> {
 
 			public RowReplaceEditType(Interpreted<R, C> interpreted, ColumnEditing<R, C> element) {
 				super(interpreted, element);
-				theReplacement = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class)
-					.<SettableValue<R>> parameterized(element.getParentElement().getRowType())).build();
+				theReplacement = SettableValue.build(
+					TypeTokens.get().keyFor(SettableValue.class).<SettableValue<R>> parameterized(element.getParentElement().getRowType()))
+					.build();
 			}
 
 			public SettableValue<R> getReplacement() {
@@ -647,7 +647,8 @@ public interface QuickTableColumn<R, C> {
 			}
 
 			@Override
-			public void update(InterpretedModelSet models, QuickStyledElement.QuickInterpretationCache cache) throws ExpressoInterpretationException {
+			public void update(InterpretedModelSet models, QuickStyledElement.QuickInterpretationCache cache)
+				throws ExpressoInterpretationException {
 				theValue = getDefinition().getValue().evaluate(ModelTypes.Value.<C> anyAsV()).interpret();
 				DynamicModelValue.satisfyDynamicValueType(getDefinition().getColumnValueName(), getDefinition().getModels(),
 					theValue.getType());
@@ -683,13 +684,13 @@ public interface QuickTableColumn<R, C> {
 
 			@Override
 			public void destroy() {
-				if(theRenderer!=null) {
+				if (theRenderer != null) {
 					theRenderer.destroy();
-					theRenderer=null;
+					theRenderer = null;
 				}
-				if(theEditing!=null) {
+				if (theEditing != null) {
 					theEditing.destroy();
-					theEditing=null;
+					theEditing = null;
 				}
 				super.destroy();
 			}
@@ -750,29 +751,24 @@ public interface QuickTableColumn<R, C> {
 			}
 			theName.set(myInterpreted.getName().get(myModels), null);
 			theValue.set(myInterpreted.getValue().get(myModels), null);
-			theHeaderTooltip.set(myInterpreted.getHeaderTooltip() == null ? null : myInterpreted.getHeaderTooltip().get(myModels),
-				null);
+			theHeaderTooltip.set(myInterpreted.getHeaderTooltip() == null ? null : myInterpreted.getHeaderTooltip().get(myModels), null);
 
 			if (myInterpreted.getRenderer() == null)
 				theRenderer = null; // TODO Dispose?
 			else if (theRenderer == null || theRenderer.getId() != myInterpreted.getRenderer().getId()) {
 				try {
 					theRenderer = myInterpreted.getRenderer().create(this);
-				} catch (ExpressoRuntimeException e) {
-					throw e;
 				} catch (RuntimeException | Error e) {
-					throw new ExpressoRuntimeException(e.getMessage() == null ? e.toString() : e.getMessage(),
-						myInterpreted.getRenderer().getDefinition().reporting().getFileLocation().getPosition(0), e);
+					myInterpreted.getRenderer().getDefinition().reporting().error(e.getMessage() == null ? e.toString() : e.getMessage(),
+						e);
 				}
 			}
 			if (theRenderer != null) {
 				try {
 					theRenderer.update(myInterpreted.getRenderer(), myModels);
-				} catch (ExpressoRuntimeException e) {
-					throw e;
 				} catch (RuntimeException | Error e) {
-					throw new ExpressoRuntimeException(e.getMessage() == null ? e.toString() : e.getMessage(),
-						myInterpreted.getRenderer().getDefinition().reporting().getFileLocation().getPosition(0), e);
+					myInterpreted.getRenderer().getDefinition().reporting().error(e.getMessage() == null ? e.toString() : e.getMessage(),
+						e);
 				}
 			}
 

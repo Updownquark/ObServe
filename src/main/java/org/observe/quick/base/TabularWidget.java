@@ -8,7 +8,6 @@ import org.observe.collect.ObservableCollection;
 import org.observe.expresso.DynamicModelValue;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ExpressoQIS;
-import org.observe.expresso.ExpressoRuntimeException;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
@@ -57,9 +56,8 @@ public interface TabularWidget<R> extends MultiValueWidget<R>, RowTyped<R> {
 						}
 
 						@Override
-						public ElementSyncAction leftOnly(
-							ElementSyncInput<QuickTableColumn.TableColumnSet.Def<?>, ExpressoQIS> element)
-								throws QonfigInterpretationException {
+						public ElementSyncAction leftOnly(ElementSyncInput<QuickTableColumn.TableColumnSet.Def<?>, ExpressoQIS> element)
+							throws QonfigInterpretationException {
 							// TODO dispose the column set?
 							return element.remove();
 						}
@@ -75,9 +73,8 @@ public interface TabularWidget<R> extends MultiValueWidget<R>, RowTyped<R> {
 						}
 
 						@Override
-						public ElementSyncAction common(
-							ElementSyncInput<QuickTableColumn.TableColumnSet.Def<?>, ExpressoQIS> element)
-								throws QonfigInterpretationException {
+						public ElementSyncAction common(ElementSyncInput<QuickTableColumn.TableColumnSet.Def<?>, ExpressoQIS> element)
+							throws QonfigInterpretationException {
 							element.getLeftValue().update(element.getRightValue());
 							return element.useValue(element.getLeftValue());
 						}
@@ -117,8 +114,7 @@ public interface TabularWidget<R> extends MultiValueWidget<R>, RowTyped<R> {
 			}
 
 			@Override
-			public void update(QuickStyledElement.QuickInterpretationCache cache)
-				throws ExpressoInterpretationException {
+			public void update(QuickStyledElement.QuickInterpretationCache cache) throws ExpressoInterpretationException {
 				if (theColumns == null)
 					theColumns = ObservableCollection.build(TypeTokens.get().keyFor(
 						QuickTableColumn.TableColumnSet.Interpreted.class).<QuickTableColumn.TableColumnSet.Interpreted<R, ?>> parameterized(
@@ -315,21 +311,16 @@ public interface TabularWidget<R> extends MultiValueWidget<R>, RowTyped<R> {
 							created = element.getRightValue()//
 								.create(TabularWidget.Abstract.this);
 							created.update(element.getRightValue(), myModels);
-						} catch (ExpressoRuntimeException e) {
-							throw e;
 						} catch (RuntimeException | Error e) {
-							throw new ExpressoRuntimeException(e.getMessage() == null ? e.toString() : e.getMessage(),
-								element.getRightValue().getDefinition().reporting().getFileLocation().getPosition(0), e);
+							element.getRightValue().getDefinition().reporting()
+							.error(e.getMessage() == null ? e.toString() : e.getMessage(), e);
+							return element.remove();
 						}
 						for (QuickTableColumn<R, ?> column : created.getColumns()) {
 							try {
 								column.update();
-							} catch (ExpressoRuntimeException e) {
-								throw e;
 							} catch (RuntimeException | Error e) {
-								throw new ExpressoRuntimeException(e.getMessage() == null ? e.toString() : e.getMessage(),
-									column.getColumnSet().reporting().getFileLocation().getPosition(0),
-									e);
+								column.getColumnSet().reporting().error(e.getMessage() == null ? e.toString() : e.getMessage(), e);
 							}
 						}
 
@@ -342,21 +333,15 @@ public interface TabularWidget<R> extends MultiValueWidget<R>, RowTyped<R> {
 							throws ModelInstantiationException {
 						try {
 							element.getLeftValue().update(element.getRightValue(), myModels);
-						} catch (ExpressoRuntimeException e) {
-							throw e;
 						} catch (RuntimeException | Error e) {
-							throw new ExpressoRuntimeException(e.getMessage() == null ? e.toString() : e.getMessage(),
-								element.getRightValue().getDefinition().reporting().getFileLocation().getPosition(0), e);
+							element.getRightValue().getDefinition().reporting()
+							.error(e.getMessage() == null ? e.toString() : e.getMessage(), e);
 						}
 						for (QuickTableColumn<R, ?> column : element.getLeftValue().getColumns()) {
 							try {
 								column.update();
-							} catch (ExpressoRuntimeException e) {
-								throw e;
 							} catch (RuntimeException | Error e) {
-								throw new ExpressoRuntimeException(e.getMessage() == null ? e.toString() : e.getMessage(),
-									column.getColumnSet().reporting().getFileLocation().getPosition(0),
-									e);
+								column.getColumnSet().reporting().error(e.getMessage() == null ? e.toString() : e.getMessage(), e);
 							}
 						}
 						return element.useValue(element.getLeftValue());
