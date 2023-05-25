@@ -550,8 +550,8 @@ public class CsvEntitySet implements AutoCloseable {
 					}
 				}
 			}
-		} else {
-			theEntityDirectory.mkdirs();
+		} else if (!theEntityDirectory.mkdirs()) {
+			throw new IOException("Could not create directory " + theEntityDirectory);
 		}
 	}
 

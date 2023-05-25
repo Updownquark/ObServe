@@ -1695,6 +1695,11 @@ public interface ObservableModelSet extends Identifiable {
 		 */
 		<M, MV extends M> MV get(ModelComponentNode<M, MV> component) throws ModelInstantiationException;
 
+		/**
+		 * @param modelId The id of the inherited model
+		 * @return The instance of the given model inherited by this instance builder
+		 * @throws IllegalArgumentException
+		 */
 		ModelSetInstance getInherited(ModelComponentId modelId) throws IllegalArgumentException;
 
 		/**
@@ -1706,12 +1711,18 @@ public interface ObservableModelSet extends Identifiable {
 
 	/** Builds a {@link ModelSetInstance} */
 	public interface ModelSetInstanceBuilder {
+		/** @return The interpreted model set that this is an instance of */
 		InterpretedModelSet getModel();
 
 		/** @return The observable that the model set instance {@link #build() built} with this builder will die with */
 		Observable<?> getUntil();
 
-		ModelSetInstance getInherited(ModelComponentId id) throws IllegalArgumentException;
+		/**
+		 * @param modelId The id of the inherited model
+		 * @return The instance of the given model inherited by this instance
+		 * @throws IllegalArgumentException
+		 */
+		ModelSetInstance getInherited(ModelComponentId modelId) throws IllegalArgumentException;
 
 		/**
 		 * Satisfies a runtime value declared with {@link ObservableModelSet.Builder#withRuntimeValue(String, ModelInstanceType)}

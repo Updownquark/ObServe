@@ -32,8 +32,8 @@ import org.qommons.collect.FastFailLockingStrategy;
 import org.qommons.config.QommonsConfig;
 import org.qommons.io.BetterFile;
 import org.qommons.io.FileUtils;
+import org.qommons.io.TextParseException;
 import org.qommons.tree.BetterTreeList;
-import org.xml.sax.SAXException;
 
 class DefaultInteractiveTestSuite implements InteractiveTestSuite {
 	private final DefaultInteractiveTestSuite theParent;
@@ -141,7 +141,7 @@ class DefaultInteractiveTestSuite implements InteractiveTestSuite {
 			ObservableConfig xmlConfig = ObservableConfig.createRoot("", null, __ -> new FastFailLockingStrategy(ThreadConstraint.ANY));
 			try {
 				ObservableConfig.readXml(xmlConfig, url.openStream(), XmlEncoding.DEFAULT);
-			} catch (SAXException e) {
+			} catch (TextParseException e) {
 				throw new IOException("Could not parse " + url.getFile(), e);
 			}
 			config.copyFrom(xmlConfig, false);
@@ -211,7 +211,7 @@ class DefaultInteractiveTestSuite implements InteractiveTestSuite {
 					__ -> new FastFailLockingStrategy(ThreadConstraint.ANY));
 				try {
 					ObservableConfig.readXml(resultsConfig, testResultsFile.read(), XmlEncoding.DEFAULT);
-				} catch (IOException | SAXException e) {
+				} catch (IOException | TextParseException e) {
 					System.err.println("Could not read test results for " + test.getClass().getName());
 					e.printStackTrace();
 				}

@@ -239,6 +239,7 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 						try {
 							Thread.sleep(20);
 						} catch (InterruptedException e) {
+							Thread.currentThread().interrupt();
 						}
 					} while (hasQueuedEvents());
 				}
@@ -279,6 +280,7 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 				try {
 					Thread.sleep(5);
 				} catch (InterruptedException e) {
+					Thread.currentThread().interrupt();
 				}
 			} while (!theFlushLock.compareAndSet(false, true));
 		}
@@ -355,6 +357,7 @@ public class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> 
 			try {
 				Thread.sleep(5);
 			} catch (InterruptedException e) {
+				Thread.currentThread().interrupt();
 			}
 		}
 		theAnchor.event("flush", null);

@@ -22,7 +22,7 @@ import org.qommons.ThreadConstraint;
 import org.qommons.collect.FastFailLockingStrategy;
 import org.qommons.collect.StampedLockingStrategy;
 import org.qommons.config.QommonsConfig;
-import org.xml.sax.SAXException;
+import org.qommons.io.TextParseException;
 
 /** Simple default implementation of {@link InteractiveTestingService} */
 public class DefaultInteractiveTestService extends DefaultInteractiveTestSuite implements InteractiveTestingService {
@@ -153,7 +153,7 @@ public class DefaultInteractiveTestService extends DefaultInteractiveTestSuite i
 			URL url = QommonsConfig.toUrl(theGlobalConfigLocation);
 			try {
 				ObservableConfig.readXml(config, url.openStream(), XmlEncoding.DEFAULT);
-			} catch (SAXException e) {
+			} catch (TextParseException e) {
 				throw new IOException("Could not parse " + url.getFile(), e);
 			}
 		}

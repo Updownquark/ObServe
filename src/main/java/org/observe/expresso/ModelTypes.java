@@ -420,14 +420,16 @@ public class ModelTypes {
 			public ObservableValue<String> isEnabled() {
 				if (theSatisfied != null)
 					return theSatisfied.isEnabled();
-				else if (theEnabled != null)
-					return (ObservableValue<String>) theEnabled;
+				HollowModelValue<SettableValue<?>, SettableValue<String>> enabled=theEnabled;
+				if (enabled != null)
+					return (ObservableValue<String>) enabled;
 				synchronized (this) {
 					if (theSatisfied != null)
 						return theSatisfied.isEnabled();
-					else if (theEnabled == null)
-						theEnabled = Value.createHollowValue(theName + ".enabled", Value.STRING);
-					return (ObservableValue<String>) theEnabled;
+					enabled=theEnabled;
+					if (enabled == null)
+						theEnabled =enabled= Value.createHollowValue(theName + ".enabled", Value.STRING);
+					return (ObservableValue<String>) enabled;
 				}
 			}
 

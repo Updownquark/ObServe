@@ -983,13 +983,15 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 
 		@Override
 		public ObservableValue<String> isEnabled() {
-			if (isEnabled == null) {
+			ObservableValue<String> enabled = isEnabled;
+			if (enabled == null) {
 				synchronized (this) {
-					if (isEnabled == null)
-						isEnabled = getWrapped().isEnabled().safe(getThreadConstraint(), theUntil);
+					enabled = isEnabled;
+					if (enabled == null)
+						isEnabled = enabled = getWrapped().isEnabled().safe(getThreadConstraint(), theUntil);
 				}
 			}
-			return isEnabled;
+			return enabled;
 		}
 	}
 

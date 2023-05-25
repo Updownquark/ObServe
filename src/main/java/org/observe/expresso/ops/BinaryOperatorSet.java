@@ -830,19 +830,43 @@ public class BinaryOperatorSet {
 		operators.withFloatArithmeticOp("-", (s1, s2) -> unwrapF(s1) - unwrapF(s2), (s, s2, v) -> unwrapF(v) + unwrapF(s2), null);
 		operators.withDoubleArithmeticOp("-", (s1, s2) -> unwrapD(s1) - unwrapD(s2), (s, s2, v) -> unwrapD(v) + unwrapD(s2), null);
 
-		operators.withIntArithmeticOp("*", (s1, s2) -> unwrapI(s1) * unwrapI(s2), (s, s2, v) -> unwrapI(v) / unwrapI(s2), null);
-		operators.withLongArithmeticOp("*", (s1, s2) -> unwrapL(s1) * unwrapL(s2), (s, s2, v) -> unwrapL(v) / unwrapL(s2), null);
+		operators.withIntArithmeticOp("*", (s1, s2) -> unwrapI(s1) * unwrapI(s2), (s, s2, v) -> {
+			int num = unwrapI(v);
+			int den = unwrapI(s2);
+			return den == 0 ? num : num / den;
+		}, null);
+		operators.withLongArithmeticOp("*", (s1, s2) -> unwrapL(s1) * unwrapL(s2), (s, s2, v) -> {
+			long num = unwrapI(v);
+			long den = unwrapI(s2);
+			return den == 0 ? num : num / den;
+		}, null);
 		operators.withFloatArithmeticOp("*", (s1, s2) -> unwrapF(s1) * unwrapF(s2), (s, s2, v) -> unwrapF(v) / unwrapF(s2), null);
 		operators.withDoubleArithmeticOp("*", (s1, s2) -> unwrapD(s1) * unwrapD(s2), (s, s2, v) -> unwrapD(v) / unwrapD(s2), null);
 
-		operators.withIntArithmeticOp("/", (s1, s2) -> unwrapI(s1) / unwrapI(s2), (s, s2, v) -> unwrapI(v) * unwrapI(s2), null);
-		operators.withLongArithmeticOp("/", (s1, s2) -> unwrapL(s1) / unwrapL(s2), (s, s2, v) -> unwrapL(v) * unwrapL(s2), null);
+		operators.withIntArithmeticOp("/", (s1, s2) -> {
+			int num = unwrapI(s1);
+			int den = unwrapI(s2);
+			return den == 0 ? num : num / den;
+		}, (s, s2, v) -> unwrapI(v) * unwrapI(s2), null);
+		operators.withLongArithmeticOp("/", (s1, s2) -> {
+			long num = unwrapI(s1);
+			long den = unwrapI(s2);
+			return den == 0 ? num : num / den;
+		}, (s, s2, v) -> unwrapL(v) * unwrapL(s2), null);
 		operators.withFloatArithmeticOp("/", (s1, s2) -> unwrapF(s1) / unwrapF(s2), (s, s2, v) -> unwrapF(v) * unwrapF(s2), null);
 		operators.withDoubleArithmeticOp("/", (s1, s2) -> unwrapD(s1) / unwrapD(s2), (s, s2, v) -> unwrapD(v) * unwrapD(s2), null);
 
-		operators.withIntArithmeticOp("%", (s1, s2) -> unwrapI(s1) % unwrapI(s2), (s, s2, v) -> unwrapI(v), //
+		operators.withIntArithmeticOp("%", (s1, s2) -> {
+			int num = unwrapI(s1);
+			int den = unwrapI(s2);
+			return den == 0 ? num : num % den;
+		}, (s, s2, v) -> unwrapI(v), //
 			(s, s2, v) -> Math.abs(unwrapI(v)) >= Math.abs(unwrapI(s2)) ? "Cannot set a modulus to less than the divisor" : null);
-		operators.withLongArithmeticOp("%", (s1, s2) -> unwrapL(s1) % unwrapL(s2), (s, s2, v) -> unwrapL(v) * unwrapL(s2), //
+		operators.withLongArithmeticOp("%", (s1, s2) -> {
+			long num = unwrapI(s1);
+			long den = unwrapI(s2);
+			return den == 0 ? num : num % den;
+		}, (s, s2, v) -> unwrapL(v) * unwrapL(s2), //
 			(s, s2, v) -> Math.abs(unwrapL(v)) >= Math.abs(unwrapL(s2)) ? "Cannot set a modulus to less than the divisor" : null);
 		operators.withFloatArithmeticOp("%", (s1, s2) -> unwrapF(s1) % unwrapF(s2), (s, s2, v) -> unwrapF(v) * unwrapF(s2), //
 			(s, s2, v) -> Math.abs(unwrapF(v)) >= Math.abs(unwrapF(s2)) ? "Cannot set a modulus to less than the divisor" : null);

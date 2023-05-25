@@ -211,9 +211,23 @@ public class TypeTokens implements TypeParser {
 		Type getType(String typeName);
 	}
 
+	/**
+	 * Adds the ability for {@link TypeTokens#getCast(TypeToken, TypeToken)} to cast one type to another
+	 *
+	 * @param <S> The type to cast from
+	 * @param <T> The type to cast to
+	 */
 	public interface SupplementaryCast<S, T> {
+		/**
+		 * @param sourceType The source type to cast
+		 * @return The result type that this cast will produce from the given source type
+		 */
 		TypeToken<? extends T> getCastType(TypeToken<? extends S> sourceType);
 
+		/**
+		 * @param source The source value to cast
+		 * @return The cast value
+		 */
 		T cast(S source);
 	}
 
@@ -351,11 +365,27 @@ public class TypeTokens implements TypeParser {
 		return theParser.removeTypeRetriever(typeRetriever);
 	}
 
+	/**
+	 * Adds the ability for {@link #getCast(TypeToken, TypeToken)} to cast from one type to another
+	 *
+	 * @param <S> The type to cast from
+	 * @param <T> The type to cast to
+	 * @param sourceType The type to cast from
+	 * @param targetType The type to cast to
+	 * @param cast The cast to perform the cast operation
+	 * @return This TypeTokens
+	 */
 	public <S, T> TypeTokens addSupplementaryCast(Class<S> sourceType, Class<T> targetType, SupplementaryCast<S, T> cast) {
 		theSupplementaryCasts.computeIfAbsent(targetType, ClassMap::new).put(sourceType, cast);
 		return this;
 	}
 
+	/**
+	 * @param sourceType The source type
+	 * @param targetType The target type
+	 * @param cast The cast to remove
+	 * @return Whether the cast was found and removed for the given source/target type pair
+	 */
 	public boolean removeSupplementaryCast(Class<?> sourceType, Class<?> targetType, SupplementaryCast<?, ?> cast) {
 		ClassMap<SupplementaryCast<?, ?>> srcCasts = theSupplementaryCasts.get(targetType, ClassMap.TypeMatch.EXACT);
 		boolean[] match = new boolean[1];

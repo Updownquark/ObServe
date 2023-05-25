@@ -443,7 +443,9 @@ public interface OperationResult<T> {
 						while (wrapped == null) {
 							try {
 								WrapperResult.this.wait();
-							} catch (InterruptedException e) {}
+							} catch (InterruptedException e) {
+								Thread.currentThread().interrupt();
+							}
 							wrapped = theWrapped;
 						}
 						return wrapped.watchStatus().lock();
