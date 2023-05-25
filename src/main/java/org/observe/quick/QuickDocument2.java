@@ -41,8 +41,10 @@ public class QuickDocument2 extends QuickElement.Abstract {
 		public void update(ExpressoQIS session) throws QonfigInterpretationException {
 			super.update(session);
 			theHead = QuickElement.useOrReplace(QuickHeadSection.Def.class, theHead, session, "head");
-			if (theHead != null)
+			if (theHead != null) {
 				session.setExpressoEnv(session.getExpressoEnv().with(theHead.getModels(), theHead.getClassView()));
+				session.as(StyleQIS.class).setStyleSheet(theHead.getStyleSheet());
+			}
 			theBody = QuickElement.useOrReplace(QuickWidget.Def.class, theBody, session, "body");
 		}
 

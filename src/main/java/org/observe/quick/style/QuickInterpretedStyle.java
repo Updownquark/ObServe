@@ -248,12 +248,18 @@ public interface QuickInterpretedStyle {
 				values[theValues.size()] = ObservableValue.of(new ConditionalValue<>(true, value));
 			}
 			ConditionalValue<T> defaultCV = new ConditionalValue<>(true, null);
-			ObservableValue<ConditionalValue<T>> conditionalValue = ObservableValue.firstValue(
-				(TypeToken<ConditionalValue<T>>) (TypeToken<?>) TypeTokens.get().of(ConditionalValue.class), //
-				LambdaUtils.printablePred(cv -> cv.pass, "pass", null), //
-				LambdaUtils.printableSupplier(() -> defaultCV, () -> "null", null), values);
-			return ObservableValue
-				.flatten(conditionalValue.map(LambdaUtils.printableFn(cv -> cv.value, "value", null)));
+			TypeToken<ConditionalValue<T>> cvType = (TypeToken<ConditionalValue<T>>) (TypeToken<?>) TypeTokens.get()
+				.of(ConditionalValue.class);
+			ObservableValue<ConditionalValue<T>> conditionalValue;
+			if (values.length == 0)
+				conditionalValue = ObservableValue.of(cvType, defaultCV);
+			else if (values.length == 1)
+				conditionalValue = values[0].map(LambdaUtils.printableFn(cv -> cv.pass ? cv : defaultCV, "passOrNull", null));
+			else
+				conditionalValue = ObservableValue.firstValue(cvType, //
+					LambdaUtils.printablePred(cv -> cv.pass, "pass", null), //
+					LambdaUtils.printableSupplier(() -> defaultCV, () -> "null", null), values);
+			return ObservableValue.flatten(conditionalValue.map(LambdaUtils.printableFn(cv -> cv.value, "value", null)));
 		}
 
 		private static class ConditionalValue<T> {

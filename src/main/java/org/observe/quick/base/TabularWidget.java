@@ -209,6 +209,10 @@ public interface TabularWidget<R> extends MultiValueWidget<R>, RowTyped<R> {
 		}
 	}
 
+	TypeToken<R> getRowType();
+
+	String getValueName();
+
 	void setContext(TabularContext<R> ctx) throws ModelInstantiationException;
 
 	ObservableCollection<QuickTableColumn.TableColumnSet<R>> getColumnSets();
@@ -254,10 +258,12 @@ public interface TabularWidget<R> extends MultiValueWidget<R>, RowTyped<R> {
 			return theColumns.flow().unmodifiable(false).collect();
 		}
 
+		@Override
 		public TypeToken<R> getRowType() {
 			return theRowType;
 		}
 
+		@Override
 		public String getValueName() {
 			return theValueName;
 		}
@@ -281,9 +287,9 @@ public interface TabularWidget<R> extends MultiValueWidget<R>, RowTyped<R> {
 			TabularWidget.Interpreted<R, ?> myInterpreted = (TabularWidget.Interpreted<R, ?>) interpreted;
 			theValueName = myInterpreted.getDefinition().getValueName();
 			satisfyContextValue(theValueName, ModelTypes.Value.forType(theRowType), SettableValue.flatten(theRenderValue), myModels);
-			satisfyContextValue("selected", ModelTypes.Value.BOOLEAN, SettableValue.flatten(isSelected), myModels);
-			satisfyContextValue("rowIndex", ModelTypes.Value.INT, SettableValue.flatten(theRowIndex), myModels);
-			satisfyContextValue("columnIndex", ModelTypes.Value.INT, SettableValue.flatten(theColumnIndex), myModels);
+			satisfyContextValue("selected", ModelTypes.Value.BOOLEAN, SettableValue.flatten(isSelected, () -> false), myModels);
+			satisfyContextValue("rowIndex", ModelTypes.Value.INT, SettableValue.flatten(theRowIndex, () -> 0), myModels);
+			satisfyContextValue("columnIndex", ModelTypes.Value.INT, SettableValue.flatten(theColumnIndex, () -> 0), myModels);
 			CollectionUtils.synchronize(theColumnSets, myInterpreted.getColumns(), (v, i) -> v.getId() == i.getId())//
 			.adjust(
 				new CollectionUtils.CollectionSynchronizerE<QuickTableColumn.TableColumnSet<R>, QuickTableColumn.TableColumnSet.Interpreted<R, ?>, ModelInstantiationException>() {

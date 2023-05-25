@@ -184,7 +184,7 @@ public interface QuickCompiledStyle {
 		@Override
 		public String toString() {
 			StringBuilder str = new StringBuilder();
-			str.append(theElement.getType().getName() + " style:");
+			str.append(theElement.getType().getName()).append(" style:");
 			for (CompiledStyleValue<?> value : theDeclaredValues)
 				str.append("\n\t").append(value);
 			return str.toString();

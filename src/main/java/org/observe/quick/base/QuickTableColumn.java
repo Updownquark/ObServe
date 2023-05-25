@@ -1,5 +1,11 @@
 package org.observe.quick.base;
 
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.Set;
+
 import org.observe.ObservableAction;
 import org.observe.SettableValue;
 import org.observe.collect.ObservableCollection;
@@ -10,6 +16,7 @@ import org.observe.expresso.ExpressoQIS;
 import org.observe.expresso.ModelException;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
+import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
@@ -50,6 +57,9 @@ public interface QuickTableColumn<R, C> {
 
 			CC create(QuickElement parent);
 		}
+
+		@Override
+		TabularWidget<R> getParentElement();
 
 		TypeToken<R> getRowType();
 
@@ -294,13 +304,6 @@ public interface QuickTableColumn<R, C> {
 		}
 
 		@Override
-		protected ModelSetInstance createElementModel(QuickElement.Interpreted<?> interpreted, ModelSetInstance parentModels)
-			throws ModelInstantiationException {
-			// The context values in the editor's models need to be independent from the render models
-			return super.createElementModel(interpreted, parentModels).copy().build();
-		}
-
-		@Override
 		protected void updateModel(QuickElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
 			super.updateModel(interpreted, myModels);
 			ColumnEditing.Interpreted<R, C> myInterpreted = (ColumnEditing.Interpreted<R, C>) interpreted;
@@ -313,11 +316,13 @@ public interface QuickTableColumn<R, C> {
 				theEditor = null;
 			else if (theEditor == null || theEditor.getId() != myInterpreted.getEditor())
 				theEditor = myInterpreted.getEditor().create(this);
-			theValueName = null;
+			theValueName = getParentElement().getParentElement().getValueName();
 			QuickElement.satisfyContextValue(theColumnEditValueName, ModelTypes.Value.forType(myInterpreted.getColumnType()),
 				SettableValue.flatten(theEditColumnValue), myModels, this);
 			if (theEditor != null) {
-				ModelSetInstance editorModels = theEditor.update(myInterpreted.getEditor(), myModels);
+				Set<String> lookingForValues = new HashSet<>(Arrays.asList(theValueName, "rowIndex", "columnIndex", "selected"));
+				ModelSetInstance editorModels = createEditorModels(myModels.copy(), lookingForValues);
+				editorModels = theEditor.update(myInterpreted.getEditor(), editorModels);
 				if (theValueName != null)
 					QuickElement.satisfyContextValue(theValueName, ModelTypes.Value.forType(myInterpreted.getColumnType()),
 						SettableValue.flatten(theEditColumnValue), editorModels, theEditor);
@@ -335,6 +340,33 @@ public interface QuickTableColumn<R, C> {
 				if (parent != null)
 					theValueName = ((MultiValueWidget.Interpreted<?, ?>) parent).getDefinition().getValueName();
 			}
+		}
+
+		protected ModelSetInstance createEditorModels(ObservableModelSet.ModelSetInstanceBuilder editingModels,
+			Set<String> lookingForValues) throws ModelInstantiationException {
+			if (!lookingForValues.isEmpty()) {
+				for (Map.Entry<ObservableModelSet.ModelComponentId, ? extends InterpretedModelSet> inh : editingModels.getModel()
+					.getInheritance().entrySet()) {
+					if (!lookingForValues.isEmpty() && hasAny(inh.getValue(), lookingForValues))
+						editingModels.withAll(createEditorModels(editingModels.getInherited(inh.getKey()).copy(), lookingForValues));
+				}
+			}
+			return editingModels.build();
+		}
+
+		private boolean hasAny(InterpretedModelSet model, Set<String> lookingForValues) {
+			boolean anyFound = false;
+			Iterator<String> lfvIter = lookingForValues.iterator();
+			while (lfvIter.hasNext()) {
+				String lfv = lfvIter.next();
+				ObservableModelSet.InterpretedModelComponentNode<?, ?> component = model.getComponentIfExists(lfv);
+				if (component != null) {
+					anyFound = true;
+					if (component.getIdentity().getOwnerId().equals(model.getIdentity()))
+						lfvIter.remove(); // No need to copy further for this value
+				}
+			}
+			return anyFound;
 		}
 	}
 
@@ -697,7 +729,7 @@ public interface QuickTableColumn<R, C> {
 
 			@Override
 			public SingleColumnSet<R, C> create(QuickElement parent) {
-				return new SingleColumnSet<>(this, parent);
+				return new SingleColumnSet<>(this, (TabularWidget<R>) parent);
 			}
 		}
 
@@ -711,7 +743,7 @@ public interface QuickTableColumn<R, C> {
 		private QuickWidget theRenderer;
 		private ColumnEditing<R, C> theEditing;
 
-		public SingleColumnSet(Interpreted<R, C> interpreted, QuickElement parent) {
+		public SingleColumnSet(Interpreted<R, C> interpreted, TabularWidget<R> parent) {
 			super(interpreted, parent);
 			theName = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<String>> parameterized(String.class))
 				.build();
@@ -722,6 +754,11 @@ public interface QuickTableColumn<R, C> {
 			theColumn = ObservableCollection.of((Class<SingleColumnSet<R, C>.SingleColumn>) (Class<?>) SingleColumn.class,
 				new SingleColumn());
 			theHeaderTooltip = SettableValue.build(theName.getType()).build();
+		}
+
+		@Override
+		public TabularWidget<R> getParentElement() {
+			return (TabularWidget<R>) super.getParentElement();
 		}
 
 		@Override

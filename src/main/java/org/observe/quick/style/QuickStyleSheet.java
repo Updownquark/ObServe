@@ -83,6 +83,16 @@ public class QuickStyleSheet {
 		for (QuickStyleValue<?> ssv : theValues) {
 			if (ssv.getApplication().applies(element))
 				values.add(ssv);
+			else if (ssv.isTrickleDown()) {
+				QonfigElement parent = element.getParent();
+				while (parent != null && !parent.isInstance(ssv.getAttribute().getDeclarer().getElement())) {
+					if (ssv.getApplication().applies(parent)) {
+						values.add(ssv);
+						break;
+					}
+					parent = parent.getParent();
+				}
+			}
 		}
 		for (QuickStyleSheet imported : theImportedStyleSheets.values()) {
 			values.addAll(imported.getValues(element));

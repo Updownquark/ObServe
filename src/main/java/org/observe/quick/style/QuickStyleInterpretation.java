@@ -4,6 +4,7 @@ import java.io.BufferedInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
+import java.text.ParseException;
 import java.util.AbstractList;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -258,8 +259,80 @@ public class QuickStyleInterpretation implements QonfigInterpretation {
 					attrName.position == null ? null : new LocatedFilePosition(attrName.fileLocation, attrName.position.getPosition(0)),
 						attrName.text.length());
 
+			int dot = attrName.text.indexOf('.');
 			Set<QuickStyleAttribute<?>> attrs = new HashSet<>();
-			if (element != null) {
+			if (dot >= 0) { // Type-qualified
+				QonfigElementOrAddOn type;
+				int colon = attrName.text.indexOf(':');
+				if (colon >= 0 && colon < dot) { // Toolkit-qualified
+					ToolkitSpec spec;
+					try {
+						spec = ToolkitSpec.parse(attrName.text.substring(0, colon));
+					} catch (ParseException e) {
+						throw new QonfigInterpretationException(
+							"To qualify an attribute name with a toolkit, use the form 'ToolkitName v1.2:element-name.attr-name",
+							new LocatedFilePosition(attrName.fileLocation, attrName.position.getPosition(0)), colon, e);
+					}
+					QonfigToolkit toolkit = null;
+					for (QonfigToolkit tk : session.getWrapped().getInterpreter().getKnownToolkits()) {
+						QonfigToolkit found = spec.find(tk);
+						if (found != null) {
+							if (toolkit != null && found != toolkit)
+								throw new QonfigInterpretationException("Multiple toolkits found matching " + spec,
+									new LocatedFilePosition(attrName.fileLocation, attrName.position.getPosition(0)), colon);
+							toolkit = found;
+						}
+					}
+					if (toolkit == null)
+						throw new QonfigInterpretationException("No loaded toolkits found matching " + spec,
+							new LocatedFilePosition(attrName.fileLocation, attrName.position.getPosition(0)), colon);
+					String typeName = attrName.text.substring(colon + 1, dot);
+					try {
+						type = toolkit.getElementOrAddOn(typeName);
+					} catch (IllegalArgumentException e) {
+						throw new QonfigInterpretationException(e.getMessage(),
+							new LocatedFilePosition(attrName.fileLocation, attrName.position.getPosition(colon + 1)), typeName.length(), e);
+					}
+					if (type == null)
+						throw new QonfigInterpretationException("No such element or add-on '" + typeName + "' found in toolkit " + toolkit,
+							new LocatedFilePosition(attrName.fileLocation, attrName.position.getPosition(colon + 1)), typeName.length());
+				} else {
+					String typeName = attrName.text.substring(0, dot);
+					type = null;
+					for (QonfigToolkit tk : session.getWrapped().getInterpreter().getKnownToolkits()) {
+						QonfigElementOrAddOn found;
+						try {
+							found = tk.getElementOrAddOn(typeName);
+						} catch (IllegalArgumentException e) {
+							throw new QonfigInterpretationException(e.getMessage(),
+								new LocatedFilePosition(attrName.fileLocation, attrName.position.getPosition(0)), typeName.length(), e);
+						}
+						if (found != null) {
+							if (type != null && type != found)
+								throw new QonfigInterpretationException(
+									"Multiple elements/add-ons named '" + typeName + "' found in loaded toolkits",
+									new LocatedFilePosition(attrName.fileLocation, attrName.position.getPosition(0)), typeName.length());
+							type = found;
+						}
+					}
+					if (type == null)
+						throw new QonfigInterpretationException("No such element or add-on '" + typeName + "' found in loaded toolkits",
+							new LocatedFilePosition(attrName.fileLocation, attrName.position.getPosition(colon + 1)), typeName.length());
+				}
+				QuickTypeStyle styled = session.getStyleSet().getOrCompile(type, session, theToolkit);
+				if (styled == null)
+					throw new QonfigInterpretationException("Element '" + attrName.text.substring(0, dot) + "' is not styled",
+						new LocatedFilePosition(attrName.fileLocation, attrName.position.getPosition(0)), dot);
+				attrs.addAll(styled.getAttributes(attrName.text.substring(dot + 1)));
+				if (attrs.isEmpty())
+					throw new QonfigInterpretationException("No such style attribute: " + attrName, //
+						attrName.position == null ? null : new LocatedFilePosition(attrName.fileLocation, attrName.position.getPosition(0)),
+							attrName.text.length());
+				else if (attrs.size() > 1)
+					throw new QonfigInterpretationException("Multiple style attributes found matching " + attrName, //
+						attrName.position == null ? null : new LocatedFilePosition(attrName.fileLocation, attrName.position.getPosition(0)),
+							attrName.text.length());
+			} else if (element != null) {
 				QuickTypeStyle styled = session.getStyleSet().getOrCompile(element.getType(), exS, theToolkit);
 				if (styled != null)
 					attrs.addAll(session.getStyleSet().getOrCompile(element.getType(), exS, theToolkit).getAttributes(attrName.text));
@@ -438,5 +511,81 @@ public class QuickStyleInterpretation implements QonfigInterpretation {
 			sse++;
 		}
 		return styleSheet;
+	}
+
+	private static class ToolkitSpec {
+		final String name;
+		final int major;
+		final int minor;
+
+		ToolkitSpec(String name, int major, int minor) {
+			this.name = name;
+			this.major = major;
+			this.minor = minor;
+		}
+
+		QonfigToolkit find(QonfigToolkit toolkit) {
+			if (name.equals(toolkit.getName())//
+				&& (major < 0 || major == toolkit.getMajorVersion())//
+				&& (minor < 0 || minor == toolkit.getMinorVersion()))
+				return toolkit;
+			for (QonfigToolkit dep : toolkit.getDependencies().values()) {
+				QonfigToolkit found = find(dep);
+				if (found != null)
+					return found;
+			}
+			return null;
+		}
+
+		public static ToolkitSpec parse(CharSequence text) throws ParseException {
+			int space = -1;
+			for (int c = 0; c < text.length(); c++) {
+				if (Character.isWhitespace(text.charAt(c))) {
+					space = c;
+					break;
+				}
+			}
+			if (space < 0)
+				return new ToolkitSpec(text.toString(), -1, -1);
+
+			String name = text.subSequence(0, space).toString();
+			int start = space + 1;
+			while (start < text.length() && Character.isWhitespace(text.charAt(start)))
+				start++;
+			if (start < text.length() && (text.charAt(start) == 'v' || text.charAt(start) == 'V'))
+				start++;
+			if (start == text.length())
+				throw new ParseException(
+					"When specifying a toolkit-qualified style attribute, either have no spaces or the space should separate the toolkit name from its version",
+					name.length());
+			int major = 0;
+			int majorStart = start;
+			while (start < text.length() && text.charAt(start) >= '0' && text.charAt(start) <= '9') {
+				major = major * 10 + text.charAt(start) - '0';
+				if (major < 0)
+					throw new ParseException("Major version is too large", majorStart);
+			}
+			if (start == majorStart)
+				throw new ParseException("Major version expected", majorStart);
+			if (start == text.length())
+				return new ToolkitSpec(name, major, -1);
+			if (text.charAt(start) != '.')
+				throw new ParseException("'.' separator expected between major an minor versions", start);
+			start++;
+			int minor = 0;
+			int minorStart = start;
+			while (start < text.length() && text.charAt(start) >= '0' && text.charAt(start) <= '9') {
+				minor = minor * 10 + text.charAt(start) - '0';
+				if (major < 0)
+					throw new ParseException("Minor version is too large", minorStart);
+			}
+			if (start == minorStart)
+				throw new ParseException("Minor version expected", minorStart);
+			while (start < text.length() && Character.isWhitespace(text.charAt(start)))
+				start++;
+			if (start != text.length())
+				throw new ParseException("Extra information prohibited after version specification", start);
+			return new ToolkitSpec(name, major, minor);
+		}
 	}
 }

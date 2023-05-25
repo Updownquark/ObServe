@@ -9,6 +9,7 @@ import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet.CompiledModelValue;
 import org.qommons.StringUtils;
+import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
 /**
@@ -21,6 +22,7 @@ public class QuickStyleValue<T> implements Comparable<QuickStyleValue<?>> {
 	private final StyleApplicationDef theApplication;
 	private final QuickStyleAttribute<T> theAttribute;
 	private final LocatedExpression theValueExpression;
+	private final boolean isTrickleDown;
 
 	/**
 	 * @param styleSheet The style sheet that defined this value
@@ -38,6 +40,18 @@ public class QuickStyleValue<T> implements Comparable<QuickStyleValue<?>> {
 		theApplication = application;
 		theAttribute = attribute;
 		theValueExpression = value;
+		boolean styleAppliesToApp = false;
+		if (application.getRole() != null && application.getRole().getType() != null
+			&& attribute.getDeclarer().getElement().isAssignableFrom(application.getRole().getType()))
+			styleAppliesToApp = true;
+		else {
+			for (QonfigElementOrAddOn type : application.getTypes().values()) {
+				styleAppliesToApp = attribute.getDeclarer().getElement().isAssignableFrom(type);
+				if (styleAppliesToApp)
+					break;
+			}
+		}
+		isTrickleDown = !styleAppliesToApp;
 	}
 
 	/** @return The style sheet that defined this value */
@@ -62,6 +76,23 @@ public class QuickStyleValue<T> implements Comparable<QuickStyleValue<?>> {
 	/** @return The expression defining this style value's value */
 	public LocatedExpression getValueExpression() {
 		return theValueExpression;
+	}
+
+	/**
+	 * <p>
+	 * It is possible to specify style attributes from style sheets against types that the attribute is not declared by. In this case, the
+	 * style should apply to the highest-level descendants that the attribute applies to, under those elements which match the style.
+	 * </p>
+	 * <p>
+	 * E.g. one could specify a style for widget color against a table column. A table column is not a widget. Therefore, clearly the intent
+	 * is to apply the style to apply the color style against all the widgets belonging to the column, i.e. renderers and editors.
+	 * </p>
+	 *
+	 * @return Whether this style value should apply to the highest-level descendants that the attribute applies to of elements which match
+	 *         the application
+	 */
+	public boolean isTrickleDown() {
+		return isTrickleDown;
 	}
 
 	/**

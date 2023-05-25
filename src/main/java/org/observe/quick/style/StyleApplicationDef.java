@@ -195,9 +195,7 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 				if (node.getValueIdentity() instanceof DynamicModelValue.Identity)
 					modelValues.add((DynamicModelValue.Identity) node.getValueIdentity());
 			} else if (styleSheet) {
-				Map<String, DynamicModelValue.Identity> typeValues = null;
-				for (QonfigElementOrAddOn type : theTypes.values())
-					typeValues = dmvCache.getDynamicValues(expresso, type, typeValues);
+				Map<String, DynamicModelValue.Identity> typeValues = getTypeValues(dmvCache, expresso, null);
 				DynamicModelValue.Identity mv = typeValues == null ? null : typeValues.get(name);
 				if (mv != null) {
 					if (mv.getType() == null)
@@ -228,6 +226,17 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 			}
 		}
 		return ex;
+	}
+
+	private Map<String, DynamicModelValue.Identity> getTypeValues(DynamicModelValue.Cache dmvCache, QonfigToolkit expresso,
+		Map<String, DynamicModelValue.Identity> values) {
+		for (QonfigElementOrAddOn type : theTypes.values())
+			values = dmvCache.getDynamicValues(expresso, type, values);
+		if (theRole != null && theRole.getType() != null)
+			values = dmvCache.getDynamicValues(expresso, theRole.getType(), values);
+		if (theParent != null)
+			values = theParent.getTypeValues(dmvCache, expresso, values);
+		return values;
 	}
 
 	/** Replacement expression for a {@link DynamicModelValue} in a spreadsheet condition */
@@ -294,7 +303,8 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 			try {
 				node = env.getModels().getIdentifiedValue(theModelValue);
 			} catch (ModelException e) {
-				throw new ExpressoEvaluationException(expressionOffset, theModelValue.getName().length(), "No such model value found", e);
+				throw new ExpressoEvaluationException(expressionOffset, theModelValue.getName().length(),
+					"No such model value found: '" + theModelValue.getName() + "'", e);
 			}
 			try {
 				return node.as(type);
@@ -400,10 +410,8 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 
 	@Override
 	public int compareTo(StyleApplicationDef o) {
-		int comp = 0;
 		// Compare the complexity of the role path
-		if (comp == 0)
-			comp = -Integer.compare(getDepth(), o.getDepth());
+		int comp = -Integer.compare(getDepth(), o.getDepth());
 
 		// Compare the complexity of the element type
 		if (comp == 0)
@@ -527,6 +535,11 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 				return new LocatedFilePosition("StyleApplicationDef.java", 0, 0, 0);
 			else
 				return theRight.getFilePosition(offset - theLeft.length() - 4);
+		}
+
+		@Override
+		public String toString() {
+			return theLeft + " && " + theRight;
 		}
 	}
 

@@ -35,6 +35,9 @@
 				<hook name="hook" on="valueSize">System.out.println(valueSize+" values")</hook>
 			</model>
 		</models>
+		<style-sheet>
+			<import-style-sheet name="tests" ref="quick-tests.qss" />
+		</style-sheet>
 	</head>
 	<box layout="inline-layout" orientation="vertical" cross-align="justify">
 		<table rows="app.values" name="Simple Table" selection="app.selected" multi-selection="app.allSelected">
@@ -46,9 +49,7 @@
 				</style>
 			</titled-border>
 			<column name="`Value`" value="value">
-				<label value="columnValue">
-					<style attr="color" condition="rowIndex % 2 == 1">`light-gray`</style>
-				</label>
+				<label value="columnValue" />
 				<column-edit type="replace-row-value" replacement="columnEditValue">
 					<text-field />
 				</column-edit>
@@ -56,17 +57,17 @@
 			<column name="`Prime`" value="app.primes.factorize(value, 100_000).size()==1" column-value-name="prime"
 				header-tooltip="`Whether the value is prime`">
 				<check-box value="prime" tooltip="prime ? `Prime` : `Not Prime`">
-					<style attr="color" condition="rowIndex % 2 == 1">`light-gray`</style>
-					<style attr="color" condition="hovered">`red`</style>
-					<style attr="color" condition="focused">`teal`</style>
-					<style attr="color" condition="focused &amp;&amp; hovered">`purple`</style>
+					<style attr="color">
+						<style condition="hovered">`red`</style>
+						<style condition="focused">`teal`</style>
+						<style condition="focused &amp;&amp; hovered">`purple`</style>
+					</style>
 					<on-type>System.out.println("Typed "+typedChar)</on-type>
 				</check-box>
 			</column>
 			<column name="`Factorization`" value="org.qommons.Primes.formatFactorization(app.primes.factorize(value, 100_000))"
 				header-tooltip="&quot;The prime factors of each of the &quot;+app.valueSize+&quot; values&quot;">
 				<label value="columnValue">
-					<style attr="color" condition="rowIndex % 2 == 1">`light-gray`</style>
 					<style attr="color" condition="hovered">`aqua`</style>
 					<style attr="font-weight" condition="rightPressed">`bold`</style>
 				</label>
