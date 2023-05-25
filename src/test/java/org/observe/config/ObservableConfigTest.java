@@ -10,6 +10,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 
+import org.hamcrest.MatcherAssert;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -25,6 +26,7 @@ import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.FastFailLockingStrategy;
+import org.qommons.io.TextParseException;
 import org.qommons.tree.BetterTreeList;
 import org.xml.sax.SAXException;
 
@@ -46,15 +48,15 @@ public class ObservableConfigTest {
 	 * Simple persistence test
 	 *
 	 * @throws IOException Should not happen
-	 * @throws SAXException Should not happen
+	 * @throws TextParseException Should not happen
 	 */
 	@Test
-	public void testXml1() throws IOException, SAXException {
+	public void testXml1() throws IOException, TextParseException {
 		readXml(getClass().getResourceAsStream("TestXml1.xml"));
 		checkXml1();
 	}
 
-	private void readXml(InputStream in) throws IOException, SAXException {
+	private void readXml(InputStream in) throws IOException, TextParseException {
 		ObservableConfig.readXml(theConfig, in, theEncoding);
 	}
 
@@ -71,16 +73,16 @@ public class ObservableConfigTest {
 	 * Slightly larger persistence test
 	 *
 	 * @throws IOException Should not happen
-	 * @throws SAXException Should not happen
+	 * @throws TextParseException Should not happen
 	 */
 	@Test
-	public void testXmlPersistence() throws IOException, SAXException {
+	public void testXmlPersistence() throws IOException, TextParseException {
 		readXml(getClass().getResourceAsStream("TestXml1.xml"));
 		writeClearAndParse(null);
 		testXml1();
 	}
 
-	private void writeClearAndParse(Runnable beforeParse) throws IOException, SAXException {
+	private void writeClearAndParse(Runnable beforeParse) throws IOException, TextParseException {
 		StringWriter writer = new StringWriter();
 		ObservableConfig.writeXml(theConfig, writer, theEncoding, "\t");
 		theConfig.getAllContent().getValues().clear();
@@ -94,10 +96,10 @@ public class ObservableConfigTest {
 	 * Tests {@link ObservableConfig#asValue(TypeToken)}
 	 *
 	 * @throws IOException Should not happen
-	 * @throws SAXException Should not happen
+	 * @throws TextParseException Should not happen
 	 */
 	@Test
-	public void testValues() throws IOException, SAXException {
+	public void testValues() throws IOException, TextParseException {
 		SimpleObservable<Void> until = new SimpleObservable<>();
 		readXml(getClass().getResourceAsStream("TestValues.xml"));
 
@@ -166,10 +168,10 @@ public class ObservableConfigTest {
 	 * Simple, read-only test against config-backed entities
 	 *
 	 * @throws IOException Should not happen
-	 * @throws SAXException Should not happen
+	 * @throws TextParseException Should not happen
 	 */
 	@Test
-	public void testReadOnlySimpleEntities() throws IOException, SAXException {
+	public void testReadOnlySimpleEntities() throws IOException, TextParseException {
 		testSimpleEntities(false);
 	}
 
@@ -177,14 +179,14 @@ public class ObservableConfigTest {
 	 * Simple, test against config-backed entities, with modification
 	 *
 	 * @throws IOException Should not happen
-	 * @throws SAXException Should not happen
+	 * @throws TextParseException Should not happen
 	 */
 	@Test
-	public void testModifySimpleEntities() throws IOException, SAXException {
+	public void testModifySimpleEntities() throws IOException, TextParseException {
 		testSimpleEntities(true);
 	}
 
-	private void testSimpleEntities(boolean withModification) throws IOException, SAXException {
+	private void testSimpleEntities(boolean withModification) throws IOException, TextParseException {
 		SimpleObservable<Void> until = new SimpleObservable<>();
 		readXml(getClass().getResourceAsStream("TestValues.xml"));
 		SyncValueSet<TestEntity> testEntities = theConfig.asValue(TestEntity.class).at("test-entities/test-entity").until(until)
@@ -317,10 +319,10 @@ public class ObservableConfigTest {
 	 * Test against complex config-backed entities
 	 *
 	 * @throws IOException Should not happen
-	 * @throws SAXException Should not happen
+	 * @throws TextParseException Should not happen
 	 */
 	@Test
-	public void testComplexEntities() throws IOException, SAXException {
+	public void testComplexEntities() throws IOException, TextParseException {
 		SimpleObservable<Void> until = new SimpleObservable<>();
 		readXml(getClass().getResourceAsStream("TestValues.xml"));
 		SyncValueSet<TestEntity2> testEntities = theConfig.asValue(TestEntity2.class).at("test-entities2/test-entity2").until(until)
@@ -331,7 +333,8 @@ public class ObservableConfigTest {
 			switch (i) {
 			case 0:
 				Assert.assertEquals("text1", entity.getText());
-				Assert.assertThat(entity.getTexts(), QommonsTestUtils.collectionsEqual(Arrays.asList("text2", "text3", "text4"), true));
+				MatcherAssert.assertThat(entity.getTexts(),
+					QommonsTestUtils.collectionsEqual(Arrays.asList("text2", "text3", "text4"), true));
 				entity.getTexts().remove(1);
 				Assert.assertEquals(1, entity.getEntityField().getD());
 				Assert.assertEquals(2, entity.getListedEntities().getValues().size());
@@ -360,7 +363,7 @@ public class ObservableConfigTest {
 				break;
 			case 1:
 				Assert.assertEquals("text8", entity.getText());
-				Assert.assertThat(entity.getTexts(), QommonsTestUtils.collectionsEqual(Arrays.asList("text9", "text10"), true));
+				MatcherAssert.assertThat(entity.getTexts(), QommonsTestUtils.collectionsEqual(Arrays.asList("text9", "text10"), true));
 				entity.getTexts().add("text11");
 				Assert.assertEquals(1, entity.getEntityField().getD());
 				Assert.assertEquals(2, entity.getListedEntities().getValues().size());
@@ -404,14 +407,15 @@ public class ObservableConfigTest {
 			switch (i) {
 			case 0:
 				Assert.assertEquals("text1", entity.getText());
-				Assert.assertThat(entity.getTexts(), QommonsTestUtils.collectionsEqual(Arrays.asList("text2", "text4"), true));
+				MatcherAssert.assertThat(entity.getTexts(), QommonsTestUtils.collectionsEqual(Arrays.asList("text2", "text4"), true));
 				Assert.assertEquals(10, entity.getEntityField().getD());
 				Assert.assertEquals(1, entity.getListedEntities().getValues().size());
 				Assert.assertEquals(60, entity.getListedEntities().getValues().getFirst().getE());
 				break;
 			case 1:
 				Assert.assertEquals("text8", entity.getText());
-				Assert.assertThat(entity.getTexts(), QommonsTestUtils.collectionsEqual(Arrays.asList("text9", "text10", "text11"), true));
+				MatcherAssert.assertThat(entity.getTexts(),
+					QommonsTestUtils.collectionsEqual(Arrays.asList("text9", "text10", "text11"), true));
 				Assert.assertEquals(20, entity.getEntityField().getD());
 				Assert.assertEquals(3, entity.getListedEntities().getValues().size());
 				int j = 0;
@@ -492,7 +496,7 @@ public class ObservableConfigTest {
 			theConfig = ObservableConfig.createRoot("test", null, __ -> new FastFailLockingStrategy(ThreadConstraint.ANY));
 			try {
 				ObservableConfig.readXml(theConfig, ObservableConfigTest.class.getResourceAsStream("TestValues.xml"), theEncoding);
-			} catch (IOException | SAXException e) {
+			} catch (IOException | TextParseException e) {
 				throw new IllegalStateException(e);
 			}
 			SimpleObservable<Void> until = new SimpleObservable<>();
@@ -714,7 +718,7 @@ public class ObservableConfigTest {
 							ObservableConfig.writeXml(theConfig, writer, theEncoding, "\t");
 							theConfig.getAllContent().getValues().clear();
 							ObservableConfig.readXml(theConfig, new ByteArrayInputStream(writer.toString().getBytes("UTF-8")), theEncoding);
-						} catch (IOException | SAXException e) {
+						} catch (IOException | TextParseException e) {
 							throw new IllegalStateException(e);
 						}
 					}).execute("modify");
@@ -892,11 +896,6 @@ public class ObservableConfigTest {
 			str.append("texts=").append(theTexts);
 			str.append('}');
 			return str.toString();
-		}
-
-		void trim() {
-			for (int i = 0; i < theTexts.size(); i++)
-				theTexts.set(i, theTexts.get(i).trim());
 		}
 
 		void install(TestEntity2 entity1, TestEntity2 entity2) {

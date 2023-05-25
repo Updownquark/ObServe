@@ -51,8 +51,8 @@ import org.qommons.io.FileBackups;
 import org.qommons.io.FileUtils;
 import org.qommons.io.Format;
 import org.qommons.io.SpinnerFormat;
+import org.qommons.io.TextParseException;
 import org.qommons.threading.QommonsTimer;
-import org.xml.sax.SAXException;
 
 public class AppPopulation {
 	public static class ObservableUiBuilder extends WindowPopulation.DefaultWindowBuilder<JFrame, ObservableUiBuilder> {
@@ -304,7 +304,7 @@ public class AppPopulation {
 						}
 						config.setName(configName);
 						loaded = true;
-					} catch (IOException | SAXException e) {
+					} catch (IOException | TextParseException e) {
 						System.out.println("Could not read config file " + configFile.getPath());
 						e.printStackTrace(System.out);
 					}

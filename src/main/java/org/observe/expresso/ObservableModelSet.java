@@ -1262,9 +1262,26 @@ public interface ObservableModelSet extends Identifiable {
 	 * @throws ModelException If no such identified value exists in this model
 	 */
 	default ModelComponentNode<?, ?> getIdentifiedValue(Object valueIdentifier) throws ModelException {
-		ModelComponentNode<?, ?> node = getIdentifiedComponents().get(valueIdentifier);
+		ModelComponentNode<?, ?> node = getIdentifiedValueIfExists(valueIdentifier);
 		if (node == null)
 			throw new ModelException("No such value in this model with identifier " + valueIdentifier);
+		return node;
+	}
+
+	/**
+	 * @param valueIdentifier The identifier of the value
+	 * @return The {@link IdentifableCompiledValue identified} value in this model with the given value ID, or null if there is no such
+	 *         value
+	 */
+	default ModelComponentNode<?, ?> getIdentifiedValueIfExists(Object valueIdentifier) {
+		ModelComponentNode<?, ?> node = getIdentifiedComponents().get(valueIdentifier);
+		if (node == null) {
+			for (ObservableModelSet inh : getInheritance().values()) {
+				node = inh.getIdentifiedValueIfExists(valueIdentifier);
+				if (node != null)
+					break;
+			}
+		}
 		return node;
 	}
 
@@ -1286,12 +1303,10 @@ public interface ObservableModelSet extends Identifiable {
 				return null;
 			refModel = node.getModel();
 
-			StringBuilder modelPath = new StringBuilder(getIdentity().toString()).append('.').append(modelName);
 			int lastDot = dot;
 			dot = path.indexOf('.', dot + 1);
 			while (dot >= 0) {
 				modelName = path.substring(0, dot);
-				modelPath.append('.').append(modelName);
 				node = refModel.getComponentIfExists(modelName);
 				if (node == null || node.getModel() == null)
 					return null;
@@ -1680,6 +1695,8 @@ public interface ObservableModelSet extends Identifiable {
 		 */
 		<M, MV extends M> MV get(ModelComponentNode<M, MV> component) throws ModelInstantiationException;
 
+		ModelSetInstance getInherited(ModelComponentId modelId) throws IllegalArgumentException;
+
 		/**
 		 * @return A builder containing all of this model's data, but whose runtime components may be replaced
 		 * @throws ModelInstantiationException If any of this model's components could not be copied
@@ -1689,8 +1706,12 @@ public interface ObservableModelSet extends Identifiable {
 
 	/** Builds a {@link ModelSetInstance} */
 	public interface ModelSetInstanceBuilder {
+		InterpretedModelSet getModel();
+
 		/** @return The observable that the model set instance {@link #build() built} with this builder will die with */
 		Observable<?> getUntil();
+
+		ModelSetInstance getInherited(ModelComponentId id) throws IllegalArgumentException;
 
 		/**
 		 * Satisfies a runtime value declared with {@link ObservableModelSet.Builder#withRuntimeValue(String, ModelInstanceType)}
@@ -2858,6 +2879,16 @@ public interface ObservableModelSet extends Identifiable {
 			}
 
 			@Override
+			public InterpretedModelSet getModel() {
+				return theMSI.getModel();
+			}
+
+			@Override
+			public ModelSetInstance getInherited(ModelComponentId id) throws IllegalArgumentException {
+				return theMSI.getInherited(id);
+			}
+
+			@Override
 			public Observable<?> getUntil() {
 				return theMSI.getUntil();
 			}
@@ -3004,6 +3035,14 @@ public interface ObservableModelSet extends Identifiable {
 					theCircularityDetector.remove(component);
 				}
 				return thing;
+			}
+
+			@Override
+			public ModelSetInstance getInherited(ModelComponentId modelId) throws IllegalArgumentException {
+				ModelSetInstance inh = theInheritance.get(modelId);
+				if (inh == null)
+					throw new IllegalArgumentException(theModel.getIdentity() + " inherits no such model: " + modelId);
+				return inh;
 			}
 
 			@Override

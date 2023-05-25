@@ -35,23 +35,7 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
-import javax.swing.ButtonGroup;
-import javax.swing.ImageIcon;
-import javax.swing.JCheckBox;
-import javax.swing.JComponent;
-import javax.swing.JFrame;
-import javax.swing.JList;
-import javax.swing.JOptionPane;
-import javax.swing.JPanel;
-import javax.swing.JSlider;
-import javax.swing.JSpinner;
-import javax.swing.JTable;
-import javax.swing.JToggleButton;
-import javax.swing.ListModel;
-import javax.swing.ListSelectionModel;
-import javax.swing.ToolTipManager;
-import javax.swing.UIManager;
-import javax.swing.UnsupportedLookAndFeelException;
+import javax.swing.*;
 import javax.swing.event.ChangeListener;
 import javax.swing.event.ListDataEvent;
 import javax.swing.event.ListDataListener;
@@ -71,7 +55,7 @@ import org.qommons.Causable;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
 import org.qommons.TriFunction;
-import org.xml.sax.SAXException;
+import org.qommons.io.TextParseException;
 
 import com.google.common.reflect.TypeToken;
 
@@ -796,7 +780,7 @@ public class ObservableSwingUtils {
 				try (InputStream configStream = new BufferedInputStream(new FileInputStream(configFile))) {
 					ObservableConfig.readXml(config, configStream, encoding);
 				}
-			} catch (IOException | SAXException e) {
+			} catch (IOException | TextParseException e) {
 				System.err.println("Could not read config file " + configFileLoc);
 				e.printStackTrace();
 			}

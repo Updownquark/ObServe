@@ -23,10 +23,6 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
-import javax.xml.parsers.ParserConfigurationException;
-import javax.xml.parsers.SAXParser;
-import javax.xml.parsers.SAXParserFactory;
-
 import org.observe.Eventable;
 import org.observe.Observable;
 import org.observe.ObservableValue;
@@ -65,11 +61,12 @@ import org.qommons.collect.ElementId;
 import org.qommons.collect.MapEntryHandle;
 import org.qommons.ex.ExFunction;
 import org.qommons.io.BetterFile;
+import org.qommons.io.ContentPosition;
+import org.qommons.io.FilePosition;
 import org.qommons.io.Format;
+import org.qommons.io.SimpleXMLParser;
+import org.qommons.io.TextParseException;
 import org.qommons.tree.BetterTreeMap;
-import org.xml.sax.Attributes;
-import org.xml.sax.SAXException;
-import org.xml.sax.helpers.DefaultHandler;
 
 import com.google.common.reflect.TypeToken;
 
@@ -1395,17 +1392,9 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped, Event
 	 * @param in The input stream containing the XML data
 	 * @param encoding The scheme to use for decoding illegal XML names from their serialized forms
 	 * @throws IOException If an error occurs reading the document
-	 * @throws SAXException If an error occurs parsing the document
+	 * @throws TextParseException If an error occurs parsing the document
 	 */
-	public static void readXml(ObservableConfig config, InputStream in, XmlEncoding encoding) throws IOException, SAXException {
-		SAXParserFactory factory = SAXParserFactory.newInstance();
-		SAXParser parser;
-		try {
-			parser = factory.newSAXParser();
-		} catch (ParserConfigurationException e) {
-			throw new IllegalStateException(e);
-		}
-
+	public static void readXml(ObservableConfig config, InputStream in, XmlEncoding encoding) throws IOException, TextParseException {
 		class ParsedConfig {
 			final String name;
 			String value;
@@ -1466,59 +1455,50 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped, Event
 				}
 			}
 		}
-		class ConfigParser extends DefaultHandler {
+		class ConfigParser implements SimpleXMLParser.ParseHandler {
 			ParsedConfig theRoot;
 			private final LinkedList<ParsedConfig> theStack = new LinkedList<>();
 			private final ArrayList<StringBuilder> theContentStack = new ArrayList<>();
 			private final BitSet hasElementContent = new BitSet();
 
 			@Override
-			public void startElement(String uri, String localName, String qName, Attributes attributes) throws SAXException {
+			public void handleElementStart(String name, FilePosition position) {
 				ParsedConfig newConfig;
-				String name = encoding.decode((localName != null && localName.length() > 0) ? localName : qName, true, true);
-				if (theRoot == null) {
+				name = encoding.decode(name, true, true);
+				if (theRoot == null)
 					theRoot = newConfig = new ParsedConfig(name);
-					persistAttributes(newConfig, attributes);
-				} else {
+				else
 					newConfig = theStack.getLast().addChild(name);
-					persistAttributes(newConfig, attributes);
-				}
 				theStack.add(newConfig);
 				if (theContentStack.size() < theStack.size())
 					theContentStack.add(new StringBuilder());
 				hasElementContent.set(theStack.size(), false);
 			}
 
-			private void persistAttributes(ParsedConfig cfg, Attributes attributes) {
-				for (int a = 0; a < attributes.getLength(); a++) {
-					String attName = attributes.getLocalName(a);
-					if (attName == null || attName.length() == 0)
-						attName = attributes.getQName(a);
-					cfg.set(encoding.decode(attName, true, false), encoding.decode(attributes.getValue(a), false, false));
-				}
+			@Override
+			public void handleAttributeValue(String attributeName, FilePosition namePosition, String attributeValue,
+				ContentPosition valuePosition) {
+				theStack.getLast().set(encoding.decode(attributeName, true, false), encoding.decode(attributeValue, false, false));
 			}
 
 			@Override
-			public void characters(char[] ch, int start, int length) throws SAXException {
+			public void handleElementContent(String elementName, String elementValue, ContentPosition position) {
 				if (hasElementContent.get(theStack.size() - 1))
 					return; // We only pay attention to the first set of content
-				StringBuilder content = theContentStack.get(theStack.size() - 1);
-				for (int i = 0; i < length; i++) {
-					char c = ch[start + i];
-					if (content.length() > 0 || !Character.isWhitespace(c))
-						content.append(c);
-				}
+				StringBuilder contentBuilder = theContentStack.get(theStack.size() - 1);
+				contentBuilder.append(elementValue.trim());
 			}
 
 			@Override
-			public void ignorableWhitespace(char[] ch, int start, int length) throws SAXException {
-				// It seems this doesn't actually ever happen in practice, it just goes to the characters() method
-				// But this is what should happen if it is called
-				characters(ch, start, length);
+			public void handleCDataContent(String elementName, String content, ContentPosition position) {
+				if (hasElementContent.get(theStack.size() - 1))
+					return; // We only pay attention to the first set of content
+				StringBuilder contentBuilder = theContentStack.get(theStack.size() - 1);
+				contentBuilder.append(content.trim());
 			}
 
 			@Override
-			public void endElement(String uri, String localName, String qName) throws SAXException {
+			public void handleElementEnd(String elementName, FilePosition position, boolean selfClosing) {
 				ParsedConfig cfg = theStack.removeLast();
 				StringBuilder contentSB = theContentStack.get(theStack.size());
 				int i = contentSB.length() - 1;
@@ -1533,7 +1513,7 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped, Event
 			}
 		}
 		ConfigParser handler = new ConfigParser();
-		parser.parse(in, handler);
+		new SimpleXMLParser().parseXml(in, handler);
 		try (Transaction t = config.lock(true, null)) {
 			handler.theRoot.pushTo(config);
 		}

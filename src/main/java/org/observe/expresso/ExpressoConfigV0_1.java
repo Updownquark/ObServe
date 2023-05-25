@@ -89,8 +89,8 @@ import org.qommons.io.LocatedFilePosition;
 import org.qommons.io.NativeFileSource;
 import org.qommons.io.SftpFileSource;
 import org.qommons.io.SpinnerFormat;
+import org.qommons.io.TextParseException;
 import org.qommons.threading.QommonsTimer;
-import org.xml.sax.SAXException;
 
 import com.google.common.reflect.TypeToken;
 
@@ -307,7 +307,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 								}
 								config.setName(configName);
 								loaded = true;
-							} catch (IOException | SAXException e) {
+							} catch (IOException | TextParseException e) {
 								System.out.println("Could not read config file " + configFile.getPath());
 								e.printStackTrace(System.out);
 							}
@@ -1229,10 +1229,8 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 							SftpFileSource sftp;
 							try {
 								sftp = new SftpFileSource(hostS, userS, sftpSession -> {
-									sftpSession.setConnectTimeout(timeoutI);
-									sftpSession.setTimeout(timeoutI);
-								}, sftpSession -> {
-									sftpSession.authPassword(userS, passwordS == null ? "" : passwordS);
+									sftpSession.withTimeout(timeoutI)//
+									.withAuthentication(userS, passwordS);
 								}, "/");
 								retry.changes()
 								.takeUntil(Observable.or(user.noInitChanges(), password.noInitChanges(), timeout.noInitChanges()))

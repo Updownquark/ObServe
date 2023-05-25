@@ -108,7 +108,11 @@ public interface DynamicModelValue<M, MV extends M> extends ModelValueSynth<M, M
 
 		@Override
 		public String toString() {
-			StringBuilder str = new StringBuilder(theOwner.toString()).append('.').append(theName);
+			StringBuilder str = new StringBuilder(theOwner.toString()).append('.');
+			if (theName != null)
+				str.append(theName);
+			else
+				str.append('{').append(theNameAttribute.getName()).append('}');
 			if (theType != null)
 				str.append('(').append(theType).append(')');
 			if (theSourceAttribute != null)
