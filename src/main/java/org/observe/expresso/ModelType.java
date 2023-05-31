@@ -86,8 +86,9 @@ public abstract class ModelType<M> implements Named {
 				TypeConverter<Object, Object> cast;
 				TypeConverter<Object, Object> reverse;
 				TypeToken<?> type;
-				if (source.getType(0).equals(dest.getType(0)) || (dest.getType(0).isAssignableFrom(source.getType(0))
-					&& (dest.getType(0).getType() instanceof WildcardType || source.getType(0).isAssignableFrom(dest.getType(0))))) {
+				if (source.getType(0).equals(dest.getType(0)) || TypeTokens.get().isAssignable(dest.getType(0), source.getType(0))
+					&& (dest.getType(0).getType() instanceof WildcardType
+						|| TypeTokens.get().isAssignable(source.getType(0), dest.getType(0)))) {
 					type = source.getType(0);
 					cast = reverse = null;
 				} else {
@@ -135,8 +136,9 @@ public abstract class ModelType<M> implements Named {
 				TypeToken<?> keyType;
 				TypeConverter<Object, Object> keyCast;
 				TypeConverter<Object, Object> keyReverse;
-				if (source.getType(0).equals(dest.getType(0)) || (dest.getType(0).isAssignableFrom(source.getType(0))
-					&& (dest.getType(0).getType() instanceof WildcardType || source.getType(0).isAssignableFrom(dest.getType(0))))) {
+				if (source.getType(0).equals(dest.getType(0)) || TypeTokens.get().isAssignable(dest.getType(0), source.getType(0))
+					&& (dest.getType(0).getType() instanceof WildcardType
+						|| TypeTokens.get().isAssignable(source.getType(0), dest.getType(0)))) {
 					keyType = source.getType(0);
 					keyCast = keyReverse = null;
 				} else {
@@ -149,8 +151,9 @@ public abstract class ModelType<M> implements Named {
 				TypeToken<?> valueType;
 				TypeConverter<Object, Object> valueCast;
 				TypeConverter<Object, Object> valueReverse;
-				if (source.getType(1).equals(dest.getType(1)) || (dest.getType(1).isAssignableFrom(source.getType(1))
-					&& (dest.getType(1).getType() instanceof WildcardType || source.getType(1).isAssignableFrom(dest.getType(1))))) {
+				if (source.getType(1).equals(dest.getType(1)) || TypeTokens.get().isAssignable(dest.getType(1), source.getType(1))
+					&& (dest.getType(1).getType() instanceof WildcardType
+						|| TypeTokens.get().isAssignable(source.getType(1), dest.getType(1)))) {
 					valueType = source.getType(1);
 					valueCast = valueReverse = null;
 				} else {
@@ -375,8 +378,9 @@ public abstract class ModelType<M> implements Named {
 					if (target.getType(i).equals(getType(i))) {
 						params[i] = getType(i);
 						continue;
-					} else if (target.getType(i).isAssignableFrom(getType(i))
-						&& (target.getType(i).getType() instanceof WildcardType || getType(i).isAssignableFrom(target.getType(i)))) {
+					} else if (TypeTokens.get().isAssignable(target.getType(i), getType(i))
+						&& (target.getType(i).getType() instanceof WildcardType
+							|| TypeTokens.get().isAssignable(getType(i), target.getType(i)))) {
 						params[i] = getType(i);
 						casts[i] = null;
 					} else {

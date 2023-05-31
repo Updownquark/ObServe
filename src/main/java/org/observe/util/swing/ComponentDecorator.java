@@ -172,7 +172,11 @@ public class ComponentDecorator extends FontAdjuster {
 		else
 			theBorder = b = new TitledBorder(new ModifiableLineBorder(Color.black, 1, false), title);
 		((ModifiableLineBorder) b.getBorder()).setColor(borderColor);
-		return font.adjust(b);
+		if (font == null)
+			return () -> {
+			};
+		else
+			return font.adjust(b);
 	}
 
 	public ComponentDecorator withLineBorder(Color color, int thickness, boolean rounded) {

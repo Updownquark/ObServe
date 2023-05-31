@@ -619,7 +619,7 @@ public interface ObservableConfigFormat<E> {
 		 */
 		public <E2 extends E> EntityFormatBuilder<E> withSubType(TypeToken<E2> type,
 			Function<EntitySubFormatBuilder<E2>, EntitySubFormat<E2>> subFormat) {
-			if (!theEntityType.getType().isAssignableFrom(type))
+			if (!TypeTokens.get().isAssignable(theEntityType.getType(), type))
 				throw new IllegalArgumentException(type + " is not a sub-type of " + theEntityType);
 			theSubFormats.add(subFormat.apply(new EntitySubFormatBuilder<>(type, theFormatSet)));
 			return this;
@@ -1165,7 +1165,7 @@ public interface ObservableConfigFormat<E> {
 			 * @return This builder
 			 */
 			public <T2 extends T> Builder<T> with(TypeToken<T2> type, Function<SubFormatBuilder<T2>, SubFormat<T2>> subFormat) {
-				if (!theType.isAssignableFrom(type))
+				if (!TypeTokens.get().isAssignable(theType, type))
 					throw new IllegalArgumentException(type + " is not a sub-type of " + theType);
 				theSubFormats.add(subFormat.apply(new SubFormatBuilder<>(type)));
 				return this;
@@ -2019,7 +2019,7 @@ public interface ObservableConfigFormat<E> {
 			public <E2 extends E> ConfigCreator<E2> create(ObservableConfigParseSession session, TypeToken<E2> subType) {
 				if (subType != null && !subType.equals(getType())) {
 					for (EntitySubFormat<? extends E> subFormat : theSubFormats) {
-						if (subFormat.type.isAssignableFrom(subType))
+						if (TypeTokens.get().isAssignable(subFormat.type, subType))
 							return ((EntitySubFormat<? super E2>) subFormat).format.create(session, subType);
 					}
 				}
@@ -2537,7 +2537,7 @@ public interface ObservableConfigFormat<E> {
 					while (!parentType.getType().equals(parentTypeToken)) {
 						boolean foundSuper = false;
 						for (EntityConfiguredValueType<? super E2> superType : parentType.getSupers()) {
-							if (parentTypeToken.isAssignableFrom(superType.getType())) {
+							if (TypeTokens.get().isAssignable(parentTypeToken, superType.getType())) {
 								parentType = superType;
 								foundSuper = true;
 							}
@@ -2549,7 +2549,7 @@ public interface ObservableConfigFormat<E> {
 				while (idField.getOwnerType() != parentType) {
 					boolean found = false;
 					for (EntityConfiguredValueField<? super E2, ?> override : idField.getOverrides()) {
-						if (parentType.getType().isAssignableFrom(override.getOwnerType().getType())) {
+						if (TypeTokens.get().isAssignable(parentType.getType(), override.getOwnerType().getType())) {
 							idField = override;
 							found = true;
 						}

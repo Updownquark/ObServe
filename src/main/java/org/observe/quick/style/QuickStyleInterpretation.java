@@ -564,6 +564,7 @@ public class QuickStyleInterpretation implements QonfigInterpretation {
 				major = major * 10 + text.charAt(start) - '0';
 				if (major < 0)
 					throw new ParseException("Major version is too large", majorStart);
+				start++;
 			}
 			if (start == majorStart)
 				throw new ParseException("Major version expected", majorStart);
@@ -578,6 +579,7 @@ public class QuickStyleInterpretation implements QonfigInterpretation {
 				minor = minor * 10 + text.charAt(start) - '0';
 				if (major < 0)
 					throw new ParseException("Minor version is too large", minorStart);
+				start++;
 			}
 			if (start == minorStart)
 				throw new ParseException("Minor version expected", minorStart);

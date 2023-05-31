@@ -248,6 +248,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 							w.run(null);
 						});
 					} catch (InterruptedException e) {
+						Thread.currentThread().interrupt();
 					} catch (InvocationTargetException e) {
 						if (e.getTargetException() instanceof CheckedExceptionWrapper
 							&& e.getTargetException().getCause() instanceof ModelInstantiationException)
@@ -936,10 +937,12 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 		private static volatile boolean isRightPressed;
 
 		private void initMouseListening() {
-			if (isMouseListening)
+			boolean ml = isMouseListening;
+			if (ml)
 				return;
 			synchronized (QuickCore.class) {
-				if (isMouseListening)
+				ml = isMouseListening;
+				if (ml)
 					return;
 				Toolkit.getDefaultToolkit().addAWTEventListener(event -> {
 					MouseEvent mouse = (MouseEvent) event;

@@ -58,16 +58,20 @@ public class TestInterpretation implements QonfigInterpretation {
 			@Override
 			public void augmentElementModel(ExpressoQIS session, ObservableModelSet.Builder builder) throws QonfigInterpretationException {
 				ExpressoQIS bodySession = session.forChildren("body").getFirst();
-				QuickWidget.Def<?> bodyDef = bodySession.interpret(QuickWidget.Def.class).update(bodySession);
+				QuickWidget.Def<?> bodyDef = bodySession.interpret(QuickWidget.Def.class);
+				bodyDef.update(bodySession);
 				String quickModelName = bodySession.getAttributeText("name");
 				ObservableModelSet.Builder quickModel = builder.createSubModel(quickModelName);
 				QuickWidget.Interpreted<?>[] bodyInterpreted = new QuickWidget.Interpreted[1];
 				quickModel.withMaker("$body$", CompiledModelValue.of("$body$", ModelTypes.Value, () -> {
-					bodyInterpreted[0] = bodyDef.interpret(null).update(new QuickStyledElement.QuickInterpretationCache());
+					bodyInterpreted[0] = bodyDef.interpret(null);
+					bodyInterpreted[0].update(new QuickWidget.QuickInterpretationCache());
 					TypeToken<QuickWidget> widgetType = (TypeToken<QuickWidget>) bodyInterpreted[0].getWidgetType();
-					return ModelValueSynth.of(ModelTypes.Value.forType(widgetType), //
-						msi -> SettableValue.of(widgetType, bodyInterpreted[0].create(null)//
-							.update(msi), "Widgets are not settable"));
+					return ModelValueSynth.of(ModelTypes.Value.forType(widgetType), msi -> {
+						QuickWidget body = bodyInterpreted[0].create(null);
+						body.update(bodyInterpreted[0], msi);
+						return SettableValue.of(widgetType, body, "Widgets are not settable");
+					});
 				}));
 				populateQuickModel(quickModel, bodyDef, quickModelName, //
 					(ModelComponentNode<SettableValue<?>, SettableValue<QuickWidget>>) quickModel.getComponentIfExists("$body$"),

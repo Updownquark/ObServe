@@ -179,15 +179,7 @@ public class TypeTokens implements TypeParser {
 
 		@Override
 		public boolean equals(Object obj) {
-			if (obj instanceof TypeKey) {
-				return clazz == ((TypeKey<?>) obj).clazz;
-			} else if (obj instanceof Class) {
-				return clazz == obj;
-			} else if (obj instanceof TypeToken) {
-				return clazz == ((TypeToken<?>) obj).getType();
-			} else {
-				return false;
-			}
+			return obj instanceof TypeKey && clazz == ((TypeKey<?>) obj).clazz;
 		}
 
 		@Override
@@ -734,7 +726,7 @@ public class TypeTokens implements TypeParser {
 	private final ThreadLocal<Set<TypeVariable<?>>> ASSIGNABLE_VARIABLE_STACK = ThreadLocal.withInitial(HashSet::new);
 
 	/**
-	 * Similar to {@link TypeToken#isAssignableFrom(TypeToken)}, but this method allows for assignments where conversion is required, e.g.
+	 * Similar to {@link TypeToken#isSupertypeOf(TypeToken)}, but this method allows for assignments where conversion is required, e.g.
 	 * auto-(un)boxing and primitive number type conversion.
 	 *
 	 * @param left The type of the variable to assign the value to
@@ -742,7 +734,13 @@ public class TypeTokens implements TypeParser {
 	 * @return Whether the given value type can be assigned to the given variable type
 	 */
 	public boolean isAssignable(TypeToken<?> left, TypeToken<?> right) {
-		if (left.isAssignableFrom(right))
+		if (left.getType() instanceof WildcardType && ((WildcardType) left.getType()).getLowerBounds().length == 0) {
+			// As far as I can tell, Google seems to have broken this.
+			// TypeToken.isAssignableFrom(TypeToken) used to return true for this case,
+			// but now TypeToken.isSuperTypeOf(TypeToken)returns false, which seems clearly wrong.
+			return true;
+		}
+		if (left.isSupertypeOf(right))
 			return true;
 		Class<?> rawRight = unwrap(getRawType(right));
 		Class<?> rawLeft = unwrap(getRawType(left));
@@ -911,7 +909,12 @@ public class TypeTokens implements TypeParser {
 
 		if (target.getType() instanceof TypeVariable && ((TypeVariable<?>) target.getType()).getBounds().length == 1)
 			target = (TypeToken<T>) of(((TypeVariable<?>) target.getType()).getBounds()[0]);
-		if (target.isAssignableFrom(source)) {
+		if (source.getType() instanceof WildcardType && ((WildcardType) source.getType()).getLowerBounds().length == 0) {
+			// As far as I can tell, Google seems to have broken this.
+			// TypeToken.isAssignableFrom(TypeToken) used to return true for this case,
+			// but now TypeToken.isSuperTypeOf(TypeToken)returns false, which seems clearly wrong.
+			return new TypeConverter<>((TypeToken<T>) source, "no-op", v -> (T) v);
+		} else if (target.isSupertypeOf(source)) {
 			if (target.isPrimitive() && !source.isPrimitive()) {
 				T safeValue = safe ? (T) SAFE_VALUES.get(getRawType(source)) : null;
 				return new TypeConverter<>((TypeToken<T>) source, "primitive-safe-cast", v -> {

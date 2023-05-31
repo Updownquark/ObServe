@@ -557,7 +557,7 @@ public class ModelTypes {
 							dest);
 					} else {
 						TypeToken<?> oveType = TypeTokens.get().keyFor(ObservableValueEvent.class).parameterized(source.getType(0));
-						if (dest.getType(0).isAssignableFrom(oveType))
+						if (TypeTokens.get().isAssignable(dest.getType(0), oveType))
 							return ModelType.converter(LambdaUtils.printableFn(src -> src.noInitChanges(), "changes", null),
 								dest.getModelType().forTypes(oveType));
 						else
@@ -907,7 +907,7 @@ public class ModelTypes {
 						return ModelType.converter(LambdaUtils.printableFn(src -> src.changes().map(__ -> null), "changes", null), dest);
 					} else {
 						TypeToken<?> oceType = TypeTokens.get().keyFor(ObservableCollectionEvent.class).parameterized(source.getType(0));
-						if (dest.getType(0).isAssignableFrom(oceType)) {
+						if (TypeTokens.get().isAssignable(dest.getType(0), oceType)) {
 							return ModelType.converter(LambdaUtils.printableFn(src -> src.changes(), "changes", null),
 								dest.getModelType().forTypes(oceType));
 						} else
@@ -1059,7 +1059,7 @@ public class ModelTypes {
 					} else {
 						TypeToken<?> oceType = TypeTokens.get().keyFor(ObservableCollectionEvent.class)
 							.parameterized(source.getType(0));
-						if (dest.getType(0).isAssignableFrom(oceType))
+							if (TypeTokens.get().isAssignable(dest.getType(0), oceType))
 							return ModelType.converter(LambdaUtils
 								.printableFn(LambdaUtils.printableFn(src -> src.changes(), "changes", null), "changes", null),
 								dest.getModelType().forTypes(oceType));
@@ -1177,7 +1177,7 @@ public class ModelTypes {
 					} else {
 						TypeToken<?> oceType = TypeTokens.get().keyFor(ObservableCollectionEvent.class)
 							.parameterized(source.getType(0));
-						if (dest.getType(0).isAssignableFrom(oceType))
+						if (TypeTokens.get().isAssignable(dest.getType(0), oceType))
 							return ModelType.converter(LambdaUtils.printableFn(src -> src.changes(), "changes", null),
 								dest.getModelType().forTypes(oceType));
 						else
@@ -1373,7 +1373,7 @@ public class ModelTypes {
 					} else {
 						TypeToken<?> oceType = TypeTokens.get().keyFor(ObservableCollectionEvent.class)
 							.parameterized(source.getType(0));
-						if (dest.getType(0).isAssignableFrom(oceType))
+						if (TypeTokens.get().isAssignable(dest.getType(0), oceType))
 							return ModelType.converter(LambdaUtils.printableFn(src -> src.changes(), "changes", null),
 								dest.getModelType().forTypes(oceType));
 						else
@@ -1474,7 +1474,7 @@ public class ModelTypes {
 					} else {
 						TypeToken<?> oceType = TypeTokens.get().keyFor(ObservableCollectionEvent.class)
 							.parameterized(source.getType(0));
-						if (dest.getType(0).isAssignableFrom(oceType)) {
+						if (TypeTokens.get().isAssignable(dest.getType(0), oceType)) {
 							return ModelType.converter(LambdaUtils.printableFn(src -> src.getValues().changes(), "changes", null),
 								dest.getModelType().forTypes(oceType));
 						} else
@@ -1580,7 +1580,7 @@ public class ModelTypes {
 					} else {
 						TypeToken<?> omeType = TypeTokens.get().keyFor(ObservableMapEvent.class).parameterized(source.getType(0),
 							source.getType(1));
-						if (dest.getType(0).isAssignableFrom(omeType))
+						if (TypeTokens.get().isAssignable(dest.getType(0), omeType))
 							return ModelType.converter(LambdaUtils.printableFn(src -> src.changes(), "changes", null),
 								dest.getModelType().forTypes(omeType));
 						else
@@ -1694,7 +1694,7 @@ public class ModelTypes {
 					} else {
 						TypeToken<?> omeType = TypeTokens.get().keyFor(ObservableMapEvent.class).parameterized(source.getType(0),
 							source.getType(1));
-						if (dest.getType(0).isAssignableFrom(omeType))
+						if (TypeTokens.get().isAssignable(dest.getType(0), omeType))
 							return ModelType.converter(LambdaUtils.printableFn(src -> src.changes(), "changes", null),
 								dest.getModelType().forTypes(omeType));
 						else
@@ -1819,7 +1819,7 @@ public class ModelTypes {
 					} else {
 						TypeToken<?> omeType = TypeTokens.get().keyFor(ObservableMultiMapEvent.class).parameterized(source.getType(0),
 							source.getType(1));
-						if (dest.getType(0).isAssignableFrom(omeType))
+						if (TypeTokens.get().isAssignable(dest.getType(0), omeType))
 							return ModelType.converter(
 								LambdaUtils.printableFn(LambdaUtils.printableFn(src -> src.changes(), "changes", null), "changes", null),
 								dest.getModelType().forTypes(omeType));
@@ -1951,7 +1951,7 @@ public class ModelTypes {
 					} else {
 						TypeToken<?> omeType = TypeTokens.get().keyFor(ObservableMultiMapEvent.class).parameterized(source.getType(0),
 							source.getType(1));
-						if (dest.getType(0).isAssignableFrom(omeType))
+						if (TypeTokens.get().isAssignable(dest.getType(0), omeType))
 							return ModelType.converter(LambdaUtils.printableFn(src -> src.changes(), "changes", null),
 								dest.getModelType().forTypes(omeType));
 						else

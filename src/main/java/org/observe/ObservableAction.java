@@ -325,7 +325,7 @@ public interface ObservableAction<T> extends TypedValueContainer<T> {
 
 		@Override
 		public T[] act(Object cause) throws IllegalStateException {
-			ObservableAction<? extends T>[] actions = theActions.toArray();
+			ObservableAction<? extends T>[] actions = theActions.toArray(new ObservableAction[theActions.size()]);
 			for (ObservableAction<? extends T> action : actions) {
 				String msg = action.isEnabled().get();
 				if (msg != null)

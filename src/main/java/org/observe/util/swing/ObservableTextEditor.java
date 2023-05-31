@@ -462,13 +462,7 @@ public class ObservableTextEditor<E> {
 	 * @see #getEditError()
 	 */
 	public ObservableValue<String> getErrorState() {
-		if (theStatusChange == null) {
-			synchronized (this) {
-				if (theStatusChange == null)
-					theStatusChange = SimpleObservable.build().build();
-			}
-		}
-		return ObservableValue.of(TypeTokens.get().STRING, () -> theError, () -> theStateStamp, theStatusChange);
+		return ObservableValue.of(TypeTokens.get().STRING, () -> theError, () -> theStateStamp, getStatusChanges());
 	}
 
 	/**
@@ -476,13 +470,20 @@ public class ObservableTextEditor<E> {
 	 * @see #getEditWarning()
 	 */
 	public ObservableValue<String> getWarningState() {
-		if (theStatusChange == null) {
+		return ObservableValue.of(TypeTokens.get().STRING, () -> theWarningMsg, () -> theStateStamp, getStatusChanges());
+	}
+
+	/** @return An observable that fires whenever the {@link #getErrorState()} or {@link #getWarningState()} values change */
+	protected Observable<Void> getStatusChanges() {
+		SimpleObservable<Void> statusChanges = theStatusChange;
+		if (statusChanges == null) {
 			synchronized (this) {
-				if (theStatusChange == null)
-					theStatusChange = SimpleObservable.build().build();
+				statusChanges = theStatusChange;
+				if (statusChanges == null)
+					theStatusChange = statusChanges = SimpleObservable.build().build();
 			}
 		}
-		return ObservableValue.of(TypeTokens.get().STRING, () -> theWarningMsg, () -> theStateStamp, theStatusChange);
+		return statusChanges;
 	}
 
 	/** @param enabled Whether to allow the user to modify this editor when the value is enabled */
