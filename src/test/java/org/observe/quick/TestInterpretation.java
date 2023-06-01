@@ -97,10 +97,10 @@ public class TestInterpretation implements QonfigInterpretation {
 				});
 			}));
 		}
-		if (widget instanceof QuickContainer2.Def) {
+		if (widget instanceof QuickContainer.Def) {
 			if (widget.getParent() != null)
 				path.add(widget);
-			for (QuickWidget.Def<?> child : ((QuickContainer2.Def<?, ?>) widget).getContents())
+			for (QuickWidget.Def<?> child : ((QuickContainer.Def<?, ?>) widget).getContents())
 				populateQuickModel(quickModel, child, modelName, bodyValue, interpretedRoot, path);
 			if (widget.getParent() != null)
 				path.remove(path.size() - 1);
@@ -110,7 +110,7 @@ public class TestInterpretation implements QonfigInterpretation {
 	private static QuickWidget.Interpreted<?> find(QuickWidget.Interpreted<?> parent, QuickWidget.Def<?>[] widgetPath, int pathIndex) {
 		if (pathIndex == widgetPath.length)
 			return parent;
-		for (QuickWidget.Interpreted<?> child : ((QuickContainer2.Interpreted<?, ?>) parent).getContents()) {
+		for (QuickWidget.Interpreted<?> child : ((QuickContainer.Interpreted<?, ?>) parent).getContents()) {
 			if (child.getDefinition() == widgetPath[pathIndex])
 				return find(child, widgetPath, pathIndex + 1);
 		}
@@ -120,7 +120,7 @@ public class TestInterpretation implements QonfigInterpretation {
 	private static QuickWidget find(QuickWidget parent, QuickWidget.Def<?>[] widgetPath, int pathIndex) {
 		if (pathIndex == widgetPath.length)
 			return parent;
-		for (QuickWidget child : ((QuickContainer2<?>) parent).getContents()) {
+		for (QuickWidget child : ((QuickContainer<?>) parent).getContents()) {
 			if (child.getIdentity() == widgetPath[pathIndex].getIdentity())
 				return find(child, widgetPath, pathIndex + 1);
 		}

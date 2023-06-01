@@ -40,7 +40,7 @@ public class QuickWindow extends QuickAddOn.Abstract<QuickElement> {
 		 * @param type The add-on that the Qonfig toolkit uses to represent this type
 		 * @param element The element that this add-on is added onto
 		 */
-		public Def(QonfigAddOn type, QuickElement.Def<? extends QuickDocument2> element) {
+		public Def(QonfigAddOn type, QuickElement.Def<? extends QuickDocument> element) {
 			super(type, element);
 		}
 
@@ -109,7 +109,7 @@ public class QuickWindow extends QuickAddOn.Abstract<QuickElement> {
 
 		@Override
 		public Interpreted interpret(QuickElement.Interpreted<? extends QuickElement> element) {
-			return new Interpreted(this, (QuickDocument2.Interpreted) element);
+			return new Interpreted(this, (QuickDocument.Interpreted) element);
 		}
 	}
 
@@ -126,7 +126,7 @@ public class QuickWindow extends QuickAddOn.Abstract<QuickElement> {
 		 * @param definition The definition producing this interpretation
 		 * @param element The element interpretation that this add-on is added onto
 		 */
-		public Interpreted(Def definition, QuickDocument2.Interpreted element) {
+		public Interpreted(Def definition, QuickDocument.Interpreted element) {
 			super(definition, element);
 		}
 
@@ -136,8 +136,8 @@ public class QuickWindow extends QuickAddOn.Abstract<QuickElement> {
 		}
 
 		@Override
-		public QuickDocument2.Interpreted getElement() {
-			return (QuickDocument2.Interpreted) super.getElement();
+		public QuickDocument.Interpreted getElement() {
+			return (QuickDocument.Interpreted) super.getElement();
 		}
 
 		/** @return The expression defining the x-coordinate of the window--to move and be updated when the user moves it */

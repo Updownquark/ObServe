@@ -197,7 +197,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 		@Override
 		public void configure(Builder<ExpressoInterpretationException> tx) {
 			initMouseListening();
-			tx.with(QuickDocument2.Interpreted.class, QuickApplication.class, (interpretedDoc, tx2) -> {
+			tx.with(QuickDocument.Interpreted.class, QuickApplication.class, (interpretedDoc, tx2) -> {
 				QuickSwingPopulator<QuickWidget> interpretedBody = tx2.transform(interpretedDoc.getBody(), QuickSwingPopulator.class);
 				return doc -> {
 					try {

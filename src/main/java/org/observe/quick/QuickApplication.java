@@ -37,7 +37,7 @@ public interface QuickApplication {
 	 * @param doc The document containing the Quick configuration for the application
 	 * @throws ModelInstantiationException If an error occurs initializing the application
 	 */
-	void runApplication(QuickDocument2 doc) throws ModelInstantiationException;
+	void runApplication(QuickDocument doc) throws ModelInstantiationException;
 
 	/**
 	 * @param clArgs Command-line arguments. --quick-app=? may be used to specify the application setup file. The rest will be passed to the
@@ -112,7 +112,7 @@ public interface QuickApplication {
 			throw new IllegalStateException("Quick application file '" + quickAppFile + "' does not use the Quick-App toolkit");
 
 		ValueHolder<AbstractQIS<?>> docSession = new ValueHolder<>();
-		QuickDocument2.Def quickDocDef = QonfigApp.interpretApp(quickApp, QuickDocument2.Def.class, docSession);
+		QuickDocument.Def quickDocDef = QonfigApp.interpretApp(quickApp, QuickDocument.Def.class, docSession);
 		quickDocDef.update(docSession.get().as(ExpressoQIS.class));
 		docSession.clear(); // Free up memory
 
@@ -132,14 +132,14 @@ public interface QuickApplication {
 			interp.configure(transformBuilder);
 		Transformer<ExpressoInterpretationException> transformer = transformBuilder.build();
 
-		QuickDocument2.Interpreted interpretedDoc = quickDocDef.interpret(null);
+		QuickDocument.Interpreted interpretedDoc = quickDocDef.interpret(null);
 		quickDocDef = null; // Free up memory
 		interpretedDoc.update();
 
 		QuickApplication app = transformer.transform(interpretedDoc, QuickApplication.class);
 
 		ModelSetInstance msi = interpretedDoc.getHead().getModels().createInstance(extModels, Observable.empty()).build();
-		QuickDocument2 doc = interpretedDoc.create();
+		QuickDocument doc = interpretedDoc.create();
 		doc.update(interpretedDoc, msi);
 
 		// Clean up to free memory

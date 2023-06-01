@@ -13,9 +13,9 @@ import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigInterpretationException;
 
 /** The root of a quick file, containing all information needed to power an application */
-public class QuickDocument2 extends QuickElement.Abstract {
+public class QuickDocument extends QuickElement.Abstract {
 	/** The definition of a Quick document */
-	public static class Def extends QuickElement.Def.Abstract<QuickDocument2> {
+	public static class Def extends QuickElement.Def.Abstract<QuickDocument> {
 		private QuickHeadSection.Def theHead;
 		private QuickWidget.Def<?> theBody;
 
@@ -58,7 +58,7 @@ public class QuickDocument2 extends QuickElement.Abstract {
 	}
 
 	/** An interpreted Quick document */
-	public static class Interpreted extends QuickElement.Interpreted.Abstract<QuickDocument2> {
+	public static class Interpreted extends QuickElement.Interpreted.Abstract<QuickDocument> {
 		private QuickHeadSection theHead;
 		private QuickWidget.Interpreted<?> theBody;
 
@@ -102,8 +102,8 @@ public class QuickDocument2 extends QuickElement.Abstract {
 		}
 
 		/** @return The new document */
-		public QuickDocument2 create() {
-			return new QuickDocument2(this);
+		public QuickDocument create() {
+			return new QuickDocument(this);
 		}
 	}
 
@@ -120,7 +120,7 @@ public class QuickDocument2 extends QuickElement.Abstract {
 		 * @param models The models defined in this head section
 		 * @param styleSheet The style sheet defined in this head section
 		 */
-		public QuickHeadSection(Def def, QuickDocument2.Interpreted document, ClassView classView, InterpretedModelSet models,
+		public QuickHeadSection(Def def, QuickDocument.Interpreted document, ClassView classView, InterpretedModelSet models,
 			QuickStyleSheet styleSheet) {
 			super(def, document);
 			theClassView = classView;
@@ -154,7 +154,7 @@ public class QuickDocument2 extends QuickElement.Abstract {
 			 * @param parent The document that this head section is for
 			 * @param element The element that this head section is being parsed from
 			 */
-			public Def(QuickDocument2.Def parent, QonfigElement element) {
+			public Def(QuickDocument.Def parent, QonfigElement element) {
 				super(parent, element);
 			}
 
@@ -197,7 +197,7 @@ public class QuickDocument2 extends QuickElement.Abstract {
 			 * @throws ExpressoInterpretationException If the {@link org.observe.expresso.ObservableModelSet.Built#interpret()
 			 *         interpretation} of the head section's {@link #getModels() models} fails
 			 */
-			public QuickHeadSection interpret(QuickDocument2.Interpreted document) throws ExpressoInterpretationException {
+			public QuickHeadSection interpret(QuickDocument.Interpreted document) throws ExpressoInterpretationException {
 				return new QuickHeadSection(this, document, getClassView(), getModels().interpret(), theStyleSheet);
 			}
 		}
@@ -206,7 +206,7 @@ public class QuickDocument2 extends QuickElement.Abstract {
 	private QuickWidget theBody;
 
 	/** @param interpreted The interpreted document that is creating this document */
-	public QuickDocument2(Interpreted interpreted) {
+	public QuickDocument(Interpreted interpreted) {
 		super(interpreted, null);
 	}
 
@@ -218,7 +218,7 @@ public class QuickDocument2 extends QuickElement.Abstract {
 	@Override
 	protected void updateModel(QuickElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
 		super.updateModel(interpreted, myModels);
-		QuickDocument2.Interpreted myInterpreted = (QuickDocument2.Interpreted) interpreted;
+		QuickDocument.Interpreted myInterpreted = (QuickDocument.Interpreted) interpreted;
 		if (theBody == null)
 			theBody = myInterpreted.getBody().create(null);
 		theBody.update(myInterpreted.getBody(), myModels);

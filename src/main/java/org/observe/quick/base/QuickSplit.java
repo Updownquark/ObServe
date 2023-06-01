@@ -8,7 +8,7 @@ import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
-import org.observe.quick.QuickContainer2;
+import org.observe.quick.QuickContainer;
 import org.observe.quick.QuickElement;
 import org.observe.quick.QuickWidget;
 import org.observe.util.TypeTokens;
@@ -17,8 +17,8 @@ import org.qommons.config.QonfigInterpretationException;
 
 import com.google.common.reflect.TypeToken;
 
-public class QuickSplit extends QuickContainer2.Abstract<QuickWidget> {
-	public static class Def<S extends QuickSplit> extends QuickContainer2.Def.Abstract<S, QuickWidget> {
+public class QuickSplit extends QuickContainer.Abstract<QuickWidget> {
+	public static class Def<S extends QuickSplit> extends QuickContainer.Def.Abstract<S, QuickWidget> {
 		private boolean isVertical;
 		private CompiledExpression theSplitPosition;
 
@@ -59,7 +59,7 @@ public class QuickSplit extends QuickContainer2.Abstract<QuickWidget> {
 		}
 	}
 
-	public static class Interpreted<S extends QuickSplit> extends QuickContainer2.Interpreted.Abstract<S, QuickWidget> {
+	public static class Interpreted<S extends QuickSplit> extends QuickContainer.Interpreted.Abstract<S, QuickWidget> {
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<QuickSize>> theSplitPosition;
 
 		public Interpreted(Def<? super S> definition, QuickElement.Interpreted<?> parent) {

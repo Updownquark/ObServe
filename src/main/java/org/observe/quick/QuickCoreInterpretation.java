@@ -47,12 +47,12 @@ public class QuickCoreInterpretation implements QonfigInterpretation {
 
 	@Override
 	public Builder configureInterpreter(Builder interpreter) {
-		interpreter.createWith("quick", QuickDocument2.Def.class, session -> new QuickDocument2.Def(null, session.getElement()));
-		interpreter.createWith("head", QuickDocument2.QuickHeadSection.Def.class,
-			session -> new QuickDocument2.QuickHeadSection.Def((QuickDocument2.Def) session.get(QuickElement.SESSION_QUICK_ELEMENT),
+		interpreter.createWith("quick", QuickDocument.Def.class, session -> new QuickDocument.Def(null, session.getElement()));
+		interpreter.createWith("head", QuickDocument.QuickHeadSection.Def.class,
+			session -> new QuickDocument.QuickHeadSection.Def((QuickDocument.Def) session.get(QuickElement.SESSION_QUICK_ELEMENT),
 				session.getElement()));
 		interpreter.createWith("window", QuickWindow.Def.class,
-			session -> interpretAddOn(session, (p, ao) -> new QuickWindow.Def(ao, (QuickDocument2.Def) p)));
+			session -> interpretAddOn(session, (p, ao) -> new QuickWindow.Def(ao, (QuickDocument.Def) p)));
 		interpreter.createWith("line-border", QuickBorder.LineBorder.Def.class,
 			session -> interpretQuick(session, QuickBorder.LineBorder.Def::new));
 		interpreter.createWith("titled-border", QuickBorder.TitledBorder.Def.class,

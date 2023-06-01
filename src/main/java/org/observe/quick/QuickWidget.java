@@ -42,7 +42,7 @@ public interface QuickWidget extends QuickTextElement {
 		QuickWidgetStyle.Def getStyle();
 
 		/** @return The container definition that this widget is a child of */
-		QuickContainer2.Def<?, ?> getParent();
+		QuickContainer.Def<?, ?> getParent();
 
 		/** @return This widget's border */
 		QuickBorder.Def<?> getBorder();
@@ -91,9 +91,9 @@ public interface QuickWidget extends QuickTextElement {
 			}
 
 			@Override
-			public QuickContainer2.Def<?, ?> getParent() {
+			public QuickContainer.Def<?, ?> getParent() {
 				QuickElement.Def<?> parent = getParentElement();
-				return parent instanceof QuickContainer2.Def ? (QuickContainer2.Def<?, ?>) parent : null;
+				return parent instanceof QuickContainer.Def ? (QuickContainer.Def<?, ?>) parent : null;
 			}
 
 			@Override
@@ -159,7 +159,7 @@ public interface QuickWidget extends QuickTextElement {
 		QuickWidgetStyle.Interpreted getStyle();
 
 		/** @return The parent container of this widget interpretation, if any */
-		QuickContainer2.Interpreted<?, ?> getParent();
+		QuickContainer.Interpreted<?, ?> getParent();
 
 		/** @return This widget's border */
 		QuickBorder.Interpreted<?> getBorder();
@@ -214,9 +214,9 @@ public interface QuickWidget extends QuickTextElement {
 			}
 
 			@Override
-			public QuickContainer2.Interpreted<?, ?> getParent() {
+			public QuickContainer.Interpreted<?, ?> getParent() {
 				QuickElement.Interpreted<?> parent = getParentElement();
-				return parent instanceof QuickContainer2.Interpreted ? (QuickContainer2.Interpreted<?, ?>) parent : null;
+				return parent instanceof QuickContainer.Interpreted ? (QuickContainer.Interpreted<?, ?>) parent : null;
 			}
 
 			@Override
@@ -333,7 +333,7 @@ public interface QuickWidget extends QuickTextElement {
 	QuickWidgetStyle getStyle();
 
 	/** @return The parent container, if any */
-	QuickContainer2<?> getParent();
+	QuickContainer<?> getParent();
 
 	/** @return This widget's border */
 	QuickBorder getBorder();
@@ -393,9 +393,9 @@ public interface QuickWidget extends QuickTextElement {
 		}
 
 		@Override
-		public QuickContainer2<?> getParent() {
+		public QuickContainer<?> getParent() {
 			QuickElement parent = getParentElement();
-			return parent instanceof QuickContainer2 ? (QuickContainer2<?>) parent : null;
+			return parent instanceof QuickContainer ? (QuickContainer<?>) parent : null;
 		}
 
 		@Override

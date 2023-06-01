@@ -8,7 +8,7 @@ import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
-import org.observe.quick.QuickContainer2;
+import org.observe.quick.QuickContainer;
 import org.observe.quick.QuickElement;
 import org.observe.quick.QuickStyledElement;
 import org.observe.quick.QuickWidget;
@@ -18,8 +18,8 @@ import org.qommons.config.QonfigInterpretationException;
 
 import com.google.common.reflect.TypeToken;
 
-public class QuickBox extends QuickContainer2.Abstract<QuickWidget> {
-	public static class Def<W extends QuickBox> extends QuickContainer2.Def.Abstract<W, QuickWidget> {
+public class QuickBox extends QuickContainer.Abstract<QuickWidget> {
+	public static class Def<W extends QuickBox> extends QuickContainer.Def.Abstract<W, QuickWidget> {
 		private CompiledExpression theOpacity;
 
 		public Def(QuickElement.Def<?> parent, QonfigElement element) {
@@ -51,7 +51,7 @@ public class QuickBox extends QuickContainer2.Abstract<QuickWidget> {
 		}
 	}
 
-	public static class Interpreted<W extends QuickBox> extends QuickContainer2.Interpreted.Abstract<W, QuickWidget> {
+	public static class Interpreted<W extends QuickBox> extends QuickContainer.Interpreted.Abstract<W, QuickWidget> {
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<Double>> theOpacity;
 
 		public Interpreted(Def<? super W> definition, QuickElement.Interpreted<?> parent) {

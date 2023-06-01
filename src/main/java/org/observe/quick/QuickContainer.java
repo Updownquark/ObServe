@@ -16,14 +16,14 @@ import org.qommons.tree.BetterTreeList;
  *
  * @param <C> The type of widgets in this container's content
  */
-public interface QuickContainer2<C extends QuickWidget> extends QuickWidget {
+public interface QuickContainer<C extends QuickWidget> extends QuickWidget {
 	/**
 	 * The definition of a QuickContainer
 	 *
 	 * @param <W> The type of the container that this definition is for
 	 * @param <C> The type of widgets that the container will contain
 	 */
-	public interface Def<W extends QuickContainer2<C>, C extends QuickWidget> extends QuickWidget.Def<W> {
+	public interface Def<W extends QuickContainer<C>, C extends QuickWidget> extends QuickWidget.Def<W> {
 		/** @return The definitions of all widgets that will be contained in the container produced by this definition */
 		BetterList<? extends QuickWidget.Def<? extends C>> getContents();
 
@@ -36,7 +36,7 @@ public interface QuickContainer2<C extends QuickWidget> extends QuickWidget {
 		 * @param <W> The type of the container that this definition is for
 		 * @param <C> The type of widgets that the container will contain
 		 */
-		public abstract class Abstract<W extends QuickContainer2<C>, C extends QuickWidget> extends QuickWidget.Def.Abstract<W>
+		public abstract class Abstract<W extends QuickContainer<C>, C extends QuickWidget> extends QuickWidget.Def.Abstract<W>
 		implements Def<W, C> {
 			private final BetterList<QuickWidget.Def<? extends C>> theContents;
 
@@ -73,7 +73,7 @@ public interface QuickContainer2<C extends QuickWidget> extends QuickWidget {
 	 * @param <W> The type of the container that this interpretation is for
 	 * @param <C> The type of widgets that the container will contain
 	 */
-	public interface Interpreted<W extends QuickContainer2<C>, C extends QuickWidget> extends QuickWidget.Interpreted<W> {
+	public interface Interpreted<W extends QuickContainer<C>, C extends QuickWidget> extends QuickWidget.Interpreted<W> {
 		@Override
 		Def<? super W, ? super C> getDefinition();
 
@@ -86,7 +86,7 @@ public interface QuickContainer2<C extends QuickWidget> extends QuickWidget {
 		 * @param <W> The type of the container that this interpretation is for
 		 * @param <C> The type of widgets that the container will contain
 		 */
-		public abstract class Abstract<W extends QuickContainer2<C>, C extends QuickWidget> extends QuickWidget.Interpreted.Abstract<W>
+		public abstract class Abstract<W extends QuickContainer<C>, C extends QuickWidget> extends QuickWidget.Interpreted.Abstract<W>
 		implements Interpreted<W, C> {
 			private final BetterList<QuickWidget.Interpreted<? extends C>> theContents;
 
@@ -136,18 +136,18 @@ public interface QuickContainer2<C extends QuickWidget> extends QuickWidget {
 	BetterList<? extends C> getContents();
 
 	/**
-	 * An abstract {@link QuickContainer2} implementation
+	 * An abstract {@link QuickContainer} implementation
 	 *
 	 * @param <C> The type of the contained widgets
 	 */
-	public abstract class Abstract<C extends QuickWidget> extends QuickWidget.Abstract implements QuickContainer2<C> {
+	public abstract class Abstract<C extends QuickWidget> extends QuickWidget.Abstract implements QuickContainer<C> {
 		private final BetterList<C> theContents;
 
 		/**
 		 * @param interpreted The interpretation producing this container
 		 * @param parent The parent element
 		 */
-		protected Abstract(QuickContainer2.Interpreted<?, ?> interpreted, QuickElement parent) {
+		protected Abstract(QuickContainer.Interpreted<?, ?> interpreted, QuickElement parent) {
 			super(interpreted, parent);
 			theContents = BetterTreeList.<C> build().build();
 		}
@@ -160,10 +160,10 @@ public interface QuickContainer2<C extends QuickWidget> extends QuickWidget {
 		@Override
 		protected void updateModel(QuickElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
 			super.updateModel(interpreted, myModels);
-			QuickContainer2.Interpreted<?, C> myInterpreted = (QuickContainer2.Interpreted<?, C>) interpreted;
+			QuickContainer.Interpreted<?, C> myInterpreted = (QuickContainer.Interpreted<?, C>) interpreted;
 			CollectionUtils.synchronize(theContents, myInterpreted.getContents(), //
 				(widget, child) -> widget.getIdentity() == child.getDefinition().getIdentity())//
-			.<ModelInstantiationException> simpleE(child -> (C) child.create(QuickContainer2.Abstract.this))//
+			.<ModelInstantiationException> simpleE(child -> (C) child.create(QuickContainer.Abstract.this))//
 			.rightOrder()//
 			.onRightX(element -> {
 				try {

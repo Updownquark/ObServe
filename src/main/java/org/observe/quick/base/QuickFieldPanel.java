@@ -1,6 +1,6 @@
 package org.observe.quick.base;
 
-import org.observe.quick.QuickContainer2;
+import org.observe.quick.QuickContainer;
 import org.observe.quick.QuickElement;
 import org.observe.quick.QuickWidget;
 import org.observe.util.TypeTokens;
@@ -8,8 +8,8 @@ import org.qommons.config.QonfigElement;
 
 import com.google.common.reflect.TypeToken;
 
-public class QuickFieldPanel extends QuickContainer2.Abstract<QuickWidget> {
-	public static class Def extends QuickContainer2.Def.Abstract<QuickFieldPanel, QuickWidget> {
+public class QuickFieldPanel extends QuickContainer.Abstract<QuickWidget> {
+	public static class Def extends QuickContainer.Def.Abstract<QuickFieldPanel, QuickWidget> {
 		public Def(QuickElement.Def<?> parent, QonfigElement element) {
 			super(parent, element);
 		}
@@ -20,7 +20,7 @@ public class QuickFieldPanel extends QuickContainer2.Abstract<QuickWidget> {
 		}
 	}
 
-	public static class Interpreted extends QuickContainer2.Interpreted.Abstract<QuickFieldPanel, QuickWidget> {
+	public static class Interpreted extends QuickContainer.Interpreted.Abstract<QuickFieldPanel, QuickWidget> {
 		public Interpreted(Def definition, QuickElement.Interpreted<?> parent) {
 			super(definition, parent);
 		}

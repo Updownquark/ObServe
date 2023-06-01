@@ -19,7 +19,7 @@ import org.observe.expresso.ObservableModelSet.ModelValueSynth;
 import org.observe.expresso.ops.BinaryOperatorSet;
 import org.observe.expresso.ops.UnaryOperatorSet;
 import org.observe.quick.QuickCoreInterpretation;
-import org.observe.quick.QuickDocument2;
+import org.observe.quick.QuickDocument;
 import org.observe.quick.QuickElement;
 import org.observe.quick.QuickWidget;
 import org.observe.quick.style.StyleQIS;
@@ -83,7 +83,7 @@ public class QuickBaseInterpretation implements QonfigInterpretation {
 	@Override
 	public QonfigInterpreterCore.Builder configureInterpreter(Builder interpreter) {
 		// General setup
-		interpreter.modifyWith("quick", QuickDocument2.Def.class, new QonfigInterpreterCore.QonfigValueModifier<QuickDocument2.Def>() {
+		interpreter.modifyWith("quick", QuickDocument.Def.class, new QonfigInterpreterCore.QonfigValueModifier<QuickDocument.Def>() {
 			@Override
 			public Object prepareSession(CoreSession session) throws QonfigInterpretationException {
 				ExpressoQIS exS = session.as(ExpressoQIS.class);
@@ -96,7 +96,7 @@ public class QuickBaseInterpretation implements QonfigInterpretation {
 			}
 
 			@Override
-			public QuickDocument2.Def modifyValue(QuickDocument2.Def value, CoreSession session, Object prepared)
+			public QuickDocument.Def modifyValue(QuickDocument.Def value, CoreSession session, Object prepared)
 				throws QonfigInterpretationException {
 				return value;
 			}
