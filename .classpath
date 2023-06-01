@@ -19,7 +19,6 @@
 			<attribute name="test" value="true"/>
 		</attributes>
 	</classpathentry>
-	<classpathentry combineaccessrules="false" exported="true" kind="src" path="/Qommons"/>
 	<classpathentry kind="src" output="bin/main" path="src/main/antlr">
 		<attributes>
 			<attribute name="gradle_scope" value="main"/>

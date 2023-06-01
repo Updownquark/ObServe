@@ -20,19 +20,24 @@ repositories {
     mavenCentral()
 }
 
+group = "ObServe"
+version = "2.0.0"
+description = "A library of observables and many utilities for them"
+
 java {                                      
     sourceCompatibility = JavaVersion.VERSION_1_8
     targetCompatibility = JavaVersion.VERSION_1_8
 }
 
 dependencies {
+	api(project("Qommons"))
     api("com.google.guava:guava:32.0.0-jre")
     antlr("org.antlr:antlr4:4.9.2")
 
     // This dependency is used internally, and not exposed to consumers on their own compile classpath.
 	implementation("com.miglayout:miglayout-swing:4.2")
 	implementation("org.swinglabs:swingx:1.6.1")
-	
+
     // Use JUnit test framework.
     testImplementation("junit:junit:4.13.2")
 }

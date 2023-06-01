@@ -8,3 +8,6 @@
  */
 
 rootProject.name = "ObServe"
+
+include("Qommons")
+project(":Qommons").projectDir=file("../qommons")
