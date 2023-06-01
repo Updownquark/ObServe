@@ -162,7 +162,7 @@ public interface QuickContainer2<C extends QuickWidget> extends QuickWidget {
 			super.updateModel(interpreted, myModels);
 			QuickContainer2.Interpreted<?, C> myInterpreted = (QuickContainer2.Interpreted<?, C>) interpreted;
 			CollectionUtils.synchronize(theContents, myInterpreted.getContents(), //
-				(widget, child) -> widget.getId() == child.getId())//
+				(widget, child) -> widget.getIdentity() == child.getDefinition().getIdentity())//
 			.<ModelInstantiationException> simpleE(child -> (C) child.create(QuickContainer2.Abstract.this))//
 			.rightOrder()//
 			.onRightX(element -> {

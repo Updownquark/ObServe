@@ -314,7 +314,7 @@ public interface QuickTableColumn<R, C> {
 
 			if (myInterpreted.getEditor() == null)
 				theEditor = null;
-			else if (theEditor == null || theEditor.getId() != myInterpreted.getEditor())
+			else if (theEditor == null || theEditor.getIdentity() != myInterpreted.getEditor().getDefinition().getIdentity())
 				theEditor = myInterpreted.getEditor().create(this);
 			theValueName = getParentElement().getParentElement().getValueName();
 			QuickElement.satisfyContextValue(theColumnEditValueName, ModelTypes.Value.forType(myInterpreted.getColumnType()),
@@ -792,7 +792,7 @@ public interface QuickTableColumn<R, C> {
 
 			if (myInterpreted.getRenderer() == null)
 				theRenderer = null; // TODO Dispose?
-			else if (theRenderer == null || theRenderer.getId() != myInterpreted.getRenderer().getId()) {
+			else if (theRenderer == null || theRenderer.getIdentity() != myInterpreted.getRenderer().getDefinition().getIdentity()) {
 				try {
 					theRenderer = myInterpreted.getRenderer().create(this);
 				} catch (RuntimeException | Error e) {
@@ -811,7 +811,7 @@ public interface QuickTableColumn<R, C> {
 
 			if (myInterpreted.getEditing() == null)
 				theEditing = null; // TODO Dispose?
-			else if (theEditing == null || theEditing.getId() != myInterpreted.getEditing().getId())
+			else if (theEditing == null || theEditing.getIdentity() != myInterpreted.getEditing().getDefinition().getIdentity())
 				theEditing = myInterpreted.getEditing().create(this, theColumn.getFirst());
 			if (theEditing != null)
 				theEditing.update(myInterpreted.getEditing(), myModels);

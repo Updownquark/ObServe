@@ -1557,29 +1557,29 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 						case add:
 							renderer = true;
 							if (evt.getNewValue().getRenderer() != null)
-								renderers.put(evt.getNewValue().getId(),
+								renderers.put(evt.getNewValue().getDefinition().getIdentity(),
 									tx.transform(evt.getNewValue().getRenderer(), QuickSwingPopulator.class));
 							renderer = false;
 							if (evt.getNewValue().getEditing() != null && evt.getNewValue().getEditing().getEditor() != null)
-								editors.put(evt.getNewValue().getId(),
+								editors.put(evt.getNewValue().getDefinition().getIdentity(),
 									tx.transform(evt.getNewValue().getEditing().getEditor(), QuickSwingPopulator.class));
 							break;
 						case remove:
-							renderers.remove(evt.getOldValue().getId());
-							editors.remove(evt.getOldValue().getId());
+							renderers.remove(evt.getOldValue().getDefinition().getIdentity());
+							editors.remove(evt.getOldValue().getDefinition().getIdentity());
 							break;
 						case set:
-							if (evt.getOldValue().getId() != evt.getNewValue().getId()) {
-								renderers.remove(evt.getOldValue().getId());
-								editors.remove(evt.getOldValue().getId());
+							if (evt.getOldValue().getDefinition().getIdentity() != evt.getNewValue().getDefinition().getIdentity()) {
+								renderers.remove(evt.getOldValue().getDefinition().getIdentity());
+								editors.remove(evt.getOldValue().getDefinition().getIdentity());
 							}
 							renderer = true;
 							if (evt.getNewValue().getRenderer() != null)
-								renderers.put(evt.getNewValue().getId(),
+								renderers.put(evt.getNewValue().getDefinition().getIdentity(),
 									tx.transform(evt.getNewValue().getRenderer(), QuickSwingPopulator.class));
 							renderer = false;
 							if (evt.getNewValue().getEditing() != null && evt.getNewValue().getEditing().getEditor() != null)
-								editors.put(evt.getNewValue().getId(),
+								editors.put(evt.getNewValue().getDefinition().getIdentity(),
 									tx.transform(evt.getNewValue().getEditing().getEditor(), QuickSwingPopulator.class));
 							break;
 						}
@@ -1614,7 +1614,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 					.map((Class<InterpretedSwingTableColumn<R, ?>>) (Class<?>) InterpretedSwingTableColumn.class, column -> {
 						try {
 							return new InterpretedSwingTableColumn<>(quick, column, ctx, tx, panel.getUntil(), () -> parent[0],
-								renderers.get(column.getColumnSet().getId()), editors.get(column.getColumnSet().getId()));
+								renderers.get(column.getColumnSet().getIdentity()), editors.get(column.getColumnSet().getIdentity()));
 						} catch (ModelInstantiationException e) {
 							if (tableInitialized[0]) {
 								column.getColumnSet().reporting().error(e.getMessage(), e);

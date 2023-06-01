@@ -461,7 +461,9 @@ public interface QuickWidget extends QuickTextElement {
 			if (myInterpreted.isVisible() != null)
 				isVisible.set(myInterpreted.isVisible().get(myModels), null);
 			try (Transaction t = theEventListeners.lock(true, null)) {
-				CollectionUtils.synchronize(theEventListeners, myInterpreted.getEventListeners(), (l, i) -> l.getId() == i.getId())//
+				CollectionUtils
+				.synchronize(theEventListeners, myInterpreted.getEventListeners(),
+					(l, i) -> l.getIdentity() == i.getDefinition().getIdentity())//
 				.<ModelInstantiationException> simpleE(l -> {
 					QuickEventListener listener = l.create(this);
 					listener.update(l, myModels);

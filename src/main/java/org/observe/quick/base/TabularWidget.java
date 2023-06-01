@@ -290,7 +290,8 @@ public interface TabularWidget<R> extends MultiValueWidget<R>, RowTyped<R> {
 			satisfyContextValue("selected", ModelTypes.Value.BOOLEAN, SettableValue.flatten(isSelected, () -> false), myModels);
 			satisfyContextValue("rowIndex", ModelTypes.Value.INT, SettableValue.flatten(theRowIndex, () -> 0), myModels);
 			satisfyContextValue("columnIndex", ModelTypes.Value.INT, SettableValue.flatten(theColumnIndex, () -> 0), myModels);
-			CollectionUtils.synchronize(theColumnSets, myInterpreted.getColumns(), (v, i) -> v.getId() == i.getId())//
+			CollectionUtils
+			.synchronize(theColumnSets, myInterpreted.getColumns(), (v, i) -> v.getIdentity() == i.getDefinition().getIdentity())//
 			.adjust(
 				new CollectionUtils.CollectionSynchronizerE<QuickTableColumn.TableColumnSet<R>, QuickTableColumn.TableColumnSet.Interpreted<R, ?>, ModelInstantiationException>() {
 					@Override

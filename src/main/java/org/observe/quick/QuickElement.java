@@ -20,6 +20,7 @@ import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.TypeConversionException;
 import org.qommons.ClassMap;
+import org.qommons.Identifiable;
 import org.qommons.collect.CollectionUtils;
 import org.qommons.config.AbstractQIS;
 import org.qommons.config.QonfigAddOn;
@@ -27,18 +28,45 @@ import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigInterpreterCore;
 import org.qommons.io.ErrorReporting;
+import org.qommons.io.LocatedFilePosition;
 
 /** The base type of values interpreted from Quick-typed {@link QonfigElement}s */
-public interface QuickElement {
+public interface QuickElement extends Identifiable {
 	/** The property in the Qonfig interpretation session where the definition interpreted from the session is stored. */
 	public static final String SESSION_QUICK_ELEMENT = "quick.element.def";
+
+	public static class Identity {
+		private final String theElementType;
+		private final LocatedFilePosition thePosition;
+
+		public Identity(String elementType, LocatedFilePosition position) {
+			theElementType = elementType;
+			thePosition = position;
+		}
+
+		public String getElementType() {
+			return theElementType;
+		}
+
+		public LocatedFilePosition getPosition() {
+			return thePosition;
+		}
+
+		@Override
+		public String toString() {
+			return new StringBuilder().append('<').append(theElementType).append(thePosition.toShortString()).toString();
+		}
+	}
 
 	/**
 	 * The definition of an element, interpreted via {@link QonfigInterpreterCore Qonfig interpretation} from {@link QonfigElement}s
 	 *
 	 * @param <E> The type of element that this definition is for
 	 */
-	public interface Def<E extends QuickElement> {
+	public interface Def<E extends QuickElement> extends Identifiable {
+		@Override
+		Identity getIdentity();
+
 		/** @return The definition interpreted from the parent element */
 		Def<?> getParentElement();
 
@@ -90,6 +118,7 @@ public interface QuickElement {
 		 * @param <E> The type of the element that this definition is for
 		 */
 		public abstract class Abstract<E extends QuickElement> implements Def<E> {
+			private final Identity theId;
 			private final QuickElement.Def<?> theParent;
 			private QonfigElement theElement;
 			private final ClassMap<QuickAddOn.Def<? super E, ?>> theAddOns;
@@ -103,9 +132,15 @@ public interface QuickElement {
 			 * @param element The element that this definition is being interpreted from
 			 */
 			protected Abstract(QuickElement.Def<?> parent, QonfigElement element) {
+				theId = new Identity(element.getType().getName(), element.getPositionInFile());
 				theParent = parent;
 				theElement = element;
 				theAddOns = new ClassMap<>();
+			}
+
+			@Override
+			public Identity getIdentity() {
+				return theId;
 			}
 
 			@Override
@@ -193,8 +228,6 @@ public interface QuickElement {
 	 * @param <E> The type of element that this interpretation is for
 	 */
 	public interface Interpreted<E extends QuickElement> {
-		Object getId();
-
 		/** @return The definition that produced this interpretation */
 		Def<? super E> getDefinition();
 
@@ -241,7 +274,6 @@ public interface QuickElement {
 		 * @param <E> The type of element that this interpretation is for
 		 */
 		public abstract class Abstract<E extends QuickElement> implements Interpreted<E> {
-			private final Object theId;
 			private final Def<? super E> theDefinition;
 			private final Interpreted<?> theParent;
 			private final ClassMap<QuickAddOn.Interpreted<? super E, ?>> theAddOns;
@@ -253,7 +285,6 @@ public interface QuickElement {
 			 * @param parent The interpretation from the parent element
 			 */
 			protected Abstract(Def<? super E> definition, Interpreted<?> parent) {
-				theId = new Object();
 				theDefinition = definition;
 				theParent = parent;
 				theAddOns = new ClassMap<>();
@@ -262,11 +293,6 @@ public interface QuickElement {
 					theAddOns.put(interp.getClass(), interp);
 				}
 				isDestroyed = SettableValue.build(boolean.class).withValue(false).build();
-			}
-
-			@Override
-			public Object getId() {
-				return theId;
 			}
 
 			@Override
@@ -331,7 +357,8 @@ public interface QuickElement {
 		}
 	}
 
-	Object getId();
+	@Override
+	Identity getIdentity();
 
 	/** @return The parent element */
 	QuickElement getParentElement();
@@ -371,7 +398,7 @@ public interface QuickElement {
 
 	/** Abstract {@link QuickElement} implementation */
 	public abstract class Abstract implements QuickElement {
-		private final Object theId;
+		private final Identity theId;
 		private final QuickElement theParent;
 		private final ClassMap<QuickAddOn<?>> theAddOns;
 		private final ClassMap<Class<? extends QuickAddOn.Interpreted<?, ?>>> theAddOnInterpretations;
@@ -382,7 +409,7 @@ public interface QuickElement {
 		 * @param parent The parent element
 		 */
 		protected Abstract(Interpreted<?> interpreted, QuickElement parent) {
-			theId = interpreted.getId();
+			theId = interpreted.getDefinition().getIdentity();
 			theParent = parent;
 			theAddOns = new ClassMap<>();
 			theAddOnInterpretations = new ClassMap<>();
@@ -395,7 +422,7 @@ public interface QuickElement {
 		}
 
 		@Override
-		public Object getId() {
+		public Identity getIdentity() {
 			return theId;
 		}
 
@@ -443,7 +470,7 @@ public interface QuickElement {
 
 		@Override
 		public String toString() {
-			return getClass().getSimpleName() + " " + theReporting.getFileLocation().getPosition(0);
+			return theId.toString();
 		}
 
 		protected <M, MV extends M> void satisfyContextValue(String valueName, ModelInstanceType<M, MV> type, MV value,

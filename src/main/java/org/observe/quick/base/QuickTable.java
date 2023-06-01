@@ -194,7 +194,8 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 		theMultiSelection.set(myInterpreted.getMultiSelection() == null ? null : myInterpreted.getMultiSelection().get(myModels),
 			null);
 		CollectionUtils.synchronize(theActions, myInterpreted.getActions(), //
-			(a, i) -> a.getId() == i.getId()).<ModelInstantiationException> simpleE(action -> action.create(this))//
+			(a, i) -> a.getIdentity() == i.getDefinition().getIdentity())
+		.<ModelInstantiationException> simpleE(action -> action.create(this))//
 		.rightOrder()//
 		.onRightX(element -> element.getLeftValue().update(element.getRightValue(), myModels))//
 		.onCommonX(element -> element.getLeftValue().update(element.getRightValue(), myModels))//

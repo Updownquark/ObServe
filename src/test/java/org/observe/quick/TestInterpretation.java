@@ -121,7 +121,7 @@ public class TestInterpretation implements QonfigInterpretation {
 		if (pathIndex == widgetPath.length)
 			return parent;
 		for (QuickWidget child : ((QuickContainer2<?>) parent).getContents()) {
-			if (child.getInterpreted().getDefinition() == widgetPath[pathIndex])
+			if (child.getIdentity() == widgetPath[pathIndex].getIdentity())
 				return find(child, widgetPath, pathIndex + 1);
 		}
 		throw new IllegalStateException("Could not find widget " + widgetPath[widgetPath.length - 1].getName());
