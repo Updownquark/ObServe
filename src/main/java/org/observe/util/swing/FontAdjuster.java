@@ -217,9 +217,7 @@ public class FontAdjuster {
 			Font oldFont = c.getFont();
 			Font newFont = theFont.apply(c.getFont());
 			c.setFont(newFont);
-			System.out.println("Setting font " + newFont.getStyle());
 			revert.add(() -> {
-				System.out.println("reverting font to " + oldFont.getStyle());
 				c.setFont(oldFont);
 			});
 		}
