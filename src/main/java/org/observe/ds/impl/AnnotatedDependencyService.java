@@ -52,7 +52,7 @@ public class AnnotatedDependencyService extends DefaultTypedDependencyService<Ob
 				m.setAccessible(true);
 			int controllerIdx = -1;
 			for (int i = 0; i < m.getParameters().size(); i++) {
-				if (TypeTokens.get().of(ComponentController.class).isAssignableFrom(m.getParameters().get(i).getType())) {
+				if (TypeTokens.get().isAssignable(TypeTokens.get().of(ComponentController.class), m.getParameters().get(i).getType())) {
 					if (controllerIdx >= 0)
 						throw new IllegalStateException(
 							m.getDeclaringClass().getName() + "." + m.getName() + " declares multiple controller parameters");
