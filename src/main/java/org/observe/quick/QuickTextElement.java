@@ -49,8 +49,8 @@ public interface QuickTextElement extends QuickStyledElement {
 
 				protected Abstract(QuickCompiledStyle parent, QuickCompiledStyle wrapped) {
 					super(parent, wrapped);
-					QuickTypeStyle typeStyle = QuickStyledElement.getTypeStyle(wrapped.getStyleSet(), wrapped.getElement(), QuickCore.NAME,
-						QuickCore.VERSION, "with-text");
+					QuickTypeStyle typeStyle = QuickStyledElement.getTypeStyle(wrapped.getStyleSet(), wrapped.getElement(),
+						QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, "with-text");
 					theFontColor = (QuickStyleAttribute<Color>) typeStyle.getAttribute("font-color", Color.class);
 					theFontSize = (QuickStyleAttribute<Double>) typeStyle.getAttribute("font-size", double.class);
 					theFontWeight = (QuickStyleAttribute<Double>) typeStyle.getAttribute("font-weight", double.class);
