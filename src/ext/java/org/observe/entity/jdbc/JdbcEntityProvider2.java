@@ -40,7 +40,7 @@ import org.observe.entity.ObservableEntityType;
 import org.observe.entity.jdbc.ConnectionPool.PreparedSqlOperation;
 import org.observe.entity.jdbc.DbDialect.EntityTable;
 import org.observe.entity.jdbc.DbDialect.JoinedTable;
-import org.observe.entity.jdbc.JdbcEntitySupport.JdbcColumn;
+import org.observe.entity.jdbc.JdbcTypesSupport.JdbcColumn;
 import org.observe.entity.jdbc.JdbcFieldRepresentation.Column;
 import org.observe.entity.jdbc.JdbcFieldRepresentation.JoinedField;
 import org.observe.entity.jdbc.JdbcFieldRepresentation.OverriddenField;
@@ -232,7 +232,7 @@ public class JdbcEntityProvider2 implements ObservableEntityProvider {
 
 	private final StampedLockingStrategy theLocker;
 	private final ConnectionPool theConnectionPool;
-	private final JdbcEntitySupport theTypeSupport;
+	private final JdbcTypesSupport theTypeSupport;
 	private final DbDialect theDialect;
 	private final Map<ObservableEntityType<?>, EntityTable<?>> theTables;
 	private final String theSchemaName;
@@ -240,7 +240,7 @@ public class JdbcEntityProvider2 implements ObservableEntityProvider {
 	private final boolean installSchema;
 	private ObservableEntityDataSet theEntitySet;
 
-	public JdbcEntityProvider2(StampedLockingStrategy locker, JdbcEntitySupport typeSupport, DbDialect dialect,
+	public JdbcEntityProvider2(StampedLockingStrategy locker, JdbcTypesSupport typeSupport, DbDialect dialect,
 		ConnectionPool connectionPool, String schemaName, boolean installSchema) {
 		theLocker = locker;
 		theConnectionPool = connectionPool;

@@ -5,7 +5,7 @@ import java.util.function.Function;
 
 import org.observe.ObservableValue;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
-import org.observe.quick.style.QuickElementStyle;
+import org.observe.quick.style.QuickInterpretedStyle;
 import org.observe.quick.style.StyleQIS;
 import org.observe.util.swing.PanelPopulation.ComponentEditor;
 import org.qommons.config.QonfigElement;
@@ -13,7 +13,7 @@ import org.qommons.config.QonfigInterpretationException;
 
 public abstract class AbstractQuickComponentDef implements QuickComponentDef {
 	private final StyleQIS theSession;
-	private final QuickElementStyle theStyle;
+	private final QuickInterpretedStyle theStyle;
 	private Function<ModelSetInstance, ? extends ObservableValue<String>> theFieldName;
 	private BiConsumer<ComponentEditor<?, ?>, QuickComponent.Builder> theModifications;
 
@@ -33,7 +33,7 @@ public abstract class AbstractQuickComponentDef implements QuickComponentDef {
 	}
 
 	@Override
-	public QuickElementStyle getStyle() {
+	public QuickInterpretedStyle getStyle() {
 		return theStyle;
 	}
 

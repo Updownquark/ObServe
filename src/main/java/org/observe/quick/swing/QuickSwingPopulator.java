@@ -46,10 +46,6 @@ import org.observe.expresso.ModelInstantiationException;
 import org.observe.quick.*;
 import org.observe.quick.QuickTextElement.QuickTextStyle;
 import org.observe.quick.base.*;
-import org.observe.quick.base.QuickBox;
-import org.observe.quick.base.QuickLayout;
-import org.observe.quick.base.QuickSize;
-import org.observe.quick.base.SimpleLayout;
 import org.observe.quick.swing.QuickSwingTablePopulation.InterpretedSwingTableColumn;
 import org.observe.util.TypeTokens;
 import org.observe.util.swing.*;
@@ -940,7 +936,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 			boolean ml = isMouseListening;
 			if (ml)
 				return;
-			synchronized (QuickCore.class) {
+			synchronized (QuickCoreSwing.class) {
 				ml = isMouseListening;
 				if (ml)
 					return;

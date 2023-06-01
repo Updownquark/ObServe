@@ -56,7 +56,7 @@ import org.observe.entity.jdbc.JdbcEntityProvider.EntryColumn;
 import org.observe.entity.jdbc.JdbcEntityProvider.ReferenceColumn;
 import org.observe.entity.jdbc.JdbcEntityProvider.SerialColumn;
 import org.observe.entity.jdbc.JdbcEntityProvider.TableNaming;
-import org.observe.entity.jdbc.JdbcEntitySupport.JdbcColumn;
+import org.observe.entity.jdbc.JdbcTypesSupport.JdbcColumn;
 import org.observe.util.TypeTokens;
 import org.qommons.BiTuple;
 import org.qommons.IntList;
@@ -399,14 +399,14 @@ public class JdbcEntityProvider implements ObservableEntityProvider {
 
 	private final StampedLockingStrategy theLocker;
 	private final ConnectionPool theConnectionPool;
-	private final JdbcEntitySupport theTypeSupport;
+	private final JdbcTypesSupport theTypeSupport;
 	private final Map<String, TableNaming<?>> theTableNaming;
 	private final String theSchemaName;
 	private final ListenerList<EntityChange<?>> theChanges;
 	private final boolean installSchema;
 	private ObservableEntityDataSet theEntitySet;
 
-	public JdbcEntityProvider(StampedLockingStrategy locker, JdbcEntitySupport typeSupport, ConnectionPool connectionPool,
+	public JdbcEntityProvider(StampedLockingStrategy locker, JdbcTypesSupport typeSupport, ConnectionPool connectionPool,
 		String schemaName, boolean installSchema) {
 		theLocker = locker;
 		theConnectionPool = connectionPool;

@@ -13,11 +13,11 @@ import org.observe.expresso.ExpressoParser;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
-import org.observe.expresso.ObservableModelSet.ValueContainer;
+import org.observe.expresso.ObservableModelSet.ModelValueSynth;
 import org.observe.util.TypeTokens;
 import org.qommons.config.CustomValueType;
-import org.qommons.config.ErrorReporting;
 import org.qommons.config.QonfigToolkit;
+import org.qommons.io.ErrorReporting;
 
 /** Represents the linear size of one dimension of a Quick widget */
 public class QuickSize {
@@ -185,16 +185,16 @@ public class QuickSize {
 		}
 
 		@Override
-		public <M, MV extends M> ValueContainer<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env)
+		public <M, MV extends M> ModelValueSynth<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env)
 			throws ExpressoEvaluationException {
 			if (type.getModelType() != ModelTypes.Value)
 				throw new ExpressoEvaluationException(getExpressionOffset(), getExpressionEnd(), "Only values are supported");
 			else if (!(TypeTokens.getRawType(type.getType(0)).isAssignableFrom(QuickSize.class)))
 				throw new ExpressoEvaluationException(getExpressionOffset(), getExpressionEnd(),
 					"Cannot cast SizeUnit to " + type.getType(0));
-			ValueContainer<SettableValue<?>, SettableValue<Double>> valueC = theValue
+			ModelValueSynth<SettableValue<?>, SettableValue<Double>> valueC = theValue
 				.evaluateInternal(ModelTypes.Value.forType(double.class), env);
-			return (ValueContainer<M, MV>) valueC.map(ModelTypes.Value.forType(QuickSize.class),
+			return (ModelValueSynth<M, MV>) valueC.map(ModelTypes.Value.forType(QuickSize.class),
 				doubleValue -> doubleValue.transformReversible(QuickSize.class, tx -> tx.cache(false)//
 					.map(dbl -> new QuickSize(dbl.floatValue(), theUnit))//
 					.withReverse(pos -> Double.valueOf(pos.value))));

@@ -1,5 +1,6 @@
 package org.observe.entity.impl;
 
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -7,7 +8,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
-import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -34,11 +34,7 @@ import org.qommons.collect.ElementId;
 import org.qommons.collect.MultiMap;
 import org.qommons.collect.QuickSet;
 import org.qommons.collect.QuickSet.QuickMap;
-import org.qommons.condition.All;
 import org.qommons.condition.Condition;
-import org.qommons.condition.ConditionalEntity;
-import org.qommons.condition.ConditionalFieldAccess;
-import org.qommons.condition.ConditionalValueAccess;
 
 import com.google.common.reflect.TypeToken;
 
@@ -79,13 +75,11 @@ public abstract class AbstractTabularEntityProvider implements ObservableEntityP
 		}
 	}
 
-
 	public interface TableField<F> {
 		Table getOwnerTable();
 
 		List<? extends TableColumn> getOwnerTableColumns();
 	}
-
 
 	public interface ScalarField<F> extends TableField<F> {
 		// void toColumns(F value, ); TODO
@@ -93,14 +87,13 @@ public abstract class AbstractTabularEntityProvider implements ObservableEntityP
 		// F fromColumns(Object
 	}
 
-
 	public interface SuperReferenceTableField<E, F> extends TableField<F> {
 		EntityTable<E> getEntityTable();
 
 		List<? extends TableField<? super F>> getSuperFields();
 
 		@Override
-		default List<? extends TableColumn<?>> getOwnerTableColumns() {
+		default List<? extends TableColumn> getOwnerTableColumns() {
 			return getOwnerTable().getIdentityColumns().allValues();
 		}
 	}
@@ -120,7 +113,7 @@ public abstract class AbstractTabularEntityProvider implements ObservableEntityP
 		TableField<V> getValueField();
 
 		@Override
-		default List<? extends TableColumn<?>> getOwnerTableColumns() {
+		default List<? extends TableColumn> getOwnerTableColumns() {
 			return Collections.emptyList();
 		}
 	}
@@ -134,92 +127,97 @@ public abstract class AbstractTabularEntityProvider implements ObservableEntityP
 	public interface Row {
 	}
 
-	public interface TableOrJoin extends ConditionalEntity<Row>, Named {
-		QuickMap<String, ? extends TableOrJoinColumn<?>> getColumns();
+	public interface TableOrJoin extends Named {
+		QuickMap<String, ? extends TableOrJoinColumn> getColumns();
 
-		@Override
-		default <F> ConditionalFieldAccess<Row, F> getField(Function<? super Row, F> fieldGetter)
-			throws UnsupportedOperationException, IllegalArgumentException {
-			throw new UnsupportedOperationException("Unsupported");
-		}
-
-		@Override
-		default TableOrJoinColumn<?> getField(String fieldName) throws UnsupportedOperationException, IllegalArgumentException {
+		default TableOrJoinColumn getField(String fieldName) throws UnsupportedOperationException, IllegalArgumentException {
 			return getColumns().get(fieldName);
 		}
 
-		@Override
-		default boolean owns(ConditionalValueAccess<?, ?> field) {
-			return getColumns().getIfPresent(((TableOrJoinColumn<?>) field).getName()) == field;
-		}
-
-		@Override
-		default boolean isAssignableFrom(ConditionalEntity<?> other) {
-			return this == other;
-		}
-
-		@Override
-		default ConditionalFieldAccess<?, ?> getOverriddenField(ConditionalFieldAccess<?, ?> conditionalFieldAccess) {
-			throw new UnsupportedOperationException("No overriding fields");
-		}
-
-		@Override
-		default All<Row, ?, ?> select() {
-			return null;
+		default boolean owns(TableOrJoinColumn column) {
+			return getColumns().getIfPresent(column.getName()) == column;
 		}
 	}
 
-	public interface TableOrJoinColumn<V> extends ConditionalFieldAccess<Row, V>, Named {
-		@Override
-		default boolean isOverride(ConditionalValueAccess<? extends Row, ?> field) {
-			return field == this;
-		}
+	public interface TableOrJoinColumn extends Named, Comparable<TableOrJoinColumn> {
+		TableOrJoin getOwner();
 
 		@Override
-		default int compareTo(ConditionalValueAccess<?, ?> o) {
-			if (!(o instanceof ObservableEntityFieldType))
-				return -1;
-			if (getSourceEntity() != ((TableOrJoinColumn<?>) o).getSourceEntity())
+		default int compareTo(TableOrJoinColumn o) {
+			if (getOwner() != o.getOwner())
 				throw new IllegalArgumentException("Cannot compare fields of different entity types");
-			return StringUtils.compareNumberTolerant(getName(), ((TableOrJoinColumn<?>) o).getName(), true, true);
+			return StringUtils.compareNumberTolerant(getName(), o.getName(), true, true);
 		}
 	}
 
 	public interface Table extends TableOrJoin {
-		QuickMap<String, TableColumn<?>> getIdentityColumns();
+		QuickMap<String, TableColumn> getIdentityColumns();
 
 		@Override
-		QuickMap<String, TableColumn<?>> getColumns();
+		QuickMap<String, TableColumn> getColumns();
+
+		public static class Default implements Table {
+			private final String theName;
+			private final QuickMap<String, TableColumn> theIdColumns;
+			private final QuickMap<String, TableColumn> theColumns;
+
+			public Default(String name, QuickMap<String, TableColumn> idColumns, QuickMap<String, TableColumn> columns) {
+				theName = name;
+				theIdColumns = idColumns.unmodifiable();
+				theColumns = columns.unmodifiable();
+			}
+
+			@Override
+			public String getName() {
+				return theName;
+			}
+
+			@Override
+			public QuickMap<String, TableColumn> getIdentityColumns() {
+				return theIdColumns;
+			}
+
+			@Override
+			public QuickMap<String, TableColumn> getColumns() {
+				return theColumns;
+			}
+
+			@Override
+			public String toString() {
+				return super.toString();
+			}
+		}
 	}
 
-	public interface TableColumn<V> extends TableOrJoinColumn<V> {
-		Table getTable();
+	public interface TableColumn extends TableOrJoinColumn {
+		@Override
+		Table getOwner();
 	}
 
-	public interface ReferenceColumn<V> extends TableColumn<V> {
+	public interface ReferenceColumn<V> extends TableColumn {
 		Table getReferenceTable();
 
-		TableColumn<V> getReferenceColumn();
+		TableColumn getReferenceColumn();
 	}
 
 	public static class Join implements TableOrJoin {
 		private final String theJoinName;
 		private final TableOrJoin theLeft;
 		private final Table theRight;
-		private final List<JoinColumn<?>> theJoinColumns;
-		private final QuickMap<String, JoinColumn<?>> theAllJoinColumns;
+		private final List<JoinColumn> theJoinColumns;
+		private final QuickMap<String, JoinColumn> theAllJoinColumns;
 
-		public Join(String joinName, TableOrJoin left, Table right, List<TableOrJoinColumn<?>> leftJoins, List<TableColumn<?>> rightJoins) {
+		public Join(String joinName, TableOrJoin left, Table right, List<TableOrJoinColumn> leftJoins, List<TableColumn> rightJoins) {
 			theJoinName = joinName;
 			theLeft = left;
 			theRight = right;
-			List<JoinColumn<?>> joinColumns = new ArrayList<>(leftJoins.size());
+			List<JoinColumn> joinColumns = new ArrayList<>(leftJoins.size());
 			theJoinColumns = Collections.unmodifiableList(joinColumns);
-			Map<String, JoinColumn<?>> allJoinColumns = new HashMap<>();
+			Map<String, JoinColumn> allJoinColumns = new HashMap<>();
 			for (int i = 0; i < leftJoins.size(); i++) {
 				String joinColumnName = StringUtils.getNewItemName(allJoinColumns.values(), JoinColumn::getName,
 					joinName + rightJoins.get(i).getName(), StringUtils.SIMPLE_DUPLICATES);
-				JoinColumn<Object> joinColumn = new JoinColumn<>(this, joinColumnName, leftJoins.get(i), rightJoins.get(i));
+				JoinColumn joinColumn = new JoinColumn(this, joinColumnName, leftJoins.get(i), rightJoins.get(i));
 				joinColumns.add(joinColumn);
 				allJoinColumns.put(joinColumnName, joinColumn);
 			}
@@ -232,7 +230,7 @@ public abstract class AbstractTabularEntityProvider implements ObservableEntityP
 		}
 
 		@Override
-		public QuickMap<String, JoinColumn<?>> getColumns() {
+		public QuickMap<String, JoinColumn> getColumns() {
 			return theAllJoinColumns;
 		}
 
@@ -244,18 +242,18 @@ public abstract class AbstractTabularEntityProvider implements ObservableEntityP
 			return theRight;
 		}
 
-		public List<JoinColumn<?>> getJoinColumns() {
+		public List<JoinColumn> getJoinColumns() {
 			return theJoinColumns;
 		}
 	}
 
-	private static class JoinColumn<T> implements TableOrJoinColumn<T> {
+	private static class JoinColumn implements TableOrJoinColumn {
 		private final Join theJoin;
 		private final String theJoinColumnName;
-		private final TableOrJoinColumn<? extends T> theLeft;
-		private final TableColumn<? extends T> theRight;
+		private final TableOrJoinColumn theLeft;
+		private final TableColumn theRight;
 
-		public JoinColumn(Join join, String joinColumnName, TableOrJoinColumn<? extends T> left, TableColumn<? extends T> right) {
+		public JoinColumn(Join join, String joinColumnName, TableOrJoinColumn left, TableColumn right) {
 			theJoin = join;
 			theJoinColumnName = joinColumnName;
 			theLeft = left;
@@ -263,7 +261,7 @@ public abstract class AbstractTabularEntityProvider implements ObservableEntityP
 		}
 
 		@Override
-		public ConditionalEntity<Row> getSourceEntity() {
+		public Join getOwner() {
 			return theJoin;
 		}
 
@@ -272,27 +270,12 @@ public abstract class AbstractTabularEntityProvider implements ObservableEntityP
 			return theJoinColumnName;
 		}
 
-		public TableOrJoinColumn<? extends T> getLeft() {
+		public TableOrJoinColumn getLeft() {
 			return theLeft;
 		}
 
-		public TableColumn<? extends T> getRight() {
+		public TableColumn getRight() {
 			return theRight;
-		}
-
-		@Override
-		public ConditionalEntity<T> getTargetEntity() {
-			return null;
-		}
-
-		@Override
-		public T get(Row entity) {
-			return theLeft.get(entity);
-		}
-
-		@Override
-		public int compare(T o1, T o2) {
-			return ((TableOrJoinColumn<T>) theLeft).compare(o1, o2);
 		}
 
 		@Override
@@ -321,9 +304,9 @@ public abstract class AbstractTabularEntityProvider implements ObservableEntityP
 
 	public static class TableCreateRequest {
 		private final Table theTable;
-		private final Map<TableColumn<?>, Object> theValues;
+		private final Map<TableColumn, Object> theValues;
 
-		public TableCreateRequest(Table table, Map<TableColumn<?>, Object> values) {
+		public TableCreateRequest(Table table, Map<TableColumn, Object> values) {
 			theTable = table;
 			theValues = values;
 		}
@@ -332,7 +315,7 @@ public abstract class AbstractTabularEntityProvider implements ObservableEntityP
 			return theTable;
 		}
 
-		public Map<TableColumn<?>, Object> getValues() {
+		public Map<TableColumn, Object> getValues() {
 			return theValues;
 		}
 	}
@@ -347,36 +330,36 @@ public abstract class AbstractTabularEntityProvider implements ObservableEntityP
 		OperationResult<Long> countAsync(Object prepared, Variables variables);
 	}
 
-	// public interface TableQuery<C extends TableColumn, T extends Table> {
+	// public interface TableQuery<C extends QuickTableColumn, T extends Table> {
 	// T getTable();
 	//
-	// TableQuery<C, T> addColumns(TableColumn... columns);
+	// TableQuery<C, T> addColumns(QuickTableColumn... columns);
 	//
-	// TableQuery<C, T> join(Table table, TableColumn... joinColumns);
+	// TableQuery<C, T> join(Table table, QuickTableColumn... joinColumns);
 	// }
 	//
-	// public interface TableInsert<C extends TableColumn, T extends Table> {
+	// public interface TableInsert<C extends QuickTableColumn, T extends Table> {
 	// T getTable();
 	//
 	// // TableInsert<C, T> with(
 	// }
 	//
-	// public interface TableUpdate<C extends TableColumn, T extends Table> {
+	// public interface TableUpdate<C extends QuickTableColumn, T extends Table> {
 	// T getTable();
 	//
 	// }
 	//
-	// public interface TableDelete<C extends TableColumn, T extends Table> {
+	// public interface TableDelete<C extends QuickTableColumn, T extends Table> {
 	// T getTable();
 	//
 	// }
 	//
-	// public interface TableCreate<C extends TableColumn, T extends Table> {
+	// public interface TableCreate<C extends QuickTableColumn, T extends Table> {
 	//
 	// }
 
 	private ObservableEntityDataSet theEntitySet;
-	private QuickMap<String, EntityTable<?>> theEntityTables;
+	private Map<String, EntityTable<?>> theEntityTables;
 	private List<EntityChange<?>> theLocalChanges;
 
 	@Override
@@ -386,40 +369,44 @@ public abstract class AbstractTabularEntityProvider implements ObservableEntityP
 		QuickMap<String, EntityTable<?>> entityTables = QuickSet
 			.of(theEntitySet.getEntityTypes().stream().map(e -> e.getName()).collect(Collectors.toList()))//
 			.createMap();
-		theEntityTables = entityTables.unmodifiable();
 		List<QuickMap<String, TableField<?>>> fields = new ArrayList<>(theEntitySet.getEntityTypes().size());
 		// Create the entity table instances
 		for (int i = 0; i < entityTables.keySize(); i++) {
 			ObservableEntityType<?> entity = theEntitySet.getEntityTypes().get(i);
-			entityTables.put(entity.getName(), _createEntityTable(entity, entityTables, fields));
+			try {
+				entityTables.put(entity.getName(), _createEntityTable(entity, entityTables, fields));
+			} catch (SQLException e) {
+				throw new EntityOperationException("Could not initialize entity tables from DB", e);
+			}
 		}
+		theEntityTables = Collections.unmodifiableMap(new HashMap<>(entityTables.asJavaMap()));
 		// Create non-reference ID fields
 		for (int i = 0; i < entityTables.keySize(); i++)
-			initFields(entityTables.get(i), fields, i, false, false, false);
+			initFields(entityTables, fields, i, false, false, false);
 		// Create reference ID fields
 		for (int i = 0; i < entityTables.keySize(); i++)
-			initFields(entityTables.get(i), fields, i, false, true, false);
+			initFields(entityTables, fields, i, false, true, false);
 		// Create non-reference, scalar, non-ID fields
 		for (int i = 0; i < entityTables.keySize(); i++)
-			initFields(entityTables.get(i), fields, i, true, false, false);
+			initFields(entityTables, fields, i, true, false, false);
 		// Create reference, scalar, non-ID fields
 		for (int i = 0; i < entityTables.keySize(); i++)
-			initFields(entityTables.get(i), fields, i, true, true, false);
+			initFields(entityTables, fields, i, true, true, false);
 		// Create non-scalar fields
 		for (int i = 0; i < entityTables.keySize(); i++)
-			initFields(entityTables.get(i), fields, i, false, true, true);
+			initFields(entityTables, fields, i, false, true, true);
 
 		init();
 	}
 
 	private <E> EntityTable<E> _createEntityTable(ObservableEntityType<E> entity, QuickMap<String, EntityTable<?>> entityTables,
-		List<QuickMap<String, TableField<?>>> fields) {
+		List<QuickMap<String, TableField<?>>> fields) throws SQLException, EntityOperationException {
 		List<EntityTable<? super E>> superTables = new ArrayList<>(entity.getSupers().size());
 		for (ObservableEntityType<? super E> superEntity : entity.getSupers()) {
 			entityTables.put(superEntity.getName(), _createEntityTable(superEntity, entityTables, fields));
 		}
 		QuickMap<String, TableField<?>> entityFields = entity.getFields().keySet().createMap();
-		fields.add(theEntityTables.keyIndex(entity.getName()), entityFields);
+		fields.add(entityTables.keyIndex(entity.getName()), entityFields);
 		EntityTable<E> table = new EntityTable<>(entity, //
 			superTables.isEmpty() ? Collections.<EntityTable<? super E>> emptyList() : Collections.unmodifiableList(superTables), //
 				entityFields);
@@ -427,11 +414,13 @@ public abstract class AbstractTabularEntityProvider implements ObservableEntityP
 		return table;
 	}
 
-	private <E> void initFields(EntityTable<E> entityTable, List<QuickMap<String, TableField<?>>> fields, int entityIndex,
+	private <E> void initFields(QuickMap<String, EntityTable<?>> entityTables, List<QuickMap<String, TableField<?>>> fields,
+		int entityIndex,
 		boolean withNonIdFields, boolean withReferences, boolean withNonScalar) {
+		EntityTable<E> entityTable = (EntityTable<E>) entityTables.get(entityIndex);
 		for (ObservableEntityType<? super E> superType : entityTable.getType().getSupers()) {
-			int superIndex = theEntityTables.keyIndex(superType.getName());
-			initFields(theEntityTables.get(superIndex), fields, superIndex, withNonIdFields, withReferences, withNonScalar);
+			int superIndex = entityTables.keyIndex(superType.getName());
+			initFields(entityTables, fields, superIndex, withNonIdFields, withReferences, withNonScalar);
 		}
 		QuickMap<String, TableField<?>> entityFields = fields.get(entityIndex);
 		for (int f = 0; f < entityFields.keySize(); f++) {
@@ -463,7 +452,7 @@ public abstract class AbstractTabularEntityProvider implements ObservableEntityP
 		return true;
 	}
 
-	protected abstract <E> Table createTable(EntityTable<E> entity);
+	protected abstract <E> Table createTable(EntityTable<E> entity) throws SQLException, EntityOperationException;
 
 	protected abstract Table createCollectionTable(Table ownerTable, String fieldName, Class<?> collectionClass);
 
@@ -474,7 +463,7 @@ public abstract class AbstractTabularEntityProvider implements ObservableEntityP
 		String fieldName, ObservableEntityFieldType<?, ?> field, ObservableEntityType<?> targetEntity,
 		ObservableEntityType<?> keyTargetEntity, ObservableEntityType<?> valueTargetEntity);
 
-	protected abstract <V> ReferenceColumn<V> createReferenceColumn(Table ownerTable, TableColumn<V> idField);
+	protected abstract <V> ReferenceColumn<V> createReferenceColumn(Table ownerTable, TableColumn idField);
 
 	protected abstract void init();
 
@@ -554,7 +543,7 @@ public abstract class AbstractTabularEntityProvider implements ObservableEntityP
 		ObservableEntityFieldType<?, ?> field) {
 		EntityTable<F> referenceTable = (EntityTable<F>) theEntityTables.get(targetType.getName());
 		List<ReferenceColumn<?>> refColumns = new ArrayList<>(referenceTable.getTable().getIdentityColumns().keySize());
-		for (TableColumn<?> idField : referenceTable.getTable().getIdentityColumns().allValues()) {
+		for (TableColumn idField : referenceTable.getTable().getIdentityColumns().allValues()) {
 			refColumns.add(createReferenceColumn(ownerTable, idField));
 		}
 		return new ReferenceFieldImpl<>(ownerTable, referenceTable, Collections.unmodifiableList(refColumns));
@@ -573,7 +562,7 @@ public abstract class AbstractTabularEntityProvider implements ObservableEntityP
 			valueName = StringUtils.singularize(fieldName);
 		TableField<V> valueField = createField(null, collectionTable, valueName, valueType, field, valueEntity, null, null);
 		List<ReferenceColumn<?>> backRefColumns = new ArrayList<>(ownerTable.getIdentityColumns().keySize());
-		for (TableColumn<?> idField : ownerTable.getIdentityColumns().allValues()) {
+		for (TableColumn idField : ownerTable.getIdentityColumns().allValues()) {
 			backRefColumns.add(createReferenceColumn(ownerTable, idField));
 		}
 		return new CollectionFieldImpl<>(ownerTable, collectionTable, Collections.unmodifiableList(backRefColumns), valueField);
@@ -609,7 +598,7 @@ public abstract class AbstractTabularEntityProvider implements ObservableEntityP
 		TableField<K> keyField = createField(null, collectionTable, keyName, keyType, field, keyEntity, null, null);
 		TableField<V> valueField = createField(null, collectionTable, valueName, valueType, field, valueEntity, null, null);
 		List<ReferenceColumn<?>> backRefColumns = new ArrayList<>(ownerTable.getIdentityColumns().keySize());
-		for (TableColumn<?> idField : ownerTable.getIdentityColumns().allValues()) {
+		for (TableColumn idField : ownerTable.getIdentityColumns().allValues()) {
 			backRefColumns.add(createReferenceColumn(ownerTable, idField));
 		}
 		return new MapFieldImpl<>(ownerTable, collectionTable, Collections.unmodifiableList(backRefColumns), keyField, valueField);
@@ -643,7 +632,7 @@ public abstract class AbstractTabularEntityProvider implements ObservableEntityP
 		TableField<K> keyField = createField(null, collectionTable, keyName, keyType, field, keyEntity, null, null);
 		TableField<V> valueField = createField(null, collectionTable, valueName, valueType, field, valueEntity, null, null);
 		List<ReferenceColumn<?>> backRefColumns = new ArrayList<>(ownerTable.getIdentityColumns().keySize());
-		for (TableColumn<?> idField : ownerTable.getIdentityColumns().allValues()) {
+		for (TableColumn idField : ownerTable.getIdentityColumns().allValues()) {
 			backRefColumns.add(createReferenceColumn(ownerTable, idField));
 		}
 		return new MultiMapFieldImpl<>(ownerTable, collectionTable, Collections.unmodifiableList(backRefColumns), keyField, valueField);
@@ -651,7 +640,7 @@ public abstract class AbstractTabularEntityProvider implements ObservableEntityP
 
 	static class EntityCreateOperation<E> {
 		private final TableOperation<Row> theOperation;
-		private final QuickMap<String, TableOrJoinColumn<?>> theFi
+		// private final QuickMap<String, TableOrJoinColumn<?>> theFi
 	}
 
 	@Override
@@ -682,6 +671,7 @@ public abstract class AbstractTabularEntityProvider implements ObservableEntityP
 
 	@Override
 	public <E> OperationResult<Iterable<SimpleEntity<? extends E>>> query(EntityQuery<E> query, Object prepared) {
+
 		// TODO Auto-generated method stub
 		return null;
 	}
@@ -767,7 +757,7 @@ public abstract class AbstractTabularEntityProvider implements ObservableEntityP
 
 	protected abstract QueryOperation query(Selection selection);
 
-	protected abstract TableOperation<Long> update(Selection selection, Map<TableOrJoinColumn<?>, Object> values);
+	protected abstract TableOperation<Long> update(Selection selection, Map<TableOrJoinColumn, Object> values);
 
 	protected abstract TableOperation<Long> delete(Selection selection);
 

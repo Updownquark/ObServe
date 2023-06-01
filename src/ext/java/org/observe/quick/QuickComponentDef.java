@@ -5,7 +5,7 @@ import java.util.function.Function;
 
 import org.observe.ObservableValue;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
-import org.observe.quick.style.QuickElementStyle;
+import org.observe.quick.style.QuickInterpretedStyle;
 import org.observe.quick.style.StyleQIS;
 import org.observe.util.swing.PanelPopulation.ComponentEditor;
 import org.observe.util.swing.PanelPopulation.PanelPopulator;
@@ -17,7 +17,7 @@ public interface QuickComponentDef {
 
 	StyleQIS getSession();
 
-	QuickElementStyle getStyle();
+	QuickInterpretedStyle getStyle();
 
 	Function<ModelSetInstance, ? extends ObservableValue<String>> getFieldName();
 

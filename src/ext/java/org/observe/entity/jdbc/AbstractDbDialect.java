@@ -3,42 +3,20 @@ package org.observe.entity.jdbc;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.TreeMap;
+import java.util.*;
 import java.util.function.BooleanSupplier;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
-import org.observe.entity.ConfigurableCreator;
-import org.observe.entity.ConfigurableDeletion;
-import org.observe.entity.ConfigurableQuery;
-import org.observe.entity.ConfigurableUpdate;
-import org.observe.entity.EntityCondition;
+import org.observe.entity.*;
 import org.observe.entity.EntityCondition.CompositeCondition;
 import org.observe.entity.EntityCondition.LiteralCondition;
 import org.observe.entity.EntityCondition.OrCondition;
 import org.observe.entity.EntityCondition.ValueCondition;
 import org.observe.entity.EntityCondition.VariableCondition;
-import org.observe.entity.EntityIdentity;
-import org.observe.entity.EntityLoadRequest;
 import org.observe.entity.EntityLoadRequest.Fulfillment;
-import org.observe.entity.EntityOperationException;
-import org.observe.entity.EntityUpdate;
-import org.observe.entity.EntityValueAccess;
-import org.observe.entity.FieldLoadType;
-import org.observe.entity.ObservableEntityFieldType;
 import org.observe.entity.ObservableEntityProvider.CollectionOperationType;
 import org.observe.entity.ObservableEntityProvider.SimpleEntity;
-import org.observe.entity.ObservableEntityType;
 import org.observe.entity.jdbc.JdbcFieldRepresentation.Column;
 import org.observe.entity.jdbc.JdbcFieldRepresentation.JoinedField;
 import org.observe.entity.jdbc.JdbcFieldRepresentation.OverriddenField;
@@ -371,7 +349,7 @@ public abstract class AbstractDbDialect implements DbDialect {
 					else
 						sql.append(" AND ");
 					sql.append(theNickName).append('.').append(column.getName())//
-						.append('=').append(source.theNickName).append('.').append(column.getName());
+					.append('=').append(source.theNickName).append('.').append(column.getName());
 				}
 			}
 		}
@@ -970,7 +948,7 @@ public abstract class AbstractDbDialect implements DbDialect {
 					.ceil(loadRequest.getEntities().size() * 1.0 / MAX_IDS_PER_QUERY)) {
 					IntList entities = new IntList();
 					StringBuilder str = new StringBuilder();
-					int querySize = ranges.size() / ((int) Math.ceil(ranges.size() / MAX_RANGES_PER_QUERY));
+					int querySize = ranges.size() / ((int) Math.ceil(ranges.size() * 1.0f / MAX_RANGES_PER_QUERY));
 					queries = new ArrayList<>(querySize);
 					for (int r = 0; r < ranges.size(); r++) {
 						if (r % querySize == querySize - 1) {

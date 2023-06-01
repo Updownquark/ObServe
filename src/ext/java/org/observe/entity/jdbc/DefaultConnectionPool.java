@@ -89,7 +89,7 @@ public class DefaultConnectionPool implements ConnectionPool {
 
 	public DefaultConnectionPool(String name, SqlConnector connection) {
 		theConnection = connection;
-		theSynchronousConnectionList = BetterTreeList.<Connection> build().safe(false).build();
+		theSynchronousConnectionList = BetterTreeList.<Connection> build().build();
 		theSynchronousConnections = ThreadLocal.withInitial(() -> {
 			try {
 				Connection conn = theConnection.getConnection();

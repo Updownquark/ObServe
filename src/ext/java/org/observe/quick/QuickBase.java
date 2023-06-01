@@ -55,11 +55,11 @@ import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet;
-import org.observe.expresso.ObservableModelSet.AbstractValueContainer;
+import org.observe.expresso.ObservableModelSet.AbstractValueSynth;
 import org.observe.expresso.ObservableModelSet.ExternalModelSetBuilder;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
-import org.observe.expresso.ObservableModelSet.ValueContainer;
-import org.observe.expresso.ObservableModelSet.ValueCreator;
+import org.observe.expresso.ObservableModelSet.ModelValueSynth;
+import org.observe.expresso.ObservableModelSet.CompiledModelValue;
 import org.observe.expresso.QonfigExpression;
 import org.observe.quick.QuickComponent.Builder;
 import org.observe.quick.style.StyleQIS;
@@ -116,7 +116,7 @@ public class QuickBase implements QonfigInterpretation {
 	public interface Column<R, C> {
 		CategoryRenderStrategy<R, C> createColumn(QuickComponent.Builder parent, Supplier<ModelSetInstance> modelCreator,
 			BiConsumer<ModelSetInstance, R> configModelValue, BiConsumer<ModelSetInstance, ModelCell<? extends R, ? extends C>> configCell,
-			ValueContainer<SettableValue<?>, SettableValue<R>> defaultColumnValue);
+			ModelValueSynth<SettableValue<?>, SettableValue<R>> defaultColumnValue);
 	}
 
 	public interface ColumnList<R> {
@@ -132,23 +132,23 @@ public class QuickBase implements QonfigInterpretation {
 		public final ObservableModelSet model;
 		public final BiConsumer<ModelSetInstance, SettableValue<T>> valueInstaller;
 		public final BiConsumer<ModelSetInstance, ObservableCollection<T>> valuesInstaller;
-		public final ValueContainer<SettableValue<?>, SettableValue<String>> name;
+		public final ModelValueSynth<SettableValue<?>, SettableValue<String>> name;
 		public final Function<ModelSetInstance, SettableValue<Icon>> icon;
-		public final ValueContainer<ObservableAction<?>, ObservableAction<?>> action;
-		public final ValueContainer<SettableValue<?>, SettableValue<String>> enabled;
+		public final ModelValueSynth<ObservableAction<?>, ObservableAction<?>> action;
+		public final ModelValueSynth<SettableValue<?>, SettableValue<String>> enabled;
 		public final boolean asButton;
 		public final boolean asPopup;
 		public final boolean allowForEmpty;
 		public final boolean allowForMultiple;
-		public final ValueContainer<SettableValue<?>, SettableValue<String>> tooltip;
+		public final ModelValueSynth<SettableValue<?>, SettableValue<String>> tooltip;
 
 		public ValueAction(ObservableModelSet model, BiConsumer<ModelSetInstance, SettableValue<T>> valueInstaller,
 			BiConsumer<ModelSetInstance, ObservableCollection<T>> valuesInstaller,
-			ValueContainer<SettableValue<?>, SettableValue<String>> name, Function<ModelSetInstance, SettableValue<Icon>> icon,
-			ValueContainer<ObservableAction<?>, ObservableAction<?>> action,
-			ValueContainer<SettableValue<?>, SettableValue<String>> enabled, //
+			ModelValueSynth<SettableValue<?>, SettableValue<String>> name, Function<ModelSetInstance, SettableValue<Icon>> icon,
+			ModelValueSynth<ObservableAction<?>, ObservableAction<?>> action,
+			ModelValueSynth<SettableValue<?>, SettableValue<String>> enabled, //
 			boolean asButton, boolean asPopup, boolean allowForEmpty, boolean allowForMultiple,
-			ValueContainer<SettableValue<?>, SettableValue<String>> tooltip) {
+			ModelValueSynth<SettableValue<?>, SettableValue<String>> tooltip) {
 			this.model = model;
 			this.valueInstaller = valueInstaller;
 			this.valuesInstaller = valuesInstaller;
@@ -223,7 +223,7 @@ public class QuickBase implements QonfigInterpretation {
 		.createWith("column", Column.class, session -> interpretColumn(wrap(session), base))//
 		.createWith("modify-row-value", ColumnEditing.class, session -> interpretRowModify(wrap(session)))//
 		// .createWith("replace-row-value", ColumnEditing.class, session->interpretRowReplace(wrap(session))) TODO
-		.createWith("columns", ValueCreator.class, session -> interpretColumns(wrap(session)))//
+		.createWith("columns", CompiledModelValue.class, session -> interpretColumns(wrap(session)))//
 		.createWith("split", QuickComponentDef.class, session -> interpretSplit(wrap(session)))//
 		.createWith("field-panel", QuickComponentDef.class, session -> interpretFieldPanel(wrap(session)))//
 		.modifyWith("field", QuickComponentDef.class, (field, session, prep) -> modifyField(field, wrap(session)))//
@@ -301,11 +301,11 @@ public class QuickBase implements QonfigInterpretation {
 			if (entry.getValue() instanceof Map)
 				buildExtModels(widgetModels.addSubModel(entry.getKey()), (Map<String, Object>) entry.getValue(), msi);
 			else
-				installExtValue(widgetModels, entry.getKey(), (ValueContainer<?, ?>) entry.getValue(), msi);
+				installExtValue(widgetModels, entry.getKey(), (ModelValueSynth<?, ?>) entry.getValue(), msi);
 		}
 	}
 
-	private static <M, MV extends M> void installExtValue(ExternalModelSetBuilder widgetModels, String name, ValueContainer<M, MV> value,
+	private static <M, MV extends M> void installExtValue(ExternalModelSetBuilder widgetModels, String name, ModelValueSynth<M, MV> value,
 		ModelSetInstance msi) throws QonfigInterpretationException {
 		widgetModels.with(name, value.getType(), value.get(msi));
 	}
@@ -351,25 +351,25 @@ public class QuickBase implements QonfigInterpretation {
 		int c = 0;
 		for (ExpressoQIS child : session.as(ExpressoQIS.class).forChildren()) {
 			QuickComponentDef childComp = box.getChildren().get(c++);
-			ValueContainer<SettableValue<?>, SettableValue<QuickPosition>> leftC = QuickCore
+			ModelValueSynth<SettableValue<?>, SettableValue<QuickPosition>> leftC = QuickCore
 				.parsePosition(child.getAttribute("left", QonfigExpression.class), child);
-			ValueContainer<SettableValue<?>, SettableValue<QuickPosition>> rightC = QuickCore
+			ModelValueSynth<SettableValue<?>, SettableValue<QuickPosition>> rightC = QuickCore
 				.parsePosition(child.getAttribute("right", QonfigExpression.class), child);
-			ValueContainer<SettableValue<?>, SettableValue<QuickPosition>> topC = QuickCore
+			ModelValueSynth<SettableValue<?>, SettableValue<QuickPosition>> topC = QuickCore
 				.parsePosition(child.getAttribute("top", QonfigExpression.class), child);
-			ValueContainer<SettableValue<?>, SettableValue<QuickPosition>> bottomC = QuickCore
+			ModelValueSynth<SettableValue<?>, SettableValue<QuickPosition>> bottomC = QuickCore
 				.parsePosition(child.getAttribute("bottom", QonfigExpression.class), child);
-			ValueContainer<SettableValue<?>, SettableValue<QuickSize>> minWidthC = QuickCore
+			ModelValueSynth<SettableValue<?>, SettableValue<QuickSize>> minWidthC = QuickCore
 				.parseSize(child.getAttribute("min-width", QonfigExpression.class), child);
-			ValueContainer<SettableValue<?>, SettableValue<QuickSize>> prefWidthC = QuickCore
+			ModelValueSynth<SettableValue<?>, SettableValue<QuickSize>> prefWidthC = QuickCore
 				.parseSize(child.getAttribute("pref-width", QonfigExpression.class), child);
-			ValueContainer<SettableValue<?>, SettableValue<QuickSize>> maxWidthC = QuickCore
+			ModelValueSynth<SettableValue<?>, SettableValue<QuickSize>> maxWidthC = QuickCore
 				.parseSize(child.getAttribute("max-width", QonfigExpression.class), child);
-			ValueContainer<SettableValue<?>, SettableValue<QuickSize>> minHeightC = QuickCore
+			ModelValueSynth<SettableValue<?>, SettableValue<QuickSize>> minHeightC = QuickCore
 				.parseSize(child.getAttribute("min-height", QonfigExpression.class), child);
-			ValueContainer<SettableValue<?>, SettableValue<QuickSize>> prefHeightC = QuickCore
+			ModelValueSynth<SettableValue<?>, SettableValue<QuickSize>> prefHeightC = QuickCore
 				.parseSize(child.getAttribute("pref-height", QonfigExpression.class), child);
-			ValueContainer<SettableValue<?>, SettableValue<QuickSize>> maxHeightC = QuickCore
+			ModelValueSynth<SettableValue<?>, SettableValue<QuickSize>> maxHeightC = QuickCore
 				.parseSize(child.getAttribute("max-height", QonfigExpression.class), child);
 			childComp.modify((ch, builder) -> {
 				ObservableValue<QuickPosition> left = leftC == null ? null : leftC.get(builder.getModels());
@@ -453,14 +453,14 @@ public class QuickBase implements QonfigInterpretation {
 		ModelInstanceType<ObservableCollection<?>, ObservableCollection<T>> valuesType = ModelTypes.Collection.forType(valueType);
 		DynamicModelValue.satisfyDynamicValueType(valuesName, exS.getExpressoEnv().getModels(), valuesType);
 
-		ValueContainer<SettableValue<?>, SettableValue<String>> name = exS.getAttribute("name", ModelTypes.Value.forType(String.class),
+		ModelValueSynth<SettableValue<?>, SettableValue<String>> name = exS.getAttribute("name", ModelTypes.Value.forType(String.class),
 			null);
 		Function<ModelSetInstance, SettableValue<Icon>> icon = QuickCore.parseIcon(//
 			exS.getAttributeExpression("icon"), exS);
-		ValueContainer<ObservableAction<?>, ObservableAction<?>> action = exS.getAttribute("action", ModelTypes.Action.any(), null);
-		ValueContainer<SettableValue<?>, SettableValue<String>> enabled = exS.getAttribute("enabled",
+		ModelValueSynth<ObservableAction<?>, ObservableAction<?>> action = exS.getAttribute("action", ModelTypes.Action.any(), null);
+		ModelValueSynth<SettableValue<?>, SettableValue<String>> enabled = exS.getAttribute("enabled",
 			ModelTypes.Value.forType(String.class), null);
-		ValueContainer<SettableValue<?>, SettableValue<String>> tooltip = exS.getAttribute("tooltip",
+		ModelValueSynth<SettableValue<?>, SettableValue<String>> tooltip = exS.getAttribute("tooltip",
 			ModelTypes.Value.forType(String.class), null);
 
 		return new ValueAction<>(exS.getExpressoEnv().getModels(), null, (models, values) -> {
@@ -475,7 +475,7 @@ public class QuickBase implements QonfigInterpretation {
 
 	private <T> QuickComponentDef interpretTextField(StyleQIS session) throws QonfigInterpretationException {
 		ExpressoQIS exS = session.as(ExpressoQIS.class);
-		ValueContainer<SettableValue<?>, SettableValue<T>> value = exS.getAttribute("value",
+		ModelValueSynth<SettableValue<?>, SettableValue<T>> value = exS.getAttribute("value",
 			(ModelInstanceType<SettableValue<?>, SettableValue<T>>) (ModelInstanceType<?, ?>) ModelTypes.Value.any(), null);
 		ModelInstanceType.SingleTyped<SettableValue<?>, T, SettableValue<T>> type;
 		type = (ModelInstanceType.SingleTyped<SettableValue<?>, T, SettableValue<T>>) value.getType();
@@ -483,7 +483,7 @@ public class QuickBase implements QonfigInterpretation {
 		ObservableExpression formatX = exS.getAttributeExpression("format");
 		ModelInstanceType.SingleTyped<SettableValue<?>, Format<T>, SettableValue<Format<T>>> formatType;
 		formatType = ModelTypes.Value.forType(TypeTokens.get().keyFor(Format.class).<Format<T>> parameterized(type.getValueType()));
-		ValueContainer<SettableValue<?>, SettableValue<Format<T>>> format;
+		ModelValueSynth<SettableValue<?>, SettableValue<Format<T>>> format;
 		boolean commitOnType = session.getAttribute("commit-on-type", boolean.class);
 		String columnsStr = session.getAttributeText("columns");
 		int columns = columnsStr == null ? -1 : Integer.parseInt(columnsStr);
@@ -509,9 +509,9 @@ public class QuickBase implements QonfigInterpretation {
 			else
 				throw new QonfigInterpretationException(
 					"No default format available for type " + value.getType().getType(0) + " -- format must be specified");
-			format = ValueContainer.literal(formatType, f, rawType.getSimpleName());
+			format = ModelValueSynth.literal(formatType, f, rawType.getSimpleName());
 		}
-		ValueContainer<SettableValue<?>, SettableValue<String>> disabled = exS.getAttribute("disable-with", ModelTypes.Value.STRING, null);
+		ModelValueSynth<SettableValue<?>, SettableValue<String>> disabled = exS.getAttribute("disable-with", ModelTypes.Value.STRING, null);
 		return new AbstractQuickValueEditor(session) {
 			@Override
 			public QuickComponent install(PanelPopulator<?, ?> container, QuickComponent.Builder builder) {
@@ -566,14 +566,14 @@ public class QuickBase implements QonfigInterpretation {
 
 	private <T> QuickComponentDef interpretTextArea(StyleQIS session) throws QonfigInterpretationException {
 		ExpressoQIS exS = session.as(ExpressoQIS.class);
-		ValueContainer<SettableValue<?>, SettableValue<T>> value = exS.getAttribute("value",
+		ModelValueSynth<SettableValue<?>, SettableValue<T>> value = exS.getAttribute("value",
 			(ModelInstanceType<SettableValue<?>, SettableValue<T>>) (ModelInstanceType<?, ?>) ModelTypes.Value.any(), null);
 		ModelInstanceType.SingleTyped<SettableValue<?>, T, SettableValue<T>> type;
 		type = (ModelInstanceType.SingleTyped<SettableValue<?>, T, SettableValue<T>>) value.getType();
 		ObservableExpression formatX = exS.getAttributeExpression("format");
 		ModelInstanceType.SingleTyped<SettableValue<?>, Format<T>, SettableValue<Format<T>>> formatType;
 		formatType = ModelTypes.Value.forType(TypeTokens.get().keyFor(Format.class).<Format<T>> parameterized(type.getValueType()));
-		ValueContainer<SettableValue<?>, SettableValue<Format<T>>> format;
+		ModelValueSynth<SettableValue<?>, SettableValue<Format<T>>> format;
 		if (formatX != null) {
 			format = formatX.evaluate(formatType, exS.getExpressoEnv());
 		} else {
@@ -596,15 +596,15 @@ public class QuickBase implements QonfigInterpretation {
 			else
 				throw new QonfigInterpretationException(
 					"No default format available for type " + value.getType().getType(0) + " -- format must be specified");
-			format = ValueContainer.literal(formatType, f, rawType.getSimpleName());
+			format = ModelValueSynth.literal(formatType, f, rawType.getSimpleName());
 		}
-		ValueContainer<SettableValue<?>, SettableValue<Integer>> rows = exS.getAttribute("rows", ModelTypes.Value.forType(Integer.class),
+		ModelValueSynth<SettableValue<?>, SettableValue<Integer>> rows = exS.getAttribute("rows", ModelTypes.Value.forType(Integer.class),
 			null);
-		ValueContainer<SettableValue<?>, SettableValue<Boolean>> html = exS.getAttribute("html", ModelTypes.Value.forType(Boolean.class),
+		ModelValueSynth<SettableValue<?>, SettableValue<Boolean>> html = exS.getAttribute("html", ModelTypes.Value.forType(Boolean.class),
 			null);
-		ValueContainer<SettableValue<?>, SettableValue<Boolean>> editable = exS.getAttribute("editable",
+		ModelValueSynth<SettableValue<?>, SettableValue<Boolean>> editable = exS.getAttribute("editable",
 			ModelTypes.Value.forType(Boolean.class), null);
-		ValueContainer<SettableValue<?>, SettableValue<String>> disabled = exS.getAttribute("disable-with", ModelTypes.Value.STRING, null);
+		ModelValueSynth<SettableValue<?>, SettableValue<String>> disabled = exS.getAttribute("disable-with", ModelTypes.Value.STRING, null);
 		return new AbstractQuickField(session) {
 			@Override
 			public QuickComponent install(PanelPopulator<?, ?> container, QuickComponent.Builder builder) {
@@ -655,16 +655,16 @@ public class QuickBase implements QonfigInterpretation {
 
 	private QuickComponentDef interpretButton(StyleQIS session) throws QonfigInterpretationException {
 		ExpressoQIS exS = session.as(ExpressoQIS.class);
-		ValueContainer<SettableValue<?>, SettableValue<String>> buttonText;
+		ModelValueSynth<SettableValue<?>, SettableValue<String>> buttonText;
 		ObservableExpression valueX = exS.getValueExpression();
 		if (valueX == null) {
 			String txt = session.getValueText();
 			if (txt == null)
 				throw new IllegalArgumentException("Either 'text' attribute or element value must be specified");
-			buttonText = ValueContainer.literal(TypeTokens.get().STRING, txt, txt);
+			buttonText = ModelValueSynth.literal(TypeTokens.get().STRING, txt, txt);
 		} else
 			buttonText = valueX.evaluate(ModelTypes.Value.forType(String.class), exS.getExpressoEnv());
-		ValueContainer<ObservableAction<?>, ? extends ObservableAction<?>> action = exS.getExpressoEnv().getModels()
+		ModelValueSynth<ObservableAction<?>, ? extends ObservableAction<?>> action = exS.getExpressoEnv().getModels()
 			.getValue(session.getAttributeText("action"), ModelTypes.Action.any());
 		return new AbstractQuickComponentDef(session) {
 			@Override
@@ -683,7 +683,7 @@ public class QuickBase implements QonfigInterpretation {
 
 	private <M, C> Column<M, C> interpretColumn(StyleQIS session, QonfigToolkit base) throws QonfigInterpretationException {
 		ExpressoQIS exS = session.as(ExpressoQIS.class);
-		ValueContainer<SettableValue<?>, SettableValue<C>> columnValue = exS.getAttribute("value",
+		ModelValueSynth<SettableValue<?>, SettableValue<C>> columnValue = exS.getAttribute("value",
 			(ModelInstanceType<SettableValue<?>, SettableValue<C>>) (ModelInstanceType<?, ?>) ModelTypes.Value.any(), null);
 		TypeToken<M> modelType = session.get(MODEL_TYPE_KEY, TypeToken.class);
 		TypeToken<C> columnType = (TypeToken<C>) (columnValue != null ? columnValue.getType().getType(0) : modelType);
@@ -700,7 +700,7 @@ public class QuickBase implements QonfigInterpretation {
 				(atSession, attr) -> new QonfigExpression(columnValueName));
 		}).getFirst()
 			.interpret(QuickComponentDef.class);
-		ValueContainer<SettableValue<?>, SettableValue<String>> tooltip = exS.getAttribute("tooltip",
+		ModelValueSynth<SettableValue<?>, SettableValue<String>> tooltip = exS.getAttribute("tooltip",
 			ModelTypes.Value.forType(String.class), null);
 		ColumnEditing<M, C> editing;
 		ExpressoQIS columnEdit = exS.forChildren("edit").peekFirst();
@@ -892,7 +892,7 @@ public class QuickBase implements QonfigInterpretation {
 		ObservableExpression commitX = exS.getAttributeExpression("commit");
 		ObservableExpression editableIfX = exS.getAttributeExpression("editable-if");
 		ObservableExpression acceptX = exS.getAttributeExpression("accept");
-		ValueContainer<ObservableAction<?>, ObservableAction<?>> commit = commitX.evaluate(ModelTypes.Action.any(), exS.getExpressoEnv());
+		ModelValueSynth<ObservableAction<?>, ObservableAction<?>> commit = commitX.evaluate(ModelTypes.Action.any(), exS.getExpressoEnv());
 		boolean rowUpdate = session.getAttribute("row-update", boolean.class);
 		return (parent, column, models, modelValueName) -> { // TODO Not done here
 			ObservableAction<?> commitAction = commit.get(models);
@@ -900,7 +900,7 @@ public class QuickBase implements QonfigInterpretation {
 		};
 	}
 
-	private <M> ValueCreator<ObservableCollection<?>, ObservableCollection<CategoryRenderStrategy<M, ?>>> interpretColumns(StyleQIS session)
+	private <M> CompiledModelValue<ObservableCollection<?>, ObservableCollection<CategoryRenderStrategy<M, ?>>> interpretColumns(StyleQIS session)
 		throws QonfigInterpretationException {
 		ExpressoQIS exS = session.as(ExpressoQIS.class);
 		TypeToken<M> rowType = (TypeToken<M>) ExpressoBaseV0_1.parseType(session.getAttributeText("type"), exS.getExpressoEnv());
@@ -908,7 +908,7 @@ public class QuickBase implements QonfigInterpretation {
 		TypeToken<CategoryRenderStrategy<M, ?>> columnType = TypeTokens.get().keyFor(CategoryRenderStrategy.class)
 			.<CategoryRenderStrategy<M, ?>> parameterized(rowType, TypeTokens.get().WILDCARD);
 		List<Column<M, ?>> columns = session.interpretChildren("column", Column.class);
-		return () -> new AbstractValueContainer<ObservableCollection<?>, ObservableCollection<CategoryRenderStrategy<M, ?>>>(
+		return () -> new AbstractValueSynth<ObservableCollection<?>, ObservableCollection<CategoryRenderStrategy<M, ?>>>(
 			ModelTypes.Collection.forType(columnType)) {
 			@Override
 			public ObservableCollection<CategoryRenderStrategy<M, ?>> get(ModelSetInstance models) {
@@ -919,7 +919,7 @@ public class QuickBase implements QonfigInterpretation {
 			}
 
 			@Override
-			public BetterList<ValueContainer<?, ?>> getCores() {
+			public BetterList<ModelValueSynth<?, ?>> getCores() {
 				return BetterList.of(this);
 			}
 		};
@@ -931,7 +931,7 @@ public class QuickBase implements QonfigInterpretation {
 		ExpressoQIS exS = session.as(ExpressoQIS.class);
 		List<QuickComponentDef> children = session.interpretChildren("content", QuickComponentDef.class);
 		boolean vertical = session.getAttributeText("orientation").equals("vertical");
-		ValueContainer<SettableValue<?>, SettableValue<QuickPosition>> splitPos = QuickCore
+		ModelValueSynth<SettableValue<?>, SettableValue<QuickPosition>> splitPos = QuickCore
 			.parsePosition(exS.getAttribute("split-position", QonfigExpression.class), exS);
 		return new AbstractQuickComponentDef(session) {
 			@Override
@@ -1166,10 +1166,10 @@ public class QuickBase implements QonfigInterpretation {
 
 	private QuickComponentDef interpretCheckBox(StyleQIS session) throws QonfigInterpretationException {
 		ExpressoQIS exS = session.as(ExpressoQIS.class);
-		ValueContainer<SettableValue<?>, SettableValue<Boolean>> value;
+		ModelValueSynth<SettableValue<?>, SettableValue<Boolean>> value;
 		value = exS.getAttribute("value", ModelTypes.Value.forType(boolean.class), null);
-		ValueContainer<SettableValue<?>, SettableValue<String>> text = exS.getValue(ModelTypes.Value.forType(String.class), null);
-		ValueContainer<SettableValue<?>, SettableValue<String>> disabled = exS.getAttribute("disable-with", ModelTypes.Value.STRING, null);
+		ModelValueSynth<SettableValue<?>, SettableValue<String>> text = exS.getValue(ModelTypes.Value.forType(String.class), null);
+		ModelValueSynth<SettableValue<?>, SettableValue<String>> disabled = exS.getAttribute("disable-with", ModelTypes.Value.STRING, null);
 		return new AbstractQuickValueEditor(session) {
 			@Override
 			public QuickComponent install(PanelPopulator<?, ?> container, QuickComponent.Builder builder) {
@@ -1211,11 +1211,11 @@ public class QuickBase implements QonfigInterpretation {
 	private QuickComponentDef interpretRadioButtons(StyleQIS session) throws QonfigInterpretationException {
 		ExpressoQIS exS = session.as(ExpressoQIS.class);
 		System.err.println("WARNING: radio-buttons is not fully implemented!!"); // TODO
-		ValueContainer<SettableValue<?>, ? extends SettableValue<Object>> value;
-		value = (ValueContainer<SettableValue<?>, ? extends SettableValue<Object>>) exS.getAttribute("value", ModelTypes.Value.any(), null);
-		ValueContainer<SettableValue<?>, SettableValue<Object[]>> values = exS.getAttribute("values",
+		ModelValueSynth<SettableValue<?>, ? extends SettableValue<Object>> value;
+		value = (ModelValueSynth<SettableValue<?>, ? extends SettableValue<Object>>) exS.getAttribute("value", ModelTypes.Value.any(), null);
+		ModelValueSynth<SettableValue<?>, SettableValue<Object[]>> values = exS.getAttribute("values",
 			ModelTypes.Value.forType((TypeToken<Object[]>) TypeTokens.get().getArrayType(value.getType().getType(0), 1)), null);
-		ValueContainer<SettableValue<?>, SettableValue<String>> disabled = exS.getAttribute("disable-with", ModelTypes.Value.STRING, null);
+		ModelValueSynth<SettableValue<?>, SettableValue<String>> disabled = exS.getAttribute("disable-with", ModelTypes.Value.STRING, null);
 		return new AbstractQuickField(session) {
 			@Override
 			public QuickComponent install(PanelPopulator<?, ?> container, QuickComponent.Builder builder) {
@@ -1234,15 +1234,15 @@ public class QuickBase implements QonfigInterpretation {
 
 	private QuickComponentDef interpretFileButton(StyleQIS session) throws QonfigInterpretationException {
 		ExpressoQIS exS = session.as(ExpressoQIS.class);
-		ValueContainer<SettableValue<?>, ? extends SettableValue<Object>> value;
-		value = (ValueContainer<SettableValue<?>, ? extends SettableValue<Object>>) exS.getAttribute("value", ModelTypes.Value.any(), null);
+		ModelValueSynth<SettableValue<?>, ? extends SettableValue<Object>> value;
+		value = (ModelValueSynth<SettableValue<?>, ? extends SettableValue<Object>>) exS.getAttribute("value", ModelTypes.Value.any(), null);
 		Function<ModelSetInstance, SettableValue<File>> file;
 		Class<?> valueType = TypeTokens.getRawType(value.getType().getType(0));
 		if (File.class.isAssignableFrom(valueType))
-			file = ((ValueContainer<SettableValue<?>, SettableValue<File>>) value)::get;
+			file = ((ModelValueSynth<SettableValue<?>, SettableValue<File>>) value)::get;
 		else if (BetterFile.class.isAssignableFrom(valueType)) {
 			file = msi -> {
-				SettableValue<BetterFile> betterFile = ((ValueContainer<SettableValue<?>, SettableValue<BetterFile>>) value).get(msi);
+				SettableValue<BetterFile> betterFile = ((ModelValueSynth<SettableValue<?>, SettableValue<BetterFile>>) value).get(msi);
 				return betterFile.transformReversible(File.class, tx -> tx//
 					.map(FileUtils::asFile)//
 					.withReverse(f -> {
@@ -1255,7 +1255,7 @@ public class QuickBase implements QonfigInterpretation {
 		} else
 			throw new QonfigInterpretationException("Cannot use " + value + " as a File");
 		boolean open = session.getAttribute("open", boolean.class);
-		ValueContainer<SettableValue<?>, SettableValue<String>> disabled = exS.getAttribute("disable-with", ModelTypes.Value.STRING, null);
+		ModelValueSynth<SettableValue<?>, SettableValue<String>> disabled = exS.getAttribute("disable-with", ModelTypes.Value.STRING, null);
 		return new AbstractQuickValueEditor(session) {
 			@Override
 			public QuickComponent install(PanelPopulator<?, ?> container, QuickComponent.Builder builder) {
@@ -1295,17 +1295,17 @@ public class QuickBase implements QonfigInterpretation {
 		Function<ModelSetInstance, ? extends SettableValue<T>> value;
 		TypeToken<T> valueType;
 		ObservableExpression valueEx = exS.getAttributeExpression("value");
-		ValueContainer<SettableValue<?>, SettableValue<T>> valueX;
+		ModelValueSynth<SettableValue<?>, SettableValue<T>> valueX;
 		if (valueEx != null && valueEx != ObservableExpression.EMPTY)
 			valueX = valueEx.evaluate(
 				(ModelInstanceType<SettableValue<?>, SettableValue<T>>) (ModelInstanceType<?, ?>) ModelTypes.Value.any(),
 				exS.getExpressoEnv());
 		else if (session.getElement().getValue() == null) {
 			session.warn("No value for label");
-			valueX = (ValueContainer<SettableValue<?>, SettableValue<T>>) (ValueContainer<?, ?>) ValueContainer
+			valueX = (ModelValueSynth<SettableValue<?>, SettableValue<T>>) (ModelValueSynth<?, ?>) ModelValueSynth
 				.literal(ModelTypes.Value.forType(String.class), "", "");
 		} else
-			valueX = (ValueContainer<SettableValue<?>, SettableValue<T>>) (ValueContainer<?, ?>) ValueContainer
+			valueX = (ModelValueSynth<SettableValue<?>, SettableValue<T>>) (ModelValueSynth<?, ?>) ModelValueSynth
 			.literal(ModelTypes.Value.forType(String.class), session.getValueText(), session.getValueText());
 		ObservableExpression formatX = exS.getAttributeExpression("format");
 		Function<ModelSetInstance, SettableValue<Format<T>>> format;
@@ -1354,30 +1354,30 @@ public class QuickBase implements QonfigInterpretation {
 
 	private <R> QuickComponentDef interpretTable(StyleQIS session) throws QonfigInterpretationException {
 		ExpressoQIS exS = session.as(ExpressoQIS.class);
-		ValueContainer<ObservableCollection<?>, ? extends ObservableCollection<R>> rows;
-		rows = (ValueContainer<ObservableCollection<?>, ? extends ObservableCollection<R>>) exS.getAttribute("rows",
+		ModelValueSynth<ObservableCollection<?>, ? extends ObservableCollection<R>> rows;
+		rows = (ModelValueSynth<ObservableCollection<?>, ? extends ObservableCollection<R>>) exS.getAttribute("rows",
 			ModelTypes.Collection.any(), null);
 		TypeToken<R> modelType = (TypeToken<R>) rows.getType().getType(0);
 		session.put(MODEL_TYPE_KEY, modelType);
 
 		String valueName = exS.getAttributeText("value-name");
 		DynamicModelValue.satisfyDynamicValueType(valueName, exS.getExpressoEnv().getModels(), ModelTypes.Value.forType(modelType));
-		ValueContainer<SettableValue<?>, SettableValue<R>> modelValue = exS.getExpressoEnv().getModels().getValue(valueName,
+		ModelValueSynth<SettableValue<?>, SettableValue<R>> modelValue = exS.getExpressoEnv().getModels().getValue(valueName,
 			ModelTypes.Value.forType(modelType));
 
-		ValueContainer<SettableValue<?>, SettableValue<R>> selectionV;
-		ValueContainer<ObservableCollection<?>, ObservableCollection<R>> selectionC;
+		ModelValueSynth<SettableValue<?>, SettableValue<R>> selectionV;
+		ModelValueSynth<ObservableCollection<?>, ObservableCollection<R>> selectionC;
 		ObservableExpression selectionS = exS.getAttributeExpression("selection");
 		if (selectionS != null) {
-			ValueContainer<?, ?> selection = selectionS.evaluate(null, exS.getExpressoEnv());
+			ModelValueSynth<?, ?> selection = selectionS.evaluate(null, exS.getExpressoEnv());
 			ModelType<?> type = selection.getType().getModelType();
 			if (type == ModelTypes.Value) {
-				selectionV = (ValueContainer<SettableValue<?>, SettableValue<R>>) selection;
+				selectionV = (ModelValueSynth<SettableValue<?>, SettableValue<R>>) selection;
 				selectionC = null;
 				// TODO Test selection value type
 			} else if (type == ModelTypes.Collection || type == ModelTypes.SortedCollection) {
 				selectionV = null;
-				selectionC = (ValueContainer<ObservableCollection<?>, ObservableCollection<R>>) selection;
+				selectionC = (ModelValueSynth<ObservableCollection<?>, ObservableCollection<R>>) selection;
 				// TODO Test selection value type
 			} else
 				throw new IllegalArgumentException(
@@ -1386,9 +1386,9 @@ public class QuickBase implements QonfigInterpretation {
 			selectionV = null;
 			selectionC = null;
 		}
-		ValueContainer<SettableValue<?>, SettableValue<Integer>> rowIndex = exS.getExpressoEnv().getModels().getValue("rowIndex",
+		ModelValueSynth<SettableValue<?>, SettableValue<Integer>> rowIndex = exS.getExpressoEnv().getModels().getValue("rowIndex",
 			ModelTypes.Value.INT);
-		ValueContainer<SettableValue<?>, SettableValue<Integer>> columnIndex = exS.getExpressoEnv().getModels().getValue("columnIndex",
+		ModelValueSynth<SettableValue<?>, SettableValue<Integer>> columnIndex = exS.getExpressoEnv().getModels().getValue("columnIndex",
 			ModelTypes.Value.INT);
 		TypeToken<Column<R, ?>> columnType = TypeTokens.get().keyFor(Column.class).<Column<R, ?>> parameterized(modelType,
 			TypeTokens.get().WILDCARD);
@@ -1484,7 +1484,7 @@ public class QuickBase implements QonfigInterpretation {
 		throws QonfigInterpretationException {
 		return interpretAbstractTree(session, new TreeMaker<T, E>() {
 			@Override
-			public void configure(ObservableModelSet model, ValueContainer<SettableValue<?>, ? extends SettableValue<T>> root) {
+			public void configure(ObservableModelSet model, ModelValueSynth<SettableValue<?>, ? extends SettableValue<T>> root) {
 			}
 
 			@Override
@@ -1496,7 +1496,7 @@ public class QuickBase implements QonfigInterpretation {
 	}
 
 	interface TreeMaker<T, E extends PanelPopulation.AbstractTreeEditor<T, ?, E>> {
-		void configure(ObservableModelSet model, ValueContainer<SettableValue<?>, ? extends SettableValue<T>> root)
+		void configure(ObservableModelSet model, ModelValueSynth<SettableValue<?>, ? extends SettableValue<T>> root)
 			throws QonfigInterpretationException;
 
 		void makeTree(QuickComponent.Builder builder, PanelPopulator<?, ?> container, ObservableValue<T> root,
@@ -1522,7 +1522,7 @@ public class QuickBase implements QonfigInterpretation {
 		TreeMaker<T, E> treeMaker) throws QonfigInterpretationException {
 		ExpressoQIS exS = session.as(ExpressoQIS.class);
 		System.err.println("WARNING: " + session.getElement().getType().getName() + " is not fully implemented!!"); // TODO
-		ValueContainer<SettableValue<?>, ? extends SettableValue<T>> root = (ValueContainer<SettableValue<?>, ? extends SettableValue<T>>) exS
+		ModelValueSynth<SettableValue<?>, ? extends SettableValue<T>> root = (ModelValueSynth<SettableValue<?>, ? extends SettableValue<T>>) exS
 			.getAttribute("root", ModelTypes.Value.any(), null);
 		TypeToken<T> valueType = (TypeToken<T>) root.getType().getType(0);
 		TypeToken<BetterList<T>> pathType = TypeTokens.get().keyFor(BetterList.class).<BetterList<T>> parameterized(valueType);
@@ -1540,23 +1540,23 @@ public class QuickBase implements QonfigInterpretation {
 		});
 		session.put(MODEL_TYPE_KEY, valueType);
 
-		ValueContainer<SettableValue<?>, SettableValue<BetterList<T>>> path = exS.getExpressoEnv().getModels().getValue(pathName,
+		ModelValueSynth<SettableValue<?>, SettableValue<BetterList<T>>> path = exS.getExpressoEnv().getModels().getValue(pathName,
 			ModelTypes.Value.forType(pathType));
-		ValueContainer<SettableValue<?>, SettableValue<T>> treeNodeValue = exS.getExpressoEnv().getModels().getValue(valueName,
+		ModelValueSynth<SettableValue<?>, SettableValue<T>> treeNodeValue = exS.getExpressoEnv().getModels().getValue(valueName,
 			ModelTypes.Value.forType(valueType));
-		ValueContainer<SettableValue<?>, SettableValue<Boolean>> selected = exS.getExpressoEnv().getModels().getValue("selected",
+		ModelValueSynth<SettableValue<?>, SettableValue<Boolean>> selected = exS.getExpressoEnv().getModels().getValue("selected",
 			ModelTypes.Value.BOOLEAN);
-		// ValueContainer<SettableValue<?>, SettableValue<Boolean>> focused = exS.getExpressoEnv().getModels().getValue("focused",
+		// ModelValueSynth<SettableValue<?>, SettableValue<Boolean>> focused = exS.getExpressoEnv().getModels().getValue("focused",
 		// ModelTypes.Value.BOOLEAN);
-		ValueContainer<SettableValue<?>, SettableValue<Boolean>> hovered = exS.getExpressoEnv().getModels().getValue("hovered",
+		ModelValueSynth<SettableValue<?>, SettableValue<Boolean>> hovered = exS.getExpressoEnv().getModels().getValue("hovered",
 			ModelTypes.Value.BOOLEAN);
-		ValueContainer<ObservableCollection<?>, ObservableCollection<T>> children = exS.getAttribute("children",
+		ModelValueSynth<ObservableCollection<?>, ObservableCollection<T>> children = exS.getAttribute("children",
 			ModelTypes.Collection.forType(valueType), null);
 		Column<BetterList<T>, T> treeColumn = session.interpretChildren("tree-column", Column.class).peekFirst();
-		ValueContainer<ObservableCollection<?>, ObservableCollection<T>> multiSelectionV;
-		ValueContainer<ObservableCollection<?>, ObservableCollection<BetterList<T>>> multiSelectionPath;
-		ValueContainer<SettableValue<?>, SettableValue<T>> singleSelectionV;
-		ValueContainer<SettableValue<?>, SettableValue<BetterList<T>>> singleSelectionPath;
+		ModelValueSynth<ObservableCollection<?>, ObservableCollection<T>> multiSelectionV;
+		ModelValueSynth<ObservableCollection<?>, ObservableCollection<BetterList<T>>> multiSelectionPath;
+		ModelValueSynth<SettableValue<?>, SettableValue<T>> singleSelectionV;
+		ModelValueSynth<SettableValue<?>, SettableValue<BetterList<T>>> singleSelectionPath;
 		ObservableExpression selectionEx = exS.getAttributeExpression("selection");
 		if (selectionEx == null) {
 			multiSelectionV = null;
@@ -1564,8 +1564,8 @@ public class QuickBase implements QonfigInterpretation {
 			singleSelectionV = null;
 			singleSelectionPath = null;
 		} else {
-			ValueContainer<?, ?> selection = selectionEx.evaluate(null, exS.getExpressoEnv());
-			ValueContainer<Object, Object> hackS = (ValueContainer<Object, Object>) selection;
+			ModelValueSynth<?, ?> selection = selectionEx.evaluate(null, exS.getExpressoEnv());
+			ModelValueSynth<Object, Object> hackS = (ModelValueSynth<Object, Object>) selection;
 			if (selection.getType().getModelType() == ModelTypes.Value) {
 				multiSelectionV = null;
 				multiSelectionPath = null;
@@ -1589,7 +1589,7 @@ public class QuickBase implements QonfigInterpretation {
 				throw new QonfigInterpretationException(
 					"Value " + selectionEx + ", type " + selection.getType() + " cannot be used for tree selection");
 		}
-		ValueContainer<SettableValue<?>, SettableValue<Boolean>> leaf = exS.getAttribute("leaf", ModelTypes.Value.BOOLEAN, null);
+		ModelValueSynth<SettableValue<?>, SettableValue<Boolean>> leaf = exS.getAttribute("leaf", ModelTypes.Value.BOOLEAN, null);
 		treeMaker.configure(exS.getExpressoEnv().getModels(), root);
 		return new AbstractQuickComponentDef(session) {
 			@Override
@@ -1634,7 +1634,7 @@ public class QuickBase implements QonfigInterpretation {
 									path.get(models).set(cell.getModelValue(), null);
 									selected.get(models).set(cell.isSelected(), null);
 									hovered.get(models).set(cell.isRowHovered() && cell.isCellHovered(), null);
-								}, (ValueContainer<SettableValue<?>, SettableValue<BetterList<T>>>) (ValueContainer<?, ?>) treeNodeValue));
+								}, (ModelValueSynth<SettableValue<?>, SettableValue<BetterList<T>>>) (ModelValueSynth<?, ?>) treeNodeValue));
 						if (singleSelectionV != null)
 							tree.withValueSelection(singleSelectionV.get(builder.getModels()), false);
 						else if (singleSelectionPath != null)
@@ -1665,21 +1665,21 @@ public class QuickBase implements QonfigInterpretation {
 		final ObservableModelSet models;
 		final ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<T>> tabValuePlaceholder;
 		final QuickComponentDef content;
-		final ValueContainer<SettableValue<?>, SettableValue<T>> tabId;
+		final ModelValueSynth<SettableValue<?>, SettableValue<T>> tabId;
 		final String renderValueName;
-		final ValueContainer<SettableValue<?>, ? extends SettableValue<String>> tabName;
-		final ValueContainer<SettableValue<?>, ? extends SettableValue<Icon>> tabIcon;
+		final ModelValueSynth<SettableValue<?>, ? extends SettableValue<String>> tabName;
+		final ModelValueSynth<SettableValue<?>, ? extends SettableValue<Icon>> tabIcon;
 		final boolean removable;
 		final Function<ModelSetInstance, Consumer<T>> onRemove;
-		final ValueContainer<Observable<?>, ? extends Observable<?>> selectOn;
+		final ModelValueSynth<Observable<?>, ? extends Observable<?>> selectOn;
 		final Function<ModelSetInstance, Consumer<T>> onSelect;
 
 		private SingleTab(ObservableModelSet models,
 			ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<T>> tabValuePlaceholder, QuickComponentDef content,
-			ValueContainer<SettableValue<?>, SettableValue<T>> tabId, String renderValueName,
-			ValueContainer<SettableValue<?>, ? extends SettableValue<String>> tabName,
-				ValueContainer<SettableValue<?>, ? extends SettableValue<Icon>> tabIcon, boolean removable,
-					Function<ModelSetInstance, Consumer<T>> onRemove, ValueContainer<Observable<?>, ? extends Observable<?>> selectOn,
+			ModelValueSynth<SettableValue<?>, SettableValue<T>> tabId, String renderValueName,
+			ModelValueSynth<SettableValue<?>, ? extends SettableValue<String>> tabName,
+				ModelValueSynth<SettableValue<?>, ? extends SettableValue<Icon>> tabIcon, boolean removable,
+					Function<ModelSetInstance, Consumer<T>> onRemove, ModelValueSynth<Observable<?>, ? extends Observable<?>> selectOn,
 						Function<ModelSetInstance, Consumer<T>> onSelect) {
 			this.models = models;
 			this.tabValuePlaceholder = tabValuePlaceholder;
@@ -1750,7 +1750,7 @@ public class QuickBase implements QonfigInterpretation {
 		static <T2> SingleTab<T2> parse(QonfigToolkit base, StyleQIS tab) throws QonfigInterpretationException {
 			ExpressoQIS exTab = tab.as(ExpressoQIS.class);
 			QuickComponentDef content = tab.interpret(QuickComponentDef.class);
-			ValueContainer<SettableValue<?>, SettableValue<T2>> tabId = exTab.getAttributeAsValue("tab-id",
+			ModelValueSynth<SettableValue<?>, SettableValue<T2>> tabId = exTab.getAttributeAsValue("tab-id",
 				(TypeToken<T2>) TypeTokens.get().WILDCARD, null);
 			String renderValueName;
 			ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<T2>> tvp;
@@ -1764,8 +1764,8 @@ public class QuickBase implements QonfigInterpretation {
 				tvp = null;
 			}
 
-			ValueContainer<SettableValue<?>, SettableValue<String>> tabName = exTab.getAttributeAsValue("tab-name", String.class,
-				() -> msi -> SettableValue.of(String.class, tabId.get(msi).get().toString(), "Not editable"));
+			ModelValueSynth<SettableValue<?>, SettableValue<String>> tabName = exTab.getAttributeAsValue("tab-name", String.class,
+				() -> msi -> SettableValue.getOrCompile(String.class, tabId.get(msi).get().toString(), "Not editable"));
 
 			Function<ModelSetInstance, SettableValue<Icon>> tabIcon = QuickCore.parseIcon(exTab.getAttributeExpression("tab-icon"), exTab);
 
@@ -1786,7 +1786,7 @@ public class QuickBase implements QonfigInterpretation {
 			} else
 				onRemove = null;
 
-			ValueContainer<Observable<?>, ?> selectOn = exTab.getAttribute("select-on",
+			ModelValueSynth<Observable<?>, ?> selectOn = exTab.getAttribute("select-on",
 				ModelTypes.Event.forType(TypeTokens.get().WILDCARD), null);
 
 			ObservableExpression onSelectEx = exTab.getAttributeExpression("on-select");
@@ -1808,7 +1808,7 @@ public class QuickBase implements QonfigInterpretation {
 		final ObservableModelSet models;
 		final ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<T>> tabValuePlaceholder;
 		final QonfigElement element;
-		final ValueContainer<ObservableCollection<?>, ObservableCollection<T>> values;
+		final ModelValueSynth<ObservableCollection<?>, ObservableCollection<T>> values;
 		final String renderValueName;
 		final QuickComponentDef content;
 		final Function<ModelSetInstance, Function<T, String>> tabName;
@@ -1820,7 +1820,7 @@ public class QuickBase implements QonfigInterpretation {
 
 		MultiTabSet(ObservableModelSet models,
 			ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<T>> tabValuePlaceholder, QonfigElement element,
-			ValueContainer<ObservableCollection<?>, ObservableCollection<T>> values, String renderValueName, QuickComponentDef content,
+			ModelValueSynth<ObservableCollection<?>, ObservableCollection<T>> values, String renderValueName, QuickComponentDef content,
 			Function<ModelSetInstance, Function<T, String>> tabName, Function<ModelSetInstance, Function<T, Icon>> tabIcon,
 			Function<ModelSetInstance, Function<T, Boolean>> removable, Function<ModelSetInstance, Consumer<T>> onRemove,
 			Function<ModelSetInstance, Function<T, Observable<?>>> selectOn, Function<ModelSetInstance, Consumer<T>> onSelect) {
@@ -1888,7 +1888,7 @@ public class QuickBase implements QonfigInterpretation {
 
 		static <T> MultiTabSet<T> parse(StyleQIS tabSet) throws QonfigInterpretationException {
 			ExpressoQIS exTabSet = tabSet.as(ExpressoQIS.class);
-			ValueContainer<ObservableCollection<?>, ObservableCollection<T>> values = exTabSet.getAttributeAsCollection("values",
+			ModelValueSynth<ObservableCollection<?>, ObservableCollection<T>> values = exTabSet.getAttributeAsCollection("values",
 				(TypeToken<T>) TypeTokens.get().WILDCARD, null);
 			String renderValueName = tabSet.getAttributeText("render-value-name");
 			ObservableModelSet.Builder wb = exTabSet.getExpressoEnv().getModels().wrap("tabs");
@@ -2048,7 +2048,7 @@ public class QuickBase implements QonfigInterpretation {
 		}
 		TypeToken<T> tabType = TypeTokens.get().getCommonType(tabTypes);
 		ObservableExpression selectionX = exS.getAttributeExpression("selected");
-		ValueContainer<SettableValue<?>, SettableValue<T>> selection;
+		ModelValueSynth<SettableValue<?>, SettableValue<T>> selection;
 		if (selectionX == null)
 			selection = null;
 		else

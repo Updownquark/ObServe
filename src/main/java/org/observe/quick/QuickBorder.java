@@ -183,8 +183,8 @@ public interface QuickBorder extends QuickStyledElement {
 
 				public Def(QuickCompiledStyle parent, QuickCompiledStyle wrapped) {
 					super(parent, wrapped);
-					QuickTypeStyle typeStyle = QuickStyledElement.getTypeStyle(wrapped.getStyleSet(), getElement(), QuickCore.NAME,
-						QuickCore.VERSION, "titled-border");
+					QuickTypeStyle typeStyle = QuickStyledElement.getTypeStyle(wrapped.getStyleSet(), getElement(),
+						QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, "titled-border");
 					theBorderColor = (QuickStyleAttribute<Color>) typeStyle.getAttribute("border-color", Color.class);
 					theBorderThickness = (QuickStyleAttribute<Integer>) typeStyle.getAttribute("thickness", Integer.class);
 				}
@@ -284,8 +284,8 @@ public interface QuickBorder extends QuickStyledElement {
 
 				public Default(QuickCompiledStyle parent, QuickCompiledStyle wrapped) {
 					super(parent, wrapped);
-					QuickTypeStyle typeStyle = QuickStyledElement.getTypeStyle(wrapped.getStyleSet(), getElement(), QuickCore.NAME,
-						QuickCore.VERSION, "border");
+					QuickTypeStyle typeStyle = QuickStyledElement.getTypeStyle(wrapped.getStyleSet(), getElement(),
+						QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, "border");
 					theBorderColor = (QuickStyleAttribute<Color>) typeStyle.getAttribute("border-color", Color.class);
 					theBorderThickness = (QuickStyleAttribute<Integer>) typeStyle.getAttribute("thickness", Integer.class);
 				}

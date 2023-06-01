@@ -121,7 +121,7 @@ public class JsonEntityProvider implements ObservableEntityProvider {
 				for (int f = 0; f < cc.getEntityType().getFields().keySize(); f++) {
 					Object value = cc.getFieldValues().get(f);
 					if (value != EntityUpdate.NOT_SET) {
-						jsw.startProperty(cc.getEntityType().getFields().get(f).getName());
+						jsw.startProperty(cc.getEntityType().getFields().get(f).getFieldLabel());
 						serialize(jsw, value);
 					}
 				}
@@ -165,14 +165,14 @@ public class JsonEntityProvider implements ObservableEntityProvider {
 				jsw.startProperty("prepared");
 				serializePrepared(jsw, prepared);
 			}
-			jsw.startProperty("type").writeString(creator.getEntityType().getName());
+			jsw.startProperty("type").writeString(creator.getEntityType().getFieldLabel());
 			if (creator instanceof ConfigurableCreator) {
 				jsw.startProperty("fields").startObject();
 				ConfigurableCreator<E> cc = (ConfigurableCreator<E>) creator;
 				for (int f = 0; f < creator.getEntityType().getFields().keySize(); f++) {
 					Object value = cc.getFieldValues().get(f);
 					if (value != EntityUpdate.NOT_SET) {
-						jsw.startProperty(creator.getEntityType().getFields().get(f).getName());
+						jsw.startProperty(creator.getEntityType().getFields().get(f).getFieldLabel());
 						serialize(jsw, value);
 					}
 				}

@@ -42,24 +42,14 @@ import org.observe.ObservableAction;
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.Subscription;
-import org.observe.expresso.ClassView;
-import org.observe.expresso.DynamicModelValue;
-import org.observe.expresso.ExpressoBaseV0_1;
+import org.observe.expresso.*;
 import org.observe.expresso.ExpressoBaseV0_1.AppEnvironment;
-import org.observe.expresso.ExpressoEvaluationException;
-import org.observe.expresso.ExpressoParseException;
-import org.observe.expresso.ExpressoQIS;
 import org.observe.expresso.ModelType.ModelInstanceType;
-import org.observe.expresso.ModelTypes;
-import org.observe.expresso.ObservableExpression;
-import org.observe.expresso.ObservableModelSet;
+import org.observe.expresso.ObservableModelSet.CompiledModelValue;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
-import org.observe.expresso.ObservableModelSet.ValueContainer;
-import org.observe.expresso.ObservableModelSet.ValueCreator;
-import org.observe.expresso.QonfigExpression;
-import org.observe.expresso.QonfigExpression2;
-import org.observe.quick.style.QuickElementStyle;
-import org.observe.quick.style.QuickElementStyle.QuickElementStyleAttribute;
+import org.observe.expresso.ObservableModelSet.ModelValueSynth;
+import org.observe.quick.style.QuickInterpretedStyle;
+import org.observe.quick.style.QuickInterpretedStyle.QuickElementStyleAttribute;
 import org.observe.quick.style.QuickStyleSheet;
 import org.observe.quick.style.StyleQIS;
 import org.observe.util.TypeTokens;
@@ -76,8 +66,6 @@ import org.qommons.Transaction;
 import org.qommons.Version;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.config.QonfigElement.QonfigValue;
-import org.qommons.config.QonfigEvaluationException;
-import org.qommons.config.QonfigFilePosition;
 import org.qommons.config.QonfigInterpretation;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigInterpreterCore;
@@ -85,6 +73,7 @@ import org.qommons.config.QonfigInterpreterCore.CoreSession;
 import org.qommons.config.QonfigToolkit;
 import org.qommons.config.SpecialSession;
 import org.qommons.ex.ExFunction;
+import org.qommons.io.LocatedFilePosition;
 
 /** Interpretation for the Quick-Core toolkit */
 public class QuickCore implements QonfigInterpretation {
@@ -105,7 +94,7 @@ public class QuickCore implements QonfigInterpretation {
 
 	/** Interpretation type for a mouse listener */
 	public interface QuickMouseListener {
-		/** {@link ValueContainer} equivalent for a mouse listener */
+		/** {@link ModelValueSynth} equivalent for a mouse listener */
 		public interface Container {
 			/** @return Whether this listener needs mouse motion input */
 			boolean isMotionListener();
@@ -136,7 +125,7 @@ public class QuickCore implements QonfigInterpretation {
 
 	/** Interpretation type for a key listener */
 	public interface QuickKeyListener {
-		/** {@link ValueContainer} equivalent for a key listener */
+		/** {@link ModelValueSynth} equivalent for a key listener */
 		public interface Container {
 			/**
 			 * @param models The models to use to create the listener
@@ -187,10 +176,10 @@ public class QuickCore implements QonfigInterpretation {
 	 *
 	 * @param value The expression to parse
 	 * @param session The session in which to parse the expression
-	 * @return The ValueContainer to produce the position value
+	 * @return The ModelValueSynth to produce the position value
 	 * @throws QonfigInterpretationException If the position could not be parsed
 	 */
-	public static ValueCreator<SettableValue<?>, SettableValue<QuickPosition>> parsePosition(QonfigValue value, ExpressoQIS session)
+	public static CompiledModelValue<SettableValue<?>, SettableValue<QuickPosition>> parsePosition(QonfigValue value, ExpressoQIS session)
 		throws QonfigInterpretationException {
 		if (value == null)
 			return null;
@@ -212,24 +201,24 @@ public class QuickCore implements QonfigInterpretation {
 			else
 				parsed = session.getExpressoParser().parse(expression.text);
 		} catch (ExpressoParseException e) {
-			throw new QonfigInterpretationException("Could not parse position expression: " + expression, e,
-				value.position == null ? null : new QonfigFilePosition(value.fileLocation, value.position.getPosition(e.getErrorOffset())),
-					e.getEndIndex() - e.getErrorOffset());
+			throw new QonfigInterpretationException("Could not parse position expression: " + expression, value.position == null ? null : new LocatedFilePosition(value.fileLocation, value.position.getPosition(e.getErrorOffset())),
+				e.getEndIndex() - e.getErrorOffset(),
+					e);
 		}
 		return () -> {
-			ValueContainer<SettableValue<?>, SettableValue<QuickPosition>> positionValue;
+			ModelValueSynth<SettableValue<?>, SettableValue<QuickPosition>> positionValue;
 			if (unit != null) {
 				QuickPosition.PositionUnit fUnit = unit;
-				ValueContainer<SettableValue<?>, SettableValue<Double>> num;
+				ModelValueSynth<SettableValue<?>, SettableValue<Double>> num;
 				try {
 					num = parsed.evaluate(ModelTypes.Value.forType(double.class), session.getExpressoEnv());
 				} catch (ExpressoEvaluationException e) {
 					throw new QonfigEvaluationException("Could not parse position value: " + expression, e,
 						value.position == null ? null
-							: new QonfigFilePosition(value.fileLocation, value.position.getPosition(e.getErrorOffset())),
+							: new LocatedFilePosition(value.fileLocation, value.position.getPosition(e.getErrorOffset())),
 							e.getEndIndex() - e.getErrorOffset());
 				}
-				positionValue = ValueContainer.of(ModelTypes.Value.forType(QuickPosition.class), msi -> {
+				positionValue = ModelValueSynth.of(ModelTypes.Value.forType(QuickPosition.class), msi -> {
 					SettableValue<Double> numV = num.get(msi);
 					return numV.transformReversible(QuickPosition.class, tx -> tx//
 						.map(n -> new QuickPosition(n.floatValue(), fUnit))//
@@ -253,7 +242,7 @@ public class QuickCore implements QonfigInterpretation {
 					} catch (ExpressoEvaluationException e2) {
 						throw new QonfigEvaluationException("Could not parse position value: " + expression, e1,
 							value.position == null ? null
-								: new QonfigFilePosition(value.fileLocation, value.position.getPosition(e1.getErrorOffset())),
+								: new LocatedFilePosition(value.fileLocation, value.position.getPosition(e1.getErrorOffset())),
 								e1.getEndIndex() - e1.getErrorOffset());
 					}
 				}
@@ -267,10 +256,10 @@ public class QuickCore implements QonfigInterpretation {
 	 *
 	 * @param value The expression to parse
 	 * @param session The session in which to parse the expression
-	 * @return The ValueContainer to produce the size value
+	 * @return The ModelValueSynth to produce the size value
 	 * @throws QonfigInterpretationException If the size could not be parsed
 	 */
-	public static ValueCreator<SettableValue<?>, SettableValue<QuickSize>> parseSize(QonfigValue value, ExpressoQIS session)
+	public static CompiledModelValue<SettableValue<?>, SettableValue<QuickSize>> parseSize(QonfigValue value, ExpressoQIS session)
 		throws QonfigInterpretationException {
 		if (value == null)
 			return null;
@@ -292,24 +281,24 @@ public class QuickCore implements QonfigInterpretation {
 			else
 				parsed = session.getExpressoParser().parse(expression.text);
 		} catch (ExpressoParseException e) {
-			throw new QonfigInterpretationException("Could not parse position expression: " + expression, e,
-				value.position == null ? null : new QonfigFilePosition(value.fileLocation, value.position.getPosition(e.getErrorOffset())),
-					e.getEndIndex() - e.getErrorOffset());
+			throw new QonfigInterpretationException("Could not parse position expression: " + expression, value.position == null ? null : new LocatedFilePosition(value.fileLocation, value.position.getPosition(e.getErrorOffset())),
+				e.getEndIndex() - e.getErrorOffset(),
+					e);
 		}
 		return () -> {
-			ValueContainer<SettableValue<?>, SettableValue<QuickSize>> positionValue;
+			ModelValueSynth<SettableValue<?>, SettableValue<QuickSize>> positionValue;
 			if (unit != null) {
 				QuickSize.SizeUnit fUnit = unit;
-				ValueContainer<SettableValue<?>, SettableValue<Double>> num;
+				ModelValueSynth<SettableValue<?>, SettableValue<Double>> num;
 				try {
 					num = parsed.evaluate(ModelTypes.Value.forType(double.class), session.getExpressoEnv());
 				} catch (ExpressoEvaluationException e) {
 					throw new QonfigEvaluationException("Could not parse size value: " + expression, e,
 						value.position == null ? null
-							: new QonfigFilePosition(value.fileLocation, value.position.getPosition(e.getErrorOffset())),
+							: new LocatedFilePosition(value.fileLocation, value.position.getPosition(e.getErrorOffset())),
 							e.getEndIndex() - e.getErrorOffset());
 				}
-				positionValue = ValueContainer.of(ModelTypes.Value.forType(QuickSize.class), msi -> {
+				positionValue = ModelValueSynth.of(ModelTypes.Value.forType(QuickSize.class), msi -> {
 					SettableValue<Double> numV = num.get(msi);
 					return numV.transformReversible(QuickSize.class, tx -> tx//
 						.map(n -> new QuickSize(n.floatValue(), fUnit))//
@@ -331,7 +320,7 @@ public class QuickCore implements QonfigInterpretation {
 					} catch (ExpressoEvaluationException e2) {
 						throw new QonfigEvaluationException("Could not parse size value: " + expression, e1,
 							value.position == null ? null
-								: new QonfigFilePosition(value.fileLocation, value.position.getPosition(e1.getErrorOffset())),
+								: new LocatedFilePosition(value.fileLocation, value.position.getPosition(e1.getErrorOffset())),
 								e1.getEndIndex() - e1.getErrorOffset());
 					}
 				}
@@ -345,13 +334,13 @@ public class QuickCore implements QonfigInterpretation {
 	 *
 	 * @param expression The expression to parse
 	 * @param session The session in which to parse the expression
-	 * @return The ValueContainer to produce the icon value
+	 * @return The ModelValueSynth to produce the icon value
 	 * @throws QonfigEvaluationException If the icon could not be parsed
 	 */
-	public static ExFunction<ModelSetInstance, SettableValue<Icon>, QonfigEvaluationException> parseIcon(QonfigExpression2 expression,
+	public static ExFunction<ModelSetInstance, SettableValue<Icon>, QonfigEvaluationException> parseIcon(CompiledExpression expression,
 		ExpressoQIS session) throws QonfigEvaluationException {
 		if (expression != null) {
-			ValueContainer<SettableValue<?>, SettableValue<?>> iconV = expression.evaluate(ModelTypes.Value.any(),
+			ModelValueSynth<SettableValue<?>, SettableValue<?>> iconV = expression.evaluate(ModelTypes.Value.any(),
 				session.getExpressoEnv());
 			Class<?> iconType = TypeTokens.getRawType(iconV.getType().getType(0));
 			if (Icon.class.isAssignableFrom(iconType))
@@ -368,10 +357,10 @@ public class QuickCore implements QonfigInterpretation {
 						: ObservableSwingUtils.getFixedIcon(callingClass, (String) loc, 16, 16)), __ -> "unsettable");
 				} else {
 					session.warn("Cannot use value " + expression + ", type " + iconV.getType().getType(0) + " as an icon");
-					return msi -> SettableValue.of(Icon.class, null, "unsettable");
+					return msi -> SettableValue.getOrCompile(Icon.class, null, "unsettable");
 				}
 		} else {
-			return msi -> SettableValue.of(Icon.class, null, "None provided");
+			return msi -> SettableValue.getOrCompile(Icon.class, null, "None provided");
 		}
 	}
 
@@ -421,12 +410,12 @@ public class QuickCore implements QonfigInterpretation {
 		QuickDocument[] doc = new QuickDocument[1];
 		AppEnvironment appEnv = new AppEnvironment() {
 			@Override
-			public ValueContainer<SettableValue<?>, ? extends ObservableValue<String>> getTitle() {
+			public ModelValueSynth<SettableValue<?>, ? extends ObservableValue<String>> getTitle() {
 				return doc[0].getTitle();
 			}
 
 			@Override
-			public ValueContainer<SettableValue<?>, ? extends ObservableValue<Image>> getIcon() {
+			public ModelValueSynth<SettableValue<?>, ? extends ObservableValue<Image>> getIcon() {
 				return doc[0].getIcon();
 			}
 		};
@@ -445,7 +434,7 @@ public class QuickCore implements QonfigInterpretation {
 		ClassView cv = importSession == null ? null : importSession.interpret(ClassView.class);
 		if (cv == null) {
 			ClassView defaultCV = ClassView.build().withWildcardImport("java.lang").build();
-			TypeTokens.get().addClassRetriever(new TypeTokens.TypeRetriever() {
+			TypeTokens.get().addTypeRetriever(new TypeTokens.TypeRetriever() {
 				@Override
 				public Type getType(String typeName) {
 					return defaultCV.getType(typeName);
@@ -466,10 +455,10 @@ public class QuickCore implements QonfigInterpretation {
 
 	private QuickDocument modifyWindow(QuickDocument doc, StyleQIS session) throws QonfigInterpretationException {
 		ExpressoQIS exS = session.as(ExpressoQIS.class);
-		QonfigExpression2 visibleEx = exS.getAttributeExpression("visible");
+		CompiledExpression visibleEx = exS.getAttributeExpression("visible");
 		if (visibleEx != null)
 			doc.setVisible(visibleEx.evaluate(ModelTypes.Value.forType(Boolean.class), exS.getExpressoEnv()));
-		QonfigExpression2 titleEx = exS.getAttributeExpression("title");
+		CompiledExpression titleEx = exS.getAttributeExpression("title");
 		if (titleEx != null)
 			doc.setTitle(titleEx.evaluate(ModelTypes.Value.forType(String.class), exS.getExpressoEnv()));
 		doc.withBounds(//
@@ -808,9 +797,9 @@ public class QuickCore implements QonfigInterpretation {
 			});
 		});
 		String name = session.getAttribute("name", String.class);
-		ValueContainer<SettableValue<?>, SettableValue<String>> tooltip = exS.getAttribute("tooltip",
+		ModelValueSynth<SettableValue<?>, SettableValue<String>> tooltip = exS.getAttribute("tooltip",
 			ModelTypes.Value.forType(String.class), null);
-		ValueContainer<SettableValue<?>, SettableValue<Boolean>> visible = exS.getAttribute("visible",
+		ModelValueSynth<SettableValue<?>, SettableValue<Boolean>> visible = exS.getAttribute("visible",
 			ModelTypes.Value.forType(boolean.class), null);
 		QuickBorder border = session.interpretChildren("border", QuickBorder.class).peekFirst();
 		if (name != null) {
@@ -1053,7 +1042,7 @@ public class QuickCore implements QonfigInterpretation {
 	}
 
 	private QuickBorder interpretLineBorder(StyleQIS session) throws QonfigInterpretationException {
-		QuickElementStyle style = session.getStyle();
+		QuickInterpretedStyle style = session.getStyle();
 		QuickElementStyleAttribute<? extends Color> colorStyle = style.get(session.getStyleAttribute(null, "border-color", Color.class));
 		QuickElementStyleAttribute<? extends Integer> thicknessStyle = style
 			.get(session.getStyleAttribute(null, "thickness", Integer.class));
@@ -1074,9 +1063,9 @@ public class QuickCore implements QonfigInterpretation {
 
 	private QuickBorder interpretTitledBorder(StyleQIS session) throws QonfigInterpretationException {
 		ExpressoQIS exS = session.as(ExpressoQIS.class);
-		ValueContainer<SettableValue<?>, SettableValue<String>> title = exS.getAttribute("title", ModelTypes.Value.forType(String.class),
+		ModelValueSynth<SettableValue<?>, SettableValue<String>> title = exS.getAttribute("title", ModelTypes.Value.forType(String.class),
 			null);
-		QuickElementStyle style = session.getStyle();
+		QuickInterpretedStyle style = session.getStyle();
 		QuickElementStyleAttribute<? extends Color> colorStyle = style.get(session.getStyleAttribute(null, "border-color", Color.class));
 		QuickElementStyleAttribute<? extends Integer> thicknessStyle = style
 			.get(session.getStyleAttribute(null, "thickness", Integer.class));
@@ -1125,10 +1114,10 @@ public class QuickCore implements QonfigInterpretation {
 
 	private QuickMouseListener.Container interpretMouseListener(StyleQIS session) throws QonfigInterpretationException {
 		ExpressoQIS exSession = session.as(ExpressoQIS.class);
-		List<ValueContainer<SettableValue<?>, SettableValue<Boolean>>> filters = new ArrayList<>();
+		List<ModelValueSynth<SettableValue<?>, SettableValue<Boolean>>> filters = new ArrayList<>();
 		for (ExpressoQIS filterS : exSession.forChildren("filter"))
 			filters.add(filterS.getValueAsValue(boolean.class, null));
-		ValueContainer<ObservableAction<?>, ObservableAction<?>> action = exSession.getValueExpression().evaluate(ModelTypes.Action.any(),
+		ModelValueSynth<ObservableAction<?>, ObservableAction<?>> action = exSession.getValueExpression().evaluate(ModelTypes.Action.any(),
 			exSession.getExpressoEnv());
 
 		return new QuickMouseListener.Container() {
@@ -1228,7 +1217,7 @@ public class QuickCore implements QonfigInterpretation {
 	private QuickMouseListener.Container modifyMouseClickListener(QuickMouseListener.Container listener, StyleQIS session)
 		throws QonfigInterpretationException {
 		ExpressoQIS exSession = session.as(ExpressoQIS.class);
-		ValueContainer<SettableValue<?>, SettableValue<Integer>> clickCount = exSession.getAttributeAsValue("click-count", Integer.class,
+		ModelValueSynth<SettableValue<?>, SettableValue<Integer>> clickCount = exSession.getAttributeAsValue("click-count", Integer.class,
 			null);
 		return new QuickMouseListener.Container() {
 			@Override
@@ -1358,12 +1347,12 @@ public class QuickCore implements QonfigInterpretation {
 
 	private QuickKeyListener.Container createKeyListener(StyleQIS session, boolean pressed) throws QonfigInterpretationException {
 		ExpressoQIS exSession = session.as(ExpressoQIS.class);
-		List<ValueContainer<SettableValue<?>, SettableValue<Boolean>>> filters = new ArrayList<>();
+		List<ModelValueSynth<SettableValue<?>, SettableValue<Boolean>>> filters = new ArrayList<>();
 		for (ExpressoQIS filterS : exSession.forChildren("filter"))
 			filters.add(filterS.getValueAsValue(boolean.class, null));
-		ValueContainer<ObservableAction<?>, ObservableAction<?>> action = exSession.getValueExpression().evaluate(ModelTypes.Action.any(),
+		ModelValueSynth<ObservableAction<?>, ObservableAction<?>> action = exSession.getValueExpression().evaluate(ModelTypes.Action.any(),
 			exSession.getExpressoEnv());
-		ValueContainer<SettableValue<?>, SettableValue<KeyCode>> key = exSession.getAttributeAsValue("key", KeyCode.class, null);
+		ModelValueSynth<SettableValue<?>, SettableValue<KeyCode>> key = exSession.getAttributeAsValue("key", KeyCode.class, null);
 
 		int eventType = pressed ? KeyEvent.KEY_PRESSED : KeyEvent.KEY_RELEASED;
 		return models -> {
@@ -1700,10 +1689,10 @@ public class QuickCore implements QonfigInterpretation {
 
 	private QuickKeyListener.Container createKeyTypeListener(StyleQIS session) throws QonfigInterpretationException {
 		ExpressoQIS exSession = session.as(ExpressoQIS.class);
-		List<ValueContainer<SettableValue<?>, SettableValue<Boolean>>> filters = new ArrayList<>();
+		List<ModelValueSynth<SettableValue<?>, SettableValue<Boolean>>> filters = new ArrayList<>();
 		for (ExpressoQIS filterS : exSession.forChildren("filter"))
 			filters.add(filterS.getValueAsValue(boolean.class, null));
-		ValueContainer<ObservableAction<?>, ObservableAction<?>> action = exSession.getValueExpression().evaluate(ModelTypes.Action.any(),
+		ModelValueSynth<ObservableAction<?>, ObservableAction<?>> action = exSession.getValueExpression().evaluate(ModelTypes.Action.any(),
 			exSession.getExpressoEnv());
 		String typedChar = exSession.getAttributeText("char");
 		if (typedChar != null && typedChar.length() != 1)

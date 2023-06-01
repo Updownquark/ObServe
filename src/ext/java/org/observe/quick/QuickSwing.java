@@ -22,7 +22,7 @@ import org.observe.expresso.ExpressoQIS;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.ExternalModelSet;
-import org.observe.expresso.ObservableModelSet.ValueContainer;
+import org.observe.expresso.ObservableModelSet.ModelValueSynth;
 import org.observe.quick.style.StyleQIS;
 import org.observe.util.TypeTokens;
 import org.qommons.QommonsUtils;
@@ -105,8 +105,8 @@ public class QuickSwing implements QonfigInterpretation {
 			}
 		}
 
-		ValueContainer<SettableValue<?>, SettableValue<Integer>> xVal, yVal, wVal, hVal;
-		ValueContainer<SettableValue<?>, SettableValue<Boolean>> vVal;
+		ModelValueSynth<SettableValue<?>, SettableValue<Integer>> xVal, yVal, wVal, hVal;
+		ModelValueSynth<SettableValue<?>, SettableValue<Boolean>> vVal;
 		xVal = exS.getAttribute("debug-x", ModelTypes.Value.forType(int.class),
 			() -> msi -> SettableValue.build(int.class).withDescription("x").withValue(0).build());
 		yVal = exS.getAttribute("debug-y", ModelTypes.Value.forType(int.class),
@@ -118,10 +118,10 @@ public class QuickSwing implements QonfigInterpretation {
 		vVal = exS.getAttribute("debug-visible", ModelTypes.Value.forType(boolean.class),
 			() -> msi -> SettableValue.build(boolean.class).withDescription("v").withValue(true).build());
 
-		ValueContainer<SettableValue<?>, SettableValue<QuickComponent>> selectedComponent = theDebugDoc.getHead().getModels()
+		ModelValueSynth<SettableValue<?>, SettableValue<QuickComponent>> selectedComponent = theDebugDoc.getHead().getModels()
 			.getValue("debug.selectedComponent", ModelTypes.Value.forType(QuickComponent.class));
-		// ValueContainer<SettableValue<?>, SettableValue<Integer>> scX, scY, scW, scH;
-		// ValueContainer<SettableValue<?>, SettableValue<Boolean>> scV;
+		// ModelValueSynth<SettableValue<?>, SettableValue<Integer>> scX, scY, scW, scH;
+		// ModelValueSynth<SettableValue<?>, SettableValue<Boolean>> scV;
 		// scX=msi->
 
 		return new QuickDocument() {
@@ -141,55 +141,55 @@ public class QuickSwing implements QonfigInterpretation {
 			}
 
 			@Override
-			public ValueContainer<SettableValue<?>, SettableValue<String>> getTitle() {
+			public ModelValueSynth<SettableValue<?>, SettableValue<String>> getTitle() {
 				return doc.getTitle();
 			}
 
 			@Override
-			public void setTitle(ValueContainer<SettableValue<?>, SettableValue<String>> title) {
+			public void setTitle(ModelValueSynth<SettableValue<?>, SettableValue<String>> title) {
 				doc.setTitle(title);
 			}
 
 			@Override
-			public ValueContainer<SettableValue<?>, SettableValue<Image>> getIcon() {
+			public ModelValueSynth<SettableValue<?>, SettableValue<Image>> getIcon() {
 				return doc.getIcon();
 			}
 
 			@Override
-			public void setIcon(ValueContainer<SettableValue<?>, SettableValue<Image>> icon) {
+			public void setIcon(ModelValueSynth<SettableValue<?>, SettableValue<Image>> icon) {
 				doc.setIcon(icon);
 			}
 
 			@Override
-			public ValueContainer<SettableValue<?>, SettableValue<Integer>> getX() {
+			public ModelValueSynth<SettableValue<?>, SettableValue<Integer>> getX() {
 				return doc.getX();
 			}
 
 			@Override
-			public ValueContainer<SettableValue<?>, SettableValue<Integer>> getY() {
+			public ModelValueSynth<SettableValue<?>, SettableValue<Integer>> getY() {
 				return doc.getY();
 			}
 
 			@Override
-			public ValueContainer<SettableValue<?>, SettableValue<Integer>> getWidth() {
+			public ModelValueSynth<SettableValue<?>, SettableValue<Integer>> getWidth() {
 				return doc.getWidth();
 			}
 
 			@Override
-			public ValueContainer<SettableValue<?>, SettableValue<Integer>> getHeight() {
+			public ModelValueSynth<SettableValue<?>, SettableValue<Integer>> getHeight() {
 				return doc.getHeight();
 			}
 
 			@Override
-			public QuickDocument withBounds(ValueContainer<SettableValue<?>, SettableValue<Integer>> x,
-				ValueContainer<SettableValue<?>, SettableValue<Integer>> y, ValueContainer<SettableValue<?>, SettableValue<Integer>> width,
-				ValueContainer<SettableValue<?>, SettableValue<Integer>> height) {
+			public QuickDocument withBounds(ModelValueSynth<SettableValue<?>, SettableValue<Integer>> x,
+				ModelValueSynth<SettableValue<?>, SettableValue<Integer>> y, ModelValueSynth<SettableValue<?>, SettableValue<Integer>> width,
+				ModelValueSynth<SettableValue<?>, SettableValue<Integer>> height) {
 				doc.withBounds(x, y, width, height);
 				return this;
 			}
 
 			@Override
-			public ValueContainer<SettableValue<?>, SettableValue<Boolean>> getVisible() {
+			public ModelValueSynth<SettableValue<?>, SettableValue<Boolean>> getVisible() {
 				return doc.getVisible();
 			}
 
@@ -199,7 +199,7 @@ public class QuickSwing implements QonfigInterpretation {
 			}
 
 			@Override
-			public QuickDocument setVisible(ValueContainer<SettableValue<?>, SettableValue<Boolean>> visible) {
+			public QuickDocument setVisible(ModelValueSynth<SettableValue<?>, SettableValue<Boolean>> visible) {
 				doc.setVisible(visible);
 				return this;
 			}

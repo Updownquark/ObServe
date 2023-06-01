@@ -9,7 +9,7 @@ import org.observe.entity.EntityIdentity;
 import org.observe.entity.ObservableEntity;
 import org.observe.entity.ObservableEntityType;
 import org.observe.entity.jdbc.DbDialect.JoinedTable;
-import org.observe.entity.jdbc.JdbcEntitySupport.JdbcColumn;
+import org.observe.entity.jdbc.JdbcTypesSupport.JdbcColumn;
 import org.qommons.IterableUtils;
 import org.qommons.Named;
 import org.qommons.collect.QuickSet.QuickMap;

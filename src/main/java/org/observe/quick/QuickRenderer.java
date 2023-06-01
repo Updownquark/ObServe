@@ -2,6 +2,7 @@ package org.observe.quick;
 
 import org.qommons.config.QonfigAddOn;
 
+/** Tag for a widget that is only used as a renderer, instead of being a first class child of its parent */
 public class QuickRenderer extends QuickAddOn.Abstract<QuickWidget> {
 	public static class Def extends QuickAddOn.Def.Abstract<QuickWidget, QuickRenderer> {
 		public Def(QonfigAddOn type, QuickWidget.Def<?> element) {

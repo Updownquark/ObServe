@@ -15,7 +15,7 @@ import org.observe.expresso.ExpressoQIS;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
-import org.observe.expresso.ObservableModelSet.ValueContainer;
+import org.observe.expresso.ObservableModelSet.ModelValueSynth;
 import org.observe.quick.QuickContainer.AbstractQuickContainer;
 import org.observe.quick.style.StyleQIS;
 import org.observe.util.TypeTokens;
@@ -72,7 +72,7 @@ public class QuickX implements QonfigInterpretation {
 
 	private QuickComponentDef interpretCollapsePane(StyleQIS session) throws QonfigInterpretationException {
 		ExpressoQIS exS = session.as(ExpressoQIS.class);
-		ValueContainer<SettableValue<?>, SettableValue<Boolean>> collapsed = exS.getAttributeAsValue("collapsed", boolean.class,
+		ModelValueSynth<SettableValue<?>, SettableValue<Boolean>> collapsed = exS.getAttributeAsValue("collapsed", boolean.class,
 			() -> mis -> SettableValue.build(boolean.class).withDescription("collapsed").build());
 		Boolean initCollapsed = session.getAttribute("init-collapsed", Boolean.class);
 		QuickComponentDef header = session.interpretChildren("header", QuickComponentDef.class).getFirst();
@@ -107,15 +107,15 @@ public class QuickX implements QonfigInterpretation {
 		return QuickBase.interpretAbstractTree(session, new QuickBase.TreeMaker<T, E>() {
 			TypeToken<BetterList<T>> modelType;
 			String pathName;
-			ValueContainer<SettableValue<?>, SettableValue<BetterList<T>>> pathValue;
-			ValueContainer<SettableValue<?>, SettableValue<Integer>> columnIndex;
+			ModelValueSynth<SettableValue<?>, SettableValue<BetterList<T>>> pathValue;
+			ModelValueSynth<SettableValue<?>, SettableValue<Integer>> columnIndex;
 
 			TypeToken<CategoryRenderStrategy<BetterList<T>, ?>> columnType;
-			ValueContainer<ObservableCollection<?>, ObservableCollection<CategoryRenderStrategy<BetterList<T>, ?>>> columnsAttr;
+			ModelValueSynth<ObservableCollection<?>, ObservableCollection<CategoryRenderStrategy<BetterList<T>, ?>>> columnsAttr;
 			List<QuickBase.Column<BetterList<T>, ?>> columns = new ArrayList<>();
 
 			@Override
-			public void configure(ObservableModelSet model, ValueContainer<SettableValue<?>, ? extends SettableValue<T>> root)
+			public void configure(ObservableModelSet model, ModelValueSynth<SettableValue<?>, ? extends SettableValue<T>> root)
 				throws QonfigInterpretationException {
 				modelType = TypeTokens.get().keyFor(BetterList.class).<BetterList<T>> parameterized(root.getType().getType(0));
 				session.put(QuickBase.MODEL_TYPE_KEY, modelType);
