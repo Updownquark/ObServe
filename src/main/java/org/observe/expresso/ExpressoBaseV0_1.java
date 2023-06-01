@@ -283,6 +283,8 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		}).createWith("models", ObservableModelSet.Built.class, session -> {
 			ExpressoQIS expressoSession = wrap(session);
 			ObservableModelSet.Builder builder = ObservableModelSet.build("models", ObservableModelSet.JAVA_NAME_CHECKER);
+			if (nonTrivial(expressoSession.getExpressoEnv().getModels()))
+				builder.withAll(expressoSession.getExpressoEnv().getModels());
 			for (ExpressoQIS model : expressoSession.forChildren("model")) {
 				ObservableModelSet.Builder subModel = builder.createSubModel(model.getAttributeText("named", "name"));
 				expressoSession.setModels(subModel, null);
@@ -332,6 +334,16 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 				return value;
 			}
 		});
+	}
+
+	private static boolean nonTrivial(ObservableModelSet models) {
+		if (!models.getComponents().isEmpty())
+			return true;
+		for (ObservableModelSet inh : models.getInheritance().values()) {
+			if (nonTrivial(inh))
+				return true;
+		}
+		return false;
 	}
 
 	void configureExternalModels(QonfigInterpreterCore.Builder interpreter) {
@@ -4388,7 +4400,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 			@Override
 			public <T> ModelValueSynth<SettableValue<?>, SettableValue<Comparator<T>>> evaluate(TypeToken<T> type)
 				throws ExpressoInterpretationException {
-				Comparator<T> compare = getDefaultSorting(TypeTokens.getRawType(type));
+				Comparator<T> compare = getDefaultSorting(TypeTokens.getRawType(TypeTokens.get().wrap(type)));
 				if (compare != null)
 					return ModelValueSynth.literal(TypeTokens.get().keyFor(Comparator.class).parameterized(type), compare,
 						compare.toString());

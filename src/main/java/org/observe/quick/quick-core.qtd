@@ -42,7 +42,11 @@
 	</add-ons>
 
 	<elements>
-		<element-def name="quick">
+		<element-def name="quick" inherits="with-element-model">
+			<element-model>
+				<event name="onModelLoad" type="Void" />
+				<event name="onBodyLoad" type="Void" />
+			</element-model>
 			<child-def name="head" type="head" min="0" />
 			<child-def name="body" type="widget" min="1" />
 		</element-def>

@@ -14,7 +14,6 @@ import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ExpressoQIS;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ObservableModelSet;
-import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.qommons.ArgumentParsing;
 import org.qommons.Transformer;
 import org.qommons.ValueHolder;
@@ -69,6 +68,31 @@ public interface QuickApplication {
 	QonfigInterpretationException, ExpressoInterpretationException, ModelInstantiationException, IllegalStateException {
 		// TODO Status (replace Splash Screen a la OSGi)
 
+		QonfigDocument quickApp = parseQuickApp(clArgs);
+
+		QuickDocument.Def quickDocDef = parseQuick(null, quickApp, clArgs);
+
+		ObservableModelSet.ExternalModelSet extModels = parseExtModels(
+			ObservableModelSet.buildExternal(ObservableModelSet.JAVA_NAME_CHECKER), clArgs);
+
+		QuickDocument.Interpreted interpretedDoc = quickDocDef.interpret(null);
+		quickDocDef = null; // Free up memory
+		interpretedDoc.update();
+
+		QuickApplication app = interpretQuick(quickApp, interpretedDoc);
+
+		QuickDocument doc = interpretedDoc.create();
+		doc.update(interpretedDoc, extModels, Observable.empty());
+
+		// Clean up to free memory
+		interpretedDoc.destroy();
+		interpretedDoc = null;
+
+		app.runApplication(doc);
+	}
+
+	public static QonfigDocument parseQuickApp(String... clArgs)
+		throws IllegalArgumentException, IOException, TextParseException, QonfigParseException {
 		// Find the app definition
 		ArgumentParsing.Arguments args = ArgumentParsing.build()//
 			.forValuePattern(p -> p//
@@ -106,23 +130,56 @@ public interface QuickApplication {
 		if (quickAppToolkitUrl == null)
 			throw new IllegalStateException("Could not locate Quick App toolkit quick-app.qtd");
 
-		QonfigDocument quickApp = QonfigApp.parseApp(quickAppUrl, quickAppToolkitUrl);
-		QonfigToolkit quickAppTk = Impl.findQuickAppTk(quickApp.getDocToolkit());
-		if (quickAppTk == null)
-			throw new IllegalStateException("Quick application file '" + quickAppFile + "' does not use the Quick-App toolkit");
+		return QonfigApp.parseApp(quickAppUrl, quickAppToolkitUrl);
+	}
 
+	/**
+	 * @param clArgs Command-line arguments. --quick-app=? may be used to specify the application setup file. The rest will be passed to the
+	 *        quick document's external models (not yet implemented)
+	 * @throws IllegalArgumentException If the argument does not contain a reference to a quick-app file
+	 * @throws IOException If the application file or the quick file cannot be read
+	 * @throws TextParseException If the application file or the quick file cannot be parsed as XML
+	 * @throws QonfigParseException If the application file or the quick file cannot be validated
+	 * @throws QonfigInterpretationException If the quick file cannot be interpreted
+	 * @throws ExpressoInterpretationException If model configuration or references in the quick file contain errors
+	 * @throws ModelInstantiationException If the quick document could not be loaded
+	 * @throws IllegalStateException If an error occurs loading any internal resources, such as toolkits
+	 */
+	public static QuickDocument.Def parseQuick(QuickDocument.Def previous, QonfigDocument quickApp, String... clArgs)
+		throws IllegalArgumentException, IOException, TextParseException, QonfigParseException, QonfigInterpretationException,
+		IllegalStateException {
 		ValueHolder<AbstractQIS<?>> docSession = new ValueHolder<>();
-		QuickDocument.Def quickDocDef = QonfigApp.interpretApp(quickApp, QuickDocument.Def.class, docSession);
+		QuickDocument.Def quickDocDef;
+		if (previous != null)
+			quickDocDef = previous;
+		else
+			quickDocDef = QonfigApp.interpretApp(quickApp, QuickDocument.Def.class, docSession);
 		quickDocDef.update(docSession.get().as(ExpressoQIS.class));
 		docSession.clear(); // Free up memory
+		return quickDocDef;
+	}
 
-		ObservableModelSet.ExternalModelSet extModels = ObservableModelSet.buildExternal(ObservableModelSet.JAVA_NAME_CHECKER).build();
+	public static ObservableModelSet.ExternalModelSet parseExtModels(ObservableModelSet.ExternalModelSetBuilder ext, String... clArgs) {
 		/* TODO
 		 * * Inspect external models
 		 * * Build ArgumentParser2
 		 * * Apply to command-line arguments
 		 * * Create external models from argument values */
+		return ext.build();
+	}
 
+	/**
+	 * @throws IllegalArgumentException If the argument does not contain a reference to a quick-app file
+	 * @throws QonfigParseException If any of the Quick interpretations configured in the application file cannot be resolved or
+	 *         instantiated
+	 * @throws ExpressoInterpretationException If model configuration or references in the quick file contain errors
+	 * @throws IllegalStateException If an error occurs loading any internal resources, such as toolkits
+	 */
+	public static QuickApplication interpretQuick(QonfigDocument quickApp, QuickDocument.Interpreted quickDoc)
+		throws IllegalArgumentException, QonfigParseException, ExpressoInterpretationException {
+		QonfigToolkit quickAppTk = Impl.findQuickAppTk(quickApp.getDocToolkit());
+		if (quickAppTk == null)
+			throw new IllegalStateException("Quick application file '" + quickApp.getLocation() + "' does not use the Quick-App toolkit");
 		List<QuickInterpretation> quickInterpretation = QonfigApp.create(//
 			quickApp.getRoot().getChildrenInRole(quickAppTk, "quick-app", "quick-interpretation"), QuickInterpretation.class);
 		quickApp = null; // Free up memory
@@ -132,21 +189,7 @@ public interface QuickApplication {
 			interp.configure(transformBuilder);
 		Transformer<ExpressoInterpretationException> transformer = transformBuilder.build();
 
-		QuickDocument.Interpreted interpretedDoc = quickDocDef.interpret(null);
-		quickDocDef = null; // Free up memory
-		interpretedDoc.update();
-
-		QuickApplication app = transformer.transform(interpretedDoc, QuickApplication.class);
-
-		ModelSetInstance msi = interpretedDoc.getHead().getModels().createInstance(extModels, Observable.empty()).build();
-		QuickDocument doc = interpretedDoc.create();
-		doc.update(interpretedDoc, msi);
-
-		// Clean up to free memory
-		interpretedDoc.destroy();
-		interpretedDoc = null;
-
-		app.runApplication(doc);
+		return transformer.transform(quickDoc, QuickApplication.class);
 	}
 
 	/** Implementation details */

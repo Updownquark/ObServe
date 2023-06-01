@@ -32,7 +32,7 @@ public class ExpressoEnv {
 	 * {@link #withDefaultNonStructuredParsing() default} non-structured parsing
 	 */
 	public static final ExpressoEnv STANDARD_JAVA = new ExpressoEnv(
-		ObservableModelSet.build("StandardJava", ObservableModelSet.JAVA_NAME_CHECKER),
+		ObservableModelSet.build("StandardJava", ObservableModelSet.JAVA_NAME_CHECKER).build(),
 		ClassView.build().withWildcardImport("java.lang").build(), null, UnaryOperatorSet.STANDARD_JAVA, BinaryOperatorSet.STANDARD_JAVA,
 		new ErrorReporting.Default(null))//
 		.withDefaultNonStructuredParsing();

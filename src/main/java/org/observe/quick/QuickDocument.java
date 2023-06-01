@@ -1,9 +1,13 @@
 package org.observe.quick;
 
+import org.observe.Observable;
+import org.observe.SimpleObservable;
 import org.observe.expresso.ClassView;
+import org.observe.expresso.ExpressoEnv;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ExpressoQIS;
 import org.observe.expresso.ModelInstantiationException;
+import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
@@ -204,10 +208,14 @@ public class QuickDocument extends QuickElement.Abstract {
 	}
 
 	private QuickWidget theBody;
+	private final SimpleObservable<Void> theModelLoad;
+	private final SimpleObservable<Void> theBodyLoad;
 
 	/** @param interpreted The interpreted document that is creating this document */
 	public QuickDocument(Interpreted interpreted) {
 		super(interpreted, null);
+		theModelLoad = new SimpleObservable<>();
+		theBodyLoad = new SimpleObservable<>();
 	}
 
 	/** @return The document's body */
@@ -215,12 +223,35 @@ public class QuickDocument extends QuickElement.Abstract {
 		return theBody;
 	}
 
+	public ModelSetInstance update(QuickDocument.Interpreted interpreted, ObservableModelSet.ExternalModelSet extModels,
+		Observable<?> until) throws ModelInstantiationException {
+		ModelSetInstance models;
+		try {
+			models = createElementModel(interpreted, ExpressoEnv.STANDARD_JAVA.getBuiltModels().interpret().createInstance(until).build());
+		} catch (ExpressoInterpretationException e) {
+			throw new IllegalStateException("Could not update static models?", e);
+		}
+		satisfyContextValue("onModelLoad", ModelTypes.Event.VOID, theModelLoad.readOnly(), models);
+		satisfyContextValue("onBodyLoad", ModelTypes.Event.VOID, theBodyLoad.readOnly(), models);
+		ModelSetInstance headModels = interpreted.getHead().getModels().createInstance(until).withAll(models).build();
+		updateModel(interpreted, headModels);
+		return headModels;
+	}
+
+	@Override
+	public ModelSetInstance update(QuickElement.Interpreted<?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
+		throw new UnsupportedOperationException(
+			"This update method is not supported.  Use update(QuickDocument.Interpreted, ExternalModelSet, Observable)");
+	}
+
 	@Override
 	protected void updateModel(QuickElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
 		super.updateModel(interpreted, myModels);
 		QuickDocument.Interpreted myInterpreted = (QuickDocument.Interpreted) interpreted;
+		theModelLoad.onNext(null);
 		if (theBody == null)
 			theBody = myInterpreted.getBody().create(null);
 		theBody.update(myInterpreted.getBody(), myModels);
+		theBodyLoad.onNext(null);
 	}
 }

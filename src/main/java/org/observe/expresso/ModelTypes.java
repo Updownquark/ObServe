@@ -154,6 +154,9 @@ public class ModelTypes {
 
 	/** See {@link ModelTypes#Event} */
 	public static class EventModelType extends ModelType.SingleTyped<Observable<?>> {
+		/** Event&lt;Void> type */
+		public final ModelInstanceType.SingleTyped<Observable<?>, Void, Observable<Void>> VOID = forType(Void.class);
+
 		private EventModelType() {
 			super("Event", (Class<Observable<?>>) (Class<?>) Observable.class);
 		}
@@ -1059,7 +1062,7 @@ public class ModelTypes {
 					} else {
 						TypeToken<?> oceType = TypeTokens.get().keyFor(ObservableCollectionEvent.class)
 							.parameterized(source.getType(0));
-							if (TypeTokens.get().isAssignable(dest.getType(0), oceType))
+						if (TypeTokens.get().isAssignable(dest.getType(0), oceType))
 							return ModelType.converter(LambdaUtils
 								.printableFn(LambdaUtils.printableFn(src -> src.changes(), "changes", null), "changes", null),
 								dest.getModelType().forTypes(oceType));
