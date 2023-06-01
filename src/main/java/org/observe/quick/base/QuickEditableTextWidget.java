@@ -90,6 +90,7 @@ public interface QuickEditableTextWidget<T> extends QuickTextWidget<T> {
 	QuickEditableTextWidget<T> setContext(EditableTextWidgetContext ctx) throws ModelInstantiationException;
 
 	public static abstract class Abstract<T> extends QuickTextWidget.Abstract<T> implements QuickEditableTextWidget<T> {
+		private boolean isCommitOnType;
 		private final SettableValue<SettableValue<String>> theErrorStatus;
 		private final SettableValue<SettableValue<String>> theWarningStatus;
 
@@ -100,9 +101,15 @@ public interface QuickEditableTextWidget<T> extends QuickTextWidget<T> {
 			theWarningStatus = SettableValue.build(theErrorStatus.getType()).build();
 		}
 
+		public boolean isCommitOnType() {
+			return isCommitOnType;
+		}
+
 		@Override
 		protected void updateModel(QuickElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
 			super.updateModel(interpreted, myModels);
+			QuickEditableTextWidget.Interpreted<T, ?> myInterpreted = (QuickEditableTextWidget.Interpreted<T, ?>) interpreted;
+			isCommitOnType = myInterpreted.getDefinition().isCommitOnType();
 			QuickElement.satisfyContextValue("error", ModelTypes.Value.STRING, SettableValue.flatten(theErrorStatus), myModels, this);
 			QuickElement.satisfyContextValue("warning", ModelTypes.Value.STRING, SettableValue.flatten(theWarningStatus), myModels, this);
 		}

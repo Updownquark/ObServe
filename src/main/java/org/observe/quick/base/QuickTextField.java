@@ -84,7 +84,6 @@ public class QuickTextField<T> extends QuickEditableTextWidget.Abstract<T> {
 		}
 	}
 
-	private boolean isCommitOnType;
 	private Integer theColumns;
 	private final SettableValue<SettableValue<String>> theEmptyText;
 
@@ -92,10 +91,6 @@ public class QuickTextField<T> extends QuickEditableTextWidget.Abstract<T> {
 		super(interpreted, parent);
 		theEmptyText = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<String>> parameterized(String.class))
 			.build();
-	}
-
-	public boolean isCommitOnType() {
-		return isCommitOnType;
 	}
 
 	public Integer getColumns() {
@@ -110,7 +105,6 @@ public class QuickTextField<T> extends QuickEditableTextWidget.Abstract<T> {
 	protected void updateModel(QuickElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
 		super.updateModel(interpreted, myModels);
 		QuickTextField.Interpreted<T> myInterpreted = (QuickTextField.Interpreted<T>) interpreted;
-		isCommitOnType = myInterpreted.getDefinition().isCommitOnType();
 		theColumns = myInterpreted.getDefinition().getColumns();
 		theEmptyText.set(myInterpreted.getEmptyText() == null ? null : myInterpreted.getEmptyText().get(myModels), null);
 	}
