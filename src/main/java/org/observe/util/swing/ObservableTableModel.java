@@ -794,9 +794,13 @@ public class ObservableTableModel<R> implements TableModel {
 
 			private void fireCellEvent(MouseEvent e,
 				TriConsumer<CategoryMouseListener<? super R, ? super C>, ModelCell<R, C>, MouseEvent> call) {
-				if (theCell == null || theCategory == null || theCategory.getMouseListener() == null)
+				if (theCategory == null || theCategory.getMouseListener() == null)
 					return;
-				Point offset = getCellOffset(theCell.getRowIndex(), theCell.getColumnIndex());
+				Point offset;
+				if (theCell != null)
+					offset = getCellOffset(theCell.getRowIndex(), theCell.getColumnIndex());
+				else
+					offset = e.getPoint();
 				if (offset == null)
 					return;
 				e.translatePoint(-offset.x, -offset.y);
