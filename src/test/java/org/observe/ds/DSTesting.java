@@ -12,13 +12,13 @@ import org.observe.Observable;
 import org.observe.ds.impl.DefaultDependencyService;
 import org.qommons.Causable;
 import org.qommons.Causable.CausableKey;
-import org.qommons.TestHelper;
-import org.qommons.TestHelper.Testable;
 import org.qommons.Transactable;
 import org.qommons.collect.BetterHashSet;
 import org.qommons.collect.BetterSet;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
+import org.qommons.testing.TestHelper;
+import org.qommons.testing.TestHelper.Testable;
 
 /** Tests the default implementation of {@link DependencyService} */
 public class DSTesting {

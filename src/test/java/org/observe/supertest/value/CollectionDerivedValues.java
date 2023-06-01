@@ -28,8 +28,8 @@ import org.observe.supertest.collect.FilteredCollectionLink;
 import org.observe.supertest.collect.ObservableCollectionLink;
 import org.observe.util.TypeTokens;
 import org.qommons.Ternian;
-import org.qommons.TestHelper;
 import org.qommons.collect.BetterSortedList.SortedSearchFilter;
+import org.qommons.testing.TestHelper;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
 

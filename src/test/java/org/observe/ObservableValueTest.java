@@ -11,7 +11,7 @@ import org.observe.supertest.TestValueType;
 import org.observe.supertest.collect.BaseCollectionLink;
 import org.observe.supertest.collect.FilteredCollectionLink;
 import org.qommons.StringUtils;
-import org.qommons.TestHelper;
+import org.qommons.testing.TestHelper;
 
 import com.google.common.reflect.TypeToken;
 

@@ -1,7 +1,7 @@
 package org.observe.collect;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertThat;
+import static org.qommons.testing.QommonsTestUtils.assertThat;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -13,7 +13,7 @@ import java.util.function.Consumer;
 import org.observe.AbstractObservableTester;
 import org.observe.Observable;
 import org.observe.Subscription;
-import org.qommons.QommonsTestUtils;
+import org.qommons.testing.QommonsTestUtils;
 
 /**
  * A utility for testing an {@link ObservableCollection}

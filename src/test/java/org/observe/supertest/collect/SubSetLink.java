@@ -7,8 +7,8 @@ import org.observe.supertest.ChainLinkGenerator;
 import org.observe.supertest.ObservableChainLink;
 import org.observe.supertest.OperationRejection;
 import org.observe.supertest.TestValueType;
-import org.qommons.TestHelper;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
+import org.qommons.testing.TestHelper;
 
 /**
  * Tests {@link ObservableSortedSet#subSet(Object, boolean, Object, boolean)}

@@ -3,18 +3,7 @@ package org.observe.assoc;
 import static org.observe.collect.ObservableCollectionsTest.intType;
 
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.SortedMap;
-import java.util.SortedSet;
-import java.util.TreeMap;
-import java.util.TreeSet;
+import java.util.*;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 
@@ -30,10 +19,10 @@ import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollectionTester;
 import org.observe.util.TypeTokens;
 import org.qommons.BiTuple;
-import org.qommons.QommonsTestUtils;
-import org.qommons.TestHelper;
-import org.qommons.TestHelper.Testable;
 import org.qommons.collect.MultiEntryHandle;
+import org.qommons.testing.QommonsTestUtils;
+import org.qommons.testing.TestHelper;
+import org.qommons.testing.TestHelper.Testable;
 
 import com.google.common.reflect.TypeToken;
 
@@ -671,12 +660,13 @@ public class ObservableAssocTest {
 						Assert.assertEquals(message(msg, "Listening key set mismatch"), expectedEntry.getKey(), listeningKSIter.next());
 					}
 					if (listeningCollections.containsKey(expectedEntry.getKey())) {
-						Assert.assertThat(message(msg, "listening to ", expectedEntry.getKey()),
+						QommonsTestUtils.assertThat(message(msg, "listening to ", expectedEntry.getKey()),
 							listeningCollections.get(expectedEntry.getKey()),
 							QommonsTestUtils.collectionsEqual(expectedEntry.getValue().keySet(), true));
 					}
 					if (watchedCollections.containsKey(expectedEntry.getKey())) {
-						Assert.assertThat(message(msg, "watching ", expectedEntry.getKey()), watchedCollections.get(expectedEntry.getKey()),
+						QommonsTestUtils.assertThat(message(msg, "watching ", expectedEntry.getKey()),
+							watchedCollections.get(expectedEntry.getKey()),
 							QommonsTestUtils.collectionsEqual(expectedEntry.getValue().keySet(), true));
 					}
 				}
@@ -686,13 +676,13 @@ public class ObservableAssocTest {
 					throw new AssertionError(action + ": Extra listening value: " + listeningIter.next());
 				for (Map.Entry<Integer, List<ValueHolder>> listening : listeningCollections.entrySet()) {
 					if (!expected.containsKey(listening.getKey())) {
-						Assert.assertThat(message(msg, "listening ", listening.getKey()), listening.getValue(),
+						QommonsTestUtils.assertThat(message(msg, "listening ", listening.getKey()), listening.getValue(),
 							QommonsTestUtils.collectionsEqual(Collections.emptyList(), true));
 					}
 				}
 				for (Map.Entry<Integer, ObservableCollection<ValueHolder>> watching : watchedCollections.entrySet()) {
 					if (!expected.containsKey(watching.getKey())) {
-						Assert.assertThat(message(msg, "watching ", watching.getKey()), watching.getValue(),
+						QommonsTestUtils.assertThat(message(msg, "watching ", watching.getKey()), watching.getValue(),
 							QommonsTestUtils.collectionsEqual(Collections.emptyList(), true));
 					}
 				}

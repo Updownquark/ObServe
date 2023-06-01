@@ -7,7 +7,7 @@ import org.observe.Observable;
 import org.observe.SimpleObservable;
 import org.qommons.Lockable;
 import org.qommons.Lockable.CoreId;
-import org.qommons.TestHelper;
+import org.qommons.testing.TestHelper;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transactable;
 import org.qommons.Transaction;

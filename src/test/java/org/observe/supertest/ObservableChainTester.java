@@ -30,12 +30,12 @@ import org.observe.supertest.value.CollectionDerivedValues;
 import org.observe.supertest.value.CombinedValueLink;
 import org.observe.supertest.value.MappedValueLink;
 import org.qommons.LockDebug;
-import org.qommons.TestHelper;
-import org.qommons.TestHelper.Testable;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollections;
 import org.qommons.collect.ListenerList;
 import org.qommons.debug.Debug;
+import org.qommons.testing.TestHelper;
+import org.qommons.testing.TestHelper.Testable;
 
 /** Tests many of the classes in ObServe using randomly generated observable structure chains and randomly generated-data. */
 public class ObservableChainTester implements Testable {

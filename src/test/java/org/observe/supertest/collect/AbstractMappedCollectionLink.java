@@ -3,8 +3,8 @@ package org.observe.supertest.collect;
 import org.observe.Transformation;
 import org.observe.supertest.ObservableChainLink;
 import org.observe.supertest.OperationRejection;
-import org.qommons.TestHelper;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
+import org.qommons.testing.TestHelper;
 
 /**
  * An abstract class that helps with any one-to-one collection link type that performs a mapping

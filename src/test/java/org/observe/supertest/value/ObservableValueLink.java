@@ -15,8 +15,8 @@ import org.observe.supertest.ObservableChainTester;
 import org.observe.supertest.OperationRejection;
 import org.observe.supertest.TestValueType;
 import org.observe.supertest.collect.ObservableCollectionLink;
-import org.qommons.TestHelper;
 import org.qommons.collect.ElementId;
+import org.qommons.testing.TestHelper;
 
 /**
  * An {@link ObservableChainLink} whose observable structure is an {@link ObservableValue}

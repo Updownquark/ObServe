@@ -1,7 +1,7 @@
 package org.observe.supertest.collect;
 
-import org.qommons.TestHelper;
 import org.qommons.collect.CollectionElement;
+import org.qommons.testing.TestHelper;
 
 /**
  * Just implements {@link #validate(CollectionLinkElement, boolean)}

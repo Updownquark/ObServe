@@ -19,8 +19,6 @@ import org.observe.supertest.ObservableChainLink;
 import org.observe.supertest.ObservableChainTester;
 import org.observe.supertest.OperationRejection;
 import org.observe.supertest.TestValueType;
-import org.qommons.TestHelper;
-import org.qommons.TestHelper.RandomAction;
 import org.qommons.Transactable;
 import org.qommons.ValueHolder;
 import org.qommons.collect.BetterList;
@@ -29,6 +27,8 @@ import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.MapEntryHandle;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
+import org.qommons.testing.TestHelper;
+import org.qommons.testing.TestHelper.RandomAction;
 import org.qommons.tree.BetterTreeMap;
 
 import com.google.common.reflect.TypeToken;

@@ -21,10 +21,10 @@ import org.observe.supertest.ObservableChainTester;
 import org.observe.supertest.TestValueType;
 import org.observe.supertest.TypeTransformation;
 import org.qommons.LambdaUtils;
-import org.qommons.TestHelper;
-import org.qommons.TestHelper.RandomAction;
 import org.qommons.Transactable;
 import org.qommons.ValueHolder;
+import org.qommons.testing.TestHelper;
+import org.qommons.testing.TestHelper.RandomAction;
 
 import com.google.common.reflect.TypeToken;
 

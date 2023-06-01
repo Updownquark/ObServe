@@ -16,9 +16,9 @@ import org.observe.supertest.TestValueType;
 import org.qommons.BiTuple;
 import org.qommons.LambdaUtils;
 import org.qommons.StringUtils;
-import org.qommons.TestHelper;
-import org.qommons.TestHelper.RandomAction;
 import org.qommons.collect.CollectionElement;
+import org.qommons.testing.TestHelper;
+import org.qommons.testing.TestHelper.RandomAction;
 
 /**
  * Tests {@link org.observe.collect.ObservableCollection.CollectionDataFlow#sorted(Comparator)}

@@ -3,7 +3,7 @@ package org.observe.supertest.collect;
 import org.junit.Assert;
 import org.observe.supertest.CollectionOpType;
 import org.observe.supertest.OperationRejection;
-import org.qommons.TestHelper;
+import org.qommons.testing.TestHelper;
 
 /**
  * An abstract class for derived {@link ObservableCollectionLink}s that represent each of the source elements and derive their order from

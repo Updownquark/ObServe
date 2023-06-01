@@ -6,8 +6,8 @@ import java.util.List;
 
 import org.junit.Assert;
 import org.junit.Test;
-import org.qommons.TestHelper;
-import org.qommons.TestHelper.Testable;
+import org.qommons.testing.TestHelper;
+import org.qommons.testing.TestHelper.Testable;
 
 /** Tests {@link ByteAddress} */
 public class ByteAddressTest implements Testable {

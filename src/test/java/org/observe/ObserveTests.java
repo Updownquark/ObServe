@@ -7,18 +7,17 @@ import org.observe.assoc.ObservableAssocTest;
 import org.observe.collect.ObservableCollectionsTest;
 import org.observe.config.ObservableConfigTest;
 import org.observe.ds.DSTesting;
-import org.observe.supertest.ShortChainTester;
 import org.observe.expresso.ExpressoTests;
 import org.observe.quick.QuickTests;
 import org.observe.quick.style.QuickStyleTests;
 import org.observe.remote.ByteAddressTest;
+import org.observe.supertest.ShortChainTester;
 import org.observe.util.CollectionSynchronizationTest;
 import org.observe.util.CsvEntitySetTest;
 import org.observe.util.EntityArgumentsTest;
 import org.observe.util.EntityReflectorTest;
 import org.observe.util.TypeTokensTest;
 import org.observe.util.swing.ObservableSwingUtilsTests;
-import org.qommons.QommonsTests;
 
 /** Runs all unit tests in the ObServe project. */
 @RunWith(Suite.class)
@@ -39,8 +38,7 @@ import org.qommons.QommonsTests;
 	CsvEntitySetTest.class, //
 	ExpressoTests.class, //
 	QuickStyleTests.class, //
-	QuickTests.class, //
-	QommonsTests.class
+	QuickTests.class
 })
 public class ObserveTests {
 }

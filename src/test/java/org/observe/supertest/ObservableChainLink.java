@@ -3,8 +3,8 @@ package org.observe.supertest;
 import java.util.List;
 
 import org.observe.supertest.collect.ObservableCollectionLink;
-import org.qommons.TestHelper;
 import org.qommons.Transactable;
+import org.qommons.testing.TestHelper;
 
 /**
  * A link in a chain (actually a tree) of observable structures in an {@link ObservableChainTester} test case
@@ -46,7 +46,7 @@ public interface ObservableChainLink<S, T> extends Transactable {
 	double getModificationAffinity();
 
 	/**
-	 * @param action The action to {@link org.qommons.TestHelper.RandomAction#or(double, Runnable) or} potential modifications into
+	 * @param action The action to {@link org.qommons.testing.TestHelper.RandomAction#or(double, Runnable) or} potential modifications into
 	 * @param helper The source of randomness for the modifications
 	 */
 	void tryModify(TestHelper.RandomAction action, TestHelper helper);

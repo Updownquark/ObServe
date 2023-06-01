@@ -9,8 +9,8 @@ import org.observe.supertest.ChainLinkGenerator;
 import org.observe.supertest.ObservableChainLink;
 import org.observe.supertest.OperationRejection;
 import org.observe.supertest.TestValueType;
-import org.qommons.TestHelper;
 import org.qommons.ValueHolder;
+import org.qommons.testing.TestHelper;
 
 /**
  * Tests {@link org.observe.collect.ObservableCollection.CollectionDataFlow#filterMod(java.util.function.Consumer)}

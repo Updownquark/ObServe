@@ -10,7 +10,6 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 
-import org.hamcrest.MatcherAssert;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -20,13 +19,13 @@ import org.observe.collect.ObservableCollectionTester;
 import org.observe.config.ObservableConfig.XmlEncoding;
 import org.observe.util.TypeTokens;
 import org.qommons.BreakpointHere;
-import org.qommons.QommonsTestUtils;
-import org.qommons.TestHelper;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.FastFailLockingStrategy;
 import org.qommons.io.TextParseException;
+import org.qommons.testing.QommonsTestUtils;
+import org.qommons.testing.TestHelper;
 import org.qommons.tree.BetterTreeList;
 import org.xml.sax.SAXException;
 
@@ -333,7 +332,7 @@ public class ObservableConfigTest {
 			switch (i) {
 			case 0:
 				Assert.assertEquals("text1", entity.getText());
-				MatcherAssert.assertThat(entity.getTexts(),
+				QommonsTestUtils.assertThat(entity.getTexts(),
 					QommonsTestUtils.collectionsEqual(Arrays.asList("text2", "text3", "text4"), true));
 				entity.getTexts().remove(1);
 				Assert.assertEquals(1, entity.getEntityField().getD());
@@ -363,7 +362,7 @@ public class ObservableConfigTest {
 				break;
 			case 1:
 				Assert.assertEquals("text8", entity.getText());
-				MatcherAssert.assertThat(entity.getTexts(), QommonsTestUtils.collectionsEqual(Arrays.asList("text9", "text10"), true));
+				QommonsTestUtils.assertThat(entity.getTexts(), QommonsTestUtils.collectionsEqual(Arrays.asList("text9", "text10"), true));
 				entity.getTexts().add("text11");
 				Assert.assertEquals(1, entity.getEntityField().getD());
 				Assert.assertEquals(2, entity.getListedEntities().getValues().size());
@@ -407,14 +406,14 @@ public class ObservableConfigTest {
 			switch (i) {
 			case 0:
 				Assert.assertEquals("text1", entity.getText());
-				MatcherAssert.assertThat(entity.getTexts(), QommonsTestUtils.collectionsEqual(Arrays.asList("text2", "text4"), true));
+				QommonsTestUtils.assertThat(entity.getTexts(), QommonsTestUtils.collectionsEqual(Arrays.asList("text2", "text4"), true));
 				Assert.assertEquals(10, entity.getEntityField().getD());
 				Assert.assertEquals(1, entity.getListedEntities().getValues().size());
 				Assert.assertEquals(60, entity.getListedEntities().getValues().getFirst().getE());
 				break;
 			case 1:
 				Assert.assertEquals("text8", entity.getText());
-				MatcherAssert.assertThat(entity.getTexts(),
+				QommonsTestUtils.assertThat(entity.getTexts(),
 					QommonsTestUtils.collectionsEqual(Arrays.asList("text9", "text10", "text11"), true));
 				Assert.assertEquals(20, entity.getEntityField().getD());
 				Assert.assertEquals(3, entity.getListedEntities().getValues().size());

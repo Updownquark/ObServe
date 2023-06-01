@@ -225,7 +225,7 @@
 	<test name="sort">
 		<model>
 			<value name="entityCopy" init="new java.util.ArrayList&lt;&gt;(models.sortedEntityList)" />
-			<value name="random">new org.qommons.TestUtil()</value>
+			<value name="random">new org.qommons.testing.TestUtil()</value>
 			<value name="maxInstant" type="java.time.Instant">`Dec 31, 2100`</value>
 			<value name="index" type="int" />
 			<action-group name="randomlyModifyEntity">

@@ -16,8 +16,8 @@ import org.observe.supertest.TestValueType;
 import org.observe.util.TypeTokens;
 import org.qommons.LambdaUtils;
 import org.qommons.Primes;
-import org.qommons.TestHelper;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
+import org.qommons.testing.TestHelper;
 
 /** Simple flat-map test that maps integer-typed collections to the factorization of each element */
 public class FactoringFlatMapCollectionLink extends AbstractFlatMappedCollectionLink<Integer, Integer> {

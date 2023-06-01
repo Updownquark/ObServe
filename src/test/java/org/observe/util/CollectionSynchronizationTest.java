@@ -6,9 +6,9 @@ import org.junit.Assert;
 import org.junit.Test;
 import org.observe.collect.ObservableCollection;
 import org.observe.util.ObservableCollectionSynchronization.Builder;
-import org.qommons.QommonsTestUtils;
-import org.qommons.TestHelper;
-import org.qommons.TestHelper.Testable;
+import org.qommons.testing.QommonsTestUtils;
+import org.qommons.testing.TestHelper;
+import org.qommons.testing.TestHelper.Testable;
 
 /** Tests {@link ObservableCollectionSynchronization} */
 public class CollectionSynchronizationTest {
@@ -17,7 +17,7 @@ public class CollectionSynchronizationTest {
 	public void simpleTest() {
 		TestHelper.createTester(SimpleTest.class)//
 		.withFailurePersistence(true).revisitKnownFailures(true).withDebug(true)//
-			.withMaxCaseDuration(Duration.ofSeconds(1)).withRandomCases(200)//
+		.withMaxCaseDuration(Duration.ofSeconds(1)).withRandomCases(200)//
 		// .withConcurrency(p -> p - 2)//
 		.withPlacemarks("op")//
 		.execute()//
@@ -29,7 +29,7 @@ public class CollectionSynchronizationTest {
 	public void preferOrderedTest() {
 		TestHelper.createTester(PreferOrderedTest.class)//
 		.withFailurePersistence(true).revisitKnownFailures(true).withDebug(true)//
-			.withMaxCaseDuration(Duration.ofSeconds(1)).withRandomCases(50)//
+		.withMaxCaseDuration(Duration.ofSeconds(1)).withRandomCases(50)//
 		// .withConcurrency(p -> p - 2)//
 		.withPlacemarks("op")//
 		.execute()//
@@ -162,7 +162,7 @@ public class CollectionSynchronizationTest {
 		 * @throws AssertionError If the two collections are not synchronized
 		 */
 		protected void checkSync() throws AssertionError {
-			Assert.assertThat(theRight, QommonsTestUtils.collectionsEqual(theLeft, isOrdered()));
+			QommonsTestUtils.assertThat(theRight, QommonsTestUtils.collectionsEqual(theLeft, isOrdered()));
 		}
 
 		/**

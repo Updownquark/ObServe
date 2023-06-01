@@ -12,11 +12,11 @@ import org.observe.supertest.ObservableChainLink;
 import org.observe.supertest.OperationRejection;
 import org.observe.supertest.TestValueType;
 import org.qommons.BiTuple;
-import org.qommons.TestHelper;
 import org.qommons.collect.BetterSet;
 import org.qommons.collect.BetterSortedList;
 import org.qommons.collect.BetterSortedSet;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
+import org.qommons.testing.TestHelper;
 import org.qommons.tree.BetterTreeSet;
 import org.qommons.tree.SortedTreeList;
 

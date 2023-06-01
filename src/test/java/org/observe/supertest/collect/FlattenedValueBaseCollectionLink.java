@@ -13,9 +13,9 @@ import org.observe.supertest.ObservableChainTester;
 import org.observe.supertest.OperationRejection;
 import org.observe.supertest.TestValueType;
 import org.observe.util.TypeTokens;
-import org.qommons.TestHelper;
-import org.qommons.TestHelper.RandomAction;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
+import org.qommons.testing.TestHelper;
+import org.qommons.testing.TestHelper.RandomAction;
 
 import com.google.common.reflect.TypeToken;
 

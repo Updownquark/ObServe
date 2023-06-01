@@ -18,11 +18,11 @@ import org.observe.supertest.ObservableChainTester;
 import org.observe.supertest.OperationRejection;
 import org.observe.supertest.TestValueType;
 import org.observe.supertest.collect.CombinedCollectionLink;
-import org.qommons.TestHelper;
-import org.qommons.TestHelper.RandomAction;
 import org.qommons.Transactable;
 import org.qommons.TriFunction;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
+import org.qommons.testing.TestHelper;
+import org.qommons.testing.TestHelper.RandomAction;
 
 import com.google.common.reflect.TypeToken;
 

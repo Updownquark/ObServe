@@ -6,7 +6,7 @@ import org.observe.supertest.ChainLinkGenerator;
 import org.observe.supertest.ObservableChainLink;
 import org.observe.supertest.OperationRejection;
 import org.observe.supertest.TestValueType;
-import org.qommons.TestHelper;
+import org.qommons.testing.TestHelper;
 
 /**
  * Tests {@link ObservableCollection#reverse()} and {@link org.observe.collect.ObservableCollection.CollectionDataFlow#reverse()}

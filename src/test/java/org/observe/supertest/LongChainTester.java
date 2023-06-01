@@ -5,7 +5,7 @@ import java.time.Duration;
 
 import org.junit.Test;
 import org.qommons.QommonsUtils;
-import org.qommons.TestHelper;
+import org.qommons.testing.TestHelper;
 
 /** A long chain tester, for standalone testing */
 public class LongChainTester extends ObservableChainTester {

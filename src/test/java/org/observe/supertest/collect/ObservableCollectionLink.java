@@ -25,9 +25,6 @@ import org.observe.supertest.ObservableChainLink;
 import org.observe.supertest.ObservableChainTester;
 import org.observe.supertest.OperationRejection;
 import org.observe.supertest.TestValueType;
-import org.qommons.QommonsTestUtils;
-import org.qommons.TestHelper;
-import org.qommons.TestHelper.RandomAction;
 import org.qommons.collect.BetterCollections;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.BetterSortedList.SortedSearchFilter;
@@ -35,6 +32,9 @@ import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
+import org.qommons.testing.QommonsTestUtils;
+import org.qommons.testing.TestHelper;
+import org.qommons.testing.TestHelper.RandomAction;
 import org.qommons.tree.BetterTreeList;
 
 /**
@@ -1306,9 +1306,9 @@ public abstract class ObservableCollectionLink<S, T> extends AbstractChainLink<S
 		for (T value : getCollection())
 			referenceArray[i++] = value;
 		Assert.assertEquals(i, getCollection().size());
-		Assert.assertThat(Arrays.asList(getCollection().toArray()), //
+		QommonsTestUtils.assertThat(Arrays.asList(getCollection().toArray()), //
 			QommonsTestUtils.collectionsEqual(Arrays.asList(referenceArray), true));
-		Assert.assertThat(Arrays.asList(getMultiStepCollection().toArray()), //
+		QommonsTestUtils.assertThat(Arrays.asList(getMultiStepCollection().toArray()), //
 			QommonsTestUtils.collectionsEqual(Arrays.asList(referenceArray), theDef.orderImportant));
 
 		// Test equals(Object)

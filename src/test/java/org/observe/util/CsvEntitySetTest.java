@@ -13,8 +13,6 @@ import java.util.Set;
 import org.junit.Assert;
 import org.junit.Test;
 import org.observe.util.CsvEntitySet.EntityIterator;
-import org.qommons.TestHelper;
-import org.qommons.TestHelper.Testable;
 import org.qommons.collect.BetterHashMap;
 import org.qommons.collect.BetterSortedMap;
 import org.qommons.collect.QuickSet.QuickMap;
@@ -22,6 +20,8 @@ import org.qommons.ex.CheckedExceptionWrapper;
 import org.qommons.io.FileUtils;
 import org.qommons.io.Format;
 import org.qommons.io.TextParseException;
+import org.qommons.testing.TestHelper;
+import org.qommons.testing.TestHelper.Testable;
 import org.qommons.tree.BetterTreeList;
 import org.qommons.tree.BetterTreeMap;
 

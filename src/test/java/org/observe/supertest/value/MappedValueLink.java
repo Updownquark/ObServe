@@ -13,10 +13,10 @@ import org.observe.supertest.OperationRejection;
 import org.observe.supertest.TestValueType;
 import org.observe.supertest.TypeTransformation;
 import org.observe.supertest.collect.MappedCollectionLink;
-import org.qommons.TestHelper;
-import org.qommons.TestHelper.RandomAction;
 import org.qommons.Transactable;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
+import org.qommons.testing.TestHelper;
+import org.qommons.testing.TestHelper.RandomAction;
 
 import com.google.common.reflect.TypeToken;
 
