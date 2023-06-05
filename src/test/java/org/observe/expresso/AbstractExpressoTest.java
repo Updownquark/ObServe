@@ -2,7 +2,6 @@ package org.observe.expresso;
 
 import org.junit.Before;
 import org.qommons.config.QonfigApp;
-import org.qommons.config.QonfigDocument;
 
 /**
  * Abstract class for a unit test backed by an expresso Qonfig file
@@ -29,8 +28,8 @@ public abstract class AbstractExpressoTest<H extends Expresso> {
 			System.out.print("Interpreting test files...");
 			System.out.flush();
 			try {
-				QonfigDocument app = QonfigApp.parseApp(getClass().getResource(getTestAppFile()));
-				TESTING = QonfigApp.interpretApp(app, ExpressoTesting.class);
+				QonfigApp app = QonfigApp.parseApp(getClass().getResource(getTestAppFile()));
+				TESTING = app.interpretApp(ExpressoTesting.class);
 			} catch (Exception e) {
 				e.printStackTrace();
 				throw new RuntimeException(e);

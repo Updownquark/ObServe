@@ -8,7 +8,7 @@ import org.observe.quick.QuickTextWidget;
 import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigInterpretationException;
-import org.qommons.io.LocatedContentPosition;
+import org.qommons.io.LocatedPositionedContent;
 
 import com.google.common.reflect.TypeToken;
 
@@ -53,7 +53,7 @@ public class QuickLabel<T> extends QuickTextWidget.Abstract<T> {
 			if (theStaticText != null) {
 				theTextExpression = new CompiledExpression(//
 					new ObservableExpression.LiteralExpression<>(theStaticText, theStaticText), session.getElement(), session.getValueDef(),
-					LocatedContentPosition.of(session.getElement().getDocument().getLocation(), session.getElement().getValue().position),
+					LocatedPositionedContent.of(session.getElement().getDocument().getLocation(), session.getElement().getValue().position),
 					session);
 			}
 		}

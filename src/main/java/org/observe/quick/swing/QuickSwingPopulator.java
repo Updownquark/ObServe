@@ -199,59 +199,65 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 			initMouseListening();
 			tx.with(QuickDocument.Interpreted.class, QuickApplication.class, (interpretedDoc, tx2) -> {
 				QuickSwingPopulator<QuickWidget> interpretedBody = tx2.transform(interpretedDoc.getBody(), QuickSwingPopulator.class);
-				return doc -> {
-					try {
-						EventQueue.invokeAndWait(() -> {
-							QuickWindow window = doc.getAddOn(QuickWindow.class);
-							// TODO Need an until in QuickElement?
-							Observable<?> until = Observable.empty();
-							WindowBuilder<?, ?> w = WindowPopulation.populateWindow(new JFrame(), until, true, true);
-							if (window != null) {
-								switch (window.getCloseAction()) {
-								case DoNothing:
-									w.withCloseAction(JFrame.DO_NOTHING_ON_CLOSE);
-									break;
-								case Hide:
-									w.withCloseAction(JFrame.HIDE_ON_CLOSE);
-									break;
-								case Dispose:
-									w.withCloseAction(JFrame.DISPOSE_ON_CLOSE);
-									break;
-								case Exit:
-									w.withCloseAction(JFrame.EXIT_ON_CLOSE);
-									break;
+				return new QuickApplication() {
+					@Override
+					public void runApplication(QuickDocument doc, Observable<?> until) throws ModelInstantiationException {
+						try {
+							EventQueue.invokeAndWait(() -> {
+								QuickWindow window = doc.getAddOn(QuickWindow.class);
+								WindowBuilder<?, ?> w = WindowPopulation.populateWindow(new JFrame(), until, true, true);
+								if (window != null) {
+									switch (window.getCloseAction()) {
+									case DoNothing:
+										w.withCloseAction(JFrame.DO_NOTHING_ON_CLOSE);
+										break;
+									case Hide:
+										w.withCloseAction(JFrame.HIDE_ON_CLOSE);
+										break;
+									case Dispose:
+										w.withCloseAction(JFrame.DISPOSE_ON_CLOSE);
+										break;
+									case Exit:
+										w.withCloseAction(JFrame.EXIT_ON_CLOSE);
+										break;
+									}
+									if (window.getX() != null)
+										w.withX(window.getX());
+									if (window.getY() != null)
+										w.withY(window.getY());
+									if (window.getWidth() != null)
+										w.withWidth(window.getWidth());
+									if (window.getHeight() != null)
+										w.withHeight(window.getHeight());
+									if (window.getTitle() != null)
+										w.withTitle(window.getTitle());
+									if (window.getVisible() != null)
+										w.withVisible(window.getVisible());
 								}
-								if (window.getX() != null)
-									w.withX(window.getX());
-								if (window.getY() != null)
-									w.withY(window.getY());
-								if (window.getWidth() != null)
-									w.withWidth(window.getWidth());
-								if (window.getHeight() != null)
-									w.withHeight(window.getHeight());
-								if (window.getTitle() != null)
-									w.withTitle(window.getTitle());
-								if (window.getVisible() != null)
-									w.withVisible(window.getVisible());
-							}
-							w.withHContent(new JustifiedBoxLayout(true).mainJustified().crossJustified(), content -> {
-								try {
-									interpretedBody.populate(content, doc.getBody());
-								} catch (ModelInstantiationException e) {
-									throw new CheckedExceptionWrapper(e);
-								}
+								w.withHContent(new JustifiedBoxLayout(true).mainJustified().crossJustified(), content -> {
+									try {
+										interpretedBody.populate(content, doc.getBody());
+									} catch (ModelInstantiationException e) {
+										throw new CheckedExceptionWrapper(e);
+									}
+								});
+								w.run(null);
 							});
-							w.run(null);
-						});
-					} catch (InterruptedException e) {
-						Thread.currentThread().interrupt();
-					} catch (InvocationTargetException e) {
-						if (e.getTargetException() instanceof CheckedExceptionWrapper
-							&& e.getTargetException().getCause() instanceof ModelInstantiationException)
-							throw (ModelInstantiationException) e.getTargetException().getCause();
-						doc.reporting().error("Unhandled error", e);
-					} catch (RuntimeException | Error e) {
-						doc.reporting().error("Unhandled error", e);
+						} catch (InterruptedException e) {
+							Thread.currentThread().interrupt();
+						} catch (InvocationTargetException e) {
+							if (e.getTargetException() instanceof CheckedExceptionWrapper
+								&& e.getTargetException().getCause() instanceof ModelInstantiationException)
+								throw (ModelInstantiationException) e.getTargetException().getCause();
+							doc.reporting().error("Unhandled error", e);
+						} catch (RuntimeException | Error e) {
+							doc.reporting().error("Unhandled error", e);
+						}
+					}
+
+					@Override
+					public void update(QuickDocument doc) throws ModelInstantiationException {
+						// TODO Auto-generated method stub
 					}
 				};
 			});

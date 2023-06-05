@@ -5,7 +5,7 @@ import org.observe.expresso.ObservableModelSet.ModelValueSynth;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigValueDef;
-import org.qommons.io.LocatedContentPosition;
+import org.qommons.io.LocatedPositionedContent;
 import org.qommons.io.LocatedFilePosition;
 
 /**
@@ -16,7 +16,7 @@ public class CompiledExpression implements LocatedExpression {
 	private final ObservableExpression theExpression;
 	private final QonfigElement theElement;
 	private final QonfigValueDef theDef;
-	private final LocatedContentPosition thePosition;
+	private final LocatedPositionedContent thePosition;
 	private ExpressoQIS theSession;
 	private ExpressoEnv theEnv;
 
@@ -27,7 +27,7 @@ public class CompiledExpression implements LocatedExpression {
 	 * @param position The position in the Qonfig file of the start of the expression
 	 * @param session The Expresso session in which to evaluate the expression
 	 */
-	public CompiledExpression(ObservableExpression expression, QonfigElement element, QonfigValueDef def, LocatedContentPosition position,
+	public CompiledExpression(ObservableExpression expression, QonfigElement element, QonfigValueDef def, LocatedPositionedContent position,
 		ExpressoQIS session) {
 		theExpression = expression;
 		theElement = element;
@@ -52,7 +52,7 @@ public class CompiledExpression implements LocatedExpression {
 	}
 
 	@Override
-	public LocatedContentPosition getFilePosition() {
+	public LocatedPositionedContent getFilePosition() {
 		return thePosition;
 	}
 

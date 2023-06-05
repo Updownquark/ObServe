@@ -10,7 +10,7 @@ import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.util.TypeTokens;
 import org.qommons.StringUtils;
 import org.qommons.config.QonfigInterpretationException;
-import org.qommons.io.ContentPosition;
+import org.qommons.io.PositionedContent;
 import org.qommons.io.LocatedFilePosition;
 
 import com.google.common.reflect.TypeToken;
@@ -40,7 +40,7 @@ public interface VariableType {
 	 * @return The new type
 	 * @throws QonfigInterpretationException If the type could not be parsed
 	 */
-	public static VariableType parseType(String text, ClassView cv, String file, ContentPosition position)
+	public static VariableType parseType(String text, ClassView cv, String file, PositionedContent position)
 		throws QonfigInterpretationException {
 		text = text.replace(" ", "");
 		int[] start = new int[1];
@@ -53,7 +53,7 @@ public interface VariableType {
 
 	/** Parsing logic for the {@link VariableType} class */
 	class Parsing {
-		static VariableType parseType(String text, int[] start, ClassView cv, String file, ContentPosition position)
+		static VariableType parseType(String text, int[] start, ClassView cv, String file, PositionedContent position)
 			throws QonfigInterpretationException {
 			int c = start[0];
 			for (; c < text.length(); c++) {

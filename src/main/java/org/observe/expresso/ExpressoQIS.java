@@ -7,7 +7,7 @@ import org.qommons.config.QonfigInterpreterCore.CoreSession;
 import org.qommons.config.QonfigValueDef;
 import org.qommons.config.QonfigValueType;
 import org.qommons.config.SpecialSession;
-import org.qommons.io.LocatedContentPosition;
+import org.qommons.io.LocatedPositionedContent;
 import org.qommons.io.LocatedFilePosition;
 
 /** A special session with extra utility for the Expresso toolkits */
@@ -104,7 +104,7 @@ public class ExpressoQIS implements SpecialSession<ExpressoQIS> {
 			throw new QonfigInterpretationException("Could not parse attribute " + type, position, e.getErrorLength(), e);
 		}
 		return new CompiledExpression(expression, getElement(), type,
-			LocatedContentPosition.of(getElement().getDocument().getLocation(), value.position), this);
+			LocatedPositionedContent.of(getElement().getDocument().getLocation(), value.position), this);
 	}
 
 	/**

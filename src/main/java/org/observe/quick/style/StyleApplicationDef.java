@@ -22,8 +22,8 @@ import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigToolkit;
-import org.qommons.io.LocatedContentPosition;
 import org.qommons.io.LocatedFilePosition;
+import org.qommons.io.LocatedPositionedContent;
 
 /**
  * Definition structure parsed from a &lt;style> element determining what &lt;styled> {@link QonfigElement}s a {@link QuickStyleValue}
@@ -151,7 +151,7 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 			}
 
 			@Override
-			public LocatedContentPosition getFilePosition() {
+			public LocatedPositionedContent getFilePosition() {
 				return ex.getFilePosition();
 			}
 
@@ -523,7 +523,7 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 		}
 
 		@Override
-		public LocatedContentPosition getFilePosition() {
+		public LocatedPositionedContent getFilePosition() {
 			return new LocatedAndLocation(theLeft.getFilePosition(), " && ", theRight.getFilePosition());
 		}
 
@@ -543,12 +543,12 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 		}
 	}
 
-	private static class LocatedAndLocation implements LocatedContentPosition {
-		private final LocatedContentPosition theLeft;
+	private static class LocatedAndLocation implements LocatedPositionedContent {
+		private final LocatedPositionedContent theLeft;
 		private final String theOperator;
-		private final LocatedContentPosition theRight;
+		private final LocatedPositionedContent theRight;
 
-		LocatedAndLocation(LocatedContentPosition left, String operator, LocatedContentPosition right) {
+		LocatedAndLocation(LocatedPositionedContent left, String operator, LocatedPositionedContent right) {
 			theLeft = left;
 			theOperator = operator;
 			theRight = right;
@@ -557,6 +557,16 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 		@Override
 		public int length() {
 			return theLeft.length() + theOperator.length() + theRight.length();
+		}
+
+		@Override
+		public char charAt(int index) {
+			if (index < theLeft.length())
+				return theLeft.charAt(index);
+			else if (index < theLeft.length() + theOperator.length())
+				return theOperator.charAt(index - theLeft.length());
+			else
+				return theRight.charAt(index - theLeft.length() - theOperator.length());
 		}
 
 		@Override
@@ -575,7 +585,27 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 		}
 
 		@Override
-		public LocatedContentPosition subSequence(int startIndex) {
+		public CharSequence getSourceContent(int from, int to) {
+			int leftLen = theLeft.length();
+			if (from < leftLen) {
+				if (to <= leftLen)
+					return theLeft.getSourceContent(from, to);
+				else if (to <= leftLen + theOperator.length())
+					return theLeft.getSourceContent(from, theLeft.length());
+				else
+					return theLeft.getSourceContent(from, theLeft.length()).toString() + theOperator
+						+ theRight.getSourceContent(0, to - leftLen - theOperator.length());
+			} else if (from < theLeft.length() + theOperator.length()) {
+				if (to < leftLen + theOperator.length())
+					return "";
+				else
+					return theRight.getSourceContent(from - leftLen - theOperator.length(), to - leftLen - theOperator.length());
+			} else
+				return theRight.getSourceContent(from - leftLen - theOperator.length(), to - leftLen - theOperator.length());
+		}
+
+		@Override
+		public LocatedPositionedContent subSequence(int startIndex) {
 			if (startIndex < theLeft.length())
 				return new LocatedAndLocation(theLeft.subSequence(startIndex), theOperator, theRight);
 			else if (startIndex < theLeft.length() + theOperator.length())
@@ -585,7 +615,7 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 		}
 
 		@Override
-		public LocatedContentPosition subSequence(int startIndex, int endIndex) {
+		public LocatedPositionedContent subSequence(int startIndex, int endIndex) {
 			int leftLen = theLeft.length();
 			if (startIndex < leftLen) {
 				if (endIndex <= leftLen)

@@ -61,9 +61,9 @@ import org.qommons.collect.ElementId;
 import org.qommons.collect.MapEntryHandle;
 import org.qommons.ex.ExFunction;
 import org.qommons.io.BetterFile;
-import org.qommons.io.ContentPosition;
 import org.qommons.io.FilePosition;
 import org.qommons.io.Format;
+import org.qommons.io.PositionedContent;
 import org.qommons.io.SimpleXMLParser;
 import org.qommons.io.TextParseException;
 import org.qommons.tree.BetterTreeMap;
@@ -1476,25 +1476,25 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped, Event
 			}
 
 			@Override
-			public void handleAttributeValue(String attributeName, FilePosition namePosition, String attributeValue,
-				ContentPosition valuePosition) {
-				theStack.getLast().set(encoding.decode(attributeName, true, false), encoding.decode(attributeValue, false, false));
+			public void handleAttribute(String attributeName, FilePosition namePosition, PositionedContent attributeValue) {
+				theStack.getLast().set(encoding.decode(attributeName, true, false),
+					encoding.decode(attributeValue.toString(), false, false));
 			}
 
 			@Override
-			public void handleElementContent(String elementName, String elementValue, ContentPosition position) {
+			public void handleElementContent(String elementName, PositionedContent elementValue) {
 				if (hasElementContent.get(theStack.size() - 1))
 					return; // We only pay attention to the first set of content
 				StringBuilder contentBuilder = theContentStack.get(theStack.size() - 1);
-				contentBuilder.append(elementValue.trim());
+				contentBuilder.append(elementValue.toString().trim());
 			}
 
 			@Override
-			public void handleCDataContent(String elementName, String content, ContentPosition position) {
+			public void handleCDataContent(String elementName, PositionedContent content) {
 				if (hasElementContent.get(theStack.size() - 1))
 					return; // We only pay attention to the first set of content
 				StringBuilder contentBuilder = theContentStack.get(theStack.size() - 1);
-				contentBuilder.append(content.trim());
+				contentBuilder.append(content.toString().trim());
 			}
 
 			@Override

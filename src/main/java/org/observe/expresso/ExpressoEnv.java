@@ -18,7 +18,7 @@ import org.qommons.ClassMap;
 import org.qommons.Colors;
 import org.qommons.TimeUtils;
 import org.qommons.io.ErrorReporting;
-import org.qommons.io.LocatedContentPosition;
+import org.qommons.io.LocatedPositionedContent;
 
 import com.google.common.reflect.TypeToken;
 
@@ -230,7 +230,7 @@ public class ExpressoEnv {
 	 * @param position The position at which to report errors for the new expresso environment
 	 * @return The new environment
 	 */
-	public ExpressoEnv at(LocatedContentPosition position) {
+	public ExpressoEnv at(LocatedPositionedContent position) {
 		ErrorReporting reporting = theErrorReporting.at(position);
 		if (reporting == theErrorReporting)
 			return this;
