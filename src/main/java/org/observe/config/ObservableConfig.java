@@ -61,10 +61,12 @@ import org.qommons.collect.ElementId;
 import org.qommons.collect.MapEntryHandle;
 import org.qommons.ex.ExFunction;
 import org.qommons.io.BetterFile;
-import org.qommons.io.FilePosition;
 import org.qommons.io.Format;
 import org.qommons.io.PositionedContent;
 import org.qommons.io.SimpleXMLParser;
+import org.qommons.io.SimpleXMLParser.XmlAttribute;
+import org.qommons.io.SimpleXMLParser.XmlCdata;
+import org.qommons.io.SimpleXMLParser.XmlElementTerminal;
 import org.qommons.io.TextParseException;
 import org.qommons.tree.BetterTreeMap;
 
@@ -1462,9 +1464,9 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped, Event
 			private final BitSet hasElementContent = new BitSet();
 
 			@Override
-			public void handleElementStart(String name, FilePosition position) {
+			public void handleElementStart(XmlElementTerminal element) {
 				ParsedConfig newConfig;
-				name = encoding.decode(name, true, true);
+				String name = encoding.decode(element.getName(), true, true);
 				if (theRoot == null)
 					theRoot = newConfig = new ParsedConfig(name);
 				else
@@ -1476,9 +1478,9 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped, Event
 			}
 
 			@Override
-			public void handleAttribute(String attributeName, FilePosition namePosition, PositionedContent attributeValue) {
-				theStack.getLast().set(encoding.decode(attributeName, true, false),
-					encoding.decode(attributeValue.toString(), false, false));
+			public void handleAttribute(XmlAttribute attribute) {
+				theStack.getLast().set(encoding.decode(attribute.getName(), true, false),
+					encoding.decode(attribute.getValueContent().toString(), false, false));
 			}
 
 			@Override
@@ -1490,15 +1492,15 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped, Event
 			}
 
 			@Override
-			public void handleCDataContent(String elementName, PositionedContent content) {
+			public void handleCDataContent(String elementName, XmlCdata cdata) {
 				if (hasElementContent.get(theStack.size() - 1))
 					return; // We only pay attention to the first set of content
 				StringBuilder contentBuilder = theContentStack.get(theStack.size() - 1);
-				contentBuilder.append(content.toString().trim());
+				contentBuilder.append(cdata.getValueContent().toString().trim());
 			}
 
 			@Override
-			public void handleElementEnd(String elementName, FilePosition position, boolean selfClosing) {
+			public void handleElementEnd(XmlElementTerminal element, boolean selfClosing) {
 				ParsedConfig cfg = theStack.removeLast();
 				StringBuilder contentSB = theContentStack.get(theStack.size());
 				int i = contentSB.length() - 1;
