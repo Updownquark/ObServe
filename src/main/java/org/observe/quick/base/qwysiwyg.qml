@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<quick uses:base="Quick-Base v0.1" with-extension="window" title="`Simple Quick Table Demo`" close-action="exit">
+<quick uses:base="Quick-Base v0.1" with-extension="window" title="`Simple Quick Table Demo`" close-action="exit"
+	width="window.width" height="window.height">
 	<head>
 		<models>
 			<ext-model name="clArgs">
@@ -12,6 +13,10 @@
 				<hook name="modelLoad" on="onModelLoad">qwysiwyg.init(clArgs.targetQuickApp, clArgs.$UNMATCHED$)</hook>
 				<hook name="targetChange" on="clArgs.targetQuickApp">qwysiwyg.init(clArgs.targetQuickApp, clArgs.$UNMATCHED$)</hook>
 				<hook name="clArgsChange" on="clArgs.$UNMATCHED$">qwysiwyg.init(clArgs.targetQuickApp, clArgs.$UNMATCHED$)</hook>
+			</model>
+			<model name="window">
+				<value name="width" init="640" />
+				<value name="height" init="640" />
 			</model>
 		</models>
 	</head>

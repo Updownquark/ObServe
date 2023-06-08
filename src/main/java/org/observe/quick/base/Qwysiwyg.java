@@ -126,7 +126,6 @@ public class Qwysiwyg {
 
 			renderXml(quickApp.resolveAppFile());
 
-			theRoot = new DocumentComponent(new FilePosition(0, 0, 0), false, null);
 			try {
 				theDocumentDef = quickApp.parseQuick(theDocumentDef);
 			} catch (IOException | RuntimeException e) {
@@ -278,6 +277,7 @@ public class Qwysiwyg {
 				@Override
 				public void handleProcessingInstruction(XmlProcessingInstruction pi) {
 					DocumentComponent piComp = stack.getLast().addChild(pi.getContent().getPosition(0), false, ELEMENT_COLOR);
+					piComp.end = pi.getContent().getPosition(pi.getContent().length());
 					PositionedContent value = pi.getValueContent();
 					if (value != null) {
 						DocumentComponent valueComp = piComp.addChild(value.getPosition(0), false, ELEMENT_VALUE_COLOR);
@@ -299,7 +299,7 @@ public class Qwysiwyg {
 
 				@Override
 				public void handleElementOpen(String elementName, PositionedContent openEnd) {
-					stack.pop().end = openEnd.getPosition(openEnd.length());
+					stack.removeLast().end = openEnd.getPosition(openEnd.length());
 				}
 
 				@Override
@@ -326,8 +326,12 @@ public class Qwysiwyg {
 
 				@Override
 				public void handleElementEnd(XmlElementTerminal element, boolean selfClosing) {
-					DocumentComponent elComp = stack.getLast().addChild(element.getContent().getPosition(0), false, ELEMENT_COLOR);
-					elComp.end = element.getContent().getPosition(element.getContent().length());
+					if (selfClosing)
+						stack.removeLast().end = element.getContent().getPosition(element.getContent().length());
+					else {
+						DocumentComponent elComp = stack.getLast().addChild(element.getContent().getPosition(0), false, ELEMENT_COLOR);
+						elComp.end = element.getContent().getPosition(element.getContent().length());
+					}
 				}
 			});
 		} catch (IOException | XmlParseException e) {
@@ -382,7 +386,7 @@ public class Qwysiwyg {
 			char ch = theDocumentContent.charAt(c);
 			switch (ch) {
 			case '\n':
-				renderedText.append("<br>");
+				renderedText.append("<br>\n");
 				break;
 			case '\t':
 				renderedText.append(TAB_HTML);
