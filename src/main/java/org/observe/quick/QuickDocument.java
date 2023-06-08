@@ -233,7 +233,7 @@ public class QuickDocument extends QuickElement.Abstract {
 		}
 		satisfyContextValue("onModelLoad", ModelTypes.Event.VOID, theModelLoad.readOnly(), models);
 		satisfyContextValue("onBodyLoad", ModelTypes.Event.VOID, theBodyLoad.readOnly(), models);
-		ModelSetInstance headModels = interpreted.getHead().getModels().createInstance(until).withAll(models).build();
+		ModelSetInstance headModels = interpreted.getHead().getModels().createInstance(extModels, until).withAll(models).build();
 		updateModel(interpreted, headModels);
 		return headModels;
 	}

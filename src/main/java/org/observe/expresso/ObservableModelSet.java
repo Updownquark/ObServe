@@ -925,6 +925,9 @@ public interface ObservableModelSet extends Identifiable {
 		 */
 		MV get(ExternalModelSet extModels) throws ModelException, TypeConversionException, ModelInstantiationException;
 
+		/** @return Whether this external value is defined with a default, allowing it to remain unspecified externally */
+		boolean hasDefault();
+
 		/**
 		 * If no value is supplied in the external model set for this value, this reference may optionally supply a default value. If no
 		 * default value is supplied, then an error will be thrown (but not by this method).
@@ -997,6 +1000,11 @@ public interface ObservableModelSet extends Identifiable {
 				@Override
 				public MV get(ExternalModelSet extModels) throws ModelException, TypeConversionException, ModelInstantiationException {
 					return value.getValue(extModels);
+				}
+
+				@Override
+				public boolean hasDefault() {
+					return defaultValue != null;
 				}
 
 				@Override
@@ -1947,6 +1955,15 @@ public interface ObservableModelSet extends Identifiable {
 		public ExternalModelSetBuilder withSubModel(String name, ExConsumer<ExternalModelSetBuilder, ModelException> modelBuilder)
 			throws ModelException {
 			theNameChecker.checkName(name);
+			DefaultExternalModelSet.Placeholder existing = theComponents.get(name);
+			if (existing != null) {
+				if (existing.thing instanceof ExternalModelSetBuilder) {
+					modelBuilder.accept((ExternalModelSetBuilder) existing.thing);
+					return this;
+				} else
+					throw new ModelException(
+						"A value of type " + theComponents.get(name).type + " has already been added as '" + name + "'");
+			}
 			if (theComponents.containsKey(name))
 				throw new ModelException("A value of type " + theComponents.get(name).type + " has already been added as '" + name + "'");
 			ExternalModelSetBuilder subModel = new ExternalModelSetBuilder((ExternalModelSetBuilder) theRoot, pathTo(name), theNameChecker);
@@ -1962,8 +1979,14 @@ public interface ObservableModelSet extends Identifiable {
 		 */
 		public ExternalModelSetBuilder addSubModel(String name) throws ModelException {
 			theNameChecker.checkName(name);
-			if (theComponents.containsKey(name))
-				throw new ModelException("A value of type " + theComponents.get(name).type + " has already been added as '" + name + "'");
+			DefaultExternalModelSet.Placeholder existing = theComponents.get(name);
+			if (existing != null) {
+				if (existing.thing instanceof ExternalModelSetBuilder)
+					return (ExternalModelSetBuilder) existing.thing;
+				else
+					throw new ModelException(
+						"A value of type " + theComponents.get(name).type + " has already been added as '" + name + "'");
+			}
 			ExternalModelSetBuilder subModel = new ExternalModelSetBuilder((ExternalModelSetBuilder) theRoot, pathTo(name), theNameChecker);
 			theComponents.put(name, new DefaultExternalModelSet.Placeholder(ModelTypes.Model.instance(), subModel));
 			return subModel;

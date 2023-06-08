@@ -1,21 +1,43 @@
 package org.observe.quick;
 
+import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.function.Consumer;
 import java.util.jar.Manifest;
+import java.util.stream.Collectors;
 
 import javax.swing.JOptionPane;
 
 import org.observe.Observable;
+import org.observe.SettableValue;
+import org.observe.collect.ObservableCollection;
+import org.observe.collect.ObservableSet;
+import org.observe.collect.ObservableSortedCollection;
+import org.observe.collect.ObservableSortedSet;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ExpressoQIS;
+import org.observe.expresso.ModelException;
 import org.observe.expresso.ModelInstantiationException;
+import org.observe.expresso.ModelType;
+import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet;
+import org.observe.expresso.ObservableModelSet.ExtValueRef;
+import org.observe.expresso.ObservableModelSet.ExternalModelSetBuilder;
+import org.observe.util.TypeTokens;
 import org.qommons.ArgumentParsing;
+import org.qommons.ArgumentParsing.Arguments;
+import org.qommons.ArgumentParsing.ParserBuilder;
+import org.qommons.QommonsUtils;
+import org.qommons.StringUtils;
 import org.qommons.Transformer;
 import org.qommons.ValueHolder;
 import org.qommons.config.AbstractQIS;
@@ -26,11 +48,14 @@ import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigParseException;
 import org.qommons.config.QonfigToolkit;
 import org.qommons.config.SpecialSessionImplementation;
+import org.qommons.io.BetterFile;
 import org.qommons.io.TextParseException;
 
 public class QuickApp extends QonfigApp {
 	/** The name of the Quick-App toolkit */
 	public static final String TOOLKIT_NAME = "Quick-App";
+
+	public static final String UNMATCHED_CL_ARGS = "$UNMATCHED$";
 
 	/**
 	 * @param appDefUrl The location of the {@link #getQonfigAppToolkit() Qonfig-App}-formatted application to parse
@@ -41,7 +66,7 @@ public class QuickApp extends QonfigApp {
 	 * @throws QonfigParseException If the application could not be parsed as Qonfig
 	 * @throws IllegalStateException If a references resource, like a toolkit, cannot be resolved
 	 */
-	public static QuickApp parseApp(URL appDefUrl, URL... appToolkits)
+	public static QuickApp parseApp(URL appDefUrl, URL[] appToolkits, List<String> clArgs)
 		throws IOException, TextParseException, QonfigParseException, IllegalStateException {
 		QonfigApp qonfigApp = QonfigApp.parseApp(appDefUrl, appToolkits);
 		QonfigToolkit quickAppTk = findQuickAppTk(qonfigApp.getDocument().getDocToolkit());
@@ -51,25 +76,29 @@ public class QuickApp extends QonfigApp {
 			qonfigApp.getDocument().getRoot().getChildrenInRole(quickAppTk, "quick-app", "quick-interpretation"),
 			QuickInterpretation.class);
 		return new QuickApp(qonfigApp.getDocument(), qonfigApp.getAppFile(), qonfigApp.getToolkits(), qonfigApp.getSessionTypes(),
-			qonfigApp.getInterpretations(), quickInterpretation);
+			qonfigApp.getInterpretations(), quickInterpretation, QommonsUtils.unmodifiableCopy(clArgs));
 	}
 
 	private final List<QuickInterpretation> theQuickInterpretations;
+	private final List<String> theCommandLineArgs;
 
 	protected QuickApp(QonfigDocument document, String appFile, Set<QonfigToolkit> toolkits,
-		List<SpecialSessionImplementation<?>> sessionTypes,
-		List<QonfigInterpretation> interpretations, List<QuickInterpretation> quickInterpretations) {
+		List<SpecialSessionImplementation<?>> sessionTypes, List<QonfigInterpretation> interpretations,
+		List<QuickInterpretation> quickInterpretations, List<String> commandLineArgs) {
 		super(document, appFile, toolkits, sessionTypes, interpretations);
 		theQuickInterpretations = quickInterpretations;
+		theCommandLineArgs = commandLineArgs;
 	}
 
 	public List<QuickInterpretation> getQuickInterpretations() {
 		return theQuickInterpretations;
 	}
 
+	public List<String> getCommandLineArgs() {
+		return theCommandLineArgs;
+	}
+
 	/**
-	 * @param clArgs Command-line arguments. --quick-app=? may be used to specify the application setup file. The rest will be passed to the
-	 *        quick document's external models (not yet implemented)
 	 * @throws IllegalArgumentException If the {@link #getAppFile()} cannot be resolved
 	 * @throws IOException If the application file or the quick file cannot be read
 	 * @throws TextParseException If the application file or the quick file cannot be parsed as XML
@@ -78,8 +107,8 @@ public class QuickApp extends QonfigApp {
 	 * @throws ExpressoInterpretationException If model configuration or references in the quick file contain errors
 	 * @throws ModelInstantiationException If the quick document could not be loaded
 	 */
-	public QuickDocument.Def parseQuick(QuickDocument.Def previous, String... clArgs) throws IllegalArgumentException, IOException,
-	TextParseException, QonfigParseException, QonfigInterpretationException {
+	public QuickDocument.Def parseQuick(QuickDocument.Def previous)
+		throws IllegalArgumentException, IOException, TextParseException, QonfigParseException, QonfigInterpretationException {
 		ValueHolder<AbstractQIS<?>> docSession = new ValueHolder<>();
 		QuickDocument.Def quickDocDef;
 		if (previous != null)
@@ -135,10 +164,10 @@ public class QuickApp extends QonfigApp {
 
 		QuickApp quickApp = parseQuickApp(clArgs);
 
-		QuickDocument.Def quickDocDef = quickApp.parseQuick(null, clArgs);
+		QuickDocument.Def quickDocDef = quickApp.parseQuick(null);
 
-		ObservableModelSet.ExternalModelSet extModels = parseExtModels(
-			ObservableModelSet.buildExternal(ObservableModelSet.JAVA_NAME_CHECKER), clArgs);
+		ObservableModelSet.ExternalModelSet extModels = parseExtModels(quickDocDef.getHead().getModels(), quickApp.getCommandLineArgs(),
+			ObservableModelSet.buildExternal(ObservableModelSet.JAVA_NAME_CHECKER));
 
 		QuickDocument.Interpreted interpretedDoc = quickDocDef.interpret(null);
 		quickDocDef = null; // Free up memory
@@ -195,16 +224,194 @@ public class QuickApp extends QonfigApp {
 		if (quickAppToolkitUrl == null)
 			throw new IllegalStateException("Could not locate Quick App toolkit quick-app.qtd");
 
-		return QuickApp.parseApp(quickAppUrl, quickAppToolkitUrl);
+		return QuickApp.parseApp(quickAppUrl, new URL[] { quickAppToolkitUrl }, args.getUnmatched());
 	}
 
-	public static ObservableModelSet.ExternalModelSet parseExtModels(ObservableModelSet.ExternalModelSetBuilder ext, String... clArgs) {
-		/* TODO
-		 * * Inspect external models
-		 * * Build ArgumentParser2
-		 * * Apply to command-line arguments
-		 * * Create external models from argument values */
+	public static ObservableModelSet.ExternalModelSet parseExtModels(ObservableModelSet.Built models, List<String> clArgs,
+		ObservableModelSet.ExternalModelSetBuilder ext) {
+		ArgumentParsing.ParserBuilder apBuilder = ArgumentParsing.build();
+		// Inspect external models and build an ArgumentParser
+		buildArgumentParser(models, apBuilder, null, new StringBuilder());
+		// Apply to command-line arguments
+		ArgumentParsing.Arguments parsedArgs = apBuilder.build()//
+			.parse(clArgs);
+		// Create external models from argument values
+		populateExtModel(models, ext, parsedArgs, null, new StringBuilder());
 		return ext.build();
+	}
+
+	private static void buildArgumentParser(ObservableModelSet.Built models, ArgumentParsing.ParserBuilder builder, String modelName,
+		StringBuilder path) {
+		int preLen = path.length();
+		for (Map.Entry<String, ? extends ObservableModelSet.ModelComponentNode<?, ?>> comp : models.getComponents().entrySet()) {
+			if (comp.getValue().getThing() instanceof ExtValueRef) {
+				if (path.length() > 0)
+					path.append('.');
+				path.append(toArgName(comp.getKey()));
+				buildArgument(modelName, path.toString(), (ExtValueRef<?, ?>) comp.getValue().getThing(), builder);
+			} else if (comp.getValue().getThing() instanceof ObservableModelSet) {
+				String compModelName;
+				if (modelName == null)
+					compModelName = comp.getKey();
+				else {
+					compModelName = modelName;
+					if (path.length() > 0)
+						path.append('.');
+					path.append(toArgName(comp.getKey()));
+				}
+				buildArgumentParser((ObservableModelSet.Built) comp.getValue().getThing(), builder, compModelName, path);
+			}
+			path.setLength(preLen);
+		}
+	}
+
+	private static String toArgName(String name) {
+		if (name.equals(UNMATCHED_CL_ARGS))
+			return name;
+		return StringUtils.parseByCase(name, true).toKebabCase();
+	}
+
+	protected static <M, MV extends M> void buildArgument(String modelName, String name, ExtValueRef<M, MV> thing, ParserBuilder builder) {
+		ModelType<M> modelType = thing.getType().getModelType();
+		if (modelType.getTypeCount() != 1)
+			throw new IllegalArgumentException("External model value '" + modelName + "." + name
+				+ "' cannot be satisfied via command-line.  Model type " + modelType + " is unsupported.");
+		boolean hasDefault = thing.hasDefault();
+		Consumer<ArgumentParsing.ArgumentBuilder<?, ?>> argConfig;
+		if (modelType == ModelTypes.Value) {
+			argConfig = arg -> {
+				if (hasDefault)
+					arg.optional();
+				else
+					arg.required();
+			};
+		} else if (modelType == ModelTypes.Collection) {
+			if (name.equals(UNMATCHED_CL_ARGS)) {
+				builder.acceptUnmatched(true);
+				return;
+			} else
+				argConfig = arg -> arg.required();
+		} else {
+			argConfig = arg -> arg.required();
+		}
+		Consumer<ArgumentParsing.ValuedArgumentSetBuilder> argsBuilder;
+		Class<?> type = TypeTokens.get().unwrap(TypeTokens.getRawType(thing.getType().getType(0)));
+		if (type == boolean.class) {
+			if (!hasDefault && modelType == ModelTypes.Value) {
+				builder.forFlagPattern(p -> p.add(name, null));
+				return;
+			} else
+				argsBuilder = p -> p.addBooleanArgument(name, argConfig);
+		} else if (type == int.class) {
+			argsBuilder = p -> p.addIntArgument(name, argConfig);
+		} else if (type == long.class) {
+			argsBuilder = p -> p.addLongArgument(name, argConfig);
+		} else if (type == double.class) {
+			argsBuilder = p -> p.addDoubleArgument(name, argConfig);
+		} else if (type == String.class) {
+			argsBuilder = p -> p.addStringArgument(name, argConfig);
+		} else if (Enum.class.isAssignableFrom(type)) {
+			argsBuilder = p -> p.addEnumArgument(name, (Class<? extends Enum<?>>) type, argConfig);
+		} else if (type == Duration.class) {
+			argsBuilder = p -> p.addDurationArgument(name, argConfig);
+		} else if (type == Instant.class) {
+			argsBuilder = p -> p.addInstantArgument(name, argConfig);
+		} else if (type == File.class) {
+			argsBuilder = p -> p.addFileArgument(name, argConfig);
+		} else if (type == BetterFile.class) {
+			argsBuilder = p -> p.addBetterFileArgument(name, argConfig);
+		} else
+			throw new IllegalArgumentException("External model value '" + modelName + "." + name
+				+ "' cannot be satisfied via command-line.  Value type " + type.getName() + " is unsupported.");
+		if (modelType == ModelTypes.Value) {
+			builder.forValuePattern(argsBuilder);
+		} else if (modelType == ModelTypes.Collection || modelType == ModelTypes.Set) {
+			builder.forMultiValuePattern(argsBuilder);
+		} else if (modelType == ModelTypes.SortedCollection || modelType == ModelTypes.SortedSet) {
+			if (!Comparable.class.isAssignableFrom(TypeTokens.get().wrap(type)))
+				throw new IllegalArgumentException("External model value '" + modelName + "." + name
+					+ "' cannot be satisfied via command-line.  Value type " + type.getName() + " is not intrinsically sortable.");
+			builder.forMultiValuePattern(argsBuilder);
+		} else
+			throw new IllegalArgumentException("External model value '" + modelName + "." + name
+				+ "' cannot be satisfied via command-line.  Model type " + modelType + " is unsupported.");
+
+	}
+
+	private static void populateExtModel(ObservableModelSet.Built models, ExternalModelSetBuilder ext, Arguments parsedArgs,
+		String modelName, StringBuilder path) {
+		int preLen = path.length();
+		for (Map.Entry<String, ? extends ObservableModelSet.ModelComponentNode<?, ?>> comp : models.getComponents().entrySet()) {
+			if (comp.getValue().getThing() instanceof ExtValueRef) {
+				if (path.length() > 0)
+					path.append('.');
+				path.append(comp.getKey());
+				satisfyArgument(path.toString(), (ExtValueRef<?, ?>) comp.getValue().getThing(), ext, parsedArgs);
+			} else if (comp.getValue().getThing() instanceof ObservableModelSet) {
+				String compModelName;
+				if (modelName == null)
+					compModelName = comp.getKey();
+				else {
+					compModelName = modelName;
+					if (path.length() > 0)
+						path.append('.');
+					path.append(toArgName(comp.getKey()));
+				}
+				ExternalModelSetBuilder subModel;
+				try {
+					subModel = ext.addSubModel(comp.getKey());
+				} catch (ModelException e) {
+					throw new IllegalStateException("Argument conflict", e);
+				}
+				populateExtModel((ObservableModelSet.Built) comp.getValue().getThing(), subModel, parsedArgs, compModelName, path);
+			}
+			path.setLength(preLen);
+		}
+	}
+
+	protected static <M, MV extends M> void satisfyArgument(String valueName, ExtValueRef<M, MV> thing, ExternalModelSetBuilder ext,
+		Arguments parsedArgs) {
+		String argName = String.join(".", Arrays.stream(valueName.split("\\.")).map(n -> StringUtils.parseByCase(n, true).toKebabCase())//
+			.collect(Collectors.toList()));
+		ModelType<M> modelType = thing.getType().getModelType();
+		boolean hasDefault = thing.hasDefault();
+		Class<?> type = TypeTokens.get().unwrap(TypeTokens.getRawType(thing.getType().getType(0)));
+		MV value;
+		if (modelType == ModelTypes.Value) {
+			if (type == boolean.class && !hasDefault)
+				value = (MV) SettableValue.of(boolean.class, parsedArgs.has(argName), "Command-line argument");
+			else
+				value = (MV) SettableValue.of((Class<Object>) type, parsedArgs.get(argName), "Command-line argument");
+		} else {
+			ObservableCollection<Object> collection;
+			if (modelType == ModelTypes.Collection)
+				collection = ObservableCollection.build((Class<Object>) type).build();
+			else if (modelType == ModelTypes.SortedCollection) {
+				if (!Comparable.class.isAssignableFrom(TypeTokens.get().wrap(type)))
+					return;
+				collection = ObservableSortedCollection.build((Class<Object>) type, (o1, o2) -> ((Comparable<Object>) o1).compareTo(o2))
+					.build();
+			} else if (modelType == ModelTypes.Set)
+				collection = ObservableSet.build((Class<Object>) type).build();
+			else if (modelType == ModelTypes.SortedSet) {
+				if (!Comparable.class.isAssignableFrom(TypeTokens.get().wrap(type)))
+					return;
+				collection = ObservableSortedSet.build((Class<Object>) type, (o1, o2) -> ((Comparable<Object>) o1).compareTo(o2)).build();
+			} else
+				return;
+
+			if (valueName.equals(UNMATCHED_CL_ARGS))
+				collection.addAll(parsedArgs.getUnmatched());
+			else
+				collection.addAll(parsedArgs.getAll(argName));
+
+			value = (MV) collection.flow().unmodifiable(false).collect();
+		}
+		try {
+			ext.with(valueName, thing.getType(), value);
+		} catch (ModelException e) {
+			throw new IllegalStateException("Failed to satisfy external model value " + thing + " with command-line argument", e);
+		}
 	}
 
 	private static QonfigToolkit findQuickAppTk(QonfigToolkit toolkit) {

@@ -94,7 +94,7 @@ public class ConstructorInvocation extends Invocation {
 		int expressionOffset) throws ExpressoEvaluationException, ExpressoInterpretationException {
 		Class<?> constructorType = env.getClassView().getType(theType.getName());
 		if (constructorType == null)
-			throw new ExpressoEvaluationException(expressionOffset + 3, theType.length(), "No such type found: " + theType);
+			throw new ExpressoEvaluationException(expressionOffset + 4, theType.length(), "No such type found: " + theType);
 		Invocation.MethodResult<Constructor<?>, MV> result = Invocation.findMethod(constructorType.getConstructors(), null, null, true,
 			Arrays.asList(args), type, env, Invocation.ExecutableImpl.CONSTRUCTOR, this, expressionOffset);
 		if (result != null) {

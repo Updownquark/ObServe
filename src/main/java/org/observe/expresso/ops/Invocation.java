@@ -9,6 +9,7 @@ import java.lang.reflect.Modifier;
 import java.lang.reflect.Type;
 import java.lang.reflect.TypeVariable;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -33,6 +34,7 @@ import org.observe.expresso.ObservableModelSet.ModelValueSynth;
 import org.observe.expresso.TypeConversionException;
 import org.observe.util.TypeTokens;
 import org.qommons.ArrayUtils;
+import org.qommons.StringUtils;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterList;
 import org.qommons.io.ErrorReporting;
@@ -704,6 +706,17 @@ public abstract class Invocation implements ObservableExpression {
 
 			public ErrorReporting getReporting() {
 				return theReporting;
+			}
+
+			@Override
+			public String toString() {
+				StringBuilder str = new StringBuilder();
+				if (theContext != null)
+					str.append(theContext).append('.');
+				str.append(theMethod.method.getName()).append('(');
+				StringUtils.print(str, ", ", Arrays.asList(theArguments), StringBuilder::append);
+				str.append(')');
+				return str.toString();
 			}
 		}
 	}
