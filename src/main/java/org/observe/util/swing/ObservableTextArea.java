@@ -9,6 +9,9 @@ import java.awt.RenderingHints;
 import java.awt.event.FocusAdapter;
 import java.awt.event.FocusEvent;
 import java.awt.event.KeyEvent;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
+import java.awt.event.MouseMotionListener;
 import java.util.function.BiConsumer;
 import java.util.function.Function;
 
@@ -19,6 +22,7 @@ import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.util.swing.ObservableTextEditor.ObservableTextEditorWidget;
+import org.qommons.collect.ListenerList;
 import org.qommons.io.Format;
 
 /**
@@ -27,11 +31,16 @@ import org.qommons.io.Format;
  * @param <E> The type of value edited by the text area
  */
 public class ObservableTextArea<E> extends JEditorPane implements ObservableTextEditorWidget<E, ObservableTextArea<E>> {
+	public interface TextAreaMouseListener {
+		public void mouseMoved(int row, int column);
+	}
+
 	private final ObservableTextEditor<E> theEditor;
 	private boolean isWordWrapped;
 	private int theRows;
 
 	private String theEmptyText;
+	private final ListenerList<TextAreaMouseListener> theMouseListeners;
 
 	/**
 	 * @param value The value for the text field to interact with
@@ -62,6 +71,20 @@ public class ObservableTextArea<E> extends JEditorPane implements ObservableText
 			}
 		});
 		isWordWrapped = true;
+		MouseMotionListener mouseListener = new MouseAdapter() {
+			@Override
+			public void mouseMoved(MouseEvent evt) {
+				int docPos = viewToModel(evt.getPoint());
+				if (docPos < 0)
+					return;
+			}
+		};
+		theMouseListeners = ListenerList.build().withInUse(inUse -> {
+			if (inUse)
+				addMouseMotionListener(mouseListener);
+			else
+				removeMouseMotionListener(mouseListener);
+		}).build();
 	}
 
 	@Override
@@ -138,7 +161,13 @@ public class ObservableTextArea<E> extends JEditorPane implements ObservableText
 	 * @return This text area
 	 */
 	public ObservableTextArea<E> asHtml(boolean html) {
-		setContentType(html ? "text/html" : "text/plain");
+		String contentType = html ? "text/html" : "text/plain";
+		if (contentType.equals(getContentType()))
+			return this;
+		// When setting the content type, the document is cleared. If the value has already been set, this will result in a blank text area.
+		String text = getText();
+		setContentType(contentType);
+		setText(text);
 		return this;
 	}
 
@@ -167,9 +196,14 @@ public class ObservableTextArea<E> extends JEditorPane implements ObservableText
 	}
 
 	private void _withRows(int rows, Graphics2D g) {
-		int h = (int) Math.ceil(g.getFont().getLineMetrics("Mgp!q", g.getFontRenderContext()).getHeight());
-		setPreferredSize(new Dimension(getPreferredSize().width, h * rows));
-		setMinimumSize(new Dimension(getMinimumSize().width, h * rows));
+		if (rows > 0) {
+			int h = (int) Math.ceil(g.getFont().getLineMetrics("Mgp!q", g.getFontRenderContext()).getHeight());
+			setPreferredSize(new Dimension(getPreferredSize().width, h * rows));
+			setMinimumSize(new Dimension(getMinimumSize().width, h * rows));
+		} else {
+			setPreferredSize(null);
+			setMinimumSize(null);
+		}
 	}
 
 	@Override
@@ -191,6 +225,10 @@ public class ObservableTextArea<E> extends JEditorPane implements ObservableText
 	@Override
 	public void setToolTipText(String text) {
 		theEditor.setToolTipText(text);
+	}
+
+	public Runnable addMouseListener(TextAreaMouseListener listener) {
+		return theMouseListeners.add(listener, true);
 	}
 
 	@Override
