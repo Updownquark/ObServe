@@ -233,7 +233,7 @@ public class ObservableTextEditor<E> {
 		theValue = value.safe(ThreadConstraint.EDT, until);
 		theFormat = format;
 		if (until == null)
-			until = Observable.empty;
+			until = Observable.empty();
 		reformatOnCommit = true;
 
 		normal_bg = component.getBackground();

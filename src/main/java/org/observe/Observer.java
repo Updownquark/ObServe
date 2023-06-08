@@ -1,5 +1,7 @@
 package org.observe;
 
+import org.qommons.Causable;
+
 /**
  * Listens to an observable
  *
@@ -15,8 +17,7 @@ public interface Observer<T> {
 	/**
 	 * Signals that the observable has no more values
 	 *
-	 * @param <V> The actual type of the value
-	 * @param value The final value, or null if not applicable
+	 * @param cause The cause of the completion
 	 */
-	<V extends T> void onCompleted(V value);
+	void onCompleted(Causable cause);
 }

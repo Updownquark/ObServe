@@ -1,8 +1,10 @@
 package org.observe;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 import org.junit.Test;
+import org.qommons.Causable;
 import org.qommons.TriFunction;
 
 import com.google.common.reflect.TypeToken;
@@ -103,7 +105,10 @@ public class ObservableTest {
 		}
 
 		complete[0] = false;
-		obs.onCompleted(0);
+
+		try (Causable.CausableInUse cause = Causable.cause()) {
+			obs.onCompleted(cause);
+		}
 		assertEquals(false, complete[0]);
 
 		obs = new SimpleObservable<>();
@@ -111,7 +116,9 @@ public class ObservableTest {
 		take = obs.takeUntil(stop);
 		take.completed().act(value -> complete[0] = true);
 
-		obs.onCompleted(0);
+		try (Causable.CausableInUse cause = Causable.cause()) {
+			obs.onCompleted(cause);
+		}
 		assertEquals(true, complete[0]);
 	}
 
@@ -165,14 +172,17 @@ public class ObservableTest {
 	public void completed() {
 		SimpleObservable<Integer> obs = new SimpleObservable<>();
 		int [] received = new int[] {0};
-		obs.completed().act(value -> received[0] = value);
+		boolean[] finished = new boolean[1];
+		obs.completed().act(cause -> finished[0] = true);
 
 		for(int i = 1; i < 30; i++) {
 			obs.onNext(i);
 			assertEquals(0, received[0]);
 		}
-		obs.onCompleted(10);
-		assertEquals(10, received[0]);
+		try (Causable.CausableInUse cause = Causable.cause()) {
+			obs.onCompleted(cause);
+		}
+		assertTrue(finished[0]);
 	}
 
 	/** Tests {@link ObservableValue#combine(TriFunction, ObservableValue, ObservableValue)} */

@@ -1265,7 +1265,7 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 			if (prefersPassive())
 				return collectPassive();
 			else
-				return collectActive(Observable.empty);
+				return collectActive(Observable.empty());
 		}
 
 		/**

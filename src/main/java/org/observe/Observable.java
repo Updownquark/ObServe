@@ -11,7 +11,6 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
-import org.observe.util.TypeTokens;
 import org.qommons.Causable;
 import org.qommons.Identifiable;
 import org.qommons.LambdaUtils;
@@ -25,17 +24,12 @@ import org.qommons.Transaction;
 import org.qommons.collect.ListenerList;
 import org.qommons.threading.QommonsTimer;
 
-import com.google.common.reflect.TypeToken;
-
 /**
  * A stream of values that can be filtered, mapped, composed, etc. and evaluated on
  *
  * @param <T> The type of values this observable provides
  */
 public interface Observable<T> extends Lockable, Identifiable, Eventable {
-	/** This class's wildcard {@link TypeToken} */
-	static TypeToken<Observable<?>> TYPE = TypeTokens.get().keyFor(Observable.class).wildCard();
-
 	/**
 	 * Subscribes to this observable such that the given observer will be notified of any new values on this observable.
 	 *
@@ -56,7 +50,8 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable {
 			}
 
 			@Override
-			public <V extends T> void onCompleted(V value) {}
+			public void onCompleted(Causable cause) {
+			}
 
 			@Override
 			public String toString() {
@@ -65,17 +60,9 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable {
 		});
 	}
 
-	/** @return An observable that will fire once when this observable completes (the value will be null) */
-	default Observable<T> completed() {
-		return new CompletionObservable<>(this, false);
-	}
-
-	/**
-	 * @return An observable that fires the same values as this observable, but calls its observers' {@link Observer#onNext(Object)} method
-	 *         as well when this observable completes.
-	 */
-	default Observable<T> fireOnComplete() {
-		return new CompletionObservable<>(this, true);
+	/** @return An observable that will fire once when this observable completes */
+	default Observable<Causable> completed() {
+		return new CompletionObservable<>(this);
 	}
 
 	/**
@@ -316,6 +303,9 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable {
 
 		@Override
 		public Subscription subscribe(Observer<? super Object> observer) {
+			try (Causable.CausableInUse cause = Causable.cause()) {
+				observer.onCompleted(cause);
+			}
 			return Subscription.NONE;
 		}
 
@@ -352,16 +342,6 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable {
 		@Override
 		public CoreId getCoreId() {
 			return CoreId.EMPTY;
-		}
-
-		@Override
-		public Observable<Object> completed() {
-			return this;
-		}
-
-		@Override
-		public Observable<Object> fireOnComplete() {
-			return this;
 		}
 
 		@Override
@@ -435,7 +415,7 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable {
 
 	/**
 	 * @return An observable that fires (a null value) both for {@link Observer#onNext(Object) onNext} and
-	 *         {@link Observer#onCompleted(Object) onCompleted} as the Java VM is shutting down
+	 *         {@link Observer#onCompleted(Causable) onCompleted} as the Java VM is shutting down
 	 */
 	static Observable<Void> onVmShutdown() {
 		return new VmShutdownObservable();
@@ -444,7 +424,7 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable {
 	/**
 	 * @param initDelay The initial delay before firing the first value
 	 * @param interval The interval at which to fire values
-	 * @param until The duration after which values will stop being fired (and an {@link Observer#onCompleted(Object) onCompleted} event
+	 * @param until The duration after which values will stop being fired (and an {@link Observer#onCompleted(Causable) onCompleted} event
 	 *        will be fired)
 	 * @param value The function to produce values for the observable
 	 * @param dispose An action to be taken on each generated value after it is used by all listeners (e.g. {@link AutoCloseable#close()})
@@ -506,35 +486,30 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable {
 	/**
 	 * Implements {@link Observable#completed()}
 	 *
-	 * @param <T> The type of the observable
+	 * @param <T> The type of the source observable
 	 */
-	class CompletionObservable<T> extends WrappingObservable<T, T> {
-		private final boolean fireOnNext;
-
-		public CompletionObservable(Observable<T> wrapped, boolean fireOnNext) {
+	class CompletionObservable<T> extends WrappingObservable<T, Causable> {
+		public CompletionObservable(Observable<T> wrapped) {
 			super(wrapped);
-			this.fireOnNext = fireOnNext;
 		}
 
 		@Override
-		public Subscription subscribe(Observer<? super T> observer) {
+		public Subscription subscribe(Observer<? super Causable> observer) {
 			class CompleteObserver implements Observer<T> {
-				private final Observer<? super T> wrapped;
+				private final Observer<? super Causable> wrapped;
 
-				CompleteObserver(Observer<? super T> wrap) {
+				CompleteObserver(Observer<? super Causable> wrap) {
 					wrapped = wrap;
 				}
 
 				@Override
 				public <V extends T> void onNext(V value) {
-					if (fireOnNext)
-						wrapped.onNext(value);
 				}
 
 				@Override
-				public <V extends T> void onCompleted(V value) {
-					wrapped.onNext(value);
-					wrapped.onCompleted(value);
+				public void onCompleted(Causable cause) {
+					wrapped.onNext(cause);
+					wrapped.onCompleted(cause);
 				}
 			}
 			return getWrapped().subscribe(new CompleteObserver(observer));
@@ -572,8 +547,8 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable {
 				}
 
 				@Override
-				public <V extends T> void onCompleted(V value) {
-					observer.onCompleted(value);
+				public void onCompleted(Causable cause) {
+					observer.onCompleted(cause);
 				}
 			});
 			initialized[0] = true;
@@ -621,18 +596,8 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable {
 				}
 
 				@Override
-				public <V extends T> void onCompleted(V value) {
-					R mapped;
-					try {
-						mapped = theMap.apply(value);
-					} catch (RuntimeException e) {
-						mapped = null;
-						e.printStackTrace();
-					}
-					if (mapped != null)
-						observer.onCompleted(mapped);
-					else
-						observer.onCompleted(null); // Gotta pass along the completion even if it doesn't include a value
+				public void onCompleted(Causable cause) {
+					observer.onCompleted(cause);
 				}
 			});
 		}
@@ -707,11 +672,10 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable {
 								}
 
 								@Override
-								public <V> void onCompleted(V value) {
-									values[index] = value;
+								public void onCompleted(Causable cause) {
 									Object next = getNext();
 									if (next != UNSET)
-										fireCompleted((T) next);
+										fireCompleted(cause);
 								}
 
 								private Object getNext() {
@@ -727,9 +691,9 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable {
 										listener -> listener.onNext(next));
 								}
 
-								private void fireCompleted(T next) {
+								private void fireCompleted(Causable cause) {
 									theObservers.forEach(//
-										listener -> listener.onCompleted(next));
+										listener -> listener.onCompleted(cause));
 								}
 							});
 						}
@@ -822,17 +786,11 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable {
 	class ObservableTakenUntil<T> extends WrappingObservable<T, T> {
 		private final Observable<?> theUntil;
 		private final boolean isTerminating;
-		private final Supplier<T> theDefaultValue;
 
 		protected ObservableTakenUntil(Observable<T> wrap, Observable<?> until, boolean terminate) {
-			this(wrap, until, terminate, () -> null);
-		}
-
-		protected ObservableTakenUntil(Observable<T> wrap, Observable<?> until, boolean terminate, Supplier<T> def) {
 			super(wrap);
 			theUntil = until;
 			isTerminating = terminate;
-			theDefaultValue = def;
 		}
 
 		@Override
@@ -857,15 +815,14 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable {
 					complete[0] = true;
 					outerSub.unsubscribe();
 					if (isTerminating) {
-						T defValue = theDefaultValue.get();
-						try (Transaction t = Causable.use(defValue)) {
-							observer.onCompleted(defValue);
+						try (Causable.CausableInUse cause = Causable.cause()) {
+							observer.onCompleted(cause);
 						}
 					}
 				}
 
 				@Override
-				public void onCompleted(Object value) {
+				public void onCompleted(Causable cause) {
 					// A completed until shouldn't affect things
 				}
 			});
@@ -914,7 +871,13 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable {
 					if (count < theTimes)
 						observer.onNext(value);
 					if (count == theTimes - 1) {
-						observer.onCompleted(value);
+						if (value instanceof Causable)
+							observer.onCompleted((Causable) value);
+						else {
+							try (Causable.CausableInUse cause = Causable.cause(value)) {
+								observer.onCompleted(cause);
+							}
+						}
 						if (wrapSub[0] != null)
 							wrapSub[0].unsubscribe();
 						completed[0] = true;
@@ -922,9 +885,9 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable {
 				}
 
 				@Override
-				public <V extends T> void onCompleted(V value) {
+				public void onCompleted(Causable cause) {
 					if (theCounter.get() < theTimes)
-						observer.onCompleted(value);
+						observer.onCompleted(cause);
 				}
 			});
 			if (completed[0])
@@ -972,8 +935,8 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable {
 				}
 
 				@Override
-				public <V extends T> void onCompleted(V value) {
-					observer.onCompleted(value);
+				public void onCompleted(Causable cause) {
+					observer.onCompleted(cause);
 				}
 			});
 		}
@@ -1010,9 +973,9 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable {
 				}
 
 				@Override
-				public <V extends T> void onCompleted(V value) {
+				public void onCompleted(Causable cause) {
 					theThreading.invoke(() -> {
-						observer.onCompleted(value);
+						observer.onCompleted(cause);
 					});
 				}
 			});
@@ -1082,7 +1045,7 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable {
 					}
 
 					@Override
-					public <V2 extends V> void onCompleted(V2 value) {
+					public void onCompleted(Causable cause) {
 						try (Transaction t = Lockable.lockAll(others)) {
 							subs[index] = null;
 							boolean allDone = !init[0];
@@ -1090,7 +1053,7 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable {
 								if (subs[j] != null)
 									allDone = false;
 							if (allDone)
-								observer.onCompleted(value);
+								observer.onCompleted(cause);
 						}
 					}
 				});
@@ -1152,8 +1115,8 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable {
 				}
 
 				@Override
-				public <V extends Causable> void onCompleted(V value) {
-					observer.onCompleted(value);
+				public void onCompleted(Causable cause) {
+					observer.onCompleted(cause);
 				}
 			});
 		}
@@ -1195,33 +1158,27 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable {
 		@Override
 		public Subscription subscribe(Observer<? super T> observer) {
 			return theWrapper.subscribe(new Observer<Observable<? extends T>>() {
-				private T theLastValue;
-
 				@Override
 				public <O extends Observable<? extends T>> void onNext(O innerObs) {
 					if (innerObs != null) {
 						innerObs.takeUntil(theWrapper.noInit()).subscribe(new Observer<T>() {
 							@Override
 							public <V extends T> void onNext(V value) {
-								theLastValue = value;
 								observer.onNext(value);
 							}
 
 							@Override
-							public <V extends T> void onCompleted(V value) {
+							public void onCompleted(Causable cause) {
 								// Do nothing. The outer observable may get another value.
 							}
 						});
-					} else {
-						theLastValue = null;
+					} else
 						observer.onNext(null);
-					}
 				}
 
 				@Override
-				public <O extends Observable<? extends T>> void onCompleted(O innerObs) {
-					observer.onCompleted(theLastValue);
-					theLastValue = null;
+				public void onCompleted(Causable cause) {
+					observer.onCompleted(cause);
 				}
 			});
 		}

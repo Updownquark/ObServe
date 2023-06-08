@@ -3495,7 +3495,7 @@ public final class ObservableCollectionImpl {
 						}
 
 						@Override
-						public <V extends ObservableValueEvent<? extends ObservableCollection<? extends E>>> void onCompleted(V value) {
+						public void onCompleted(Causable cause) {
 							unsubscribe();
 						}
 
@@ -3654,7 +3654,7 @@ public final class ObservableCollectionImpl {
 				}
 
 				@Override
-				public <V extends ObservableValueEvent<? extends ObservableCollection<? extends E>>> void onCompleted(V value) {
+				public void onCompleted(Causable cause) {
 					unsubscribe(true);
 				}
 

@@ -112,7 +112,7 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 	public static <M, C> ObservableCellEditor<M, C> createTextEditor(Format<C> format, Consumer<ObservableTextField<C>> textField) {
 		Function<C, String>[] filter = new Function[1];
 		SettableValue<C> value = DefaultObservableCellEditor.createEditorValue(filter);
-		ObservableTextField<C> field = new ObservableTextField<>(value, format, Observable.empty);
+		ObservableTextField<C> field = new ObservableTextField<>(value, format, Observable.empty());
 		if (textField != null)
 			textField.accept(field);
 		// Default margins for the text field don't fit into the rendered cell

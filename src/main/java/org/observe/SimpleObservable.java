@@ -4,6 +4,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
+import org.qommons.Causable;
 import org.qommons.Identifiable;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transactable;
@@ -204,13 +205,13 @@ public class SimpleObservable<T> implements Observable<T>, Observer<T> {
 	}
 
 	@Override
-	public <V extends T> void onCompleted(V value) {
-		try (Transaction lock = theLock == null ? Transaction.NONE : theLock.lock(true, value)) {
+	public void onCompleted(Causable cause) {
+		try (Transaction lock = theLock == null ? Transaction.NONE : theLock.lock(true, cause)) {
 			if (!isAlive)
 				return;
 			isAlive = false;
 			theListeners.forEach(//
-				observer -> observer.onCompleted(value));
+				observer -> observer.onCompleted(cause));
 			theListeners.clear();
 		}
 	}
@@ -221,7 +222,7 @@ public class SimpleObservable<T> implements Observable<T>, Observer<T> {
 	}
 
 	/**
-	 * Locks this observable exclusively, allowing {@link #onNext(Object)} or {@link #onCompleted(Object)} to be called on the current
+	 * Locks this observable exclusively, allowing {@link #onNext(Object)} or {@link #onCompleted(Causable)} to be called on the current
 	 * thread while the lock is held.
 	 *
 	 * @return The transaction to close to release the lock

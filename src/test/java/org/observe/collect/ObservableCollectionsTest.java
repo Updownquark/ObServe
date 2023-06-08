@@ -684,7 +684,7 @@ public class ObservableCollectionsTest {
 			if (derivedFlow.supportsPassive() && helper.getBoolean())
 				derived = derivedFlow.collectPassive();
 			else
-				derived = derivedFlow.collectActive(Observable.empty);
+				derived = derivedFlow.collectActive(Observable.empty());
 			ObservableCollectionTester<Integer> tester;
 			BetterList<Integer> expected = BetterTreeList.<Integer> build().build();
 			if (helper.getBoolean()) {

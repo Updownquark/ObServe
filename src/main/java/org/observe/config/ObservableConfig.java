@@ -1126,7 +1126,7 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped, Event
 			}
 
 			@Override
-			public <V> void onCompleted(V value) {
+			public void onCompleted(Causable cause) {
 				tryPersist(true);
 			}
 

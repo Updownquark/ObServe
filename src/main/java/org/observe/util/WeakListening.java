@@ -14,6 +14,7 @@ import org.observe.Observable;
 import org.observe.Observer;
 import org.observe.SimpleObservable;
 import org.observe.Subscription;
+import org.qommons.Causable;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
 import org.qommons.collect.ListenerList;
@@ -365,10 +366,10 @@ public class WeakListening {
 		}
 
 		@Override
-		public <V extends T> void onCompleted(V value) {
+		public void onCompleted(Causable cause) {
 			Observer<? super T> listener = theListenerRef.get();
 			if (listener != null)
-				listener.onCompleted(value);
+				listener.onCompleted(cause);
 		}
 	}
 }

@@ -14,6 +14,7 @@ import org.observe.Observable;
 import org.observe.Observer;
 import org.observe.SimpleObservable;
 import org.observe.Subscription;
+import org.qommons.Causable;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
 import org.qommons.collect.ListenerList;
@@ -321,8 +322,11 @@ public interface OperationResult<T> {
 				return false;
 			theStatus = newStatus;
 			theStatusChanges.onNext(this);
-			if (newStatus.isDone())
-				theStatusChanges.onCompleted(this);
+			if (newStatus.isDone()) {
+				try (Causable.CausableInUse cause = Causable.cause(newStatus)) {
+					theStatusChanges.onCompleted(cause);
+				}
+			}
 			return true;
 		}
 	}

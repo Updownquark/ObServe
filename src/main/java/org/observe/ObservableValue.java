@@ -99,8 +99,8 @@ public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>,
 					}
 
 					@Override
-					public <V extends ObservableValueEvent<T>> void onCompleted(V value) {
-						observer.onCompleted(value.getNewValue());
+					public void onCompleted(Causable cause) {
+						observer.onCompleted(cause);
 					}
 				});
 			}
@@ -624,7 +624,7 @@ public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>,
 								}
 
 								@Override
-								public <V extends T> void onCompleted(V event2) {
+								public void onCompleted(Causable cause) {
 									// Don't use the completed events because the contents of this observable may be replaced
 								}
 							});
@@ -632,8 +632,8 @@ public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>,
 					}
 
 					@Override
-					public <E extends ObservableValueEvent<? extends Observable<? extends T>>> void onCompleted(E event) {
-						observer.onCompleted(null);
+					public void onCompleted(Causable cause) {
+						observer.onCompleted(cause);
 					}
 				});
 			}
@@ -1059,10 +1059,7 @@ public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>,
 			super(wrap);
 			isTerminating = terminate;
 			theUntil = until;
-			theChanges = new Observable.ObservableTakenUntil<>(wrap.noInitChanges(), until, terminate, () -> {
-				T value = wrap.get();
-				return wrap.createChangeEvent(value, value);
-			});
+			theChanges = new Observable.ObservableTakenUntil<>(wrap.noInitChanges(), until, terminate);
 		}
 
 		@Override
@@ -1137,8 +1134,7 @@ public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>,
 
 				@Override
 				public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
-					Subscription[] refireSub = new Subscription[1];
-					boolean[] completed = new boolean[1];
+					boolean[] completed = new boolean[2];
 					Subscription outerSub = theWrapped.noInitChanges().subscribe(new Observer<ObservableValueEvent<T>>() {
 						@Override
 						public <V extends ObservableValueEvent<T>> void onNext(V value) {
@@ -1146,29 +1142,33 @@ public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>,
 						}
 
 						@Override
-						public <V extends ObservableValueEvent<T>> void onCompleted(V value) {
-							observer.onCompleted(value);
-							if (refireSub[0] != null) {
-								refireSub[0].unsubscribe();
-								refireSub[0] = null;
-							}
+						public void onCompleted(Causable cause) {
+							// Just because the changes are completed doesn't mean the value is. Continue observing the refresh.
 							completed[0] = true;
+							if (completed[1])
+								observer.onCompleted(cause);
 						}
 					});
-					if (completed[0]) {
-						return () -> {};
-					}
-					refireSub[0] = theRefresh.act(evt -> {
-						T value = get();
-						ObservableValueEvent<T> evt2 = createChangeEvent(value, value, evt);
-						try (Transaction t = evt2.use()) {
-							observer.onNext(evt2);
+					Subscription refireSub = theRefresh.subscribe(new Observer<Object>() {
+						@Override
+						public <V> void onNext(V evt) {
+							T value = get();
+							ObservableValueEvent<T> evt2 = createChangeEvent(value, value, evt);
+							try (Transaction t = evt2.use()) {
+								observer.onNext(evt2);
+							}
+						}
+
+						@Override
+						public void onCompleted(Causable cause) {
+							completed[1] = true;
+							if (completed[0])
+								observer.onCompleted(cause);
 						}
 					});
 					return () -> {
 						outerSub.unsubscribe();
-						if (refireSub[0] != null)
-							refireSub[0].unsubscribe();
+						refireSub.unsubscribe();
 					};
 				}
 
@@ -1353,7 +1353,52 @@ public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>,
 
 		@Override
 		public Observable<ObservableValueEvent<T>> noInitChanges() {
-			return Observable.empty();
+			class ConstantChanges extends AbstractIdentifiable implements Observable<ObservableValueEvent<T>> {
+				@Override
+				protected Object createIdentity() {
+					return Identifiable.wrap(ConstantObservableValue.this.getIdentity(), "changes");
+				}
+
+				@Override
+				public CoreId getCoreId() {
+					return CoreId.EMPTY;
+				}
+
+				@Override
+				public ThreadConstraint getThreadConstraint() {
+					return ThreadConstraint.NONE;
+				}
+
+				@Override
+				public boolean isEventing() {
+					return false;
+				}
+
+				@Override
+				public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
+					ObservableValueEvent<T> complete = createChangeEvent(theValue, theValue);
+					try (Transaction t = complete.use()) {
+						observer.onCompleted(complete);
+					}
+					return Subscription.NONE;
+				}
+
+				@Override
+				public boolean isSafe() {
+					return true;
+				}
+
+				@Override
+				public Transaction lock() {
+					return Transaction.NONE;
+				}
+
+				@Override
+				public Transaction tryLock() {
+					return Transaction.NONE;
+				}
+			}
+			return new ConstantChanges();
 		}
 
 		@Override
@@ -1417,15 +1462,15 @@ public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>,
 
 		@Override
 		public Observable<ObservableValueEvent<T>> changes() {
-			return changes(true);
+			return changes(true, -1, null);
 		}
 
 		@Override
 		public Observable<ObservableValueEvent<T>> noInitChanges() {
-			return changes(false);
+			return changes(false, -1, null);
 		}
 
-		private Observable<ObservableValueEvent<T>> changes(boolean withInit) {
+		Observable<ObservableValueEvent<T>> changes(boolean withInit, long stamp, T initialValue) {
 			return new Observable<ObservableValueEvent<T>>() {
 				@Override
 				public Object getIdentity() {
@@ -1448,7 +1493,10 @@ public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>,
 
 						void initialize() {
 							isInitialized = true;
-							theCurrentValue = theValue.get();
+							if (stamp == getStamp())
+								theCurrentValue = initialValue;
+							else
+								theCurrentValue = theValue.get();
 							if (withInit)
 								observer.onNext(createInitialEvent(theCurrentValue, null));
 						}
@@ -1471,15 +1519,8 @@ public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>,
 						}
 
 						@Override
-						public <V> void onCompleted(V value) {
-							T oldValue;
-							if (isInitialized)
-								oldValue = theCurrentValue;
-							else {
-								theCurrentValue = oldValue = theValue.get();
-								isInitialized = true;
-							}
-							observer.onCompleted(createChangeEvent(oldValue, oldValue, value));
+						public void onCompleted(Causable cause) {
+							observer.onCompleted(cause);
 						}
 					}
 					SyntheticChanges changes = new SyntheticChanges();
@@ -1538,65 +1579,61 @@ public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>,
 		public ObservableValue<T> cached() {
 			return new CachedObservableValue<>(this);
 		}
-	}
 
-	/**
-	 * Implements {@link SyntheticObservable#cached()}
-	 *
-	 * @param <T> The type of the value
-	 */
-	class CachedObservableValue<T> implements ObservableValue<T> {
-		private final ObservableValue<T> theValue;
-		private volatile T theCachedValue;
-		private volatile long theCachedStamp;
+		static class CachedObservableValue<T> implements ObservableValue<T> {
+			private final SyntheticObservable<T> theValue;
+			private volatile T theCachedValue;
+			private volatile long theCachedStamp;
 
-		public CachedObservableValue(ObservableValue<T> value) {
-			theValue = value;
-			theCachedStamp = value.getStamp() - 1;
-		}
-
-		@Override
-		public Object getIdentity() {
-			return theValue.getIdentity();
-		}
-
-		@Override
-		public TypeToken<T> getType() {
-			return theValue.getType();
-		}
-
-		@Override
-		public long getStamp() {
-			return theValue.getStamp();
-		}
-
-		@Override
-		public T get() {
-			if (theCachedStamp != theValue.getStamp()) {
-				theCachedValue = theValue.get();
-				theCachedStamp = theValue.getStamp();
+			public CachedObservableValue(SyntheticObservable<T> value) {
+				theValue = value;
+				theCachedStamp = value.getStamp() - 1;
 			}
-			return theCachedValue;
-		}
 
-		@Override
-		public Observable<ObservableValueEvent<T>> noInitChanges() {
-			return theValue.noInitChanges();
-		}
+			@Override
+			public Object getIdentity() {
+				return theValue.getIdentity();
+			}
 
-		@Override
-		public int hashCode() {
-			return theValue.hashCode();
-		}
+			@Override
+			public TypeToken<T> getType() {
+				return theValue.getType();
+			}
 
-		@Override
-		public boolean equals(Object obj) {
-			return theValue.equals(obj);
-		}
+			@Override
+			public long getStamp() {
+				return theValue.getStamp();
+			}
 
-		@Override
-		public String toString() {
-			return theValue.toString();
+			@Override
+			public T get() {
+				long newStamp = theValue.getStamp();
+				if (theCachedStamp != newStamp) {
+					theCachedValue = theValue.get();
+					theCachedStamp = newStamp;
+				}
+				return theCachedValue;
+			}
+
+			@Override
+			public Observable<ObservableValueEvent<T>> noInitChanges() {
+				return theValue.changes(false, theCachedStamp, theCachedValue);
+			}
+
+			@Override
+			public int hashCode() {
+				return theValue.hashCode();
+			}
+
+			@Override
+			public boolean equals(Object obj) {
+				return theValue.equals(obj);
+			}
+
+			@Override
+			public String toString() {
+				return theValue.toString();
+			}
 		}
 	}
 
@@ -1769,7 +1806,7 @@ public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>,
 											}
 
 											@Override
-											public <V2 extends ObservableValueEvent<? extends T>> void onCompleted(V2 value) {
+											public void onCompleted(Causable cause) {
 											}
 										})));
 									if (!firedInit2[0])
@@ -1794,16 +1831,12 @@ public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>,
 						}
 
 						@Override
-						public <V extends ObservableValueEvent<? extends ObservableValue<? extends T>>> void onCompleted(V event) {
+						public void onCompleted(Causable cause) {
 							firedInit[0] = true;
 							Subscription.unsubscribe(innerSub.getAndSet(null));
 							theLock.lock();
 							try {
-								ObservableValueEvent<T> toFire = retObs.createChangeEvent(get(event.getOldValue()),
-									get(event.getNewValue()), event.getCauses());
-								try (Transaction t = toFire.use()) {
-									observer.onCompleted(toFire);
-								}
+								observer.onCompleted(cause);
 							} finally {
 								theLock.unlock();
 							}
@@ -1974,20 +2007,11 @@ public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>,
 
 					@Override
 					public <V extends ObservableValueEvent<? extends T>> void onNext(V event) {
-						event(event, false);
-					}
-
-					@Override
-					public <V extends ObservableValueEvent<? extends T>> void onCompleted(V event) {
-						event(event, true);
-					}
-
-					private void event(ObservableValueEvent<? extends T> event, boolean complete) {
 						lock.lock();
 						try {
 							boolean found;
 							try {
-								found = !complete && theTest.test(event.getNewValue());
+								found = theTest.test(event.getNewValue());
 							} catch (RuntimeException e) {
 								e.printStackTrace();
 								found = false;
@@ -1998,19 +2022,12 @@ public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>,
 									nextIndex++;
 							}
 							ObservableValueEvent<T> toFire;
-							if (complete) {
-								finished[index] = true;
-								valueSubs[index] = null;
-							}
-							boolean allComplete = complete && allCompleted();
 							if (!found) {
 								if (!isFound && !event.isInitial())
 									toFire = null;
 								else if (nextIndex < theValues.length) {
 									toFire = null;
 									valueSubs[nextIndex] = theValues[nextIndex].changes().subscribe(new ElementFirstObserver(nextIndex));
-								} else if (allComplete) {
-									toFire = createChangeEvent((T) lastValue[0], (T) lastValue[0], event);
 								} else {
 									T def;
 									try {
@@ -2048,15 +2065,20 @@ public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>,
 								hasFiredInit[0] = true;
 								lastValue[0] = toFire.getNewValue();
 								try (Transaction t = toFire.use()) {
-									if (allComplete)
-										observer.onCompleted(toFire);
-									else
-										observer.onNext(toFire);
+									observer.onNext(toFire);
 								}
 							}
 						} finally {
 							lock.unlock();
 						}
+					}
+
+					@Override
+					public void onCompleted(Causable cause) {
+						finished[index] = true;
+						valueSubs[index] = null;
+						if (allCompleted())
+							observer.onCompleted(cause);
 					}
 
 					private boolean allCompleted() {
