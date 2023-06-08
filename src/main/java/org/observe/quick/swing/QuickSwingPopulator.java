@@ -1309,6 +1309,8 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 				QuickBaseSwing.gen(QuickCheckBox.Interpreted.class), QuickBaseSwing::interpretCheckBox);
 			QuickSwingPopulator.<QuickButton, QuickButton.Interpreted<QuickButton>> interpretWidget(tx, gen(QuickButton.Interpreted.class),
 				QuickBaseSwing::interpretButton);
+			QuickSwingPopulator.<QuickTextArea<?>, QuickTextArea.Interpreted<?>> interpretWidget(tx,
+				QuickBaseSwing.gen(QuickTextArea.Interpreted.class), QuickBaseSwing::interpretTextArea);
 
 			// Containers
 			QuickSwingPopulator.<QuickBox, QuickBox.Interpreted<?>> interpretContainer(tx, gen(QuickBox.Interpreted.class),
@@ -1540,6 +1542,39 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 				panel.addButton(null, quick.getAction(), btn -> {
 					if (quick.getText() != null)
 						btn.withText(quick.getText());
+				});
+			});
+		}
+
+		static <T> QuickSwingPopulator<QuickTextArea<T>> interpretTextArea(QuickTextArea.Interpreted<T> interpreted,
+			Transformer<ExpressoInterpretationException> tx) {
+			return createWidget((panel, quick) -> {
+				Format<T> format = quick.getFormat().get();
+				boolean commitOnType = quick.isCommitOnType();
+				SettableValue<Integer> rows = quick.getRows();
+				SettableValue<Boolean> html = quick.isHtml();
+				panel.addTextArea(null, quick.getValue(), format, tf -> {
+					tf.modifyEditor(tf2 -> {
+						try {
+							quick.setContext(new QuickEditableTextWidget.EditableTextWidgetContext.Default(//
+								tf2.getErrorState(), tf2.getWarningState()));
+						} catch (ModelInstantiationException e) {
+							quick.reporting().error(e.getMessage(), e);
+							return;
+						}
+						if (commitOnType)
+							tf2.setCommitOnType(commitOnType);
+						rows.changes().takeUntil(tf.getUntil()).act(evt -> tf2.withRows(evt.getNewValue()));
+						html.changes().takeUntil(tf.getUntil()).act(evt -> tf2.asHtml(evt.getNewValue()));
+						QuickTextArea.QuickTextAreaContext ctx = new QuickTextArea.QuickTextAreaContext.Default();
+						tf2.addMouseListener((row, col) -> {
+							ctx.getMouseRow().set(row, null);
+							ctx.getMouseColumn().set(col, null);
+						});
+						quick.setTextAreaContext(ctx);
+						quick.isEditable().changes().takeUntil(tf.getUntil())
+							.act(evt -> tf2.setEditable(!Boolean.FALSE.equals(evt.getNewValue())));
+					});
 				});
 			});
 		}

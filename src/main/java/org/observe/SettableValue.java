@@ -1348,7 +1348,7 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 			super("settable-value");
 			theType = type;
 			theListenerBuilder = ListenerList.build();
-			isNullable = true;
+			isNullable = !type.isPrimitive();
 		}
 
 		public Builder<T> vetoable() {
@@ -1357,6 +1357,8 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 		}
 
 		public Builder<T> nullable(boolean nullable) {
+			if (nullable && theType.isPrimitive())
+				throw new IllegalArgumentException("A primitive-typed value cannot be nullable");
 			isNullable = nullable;
 			return this;
 		}
@@ -1367,11 +1369,15 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 		}
 
 		public Builder<T> withValue(T value) {
+			if (!isNullable && value == null)
+				throw new IllegalArgumentException("This value cannot be null");
 			theInitialValue = value;
 			return this;
 		}
 
 		public SettableValue<T> build() {
+			if (!isNullable && theInitialValue == null)
+				throw new IllegalArgumentException("This value cannot be null.  Provide an initial value.");
 			if (isVetoable)
 				return new VetoableSettableValue<>(theType, getDescription(), isNullable, theListenerBuilder, getLocker(), theInitialValue);
 			else
