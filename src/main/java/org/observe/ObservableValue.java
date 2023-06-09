@@ -1833,13 +1833,15 @@ public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>,
 						@Override
 						public void onCompleted(Causable cause) {
 							firedInit[0] = true;
-							Subscription.unsubscribe(innerSub.getAndSet(null));
-							theLock.lock();
-							try {
-								observer.onCompleted(cause);
-							} finally {
-								theLock.unlock();
-							}
+							// The outer *changes* observable is complete, meaning this value can now never change
+							// It does NOT mean that we should stop listening to the inner observable
+							// Subscription.unsubscribe(innerSub.getAndSet(null));
+							// theLock.lock();
+							// try {
+							// observer.onCompleted(cause);
+							// } finally {
+							// theLock.unlock();
+							// }
 						}
 					});
 				if (!firedInit[0])
