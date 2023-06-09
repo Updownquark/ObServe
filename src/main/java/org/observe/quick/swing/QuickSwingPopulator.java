@@ -1567,13 +1567,10 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 						rows.changes().takeUntil(tf.getUntil()).act(evt -> tf2.withRows(evt.getNewValue()));
 						html.changes().takeUntil(tf.getUntil()).act(evt -> tf2.asHtml(evt.getNewValue()));
 						QuickTextArea.QuickTextAreaContext ctx = new QuickTextArea.QuickTextAreaContext.Default();
-						tf2.addMouseListener((row, col) -> {
-							ctx.getMouseRow().set(row, null);
-							ctx.getMouseColumn().set(col, null);
-						});
+						tf2.addMouseListener(pos -> ctx.getMousePosition().set(pos, null));
 						quick.setTextAreaContext(ctx);
 						quick.isEditable().changes().takeUntil(tf.getUntil())
-							.act(evt -> tf2.setEditable(!Boolean.FALSE.equals(evt.getNewValue())));
+						.act(evt -> tf2.setEditable(!Boolean.FALSE.equals(evt.getNewValue())));
 					});
 				});
 			});

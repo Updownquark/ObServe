@@ -21,9 +21,9 @@
 		</models>
 	</head>
 	<box layout="inline-layout" orientation="vertical" main-align="justify" tooltip="app.qwysiwyg.tooltip">
-		<text-area html="true" editable="false" value="app.qwysiwyg.documentDisplay">
-			<on-mouse-move>app.qwysiwyg.hover(mouseRow, mouseColumn)</on-mouse-move>
-			<on-click>app.qwysiwyg.clicked(mouseRow, mouseColumn, clickCount)</on-click>
+		<text-area html="true" editable="false" value="app.qwysiwyg.documentDisplay" tooltip="app.qwysiwyg.tooltip">
+			<on-mouse-move>app.qwysiwyg.hover(mousePosition)</on-mouse-move>
+			<on-click>app.qwysiwyg.clicked(mousePosition, clickCount)</on-click>
 			<on-mouse-exit>app.qwysiwyg.mouseExit()</on-mouse-exit>
 		</text-area>
 	</box>

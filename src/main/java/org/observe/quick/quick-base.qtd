@@ -178,8 +178,7 @@
 		</element-def>
 		<element-def name="text-area" extends="editable-text-widget" inherits="with-element-model">
 			<element-model>
-				<value name="mouseRow" type="int" priority="25" />
-				<value name="mouseColumn" type="int" priority="25" />
+				<value name="mousePosition" type="int" priority="25" />
 			</element-model>
 			<attribute name="rows" type="expression" specify="optional" />
 			<attribute name="html" type="expression" default="false" />

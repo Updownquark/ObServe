@@ -17,6 +17,7 @@ import java.util.function.Function;
 
 import javax.swing.JEditorPane;
 import javax.swing.UIManager;
+import javax.swing.text.BadLocationException;
 
 import org.observe.Observable;
 import org.observe.ObservableValue;
@@ -32,7 +33,7 @@ import org.qommons.io.Format;
  */
 public class ObservableTextArea<E> extends JEditorPane implements ObservableTextEditorWidget<E, ObservableTextArea<E>> {
 	public interface TextAreaMouseListener {
-		public void mouseMoved(int row, int column);
+		public void mouseMoved(int position);
 	}
 
 	private final ObservableTextEditor<E> theEditor;
@@ -49,11 +50,11 @@ public class ObservableTextArea<E> extends JEditorPane implements ObservableText
 	 */
 	public ObservableTextArea(SettableValue<E> value, Format<E> format, Observable<?> until) {
 		theEditor = new ObservableTextEditor<E>(this, value, format, until, //
-			e -> super.setEditable(e), //
-			tt -> super.setToolTipText(tt)) {
+			super::setEditable, //
+			super::setToolTipText) {
 			@Override
 			protected ObservableTextEditor<E> setText(String text) {
-				ObservableTextArea.this.setText(text);
+				updateText(text);
 				return this;
 			}
 		}.setSelectAllOnFocus(false);
@@ -75,8 +76,9 @@ public class ObservableTextArea<E> extends JEditorPane implements ObservableText
 			@Override
 			public void mouseMoved(MouseEvent evt) {
 				int docPos = viewToModel(evt.getPoint());
-				if (docPos < 0)
-					return;
+				if (docPos >= 0)
+					theMouseListeners.forEach(//
+						l -> l.mouseMoved(docPos));
 			}
 		};
 		theMouseListeners = ListenerList.build().withInUse(inUse -> {
@@ -85,6 +87,37 @@ public class ObservableTextArea<E> extends JEditorPane implements ObservableText
 			else
 				removeMouseMotionListener(mouseListener);
 		}).build();
+	}
+
+	private void updateText(String text) {
+		String oldText = getText();
+		if (oldText == null || oldText.length() < 3) {
+			setText(text);
+			return;
+		}
+		int s, e;
+		for (s = 0; s < text.length() && s < oldText.length() && text.charAt(s) == oldText.charAt(s); s++) {
+		}
+		if (s == text.length() && s == oldText.length())
+			return;// No change
+		for (e = 1; e < text.length() && e < oldText.length()
+			&& text.charAt(text.length() - e) == oldText.charAt(oldText.length() - e); e++) {
+		}
+		e--;
+		if (s + e < oldText.length()) {
+			try {
+				getDocument().remove(s, oldText.length() - s - e);
+			} catch (BadLocationException x) {
+				throw new IllegalStateException(x);
+			}
+		}
+		if (s + e < text.length()) {
+			try {
+				getDocument().insertString(s, text.substring(s, text.length() - e), null);
+			} catch (BadLocationException x) {
+				throw new IllegalStateException(x);
+			}
+		}
 	}
 
 	@Override

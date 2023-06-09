@@ -92,40 +92,29 @@ public class QuickTextArea<T> extends QuickEditableTextWidget.Abstract<T> {
 	}
 
 	public interface QuickTextAreaContext {
-		SettableValue<Integer> getMouseRow();
-
-		SettableValue<Integer> getMouseColumn();
+		SettableValue<Integer> getMousePosition();
 
 		public class Default implements QuickTextAreaContext {
-			private final SettableValue<Integer> theMouseRow;
-			private final SettableValue<Integer> theMouseColumn;
+			private final SettableValue<Integer> theMousePosition;
 
-			public Default(SettableValue<Integer> mouseRow, SettableValue<Integer> mouseColumn) {
-				theMouseRow = mouseRow;
-				theMouseColumn = mouseColumn;
+			public Default(SettableValue<Integer> mousePosition) {
+				theMousePosition = mousePosition;
 			}
 
 			public Default() {
-				this(SettableValue.build(int.class).withDescription("mouseRow").withValue(0).build(),
-					SettableValue.build(int.class).withDescription("mouseColumn").withValue(0).build());
+				this(SettableValue.build(int.class).withDescription("mousePosition").withValue(0).build());
 			}
 
 			@Override
-			public SettableValue<Integer> getMouseRow() {
-				return theMouseRow;
-			}
-
-			@Override
-			public SettableValue<Integer> getMouseColumn() {
-				return theMouseColumn;
+			public SettableValue<Integer> getMousePosition() {
+				return theMousePosition;
 			}
 		}
 	}
 
 	private final SettableValue<SettableValue<Integer>> theRows;
 	private final SettableValue<SettableValue<Boolean>> isHtml;
-	private final SettableValue<SettableValue<Integer>> theMouseRow;
-	private final SettableValue<SettableValue<Integer>> theMouseColumn;
+	private final SettableValue<SettableValue<Integer>> theMousePosition;
 
 	public QuickTextArea(Interpreted<T> interpreted, QuickElement parent) {
 		super(interpreted, parent);
@@ -133,9 +122,9 @@ public class QuickTextArea<T> extends QuickEditableTextWidget.Abstract<T> {
 			.build();
 		isHtml = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Boolean>> parameterized(boolean.class))
 			.build();
-		theMouseRow = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Integer>> parameterized(int.class))
+		theMousePosition = SettableValue
+			.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Integer>> parameterized(int.class))
 			.build();
-		theMouseColumn = SettableValue.build(theMouseRow.getType()).build();
 	}
 
 	public SettableValue<Integer> getRows() {
@@ -146,23 +135,17 @@ public class QuickTextArea<T> extends QuickEditableTextWidget.Abstract<T> {
 		return SettableValue.flatten(isHtml, () -> false);
 	}
 
-	public SettableValue<Integer> getMouseRow() {
-		return SettableValue.flatten(theMouseRow, () -> 0);
-	}
-
-	public SettableValue<Integer> getMouseColumn() {
-		return SettableValue.flatten(theMouseColumn, () -> 0);
+	public SettableValue<Integer> getMousePosition() {
+		return SettableValue.flatten(theMousePosition, () -> 0);
 	}
 
 	public void setTextAreaContext(QuickTextAreaContext ctx) {
-		theMouseRow.set(ctx.getMouseRow(), null);
-		theMouseColumn.set(ctx.getMouseColumn(), null);
+		theMousePosition.set(ctx.getMousePosition(), null);
 	}
 
 	@Override
 	protected void updateModel(QuickElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
-		satisfyContextValue("mouseRow", ModelTypes.Value.INT, getMouseRow(), myModels);
-		satisfyContextValue("mouseColumn", ModelTypes.Value.INT, getMouseColumn(), myModels);
+		satisfyContextValue("mousePosition", ModelTypes.Value.INT, getMousePosition(), myModels);
 		super.updateModel(interpreted, myModels);
 		QuickTextArea.Interpreted<T> myInterpreted = (QuickTextArea.Interpreted<T>) interpreted;
 		theRows.set(myInterpreted.getRows() == null ? null : myInterpreted.getRows().get(myModels), null);
