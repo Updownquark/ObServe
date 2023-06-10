@@ -1,7 +1,13 @@
 package org.observe.quick;
 
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 
 import org.observe.Observable;
@@ -25,6 +31,8 @@ import org.qommons.Version;
 import org.qommons.collect.CollectionUtils;
 import org.qommons.config.AbstractQIS;
 import org.qommons.config.QonfigAddOn;
+import org.qommons.config.QonfigAttributeDef;
+import org.qommons.config.QonfigChildDef;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
@@ -60,6 +68,22 @@ public interface QuickElement extends Identifiable {
 		}
 	}
 
+	public interface AttributeValueGetter<E extends QuickElement, I extends QuickElement.Interpreted<? extends E>, D extends QuickElement.Def<? extends E>> {
+		Object getFromDef(D def);
+
+		Object getFromInterpreted(I interp);
+
+		Object getFromElement(E element);
+	}
+
+	public interface ChildElementGetter<E extends QuickElement, I extends QuickElement.Interpreted<? extends E>, D extends QuickElement.Def<? extends E>> {
+		List<? extends QuickElement.Def<?>> getChildrenFromDef(D def);
+
+		List<? extends QuickElement.Interpreted<?>> getChildrenFromInterpreted(I interp);
+
+		List<? extends QuickElement> getChildrenFromElement(E element);
+	}
+
 	/**
 	 * The definition of an element, interpreted via {@link QonfigInterpreterCore Qonfig interpretation} from {@link QonfigElement}s
 	 *
@@ -84,6 +108,114 @@ public interface QuickElement extends Identifiable {
 
 		Class<?> getCallingClass();
 
+		Object getAttribute(QonfigAttributeDef attr);
+
+		List<? extends Def<?>> getChildren(QonfigChildDef role);
+
+		default List<Def<?>> getAllChildren() {
+			List<Def<?>> children = null;
+			Set<QonfigChildDef.Declared> fulfilled = null;
+			for (QonfigChildDef.Declared child : getElement().getType().getAllChildren().keySet()) {
+				if (fulfilled == null)
+					fulfilled = new HashSet<>();
+				if (!fulfilled.add(child))
+					continue;
+				List<? extends Def<?>> roleChildren = getChildren(child);
+				if (!roleChildren.isEmpty()) {
+					if (children == null)
+						children = new ArrayList<>();
+					children.addAll(roleChildren);
+				}
+			}
+			for (QonfigAddOn inh : getElement().getInheritance().getExpanded(QonfigAddOn::getInheritance)) {
+				for (QonfigChildDef.Declared child : inh.getDeclaredChildren().values()) {
+					if (fulfilled == null)
+						fulfilled = new HashSet<>();
+					if (!fulfilled.add(child))
+						continue;
+					List<? extends Def<?>> roleChildren = getChildren(child);
+					if (!roleChildren.isEmpty()) {
+						if (children == null)
+							children = new ArrayList<>();
+						children.addAll(roleChildren);
+					}
+				}
+			}
+			return children == null ? Collections.emptyList() : children;
+		}
+
+		Object getAttribute(Interpreted<? extends E> interpreted, QonfigAttributeDef attr);
+
+		List<? extends Interpreted<?>> getChildren(Interpreted<? extends E> interpreted, QonfigChildDef role);
+
+		default List<Interpreted<?>> getAllChildren(Interpreted<? extends E> interpreted) {
+			List<Interpreted<?>> children = null;
+			Set<QonfigChildDef.Declared> fulfilled = null;
+			for (QonfigChildDef.Declared child : getElement().getType().getAllChildren().keySet()) {
+				if (fulfilled == null)
+					fulfilled = new HashSet<>();
+				if (!fulfilled.add(child))
+					continue;
+				List<? extends Interpreted<?>> roleChildren = getChildren(interpreted, child);
+				if (!roleChildren.isEmpty()) {
+					if (children == null)
+						children = new ArrayList<>();
+					children.addAll(roleChildren);
+				}
+			}
+			for (QonfigAddOn inh : getElement().getInheritance().getExpanded(QonfigAddOn::getInheritance)) {
+				for (QonfigChildDef.Declared child : inh.getDeclaredChildren().values()) {
+					if (fulfilled == null)
+						fulfilled = new HashSet<>();
+					if (!fulfilled.add(child))
+						continue;
+					List<? extends Interpreted<?>> roleChildren = getChildren(interpreted, child);
+					if (!roleChildren.isEmpty()) {
+						if (children == null)
+							children = new ArrayList<>();
+						children.addAll(roleChildren);
+					}
+				}
+			}
+			return children == null ? Collections.emptyList() : children;
+		}
+
+		Object getAttribute(E element, QonfigAttributeDef attr);
+
+		List<? extends QuickElement> getChildren(E element, QonfigChildDef role);
+
+		default List<QuickElement> getAllChildren(E element) {
+			List<QuickElement> children = null;
+			Set<QonfigChildDef.Declared> fulfilled = null;
+			for (QonfigChildDef.Declared child : getElement().getType().getAllChildren().keySet()) {
+				if (fulfilled == null)
+					fulfilled = new HashSet<>();
+				if (!fulfilled.add(child))
+					continue;
+				List<? extends QuickElement> roleChildren = getChildren(element, child);
+				if (!roleChildren.isEmpty()) {
+					if (children == null)
+						children = new ArrayList<>();
+					children.addAll(roleChildren);
+				}
+			}
+			for (QonfigAddOn inh : getElement().getInheritance().getExpanded(QonfigAddOn::getInheritance)) {
+				for (QonfigChildDef.Declared child : inh.getDeclaredChildren().values()) {
+					if (fulfilled == null)
+						fulfilled = new HashSet<>();
+					if (!fulfilled.add(child))
+						continue;
+					List<? extends QuickElement> roleChildren = getChildren(element, child);
+					if (!roleChildren.isEmpty()) {
+						if (children == null)
+							children = new ArrayList<>();
+						children.addAll(roleChildren);
+					}
+				}
+			}
+			return children == null ? Collections.emptyList() : children;
+		}
+
 		/**
 		 * @param <AO> The type of the add-on to get
 		 * @param addOn The type of the add-on to get
@@ -106,6 +238,10 @@ public interface QuickElement extends Identifiable {
 			return ao == null ? null : fn.apply(ao);
 		}
 
+		void forAttribute(QonfigAttributeDef.Declared attr, AttributeValueGetter<? super E, ?, ?> getter);
+
+		void forChild(QonfigChildDef.Declared child, ChildElementGetter<? super E, ?, ?> getter);
+
 		/**
 		 * Updates this element definition. Must be called at least once after interpretation produces this object.
 		 *
@@ -123,6 +259,8 @@ public interface QuickElement extends Identifiable {
 			private final Identity theId;
 			private final QuickElement.Def<?> theParent;
 			private QonfigElement theElement;
+			private final Map<QonfigAttributeDef.Declared, AttributeValueGetter<? super E, ?, ?>> theAttributes;
+			private final Map<QonfigChildDef.Declared, ChildElementGetter<? super E, ?, ?>> theChildren;
 			private final ClassMap<QuickAddOn.Def<? super E, ?>> theAddOns;
 			private ExpressoEnv theExpressoEnv;
 			private ObservableModelSet.Built theModels;
@@ -137,6 +275,8 @@ public interface QuickElement extends Identifiable {
 				theId = new Identity(element.getType().getName(), element.getPositionInFile());
 				theParent = parent;
 				theElement = element;
+				theAttributes = new HashMap<>();
+				theChildren = new HashMap<>();
 				theAddOns = new ClassMap<>();
 			}
 
@@ -186,6 +326,64 @@ public interface QuickElement extends Identifiable {
 			}
 
 			@Override
+			public Object getAttribute(QonfigAttributeDef attr) {
+				AttributeValueGetter<? super E, ?, ?> getter = theAttributes.get(attr.getDeclared());
+				if (getter == null)
+					return null;
+				return ((AttributeValueGetter<? super E, ?, Def<E>>) getter).getFromDef(this);
+			}
+
+			@Override
+			public List<? extends Def<?>> getChildren(QonfigChildDef role) {
+				ChildElementGetter<? super E, ?, ?> getter = theChildren.get(role.getDeclared());
+				if (getter == null)
+					return Collections.emptyList();
+				return ((ChildElementGetter<? super E, ?, Def<E>>) getter).getChildrenFromDef(this);
+			}
+
+			@Override
+			public Object getAttribute(Interpreted<? extends E> interpreted, QonfigAttributeDef attr) {
+				AttributeValueGetter<? super E, ?, ?> getter = theAttributes.get(attr.getDeclared());
+				if (getter == null)
+					return null;
+				return ((AttributeValueGetter<? super E, Interpreted<? extends E>, ?>) getter).getFromInterpreted(interpreted);
+			}
+
+			@Override
+			public List<? extends Interpreted<?>> getChildren(Interpreted<? extends E> interpreted, QonfigChildDef role) {
+				ChildElementGetter<? super E, ?, ?> getter = theChildren.get(role.getDeclared());
+				if (getter == null)
+					return Collections.emptyList();
+				return ((ChildElementGetter<? super E, Interpreted<? extends E>, ?>) getter).getChildrenFromInterpreted(interpreted);
+			}
+
+			@Override
+			public Object getAttribute(E element, QonfigAttributeDef attr) {
+				AttributeValueGetter<? super E, ?, ?> getter = theAttributes.get(attr.getDeclared());
+				if (getter == null)
+					return null;
+				return ((AttributeValueGetter<? super E, ?, ?>) getter).getFromElement(element);
+			}
+
+			@Override
+			public List<? extends QuickElement> getChildren(E element, QonfigChildDef role) {
+				ChildElementGetter<? super E, ?, ?> getter = theChildren.get(role.getDeclared());
+				if (getter == null)
+					return Collections.emptyList();
+				return ((ChildElementGetter<? super E, ?, ?>) getter).getChildrenFromElement(element);
+			}
+
+			@Override
+			public void forAttribute(QonfigAttributeDef.Declared attr, AttributeValueGetter<? super E, ?, ?> getter) {
+				theAttributes.putIfAbsent(attr, getter);
+			}
+
+			@Override
+			public void forChild(QonfigChildDef.Declared child, ChildElementGetter<? super E, ?, ?> getter) {
+				theChildren.putIfAbsent(child, getter);
+			}
+
+			@Override
 			public void update(ExpressoQIS session) throws QonfigInterpretationException {
 				theReporting = session.reporting();
 				theCallingClass = session.getWrapped().getInterpreter().getCallingClass();
@@ -202,7 +400,27 @@ public interface QuickElement extends Identifiable {
 						addAddOn(session.asElementOnly(addOn));
 
 					for (QuickAddOn.Def<? super E, ?> addOn : theAddOns.getAllValues())
-						addOn.update(session.asElement(addOn.getType()));
+						addOn.update(session.asElement(addOn.getType()), this);
+
+					// Ensure implementation added all attribute/child getters
+					for (QonfigAttributeDef.Declared attr : session.getElement().getType().getAllAttributes().keySet()) {
+						if (!theAttributes.containsKey(attr))
+							theReporting.warn(getClass() + ": Attribute getter not declared for " + attr);
+					}
+					for (QonfigChildDef.Declared child : session.getElement().getType().getAllChildren().keySet()) {
+						if (!theChildren.containsKey(child))
+							theReporting.warn(getClass() + ": Child getter not declared for " + child);
+					}
+					for (QonfigAddOn addOn : session.getElement().getInheritance().getExpanded(QonfigAddOn::getInheritance)) {
+						for (QonfigAttributeDef.Declared attr : addOn.getDeclaredAttributes().values()) {
+							if (!theAttributes.containsKey(attr))
+								theReporting.warn(getClass() + ": Attribute getter not declared for " + attr);
+						}
+						for (QonfigChildDef.Declared child : addOn.getDeclaredChildren().values()) {
+							if (!theChildren.containsKey(child))
+								theReporting.warn(getClass() + ": Child getter not declared for " + child);
+						}
+					}
 				}
 			}
 

@@ -1,5 +1,8 @@
 package org.observe.quick;
 
+import java.util.Collections;
+import java.util.List;
+
 import org.observe.Observable;
 import org.observe.SimpleObservable;
 import org.observe.expresso.ClassView;
@@ -19,6 +22,40 @@ import org.qommons.config.QonfigInterpretationException;
 /** The root of a quick file, containing all information needed to power an application */
 public class QuickDocument extends QuickElement.Abstract {
 	public static final String QUICK = "quick";
+
+	public static final QuickElement.ChildElementGetter<QuickDocument, Interpreted, Def> DOC_HEAD = new QuickElement.ChildElementGetter<QuickDocument, Interpreted, Def>() {
+		@Override
+		public List<? extends QuickElement.Def<?>> getChildrenFromDef(Def def) {
+			return Collections.singletonList(def.getHead());
+		}
+
+		@Override
+		public List<? extends QuickElement.Interpreted<?>> getChildrenFromInterpreted(Interpreted interp) {
+			return Collections.singletonList(interp.getHead());
+		}
+
+		@Override
+		public List<? extends QuickElement> getChildrenFromElement(QuickDocument element) {
+			return Collections.emptyList();
+		}
+	};
+
+	public static final QuickElement.ChildElementGetter<QuickDocument, Interpreted, Def> DOC_BODY = new QuickElement.ChildElementGetter<QuickDocument, Interpreted, Def>() {
+		@Override
+		public List<? extends QuickElement.Def<?>> getChildrenFromDef(Def def) {
+			return Collections.singletonList(def.getBody());
+		}
+
+		@Override
+		public List<? extends QuickElement.Interpreted<?>> getChildrenFromInterpreted(Interpreted interp) {
+			return Collections.singletonList(interp.getBody());
+		}
+
+		@Override
+		public List<? extends QuickElement> getChildrenFromElement(QuickDocument element) {
+			return Collections.singletonList(element.getBody());
+		}
+	};
 
 	/** The definition of a Quick document */
 	public static class Def extends QuickElement.Def.Abstract<QuickDocument> {
@@ -46,6 +83,8 @@ public class QuickDocument extends QuickElement.Abstract {
 		@Override
 		public void update(ExpressoQIS session) throws QonfigInterpretationException {
 			checkElement(session.getFocusType(), QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, QUICK);
+			forChild(session.getRole(null, null, "head").getDeclared(), DOC_HEAD);
+			forChild(session.getRole(null, null, "body").getDeclared(), DOC_BODY);
 			super.update(session);
 			theHead = QuickElement.useOrReplace(QuickHeadSection.Def.class, theHead, session, "head");
 			if (theHead != null) {

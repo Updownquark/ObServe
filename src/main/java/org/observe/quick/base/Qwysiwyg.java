@@ -229,6 +229,8 @@ public class Qwysiwyg {
 			hovered = hovered.parent;
 		if (hovered != null)
 			theInternalTooltip.set(hovered.tooltip.get(), null);
+		else
+			theInternalTooltip.set(null, null);
 	}
 
 	public void clicked(int position, int clickCount) {
@@ -406,7 +408,10 @@ public class Qwysiwyg {
 
 	private void renderDef(DocumentComponent component, QuickElement.Def<?> def) {
 		for (Map.Entry<QonfigAttributeDef.Declared, QonfigValue> attr : def.getElement().getAttributes().entrySet()) {
-			DocumentComponent attrValueComp = getSourceComponent(component, attr.getValue().position.getPosition(0).getPosition());
+			PositionedContent position = attr.getValue().position;
+			if (position == null)
+				continue;
+			DocumentComponent attrValueComp = getSourceComponent(component, position.getPosition(0).getPosition());
 			DocumentComponent attrComp = attrValueComp.parent;
 			QonfigValueType type = attr.getKey().getType();
 			if (type instanceof QonfigValueType.Custom) {
@@ -417,7 +422,21 @@ public class Qwysiwyg {
 			}
 			attrComp.tooltip2(() -> renderValueType(type, 1));
 		}
-		// TODO Children
+		// TODO this doesn't work for the value because the values are not being rendered special in the XML
+		if (def.getElement().getValue() != null && def.getElement().getValue().position != null) {
+			PositionedContent position = def.getElement().getValue().position;
+			DocumentComponent attrValueComp = getSourceComponent(component, position.getPosition(0).getPosition());
+			QonfigValueType type = def.getElement().getType().getValue().getType();
+			if (type instanceof QonfigValueType.Custom) {
+				CustomValueType customType = ((QonfigValueType.Custom) type).getCustomType();
+				if (customType instanceof ExpressionValueType) {
+					// TODO Color different expression components
+				}
+			}
+			attrValueComp.tooltip2(() -> renderValueType(type, 1));
+		}
+		for (QuickElement.Def<?> child : def.getAllChildren())
+			renderDef(component, child);
 	}
 
 	static String renderValueType(QonfigValueType type, int indent) {

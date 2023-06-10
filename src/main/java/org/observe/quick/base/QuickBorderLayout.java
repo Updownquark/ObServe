@@ -68,8 +68,8 @@ public class QuickBorderLayout extends QuickLayout.Abstract {
 			}
 
 			@Override
-			public void update(ExpressoQIS session) throws QonfigInterpretationException {
-				super.update(session);
+			public void update(ExpressoQIS session, QuickElement.Def<? extends QuickWidget> element) throws QonfigInterpretationException {
+				super.update(session, element);
 				String regionStr = session.getAttributeText("region");
 				switch (regionStr) {
 				case "center":

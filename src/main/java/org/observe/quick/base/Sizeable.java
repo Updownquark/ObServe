@@ -62,8 +62,8 @@ public abstract class Sizeable extends QuickAddOn.Abstract<QuickElement> {
 		}
 
 		@Override
-		public void update(ExpressoQIS session) throws QonfigInterpretationException {
-			super.update(session);
+		public void update(ExpressoQIS session, QuickElement.Def<?> element) throws QonfigInterpretationException {
+			super.update(session, element);
 			switch (isVertical) {
 			case TRUE:
 				theSize = parseSize(session.getAttributeQV("height"), session, false);

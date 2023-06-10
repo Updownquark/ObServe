@@ -1,5 +1,7 @@
 package org.observe.quick;
 
+import java.util.List;
+
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ExpressoQIS;
 import org.observe.expresso.ModelInstantiationException;
@@ -18,6 +20,23 @@ import org.qommons.tree.BetterTreeList;
  */
 public interface QuickContainer<C extends QuickWidget> extends QuickWidget {
 	public static final String CONTAINER = "container";
+
+	public static final QuickElement.ChildElementGetter<QuickContainer<?>, Interpreted<?, ?>, Def<?, ?>> CONTENTS = new QuickElement.ChildElementGetter<QuickContainer<?>, Interpreted<?, ?>, Def<?, ?>>() {
+		@Override
+		public List<? extends QuickElement.Def<?>> getChildrenFromDef(Def<?, ?> def) {
+			return def.getContents();
+		}
+
+		@Override
+		public List<? extends QuickElement.Interpreted<?>> getChildrenFromInterpreted(Interpreted<?, ?> interp) {
+			return interp.getContents();
+		}
+
+		@Override
+		public List<? extends QuickElement> getChildrenFromElement(QuickContainer<?> element) {
+			return element.getContents();
+		}
+	};
 
 	/**
 	 * The definition of a QuickContainer
@@ -59,6 +78,7 @@ public interface QuickContainer<C extends QuickWidget> extends QuickWidget {
 			@Override
 			public void update(ExpressoQIS session) throws QonfigInterpretationException {
 				checkElement(session.getFocusType(), QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, CONTAINER);
+				forChild(session.getRole("content").getDeclared(), CONTENTS);
 				super.update(session.asElement(session.getFocusType().getSuperElement()));
 				QuickElement.syncDefs(QuickWidget.Def.class, theContents, session.forChildren("content"));
 			}

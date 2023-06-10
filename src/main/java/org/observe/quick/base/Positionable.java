@@ -23,7 +23,7 @@ public abstract class Positionable extends QuickAddOn.Abstract<QuickElement> {
 		private CompiledModelValue<SettableValue<?>, SettableValue<QuickSize>> theCenter;
 		private CompiledModelValue<SettableValue<?>, SettableValue<QuickSize>> theTrailing;
 
-		protected Def(boolean vertical, QonfigAddOn type, QuickElement.Def<? extends QuickElement> element) {
+		protected Def(boolean vertical, QonfigAddOn type, QuickElement.Def<?> element) {
 			super(type, element);
 			isVertical = vertical;
 		}
@@ -45,8 +45,8 @@ public abstract class Positionable extends QuickAddOn.Abstract<QuickElement> {
 		}
 
 		@Override
-		public void update(ExpressoQIS session) throws QonfigInterpretationException {
-			super.update(session);
+		public void update(ExpressoQIS session, QuickElement.Def<?> element) throws QonfigInterpretationException {
+			super.update(session, element);
 			if (isVertical) {
 				theLeading = Sizeable.parseSize(session.getAttributeQV("top"), session, true);
 				theCenter = Sizeable.parseSize(session.getAttributeQV("v-center"), session, true);

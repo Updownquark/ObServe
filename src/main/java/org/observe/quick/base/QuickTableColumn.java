@@ -428,8 +428,9 @@ public interface QuickTableColumn<R, C> {
 				}
 
 				@Override
-				public void update(ExpressoQIS session) throws QonfigInterpretationException {
-					super.update(session);
+				public void update(ExpressoQIS session, QuickElement.Def<? extends ColumnEditing<?, ?>> element)
+					throws QonfigInterpretationException {
+					super.update(session, element);
 					theCommit = session.getAttributeExpression("commit");
 					isRowUpdate = session.getAttribute("row-update", boolean.class);
 				}
@@ -506,8 +507,9 @@ public interface QuickTableColumn<R, C> {
 				}
 
 				@Override
-				public void update(ExpressoQIS session) throws QonfigInterpretationException {
-					super.update(session);
+				public void update(ExpressoQIS session, QuickElement.Def<? extends ColumnEditing<?, ?>> element)
+					throws QonfigInterpretationException {
+					super.update(session, element);
 					theReplacement = session.getAttributeExpression("replacement");
 				}
 

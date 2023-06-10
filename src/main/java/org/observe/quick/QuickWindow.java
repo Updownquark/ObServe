@@ -14,6 +14,125 @@ import org.qommons.config.QonfigInterpretationException;
 
 /** An add-on for an element that is to be a window */
 public class QuickWindow extends QuickAddOn.Abstract<QuickElement> {
+	public static final QuickElement.AttributeValueGetter<QuickElement, QuickElement.Interpreted<?>, QuickElement.Def<?>> X = new QuickElement.AttributeValueGetter<QuickElement, QuickElement.Interpreted<?>, QuickElement.Def<?>>() {
+		@Override
+		public CompiledExpression getFromDef(QuickElement.Def<?> def) {
+			return def.getAddOnValue(QuickWindow.Def.class, QuickWindow.Def::getX);
+		}
+
+		@Override
+		public InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> getFromInterpreted(QuickElement.Interpreted<?> interp) {
+			return interp.getAddOnValue(QuickWindow.Interpreted.class, QuickWindow.Interpreted::getX);
+		}
+
+		@Override
+		public SettableValue<Integer> getFromElement(QuickElement element) {
+			return element.getAddOnValue(QuickWindow.class, QuickWindow::getX);
+		}
+	};
+
+	public static final QuickElement.AttributeValueGetter<QuickElement, QuickElement.Interpreted<?>, QuickElement.Def<?>> Y = new QuickElement.AttributeValueGetter<QuickElement, QuickElement.Interpreted<?>, QuickElement.Def<?>>() {
+		@Override
+		public CompiledExpression getFromDef(QuickElement.Def<?> def) {
+			return def.getAddOnValue(QuickWindow.Def.class, QuickWindow.Def::getY);
+		}
+
+		@Override
+		public InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> getFromInterpreted(QuickElement.Interpreted<?> interp) {
+			return interp.getAddOnValue(QuickWindow.Interpreted.class, QuickWindow.Interpreted::getY);
+		}
+
+		@Override
+		public SettableValue<Integer> getFromElement(QuickElement element) {
+			return element.getAddOnValue(QuickWindow.class, QuickWindow::getY);
+		}
+	};
+
+	public static final QuickElement.AttributeValueGetter<QuickElement, QuickElement.Interpreted<?>, QuickElement.Def<?>> WIDTH = new QuickElement.AttributeValueGetter<QuickElement, QuickElement.Interpreted<?>, QuickElement.Def<?>>() {
+		@Override
+		public CompiledExpression getFromDef(QuickElement.Def<?> def) {
+			return def.getAddOnValue(QuickWindow.Def.class, QuickWindow.Def::getWidth);
+		}
+
+		@Override
+		public InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> getFromInterpreted(QuickElement.Interpreted<?> interp) {
+			return interp.getAddOnValue(QuickWindow.Interpreted.class, QuickWindow.Interpreted::getWidth);
+		}
+
+		@Override
+		public SettableValue<Integer> getFromElement(QuickElement element) {
+			return element.getAddOnValue(QuickWindow.class, QuickWindow::getWidth);
+		}
+	};
+
+	public static final QuickElement.AttributeValueGetter<QuickElement, QuickElement.Interpreted<?>, QuickElement.Def<?>> HEIGHT = new QuickElement.AttributeValueGetter<QuickElement, QuickElement.Interpreted<?>, QuickElement.Def<?>>() {
+		@Override
+		public CompiledExpression getFromDef(QuickElement.Def<?> def) {
+			return def.getAddOnValue(QuickWindow.Def.class, QuickWindow.Def::getHeight);
+		}
+
+		@Override
+		public InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> getFromInterpreted(QuickElement.Interpreted<?> interp) {
+			return interp.getAddOnValue(QuickWindow.Interpreted.class, QuickWindow.Interpreted::getHeight);
+		}
+
+		@Override
+		public SettableValue<Integer> getFromElement(QuickElement element) {
+			return element.getAddOnValue(QuickWindow.class, QuickWindow::getHeight);
+		}
+	};
+
+	public static final QuickElement.AttributeValueGetter<QuickElement, QuickElement.Interpreted<?>, QuickElement.Def<?>> TITLE = new QuickElement.AttributeValueGetter<QuickElement, QuickElement.Interpreted<?>, QuickElement.Def<?>>() {
+		@Override
+		public CompiledExpression getFromDef(QuickElement.Def<?> def) {
+			return def.getAddOnValue(QuickWindow.Def.class, QuickWindow.Def::getTitle);
+		}
+
+		@Override
+		public InterpretedValueSynth<SettableValue<?>, SettableValue<String>> getFromInterpreted(QuickElement.Interpreted<?> interp) {
+			return interp.getAddOnValue(QuickWindow.Interpreted.class, QuickWindow.Interpreted::getTitle);
+		}
+
+		@Override
+		public SettableValue<String> getFromElement(QuickElement element) {
+			return element.getAddOnValue(QuickWindow.class, QuickWindow::getTitle);
+		}
+	};
+
+	public static final QuickElement.AttributeValueGetter<QuickElement, QuickElement.Interpreted<?>, QuickElement.Def<?>> VISIBLE = new QuickElement.AttributeValueGetter<QuickElement, QuickElement.Interpreted<?>, QuickElement.Def<?>>() {
+		@Override
+		public CompiledExpression getFromDef(QuickElement.Def<?> def) {
+			return def.getAddOnValue(QuickWindow.Def.class, QuickWindow.Def::isVisible);
+		}
+
+		@Override
+		public InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> getFromInterpreted(QuickElement.Interpreted<?> interp) {
+			return interp.getAddOnValue(QuickWindow.Interpreted.class, QuickWindow.Interpreted::isVisible);
+		}
+
+		@Override
+		public SettableValue<Boolean> getFromElement(QuickElement element) {
+			return element.getAddOnValue(QuickWindow.class, QuickWindow::isVisible);
+		}
+	};
+
+	public static final QuickElement.AttributeValueGetter<QuickElement, QuickElement.Interpreted<?>, QuickElement.Def<?>> CLOSE_ACTION = new QuickElement.AttributeValueGetter<QuickElement, QuickElement.Interpreted<?>, QuickElement.Def<?>>() {
+		@Override
+		public CloseAction getFromDef(QuickElement.Def<?> def) {
+			return def.getAddOnValue(QuickWindow.Def.class, QuickWindow.Def::getCloseAction);
+		}
+
+		@Override
+		public CloseAction getFromInterpreted(QuickElement.Interpreted<?> interp) {
+			return interp.getAddOnValue(QuickWindow.Interpreted.class, i -> i.getDefinition().getCloseAction());
+		}
+
+		@Override
+		public CloseAction getFromElement(QuickElement element) {
+			return element.getAddOnValue(QuickWindow.class, e -> e.getCloseAction());
+		}
+	};
+
 	/** An action to perform when the user closes the window (e.g. clicks the "X") */
 	public enum CloseAction {
 		/** Do nothing when the user attempts to close */
@@ -40,7 +159,7 @@ public class QuickWindow extends QuickAddOn.Abstract<QuickElement> {
 		 * @param type The add-on that the Qonfig toolkit uses to represent this type
 		 * @param element The element that this add-on is added onto
 		 */
-		public Def(QonfigAddOn type, QuickElement.Def<? extends QuickDocument> element) {
+		public Def(QonfigAddOn type, QuickElement.Def<? extends QuickElement> element) {
 			super(type, element);
 		}
 
@@ -70,7 +189,7 @@ public class QuickWindow extends QuickAddOn.Abstract<QuickElement> {
 		}
 
 		/** @return The expression defining when the window is visible--to hide/show and to be updated when the user closes the window */
-		public CompiledExpression getVisible() {
+		public CompiledExpression isVisible() {
 			return theVisible;
 		}
 
@@ -80,7 +199,14 @@ public class QuickWindow extends QuickAddOn.Abstract<QuickElement> {
 		}
 
 		@Override
-		public void update(ExpressoQIS session) throws QonfigInterpretationException {
+		public void update(ExpressoQIS session, QuickElement.Def<? extends QuickElement> element) throws QonfigInterpretationException {
+			element.forAttribute(session.getFocusType().getAttribute("x").getDeclared(), X);
+			element.forAttribute(session.getFocusType().getAttribute("y").getDeclared(), Y);
+			element.forAttribute(session.getFocusType().getAttribute("width").getDeclared(), WIDTH);
+			element.forAttribute(session.getFocusType().getAttribute("height").getDeclared(), HEIGHT);
+			element.forAttribute(session.getFocusType().getAttribute("title").getDeclared(), TITLE);
+			element.forAttribute(session.getFocusType().getAttribute("visible").getDeclared(), VISIBLE);
+			element.forAttribute(session.getFocusType().getAttribute("close-action").getDeclared(), CLOSE_ACTION);
 			theX = session.getAttributeExpression("x");
 			theY = session.getAttributeExpression("y");
 			theWidth = session.getAttributeExpression("width");
@@ -166,7 +292,7 @@ public class QuickWindow extends QuickAddOn.Abstract<QuickElement> {
 		}
 
 		/** @return The expression defining when the window is visible--to hide/show and to be updated when the user closes the window */
-		public InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> getVisible() {
+		public InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> isVisible() {
 			return theVisible;
 		}
 
@@ -177,8 +303,8 @@ public class QuickWindow extends QuickAddOn.Abstract<QuickElement> {
 			theWidth = getDefinition().getWidth() == null ? null : getDefinition().getWidth().evaluate(ModelTypes.Value.INT).interpret();
 			theHeight = getDefinition().getHeight() == null ? null : getDefinition().getHeight().evaluate(ModelTypes.Value.INT).interpret();
 			theTitle = getDefinition().getTitle() == null ? null : getDefinition().getTitle().evaluate(ModelTypes.Value.STRING).interpret();
-			theVisible = getDefinition().getVisible() == null ? null
-				: getDefinition().getVisible().evaluate(ModelTypes.Value.BOOLEAN).interpret();
+			theVisible = getDefinition().isVisible() == null ? null
+				: getDefinition().isVisible().evaluate(ModelTypes.Value.BOOLEAN).interpret();
 		}
 
 		@Override
@@ -233,7 +359,7 @@ public class QuickWindow extends QuickAddOn.Abstract<QuickElement> {
 	}
 
 	/** @return The value defining when the window is visible--to hide/show and to be updated when the user closes the window */
-	public SettableValue<Boolean> getVisible() {
+	public SettableValue<Boolean> isVisible() {
 		return theVisible;
 	}
 
@@ -247,6 +373,6 @@ public class QuickWindow extends QuickAddOn.Abstract<QuickElement> {
 		theWidth = myInterpreted.getWidth() == null ? null : myInterpreted.getWidth().get(models);
 		theHeight = myInterpreted.getHeight() == null ? null : myInterpreted.getHeight().get(models);
 		theTitle = myInterpreted.getTitle() == null ? null : myInterpreted.getTitle().get(models);
-		theVisible = myInterpreted.getVisible() == null ? null : myInterpreted.getVisible().get(models);
+		theVisible = myInterpreted.isVisible() == null ? null : myInterpreted.isVisible().get(models);
 	}
 }

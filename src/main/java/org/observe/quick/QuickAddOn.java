@@ -32,9 +32,9 @@ public interface QuickAddOn<E extends QuickElement> {
 		 * add-on definition
 		 *
 		 * @param session The session to support this add-on
-		 * @throws QonfigInterpretationException
+		 * @throws QonfigInterpretationException If an error occurs updating this add-on
 		 */
-		void update(ExpressoQIS session) throws QonfigInterpretationException;
+		void update(ExpressoQIS session, QuickElement.Def<? extends E> element) throws QonfigInterpretationException;
 
 		/**
 		 * @param element The element interpretation
@@ -72,7 +72,7 @@ public interface QuickAddOn<E extends QuickElement> {
 			}
 
 			@Override
-			public void update(ExpressoQIS session) throws QonfigInterpretationException {
+			public void update(ExpressoQIS session, QuickElement.Def<? extends E> element) throws QonfigInterpretationException {
 			}
 		}
 	}

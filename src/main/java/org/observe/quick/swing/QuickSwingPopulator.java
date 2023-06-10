@@ -231,8 +231,8 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 										w.withHeight(window.getHeight());
 									if (window.getTitle() != null)
 										w.withTitle(window.getTitle());
-									if (window.getVisible() != null)
-										w.withVisible(window.getVisible());
+									if (window.isVisible() != null)
+										w.withVisible(window.isVisible());
 								}
 								w.withHContent(new JustifiedBoxLayout(true).mainJustified().crossJustified(), content -> {
 									try {

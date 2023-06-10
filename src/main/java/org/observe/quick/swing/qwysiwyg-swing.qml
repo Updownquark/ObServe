@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<quick-app uses:app="Quick-App v0.1" app-file="qwysiwyg.qml">
+<quick-app uses:app="Quick-App v0.1" app-file="../base/qwysiwyg.qml">
 	<toolkit def="/org/observe/expresso/expresso-core.qtd">
 		<value-type>org.observe.expresso.ExpressionValueType</value-type>
 	</toolkit>

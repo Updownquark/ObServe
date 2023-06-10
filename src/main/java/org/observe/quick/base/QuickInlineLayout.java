@@ -32,8 +32,8 @@ public class QuickInlineLayout extends QuickLayout.Abstract {
 		}
 
 		@Override
-		public void update(ExpressoQIS session) throws QonfigInterpretationException {
-			super.update(session);
+		public void update(ExpressoQIS session, QuickElement.Def<? extends QuickBox> element) throws QonfigInterpretationException {
+			super.update(session, element);
 			isVertical = "vertical".equals(session.getAttributeText("orientation"));
 			theMainAlign = jblAlign("main-align", session.getAttributeText("main-align"), session);
 			theCrossAlign = jblAlign("cross-align", session.getAttributeText("cross-align"), session);

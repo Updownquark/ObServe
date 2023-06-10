@@ -34,6 +34,40 @@ import com.google.common.reflect.TypeToken;
 public interface QuickWidget extends QuickTextElement {
 	public static final String WIDGET = "widget";
 
+	public static final QuickElement.ChildElementGetter<QuickWidget, Interpreted<?>, Def<?>> BORDER = new QuickElement.ChildElementGetter<QuickWidget, Interpreted<?>, Def<?>>() {
+		@Override
+		public List<? extends org.observe.quick.QuickElement.Def<?>> getChildrenFromDef(Def<?> def) {
+			return def.getBorder() == null ? Collections.emptyList() : Collections.singletonList(def.getBorder());
+		}
+
+		@Override
+		public List<? extends org.observe.quick.QuickElement.Interpreted<?>> getChildrenFromInterpreted(Interpreted<?> interp) {
+			return interp.getBorder() == null ? Collections.emptyList() : Collections.singletonList(interp.getBorder());
+		}
+
+		@Override
+		public List<? extends QuickElement> getChildrenFromElement(QuickWidget element) {
+			return element.getBorder() == null ? Collections.emptyList() : Collections.singletonList(element.getBorder());
+		}
+	};
+
+	public static final QuickElement.ChildElementGetter<QuickWidget, Interpreted<?>, Def<?>> EVENT_LISTENERS = new QuickElement.ChildElementGetter<QuickWidget, Interpreted<?>, Def<?>>() {
+		@Override
+		public List<? extends org.observe.quick.QuickElement.Def<?>> getChildrenFromDef(Def<?> def) {
+			return def.getEventListeners();
+		}
+
+		@Override
+		public List<? extends org.observe.quick.QuickElement.Interpreted<?>> getChildrenFromInterpreted(Interpreted<?> interp) {
+			return interp.getEventListeners();
+		}
+
+		@Override
+		public List<? extends QuickElement> getChildrenFromElement(QuickWidget element) {
+			return element.getEventListeners();
+		}
+	};
+
 	/**
 	 * The definition of a {@link QuickWidget}
 	 *
@@ -126,6 +160,8 @@ public interface QuickWidget extends QuickTextElement {
 			@Override
 			public void update(ExpressoQIS session) throws QonfigInterpretationException {
 				checkElement(session.getFocusType(), QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, WIDGET);
+				forChild(session.getRole("border").getDeclared(), BORDER);
+				forChild(session.getRole("event-listener").getDeclared(), EVENT_LISTENERS);
 				super.update(session);
 				theBorder = QuickElement.useOrReplace(QuickBorder.Def.class, theBorder, session, "border");
 				theName = session.getAttributeText("name");
