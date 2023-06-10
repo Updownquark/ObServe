@@ -818,6 +818,8 @@ public interface ObservableModelSet extends Identifiable {
 		 */
 		ModelValueSynth<M, MV> getValue() throws ExpressoInterpretationException;
 
+		LocatedFilePosition getSourceLocation();
+
 		@Override
 		InterpretedModelComponentNode<M, MV> interpret() throws ExpressoInterpretationException;
 	}
@@ -1452,7 +1454,7 @@ public interface ObservableModelSet extends Identifiable {
 		 *        {@link InterpretedModelSet#createInstance(ObservableModelSet.ExternalModelSet, Observable)}
 		 * @return This builder
 		 */
-		<M, MV extends M> Builder withExternal(String name, ExtValueRef<M, MV> extGetter);
+		<M, MV extends M> Builder withExternal(String name, ExtValueRef<M, MV> extGetter, LocatedFilePosition sourceLocation);
 
 		/**
 		 * Installs a creator for a model value
@@ -1461,7 +1463,7 @@ public interface ObservableModelSet extends Identifiable {
 		 * @param maker The creator to create the model value
 		 * @return This builder
 		 */
-		Builder withMaker(String name, CompiledModelValue<?, ?> maker);
+		Builder withMaker(String name, CompiledModelValue<?, ?> maker, LocatedFilePosition sourceLocation);
 
 		/**
 		 * Declares a value to be satisfied with {@link ModelSetInstanceBuilder#with(RuntimeValuePlaceholder, Object)}
@@ -1472,8 +1474,10 @@ public interface ObservableModelSet extends Identifiable {
 		 * @param type The type of the runtime value
 		 * @return This builder
 		 */
-		default <M, MV extends M> RuntimeValuePlaceholder<M, MV> withRuntimeValue(String name, ModelInstanceType<M, MV> type) {
-			return withRuntimeValue(name, type.getModelType(), LambdaUtils.printableExSupplier(() -> type, type::toString, null));
+		default <M, MV extends M> RuntimeValuePlaceholder<M, MV> withRuntimeValue(String name, ModelInstanceType<M, MV> type,
+			LocatedFilePosition sourceLocation) {
+			return withRuntimeValue(name, type.getModelType(), LambdaUtils.printableExSupplier(() -> type, type::toString, null),
+				sourceLocation);
 		}
 
 		/**
@@ -1487,7 +1491,7 @@ public interface ObservableModelSet extends Identifiable {
 		 * @return This builder
 		 */
 		<M, MV extends M> RuntimeValuePlaceholder<M, MV> withRuntimeValue(String name, ModelType<M> modelType,
-			ExSupplier<ModelInstanceType<M, MV>, ExpressoInterpretationException> type);
+			ExSupplier<ModelInstanceType<M, MV>, ExpressoInterpretationException> type, LocatedFilePosition sourceLocation);
 
 		/**
 		 * Retrieves or creates a builder for a sub-model under this model set
@@ -1495,7 +1499,7 @@ public interface ObservableModelSet extends Identifiable {
 		 * @param name The name for the sub-model
 		 * @return The builder for the sub-model
 		 */
-		Builder createSubModel(String name);
+		Builder createSubModel(String name, LocatedFilePosition sourceLocation);
 
 		/**
 		 * Causes this model to {@link ObservableModelSet#getInheritance() inherit} all of the other model's components. All of the other
@@ -1520,7 +1524,7 @@ public interface ObservableModelSet extends Identifiable {
 		 */
 		default <M, MV extends M> Builder withExternal(String name, ModelInstanceType<M, MV> type, LocatedFilePosition filePosition,
 			ExtValueCreator<ExternalModelSet, MV> value) {
-			return withExternal(name, ExtValueRef.of(type, filePosition, value));
+			return withExternal(name, ExtValueRef.of(type, filePosition, value), filePosition);
 		}
 
 		/**
@@ -1539,7 +1543,7 @@ public interface ObservableModelSet extends Identifiable {
 		 */
 		default <M, MV extends M> Builder withExternal(String name, ModelInstanceType<M, MV> type, LocatedFilePosition filePosition,
 			ExtValueCreator<ExternalModelSet, MV> value, ExtValueCreator<ModelSetInstance, MV> defaultValue) {
-			return withExternal(name, ExtValueRef.of(type, filePosition, value, defaultValue));
+			return withExternal(name, ExtValueRef.of(type, filePosition, value, defaultValue), filePosition);
 		}
 
 		/**
@@ -1549,8 +1553,8 @@ public interface ObservableModelSet extends Identifiable {
 		 * @param value The container to create the model value
 		 * @return This builder
 		 */
-		default <M, MV extends M> Builder with(String name, ModelValueSynth<M, MV> value) {
-			return withMaker(name, CompiledModelValue.constant(value));
+		default <M, MV extends M> Builder with(String name, ModelValueSynth<M, MV> value, LocatedFilePosition sourceLocation) {
+			return withMaker(name, CompiledModelValue.constant(value), sourceLocation);
 		}
 
 		/**
@@ -1562,8 +1566,8 @@ public interface ObservableModelSet extends Identifiable {
 		 * @return This builder
 		 */
 		default <M, MV extends M> Builder with(String name, ModelInstanceType<M, MV> type,
-			ExFunction<ModelSetInstance, MV, ModelInstantiationException> value) {
-			return with(name, ModelValueSynth.of(type, value));
+			ExFunction<ModelSetInstance, MV, ModelInstantiationException> value, LocatedFilePosition sourceLocation) {
+			return with(name, ModelValueSynth.of(type, value), sourceLocation);
 		}
 
 		/** @return The immutable {@link ObservableModelSet} configured with this builder */
@@ -2148,6 +2152,7 @@ public interface ObservableModelSet extends Identifiable {
 
 		class ModelNodeImpl<M, MV extends M> implements ModelComponentNode<M, MV> {
 			private final ModelComponentId theNodeId;
+			private final LocatedFilePosition theSourceLocation;
 			private final CompiledModelValue<M, MV> theCreator;
 			private final RuntimeValuePlaceholder<M, MV> theRuntimePlaceholder;
 			private ModelValueSynth<M, MV> theValue;
@@ -2155,12 +2160,13 @@ public interface ObservableModelSet extends Identifiable {
 			private final DefaultModelSet theModel;
 
 			ModelNodeImpl(ModelComponentId id, CompiledModelValue<M, MV> creator, RuntimeValuePlaceholder<M, MV> runtimePlaceholder,
-				ExtValueRef<M, MV> extRef, DefaultModelSet model) {
+				ExtValueRef<M, MV> extRef, DefaultModelSet model, LocatedFilePosition sourceLocation) {
 				theNodeId = id;
 				theCreator = creator;
 				theRuntimePlaceholder = runtimePlaceholder;
 				theExtRef = extRef;
 				theModel = model;
+				theSourceLocation = sourceLocation;
 			}
 
 			@Override
@@ -2301,6 +2307,11 @@ public interface ObservableModelSet extends Identifiable {
 			}
 
 			@Override
+			public LocatedFilePosition getSourceLocation() {
+				return theSourceLocation;
+			}
+
+			@Override
 			public InterpretedModelComponentNode<M, MV> interpret() throws ExpressoInterpretationException {
 				if (theModel != null)
 					throw new IllegalStateException("Cannot interpret a model element here");
@@ -2308,11 +2319,12 @@ public interface ObservableModelSet extends Identifiable {
 					if (!(theValue instanceof InterpretedValueSynth))
 						theValue = getOfValue(vc -> vc.interpret());
 					return new InterpretedModelNodeImpl<>(theNodeId, theCreator, //
-						(InterpretedValueSynth<M, MV>) theValue, null, null, null);
+						(InterpretedValueSynth<M, MV>) theValue, null, null, null, theSourceLocation);
 				} else if (theRuntimePlaceholder != null)
-					return new InterpretedModelNodeImpl<>(theNodeId, null, null, theRuntimePlaceholder.interpret(), null, null);
+					return new InterpretedModelNodeImpl<>(theNodeId, null, null, theRuntimePlaceholder.interpret(), null, null,
+						theSourceLocation);
 				else if (theExtRef != null)
-					return new InterpretedModelNodeImpl<>(theNodeId, null, null, null, theExtRef, null);
+					return new InterpretedModelNodeImpl<>(theNodeId, null, null, null, theExtRef, null, theSourceLocation);
 				else
 					throw new IllegalArgumentException("Unrecognized node value: " + getThing().getClass().getName());
 			}
@@ -2332,6 +2344,7 @@ public interface ObservableModelSet extends Identifiable {
 
 		static class InterpretedModelNodeImpl<M, MV extends M> implements InterpretedModelComponentNode<M, MV> {
 			private final ModelComponentId theNodeId;
+			private final LocatedFilePosition theSourceLocation;
 			private final CompiledModelValue<M, MV> theCreator;
 			private final InterpretedValueSynth<M, MV> theValue;
 			private final RuntimeValuePlaceholder.Interpreted<M, MV> theRuntimePlaceholder;
@@ -2340,9 +2353,9 @@ public interface ObservableModelSet extends Identifiable {
 
 			public InterpretedModelNodeImpl(ModelComponentId nodeId, CompiledModelValue<M, MV> creator,
 				InterpretedValueSynth<M, MV> value, RuntimeValuePlaceholder.Interpreted<M, MV> runtimePlaceholder,
-				ExtValueRef<M, MV> extRef,
-				DefaultInterpreted model) {
+				ExtValueRef<M, MV> extRef, DefaultInterpreted model, LocatedFilePosition sourceLocation) {
 				theNodeId = nodeId;
+				theSourceLocation = sourceLocation;
 				theCreator = creator;
 				theValue = value;
 				theRuntimePlaceholder = runtimePlaceholder;
@@ -2438,6 +2451,11 @@ public interface ObservableModelSet extends Identifiable {
 			@Override
 			public InterpretedValueSynth<M, MV> getValue() {
 				return theValue;
+			}
+
+			@Override
+			public LocatedFilePosition getSourceLocation() {
+				return theSourceLocation;
 			}
 
 			@Override
@@ -2594,18 +2612,20 @@ public interface ObservableModelSet extends Identifiable {
 			}
 
 			@Override
-			public <M, MV extends M> Builder withExternal(String name, ExtValueRef<M, MV> extGetter) {
+			public <M, MV extends M> Builder withExternal(String name, ExtValueRef<M, MV> extGetter, LocatedFilePosition sourceLocation) {
 				getNameChecker().checkName(name);
 				checkNameForAdd(name);
-				getAddableComponents().put(name, createPlaceholder(new ModelComponentId(getIdentity(), name), null, null, extGetter, null));
+				getAddableComponents().put(name,
+					createPlaceholder(new ModelComponentId(getIdentity(), name), null, null, extGetter, null, sourceLocation));
 				return this;
 			}
 
 			@Override
-			public Builder withMaker(String name, CompiledModelValue<?, ?> maker) {
+			public Builder withMaker(String name, CompiledModelValue<?, ?> maker, LocatedFilePosition sourceLocation) {
 				getNameChecker().checkName(name);
 				checkNameForAdd(name);
-				ModelComponentNode<?, ?> node = createPlaceholder(new ModelComponentId(getIdentity(), name), maker, null, null, null);
+				ModelComponentNode<?, ?> node = createPlaceholder(new ModelComponentId(getIdentity(), name), maker, null, null, null,
+					sourceLocation);
 				getAddableComponents().put(name, node);
 				if (node.getValueIdentity() != null)
 					getAddableIdComponents().put(node.getValueIdentity(), node);
@@ -2614,24 +2634,24 @@ public interface ObservableModelSet extends Identifiable {
 
 			@Override
 			public <M, MV extends M> RuntimeValuePlaceholder<M, MV> withRuntimeValue(String name, ModelType<M> modelType,
-				ExSupplier<ModelInstanceType<M, MV>, ExpressoInterpretationException> type) {
+				ExSupplier<ModelInstanceType<M, MV>, ExpressoInterpretationException> type, LocatedFilePosition sourceLocation) {
 				getNameChecker().checkName(name);
 				checkNameForAdd(name);
 				ModelComponentId id = new ModelComponentId(getIdentity(), name);
 				RVPI<M, MV> rvp = new RVPI<>(id, modelType, type);
-				getAddableComponents().put(name, createPlaceholder(id, null, rvp, null, null));
+				getAddableComponents().put(name, createPlaceholder(id, null, rvp, null, null, sourceLocation));
 				return rvp;
 			}
 
 			@Override
-			public DefaultBuilder createSubModel(String name) {
+			public DefaultBuilder createSubModel(String name, LocatedFilePosition sourceLocation) {
 				getNameChecker().checkName(name);
 				ModelComponentNode<?, ?> thing = theComponents.get(name);
 				if (thing == null) {
 					DefaultBuilder subModel = new DefaultBuilder(new ModelComponentId(getIdentity(), name), (DefaultBuilder) getRoot(),
 						this, getNameChecker());
 					getAddableComponents().put(name,
-						createPlaceholder(new ModelComponentId(getIdentity(), name), null, null, null, subModel));
+						createPlaceholder(new ModelComponentId(getIdentity(), name), null, null, null, subModel, sourceLocation));
 					return subModel;
 				} else if (thing.getModel() != null)
 					return (DefaultBuilder) thing.getModel();
@@ -2653,7 +2673,7 @@ public interface ObservableModelSet extends Identifiable {
 				// For any sub-models with the same name, this model's sub-model should inherit that of the other
 				for (ModelComponentNode<?, ?> component : other.getComponents().values()) {
 					if (component.getModel() != null)
-						createSubModel(component.getIdentity().getName()).withAll(component.getModel());
+						createSubModel(component.getIdentity().getName(), component.getSourceLocation()).withAll(component.getModel());
 					else if (component.getValueIdentity() != null)
 						getAddableIdComponents().putIfAbsent(component.getValueIdentity(), component);
 				}
@@ -2674,8 +2694,8 @@ public interface ObservableModelSet extends Identifiable {
 			 */
 			protected <M, MV extends M> ModelComponentNode<M, MV> createPlaceholder(ModelComponentId componentId,
 				CompiledModelValue<M, MV> creator, RuntimeValuePlaceholder<M, MV> runtimeValue, ExtValueRef<M, MV> extRef,
-				DefaultModelSet subModel) {
-				return new ModelNodeImpl<>(componentId, creator, runtimeValue, extRef, subModel);
+				DefaultModelSet subModel, LocatedFilePosition sourceLocation) {
+				return new ModelNodeImpl<>(componentId, creator, runtimeValue, extRef, subModel, sourceLocation);
 			}
 
 			@Override
@@ -2711,7 +2731,8 @@ public interface ObservableModelSet extends Identifiable {
 					if (component.getValue().getModel() != null) {
 						DefaultBuilt subModel = ((DefaultBuilder) component.getValue().getModel())._build(root, model);
 						components.put(component.getKey(),
-							createPlaceholder(component.getValue().getIdentity(), null, null, null, subModel));
+							createPlaceholder(component.getValue().getIdentity(), null, null, null, subModel,
+								component.getValue().getSourceLocation()));
 					} else
 						components.put(component.getKey(), component.getValue());
 				}
@@ -2800,8 +2821,8 @@ public interface ObservableModelSet extends Identifiable {
 				for (Map.Entry<String, ? extends ModelComponentNode<?, ?>> component : theComponents.entrySet()) {
 					if (component.getValue().getModel() != null) {
 						DefaultInterpreted subModel = ((DefaultBuilt) component.getValue().getModel())._interpret(root, model);
-						components.put(component.getKey(),
-							new InterpretedModelNodeImpl<>(component.getValue().getIdentity(), null, null, null, null, subModel));
+						components.put(component.getKey(), new InterpretedModelNodeImpl<>(component.getValue().getIdentity(), null, null,
+							null, null, subModel, component.getValue().getSourceLocation()));
 					} else
 						components.put(component.getKey(), component.getValue().interpret());
 				}

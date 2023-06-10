@@ -236,9 +236,9 @@ public class ExpressoSessionImplV0_1 implements SpecialSessionImplementation<Exp
 		InterpretedModelSet models = ObservableModelSet
 			.build(element.getType().getName() + "_value", ObservableModelSet.JAVA_NAME_CHECKER)//
 			.with("toolkit", ModelTypes.Value.forType(QonfigToolkit.class),
-				m -> SettableValue.of(QonfigToolkit.class, theToolkit, "Not modifiable"))//
+				m -> SettableValue.of(QonfigToolkit.class, theToolkit, "Not modifiable"), null)//
 			.with("element", ModelTypes.Value.forType(QonfigElement.class),
-				m -> SettableValue.of(QonfigElement.class, element, "Not modifiable"))//
+				m -> SettableValue.of(QonfigElement.class, element, "Not modifiable"), element.getPositionInFile())//
 			.build()//
 			.interpret();
 		ExpressoEnv env = sourceEnv.with(models, null);

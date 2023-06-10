@@ -227,7 +227,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 								public String toString() {
 									return name + "=" + sourceAttrX;
 								}
-							});
+							}, session.getElement().getPositionInFile());
 							// } else if (dv.getType() != null) {
 							// wrappedBuilder.withMaker(name, ObservableModelSet.IdentifableCompiledValue.of(dv,
 							// new DynamicModelValue.RuntimeModelValue<>(dv, valueType)));
@@ -235,7 +235,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 							builder.withMaker(name,
 								new DynamicModelValue.DynamicTypedModelValueCreator<>(dv, spec.getModelType(), reporting, () -> {
 									return (ModelInstanceType<Object, Object>) spec.getType(models);
-								}));
+								}), session.getElement().getPositionInFile());
 						}
 					}
 				}
@@ -286,7 +286,8 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 			if (nonTrivial(expressoSession.getExpressoEnv().getModels()))
 				builder.withAll(expressoSession.getExpressoEnv().getModels());
 			for (ExpressoQIS model : expressoSession.forChildren("model")) {
-				ObservableModelSet.Builder subModel = builder.createSubModel(model.getAttributeText("named", "name"));
+				ObservableModelSet.Builder subModel = builder.createSubModel(model.getAttributeText("named", "name"),
+					model.getElement().getPositionInFile());
 				expressoSession.setModels(subModel, null);
 				model.setModels(subModel, null).interpret(ObservableModelSet.class);
 			}
@@ -397,7 +398,8 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 				});
 			}
 			for (ExpressoQIS subModelEl : eqis.forChildren("sub-model")) {
-				ObservableModelSet.Builder subModel = model.createSubModel(subModelEl.getAttributeText("named", "name"));
+				ObservableModelSet.Builder subModel = model.createSubModel(subModelEl.getAttributeText("named", "name"),
+					subModelEl.getElement().getPositionInFile());
 				subModelEl.setModels(subModel, null);
 				subModelEl.interpret(ObservableModelSet.class);
 			}
@@ -723,9 +725,10 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 			for (ExpressoQIS child : eqis.forChildren()) {
 				if (child.fulfills(valueRole)) {
 					CompiledModelValue<?, ?> container = child.setModels(model, null).interpret(CompiledModelValue.class);
-					model.withMaker(child.getAttributeText("model-element", "name"), container);
+					model.withMaker(child.getAttributeText("model-element", "name"), container, child.getElement().getPositionInFile());
 				} else if (child.fulfills(subModelRole)) {
-					ObservableModelSet.Builder subModel = model.createSubModel(child.getAttributeText("named", "name"));
+					ObservableModelSet.Builder subModel = model.createSubModel(child.getAttributeText("named", "name"),
+						child.getElement().getPositionInFile());
 					child.setModels(subModel, null);
 					child.interpret(ObservableModelSet.class);
 				}
@@ -2617,13 +2620,13 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 
 	private <S, T> ObservableTransform<Observable<?>> mapObservableTo(ExpressoQIS op) throws QonfigInterpretationException {
 		String sourceAs = op.getAttributeText("source-as");
-
+		LocatedFilePosition sourcePos = op.getAttributeValuePosition("source-as", 0);
 		CompiledExpression mapX = op.getAttributeExpression("map");
 		ExpressoEnv env = op.getExpressoEnv();
 		return ObservableTransform.create(ModelTypes.Event, sourceType -> {
 			ObservableModelSet.Builder wrappedBuilder = env.getModels().wrap("mapModel");
 			RuntimeValuePlaceholder<SettableValue<?>, SettableValue<S>> sourcePlaceholder = wrappedBuilder.withRuntimeValue(sourceAs,
-				ModelTypes.Value.forType((TypeToken<S>) sourceType.getValueType()));
+				ModelTypes.Value.forType((TypeToken<S>) sourceType.getValueType()), sourcePos);
 			ObservableModelSet.Built wrapped = wrappedBuilder.build();
 			InterpretedModelSet interpretedWrapped = wrapped.interpret();
 
@@ -2653,12 +2656,13 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 
 	private <T> ObservableTransform<Observable<?>> filterObservable(ExpressoQIS op) throws QonfigInterpretationException {
 		String sourceAs = op.getAttributeText("source-as");
+		LocatedFilePosition sourcePos = op.getAttributeValuePosition("source-as", 0);
 		CompiledExpression testX = op.getAttributeExpression("test");
 		ExpressoEnv env = op.getExpressoEnv();
 		return ObservableTransform.create(ModelTypes.Event, sourceType -> {
 			ObservableModelSet.Builder wrappedBuilder = env.getModels().wrap("filterModel");
 			RuntimeValuePlaceholder<SettableValue<?>, SettableValue<T>> sourcePlaceholder = wrappedBuilder.withRuntimeValue(sourceAs,
-				ModelTypes.Value.forType((TypeToken<T>) sourceType.getValueType()));
+				ModelTypes.Value.forType((TypeToken<T>) sourceType.getValueType()), sourcePos);
 			ObservableModelSet.Built wrapped = wrappedBuilder.build();
 
 			ModelValueSynth<SettableValue<?>, SettableValue<String>> test = parseFilter(testX, env.with(wrapped, null), false);
@@ -2761,12 +2765,13 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 
 	private <T> ValueTransform<SettableValue<?>> filterAcceptValue(ExpressoQIS op) throws QonfigInterpretationException {
 		String sourceAs = op.getAttributeText("source-as");
+		LocatedFilePosition sourcePos = op.getAttributeValuePosition("source-as", 0);
 		CompiledExpression testX = op.getAttributeExpression("test");
 		ExpressoEnv env = op.getExpressoEnv();
 		return ValueTransform.<T, SettableValue<?>> create(ModelTypes.Value, sourceType -> {
 			ObservableModelSet.Builder wrappedBuilder = env.getModels().wrap("filterAcceptModel");
 			RuntimeValuePlaceholder<SettableValue<?>, SettableValue<T>> sourcePlaceholder = wrappedBuilder.withRuntimeValue(sourceAs,
-				sourceType);
+				sourceType, sourcePos);
 			ObservableModelSet.Built wrapped = wrappedBuilder.build();
 
 			ModelValueSynth<SettableValue<?>, SettableValue<String>> test = parseFilter(testX, env.with(wrapped, null), true);
@@ -2908,7 +2913,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		return flattenValueToCollection(op, collectionModel, sort, sortSession);
 	}
 
-	private <T> ValueTransform<SettableValue<?>> flattenValueToValue(ExpressoQIS op) throws QonfigInterpretationException {
+	private <T> ValueTransform<SettableValue<?>> flattenValueToValue(ExpressoQIS op) {
 		return ValueTransform.create(ModelTypes.Value, sourceType -> {
 			Class<?> rawType = TypeTokens.getRawType(sourceType.getValueType());
 			if (SettableValue.class.isAssignableFrom(rawType)) {
@@ -2927,7 +2932,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 	}
 
 	private <T, C extends ObservableCollection<?>> ValueTransform<C> flattenValueToCollection(ExpressoQIS op,
-		ModelType.SingleTyped<C> collectionType, ParsedSorting sort, ExpressoQIS sortSession) throws QonfigInterpretationException {
+		ModelType.SingleTyped<C> collectionType, ParsedSorting sort, ExpressoQIS sortSession) {
 		return ValueTransform.<C, C> create(collectionType, sourceType -> {
 			Class<?> rawType = TypeTokens.getRawType(sourceType.getValueType());
 			if (!collectionType.modelType.isAssignableFrom(rawType))
@@ -3081,10 +3086,11 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		String sourceAs = op.getAttributeText("source-as");
 		CompiledExpression testX = op.getAttributeExpression("test");
 		ExpressoEnv env = op.getExpressoEnv();
+		LocatedFilePosition sourcePos = op.getAttributeValuePosition("source-as", 0);
 		return CollectionTransform.<C, T, C, C> create(sourceModelType, sourceModelType, sourceType -> {
 			ObservableModelSet.Builder wrappedBuilder = env.getModels().wrap("filterModel");
 			RuntimeValuePlaceholder<SettableValue<?>, SettableValue<T>> sourcePlaceholder = wrappedBuilder.withRuntimeValue(sourceAs,
-				ModelTypes.Value.forType(sourceType.getValueType()));
+				ModelTypes.Value.forType(sourceType.getValueType()), sourcePos);
 			ObservableModelSet.Built wrapped = wrappedBuilder.build();
 
 			ModelValueSynth<SettableValue<?>, SettableValue<String>> test = parseFilter(testX, env.with(wrapped, null), false);
@@ -3130,8 +3136,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		});
 	}
 
-	private <T, C extends ObservableCollection<?>> CollectionTransform<C, C> reverseCollection(ExpressoQIS op)
-		throws QonfigInterpretationException {
+	private <T, C extends ObservableCollection<?>> CollectionTransform<C, C> reverseCollection(ExpressoQIS op) {
 		ModelType.SingleTyped<C> sourceModelType = (ModelType.SingleTyped<C>) op.get(VALUE_TYPE_KEY);
 		return CollectionTransform.<C, T, C, C> create(sourceModelType, sourceModelType, //
 			sourceType -> new FlowCollectionTransform<T, T, C, C, C, C>() {
@@ -3199,10 +3204,11 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		String sourceAs = op.getAttributeText("source-as");
 		CompiledExpression refreshX = op.getAttributeExpression("on");
 		ExpressoEnv env = op.getExpressoEnv();
+		LocatedFilePosition declaredLocation = op.getAttributeValuePosition("source-as", 0);
 		return CollectionTransform.<C, T, C, C> create(sourceModelType, sourceModelType, sourceType -> {
 			ObservableModelSet.Builder refreshModelBuilder = env.getModels().wrap("refreshEachModel");
 			RuntimeValuePlaceholder<SettableValue<?>, SettableValue<T>> sourcePlaceholder = refreshModelBuilder.withRuntimeValue(sourceAs,
-				ModelTypes.Value.forType(sourceType.getValueType()));
+				ModelTypes.Value.forType(sourceType.getValueType()), declaredLocation);
 			ObservableModelSet.Built refreshModel = refreshModelBuilder.build();
 			ModelValueSynth<SettableValue<?>, SettableValue<Observable<?>>> refreshV;
 			try {
@@ -3281,8 +3287,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		throw new QonfigInterpretationException("Not yet implemented", op.getElement().getPositionInFile(), 0); // TODO
 	}
 
-	private <T, C extends ObservableCollection<?>> CollectionTransform<C, C> unmodifiableCollection(ExpressoQIS op)
-		throws QonfigInterpretationException {
+	private <T, C extends ObservableCollection<?>> CollectionTransform<C, C> unmodifiableCollection(ExpressoQIS op) {
 		ModelType.SingleTyped<C> sourceModelType = (ModelType.SingleTyped<C>) op.get(VALUE_TYPE_KEY);
 		boolean allowUpdates = op.getAttribute("allow-updates", boolean.class);
 		return CollectionTransform.<C, T, C, C> create(sourceModelType, sourceModelType, sourceType -> {
@@ -3425,8 +3430,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		throw new QonfigInterpretationException("Not yet implemented", op.getElement().getPositionInFile(), 0); // TODO
 	}
 
-	private <T, C extends ObservableCollection<C>> CollectionTransform<C, C> collectCollection(ExpressoQIS op)
-		throws QonfigInterpretationException {
+	private <T, C extends ObservableCollection<C>> CollectionTransform<C, C> collectCollection(ExpressoQIS op) {
 		ModelType.SingleTyped<C> sourceModelType = (ModelType.SingleTyped<C>) op.get(VALUE_TYPE_KEY);
 		Boolean active = op.getAttribute("active", Boolean.class);
 		return CollectionTransform.create(sourceModelType, sourceModelType, sourceType -> {
@@ -3500,7 +3504,8 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		 * @param combinedVariables The names of the combined variables
 		 * @throws QonfigInterpretationException If an exception occurs compiling this reverse
 		 */
-		void compile(ExpressoQIS session, String sourceName, Set<String> combinedVariables) throws QonfigInterpretationException;
+		void compile(ExpressoQIS session, String sourceName, LocatedFilePosition sourceDeclaredLocation,
+			Map<String, LocatedFilePosition> combinedVariables) throws QonfigInterpretationException;
 
 		/**
 		 * @param <S> The type of the source values to produce
@@ -3567,6 +3572,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 			combinedXs.put(name, combinedQIS.getValueExpression());
 		}
 		String sourceName = op.getAttributeText("source-as");
+		LocatedFilePosition sourceDeclaredLocation = op.getAttributeValuePosition("source-as", 0);
 		boolean cached = op.getAttribute("cache", boolean.class);
 		boolean reEval = op.getAttribute("re-eval-on-update", boolean.class);
 		boolean fireIfUnchanged = op.getAttribute("fire-if-unchanged", boolean.class);
@@ -3594,18 +3600,22 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 			CompiledMapTransformation(ExpressoQIS mapSession, ExpressoQIS reverseSession) throws QonfigInterpretationException {
 				theMapModels = env.getModels().wrap("mapModel");
 				sourcePlaceholder = theMapModels.withRuntimeValue(sourceName, ModelTypes.Value,
-					() -> ModelTypes.Value.forType(theSourceType));
+					() -> ModelTypes.Value.forType(theSourceType), sourceDeclaredLocation);
 				combinedPlaceholders = new LinkedHashMap<>();
+				Map<String, LocatedFilePosition> locatedCombined = new LinkedHashMap<>();
 				for (Map.Entry<String, CompiledExpression> combinedX : combinedXs.entrySet()) {
 					String key = combinedX.getKey();
+					LocatedFilePosition declaredLocation = combinedX.getValue().getFilePosition(0);
 					combinedPlaceholders.put(key,
-						theMapModels.withRuntimeValue(combinedX.getKey(), ModelTypes.Value, () -> theCombinedTypes.get(key)));
+						theMapModels.withRuntimeValue(combinedX.getKey(), ModelTypes.Value, () -> theCombinedTypes.get(key),
+							declaredLocation));
+					locatedCombined.put(combinedX.getKey(), declaredLocation);
 				}
 				mapSession.setModels(theMapModels, null);
 				env = mapSession.getExpressoEnv();
 
 				if (compiledReverse != null)
-					compiledReverse.compile(reverseSession, sourceName, combinedPlaceholders.keySet());
+					compiledReverse.compile(reverseSession, sourceName, sourceDeclaredLocation, locatedCombined);
 			}
 
 			@Override
@@ -3742,6 +3752,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 			throw new QonfigInterpretationException("Illegal name for target-as: '" + targetName + "'",
 				reverse.getAttributeValuePosition("target-as", 0), targetName.length(), e);
 		}
+		LocatedFilePosition targetDeclaredLocation = reverse.getAttributeValuePosition("target-as", 0);
 
 		boolean inexact = reverse.getAttribute("inexact", boolean.class);
 		return new CompiledMapReverse() {
@@ -3756,17 +3767,17 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 			private ObservableModelSet.Builder theReverseModels;
 
 			@Override
-			public void compile(ExpressoQIS session, String sourceName, Set<String> combinedVariables)
-				throws QonfigInterpretationException {
+			public void compile(ExpressoQIS session, String sourceName, LocatedFilePosition sourceDeclaredLocation,
+				Map<String, LocatedFilePosition> combinedVariables) throws QonfigInterpretationException {
 				theReverseModels = session.getExpressoEnv().getModels().wrap("mapRepReverseModel");
 				sourcePlaceholder = theReverseModels.withRuntimeValue(sourceName, ModelTypes.Value,
-					() -> ModelTypes.Value.forType(theSourceType));
+					() -> ModelTypes.Value.forType(theSourceType), sourceDeclaredLocation);
 				targetPlaceholder = theReverseModels.withRuntimeValue(targetName, ModelTypes.Value,
-					() -> ModelTypes.Value.forType(theTargetType));
+					() -> ModelTypes.Value.forType(theTargetType), targetDeclaredLocation);
 				combinedValues = new LinkedHashMap<>();
-				for (String combined : combinedVariables)
-					combinedValues.put(combined, theReverseModels.withRuntimeValue(combined, ModelTypes.Value,
-						() -> ModelTypes.Value.forType(theCombinedTypes.get(combined))));
+				for (Map.Entry<String, LocatedFilePosition> combined : combinedVariables.entrySet())
+					combinedValues.put(combined.getKey(), theReverseModels.withRuntimeValue(combined.getKey(), ModelTypes.Value,
+						() -> ModelTypes.Value.forType(theCombinedTypes.get(combined.getKey())), combined.getValue()));
 
 				session.setModels(theReverseModels, null);
 			}
@@ -3981,6 +3992,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 			throw new QonfigInterpretationException("Illegal name for target-as: '" + targetName + "'",
 				reverse.getAttributeValuePosition("target-as", 0), targetName.length(), e);
 		}
+		LocatedFilePosition targetDeclaredLocation = reverse.getAttributeValuePosition("target-as", 0);
 		return new CompiledMapReverse() {
 			private RuntimeValuePlaceholder<SettableValue<?>, ? extends SettableValue<?>> sourcePlaceholder;
 			private RuntimeValuePlaceholder<SettableValue<?>, ? extends SettableValue<?>> targetPlaceholder;
@@ -3993,17 +4005,17 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 			private ObservableModelSet.Builder theReverseModels;
 
 			@Override
-			public void compile(ExpressoQIS session, String sourceName, Set<String> combinedVariables)
-				throws QonfigInterpretationException {
+			public void compile(ExpressoQIS session, String sourceName, LocatedFilePosition sourceDeclaredLocation,
+				Map<String, LocatedFilePosition> combinedVariables) throws QonfigInterpretationException {
 				theReverseModels = session.getExpressoEnv().getModels().wrap("mapRepReverseModel");
 				sourcePlaceholder = theReverseModels.withRuntimeValue(sourceName, ModelTypes.Value,
-					() -> ModelTypes.Value.forType(theSourceType));
+					() -> ModelTypes.Value.forType(theSourceType), sourceDeclaredLocation);
 				targetPlaceholder = theReverseModels.withRuntimeValue(targetName, ModelTypes.Value,
-					() -> ModelTypes.Value.forType(theTargetType));
+					() -> ModelTypes.Value.forType(theTargetType), targetDeclaredLocation);
 				combinedValues = new LinkedHashMap<>();
-				for (String combined : combinedVariables)
-					combinedValues.put(combined, theReverseModels.withRuntimeValue(combined, ModelTypes.Value,
-						() -> ModelTypes.Value.forType(theCombinedTypes.get(combined))));
+				for (Map.Entry<String, LocatedFilePosition> combined : combinedVariables.entrySet())
+					combinedValues.put(combined.getKey(), theReverseModels.withRuntimeValue(combined.getKey(), ModelTypes.Value,
+						() -> ModelTypes.Value.forType(theCombinedTypes.get(combined.getKey())), combined.getValue()));
 
 				session.setModels(theReverseModels, null);
 			}
@@ -4202,11 +4214,11 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 	private ParsedSorting parseSorting(ExpressoQIS session) throws QonfigInterpretationException {
 		String valueAs = session.getAttributeText("sort-value-as");
 		String compareValueAs = session.getAttributeText("sort-compare-value-as");
+		LocatedFilePosition valuePos = session.getAttributeValuePosition("sort-value-as", 0);
+		LocatedFilePosition compareValuePos = session.getAttributeValuePosition("sort-compare-value-as", 0);
 		CompiledExpression sortWith = session.getAttributeExpression("sort-with");
 		List<ExpressoQIS> sortBy = session.forChildren("sort-by");
 		boolean ascending = session.getAttribute("ascending", boolean.class);
-		// ModelInstanceType.SingleTyped<SettableValue<?>, Comparator<T>, SettableValue<Comparator<T>>> compareType = ModelTypes.Value
-		// .forType(TypeTokens.get().keyFor(Comparator.class).parameterized(type));
 		ExpressoEnv env = session.getExpressoEnv();
 		if (sortWith != null) {
 			if (!sortBy.isEmpty())
@@ -4225,9 +4237,9 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 						.forType(TypeTokens.get().keyFor(Comparator.class).parameterized(type));
 					ObservableModelSet.Builder cModelBuilder = env.getModels().wrap("sortAsModel");
 					ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<T>> valuePlaceholder = cModelBuilder
-						.withRuntimeValue(valueAs, ModelTypes.Value.forType(type));
+						.withRuntimeValue(valueAs, ModelTypes.Value.forType(type), valuePos);
 					ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<T>> compareValuePlaceholder = cModelBuilder
-						.withRuntimeValue(compareValueAs, ModelTypes.Value.forType(type));
+						.withRuntimeValue(compareValueAs, ModelTypes.Value.forType(type), compareValuePos);
 					ObservableModelSet.Built cModel = cModelBuilder.build();
 					ModelValueSynth<SettableValue<?>, SettableValue<Integer>> comparison;
 					try {
@@ -4303,7 +4315,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 					throws ExpressoInterpretationException {
 					ObservableModelSet.Builder cModelBuilder = env.getModels().wrap("sortByModel");
 					ObservableModelSet.RuntimeValuePlaceholder<SettableValue<?>, SettableValue<T>> valuePlaceholder = cModelBuilder
-						.withRuntimeValue(valueAs, ModelTypes.Value.forType(type));
+						.withRuntimeValue(valueAs, ModelTypes.Value.forType(type), valuePos);
 					ObservableModelSet.Built cModel = cModelBuilder.build();
 
 					List<CompiledExpression> subSortingXs = new ArrayList<>(sortBy.size());

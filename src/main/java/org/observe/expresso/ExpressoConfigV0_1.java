@@ -343,7 +343,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 						return SettableValue.of(ObservableConfig.class, config, "Not Settable");
 					});
 				}
-			});
+			}, session.getElement().getPositionInFile());
 			ModelValueSynth<SettableValue<?>, SettableValue<ObservableConfig>> configV;
 			try {
 				configV = (ModelValueSynth<SettableValue<?>, SettableValue<ObservableConfig>>) model.getComponent(CONFIG_NAME);
@@ -358,7 +358,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 				if (path == null)
 					path = name;
 				ConfigModelValue<?, ?, ?> mv = values.get(mvi);
-				model.withMaker(name, createConfigValue(mv, configV, path, child));
+				model.withMaker(name, createConfigValue(mv, configV, path, child), child.getElement().getPositionInFile());
 				mvi++;
 			}
 			return model;

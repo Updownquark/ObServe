@@ -61,7 +61,8 @@ public class TestInterpretation implements QonfigInterpretation {
 				QuickWidget.Def<?> bodyDef = bodySession.interpret(QuickWidget.Def.class);
 				bodyDef.update(bodySession);
 				String quickModelName = bodySession.getAttributeText("name");
-				ObservableModelSet.Builder quickModel = builder.createSubModel(quickModelName);
+				ObservableModelSet.Builder quickModel = builder.createSubModel(quickModelName,
+					bodySession.getElement().getPositionInFile());
 				QuickWidget.Interpreted<?>[] bodyInterpreted = new QuickWidget.Interpreted[1];
 				quickModel.withMaker("$body$", CompiledModelValue.of("$body$", ModelTypes.Value, () -> {
 					bodyInterpreted[0] = bodyDef.interpret(null);
@@ -72,7 +73,7 @@ public class TestInterpretation implements QonfigInterpretation {
 						body.update(bodyInterpreted[0], msi);
 						return SettableValue.of(widgetType, body, "Widgets are not settable");
 					});
-				}));
+				}), bodySession.getElement().getPositionInFile());
 				populateQuickModel(quickModel, bodyDef, quickModelName, //
 					(ModelComponentNode<SettableValue<?>, SettableValue<QuickWidget>>) quickModel.getComponentIfExists("$body$"),
 					bodyInterpreted, new ArrayList<>());
@@ -95,7 +96,7 @@ public class TestInterpretation implements QonfigInterpretation {
 					QuickWidget body = bodySynth.get(models).get();
 					return SettableValue.of(widgetType, (W) find(body, widgetPath, 0), "Widgets are not settable");
 				});
-			}));
+			}), widget.getElement().getPositionInFile());
 		}
 		if (widget instanceof QuickContainer.Def) {
 			if (widget.getParent() != null)

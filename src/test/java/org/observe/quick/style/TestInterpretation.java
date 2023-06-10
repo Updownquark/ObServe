@@ -68,7 +68,8 @@ public class TestInterpretation implements QonfigInterpretation {
 			public void augmentElementModel(ExpressoQIS session, org.observe.expresso.ObservableModelSet.Builder builder)
 				throws QonfigInterpretationException {
 				for (ExpressoQIS value : session.forChildren("styled-value"))
-					builder.withMaker(value.getAttributeText("name"), value.interpret(CompiledModelValue.class));
+					builder.withMaker(value.getAttributeText("name"), value.interpret(CompiledModelValue.class),
+						value.getElement().getPositionInFile());
 			}
 		});
 		return interpreter;
