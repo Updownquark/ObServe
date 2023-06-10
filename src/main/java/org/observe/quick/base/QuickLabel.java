@@ -13,6 +13,8 @@ import org.qommons.io.LocatedPositionedContent;
 import com.google.common.reflect.TypeToken;
 
 public class QuickLabel<T> extends QuickTextWidget.Abstract<T> {
+	public static final String LABEL = "label";
+
 	public static class Def<T, W extends QuickLabel<T>> extends QuickTextWidget.Def.Abstract<T, W> {
 		private String theStaticText;
 		private CompiledExpression theTextExpression;
@@ -35,7 +37,8 @@ public class QuickLabel<T> extends QuickTextWidget.Abstract<T> {
 
 		@Override
 		public void update(ExpressoQIS session) throws QonfigInterpretationException {
-			super.update(session);
+			checkElement(session.getFocusType(), QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, LABEL);
+			super.update(session.asElement(session.getFocusType().getSuperElement()));
 			String staticText = session.getValueText();
 			if (staticText != null && staticText.isEmpty())
 				staticText = null;

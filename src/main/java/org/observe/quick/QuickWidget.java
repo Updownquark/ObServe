@@ -32,6 +32,8 @@ import com.google.common.reflect.TypeToken;
 
 /** The base class for widgets in Quick */
 public interface QuickWidget extends QuickTextElement {
+	public static final String WIDGET = "widget";
+
 	/**
 	 * The definition of a {@link QuickWidget}
 	 *
@@ -123,6 +125,7 @@ public interface QuickWidget extends QuickTextElement {
 
 			@Override
 			public void update(ExpressoQIS session) throws QonfigInterpretationException {
+				checkElement(session.getFocusType(), QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, WIDGET);
 				super.update(session);
 				theBorder = QuickElement.useOrReplace(QuickBorder.Def.class, theBorder, session, "border");
 				theName = session.getAttributeText("name");

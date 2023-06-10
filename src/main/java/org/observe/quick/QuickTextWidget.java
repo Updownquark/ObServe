@@ -22,6 +22,8 @@ import org.qommons.io.SpinnerFormat;
 import com.google.common.reflect.TypeToken;
 
 public interface QuickTextWidget<T> extends QuickValueWidget<T> {
+	public static final String TEXT_WIDGET = "text-widget";
+
 	public static final Format<Double> DEFAULT_DOUBLE_FORMAT = Format.doubleFormat(5)//
 		.printIntFor(5, false)//
 		.withExpCondition(5, 2)//
@@ -77,7 +79,8 @@ public interface QuickTextWidget<T> extends QuickValueWidget<T> {
 
 			@Override
 			public void update(ExpressoQIS session) throws QonfigInterpretationException {
-				super.update(session);
+				checkElement(session.getFocusType(), QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, TEXT_WIDGET);
+				super.update(session.asElement(session.getFocusType().getSuperElement()));
 				theFormat = session.getAttributeExpression("format");
 				isEditable = session.getAttributeExpression("editable");
 			}

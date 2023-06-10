@@ -107,6 +107,8 @@ public interface QuickTableColumn<R, C> {
 	}
 
 	public class ColumnEditing<R, C> extends QuickElement.Abstract implements QuickValueWidget.WidgetValueSupplier<C> {
+		public static final String COLUMN_EDITING = "column-edit";
+
 		public static class Def extends QuickElement.Def.Abstract<ColumnEditing<?, ?>>
 		implements QuickValueWidget.WidgetValueSupplier.Def<ColumnEditing<?, ?>> {
 			private QuickWidget.Def<?> theEditor;
@@ -146,6 +148,8 @@ public interface QuickTableColumn<R, C> {
 
 			@Override
 			public void update(ExpressoQIS session) throws QonfigInterpretationException {
+				checkElement(session.getFocusType(), QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION,
+					COLUMN_EDITING);
 				super.update(session);
 				theEditor = QuickElement.useOrReplace(QuickWidget.Def.class, theEditor, session, "editor");
 				theColumnEditValueName = session.getAttributeText("column-edit-value-name");
@@ -564,6 +568,8 @@ public interface QuickTableColumn<R, C> {
 	}
 
 	public class SingleColumnSet<R, C> extends QuickElement.Abstract implements TableColumnSet<R> {
+		public static final String COLUMN = "column";
+
 		public static class Def extends QuickElement.Def.Abstract<SingleColumnSet<?, ?>>
 		implements TableColumnSet.Def<SingleColumnSet<?, ?>> {
 			private CompiledExpression theName;
@@ -610,6 +616,7 @@ public interface QuickTableColumn<R, C> {
 
 			@Override
 			public void update(ExpressoQIS session) throws QonfigInterpretationException {
+				checkElement(session.getFocusType(), QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, COLUMN);
 				super.update(session);
 				theName = session.getAttributeExpression("name");
 				theColumnValueName = session.getAttributeText("column-value-name");

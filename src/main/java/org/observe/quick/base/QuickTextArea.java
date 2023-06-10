@@ -16,6 +16,8 @@ import org.qommons.config.QonfigInterpretationException;
 import com.google.common.reflect.TypeToken;
 
 public class QuickTextArea<T> extends QuickEditableTextWidget.Abstract<T> {
+	public static final String TEXT_AREA = "text-area";
+
 	public static class Def<T> extends QuickEditableTextWidget.Def.Abstract<T, QuickTextArea<T>> {
 		private CompiledExpression theRows;
 		private CompiledExpression isHtml;
@@ -39,7 +41,8 @@ public class QuickTextArea<T> extends QuickEditableTextWidget.Abstract<T> {
 
 		@Override
 		public void update(ExpressoQIS session) throws QonfigInterpretationException {
-			super.update(session);
+			checkElement(session.getFocusType(), QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, TEXT_AREA);
+			super.update(session.asElement(session.getFocusType().getSuperElement()));
 			theRows = session.getAttributeExpression("rows");
 			isHtml = session.getAttributeExpression("html");
 		}

@@ -65,6 +65,8 @@ public interface QuickKeyListener extends QuickEventListener {
 	}
 
 	public class QuickKeyTypedListener extends QuickEventListener.Abstract implements QuickKeyListener {
+		public static final String KEY_TYPED_LISTENER = "on-type";
+
 		public static class Def extends QuickEventListener.Def.Abstract<QuickKeyTypedListener>
 		implements QuickKeyListener.Def<QuickKeyTypedListener> {
 			private char theCharFilter;
@@ -79,7 +81,11 @@ public interface QuickKeyListener extends QuickEventListener {
 
 			@Override
 			public void update(ExpressoQIS session) throws QonfigInterpretationException {
-				super.update(session);
+				checkElement(session.getFocusType(), QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, KEY_TYPED_LISTENER);
+				super.update(session.asElement(session.getFocusType()// on-type
+					.getSuperElement() // key-listener
+					.getSuperElement() // event-listener
+					));
 				String charFilterStr = session.getAttributeText("char");
 				if (charFilterStr == null || charFilterStr.isEmpty())
 					theCharFilter = 0;
@@ -143,6 +149,10 @@ public interface QuickKeyListener extends QuickEventListener {
 	}
 
 	public class QuickKeyCodeListener extends QuickEventListener.Abstract implements QuickKeyListener {
+		public static final String KEY_CODE_LISTENER = "key-code-listener";
+		public static final String KEY_PRESSED_LISTENER = "on-key-press";
+		public static final String KEY_RELEASED_LISTENER = "on-key-release";
+
 		public static class Def extends QuickEventListener.Def.Abstract<QuickKeyCodeListener>
 		implements QuickKeyListener.Def<QuickKeyCodeListener> {
 			private final boolean isPressed;
@@ -163,7 +173,19 @@ public interface QuickKeyListener extends QuickEventListener {
 
 			@Override
 			public void update(ExpressoQIS session) throws QonfigInterpretationException {
-				super.update(session);
+				switch (session.getFocusType().getName()) {
+				case KEY_PRESSED_LISTENER:
+				case KEY_RELEASED_LISTENER: // Don't need a separate subclass for these
+					session = session.asElement(session.getFocusType()// on-key-press or on-key-release
+						.getSuperElement()// key-code-listener
+						);
+					break;
+				default:
+				}
+				checkElement(session.getFocusType(), QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, KEY_CODE_LISTENER);
+				super.update(session.asElement(session.getFocusType().getSuperElement()// key-listener
+					.getSuperElement() // event-listener
+				));
 				String keyCodeStr = session.getAttributeText("key");
 				if (keyCodeStr == null || keyCodeStr.isEmpty())
 					theKeyCode = null;

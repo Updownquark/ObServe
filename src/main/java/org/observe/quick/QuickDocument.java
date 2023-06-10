@@ -18,6 +18,8 @@ import org.qommons.config.QonfigInterpretationException;
 
 /** The root of a quick file, containing all information needed to power an application */
 public class QuickDocument extends QuickElement.Abstract {
+	public static final String QUICK = "quick";
+
 	/** The definition of a Quick document */
 	public static class Def extends QuickElement.Def.Abstract<QuickDocument> {
 		private QuickHeadSection.Def theHead;
@@ -43,6 +45,7 @@ public class QuickDocument extends QuickElement.Abstract {
 
 		@Override
 		public void update(ExpressoQIS session) throws QonfigInterpretationException {
+			checkElement(session.getFocusType(), QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, QUICK);
 			super.update(session);
 			theHead = QuickElement.useOrReplace(QuickHeadSection.Def.class, theHead, session, "head");
 			if (theHead != null) {
@@ -113,6 +116,8 @@ public class QuickDocument extends QuickElement.Abstract {
 
 	/** Represents the head section of a Quick document, containing class-view, model, and style information */
 	public static class QuickHeadSection extends QuickElement.Interpreted.Abstract<QuickElement> {
+		public static final String HEAD = "head";
+
 		private final ClassView theClassView;
 		private final InterpretedModelSet theModels;
 		private final QuickStyleSheet theStyleSheet;
@@ -180,6 +185,7 @@ public class QuickDocument extends QuickElement.Abstract {
 
 			@Override
 			public void update(ExpressoQIS session) throws QonfigInterpretationException {
+				checkElement(session.getFocusType(), QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, HEAD);
 				super.update(session);
 				ClassView cv = session.interpretChildren("imports", ClassView.class).peekFirst();
 				if (cv == null) {

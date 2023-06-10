@@ -18,6 +18,8 @@ import org.qommons.config.QonfigInterpretationException;
 import com.google.common.reflect.TypeToken;
 
 public class QuickSplit extends QuickContainer.Abstract<QuickWidget> {
+	public static final String SPLIT = "split";
+
 	public static class Def<S extends QuickSplit> extends QuickContainer.Def.Abstract<S, QuickWidget> {
 		private boolean isVertical;
 		private CompiledExpression theSplitPosition;
@@ -36,7 +38,8 @@ public class QuickSplit extends QuickContainer.Abstract<QuickWidget> {
 
 		@Override
 		public void update(ExpressoQIS session) throws QonfigInterpretationException {
-			super.update(session);
+			checkElement(session.getFocusType(), QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, SPLIT);
+			super.update(session.asElement(session.getFocusType().getSuperElement()));
 			switch (session.getAttributeText("orientation")) {
 			case "horizontal":
 				isVertical = false;

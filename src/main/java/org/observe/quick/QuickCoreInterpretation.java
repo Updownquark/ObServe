@@ -47,36 +47,42 @@ public class QuickCoreInterpretation implements QonfigInterpretation {
 
 	@Override
 	public Builder configureInterpreter(Builder interpreter) {
-		interpreter.createWith("quick", QuickDocument.Def.class, session -> new QuickDocument.Def(null, session.getElement()));
-		interpreter.createWith("head", QuickDocument.QuickHeadSection.Def.class,
+		interpreter.createWith(QuickDocument.QUICK, QuickDocument.Def.class, session -> new QuickDocument.Def(null, session.getElement()));
+		interpreter.createWith(QuickDocument.QuickHeadSection.HEAD, QuickDocument.QuickHeadSection.Def.class,
 			session -> new QuickDocument.QuickHeadSection.Def((QuickDocument.Def) session.get(QuickElement.SESSION_QUICK_ELEMENT),
 				session.getElement()));
 		interpreter.createWith("window", QuickWindow.Def.class,
 			session -> interpretAddOn(session, (p, ao) -> new QuickWindow.Def(ao, (QuickDocument.Def) p)));
-		interpreter.createWith("line-border", QuickBorder.LineBorder.Def.class,
+		interpreter.createWith(QuickBorder.LineBorder.LINE_BORDER, QuickBorder.LineBorder.Def.class,
 			session -> interpretQuick(session, QuickBorder.LineBorder.Def::new));
-		interpreter.createWith("titled-border", QuickBorder.TitledBorder.Def.class,
+		interpreter.createWith(QuickBorder.TitledBorder.TITLED_BORDER, QuickBorder.TitledBorder.Def.class,
 			session -> interpretQuick(session, QuickBorder.TitledBorder.Def::new));
 
-		interpreter.createWith("on-click", QuickMouseListener.QuickMouseButtonListener.Def.class, session -> interpretQuick(session,
-			(p, el) -> new QuickMouseListener.QuickMouseButtonListener.Def(p, el, QuickMouseListener.MouseButtonEventType.Click)));
-		interpreter.createWith("on-mouse-press", QuickMouseListener.QuickMouseButtonListener.Def.class, session -> interpretQuick(session,
-			(p, el) -> new QuickMouseListener.QuickMouseButtonListener.Def(p, el, QuickMouseListener.MouseButtonEventType.Press)));
-		interpreter.createWith("on-mouse-release", QuickMouseListener.QuickMouseButtonListener.Def.class, session -> interpretQuick(session,
-			(p, el) -> new QuickMouseListener.QuickMouseButtonListener.Def(p, el, QuickMouseListener.MouseButtonEventType.Release)));
-		interpreter.createWith("on-mouse-move", QuickMouseListener.QuickMouseMoveListener.Def.class, session -> interpretQuick(session,
-			(p, el) -> new QuickMouseListener.QuickMouseMoveListener.Def(p, el, QuickMouseListener.MouseMoveEventType.Move)));
-		interpreter.createWith("on-mouse-enter", QuickMouseListener.QuickMouseMoveListener.Def.class, session -> interpretQuick(session,
-			(p, el) -> new QuickMouseListener.QuickMouseMoveListener.Def(p, el, QuickMouseListener.MouseMoveEventType.Enter)));
-		interpreter.createWith("on-mouse-exit", QuickMouseListener.QuickMouseMoveListener.Def.class, session -> interpretQuick(session,
-			(p, el) -> new QuickMouseListener.QuickMouseMoveListener.Def(p, el, QuickMouseListener.MouseMoveEventType.Exit)));
-		interpreter.createWith("on-scroll", QuickMouseListener.QuickScrollListener.Def.class,
+		interpreter.createWith(QuickMouseListener.MouseButtonEventType.Click.elementName,
+			QuickMouseListener.QuickMouseButtonListener.Def.class, session -> interpretQuick(session,
+				(p, el) -> new QuickMouseListener.QuickMouseButtonListener.Def(p, el, QuickMouseListener.MouseButtonEventType.Click)));
+		interpreter.createWith(QuickMouseListener.MouseButtonEventType.Press.elementName,
+			QuickMouseListener.QuickMouseButtonListener.Def.class, session -> interpretQuick(session,
+				(p, el) -> new QuickMouseListener.QuickMouseButtonListener.Def(p, el, QuickMouseListener.MouseButtonEventType.Press)));
+		interpreter.createWith(QuickMouseListener.MouseButtonEventType.Release.elementName,
+			QuickMouseListener.QuickMouseButtonListener.Def.class, session -> interpretQuick(session,
+				(p, el) -> new QuickMouseListener.QuickMouseButtonListener.Def(p, el, QuickMouseListener.MouseButtonEventType.Release)));
+		interpreter.createWith(QuickMouseListener.MouseMoveEventType.Move.elementName, QuickMouseListener.QuickMouseMoveListener.Def.class,
+			session -> interpretQuick(session,
+				(p, el) -> new QuickMouseListener.QuickMouseMoveListener.Def(p, el, QuickMouseListener.MouseMoveEventType.Move)));
+		interpreter.createWith(QuickMouseListener.MouseMoveEventType.Enter.elementName, QuickMouseListener.QuickMouseMoveListener.Def.class,
+			session -> interpretQuick(session,
+				(p, el) -> new QuickMouseListener.QuickMouseMoveListener.Def(p, el, QuickMouseListener.MouseMoveEventType.Enter)));
+		interpreter.createWith(QuickMouseListener.MouseMoveEventType.Exit.elementName, QuickMouseListener.QuickMouseMoveListener.Def.class,
+			session -> interpretQuick(session,
+				(p, el) -> new QuickMouseListener.QuickMouseMoveListener.Def(p, el, QuickMouseListener.MouseMoveEventType.Exit)));
+		interpreter.createWith(QuickMouseListener.QuickScrollListener.SCROLL_LISTENER, QuickMouseListener.QuickScrollListener.Def.class,
 			session -> interpretQuick(session, QuickMouseListener.QuickScrollListener.Def::new));
-		interpreter.createWith("on-type", QuickKeyListener.QuickKeyTypedListener.Def.class,
+		interpreter.createWith(QuickKeyListener.QuickKeyTypedListener.KEY_TYPED_LISTENER, QuickKeyListener.QuickKeyTypedListener.Def.class,
 			session -> interpretQuick(session, QuickKeyListener.QuickKeyTypedListener.Def::new));
-		interpreter.createWith("on-key-press", QuickKeyListener.QuickKeyCodeListener.Def.class,
+		interpreter.createWith(QuickKeyListener.QuickKeyCodeListener.KEY_PRESSED_LISTENER, QuickKeyListener.QuickKeyCodeListener.Def.class,
 			session -> interpretQuick(session, (p, el) -> new QuickKeyListener.QuickKeyCodeListener.Def(p, el, true)));
-		interpreter.createWith("on-key-release", QuickKeyListener.QuickKeyCodeListener.Def.class,
+		interpreter.createWith(QuickKeyListener.QuickKeyCodeListener.KEY_RELEASED_LISTENER, QuickKeyListener.QuickKeyCodeListener.Def.class,
 			session -> interpretQuick(session, (p, el) -> new QuickKeyListener.QuickKeyCodeListener.Def(p, el, false)));
 
 		interpreter.createWith("renderer", QuickRenderer.Def.class,

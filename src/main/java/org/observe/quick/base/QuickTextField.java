@@ -16,6 +16,8 @@ import org.qommons.config.QonfigInterpretationException;
 import com.google.common.reflect.TypeToken;
 
 public class QuickTextField<T> extends QuickEditableTextWidget.Abstract<T> {
+	public static final String TEXT_FIELD = "text-field";
+
 	public static class Def<T> extends QuickEditableTextWidget.Def.Abstract<T, QuickTextField<T>> {
 		private Integer theColumns;
 		private CompiledExpression theEmptyText;
@@ -39,7 +41,8 @@ public class QuickTextField<T> extends QuickEditableTextWidget.Abstract<T> {
 
 		@Override
 		public void update(ExpressoQIS session) throws QonfigInterpretationException {
-			super.update(session);
+			checkElement(session.getFocusType(), QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, TEXT_FIELD);
+			super.update(session.asElement(session.getFocusType().getSuperElement()));
 			theColumns = session.getAttribute("columns", Integer.class);
 			theEmptyText = session.getAttributeExpression("empty-text");
 		}

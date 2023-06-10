@@ -1,16 +1,26 @@
 package org.observe.quick.base;
 
+import org.observe.expresso.ExpressoQIS;
 import org.observe.quick.QuickElement;
 import org.observe.quick.QuickValueWidget;
 import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElement;
+import org.qommons.config.QonfigInterpretationException;
 
 import com.google.common.reflect.TypeToken;
 
 public class QuickCheckBox extends QuickValueWidget.Abstract<Boolean> {
+	public static final String CHECK_BOX = "check-box";
+
 	public static class Def extends QuickValueWidget.Def.Abstract<Boolean, QuickCheckBox> {
 		public Def(QuickElement.Def<?> parent, QonfigElement element) {
 			super(parent, element);
+		}
+
+		@Override
+		public void update(ExpressoQIS session) throws QonfigInterpretationException {
+			checkElement(session.getFocusType(), QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, CHECK_BOX);
+			super.update(session.asElement(session.getFocusType().getSuperElement()));
 		}
 
 		@Override

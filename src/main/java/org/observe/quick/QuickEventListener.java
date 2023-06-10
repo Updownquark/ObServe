@@ -22,6 +22,8 @@ import org.qommons.config.QonfigInterpretationException;
 
 public interface QuickEventListener extends QuickElement {
 	public interface Def<L extends QuickEventListener> extends QuickElement.Def<L> {
+		public static final String EVENT_LISTENER = "event-listener";
+
 		List<CompiledExpression> getFilters();
 
 		CompiledExpression getAction();
@@ -49,6 +51,7 @@ public interface QuickEventListener extends QuickElement {
 
 			@Override
 			public void update(ExpressoQIS session) throws QonfigInterpretationException {
+				checkElement(session.getFocusType(), QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, EVENT_LISTENER);
 				super.update(session);
 				theFilters.clear();
 				for (ExpressoQIS filter : session.forChildren("filter"))

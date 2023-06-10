@@ -41,6 +41,8 @@ public interface ValueAction<T> extends QuickElement {
 		Interpreted<? extends T, ? extends A> interpret(QuickElement.Interpreted<?> parent, TypeToken<? extends T> valueType);
 
 		public abstract class Abstract<T, A extends ValueAction<T>> extends QuickElement.Def.Abstract<A> implements Def<T, A> {
+			public static final String ABTRACT_VALUE_ACTION = "abstract-value-action";
+
 			private CompiledExpression theName;
 			private boolean isButton;
 			private boolean isPopup;
@@ -90,6 +92,8 @@ public interface ValueAction<T> extends QuickElement {
 
 			@Override
 			public void update(ExpressoQIS session) throws QonfigInterpretationException {
+				checkElement(session.getFocusType(), QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION,
+					ABTRACT_VALUE_ACTION);
 				super.update(session);
 				theName = session.getAttributeExpression("name");
 				isButton = session.getAttribute("as-button", boolean.class);
@@ -320,6 +324,8 @@ public interface ValueAction<T> extends QuickElement {
 	}
 
 	public class Single<T> extends ValueAction.Abstract<T> {
+		public static final String SINGLE_VALUE_ACTION = "value-action";
+
 		public static class Def<T, A extends Single<T>> extends ValueAction.Def.Abstract<T, A> {
 			private String theValueName;
 			private boolean allowForMultiple;
@@ -338,7 +344,9 @@ public interface ValueAction<T> extends QuickElement {
 
 			@Override
 			public void update(ExpressoQIS session) throws QonfigInterpretationException {
-				super.update(session);
+				checkElement(session.getFocusType(), QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION,
+					SINGLE_VALUE_ACTION);
+				super.update(session.asElement(session.getFocusType().getSuperElement()));
 				theValueName = session.getAttributeText("value-name");
 				allowForMultiple = session.getAttribute("allow-for-multiple", boolean.class);
 			}
@@ -406,6 +414,8 @@ public interface ValueAction<T> extends QuickElement {
 	}
 
 	public class Multi<T> extends ValueAction.Abstract<T> {
+		public static final String MULTI_VALUE_ACTION = "multi-value-action";
+
 		public static class Def<T, A extends Multi<T>> extends ValueAction.Def.Abstract<T, A> {
 			private String theValuesName;
 			private boolean allowForEmpty;
@@ -424,7 +434,9 @@ public interface ValueAction<T> extends QuickElement {
 
 			@Override
 			public void update(ExpressoQIS session) throws QonfigInterpretationException {
-				super.update(session);
+				checkElement(session.getFocusType(), QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION,
+					MULTI_VALUE_ACTION);
+				super.update(session.asElement(session.getFocusType().getSuperElement()));
 				theValuesName = session.getAttributeText("values-name");
 				allowForEmpty = session.getAttribute("allow-for-empty", boolean.class);
 			}

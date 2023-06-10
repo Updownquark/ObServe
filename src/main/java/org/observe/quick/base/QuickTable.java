@@ -24,6 +24,8 @@ import org.qommons.config.QonfigInterpretationException;
 import com.google.common.reflect.TypeToken;
 
 public class QuickTable<R> extends TabularWidget.Abstract<R> {
+	public static final String TABLE = "table";
+
 	public static class Def extends TabularWidget.Def.Abstract<QuickTable<?>> {
 		private CompiledExpression theRows;
 		private String theValueName;
@@ -61,7 +63,8 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 
 		@Override
 		public void update(ExpressoQIS session) throws QonfigInterpretationException {
-			super.update(session);
+			checkElement(session.getFocusType(), QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, TABLE);
+			super.update(session); // table is a tabular widget, tabular-widget is an add-on. Don't get the multi-value-widget super
 			theRows = session.getAttributeExpression("rows");
 			theValueName = session.getAttributeText("value-name");
 			theSelection = session.getAttributeExpression("selection");

@@ -19,6 +19,8 @@ import org.qommons.config.QonfigInterpretationException;
 import com.google.common.reflect.TypeToken;
 
 public class QuickBox extends QuickContainer.Abstract<QuickWidget> {
+	public static final String BOX = "box";
+
 	public static class Def<W extends QuickBox> extends QuickContainer.Def.Abstract<W, QuickWidget> {
 		private CompiledExpression theOpacity;
 
@@ -36,7 +38,8 @@ public class QuickBox extends QuickContainer.Abstract<QuickWidget> {
 
 		@Override
 		public void update(ExpressoQIS session) throws QonfigInterpretationException {
-			super.update(session);
+			checkElement(session.getFocusType(), QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, BOX);
+			super.update(session.asElement(session.getFocusType().getSuperElement()));
 			if (getAddOn(QuickLayout.Def.class) == null) {
 				String layout = session.getAttributeText("layout");
 				throw new QonfigInterpretationException("No Quick interpretationfor layout " + layout,

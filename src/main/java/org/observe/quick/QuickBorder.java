@@ -42,6 +42,8 @@ public interface QuickBorder extends QuickStyledElement {
 	QuickBorderStyle getStyle();
 
 	public class LineBorder extends QuickStyledElement.Abstract implements QuickBorder {
+		public static final String LINE_BORDER = "line-border";
+
 		public static class Def<B extends LineBorder> extends QuickStyledElement.Def.Abstract<B> implements QuickBorder.Def<B> {
 			public Def(QuickElement.Def<?> parent, QonfigElement element) {
 				super(parent, element);
@@ -50,6 +52,12 @@ public interface QuickBorder extends QuickStyledElement {
 			@Override
 			public QuickBorderStyle.Def getStyle() {
 				return (QuickBorderStyle.Def) super.getStyle();
+			}
+
+			@Override
+			public void update(ExpressoQIS session) throws QonfigInterpretationException {
+				checkElement(session.getFocusType(), QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, LINE_BORDER);
+				super.update(session.asElement(session.getFocusType().getSuperElement()));
 			}
 
 			@Override
@@ -96,6 +104,8 @@ public interface QuickBorder extends QuickStyledElement {
 	}
 
 	public class TitledBorder extends LineBorder {
+		public static final String TITLED_BORDER = "titled-border";
+
 		public static class Def<B extends TitledBorder> extends LineBorder.Def<B> {
 			private CompiledExpression theTitle;
 
@@ -109,7 +119,8 @@ public interface QuickBorder extends QuickStyledElement {
 
 			@Override
 			public void update(ExpressoQIS session) throws QonfigInterpretationException {
-				super.update(session);
+				checkElement(session.getFocusType(), QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, TITLED_BORDER);
+				super.update(session.asElement(session.getFocusType().getSuperElement()));
 				theTitle = session.getAttributeExpression("title");
 			}
 

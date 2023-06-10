@@ -22,6 +22,8 @@ import org.qommons.ex.ExFunction;
 import com.google.common.reflect.TypeToken;
 
 public class QuickButton extends QuickWidget.Abstract {
+	public static final String BUTTON = "button";
+
 	public static class Def<B extends QuickButton> extends QuickWidget.Def.Abstract<B> {
 		private CompiledExpression theText;
 		private CompiledExpression theIcon;
@@ -45,7 +47,8 @@ public class QuickButton extends QuickWidget.Abstract {
 
 		@Override
 		public void update(ExpressoQIS session) throws QonfigInterpretationException {
-			super.update(session);
+			checkElement(session.getFocusType(), QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, BUTTON);
+			super.update(session.asElement(session.getFocusType().getSuperElement()));
 			theText = session.getValueExpression();
 			theIcon = session.getAttributeExpression("icon");
 			theAction = session.getAttributeExpression("action");

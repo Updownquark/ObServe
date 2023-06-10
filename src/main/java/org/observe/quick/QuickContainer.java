@@ -17,6 +17,8 @@ import org.qommons.tree.BetterTreeList;
  * @param <C> The type of widgets in this container's content
  */
 public interface QuickContainer<C extends QuickWidget> extends QuickWidget {
+	public static final String CONTAINER = "container";
+
 	/**
 	 * The definition of a QuickContainer
 	 *
@@ -56,7 +58,8 @@ public interface QuickContainer<C extends QuickWidget> extends QuickWidget {
 
 			@Override
 			public void update(ExpressoQIS session) throws QonfigInterpretationException {
-				super.update(session);
+				checkElement(session.getFocusType(), QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, CONTAINER);
+				super.update(session.asElement(session.getFocusType().getSuperElement()));
 				QuickElement.syncDefs(QuickWidget.Def.class, theContents, session.forChildren("content"));
 			}
 

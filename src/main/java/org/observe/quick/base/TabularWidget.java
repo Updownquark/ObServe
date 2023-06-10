@@ -43,7 +43,9 @@ public interface TabularWidget<R> extends MultiValueWidget<R>, RowTyped<R> {
 
 			@Override
 			public void update(ExpressoQIS session) throws QonfigInterpretationException {
-				super.update(session);
+				super.update(session.asElement(session.getFocusType().getSuperElement() // multi-value-widget
+					.getSuperElement() // widget
+				));
 				CollectionUtils
 				.synchronize(theColumns, session.forChildren("columns"),
 					(c, s) -> QuickElement.typesEqual(c.getElement(), s.getElement()))//

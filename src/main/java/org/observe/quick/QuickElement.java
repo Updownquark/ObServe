@@ -21,10 +21,12 @@ import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.TypeConversionException;
 import org.qommons.ClassMap;
 import org.qommons.Identifiable;
+import org.qommons.Version;
 import org.qommons.collect.CollectionUtils;
 import org.qommons.config.AbstractQIS;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigElement;
+import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigInterpreterCore;
 import org.qommons.io.ErrorReporting;
@@ -202,6 +204,15 @@ public interface QuickElement extends Identifiable {
 					for (QuickAddOn.Def<? super E, ?> addOn : theAddOns.getAllValues())
 						addOn.update(session.asElement(addOn.getType()));
 				}
+			}
+
+			public void checkElement(QonfigElementOrAddOn element, String tkName, Version tkVersion, String elementName) {
+				if (!element.getDeclarer().getName().equals(tkName) || element.getDeclarer().getMajorVersion() != tkVersion.major
+					|| element.getDeclarer().getMinorVersion() != tkVersion.minor || !element.getName().equals(elementName))
+					throw new IllegalStateException(
+						"This class is designed against " + tkName + " v" + tkVersion.major + "." + tkVersion.minor + " " + elementName
+						+ ", not " + element.getDeclarer().getName() + " v" + element.getDeclarer().getMajorVersion() + "."
+						+ element.getDeclarer().getMinorVersion() + " " + element.getName());
 			}
 
 			private void addAddOn(AbstractQIS<?> session) throws QonfigInterpretationException {

@@ -11,9 +11,17 @@ import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigInterpretationException;
 
 public abstract class QuickMouseListener extends QuickEventListener.Abstract {
+	public static final String MOUSE_LISTENER = "mouse-listener";
+
 	public static abstract class Def<L extends QuickMouseListener> extends QuickEventListener.Def.Abstract<L> {
 		protected Def(QuickElement.Def<?> parent, QonfigElement element) {
 			super(parent, element);
+		}
+
+		@Override
+		public void update(ExpressoQIS session) throws QonfigInterpretationException {
+			checkElement(session.getFocusType(), QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, MOUSE_LISTENER);
+			super.update(session.asElement(session.getFocusType().getSuperElement()));
 		}
 
 		@Override
@@ -91,11 +99,23 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 	}
 
 	public enum MouseMoveEventType {
-		Move, Enter, Exit
+		Move("on-mouse-move"), Enter("on-mouse-enter"), Exit("on-mouse-exit");
+
+		public final String elementName;
+
+		private MouseMoveEventType(String elementName) {
+			this.elementName = elementName;
+		}
 	}
 
 	public enum MouseButtonEventType {
-		Press, Release, Click
+		Press("on-mouse-press"), Release("on-mouse-release"), Click("on-click");
+
+		public final String elementName;
+
+		private MouseButtonEventType(String elementName) {
+			this.elementName = elementName;
+		}
 	}
 
 	public interface MouseButtonListenerContext extends MouseListenerContext {
@@ -154,6 +174,13 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 			}
 
 			@Override
+			public void update(ExpressoQIS session) throws QonfigInterpretationException {
+				checkElement(session.getFocusType(), QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION,
+					theEventType.elementName);
+				super.update(session.asElement(session.getFocusType().getSuperElement()));
+			}
+
+			@Override
 			public Interpreted interpret(QuickElement.Interpreted<?> parent) {
 				return new Interpreted(this, parent);
 			}
@@ -194,6 +221,7 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 	}
 
 	public static class QuickMouseButtonListener extends QuickMouseListener {
+		public static final String MOUSE_PRESS_LISTENER = "on-mouse-press";
 		public static class Def extends QuickMouseListener.Def<QuickMouseButtonListener> {
 			private final MouseButtonEventType theEventType;
 			private MouseButton theButton;
@@ -213,7 +241,11 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 
 			@Override
 			public void update(ExpressoQIS session) throws QonfigInterpretationException {
-				super.update(session);
+				checkElement(session.getFocusType(), QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION,
+					theEventType.elementName);
+				super.update(session.asElement(session.getFocusType().getSuperElement() // mouse-button-listener
+					.getSuperElement() // mouse-listener
+					));
 				String button = session.getAttributeText("button");
 				if (button == null)
 					theButton = null;
@@ -291,9 +323,17 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 	}
 
 	public static class QuickScrollListener extends QuickMouseListener {
+		public static final String SCROLL_LISTENER = "on-scroll";
+
 		public static class Def extends QuickMouseListener.Def<QuickScrollListener> {
 			public Def(QuickElement.Def<?> parent, QonfigElement element) {
 				super(parent, element);
+			}
+
+			@Override
+			public void update(ExpressoQIS session) throws QonfigInterpretationException {
+				checkElement(session.getFocusType(), QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, SCROLL_LISTENER);
+				super.update(session.asElement(session.getFocusType().getSuperElement()));
 			}
 
 			@Override

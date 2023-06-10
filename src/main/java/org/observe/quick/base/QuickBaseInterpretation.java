@@ -42,10 +42,10 @@ import com.google.common.reflect.TypeToken;
 /** {@link QonfigInterpretation} for the Quick-Base toolkit */
 public class QuickBaseInterpretation implements QonfigInterpretation {
 	/** The name of the toolkit */
-	public static final String TOOLKIT_NAME = "Quick-Base";
+	public static final String NAME = "Quick-Base";
 
 	/** The version of the toolkit */
-	public static final Version TOOLKIT_VERSION = new Version(0, 1, 0);
+	public static final Version VERSION = new Version(0, 1, 0);
 
 	static {
 		TypeTokens.get().addSupplementaryCast(Integer.class, QuickSize.class, new TypeTokens.SupplementaryCast<Integer, QuickSize>() {
@@ -68,12 +68,12 @@ public class QuickBaseInterpretation implements QonfigInterpretation {
 
 	@Override
 	public String getToolkitName() {
-		return TOOLKIT_NAME;
+		return NAME;
 	}
 
 	@Override
 	public Version getVersion() {
-		return TOOLKIT_VERSION;
+		return VERSION;
 	}
 
 	@Override
@@ -83,7 +83,8 @@ public class QuickBaseInterpretation implements QonfigInterpretation {
 	@Override
 	public QonfigInterpreterCore.Builder configureInterpreter(Builder interpreter) {
 		// General setup
-		interpreter.modifyWith("quick", QuickDocument.Def.class, new QonfigInterpreterCore.QonfigValueModifier<QuickDocument.Def>() {
+		interpreter.modifyWith(QuickDocument.QUICK, QuickDocument.Def.class,
+			new QonfigInterpreterCore.QonfigValueModifier<QuickDocument.Def>() {
 			@Override
 			public Object prepareSession(CoreSession session) throws QonfigInterpretationException {
 				ExpressoQIS exS = session.as(ExpressoQIS.class);
@@ -103,24 +104,25 @@ public class QuickBaseInterpretation implements QonfigInterpretation {
 		});
 
 		// Simple widgets
-		interpreter.createWith("label", QuickLabel.Def.class,
+		interpreter.createWith(QuickLabel.LABEL, QuickLabel.Def.class,
 			session -> QuickCoreInterpretation.interpretQuick(session, QuickLabel.Def::new));
-		interpreter.createWith("text-field", QuickTextField.Def.class,
+		interpreter.createWith(QuickTextField.TEXT_FIELD, QuickTextField.Def.class,
 			session -> QuickCoreInterpretation.interpretQuick(session, QuickTextField.Def::new));
-		interpreter.createWith("check-box", QuickCheckBox.Def.class,
+		interpreter.createWith(QuickCheckBox.CHECK_BOX, QuickCheckBox.Def.class,
 			session -> QuickCoreInterpretation.interpretQuick(session, QuickCheckBox.Def::new));
-		interpreter.createWith("button", QuickButton.Def.class,
+		interpreter.createWith(QuickButton.BUTTON, QuickButton.Def.class,
 			session -> QuickCoreInterpretation.interpretQuick(session, QuickButton.Def::new));
-		interpreter.createWith("text-area", QuickTextArea.Def.class,
+		interpreter.createWith(QuickTextArea.TEXT_AREA, QuickTextArea.Def.class,
 			session -> QuickCoreInterpretation.interpretQuick(session, QuickTextArea.Def::new));
 
 		// Containers
-		interpreter.createWith("box", QuickBox.Def.class, session -> QuickCoreInterpretation.interpretQuick(session, QuickBox.Def::new));
-		interpreter.createWith("field-panel", QuickFieldPanel.Def.class,
+		interpreter.createWith(QuickBox.BOX, QuickBox.Def.class,
+			session -> QuickCoreInterpretation.interpretQuick(session, QuickBox.Def::new));
+		interpreter.createWith(QuickFieldPanel.FIELD_PANEL, QuickFieldPanel.Def.class,
 			session -> QuickCoreInterpretation.interpretQuick(session, QuickFieldPanel.Def::new));
 		interpreter.createWith("field", QuickField.Def.class,
 			session -> QuickCoreInterpretation.interpretAddOn(session, (p, ao) -> new QuickField.Def(ao, (QuickWidget.Def<?>) p)));
-		interpreter.createWith("split", QuickSplit.Def.class,
+		interpreter.createWith(QuickSplit.SPLIT, QuickSplit.Def.class,
 			session -> QuickCoreInterpretation.interpretQuick(session, QuickSplit.Def::new));
 
 		// Box layouts
@@ -144,22 +146,23 @@ public class QuickBaseInterpretation implements QonfigInterpretation {
 			session -> QuickCoreInterpretation.interpretAddOn(session, (p, ao) -> new Sizeable.Def.Vertical(ao, p)));
 
 		// Table
-		interpreter.createWith("table", QuickTable.Def.class,
+		interpreter.createWith(QuickTable.TABLE, QuickTable.Def.class,
 			session -> QuickCoreInterpretation.interpretQuick(session, QuickTable.Def::new));
-		interpreter.createWith("column", QuickTableColumn.SingleColumnSet.Def.class,
+		interpreter.createWith(QuickTableColumn.SingleColumnSet.COLUMN, QuickTableColumn.SingleColumnSet.Def.class,
 			session -> QuickCoreInterpretation.interpretQuick(session,
 				(p, el) -> new QuickTableColumn.SingleColumnSet.Def((RowTyped.Def<?>) p, el)));
-		interpreter.createWith("column-edit", QuickTableColumn.ColumnEditing.Def.class, session -> QuickCoreInterpretation
-			.interpretQuick(session, (p, el) -> new QuickTableColumn.ColumnEditing.Def((QuickTableColumn.TableColumnSet.Def<?>) p, el)));
+		interpreter.createWith(QuickTableColumn.ColumnEditing.COLUMN_EDITING, QuickTableColumn.ColumnEditing.Def.class,
+			session -> QuickCoreInterpretation.interpretQuick(session,
+				(p, el) -> new QuickTableColumn.ColumnEditing.Def((QuickTableColumn.TableColumnSet.Def<?>) p, el)));
 		interpreter.createWith("modify-row-value", QuickTableColumn.ColumnEditType.RowModifyEditType.Def.class,
 			session -> new QuickTableColumn.ColumnEditType.RowModifyEditType.Def((QonfigAddOn) session.getFocusType(),
 				(QuickTableColumn.ColumnEditing.Def) session.get(QuickElement.SESSION_QUICK_ELEMENT)));
 		interpreter.createWith("replace-row-value", QuickTableColumn.ColumnEditType.RowReplaceEditType.Def.class,
 			session -> new QuickTableColumn.ColumnEditType.RowReplaceEditType.Def((QonfigAddOn) session.getFocusType(),
 				(QuickTableColumn.ColumnEditing.Def) session.get(QuickElement.SESSION_QUICK_ELEMENT)));
-		interpreter.createWith("value-action", ValueAction.Single.Def.class,
+		interpreter.createWith(ValueAction.Single.SINGLE_VALUE_ACTION, ValueAction.Single.Def.class,
 			session -> QuickCoreInterpretation.interpretQuick(session, (p, el) -> new ValueAction.Single.Def<>(p, el)));
-		interpreter.createWith("multi-value-action", ValueAction.Multi.Def.class,
+		interpreter.createWith(ValueAction.Multi.MULTI_VALUE_ACTION, ValueAction.Multi.Def.class,
 			session -> QuickCoreInterpretation.interpretQuick(session, (p, el) -> new ValueAction.Multi.Def<>(p, el)));
 		return interpreter;
 	}

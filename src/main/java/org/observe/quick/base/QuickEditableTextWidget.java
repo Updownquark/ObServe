@@ -13,6 +13,8 @@ import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigInterpretationException;
 
 public interface QuickEditableTextWidget<T> extends QuickTextWidget<T> {
+	public static final String EDITABLE_TEXT_WIDGET = "editable-text-widget";
+
 	public interface Def<W extends QuickEditableTextWidget<?>> extends QuickTextWidget.Def<W> {
 		boolean isCommitOnType();
 
@@ -33,7 +35,8 @@ public interface QuickEditableTextWidget<T> extends QuickTextWidget<T> {
 
 			@Override
 			public void update(ExpressoQIS session) throws QonfigInterpretationException {
-				super.update(session);
+				checkElement(session.getFocusType(), QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, EDITABLE_TEXT_WIDGET);
+				super.update(session.asElement(session.getFocusType().getSuperElement()));
 				isCommitOnType = session.getAttribute("commit-on-type", boolean.class);
 			}
 		}

@@ -19,6 +19,8 @@ import org.qommons.config.QonfigInterpretationException;
 import com.google.common.reflect.TypeToken;
 
 public interface QuickValueWidget<T> extends QuickWidget {
+	public static final String VALUE_WIDGET = "value-widget";
+
 	public interface Def<W extends QuickValueWidget<?>> extends QuickWidget.Def<W> {
 		String getValueName();
 
@@ -55,7 +57,8 @@ public interface QuickValueWidget<T> extends QuickWidget {
 
 			@Override
 			public void update(ExpressoQIS session) throws QonfigInterpretationException {
-				super.update(session);
+				checkElement(session.getFocusType(), QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, VALUE_WIDGET);
+				super.update(session.asElement(session.getFocusType().getSuperElement()));
 				theValueName = session.getAttributeText("value-name");
 				theValue = session.getAttributeExpression("value");
 				if (theValue.getExpression() == ObservableExpression.EMPTY && getParentElement() instanceof WidgetValueSupplier.Def)
