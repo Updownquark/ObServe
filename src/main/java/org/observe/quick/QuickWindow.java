@@ -15,20 +15,26 @@ import org.qommons.config.QonfigInterpretationException;
 /** An add-on for an element that is to be a window */
 public class QuickWindow extends QuickAddOn.Abstract<QuickElement> {
 	public static final QuickAddOn.AddOnAttributeGetter.Expression<QuickElement, QuickWindow, Interpreted, Def, SettableValue<?>, SettableValue<Integer>> X = QuickAddOn.AddOnAttributeGetter
-		.ofX(Def.class, Def::getX, Interpreted.class, Interpreted::getX, QuickWindow.class, QuickWindow::getX);
+		.ofX(Def.class, Def::getX, Interpreted.class, Interpreted::getX, QuickWindow.class, QuickWindow::getX,
+			"The x-coordinate of the position of the top-left corner of the window in the graphics environment");
 	public static final QuickAddOn.AddOnAttributeGetter.Expression<QuickElement, QuickWindow, Interpreted, Def, SettableValue<?>, SettableValue<Integer>> Y = QuickAddOn.AddOnAttributeGetter
-		.ofX(Def.class, Def::getY, Interpreted.class, Interpreted::getY, QuickWindow.class, QuickWindow::getY);
+		.ofX(Def.class, Def::getY, Interpreted.class, Interpreted::getY, QuickWindow.class, QuickWindow::getY,
+			"The y-coordinate of the position of the top-left corner of the window in the graphics environment");
 	public static final QuickAddOn.AddOnAttributeGetter.Expression<QuickElement, QuickWindow, Interpreted, Def, SettableValue<?>, SettableValue<Integer>> WIDTH = QuickAddOn.AddOnAttributeGetter
-		.ofX(Def.class, Def::getWidth, Interpreted.class, Interpreted::getWidth, QuickWindow.class, QuickWindow::getWidth);
+		.ofX(Def.class, Def::getWidth, Interpreted.class, Interpreted::getWidth, QuickWindow.class, QuickWindow::getWidth,
+			"The width of the window");
 	public static final QuickAddOn.AddOnAttributeGetter.Expression<QuickElement, QuickWindow, Interpreted, Def, SettableValue<?>, SettableValue<Integer>> HEIGHT = QuickAddOn.AddOnAttributeGetter
-		.ofX(Def.class, Def::getHeight, Interpreted.class, Interpreted::getHeight, QuickWindow.class, QuickWindow::getHeight);
+		.ofX(Def.class, Def::getHeight, Interpreted.class, Interpreted::getHeight, QuickWindow.class, QuickWindow::getHeight,
+			"The height of the window");
 	public static final QuickAddOn.AddOnAttributeGetter.Expression<QuickElement, QuickWindow, Interpreted, Def, SettableValue<?>, SettableValue<String>> TITLE = QuickAddOn.AddOnAttributeGetter
-		.ofX(Def.class, Def::getTitle, Interpreted.class, Interpreted::getTitle, QuickWindow.class, QuickWindow::getTitle);
+		.ofX(Def.class, Def::getTitle, Interpreted.class, Interpreted::getTitle, QuickWindow.class, QuickWindow::getTitle,
+			"The title for the window");
 	public static final QuickAddOn.AddOnAttributeGetter.Expression<QuickElement, QuickWindow, Interpreted, Def, SettableValue<?>, SettableValue<Boolean>> VISIBLE = QuickAddOn.AddOnAttributeGetter
-		.ofX(Def.class, Def::isVisible, Interpreted.class, Interpreted::isVisible, QuickWindow.class, QuickWindow::isVisible);
+		.ofX(Def.class, Def::isVisible, Interpreted.class, Interpreted::isVisible, QuickWindow.class, QuickWindow::isVisible,
+			"Controls when the window is displayed");
 	public static final QuickAddOn.AddOnAttributeGetter<QuickElement, QuickWindow, Interpreted, Def> CLOSE_ACTION = QuickAddOn.AddOnAttributeGetter
 		.of(Def.class, Def::getCloseAction, Interpreted.class, i -> i.getDefinition().getCloseAction(), QuickWindow.class,
-			QuickWindow::getCloseAction);
+			QuickWindow::getCloseAction, "The action to take when the user closes the window by clicking the \"X\" at the corner");
 
 	/** An action to perform when the user closes the window (e.g. clicks the "X") */
 	public enum CloseAction {

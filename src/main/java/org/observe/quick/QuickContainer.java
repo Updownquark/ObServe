@@ -23,6 +23,11 @@ public interface QuickContainer<C extends QuickWidget> extends QuickWidget {
 
 	public static final QuickElement.ChildElementGetter<QuickContainer<?>, Interpreted<?, ?>, Def<?, ?>> CONTENTS = new QuickElement.ChildElementGetter<QuickContainer<?>, Interpreted<?, ?>, Def<?, ?>>() {
 		@Override
+		public String getDescription() {
+			return "A widget displayed inside the container";
+		}
+
+		@Override
 		public List<? extends QuickElement.Def<?>> getChildrenFromDef(Def<?, ?> def) {
 			return def.getContents();
 		}

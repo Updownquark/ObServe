@@ -9,6 +9,7 @@ import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.QonfigDefinedElement;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
@@ -23,11 +24,18 @@ public interface QuickAddOn<E extends QuickElement> {
 		private final Class<D> theDefType;
 		private final Class<I> theInterpType;
 		private final Class<AO> theAddOnType;
+		private final String theDescription;
 
-		protected AddOnAttributeGetter(Class<D> defType, Class<I> interpType, Class<AO> addOnType) {
+		protected AddOnAttributeGetter(Class<D> defType, Class<I> interpType, Class<AO> addOnType, String descrip) {
 			theDefType = defType;
 			theInterpType = interpType;
 			theAddOnType = addOnType;
+			theDescription = descrip;
+		}
+
+		@Override
+		public String getDescription() {
+			return theDescription;
 		}
 
 		public abstract Object getFromDef(D def);
@@ -53,15 +61,15 @@ public interface QuickAddOn<E extends QuickElement> {
 
 		public static <E extends QuickElement, AO extends QuickAddOn<? super E>, I extends Interpreted<? super E, ? extends AO>, D extends QuickAddOn.Def<? super E, ? extends AO>> Default<E, AO, I, D> of(
 			Class<D> defType, Function<? super D, ?> defGetter, Class<I> interpretedType, Function<? super I, ?> interpretedGetter,
-			Class<AO> addOnType, Function<? super AO, ?> addOnGetter) {
-			return new Default<>(defType, defGetter, interpretedType, interpretedGetter, addOnType, addOnGetter);
+			Class<AO> addOnType, Function<? super AO, ?> addOnGetter, String descrip) {
+			return new Default<>(defType, defGetter, interpretedType, interpretedGetter, addOnType, addOnGetter, descrip);
 		}
 
 		public static <E extends QuickElement, AO extends QuickAddOn<? super E>, I extends Interpreted<? super E, ? extends AO>, D extends QuickAddOn.Def<? super E, ? extends AO>, M, MV extends M> Expression<E, AO, I, D, M, MV> ofX(
 			Class<D> defType, Function<? super D, ? extends CompiledExpression> defGetter, Class<I> interpretedType,
 			Function<? super I, ? extends InterpretedValueSynth<M, ? extends MV>> interpretedGetter, Class<AO> addOnType,
-				Function<? super AO, ? extends MV> addOnGetter) {
-			return new Expression<>(defType, defGetter, interpretedType, interpretedGetter, addOnType, addOnGetter);
+				Function<? super AO, ? extends MV> addOnGetter, String description) {
+			return new Expression<>(defType, defGetter, interpretedType, interpretedGetter, addOnType, addOnGetter, description);
 		}
 
 		public static class Default<E extends QuickElement, AO extends QuickAddOn<? super E>, I extends Interpreted<? super E, ? extends AO>, D extends QuickAddOn.Def<? super E, ? extends AO>>
@@ -71,8 +79,8 @@ public interface QuickAddOn<E extends QuickElement> {
 			private final Function<? super AO, ?> theAddOnGetter;
 
 			public Default(Class<D> defType, Function<? super D, ?> defGetter, Class<I> interpType,
-				Function<? super I, ?> interpretedGetter, Class<AO> addOnType, Function<? super AO, ?> addOnGetter) {
-				super(defType, interpType, addOnType);
+				Function<? super I, ?> interpretedGetter, Class<AO> addOnType, Function<? super AO, ?> addOnGetter, String description) {
+				super(defType, interpType, addOnType, description);
 				theDefGetter = defGetter;
 				theInterpretedGetter = interpretedGetter;
 				theAddOnGetter = addOnGetter;
@@ -102,8 +110,8 @@ public interface QuickAddOn<E extends QuickElement> {
 
 			public Expression(Class<D> defType, Function<? super D, ? extends CompiledExpression> defGetter, Class<I> interpType,
 				Function<? super I, ? extends InterpretedValueSynth<M, ? extends MV>> interpretedGetter, Class<AO> addOnType,
-					Function<? super AO, ? extends MV> addOnGetter) {
-				super(defType, interpType, addOnType);
+					Function<? super AO, ? extends MV> addOnGetter, String descrip) {
+				super(defType, interpType, addOnType, descrip);
 				theDefGetter = defGetter;
 				theInterpretedGetter = interpretedGetter;
 				theAddOnGetter = addOnGetter;

@@ -26,6 +26,31 @@ import com.google.common.reflect.TypeToken;
 public class QuickTable<R> extends TabularWidget.Abstract<R> {
 	public static final String TABLE = "table";
 
+	public static final QuickElement.AttributeValueGetter<QuickTable<?>, Interpreted<?>, Def> ROWS = QuickElement.AttributeValueGetter
+		.ofX(Def::getRows, Interpreted::getRows, QuickTable::getRows, "The rows to display in the table");
+
+	public static final QuickElement.ChildElementGetter<QuickTable<?>, Interpreted<?>, Def> ACTIONS = new QuickElement.ChildElementGetter<QuickTable<?>, Interpreted<?>, Def>() {
+		@Override
+		public String getDescription() {
+			return "Actions that may be performed on rows, groups of rows, or the data set as a whole";
+		}
+
+		@Override
+		public List<? extends QuickElement.Def<?>> getChildrenFromDef(Def def) {
+			return def.getActions();
+		}
+
+		@Override
+		public List<? extends QuickElement.Interpreted<?>> getChildrenFromInterpreted(Interpreted<?> interp) {
+			return interp.getActions();
+		}
+
+		@Override
+		public List<? extends QuickElement> getChildrenFromElement(QuickTable<?> element) {
+			return element.getActions();
+		}
+	};
+
 	public static class Def extends TabularWidget.Def.Abstract<QuickTable<?>> {
 		private CompiledExpression theRows;
 		private String theValueName;
@@ -64,6 +89,8 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 		@Override
 		public void update(ExpressoQIS session) throws QonfigInterpretationException {
 			checkElement(session.getFocusType(), QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, TABLE);
+			forAttribute(session.getAttributeDef(null, null, "rows"), ROWS);
+			forChild(session.getRole("action"), ACTIONS);
 			super.update(session); // table is a tabular widget, tabular-widget is an add-on. Don't get the multi-value-widget super
 			theRows = session.getAttributeExpression("rows");
 			theValueName = session.getAttributeText("value-name");

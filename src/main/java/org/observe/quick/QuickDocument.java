@@ -25,6 +25,11 @@ public class QuickDocument extends QuickElement.Abstract {
 
 	public static final QuickElement.ChildElementGetter<QuickDocument, Interpreted, Def> DOC_HEAD = new QuickElement.ChildElementGetter<QuickDocument, Interpreted, Def>() {
 		@Override
+		public String getDescription() {
+			return "The head section of the Quick document, containing application models, style sheets, etc.";
+		}
+
+		@Override
 		public List<? extends QuickElement.Def<?>> getChildrenFromDef(Def def) {
 			return Collections.singletonList(def.getHead());
 		}
@@ -41,6 +46,11 @@ public class QuickDocument extends QuickElement.Abstract {
 	};
 
 	public static final QuickElement.ChildElementGetter<QuickDocument, Interpreted, Def> DOC_BODY = new QuickElement.ChildElementGetter<QuickDocument, Interpreted, Def>() {
+		@Override
+		public String getDescription() {
+			return "The widget content of the application";
+		}
+
 		@Override
 		public List<? extends QuickElement.Def<?>> getChildrenFromDef(Def def) {
 			return Collections.singletonList(def.getBody());

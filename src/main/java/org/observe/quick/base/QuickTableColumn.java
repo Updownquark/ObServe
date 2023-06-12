@@ -1,8 +1,10 @@
 package org.observe.quick.base;
 
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -109,6 +111,28 @@ public interface QuickTableColumn<R, C> {
 	public class ColumnEditing<R, C> extends QuickElement.Abstract implements QuickValueWidget.WidgetValueSupplier<C> {
 		public static final String COLUMN_EDITING = "column-edit";
 
+		public static final QuickElement.ChildElementGetter<ColumnEditing<?, ?>, Interpreted<?, ?>, Def> EDITOR = new QuickElement.ChildElementGetter<ColumnEditing<?, ?>, Interpreted<?, ?>, Def>() {
+			@Override
+			public String getDescription() {
+				return "The widget that allows the user to create a new value for this column";
+			}
+
+			@Override
+			public List<? extends QuickElement.Def<?>> getChildrenFromDef(Def def) {
+				return def.getEditor() == null ? Collections.emptyList() : Collections.singletonList(def.getEditor());
+			}
+
+			@Override
+			public List<? extends QuickElement.Interpreted<?>> getChildrenFromInterpreted(Interpreted<?, ?> interp) {
+				return interp.getEditor() == null ? Collections.emptyList() : Collections.singletonList(interp.getEditor());
+			}
+
+			@Override
+			public List<? extends QuickElement> getChildrenFromElement(ColumnEditing<?, ?> element) {
+				return element.getEditor() == null ? Collections.emptyList() : Collections.singletonList(element.getEditor());
+			}
+		};
+
 		public static class Def extends QuickElement.Def.Abstract<ColumnEditing<?, ?>>
 		implements QuickValueWidget.WidgetValueSupplier.Def<ColumnEditing<?, ?>> {
 			private QuickWidget.Def<?> theEditor;
@@ -148,8 +172,8 @@ public interface QuickTableColumn<R, C> {
 
 			@Override
 			public void update(ExpressoQIS session) throws QonfigInterpretationException {
-				checkElement(session.getFocusType(), QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION,
-					COLUMN_EDITING);
+				checkElement(session.getFocusType(), QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, COLUMN_EDITING);
+				forChild(session.getRole("editor"), EDITOR);
 				super.update(session);
 				theEditor = QuickElement.useOrReplace(QuickWidget.Def.class, theEditor, session, "editor");
 				theColumnEditValueName = session.getAttributeText("column-edit-value-name");
@@ -572,6 +596,57 @@ public interface QuickTableColumn<R, C> {
 	public class SingleColumnSet<R, C> extends QuickElement.Abstract implements TableColumnSet<R> {
 		public static final String COLUMN = "column";
 
+		public static final QuickElement.AttributeValueGetter<SingleColumnSet<?, ?>, Interpreted<?, ?>, Def> NAME = QuickElement.AttributeValueGetter
+			.ofX(Def::getName, Interpreted::getName, SingleColumnSet::getName,
+				"The name of the column, to be displayed in the column header");
+		public static final QuickElement.AttributeValueGetter<SingleColumnSet<?, ?>, Interpreted<?, ?>, Def> COLUMN_VALUE_NAME = QuickElement.AttributeValueGetter
+			.of(Def::getColumnValueName, i -> i.getDefinition().getColumnValueName(), SingleColumnSet::getColumnValueName,
+				"The name variable holding the column value to be rendered, for use in expressions");
+
+		public static final QuickElement.ChildElementGetter<SingleColumnSet<?, ?>, Interpreted<?, ?>, Def> RENDERER = new QuickElement.ChildElementGetter<SingleColumnSet<?, ?>, Interpreted<?, ?>, Def>() {
+			@Override
+			public String getDescription() {
+				return "The widget used to render the value for this column in each row";
+			}
+
+			@Override
+			public List<? extends QuickElement.Def<?>> getChildrenFromDef(Def def) {
+				return def.getRenderer() == null ? Collections.emptyList() : Collections.singletonList(def.getRenderer());
+			}
+
+			@Override
+			public List<? extends QuickElement.Interpreted<?>> getChildrenFromInterpreted(Interpreted<?, ?> interp) {
+				return interp.getRenderer() == null ? Collections.emptyList() : Collections.singletonList(interp.getRenderer());
+			}
+
+			@Override
+			public List<? extends QuickElement> getChildrenFromElement(SingleColumnSet<?, ?> element) {
+				return element.getRenderer() == null ? Collections.emptyList() : Collections.singletonList(element.getRenderer());
+			}
+		};
+
+		public static final QuickElement.ChildElementGetter<SingleColumnSet<?, ?>, Interpreted<?, ?>, Def> EDITING = new QuickElement.ChildElementGetter<SingleColumnSet<?, ?>, Interpreted<?, ?>, Def>() {
+			@Override
+			public String getDescription() {
+				return "Configures the ability to update or replace the value of each row by providing a new value for the column";
+			}
+
+			@Override
+			public List<? extends QuickElement.Def<?>> getChildrenFromDef(Def def) {
+				return def.getEditing() == null ? Collections.emptyList() : Collections.singletonList(def.getEditing());
+			}
+
+			@Override
+			public List<? extends QuickElement.Interpreted<?>> getChildrenFromInterpreted(Interpreted<?, ?> interp) {
+				return interp.getEditing() == null ? Collections.emptyList() : Collections.singletonList(interp.getEditing());
+			}
+
+			@Override
+			public List<? extends QuickElement> getChildrenFromElement(SingleColumnSet<?, ?> element) {
+				return element.getEditing() == null ? Collections.emptyList() : Collections.singletonList(element.getEditing());
+			}
+		};
+
 		public static class Def extends QuickElement.Def.Abstract<SingleColumnSet<?, ?>>
 		implements TableColumnSet.Def<SingleColumnSet<?, ?>> {
 			private CompiledExpression theName;
@@ -619,6 +694,10 @@ public interface QuickTableColumn<R, C> {
 			@Override
 			public void update(ExpressoQIS session) throws QonfigInterpretationException {
 				checkElement(session.getFocusType(), QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, COLUMN);
+				forAttribute(session.getAttributeDef(null, null, "name"), NAME);
+				forAttribute(session.getAttributeDef(null, null, "column-value-name"), COLUMN_VALUE_NAME);
+				forChild(session.getRole("renderer"), RENDERER);
+				forChild(session.getRole("edit"), EDITING);
 				super.update(session);
 				theName = session.getAttributeExpression("name");
 				theColumnValueName = session.getAttributeText("column-value-name");
@@ -747,6 +826,7 @@ public interface QuickTableColumn<R, C> {
 		private final ObservableCollection<SingleColumn> theColumn;
 
 		private final SettableValue<SettableValue<String>> theName;
+		private String theColumnValueName;
 		private final SettableValue<SettableValue<C>> theValue;
 		private final SettableValue<SettableValue<String>> theHeaderTooltip;
 		private QuickWidget theRenderer;
@@ -770,6 +850,14 @@ public interface QuickTableColumn<R, C> {
 			return (TabularWidget<R>) super.getParentElement();
 		}
 
+		public SettableValue<SettableValue<String>> getName() {
+			return theName;
+		}
+
+		public String getColumnValueName() {
+			return theColumnValueName;
+		}
+
 		@Override
 		public TypeToken<R> getRowType() {
 			return theRowType;
@@ -784,6 +872,14 @@ public interface QuickTableColumn<R, C> {
 			return SettableValue.flatten(theValue);
 		}
 
+		public QuickWidget getRenderer() {
+			return theRenderer;
+		}
+
+		public ColumnEditing<R, C> getEditing() {
+			return theEditing;
+		}
+
 		@Override
 		protected void updateModel(QuickElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
 			super.updateModel(interpreted, myModels);
@@ -796,6 +892,7 @@ public interface QuickTableColumn<R, C> {
 				return;
 			}
 			theName.set(myInterpreted.getName().get(myModels), null);
+			theColumnValueName = myInterpreted.getDefinition().getColumnValueName();
 			theValue.set(myInterpreted.getValue().get(myModels), null);
 			theHeaderTooltip.set(myInterpreted.getHeaderTooltip() == null ? null : myInterpreted.getHeaderTooltip().get(myModels), null);
 

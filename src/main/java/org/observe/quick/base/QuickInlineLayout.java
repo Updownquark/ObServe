@@ -12,13 +12,14 @@ import org.qommons.config.QonfigInterpretationException;
 public class QuickInlineLayout extends QuickLayout.Abstract {
 	public static final QuickAddOn.AddOnAttributeGetter<QuickBox, QuickInlineLayout, Interpreted, Def> VERTICAL = QuickAddOn.AddOnAttributeGetter
 		.of(Def.class, Def::isVertical, Interpreted.class, i -> i.getDefinition().isVertical(), QuickInlineLayout.class,
-			QuickInlineLayout::isVertical);
+			QuickInlineLayout::isVertical, "Whether the components are arranged top-to-bottom or left-to-right");
 	public static final QuickAddOn.AddOnAttributeGetter<QuickBox, QuickInlineLayout, Interpreted, Def> MAIN_ALIGN = QuickAddOn.AddOnAttributeGetter
 		.of(Def.class, Def::getMainAlign, Interpreted.class, i -> i.getDefinition().getMainAlign(), QuickInlineLayout.class,
-			QuickInlineLayout::getMainAlign);
+			QuickInlineLayout::getMainAlign,
+			"The alignment strategy determining how all the components will share space along the main axis of the layout");
 	public static final QuickAddOn.AddOnAttributeGetter<QuickBox, QuickInlineLayout, Interpreted, Def> CROSS_ALIGN = QuickAddOn.AddOnAttributeGetter
 		.of(Def.class, Def::getCrossAlign, Interpreted.class, i -> i.getDefinition().getCrossAlign(), QuickInlineLayout.class,
-			QuickInlineLayout::getCrossAlign);
+			QuickInlineLayout::getCrossAlign, "The alignment strategy for each component along the cross axis of the layout");
 
 	public static class Def extends QuickLayout.Def<QuickInlineLayout> {
 		private boolean isVertical;

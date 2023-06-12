@@ -35,13 +35,21 @@ public interface QuickWidget extends QuickTextElement {
 	public static final String WIDGET = "widget";
 
 	public static final QuickElement.AttributeValueGetter<QuickWidget, Interpreted<? extends QuickWidget>, Def<? extends QuickWidget>> NAME = QuickElement.AttributeValueGetter
-		.of(Def::getName, i -> i.getDefinition().getName(), QuickWidget::getName);
+		.of(Def::getName, i -> i.getDefinition().getName(), QuickWidget::getName,
+			"The name of the widget.  Typically only used for debugging");
 	public static final QuickElement.AttributeValueGetter.Expression<QuickWidget, Interpreted<? extends QuickWidget>, Def<? extends QuickWidget>, SettableValue<?>, SettableValue<String>> TOOLTIP = QuickElement.AttributeValueGetter
-		.ofX(Def::getTooltip, Interpreted::getTooltip, QuickWidget::getTooltip);
+		.ofX(Def::getTooltip, Interpreted::getTooltip, QuickWidget::getTooltip,
+			"The tooltip to display when the user hovers the mouse over the widget, for user feedback");
 	public static final QuickElement.AttributeValueGetter.Expression<QuickWidget, Interpreted<? extends QuickWidget>, Def<? extends QuickWidget>, SettableValue<?>, SettableValue<Boolean>> VISIBLE = QuickElement.AttributeValueGetter
-		.ofX(Def::isVisible, Interpreted::isVisible, QuickWidget::isVisible);
+		.ofX(Def::isVisible, Interpreted::isVisible, QuickWidget::isVisible,
+			"Determines when the widget is displayed to the user or hidden");
 
 	public static final QuickElement.ChildElementGetter<QuickWidget, Interpreted<?>, Def<?>> BORDER = new QuickElement.ChildElementGetter<QuickWidget, Interpreted<?>, Def<?>>() {
+		@Override
+		public String getDescription() {
+			return "The border to draw around the widget";
+		}
+
 		@Override
 		public List<? extends org.observe.quick.QuickElement.Def<?>> getChildrenFromDef(Def<?> def) {
 			return def.getBorder() == null ? Collections.emptyList() : Collections.singletonList(def.getBorder());
@@ -59,6 +67,11 @@ public interface QuickWidget extends QuickTextElement {
 	};
 
 	public static final QuickElement.ChildElementGetter<QuickWidget, Interpreted<?>, Def<?>> EVENT_LISTENERS = new QuickElement.ChildElementGetter<QuickWidget, Interpreted<?>, Def<?>>() {
+		@Override
+		public String getDescription() {
+			return "Listeners to events like mouse clicks or key presses";
+		}
+
 		@Override
 		public List<? extends org.observe.quick.QuickElement.Def<?>> getChildrenFromDef(Def<?> def) {
 			return def.getEventListeners();

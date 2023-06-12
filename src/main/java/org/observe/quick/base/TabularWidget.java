@@ -25,6 +25,28 @@ import org.qommons.config.QonfigInterpretationException;
 import com.google.common.reflect.TypeToken;
 
 public interface TabularWidget<R> extends MultiValueWidget<R>, RowTyped<R> {
+	public static final QuickElement.ChildElementGetter<TabularWidget<?>, Interpreted<?, ?>, Def<?>> COLUMNS = new QuickElement.ChildElementGetter<TabularWidget<?>, TabularWidget.Interpreted<?, ?>, TabularWidget.Def<?>>() {
+		@Override
+		public String getDescription() {
+			return "A column or set of columns to display a category of data for each row in the table";
+		}
+
+		@Override
+		public List<? extends QuickElement.Def<?>> getChildrenFromDef(Def<?> def) {
+			return def.getColumns();
+		}
+
+		@Override
+		public List<? extends QuickElement.Interpreted<?>> getChildrenFromInterpreted(Interpreted<?, ?> interp) {
+			return interp.getColumns();
+		}
+
+		@Override
+		public List<? extends QuickElement> getChildrenFromElement(TabularWidget<?> element) {
+			return element.getColumnSets();
+		}
+	};
+
 	public interface Def<W extends TabularWidget<?>> extends MultiValueWidget.Def<W>, RowTyped.Def<W> {
 		List<QuickTableColumn.TableColumnSet.Def<?>> getColumns();
 
@@ -43,9 +65,10 @@ public interface TabularWidget<R> extends MultiValueWidget<R>, RowTyped<R> {
 
 			@Override
 			public void update(ExpressoQIS session) throws QonfigInterpretationException {
+				forChild(session.getRole("columns"), COLUMNS);
 				super.update(session.asElement(session.getFocusType().getSuperElement() // multi-value-widget
 					.getSuperElement() // widget
-				));
+					));
 				CollectionUtils
 				.synchronize(theColumns, session.forChildren("columns"),
 					(c, s) -> QuickElement.typesEqual(c.getElement(), s.getElement()))//

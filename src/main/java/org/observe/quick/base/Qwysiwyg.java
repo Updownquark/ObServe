@@ -31,6 +31,7 @@ import org.qommons.collect.DequeList;
 import org.qommons.config.CustomValueType;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigAttributeDef;
+import org.qommons.config.QonfigChildDef;
 import org.qommons.config.QonfigElement.QonfigValue;
 import org.qommons.config.QonfigParseException;
 import org.qommons.config.QonfigValueType;
@@ -163,7 +164,7 @@ public class Qwysiwyg {
 				return;
 			}
 
-			renderDef(theRoot, theDocumentDef);
+			renderDef(theRoot, theDocumentDef, null);
 
 			ObservableModelSet.ExternalModelSet extModels = QuickApp.parseExtModels(theDocumentDef.getHead().getModels(),
 				quickApp.getCommandLineArgs(), ObservableModelSet.buildExternal(ObservableModelSet.JAVA_NAME_CHECKER));
@@ -361,7 +362,8 @@ public class Qwysiwyg {
 				public void handleElementStart(XmlElementTerminal element) {
 					DocumentComponent elementComp = stack.getLast().addChild(element.getContent().getPosition(0));
 					stack.add(elementComp);
-					DocumentComponent elStartComp = stack.getLast().addChild(element.getContent().getPosition(0)).color(ELEMENT_COLOR);
+					DocumentComponent elStartComp = stack.getLast().addChild(element.getContent().getPosition(element.getNameOffset()))
+						.color(ELEMENT_COLOR);
 					stack.add(elStartComp);
 				}
 
@@ -414,7 +416,11 @@ public class Qwysiwyg {
 		}
 	}
 
-	private void renderDef(DocumentComponent component, QuickElement.Def<?> def) {
+	private void renderDef(DocumentComponent component, QuickElement.Def<?> def, String descrip) {
+		if (descrip != null) {
+			DocumentComponent elComponent = getSourceComponent(component, def.getElement().getPositionInFile().getPosition());
+			elComponent.tooltip(descrip);
+		}
 		for (Map.Entry<QonfigAttributeDef.Declared, QonfigValue> attr : def.getElement().getAttributes().entrySet()) {
 			PositionedContent position = attr.getValue().position;
 			if (position == null)
@@ -428,7 +434,13 @@ public class Qwysiwyg {
 					// TODO Color different expression components
 				}
 			}
-			attrComp.tooltip2(() -> renderValueType(type, 1));
+			String attrDescrip = def.getAttributeDescription(attr.getKey());
+			attrComp.tooltip2(() -> {
+				if (attrDescrip != null)
+					return "<html>" + attrDescrip + "<br><br>" + renderValueType(type, 1);
+				else
+					return renderValueType(type, 1);
+			});
 		}
 		if (def.getElement().getValue() != null && def.getElement().getValue().position != null) {
 			PositionedContent position = def.getElement().getValue().position;
@@ -442,8 +454,19 @@ public class Qwysiwyg {
 			}
 			attrValueComp.tooltip2(() -> renderValueType(type, 1));
 		}
-		for (QuickElement.Def<?> child : def.getAllChildren())
-			renderDef(component, child);
+		for (QuickElement.Def<?> child : def.getAllChildren()) {
+			String childDescrip = null;
+			for (QonfigChildDef role : child.getElement().getParentRoles()) {
+				String roleDescrip = def.getChildDescription(role);
+				if (roleDescrip != null) {
+					if (childDescrip == null)
+						childDescrip = roleDescrip;
+					else
+						childDescrip += "<br><br>" + roleDescrip;
+				}
+			}
+			renderDef(component, child, childDescrip);
+		}
 	}
 
 	static String renderValueType(QonfigValueType type, int indent) {
