@@ -10,6 +10,16 @@ import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
 public class QuickInlineLayout extends QuickLayout.Abstract {
+	public static final QuickAddOn.AddOnAttributeGetter<QuickBox, QuickInlineLayout, Interpreted, Def> VERTICAL = QuickAddOn.AddOnAttributeGetter
+		.of(Def.class, Def::isVertical, Interpreted.class, i -> i.getDefinition().isVertical(), QuickInlineLayout.class,
+			QuickInlineLayout::isVertical);
+	public static final QuickAddOn.AddOnAttributeGetter<QuickBox, QuickInlineLayout, Interpreted, Def> MAIN_ALIGN = QuickAddOn.AddOnAttributeGetter
+		.of(Def.class, Def::getMainAlign, Interpreted.class, i -> i.getDefinition().getMainAlign(), QuickInlineLayout.class,
+			QuickInlineLayout::getMainAlign);
+	public static final QuickAddOn.AddOnAttributeGetter<QuickBox, QuickInlineLayout, Interpreted, Def> CROSS_ALIGN = QuickAddOn.AddOnAttributeGetter
+		.of(Def.class, Def::getCrossAlign, Interpreted.class, i -> i.getDefinition().getCrossAlign(), QuickInlineLayout.class,
+			QuickInlineLayout::getCrossAlign);
+
 	public static class Def extends QuickLayout.Def<QuickInlineLayout> {
 		private boolean isVertical;
 		private JustifiedBoxLayout.Alignment theMainAlign;
@@ -33,6 +43,9 @@ public class QuickInlineLayout extends QuickLayout.Abstract {
 
 		@Override
 		public void update(ExpressoQIS session, QuickElement.Def<? extends QuickBox> element) throws QonfigInterpretationException {
+			element.forAttribute(session.getAttributeDef(null, null, "orientation"), VERTICAL);
+			element.forAttribute(session.getAttributeDef(null, null, "main-align"), MAIN_ALIGN);
+			element.forAttribute(session.getAttributeDef(null, null, "cross-align"), CROSS_ALIGN);
 			super.update(session, element);
 			isVertical = "vertical".equals(session.getAttributeText("orientation"));
 			theMainAlign = jblAlign("main-align", session.getAttributeText("main-align"), session);

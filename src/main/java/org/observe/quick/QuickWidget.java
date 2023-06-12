@@ -34,6 +34,13 @@ import com.google.common.reflect.TypeToken;
 public interface QuickWidget extends QuickTextElement {
 	public static final String WIDGET = "widget";
 
+	public static final QuickElement.AttributeValueGetter<QuickWidget, Interpreted<? extends QuickWidget>, Def<? extends QuickWidget>> NAME = QuickElement.AttributeValueGetter
+		.of(Def::getName, i -> i.getDefinition().getName(), QuickWidget::getName);
+	public static final QuickElement.AttributeValueGetter.Expression<QuickWidget, Interpreted<? extends QuickWidget>, Def<? extends QuickWidget>, SettableValue<?>, SettableValue<String>> TOOLTIP = QuickElement.AttributeValueGetter
+		.ofX(Def::getTooltip, Interpreted::getTooltip, QuickWidget::getTooltip);
+	public static final QuickElement.AttributeValueGetter.Expression<QuickWidget, Interpreted<? extends QuickWidget>, Def<? extends QuickWidget>, SettableValue<?>, SettableValue<Boolean>> VISIBLE = QuickElement.AttributeValueGetter
+		.ofX(Def::isVisible, Interpreted::isVisible, QuickWidget::isVisible);
+
 	public static final QuickElement.ChildElementGetter<QuickWidget, Interpreted<?>, Def<?>> BORDER = new QuickElement.ChildElementGetter<QuickWidget, Interpreted<?>, Def<?>>() {
 		@Override
 		public List<? extends org.observe.quick.QuickElement.Def<?>> getChildrenFromDef(Def<?> def) {
@@ -160,6 +167,9 @@ public interface QuickWidget extends QuickTextElement {
 			@Override
 			public void update(ExpressoQIS session) throws QonfigInterpretationException {
 				checkElement(session.getFocusType(), QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, WIDGET);
+				forAttribute(session.getAttributeDef(null, null, "name").getDeclared(), NAME);
+				forAttribute(session.getAttributeDef(null, null, "tooltip").getDeclared(), TOOLTIP);
+				forAttribute(session.getAttributeDef(null, null, "visible").getDeclared(), VISIBLE);
 				forChild(session.getRole("border").getDeclared(), BORDER);
 				forChild(session.getRole("event-listener").getDeclared(), EVENT_LISTENERS);
 				super.update(session);
@@ -167,14 +177,12 @@ public interface QuickWidget extends QuickTextElement {
 				theName = session.getAttributeText("name");
 				theTooltip = session.getAttributeExpression("tooltip");
 				isVisible = session.getAttributeExpression("visible");
-				CollectionUtils
-				.synchronize(theEventListeners, session.forChildren("event-listener"),
-					(l, s) -> QuickElement.typesEqual(l.getElement(), s.getElement()))
-				.simpleE(s -> {
-					QuickEventListener.Def<?> listener = s.interpret(QuickEventListener.Def.class);
-					listener.update(s);
-					return listener;
-				})//
+				CollectionUtils.synchronize(theEventListeners, session.forChildren("event-listener"),
+					(l, s) -> QuickElement.typesEqual(l.getElement(), s.getElement())).simpleE(s -> {
+						QuickEventListener.Def<?> listener = s.interpret(QuickEventListener.Def.class);
+						listener.update(s);
+						return listener;
+					})//
 				.onCommonX(el -> el.getLeftValue().update(el.getRightValue())).adjust();
 			}
 
@@ -279,8 +287,7 @@ public interface QuickWidget extends QuickTextElement {
 			}
 
 			@Override
-			public void update(QuickStyledElement.QuickInterpretationCache cache)
-				throws ExpressoInterpretationException {
+			public void update(QuickStyledElement.QuickInterpretationCache cache) throws ExpressoInterpretationException {
 				super.update(cache);
 				if (getDefinition().getBorder() == null)
 					theBorder = null;
@@ -374,6 +381,8 @@ public interface QuickWidget extends QuickTextElement {
 	/** @return The parent container, if any */
 	QuickContainer<?> getParent();
 
+	ObservableValue<String> getName();
+
 	/** @return This widget's border */
 	QuickBorder getBorder();
 
@@ -397,6 +406,7 @@ public interface QuickWidget extends QuickTextElement {
 
 	/** An abstract {@link QuickWidget} implementation */
 	public abstract class Abstract extends QuickStyledElement.Abstract implements QuickWidget {
+		private final SettableValue<String> theName;
 		private final SettableValue<SettableValue<Boolean>> isHovered;
 		private final SettableValue<SettableValue<Boolean>> isFocused;
 		private final SettableValue<SettableValue<Boolean>> isPressed;
@@ -413,6 +423,7 @@ public interface QuickWidget extends QuickTextElement {
 		 */
 		protected Abstract(QuickWidget.Interpreted<?> interpreted, QuickElement parent) {
 			super(interpreted, parent);
+			theName = SettableValue.build(String.class).build();
 			theTooltip = SettableValue
 				.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<String>> parameterized(String.class)).build();
 			isVisible = SettableValue
@@ -435,6 +446,11 @@ public interface QuickWidget extends QuickTextElement {
 		public QuickContainer<?> getParent() {
 			QuickElement parent = getParentElement();
 			return parent instanceof QuickContainer ? (QuickContainer<?>) parent : null;
+		}
+
+		@Override
+		public ObservableValue<String> getName() {
+			return theName.unsettable();
 		}
 
 		@Override
@@ -493,6 +509,7 @@ public interface QuickWidget extends QuickTextElement {
 			satisfyContextValue("pressed", ModelTypes.Value.BOOLEAN, SettableValue.flatten(isPressed), myModels);
 			satisfyContextValue("rightPressed", ModelTypes.Value.BOOLEAN, SettableValue.flatten(isRightPressed), myModels);
 			QuickWidget.Interpreted<?> myInterpreted = (QuickWidget.Interpreted<?>) interpreted;
+			theName.set(myInterpreted.getDefinition().getName(), null);
 			theBorder = myInterpreted.getBorder() == null ? null : myInterpreted.getBorder().create(this);
 			if (theBorder != null)
 				theBorder.update(myInterpreted.getBorder(), myModels);

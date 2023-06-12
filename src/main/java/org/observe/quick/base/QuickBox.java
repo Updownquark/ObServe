@@ -21,6 +21,11 @@ import com.google.common.reflect.TypeToken;
 public class QuickBox extends QuickContainer.Abstract<QuickWidget> {
 	public static final String BOX = "box";
 
+	public static QuickElement.AttributeValueGetter.AddOn<QuickBox, QuickLayout, QuickLayout.Interpreted<?>, QuickLayout.Def<?>> LAYOUT = QuickElement.AttributeValueGetter
+		.addOn(QuickLayout.Def.class, QuickLayout.Interpreted.class, QuickLayout.class);
+	public static QuickElement.AttributeValueGetter.Expression<QuickBox, Interpreted<? extends QuickBox>, Def<? extends QuickBox>, SettableValue<?>, SettableValue<Double>> OPACITY = QuickElement.AttributeValueGetter
+		.ofX(Def::getOpacity, Interpreted::getOpacity, QuickBox::getOpacity);
+
 	public static class Def<W extends QuickBox> extends QuickContainer.Def.Abstract<W, QuickWidget> {
 		private CompiledExpression theOpacity;
 
@@ -39,10 +44,12 @@ public class QuickBox extends QuickContainer.Abstract<QuickWidget> {
 		@Override
 		public void update(ExpressoQIS session) throws QonfigInterpretationException {
 			checkElement(session.getFocusType(), QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, BOX);
+			forAttribute(session.getAttributeDef(null, null, "layout"), LAYOUT);
+			forAttribute(session.getAttributeDef(null, null, "opacity"), OPACITY);
 			super.update(session.asElement(session.getFocusType().getSuperElement()));
 			if (getAddOn(QuickLayout.Def.class) == null) {
 				String layout = session.getAttributeText("layout");
-				throw new QonfigInterpretationException("No Quick interpretationfor layout " + layout,
+				throw new QonfigInterpretationException("No Quick interpretation for layout " + layout,
 					session.getAttributeValuePosition("layout", 0), layout.length());
 			}
 			theOpacity = session.getAttributeExpression("opacity");

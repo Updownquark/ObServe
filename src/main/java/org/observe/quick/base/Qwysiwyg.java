@@ -236,8 +236,11 @@ public class Qwysiwyg {
 	public void clicked(int position, int clickCount) {
 		if (theRoot == null)
 			return;
-		DocumentComponent hovered = getRenderComponent(theRoot, position);
-		System.out.print("");
+		DocumentComponent clicked = getRenderComponent(theRoot, position);
+		String print = "" + clicked.start;
+		if (clicked.tooltip != null)
+			print += clicked.tooltip.get();
+		System.out.println(print);
 	}
 
 	public void mouseExit() {
@@ -258,10 +261,10 @@ public class Qwysiwyg {
 
 	DocumentComponent getSourceComponent(DocumentComponent parent, int sourcePosition) {
 		if (parent.children != null) {
-			int childIdx = ArrayUtils.binarySearch(parent.children, child -> Integer.compare(sourcePosition, child.start));
+			int childIdx = ArrayUtils.binarySearch(parent.children, child -> Integer.compare(sourcePosition, child.start.getPosition()));
 			if (childIdx < 0) {
 				childIdx = -childIdx - 2;
-				if (childIdx < 0 || sourcePosition >= parent.children.get(childIdx).end)
+				if (childIdx < 0 || sourcePosition >= parent.children.get(childIdx).getEnd())
 					return parent;
 			}
 			return getSourceComponent(parent.children.get(childIdx), sourcePosition);
@@ -324,57 +327,60 @@ public class Qwysiwyg {
 			new SimpleXMLParser().parseXml(in, new SimpleXMLParser.ParseHandler() {
 				@Override
 				public void handleDeclaration(XmlDeclaration declaration) {
-					DocumentComponent declComp = stack.getLast().addChild(declaration.getContent().getPosition(0).getPosition())
+					DocumentComponent declComp = stack.getLast().addChild(declaration.getContent().getPosition(0))
 						.color(ELEMENT_COLOR);
-					declComp.end = declaration.getContent().getPosition(declaration.getContent().length()).getPosition();
+					declComp.end(declaration.getContent().getPosition(declaration.getContent().length()).getPosition());
 					for (String attr : declaration.getAttributes()) {
-						DocumentComponent attrComp = declComp.addChild(declaration.getAttributeNamePosition(attr).getPosition())
+						DocumentComponent attrComp = declComp.addChild(declaration.getAttributeNamePosition(attr))
 							.color(ATTRIBUTE_NAME_COLOR);
-						attrComp.end = declaration.getAttributeValueEnd(attr).getPosition();
+						attrComp.end(declaration.getAttributeValueEnd(attr).getPosition());
 						PositionedContent value = declaration.getAttributeValue(attr);
-						DocumentComponent valueComp = attrComp.addChild(value.getPosition(0).getPosition()).color(ATTRIBUTE_VALUE_COLOR);
-						valueComp.end = value.getPosition(value.length()).getPosition();
+						DocumentComponent valueComp = attrComp.addChild(value.getPosition(0)).color(ATTRIBUTE_VALUE_COLOR);
+						valueComp.end(value.getPosition(value.length()).getPosition());
 					}
 				}
 
 				@Override
 				public void handleProcessingInstruction(XmlProcessingInstruction pi) {
-					DocumentComponent piComp = stack.getLast().addChild(pi.getContent().getPosition(0).getPosition()).color(ELEMENT_COLOR);
-					piComp.end = pi.getContent().getPosition(pi.getContent().length()).getPosition();
+					DocumentComponent piComp = stack.getLast().addChild(pi.getContent().getPosition(0)).color(ELEMENT_COLOR);
+					piComp.end(pi.getContent().getPosition(pi.getContent().length()).getPosition());
 					PositionedContent value = pi.getValueContent();
 					if (value != null) {
-						DocumentComponent valueComp = piComp.addChild(value.getPosition(0).getPosition()).color(ELEMENT_VALUE_COLOR);
-						valueComp.end = value.getPosition(value.length()).getPosition();
+						DocumentComponent valueComp = piComp.addChild(value.getPosition(0)).color(ELEMENT_VALUE_COLOR);
+						valueComp.end(value.getPosition(value.length()).getPosition());
 					}
 				}
 
 				@Override
 				public void handleComment(XmlComment comment) {
-					DocumentComponent commentComp = stack.getLast().addChild(comment.getContent().getPosition(0).getPosition())
-						.color(COMMENT_COLOR);
-					commentComp.end = comment.getContent().getPosition(comment.getContent().length()).getPosition();
+					DocumentComponent commentComp = stack.getLast().addChild(comment.getContent().getPosition(0)).color(COMMENT_COLOR);
+					commentComp.end(comment.getContent().getPosition(comment.getContent().length()).getPosition());
 				}
 
 				@Override
 				public void handleElementStart(XmlElementTerminal element) {
-					DocumentComponent elComp = stack.getLast().addChild(element.getContent().getPosition(0).getPosition())
-						.color(ELEMENT_COLOR);
-					stack.add(elComp);
+					DocumentComponent elementComp = stack.getLast().addChild(element.getContent().getPosition(0));
+					stack.add(elementComp);
+					DocumentComponent elStartComp = stack.getLast().addChild(element.getContent().getPosition(0)).color(ELEMENT_COLOR);
+					stack.add(elStartComp);
 				}
 
 				@Override
 				public void handleElementOpen(String elementName, PositionedContent openEnd) {
-					stack.removeLast().end = openEnd.getPosition(openEnd.length()).getPosition();
+					stack.removeLast().end(openEnd.getPosition(openEnd.length()).getPosition());
+					DocumentComponent contentComponent = stack.getLast().addChild(openEnd.getPosition(openEnd.length()))//
+						.color(ELEMENT_VALUE_COLOR);
+					stack.add(contentComponent);
 				}
 
 				@Override
 				public void handleAttribute(XmlAttribute attribute) {
-					DocumentComponent attrComp = stack.getLast().addChild(attribute.getContent().getPosition(0).getPosition())
+					DocumentComponent attrComp = stack.getLast().addChild(attribute.getContent().getPosition(0))
 						.color(ATTRIBUTE_NAME_COLOR);
-					attrComp.end = attribute.getContent().getPosition(attribute.getContent().length()).getPosition();
+					attrComp.end(attribute.getContent().getPosition(attribute.getContent().length()).getPosition());
 					PositionedContent value = attribute.getValueContent();
-					DocumentComponent valueComp = attrComp.addChild(value.getPosition(0).getPosition()).color(ATTRIBUTE_VALUE_COLOR);
-					valueComp.end = value.getPosition(value.length()).getPosition();
+					DocumentComponent valueComp = attrComp.addChild(value.getPosition(0)).color(ATTRIBUTE_VALUE_COLOR);
+					valueComp.end(value.getPosition(value.length()).getPosition());
 				}
 
 				@Override
@@ -383,22 +389,24 @@ public class Qwysiwyg {
 
 				@Override
 				public void handleCDataContent(String elementName, XmlCdata cdata) {
-					DocumentComponent cdataComp = stack.getLast().addChild(cdata.getContent().getPosition(0).getPosition())
-						.color(ELEMENT_COLOR);
+					DocumentComponent cdataComp = stack.getLast().addChild(cdata.getContent().getPosition(0)).color(ELEMENT_COLOR);
 					PositionedContent value = cdata.getValueContent();
-					DocumentComponent valueComp = cdataComp.addChild(value.getPosition(0).getPosition()).color(ELEMENT_VALUE_COLOR);
-					valueComp.end = value.getPosition(value.length()).getPosition();
+					DocumentComponent valueComp = cdataComp.addChild(value.getPosition(0)).color(ELEMENT_VALUE_COLOR);
+					valueComp.end(value.getPosition(value.length()).getPosition());
+					cdataComp.end(cdata.getContent().getPosition(cdata.getContent().length()).getPosition());
 				}
 
 				@Override
 				public void handleElementEnd(XmlElementTerminal element, boolean selfClosing) {
-					if (selfClosing)
-						stack.removeLast().end = element.getContent().getPosition(element.getContent().length()).getPosition();
-					else {
-						DocumentComponent elComp = stack.getLast().addChild(element.getContent().getPosition(0).getPosition())
+					// Remove the component either for the element start (if self-closing) or the element's content
+					stack.removeLast().end(element.getContent().getPosition(0).getPosition());
+					if (!selfClosing) {
+						DocumentComponent elComp = stack.getLast().addChild(element.getContent().getPosition(0))
 							.color(ELEMENT_COLOR);
-						elComp.end = element.getContent().getPosition(element.getContent().length()).getPosition();
+						elComp.end(element.getContent().getPosition(element.getContent().length()).getPosition());
 					}
+					// Remove the component for the element
+					stack.removeLast().end(element.getContent().getPosition(element.getContent().length()).getPosition());
 				}
 			});
 		} catch (IOException | XmlParseException e) {
@@ -422,7 +430,6 @@ public class Qwysiwyg {
 			}
 			attrComp.tooltip2(() -> renderValueType(type, 1));
 		}
-		// TODO this doesn't work for the value because the values are not being rendered special in the XML
 		if (def.getElement().getValue() != null && def.getElement().getValue().position != null) {
 			PositionedContent position = def.getElement().getValue().position;
 			DocumentComponent attrValueComp = getSourceComponent(component, position.getPosition(0).getPosition());
@@ -472,12 +479,136 @@ public class Qwysiwyg {
 	}
 
 	private void renderText() {
+		int lines = 0;
+		for (int c = 0; c < theDocumentContent.length(); c++) {
+			if (theDocumentContent.charAt(c) == '\n')
+				lines++;
+		}
+		int lineDigits = getDigits(lines);
 		StringBuilder renderedText = new StringBuilder();
-		render(theRoot, renderedText, new int[1]);
+		int[] model = new int[1];
+		renderLineBreak(renderedText, model, 1, lineDigits);
+		render(theRoot, renderedText, model, new int[1], lineDigits);
 		theInternalDocumentDisplay.set(renderedText.toString(), null);
 	}
 
-	private int render(DocumentComponent comp, StringBuilder renderedText, int[] model) {
+	private static class DocumentRenderer {
+		private static final String TAB_HTML = "&nbsp;&nbsp;&nbsp;&nbsp;";
+
+		private final CharSequence theContent;
+		private final StringBuilder theRenderedText;
+		private final int theMaxLineDigits;
+
+		private int theModelPosition;
+		private int theLineNumber;
+
+		private Color theFontColor;
+		private boolean isBold;
+
+		public DocumentRenderer(CharSequence content) {
+			theContent = content;
+			theRenderedText = new StringBuilder();
+			int lines = 0;
+			for (int c = 0; c < theContent.length(); c++) {
+				if (theContent.charAt(c) == '\n')
+					lines++;
+			}
+			theMaxLineDigits = getDigits(lines);
+		}
+
+		private int render(DocumentComponent comp) {
+			comp.renderedStart = theModelPosition;
+			Color preFC = theFontColor;
+			boolean color = comp.fontColor != null && !comp.fontColor.equals(theFontColor);
+			if (color) {
+				theFontColor = comp.fontColor;
+				theRenderedText.append("<font color=\"").append(Colors.toHTML(comp.fontColor)).append("\">");
+			}
+			boolean linkEnded = !comp.link;
+			boolean bold = comp.bold && !isBold;
+			if (bold) {
+				isBold = true;
+				theRenderedText.append("<b>");
+			}
+			if (comp.link)
+				theRenderedText.append("<u>");
+			int prevPos = comp.start.getPosition();
+			int end = comp.getEnd() < 0 ? theContent.length() : comp.getEnd();
+			if (comp.children != null) {
+				for (DocumentComponent child : comp.children) {
+					renderText(prevPos, child.start.getPosition());
+					if (!linkEnded) {
+						linkEnded = true;
+						theRenderedText.append("</u>");
+					}
+					prevPos = render(child);
+				}
+			}
+			renderText(prevPos, end);
+			if (!linkEnded)
+				theRenderedText.append("</u>");
+			if (bold) {
+				theRenderedText.append("</b>");
+				isBold = false;
+			}
+			if (color) {
+				theRenderedText.append("</font>");
+				theFontColor = preFC;
+			}
+			comp.renderedEnd = theModelPosition;
+			return end;
+		}
+
+		private void renderText(int from, int to) {
+			for (int c = from; c < to; c++) {
+				char ch = theContent.charAt(c);
+				switch (ch) {
+				case '\n':
+					theRenderedText.append("<br>\n");
+					theModelPosition++;
+					theLineNumber++;
+					renderLineBreak();
+					break;
+				case '\t':
+					theRenderedText.append(TAB_HTML);
+					theModelPosition += 4;
+					break;
+				case '<':
+					theRenderedText.append("&lt;");
+					break;
+				case '"':
+					theRenderedText.append("&quot;");
+					break;
+				case '\'':
+					theRenderedText.append("&apos;");
+					break;
+				case '&':
+					theRenderedText.append("&amp;");
+					break;
+				default:
+					theRenderedText.append(ch);
+					break;
+				}
+			}
+		}
+
+		private void renderLineBreak() {
+			theRenderedText.append("Line ").append(theLineNumber).append(':');
+			int digs = getDigits(theLineNumber);
+			for (int i = theMaxLineDigits; i > digs; i--)
+				theRenderedText.append("&nbsp;");
+			theModelPosition += 6 + theMaxLineDigits;
+		}
+
+		private static int getDigits(int number) {
+			int digs = 1;
+			for (int num = 10; num >= 0 && num <= number; num *= 10, digs++) {
+			}
+			return digs;
+		}
+	}
+
+	private int render(DocumentComponent comp, StringBuilder renderedText, int[] model, int[] line, int lineDigits) {
 		comp.renderedStart = model[0];
 		if (comp.fontColor != null)
 			renderedText.append("<font color=\"").append(Colors.toHTML(comp.fontColor)).append("\">");
@@ -486,19 +617,19 @@ public class Qwysiwyg {
 			renderedText.append("<b>");
 		if (comp.link)
 			renderedText.append("<u>");
-		int prevPos = comp.start;
-		int end = comp.end < 0 ? theDocumentContent.length() : comp.end;
+		int prevPos = comp.start.getPosition();
+		int end = comp.getEnd() < 0 ? theDocumentContent.length() : comp.getEnd();
 		if (comp.children != null) {
 			for (DocumentComponent child : comp.children) {
-				renderText(prevPos, child.start, renderedText, model);
+				renderText(prevPos, child.start.getPosition(), renderedText, model, line, lineDigits);
 				if (!linkEnded) {
 					linkEnded = true;
 					renderedText.append("</u>");
 				}
-				prevPos = render(child, renderedText, model);
+				prevPos = render(child, renderedText, model, line, lineDigits);
 			}
 		}
-		renderText(prevPos, end, renderedText, model);
+		renderText(prevPos, end, renderedText, model, line, lineDigits);
 		if (!linkEnded)
 			renderedText.append("</u>");
 		if (comp.bold)
@@ -511,13 +642,15 @@ public class Qwysiwyg {
 
 	private static final String TAB_HTML = "&nbsp;&nbsp;&nbsp;&nbsp;";
 
-	private void renderText(int from, int to, StringBuilder renderedText, int[] model) {
+	private void renderText(int from, int to, StringBuilder renderedText, int[] model, int[] line, int lineDigits) {
 		for (int c = from; c < to; c++) {
 			char ch = theDocumentContent.charAt(c);
 			switch (ch) {
 			case '\n':
 				renderedText.append("<br>\n");
 				model[0]++;
+				line[0]++;
+				renderLineBreak(renderedText, model, line[0] + 1, lineDigits);
 				break;
 			case '\t':
 				renderedText.append(TAB_HTML);
@@ -547,10 +680,25 @@ public class Qwysiwyg {
 		}
 	}
 
+	private static void renderLineBreak(StringBuilder renderedText, int[] model, int lineNo, int lineDigits) {
+		renderedText.append("Line ").append(lineNo).append(':');
+		int digs = getDigits(lineNo);
+		for (int i = lineDigits; i > digs; i--)
+			renderedText.append("&nbsp;");
+		model[0] += 6 + lineDigits;
+	}
+
+	private static int getDigits(int number) {
+		int digs = 1;
+		for (int num = 10; num >= 0 && num <= number; num *= 10, digs++) {
+		}
+		return digs;
+	}
+
 	static class DocumentComponent {
 		final DocumentComponent parent;
-		final int start;
-		int end;
+		final FilePosition start;
+		private int end;
 		boolean link;
 		boolean bold;
 		Color fontColor;
@@ -560,25 +708,41 @@ public class Qwysiwyg {
 		int renderedEnd;
 
 		static DocumentComponent createRoot() {
-			return new DocumentComponent(null, 0);
+			return new DocumentComponent(null, FilePosition.START);
 		}
 
-		DocumentComponent(DocumentComponent parent, int start) {
+		DocumentComponent(DocumentComponent parent, FilePosition start) {
 			this.parent = parent;
 			this.start = start;
 			end = -1;
+		}
+
+		public int getEnd() {
+			return end;
 		}
 
 		public ObservableValue<String> getTooltip() {
 			return null;
 		}
 
-		DocumentComponent addChild(int childStart) {
+		DocumentComponent addChild(FilePosition childStart) {
+			if (start.getPosition() > childStart.getPosition())
+				throw new IllegalArgumentException("Adding child before the parent");
 			if (children == null)
 				children = new ArrayList<>();
+			else if (!children.isEmpty() && childStart.getPosition() < children.get(children.size() - 1).end)
+				throw new IllegalArgumentException("Adding child before end of the previous one");
 			DocumentComponent child = new DocumentComponent(this, childStart);
 			children.add(child);
 			return child;
+		}
+
+		void end(int e) {
+			if (e < start.getPosition())
+				throw new IllegalArgumentException("Ending before beginning");
+			if (children != null && !children.isEmpty() && e < children.get(children.size() - 1).end)
+				throw new IllegalArgumentException("Ending parent before last child");
+			this.end = e;
 		}
 
 		DocumentComponent color(Color color) {

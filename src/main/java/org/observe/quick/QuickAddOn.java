@@ -1,19 +1,131 @@
 package org.observe.quick;
 
+import java.util.function.Function;
+
+import org.observe.expresso.CompiledExpression;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ExpressoQIS;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
+import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
 /**
- * The Quick interpretation of a {@link QonfigAddOn}. Hangs on to a {@link QuickElement} and provides specialized functionality to it.
+ * The Quick interpretation of a {@link QonfigAddOn}. Hangs on to a {@link QonfigDefinedElement} and provides specialized functionality to it.
  *
  * @param <E> The super type of element that this type of add-on may be added onto
  */
 public interface QuickAddOn<E extends QuickElement> {
+	public abstract class AddOnAttributeGetter<E extends QuickElement, AO extends QuickAddOn<? super E>, I extends Interpreted<? super E, ? extends AO>, D extends QuickAddOn.Def<? super E, ? extends AO>> //
+	implements QuickElement.AttributeValueGetter<E, QuickElement.Interpreted<? extends E>, QuickElement.Def<? extends E>> {
+		private final Class<D> theDefType;
+		private final Class<I> theInterpType;
+		private final Class<AO> theAddOnType;
+
+		protected AddOnAttributeGetter(Class<D> defType, Class<I> interpType, Class<AO> addOnType) {
+			theDefType = defType;
+			theInterpType = interpType;
+			theAddOnType = addOnType;
+		}
+
+		public abstract Object getFromDef(D def);
+
+		public abstract Object getFromInterpreted(I interpreted);
+
+		public abstract Object getFromAddOn(AO addOn);
+
+		@Override
+		public Object getFromDef(QuickElement.Def<? extends E> def) {
+			return def.getAddOnValue(theDefType, this::getFromDef);
+		}
+
+		@Override
+		public Object getFromInterpreted(QuickElement.Interpreted<? extends E> interp) {
+			return interp.getAddOnValue(theInterpType, this::getFromInterpreted);
+		}
+
+		@Override
+		public Object getFromElement(QuickElement element) {
+			return element.getAddOnValue(theAddOnType, this::getFromAddOn);
+		}
+
+		public static <E extends QuickElement, AO extends QuickAddOn<? super E>, I extends Interpreted<? super E, ? extends AO>, D extends QuickAddOn.Def<? super E, ? extends AO>> Default<E, AO, I, D> of(
+			Class<D> defType, Function<? super D, ?> defGetter, Class<I> interpretedType, Function<? super I, ?> interpretedGetter,
+			Class<AO> addOnType, Function<? super AO, ?> addOnGetter) {
+			return new Default<>(defType, defGetter, interpretedType, interpretedGetter, addOnType, addOnGetter);
+		}
+
+		public static <E extends QuickElement, AO extends QuickAddOn<? super E>, I extends Interpreted<? super E, ? extends AO>, D extends QuickAddOn.Def<? super E, ? extends AO>, M, MV extends M> Expression<E, AO, I, D, M, MV> ofX(
+			Class<D> defType, Function<? super D, ? extends CompiledExpression> defGetter, Class<I> interpretedType,
+			Function<? super I, ? extends InterpretedValueSynth<M, ? extends MV>> interpretedGetter, Class<AO> addOnType,
+				Function<? super AO, ? extends MV> addOnGetter) {
+			return new Expression<>(defType, defGetter, interpretedType, interpretedGetter, addOnType, addOnGetter);
+		}
+
+		public static class Default<E extends QuickElement, AO extends QuickAddOn<? super E>, I extends Interpreted<? super E, ? extends AO>, D extends QuickAddOn.Def<? super E, ? extends AO>>
+		extends AddOnAttributeGetter<E, AO, I, D> {
+			private final Function<? super D, ?> theDefGetter;
+			private final Function<? super I, ?> theInterpretedGetter;
+			private final Function<? super AO, ?> theAddOnGetter;
+
+			public Default(Class<D> defType, Function<? super D, ?> defGetter, Class<I> interpType,
+				Function<? super I, ?> interpretedGetter, Class<AO> addOnType, Function<? super AO, ?> addOnGetter) {
+				super(defType, interpType, addOnType);
+				theDefGetter = defGetter;
+				theInterpretedGetter = interpretedGetter;
+				theAddOnGetter = addOnGetter;
+			}
+
+			@Override
+			public Object getFromDef(D def) {
+				return theDefGetter.apply(def);
+			}
+
+			@Override
+			public Object getFromInterpreted(I interpreted) {
+				return theInterpretedGetter.apply(interpreted);
+			}
+
+			@Override
+			public Object getFromAddOn(AO addOn) {
+				return theAddOnGetter.apply(addOn);
+			}
+		}
+
+		public static class Expression<E extends QuickElement, AO extends QuickAddOn<? super E>, I extends Interpreted<? super E, ? extends AO>, D extends QuickAddOn.Def<? super E, ? extends AO>, M, MV extends M>
+		extends AddOnAttributeGetter<E, AO, I, D> {
+			private final Function<? super D, ? extends CompiledExpression> theDefGetter;
+			private final Function<? super I, ? extends InterpretedValueSynth<M, ? extends MV>> theInterpretedGetter;
+			private final Function<? super AO, ? extends MV> theAddOnGetter;
+
+			public Expression(Class<D> defType, Function<? super D, ? extends CompiledExpression> defGetter, Class<I> interpType,
+				Function<? super I, ? extends InterpretedValueSynth<M, ? extends MV>> interpretedGetter, Class<AO> addOnType,
+					Function<? super AO, ? extends MV> addOnGetter) {
+				super(defType, interpType, addOnType);
+				theDefGetter = defGetter;
+				theInterpretedGetter = interpretedGetter;
+				theAddOnGetter = addOnGetter;
+			}
+
+			@Override
+			public Object getFromDef(D def) {
+				return theDefGetter.apply(def);
+			}
+
+			@Override
+			public Object getFromInterpreted(I interpreted) {
+				return theInterpretedGetter.apply(interpreted);
+			}
+
+			@Override
+			public Object getFromAddOn(AO addOn) {
+				return theAddOnGetter.apply(addOn);
+			}
+		}
+	}
+
 	/**
 	 * The definition of a {@link QuickAddOn}
 	 *
@@ -28,7 +140,7 @@ public interface QuickAddOn<E extends QuickElement> {
 		QuickElement.Def<? extends E> getElement();
 
 		/**
-		 * Called from the {@link #getElement() element}'s {@link QuickElement.Def#update(ExpressoQIS) update}, initializes or updates this
+		 * Called from the {@link #getElement() element}'s {@link QonfigDefinedElement.Def#update(ExpressoQIS) update}, initializes or updates this
 		 * add-on definition
 		 *
 		 * @param session The session to support this add-on
@@ -99,7 +211,7 @@ public interface QuickAddOn<E extends QuickElement> {
 		void update(InterpretedModelSet models) throws ExpressoInterpretationException;
 
 		/**
-		 * @param element The QuickElement
+		 * @param element The QonfigDefinedElement
 		 * @return An instance of this add-on for the given element
 		 */
 		AO create(E element);

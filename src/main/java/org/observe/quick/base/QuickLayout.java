@@ -5,7 +5,7 @@ import org.observe.quick.QuickElement;
 import org.qommons.config.QonfigAddOn;
 
 public interface QuickLayout extends QuickAddOn<QuickBox> {
-	public abstract class Def<L extends QuickLayout> extends QuickAddOn.Def.Abstract<QuickBox, QuickLayout> {
+	public abstract class Def<L extends QuickLayout> extends QuickAddOn.Def.Abstract<QuickBox, L> {
 		protected Def(QonfigAddOn type, QuickElement.Def<? extends QuickBox> element) {
 			super(type, element);
 		}

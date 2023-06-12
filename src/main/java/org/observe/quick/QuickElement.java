@@ -14,6 +14,7 @@ import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.SettableValue;
+import org.observe.expresso.CompiledExpression;
 import org.observe.expresso.DynamicModelValue;
 import org.observe.expresso.ExpressoEnv;
 import org.observe.expresso.ExpressoInterpretationException;
@@ -23,6 +24,7 @@ import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
+import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.TypeConversionException;
 import org.qommons.ClassMap;
@@ -74,6 +76,110 @@ public interface QuickElement extends Identifiable {
 		Object getFromInterpreted(I interp);
 
 		Object getFromElement(E element);
+
+		public static <E extends QuickElement, I extends QuickElement.Interpreted<? extends E>, D extends QuickElement.Def<? extends E>> Default<E, I, D> of(
+			Function<? super D, ?> defGetter, Function<? super I, ?> interpretedGetter, Function<? super E, ?> elementGetter) {
+			return new Default<>(defGetter, interpretedGetter, elementGetter);
+		}
+
+		public static <E extends QuickElement, I extends QuickElement.Interpreted<? extends E>, D extends QuickElement.Def<? extends E>, M, MV extends M> Expression<E, I, D, M, MV> ofX(
+			Function<? super D, ? extends CompiledExpression> defGetter,
+			Function<? super I, ? extends InterpretedValueSynth<M, ? extends MV>> interpretedGetter,
+				Function<? super E, ? extends MV> elementGetter) {
+			return new Expression<>(defGetter, interpretedGetter, elementGetter);
+		}
+
+		public static <E extends QuickElement, AO extends QuickAddOn<? super E>, I extends QuickAddOn.Interpreted<? super E, ? extends AO>, D extends QuickAddOn.Def<? super E, ? extends AO>> AddOn<E, AO, I, D> addOn(
+			Class<D> defType, Class<I> interpretedType, Class<AO> addOnType) {
+			return new AddOn<>(defType, interpretedType, addOnType);
+		}
+
+		public static class Default<E extends QuickElement, I extends QuickElement.Interpreted<? extends E>, D extends QuickElement.Def<? extends E>>
+		implements AttributeValueGetter<E, I, D> {
+			private final Function<? super D, ?> theDefGetter;
+			private final Function<? super I, ?> theInterpretedGetter;
+			private final Function<? super E, ?> theElementGetter;
+
+			public Default(Function<? super D, ?> defGetter, Function<? super I, ?> interpretedGetter,
+				Function<? super E, ?> elementGetter) {
+				theDefGetter = defGetter;
+				theInterpretedGetter = interpretedGetter;
+				theElementGetter = elementGetter;
+			}
+
+			@Override
+			public Object getFromDef(D def) {
+				return theDefGetter.apply(def);
+			}
+
+			@Override
+			public Object getFromInterpreted(I interp) {
+				return theInterpretedGetter.apply(interp);
+			}
+
+			@Override
+			public Object getFromElement(E element) {
+				return theElementGetter.apply(element);
+			}
+		}
+
+		public static class Expression<E extends QuickElement, I extends QuickElement.Interpreted<? extends E>, D extends QuickElement.Def<? extends E>, M, MV extends M>
+		implements AttributeValueGetter<E, I, D> {
+			private final Function<? super D, ? extends CompiledExpression> theDefGetter;
+			private final Function<? super I, ? extends InterpretedValueSynth<M, ? extends MV>> theInterpretedGetter;
+			private final Function<? super E, ? extends MV> theElementGetter;
+
+			public Expression(Function<? super D, ? extends CompiledExpression> defGetter,
+				Function<? super I, ? extends InterpretedValueSynth<M, ? extends MV>> interpretedGetter,
+					Function<? super E, ? extends MV> elementGetter) {
+				theDefGetter = defGetter;
+				theInterpretedGetter = interpretedGetter;
+				theElementGetter = elementGetter;
+			}
+
+			@Override
+			public CompiledExpression getFromDef(D def) {
+				return theDefGetter.apply(def);
+			}
+
+			@Override
+			public InterpretedValueSynth<M, ? extends MV> getFromInterpreted(I interp) {
+				return theInterpretedGetter.apply(interp);
+			}
+
+			@Override
+			public MV getFromElement(E element) {
+				return theElementGetter.apply(element);
+			}
+		}
+
+		public static class AddOn<E extends QuickElement, AO extends QuickAddOn<? super E>, I extends QuickAddOn.Interpreted<? super E, ? extends AO>, D extends QuickAddOn.Def<? super E, ? extends AO>>
+		implements AttributeValueGetter<E, QuickElement.Interpreted<? extends E>, QuickElement.Def<? extends E>> {
+			private final Class<D> theDefType;
+			private final Class<I> theInterpretedType;
+			private final Class<AO> theAddOnType;
+
+			public AddOn(Class<D> defType, Class<I> interpretedType, Class<AO> addOnType) {
+				theDefType = defType;
+				theInterpretedType = interpretedType;
+				theAddOnType = addOnType;
+			}
+
+			@Override
+			public D getFromDef(Def<? extends E> def) {
+				return def.getAddOn(theDefType);
+			}
+
+			@Override
+			public I getFromInterpreted(Interpreted<? extends E> interp) {
+				return interp.getAddOn(theInterpretedType);
+			}
+
+			@Override
+			public AO getFromElement(E element) {
+				return element.getAddOn(theAddOnType);
+			}
+		}
 	}
 
 	public interface ChildElementGetter<E extends QuickElement, I extends QuickElement.Interpreted<? extends E>, D extends QuickElement.Def<? extends E>> {
@@ -141,6 +247,9 @@ public interface QuickElement extends Identifiable {
 					}
 				}
 			}
+			if (children != null)
+				Collections.sort(children, (c1, c2) -> Integer.compare(c1.reporting().getFileLocation().getPosition(0).getPosition(),
+					c2.reporting().getFileLocation().getPosition(0).getPosition()));
 			return children == null ? Collections.emptyList() : children;
 		}
 
@@ -177,6 +286,10 @@ public interface QuickElement extends Identifiable {
 					}
 				}
 			}
+			if (children != null)
+				Collections.sort(children,
+					(c1, c2) -> Integer.compare(c1.getDefinition().reporting().getFileLocation().getPosition(0).getPosition(),
+						c2.getDefinition().reporting().getFileLocation().getPosition(0).getPosition()));
 			return children == null ? Collections.emptyList() : children;
 		}
 
@@ -213,6 +326,9 @@ public interface QuickElement extends Identifiable {
 					}
 				}
 			}
+			if (children != null)
+				Collections.sort(children, (c1, c2) -> Integer.compare(c1.reporting().getFileLocation().getPosition(0).getPosition(),
+					c2.reporting().getFileLocation().getPosition(0).getPosition()));
 			return children == null ? Collections.emptyList() : children;
 		}
 
@@ -238,9 +354,9 @@ public interface QuickElement extends Identifiable {
 			return ao == null ? null : fn.apply(ao);
 		}
 
-		void forAttribute(QonfigAttributeDef.Declared attr, AttributeValueGetter<? super E, ?, ?> getter);
+		void forAttribute(QonfigAttributeDef attr, AttributeValueGetter<? super E, ?, ?> getter);
 
-		void forChild(QonfigChildDef.Declared child, ChildElementGetter<? super E, ?, ?> getter);
+		void forChild(QonfigChildDef child, ChildElementGetter<? super E, ?, ?> getter);
 
 		/**
 		 * Updates this element definition. Must be called at least once after interpretation produces this object.
@@ -374,13 +490,13 @@ public interface QuickElement extends Identifiable {
 			}
 
 			@Override
-			public void forAttribute(QonfigAttributeDef.Declared attr, AttributeValueGetter<? super E, ?, ?> getter) {
-				theAttributes.putIfAbsent(attr, getter);
+			public void forAttribute(QonfigAttributeDef attr, AttributeValueGetter<? super E, ?, ?> getter) {
+				theAttributes.putIfAbsent(attr.getDeclared(), getter);
 			}
 
 			@Override
-			public void forChild(QonfigChildDef.Declared child, ChildElementGetter<? super E, ?, ?> getter) {
-				theChildren.putIfAbsent(child, getter);
+			public void forChild(QonfigChildDef child, ChildElementGetter<? super E, ?, ?> getter) {
+				theChildren.putIfAbsent(child.getDeclared(), getter);
 			}
 
 			@Override
@@ -625,7 +741,7 @@ public interface QuickElement extends Identifiable {
 	 */
 	ModelSetInstance update(Interpreted<?> interpreted, ModelSetInstance models) throws ModelInstantiationException;
 
-	/** Abstract {@link QuickElement} implementation */
+	/** Abstract {@link QonfigDefinedElement} implementation */
 	public abstract class Abstract implements QuickElement {
 		private final Identity theId;
 		private final QuickElement theParent;
@@ -723,8 +839,8 @@ public interface QuickElement extends Identifiable {
 			try {
 				DynamicModelValue.satisfyDynamicValue(valueName, type, models, value);
 			} catch (ModelException e) {
-				throw new ModelInstantiationException("No " + valueName + " value?",
-					element.reporting().getFileLocation().getPosition(0), 0, e);
+				throw new ModelInstantiationException("No " + valueName + " value?", element.reporting().getFileLocation().getPosition(0),
+					0, e);
 			} catch (TypeConversionException e) {
 				throw new IllegalStateException(valueName + " is not a " + type + "?", e);
 			}
@@ -741,8 +857,8 @@ public interface QuickElement extends Identifiable {
 	 * @throws QonfigInterpretationException If the definition could not be interpreted
 	 * @throws IllegalArgumentException If no such child role exists
 	 */
-	public static <D extends QuickElement.Def<?>> D useOrReplace(Class<? extends D> type, D def,
-		ExpressoQIS session, String childName) throws QonfigInterpretationException, IllegalArgumentException {
+	public static <D extends QuickElement.Def<?>> D useOrReplace(Class<? extends D> type, D def, ExpressoQIS session, String childName)
+		throws QonfigInterpretationException, IllegalArgumentException {
 		QonfigElement element = session.getChildren(childName).peekFirst();
 		if (element == null)
 			return null;
