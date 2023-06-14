@@ -335,7 +335,7 @@ public class QuickStyleInterpretation implements QonfigInterpretation {
 			} else if (element != null) {
 				QuickTypeStyle styled = session.getStyleSet().getOrCompile(element.getType(), exS, theToolkit);
 				if (styled != null)
-					attrs.addAll(session.getStyleSet().getOrCompile(element.getType(), exS, theToolkit).getAttributes(attrName.text));
+					attrs.addAll(styled.getAttributes(attrName.text));
 				for (QonfigAddOn inh : element.getInheritance().values()) {
 					if (attrs.size() > 1)
 						break;

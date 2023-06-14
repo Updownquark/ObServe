@@ -761,6 +761,9 @@ public abstract class Invocation implements ObservableExpression {
 					Object retValue = invoke(true);
 					return getMethod().converter.convert(SettableValue.of(Object.class, retValue, "")).get();
 				} catch (InvocationTargetException e) {
+					// For the sake of unit testing, let this one exception through
+					if (e.getTargetException() instanceof AssertionError)
+						throw (AssertionError) e.getTargetException();
 					getReporting().error(e.getTargetException().getMessage(), e.getTargetException());
 					return null;
 				} catch (Throwable e) {

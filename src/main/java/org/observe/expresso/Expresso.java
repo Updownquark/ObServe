@@ -185,7 +185,7 @@ public class Expresso {
 	public interface ElementModelAugmentation<T> extends QonfigInterpreterCore.QonfigValueModifier<T> {
 		@Override
 		default Object prepareSession(CoreSession session) throws QonfigInterpretationException {
-			if (session.get(getClass().getName()) != null)
+			if (session.get(getClass().getName(), true) != null)
 				return null;
 			session.putLocal(getClass().getName(), true);
 			ObservableModelSet.Builder builder;

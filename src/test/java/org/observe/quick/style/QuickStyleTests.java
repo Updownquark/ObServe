@@ -46,4 +46,15 @@ public class QuickStyleTests extends AbstractExpressoTest<Expresso> {
 	public void testLocalStyleSheet() throws ExpressoInterpretationException, ModelInstantiationException {
 		getTesting().executeTest("localStyleSheet");
 	}
+
+	/**
+	 * Tests against an inline style sheet with conditionally-applied style sets
+	 *
+	 * @throws ExpressoInterpretationException If an error occurs interpreting the test
+	 * @throws ModelInstantiationException If an error occurs instantiating the test structures
+	 */
+	@Test
+	public void testWithStyleSets() throws ExpressoInterpretationException, ModelInstantiationException {
+		getTesting().executeTest("withStyleSets");
+	}
 }

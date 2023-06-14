@@ -241,4 +241,25 @@
 		</model>
 		<action name="blank">models.m0=true</action>
 	</test>
+	<test name="withStyleSets">
+		<style-sheet>
+			<style-set name="testStyle">
+				<style element="a" attr="s1">217
+					<style condition="d">856</style>
+				</style>
+			</style-set>
+		</style-sheet>
+
+		<a name="a" a="models.m0" b="true" c="0" d="models.m2">
+			<style condition="a" style-set="testStyle" />
+		</a>
+	
+		<action name="init0">assertEquals(0, a.s1)</action>
+		<action name="applyStyleSet0">models.m0=true</action>
+		<action name="test1">assertEquals(217, a.s1)</action>
+		<action name="applyCondition0">models.m2=true</action>
+		<action name="test2">assertEquals(856, a.s1)</action>
+		<action name="applyStyleSet1">models.m0=false</action>
+		<action name="test3">assertEquals(0, a.s1)</action>
+	</test>
 </testing>

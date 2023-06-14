@@ -1404,7 +1404,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 	 * @throws ExpressoInterpretationException If the value in the session for the given key is not a type
 	 */
 	public static <T> TypeToken<T> getType(ExpressoQIS session, String typeKey) throws ExpressoInterpretationException {
-		Object type = session.get(typeKey);
+		Object type = session.get(typeKey, true);
 		if (type == null)
 			return null;
 		else if (type instanceof TypeToken<?>)

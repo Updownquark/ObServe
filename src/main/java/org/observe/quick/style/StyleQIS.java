@@ -77,7 +77,7 @@ public class StyleQIS implements SpecialSession<StyleQIS> {
 	}
 
 	boolean isStyled() {
-		return (Boolean) getWrapped().get(STYLED_PROP);
+		return (Boolean) getWrapped().get(STYLED_PROP, true);
 	}
 
 	/** @return The set of style types for this style session */

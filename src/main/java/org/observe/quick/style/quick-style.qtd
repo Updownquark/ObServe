@@ -60,7 +60,7 @@
 
 		<element-def name="style-set">
 			<attribute name="name" type="identifier" specify="required" />
-			<child-def name="style" type="style" />
+			<child-def name="style" type="style" max="inf" />
 		</element-def>
 
 		<!-- Now the structure of the Quick document -->
