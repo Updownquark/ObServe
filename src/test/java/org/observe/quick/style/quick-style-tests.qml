@@ -273,7 +273,7 @@
 
 		<action name="init20">assertEquals(0, a2.s1)</action>
 		<action name="applyStyleSet20">models.m0=true</action>
-		<action name="test21" breakpoint="true">assertEquals(217, a2.s1)</action>
+		<action name="test21">assertEquals(217, a2.s1)</action>
 		<action name="applyCondition20">models.m2=true</action>
 		<action name="test22">assertEquals(856, a2.s1)</action>
 		<action name="applyStyleSet21">models.m0=false</action>
