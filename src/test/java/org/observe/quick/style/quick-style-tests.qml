@@ -216,7 +216,7 @@
 		<action name="assignB_1">a0.b=true</action>
 		<action name="assignC_1">a0.c=250</action>
 		<action name="checkA0S0_1">assertEquals(ext.actionName, false, a0.s0)</action>
-		<action name="checkA0S1_1" breakpoint="true">assertEquals(ext.actionName, 25_000, a0.s1)</action>
+		<action name="checkA0S1_1">assertEquals(ext.actionName, 25_000, a0.s1)</action>
 
 		<action name="assignB0E_1">b0.e=true</action>
 		<action name="checkB0S3_1">assertEquals(ext.actionName, models.m3, b0.s3)</action>
@@ -247,19 +247,40 @@
 				<style element="a" attr="s1">217
 					<style condition="d">856</style>
 				</style>
+				<style element="a" attr="s0">true</style> <!-- Just to test multiple styles in a style set -->
 			</style-set>
 		</style-sheet>
 
-		<a name="a" a="models.m0" b="true" c="0" d="models.m2">
+		<a name="a1" a="models.m0" b="true" c="0" d="models.m2">
+			<style condition="a" attr="s1">217
+				<style condition="d">856</style>
+			</style>
+		</a>
+		<a name="a2" a="models.m0" b="true" c="0" d="models.m2">
+			<style attr="s0">false</style>
 			<style condition="a" style-set="testStyle" />
 		</a>
-	
-		<action name="init0">assertEquals(0, a.s1)</action>
-		<action name="applyStyleSet0">models.m0=true</action>
-		<action name="test1">assertEquals(217, a.s1)</action>
-		<action name="applyCondition0">models.m2=true</action>
-		<action name="test2">assertEquals(856, a.s1)</action>
-		<action name="applyStyleSet1">models.m0=false</action>
-		<action name="test3">assertEquals(0, a.s1)</action>
+
+		<action name="init10">assertEquals(0, a1.s1)</action>
+		<action name="applyStyleSet10">models.m0=true</action>
+		<action name="test11">assertEquals(217, a1.s1)</action>
+		<action name="applyCondition10">models.m2=true</action>
+		<action name="test12">assertEquals(856, a1.s1)</action>
+		<action name="applyStyleSet11">models.m0=false</action>
+		<action name="test13">assertEquals(0, a1.s1)</action>
+
+		<action name="reset0">models.m2=false</action>
+
+		<action name="init20">assertEquals(0, a2.s1)</action>
+		<action name="applyStyleSet20">models.m0=true</action>
+		<action name="test21" breakpoint="true">assertEquals(217, a2.s1)</action>
+		<action name="applyCondition20">models.m2=true</action>
+		<action name="test22">assertEquals(856, a2.s1)</action>
+		<action name="applyStyleSet21">models.m0=false</action>
+		<action name="test23">assertEquals(0, a2.s1)</action>
+
+		<action name="init30">assertEquals(false, a2.s0)</action>
+		<action name="applyStyleSet30">models.m0=true</action>
+		<action name="init30">assertEquals(true, a2.s0)</action>
 	</test>
 </testing>

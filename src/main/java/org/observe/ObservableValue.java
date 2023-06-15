@@ -1954,7 +1954,7 @@ public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>,
 
 		@Override
 		public long getStamp() {
-			return Stamped.compositeStamp(Arrays.asList(theValues), Stamped::getStamp);
+			return Stamped.compositeStamp(Arrays.asList(theValues));
 		}
 
 		@Override

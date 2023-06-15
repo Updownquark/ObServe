@@ -111,6 +111,15 @@ public class QuickStyleValue<T> implements Comparable<QuickStyleValue<?>> {
 		return new CompiledStyleValue<>(this, application, valueV);
 	}
 
+	/**
+	 * @param application The application to apply
+	 * @return A new style value identical to this one, except whose {@link #getApplication() application} is the
+	 *         {@link StyleApplicationDef#and(StyleApplicationDef) AND} operation of this value's application and the one given
+	 */
+	public QuickStyleValue<T> when(StyleApplicationDef application) {
+		return new QuickStyleValue<>(theStyleSheet, theApplication.and(application), theAttribute, theValueExpression);
+	}
+
 	@Override
 	public int compareTo(QuickStyleValue<?> o) {
 		int comp = theApplication.compareTo(o.theApplication);

@@ -27,6 +27,7 @@ import org.observe.util.TypeTokens;
 import org.qommons.IdentityKey;
 import org.qommons.QommonsUtils;
 import org.qommons.Version;
+import org.qommons.collect.BetterList;
 import org.qommons.config.*;
 import org.qommons.config.QonfigElement.QonfigValue;
 import org.qommons.config.QonfigInterpreterCore.Builder;
@@ -243,7 +244,13 @@ public class QuickStyleInterpretation implements QonfigInterpretation {
 					elName.position == null ? null : new LocatedFilePosition(elName.fileLocation, elName.position.getPosition(0)), //
 						elName.text.length(), e);
 			}
-			application = application.forType(el);
+			try {
+				application = application.forType(el);
+			} catch (IllegalArgumentException e) {
+				throw new QonfigInterpretationException(e.getMessage(),
+					elName.position == null ? null : new LocatedFilePosition(elName.fileLocation, elName.position.getPosition(0)), //
+						elName.text.length(), e);
+			}
 		}
 		DynamicModelValue.Cache dmvCache = exS.getDynamicValueCache();
 		CompiledExpression newCondition = exS.getAttributeExpression("condition");
@@ -415,8 +422,14 @@ public class QuickStyleInterpretation implements QonfigInterpretation {
 						theToolkit, styleSheet != null, dmvCache);
 					values.add(new QuickStyleValue<>(styleSheet, theApplication, theAttr, replacedValue));
 				}
-				if (styleSetRef != null)
-					values.addAll(styleSetRef);
+				if (styleSetRef != null) {
+					for (QuickStyleValue<?> ssv : styleSetRef) {
+						ssv = ssv.when(theApplication);
+						if (ssv.getApplication() == StyleApplicationDef.NONE)
+							continue;
+						values.add(ssv);
+					}
+				}
 				for (StyleValues child : subStyles)
 					values.addAll(child);
 				return values;
@@ -426,8 +439,15 @@ public class QuickStyleInterpretation implements QonfigInterpretation {
 
 	private QuickStyleSheet interpretStyleSheet(StyleQIS session) throws QonfigInterpretationException {
 		ExpressoQIS exS = session.as(ExpressoQIS.class);
-		// First import style sheets
+
 		Map<String, QuickStyleSheet> imports = new LinkedHashMap<>();
+		Map<String, List<QuickStyleValue<?>>> styleSets = new LinkedHashMap<>();
+		List<QuickStyleValue<?>> values = new ArrayList<>();
+		QuickStyleSheet styleSheet = new QuickStyleSheet((URL) session.get(STYLE_SHEET_REF), Collections.unmodifiableMap(styleSets),
+			Collections.unmodifiableList(values), Collections.unmodifiableMap(imports));
+		session.setStyleSheet(styleSheet);
+
+		// First import style sheets
 		DefaultQonfigParser parser = null;
 		for (StyleQIS sse : session.forChildren("style-sheet-ref")) {
 			String name = sse.getAttributeText("name");
@@ -478,12 +498,17 @@ public class QuickStyleInterpretation implements QonfigInterpretation {
 		}
 
 		// Next, compile style-sets
-		Map<String, List<QuickStyleValue<?>>> styleSets = new LinkedHashMap<>();
 		List<StyleQIS> styleSetEls = session.forChildren("style-set");
 		for (StyleQIS styleSetEl : styleSetEls) {
 			String name = styleSetEl.getAttributeText("name");
 			styleSetEl.put(STYLE_NAME, name);
-			styleSets.put(name, styleSetEl.interpretChildren("style", StyleValues.class).getFirst());
+			List<StyleValues> styleSetValues = styleSetEl.interpretChildren("style", StyleValues.class);
+			styleSets.put(name, new StyleValues(name) {
+				@Override
+				protected List<QuickStyleValue<?>> get() throws QonfigInterpretationException {
+					return BetterList.of(styleSetValues.stream(), sv -> sv.get().stream());
+				}
+			});
 		}
 
 		// Now compile the style-sheet styles
@@ -492,10 +517,6 @@ public class QuickStyleInterpretation implements QonfigInterpretation {
 		if (slash >= 0)
 			name = name.substring(slash + 1);
 		session.put(STYLE_NAME, name);
-		List<QuickStyleValue<?>> values = new ArrayList<>();
-		QuickStyleSheet styleSheet = new QuickStyleSheet((URL) session.get(STYLE_SHEET_REF), Collections.unmodifiableMap(styleSets),
-			Collections.unmodifiableList(values), Collections.unmodifiableMap(imports));
-		session.setStyleSheet(styleSheet);
 		for (StyleQIS subStyleEl : session.forChildren("style")) {
 			StyleValues subStyle = subStyleEl.interpret(StyleValues.class);
 			subStyle.init(subStyleEl.getElement());

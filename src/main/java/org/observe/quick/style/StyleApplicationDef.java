@@ -19,6 +19,7 @@ import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigAttributeDef;
 import org.qommons.config.QonfigChildDef;
 import org.qommons.config.QonfigElement;
+import org.qommons.config.QonfigElementDef;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigToolkit;
@@ -35,6 +36,24 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 	/** An {@link StyleApplicationDef} that applies to all {@link QonfigElement}s */
 	public static final StyleApplicationDef ALL = new StyleApplicationDef(null, null, MultiInheritanceSet.empty(), null,
 		Collections.emptyMap());
+	/** An {@link StyleApplicationDef} that applies to no {@link QonfigElement}s */
+	public static final StyleApplicationDef NONE = new StyleApplicationDef(null, null, MultiInheritanceSet.empty(),
+		new LocatedExpression() {
+		@Override
+		public int length() {
+			return "false".length();
+		}
+
+		@Override
+		public LocatedPositionedContent getFilePosition() {
+			return null;
+		}
+
+		@Override
+		public ObservableExpression getExpression() {
+				return new ObservableExpression.LiteralExpression<>("false", false);
+		}
+	}, Collections.emptyMap());
 
 	private static final Map<DynamicModelValue.Identity, Integer> MODEL_VALUE_PRIORITY = new WeakHashMap<>();
 
@@ -436,23 +455,86 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 	}
 
 	/**
+	 * @param types The types to test
+	 * @return Whether the given types are compatible with this application. E.g. 2 unrelated {@link QonfigElementDef}s cannot be part of
+	 *         the same application, as a single {@link QonfigElement} cannot possibly be of both types.
+	 */
+	public boolean isCompatible(QonfigElementOrAddOn... types) {
+		for (QonfigElementOrAddOn type : types) {
+			QonfigElementDef typeEl;
+			if (type instanceof QonfigElementDef)
+				typeEl = (QonfigElementDef) type;
+			else if (type.getSuperElement() != null)
+				typeEl = type.getSuperElement();
+			else
+				continue; // Compatible with anything
+
+			if (theRole != null && theRole.getType() != null//
+				&& !typeEl.isAssignableFrom(theRole.getType()) && !theRole.getType().isAssignableFrom(typeEl))
+				return false;
+			for (QonfigElementOrAddOn myType : theTypes.values()) {
+				QonfigElementDef myTypeEl;
+				if (myType instanceof QonfigElementDef)
+					myTypeEl = (QonfigElementDef) myType;
+				else if (myType.getSuperElement() != null)
+					myTypeEl = myType.getSuperElement();
+				else
+					continue; // Compatible with anything
+
+				if (!typeEl.isAssignableFrom(myTypeEl) && !myTypeEl.isAssignableFrom(typeEl))
+					return false;
+			}
+		}
+		return true;
+	}
+
+	/**
 	 * @param types The element types to apply to
 	 * @return A {@link StyleApplicationDef} that applies to {@link QonfigElement}s that this application applies to <b>AND</b> that are
 	 *         {@link QonfigElement#isInstance(QonfigElementOrAddOn) instances} of <b>ALL</b> of the given types
+	 * @throws IllegalArgumentException If one of the given types is {{@link #isCompatible(QonfigElementOrAddOn...) incompatible} with
+	 *         another or one of the types in this application
 	 */
-	public StyleApplicationDef forType(QonfigElementOrAddOn... types) {
+	public StyleApplicationDef forType(QonfigElementOrAddOn... types) throws IllegalArgumentException{
 		MultiInheritanceSet<QonfigElementOrAddOn> newTypes = null;
 		for (QonfigElementOrAddOn type : types) {
-			if (theRole != null && theRole.getType() != null && type.isAssignableFrom(theRole.getType()))
+			if (theTypes.contains(type))
 				continue;
-			if (!theTypes.contains(type)) {
-				if (newTypes == null) {
-					newTypes = MultiInheritanceSet.create(STYLE_INHERITANCE);
-					newTypes.addAll(theTypes.values());
-				}
-				newTypes.add(type);
-				// break; Don't know why I was breaking here, doesn't seem right
+
+			QonfigElementDef typeEl;
+			if (type instanceof QonfigElementDef)
+				typeEl = (QonfigElementDef) type;
+			else if (type.getSuperElement() != null)
+				typeEl = type.getSuperElement();
+			else
+				typeEl = null; // Compatible with anything
+
+			if (theRole != null && theRole.getType() != null) {
+				if (type.isAssignableFrom(theRole.getType()))
+					continue;
+				else if (typeEl != null && !typeEl.isAssignableFrom(theRole.getType()) && !theRole.getType().isAssignableFrom(typeEl))
+					throw new IllegalArgumentException(
+						"Type " + type + " is incompatible with type " + theRole.getType() + " of role " + theRole);
 			}
+			if (typeEl != null) {
+				for (QonfigElementOrAddOn myType : theTypes.values()) {
+					QonfigElementDef myTypeEl;
+					if (myType instanceof QonfigElementDef)
+						myTypeEl = (QonfigElementDef) myType;
+					else if (myType.getSuperElement() != null)
+						myTypeEl = myType.getSuperElement();
+					else
+						continue; // Compatible with anything
+
+					if (!typeEl.isAssignableFrom(myTypeEl) && !myTypeEl.isAssignableFrom(typeEl))
+						throw new IllegalArgumentException("Type " + type + " is incompatible with type " + myType);
+				}
+			}
+			if (newTypes == null) {
+				newTypes = MultiInheritanceSet.create(STYLE_INHERITANCE);
+				newTypes.addAll(theTypes.values());
+			}
+			newTypes.add(type);
 		}
 		if (newTypes == null)
 			return this; // All types already contained
@@ -491,12 +573,81 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 		else
 			newCondition = new LocatedAndExpression(theCondition, condition);
 
+		Map<DynamicModelValue.Identity, Integer> modelValues = getPrioritizedModelValues(newCondition, env.getModels(), priorityAttr,
+			styleSheet, dmvCache);
+		return new StyleApplicationDef(theParent, theRole, theTypes, newCondition, modelValues);
+	}
+
+	private Map<DynamicModelValue.Identity, Integer> getPrioritizedModelValues(LocatedExpression newCondition, ObservableModelSet models,
+		QonfigAttributeDef.Declared priorityAttr, boolean styleSheet, DynamicModelValue.Cache dmvCache)
+			throws QonfigInterpretationException {
 		Set<DynamicModelValue.Identity> mvs = new LinkedHashSet<>();
 		// We don't need to worry about satisfying anything here. The model values just need to be available for the link level.
-		newCondition = findModelValues(newCondition, mvs, env.getModels(), priorityAttr.getDeclarer(), styleSheet, dmvCache);
+		newCondition = findModelValues(newCondition, mvs, models, priorityAttr.getDeclarer(), styleSheet, dmvCache);
 		mvs.addAll(theModelValues.keySet());
-		return new StyleApplicationDef(theParent, theRole, theTypes, newCondition,
-			prioritizeModelValues(mvs, theModelValues, priorityAttr));
+		return prioritizeModelValues(mvs, theModelValues, priorityAttr);
+	}
+
+	/**
+	 * @param other The other application to combine with this one
+	 * @return An application that {@link #applies(QonfigElement) applies} to an element if and only if both this application and
+	 *         <code>other</code> apply to it
+	 */
+	public StyleApplicationDef and(StyleApplicationDef other) {
+		if (!isCompatible(other.getTypes().values().toArray(new QonfigElementOrAddOn[0])))
+			return NONE;
+
+		StyleApplicationDef parent;
+		if (theParent != null) {
+			if (other.theParent != null) {
+				parent = theParent.and(other.theParent);// , models, priorityAttr, styleSheet, dmvCache);
+				if (parent == NONE)
+					return NONE;
+			} else
+				parent = theParent;
+		} else
+			parent = other.theParent;
+
+		QonfigChildDef role;
+		if (theRole != null) {
+			if (other.theRole != null) {
+				if (theRole.isFulfilledBy(other.theRole))
+					role = other.theRole;
+				else if (other.theRole.isFulfilledBy(theRole))
+					role = theRole;
+				else {// Although it might be possible for a child to fulfill 2 unrelated roles,
+					// this class doesn't currently support it
+					return NONE;
+				}
+			} else
+				role = theRole;
+		} else
+			role = other.theRole;
+
+		MultiInheritanceSet<QonfigElementOrAddOn> types = MultiInheritanceSet.create(STYLE_INHERITANCE);
+		types.addAll(theTypes.values());
+		types.addAll(other.theTypes.values());
+
+		LocatedExpression condition;
+		Map<Identity, Integer> modelValues;
+		if (theCondition != null) {
+			if (other.theCondition != null) {
+				// Would theoretically be possible here to search for impossible conditions
+				// like b && !b, but that's a lot of work
+				condition = new LocatedAndExpression(theCondition, other.theCondition);
+				modelValues = new LinkedHashMap<>();
+				modelValues.putAll(theModelValues);
+				modelValues.putAll(other.theModelValues);
+			} else {
+				condition = theCondition;
+				modelValues = theModelValues;
+			}
+		} else {
+			condition = other.theCondition;
+			modelValues = other.theModelValues;
+		}
+
+		return new StyleApplicationDef(parent, role, types, condition, modelValues);
 	}
 
 	private static class LocatedAndExpression implements LocatedExpression {
