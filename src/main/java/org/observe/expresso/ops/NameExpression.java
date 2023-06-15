@@ -24,6 +24,7 @@ import org.observe.expresso.ObservableModelSet.ModelValueSynth;
 import org.observe.expresso.TypeConversionException;
 import org.observe.util.TypeTokens;
 import org.qommons.Identifiable;
+import org.qommons.LambdaUtils;
 import org.qommons.Named;
 import org.qommons.StringUtils;
 import org.qommons.Transaction;
@@ -329,9 +330,10 @@ public class NameExpression implements ObservableExpression, Named {
 			theType = type;
 			theChanges = SimpleObservable.build().build();
 			if (theContext == null)
-				theMappedValue = ObservableValue.of(type, this::getStatic, this::getStamp, theChanges);
+				theMappedValue = ObservableValue.of(type, LambdaUtils.printableSupplier(this::getStatic, theField::getName, null),
+					this::getStamp, theChanges);
 			else
-				theMappedValue = theContext.map(this::getFromContext);
+				theMappedValue = theContext.map(LambdaUtils.printableFn(this::getFromContext, theField.getName(), null));
 			theReporting = reporting;
 		}
 
