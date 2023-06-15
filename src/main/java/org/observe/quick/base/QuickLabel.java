@@ -3,7 +3,7 @@ package org.observe.quick.base;
 import org.observe.expresso.CompiledExpression;
 import org.observe.expresso.ExpressoQIS;
 import org.observe.expresso.ObservableExpression;
-import org.observe.quick.QuickElement;
+import org.observe.expresso.qonfig.ExElement;
 import org.observe.quick.QuickTextWidget;
 import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElement;
@@ -19,7 +19,7 @@ public class QuickLabel<T> extends QuickTextWidget.Abstract<T> {
 		private String theStaticText;
 		private CompiledExpression theTextExpression;
 
-		public Def(QuickElement.Def<?> parent, QonfigElement element) {
+		public Def(ExElement.Def<?> parent, QonfigElement element) {
 			super(parent, element);
 		}
 
@@ -62,13 +62,13 @@ public class QuickLabel<T> extends QuickTextWidget.Abstract<T> {
 		}
 
 		@Override
-		public Interpreted<T, ? extends W> interpret(QuickElement.Interpreted<?> parent) {
+		public Interpreted<T, ? extends W> interpret(ExElement.Interpreted<?> parent) {
 			return new Interpreted<>(this, parent);
 		}
 	}
 
 	public static class Interpreted<T, W extends QuickLabel<T>> extends QuickTextWidget.Interpreted.Abstract<T, W> {
-		public Interpreted(QuickLabel.Def<T, ? super W> definition, QuickElement.Interpreted<?> parent) {
+		public Interpreted(QuickLabel.Def<T, ? super W> definition, ExElement.Interpreted<?> parent) {
 			super(definition, parent);
 		}
 
@@ -78,12 +78,12 @@ public class QuickLabel<T> extends QuickTextWidget.Abstract<T> {
 		}
 
 		@Override
-		public W create(QuickElement parent) {
+		public W create(ExElement parent) {
 			return (W) new QuickLabel<>(this, parent);
 		}
 	}
 
-	public QuickLabel(Interpreted<T, ?> interpreted, QuickElement parent) {
+	public QuickLabel(Interpreted<T, ?> interpreted, ExElement parent) {
 		super(interpreted, parent);
 	}
 }

@@ -45,8 +45,8 @@ import com.google.common.reflect.TypeToken;
 public interface ObservableModelSet extends Identifiable {
 	/**
 	 * <p>
-	 * A value added to an {@link ObservableModelSet} via {@link Builder#with(String, ModelValueSynth)},
-	 * {@link Builder#withMaker(String, CompiledModelValue)}, or another value method.
+	 * A value added to an {@link ObservableModelSet} via {@link Builder#with(String, ModelValueSynth, LocatedFilePosition)},
+	 * {@link Builder#withMaker(String, CompiledModelValue, LocatedFilePosition)}, or another value method.
 	 * </p>
 	 * <p>
 	 * Its role is to create a {@link ModelValueSynth} at the moment it is needed. This allows values that depend on each other to be added
@@ -798,15 +798,16 @@ public interface ObservableModelSet extends Identifiable {
 		 * @return One of:
 		 *         <ul>
 		 *         <li>A {@link CompiledModelValue} if this component represents a model value installed with
-		 *         {@link ObservableModelSet.Builder#withMaker(String, CompiledModelValue)},
-		 *         {@link ObservableModelSet.Builder#with(String, ModelValueSynth)}, or another value method</li>
+		 *         {@link ObservableModelSet.Builder#withMaker(String, CompiledModelValue, LocatedFilePosition)},
+		 *         {@link ObservableModelSet.Builder#with(String, ModelValueSynth, LocatedFilePosition)}, or another value method</li>
 		 *         <li>A {@link ExtValueRef} if this component represents a placeholder for an external model value installed with
-		 *         {@link ObservableModelSet.Builder#withExternal(String, ExtValueRef)} or another external value method</li>
+		 *         {@link ObservableModelSet.Builder#withExternal(String, ExtValueRef, LocatedFilePosition)} or another external value
+		 *         method</li>
 		 *         <li>A {@link RuntimeValuePlaceholder} if this component represents a placeholder for a model value to be
 		 *         {@link ModelSetInstanceBuilder#with(RuntimeValuePlaceholder, Object) installed} at runtime, installed with
-		 *         {@link ObservableModelSet.Builder#withRuntimeValue(String, ModelInstanceType)}</li>
+		 *         {@link ObservableModelSet.Builder#withRuntimeValue(String, ModelInstanceType, LocatedFilePosition)}</li>
 		 *         <li>An {@link ObservableModelSet} if this component represents a sub-model installed with
-		 *         {@link ObservableModelSet.Builder#createSubModel(String)}</li>
+		 *         {@link ObservableModelSet.Builder#createSubModel(String, LocatedFilePosition)}</li>
 		 *         <li>Potentially anything else if this model is extended from the default</li>
 		 *         </ul>
 		 */
@@ -818,6 +819,7 @@ public interface ObservableModelSet extends Identifiable {
 		 */
 		ModelValueSynth<M, MV> getValue() throws ExpressoInterpretationException;
 
+		/** @return The location where this value was declared in its source file. May be null. */
 		LocatedFilePosition getSourceLocation();
 
 		@Override
@@ -843,8 +845,9 @@ public interface ObservableModelSet extends Identifiable {
 		/**
 		 * Identical to {@link ObservableModelSet.ModelComponentNode#getThing()}, except that:<br />
 		 * <ul>
-		 * <li>If the component is a sub-model installed with {@link ObservableModelSet.Builder#createSubModel(String)}, the value will also
-		 * be an instance of {@link InterpretedModelSet}</li>
+		 * <li>If the component is a sub-model installed with
+		 * {@link ObservableModelSet.Builder#createSubModel(String, LocatedFilePosition)}, the value will also be an instance of
+		 * {@link InterpretedModelSet}</li>
 		 * <li>If the component is a runtime value installed with {@link ModelSetInstanceBuilder#with(RuntimeValuePlaceholder, Object)
 		 * installed}, the value will also be an instance of {@link ObservableModelSet.RuntimeValuePlaceholder.Interpreted}</li>
 		 * </ul>
@@ -907,8 +910,8 @@ public interface ObservableModelSet extends Identifiable {
 	public static final JavaNameChecker JAVA_NAME_CHECKER = new JavaNameChecker();
 
 	/**
-	 * A value added to an {@link ObservableModelSet} with {@link Builder#withExternal(String, ExtValueRef)} or another external value
-	 * method
+	 * A value added to an {@link ObservableModelSet} with {@link Builder#withExternal(String, ExtValueRef, LocatedFilePosition)} or another
+	 * external value method
 	 *
 	 * @param <M> The model type of the value
 	 * @param <MV> The type of the value
@@ -1024,8 +1027,9 @@ public interface ObservableModelSet extends Identifiable {
 	}
 
 	/**
-	 * A placeholder returned by {@link Builder#withRuntimeValue(String, ModelInstanceType)}. This placeholder can be used to satisfy the
-	 * value in a {@link ObservableModelSet.ModelSetInstance} with {@link ModelSetInstanceBuilder#with(RuntimeValuePlaceholder, Object)}.
+	 * A placeholder returned by {@link Builder#withRuntimeValue(String, ModelInstanceType, LocatedFilePosition)}. This placeholder can be
+	 * used to satisfy the value in a {@link ObservableModelSet.ModelSetInstance} with
+	 * {@link ModelSetInstanceBuilder#with(RuntimeValuePlaceholder, Object)}.
 	 *
 	 * @param <M> The model type of the runtime value
 	 * @param <MV> The type of the runtime value
@@ -1452,6 +1456,7 @@ public interface ObservableModelSet extends Identifiable {
 		 * @param name The name of the value in this model set
 		 * @param extGetter The reference to retrieve the value from an {@link ObservableModelSet.ExternalModelSet} passed to
 		 *        {@link InterpretedModelSet#createInstance(ObservableModelSet.ExternalModelSet, Observable)}
+		 * @param sourceLocation The location in the source file where the external value was declared. May be null.
 		 * @return This builder
 		 */
 		<M, MV extends M> Builder withExternal(String name, ExtValueRef<M, MV> extGetter, LocatedFilePosition sourceLocation);
@@ -1461,6 +1466,7 @@ public interface ObservableModelSet extends Identifiable {
 		 *
 		 * @param name The name of the value in this model set
 		 * @param maker The creator to create the model value
+		 * @param sourceLocation The location in the source file where the value was declared. May be null.
 		 * @return This builder
 		 */
 		Builder withMaker(String name, CompiledModelValue<?, ?> maker, LocatedFilePosition sourceLocation);
@@ -1472,6 +1478,7 @@ public interface ObservableModelSet extends Identifiable {
 		 * @param <MV> The type of the runtime value
 		 * @param name The name of the value in this model set
 		 * @param type The type of the runtime value
+		 * @param sourceLocation The location in the source file where the runtime value was declared. May be null.
 		 * @return This builder
 		 */
 		default <M, MV extends M> RuntimeValuePlaceholder<M, MV> withRuntimeValue(String name, ModelInstanceType<M, MV> type,
@@ -1488,6 +1495,7 @@ public interface ObservableModelSet extends Identifiable {
 		 * @param name The name of the value in this model set
 		 * @param modelType The model type of the runtime value
 		 * @param type The type of the runtime value
+		 * @param sourceLocation The location in the source file where the runtime value was declared. May be null.
 		 * @return This builder
 		 */
 		<M, MV extends M> RuntimeValuePlaceholder<M, MV> withRuntimeValue(String name, ModelType<M> modelType,
@@ -1497,6 +1505,7 @@ public interface ObservableModelSet extends Identifiable {
 		 * Retrieves or creates a builder for a sub-model under this model set
 		 *
 		 * @param name The name for the sub-model
+		 * @param sourceLocation The location in the source file where the model was declared. May be null.
 		 * @return The builder for the sub-model
 		 */
 		Builder createSubModel(String name, LocatedFilePosition sourceLocation);
@@ -1551,6 +1560,7 @@ public interface ObservableModelSet extends Identifiable {
 		 *
 		 * @param name The name of the value in this model set
 		 * @param value The container to create the model value
+		 * @param sourceLocation The location in the source file where the value was declared. May be null.
 		 * @return This builder
 		 */
 		default <M, MV extends M> Builder with(String name, ModelValueSynth<M, MV> value, LocatedFilePosition sourceLocation) {
@@ -1563,6 +1573,7 @@ public interface ObservableModelSet extends Identifiable {
 		 * @param name The name of the value in this model set
 		 * @param type The type of the new value
 		 * @param value The function to create the model value
+		 * @param sourceLocation The location in the source file where the value was declared. May be null.
 		 * @return This builder
 		 */
 		default <M, MV extends M> Builder with(String name, ModelInstanceType<M, MV> type,
@@ -1665,7 +1676,7 @@ public interface ObservableModelSet extends Identifiable {
 		 * Creates a builder for a {@link ModelSetInstance} which will contain values for all the components in this model set
 		 *
 		 * @param extModel The external model set to satisfy {@link ExtValueRef external value references} installed with
-		 *        {@link Builder#withExternal(String, ExtValueRef)}
+		 *        {@link Builder#withExternal(String, ExtValueRef, LocatedFilePosition)}
 		 * @param until An observable that fires when the lifetime of the new model instance set expires (or null if the lifetime of the new
 		 *        model instance set is to be infinite)
 		 * @return A builder for the new instance set
@@ -1675,7 +1686,7 @@ public interface ObservableModelSet extends Identifiable {
 		/**
 		 * Creates a builder for a {@link ModelSetInstance} which will contain values for all the components in this model set. This builder
 		 * may only be used if no {@link ExtValueRef external value references} were installed in this model set with
-		 * {@link Builder#withExternal(String, ExtValueRef)}
+		 * {@link Builder#withExternal(String, ExtValueRef, LocatedFilePosition)}
 		 *
 		 * @param until An observable that fires when the lifetime of the new model instance set expires (or null if the lifetime of the new
 		 *        model instance set is to be infinite)
@@ -1737,12 +1748,14 @@ public interface ObservableModelSet extends Identifiable {
 		ModelSetInstance getInherited(ModelComponentId modelId) throws IllegalArgumentException;
 
 		/**
-		 * Satisfies a runtime value declared with {@link ObservableModelSet.Builder#withRuntimeValue(String, ModelInstanceType)}
+		 * Satisfies a runtime value declared with
+		 * {@link ObservableModelSet.Builder#withRuntimeValue(String, ModelInstanceType, LocatedFilePosition)}
 		 *
 		 * @param <M> The model type of the value
 		 * @param <MV> The type of the value
-		 * @param placeholder The placeholder returned by {@link ObservableModelSet.Builder#withRuntimeValue(String, ModelInstanceType)}
-		 *        when the value was declared
+		 * @param placeholder The placeholder returned by
+		 *        {@link ObservableModelSet.Builder#withRuntimeValue(String, ModelInstanceType, LocatedFilePosition)} when the value was
+		 *        declared
 		 * @param value The value to install for the runtime placeholder
 		 * @return This builder
 		 */
@@ -1766,8 +1779,8 @@ public interface ObservableModelSet extends Identifiable {
 	/**
 	 * A set of values supplied to
 	 * {@link ObservableModelSet.InterpretedModelSet#createInstance(ObservableModelSet.ExternalModelSet, Observable)} to satisfy
-	 * placeholders installed in the {@link ObservableModelSet} with {@link Builder#withExternal(String, ExtValueRef)} or another external
-	 * value method
+	 * placeholders installed in the {@link ObservableModelSet} with {@link Builder#withExternal(String, ExtValueRef, LocatedFilePosition)}
+	 * or another external value method
 	 */
 	public interface ExternalModelSet {
 		/**
@@ -2690,6 +2703,7 @@ public interface ObservableModelSet extends Identifiable {
 			 * @param runtimeValue The runtime value of the component
 			 * @param extRef The external value retriever of the component
 			 * @param subModel The sub model of the component
+			 * @param sourceLocation The location where the runtime value was declared in the source. May be null
 			 * @return The new component node
 			 */
 			protected <M, MV extends M> ModelComponentNode<M, MV> createPlaceholder(ModelComponentId componentId,

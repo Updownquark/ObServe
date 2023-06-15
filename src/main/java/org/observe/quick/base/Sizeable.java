@@ -17,10 +17,10 @@ import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueSynth;
+import org.observe.expresso.qonfig.ExAddOn;
+import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.QonfigExpression;
 import org.observe.expresso.TypeConversionException;
-import org.observe.quick.QuickAddOn;
-import org.observe.quick.QuickElement;
 import org.observe.util.TypeTokens;
 import org.qommons.Ternian;
 import org.qommons.config.QonfigAddOn;
@@ -28,15 +28,15 @@ import org.qommons.config.QonfigElement.QonfigValue;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.io.LocatedFilePosition;
 
-public abstract class Sizeable extends QuickAddOn.Abstract<QuickElement> {
-	public static abstract class Def<S extends Sizeable> extends QuickAddOn.Def.Abstract<QuickElement, S> {
+public abstract class Sizeable extends ExAddOn.Abstract<ExElement> {
+	public static abstract class Def<S extends Sizeable> extends ExAddOn.Def.Abstract<ExElement, S> {
 		private final Ternian isVertical;
 		private CompiledModelValue<SettableValue<?>, SettableValue<QuickSize>> theSize;
 		private CompiledModelValue<SettableValue<?>, SettableValue<QuickSize>> theMinimum;
 		private CompiledModelValue<SettableValue<?>, SettableValue<QuickSize>> thePreferred;
 		private CompiledModelValue<SettableValue<?>, SettableValue<QuickSize>> theMaximum;
 
-		protected Def(Ternian vertical, QonfigAddOn type, QuickElement.Def<? extends QuickElement> element) {
+		protected Def(Ternian vertical, QonfigAddOn type, ExElement.Def<? extends ExElement> element) {
 			super(type, element);
 			isVertical = vertical;
 		}
@@ -62,7 +62,7 @@ public abstract class Sizeable extends QuickAddOn.Abstract<QuickElement> {
 		}
 
 		@Override
-		public void update(ExpressoQIS session, QuickElement.Def<?> element) throws QonfigInterpretationException {
+		public void update(ExpressoQIS session, ExElement.Def<?> element) throws QonfigInterpretationException {
 			super.update(session, element);
 			switch (isVertical) {
 			case TRUE:
@@ -87,46 +87,46 @@ public abstract class Sizeable extends QuickAddOn.Abstract<QuickElement> {
 		}
 
 		public static class Vertical extends Def<Sizeable.Vertical> {
-			public Vertical(QonfigAddOn type, QuickElement.Def<?> element) {
+			public Vertical(QonfigAddOn type, ExElement.Def<?> element) {
 				super(Ternian.TRUE, type, element);
 			}
 
 			@Override
-			public Interpreted.Vertical interpret(QuickElement.Interpreted<?> element) {
+			public Interpreted.Vertical interpret(ExElement.Interpreted<?> element) {
 				return new Interpreted.Vertical(this, element);
 			}
 		}
 
 		public static class Horizontal extends Def<Sizeable.Horizontal> {
-			public Horizontal(QonfigAddOn type, QuickElement.Def<?> element) {
+			public Horizontal(QonfigAddOn type, ExElement.Def<?> element) {
 				super(Ternian.FALSE, type, element);
 			}
 
 			@Override
-			public Interpreted.Horizontal interpret(QuickElement.Interpreted<?> element) {
+			public Interpreted.Horizontal interpret(ExElement.Interpreted<?> element) {
 				return new Interpreted.Horizontal(this, element);
 			}
 		}
 
 		public static class Generic extends Def<Sizeable.Generic> {
-			public Generic(QonfigAddOn type, QuickElement.Def<?> element) {
+			public Generic(QonfigAddOn type, ExElement.Def<?> element) {
 				super(Ternian.NONE, type, element);
 			}
 
 			@Override
-			public Interpreted.Generic interpret(QuickElement.Interpreted<?> element) {
+			public Interpreted.Generic interpret(ExElement.Interpreted<?> element) {
 				return new Interpreted.Generic(this, element);
 			}
 		}
 	}
 
-	public abstract static class Interpreted<S extends Sizeable> extends QuickAddOn.Interpreted.Abstract<QuickElement, S> {
+	public abstract static class Interpreted<S extends Sizeable> extends ExAddOn.Interpreted.Abstract<ExElement, S> {
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<QuickSize>> theSize;
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<QuickSize>> theMaximum;
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<QuickSize>> thePreferred;
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<QuickSize>> theMinimum;
 
-		protected Interpreted(Def<S> definition, QuickElement.Interpreted<?> element) {
+		protected Interpreted(Def<S> definition, ExElement.Interpreted<?> element) {
 			super(definition, element);
 		}
 
@@ -160,7 +160,7 @@ public abstract class Sizeable extends QuickAddOn.Abstract<QuickElement> {
 		}
 
 		public static class Vertical extends Interpreted<Sizeable.Vertical> {
-			public Vertical(Def.Vertical definition, QuickElement.Interpreted<?> element) {
+			public Vertical(Def.Vertical definition, ExElement.Interpreted<?> element) {
 				super(definition, element);
 			}
 
@@ -170,13 +170,13 @@ public abstract class Sizeable extends QuickAddOn.Abstract<QuickElement> {
 			}
 
 			@Override
-			public Sizeable.Vertical create(QuickElement element) {
+			public Sizeable.Vertical create(ExElement element) {
 				return new Sizeable.Vertical(this, element);
 			}
 		}
 
 		public static class Horizontal extends Interpreted<Sizeable.Horizontal> {
-			public Horizontal(Def.Horizontal definition, QuickElement.Interpreted<?> element) {
+			public Horizontal(Def.Horizontal definition, ExElement.Interpreted<?> element) {
 				super(definition, element);
 			}
 
@@ -186,13 +186,13 @@ public abstract class Sizeable extends QuickAddOn.Abstract<QuickElement> {
 			}
 
 			@Override
-			public Sizeable.Horizontal create(QuickElement element) {
+			public Sizeable.Horizontal create(ExElement element) {
 				return new Sizeable.Horizontal(this, element);
 			}
 		}
 
 		public static class Generic extends Interpreted<Sizeable.Generic> {
-			public Generic(Def.Generic definition, QuickElement.Interpreted<?> element) {
+			public Generic(Def.Generic definition, ExElement.Interpreted<?> element) {
 				super(definition, element);
 			}
 
@@ -202,7 +202,7 @@ public abstract class Sizeable extends QuickAddOn.Abstract<QuickElement> {
 			}
 
 			@Override
-			public Sizeable.Generic create(QuickElement element) {
+			public Sizeable.Generic create(ExElement element) {
 				return new Sizeable.Generic(this, element);
 			}
 		}
@@ -213,7 +213,7 @@ public abstract class Sizeable extends QuickAddOn.Abstract<QuickElement> {
 	private final SettableValue<SettableValue<QuickSize>> thePreferred;
 	private final SettableValue<SettableValue<QuickSize>> theMaximum;
 
-	protected Sizeable(Interpreted interpreted, QuickElement element) {
+	protected Sizeable(Interpreted interpreted, ExElement element) {
 		super(interpreted, element);
 		theSize = SettableValue
 			.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<QuickSize>> parameterized(QuickSize.class)).build();
@@ -239,7 +239,7 @@ public abstract class Sizeable extends QuickAddOn.Abstract<QuickElement> {
 	}
 
 	@Override
-	public void update(QuickAddOn.Interpreted<?, ?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
+	public void update(ExAddOn.Interpreted<?, ?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
 		Sizeable.Interpreted<?> myInterpreted = (Sizeable.Interpreted<?>) interpreted;
 		theSize.set(myInterpreted.getSize() == null ? null : myInterpreted.getSize().get(models), null);
 		theMinimum.set(myInterpreted.getMinimum() == null ? null : myInterpreted.getMinimum().get(models), null);
@@ -358,19 +358,19 @@ public abstract class Sizeable extends QuickAddOn.Abstract<QuickElement> {
 	}
 
 	public static class Vertical extends Sizeable {
-		public Vertical(Interpreted.Vertical interpreted, QuickElement element) {
+		public Vertical(Interpreted.Vertical interpreted, ExElement element) {
 			super(interpreted, element);
 		}
 	}
 
 	public static class Horizontal extends Sizeable {
-		public Horizontal(Interpreted.Horizontal interpreted, QuickElement element) {
+		public Horizontal(Interpreted.Horizontal interpreted, ExElement element) {
 			super(interpreted, element);
 		}
 	}
 
 	public static class Generic extends Sizeable {
-		public Generic(Interpreted.Generic interpreted, QuickElement element) {
+		public Generic(Interpreted.Generic interpreted, ExElement element) {
 			super(interpreted, element);
 		}
 	}

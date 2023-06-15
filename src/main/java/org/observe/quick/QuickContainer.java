@@ -6,6 +6,7 @@ import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ExpressoQIS;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.qonfig.ExElement;
 import org.observe.quick.style.QuickCompiledStyle;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.CollectionUtils;
@@ -21,24 +22,24 @@ import org.qommons.tree.BetterTreeList;
 public interface QuickContainer<C extends QuickWidget> extends QuickWidget {
 	public static final String CONTAINER = "container";
 
-	public static final QuickElement.ChildElementGetter<QuickContainer<?>, Interpreted<?, ?>, Def<?, ?>> CONTENTS = new QuickElement.ChildElementGetter<QuickContainer<?>, Interpreted<?, ?>, Def<?, ?>>() {
+	public static final ExElement.ChildElementGetter<QuickContainer<?>, Interpreted<?, ?>, Def<?, ?>> CONTENTS = new ExElement.ChildElementGetter<QuickContainer<?>, Interpreted<?, ?>, Def<?, ?>>() {
 		@Override
 		public String getDescription() {
 			return "A widget displayed inside the container";
 		}
 
 		@Override
-		public List<? extends QuickElement.Def<?>> getChildrenFromDef(Def<?, ?> def) {
+		public List<? extends ExElement.Def<?>> getChildrenFromDef(Def<?, ?> def) {
 			return def.getContents();
 		}
 
 		@Override
-		public List<? extends QuickElement.Interpreted<?>> getChildrenFromInterpreted(Interpreted<?, ?> interp) {
+		public List<? extends ExElement.Interpreted<?>> getChildrenFromInterpreted(Interpreted<?, ?> interp) {
 			return interp.getContents();
 		}
 
 		@Override
-		public List<? extends QuickElement> getChildrenFromElement(QuickContainer<?> element) {
+		public List<? extends ExElement> getChildrenFromElement(QuickContainer<?> element) {
 			return element.getContents();
 		}
 	};
@@ -54,7 +55,7 @@ public interface QuickContainer<C extends QuickWidget> extends QuickWidget {
 		BetterList<? extends QuickWidget.Def<? extends C>> getContents();
 
 		@Override
-		Interpreted<? extends W, ? extends C> interpret(QuickElement.Interpreted<?> parent);
+		Interpreted<? extends W, ? extends C> interpret(ExElement.Interpreted<?> parent);
 
 		/**
 		 * An abstract {@link Def} implementation
@@ -70,7 +71,7 @@ public interface QuickContainer<C extends QuickWidget> extends QuickWidget {
 			 * @param parent The parent definition
 			 * @param element The element that this definition is interpreted from
 			 */
-			protected Abstract(QuickElement.Def<?> parent, QonfigElement element) {
+			protected Abstract(ExElement.Def<?> parent, QonfigElement element) {
 				super(parent, element);
 				theContents = BetterTreeList.<QuickWidget.Def<? extends C>> build().build();
 			}
@@ -85,7 +86,7 @@ public interface QuickContainer<C extends QuickWidget> extends QuickWidget {
 				checkElement(session.getFocusType(), QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, CONTAINER);
 				forChild(session.getRole("content").getDeclared(), CONTENTS);
 				super.update(session.asElement(session.getFocusType().getSuperElement()));
-				QuickElement.syncDefs(QuickWidget.Def.class, theContents, session.forChildren("content"));
+				ExElement.syncDefs(QuickWidget.Def.class, theContents, session.forChildren("content"));
 			}
 
 			@Override
@@ -122,7 +123,7 @@ public interface QuickContainer<C extends QuickWidget> extends QuickWidget {
 			 * @param definition The definition producing this interpretation
 			 * @param parent The parent interpretation
 			 */
-			protected Abstract(Def<? super W, ? super C> definition, QuickElement.Interpreted<?> parent) {
+			protected Abstract(Def<? super W, ? super C> definition, ExElement.Interpreted<?> parent) {
 				super(definition, parent);
 				theContents = BetterTreeList.<QuickWidget.Interpreted<? extends C>> build().build();
 			}
@@ -175,7 +176,7 @@ public interface QuickContainer<C extends QuickWidget> extends QuickWidget {
 		 * @param interpreted The interpretation producing this container
 		 * @param parent The parent element
 		 */
-		protected Abstract(QuickContainer.Interpreted<?, ?> interpreted, QuickElement parent) {
+		protected Abstract(QuickContainer.Interpreted<?, ?> interpreted, ExElement parent) {
 			super(interpreted, parent);
 			theContents = BetterTreeList.<C> build().build();
 		}
@@ -186,7 +187,7 @@ public interface QuickContainer<C extends QuickWidget> extends QuickWidget {
 		}
 
 		@Override
-		protected void updateModel(QuickElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
+		protected void updateModel(ExElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
 			super.updateModel(interpreted, myModels);
 			QuickContainer.Interpreted<?, C> myInterpreted = (QuickContainer.Interpreted<?, C>) interpreted;
 			CollectionUtils.synchronize(theContents, myInterpreted.getContents(), //

@@ -12,6 +12,7 @@ import org.observe.expresso.ObservableModelSet.CompiledModelValue;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueSynth;
+import org.observe.expresso.qonfig.ExElement;
 import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigInterpretationException;
@@ -29,14 +30,14 @@ public interface QuickValueWidget<T> extends QuickWidget {
 		CompiledExpression getDisabled();
 
 		@Override
-		Interpreted<?, ? extends W> interpret(QuickElement.Interpreted<?> parent);
+		Interpreted<?, ? extends W> interpret(ExElement.Interpreted<?> parent);
 
 		public abstract class Abstract<T, W extends QuickValueWidget<T>> extends QuickWidget.Def.Abstract<W> implements Def<W> {
 			private String theValueName;
 			private CompiledExpression theValue;
 			private CompiledExpression theDisabled;
 
-			protected Abstract(QuickElement.Def<?> parent, QonfigElement element) {
+			protected Abstract(ExElement.Def<?> parent, QonfigElement element) {
 				super(parent, element);
 			}
 
@@ -82,7 +83,7 @@ public interface QuickValueWidget<T> extends QuickWidget {
 		implements Interpreted<T, W> {
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<T>> theValue;
 
-			protected Abstract(QuickValueWidget.Def<? super W> definition, QuickElement.Interpreted<?> parent) {
+			protected Abstract(QuickValueWidget.Def<? super W> definition, ExElement.Interpreted<?> parent) {
 				super(definition, parent);
 			}
 
@@ -125,7 +126,7 @@ public interface QuickValueWidget<T> extends QuickWidget {
 	public abstract class Abstract<T> extends QuickWidget.Abstract implements QuickValueWidget<T> {
 		private final SettableValue<SettableValue<T>> theValue;
 
-		protected Abstract(QuickValueWidget.Interpreted<T, ?> interpreted, QuickElement parent) {
+		protected Abstract(QuickValueWidget.Interpreted<T, ?> interpreted, ExElement parent) {
 			super(interpreted, parent);
 			theValue = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class)
 				.<SettableValue<T>> parameterized((TypeToken<T>) interpreted.getValue().getType().getType(0))).build();
@@ -137,18 +138,18 @@ public interface QuickValueWidget<T> extends QuickWidget {
 		}
 
 		@Override
-		protected void updateModel(QuickElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
+		protected void updateModel(ExElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
 			super.updateModel(interpreted, myModels);
 			QuickValueWidget.Interpreted<T, ?> myInterpreted = (QuickValueWidget.Interpreted<T, ?>) interpreted;
 			theValue.set(myInterpreted.getValue().get(myModels), null);
 		}
 	}
 
-	public interface WidgetValueSupplier<T> extends QuickElement {
-		public interface Def<VS extends WidgetValueSupplier<?>> extends QuickElement.Def<VS> {
+	public interface WidgetValueSupplier<T> extends ExElement {
+		public interface Def<VS extends WidgetValueSupplier<?>> extends ExElement.Def<VS> {
 		}
 
-		public interface Interpreted<T, VS extends WidgetValueSupplier<T>> extends QuickElement.Interpreted<VS> {
+		public interface Interpreted<T, VS extends WidgetValueSupplier<T>> extends ExElement.Interpreted<VS> {
 			@Override
 			Def<? super VS> getDefinition();
 

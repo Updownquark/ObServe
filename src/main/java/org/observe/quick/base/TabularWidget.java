@@ -11,7 +11,7 @@ import org.observe.expresso.ExpressoQIS;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
-import org.observe.quick.QuickElement;
+import org.observe.expresso.qonfig.ExElement;
 import org.observe.quick.QuickStyledElement;
 import org.observe.quick.QuickWidget;
 import org.observe.quick.base.QuickTableColumn.TableColumnSet;
@@ -25,24 +25,24 @@ import org.qommons.config.QonfigInterpretationException;
 import com.google.common.reflect.TypeToken;
 
 public interface TabularWidget<R> extends MultiValueWidget<R>, RowTyped<R> {
-	public static final QuickElement.ChildElementGetter<TabularWidget<?>, Interpreted<?, ?>, Def<?>> COLUMNS = new QuickElement.ChildElementGetter<TabularWidget<?>, TabularWidget.Interpreted<?, ?>, TabularWidget.Def<?>>() {
+	public static final ExElement.ChildElementGetter<TabularWidget<?>, Interpreted<?, ?>, Def<?>> COLUMNS = new ExElement.ChildElementGetter<TabularWidget<?>, TabularWidget.Interpreted<?, ?>, TabularWidget.Def<?>>() {
 		@Override
 		public String getDescription() {
 			return "A column or set of columns to display a category of data for each row in the table";
 		}
 
 		@Override
-		public List<? extends QuickElement.Def<?>> getChildrenFromDef(Def<?> def) {
+		public List<? extends ExElement.Def<?>> getChildrenFromDef(Def<?> def) {
 			return def.getColumns();
 		}
 
 		@Override
-		public List<? extends QuickElement.Interpreted<?>> getChildrenFromInterpreted(Interpreted<?, ?> interp) {
+		public List<? extends ExElement.Interpreted<?>> getChildrenFromInterpreted(Interpreted<?, ?> interp) {
 			return interp.getColumns();
 		}
 
 		@Override
-		public List<? extends QuickElement> getChildrenFromElement(TabularWidget<?> element) {
+		public List<? extends ExElement> getChildrenFromElement(TabularWidget<?> element) {
 			return element.getColumnSets();
 		}
 	};
@@ -53,7 +53,7 @@ public interface TabularWidget<R> extends MultiValueWidget<R>, RowTyped<R> {
 		public abstract class Abstract<W extends TabularWidget<?>> extends QuickWidget.Def.Abstract<W> implements Def<W> {
 			private final List<QuickTableColumn.TableColumnSet.Def<?>> theColumns;
 
-			protected Abstract(QuickElement.Def<?> parent, QonfigElement element) {
+			protected Abstract(ExElement.Def<?> parent, QonfigElement element) {
 				super(parent, element);
 				theColumns = new ArrayList<>();
 			}
@@ -71,7 +71,7 @@ public interface TabularWidget<R> extends MultiValueWidget<R>, RowTyped<R> {
 					));
 				CollectionUtils
 				.synchronize(theColumns, session.forChildren("columns"),
-					(c, s) -> QuickElement.typesEqual(c.getElement(), s.getElement()))//
+					(c, s) -> ExElement.typesEqual(c.getElement(), s.getElement()))//
 				.adjust(
 					new CollectionUtils.CollectionSynchronizerE<QuickTableColumn.TableColumnSet.Def<?>, ExpressoQIS, QonfigInterpretationException>() {
 						@Override
@@ -107,7 +107,7 @@ public interface TabularWidget<R> extends MultiValueWidget<R>, RowTyped<R> {
 			}
 
 			@Override
-			public abstract TabularWidget.Interpreted<?, ? extends W> interpret(QuickElement.Interpreted<?> parent);
+			public abstract TabularWidget.Interpreted<?, ? extends W> interpret(ExElement.Interpreted<?> parent);
 		}
 	}
 
@@ -124,7 +124,7 @@ public interface TabularWidget<R> extends MultiValueWidget<R>, RowTyped<R> {
 		implements Interpreted<R, W> {
 			private ObservableCollection<QuickTableColumn.TableColumnSet.Interpreted<R, ?>> theColumns;
 
-			protected Abstract(Def<? super W> definition, QuickElement.Interpreted<?> parent) {
+			protected Abstract(Def<? super W> definition, ExElement.Interpreted<?> parent) {
 				super(definition, parent);
 			}
 
@@ -195,7 +195,7 @@ public interface TabularWidget<R> extends MultiValueWidget<R>, RowTyped<R> {
 			}
 
 			@Override
-			public abstract W create(QuickElement parent);
+			public abstract W create(ExElement parent);
 		}
 	}
 
@@ -255,7 +255,7 @@ public interface TabularWidget<R> extends MultiValueWidget<R>, RowTyped<R> {
 		private final SettableValue<SettableValue<Integer>> theColumnIndex;
 		private String theValueName;
 
-		protected Abstract(TabularWidget.Interpreted<R, ?> interpreted, QuickElement parent) {
+		protected Abstract(TabularWidget.Interpreted<R, ?> interpreted, ExElement parent) {
 			super(interpreted, parent);
 			theRowType = interpreted.getRowType();
 			theColumnSets = ObservableCollection
@@ -307,7 +307,7 @@ public interface TabularWidget<R> extends MultiValueWidget<R>, RowTyped<R> {
 		}
 
 		@Override
-		protected void updateModel(QuickElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
+		protected void updateModel(ExElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
 			super.updateModel(interpreted, myModels);
 			TabularWidget.Interpreted<R, ?> myInterpreted = (TabularWidget.Interpreted<R, ?>) interpreted;
 			theValueName = myInterpreted.getDefinition().getValueName();

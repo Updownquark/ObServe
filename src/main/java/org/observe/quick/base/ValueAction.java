@@ -14,7 +14,7 @@ import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
-import org.observe.quick.QuickElement;
+import org.observe.expresso.qonfig.ExElement;
 import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigInterpretationException;
@@ -22,8 +22,8 @@ import org.qommons.ex.ExFunction;
 
 import com.google.common.reflect.TypeToken;
 
-public interface ValueAction<T> extends QuickElement {
-	public interface Def<T, A extends ValueAction<T>> extends QuickElement.Def<A> {
+public interface ValueAction<T> extends ExElement {
+	public interface Def<T, A extends ValueAction<T>> extends ExElement.Def<A> {
 		CompiledExpression getName();
 
 		boolean isButton();
@@ -38,9 +38,9 @@ public interface ValueAction<T> extends QuickElement {
 
 		CompiledExpression getAction();
 
-		Interpreted<? extends T, ? extends A> interpret(QuickElement.Interpreted<?> parent, TypeToken<? extends T> valueType);
+		Interpreted<? extends T, ? extends A> interpret(ExElement.Interpreted<?> parent, TypeToken<? extends T> valueType);
 
-		public abstract class Abstract<T, A extends ValueAction<T>> extends QuickElement.Def.Abstract<A> implements Def<T, A> {
+		public abstract class Abstract<T, A extends ValueAction<T>> extends ExElement.Def.Abstract<A> implements Def<T, A> {
 			public static final String ABTRACT_VALUE_ACTION = "abstract-value-action";
 
 			private CompiledExpression theName;
@@ -51,7 +51,7 @@ public interface ValueAction<T> extends QuickElement {
 			private CompiledExpression theTooltip;
 			private CompiledExpression theAction;
 
-			protected Abstract(QuickElement.Def<?> parent, QonfigElement element) {
+			protected Abstract(ExElement.Def<?> parent, QonfigElement element) {
 				super(parent, element);
 			}
 
@@ -106,7 +106,7 @@ public interface ValueAction<T> extends QuickElement {
 		}
 	}
 
-	public interface Interpreted<T, A extends ValueAction<T>> extends QuickElement.Interpreted<A> {
+	public interface Interpreted<T, A extends ValueAction<T>> extends ExElement.Interpreted<A> {
 		@Override
 		Def<? super T, ? super A> getDefinition();
 
@@ -124,9 +124,9 @@ public interface ValueAction<T> extends QuickElement {
 
 		void update() throws ExpressoInterpretationException;
 
-		ValueAction<T> create(QuickElement parent);
+		ValueAction<T> create(ExElement parent);
 
-		public abstract class Abstract<T, A extends ValueAction<T>> extends QuickElement.Interpreted.Abstract<A>
+		public abstract class Abstract<T, A extends ValueAction<T>> extends ExElement.Interpreted.Abstract<A>
 		implements Interpreted<T, A> {
 			private final TypeToken<T> theValueType;
 			InterpretedValueSynth<SettableValue<?>, SettableValue<String>> theName;
@@ -135,7 +135,7 @@ public interface ValueAction<T> extends QuickElement {
 			InterpretedValueSynth<SettableValue<?>, SettableValue<String>> theTooltip;
 			InterpretedValueSynth<ObservableAction<?>, ObservableAction<?>> theAction;
 
-			protected Abstract(Def<? super T, ? super A> definition, QuickElement.Interpreted<?> parent, TypeToken<T> valueType) {
+			protected Abstract(Def<? super T, ? super A> definition, ExElement.Interpreted<?> parent, TypeToken<T> valueType) {
 				super(definition, parent);
 				theValueType = valueType;
 			}
@@ -205,7 +205,7 @@ public interface ValueAction<T> extends QuickElement {
 
 	ObservableAction<?> getAction();
 
-	public abstract class Abstract<T> extends QuickElement.Abstract implements ValueAction<T> {
+	public abstract class Abstract<T> extends ExElement.Abstract implements ValueAction<T> {
 		private final TypeToken<T> theValueType;
 		private final SettableValue<SettableValue<String>> theName;
 		private boolean isButton;
@@ -215,7 +215,7 @@ public interface ValueAction<T> extends QuickElement {
 		private final SettableValue<SettableValue<String>> theTooltip;
 		private ObservableAction<?> theAction;
 
-		protected Abstract(ValueAction.Interpreted<T, ?> interpreted, QuickElement parent) {
+		protected Abstract(ValueAction.Interpreted<T, ?> interpreted, ExElement parent) {
 			super(interpreted, parent);
 			theValueType = interpreted.getValueType();
 			theName = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<String>> parameterized(String.class))
@@ -266,7 +266,7 @@ public interface ValueAction<T> extends QuickElement {
 		}
 
 		@Override
-		public ModelSetInstance update(QuickElement.Interpreted<?> interpreted, ModelSetInstance models)
+		public ModelSetInstance update(ExElement.Interpreted<?> interpreted, ModelSetInstance models)
 			throws ModelInstantiationException {
 			ModelSetInstance myModels = super.update(interpreted, models);
 			ValueAction.Interpreted<T, ?> myInterpreted = (ValueAction.Interpreted<T, ?>) interpreted;
@@ -330,7 +330,7 @@ public interface ValueAction<T> extends QuickElement {
 			private String theValueName;
 			private boolean allowForMultiple;
 
-			public Def(QuickElement.Def<?> parent, QonfigElement element) {
+			public Def(ExElement.Def<?> parent, QonfigElement element) {
 				super(parent, element);
 			}
 
@@ -352,13 +352,13 @@ public interface ValueAction<T> extends QuickElement {
 			}
 
 			@Override
-			public Interpreted<? extends T, ? extends A> interpret(QuickElement.Interpreted<?> parent, TypeToken<? extends T> valueType) {
+			public Interpreted<? extends T, ? extends A> interpret(ExElement.Interpreted<?> parent, TypeToken<? extends T> valueType) {
 				return new Single.Interpreted<>(this, parent, (TypeToken<T>) valueType);
 			}
 		}
 
 		public static class Interpreted<T, A extends Single<T>> extends ValueAction.Interpreted.Abstract<T, A> {
-			public Interpreted(Single.Def<? super T, ? super A> definition, QuickElement.Interpreted<?> parent, TypeToken<T> valueType) {
+			public Interpreted(Single.Def<? super T, ? super A> definition, ExElement.Interpreted<?> parent, TypeToken<T> valueType) {
 				super(definition, parent, valueType);
 			}
 
@@ -375,7 +375,7 @@ public interface ValueAction<T> extends QuickElement {
 			}
 
 			@Override
-			public Single<T> create(QuickElement parent) {
+			public Single<T> create(ExElement parent) {
 				return new Single<>(this, parent);
 			}
 		}
@@ -384,7 +384,7 @@ public interface ValueAction<T> extends QuickElement {
 		private String theValueName;
 		private boolean allowForMultiple;
 
-		public Single(Interpreted<T, ?> interpreted, QuickElement parent) {
+		public Single(Interpreted<T, ?> interpreted, ExElement parent) {
 			super(interpreted, parent);
 			theActionValue = SettableValue
 				.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<T>> parameterized(interpreted.getValueType())).build();
@@ -403,12 +403,12 @@ public interface ValueAction<T> extends QuickElement {
 		}
 
 		@Override
-		protected void updateModel(QuickElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
+		protected void updateModel(ExElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
 			super.updateModel(interpreted, myModels);
 			Interpreted<T, ?> myInterpreted = (Interpreted<T, ?>) interpreted;
 			theValueName = myInterpreted.getDefinition().getValueName();
 			allowForMultiple = myInterpreted.getDefinition().allowForMultiple();
-			QuickElement.satisfyContextValue(theValueName, ModelTypes.Value.forType(getValueType()), SettableValue.flatten(theActionValue),
+			ExElement.satisfyContextValue(theValueName, ModelTypes.Value.forType(getValueType()), SettableValue.flatten(theActionValue),
 				myModels, this);
 		}
 	}
@@ -420,7 +420,7 @@ public interface ValueAction<T> extends QuickElement {
 			private String theValuesName;
 			private boolean allowForEmpty;
 
-			public Def(QuickElement.Def<?> parent, QonfigElement element) {
+			public Def(ExElement.Def<?> parent, QonfigElement element) {
 				super(parent, element);
 			}
 
@@ -442,14 +442,14 @@ public interface ValueAction<T> extends QuickElement {
 			}
 
 			@Override
-			public Multi.Interpreted<? extends T, ? extends A> interpret(QuickElement.Interpreted<?> parent,
+			public Multi.Interpreted<? extends T, ? extends A> interpret(ExElement.Interpreted<?> parent,
 				TypeToken<? extends T> valueType) {
 				return new Multi.Interpreted<>(this, parent, (TypeToken<T>) valueType);
 			}
 		}
 
 		public static class Interpreted<T, A extends Multi<T>> extends ValueAction.Interpreted.Abstract<T, A> {
-			public Interpreted(Multi.Def<? super T, ? super A> definition, QuickElement.Interpreted<?> parent, TypeToken<T> valueType) {
+			public Interpreted(Multi.Def<? super T, ? super A> definition, ExElement.Interpreted<?> parent, TypeToken<T> valueType) {
 				super(definition, parent, valueType);
 			}
 
@@ -466,7 +466,7 @@ public interface ValueAction<T> extends QuickElement {
 			}
 
 			@Override
-			public Multi<T> create(QuickElement parent) {
+			public Multi<T> create(ExElement parent) {
 				return new Multi<>(this, parent);
 			}
 		}
@@ -475,7 +475,7 @@ public interface ValueAction<T> extends QuickElement {
 		private String theValuesName;
 		private boolean allowForEmpty;
 
-		public Multi(Interpreted<T, ?> interpreted, QuickElement parent) {
+		public Multi(Interpreted<T, ?> interpreted, ExElement parent) {
 			super(interpreted, parent);
 			theActionValues = SettableValue
 				.build(
@@ -496,12 +496,12 @@ public interface ValueAction<T> extends QuickElement {
 		}
 
 		@Override
-		protected void updateModel(QuickElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
+		protected void updateModel(ExElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
 			super.updateModel(interpreted, myModels);
 			Interpreted<T, ?> myInterpreted = (Interpreted<T, ?>) interpreted;
 			theValuesName = myInterpreted.getDefinition().getValuesName();
 			allowForEmpty = myInterpreted.getDefinition().allowForEmpty();
-			QuickElement.satisfyContextValue(theValuesName, ModelTypes.Collection.forType(getValueType()),
+			ExElement.satisfyContextValue(theValuesName, ModelTypes.Collection.forType(getValueType()),
 				ObservableCollection.flattenValue(theActionValues), myModels, this);
 		}
 	}

@@ -8,8 +8,8 @@ import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.qonfig.ExElement;
 import org.observe.quick.QuickContainer;
-import org.observe.quick.QuickElement;
 import org.observe.quick.QuickStyledElement;
 import org.observe.quick.QuickWidget;
 import org.observe.util.TypeTokens;
@@ -21,17 +21,17 @@ import com.google.common.reflect.TypeToken;
 public class QuickBox extends QuickContainer.Abstract<QuickWidget> {
 	public static final String BOX = "box";
 
-	public static QuickElement.AttributeValueGetter.AddOn<QuickBox, QuickLayout, QuickLayout.Interpreted<?>, QuickLayout.Def<?>> LAYOUT = QuickElement.AttributeValueGetter
+	public static ExElement.AttributeValueGetter.AddOn<QuickBox, QuickLayout, QuickLayout.Interpreted<?>, QuickLayout.Def<?>> LAYOUT = ExElement.AttributeValueGetter
 		.addOn(QuickLayout.Def.class, QuickLayout.Interpreted.class, QuickLayout.class,
 			"The layout that the box will use to arrange its contents");
-	public static QuickElement.AttributeValueGetter.Expression<QuickBox, Interpreted<? extends QuickBox>, Def<? extends QuickBox>, SettableValue<?>, SettableValue<Double>> OPACITY = QuickElement.AttributeValueGetter
+	public static ExElement.AttributeValueGetter.Expression<QuickBox, Interpreted<? extends QuickBox>, Def<? extends QuickBox>, SettableValue<?>, SettableValue<Double>> OPACITY = ExElement.AttributeValueGetter
 		.ofX(Def::getOpacity, Interpreted::getOpacity, QuickBox::getOpacity,
 			"The opacity of the box, between 0 (completely transparent) and 1 (completely opaque)");
 
 	public static class Def<W extends QuickBox> extends QuickContainer.Def.Abstract<W, QuickWidget> {
 		private CompiledExpression theOpacity;
 
-		public Def(QuickElement.Def<?> parent, QonfigElement element) {
+		public Def(ExElement.Def<?> parent, QonfigElement element) {
 			super(parent, element);
 		}
 
@@ -58,7 +58,7 @@ public class QuickBox extends QuickContainer.Abstract<QuickWidget> {
 		}
 
 		@Override
-		public Interpreted<W> interpret(QuickElement.Interpreted<?> parent) {
+		public Interpreted<W> interpret(ExElement.Interpreted<?> parent) {
 			return new Interpreted<>(this, parent);
 		}
 	}
@@ -66,7 +66,7 @@ public class QuickBox extends QuickContainer.Abstract<QuickWidget> {
 	public static class Interpreted<W extends QuickBox> extends QuickContainer.Interpreted.Abstract<W, QuickWidget> {
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<Double>> theOpacity;
 
-		public Interpreted(Def<? super W> definition, QuickElement.Interpreted<?> parent) {
+		public Interpreted(Def<? super W> definition, ExElement.Interpreted<?> parent) {
 			super(definition, parent);
 		}
 
@@ -96,14 +96,14 @@ public class QuickBox extends QuickContainer.Abstract<QuickWidget> {
 		}
 
 		@Override
-		public W create(QuickElement parent) {
+		public W create(ExElement parent) {
 			return (W) new QuickBox(this, parent);
 		}
 	}
 
 	private SettableValue<Double> theOpacity;
 
-	public QuickBox(Interpreted<?> interpreted, QuickElement parent) {
+	public QuickBox(Interpreted<?> interpreted, ExElement parent) {
 		super(interpreted, parent);
 	}
 
@@ -112,7 +112,7 @@ public class QuickBox extends QuickContainer.Abstract<QuickWidget> {
 	}
 
 	@Override
-	protected void updateModel(QuickElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
+	protected void updateModel(ExElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
 		super.updateModel(interpreted, myModels);
 		QuickBox.Interpreted<?> myInterpreted = (QuickBox.Interpreted<?>) interpreted;
 		theOpacity = myInterpreted.getOpacity() == null ? null : myInterpreted.getOpacity().get(myModels);

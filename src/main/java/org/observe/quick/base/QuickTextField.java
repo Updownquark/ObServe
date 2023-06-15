@@ -8,7 +8,7 @@ import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
-import org.observe.quick.QuickElement;
+import org.observe.expresso.qonfig.ExElement;
 import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigInterpretationException;
@@ -22,7 +22,7 @@ public class QuickTextField<T> extends QuickEditableTextWidget.Abstract<T> {
 		private Integer theColumns;
 		private CompiledExpression theEmptyText;
 
-		public Def(QuickElement.Def<?> parent, QonfigElement element) {
+		public Def(ExElement.Def<?> parent, QonfigElement element) {
 			super(parent, element);
 		}
 
@@ -48,7 +48,7 @@ public class QuickTextField<T> extends QuickEditableTextWidget.Abstract<T> {
 		}
 
 		@Override
-		public Interpreted<T> interpret(QuickElement.Interpreted<?> parent) {
+		public Interpreted<T> interpret(ExElement.Interpreted<?> parent) {
 			return new Interpreted<>(this, parent);
 		}
 	}
@@ -56,7 +56,7 @@ public class QuickTextField<T> extends QuickEditableTextWidget.Abstract<T> {
 	public static class Interpreted<T> extends QuickEditableTextWidget.Interpreted.Abstract<T, QuickTextField<T>> {
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<String>> theEmptyText;
 
-		public Interpreted(Def<T> definition, QuickElement.Interpreted<?> parent) {
+		public Interpreted(Def<T> definition, ExElement.Interpreted<?> parent) {
 			super(definition, parent);
 		}
 
@@ -82,7 +82,7 @@ public class QuickTextField<T> extends QuickEditableTextWidget.Abstract<T> {
 		}
 
 		@Override
-		public QuickTextField<T> create(QuickElement parent) {
+		public QuickTextField<T> create(ExElement parent) {
 			return new QuickTextField<>(this, parent);
 		}
 	}
@@ -90,7 +90,7 @@ public class QuickTextField<T> extends QuickEditableTextWidget.Abstract<T> {
 	private Integer theColumns;
 	private final SettableValue<SettableValue<String>> theEmptyText;
 
-	public QuickTextField(Interpreted<T> interpreted, QuickElement parent) {
+	public QuickTextField(Interpreted<T> interpreted, ExElement parent) {
 		super(interpreted, parent);
 		theEmptyText = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<String>> parameterized(String.class))
 			.build();
@@ -105,7 +105,7 @@ public class QuickTextField<T> extends QuickEditableTextWidget.Abstract<T> {
 	}
 
 	@Override
-	protected void updateModel(QuickElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
+	protected void updateModel(ExElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
 		super.updateModel(interpreted, myModels);
 		QuickTextField.Interpreted<T> myInterpreted = (QuickTextField.Interpreted<T>) interpreted;
 		theColumns = myInterpreted.getDefinition().getColumns();

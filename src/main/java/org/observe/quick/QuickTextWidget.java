@@ -13,6 +13,7 @@ import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueSynth;
+import org.observe.expresso.qonfig.ExElement;
 import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigInterpretationException;
@@ -57,13 +58,13 @@ public interface QuickTextWidget<T> extends QuickValueWidget<T> {
 		CompiledExpression isEditable();
 
 		@Override
-		Interpreted<?, ? extends W> interpret(QuickElement.Interpreted<?> parent);
+		Interpreted<?, ? extends W> interpret(ExElement.Interpreted<?> parent);
 
 		public abstract class Abstract<T, W extends QuickTextWidget<T>> extends QuickValueWidget.Def.Abstract<T, W> implements Def<W> {
 			private CompiledExpression theFormat;
 			private CompiledExpression isEditable;
 
-			protected Abstract(QuickElement.Def<?> parent, QonfigElement element) {
+			protected Abstract(ExElement.Def<?> parent, QonfigElement element) {
 				super(parent, element);
 			}
 
@@ -100,7 +101,7 @@ public interface QuickTextWidget<T> extends QuickValueWidget<T> {
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<Format<T>>> theFormat;
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> isEditable;
 
-			protected Abstract(Def<? super W> definition, QuickElement.Interpreted<?> parent) {
+			protected Abstract(Def<? super W> definition, ExElement.Interpreted<?> parent) {
 				super(definition, parent);
 			}
 
@@ -175,7 +176,7 @@ public interface QuickTextWidget<T> extends QuickValueWidget<T> {
 		private final SettableValue<SettableValue<Format<T>>> theFormat;
 		private final SettableValue<SettableValue<Boolean>> isEditable;
 
-		protected Abstract(QuickTextWidget.Interpreted<T, ?> interpreted, QuickElement parent) {
+		protected Abstract(QuickTextWidget.Interpreted<T, ?> interpreted, ExElement parent) {
 			super(interpreted, parent);
 			theFormat = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Format<T>>> parameterized(//
 				interpreted.getFormat().getType().getType(0))).build();
@@ -194,7 +195,7 @@ public interface QuickTextWidget<T> extends QuickValueWidget<T> {
 		}
 
 		@Override
-		protected void updateModel(QuickElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
+		protected void updateModel(ExElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
 			super.updateModel(interpreted, myModels);
 			QuickTextWidget.Interpreted<T, ?> myInterpreted = (QuickTextWidget.Interpreted<T, ?>) interpreted;
 			theFormat.set(myInterpreted.getFormat().get(myModels), null);

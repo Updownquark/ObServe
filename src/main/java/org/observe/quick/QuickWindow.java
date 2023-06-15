@@ -9,30 +9,32 @@ import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.qonfig.ExAddOn;
+import org.observe.expresso.qonfig.ExElement;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
 /** An add-on for an element that is to be a window */
-public class QuickWindow extends QuickAddOn.Abstract<QuickElement> {
-	public static final QuickAddOn.AddOnAttributeGetter.Expression<QuickElement, QuickWindow, Interpreted, Def, SettableValue<?>, SettableValue<Integer>> X = QuickAddOn.AddOnAttributeGetter
+public class QuickWindow extends ExAddOn.Abstract<ExElement> {
+	public static final ExAddOn.AddOnAttributeGetter.Expression<ExElement, QuickWindow, Interpreted, Def, SettableValue<?>, SettableValue<Integer>> X = ExAddOn.AddOnAttributeGetter
 		.ofX(Def.class, Def::getX, Interpreted.class, Interpreted::getX, QuickWindow.class, QuickWindow::getX,
 			"The x-coordinate of the position of the top-left corner of the window in the graphics environment");
-	public static final QuickAddOn.AddOnAttributeGetter.Expression<QuickElement, QuickWindow, Interpreted, Def, SettableValue<?>, SettableValue<Integer>> Y = QuickAddOn.AddOnAttributeGetter
+	public static final ExAddOn.AddOnAttributeGetter.Expression<ExElement, QuickWindow, Interpreted, Def, SettableValue<?>, SettableValue<Integer>> Y = ExAddOn.AddOnAttributeGetter
 		.ofX(Def.class, Def::getY, Interpreted.class, Interpreted::getY, QuickWindow.class, QuickWindow::getY,
 			"The y-coordinate of the position of the top-left corner of the window in the graphics environment");
-	public static final QuickAddOn.AddOnAttributeGetter.Expression<QuickElement, QuickWindow, Interpreted, Def, SettableValue<?>, SettableValue<Integer>> WIDTH = QuickAddOn.AddOnAttributeGetter
+	public static final ExAddOn.AddOnAttributeGetter.Expression<ExElement, QuickWindow, Interpreted, Def, SettableValue<?>, SettableValue<Integer>> WIDTH = ExAddOn.AddOnAttributeGetter
 		.ofX(Def.class, Def::getWidth, Interpreted.class, Interpreted::getWidth, QuickWindow.class, QuickWindow::getWidth,
 			"The width of the window");
-	public static final QuickAddOn.AddOnAttributeGetter.Expression<QuickElement, QuickWindow, Interpreted, Def, SettableValue<?>, SettableValue<Integer>> HEIGHT = QuickAddOn.AddOnAttributeGetter
+	public static final ExAddOn.AddOnAttributeGetter.Expression<ExElement, QuickWindow, Interpreted, Def, SettableValue<?>, SettableValue<Integer>> HEIGHT = ExAddOn.AddOnAttributeGetter
 		.ofX(Def.class, Def::getHeight, Interpreted.class, Interpreted::getHeight, QuickWindow.class, QuickWindow::getHeight,
 			"The height of the window");
-	public static final QuickAddOn.AddOnAttributeGetter.Expression<QuickElement, QuickWindow, Interpreted, Def, SettableValue<?>, SettableValue<String>> TITLE = QuickAddOn.AddOnAttributeGetter
+	public static final ExAddOn.AddOnAttributeGetter.Expression<ExElement, QuickWindow, Interpreted, Def, SettableValue<?>, SettableValue<String>> TITLE = ExAddOn.AddOnAttributeGetter
 		.ofX(Def.class, Def::getTitle, Interpreted.class, Interpreted::getTitle, QuickWindow.class, QuickWindow::getTitle,
 			"The title for the window");
-	public static final QuickAddOn.AddOnAttributeGetter.Expression<QuickElement, QuickWindow, Interpreted, Def, SettableValue<?>, SettableValue<Boolean>> VISIBLE = QuickAddOn.AddOnAttributeGetter
+	public static final ExAddOn.AddOnAttributeGetter.Expression<ExElement, QuickWindow, Interpreted, Def, SettableValue<?>, SettableValue<Boolean>> VISIBLE = ExAddOn.AddOnAttributeGetter
 		.ofX(Def.class, Def::isVisible, Interpreted.class, Interpreted::isVisible, QuickWindow.class, QuickWindow::isVisible,
 			"Controls when the window is displayed");
-	public static final QuickAddOn.AddOnAttributeGetter<QuickElement, QuickWindow, Interpreted, Def> CLOSE_ACTION = QuickAddOn.AddOnAttributeGetter
+	public static final ExAddOn.AddOnAttributeGetter<ExElement, QuickWindow, Interpreted, Def> CLOSE_ACTION = ExAddOn.AddOnAttributeGetter
 		.of(Def.class, Def::getCloseAction, Interpreted.class, i -> i.getDefinition().getCloseAction(), QuickWindow.class,
 			QuickWindow::getCloseAction, "The action to take when the user closes the window by clicking the \"X\" at the corner");
 
@@ -49,7 +51,7 @@ public class QuickWindow extends QuickAddOn.Abstract<QuickElement> {
 	}
 
 	/** The definition of a {@link QuickWindow} */
-	public static class Def extends QuickAddOn.Def.Abstract<QuickElement, QuickWindow> {
+	public static class Def extends ExAddOn.Def.Abstract<ExElement, QuickWindow> {
 		private CompiledExpression theX;
 		private CompiledExpression theY;
 		private CompiledExpression theWidth;
@@ -62,7 +64,7 @@ public class QuickWindow extends QuickAddOn.Abstract<QuickElement> {
 		 * @param type The add-on that the Qonfig toolkit uses to represent this type
 		 * @param element The element that this add-on is added onto
 		 */
-		public Def(QonfigAddOn type, QuickElement.Def<? extends QuickElement> element) {
+		public Def(QonfigAddOn type, ExElement.Def<? extends ExElement> element) {
 			super(type, element);
 		}
 
@@ -102,7 +104,7 @@ public class QuickWindow extends QuickAddOn.Abstract<QuickElement> {
 		}
 
 		@Override
-		public void update(ExpressoQIS session, QuickElement.Def<? extends QuickElement> element) throws QonfigInterpretationException {
+		public void update(ExpressoQIS session, ExElement.Def<? extends ExElement> element) throws QonfigInterpretationException {
 			element.forAttribute(session.getFocusType().getAttribute("x").getDeclared(), X);
 			element.forAttribute(session.getFocusType().getAttribute("y").getDeclared(), Y);
 			element.forAttribute(session.getFocusType().getAttribute("width").getDeclared(), WIDTH);
@@ -137,13 +139,13 @@ public class QuickWindow extends QuickAddOn.Abstract<QuickElement> {
 		}
 
 		@Override
-		public Interpreted interpret(QuickElement.Interpreted<? extends QuickElement> element) {
+		public Interpreted interpret(ExElement.Interpreted<? extends ExElement> element) {
 			return new Interpreted(this, (QuickDocument.Interpreted) element);
 		}
 	}
 
 	/** An interpretation of a {@link QuickWindow} */
-	public static class Interpreted extends QuickAddOn.Interpreted.Abstract<QuickElement, QuickWindow> {
+	public static class Interpreted extends ExAddOn.Interpreted.Abstract<ExElement, QuickWindow> {
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> theX;
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> theY;
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> theWidth;
@@ -211,7 +213,7 @@ public class QuickWindow extends QuickAddOn.Abstract<QuickElement> {
 		}
 
 		@Override
-		public QuickWindow create(QuickElement element) {
+		public QuickWindow create(ExElement element) {
 			return new QuickWindow(this, element);
 		}
 	}
@@ -228,7 +230,7 @@ public class QuickWindow extends QuickAddOn.Abstract<QuickElement> {
 	 * @param interpreted The interpretation producing this window
 	 * @param element The element that this add-on is added onto
 	 */
-	public QuickWindow(Interpreted interpreted, QuickElement element) {
+	public QuickWindow(Interpreted interpreted, ExElement element) {
 		super(interpreted, element);
 	}
 
@@ -267,7 +269,7 @@ public class QuickWindow extends QuickAddOn.Abstract<QuickElement> {
 	}
 
 	@Override
-	public void update(QuickAddOn.Interpreted<?, ?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
+	public void update(ExAddOn.Interpreted<?, ?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
 		super.update(interpreted, models);
 		QuickWindow.Interpreted myInterpreted = (QuickWindow.Interpreted) interpreted;
 		theCloseAction = myInterpreted.getDefinition().getCloseAction();

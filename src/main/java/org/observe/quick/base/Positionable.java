@@ -10,20 +10,20 @@ import org.observe.expresso.ObservableModelSet.CompiledModelValue;
 import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
-import org.observe.quick.QuickAddOn;
-import org.observe.quick.QuickElement;
+import org.observe.expresso.qonfig.ExAddOn;
+import org.observe.expresso.qonfig.ExElement;
 import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
-public abstract class Positionable extends QuickAddOn.Abstract<QuickElement> {
-	public static abstract class Def<P extends Positionable> extends QuickAddOn.Def.Abstract<QuickElement, P> {
+public abstract class Positionable extends ExAddOn.Abstract<ExElement> {
+	public static abstract class Def<P extends Positionable> extends ExAddOn.Def.Abstract<ExElement, P> {
 		private final boolean isVertical;
 		private CompiledModelValue<SettableValue<?>, SettableValue<QuickSize>> theLeading;
 		private CompiledModelValue<SettableValue<?>, SettableValue<QuickSize>> theCenter;
 		private CompiledModelValue<SettableValue<?>, SettableValue<QuickSize>> theTrailing;
 
-		protected Def(boolean vertical, QonfigAddOn type, QuickElement.Def<?> element) {
+		protected Def(boolean vertical, QonfigAddOn type, ExElement.Def<?> element) {
 			super(type, element);
 			isVertical = vertical;
 		}
@@ -45,7 +45,7 @@ public abstract class Positionable extends QuickAddOn.Abstract<QuickElement> {
 		}
 
 		@Override
-		public void update(ExpressoQIS session, QuickElement.Def<?> element) throws QonfigInterpretationException {
+		public void update(ExpressoQIS session, ExElement.Def<?> element) throws QonfigInterpretationException {
 			super.update(session, element);
 			if (isVertical) {
 				theLeading = Sizeable.parseSize(session.getAttributeQV("top"), session, true);
@@ -59,34 +59,34 @@ public abstract class Positionable extends QuickAddOn.Abstract<QuickElement> {
 		}
 
 		public static class Vertical extends Def<Positionable.Vertical> {
-			public Vertical(QonfigAddOn type, QuickElement.Def<?> element) {
+			public Vertical(QonfigAddOn type, ExElement.Def<?> element) {
 				super(true, type, element);
 			}
 
 			@Override
-			public Interpreted.Vertical interpret(QuickElement.Interpreted<?> element) {
+			public Interpreted.Vertical interpret(ExElement.Interpreted<?> element) {
 				return new Interpreted.Vertical(this, element);
 			}
 		}
 
 		public static class Horizontal extends Def<Positionable.Horizontal> {
-			public Horizontal(QonfigAddOn type, QuickElement.Def<?> element) {
+			public Horizontal(QonfigAddOn type, ExElement.Def<?> element) {
 				super(false, type, element);
 			}
 
 			@Override
-			public Interpreted.Horizontal interpret(QuickElement.Interpreted<?> element) {
+			public Interpreted.Horizontal interpret(ExElement.Interpreted<?> element) {
 				return new Interpreted.Horizontal(this, element);
 			}
 		}
 	}
 
-	public static abstract class Interpreted<P extends Positionable> extends QuickAddOn.Interpreted.Abstract<QuickElement, P> {
+	public static abstract class Interpreted<P extends Positionable> extends ExAddOn.Interpreted.Abstract<ExElement, P> {
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<QuickSize>> theLeading;
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<QuickSize>> theCenter;
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<QuickSize>> theTrailing;
 
-		protected Interpreted(Def<P> definition, QuickElement.Interpreted<?> element) {
+		protected Interpreted(Def<P> definition, ExElement.Interpreted<?> element) {
 			super(definition, element);
 		}
 
@@ -115,7 +115,7 @@ public abstract class Positionable extends QuickAddOn.Abstract<QuickElement> {
 		}
 
 		public static class Vertical extends Interpreted<Positionable.Vertical> {
-			public Vertical(Def.Vertical definition, QuickElement.Interpreted<?> element) {
+			public Vertical(Def.Vertical definition, ExElement.Interpreted<?> element) {
 				super(definition, element);
 			}
 
@@ -125,13 +125,13 @@ public abstract class Positionable extends QuickAddOn.Abstract<QuickElement> {
 			}
 
 			@Override
-			public Positionable.Vertical create(QuickElement element) {
+			public Positionable.Vertical create(ExElement element) {
 				return new Positionable.Vertical(this, element);
 			}
 		}
 
 		public static class Horizontal extends Interpreted<Positionable.Horizontal> {
-			public Horizontal(Def.Horizontal definition, QuickElement.Interpreted<?> element) {
+			public Horizontal(Def.Horizontal definition, ExElement.Interpreted<?> element) {
 				super(definition, element);
 			}
 
@@ -141,7 +141,7 @@ public abstract class Positionable extends QuickAddOn.Abstract<QuickElement> {
 			}
 
 			@Override
-			public Positionable.Horizontal create(QuickElement element) {
+			public Positionable.Horizontal create(ExElement element) {
 				return new Positionable.Horizontal(this, element);
 			}
 		}
@@ -151,7 +151,7 @@ public abstract class Positionable extends QuickAddOn.Abstract<QuickElement> {
 	private final SettableValue<SettableValue<QuickSize>> theCenter;
 	private final SettableValue<SettableValue<QuickSize>> theTrailing;
 
-	protected Positionable(Interpreted<?> interpreted, QuickElement element) {
+	protected Positionable(Interpreted<?> interpreted, ExElement element) {
 		super(interpreted, element);
 		theLeading = SettableValue
 			.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<QuickSize>> parameterized(QuickSize.class)).build();
@@ -172,7 +172,7 @@ public abstract class Positionable extends QuickAddOn.Abstract<QuickElement> {
 	}
 
 	@Override
-	public void update(QuickAddOn.Interpreted<?, ?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
+	public void update(ExAddOn.Interpreted<?, ?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
 		super.update(interpreted, models);
 		Positionable.Interpreted<?> myInterpreted = (Positionable.Interpreted<?>) interpreted;
 		theLeading.set(myInterpreted.getLeading() == null ? null : myInterpreted.getLeading().get(models), null);
@@ -185,13 +185,13 @@ public abstract class Positionable extends QuickAddOn.Abstract<QuickElement> {
 	}
 
 	public static class Vertical extends Positionable {
-		public Vertical(Interpreted.Vertical interpreted, QuickElement element) {
+		public Vertical(Interpreted.Vertical interpreted, ExElement element) {
 			super(interpreted, element);
 		}
 	}
 
 	public static class Horizontal extends Positionable {
-		public Horizontal(Interpreted.Horizontal interpreted, QuickElement element) {
+		public Horizontal(Interpreted.Horizontal interpreted, ExElement element) {
 			super(interpreted, element);
 		}
 	}

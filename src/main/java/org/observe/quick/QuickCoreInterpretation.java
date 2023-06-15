@@ -4,6 +4,8 @@ import java.util.Set;
 import java.util.function.BiFunction;
 
 import org.observe.expresso.ExpressoQIS;
+import org.observe.expresso.qonfig.ExAddOn;
+import org.observe.expresso.qonfig.ExElement;
 import org.observe.quick.style.StyleQIS;
 import org.qommons.QommonsUtils;
 import org.qommons.Version;
@@ -49,7 +51,7 @@ public class QuickCoreInterpretation implements QonfigInterpretation {
 	public Builder configureInterpreter(Builder interpreter) {
 		interpreter.createWith(QuickDocument.QUICK, QuickDocument.Def.class, session -> new QuickDocument.Def(null, session.getElement()));
 		interpreter.createWith(QuickDocument.QuickHeadSection.HEAD, QuickDocument.QuickHeadSection.Def.class,
-			session -> new QuickDocument.QuickHeadSection.Def((QuickDocument.Def) session.get(QuickElement.SESSION_QUICK_ELEMENT),
+			session -> new QuickDocument.QuickHeadSection.Def((QuickDocument.Def) session.get(ExElement.SESSION_EX_ELEMENT),
 				session.getElement()));
 		interpreter.createWith("window", QuickWindow.Def.class,
 			session -> interpretAddOn(session, (p, ao) -> new QuickWindow.Def(ao, (QuickDocument.Def) p)));
@@ -99,9 +101,9 @@ public class QuickCoreInterpretation implements QonfigInterpretation {
 	 * @param element Produces the definition
 	 * @return The definition
 	 */
-	public static <E extends QuickElement, D extends QuickElement.Def<E>> D interpretQuick(AbstractQIS<?> session,
-		BiFunction<QuickElement.Def<?>, QonfigElement, D> element) {
-		return element.apply((QuickElement.Def<?>) session.get(QuickElement.SESSION_QUICK_ELEMENT), session.getElement());
+	public static <E extends ExElement, D extends ExElement.Def<E>> D interpretQuick(AbstractQIS<?> session,
+		BiFunction<ExElement.Def<?>, QonfigElement, D> element) {
+		return element.apply((ExElement.Def<?>) session.get(ExElement.SESSION_EX_ELEMENT), session.getElement());
 	}
 
 	/**
@@ -113,8 +115,8 @@ public class QuickCoreInterpretation implements QonfigInterpretation {
 	 * @param addOn Produces the definition
 	 * @return The definition
 	 */
-	public static <E extends QuickElement, AO extends QuickAddOn<E>, D extends QuickAddOn.Def<E, AO>> D interpretAddOn(
-		AbstractQIS<?> session, BiFunction<QuickElement.Def<?>, QonfigAddOn, D> addOn) {
-		return addOn.apply((QuickElement.Def<?>) session.get(QuickElement.SESSION_QUICK_ELEMENT), (QonfigAddOn) session.getFocusType());
+	public static <E extends ExElement, AO extends ExAddOn<E>, D extends ExAddOn.Def<E, AO>> D interpretAddOn(
+		AbstractQIS<?> session, BiFunction<ExElement.Def<?>, QonfigAddOn, D> addOn) {
+		return addOn.apply((ExElement.Def<?>) session.get(ExElement.SESSION_EX_ELEMENT), (QonfigAddOn) session.getFocusType());
 	}
 }

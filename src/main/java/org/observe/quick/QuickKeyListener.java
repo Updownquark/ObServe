@@ -5,6 +5,7 @@ import org.observe.expresso.ExpressoQIS;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.qonfig.ExElement;
 import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigInterpretationException;
@@ -71,7 +72,7 @@ public interface QuickKeyListener extends QuickEventListener {
 		implements QuickKeyListener.Def<QuickKeyTypedListener> {
 			private char theCharFilter;
 
-			public Def(QuickElement.Def<?> parent, QonfigElement element) {
+			public Def(ExElement.Def<?> parent, QonfigElement element) {
 				super(parent, element);
 			}
 
@@ -97,7 +98,7 @@ public interface QuickKeyListener extends QuickEventListener {
 			}
 
 			@Override
-			public Interpreted interpret(QuickElement.Interpreted<?> parent) {
+			public Interpreted interpret(ExElement.Interpreted<?> parent) {
 				return new Interpreted(this, parent);
 			}
 		}
@@ -105,7 +106,7 @@ public interface QuickKeyListener extends QuickEventListener {
 		public static class Interpreted extends QuickEventListener.Interpreted.Abstract<QuickKeyTypedListener>
 		implements QuickKeyListener.Interpreted<QuickKeyTypedListener> {
 
-			public Interpreted(Def definition, QuickElement.Interpreted<?> parent) {
+			public Interpreted(Def definition, ExElement.Interpreted<?> parent) {
 				super(definition, parent);
 			}
 
@@ -115,7 +116,7 @@ public interface QuickKeyListener extends QuickEventListener {
 			}
 
 			@Override
-			public QuickKeyTypedListener create(QuickElement parent) {
+			public QuickKeyTypedListener create(ExElement parent) {
 				return new QuickKeyTypedListener(this, parent);
 			}
 		}
@@ -123,7 +124,7 @@ public interface QuickKeyListener extends QuickEventListener {
 		private final SettableValue<SettableValue<Character>> theTypedChar;
 		private char theCharFilter;
 
-		public QuickKeyTypedListener(Interpreted interpreted, QuickElement parent) {
+		public QuickKeyTypedListener(Interpreted interpreted, ExElement parent) {
 			super(interpreted, parent);
 			theTypedChar = SettableValue
 				.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Character>> parameterized(Character.class)).build();
@@ -139,9 +140,9 @@ public interface QuickKeyListener extends QuickEventListener {
 		}
 
 		@Override
-		protected void updateModel(QuickElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
+		protected void updateModel(ExElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
 			super.updateModel(interpreted, myModels);
-			QuickElement.satisfyContextValue("typedChar", ModelTypes.Value.forType(char.class), SettableValue.flatten(theTypedChar),
+			ExElement.satisfyContextValue("typedChar", ModelTypes.Value.forType(char.class), SettableValue.flatten(theTypedChar),
 				myModels, this);
 			QuickKeyTypedListener.Interpreted myInterpreted = (QuickKeyTypedListener.Interpreted) interpreted;
 			theCharFilter = myInterpreted.getDefinition().getCharFilter();
@@ -158,7 +159,7 @@ public interface QuickKeyListener extends QuickEventListener {
 			private final boolean isPressed;
 			private KeyCode theKeyCode;
 
-			public Def(QuickElement.Def<?> parent, QonfigElement element, boolean pressed) {
+			public Def(ExElement.Def<?> parent, QonfigElement element, boolean pressed) {
 				super(parent, element);
 				isPressed = pressed;
 			}
@@ -200,14 +201,14 @@ public interface QuickKeyListener extends QuickEventListener {
 			}
 
 			@Override
-			public Interpreted interpret(QuickElement.Interpreted<?> parent) {
+			public Interpreted interpret(ExElement.Interpreted<?> parent) {
 				return new Interpreted(this, parent);
 			}
 		}
 
 		public static class Interpreted extends QuickEventListener.Interpreted.Abstract<QuickKeyCodeListener>
 		implements QuickKeyListener.Interpreted<QuickKeyCodeListener> {
-			public Interpreted(Def definition, QuickElement.Interpreted<?> parent) {
+			public Interpreted(Def definition, ExElement.Interpreted<?> parent) {
 				super(definition, parent);
 			}
 
@@ -217,7 +218,7 @@ public interface QuickKeyListener extends QuickEventListener {
 			}
 
 			@Override
-			public QuickKeyCodeListener create(QuickElement parent) {
+			public QuickKeyCodeListener create(ExElement parent) {
 				return new QuickKeyCodeListener(this, parent);
 			}
 		}
@@ -226,7 +227,7 @@ public interface QuickKeyListener extends QuickEventListener {
 		private boolean isPressed;
 		private KeyCode theKeyCode;
 
-		public QuickKeyCodeListener(Interpreted interpreted, QuickElement parent) {
+		public QuickKeyCodeListener(Interpreted interpreted, ExElement parent) {
 			super(interpreted, parent);
 			theEventKeyCode = SettableValue
 				.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<KeyCode>> parameterized(KeyCode.class)).build();
@@ -246,9 +247,9 @@ public interface QuickKeyListener extends QuickEventListener {
 		}
 
 		@Override
-		protected void updateModel(QuickElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
+		protected void updateModel(ExElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
 			super.updateModel(interpreted, myModels);
-			QuickElement.satisfyContextValue("keyCode", ModelTypes.Value.forType(KeyCode.class), SettableValue.flatten(theEventKeyCode),
+			ExElement.satisfyContextValue("keyCode", ModelTypes.Value.forType(KeyCode.class), SettableValue.flatten(theEventKeyCode),
 				myModels, this);
 			QuickKeyCodeListener.Interpreted myInterpreted = (QuickKeyCodeListener.Interpreted) interpreted;
 			isPressed = myInterpreted.getDefinition().isPressed();

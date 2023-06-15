@@ -1,21 +1,21 @@
 package org.observe.quick.base;
 
-import org.observe.quick.QuickAddOn;
-import org.observe.quick.QuickElement;
+import org.observe.expresso.qonfig.ExAddOn;
+import org.observe.expresso.qonfig.ExElement;
 import org.qommons.config.QonfigAddOn;
 
-public interface QuickLayout extends QuickAddOn<QuickBox> {
-	public abstract class Def<L extends QuickLayout> extends QuickAddOn.Def.Abstract<QuickBox, L> {
-		protected Def(QonfigAddOn type, QuickElement.Def<? extends QuickBox> element) {
+public interface QuickLayout extends ExAddOn<QuickBox> {
+	public abstract class Def<L extends QuickLayout> extends ExAddOn.Def.Abstract<QuickBox, L> {
+		protected Def(QonfigAddOn type, ExElement.Def<? extends QuickBox> element) {
 			super(type, element);
 		}
 
 		@Override
-		public abstract Interpreted<L> interpret(QuickElement.Interpreted<? extends QuickBox> element);
+		public abstract Interpreted<L> interpret(ExElement.Interpreted<? extends QuickBox> element);
 	}
 
-	public abstract class Interpreted<L extends QuickLayout> extends QuickAddOn.Interpreted.Abstract<QuickBox, L> {
-		protected Interpreted(Def<L> definition, QuickElement.Interpreted<? extends QuickBox> element) {
+	public abstract class Interpreted<L extends QuickLayout> extends ExAddOn.Interpreted.Abstract<QuickBox, L> {
+		protected Interpreted(Def<L> definition, ExElement.Interpreted<? extends QuickBox> element) {
 			super(definition, element);
 		}
 
@@ -25,7 +25,7 @@ public interface QuickLayout extends QuickAddOn<QuickBox> {
 		}
 	}
 
-	public abstract class Abstract extends QuickAddOn.Abstract<QuickBox> implements QuickLayout {
+	public abstract class Abstract extends ExAddOn.Abstract<QuickBox> implements QuickLayout {
 		protected Abstract(QuickLayout.Interpreted<?> interpreted, QuickBox element) {
 			super(interpreted, element);
 		}

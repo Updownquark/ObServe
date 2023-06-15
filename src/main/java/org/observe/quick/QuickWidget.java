@@ -16,6 +16,7 @@ import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.qonfig.ExElement;
 import org.observe.quick.style.CompiledStyleApplication;
 import org.observe.quick.style.InterpretedStyleApplication;
 import org.observe.quick.style.QuickCompiledStyle;
@@ -34,56 +35,56 @@ import com.google.common.reflect.TypeToken;
 public interface QuickWidget extends QuickTextElement {
 	public static final String WIDGET = "widget";
 
-	public static final QuickElement.AttributeValueGetter<QuickWidget, Interpreted<? extends QuickWidget>, Def<? extends QuickWidget>> NAME = QuickElement.AttributeValueGetter
+	public static final ExElement.AttributeValueGetter<QuickWidget, Interpreted<? extends QuickWidget>, Def<? extends QuickWidget>> NAME = ExElement.AttributeValueGetter
 		.of(Def::getName, i -> i.getDefinition().getName(), QuickWidget::getName,
 			"The name of the widget.  Typically only used for debugging");
-	public static final QuickElement.AttributeValueGetter.Expression<QuickWidget, Interpreted<? extends QuickWidget>, Def<? extends QuickWidget>, SettableValue<?>, SettableValue<String>> TOOLTIP = QuickElement.AttributeValueGetter
+	public static final ExElement.AttributeValueGetter.Expression<QuickWidget, Interpreted<? extends QuickWidget>, Def<? extends QuickWidget>, SettableValue<?>, SettableValue<String>> TOOLTIP = ExElement.AttributeValueGetter
 		.ofX(Def::getTooltip, Interpreted::getTooltip, QuickWidget::getTooltip,
 			"The tooltip to display when the user hovers the mouse over the widget, for user feedback");
-	public static final QuickElement.AttributeValueGetter.Expression<QuickWidget, Interpreted<? extends QuickWidget>, Def<? extends QuickWidget>, SettableValue<?>, SettableValue<Boolean>> VISIBLE = QuickElement.AttributeValueGetter
+	public static final ExElement.AttributeValueGetter.Expression<QuickWidget, Interpreted<? extends QuickWidget>, Def<? extends QuickWidget>, SettableValue<?>, SettableValue<Boolean>> VISIBLE = ExElement.AttributeValueGetter
 		.ofX(Def::isVisible, Interpreted::isVisible, QuickWidget::isVisible,
 			"Determines when the widget is displayed to the user or hidden");
 
-	public static final QuickElement.ChildElementGetter<QuickWidget, Interpreted<?>, Def<?>> BORDER = new QuickElement.ChildElementGetter<QuickWidget, Interpreted<?>, Def<?>>() {
+	public static final ExElement.ChildElementGetter<QuickWidget, Interpreted<?>, Def<?>> BORDER = new ExElement.ChildElementGetter<QuickWidget, Interpreted<?>, Def<?>>() {
 		@Override
 		public String getDescription() {
 			return "The border to draw around the widget";
 		}
 
 		@Override
-		public List<? extends org.observe.quick.QuickElement.Def<?>> getChildrenFromDef(Def<?> def) {
+		public List<? extends org.observe.expresso.qonfig.ExElement.Def<?>> getChildrenFromDef(Def<?> def) {
 			return def.getBorder() == null ? Collections.emptyList() : Collections.singletonList(def.getBorder());
 		}
 
 		@Override
-		public List<? extends org.observe.quick.QuickElement.Interpreted<?>> getChildrenFromInterpreted(Interpreted<?> interp) {
+		public List<? extends org.observe.expresso.qonfig.ExElement.Interpreted<?>> getChildrenFromInterpreted(Interpreted<?> interp) {
 			return interp.getBorder() == null ? Collections.emptyList() : Collections.singletonList(interp.getBorder());
 		}
 
 		@Override
-		public List<? extends QuickElement> getChildrenFromElement(QuickWidget element) {
+		public List<? extends ExElement> getChildrenFromElement(QuickWidget element) {
 			return element.getBorder() == null ? Collections.emptyList() : Collections.singletonList(element.getBorder());
 		}
 	};
 
-	public static final QuickElement.ChildElementGetter<QuickWidget, Interpreted<?>, Def<?>> EVENT_LISTENERS = new QuickElement.ChildElementGetter<QuickWidget, Interpreted<?>, Def<?>>() {
+	public static final ExElement.ChildElementGetter<QuickWidget, Interpreted<?>, Def<?>> EVENT_LISTENERS = new ExElement.ChildElementGetter<QuickWidget, Interpreted<?>, Def<?>>() {
 		@Override
 		public String getDescription() {
 			return "Listeners to events like mouse clicks or key presses";
 		}
 
 		@Override
-		public List<? extends org.observe.quick.QuickElement.Def<?>> getChildrenFromDef(Def<?> def) {
+		public List<? extends org.observe.expresso.qonfig.ExElement.Def<?>> getChildrenFromDef(Def<?> def) {
 			return def.getEventListeners();
 		}
 
 		@Override
-		public List<? extends org.observe.quick.QuickElement.Interpreted<?>> getChildrenFromInterpreted(Interpreted<?> interp) {
+		public List<? extends org.observe.expresso.qonfig.ExElement.Interpreted<?>> getChildrenFromInterpreted(Interpreted<?> interp) {
 			return interp.getEventListeners();
 		}
 
 		@Override
-		public List<? extends QuickElement> getChildrenFromElement(QuickWidget element) {
+		public List<? extends ExElement> getChildrenFromElement(QuickWidget element) {
 			return element.getEventListeners();
 		}
 	};
@@ -118,7 +119,7 @@ public interface QuickWidget extends QuickTextElement {
 		 * @param parent The parent container interpretation
 		 * @return The new widget interpretation
 		 */
-		Interpreted<? extends W> interpret(QuickElement.Interpreted<?> parent);
+		Interpreted<? extends W> interpret(ExElement.Interpreted<?> parent);
 
 		/**
 		 * An abstract {@link Def} implementation
@@ -136,7 +137,7 @@ public interface QuickWidget extends QuickTextElement {
 			 * @param parent The parent container definition
 			 * @param element The element that this widget is interpreted from
 			 */
-			protected Abstract(QuickElement.Def<?> parent, QonfigElement element) {
+			protected Abstract(ExElement.Def<?> parent, QonfigElement element) {
 				super(parent, element);
 				theEventListeners = new ArrayList<>();
 			}
@@ -148,7 +149,7 @@ public interface QuickWidget extends QuickTextElement {
 
 			@Override
 			public QuickContainer.Def<?, ?> getParent() {
-				QuickElement.Def<?> parent = getParentElement();
+				ExElement.Def<?> parent = getParentElement();
 				return parent instanceof QuickContainer.Def ? (QuickContainer.Def<?, ?>) parent : null;
 			}
 
@@ -186,12 +187,12 @@ public interface QuickWidget extends QuickTextElement {
 				forChild(session.getRole("border").getDeclared(), BORDER);
 				forChild(session.getRole("event-listener").getDeclared(), EVENT_LISTENERS);
 				super.update(session);
-				theBorder = QuickElement.useOrReplace(QuickBorder.Def.class, theBorder, session, "border");
+				theBorder = ExElement.useOrReplace(QuickBorder.Def.class, theBorder, session, "border");
 				theName = session.getAttributeText("name");
 				theTooltip = session.getAttributeExpression("tooltip");
 				isVisible = session.getAttributeExpression("visible");
 				CollectionUtils.synchronize(theEventListeners, session.forChildren("event-listener"),
-					(l, s) -> QuickElement.typesEqual(l.getElement(), s.getElement())).simpleE(s -> {
+					(l, s) -> ExElement.typesEqual(l.getElement(), s.getElement())).simpleE(s -> {
 						QuickEventListener.Def<?> listener = s.interpret(QuickEventListener.Def.class);
 						listener.update(s);
 						return listener;
@@ -241,7 +242,7 @@ public interface QuickWidget extends QuickTextElement {
 		 * @param parent The parent container, if any
 		 * @return The new widget
 		 */
-		W create(QuickElement parent);
+		W create(ExElement parent);
 
 		/**
 		 * An abstract {@link Interpreted} implementation
@@ -258,7 +259,7 @@ public interface QuickWidget extends QuickTextElement {
 			 * @param definition The definition producing this interpretation
 			 * @param parent The interpreted parent
 			 */
-			protected Abstract(Def<? super W> definition, QuickElement.Interpreted<?> parent) {
+			protected Abstract(Def<? super W> definition, ExElement.Interpreted<?> parent) {
 				super(definition, parent);
 				theEventListeners = new ArrayList<>();
 			}
@@ -275,7 +276,7 @@ public interface QuickWidget extends QuickTextElement {
 
 			@Override
 			public QuickContainer.Interpreted<?, ?> getParent() {
-				QuickElement.Interpreted<?> parent = getParentElement();
+				ExElement.Interpreted<?> parent = getParentElement();
 				return parent instanceof QuickContainer.Interpreted ? (QuickContainer.Interpreted<?, ?>) parent : null;
 			}
 
@@ -434,7 +435,7 @@ public interface QuickWidget extends QuickTextElement {
 		 * @param interpreted The interpretation instantiating this widget
 		 * @param parent The parent element
 		 */
-		protected Abstract(QuickWidget.Interpreted<?> interpreted, QuickElement parent) {
+		protected Abstract(QuickWidget.Interpreted<?> interpreted, ExElement parent) {
 			super(interpreted, parent);
 			theName = SettableValue.build(String.class).build();
 			theTooltip = SettableValue
@@ -457,7 +458,7 @@ public interface QuickWidget extends QuickTextElement {
 
 		@Override
 		public QuickContainer<?> getParent() {
-			QuickElement parent = getParentElement();
+			ExElement parent = getParentElement();
 			return parent instanceof QuickContainer ? (QuickContainer<?>) parent : null;
 		}
 
@@ -515,7 +516,7 @@ public interface QuickWidget extends QuickTextElement {
 		}
 
 		@Override
-		protected void updateModel(QuickElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
+		protected void updateModel(ExElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
 			super.updateModel(interpreted, myModels);
 			satisfyContextValue("hovered", ModelTypes.Value.BOOLEAN, SettableValue.flatten(isHovered), myModels);
 			satisfyContextValue("focused", ModelTypes.Value.BOOLEAN, SettableValue.flatten(isFocused), myModels);
@@ -553,7 +554,7 @@ public interface QuickWidget extends QuickTextElement {
 
 				public Default(QuickCompiledStyle parent, QuickCompiledStyle wrapped) {
 					super(parent, wrapped);
-					QuickTypeStyle typeStyle = QuickStyledElement.getTypeStyle(wrapped.getStyleSet(), getElement(),
+					QuickTypeStyle typeStyle = QuickStyledElement.getTypeStyle(wrapped.getStyleTypes(), getElement(),
 						QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, "widget");
 					theColor = (QuickStyleAttribute<Color>) typeStyle.getAttribute("color", Color.class);
 				}

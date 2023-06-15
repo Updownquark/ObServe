@@ -8,7 +8,7 @@ import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
-import org.observe.quick.QuickElement;
+import org.observe.expresso.qonfig.ExElement;
 import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigInterpretationException;
@@ -22,7 +22,7 @@ public class QuickTextArea<T> extends QuickEditableTextWidget.Abstract<T> {
 		private CompiledExpression theRows;
 		private CompiledExpression isHtml;
 
-		public Def(QuickElement.Def<?> parent, QonfigElement element) {
+		public Def(ExElement.Def<?> parent, QonfigElement element) {
 			super(parent, element);
 		}
 
@@ -48,7 +48,7 @@ public class QuickTextArea<T> extends QuickEditableTextWidget.Abstract<T> {
 		}
 
 		@Override
-		public Interpreted<T> interpret(QuickElement.Interpreted<?> parent) {
+		public Interpreted<T> interpret(ExElement.Interpreted<?> parent) {
 			return new Interpreted<>(this, parent);
 		}
 	}
@@ -57,7 +57,7 @@ public class QuickTextArea<T> extends QuickEditableTextWidget.Abstract<T> {
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> theRows;
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> isHtml;
 
-		public Interpreted(Def<T> definition, QuickElement.Interpreted<?> parent) {
+		public Interpreted(Def<T> definition, ExElement.Interpreted<?> parent) {
 			super(definition, parent);
 		}
 
@@ -89,7 +89,7 @@ public class QuickTextArea<T> extends QuickEditableTextWidget.Abstract<T> {
 		}
 
 		@Override
-		public QuickTextArea<T> create(QuickElement parent) {
+		public QuickTextArea<T> create(ExElement parent) {
 			return new QuickTextArea<>(this, parent);
 		}
 	}
@@ -119,7 +119,7 @@ public class QuickTextArea<T> extends QuickEditableTextWidget.Abstract<T> {
 	private final SettableValue<SettableValue<Boolean>> isHtml;
 	private final SettableValue<SettableValue<Integer>> theMousePosition;
 
-	public QuickTextArea(Interpreted<T> interpreted, QuickElement parent) {
+	public QuickTextArea(Interpreted<T> interpreted, ExElement parent) {
 		super(interpreted, parent);
 		theRows = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Integer>> parameterized(Integer.class))
 			.build();
@@ -147,7 +147,7 @@ public class QuickTextArea<T> extends QuickEditableTextWidget.Abstract<T> {
 	}
 
 	@Override
-	protected void updateModel(QuickElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
+	protected void updateModel(ExElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
 		satisfyContextValue("mousePosition", ModelTypes.Value.INT, getMousePosition(), myModels);
 		super.updateModel(interpreted, myModels);
 		QuickTextArea.Interpreted<T> myInterpreted = (QuickTextArea.Interpreted<T>) interpreted;

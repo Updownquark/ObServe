@@ -38,7 +38,7 @@ public class QuickTypeStyle {
 	public static final String STYLE_ATTRIBUTE = "style-attribute";
 
 	/** A set of {@link QuickTypeStyle}s */
-	public static class StyleSet {
+	public static class TypeStyleSet {
 		private final Map<QonfigElementOrAddOn, QuickTypeStyle> theElementStyleTypes = new ConcurrentHashMap<>();
 
 		/**
@@ -138,17 +138,17 @@ public class QuickTypeStyle {
 		return style.getAttribute("style-model-value", "priority").getDeclared();
 	}
 
-	private final StyleSet theStyleSet;
+	private final TypeStyleSet theStyleTypes;
 	private final QonfigElementOrAddOn theElement;
 	private final List<QuickTypeStyle> theSuperElements;
 	private final Map<String, QuickStyleAttribute<?>> theDeclaredAttributes;
 	private final BetterMultiMap<String, QuickStyleAttribute<?>> theAttributes;
 	private final QonfigAttributeDef.Declared thePriorityAttr;
 
-	QuickTypeStyle(StyleSet styleSet, QonfigElementOrAddOn element, List<QuickTypeStyle> superElements,
+	QuickTypeStyle(TypeStyleSet styleTypes, QonfigElementOrAddOn element, List<QuickTypeStyle> superElements,
 		QonfigAttributeDef.Declared priorityAttr, //
 		Map<String, QuickStyleAttribute<?>> declaredAttributes, BetterMultiMap<String, QuickStyleAttribute<?>> attributes) {
-		theStyleSet = styleSet;
+		theStyleTypes = styleTypes;
 		theElement = element;
 		theSuperElements = superElements;
 		thePriorityAttr = priorityAttr;
@@ -209,7 +209,7 @@ public class QuickTypeStyle {
 			QonfigElementOrAddOn el = theElement.getDeclarer().getElementOrAddOn(elName);
 			if (el == null)
 				throw new IllegalArgumentException("No such element or add-on '" + elName + "'");
-			QuickTypeStyle styled = theStyleSet.get(el);
+			QuickTypeStyle styled = theStyleTypes.get(el);
 			if (styled == null)
 				throw new IllegalArgumentException(theElement + " is not related to " + elName);
 			return styled.getAttribute(name.substring(dot + 1));
@@ -230,7 +230,7 @@ public class QuickTypeStyle {
 			QonfigElementOrAddOn el = theElement.getDeclarer().getElementOrAddOn(elName);
 			if (el == null)
 				throw new IllegalArgumentException("No such element or add-on '" + elName + "'");
-			QuickTypeStyle styled = theStyleSet.get(el);
+			QuickTypeStyle styled = theStyleTypes.get(el);
 			if (styled == null)
 				throw new IllegalArgumentException(theElement + " is not related to " + elName);
 			return styled.getAttributes(name.substring(dot + 1));

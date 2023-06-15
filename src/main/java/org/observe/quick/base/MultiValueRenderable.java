@@ -2,7 +2,7 @@ package org.observe.quick.base;
 
 import org.observe.SettableValue;
 import org.observe.expresso.ModelInstantiationException;
-import org.observe.quick.QuickElement;
+import org.observe.expresso.qonfig.ExElement;
 import org.observe.quick.QuickWidget;
 
 public interface MultiValueRenderable<T> extends QuickWidget {
@@ -15,7 +15,7 @@ public interface MultiValueRenderable<T> extends QuickWidget {
 		Def<? super W> getDefinition();
 
 		@Override
-		W create(QuickElement parent);
+		W create(ExElement parent);
 	}
 
 	public interface MultiValueRenderContext<T> {

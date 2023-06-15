@@ -16,25 +16,26 @@ import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.qonfig.ExElement;
 import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigInterpretationException;
 
-public interface QuickEventListener extends QuickElement {
-	public interface Def<L extends QuickEventListener> extends QuickElement.Def<L> {
+public interface QuickEventListener extends ExElement {
+	public interface Def<L extends QuickEventListener> extends ExElement.Def<L> {
 		public static final String EVENT_LISTENER = "event-listener";
 
 		List<CompiledExpression> getFilters();
 
 		CompiledExpression getAction();
 
-		Interpreted<? extends L> interpret(QuickElement.Interpreted<?> parent);
+		Interpreted<? extends L> interpret(ExElement.Interpreted<?> parent);
 
-		public abstract class Abstract<L extends QuickEventListener> extends QuickElement.Def.Abstract<L> implements Def<L> {
+		public abstract class Abstract<L extends QuickEventListener> extends ExElement.Def.Abstract<L> implements Def<L> {
 			private final List<CompiledExpression> theFilters;
 			private CompiledExpression theAction;
 
-			protected Abstract(QuickElement.Def<?> parent, QonfigElement element) {
+			protected Abstract(ExElement.Def<?> parent, QonfigElement element) {
 				super(parent, element);
 				theFilters = new ArrayList<>();
 			}
@@ -63,7 +64,7 @@ public interface QuickEventListener extends QuickElement {
 		}
 	}
 
-	public interface Interpreted<L extends QuickEventListener> extends QuickElement.Interpreted<L> {
+	public interface Interpreted<L extends QuickEventListener> extends ExElement.Interpreted<L> {
 		@Override
 		Def<? super L> getDefinition();
 
@@ -73,14 +74,14 @@ public interface QuickEventListener extends QuickElement {
 
 		void update() throws ExpressoInterpretationException;
 
-		L create(QuickElement parent);
+		L create(ExElement parent);
 
-		public abstract class Abstract<L extends QuickEventListener> extends QuickElement.Interpreted.Abstract<L>
+		public abstract class Abstract<L extends QuickEventListener> extends ExElement.Interpreted.Abstract<L>
 		implements Interpreted<L> {
 			private final List<InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>>> theFilters;
 			private InterpretedValueSynth<ObservableAction<?>, ObservableAction<?>> theAction;
 
-			protected Abstract(Def<? super L> definition, QuickElement.Interpreted<?> parent) {
+			protected Abstract(Def<? super L> definition, ExElement.Interpreted<?> parent) {
 				super(definition, parent);
 				theFilters = new ArrayList<>();
 			}
@@ -158,7 +159,7 @@ public interface QuickEventListener extends QuickElement {
 
 	ObservableAction<?> getAction();
 
-	public abstract class Abstract extends QuickElement.Abstract implements QuickEventListener {
+	public abstract class Abstract extends ExElement.Abstract implements QuickEventListener {
 		private final ObservableCollection<SettableValue<Boolean>> theFilters;
 		private final ObservableValue<Boolean> theCondensedFilter;
 		private ObservableAction<?> theAction;
@@ -166,7 +167,7 @@ public interface QuickEventListener extends QuickElement {
 		private final SettableValue<SettableValue<Boolean>> isCtrlPressed;
 		private final SettableValue<SettableValue<Boolean>> isShiftPressed;
 
-		protected Abstract(QuickEventListener.Interpreted<?> interpreted, QuickElement parent) {
+		protected Abstract(QuickEventListener.Interpreted<?> interpreted, ExElement parent) {
 			super(interpreted, parent);
 			theFilters = ObservableCollection
 				.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Boolean>> parameterized(boolean.class)).build();
@@ -213,11 +214,11 @@ public interface QuickEventListener extends QuickElement {
 		}
 
 		@Override
-		protected void updateModel(QuickElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
+		protected void updateModel(ExElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
 			super.updateModel(interpreted, myModels);
-			QuickElement.satisfyContextValue("altPressed", ModelTypes.Value.BOOLEAN, SettableValue.flatten(isAltPressed), myModels, this);
-			QuickElement.satisfyContextValue("ctrlPressed", ModelTypes.Value.BOOLEAN, SettableValue.flatten(isCtrlPressed), myModels, this);
-			QuickElement.satisfyContextValue("shiftPressed", ModelTypes.Value.BOOLEAN, SettableValue.flatten(isShiftPressed), myModels,
+			ExElement.satisfyContextValue("altPressed", ModelTypes.Value.BOOLEAN, SettableValue.flatten(isAltPressed), myModels, this);
+			ExElement.satisfyContextValue("ctrlPressed", ModelTypes.Value.BOOLEAN, SettableValue.flatten(isCtrlPressed), myModels, this);
+			ExElement.satisfyContextValue("shiftPressed", ModelTypes.Value.BOOLEAN, SettableValue.flatten(isShiftPressed), myModels,
 				this);
 			QuickEventListener.Interpreted<?> myInterpreted = (QuickEventListener.Interpreted<?>) interpreted;
 			theFilters.clear();

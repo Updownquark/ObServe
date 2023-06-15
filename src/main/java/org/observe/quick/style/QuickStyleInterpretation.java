@@ -140,7 +140,7 @@ public class QuickStyleInterpretation implements QonfigInterpretation {
 			@Override
 			public Object prepareSession(CoreSession session) throws QonfigInterpretationException {
 				QuickStyleSheet styleSheet = session.interpretChildren("style-sheet", QuickStyleSheet.class).peekFirst();
-				session.as(StyleQIS.class).setStyleSheet(styleSheet != null ? styleSheet : QuickStyleSheet.EMPTY);
+				session.as(StyleQIS.class).setStyleSheet(styleSheet);
 				return null;
 			}
 
@@ -155,27 +155,31 @@ public class QuickStyleInterpretation implements QonfigInterpretation {
 				throws QonfigInterpretationException {
 				builder.withTagValue(StyleQIS.STYLED_ELEMENT_TAG, session.getElement());
 				QuickCompiledStyle parentStyle = session.get(StyleQIS.STYLE_PROP, QuickCompiledStyle.class);
-				QuickStyleSheet styleSheet = session.get(StyleQIS.STYLE_SHEET_PROP, QuickStyleSheet.class);
+				QuickStyleSheet styleSheet = session.as(StyleQIS.class).getStyleSheet();
 				// Parse style values, if any
 				session.put(STYLE_ELEMENT, session.getElement());
 				List<QuickStyleValue<?>> declared = null;
-				for (StyleValues sv : session.interpretChildren("style", StyleValues.class)) {
+				List<QuickStyleElement.Def> styleElements = null;
+				for (ExpressoQIS svSession : session.forChildren("style")) {
+					StyleValues sv = svSession.interpret(StyleValues.class);
 					sv.init(session.getElement());
-					if (declared == null)
+					if (declared == null) {
 						declared = new ArrayList<>();
+						styleElements = new ArrayList<>();
+					}
 					declared.addAll(sv);
+					styleElements.add((QuickStyleElement.Def) svSession.as(StyleQIS.class).getStyleElement());
 				}
-				if (declared == null)
-					declared = Collections.emptyList();
-				Collections.sort(declared);
+				declared = QommonsUtils.unmodifiableCopy(declared);
+				styleElements = QommonsUtils.unmodifiableCopy(styleElements);
 
 				DynamicModelValue.satisfyDynamicValue(MODEL_ELEMENT_NAME, session.getExpressoEnv().getModels(), //
 					ObservableModelSet.CompiledModelValue.literal(TypeTokens.get().of(QonfigElement.class), session.getElement(),
 						MODEL_ELEMENT_NAME));
 				StyleQIS styleSession = session.as(StyleQIS.class);
 				session.put(StyleQIS.STYLE_PROP,
-					new QuickCompiledStyle.Default(styleSession.getStyleSet(), Collections.unmodifiableList(declared), parentStyle,
-						styleSheet, session.getElement(), session, theToolkit, new HashMap<>()));
+					new QuickCompiledStyle.Default(styleSession.getStyleTypes(), declared, parentStyle, styleSheet,
+						session.getElement(), session, theToolkit, new HashMap<>(), styleElements));
 			}
 		})//
 		.createWith("style", StyleValues.class, session -> interpretStyle(wrap(session)))//
@@ -199,6 +203,13 @@ public class QuickStyleInterpretation implements QonfigInterpretation {
 		QuickStyleAttribute<?> attr = session.get(STYLE_ATTRIBUTE, QuickStyleAttribute.class);
 		QonfigElement element = (QonfigElement) session.get(STYLE_ELEMENT);
 		modifyForStyle(session);
+
+		QonfigElementOrAddOn declaredType = null;
+		QonfigChildDef declaredRole = null;
+		CompiledExpression declaredCondition = null;
+		QuickStyleSet styleSetRef;
+		QuickStyleAttribute<?> declaredAttr = null;
+		CompiledExpression value;
 
 		QonfigValue rolePath = session.getAttributeQV("child");
 		if (rolePath != null && rolePath.value != null) { // Role path may be defaulted
@@ -227,6 +238,7 @@ public class QuickStyleInterpretation implements QonfigInterpretation {
 					throw new QonfigInterpretationException("No such role '" + roleName + "' for parent style " + application, //
 						rolePath.position == null ? null : new LocatedFilePosition(rolePath.fileLocation, rolePath.position.getPosition(0)),
 							rolePath.text.length());
+				declaredRole = child;
 				application = application.forChild(child);
 			}
 		}
@@ -244,6 +256,7 @@ public class QuickStyleInterpretation implements QonfigInterpretation {
 					elName.position == null ? null : new LocatedFilePosition(elName.fileLocation, elName.position.getPosition(0)), //
 						elName.text.length(), e);
 			}
+			declaredType = el;
 			try {
 				application = application.forType(el);
 			} catch (IllegalArgumentException e) {
@@ -253,9 +266,9 @@ public class QuickStyleInterpretation implements QonfigInterpretation {
 			}
 		}
 		DynamicModelValue.Cache dmvCache = exS.getDynamicValueCache();
-		CompiledExpression newCondition = exS.getAttributeExpression("condition");
-		if (newCondition != null)
-			application = application.forCondition(newCondition, exS.getExpressoEnv(), thePriorityAttr, styleSheet != null, dmvCache);
+		declaredCondition = exS.getAttributeExpression("condition");
+		if (declaredCondition != null)
+			application = application.forCondition(declaredCondition, exS.getExpressoEnv(), thePriorityAttr, styleSheet != null, dmvCache);
 		session.put(STYLE_APPLICATION, application);
 
 		QonfigValue attrName = session.getAttributeQV("attr");
@@ -326,7 +339,7 @@ public class QuickStyleInterpretation implements QonfigInterpretation {
 						throw new QonfigInterpretationException("No such element or add-on '" + typeName + "' found in loaded toolkits",
 							new LocatedFilePosition(attrName.fileLocation, attrName.position.getPosition(colon + 1)), typeName.length());
 				}
-				QuickTypeStyle styled = session.getStyleSet().getOrCompile(type, session, theToolkit);
+				QuickTypeStyle styled = session.getStyleTypes().getOrCompile(type, session, theToolkit);
 				if (styled == null)
 					throw new QonfigInterpretationException("Element '" + attrName.text.substring(0, dot) + "' is not styled",
 						new LocatedFilePosition(attrName.fileLocation, attrName.position.getPosition(0)), dot);
@@ -340,13 +353,13 @@ public class QuickStyleInterpretation implements QonfigInterpretation {
 						attrName.position == null ? null : new LocatedFilePosition(attrName.fileLocation, attrName.position.getPosition(0)),
 							attrName.text.length());
 			} else if (element != null) {
-				QuickTypeStyle styled = session.getStyleSet().getOrCompile(element.getType(), exS, theToolkit);
+				QuickTypeStyle styled = session.getStyleTypes().getOrCompile(element.getType(), exS, theToolkit);
 				if (styled != null)
 					attrs.addAll(styled.getAttributes(attrName.text));
 				for (QonfigAddOn inh : element.getInheritance().values()) {
 					if (attrs.size() > 1)
 						break;
-					styled = session.getStyleSet().getOrCompile(inh, exS, theToolkit);
+					styled = session.getStyleTypes().getOrCompile(inh, exS, theToolkit);
 					if (styled != null)
 						attrs.addAll(styled.getAttributes(attrName.text));
 				}
@@ -362,7 +375,7 @@ public class QuickStyleInterpretation implements QonfigInterpretation {
 				for (QonfigElementOrAddOn type : application.getTypes().values()) {
 					if (attrs.size() > 1)
 						break;
-					QuickTypeStyle styled = session.getStyleSet().getOrCompile(type, exS, theToolkit);
+					QuickTypeStyle styled = session.getStyleTypes().getOrCompile(type, exS, theToolkit);
 					if (styled != null)
 						attrs.addAll(styled.getAttributes(attrName.text));
 				}
@@ -377,14 +390,14 @@ public class QuickStyleInterpretation implements QonfigInterpretation {
 							attrName.text.length());
 			}
 			attr = attrs.iterator().next();
+			declaredAttr = attr;
 			session.put(STYLE_ATTRIBUTE, attr);
 		}
-		CompiledExpression value = exS.getValueExpression();
+		value = exS.getValueExpression();
 		if ((value != null && value.getExpression() != ObservableExpression.EMPTY) && attr == null)
 			throw new QonfigInterpretationException("Cannot specify a style value without an attribute",
 				value.getFilePosition().getPosition(0), value.length());
 		QonfigValue styleSetName = session.getAttributeQV("style-set");
-		List<QuickStyleValue<?>> styleSetRef;
 		if (styleSetName != null) {
 			if (attr != null)
 				throw new QonfigInterpretationException("Cannot refer to a style set when an attribute is specified", //
@@ -399,13 +412,19 @@ public class QuickStyleInterpretation implements QonfigInterpretation {
 						: new LocatedFilePosition(styleSetName.fileLocation, styleSetName.position.getPosition(0)),
 						styleSetName.text.length());
 			}
-			if (styleSetRef instanceof StyleValues)
-				((StyleValues) styleSetRef).init(session.getElement());
+			// Should have been initialize already. Hopefully, because now I can't access the StyleValues to initialize it
+			// if (styleSetRef instanceof StyleValues)
+			// ((StyleValues) styleSetRef).init(session.getElement());
 		} else
 			styleSetRef = null;
+		List<QuickStyleElement.Def> subStyleElements = new ArrayList<>();
+		QuickStyleElement.Def styleElement = new QuickStyleElement.Def(session.getStyleElement(), session, declaredType,
+			declaredRole, declaredCondition, styleSetRef, declaredAttr, attr, value, Collections.unmodifiableList(subStyleElements));
+		session.setStyleElement(styleElement);
 		List<StyleValues> subStyles = new ArrayList<>();
 		for (StyleQIS subStyleEl : session.forChildren("sub-style")) {
 			StyleValues subStyle = subStyleEl.interpret(StyleValues.class);
+			subStyleElements.add((QuickStyleElement.Def) subStyleEl.getStyleElement());
 			subStyle.init(subStyleEl.getElement());
 			subStyles.add(subStyle);
 		}
@@ -423,7 +442,7 @@ public class QuickStyleInterpretation implements QonfigInterpretation {
 					values.add(new QuickStyleValue<>(styleSheet, theApplication, theAttr, replacedValue));
 				}
 				if (styleSetRef != null) {
-					for (QuickStyleValue<?> ssv : styleSetRef) {
+					for (QuickStyleValue<?> ssv : styleSetRef.getValues()) {
 						ssv = ssv.when(theApplication);
 						if (ssv.getApplication() == StyleApplicationDef.NONE)
 							continue;
@@ -441,16 +460,20 @@ public class QuickStyleInterpretation implements QonfigInterpretation {
 		ExpressoQIS exS = session.as(ExpressoQIS.class);
 
 		Map<String, QuickStyleSheet> imports = new LinkedHashMap<>();
-		Map<String, List<QuickStyleValue<?>>> styleSets = new LinkedHashMap<>();
+		Map<String, QuickStyleSet> styleSets = new LinkedHashMap<>();
 		List<QuickStyleValue<?>> values = new ArrayList<>();
-		QuickStyleSheet styleSheet = new QuickStyleSheet((URL) session.get(STYLE_SHEET_REF), Collections.unmodifiableMap(styleSets),
-			Collections.unmodifiableList(values), Collections.unmodifiableMap(imports));
+		List<QuickStyleSheet.StyleSheetRef> importedRefs = new ArrayList<>();
+		List<QuickStyleElement.Def> styleSheetElements = new ArrayList<>();
+		QuickStyleSheet styleSheet = new QuickStyleSheet(session.getStyleElement(), session,
+			(URL) session.get(STYLE_SHEET_REF), Collections.unmodifiableMap(styleSets), Collections.unmodifiableList(values),
+			Collections.unmodifiableMap(imports), Collections.unmodifiableList(importedRefs),
+			Collections.unmodifiableList(styleSheetElements));
 		session.setStyleSheet(styleSheet);
+		session.setStyleElement(styleSheet);
 
 		// First import style sheets
 		DefaultQonfigParser parser = null;
 		for (StyleQIS sse : session.forChildren("style-sheet-ref")) {
-			String name = sse.getAttributeText("name");
 			if (parser == null) {
 				parser = new DefaultQonfigParser();
 				for (QonfigToolkit tk : session.getElement().getDocument().getDocToolkit().getDependencies().values())
@@ -494,16 +517,33 @@ public class QuickStyleInterpretation implements QonfigInterpretation {
 				exS.getExpressoEnv().getClassView());
 			modifyForStyle(session);
 			QuickStyleSheet imported = importSession.interpret(QuickStyleSheet.class);
+			String name = sse.getAttributeText("name");
+			QuickStyleSheet.StyleSheetRef ssr = new QuickStyleSheet.StyleSheetRef(styleSheet, sse, imported);
+			importedRefs.add(ssr);
 			imports.put(name, imported);
 		}
 
 		// Next, compile style-sets
 		List<StyleQIS> styleSetEls = session.forChildren("style-set");
+		Map<String, StyleValues> styleSetParsedValues = styleSetEls.isEmpty() ? null : new LinkedHashMap<>();
+		Map<String, List<QuickStyleValue<?>>> styleSetValueLists = styleSetEls.isEmpty() ? null : new LinkedHashMap<>();
 		for (StyleQIS styleSetEl : styleSetEls) {
 			String name = styleSetEl.getAttributeText("name");
 			styleSetEl.put(STYLE_NAME, name);
-			List<StyleValues> styleSetValues = styleSetEl.interpretChildren("style", StyleValues.class);
-			styleSets.put(name, new StyleValues(name) {
+			List<QuickStyleValue<?>> thisSSVs = new ArrayList<>();
+			styleSetValueLists.put(name, thisSSVs);
+			List<QuickStyleElement.Def> styleSetElements = new ArrayList<>();
+			QuickStyleSet styleSet = new QuickStyleSet(styleSheet, styleSetEl, name, Collections.unmodifiableList(thisSSVs),
+				Collections.unmodifiableList(styleSetElements));
+			styleSets.put(name, styleSet);
+			styleSetEl.setStyleElement(styleSet);
+			List<StyleQIS> styleValueEls = styleSetEl.forChildren("style");
+			List<StyleValues> styleSetValues = new ArrayList<>(styleValueEls.size());
+			for (StyleQIS styleValueEl : styleValueEls) {
+				styleSetValues.add(styleValueEl.interpret(StyleValues.class));
+				styleSetElements.add((QuickStyleElement.Def) styleValueEl.getStyleElement());
+			}
+			styleSetParsedValues.put(name, new StyleValues(name) {
 				@Override
 				protected List<QuickStyleValue<?>> get() throws QonfigInterpretationException {
 					return BetterList.of(styleSetValues.stream(), sv -> sv.get().stream());
@@ -519,17 +559,17 @@ public class QuickStyleInterpretation implements QonfigInterpretation {
 		session.put(STYLE_NAME, name);
 		for (StyleQIS subStyleEl : session.forChildren("style")) {
 			StyleValues subStyle = subStyleEl.interpret(StyleValues.class);
+			styleSheetElements.add((QuickStyleElement.Def) subStyleEl.getStyleElement());
 			subStyle.init(subStyleEl.getElement());
 			values.addAll(subStyle.get());
 		}
 
 		// Replace the StyleValues instances in the styleSets map with regular lists. Don't keep that silly type around.
 		// This also forces parsing of all the values if they weren't referred to internally.
-		int sse = 0;
-		for (Map.Entry<String, List<QuickStyleValue<?>>> ss : styleSets.entrySet()) {
-			((StyleValues) ss.getValue()).init(styleSetEls.get(sse).getElement());
-			ss.setValue(QommonsUtils.unmodifiableCopy(ss.getValue()));
-			sse++;
+		for (Map.Entry<String, QuickStyleSet> ss : styleSets.entrySet()) {
+			StyleValues ssvs = styleSetParsedValues.get(ss.getKey());
+			ssvs.init(ss.getValue().getElement());
+			styleSetValueLists.remove(ss.getKey()).addAll(ssvs);
 		}
 		return styleSheet;
 	}

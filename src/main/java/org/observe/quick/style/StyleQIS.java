@@ -11,6 +11,7 @@ import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelTag;
 import org.observe.expresso.TypeConversionException;
+import org.observe.expresso.qonfig.ExElement;
 import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigElementOrAddOn;
@@ -29,6 +30,7 @@ public class StyleQIS implements SpecialSession<StyleQIS> {
 	static final String STYLED_PROP = "quick-interpreter-styled";
 	static final String STYLE_PROP = "quick-interpreter-style";
 	static final String STYLE_SHEET_PROP = "quick-interpreter-style-sheet";
+	static final String STYLE_ELEMENT = "expresso-style-element";
 
 	private static final String PARENT_MODEL_NAME = "PARENT$MODEL$INSTANCE";
 	private static final ModelInstanceType<SettableValue<?>, SettableValue<ModelSetInstance>> PARENT_MODEL_TYPE = ModelTypes.Value
@@ -81,8 +83,8 @@ public class StyleQIS implements SpecialSession<StyleQIS> {
 	}
 
 	/** @return The set of style types for this style session */
-	public QuickTypeStyle.StyleSet getStyleSet() {
-		return get(STYLE_SET_PROP, QuickTypeStyle.StyleSet.class);
+	public QuickTypeStyle.TypeStyleSet getStyleTypes() {
+		return get(STYLE_SET_PROP, QuickTypeStyle.TypeStyleSet.class);
 	}
 
 	/** @return The style sheet applying to this element */
@@ -96,6 +98,15 @@ public class StyleQIS implements SpecialSession<StyleQIS> {
 	 */
 	public StyleQIS setStyleSheet(QuickStyleSheet styleSheet) {
 		getWrapped().put(STYLE_SHEET_PROP, styleSheet);
+		return this;
+	}
+
+	public ExElement.Def<?> getStyleElement() {
+		return getWrapped().get(STYLE_ELEMENT, ExElement.Def.class);
+	}
+
+	public StyleQIS setStyleElement(ExElement.Def<?> def) {
+		getWrapped().put(STYLE_ELEMENT, def);
 		return this;
 	}
 
@@ -121,9 +132,9 @@ public class StyleQIS implements SpecialSession<StyleQIS> {
 			else if (!getElement().isInstance(el))
 				throw new QonfigInterpretationException("This element is not an instance of  '" + element + "'",
 					getElement().getPositionInFile(), 0);
-			return getStyleSet().getOrCompile(el, as(ExpressoQIS.class), theStyleTK).getAttribute(name, type);
+			return getStyleTypes().getOrCompile(el, as(ExpressoQIS.class), theStyleTK).getAttribute(name, type);
 		}
-		return getStyleSet().getOrCompile(getFocusType(), as(ExpressoQIS.class), theStyleTK).getAttribute(name, type);
+		return getStyleTypes().getOrCompile(getFocusType(), as(ExpressoQIS.class), theStyleTK).getAttribute(name, type);
 	}
 
 	@Override

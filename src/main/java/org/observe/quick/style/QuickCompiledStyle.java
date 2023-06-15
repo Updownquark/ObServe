@@ -11,7 +11,8 @@ import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ExpressoQIS;
 import org.observe.expresso.ObservableExpression;
 import org.observe.quick.style.QuickInterpretedStyle.QuickElementStyleAttribute;
-import org.observe.quick.style.QuickTypeStyle.StyleSet;
+import org.observe.quick.style.QuickStyleElement.Def;
+import org.observe.quick.style.QuickTypeStyle.TypeStyleSet;
 import org.qommons.QommonsUtils;
 import org.qommons.collect.BetterCollections;
 import org.qommons.collect.BetterHashMultiMap;
@@ -27,7 +28,7 @@ import org.qommons.tree.SortedTreeList;
 /** A compiled structure of all style values that may under any circumstance apply to a particular {@link QonfigElement element} */
 public interface QuickCompiledStyle {
 	/** @return The style set that this compiled style belongs to */
-	QuickTypeStyle.StyleSet getStyleSet();
+	QuickTypeStyle.TypeStyleSet getStyleTypes();
 
 	/** @return This element's {@link QonfigElement#getParent() parent}'s style */
 	QuickCompiledStyle getParent();
@@ -44,6 +45,8 @@ public interface QuickCompiledStyle {
 	/** @return A multi-map of all style values applicable to this style, keyed by name */
 	BetterMultiMap<String, QuickStyleAttribute<?>> getAttributesByName();
 
+	List<QuickStyleElement.Def> getStyleElements();
+
 	/**
 	 * Interprets this compiled structure
 	 *
@@ -59,15 +62,16 @@ public interface QuickCompiledStyle {
 
 	/** Default {@link QuickCompiledStyle} implementation */
 	public class Default implements QuickCompiledStyle {
-		private final QuickTypeStyle.StyleSet theStyleSet;
+		private final QuickTypeStyle.TypeStyleSet theStyleTypes;
 		private final QuickCompiledStyle theParent;
 		private final QonfigElement theElement;
 		private final List<CompiledStyleValue<?>> theDeclaredValues;
 		private final Map<QuickStyleAttribute<?>, QuickCompiledStyleAttribute<?>> theValues;
 		private final BetterMultiMap<String, QuickStyleAttribute<?>> theAttributesByName;
+		private final List<QuickStyleElement.Def> theStyleElements;
 
 		/**
-		 * @param styleSet The style set for this compiled style
+		 * @param styleTypes The style type set for this compiled style
 		 * @param declaredValues All style values declared specifically on this element
 		 * @param parent The element style for the {@link QonfigElement#getParent() parent} element
 		 * @param styleSheet The style sheet applying to the element
@@ -78,12 +82,14 @@ public interface QuickCompiledStyle {
 		 * @param applications A cache of compiled style applications for re-use
 		 * @throws QonfigInterpretationException If an error occurs evaluating all the style information for the element
 		 */
-		public Default(QuickTypeStyle.StyleSet styleSet, List<QuickStyleValue<?>> declaredValues, QuickCompiledStyle parent,
+		public Default(QuickTypeStyle.TypeStyleSet styleTypes, List<QuickStyleValue<?>> declaredValues, QuickCompiledStyle parent,
 			QuickStyleSheet styleSheet, QonfigElement element, ExpressoQIS session, QonfigToolkit style,
-			Map<StyleApplicationDef, CompiledStyleApplication> applications) throws QonfigInterpretationException {
-			theStyleSet = styleSet;
+			Map<StyleApplicationDef, CompiledStyleApplication> applications, List<QuickStyleElement.Def> styleElements)
+				throws QonfigInterpretationException {
+			theStyleTypes = styleTypes;
 			theParent = parent;
 			theElement = element;
+			theStyleElements = styleElements;
 			List<CompiledStyleValue<?>> evaldValues = new ArrayList<>(declaredValues.size());
 			theDeclaredValues = Collections.unmodifiableList(evaldValues);
 			for (QuickStyleValue<?> dv : declaredValues)
@@ -91,12 +97,12 @@ public interface QuickCompiledStyle {
 
 			Map<QuickStyleAttribute<?>, BetterSortedList<? extends CompiledStyleValue<?>>> values = new HashMap<>();
 			// Compile all attributes applicable to this element
-			QuickTypeStyle type = styleSet.getOrCompile(element.getType(), session, style);
+			QuickTypeStyle type = styleTypes.getOrCompile(element.getType(), session, style);
 			for (QuickStyleAttribute<?> attr : type.getAttributes().values())
 				values.computeIfAbsent(attr,
 					__ -> SortedTreeList.<CompiledStyleValue<?>> buildTreeList(CompiledStyleValue::compareTo).build());
 			for (QonfigAddOn inh : element.getInheritance().getExpanded(QonfigAddOn::getInheritance)) {
-				type = styleSet.getOrCompile(inh, session, style);
+				type = styleTypes.getOrCompile(inh, session, style);
 				if (type == null)
 					continue;
 				for (QuickStyleAttribute<?> attr : type.getAttributes().values())
@@ -127,8 +133,8 @@ public interface QuickCompiledStyle {
 		}
 
 		@Override
-		public QuickTypeStyle.StyleSet getStyleSet() {
-			return theStyleSet;
+		public QuickTypeStyle.TypeStyleSet getStyleTypes() {
+			return theStyleTypes;
 		}
 
 		@Override
@@ -154,6 +160,11 @@ public interface QuickCompiledStyle {
 		@Override
 		public BetterMultiMap<String, QuickStyleAttribute<?>> getAttributesByName() {
 			return theAttributesByName;
+		}
+
+		@Override
+		public List<QuickStyleElement.Def> getStyleElements() {
+			return theStyleElements;
 		}
 
 		@Override
@@ -211,8 +222,8 @@ public interface QuickCompiledStyle {
 		}
 
 		@Override
-		public StyleSet getStyleSet() {
-			return theWrapped.getStyleSet();
+		public TypeStyleSet getStyleTypes() {
+			return theWrapped.getStyleTypes();
 		}
 
 		@Override
@@ -238,6 +249,11 @@ public interface QuickCompiledStyle {
 		@Override
 		public BetterMultiMap<String, QuickStyleAttribute<?>> getAttributesByName() {
 			return theWrapped.getAttributesByName();
+		}
+
+		@Override
+		public List<Def> getStyleElements() {
+			return theWrapped.getStyleElements();
 		}
 
 		@Override

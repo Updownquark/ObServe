@@ -26,6 +26,7 @@ import org.qommons.config.QonfigValueType;
 import org.qommons.config.SpecificationType;
 import org.qommons.ex.ExSupplier;
 import org.qommons.io.ErrorReporting;
+import org.qommons.io.LocatedFilePosition;
 
 import com.google.common.reflect.TypeToken;
 
@@ -124,8 +125,8 @@ public interface DynamicModelValue<M, MV extends M> extends ModelValueSynth<M, M
 	}
 
 	/**
-	 * Dynamic values in models should always be {@link ObservableModelSet.Builder#withMaker(String, CompiledModelValue) added} as an instance of
-	 * this type.
+	 * Dynamic values in models should always be
+	 * {@link ObservableModelSet.Builder#withMaker(String, CompiledModelValue, LocatedFilePosition) added} as an instance of this type.
 	 *
 	 * @param <M> The model type of the dynamic value
 	 * @param <MV> The type of the dynamic value

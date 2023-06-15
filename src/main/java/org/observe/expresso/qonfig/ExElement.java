@@ -1,4 +1,4 @@
-package org.observe.quick;
+package org.observe.expresso.qonfig;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -19,6 +19,7 @@ import org.observe.expresso.DynamicModelValue;
 import org.observe.expresso.ExpressoEnv;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ExpressoQIS;
+import org.observe.expresso.LocatedExpression;
 import org.observe.expresso.ModelException;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelType.ModelInstanceType;
@@ -26,7 +27,6 @@ import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
-import org.observe.expresso.QonfigDefinedElement;
 import org.observe.expresso.TypeConversionException;
 import org.qommons.ClassMap;
 import org.qommons.Identifiable;
@@ -43,10 +43,10 @@ import org.qommons.config.QonfigInterpreterCore;
 import org.qommons.io.ErrorReporting;
 import org.qommons.io.LocatedFilePosition;
 
-/** The base type of values interpreted from Quick-typed {@link QonfigElement}s */
-public interface QuickElement extends Identifiable {
+/** A base type for values interpreted from {@link QonfigElement}s */
+public interface ExElement extends Identifiable {
 	/** The property in the Qonfig interpretation session where the definition interpreted from the session is stored. */
-	public static final String SESSION_QUICK_ELEMENT = "quick.element.def";
+	public static final String SESSION_EX_ELEMENT = "expresso.element.def";
 
 	public static class Identity {
 		private final String theElementType;
@@ -71,7 +71,7 @@ public interface QuickElement extends Identifiable {
 		}
 	}
 
-	public interface AttributeValueGetter<E extends QuickElement, I extends QuickElement.Interpreted<? extends E>, D extends QuickElement.Def<? extends E>> {
+	public interface AttributeValueGetter<E extends ExElement, I extends ExElement.Interpreted<? extends E>, D extends ExElement.Def<? extends E>> {
 		String getDescription();
 
 		Object getFromDef(D def);
@@ -80,25 +80,25 @@ public interface QuickElement extends Identifiable {
 
 		Object getFromElement(E element);
 
-		public static <E extends QuickElement, I extends QuickElement.Interpreted<? extends E>, D extends QuickElement.Def<? extends E>> Default<E, I, D> of(
+		public static <E extends ExElement, I extends ExElement.Interpreted<? extends E>, D extends ExElement.Def<? extends E>> Default<E, I, D> of(
 			Function<? super D, ?> defGetter, Function<? super I, ?> interpretedGetter, Function<? super E, ?> elementGetter,
 			String descrip) {
 			return new Default<>(defGetter, interpretedGetter, elementGetter, descrip);
 		}
 
-		public static <E extends QuickElement, I extends QuickElement.Interpreted<? extends E>, D extends QuickElement.Def<? extends E>, M, MV extends M> Expression<E, I, D, M, MV> ofX(
+		public static <E extends ExElement, I extends ExElement.Interpreted<? extends E>, D extends ExElement.Def<? extends E>, M, MV extends M> Expression<E, I, D, M, MV> ofX(
 			Function<? super D, ? extends CompiledExpression> defGetter,
 			Function<? super I, ? extends InterpretedValueSynth<M, ? extends MV>> interpretedGetter,
-			Function<? super E, ? extends MV> elementGetter, String descrip) {
+				Function<? super E, ? extends MV> elementGetter, String descrip) {
 			return new Expression<>(defGetter, interpretedGetter, elementGetter, descrip);
 		}
 
-		public static <E extends QuickElement, AO extends QuickAddOn<? super E>, I extends QuickAddOn.Interpreted<? super E, ? extends AO>, D extends QuickAddOn.Def<? super E, ? extends AO>> AddOn<E, AO, I, D> addOn(
+		public static <E extends ExElement, AO extends ExAddOn<? super E>, I extends ExAddOn.Interpreted<? super E, ? extends AO>, D extends ExAddOn.Def<? super E, ? extends AO>> AddOn<E, AO, I, D> addOn(
 			Class<D> defType, Class<I> interpretedType, Class<AO> addOnType, String descrip) {
 			return new AddOn<>(defType, interpretedType, addOnType, descrip);
 		}
 
-		public static class Default<E extends QuickElement, I extends QuickElement.Interpreted<? extends E>, D extends QuickElement.Def<? extends E>>
+		public static class Default<E extends ExElement, I extends ExElement.Interpreted<? extends E>, D extends ExElement.Def<? extends E>>
 		implements AttributeValueGetter<E, I, D> {
 			private final Function<? super D, ?> theDefGetter;
 			private final Function<? super I, ?> theInterpretedGetter;
@@ -134,14 +134,14 @@ public interface QuickElement extends Identifiable {
 			}
 		}
 
-		public static class Expression<E extends QuickElement, I extends QuickElement.Interpreted<? extends E>, D extends QuickElement.Def<? extends E>, M, MV extends M>
+		public static class Expression<E extends ExElement, I extends ExElement.Interpreted<? extends E>, D extends ExElement.Def<? extends E>, M, MV extends M>
 		implements AttributeValueGetter<E, I, D> {
-			private final Function<? super D, ? extends CompiledExpression> theDefGetter;
+			private final Function<? super D, ? extends LocatedExpression> theDefGetter;
 			private final Function<? super I, ? extends InterpretedValueSynth<M, ? extends MV>> theInterpretedGetter;
 			private final Function<? super E, ? extends MV> theElementGetter;
 			private final String theDescription;
 
-			public Expression(Function<? super D, ? extends CompiledExpression> defGetter,
+			public Expression(Function<? super D, ? extends LocatedExpression> defGetter,
 				Function<? super I, ? extends InterpretedValueSynth<M, ? extends MV>> interpretedGetter,
 					Function<? super E, ? extends MV> elementGetter, String descrip) {
 				theDefGetter = defGetter;
@@ -156,7 +156,7 @@ public interface QuickElement extends Identifiable {
 			}
 
 			@Override
-			public CompiledExpression getFromDef(D def) {
+			public LocatedExpression getFromDef(D def) {
 				return theDefGetter.apply(def);
 			}
 
@@ -171,8 +171,8 @@ public interface QuickElement extends Identifiable {
 			}
 		}
 
-		public static class AddOn<E extends QuickElement, AO extends QuickAddOn<? super E>, I extends QuickAddOn.Interpreted<? super E, ? extends AO>, D extends QuickAddOn.Def<? super E, ? extends AO>>
-		implements AttributeValueGetter<E, QuickElement.Interpreted<? extends E>, QuickElement.Def<? extends E>> {
+		public static class AddOn<E extends ExElement, AO extends ExAddOn<? super E>, I extends ExAddOn.Interpreted<? super E, ? extends AO>, D extends ExAddOn.Def<? super E, ? extends AO>>
+		implements AttributeValueGetter<E, ExElement.Interpreted<? extends E>, ExElement.Def<? extends E>> {
 			private final Class<D> theDefType;
 			private final Class<I> theInterpretedType;
 			private final Class<AO> theAddOnType;
@@ -207,14 +207,14 @@ public interface QuickElement extends Identifiable {
 		}
 	}
 
-	public interface ChildElementGetter<E extends QuickElement, I extends QuickElement.Interpreted<? extends E>, D extends QuickElement.Def<? extends E>> {
+	public interface ChildElementGetter<E extends ExElement, I extends ExElement.Interpreted<? extends E>, D extends ExElement.Def<? extends E>> {
 		String getDescription();
 
-		List<? extends QuickElement.Def<?>> getChildrenFromDef(D def);
+		List<? extends ExElement.Def<?>> getChildrenFromDef(D def);
 
-		List<? extends QuickElement.Interpreted<?>> getChildrenFromInterpreted(I interp);
+		List<? extends ExElement.Interpreted<?>> getChildrenFromInterpreted(I interp);
 
-		List<? extends QuickElement> getChildrenFromElement(E element);
+		List<? extends ExElement> getChildrenFromElement(E element);
 	}
 
 	/**
@@ -222,7 +222,7 @@ public interface QuickElement extends Identifiable {
 	 *
 	 * @param <E> The type of element that this definition is for
 	 */
-	public interface Def<E extends QuickElement> extends Identifiable {
+	public interface Def<E extends ExElement> extends Identifiable {
 		@Override
 		Identity getIdentity();
 
@@ -244,6 +244,10 @@ public interface QuickElement extends Identifiable {
 		Object getAttribute(QonfigAttributeDef attr);
 
 		String getAttributeDescription(QonfigAttributeDef attr);
+
+		Object getElementValue();
+
+		String getElementValueDescription();
 
 		List<? extends Def<?>> getChildren(QonfigChildDef role);
 
@@ -326,17 +330,17 @@ public interface QuickElement extends Identifiable {
 
 		Object getAttribute(E element, QonfigAttributeDef attr);
 
-		List<? extends QuickElement> getChildren(E element, QonfigChildDef role);
+		List<? extends ExElement> getChildren(E element, QonfigChildDef role);
 
-		default List<QuickElement> getAllChildren(E element) {
-			List<QuickElement> children = null;
+		default List<ExElement> getAllChildren(E element) {
+			List<ExElement> children = null;
 			Set<QonfigChildDef.Declared> fulfilled = null;
 			for (QonfigChildDef.Declared child : getElement().getType().getAllChildren().keySet()) {
 				if (fulfilled == null)
 					fulfilled = new HashSet<>();
 				if (!fulfilled.add(child))
 					continue;
-				List<? extends QuickElement> roleChildren = getChildren(element, child);
+				List<? extends ExElement> roleChildren = getChildren(element, child);
 				if (!roleChildren.isEmpty()) {
 					if (children == null)
 						children = new ArrayList<>();
@@ -349,7 +353,7 @@ public interface QuickElement extends Identifiable {
 						fulfilled = new HashSet<>();
 					if (!fulfilled.add(child))
 						continue;
-					List<? extends QuickElement> roleChildren = getChildren(element, child);
+					List<? extends ExElement> roleChildren = getChildren(element, child);
 					if (!roleChildren.isEmpty()) {
 						if (children == null)
 							children = new ArrayList<>();
@@ -368,10 +372,10 @@ public interface QuickElement extends Identifiable {
 		 * @param addOn The type of the add-on to get
 		 * @return The add-on in this element definition of the given type
 		 */
-		<AO extends QuickAddOn.Def<? super E, ?>> AO getAddOn(Class<AO> addOn);
+		<AO extends ExAddOn.Def<? super E, ?>> AO getAddOn(Class<AO> addOn);
 
 		/** @return All add-ons on this element definition */
-		Collection<QuickAddOn.Def<? super E, ?>> getAddOns();
+		Collection<ExAddOn.Def<? super E, ?>> getAddOns();
 
 		/**
 		 * @param <AO> The type of the add on
@@ -380,12 +384,14 @@ public interface QuickElement extends Identifiable {
 		 * @param fn Produces the value from the add on if it exists
 		 * @return The value from the given add on in this element definition, or null if no such add-on is present
 		 */
-		default <AO extends QuickAddOn.Def<? super E, ?>, T> T getAddOnValue(Class<AO> addOn, Function<? super AO, ? extends T> fn) {
+		default <AO extends ExAddOn.Def<? super E, ?>, T> T getAddOnValue(Class<AO> addOn, Function<? super AO, ? extends T> fn) {
 			AO ao = getAddOn(addOn);
 			return ao == null ? null : fn.apply(ao);
 		}
 
 		void forAttribute(QonfigAttributeDef attr, AttributeValueGetter<? super E, ?, ?> getter);
+
+		void forValue(AttributeValueGetter<? super E, ?, ?> getter);
 
 		void forChild(QonfigChildDef child, ChildElementGetter<? super E, ?, ?> getter);
 
@@ -402,13 +408,14 @@ public interface QuickElement extends Identifiable {
 		 *
 		 * @param <E> The type of the element that this definition is for
 		 */
-		public abstract class Abstract<E extends QuickElement> implements Def<E> {
+		public abstract class Abstract<E extends ExElement> implements Def<E> {
 			private final Identity theId;
-			private final QuickElement.Def<?> theParent;
+			private final ExElement.Def<?> theParent;
 			private QonfigElement theElement;
 			private final Map<QonfigAttributeDef.Declared, AttributeValueGetter<? super E, ?, ?>> theAttributes;
+			private AttributeValueGetter<? super E, ?, ?> theValue;
 			private final Map<QonfigChildDef.Declared, ChildElementGetter<? super E, ?, ?>> theChildren;
-			private final ClassMap<QuickAddOn.Def<? super E, ?>> theAddOns;
+			private final ClassMap<ExAddOn.Def<? super E, ?>> theAddOns;
 			private ExpressoEnv theExpressoEnv;
 			private ObservableModelSet.Built theModels;
 			private ErrorReporting theReporting;
@@ -418,7 +425,7 @@ public interface QuickElement extends Identifiable {
 			 * @param parent The definition interpreted from the parent element
 			 * @param element The element that this definition is being interpreted from
 			 */
-			protected Abstract(QuickElement.Def<?> parent, QonfigElement element) {
+			protected Abstract(ExElement.Def<?> parent, QonfigElement element) {
 				theId = new Identity(element.getType().getName(), element.getPositionInFile());
 				theParent = parent;
 				theElement = element;
@@ -433,7 +440,7 @@ public interface QuickElement extends Identifiable {
 			}
 
 			@Override
-			public QuickElement.Def<?> getParentElement() {
+			public ExElement.Def<?> getParentElement() {
 				return theParent;
 			}
 
@@ -453,12 +460,12 @@ public interface QuickElement extends Identifiable {
 			}
 
 			@Override
-			public <AO extends QuickAddOn.Def<? super E, ?>> AO getAddOn(Class<AO> addOn) {
+			public <AO extends ExAddOn.Def<? super E, ?>> AO getAddOn(Class<AO> addOn) {
 				return (AO) theAddOns.get(addOn, ClassMap.TypeMatch.SUB_TYPE);
 			}
 
 			@Override
-			public Collection<QuickAddOn.Def<? super E, ?>> getAddOns() {
+			public Collection<ExAddOn.Def<? super E, ?>> getAddOns() {
 				return theAddOns.getAllValues();
 			}
 
@@ -486,6 +493,16 @@ public interface QuickElement extends Identifiable {
 				if (getter == null)
 					return null;
 				return getter.getDescription();
+			}
+
+			@Override
+			public Object getElementValue() {
+				return theValue == null ? null : ((AttributeValueGetter<? super E, ?, Def<E>>) theValue).getFromDef(this);
+			}
+
+			@Override
+			public String getElementValueDescription() {
+				return theValue == null ? null : theValue.getDescription();
 			}
 
 			@Override
@@ -529,7 +546,7 @@ public interface QuickElement extends Identifiable {
 			}
 
 			@Override
-			public List<? extends QuickElement> getChildren(E element, QonfigChildDef role) {
+			public List<? extends ExElement> getChildren(E element, QonfigChildDef role) {
 				ChildElementGetter<? super E, ?, ?> getter = theChildren.get(role.getDeclared());
 				if (getter == null)
 					return Collections.emptyList();
@@ -542,6 +559,11 @@ public interface QuickElement extends Identifiable {
 			}
 
 			@Override
+			public void forValue(AttributeValueGetter<? super E, ?, ?> getter) {
+				theValue = getter;
+			}
+
+			@Override
 			public void forChild(QonfigChildDef child, ChildElementGetter<? super E, ?, ?> getter) {
 				theChildren.putIfAbsent(child.getDeclared(), getter);
 			}
@@ -550,7 +572,7 @@ public interface QuickElement extends Identifiable {
 			public void update(ExpressoQIS session) throws QonfigInterpretationException {
 				theReporting = session.reporting();
 				theCallingClass = session.getWrapped().getInterpreter().getCallingClass();
-				session.put(SESSION_QUICK_ELEMENT, this);
+				session.put(SESSION_EX_ELEMENT, this);
 				theElement = session.getElement();
 				theExpressoEnv = session.getExpressoEnv();
 				ObservableModelSet models = theExpressoEnv.getModels();
@@ -558,11 +580,11 @@ public interface QuickElement extends Identifiable {
 					: (ObservableModelSet.Built) models;
 
 				if (theAddOns.isEmpty()) {
-					// Add-ons can't change, because if they do, the Quick definition should be re-interpreted from the session
+					// Add-ons can't change, because if they do, the element definition should be re-interpreted from the session
 					for (QonfigAddOn addOn : session.getElement().getInheritance().getExpanded(QonfigAddOn::getInheritance))
 						addAddOn(session.asElementOnly(addOn));
 
-					for (QuickAddOn.Def<? super E, ?> addOn : theAddOns.getAllValues())
+					for (ExAddOn.Def<? super E, ?> addOn : theAddOns.getAllValues())
 						addOn.update(session.asElement(addOn.getType()), this);
 
 					// Ensure implementation added all attribute/child getters
@@ -597,8 +619,8 @@ public interface QuickElement extends Identifiable {
 			}
 
 			private void addAddOn(AbstractQIS<?> session) throws QonfigInterpretationException {
-				if (session.supportsInterpretation(QuickAddOn.Def.class)) {
-					QuickAddOn.Def<? super E, ?> addOn = session.interpret(QuickAddOn.Def.class);
+				if (session.supportsInterpretation(ExAddOn.Def.class)) {
+					ExAddOn.Def<? super E, ?> addOn = session.interpret(ExAddOn.Def.class);
 					theAddOns.put(addOn.getClass(), addOn);
 				} else {
 					for (QonfigAddOn inh : session.getFocusType().getInheritance())
@@ -619,7 +641,7 @@ public interface QuickElement extends Identifiable {
 	 *
 	 * @param <E> The type of element that this interpretation is for
 	 */
-	public interface Interpreted<E extends QuickElement> {
+	public interface Interpreted<E extends ExElement> {
 		/** @return The definition that produced this interpretation */
 		Def<? super E> getDefinition();
 
@@ -634,10 +656,10 @@ public interface QuickElement extends Identifiable {
 		 * @param addOn The type of the add-on to get
 		 * @return The add-on in this element definition of the given type
 		 */
-		<AO extends QuickAddOn.Interpreted<? super E, ?>> AO getAddOn(Class<AO> addOn);
+		<AO extends ExAddOn.Interpreted<? super E, ?>> AO getAddOn(Class<AO> addOn);
 
 		/** @return All add-ons on this element definition */
-		Collection<QuickAddOn.Interpreted<? super E, ?>> getAddOns();
+		Collection<ExAddOn.Interpreted<? super E, ?>> getAddOns();
 
 		/**
 		 * @param <AO> The type of the add on
@@ -646,7 +668,7 @@ public interface QuickElement extends Identifiable {
 		 * @param fn Produces the value from the add on if it exists
 		 * @return The value from the given add on in this element definition, or null if no such add-on is present
 		 */
-		default <AO extends QuickAddOn.Interpreted<? super E, ?>, T> T getAddOnValue(Class<AO> addOn,
+		default <AO extends ExAddOn.Interpreted<? super E, ?>, T> T getAddOnValue(Class<AO> addOn,
 			Function<? super AO, ? extends T> fn) {
 			AO ao = getAddOn(addOn);
 			return ao == null ? null : fn.apply(ao);
@@ -665,10 +687,10 @@ public interface QuickElement extends Identifiable {
 		 *
 		 * @param <E> The type of element that this interpretation is for
 		 */
-		public abstract class Abstract<E extends QuickElement> implements Interpreted<E> {
+		public abstract class Abstract<E extends ExElement> implements Interpreted<E> {
 			private final Def<? super E> theDefinition;
 			private final Interpreted<?> theParent;
-			private final ClassMap<QuickAddOn.Interpreted<? super E, ?>> theAddOns;
+			private final ClassMap<ExAddOn.Interpreted<? super E, ?>> theAddOns;
 			private final SettableValue<Boolean> isDestroyed;
 			private InterpretedModelSet theModels;
 
@@ -680,8 +702,8 @@ public interface QuickElement extends Identifiable {
 				theDefinition = definition;
 				theParent = parent;
 				theAddOns = new ClassMap<>();
-				for (QuickAddOn.Def<? super E, ?> addOn : definition.getAddOns()) {
-					QuickAddOn.Interpreted<? super E, ?> interp = (QuickAddOn.Interpreted<? super E, ?>) addOn.interpret(this);
+				for (ExAddOn.Def<? super E, ?> addOn : definition.getAddOns()) {
+					ExAddOn.Interpreted<? super E, ?> interp = (ExAddOn.Interpreted<? super E, ?>) addOn.interpret(this);
 					theAddOns.put(interp.getClass(), interp);
 				}
 				isDestroyed = SettableValue.build(boolean.class).withValue(false).build();
@@ -703,12 +725,12 @@ public interface QuickElement extends Identifiable {
 			}
 
 			@Override
-			public <AO extends QuickAddOn.Interpreted<? super E, ?>> AO getAddOn(Class<AO> addOn) {
+			public <AO extends ExAddOn.Interpreted<? super E, ?>> AO getAddOn(Class<AO> addOn) {
 				return (AO) theAddOns.get(addOn, ClassMap.TypeMatch.SUB_TYPE);
 			}
 
 			@Override
-			public Collection<QuickAddOn.Interpreted<? super E, ?>> getAddOns() {
+			public Collection<ExAddOn.Interpreted<? super E, ?>> getAddOns() {
 				return theAddOns.getAllValues();
 			}
 
@@ -719,7 +741,7 @@ public interface QuickElement extends Identifiable {
 
 			@Override
 			public void destroy() {
-				for (QuickAddOn.Interpreted<?, ?> addOn : theAddOns.getAllValues())
+				for (ExAddOn.Interpreted<?, ?> addOn : theAddOns.getAllValues())
 					addOn.destroy();
 				theAddOns.clear();
 				if (!isDestroyed.get().booleanValue())
@@ -738,7 +760,7 @@ public interface QuickElement extends Identifiable {
 				// theDefinition.getExpressoSession().setExpressoEnv(theDefinition.getExpressoSession().getExpressoEnv().with(models,
 				// null));
 				theDefinition.getExpressoEnv().interpretLocalModel();
-				for (QuickAddOn.Interpreted<?, ?> addOn : theAddOns.getAllValues())
+				for (ExAddOn.Interpreted<?, ?> addOn : theAddOns.getAllValues())
 					addOn.update(theModels);
 			}
 
@@ -753,17 +775,17 @@ public interface QuickElement extends Identifiable {
 	Identity getIdentity();
 
 	/** @return The parent element */
-	QuickElement getParentElement();
+	ExElement getParentElement();
 
 	/**
 	 * @param <AO> The type of the add-on to get
 	 * @param addOn The type of the add-on to get
 	 * @return The add-on in this element definition of the given type
 	 */
-	<AO extends QuickAddOn<?>> AO getAddOn(Class<AO> addOn);
+	<AO extends ExAddOn<?>> AO getAddOn(Class<AO> addOn);
 
 	/** @return All add-ons on this element definition */
-	Collection<QuickAddOn<?>> getAddOns();
+	Collection<ExAddOn<?>> getAddOns();
 
 	/**
 	 * @param <AO> The type of the add on
@@ -772,7 +794,7 @@ public interface QuickElement extends Identifiable {
 	 * @param fn Produces the value from the add on if it exists
 	 * @return The value from the given add on in this element definition, or null if no such add-on is present
 	 */
-	default <AO extends QuickAddOn<?>, T> T getAddOnValue(Class<AO> addOn, Function<? super AO, ? extends T> fn) {
+	default <AO extends ExAddOn<?>, T> T getAddOnValue(Class<AO> addOn, Function<? super AO, ? extends T> fn) {
 		AO ao = getAddOn(addOn);
 		return ao == null ? null : fn.apply(ao);
 	}
@@ -789,26 +811,26 @@ public interface QuickElement extends Identifiable {
 	ModelSetInstance update(Interpreted<?> interpreted, ModelSetInstance models) throws ModelInstantiationException;
 
 	/** Abstract {@link QonfigDefinedElement} implementation */
-	public abstract class Abstract implements QuickElement {
+	public abstract class Abstract implements ExElement {
 		private final Identity theId;
-		private final QuickElement theParent;
-		private final ClassMap<QuickAddOn<?>> theAddOns;
-		private final ClassMap<Class<? extends QuickAddOn.Interpreted<?, ?>>> theAddOnInterpretations;
+		private final ExElement theParent;
+		private final ClassMap<ExAddOn<?>> theAddOns;
+		private final ClassMap<Class<? extends ExAddOn.Interpreted<?, ?>>> theAddOnInterpretations;
 		private final ErrorReporting theReporting;
 
 		/**
 		 * @param interpreted The interpretation producing this element
 		 * @param parent The parent element
 		 */
-		protected Abstract(Interpreted<?> interpreted, QuickElement parent) {
+		protected Abstract(Interpreted<?> interpreted, ExElement parent) {
 			theId = interpreted.getDefinition().getIdentity();
 			theParent = parent;
 			theAddOns = new ClassMap<>();
 			theAddOnInterpretations = new ClassMap<>();
-			for (QuickAddOn.Interpreted<?, ?> addOn : interpreted.getAddOns()) {
-				QuickAddOn<?> inst = ((QuickAddOn.Interpreted<QuickElement, ?>) addOn).create(this);
+			for (ExAddOn.Interpreted<?, ?> addOn : interpreted.getAddOns()) {
+				ExAddOn<?> inst = ((ExAddOn.Interpreted<ExElement, ?>) addOn).create(this);
 				theAddOns.put(inst.getClass(), inst);
-				theAddOnInterpretations.put(inst.getClass(), (Class<? extends QuickAddOn.Interpreted<?, ?>>) addOn.getClass());
+				theAddOnInterpretations.put(inst.getClass(), (Class<? extends ExAddOn.Interpreted<?, ?>>) addOn.getClass());
 			}
 			theReporting = interpreted.getDefinition().reporting();
 		}
@@ -819,17 +841,17 @@ public interface QuickElement extends Identifiable {
 		}
 
 		@Override
-		public QuickElement getParentElement() {
+		public ExElement getParentElement() {
 			return theParent;
 		}
 
 		@Override
-		public <AO extends QuickAddOn<?>> AO getAddOn(Class<AO> addOn) {
+		public <AO extends ExAddOn<?>> AO getAddOn(Class<AO> addOn) {
 			return (AO) theAddOns.get(addOn, ClassMap.TypeMatch.SUB_TYPE);
 		}
 
 		@Override
-		public Collection<QuickAddOn<?>> getAddOns() {
+		public Collection<ExAddOn<?>> getAddOns() {
 			return theAddOns.getAllValues();
 		}
 
@@ -851,12 +873,12 @@ public interface QuickElement extends Identifiable {
 		}
 
 		protected void updateModel(Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
-			for (QuickAddOn<?> addOn : theAddOns.getAllValues()) {
-				Class<? extends QuickAddOn.Interpreted<QuickElement, ?>> addOnInterpType;
-				addOnInterpType = (Class<? extends QuickAddOn.Interpreted<QuickElement, ?>>) theAddOnInterpretations.get(addOn.getClass(),
+			for (ExAddOn<?> addOn : theAddOns.getAllValues()) {
+				Class<? extends ExAddOn.Interpreted<ExElement, ?>> addOnInterpType;
+				addOnInterpType = (Class<? extends ExAddOn.Interpreted<ExElement, ?>>) theAddOnInterpretations.get(addOn.getClass(),
 					ClassMap.TypeMatch.EXACT);
-				QuickAddOn.Interpreted<?, ?> interpretedAddOn = interpreted.getAddOn(addOnInterpType);
-				((QuickAddOn<QuickElement>) addOn).update(interpretedAddOn, myModels);
+				ExAddOn.Interpreted<?, ?> interpretedAddOn = interpreted.getAddOn(addOnInterpType);
+				((ExAddOn<ExElement>) addOn).update(interpretedAddOn, myModels);
 			}
 		}
 
@@ -867,7 +889,7 @@ public interface QuickElement extends Identifiable {
 
 		protected <M, MV extends M> void satisfyContextValue(String valueName, ModelInstanceType<M, MV> type, MV value,
 			ModelSetInstance models) throws ModelInstantiationException {
-			QuickElement.satisfyContextValue(valueName, type, value, models, this);
+			ExElement.satisfyContextValue(valueName, type, value, models, this);
 		}
 	}
 
@@ -881,7 +903,7 @@ public interface QuickElement extends Identifiable {
 	}
 
 	public static <M, MV extends M> void satisfyContextValue(String valueName, ModelInstanceType<M, MV> type, MV value,
-		ModelSetInstance models, QuickElement element) throws ModelInstantiationException {
+		ModelSetInstance models, ExElement element) throws ModelInstantiationException {
 		if (value != null) {
 			try {
 				DynamicModelValue.satisfyDynamicValue(valueName, type, models, value);
@@ -904,7 +926,7 @@ public interface QuickElement extends Identifiable {
 	 * @throws QonfigInterpretationException If the definition could not be interpreted
 	 * @throws IllegalArgumentException If no such child role exists
 	 */
-	public static <D extends QuickElement.Def<?>> D useOrReplace(Class<? extends D> type, D def, ExpressoQIS session, String childName)
+	public static <D extends ExElement.Def<?>> D useOrReplace(Class<? extends D> type, D def, ExpressoQIS session, String childName)
 		throws QonfigInterpretationException, IllegalArgumentException {
 		QonfigElement element = session.getChildren(childName).peekFirst();
 		if (element == null)
@@ -917,10 +939,10 @@ public interface QuickElement extends Identifiable {
 		return def;
 	}
 
-	public static <T extends QuickElement.Def<?>> void syncDefs(Class<T> defType, List<? extends T> defs, List<ExpressoQIS> sessions)
+	public static <T extends ExElement.Def<?>> void syncDefs(Class<T> defType, List<? extends T> defs, List<ExpressoQIS> sessions)
 		throws QonfigInterpretationException {
 		CollectionUtils.synchronize((List<T>) defs, sessions, //
-			(widget, child) -> QuickElement.typesEqual(widget.getElement(), child.getElement()))//
+			(widget, child) -> ExElement.typesEqual(widget.getElement(), child.getElement()))//
 		.simpleE(child -> child.interpret(defType))//
 		.rightOrder()//
 		.onRightX(element -> element.getLeftValue().update(element.getRightValue()))//

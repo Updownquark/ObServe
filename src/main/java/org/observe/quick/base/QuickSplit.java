@@ -8,8 +8,8 @@ import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.qonfig.ExElement;
 import org.observe.quick.QuickContainer;
-import org.observe.quick.QuickElement;
 import org.observe.quick.QuickWidget;
 import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElement;
@@ -24,7 +24,7 @@ public class QuickSplit extends QuickContainer.Abstract<QuickWidget> {
 		private boolean isVertical;
 		private CompiledExpression theSplitPosition;
 
-		public Def(QuickElement.Def<?> parent, QonfigElement element) {
+		public Def(ExElement.Def<?> parent, QonfigElement element) {
 			super(parent, element);
 		}
 
@@ -57,7 +57,7 @@ public class QuickSplit extends QuickContainer.Abstract<QuickWidget> {
 		}
 
 		@Override
-		public Interpreted<? extends S> interpret(QuickElement.Interpreted<?> parent) {
+		public Interpreted<? extends S> interpret(ExElement.Interpreted<?> parent) {
 			return new Interpreted<>(this, parent);
 		}
 	}
@@ -65,7 +65,7 @@ public class QuickSplit extends QuickContainer.Abstract<QuickWidget> {
 	public static class Interpreted<S extends QuickSplit> extends QuickContainer.Interpreted.Abstract<S, QuickWidget> {
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<QuickSize>> theSplitPosition;
 
-		public Interpreted(Def<? super S> definition, QuickElement.Interpreted<?> parent) {
+		public Interpreted(Def<? super S> definition, ExElement.Interpreted<?> parent) {
 			super(definition, parent);
 		}
 
@@ -91,7 +91,7 @@ public class QuickSplit extends QuickContainer.Abstract<QuickWidget> {
 		}
 
 		@Override
-		public S create(QuickElement parent) {
+		public S create(ExElement parent) {
 			return (S) new QuickSplit(this, parent);
 		}
 	}
@@ -99,7 +99,7 @@ public class QuickSplit extends QuickContainer.Abstract<QuickWidget> {
 	private boolean isVertical;
 	private final SettableValue<SettableValue<QuickSize>> theSplitPosition;
 
-	public QuickSplit(Interpreted<?> interpreted, QuickElement parent) {
+	public QuickSplit(Interpreted<?> interpreted, ExElement parent) {
 		super(interpreted, parent);
 		theSplitPosition = SettableValue
 			.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<QuickSize>> parameterized(QuickSize.class)).build();
@@ -110,7 +110,7 @@ public class QuickSplit extends QuickContainer.Abstract<QuickWidget> {
 	}
 
 	@Override
-	protected void updateModel(QuickElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
+	protected void updateModel(ExElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
 		super.updateModel(interpreted, myModels);
 		QuickSplit.Interpreted<?> myInterpreted = (QuickSplit.Interpreted<?>) interpreted;
 		isVertical = myInterpreted.getDefinition().isVertical();

@@ -1,7 +1,7 @@
 package org.observe.quick.base;
 
-import org.observe.quick.QuickAddOn;
-import org.observe.quick.QuickElement;
+import org.observe.expresso.qonfig.ExAddOn;
+import org.observe.expresso.qonfig.ExElement;
 import org.observe.quick.QuickWidget;
 import org.qommons.config.QonfigAddOn;
 
@@ -17,7 +17,7 @@ public class QuickSimpleLayout extends QuickLayout.Abstract {
 		}
 
 		@Override
-		public Interpreted interpret(QuickElement.Interpreted<? extends QuickBox> element) {
+		public Interpreted interpret(ExElement.Interpreted<? extends QuickBox> element) {
 			return new Interpreted(this, (QuickBox.Interpreted<?>) element);
 		}
 	}
@@ -47,19 +47,19 @@ public class QuickSimpleLayout extends QuickLayout.Abstract {
 		super(interpreted, element);
 	}
 
-	public static class Child extends QuickAddOn.Abstract<QuickWidget> {
-		public static class Def extends QuickAddOn.Def.Abstract<QuickWidget, Child> {
+	public static class Child extends ExAddOn.Abstract<QuickWidget> {
+		public static class Def extends ExAddOn.Def.Abstract<QuickWidget, Child> {
 			public Def(QonfigAddOn type, QuickWidget.Def<?> element) {
 				super(type, element);
 			}
 
 			@Override
-			public Interpreted interpret(QuickElement.Interpreted<? extends QuickWidget> element) {
+			public Interpreted interpret(ExElement.Interpreted<? extends QuickWidget> element) {
 				return new Interpreted(this, (QuickWidget.Interpreted<?>) element);
 			}
 		}
 
-		public static class Interpreted extends QuickAddOn.Interpreted.Abstract<QuickWidget, Child> {
+		public static class Interpreted extends ExAddOn.Interpreted.Abstract<QuickWidget, Child> {
 			public Interpreted(Def definition, QuickWidget.Interpreted<?> element) {
 				super(definition, element);
 			}

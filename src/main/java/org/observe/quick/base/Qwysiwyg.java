@@ -19,10 +19,10 @@ import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.qonfig.ExElement;
 import org.observe.quick.QuickApp;
 import org.observe.quick.QuickApplication;
 import org.observe.quick.QuickDocument;
-import org.observe.quick.QuickElement;
 import org.qommons.ArrayUtils;
 import org.qommons.Colors;
 import org.qommons.LambdaUtils;
@@ -99,8 +99,10 @@ public class Qwysiwyg {
 			theInternalDocumentDisplay.set(null, null);
 			clearDef();
 		}
-		if (theDocumentLocation == null)
+		if (theDocumentLocation == null) {
+			System.err.println("WARNING: No target document");
 			return;
+		}
 
 		// TODO Replace the reporting?
 
@@ -416,7 +418,7 @@ public class Qwysiwyg {
 		}
 	}
 
-	private void renderDef(DocumentComponent component, QuickElement.Def<?> def, String descrip) {
+	private void renderDef(DocumentComponent component, ExElement.Def<?> def, String descrip) {
 		if (descrip != null) {
 			DocumentComponent elComponent = getSourceComponent(component, def.getElement().getPositionInFile().getPosition());
 			elComponent.tooltip(descrip);
@@ -452,9 +454,15 @@ public class Qwysiwyg {
 					// TODO Color different expression components
 				}
 			}
-			attrValueComp.tooltip2(() -> renderValueType(type, 1));
+			String attrDescrip = def.getElementValueDescription();
+			attrValueComp.tooltip2(() -> {
+				if (attrDescrip != null)
+					return "<html>" + attrDescrip + "<br><br>" + renderValueType(type, 1);
+				else
+					return renderValueType(type, 1);
+			});
 		}
-		for (QuickElement.Def<?> child : def.getAllChildren()) {
+		for (ExElement.Def<?> child : def.getAllChildren()) {
 			String childDescrip = null;
 			for (QonfigChildDef role : child.getElement().getParentRoles()) {
 				String roleDescrip = def.getChildDescription(role);

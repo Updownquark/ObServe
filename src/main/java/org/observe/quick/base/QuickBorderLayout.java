@@ -3,8 +3,8 @@ package org.observe.quick.base;
 import org.observe.expresso.ExpressoQIS;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
-import org.observe.quick.QuickAddOn;
-import org.observe.quick.QuickElement;
+import org.observe.expresso.qonfig.ExAddOn;
+import org.observe.expresso.qonfig.ExElement;
 import org.observe.quick.QuickWidget;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigInterpretationException;
@@ -21,7 +21,7 @@ public class QuickBorderLayout extends QuickLayout.Abstract {
 		}
 
 		@Override
-		public Interpreted interpret(QuickElement.Interpreted<? extends QuickBox> element) {
+		public Interpreted interpret(ExElement.Interpreted<? extends QuickBox> element) {
 			return new Interpreted(this, (QuickBox.Interpreted<?>) element);
 		}
 	}
@@ -55,8 +55,8 @@ public class QuickBorderLayout extends QuickLayout.Abstract {
 		Center, North, South, East, West
 	}
 
-	public static class Child extends QuickAddOn.Abstract<QuickWidget> {
-		public static class Def extends QuickAddOn.Def.Abstract<QuickWidget, Child> {
+	public static class Child extends ExAddOn.Abstract<QuickWidget> {
+		public static class Def extends ExAddOn.Def.Abstract<QuickWidget, Child> {
 			private Region theRegion;
 
 			public Def(QonfigAddOn type, QuickWidget.Def<?> element) {
@@ -68,7 +68,7 @@ public class QuickBorderLayout extends QuickLayout.Abstract {
 			}
 
 			@Override
-			public void update(ExpressoQIS session, QuickElement.Def<? extends QuickWidget> element) throws QonfigInterpretationException {
+			public void update(ExpressoQIS session, ExElement.Def<? extends QuickWidget> element) throws QonfigInterpretationException {
 				super.update(session, element);
 				String regionStr = session.getAttributeText("region");
 				switch (regionStr) {
@@ -94,12 +94,12 @@ public class QuickBorderLayout extends QuickLayout.Abstract {
 			}
 
 			@Override
-			public Interpreted interpret(QuickElement.Interpreted<? extends QuickWidget> element) {
+			public Interpreted interpret(ExElement.Interpreted<? extends QuickWidget> element) {
 				return new Interpreted(this, (QuickWidget.Interpreted<?>) element);
 			}
 		}
 
-		public static class Interpreted extends QuickAddOn.Interpreted.Abstract<QuickWidget, Child> {
+		public static class Interpreted extends ExAddOn.Interpreted.Abstract<QuickWidget, Child> {
 			public Interpreted(Def definition, QuickWidget.Interpreted<?> element) {
 				super(definition, element);
 			}
@@ -126,7 +126,7 @@ public class QuickBorderLayout extends QuickLayout.Abstract {
 		}
 
 		@Override
-		public void update(QuickAddOn.Interpreted<?, ?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
+		public void update(ExAddOn.Interpreted<?, ?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
 			super.update(interpreted, models);
 			Child.Interpreted myInterpreted = (Child.Interpreted) interpreted;
 			theRegion = myInterpreted.getDefinition().getRegion();

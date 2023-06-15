@@ -1,7 +1,7 @@
 package org.observe.quick.base;
 
 import org.observe.expresso.ExpressoQIS;
-import org.observe.quick.QuickElement;
+import org.observe.expresso.qonfig.ExElement;
 import org.observe.quick.QuickValueWidget;
 import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElement;
@@ -13,7 +13,7 @@ public class QuickCheckBox extends QuickValueWidget.Abstract<Boolean> {
 	public static final String CHECK_BOX = "check-box";
 
 	public static class Def extends QuickValueWidget.Def.Abstract<Boolean, QuickCheckBox> {
-		public Def(QuickElement.Def<?> parent, QonfigElement element) {
+		public Def(ExElement.Def<?> parent, QonfigElement element) {
 			super(parent, element);
 		}
 
@@ -24,13 +24,13 @@ public class QuickCheckBox extends QuickValueWidget.Abstract<Boolean> {
 		}
 
 		@Override
-		public Interpreted interpret(QuickElement.Interpreted<?> parent) {
+		public Interpreted interpret(ExElement.Interpreted<?> parent) {
 			return new Interpreted(this, parent);
 		}
 	}
 
 	public static class Interpreted extends QuickValueWidget.Interpreted.Abstract<Boolean, QuickCheckBox> {
-		public Interpreted(Def definition, QuickElement.Interpreted<?> parent) {
+		public Interpreted(Def definition, ExElement.Interpreted<?> parent) {
 			super(definition, parent);
 		}
 
@@ -40,12 +40,12 @@ public class QuickCheckBox extends QuickValueWidget.Abstract<Boolean> {
 		}
 
 		@Override
-		public QuickCheckBox create(QuickElement parent) {
+		public QuickCheckBox create(ExElement parent) {
 			return new QuickCheckBox(this, parent);
 		}
 	}
 
-	public QuickCheckBox(Interpreted interpreted, QuickElement parent) {
+	public QuickCheckBox(Interpreted interpreted, ExElement parent) {
 		super(interpreted, parent);
 	}
 }

@@ -14,61 +14,62 @@ import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.qonfig.ExElement;
 import org.observe.quick.style.QuickStyleSheet;
 import org.observe.quick.style.StyleQIS;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigInterpretationException;
 
 /** The root of a quick file, containing all information needed to power an application */
-public class QuickDocument extends QuickElement.Abstract {
+public class QuickDocument extends ExElement.Abstract {
 	public static final String QUICK = "quick";
 
-	public static final QuickElement.ChildElementGetter<QuickDocument, Interpreted, Def> DOC_HEAD = new QuickElement.ChildElementGetter<QuickDocument, Interpreted, Def>() {
+	public static final ExElement.ChildElementGetter<QuickDocument, Interpreted, Def> DOC_HEAD = new ExElement.ChildElementGetter<QuickDocument, Interpreted, Def>() {
 		@Override
 		public String getDescription() {
 			return "The head section of the Quick document, containing application models, style sheets, etc.";
 		}
 
 		@Override
-		public List<? extends QuickElement.Def<?>> getChildrenFromDef(Def def) {
+		public List<? extends ExElement.Def<?>> getChildrenFromDef(Def def) {
 			return Collections.singletonList(def.getHead());
 		}
 
 		@Override
-		public List<? extends QuickElement.Interpreted<?>> getChildrenFromInterpreted(Interpreted interp) {
+		public List<? extends ExElement.Interpreted<?>> getChildrenFromInterpreted(Interpreted interp) {
 			return Collections.singletonList(interp.getHead());
 		}
 
 		@Override
-		public List<? extends QuickElement> getChildrenFromElement(QuickDocument element) {
+		public List<? extends ExElement> getChildrenFromElement(QuickDocument element) {
 			return Collections.emptyList();
 		}
 	};
 
-	public static final QuickElement.ChildElementGetter<QuickDocument, Interpreted, Def> DOC_BODY = new QuickElement.ChildElementGetter<QuickDocument, Interpreted, Def>() {
+	public static final ExElement.ChildElementGetter<QuickDocument, Interpreted, Def> DOC_BODY = new ExElement.ChildElementGetter<QuickDocument, Interpreted, Def>() {
 		@Override
 		public String getDescription() {
 			return "The widget content of the application";
 		}
 
 		@Override
-		public List<? extends QuickElement.Def<?>> getChildrenFromDef(Def def) {
+		public List<? extends ExElement.Def<?>> getChildrenFromDef(Def def) {
 			return Collections.singletonList(def.getBody());
 		}
 
 		@Override
-		public List<? extends QuickElement.Interpreted<?>> getChildrenFromInterpreted(Interpreted interp) {
+		public List<? extends ExElement.Interpreted<?>> getChildrenFromInterpreted(Interpreted interp) {
 			return Collections.singletonList(interp.getBody());
 		}
 
 		@Override
-		public List<? extends QuickElement> getChildrenFromElement(QuickDocument element) {
+		public List<? extends ExElement> getChildrenFromElement(QuickDocument element) {
 			return Collections.singletonList(element.getBody());
 		}
 	};
 
 	/** The definition of a Quick document */
-	public static class Def extends QuickElement.Def.Abstract<QuickDocument> {
+	public static class Def extends ExElement.Def.Abstract<QuickDocument> {
 		private QuickHeadSection.Def theHead;
 		private QuickWidget.Def<?> theBody;
 
@@ -76,7 +77,7 @@ public class QuickDocument extends QuickElement.Abstract {
 		 * @param parent The parent of this document, typically null
 		 * @param element The element that this document definition is being interpreted from
 		 */
-		public Def(QuickElement.Def<?> parent, QonfigElement element) {
+		public Def(ExElement.Def<?> parent, QonfigElement element) {
 			super(parent, element);
 		}
 
@@ -96,25 +97,25 @@ public class QuickDocument extends QuickElement.Abstract {
 			forChild(session.getRole(null, null, "head").getDeclared(), DOC_HEAD);
 			forChild(session.getRole(null, null, "body").getDeclared(), DOC_BODY);
 			super.update(session);
-			theHead = QuickElement.useOrReplace(QuickHeadSection.Def.class, theHead, session, "head");
+			theHead = ExElement.useOrReplace(QuickHeadSection.Def.class, theHead, session, "head");
 			if (theHead != null) {
 				session.setExpressoEnv(session.getExpressoEnv().with(theHead.getModels(), theHead.getClassView()));
 				session.as(StyleQIS.class).setStyleSheet(theHead.getStyleSheet());
 			}
-			theBody = QuickElement.useOrReplace(QuickWidget.Def.class, theBody, session, "body");
+			theBody = ExElement.useOrReplace(QuickWidget.Def.class, theBody, session, "body");
 		}
 
 		/**
 		 * @param parent The interpreted parent, typically null
 		 * @return The interpreted document
 		 */
-		public Interpreted interpret(QuickElement.Interpreted<?> parent) {
+		public Interpreted interpret(ExElement.Interpreted<?> parent) {
 			return new Interpreted(this, parent);
 		}
 	}
 
 	/** An interpreted Quick document */
-	public static class Interpreted extends QuickElement.Interpreted.Abstract<QuickDocument> {
+	public static class Interpreted extends ExElement.Interpreted.Abstract<QuickDocument> {
 		private QuickHeadSection theHead;
 		private QuickWidget.Interpreted<?> theBody;
 
@@ -122,7 +123,7 @@ public class QuickDocument extends QuickElement.Abstract {
 		 * @param def The document's definition
 		 * @param parent The document's interpreted parent, typically null
 		 */
-		public Interpreted(Def def, QuickElement.Interpreted<?> parent) {
+		public Interpreted(Def def, ExElement.Interpreted<?> parent) {
 			super(def, parent);
 		}
 
@@ -164,8 +165,92 @@ public class QuickDocument extends QuickElement.Abstract {
 	}
 
 	/** Represents the head section of a Quick document, containing class-view, model, and style information */
-	public static class QuickHeadSection extends QuickElement.Interpreted.Abstract<QuickElement> {
+	public static class QuickHeadSection extends ExElement.Interpreted.Abstract<ExElement> {
 		public static final String HEAD = "head";
+
+		public static final ExElement.ChildElementGetter<ExElement, QuickHeadSection, QuickHeadSection.Def> STYLE_SHEET = new ExElement.ChildElementGetter<ExElement, QuickHeadSection, QuickHeadSection.Def>() {
+			@Override
+			public String getDescription() {
+				return "The head section of the Quick document, containing application models, style sheets, etc.";
+			}
+
+			@Override
+			public List<? extends ExElement.Def<?>> getChildrenFromDef(QuickHeadSection.Def def) {
+				return Collections.singletonList(def.getStyleSheet());
+			}
+
+			@Override
+			public List<? extends ExElement.Interpreted<?>> getChildrenFromInterpreted(QuickHeadSection interp) {
+				return Collections.emptyList();
+			}
+
+			@Override
+			public List<? extends ExElement> getChildrenFromElement(ExElement element) {
+				return Collections.emptyList();
+			}
+		};
+
+		/** The definition of a head section */
+		public static class Def extends ExElement.Def.Abstract<ExElement> {
+			private ClassView theClassView;
+			private ObservableModelSet.Built theModels;
+			private QuickStyleSheet theStyleSheet;
+
+			/**
+			 * @param parent The document that this head section is for
+			 * @param element The element that this head section is being parsed from
+			 */
+			public Def(QuickDocument.Def parent, QonfigElement element) {
+				super(parent, element);
+			}
+
+			/** @return The class view defined in this head section */
+			public ClassView getClassView() {
+				return theClassView;
+			}
+
+			/** @return The models defined in this head section */
+			@Override
+			public ObservableModelSet.Built getModels() {
+				return theModels;
+			}
+
+			/** @return The style sheet defined in this head section */
+			public QuickStyleSheet getStyleSheet() {
+				return theStyleSheet;
+			}
+
+			@Override
+			public void update(ExpressoQIS session) throws QonfigInterpretationException {
+				checkElement(session.getFocusType(), QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, HEAD);
+				forChild(session.getRole("style-sheet"), STYLE_SHEET);
+				super.update(session);
+				ClassView cv = session.interpretChildren("imports", ClassView.class).peekFirst();
+				if (cv == null) {
+					ClassView defaultCV = ClassView.build().withWildcardImport("java.lang").build();
+					cv = defaultCV;
+				}
+				theClassView = cv;
+				ObservableModelSet.Built model = session.interpretChildren("models", ObservableModelSet.Built.class).peekFirst();
+				if (model == null)
+					model = ObservableModelSet.build("models", ObservableModelSet.JAVA_NAME_CHECKER).build();
+				theModels = model;
+				session.setExpressoEnv(session.getExpressoEnv().with(model, cv));
+				theStyleSheet = session.as(StyleQIS.class).getStyleSheet();
+				if (theStyleSheet != null)
+					theStyleSheet.update(session.forChildren("style-sheet").getFirst());
+			}
+
+			/**
+			 * @param document The document that the head section is for
+			 * @return The new head section
+			 * @throws ExpressoInterpretationException If the {@link org.observe.expresso.ObservableModelSet.Built#interpret()
+			 *         interpretation} of the head section's {@link #getModels() models} fails
+			 */
+			public QuickHeadSection interpret(QuickDocument.Interpreted document) throws ExpressoInterpretationException {
+				return new QuickHeadSection(this, document, getClassView(), getModels().interpret(), theStyleSheet);
+			}
+		}
 
 		private final ClassView theClassView;
 		private final InterpretedModelSet theModels;
@@ -202,63 +287,9 @@ public class QuickDocument extends QuickElement.Abstract {
 			return theStyleSheet;
 		}
 
-		/** The definition of a head section */
-		public static class Def extends QuickElement.Def.Abstract<QuickElement> {
-			private ClassView theClassView;
-			private ObservableModelSet.Built theModels;
-			private QuickStyleSheet theStyleSheet;
-
-			/**
-			 * @param parent The document that this head section is for
-			 * @param element The element that this head section is being parsed from
-			 */
-			public Def(QuickDocument.Def parent, QonfigElement element) {
-				super(parent, element);
-			}
-
-			/** @return The class view defined in this head section */
-			public ClassView getClassView() {
-				return theClassView;
-			}
-
-			/** @return The models defined in this head section */
-			@Override
-			public ObservableModelSet.Built getModels() {
-				return theModels;
-			}
-
-			/** @return The style sheet defined in this head section */
-			public QuickStyleSheet getStyleSheet() {
-				return theStyleSheet;
-			}
-
-			@Override
-			public void update(ExpressoQIS session) throws QonfigInterpretationException {
-				checkElement(session.getFocusType(), QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, HEAD);
-				super.update(session);
-				ClassView cv = session.interpretChildren("imports", ClassView.class).peekFirst();
-				if (cv == null) {
-					ClassView defaultCV = ClassView.build().withWildcardImport("java.lang").build();
-					cv = defaultCV;
-				}
-				theClassView = cv;
-				ObservableModelSet.Built model = session.interpretChildren("models", ObservableModelSet.Built.class).peekFirst();
-				if (model == null)
-					model = ObservableModelSet.build("models", ObservableModelSet.JAVA_NAME_CHECKER).build();
-				theModels = model;
-				session.setExpressoEnv(session.getExpressoEnv().with(model, cv));
-				theStyleSheet = session.as(StyleQIS.class).getStyleSheet();
-			}
-
-			/**
-			 * @param document The document that the head section is for
-			 * @return The new head section
-			 * @throws ExpressoInterpretationException If the {@link org.observe.expresso.ObservableModelSet.Built#interpret()
-			 *         interpretation} of the head section's {@link #getModels() models} fails
-			 */
-			public QuickHeadSection interpret(QuickDocument.Interpreted document) throws ExpressoInterpretationException {
-				return new QuickHeadSection(this, document, getClassView(), getModels().interpret(), theStyleSheet);
-			}
+		@Override
+		protected void update() throws ExpressoInterpretationException {
+			super.update();
 		}
 	}
 
@@ -294,13 +325,13 @@ public class QuickDocument extends QuickElement.Abstract {
 	}
 
 	@Override
-	public ModelSetInstance update(QuickElement.Interpreted<?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
+	public ModelSetInstance update(ExElement.Interpreted<?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
 		throw new UnsupportedOperationException(
 			"This update method is not supported.  Use update(QuickDocument.Interpreted, ExternalModelSet, Observable)");
 	}
 
 	@Override
-	protected void updateModel(QuickElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
+	protected void updateModel(ExElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
 		super.updateModel(interpreted, myModels);
 		QuickDocument.Interpreted myInterpreted = (QuickDocument.Interpreted) interpreted;
 		theModelLoad.onNext(null);

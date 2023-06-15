@@ -2,16 +2,19 @@ package org.observe.quick;
 
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ExpressoQIS;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.qonfig.ExElement;
 import org.observe.quick.style.CompiledStyleApplication;
 import org.observe.quick.style.InterpretedStyleApplication;
 import org.observe.quick.style.QuickCompiledStyle;
 import org.observe.quick.style.QuickInterpretedStyle;
+import org.observe.quick.style.QuickStyleElement;
 import org.observe.quick.style.QuickTypeStyle;
 import org.observe.quick.style.StyleQIS;
 import org.qommons.Version;
@@ -22,13 +25,36 @@ import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigToolkit;
 
 /** A Quick element that has style */
-public interface QuickStyledElement extends QuickElement {
+public interface QuickStyledElement extends ExElement {
+	public static final ExElement.ChildElementGetter<QuickStyledElement, Interpreted<?>, Def<?>> STYLE_ELEMENTS//
+	= new ExElement.ChildElementGetter<QuickStyledElement, Interpreted<?>, Def<?>>() {
+		@Override
+		public String getDescription() {
+			return "Styles declared on the element itself";
+		}
+
+		@Override
+		public List<? extends QuickStyleElement.Def> getChildrenFromDef(Def<?> def) {
+			return def.getStyle().getStyleElements();
+		}
+
+		@Override
+		public List<? extends QuickStyleElement.Interpreted> getChildrenFromInterpreted(Interpreted<?> interp) {
+			return Collections.emptyList(); // TODO Fill in when we have the type
+		}
+
+		@Override
+		public List<? extends QuickStyledElement> getChildrenFromElement(QuickStyledElement element) {
+			return Collections.emptyList(); // TODO Fill in when we have the type
+		}
+	};
+
 	/**
 	 * The definition of a styled element
 	 *
 	 * @param <S> The type of the styled element that this definition is for
 	 */
-	public interface Def<S extends QuickStyledElement> extends QuickElement.Def<S> {
+	public interface Def<S extends QuickStyledElement> extends ExElement.Def<S> {
 		/** @return This element's style */
 		QuickInstanceStyle.Def getStyle();
 
@@ -37,14 +63,14 @@ public interface QuickStyledElement extends QuickElement {
 		 *
 		 * @param <S> The type of styled object that this definition is for
 		 */
-		public abstract class Abstract<S extends QuickStyledElement> extends QuickElement.Def.Abstract<S> implements Def<S> {
+		public abstract class Abstract<S extends QuickStyledElement> extends ExElement.Def.Abstract<S> implements Def<S> {
 			private QuickInstanceStyle.Def theStyle;
 
 			/**
 			 * @param parent The parent container definition
 			 * @param element The element that this widget is interpreted from
 			 */
-			protected Abstract(QuickElement.Def<?> parent, QonfigElement element) {
+			protected Abstract(ExElement.Def<?> parent, QonfigElement element) {
 				super(parent, element);
 			}
 
@@ -55,12 +81,17 @@ public interface QuickStyledElement extends QuickElement {
 
 			@Override
 			public void update(ExpressoQIS session) throws QonfigInterpretationException {
+				forChild(session.getRole("style"), STYLE_ELEMENTS);
 				super.update(session);
-				QuickElement.Def<?> parent = getParentElement();
+				ExElement.Def<?> parent = getParentElement();
 				while (parent != null && !(parent instanceof QuickStyledElement.Def))
 					parent = parent.getParentElement();
+				session.as(StyleQIS.class).setStyleElement(this);
 				theStyle = wrap(parent == null ? null : ((QuickStyledElement.Def<?>) parent).getStyle(),
 					session.as(StyleQIS.class).getStyle());
+				int i = 0;
+				for (ExpressoQIS styleSession : session.forChildren("style"))
+					theStyle.getStyleElements().get(i++).update(styleSession);
 			}
 
 			/**
@@ -84,7 +115,7 @@ public interface QuickStyledElement extends QuickElement {
 	 *
 	 * @param <S> The type of styled element that this interpretation creates
 	 */
-	public interface Interpreted<S extends QuickStyledElement> extends QuickElement.Interpreted<S> {
+	public interface Interpreted<S extends QuickStyledElement> extends ExElement.Interpreted<S> {
 		@Override
 		Def<? super S> getDefinition();
 
@@ -105,7 +136,7 @@ public interface QuickStyledElement extends QuickElement {
 		 *
 		 * @param <S> The type of widget that this interpretation is for
 		 */
-		public abstract class Abstract<S extends QuickStyledElement> extends QuickElement.Interpreted.Abstract<S>
+		public abstract class Abstract<S extends QuickStyledElement> extends ExElement.Interpreted.Abstract<S>
 		implements Interpreted<S> {
 			private QuickInstanceStyle.Interpreted theStyle;
 
@@ -113,7 +144,7 @@ public interface QuickStyledElement extends QuickElement {
 			 * @param definition The definition producing this interpretation
 			 * @param parent The interpreted parent
 			 */
-			protected Abstract(Def<? super S> definition, QuickElement.Interpreted<?> parent) {
+			protected Abstract(Def<? super S> definition, ExElement.Interpreted<?> parent) {
 				super(definition, parent);
 			}
 
@@ -132,7 +163,7 @@ public interface QuickStyledElement extends QuickElement {
 				throws ExpressoInterpretationException {
 				super.update();
 				if (theStyle == null || theStyle.getCompiled() != getDefinition().getStyle()) {
-					QuickElement.Interpreted<?> parent = getParentElement();
+					ExElement.Interpreted<?> parent = getParentElement();
 					while (parent != null && !(parent instanceof QuickStyledElement.Interpreted))
 						parent = parent.getParentElement();
 					theStyle = getDefinition().getStyle()
@@ -145,7 +176,7 @@ public interface QuickStyledElement extends QuickElement {
 	QuickInstanceStyle getStyle();
 
 	/** An abstract {@link QuickStyledElement} implementation */
-	public abstract class Abstract extends QuickElement.Abstract implements QuickStyledElement {
+	public abstract class Abstract extends ExElement.Abstract implements QuickStyledElement {
 		private QuickInstanceStyle theStyle;
 		private ModelSetInstance theUpdatingModels;
 
@@ -153,7 +184,7 @@ public interface QuickStyledElement extends QuickElement {
 		 * @param interpreted The interpretation that is creating this element
 		 * @param parent The parent element
 		 */
-		protected Abstract(QuickStyledElement.Interpreted<?> interpreted, QuickElement parent) {
+		protected Abstract(QuickStyledElement.Interpreted<?> interpreted, ExElement parent) {
 			super(interpreted, parent);
 		}
 
@@ -163,7 +194,7 @@ public interface QuickStyledElement extends QuickElement {
 		}
 
 		@Override
-		public ModelSetInstance update(QuickElement.Interpreted<?> interpreted, ModelSetInstance models)
+		public ModelSetInstance update(ExElement.Interpreted<?> interpreted, ModelSetInstance models)
 			throws ModelInstantiationException {
 			try {
 				return super.update(interpreted, models);
@@ -173,16 +204,16 @@ public interface QuickStyledElement extends QuickElement {
 		}
 
 		@Override
-		protected ModelSetInstance createElementModel(QuickElement.Interpreted<?> interpreted, ModelSetInstance parentModels)
+		protected ModelSetInstance createElementModel(ExElement.Interpreted<?> interpreted, ModelSetInstance parentModels)
 			throws ModelInstantiationException {
 			return theUpdatingModels = super.createElementModel(interpreted, parentModels);
 		}
 
 		@Override
-		protected void updateModel(QuickElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
+		protected void updateModel(ExElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
 			super.updateModel(interpreted, myModels);
 			QuickStyledElement.Interpreted<?> myInterpreted = (QuickStyledElement.Interpreted<?>) interpreted;
-			QuickElement parent = getParentElement();
+			ExElement parent = getParentElement();
 			while (parent != null && !(parent instanceof QuickStyledElement.Abstract))
 				parent = parent.getParentElement();
 			StyleQIS.installParentModels(myModels, parent == null ? null : ((QuickStyledElement.Abstract) parent).theUpdatingModels);
@@ -213,7 +244,7 @@ public interface QuickStyledElement extends QuickElement {
 		void update(Interpreted interpreted, ModelSetInstance models) throws ModelInstantiationException;
 	}
 
-	static QuickTypeStyle getTypeStyle(QuickTypeStyle.StyleSet styleSet, QonfigElement element, String toolkitName, Version toolkitVersion,
+	static QuickTypeStyle getTypeStyle(QuickTypeStyle.TypeStyleSet styleSet, QonfigElement element, String toolkitName, Version toolkitVersion,
 		String elementName) {
 		QonfigToolkit.ToolkitDefVersion tdv = new QonfigToolkit.ToolkitDefVersion(toolkitVersion.major, toolkitVersion.minor);
 		QonfigToolkit toolkit;

@@ -11,7 +11,7 @@ import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
-import org.observe.quick.QuickElement;
+import org.observe.expresso.qonfig.ExElement;
 import org.observe.quick.QuickStyledElement;
 import org.observe.quick.QuickWidget;
 import org.observe.util.TypeTokens;
@@ -29,7 +29,7 @@ public class QuickButton extends QuickWidget.Abstract {
 		private CompiledExpression theIcon;
 		private CompiledExpression theAction;
 
-		public Def(QuickElement.Def<?> parent, QonfigElement element) {
+		public Def(ExElement.Def<?> parent, QonfigElement element) {
 			super(parent, element);
 		}
 
@@ -55,7 +55,7 @@ public class QuickButton extends QuickWidget.Abstract {
 		}
 
 		@Override
-		public Interpreted<? extends B> interpret(QuickElement.Interpreted<?> parent) {
+		public Interpreted<? extends B> interpret(ExElement.Interpreted<?> parent) {
 			return new Interpreted<>(this, parent);
 		}
 	}
@@ -65,7 +65,7 @@ public class QuickButton extends QuickWidget.Abstract {
 		private ExFunction<ModelSetInstance, SettableValue<Icon>, ModelInstantiationException> theIcon;
 		private InterpretedValueSynth<ObservableAction<?>, ObservableAction<?>> theAction;
 
-		public Interpreted(Def<? super B> definition, QuickElement.Interpreted<?> parent) {
+		public Interpreted(Def<? super B> definition, ExElement.Interpreted<?> parent) {
 			super(definition, parent);
 		}
 
@@ -102,7 +102,7 @@ public class QuickButton extends QuickWidget.Abstract {
 		}
 
 		@Override
-		public B create(QuickElement parent) {
+		public B create(ExElement parent) {
 			return (B) new QuickButton(this, parent);
 		}
 	}
@@ -111,7 +111,7 @@ public class QuickButton extends QuickWidget.Abstract {
 	private SettableValue<Icon> theIcon;
 	private ObservableAction<?> theAction;
 
-	public QuickButton(Interpreted<?> interpreted, QuickElement parent) {
+	public QuickButton(Interpreted<?> interpreted, ExElement parent) {
 		super(interpreted, parent);
 	}
 
@@ -128,7 +128,7 @@ public class QuickButton extends QuickWidget.Abstract {
 	}
 
 	@Override
-	protected void updateModel(QuickElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
+	protected void updateModel(ExElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
 		super.updateModel(interpreted, myModels);
 		QuickButton.Interpreted<?> myInterpreted = (QuickButton.Interpreted<?>) interpreted;
 		theText = myInterpreted.getText() == null ? null : myInterpreted.getText().get(myModels);

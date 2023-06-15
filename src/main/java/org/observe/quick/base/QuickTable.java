@@ -14,7 +14,7 @@ import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
-import org.observe.quick.QuickElement;
+import org.observe.expresso.qonfig.ExElement;
 import org.observe.quick.QuickStyledElement;
 import org.observe.util.TypeTokens;
 import org.qommons.collect.CollectionUtils;
@@ -26,27 +26,27 @@ import com.google.common.reflect.TypeToken;
 public class QuickTable<R> extends TabularWidget.Abstract<R> {
 	public static final String TABLE = "table";
 
-	public static final QuickElement.AttributeValueGetter<QuickTable<?>, Interpreted<?>, Def> ROWS = QuickElement.AttributeValueGetter
+	public static final ExElement.AttributeValueGetter<QuickTable<?>, Interpreted<?>, Def> ROWS = ExElement.AttributeValueGetter
 		.ofX(Def::getRows, Interpreted::getRows, QuickTable::getRows, "The rows to display in the table");
 
-	public static final QuickElement.ChildElementGetter<QuickTable<?>, Interpreted<?>, Def> ACTIONS = new QuickElement.ChildElementGetter<QuickTable<?>, Interpreted<?>, Def>() {
+	public static final ExElement.ChildElementGetter<QuickTable<?>, Interpreted<?>, Def> ACTIONS = new ExElement.ChildElementGetter<QuickTable<?>, Interpreted<?>, Def>() {
 		@Override
 		public String getDescription() {
 			return "Actions that may be performed on rows, groups of rows, or the data set as a whole";
 		}
 
 		@Override
-		public List<? extends QuickElement.Def<?>> getChildrenFromDef(Def def) {
+		public List<? extends ExElement.Def<?>> getChildrenFromDef(Def def) {
 			return def.getActions();
 		}
 
 		@Override
-		public List<? extends QuickElement.Interpreted<?>> getChildrenFromInterpreted(Interpreted<?> interp) {
+		public List<? extends ExElement.Interpreted<?>> getChildrenFromInterpreted(Interpreted<?> interp) {
 			return interp.getActions();
 		}
 
 		@Override
-		public List<? extends QuickElement> getChildrenFromElement(QuickTable<?> element) {
+		public List<? extends ExElement> getChildrenFromElement(QuickTable<?> element) {
 			return element.getActions();
 		}
 	};
@@ -58,7 +58,7 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 		private CompiledExpression theMultiSelection;
 		private final List<ValueAction.Def<?, ?>> theActions;
 
-		public Def(QuickElement.Def<?> parent, QonfigElement element) {
+		public Def(ExElement.Def<?> parent, QonfigElement element) {
 			super(parent, element);
 			theActions = new ArrayList<>();
 		}
@@ -96,11 +96,11 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 			theValueName = session.getAttributeText("value-name");
 			theSelection = session.getAttributeExpression("selection");
 			theMultiSelection = session.getAttributeExpression("multi-selection");
-			QuickElement.syncDefs(ValueAction.Def.class, theActions, session.forChildren("action"));
+			ExElement.syncDefs(ValueAction.Def.class, theActions, session.forChildren("action"));
 		}
 
 		@Override
-		public Interpreted<?> interpret(QuickElement.Interpreted<?> parent) {
+		public Interpreted<?> interpret(ExElement.Interpreted<?> parent) {
 			return new Interpreted<>(this, parent);
 		}
 	}
@@ -111,7 +111,7 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 		private InterpretedValueSynth<ObservableCollection<?>, ObservableCollection<R>> theMultiSelection;
 		private final List<ValueAction.Interpreted<R, ?>> theActions;
 
-		public Interpreted(Def definition, QuickElement.Interpreted<?> parent) {
+		public Interpreted(Def definition, ExElement.Interpreted<?> parent) {
 			super(definition, parent);
 			theActions = new ArrayList<>();
 		}
@@ -171,7 +171,7 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 		}
 
 		@Override
-		public QuickTable<R> create(QuickElement parent) {
+		public QuickTable<R> create(ExElement parent) {
 			return new QuickTable<>(this, parent);
 		}
 	}
@@ -181,7 +181,7 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 	private final SettableValue<ObservableCollection<R>> theMultiSelection;
 	private final ObservableCollection<ValueAction<R>> theActions;
 
-	public QuickTable(Interpreted<R> interpreted, QuickElement parent) {
+	public QuickTable(Interpreted<R> interpreted, ExElement parent) {
 		super(interpreted, parent);
 		theRows = SettableValue
 			.build(
@@ -216,7 +216,7 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 	}
 
 	@Override
-	protected void updateModel(QuickElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
+	protected void updateModel(ExElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
 		super.updateModel(interpreted, myModels);
 		QuickTable.Interpreted<R> myInterpreted = (QuickTable.Interpreted<R>) interpreted;
 		theRows.set(myInterpreted.getRows().get(myModels), null);

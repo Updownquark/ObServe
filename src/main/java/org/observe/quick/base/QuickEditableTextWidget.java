@@ -6,7 +6,7 @@ import org.observe.expresso.ExpressoQIS;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
-import org.observe.quick.QuickElement;
+import org.observe.expresso.qonfig.ExElement;
 import org.observe.quick.QuickTextWidget;
 import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElement;
@@ -19,12 +19,12 @@ public interface QuickEditableTextWidget<T> extends QuickTextWidget<T> {
 		boolean isCommitOnType();
 
 		@Override
-		Interpreted<?, ? extends W> interpret(QuickElement.Interpreted<?> parent);
+		Interpreted<?, ? extends W> interpret(ExElement.Interpreted<?> parent);
 
 		public abstract class Abstract<T, W extends QuickEditableTextWidget<T>> extends QuickTextWidget.Def.Abstract<T, W> implements Def<W> {
 			private boolean isCommitOnType;
 
-			protected Abstract(QuickElement.Def<?> parent, QonfigElement element) {
+			protected Abstract(ExElement.Def<?> parent, QonfigElement element) {
 				super(parent, element);
 			}
 
@@ -48,7 +48,7 @@ public interface QuickEditableTextWidget<T> extends QuickTextWidget<T> {
 
 		public abstract class Abstract<T, W extends QuickEditableTextWidget<T>> extends QuickTextWidget.Interpreted.Abstract<T, W>
 		implements Interpreted<T, W> {
-			protected Abstract(QuickEditableTextWidget.Def<? super W> definition, QuickElement.Interpreted<?> parent) {
+			protected Abstract(QuickEditableTextWidget.Def<? super W> definition, ExElement.Interpreted<?> parent) {
 				super(definition, parent);
 			}
 
@@ -97,7 +97,7 @@ public interface QuickEditableTextWidget<T> extends QuickTextWidget<T> {
 		private final SettableValue<SettableValue<String>> theErrorStatus;
 		private final SettableValue<SettableValue<String>> theWarningStatus;
 
-		protected Abstract(QuickEditableTextWidget.Interpreted<T, ?> interpreted, QuickElement parent) {
+		protected Abstract(QuickEditableTextWidget.Interpreted<T, ?> interpreted, ExElement parent) {
 			super(interpreted, parent);
 			theErrorStatus = SettableValue
 				.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<String>> parameterized(String.class)).build();
@@ -109,12 +109,12 @@ public interface QuickEditableTextWidget<T> extends QuickTextWidget<T> {
 		}
 
 		@Override
-		protected void updateModel(QuickElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
+		protected void updateModel(ExElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
 			super.updateModel(interpreted, myModels);
 			QuickEditableTextWidget.Interpreted<T, ?> myInterpreted = (QuickEditableTextWidget.Interpreted<T, ?>) interpreted;
 			isCommitOnType = myInterpreted.getDefinition().isCommitOnType();
-			QuickElement.satisfyContextValue("error", ModelTypes.Value.STRING, SettableValue.flatten(theErrorStatus), myModels, this);
-			QuickElement.satisfyContextValue("warning", ModelTypes.Value.STRING, SettableValue.flatten(theWarningStatus), myModels, this);
+			ExElement.satisfyContextValue("error", ModelTypes.Value.STRING, SettableValue.flatten(theErrorStatus), myModels, this);
+			ExElement.satisfyContextValue("warning", ModelTypes.Value.STRING, SettableValue.flatten(theWarningStatus), myModels, this);
 		}
 
 		@Override

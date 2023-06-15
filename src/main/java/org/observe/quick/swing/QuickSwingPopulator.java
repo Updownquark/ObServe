@@ -43,6 +43,7 @@ import org.observe.Subscription;
 import org.observe.collect.ObservableCollection;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ModelInstantiationException;
+import org.observe.expresso.qonfig.ExAddOn;
 import org.observe.quick.*;
 import org.observe.quick.QuickTextElement.QuickTextStyle;
 import org.observe.quick.base.*;
@@ -2139,7 +2140,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 	 * @param widgetType The type of the interpreted quick widget
 	 * @param modifier Modifies a {@link QuickSwingPopulator} for interpreted widgets of the given type
 	 */
-	public static <W extends QuickWidget, AO extends QuickAddOn<? super W>, AOI extends QuickAddOn.Interpreted<? super W, ? extends AO>> void modifyForAddOn(//
+	public static <W extends QuickWidget, AO extends ExAddOn<? super W>, AOI extends ExAddOn.Interpreted<? super W, ? extends AO>> void modifyForAddOn(//
 		Transformer.Builder<ExpressoInterpretationException> transformer, Class<AOI> interpretedType,
 		Class<? extends QuickWidget.Interpreted<W>> widgetType,
 			ExTriConsumer<? super AOI, QuickSwingPopulator<?>, Transformer<ExpressoInterpretationException>, ExpressoInterpretationException> modifier) {
