@@ -1,6 +1,5 @@
 package org.observe.quick.style;
 
-import java.util.Collections;
 import java.util.List;
 
 import org.observe.SettableValue;
@@ -8,7 +7,6 @@ import org.observe.expresso.CompiledExpression;
 import org.observe.expresso.ExpressoQIS;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.qonfig.ExElement;
-import org.observe.quick.QuickStyledElement;
 import org.observe.util.TypeTokens;
 import org.qommons.config.AbstractQIS;
 import org.qommons.config.QonfigChildDef;
@@ -32,28 +30,8 @@ public class QuickStyleElement extends ExElement.Abstract {
 	private static final ExElement.AttributeValueGetter.Expression<QuickStyleElement, Interpreted, Def, SettableValue<?>, SettableValue<?>> VALUE//
 	= ExElement.AttributeValueGetter.ofX(Def::getValue, Interpreted::getValue, QuickStyleElement::getValue,
 		"The value for the style's attribute, when it applies");
-	private static final ExElement.ChildElementGetter<QuickStyleElement, Interpreted, Def> STYLE_ELEMENTS//
-	= new ExElement.ChildElementGetter<QuickStyleElement, Interpreted, Def>() {
-		@Override
-		public String getDescription() {
-			return "Styles declared on the element itself";
-		}
-
-		@Override
-		public List<? extends QuickStyleElement.Def> getChildrenFromDef(Def def) {
-			return def.getChildren();
-		}
-
-		@Override
-		public List<? extends QuickStyleElement.Interpreted> getChildrenFromInterpreted(Interpreted interp) {
-			return Collections.emptyList(); // TODO Fill in when we have the type
-		}
-
-		@Override
-		public List<? extends QuickStyledElement> getChildrenFromElement(QuickStyleElement element) {
-			return Collections.emptyList(); // TODO Fill in when we have the type
-		}
-	};
+	private static final ExElement.ChildElementGetter<QuickStyleElement, Interpreted, Def> STYLE_ELEMENTS = ExElement.ChildElementGetter
+		.<QuickStyleElement, Interpreted, Def> of(Def::getChildren, null, null, "Styles declared on the element itself");
 
 	public static class Def extends ExElement.Def.Abstract<QuickStyleElement> {
 		private final QonfigElementOrAddOn theStyleElement;

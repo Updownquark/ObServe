@@ -1,12 +1,9 @@
 package org.observe.quick.style;
 
-import java.util.Collections;
 import java.util.List;
 
 import org.observe.expresso.ExpressoQIS;
 import org.observe.expresso.qonfig.ExElement;
-import org.observe.expresso.qonfig.ExElement.Def;
-import org.observe.expresso.qonfig.ExElement.Interpreted;
 import org.qommons.Named;
 import org.qommons.config.AbstractQIS;
 import org.qommons.config.QonfigInterpretationException;
@@ -15,27 +12,8 @@ public class QuickStyleSet extends ExElement.Def.Abstract<ExElement> implements 
 	private static final ExElement.AttributeValueGetter<ExElement, ExElement.Interpreted<?>, QuickStyleSet> NAME//
 	= ExElement.AttributeValueGetter.of(QuickStyleSet::getName, null, null,
 		"The name by which the style set may be referred to from documents using the style sheet");
-	private static final ExElement.ChildElementGetter<ExElement, ExElement.Interpreted<?>, QuickStyleSet> STYLE_ELEMENTS = new ExElement.ChildElementGetter<ExElement, ExElement.Interpreted<?>, QuickStyleSet>() {
-		@Override
-		public String getDescription() {
-			return "Style values for this style set";
-		}
-
-		@Override
-		public List<? extends Def<?>> getChildrenFromDef(QuickStyleSet def) {
-			return def.getStyleElements();
-		}
-
-		@Override
-		public List<? extends Interpreted<?>> getChildrenFromInterpreted(Interpreted<?> interp) {
-			return Collections.emptyList();
-		}
-
-		@Override
-		public List<? extends ExElement> getChildrenFromElement(ExElement element) {
-			return Collections.emptyList();
-		}
-	};
+	private static final ExElement.ChildElementGetter<ExElement, ExElement.Interpreted<?>, QuickStyleSet> STYLE_ELEMENTS = ExElement.ChildElementGetter.<ExElement, ExElement.Interpreted<?>, QuickStyleSet> of(
+		QuickStyleSet::getStyleElements, null, null, "Style values for this style set");
 
 	private final String theName;
 	private final List<QuickStyleValue<?>> theValues;

@@ -66,6 +66,8 @@ public interface TabularWidget<R> extends MultiValueWidget<R>, RowTyped<R> {
 			@Override
 			public void update(ExpressoQIS session) throws QonfigInterpretationException {
 				forChild(session.getRole("columns"), COLUMNS);
+				forAttribute(session.getAttributeDef(null, null, "selection"), SELECTION);
+				forAttribute(session.getAttributeDef(null, null, "multi-selection"), MULTI_SELECTION);
 				super.update(session.asElement(session.getFocusType().getSuperElement() // multi-value-widget
 					.getSuperElement() // widget
 					));

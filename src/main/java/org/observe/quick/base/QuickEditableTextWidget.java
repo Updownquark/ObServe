@@ -15,6 +15,10 @@ import org.qommons.config.QonfigInterpretationException;
 public interface QuickEditableTextWidget<T> extends QuickTextWidget<T> {
 	public static final String EDITABLE_TEXT_WIDGET = "editable-text-widget";
 
+	public static final ExElement.AttributeValueGetter<QuickEditableTextWidget<?>, Interpreted<?, ?>, Def<?>> COMMIT_ON_TYPE = ExElement.AttributeValueGetter
+		.<QuickEditableTextWidget<?>, Interpreted<?, ?>, Def<?>> of(Def::isCommitOnType, null, null,
+			"Whether the widget's value is changed as the user types, or only when they take some action to commit, like typing enter or changing focus");
+
 	public interface Def<W extends QuickEditableTextWidget<?>> extends QuickTextWidget.Def<W> {
 		boolean isCommitOnType();
 
@@ -36,6 +40,7 @@ public interface QuickEditableTextWidget<T> extends QuickTextWidget<T> {
 			@Override
 			public void update(ExpressoQIS session) throws QonfigInterpretationException {
 				checkElement(session.getFocusType(), QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, EDITABLE_TEXT_WIDGET);
+				forAttribute(session.getAttributeDef(null, null, "commit-on-type"), COMMIT_ON_TYPE);
 				super.update(session.asElement(session.getFocusType().getSuperElement()));
 				isCommitOnType = session.getAttribute("commit-on-type", boolean.class);
 			}

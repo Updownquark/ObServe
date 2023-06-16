@@ -18,6 +18,13 @@ import com.google.common.reflect.TypeToken;
 public class QuickTextArea<T> extends QuickEditableTextWidget.Abstract<T> {
 	public static final String TEXT_AREA = "text-area";
 
+	public static final ExElement.AttributeValueGetter.Expression<QuickTextArea<?>, Interpreted<?>, Def<?>, SettableValue<?>, SettableValue<Integer>> ROWS = ExElement.AttributeValueGetter
+		.<QuickTextArea<?>, Interpreted<?>, Def<?>, SettableValue<?>, SettableValue<Integer>> ofX(Def::getRows, Interpreted::getRows,
+			QuickTextArea::getRows, "The number of rows of text for the text area");
+	public static final ExElement.AttributeValueGetter.Expression<QuickTextArea<?>, Interpreted<?>, Def<?>, SettableValue<?>, SettableValue<Boolean>> HTML = ExElement.AttributeValueGetter
+		.<QuickTextArea<?>, Interpreted<?>, Def<?>, SettableValue<?>, SettableValue<Boolean>> ofX(Def::isHtml, Interpreted::isHtml,
+			QuickTextArea::isHovered, "Whether to accept HTML content and format it accordingly");
+
 	public static class Def<T> extends QuickEditableTextWidget.Def.Abstract<T, QuickTextArea<T>> {
 		private CompiledExpression theRows;
 		private CompiledExpression isHtml;
@@ -42,6 +49,8 @@ public class QuickTextArea<T> extends QuickEditableTextWidget.Abstract<T> {
 		@Override
 		public void update(ExpressoQIS session) throws QonfigInterpretationException {
 			checkElement(session.getFocusType(), QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, TEXT_AREA);
+			forAttribute(session.getAttributeDef(null, null, "rows"), ROWS);
+			forAttribute(session.getAttributeDef(null, null, "html"), HTML);
 			super.update(session.asElement(session.getFocusType().getSuperElement()));
 			theRows = session.getAttributeExpression("rows");
 			isHtml = session.getAttributeExpression("html");

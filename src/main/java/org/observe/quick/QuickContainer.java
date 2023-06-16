@@ -1,7 +1,5 @@
 package org.observe.quick;
 
-import java.util.List;
-
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ExpressoQIS;
 import org.observe.expresso.ModelInstantiationException;
@@ -22,27 +20,9 @@ import org.qommons.tree.BetterTreeList;
 public interface QuickContainer<C extends QuickWidget> extends QuickWidget {
 	public static final String CONTAINER = "container";
 
-	public static final ExElement.ChildElementGetter<QuickContainer<?>, Interpreted<?, ?>, Def<?, ?>> CONTENTS = new ExElement.ChildElementGetter<QuickContainer<?>, Interpreted<?, ?>, Def<?, ?>>() {
-		@Override
-		public String getDescription() {
-			return "A widget displayed inside the container";
-		}
-
-		@Override
-		public List<? extends ExElement.Def<?>> getChildrenFromDef(Def<?, ?> def) {
-			return def.getContents();
-		}
-
-		@Override
-		public List<? extends ExElement.Interpreted<?>> getChildrenFromInterpreted(Interpreted<?, ?> interp) {
-			return interp.getContents();
-		}
-
-		@Override
-		public List<? extends ExElement> getChildrenFromElement(QuickContainer<?> element) {
-			return element.getContents();
-		}
-	};
+	public static final ExElement.ChildElementGetter<QuickContainer<?>, Interpreted<?, ?>, Def<?, ?>> CONTENTS = ExElement.ChildElementGetter
+		.<QuickContainer<?>, Interpreted<?, ?>, Def<?, ?>> of(Def::getContents, Interpreted::getContents, QuickContainer::getContents,
+			"A widget displayed inside the container");
 
 	/**
 	 * The definition of a QuickContainer

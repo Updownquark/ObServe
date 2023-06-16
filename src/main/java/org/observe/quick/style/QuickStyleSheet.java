@@ -17,10 +17,10 @@ import org.qommons.config.QonfigInterpretationException;
 /** A structure containing many {@link #getValues() style values} that may apply to all &lt;styled> elements in a document */
 public class QuickStyleSheet extends ExElement.Def.Abstract<ExElement> {
 	public static class StyleSheetRef extends ExElement.Def.Abstract<ExElement> {
-		public static final ExElement.AttributeValueGetter<ExElement, ExElement.Interpreted<?>, StyleSheetRef> NAME//
+		private static final ExElement.AttributeValueGetter<ExElement, ExElement.Interpreted<?>, StyleSheetRef> NAME//
 		= ExElement.AttributeValueGetter.of(StyleSheetRef::getName, null, null,
 			"The name by which the imported style sheet may be referred to in the document");
-		public static final ExElement.AttributeValueGetter<ExElement, ExElement.Interpreted<?>, StyleSheetRef> REF//
+		private static final ExElement.AttributeValueGetter<ExElement, ExElement.Interpreted<?>, StyleSheetRef> REF//
 		= ExElement.AttributeValueGetter.<ExElement, ExElement.Interpreted<?>, StyleSheetRef> of(StyleSheetRef::getReference, null,
 			null, "The URL location of the imported style sheet's data");
 
@@ -140,6 +140,7 @@ public class QuickStyleSheet extends ExElement.Def.Abstract<ExElement> {
 		theStyleElements = styleElements;
 		forChild(session.getRole("style-sheet-ref"), IMPORTED);
 		forChild(session.getRole("style-set"), STYLE_SETS);
+		forChild(session.getRole("style"), STYLE_ELEMENTS);
 	}
 
 	/** @return The location where this standalone style sheet was parsed from */

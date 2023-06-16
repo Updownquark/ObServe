@@ -107,6 +107,10 @@ public interface QuickBorder extends QuickStyledElement {
 	public class TitledBorder extends LineBorder {
 		public static final String TITLED_BORDER = "titled-border";
 
+		public static final ExElement.AttributeValueGetter.Expression<TitledBorder, Interpreted<?>, Def<?>, SettableValue<?>, SettableValue<String>> TITLE = ExElement.AttributeValueGetter
+			.<TitledBorder, Interpreted<?>, Def<?>, SettableValue<?>, SettableValue<String>> ofX(Def::getTitle, Interpreted::getTitle,
+				TitledBorder::getTitle, "The title to display for the border");
+
 		public static class Def<B extends TitledBorder> extends LineBorder.Def<B> {
 			private CompiledExpression theTitle;
 
@@ -121,6 +125,7 @@ public interface QuickBorder extends QuickStyledElement {
 			@Override
 			public void update(ExpressoQIS session) throws QonfigInterpretationException {
 				checkElement(session.getFocusType(), QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, TITLED_BORDER);
+				forAttribute(session.getAttributeDef(null, null, "title"), TITLE);
 				super.update(session.asElement(session.getFocusType().getSuperElement()));
 				theTitle = session.getAttributeExpression("title");
 			}

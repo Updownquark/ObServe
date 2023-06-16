@@ -24,6 +24,16 @@ import com.google.common.reflect.TypeToken;
 public class QuickButton extends QuickWidget.Abstract {
 	public static final String BUTTON = "button";
 
+	public static final ExElement.AttributeValueGetter.Expression<QuickButton, Interpreted<?>, Def<?>, ObservableAction<?>, ObservableAction<?>> ACTION = ExElement.AttributeValueGetter
+		.<QuickButton, Interpreted<?>, Def<?>, ObservableAction<?>, ObservableAction<?>> ofX(Def::getAction, Interpreted::getAction,
+			QuickButton::getAction, "The action to perform when the button is pressed");
+	public static final ExElement.AttributeValueGetter<QuickButton, Interpreted<?>, Def<?>> ICON = ExElement.AttributeValueGetter
+		.<QuickButton, Interpreted<?>, Def<?>> of(Def::getIcon, Interpreted::getIcon, QuickButton::getIcon,
+			"The icon to display for the button");
+	public static final ExElement.AttributeValueGetter<QuickButton, Interpreted<?>, Def<?>> VALUE = ExElement.AttributeValueGetter
+		.<QuickButton, Interpreted<?>, Def<?>> of(Def::getText, Interpreted::getText, QuickButton::getText,
+			"The text to display for the button");
+
 	public static class Def<B extends QuickButton> extends QuickWidget.Def.Abstract<B> {
 		private CompiledExpression theText;
 		private CompiledExpression theIcon;
@@ -48,6 +58,9 @@ public class QuickButton extends QuickWidget.Abstract {
 		@Override
 		public void update(ExpressoQIS session) throws QonfigInterpretationException {
 			checkElement(session.getFocusType(), QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, BUTTON);
+			forAttribute(session.getAttributeDef(null, null, "action"), ACTION);
+			forAttribute(session.getAttributeDef(null, null, "icon"), ICON);
+			forValue(VALUE);
 			super.update(session.asElement(session.getFocusType().getSuperElement()));
 			theText = session.getValueExpression();
 			theIcon = session.getAttributeExpression("icon");

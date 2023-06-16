@@ -105,8 +105,8 @@ public interface ExElement extends Identifiable {
 			private final Function<? super E, ?> theElementGetter;
 			private final String theDescription;
 
-			public Default(Function<? super D, ?> defGetter, Function<? super I, ?> interpretedGetter,
-				Function<? super E, ?> elementGetter, String descrip) {
+			public Default(Function<? super D, ?> defGetter, Function<? super I, ?> interpretedGetter, Function<? super E, ?> elementGetter,
+				String descrip) {
 				theDefGetter = defGetter;
 				theInterpretedGetter = interpretedGetter;
 				theElementGetter = elementGetter;
@@ -215,6 +215,32 @@ public interface ExElement extends Identifiable {
 		List<? extends ExElement.Interpreted<?>> getChildrenFromInterpreted(I interp);
 
 		List<? extends ExElement> getChildrenFromElement(E element);
+
+		public static <E extends ExElement, I extends ExElement.Interpreted<? extends E>, D extends ExElement.Def<? extends E>> ChildElementGetter<E, I, D> of(
+			Function<D, List<? extends ExElement.Def<?>>> defGetter, Function<I, List<? extends ExElement.Interpreted<?>>> interpGetter,
+			Function<E, List<? extends ExElement>> elGetter, String descrip) {
+			return new ChildElementGetter<E, I, D>() {
+				@Override
+				public String getDescription() {
+					return descrip;
+				}
+
+				@Override
+				public List<? extends Def<?>> getChildrenFromDef(D def) {
+					return defGetter.apply(def);
+				}
+
+				@Override
+				public List<? extends Interpreted<?>> getChildrenFromInterpreted(I interp) {
+					return interpGetter == null ? Collections.emptyList() : interpGetter.apply(interp);
+				}
+
+				@Override
+				public List<? extends ExElement> getChildrenFromElement(E element) {
+					return elGetter == null ? Collections.emptyList() : elGetter.apply(element);
+				}
+			};
+		}
 	}
 
 	/**
@@ -588,6 +614,8 @@ public interface ExElement extends Identifiable {
 						addOn.update(session.asElement(addOn.getType()), this);
 
 					// Ensure implementation added all attribute/child getters
+					if (theValue == null && theElement.getType().getValue() != null)
+						theReporting.warn(getClass() + ": Value getter not declared for " + theElement.getType().getValue().getOwner());
 					for (QonfigAttributeDef.Declared attr : session.getElement().getType().getAllAttributes().keySet()) {
 						if (!theAttributes.containsKey(attr))
 							theReporting.warn(getClass() + ": Attribute getter not declared for " + attr);
@@ -668,8 +696,7 @@ public interface ExElement extends Identifiable {
 		 * @param fn Produces the value from the add on if it exists
 		 * @return The value from the given add on in this element definition, or null if no such add-on is present
 		 */
-		default <AO extends ExAddOn.Interpreted<? super E, ?>, T> T getAddOnValue(Class<AO> addOn,
-			Function<? super AO, ? extends T> fn) {
+		default <AO extends ExAddOn.Interpreted<? super E, ?>, T> T getAddOnValue(Class<AO> addOn, Function<? super AO, ? extends T> fn) {
 			AO ao = getAddOn(addOn);
 			return ao == null ? null : fn.apply(ao);
 		}

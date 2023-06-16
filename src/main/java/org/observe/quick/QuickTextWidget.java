@@ -50,6 +50,15 @@ public interface QuickTextWidget<T> extends QuickValueWidget<T> {
 		}
 	};
 
+	public static final ExElement.AttributeValueGetter.Expression<QuickTextWidget<?>, Interpreted<?, ?>, Def<?>, SettableValue<?>, SettableValue<? extends Format<?>>> FORMAT = ExElement.AttributeValueGetter
+		.<QuickTextWidget<?>, Interpreted<?, ?>, Def<?>, SettableValue<?>, SettableValue<? extends Format<?>>> ofX(def -> def.getFormat(),
+			interp -> interp.getFormat(), w -> w.getFormat(),
+			"The format to use to display the widget's value to the user and allow them to edit it");
+	public static final ExElement.AttributeValueGetter.Expression<QuickTextWidget<?>, Interpreted<?, ?>, Def<?>, SettableValue<?>, SettableValue<Boolean>> EDITABLE = ExElement.AttributeValueGetter
+		.<QuickTextWidget<?>, Interpreted<?, ?>, Def<?>, SettableValue<?>, SettableValue<Boolean>> ofX(Def::isEditable,
+			Interpreted::isEditable, QuickTextWidget::isEditable, "Whether the user can modify the text in the widget."
+				+ "This is distinct from disable-with in that some UIs differentiate visually between disabled and uneditable widgets");
+
 	public interface Def<W extends QuickTextWidget<?>> extends QuickValueWidget.Def<W> {
 		CompiledExpression getFormat();
 
@@ -81,6 +90,8 @@ public interface QuickTextWidget<T> extends QuickValueWidget<T> {
 			@Override
 			public void update(ExpressoQIS session) throws QonfigInterpretationException {
 				checkElement(session.getFocusType(), QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, TEXT_WIDGET);
+				forAttribute(session.getAttributeDef(null, null, "format"), FORMAT);
+				forAttribute(session.getAttributeDef(null, null, "editable"), EDITABLE);
 				super.update(session.asElement(session.getFocusType().getSuperElement()));
 				theFormat = session.getAttributeExpression("format");
 				isEditable = session.getAttributeExpression("editable");

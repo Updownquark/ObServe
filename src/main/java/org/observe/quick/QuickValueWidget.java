@@ -11,7 +11,6 @@ import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet.CompiledModelValue;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
-import org.observe.expresso.ObservableModelSet.ModelValueSynth;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElement;
@@ -21,6 +20,17 @@ import com.google.common.reflect.TypeToken;
 
 public interface QuickValueWidget<T> extends QuickWidget {
 	public static final String VALUE_WIDGET = "value-widget";
+
+	public static final ExElement.AttributeValueGetter.Expression<QuickValueWidget<?>, Interpreted<?, ?>, Def<?>, SettableValue<?>, SettableValue<?>> VALUE//
+	= ExElement.AttributeValueGetter.<QuickValueWidget<?>, Interpreted<?, ?>, Def<?>, SettableValue<?>, SettableValue<?>> ofX(
+		Def::getValue, Interpreted::getValue, QuickValueWidget::getValue, "The value to edit with the widget");
+	public static final ExElement.AttributeValueGetter.Expression<QuickValueWidget<?>, Interpreted<?, ?>, Def<?>, SettableValue<?>, SettableValue<String>> DISABLE_WITH//
+	= ExElement.AttributeValueGetter.<QuickValueWidget<?>, Interpreted<?, ?>, Def<?>, SettableValue<?>, SettableValue<String>> ofX(
+		Def::getDisabled, Interpreted::getDisabled, QuickValueWidget::getDisabled,
+		"A value to disable this widget.  If the value is non-null, the widget will be disabled and the value will be displayed to the user.");
+	public static final ExElement.AttributeValueGetter<QuickValueWidget<?>, Interpreted<?, ?>, Def<?>> VALUE_NAME = ExElement.AttributeValueGetter
+		.<QuickValueWidget<?>, Interpreted<?, ?>, Def<?>> of(Def::getValueName, null, null,
+			"The name of this widget's value for use in internal expressions");
 
 	public interface Def<W extends QuickValueWidget<?>> extends QuickWidget.Def<W> {
 		String getValueName();
@@ -59,6 +69,9 @@ public interface QuickValueWidget<T> extends QuickWidget {
 			@Override
 			public void update(ExpressoQIS session) throws QonfigInterpretationException {
 				checkElement(session.getFocusType(), QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, VALUE_WIDGET);
+				forAttribute(session.getAttributeDef(null, null, "value"), VALUE);
+				forAttribute(session.getAttributeDef(null, null, "value-name"), VALUE_NAME);
+				forAttribute(session.getAttributeDef(null, null, "disable-with"), DISABLE_WITH);
 				super.update(session.asElement(session.getFocusType().getSuperElement()));
 				theValueName = session.getAttributeText("value-name");
 				theValue = session.getAttributeExpression("value");
@@ -75,6 +88,8 @@ public interface QuickValueWidget<T> extends QuickWidget {
 
 		InterpretedValueSynth<SettableValue<?>, SettableValue<T>> getValue();
 
+		InterpretedValueSynth<SettableValue<?>, SettableValue<String>> getDisabled();
+
 		default TypeToken<T> getValueType() {
 			return (TypeToken<T>) getValue().getType().getType(0);
 		}
@@ -82,6 +97,7 @@ public interface QuickValueWidget<T> extends QuickWidget {
 		public abstract class Abstract<T, W extends QuickValueWidget<T>> extends QuickWidget.Interpreted.Abstract<W>
 		implements Interpreted<T, W> {
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<T>> theValue;
+			private InterpretedValueSynth<SettableValue<?>, SettableValue<String>> theDisabled;
 
 			protected Abstract(QuickValueWidget.Def<? super W> definition, ExElement.Interpreted<?> parent) {
 				super(definition, parent);
@@ -98,22 +114,19 @@ public interface QuickValueWidget<T> extends QuickWidget {
 			}
 
 			@Override
-			public void update(QuickStyledElement.QuickInterpretationCache cache)
-				throws ExpressoInterpretationException {
+			public InterpretedValueSynth<SettableValue<?>, SettableValue<String>> getDisabled() {
+				return theDisabled;
+			}
+
+			@Override
+			public void update(QuickStyledElement.QuickInterpretationCache cache) throws ExpressoInterpretationException {
 				InterpretedValueSynth<SettableValue<?>, SettableValue<T>> value;
 				if (getDefinition().getValue() != null)
-					value = getDefinition().getValue().evaluate(ModelTypes.Value.<T> anyAsV()).interpret();
+					theValue = getDefinition().getValue().evaluate(ModelTypes.Value.<T> anyAsV()).interpret();
 				else
-					value = ((WidgetValueSupplier.Interpreted<T, ?>) getParentElement()).getValue();
-				InterpretedValueSynth<SettableValue<?>, SettableValue<String>> disabled = getDefinition().getDisabled() == null ? null
+					theValue = ((WidgetValueSupplier.Interpreted<T, ?>) getParentElement()).getValue();
+				theDisabled = getDefinition().getDisabled() == null ? null
 					: getDefinition().getDisabled().evaluate(ModelTypes.Value.STRING).interpret();
-				theValue = ModelValueSynth.of(value.getType(), msi -> {
-					SettableValue<T> valueInst = value.get(msi);
-					if (disabled == null)
-						return valueInst;
-					SettableValue<String> disabledInst = disabled.get(msi);
-					return valueInst.disableWith(disabledInst);
-				}).interpret();
 				DynamicModelValue.satisfyDynamicValue(getDefinition().getValueName(), getDefinition().getModels(),
 					CompiledModelValue.constant(theValue));
 				super.update(cache);
@@ -123,18 +136,28 @@ public interface QuickValueWidget<T> extends QuickWidget {
 
 	SettableValue<T> getValue();
 
+	SettableValue<String> getDisabled();
+
 	public abstract class Abstract<T> extends QuickWidget.Abstract implements QuickValueWidget<T> {
 		private final SettableValue<SettableValue<T>> theValue;
+		private final SettableValue<SettableValue<String>> theDisabled;
 
 		protected Abstract(QuickValueWidget.Interpreted<T, ?> interpreted, ExElement parent) {
 			super(interpreted, parent);
 			theValue = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class)
 				.<SettableValue<T>> parameterized((TypeToken<T>) interpreted.getValue().getType().getType(0))).build();
+			theDisabled = SettableValue
+				.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<String>> parameterized(String.class)).build();
 		}
 
 		@Override
 		public SettableValue<T> getValue() {
-			return SettableValue.flatten(theValue);
+			return SettableValue.flatten(theValue).disableWith(getDisabled());
+		}
+
+		@Override
+		public SettableValue<String> getDisabled() {
+			return SettableValue.flatten(theDisabled);
 		}
 
 		@Override
@@ -146,8 +169,7 @@ public interface QuickValueWidget<T> extends QuickWidget {
 	}
 
 	public interface WidgetValueSupplier<T> extends ExElement {
-		public interface Def<VS extends WidgetValueSupplier<?>> extends ExElement.Def<VS> {
-		}
+		public interface Def<VS extends WidgetValueSupplier<?>> extends ExElement.Def<VS> {}
 
 		public interface Interpreted<T, VS extends WidgetValueSupplier<T>> extends ExElement.Interpreted<VS> {
 			@Override

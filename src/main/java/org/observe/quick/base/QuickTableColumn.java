@@ -22,13 +22,17 @@ import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.TypeConversionException;
 import org.observe.expresso.qonfig.ExAddOn;
 import org.observe.expresso.qonfig.ExElement;
-import org.observe.expresso.TypeConversionException;
 import org.observe.quick.QuickStyledElement;
 import org.observe.quick.QuickStyledElement.QuickInterpretationCache;
 import org.observe.quick.QuickValueWidget;
 import org.observe.quick.QuickWidget;
+import org.observe.quick.style.CompiledStyleApplication;
+import org.observe.quick.style.InterpretedStyleApplication;
+import org.observe.quick.style.QuickCompiledStyle;
+import org.observe.quick.style.QuickInterpretedStyle;
 import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigElement;
@@ -593,7 +597,7 @@ public interface QuickTableColumn<R, C> {
 		}
 	}
 
-	public class SingleColumnSet<R, C> extends ExElement.Abstract implements TableColumnSet<R> {
+	public class SingleColumnSet<R, C> extends QuickStyledElement.Abstract implements TableColumnSet<R> {
 		public static final String COLUMN = "column";
 
 		public static final ExElement.AttributeValueGetter<SingleColumnSet<?, ?>, Interpreted<?, ?>, Def> NAME = ExElement.AttributeValueGetter
@@ -647,7 +651,7 @@ public interface QuickTableColumn<R, C> {
 			}
 		};
 
-		public static class Def extends ExElement.Def.Abstract<SingleColumnSet<?, ?>>
+		public static class Def extends QuickStyledElement.Def.Abstract<SingleColumnSet<?, ?>>
 		implements TableColumnSet.Def<SingleColumnSet<?, ?>> {
 			private CompiledExpression theName;
 			private String theColumnValueName;
@@ -708,12 +712,17 @@ public interface QuickTableColumn<R, C> {
 			}
 
 			@Override
+			protected ColumnStyle.Def wrap(QuickInstanceStyle.Def parentStyle, QuickCompiledStyle style) {
+				return new ColumnStyle.Def(parentStyle, style);
+			}
+
+			@Override
 			public <R> Interpreted<R, ?> interpret(ExElement.Interpreted<?> parent) {
 				return new Interpreted<>(this, (RowTyped.Interpreted<R, ?>) parent);
 			}
 		}
 
-		public static class Interpreted<R, C> extends ExElement.Interpreted.Abstract<SingleColumnSet<R, C>>
+		public static class Interpreted<R, C> extends QuickStyledElement.Interpreted.Abstract<SingleColumnSet<R, C>>
 		implements TableColumnSet.Interpreted<R, SingleColumnSet<R, C>> {
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<String>> theName;
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<C>> theValue;
@@ -772,7 +781,7 @@ public interface QuickTableColumn<R, C> {
 				theValue = getDefinition().getValue().evaluate(ModelTypes.Value.<C> anyAsV()).interpret();
 				DynamicModelValue.satisfyDynamicValueType(getDefinition().getColumnValueName(), getDefinition().getModels(),
 					theValue.getType());
-				super.update();
+				super.update(cache);
 				theName = getDefinition().getName().evaluate(ModelTypes.Value.STRING).interpret();
 				theHeaderTooltip = getDefinition().getHeaderTooltip() == null ? null
 					: getDefinition().getHeaderTooltip().evaluate(ModelTypes.Value.STRING).interpret();
@@ -962,6 +971,62 @@ public interface QuickTableColumn<R, C> {
 			@Override
 			public void update() {
 			}
+		}
+
+		public static class ColumnStyle implements QuickStyledElement.QuickInstanceStyle {
+			public static class Def extends QuickCompiledStyle.Wrapper implements QuickStyledElement.QuickInstanceStyle.Def {
+				public Def(QuickCompiledStyle parent, QuickCompiledStyle wrapped) {
+					super(parent, wrapped);
+				}
+
+				@Override
+				public ColumnStyle.Interpreted interpret(QuickInterpretedStyle parent,
+					Map<CompiledStyleApplication, InterpretedStyleApplication> applications) throws ExpressoInterpretationException {
+					return new Interpreted(this, parent, getWrapped().interpret(parent, applications));
+				}
+			}
+
+			public static class Interpreted extends QuickInterpretedStyle.Wrapper
+			implements QuickStyledElement.QuickInstanceStyle.Interpreted {
+				private final Def theCompiled;
+				private final Object theId;
+
+				public Interpreted(Def compiled, QuickInterpretedStyle parent, QuickInterpretedStyle wrapped) {
+					super(parent, wrapped);
+					theCompiled = compiled;
+					theId = new Object();
+				}
+
+				@Override
+				public Def getCompiled() {
+					return theCompiled;
+				}
+
+				@Override
+				public Object getId() {
+					return theId;
+				}
+
+				@Override
+				public QuickInstanceStyle create() {
+					return new ColumnStyle(this);
+				}
+			}
+
+			private final Object theId;
+
+			ColumnStyle(Interpreted interpreted) {
+				theId = interpreted.getId();
+			}
+
+			@Override
+			public Object getId() {
+				return theId;
+			}
+
+			@Override
+			public void update(QuickStyledElement.QuickInstanceStyle.Interpreted interpreted, ModelSetInstance models)
+				throws ModelInstantiationException {}
 		}
 	}
 }
