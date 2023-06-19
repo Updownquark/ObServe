@@ -45,7 +45,7 @@ public class QuickBox extends QuickContainer.Abstract<QuickWidget> {
 
 		@Override
 		public void update(ExpressoQIS session) throws QonfigInterpretationException {
-			checkElement(session.getFocusType(), QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, BOX);
+			ExElement.checkElement(session.getFocusType(), QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, BOX);
 			forAttribute(session.getAttributeDef(null, null, "layout"), LAYOUT);
 			forAttribute(session.getAttributeDef(null, null, "opacity"), OPACITY);
 			super.update(session.asElement(session.getFocusType().getSuperElement()));

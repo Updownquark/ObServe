@@ -34,6 +34,7 @@ import org.qommons.config.QonfigAttributeDef;
 import org.qommons.config.QonfigChildDef;
 import org.qommons.config.QonfigElement.QonfigValue;
 import org.qommons.config.QonfigParseException;
+import org.qommons.config.QonfigValueDef;
 import org.qommons.config.QonfigValueType;
 import org.qommons.io.CircularCharBuffer;
 import org.qommons.io.ErrorReporting;
@@ -439,9 +440,9 @@ public class Qwysiwyg {
 			String attrDescrip = def.getAttributeDescription(attr.getKey());
 			attrComp.tooltip2(() -> {
 				if (attrDescrip != null)
-					return "<html>" + attrDescrip + "<br><br>" + renderValueType(type, 1);
+					return "<html>" + attrDescrip + "<br><br>" + renderValueType(type, 1, attr.getKey());
 				else
-					return renderValueType(type, 1);
+					return renderValueType(type, 1, attr.getKey());
 			});
 		}
 		if (def.getElement().getValue() != null && def.getElement().getValue().position != null) {
@@ -457,9 +458,10 @@ public class Qwysiwyg {
 			String attrDescrip = def.getElementValueDescription();
 			attrValueComp.tooltip2(() -> {
 				if (attrDescrip != null)
-					return "<html>" + attrDescrip + "<br><br>" + renderValueType(type, 1);
+					return "<html>" + attrDescrip + "<br><br>"
+					+ renderValueType(type, 1, def.getElement().getType().getValue());
 				else
-					return renderValueType(type, 1);
+					return renderValueType(type, 1, def.getElement().getType().getValue());
 			});
 		}
 		for (ExElement.Def<?> child : def.getAllChildren()) {
@@ -477,32 +479,35 @@ public class Qwysiwyg {
 		}
 	}
 
-	static String renderValueType(QonfigValueType type, int indent) {
+	static String renderValueType(QonfigValueType type, int indent, QonfigValueDef value) {
+		String tt;
 		if (type instanceof QonfigValueType.Custom) {
 			CustomValueType customType = ((QonfigValueType.Custom) type).getCustomType();
 			if (customType instanceof ExpressionValueType)
-				return "expression";
+				tt = "expression";
 			else
-				return customType.getName() + " (" + customType.getClass().getName() + ")";
+				tt = customType.getName() + " (" + customType.getClass().getName() + ")";
 		} else if (type instanceof QonfigAddOn) {
-			return "Add-on " + type.toString();
+			tt = "Add-on " + type.toString();
 		} else if (type instanceof QonfigValueType.Literal)
-			return "'" + ((QonfigValueType.Literal) type).getValue() + "'";
+			tt = "'" + ((QonfigValueType.Literal) type).getValue() + "'";
 		else if (type instanceof QonfigValueType.OneOf) {
 			StringBuilder str = new StringBuilder("<html>").append(type.getName()).append(": one of<br>");
-			boolean first = true;
 			for (QonfigValueType sub : ((QonfigValueType.OneOf) type).getComponents()) {
-				if (first)
-					first = false;
-				else
-					str.append("<br>");
 				for (int i = 0; i < indent; i++)
 					str.append("  ");
-				str.append("\u2022 ").append(renderValueType(sub, indent + 1));
+				str.append("\u2022 ").append(renderValueType(sub, indent + 1, null)).append("<br>");
 			}
-			return str.toString();
+			tt = str.toString();
 		} else
-			return type.getName();
+			tt = type.getName();
+		if (value != null) {
+			tt += " (" + value.getSpecification();
+			if (value.getDefaultValue() != null)
+				tt += ", default " + value.getDefaultValue();
+			tt += ")";
+		}
+		return tt;
 	}
 
 	private void renderInterpreted() {

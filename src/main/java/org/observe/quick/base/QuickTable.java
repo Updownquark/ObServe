@@ -88,7 +88,7 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 
 		@Override
 		public void update(ExpressoQIS session) throws QonfigInterpretationException {
-			checkElement(session.getFocusType(), QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, TABLE);
+			ExElement.checkElement(session.getFocusType(), QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, TABLE);
 			forAttribute(session.getAttributeDef(null, null, "rows"), ROWS);
 			forChild(session.getRole("action"), ACTIONS);
 			super.update(session); // table is a tabular widget, tabular-widget is an add-on. Don't get the multi-value-widget super

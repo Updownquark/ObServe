@@ -18,6 +18,13 @@ import com.google.common.reflect.TypeToken;
 public class QuickTextField<T> extends QuickEditableTextWidget.Abstract<T> {
 	public static final String TEXT_FIELD = "text-field";
 
+	private static final ExElement.AttributeValueGetter.Expression<QuickTextField<?>, Interpreted<?>, Def<?>, SettableValue<?>, SettableValue<String>> EMPTY_TEXT = ExElement.AttributeValueGetter
+		.ofX(Def::getEmptyText, Interpreted::getEmptyText, QuickTextField::getEmptyText,
+			"The text cue to display to the user when the text field has no value");
+	private static final ExElement.AttributeValueGetter<QuickTextField<?>, Interpreted<?>, Def<?>> COLUMNS = ExElement.AttributeValueGetter
+		.of(Def::getColumns, i -> i.getDefinition().getColumns(), QuickTextField::getColumns,
+			"The number of columns of characters to configure the text field's width");
+
 	public static class Def<T> extends QuickEditableTextWidget.Def.Abstract<T, QuickTextField<T>> {
 		private Integer theColumns;
 		private CompiledExpression theEmptyText;
@@ -41,7 +48,9 @@ public class QuickTextField<T> extends QuickEditableTextWidget.Abstract<T> {
 
 		@Override
 		public void update(ExpressoQIS session) throws QonfigInterpretationException {
-			checkElement(session.getFocusType(), QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, TEXT_FIELD);
+			ExElement.checkElement(session.getFocusType(), QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, TEXT_FIELD);
+			forAttribute(session.getAttributeDef(null, null, "empty-text"), EMPTY_TEXT);
+			forAttribute(session.getAttributeDef(null, null, "columns"), COLUMNS);
 			super.update(session.asElement(session.getFocusType().getSuperElement()));
 			theColumns = session.getAttribute("columns", Integer.class);
 			theEmptyText = session.getAttributeExpression("empty-text");

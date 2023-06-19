@@ -39,7 +39,8 @@ public interface QuickEditableTextWidget<T> extends QuickTextWidget<T> {
 
 			@Override
 			public void update(ExpressoQIS session) throws QonfigInterpretationException {
-				checkElement(session.getFocusType(), QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, EDITABLE_TEXT_WIDGET);
+				ExElement.checkElement(session.getFocusType(), QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION,
+					EDITABLE_TEXT_WIDGET);
 				forAttribute(session.getAttributeDef(null, null, "commit-on-type"), COMMIT_ON_TYPE);
 				super.update(session.asElement(session.getFocusType().getSuperElement()));
 				isCommitOnType = session.getAttribute("commit-on-type", boolean.class);

@@ -180,7 +180,7 @@ public interface QuickWidget extends QuickTextElement {
 
 			@Override
 			public void update(ExpressoQIS session) throws QonfigInterpretationException {
-				checkElement(session.getFocusType(), QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, WIDGET);
+				ExElement.checkElement(session.getFocusType(), QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, WIDGET);
 				forAttribute(session.getAttributeDef(null, null, "name").getDeclared(), NAME);
 				forAttribute(session.getAttributeDef(null, null, "tooltip").getDeclared(), TOOLTIP);
 				forAttribute(session.getAttributeDef(null, null, "visible").getDeclared(), VISIBLE);

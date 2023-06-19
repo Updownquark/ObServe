@@ -93,7 +93,7 @@ public class QuickDocument extends ExElement.Abstract {
 
 		@Override
 		public void update(ExpressoQIS session) throws QonfigInterpretationException {
-			checkElement(session.getFocusType(), QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, QUICK);
+			ExElement.checkElement(session.getFocusType(), QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, QUICK);
 			forChild(session.getRole(null, null, "head").getDeclared(), DOC_HEAD);
 			forChild(session.getRole(null, null, "body").getDeclared(), DOC_BODY);
 			super.update(session);
@@ -250,10 +250,9 @@ public class QuickDocument extends ExElement.Abstract {
 
 			@Override
 			public void update(ExpressoQIS session) throws QonfigInterpretationException {
-				checkElement(session.getFocusType(), QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, HEAD);
+				ExElement.checkElement(session.getFocusType(), QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, HEAD);
 				forChild(session.getRole("imports"), IMPORTS);
 				forChild(session.getRole("style-sheet"), STYLE_SHEET);
-				session.setElementRepresentation(this);
 				super.update(session);
 				ClassView cv = session.interpretChildren("imports", ClassView.class).peekFirst();
 				if (cv == null) {

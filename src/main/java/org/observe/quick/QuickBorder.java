@@ -57,7 +57,7 @@ public interface QuickBorder extends QuickStyledElement {
 
 			@Override
 			public void update(ExpressoQIS session) throws QonfigInterpretationException {
-				checkElement(session.getFocusType(), QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, LINE_BORDER);
+				ExElement.checkElement(session.getFocusType(), QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, LINE_BORDER);
 				super.update(session.asElement(session.getFocusType().getSuperElement()));
 			}
 
@@ -124,7 +124,8 @@ public interface QuickBorder extends QuickStyledElement {
 
 			@Override
 			public void update(ExpressoQIS session) throws QonfigInterpretationException {
-				checkElement(session.getFocusType(), QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, TITLED_BORDER);
+				ExElement.checkElement(session.getFocusType(), QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION,
+					TITLED_BORDER);
 				forAttribute(session.getAttributeDef(null, null, "title"), TITLE);
 				super.update(session.asElement(session.getFocusType().getSuperElement()));
 				theTitle = session.getAttributeExpression("title");

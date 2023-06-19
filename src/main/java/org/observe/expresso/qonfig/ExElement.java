@@ -45,9 +45,6 @@ import org.qommons.io.LocatedFilePosition;
 
 /** A base type for values interpreted from {@link QonfigElement}s */
 public interface ExElement extends Identifiable {
-	/** The property in the Qonfig interpretation session where the definition interpreted from the session is stored. */
-	public static final String SESSION_EX_ELEMENT = "expresso.element.def";
-
 	public static class Identity {
 		private final String theElementType;
 		private final LocatedFilePosition thePosition;
@@ -598,7 +595,7 @@ public interface ExElement extends Identifiable {
 			public void update(ExpressoQIS session) throws QonfigInterpretationException {
 				theReporting = session.reporting();
 				theCallingClass = session.getWrapped().getInterpreter().getCallingClass();
-				session.put(SESSION_EX_ELEMENT, this);
+				session.setElementRepresentation(this);
 				theElement = session.getElement();
 				theExpressoEnv = session.getExpressoEnv();
 				ObservableModelSet models = theExpressoEnv.getModels();
@@ -637,15 +634,6 @@ public interface ExElement extends Identifiable {
 				}
 			}
 
-			public void checkElement(QonfigElementOrAddOn element, String tkName, Version tkVersion, String elementName) {
-				if (!element.getDeclarer().getName().equals(tkName) || element.getDeclarer().getMajorVersion() != tkVersion.major
-					|| element.getDeclarer().getMinorVersion() != tkVersion.minor || !element.getName().equals(elementName))
-					throw new IllegalStateException(
-						"This class is designed against " + tkName + " v" + tkVersion.major + "." + tkVersion.minor + " " + elementName
-						+ ", not " + element.getDeclarer().getName() + " v" + element.getDeclarer().getMajorVersion() + "."
-						+ element.getDeclarer().getMinorVersion() + " " + element.getName());
-			}
-
 			private void addAddOn(AbstractQIS<?> session) throws QonfigInterpretationException {
 				if (session.supportsInterpretation(ExAddOn.Def.class)) {
 					ExAddOn.Def<? super E, ?> addOn = session.interpret(ExAddOn.Def.class);
@@ -661,6 +649,14 @@ public interface ExElement extends Identifiable {
 				return theElement == null ? super.toString() : theElement.toString();
 			}
 		}
+	}
+
+	public static void checkElement(QonfigElementOrAddOn element, String tkName, Version tkVersion, String elementName) {
+		if (!element.getDeclarer().getName().equals(tkName) || element.getDeclarer().getMajorVersion() != tkVersion.major
+			|| element.getDeclarer().getMinorVersion() != tkVersion.minor || !element.getName().equals(elementName))
+			throw new IllegalStateException("This class is designed against " + tkName + " v" + tkVersion.major + "." + tkVersion.minor
+				+ " " + elementName + ", not " + element.getDeclarer().getName() + " v" + element.getDeclarer().getMajorVersion() + "."
+				+ element.getDeclarer().getMinorVersion() + " " + element.getName());
 	}
 
 	/**

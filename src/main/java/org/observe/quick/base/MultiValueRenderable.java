@@ -16,7 +16,10 @@ public interface MultiValueRenderable<T> extends QuickWidget {
 	public static final ExElement.AttributeValueGetter.Expression<MultiValueRenderable<?>, Interpreted<?, ?>, Def<?>, ObservableCollection<?>, ObservableCollection<?>> MULTI_SELECTION = ExElement.AttributeValueGetter
 		.<MultiValueRenderable<?>, Interpreted<?, ?>, Def<?>, ObservableCollection<?>, ObservableCollection<?>> ofX(Def::getMultiSelection,
 			Interpreted::getMultiSelection, MultiValueRenderable::getMultiSelection,
-			"The value the the user has selected in the widget, or null if no value or multiple values are selected");
+			"The values the the user has selected in the widget");
+	public static final ExElement.AttributeValueGetter<MultiValueRenderable<?>, Interpreted<?, ?>, Def<?>> VALUE_NAME = ExElement.AttributeValueGetter
+		.<MultiValueRenderable<?>, Interpreted<?, ?>, Def<?>> of(Def::getValueName, i -> i.getDefinition().getValueName(),
+			MultiValueRenderable::getValueName, "The name of the currently applicable value, e.g. for rendering");
 
 	public interface Def<W extends MultiValueRenderable<?>> extends QuickWidget.Def<W> {
 		String getValueName();
@@ -67,6 +70,8 @@ public interface MultiValueRenderable<T> extends QuickWidget {
 	SettableValue<T> getSelection();
 
 	ObservableCollection<T> getMultiSelection();
+
+	String getValueName();
 
 	public void setContext(MultiValueRenderContext<T> ctx) throws ModelInstantiationException;
 }

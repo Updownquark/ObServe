@@ -68,7 +68,7 @@ public interface QuickValueWidget<T> extends QuickWidget {
 
 			@Override
 			public void update(ExpressoQIS session) throws QonfigInterpretationException {
-				checkElement(session.getFocusType(), QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, VALUE_WIDGET);
+				ExElement.checkElement(session.getFocusType(), QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, VALUE_WIDGET);
 				forAttribute(session.getAttributeDef(null, null, "value"), VALUE);
 				forAttribute(session.getAttributeDef(null, null, "value-name"), VALUE_NAME);
 				forAttribute(session.getAttributeDef(null, null, "disable-with"), DISABLE_WITH);

@@ -115,7 +115,23 @@ public interface QuickTableColumn<R, C> {
 	public class ColumnEditing<R, C> extends ExElement.Abstract implements QuickValueWidget.WidgetValueSupplier<C> {
 		public static final String COLUMN_EDITING = "column-edit";
 
-		public static final ExElement.ChildElementGetter<ColumnEditing<?, ?>, Interpreted<?, ?>, Def> EDITOR = new ExElement.ChildElementGetter<ColumnEditing<?, ?>, Interpreted<?, ?>, Def>() {
+		private static final ExElement.AttributeValueGetter<ColumnEditing<?, ?>, Interpreted<?, ?>, Def> TYPE = ExElement.AttributeValueGetter
+			.of(Def::getType, Interpreted::getType, ColumnEditing::getType,
+				"The type of column editing to use to update the data set with column edit operations");
+		private static final ExElement.AttributeValueGetter<ColumnEditing<?, ?>, Interpreted<?, ?>, Def> COLUMN_EDIT_VALUE_NAME = ExElement.AttributeValueGetter
+			.of(Def::getColumnEditValueName, i -> i.getDefinition().getColumnEditValueName(), ColumnEditing::getColumnEditValueName,
+				"The variable name of the column value being edited for expressions");
+		private static final ExElement.AttributeValueGetter.Expression<ColumnEditing<?, ?>, Interpreted<?, ?>, Def, SettableValue<?>, SettableValue<String>> EDITABLE_IF = ExElement.AttributeValueGetter
+			.ofX(Def::isEditable, Interpreted::isEditable, ColumnEditing::isEditable,
+				"A filter on the column value that determines whether the column is editable for a particular row");
+		private static final ExElement.AttributeValueGetter.Expression<ColumnEditing<?, ?>, Interpreted<?, ?>, Def, SettableValue<?>, SettableValue<String>> ACCEPT = ExElement.AttributeValueGetter
+			.ofX(Def::isAcceptable, Interpreted::isAcceptable, ColumnEditing::isAcceptable,
+				"A filter that will prevent a column value from being committed");
+		private static final ExElement.AttributeValueGetter<ColumnEditing<?, ?>, Interpreted<?, ?>, Def> CLICKS = ExElement.AttributeValueGetter
+			.of(Def::getClicks, i -> i.getDefinition().getClicks(), ColumnEditing::getClicks,
+				"The number of clicks required to initiated editing on this column");
+
+		private static final ExElement.ChildElementGetter<ColumnEditing<?, ?>, Interpreted<?, ?>, Def> EDITOR = new ExElement.ChildElementGetter<ColumnEditing<?, ?>, Interpreted<?, ?>, Def>() {
 			@Override
 			public String getDescription() {
 				return "The widget that allows the user to create a new value for this column";
@@ -154,6 +170,10 @@ public interface QuickTableColumn<R, C> {
 				return (TableColumnSet.Def<?>) super.getParentElement();
 			}
 
+			public ColumnEditType.Def<?> getType() {
+				return getAddOn(ColumnEditType.Def.class);
+			}
+
 			public QuickWidget.Def<?> getEditor() {
 				return theEditor;
 			}
@@ -176,7 +196,13 @@ public interface QuickTableColumn<R, C> {
 
 			@Override
 			public void update(ExpressoQIS session) throws QonfigInterpretationException {
-				checkElement(session.getFocusType(), QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, COLUMN_EDITING);
+				ExElement.checkElement(session.getFocusType(), QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION,
+					COLUMN_EDITING);
+				forAttribute(session.getAttributeDef(null, null, "type"), TYPE);
+				forAttribute(session.getAttributeDef(null, null, "column-edit-value-name"), COLUMN_EDIT_VALUE_NAME);
+				forAttribute(session.getAttributeDef(null, null, "editable-if"), EDITABLE_IF);
+				forAttribute(session.getAttributeDef(null, null, "accept"), ACCEPT);
+				forAttribute(session.getAttributeDef(null, null, "clicks"), CLICKS);
 				forChild(session.getRole("editor"), EDITOR);
 				super.update(session);
 				theEditor = ExElement.useOrReplace(QuickWidget.Def.class, theEditor, session, "editor");
@@ -210,6 +236,10 @@ public interface QuickTableColumn<R, C> {
 			@Override
 			public TableColumnSet.Interpreted<R, ?> getParentElement() {
 				return (TableColumnSet.Interpreted<R, ?>) super.getParentElement();
+			}
+
+			public ColumnEditType.Interpreted<R, C, ?> getType() {
+				return getAddOn(ColumnEditType.Interpreted.class);
 			}
 
 			public InterpretedValueSynth<SettableValue<?>, SettableValue<String>> isEditable() {
@@ -316,8 +346,20 @@ public interface QuickTableColumn<R, C> {
 			return getAddOn(ColumnEditType.class);
 		}
 
+		public String getColumnEditValueName() {
+			return theColumnEditValueName;
+		}
+
 		public QuickWidget getEditor() {
 			return theEditor;
+		}
+
+		public SettableValue<String> isEditable() {
+			return SettableValue.flatten(isEditable);
+		}
+
+		public SettableValue<String> isAcceptable() {
+			return SettableValue.flatten(isAcceptable);
 		}
 
 		public SettableValue<C> getFilteredColumnEditValue() {
@@ -439,6 +481,15 @@ public interface QuickTableColumn<R, C> {
 		}
 
 		public static class RowModifyEditType<R, C> extends ColumnEditType<R, C> {
+			private static final ExAddOn.AddOnAttributeGetter.Expression<ColumnEditing<?, ?>, RowModifyEditType<?, ?>, Interpreted<?, ?>, Def, ObservableAction<?>, ObservableAction<?>> COMMIT = ExAddOn.AddOnAttributeGetter
+				.<ColumnEditing<?, ?>, RowModifyEditType<?, ?>, Interpreted<?, ?>, Def, ObservableAction<?>, ObservableAction<?>> ofX(
+					Def.class, Def::getCommit, Interpreted.class, Interpreted::getCommit, RowModifyEditType.class,
+					RowModifyEditType::getCommit, "The action to perform that modifies the row value with the column edit value");
+			private static final ExAddOn.AddOnAttributeGetter<ColumnEditing<?, ?>, RowModifyEditType<?, ?>, Interpreted<?, ?>, Def> ROW_UPDATE = ExAddOn.AddOnAttributeGetter
+				.<ColumnEditing<?, ?>, RowModifyEditType<?, ?>, Interpreted<?, ?>, Def> of(Def.class, Def::isRowUpdate, Interpreted.class,
+					i -> i.getDefinition().isRowUpdate(), RowModifyEditType.class, RowModifyEditType::isRowUpdate,
+					"Whether to fire an update event on the row after a modification");
+
 			public static class Def extends ColumnEditType.Def<RowModifyEditType<?, ?>> {
 				private CompiledExpression theCommit;
 				private boolean isRowUpdate;
@@ -458,6 +509,10 @@ public interface QuickTableColumn<R, C> {
 				@Override
 				public void update(ExpressoQIS session, ExElement.Def<? extends ColumnEditing<?, ?>> element)
 					throws QonfigInterpretationException {
+					ExElement.checkElement(session.getFocusType(), QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION,
+						"modify-row");
+					element.forAttribute(session.getAttributeDef(null, null, "commit"), COMMIT);
+					element.forAttribute(session.getAttributeDef(null, null, "row-update"), ROW_UPDATE);
 					super.update(session, element);
 					theCommit = session.getAttributeExpression("commit");
 					isRowUpdate = session.getAttribute("row-update", boolean.class);
@@ -523,6 +578,11 @@ public interface QuickTableColumn<R, C> {
 		}
 
 		public static class RowReplaceEditType<R, C> extends ColumnEditType<R, C> {
+			private static final ExAddOn.AddOnAttributeGetter.Expression<ColumnEditing<?, ?>, RowReplaceEditType<?, ?>, Interpreted<?, ?>, Def, SettableValue<?>, SettableValue<?>> REPLACEMENT = ExAddOn.AddOnAttributeGetter
+				.<ColumnEditing<?, ?>, RowReplaceEditType<?, ?>, Interpreted<?, ?>, Def, SettableValue<?>, SettableValue<?>> ofX(Def.class,
+					Def::getReplacement, Interpreted.class, Interpreted::getReplacement, RowReplaceEditType.class,
+					RowReplaceEditType::getReplacement, "The row value to replace in the model after the edit operation");
+
 			public static class Def extends ColumnEditType.Def<RowReplaceEditType<?, ?>> {
 				private CompiledExpression theReplacement;
 
@@ -537,6 +597,9 @@ public interface QuickTableColumn<R, C> {
 				@Override
 				public void update(ExpressoQIS session, ExElement.Def<? extends ColumnEditing<?, ?>> element)
 					throws QonfigInterpretationException {
+					ExElement.checkElement(session.getFocusType(), QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION,
+						"replace-row-value");
+					element.forAttribute(session.getAttributeDef(null, null, "replacement"), REPLACEMENT);
 					super.update(session, element);
 					theReplacement = session.getAttributeExpression("replacement");
 				}
@@ -600,12 +663,17 @@ public interface QuickTableColumn<R, C> {
 	public class SingleColumnSet<R, C> extends QuickStyledElement.Abstract implements TableColumnSet<R> {
 		public static final String COLUMN = "column";
 
-		public static final ExElement.AttributeValueGetter<SingleColumnSet<?, ?>, Interpreted<?, ?>, Def> NAME = ExElement.AttributeValueGetter
+		public static final ExElement.AttributeValueGetter.Expression<SingleColumnSet<?, ?>, Interpreted<?, ?>, Def, SettableValue<?>, SettableValue<String>> NAME = ExElement.AttributeValueGetter
 			.ofX(Def::getName, Interpreted::getName, SingleColumnSet::getName,
 				"The name of the column, to be displayed in the column header");
+		public static final ExElement.AttributeValueGetter.Expression<SingleColumnSet<?, ?>, Interpreted<?, ?>, Def, SettableValue<?>, SettableValue<?>> VALUE = ExElement.AttributeValueGetter
+			.ofX(Def::getValue, Interpreted::getValue, SingleColumnSet::getValue, "The value for the column, as derived from the row");
 		public static final ExElement.AttributeValueGetter<SingleColumnSet<?, ?>, Interpreted<?, ?>, Def> COLUMN_VALUE_NAME = ExElement.AttributeValueGetter
 			.of(Def::getColumnValueName, i -> i.getDefinition().getColumnValueName(), SingleColumnSet::getColumnValueName,
 				"The name variable holding the column value to be rendered, for use in expressions");
+		public static final ExElement.AttributeValueGetter.Expression<SingleColumnSet<?, ?>, Interpreted<?, ?>, Def, SettableValue<?>, SettableValue<String>> HEADER_TOOLTIP = ExElement.AttributeValueGetter
+			.ofX(Def::getHeaderTooltip, Interpreted::getHeaderTooltip, SingleColumnSet::getHeaderTooltip,
+				"The tooltip to display for the column header");
 
 		public static final ExElement.ChildElementGetter<SingleColumnSet<?, ?>, Interpreted<?, ?>, Def> RENDERER = new ExElement.ChildElementGetter<SingleColumnSet<?, ?>, Interpreted<?, ?>, Def>() {
 			@Override
@@ -697,9 +765,11 @@ public interface QuickTableColumn<R, C> {
 
 			@Override
 			public void update(ExpressoQIS session) throws QonfigInterpretationException {
-				checkElement(session.getFocusType(), QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, COLUMN);
+				ExElement.checkElement(session.getFocusType(), QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, COLUMN);
 				forAttribute(session.getAttributeDef(null, null, "name"), NAME);
+				forAttribute(session.getAttributeDef(null, null, "value"), VALUE);
 				forAttribute(session.getAttributeDef(null, null, "column-value-name"), COLUMN_VALUE_NAME);
+				forAttribute(session.getAttributeDef(null, null, "header-tooltip"), HEADER_TOOLTIP);
 				forChild(session.getRole("renderer"), RENDERER);
 				forChild(session.getRole("edit"), EDITING);
 				super.update(session);
@@ -859,8 +929,8 @@ public interface QuickTableColumn<R, C> {
 			return (TabularWidget<R>) super.getParentElement();
 		}
 
-		public SettableValue<SettableValue<String>> getName() {
-			return theName;
+		public SettableValue<String> getName() {
+			return SettableValue.flatten(theName);
 		}
 
 		public String getColumnValueName() {
@@ -879,6 +949,10 @@ public interface QuickTableColumn<R, C> {
 
 		public SettableValue<C> getValue() {
 			return SettableValue.flatten(theValue);
+		}
+
+		public SettableValue<String> getHeaderTooltip() {
+			return SettableValue.flatten(theHeaderTooltip);
 		}
 
 		public QuickWidget getRenderer() {
@@ -940,7 +1014,7 @@ public interface QuickTableColumn<R, C> {
 
 			@Override
 			public SettableValue<String> getName() {
-				return SettableValue.flatten(theName);
+				return SingleColumnSet.this.getName();
 			}
 
 			@Override
@@ -955,7 +1029,7 @@ public interface QuickTableColumn<R, C> {
 
 			@Override
 			public SettableValue<String> getHeaderTooltip() {
-				return SettableValue.flatten(theHeaderTooltip);
+				return SingleColumnSet.this.getHeaderTooltip();
 			}
 
 			@Override
@@ -1026,7 +1100,8 @@ public interface QuickTableColumn<R, C> {
 
 			@Override
 			public void update(QuickStyledElement.QuickInstanceStyle.Interpreted interpreted, ModelSetInstance models)
-				throws ModelInstantiationException {}
+				throws ModelInstantiationException {
+			}
 		}
 	}
 }

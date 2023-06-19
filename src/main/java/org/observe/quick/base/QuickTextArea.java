@@ -48,7 +48,7 @@ public class QuickTextArea<T> extends QuickEditableTextWidget.Abstract<T> {
 
 		@Override
 		public void update(ExpressoQIS session) throws QonfigInterpretationException {
-			checkElement(session.getFocusType(), QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, TEXT_AREA);
+			ExElement.checkElement(session.getFocusType(), QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, TEXT_AREA);
 			forAttribute(session.getAttributeDef(null, null, "rows"), ROWS);
 			forAttribute(session.getAttributeDef(null, null, "html"), HTML);
 			super.update(session.asElement(session.getFocusType().getSuperElement()));

@@ -42,7 +42,7 @@ public class ClassView extends ExElement.Def.Abstract<ExElement> implements Type
 	private static class ImportElement extends ExElement.Def.Abstract<ExElement> {
 		ImportElement(ExElement.Def<?> parent, AbstractQIS<?> session) {
 			super(parent, session.getElement());
-			checkElement(session.getFocusType(), ExpressoSessionImplV0_1.TOOLKIT_NAME, ExpressoSessionImplV0_1.VERSION, "import");
+			ExElement.checkElement(session.getFocusType(), ExpressoSessionImplV0_1.TOOLKIT_NAME, ExpressoSessionImplV0_1.VERSION, "import");
 			forValue(IMPORT_VALUE);
 		}
 
@@ -65,7 +65,8 @@ public class ClassView extends ExElement.Def.Abstract<ExElement> implements Type
 		Set<String> wildcardImports, ExElement.Def<?> parent, AbstractQIS<?> session, List<AbstractQIS<?>> importElements) {
 		super(parent, session == null ? null : session.getElement());
 		if (session != null) {
-			checkElement(session.getFocusType(), ExpressoSessionImplV0_1.TOOLKIT_NAME, ExpressoSessionImplV0_1.VERSION, "imports");
+			ExElement.checkElement(session.getFocusType(), ExpressoSessionImplV0_1.TOOLKIT_NAME, ExpressoSessionImplV0_1.VERSION,
+				"imports");
 			forChild(session.getRole("import"), IMPORT_ELEMENTS);
 		}
 		theClassLoaders = classLoaders;

@@ -68,6 +68,10 @@ public interface QuickKeyListener extends QuickEventListener {
 	public class QuickKeyTypedListener extends QuickEventListener.Abstract implements QuickKeyListener {
 		public static final String KEY_TYPED_LISTENER = "on-type";
 
+		private static final ExElement.AttributeValueGetter<QuickKeyTypedListener, Interpreted, Def> CHAR = ExElement.AttributeValueGetter
+			.of(Def::getCharFilter, i -> i.getDefinition().getCharFilter(), QuickKeyTypedListener::getCharFilter,
+				"The typed character that this listener will be notified for.  If not specified, this listener will be notified for any character.");
+
 		public static class Def extends QuickEventListener.Def.Abstract<QuickKeyTypedListener>
 		implements QuickKeyListener.Def<QuickKeyTypedListener> {
 			private char theCharFilter;
@@ -82,7 +86,9 @@ public interface QuickKeyListener extends QuickEventListener {
 
 			@Override
 			public void update(ExpressoQIS session) throws QonfigInterpretationException {
-				checkElement(session.getFocusType(), QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, KEY_TYPED_LISTENER);
+				ExElement.checkElement(session.getFocusType(), QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION,
+					KEY_TYPED_LISTENER);
+				forAttribute(session.getAttributeDef(null, null, "char"), CHAR);
 				super.update(session.asElement(session.getFocusType()// on-type
 					.getSuperElement() // key-listener
 					.getSuperElement() // event-listener
@@ -154,6 +160,10 @@ public interface QuickKeyListener extends QuickEventListener {
 		public static final String KEY_PRESSED_LISTENER = "on-key-press";
 		public static final String KEY_RELEASED_LISTENER = "on-key-release";
 
+		private static final ExElement.AttributeValueGetter<QuickKeyCodeListener, Interpreted, Def> KEY = ExElement.AttributeValueGetter.of(
+			Def::getKeyCode, i -> i.getDefinition().getKeyCode(), QuickKeyCodeListener::getKeyCode,
+			"The key code that this listener will be notified for.  If not specified, this listener will be notified for any key.");
+
 		public static class Def extends QuickEventListener.Def.Abstract<QuickKeyCodeListener>
 		implements QuickKeyListener.Def<QuickKeyCodeListener> {
 			private final boolean isPressed;
@@ -183,10 +193,12 @@ public interface QuickKeyListener extends QuickEventListener {
 					break;
 				default:
 				}
-				checkElement(session.getFocusType(), QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, KEY_CODE_LISTENER);
+				ExElement.checkElement(session.getFocusType(), QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION,
+					KEY_CODE_LISTENER);
+				forAttribute(session.getAttributeDef(null, null, "key"), KEY);
 				super.update(session.asElement(session.getFocusType().getSuperElement()// key-listener
 					.getSuperElement() // event-listener
-				));
+					));
 				String keyCodeStr = session.getAttributeText("key");
 				if (keyCodeStr == null || keyCodeStr.isEmpty())
 					theKeyCode = null;

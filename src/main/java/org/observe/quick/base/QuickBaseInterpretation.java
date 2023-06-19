@@ -18,7 +18,6 @@ import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueSynth;
 import org.observe.expresso.ops.BinaryOperatorSet;
 import org.observe.expresso.ops.UnaryOperatorSet;
-import org.observe.expresso.qonfig.ExElement;
 import org.observe.quick.QuickCoreInterpretation;
 import org.observe.quick.QuickDocument;
 import org.observe.quick.QuickWidget;
@@ -156,10 +155,10 @@ public class QuickBaseInterpretation implements QonfigInterpretation {
 				(p, el) -> new QuickTableColumn.ColumnEditing.Def((QuickTableColumn.TableColumnSet.Def<?>) p, el)));
 		interpreter.createWith("modify-row-value", QuickTableColumn.ColumnEditType.RowModifyEditType.Def.class,
 			session -> new QuickTableColumn.ColumnEditType.RowModifyEditType.Def((QonfigAddOn) session.getFocusType(),
-				(QuickTableColumn.ColumnEditing.Def) session.get(ExElement.SESSION_EX_ELEMENT)));
+				(QuickTableColumn.ColumnEditing.Def) session.getElementRepresentation()));
 		interpreter.createWith("replace-row-value", QuickTableColumn.ColumnEditType.RowReplaceEditType.Def.class,
 			session -> new QuickTableColumn.ColumnEditType.RowReplaceEditType.Def((QonfigAddOn) session.getFocusType(),
-				(QuickTableColumn.ColumnEditing.Def) session.get(ExElement.SESSION_EX_ELEMENT)));
+				(QuickTableColumn.ColumnEditing.Def) session.getElementRepresentation()));
 		interpreter.createWith(ValueAction.Single.SINGLE_VALUE_ACTION, ValueAction.Single.Def.class,
 			session -> QuickCoreInterpretation.interpretQuick(session, (p, el) -> new ValueAction.Single.Def<>(p, el)));
 		interpreter.createWith(ValueAction.Multi.MULTI_VALUE_ACTION, ValueAction.Multi.Def.class,

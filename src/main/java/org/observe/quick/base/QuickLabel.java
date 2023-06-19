@@ -60,7 +60,7 @@ public class QuickLabel<T> extends QuickTextWidget.Abstract<T> {
 
 		@Override
 		public void update(ExpressoQIS session) throws QonfigInterpretationException {
-			checkElement(session.getFocusType(), QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, LABEL);
+			ExElement.checkElement(session.getFocusType(), QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, LABEL);
 			forAttribute(session.getAttributeDef(null, null, "icon"), ICON);
 			forValue(VALUE_TEXT);
 			super.update(session.asElement(session.getFocusType().getSuperElement()));

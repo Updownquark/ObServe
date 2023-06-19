@@ -24,6 +24,28 @@ import com.google.common.reflect.TypeToken;
 
 public interface ValueAction<T> extends ExElement {
 	public interface Def<T, A extends ValueAction<T>> extends ExElement.Def<A> {
+		public static final ExElement.AttributeValueGetter.Expression<ValueAction<?>, Interpreted<?, ?>, Def<?, ?>, ObservableAction<?>, ObservableAction<?>> ACTION = ExElement.AttributeValueGetter
+			.<ValueAction<?>, Interpreted<?, ?>, Def<?, ?>, ObservableAction<?>, ObservableAction<?>> ofX(Def::getAction,
+				Interpreted::getAction, ValueAction::getAction, "The action to perform when the user selects the action");
+		public static final ExElement.AttributeValueGetter.Expression<ValueAction<?>, Interpreted<?, ?>, Def<?, ?>, SettableValue<?>, SettableValue<String>> NAME = ExElement.AttributeValueGetter
+			.<ValueAction<?>, Interpreted<?, ?>, Def<?, ?>, SettableValue<?>, SettableValue<String>> ofX(Def::getName, Interpreted::getName,
+				ValueAction::getName, "The name of the action to display to the user");
+		public static final ExElement.AttributeValueGetter<ValueAction<?>, Interpreted<?, ?>, Def<?, ?>> AS_BUTTON = ExElement.AttributeValueGetter
+			.<ValueAction<?>, Interpreted<?, ?>, Def<?, ?>> of(Def::isButton, i -> i.getDefinition().isButton(), ValueAction::isButton,
+				"Whether the action should be presented to the user as a button near the table");
+		public static final ExElement.AttributeValueGetter<ValueAction<?>, Interpreted<?, ?>, Def<?, ?>> AS_POPUP = ExElement.AttributeValueGetter
+			.<ValueAction<?>, Interpreted<?, ?>, Def<?, ?>> of(Def::isPopup, i -> i.getDefinition().isPopup(), ValueAction::isPopup,
+				"Whether the action should be presented to the user as a popup when they right-click on the table");
+		public static final ExElement.AttributeValueGetter<ValueAction<?>, Interpreted<?, ?>, Def<?, ?>> ICON = ExElement.AttributeValueGetter
+			.<ValueAction<?>, Interpreted<?, ?>, Def<?, ?>> of(Def::getIcon, Interpreted::getIcon, ValueAction::getIcon,
+				"The icon to display to represent this action");
+		public static final ExElement.AttributeValueGetter.Expression<ValueAction<?>, Interpreted<?, ?>, Def<?, ?>, SettableValue<?>, SettableValue<String>> ENABLED = ExElement.AttributeValueGetter
+			.<ValueAction<?>, Interpreted<?, ?>, Def<?, ?>, SettableValue<?>, SettableValue<String>> ofX(Def::isEnabled,
+				Interpreted::isEnabled, ValueAction::isEnabled, "Whether the action is currently enabled");
+		public static final ExElement.AttributeValueGetter.Expression<ValueAction<?>, Interpreted<?, ?>, Def<?, ?>, SettableValue<?>, SettableValue<String>> TOOLTIP = ExElement.AttributeValueGetter
+			.<ValueAction<?>, Interpreted<?, ?>, Def<?, ?>, SettableValue<?>, SettableValue<String>> ofX(Def::getTooltip,
+				Interpreted::getTooltip, ValueAction::getTooltip, "The tooltip to display to the user to describe the action");
+
 		CompiledExpression getName();
 
 		boolean isButton();
@@ -92,8 +114,15 @@ public interface ValueAction<T> extends ExElement {
 
 			@Override
 			public void update(ExpressoQIS session) throws QonfigInterpretationException {
-				checkElement(session.getFocusType(), QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION,
+				ExElement.checkElement(session.getFocusType(), QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION,
 					ABTRACT_VALUE_ACTION);
+				forValue(ACTION);
+				forAttribute(session.getAttributeDef(null, null, "name"), NAME);
+				forAttribute(session.getAttributeDef(null, null, "as-button"), AS_BUTTON);
+				forAttribute(session.getAttributeDef(null, null, "as-popup"), AS_POPUP);
+				forAttribute(session.getAttributeDef(null, null, "icon"), ICON);
+				forAttribute(session.getAttributeDef(null, null, "enabled"), ENABLED);
+				forAttribute(session.getAttributeDef(null, null, "tooltip"), TOOLTIP);
 				super.update(session);
 				theName = session.getAttributeExpression("name");
 				isButton = session.getAttribute("as-button", boolean.class);
@@ -126,8 +155,7 @@ public interface ValueAction<T> extends ExElement {
 
 		ValueAction<T> create(ExElement parent);
 
-		public abstract class Abstract<T, A extends ValueAction<T>> extends ExElement.Interpreted.Abstract<A>
-		implements Interpreted<T, A> {
+		public abstract class Abstract<T, A extends ValueAction<T>> extends ExElement.Interpreted.Abstract<A> implements Interpreted<T, A> {
 			private final TypeToken<T> theValueType;
 			InterpretedValueSynth<SettableValue<?>, SettableValue<String>> theName;
 			ExFunction<ModelSetInstance, SettableValue<Icon>, ModelInstantiationException> theIcon;
@@ -266,8 +294,7 @@ public interface ValueAction<T> extends ExElement {
 		}
 
 		@Override
-		public ModelSetInstance update(ExElement.Interpreted<?> interpreted, ModelSetInstance models)
-			throws ModelInstantiationException {
+		public ModelSetInstance update(ExElement.Interpreted<?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
 			ModelSetInstance myModels = super.update(interpreted, models);
 			ValueAction.Interpreted<T, ?> myInterpreted = (ValueAction.Interpreted<T, ?>) interpreted;
 			theName.set(myInterpreted.getName() == null ? null : myInterpreted.getName().get(myModels), null);
@@ -326,6 +353,13 @@ public interface ValueAction<T> extends ExElement {
 	public class Single<T> extends ValueAction.Abstract<T> {
 		public static final String SINGLE_VALUE_ACTION = "value-action";
 
+		private static final ExElement.AttributeValueGetter<Single<?>, Interpreted<?, ?>, Def<?, ?>> VALUE_NAME = ExElement.AttributeValueGetter
+			.<Single<?>, Interpreted<?, ?>, Def<?, ?>> of(Def::getValueName, i -> i.getDefinition().getValueName(), Single::getValueName,
+				"The variable name of the value that the action is invoked upon, for expressions");
+		private static final ExElement.AttributeValueGetter<Single<?>, Interpreted<?, ?>, Def<?, ?>> ALLOW_FOR_MULTIPLE = ExElement.AttributeValueGetter
+			.<Single<?>, Interpreted<?, ?>, Def<?, ?>> of(Def::allowForMultiple, i -> i.getDefinition().allowForMultiple(),
+				Single::allowForMultiple,
+				"Whether an action can be invoked by the user for multiple values at once.  The action would then be invoked separately for each value.");
 		public static class Def<T, A extends Single<T>> extends ValueAction.Def.Abstract<T, A> {
 			private String theValueName;
 			private boolean allowForMultiple;
@@ -344,8 +378,10 @@ public interface ValueAction<T> extends ExElement {
 
 			@Override
 			public void update(ExpressoQIS session) throws QonfigInterpretationException {
-				checkElement(session.getFocusType(), QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION,
+				ExElement.checkElement(session.getFocusType(), QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION,
 					SINGLE_VALUE_ACTION);
+				forAttribute(session.getAttributeDef(null, null, "value-name"), VALUE_NAME);
+				forAttribute(session.getAttributeDef(null, null, "allow-for-multiple"), ALLOW_FOR_MULTIPLE);
 				super.update(session.asElement(session.getFocusType().getSuperElement()));
 				theValueName = session.getAttributeText("value-name");
 				allowForMultiple = session.getAttribute("allow-for-multiple", boolean.class);
@@ -416,6 +452,13 @@ public interface ValueAction<T> extends ExElement {
 	public class Multi<T> extends ValueAction.Abstract<T> {
 		public static final String MULTI_VALUE_ACTION = "multi-value-action";
 
+		private static final ExElement.AttributeValueGetter<Multi<?>, Interpreted<?, ?>, Def<?, ?>> VALUES_NAME = ExElement.AttributeValueGetter
+			.<Multi<?>, Interpreted<?, ?>, Def<?, ?>> of(Def::getValuesName, i -> i.getDefinition().getValuesName(), Multi::getValuesName,
+				"The variable name of the values that the action is invoked upon, for expressions");
+		private static final ExElement.AttributeValueGetter<Multi<?>, Interpreted<?, ?>, Def<?, ?>> ALLOW_FOR_EMPTY = ExElement.AttributeValueGetter
+			.<Multi<?>, Interpreted<?, ?>, Def<?, ?>> of(Def::allowForEmpty, i -> i.getDefinition().allowForEmpty(), Multi::allowForEmpty,
+				"Whether the action can be invoked upon an empty list of values");
+
 		public static class Def<T, A extends Multi<T>> extends ValueAction.Def.Abstract<T, A> {
 			private String theValuesName;
 			private boolean allowForEmpty;
@@ -434,8 +477,10 @@ public interface ValueAction<T> extends ExElement {
 
 			@Override
 			public void update(ExpressoQIS session) throws QonfigInterpretationException {
-				checkElement(session.getFocusType(), QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION,
+				ExElement.checkElement(session.getFocusType(), QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION,
 					MULTI_VALUE_ACTION);
+				forAttribute(session.getAttributeDef(null, null, "values-name"), VALUES_NAME);
+				forAttribute(session.getAttributeDef(null, null, "allow-for-EMPTY"), ALLOW_FOR_EMPTY);
 				super.update(session.asElement(session.getFocusType().getSuperElement()));
 				theValuesName = session.getAttributeText("values-name");
 				allowForEmpty = session.getAttribute("allow-for-empty", boolean.class);
@@ -483,7 +528,7 @@ public interface ValueAction<T> extends ExElement {
 				.build();
 		}
 
-		public String getValueName() {
+		public String getValuesName() {
 			return theValuesName;
 		}
 

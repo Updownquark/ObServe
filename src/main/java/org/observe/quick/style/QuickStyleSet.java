@@ -22,7 +22,7 @@ public class QuickStyleSet extends ExElement.Def.Abstract<ExElement> implements 
 	public QuickStyleSet(QuickStyleSheet styleSheet, AbstractQIS<?> session, String name, List<QuickStyleValue<?>> values,
 		List<QuickStyleElement.Def> styleElements) {
 		super(styleSheet, session.getElement());
-		checkElement(session.getFocusType(), StyleSessionImplV0_1.NAME, StyleSessionImplV0_1.VERSION, "style-set");
+		ExElement.checkElement(session.getFocusType(), StyleSessionImplV0_1.NAME, StyleSessionImplV0_1.VERSION, "style-set");
 		theName = name;
 		theValues = values;
 		theStyleElements = styleElements;

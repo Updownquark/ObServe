@@ -56,7 +56,8 @@ public interface QuickEventListener extends ExElement {
 
 			@Override
 			public void update(ExpressoQIS session) throws QonfigInterpretationException {
-				checkElement(session.getFocusType(), QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, EVENT_LISTENER);
+				ExElement.checkElement(session.getFocusType(), QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION,
+					EVENT_LISTENER);
 				forValue(ACTION);
 				super.update(session);
 				theFilters.clear();

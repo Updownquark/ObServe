@@ -57,7 +57,7 @@ public class QuickButton extends QuickWidget.Abstract {
 
 		@Override
 		public void update(ExpressoQIS session) throws QonfigInterpretationException {
-			checkElement(session.getFocusType(), QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, BUTTON);
+			ExElement.checkElement(session.getFocusType(), QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, BUTTON);
 			forAttribute(session.getAttributeDef(null, null, "action"), ACTION);
 			forAttribute(session.getAttributeDef(null, null, "icon"), ICON);
 			forValue(VALUE);

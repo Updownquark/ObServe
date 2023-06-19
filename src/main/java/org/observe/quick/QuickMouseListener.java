@@ -21,7 +21,7 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 
 		@Override
 		public void update(ExpressoQIS session) throws QonfigInterpretationException {
-			checkElement(session.getFocusType(), QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, MOUSE_LISTENER);
+			ExElement.checkElement(session.getFocusType(), QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, MOUSE_LISTENER);
 			super.update(session.asElement(session.getFocusType().getSuperElement()));
 		}
 
@@ -176,7 +176,7 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 
 			@Override
 			public void update(ExpressoQIS session) throws QonfigInterpretationException {
-				checkElement(session.getFocusType(), QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION,
+				ExElement.checkElement(session.getFocusType(), QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION,
 					theEventType.elementName);
 				super.update(session.asElement(session.getFocusType().getSuperElement()));
 			}
@@ -223,9 +223,19 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 
 	public static class QuickMouseButtonListener extends QuickMouseListener {
 		public static final String MOUSE_PRESS_LISTENER = "on-mouse-press";
+
+		public static final ExElement.AttributeValueGetter<QuickMouseButtonListener, Interpreted, Def> BUTTON = ExElement.AttributeValueGetter
+			.of(d -> d.getButton(), i -> i.getDefinition().getButton(), QuickMouseButtonListener::getButton,
+				"The button that this listener will listen to.  If not specified, the listener will trigger for any button.");
+
+		public static final ExElement.AttributeValueGetter<QuickMouseButtonListener, Interpreted, Def> CLICK_COUNT = ExElement.AttributeValueGetter
+			.of(d -> d.getClickCount(), i -> i.getDefinition().getClickCount(), QuickMouseButtonListener::getClickCount,
+				"The number of consecutive clicks necessary to trigger this listener.  If not specified, the listener will trigger for any number of clicks.");
+
 		public static class Def extends QuickMouseListener.Def<QuickMouseButtonListener> {
 			private final MouseButtonEventType theEventType;
 			private MouseButton theButton;
+			private int theClickCount;
 
 			public Def(ExElement.Def<?> parent, QonfigElement element, MouseButtonEventType eventType) {
 				super(parent, element);
@@ -240,10 +250,27 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 				return theButton;
 			}
 
+			public int getClickCount() {
+				return theClickCount;
+			}
+
 			@Override
 			public void update(ExpressoQIS session) throws QonfigInterpretationException {
-				checkElement(session.getFocusType(), QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION,
+				ExElement.checkElement(session.getFocusType(), QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION,
 					theEventType.elementName);
+				forAttribute(session.getAttributeDef(null, null, "button"), BUTTON);
+				if (theEventType == MouseButtonEventType.Click) {
+					forAttribute(session.getAttributeDef(null, null, "click-count"), CLICK_COUNT);
+					String txt = session.getAttributeText("click-count");
+					if (txt == null)
+						theClickCount = 0;
+					else {
+						theClickCount = Integer.parseInt(txt);
+						if (theClickCount < 1)
+							session.reporting().at(session.getAttributeValuePosition("click-count"))
+							.error("click-count must be greater than zero");
+					}
+				}
 				super.update(session.asElement(session.getFocusType().getSuperElement() // mouse-button-listener
 					.getSuperElement() // mouse-listener
 					));
@@ -293,6 +320,7 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 		private final SettableValue<SettableValue<MouseButton>> theEventButton;
 		private MouseButtonEventType theEventType;
 		private MouseButton theButton;
+		private int theClickCount;
 
 		public QuickMouseButtonListener(QuickMouseButtonListener.Interpreted interpreted, ExElement parent) {
 			super(interpreted, parent);
@@ -308,6 +336,10 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 			return theButton;
 		}
 
+		public int getClickCount() {
+			return theClickCount;
+		}
+
 		public void setListenerContext(MouseButtonListenerContext ctx) throws ModelInstantiationException {
 			setListenerContext((MouseListenerContext) ctx);
 			theEventButton.set(ctx.getMouseButton(), null);
@@ -320,6 +352,7 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 			QuickMouseButtonListener.Interpreted myInterpreted = (QuickMouseButtonListener.Interpreted) interpreted;
 			theEventType = myInterpreted.getDefinition().getEventType();
 			theButton = myInterpreted.getDefinition().getButton();
+			theClickCount = myInterpreted.getDefinition().getClickCount();
 		}
 	}
 
@@ -333,7 +366,8 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 
 			@Override
 			public void update(ExpressoQIS session) throws QonfigInterpretationException {
-				checkElement(session.getFocusType(), QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, SCROLL_LISTENER);
+				ExElement.checkElement(session.getFocusType(), QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION,
+					SCROLL_LISTENER);
 				super.update(session.asElement(session.getFocusType().getSuperElement()));
 			}
 

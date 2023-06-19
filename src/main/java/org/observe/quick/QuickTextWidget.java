@@ -89,7 +89,7 @@ public interface QuickTextWidget<T> extends QuickValueWidget<T> {
 
 			@Override
 			public void update(ExpressoQIS session) throws QonfigInterpretationException {
-				checkElement(session.getFocusType(), QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, TEXT_WIDGET);
+				ExElement.checkElement(session.getFocusType(), QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, TEXT_WIDGET);
 				forAttribute(session.getAttributeDef(null, null, "format"), FORMAT);
 				forAttribute(session.getAttributeDef(null, null, "editable"), EDITABLE);
 				super.update(session.asElement(session.getFocusType().getSuperElement()));

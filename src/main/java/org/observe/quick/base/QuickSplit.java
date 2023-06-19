@@ -38,7 +38,7 @@ public class QuickSplit extends QuickContainer.Abstract<QuickWidget> {
 
 		@Override
 		public void update(ExpressoQIS session) throws QonfigInterpretationException {
-			checkElement(session.getFocusType(), QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, SPLIT);
+			ExElement.checkElement(session.getFocusType(), QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, SPLIT);
 			super.update(session.asElement(session.getFocusType().getSuperElement()));
 			switch (session.getAttributeText("orientation")) {
 			case "horizontal":

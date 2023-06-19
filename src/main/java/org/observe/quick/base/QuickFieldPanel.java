@@ -20,7 +20,7 @@ public class QuickFieldPanel extends QuickContainer.Abstract<QuickWidget> {
 
 		@Override
 		public void update(ExpressoQIS session) throws QonfigInterpretationException {
-			checkElement(session.getFocusType(), QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, FIELD_PANEL);
+			ExElement.checkElement(session.getFocusType(), QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, FIELD_PANEL);
 			super.update(session.asElement(session.getFocusType().getSuperElement()));
 		}
 

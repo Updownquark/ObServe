@@ -68,6 +68,7 @@ public interface TabularWidget<R> extends MultiValueWidget<R>, RowTyped<R> {
 				forChild(session.getRole("columns"), COLUMNS);
 				forAttribute(session.getAttributeDef(null, null, "selection"), SELECTION);
 				forAttribute(session.getAttributeDef(null, null, "multi-selection"), MULTI_SELECTION);
+				forAttribute(session.getAttributeDef(null, null, "value-name"), VALUE_NAME);
 				super.update(session.asElement(session.getFocusType().getSuperElement() // multi-value-widget
 					.getSuperElement() // widget
 					));
@@ -238,6 +239,7 @@ public interface TabularWidget<R> extends MultiValueWidget<R>, RowTyped<R> {
 
 	TypeToken<R> getRowType();
 
+	@Override
 	String getValueName();
 
 	void setContext(TabularContext<R> ctx) throws ModelInstantiationException;

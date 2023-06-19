@@ -36,7 +36,7 @@ public class QuickCheckBox extends QuickValueWidget.Abstract<Boolean> {
 
 		@Override
 		public void update(ExpressoQIS session) throws QonfigInterpretationException {
-			checkElement(session.getFocusType(), QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, CHECK_BOX);
+			ExElement.checkElement(session.getFocusType(), QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, CHECK_BOX);
 			forValue(CHECK_BOX_TEXT);
 			super.update(session.asElement(session.getFocusType().getSuperElement()));
 			theText = session.getValueExpression();

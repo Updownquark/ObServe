@@ -63,7 +63,7 @@ public interface QuickContainer<C extends QuickWidget> extends QuickWidget {
 
 			@Override
 			public void update(ExpressoQIS session) throws QonfigInterpretationException {
-				checkElement(session.getFocusType(), QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, CONTAINER);
+				ExElement.checkElement(session.getFocusType(), QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, CONTAINER);
 				forChild(session.getRole("content").getDeclared(), CONTENTS);
 				super.update(session.asElement(session.getFocusType().getSuperElement()));
 				ExElement.syncDefs(QuickWidget.Def.class, theContents, session.forChildren("content"));

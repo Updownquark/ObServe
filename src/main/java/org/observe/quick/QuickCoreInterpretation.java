@@ -51,10 +51,10 @@ public class QuickCoreInterpretation implements QonfigInterpretation {
 	public Builder configureInterpreter(Builder interpreter) {
 		interpreter.createWith(QuickDocument.QUICK, QuickDocument.Def.class, session -> new QuickDocument.Def(null, session.getElement()));
 		interpreter.createWith(QuickDocument.QuickHeadSection.HEAD, QuickDocument.QuickHeadSection.Def.class,
-			session -> new QuickDocument.QuickHeadSection.Def((QuickDocument.Def) session.get(ExElement.SESSION_EX_ELEMENT),
+			session -> new QuickDocument.QuickHeadSection.Def((QuickDocument.Def) session.getElementRepresentation(),
 				session.getElement()));
 		interpreter.createWith("window", QuickWindow.Def.class,
-			session -> interpretAddOn(session, (p, ao) -> new QuickWindow.Def(ao, (QuickDocument.Def) p)));
+			session -> interpretAddOn(session, (p, ao) -> new QuickWindow.Def(ao, p)));
 		interpreter.createWith(QuickBorder.LineBorder.LINE_BORDER, QuickBorder.LineBorder.Def.class,
 			session -> interpretQuick(session, QuickBorder.LineBorder.Def::new));
 		interpreter.createWith(QuickBorder.TitledBorder.TITLED_BORDER, QuickBorder.TitledBorder.Def.class,
@@ -103,7 +103,7 @@ public class QuickCoreInterpretation implements QonfigInterpretation {
 	 */
 	public static <E extends ExElement, D extends ExElement.Def<E>> D interpretQuick(AbstractQIS<?> session,
 		BiFunction<ExElement.Def<?>, QonfigElement, D> element) {
-		return element.apply((ExElement.Def<?>) session.get(ExElement.SESSION_EX_ELEMENT), session.getElement());
+		return element.apply((ExElement.Def<?>) session.getElementRepresentation(), session.getElement());
 	}
 
 	/**
@@ -117,6 +117,6 @@ public class QuickCoreInterpretation implements QonfigInterpretation {
 	 */
 	public static <E extends ExElement, AO extends ExAddOn<E>, D extends ExAddOn.Def<E, AO>> D interpretAddOn(
 		AbstractQIS<?> session, BiFunction<ExElement.Def<?>, QonfigAddOn, D> addOn) {
-		return addOn.apply((ExElement.Def<?>) session.get(ExElement.SESSION_EX_ELEMENT), (QonfigAddOn) session.getFocusType());
+		return addOn.apply((ExElement.Def<?>) session.getElementRepresentation(), (QonfigAddOn) session.getFocusType());
 	}
 }
