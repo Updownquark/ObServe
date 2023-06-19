@@ -30,7 +30,6 @@ public class StyleQIS implements SpecialSession<StyleQIS> {
 	static final String STYLED_PROP = "quick-interpreter-styled";
 	static final String STYLE_PROP = "quick-interpreter-style";
 	static final String STYLE_SHEET_PROP = "quick-interpreter-style-sheet";
-	static final String STYLE_ELEMENT = "expresso-style-element";
 
 	private static final String PARENT_MODEL_NAME = "PARENT$MODEL$INSTANCE";
 	private static final ModelInstanceType<SettableValue<?>, SettableValue<ModelSetInstance>> PARENT_MODEL_TYPE = ModelTypes.Value
@@ -101,18 +100,27 @@ public class StyleQIS implements SpecialSession<StyleQIS> {
 		return this;
 	}
 
-	public ExElement.Def<?> getStyleElement() {
-		return getWrapped().get(STYLE_ELEMENT, ExElement.Def.class);
-	}
-
-	public StyleQIS setStyleElement(ExElement.Def<?> def) {
-		getWrapped().put(STYLE_ELEMENT, def);
-		return this;
-	}
-
 	/** @return This element's style */
 	public QuickCompiledStyle getStyle() {
 		return (QuickCompiledStyle) getWrapped().get(STYLE_PROP);
+	}
+
+	@Override
+	public ExElement.Def<?> getElementRepresentation() {
+		Object er = SpecialSession.super.getElementRepresentation();
+		if (er instanceof ExElement.Def<?>)
+			return (ExElement.Def<?>) er;
+		else
+			return null;
+	}
+
+	@Override
+	public StyleQIS setElementRepresentation(Object def) {
+		if (!(def instanceof ExElement.Def))
+			throw new IllegalArgumentException(
+				"Style session can only accept representation by an " + ExElement.class.getName() + ".Def implementation");
+		SpecialSession.super.setElementRepresentation(def);
+		return this;
 	}
 
 	/**

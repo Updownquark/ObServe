@@ -3,6 +3,9 @@
 <quick uses:base="Quick-Base v0.1" uses:expresso="Expresso-Base v0.1" with-extension="window"
 	title="`Simple Quick Table Demo`" close-action="exit">
 	<head>
+		<imports>
+			<import>org.qommons.Primes</import>
+		</imports>
 		<models>
 			<model name="app">
 				<list name="values" type="int">
@@ -11,7 +14,7 @@
 					<element>269</element>
 				</list>
 				<value name="newValue" type="int" />
-				<value name="primes">new org.qommons.Primes()</value>
+				<value name="primes">new Primes()</value>
 				<action-group name="_addPrime">
 					<action>app.values.add(app.newValue)</action>
 					<action>app.newValue=1</action>
@@ -65,7 +68,7 @@
 					<on-type>System.out.println("Typed "+typedChar)</on-type>
 				</check-box>
 			</column>
-			<column name="`Factorization`" value="org.qommons.Primes.formatFactorization(app.primes.factorize(value, 100_000))"
+			<column name="`Factorization`" value="Primes.formatFactorization(app.primes.factorize(value, 100_000))"
 				header-tooltip="&quot;The prime factors of each of the &quot;+app.valueSize+&quot; values&quot;">
 				<label value="columnValue">
 					<style attr="color" condition="hovered">`aqua`</style>

@@ -1,5 +1,6 @@
 package org.observe.expresso;
 
+import org.observe.expresso.qonfig.ExElement;
 import org.qommons.config.QonfigAttributeDef;
 import org.qommons.config.QonfigElement.QonfigValue;
 import org.qommons.config.QonfigInterpretationException;
@@ -7,8 +8,8 @@ import org.qommons.config.QonfigInterpreterCore.CoreSession;
 import org.qommons.config.QonfigValueDef;
 import org.qommons.config.QonfigValueType;
 import org.qommons.config.SpecialSession;
-import org.qommons.io.LocatedPositionedContent;
 import org.qommons.io.LocatedFilePosition;
+import org.qommons.io.LocatedPositionedContent;
 
 /** A special session with extra utility for the Expresso toolkits */
 public class ExpressoQIS implements SpecialSession<ExpressoQIS> {
@@ -68,6 +69,24 @@ public class ExpressoQIS implements SpecialSession<ExpressoQIS> {
 		return theWrapped.get(DYNAMIC_VALUE_CACHE, DynamicModelValue.Cache.class);
 	}
 
+	@Override
+	public ExElement.Def<?> getElementRepresentation() {
+		Object er = SpecialSession.super.getElementRepresentation();
+		if (er instanceof ExElement.Def<?>)
+			return (ExElement.Def<?>) er;
+		else
+			return null;
+	}
+
+	@Override
+	public ExpressoQIS setElementRepresentation(Object def) {
+		if (!(def instanceof ExElement.Def))
+			throw new IllegalArgumentException(
+				"Expresso session can only accept representation by an " + ExElement.class.getName() + ".Def implementation");
+		SpecialSession.super.setElementRepresentation(def);
+		return this;
+	}
+
 	/**
 	 * @param attrName The name of the attribute to get
 	 * @return The observable expression at the given attribute
@@ -116,49 +135,6 @@ public class ExpressoQIS implements SpecialSession<ExpressoQIS> {
 		return getExpression(attr);
 	}
 
-	// /**
-	// * @param <M> The model type to evaluate the attribute as
-	// * @param <MV> The type to evaluate the attribute as
-	// * @param attrName The name of the attribute to evaluate
-	// * @param type The type to evaluate the attribute as
-	// * @param defaultValue Supplies a default value if the given attribute is not specified (optional)
-	// * @return The parsed and evaluated attribute expression
-	// * @throws QonfigInterpretationException If the attribute expression could not be parsed or evaluated
-	// */
-	// public <M, MV extends M> ModelValueSynth<M, MV> getAttribute(String attrName, ModelInstanceType<M, MV> type,
-	// Supplier<Function<ModelSetInstance, MV>> defaultValue) throws QonfigInterpretationException {
-	// QonfigExpression expression = getAttribute(attrName, QonfigExpression.class);
-	// if (expression == null) {
-	// if (defaultValue == null)
-	// return null;
-	// return new ModelValueSynth<M, MV>() {
-	// final Function<ModelSetInstance, MV> def = defaultValue == null ? null : defaultValue.get();
-	//
-	// @Override
-	// public ModelInstanceType<M, MV> getType() {
-	// return type;
-	// }
-	//
-	// @Override
-	// public MV get(ModelSetInstance models) {
-	// return def == null ? null : def.apply(models);
-	// }
-	//
-	// @Override
-	// public MV forModelCopy(MV value, ModelSetInstance sourceModels, ModelSetInstance newModels) {
-	// return def == null ? null : def.apply(newModels);
-	// }
-	//
-	// @Override
-	// public BetterList<ModelValueSynth<?, ?>> getCores() {
-	// return BetterList.of(this);
-	// }
-	// };
-	// }
-	// ObservableExpression obEx = getExpressoParser().parse(expression.text);
-	// return obEx.evaluate(type, getExpressoEnv());
-	// }
-
 	/**
 	 * @return The observable expression in this element's value
 	 * @throws QonfigInterpretationException If the value expression could not be parsed
@@ -166,191 +142,6 @@ public class ExpressoQIS implements SpecialSession<ExpressoQIS> {
 	public CompiledExpression getValueExpression() throws QonfigInterpretationException {
 		return getExpression(getValueDef());
 	}
-
-	// /**
-	// * @param <M> The model type to evaluate the value as
-	// * @param <MV> The type to evaluate the value as
-	// * @param type The type to evaluate the value as
-	// * @param defaultValue Supplies a default value if the value is not specified (optional)
-	// * @return The parsed and evaluated value expression
-	// * @throws IllegalArgumentException If the value is not an expression
-	// * @throws QonfigInterpretationException If the value expression could not be parsed or evaluated as a value
-	// */
-	// public <M, MV extends M> ModelValueSynth<M, MV> getValue(ModelInstanceType<M, MV> type,
-	// Supplier<Function<ModelSetInstance, MV>> defaultValue) throws IllegalArgumentException, QonfigInterpretationException {
-	// QonfigValue value = getElement().getValue();
-	// if (value == null) {
-	// if (defaultValue == null)
-	// return null;
-	// return new ModelValueSynth<M, MV>() {
-	// final Function<ModelSetInstance, MV> def = defaultValue.get();
-	//
-	// @Override
-	// public ModelInstanceType<M, MV> getType() {
-	// return type;
-	// }
-	//
-	// @Override
-	// public MV get(ModelSetInstance models) {
-	// return def.apply(models);
-	// }
-	//
-	// @Override
-	// public MV forModelCopy(MV value2, ModelSetInstance sourceModels, ModelSetInstance newModels) {
-	// return def == null ? null : def.apply(newModels);
-	// }
-	//
-	// @Override
-	// public BetterList<ModelValueSynth<?, ?>> getCores() {
-	// return BetterList.of(this);
-	// }
-	// };
-	// } else if (!(value.value instanceof QonfigExpression))
-	// throw new IllegalArgumentException(
-	// "Value of " + getElement() + " is a " + value.getClass().getName() + ", not an expression");
-	//
-	// try {
-	// ObservableExpression obEx = getExpressoParser().parse(((QonfigExpression) value.value).text);
-	// return obEx.evaluate(type, getExpressoEnv());
-	// } catch (ExpressoException e) {
-	// forChild("value", (value.position == null || e.getErrorOffset() < 0) ? null : value.position.getPosition(e.getErrorOffset()))//
-	// .error("Could not parse value", e);
-	// throw new IllegalStateException(e); // Should not get here
-	// }
-	// }
-	//
-	// /**
-	// * Evaluates an attribute as a simple value
-	// *
-	// * @param <T> The type to evaluate the attribute as
-	// * @param attrName The name of the attribute to evaluate
-	// * @param type The type to evaluate the attribute as
-	// * @param defaultValue Supplies a default value if the given attribute is not specified (optional)
-	// * @return The attribute expression, parsed and evaluated as a value
-	// * @throws IllegalArgumentException If the attribute value is not an expression
-	// * @throws QonfigInterpretationException If the attribute expression could not be parsed or evaluated
-	// */
-	// public <T> ModelValueSynth<SettableValue<?>, SettableValue<T>> getAttributeAsValue(String attrName, TypeToken<T> type,
-	// Supplier<Function<ModelSetInstance, SettableValue<T>>> defaultValue)
-	// throws IllegalArgumentException, QonfigInterpretationException {
-	// return getAttribute(attrName, ModelTypes.Value.forType(type), defaultValue);
-	// }
-	//
-	// /**
-	// * Evaluates an attribute as a simple value
-	// *
-	// * @param <T> The type to evaluate the attribute as
-	// * @param attrName The name of the attribute to evaluate
-	// * @param type The type to evaluate the attribute as
-	// * @param defaultValue Supplies a default value if the given attribute is not specified (optional)
-	// * @return The attribute expression, parsed and evaluated as a value
-	// * @throws IllegalArgumentException If the attribute value is not an expression
-	// * @throws QonfigInterpretationException If the attribute expression could not be parsed or evaluated as a value
-	// */
-	// public <T> ModelValueSynth<SettableValue<?>, SettableValue<T>> getAttributeAsValue(String attrName, Class<T> type,
-	// Supplier<Function<ModelSetInstance, SettableValue<T>>> defaultValue)
-	// throws IllegalArgumentException, QonfigInterpretationException {
-	// return getAttributeAsValue(attrName, TypeTokens.get().of(type), defaultValue);
-	// }
-	//
-	// /**
-	// * Evaluates this element's value as a simple value
-	// *
-	// * @param <T> The type to evaluate the value as
-	// * @param type The type to evaluate the value as
-	// * @param defaultValue Supplies a default value if the value is not specified (optional)
-	// * @return The value expression, parsed and evaluated as a value
-	// * @throws IllegalArgumentException If the value is not an expression
-	// * @throws QonfigInterpretationException If the value expression could not be parsed or evaluated as a value
-	// */
-	// public <T> ModelValueSynth<SettableValue<?>, SettableValue<T>> getValueAsValue(TypeToken<T> type,
-	// Supplier<Function<ModelSetInstance, SettableValue<T>>> defaultValue)
-	// throws IllegalArgumentException, QonfigInterpretationException {
-	// return getValue(ModelTypes.Value.forType(type), defaultValue);
-	// }
-	//
-	// /**
-	// * Evaluates this element's value as a simple value
-	// *
-	// * @param <T> The element type to evaluate the value as
-	// * @param type The type to evaluate the value as
-	// * @param defaultValue Supplies a default value if the value is not specified (optional)
-	// * @return The value expression, parsed and evaluated as a value
-	// * @throws IllegalArgumentException If the value is not an expression
-	// * @throws QonfigInterpretationException If the value expression could not be parsed or evaluated as a value
-	// */
-	// public <T> ModelValueSynth<SettableValue<?>, SettableValue<T>> getValueAsValue(Class<T> type,
-	// Supplier<Function<ModelSetInstance, SettableValue<T>>> defaultValue)
-	// throws IllegalArgumentException, QonfigInterpretationException {
-	// return getValueAsValue(TypeTokens.get().of(type), defaultValue);
-	// }
-	//
-	// /**
-	// * Evaluates an attribute as a collection
-	// *
-	// * @param <T> The element type to evaluate the attribute as
-	// * @param attrName The name of the attribute to evaluate
-	// * @param type The element type to evaluate the attribute as
-	// * @param defaultValue Supplies a default collection if the given attribute is not specified (optional)
-	// * @return The attribute expression, parsed and evaluated as a collection
-	// * @throws IllegalArgumentException If the attribute value is not an expression
-	// * @throws QonfigInterpretationException If the attribute expression could not be parsed or evaluated as a value
-	// */
-	// public <T> ModelValueSynth<ObservableCollection<?>, ObservableCollection<T>> getAttributeAsCollection(String attrName, TypeToken<T>
-	// type,
-	// Supplier<Function<ModelSetInstance, ObservableCollection<T>>> defaultValue)
-	// throws IllegalArgumentException, QonfigInterpretationException {
-	// return getAttribute(attrName, ModelTypes.Collection.forType(type), defaultValue);
-	// }
-	//
-	// /**
-	// * Evaluates an attribute as a collection
-	// *
-	// * @param <T> The element type to evaluate the attribute as
-	// * @param attrName The name of the attribute to evaluate
-	// * @param type The element type to evaluate the attribute as
-	// * @param defaultValue Supplies a default collection if the given attribute is not specified (optional)
-	// * @return The attribute expression, parsed and evaluated as a collection
-	// * @throws IllegalArgumentException If the attribute value is not an expression
-	// * @throws QonfigInterpretationException If the attribute expression could not be parsed or evaluated as a value
-	// */
-	// public <T> ModelValueSynth<ObservableCollection<?>, ObservableCollection<T>> getAttributeAsCollection(String attrName, Class<T> type,
-	// Supplier<Function<ModelSetInstance, ObservableCollection<T>>> defaultValue)
-	// throws IllegalArgumentException, QonfigInterpretationException {
-	// return getAttributeAsCollection(attrName, TypeTokens.get().of(type), defaultValue);
-	// }
-	//
-	// /**
-	// * Evaluates this element's value as a collection
-	// *
-	// * @param <T> The element type to evaluate the value as
-	// * @param type The element type to evaluate the value as
-	// * @param defaultValue Supplies a default collection if the value is not specified (optional)
-	// * @return The value expression, parsed and evaluated as a collection
-	// * @throws IllegalArgumentException If the value is not an expression
-	// * @throws QonfigInterpretationException If the value expression could not be parsed or evaluated as a collection
-	// */
-	// public <T> ModelValueSynth<ObservableCollection<?>, ObservableCollection<T>> getValueAsCollection(TypeToken<T> type,
-	// Supplier<Function<ModelSetInstance, ObservableCollection<T>>> defaultValue)
-	// throws IllegalArgumentException, QonfigInterpretationException {
-	// return getValue(ModelTypes.Collection.forType(type), defaultValue);
-	// }
-	//
-	// /**
-	// * Evaluates this element's value as a collection
-	// *
-	// * @param <T> The element type to evaluate the value as
-	// * @param type The element type to evaluate the value as
-	// * @param defaultValue Supplies a default collection if the value is not specified (optional)
-	// * @return The value expression, parsed and evaluated as a collection
-	// * @throws IllegalArgumentException If the value is not an expression
-	// * @throws QonfigInterpretationException If the value expression could not be parsed or evaluated as a collection
-	// */
-	// public <T> ModelValueSynth<ObservableCollection<?>, ObservableCollection<T>> getValueAsCollection(Class<T> type,
-	// Supplier<Function<ModelSetInstance, ObservableCollection<T>>> defaultValue)
-	// throws IllegalArgumentException, QonfigInterpretationException {
-	// return getValueAsCollection(TypeTokens.get().of(type), defaultValue);
-	// }
 
 	@Override
 	public String toString() {

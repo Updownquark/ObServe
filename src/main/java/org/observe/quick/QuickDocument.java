@@ -168,15 +168,43 @@ public class QuickDocument extends ExElement.Abstract {
 	public static class QuickHeadSection extends ExElement.Interpreted.Abstract<ExElement> {
 		public static final String HEAD = "head";
 
-		public static final ExElement.ChildElementGetter<ExElement, QuickHeadSection, QuickHeadSection.Def> STYLE_SHEET = new ExElement.ChildElementGetter<ExElement, QuickHeadSection, QuickHeadSection.Def>() {
+		public static final ExElement.ChildElementGetter<ExElement, QuickHeadSection, QuickHeadSection.Def> IMPORTS = new ExElement.ChildElementGetter<ExElement, QuickHeadSection, QuickHeadSection.Def>() {
 			@Override
 			public String getDescription() {
-				return "The head section of the Quick document, containing application models, style sheets, etc.";
+				return "The imports of the document, allowing types and static fields and methods to be used by name without full qualification";
 			}
 
 			@Override
 			public List<? extends ExElement.Def<?>> getChildrenFromDef(QuickHeadSection.Def def) {
-				return Collections.singletonList(def.getStyleSheet());
+				if(def.getClassView().getElement()!=null)
+					return Collections.singletonList(def.getClassView());
+				else
+					return Collections.emptyList();
+			}
+
+			@Override
+			public List<? extends ExElement.Interpreted<?>> getChildrenFromInterpreted(QuickHeadSection interp) {
+				return Collections.emptyList();
+			}
+
+			@Override
+			public List<? extends ExElement> getChildrenFromElement(ExElement element) {
+				return Collections.emptyList();
+			}
+		};
+
+		public static final ExElement.ChildElementGetter<ExElement, QuickHeadSection, QuickHeadSection.Def> STYLE_SHEET = new ExElement.ChildElementGetter<ExElement, QuickHeadSection, QuickHeadSection.Def>() {
+			@Override
+			public String getDescription() {
+				return "The style sheet of the document, defining styles that can be applied to sets of elements without being declared on each element";
+			}
+
+			@Override
+			public List<? extends ExElement.Def<?>> getChildrenFromDef(QuickHeadSection.Def def) {
+				if(def.getStyleSheet()!=null)
+					return Collections.singletonList(def.getStyleSheet());
+				else
+					return Collections.emptyList();
 			}
 
 			@Override
@@ -223,14 +251,19 @@ public class QuickDocument extends ExElement.Abstract {
 			@Override
 			public void update(ExpressoQIS session) throws QonfigInterpretationException {
 				checkElement(session.getFocusType(), QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, HEAD);
+				forChild(session.getRole("imports"), IMPORTS);
 				forChild(session.getRole("style-sheet"), STYLE_SHEET);
+				session.setElementRepresentation(this);
 				super.update(session);
 				ClassView cv = session.interpretChildren("imports", ClassView.class).peekFirst();
 				if (cv == null) {
-					ClassView defaultCV = ClassView.build().withWildcardImport("java.lang").build();
+					ClassView defaultCV = ClassView.build().withWildcardImport("java.lang", null).build(this, null);
 					cv = defaultCV;
-				}
+				} else
+					cv.update(session.forChildren("imports").getFirst());
 				theClassView = cv;
+				// Install the class view now, so the model can use it
+				session.setExpressoEnv(session.getExpressoEnv().with(null, cv));
 				ObservableModelSet.Built model = session.interpretChildren("models", ObservableModelSet.Built.class).peekFirst();
 				if (model == null)
 					model = ObservableModelSet.build("models", ObservableModelSet.JAVA_NAME_CHECKER).build();

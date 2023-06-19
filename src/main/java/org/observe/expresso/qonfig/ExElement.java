@@ -452,7 +452,7 @@ public interface ExElement extends Identifiable {
 			 * @param element The element that this definition is being interpreted from
 			 */
 			protected Abstract(ExElement.Def<?> parent, QonfigElement element) {
-				theId = new Identity(element.getType().getName(), element.getPositionInFile());
+				theId = element == null ? null : new Identity(element.getType().getName(), element.getPositionInFile());
 				theParent = parent;
 				theElement = element;
 				theAttributes = new HashMap<>();
@@ -658,7 +658,7 @@ public interface ExElement extends Identifiable {
 
 			@Override
 			public String toString() {
-				return theElement.toString();
+				return theElement == null ? super.toString() : theElement.toString();
 			}
 		}
 	}

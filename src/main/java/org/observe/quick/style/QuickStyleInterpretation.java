@@ -168,7 +168,7 @@ public class QuickStyleInterpretation implements QonfigInterpretation {
 						styleElements = new ArrayList<>();
 					}
 					declared.addAll(sv);
-					styleElements.add((QuickStyleElement.Def) svSession.as(StyleQIS.class).getStyleElement());
+					styleElements.add((QuickStyleElement.Def) svSession.as(StyleQIS.class).getElementRepresentation());
 				}
 				declared = QommonsUtils.unmodifiableCopy(declared);
 				styleElements = QommonsUtils.unmodifiableCopy(styleElements);
@@ -418,13 +418,13 @@ public class QuickStyleInterpretation implements QonfigInterpretation {
 		} else
 			styleSetRef = null;
 		List<QuickStyleElement.Def> subStyleElements = new ArrayList<>();
-		QuickStyleElement.Def styleElement = new QuickStyleElement.Def(session.getStyleElement(), session, declaredType,
+		QuickStyleElement.Def styleElement = new QuickStyleElement.Def(session.getElementRepresentation(), session, declaredType,
 			declaredRole, declaredCondition, styleSetRef, declaredAttr, attr, value, Collections.unmodifiableList(subStyleElements));
-		session.setStyleElement(styleElement);
+		session.setElementRepresentation(styleElement);
 		List<StyleValues> subStyles = new ArrayList<>();
 		for (StyleQIS subStyleEl : session.forChildren("sub-style")) {
 			StyleValues subStyle = subStyleEl.interpret(StyleValues.class);
-			subStyleElements.add((QuickStyleElement.Def) subStyleEl.getStyleElement());
+			subStyleElements.add((QuickStyleElement.Def) subStyleEl.getElementRepresentation());
 			subStyle.init(subStyleEl.getElement());
 			subStyles.add(subStyle);
 		}
@@ -464,12 +464,12 @@ public class QuickStyleInterpretation implements QonfigInterpretation {
 		List<QuickStyleValue<?>> values = new ArrayList<>();
 		List<QuickStyleSheet.StyleSheetRef> importedRefs = new ArrayList<>();
 		List<QuickStyleElement.Def> styleSheetElements = new ArrayList<>();
-		QuickStyleSheet styleSheet = new QuickStyleSheet(session.getStyleElement(), session,
+		QuickStyleSheet styleSheet = new QuickStyleSheet(session.getElementRepresentation(), session,
 			(URL) session.get(STYLE_SHEET_REF), Collections.unmodifiableMap(styleSets), Collections.unmodifiableList(values),
 			Collections.unmodifiableMap(imports), Collections.unmodifiableList(importedRefs),
 			Collections.unmodifiableList(styleSheetElements));
 		session.setStyleSheet(styleSheet);
-		session.setStyleElement(styleSheet);
+		session.setElementRepresentation(styleSheet);
 
 		// First import style sheets
 		DefaultQonfigParser parser = null;
@@ -536,12 +536,12 @@ public class QuickStyleInterpretation implements QonfigInterpretation {
 			QuickStyleSet styleSet = new QuickStyleSet(styleSheet, styleSetEl, name, Collections.unmodifiableList(thisSSVs),
 				Collections.unmodifiableList(styleSetElements));
 			styleSets.put(name, styleSet);
-			styleSetEl.setStyleElement(styleSet);
+			styleSetEl.setElementRepresentation(styleSet);
 			List<StyleQIS> styleValueEls = styleSetEl.forChildren("style");
 			List<StyleValues> styleSetValues = new ArrayList<>(styleValueEls.size());
 			for (StyleQIS styleValueEl : styleValueEls) {
 				styleSetValues.add(styleValueEl.interpret(StyleValues.class));
-				styleSetElements.add((QuickStyleElement.Def) styleValueEl.getStyleElement());
+				styleSetElements.add((QuickStyleElement.Def) styleValueEl.getElementRepresentation());
 			}
 			styleSetParsedValues.put(name, new StyleValues(name) {
 				@Override
@@ -559,7 +559,7 @@ public class QuickStyleInterpretation implements QonfigInterpretation {
 		session.put(STYLE_NAME, name);
 		for (StyleQIS subStyleEl : session.forChildren("style")) {
 			StyleValues subStyle = subStyleEl.interpret(StyleValues.class);
-			styleSheetElements.add((QuickStyleElement.Def) subStyleEl.getStyleElement());
+			styleSheetElements.add((QuickStyleElement.Def) subStyleEl.getElementRepresentation());
 			subStyle.init(subStyleEl.getElement());
 			values.addAll(subStyle.get());
 		}

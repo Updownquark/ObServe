@@ -86,7 +86,7 @@ public interface QuickStyledElement extends ExElement {
 				ExElement.Def<?> parent = getParentElement();
 				while (parent != null && !(parent instanceof QuickStyledElement.Def))
 					parent = parent.getParentElement();
-				session.as(StyleQIS.class).setStyleElement(this);
+				session.as(StyleQIS.class).setElementRepresentation(this);
 				theStyle = wrap(parent == null ? null : ((QuickStyledElement.Def<?>) parent).getStyle(),
 					session.as(StyleQIS.class).getStyle());
 				int i = 0;

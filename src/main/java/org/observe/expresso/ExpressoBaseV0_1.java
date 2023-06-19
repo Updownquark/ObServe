@@ -49,6 +49,7 @@ import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueSynth;
 import org.observe.expresso.ObservableModelSet.RuntimeValuePlaceholder;
 import org.observe.expresso.ops.NameExpression;
+import org.observe.expresso.qonfig.ExElement;
 import org.observe.util.TypeTokens;
 import org.qommons.BiTuple;
 import org.qommons.Causable;
@@ -270,14 +271,14 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 
 	void configureBaseModels(QonfigInterpreterCore.Builder interpreter) {
 		interpreter.createWith("imports", ClassView.class, session -> {
-			ClassView.Builder builder = ClassView.build().withWildcardImport("java.lang");
+			ClassView.Builder builder = ClassView.build().withWildcardImport("java.lang", null);
 			for (CoreSession imp : session.forChildren("import")) {
 				if (imp.getValueText().endsWith(".*"))
-					builder.withWildcardImport(imp.getValueText().substring(0, imp.getValueText().length() - 2));
+					builder.withWildcardImport(imp.getValueText().substring(0, imp.getValueText().length() - 2), imp);
 				else
-					builder.withImport(imp.getValueText(), imp.reporting().at(imp.getValuePosition()));
+					builder.withImport(imp.getValueText(), imp.reporting().at(imp.getValuePosition()), imp);
 			}
-			ClassView cv = builder.build();
+			ClassView cv = builder.build((ExElement.Def<?>) session.getElementRepresentation(), session);
 			wrap(session).setModels(null, cv);
 			return cv;
 		}).createWith("models", ObservableModelSet.Built.class, session -> {

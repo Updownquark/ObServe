@@ -15,34 +15,63 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
+import org.observe.expresso.qonfig.ExElement;
 import org.observe.util.TypeParser;
 import org.observe.util.TypeTokens;
 import org.observe.util.TypeTokens.TypeRetriever;
 import org.qommons.QommonsUtils;
 import org.qommons.ValueHolder;
+import org.qommons.collect.BetterList;
+import org.qommons.config.AbstractQIS;
+import org.qommons.config.QonfigInterpretationException;
 import org.qommons.io.ErrorReporting;
 
 import com.google.common.reflect.TypeToken;
 
 /** A perspective from which to load classes by name, qualified or not, as well as statically-imported fields and methods */
-public class ClassView implements TypeParser {
+public class ClassView extends ExElement.Def.Abstract<ExElement> implements TypeParser {
 	private static final Class<?> NOT_FOUND = new Object() {
 	}.getClass();
+
+	private static final ExElement.ChildElementGetter<ExElement, ExElement.Interpreted<?>, ClassView> IMPORT_ELEMENTS = ExElement.ChildElementGetter.<ExElement, ExElement.Interpreted<?>, ClassView> of(
+		ClassView::getImportElements, null, null, "The import statements");
+
+	private static final ExElement.AttributeValueGetter<ExElement, ExElement.Interpreted<?>, ImportElement> IMPORT_VALUE = ExElement.AttributeValueGetter.<ExElement, ExElement.Interpreted<?>, ImportElement> of(
+		ImportElement::getValue, null, null, "The type name, static field or method name, or wildcard expression to import");
+
+	private static class ImportElement extends ExElement.Def.Abstract<ExElement> {
+		ImportElement(ExElement.Def<?> parent, AbstractQIS<?> session) {
+			super(parent, session.getElement());
+			checkElement(session.getFocusType(), ExpressoSessionImplV0_1.TOOLKIT_NAME, ExpressoSessionImplV0_1.VERSION, "import");
+			forValue(IMPORT_VALUE);
+		}
+
+		String getValue() {
+			return getElement().getValueText();
+		}
+	}
 
 	private final TypeParser theParser;
 	private final List<ClassLoader> theClassLoaders;
 	private final Map<String, String> theImportedTypes;
 	private final Set<String> theWildcardImports;
+	private final List<ImportElement> theImportElements;
 
 	private Map<String, Class<?>> theTypeCache;
 	private Map<String, ValueHolder<Field>> theFieldCache;
 	private Map<String, List<Method>> theMethodCache;
 
 	private ClassView(List<ClassLoader> classLoaders, Map<String, String> importedTypes, Map<String, ErrorReporting> importTypeErrors,
-		Set<String> wildcardImports) {
+		Set<String> wildcardImports, ExElement.Def<?> parent, AbstractQIS<?> session, List<AbstractQIS<?>> importElements) {
+		super(parent, session == null ? null : session.getElement());
+		if (session != null) {
+			checkElement(session.getFocusType(), ExpressoSessionImplV0_1.TOOLKIT_NAME, ExpressoSessionImplV0_1.VERSION, "imports");
+			forChild(session.getRole("import"), IMPORT_ELEMENTS);
+		}
 		theClassLoaders = classLoaders;
 		theImportedTypes = importedTypes;
 		theWildcardImports = wildcardImports;
+		theImportElements = BetterList.of2(importElements.stream(), s -> new ImportElement(this, s));
 		theFieldCache = new ConcurrentHashMap<>();
 		theMethodCache = new ConcurrentHashMap<>();
 
@@ -195,6 +224,18 @@ public class ClassView implements TypeParser {
 		return theParser.removeTypeRetriever(typeRetriever);
 	}
 
+	public List<ImportElement> getImportElements() {
+		return theImportElements;
+	}
+
+	@Override
+	public void update(ExpressoQIS session) throws QonfigInterpretationException {
+		super.update(session);
+		int i = 0;
+		for (ExpressoQIS impSession : session.forChildren("import"))
+			theImportElements.get(i++).update(impSession);
+	}
+
 	/** @return A builder to create a new class view */
 	public static Builder build() {
 		return new Builder();
@@ -206,12 +247,14 @@ public class ClassView implements TypeParser {
 		private final Map<String, String> theImportedTypes;
 		private final Map<String, ErrorReporting> theImportTypeErrors;
 		private final Set<String> theWildcardImports;
+		private final List<AbstractQIS<?>> theImportElements;
 
 		Builder() {
 			theClassLoaders = new ArrayList<>(3);
 			theImportedTypes = new LinkedHashMap<>();
 			theImportTypeErrors = new LinkedHashMap<>();
 			theWildcardImports = new LinkedHashSet<>();
+			theImportElements = new ArrayList<>();
 		}
 
 		/**
@@ -228,12 +271,16 @@ public class ClassView implements TypeParser {
 		 * @param onError Error reporting if this type cannot be resolved after the class view is built
 		 * @return This builder
 		 */
-		public Builder withImport(String importedType, ErrorReporting onError) {
+		public Builder withImport(String importedType, ErrorReporting onError, AbstractQIS<?> session) {
 			int lastDot = importedType.lastIndexOf('.');
 			if (lastDot >= 0)
 				theImportedTypes.put(importedType.substring(lastDot + 1), importedType);
 			else
 				theImportedTypes.put(importedType, importedType);
+			if (onError != null)
+				theImportTypeErrors.put(importedType, onError);
+			if (session != null)
+				theImportElements.add(session);
 			return this;
 		}
 
@@ -242,18 +289,20 @@ public class ClassView implements TypeParser {
 		 *        names, and fields and methods of the given type will be available by name.
 		 * @return This builder
 		 */
-		public Builder withWildcardImport(String wildcardImport) {
+		public Builder withWildcardImport(String wildcardImport, AbstractQIS<?> session) {
 			theWildcardImports.add(wildcardImport);
+			if (session != null)
+				theImportElements.add(session);
 			return this;
 		}
 
 		/** @return The new {@link ClassView} */
-		public ClassView build() {
+		public ClassView build(ExElement.Def<?> parent, AbstractQIS<?> session) {
 			return new ClassView(//
 				theClassLoaders.isEmpty() ? Collections.unmodifiableList(Arrays.asList(Thread.currentThread().getContextClassLoader()))
 					: QommonsUtils.unmodifiableCopy(theClassLoaders), //
-				QommonsUtils.unmodifiableCopy(theImportedTypes), theImportTypeErrors, //
-					QommonsUtils.unmodifiableDistinctCopy(theWildcardImports));
+					QommonsUtils.unmodifiableCopy(theImportedTypes), theImportTypeErrors, //
+					QommonsUtils.unmodifiableDistinctCopy(theWildcardImports), parent, session, theImportElements);
 		}
 	}
 }
