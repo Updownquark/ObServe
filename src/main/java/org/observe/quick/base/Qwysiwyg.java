@@ -9,14 +9,15 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.function.Supplier;
 
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.SimpleObservable;
 import org.observe.expresso.ExpressionValueType;
 import org.observe.expresso.ExpressoInterpretationException;
+import org.observe.expresso.LocatedExpression;
 import org.observe.expresso.ModelInstantiationException;
+import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.qonfig.ExElement;
@@ -25,7 +26,6 @@ import org.observe.quick.QuickApplication;
 import org.observe.quick.QuickDocument;
 import org.qommons.ArrayUtils;
 import org.qommons.Colors;
-import org.qommons.LambdaUtils;
 import org.qommons.collect.CircularArrayList;
 import org.qommons.collect.DequeList;
 import org.qommons.config.CustomValueType;
@@ -40,6 +40,7 @@ import org.qommons.io.CircularCharBuffer;
 import org.qommons.io.ErrorReporting;
 import org.qommons.io.FilePosition;
 import org.qommons.io.FileUtils;
+import org.qommons.io.LocatedFilePosition;
 import org.qommons.io.LocatedPositionedContent;
 import org.qommons.io.PositionedContent;
 import org.qommons.io.SimpleXMLParser;
@@ -229,12 +230,14 @@ public class Qwysiwyg {
 		if (hovered == theHovered)
 			return;
 		theHovered = hovered;
-		while (hovered != null && hovered.tooltip == null)
+		String tt = null;
+		while (hovered != null) {
+			tt = hovered.getTooltip();
+			if (tt != null)
+				break;
 			hovered = hovered.parent;
-		if (hovered != null)
-			theInternalTooltip.set(hovered.tooltip.get(), null);
-		else
-			theInternalTooltip.set(null, null);
+		}
+		theInternalTooltip.set(tt, null);
 	}
 
 	public void clicked(int position, int clickCount) {
@@ -242,8 +245,9 @@ public class Qwysiwyg {
 			return;
 		DocumentComponent clicked = getRenderComponent(theRoot, position);
 		String print = "" + clicked.start;
-		if (clicked.tooltip != null)
-			print += clicked.tooltip.get();
+		String tt = clicked.getTooltip();
+		if (tt != null)
+			print += tt;
 		System.out.println(print);
 	}
 
@@ -422,7 +426,7 @@ public class Qwysiwyg {
 	private void renderDef(DocumentComponent component, ExElement.Def<?> def, String descrip) {
 		if (descrip != null) {
 			DocumentComponent elComponent = getSourceComponent(component, def.getElement().getPositionInFile().getPosition());
-			elComponent.tooltip(descrip);
+			elComponent.typeTooltip(descrip, true);
 		}
 		for (Map.Entry<QonfigAttributeDef.Declared, QonfigValue> attr : def.getElement().getAttributes().entrySet()) {
 			PositionedContent position = attr.getValue().position;
@@ -434,16 +438,17 @@ public class Qwysiwyg {
 			if (type instanceof QonfigValueType.Custom) {
 				CustomValueType customType = ((QonfigValueType.Custom) type).getCustomType();
 				if (customType instanceof ExpressionValueType) {
-					// TODO Color different expression components
+					Object defValue = def.getAttribute(attr.getKey());
+					if (defValue instanceof LocatedExpression)
+						renderCompiledExpression(((LocatedExpression) defValue).getExpression(),
+							((LocatedExpression) defValue).getFilePosition(), attrValueComp);
 				}
 			}
 			String attrDescrip = def.getAttributeDescription(attr.getKey());
-			attrComp.tooltip2(() -> {
-				if (attrDescrip != null)
-					return "<html>" + attrDescrip + "<br><br>" + renderValueType(type, 1, attr.getKey());
-				else
-					return renderValueType(type, 1, attr.getKey());
-			});
+			if (attrDescrip != null)
+				attrComp.typeTooltip(attrDescrip + "<br><br>" + renderValueType(type, 1, attr.getKey()), true);
+			else
+				attrComp.typeTooltip(renderValueType(type, 1, attr.getKey()), true);
 		}
 		if (def.getElement().getValue() != null && def.getElement().getValue().position != null) {
 			PositionedContent position = def.getElement().getValue().position;
@@ -452,17 +457,17 @@ public class Qwysiwyg {
 			if (type instanceof QonfigValueType.Custom) {
 				CustomValueType customType = ((QonfigValueType.Custom) type).getCustomType();
 				if (customType instanceof ExpressionValueType) {
-					// TODO Color different expression components
+					Object defValue = def.getElementValue();
+					if (defValue instanceof LocatedExpression)
+						renderCompiledExpression(((LocatedExpression) defValue).getExpression(),
+							((LocatedExpression) defValue).getFilePosition(), attrValueComp);
 				}
 			}
 			String attrDescrip = def.getElementValueDescription();
-			attrValueComp.tooltip2(() -> {
-				if (attrDescrip != null)
-					return "<html>" + attrDescrip + "<br><br>"
-					+ renderValueType(type, 1, def.getElement().getType().getValue());
-				else
-					return renderValueType(type, 1, def.getElement().getType().getValue());
-			});
+			if (attrDescrip != null)
+				attrValueComp.typeTooltip(attrDescrip + "<br><br>" + renderValueType(type, 1, def.getElement().getType().getValue()), true);
+			else
+				attrValueComp.typeTooltip(renderValueType(type, 1, def.getElement().getType().getValue()), true);
 		}
 		for (ExElement.Def<?> child : def.getAllChildren()) {
 			String childDescrip = null;
@@ -477,6 +482,29 @@ public class Qwysiwyg {
 			}
 			renderDef(component, child, childDescrip);
 		}
+	}
+
+	private void renderCompiledExpression(ObservableExpression ex, LocatedPositionedContent content, DocumentComponent component) {
+		component.color(getColor(ex.getClass()));
+		int c = 0;
+		for (ObservableExpression child : ex.getChildren()) {
+			int childOffset = ex.getChildOffset(c);
+			int length = child.getExpressionLength();
+			LocatedFilePosition startPos = content.getPosition(childOffset);
+			renderCompiledExpression(child, content.subSequence(childOffset, childOffset + length), //
+				component.addChild(startPos).end(startPos.getPosition() + length));
+			c++;
+		}
+		// TODO Color different expression components
+
+	}
+
+	private Color getColor(Class<? extends ObservableExpression> exType) {
+		Color color = new Color(exType.getName().hashCode());
+		float dark = Colors.getDarkness(color);
+		if (dark < 0.15)
+			color = Colors.stain(color, 0.25f);
+		return color;
 	}
 
 	static String renderValueType(QonfigValueType type, int indent, QonfigValueDef value) {
@@ -738,10 +766,13 @@ public class Qwysiwyg {
 		boolean link;
 		boolean bold;
 		Color fontColor;
-		Supplier<String> tooltip;
 		List<DocumentComponent> children;
 		int renderedStart;
 		int renderedEnd;
+
+		boolean isTooltipHtml;
+		String typeTooltip;
+		String interpretedTooltip;
 
 		static DocumentComponent createRoot() {
 			return new DocumentComponent(null, FilePosition.START);
@@ -757,10 +788,6 @@ public class Qwysiwyg {
 			return end;
 		}
 
-		public ObservableValue<String> getTooltip() {
-			return null;
-		}
-
 		DocumentComponent addChild(FilePosition childStart) {
 			if (start.getPosition() > childStart.getPosition())
 				throw new IllegalArgumentException("Adding child before the parent");
@@ -773,12 +800,13 @@ public class Qwysiwyg {
 			return child;
 		}
 
-		void end(int e) {
+		DocumentComponent end(int e) {
 			if (e < start.getPosition())
 				throw new IllegalArgumentException("Ending before beginning");
 			if (children != null && !children.isEmpty() && e < children.get(children.size() - 1).end)
 				throw new IllegalArgumentException("Ending parent before last child");
 			this.end = e;
+			return this;
 		}
 
 		DocumentComponent color(Color color) {
@@ -796,13 +824,32 @@ public class Qwysiwyg {
 			return this;
 		}
 
-		DocumentComponent tooltip(String tt) {
-			tooltip = LambdaUtils.constantSupplier(tt, tt, null);
+		String getTooltip() {
+			if (typeTooltip == null && interpretedTooltip == null)
+				return null;
+			StringBuilder str = new StringBuilder();
+			if (isTooltipHtml)
+				str.append("<html>");
+			if (typeTooltip != null) {
+				str.append(typeTooltip);
+				if (interpretedTooltip != null)
+					str.append("<br><br>").append(interpretedTooltip);
+			} else
+				str.append(interpretedTooltip);
+			return str.toString();
+		}
+
+		DocumentComponent typeTooltip(String tt, boolean html) {
+			typeTooltip = tt;
+			if (html)
+				isTooltipHtml = true;
 			return this;
 		}
 
-		DocumentComponent tooltip2(Supplier<String> tt) {
-			tooltip = tt;
+		DocumentComponent interpretedTooltip(String tt, boolean html) {
+			interpretedTooltip = tt;
+			if (html)
+				isTooltipHtml = true;
 			return this;
 		}
 
