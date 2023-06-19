@@ -425,6 +425,6 @@ public class BinaryOperator implements ObservableExpression {
 
 	@Override
 	public String toString() {
-		return theLeft + " " + theOperator + " " + theRight;
+		return theLeft + theOperator + theRight;
 	}
 }

@@ -228,6 +228,6 @@ public class ConditionalExpression implements ObservableExpression {
 
 	@Override
 	public String toString() {
-		return theCondition + " ? " + thePrimary + " : " + theSecondary;
+		return theCondition + "?" + thePrimary + ":" + theSecondary;
 	}
 }

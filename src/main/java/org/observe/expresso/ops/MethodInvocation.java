@@ -68,8 +68,8 @@ public class MethodInvocation extends Invocation {
 			argIndex = childIndex;
 		offset += theMethodName.length() + 1;
 		if (argIndex > 0)
-			offset += argIndex - 1;
-		for (int a = 0; a < argIndex - 1; a++)
+			offset += argIndex;
+		for (int a = 0; a < argIndex; a++)
 			offset += getArguments().get(a).getExpressionLength();
 		return offset;
 	}
