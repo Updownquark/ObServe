@@ -480,7 +480,7 @@ public interface ValueAction<T> extends ExElement {
 				ExElement.checkElement(session.getFocusType(), QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION,
 					MULTI_VALUE_ACTION);
 				forAttribute(session.getAttributeDef(null, null, "values-name"), VALUES_NAME);
-				forAttribute(session.getAttributeDef(null, null, "allow-for-EMPTY"), ALLOW_FOR_EMPTY);
+				forAttribute(session.getAttributeDef(null, null, "allow-for-empty"), ALLOW_FOR_EMPTY);
 				super.update(session.asElement(session.getFocusType().getSuperElement()));
 				theValuesName = session.getAttributeText("values-name");
 				allowForEmpty = session.getAttribute("allow-for-empty", boolean.class);
