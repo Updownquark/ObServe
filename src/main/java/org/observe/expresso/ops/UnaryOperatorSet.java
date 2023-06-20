@@ -52,6 +52,7 @@ public class UnaryOperatorSet {
 		 * @param type The input and output type of the operator
 		 * @param op The function to use for {@link UnaryOp#apply(Object)}
 		 * @param reverse The function to use for {@link UnaryOp#reverse(Object)}
+		 * @param description The description for the operator
 		 * @return The unary operator composed of the given functions
 		 */
 		static <T> UnaryOp<T, T> of(String name, Class<T> type, Function<? super T, ? extends T> op,
@@ -66,6 +67,7 @@ public class UnaryOperatorSet {
 		 * @param name The name of the operator
 		 * @param type The input and output type of the operator
 		 * @param op The function to use for {@link UnaryOp#apply(Object)} and {@link UnaryOp#reverse(Object)}
+		 * @param description The description for the operator
 		 * @return The unary operator composed of the given function
 		 */
 		static <T> UnaryOp<T, T> ofSym(String name, Class<T> type, Function<T, T> op, String description) {
@@ -81,6 +83,7 @@ public class UnaryOperatorSet {
 		 * @param type The type of the output
 		 * @param op The function to use for {@link UnaryOp#apply(Object)}
 		 * @param reverse The function to use for {@link UnaryOp#reverse(Object)}
+		 * @param description The description for the operator
 		 * @return The unary operator composed of the given functions
 		 */
 		static <S, T> UnaryOp<S, T> of2(String name, Class<T> type, Function<? super S, ? extends T> op,
@@ -122,6 +125,7 @@ public class UnaryOperatorSet {
 		 * @param <T> The type of the input and output
 		 * @param name The name of the operator
 		 * @param type The type of the input and output
+		 * @param description The description for the operator
 		 * @return A unary operator whose output is the same as the input
 		 */
 		static <T> UnaryOp<T, T> identity(String name, Class<T> type, String description) {
@@ -164,6 +168,7 @@ public class UnaryOperatorSet {
 		 * @param <T> The type of the input and output
 		 * @param type The type of the input and output
 		 * @param op The function to use for {@link UnaryOp#apply(Object)}
+		 * @param description The description for the operator
 		 * @return The unary operator
 		 */
 		static <T> UnaryOp<T, T> ofAction(Class<T> type, Function<? super T, ? extends T> op, String description) {
@@ -354,6 +359,7 @@ public class UnaryOperatorSet {
 		 * @param type The type of the input
 		 * @param op The function to apply the operation
 		 * @param reverse The function to reverse the operation
+		 * @param description The description for the operator
 		 * @return This builder
 		 * @see UnaryOp#reverse(Object)
 		 */
@@ -373,6 +379,7 @@ public class UnaryOperatorSet {
 		 * @param target The type of the output
 		 * @param op The function to apply the operation
 		 * @param reverse The function to reverse the operation
+		 * @param description The description for the operator
 		 * @return This builder
 		 * @see UnaryOp#reverse(Object)
 		 */
@@ -391,6 +398,7 @@ public class UnaryOperatorSet {
 		 * @param operator The name of the operator
 		 * @param type The type of the operator
 		 * @param op The function to apply and reverse the operator
+		 * @param description The description for the operator
 		 * @return This builder
 		 */
 		public <T> Builder withSymmetric(String operator, Class<T> type, Function<T, T> op, String description) {
@@ -404,6 +412,7 @@ public class UnaryOperatorSet {
 		 * @param <T> The type of the operator
 		 * @param operator The name of the operator
 		 * @param type The type of the operator
+		 * @param description The description for the operator
 		 * @return This builder
 		 */
 		public <T> Builder withIdentity(String operator, Class<T> type, String description) {
@@ -418,6 +427,7 @@ public class UnaryOperatorSet {
 		 * @param operator The name of the operator
 		 * @param type The type of the operator
 		 * @param op The function to apply the operator
+		 * @param description The description for the operator
 		 * @return This builder
 		 */
 		public <T> Builder withAction(String operator, Class<T> type, Function<? super T, ? extends T> op, String description) {

@@ -77,6 +77,7 @@ public class BinaryOperatorSet {
 		 * @param reverse The function to use for {@link BinaryOp#reverse(Object, Object, Object)}
 		 * @param reverseEnabled The function to use for {@link BinaryOp#canReverse(Object, Object, Object)}, or null if the operator is
 		 *        always reversible
+		 * @param description The description for the operator
 		 * @return The binary operator composed of the given functions
 		 */
 		static <S, T> BinaryOp<S, T, S> of(String name, TypeToken<S> type, BiFunction<? super S, ? super T, ? extends S> op,
@@ -97,6 +98,7 @@ public class BinaryOperatorSet {
 		 * @param reverse The function to use for {@link BinaryOp#reverse(Object, Object, Object)}
 		 * @param reverseEnabled The function to use for {@link BinaryOp#canReverse(Object, Object, Object)}, or null if the operator is
 		 *        always reversible
+		 * @param description The description for the operator
 		 * @return The binary operator composed of the given functions
 		 */
 		static <S, T, V> BinaryOp<S, T, V> of2(String name, TypeToken<V> type, BiFunction<? super S, ? super T, ? extends V> op,
@@ -1206,6 +1208,7 @@ public class BinaryOperatorSet {
 		 * @param op The function to apply the operation
 		 * @param reverse The function to reverse the operation
 		 * @param reverseEnabled The function to detect support for reversing the operation, or null if the operation is always reversible
+		 * @param description The description for the operator
 		 * @return This builder
 		 * @see BinaryOp#canReverse(Object, Object, Object)
 		 * @see BinaryOp#reverse(Object, Object, Object)
@@ -1230,6 +1233,7 @@ public class BinaryOperatorSet {
 		 * @param op The function to apply the operation
 		 * @param reverse The function to reverse the operation
 		 * @param reverseEnabled The function to detect support for reversing the operation, or null if the operation is always reversible
+		 * @param description The description for the operator
 		 * @return This builder
 		 * @see BinaryOp#canReverse(Object, Object, Object)
 		 * @see BinaryOp#reverse(Object, Object, Object)
@@ -1331,6 +1335,7 @@ public class BinaryOperatorSet {
 		 * @param op The function to apply the operation
 		 * @param reverse The function to reverse the operation
 		 * @param canReverse The function to detect support for reversing the operation, or null if the operation is always reversible
+		 * @param description The description for the operator
 		 * @return This builder
 		 */
 		public Builder withIntArithmeticOp(String operator, BiFunction<Integer, Integer, Integer> op,
@@ -1363,6 +1368,7 @@ public class BinaryOperatorSet {
 		 * @param op The function to apply the operation
 		 * @param reverse The function to reverse the operation
 		 * @param canReverse The function to detect support for reversing the operation, or null if the operation is always reversible
+		 * @param description The description for the operator
 		 * @return This builder
 		 */
 		public Builder withLongArithmeticOp(String operator, BiFunction<Long, Long, Long> op, TriFunction<Long, Long, Long, Long> reverse,
@@ -1386,6 +1392,7 @@ public class BinaryOperatorSet {
 		 * @param op The function to apply the operation
 		 * @param reverse The function to reverse the operation
 		 * @param canReverse The function to detect support for reversing the operation, or null if the operation is always reversible
+		 * @param description The description for the operator
 		 * @return This builder
 		 */
 		public Builder withFloatArithmeticOp(String operator, BiFunction<Float, Float, Float> op,
@@ -1411,6 +1418,7 @@ public class BinaryOperatorSet {
 		 * @param op The function to apply the operation
 		 * @param reverse The function to reverse the operation
 		 * @param canReverse The function to detect support for reversing the operation, or null if the operation is always reversible
+		 * @param description The description for the operator
 		 * @return This builder
 		 */
 		public Builder withDoubleArithmeticOp(String operator, BiFunction<Double, Double, Double> op,
@@ -1437,6 +1445,7 @@ public class BinaryOperatorSet {
 		 *
 		 * @param operator The name of the operator
 		 * @param op The function to apply the operation
+		 * @param description The description for the operator
 		 * @return This builder
 		 */
 		public Builder withIntComparisonOp(String operator, BiFunction<Integer, Integer, Boolean> op, String description) {
@@ -1466,6 +1475,7 @@ public class BinaryOperatorSet {
 		 *
 		 * @param operator The name of the operator
 		 * @param op The function to apply the operation
+		 * @param description The description for the operator
 		 * @return This builder
 		 */
 		public Builder withLongComparisonOp(String operator, BiFunction<Long, Long, Boolean> op, String description) {
@@ -1487,6 +1497,7 @@ public class BinaryOperatorSet {
 		 *
 		 * @param operator The name of the operator
 		 * @param op The function to apply the operation
+		 * @param description The description for the operator
 		 * @return This builder
 		 */
 		public Builder withFloatComparisonOp(String operator, BiFunction<Float, Float, Boolean> op, String description) {
@@ -1510,6 +1521,7 @@ public class BinaryOperatorSet {
 		 *
 		 * @param operator The name of the operator
 		 * @param op The function to apply the operation
+		 * @param description The description for the operator
 		 * @return This builder
 		 */
 		public Builder withDoubleComparisonOp(String operator, BiFunction<Double, Double, Boolean> op, String description) {
