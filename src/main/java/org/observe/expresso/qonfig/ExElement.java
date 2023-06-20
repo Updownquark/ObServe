@@ -313,6 +313,8 @@ public interface ExElement extends Identifiable {
 
 		Object getAttribute(Interpreted<? extends E> interpreted, QonfigAttributeDef attr);
 
+		Object getElementValue(Interpreted<? extends E> interpreted);
+
 		List<? extends Interpreted<?>> getChildren(Interpreted<? extends E> interpreted, QonfigChildDef role);
 
 		default List<Interpreted<?>> getAllChildren(Interpreted<? extends E> interpreted) {
@@ -352,6 +354,8 @@ public interface ExElement extends Identifiable {
 		}
 
 		Object getAttribute(E element, QonfigAttributeDef attr);
+
+		Object getElementValue(E element);
 
 		List<? extends ExElement> getChildren(E element, QonfigChildDef role);
 
@@ -553,6 +557,12 @@ public interface ExElement extends Identifiable {
 			}
 
 			@Override
+			public Object getElementValue(Interpreted<? extends E> interpreted) {
+				return theValue == null ? null
+					: ((AttributeValueGetter<? super E, Interpreted<? extends E>, ?>) theValue).getFromInterpreted(interpreted);
+			}
+
+			@Override
 			public List<? extends Interpreted<?>> getChildren(Interpreted<? extends E> interpreted, QonfigChildDef role) {
 				ChildElementGetter<? super E, ?, ?> getter = theChildren.get(role.getDeclared());
 				if (getter == null)
@@ -566,6 +576,11 @@ public interface ExElement extends Identifiable {
 				if (getter == null)
 					return null;
 				return ((AttributeValueGetter<? super E, ?, ?>) getter).getFromElement(element);
+			}
+
+			@Override
+			public Object getElementValue(E element) {
+				return theValue == null ? null : ((AttributeValueGetter<? super E, ?, ?>) theValue).getFromElement(element);
 			}
 
 			@Override

@@ -13,7 +13,6 @@ import org.observe.expresso.ExpressoEvaluationException;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ObservableExpression;
-import org.observe.expresso.ObservableModelSet.ModelValueSynth;
 
 /** An expression representing the invocation of a constructor to create a new instance of a type */
 public class ConstructorInvocation extends Invocation {
@@ -35,29 +34,29 @@ public class ConstructorInvocation extends Invocation {
 	}
 
 	@Override
-	public int getChildOffset(int childIndex) {
-		if (childIndex >= getChildren().size())
-			throw new IndexOutOfBoundsException(childIndex + " of " + getChildren().size());
+	public int getComponentOffset(int childIndex) {
+		if (childIndex >= getComponents().size())
+			throw new IndexOutOfBoundsException(childIndex + " of " + getComponents().size());
 		int offset = 4 + theType.length();
 		if (childIndex > 0)
 			offset += childIndex - 1;
 		for (int i = 0; i < childIndex; i++)
-			offset += getChildren().get(childIndex).getExpressionLength();
+			offset += getComponents().get(childIndex).getExpressionLength();
 		return offset;
 	}
 
 	@Override
 	public int getExpressionLength() {
 		int length = 5 + theType.length();
-		if (getChildren().size() > 0)
-			length += getChildren().size() - 1;
-		for (ObservableExpression arg : getChildren())
+		if (!getComponents().isEmpty())
+			length += getComponents().size() - 1;
+		for (ObservableExpression arg : getComponents())
 			length = arg.getExpressionLength();
 		return length;
 	}
 
 	@Override
-	public List<? extends ObservableExpression> getChildren() {
+	public List<? extends ObservableExpression> getComponents() {
 		return getArguments();
 	}
 
@@ -66,7 +65,7 @@ public class ConstructorInvocation extends Invocation {
 		ObservableExpression replacement = replace.apply(this);
 		if (replacement != this)
 			return replacement;
-		List<? extends ObservableExpression> children = getChildren();
+		List<? extends ObservableExpression> children = getComponents();
 		List<ObservableExpression> newChildren = new ArrayList<>(children.size());
 		boolean different = false;
 		for (ObservableExpression child : children) {
@@ -98,7 +97,7 @@ public class ConstructorInvocation extends Invocation {
 		Invocation.MethodResult<Constructor<?>, MV> result = Invocation.findMethod(constructorType.getConstructors(), null, null, true,
 			Arrays.asList(args), type, env, Invocation.ExecutableImpl.CONSTRUCTOR, this, expressionOffset);
 		if (result != null) {
-			ModelValueSynth<SettableValue<?>, SettableValue<?>>[] realArgs = new ModelValueSynth[getArguments().size()];
+			EvaluatedExpression<SettableValue<?>, SettableValue<?>>[] realArgs = new EvaluatedExpression[getArguments().size()];
 			for (int a = 0; a < realArgs.length; a++)
 				realArgs[a] = args.args[a].get(0);
 			return new InvokableResult<>(result, null, Arrays.asList(realArgs), Invocation.ExecutableImpl.CONSTRUCTOR);

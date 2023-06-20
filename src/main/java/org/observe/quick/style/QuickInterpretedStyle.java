@@ -7,8 +7,10 @@ import java.util.Set;
 
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
+import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.quick.style.QuickStyleElement.Interpreted;
 import org.observe.util.TypeTokens;
 import org.qommons.LambdaUtils;
 import org.qommons.collect.BetterCollection;
@@ -74,12 +76,17 @@ public interface QuickInterpretedStyle {
 		return get(attributeName, TypeTokens.get().of(type));
 	}
 
+	List<QuickStyleElement.Interpreted> getStyleElements();
+
+	void update() throws ExpressoInterpretationException;
+
 	/** Default implementation */
 	public class Default implements QuickInterpretedStyle {
 		private final QuickInterpretedStyle theParent;
 		private final QuickCompiledStyle theCompiledStyle;
 		private final List<InterpretedStyleValue<?>> theDeclaredValues;
 		private final Map<QuickStyleAttribute<?>, QuickElementStyleAttribute<?>> theValues;
+		private final List<QuickStyleElement.Interpreted> theStyleElements;
 
 		/**
 		 * @param parent The element style for the {@link QonfigElement#getParent() parent} element
@@ -88,11 +95,12 @@ public interface QuickInterpretedStyle {
 		 * @param values All values for style attributes that vary on this style
 		 */
 		public Default(QuickInterpretedStyle parent, QuickCompiledStyle compiled, List<InterpretedStyleValue<?>> declaredValues,
-			Map<QuickStyleAttribute<?>, QuickElementStyleAttribute<?>> values) {
+			Map<QuickStyleAttribute<?>, QuickElementStyleAttribute<?>> values, List<QuickStyleElement.Interpreted> styleElements) {
 			theParent = parent;
 			theCompiledStyle = compiled;
 			theDeclaredValues = declaredValues;
 			theValues = values;
+			theStyleElements = styleElements;
 		}
 
 		@Override
@@ -125,6 +133,17 @@ public interface QuickInterpretedStyle {
 					"Attribute " + attr + " is not valid for this element (" + theCompiledStyle.getElement().getType().getName() + ")");
 			return new QuickElementStyleAttribute<>(attr, this, Collections.emptyList(), //
 				theParent != null && attr.isTrickleDown() ? theParent.get(attr) : null);
+		}
+
+		@Override
+		public List<QuickStyleElement.Interpreted> getStyleElements() {
+			return theStyleElements;
+		}
+
+		@Override
+		public void update() throws ExpressoInterpretationException {
+			for (QuickStyleElement.Interpreted styleEl : theStyleElements)
+				styleEl.update();
 		}
 
 		@Override
@@ -177,6 +196,16 @@ public interface QuickInterpretedStyle {
 		@Override
 		public <T> QuickElementStyleAttribute<T> get(QuickStyleAttribute<T> attr) {
 			return theWrapped.get(attr);
+		}
+
+		@Override
+		public List<Interpreted> getStyleElements() {
+			return theWrapped.getStyleElements();
+		}
+
+		@Override
+		public void update() throws ExpressoInterpretationException {
+			theWrapped.update();
 		}
 
 		@Override

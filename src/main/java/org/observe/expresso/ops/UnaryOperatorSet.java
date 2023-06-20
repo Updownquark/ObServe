@@ -10,6 +10,7 @@ import org.qommons.BiTuple;
 import org.qommons.ClassMap;
 import org.qommons.ClassMap.TypeMatch;
 import org.qommons.QommonsUtils;
+import org.qommons.SelfDescribed;
 
 /** A set of unary operations that a {@link UnaryOperator} can use to evaluate itself */
 public class UnaryOperatorSet {
@@ -19,7 +20,7 @@ public class UnaryOperatorSet {
 	 * @param <S> The super-type of the first input that this operator knows how to handle
 	 * @param <T> The type of output produced by this operator
 	 */
-	public interface UnaryOp<S, T> {
+	public interface UnaryOp<S, T> extends SelfDescribed {
 		/** @return The type of output produced by this operator */
 		Class<T> getTargetType();
 
@@ -54,8 +55,8 @@ public class UnaryOperatorSet {
 		 * @return The unary operator composed of the given functions
 		 */
 		static <T> UnaryOp<T, T> of(String name, Class<T> type, Function<? super T, ? extends T> op,
-			Function<? super T, ? extends T> reverse) {
-			return of2(name, type, op, reverse);
+			Function<? super T, ? extends T> reverse, String description) {
+			return of2(name, type, op, reverse, description);
 		}
 
 		/**
@@ -67,8 +68,8 @@ public class UnaryOperatorSet {
 		 * @param op The function to use for {@link UnaryOp#apply(Object)} and {@link UnaryOp#reverse(Object)}
 		 * @return The unary operator composed of the given function
 		 */
-		static <T> UnaryOp<T, T> ofSym(String name, Class<T> type, Function<T, T> op) {
-			return of2(name, type, op, op);
+		static <T> UnaryOp<T, T> ofSym(String name, Class<T> type, Function<T, T> op, String description) {
+			return of2(name, type, op, op, description);
 		}
 
 		/**
@@ -83,7 +84,7 @@ public class UnaryOperatorSet {
 		 * @return The unary operator composed of the given functions
 		 */
 		static <S, T> UnaryOp<S, T> of2(String name, Class<T> type, Function<? super S, ? extends T> op,
-			Function<? super T, ? extends S> reverse) {
+			Function<? super T, ? extends S> reverse, String description) {
 			return new UnaryOp<S, T>() {
 				@Override
 				public Class<T> getTargetType() {
@@ -106,6 +107,11 @@ public class UnaryOperatorSet {
 				}
 
 				@Override
+				public String getDescription() {
+					return description;
+				}
+
+				@Override
 				public String toString() {
 					return name;
 				}
@@ -118,7 +124,7 @@ public class UnaryOperatorSet {
 		 * @param type The type of the input and output
 		 * @return A unary operator whose output is the same as the input
 		 */
-		static <T> UnaryOp<T, T> identity(String name, Class<T> type) {
+		static <T> UnaryOp<T, T> identity(String name, Class<T> type, String description) {
 			return new UnaryOp<T, T>() {
 				@Override
 				public Class<T> getTargetType() {
@@ -141,6 +147,11 @@ public class UnaryOperatorSet {
 				}
 
 				@Override
+				public String getDescription() {
+					return description;
+				}
+
+				@Override
 				public String toString() {
 					return name;
 				}
@@ -155,7 +166,7 @@ public class UnaryOperatorSet {
 		 * @param op The function to use for {@link UnaryOp#apply(Object)}
 		 * @return The unary operator
 		 */
-		static <T> UnaryOp<T, T> ofAction(Class<T> type, Function<? super T, ? extends T> op) {
+		static <T> UnaryOp<T, T> ofAction(Class<T> type, Function<? super T, ? extends T> op, String description) {
 			return new UnaryOp<T, T>() {
 				@Override
 				public Class<T> getTargetType() {
@@ -170,6 +181,11 @@ public class UnaryOperatorSet {
 				@Override
 				public boolean isActionOnly() {
 					return true;
+				}
+
+				@Override
+				public String getDescription() {
+					return description;
 				}
 
 				@Override
@@ -198,47 +214,56 @@ public class UnaryOperatorSet {
 	 * @return The builder
 	 */
 	public static Builder standardJava(Builder operators) {
-		operators.withSymmetric("!", Boolean.class, b -> b == null ? true : !b);
+		operators.withSymmetric("!", Boolean.class, b -> b == null ? true : !b, "Boolean NOT operator");
 
-		operators.withSymmetric("~", Integer.class, i -> i == null ? ~0 : ~i);
-		operators.withIdentity("+", Integer.class);
-		operators.withSymmetric("-", Integer.class, i -> i == null ? 0 : -i);
-		operators.withAction("++", Integer.class, i -> i == null ? 1 : i + 1);
-		operators.withAction("--", Integer.class, i -> i == null ? 1 : i - 1);
+		operators.withSymmetric("~", Integer.class, i -> i == null ? ~0 : ~i, "Integer complement operator");
+		operators.withIdentity("+", Integer.class, "Integer identity operator");
+		operators.withSymmetric("-", Integer.class, i -> i == null ? 0 : -i, "Integer negation operator");
+		operators.withAction("++", Integer.class, i -> i == null ? 1 : i + 1, "Integer increment operator");
+		operators.withAction("--", Integer.class, i -> i == null ? 1 : i - 1, "Integer decrement operator");
 
-		operators.withSymmetric("~", Long.class, i -> i == null ? ~0 : ~i);
-		operators.withIdentity("+", Long.class);
-		operators.withSymmetric("-", Long.class, i -> i == null ? 0 : -i);
-		operators.withAction("++", Long.class, i -> i == null ? 1 : i + 1);
-		operators.withAction("--", Long.class, i -> i == null ? 1 : i - 1);
+		operators.withSymmetric("~", Long.class, i -> i == null ? ~0 : ~i, "Long integer complement operator");
+		operators.withIdentity("+", Long.class, "Long integer identity operator");
+		operators.withSymmetric("-", Long.class, i -> i == null ? 0 : -i, "Long integer negation operator");
+		operators.withAction("++", Long.class, i -> i == null ? 1 : i + 1, "Long integer increment operator");
+		operators.withAction("--", Long.class, i -> i == null ? 1 : i - 1, "Long integer decrement operator");
 
-		operators.with2("~", Byte.class, Integer.class, i -> i == null ? ~0 : ~i, i -> (byte) (i == null ? 0 : ~i));
-		operators.with2("+", Byte.class, Integer.class, i -> i == null ? 0 : (int) i, i -> (byte) (i == null ? 0 : i));
-		operators.with2("-", Byte.class, Integer.class, i -> i == null ? 0 : -i, i -> (byte) (i == null ? 0 : -i));
-		operators.withAction("++", Byte.class, i -> (byte) (i == null ? 1 : i + 1));
-		operators.withAction("--", Byte.class, i -> (byte) (i == null ? 1 : i - 1));
+		operators.with2("~", Byte.class, Integer.class, i -> i == null ? ~0 : ~i, i -> (byte) (i == null ? 0 : ~i),
+			"Byte complement operator");
+		operators.with2("+", Byte.class, Integer.class, i -> i == null ? 0 : (int) i, i -> (byte) (i == null ? 0 : i),
+			"Byte identity operator");
+		operators.with2("-", Byte.class, Integer.class, i -> i == null ? 0 : -i, i -> (byte) (i == null ? 0 : -i),
+			"Byte negation operator");
+		operators.withAction("++", Byte.class, i -> (byte) (i == null ? 1 : i + 1), "Byte increment operator");
+		operators.withAction("--", Byte.class, i -> (byte) (i == null ? 1 : i - 1), "Byte decrement operator");
 
-		operators.with2("~", Character.class, Integer.class, i -> i == null ? ~0 : ~i, i -> (char) (i == null ? 0 : ~i));
-		operators.with2("+", Character.class, Integer.class, i -> i == null ? 0 : (int) i, i -> (char) (i == null ? 0 : i));
-		operators.with2("-", Character.class, Integer.class, i -> i == null ? 0 : -i, i -> (char) (i == null ? 0 : -i));
-		operators.withAction("++", Character.class, i -> (char) (i == null ? 1 : i + 1));
-		operators.withAction("--", Character.class, i -> (char) (i == null ? 1 : i - 1));
+		operators.with2("~", Character.class, Integer.class, i -> i == null ? ~0 : ~i, i -> (char) (i == null ? 0 : ~i),
+			"Character complement operator");
+		operators.with2("+", Character.class, Integer.class, i -> i == null ? 0 : (int) i, i -> (char) (i == null ? 0 : i),
+			"Character identity operator");
+		operators.with2("-", Character.class, Integer.class, i -> i == null ? 0 : -i, i -> (char) (i == null ? 0 : -i),
+			"Character negation operator");
+		operators.withAction("++", Character.class, i -> (char) (i == null ? 1 : i + 1), "Character increment operator");
+		operators.withAction("--", Character.class, i -> (char) (i == null ? 1 : i - 1), "Character decrement operator");
 
-		operators.with2("~", Short.class, Integer.class, i -> i == null ? ~0 : ~i, i -> (short) (i == null ? 0 : ~i));
-		operators.with2("+", Short.class, Integer.class, i -> i == null ? 0 : (int) i, i -> (short) (i == null ? 0 : i));
-		operators.with2("-", Short.class, Integer.class, i -> i == null ? 0 : -i, i -> (short) (i == null ? 0 : -i));
-		operators.withAction("++", Short.class, i -> (short) (i == null ? 1 : i + 1));
-		operators.withAction("--", Short.class, i -> (short) (i == null ? 1 : i - 1));
+		operators.with2("~", Short.class, Integer.class, i -> i == null ? ~0 : ~i, i -> (short) (i == null ? 0 : ~i),
+			"Short integer complement operator");
+		operators.with2("+", Short.class, Integer.class, i -> i == null ? 0 : (int) i, i -> (short) (i == null ? 0 : i),
+			"Short integer identity operator");
+		operators.with2("-", Short.class, Integer.class, i -> i == null ? 0 : -i, i -> (short) (i == null ? 0 : -i),
+			"Short integer negation operator");
+		operators.withAction("++", Short.class, i -> (short) (i == null ? 1 : i + 1), "Short integer increment operator");
+		operators.withAction("--", Short.class, i -> (short) (i == null ? 1 : i - 1), "Short integer decrement operator");
 
-		operators.withIdentity("+", Double.class);
-		operators.withSymmetric("-", Double.class, i -> i == null ? 0 : -i);
-		operators.withAction("++", Double.class, i -> i == null ? 1 : i + 1);
-		operators.withAction("--", Double.class, i -> i == null ? 1 : i - 1);
+		operators.withIdentity("+", Double.class, "Double-precision floating-point identity operator");
+		operators.withSymmetric("-", Double.class, i -> i == null ? 0 : -i, "Double-precision floating-point negation operator");
+		operators.withAction("++", Double.class, i -> i == null ? 1 : i + 1, "Double-precision floating-point increment operator");
+		operators.withAction("--", Double.class, i -> i == null ? 1 : i - 1, "Double-precision floating-point decrement operator");
 
-		operators.withIdentity("+", Float.class);
-		operators.withSymmetric("-", Float.class, i -> i == null ? 0 : -i);
-		operators.withAction("++", Float.class, i -> i == null ? 1 : i + 1);
-		operators.withAction("--", Float.class, i -> i == null ? 1 : i - 1);
+		operators.withIdentity("+", Float.class, "Floating-point identity operator");
+		operators.withSymmetric("-", Float.class, i -> i == null ? 0 : -i, "Floating-point negation operator");
+		operators.withAction("++", Float.class, i -> i == null ? 1 : i + 1, "Floating-point increment operator");
+		operators.withAction("--", Float.class, i -> i == null ? 1 : i - 1, "Floating-point decrement operator");
 
 		return operators;
 	}
@@ -333,9 +358,9 @@ public class UnaryOperatorSet {
 		 * @see UnaryOp#reverse(Object)
 		 */
 		public <T> Builder with(String operator, Class<T> type, Function<? super T, ? extends T> op,
-			Function<? super T, ? extends T> reverse) {
+			Function<? super T, ? extends T> reverse, String description) {
 			return with(operator, type, //
-				UnaryOp.of(operator, type, op, reverse));
+				UnaryOp.of(operator, type, op, reverse, description));
 		}
 
 		/**
@@ -352,8 +377,9 @@ public class UnaryOperatorSet {
 		 * @see UnaryOp#reverse(Object)
 		 */
 		public <S, T> Builder with2(String operator, Class<S> source, Class<T> target, Function<? super S, ? extends T> op,
-			Function<? super T, ? extends S> reverse) {
-			theOperators.computeIfAbsent(operator, __ -> new ClassMap<>()).with(source, UnaryOp.of2(operator, target, op, reverse));
+			Function<? super T, ? extends S> reverse, String description) {
+			theOperators.computeIfAbsent(operator, __ -> new ClassMap<>()).with(source,
+				UnaryOp.of2(operator, target, op, reverse, description));
 			return this;
 		}
 
@@ -367,8 +393,8 @@ public class UnaryOperatorSet {
 		 * @param op The function to apply and reverse the operator
 		 * @return This builder
 		 */
-		public <T> Builder withSymmetric(String operator, Class<T> type, Function<T, T> op) {
-			theOperators.computeIfAbsent(operator, __ -> new ClassMap<>()).with(type, UnaryOp.ofSym(operator, type, op));
+		public <T> Builder withSymmetric(String operator, Class<T> type, Function<T, T> op, String description) {
+			theOperators.computeIfAbsent(operator, __ -> new ClassMap<>()).with(type, UnaryOp.ofSym(operator, type, op, description));
 			return this;
 		}
 
@@ -380,8 +406,8 @@ public class UnaryOperatorSet {
 		 * @param type The type of the operator
 		 * @return This builder
 		 */
-		public <T> Builder withIdentity(String operator, Class<T> type) {
-			theOperators.computeIfAbsent(operator, __ -> new ClassMap<>()).with(type, UnaryOp.identity(operator, type));
+		public <T> Builder withIdentity(String operator, Class<T> type, String description) {
+			theOperators.computeIfAbsent(operator, __ -> new ClassMap<>()).with(type, UnaryOp.identity(operator, type, description));
 			return this;
 		}
 
@@ -394,8 +420,8 @@ public class UnaryOperatorSet {
 		 * @param op The function to apply the operator
 		 * @return This builder
 		 */
-		public <T> Builder withAction(String operator, Class<T> type, Function<? super T, ? extends T> op) {
-			theOperators.computeIfAbsent(operator, __ -> new ClassMap<>()).with(type, UnaryOp.ofAction(type, op));
+		public <T> Builder withAction(String operator, Class<T> type, Function<? super T, ? extends T> op, String description) {
+			theOperators.computeIfAbsent(operator, __ -> new ClassMap<>()).with(type, UnaryOp.ofAction(type, op, description));
 			return this;
 		}
 

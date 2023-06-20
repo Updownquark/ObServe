@@ -13,7 +13,7 @@ import org.observe.expresso.ModelType;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
-import org.observe.expresso.ObservableModelSet.ModelValueSynth;
+import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.TypeConversionException;
 import org.observe.util.TypeTokens;
 
@@ -42,7 +42,7 @@ public class InstanceofExpression implements ObservableExpression {
 	}
 
 	@Override
-	public int getChildOffset(int childIndex) {
+	public int getComponentOffset(int childIndex) {
 		if (childIndex != 0)
 			throw new IndexOutOfBoundsException(childIndex + " of 1");
 		return 0;
@@ -54,7 +54,7 @@ public class InstanceofExpression implements ObservableExpression {
 	}
 
 	@Override
-	public List<? extends ObservableExpression> getChildren() {
+	public List<? extends ObservableExpression> getComponents() {
 		return Collections.singletonList(theLeft);
 	}
 
@@ -75,12 +75,12 @@ public class InstanceofExpression implements ObservableExpression {
 	}
 
 	@Override
-	public <M, MV extends M> ModelValueSynth<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env, int expressionOffset)
-		throws ExpressoEvaluationException, ExpressoInterpretationException {
+	public <M, MV extends M> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env,
+		int expressionOffset) throws ExpressoEvaluationException, ExpressoInterpretationException {
 		if (type.getModelType() != ModelTypes.Value && !TypeTokens.get().isAssignable(type.getType(0), TypeTokens.get().BOOLEAN))
 			throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(),
 				"instanceof expressions can only be evaluated to Value<Boolean>");
-		ModelValueSynth<SettableValue<?>, SettableValue<?>> leftValue;
+		EvaluatedExpression<SettableValue<?>, SettableValue<?>> leftValue;
 		try {
 			leftValue = theLeft.evaluate(ModelTypes.Value.any(), env, expressionOffset);
 		} catch (TypeConversionException e) {
@@ -97,12 +97,12 @@ public class InstanceofExpression implements ObservableExpression {
 				throw new ExpressoEvaluationException(expressionOffset + theLeft.getExpressionLength() + 12 + e.getErrorOffset(), 0,
 					e.getMessage(), e);
 		}
-		ModelValueSynth<SettableValue<?>, SettableValue<Boolean>> container = leftValue.map(ModelTypes.Value.forType(boolean.class),
+		InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> container = leftValue.map(ModelTypes.Value.forType(boolean.class),
 			(lv, msi) -> {
 				return SettableValue.asSettable(lv.map(TypeTokens.get().BOOLEAN, v -> v != null && testType.isInstance(v)),
 					__ -> "instanceof expressions are not reversible");
 			});
-		return (ModelValueSynth<M, MV>) container;
+		return ObservableExpression.evEx((InterpretedValueSynth<M, MV>) container, testType, leftValue);
 	}
 
 	@Override

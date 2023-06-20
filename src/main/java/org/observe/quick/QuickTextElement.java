@@ -8,6 +8,7 @@ import org.observe.SettableValue;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.qonfig.ExElement;
 import org.observe.quick.style.CompiledStyleApplication;
 import org.observe.quick.style.InterpretedStyleApplication;
 import org.observe.quick.style.QuickCompiledStyle;
@@ -38,8 +39,8 @@ public interface QuickTextElement extends QuickStyledElement {
 			QuickStyleAttribute<Double> getFontSlant();
 
 			@Override
-			Interpreted interpret(QuickInterpretedStyle parent, Map<CompiledStyleApplication, InterpretedStyleApplication> applications)
-				throws ExpressoInterpretationException;
+			Interpreted interpret(ExElement.Interpreted<?> parentEl, QuickInterpretedStyle parent,
+				Map<CompiledStyleApplication, InterpretedStyleApplication> applications) throws ExpressoInterpretationException;
 
 			public abstract class Abstract extends QuickCompiledStyle.Wrapper implements Def {
 				private final QuickStyleAttribute<Color> theFontColor;
@@ -78,7 +79,7 @@ public interface QuickTextElement extends QuickStyledElement {
 				}
 
 				@Override
-				public abstract Interpreted interpret(QuickInterpretedStyle parent,
+				public abstract Interpreted interpret(ExElement.Interpreted<?> parentEl, QuickInterpretedStyle parent,
 					Map<CompiledStyleApplication, InterpretedStyleApplication> applications) throws ExpressoInterpretationException;
 			}
 		}

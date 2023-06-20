@@ -35,7 +35,7 @@
 				<transform name="allSelectedValue" source="_allSelectedV">
 					<refresh on="allSelected" />
 				</transform>
-				<hook name="hook" on="valueSize">System.out.println(valueSize+" values")</hook>
+				<hook name="hook" on="valueSize">System . out . println(valueSize+" values")</hook>
 			</model>
 		</models>
 		<style-sheet>

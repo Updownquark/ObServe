@@ -64,6 +64,11 @@ public class ExpressoSessionImplV0_1 implements SpecialSessionImplementation<Exp
 		}
 
 		@Override
+		public String getDescription() {
+			return "Object OR operation--first non-null value";
+		}
+
+		@Override
 		public String toString() {
 			return "||";
 		}

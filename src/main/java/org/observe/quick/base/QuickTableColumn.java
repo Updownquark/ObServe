@@ -1054,9 +1054,9 @@ public interface QuickTableColumn<R, C> {
 				}
 
 				@Override
-				public ColumnStyle.Interpreted interpret(QuickInterpretedStyle parent,
+				public ColumnStyle.Interpreted interpret(ExElement.Interpreted<?> parentEl, QuickInterpretedStyle parent,
 					Map<CompiledStyleApplication, InterpretedStyleApplication> applications) throws ExpressoInterpretationException {
-					return new Interpreted(this, parent, getWrapped().interpret(parent, applications));
+					return new Interpreted(this, parent, getWrapped().interpret(parentEl, parent, applications));
 				}
 			}
 

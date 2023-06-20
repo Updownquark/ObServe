@@ -218,9 +218,9 @@ public interface QuickBorder extends QuickStyledElement {
 				}
 
 				@Override
-				public Interpreted interpret(QuickInterpretedStyle parent,
+				public Interpreted interpret(ExElement.Interpreted<?> parentEl, QuickInterpretedStyle parent,
 					Map<CompiledStyleApplication, InterpretedStyleApplication> applications) throws ExpressoInterpretationException {
-					return new Interpreted(this, parent, getWrapped().interpret(parent, applications));
+					return new Interpreted(this, parent, getWrapped().interpret(parentEl, parent, applications));
 				}
 			}
 
@@ -293,8 +293,8 @@ public interface QuickBorder extends QuickStyledElement {
 			QuickStyleAttribute<Integer> getBorderThickness();
 
 			@Override
-			Interpreted interpret(QuickInterpretedStyle parent, Map<CompiledStyleApplication, InterpretedStyleApplication> applications)
-				throws ExpressoInterpretationException;
+			Interpreted interpret(ExElement.Interpreted<?> parentEl, QuickInterpretedStyle parent,
+				Map<CompiledStyleApplication, InterpretedStyleApplication> applications) throws ExpressoInterpretationException;
 
 			public class Default extends QuickCompiledStyle.Wrapper implements Def {
 				private final QuickStyleAttribute<Color> theBorderColor;
@@ -319,9 +319,9 @@ public interface QuickBorder extends QuickStyledElement {
 				}
 
 				@Override
-				public Interpreted interpret(QuickInterpretedStyle parent,
+				public Interpreted interpret(ExElement.Interpreted<?> parentEl, QuickInterpretedStyle parent,
 					Map<CompiledStyleApplication, InterpretedStyleApplication> applications) throws ExpressoInterpretationException {
-					return new Interpreted.Default(this, parent, getWrapped().interpret(parent, applications));
+					return new Interpreted.Default(this, parent, getWrapped().interpret(parentEl, parent, applications));
 				}
 			}
 		}

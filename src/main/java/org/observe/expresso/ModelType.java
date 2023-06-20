@@ -1158,6 +1158,11 @@ public abstract class ModelType<M> implements Named {
 		}
 
 		@Override
+		public List<? extends InterpretedValueSynth<?, ?>> getComponents() {
+			return Collections.singletonList(theSource);
+		}
+
+		@Override
 		public String toString() {
 			return theSource.toString();
 		}

@@ -59,7 +59,7 @@ public class ConditionalExpression implements ObservableExpression {
 	}
 
 	@Override
-	public int getChildOffset(int childIndex) {
+	public int getComponentOffset(int childIndex) {
 		switch (childIndex) {
 		case 0:
 			return 0;
@@ -78,7 +78,7 @@ public class ConditionalExpression implements ObservableExpression {
 	}
 
 	@Override
-	public List<? extends ObservableExpression> getChildren() {
+	public List<? extends ObservableExpression> getComponents() {
 		return QommonsUtils.unmodifiableCopy(theCondition, thePrimary, theSecondary);
 	}
 
@@ -101,14 +101,15 @@ public class ConditionalExpression implements ObservableExpression {
 	}
 
 	@Override
-	public <M, MV extends M> ModelValueSynth<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env, int expressionOffset)
-		throws ExpressoEvaluationException, ExpressoInterpretationException {
+	public <M, MV extends M> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env,
+		int expressionOffset)
+			throws ExpressoEvaluationException, ExpressoInterpretationException {
 		if (type.getModelType() == ModelTypes.Value || type.getModelType() == ModelTypes.Collection
 			|| type.getModelType() == ModelTypes.Set) {//
 		} else
 			throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(),
 				"Conditional expressions not supported for model type " + type.getModelType() + " (" + this + ")");
-		ModelValueSynth<SettableValue<?>, SettableValue<Boolean>> conditionV;
+		EvaluatedExpression<SettableValue<?>, SettableValue<Boolean>> conditionV;
 		try {
 			conditionV = theCondition.evaluate(//
 				ModelTypes.Value.forType(boolean.class), env, expressionOffset);
@@ -117,7 +118,7 @@ public class ConditionalExpression implements ObservableExpression {
 		}
 		int primaryOffset = expressionOffset + theCondition.getExpressionLength() + 1;
 		ExpressoEnv primaryEnv = env.at(theCondition.getExpressionLength() + 1);
-		ModelValueSynth<M, MV> primaryV;
+		EvaluatedExpression<M, MV> primaryV;
 		try {
 			primaryV = thePrimary.evaluate(type, primaryEnv, primaryOffset);
 		} catch (TypeConversionException e) {
@@ -125,7 +126,7 @@ public class ConditionalExpression implements ObservableExpression {
 		}
 		int secondaryOffset = primaryOffset + thePrimary.getExpressionLength() + 1;
 		ExpressoEnv secondaryEnv = primaryEnv.at(thePrimary.getExpressionLength() + 1);
-		ModelValueSynth<M, MV> secondaryV;
+		EvaluatedExpression<M, MV> secondaryV;
 		try {
 			secondaryV = theSecondary.evaluate(type, secondaryEnv, secondaryOffset);
 		} catch (TypeConversionException e) {
@@ -156,7 +157,7 @@ public class ConditionalExpression implements ObservableExpression {
 				types[i] = TypeTokens.get().getCommonType(primaryType.getType(i), secondaryType.getType(i));
 			resultType = (ModelInstanceType<M, MV>) primaryType.getModelType().forTypes(types);
 		}
-		return new ModelValueSynth<M, MV>() {
+		return new EvaluatedExpression<M, MV>() {
 			@Override
 			public ModelType<M> getModelType() {
 				return resultType.getModelType();
@@ -220,8 +221,23 @@ public class ConditionalExpression implements ObservableExpression {
 			}
 
 			@Override
-			public BetterList<ModelValueSynth<?, ?>> getCores() throws ExpressoInterpretationException {
+			public BetterList<ModelValueSynth<?, ?>> getCores() {
 				return BetterList.of(Stream.of(conditionV, primaryV, secondaryV), vc -> vc.getCores().stream());
+			}
+
+			@Override
+			public Object getDescriptor(int offset) {
+				return null;
+			}
+
+			@Override
+			public List<? extends EvaluatedExpression<?, ?>> getComponents() {
+				return QommonsUtils.unmodifiableCopy(conditionV, primaryV, secondaryV);
+			}
+
+			@Override
+			public String toString() {
+				return conditionV + " ? " + primaryV + " : " + secondaryV;
 			}
 		};
 	}

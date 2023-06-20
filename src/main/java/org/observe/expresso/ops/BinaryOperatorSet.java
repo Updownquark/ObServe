@@ -12,6 +12,7 @@ import org.observe.util.TypeTokens;
 import org.qommons.BiTuple;
 import org.qommons.ClassMap;
 import org.qommons.ClassMap.TypeMatch;
+import org.qommons.SelfDescribed;
 import org.qommons.StringUtils;
 import org.qommons.TriFunction;
 
@@ -26,7 +27,7 @@ public class BinaryOperatorSet {
 	 * @param <T> The super-type of the second input that this operator knows how to handle
 	 * @param <V> The type of output produced by this operator
 	 */
-	public interface BinaryOp<S, T, V> {
+	public interface BinaryOp<S, T, V> extends SelfDescribed {
 		/** @return The super-type of output produced by this operator */
 		Class<V> getTargetSuperType();
 
@@ -80,8 +81,8 @@ public class BinaryOperatorSet {
 		 */
 		static <S, T> BinaryOp<S, T, S> of(String name, TypeToken<S> type, BiFunction<? super S, ? super T, ? extends S> op,
 			TriFunction<? super S, ? super T, ? super S, ? extends S> reverse,
-			TriFunction<? super S, ? super T, ? super S, String> reverseEnabled) {
-			return of2(name, type, op, reverse, reverseEnabled);
+			TriFunction<? super S, ? super T, ? super S, String> reverseEnabled, String description) {
+			return of2(name, type, op, reverse, reverseEnabled, description);
 		}
 
 		/**
@@ -100,7 +101,7 @@ public class BinaryOperatorSet {
 		 */
 		static <S, T, V> BinaryOp<S, T, V> of2(String name, TypeToken<V> type, BiFunction<? super S, ? super T, ? extends V> op,
 			TriFunction<? super S, ? super T, ? super V, ? extends S> reverse,
-			TriFunction<? super S, ? super T, ? super V, String> reverseEnabled) {
+			TriFunction<? super S, ? super T, ? super V, String> reverseEnabled, String description) {
 			return new BinaryOp<S, T, V>() {
 				@Override
 				public Class<V> getTargetSuperType() {
@@ -127,6 +128,11 @@ public class BinaryOperatorSet {
 				@Override
 				public S reverse(S currentSource, T other, V value) {
 					return reverse.apply(currentSource, other, value);
+				}
+
+				@Override
+				public String getDescription() {
+					return description;
 				}
 
 				@Override
@@ -367,6 +373,11 @@ public class BinaryOperatorSet {
 					T newTarget = op.reverse(cast(currentSource), other, value);
 					return CastOp.this.reverse(newTarget);
 				}
+
+				@Override
+				public String getDescription() {
+					return op.getDescription();
+				}
 			};
 		}
 
@@ -400,6 +411,11 @@ public class BinaryOperatorSet {
 				@Override
 				public T reverse(T currentSource, S other, V value) {
 					return op.reverse(currentSource, cast(other), value);
+				}
+
+				@Override
+				public String getDescription() {
+					return op.getDescription();
 				}
 			};
 		}
@@ -446,6 +462,11 @@ public class BinaryOperatorSet {
 				public S reverse(S currentSource, T other, V value) {
 					T2 newTarget = op.reverse(sourceCast.cast(currentSource), otherCast.cast(other), value);
 					return sourceCast.reverse(newTarget);
+				}
+
+				@Override
+				public String getDescription() {
+					return op.getDescription();
 				}
 			};
 		}
@@ -508,9 +529,9 @@ public class BinaryOperatorSet {
 		// Do equality first, which is special
 		// First, same-type primitive equality
 		operators.with("==", Boolean.class, Boolean.class, (b1, b2) -> unwrapBool(b1) == unwrapBool(b2),
-			(s, b2, r) -> unwrapBool(b2) ? unwrapBool(r) : !unwrapBool(r), null);
+			(s, b2, r) -> unwrapBool(b2) ? unwrapBool(r) : !unwrapBool(r), null, "Boolean equality comparison");
 		operators.with("!=", Boolean.class, Boolean.class, (b1, b2) -> unwrapBool(b1) != unwrapBool(b2),
-			(s, b2, r) -> unwrapBool(b2) ? !unwrapBool(r) : unwrapBool(r), null);
+			(s, b2, r) -> unwrapBool(b2) ? !unwrapBool(r) : unwrapBool(r), null, "Boolean inequality comparison");
 
 		operators.with2("==", Integer.class, Integer.class, Boolean.class, (i1, i2) -> unwrapI(i1) == unwrapI(i2), //
 			(s, i2, r) -> {
@@ -520,7 +541,8 @@ public class BinaryOperatorSet {
 					return s; // Leave it alone--it's already false
 				else
 					return null; // Don't make up a value to make it false--prevent with the enabled fn
-			}, (s, i2, r) -> (!unwrapBool(r) && unwrapI(s) == unwrapI(i2)) ? "Equal expression cannot be negated" : null);
+			}, (s, i2, r) -> (!unwrapBool(r) && unwrapI(s) == unwrapI(i2)) ? "Equal expression cannot be negated" : null,
+			"Integer equality comparison");
 		operators.with2("!=", Integer.class, Integer.class, Boolean.class, (i1, i2) -> unwrapI(i1) != unwrapI(i2), //
 			(s, i2, r) -> {
 				if (unwrapBool(r)) {// Trying to make the expression true
@@ -530,7 +552,8 @@ public class BinaryOperatorSet {
 						return null; // Don't make up a value to make it true--prevent with the enabled fn
 				} else
 					return i2;
-			}, (s, i2, r) -> (unwrapBool(r) && unwrapI(s) != unwrapI(i2)) ? "Not-equal expression cannot be made true" : null);
+			}, (s, i2, r) -> (unwrapBool(r) && unwrapI(s) != unwrapI(i2)) ? "Not-equal expression cannot be made true" : null,
+			"Integer inequality comparison");
 		operators.with2("==", Long.class, Long.class, Boolean.class, (i1, i2) -> unwrapL(i1) == unwrapL(i2), //
 			(s, i2, r) -> {
 				if (unwrapBool(r)) // Trying to make the expression true
@@ -539,7 +562,8 @@ public class BinaryOperatorSet {
 					return s; // Leave it alone--it's already false
 				else
 					return null; // Don't make up a value to make it false--prevent with the enabled fn
-			}, (s, i2, r) -> (!unwrapBool(r) && unwrapL(s) == unwrapL(i2)) ? "Equal expression cannot be negated" : null);
+			}, (s, i2, r) -> (!unwrapBool(r) && unwrapL(s) == unwrapL(i2)) ? "Equal expression cannot be negated" : null,
+			"Long integer equality comparison");
 		operators.with2("!=", Long.class, Long.class, Boolean.class, (i1, i2) -> unwrapL(i1) != unwrapL(i2), //
 			(s, i2, r) -> {
 				if (unwrapBool(r)) {// Trying to make the expression true
@@ -549,7 +573,8 @@ public class BinaryOperatorSet {
 						return null; // Don't make up a value to make it true--prevent with the enabled fn
 				} else
 					return i2;
-			}, (s, i2, r) -> (unwrapBool(r) && unwrapL(s) != unwrapL(i2)) ? "Not-equal expression cannot be made true" : null);
+			}, (s, i2, r) -> (unwrapBool(r) && unwrapL(s) != unwrapL(i2)) ? "Not-equal expression cannot be made true" : null,
+			"Long integer inequality comparison");
 		operators.with2("==", Double.class, Double.class, Boolean.class, (i1, i2) -> unwrapD(i1) == unwrapD(i2), //
 			(s, i2, r) -> {
 				if (unwrapBool(r)) // Trying to make the expression true
@@ -558,7 +583,8 @@ public class BinaryOperatorSet {
 					return s; // Leave it alone--it's already false
 				else
 					return null; // Don't make up a value to make it false--prevent with the enabled fn
-			}, (s, i2, r) -> (!unwrapBool(r) && unwrapD(s) == unwrapD(i2)) ? "Equal expression cannot be negated" : null);
+			}, (s, i2, r) -> (!unwrapBool(r) && unwrapD(s) == unwrapD(i2)) ? "Equal expression cannot be negated" : null,
+			"Double-precision floating-point value equality comparison");
 		operators.with2("!=", Double.class, Double.class, Boolean.class, (i1, i2) -> unwrapD(i1) != unwrapD(i2), //
 			(s, i2, r) -> {
 				if (unwrapBool(r)) {// Trying to make the expression true
@@ -568,7 +594,8 @@ public class BinaryOperatorSet {
 						return null; // Don't make up a value to make it true--prevent with the enabled fn
 				} else
 					return i2;
-			}, (s, i2, r) -> (unwrapBool(r) && unwrapD(s) != unwrapD(i2)) ? "Not-equal expression cannot be made true" : null);
+			}, (s, i2, r) -> (unwrapBool(r) && unwrapD(s) != unwrapD(i2)) ? "Not-equal expression cannot be made true" : null,
+			"Double-precision floating-point value inequality comparison");
 		operators.with2("==", Float.class, Float.class, Boolean.class, (i1, i2) -> unwrapF(i1) == unwrapF(i2), //
 			(s, i2, r) -> {
 				if (unwrapBool(r)) // Trying to make the expression true
@@ -577,7 +604,8 @@ public class BinaryOperatorSet {
 					return s; // Leave it alone--it's already false
 				else
 					return null; // Don't make up a value to make it false--prevent with the enabled fn
-			}, (s, i2, r) -> (!unwrapBool(r) && unwrapF(s) == unwrapF(i2)) ? "Equal expression cannot be negated" : null);
+			}, (s, i2, r) -> (!unwrapBool(r) && unwrapF(s) == unwrapF(i2)) ? "Equal expression cannot be negated" : null,
+			"Floating-point value equality comparison");
 		operators.with2("!=", Float.class, Float.class, Boolean.class, (i1, i2) -> unwrapF(i1) != unwrapF(i2), //
 			(s, i2, r) -> {
 				if (unwrapBool(r)) {// Trying to make the expression true
@@ -587,7 +615,8 @@ public class BinaryOperatorSet {
 						return null; // Don't make up a value to make it true--prevent with the enabled fn
 				} else
 					return i2;
-			}, (s, i2, r) -> (unwrapBool(r) && unwrapF(s) != unwrapF(i2)) ? "Not-equal expression cannot be made true" : null);
+			}, (s, i2, r) -> (unwrapBool(r) && unwrapF(s) != unwrapF(i2)) ? "Not-equal expression cannot be made true" : null,
+			"Floating-point value inequality comparison");
 		operators.with2("==", Byte.class, Byte.class, Boolean.class, (i1, i2) -> unwrapByte(i1) == unwrapByte(i2), //
 			(s, i2, r) -> {
 				if (unwrapBool(r)) // Trying to make the expression true
@@ -596,7 +625,8 @@ public class BinaryOperatorSet {
 					return s; // Leave it alone--it's already false
 				else
 					return null; // Don't make up a value to make it false--prevent with the enabled fn
-			}, (s, i2, r) -> (!unwrapBool(r) && unwrapByte(s) == unwrapByte(i2)) ? "Equal expression cannot be negated" : null);
+			}, (s, i2, r) -> (!unwrapBool(r) && unwrapByte(s) == unwrapByte(i2)) ? "Equal expression cannot be negated" : null,
+			"Byte equality comparison");
 		operators.with2("!=", Byte.class, Byte.class, Boolean.class, (i1, i2) -> unwrapByte(i1) != unwrapByte(i2), //
 			(s, i2, r) -> {
 				if (unwrapBool(r)) {// Trying to make the expression true
@@ -606,7 +636,8 @@ public class BinaryOperatorSet {
 						return null; // Don't make up a value to make it true--prevent with the enabled fn
 				} else
 					return i2;
-			}, (s, i2, r) -> (unwrapBool(r) && unwrapByte(s) != unwrapByte(i2)) ? "Not-equal expression cannot be made true" : null);
+			}, (s, i2, r) -> (unwrapBool(r) && unwrapByte(s) != unwrapByte(i2)) ? "Not-equal expression cannot be made true" : null,
+			"Byte inequality comparison");
 		operators.with2("==", Short.class, Short.class, Boolean.class, (i1, i2) -> unwrapS(i1) == unwrapS(i2), //
 			(s, i2, r) -> {
 				if (unwrapBool(r)) // Trying to make the expression true
@@ -615,7 +646,8 @@ public class BinaryOperatorSet {
 					return s; // Leave it alone--it's already false
 				else
 					return null; // Don't make up a value to make it false--prevent with the enabled fn
-			}, (s, i2, r) -> (!unwrapBool(r) && unwrapS(s) == unwrapS(i2)) ? "Equal expression cannot be negated" : null);
+			}, (s, i2, r) -> (!unwrapBool(r) && unwrapS(s) == unwrapS(i2)) ? "Equal expression cannot be negated" : null,
+			"Short integer equality comparison");
 		operators.with2("!=", Short.class, Short.class, Boolean.class, (i1, i2) -> unwrapS(i1) != unwrapS(i2), //
 			(s, i2, r) -> {
 				if (unwrapBool(r)) {// Trying to make the expression true
@@ -625,7 +657,8 @@ public class BinaryOperatorSet {
 						return null; // Don't make up a value to make it true--prevent with the enabled fn
 				} else
 					return i2;
-			}, (s, i2, r) -> (unwrapBool(r) && unwrapS(s) != unwrapS(i2)) ? "Not-equal expression cannot be made true" : null);
+			}, (s, i2, r) -> (unwrapBool(r) && unwrapS(s) != unwrapS(i2)) ? "Not-equal expression cannot be made true" : null,
+			"Short integer inequality comparison");
 		operators.with2("==", Character.class, Character.class, Boolean.class, (i1, i2) -> unwrapC(i1) == unwrapC(i2), //
 			(s, i2, r) -> {
 				if (unwrapBool(r)) // Trying to make the expression true
@@ -634,7 +667,8 @@ public class BinaryOperatorSet {
 					return s; // Leave it alone--it's already false
 				else
 					return null; // Don't make up a value to make it false--prevent with the enabled fn
-			}, (s, i2, r) -> (!unwrapBool(r) && unwrapC(s) == unwrapC(i2)) ? "Equal expression cannot be negated" : null);
+			}, (s, i2, r) -> (!unwrapBool(r) && unwrapC(s) == unwrapC(i2)) ? "Equal expression cannot be negated" : null,
+			"Character equality comparison");
 		operators.with2("!=", Character.class, Character.class, Boolean.class, (i1, i2) -> unwrapC(i1) != unwrapC(i2), //
 			(s, i2, r) -> {
 				if (unwrapBool(r)) {// Trying to make the expression true
@@ -644,7 +678,8 @@ public class BinaryOperatorSet {
 						return null; // Don't make up a value to make it true--prevent with the enabled fn
 				} else
 					return i2;
-			}, (s, i2, r) -> (unwrapBool(r) && unwrapC(s) != unwrapC(i2)) ? "Not-equal expression cannot be made true" : null);
+			}, (s, i2, r) -> (unwrapBool(r) && unwrapC(s) != unwrapC(i2)) ? "Not-equal expression cannot be made true" : null,
+			"Character inequality comparison");
 
 		// Use the same-type equality methods above to implement cross-type primitive equal comparisons
 
@@ -745,13 +780,14 @@ public class BinaryOperatorSet {
 				return o2;
 			else
 				return s;
-		}, (s, o2, r) -> (!unwrapBool(r) && s != o2) ? "Equals expression cannot be made false" : null);
+		}, (s, o2, r) -> (!unwrapBool(r) && s != o2) ? "Equals expression cannot be made false" : null, "Object identity comparison");
 		operators.with2("!=", Object.class, Object.class, Boolean.class, (o1, o2) -> o1 != o2, (s, o2, r) -> {
 			if (unwrapBool(r)) // Trying to make the expression true
 				return s;
 			else
 				return o2;
-		}, (s, o2, r) -> (unwrapBool(r) && s != o2) ? "Not-equals expression cannot be made true" : null);
+		}, (s, o2, r) -> (unwrapBool(r) && s != o2) ? "Not-equals expression cannot be made true" : null,
+			"Negative object identity comparison");
 
 		// Boolean ops
 		operators.with("||", Boolean.class, Boolean.class, (b1, b2) -> unwrapBool(b1) || unwrapBool(b2), //
@@ -767,7 +803,7 @@ public class BinaryOperatorSet {
 					else
 						return false;
 				}
-			}, (s, b2, r) -> (!unwrapBool(r) && unwrapBool(b2)) ? "Or expression cannot be made false" : null);
+			}, (s, b2, r) -> (!unwrapBool(r) && unwrapBool(b2)) ? "Or expression cannot be made false" : null, "Boolean OR operator");
 		operators.with("|", Boolean.class, Boolean.class, (b1, b2) -> unwrapBool(b1) || unwrapBool(b2), //
 			(s, b2, r) -> {
 				if (unwrapBool(r)) { // Trying to make the expression true
@@ -781,7 +817,7 @@ public class BinaryOperatorSet {
 					else
 						return false;
 				}
-			}, (s, b2, r) -> (!unwrapBool(r) && unwrapBool(b2)) ? "Or expression cannot be made false" : null);
+			}, (s, b2, r) -> (!unwrapBool(r) && unwrapBool(b2)) ? "Or expression cannot be made false" : null, "Boolean OR operator");
 		operators.with("&&", Boolean.class, Boolean.class, (b1, b2) -> unwrapBool(b1) && unwrapBool(b2), //
 			(s, b2, r) -> {
 				if (unwrapBool(r)) { // Trying to make the expression true
@@ -795,7 +831,7 @@ public class BinaryOperatorSet {
 					else
 						return s; // Leave it alone--the expression will be false regardless
 				}
-			}, (s, b2, r) -> (!unwrapBool(b2) && unwrapBool(r)) ? "And expression cannot be made true" : null);
+			}, (s, b2, r) -> (!unwrapBool(b2) && unwrapBool(r)) ? "And expression cannot be made true" : null, "Boolean AND operator");
 		operators.with("&", Boolean.class, Boolean.class, (b1, b2) -> unwrapBool(b1) && unwrapBool(b2), //
 			(s, b2, r) -> {
 				if (unwrapBool(r)) { // Trying to make the expression true
@@ -809,7 +845,7 @@ public class BinaryOperatorSet {
 					else
 						return s; // Leave it alone--the expression will be false regardless
 				}
-			}, (s, b2, r) -> (!unwrapBool(b2) && unwrapBool(r)) ? "And expression cannot be made true" : null);
+			}, (s, b2, r) -> (!unwrapBool(b2) && unwrapBool(r)) ? "And expression cannot be made true" : null, "Boolean AND operator");
 		operators.with("^", Boolean.class, Boolean.class, (b1, b2) -> unwrapBool(b1) ^ unwrapBool(b2), //
 			(s, b2, r) -> {
 				if (unwrapBool(r)) { // Trying to make the expression true
@@ -817,103 +853,134 @@ public class BinaryOperatorSet {
 				} else { // Trying to make the expression false
 					return unwrapBool(b2);
 				}
-			}, null);
+			}, null, "Boolean XOR operator");
 
 		// Arithmetic ops
-		operators.withIntArithmeticOp("+", (s1, s2) -> unwrapI(s1) + unwrapI(s2), (s, s2, v) -> unwrapI(v) - unwrapI(s2), null);
-		operators.withLongArithmeticOp("+", (s1, s2) -> unwrapL(s1) + unwrapL(s2), (s, s2, v) -> unwrapL(v) - unwrapL(s2), null);
-		operators.withFloatArithmeticOp("+", (s1, s2) -> unwrapF(s1) + unwrapF(s2), (s, s2, v) -> unwrapF(v) - unwrapF(s2), null);
-		operators.withDoubleArithmeticOp("+", (s1, s2) -> unwrapD(s1) + unwrapD(s2), (s, s2, v) -> unwrapD(v) - unwrapD(s2), null);
+		operators.withIntArithmeticOp("+", (s1, s2) -> unwrapI(s1) + unwrapI(s2), (s, s2, v) -> unwrapI(v) - unwrapI(s2), null,
+			"Integer addition operator");
+		operators.withLongArithmeticOp("+", (s1, s2) -> unwrapL(s1) + unwrapL(s2), (s, s2, v) -> unwrapL(v) - unwrapL(s2), null,
+			"Long integer addition operator");
+		operators.withFloatArithmeticOp("+", (s1, s2) -> unwrapF(s1) + unwrapF(s2), (s, s2, v) -> unwrapF(v) - unwrapF(s2), null,
+			"Floating point addition operator");
+		operators.withDoubleArithmeticOp("+", (s1, s2) -> unwrapD(s1) + unwrapD(s2), (s, s2, v) -> unwrapD(v) - unwrapD(s2), null,
+			"Double-precision floating-point addition operator");
 
-		operators.withIntArithmeticOp("-", (s1, s2) -> unwrapI(s1) - unwrapI(s2), (s, s2, v) -> unwrapI(v) + unwrapI(s2), null);
-		operators.withLongArithmeticOp("-", (s1, s2) -> unwrapL(s1) - unwrapL(s2), (s, s2, v) -> unwrapL(v) + unwrapL(s2), null);
-		operators.withFloatArithmeticOp("-", (s1, s2) -> unwrapF(s1) - unwrapF(s2), (s, s2, v) -> unwrapF(v) + unwrapF(s2), null);
-		operators.withDoubleArithmeticOp("-", (s1, s2) -> unwrapD(s1) - unwrapD(s2), (s, s2, v) -> unwrapD(v) + unwrapD(s2), null);
+		operators.withIntArithmeticOp("-", (s1, s2) -> unwrapI(s1) - unwrapI(s2), (s, s2, v) -> unwrapI(v) + unwrapI(s2), null,
+			"Integer subtraction operator");
+		operators.withLongArithmeticOp("-", (s1, s2) -> unwrapL(s1) - unwrapL(s2), (s, s2, v) -> unwrapL(v) + unwrapL(s2), null,
+			"Long integer subtraction operator");
+		operators.withFloatArithmeticOp("-", (s1, s2) -> unwrapF(s1) - unwrapF(s2), (s, s2, v) -> unwrapF(v) + unwrapF(s2), null,
+			"Floating point subtraction operator");
+		operators.withDoubleArithmeticOp("-", (s1, s2) -> unwrapD(s1) - unwrapD(s2), (s, s2, v) -> unwrapD(v) + unwrapD(s2), null,
+			"Double-precision floating-point subtraction operator");
 
 		operators.withIntArithmeticOp("*", (s1, s2) -> unwrapI(s1) * unwrapI(s2), (s, s2, v) -> {
 			int num = unwrapI(v);
 			int den = unwrapI(s2);
 			return den == 0 ? num : num / den;
-		}, null);
+		}, null, "Integer multiplication operator");
 		operators.withLongArithmeticOp("*", (s1, s2) -> unwrapL(s1) * unwrapL(s2), (s, s2, v) -> {
 			long num = unwrapI(v);
 			long den = unwrapI(s2);
 			return den == 0 ? num : num / den;
-		}, null);
-		operators.withFloatArithmeticOp("*", (s1, s2) -> unwrapF(s1) * unwrapF(s2), (s, s2, v) -> unwrapF(v) / unwrapF(s2), null);
-		operators.withDoubleArithmeticOp("*", (s1, s2) -> unwrapD(s1) * unwrapD(s2), (s, s2, v) -> unwrapD(v) / unwrapD(s2), null);
+		}, null, "Long integer multiplication operator");
+		operators.withFloatArithmeticOp("*", (s1, s2) -> unwrapF(s1) * unwrapF(s2), (s, s2, v) -> unwrapF(v) / unwrapF(s2), null,
+			"Floating-point multiplication operator");
+		operators.withDoubleArithmeticOp("*", (s1, s2) -> unwrapD(s1) * unwrapD(s2), (s, s2, v) -> unwrapD(v) / unwrapD(s2), null,
+			"Double-precision floating-point multiplication operator");
 
 		operators.withIntArithmeticOp("/", (s1, s2) -> {
 			int num = unwrapI(s1);
 			int den = unwrapI(s2);
 			return den == 0 ? num : num / den;
-		}, (s, s2, v) -> unwrapI(v) * unwrapI(s2), null);
+		}, (s, s2, v) -> unwrapI(v) * unwrapI(s2), null, "Integer division operator");
 		operators.withLongArithmeticOp("/", (s1, s2) -> {
 			long num = unwrapI(s1);
 			long den = unwrapI(s2);
 			return den == 0 ? num : num / den;
-		}, (s, s2, v) -> unwrapL(v) * unwrapL(s2), null);
-		operators.withFloatArithmeticOp("/", (s1, s2) -> unwrapF(s1) / unwrapF(s2), (s, s2, v) -> unwrapF(v) * unwrapF(s2), null);
-		operators.withDoubleArithmeticOp("/", (s1, s2) -> unwrapD(s1) / unwrapD(s2), (s, s2, v) -> unwrapD(v) * unwrapD(s2), null);
+		}, (s, s2, v) -> unwrapL(v) * unwrapL(s2), null, "Long integer division operator");
+		operators.withFloatArithmeticOp("/", (s1, s2) -> unwrapF(s1) / unwrapF(s2), (s, s2, v) -> unwrapF(v) * unwrapF(s2), null,
+			"Floating-point division operator");
+		operators.withDoubleArithmeticOp("/", (s1, s2) -> unwrapD(s1) / unwrapD(s2), (s, s2, v) -> unwrapD(v) * unwrapD(s2), null,
+			"Double-precision floating-point division operator");
 
 		operators.withIntArithmeticOp("%", (s1, s2) -> {
 			int num = unwrapI(s1);
 			int den = unwrapI(s2);
 			return den == 0 ? num : num % den;
 		}, (s, s2, v) -> unwrapI(v), //
-			(s, s2, v) -> Math.abs(unwrapI(v)) >= Math.abs(unwrapI(s2)) ? "Cannot set a modulus to less than the divisor" : null);
+			(s, s2, v) -> Math.abs(unwrapI(v)) >= Math.abs(unwrapI(s2)) ? "Cannot set a modulus to less than the divisor" : null,
+			"Integer modulus operator");
 		operators.withLongArithmeticOp("%", (s1, s2) -> {
 			long num = unwrapI(s1);
 			long den = unwrapI(s2);
 			return den == 0 ? num : num % den;
 		}, (s, s2, v) -> unwrapL(v) * unwrapL(s2), //
-			(s, s2, v) -> Math.abs(unwrapL(v)) >= Math.abs(unwrapL(s2)) ? "Cannot set a modulus to less than the divisor" : null);
+			(s, s2, v) -> Math.abs(unwrapL(v)) >= Math.abs(unwrapL(s2)) ? "Cannot set a modulus to less than the divisor" : null,
+			"Long integer modulus operator");
 		operators.withFloatArithmeticOp("%", (s1, s2) -> unwrapF(s1) % unwrapF(s2), (s, s2, v) -> unwrapF(v) * unwrapF(s2), //
-			(s, s2, v) -> Math.abs(unwrapF(v)) >= Math.abs(unwrapF(s2)) ? "Cannot set a modulus to less than the divisor" : null);
+			(s, s2, v) -> Math.abs(unwrapF(v)) >= Math.abs(unwrapF(s2)) ? "Cannot set a modulus to less than the divisor" : null,
+			"Floating-point modulus operator");
 		operators.withDoubleArithmeticOp("%", (s1, s2) -> unwrapD(s1) % unwrapD(s2), (s, s2, v) -> unwrapD(v) * unwrapD(s2), //
-			(s, s2, v) -> Math.abs(unwrapD(v)) >= Math.abs(unwrapD(s2)) ? "Cannot set a modulus to less than the divisor" : null);
+			(s, s2, v) -> Math.abs(unwrapD(v)) >= Math.abs(unwrapD(s2)) ? "Cannot set a modulus to less than the divisor" : null,
+			"Double-precision floating-point modulus operator");
 
 		// Comparison ops
-		operators.withIntComparisonOp("<", (s1, s2) -> unwrapI(s1) < unwrapI(s2));
-		operators.withIntComparisonOp("<=", (s1, s2) -> unwrapI(s1) <= unwrapI(s2));
-		operators.withIntComparisonOp(">", (s1, s2) -> unwrapI(s1) > unwrapI(s2));
-		operators.withIntComparisonOp(">=", (s1, s2) -> unwrapI(s1) >= unwrapI(s2));
+		operators.withIntComparisonOp("<", (s1, s2) -> unwrapI(s1) < unwrapI(s2), "Integer less than comparison");
+		operators.withIntComparisonOp("<=", (s1, s2) -> unwrapI(s1) <= unwrapI(s2), "Integer less than or equal to comparison");
+		operators.withIntComparisonOp(">", (s1, s2) -> unwrapI(s1) > unwrapI(s2), "Integer greater than comparison");
+		operators.withIntComparisonOp(">=", (s1, s2) -> unwrapI(s1) >= unwrapI(s2), "Integer greater than or equal to comparison");
 
-		operators.withLongComparisonOp("<", (s1, s2) -> unwrapL(s1) < unwrapL(s2));
-		operators.withLongComparisonOp("<=", (s1, s2) -> unwrapL(s1) <= unwrapL(s2));
-		operators.withLongComparisonOp(">", (s1, s2) -> unwrapL(s1) > unwrapL(s2));
-		operators.withLongComparisonOp(">=", (s1, s2) -> unwrapL(s1) >= unwrapL(s2));
+		operators.withLongComparisonOp("<", (s1, s2) -> unwrapL(s1) < unwrapL(s2), "Long integer less than comparison");
+		operators.withLongComparisonOp("<=", (s1, s2) -> unwrapL(s1) <= unwrapL(s2), "Long integer less than or equal to comparison");
+		operators.withLongComparisonOp(">", (s1, s2) -> unwrapL(s1) > unwrapL(s2), "Long integer greater than comparison");
+		operators.withLongComparisonOp(">=", (s1, s2) -> unwrapL(s1) >= unwrapL(s2), "Long integer greater than or equal to comparison");
 
-		operators.withFloatComparisonOp("<", (s1, s2) -> unwrapF(s1) < unwrapF(s2));
-		operators.withFloatComparisonOp("<=", (s1, s2) -> unwrapF(s1) <= unwrapF(s2));
-		operators.withFloatComparisonOp(">", (s1, s2) -> unwrapF(s1) > unwrapF(s2));
-		operators.withFloatComparisonOp(">=", (s1, s2) -> unwrapF(s1) >= unwrapF(s2));
+		operators.withFloatComparisonOp("<", (s1, s2) -> unwrapF(s1) < unwrapF(s2), "Floating-point less than comparison");
+		operators.withFloatComparisonOp("<=", (s1, s2) -> unwrapF(s1) <= unwrapF(s2), "Floating-point less than or equal to comparison");
+		operators.withFloatComparisonOp(">", (s1, s2) -> unwrapF(s1) > unwrapF(s2), "Floating-point greater than comparison");
+		operators.withFloatComparisonOp(">=", (s1, s2) -> unwrapF(s1) >= unwrapF(s2), "Floating-point greater than or equal to comparison");
 
-		operators.withDoubleComparisonOp("<", (s1, s2) -> unwrapD(s1) < unwrapD(s2));
-		operators.withDoubleComparisonOp("<=", (s1, s2) -> unwrapD(s1) <= unwrapD(s2));
-		operators.withDoubleComparisonOp(">", (s1, s2) -> unwrapD(s1) > unwrapD(s2));
-		operators.withDoubleComparisonOp(">=", (s1, s2) -> unwrapD(s1) >= unwrapD(s2));
+		operators.withDoubleComparisonOp("<", (s1, s2) -> unwrapD(s1) < unwrapD(s2),
+			"Double-precision floating-point less than comparison");
+		operators.withDoubleComparisonOp("<=", (s1, s2) -> unwrapD(s1) <= unwrapD(s2),
+			"Double-precision floating-point less than or equal to comparison");
+		operators.withDoubleComparisonOp(">", (s1, s2) -> unwrapD(s1) > unwrapD(s2),
+			"Double-precision floating-point greater than comparison");
+		operators.withDoubleComparisonOp(">=", (s1, s2) -> unwrapD(s1) >= unwrapD(s2),
+			"Double-precision floating-point greater than or equal to comparison");
 
 		// Bit shifting
-		operators.withIntArithmeticOp("<<", (s1, s2) -> unwrapI(s1) << unwrapI(s2), (s, s2, r) -> unwrapI(r) >>> unwrapI(s2), null);
-		operators.withIntArithmeticOp(">>", (s1, s2) -> unwrapI(s1) >> unwrapI(s2), (s, s2, r) -> unwrapI(r) << unwrapI(s2), null);
-		operators.withIntArithmeticOp(">>", (s1, s2) -> unwrapI(s1) >>> unwrapI(s2), (s, s2, r) -> unwrapI(r) << unwrapI(s2), null);
-		operators.withLongArithmeticOp("<<", (s1, s2) -> unwrapL(s1) << unwrapL(s2), (s, s2, r) -> unwrapL(r) >>> unwrapL(s2), null);
-		operators.withLongArithmeticOp(">>", (s1, s2) -> unwrapL(s1) >> unwrapL(s2), (s, s2, r) -> unwrapL(r) << unwrapL(s2), null);
-		operators.withLongArithmeticOp(">>", (s1, s2) -> unwrapL(s1) >>> unwrapL(s2), (s, s2, r) -> unwrapL(r) << unwrapL(s2), null);
+		operators.withIntArithmeticOp("<<", (s1, s2) -> unwrapI(s1) << unwrapI(s2), (s, s2, r) -> unwrapI(r) >>> unwrapI(s2), null,
+			"Integer left bit-shift operator");
+		operators.withIntArithmeticOp(">>", (s1, s2) -> unwrapI(s1) >> unwrapI(s2), (s, s2, r) -> unwrapI(r) << unwrapI(s2), null,
+			"Integer right bit-shift operator");
+		operators.withIntArithmeticOp(">>", (s1, s2) -> unwrapI(s1) >>> unwrapI(s2), (s, s2, r) -> unwrapI(r) << unwrapI(s2), null,
+			"Integer unsigned right bit-shift operator");
+		operators.withLongArithmeticOp("<<", (s1, s2) -> unwrapL(s1) << unwrapL(s2), (s, s2, r) -> unwrapL(r) >>> unwrapL(s2), null,
+			"Long integer left bit-shift operator");
+		operators.withLongArithmeticOp(">>", (s1, s2) -> unwrapL(s1) >> unwrapL(s2), (s, s2, r) -> unwrapL(r) << unwrapL(s2), null,
+			"Long integer right bit-shift operator");
+		operators.withLongArithmeticOp(">>", (s1, s2) -> unwrapL(s1) >>> unwrapL(s2), (s, s2, r) -> unwrapL(r) << unwrapL(s2), null,
+			"Long integer unsigned right bit-shift operator");
 
 		// Bitwise operators
 		operators.withIntArithmeticOp("|", (s1, s2) -> unwrapI(s1) | unwrapI(s2), (s, s2, r) -> unwrapI(r), (s, s2, r) -> {
 			if ((unwrapI(r) & ~unwrapI(s2)) != 0)
 				return "Invalid bitwise operator reverse";
 			return null;
-		});
+		}, "Integer bitwise OR operator");
+		operators.withLongArithmeticOp("|", (s1, s2) -> unwrapL(s1) | unwrapL(s2), (s, s2, r) -> unwrapL(r), (s, s2, r) -> {
+			if ((unwrapL(r) & ~unwrapL(s2)) != 0)
+				return "Invalid bitwise operator reverse";
+			return null;
+		}, "Long integer bitwise OR operator");
 
 		// String append
 		operators.with2("+", String.class, Object.class, String.class, (s1, s2) -> s1 + s2, null,
-			(s, s2, r) -> "Cannot reverse string append");
+			(s, s2, r) -> "Cannot reverse string append", "String concatenation operator");
 		operators.with2("+", Object.class, String.class, String.class, (s1, s2) -> s1 + s2, null,
-			(s, s2, r) -> "Cannot reverse string append");
+			(s, s2, r) -> "Cannot reverse string append", "String concatenation operator");
 		// Unfortunately I don't support general string reversal here, but at least for some simple cases we can
 		operators.with2("+", String.class, String.class, String.class, (s1, s2) -> s1 + s2, (s, s2, r) -> {
 			return r.substring(0, r.length() - s2.length());
@@ -921,7 +988,7 @@ public class BinaryOperatorSet {
 			if (r == null || !r.endsWith(s2))
 				return "String does not end with \"" + s2 + "\"";
 			return null;
-		});
+		}, "String concatenation operator");
 		operators.with2("+", Boolean.class, String.class, String.class, (s1, s2) -> s1 + s2, (s, s2, r) -> {
 			return Boolean.valueOf(r.substring(0, r.length() - s2.length()));
 		}, (s, s2, r) -> {
@@ -935,7 +1002,7 @@ public class BinaryOperatorSet {
 			default:
 				return "'true' or 'false' expected";
 			}
-		});
+		}, "String concatenation operator");
 		String MIN_INT_STR = String.valueOf(Integer.MIN_VALUE).substring(1);
 		String MAX_INT_STR = String.valueOf(Integer.MAX_VALUE);
 		operators.with2("+", Integer.class, String.class, String.class, (s1, s2) -> s1 + s2, (s, s2, r) -> {
@@ -957,7 +1024,7 @@ public class BinaryOperatorSet {
 				&& StringUtils.compareNumberTolerant(StringUtils.cheapSubSequence(begin, 1, begin.length()), MIN_INT_STR, false, true) > 0)
 				return "negative integer is too large for int type";
 			return null;
-		});
+		}, "String concatenation operator");
 		String MIN_LONG_STR = String.valueOf(Long.MIN_VALUE).substring(1);
 		String MAX_LONG_STR = String.valueOf(Long.MAX_VALUE);
 		operators.with2("+", Long.class, String.class, String.class, (s1, s2) -> s1 + s2, (s, s2, r) -> {
@@ -979,7 +1046,7 @@ public class BinaryOperatorSet {
 				&& StringUtils.compareNumberTolerant(StringUtils.cheapSubSequence(begin, 1, begin.length()), MIN_LONG_STR, false, true) > 0)
 				return "negative integer is too large for long type";
 			return null;
-		});
+		}, "String concatenation operator");
 		operators.with2("+", Double.class, String.class, String.class, (s1, s2) -> s1 + s2, (s, s2, r) -> {
 			return Double.valueOf(r.substring(0, r.length() - s2.length()));
 		}, (s, s2, r) -> {
@@ -993,7 +1060,7 @@ public class BinaryOperatorSet {
 			} catch (NumberFormatException e) {
 				return e.getMessage();
 			}
-		});
+		}, "String concatenation operator");
 		operators.with2("+", Float.class, String.class, String.class, (s1, s2) -> s1 + s2, (s, s2, r) -> {
 			return Float.valueOf(r.substring(0, r.length() - s2.length()));
 		}, (s, s2, r) -> {
@@ -1007,7 +1074,7 @@ public class BinaryOperatorSet {
 			} catch (NumberFormatException e) {
 				return e.getMessage();
 			}
-		});
+		}, "String concatenation operator");
 		return operators;
 	}
 
@@ -1145,9 +1212,9 @@ public class BinaryOperatorSet {
 		 */
 		public <S, T> Builder with(String operator, Class<S> primary, Class<T> secondary, BiFunction<? super S, ? super T, ? extends S> op,
 			TriFunction<? super S, ? super T, ? super S, ? extends S> reverse,
-			TriFunction<? super S, ? super T, ? super S, String> reverseEnabled) {
+			TriFunction<? super S, ? super T, ? super S, String> reverseEnabled, String description) {
 			with(operator, primary, secondary, //
-				BinaryOp.of(operator, TypeTokens.get().of(primary), op, reverse, reverseEnabled));
+				BinaryOp.of(operator, TypeTokens.get().of(primary), op, reverse, reverseEnabled, description));
 			return this;
 		}
 
@@ -1169,11 +1236,11 @@ public class BinaryOperatorSet {
 		 */
 		public <S, T, V> Builder with2(String operator, Class<S> primary, Class<T> secondary, Class<V> target,
 			BiFunction<? super S, ? super T, ? extends V> op, TriFunction<? super S, ? super T, ? super V, ? extends S> reverse,
-			TriFunction<? super S, ? super T, ? super V, String> reverseEnabled) {
+			TriFunction<? super S, ? super T, ? super V, String> reverseEnabled, String description) {
 			theOperators.computeIfAbsent(operator, __ -> new ClassMap<>())//
 			.computeIfAbsent(target, () -> new ClassMap<>())//
 			.computeIfAbsent(primary, () -> new ClassMap<>())//
-			.with(secondary, BinaryOp.of2(operator, TypeTokens.get().of(target), op, reverse, reverseEnabled));
+			.with(secondary, BinaryOp.of2(operator, TypeTokens.get().of(target), op, reverse, reverseEnabled, description));
 			return this;
 		}
 
@@ -1267,8 +1334,9 @@ public class BinaryOperatorSet {
 		 * @return This builder
 		 */
 		public Builder withIntArithmeticOp(String operator, BiFunction<Integer, Integer, Integer> op,
-			TriFunction<Integer, Integer, Integer, Integer> reverse, TriFunction<Integer, Integer, Integer, String> canReverse) {
-			with(operator, Integer.class, Integer.class, op, reverse, canReverse);
+			TriFunction<Integer, Integer, Integer, Integer> reverse, TriFunction<Integer, Integer, Integer, String> canReverse,
+			String description) {
+			with(operator, Integer.class, Integer.class, op, reverse, canReverse, description);
 
 			withCastSecondary(operator, Integer.class, Character.class, int.class, CastOp.charInt);
 			withCastSecondary(operator, Integer.class, Byte.class, int.class, CastOp.byteInt);
@@ -1298,8 +1366,8 @@ public class BinaryOperatorSet {
 		 * @return This builder
 		 */
 		public Builder withLongArithmeticOp(String operator, BiFunction<Long, Long, Long> op, TriFunction<Long, Long, Long, Long> reverse,
-			TriFunction<Long, Long, Long, String> canReverse) {
-			with(operator, Long.class, Long.class, op, reverse, canReverse);
+			TriFunction<Long, Long, Long, String> canReverse, String description) {
+			with(operator, Long.class, Long.class, op, reverse, canReverse, description);
 
 			withCastSecondary(operator, Long.class, Character.class, long.class, CastOp.charLong);
 			withCastSecondary(operator, Long.class, Byte.class, long.class, CastOp.byteLong);
@@ -1321,8 +1389,8 @@ public class BinaryOperatorSet {
 		 * @return This builder
 		 */
 		public Builder withFloatArithmeticOp(String operator, BiFunction<Float, Float, Float> op,
-			TriFunction<Float, Float, Float, Float> reverse, TriFunction<Float, Float, Float, String> canReverse) {
-			with(operator, Float.class, Float.class, op, reverse, canReverse);
+			TriFunction<Float, Float, Float, Float> reverse, TriFunction<Float, Float, Float, String> canReverse, String description) {
+			with(operator, Float.class, Float.class, op, reverse, canReverse, description);
 
 			withCastSecondary(operator, Float.class, Character.class, float.class, CastOp.charFloat);
 			withCastSecondary(operator, Float.class, Byte.class, float.class, CastOp.byteFloat);
@@ -1346,8 +1414,9 @@ public class BinaryOperatorSet {
 		 * @return This builder
 		 */
 		public Builder withDoubleArithmeticOp(String operator, BiFunction<Double, Double, Double> op,
-			TriFunction<Double, Double, Double, Double> reverse, TriFunction<Double, Double, Double, String> canReverse) {
-			with(operator, Double.class, Double.class, op, reverse, canReverse);
+			TriFunction<Double, Double, Double, Double> reverse, TriFunction<Double, Double, Double, String> canReverse,
+			String description) {
+			with(operator, Double.class, Double.class, op, reverse, canReverse, description);
 
 			withCastSecondary(operator, Double.class, Character.class, double.class, CastOp.charDouble);
 			withCastSecondary(operator, Double.class, Byte.class, double.class, CastOp.byteDouble);
@@ -1370,9 +1439,9 @@ public class BinaryOperatorSet {
 		 * @param op The function to apply the operation
 		 * @return This builder
 		 */
-		public Builder withIntComparisonOp(String operator, BiFunction<Integer, Integer, Boolean> op) {
-			with2(operator, Integer.class, Integer.class, Boolean.class, op, null,
-				(s, s2, v) -> "Comparison operations cannot be reversed");
+		public Builder withIntComparisonOp(String operator, BiFunction<Integer, Integer, Boolean> op, String description) {
+			with2(operator, Integer.class, Integer.class, Boolean.class, op, null, (s, s2, v) -> "Comparison operations cannot be reversed",
+				description);
 
 			withCastSecondary(operator, Integer.class, Character.class, boolean.class, CastOp.charInt);
 			withCastSecondary(operator, Integer.class, Byte.class, boolean.class, CastOp.byteInt);
@@ -1399,8 +1468,9 @@ public class BinaryOperatorSet {
 		 * @param op The function to apply the operation
 		 * @return This builder
 		 */
-		public Builder withLongComparisonOp(String operator, BiFunction<Long, Long, Boolean> op) {
-			with2(operator, Long.class, Long.class, Boolean.class, op, null, (s, s2, v) -> "Comparison operations cannot be reversed");
+		public Builder withLongComparisonOp(String operator, BiFunction<Long, Long, Boolean> op, String description) {
+			with2(operator, Long.class, Long.class, Boolean.class, op, null, (s, s2, v) -> "Comparison operations cannot be reversed",
+				description);
 
 			withCastSecondary(operator, Long.class, Character.class, boolean.class, CastOp.charLong);
 			withCastSecondary(operator, Long.class, Byte.class, boolean.class, CastOp.byteLong);
@@ -1419,8 +1489,9 @@ public class BinaryOperatorSet {
 		 * @param op The function to apply the operation
 		 * @return This builder
 		 */
-		public Builder withFloatComparisonOp(String operator, BiFunction<Float, Float, Boolean> op) {
-			with2(operator, Float.class, Float.class, Boolean.class, op, null, (s, s2, v) -> "Comparison operations cannot be reversed");
+		public Builder withFloatComparisonOp(String operator, BiFunction<Float, Float, Boolean> op, String description) {
+			with2(operator, Float.class, Float.class, Boolean.class, op, null, (s, s2, v) -> "Comparison operations cannot be reversed",
+				description);
 
 			withCastSecondary(operator, Float.class, Character.class, boolean.class, CastOp.charFloat);
 			withCastSecondary(operator, Float.class, Byte.class, boolean.class, CastOp.byteFloat);
@@ -1441,8 +1512,9 @@ public class BinaryOperatorSet {
 		 * @param op The function to apply the operation
 		 * @return This builder
 		 */
-		public Builder withDoubleComparisonOp(String operator, BiFunction<Double, Double, Boolean> op) {
-			with2(operator, Double.class, Double.class, Boolean.class, op, null, (s, s2, v) -> "Comparison operations cannot be reversed");
+		public Builder withDoubleComparisonOp(String operator, BiFunction<Double, Double, Boolean> op, String description) {
+			with2(operator, Double.class, Double.class, Boolean.class, op, null, (s, s2, v) -> "Comparison operations cannot be reversed",
+				description);
 
 			withCastSecondary(operator, Double.class, Character.class, boolean.class, CastOp.charDouble);
 			withCastSecondary(operator, Double.class, Byte.class, boolean.class, CastOp.byteDouble);

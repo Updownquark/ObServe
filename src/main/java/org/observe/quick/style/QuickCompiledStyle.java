@@ -10,6 +10,7 @@ import java.util.Set;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ExpressoQIS;
 import org.observe.expresso.ObservableExpression;
+import org.observe.expresso.qonfig.ExElement;
 import org.observe.quick.style.QuickInterpretedStyle.QuickElementStyleAttribute;
 import org.observe.quick.style.QuickStyleElement.Def;
 import org.observe.quick.style.QuickTypeStyle.TypeStyleSet;
@@ -57,8 +58,8 @@ public interface QuickCompiledStyle {
 	 *         {@link ObservableExpression#evaluate(org.observe.expresso.ModelType.ModelInstanceType, org.observe.expresso.ExpressoEnv, int)
 	 *         evaluated}
 	 */
-	QuickInterpretedStyle interpret(QuickInterpretedStyle parent, Map<CompiledStyleApplication, InterpretedStyleApplication> applications)
-		throws ExpressoInterpretationException;
+	QuickInterpretedStyle interpret(ExElement.Interpreted<?> parentEl, QuickInterpretedStyle parent,
+		Map<CompiledStyleApplication, InterpretedStyleApplication> applications) throws ExpressoInterpretationException;
 
 	/** Default {@link QuickCompiledStyle} implementation */
 	public class Default implements QuickCompiledStyle {
@@ -168,12 +169,13 @@ public interface QuickCompiledStyle {
 		}
 
 		@Override
-		public QuickInterpretedStyle interpret(QuickInterpretedStyle parent,
+		public QuickInterpretedStyle interpret(ExElement.Interpreted<?> parentEl, QuickInterpretedStyle parent,
 			Map<CompiledStyleApplication, InterpretedStyleApplication> applications) throws ExpressoInterpretationException {
 			List<InterpretedStyleValue<?>> declaredValues = new ArrayList<>(theValues.size());
 			Map<QuickStyleAttribute<?>, QuickElementStyleAttribute<?>> values = new HashMap<>();
+			List<QuickStyleElement.Interpreted> styleElements = new ArrayList<>();
 			QuickInterpretedStyle style = new QuickInterpretedStyle.Default(parent, this, Collections.unmodifiableList(declaredValues),
-				Collections.unmodifiableMap(values));
+				Collections.unmodifiableMap(values), Collections.unmodifiableList(styleElements));
 			for (CompiledStyleValue<?> value : theDeclaredValues)
 				declaredValues.add(value.interpret(applications));
 			for (Map.Entry<QuickStyleAttribute<?>, QuickCompiledStyleAttribute<?>> value : theValues.entrySet()) {
@@ -183,6 +185,8 @@ public interface QuickCompiledStyle {
 				values.put(attr, //
 					((QuickCompiledStyleAttribute<Object>) value.getValue()).interpret(style, inherited, applications));
 			}
+			for (QuickStyleElement.Def se : theStyleElements)
+				styleElements.add(se.interpret(parentEl));
 			return style;
 		}
 
@@ -257,9 +261,9 @@ public interface QuickCompiledStyle {
 		}
 
 		@Override
-		public QuickInterpretedStyle interpret(QuickInterpretedStyle parent,
+		public QuickInterpretedStyle interpret(ExElement.Interpreted<?> parentEl, QuickInterpretedStyle parent,
 			Map<CompiledStyleApplication, InterpretedStyleApplication> applications) throws ExpressoInterpretationException {
-			return theWrapped.interpret(parent, applications);
+			return theWrapped.interpret(parentEl, parent, applications);
 		}
 
 		@Override

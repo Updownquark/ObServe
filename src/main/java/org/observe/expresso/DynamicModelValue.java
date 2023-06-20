@@ -3,6 +3,7 @@ package org.observe.expresso;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -396,6 +397,11 @@ public interface DynamicModelValue<M, MV extends M> extends ModelValueSynth<M, M
 		}
 
 		@Override
+		public List<? extends ModelValueSynth<?, ?>> getComponents() {
+			return Collections.emptyList();
+		}
+
+		@Override
 		public int hashCode() {
 			return Objects.hash(theDeclaration, theType);
 		}
@@ -477,6 +483,15 @@ public interface DynamicModelValue<M, MV extends M> extends ModelValueSynth<M, M
 		@Override
 		public BetterList<ModelValueSynth<?, ?>> getCores() {
 			return BetterList.of(this);
+		}
+
+		@Override
+		public List<? extends ModelValueSynth<?, ?>> getComponents() {
+			try {
+				return Collections.singletonList(getContainer());
+			} catch (ModelInstantiationException e) {
+				throw new IllegalStateException("Could not synthesize dynamic value", e);
+			}
 		}
 
 		@Override

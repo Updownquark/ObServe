@@ -190,5 +190,10 @@ public class QuickSize {
 					return (ObservableValue<? extends T>) ObservableValue.of(QuickSize.class, new QuickSize(0.0f, value));
 			}
 		}
+
+		@Override
+		public String getDescription() {
+			return "Simple Size literal";
+		}
 	}
 }

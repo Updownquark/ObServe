@@ -1,6 +1,7 @@
 package org.observe.expresso;
 
 import java.util.Collections;
+import java.util.List;
 import java.util.Set;
 
 import org.observe.expresso.ModelType.ModelInstanceType;
@@ -106,6 +107,11 @@ public class ExpressoDebugV0_1 implements QonfigInterpretation {
 								}
 
 								@Override
+										public List<? extends ModelValueSynth<?, ?>> getComponents() {
+											return Collections.singletonList(wrapped);
+										}
+
+										@Override
 								public String toString() {
 									return wrapped.toString();
 								}

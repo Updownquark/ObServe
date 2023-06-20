@@ -11,6 +11,7 @@ import org.observe.expresso.ModelType;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
+import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelValueSynth;
 import org.observe.util.TypeTokens;
 
@@ -41,7 +42,7 @@ public class ClassInstanceExpression implements ObservableExpression {
 	}
 
 	@Override
-	public int getChildOffset(int childIndex) {
+	public int getComponentOffset(int childIndex) {
 		throw new IndexOutOfBoundsException(childIndex + " of 0");
 	}
 
@@ -51,7 +52,7 @@ public class ClassInstanceExpression implements ObservableExpression {
 	}
 
 	@Override
-	public List<? extends ObservableExpression> getChildren() {
+	public List<? extends ObservableExpression> getComponents() {
 		return Collections.emptyList();
 	}
 
@@ -66,8 +67,8 @@ public class ClassInstanceExpression implements ObservableExpression {
 	}
 
 	@Override
-	public <M, MV extends M> ModelValueSynth<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env, int expressionOffset)
-		throws ExpressoEvaluationException {
+	public <M, MV extends M> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env,
+		int expressionOffset) throws ExpressoEvaluationException {
 		if (type.getModelType() != ModelTypes.Value)
 			throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(),
 				"A class instance expression can only be evaluated to a value");
@@ -84,7 +85,8 @@ public class ClassInstanceExpression implements ObservableExpression {
 		if (!TypeTokens.get().isAssignable(type.getType(0), classType))
 			throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(),
 				theType + ".class cannot be evaluated as a " + type.getType(0));
-		return (ModelValueSynth<M, MV>) ModelValueSynth.literal(ModelTypes.Value.forType(classType), clazz, theType + ".class");
+		return ObservableExpression.evEx(
+			(InterpretedValueSynth<M, MV>) ModelValueSynth.literal(ModelTypes.Value.forType(classType), clazz, theType + ".class"), clazz);
 	}
 
 	@Override

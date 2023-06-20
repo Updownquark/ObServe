@@ -77,4 +77,9 @@ public class FontValueParser implements NonStructuredParser {
 			value = NAMED_SLANTS.get(text);
 		return (ObservableValue<? extends T>) ObservableValue.of(double.class, value);
 	}
+
+	@Override
+	public String getDescription() {
+		return "Font constant literal";
+	}
 }

@@ -493,6 +493,11 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 					public BetterList<ModelValueSynth<?, ?>> getCores() {
 						return BetterList.of(this);
 					}
+
+					@Override
+					public List<? extends ModelValueSynth<?, ?>> getComponents() {
+						return Collections.emptyList();
+					}
 				};
 			});
 		}
@@ -610,6 +615,11 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 					public BetterList<ModelValueSynth<?, ?>> getCores() {
 						return BetterList.of(this);
 					}
+
+					@Override
+					public List<? extends ModelValueSynth<?, ?>> getComponents() {
+						return Collections.emptyList();
+					}
 				};
 			});
 		}
@@ -693,6 +703,11 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 					@Override
 					public BetterList<ModelValueSynth<?, ?>> getCores() {
 						return BetterList.of(this);
+					}
+
+					@Override
+					public List<? extends ModelValueSynth<?, ?>> getComponents() {
+						return Collections.emptyList();
 					}
 				};
 			});
@@ -795,6 +810,11 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 					@Override
 					public BetterList<ModelValueSynth<?, ?>> getCores() {
 						return BetterList.of(this);
+					}
+
+					@Override
+					public List<? extends ModelValueSynth<?, ?>> getComponents() {
+						return Collections.emptyList();
 					}
 				};
 			});
@@ -1027,6 +1047,11 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 				public BetterList<ModelValueSynth<?, ?>> getCores() {
 					return BetterList.of(this);
 				}
+
+				@Override
+				public List<? extends ModelValueSynth<?, ?>> getComponents() {
+					return Collections.emptyList();
+				}
 			};
 		});
 	}
@@ -1101,6 +1126,14 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 					else
 						return BetterList.of(this);
 				}
+
+				@Override
+				public List<? extends ModelValueSynth<?, ?>> getComponents() {
+					if (value != null)
+						return Collections.singletonList(value);
+					else
+						return Collections.emptyList();
+				}
 			};
 		});
 	}
@@ -1159,6 +1192,11 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 				@Override
 				public BetterList<ModelValueSynth<?, ?>> getCores() throws ExpressoInterpretationException {
 					return BetterList.of(actionVs.stream(), vc -> vc.getCores().stream());
+				}
+
+				@Override
+				public List<? extends ModelValueSynth<?, ?>> getComponents() {
+					return actionVs;
 				}
 			};
 		});
@@ -1247,6 +1285,31 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 					return BetterList.of(Stream.concat(//
 						Stream.of(initV, beforeV, whileV, beforeBodyV, afterBodyV, finallyV), //
 						execVs.stream()), cv -> cv == null ? Stream.empty() : cv.getCores().stream());
+				}
+
+				@Override
+				public List<? extends ModelValueSynth<?, ?>> getComponents() {
+					List<ModelValueSynth<?, ?>> components = new ArrayList<>(//
+						(initV == null ? 0 : 1)//
+						+ (beforeV == null ? 0 : 1)//
+						+ 1 // whileV
+						+ (beforeBodyV == null ? 0 : 1)//
+						+ (afterBodyV == null ? 0 : 1)//
+						+ (finallyV == null ? 0 : 1)//
+						+ execVs.size());
+					if (initV != null)
+						components.add(initV);
+					if (beforeV != null)
+						components.add(beforeV);
+					components.add(whileV);
+					if (beforeBodyV != null)
+						components.add(beforeBodyV);
+					if (afterBodyV != null)
+						components.add(afterBodyV);
+					if (finallyV != null)
+						components.add(finallyV);
+					components.addAll(execVs);
+					return Collections.unmodifiableList(components);
 				}
 			};
 		});
@@ -1354,6 +1417,11 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 				@Override
 				public BetterList<ModelValueSynth<?, ?>> getCores() throws ExpressoInterpretationException {
 					return BetterList.of(valueContainers.stream(), vc -> vc.getCores().stream());
+				}
+
+				@Override
+				public List<? extends ModelValueSynth<?, ?>> getComponents() {
+					return Collections.unmodifiableList(valueContainers);
 				}
 			};
 		});
@@ -1538,6 +1606,17 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 					else
 						return value;
 				}
+
+				@Override
+				public List<? extends ModelValueSynth<?, ?>> getComponents() {
+					List<ModelValueSynth<?, ?>> txComponents = transform.getComponents();
+					if (txComponents.isEmpty())
+						return Collections.singletonList(compiledSource);
+					List<ModelValueSynth<?, ?>> components = new ArrayList<>(1 + txComponents.size());
+					components.add(compiledSource);
+					components.addAll(txComponents);
+					return Collections.unmodifiableList(components);
+				}
 			};
 		});
 	}
@@ -1646,11 +1725,15 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		 */
 		boolean isDifferent(ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException;
 
+		BetterList<ModelValueSynth<?, ?>> getComponents();
+
 		/**
 		 * @return The cores of any model values that compose this transform
 		 * @throws ExpressoInterpretationException If the cores cannot be retrieved
 		 */
-		BetterList<ModelValueSynth<?, ?>> getCores() throws ExpressoInterpretationException;
+		default BetterList<ModelValueSynth<?, ?>> getCores() throws ExpressoInterpretationException {
+			return BetterList.of(getComponents().stream(), v -> ((ModelValueSynth<?, ?>) v).getCores().stream());
+		}
 
 		/**
 		 * @param <M0> The original source model type
@@ -1680,8 +1763,8 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 				}
 
 				@Override
-				public BetterList<ModelValueSynth<?, ?>> getCores() throws ExpressoInterpretationException {
-					return BetterList.of(Stream.concat(previous.getCores().stream(), next.getCores().stream()));
+				public BetterList<ModelValueSynth<?, ?>> getComponents() {
+					return BetterList.of(Stream.concat(previous.getComponents().stream(), next.getComponents().stream()));
 				}
 
 				@Override
@@ -1715,7 +1798,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 				}
 
 				@Override
-				public BetterList<ModelValueSynth<?, ?>> getCores() {
+				public BetterList<ModelValueSynth<?, ?>> getComponents() {
 					return BetterList.empty();
 				}
 
@@ -1814,8 +1897,8 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 				}
 
 				@Override
-				public BetterList<ModelValueSynth<?, ?>> getCores() throws ExpressoInterpretationException {
-					return BetterList.of(Stream.of(components), c -> c.getCores().stream());
+				public BetterList<ModelValueSynth<?, ?>> getComponents() {
+					return BetterList.of(components);
 				}
 
 				@Override
@@ -1860,8 +1943,8 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 				}
 
 				@Override
-				public BetterList<ModelValueSynth<?, ?>> getCores() throws ExpressoInterpretationException {
-					return BetterList.of(Stream.of(components), c -> c.getCores().stream());
+				public BetterList<ModelValueSynth<?, ?>> getComponents() {
+					return BetterList.of(components);
 				}
 
 				@Override
@@ -1940,8 +2023,8 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 				}
 
 				@Override
-				public BetterList<ModelValueSynth<?, ?>> getCores() throws ExpressoInterpretationException {
-					return BetterList.of(Stream.of(components), c -> c.getCores().stream());
+				public BetterList<ModelValueSynth<?, ?>> getComponents() {
+					return BetterList.of(components);
 				}
 
 				@Override
@@ -1986,8 +2069,8 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 				}
 
 				@Override
-				public BetterList<ModelValueSynth<?, ?>> getCores() throws ExpressoInterpretationException {
-					return BetterList.of(Stream.of(components), c -> c.getCores().stream());
+				public BetterList<ModelValueSynth<?, ?>> getComponents() {
+					return BetterList.of(components);
 				}
 
 				@Override
@@ -2064,8 +2147,8 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 				}
 
 				@Override
-				public BetterList<ModelValueSynth<?, ?>> getCores() throws ExpressoInterpretationException {
-					return BetterList.of(Stream.of(components), c -> c.getCores().stream());
+				public BetterList<ModelValueSynth<?, ?>> getComponents() {
+					return BetterList.of(components);
 				}
 
 				@Override
@@ -2110,8 +2193,8 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 				}
 
 				@Override
-				public BetterList<ModelValueSynth<?, ?>> getCores() throws ExpressoInterpretationException {
-					return BetterList.of(Stream.of(components), c -> c.getCores().stream());
+				public BetterList<ModelValueSynth<?, ?>> getComponents() {
+					return BetterList.of(components);
 				}
 
 				@Override
@@ -2200,8 +2283,8 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 				}
 
 				@Override
-				public BetterList<ModelValueSynth<?, ?>> getCores() throws ExpressoInterpretationException {
-					return BetterList.of(Stream.of(components), c -> c.getCores().stream());
+				public BetterList<ModelValueSynth<?, ?>> getComponents() {
+					return BetterList.of(components);
 				}
 
 				@Override
@@ -2253,8 +2336,8 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 				}
 
 				@Override
-				public BetterList<ModelValueSynth<?, ?>> getCores() throws ExpressoInterpretationException {
-					return BetterList.of(Stream.of(components), c -> c.getCores().stream());
+				public BetterList<ModelValueSynth<?, ?>> getComponents() {
+					return BetterList.of(components);
 				}
 
 				@Override
@@ -2306,8 +2389,8 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 				}
 
 				@Override
-				public BetterList<ModelValueSynth<?, ?>> getCores() throws ExpressoInterpretationException {
-					return BetterList.of(Stream.of(components), c -> c.getCores().stream());
+				public BetterList<ModelValueSynth<?, ?>> getComponents() {
+					return BetterList.of(components);
 				}
 
 				@Override
@@ -2359,8 +2442,8 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 				}
 
 				@Override
-				public BetterList<ModelValueSynth<?, ?>> getCores() throws ExpressoInterpretationException {
-					return BetterList.of(Stream.of(components), c -> c.getCores().stream());
+				public BetterList<ModelValueSynth<?, ?>> getComponents() {
+					return BetterList.of(components);
 				}
 
 				@Override
@@ -2412,8 +2495,8 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 				}
 
 				@Override
-				public BetterList<ModelValueSynth<?, ?>> getCores() throws ExpressoInterpretationException {
-					return BetterList.of(Stream.of(components), c -> c.getCores().stream());
+				public BetterList<ModelValueSynth<?, ?>> getComponents() {
+					return BetterList.of(components);
 				}
 
 				@Override
@@ -2519,8 +2602,8 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 					}
 
 					@Override
-					public BetterList<ModelValueSynth<?, ?>> getCores() throws ExpressoInterpretationException {
-						return BetterList.of(Stream.concat(previous.getCores().stream(), next.getCores().stream()));
+					public BetterList<ModelValueSynth<?, ?>> getComponents() {
+						return BetterList.of(Stream.concat(previous.getComponents().stream(), next.getComponents().stream()));
 					}
 
 					@Override
@@ -2579,7 +2662,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 				}
 
 				@Override
-				public BetterList<ModelValueSynth<?, ?>> getCores() {
+				public BetterList<ModelValueSynth<?, ?>> getComponents() {
 					return BetterList.empty();
 				}
 			};
@@ -3167,7 +3250,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 				}
 
 				@Override
-				public BetterList<ModelValueSynth<?, ?>> getCores() {
+				public BetterList<ModelValueSynth<?, ?>> getComponents() {
 					return BetterList.empty();
 				}
 
@@ -4301,6 +4384,11 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 						public BetterList<ModelValueSynth<?, ?>> getCores() throws ExpressoInterpretationException {
 							return comparison.getCores();
 						}
+
+						@Override
+						public List<? extends ModelValueSynth<?, ?>> getComponents() {
+							return Collections.singletonList(comparison);
+						}
 					};
 				}
 			};
@@ -4401,6 +4489,11 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 						@Override
 						public BetterList<ModelValueSynth<?, ?>> getCores() throws ExpressoInterpretationException {
 							return BetterList.of(sortByMaps.stream(), vc -> vc.getCores().stream());
+						}
+
+						@Override
+						public List<? extends ModelValueSynth<?, ?>> getComponents() {
+							return Collections.unmodifiableList(sortByMaps);
 						}
 					};
 				}

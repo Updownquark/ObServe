@@ -4,28 +4,42 @@ import java.awt.Color;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.Reader;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
+import java.lang.reflect.Type;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.IntFunction;
 
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.SimpleObservable;
+import org.observe.expresso.DynamicModelValue;
 import org.observe.expresso.ExpressionValueType;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.LocatedExpression;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ObservableExpression;
+import org.observe.expresso.ObservableExpression.EvaluatedExpression;
 import org.observe.expresso.ObservableModelSet;
+import org.observe.expresso.ObservableModelSet.CompiledModelValue;
+import org.observe.expresso.ObservableModelSet.ExtValueRef;
+import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
+import org.observe.expresso.ObservableModelSet.ModelComponentNode;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.ObservableModelSet.RuntimeValuePlaceholder;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.quick.QuickApp;
 import org.observe.quick.QuickApplication;
 import org.observe.quick.QuickDocument;
+import org.observe.util.TypeTokens;
 import org.qommons.ArrayUtils;
 import org.qommons.Colors;
+import org.qommons.SelfDescribed;
 import org.qommons.collect.CircularArrayList;
 import org.qommons.collect.DequeList;
 import org.qommons.config.CustomValueType;
@@ -52,6 +66,8 @@ import org.qommons.io.SimpleXMLParser.XmlElementTerminal;
 import org.qommons.io.SimpleXMLParser.XmlParseException;
 import org.qommons.io.SimpleXMLParser.XmlProcessingInstruction;
 import org.qommons.io.TextParseException;
+
+import com.google.common.reflect.TypeToken;
 
 public class Qwysiwyg {
 	public static final Color ELEMENT_COLOR = Colors.green;
@@ -187,7 +203,7 @@ public class Qwysiwyg {
 				return;
 			}
 
-			renderInterpreted();
+			renderInterpreted(theRoot, theDocumentInterpreted);
 
 			try {
 				if (theDocument == null)
@@ -221,34 +237,40 @@ public class Qwysiwyg {
 		}
 	}
 
-	private DocumentComponent theHovered;
+	private int theHovered;
 
 	public void hover(int position) {
-		if (theRoot == null)
+		if (theRoot == null || position == theHovered)
 			return;
-		DocumentComponent hovered = getRenderComponent(theRoot, position);
-		if (hovered == theHovered)
-			return;
-		theHovered = hovered;
-		String tt = null;
-		while (hovered != null) {
-			tt = hovered.getTooltip();
-			if (tt != null)
-				break;
-			hovered = hovered.parent;
+		theHovered = position;
+		try {
+			DocumentComponent hovered = getRenderComponent(theRoot, position);
+			String tt = null;
+			while (hovered != null) {
+				tt = hovered.getTooltip(position - hovered.renderedStart);
+				if (tt != null)
+					break;
+				hovered = hovered.parent;
+			}
+			theInternalTooltip.set(tt, null);
+		} catch (RuntimeException | Error e) {
+			e.printStackTrace();
 		}
-		theInternalTooltip.set(tt, null);
 	}
 
 	public void clicked(int position, int clickCount) {
 		if (theRoot == null)
 			return;
-		DocumentComponent clicked = getRenderComponent(theRoot, position);
-		String print = "" + clicked.start;
-		String tt = clicked.getTooltip();
-		if (tt != null)
-			print += tt;
-		System.out.println(print);
+		try {
+			DocumentComponent clicked = getRenderComponent(theRoot, position);
+			String print = "" + clicked.start;
+			String tt = clicked.getTooltip(position - clicked.renderedStart);
+			if (tt != null)
+				print += tt;
+			System.out.println(print);
+		} catch (RuntimeException | Error e) {
+			e.printStackTrace();
+		}
 	}
 
 	public void mouseExit() {
@@ -268,14 +290,17 @@ public class Qwysiwyg {
 	}
 
 	DocumentComponent getSourceComponent(DocumentComponent parent, int sourcePosition) {
+		if (parent.start.getPosition() == sourcePosition)
+			return parent;
 		if (parent.children != null) {
 			int childIdx = ArrayUtils.binarySearch(parent.children, child -> Integer.compare(sourcePosition, child.start.getPosition()));
 			if (childIdx < 0) {
 				childIdx = -childIdx - 2;
 				if (childIdx < 0 || sourcePosition >= parent.children.get(childIdx).getEnd())
 					return parent;
-			}
-			return getSourceComponent(parent.children.get(childIdx), sourcePosition);
+				return getSourceComponent(parent.children.get(childIdx), sourcePosition);
+			} else
+				return parent.children.get(childIdx);
 		}
 		return parent;
 	}
@@ -424,15 +449,14 @@ public class Qwysiwyg {
 	}
 
 	private void renderDef(DocumentComponent component, ExElement.Def<?> def, String descrip) {
-		if (descrip != null) {
-			DocumentComponent elComponent = getSourceComponent(component, def.getElement().getPositionInFile().getPosition());
+		DocumentComponent elComponent = getSourceComponent(component, def.getElement().getPositionInFile().getPosition()).parent;
+		if (descrip != null)
 			elComponent.typeTooltip(descrip, true);
-		}
 		for (Map.Entry<QonfigAttributeDef.Declared, QonfigValue> attr : def.getElement().getAttributes().entrySet()) {
 			PositionedContent position = attr.getValue().position;
 			if (position == null)
 				continue;
-			DocumentComponent attrValueComp = getSourceComponent(component, position.getPosition(0).getPosition());
+			DocumentComponent attrValueComp = getSourceComponent(elComponent, position.getPosition(0).getPosition());
 			DocumentComponent attrComp = attrValueComp.parent;
 			QonfigValueType type = attr.getKey().getType();
 			if (type instanceof QonfigValueType.Custom) {
@@ -452,7 +476,7 @@ public class Qwysiwyg {
 		}
 		if (def.getElement().getValue() != null && def.getElement().getValue().position != null) {
 			PositionedContent position = def.getElement().getValue().position;
-			DocumentComponent attrValueComp = getSourceComponent(component, position.getPosition(0).getPosition());
+			DocumentComponent attrValueComp = getSourceComponent(elComponent, position.getPosition(0).getPosition());
 			QonfigValueType type = def.getElement().getType().getValue().getType();
 			if (type instanceof QonfigValueType.Custom) {
 				CustomValueType customType = ((QonfigValueType.Custom) type).getCustomType();
@@ -480,15 +504,15 @@ public class Qwysiwyg {
 						childDescrip += "<br><br>" + roleDescrip;
 				}
 			}
-			renderDef(component, child, childDescrip);
+			renderDef(elComponent, child, childDescrip);
 		}
 	}
 
 	private void renderCompiledExpression(ObservableExpression ex, LocatedPositionedContent content, DocumentComponent component) {
-		component.color(getColor(ex.getClass()));
+		component.color(getExpressionColor(ex));
 		int c = 0;
-		for (ObservableExpression child : ex.getChildren()) {
-			int childOffset = ex.getChildOffset(c);
+		for (ObservableExpression child : ex.getComponents()) {
+			int childOffset = ex.getComponentOffset(c);
 			int length = child.getExpressionLength();
 			LocatedFilePosition startPos = content.getPosition(childOffset);
 			int end = content.getPosition(childOffset + length).getPosition();
@@ -498,8 +522,8 @@ public class Qwysiwyg {
 		}
 	}
 
-	private Color getColor(Class<? extends ObservableExpression> exType) {
-		Color color = new Color(exType.getName().hashCode());
+	protected Color getExpressionColor(ObservableExpression exType) {
+		Color color = new Color(exType.getClass().getName().hashCode());
 		float dark = Colors.getDarkness(color);
 		if (dark < 0.15)
 			color = Colors.stain(color, 0.25f);
@@ -537,21 +561,152 @@ public class Qwysiwyg {
 		return tt;
 	}
 
-	private void renderInterpreted() {
-		// TODO
+	private <E extends ExElement> void renderInterpreted(DocumentComponent component, ExElement.Interpreted<E> interpreted) {
+		ExElement.Def<? super E> def = interpreted.getDefinition();
+		DocumentComponent elComponent = getSourceComponent(component, def.getElement().getPositionInFile().getPosition()).parent;
+		for (Map.Entry<QonfigAttributeDef.Declared, QonfigValue> attr : def.getElement().getAttributes().entrySet()) {
+			PositionedContent position = attr.getValue().position;
+			if (position == null)
+				continue;
+			DocumentComponent attrValueComp = getSourceComponent(elComponent, position.getPosition(0).getPosition());
+			DocumentComponent attrComp = attrValueComp.parent;
+			QonfigValueType type = attr.getKey().getType();
+			if (type instanceof QonfigValueType.Custom) {
+				CustomValueType customType = ((QonfigValueType.Custom) type).getCustomType();
+				if (customType instanceof ExpressionValueType) {
+					Object interpValue = def.getAttribute(interpreted, attr.getKey());
+					if (interpValue instanceof InterpretedValueSynth) {
+						EvaluatedExpression<?, ?> expression = getEvaluatedExpression((InterpretedValueSynth<?, ?>) interpValue);
+						if (expression != null)
+							renderInterpretedExpression(expression, attrValueComp);
+					}
+				}
+			}
+			// TODO describe interpreted value?
+		}
+		if (def.getElement().getValue() != null && def.getElement().getValue().position != null) {
+			PositionedContent position = def.getElement().getValue().position;
+			DocumentComponent attrValueComp = getSourceComponent(elComponent, position.getPosition(0).getPosition());
+			QonfigValueType type = def.getElement().getType().getValue().getType();
+			if (type instanceof QonfigValueType.Custom) {
+				CustomValueType customType = ((QonfigValueType.Custom) type).getCustomType();
+				if (customType instanceof ExpressionValueType) {
+					Object interpValue = def.getElementValue(interpreted);
+					if (interpValue instanceof InterpretedValueSynth) {
+						EvaluatedExpression<?, ?> expression = getEvaluatedExpression((InterpretedValueSynth<?, ?>) interpValue);
+						if (expression != null)
+							renderInterpretedExpression(expression, attrValueComp);
+					}
+				}
+			}
+			// TODO describe interpreted value?
+		}
+		for (ExElement.Interpreted<?> child : def.getAllChildren(interpreted))
+			renderInterpreted(elComponent, child);
+	}
+
+	private static EvaluatedExpression<?, ?> getEvaluatedExpression(InterpretedValueSynth<?, ?> value) {
+		while (!(value instanceof EvaluatedExpression) && value.getComponents().size() == 1)
+			value = value.getComponents().get(0);
+		return value instanceof EvaluatedExpression ? (EvaluatedExpression<?, ?>) value : null;
+	}
+
+	private void renderInterpretedExpression(EvaluatedExpression<?, ?> expression, DocumentComponent component) {
+		component.interpretedTooltip(pos -> renderInterpretedDescriptor(expression.getDescriptor(pos)), true);
+		List<? extends EvaluatedExpression<?, ?>> components = expression.getComponents();
+		if (component.children != null && components.size() == component.children.size()) {
+			int c = 0;
+			for (EvaluatedExpression<?, ?> child : components) {
+				renderInterpretedExpression(child, component.children.get(c));
+				c++;
+			}
+		}
+	}
+
+	protected String renderInterpretedDescriptor(Object descriptor) {
+		if (descriptor == null)
+			return null;
+		System.out.println("Descriptor: " + descriptor.getClass().getName());
+		if (descriptor instanceof Class) {
+			return "Class " + ((Class<?>) descriptor).getName();
+		} else if (descriptor instanceof TypeToken) {
+			return "Type " + renderType(descriptor);
+		} else if (descriptor instanceof Type) {
+			return "Type " + renderType(descriptor);
+		} else if (descriptor instanceof Field) {
+			Field f = (Field) descriptor;
+			StringBuilder str = new StringBuilder();
+			if (Modifier.isStatic(f.getModifiers()))
+				str.append("Static field ");
+			else
+				str.append("Field ");
+			str.append(f.getDeclaringClass().getName()).append('.').append(f.getName());
+			str.append(": ").append(renderType(f.getGenericType()));
+			return str.toString();
+		} else if (descriptor instanceof Method) {
+			Method m = (Method) descriptor;
+			StringBuilder str = new StringBuilder();
+			if (Modifier.isStatic(m.getModifiers()))
+				str.append("Static method ");
+			else
+				str.append("Method ");
+			str.append(m.getDeclaringClass().getName()).append('.').append(m.getName()).append('(');
+			boolean first = true;
+			for (Type pt : m.getGenericParameterTypes()) {
+				if (first)
+					first = false;
+				else
+					str.append(", ");
+				str.append(renderType(pt));
+			}
+			str.append("): ").append(renderType(m.getGenericReturnType())).append(')');
+			return str.toString();
+		} else if (descriptor instanceof ModelComponentNode) {
+			ModelComponentNode<?, ?> node = (ModelComponentNode<?, ?>) descriptor;
+			Object id = node.getValueIdentity() != null ? node.getValueIdentity() : node.getIdentity();
+			Object thing = node.getThing();
+			if (thing instanceof ObservableModelSet)
+				return "Model " + id.toString();
+			else if (thing instanceof CompiledModelValue) {
+				String descrip;
+				if (id instanceof DynamicModelValue.Identity)
+					descrip = "Element model value ";
+				else
+					descrip = "Model value ";
+				try {
+					return descrip + id.toString() + ": " + renderType(node.getType());
+				} catch (ExpressoInterpretationException e) {
+					e.printStackTrace();
+					return "Error retrieving type: " + e;
+				}
+			} else if (thing instanceof ExtValueRef)
+				return "External value " + id.toString() + ": " + renderType(((ExtValueRef<?, ?>) thing).getType());
+			else if (thing instanceof RuntimeValuePlaceholder) {
+				try {
+					return "Runtime value " + id.toString() + ": "
+						+ renderType(((RuntimeValuePlaceholder<?, ?>) thing).getType());
+				} catch (ExpressoInterpretationException e) {
+					e.printStackTrace();
+					return "Error retrieving type: " + e;
+				}
+			} else
+				return "Model component " + id.toString();
+		} else if (descriptor instanceof DynamicModelValue) {
+			DynamicModelValue<?, ?> dmv = (DynamicModelValue<?, ?>) descriptor;
+			return "Element value " + dmv.getDeclaration().toString();
+		} else if (descriptor instanceof SelfDescribed)
+			return ((SelfDescribed) descriptor).getDescription();
+		else
+			return "Literal " + descriptor;
+	}
+
+	static String renderType(Object type) {
+		if (type instanceof Type)
+			type = TypeTokens.get().of((Type) type);
+		return type.toString().replace("<", "&lt;");
 	}
 
 	private void renderText() {
-		// int lines = 0;
-		// for (int c = 0; c < theDocumentContent.length(); c++) {
-		// if (theDocumentContent.charAt(c) == '\n')
-		// lines++;
-		// }
-		// int lineDigits = getDigits(lines);
-		// StringBuilder renderedText = new StringBuilder();
-		// int[] model = new int[1];
-		// renderLineBreak(renderedText, model, 1, lineDigits);
-		// render(theRoot, renderedText, model, new int[1], lineDigits);
 		DocumentRenderer renderer = new DocumentRenderer(theDocumentContent);
 		renderer.render(theRoot);
 		theInternalDocumentDisplay.set(renderer.toString(), null);
@@ -570,7 +725,7 @@ public class Qwysiwyg {
 		private Color theFontColor;
 		private boolean isBold;
 
-		public DocumentRenderer(CharSequence content) {
+		DocumentRenderer(CharSequence content) {
 			theContent = content;
 			theRenderedText = new StringBuilder();
 			int lines = 0;
@@ -583,7 +738,7 @@ public class Qwysiwyg {
 			renderLineBreak();
 		}
 
-		private int render(DocumentComponent comp) {
+		int render(DocumentComponent comp) {
 			comp.renderedStart = theModelPosition;
 			Color preFC = theFontColor;
 			boolean color = comp.fontColor != null && !comp.fontColor.equals(theFontColor);
@@ -642,23 +797,23 @@ public class Qwysiwyg {
 					break;
 				case '<':
 					theRenderedText.append("&lt;");
-					theModelPosition += 4;
+					theModelPosition++;
 					break;
 				case '"':
 					theRenderedText.append("&quot;");
-					theModelPosition += 4;
+					theModelPosition++;
 					break;
 				case '\'':
 					theRenderedText.append("&apos;");
-					theModelPosition += 4;
+					theModelPosition++;
 					break;
 				case '&':
 					theRenderedText.append("&amp;");
-					theModelPosition += 4;
+					theModelPosition++;
 					break;
 				default:
 					theRenderedText.append(ch);
-					theModelPosition += 4;
+					theModelPosition++;
 					break;
 				}
 			}
@@ -685,93 +840,6 @@ public class Qwysiwyg {
 		}
 	}
 
-	// private int render(DocumentComponent comp, StringBuilder renderedText, int[] model, int[] line, int lineDigits) {
-	// comp.renderedStart = model[0];
-	// if (comp.fontColor != null)
-	// renderedText.append("<font color=\"").append(Colors.toHTML(comp.fontColor)).append("\">");
-	// boolean linkEnded = !comp.link;
-	// if (comp.bold)
-	// renderedText.append("<b>");
-	// if (comp.link)
-	// renderedText.append("<u>");
-	// int prevPos = comp.start.getPosition();
-	// int end = comp.getEnd() < 0 ? theDocumentContent.length() : comp.getEnd();
-	// if (comp.children != null) {
-	// for (DocumentComponent child : comp.children) {
-	// renderText(prevPos, child.start.getPosition(), renderedText, model, line, lineDigits);
-	// if (!linkEnded) {
-	// linkEnded = true;
-	// renderedText.append("</u>");
-	// }
-	// prevPos = render(child, renderedText, model, line, lineDigits);
-	// }
-	// }
-	// renderText(prevPos, end, renderedText, model, line, lineDigits);
-	// if (!linkEnded)
-	// renderedText.append("</u>");
-	// if (comp.bold)
-	// renderedText.append("</b>");
-	// if (comp.fontColor != null)
-	// renderedText.append("</font>");
-	// comp.renderedEnd = model[0];
-	// return end;
-	// }
-	//
-	// private static final String TAB_HTML = "&nbsp;&nbsp;&nbsp;&nbsp;";
-	//
-	// private void renderText(int from, int to, StringBuilder renderedText, int[] model, int[] line, int lineDigits) {
-	// for (int c = from; c < to; c++) {
-	// char ch = theDocumentContent.charAt(c);
-	// switch (ch) {
-	// case '\n':
-	// renderedText.append("<br>\n");
-	// model[0]++;
-	// line[0]++;
-	// renderLineBreak(renderedText, model, line[0] + 1, lineDigits);
-	// break;
-	// case '\t':
-	// renderedText.append(TAB_HTML);
-	// model[0] += 4;
-	// break;
-	// case '<':
-	// renderedText.append("&lt;");
-	// model[0]++;
-	// break;
-	// case '"':
-	// renderedText.append("&quot;");
-	// model[0]++;
-	// break;
-	// case '\'':
-	// renderedText.append("&apos;");
-	// model[0]++;
-	// break;
-	// case '&':
-	// renderedText.append("&amp;");
-	// model[0]++;
-	// break;
-	// default:
-	// renderedText.append(ch);
-	// model[0]++;
-	// break;
-	// }
-	// }
-	// }
-	//
-	// private static void renderLineBreak(StringBuilder renderedText, int[] model, int lineNo, int lineDigits) {
-	// renderedText.append("Line ").append(lineNo).append(':');
-	// int digs = getDigits(lineNo);
-	// for (int i = lineDigits; i > digs; i--)
-	// renderedText.append("&nbsp;");
-	// model[0] += 6 + lineDigits;
-	// }
-	//
-	// private static int getDigits(int number) {
-	// int digs = 1;
-	// for (int num = 10; num >= 0 && num <= number; num *= 10, digs++) {
-	// }
-	// return digs;
-	// }
-
 	static class DocumentComponent {
 		final DocumentComponent parent;
 		final FilePosition start;
@@ -785,7 +853,7 @@ public class Qwysiwyg {
 
 		boolean isTooltipHtml;
 		String typeTooltip;
-		String interpretedTooltip;
+		IntFunction<String> interpretedTooltip;
 
 		static DocumentComponent createRoot() {
 			return new DocumentComponent(null, FilePosition.START);
@@ -839,8 +907,9 @@ public class Qwysiwyg {
 			return this;
 		}
 
-		String getTooltip() {
-			if (typeTooltip == null && interpretedTooltip == null)
+		String getTooltip(int offset) {
+			String intTT = interpretedTooltip == null ? null : interpretedTooltip.apply(offset);
+			if (typeTooltip == null && intTT == null)
 				return null;
 			StringBuilder str = new StringBuilder();
 			if (isTooltipHtml)
@@ -848,9 +917,9 @@ public class Qwysiwyg {
 			if (typeTooltip != null) {
 				str.append(typeTooltip);
 				if (interpretedTooltip != null)
-					str.append("<br><br>").append(interpretedTooltip);
+					str.append("<br><br>").append(intTT);
 			} else
-				str.append(interpretedTooltip);
+				str.append(intTT);
 			return str.toString();
 		}
 
@@ -861,7 +930,7 @@ public class Qwysiwyg {
 			return this;
 		}
 
-		DocumentComponent interpretedTooltip(String tt, boolean html) {
+		DocumentComponent interpretedTooltip(IntFunction<String> tt, boolean html) {
 			interpretedTooltip = tt;
 			if (html)
 				isTooltipHtml = true;

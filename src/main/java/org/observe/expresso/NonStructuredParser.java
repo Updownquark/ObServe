@@ -4,12 +4,13 @@ import java.text.ParseException;
 
 import org.observe.ObservableValue;
 import org.observe.util.TypeTokens;
+import org.qommons.SelfDescribed;
 import org.qommons.ex.ExBiFunction;
 
 import com.google.common.reflect.TypeToken;
 
 /** A parser to interpret 'external literal' values (by default, enclosed within grave accents, `like this`) */
-public interface NonStructuredParser {
+public interface NonStructuredParser extends SelfDescribed {
 	/**
 	 * @param type The type to parse the expression as
 	 * @param text The text of the expression
@@ -69,10 +70,11 @@ public interface NonStructuredParser {
 	 * Creates a simple parser from a function
 	 *
 	 * @param parser The parser
+	 * @param description The description for the parser
 	 * @return The parser
 	 */
-	static <T> Simple<T> simple(ExBiFunction<TypeToken<? extends T>, String, T, ParseException> parser) {
-		return simple(null, parser);
+	static <T> Simple<T> simple(ExBiFunction<TypeToken<? extends T>, String, T, ParseException> parser, String description) {
+		return simple(null, parser, description);
 	}
 
 	/**
@@ -81,13 +83,20 @@ public interface NonStructuredParser {
 	 * @param <T> The type of values to parser
 	 * @param type The type of values to parse
 	 * @param parser The parser
+	 * @param description The description for the parser
 	 * @return The parser
 	 */
-	static <T> Simple<T> simple(TypeToken<T> type, ExBiFunction<TypeToken<? extends T>, String, T, ParseException> parser) {
+	static <T> Simple<T> simple(TypeToken<T> type, ExBiFunction<TypeToken<? extends T>, String, T, ParseException> parser,
+		String description) {
 		return new Simple<T>(null) {
 			@Override
 			<T2 extends T> T2 parseValue(TypeToken<T2> type2, String text) throws ParseException {
 				return (T2) parser.apply(type2, text);
+			}
+
+			@Override
+			public String getDescription() {
+				return description;
 			}
 		};
 	}

@@ -133,12 +133,21 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			throws ModelInstantiationException;
 
 		/**
+		 * Equivalent of {@link ModelValueSynth#getComponents()}
+		 *
+		 * @return The value container that are components of the test
+		 */
+		List<ModelValueSynth<?, ?>> getComponents();
+
+		/**
 		 * Equivalent of {@link ModelValueSynth#getCores()}
 		 *
 		 * @return The value container cores that are the fundamental sources of value for the test
 		 * @throws ExpressoInterpretationException If an error occurs retrieving the cores
 		 */
-		BetterList<ModelValueSynth<?, ?>> getCores() throws ExpressoInterpretationException;
+		default BetterList<ModelValueSynth<?, ?>> getCores() throws ExpressoInterpretationException {
+			return BetterList.of(getComponents().stream(), vs -> vs.getCores().stream());
+		}
 	}
 
 	/** The name of the model value to store the {@link ObservableConfig} in the model */
@@ -431,6 +440,11 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 					public BetterList<ModelValueSynth<?, ?>> getCores() {
 						return BetterList.of(this);
 					}
+
+					@Override
+					public List<? extends ModelValueSynth<?, ?>> getComponents() {
+						return Collections.emptyList();
+					}
 				};
 			});
 		}
@@ -507,6 +521,11 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 						@Override
 						public <T2> ObservableValue<? extends T2> parse(TypeToken<T2> type2, String text) throws ParseException {
 							return ObservableValue.of(type2, (T2) theTextFormat.parse(text));
+						}
+
+						@Override
+						public String getDescription() {
+							return "Literal parsed by value's format";
 						}
 					};
 					Class<T> raw = TypeTokens.getRawType(theValueType);
@@ -1116,6 +1135,11 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 				}
 
 				@Override
+				public List<? extends ModelValueSynth<?, ?>> getComponents() {
+					return Collections.singletonList(textFormatContainer);
+				}
+
+				@Override
 				public SettableValue<ObservableConfigFormat<T>> forModelCopy(SettableValue<ObservableConfigFormat<T>> value,
 					ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException {
 					SettableValue<Format<T>> srcTextFormat = textFormatContainer.get(sourceModels);
@@ -1182,6 +1206,12 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 				public BetterList<ModelValueSynth<?, ?>> getCores() throws ExpressoInterpretationException {
 					return BetterList.of(Stream.of(hostVC, userVC, passwordVC, connectingVC, connectedVC, timeoutVC, retryVC)//
 						.filter(vc -> vc != null), vc -> vc.getCores().stream());
+				}
+
+				@Override
+				public List<? extends ModelValueSynth<?, ?>> getComponents() {
+					return BetterList.of(Stream.of(hostVC, userVC, passwordVC, connectingVC, connectedVC, timeoutVC, retryVC)//
+						.filter(vc -> vc != null));
 				}
 
 				@Override
@@ -1329,6 +1359,11 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 				public BetterList<ModelValueSynth<?, ?>> getCores() throws ExpressoInterpretationException {
 					return BetterList.of(Stream.concat(Stream.of(wrappedContainer, archiveDepthVC), //
 						archiveMethodContainers.stream()), vc -> vc.getCores().stream());
+				}
+
+				@Override
+				public List<? extends ModelValueSynth<?, ?>> getComponents() {
+					return BetterList.of(Stream.concat(Stream.of(wrappedContainer, archiveDepthVC), archiveMethodContainers.stream()));
 				}
 
 				@Override
@@ -1481,6 +1516,12 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 					List<ModelValueSynth<?, ?>> formatCores = formatContainer.getCores();
 					List<ModelValueSynth<?, ?>> validationCores = BetterList.of(validationContainers.stream(), vc -> vc.getCores().stream());
 					return BetterList.of(Stream.concat(formatCores.stream(), validationCores.stream()));
+				}
+
+				@Override
+				public List<? extends ModelValueSynth<?, ?>> getComponents() {
+					return BetterList.of(
+						Stream.concat(Stream.of(formatContainer), validationContainers.stream().flatMap(v -> v.getComponents().stream())));
 				}
 			}
 			return new ValidatedFormatContainer(formatContainer, validationContainers);
@@ -1645,6 +1686,11 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 				public BetterList<ModelValueSynth<?, ?>> getCores() {
 					return BetterList.of(this);
 				}
+
+				@Override
+				public List<? extends ModelValueSynth<?, ?>> getComponents() {
+					return Collections.emptyList();
+				}
 			};
 		});
 	}
@@ -1707,6 +1753,11 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 				public BetterList<ModelValueSynth<?, ?>> getCores() throws ExpressoInterpretationException {
 					return fileSource.getCores();
 				}
+
+				@Override
+				public List<? extends ModelValueSynth<?, ?>> getComponents() {
+					return Collections.singletonList(fileSource);
+				}
 			};
 		});
 	}
@@ -1755,8 +1806,8 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 					}
 
 					@Override
-					public BetterList<ModelValueSynth<?, ?>> getCores() throws ExpressoInterpretationException {
-						return patternC.getCores();
+					public List<ModelValueSynth<?, ?>> getComponents() {
+						return Collections.singletonList(patternC);
 					}
 				};
 			}
@@ -1829,8 +1880,8 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 					}
 
 					@Override
-					public BetterList<ModelValueSynth<?, ?>> getCores() throws ExpressoInterpretationException {
-						return fFilter.getCores();
+					public List<ModelValueSynth<?, ?>> getComponents() {
+						return Collections.singletonList(fFilter);
 					}
 				};
 			}

@@ -14,7 +14,6 @@ import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
-import org.observe.expresso.ObservableModelSet.ModelValueSynth;
 import org.observe.expresso.TypeConversionException;
 import org.observe.util.TypeTokens;
 import org.qommons.ArrayUtils;
@@ -54,9 +53,9 @@ public class MethodInvocation extends Invocation {
 	}
 
 	@Override
-	public int getChildOffset(int childIndex) {
-		if (childIndex >= getChildren().size())
-			throw new IndexOutOfBoundsException(childIndex + " of " + getChildren().size());
+	public int getComponentOffset(int childIndex) {
+		if (childIndex >= getComponents().size())
+			throw new IndexOutOfBoundsException(childIndex + " of " + getComponents().size());
 		int argIndex;
 		int offset = 0;
 		if (theContext != null) {
@@ -87,7 +86,7 @@ public class MethodInvocation extends Invocation {
 	}
 
 	@Override
-	public List<? extends ObservableExpression> getChildren() {
+	public List<? extends ObservableExpression> getComponents() {
 		List<ObservableExpression> children = new ArrayList<>(getArguments().size() + (theContext == null ? 0 : 1));
 		if (theContext != null)
 			children.add(theContext);
@@ -140,7 +139,7 @@ public class MethodInvocation extends Invocation {
 						TypeTokens.get().of(clazz), true, Arrays.asList(args), type, env, Invocation.ExecutableImpl.METHOD, this,
 						expressionOffset);
 					if (result != null) {
-						ModelValueSynth<SettableValue<?>, SettableValue<?>>[] realArgs = new ModelValueSynth[getArguments().size()];
+						EvaluatedExpression<SettableValue<?>, SettableValue<?>>[] realArgs = new EvaluatedExpression[getArguments().size()];
 						for (int a = 0; a < realArgs.length; a++)
 							realArgs[a] = args.args[a].get(0);
 						return new InvokableResult<>(result, null, Arrays.asList(realArgs), Invocation.ExecutableImpl.METHOD);
@@ -149,18 +148,13 @@ public class MethodInvocation extends Invocation {
 						"No such method " + printSignature() + " in class " + clazz.getName());
 				}
 			}
-			ModelValueSynth<SettableValue<?>, SettableValue<?>> ctx;
+			EvaluatedExpression<SettableValue<?>, SettableValue<?>> ctx;
 			try {
 				ctx = theContext.evaluate(ModelTypes.Value.any(), env, expressionOffset);
-			} catch (TypeConversionException e) {
+			} catch (ExpressoInterpretationException | TypeConversionException e) {
 				throw new ExpressoEvaluationException(expressionOffset, theContext.getExpressionLength(), e.getMessage(), e);
 			}
-			TypeToken<?> ctxType;
-			try {
-				ctxType = ctx.getType().getType(0);
-			} catch (ExpressoInterpretationException e) {
-				throw new ExpressoEvaluationException(expressionOffset, theContext.getExpressionLength(), e.getMessage(), e);
-			}
+			TypeToken<?> ctxType = ctx.getType().getType(0);
 			Class<?> rawCtxType = TypeTokens.getRawType(ctxType);
 			Method[] methods = rawCtxType.getMethods();
 			if (rawCtxType.isInterface())
@@ -168,7 +162,7 @@ public class MethodInvocation extends Invocation {
 			Invocation.MethodResult<Method, MV> result = Invocation.findMethod(methods, theMethodName.getName(), ctxType, false,
 				Arrays.asList(args), type, env, Invocation.ExecutableImpl.METHOD, this, expressionOffset);
 			if (result != null) {
-				ModelValueSynth<SettableValue<?>, SettableValue<?>>[] realArgs = new ModelValueSynth[getArguments().size()];
+				EvaluatedExpression<SettableValue<?>, SettableValue<?>>[] realArgs = new EvaluatedExpression[getArguments().size()];
 				for (int a = 0; a < realArgs.length; a++)
 					realArgs[a] = args.args[a].get(0);
 				return new InvokableResult<>(result, ctx, Arrays.asList(realArgs), Invocation.ExecutableImpl.METHOD);
@@ -181,7 +175,7 @@ public class MethodInvocation extends Invocation {
 				theMethodName.getName(), null, true, Arrays.asList(args), type, env, Invocation.ExecutableImpl.METHOD, this,
 				expressionOffset);
 			if (result != null) {
-				ModelValueSynth<SettableValue<?>, SettableValue<?>>[] realArgs = new ModelValueSynth[getArguments().size()];
+				EvaluatedExpression<SettableValue<?>, SettableValue<?>>[] realArgs = new EvaluatedExpression[getArguments().size()];
 				for (int a = 0; a < realArgs.length; a++)
 					realArgs[a] = args.args[a].get(0);
 				return new InvokableResult<>(result, null, Arrays.asList(realArgs), Invocation.ExecutableImpl.METHOD);

@@ -16,7 +16,6 @@ import org.observe.expresso.ModelType;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
-import org.observe.expresso.ObservableModelSet.ModelValueSynth;
 import org.observe.expresso.TypeConversionException;
 import org.observe.expresso.ops.UnaryOperatorSet.UnaryOp;
 import org.observe.util.TypeTokens;
@@ -58,7 +57,7 @@ public class UnaryOperator implements ObservableExpression {
 	}
 
 	@Override
-	public int getChildOffset(int childIndex) {
+	public int getComponentOffset(int childIndex) {
 		if (childIndex != 0)
 			throw new IndexOutOfBoundsException(childIndex + " of 1");
 		if (isPrefix)
@@ -81,7 +80,7 @@ public class UnaryOperator implements ObservableExpression {
 	}
 
 	@Override
-	public List<? extends ObservableExpression> getChildren() {
+	public List<? extends ObservableExpression> getComponents() {
 		return Collections.singletonList(theOperand);
 	}
 
@@ -105,8 +104,8 @@ public class UnaryOperator implements ObservableExpression {
 	}
 
 	@Override
-	public <M, MV extends M> ModelValueSynth<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env, int expressionOffset)
-		throws ExpressoEvaluationException, ExpressoInterpretationException {
+	public <M, MV extends M> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env,
+		int expressionOffset) throws ExpressoEvaluationException, ExpressoInterpretationException {
 		Set<Class<?>> types = env.getUnaryOperators().getSupportedInputTypes(theOperator);
 		TypeToken<?> targetOpType;
 		switch (types.size()) {
@@ -120,10 +119,10 @@ public class UnaryOperator implements ObservableExpression {
 			targetOpType = TypeTokens.get().WILDCARD;
 			break;
 		}
-		int operandOffset = expressionOffset + getChildOffset(0);
-		ExpressoEnv valueEnv = env.at(getChildOffset(0));
+		int operandOffset = expressionOffset + getComponentOffset(0);
+		ExpressoEnv valueEnv = env.at(getComponentOffset(0));
 		try {
-			return (ModelValueSynth<M, MV>) doOperation(type,
+			return (EvaluatedExpression<M, MV>) doOperation(type,
 				theOperand.evaluate(ModelTypes.Value.forType(targetOpType), valueEnv, operandOffset), env, expressionOffset,
 				valueEnv.reporting());
 		} catch (TypeConversionException e) {
@@ -131,16 +130,10 @@ public class UnaryOperator implements ObservableExpression {
 		}
 	}
 
-	private <M, MV extends M, S> MV doOperation(ModelInstanceType<M, MV> type, ModelValueSynth<SettableValue<?>, SettableValue<S>> op,
+	private <M, MV extends M, S> MV doOperation(ModelInstanceType<M, MV> type, EvaluatedExpression<SettableValue<?>, SettableValue<S>> op,
 		ExpressoEnv env, int expressionOffset, ErrorReporting valueReporting)
 			throws ExpressoEvaluationException, ExpressoInterpretationException {
-		TypeToken<S> opType;
-		int operandOffset = expressionOffset + getChildOffset(0);
-		try {
-			opType = (TypeToken<S>) op.getType().getType(0);
-		} catch (ExpressoInterpretationException e) {
-			throw new ExpressoEvaluationException(operandOffset, theOperand.getExpressionLength(), e.getMessage(), e);
-		}
+		TypeToken<S> opType = (TypeToken<S>) op.getType().getType(0);
 		UnaryOp<S, ?> operator = env.getUnaryOperators().getOperator(theOperator, TypeTokens.getRawType(opType));
 		ErrorReporting operatorReporting;
 		if (isPrefix)
@@ -164,9 +157,9 @@ public class UnaryOperator implements ObservableExpression {
 		}
 	}
 
-	private <T, A> ModelValueSynth<ObservableAction<?>, ObservableAction<A>> evaluateAction(TypeToken<A> actionType,
-		ModelValueSynth<SettableValue<?>, SettableValue<T>> op, UnaryOp<T, T> operator, int expressionOffset, ErrorReporting valueReporting,
-		ErrorReporting operatorReporting) throws ExpressoEvaluationException {
+	private <T, A> EvaluatedExpression<ObservableAction<?>, ObservableAction<A>> evaluateAction(TypeToken<A> actionType,
+		EvaluatedExpression<SettableValue<?>, SettableValue<T>> op, UnaryOp<T, T> operator, int expressionOffset,
+		ErrorReporting valueReporting, ErrorReporting operatorReporting) throws ExpressoEvaluationException {
 		boolean voidAction = TypeTokens.get().unwrap(TypeTokens.getRawType(actionType)) == void.class;
 		if (!voidAction) {
 			if (TypeTokens.get().isAssignable(actionType, TypeTokens.get().of(operator.getTargetType())))
@@ -177,7 +170,7 @@ public class UnaryOperator implements ObservableExpression {
 		}
 		boolean prefix = isPrefix;
 		TypeToken<A> fActionType = actionType;
-		return op.map(ModelTypes.Action.forType(actionType), opV -> {
+		return ObservableExpression.evEx(op.map(ModelTypes.Action.forType(actionType), opV -> {
 			ObservableAction<T> assignmentAction = opV.assignmentTo(opV.map(operator::apply));
 			return new ObservableAction<A>() {
 				@Override
@@ -214,20 +207,19 @@ public class UnaryOperator implements ObservableExpression {
 					return assignmentAction.isEnabled();
 				}
 			};
-		});
+		}), operator, op);
 	}
 
-	private <S, T> ModelValueSynth<SettableValue<?>, SettableValue<T>> evaluateValue(TypeToken<S> opType, TypeToken<T> type,
-		ModelValueSynth<SettableValue<?>, SettableValue<S>> op, UnaryOp<S, T> operator, int expressionOffset,
-		ErrorReporting operatorReporting)
-			throws ExpressoEvaluationException {
+	private <S, T> EvaluatedExpression<SettableValue<?>, SettableValue<T>> evaluateValue(TypeToken<S> opType, TypeToken<T> type,
+		EvaluatedExpression<SettableValue<?>, SettableValue<S>> op, UnaryOp<S, T> operator, int expressionOffset,
+		ErrorReporting operatorReporting) throws ExpressoEvaluationException {
 		if (TypeTokens.get().isAssignable(type, TypeTokens.get().of(operator.getTargetType())))
 			type = TypeTokens.get().of(operator.getTargetType());
 		else
 			throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(),
 				this + " cannot be evaluated as a " + ModelTypes.Value.getName() + "<" + opType + ">");
 		TypeToken<T> fType = type;
-		return op.map(ModelTypes.Value.forType(type), opV -> opV.transformReversible(fType, tx -> tx//
+		return ObservableExpression.evEx(op.map(ModelTypes.Value.forType(type), opV -> opV.transformReversible(fType, tx -> tx//
 			.map(LambdaUtils.printableFn(v -> {
 				try {
 					return operator.apply(v);
@@ -243,7 +235,7 @@ public class UnaryOperator implements ObservableExpression {
 					operatorReporting.error(null, e);
 					return null;
 				}
-			})));
+			}))), operator, op);
 	}
 
 	@Override

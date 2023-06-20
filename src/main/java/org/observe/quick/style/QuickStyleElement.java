@@ -1,13 +1,19 @@
 package org.observe.quick.style;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 import org.observe.SettableValue;
 import org.observe.expresso.CompiledExpression;
+import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ExpressoQIS;
+import org.observe.expresso.ModelTypes;
+import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.util.TypeTokens;
+import org.qommons.collect.CollectionUtils;
 import org.qommons.config.AbstractQIS;
 import org.qommons.config.QonfigChildDef;
 import org.qommons.config.QonfigElementOrAddOn;
@@ -31,7 +37,8 @@ public class QuickStyleElement extends ExElement.Abstract {
 	= ExElement.AttributeValueGetter.ofX(Def::getValue, Interpreted::getValue, QuickStyleElement::getValue,
 		"The value for the style's attribute, when it applies");
 	private static final ExElement.ChildElementGetter<QuickStyleElement, Interpreted, Def> STYLE_ELEMENTS = ExElement.ChildElementGetter
-		.<QuickStyleElement, Interpreted, Def> of(Def::getChildren, null, null, "Styles declared on the element itself");
+		.<QuickStyleElement, Interpreted, Def> of(Def::getChildren, Interpreted::getChildren, null,
+			"Styles declared on the element itself");
 
 	public static class Def extends ExElement.Def.Abstract<QuickStyleElement> {
 		private final QonfigElementOrAddOn theStyleElement;
@@ -104,14 +111,20 @@ public class QuickStyleElement extends ExElement.Abstract {
 			for (ExpressoQIS subStyleSession : session.forChildren("sub-style"))
 				theChildren.get(i++).update(subStyleSession);
 		}
+
+		public Interpreted interpret(ExElement.Interpreted<?> parent) {
+			return new Interpreted(this, parent);
+		}
 	}
 
 	public static class Interpreted extends ExElement.Interpreted.Abstract<QuickStyleElement> {
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> theCondition;
-		private InterpretedValueSynth<SettableValue<?>, SettableValue<?>> theValue;
+		private InterpretedValueSynth<SettableValue<?>, ? extends SettableValue<?>> theValue;
+		private final List<Interpreted> theChildren;
 
 		public Interpreted(Def definition, ExElement.Interpreted<?> parent) {
 			super(definition, parent);
+			theChildren = new ArrayList<>();
 		}
 
 		@Override
@@ -127,12 +140,36 @@ public class QuickStyleElement extends ExElement.Abstract {
 			theCondition = condition;
 		}
 
-		public InterpretedValueSynth<SettableValue<?>, SettableValue<?>> getValue() {
+		public InterpretedValueSynth<SettableValue<?>, ? extends SettableValue<?>> getValue() {
 			return theValue;
 		}
 
 		public void setValue(InterpretedValueSynth<SettableValue<?>, SettableValue<?>> value) {
 			theValue = value;
+		}
+
+		public List<Interpreted> getChildren() {
+			return Collections.unmodifiableList(theChildren);
+		}
+
+		@Override
+		public void update() throws ExpressoInterpretationException {
+			super.update();
+			theCondition = getDefinition().getCondition() == null ? null
+				: getDefinition().getCondition().evaluate(ModelTypes.Value.BOOLEAN).interpret();
+			if (getDefinition().getValue() != null && getDefinition().getValue().getExpression() != ObservableExpression.EMPTY)
+				theValue = getDefinition().getValue().evaluate(ModelTypes.Value.forType(getDefinition().getEffectiveAttribute().getType()))
+					.interpret();
+			else
+				theValue = null;
+			CollectionUtils.synchronize(theChildren, getDefinition().getChildren(), (interp, def) -> interp.getDefinition() == def)//
+			.<ExpressoInterpretationException> simpleE(def -> def.interpret(this))//
+			.commonUses(true, false)//
+			.rightOrder()//
+			.onLeftX(el -> el.getLeftValue().destroy())//
+			.onRightX(el -> el.getLeftValue().update())//
+			.onCommonX(el -> el.getLeftValue().update())//
+			.adjust();
 		}
 	}
 

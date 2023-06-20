@@ -15,6 +15,7 @@ import org.observe.expresso.ModelType;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
+import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueSynth;
 import org.observe.expresso.TypeConversionException;
@@ -51,7 +52,7 @@ public class AssignmentExpression implements ObservableExpression {
 	}
 
 	@Override
-	public int getChildOffset(int childIndex) {
+	public int getComponentOffset(int childIndex) {
 		switch (childIndex) {
 		case 0:
 			return 0;
@@ -68,7 +69,7 @@ public class AssignmentExpression implements ObservableExpression {
 	}
 
 	@Override
-	public List<? extends ObservableExpression> getChildren() {
+	public List<? extends ObservableExpression> getComponents() {
 		return QommonsUtils.unmodifiableCopy(theTarget, theValue);
 	}
 
@@ -90,12 +91,12 @@ public class AssignmentExpression implements ObservableExpression {
 	}
 
 	@Override
-	public <M, MV extends M> ModelValueSynth<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env, int expressionOffset)
-		throws ExpressoEvaluationException, ExpressoInterpretationException {
+	public <M, MV extends M> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env,
+		int expressionOffset) throws ExpressoEvaluationException, ExpressoInterpretationException {
 		if (type.getModelType() != ModelTypes.Action)
 			throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(),
 				"Assignments cannot be used as " + type.getModelType() + "s");
-		ModelValueSynth<SettableValue<?>, SettableValue<Object>> target;
+		EvaluatedExpression<SettableValue<?>, SettableValue<Object>> target;
 		try {
 			target = theTarget.evaluate(
 				(ModelInstanceType<SettableValue<?>, SettableValue<Object>>) (ModelInstanceType<?, ?>) ModelTypes.Value.any(), env,
@@ -107,7 +108,7 @@ public class AssignmentExpression implements ObservableExpression {
 		if (!isVoid && !TypeTokens.get().isAssignable(type.getType(0), target.getType().getType(0)))
 			throw new ExpressoEvaluationException(expressionOffset, theTarget.getExpressionLength(),
 				"Cannot assign " + target + ", type " + type.getType(0) + " to " + target.getType().getType(0));
-		ModelValueSynth<SettableValue<?>, SettableValue<Object>> value;
+		EvaluatedExpression<SettableValue<?>, SettableValue<Object>> value;
 		int valueOffset = expressionOffset + theTarget.getExpressionLength() + 1;
 		try (Transaction t = Invocation.asAction()) {
 			value = theValue.evaluate(
@@ -117,51 +118,57 @@ public class AssignmentExpression implements ObservableExpression {
 			throw new ExpressoEvaluationException(valueOffset, theValue.getExpressionLength(), e.getMessage(), e);
 		}
 		ErrorReporting reporting = env.reporting();
-		return (ModelValueSynth<M, MV>) new ModelValueSynth<ObservableAction<?>, ObservableAction<?>>() {
-			@Override
-			public ModelType<ObservableAction<?>> getModelType() {
-				return ModelTypes.Action;
-			}
+		return ObservableExpression
+			.evEx((InterpretedValueSynth<M, MV>) new InterpretedValueSynth<ObservableAction<?>, ObservableAction<?>>() {
+				@Override
+				public ModelType<ObservableAction<?>> getModelType() {
+					return ModelTypes.Action;
+				}
 
-			@Override
-			public ModelInstanceType<ObservableAction<?>, ObservableAction<?>> getType() throws ExpressoInterpretationException {
-				if (isVoid)
-					return (ModelInstanceType<ObservableAction<?>, ObservableAction<?>>) type;
-				else
-					return (ModelInstanceType<ObservableAction<?>, ObservableAction<?>>) (ModelInstanceType<?, ?>) ModelTypes.Action
-						.forType(target.getType().getType(0));
-			}
+				@Override
+				public ModelInstanceType<ObservableAction<?>, ObservableAction<?>> getType() {
+					if (isVoid)
+						return (ModelInstanceType<ObservableAction<?>, ObservableAction<?>>) type;
+					else
+						return (ModelInstanceType<ObservableAction<?>, ObservableAction<?>>) (ModelInstanceType<?, ?>) ModelTypes.Action
+							.forType(target.getType().getType(0));
+				}
 
-			@Override
-			public ObservableAction<?> get(ModelSetInstance models) throws ModelInstantiationException {
-				SettableValue<Object> ctxValue = target.get(models);
-				SettableValue<Object> valueValue = value.get(models);
-				return ctxValue.assignmentTo(valueValue, err -> reporting.error(null, err));
-			}
+				@Override
+				public ObservableAction<?> get(ModelSetInstance models) throws ModelInstantiationException {
+					SettableValue<Object> ctxValue = target.get(models);
+					SettableValue<Object> valueValue = value.get(models);
+					return ctxValue.assignmentTo(valueValue, err -> reporting.error(null, err));
+				}
 
-			@Override
-			public ObservableAction<?> forModelCopy(ObservableAction<?> value2, ModelSetInstance sourceModels, ModelSetInstance newModels)
-				throws ModelInstantiationException {
-				SettableValue<Object> sourceCtx = target.get(sourceModels);
-				SettableValue<Object> newCtx = target.get(newModels);
-				SettableValue<Object> sourceValue = value.get(sourceModels);
-				SettableValue<Object> newValue = value.get(newModels);
-				if (sourceCtx == newCtx && sourceValue == newValue)
-					return value2;
-				else
-					return newCtx.assignmentTo(newValue);
-			}
+				@Override
+				public ObservableAction<?> forModelCopy(ObservableAction<?> value2, ModelSetInstance sourceModels,
+					ModelSetInstance newModels) throws ModelInstantiationException {
+					SettableValue<Object> sourceCtx = target.get(sourceModels);
+					SettableValue<Object> newCtx = target.get(newModels);
+					SettableValue<Object> sourceValue = value.get(sourceModels);
+					SettableValue<Object> newValue = value.get(newModels);
+					if (sourceCtx == newCtx && sourceValue == newValue)
+						return value2;
+					else
+						return newCtx.assignmentTo(newValue);
+				}
 
-			@Override
-			public BetterList<ModelValueSynth<?, ?>> getCores() throws ExpressoInterpretationException {
-				return BetterList.of(Stream.of(target, value), vc -> vc.getCores().stream());
-			}
+				@Override
+				public BetterList<ModelValueSynth<?, ?>> getCores() {
+					return BetterList.of(Stream.of(target, value), vc -> vc.getCores().stream());
+				}
 
-			@Override
-			public String toString() {
-				return AssignmentExpression.this.toString();
-			}
-		};
+				@Override
+				public List<? extends InterpretedValueSynth<?, ?>> getComponents() {
+					return QommonsUtils.unmodifiableCopy(target, value);
+				}
+
+				@Override
+				public String toString() {
+					return AssignmentExpression.this.toString();
+				}
+			}, null, target, value);
 	}
 
 	@Override

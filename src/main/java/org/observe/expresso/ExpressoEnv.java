@@ -191,12 +191,13 @@ public class ExpressoEnv {
 	 * @return This environment
 	 */
 	public ExpressoEnv withDefaultNonStructuredParsing() {
-		withNonStructuredParser(String.class, NonStructuredParser.simple((t, s) -> s));
-		withNonStructuredParser(Duration.class, NonStructuredParser.simple((t, s) -> TimeUtils.parseDuration(s)));
-		withNonStructuredParser(Instant.class,
-			NonStructuredParser.simple((t, s) -> TimeUtils.parseInstant(s, true, true, null).evaluate(Instant::now)));
-		withNonStructuredParser(Enum.class, NonStructuredParser.simple((t, s) -> parseEnum(t, s)));
-		withNonStructuredParser(Color.class, NonStructuredParser.simple((t, s) -> Colors.parseColor(s)));
+		withNonStructuredParser(String.class, NonStructuredParser.simple((t, s) -> s, "Simple String literal"));
+		withNonStructuredParser(Duration.class,
+			NonStructuredParser.simple((t, s) -> TimeUtils.parseDuration(s), "Simple duration literal"));
+		withNonStructuredParser(Instant.class, NonStructuredParser
+			.simple((t, s) -> TimeUtils.parseInstant(s, true, true, null).evaluate(Instant::now), "Simple date/time literal"));
+		withNonStructuredParser(Enum.class, NonStructuredParser.simple((t, s) -> parseEnum(t, s), "Enum literal"));
+		withNonStructuredParser(Color.class, NonStructuredParser.simple((t, s) -> Colors.parseColor(s), "Color literal"));
 		return this;
 	}
 

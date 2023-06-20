@@ -19,6 +19,7 @@ import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueSynth;
 import org.observe.expresso.TypeConversionException;
 import org.observe.util.TypeTokens;
+import org.qommons.QommonsUtils;
 import org.qommons.collect.BetterList;
 import org.qommons.io.ErrorReporting;
 
@@ -49,7 +50,7 @@ public class ArrayAccessExpression implements ObservableExpression {
 	}
 
 	@Override
-	public int getChildOffset(int childIndex) {
+	public int getComponentOffset(int childIndex) {
 		switch (childIndex) {
 		case 0:
 			return 0;
@@ -66,7 +67,7 @@ public class ArrayAccessExpression implements ObservableExpression {
 	}
 
 	@Override
-	public List<? extends ObservableExpression> getChildren() {
+	public List<? extends ObservableExpression> getComponents() {
 		return Collections.unmodifiableList(Arrays.asList(theArray, theIndex));
 	}
 
@@ -88,13 +89,13 @@ public class ArrayAccessExpression implements ObservableExpression {
 	}
 
 	@Override
-	public <M, MV extends M> ModelValueSynth<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env, int expressionOffset)
-		throws ExpressoEvaluationException, ExpressoInterpretationException {
+	public <M, MV extends M> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env,
+		int expressionOffset) throws ExpressoEvaluationException, ExpressoInterpretationException {
 		if (type.getModelType() != ModelTypes.Value)
 			throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(),
 				"An array access expression can only be evaluated as a value");
 
-		ModelValueSynth<SettableValue<?>, SettableValue<Object[]>> arrayValue;
+		EvaluatedExpression<SettableValue<?>, SettableValue<Object[]>> arrayValue;
 		try {
 			arrayValue = theArray.evaluate(ModelTypes.Value.forType(//
 				(TypeToken<Object[]>) TypeTokens.get().getArrayType(type.getType(0), 1)), env, expressionOffset);
@@ -104,22 +105,24 @@ public class ArrayAccessExpression implements ObservableExpression {
 		}
 		int indexOffset = expressionOffset + theArray.getExpressionLength() + 1;
 		ExpressoEnv indexEnv = env.at(theArray.getExpressionLength() + 1);
-		ModelValueSynth<SettableValue<?>, SettableValue<Integer>> indexValue;
+		EvaluatedExpression<SettableValue<?>, SettableValue<Integer>> indexValue;
 		try {
 			indexValue = theIndex.evaluate(ModelTypes.Value.forType(int.class), indexEnv, indexOffset);
 		} catch (TypeConversionException e) {
 			throw new ExpressoEvaluationException(indexOffset, theIndex.getExpressionLength(),
 				"index " + theArray + " cannot be evaluated as an integer", e);
 		}
-		return (ModelValueSynth<M, MV>) this.<Object> doEval(arrayValue, indexValue, env.reporting(), indexEnv.reporting());
+		return (EvaluatedExpression<M, MV>) this.<Object> doEval(//
+			arrayValue, indexValue, env.reporting(), indexEnv.reporting());
 	}
 
-	private <T> ModelValueSynth<SettableValue<?>, SettableValue<T>> doEval(ModelValueSynth<SettableValue<?>, SettableValue<T[]>> arrayValue,
-		ModelValueSynth<SettableValue<?>, SettableValue<Integer>> indexValue, ErrorReporting arrayReporting, ErrorReporting indexReporting)
-			throws ExpressoInterpretationException {
+	private <T> EvaluatedExpression<SettableValue<?>, SettableValue<T>> doEval(
+		EvaluatedExpression<SettableValue<?>, SettableValue<T[]>> arrayValue,
+		EvaluatedExpression<SettableValue<?>, SettableValue<Integer>> indexValue, ErrorReporting arrayReporting,
+		ErrorReporting indexReporting) throws ExpressoInterpretationException {
 		TypeToken<T> targetType = (TypeToken<T>) arrayValue.getType().getType(0).getComponentType();
 		ModelInstanceType<SettableValue<?>, SettableValue<T>> targetModelType = ModelTypes.Value.forType(targetType);
-		return new ModelValueSynth<SettableValue<?>, SettableValue<T>>() {
+		return new EvaluatedExpression<SettableValue<?>, SettableValue<T>>() {
 			@Override
 			public ModelType<SettableValue<?>> getModelType() {
 				return ModelTypes.Value;
@@ -174,8 +177,18 @@ public class ArrayAccessExpression implements ObservableExpression {
 			}
 
 			@Override
-			public BetterList<ModelValueSynth<?, ?>> getCores() throws ExpressoInterpretationException {
+			public BetterList<ModelValueSynth<?, ?>> getCores() {
 				return BetterList.of(Stream.of(arrayValue, indexValue), cv -> cv.getCores().stream());
+			}
+
+			@Override
+			public Object getDescriptor(int offset) {
+				return null;
+			}
+
+			@Override
+			public List<? extends EvaluatedExpression<?, ?>> getComponents() {
+				return QommonsUtils.unmodifiableCopy(arrayValue, indexValue);
 			}
 		};
 	}

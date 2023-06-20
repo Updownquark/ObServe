@@ -565,9 +565,9 @@ public interface QuickWidget extends QuickTextElement {
 				}
 
 				@Override
-				public QuickWidgetStyle.Interpreted interpret(QuickInterpretedStyle parent,
+				public QuickWidgetStyle.Interpreted interpret(ExElement.Interpreted<?> parentEl, QuickInterpretedStyle parent,
 					Map<CompiledStyleApplication, InterpretedStyleApplication> applications) throws ExpressoInterpretationException {
-					return new Interpreted.Default(this, parent, getWrapped().interpret(parent, applications));
+					return new Interpreted.Default(this, parent, getWrapped().interpret(parentEl, parent, applications));
 				}
 			}
 		}

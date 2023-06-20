@@ -19,6 +19,7 @@ import org.observe.expresso.ModelType;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
+import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueSynth;
 import org.observe.expresso.TypeConversionException;
@@ -64,7 +65,7 @@ public class BinaryOperator implements ObservableExpression {
 	}
 
 	@Override
-	public int getChildOffset(int childIndex) {
+	public int getComponentOffset(int childIndex) {
 		switch (childIndex) {
 		case 0:
 			return 0;
@@ -81,7 +82,7 @@ public class BinaryOperator implements ObservableExpression {
 	}
 
 	@Override
-	public List<? extends ObservableExpression> getChildren() {
+	public List<? extends ObservableExpression> getComponents() {
 		return QommonsUtils.unmodifiableCopy(theLeft, theRight);
 	}
 
@@ -114,8 +115,8 @@ public class BinaryOperator implements ObservableExpression {
 	}
 
 	@Override
-	public <M, MV extends M> ModelValueSynth<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env, int expressionOffset)
-		throws ExpressoEvaluationException, ExpressoInterpretationException {
+	public <M, MV extends M> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env,
+		int expressionOffset) throws ExpressoEvaluationException, ExpressoInterpretationException {
 		if (type.getModelType() == ModelTypes.Action) {//
 		} else if (type.getModelType() == ModelTypes.Value) {//
 		} else
@@ -147,18 +148,13 @@ public class BinaryOperator implements ObservableExpression {
 			targetOpType = TypeTokens.get().WILDCARD;
 			break;
 		}
-		ModelValueSynth<SettableValue<?>, SettableValue<Object>> left;
+		EvaluatedExpression<SettableValue<?>, SettableValue<Object>> left;
 		try {
 			left = theLeft.evaluate(ModelTypes.Value.forType((TypeToken<Object>) targetOpType), env, expressionOffset);
-		} catch (TypeConversionException e) {
+		} catch (ExpressoInterpretationException | TypeConversionException e) {
 			throw new ExpressoEvaluationException(expressionOffset, theLeft.getExpressionLength(), e.getMessage(), e);
 		}
-		TypeToken<?> leftTypeT;
-		try {
-			leftTypeT = left.getType().getType(0);
-		} catch (ExpressoInterpretationException e) {
-			throw new ExpressoEvaluationException(expressionOffset, theLeft.getExpressionLength(), e.getMessage(), e);
-		}
+		TypeToken<?> leftTypeT = left.getType().getType(0);
 		Class<?> leftType = TypeTokens.getRawType(leftTypeT);
 		types = env.getBinaryOperators().getSupportedSecondaryInputTypes(operator, targetType, leftType);
 		switch (types.size()) {
@@ -174,19 +170,14 @@ public class BinaryOperator implements ObservableExpression {
 			break;
 		}
 		int rightOffset = expressionOffset + theLeft.getExpressionLength() + theOperator.length();
-		ModelValueSynth<SettableValue<?>, SettableValue<Object>> right;
+		EvaluatedExpression<SettableValue<?>, SettableValue<Object>> right;
 		try {
 			right = theRight.evaluate(ModelTypes.Value.forType((TypeToken<Object>) targetOpType),
 				env.at(theLeft.getExpressionLength() + theOperator.length()), rightOffset);
-		} catch (TypeConversionException e) {
+		} catch (ExpressoInterpretationException | TypeConversionException e) {
 			throw new ExpressoEvaluationException(rightOffset, theRight.getExpressionLength(), e.getMessage(), e);
 		}
-		TypeToken<?> rightTypeT;
-		try {
-			rightTypeT = right.getType().getType(0);
-		} catch (ExpressoInterpretationException e) {
-			throw new ExpressoEvaluationException(rightOffset, theRight.getExpressionLength(), e.getMessage(), e);
-		}
+		TypeToken<?> rightTypeT = right.getType().getType(0);
 		BinaryOp<Object, Object, Object> op;
 		op = (BinaryOp<Object, Object, Object>) env.getBinaryOperators().getOperator(operator, targetType, //
 			leftType, TypeTokens.getRawType(rightTypeT));
@@ -194,8 +185,7 @@ public class BinaryOperator implements ObservableExpression {
 			throw new ExpressoEvaluationException(expressionOffset + theLeft.getExpressionLength(), theOperator.length(),
 				"Binary operator '" + theOperator + "' is not supported or implemented for operand types " + leftTypeT + " and "
 					+ rightTypeT + ", target type " + targetType.getName());
-		TypeToken<Object> resultType = op.getTargetType(//
-			leftTypeT, rightTypeT);
+		TypeToken<Object> resultType = op.getTargetType(leftTypeT, rightTypeT);
 		ErrorReporting reporting = env.reporting();
 		ErrorReporting operatorReporting = env.reporting().at(theLeft.getExpressionLength());
 		if (action) {
@@ -211,73 +201,79 @@ public class BinaryOperator implements ObservableExpression {
 			else
 				throw new ExpressoEvaluationException(expressionOffset + theLeft.getExpressionLength(), theOperator.length(),
 					this + " cannot be evaluated as an " + ModelTypes.Action.getName() + "<" + type.getType(0) + ">");
-			return (ModelValueSynth<M, MV>) new ModelValueSynth<ObservableAction<?>, ObservableAction<Object>>() {
-				@Override
-				public ModelType<ObservableAction<?>> getModelType() {
-					return ModelTypes.Action;
-				}
+			return ObservableExpression
+				.evEx((InterpretedValueSynth<M, MV>) new InterpretedValueSynth<ObservableAction<?>, ObservableAction<Object>>() {
+					@Override
+					public ModelType<ObservableAction<?>> getModelType() {
+						return ModelTypes.Action;
+					}
 
-				@Override
-				public ModelInstanceType<ObservableAction<?>, ObservableAction<Object>> getType() {
-					return ModelTypes.Action.forType(actionType);
-				}
+					@Override
+					public ModelInstanceType<ObservableAction<?>, ObservableAction<Object>> getType() {
+						return ModelTypes.Action.forType(actionType);
+					}
 
-				@Override
-				public ObservableAction<Object> get(ModelSetInstance msi) throws ModelInstantiationException {
-					SettableValue<Object> leftV = left.get(msi);
-					SettableValue<Object> rightV = right.get(msi);
-					return createOpAction(leftV, rightV);
-				}
+					@Override
+					public ObservableAction<Object> get(ModelSetInstance msi) throws ModelInstantiationException {
+						SettableValue<Object> leftV = left.get(msi);
+						SettableValue<Object> rightV = right.get(msi);
+						return createOpAction(leftV, rightV);
+					}
 
-				private ObservableAction<Object> createOpAction(SettableValue<Object> leftV, SettableValue<Object> rightV) {
-					ObservableValue<String> enabled = leftV.isEnabled().transform(String.class, tx -> tx//
-						.combineWith(leftV).combineWith(rightV)//
-						.combine((en, lft, rgt) -> {
-							if (en != null)
-								return en;
-							Object res;
-							try {
-								res = op.apply(lft, rgt);
-							} catch (RuntimeException | Error e) {
-								operatorReporting.error(null, e);
-								return "Error";
-							}
-							String msg = op.canReverse(lft, rgt, res);
-							if (msg != null)
-								return msg;
-							return leftV.isAcceptable(res);
-						}));
-					return new BinaryOperatorAction(resultType, leftV, rightV, op, enabled, reporting, operatorReporting);
-				}
+					private ObservableAction<Object> createOpAction(SettableValue<Object> leftV, SettableValue<Object> rightV) {
+						ObservableValue<String> enabled = leftV.isEnabled().transform(String.class, tx -> tx//
+							.combineWith(leftV).combineWith(rightV)//
+							.combine((en, lft, rgt) -> {
+								if (en != null)
+									return en;
+								Object res;
+								try {
+									res = op.apply(lft, rgt);
+								} catch (RuntimeException | Error e) {
+									operatorReporting.error(null, e);
+									return "Error";
+								}
+								String msg = op.canReverse(lft, rgt, res);
+								if (msg != null)
+									return msg;
+								return leftV.isAcceptable(res);
+							}));
+						return new BinaryOperatorAction(resultType, leftV, rightV, op, enabled, reporting, operatorReporting);
+					}
 
-				@Override
-				public ObservableAction<Object> forModelCopy(ObservableAction<Object> value, ModelSetInstance sourceModels,
-					ModelSetInstance newModels) throws ModelInstantiationException {
-					SettableValue<Object> sourceLeft = left.get(sourceModels);
-					SettableValue<Object> newLeft = left.get(newModels);
-					SettableValue<Object> sourceRight = right.get(sourceModels);
-					SettableValue<Object> newRight = right.get(newModels);
-					if (sourceLeft == newLeft && sourceRight == newRight)
-						return value;
-					else
-						return createOpAction(newLeft, newRight);
-				}
+					@Override
+					public ObservableAction<Object> forModelCopy(ObservableAction<Object> value, ModelSetInstance sourceModels,
+						ModelSetInstance newModels) throws ModelInstantiationException {
+						SettableValue<Object> sourceLeft = left.get(sourceModels);
+						SettableValue<Object> newLeft = left.get(newModels);
+						SettableValue<Object> sourceRight = right.get(sourceModels);
+						SettableValue<Object> newRight = right.get(newModels);
+						if (sourceLeft == newLeft && sourceRight == newRight)
+							return value;
+						else
+							return createOpAction(newLeft, newRight);
+					}
 
-				@Override
-				public BetterList<ModelValueSynth<?, ?>> getCores() throws ExpressoInterpretationException {
-					return BetterList.of(Stream.of(left, right), vc -> vc.getCores().stream());
-				}
+					@Override
+					public BetterList<ModelValueSynth<?, ?>> getCores() {
+						return BetterList.of(Stream.of(left, right), vc -> vc.getCores().stream());
+					}
 
-				@Override
-				public String toString() {
-					return BinaryOperator.this.toString();
-				}
-			};
+					@Override
+					public List<? extends InterpretedValueSynth<?, ?>> getComponents() {
+						return QommonsUtils.unmodifiableCopy(left, right);
+					}
+
+					@Override
+					public String toString() {
+						return BinaryOperator.this.toString();
+					}
+				}, op, left, right);
 		} else {
 			if (type.getModelType() != ModelTypes.Value)
 				throw new ExpressoEvaluationException(expressionOffset + theLeft.getExpressionLength(), theOperator.length(),
 					"Binary operator " + theOperator + " can only be evaluated as a value");
-			ModelValueSynth<SettableValue<?>, SettableValue<Object>> operated = new ModelValueSynth<SettableValue<?>, SettableValue<Object>>() {
+			InterpretedValueSynth<SettableValue<?>, SettableValue<Object>> operated = new InterpretedValueSynth<SettableValue<?>, SettableValue<Object>>() {
 				@Override
 				public ModelType<SettableValue<?>> getModelType() {
 					return ModelTypes.Value;
@@ -322,8 +318,13 @@ public class BinaryOperator implements ObservableExpression {
 				}
 
 				@Override
-				public BetterList<ModelValueSynth<?, ?>> getCores() throws ExpressoInterpretationException {
+				public BetterList<ModelValueSynth<?, ?>> getCores() {
 					return BetterList.of(Stream.of(left, right), vc -> vc.getCores().stream());
+				}
+
+				@Override
+				public List<? extends InterpretedValueSynth<?, ?>> getComponents() {
+					return QommonsUtils.unmodifiableCopy(left, right);
 				}
 
 				@Override
@@ -331,7 +332,7 @@ public class BinaryOperator implements ObservableExpression {
 					return BinaryOperator.this.toString();
 				}
 			};
-			return (ModelValueSynth<M, MV>) operated;
+			return ObservableExpression.evEx((InterpretedValueSynth<M, MV>) operated, op, left, right);
 		}
 	}
 

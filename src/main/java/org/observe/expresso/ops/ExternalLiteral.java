@@ -39,7 +39,7 @@ public class ExternalLiteral implements ObservableExpression {
 	}
 
 	@Override
-	public int getChildOffset(int childIndex) {
+	public int getComponentOffset(int childIndex) {
 		throw new IndexOutOfBoundsException(childIndex + " of 0");
 	}
 
@@ -49,7 +49,7 @@ public class ExternalLiteral implements ObservableExpression {
 	}
 
 	@Override
-	public List<? extends ObservableExpression> getChildren() {
+	public List<? extends ObservableExpression> getComponents() {
 		return Collections.emptyList();
 	}
 
@@ -64,15 +64,16 @@ public class ExternalLiteral implements ObservableExpression {
 	}
 
 	@Override
-	public <M, MV extends M> ModelValueSynth<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env, int expressionOffset)
-		throws ExpressoEvaluationException {
+	public <M, MV extends M> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env,
+		int expressionOffset) throws ExpressoEvaluationException {
 		if (type.getModelType() != ModelTypes.Value)
-			throw new ExpressoEvaluationException(expressionOffset, theText.length(),
-				"'" + theText + "' cannot be evaluated as a " + type);
-		ObservableValue<?> value = parseValue(type.getType(0), env, expressionOffset);
-		return ModelValueSynth.of((ModelInstanceType<M, MV>) ModelTypes.Value.forType(value.getType()), //
+			throw new ExpressoEvaluationException(expressionOffset, theText.length(), "'" + theText + "' cannot be evaluated as a " + type);
+		NonStructuredParser[] parser = new NonStructuredParser[1];
+		ObservableValue<?> value = _parseValue(type.getType(0), env, expressionOffset, parser);
+		return ObservableExpression.evEx(ModelValueSynth.of((ModelInstanceType<M, MV>) ModelTypes.Value.forType(value.getType()), //
 			LambdaUtils.constantExFn(//
-				(MV) SettableValue.asSettable(value, __ -> "Literal value cannot be modified"), theText, null));
+				(MV) SettableValue.asSettable(value, __ -> "Literal value cannot be modified"), theText, null)),
+			parser[0]);
 	}
 
 	/**
@@ -85,6 +86,11 @@ public class ExternalLiteral implements ObservableExpression {
 	 */
 	public <T> ObservableValue<? extends T> parseValue(TypeToken<T> asType, ExpressoEnv env, int expressionOffset)
 		throws ExpressoEvaluationException {
+		return _parseValue(asType, env, expressionOffset, null);
+	}
+
+	private <T> ObservableValue<? extends T> _parseValue(TypeToken<T> asType, ExpressoEnv env, int expressionOffset,
+		NonStructuredParser[] parserUsed) throws ExpressoEvaluationException {
 		// Get all parsers that may possibly be able to generate an appropriate value
 		Class<T> rawType = TypeTokens.getRawType(asType);
 		Set<NonStructuredParser> parsers = env.getNonStructuredParsers(rawType);
@@ -101,6 +107,7 @@ public class ExternalLiteral implements ObservableExpression {
 		if (parser == null)
 			throw new ExpressoEvaluationException(expressionOffset + 1, theText.length(),
 				"No literal parsers for value `" + theText + "` as type " + rawType.getName());
+		parserUsed[0] = parser;
 		ObservableValue<? extends T> value;
 		try {
 			value = parser.parse(asType, theText);

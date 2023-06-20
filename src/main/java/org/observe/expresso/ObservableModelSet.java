@@ -6,6 +6,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.BiFunction;
@@ -195,7 +196,7 @@ public interface ObservableModelSet extends Identifiable {
 		ModelType<M> getModelType();
 
 		/**
-		 * Creates an {@link IdentifableCompiledValue} from this value container, which has been pre-interpreted and cannot throw
+		 * Creates an {@link InterpretedValueSynth} from this value container, which has been pre-interpreted and cannot throw
 		 * {@link ExpressoInterpretationException}s.
 		 *
 		 * @return The interpreted value container
@@ -236,6 +237,8 @@ public interface ObservableModelSet extends Identifiable {
 		 */
 		MV forModelCopy(MV value, ModelSetInstance sourceModels, ModelSetInstance newModels)
 			throws ModelInstantiationException;
+
+		List<? extends ModelValueSynth<?, ?>> getComponents();
 
 		/**
 		 * @param <M2> The model type to convert to
@@ -317,6 +320,11 @@ public interface ObservableModelSet extends Identifiable {
 			}
 
 			@Override
+			public List<? extends ModelValueSynth<?, ?>> getComponents() {
+				return Collections.singletonList(theSource);
+			}
+
+			@Override
 			public String toString() {
 				return theMap + "(" + getType() + ")";
 			}
@@ -379,6 +387,11 @@ public interface ObservableModelSet extends Identifiable {
 			}
 
 			@Override
+			public List<? extends ModelValueSynth<?, ?>> getComponents() {
+				return Collections.singletonList(theSource);
+			}
+
+			@Override
 			public int hashCode() {
 				return theSource.hashCode();
 			}
@@ -432,6 +445,11 @@ public interface ObservableModelSet extends Identifiable {
 				}
 
 				@Override
+				public List<? extends InterpretedValueSynth<?, ?>> getComponents() {
+					return Collections.emptyList();
+				}
+
+				@Override
 				public String toString() {
 					return text;
 				}
@@ -475,6 +493,11 @@ public interface ObservableModelSet extends Identifiable {
 				}
 
 				@Override
+				public List<? extends InterpretedValueSynth<?, ?>> getComponents() {
+					return Collections.emptyList();
+				}
+
+				@Override
 				public String toString() {
 					return text;
 				}
@@ -489,7 +512,7 @@ public interface ObservableModelSet extends Identifiable {
 		 * @return A value container with the given type, implemented by the given function
 		 */
 		static <M, MV extends M> InterpretedValueSynth<M, MV> of(ModelInstanceType<M, MV> type,
-			ExFunction<ModelSetInstance, MV, ModelInstantiationException> value) {
+			ExFunction<ModelSetInstance, MV, ModelInstantiationException> value, InterpretedValueSynth<?, ?>... components) {
 			class SimpleVC implements InterpretedValueSynth<M, MV> {
 				@Override
 				public ModelType<M> getModelType() {
@@ -515,6 +538,11 @@ public interface ObservableModelSet extends Identifiable {
 				@Override
 				public BetterList<ModelValueSynth<?, ?>> getCores() {
 					return BetterList.of(this);
+				}
+
+				@Override
+				public List<? extends InterpretedValueSynth<?, ?>> getComponents() {
+					return QommonsUtils.unmodifiableCopy(components);
 				}
 
 				@Override
@@ -549,6 +577,9 @@ public interface ObservableModelSet extends Identifiable {
 
 		@Override
 		BetterList<ModelValueSynth<?, ?>> getCores();
+
+		@Override
+		List<? extends InterpretedValueSynth<?, ?>> getComponents();
 
 		@Override
 		default <M2, MV2 extends M2> InterpretedValueSynth<M2, MV2> as(ModelInstanceType<M2, MV2> type) throws TypeConversionException {
@@ -602,6 +633,11 @@ public interface ObservableModelSet extends Identifiable {
 			public BetterList<ModelValueSynth<?, ?>> getCores() {
 				return getSource().getCores();
 			}
+
+			@Override
+			public List<? extends InterpretedValueSynth<?, ?>> getComponents() {
+				return Collections.singletonList(getSource());
+			}
 		}
 
 		@Override
@@ -636,6 +672,11 @@ public interface ObservableModelSet extends Identifiable {
 			@Override
 			public BetterList<ModelValueSynth<?, ?>> getCores() {
 				return getSource().getCores();
+			}
+
+			@Override
+			public List<? extends InterpretedValueSynth<?, ?>> getComponents() {
+				return Collections.singletonList(getSource());
 			}
 		}
 
@@ -681,6 +722,15 @@ public interface ObservableModelSet extends Identifiable {
 			public BetterList<ModelValueSynth<?, ?>> getCores() {
 				try {
 					return theContainer.getCores();
+				} catch (ExpressoInterpretationException e) {
+					throw new IllegalStateException(e);
+				}
+			}
+
+			@Override
+			public List<? extends InterpretedValueSynth<?, ?>> getComponents() {
+				try {
+					return BetterList.of2(theContainer.getComponents().stream(), mv -> mv.interpret());
 				} catch (ExpressoInterpretationException e) {
 					throw new IllegalStateException(e);
 				}
@@ -2320,6 +2370,19 @@ public interface ObservableModelSet extends Identifiable {
 			}
 
 			@Override
+			public List<? extends ModelValueSynth<?, ?>> getComponents() {
+				if (theCreator == null)
+					return Collections.emptyList();
+				else {
+					try {
+						return Collections.singletonList(getOfValue(v -> v));
+					} catch (ExpressoInterpretationException e) {
+						throw new IllegalStateException("Could not evaluate value", e);
+					}
+				}
+			}
+
+			@Override
 			public LocatedFilePosition getSourceLocation() {
 				return theSourceLocation;
 			}
@@ -2430,6 +2493,14 @@ public interface ObservableModelSet extends Identifiable {
 			@Override
 			public BetterList<ModelValueSynth<?, ?>> getCores() {
 				return theValue == null ? BetterList.empty() : theValue.getCores();
+			}
+
+			@Override
+			public List<? extends InterpretedValueSynth<?, ?>> getComponents() {
+				if (theValue == null)
+					return Collections.emptyList();
+				else
+					return Collections.singletonList(theValue);
 			}
 
 			@Override

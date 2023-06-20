@@ -51,7 +51,7 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 
 		@Override
 		public ObservableExpression getExpression() {
-				return new ObservableExpression.LiteralExpression<>("false", false);
+			return new ObservableExpression.LiteralExpression<>("false", false);
 		}
 	}, Collections.emptyMap());
 
@@ -227,9 +227,9 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 		} else {
 			IdentityHashMap<ObservableExpression, ObservableExpression>[] replace = new IdentityHashMap[1];
 			int c = 0;
-			for (ObservableExpression child : ex.getChildren()) {
+			for (ObservableExpression child : ex.getComponents()) {
 				ObservableExpression newChild = _findModelValues(child, modelValues, models, expresso, styleSheet, dmvCache, //
-					ex.getChildOffset(c));
+					ex.getComponentOffset(c));
 				if (newChild != child) {
 					if (replace[0] == null)
 						replace[0] = new IdentityHashMap<>();
@@ -283,7 +283,7 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 		}
 
 		@Override
-		public int getChildOffset(int childIndex) {
+		public int getComponentOffset(int childIndex) {
 			if (childIndex == 0)
 				return 0;
 			throw new IndexOutOfBoundsException(childIndex + " of 1");
@@ -300,7 +300,7 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 		}
 
 		@Override
-		public List<? extends ObservableExpression> getChildren() {
+		public List<? extends ObservableExpression> getComponents() {
 			return Collections.singletonList(theWrapped);
 		}
 
@@ -316,7 +316,7 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 		}
 
 		@Override
-		public <M, MV extends M> ModelValueSynth<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env,
+		public <M, MV extends M> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env,
 			int expressionOffset) throws ExpressoEvaluationException, ExpressoInterpretationException {
 			ModelComponentNode<?, ?> node;
 			try {
@@ -326,7 +326,7 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 					"No such model value found: '" + theModelValue.getName() + "'", e);
 			}
 			try {
-				return node.as(type);
+				return ObservableExpression.evEx(node.as(type), theModelValue);
 			} catch (TypeConversionException e) {
 				throw new ExpressoEvaluationException(expressionOffset, theModelValue.getName().length(), e.getMessage(), e);
 			}
@@ -733,6 +733,26 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 				return theRight.getPosition(0);
 			else
 				return theRight.getPosition(index);
+		}
+
+		@Override
+		public int getSourceLength(int from, int to) {
+			int leftLen = theLeft.length();
+			if (from < leftLen) {
+				if (to <= leftLen)
+					return theLeft.getSourceLength(from, to);
+				else if (to <= leftLen + theOperator.length())
+					return theLeft.getSourceLength(from, theLeft.length());
+				else
+					return theLeft.getSourceLength(from, theLeft.length()) + theOperator.length()
+					+ theRight.getSourceLength(0, to - leftLen - theOperator.length());
+			} else if (from < theLeft.length() + theOperator.length()) {
+				if (to < leftLen + theOperator.length())
+					return 0;
+				else
+					return theRight.getSourceLength(from - leftLen - theOperator.length(), to - leftLen - theOperator.length());
+			} else
+				return theRight.getSourceLength(from - leftLen - theOperator.length(), to - leftLen - theOperator.length());
 		}
 
 		@Override
