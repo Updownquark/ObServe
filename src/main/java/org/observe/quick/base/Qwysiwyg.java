@@ -491,12 +491,11 @@ public class Qwysiwyg {
 			int childOffset = ex.getChildOffset(c);
 			int length = child.getExpressionLength();
 			LocatedFilePosition startPos = content.getPosition(childOffset);
+			int end = content.getPosition(childOffset + length).getPosition();
 			renderCompiledExpression(child, content.subSequence(childOffset, childOffset + length), //
-				component.addChild(startPos).end(startPos.getPosition() + length));
+				component.addChild(startPos).end(end));
 			c++;
 		}
-		// TODO Color different expression components
-
 	}
 
 	private Color getColor(Class<? extends ObservableExpression> exType) {
@@ -543,17 +542,19 @@ public class Qwysiwyg {
 	}
 
 	private void renderText() {
-		int lines = 0;
-		for (int c = 0; c < theDocumentContent.length(); c++) {
-			if (theDocumentContent.charAt(c) == '\n')
-				lines++;
-		}
-		int lineDigits = getDigits(lines);
-		StringBuilder renderedText = new StringBuilder();
-		int[] model = new int[1];
-		renderLineBreak(renderedText, model, 1, lineDigits);
-		render(theRoot, renderedText, model, new int[1], lineDigits);
-		theInternalDocumentDisplay.set(renderedText.toString(), null);
+		// int lines = 0;
+		// for (int c = 0; c < theDocumentContent.length(); c++) {
+		// if (theDocumentContent.charAt(c) == '\n')
+		// lines++;
+		// }
+		// int lineDigits = getDigits(lines);
+		// StringBuilder renderedText = new StringBuilder();
+		// int[] model = new int[1];
+		// renderLineBreak(renderedText, model, 1, lineDigits);
+		// render(theRoot, renderedText, model, new int[1], lineDigits);
+		DocumentRenderer renderer = new DocumentRenderer(theDocumentContent);
+		renderer.render(theRoot);
+		theInternalDocumentDisplay.set(renderer.toString(), null);
 	}
 
 	private static class DocumentRenderer {
@@ -578,6 +579,8 @@ public class Qwysiwyg {
 					lines++;
 			}
 			theMaxLineDigits = getDigits(lines);
+			theLineNumber = 1;
+			renderLineBreak();
 		}
 
 		private int render(DocumentComponent comp) {
@@ -639,18 +642,23 @@ public class Qwysiwyg {
 					break;
 				case '<':
 					theRenderedText.append("&lt;");
+					theModelPosition += 4;
 					break;
 				case '"':
 					theRenderedText.append("&quot;");
+					theModelPosition += 4;
 					break;
 				case '\'':
 					theRenderedText.append("&apos;");
+					theModelPosition += 4;
 					break;
 				case '&':
 					theRenderedText.append("&amp;");
+					theModelPosition += 4;
 					break;
 				default:
 					theRenderedText.append(ch);
+					theModelPosition += 4;
 					break;
 				}
 			}
@@ -670,94 +678,99 @@ public class Qwysiwyg {
 			}
 			return digs;
 		}
-	}
 
-	private int render(DocumentComponent comp, StringBuilder renderedText, int[] model, int[] line, int lineDigits) {
-		comp.renderedStart = model[0];
-		if (comp.fontColor != null)
-			renderedText.append("<font color=\"").append(Colors.toHTML(comp.fontColor)).append("\">");
-		boolean linkEnded = !comp.link;
-		if (comp.bold)
-			renderedText.append("<b>");
-		if (comp.link)
-			renderedText.append("<u>");
-		int prevPos = comp.start.getPosition();
-		int end = comp.getEnd() < 0 ? theDocumentContent.length() : comp.getEnd();
-		if (comp.children != null) {
-			for (DocumentComponent child : comp.children) {
-				renderText(prevPos, child.start.getPosition(), renderedText, model, line, lineDigits);
-				if (!linkEnded) {
-					linkEnded = true;
-					renderedText.append("</u>");
-				}
-				prevPos = render(child, renderedText, model, line, lineDigits);
-			}
-		}
-		renderText(prevPos, end, renderedText, model, line, lineDigits);
-		if (!linkEnded)
-			renderedText.append("</u>");
-		if (comp.bold)
-			renderedText.append("</b>");
-		if (comp.fontColor != null)
-			renderedText.append("</font>");
-		comp.renderedEnd = model[0];
-		return end;
-	}
-
-	private static final String TAB_HTML = "&nbsp;&nbsp;&nbsp;&nbsp;";
-
-	private void renderText(int from, int to, StringBuilder renderedText, int[] model, int[] line, int lineDigits) {
-		for (int c = from; c < to; c++) {
-			char ch = theDocumentContent.charAt(c);
-			switch (ch) {
-			case '\n':
-				renderedText.append("<br>\n");
-				model[0]++;
-				line[0]++;
-				renderLineBreak(renderedText, model, line[0] + 1, lineDigits);
-				break;
-			case '\t':
-				renderedText.append(TAB_HTML);
-				model[0] += 4;
-				break;
-			case '<':
-				renderedText.append("&lt;");
-				model[0]++;
-				break;
-			case '"':
-				renderedText.append("&quot;");
-				model[0]++;
-				break;
-			case '\'':
-				renderedText.append("&apos;");
-				model[0]++;
-				break;
-			case '&':
-				renderedText.append("&amp;");
-				model[0]++;
-				break;
-			default:
-				renderedText.append(ch);
-				model[0]++;
-				break;
-			}
+		@Override
+		public String toString() {
+			return theRenderedText.toString();
 		}
 	}
 
-	private static void renderLineBreak(StringBuilder renderedText, int[] model, int lineNo, int lineDigits) {
-		renderedText.append("Line ").append(lineNo).append(':');
-		int digs = getDigits(lineNo);
-		for (int i = lineDigits; i > digs; i--)
-			renderedText.append("&nbsp;");
-		model[0] += 6 + lineDigits;
-	}
-
-	private static int getDigits(int number) {
-		int digs = 1;
-		for (int num = 10; num >= 0 && num <= number; num *= 10, digs++) {
-		}
-		return digs;
-	}
+	// private int render(DocumentComponent comp, StringBuilder renderedText, int[] model, int[] line, int lineDigits) {
+	// comp.renderedStart = model[0];
+	// if (comp.fontColor != null)
+	// renderedText.append("<font color=\"").append(Colors.toHTML(comp.fontColor)).append("\">");
+	// boolean linkEnded = !comp.link;
+	// if (comp.bold)
+	// renderedText.append("<b>");
+	// if (comp.link)
+	// renderedText.append("<u>");
+	// int prevPos = comp.start.getPosition();
+	// int end = comp.getEnd() < 0 ? theDocumentContent.length() : comp.getEnd();
+	// if (comp.children != null) {
+	// for (DocumentComponent child : comp.children) {
+	// renderText(prevPos, child.start.getPosition(), renderedText, model, line, lineDigits);
+	// if (!linkEnded) {
+	// linkEnded = true;
+	// renderedText.append("</u>");
+	// }
+	// prevPos = render(child, renderedText, model, line, lineDigits);
+	// }
+	// }
+	// renderText(prevPos, end, renderedText, model, line, lineDigits);
+	// if (!linkEnded)
+	// renderedText.append("</u>");
+	// if (comp.bold)
+	// renderedText.append("</b>");
+	// if (comp.fontColor != null)
+	// renderedText.append("</font>");
+	// comp.renderedEnd = model[0];
+	// return end;
+	// }
+	//
+	// private static final String TAB_HTML = "&nbsp;&nbsp;&nbsp;&nbsp;";
+	//
+	// private void renderText(int from, int to, StringBuilder renderedText, int[] model, int[] line, int lineDigits) {
+	// for (int c = from; c < to; c++) {
+	// char ch = theDocumentContent.charAt(c);
+	// switch (ch) {
+	// case '\n':
+	// renderedText.append("<br>\n");
+	// model[0]++;
+	// line[0]++;
+	// renderLineBreak(renderedText, model, line[0] + 1, lineDigits);
+	// break;
+	// case '\t':
+	// renderedText.append(TAB_HTML);
+	// model[0] += 4;
+	// break;
+	// case '<':
+	// renderedText.append("&lt;");
+	// model[0]++;
+	// break;
+	// case '"':
+	// renderedText.append("&quot;");
+	// model[0]++;
+	// break;
+	// case '\'':
+	// renderedText.append("&apos;");
+	// model[0]++;
+	// break;
+	// case '&':
+	// renderedText.append("&amp;");
+	// model[0]++;
+	// break;
+	// default:
+	// renderedText.append(ch);
+	// model[0]++;
+	// break;
+	// }
+	// }
+	// }
+	//
+	// private static void renderLineBreak(StringBuilder renderedText, int[] model, int lineNo, int lineDigits) {
+	// renderedText.append("Line ").append(lineNo).append(':');
+	// int digs = getDigits(lineNo);
+	// for (int i = lineDigits; i > digs; i--)
+	// renderedText.append("&nbsp;");
+	// model[0] += 6 + lineDigits;
+	// }
+	//
+	// private static int getDigits(int number) {
+	// int digs = 1;
+	// for (int num = 10; num >= 0 && num <= number; num *= 10, digs++) {
+	// }
+	// return digs;
+	// }
 
 	static class DocumentComponent {
 		final DocumentComponent parent;
@@ -805,6 +818,8 @@ public class Qwysiwyg {
 				throw new IllegalArgumentException("Ending before beginning");
 			if (children != null && !children.isEmpty() && e < children.get(children.size() - 1).end)
 				throw new IllegalArgumentException("Ending parent before last child");
+			if (parent != null && parent.end > 0 && end > parent.end)
+				throw new IllegalArgumentException("Ending child after parent");
 			this.end = e;
 			return this;
 		}
@@ -854,6 +869,11 @@ public class Qwysiwyg {
 		}
 
 		public void followLink() {
+		}
+
+		@Override
+		public String toString() {
+			return start.toString();
 		}
 	}
 }

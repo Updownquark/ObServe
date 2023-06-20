@@ -69,7 +69,7 @@ public class BinaryOperator implements ObservableExpression {
 		case 0:
 			return 0;
 		case 1:
-			return theLeft.getExpressionLength() + 1;
+			return theLeft.getExpressionLength() + theOperator.length();
 		default:
 			throw new IndexOutOfBoundsException(childIndex + " of 2");
 		}
@@ -173,11 +173,11 @@ public class BinaryOperator implements ObservableExpression {
 			targetOpType = TypeTokens.get().WILDCARD;
 			break;
 		}
-		int rightOffset = expressionOffset + theLeft.getExpressionLength() + 1;
+		int rightOffset = expressionOffset + theLeft.getExpressionLength() + theOperator.length();
 		ModelValueSynth<SettableValue<?>, SettableValue<Object>> right;
 		try {
-			right = theRight.evaluate(ModelTypes.Value.forType((TypeToken<Object>) targetOpType), env.at(theLeft.getExpressionLength() + 1),
-				rightOffset);
+			right = theRight.evaluate(ModelTypes.Value.forType((TypeToken<Object>) targetOpType),
+				env.at(theLeft.getExpressionLength() + theOperator.length()), rightOffset);
 		} catch (TypeConversionException e) {
 			throw new ExpressoEvaluationException(rightOffset, theRight.getExpressionLength(), e.getMessage(), e);
 		}

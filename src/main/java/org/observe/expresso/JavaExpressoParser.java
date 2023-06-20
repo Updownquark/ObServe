@@ -117,7 +117,7 @@ public class JavaExpressoParser implements ExpressoParser {
 								if (typeOffset < 0)
 									typeOffset = ch.getStartIndex();
 								typeName.add(BufferedName.buffer(//
-									getWhiteSpaceBefore(fullText, ch.getStartIndex()), //
+									getWhiteSpaceBefore(fullText, ch.getStartIndex(), expression.getStartIndex()), //
 									ch.getText(), //
 									getWhiteSpaceAt(fullText, ch.getEndIndex())));
 							}
@@ -129,7 +129,7 @@ public class JavaExpressoParser implements ExpressoParser {
 							args = new ArrayList<>();
 							for (Expression arg : creator.getComponents("classCreatorRest", "arguments", "expressionList", "expression")) {
 								ObservableExpression argEx = _parse(arg, fullText);
-								argEx = BufferedExpression.buffer(getWhiteSpaceBefore(fullText, arg.getStartIndex()), argEx,
+								argEx = BufferedExpression.buffer(getWhiteSpaceBefore(fullText, arg.getStartIndex(), 0), argEx,
 									getWhiteSpaceAt(fullText, arg.getStartIndex() + argEx.getExpressionLength()));
 								args.add(argEx);
 							}
@@ -154,7 +154,7 @@ public class JavaExpressoParser implements ExpressoParser {
 					BufferedType type = parseType(expression);
 					Expression valueX = expression.getComponents().getLast();
 					ObservableExpression value = _parse(valueX, fullText);
-					value = BufferedExpression.buffer(getWhiteSpaceBefore(fullText, valueX.getStartIndex()), value, 0);
+					value = BufferedExpression.buffer(getWhiteSpaceBefore(fullText, valueX.getStartIndex(), 0), value, 0);
 					return new CastExpression(value, type);
 				}
 				switch (expression.getComponents().get(1).getText()) {
@@ -176,7 +176,7 @@ public class JavaExpressoParser implements ExpressoParser {
 					case "THIS":
 					case "SUPER":
 						BufferedName newName = BufferedName.buffer(//
-							getWhiteSpaceBefore(fullText, child.getStartIndex()), //
+							getWhiteSpaceBefore(fullText, child.getStartIndex(), expression.getStartIndex()), //
 							child.getText(), getWhiteSpaceAt(fullText, child.getEndIndex()));
 						if (context instanceof NameExpression) {
 							List<BufferedName> names = new ArrayList<>(((NameExpression) context).getNames());
@@ -187,13 +187,13 @@ public class JavaExpressoParser implements ExpressoParser {
 					case "methodCall":
 						Expression methodNameX = child.getComponents().getFirst();
 						BufferedName methodName = BufferedName.buffer(//
-							getWhiteSpaceBefore(fullText, methodNameX.getStartIndex()), //
+							getWhiteSpaceBefore(fullText, methodNameX.getStartIndex(), expression.getStartIndex()), //
 							methodNameX.getText(), //
 							getWhiteSpaceAt(fullText, methodNameX.getEndIndex()));
 						args = new ArrayList<>();
 						for (Expression arg : child.getComponents("expressionList", "expression")) {
 							ObservableExpression argEx = _parse(arg, fullText);
-							argEx = BufferedExpression.buffer(getWhiteSpaceBefore(fullText, arg.getStartIndex()), //
+							argEx = BufferedExpression.buffer(getWhiteSpaceBefore(fullText, arg.getStartIndex(), 0), //
 								argEx, getWhiteSpaceAt(fullText, arg.getStartIndex() + argEx.getExpressionLength()));
 							args.add(argEx);
 						}
@@ -215,7 +215,7 @@ public class JavaExpressoParser implements ExpressoParser {
 						getWhiteSpaceAt(fullText, firstChild.getStartIndex() + context.getExpressionLength()));
 					Expression valueX = expression.getComponents().getLast();
 					ObservableExpression value = _parse(valueX, fullText);
-					value = BufferedExpression.buffer(getWhiteSpaceBefore(fullText, valueX.getStartIndex()), //
+					value = BufferedExpression.buffer(getWhiteSpaceBefore(fullText, valueX.getStartIndex(), 0), //
 						value, getWhiteSpaceAt(fullText, valueX.getStartIndex() + value.getExpressionLength()));
 					return new AssignmentExpression(context, value);
 				case "+":
@@ -253,7 +253,7 @@ public class JavaExpressoParser implements ExpressoParser {
 						getWhiteSpaceAt(fullText, firstChild.getStartIndex() + left.getExpressionLength()));
 					Expression rightX = expression.getComponents().getLast();
 					ObservableExpression right = _parse(rightX, fullText);
-					right = BufferedExpression.buffer(getWhiteSpaceBefore(fullText, rightX.getStartIndex()), right, 0);
+					right = BufferedExpression.buffer(getWhiteSpaceBefore(fullText, rightX.getStartIndex(), 0), right, 0);
 					return new BinaryOperator(expression.getComponents().get(1).getText(), left, right);
 				case "instanceof":
 					left = _parse(firstChild, fullText);
@@ -266,11 +266,11 @@ public class JavaExpressoParser implements ExpressoParser {
 						getWhiteSpaceAt(fullText, firstChild.getStartIndex() + condition.getExpressionLength()));
 					Expression primaryX = expression.getComponents().get(2);
 					ObservableExpression primary = _parse(primaryX, fullText);
-					primary = BufferedExpression.buffer(getWhiteSpaceBefore(fullText, primaryX.getStartIndex()), primary, //
+					primary = BufferedExpression.buffer(getWhiteSpaceBefore(fullText, primaryX.getStartIndex(), 0), primary, //
 						getWhiteSpaceAt(fullText, primaryX.getStartIndex() + primary.getExpressionLength()));
 					Expression secondaryX = expression.getComponents().getLast();
 					ObservableExpression secondary = _parse(secondaryX, fullText);
-					secondary = BufferedExpression.buffer(getWhiteSpaceBefore(fullText, secondaryX.getStartIndex()), secondary, 0);
+					secondary = BufferedExpression.buffer(getWhiteSpaceBefore(fullText, secondaryX.getStartIndex(), 0), secondary, 0);
 					return new ConditionalExpression(condition, primary, secondary);
 				case "[":
 					ObservableExpression array = _parse(firstChild, fullText);
@@ -278,7 +278,7 @@ public class JavaExpressoParser implements ExpressoParser {
 						getWhiteSpaceAt(fullText, firstChild.getStartIndex() + array.getExpressionLength()));
 					Expression indexX = expression.getComponents().get(2);
 					ObservableExpression index = _parse(indexX, fullText);
-					index = BufferedExpression.buffer(getWhiteSpaceBefore(fullText, indexX.getStartIndex()), index, //
+					index = BufferedExpression.buffer(getWhiteSpaceBefore(fullText, indexX.getStartIndex(), 0), index, //
 						getWhiteSpaceAt(fullText, indexX.getStartIndex() + index.getExpressionLength()));
 					return new ArrayAccessExpression(array, index);
 				case "::":
@@ -295,7 +295,8 @@ public class JavaExpressoParser implements ExpressoParser {
 				switch (child.getText()) {
 				case "this":
 				case "super":
-					BufferedName name = BufferedName.buffer(getWhiteSpaceBefore(fullText, child.getStartIndex()), //
+					BufferedName name = BufferedName.buffer(
+						getWhiteSpaceBefore(fullText, child.getStartIndex(), expression.getStartIndex()), //
 						child.getText(), //
 						getWhiteSpaceAt(fullText, child.getEndIndex()));
 					return new NameExpression(null, BetterList.of(name));
@@ -306,7 +307,8 @@ public class JavaExpressoParser implements ExpressoParser {
 				case "literal":
 					return _parse(child.getComponents().getFirst(), fullText);
 				case "identifier":
-					BufferedName name = BufferedName.buffer(getWhiteSpaceBefore(fullText, child.getStartIndex()), //
+					BufferedName name = BufferedName.buffer(
+						getWhiteSpaceBefore(fullText, child.getStartIndex(), expression.getStartIndex()), //
 						child.getText(), //
 						getWhiteSpaceAt(fullText, child.getEndIndex()));
 					return new NameExpression(null, BetterList.of(name));
@@ -319,13 +321,13 @@ public class JavaExpressoParser implements ExpressoParser {
 					Expression valueX = expression.getComponents().get(1);
 
 					ObservableExpression value = _parse(valueX, fullText);
-					value = BufferedExpression.buffer(getWhiteSpaceBefore(fullText, valueX.getStartIndex()), //
+					value = BufferedExpression.buffer(getWhiteSpaceBefore(fullText, valueX.getStartIndex(), 0), //
 						value, //
 						getWhiteSpaceAt(fullText, valueX.getStartIndex() + value.getExpressionLength()));
 					return new ParentheticExpression(value);
 				case "class":
 					Expression child = firstChild;
-					int ws = getWhiteSpaceBefore(fullText, expression.getComponents().get(2).getStartIndex());
+					int ws = getWhiteSpaceBefore(fullText, expression.getComponents().get(2).getStartIndex(), expression.getStartIndex());
 					return new ClassInstanceExpression(parseType(child), ws);
 				default:
 					break;
@@ -337,7 +339,7 @@ public class JavaExpressoParser implements ExpressoParser {
 			args = new ArrayList<>();
 			for (Expression arg : expression.getComponents("expressionList", "expression")) {
 				ObservableExpression argX = _parse(arg, fullText);
-				args.add(BufferedExpression.buffer(getWhiteSpaceBefore(fullText, arg.getStartIndex()), //
+				args.add(BufferedExpression.buffer(getWhiteSpaceBefore(fullText, arg.getStartIndex(), 0), //
 					argX, //
 					getWhiteSpaceAt(fullText, arg.getStartIndex() + argX.getExpressionLength())));
 			}
@@ -537,9 +539,9 @@ public class JavaExpressoParser implements ExpressoParser {
 		return end - index;
 	}
 
-	private static int getWhiteSpaceBefore(String text, int index) {
+	private static int getWhiteSpaceBefore(String text, int index, int limit) {
 		int start = index;
-		while (start > 0 && Character.isWhitespace(text.charAt(start - 1)))
+		while (start > limit && Character.isWhitespace(text.charAt(start - 1)))
 			start--;
 		return index - start;
 	}
