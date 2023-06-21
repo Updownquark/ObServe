@@ -1,6 +1,7 @@
 package org.observe.quick.style;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Set;
@@ -24,7 +25,6 @@ import org.observe.expresso.TypeConversionException;
 import org.observe.quick.style.QuickInterpretedStyle.QuickElementStyleAttribute;
 import org.qommons.QommonsUtils;
 import org.qommons.Version;
-import org.qommons.collect.BetterList;
 import org.qommons.config.QonfigInterpretation;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigInterpreterCore.Builder;
@@ -119,7 +119,7 @@ public class TestInterpretation implements QonfigInterpretation {
 
 			@Override
 			public ModelValueSynth<SettableValue<?>, SettableValue<A>> createSynthesizer() throws ExpressoInterpretationException {
-				return new Synth(expressoSession, a, b, c, d, theStyle.interpret(null, new HashMap<>()));
+				return new Synth(expressoSession, a, b, c, d, theStyle.interpret(null, null, new HashMap<>()));
 			}
 		}
 
@@ -184,8 +184,8 @@ public class TestInterpretation implements QonfigInterpretation {
 			}
 
 			@Override
-			public BetterList<ModelValueSynth<?, ?>> getCores() {
-				return BetterList.of(this);
+			public List<? extends ModelValueSynth<?, ?>> getComponents() throws ExpressoInterpretationException {
+				return Collections.emptyList();
 			}
 
 			@Override
@@ -312,7 +312,7 @@ public class TestInterpretation implements QonfigInterpretation {
 				this.clazz = def.clazz;
 				expressoSession = def.expressoSession;
 				expressoSession.getExpressoEnv().interpretLocalModel();
-				style = def.style.interpret(null, new HashMap<>());
+				style = def.style.interpret(null, null, new HashMap<>());
 				try {
 					this.e = def.e.interpret().as(ModelTypes.Value.BOOLEAN);
 				} catch (TypeConversionException x) {
@@ -367,8 +367,8 @@ public class TestInterpretation implements QonfigInterpretation {
 			}
 
 			@Override
-			public BetterList<ModelValueSynth<?, ?>> getCores() {
-				return BetterList.of(this);
+			public List<? extends ModelValueSynth<?, ?>> getComponents() throws ExpressoInterpretationException {
+				return Collections.emptyList();
 			}
 		}
 

@@ -10,7 +10,6 @@ import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueSynth;
 import org.qommons.BreakpointHere;
 import org.qommons.Version;
-import org.qommons.collect.BetterList;
 import org.qommons.config.QonfigInterpretation;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigInterpreterCore.Builder;
@@ -102,16 +101,11 @@ public class ExpressoDebugV0_1 implements QonfigInterpretation {
 								}
 
 								@Override
-								public BetterList<ModelValueSynth<?, ?>> getCores() throws ExpressoInterpretationException {
-									return wrapped.getCores();
+								public List<? extends ModelValueSynth<?, ?>> getComponents() {
+									return Collections.singletonList(wrapped);
 								}
 
 								@Override
-										public List<? extends ModelValueSynth<?, ?>> getComponents() {
-											return Collections.singletonList(wrapped);
-										}
-
-										@Override
 								public String toString() {
 									return wrapped.toString();
 								}

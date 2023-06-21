@@ -490,11 +490,6 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 					}
 
 					@Override
-					public BetterList<ModelValueSynth<?, ?>> getCores() {
-						return BetterList.of(this);
-					}
-
-					@Override
 					public List<? extends ModelValueSynth<?, ?>> getComponents() {
 						return Collections.emptyList();
 					}
@@ -612,11 +607,6 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 					}
 
 					@Override
-					public BetterList<ModelValueSynth<?, ?>> getCores() {
-						return BetterList.of(this);
-					}
-
-					@Override
 					public List<? extends ModelValueSynth<?, ?>> getComponents() {
 						return Collections.emptyList();
 					}
@@ -698,11 +688,6 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 						// Configured entries are merely initialized, not slaved, and the multi-map may have been modified
 						// since it was created. There's no sense to making a re-initialized copy here.
 						return value;
-					}
-
-					@Override
-					public BetterList<ModelValueSynth<?, ?>> getCores() {
-						return BetterList.of(this);
 					}
 
 					@Override
@@ -805,11 +790,6 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 					public ObservableValueSet<Object> forModelCopy(ObservableValueSet<Object> value, ModelSetInstance sourceModels,
 						ModelSetInstance newModels) throws ModelInstantiationException {
 						return value;
-					}
-
-					@Override
-					public BetterList<ModelValueSynth<?, ?>> getCores() {
-						return BetterList.of(this);
 					}
 
 					@Override
@@ -1044,11 +1024,6 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 				}
 
 				@Override
-				public BetterList<ModelValueSynth<?, ?>> getCores() {
-					return BetterList.of(this);
-				}
-
-				@Override
 				public List<? extends ModelValueSynth<?, ?>> getComponents() {
 					return Collections.emptyList();
 				}
@@ -1120,14 +1095,6 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 				}
 
 				@Override
-				public BetterList<ModelValueSynth<?, ?>> getCores() throws ExpressoInterpretationException {
-					if (value != null)
-						return value.getCores();
-					else
-						return BetterList.of(this);
-				}
-
-				@Override
 				public List<? extends ModelValueSynth<?, ?>> getComponents() {
 					if (value != null)
 						return Collections.singletonList(value);
@@ -1187,11 +1154,6 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 							result.add(realAction.act(cause));
 						return result;
 					});
-				}
-
-				@Override
-				public BetterList<ModelValueSynth<?, ?>> getCores() throws ExpressoInterpretationException {
-					return BetterList.of(actionVs.stream(), vc -> vc.getCores().stream());
 				}
 
 				@Override
@@ -1281,35 +1243,10 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 				}
 
 				@Override
-				public BetterList<ModelValueSynth<?, ?>> getCores() throws ExpressoInterpretationException {
+				public List<? extends ModelValueSynth<?, ?>> getComponents() {
 					return BetterList.of(Stream.concat(//
 						Stream.of(initV, beforeV, whileV, beforeBodyV, afterBodyV, finallyV), //
-						execVs.stream()), cv -> cv == null ? Stream.empty() : cv.getCores().stream());
-				}
-
-				@Override
-				public List<? extends ModelValueSynth<?, ?>> getComponents() {
-					List<ModelValueSynth<?, ?>> components = new ArrayList<>(//
-						(initV == null ? 0 : 1)//
-						+ (beforeV == null ? 0 : 1)//
-						+ 1 // whileV
-						+ (beforeBodyV == null ? 0 : 1)//
-						+ (afterBodyV == null ? 0 : 1)//
-						+ (finallyV == null ? 0 : 1)//
-						+ execVs.size());
-					if (initV != null)
-						components.add(initV);
-					if (beforeV != null)
-						components.add(beforeV);
-					components.add(whileV);
-					if (beforeBodyV != null)
-						components.add(beforeBodyV);
-					if (afterBodyV != null)
-						components.add(afterBodyV);
-					if (finallyV != null)
-						components.add(finallyV);
-					components.addAll(execVs);
-					return Collections.unmodifiableList(components);
+						execVs.stream()).filter(cv -> cv != null));
 				}
 			};
 		});
@@ -1412,11 +1349,6 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 						return SettableValue.firstValue(commonType, v -> v != null, () -> null, vs);
 					else
 						return value;
-				}
-
-				@Override
-				public BetterList<ModelValueSynth<?, ?>> getCores() throws ExpressoInterpretationException {
-					return BetterList.of(valueContainers.stream(), vc -> vc.getCores().stream());
 				}
 
 				@Override
@@ -1592,11 +1524,6 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 				}
 
 				@Override
-				public BetterList<ModelValueSynth<?, ?>> getCores() throws ExpressoInterpretationException {
-					return BetterList.of(Stream.concat(compiledSource.getCores().stream(), transform.getCores().stream()));
-				}
-
-				@Override
 				public Object forModelCopy(Object value, ModelSetInstance sourceModels, ModelSetInstance newModels)
 					throws ModelInstantiationException {
 					Object sourceS = compiledSource.get(sourceModels);
@@ -1725,15 +1652,8 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		 */
 		boolean isDifferent(ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException;
 
+		/** @return Any model values used by this transformation */
 		BetterList<ModelValueSynth<?, ?>> getComponents();
-
-		/**
-		 * @return The cores of any model values that compose this transform
-		 * @throws ExpressoInterpretationException If the cores cannot be retrieved
-		 */
-		default BetterList<ModelValueSynth<?, ?>> getCores() throws ExpressoInterpretationException {
-			return BetterList.of(getComponents().stream(), v -> ((ModelValueSynth<?, ?>) v).getCores().stream());
-		}
 
 		/**
 		 * @param <M0> The original source model type
@@ -4381,11 +4301,6 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 						}
 
 						@Override
-						public BetterList<ModelValueSynth<?, ?>> getCores() throws ExpressoInterpretationException {
-							return comparison.getCores();
-						}
-
-						@Override
 						public List<? extends ModelValueSynth<?, ?>> getComponents() {
 							return Collections.singletonList(comparison);
 						}
@@ -4484,11 +4399,6 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 						public SettableValue<Comparator<T>> forModelCopy(SettableValue<Comparator<T>> value, ModelSetInstance sourceModels,
 							ModelSetInstance newModels) {
 							return value;
-						}
-
-						@Override
-						public BetterList<ModelValueSynth<?, ?>> getCores() throws ExpressoInterpretationException {
-							return BetterList.of(sortByMaps.stream(), vc -> vc.getCores().stream());
 						}
 
 						@Override

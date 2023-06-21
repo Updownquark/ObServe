@@ -2,7 +2,6 @@ package org.observe.expresso.ops;
 
 import java.util.List;
 import java.util.function.Function;
-import java.util.stream.Stream;
 
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
@@ -22,7 +21,6 @@ import org.observe.expresso.TypeConversionException;
 import org.observe.util.TypeTokens;
 import org.qommons.LambdaUtils;
 import org.qommons.QommonsUtils;
-import org.qommons.collect.BetterList;
 
 import com.google.common.reflect.TypeToken;
 
@@ -218,11 +216,6 @@ public class ConditionalExpression implements ObservableExpression {
 				if (sourceCondition == newCondition && sourcePrimary == newPrimary && sourceSecondary == newSecondary)
 					return value;
 				return createValue(newCondition, newPrimary, newSecondary);
-			}
-
-			@Override
-			public BetterList<ModelValueSynth<?, ?>> getCores() {
-				return BetterList.of(Stream.of(conditionV, primaryV, secondaryV), vc -> vc.getCores().stream());
 			}
 
 			@Override

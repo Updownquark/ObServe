@@ -14,7 +14,6 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Stream;
 
 import org.observe.Observable;
 import org.observe.ObservableAction;
@@ -32,14 +31,12 @@ import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
-import org.observe.expresso.ObservableModelSet.ModelValueSynth;
 import org.observe.expresso.TypeConversionException;
 import org.observe.util.TypeTokens;
 import org.qommons.ArrayUtils;
 import org.qommons.QommonsUtils;
 import org.qommons.StringUtils;
 import org.qommons.Transaction;
-import org.qommons.collect.BetterList;
 import org.qommons.io.ErrorReporting;
 
 import com.google.common.reflect.TypeToken;
@@ -617,13 +614,6 @@ public abstract class Invocation implements ObservableExpression {
 				changeSources[changeSources.length - 1] = newCtx.noInitChanges();
 			return createModelValue(newCtx, argVs, //
 				Observable.or(changeSources));
-		}
-
-		@Override
-		public BetterList<ModelValueSynth<?, ?>> getCores() {
-			return BetterList.of(//
-				Stream.concat(Stream.of(theContext), theArguments.stream()), //
-				vc -> vc == null ? Stream.empty() : vc.getCores().stream());
 		}
 
 		@Override

@@ -1,6 +1,7 @@
 package org.observe.expresso;
 
 import java.util.Collections;
+import java.util.List;
 import java.util.Set;
 
 import org.observe.SettableValue;
@@ -8,7 +9,6 @@ import org.observe.expresso.ObservableModelSet.CompiledModelValue;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueSynth;
 import org.qommons.Version;
-import org.qommons.collect.BetterList;
 import org.qommons.config.QonfigInterpretation;
 import org.qommons.config.QonfigInterpreterCore.Builder;
 import org.qommons.config.QonfigToolkit;
@@ -49,12 +49,12 @@ public class TestInterpretation implements QonfigInterpretation {
 			return CompiledModelValue.of("stateful-struct", ModelTypes.Value, () -> {
 				ModelValueSynth<SettableValue<?>, SettableValue<Integer>> derivedStateV;
 				derivedStateV = derivedStateX.evaluate(ModelTypes.Value.forType(int.class));
-					exS.getExpressoEnv().interpretLocalModel();
+				exS.getExpressoEnv().interpretLocalModel();
 				return new ObservableModelSet.AbstractValueSynth<SettableValue<?>, SettableValue<StatefulTestStructure>>(
 					ModelTypes.Value.forType(StatefulTestStructure.class)) {
 					@Override
 					public SettableValue<StatefulTestStructure> get(ModelSetInstance models) throws ModelInstantiationException {
-							models = exS.getExpressoEnv().wrapLocal(models);
+						models = exS.getExpressoEnv().wrapLocal(models);
 						StatefulTestStructure structure = new StatefulTestStructure(derivedStateV.get(models));
 						try {
 							DynamicModelValue.satisfyDynamicValue(//
@@ -72,8 +72,8 @@ public class TestInterpretation implements QonfigInterpretation {
 					}
 
 					@Override
-					public BetterList<ModelValueSynth<?, ?>> getCores() {
-						return BetterList.of(this);
+						public List<? extends ModelValueSynth<?, ?>> getComponents() throws ExpressoInterpretationException {
+							return Collections.emptyList();
 					}
 				};
 			});
@@ -115,8 +115,8 @@ public class TestInterpretation implements QonfigInterpretation {
 					}
 
 					@Override
-					public BetterList<ModelValueSynth<?, ?>> getCores() {
-						return BetterList.of(this);
+					public List<? extends ModelValueSynth<?, ?>> getComponents() throws ExpressoInterpretationException {
+						return Collections.emptyList();
 					}
 				};
 			});
@@ -152,8 +152,8 @@ public class TestInterpretation implements QonfigInterpretation {
 					}
 
 					@Override
-					public BetterList<ModelValueSynth<?, ?>> getCores() {
-						return BetterList.of(this);
+					public List<? extends ModelValueSynth<?, ?>> getComponents() throws ExpressoInterpretationException {
+						return Collections.emptyList();
 					}
 				};
 			});

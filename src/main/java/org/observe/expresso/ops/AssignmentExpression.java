@@ -3,7 +3,6 @@ package org.observe.expresso.ops;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Function;
-import java.util.stream.Stream;
 
 import org.observe.ObservableAction;
 import org.observe.SettableValue;
@@ -17,12 +16,10 @@ import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
-import org.observe.expresso.ObservableModelSet.ModelValueSynth;
 import org.observe.expresso.TypeConversionException;
 import org.observe.util.TypeTokens;
 import org.qommons.QommonsUtils;
 import org.qommons.Transaction;
-import org.qommons.collect.BetterList;
 import org.qommons.io.ErrorReporting;
 
 import com.google.common.reflect.TypeToken;
@@ -152,11 +149,6 @@ public class AssignmentExpression implements ObservableExpression {
 						return value2;
 					else
 						return newCtx.assignmentTo(newValue);
-				}
-
-				@Override
-				public BetterList<ModelValueSynth<?, ?>> getCores() {
-					return BetterList.of(Stream.of(target, value), vc -> vc.getCores().stream());
 				}
 
 				@Override

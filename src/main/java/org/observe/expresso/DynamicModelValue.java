@@ -392,11 +392,6 @@ public interface DynamicModelValue<M, MV extends M> extends ModelValueSynth<M, M
 		}
 
 		@Override
-		public BetterList<ModelValueSynth<?, ?>> getCores() {
-			return BetterList.of(this);
-		}
-
-		@Override
 		public List<? extends ModelValueSynth<?, ?>> getComponents() {
 			return Collections.emptyList();
 		}
@@ -482,7 +477,7 @@ public interface DynamicModelValue<M, MV extends M> extends ModelValueSynth<M, M
 
 		@Override
 		public BetterList<ModelValueSynth<?, ?>> getCores() {
-			return BetterList.of(this);
+			return BetterList.of(this); // Don't remember why I did this, but I'm leaving it alone until it causes problems
 		}
 
 		@Override

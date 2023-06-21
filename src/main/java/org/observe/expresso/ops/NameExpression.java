@@ -221,13 +221,15 @@ public class NameExpression implements ObservableExpression, Named {
 				throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(),
 					this + " is a model, not a " + type.getModelType());
 			InterpretedValueSynth<M, MV> imv = (InterpretedValueSynth<M, MV>) mv.interpret();
-			divisions[nameIndex - 1] = ObservableExpression.evEx(imv, mv);
+			if (nameIndex > 0)
+				divisions[nameIndex - 1] = ObservableExpression.evEx(imv, mv);
 			return ObservableExpression.evEx2(imv, null,
 				context == null ? Collections.emptyList() : Collections.singletonList(context), QommonsUtils.unmodifiableCopy(divisions));
 		} else if (mvType.getModelType() == ModelTypes.Model) {
 			String modelStr = path.toString();
 			ObservableModelSet model = models.getSubModelIfExists(modelStr);
-			divisions[nameIndex - 1] = ObservableExpression
+			if (nameIndex > 0)
+				divisions[nameIndex - 1] = ObservableExpression
 				.evEx(ModelValueSynth.literal(TypeTokens.get().of(ObservableModelSet.class), model, modelStr), mv);
 			path.append('.').append(theNames.get(nameIndex).getName());
 			String pathStr = path.toString();
@@ -243,7 +245,8 @@ public class NameExpression implements ObservableExpression, Named {
 		} else if (mvType.getModelType() == ModelTypes.Value) {
 			InterpretedValueSynth<SettableValue<?>, ? extends SettableValue<?>> imv = (InterpretedValueSynth<SettableValue<?>, ? extends SettableValue<?>>) mv
 				.interpret();
-			divisions[nameIndex - 1] = ObservableExpression.evEx(imv, mv);
+			if (nameIndex > 0)
+				divisions[nameIndex - 1] = ObservableExpression.evEx(imv, mv);
 			Field field;
 			try {
 				field = TypeTokens.getRawType(mvType.getType(0)).getField(theNames.get(nameIndex).getName());

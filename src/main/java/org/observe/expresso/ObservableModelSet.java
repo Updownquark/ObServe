@@ -208,7 +208,7 @@ public interface ObservableModelSet extends Identifiable {
 
 		/**
 		 * @return The type of the value
-		 * @throws ExpressoInterpretationException If ths value cannot be interpreted
+		 * @throws ExpressoInterpretationException If this value cannot be interpreted
 		 */
 		ModelInstanceType<M, MV> getType() throws ExpressoInterpretationException;
 
@@ -221,10 +221,21 @@ public interface ObservableModelSet extends Identifiable {
 		MV get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException;
 
 		/**
+		 * @return The component values making up this value
+		 * @throws ExpressoInterpretationException If this value cannot be interpreted
+		 */
+		List<? extends ModelValueSynth<?, ?>> getComponents() throws ExpressoInterpretationException;
+
+		/**
 		 * @return All the self-sufficient containers that compose this value container
 		 * @throws ExpressoInterpretationException If this value cannot be interpreted
 		 */
-		BetterList<ModelValueSynth<?, ?>> getCores() throws ExpressoInterpretationException;
+		default BetterList<ModelValueSynth<?, ?>> getCores() throws ExpressoInterpretationException {
+			List<? extends ModelValueSynth<?, ?>> components = getComponents();
+			if (components.isEmpty())
+				return BetterList.of(this);
+			return BetterList.of(components.stream(), v -> v.getCores().stream());
+		}
 
 		/**
 		 * @param value The value to copy
@@ -237,8 +248,6 @@ public interface ObservableModelSet extends Identifiable {
 		 */
 		MV forModelCopy(MV value, ModelSetInstance sourceModels, ModelSetInstance newModels)
 			throws ModelInstantiationException;
-
-		List<? extends ModelValueSynth<?, ?>> getComponents();
 
 		/**
 		 * @param <M2> The model type to convert to
@@ -315,11 +324,6 @@ public interface ObservableModelSet extends Identifiable {
 			}
 
 			@Override
-			public BetterList<ModelValueSynth<?, ?>> getCores() throws ExpressoInterpretationException {
-				return theSource.getCores();
-			}
-
-			@Override
 			public List<? extends ModelValueSynth<?, ?>> getComponents() {
 				return Collections.singletonList(theSource);
 			}
@@ -382,11 +386,6 @@ public interface ObservableModelSet extends Identifiable {
 			}
 
 			@Override
-			public BetterList<ModelValueSynth<?, ?>> getCores() throws ExpressoInterpretationException {
-				return theSource.getCores();
-			}
-
-			@Override
 			public List<? extends ModelValueSynth<?, ?>> getComponents() {
 				return Collections.singletonList(theSource);
 			}
@@ -437,11 +436,6 @@ public interface ObservableModelSet extends Identifiable {
 				@Override
 				public SettableValue<T> forModelCopy(SettableValue<T> value2, ModelSetInstance sourceModels, ModelSetInstance newModels) {
 					return theValue;
-				}
-
-				@Override
-				public BetterList<ObservableModelSet.ModelValueSynth<?, ?>> getCores() {
-					return BetterList.of(this);
 				}
 
 				@Override
@@ -536,11 +530,6 @@ public interface ObservableModelSet extends Identifiable {
 				}
 
 				@Override
-				public BetterList<ModelValueSynth<?, ?>> getCores() {
-					return BetterList.of(this);
-				}
-
-				@Override
 				public List<? extends InterpretedValueSynth<?, ?>> getComponents() {
 					return QommonsUtils.unmodifiableCopy(components);
 				}
@@ -576,10 +565,16 @@ public interface ObservableModelSet extends Identifiable {
 		ModelInstanceType<M, MV> getType();
 
 		@Override
-		BetterList<ModelValueSynth<?, ?>> getCores();
+		List<? extends InterpretedValueSynth<?, ?>> getComponents();
 
 		@Override
-		List<? extends InterpretedValueSynth<?, ?>> getComponents();
+		default BetterList<ModelValueSynth<?, ?>> getCores() {
+			try {
+				return ModelValueSynth.super.getCores();
+			} catch (ExpressoInterpretationException e) {
+				throw new IllegalStateException("Should be impossible", e);
+			}
+		}
 
 		@Override
 		default <M2, MV2 extends M2> InterpretedValueSynth<M2, MV2> as(ModelInstanceType<M2, MV2> type) throws TypeConversionException {
@@ -630,11 +625,6 @@ public interface ObservableModelSet extends Identifiable {
 			}
 
 			@Override
-			public BetterList<ModelValueSynth<?, ?>> getCores() {
-				return getSource().getCores();
-			}
-
-			@Override
 			public List<? extends InterpretedValueSynth<?, ?>> getComponents() {
 				return Collections.singletonList(getSource());
 			}
@@ -667,11 +657,6 @@ public interface ObservableModelSet extends Identifiable {
 			@Override
 			public ModelInstanceType<M, MV> getType() {
 				return getSource().getType();
-			}
-
-			@Override
-			public BetterList<ModelValueSynth<?, ?>> getCores() {
-				return getSource().getCores();
 			}
 
 			@Override
@@ -716,15 +701,6 @@ public interface ObservableModelSet extends Identifiable {
 			public MV forModelCopy(MV value, ModelSetInstance sourceModels, ModelSetInstance newModels)
 				throws ModelInstantiationException, IllegalStateException {
 				return theContainer.forModelCopy(value, sourceModels, newModels);
-			}
-
-			@Override
-			public BetterList<ModelValueSynth<?, ?>> getCores() {
-				try {
-					return theContainer.getCores();
-				} catch (ExpressoInterpretationException e) {
-					throw new IllegalStateException(e);
-				}
 			}
 
 			@Override
@@ -2370,16 +2346,11 @@ public interface ObservableModelSet extends Identifiable {
 			}
 
 			@Override
-			public List<? extends ModelValueSynth<?, ?>> getComponents() {
+			public List<? extends ModelValueSynth<?, ?>> getComponents() throws ExpressoInterpretationException {
 				if (theCreator == null)
 					return Collections.emptyList();
-				else {
-					try {
-						return Collections.singletonList(getOfValue(v -> v));
-					} catch (ExpressoInterpretationException e) {
-						throw new IllegalStateException("Could not evaluate value", e);
-					}
-				}
+				else
+					return Collections.singletonList(getOfValue(v -> v));
 			}
 
 			@Override
@@ -2488,11 +2459,6 @@ public interface ObservableModelSet extends Identifiable {
 					return theValue.forModelCopy(value, sourceModels, newModels);
 				else
 					return value;
-			}
-
-			@Override
-			public BetterList<ModelValueSynth<?, ?>> getCores() {
-				return theValue == null ? BetterList.empty() : theValue.getCores();
 			}
 
 			@Override

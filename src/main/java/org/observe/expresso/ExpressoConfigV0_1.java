@@ -138,16 +138,6 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		 * @return The value container that are components of the test
 		 */
 		List<ModelValueSynth<?, ?>> getComponents();
-
-		/**
-		 * Equivalent of {@link ModelValueSynth#getCores()}
-		 *
-		 * @return The value container cores that are the fundamental sources of value for the test
-		 * @throws ExpressoInterpretationException If an error occurs retrieving the cores
-		 */
-		default BetterList<ModelValueSynth<?, ?>> getCores() throws ExpressoInterpretationException {
-			return BetterList.of(getComponents().stream(), vs -> vs.getCores().stream());
-		}
 	}
 
 	/** The name of the model value to store the {@link ObservableConfig} in the model */
@@ -434,11 +424,6 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 					public MV forModelCopy(MV value, ModelSetInstance sourceModels, ModelSetInstance newModels) {
 						// Should be the same thing, since the config hasn't changed
 						return value;
-					}
-
-					@Override
-					public BetterList<ModelValueSynth<?, ?>> getCores() {
-						return BetterList.of(this);
 					}
 
 					@Override
@@ -1130,11 +1115,6 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 				}
 
 				@Override
-				public BetterList<ModelValueSynth<?, ?>> getCores() throws ExpressoInterpretationException {
-					return textFormatContainer.getCores();
-				}
-
-				@Override
 				public List<? extends ModelValueSynth<?, ?>> getComponents() {
 					return Collections.singletonList(textFormatContainer);
 				}
@@ -1200,12 +1180,6 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 					SettableValue<Duration> timeout = timeoutVC.get(models);
 					SettableValue<Integer> retry = retryVC.get(models);
 					return createFileSource(host, user, password, connecting, connected, timeout, retry);
-				}
-
-				@Override
-				public BetterList<ModelValueSynth<?, ?>> getCores() throws ExpressoInterpretationException {
-					return BetterList.of(Stream.of(hostVC, userVC, passwordVC, connectingVC, connectedVC, timeoutVC, retryVC)//
-						.filter(vc -> vc != null), vc -> vc.getCores().stream());
 				}
 
 				@Override
@@ -1356,12 +1330,6 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 				}
 
 				@Override
-				public BetterList<ModelValueSynth<?, ?>> getCores() throws ExpressoInterpretationException {
-					return BetterList.of(Stream.concat(Stream.of(wrappedContainer, archiveDepthVC), //
-						archiveMethodContainers.stream()), vc -> vc.getCores().stream());
-				}
-
-				@Override
 				public List<? extends ModelValueSynth<?, ?>> getComponents() {
 					return BetterList.of(Stream.concat(Stream.of(wrappedContainer, archiveDepthVC), archiveMethodContainers.stream()));
 				}
@@ -1509,13 +1477,6 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 				public SettableValue<Format<T>> forModelCopy(SettableValue<Format<T>> formatV, ModelSetInstance sourceModels,
 					ModelSetInstance newModels) throws ModelInstantiationException {
 					return ((ValidatedFormat) formatV).forModelCopy(sourceModels, newModels);
-				}
-
-				@Override
-				public BetterList<ModelValueSynth<?, ?>> getCores() throws ExpressoInterpretationException {
-					List<ModelValueSynth<?, ?>> formatCores = formatContainer.getCores();
-					List<ModelValueSynth<?, ?>> validationCores = BetterList.of(validationContainers.stream(), vc -> vc.getCores().stream());
-					return BetterList.of(Stream.concat(formatCores.stream(), validationCores.stream()));
 				}
 
 				@Override
@@ -1683,11 +1644,6 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 				}
 
 				@Override
-				public BetterList<ModelValueSynth<?, ?>> getCores() {
-					return BetterList.of(this);
-				}
-
-				@Override
 				public List<? extends ModelValueSynth<?, ?>> getComponents() {
 					return Collections.emptyList();
 				}
@@ -1747,11 +1703,6 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 							return new BetterFile.FileFormat(fs, workingDirFile, allowEmpty);
 						})), //
 						__ -> "Not reversible");
-				}
-
-				@Override
-				public BetterList<ModelValueSynth<?, ?>> getCores() throws ExpressoInterpretationException {
-					return fileSource.getCores();
 				}
 
 				@Override

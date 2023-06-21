@@ -17,7 +17,6 @@ import org.observe.util.TypeTokens;
 import org.observe.util.TypeTokens.TypeConverter;
 import org.qommons.LambdaUtils;
 import org.qommons.Named;
-import org.qommons.collect.BetterList;
 
 import com.google.common.reflect.TypeToken;
 
@@ -1150,11 +1149,6 @@ public abstract class ModelType<M> implements Named {
 				return value;
 			else
 				return (MVT) theConverter.convert(newSourceV);
-		}
-
-		@Override
-		public BetterList<ModelValueSynth<?, ?>> getCores() {
-			return theSource.getCores();
 		}
 
 		@Override

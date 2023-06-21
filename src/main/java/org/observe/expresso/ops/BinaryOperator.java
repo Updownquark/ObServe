@@ -3,7 +3,6 @@ package org.observe.expresso.ops;
 import java.util.List;
 import java.util.Set;
 import java.util.function.Function;
-import java.util.stream.Stream;
 
 import org.observe.ObservableAction;
 import org.observe.ObservableValue;
@@ -21,13 +20,11 @@ import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
-import org.observe.expresso.ObservableModelSet.ModelValueSynth;
 import org.observe.expresso.TypeConversionException;
 import org.observe.expresso.ops.BinaryOperatorSet.BinaryOp;
 import org.observe.util.TypeTokens;
 import org.qommons.LambdaUtils;
 import org.qommons.QommonsUtils;
-import org.qommons.collect.BetterList;
 import org.qommons.io.ErrorReporting;
 
 import com.google.common.reflect.TypeToken;
@@ -255,11 +252,6 @@ public class BinaryOperator implements ObservableExpression {
 					}
 
 					@Override
-					public BetterList<ModelValueSynth<?, ?>> getCores() {
-						return BetterList.of(Stream.of(left, right), vc -> vc.getCores().stream());
-					}
-
-					@Override
 					public List<? extends InterpretedValueSynth<?, ?>> getComponents() {
 						return QommonsUtils.unmodifiableCopy(left, right);
 					}
@@ -315,11 +307,6 @@ public class BinaryOperator implements ObservableExpression {
 						return value;
 					else
 						return createOpValue(newLeft, newRight);
-				}
-
-				@Override
-				public BetterList<ModelValueSynth<?, ?>> getCores() {
-					return BetterList.of(Stream.of(left, right), vc -> vc.getCores().stream());
 				}
 
 				@Override
