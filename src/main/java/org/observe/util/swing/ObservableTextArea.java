@@ -76,9 +76,9 @@ public class ObservableTextArea<E> extends JEditorPane implements ObservableText
 			@Override
 			public void mouseMoved(MouseEvent evt) {
 				int docPos = viewToModel(evt.getPoint());
-				if (docPos >= 0)
+				if (docPos > 0)
 					theMouseListeners.forEach(//
-						l -> l.mouseMoved(docPos));
+						l -> l.mouseMoved(docPos - 1)); // Index from zero
 			}
 		};
 		theMouseListeners = ListenerList.build().withInUse(inUse -> {

@@ -1047,7 +1047,7 @@ public interface QuickTableColumn<R, C> {
 			}
 		}
 
-		public static class ColumnStyle implements QuickStyledElement.QuickInstanceStyle {
+		public static class ColumnStyle extends QuickStyledElement.QuickInstanceStyle.Abstract {
 			public static class Def extends QuickCompiledStyle.Wrapper implements QuickStyledElement.QuickInstanceStyle.Def {
 				public Def(QuickCompiledStyle parent, QuickCompiledStyle wrapped) {
 					super(parent, wrapped);
@@ -1082,25 +1082,21 @@ public interface QuickTableColumn<R, C> {
 				}
 
 				@Override
-				public QuickInstanceStyle create() {
-					return new ColumnStyle(this);
+				public QuickInstanceStyle create(QuickStyledElement styled) {
+					return new ColumnStyle(this, (SingleColumnSet<?, ?>) styled);
 				}
 			}
 
 			private final Object theId;
 
-			ColumnStyle(Interpreted interpreted) {
+			ColumnStyle(Interpreted interpreted, SingleColumnSet<?, ?> parent) {
+				super(interpreted, parent);
 				theId = interpreted.getId();
 			}
 
 			@Override
 			public Object getId() {
 				return theId;
-			}
-
-			@Override
-			public void update(QuickStyledElement.QuickInstanceStyle.Interpreted interpreted, ModelSetInstance models)
-				throws ModelInstantiationException {
 			}
 		}
 	}

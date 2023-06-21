@@ -226,7 +226,7 @@ public class ConditionalExpression implements ObservableExpression {
 			}
 
 			@Override
-			public Object getDescriptor(int offset) {
+			public Object getDescriptor() {
 				return null;
 			}
 

@@ -579,7 +579,7 @@ public interface QuickWidget extends QuickTextElement {
 			QuickElementStyleAttribute<Color> getColor();
 
 			@Override
-			QuickWidgetStyle create();
+			QuickWidgetStyle create(QuickStyledElement styledElement);
 
 			public class Default extends QuickTextStyle.Interpreted.Abstract implements QuickWidgetStyle.Interpreted {
 				private QuickElementStyleAttribute<Color> theColor;
@@ -600,8 +600,8 @@ public interface QuickWidget extends QuickTextElement {
 				}
 
 				@Override
-				public QuickWidgetStyle create() {
-					return new QuickWidgetStyle.Default(this);
+				public QuickWidgetStyle create(QuickStyledElement styledElement) {
+					return new QuickWidgetStyle.Default(this, (QuickWidget) styledElement);
 				}
 			}
 		}
@@ -611,8 +611,8 @@ public interface QuickWidget extends QuickTextElement {
 		public class Default extends QuickTextStyle.Abstract implements QuickWidgetStyle {
 			private final SettableValue<ObservableValue<Color>> theColor;
 
-			public Default(QuickWidgetStyle.Interpreted interpreted) {
-				super(interpreted);
+			public Default(QuickWidgetStyle.Interpreted interpreted, QuickWidget widget) {
+				super(interpreted, widget);
 				theColor = SettableValue
 					.build(TypeTokens.get().keyFor(ObservableValue.class).<ObservableValue<Color>> parameterized(Color.class)).build();
 			}

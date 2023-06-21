@@ -121,6 +121,9 @@ public class ArrayAccessExpression implements ObservableExpression {
 		EvaluatedExpression<SettableValue<?>, SettableValue<Integer>> indexValue, ErrorReporting arrayReporting,
 		ErrorReporting indexReporting) throws ExpressoInterpretationException {
 		TypeToken<T> targetType = (TypeToken<T>) arrayValue.getType().getType(0).getComponentType();
+		if (targetType == null)
+			throw new ExpressoInterpretationException("Value is not an array", arrayReporting.getFileLocation().getPosition(0),
+				theArray.getExpressionLength());
 		ModelInstanceType<SettableValue<?>, SettableValue<T>> targetModelType = ModelTypes.Value.forType(targetType);
 		return new EvaluatedExpression<SettableValue<?>, SettableValue<T>>() {
 			@Override
@@ -182,7 +185,7 @@ public class ArrayAccessExpression implements ObservableExpression {
 			}
 
 			@Override
-			public Object getDescriptor(int offset) {
+			public Object getDescriptor() {
 				return null;
 			}
 

@@ -64,7 +64,7 @@ public interface ExElement extends Identifiable {
 
 		@Override
 		public String toString() {
-			return new StringBuilder().append('<').append(theElementType).append(thePosition.toShortString()).toString();
+			return new StringBuilder().append('<').append(theElementType).append('>').append(thePosition.toShortString()).toString();
 		}
 	}
 
@@ -712,6 +712,10 @@ public interface ExElement extends Identifiable {
 			return ao == null ? null : fn.apply(ao);
 		}
 
+		boolean isModelInstancePersistent();
+
+		Interpreted<E> persistModelInstances(boolean persist);
+
 		ObservableValue<Boolean> isDestroyed();
 
 		default Observable<ObservableValueEvent<Boolean>> destroyed() {
@@ -731,6 +735,7 @@ public interface ExElement extends Identifiable {
 			private final ClassMap<ExAddOn.Interpreted<? super E, ?>> theAddOns;
 			private final SettableValue<Boolean> isDestroyed;
 			private InterpretedModelSet theModels;
+			private Boolean isModelInstancePersistent;
 
 			/**
 			 * @param definition The definition that is producing this interpretation
@@ -770,6 +775,22 @@ public interface ExElement extends Identifiable {
 			@Override
 			public Collection<ExAddOn.Interpreted<? super E, ?>> getAddOns() {
 				return theAddOns.getAllValues();
+			}
+
+			@Override
+			public boolean isModelInstancePersistent() {
+				if (isModelInstancePersistent != null)
+					return isModelInstancePersistent.booleanValue();
+				else if (theParent != null)
+					return theParent.isModelInstancePersistent();
+				else
+					return false;
+			}
+
+			@Override
+			public Interpreted<E> persistModelInstances(boolean persist) {
+				isModelInstancePersistent = persist;
+				return this;
 			}
 
 			@Override
@@ -837,6 +858,26 @@ public interface ExElement extends Identifiable {
 		return ao == null ? null : fn.apply(ao);
 	}
 
+	/**
+	 * <p>
+	 * Retrieves the model instance by which this element is populated with expression values.
+	 * </p>
+	 * <p>
+	 * This method is generally only applicable while it is {@link #update(Interpreted, ModelSetInstance) updating}. The model structures
+	 * are typically discarded outside this phase to free up memory.
+	 * </p>
+	 * <p>
+	 * The exception to this is when the {@link Interpreted#isModelInstancePersistent()} flag is set on the interpreter passed to the
+	 * {@link #update(Interpreted, ModelSetInstance) update} method. In this case the models are persisted in the element and available any
+	 * time
+	 * </p>
+	 *
+	 * @return The model instance used by this element to build its expression values
+	 * @throws IllegalStateException If this element is not {@link #update(Interpreted, ModelSetInstance) updating} and its interpretation's
+	 *         {@link Interpreted#isModelInstancePersistent()} flag was not set
+	 */
+	ModelSetInstance getUpdatingModels() throws IllegalStateException;
+
 	ErrorReporting reporting();
 
 	/**
@@ -855,6 +896,7 @@ public interface ExElement extends Identifiable {
 		private final ClassMap<ExAddOn<?>> theAddOns;
 		private final ClassMap<Class<? extends ExAddOn.Interpreted<?, ?>>> theAddOnInterpretations;
 		private final ErrorReporting theReporting;
+		private ModelSetInstance theUpdatingModels;
 
 		/**
 		 * @param interpreted The interpretation producing this element
@@ -894,6 +936,11 @@ public interface ExElement extends Identifiable {
 		}
 
 		@Override
+		public ModelSetInstance getUpdatingModels() {
+			return theUpdatingModels;
+		}
+
+		@Override
 		public ErrorReporting reporting() {
 			return theReporting;
 		}
@@ -901,13 +948,19 @@ public interface ExElement extends Identifiable {
 		@Override
 		public ModelSetInstance update(Interpreted<?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
 			ModelSetInstance myModels = createElementModel(interpreted, models);
-			updateModel(interpreted, myModels);
+			try {
+				updateModel(interpreted, myModels);
+			} finally {
+				if (!interpreted.isModelInstancePersistent())
+					theUpdatingModels = null;
+			}
 			return myModels;
 		}
 
 		protected ModelSetInstance createElementModel(Interpreted<?> interpreted, ModelSetInstance parentModels)
 			throws ModelInstantiationException {
-			return interpreted.getDefinition().getExpressoEnv().wrapLocal(parentModels);
+			theUpdatingModels = interpreted.getDefinition().getExpressoEnv().wrapLocal(parentModels);
+			return theUpdatingModels;
 		}
 
 		protected void updateModel(Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {

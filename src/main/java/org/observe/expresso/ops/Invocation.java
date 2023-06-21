@@ -217,22 +217,27 @@ public abstract class Invocation implements ObservableExpression {
 		/** The method to invoke */
 		public final MethodResult<X, MV> method;
 		/** The context for the method invocation */
-		public final EvaluatedExpression<SettableValue<?>, SettableValue<?>> context;
+		public final EvaluatedExpression<SettableValue<?>, ? extends SettableValue<?>> context;
+		/** Whether this result's context is trivial and not to be used by the result */
+		public final boolean trivialContext;
 		/** The arguments for the method invocation */
-		public final List<EvaluatedExpression<SettableValue<?>, SettableValue<?>>> arguments;
+		public final List<EvaluatedExpression<SettableValue<?>, ? extends SettableValue<?>>> arguments;
 		/** The interface to actually invoke the invokable */
 		public final ExecutableImpl<X> impl;
 
 		/**
 		 * @param method The method to invoke
 		 * @param context The context for the method invocation
+		 * @param contextTrivial Whether the result's context is trivial and not to be used by the result
 		 * @param arguments The arguments for the method invocation
 		 * @param impl The interface to actually invoke the invokable
 		 */
-		public InvokableResult(MethodResult<X, MV> method, EvaluatedExpression<SettableValue<?>, SettableValue<?>> context,
-			List<EvaluatedExpression<SettableValue<?>, SettableValue<?>>> arguments, ExecutableImpl<X> impl) {
+		public InvokableResult(MethodResult<X, MV> method, EvaluatedExpression<SettableValue<?>, ? extends SettableValue<?>> context,
+			boolean contextTrivial, List<EvaluatedExpression<SettableValue<?>, ? extends SettableValue<?>>> arguments,
+			ExecutableImpl<X> impl) {
 			this.method = method;
 			this.context = context;
+			this.trivialContext = contextTrivial;
 			this.arguments = arguments;
 			this.impl = impl;
 		}
@@ -269,12 +274,14 @@ public abstract class Invocation implements ObservableExpression {
 
 	private <X extends Executable, T> InvocationActionContainer<X, T> createActionContainer(
 		InvokableResult<X, SettableValue<?>, SettableValue<T>> result, ErrorReporting reporting) {
-		return new InvocationActionContainer<>(result.method, result.context, result.arguments, result.impl, reporting);
+		return new InvocationActionContainer<>(result.method, result.trivialContext ? null : result.context, result.arguments, result.impl,
+			reporting);
 	}
 
 	private <X extends Executable, M, MV extends M> InterpretedValueSynth<M, MV> createValueContainer(InvokableResult<X, M, MV> result,
 		ErrorReporting reporting) {
-		return new InvocationThingContainer<>(result.method, result.context, result.arguments, result.impl, reporting);
+		return new InvocationThingContainer<>(result.method, result.trivialContext ? null : result.context, result.arguments, result.impl,
+			reporting);
 	}
 
 	/**
@@ -528,15 +535,15 @@ public abstract class Invocation implements ObservableExpression {
 
 	static abstract class InvocationContainer<X extends Executable, R, M, MV extends M> implements InterpretedValueSynth<M, MV> {
 		private final Invocation.MethodResult<X, R> theMethod;
-		private final EvaluatedExpression<SettableValue<?>, SettableValue<?>> theContext;
-		private final List<EvaluatedExpression<SettableValue<?>, SettableValue<?>>> theArguments;
+		private final EvaluatedExpression<SettableValue<?>, ? extends SettableValue<?>> theContext;
+		private final List<EvaluatedExpression<SettableValue<?>, ? extends SettableValue<?>>> theArguments;
 		private final ModelInstanceType<M, MV> theType;
 		protected final Invocation.ExecutableImpl<X> theImpl;
 		protected final boolean isCaching;
 		protected final ErrorReporting theReporting;
 
-		InvocationContainer(Invocation.MethodResult<X, R> method, EvaluatedExpression<SettableValue<?>, SettableValue<?>> context,
-			List<EvaluatedExpression<SettableValue<?>, SettableValue<?>>> arguments, ModelInstanceType<M, MV> type,
+		InvocationContainer(Invocation.MethodResult<X, R> method, EvaluatedExpression<SettableValue<?>, ? extends SettableValue<?>> context,
+			List<EvaluatedExpression<SettableValue<?>, ? extends SettableValue<?>>> arguments, ModelInstanceType<M, MV> type,
 			Invocation.ExecutableImpl<X> impl, ErrorReporting reporting) {
 			theMethod = method;
 			theArguments = arguments;
@@ -758,9 +765,9 @@ public abstract class Invocation implements ObservableExpression {
 	static class InvocationActionContainer<X extends Executable, T>
 	extends Invocation.InvocationContainer<X, SettableValue<T>, ObservableAction<?>, ObservableAction<T>> {
 		InvocationActionContainer(Invocation.MethodResult<X, SettableValue<T>> method,
-			EvaluatedExpression<SettableValue<?>, SettableValue<?>> context,
-			List<EvaluatedExpression<SettableValue<?>, SettableValue<?>>> arguments, Invocation.ExecutableImpl<X> impl,
-			ErrorReporting reporting) {
+			EvaluatedExpression<SettableValue<?>, ? extends SettableValue<?>> context,
+				List<EvaluatedExpression<SettableValue<?>, ? extends SettableValue<?>>> arguments, Invocation.ExecutableImpl<X> impl,
+				ErrorReporting reporting) {
 			super(method, context, arguments, ModelTypes.Action.forType((TypeToken<T>) method.converter.getType().getType(0)), impl,
 				reporting);
 		}
@@ -815,9 +822,10 @@ public abstract class Invocation implements ObservableExpression {
 	}
 
 	static class InvocationThingContainer<X extends Executable, M, MV extends M> extends Invocation.InvocationContainer<X, MV, M, MV> {
-		InvocationThingContainer(Invocation.MethodResult<X, MV> method, EvaluatedExpression<SettableValue<?>, SettableValue<?>> context,
-			List<EvaluatedExpression<SettableValue<?>, SettableValue<?>>> arguments, Invocation.ExecutableImpl<X> impl,
-			ErrorReporting reporting) {
+		InvocationThingContainer(Invocation.MethodResult<X, MV> method,
+			EvaluatedExpression<SettableValue<?>, ? extends SettableValue<?>> context,
+				List<EvaluatedExpression<SettableValue<?>, ? extends SettableValue<?>>> arguments, Invocation.ExecutableImpl<X> impl,
+				ErrorReporting reporting) {
 			super(method, context, arguments, (ModelInstanceType<M, MV>) method.converter.getType(), impl, reporting);
 		}
 

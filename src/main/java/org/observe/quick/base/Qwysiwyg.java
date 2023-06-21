@@ -10,11 +10,14 @@ import java.lang.reflect.Modifier;
 import java.lang.reflect.Type;
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.function.IntFunction;
+import java.util.function.Supplier;
+import java.util.stream.Collectors;
 
+import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.SimpleObservable;
@@ -23,6 +26,8 @@ import org.observe.expresso.ExpressionValueType;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.LocatedExpression;
 import org.observe.expresso.ModelInstantiationException;
+import org.observe.expresso.ModelType;
+import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableExpression.EvaluatedExpression;
 import org.observe.expresso.ObservableModelSet;
@@ -32,6 +37,7 @@ import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelComponentNode;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.RuntimeValuePlaceholder;
+import org.observe.expresso.TypeConversionException;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.quick.QuickApp;
 import org.observe.quick.QuickApplication;
@@ -40,6 +46,7 @@ import org.observe.util.TypeTokens;
 import org.qommons.ArrayUtils;
 import org.qommons.Colors;
 import org.qommons.SelfDescribed;
+import org.qommons.Stamped;
 import org.qommons.collect.CircularArrayList;
 import org.qommons.collect.DequeList;
 import org.qommons.config.CustomValueType;
@@ -87,10 +94,11 @@ public class Qwysiwyg {
 	public final ObservableValue<String> tooltip;
 
 	private final SettableValue<String> theInternalDocumentDisplay;
-	private final SettableValue<String> theInternalTooltip;
+	private final SettableValue<ObservableValue<String>> theInternalTooltip;
 	private final SimpleObservable<Void> theDocumentReplacement;
 	private final SimpleObservable<Void> theApplicationReplacement;
-	private String theDocumentLocation;
+	private String theAppLocation;
+	private String theDocumentURL;
 	private final StringBuilder theDocumentContent;
 	private QuickDocument.Def theDocumentDef;
 	private QuickDocument.Interpreted theDocumentInterpreted;
@@ -102,22 +110,23 @@ public class Qwysiwyg {
 
 	public Qwysiwyg() {
 		theInternalDocumentDisplay = SettableValue.build(String.class).build();
-		theInternalTooltip = SettableValue.build(String.class).build();
+		theInternalTooltip = SettableValue
+			.build(TypeTokens.get().keyFor(ObservableValue.class).<ObservableValue<String>> parameterized(String.class)).build();
 		documentDisplay = theInternalDocumentDisplay; // .unsettable(); This is settable so the tooltip can display
-		tooltip = theInternalTooltip.unsettable();
+		tooltip = ObservableValue.flatten(theInternalTooltip);
 		theDocumentReplacement = new SimpleObservable<>();
 		theApplicationReplacement = new SimpleObservable<>();
 		theDocumentContent = new StringBuilder();
 	}
 
 	public void init(String documentLocation, List<String> unmatched) {
-		boolean sameDoc = Objects.equals(documentLocation, theDocumentLocation);
-		theDocumentLocation = documentLocation;
+		boolean sameDoc = Objects.equals(documentLocation, theAppLocation);
+		theAppLocation = documentLocation;
 		if (!sameDoc) {
 			theInternalDocumentDisplay.set(null, null);
 			clearDef();
 		}
-		if (theDocumentLocation == null) {
+		if (theAppLocation == null) {
 			System.err.println("WARNING: No target document");
 			return;
 		}
@@ -163,7 +172,9 @@ public class Qwysiwyg {
 				return;
 			}
 
-			renderXml(quickApp.resolveAppFile());
+			URL docURL = quickApp.resolveAppFile();
+			theDocumentURL = docURL.toString();
+			renderXml(docURL);
 
 			try {
 				theDocumentDef = quickApp.parseQuick(theDocumentDef);
@@ -203,20 +214,21 @@ public class Qwysiwyg {
 				return;
 			}
 
-			renderInterpreted(theRoot, theDocumentInterpreted);
-
+			theDocumentInterpreted.persistModelInstances(true);
+			theModels = null;
 			try {
 				if (theDocument == null)
 					theDocument = theDocumentInterpreted.create();
 				theModels = theDocument.update(theDocumentInterpreted, extModels, theDocumentReplacement);
 			} catch (TextParseException e) {
 				logToConsole(e, quickApp.getAppFile(), e.getPosition());
-				clearDocument();
 				return;
 			} catch (RuntimeException e) {
 				logToConsole(e, null);
-				clearDocument();
 				return;
+			} finally {
+				// Render interpretation and instances (if available)
+				renderInterpreted(theRoot, theDocumentInterpreted, theDocument);
 			}
 
 			try {
@@ -245,9 +257,9 @@ public class Qwysiwyg {
 		theHovered = position;
 		try {
 			DocumentComponent hovered = getRenderComponent(theRoot, position);
-			String tt = null;
+			ObservableValue<String> tt = null;
 			while (hovered != null) {
-				tt = hovered.getTooltip(position - hovered.renderedStart);
+				tt = hovered.getTooltip();
 				if (tt != null)
 					break;
 				hovered = hovered.parent;
@@ -263,10 +275,10 @@ public class Qwysiwyg {
 			return;
 		try {
 			DocumentComponent clicked = getRenderComponent(theRoot, position);
-			String print = "" + clicked.start;
-			String tt = clicked.getTooltip(position - clicked.renderedStart);
+			String print = position + ": " + clicked.start;
+			ObservableValue<String> tt = clicked.getTooltip();
 			if (tt != null)
-				print += tt;
+				print += tt.get();
 			System.out.println(print);
 		} catch (RuntimeException | Error e) {
 			e.printStackTrace();
@@ -451,7 +463,7 @@ public class Qwysiwyg {
 	private void renderDef(DocumentComponent component, ExElement.Def<?> def, String descrip) {
 		DocumentComponent elComponent = getSourceComponent(component, def.getElement().getPositionInFile().getPosition()).parent;
 		if (descrip != null)
-			elComponent.typeTooltip(descrip, true);
+			elComponent.typeTooltip(descrip);
 		for (Map.Entry<QonfigAttributeDef.Declared, QonfigValue> attr : def.getElement().getAttributes().entrySet()) {
 			PositionedContent position = attr.getValue().position;
 			if (position == null)
@@ -470,9 +482,9 @@ public class Qwysiwyg {
 			}
 			String attrDescrip = def.getAttributeDescription(attr.getKey());
 			if (attrDescrip != null)
-				attrComp.typeTooltip(attrDescrip + "<br><br>" + renderValueType(type, 1, attr.getKey()), true);
+				attrComp.typeTooltip(attrDescrip + "<br><br>" + renderValueType(type, 1, attr.getKey()));
 			else
-				attrComp.typeTooltip(renderValueType(type, 1, attr.getKey()), true);
+				attrComp.typeTooltip(renderValueType(type, 1, attr.getKey()));
 		}
 		if (def.getElement().getValue() != null && def.getElement().getValue().position != null) {
 			PositionedContent position = def.getElement().getValue().position;
@@ -489,9 +501,9 @@ public class Qwysiwyg {
 			}
 			String attrDescrip = def.getElementValueDescription();
 			if (attrDescrip != null)
-				attrValueComp.typeTooltip(attrDescrip + "<br><br>" + renderValueType(type, 1, def.getElement().getType().getValue()), true);
+				attrValueComp.typeTooltip(attrDescrip + "<br><br>" + renderValueType(type, 1, def.getElement().getType().getValue()));
 			else
-				attrValueComp.typeTooltip(renderValueType(type, 1, def.getElement().getType().getValue()), true);
+				attrValueComp.typeTooltip(renderValueType(type, 1, def.getElement().getType().getValue()));
 		}
 		for (ExElement.Def<?> child : def.getAllChildren()) {
 			String childDescrip = null;
@@ -519,6 +531,14 @@ public class Qwysiwyg {
 			renderCompiledExpression(child, content.subSequence(childOffset, childOffset + length), //
 				component.addChild(startPos).end(end));
 			c++;
+		}
+		// Parse out the divisions for later rendering
+		for (int d = 0; d < ex.getDivisionCount(); d++) {
+			int divOffset = ex.getDivisionOffset(d);
+			int length = ex.getDivisionLength(d);
+			LocatedFilePosition startPos = content.getPosition(divOffset);
+			int end = content.getPosition(divOffset + length).getPosition();
+			component.addChild(startPos).end(end);
 		}
 	}
 
@@ -561,7 +581,7 @@ public class Qwysiwyg {
 		return tt;
 	}
 
-	private <E extends ExElement> void renderInterpreted(DocumentComponent component, ExElement.Interpreted<E> interpreted) {
+	private <E extends ExElement> void renderInterpreted(DocumentComponent component, ExElement.Interpreted<E> interpreted, E element) {
 		ExElement.Def<? super E> def = interpreted.getDefinition();
 		DocumentComponent elComponent = getSourceComponent(component, def.getElement().getPositionInFile().getPosition()).parent;
 		for (Map.Entry<QonfigAttributeDef.Declared, QonfigValue> attr : def.getElement().getAttributes().entrySet()) {
@@ -578,7 +598,7 @@ public class Qwysiwyg {
 					if (interpValue instanceof InterpretedValueSynth) {
 						EvaluatedExpression<?, ?> expression = getEvaluatedExpression((InterpretedValueSynth<?, ?>) interpValue);
 						if (expression != null)
-							renderInterpretedExpression(expression, attrValueComp);
+							renderInterpretedExpression(expression, attrValueComp, element == null ? null : element.getUpdatingModels());
 					}
 				}
 			}
@@ -595,14 +615,20 @@ public class Qwysiwyg {
 					if (interpValue instanceof InterpretedValueSynth) {
 						EvaluatedExpression<?, ?> expression = getEvaluatedExpression((InterpretedValueSynth<?, ?>) interpValue);
 						if (expression != null)
-							renderInterpretedExpression(expression, attrValueComp);
+							renderInterpretedExpression(expression, attrValueComp, element == null ? null : element.getUpdatingModels());
 					}
 				}
 			}
 			// TODO describe interpreted value?
 		}
-		for (ExElement.Interpreted<?> child : def.getAllChildren(interpreted))
-			renderInterpreted(elComponent, child);
+		List<? extends ExElement.Interpreted<?>> interpretedChildren = def.getAllChildren(interpreted);
+		Map<Integer, ? extends ExElement> instanceChildren = element == null ? Collections.emptyMap()//
+			: def.getAllChildren(element).stream()
+			.collect(Collectors.toMap(ch -> ch.reporting().getFileLocation().getPosition(0).getPosition(), ch -> ch));
+		for (ExElement.Interpreted<?> child : interpretedChildren) {
+			ExElement instance = instanceChildren.get(child.getDefinition().reporting().getFileLocation().getPosition(0).getPosition());
+			this.renderInterpreted(elComponent, (ExElement.Interpreted<ExElement>) child, instance);
+		}
 	}
 
 	private static EvaluatedExpression<?, ?> getEvaluatedExpression(InterpretedValueSynth<?, ?> value) {
@@ -611,22 +637,69 @@ public class Qwysiwyg {
 		return value instanceof EvaluatedExpression ? (EvaluatedExpression<?, ?>) value : null;
 	}
 
-	private void renderInterpretedExpression(EvaluatedExpression<?, ?> expression, DocumentComponent component) {
-		component.interpretedTooltip(pos -> renderInterpretedDescriptor(expression.getDescriptor(pos)), true);
-		List<? extends EvaluatedExpression<?, ?>> components = expression.getComponents();
-		if (component.children != null && components.size() == component.children.size()) {
-			int c = 0;
-			for (EvaluatedExpression<?, ?> child : components) {
-				renderInterpretedExpression(child, component.children.get(c));
-				c++;
+	private void renderInterpretedExpression(EvaluatedExpression<?, ?> expression, DocumentComponent component, ModelSetInstance models) {
+		component.interpretedTooltip(() -> renderInterpretedDescriptor(expression.getDescriptor()));
+		if (models != null && isFundamentalValue(expression)) {
+			Object value;
+			Observable<?> update;
+			try {
+				value = expression.get(models);
+				if (value instanceof SettableValue)
+					component.instanceTooltip(((SettableValue<?>) value).map(String::valueOf));
+				else {
+					try {
+						update = expression.as(ModelTypes.Event.any()).get(models);
+					} catch (TypeConversionException e) {
+						update = null;
+					}
+					if (value instanceof Stamped)
+						component.instanceTooltip(
+							ObservableValue.of(String.class, () -> String.valueOf(value), ((Stamped) value)::getStamp, update));
+					else {
+						long[] stamp = new long[1];
+						if (update != null) {
+							update.takeUntil(models.getUntil()).act(__ -> stamp[0]++);
+							component
+							.instanceTooltip(ObservableValue.of(String.class, () -> String.valueOf(value), () -> stamp[0], update));
+						} else {
+							component.instanceTooltip(
+								ObservableValue.of(String.class, () -> String.valueOf(value), () -> stamp[0]++, Observable.empty()));
+						}
+					}
+				}
+			} catch (ModelInstantiationException e) {
+				logToConsole(e, new LocatedPositionedContent.SimpleLine(new LocatedFilePosition(theAppLocation, component.start), ""));
 			}
 		}
+		List<? extends EvaluatedExpression<?, ?>> components = expression.getComponents();
+		List<? extends EvaluatedExpression<?, ?>> divisions = expression.getDivisions();
+		if (component.children != null && component.children.size() == components.size() + divisions.size()) {
+			int c = 0;
+			for (EvaluatedExpression<?, ?> child : components)
+				renderInterpretedExpression(child, component.children.get(c++), models);
+			for (EvaluatedExpression<?, ?> div : divisions)
+				renderInterpretedExpression(div, component.children.get(c++), models);
+		}
+	}
+
+	private boolean isFundamentalValue(EvaluatedExpression<?, ?> expression) {
+		if (!expression.getComponents().isEmpty())
+			return false;
+		Object descriptor = expression.getDescriptor();
+		if (descriptor instanceof ModelComponentNode) {
+			ModelType<?> modelType = ((ModelComponentNode<?, ?>) descriptor).getModelType();
+			if (modelType == ModelTypes.Model || modelType == ModelTypes.Event || modelType == ModelTypes.Action)
+				return false;
+			return true;
+		} else if (descriptor instanceof Field)
+			return true;
+		else
+			return false;
 	}
 
 	protected String renderInterpretedDescriptor(Object descriptor) {
 		if (descriptor == null)
 			return null;
-		System.out.println("Descriptor: " + descriptor.getClass().getName());
 		if (descriptor instanceof Class) {
 			return "Class " + ((Class<?>) descriptor).getName();
 		} else if (descriptor instanceof TypeToken) {
@@ -664,33 +737,42 @@ public class Qwysiwyg {
 		} else if (descriptor instanceof ModelComponentNode) {
 			ModelComponentNode<?, ?> node = (ModelComponentNode<?, ?>) descriptor;
 			Object id = node.getValueIdentity() != null ? node.getValueIdentity() : node.getIdentity();
+			StringBuilder str = new StringBuilder();
 			Object thing = node.getThing();
 			if (thing instanceof ObservableModelSet)
-				return "Model " + id.toString();
+				str.append("Model ").append(id);
 			else if (thing instanceof CompiledModelValue) {
-				String descrip;
 				if (id instanceof DynamicModelValue.Identity)
-					descrip = "Element model value ";
+					str.append("Element model value ");
 				else
-					descrip = "Model value ";
+					str.append("Model value ");
 				try {
-					return descrip + id.toString() + ": " + renderType(node.getType());
+					str.append(id.toString()).append(": ").append(renderType(node.getType()));
 				} catch (ExpressoInterpretationException e) {
 					e.printStackTrace();
 					return "Error retrieving type: " + e;
 				}
 			} else if (thing instanceof ExtValueRef)
-				return "External value " + id.toString() + ": " + renderType(((ExtValueRef<?, ?>) thing).getType());
+				str.append("External value ").append(id).append(": ").append(renderType(((ExtValueRef<?, ?>) thing).getType()));
 			else if (thing instanceof RuntimeValuePlaceholder) {
 				try {
-					return "Runtime value " + id.toString() + ": "
-						+ renderType(((RuntimeValuePlaceholder<?, ?>) thing).getType());
+					str.append("Runtime value ").append(id).append(": ")
+					.append(renderType(((RuntimeValuePlaceholder<?, ?>) thing).getType()));
 				} catch (ExpressoInterpretationException e) {
 					e.printStackTrace();
 					return "Error retrieving type: " + e;
 				}
 			} else
-				return "Model component " + id.toString();
+				str.append("Model component ").append(id);
+			if (node.getSourceLocation() != null) {
+				str.append("<br>");
+				if (node.getSourceLocation().getFileLocation() != null
+					&& !node.getSourceLocation().getFileLocation().equals(theDocumentURL))
+					str.append(node.getSourceLocation().getFileLocation()).append(' ');
+				str.append('L').append(node.getSourceLocation().getLineNumber() + 1).append(" C")
+				.append(node.getSourceLocation().getCharNumber() + 1);
+			}
+			return str.toString();
 		} else if (descriptor instanceof DynamicModelValue) {
 			DynamicModelValue<?, ?> dmv = (DynamicModelValue<?, ?>) descriptor;
 			return "Element value " + dmv.getDeclaration().toString();
@@ -851,9 +933,9 @@ public class Qwysiwyg {
 		int renderedStart;
 		int renderedEnd;
 
-		boolean isTooltipHtml;
 		String typeTooltip;
-		IntFunction<String> interpretedTooltip;
+		Supplier<String> interpretedTooltip;
+		ObservableValue<String> instanceTooltip;
 
 		static DocumentComponent createRoot() {
 			return new DocumentComponent(null, FilePosition.START);
@@ -907,33 +989,42 @@ public class Qwysiwyg {
 			return this;
 		}
 
-		String getTooltip(int offset) {
-			String intTT = interpretedTooltip == null ? null : interpretedTooltip.apply(offset);
-			if (typeTooltip == null && intTT == null)
+		ObservableValue<String> getTooltip() {
+			String intTT = interpretedTooltip == null ? null : interpretedTooltip.get();
+			if (typeTooltip == null && intTT == null && instanceTooltip == null)
 				return null;
-			StringBuilder str = new StringBuilder();
-			if (isTooltipHtml)
-				str.append("<html>");
+			StringBuilder str = new StringBuilder("<html>");
 			if (typeTooltip != null) {
 				str.append(typeTooltip);
 				if (interpretedTooltip != null)
 					str.append("<br><br>").append(intTT);
 			} else
 				str.append(intTT);
-			return str.toString();
+			if (instanceTooltip == null)
+				return ObservableValue.of(str.toString());
+			else {
+				int preLen = str.length();
+				return instanceTooltip.map(instTT -> {
+					str.setLength(preLen);
+					if (instTT != null)
+						str.append("<br><br>Current Value: ").append(instTT);
+					return str.toString();
+				});
+			}
 		}
 
-		DocumentComponent typeTooltip(String tt, boolean html) {
+		DocumentComponent typeTooltip(String tt) {
 			typeTooltip = tt;
-			if (html)
-				isTooltipHtml = true;
 			return this;
 		}
 
-		DocumentComponent interpretedTooltip(IntFunction<String> tt, boolean html) {
+		DocumentComponent interpretedTooltip(Supplier<String> tt) {
 			interpretedTooltip = tt;
-			if (html)
-				isTooltipHtml = true;
+			return this;
+		}
+
+		DocumentComponent instanceTooltip(ObservableValue<String> tt) {
+			instanceTooltip = tt;
 			return this;
 		}
 

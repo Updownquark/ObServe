@@ -3,7 +3,6 @@ package org.observe.expresso;
 import java.util.Collections;
 import java.util.List;
 import java.util.function.Function;
-import java.util.function.IntFunction;
 import java.util.function.Predicate;
 
 import org.observe.ObservableValue;
@@ -62,19 +61,23 @@ public interface ObservableExpression {
 	};
 
 	public interface EvaluatedExpression<M, MV extends M> extends InterpretedValueSynth<M, MV> {
-		Object getDescriptor(int offset);
+		Object getDescriptor();
 
 		@Override
 		List<? extends EvaluatedExpression<?, ?>> getComponents();
+
+		default List<? extends EvaluatedExpression<?, ?>> getDivisions() {
+			return Collections.emptyList();
+		}
 	}
 
 	static <M, MV extends M> EvaluatedExpression<M, MV> evEx(InterpretedValueSynth<M, MV> value, Object descriptor,
 		List<? extends EvaluatedExpression<?, ?>> children) {
-		return evEx2(value, i -> descriptor, children);
+		return evEx2(value, descriptor, children, Collections.emptyList());
 	}
 
-	static <M, MV extends M> EvaluatedExpression<M, MV> evEx2(InterpretedValueSynth<M, MV> value, IntFunction<?> descriptor,
-		List<? extends EvaluatedExpression<?, ?>> children) {
+	static <M, MV extends M> EvaluatedExpression<M, MV> evEx2(InterpretedValueSynth<M, MV> value, Object descriptor,
+		List<? extends EvaluatedExpression<?, ?>> children, List<? extends EvaluatedExpression<?, ?>> divisions) {
 		return new EvaluatedExpression<M, MV>() {
 			@Override
 			public ModelInstanceType<M, MV> getType() {
@@ -98,13 +101,18 @@ public interface ObservableExpression {
 			}
 
 			@Override
-			public Object getDescriptor(int offset) {
-				return descriptor.apply(offset);
+			public Object getDescriptor() {
+				return descriptor;
 			}
 
 			@Override
 			public List<? extends EvaluatedExpression<?, ?>> getComponents() {
 				return children;
+			}
+
+			@Override
+			public List<? extends EvaluatedExpression<?, ?>> getDivisions() {
+				return divisions;
 			}
 
 			@Override
@@ -117,11 +125,6 @@ public interface ObservableExpression {
 	static <M, MV extends M> EvaluatedExpression<M, MV> evEx(InterpretedValueSynth<M, MV> value, Object descriptor,
 		EvaluatedExpression<?, ?>... children) {
 		return evEx(value, descriptor, QommonsUtils.unmodifiableCopy(children));
-	}
-
-	static <M, MV extends M> EvaluatedExpression<M, MV> evEx2(InterpretedValueSynth<M, MV> value, IntFunction<?> descriptor,
-		EvaluatedExpression<?, ?>... children) {
-		return evEx2(value, descriptor, QommonsUtils.unmodifiableCopy(children));
 	}
 
 	static <M, MV extends M> EvaluatedExpression<M, MV> wrap(EvaluatedExpression<M, MV> wrapped) {
@@ -147,7 +150,7 @@ public interface ObservableExpression {
 			}
 
 			@Override
-			public Object getDescriptor(int offset) {
+			public Object getDescriptor() {
 				return null; // No descriptor for wrappers
 			}
 
@@ -174,6 +177,26 @@ public interface ObservableExpression {
 
 	/** @return The total number of characters in the textual representation of this expression */
 	int getExpressionLength();
+
+	default int getDivisionCount() {
+		return 0;
+	}
+
+	/**
+	 * @param division The index of the division to get the offset for
+	 * @return The offset in this expression of the given division
+	 */
+	default int getDivisionOffset(int division) {
+		throw new IndexOutOfBoundsException("0 of 0");
+	}
+
+	/**
+	 * @param division The index of the division to get the offset for
+	 * @return The length of the given division in this expression
+	 */
+	default int getDivisionLength(int division) {
+		throw new IndexOutOfBoundsException("0 of 0");
+	}
 
 	/**
 	 * Allows replacement of this expression or one or more of its {@link #getComponents() children}. For any expression in the hierarchy:
@@ -238,7 +261,7 @@ public interface ObservableExpression {
 		if (cast instanceof EvaluatedExpression) // Generally means a cast was not necessary
 			return (EvaluatedExpression<M, MV>) cast;
 		else
-			return evEx2(cast, value::getDescriptor, value.getComponents());
+			return evEx2(cast, value.getDescriptor(), value.getComponents(), value.getDivisions());
 	}
 
 	/**

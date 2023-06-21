@@ -1,5 +1,6 @@
 package org.observe.quick;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -18,6 +19,7 @@ import org.observe.quick.style.QuickStyleElement;
 import org.observe.quick.style.QuickTypeStyle;
 import org.observe.quick.style.StyleQIS;
 import org.qommons.Version;
+import org.qommons.collect.CollectionUtils;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigElementOrAddOn;
@@ -44,8 +46,8 @@ public interface QuickStyledElement extends ExElement {
 		}
 
 		@Override
-		public List<? extends QuickStyledElement> getChildrenFromElement(QuickStyledElement element) {
-			return Collections.emptyList(); // TODO Fill in when we have the type
+		public List<? extends QuickStyleElement> getChildrenFromElement(QuickStyledElement element) {
+			return element.getStyle().getStyleElements();
 		}
 	};
 
@@ -177,7 +179,6 @@ public interface QuickStyledElement extends ExElement {
 	/** An abstract {@link QuickStyledElement} implementation */
 	public abstract class Abstract extends ExElement.Abstract implements QuickStyledElement {
 		private QuickInstanceStyle theStyle;
-		private ModelSetInstance theUpdatingModels;
 
 		/**
 		 * @param interpreted The interpretation that is creating this element
@@ -193,30 +194,15 @@ public interface QuickStyledElement extends ExElement {
 		}
 
 		@Override
-		public ModelSetInstance update(ExElement.Interpreted<?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
-			try {
-				return super.update(interpreted, models);
-			} finally {
-				theUpdatingModels = null;
-			}
-		}
-
-		@Override
-		protected ModelSetInstance createElementModel(ExElement.Interpreted<?> interpreted, ModelSetInstance parentModels)
-			throws ModelInstantiationException {
-			return theUpdatingModels = super.createElementModel(interpreted, parentModels);
-		}
-
-		@Override
 		protected void updateModel(ExElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
 			super.updateModel(interpreted, myModels);
 			QuickStyledElement.Interpreted<?> myInterpreted = (QuickStyledElement.Interpreted<?>) interpreted;
 			ExElement parent = getParentElement();
 			while (parent != null && !(parent instanceof QuickStyledElement.Abstract))
 				parent = parent.getParentElement();
-			StyleQIS.installParentModels(myModels, parent == null ? null : ((QuickStyledElement.Abstract) parent).theUpdatingModels);
+			StyleQIS.installParentModels(myModels, parent == null ? null : ((QuickStyledElement.Abstract) parent).getUpdatingModels());
 			if (theStyle == null || theStyle.getId() != myInterpreted.getStyle().getId())
-				theStyle = myInterpreted.getStyle().create();
+				theStyle = myInterpreted.getStyle().create(this);
 			theStyle.update(myInterpreted.getStyle(), myModels);
 		}
 	}
@@ -234,12 +220,51 @@ public interface QuickStyledElement extends ExElement {
 
 			Object getId();
 
-			QuickInstanceStyle create();
+			QuickInstanceStyle create(QuickStyledElement parent);
 		}
 
 		Object getId();
 
+		List<QuickStyleElement> getStyleElements();
+
 		void update(Interpreted interpreted, ModelSetInstance models) throws ModelInstantiationException;
+
+		public abstract class Abstract implements QuickInstanceStyle {
+			private final QuickStyledElement theStyledElement;
+			private final Object theId;
+			private final List<QuickStyleElement> theStyleElements;
+
+			protected Abstract(Interpreted interpreted, QuickStyledElement styledElement) {
+				theId = interpreted.getId();
+				theStyledElement = styledElement;
+				theStyleElements = new ArrayList<>();
+			}
+
+			public QuickStyledElement getStyledElement() {
+				return theStyledElement;
+			}
+
+			@Override
+			public Object getId() {
+				return theId;
+			}
+
+			@Override
+			public List<QuickStyleElement> getStyleElements() {
+				return Collections.unmodifiableList(theStyleElements);
+			}
+
+			@Override
+			public void update(Interpreted interpreted, ModelSetInstance models) throws ModelInstantiationException {
+				CollectionUtils
+				.synchronize(theStyleElements, interpreted.getStyleElements(),
+					(inst, interp) -> inst.getIdentity() == interp.getDefinition().getIdentity())//
+				.<ModelInstantiationException> simpleE(interp -> interp.create(theStyledElement))
+				.onRightX(el -> el.getLeftValue().update(el.getRightValue(), models))//
+				.onCommonX(el -> el.getLeftValue().update(el.getRightValue(), models))//
+				.adjust();
+			}
+		}
 	}
 
 	static QuickTypeStyle getTypeStyle(QuickTypeStyle.TypeStyleSet styleSet, QonfigElement element, String toolkitName,

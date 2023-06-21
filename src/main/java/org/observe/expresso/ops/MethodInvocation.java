@@ -14,6 +14,7 @@ import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
+import org.observe.expresso.ObservableModelSet.ModelValueSynth;
 import org.observe.expresso.TypeConversionException;
 import org.observe.util.TypeTokens;
 import org.qommons.ArrayUtils;
@@ -142,7 +143,9 @@ public class MethodInvocation extends Invocation {
 						EvaluatedExpression<SettableValue<?>, SettableValue<?>>[] realArgs = new EvaluatedExpression[getArguments().size()];
 						for (int a = 0; a < realArgs.length; a++)
 							realArgs[a] = args.args[a].get(0);
-						return new InvokableResult<>(result, null, Arrays.asList(realArgs), Invocation.ExecutableImpl.METHOD);
+						EvaluatedExpression<SettableValue<?>, ? extends SettableValue<?>> ctx = ObservableExpression
+							.evEx(ModelValueSynth.literal(TypeTokens.get().VOID, null, theContext.toString()), clazz);
+						return new InvokableResult<>(result, ctx, true, Arrays.asList(realArgs), Invocation.ExecutableImpl.METHOD);
 					}
 					throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(),
 						"No such method " + printSignature() + " in class " + clazz.getName());
@@ -165,7 +168,7 @@ public class MethodInvocation extends Invocation {
 				EvaluatedExpression<SettableValue<?>, SettableValue<?>>[] realArgs = new EvaluatedExpression[getArguments().size()];
 				for (int a = 0; a < realArgs.length; a++)
 					realArgs[a] = args.args[a].get(0);
-				return new InvokableResult<>(result, ctx, Arrays.asList(realArgs), Invocation.ExecutableImpl.METHOD);
+				return new InvokableResult<>(result, ctx, false, Arrays.asList(realArgs), Invocation.ExecutableImpl.METHOD);
 			}
 			throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(),
 				"No such method " + printSignature() + " on " + theContext + "(" + ctxType + ")");
@@ -178,7 +181,7 @@ public class MethodInvocation extends Invocation {
 				EvaluatedExpression<SettableValue<?>, SettableValue<?>>[] realArgs = new EvaluatedExpression[getArguments().size()];
 				for (int a = 0; a < realArgs.length; a++)
 					realArgs[a] = args.args[a].get(0);
-				return new InvokableResult<>(result, null, Arrays.asList(realArgs), Invocation.ExecutableImpl.METHOD);
+				return new InvokableResult<>(result, null, false, Arrays.asList(realArgs), Invocation.ExecutableImpl.METHOD);
 			}
 			throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(), "No such imported method " + printSignature());
 		}

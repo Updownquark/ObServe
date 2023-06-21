@@ -100,7 +100,7 @@ public class ConstructorInvocation extends Invocation {
 			EvaluatedExpression<SettableValue<?>, SettableValue<?>>[] realArgs = new EvaluatedExpression[getArguments().size()];
 			for (int a = 0; a < realArgs.length; a++)
 				realArgs[a] = args.args[a].get(0);
-			return new InvokableResult<>(result, null, Arrays.asList(realArgs), Invocation.ExecutableImpl.CONSTRUCTOR);
+			return new InvokableResult<>(result, null, false, Arrays.asList(realArgs), Invocation.ExecutableImpl.CONSTRUCTOR);
 		}
 		throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(), "No such constructor " + printSignature());
 	}

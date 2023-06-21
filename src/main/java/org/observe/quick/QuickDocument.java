@@ -154,7 +154,7 @@ public class QuickDocument extends ExElement.Abstract {
 				theHead.update();
 
 			if (theBody == null || theBody.getDefinition() != getDefinition().getBody())
-				theBody = getDefinition().getBody().interpret(null);
+				theBody = getDefinition().getBody().interpret(this);
 			theBody.update(new QuickStyledElement.QuickInterpretationCache());
 		}
 

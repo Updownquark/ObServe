@@ -195,6 +195,7 @@ public class QuickBaseInterpretation implements QonfigInterpretation {
 	 *
 	 * @param expression The expression to parse
 	 * @param env The expresso environment in which to parse the expression
+	 * @param callingClass The calling class of Quick for classpath resource resolution
 	 * @return The ModelValueSynth to produce the icon value
 	 * @throws ExpressoInterpretationException If the icon could not be evaluated
 	 */

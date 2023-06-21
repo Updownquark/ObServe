@@ -27,6 +27,7 @@ import org.observe.util.TypeTokens;
 import org.qommons.Identifiable;
 import org.qommons.LambdaUtils;
 import org.qommons.Named;
+import org.qommons.QommonsUtils;
 import org.qommons.StringUtils;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterList;
@@ -66,19 +67,26 @@ public class NameExpression implements ObservableExpression, Named {
 		return StringUtils.print(str, ".", theNames, (s, name) -> s.append(name.getName())).toString();
 	}
 
-	/**
-	 * @param name The index of the name to get the offset for
-	 * @return The offset in this expression of the given name
-	 */
-	public int getNameOffset(int name) {
+	@Override
+	public int getDivisionCount() {
+		return theNames.size();
+	}
+
+	@Override
+	public int getDivisionOffset(int division) {
 		int offset = 0;
 		if (theContext != null)
 			offset += theContext.getExpressionLength() + 1;
-		if (name > 0)
-			offset += name;
-		for (int n = 0; n < name; n++)
+		if (division > 0)
+			offset += division;
+		for (int n = 0; n < division; n++)
 			offset += theNames.get(n).length();
 		return offset;
+	}
+
+	@Override
+	public int getDivisionLength(int division) {
+		return theNames.get(division).length();
 	}
 
 	@Override
@@ -88,36 +96,6 @@ public class NameExpression implements ObservableExpression, Named {
 		else if (childIndex != 0)
 			throw new IndexOutOfBoundsException(childIndex + " of 1");
 		return 0;
-	}
-
-	Object getDescriptor(EvaluatedExpression<?, ?> context, Object[] descriptors, int position) {
-		if (theContext != null) {
-			int ctxLen = theContext.getExpressionLength();
-			if (position < ctxLen)
-				return context.getDescriptor(position);
-			position -= ctxLen + 1;
-		}
-		for (int n = 0; n < theNames.size(); n++) {
-			int len = theNames.get(n).length();
-			if (position < len) {
-				if (descriptors[n] instanceof EvaluatedExpression)
-					return ((EvaluatedExpression<?, ?>) descriptors[n]).getDescriptor(position);
-				else if (descriptors[n] instanceof InterpretedValueSynth) {
-					InterpretedValueSynth<?, ?> ivs = (InterpretedValueSynth<?, ?>) descriptors[n];
-					while (!(ivs instanceof EvaluatedExpression) && ivs.getComponents().size() == 1)
-						ivs = ivs.getComponents().get(0);
-					if (ivs instanceof EvaluatedExpression)
-						return ((EvaluatedExpression<?, ?>) ivs).getDescriptor(position);
-					else
-						return descriptors[n];
-				} else
-					return descriptors[n];
-			}
-			position -= len - 1;
-			if (position < 0)
-				break;
-		}
-		return null;
 	}
 
 	@Override
@@ -167,7 +145,7 @@ public class NameExpression implements ObservableExpression, Named {
 	@Override
 	public <M, MV extends M> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env,
 		int expressionOffset) throws ExpressoEvaluationException, ExpressoInterpretationException {
-		Object[] descriptors = new Object[theNames.size()];
+		EvaluatedExpression<?, ?>[] divisions = new EvaluatedExpression[theNames.size()];
 		ModelValueSynth<?, ?> mv = null;
 		if (theContext != null) {
 			try {
@@ -177,13 +155,13 @@ public class NameExpression implements ObservableExpression, Named {
 			}
 			return evaluateModel(//
 				mv.interpret(), 0, new StringBuilder(), type, env.getModels(), expressionOffset + theContext.getExpressionLength() + 1,
-				env.reporting().at(theContext.getExpressionLength() + 1), descriptors, (EvaluatedExpression<?, ?>) mv);
+				env.reporting().at(theContext.getExpressionLength() + 1), divisions, (EvaluatedExpression<?, ?>) mv);
 		} else {
 			mv = env.getModels().getComponentIfExists(theNames.getFirst().getName());
 			if (mv != null)
 				return evaluateModel(//
 					mv, 1, new StringBuilder(theNames.get(0).getName()), type, env.getModels(), expressionOffset, env.reporting(),
-					descriptors, null);
+					divisions, null);
 		}
 		// Allow unqualified enum value references
 		if (theNames.size() == 1 && type.getModelType() == ModelTypes.Value) {
@@ -196,128 +174,141 @@ public class NameExpression implements ObservableExpression, Named {
 				}
 			}
 		}
+		EvaluatedExpression<M, MV> fieldValue;
 		Field field = env.getClassView().getImportedStaticField(theNames.getFirst().getName());
 		if (field != null) {
-			descriptors[0] = field;
-			return evaluateField(field, TypeTokens.get().of(field.getGenericType()), null, 1, type, expressionOffset,
-				env.reporting().at(theNames.getFirst().length() + 1), descriptors, null);
+			fieldValue = evaluateField(field, TypeTokens.get().of(field.getGenericType()), null, 1, type, expressionOffset,
+				env.reporting().at(theNames.getFirst().length() + 1), divisions);
+		} else {
+			StringBuilder typeName = new StringBuilder().append(theNames.get(0).getName());
+			Class<?> clazz = env.getClassView().getType(typeName.toString());
+			int i;
+			for (i = 1; i < theNames.size() - 1; i++) {
+				typeName.append(theNames.get(i).getName());
+				clazz = env.getClassView().getType(typeName.toString());
+			}
+			if (clazz == null)
+				throw new ExpressoEvaluationException(getDivisionOffset(0), getDivisionOffset(0) + theNames.get(0).length(), //
+					"'" + theNames.get(0) + "' cannot be resolved to a variable ");
+			try {
+				field = clazz.getField(theNames.get(i).getName());
+			} catch (NoSuchFieldException e) {
+				throw new ExpressoEvaluationException(getDivisionOffset(i), getDivisionOffset(i) + theNames.get(0).length(), //
+					"'" + theNames.get(i) + "' cannot be resolved or is not a field");
+			} catch (SecurityException e) {
+				throw new ExpressoEvaluationException(getDivisionOffset(i), getDivisionOffset(i) + theNames.get(0).length(), //
+					clazz.getName() + "." + theNames.get(i) + " cannot be accessed", e);
+			}
+			fieldValue = evaluateField(field, TypeTokens.get().of(field.getGenericType()), null, i, type, expressionOffset, env.reporting(),
+				divisions);
+			EvaluatedExpression<?, ?> classValue = ObservableExpression.evEx(
+				ModelValueSynth.literal(TypeTokens.get().keyFor(Class.class).<Class<?>> parameterized(clazz),
+					clazz, typeName.toString()),
+				clazz);
+			for (int d = 0; d < i; d++)
+				divisions[d] = classValue;
 		}
-		StringBuilder typeName = new StringBuilder().append(theNames.get(0).getName());
-		Class<?> clazz = env.getClassView().getType(typeName.toString());
-		int i;
-		for (i = 1; i < theNames.size() - 1; i++) {
-			typeName.append(theNames.get(i).getName());
-			clazz = env.getClassView().getType(typeName.toString());
-		}
-		if (clazz == null)
-			throw new ExpressoEvaluationException(getNameOffset(0), getNameOffset(0) + theNames.get(0).length(), //
-				"'" + theNames.get(0) + "' cannot be resolved to a variable ");
-		try {
-			field = clazz.getField(theNames.get(i).getName());
-		} catch (NoSuchFieldException e) {
-			throw new ExpressoEvaluationException(getNameOffset(i), getNameOffset(i) + theNames.get(0).length(), //
-				"'" + theNames.get(i) + "' cannot be resolved or is not a field");
-		} catch (SecurityException e) {
-			throw new ExpressoEvaluationException(getNameOffset(i), getNameOffset(i) + theNames.get(0).length(), //
-				clazz.getName() + "." + theNames.get(i) + " cannot be accessed", e);
-		}
-		for (int i2 = 0; i2 < i; i2++)
-			descriptors[i2] = clazz;
-		descriptors[i] = field;
-		return evaluateField(field, TypeTokens.get().of(field.getGenericType()), null, i, type, expressionOffset, env.reporting(),
-			descriptors, null);
+		return ObservableExpression.evEx2(fieldValue, null, Collections.emptyList(), QommonsUtils.unmodifiableCopy(divisions));
 	}
 
 	private <M, MV extends M> EvaluatedExpression<M, MV> evaluateModel(ModelValueSynth<?, ?> mv, int nameIndex, StringBuilder path,
-		ModelInstanceType<M, MV> type, ObservableModelSet models, int expressionOffset, ErrorReporting reporting, Object[] descriptors,
+		ModelInstanceType<M, MV> type, ObservableModelSet models, int expressionOffset, ErrorReporting reporting,
+		EvaluatedExpression<?, ?>[] divisions,
 		EvaluatedExpression<?, ?> context) throws ExpressoEvaluationException, ExpressoInterpretationException {
-		if (nameIndex > 0)
-			descriptors[nameIndex - 1] = mv;
 		ModelInstanceType<?, ?> mvType = mv.getType();
 		if (nameIndex == theNames.size()) {
 			if (mvType.getModelType() == ModelTypes.Model)
 				throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(),
 					this + " is a model, not a " + type.getModelType());
-			return ObservableExpression.evEx2((InterpretedValueSynth<M, MV>) mv.interpret(), i -> getDescriptor(context, descriptors, i),
-				context == null ? Collections.emptyList() : Collections.singletonList(context));
-		}
-		if (mvType.getModelType() == ModelTypes.Model) {
+			InterpretedValueSynth<M, MV> imv = (InterpretedValueSynth<M, MV>) mv.interpret();
+			divisions[nameIndex - 1] = ObservableExpression.evEx(imv, mv);
+			return ObservableExpression.evEx2(imv, null,
+				context == null ? Collections.emptyList() : Collections.singletonList(context), QommonsUtils.unmodifiableCopy(divisions));
+		} else if (mvType.getModelType() == ModelTypes.Model) {
+			String modelStr = path.toString();
+			ObservableModelSet model = models.getSubModelIfExists(modelStr);
+			divisions[nameIndex - 1] = ObservableExpression
+				.evEx(ModelValueSynth.literal(TypeTokens.get().of(ObservableModelSet.class), model, modelStr), mv);
 			path.append('.').append(theNames.get(nameIndex).getName());
 			String pathStr = path.toString();
 			ModelValueSynth<?, ?> nextMV = models.getComponentIfExists(pathStr);
-			if (nextMV != null)
+			if (nextMV != null) {
 				return evaluateModel(//
 					nextMV.interpret(), nameIndex + 1, path, type, models, expressionOffset, reporting.at(theNames.get(nameIndex).length()),
-					descriptors, context);
-			throw new ExpressoEvaluationException(expressionOffset + getNameOffset(nameIndex),
-				getNameOffset(0) + theNames.get(nameIndex).length(), //
-				"'" + theNames.get(nameIndex) + "' cannot be resolved or is not a model value");
+					divisions, context);
+			} else
+				throw new ExpressoEvaluationException(expressionOffset + getDivisionOffset(nameIndex),
+					getDivisionOffset(0) + theNames.get(nameIndex).length(), //
+					"'" + theNames.get(nameIndex) + "' cannot be resolved or is not a model value");
 		} else if (mvType.getModelType() == ModelTypes.Value) {
+			InterpretedValueSynth<SettableValue<?>, ? extends SettableValue<?>> imv = (InterpretedValueSynth<SettableValue<?>, ? extends SettableValue<?>>) mv
+				.interpret();
+			divisions[nameIndex - 1] = ObservableExpression.evEx(imv, mv);
 			Field field;
 			try {
 				field = TypeTokens.getRawType(mvType.getType(0)).getField(theNames.get(nameIndex).getName());
 			} catch (NoSuchFieldException e) {
-				throw new ExpressoEvaluationException(expressionOffset + getNameOffset(nameIndex),
-					getNameOffset(0) + theNames.get(nameIndex).length(), //
+				throw new ExpressoEvaluationException(expressionOffset + getDivisionOffset(nameIndex),
+					getDivisionOffset(0) + theNames.get(nameIndex).length(), //
 					getPath(nameIndex) + "' cannot be resolved or is not a field");
 			} catch (SecurityException e) {
-				throw new ExpressoEvaluationException(expressionOffset + getNameOffset(nameIndex),
-					getNameOffset(0) + theNames.get(nameIndex).length(), //
+				throw new ExpressoEvaluationException(expressionOffset + getDivisionOffset(nameIndex),
+					getDivisionOffset(0) + theNames.get(nameIndex).length(), //
 					getPath(nameIndex) + " cannot be accessed", e);
 			}
-			descriptors[nameIndex] = field;
 			return evaluateField(field, mvType.getType(0).resolveType(field.getGenericType()), //
-				(InterpretedValueSynth<SettableValue<?>, ? extends SettableValue<?>>) mv, nameIndex, type, expressionOffset,
-				reporting.at(theNames.get(nameIndex).length() + 1), descriptors, context);
+				imv, nameIndex, type, expressionOffset, reporting.at(theNames.get(nameIndex).length() + 1), divisions);
 		} else
-			throw new ExpressoEvaluationException(expressionOffset + getNameOffset(nameIndex + 1),
-				getNameOffset(0) + theNames.get(nameIndex + 1).length(), //
+			throw new ExpressoEvaluationException(expressionOffset + getDivisionOffset(nameIndex + 1),
+				getDivisionOffset(0) + theNames.get(nameIndex + 1).length(), //
 				"Cannot evaluate field '" + theNames.get(nameIndex + 1) + "' against model of type " + mvType);
 	}
 
 	private <M, MV extends M, F> EvaluatedExpression<M, MV> evaluateField(Field field, TypeToken<F> fieldType,
 		InterpretedValueSynth<SettableValue<?>, ? extends SettableValue<?>> context, int nameIndex, ModelInstanceType<M, MV> type,
-			int expressionOffset, ErrorReporting reporting, Object[] descriptors, EvaluatedExpression<?, ?> evContext)
+			int expressionOffset, ErrorReporting reporting, EvaluatedExpression<?, ?>[] divisions)
 				throws ExpressoEvaluationException {
 		if (!field.isAccessible()) {
 			try {
 				field.setAccessible(true);
 			} catch (SecurityException e) {
-				throw new ExpressoEvaluationException(expressionOffset + getNameOffset(nameIndex),
-					getNameOffset(0) + theNames.get(nameIndex).length(), //
+				throw new ExpressoEvaluationException(expressionOffset + getDivisionOffset(nameIndex),
+					getDivisionOffset(0) + theNames.get(nameIndex).length(), //
 					"Could not access field " + getPath(nameIndex), e);
 			}
 		}
+		EvaluatedExpression<SettableValue<?>, ? extends SettableValue<?>> fieldValue = getFieldValue(field, fieldType, context, null,
+			nameIndex, expressionOffset, reporting);
+		divisions[nameIndex] = fieldValue;
+		EvaluatedExpression<M, MV> value;
 		if (nameIndex == theNames.size() - 1) {
 			if (type.getModelType() == ModelTypes.Value)
-				return (EvaluatedExpression<M, MV>) getFieldValue(field, fieldType, context, type.getType(0), nameIndex, expressionOffset,
-					reporting, descriptors, evContext);
+				value = (EvaluatedExpression<M, MV>) fieldValue;
 			else {
-				EvaluatedExpression<SettableValue<?>, ? extends SettableValue<?>> fieldValue = getFieldValue(field, fieldType, context,
-					TypeTokens.get().WILDCARD, nameIndex, expressionOffset, reporting, descriptors, evContext);
 				try {
-					return ObservableExpression.evEx2(fieldValue.as(type), fieldValue::getDescriptor, fieldValue.getComponents());
+					value = ObservableExpression.evEx2(fieldValue.as(type), fieldValue.getDescriptor(), fieldValue.getComponents(),
+						fieldValue.getDivisions());
 				} catch (TypeConversionException e) {
 					throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(), e.getMessage(), e);
 				}
 			}
+		} else {
+			Field newField;
+			try {
+				newField = TypeTokens.getRawType(fieldType).getField(theNames.get(nameIndex).getName());
+			} catch (NoSuchFieldException e) {
+				throw new ExpressoEvaluationException(expressionOffset + getDivisionOffset(nameIndex),
+					getDivisionOffset(0) + theNames.get(nameIndex).length(), //
+					getPath(nameIndex) + "' cannot be resolved or is not a field");
+			} catch (SecurityException e) {
+				throw new ExpressoEvaluationException(expressionOffset + getDivisionOffset(nameIndex),
+					getDivisionOffset(0) + theNames.get(nameIndex).length(), //
+					getPath(nameIndex) + " cannot be accessed", e);
+			}
+			value = evaluateField(newField, fieldType.resolveType(newField.getGenericType()), //
+				fieldValue, nameIndex + 1, type, expressionOffset, reporting.at(theNames.get(nameIndex).length() + 1), divisions);
 		}
-		Field newField;
-		try {
-			newField = TypeTokens.getRawType(fieldType).getField(theNames.get(nameIndex).getName());
-		} catch (NoSuchFieldException e) {
-			throw new ExpressoEvaluationException(expressionOffset + getNameOffset(nameIndex),
-				getNameOffset(0) + theNames.get(nameIndex).length(), //
-				getPath(nameIndex) + "' cannot be resolved or is not a field");
-		} catch (SecurityException e) {
-			throw new ExpressoEvaluationException(expressionOffset + getNameOffset(nameIndex),
-				getNameOffset(0) + theNames.get(nameIndex).length(), //
-				getPath(nameIndex) + " cannot be accessed", e);
-		}
-		descriptors[nameIndex] = newField;
-		return evaluateField(newField, fieldType.resolveType(newField.getGenericType()), //
-			getFieldValue(field, fieldType, context, null, nameIndex, expressionOffset, reporting, descriptors, evContext), nameIndex + 1,
-			type, expressionOffset, reporting.at(theNames.get(nameIndex).length() + 1), descriptors, evContext);
+		return value;
 	}
 
 	String getPath(int upToIndex) {
@@ -340,24 +331,21 @@ public class NameExpression implements ObservableExpression, Named {
 
 	private <F, M> EvaluatedExpression<SettableValue<?>, SettableValue<M>> getFieldValue(Field field, TypeToken<F> fieldType,
 		ModelValueSynth<SettableValue<?>, ? extends SettableValue<?>> context, TypeToken<M> targetType, int nameIndex, int expressionOffset,
-			ErrorReporting reporting, Object[] descriptors, EvaluatedExpression<?, ?> evContext) throws ExpressoEvaluationException {
+			ErrorReporting reporting) throws ExpressoEvaluationException {
 		ModelInstanceType<SettableValue<?>, SettableValue<F>> fieldModelType = ModelTypes.Value.forType(fieldType);
 		InterpretedValueSynth<SettableValue<?>, SettableValue<F>> fieldValue = ModelValueSynth.of(fieldModelType,
 			msi -> new FieldValue<>(context == null ? null : context.get(msi), field, fieldType, reporting));
 		if (targetType != null) {
 			ModelInstanceType<SettableValue<?>, SettableValue<M>> targetModelType = ModelTypes.Value.forType(targetType);
 			try {
-				return ObservableExpression.evEx2(fieldValue.as(targetModelType), i -> getDescriptor(evContext, descriptors, i),
-					evContext == null ? Collections.emptyList() : Collections.singletonList(evContext));
+				return ObservableExpression.evEx(fieldValue.as(targetModelType), null);
 			} catch (TypeConversionException e) {
-				throw new ExpressoEvaluationException(expressionOffset, getNameOffset(nameIndex) + theNames.get(nameIndex).length(),
+				throw new ExpressoEvaluationException(expressionOffset, getDivisionOffset(nameIndex) + theNames.get(nameIndex).length(),
 					e.getMessage(), e);
 			}
 		} else
-			return ObservableExpression.evEx2(
-				(InterpretedValueSynth<SettableValue<?>, SettableValue<M>>) (ModelValueSynth<?, ?>) fieldValue,
-				i -> getDescriptor(evContext, descriptors, i),
-				evContext == null ? Collections.emptyList() : Collections.singletonList(evContext));
+			return ObservableExpression.evEx((InterpretedValueSynth<SettableValue<?>, SettableValue<M>>) (ModelValueSynth<?, ?>) fieldValue,
+				null);
 	}
 
 	static class FieldValue<M, F> extends Identifiable.AbstractIdentifiable implements SettableValue<F> {

@@ -13,7 +13,6 @@ import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.qonfig.ExElement;
-import org.observe.quick.QuickTextElement.QuickTextStyle;
 import org.observe.quick.style.CompiledStyleApplication;
 import org.observe.quick.style.InterpretedStyleApplication;
 import org.observe.quick.style.QuickCompiledStyle;
@@ -104,7 +103,7 @@ public interface QuickBorder extends QuickStyledElement {
 		}
 	}
 
-	public class TitledBorder extends LineBorder {
+	public class TitledBorder extends LineBorder implements QuickTextElement {
 		public static final String TITLED_BORDER = "titled-border";
 
 		public static final ExElement.AttributeValueGetter.Expression<TitledBorder, Interpreted<?>, Def<?>, SettableValue<?>, SettableValue<String>> TITLE = ExElement.AttributeValueGetter
@@ -250,16 +249,16 @@ public interface QuickBorder extends QuickStyledElement {
 				}
 
 				@Override
-				public QuickTitledBorderStyle create() {
-					return new QuickTitledBorderStyle(this);
+				public QuickTitledBorderStyle create(QuickStyledElement styledElement) {
+					return new QuickTitledBorderStyle(this, (TitledBorder) styledElement);
 				}
 			}
 
 			private final SettableValue<ObservableValue<Color>> theBorderColor;
 			private final SettableValue<ObservableValue<Integer>> theBorderThickness;
 
-			public QuickTitledBorderStyle(Interpreted interpreted) {
-				super(interpreted);
+			public QuickTitledBorderStyle(Interpreted interpreted, TitledBorder styledElement) {
+				super(interpreted, styledElement);
 				theBorderColor = SettableValue
 					.build(TypeTokens.get().keyFor(ObservableValue.class).<ObservableValue<Color>> parameterized(Color.class)).build();
 				theBorderThickness = SettableValue
@@ -335,7 +334,7 @@ public interface QuickBorder extends QuickStyledElement {
 			QuickElementStyleAttribute<Integer> getBorderThickness();
 
 			@Override
-			QuickBorderStyle create();
+			QuickBorderStyle create(QuickStyledElement styledElement);
 
 			public class Default extends QuickInterpretedStyle.Wrapper implements Interpreted {
 				private final Def theDefinition;
@@ -372,8 +371,8 @@ public interface QuickBorder extends QuickStyledElement {
 				}
 
 				@Override
-				public QuickBorderStyle create() {
-					return new QuickBorderStyle.Default(this);
+				public QuickBorderStyle create(QuickStyledElement styledElement) {
+					return new QuickBorderStyle.Default(this, (QuickBorder) styledElement);
 				}
 			}
 		}
@@ -382,12 +381,13 @@ public interface QuickBorder extends QuickStyledElement {
 
 		ObservableValue<Integer> getBorderThickness();
 
-		public class Default implements QuickBorderStyle {
+		public class Default extends QuickInstanceStyle.Abstract implements QuickBorderStyle {
 			private final Object theId;
 			private final SettableValue<ObservableValue<Color>> theBorderColor;
 			private final SettableValue<ObservableValue<Integer>> theBorderThickness;
 
-			public Default(Interpreted interpreted) {
+			public Default(QuickBorderStyle.Interpreted interpreted, QuickBorder border) {
+				super(interpreted, border);
 				theId = interpreted.getId();
 				theBorderColor = SettableValue
 					.build(TypeTokens.get().keyFor(ObservableValue.class).<ObservableValue<Color>> parameterized(Color.class)).build();

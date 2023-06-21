@@ -89,7 +89,7 @@ public interface QuickTextElement extends QuickStyledElement {
 			Def getCompiled();
 
 			@Override
-			QuickTextStyle create();
+			QuickTextStyle create(QuickStyledElement styledElement);
 
 			QuickElementStyleAttribute<Color> getFontColor();
 
@@ -157,15 +157,14 @@ public interface QuickTextElement extends QuickStyledElement {
 
 		ObservableValue<Double> getFontSlant();
 
-		public abstract class Abstract implements QuickTextStyle {
-			private final Object theId;
+		public abstract class Abstract extends QuickInstanceStyle.Abstract implements QuickTextStyle {
 			private final SettableValue<ObservableValue<Color>> theFontColor;
 			private final SettableValue<ObservableValue<Double>> theFontSize;
 			private final SettableValue<ObservableValue<Double>> theFontWeight;
 			private final SettableValue<ObservableValue<Double>> theFontSlant;
 
-			protected Abstract(Interpreted interpreted) {
-				theId = interpreted.getId();
+			protected Abstract(QuickTextStyle.Interpreted interpreted, QuickTextElement styledElement) {
+				super(interpreted, styledElement);
 				theFontColor = SettableValue
 					.build(TypeTokens.get().keyFor(ObservableValue.class).<ObservableValue<Color>> parameterized(Color.class)).build();
 				theFontSize = SettableValue
@@ -174,11 +173,6 @@ public interface QuickTextElement extends QuickStyledElement {
 					.build(TypeTokens.get().keyFor(ObservableValue.class).<ObservableValue<Double>> parameterized(Double.class)).build();
 				theFontSlant = SettableValue
 					.build(TypeTokens.get().keyFor(ObservableValue.class).<ObservableValue<Double>> parameterized(Double.class)).build();
-			}
-
-			@Override
-			public Object getId() {
-				return theId;
 			}
 
 			@Override
@@ -203,6 +197,7 @@ public interface QuickTextElement extends QuickStyledElement {
 
 			@Override
 			public void update(QuickInstanceStyle.Interpreted interpreted, ModelSetInstance models) throws ModelInstantiationException {
+				super.update(interpreted, models);
 				QuickTextStyle.Interpreted myInterpreted = (QuickTextStyle.Interpreted) interpreted;
 				theFontColor.set(myInterpreted.getFontColor().evaluate(models), null);
 				theFontSize.set(myInterpreted.getFontSize().evaluate(models), null);
