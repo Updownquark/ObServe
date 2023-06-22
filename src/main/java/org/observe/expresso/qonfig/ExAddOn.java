@@ -1,5 +1,6 @@
 package org.observe.expresso.qonfig;
 
+import java.util.List;
 import java.util.function.Function;
 
 import org.observe.expresso.ExpressoInterpretationException;
@@ -108,8 +109,125 @@ public interface ExAddOn<E extends ExElement> {
 
 			public Expression(Class<? super D> defType, Function<? super D, ? extends CompiledExpression> defGetter,
 				Class<? super I> interpType, Function<? super I, ? extends InterpretedValueSynth<M, ? extends MV>> interpretedGetter,
-				Class<? super AO> addOnType,
+					Class<? super AO> addOnType,
 					Function<? super AO, ? extends MV> addOnGetter, String descrip) {
+				super(defType, interpType, addOnType, descrip);
+				theDefGetter = defGetter;
+				theInterpretedGetter = interpretedGetter;
+				theAddOnGetter = addOnGetter;
+			}
+
+			@Override
+			public Object getFromDef(D def) {
+				return theDefGetter.apply(def);
+			}
+
+			@Override
+			public Object getFromInterpreted(I interpreted) {
+				return theInterpretedGetter.apply(interpreted);
+			}
+
+			@Override
+			public Object getFromAddOn(AO addOn) {
+				return theAddOnGetter.apply(addOn);
+			}
+		}
+	}
+
+	public abstract class AddOnChildGetter<E extends ExElement, AO extends ExAddOn<? super E>, I extends Interpreted<? super E, ? extends AO>, D extends ExAddOn.Def<? super E, ? extends AO>> //
+		implements ExElement.ChildElementGetter<E, ExElement.Interpreted<? extends E>, ExElement.Def<? extends E>> {
+		private final Class<D> theDefType;
+		private final Class<I> theInterpType;
+		private final Class<AO> theAddOnType;
+		private final String theDescription;
+
+		protected AddOnChildGetter(Class<? super D> defType, Class<? super I> interpType, Class<? super AO> addOnType, String descrip) {
+			theDefType = (Class<D>) (Class<?>) defType;
+			theInterpType = (Class<I>) (Class<?>) interpType;
+			theAddOnType = (Class<AO>) (Class<?>) addOnType;
+			theDescription = descrip;
+		}
+
+		@Override
+		public String getDescription() {
+			return theDescription;
+		}
+
+		public abstract List<? extends ExElement.Def<?>> getFromDef(D def);
+
+		public abstract List<? extends ExElement.Interpreted<?>> getFromInterpreted(I interpreted);
+
+		public abstract List<? extends ExElement> getFromAddOn(AO addOn);
+
+		@Override
+		public List<? extends ExElement.Def<?>> getChildrenFromDef(ExElement.Def<? extends E> def) {
+			return def.getAddOnValue(theDefType, this::getFromDef);
+		}
+
+		@Override
+		public List<? extends ExElement.Interpreted<?>> getChildrenFromInterpreted(ExElement.Interpreted<? extends E> interp) {
+			return interp.getAddOnValue(theInterpType, this::getFromInterpreted);
+		}
+
+		@Override
+		public List<? extends ExElement> getChildrenFromElement(E element) {
+			return element.getAddOnValue(theAddOnType, this::getFromAddOn);
+		}
+
+		public static <E extends ExElement, AO extends ExAddOn<? super E>, I extends Interpreted<? super E, ? extends AO>, D extends ExAddOn.Def<? super E, ? extends AO>> Default<E, AO, I, D> of(
+			Class<? super D> defType, Function<? super D, ? extends List<? extends ExElement.Def<?>>> defGetter,
+			Class<? super I> interpretedType, Function<? super I, ? extends List<? extends ExElement.Interpreted<?>>> interpretedGetter,
+			Class<? super AO> addOnType, Function<? super AO, ? extends List<? extends ExElement>> addOnGetter, String descrip) {
+			return new Default<>(defType, defGetter, interpretedType, interpretedGetter, addOnType, addOnGetter, descrip);
+		}
+
+		public static <E extends ExElement, AO extends ExAddOn<? super E>, I extends Interpreted<? super E, ? extends AO>, D extends ExAddOn.Def<? super E, ? extends AO>, M, MV extends M> Expression<E, AO, I, D, M, MV> ofX(
+			Class<? super D> defType, Function<? super D, ? extends CompiledExpression> defGetter, Class<? super I> interpretedType,
+			Function<? super I, ? extends InterpretedValueSynth<M, ? extends MV>> interpretedGetter, Class<? super AO> addOnType,
+			Function<? super AO, ? extends MV> addOnGetter, String description) {
+			return new Expression<>(defType, defGetter, interpretedType, interpretedGetter, addOnType, addOnGetter, description);
+		}
+
+		public static class Default<E extends ExElement, AO extends ExAddOn<? super E>, I extends Interpreted<? super E, ? extends AO>, D extends ExAddOn.Def<? super E, ? extends AO>>
+			extends AddOnChildGetter<E, AO, I, D> {
+			private final Function<? super D, ? extends List<? extends ExElement.Def<?>>> theDefGetter;
+			private final Function<? super I, ? extends List<? extends ExElement.Interpreted<?>>> theInterpretedGetter;
+			private final Function<? super AO, ? extends List<? extends ExElement>> theAddOnGetter;
+
+			public Default(Class<? super D> defType, Function<? super D, ? extends List<? extends ExElement.Def<?>>> defGetter,
+				Class<? super I> interpType, Function<? super I, ? extends List<? extends ExElement.Interpreted<?>>> interpretedGetter,
+				Class<? super AO> addOnType, Function<? super AO, ? extends List<? extends ExElement>> addOnGetter, String description) {
+				super(defType, interpType, addOnType, description);
+				theDefGetter = defGetter;
+				theInterpretedGetter = interpretedGetter;
+				theAddOnGetter = addOnGetter;
+			}
+
+			@Override
+			public List<? extends org.observe.expresso.qonfig.ExElement.Def<?>> getFromDef(D def) {
+				return theDefGetter.apply(def);
+			}
+
+			@Override
+			public List<? extends org.observe.expresso.qonfig.ExElement.Interpreted<?>> getFromInterpreted(I interpreted) {
+				return theInterpretedGetter.apply(interpreted);
+			}
+
+			@Override
+			public List<? extends ExElement> getFromAddOn(AO addOn) {
+				return theAddOnGetter.apply(addOn);
+			}
+		}
+
+		public static class Expression<E extends ExElement, AO extends ExAddOn<? super E>, I extends Interpreted<? super E, ? extends AO>, D extends ExAddOn.Def<? super E, ? extends AO>, M, MV extends M>
+			extends AddOnAttributeGetter<E, AO, I, D> {
+			private final Function<? super D, ? extends CompiledExpression> theDefGetter;
+			private final Function<? super I, ? extends InterpretedValueSynth<M, ? extends MV>> theInterpretedGetter;
+			private final Function<? super AO, ? extends MV> theAddOnGetter;
+
+			public Expression(Class<? super D> defType, Function<? super D, ? extends CompiledExpression> defGetter,
+				Class<? super I> interpType, Function<? super I, ? extends InterpretedValueSynth<M, ? extends MV>> interpretedGetter,
+					Class<? super AO> addOnType, Function<? super AO, ? extends MV> addOnGetter, String descrip) {
 				super(defType, interpType, addOnType, descrip);
 				theDefGetter = defGetter;
 				theInterpretedGetter = interpretedGetter;

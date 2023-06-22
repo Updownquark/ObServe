@@ -356,7 +356,8 @@ public class QuickDocument extends ExElement.Abstract {
 				if (theModelElement != null)
 					theModelElement.destroy();
 				theModelElement = getDefinition().getModelElement() == null ? null : getDefinition().getModelElement().interpret(this);
-			}
+			} else if (theModelElement != null)
+				theModelElement.update();
 		}
 	}
 

@@ -257,10 +257,14 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 					model.interpret(ObservableModelSet.class);
 			}
 		})//
-			.createWith("named", ExNamed.Def.class, session -> {
+			.createWith("with-local-model", ExWithLocalModel.Def.class, session -> {
 				ExpressoQIS exS = session.as(ExpressoQIS.class);
-				return new ExNamed.Def((QonfigAddOn) exS.getFocusType(), exS.getElementRepresentation());
+				return new ExWithLocalModel.Def((QonfigAddOn) exS.getFocusType(), exS.getElementRepresentation());
 			})//
+		.createWith("named", ExNamed.Def.class, session -> {
+			ExpressoQIS exS = session.as(ExpressoQIS.class);
+			return new ExNamed.Def((QonfigAddOn) exS.getFocusType(), exS.getElementRepresentation());
+		})//
 		;
 		configureBaseModels(interpreter);
 		configureExternalModels(interpreter);

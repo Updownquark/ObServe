@@ -187,7 +187,7 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 			}
 
 			@Override
-			protected void update() throws ExpressoInterpretationException {
+			public void update() throws ExpressoInterpretationException {
 				super.update();
 				CollectionUtils.synchronize(theSubModels, getDefinition().getSubModels(), //
 					(widget, child) -> widget.getDefinition() == child)//
@@ -307,7 +307,7 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 			}
 
 			@Override
-			public ObservableModelElement create(ExElement parent) throws ModelInstantiationException {
+			public DefaultModelElement create(ExElement parent) throws ModelInstantiationException {
 				return new DefaultModelElement(this, parent);
 			}
 		}
@@ -421,7 +421,7 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 			}
 
 			@Override
-			public ObservableModelElement create(ExElement parent) throws ModelInstantiationException {
+			public ConfigModelElement create(ExElement parent) throws ModelInstantiationException {
 				return new ConfigModelElement(this, parent);
 			}
 		}
