@@ -17,7 +17,7 @@ import org.qommons.config.QonfigInterpretationException;
 public abstract class ObservableModelElement extends ExElement.Abstract {
 	public static final ExElement.ChildElementGetter<ObservableModelElement, Interpreted<?>, Def<?>> VALUES = ExElement.ChildElementGetter
 		.<ObservableModelElement, Interpreted<?>, Def<?>> of(Def::getValues, Interpreted::getValues, ObservableModelElement::getValues,
-			"The values declared in the model");
+			"A value declared in the model");
 
 	public interface ModelValueElement<E extends ExElement> extends ExElement.Def<E> {
 		InterpretedValueElement<? extends E> interpret(ObservableModelElement.Interpreted<?> modelElement, InterpretedModelSet models)

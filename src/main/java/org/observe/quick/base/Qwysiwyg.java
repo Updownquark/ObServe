@@ -53,6 +53,7 @@ import org.qommons.config.CustomValueType;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigAttributeDef;
 import org.qommons.config.QonfigChildDef;
+import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigElement.QonfigValue;
 import org.qommons.config.QonfigParseException;
 import org.qommons.config.QonfigValueDef;
@@ -505,9 +506,11 @@ public class Qwysiwyg {
 			else
 				attrValueComp.typeTooltip(renderValueType(type, 1, def.getElement().getType().getValue()));
 		}
-		for (ExElement.Def<?> child : def.getAllChildren()) {
+		Map<QonfigElement, ExElement.Def<?>> children = def.getAllChildren().stream()
+			.collect(Collectors.toMap(ExElement.Def::getElement, d -> d));
+		for (QonfigElement child : def.getElement().getChildren()) {
 			String childDescrip = null;
-			for (QonfigChildDef role : child.getElement().getParentRoles()) {
+			for (QonfigChildDef role : child.getParentRoles()) {
 				String roleDescrip = def.getChildDescription(role);
 				if (roleDescrip != null) {
 					if (childDescrip == null)
@@ -516,7 +519,11 @@ public class Qwysiwyg {
 						childDescrip += "<br><br>" + roleDescrip;
 				}
 			}
-			renderDef(elComponent, child, childDescrip);
+			ExElement.Def<?> childDef = children.get(child);
+			if (childDef != null)
+				renderDef(elComponent, childDef, childDescrip);
+			else if (childDescrip != null)
+				getSourceComponent(elComponent, child.getPositionInFile().getPosition()).parent.typeTooltip(childDescrip);
 		}
 	}
 
