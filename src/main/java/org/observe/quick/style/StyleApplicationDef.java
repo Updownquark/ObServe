@@ -5,7 +5,6 @@ import java.util.function.Function;
 
 import org.observe.SettableValue;
 import org.observe.expresso.*;
-import org.observe.expresso.DynamicModelValue.Identity;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ObservableModelSet.CompiledModelValue;
 import org.observe.expresso.ObservableModelSet.ModelComponentNode;
@@ -13,6 +12,9 @@ import org.observe.expresso.ObservableModelSet.ModelValueSynth;
 import org.observe.expresso.ops.BinaryOperator;
 import org.observe.expresso.ops.BufferedExpression;
 import org.observe.expresso.ops.NameExpression;
+import org.observe.expresso.qonfig.DynamicModelValue;
+import org.observe.expresso.qonfig.LocatedExpression;
+import org.observe.expresso.qonfig.DynamicModelValue.Identity;
 import org.qommons.BiTuple;
 import org.qommons.MultiInheritanceSet;
 import org.qommons.config.QonfigAddOn;
@@ -142,7 +144,7 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 	 * @param models The models to use to find referenced model values
 	 * @param expresso A toolkit inheriting Expresso-Core
 	 * @param styleSheet Whether the expression is from a style sheet. Model values that do not declare their
-	 *        {@link org.observe.expresso.DynamicModelValue.Identity#getType() type} cannot be used as conditions in style sheets.
+	 *        {@link org.observe.expresso.qonfig.DynamicModelValue.Identity#getType() type} cannot be used as conditions in style sheets.
 	 * @param dmvCache The model value cache to use
 	 * @return The expression to use in place of the given condition
 	 * @throws QonfigInterpretationException If a type-less condition is used from a style sheet

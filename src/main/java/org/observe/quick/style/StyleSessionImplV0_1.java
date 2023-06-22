@@ -3,7 +3,7 @@ package org.observe.quick.style;
 import java.util.Collections;
 import java.util.Set;
 
-import org.observe.expresso.ExpressoQIS;
+import org.observe.expresso.qonfig.ExpressoQIS;
 import org.qommons.Version;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigInterpreterCore.CoreSession;

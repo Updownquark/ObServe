@@ -2,8 +2,8 @@ package org.observe.quick.base;
 
 import org.observe.SettableValue;
 import org.observe.collect.ObservableCollection;
-import org.observe.expresso.CompiledExpression;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
+import org.observe.expresso.qonfig.CompiledExpression;
 import org.observe.expresso.qonfig.ExElement;
 
 public interface MultiValueWidget<T> extends MultiValueRenderable<T> {

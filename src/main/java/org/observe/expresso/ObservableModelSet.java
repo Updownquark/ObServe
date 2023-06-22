@@ -503,6 +503,7 @@ public interface ObservableModelSet extends Identifiable {
 		 * @param <MV> The type for the value
 		 * @param type The type for the value
 		 * @param value Produces the value from a model instance set
+		 * @param components The components of the model value
 		 * @return A value container with the given type, implemented by the given function
 		 */
 		static <M, MV extends M> InterpretedValueSynth<M, MV> of(ModelInstanceType<M, MV> type,

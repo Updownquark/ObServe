@@ -8,16 +8,16 @@ import javax.swing.Icon;
 import javax.swing.ImageIcon;
 
 import org.observe.SettableValue;
-import org.observe.expresso.CompiledExpression;
 import org.observe.expresso.ExpressoEnv;
 import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.ExpressoQIS;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueSynth;
 import org.observe.expresso.ops.BinaryOperatorSet;
 import org.observe.expresso.ops.UnaryOperatorSet;
+import org.observe.expresso.qonfig.CompiledExpression;
+import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.quick.QuickCoreInterpretation;
 import org.observe.quick.QuickDocument;
 import org.observe.quick.QuickWidget;

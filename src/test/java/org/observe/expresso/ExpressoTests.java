@@ -3,6 +3,7 @@ package org.observe.expresso;
 import java.util.List;
 
 import org.junit.Test;
+import org.observe.expresso.qonfig.DynamicModelValue;
 
 /** Some tests for Expresso functionality */
 public class ExpressoTests extends AbstractExpressoTest<Expresso> {

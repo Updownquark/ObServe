@@ -4,10 +4,10 @@ import java.util.Map;
 
 import org.observe.SettableValue;
 import org.observe.expresso.ExpressoEnv;
-import org.observe.expresso.LocatedExpression;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet.CompiledModelValue;
+import org.observe.expresso.qonfig.LocatedExpression;
 import org.qommons.StringUtils;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;

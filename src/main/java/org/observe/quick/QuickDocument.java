@@ -8,13 +8,13 @@ import org.observe.SimpleObservable;
 import org.observe.expresso.ClassView;
 import org.observe.expresso.ExpressoEnv;
 import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.ExpressoQIS;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet;
-import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.qonfig.ExElement;
+import org.observe.expresso.qonfig.ExpressoQIS;
+import org.observe.expresso.qonfig.ObservableModelElement;
 import org.observe.quick.style.QuickStyleSheet;
 import org.observe.quick.style.StyleQIS;
 import org.qommons.config.QonfigElement;
@@ -193,6 +193,34 @@ public class QuickDocument extends ExElement.Abstract {
 			}
 		};
 
+		public static final ExElement.ChildElementGetter<ExElement, QuickHeadSection, QuickHeadSection.Def> MODELS = new ExElement.ChildElementGetter<ExElement, QuickHeadSection, QuickHeadSection.Def>() {
+			@Override
+			public String getDescription() {
+				return "The model of the document, defining values and other structures that can be used to control the behavior of elements in the document";
+			}
+
+			@Override
+			public List<? extends ExElement.Def<?>> getChildrenFromDef(QuickHeadSection.Def def) {
+				if (def.getModelElement() != null)
+					return Collections.singletonList(def.getModelElement());
+				else
+					return Collections.emptyList();
+			}
+
+			@Override
+			public List<? extends ExElement.Interpreted<?>> getChildrenFromInterpreted(QuickHeadSection interp) {
+				if (interp.getModelElement() != null)
+					return Collections.singletonList(interp.getModelElement());
+				else
+					return Collections.emptyList();
+			}
+
+			@Override
+			public List<? extends ExElement> getChildrenFromElement(ExElement element) {
+				return Collections.emptyList();
+			}
+		};
+
 		public static final ExElement.ChildElementGetter<ExElement, QuickHeadSection, QuickHeadSection.Def> STYLE_SHEET = new ExElement.ChildElementGetter<ExElement, QuickHeadSection, QuickHeadSection.Def>() {
 			@Override
 			public String getDescription() {
@@ -222,6 +250,7 @@ public class QuickDocument extends ExElement.Abstract {
 		public static class Def extends ExElement.Def.Abstract<ExElement> {
 			private ClassView theClassView;
 			private ObservableModelSet.Built theModels;
+			private ObservableModelElement.ModelSetElement.Def<?> theModelElement;
 			private QuickStyleSheet theStyleSheet;
 
 			/**
@@ -243,6 +272,10 @@ public class QuickDocument extends ExElement.Abstract {
 				return theModels;
 			}
 
+			public ObservableModelElement.ModelSetElement.Def<?> getModelElement() {
+				return theModelElement;
+			}
+
 			/** @return The style sheet defined in this head section */
 			public QuickStyleSheet getStyleSheet() {
 				return theStyleSheet;
@@ -252,6 +285,7 @@ public class QuickDocument extends ExElement.Abstract {
 			public void update(ExpressoQIS session) throws QonfigInterpretationException {
 				ExElement.checkElement(session.getFocusType(), QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, HEAD);
 				forChild(session.getRole("imports"), IMPORTS);
+				forChild(session.getRole("models"), MODELS);
 				forChild(session.getRole("style-sheet"), STYLE_SHEET);
 				super.update(session);
 				ClassView cv = session.interpretChildren("imports", ClassView.class).peekFirst();
@@ -267,6 +301,8 @@ public class QuickDocument extends ExElement.Abstract {
 				if (model == null)
 					model = ObservableModelSet.build("models", ObservableModelSet.JAVA_NAME_CHECKER).build();
 				theModels = model;
+				theModelElement = ExElement.useOrReplace(ObservableModelElement.ModelSetElement.Def.class, theModelElement, session,
+					"models");
 				session.setExpressoEnv(session.getExpressoEnv().with(model, cv));
 				theStyleSheet = session.as(StyleQIS.class).getStyleSheet();
 				if (theStyleSheet != null)
@@ -280,48 +316,47 @@ public class QuickDocument extends ExElement.Abstract {
 			 *         interpretation} of the head section's {@link #getModels() models} fails
 			 */
 			public QuickHeadSection interpret(QuickDocument.Interpreted document) throws ExpressoInterpretationException {
-				return new QuickHeadSection(this, document, getClassView(), getModels().interpret(), theStyleSheet);
+				return new QuickHeadSection(this, document);
 			}
 		}
 
-		private final ClassView theClassView;
-		private final InterpretedModelSet theModels;
-		private final QuickStyleSheet theStyleSheet;
+		private ObservableModelElement.ModelSetElement.Interpreted<?> theModelElement;
 
 		/**
 		 * @param def The definition of this head section
 		 * @param document The document that this head section is for
-		 * @param classView The class view defined in this head section
-		 * @param models The models defined in this head section
-		 * @param styleSheet The style sheet defined in this head section
 		 */
-		public QuickHeadSection(Def def, QuickDocument.Interpreted document, ClassView classView, InterpretedModelSet models,
-			QuickStyleSheet styleSheet) {
+		public QuickHeadSection(Def def, QuickDocument.Interpreted document) {
 			super(def, document);
-			theClassView = classView;
-			theModels = models;
-			theStyleSheet = styleSheet;
+		}
+
+		@Override
+		public Def getDefinition() {
+			return (Def) super.getDefinition();
 		}
 
 		/** @return The class view defined in this head section */
 		public ClassView getClassView() {
-			return theClassView;
+			return getDefinition().getClassView();
 		}
 
-		/** @return The models defined in this head section */
-		@Override
-		public InterpretedModelSet getModels() {
-			return theModels;
+		public ObservableModelElement.ModelSetElement.Interpreted<?> getModelElement() {
+			return theModelElement;
 		}
 
 		/** @return The style sheet defined in this head section */
 		public QuickStyleSheet getStyleSheet() {
-			return theStyleSheet;
+			return getDefinition().getStyleSheet();
 		}
 
 		@Override
 		protected void update() throws ExpressoInterpretationException {
 			super.update();
+			if (theModelElement == null || theModelElement.getDefinition() != getDefinition().getModelElement()) {
+				if (theModelElement != null)
+					theModelElement.destroy();
+				theModelElement = getDefinition().getModelElement() == null ? null : getDefinition().getModelElement().interpret(this);
+			}
 		}
 	}
 

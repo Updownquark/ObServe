@@ -3,9 +3,9 @@ package org.observe.quick;
 import java.util.Set;
 import java.util.function.BiFunction;
 
-import org.observe.expresso.ExpressoQIS;
 import org.observe.expresso.qonfig.ExAddOn;
 import org.observe.expresso.qonfig.ExElement;
+import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.quick.style.StyleQIS;
 import org.qommons.QommonsUtils;
 import org.qommons.Version;

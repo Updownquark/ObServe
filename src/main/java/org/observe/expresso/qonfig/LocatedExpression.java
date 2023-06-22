@@ -1,9 +1,14 @@
-package org.observe.expresso;
+package org.observe.expresso.qonfig;
 
+import org.observe.expresso.ExpressoEnv;
+import org.observe.expresso.ExpressoEvaluationException;
+import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ModelType.ModelInstanceType;
+import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet.ModelValueSynth;
-import org.qommons.io.LocatedPositionedContent;
+import org.observe.expresso.TypeConversionException;
 import org.qommons.io.LocatedFilePosition;
+import org.qommons.io.LocatedPositionedContent;
 
 /** A structure containing an {@link ObservableExpression} and exposes the location in the file where the expression occurred */
 public interface LocatedExpression {

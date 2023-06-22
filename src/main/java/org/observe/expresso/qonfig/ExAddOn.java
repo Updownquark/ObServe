@@ -2,9 +2,7 @@ package org.observe.expresso.qonfig;
 
 import java.util.function.Function;
 
-import org.observe.expresso.CompiledExpression;
 import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.ExpressoQIS;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;

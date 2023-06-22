@@ -1,9 +1,12 @@
-package org.observe.expresso;
+package org.observe.expresso.qonfig;
 
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 
+import org.observe.expresso.ExpressoInterpretationException;
+import org.observe.expresso.ModelInstantiationException;
+import org.observe.expresso.ModelType;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ObservableModelSet.CompiledModelValue;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;

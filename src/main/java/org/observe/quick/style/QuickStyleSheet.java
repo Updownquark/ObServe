@@ -6,8 +6,8 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
-import org.observe.expresso.ExpressoQIS;
 import org.observe.expresso.qonfig.ExElement;
+import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.ExElement.Def;
 import org.observe.expresso.qonfig.ExElement.Interpreted;
 import org.qommons.config.AbstractQIS;

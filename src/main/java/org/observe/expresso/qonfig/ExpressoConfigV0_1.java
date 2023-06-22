@@ -1,7 +1,7 @@
-package org.observe.expresso;
+package org.observe.expresso.qonfig;
 
-import static org.observe.expresso.ExpressoBaseV0_1.KEY_TYPE_KEY;
-import static org.observe.expresso.ExpressoBaseV0_1.VALUE_TYPE_KEY;
+import static org.observe.expresso.qonfig.ExpressoBaseV0_1.KEY_TYPE_KEY;
+import static org.observe.expresso.qonfig.ExpressoBaseV0_1.VALUE_TYPE_KEY;
 
 import java.awt.Image;
 import java.awt.event.ComponentAdapter;
@@ -48,14 +48,15 @@ import org.observe.config.ObservableConfigFormat;
 import org.observe.config.ObservableConfigPath;
 import org.observe.config.ObservableValueSet;
 import org.observe.config.SyncValueSet;
+import org.observe.expresso.*;
 import org.observe.expresso.Expresso.ConfigModelValue;
-import org.observe.expresso.ExpressoBaseV0_1.AppEnvironment;
-import org.observe.expresso.ExpressoBaseV0_1.ParsedSorting;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ObservableModelSet.CompiledModelValue;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueSynth;
+import org.observe.expresso.qonfig.ExpressoBaseV0_1.AppEnvironment;
+import org.observe.expresso.qonfig.ExpressoBaseV0_1.ParsedSorting;
 import org.observe.util.TypeTokens;
 import org.observe.util.swing.WindowPopulation;
 import org.qommons.Identifiable;
@@ -140,6 +141,12 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		List<ModelValueSynth<?, ?>> getComponents();
 	}
 
+	/** The name of the expresso config toolkit */
+	public static final String NAME = "Expresso-Config";
+
+	/** The version of this implementation of the expresso config toolkit */
+	public static final Version VERSION = new Version(0, 1, 0);
+
 	/** The name of the model value to store the {@link ObservableConfig} in the model */
 	public static final String CONFIG_NAME = "$CONFIG$";
 
@@ -150,12 +157,12 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 
 	@Override
 	public String getToolkitName() {
-		return "Expresso-Config";
+		return NAME;
 	}
 
 	@Override
 	public Version getVersion() {
-		return ExpressoSessionImplV0_1.VERSION;
+		return VERSION;
 	}
 
 	@Override
@@ -175,6 +182,10 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 
 	void configureConfigModels(QonfigInterpreterCore.Builder interpreter) {
 		interpreter.createWith("config", ObservableModelSet.class, new ConfigModelCreator());
+		interpreter.createWith("config", ObservableModelElement.ConfigModelElement.Def.class, session -> {
+			ExpressoQIS exS = session.as(ExpressoQIS.class);
+			return new ObservableModelElement.ConfigModelElement.Def<>(exS.getElementRepresentation(), exS.getElement());
+		});
 		interpreter.createWith("value", Expresso.ConfigModelValue.class, session -> createConfigValue(wrap(session)));
 		interpreter.createWith("value-set", Expresso.ConfigModelValue.class, valueSetCreator());
 		interpreter.createWith("list", Expresso.ConfigModelValue.class, collectionCreator());

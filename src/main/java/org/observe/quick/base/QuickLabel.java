@@ -3,13 +3,13 @@ package org.observe.quick.base;
 import javax.swing.Icon;
 
 import org.observe.SettableValue;
-import org.observe.expresso.CompiledExpression;
 import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.ExpressoQIS;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.qonfig.CompiledExpression;
 import org.observe.expresso.qonfig.ExElement;
+import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.quick.QuickTextWidget;
 import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElement;

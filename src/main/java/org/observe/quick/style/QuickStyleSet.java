@@ -2,8 +2,8 @@ package org.observe.quick.style;
 
 import java.util.List;
 
-import org.observe.expresso.ExpressoQIS;
 import org.observe.expresso.qonfig.ExElement;
+import org.observe.expresso.qonfig.ExpressoQIS;
 import org.qommons.Named;
 import org.qommons.config.AbstractQIS;
 import org.qommons.config.QonfigInterpretationException;

@@ -1,4 +1,4 @@
-package org.observe.expresso;
+package org.observe.expresso.qonfig;
 
 /**
  * Represents the expression Qonfig type used by Expresso. This type doesn't do anything but hold the text of the expression for parsing at

@@ -28,7 +28,7 @@ It builds on the Expresso-Base toolkit and allows specification of persisted con
 		<!-- Config models.  These function similarly to internal models, except that they represent persistent values from
 			 ObservableConfig.  Some of these allow specification of default values, but these are only used if the persistent data
 			 for the value has not been initialized. -->
-		<element-def name="config" extends="model">
+		<element-def name="config" extends="abst-model">
 			<attribute name="config-name" type="string" specify="optional" />
 			<attribute name="config-dir" type="expression" specify="optional" />
 			<child-def name="old-config-name" type="old-config-name" min="0" max="inf" />

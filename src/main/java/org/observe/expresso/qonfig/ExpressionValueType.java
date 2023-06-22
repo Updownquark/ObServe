@@ -1,4 +1,4 @@
-package org.observe.expresso;
+package org.observe.expresso.qonfig;
 
 import org.qommons.config.CustomValueType;
 import org.qommons.config.QonfigToolkit;

@@ -1,8 +1,6 @@
 package org.observe.quick.style;
 
 import org.observe.SettableValue;
-import org.observe.expresso.DynamicModelValue;
-import org.observe.expresso.ExpressoQIS;
 import org.observe.expresso.ModelException;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelType.ModelInstanceType;
@@ -11,7 +9,9 @@ import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelTag;
 import org.observe.expresso.TypeConversionException;
+import org.observe.expresso.qonfig.DynamicModelValue;
 import org.observe.expresso.qonfig.ExElement;
+import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigElementOrAddOn;

@@ -13,6 +13,8 @@ import org.observe.expresso.ExpressoTesting.ExpressoTest;
 import org.observe.expresso.ExpressoTesting.TestAction;
 import org.observe.expresso.ObservableModelSet.CompiledModelValue;
 import org.observe.expresso.ObservableModelSet.ModelValueSynth;
+import org.observe.expresso.qonfig.CompiledExpression;
+import org.observe.expresso.qonfig.ExpressoQIS;
 import org.qommons.QommonsUtils;
 import org.qommons.Version;
 import org.qommons.config.QonfigInterpretation;

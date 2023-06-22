@@ -1,7 +1,7 @@
 package org.observe.quick.base;
 
-import org.observe.expresso.ExpressoQIS;
 import org.observe.expresso.qonfig.ExElement;
+import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.quick.QuickContainer;
 import org.observe.quick.QuickWidget;
 import org.observe.util.TypeTokens;

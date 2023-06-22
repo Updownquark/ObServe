@@ -1,10 +1,19 @@
-package org.observe.expresso;
+package org.observe.expresso.qonfig;
 
 import java.util.Collections;
 import java.util.Set;
 
 import org.observe.Observable;
 import org.observe.SettableValue;
+import org.observe.expresso.ExpressoEnv;
+import org.observe.expresso.ExpressoException;
+import org.observe.expresso.ExpressoInterpretationException;
+import org.observe.expresso.ExpressoParser;
+import org.observe.expresso.JavaExpressoParser;
+import org.observe.expresso.ModelInstantiationException;
+import org.observe.expresso.ModelTypes;
+import org.observe.expresso.ObservableModelSet;
+import org.observe.expresso.TypeConversionException;
 import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ops.BinaryOperatorSet;
 import org.observe.expresso.ops.UnaryOperatorSet;

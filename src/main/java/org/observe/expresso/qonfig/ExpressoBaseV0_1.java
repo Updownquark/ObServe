@@ -1,4 +1,4 @@
-package org.observe.expresso;
+package org.observe.expresso.qonfig;
 
 import java.awt.Image;
 import java.util.ArrayList;
@@ -38,7 +38,7 @@ import org.observe.collect.ObservableSortedCollection;
 import org.observe.collect.ObservableSortedSet;
 import org.observe.config.ObservableConfig;
 import org.observe.config.ObservableValueSet;
-import org.observe.expresso.DynamicModelValue.Identity;
+import org.observe.expresso.*;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelType.ModelInstanceType.SingleTyped;
 import org.observe.expresso.ObservableModelSet.AbstractValueSynth;
@@ -49,7 +49,7 @@ import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueSynth;
 import org.observe.expresso.ObservableModelSet.RuntimeValuePlaceholder;
 import org.observe.expresso.ops.NameExpression;
-import org.observe.expresso.qonfig.ExElement;
+import org.observe.expresso.qonfig.DynamicModelValue.Identity;
 import org.observe.util.TypeTokens;
 import org.qommons.BiTuple;
 import org.qommons.Causable;
@@ -88,6 +88,12 @@ import com.google.common.reflect.TypeToken;
 
 /** Qonfig Interpretation for the ExpressoBaseV0_1 API */
 public class ExpressoBaseV0_1 implements QonfigInterpretation {
+	/** The name of the expresso base toolkit */
+	public static final String NAME = "Expresso-Base";
+
+	/** The version of this implementation of the expresso base toolkit */
+	public static final Version VERSION = new Version(0, 1, 0);
+
 	/** Session key containing a model value's path */
 	public static final String PATH_KEY = "model-path";
 	/**
@@ -134,12 +140,12 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 
 	@Override
 	public String getToolkitName() {
-		return "Expresso-Base";
+		return NAME;
 	}
 
 	@Override
 	public Version getVersion() {
-		return ExpressoSessionImplV0_1.VERSION;
+		return VERSION;
 	}
 
 	@Override
@@ -251,6 +257,10 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 					model.interpret(ObservableModelSet.class);
 			}
 		})//
+			.createWith("named", ExNamed.Def.class, session -> {
+				ExpressoQIS exS = session.as(ExpressoQIS.class);
+				return new ExNamed.Def((QonfigAddOn) exS.getFocusType(), exS.getElementRepresentation());
+			})//
 		;
 		configureBaseModels(interpreter);
 		configureExternalModels(interpreter);
@@ -295,6 +305,9 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 			ObservableModelSet.Built built = builder.build();
 			expressoSession.setModels(built, null);
 			return built;
+		}).createWith("models", ObservableModelElement.ModelSetElement.Def.class, session -> {
+			ExpressoQIS exS = session.as(ExpressoQIS.class);
+			return new ObservableModelElement.ModelSetElement.Def<>(exS.getElementRepresentation(), exS.getElement());
 		});
 		interpreter.modifyWith("model-value", Object.class, new QonfigValueModifier<Object>() {
 			@Override
@@ -405,6 +418,10 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 				subModelEl.interpret(ObservableModelSet.class);
 			}
 			return model;
+		})//
+		.createWith("ext-model", ObservableModelElement.ExtModelElement.Def.class, session -> {
+			ExpressoQIS exS = session.as(ExpressoQIS.class);
+			return new ObservableModelElement.ExtModelElement.Def<>(exS.getElementRepresentation(), exS.getElement());
 		})//
 		.createWith("event", Expresso.ExtModelValue.class,
 			session -> new Expresso.ExtModelValue.SingleTyped<>(ModelTypes.Event, session.get(VALUE_TYPE_KEY, VariableType.class)))//
@@ -735,6 +752,10 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 				}
 			}
 			return model;
+		})//
+		.createWith("model", ObservableModelElement.DefaultModelElement.Def.class, session -> {
+			ExpressoQIS exS = session.as(ExpressoQIS.class);
+			return new ObservableModelElement.DefaultModelElement.Def<>(exS.getElementRepresentation(), exS.getElement());
 		});
 		interpreter.createWith("constant", CompiledModelValue.class, session -> interpretConstant(wrap(session)));
 		interpreter.createWith("value", CompiledModelValue.class, session -> interpretValue(wrap(session)));
@@ -1519,7 +1540,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 						else
 							throw new ModelInstantiationException(e.getCause().getMessage(), position, 0, e.getCause());
 					} catch (RuntimeException | Error e) {
-						throw new ModelInstantiationException(e.getCause().getMessage(), position, 0, e.getCause());
+						throw new ModelInstantiationException(e.getMessage(), position, 0, e);
 					}
 				}
 
@@ -4070,8 +4091,8 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 					@Override
 					public TransformReverse<S, T> reverse(Transformation<S, T> transformation, ModelSetInstance modelSet)
 						throws ModelInstantiationException {
-						SettableValue<S> sourceV = SettableValue.build(sourceType).build();
-						SettableValue<T> targetV = SettableValue.build(targetType).build();
+						SettableValue<S> sourceV = SettableValue.build(TypeTokens.get().wrap(sourceType)).build();
+						SettableValue<T> targetV = SettableValue.build(TypeTokens.get().wrap(targetType)).build();
 						ObservableModelSet.ModelSetInstanceBuilder reverseMSIBuilder = reverseModels.createInstance(modelSet.getUntil())
 							.withAll(modelSet)//
 							.with((RuntimeValuePlaceholder<SettableValue<?>, SettableValue<S>>) sourcePlaceholder,

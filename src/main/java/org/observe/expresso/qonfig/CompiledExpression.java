@@ -1,12 +1,16 @@
-package org.observe.expresso;
+package org.observe.expresso.qonfig;
 
+import org.observe.expresso.ExpressoEnv;
+import org.observe.expresso.ExpressoInterpretationException;
+import org.observe.expresso.ModelType;
 import org.observe.expresso.ModelType.ModelInstanceType;
+import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet.ModelValueSynth;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigValueDef;
-import org.qommons.io.LocatedPositionedContent;
 import org.qommons.io.LocatedFilePosition;
+import org.qommons.io.LocatedPositionedContent;
 
 /**
  * Returned by {@link ExpressoQIS#getValueExpression()} and other methods e.g. for attributes. This structure contains all the information

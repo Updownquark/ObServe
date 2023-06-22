@@ -8,9 +8,9 @@ import java.util.Map;
 import java.util.Set;
 
 import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.ExpressoQIS;
 import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.qonfig.ExElement;
+import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.quick.style.QuickInterpretedStyle.QuickElementStyleAttribute;
 import org.observe.quick.style.QuickStyleElement.Def;
 import org.observe.quick.style.QuickTypeStyle.TypeStyleSet;

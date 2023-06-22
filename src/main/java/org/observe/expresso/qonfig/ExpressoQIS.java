@@ -1,6 +1,11 @@
-package org.observe.expresso;
+package org.observe.expresso.qonfig;
 
-import org.observe.expresso.qonfig.ExElement;
+import org.observe.expresso.ClassView;
+import org.observe.expresso.ExpressoEnv;
+import org.observe.expresso.ExpressoParseException;
+import org.observe.expresso.ExpressoParser;
+import org.observe.expresso.ObservableExpression;
+import org.observe.expresso.ObservableModelSet;
 import org.qommons.config.QonfigAttributeDef;
 import org.qommons.config.QonfigElement.QonfigValue;
 import org.qommons.config.QonfigInterpretationException;

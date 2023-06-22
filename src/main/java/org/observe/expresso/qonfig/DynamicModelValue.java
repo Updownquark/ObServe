@@ -1,4 +1,4 @@
-package org.observe.expresso;
+package org.observe.expresso.qonfig;
 
 import java.util.Collections;
 import java.util.HashSet;
@@ -9,11 +9,18 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
+import org.observe.expresso.ExpressoEnv;
+import org.observe.expresso.ExpressoInterpretationException;
+import org.observe.expresso.ModelException;
+import org.observe.expresso.ModelInstantiationException;
+import org.observe.expresso.ModelType;
 import org.observe.expresso.ModelType.HollowModelValue;
 import org.observe.expresso.ModelType.ModelInstanceType;
+import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.CompiledModelValue;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueSynth;
+import org.observe.expresso.TypeConversionException;
 import org.observe.util.TypeTokens;
 import org.qommons.Named;
 import org.qommons.collect.BetterList;
@@ -127,7 +134,8 @@ public interface DynamicModelValue<M, MV extends M> extends ModelValueSynth<M, M
 
 	/**
 	 * Dynamic values in models should always be
-	 * {@link ObservableModelSet.Builder#withMaker(String, CompiledModelValue, LocatedFilePosition) added} as an instance of this type.
+	 * {@link org.observe.expresso.ObservableModelSet.Builder#withMaker(String, CompiledModelValue, LocatedFilePosition) added} as an
+	 * instance of this type.
 	 *
 	 * @param <M> The model type of the dynamic value
 	 * @param <MV> The type of the dynamic value

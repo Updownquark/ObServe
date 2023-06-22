@@ -11,6 +11,7 @@ import org.observe.expresso.ObservableModelSet.CompiledModelValue;
 import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueSynth;
+import org.observe.expresso.qonfig.ExpressoQIS;
 import org.qommons.BreakpointHere;
 import org.qommons.Named;
 import org.qommons.io.LocatedFilePosition;

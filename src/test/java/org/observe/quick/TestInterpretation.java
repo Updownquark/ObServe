@@ -6,7 +6,6 @@ import java.util.Set;
 
 import org.observe.SettableValue;
 import org.observe.expresso.Expresso;
-import org.observe.expresso.ExpressoQIS;
 import org.observe.expresso.ExpressoTesting.ExpressoTest;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet;
@@ -14,6 +13,7 @@ import org.observe.expresso.ObservableModelSet.CompiledModelValue;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelComponentNode;
 import org.observe.expresso.ObservableModelSet.ModelValueSynth;
+import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.quick.style.StyleQIS;
 import org.qommons.QommonsUtils;
 import org.qommons.Version;

@@ -14,12 +14,8 @@ import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.SettableValue;
-import org.observe.expresso.CompiledExpression;
-import org.observe.expresso.DynamicModelValue;
 import org.observe.expresso.ExpressoEnv;
 import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.ExpressoQIS;
-import org.observe.expresso.LocatedExpression;
 import org.observe.expresso.ModelException;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelType.ModelInstanceType;
@@ -246,9 +242,6 @@ public interface ExElement extends Identifiable {
 	 * @param <E> The type of element that this definition is for
 	 */
 	public interface Def<E extends ExElement> extends Identifiable {
-		@Override
-		Identity getIdentity();
-
 		/** @return The definition interpreted from the parent element */
 		Def<?> getParentElement();
 
@@ -408,7 +401,7 @@ public interface ExElement extends Identifiable {
 		 * @param <AO> The type of the add on
 		 * @param <T> The type of the value
 		 * @param addOn The type of the add-on
-		 * @param fn Produces the value from the add on if it exists
+		 * @param fn Produces the value from the add-on if it exists
 		 * @return The value from the given add on in this element definition, or null if no such add-on is present
 		 */
 		default <AO extends ExAddOn.Def<? super E, ?>, T> T getAddOnValue(Class<AO> addOn, Function<? super AO, ? extends T> fn) {
@@ -703,7 +696,7 @@ public interface ExElement extends Identifiable {
 		/**
 		 * @param <AO> The type of the add on
 		 * @param <T> The type of the value
-		 * @param addOn The type of the addon
+		 * @param addOn The type of the add-on
 		 * @param fn Produces the value from the add on if it exists
 		 * @return The value from the given add on in this element definition, or null if no such add-on is present
 		 */
@@ -830,9 +823,6 @@ public interface ExElement extends Identifiable {
 		}
 	}
 
-	@Override
-	Identity getIdentity();
-
 	/** @return The parent element */
 	ExElement getParentElement();
 
@@ -850,7 +840,7 @@ public interface ExElement extends Identifiable {
 	 * @param <AO> The type of the add on
 	 * @param <T> The type of the value
 	 * @param addOn The type of the add-on
-	 * @param fn Produces the value from the add on if it exists
+	 * @param fn Produces the value from the add-on if it exists
 	 * @return The value from the given add on in this element definition, or null if no such add-on is present
 	 */
 	default <AO extends ExAddOn<?>, T> T getAddOnValue(Class<AO> addOn, Function<? super AO, ? extends T> fn) {
@@ -889,9 +879,9 @@ public interface ExElement extends Identifiable {
 	 */
 	ModelSetInstance update(Interpreted<?> interpreted, ModelSetInstance models) throws ModelInstantiationException;
 
-	/** Abstract {@link QonfigDefinedElement} implementation */
+	/** Abstract {@link ExElement} implementation */
 	public abstract class Abstract implements ExElement {
-		private final Identity theId;
+		private final Object theId;
 		private final ExElement theParent;
 		private final ClassMap<ExAddOn<?>> theAddOns;
 		private final ClassMap<Class<? extends ExAddOn.Interpreted<?, ?>>> theAddOnInterpretations;
@@ -916,7 +906,7 @@ public interface ExElement extends Identifiable {
 		}
 
 		@Override
-		public Identity getIdentity() {
+		public Object getIdentity() {
 			return theId;
 		}
 

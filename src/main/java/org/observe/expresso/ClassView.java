@@ -16,6 +16,8 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.observe.expresso.qonfig.ExElement;
+import org.observe.expresso.qonfig.ExpressoQIS;
+import org.observe.expresso.qonfig.ExpressoSessionImplV0_1;
 import org.observe.util.TypeParser;
 import org.observe.util.TypeTokens;
 import org.observe.util.TypeTokens.TypeRetriever;
