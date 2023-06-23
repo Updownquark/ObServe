@@ -4,6 +4,7 @@ import java.awt.Color;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.Reader;
+import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
@@ -629,8 +630,8 @@ public class Qwysiwyg {
 			// TODO describe interpreted value?
 		}
 		List<? extends ExElement.Interpreted<?>> interpretedChildren = def.getAllChildren(interpreted);
-		Map<Integer, ? extends ExElement> instanceChildren = element == null ? Collections.emptyMap()//
-			: def.getAllChildren(element).stream()
+		List<? extends ExElement> tempChildren = element == null ? Collections.emptyList() : def.getAllChildren(element);
+		Map<Integer, ? extends ExElement> instanceChildren = tempChildren.stream()
 			.collect(Collectors.toMap(ch -> ch.reporting().getFileLocation().getPosition(0).getPosition(), ch -> ch));
 		for (ExElement.Interpreted<?> child : interpretedChildren) {
 			ExElement instance = instanceChildren.get(child.getDefinition().reporting().getFileLocation().getPosition(0).getPosition());
@@ -739,7 +740,21 @@ public class Qwysiwyg {
 					str.append(", ");
 				str.append(renderType(pt));
 			}
-			str.append("): ").append(renderType(m.getGenericReturnType())).append(')');
+			str.append("): ").append(renderType(m.getGenericReturnType()));
+			return str.toString();
+		} else if (descriptor instanceof Constructor) {
+			Constructor<?> c = (Constructor<?>) descriptor;
+			StringBuilder str = new StringBuilder("Constructor ");
+			str.append(c.getDeclaringClass().getName()).append('.').append(c.getName()).append('(');
+			boolean first = true;
+			for (Type pt : c.getGenericParameterTypes()) {
+				if (first)
+					first = false;
+				else
+					str.append(", ");
+				str.append(renderType(pt));
+			}
+			str.append(')');
 			return str.toString();
 		} else if (descriptor instanceof ModelComponentNode) {
 			ModelComponentNode<?, ?> node = (ModelComponentNode<?, ?>) descriptor;

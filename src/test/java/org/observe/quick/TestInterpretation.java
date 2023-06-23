@@ -5,7 +5,6 @@ import java.util.List;
 import java.util.Set;
 
 import org.observe.SettableValue;
-import org.observe.expresso.Expresso;
 import org.observe.expresso.ExpressoTesting.ExpressoTest;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet;
@@ -13,6 +12,7 @@ import org.observe.expresso.ObservableModelSet.CompiledModelValue;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelComponentNode;
 import org.observe.expresso.ObservableModelSet.ModelValueSynth;
+import org.observe.expresso.qonfig.ElementModelAugmentation;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.quick.style.StyleQIS;
 import org.qommons.QommonsUtils;
@@ -54,7 +54,7 @@ public class TestInterpretation implements QonfigInterpretation {
 
 	@Override
 	public Builder configureInterpreter(QonfigInterpreterCore.Builder interpreter) {
-		interpreter.modifyWith("quick-test", ExpressoTest.class, new Expresso.ElementModelAugmentation<ExpressoTest>() {
+		interpreter.modifyWith("quick-test", ExpressoTest.class, new ElementModelAugmentation<ExpressoTest>() {
 			@Override
 			public void augmentElementModel(ExpressoQIS session, ObservableModelSet.Builder builder) throws QonfigInterpretationException {
 				ExpressoQIS bodySession = session.forChildren("body").getFirst();

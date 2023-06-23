@@ -67,14 +67,14 @@ public class ExWithLocalModel extends ExAddOn.Abstract<ExElement> {
 					theLocalModelElement.destroy();
 				theLocalModelElement = getDefinition().getLocalModelElement() == null ? null
 					: getDefinition().getLocalModelElement().interpret(getElement());
-			} else if (theLocalModelElement != null)
+			}
+			if (theLocalModelElement != null)
 				theLocalModelElement.update();
 		}
 
 		@Override
 		public ExWithLocalModel create(ExElement element) {
-			// TODO Auto-generated method stub
-			return null;
+			return new ExWithLocalModel(this, element);
 		}
 	}
 
@@ -97,7 +97,7 @@ public class ExWithLocalModel extends ExAddOn.Abstract<ExElement> {
 		else if (theLocalModelElement == null
 			|| theLocalModelElement.getIdentity() != myInterpreted.getLocalModelElement().getDefinition().getIdentity())
 			theLocalModelElement = myInterpreted.getLocalModelElement().create(getElement());
-		else
+		if (theLocalModelElement != null)
 			theLocalModelElement.update(myInterpreted.getLocalModelElement(), models);
 	}
 }

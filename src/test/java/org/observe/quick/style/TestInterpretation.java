@@ -8,7 +8,6 @@ import java.util.Set;
 
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
-import org.observe.expresso.Expresso;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ExpressoTesting.ExpressoTest;
 import org.observe.expresso.ModelException;
@@ -20,6 +19,7 @@ import org.observe.expresso.ObservableModelSet.CompiledModelValue;
 import org.observe.expresso.ObservableModelSet.ModelComponentNode;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueSynth;
+import org.observe.expresso.qonfig.ElementModelAugmentation;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.TypeConversionException;
 import org.observe.quick.style.QuickInterpretedStyle.QuickElementStyleAttribute;
@@ -63,7 +63,7 @@ public class TestInterpretation implements QonfigInterpretation {
 		interpreter.createWith("b", CompiledModelValue.class, session -> B.Def.create(session.as(StyleQIS.class)));
 		interpreter.createWith("c", CompiledModelValue.class, session -> new C.Def(session.as(StyleQIS.class)));
 		interpreter.createWith("d", CompiledModelValue.class, session -> new D.Def(session.as(StyleQIS.class)));
-		interpreter.modifyWith("styled-test", ExpressoTest.class, new Expresso.ElementModelAugmentation<ExpressoTest>() {
+		interpreter.modifyWith("styled-test", ExpressoTest.class, new ElementModelAugmentation<ExpressoTest>() {
 			@Override
 			public void augmentElementModel(ExpressoQIS session, org.observe.expresso.ObservableModelSet.Builder builder)
 				throws QonfigInterpretationException {

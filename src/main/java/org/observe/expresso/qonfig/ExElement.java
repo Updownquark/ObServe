@@ -33,6 +33,7 @@ import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigAttributeDef;
 import org.qommons.config.QonfigChildDef;
 import org.qommons.config.QonfigElement;
+import org.qommons.config.QonfigElementDef;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigInterpreterCore;
@@ -496,6 +497,11 @@ public interface ExElement extends Identifiable {
 
 			@Override
 			public ObservableModelSet.Built getModels() {
+				if (theModels == null && theExpressoEnv != null) {
+					ObservableModelSet models = theExpressoEnv.getModels();
+					theModels = models instanceof ObservableModelSet.Builder ? ((ObservableModelSet.Builder) models).build()
+						: (ObservableModelSet.Built) models;
+				}
 				return theModels;
 			}
 
@@ -606,14 +612,14 @@ public interface ExElement extends Identifiable {
 				session.setElementRepresentation(this);
 				theElement = session.getElement();
 				theExpressoEnv = session.getExpressoEnv();
-				ObservableModelSet models = theExpressoEnv.getModels();
-				theModels = models instanceof ObservableModelSet.Builder ? ((ObservableModelSet.Builder) models).build()
-					: (ObservableModelSet.Built) models;
+				theModels = null; // Build this on demand, as it may still need to be built
 
 				if (theAddOns.isEmpty()) {
 					// Add-ons can't change, because if they do, the element definition should be re-interpreted from the session
-					for (QonfigAddOn addOn : session.getElement().getInheritance().getExpanded(QonfigAddOn::getInheritance))
-						addAddOn(session.asElementOnly(addOn));
+					Set<QonfigElementOrAddOn> addOnsTested = new HashSet<>();
+					for (QonfigAddOn addOn : session.getElement().getInheritance().values())
+						addAddOn(session, addOn, addOnsTested);
+					addAddOns(session, session.getElement().getType(), addOnsTested);
 
 					for (ExAddOn.Def<? super E, ?> addOn : theAddOns.getAllValues())
 						addOn.update(session.asElement(addOn.getType()), this);
@@ -642,14 +648,30 @@ public interface ExElement extends Identifiable {
 				}
 			}
 
-			private void addAddOn(AbstractQIS<?> session) throws QonfigInterpretationException {
-				if (session.supportsInterpretation(ExAddOn.Def.class)) {
-					ExAddOn.Def<? super E, ?> addOn = session.interpret(ExAddOn.Def.class);
-					theAddOns.put(addOn.getClass(), addOn);
-				} else {
-					for (QonfigAddOn inh : session.getFocusType().getInheritance())
-						addAddOn(session.asElementOnly(inh));
+			private void addAddOns(AbstractQIS<?> session, QonfigElementDef element, Set<QonfigElementOrAddOn> tested)
+				throws QonfigInterpretationException {
+				if (!tested.add(element))
+					return;
+				for (QonfigAddOn addOn : element.getFullInheritance().values())
+					addAddOn(session, addOn, tested);
+				if (element.getSuperElement() != null)
+					addAddOns(session, element.getSuperElement(), tested);
+			}
+
+			private void addAddOn(AbstractQIS<?> session, QonfigAddOn addOn, Set<QonfigElementOrAddOn> tested)
+				throws QonfigInterpretationException {
+				if (!tested.add(addOn))
+					return;
+				session = session.asElementOnly(addOn);
+				Class<?> addOnType = session.getInterpretationSupport(ExAddOn.Def.class);
+				if (addOnType != null && theAddOns.get(addOnType, ClassMap.TypeMatch.SUB_TYPE) == null) {
+					ExAddOn.Def<? super E, ?> exAddOn = session.interpret(ExAddOn.Def.class);
+					theAddOns.put(exAddOn.getClass(), exAddOn);
 				}
+				if (addOn.getSuperElement() != null)
+					addAddOns(session, addOn.getSuperElement(), tested);
+				for (QonfigAddOn inh : session.getFocusType().getInheritance())
+					addAddOn(session, inh, tested);
 			}
 
 			@Override

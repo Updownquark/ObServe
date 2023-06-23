@@ -105,7 +105,8 @@ public class ExpressoEnv {
 		return theErrorReporting;
 	}
 
-	void saveLocalModel() {
+	/** Saves the model as the local model */
+	public void saveLocalModel() {
 		theElementModel = theModels;
 	}
 

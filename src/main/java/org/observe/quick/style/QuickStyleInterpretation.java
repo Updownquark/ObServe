@@ -16,11 +16,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import org.observe.expresso.Expresso;
 import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.qonfig.CompiledExpression;
 import org.observe.expresso.qonfig.DynamicModelValue;
+import org.observe.expresso.qonfig.ElementModelAugmentation;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.LocatedExpression;
 import org.observe.util.TypeTokens;
@@ -149,7 +149,7 @@ public class QuickStyleInterpretation implements QonfigInterpretation {
 				return value;
 			}
 		})//
-		.modifyWith("styled", Object.class, new Expresso.ElementModelAugmentation<Object>() {
+		.modifyWith("styled", Object.class, new ElementModelAugmentation<Object>() {
 			@Override
 			public void augmentElementModel(ExpressoQIS session, ObservableModelSet.Builder builder)
 				throws QonfigInterpretationException {

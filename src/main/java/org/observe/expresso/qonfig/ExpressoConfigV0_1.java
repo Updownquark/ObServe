@@ -49,7 +49,6 @@ import org.observe.config.ObservableConfigPath;
 import org.observe.config.ObservableValueSet;
 import org.observe.config.SyncValueSet;
 import org.observe.expresso.*;
-import org.observe.expresso.Expresso.ConfigModelValue;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ObservableModelSet.CompiledModelValue;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
@@ -186,16 +185,16 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			ExpressoQIS exS = session.as(ExpressoQIS.class);
 			return new ObservableModelElement.ConfigModelElement.Def<>(exS.getElementRepresentation(), exS.getElement());
 		});
-		interpreter.createWith("value", Expresso.ConfigModelValue.class, session -> createConfigValue(wrap(session)));
-		interpreter.createWith("value-set", Expresso.ConfigModelValue.class, valueSetCreator());
-		interpreter.createWith("list", Expresso.ConfigModelValue.class, collectionCreator());
-		interpreter.createWith("sorted-list", Expresso.ConfigModelValue.class, sortedCollectionCreator());
-		interpreter.createWith("set", Expresso.ConfigModelValue.class, setCreator());
-		interpreter.createWith("sorted-set", Expresso.ConfigModelValue.class, sortedSetCreator());
-		interpreter.createWith("map", Expresso.ConfigModelValue.class, mapCreator());
-		interpreter.createWith("sorted-map", Expresso.ConfigModelValue.class, sortedMapCreator());
-		interpreter.createWith("multi-map", Expresso.ConfigModelValue.class, multiMapCreator());
-		interpreter.createWith("sorted-multi-map", Expresso.ConfigModelValue.class, sortedMultiMapCreator());
+		interpreter.createWith("value", ConfigModelValue.class, session -> createConfigValue(wrap(session)));
+		interpreter.createWith("value-set", ConfigModelValue.class, valueSetCreator());
+		interpreter.createWith("list", ConfigModelValue.class, collectionCreator());
+		interpreter.createWith("sorted-list", ConfigModelValue.class, sortedCollectionCreator());
+		interpreter.createWith("set", ConfigModelValue.class, setCreator());
+		interpreter.createWith("sorted-set", ConfigModelValue.class, sortedSetCreator());
+		interpreter.createWith("map", ConfigModelValue.class, mapCreator());
+		interpreter.createWith("sorted-map", ConfigModelValue.class, sortedMapCreator());
+		interpreter.createWith("multi-map", ConfigModelValue.class, multiMapCreator());
+		interpreter.createWith("sorted-multi-map", ConfigModelValue.class, sortedMultiMapCreator());
 	}
 
 	static class ConfigModelCreator implements QonfigInterpreterCore.QonfigValueCreator<ObservableModelSet> {
@@ -555,7 +554,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		};
 	}
 
-	abstract class ConfigValueCreator<T, M, MV extends M> implements QonfigValueCreator<Expresso.ConfigModelValue<T, M, MV>> {
+	abstract class ConfigValueCreator<T, M, MV extends M> implements QonfigValueCreator<ConfigModelValue<T, M, MV>> {
 		private final ModelType<M> theModelType;
 
 		public ConfigValueCreator(ModelType<M> modelType) {
@@ -597,7 +596,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		protected abstract MV create(ObservableConfigValueBuilder<T> builder, ModelSetInstance msi) throws ModelInstantiationException;
 	}
 
-	abstract class ConfigMapCreator<K, V, M, MV extends M> implements QonfigValueCreator<Expresso.ConfigModelValue<V, M, MV>> {
+	abstract class ConfigMapCreator<K, V, M, MV extends M> implements QonfigValueCreator<ConfigModelValue<V, M, MV>> {
 		private final ModelType<M> theModelType;
 		CompiledModelValue<?, ?> keyFormatCreator;
 		ModelValueSynth<SettableValue<?>, SettableValue<ObservableConfigFormat<K>>> keyFormatContainer;

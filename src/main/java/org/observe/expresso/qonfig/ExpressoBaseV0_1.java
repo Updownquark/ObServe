@@ -50,6 +50,7 @@ import org.observe.expresso.ObservableModelSet.ModelValueSynth;
 import org.observe.expresso.ObservableModelSet.RuntimeValuePlaceholder;
 import org.observe.expresso.ops.NameExpression;
 import org.observe.expresso.qonfig.DynamicModelValue.Identity;
+import org.observe.expresso.qonfig.ModelValueElement.CompiledModelValueElement;
 import org.observe.util.TypeTokens;
 import org.qommons.BiTuple;
 import org.qommons.Causable;
@@ -162,7 +163,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 			return new Expresso(classView, models);
 		});
 		interpreter//
-		.modifyWith("with-element-model", Object.class, new Expresso.ElementModelAugmentation<Object>() {
+		.modifyWith("with-element-model", Object.class, new ElementModelAugmentation<Object>() {
 			@Override
 			public void augmentElementModel(ExpressoQIS session, ObservableModelSet.Builder builder)
 				throws QonfigInterpretationException {
@@ -179,7 +180,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 						else
 							name = session.getElement().getAttributeText(dv.getNameAttribute());
 						ExpressoQIS dvSession = session.interpretChild(dv.getDeclaration(), dv.getDeclaration().getType());
-						Expresso.ExtModelValue<Object> spec = dvSession.interpret(Expresso.ExtModelValue.class);
+						ExtModelValue<Object> spec = dvSession.interpret(ExtModelValue.class);
 						CompiledExpression sourceAttrX;
 						try {
 							if (dv.isSourceValue())
@@ -248,7 +249,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 				}
 			}
 		})//
-		.modifyWith("with-local-model", Object.class, new Expresso.ElementModelAugmentation<Object>() {
+		.modifyWith("with-local-model", Object.class, new ElementModelAugmentation<Object>() {
 			@Override
 			public void augmentElementModel(ExpressoQIS session, ObservableModelSet.Builder builder)
 				throws QonfigInterpretationException {
@@ -257,14 +258,18 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 					model.interpret(ObservableModelSet.class);
 			}
 		})//
-			.createWith("with-local-model", ExWithLocalModel.Def.class, session -> {
-				ExpressoQIS exS = session.as(ExpressoQIS.class);
-				return new ExWithLocalModel.Def((QonfigAddOn) exS.getFocusType(), exS.getElementRepresentation());
-			})//
+		.createWith("with-local-model", ExWithLocalModel.Def.class, session -> {
+			ExpressoQIS exS = session.as(ExpressoQIS.class);
+			return new ExWithLocalModel.Def((QonfigAddOn) exS.getFocusType(), exS.getElementRepresentation());
+		})//
 		.createWith("named", ExNamed.Def.class, session -> {
 			ExpressoQIS exS = session.as(ExpressoQIS.class);
 			return new ExNamed.Def((QonfigAddOn) exS.getFocusType(), exS.getElementRepresentation());
 		})//
+			.createWith("typed", ExTyped.Def.class, session -> {
+				ExpressoQIS exS = session.as(ExpressoQIS.class);
+				return new ExTyped.Def((QonfigAddOn) exS.getFocusType(), exS.getElementRepresentation());
+			})//
 		;
 		configureBaseModels(interpreter);
 		configureExternalModels(interpreter);
@@ -376,7 +381,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 				path.append('.').append(name);
 				String childPath = path.toString();
 				path.setLength(pathLen);
-				Expresso.ExtModelValue<?> container = valueEl.interpret(Expresso.ExtModelValue.class);
+				ExtModelValue<?> container = valueEl.interpret(ExtModelValue.class);
 				ModelInstanceType<Object, Object> childType;
 				ObservableModelSet valueModel = valueEl.getExpressoEnv().getModels();
 				try {
@@ -427,35 +432,69 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 			ExpressoQIS exS = session.as(ExpressoQIS.class);
 			return new ObservableModelElement.ExtModelElement.Def<>(exS.getElementRepresentation(), exS.getElement());
 		})//
-		.createWith("event", Expresso.ExtModelValue.class,
-			session -> new Expresso.ExtModelValue.SingleTyped<>(ModelTypes.Event, session.get(VALUE_TYPE_KEY, VariableType.class)))//
-		.createWith("action", Expresso.ExtModelValue.class,
-			session -> new Expresso.ExtModelValue.SingleTyped<>(ModelTypes.Action, session.get(VALUE_TYPE_KEY, VariableType.class)))//
-		.createWith("value", Expresso.ExtModelValue.class,
-			session -> new Expresso.ExtModelValue.SingleTyped<>(ModelTypes.Value, session.get(VALUE_TYPE_KEY, VariableType.class)))//
-		.createWith("list", Expresso.ExtModelValue.class,
-			session -> new Expresso.ExtModelValue.SingleTyped<>(ModelTypes.Collection, session.get(VALUE_TYPE_KEY, VariableType.class)))//
-		.createWith("set", Expresso.ExtModelValue.class,
-			session -> new Expresso.ExtModelValue.SingleTyped<>(ModelTypes.Set, session.get(VALUE_TYPE_KEY, VariableType.class)))//
-		.createWith("sorted-list", Expresso.ExtModelValue.class,
-			session -> new Expresso.ExtModelValue.SingleTyped<>(ModelTypes.SortedCollection,
-				session.get(VALUE_TYPE_KEY, VariableType.class)))//
-		.createWith("sorted-set", Expresso.ExtModelValue.class,
-			session -> new Expresso.ExtModelValue.SingleTyped<>(ModelTypes.SortedSet, session.get(VALUE_TYPE_KEY, VariableType.class)))//
-		.createWith("value-set", Expresso.ExtModelValue.class,
-			session -> new Expresso.ExtModelValue.SingleTyped<>(ModelTypes.ValueSet, session.get(VALUE_TYPE_KEY, VariableType.class)))//
-		.createWith("map", Expresso.ExtModelValue.class,
-			session -> new Expresso.ExtModelValue.DoubleTyped<>(ModelTypes.Map, session.get(KEY_TYPE_KEY, VariableType.class),
-				session.get(VALUE_TYPE_KEY, VariableType.class)))//
-		.createWith("sorted-map", Expresso.ExtModelValue.class,
-			session -> new Expresso.ExtModelValue.DoubleTyped<>(ModelTypes.SortedMap, session.get(KEY_TYPE_KEY, VariableType.class),
-				session.get(VALUE_TYPE_KEY, VariableType.class)))//
-		.createWith("multi-map", Expresso.ExtModelValue.class,
-			session -> new Expresso.ExtModelValue.DoubleTyped<>(ModelTypes.MultiMap, session.get(KEY_TYPE_KEY, VariableType.class),
-				session.get(VALUE_TYPE_KEY, VariableType.class)))//
-		.createWith("sorted-multi-map", Expresso.ExtModelValue.class,
-			session -> new Expresso.ExtModelValue.DoubleTyped<>(ModelTypes.SortedMultiMap,
-				session.get(KEY_TYPE_KEY, VariableType.class), session.get(VALUE_TYPE_KEY, VariableType.class)))//
+		.createWith("event", ExtModelValue.class, session -> {
+			ExpressoQIS exS = session.as(ExpressoQIS.class);
+			return new ModelValueElement.Def.ExtSingle<>(exS.getElementRepresentation(), exS.getElement(), ModelTypes.Event,
+				session.get(VALUE_TYPE_KEY, VariableType.class), NAME, VERSION, "event");
+		})//
+		.createWith("action", ExtModelValue.class, session -> {
+			ExpressoQIS exS = session.as(ExpressoQIS.class);
+			return new ModelValueElement.Def.ExtSingle<>(exS.getElementRepresentation(), exS.getElement(), ModelTypes.Action,
+				session.get(VALUE_TYPE_KEY, VariableType.class), NAME, VERSION, "action");
+		})//
+		.createWith("value", ExtModelValue.class, session -> {
+			ExpressoQIS exS = session.as(ExpressoQIS.class);
+			return new ModelValueElement.Def.ExtSingle<>(exS.getElementRepresentation(), exS.getElement(), ModelTypes.Value,
+				session.get(VALUE_TYPE_KEY, VariableType.class), NAME, VERSION, "value");
+		})//
+		.createWith("list", ExtModelValue.class, session -> {
+			ExpressoQIS exS = session.as(ExpressoQIS.class);
+			return new ModelValueElement.Def.ExtSingle<>(exS.getElementRepresentation(), exS.getElement(), ModelTypes.Collection,
+				session.get(VALUE_TYPE_KEY, VariableType.class), NAME, VERSION, "list");
+		})//
+		.createWith("set", ExtModelValue.class, session -> {
+			ExpressoQIS exS = session.as(ExpressoQIS.class);
+			return new ModelValueElement.Def.ExtSingle<>(exS.getElementRepresentation(), exS.getElement(), ModelTypes.Set,
+				session.get(VALUE_TYPE_KEY, VariableType.class), NAME, VERSION, "set");
+		})//
+		.createWith("sorted-list", ExtModelValue.class, session -> {
+			ExpressoQIS exS = session.as(ExpressoQIS.class);
+			return new ModelValueElement.Def.ExtSingle<>(exS.getElementRepresentation(), exS.getElement(), ModelTypes.SortedCollection,
+				session.get(VALUE_TYPE_KEY, VariableType.class), NAME, VERSION, "sorted-list");
+		})//
+		.createWith("sorted-set", ExtModelValue.class, session -> {
+			ExpressoQIS exS = session.as(ExpressoQIS.class);
+			return new ModelValueElement.Def.ExtSingle<>(exS.getElementRepresentation(), exS.getElement(), ModelTypes.SortedSet,
+				session.get(VALUE_TYPE_KEY, VariableType.class), NAME, VERSION, "sorted-set");
+		})//
+		.createWith("value-set", ExtModelValue.class, session -> {
+			ExpressoQIS exS = session.as(ExpressoQIS.class);
+			return new ModelValueElement.Def.ExtSingle<>(exS.getElementRepresentation(), exS.getElement(), ModelTypes.ValueSet,
+				session.get(VALUE_TYPE_KEY, VariableType.class), NAME, VERSION, "value-set");
+		})//
+		.createWith("map", ExtModelValue.class, session -> {
+			ExpressoQIS exS = session.as(ExpressoQIS.class);
+			return new ModelValueElement.Def.ExtDouble<>(exS.getElementRepresentation(), exS.getElement(), ModelTypes.Map,
+				session.get(KEY_TYPE_KEY, VariableType.class), session.get(VALUE_TYPE_KEY, VariableType.class), NAME, VERSION, "map");
+		})//
+		.createWith("sorted-map", ExtModelValue.class, session -> {
+			ExpressoQIS exS = session.as(ExpressoQIS.class);
+			return new ModelValueElement.Def.ExtDouble<>(exS.getElementRepresentation(), exS.getElement(), ModelTypes.SortedMap,
+				session.get(KEY_TYPE_KEY, VariableType.class), session.get(VALUE_TYPE_KEY, VariableType.class), NAME, VERSION,
+				"sorted-map");
+		})//
+		.createWith("multi-map", ExtModelValue.class, session -> {
+			ExpressoQIS exS = session.as(ExpressoQIS.class);
+			return new ModelValueElement.Def.ExtDouble<>(exS.getElementRepresentation(), exS.getElement(), ModelTypes.MultiMap,
+				session.get(KEY_TYPE_KEY, VariableType.class), session.get(VALUE_TYPE_KEY, VariableType.class), NAME, VERSION,
+				"multi-map");
+		})//
+		.createWith("sorted-multi-map", ExtModelValue.class, session -> {
+			ExpressoQIS exS = session.as(ExpressoQIS.class);
+			return new ModelValueElement.Def.ExtDouble<>(exS.getElementRepresentation(), exS.getElement(), ModelTypes.SortedMultiMap,
+				session.get(KEY_TYPE_KEY, VariableType.class), session.get(VALUE_TYPE_KEY, VariableType.class), NAME, VERSION,
+				"sorted-multi-map");
+		})//
 		;
 	}
 
@@ -761,8 +800,8 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 			ExpressoQIS exS = session.as(ExpressoQIS.class);
 			return new ObservableModelElement.DefaultModelElement.Def<>(exS.getElementRepresentation(), exS.getElement());
 		});
-		interpreter.createWith("constant", CompiledModelValue.class, session -> interpretConstant(wrap(session)));
-		interpreter.createWith("value", CompiledModelValue.class, session -> interpretValue(wrap(session)));
+		interpreter.createWith("constant", CompiledModelValueElement.class, session -> interpretConstant(wrap(session)));
+		interpreter.createWith("value", CompiledModelValueElement.class, session -> interpretValue(wrap(session)));
 		interpreter.createWith("action", CompiledModelValue.class, session -> {
 			ExpressoQIS exS = wrap(session);
 			CompiledExpression valueX = exS.getValueExpression();
@@ -947,116 +986,117 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		});
 	}
 
-	private CompiledModelValue<SettableValue<?>, SettableValue<Object>> interpretConstant(ExpressoQIS exS)
+	private CompiledModelValueElement<SettableValue<?>, SettableValue<Object>, ?> interpretConstant(ExpressoQIS exS)
 		throws QonfigInterpretationException {
 		TypeToken<Object> valueType = (TypeToken<Object>) exS.get(VALUE_TYPE_KEY);
 		CompiledExpression value = exS.getValueExpression();
-		return CompiledModelValue.of(() -> "constant:" + valueType, ModelTypes.Value, () -> {
-			InterpretedValueSynth<SettableValue<?>, SettableValue<Object>> valueC;
-			try {
-				valueC = value.evaluate(valueType == null ? ModelTypes.Value.anyAsV() : ModelTypes.Value.forType(valueType))//
-					.interpret();
-			} catch (ExpressoInterpretationException e) {
-				throw new ExpressoInterpretationException("Could not interpret value of constant: " + value, e.getPosition(),
-					e.getErrorLength(), e);
-			}
-			String path = exS.get(PATH_KEY, String.class);
-			return new ModelValueSynth<SettableValue<?>, SettableValue<Object>>() {
-				@Override
-				public ModelType<SettableValue<?>> getModelType() {
-					return ModelTypes.Value;
+		return CompiledModelValueElement.of(exS.getElementRepresentation(), exS.getElement(), NAME, VERSION, "constant", ModelTypes.Value,
+			() -> "constant:" + valueType, () -> {
+				InterpretedValueSynth<SettableValue<?>, SettableValue<Object>> valueC;
+				try {
+					valueC = value.evaluate(valueType == null ? ModelTypes.Value.anyAsV() : ModelTypes.Value.forType(valueType))//
+						.interpret();
+				} catch (ExpressoInterpretationException e) {
+					throw new ExpressoInterpretationException("Could not interpret value of constant: " + value, e.getPosition(),
+						e.getErrorLength(), e);
 				}
-
-				@Override
-				public ModelInstanceType<SettableValue<?>, SettableValue<Object>> getType() {
-					return valueC.getType();
-				}
-
-				@Override
-				public SettableValue<Object> get(ModelSetInstance models) throws ModelInstantiationException {
-					Object v = valueC.get(models).get();
-					class ConstantValue<T> extends AbstractIdentifiable implements SettableValue<T> {
-						private final TypeToken<T> theType;
-						private final T theValue;
-
-						public ConstantValue(TypeToken<T> type, T value2) {
-							theType = type;
-							theValue = value2;
-						}
-
-						@Override
-						public TypeToken<T> getType() {
-							return theType;
-						}
-
-						@Override
-						public long getStamp() {
-							return 0;
-						}
-
-						@Override
-						public T get() {
-							return theValue;
-						}
-
-						@Override
-						public Observable<ObservableValueEvent<T>> noInitChanges() {
-							return Observable.empty();
-						}
-
-						@Override
-						public boolean isLockSupported() {
-							return true;
-						}
-
-						@Override
-						public Transaction lock(boolean write, Object cause) {
-							return Transaction.NONE;
-						}
-
-						@Override
-						public Transaction tryLock(boolean write, Object cause) {
-							return Transaction.NONE;
-						}
-
-						@Override
-						public <V extends T> T set(V value2, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
-							throw new UnsupportedOperationException("Constant value");
-						}
-
-						@Override
-						public <V extends T> String isAcceptable(V value2) {
-							return "Constant value";
-						}
-
-						@Override
-						public ObservableValue<String> isEnabled() {
-							return ObservableValue.of("Constant value");
-						}
-
-						@Override
-						protected Object createIdentity() {
-							return path;
-						}
+				String path = exS.get(PATH_KEY, String.class);
+				return new ModelValueSynth<SettableValue<?>, SettableValue<Object>>() {
+					@Override
+					public ModelType<SettableValue<?>> getModelType() {
+						return ModelTypes.Value;
 					}
-					return new ConstantValue<>((TypeToken<Object>) getType().getType(0), v);
-				}
 
-				@Override
-				public SettableValue<Object> forModelCopy(SettableValue<Object> value2, ModelSetInstance sourceModels,
-					ModelSetInstance newModels) {
-					return value2;
-				}
+					@Override
+					public ModelInstanceType<SettableValue<?>, SettableValue<Object>> getType() {
+						return valueC.getType();
+					}
 
-				@Override
-				public List<? extends ModelValueSynth<?, ?>> getComponents() {
-					return Collections.emptyList();
-				}
-			};
-		});
+					@Override
+					public SettableValue<Object> get(ModelSetInstance models) throws ModelInstantiationException {
+						Object v = valueC.get(models).get();
+						class ConstantValue<T> extends AbstractIdentifiable implements SettableValue<T> {
+							private final TypeToken<T> theType;
+							private final T theValue;
+
+							public ConstantValue(TypeToken<T> type, T value2) {
+								theType = type;
+								theValue = value2;
+							}
+
+							@Override
+							public TypeToken<T> getType() {
+								return theType;
+							}
+
+							@Override
+							public long getStamp() {
+								return 0;
+							}
+
+							@Override
+							public T get() {
+								return theValue;
+							}
+
+							@Override
+							public Observable<ObservableValueEvent<T>> noInitChanges() {
+								return Observable.empty();
+							}
+
+							@Override
+							public boolean isLockSupported() {
+								return true;
+							}
+
+							@Override
+							public Transaction lock(boolean write, Object cause) {
+								return Transaction.NONE;
+							}
+
+							@Override
+							public Transaction tryLock(boolean write, Object cause) {
+								return Transaction.NONE;
+							}
+
+							@Override
+							public <V extends T> T set(V value2, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
+								throw new UnsupportedOperationException("Constant value");
+							}
+
+							@Override
+							public <V extends T> String isAcceptable(V value2) {
+								return "Constant value";
+							}
+
+							@Override
+							public ObservableValue<String> isEnabled() {
+								return ObservableValue.of("Constant value");
+							}
+
+							@Override
+							protected Object createIdentity() {
+								return path;
+							}
+						}
+						return new ConstantValue<>((TypeToken<Object>) getType().getType(0), v);
+					}
+
+					@Override
+					public SettableValue<Object> forModelCopy(SettableValue<Object> value2, ModelSetInstance sourceModels,
+						ModelSetInstance newModels) {
+						return value2;
+					}
+
+					@Override
+					public List<? extends ModelValueSynth<?, ?>> getComponents() {
+						return Collections.emptyList();
+					}
+				};
+			});
 	}
 
-	private CompiledModelValue<SettableValue<?>, SettableValue<Object>> interpretValue(ExpressoQIS exS)
+	private CompiledModelValueElement<SettableValue<?>, SettableValue<Object>, ?> interpretValue(ExpressoQIS exS)
 		throws QonfigInterpretationException {
 		CompiledExpression valueX = exS.getValueExpression();
 		CompiledExpression initX = exS.isInstance("int-value") ? exS.asElement("int-value").getAttributeExpression("init") : null;
@@ -1066,68 +1106,69 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		if (vblType == null && valueX == null && initX == null)
 			throw new QonfigInterpretationException("A type, a value, or an initializer must be specified",
 				exS.getElement().getPositionInFile(), 0);
-		return CompiledModelValue.of(() -> {
-			if (valueX != null)
-				return valueX.toString();
-			else if (vblType != null)
-				return vblType.toString();
-			else
-				return "init:" + initX.toString();
-		}, ModelTypes.Value, () -> {
-			TypeToken<Object> type;
-			try {
-				type = vblType == null ? null : (TypeToken<Object>) vblType.getType(exS.getExpressoEnv().getModels());
-			} catch (ExpressoInterpretationException e) {
-				throw new ExpressoInterpretationException("Could not parse type", e.getPosition(), e.getErrorLength(), e);
-			}
-			ModelInstanceType<SettableValue<?>, SettableValue<Object>> modelType = type == null ? ModelTypes.Value.anyAsV()
-				: ModelTypes.Value.forType(type);
-			ModelValueSynth<SettableValue<?>, SettableValue<Object>> value = valueX == null ? null : valueX.evaluate(modelType);
-			ModelValueSynth<SettableValue<?>, SettableValue<Object>> init;
-			if (value != null)
-				init = null;
-			else if (initX != null)
-				init = initX.evaluate(modelType);
-			else
-				init = ModelValueSynth.literal(type, TypeTokens.get().getDefaultValue(type), "<default>");
-			ModelInstanceType<SettableValue<?>, SettableValue<Object>> fType;
-			if (type != null)
-				fType = modelType;
-			else if (value != null)
-				fType = value.getType();
-			else
-				fType = init.getType();
-			String path = exS.get(PATH_KEY, String.class);
-			return new ObservableModelSet.AbstractValueSynth<SettableValue<?>, SettableValue<Object>>(fType) {
-				@Override
-				public SettableValue<Object> get(ModelSetInstance models) throws ModelInstantiationException {
-					if (value != null)
-						return value.get(models);
-					SettableValue.Builder<Object> builder = SettableValue.build((TypeToken<Object>) fType.getType(0));
-					builder.withDescription(path);
-					if (init != null)
-						builder.withValue(init.get(models).get());
-					return builder.build();
+		return CompiledModelValueElement.of(exS.getElementRepresentation(), exS.getElement(), NAME, VERSION, "value", ModelTypes.Value,
+			() -> {
+				if (valueX != null)
+					return valueX.toString();
+				else if (vblType != null)
+					return vblType.toString();
+				else
+					return "init:" + initX.toString();
+			}, () -> {
+				TypeToken<Object> type;
+				try {
+					type = vblType == null ? null : (TypeToken<Object>) vblType.getType(exS.getExpressoEnv().getModels());
+				} catch (ExpressoInterpretationException e) {
+					throw new ExpressoInterpretationException("Could not parse type", e.getPosition(), e.getErrorLength(), e);
 				}
+				ModelInstanceType<SettableValue<?>, SettableValue<Object>> modelType = type == null ? ModelTypes.Value.anyAsV()
+					: ModelTypes.Value.forType(type);
+				ModelValueSynth<SettableValue<?>, SettableValue<Object>> value = valueX == null ? null : valueX.evaluate(modelType);
+				ModelValueSynth<SettableValue<?>, SettableValue<Object>> init;
+				if (value != null)
+					init = null;
+				else if (initX != null)
+					init = initX.evaluate(modelType);
+				else
+					init = ModelValueSynth.literal(type, TypeTokens.get().getDefaultValue(type), "<default>");
+				ModelInstanceType<SettableValue<?>, SettableValue<Object>> fType;
+				if (type != null)
+					fType = modelType;
+				else if (value != null)
+					fType = value.getType();
+				else
+					fType = init.getType();
+				String path = exS.get(PATH_KEY, String.class);
+				return new ObservableModelSet.AbstractValueSynth<SettableValue<?>, SettableValue<Object>>(fType) {
+					@Override
+					public SettableValue<Object> get(ModelSetInstance models) throws ModelInstantiationException {
+						if (value != null)
+							return value.get(models);
+						SettableValue.Builder<Object> builder = SettableValue.build((TypeToken<Object>) fType.getType(0));
+						builder.withDescription(path);
+						if (init != null)
+							builder.withValue(init.get(models).get());
+						return builder.build();
+					}
 
-				@Override
-				public SettableValue<Object> forModelCopy(SettableValue<Object> value2, ModelSetInstance sourceModels,
-					ModelSetInstance newModels) throws ModelInstantiationException {
-					if (value != null)
-						return value.forModelCopy(value2, sourceModels, newModels);
-					else
-						return value2;
-				}
+					@Override
+					public SettableValue<Object> forModelCopy(SettableValue<Object> value2, ModelSetInstance sourceModels,
+						ModelSetInstance newModels) throws ModelInstantiationException {
+						if (value != null)
+							return value.forModelCopy(value2, sourceModels, newModels);
+						else
+							return value2;
+					}
 
-				@Override
-				public List<? extends ModelValueSynth<?, ?>> getComponents() {
-					if (value != null)
-						return Collections.singletonList(value);
-					else
-						return Collections.emptyList();
-				}
-			};
-		});
+					@Override
+					public List<? extends ModelValueSynth<?, ?>> getComponents() {
+						if (value != null)
+							return Collections.singletonList(value);
+						else
+							return Collections.emptyList();
+					}
+				};
+			});
 	}
 
 	private CompiledModelValue<ObservableAction<?>, ObservableAction<Object>> interpretActionGroup(ExpressoQIS exS)
@@ -1500,7 +1541,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 			if (transformType == null) {
 				throw new QonfigInterpretationException("No transform supported for model type " + modelType,
 					op.getElement().getPositionInFile(), 0);
-			} else if (!op.supportsInterpretation(transformType)) {
+			} else if (op.getInterpretationSupport(transformType) == null) {
 				throw new QonfigInterpretationException(
 					"No transform supported for operation type " + op.getFocusType().getName() + " for model type " + modelType,
 					op.getElement().getPositionInFile(), 0);
@@ -3636,9 +3677,8 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 				for (Map.Entry<String, CompiledExpression> combinedX : combinedXs.entrySet()) {
 					String key = combinedX.getKey();
 					LocatedFilePosition declaredLocation = combinedX.getValue().getFilePosition(0);
-					combinedPlaceholders.put(key,
-						theMapModels.withRuntimeValue(combinedX.getKey(), ModelTypes.Value, () -> theCombinedTypes.get(key),
-							declaredLocation));
+					combinedPlaceholders.put(key, theMapModels.withRuntimeValue(combinedX.getKey(), ModelTypes.Value,
+						() -> theCombinedTypes.get(key), declaredLocation));
 					locatedCombined.put(combinedX.getKey(), declaredLocation);
 				}
 				mapSession.setModels(theMapModels, null);

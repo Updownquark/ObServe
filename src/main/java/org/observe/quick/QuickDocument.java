@@ -249,7 +249,6 @@ public class QuickDocument extends ExElement.Abstract {
 		/** The definition of a head section */
 		public static class Def extends ExElement.Def.Abstract<ExElement> {
 			private ClassView theClassView;
-			private ObservableModelSet.Built theModels;
 			private ObservableModelElement.ModelSetElement.Def<?> theModelElement;
 			private QuickStyleSheet theStyleSheet;
 
@@ -269,7 +268,7 @@ public class QuickDocument extends ExElement.Abstract {
 			/** @return The models defined in this head section */
 			@Override
 			public ObservableModelSet.Built getModels() {
-				return theModels;
+				return theModelElement.getModels();
 			}
 
 			public ObservableModelElement.ModelSetElement.Def<?> getModelElement() {
@@ -297,13 +296,9 @@ public class QuickDocument extends ExElement.Abstract {
 				theClassView = cv;
 				// Install the class view now, so the model can use it
 				session.setExpressoEnv(session.getExpressoEnv().with(null, cv));
-				ObservableModelSet.Built model = session.interpretChildren("models", ObservableModelSet.Built.class).peekFirst();
-				if (model == null)
-					model = ObservableModelSet.build("models", ObservableModelSet.JAVA_NAME_CHECKER).build();
-				theModels = model;
 				theModelElement = ExElement.useOrReplace(ObservableModelElement.ModelSetElement.Def.class, theModelElement, session,
 					"models");
-				session.setExpressoEnv(session.getExpressoEnv().with(model, cv));
+				session.setExpressoEnv(session.getExpressoEnv().with(getModels(), cv));
 				theStyleSheet = session.as(StyleQIS.class).getStyleSheet();
 				if (theStyleSheet != null)
 					theStyleSheet.update(session.forChildren("style-sheet").getFirst());
@@ -356,7 +351,8 @@ public class QuickDocument extends ExElement.Abstract {
 				if (theModelElement != null)
 					theModelElement.destroy();
 				theModelElement = getDefinition().getModelElement() == null ? null : getDefinition().getModelElement().interpret(this);
-			} else if (theModelElement != null)
+			}
+			if (theModelElement != null)
 				theModelElement.update();
 		}
 	}

@@ -13,8 +13,8 @@ import org.observe.expresso.JavaExpressoParser;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet;
-import org.observe.expresso.TypeConversionException;
 import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
+import org.observe.expresso.TypeConversionException;
 import org.observe.expresso.ops.BinaryOperatorSet;
 import org.observe.expresso.ops.UnaryOperatorSet;
 import org.observe.util.TypeTokens;
@@ -26,6 +26,7 @@ import org.qommons.config.QonfigAttributeDef;
 import org.qommons.config.QonfigChildDef;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigInterpretationException;
+import org.qommons.config.QonfigInterpreterCore;
 import org.qommons.config.QonfigInterpreterCore.CoreSession;
 import org.qommons.config.QonfigToolkit;
 import org.qommons.config.SpecialSession;
@@ -140,6 +141,8 @@ public class ExpressoSessionImplV0_1 implements SpecialSessionImplementation<Exp
 		}
 		ExpressoQIS qis = new ExpressoQIS(coreSession);
 		qis.setExpressoParser(new JavaExpressoParser());
+		ExpressoEnv.STANDARD_JAVA.reporting().ignoreClass(QonfigInterpreterCore.class.getName());
+		ExpressoEnv.STANDARD_JAVA.reporting().ignoreClass(QonfigInterpreterCore.CoreSession.class.getName());
 		qis.setExpressoEnv(ExpressoEnv.STANDARD_JAVA//
 			.at(coreSession.getElement().getFilePosition())//
 			.withOperators(null, BinaryOperatorSet.STANDARD_JAVA.copy()//
