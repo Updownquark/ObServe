@@ -276,6 +276,10 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 			ExpressoQIS exS = session.as(ExpressoQIS.class);
 			return new ExTyped.Def((QonfigAddOn) exS.getFocusType(), exS.getElementRepresentation());
 		})//
+		.createWith("int-value", ExIntValue.Def.class, session -> {
+			ExpressoQIS exS = session.as(ExpressoQIS.class);
+			return new ExIntValue.Def((QonfigAddOn) exS.getFocusType(), exS.getElementRepresentation());
+		})//
 		;
 		configureBaseModels(interpreter);
 		configureExternalModels(interpreter);
@@ -440,64 +444,64 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		})//
 		.createWith("event", ExtModelValue.class, session -> {
 			ExpressoQIS exS = session.as(ExpressoQIS.class);
-			return new ModelValueElement.Def.ExtSingle<>(exS.getElementRepresentation(), exS.getElement(), ModelTypes.Event,
+				return new ExtModelValueElement.Def.Single<>(exS.getElementRepresentation(), exS.getElement(), ModelTypes.Event,
 				session.get(VALUE_TYPE_KEY, VariableType.class), NAME, VERSION, "event");
 		})//
 		.createWith("action", ExtModelValue.class, session -> {
 			ExpressoQIS exS = session.as(ExpressoQIS.class);
-			return new ModelValueElement.Def.ExtSingle<>(exS.getElementRepresentation(), exS.getElement(), ModelTypes.Action,
+				return new ExtModelValueElement.Def.Single<>(exS.getElementRepresentation(), exS.getElement(), ModelTypes.Action,
 				session.get(VALUE_TYPE_KEY, VariableType.class), NAME, VERSION, "action");
 		})//
 		.createWith("value", ExtModelValue.class, session -> {
 			ExpressoQIS exS = session.as(ExpressoQIS.class);
-			return new ModelValueElement.Def.ExtSingle<>(exS.getElementRepresentation(), exS.getElement(), ModelTypes.Value,
+				return new ExtModelValueElement.Def.Single<>(exS.getElementRepresentation(), exS.getElement(), ModelTypes.Value,
 				session.get(VALUE_TYPE_KEY, VariableType.class), NAME, VERSION, "value");
 		})//
 		.createWith("list", ExtModelValue.class, session -> {
 			ExpressoQIS exS = session.as(ExpressoQIS.class);
-			return new ModelValueElement.Def.ExtSingle<>(exS.getElementRepresentation(), exS.getElement(), ModelTypes.Collection,
+				return new ExtModelValueElement.Def.Single<>(exS.getElementRepresentation(), exS.getElement(), ModelTypes.Collection,
 				session.get(VALUE_TYPE_KEY, VariableType.class), NAME, VERSION, "list");
 		})//
 		.createWith("set", ExtModelValue.class, session -> {
 			ExpressoQIS exS = session.as(ExpressoQIS.class);
-			return new ModelValueElement.Def.ExtSingle<>(exS.getElementRepresentation(), exS.getElement(), ModelTypes.Set,
+				return new ExtModelValueElement.Def.Single<>(exS.getElementRepresentation(), exS.getElement(), ModelTypes.Set,
 				session.get(VALUE_TYPE_KEY, VariableType.class), NAME, VERSION, "set");
 		})//
 		.createWith("sorted-list", ExtModelValue.class, session -> {
 			ExpressoQIS exS = session.as(ExpressoQIS.class);
-			return new ModelValueElement.Def.ExtSingle<>(exS.getElementRepresentation(), exS.getElement(), ModelTypes.SortedCollection,
+				return new ExtModelValueElement.Def.Single<>(exS.getElementRepresentation(), exS.getElement(), ModelTypes.SortedCollection,
 				session.get(VALUE_TYPE_KEY, VariableType.class), NAME, VERSION, "sorted-list");
 		})//
 		.createWith("sorted-set", ExtModelValue.class, session -> {
 			ExpressoQIS exS = session.as(ExpressoQIS.class);
-			return new ModelValueElement.Def.ExtSingle<>(exS.getElementRepresentation(), exS.getElement(), ModelTypes.SortedSet,
+				return new ExtModelValueElement.Def.Single<>(exS.getElementRepresentation(), exS.getElement(), ModelTypes.SortedSet,
 				session.get(VALUE_TYPE_KEY, VariableType.class), NAME, VERSION, "sorted-set");
 		})//
 		.createWith("value-set", ExtModelValue.class, session -> {
 			ExpressoQIS exS = session.as(ExpressoQIS.class);
-			return new ModelValueElement.Def.ExtSingle<>(exS.getElementRepresentation(), exS.getElement(), ModelTypes.ValueSet,
+				return new ExtModelValueElement.Def.Single<>(exS.getElementRepresentation(), exS.getElement(), ModelTypes.ValueSet,
 				session.get(VALUE_TYPE_KEY, VariableType.class), NAME, VERSION, "value-set");
 		})//
 		.createWith("map", ExtModelValue.class, session -> {
 			ExpressoQIS exS = session.as(ExpressoQIS.class);
-			return new ModelValueElement.Def.ExtDouble<>(exS.getElementRepresentation(), exS.getElement(), ModelTypes.Map,
+				return new ExtModelValueElement.Def.Double<>(exS.getElementRepresentation(), exS.getElement(), ModelTypes.Map,
 				session.get(KEY_TYPE_KEY, VariableType.class), session.get(VALUE_TYPE_KEY, VariableType.class), NAME, VERSION, "map");
 		})//
 		.createWith("sorted-map", ExtModelValue.class, session -> {
 			ExpressoQIS exS = session.as(ExpressoQIS.class);
-			return new ModelValueElement.Def.ExtDouble<>(exS.getElementRepresentation(), exS.getElement(), ModelTypes.SortedMap,
+				return new ExtModelValueElement.Def.Double<>(exS.getElementRepresentation(), exS.getElement(), ModelTypes.SortedMap,
 				session.get(KEY_TYPE_KEY, VariableType.class), session.get(VALUE_TYPE_KEY, VariableType.class), NAME, VERSION,
 				"sorted-map");
 		})//
 		.createWith("multi-map", ExtModelValue.class, session -> {
 			ExpressoQIS exS = session.as(ExpressoQIS.class);
-			return new ModelValueElement.Def.ExtDouble<>(exS.getElementRepresentation(), exS.getElement(), ModelTypes.MultiMap,
+				return new ExtModelValueElement.Def.Double<>(exS.getElementRepresentation(), exS.getElement(), ModelTypes.MultiMap,
 				session.get(KEY_TYPE_KEY, VariableType.class), session.get(VALUE_TYPE_KEY, VariableType.class), NAME, VERSION,
 				"multi-map");
 		})//
 		.createWith("sorted-multi-map", ExtModelValue.class, session -> {
 			ExpressoQIS exS = session.as(ExpressoQIS.class);
-			return new ModelValueElement.Def.ExtDouble<>(exS.getElementRepresentation(), exS.getElement(), ModelTypes.SortedMultiMap,
+				return new ExtModelValueElement.Def.Double<>(exS.getElementRepresentation(), exS.getElement(), ModelTypes.SortedMultiMap,
 				session.get(KEY_TYPE_KEY, VariableType.class), session.get(VALUE_TYPE_KEY, VariableType.class), NAME, VERSION,
 				"sorted-multi-map");
 		})//
