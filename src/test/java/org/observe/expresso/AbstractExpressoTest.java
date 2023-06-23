@@ -1,5 +1,8 @@
 package org.observe.expresso;
 
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
 import org.junit.Before;
 import org.qommons.config.QonfigApp;
 
@@ -9,7 +12,7 @@ import org.qommons.config.QonfigApp;
  * @param <H> The sub-type of this testing's head structure
  */
 public abstract class AbstractExpressoTest<H extends Expresso> {
-	private static ExpressoTesting<?> TESTING;
+	private static final Map<Class<?>, ExpressoTesting<?>> TESTING = new ConcurrentHashMap<>();
 
 	/** @return The location to find the app configuration for the test. See expresso-test-app-template.qml. */
 	protected abstract String getTestAppFile();
@@ -24,18 +27,19 @@ public abstract class AbstractExpressoTest<H extends Expresso> {
 	/** Parses the test's QML (for the first test only) */
 	@Before
 	public void prepareTest() {
-		if (TESTING == null) {
+		theTesting = (ExpressoTesting<H>) TESTING.computeIfAbsent(getClass(), __ -> {
 			System.out.print("Interpreting test files...");
 			System.out.flush();
+			ExpressoTesting<?> testing;
 			try {
 				QonfigApp app = QonfigApp.parseApp(getClass().getResource(getTestAppFile()));
-				TESTING = app.interpretApp(ExpressoTesting.class);
+				testing = app.interpretApp(ExpressoTesting.class);
 			} catch (Exception e) {
 				e.printStackTrace();
 				throw new RuntimeException(e);
 			}
 			System.out.println("done");
-		}
-		theTesting = (ExpressoTesting<H>) TESTING;
+			return testing;
+		});
 	}
 }
