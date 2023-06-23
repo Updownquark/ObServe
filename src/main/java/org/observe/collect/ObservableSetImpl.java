@@ -654,7 +654,9 @@ public class ObservableSetImpl {
 			isAlwaysUsingFirst = alwaysUseFirst;
 			isPreservingSourceOrder = preserveSourceOrder;
 
-			theDebug = Debug.d().debug(this);
+			// Debug.d().start(); //Set boolean below to true to debug
+			theDebug = Debug.d().debug(this, false);
+			// theDebug.onAction(a -> System.out.println(a.getData().getIdentity() + ": " + a));
 		}
 
 		@Override
@@ -1022,14 +1024,14 @@ public class ObservableSetImpl {
 				} else if (isAlwaysUsingFirst && node.getClosest(true) == null) {
 					theDebug.act("add:repChange").param("value", theValue).exec();
 					// The new element takes precedence over the current one
-					T oldValue = theActiveElement.get();
+					T oldValue = theValue;
 					T newActiveValue = parentEl.get();
 					theActiveElement = parentEl;
 					//Fire an internal-only event if there's not actually a change
 					ObservableCollectionActiveManagers.update(theListener, oldValue, newActiveValue, oldValue == newActiveValue, causes);
 				} else {
 					theDebug.act("add:no-effect").param("value", theValue).exec();
-					T value = theActiveElement.get();
+					T value = theValue;
 					ObservableCollectionActiveManagers.update(theListener, value, value, true, causes);
 				}
 
@@ -1130,7 +1132,7 @@ public class ObservableSetImpl {
 									theActiveElement = activeEntry.getKey();
 									theDebug.act("update:remove:repChange").exec();
 									theValue = activeEntry.getValue();
-									parentUpdated(node, realOldValue, newValue, innerCauses);
+									parentUpdated(node, realOldValue, theValue, innerCauses);
 								} else
 									theDebug.act("update:remove:no-effect").exec();
 							}

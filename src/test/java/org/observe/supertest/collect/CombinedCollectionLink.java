@@ -189,11 +189,18 @@ public class CombinedCollectionLink<S, V, T> extends AbstractMappedCollectionLin
 
 			V oldValue = theValues.get(targetValue).get();
 			V oldCombinedValue = getValueSum();
-			theValues.get(targetValue).set(newValue, null);
-			V newCombinedValue = getValueSum();
+			List<V> values = new ArrayList<>(theValues.size());
+			for (int i = 0; i < theValues.size(); i++) {
+				if (i == targetValue)
+					values.add(newValue);
+				else
+					values.add(theValues.get(i).get());
+			}
+			V newCombinedValue = theValueCombination.apply(values);
 			if (helper.isReproducing())
 				System.out.println(
 					"Value[" + targetValue + "] " + oldValue + "->" + newValue + "; total " + oldCombinedValue + "->" + newCombinedValue);
+			theValues.get(targetValue).set(newValue, null);
 			expectValueChange(oldCombinedValue, newCombinedValue);
 		});
 	}

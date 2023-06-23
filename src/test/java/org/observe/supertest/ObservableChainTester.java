@@ -9,23 +9,7 @@ import java.util.function.Function;
 import java.util.function.Supplier;
 
 import org.observe.collect.ObservableCollectionActiveManagers;
-import org.observe.supertest.collect.BaseCollectionLink;
-import org.observe.supertest.collect.CollectionSourcedLink;
-import org.observe.supertest.collect.CombinedCollectionLink;
-import org.observe.supertest.collect.ContainmentCollectionLink;
-import org.observe.supertest.collect.DistinctCollectionLink;
-import org.observe.supertest.collect.FactoringFlatMapCollectionLink;
-import org.observe.supertest.collect.FilteredCollectionLink;
-import org.observe.supertest.collect.FlatMapCollectionLink;
-import org.observe.supertest.collect.FlattenedCollectionValuesLink;
-import org.observe.supertest.collect.FlattenedValueBaseCollectionLink;
-import org.observe.supertest.collect.MappedCollectionLink;
-import org.observe.supertest.collect.ModFilteredCollectionLink;
-import org.observe.supertest.collect.ObservableCollectionLink;
-import org.observe.supertest.collect.ReversedCollectionLink;
-import org.observe.supertest.collect.SortedBaseCollectionLink;
-import org.observe.supertest.collect.SortedCollectionLink;
-import org.observe.supertest.collect.SubSetLink;
+import org.observe.supertest.collect.*;
 import org.observe.supertest.value.CollectionDerivedValues;
 import org.observe.supertest.value.CombinedValueLink;
 import org.observe.supertest.value.MappedValueLink;
@@ -292,8 +276,11 @@ public class ObservableChainTester implements Testable {
 				for (int transactionTri = 0; transactionTri < transactionMods; transactionTri++) {
 					theRoot.setModification(tri, transactionTri, (int) modifications);
 					String preValue = printValues(targetLink.path);
-					if (helper.isReproducing())
+					if (helper.isReproducing()) {
+						if (helper.hasHitBreak())
+							System.out.println(preValue);
 						System.out.print("\tMod " + (transactionTri + 1) + ": ");
+					}
 					TestHelper.RandomAction action = helper.createAction();
 					try {
 						targetLink.link.tryModify(action, helper);

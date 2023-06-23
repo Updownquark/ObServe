@@ -235,12 +235,12 @@ public class ObservableCollectionTester<E> extends AbstractObservableTester<Coll
 			case remove:
 				E oldValue = theSyncedCopy.remove(evt.getIndex());
 				if (checkRemovedValues && !Objects.equals(evt.getOldValue(), oldValue))
-					assertEquals(theName + "[" + evt.getIndex() + "]", evt.getOldValue(), oldValue);
+					assertEquals(theName + "[" + evt.getIndex() + "]", oldValue, evt.getOldValue());
 				break;
 			case set:
 				oldValue = theSyncedCopy.set(evt.getIndex(), evt.getNewValue());
 				if (checkRemovedValues && !Objects.equals(evt.getOldValue(), oldValue))
-					assertEquals(theName + "[" + evt.getIndex() + "]", evt.getOldValue(), oldValue);
+					assertEquals(theName + "[" + evt.getIndex() + "]", oldValue, evt.getOldValue());
 				break;
 			}
 		}, true);
@@ -263,14 +263,14 @@ public class ObservableCollectionTester<E> extends AbstractObservableTester<Coll
 					for (CollectionChangeEvent.ElementChange<? extends E> change : evt.getElementsReversed()) {
 						E oldValue = theBatchSyncedCopy.remove(change.index);
 						if (checkRemovedValues && !Objects.equals(change.oldValue, oldValue))
-							assertEquals(theName + "[" + change.index + "]", change.oldValue, oldValue);
+							assertEquals(theName + "[" + change.index + "]", oldValue, change.oldValue);
 					}
 					break;
 				case set:
 					for (CollectionChangeEvent.ElementChange<? extends E> change : evt.elements) {
 						E oldValue = theBatchSyncedCopy.set(change.index, change.newValue);
 						if (checkRemovedValues)
-							assertEquals(theName, change.oldValue, oldValue);
+							assertEquals(theName, oldValue, change.oldValue);
 					}
 					break;
 				}
