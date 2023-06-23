@@ -108,6 +108,8 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 	 */
 	public static final String KEY_TYPE_KEY = "key-type";
 
+	public static final String LOCAL_MODEL_ELEMENT_KEY = "Expresso.Local.Model.Element";
+
 	/** Session key where the {@link AppEnvironment} should be stored if available */
 	public static final String APP_ENVIRONMENT_KEY = "ExpressoAppEnvironment";
 
@@ -254,8 +256,12 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 			public void augmentElementModel(ExpressoQIS session, ObservableModelSet.Builder builder)
 				throws QonfigInterpretationException {
 				ExpressoQIS model = session.forChildren("model").peekFirst();
-				if (model != null)
-					model.interpret(ObservableModelSet.class);
+				if (model != null) {
+					ObservableModelElement.DefaultModelElement.Def<?> modelEl = model
+						.interpret(ObservableModelElement.DefaultModelElement.Def.class);
+					session.put(LOCAL_MODEL_ELEMENT_KEY, modelEl);
+					modelEl.update(model);
+				}
 			}
 		})//
 		.createWith("with-local-model", ExWithLocalModel.Def.class, session -> {
@@ -266,10 +272,10 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 			ExpressoQIS exS = session.as(ExpressoQIS.class);
 			return new ExNamed.Def((QonfigAddOn) exS.getFocusType(), exS.getElementRepresentation());
 		})//
-			.createWith("typed", ExTyped.Def.class, session -> {
-				ExpressoQIS exS = session.as(ExpressoQIS.class);
-				return new ExTyped.Def((QonfigAddOn) exS.getFocusType(), exS.getElementRepresentation());
-			})//
+		.createWith("typed", ExTyped.Def.class, session -> {
+			ExpressoQIS exS = session.as(ExpressoQIS.class);
+			return new ExTyped.Def((QonfigAddOn) exS.getFocusType(), exS.getElementRepresentation());
+		})//
 		;
 		configureBaseModels(interpreter);
 		configureExternalModels(interpreter);

@@ -34,7 +34,8 @@ public class ExWithLocalModel extends ExAddOn.Abstract<ExElement> {
 		public void update(ExpressoQIS session, ExElement.Def<? extends ExElement> element) throws QonfigInterpretationException {
 			element.forChild(session.getRole("model"), LOCAL_MODEL);
 			super.update(session, element);
-			ExElement.useOrReplace(ObservableModelElement.DefaultModelElement.Def.class, theLocalModelElement, session, "model");
+			theLocalModelElement = session.get(ExpressoBaseV0_1.LOCAL_MODEL_ELEMENT_KEY,
+				ObservableModelElement.DefaultModelElement.Def.class);
 		}
 
 		@Override
