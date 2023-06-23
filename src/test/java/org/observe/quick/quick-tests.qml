@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<testing uses:test="Expresso-Testing 0.1" uses:quick="Quick-Testing 0.1" uses:debug="Expresso-Debug v0.1">
+<testing uses:test="Expresso-Testing 0.1" uses:quick="Quick-Testing 0.1" uses:base="Quick-Base v0.1" uses:debug="Expresso-Debug v0.1">
 	<test:head>
 		<imports>
 			<import>org.junit.Assert.*</import>
@@ -17,9 +17,9 @@
 		</models>
 	</test:head>
 	<test name="superBasic">
-		<box name="ui" layout="inline" orientation="vertical" main-align="justify">
+		<box name="ui" layout="inline-layout" orientation="vertical" main-align="justify">
 			<label name="label1" value="model.intValue" />
-			<box layout="inline" orientation="horizontal">
+			<box layout="inline-layout" orientation="horizontal">
 				<label name="label2" value="model.stringValue" />
 			</box>
 		</box>
@@ -35,12 +35,12 @@
 		<action name="checkLabel2_1">assertEquals(model.stringValue, (String) ui.label2.getValue())</action>
 	</test>
 	<test name="withElementModels">
-		<box name="ui" layout="inline" orientation="vertical" main-align="justify">
+		<box name="ui" layout="inline-layout" orientation="vertical" main-align="justify">
 			<model>
 				<value name="intTimes2">model.intValue*2</value>
 			</model>
 			<label name="label1" value="intTimes2" />
-			<box layout="inline" orientation="horizontal">
+			<box layout="inline-layout" orientation="horizontal">
 				<model>
 					<value name="compositeString">model.stringValue+" "+intTimes2</value>
 				</model>

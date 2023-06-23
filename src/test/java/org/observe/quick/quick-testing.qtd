@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<qonfig-def name="Quick-Testing" version="0.1" extends:expresso="Expresso-Testing v0.1" extends:style="Quick-Base v0.1">
+<qonfig-def name="Quick-Testing" version="0.1" extends:expresso="Expresso-Testing v0.1" extends:quick="Quick-Core v0.1">
 	<add-ons>
 		<add-on name="quick-test" requires="test">
 			<child-def name="body" type="widget" inherits="quick-test-body" />
