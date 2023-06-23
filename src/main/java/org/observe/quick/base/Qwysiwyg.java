@@ -745,7 +745,7 @@ public class Qwysiwyg {
 		} else if (descriptor instanceof Constructor) {
 			Constructor<?> c = (Constructor<?>) descriptor;
 			StringBuilder str = new StringBuilder("Constructor ");
-			str.append(c.getDeclaringClass().getName()).append('.').append(c.getName()).append('(');
+			str.append(c.getDeclaringClass().getName()).append('(');
 			boolean first = true;
 			for (Type pt : c.getGenericParameterTypes()) {
 				if (first)
