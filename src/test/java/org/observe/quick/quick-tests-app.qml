@@ -9,7 +9,7 @@
 	<toolkit def="/org/observe/expresso/qonfig/expresso-debug.qtd" />
 	<toolkit def="/org/observe/quick/style/quick-style.qtd" />
 	<toolkit def="/org/observe/quick/quick-core.qtd" />
-	<toolkit def="/org/observe/quick/quick-base.qtd" />
+	<toolkit def="/org/observe/quick/base/quick-base.qtd" />
 	<toolkit def="/org/observe/quick/quick-testing.qtd" />
 	<special-session>org.observe.expresso.qonfig.ExpressoSessionImplV0_1</special-session>
 	<special-session>org.observe.quick.style.StyleSessionImplV0_1</special-session>
