@@ -44,7 +44,7 @@ public class ExpressoSessionImplV0_1 implements SpecialSessionImplementation<Exp
 	 * An extra convenience operator that is an OR operation (||) for objects. This operator returns the first argument if it is not null,
 	 * otherwise it returns the second.
 	 */
-	public BinaryOperatorSet.BinaryOp<Object, Object, Object> OBJECT_OR = new BinaryOperatorSet.BinaryOp<Object, Object, Object>() {
+	public BinaryOperatorSet.FirstArgDecisiveBinaryOp<Object, Object, Object> OBJECT_OR = new BinaryOperatorSet.FirstArgDecisiveBinaryOp<Object, Object, Object>() {
 		@Override
 		public Class<Object> getTargetSuperType() {
 			return Object.class;
@@ -71,6 +71,11 @@ public class ExpressoSessionImplV0_1 implements SpecialSessionImplementation<Exp
 		@Override
 		public Object reverse(Object currentSource, Object other, Object value) {
 			throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+		}
+
+		@Override
+		public Object getFirstArgDecisiveValue(Object source) {
+			return source;
 		}
 
 		@Override

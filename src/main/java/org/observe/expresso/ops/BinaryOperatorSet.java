@@ -146,6 +146,95 @@ public class BinaryOperatorSet {
 	}
 
 	/**
+	 * <p>
+	 * A binary operator for which the first argument may be decisive, meaning that the second argument is not needed to determine the
+	 * result.
+	 * </p>
+	 * <p>
+	 * The classic examples of this are the binary OR and AND operations. E.g. for an OR operation on booleans <b>a</b> and <b>b</b>, if
+	 * <b>a</b> is true, the result will be true regardless of the value of <b>b</b>.
+	 * </p>
+	 * <p>
+	 * This distinction is important because it can avoid unnecessary evaluation of values. This can be even more important because
+	 * sometimes expressions are structured assuming this will be the case. E.g. in the expression<code>a!=null && a.b!=null</code>, the
+	 * <code>a.b!=null</code> should not be evaluated if a is null, since this would cause a null pointer exception.
+	 * </p>
+	 *
+	 * @param <S> The super-type of the first input that this operator knows how to handle
+	 * @param <T> The super-type of the second input that this operator knows how to handle
+	 * @param <V> The type of output produced by this operator
+	 */
+	public interface FirstArgDecisiveBinaryOp<S, T, V> extends BinaryOp<S, T, V> {
+		/**
+		 * @param source The source value to test
+		 * @return The result of the operation if it is known from only the first argument; otherwise null
+		 */
+		V getFirstArgDecisiveValue(S source);
+
+		/**
+		 * Produces a first-arg-decisive binary operator whose input and output types are all the same
+		 *
+		 * @param <T> The type of the operator
+		 * @param name The name of the operator
+		 * @param type The primary input and output type of the operator
+		 * @param decisiveFn The function to use for {@link #getFirstArgDecisiveValue(Object)}
+		 * @param op The function to use for {@link BinaryOp#apply(Object, Object)}
+		 * @param reverse The function to use for {@link BinaryOp#reverse(Object, Object, Object)}
+		 * @param reverseEnabled The function to use for {@link BinaryOp#canReverse(Object, Object, Object)}, or null if the operator is
+		 *        always reversible
+		 * @param description The description for the operator
+		 * @return The binary operator composed of the given functions
+		 */
+		static <T> FirstArgDecisiveBinaryOp<T, T, T> of(String name, TypeToken<T> type, Function<? super T, ? extends T> decisiveFn,
+			BiFunction<? super T, ? super T, ? extends T> op, TriFunction<? super T, ? super T, ? super T, ? extends T> reverse,
+			TriFunction<? super T, ? super T, ? super T, String> reverseEnabled, String description) {
+			return new FirstArgDecisiveBinaryOp<T, T, T>() {
+				@Override
+				public Class<T> getTargetSuperType() {
+					return TypeTokens.getRawType(type);
+				}
+
+				@Override
+				public TypeToken<T> getTargetType(TypeToken<? extends T> leftOpType, TypeToken<? extends T> rightOpType) {
+					return type;
+				}
+
+				@Override
+				public T apply(T source, T other) {
+					return op.apply(source, other);
+				}
+
+				@Override
+				public String canReverse(T currentSource, T other, T value) {
+					if (reverseEnabled == null)
+						return null;
+					return reverseEnabled.apply(currentSource, other, value);
+				}
+
+				@Override
+				public T reverse(T currentSource, T other, T value) {
+					return reverse.apply(currentSource, other, value);
+				}
+
+				@Override
+				public T getFirstArgDecisiveValue(T source) {
+					return decisiveFn.apply(source);
+				}
+
+				@Override
+				public String getDescription() {
+					return description;
+				}
+
+				@Override
+				public String toString() {
+					return name;
+				}
+			};
+		}
+	}
+
+	/**
 	 * Represents a cast operation whereby a value of one type is transformed to an equivalent value of another type
 	 *
 	 * @param <S> The source type of the cast
@@ -792,62 +881,40 @@ public class BinaryOperatorSet {
 			"Negative object identity comparison");
 
 		// Boolean ops
-		operators.with("||", Boolean.class, Boolean.class, (b1, b2) -> unwrapBool(b1) || unwrapBool(b2), //
-			(s, b2, r) -> {
-				if (unwrapBool(r)) { // Trying to make the expression true
-					if (unwrapBool(b2))
-						return s; // Leave it alone--the expression will be true regardless
-					else
-						return true;
-				} else { // Trying to make the expression false
-					if (unwrapBool(b2))
-						return null; // Can't make it false--should be prevented by the enabled fn
-					else
-						return false;
-				}
-			}, (s, b2, r) -> (!unwrapBool(r) && unwrapBool(b2)) ? "Or expression cannot be made false" : null, "Boolean OR operator");
-		operators.with("|", Boolean.class, Boolean.class, (b1, b2) -> unwrapBool(b1) || unwrapBool(b2), //
-			(s, b2, r) -> {
-				if (unwrapBool(r)) { // Trying to make the expression true
-					if (unwrapBool(b2))
-						return s; // Leave it alone--the expression will be true regardless
-					else
-						return true;
-				} else { // Trying to make the expression false
-					if (unwrapBool(b2))
-						return null; // Can't make it false--should be prevented by the enabled fn
-					else
-						return false;
-				}
-			}, (s, b2, r) -> (!unwrapBool(r) && unwrapBool(b2)) ? "Or expression cannot be made false" : null, "Boolean OR operator");
-		operators.with("&&", Boolean.class, Boolean.class, (b1, b2) -> unwrapBool(b1) && unwrapBool(b2), //
-			(s, b2, r) -> {
-				if (unwrapBool(r)) { // Trying to make the expression true
-					if (unwrapBool(b2))
-						return true;
-					else
-						return null; // Can't make it true--should be prevented by the enabled fn
-				} else { // Trying to make the expression false
-					if (unwrapBool(b2))
-						return false;
-					else
-						return s; // Leave it alone--the expression will be false regardless
-				}
-			}, (s, b2, r) -> (!unwrapBool(b2) && unwrapBool(r)) ? "And expression cannot be made true" : null, "Boolean AND operator");
-		operators.with("&", Boolean.class, Boolean.class, (b1, b2) -> unwrapBool(b1) && unwrapBool(b2), //
-			(s, b2, r) -> {
-				if (unwrapBool(r)) { // Trying to make the expression true
-					if (unwrapBool(b2))
-						return true;
-					else
-						return null; // Can't make it true--should be prevented by the enabled fn
-				} else { // Trying to make the expression false
-					if (unwrapBool(b2))
-						return false;
-					else
-						return s; // Leave it alone--the expression will be false regardless
-				}
-			}, (s, b2, r) -> (!unwrapBool(b2) && unwrapBool(r)) ? "And expression cannot be made true" : null, "Boolean AND operator");
+		FirstArgDecisiveBinaryOp<Boolean, Boolean, Boolean> or = FirstArgDecisiveBinaryOp.of("||", TypeTokens.get().BOOLEAN, //
+			b -> unwrapBool(b) ? true : null, (b1, b2) -> unwrapBool(b1) || unwrapBool(b2), //
+				(s, b2, r) -> {
+					if (unwrapBool(r)) { // Trying to make the expression true
+						if (unwrapBool(b2))
+							return s; // Leave it alone--the expression will be true regardless
+						else
+							return true;
+					} else { // Trying to make the expression false
+						if (unwrapBool(b2))
+							return null; // Can't make it false--should be prevented by the enabled fn
+						else
+							return false;
+					}
+				}, (s, b2, r) -> (!unwrapBool(r) && unwrapBool(b2)) ? "Or expression cannot be made false" : null, "Boolean OR operator");
+		operators.with("||", Boolean.class, Boolean.class, or);
+		operators.with("|", Boolean.class, Boolean.class, or);
+		FirstArgDecisiveBinaryOp<Boolean, Boolean, Boolean> and = FirstArgDecisiveBinaryOp.of("&&", TypeTokens.get().BOOLEAN, //
+			b -> !unwrapBool(b) ? false : null, (b1, b2) -> unwrapBool(b1) && unwrapBool(b2), //
+				(s, b2, r) -> {
+					if (unwrapBool(r)) { // Trying to make the expression true
+						if (unwrapBool(b2))
+							return true;
+						else
+							return null; // Can't make it true--should be prevented by the enabled fn
+					} else { // Trying to make the expression false
+						if (unwrapBool(b2))
+							return false;
+						else
+							return s; // Leave it alone--the expression will be false regardless
+					}
+				}, (s, b2, r) -> (!unwrapBool(b2) && unwrapBool(r)) ? "And expression cannot be made true" : null, "Boolean AND operator");
+		operators.with("&&", Boolean.class, Boolean.class, and);
+		operators.with("&", Boolean.class, Boolean.class, and);
 		operators.with("^", Boolean.class, Boolean.class, (b1, b2) -> unwrapBool(b1) ^ unwrapBool(b2), //
 			(s, b2, r) -> {
 				if (unwrapBool(r)) { // Trying to make the expression true

@@ -1,11 +1,14 @@
 package org.observe.expresso.ops;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 import java.util.function.Function;
 
+import org.observe.Observable;
 import org.observe.ObservableAction;
 import org.observe.ObservableValue;
+import org.observe.ObservableValueEvent;
 import org.observe.SettableValue;
 import org.observe.Transformation;
 import org.observe.Transformation.ReverseQueryResult;
@@ -22,9 +25,14 @@ import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.TypeConversionException;
 import org.observe.expresso.ops.BinaryOperatorSet.BinaryOp;
+import org.observe.expresso.ops.BinaryOperatorSet.FirstArgDecisiveBinaryOp;
 import org.observe.util.TypeTokens;
+import org.qommons.Identifiable;
 import org.qommons.LambdaUtils;
+import org.qommons.Lockable;
 import org.qommons.QommonsUtils;
+import org.qommons.Stamped;
+import org.qommons.Transaction;
 import org.qommons.io.ErrorReporting;
 
 import com.google.common.reflect.TypeToken;
@@ -284,7 +292,7 @@ public class BinaryOperator implements ObservableExpression {
 				}
 
 				private SettableValue<Object> createOpValue(SettableValue<Object> leftV, SettableValue<Object> rightV) {
-					return leftV.transformReversible(resultType, tx -> tx.combineWith(rightV)//
+					SettableValue<Object> transformedV = leftV.transformReversible(resultType, tx -> tx.combineWith(rightV)//
 						.combine(LambdaUtils.printableBiFn((lft, rgt) -> {
 							try {
 								return op.apply(lft, rgt);
@@ -294,6 +302,11 @@ public class BinaryOperator implements ObservableExpression {
 							}
 						}, op::toString, op))//
 						.withReverse(new BinaryOperatorReverse(rightV, op, reporting)));
+					if (op instanceof BinaryOperatorSet.FirstArgDecisiveBinaryOp)
+						return new FirstArgDecisiveBinaryValue<>(resultType, leftV, rightV,
+							(BinaryOperatorSet.FirstArgDecisiveBinaryOp<Object, Object, Object>) op, transformedV);
+					else
+						return transformedV;
 				}
 
 				@Override
@@ -321,6 +334,11 @@ public class BinaryOperator implements ObservableExpression {
 			};
 			return ObservableExpression.evEx((InterpretedValueSynth<M, MV>) operated, op, left, right);
 		}
+	}
+
+	@Override
+	public String toString() {
+		return theLeft + theOperator + theRight;
 	}
 
 	// These classes can't be anonymous because they'll keep references to compiled objects that we don't want to keep
@@ -411,8 +429,97 @@ public class BinaryOperator implements ObservableExpression {
 		}
 	}
 
-	@Override
-	public String toString() {
-		return theLeft + theOperator + theRight;
+	static class FirstArgDecisiveBinaryValue<S, T, V> implements SettableValue<V> {
+		private final TypeToken<V> theType;
+		private final SettableValue<S> theValue1;
+		private final SettableValue<T> theValue2;
+		private final BinaryOperatorSet.FirstArgDecisiveBinaryOp<S, T, V> theOp;
+		private final SettableValue<V> theTransformedValue;
+
+		public FirstArgDecisiveBinaryValue(TypeToken<V> type, SettableValue<S> value1, SettableValue<T> value2,
+			FirstArgDecisiveBinaryOp<S, T, V> op, SettableValue<V> transformedValue) {
+			theType = type;
+			theValue1 = value1;
+			theValue2 = value2;
+			theOp = op;
+			theTransformedValue = transformedValue;
+		}
+
+		@Override
+		public Object getIdentity() {
+			return theTransformedValue.getIdentity();
+		}
+
+		@Override
+		public TypeToken<V> getType() {
+			return theType;
+		}
+
+		@Override
+		public long getStamp() {
+			return Stamped.compositeStamp(Arrays.asList(theValue1, theValue2));
+		}
+
+		@Override
+		public Transaction lock(boolean write, Object cause) {
+			return Lockable.lockAll(Lockable.lockable(theValue1, write, cause), Lockable.lockable(theValue2, write, cause));
+		}
+
+		@Override
+		public Transaction tryLock(boolean write, Object cause) {
+			return Lockable.tryLockAll(Lockable.lockable(theValue1, write, cause), Lockable.lockable(theValue2, write, cause));
+		}
+
+		@Override
+		public boolean isLockSupported() {
+			return theValue1.isLockSupported() || theValue2.isLockSupported();
+		}
+
+		@Override
+		public V get() {
+			S v1 = theValue1.get();
+			V result = theOp.getFirstArgDecisiveValue(v1);
+			if (result != null)
+				return result;
+			return theOp.apply(v1, theValue2.get());
+		}
+
+		@Override
+		public Observable<ObservableValueEvent<V>> noInitChanges() {
+			return theTransformedValue.noInitChanges();
+		}
+
+		@Override
+		public <V2 extends V> V set(V2 value, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
+			return theTransformedValue.set(value, cause);
+		}
+
+		@Override
+		public <V2 extends V> String isAcceptable(V2 value) {
+			return theTransformedValue.isAcceptable(value);
+		}
+
+		@Override
+		public ObservableValue<String> isEnabled() {
+			return theTransformedValue.isEnabled();
+		}
+
+		@Override
+		public int hashCode() {
+			return getIdentity().hashCode();
+		}
+
+		@Override
+		public boolean equals(Object obj) {
+			if (obj instanceof Identifiable)
+				return getIdentity().equals(((Identifiable) obj).getIdentity());
+			else
+				return false;
+		}
+
+		@Override
+		public String toString() {
+			return getIdentity().toString();
+		}
 	}
 }
