@@ -168,30 +168,31 @@ public class QuickDocument extends ExElement.Abstract {
 	public static class QuickHeadSection extends ExElement.Interpreted.Abstract<ExElement> {
 		public static final String HEAD = "head";
 
-		public static final ExElement.ChildElementGetter<ExElement, QuickHeadSection, QuickHeadSection.Def> IMPORTS = new ExElement.ChildElementGetter<ExElement, QuickHeadSection, QuickHeadSection.Def>() {
-			@Override
-			public String getDescription() {
-				return "The imports of the document, allowing types and static fields and methods to be used by name without full qualification";
-			}
-
-			@Override
-			public List<? extends ExElement.Def<?>> getChildrenFromDef(QuickHeadSection.Def def) {
-				if(def.getClassView().getElement()!=null)
-					return Collections.singletonList(def.getClassView());
-				else
-					return Collections.emptyList();
-			}
-
-			@Override
-			public List<? extends ExElement.Interpreted<?>> getChildrenFromInterpreted(QuickHeadSection interp) {
-				return Collections.emptyList();
-			}
-
-			@Override
-			public List<? extends ExElement> getChildrenFromElement(ExElement element) {
-				return Collections.emptyList();
-			}
-		};
+		// public static final ExElement.ChildElementGetter<ExElement, QuickHeadSection, QuickHeadSection.Def> IMPORTS = new
+		// ExElement.ChildElementGetter<ExElement, QuickHeadSection, QuickHeadSection.Def>() {
+		// @Override
+		// public String getDescription() {
+		// return "The imports of the document, allowing types and static fields and methods to be used by name without full qualification";
+		// }
+		//
+		// @Override
+		// public List<? extends ExElement.Def<?>> getChildrenFromDef(QuickHeadSection.Def def) {
+		// if(def.getClassView().getElement()!=null)
+		// return Collections.singletonList(def.getClassView());
+		// else
+		// return Collections.emptyList();
+		// }
+		//
+		// @Override
+		// public List<? extends ExElement.Interpreted<?>> getChildrenFromInterpreted(QuickHeadSection interp) {
+		// return Collections.emptyList();
+		// }
+		//
+		// @Override
+		// public List<? extends ExElement> getChildrenFromElement(ExElement element) {
+		// return Collections.emptyList();
+		// }
+		// };
 
 		public static final ExElement.ChildElementGetter<ExElement, QuickHeadSection, QuickHeadSection.Def> MODELS = new ExElement.ChildElementGetter<ExElement, QuickHeadSection, QuickHeadSection.Def>() {
 			@Override
@@ -283,20 +284,19 @@ public class QuickDocument extends ExElement.Abstract {
 			@Override
 			public void update(ExpressoQIS session) throws QonfigInterpretationException {
 				ExElement.checkElement(session.getFocusType(), QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, HEAD);
-				forChild(session.getRole("imports"), IMPORTS);
+				// forChild(session.getRole("imports"), IMPORTS);
 				forChild(session.getRole("models"), MODELS);
 				forChild(session.getRole("style-sheet"), STYLE_SHEET);
 				super.update(session);
 				ClassView cv = session.interpretChildren("imports", ClassView.class).peekFirst();
 				if (cv == null) {
 					ClassView defaultCV = ClassView.build()//
-						.withWildcardImport("java.lang", null)//
-						.withWildcardImport(MouseCursor.StandardCursors.class.getName(), null)//
-						.build(this, null);
+						.withWildcardImport("java.lang")//
+						.withWildcardImport(MouseCursor.StandardCursors.class.getName())//
+						.build();
 					cv = defaultCV;
 				} else {
-					cv = cv.copy().withWildcardImport(MouseCursor.StandardCursors.class.getName(), null).build(null, null);
-					cv.update(session.forChildren("imports").getFirst());
+					cv = cv.copy().withWildcardImport(MouseCursor.StandardCursors.class.getName()).build();
 				}
 				theClassView = cv;
 				// Install the class view now, so the model can use it

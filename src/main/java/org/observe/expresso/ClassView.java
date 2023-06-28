@@ -15,66 +15,34 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
-import org.observe.expresso.qonfig.ExElement;
-import org.observe.expresso.qonfig.ExpressoQIS;
-import org.observe.expresso.qonfig.ExpressoSessionImplV0_1;
 import org.observe.util.TypeParser;
 import org.observe.util.TypeTokens;
 import org.observe.util.TypeTokens.TypeRetriever;
 import org.qommons.QommonsUtils;
 import org.qommons.ValueHolder;
-import org.qommons.collect.BetterList;
-import org.qommons.config.AbstractQIS;
-import org.qommons.config.QonfigInterpretationException;
 import org.qommons.io.ErrorReporting;
 
 import com.google.common.reflect.TypeToken;
 
 /** A perspective from which to load classes by name, qualified or not, as well as statically-imported fields and methods */
-public class ClassView extends ExElement.Def.Abstract<ExElement> implements TypeParser {
+public class ClassView implements TypeParser {
 	private static final Class<?> NOT_FOUND = new Object() {
 	}.getClass();
-
-	private static final ExElement.ChildElementGetter<ExElement, ExElement.Interpreted<?>, ClassView> IMPORT_ELEMENTS = ExElement.ChildElementGetter.<ExElement, ExElement.Interpreted<?>, ClassView> of(
-		ClassView::getImportElements, null, null, "The import statements");
-
-	private static final ExElement.AttributeValueGetter<ExElement, ExElement.Interpreted<?>, ImportElement> IMPORT_VALUE = ExElement.AttributeValueGetter.<ExElement, ExElement.Interpreted<?>, ImportElement> of(
-		ImportElement::getValue, null, null, "The type name, static field or method name, or wildcard expression to import");
-
-	private static class ImportElement extends ExElement.Def.Abstract<ExElement> {
-		ImportElement(ExElement.Def<?> parent, AbstractQIS<?> session) {
-			super(parent, session.getElement());
-			ExElement.checkElement(session.getFocusType(), ExpressoSessionImplV0_1.TOOLKIT_NAME, ExpressoSessionImplV0_1.VERSION, "import");
-			forValue(IMPORT_VALUE);
-		}
-
-		String getValue() {
-			return getElement().getValueText();
-		}
-	}
 
 	private final TypeParser theParser;
 	private final List<ClassLoader> theClassLoaders;
 	private final Map<String, String> theImportedTypes;
 	private final Set<String> theWildcardImports;
-	private final List<ImportElement> theImportElements;
 
 	private Map<String, Class<?>> theTypeCache;
 	private Map<String, ValueHolder<Field>> theFieldCache;
 	private Map<String, List<Method>> theMethodCache;
 
 	private ClassView(List<ClassLoader> classLoaders, Map<String, String> importedTypes, Map<String, ErrorReporting> importTypeErrors,
-		Set<String> wildcardImports, ExElement.Def<?> parent, AbstractQIS<?> session, List<AbstractQIS<?>> importElements) {
-		super(parent, session == null ? null : session.getElement());
-		if (session != null) {
-			ExElement.checkElement(session.getFocusType(), ExpressoSessionImplV0_1.TOOLKIT_NAME, ExpressoSessionImplV0_1.VERSION,
-				"imports");
-			forChild(session.getRole("import"), IMPORT_ELEMENTS);
-		}
+		Set<String> wildcardImports) {
 		theClassLoaders = classLoaders;
 		theImportedTypes = importedTypes;
 		theWildcardImports = wildcardImports;
-		theImportElements = BetterList.of2(importElements.stream(), s -> new ImportElement(this, s));
 		theFieldCache = new ConcurrentHashMap<>();
 		theMethodCache = new ConcurrentHashMap<>();
 
@@ -227,18 +195,6 @@ public class ClassView extends ExElement.Def.Abstract<ExElement> implements Type
 		return theParser.removeTypeRetriever(typeRetriever);
 	}
 
-	public List<ImportElement> getImportElements() {
-		return theImportElements;
-	}
-
-	@Override
-	public void update(ExpressoQIS session) throws QonfigInterpretationException {
-		super.update(session);
-		int i = 0;
-		for (ExpressoQIS impSession : session.forChildren("import"))
-			theImportElements.get(i++).update(impSession);
-	}
-
 	public Builder copy() {
 		return new Builder(this);
 	}
@@ -254,18 +210,16 @@ public class ClassView extends ExElement.Def.Abstract<ExElement> implements Type
 		private final Map<String, String> theImportedTypes;
 		private final Map<String, ErrorReporting> theImportTypeErrors;
 		private final Set<String> theWildcardImports;
-		private final List<AbstractQIS<?>> theImportElements;
 
 		Builder(ClassView toCopy) {
 			theClassLoaders = new ArrayList<>(3);
 			theImportedTypes = new LinkedHashMap<>();
 			theImportTypeErrors = new LinkedHashMap<>();
 			theWildcardImports = new LinkedHashSet<>();
-			theImportElements = new ArrayList<>();
 			if (toCopy != null) {
 				theClassLoaders.addAll(toCopy.theClassLoaders);
-				for (String type : toCopy.theImportedTypes.keySet())
-					withImport(type, new ErrorReporting.Default(null), null);
+				for (String type : toCopy.theImportedTypes.values())
+					withImport(type, new ErrorReporting.Default(null));
 				theWildcardImports.addAll(toCopy.theWildcardImports);
 			}
 		}
@@ -284,7 +238,7 @@ public class ClassView extends ExElement.Def.Abstract<ExElement> implements Type
 		 * @param onError Error reporting if this type cannot be resolved after the class view is built
 		 * @return This builder
 		 */
-		public Builder withImport(String importedType, ErrorReporting onError, AbstractQIS<?> session) {
+		public Builder withImport(String importedType, ErrorReporting onError) {
 			int lastDot = importedType.lastIndexOf('.');
 			if (lastDot >= 0)
 				theImportedTypes.put(importedType.substring(lastDot + 1), importedType);
@@ -292,8 +246,6 @@ public class ClassView extends ExElement.Def.Abstract<ExElement> implements Type
 				theImportedTypes.put(importedType, importedType);
 			if (onError != null)
 				theImportTypeErrors.put(importedType, onError);
-			if (session != null)
-				theImportElements.add(session);
 			return this;
 		}
 
@@ -302,20 +254,18 @@ public class ClassView extends ExElement.Def.Abstract<ExElement> implements Type
 		 *        names, and fields and methods of the given type will be available by name.
 		 * @return This builder
 		 */
-		public Builder withWildcardImport(String wildcardImport, AbstractQIS<?> session) {
+		public Builder withWildcardImport(String wildcardImport) {
 			theWildcardImports.add(wildcardImport);
-			if (session != null)
-				theImportElements.add(session);
 			return this;
 		}
 
 		/** @return The new {@link ClassView} */
-		public ClassView build(ExElement.Def<?> parent, AbstractQIS<?> session) {
+		public ClassView build() {
 			return new ClassView(//
 				theClassLoaders.isEmpty() ? Collections.unmodifiableList(Arrays.asList(Thread.currentThread().getContextClassLoader()))
 					: QommonsUtils.unmodifiableCopy(theClassLoaders), //
 					QommonsUtils.unmodifiableCopy(theImportedTypes), theImportTypeErrors, //
-					QommonsUtils.unmodifiableDistinctCopy(theWildcardImports), parent, session, theImportElements);
+					QommonsUtils.unmodifiableDistinctCopy(theWildcardImports));
 		}
 	}
 }
