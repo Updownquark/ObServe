@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.UnaryOperator;
@@ -19,16 +20,32 @@ import javax.swing.JTextField;
 import javax.swing.SwingConstants;
 import javax.swing.border.TitledBorder;
 import javax.swing.text.JTextComponent;
+import javax.swing.text.MutableAttributeSet;
+import javax.swing.text.SimpleAttributeSet;
+import javax.swing.text.StyleConstants;
 
 /** Allows for simple chained modification of a font */
-public class FontAdjuster {
+public class FontAdjuster implements Cloneable {
 	private UnaryOperator<Font> theFont;
+	private MutableAttributeSet theFontAttributes;
 	private Color theForeground;
 	private Integer theHAlign;
 	private Integer theVAlign;
 
+	public FontAdjuster() {
+		this(null);
+	}
+
+	public FontAdjuster(MutableAttributeSet fontAttributes) {
+		theFontAttributes = fontAttributes;
+	}
+
 	public Function<Font, Font> getFont() {
 		return theFont;
+	}
+
+	public MutableAttributeSet getFontAttributes() {
+		return theFontAttributes;
 	}
 
 	public Color getColor() {
@@ -66,6 +83,11 @@ public class FontAdjuster {
 	}
 
 	public FontAdjuster deriveFont(int style, float size) {
+		if (theFontAttributes != null) {
+			StyleConstants.setFontSize(theFontAttributes, Math.round(size));
+			StyleConstants.setBold(theFontAttributes, (style & Font.BOLD) != 0);
+			StyleConstants.setItalic(theFontAttributes, (style & Font.ITALIC) != 0);
+		}
 		return deriveFont(font -> font.deriveFont(style, size));
 	}
 
@@ -75,10 +97,14 @@ public class FontAdjuster {
 	}
 
 	public FontAdjuster withFontWeight(float weight) {
+		if (theFontAttributes != null)
+			StyleConstants.setBold(theFontAttributes, weight > 1f);
 		return deriveFont(TextAttribute.WEIGHT, weight);
 	}
 
 	public FontAdjuster withFontSlant(float slant) {
+		if (theFontAttributes != null)
+			StyleConstants.setItalic(theFontAttributes, slant > 0f);
 		return deriveFont(TextAttribute.POSTURE, slant);
 	}
 
@@ -87,6 +113,10 @@ public class FontAdjuster {
 	 * @return This adjuster
 	 */
 	public FontAdjuster withFontStyle(int style) {
+		if (theFontAttributes != null) {
+			StyleConstants.setBold(theFontAttributes, (style & Font.BOLD) != 0);
+			StyleConstants.setItalic(theFontAttributes, (style & Font.ITALIC) != 0);
+		}
 		return deriveFont(font -> font.deriveFont(style));
 	}
 
@@ -95,6 +125,8 @@ public class FontAdjuster {
 	 * @return This adjuster
 	 */
 	public FontAdjuster withFontSize(float size) {
+		if (theFontAttributes != null)
+			StyleConstants.setFontSize(theFontAttributes, Math.round(size));
 		return deriveFont(font -> font.deriveFont(size));
 	}
 
@@ -104,7 +136,7 @@ public class FontAdjuster {
 	 * @return This holder
 	 */
 	public FontAdjuster withSizeAndStyle(int style, float fontSize) {
-		return deriveFont(font -> font.deriveFont(style, fontSize));
+		return deriveFont(style, fontSize);
 	}
 
 	/**
@@ -129,6 +161,8 @@ public class FontAdjuster {
 	}
 
 	public FontAdjuster underline(boolean underline) {
+		if (theFontAttributes != null)
+			StyleConstants.setUnderline(theFontAttributes, underline);
 		return deriveFont(TextAttribute.UNDERLINE, underline ? TextAttribute.UNDERLINE_ON : -1);
 	}
 
@@ -137,6 +171,8 @@ public class FontAdjuster {
 	}
 
 	public FontAdjuster strikethrough(boolean strikethrough) {
+		if (theFontAttributes != null)
+			StyleConstants.setStrikeThrough(theFontAttributes, strikethrough);
 		return deriveFont(TextAttribute.STRIKETHROUGH, strikethrough ? TextAttribute.STRIKETHROUGH_ON : false);
 	}
 
@@ -159,6 +195,8 @@ public class FontAdjuster {
 	 */
 	public FontAdjuster withForeground(Color foreground) {
 		theForeground = foreground;
+		if (theFontAttributes != null)
+			StyleConstants.setForeground(theFontAttributes, foreground);
 		return this;
 	}
 	/**
@@ -169,6 +207,9 @@ public class FontAdjuster {
 	 */
 	public FontAdjuster alignH(int align) {
 		theHAlign = align;
+		if (theFontAttributes != null)
+			StyleConstants.setAlignment(theFontAttributes, //
+				align < 0 ? StyleConstants.ALIGN_LEFT : (align > 0 ? StyleConstants.ALIGN_RIGHT : StyleConstants.ALIGN_CENTER));
 		return this;
 	}
 
@@ -191,6 +232,9 @@ public class FontAdjuster {
 	public FontAdjuster align(int hAlign, int vAlign) {
 		theHAlign = hAlign;
 		theVAlign = vAlign;
+		if (theFontAttributes != null)
+			StyleConstants.setAlignment(theFontAttributes, //
+				hAlign < 0 ? StyleConstants.ALIGN_LEFT : (hAlign > 0 ? StyleConstants.ALIGN_RIGHT : StyleConstants.ALIGN_CENTER));
 		return this;
 	}
 
@@ -298,6 +342,35 @@ public class FontAdjuster {
 			for (Runnable r : revert)
 				r.run();
 		};
+	}
+
+	@Override
+	public FontAdjuster clone() {
+		FontAdjuster cloned;
+		try {
+			cloned = (FontAdjuster) super.clone();
+		} catch (CloneNotSupportedException e) {
+			throw new IllegalStateException(e);
+		}
+		if (theFontAttributes != null)
+			cloned.theFontAttributes = new SimpleAttributeSet(theFontAttributes);
+		return cloned;
+	}
+
+	@Override
+	public int hashCode() {
+		return Objects.hash(theFont, theForeground, theHAlign, theVAlign);
+	}
+
+	@Override
+	public boolean equals(Object obj) {
+		if (obj == this)
+			return true;
+		else if (!(obj instanceof FontAdjuster))
+			return false;
+		FontAdjuster other = (FontAdjuster) obj;
+		return Objects.equals(theFont, other.theFont) && Objects.equals(theForeground, other.theForeground) && theHAlign == other.theHAlign
+			&& theVAlign == other.theVAlign;
 	}
 
 	@Override

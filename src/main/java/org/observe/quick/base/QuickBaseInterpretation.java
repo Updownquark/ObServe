@@ -113,6 +113,11 @@ public class QuickBaseInterpretation implements QonfigInterpretation {
 			session -> QuickCoreInterpretation.interpretQuick(session, QuickButton.Def::new));
 		interpreter.createWith(QuickTextArea.TEXT_AREA, QuickTextArea.Def.class,
 			session -> QuickCoreInterpretation.interpretQuick(session, QuickTextArea.Def::new));
+		interpreter.createWith(StyledTextArea.STYLED_TEXT_AREA, StyledTextArea.Def.class,
+			session -> QuickCoreInterpretation.interpretQuick(session, StyledTextArea.Def::new));
+		interpreter.createWith(StyledTextArea.TEXT_STYLE, StyledTextArea.TextStyleElement.Def.class,
+			session -> QuickCoreInterpretation.<StyledTextArea.TextStyleElement, StyledTextArea.TextStyleElement.Def> interpretQuick(
+				session, (parent, el) -> new StyledTextArea.TextStyleElement.Def((StyledTextArea.Def<Object>) parent, el)));
 
 		// Containers
 		interpreter.createWith(QuickBox.BOX, QuickBox.Def.class,

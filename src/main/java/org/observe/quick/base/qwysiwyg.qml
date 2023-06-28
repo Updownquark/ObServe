@@ -21,10 +21,22 @@
 		</models>
 	</head>
 	<box layout="inline-layout" orientation="vertical" main-align="justify" tooltip="app.qwysiwyg.tooltip">
-		<text-area html="true" editable="false" value="app.qwysiwyg.documentDisplay" tooltip="app.qwysiwyg.tooltip">
-			<on-mouse-move>app.qwysiwyg.hover(mousePosition)</on-mouse-move>
-			<on-click>app.qwysiwyg.clicked(mousePosition, clickCount)</on-click>
+		<styled-text-area editable="false" value="app.qwysiwyg.documentRoot" children="node.children" post-text="node.getPostText()"
+			tooltip="app.qwysiwyg.tooltip">
+			<text-style>
+				<style attr="font-weight" condition="node!=null &amp;&amp; node.isBold()">`bold`</style>
+				<style attr="font-color">node==null ? null : node.getFontColor()</style>
+				<style attr="underline" condition="node!=null &amp;&amp; node.isActiveLink()">true</style>
+			</text-style>
+			<style>
+				<style attr="mouse-cursor" condition="app.qwysiwyg.hovered!=null &amp;&amp; app.qwysiwyg.hovered.isActiveLink()">HAND</style>
+			</style>
+			<on-mouse-enter>app.qwysiwyg.controlPressed(ctrlPressed)</on-mouse-enter>
+			<on-key-press>app.qwysiwyg.controlPressed(ctrlPressed)</on-key-press>
+			<on-key-release>app.qwysiwyg.controlPressed(ctrlPressed)</on-key-release>
+			<on-mouse-move>app.qwysiwyg.hover(node, ctrlPressed)</on-mouse-move>
+			<on-click>app.qwysiwyg.clicked(node, clickCount, ctrlPressed)</on-click>
 			<on-mouse-exit>app.qwysiwyg.mouseExit()</on-mouse-exit>
-		</text-area>
+		</styled-text-area>
 	</box>
 </quick>

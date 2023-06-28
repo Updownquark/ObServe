@@ -183,6 +183,20 @@
 			<attribute name="rows" type="expression" specify="optional" />
 			<attribute name="html" type="expression" default="false" />
 		</element-def>
+		<element-def name="styled-text-area" extends="text-widget">
+			<element-model>
+				<value name="node" priority="100"/>
+			</element-model>
+			<attribute name="children" type="expression" specify="required" />
+			<attribute name="post-text" type="expression" specify="optional" />
+			<attribute name="rows" type="expression" specify="optional" />
+			<child-def name="text-style" type="text-style" min="0" />
+		</element-def>
+		<element-def name="text-style" inherits="with-text">
+			<styles>
+				<style-attribute name="bg-color" type="java.awt.Color" />
+			</styles>
+		</element-def>
 		<element-def name="spinner" extends="text-field">
 			<attribute name="increment" type="expression" specify="optional" />
 		</element-def>

@@ -10,7 +10,6 @@ import java.text.AttributedCharacterIterator.Attribute;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
-import java.util.function.Function;
 import java.util.function.UnaryOperator;
 
 import javax.swing.AbstractButton;
@@ -25,10 +24,8 @@ import javax.swing.border.LineBorder;
 import javax.swing.border.TitledBorder;
 import javax.swing.text.JTextComponent;
 
-public class ComponentDecorator extends FontAdjuster {
+public class ComponentDecorator extends BgFontAdjuster {
 	private Border theBorder;
-	private Color theBackground;
-	private Function<Font, Font> theFont;
 	private Icon theIcon;
 	private Boolean isEnabled;
 	private Cursor theCursor;
@@ -40,16 +37,10 @@ public class ComponentDecorator extends FontAdjuster {
 		return theBorder;
 	}
 
-	public Color getBackground() {
-		return theBackground;
-	}
-
 	@Override
 	public ComponentDecorator reset() {
 		super.reset();
 		theBorder = null;
-		theBackground = null;
-		theFont = null;
 		theIcon = null;
 		isEnabled = null;
 		isUsingImage = false;
@@ -175,8 +166,8 @@ public class ComponentDecorator extends FontAdjuster {
 		if (font == null)
 			return () -> {
 			};
-		else
-			return font.adjust(b);
+			else
+				return font.adjust(b);
 	}
 
 	public ComponentDecorator withLineBorder(Color color, int thickness, boolean rounded) {
@@ -215,8 +206,9 @@ public class ComponentDecorator extends FontAdjuster {
 		}
 	}
 
+	@Override
 	public ComponentDecorator withBackground(Color bg) {
-		theBackground = bg;
+		super.withBackground(bg);
 		return this;
 	}
 
@@ -263,18 +255,6 @@ public class ComponentDecorator extends FontAdjuster {
 			Border oldBorder = ((JComponent) c).getBorder();
 			((JComponent) c).setBorder(theBorder);
 			revert.add(() -> ((JComponent) c).setBorder(oldBorder));
-		}
-		if (theBackground != null) {
-			boolean oldNonOpaque = c instanceof JComponent && !c.isOpaque();
-			Color oldBG = c.getBackground();
-			if (c instanceof JComponent)
-				((JComponent) c).setOpaque(true);
-			c.setBackground(theBackground);
-			revert.add(() -> {
-				if (!oldNonOpaque)
-					((JComponent) c).setOpaque(false);
-				c.setBackground(oldBG);
-			});
 		}
 
 		if (c instanceof JLabel) {

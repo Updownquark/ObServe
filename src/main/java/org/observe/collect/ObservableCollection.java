@@ -309,7 +309,7 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 	 * @return An observable collection with same values as this one, but is safe for use on the given thread and fires its events there
 	 */
 	default ObservableCollection<E> safe(ThreadConstraint threading, Observable<?> until) {
-		if (getThreadConstraint() == threading || getThreadConstraint() == ThreadConstraint.NONE)
+		if (getThreadConstraint() == threading || getThreadConstraint() == ThreadConstraint.NONE || threading == ThreadConstraint.ANY)
 			return this;
 		return new SafeObservableCollection<>(this, threading, until);
 	}

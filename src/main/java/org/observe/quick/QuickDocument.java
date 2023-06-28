@@ -289,7 +289,10 @@ public class QuickDocument extends ExElement.Abstract {
 				super.update(session);
 				ClassView cv = session.interpretChildren("imports", ClassView.class).peekFirst();
 				if (cv == null) {
-					ClassView defaultCV = ClassView.build().withWildcardImport("java.lang", null).build(this, null);
+					ClassView defaultCV = ClassView.build()//
+						.withWildcardImport("java.lang", null)//
+						.withWildcardImport(MouseCursor.StandardCursors.class.getName(), null)//
+						.build(this, null);
 					cv = defaultCV;
 				} else
 					cv.update(session.forChildren("imports").getFirst());

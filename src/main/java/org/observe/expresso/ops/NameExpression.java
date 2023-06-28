@@ -177,8 +177,8 @@ public class NameExpression implements ObservableExpression, Named {
 		EvaluatedExpression<M, MV> fieldValue;
 		Field field = env.getClassView().getImportedStaticField(theNames.getFirst().getName());
 		if (field != null) {
-			fieldValue = evaluateField(field, TypeTokens.get().of(field.getGenericType()), null, 1, type, expressionOffset,
-				env.reporting().at(theNames.getFirst().length() + 1), divisions);
+			fieldValue = evaluateField(field, TypeTokens.get().of(field.getGenericType()), null, 0, type, expressionOffset, env.reporting(),
+				divisions);
 		} else {
 			StringBuilder typeName = new StringBuilder().append(theNames.get(0).getName());
 			Class<?> clazz = env.getClassView().getType(typeName.toString());
@@ -247,13 +247,14 @@ public class NameExpression implements ObservableExpression, Named {
 				.interpret();
 			if (nameIndex > 0)
 				divisions[nameIndex - 1] = ObservableExpression.evEx(imv, mv);
+			Class<?> ctxType = TypeTokens.getRawType(mvType.getType(0));
 			Field field;
 			try {
-				field = TypeTokens.getRawType(mvType.getType(0)).getField(theNames.get(nameIndex).getName());
+				field = ctxType.getField(theNames.get(nameIndex).getName());
 			} catch (NoSuchFieldException e) {
 				throw new ExpressoEvaluationException(expressionOffset + getDivisionOffset(nameIndex),
 					getDivisionOffset(0) + theNames.get(nameIndex).length(), //
-					getPath(nameIndex) + "' cannot be resolved or is not a field");
+					getPath(nameIndex) + "' cannot be resolved or is not a field of " + ctxType.getName());
 			} catch (SecurityException e) {
 				throw new ExpressoEvaluationException(expressionOffset + getDivisionOffset(nameIndex),
 					getDivisionOffset(0) + theNames.get(nameIndex).length(), //

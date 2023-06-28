@@ -162,7 +162,7 @@ public interface QuickStyledElement extends ExElement {
 			@Override
 			public void update(QuickStyledElement.QuickInterpretationCache cache) throws ExpressoInterpretationException {
 				super.update();
-				if (theStyle == null || theStyle.getCompiled() != getDefinition().getStyle()) {
+				if (theStyle == null || theStyle.getId() != getDefinition().getStyle().getId()) {
 					ExElement.Interpreted<?> parent = getParentElement();
 					while (parent != null && !(parent instanceof QuickStyledElement.Interpreted))
 						parent = parent.getParentElement();
@@ -209,15 +209,14 @@ public interface QuickStyledElement extends ExElement {
 
 	public interface QuickInstanceStyle {
 		public interface Def extends QuickCompiledStyle {
+			Object getId();
+
 			@Override
 			Interpreted interpret(ExElement.Interpreted<?> parentEl, QuickInterpretedStyle parent,
 				Map<CompiledStyleApplication, InterpretedStyleApplication> applications) throws ExpressoInterpretationException;
 		}
 
 		public interface Interpreted extends QuickInterpretedStyle {
-			@Override
-			Def getCompiled();
-
 			Object getId();
 
 			QuickInstanceStyle create(QuickStyledElement parent);
@@ -234,8 +233,8 @@ public interface QuickStyledElement extends ExElement {
 			private final Object theId;
 			private final List<QuickStyleElement> theStyleElements;
 
-			protected Abstract(Interpreted interpreted, QuickStyledElement styledElement) {
-				theId = interpreted.getId();
+			protected Abstract(Object interpretedId, QuickStyledElement styledElement) {
+				theId = interpretedId;
 				theStyledElement = styledElement;
 				theStyleElements = new ArrayList<>();
 			}

@@ -69,7 +69,8 @@ public interface QuickTextWidget<T> extends QuickValueWidget<T> {
 		@Override
 		Interpreted<?, ? extends W> interpret(ExElement.Interpreted<?> parent);
 
-		public abstract class Abstract<T, W extends QuickTextWidget<T>> extends QuickValueWidget.Def.Abstract<T, W> implements Def<W> {
+		public abstract class Abstract<T, W extends QuickTextWidget<? extends T>> extends QuickValueWidget.Def.Abstract<T, W>
+		implements Def<W> {
 			private CompiledExpression theFormat;
 			private CompiledExpression isEditable;
 

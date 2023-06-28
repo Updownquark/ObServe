@@ -35,6 +35,10 @@
 				<style-attribute name="font-size" type="double" trickle-down="true" />
 				<style-attribute name="font-weight" type="double" trickle-down="true" />
 				<style-attribute name="font-slant" type="double" trickle-down="true" />
+				<style-attribute name="underline" type="boolean" trickle-down="false" />
+				<style-attribute name="strike-through" type="boolean" trickle-down="false" />
+				<style-attribute name="super-script" type="boolean" trickle-down="false" />
+				<style-attribute name="sub-script" type="boolean" trickle-down="false" />
 			</styles>
 		</add-on>
 
@@ -61,6 +65,7 @@
 			</element-model>
 			<styles>
 				<style-attribute name="color" type="java.awt.Color" />
+				<style-attribute name="mouse-cursor" type="org.observe.quick.MouseCursor" />
 			</styles>
 			<!-- Local variables, visible to any children also -->
 			<attribute name="name" type="string" specify="optional" /> <!-- For debugging -->

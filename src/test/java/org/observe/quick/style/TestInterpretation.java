@@ -19,9 +19,9 @@ import org.observe.expresso.ObservableModelSet.CompiledModelValue;
 import org.observe.expresso.ObservableModelSet.ModelComponentNode;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueSynth;
+import org.observe.expresso.TypeConversionException;
 import org.observe.expresso.qonfig.ElementModelAugmentation;
 import org.observe.expresso.qonfig.ExpressoQIS;
-import org.observe.expresso.TypeConversionException;
 import org.observe.quick.style.QuickInterpretedStyle.QuickElementStyleAttribute;
 import org.qommons.QommonsUtils;
 import org.qommons.Version;
@@ -85,6 +85,9 @@ public class TestInterpretation implements QonfigInterpretation {
 			private final ModelComponentNode<?, ?> c;
 			private final ModelComponentNode<?, ?> d;
 			private final QuickCompiledStyle theStyle;
+			final QuickStyleAttribute<Boolean> s0;
+			final QuickStyleAttribute<Integer> s1;
+			final QuickStyleAttribute<Boolean> s2;
 
 			Def(StyleQIS session) throws QonfigInterpretationException {
 				expressoSession = session.as(ExpressoQIS.class);
@@ -110,6 +113,10 @@ public class TestInterpretation implements QonfigInterpretation {
 				}
 
 				theStyle = session.getStyle();
+
+				s0 = theStyle.getAttribute("s0", boolean.class);
+				s1 = theStyle.getAttribute("s1", int.class);
+				s2 = theStyle.getAttribute("s2", boolean.class);
 			}
 
 			@Override
@@ -119,7 +126,7 @@ public class TestInterpretation implements QonfigInterpretation {
 
 			@Override
 			public ModelValueSynth<SettableValue<?>, SettableValue<A>> createSynthesizer() throws ExpressoInterpretationException {
-				return new Synth(expressoSession, a, b, c, d, theStyle.interpret(null, null, new HashMap<>()));
+				return new Synth(expressoSession, this, theStyle.interpret(null, null, new HashMap<>()));
 			}
 		}
 
@@ -133,34 +140,33 @@ public class TestInterpretation implements QonfigInterpretation {
 			private final QuickElementStyleAttribute<Integer> s1;
 			private final QuickElementStyleAttribute<Boolean> s2;
 
-			Synth(ExpressoQIS session, ModelComponentNode<?, ?> a, ModelComponentNode<?, ?> b, ModelComponentNode<?, ?> c,
-				ModelComponentNode<?, ?> d, QuickInterpretedStyle style) throws ExpressoInterpretationException {
+			Synth(ExpressoQIS session, Def def, QuickInterpretedStyle style) throws ExpressoInterpretationException {
 				expressoSession = session;
 				expressoSession.getExpressoEnv().interpretLocalModel();
 				try {
-					this.a = a.interpret().as(ModelTypes.Value.BOOLEAN);
+					this.a = def.a.interpret().as(ModelTypes.Value.BOOLEAN);
 				} catch (TypeConversionException x) {
 					throw new ExpressoInterpretationException("Could not interpret a", session.getElement().getPositionInFile(), 0, x);
 				}
 				try {
-					this.b = b.interpret().as(ModelTypes.Value.BOOLEAN);
+					this.b = def.b.interpret().as(ModelTypes.Value.BOOLEAN);
 				} catch (TypeConversionException x) {
 					throw new ExpressoInterpretationException("Could not interpret b", session.getElement().getPositionInFile(), 0, x);
 				}
 				try {
-					this.c = c.interpret().as(ModelTypes.Value.INT);
+					this.c = def.c.interpret().as(ModelTypes.Value.INT);
 				} catch (TypeConversionException x) {
 					throw new ExpressoInterpretationException("Could not interpret c", session.getElement().getPositionInFile(), 0, x);
 				}
 				try {
-					this.d = d.interpret().as(ModelTypes.Value.BOOLEAN);
+					this.d = def.d.interpret().as(ModelTypes.Value.BOOLEAN);
 				} catch (TypeConversionException x) {
 					throw new ExpressoInterpretationException("Could not interpret d", session.getElement().getPositionInFile(), 0, x);
 				}
 
-				s0 = style.get("s0", boolean.class);
-				s1 = style.get("s1", int.class);
-				s2 = style.get("s2", boolean.class);
+				s0 = style.get(def.s0);
+				s1 = style.get(def.s1);
+				s2 = style.get(def.s2);
 			}
 
 			@Override
@@ -254,6 +260,8 @@ public class TestInterpretation implements QonfigInterpretation {
 			final ModelComponentNode<?, ?> f;
 			final List<CompiledModelValue<?, ?>> children;
 			final QuickCompiledStyle style;
+			final QuickStyleAttribute<Integer> s3;
+			final QuickStyleAttribute<Integer> s4;
 
 			Def(StyleQIS session, Class<T> clazz) throws QonfigInterpretationException {
 				this.clazz = clazz;
@@ -276,6 +284,9 @@ public class TestInterpretation implements QonfigInterpretation {
 					throw new QonfigInterpretationException("Could not evaluate children", x.getPosition(), x.getErrorLength(), x);
 				}
 				style = session.getStyle();
+
+				s3 = style.getAttribute("s3", int.class);
+				s4 = style.getAttribute("s4", int.class);
 			}
 
 			@Override
@@ -326,8 +337,8 @@ public class TestInterpretation implements QonfigInterpretation {
 						x);
 				}
 
-				s3 = style.get("s3", int.class);
-				s4 = style.get("s4", int.class);
+				s3 = style.get(def.s3);
+				s4 = style.get(def.s4);
 				this.children = new ArrayList<>();
 				try {
 					for (CompiledModelValue<?, ?> child : def.children)
@@ -397,6 +408,7 @@ public class TestInterpretation implements QonfigInterpretation {
 		/** {@link CompiledModelValue} for producing instances of {@link C} */
 		public static class Def extends B.Def<C> {
 			final ModelComponentNode<?, ?> g;
+			final QuickStyleAttribute<Boolean> s5;
 
 			Def(StyleQIS session) throws QonfigInterpretationException {
 				super(session, C.class);
@@ -405,6 +417,7 @@ public class TestInterpretation implements QonfigInterpretation {
 				} catch (ModelException x) {
 					throw new QonfigInterpretationException("Could not interpret g", session.getElement().getPositionInFile(), 0, x);
 				}
+				s5 = style.getAttribute("s5", boolean.class);
 			}
 
 			@Override
@@ -425,7 +438,7 @@ public class TestInterpretation implements QonfigInterpretation {
 					throw new ExpressoInterpretationException("Could not interpret g", expressoSession.getElement().getPositionInFile(), 0,
 						x);
 				}
-				this.s5 = style.get("s5", boolean.class);
+				this.s5 = style.get(def.s5);
 			}
 
 			@Override
@@ -451,6 +464,7 @@ public class TestInterpretation implements QonfigInterpretation {
 		/** {@link CompiledModelValue} for producing instances of {@link D} */
 		public static class Def extends B.Def<D> {
 			final ModelComponentNode<?, ?> h;
+			final QuickStyleAttribute<Integer> s6;
 
 			Def(StyleQIS session) throws QonfigInterpretationException {
 				super(session, D.class);
@@ -459,6 +473,7 @@ public class TestInterpretation implements QonfigInterpretation {
 				} catch (ModelException x) {
 					throw new QonfigInterpretationException("No such model value h", session.getElement().getPositionInFile(), 0, x);
 				}
+				s6 = session.getStyle().getAttribute("s6", int.class);
 			}
 
 			@Override
@@ -479,7 +494,7 @@ public class TestInterpretation implements QonfigInterpretation {
 					throw new ExpressoInterpretationException("Could not interpret h", expressoSession.getElement().getPositionInFile(), 0,
 						x);
 				}
-				this.s6 = style.get("s6", int.class);
+				this.s6 = style.get(def.s6);
 			}
 
 			@Override

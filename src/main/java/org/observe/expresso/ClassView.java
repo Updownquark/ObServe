@@ -103,7 +103,7 @@ public class ClassView extends ExElement.Def.Abstract<ExElement> implements Type
 				continue;
 			for (Field field : type.getDeclaredFields()) {
 				int mod = field.getModifiers();
-				if (Modifier.isPublic(mod) && Modifier.isStatic(mod)) {
+				if (Modifier.isPublic(mod) && Modifier.isStatic(mod) && field.getName().equals(fieldName)) {
 					found = field;
 					break;
 				}
@@ -130,7 +130,7 @@ public class ClassView extends ExElement.Def.Abstract<ExElement> implements Type
 				continue;
 			for (Method method : type.getDeclaredMethods()) {
 				int mod = method.getModifiers();
-				if (Modifier.isPublic(mod) && Modifier.isStatic(mod))
+				if (Modifier.isPublic(mod) && Modifier.isStatic(mod) && method.getName().equals(methodName))
 					methods.add(method);
 			}
 		}

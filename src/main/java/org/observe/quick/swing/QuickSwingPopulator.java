@@ -1,15 +1,6 @@
 package org.observe.quick.swing;
 
-import java.awt.AWTEvent;
-import java.awt.Color;
-import java.awt.Component;
-import java.awt.Container;
-import java.awt.EventQueue;
-import java.awt.IllegalComponentStateException;
-import java.awt.LayoutManager;
-import java.awt.Point;
-import java.awt.Toolkit;
-import java.awt.Window;
+import java.awt.*;
 import java.awt.event.FocusEvent;
 import java.awt.event.FocusListener;
 import java.awt.event.KeyAdapter;
@@ -18,6 +9,7 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseListener;
 import java.awt.event.MouseWheelEvent;
+import java.awt.font.TextAttribute;
 import java.io.File;
 import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
@@ -47,6 +39,7 @@ import org.observe.expresso.qonfig.ExAddOn;
 import org.observe.quick.*;
 import org.observe.quick.QuickTextElement.QuickTextStyle;
 import org.observe.quick.base.*;
+import org.observe.quick.base.BorderLayout;
 import org.observe.quick.swing.QuickSwingTablePopulation.InterpretedSwingTableColumn;
 import org.observe.util.TypeTokens;
 import org.observe.util.swing.*;
@@ -275,6 +268,14 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 					Runnable[] revert = new Runnable[1];
 					Component[] component = new Component[1];
 					ObservableValue<Color> color = w.getStyle().getColor();
+					ObservableValue<Cursor> cursor = w.getStyle().getMouseCursor().map(quickCursor -> {
+						try {
+							return quickCursor == null ? null : tx2.transform(quickCursor, Cursor.class);
+						} catch (ExpressoInterpretationException e) {
+							w.reporting().error("Supported cursor: " + quickCursor, e);
+							return null;
+						}
+					});
 					try {
 						comp.modifyComponent(c -> {
 							if (renderer) {
@@ -290,6 +291,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 								// We can just do all this dynamically for renderers
 								adjustFont(deco.reset(), w.getStyle());
 								deco.withBackground(color.get());
+								c.setCursor(cursor.get());
 								revert[0] = deco.decorate(c);
 							} else {
 								revert[0] = deco.decorate(c);
@@ -330,6 +332,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 					if (!renderer) { // Don't keep any subscriptions for renderers
 						adjustFont(deco, w.getStyle());
 						deco.withBackground(color.get());
+						cursor.noInitChanges().takeUntil(comp.getUntil()).act(evt -> component[0].setCursor(evt.getNewValue()));
 						Observable.onRootFinish(Observable.or(color.noInitChanges(), fontChanges(w.getStyle()))).act(__ -> {
 							adjustFont(deco.reset(), w.getStyle());
 							deco.withBackground(color.get());
@@ -342,6 +345,40 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 						});
 					}
 				});
+			});
+			tx.with(MouseCursor.StandardCursors.class, Cursor.class, (quickCursor, tx2) -> {
+				switch (quickCursor) {
+				case DEFAULT:
+					return Cursor.getPredefinedCursor(Cursor.DEFAULT_CURSOR);
+				case CROSSHAIR:
+					return Cursor.getPredefinedCursor(Cursor.CROSSHAIR_CURSOR);
+				case HAND:
+					return Cursor.getPredefinedCursor(Cursor.HAND_CURSOR);
+				case MOVE:
+					return Cursor.getPredefinedCursor(Cursor.MOVE_CURSOR);
+				case TEXT:
+					return Cursor.getPredefinedCursor(Cursor.TEXT_CURSOR);
+				case WAIT:
+					return Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR);
+				case RESIZE_N:
+					return Cursor.getPredefinedCursor(Cursor.N_RESIZE_CURSOR);
+				case RESIZE_E:
+					return Cursor.getPredefinedCursor(Cursor.E_RESIZE_CURSOR);
+				case RESIZE_S:
+					return Cursor.getPredefinedCursor(Cursor.S_RESIZE_CURSOR);
+				case RESIZE_W:
+					return Cursor.getPredefinedCursor(Cursor.W_RESIZE_CURSOR);
+				case RESIZE_NE:
+					return Cursor.getPredefinedCursor(Cursor.NE_RESIZE_CURSOR);
+				case RESIZE_SE:
+					return Cursor.getPredefinedCursor(Cursor.SE_RESIZE_CURSOR);
+				case RESIZE_SW:
+					return Cursor.getPredefinedCursor(Cursor.SW_RESIZE_CURSOR);
+				case RESIZE_NW:
+					return Cursor.getPredefinedCursor(Cursor.NW_RESIZE_CURSOR);
+				default:
+					throw new ExpressoInterpretationException("Unhandled standard cursor: " + quickCursor, null, 0);
+				}
 			});
 			tx.with(QuickBorder.LineBorder.Interpreted.class, QuickSwingBorder.class, (iBorder, tx2) -> {
 				return (deco, border, component) -> {
@@ -913,7 +950,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 			}
 		}
 
-		static void adjustFont(FontAdjuster font, QuickTextStyle style) {
+		public static void adjustFont(FontAdjuster font, QuickTextStyle style) {
 			Color color = style.getFontColor().get();
 			if (color != null)
 				font.withForeground(color);
@@ -926,12 +963,24 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 			Double slant = style.getFontSlant().get();
 			if (slant != null)
 				font.withFontSlant(slant.floatValue());
-
+			Boolean underline = style.isUnderline().get();
+			if (Boolean.TRUE.equals(underline))
+				font.underline();
+			Boolean strikeThrough = style.isStrikeThrough().get();
+			if (Boolean.TRUE.equals(strikeThrough))
+				font.strikethrough();
+			Boolean superScript = style.isSuperScript().get();
+			if (Boolean.TRUE.equals(superScript))
+				font.deriveFont(TextAttribute.SUPERSCRIPT, TextAttribute.SUPERSCRIPT_SUPER);
+			Boolean subScript = style.isSubScript().get();
+			if (Boolean.TRUE.equals(subScript))
+				font.deriveFont(TextAttribute.SUPERSCRIPT, TextAttribute.SUPERSCRIPT_SUB);
 		}
 
 		static Observable<Causable> fontChanges(QuickTextStyle style) {
 			return Observable.or(style.getFontColor().noInitChanges(), style.getFontSize().noInitChanges(),
-				style.getFontWeight().noInitChanges(), style.getFontSlant().noInitChanges());
+				style.getFontWeight().noInitChanges(), style.getFontSlant().noInitChanges(), style.isUnderline().noInitChanges(),
+				style.isStrikeThrough().noInitChanges(), style.isSuperScript().noInitChanges(), style.isSubScript().noInitChanges());
 		}
 
 		private static boolean isMouseListening;
@@ -1312,6 +1361,8 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 				QuickBaseSwing::interpretButton);
 			QuickSwingPopulator.<QuickTextArea<?>, QuickTextArea.Interpreted<?>> interpretWidget(tx,
 				QuickBaseSwing.gen(QuickTextArea.Interpreted.class), QuickBaseSwing::interpretTextArea);
+			QuickSwingPopulator.<StyledTextArea<?>, StyledTextArea.Interpreted<?>> interpretWidget(tx,
+				QuickBaseSwing.gen(StyledTextArea.Interpreted.class), QuickBaseSwing::interpretStyledTextArea);
 
 			// Containers
 			QuickSwingPopulator.<QuickBox, QuickBox.Interpreted<?>> interpretContainer(tx, gen(QuickBox.Interpreted.class),
@@ -1577,6 +1628,84 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 			});
 		}
 
+		static <T> QuickSwingPopulator<StyledTextArea<T>> interpretStyledTextArea(StyledTextArea.Interpreted<T> interpreted,
+			Transformer<ExpressoInterpretationException> tx) {
+			TypeToken<T> valueType = interpreted.getValueType();
+			return createWidget((panel, quick) -> {
+				Format<T> format = quick.getFormat().get();
+				SettableValue<Integer> rows = quick.getRows();
+				ObservableStyledDocument<T> doc = new ObservableStyledDocument<T>(quick.getValue(), format, ThreadConstraint.EDT,
+					panel.getUntil()) {
+					@Override
+					protected ObservableCollection<? extends T> getChildren(T value) {
+						try {
+							return quick.getChildren(staCtx(valueType, value));
+						} catch (ModelInstantiationException e) {
+							quick.reporting().error(e.getMessage(), e);
+							return ObservableCollection.of(valueType);
+						}
+					}
+
+					@Override
+					protected void adjustStyle(T value, BgFontAdjuster style) {
+						StyledTextArea.TextStyle textStyle;
+						try {
+							textStyle = quick.getStyle(staCtx(valueType, value));
+						} catch (ModelInstantiationException e) {
+							quick.reporting().error(e.getMessage(), e);
+							return;
+						}
+						QuickCoreSwing.adjustFont(style, textStyle);
+						Color bg = textStyle.getBackground().get();
+						if (bg != null)
+							style.withBackground(bg);
+					}
+				};
+				if (quick.hasPostText()) {
+					doc.withPostNodeText(node -> {
+						try {
+							return quick.getPostText(staCtx(valueType, node)).get();
+						} catch (ModelInstantiationException e) {
+							quick.reporting().error(e.getMessage(), e);
+							return null;
+						}
+					});
+				}
+				StyledTextArea.StyledTextAreaContext<T> mouseCtx = new StyledTextArea.StyledTextAreaContext.Default<>(valueType);
+				quick.setTextAreaContext(mouseCtx);
+				panel.addStyledTextArea(null, doc, tf -> {
+					tf.modifyEditor(tf2 -> {
+						tf2.addMouseMotionListener(new MouseAdapter() {
+							@Override
+							public void mouseMoved(MouseEvent e) {
+								int docPos = tf2.viewToModel(e.getPoint());
+								ObservableStyledDocument<T>.DocumentNode node = doc.getNodeAt(docPos);
+								mouseCtx.getNodeValue().set(node == null ? null : node.getValue(), e);
+							}
+						});
+						if (rows != null) {
+							rows.changes().takeUntil(tf.getUntil()).act(evt -> {
+								int r = evt.getNewValue();
+								if (r > 0) {
+									Graphics2D g = (Graphics2D) tf2.getGraphics();
+									int h = (int) Math.ceil(g.getFont().getLineMetrics("Mgp!q", g.getFontRenderContext()).getHeight());
+									tf2.setPreferredSize(new Dimension(tf2.getPreferredSize().width, h * r));
+									tf2.setMinimumSize(new Dimension(tf2.getMinimumSize().width, h * r));
+								} else {
+									tf2.setPreferredSize(null);
+									tf2.setMinimumSize(null);
+								}
+							});
+						}
+					});
+				});
+			});
+		}
+
+		static <T> StyledTextArea.StyledTextAreaContext<T> staCtx(TypeToken<T> type, T value) {
+			return new StyledTextArea.StyledTextAreaContext.Default<>(SettableValue.of(type, value, "Unmodifiable"));
+		}
+
 		static <R> QuickSwingPopulator<QuickTable<R>> interpretTable(QuickTable.Interpreted<R> interpreted,
 			Transformer<ExpressoInterpretationException> tx) throws ExpressoInterpretationException {
 			TypeToken<R> rowType = interpreted.getRowType();
@@ -1796,7 +1925,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 		}
 
 		@Override
-		public AbstractQuickContainerPopulator addScroll(String fieldName, Consumer<ScrollPane<?>> scroll) {
+		public AbstractQuickContainerPopulator addScroll(String fieldName, Consumer<PanelPopulation.ScrollPane<?>> scroll) {
 			return addHPanel(null, new JustifiedBoxLayout(true).mainJustified().crossJustified(), p -> p.addScroll(fieldName, scroll));
 		}
 
@@ -1825,6 +1954,13 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 			Consumer<FieldEditor<ObservableTextArea<F>, ?>> modify) {
 			return addHPanel(null, new JustifiedBoxLayout(true).mainJustified().crossJustified(),
 				p -> p.addTextArea(fieldName, field, format, modify));
+		}
+
+		@Override
+		public <F> AbstractQuickContainerPopulator addStyledTextArea(String fieldName, ObservableStyledDocument<F> doc,
+			Consumer<FieldEditor<JTextPane, ?>> modify) {
+			return addHPanel(null, new JustifiedBoxLayout(true).mainJustified().crossJustified(),
+				p -> p.addStyledTextArea(fieldName, doc, modify));
 		}
 
 		@Override

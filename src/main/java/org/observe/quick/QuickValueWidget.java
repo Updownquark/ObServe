@@ -42,7 +42,7 @@ public interface QuickValueWidget<T> extends QuickWidget {
 		@Override
 		Interpreted<?, ? extends W> interpret(ExElement.Interpreted<?> parent);
 
-		public abstract class Abstract<T, W extends QuickValueWidget<T>> extends QuickWidget.Def.Abstract<W> implements Def<W> {
+		public abstract class Abstract<T, W extends QuickValueWidget<? extends T>> extends QuickWidget.Def.Abstract<W> implements Def<W> {
 			private String theValueName;
 			private CompiledExpression theValue;
 			private CompiledExpression theDisabled;
@@ -129,7 +129,11 @@ public interface QuickValueWidget<T> extends QuickWidget {
 					: getDefinition().getDisabled().evaluate(ModelTypes.Value.STRING).interpret();
 				DynamicModelValue.satisfyDynamicValue(getDefinition().getValueName(), getDefinition().getModels(),
 					CompiledModelValue.constant(theValue));
+				valueInterpreted();
 				super.update(cache);
+			}
+
+			protected void valueInterpreted() {
 			}
 		}
 	}

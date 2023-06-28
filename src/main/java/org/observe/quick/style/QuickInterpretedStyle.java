@@ -13,7 +13,6 @@ import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.quick.style.QuickStyleElement.Interpreted;
 import org.observe.util.TypeTokens;
 import org.qommons.LambdaUtils;
-import org.qommons.collect.BetterCollection;
 import org.qommons.config.QonfigElement;
 
 import com.google.common.reflect.TypeToken;
@@ -22,9 +21,6 @@ import com.google.common.reflect.TypeToken;
 public interface QuickInterpretedStyle {
 	/** @return This element's {@link QonfigElement#getParent() parent}'s style */
 	QuickInterpretedStyle getParent();
-
-	/** @return The compiled style that {@link QuickCompiledStyle#interpret(QuickInterpretedStyle, Map) interpreted} this style */
-	QuickCompiledStyle getCompiled();
 
 	/** @return All style values that may apply to this style */
 	List<InterpretedStyleValue<?>> getDeclaredValues();
@@ -39,43 +35,6 @@ public interface QuickInterpretedStyle {
 	 */
 	<T> QuickElementStyleAttribute<T> get(QuickStyleAttribute<T> attr);
 
-	/**
-	 * Gets a style value in this style by name
-	 *
-	 * @param <T> The type of the style attribute to get
-	 * @param attributeName The name of the style attribute to get
-	 * @param type The type of the style attribute to get
-	 * @return The style value in this style with the given name
-	 * @throws IllegalArgumentException If there is no such attribute with the given name applicable to this style's element, there are
-	 *         multiple such styles, or the applicable style's {@link QuickStyleAttribute#getType() type} is not the same as that given
-	 */
-	default <T> QuickElementStyleAttribute<T> get(String attributeName, TypeToken<T> type) throws IllegalArgumentException {
-		BetterCollection<QuickStyleAttribute<?>> attrs = getCompiled().getAttributesByName().get(attributeName);
-		if (attrs.isEmpty())
-			throw new IllegalArgumentException("No such attribute: '" + attributeName + "'");
-		else if (attrs.size() > 1)
-			throw new IllegalArgumentException("Multiple attributes named '" + attributeName + "': " + attrs);
-		QuickStyleAttribute<?> attr = attrs.iterator().next();
-		if (!type.equals(attr.getType()) && !type.unwrap().equals(attr.getType().unwrap()))
-			throw new IllegalArgumentException("Attribute " + attr.getDeclarer().getElement().getName() + "." + attr.getName()
-			+ " is typed " + attr.getType() + ", not " + type);
-		return get((QuickStyleAttribute<T>) attr);
-	}
-
-	/**
-	 * Gets a style value in this style by name
-	 *
-	 * @param <T> The type of the style attribute to get
-	 * @param attributeName The name of the style attribute to get
-	 * @param type The type of the style attribute to get
-	 * @return The style value in this style with the given name
-	 * @throws IllegalArgumentException If there is no such attribute with the given name applicable to this style's element, there are
-	 *         multiple such styles, or the applicable style's {@link QuickStyleAttribute#getType() type} is not the same as that given
-	 */
-	default <T> QuickElementStyleAttribute<T> get(String attributeName, Class<T> type) {
-		return get(attributeName, TypeTokens.get().of(type));
-	}
-
 	List<QuickStyleElement.Interpreted> getStyleElements();
 
 	void update() throws ExpressoInterpretationException;
@@ -83,21 +42,18 @@ public interface QuickInterpretedStyle {
 	/** Default implementation */
 	public class Default implements QuickInterpretedStyle {
 		private final QuickInterpretedStyle theParent;
-		private final QuickCompiledStyle theCompiledStyle;
 		private final List<InterpretedStyleValue<?>> theDeclaredValues;
 		private final Map<QuickStyleAttribute<?>, QuickElementStyleAttribute<?>> theValues;
 		private final List<QuickStyleElement.Interpreted> theStyleElements;
 
 		/**
 		 * @param parent The element style for the {@link QonfigElement#getParent() parent} element
-		 * @param compiled The compiled style that {@link QuickCompiledStyle#interpret(QuickInterpretedStyle, Map) interpreted} this style
 		 * @param declaredValues All style values declared specifically on this element
 		 * @param values All values for style attributes that vary on this style
 		 */
-		public Default(QuickInterpretedStyle parent, QuickCompiledStyle compiled, List<InterpretedStyleValue<?>> declaredValues,
+		public Default(QuickInterpretedStyle parent, List<InterpretedStyleValue<?>> declaredValues,
 			Map<QuickStyleAttribute<?>, QuickElementStyleAttribute<?>> values, List<QuickStyleElement.Interpreted> styleElements) {
 			theParent = parent;
-			theCompiledStyle = compiled;
 			theDeclaredValues = declaredValues;
 			theValues = values;
 			theStyleElements = styleElements;
@@ -106,11 +62,6 @@ public interface QuickInterpretedStyle {
 		@Override
 		public QuickInterpretedStyle getParent() {
 			return theParent;
-		}
-
-		@Override
-		public QuickCompiledStyle getCompiled() {
-			return theCompiledStyle;
 		}
 
 		@Override
@@ -128,9 +79,6 @@ public interface QuickInterpretedStyle {
 			QuickElementStyleAttribute<T> value = (QuickElementStyleAttribute<T>) theValues.get(attr);
 			if (value != null)
 				return value;
-			else if (!theCompiledStyle.getElement().isInstance(attr.getDeclarer().getElement()))
-				throw new IllegalArgumentException(
-					"Attribute " + attr + " is not valid for this element (" + theCompiledStyle.getElement().getType().getName() + ")");
 			return new QuickElementStyleAttribute<>(attr, this, Collections.emptyList(), //
 				theParent != null && attr.isTrickleDown() ? theParent.get(attr) : null);
 		}
@@ -144,11 +92,6 @@ public interface QuickInterpretedStyle {
 		public void update() throws ExpressoInterpretationException {
 			for (QuickStyleElement.Interpreted styleEl : theStyleElements)
 				styleEl.update();
-		}
-
-		@Override
-		public String toString() {
-			return theCompiledStyle.toString();
 		}
 	}
 
@@ -176,11 +119,6 @@ public interface QuickInterpretedStyle {
 		@Override
 		public QuickInterpretedStyle getParent() {
 			return theParent;
-		}
-
-		@Override
-		public QuickCompiledStyle getCompiled() {
-			return theWrapped.getCompiled();
 		}
 
 		@Override
@@ -302,13 +240,13 @@ public interface QuickInterpretedStyle {
 
 			@Override
 			public String toString() {
-				return value.toString();
+				return value == null ? "StyleDefault" : value.toString();
 			}
 		}
 
 		@Override
 		public String toString() {
-			return theStyle.getCompiled().getElement() + "." + theAttribute;
+			return theAttribute.toString();
 		}
 	}
 }

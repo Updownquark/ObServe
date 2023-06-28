@@ -14,7 +14,9 @@ import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.quick.style.QuickInterpretedStyle.QuickElementStyleAttribute;
 import org.observe.quick.style.QuickStyleElement.Def;
 import org.observe.quick.style.QuickTypeStyle.TypeStyleSet;
+import org.observe.util.TypeTokens;
 import org.qommons.QommonsUtils;
+import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterCollections;
 import org.qommons.collect.BetterHashMultiMap;
 import org.qommons.collect.BetterMultiMap;
@@ -25,6 +27,8 @@ import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigToolkit;
 import org.qommons.io.ErrorReporting;
 import org.qommons.tree.SortedTreeList;
+
+import com.google.common.reflect.TypeToken;
 
 /** A compiled structure of all style values that may under any circumstance apply to a particular {@link QonfigElement element} */
 public interface QuickCompiledStyle {
@@ -45,6 +49,43 @@ public interface QuickCompiledStyle {
 
 	/** @return A multi-map of all style values applicable to this style, keyed by name */
 	BetterMultiMap<String, QuickStyleAttribute<?>> getAttributesByName();
+
+	/**
+	 * Gets a style attribute in this style by name
+	 *
+	 * @param <T> The type of the style attribute to get
+	 * @param attributeName The name of the style attribute to get
+	 * @param type The type of the style attribute to get
+	 * @return The style attribute in this style with the given name
+	 * @throws IllegalArgumentException If there is no such attribute with the given name applicable to this style's element, there are
+	 *         multiple such styles, or the applicable style's {@link QuickStyleAttribute#getType() type} is not the same as that given
+	 */
+	default <T> QuickStyleAttribute<T> getAttribute(String attributeName, TypeToken<T> type) throws IllegalArgumentException {
+		BetterCollection<QuickStyleAttribute<?>> attrs = getAttributesByName().get(attributeName);
+		if (attrs.isEmpty())
+			throw new IllegalArgumentException("No such attribute: '" + attributeName + "'");
+		else if (attrs.size() > 1)
+			throw new IllegalArgumentException("Multiple attributes named '" + attributeName + "': " + attrs);
+		QuickStyleAttribute<?> attr = attrs.iterator().next();
+		if (!type.equals(attr.getType()) && !type.unwrap().equals(attr.getType().unwrap()))
+			throw new IllegalArgumentException("Attribute " + attr.getDeclarer().getElement().getName() + "." + attr.getName()
+			+ " is typed " + attr.getType() + ", not " + type);
+		return (QuickStyleAttribute<T>) attr;
+	}
+
+	/**
+	 * Gets a style attribute in this style by name
+	 *
+	 * @param <T> The type of the style attribute to get
+	 * @param attributeName The name of the style attribute to get
+	 * @param type The type of the style attribute to get
+	 * @return The style attribute in this style with the given name
+	 * @throws IllegalArgumentException If there is no such attribute with the given name applicable to this style's element, there are
+	 *         multiple such styles, or the applicable style's {@link QuickStyleAttribute#getType() type} is not the same as that given
+	 */
+	default <T> QuickStyleAttribute<T> getAttribute(String attributeName, Class<T> type) {
+		return getAttribute(attributeName, TypeTokens.get().of(type));
+	}
 
 	List<QuickStyleElement.Def> getStyleElements();
 
@@ -174,7 +215,7 @@ public interface QuickCompiledStyle {
 			List<InterpretedStyleValue<?>> declaredValues = new ArrayList<>(theValues.size());
 			Map<QuickStyleAttribute<?>, QuickElementStyleAttribute<?>> values = new HashMap<>();
 			List<QuickStyleElement.Interpreted> styleElements = new ArrayList<>();
-			QuickInterpretedStyle style = new QuickInterpretedStyle.Default(parent, this, Collections.unmodifiableList(declaredValues),
+			QuickInterpretedStyle style = new QuickInterpretedStyle.Default(parent, Collections.unmodifiableList(declaredValues),
 				Collections.unmodifiableMap(values), Collections.unmodifiableList(styleElements));
 			for (CompiledStyleValue<?> value : theDeclaredValues)
 				declaredValues.add(value.interpret(applications));

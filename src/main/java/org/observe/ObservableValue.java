@@ -492,7 +492,7 @@ public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>,
 	 * @return An observable value with same value as this one, but is safe for use on the given thread and fires its events there
 	 */
 	default ObservableValue<T> safe(ThreadConstraint threading, Observable<?> until) {
-		if (getThreadConstraint() == threading || getThreadConstraint() == ThreadConstraint.NONE)
+		if (getThreadConstraint() == threading || getThreadConstraint() == ThreadConstraint.NONE || threading == ThreadConstraint.ANY)
 			return this;
 		return new SafeObservableValue<>(this, threading, until);
 	}

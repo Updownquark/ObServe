@@ -226,7 +226,7 @@ public interface QuickWidget extends QuickTextElement {
 		QuickBorder.Interpreted<?> getBorder();
 
 		/** @return The type of the widget produced by this interpretation */
-		TypeToken<W> getWidgetType();
+		TypeToken<? extends W> getWidgetType();
 
 		/** @return The tool tip to display when the user hovers over this widget */
 		InterpretedValueSynth<SettableValue<?>, SettableValue<String>> getTooltip();
@@ -549,19 +549,28 @@ public interface QuickWidget extends QuickTextElement {
 		public interface Def extends QuickTextStyle.Def {
 			QuickStyleAttribute<Color> getColor();
 
+			QuickStyleAttribute<MouseCursor> getMouseCursor();
+
 			public class Default extends QuickTextStyle.Def.Abstract implements QuickWidgetStyle.Def {
 				private final QuickStyleAttribute<Color> theColor;
+				private final QuickStyleAttribute<MouseCursor> theMouseCursor;
 
 				public Default(QuickCompiledStyle parent, QuickCompiledStyle wrapped) {
 					super(parent, wrapped);
 					QuickTypeStyle typeStyle = QuickStyledElement.getTypeStyle(wrapped.getStyleTypes(), getElement(),
 						QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, "widget");
 					theColor = (QuickStyleAttribute<Color>) typeStyle.getAttribute("color", Color.class);
+					theMouseCursor = (QuickStyleAttribute<MouseCursor>) typeStyle.getAttribute("mouse-cursor", MouseCursor.class);
 				}
 
 				@Override
 				public QuickStyleAttribute<Color> getColor() {
 					return theColor;
+				}
+
+				@Override
+				public QuickStyleAttribute<MouseCursor> getMouseCursor() {
+					return theMouseCursor;
 				}
 
 				@Override
@@ -573,25 +582,21 @@ public interface QuickWidget extends QuickTextElement {
 		}
 
 		public interface Interpreted extends QuickTextStyle.Interpreted {
-			@Override
-			Def getCompiled();
-
 			QuickElementStyleAttribute<Color> getColor();
+
+			QuickElementStyleAttribute<MouseCursor> getMouseCursor();
 
 			@Override
 			QuickWidgetStyle create(QuickStyledElement styledElement);
 
 			public class Default extends QuickTextStyle.Interpreted.Abstract implements QuickWidgetStyle.Interpreted {
 				private QuickElementStyleAttribute<Color> theColor;
+				private QuickElementStyleAttribute<MouseCursor> theMouseCursor;
 
 				public Default(Def definition, QuickInterpretedStyle parent, QuickInterpretedStyle wrapped) {
 					super(definition, parent, wrapped);
-					theColor = wrapped.get(getCompiled().getColor());
-				}
-
-				@Override
-				public QuickWidgetStyle.Def getCompiled() {
-					return (QuickWidgetStyle.Def) super.getCompiled();
+					theColor = wrapped.get(definition.getColor());
+					theMouseCursor = wrapped.get(definition.getMouseCursor());
 				}
 
 				@Override
@@ -600,21 +605,32 @@ public interface QuickWidget extends QuickTextElement {
 				}
 
 				@Override
+				public QuickElementStyleAttribute<MouseCursor> getMouseCursor() {
+					return theMouseCursor;
+				}
+
+				@Override
 				public QuickWidgetStyle create(QuickStyledElement styledElement) {
-					return new QuickWidgetStyle.Default(this, (QuickWidget) styledElement);
+					return new QuickWidgetStyle.Default(getId(), (QuickWidget) styledElement);
 				}
 			}
 		}
 
-		public ObservableValue<Color> getColor();
+		ObservableValue<Color> getColor();
+
+		ObservableValue<MouseCursor> getMouseCursor();
 
 		public class Default extends QuickTextStyle.Abstract implements QuickWidgetStyle {
 			private final SettableValue<ObservableValue<Color>> theColor;
+			private final SettableValue<ObservableValue<MouseCursor>> theMouseCursor;
 
-			public Default(QuickWidgetStyle.Interpreted interpreted, QuickWidget widget) {
-				super(interpreted, widget);
+			public Default(Object interpretedId, QuickWidget widget) {
+				super(interpretedId, widget);
 				theColor = SettableValue
 					.build(TypeTokens.get().keyFor(ObservableValue.class).<ObservableValue<Color>> parameterized(Color.class)).build();
+				theMouseCursor = SettableValue
+					.build(TypeTokens.get().keyFor(ObservableValue.class).<ObservableValue<MouseCursor>> parameterized(MouseCursor.class))
+					.build();
 			}
 
 			@Override
@@ -623,10 +639,16 @@ public interface QuickWidget extends QuickTextElement {
 			}
 
 			@Override
+			public ObservableValue<MouseCursor> getMouseCursor() {
+				return ObservableValue.flatten(theMouseCursor);
+			}
+
+			@Override
 			public void update(QuickInstanceStyle.Interpreted interpreted, ModelSetInstance models) throws ModelInstantiationException {
 				super.update(interpreted, models);
 				QuickWidgetStyle.Interpreted myInterpreted = (QuickWidgetStyle.Interpreted) interpreted;
 				theColor.set(myInterpreted.getColor().evaluate(models), null);
+				theMouseCursor.set(myInterpreted.getMouseCursor().evaluate(models), null);
 			}
 		}
 	}

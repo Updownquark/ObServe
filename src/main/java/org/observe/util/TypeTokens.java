@@ -452,6 +452,14 @@ public class TypeTokens implements TypeParser {
 
 	/**
 	 * @param type The type to print
+	 * @return A string representation of the given type using just the {@link Class#getSimpleName()} of the type and any parameters
+	 */
+	public static String getSimpleName(Type type) {
+		return getSimpleName(type, null).toString();
+	}
+
+	/**
+	 * @param type The type to print
 	 * @param str The StringBuilder to print the type into, or null to create a new one
 	 * @return The string builder containing a string representation of the given type using just the {@link Class#getSimpleName()} of the
 	 *         type and any parameters

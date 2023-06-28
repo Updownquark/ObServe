@@ -23,6 +23,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.Enumeration;
 import java.util.List;
 import java.util.Map;
 import java.util.function.BiConsumer;
@@ -32,6 +33,11 @@ import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 import javax.swing.*;
+import javax.swing.text.DefaultStyledDocument;
+import javax.swing.text.StyleConstants;
+import javax.swing.text.StyledDocument;
+import javax.swing.text.TabSet;
+import javax.swing.text.TabStop;
 
 import org.jdesktop.swingx.JXCollapsiblePane;
 import org.jdesktop.swingx.JXPanel;
@@ -211,6 +217,24 @@ public class PanelPopulation {
 
 		<F> P addTextArea(String fieldName, SettableValue<F> field, Format<F> format,
 			Consumer<FieldEditor<ObservableTextArea<F>, ?>> modify);
+
+		default <F> P addStyledTextArea(String fieldName, SettableValue<F> root, Format<F> format,
+			Function<? super F, ? extends ObservableCollection<? extends F>> children, BiConsumer<? super F, ? super BgFontAdjuster> style,
+				Consumer<FieldEditor<JTextPane, ?>> modify) {
+			return addStyledTextArea(fieldName, new ObservableStyledDocument<F>(root, format, ThreadConstraint.EDT, getUntil()) {
+				@Override
+				protected ObservableCollection<? extends F> getChildren(F value) {
+					return children.apply(value);
+				}
+
+				@Override
+				protected void adjustStyle(F value, BgFontAdjuster style2) {
+					style.accept(value, style2);
+				}
+			}, modify);
+		}
+
+		<F> P addStyledTextArea(String fieldName, ObservableStyledDocument<F> doc, Consumer<FieldEditor<JTextPane, ?>> modify);
 
 		default P addLabel(String fieldName, String label, Consumer<FieldEditor<JLabel, ?>> modify) {
 			return addLabel(fieldName, ObservableValue.of(label), v -> v, modify);
@@ -401,6 +425,47 @@ public class PanelPopulation {
 				modify.accept(fieldPanel);
 			if (fieldPanel.isDecorated())
 				field.noInitChanges().safe(ThreadConstraint.EDT).takeUntil(getUntil())
+				.act(__ -> fieldPanel.decorate(fieldPanel.getComponent()));
+			doAdd(fieldPanel, true);
+			return (P) this;
+		}
+
+		@Override
+		default <F> P addStyledTextArea(String fieldName, ObservableStyledDocument<F> doc, Consumer<FieldEditor<JTextPane, ?>> modify) {
+			JTextPane editor = new JTextPane();
+			editor.setEditable(false); // Editing not currently supported
+			// Default tabs are ridiculously long. Btw, I don't know what the units here are, but they're not characters. Maybe pixels.
+			if (doc.getRootStyle().getFontAttributes().getAttribute(StyleConstants.TabSet) == null) {
+				List<TabStop> tabs = new ArrayList<>();
+				for (int i = 30; i < 3000; i += 30)
+					tabs.add(new TabStop(i));
+				StyleConstants.setTabSet(doc.getRootStyle().getFontAttributes(), new TabSet(tabs.toArray(new TabStop[tabs.size()])));
+			}
+			// Set default attributes
+			Enumeration<?> attrNames = editor.getParagraphAttributes().getAttributeNames();
+			while (attrNames.hasMoreElements()) {
+				Object attr = attrNames.nextElement();
+				if (doc.getRootStyle().getFontAttributes().getAttribute(attr) == null)
+					doc.getRootStyle().getFontAttributes().addAttribute(attr, editor.getParagraphAttributes().getAttribute(attr));
+			}
+			// Make the document's style the master
+			editor.setParagraphAttributes(doc.getRootStyle().getFontAttributes(), true);
+			StyledDocument styledDoc;
+			if (editor.getDocument() instanceof StyledDocument)
+				styledDoc = (StyledDocument) editor.getDocument();
+			else {
+				styledDoc = new DefaultStyledDocument();
+				editor.setDocument(styledDoc);
+			}
+			ObservableStyledDocument.synchronize(doc, styledDoc, getUntil());
+
+			SimpleFieldEditor<JTextPane, ?> fieldPanel = new SimpleFieldEditor<>(fieldName, editor, getUntil());
+			modify(fieldPanel);
+			fieldPanel.getTooltip().changes().takeUntil(getUntil()).act(evt -> fieldPanel.getEditor().setToolTipText(evt.getNewValue()));
+			if (modify != null)
+				modify.accept(fieldPanel);
+			if (fieldPanel.isDecorated())
+				doc.getRootValue().noInitChanges().safe(ThreadConstraint.EDT).takeUntil(getUntil())
 				.act(__ -> fieldPanel.decorate(fieldPanel.getComponent()));
 			doAdd(fieldPanel, true);
 			return (P) this;
