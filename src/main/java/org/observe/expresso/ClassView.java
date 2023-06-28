@@ -239,9 +239,13 @@ public class ClassView extends ExElement.Def.Abstract<ExElement> implements Type
 			theImportElements.get(i++).update(impSession);
 	}
 
+	public Builder copy() {
+		return new Builder(this);
+	}
+
 	/** @return A builder to create a new class view */
 	public static Builder build() {
-		return new Builder();
+		return new Builder(null);
 	}
 
 	/** Builds a {@link ClassView} */
@@ -252,12 +256,18 @@ public class ClassView extends ExElement.Def.Abstract<ExElement> implements Type
 		private final Set<String> theWildcardImports;
 		private final List<AbstractQIS<?>> theImportElements;
 
-		Builder() {
+		Builder(ClassView toCopy) {
 			theClassLoaders = new ArrayList<>(3);
 			theImportedTypes = new LinkedHashMap<>();
 			theImportTypeErrors = new LinkedHashMap<>();
 			theWildcardImports = new LinkedHashSet<>();
 			theImportElements = new ArrayList<>();
+			if (toCopy != null) {
+				theClassLoaders.addAll(toCopy.theClassLoaders);
+				for (String type : toCopy.theImportedTypes.keySet())
+					withImport(type, new ErrorReporting.Default(null), null);
+				theWildcardImports.addAll(toCopy.theWildcardImports);
+			}
 		}
 
 		/**

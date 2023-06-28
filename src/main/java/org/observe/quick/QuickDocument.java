@@ -294,8 +294,10 @@ public class QuickDocument extends ExElement.Abstract {
 						.withWildcardImport(MouseCursor.StandardCursors.class.getName(), null)//
 						.build(this, null);
 					cv = defaultCV;
-				} else
+				} else {
+					cv = cv.copy().withWildcardImport(MouseCursor.StandardCursors.class.getName(), null).build(null, null);
 					cv.update(session.forChildren("imports").getFirst());
+				}
 				theClassView = cv;
 				// Install the class view now, so the model can use it
 				session.setExpressoEnv(session.getExpressoEnv().with(null, cv));
