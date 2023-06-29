@@ -1622,10 +1622,12 @@ class PanelPopulationImpl {
 
 	static class SimpleScrollEditor<P extends SimpleScrollEditor<P>> extends SimpleFieldEditor<JScrollPane, P>
 	implements PanelPopulation.ScrollPane<P> {
+		private final FixedScrollPane theFixedScroll;
 		private boolean isContentSet;
 
 		public SimpleScrollEditor(String fieldName, Observable<?> until) {
 			super(fieldName, new JScrollPane(), until);
+			theFixedScroll = new FixedScrollPane(getEditor());
 			getEditor().getVerticalScrollBar().setUnitIncrement(10);
 			getEditor().getHorizontalScrollBar().setUnitIncrement(10);
 		}
@@ -1656,6 +1658,53 @@ class PanelPopulationImpl {
 				throw new IllegalStateException("Content has already been configured");
 			isContentSet = true;
 			getEditor().setViewportView(component);
+			return (P) this;
+		}
+
+		@Override
+		protected Component createComponent() {
+			return theFixedScroll.getLayer();
+		}
+
+		@Override
+		public P withVRowHeader(Consumer<PanelPopulator<?, ?>> panel) {
+			MigFieldPanel<JPanel, ?> fieldPanel = new MigFieldPanel<>(null, null, getUntil());
+			panel.accept(fieldPanel);
+			withRowHeader(fieldPanel.getComponent());
+			if (fieldPanel.isVisible() != null)
+				fieldPanel.isVisible().changes().takeUntil(getUntil()).act(new VizChanger(fieldPanel.getComponent(), null));
+			return (P) this;
+		}
+
+		@Override
+		public P withHRowHeader(LayoutManager layout, Consumer<PanelPopulator<?, ?>> panel) {
+			SimpleHPanel<JPanel, ?> hPanel = new SimpleHPanel<>(null, new ConformingPanel(layout), getUntil());
+			panel.accept(hPanel);
+			withRowHeader(hPanel.getComponent());
+			if (hPanel.isVisible() != null)
+				hPanel.isVisible().changes().takeUntil(getUntil()).act(new VizChanger(hPanel.getComponent(), null));
+			return (P) this;
+		}
+
+		@Override
+		public P withRowHeader(Component component) {
+			getEditor().setRowHeaderView(component);
+			return (P) this;
+		}
+
+		@Override
+		public P withHColumnHeader(LayoutManager layout, Consumer<PanelPopulator<?, ?>> panel) {
+			SimpleHPanel<JPanel, ?> hPanel = new SimpleHPanel<>(null, new ConformingPanel(layout), getUntil());
+			panel.accept(hPanel);
+			withColumnHeader(hPanel.getComponent());
+			if (hPanel.isVisible() != null)
+				hPanel.isVisible().changes().takeUntil(getUntil()).act(new VizChanger(hPanel.getComponent(), null));
+			return (P) this;
+		}
+
+		@Override
+		public P withColumnHeader(Component component) {
+			getEditor().setColumnHeaderView(component);
 			return (P) this;
 		}
 	}

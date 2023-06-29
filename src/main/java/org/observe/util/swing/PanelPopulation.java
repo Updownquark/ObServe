@@ -1636,6 +1636,24 @@ public class PanelPopulation {
 		P withHContent(LayoutManager layout, Consumer<PanelPopulator<?, ?>> panel);
 
 		P withContent(Component component);
+
+		P withVRowHeader(Consumer<PanelPopulator<?, ?>> panel);
+
+		default P withHRowHeader(String layoutType, Consumer<PanelPopulator<?, ?>> panel) {
+			return withHRowHeader(makeLayout(layoutType), panel);
+		}
+
+		P withHRowHeader(LayoutManager layout, Consumer<PanelPopulator<?, ?>> panel);
+
+		P withRowHeader(Component component);
+
+		default P withHColumnHeader(String layoutType, Consumer<PanelPopulator<?, ?>> panel) {
+			return withHColumnHeader(makeLayout(layoutType), panel);
+		}
+
+		P withHColumnHeader(LayoutManager layout, Consumer<PanelPopulator<?, ?>> panel);
+
+		P withColumnHeader(Component component);
 	}
 
 	public interface CollapsePanel<CP extends Container, C extends Container, P extends CollapsePanel<CP, C, P>>

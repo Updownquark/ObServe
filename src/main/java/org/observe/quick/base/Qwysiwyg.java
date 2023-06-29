@@ -98,6 +98,7 @@ public class Qwysiwyg {
 	public final SettableValue<DocumentComponent> documentRoot;
 	public final ObservableValue<String> tooltip;
 	public final SettableValue<DocumentComponent> hovered;
+	public final SettableValue<String> lineNumbers;
 
 	private final SettableValue<DocumentComponent> theInternalDocumentRoot;
 	private final SettableValue<ObservableValue<String>> theInternalTooltip;
@@ -124,6 +125,7 @@ public class Qwysiwyg {
 		theApplicationReplacement = new SimpleObservable<>();
 		hovered = SettableValue.build(DocumentComponent.class).build();
 		theDocumentContent = new StringBuilder();
+		lineNumbers = SettableValue.build(String.class).build();
 	}
 
 	public void init(String documentLocation, List<String> unmatched) {
@@ -282,15 +284,15 @@ public class Qwysiwyg {
 					break;
 				hoveredComp = hoveredComp.parent;
 			}
-			theInternalTooltip.set(tt, null);
-			DocumentComponent oldHovered = theHoveredComponent;
-			theHoveredComponent = hoveredComp;
-			if (oldHovered != hoveredComp || ctrlChanged) {
-				if (oldHovered != null)
-					oldHovered.update();
-				if (hoveredComp != null)
-					hoveredComp.update();
+			if (hoveredComp == theHoveredComponent) {
+				if (ctrlChanged && theHoveredComponent != null)
+					theHoveredComponent.update();
+				return;
 			}
+			theInternalTooltip.set(tt, null);
+			theHoveredComponent = hoveredComp;
+			if (hoveredComp != null && isControlPressed)
+				hoveredComp.update();
 			hovered.set(hoveredComp, null);
 		} catch (RuntimeException | Error e) {
 			e.printStackTrace();
@@ -837,6 +839,17 @@ public class Qwysiwyg {
 	}
 
 	private void renderText() {
+		StringBuilder str = new StringBuilder();
+		int line = 0;
+		for (int i = 0; i < theDocumentContent.length(); i++) {
+			if (theDocumentContent.charAt(i) == '\n') {
+				line++;
+				str.append("Line ").append(line).append(":\n");
+			}
+		}
+		str.append("Line ").append(line + 1).append(':');
+
+		lineNumbers.set(str.toString(), null);
 		theInternalDocumentRoot.set(theRoot, null);
 
 		// System.out.println("Hierarchy:");
@@ -845,6 +858,10 @@ public class Qwysiwyg {
 
 	DocumentComponent createRoot() {
 		return new DocumentComponent(null, FilePosition.START);
+	}
+
+	boolean isEqual(String fileLocation, String docURL) {
+		return docURL.endsWith(fileLocation);
 	}
 
 	public class DocumentComponent {
@@ -882,7 +899,7 @@ public class Qwysiwyg {
 		}
 
 		public boolean isActiveLink() {
-			return target != null && theHoveredComponent == this && isControlPressed;
+			return target != null && theHoveredComponent == this && isControlPressed && isEqual(target.getFileLocation(), theDocumentURL);
 		}
 
 		public Color getFontColor() {

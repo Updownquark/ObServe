@@ -16,11 +16,11 @@ import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueSynth;
+import org.observe.expresso.TypeConversionException;
 import org.observe.expresso.qonfig.ExAddOn;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigExpression;
-import org.observe.expresso.TypeConversionException;
 import org.observe.util.TypeTokens;
 import org.qommons.Ternian;
 import org.qommons.config.QonfigAddOn;
@@ -270,16 +270,16 @@ public abstract class Sizeable extends ExAddOn.Abstract<ExElement> {
 		QonfigExpression expression = (QonfigExpression) value.value;
 		boolean pct, xp;
 		int unit;
-		if (expression.text.endsWith("%") && Character.isWhitespace(expression.text.charAt(expression.text.length() - 2))) {
+		if (expression.text.endsWith("%")) {
 			unit = 1;
 			pct = true;
 			xp = false;
-		} else if (expression.text.endsWith("px") && Character.isWhitespace(expression.text.charAt(expression.text.length() - 3))) {
+		} else if (expression.text.endsWith("px") && !Character.isAlphabetic(expression.text.charAt(expression.text.length() - 3))) {
 			unit = 2;
 			pct = false;
 			xp = false;
 		} else if (position && expression.text.endsWith("xp")
-			&& Character.isWhitespace(expression.text.charAt(expression.text.length() - 3))) {
+			&& !Character.isAlphabetic(expression.text.charAt(expression.text.length() - 3))) {
 			unit = 2;
 			pct = false;
 			xp = true;

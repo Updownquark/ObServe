@@ -70,6 +70,7 @@
 			<attribute name="orientation" type="orientation" />
 			<attribute name="main-align" type="inline-alignment" default="leading" />
 			<attribute name="cross-align" type="inline-alignment" default="justify" />
+			<attribute name="padding" type="int" default="2" />
 			<!--<child-mod child="box.content" inherits="generic-sizeable" />-->
 		</add-on>
 		<add-on name="simple-layout-child" inherits="h-positionable,v-positionable,h-sizeable,v-sizeable" />
@@ -320,7 +321,10 @@
 		<element-def name="singleton-container" extends="container" abstract="true">
 			<child-mod child="content" min="1" max="1" />
 		</element-def>
-		<element-def name="scroll" extends="singleton-container" />
+		<element-def name="scroll" extends="singleton-container">
+			<child-def name="row-header" type="widget" min="0" max="1" />
+			<child-def name="column-header" type="widget" min="0" max="1" />
+		</element-def>
 		
 		<element-def name="tabs" extends="container">
 			<element-model>

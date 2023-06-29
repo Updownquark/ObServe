@@ -27,6 +27,7 @@ public class QuickInlineLayout extends QuickLayout.Abstract {
 		private boolean isVertical;
 		private JustifiedBoxLayout.Alignment theMainAlign;
 		private JustifiedBoxLayout.Alignment theCrossAlign;
+		private int thePadding;
 
 		public Def(QonfigAddOn type, ExElement.Def<? extends QuickBox> element) {
 			super(type, element);
@@ -44,6 +45,10 @@ public class QuickInlineLayout extends QuickLayout.Abstract {
 			return theCrossAlign;
 		}
 
+		public int getPadding() {
+			return thePadding;
+		}
+
 		@Override
 		public void update(ExpressoQIS session, ExElement.Def<? extends QuickBox> element) throws QonfigInterpretationException {
 			element.forAttribute(session.getAttributeDef(null, null, "orientation"), VERTICAL);
@@ -53,6 +58,7 @@ public class QuickInlineLayout extends QuickLayout.Abstract {
 			isVertical = "vertical".equals(session.getAttributeText("orientation"));
 			theMainAlign = jblAlign("main-align", session.getAttributeText("main-align"), session);
 			theCrossAlign = jblAlign("cross-align", session.getAttributeText("cross-align"), session);
+			thePadding = Integer.parseInt(session.getAttributeText("padding"));
 		}
 
 		public JustifiedBoxLayout.Alignment jblAlign(String attributeName, String attributeText, ExpressoQIS session)
@@ -97,6 +103,7 @@ public class QuickInlineLayout extends QuickLayout.Abstract {
 	private boolean isVertical;
 	private JustifiedBoxLayout.Alignment theMainAlign;
 	private JustifiedBoxLayout.Alignment theCrossAlign;
+	private int thePadding;
 
 	public QuickInlineLayout(Interpreted interpreted, QuickBox element) {
 		super(interpreted, element);
@@ -114,6 +121,10 @@ public class QuickInlineLayout extends QuickLayout.Abstract {
 		return theCrossAlign;
 	}
 
+	public int getPadding() {
+		return thePadding;
+	}
+
 	@Override
 	public void update(ExAddOn.Interpreted<?, ?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
 		super.update(interpreted, models);
@@ -121,5 +132,6 @@ public class QuickInlineLayout extends QuickLayout.Abstract {
 		isVertical = myInterpreted.getDefinition().isVertical();
 		theMainAlign = myInterpreted.getDefinition().getMainAlign();
 		theCrossAlign = myInterpreted.getDefinition().getCrossAlign();
+		thePadding = myInterpreted.getDefinition().getPadding();
 	}
 }

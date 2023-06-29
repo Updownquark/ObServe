@@ -44,7 +44,10 @@ public class FixedScrollPane {
 	private final JLayer<JScrollPane> theLayer;
 
 	public FixedScrollPane(Component content) {
-		JScrollPane scroll = new JScrollPane(content);
+		this(new JScrollPane(content));
+	}
+
+	public FixedScrollPane(JScrollPane scroll) {
 		scroll.getVerticalScrollBar().setUnitIncrement(15);
 		scroll.getHorizontalScrollBar().setUnitIncrement(15);
 		theLayer = new JLayer<>(scroll, new LayerUI<JScrollPane>() {
@@ -89,7 +92,7 @@ public class FixedScrollPane {
 		theLayer.getView()
 		.setHorizontalScrollBarPolicy(horizontal ? JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED : JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
 		if (!vertical || !horizontal) {
-			getScrollPane().getViewport().setLayout(new ConstrainedViewporLayout(!vertical, !horizontal));
+			getScrollPane().getViewport().setLayout(new ConstrainedViewportLayout(!vertical, !horizontal));
 		}
 		return this;
 	}
@@ -102,11 +105,11 @@ public class FixedScrollPane {
 		return theLayer.getView();
 	}
 
-	private static final class ConstrainedViewporLayout extends ViewportLayout {
+	private static final class ConstrainedViewportLayout extends ViewportLayout {
 		private final boolean isVerticalFixed;
 		private final boolean isHorizontalFixed;
 
-		ConstrainedViewporLayout(boolean verticalFixed, boolean horizontalFixed) {
+		ConstrainedViewportLayout(boolean verticalFixed, boolean horizontalFixed) {
 			isVerticalFixed = verticalFixed;
 			isHorizontalFixed = horizontalFixed;
 		}

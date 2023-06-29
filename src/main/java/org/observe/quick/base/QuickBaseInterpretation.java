@@ -128,6 +128,8 @@ public class QuickBaseInterpretation implements QonfigInterpretation {
 			session -> QuickCoreInterpretation.interpretAddOn(session, (p, ao) -> new QuickField.Def(ao, (QuickWidget.Def<?>) p)));
 		interpreter.createWith(QuickSplit.SPLIT, QuickSplit.Def.class,
 			session -> QuickCoreInterpretation.interpretQuick(session, QuickSplit.Def::new));
+		interpreter.createWith(QuickScrollPane.SCROLL, QuickScrollPane.Def.class,
+			session -> QuickCoreInterpretation.interpretQuick(session, QuickScrollPane.Def::new));
 
 		// Box layouts
 		interpreter.createWith("inline-layout", QuickInlineLayout.Def.class,
@@ -140,13 +142,13 @@ public class QuickBaseInterpretation implements QonfigInterpretation {
 			session -> QuickCoreInterpretation.interpretAddOn(session, (p, ao) -> new QuickBorderLayout.Def(ao, (QuickBox.Def<?>) p)));
 		interpreter.createWith("border-layout-child", QuickBorderLayout.Child.Def.class, session -> QuickCoreInterpretation
 			.interpretAddOn(session, (p, ao) -> new QuickBorderLayout.Child.Def(ao, (QuickWidget.Def<?>) p)));
-		interpreter.createWith("h-positionable", Positionable.Def.class,
+		interpreter.createWith("h-positionable", Positionable.Def.Horizontal.class,
 			session -> QuickCoreInterpretation.interpretAddOn(session, (p, ao) -> new Positionable.Def.Horizontal(ao, p)));
-		interpreter.createWith("v-positionable", Positionable.Def.class,
+		interpreter.createWith("v-positionable", Positionable.Def.Vertical.class,
 			session -> QuickCoreInterpretation.interpretAddOn(session, (p, ao) -> new Positionable.Def.Vertical(ao, p)));
-		interpreter.createWith("h-sizeable", Sizeable.Def.class,
+		interpreter.createWith("h-sizeable", Sizeable.Def.Horizontal.class,
 			session -> QuickCoreInterpretation.interpretAddOn(session, (p, ao) -> new Sizeable.Def.Horizontal(ao, p)));
-		interpreter.createWith("v-sizeable", Sizeable.Def.class,
+		interpreter.createWith("v-sizeable", Sizeable.Def.Vertical.class,
 			session -> QuickCoreInterpretation.interpretAddOn(session, (p, ao) -> new Sizeable.Def.Vertical(ao, p)));
 
 		// Table
