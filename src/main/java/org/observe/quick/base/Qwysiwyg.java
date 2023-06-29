@@ -503,6 +503,7 @@ public class Qwysiwyg {
 			DocumentComponent attrValueComp = getSourceComponent(elComponent, position.getPosition(0).getPosition());
 			DocumentComponent attrComp = attrValueComp.parent;
 			QonfigValueType type = attr.getKey().getType();
+			String attrValueDescrip = null;
 			if (type instanceof QonfigValueType.Custom) {
 				CustomValueType customType = ((QonfigValueType.Custom) type).getCustomType();
 				if (customType instanceof ExpressionValueType) {
@@ -511,10 +512,22 @@ public class Qwysiwyg {
 						renderCompiledExpression(((LocatedExpression) defValue).getExpression(),
 							((LocatedExpression) defValue).getFilePosition(), attrValueComp);
 				}
+			} else {
+				Object value = def.getAttribute(attr.getKey());
+				if (!(value instanceof SelfDescribed))
+					value = def.getElement().getAttribute(attr.getKey(), Object.class);
+				if (value instanceof SelfDescribed)
+					attrValueDescrip = ((SelfDescribed) value).getDescription();
 			}
 			String attrDescrip = attr.getKey().getDescription();
-			if (attrDescrip != null)
-				attrComp.typeTooltip(attrDescrip + "<br><br>" + renderValueType(type, 1, attr.getKey()));
+			if (attrDescrip != null) {
+				if (attrValueDescrip != null)
+					attrComp
+						.typeTooltip(attrValueDescrip + "<br><br>" + attrDescrip + "<br><br>" + renderValueType(type, 1, attr.getKey()));
+				else
+					attrComp.typeTooltip(attrDescrip + "<br><br>" + renderValueType(type, 1, attr.getKey()));
+			} else if (attrValueDescrip != null)
+				attrComp.typeTooltip(attrValueDescrip + "<br><br>" + renderValueType(type, 1, attr.getKey()));
 			else
 				attrComp.typeTooltip(renderValueType(type, 1, attr.getKey()));
 		}
@@ -627,7 +640,6 @@ public class Qwysiwyg {
 			if (position == null)
 				continue;
 			DocumentComponent attrValueComp = getSourceComponent(elComponent, position.getPosition(0).getPosition());
-			DocumentComponent attrComp = attrValueComp.parent;
 			QonfigValueType type = attr.getKey().getType();
 			if (type instanceof QonfigValueType.Custom) {
 				CustomValueType customType = ((QonfigValueType.Custom) type).getCustomType();
@@ -639,6 +651,10 @@ public class Qwysiwyg {
 							renderInterpretedExpression(expression, attrValueComp, element == null ? null : element.getUpdatingModels());
 					}
 				}
+			} else {
+				Object interpValue = def.getAttribute(interpreted, attr.getKey());
+				if (interpValue instanceof SelfDescribed)
+					attrValueComp.interpretedTooltip(((SelfDescribed) interpValue)::getDescription);
 			}
 			// TODO describe interpreted value?
 		}
@@ -656,6 +672,10 @@ public class Qwysiwyg {
 							renderInterpretedExpression(expression, attrValueComp, element == null ? null : element.getUpdatingModels());
 					}
 				}
+			} else {
+				Object interpValue = def.getElementValue(interpreted);
+				if (interpValue instanceof SelfDescribed)
+					attrValueComp.interpretedTooltip(((SelfDescribed) interpValue)::getDescription);
 			}
 			// TODO describe interpreted value?
 		}

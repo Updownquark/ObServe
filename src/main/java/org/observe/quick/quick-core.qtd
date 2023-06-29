@@ -3,9 +3,13 @@
 <qonfig-def name="Quick-Core" version="0.1" root="quick,style-sheet" extends:expresso="Expresso-Base v0.1" extends:style="Quick-Style v0.1">
 	<value-types>
 		<one-of name="window-close-action">
+			<?DOC The window will remain visible when the user attempts to close it?>
 			<literal>do-nothing</literal>
+			<?DOC The window will become invisible when the user closes it, but will remain available for re-display?>
 			<literal>hide</literal>
+			<?DOC The window will be disposed of when the user closes it, and will not re-display. The application will not terminate.?>
 			<literal>dispose</literal>
+			<?DOC The application will terminate when the user closes the window?>
 			<literal>exit</literal>
 		</one-of>
 

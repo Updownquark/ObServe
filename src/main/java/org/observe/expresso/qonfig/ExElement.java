@@ -80,7 +80,7 @@ public interface ExElement extends Identifiable {
 		public static <E extends ExElement, I extends ExElement.Interpreted<? extends E>, D extends ExElement.Def<? extends E>, M, MV extends M> Expression<E, I, D, M, MV> ofX(
 			Function<? super D, ? extends CompiledExpression> defGetter,
 			Function<? super I, ? extends InterpretedValueSynth<M, ? extends MV>> interpretedGetter,
-			Function<? super E, ? extends MV> elementGetter) {
+				Function<? super E, ? extends MV> elementGetter) {
 			return new Expression<>(defGetter, interpretedGetter, elementGetter);
 		}
 
@@ -109,12 +109,12 @@ public interface ExElement extends Identifiable {
 
 			@Override
 			public Object getFromInterpreted(I interp) {
-				return theInterpretedGetter.apply(interp);
+				return theInterpretedGetter == null ? null : theInterpretedGetter.apply(interp);
 			}
 
 			@Override
 			public Object getFromElement(E element) {
-				return theElementGetter.apply(element);
+				return theElementGetter == null ? null : theElementGetter.apply(element);
 			}
 		}
 
@@ -126,7 +126,7 @@ public interface ExElement extends Identifiable {
 
 			public Expression(Function<? super D, ? extends LocatedExpression> defGetter,
 				Function<? super I, ? extends InterpretedValueSynth<M, ? extends MV>> interpretedGetter,
-				Function<? super E, ? extends MV> elementGetter) {
+					Function<? super E, ? extends MV> elementGetter) {
 				theDefGetter = defGetter;
 				theInterpretedGetter = interpretedGetter;
 				theElementGetter = elementGetter;
@@ -139,12 +139,12 @@ public interface ExElement extends Identifiable {
 
 			@Override
 			public InterpretedValueSynth<M, ? extends MV> getFromInterpreted(I interp) {
-				return theInterpretedGetter.apply(interp);
+				return theInterpretedGetter == null ? null : theInterpretedGetter.apply(interp);
 			}
 
 			@Override
 			public MV getFromElement(E element) {
-				return theElementGetter.apply(element);
+				return theElementGetter == null ? null : theElementGetter.apply(element);
 			}
 		}
 
