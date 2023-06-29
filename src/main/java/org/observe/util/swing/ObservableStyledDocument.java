@@ -3,6 +3,7 @@ package org.observe.util.swing;
 import java.awt.EventQueue;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Consumer;
@@ -35,6 +36,7 @@ public abstract class ObservableStyledDocument<T> {
 	private final Observable<?> theUntil;
 	private final BgFontAdjuster theRootStyle;
 
+	private final IdentityHashMap<T, DocumentNode> theNodesByValue;
 	private final ListenerList<Consumer<? super ChangeEvent<T>>> theListeners;
 
 	private Function<? super T, String> thePostNodeText;
@@ -44,6 +46,7 @@ public abstract class ObservableStyledDocument<T> {
 		theFormat = format;
 		theThreading = threading;
 		theUntil = until;
+		theNodesByValue = new IdentityHashMap<>();
 
 		theRootStyle = new BgFontAdjuster(new SimpleAttributeSet());
 		theRoot = root.safe(theThreading, theUntil);
@@ -88,6 +91,10 @@ public abstract class ObservableStyledDocument<T> {
 
 	public DocumentNode getNodeAt(int textPosition) {
 		return theRootNode.getNodeAt(textPosition);
+	}
+
+	public DocumentNode getNodeFor(T value) {
+		return theNodesByValue.get(value);
 	}
 
 	public Runnable addListener(Consumer<? super ChangeEvent<T>> listener) {
@@ -203,7 +210,11 @@ public abstract class ObservableStyledDocument<T> {
 		}
 
 		void changed(T value, Object cause, boolean withEvents, boolean deep) {
+			if (theValue != null)
+				theNodesByValue.remove(theValue);
 			theValue = value;
+			if (value != null)
+				theNodesByValue.put(value, this);
 			String text = theFormat.format(theValue);
 			if (text == null)
 				text = "";

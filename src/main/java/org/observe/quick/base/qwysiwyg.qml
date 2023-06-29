@@ -26,7 +26,9 @@
 				<text-area value="app.qwysiwyg.lineNumbers" editable="false" width="65px" />
 			</box>
 			<styled-text-area role="content" editable="false" value="app.qwysiwyg.documentRoot" children="node.children"
-				post-text="node.getPostText()" tooltip="app.qwysiwyg.tooltip">
+				post-text="node.getPostText()" tooltip="app.qwysiwyg.tooltip"
+				selection-start-value="app.qwysiwyg.selectedNode" selection-end-value="app.qwysiwyg.selectedNode"
+				selection-start-offset="app.qwysiwyg.selectedStartIndex" selection-end-offset="app.qwysiwyg.selectedEndIndex">
 				<text-style>
 					<style attr="font-weight" condition="node!=null &amp;&amp; node.isBold()">`bold`</style>
 					<style attr="font-color">node==null ? null : node.getFontColor()</style>

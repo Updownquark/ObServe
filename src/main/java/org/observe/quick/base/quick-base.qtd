@@ -191,6 +191,10 @@
 			<attribute name="children" type="expression" specify="required" />
 			<attribute name="post-text" type="expression" specify="optional" />
 			<attribute name="rows" type="expression" specify="optional" />
+			<attribute name="selection-start-value" type="expression" specify="optional" />
+			<attribute name="selection-start-offset" type="expression" specify="optional" />
+			<attribute name="selection-end-value" type="expression" specify="optional" />
+			<attribute name="selection-end-offset" type="expression" specify="optional" />
 			<child-def name="text-style" type="text-style" min="0" />
 		</element-def>
 		<element-def name="text-style" inherits="with-text">

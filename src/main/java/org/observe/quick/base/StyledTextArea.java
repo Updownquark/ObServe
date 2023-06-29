@@ -38,6 +38,10 @@ public class StyledTextArea<T> extends QuickTextWidget.Abstract<T> {
 		private CompiledExpression theChildren;
 		private CompiledExpression thePostText;
 		private CompiledExpression theRows;
+		private CompiledExpression theSelectionStartValue;
+		private CompiledExpression theSelectionStartOffset;
+		private CompiledExpression theSelectionEndValue;
+		private CompiledExpression theSelectionEndOffset;
 		private TextStyleElement.Def theTextStyle;
 
 		public Def(ExElement.Def<?> parent, QonfigElement element) {
@@ -65,6 +69,22 @@ public class StyledTextArea<T> extends QuickTextWidget.Abstract<T> {
 			return theTextStyle;
 		}
 
+		public CompiledExpression getSelectionStartValue() {
+			return theSelectionStartValue;
+		}
+
+		public CompiledExpression getSelectionStartOffset() {
+			return theSelectionStartOffset;
+		}
+
+		public CompiledExpression getSelectionEndValue() {
+			return theSelectionEndValue;
+		}
+
+		public CompiledExpression getSelectionEndOffset() {
+			return theSelectionEndOffset;
+		}
+
 		@Override
 		public void update(ExpressoQIS session) throws QonfigInterpretationException {
 			ExElement.checkElement(session.getFocusType(), QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION,
@@ -74,6 +94,10 @@ public class StyledTextArea<T> extends QuickTextWidget.Abstract<T> {
 			theChildren = session.getAttributeExpression("children");
 			thePostText = session.getAttributeExpression("post-text");
 			theRows = session.getAttributeExpression("rows");
+			theSelectionStartValue = session.getAttributeExpression("selection-start-value");
+			theSelectionStartOffset = session.getAttributeExpression("selection-start-offset");
+			theSelectionEndValue = session.getAttributeExpression("selection-end-value");
+			theSelectionEndOffset = session.getAttributeExpression("selection-end-offset");
 			theTextStyle = ExElement.useOrReplace(TextStyleElement.Def.class, theTextStyle, session, "text-style");
 		}
 
@@ -87,6 +111,10 @@ public class StyledTextArea<T> extends QuickTextWidget.Abstract<T> {
 		private InterpretedValueSynth<ObservableCollection<?>, ObservableCollection<T>> theChildren;
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<String>> thePostText;
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> theRows;
+		private InterpretedValueSynth<SettableValue<?>, SettableValue<T>> theSelectionStartValue;
+		private InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> theSelectionStartOffset;
+		private InterpretedValueSynth<SettableValue<?>, SettableValue<T>> theSelectionEndValue;
+		private InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> theSelectionEndOffset;
 		private TextStyleElement.Interpreted theTextStyle;
 
 		public Interpreted(Def<? super T> definition, ExElement.Interpreted<?> parent) {
@@ -129,6 +157,22 @@ public class StyledTextArea<T> extends QuickTextWidget.Abstract<T> {
 			return theRows;
 		}
 
+		public InterpretedValueSynth<SettableValue<?>, SettableValue<T>> getSelectionStartValue() {
+			return theSelectionStartValue;
+		}
+
+		public InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> getSelectionStartOffset() {
+			return theSelectionStartOffset;
+		}
+
+		public InterpretedValueSynth<SettableValue<?>, SettableValue<T>> getSelectionEndValue() {
+			return theSelectionEndValue;
+		}
+
+		public InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> getSelectionEndOffset() {
+			return theSelectionEndOffset;
+		}
+
 		public TextStyleElement.Interpreted getTextStyle() {
 			return theTextStyle;
 		}
@@ -146,6 +190,14 @@ public class StyledTextArea<T> extends QuickTextWidget.Abstract<T> {
 			thePostText = getDefinition().getPostText() == null ? null
 				: getDefinition().getPostText().evaluate(ModelTypes.Value.STRING).interpret();
 			theRows = getDefinition().getRows() == null ? null : getDefinition().getRows().evaluate(ModelTypes.Value.INT).interpret();
+			theSelectionStartValue = getDefinition().getSelectionStartValue() == null ? null
+				: getDefinition().getSelectionStartValue().evaluate(ModelTypes.Value.forType(getValueType())).interpret();
+			theSelectionStartOffset = getDefinition().getSelectionStartOffset() == null ? null
+				: getDefinition().getSelectionStartOffset().evaluate(ModelTypes.Value.forType(int.class)).interpret();
+			theSelectionEndValue = getDefinition().getSelectionEndValue() == null ? null
+				: getDefinition().getSelectionEndValue().evaluate(ModelTypes.Value.forType(getValueType())).interpret();
+			theSelectionEndOffset = getDefinition().getSelectionEndOffset() == null ? null
+				: getDefinition().getSelectionEndOffset().evaluate(ModelTypes.Value.forType(int.class)).interpret();
 			if (theTextStyle == null || theTextStyle.getDefinition() != getDefinition().getTextStyle())
 				theTextStyle = getDefinition().getTextStyle().interpret(this);
 			theTextStyle.update(cache);
@@ -187,6 +239,10 @@ public class StyledTextArea<T> extends QuickTextWidget.Abstract<T> {
 	private SettableValue<Integer> theRows;
 	private TextStyleElement theTextStyle;
 	private final SettableValue<SettableValue<T>> theNodeValue;
+	private final SettableValue<SettableValue<T>> theSelectionStartValue;
+	private final SettableValue<SettableValue<Integer>> theSelectionStartOffset;
+	private final SettableValue<SettableValue<T>> theSelectionEndValue;
+	private final SettableValue<SettableValue<Integer>> theSelectionEndOffset;
 
 	private ModelInstanceType.SingleTyped<SettableValue<?>, T, SettableValue<T>> theValueType;
 	private InterpretedValueSynth<ObservableCollection<?>, ObservableCollection<T>> theChildrenSynth;
@@ -196,6 +252,11 @@ public class StyledTextArea<T> extends QuickTextWidget.Abstract<T> {
 		super(interpreted, parent);
 		theNodeValue = SettableValue
 			.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<T>> parameterized(interpreted.getValueType())).build();
+		theSelectionStartValue = SettableValue.build(theNodeValue.getType()).build();
+		theSelectionStartOffset = SettableValue
+			.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Integer>> parameterized(int.class)).build();
+		theSelectionEndValue = SettableValue.build(theSelectionStartValue.getType()).build();
+		theSelectionEndOffset = SettableValue.build(theSelectionStartOffset.getType()).build();
 	}
 
 	public ModelInstanceType.SingleTyped<SettableValue<?>, T, SettableValue<T>> getValueType() {
@@ -216,6 +277,22 @@ public class StyledTextArea<T> extends QuickTextWidget.Abstract<T> {
 
 	public SettableValue<T> getNodeValue() {
 		return SettableValue.flatten(theNodeValue);
+	}
+
+	public SettableValue<T> getSelectionStartValue() {
+		return SettableValue.flatten(theSelectionStartValue);
+	}
+
+	public SettableValue<Integer> getSelectionStartOffset() {
+		return SettableValue.flatten(theSelectionStartOffset, () -> 0);
+	}
+
+	public SettableValue<T> getSelectionEndValue() {
+		return SettableValue.flatten(theSelectionEndValue);
+	}
+
+	public SettableValue<Integer> getSelectionEndOffset() {
+		return SettableValue.flatten(theSelectionEndOffset, () -> 0);
 	}
 
 	public ObservableCollection<? extends T> getChildren(StyledTextAreaContext<T> ctx) throws ModelInstantiationException {
@@ -252,6 +329,14 @@ public class StyledTextArea<T> extends QuickTextWidget.Abstract<T> {
 		ExElement.satisfyContextValue("node", theValueType, getNodeValue(), myModels, this);
 		super.updateModel(interpreted, myModels);
 		theRows = myInterpreted.getRows() == null ? null : myInterpreted.getRows().get(myModels);
+		theSelectionStartValue
+			.set(myInterpreted.getSelectionStartValue() == null ? null : myInterpreted.getSelectionStartValue().get(myModels), null);
+		theSelectionStartOffset
+			.set(myInterpreted.getSelectionStartOffset() == null ? null : myInterpreted.getSelectionStartOffset().get(myModels), null);
+		theSelectionEndValue.set(myInterpreted.getSelectionEndValue() == null ? null : myInterpreted.getSelectionEndValue().get(myModels),
+			null);
+		theSelectionEndOffset
+			.set(myInterpreted.getSelectionEndOffset() == null ? null : myInterpreted.getSelectionEndOffset().get(myModels), null);
 		if (theTextStyle == null || theTextStyle.getIdentity() != myInterpreted.getTextStyle().getDefinition().getIdentity())
 			theTextStyle = myInterpreted.getTextStyle().create(this);
 		theTextStyle.update(myInterpreted.getTextStyle(), myModels);

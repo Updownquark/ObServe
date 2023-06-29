@@ -46,9 +46,11 @@ import org.observe.quick.QuickApplication;
 import org.observe.quick.QuickDocument;
 import org.observe.util.TypeTokens;
 import org.qommons.ArrayUtils;
+import org.qommons.Causable;
 import org.qommons.Colors;
 import org.qommons.SelfDescribed;
 import org.qommons.Stamped;
+import org.qommons.Transaction;
 import org.qommons.collect.CircularArrayList;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.DequeList;
@@ -98,6 +100,9 @@ public class Qwysiwyg {
 	public final SettableValue<DocumentComponent> documentRoot;
 	public final ObservableValue<String> tooltip;
 	public final SettableValue<DocumentComponent> hovered;
+	public final SettableValue<DocumentComponent> selectedNode;
+	public final SettableValue<Integer> selectedStartIndex;
+	public final SettableValue<Integer> selectedEndIndex;
 	public final SettableValue<String> lineNumbers;
 
 	private final SettableValue<DocumentComponent> theInternalDocumentRoot;
@@ -124,6 +129,9 @@ public class Qwysiwyg {
 		theDocumentReplacement = new SimpleObservable<>();
 		theApplicationReplacement = new SimpleObservable<>();
 		hovered = SettableValue.build(DocumentComponent.class).build();
+		selectedNode = SettableValue.build(DocumentComponent.class).build();
+		selectedStartIndex = SettableValue.build(int.class).withValue(0).build();
+		selectedEndIndex = SettableValue.build(int.class).withValue(0).build();
 		theDocumentContent = new StringBuilder();
 		lineNumbers = SettableValue.build(String.class).build();
 	}
@@ -1012,6 +1020,15 @@ public class Qwysiwyg {
 
 		public void followLink() {
 			System.out.println("Go to " + target);
+			DocumentComponent targetComponent = getSourceComponent(theRoot, target.getPosition());
+			try (Causable.CausableInUse cause = Causable.cause(); //
+				Transaction vt = selectedNode.lock(true, cause);
+				Transaction sit = selectedStartIndex.lock(true, cause);
+				Transaction eit = selectedEndIndex.lock(true, cause)) {
+				selectedNode.set(targetComponent, cause);
+				selectedStartIndex.set(0, cause);
+				selectedEndIndex.set(targetComponent.getTextLength(), cause);
+			}
 		}
 
 		public StringBuilder printHierarchy(StringBuilder str, int indent) {
@@ -1037,6 +1054,17 @@ public class Qwysiwyg {
 			}
 
 			return str;
+		}
+
+		int getTextLength() {
+			int textEnd;
+			if (!children.isEmpty())
+				textEnd = children.getFirst().start.getPosition();
+			else if (end != null)
+				textEnd = end.getPosition();
+			else
+				textEnd = theDocumentContent.length();
+			return textEnd - start.getPosition();
 		}
 
 		@Override

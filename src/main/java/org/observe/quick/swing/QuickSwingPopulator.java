@@ -24,6 +24,7 @@ import java.util.function.Function;
 import java.util.function.Supplier;
 
 import javax.swing.*;
+import javax.swing.text.BadLocationException;
 
 import org.jdesktop.swingx.JXCollapsiblePane;
 import org.jdesktop.swingx.JXPanel;
@@ -1345,6 +1346,21 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 			}
 		}
 
+		public static void scrollTo(Component component, Rectangle bounds) {
+			while (component != null && component.isVisible()) {
+				if (component instanceof JViewport) {
+					JViewport vp = (JViewport) component;
+					Point viewPos = vp.getViewPosition();
+					bounds.x -= viewPos.x;
+					bounds.y -= viewPos.y;
+					vp.scrollRectToVisible(bounds);
+				} else {
+					bounds.x += component.getX();
+					bounds.y += component.getY();
+				}
+				component = component.getParent();
+			}
+		}
 	}
 
 	/** Quick interpretation of the base toolkit for Swing */
@@ -1638,6 +1654,10 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 			return createWidget((panel, quick) -> {
 				Format<T> format = quick.getFormat().get();
 				SettableValue<Integer> rows = quick.getRows();
+				SettableValue<T> selectionStartValue = quick.getSelectionStartValue();
+				SettableValue<Integer> selectionStartOffset = quick.getSelectionStartOffset();
+				SettableValue<T> selectionEndValue = quick.getSelectionEndValue();
+				SettableValue<Integer> selectionEndOffset = quick.getSelectionEndOffset();
 				ObservableStyledDocument<T> doc = new ObservableStyledDocument<T>(quick.getValue(), format, ThreadConstraint.EDT,
 					panel.getUntil()) {
 					@Override
@@ -1701,6 +1721,83 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 								}
 							});
 						}
+						boolean[] selectionCallbackLock = new boolean[1];
+						tf2.addCaretListener(e -> {
+							if (selectionCallbackLock[0])
+								return;
+							ObservableStyledDocument<T>.DocumentNode startNode = doc.getNodeAt(e.getDot());
+							ObservableStyledDocument<T>.DocumentNode endNode = doc.getNodeAt(e.getMark());
+							if (selectionStartValue.isAcceptable(startNode == null ? null : startNode.getValue()) == null) {
+								int startOffset = startNode == null ? 0 : e.getDot() - startNode.getStart();
+								int endOffset = endNode == null ? 0 : e.getMark() - endNode.getStart();
+								selectionCallbackLock[0] = true;
+								try (Causable.CausableInUse cause = Causable.cause(e);
+									Transaction svt = selectionStartValue.lock(true, cause);
+									Transaction sot = selectionStartOffset.lock(true, cause);
+									Transaction evt = selectionEndValue.lock(true, cause);
+									Transaction eot = selectionEndOffset.lock(true, cause)) {
+									selectionStartValue.set(startNode == null ? null : startNode.getValue(), cause);
+									if (selectionStartOffset.isAcceptable(startOffset) == null)
+										selectionStartOffset.set(startOffset, cause);
+									if (selectionEndValue.isAcceptable(endNode == null ? null : endNode.getValue()) == null) {
+										selectionEndValue.set(endNode == null ? null : endNode.getValue(), cause);
+										if (selectionEndOffset.isAcceptable(endOffset) == null)
+											selectionEndOffset.set(endOffset, cause);
+									}
+								} finally {
+									selectionCallbackLock[0] = false;
+								}
+							}
+						});
+						Observable.onRootFinish(Observable.or(selectionStartValue.noInitChanges(), selectionStartOffset.noInitChanges(),
+							selectionEndValue.noInitChanges(), selectionEndOffset.noInitChanges())).act(__ -> {
+								if (selectionCallbackLock[0])
+									return;
+								selectionCallbackLock[0] = true;
+								try {
+									T sv = selectionStartValue.get();
+									T ev = selectionEndValue.get();
+									ObservableStyledDocument<T>.DocumentNode startNode = sv == null ? null : doc.getNodeFor(sv);
+									if (sv == null) {
+										tf2.setCaretPosition(0);
+										return;
+									}
+									ObservableStyledDocument<T>.DocumentNode endNode = sv == null ? null : doc.getNodeFor(ev);
+									int startIndex = startNode.getStart() + selectionStartOffset.get();
+									if (startIndex < 0)
+										startIndex = 0;
+									else if (startIndex > tf2.getDocument().getLength())
+										startIndex = tf2.getDocument().getLength();
+									tf2.setCaretPosition(startIndex);
+									Rectangle selectionBounds;
+									try {
+										selectionBounds = tf2.modelToView(startIndex);
+									} catch (BadLocationException e) {
+										quick.reporting().error(e.getMessage(), e);
+										selectionBounds = null;
+									}
+									if (endNode != null) {
+										int endIndex = endNode.getStart() + selectionEndOffset.get();
+										if (endIndex >= 0 && endIndex <= tf2.getDocument().getLength())
+											tf2.select(Math.min(startIndex, endIndex), Math.max(startIndex, endIndex));
+										Rectangle end;
+										try {
+											end = tf2.modelToView(endIndex);
+											if (selectionBounds == null)
+												selectionBounds = end;
+											else
+												selectionBounds = selectionBounds.union(end);
+										} catch (BadLocationException e) {
+											quick.reporting().error(e.getMessage(), e);
+										}
+									}
+									if (selectionBounds != null) {
+										QuickCoreSwing.scrollTo(tf2.getParent(), selectionBounds);
+									}
+								} finally {
+									selectionCallbackLock[0] = false;
+								}
+							});
 					});
 				});
 			});
