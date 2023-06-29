@@ -22,11 +22,9 @@ public class QuickBox extends QuickContainer.Abstract<QuickWidget> {
 	public static final String BOX = "box";
 
 	public static ExElement.AttributeValueGetter.AddOn<QuickBox, QuickLayout, QuickLayout.Interpreted<?>, QuickLayout.Def<?>> LAYOUT = ExElement.AttributeValueGetter
-		.addOn(QuickLayout.Def.class, QuickLayout.Interpreted.class, QuickLayout.class,
-			"The layout that the box will use to arrange its contents");
+		.addOn(QuickLayout.Def.class, QuickLayout.Interpreted.class, QuickLayout.class);
 	public static ExElement.AttributeValueGetter.Expression<QuickBox, Interpreted<? extends QuickBox>, Def<? extends QuickBox>, SettableValue<?>, SettableValue<Double>> OPACITY = ExElement.AttributeValueGetter
-		.ofX(Def::getOpacity, Interpreted::getOpacity, QuickBox::getOpacity,
-			"The opacity of the box, between 0 (completely transparent) and 1 (completely opaque)");
+		.ofX(Def::getOpacity, Interpreted::getOpacity, QuickBox::getOpacity);
 
 	public static class Def<W extends QuickBox> extends QuickContainer.Def.Abstract<W, QuickWidget> {
 		private CompiledExpression theOpacity;

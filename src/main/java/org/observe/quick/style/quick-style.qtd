@@ -16,6 +16,7 @@
 		</add-on>
 
 		<add-on name="with-style-sheet">
+			<?DOC The style sheet of the document, defining styles that can be applied to sets of elements without being declared on each element?>
 			<child-def name="style-sheet" type="style-sheet" min="0" />
 		</add-on>
 		<add-on name="styled" inherits="with-element-model,with-local-model">
@@ -26,6 +27,7 @@
 				<value name="MODEL$ELEMENT" type="org.qommons.config.QonfigElement" priority="0" />
 			</element-model>
 			<element-meta name="styles" type="styles" min="0" />
+			<?DOC Styles declared on the element itself?>
 			<child-def name="style" type="style" inherits="element-style" min="0" max="inf" />
 		</add-on>
 		<add-on name="style-model" requires="element-model">
@@ -49,29 +51,43 @@
 		</element-def>
 
 		<element-def name="style">
+			<?DOC The element or add-on type that the style applies to?>
 			<attribute name="element" type="widget-name" specify="optional" />
+			<?DOC The child role that the style applies to?>
 			<attribute name="child" type="role-path" specify="optional" />
+			<?DOC The attribute whose value to change when this style applies?>
 			<attribute name="attr" type="style-attr" specify="optional" />
+			<?DOC "The runtime condition for the style.  A style will only be applied when its condition, if present, is true."?>
 			<attribute name="condition" type="expression" specify="optional" />
+			<?DOC The style set to apply when this style applies?>
 			<attribute name="style-set" type="string" specify="optional" />
+			<?DOC The value for the style's attribute, when it applies?>
 			<value type="expression" specify="optional" />
+			<?DOC Sub-styles for this style. Sub-styles apply to an element when all of its ancestors do as well as its own configuration.?> 
 			<child-def name="sub-style" type="style" min="0" max="inf" />
 		</element-def>
 
 		<element-def name="style-set">
+			<?DOC The name by which the style set may be referred to from documents using the style sheet?>
 			<attribute name="name" type="identifier" specify="required" />
+			<?DOC Style values for this style set?>
 			<child-def name="style" type="style" max="inf" />
 		</element-def>
 
 		<!-- Now the structure of the Quick document -->
 		<element-def name="import-style-sheet">
+			<?DOC The name by which the imported style sheet may be referred to in the document?>
 			<attribute name="name" type="identifier" specify="required" />
+			<?DOC The URL location of the imported style sheet's data?>
 			<attribute name="ref" type="string" specify="required" />
 		</element-def>
 
 		<element-def name="style-sheet">
+			<?DOC A style sheet imported by this style sheet?>
 			<child-def name="style-sheet-ref" type="import-style-sheet" min="0" max="inf" />
+			<?DOC A style set declared by this style sheet?>
 			<child-def name="style-set" type="style-set" min="0" max="inf" />
+			<?DOC A style to apply to elements in documents that use this style sheet?>
 			<child-def name="style" type="style" min="0" max="inf" />
 		</element-def>
 	</elements>

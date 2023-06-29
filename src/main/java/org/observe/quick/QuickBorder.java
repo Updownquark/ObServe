@@ -108,7 +108,7 @@ public interface QuickBorder extends QuickStyledElement {
 
 		public static final ExElement.AttributeValueGetter.Expression<TitledBorder, Interpreted<?>, Def<?>, SettableValue<?>, SettableValue<String>> TITLE = ExElement.AttributeValueGetter
 			.<TitledBorder, Interpreted<?>, Def<?>, SettableValue<?>, SettableValue<String>> ofX(Def::getTitle, Interpreted::getTitle,
-				TitledBorder::getTitle, "The title to display for the border");
+				TitledBorder::getTitle);
 
 		public static class Def<B extends TitledBorder> extends LineBorder.Def<B> {
 			private CompiledExpression theTitle;

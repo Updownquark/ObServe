@@ -23,14 +23,12 @@ public interface QuickValueWidget<T> extends QuickWidget {
 
 	public static final ExElement.AttributeValueGetter.Expression<QuickValueWidget<?>, Interpreted<?, ?>, Def<?>, SettableValue<?>, SettableValue<?>> VALUE//
 	= ExElement.AttributeValueGetter.<QuickValueWidget<?>, Interpreted<?, ?>, Def<?>, SettableValue<?>, SettableValue<?>> ofX(
-		Def::getValue, Interpreted::getValue, QuickValueWidget::getValue, "The value to edit with the widget");
+			Def::getValue, Interpreted::getValue, QuickValueWidget::getValue);
 	public static final ExElement.AttributeValueGetter.Expression<QuickValueWidget<?>, Interpreted<?, ?>, Def<?>, SettableValue<?>, SettableValue<String>> DISABLE_WITH//
 	= ExElement.AttributeValueGetter.<QuickValueWidget<?>, Interpreted<?, ?>, Def<?>, SettableValue<?>, SettableValue<String>> ofX(
-		Def::getDisabled, Interpreted::getDisabled, QuickValueWidget::getDisabled,
-		"A value to disable this widget.  If the value is non-null, the widget will be disabled and the value will be displayed to the user.");
+			Def::getDisabled, Interpreted::getDisabled, QuickValueWidget::getDisabled);
 	public static final ExElement.AttributeValueGetter<QuickValueWidget<?>, Interpreted<?, ?>, Def<?>> VALUE_NAME = ExElement.AttributeValueGetter
-		.<QuickValueWidget<?>, Interpreted<?, ?>, Def<?>> of(Def::getValueName, null, null,
-			"The name of this widget's value for use in internal expressions");
+		.<QuickValueWidget<?>, Interpreted<?, ?>, Def<?>> of(Def::getValueName, null, null);
 
 	public interface Def<W extends QuickValueWidget<?>> extends QuickWidget.Def<W> {
 		String getValueName();

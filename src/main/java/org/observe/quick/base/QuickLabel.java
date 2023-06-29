@@ -23,11 +23,9 @@ public class QuickLabel<T> extends QuickTextWidget.Abstract<T> {
 	public static final String LABEL = "label";
 
 	public static final ExElement.AttributeValueGetter<QuickLabel<?>, Interpreted<?, ?>, Def<?, ?>> VALUE_TEXT = ExElement.AttributeValueGetter
-		.<QuickLabel<?>, Interpreted<?, ?>, Def<?, ?>> of(Def::getValueText, null, null,
-			"For a label, either the 'value' attribute or the value text may specified on a label.  The value text is not an expression, but static text.");
+		.<QuickLabel<?>, Interpreted<?, ?>, Def<?, ?>> of(Def::getValueText, null, null);
 	public static final ExElement.AttributeValueGetter<QuickLabel<?>, Interpreted<?, ?>, Def<?, ?>> ICON = ExElement.AttributeValueGetter
-		.<QuickLabel<?>, Interpreted<?, ?>, Def<?, ?>> of(Def::getIcon, Interpreted::getIcon, QuickLabel::getIcon,
-			"The icon to display for the label");
+		.<QuickLabel<?>, Interpreted<?, ?>, Def<?, ?>> of(Def::getIcon, Interpreted::getIcon, QuickLabel::getIcon);
 
 	public static class Def<T, W extends QuickLabel<T>> extends QuickTextWidget.Def.Abstract<T, W> {
 		private String theStaticText;

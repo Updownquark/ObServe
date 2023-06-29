@@ -13,7 +13,7 @@ import com.google.common.reflect.TypeToken;
 public class ExTyped extends ExAddOn.Abstract<ExElement> {
 	public static final ExAddOn.AddOnAttributeGetter<ExElement, ExTyped, Interpreted, Def> VALUE_TYPE = ExAddOn.AddOnAttributeGetter
 		.<ExElement, ExTyped, Interpreted, Def> of(Def.class, Def::getValueType, Interpreted.class, Interpreted::getValueType,
-			ExTyped.class, ExTyped::getValueType, "The declared type of the variable");
+			ExTyped.class, ExTyped::getValueType);
 
 	public static class Def extends ExAddOn.Def.Abstract<ExElement, ExTyped> {
 		private Object theValueType;

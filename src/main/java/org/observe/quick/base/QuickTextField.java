@@ -19,11 +19,9 @@ public class QuickTextField<T> extends QuickEditableTextWidget.Abstract<T> {
 	public static final String TEXT_FIELD = "text-field";
 
 	private static final ExElement.AttributeValueGetter.Expression<QuickTextField<?>, Interpreted<?>, Def<?>, SettableValue<?>, SettableValue<String>> EMPTY_TEXT = ExElement.AttributeValueGetter
-		.ofX(Def::getEmptyText, Interpreted::getEmptyText, QuickTextField::getEmptyText,
-			"The text cue to display to the user when the text field has no value");
+		.ofX(Def::getEmptyText, Interpreted::getEmptyText, QuickTextField::getEmptyText);
 	private static final ExElement.AttributeValueGetter<QuickTextField<?>, Interpreted<?>, Def<?>> COLUMNS = ExElement.AttributeValueGetter
-		.of(Def::getColumns, i -> i.getDefinition().getColumns(), QuickTextField::getColumns,
-			"The number of columns of characters to configure the text field's width");
+		.of(Def::getColumns, i -> i.getDefinition().getColumns(), QuickTextField::getColumns);
 
 	public static class Def<T> extends QuickEditableTextWidget.Def.Abstract<T, QuickTextField<T>> {
 		private Integer theColumns;

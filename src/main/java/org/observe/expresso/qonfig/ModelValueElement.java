@@ -12,19 +12,15 @@ import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueSynth;
-import org.observe.expresso.VariableType;
-import org.observe.util.TypeTokens;
 import org.qommons.Version;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.ex.ExSupplier;
 
-import com.google.common.reflect.TypeToken;
-
 public interface ModelValueElement<M, MV extends M> extends ExElement {
 	public static final ExElement.AttributeValueGetter.Expression<ModelValueElement<?, ?>, Interpreted<?, ?, ?>, Def<?, ?>, Object, Object> MODEL_VALUE//
-		= ExElement.AttributeValueGetter.<ModelValueElement<?, ?>, Interpreted<?, ?, ?>, Def<?, ?>, Object, Object> ofX(Def::getValue,
-			i -> (InterpretedValueSynth<Object, Object>) i.getValue(), ModelValueElement::getValue, "The value for the variable");
+	= ExElement.AttributeValueGetter.<ModelValueElement<?, ?>, Interpreted<?, ?, ?>, Def<?, ?>, Object, Object> ofX(Def::getValue,
+		i -> (InterpretedValueSynth<Object, Object>) i.getValue(), ModelValueElement::getValue);
 
 	public interface Def<M, E extends ModelValueElement<M, ?>> extends ExElement.Def<E> {
 		ModelType<M> getModelType();

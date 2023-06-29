@@ -20,12 +20,19 @@
 
 	<add-ons>
 		<add-on name="window">
+			<?DOC The x-coordinate of the position of the top-left corner of the window in the graphics environment?>
 			<attribute name="x" type="expression" specify="optional" />
+			<?DOC The y-coordinate of the position of the top-left corner of the window in the graphics environment?>
 			<attribute name="y" type="expression" specify="optional" />
-			<attribute name="height" type="expression" specify="optional" />
+			<?DOC The width of the window?>
 			<attribute name="width" type="expression" specify="optional" />
+			<?DOC The height of the window?>
+			<attribute name="height" type="expression" specify="optional" />
+			<?DOC The title for the window?>
 			<attribute name="title" type="expression" specify="optional" />
+			<?DOC Controls when the window is displayed?>
 			<attribute name="visible" type="expression" specify="optional" />
+			<?DOC The action to take when the user closes the window by clicking the "X" at the corner?>
 			<attribute name="close-action" type="window-close-action" default="hide" />
 		</add-on>
 
@@ -51,7 +58,9 @@
 				<event name="onModelLoad" type="Void" />
 				<event name="onBodyLoad" type="Void" />
 			</element-model>
+			<?DOC The head section of the Quick document, containing application models, style sheets, etc.?>
 			<child-def name="head" type="head" min="0" />
+			<?DOC The widget content of the application?>
 			<child-def name="body" type="widget" min="1" />
 		</element-def>
 		<element-def name="head" extends="expresso" inherits="with-style-sheet" />
@@ -67,11 +76,15 @@
 				<style-attribute name="color" type="java.awt.Color" />
 				<style-attribute name="mouse-cursor" type="org.observe.quick.MouseCursor" />
 			</styles>
-			<!-- Local variables, visible to any children also -->
-			<attribute name="name" type="string" specify="optional" /> <!-- For debugging -->
+			<?DOC The name of the widget.  Typically only used for debugging?>
+			<attribute name="name" type="string" specify="optional" />
+			<?DOC The tooltip to display when the user hovers the mouse over the widget, for user feedback?>
 			<attribute name="tooltip" type="expression" specify="optional" />
+			<?DOC Determines when the widget is displayed to the user or hidden?>
 			<attribute name="visible" type="expression" specify="optional" />
+			<?DOC The border to draw around the widget?>
 			<child-def name="border" type="border" min="0" />
+			<?DOC Listeners to events like mouse clicks or key presses?>
 			<child-def name="event-listener" type="event-listener" min="0" max="inf" />
 		</element-def>
 
@@ -82,6 +95,7 @@
 				<value name="shiftPressed" type="boolean" />
 			</element-model>
 			<child-def name="filter" type="event-filter" min="0" max="inf" />
+			<?DOC The action to perform when the event occurs?>
 			<value type="expression" specify="required" />
 		</element-def>
 		<element-def name="event-filter">
@@ -97,12 +111,14 @@
 			<element-model>
 				<value name="button" />
 			</element-model>
+			<?DOC The button that this listener will listen to.  If not specified, the listener will trigger for any button.?>
 			<attribute name="button" type="mouse-button" specify="optional" />
 		</element-def>
 		<element-def name="on-click" extends="mouse-button-listener">
 			<element-model>
 				<value name="clickCount" type="int" />
 			</element-model>
+			<?DOC The number of consecutive clicks necessary to trigger this listener.  If not specified, the listener will trigger for any number of clicks.?>
 			<attribute name="click-count" type="expression" specify="optional" />
 		</element-def>
 		<element-def name="on-mouse-press" extends="mouse-button-listener" />
@@ -120,6 +136,7 @@
 			<element-model>
 				<value name="keyCode" type="org.observe.quick.KeyCode" />
 			</element-model>
+			<?DOC The key code that this listener will be notified for.  If not specified, this listener will be notified for any key.?>
 			<attribute name="key" type="identifier" specify="optional" />
 		</element-def>
 		<element-def name="on-key-press" extends="key-code-listener" />
@@ -128,10 +145,12 @@
 			<element-model>
 				<value name="typedChar" type="char" />
 			</element-model>
+			<?DOC The typed character that this listener will be notified for.  If not specified, this listener will be notified for any character.?>
 			<attribute name="char" type="string" specify="optional" />
 		</element-def>
 
 		<element-def name="container" extends="widget" abstract="true">
+			<?DOC A widget displayed inside the container?>
 			<child-def name="content" type="widget" min="0" max="inf" />
 		</element-def>
 
@@ -143,6 +162,7 @@
 		</element-def>
 		<element-def name="line-border" extends="border" />
 		<element-def name="titled-border" extends="line-border" inherits="with-text">
+			<?DOC The title to display for the border?>
 			<attribute name="title" type="expression" specify="required" />
 		</element-def>
 
@@ -151,12 +171,18 @@
 			<element-model>
 				<value name-attribute="value-name" priority="1" />
 			</element-model>
+			<?DOC The name of this widget's value for use in internal expressions?>
 			<attribute name="value-name" type="identifier" default="value" />
+			<?DOC The value to edit with the widget?>
 			<attribute name="value" type="expression" specify="required" />
+			<?DOC A value to disable this widget.  If the value is non-null, the widget will be disabled and the value will be displayed to the user.?>
 			<attribute name="disable-with" type="expression" specify="optional" />
 		</element-def>
 		<element-def name="text-widget" extends="value-widget" abstract="true">
+			<?DOC The format to use to display the widget's value to the user and allow them to edit it?>
 			<attribute name="format" type="expression" specify="optional" />
+			<?DOC Whether the user can modify the text in the widget.
+				This is distinct from disable-with in that some UIs differentiate visually between disabled and uneditable widgets.?>
 			<attribute name="editable" type="expression" specify="optional" />
 		</element-def>
 	</elements>

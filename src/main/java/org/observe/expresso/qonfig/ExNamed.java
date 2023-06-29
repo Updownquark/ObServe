@@ -9,7 +9,7 @@ import org.qommons.config.QonfigInterpretationException;
 public class ExNamed extends ExAddOn.Abstract<ExElement> implements Named {
 	private static final ExAddOn.AddOnAttributeGetter<ExElement, ExNamed, Interpreted, Def> NAME = ExAddOn.AddOnAttributeGetter
 		.<ExElement, ExNamed, Interpreted, Def> of(Def.class, Def::getName, Interpreted.class, i -> i.getDefinition().getName(),
-			ExNamed.class, ExNamed::getName, "The name of the item");
+			ExNamed.class, ExNamed::getName);
 
 	public static class Def extends ExAddOn.Def.Abstract<ExElement, ExNamed> implements Named {
 		private String theName;

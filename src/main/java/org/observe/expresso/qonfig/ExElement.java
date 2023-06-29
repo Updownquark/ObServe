@@ -66,8 +66,6 @@ public interface ExElement extends Identifiable {
 	}
 
 	public interface AttributeValueGetter<E extends ExElement, I extends ExElement.Interpreted<? extends E>, D extends ExElement.Def<? extends E>> {
-		String getDescription();
-
 		Object getFromDef(D def);
 
 		Object getFromInterpreted(I interp);
@@ -75,21 +73,20 @@ public interface ExElement extends Identifiable {
 		Object getFromElement(E element);
 
 		public static <E extends ExElement, I extends ExElement.Interpreted<? extends E>, D extends ExElement.Def<? extends E>> Default<E, I, D> of(
-			Function<? super D, ?> defGetter, Function<? super I, ?> interpretedGetter, Function<? super E, ?> elementGetter,
-			String descrip) {
-			return new Default<>(defGetter, interpretedGetter, elementGetter, descrip);
+			Function<? super D, ?> defGetter, Function<? super I, ?> interpretedGetter, Function<? super E, ?> elementGetter) {
+			return new Default<>(defGetter, interpretedGetter, elementGetter);
 		}
 
 		public static <E extends ExElement, I extends ExElement.Interpreted<? extends E>, D extends ExElement.Def<? extends E>, M, MV extends M> Expression<E, I, D, M, MV> ofX(
 			Function<? super D, ? extends CompiledExpression> defGetter,
 			Function<? super I, ? extends InterpretedValueSynth<M, ? extends MV>> interpretedGetter,
-				Function<? super E, ? extends MV> elementGetter, String descrip) {
-			return new Expression<>(defGetter, interpretedGetter, elementGetter, descrip);
+			Function<? super E, ? extends MV> elementGetter) {
+			return new Expression<>(defGetter, interpretedGetter, elementGetter);
 		}
 
 		public static <E extends ExElement, AO extends ExAddOn<? super E>, I extends ExAddOn.Interpreted<? super E, ? extends AO>, D extends ExAddOn.Def<? super E, ? extends AO>> AddOn<E, AO, I, D> addOn(
-			Class<D> defType, Class<I> interpretedType, Class<AO> addOnType, String descrip) {
-			return new AddOn<>(defType, interpretedType, addOnType, descrip);
+			Class<D> defType, Class<I> interpretedType, Class<AO> addOnType) {
+			return new AddOn<>(defType, interpretedType, addOnType);
 		}
 
 		public static class Default<E extends ExElement, I extends ExElement.Interpreted<? extends E>, D extends ExElement.Def<? extends E>>
@@ -97,19 +94,12 @@ public interface ExElement extends Identifiable {
 			private final Function<? super D, ?> theDefGetter;
 			private final Function<? super I, ?> theInterpretedGetter;
 			private final Function<? super E, ?> theElementGetter;
-			private final String theDescription;
 
-			public Default(Function<? super D, ?> defGetter, Function<? super I, ?> interpretedGetter, Function<? super E, ?> elementGetter,
-				String descrip) {
+			public Default(Function<? super D, ?> defGetter, Function<? super I, ?> interpretedGetter,
+				Function<? super E, ?> elementGetter) {
 				theDefGetter = defGetter;
 				theInterpretedGetter = interpretedGetter;
 				theElementGetter = elementGetter;
-				theDescription = descrip;
-			}
-
-			@Override
-			public String getDescription() {
-				return theDescription;
 			}
 
 			@Override
@@ -133,20 +123,13 @@ public interface ExElement extends Identifiable {
 			private final Function<? super D, ? extends LocatedExpression> theDefGetter;
 			private final Function<? super I, ? extends InterpretedValueSynth<M, ? extends MV>> theInterpretedGetter;
 			private final Function<? super E, ? extends MV> theElementGetter;
-			private final String theDescription;
 
 			public Expression(Function<? super D, ? extends LocatedExpression> defGetter,
 				Function<? super I, ? extends InterpretedValueSynth<M, ? extends MV>> interpretedGetter,
-					Function<? super E, ? extends MV> elementGetter, String descrip) {
+				Function<? super E, ? extends MV> elementGetter) {
 				theDefGetter = defGetter;
 				theInterpretedGetter = interpretedGetter;
 				theElementGetter = elementGetter;
-				theDescription = descrip;
-			}
-
-			@Override
-			public String getDescription() {
-				return theDescription;
 			}
 
 			@Override
@@ -170,18 +153,11 @@ public interface ExElement extends Identifiable {
 			private final Class<D> theDefType;
 			private final Class<I> theInterpretedType;
 			private final Class<AO> theAddOnType;
-			private final String theDescription;
 
-			public AddOn(Class<D> defType, Class<I> interpretedType, Class<AO> addOnType, String description) {
+			public AddOn(Class<D> defType, Class<I> interpretedType, Class<AO> addOnType) {
 				theDefType = defType;
 				theInterpretedType = interpretedType;
 				theAddOnType = addOnType;
-				theDescription = description;
-			}
-
-			@Override
-			public String getDescription() {
-				return theDescription;
 			}
 
 			@Override
@@ -202,8 +178,6 @@ public interface ExElement extends Identifiable {
 	}
 
 	public interface ChildElementGetter<E extends ExElement, I extends ExElement.Interpreted<? extends E>, D extends ExElement.Def<? extends E>> {
-		String getDescription();
-
 		List<? extends ExElement.Def<?>> getChildrenFromDef(D def);
 
 		List<? extends ExElement.Interpreted<?>> getChildrenFromInterpreted(I interp);
@@ -212,13 +186,8 @@ public interface ExElement extends Identifiable {
 
 		public static <E extends ExElement, I extends ExElement.Interpreted<? extends E>, D extends ExElement.Def<? extends E>> ChildElementGetter<E, I, D> of(
 			Function<D, List<? extends ExElement.Def<?>>> defGetter, Function<I, List<? extends ExElement.Interpreted<?>>> interpGetter,
-			Function<E, List<? extends ExElement>> elGetter, String descrip) {
+			Function<E, List<? extends ExElement>> elGetter) {
 			return new ChildElementGetter<E, I, D>() {
-				@Override
-				public String getDescription() {
-					return descrip;
-				}
-
 				@Override
 				public List<? extends Def<?>> getChildrenFromDef(D def) {
 					return defGetter.apply(def);
@@ -260,15 +229,9 @@ public interface ExElement extends Identifiable {
 
 		Object getAttribute(QonfigAttributeDef attr);
 
-		String getAttributeDescription(QonfigAttributeDef attr);
-
 		Object getElementValue();
 
-		String getElementValueDescription();
-
 		List<? extends Def<?>> getChildren(QonfigChildDef role);
-
-		String getChildDescription(QonfigChildDef role);
 
 		default List<Def<?>> getAllChildren() {
 			List<Def<?>> children = null;
@@ -514,21 +477,8 @@ public interface ExElement extends Identifiable {
 			}
 
 			@Override
-			public String getAttributeDescription(QonfigAttributeDef attr) {
-				AttributeValueGetter<? super E, ?, ?> getter = theAttributes.get(attr.getDeclared());
-				if (getter == null)
-					return null;
-				return getter.getDescription();
-			}
-
-			@Override
 			public Object getElementValue() {
 				return theValue == null ? null : ((AttributeValueGetter<? super E, ?, Def<E>>) theValue).getFromDef(this);
-			}
-
-			@Override
-			public String getElementValueDescription() {
-				return theValue == null ? null : theValue.getDescription();
 			}
 
 			@Override
@@ -537,14 +487,6 @@ public interface ExElement extends Identifiable {
 				if (getter == null)
 					return Collections.emptyList();
 				return ((ChildElementGetter<? super E, ?, Def<E>>) getter).getChildrenFromDef(this);
-			}
-
-			@Override
-			public String getChildDescription(QonfigChildDef role) {
-				ChildElementGetter<? super E, ?, ?> getter = theChildren.get(role.getDeclared());
-				if (getter == null)
-					return null;
-				return getter.getDescription();
 			}
 
 			@Override

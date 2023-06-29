@@ -13,7 +13,7 @@ import org.qommons.config.QonfigInterpretationException;
 public class ExIntValue extends ExAddOn.Abstract<ExElement> {
 	private static final ExAddOn.AddOnAttributeGetter.Expression<ExElement, ExIntValue, Interpreted, Def, SettableValue<?>, SettableValue<?>> INIT = ExAddOn.AddOnAttributeGetter
 		.<ExElement, ExIntValue, Interpreted, Def, SettableValue<?>, SettableValue<?>> ofX(Def.class, Def::getInit, Interpreted.class,
-			Interpreted::getInit, ExIntValue.class, ExIntValue::getInit, "The value with which to initialize this variable");
+			Interpreted::getInit, ExIntValue.class, ExIntValue::getInit);
 
 	public static class Def extends ExAddOn.Def.Abstract<ExElement, ExIntValue> {
 		private CompiledExpression theInit;

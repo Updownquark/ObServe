@@ -10,10 +10,9 @@ import org.qommons.config.QonfigInterpretationException;
 
 public class QuickStyleSet extends ExElement.Def.Abstract<ExElement> implements Named {
 	private static final ExElement.AttributeValueGetter<ExElement, ExElement.Interpreted<?>, QuickStyleSet> NAME//
-	= ExElement.AttributeValueGetter.of(QuickStyleSet::getName, null, null,
-		"The name by which the style set may be referred to from documents using the style sheet");
+	= ExElement.AttributeValueGetter.of(QuickStyleSet::getName, null, null);
 	private static final ExElement.ChildElementGetter<ExElement, ExElement.Interpreted<?>, QuickStyleSet> STYLE_ELEMENTS = ExElement.ChildElementGetter.<ExElement, ExElement.Interpreted<?>, QuickStyleSet> of(
-		QuickStyleSet::getStyleElements, null, null, "Style values for this style set");
+		QuickStyleSet::getStyleElements, null, null);
 
 	private final String theName;
 	private final List<QuickStyleValue<?>> theValues;

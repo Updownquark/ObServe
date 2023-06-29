@@ -22,18 +22,11 @@ public interface ExAddOn<E extends ExElement> {
 		private final Class<D> theDefType;
 		private final Class<I> theInterpType;
 		private final Class<AO> theAddOnType;
-		private final String theDescription;
 
-		protected AddOnAttributeGetter(Class<? super D> defType, Class<? super I> interpType, Class<? super AO> addOnType, String descrip) {
+		protected AddOnAttributeGetter(Class<? super D> defType, Class<? super I> interpType, Class<? super AO> addOnType) {
 			theDefType = (Class<D>) (Class<?>) defType;
 			theInterpType = (Class<I>) (Class<?>) interpType;
 			theAddOnType = (Class<AO>) (Class<?>) addOnType;
-			theDescription = descrip;
-		}
-
-		@Override
-		public String getDescription() {
-			return theDescription;
 		}
 
 		public abstract Object getFromDef(D def);
@@ -59,15 +52,15 @@ public interface ExAddOn<E extends ExElement> {
 
 		public static <E extends ExElement, AO extends ExAddOn<? super E>, I extends Interpreted<? super E, ? extends AO>, D extends ExAddOn.Def<? super E, ? extends AO>> Default<E, AO, I, D> of(
 			Class<? super D> defType, Function<? super D, ?> defGetter, Class<? super I> interpretedType,
-			Function<? super I, ?> interpretedGetter, Class<? super AO> addOnType, Function<? super AO, ?> addOnGetter, String descrip) {
-			return new Default<>(defType, defGetter, interpretedType, interpretedGetter, addOnType, addOnGetter, descrip);
+			Function<? super I, ?> interpretedGetter, Class<? super AO> addOnType, Function<? super AO, ?> addOnGetter) {
+			return new Default<>(defType, defGetter, interpretedType, interpretedGetter, addOnType, addOnGetter);
 		}
 
 		public static <E extends ExElement, AO extends ExAddOn<? super E>, I extends Interpreted<? super E, ? extends AO>, D extends ExAddOn.Def<? super E, ? extends AO>, M, MV extends M> Expression<E, AO, I, D, M, MV> ofX(
 			Class<? super D> defType, Function<? super D, ? extends CompiledExpression> defGetter, Class<? super I> interpretedType,
 			Function<? super I, ? extends InterpretedValueSynth<M, ? extends MV>> interpretedGetter, Class<? super AO> addOnType,
-				Function<? super AO, ? extends MV> addOnGetter, String description) {
-			return new Expression<>(defType, defGetter, interpretedType, interpretedGetter, addOnType, addOnGetter, description);
+				Function<? super AO, ? extends MV> addOnGetter) {
+			return new Expression<>(defType, defGetter, interpretedType, interpretedGetter, addOnType, addOnGetter);
 		}
 
 		public static class Default<E extends ExElement, AO extends ExAddOn<? super E>, I extends Interpreted<? super E, ? extends AO>, D extends ExAddOn.Def<? super E, ? extends AO>>
@@ -77,9 +70,8 @@ public interface ExAddOn<E extends ExElement> {
 			private final Function<? super AO, ?> theAddOnGetter;
 
 			public Default(Class<? super D> defType, Function<? super D, ?> defGetter, Class<? super I> interpType,
-				Function<? super I, ?> interpretedGetter, Class<? super AO> addOnType, Function<? super AO, ?> addOnGetter,
-				String description) {
-				super(defType, interpType, addOnType, description);
+				Function<? super I, ?> interpretedGetter, Class<? super AO> addOnType, Function<? super AO, ?> addOnGetter) {
+				super(defType, interpType, addOnType);
 				theDefGetter = defGetter;
 				theInterpretedGetter = interpretedGetter;
 				theAddOnGetter = addOnGetter;
@@ -109,9 +101,8 @@ public interface ExAddOn<E extends ExElement> {
 
 			public Expression(Class<? super D> defType, Function<? super D, ? extends CompiledExpression> defGetter,
 				Class<? super I> interpType, Function<? super I, ? extends InterpretedValueSynth<M, ? extends MV>> interpretedGetter,
-					Class<? super AO> addOnType,
-					Function<? super AO, ? extends MV> addOnGetter, String descrip) {
-				super(defType, interpType, addOnType, descrip);
+					Class<? super AO> addOnType, Function<? super AO, ? extends MV> addOnGetter) {
+				super(defType, interpType, addOnType);
 				theDefGetter = defGetter;
 				theInterpretedGetter = interpretedGetter;
 				theAddOnGetter = addOnGetter;
@@ -135,22 +126,15 @@ public interface ExAddOn<E extends ExElement> {
 	}
 
 	public abstract class AddOnChildGetter<E extends ExElement, AO extends ExAddOn<? super E>, I extends Interpreted<? super E, ? extends AO>, D extends ExAddOn.Def<? super E, ? extends AO>> //
-		implements ExElement.ChildElementGetter<E, ExElement.Interpreted<? extends E>, ExElement.Def<? extends E>> {
+	implements ExElement.ChildElementGetter<E, ExElement.Interpreted<? extends E>, ExElement.Def<? extends E>> {
 		private final Class<D> theDefType;
 		private final Class<I> theInterpType;
 		private final Class<AO> theAddOnType;
-		private final String theDescription;
 
-		protected AddOnChildGetter(Class<? super D> defType, Class<? super I> interpType, Class<? super AO> addOnType, String descrip) {
+		protected AddOnChildGetter(Class<? super D> defType, Class<? super I> interpType, Class<? super AO> addOnType) {
 			theDefType = (Class<D>) (Class<?>) defType;
 			theInterpType = (Class<I>) (Class<?>) interpType;
 			theAddOnType = (Class<AO>) (Class<?>) addOnType;
-			theDescription = descrip;
-		}
-
-		@Override
-		public String getDescription() {
-			return theDescription;
 		}
 
 		public abstract List<? extends ExElement.Def<?>> getFromDef(D def);
@@ -176,28 +160,28 @@ public interface ExAddOn<E extends ExElement> {
 
 		public static <E extends ExElement, AO extends ExAddOn<? super E>, I extends Interpreted<? super E, ? extends AO>, D extends ExAddOn.Def<? super E, ? extends AO>> Default<E, AO, I, D> of(
 			Class<? super D> defType, Function<? super D, ? extends List<? extends ExElement.Def<?>>> defGetter,
-			Class<? super I> interpretedType, Function<? super I, ? extends List<? extends ExElement.Interpreted<?>>> interpretedGetter,
-			Class<? super AO> addOnType, Function<? super AO, ? extends List<? extends ExElement>> addOnGetter, String descrip) {
-			return new Default<>(defType, defGetter, interpretedType, interpretedGetter, addOnType, addOnGetter, descrip);
+				Class<? super I> interpretedType, Function<? super I, ? extends List<? extends ExElement.Interpreted<?>>> interpretedGetter,
+					Class<? super AO> addOnType, Function<? super AO, ? extends List<? extends ExElement>> addOnGetter) {
+			return new Default<>(defType, defGetter, interpretedType, interpretedGetter, addOnType, addOnGetter);
 		}
 
 		public static <E extends ExElement, AO extends ExAddOn<? super E>, I extends Interpreted<? super E, ? extends AO>, D extends ExAddOn.Def<? super E, ? extends AO>, M, MV extends M> Expression<E, AO, I, D, M, MV> ofX(
 			Class<? super D> defType, Function<? super D, ? extends CompiledExpression> defGetter, Class<? super I> interpretedType,
 			Function<? super I, ? extends InterpretedValueSynth<M, ? extends MV>> interpretedGetter, Class<? super AO> addOnType,
-			Function<? super AO, ? extends MV> addOnGetter, String description) {
-			return new Expression<>(defType, defGetter, interpretedType, interpretedGetter, addOnType, addOnGetter, description);
+				Function<? super AO, ? extends MV> addOnGetter) {
+			return new Expression<>(defType, defGetter, interpretedType, interpretedGetter, addOnType, addOnGetter);
 		}
 
 		public static class Default<E extends ExElement, AO extends ExAddOn<? super E>, I extends Interpreted<? super E, ? extends AO>, D extends ExAddOn.Def<? super E, ? extends AO>>
-			extends AddOnChildGetter<E, AO, I, D> {
+		extends AddOnChildGetter<E, AO, I, D> {
 			private final Function<? super D, ? extends List<? extends ExElement.Def<?>>> theDefGetter;
 			private final Function<? super I, ? extends List<? extends ExElement.Interpreted<?>>> theInterpretedGetter;
 			private final Function<? super AO, ? extends List<? extends ExElement>> theAddOnGetter;
 
 			public Default(Class<? super D> defType, Function<? super D, ? extends List<? extends ExElement.Def<?>>> defGetter,
 				Class<? super I> interpType, Function<? super I, ? extends List<? extends ExElement.Interpreted<?>>> interpretedGetter,
-				Class<? super AO> addOnType, Function<? super AO, ? extends List<? extends ExElement>> addOnGetter, String description) {
-				super(defType, interpType, addOnType, description);
+					Class<? super AO> addOnType, Function<? super AO, ? extends List<? extends ExElement>> addOnGetter) {
+				super(defType, interpType, addOnType);
 				theDefGetter = defGetter;
 				theInterpretedGetter = interpretedGetter;
 				theAddOnGetter = addOnGetter;
@@ -220,15 +204,15 @@ public interface ExAddOn<E extends ExElement> {
 		}
 
 		public static class Expression<E extends ExElement, AO extends ExAddOn<? super E>, I extends Interpreted<? super E, ? extends AO>, D extends ExAddOn.Def<? super E, ? extends AO>, M, MV extends M>
-			extends AddOnAttributeGetter<E, AO, I, D> {
+		extends AddOnAttributeGetter<E, AO, I, D> {
 			private final Function<? super D, ? extends CompiledExpression> theDefGetter;
 			private final Function<? super I, ? extends InterpretedValueSynth<M, ? extends MV>> theInterpretedGetter;
 			private final Function<? super AO, ? extends MV> theAddOnGetter;
 
 			public Expression(Class<? super D> defType, Function<? super D, ? extends CompiledExpression> defGetter,
 				Class<? super I> interpType, Function<? super I, ? extends InterpretedValueSynth<M, ? extends MV>> interpretedGetter,
-					Class<? super AO> addOnType, Function<? super AO, ? extends MV> addOnGetter, String descrip) {
-				super(defType, interpType, addOnType, descrip);
+					Class<? super AO> addOnType, Function<? super AO, ? extends MV> addOnGetter) {
+				super(defType, interpType, addOnType);
 				theDefGetter = defGetter;
 				theInterpretedGetter = interpretedGetter;
 				theAddOnGetter = addOnGetter;
@@ -265,8 +249,8 @@ public interface ExAddOn<E extends ExElement> {
 		ExElement.Def<? extends E> getElement();
 
 		/**
-		 * Called from the {@link #getElement() element}'s {@link QonfigDefinedElement.Def#update(ExpressoQIS) update}, initializes or updates this
-		 * add-on definition
+		 * Called from the {@link #getElement() element}'s {@link QonfigDefinedElement.Def#update(ExpressoQIS) update}, initializes or
+		 * updates this add-on definition
 		 *
 		 * @param session The session to support this add-on
 		 * @throws QonfigInterpretationException If an error occurs updating this add-on

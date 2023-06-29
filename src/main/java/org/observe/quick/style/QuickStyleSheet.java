@@ -7,9 +7,9 @@ import java.util.List;
 import java.util.Map;
 
 import org.observe.expresso.qonfig.ExElement;
-import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.ExElement.Def;
 import org.observe.expresso.qonfig.ExElement.Interpreted;
+import org.observe.expresso.qonfig.ExpressoQIS;
 import org.qommons.config.AbstractQIS;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigInterpretationException;
@@ -18,11 +18,10 @@ import org.qommons.config.QonfigInterpretationException;
 public class QuickStyleSheet extends ExElement.Def.Abstract<ExElement> {
 	public static class StyleSheetRef extends ExElement.Def.Abstract<ExElement> {
 		private static final ExElement.AttributeValueGetter<ExElement, ExElement.Interpreted<?>, StyleSheetRef> NAME//
-		= ExElement.AttributeValueGetter.of(StyleSheetRef::getName, null, null,
-			"The name by which the imported style sheet may be referred to in the document");
+		= ExElement.AttributeValueGetter.of(StyleSheetRef::getName, null, null);
 		private static final ExElement.AttributeValueGetter<ExElement, ExElement.Interpreted<?>, StyleSheetRef> REF//
 		= ExElement.AttributeValueGetter.<ExElement, ExElement.Interpreted<?>, StyleSheetRef> of(StyleSheetRef::getReference, null,
-			null, "The URL location of the imported style sheet's data");
+			null);
 
 		private final String theName;
 		private final QuickStyleSheet theTarget;
@@ -51,11 +50,6 @@ public class QuickStyleSheet extends ExElement.Def.Abstract<ExElement> {
 	private static final ExElement.ChildElementGetter<ExElement, ExElement.Interpreted<?>, QuickStyleSheet> IMPORTED//
 	= new ExElement.ChildElementGetter<ExElement, ExElement.Interpreted<?>, QuickStyleSheet>() {
 		@Override
-		public String getDescription() {
-			return "Style sheets imported by this style sheet";
-		}
-
-		@Override
 		public List<? extends Def<?>> getChildrenFromDef(QuickStyleSheet def) {
 			return def.getImportedStyleSheetRefs();
 		}
@@ -73,11 +67,6 @@ public class QuickStyleSheet extends ExElement.Def.Abstract<ExElement> {
 	private static final ExElement.ChildElementGetter<ExElement, ExElement.Interpreted<?>, QuickStyleSheet> STYLE_SETS//
 	= new ExElement.ChildElementGetter<ExElement, ExElement.Interpreted<?>, QuickStyleSheet>() {
 		@Override
-		public String getDescription() {
-			return "Style sets declared by this style sheet";
-		}
-
-		@Override
 		public List<? extends Def<?>> getChildrenFromDef(QuickStyleSheet def) {
 			return new ArrayList<>(def.getStyleSets().values());
 		}
@@ -94,11 +83,6 @@ public class QuickStyleSheet extends ExElement.Def.Abstract<ExElement> {
 	};
 	private static final ExElement.ChildElementGetter<ExElement, ExElement.Interpreted<?>, QuickStyleSheet> STYLE_ELEMENTS//
 	= new ExElement.ChildElementGetter<ExElement, ExElement.Interpreted<?>, QuickStyleSheet>() {
-		@Override
-		public String getDescription() {
-			return "Style sets declared by this style sheet";
-		}
-
 		@Override
 		public List<? extends Def<?>> getChildrenFromDef(QuickStyleSheet def) {
 			return def.getStyleElements();
@@ -129,8 +113,8 @@ public class QuickStyleSheet extends ExElement.Def.Abstract<ExElement> {
 	 * @param importedStyleSheets All style sheets imported into this one
 	 */
 	public QuickStyleSheet(ExElement.Def<?> parent, AbstractQIS<?> session, //
-		URL ref, Map<String, QuickStyleSet> styleSets, List<QuickStyleValue<?>> values,
-		Map<String, QuickStyleSheet> importedStyleSheets, List<StyleSheetRef> refs, List<QuickStyleElement.Def> styleElements) {
+		URL ref, Map<String, QuickStyleSet> styleSets, List<QuickStyleValue<?>> values, Map<String, QuickStyleSheet> importedStyleSheets,
+		List<StyleSheetRef> refs, List<QuickStyleElement.Def> styleElements) {
 		super(parent, session.getElement());
 		theReference = ref;
 		theStyleSets = styleSets;
@@ -250,7 +234,7 @@ public class QuickStyleSheet extends ExElement.Def.Abstract<ExElement> {
 			str.append(imp.getKey()).append("<-");
 			imp.getValue().print(str, indent + 1).append('\n');
 		}
-		//TODO Style sets
+		// TODO Style sets
 		for (QuickStyleValue<?> qsv : theValues) {
 			indent(str, indent);
 			str.append(qsv);

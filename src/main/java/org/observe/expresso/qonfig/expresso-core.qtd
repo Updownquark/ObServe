@@ -23,9 +23,11 @@ It does not include anything "useful" in the concrete, i.e. no values or transfo
 		</add-on>
 
 		<add-on name="named">
+			<?DOC The name of the item?>
 			<attribute name="name" type="identifier" specify="required" />
 		</add-on>
 		<add-on name="typed">
+			<?DOC The declared type of the variable?>
 			<attribute name="type" type="string" specify="optional" />
 		</add-on>
 		<add-on name="type-required" inherits="typed">
@@ -40,6 +42,7 @@ It does not include anything "useful" in the concrete, i.e. no values or transfo
 		</add-on>
 		<!-- Elements that inherit this add-on may specify local variables with their values in the element -->
 		<add-on name="with-local-model" abstract="true">
+			<?DOC The local model with values defined only for use within the element?>
 			<child-def name="model" type="model" min="0" />
 		</add-on>
 		<add-on name="element-model-value" requires="model-value" inherits="model-element" abstract="true">
@@ -51,6 +54,7 @@ It does not include anything "useful" in the concrete, i.e. no values or transfo
 
 		<add-on name="allow-ext-model" abstract="true" />
 		<add-on name="ext-model-value" requires="model-value" inherits="type-required" abstract="true">
+			<?DOC The default value to use if one is not supplied externally?>
 			<attribute name="default" type="expression" specify="optional" />
 			<value-mod specify="forbidden" /> <!-- External/element values are specified by code instantiating the model -->
 		</add-on>
@@ -78,13 +82,16 @@ It does not include anything "useful" in the concrete, i.e. no values or transfo
 		
 		<!-- Models, values and transformations -->
 		<element-def name="abst-model" abstract="true">
+			<?DOC A value declared in the model?>
 			<child-def name="value" type="model-value" inherits="model-element" min="0" max="inf" />
 		</element-def>
 		<element-def name="model-value" abstract="true" inherits="typed">
+			<?DOC The value for the variable?>
 			<value type="expression" specify="optional" />
 		</element-def>
 
 		<element-def name="models">
+			<?DOC A model defined in the root model set?>
 			<child-def name="model" type="abst-model" min="0" max="inf" inherits="named" />
 		</element-def>
 
@@ -93,11 +100,13 @@ It does not include anything "useful" in the concrete, i.e. no values or transfo
 			 no values can be specified in the elements. -->
 		<element-def name="ext-model" extends="abst-model">
 			<child-mod child="abst-model.value" requires="allow-ext-model" inherits="ext-model-value" />
+			<?DOC A sub-model defined under the parent model?>
 			<child-def name="sub-model" type="ext-model" min="0" max="inf" inherits="named" />
 		</element-def>
 
 		<!-- Internal models.  These function as variables that are defined and sometimes instantiated inside the app. -->
 		<element-def name="model" extends="abst-model">
+			<?DOC A sub-model defined under the parent model?>
 			<child-def name="sub-model" type="model" min="0" max="inf" inherits="named" />
 		</element-def>
 
@@ -108,6 +117,7 @@ It does not include anything "useful" in the concrete, i.e. no values or transfo
 
 		<element-def name="expresso">
 			<child-def name="imports" type="imports" min="0" />
+			<?DOC The model of the document, defining values and other structures that can be used to control the behavior of elements in the document?>
 			<child-def name="models" type="models" />
 		</element-def>
 	</elements>

@@ -27,14 +27,9 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 	public static final String TABLE = "table";
 
 	public static final ExElement.AttributeValueGetter<QuickTable<?>, Interpreted<?>, Def> ROWS = ExElement.AttributeValueGetter
-		.ofX(Def::getRows, Interpreted::getRows, QuickTable::getRows, "The rows to display in the table");
+		.ofX(Def::getRows, Interpreted::getRows, QuickTable::getRows);
 
 	public static final ExElement.ChildElementGetter<QuickTable<?>, Interpreted<?>, Def> ACTIONS = new ExElement.ChildElementGetter<QuickTable<?>, Interpreted<?>, Def>() {
-		@Override
-		public String getDescription() {
-			return "Actions that may be performed on rows, groups of rows, or the data set as a whole";
-		}
-
 		@Override
 		public List<? extends ExElement.Def<?>> getChildrenFromDef(Def def) {
 			return def.getActions();
@@ -184,15 +179,11 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 	public QuickTable(Interpreted<R> interpreted, ExElement parent) {
 		super(interpreted, parent);
 		theRows = SettableValue
-			.build(
-				TypeTokens.get().keyFor(ObservableCollection.class).<ObservableCollection<R>> parameterized(getRowType()))
+			.build(TypeTokens.get().keyFor(ObservableCollection.class).<ObservableCollection<R>> parameterized(getRowType())).build();
+		theSelection = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<R>> parameterized(getRowType()))
 			.build();
-		theSelection = SettableValue
-			.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<R>> parameterized(getRowType())).build();
 		theMultiSelection = SettableValue
-			.build(
-				TypeTokens.get().keyFor(ObservableCollection.class).<ObservableCollection<R>> parameterized(getRowType()))
-			.build();
+			.build(TypeTokens.get().keyFor(ObservableCollection.class).<ObservableCollection<R>> parameterized(getRowType())).build();
 		theActions = ObservableCollection.build(TypeTokens.get().keyFor(ValueAction.class).<ValueAction<R>> parameterized(getRowType()))
 			.build();
 	}
@@ -221,8 +212,7 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 		QuickTable.Interpreted<R> myInterpreted = (QuickTable.Interpreted<R>) interpreted;
 		theRows.set(myInterpreted.getRows().get(myModels), null);
 		theSelection.set(myInterpreted.getSelection() == null ? null : myInterpreted.getSelection().get(myModels), null);
-		theMultiSelection.set(myInterpreted.getMultiSelection() == null ? null : myInterpreted.getMultiSelection().get(myModels),
-			null);
+		theMultiSelection.set(myInterpreted.getMultiSelection() == null ? null : myInterpreted.getMultiSelection().get(myModels), null);
 		CollectionUtils.synchronize(theActions, myInterpreted.getActions(), //
 			(a, i) -> a.getIdentity() == i.getDefinition().getIdentity())
 		.<ModelInstantiationException> simpleE(action -> action.create(this))//

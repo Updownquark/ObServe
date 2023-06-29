@@ -18,8 +18,7 @@ import com.google.common.reflect.TypeToken;
 public class ExtModelValueElement<M, MV extends M> extends ModelValueElement.Default<M, MV> {
 	private static final ExElement.AttributeValueGetter.Expression<ExtModelValueElement<?, ?>, Interpreted<?, ?>, Def<?>, Object, Object> DEFAULT = ExElement.AttributeValueGetter
 		.<ExtModelValueElement<?, ?>, Interpreted<?, ?>, Def<?>, Object, Object> ofX(Def::getDefault,
-			i -> (InterpretedValueSynth<Object, Object>) i.getDefault(), ExtModelValueElement::getDefault,
-			"The default value to use if one is not supplied externally");
+			i -> (InterpretedValueSynth<Object, Object>) i.getDefault(), ExtModelValueElement::getDefault);
 
 	public static abstract class Def<M> extends ModelValueElement.Def.Simple<M, ExtModelValueElement<M, ?>> implements ExtModelValue<M> {
 		private CompiledExpression theDefault;

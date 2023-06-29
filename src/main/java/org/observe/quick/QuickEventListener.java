@@ -24,7 +24,7 @@ import org.qommons.config.QonfigInterpretationException;
 public interface QuickEventListener extends ExElement {
 	public static final ExElement.AttributeValueGetter.Expression<QuickEventListener, Interpreted<?>, Def<?>, ObservableAction<?>, ObservableAction<?>> ACTION = ExElement.AttributeValueGetter
 		.<QuickEventListener, Interpreted<?>, Def<?>, ObservableAction<?>, ObservableAction<?>> ofX(Def::getAction, Interpreted::getAction,
-			QuickEventListener::getAction, "The action to perform when the event occurs");
+			QuickEventListener::getAction);
 
 	public interface Def<L extends QuickEventListener> extends ExElement.Def<L> {
 		public static final String EVENT_LISTENER = "event-listener";

@@ -225,12 +225,10 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 		public static final String MOUSE_PRESS_LISTENER = "on-mouse-press";
 
 		public static final ExElement.AttributeValueGetter<QuickMouseButtonListener, Interpreted, Def> BUTTON = ExElement.AttributeValueGetter
-			.of(d -> d.getButton(), i -> i.getDefinition().getButton(), QuickMouseButtonListener::getButton,
-				"The button that this listener will listen to.  If not specified, the listener will trigger for any button.");
+			.of(d -> d.getButton(), i -> i.getDefinition().getButton(), QuickMouseButtonListener::getButton);
 
 		public static final ExElement.AttributeValueGetter<QuickMouseButtonListener, Interpreted, Def> CLICK_COUNT = ExElement.AttributeValueGetter
-			.of(d -> d.getClickCount(), i -> i.getDefinition().getClickCount(), QuickMouseButtonListener::getClickCount,
-				"The number of consecutive clicks necessary to trigger this listener.  If not specified, the listener will trigger for any number of clicks.");
+			.of(d -> d.getClickCount(), i -> i.getDefinition().getClickCount(), QuickMouseButtonListener::getClickCount);
 
 		public static class Def extends QuickMouseListener.Def<QuickMouseButtonListener> {
 			private final MouseButtonEventType theEventType;

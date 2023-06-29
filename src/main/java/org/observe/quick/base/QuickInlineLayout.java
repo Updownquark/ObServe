@@ -12,16 +12,13 @@ import org.qommons.config.QonfigInterpretationException;
 public class QuickInlineLayout extends QuickLayout.Abstract {
 	public static final ExAddOn.AddOnAttributeGetter<QuickBox, QuickInlineLayout, Interpreted, Def> VERTICAL = ExAddOn.AddOnAttributeGetter
 		.<QuickBox, QuickInlineLayout, Interpreted, Def> of(Def.class, Def::isVertical, Interpreted.class,
-			i -> i.getDefinition().isVertical(), QuickInlineLayout.class, QuickInlineLayout::isVertical,
-			"Whether the components are arranged top-to-bottom or left-to-right");
+			i -> i.getDefinition().isVertical(), QuickInlineLayout.class, QuickInlineLayout::isVertical);
 	public static final ExAddOn.AddOnAttributeGetter<QuickBox, QuickInlineLayout, Interpreted, Def> MAIN_ALIGN = ExAddOn.AddOnAttributeGetter
 		.<QuickBox, QuickInlineLayout, Interpreted, Def> of(Def.class, Def::getMainAlign, Interpreted.class,
-			i -> i.getDefinition().getMainAlign(), QuickInlineLayout.class, QuickInlineLayout::getMainAlign,
-			"The alignment strategy determining how all the components will share space along the main axis of the layout");
+			i -> i.getDefinition().getMainAlign(), QuickInlineLayout.class, QuickInlineLayout::getMainAlign);
 	public static final ExAddOn.AddOnAttributeGetter<QuickBox, QuickInlineLayout, Interpreted, Def> CROSS_ALIGN = ExAddOn.AddOnAttributeGetter
 		.<QuickBox, QuickInlineLayout, Interpreted, Def> of(Def.class, Def::getCrossAlign, Interpreted.class,
-			i -> i.getDefinition().getCrossAlign(), QuickInlineLayout.class, QuickInlineLayout::getCrossAlign,
-			"The alignment strategy for each component along the cross axis of the layout");
+			i -> i.getDefinition().getCrossAlign(), QuickInlineLayout.class, QuickInlineLayout::getCrossAlign);
 
 	public static class Def extends QuickLayout.Def<QuickInlineLayout> {
 		private boolean isVertical;

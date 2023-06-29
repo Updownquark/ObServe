@@ -16,8 +16,7 @@ public class ExWithLocalModel extends ExAddOn.Abstract<ExElement> {
 				Interpreted.class,
 				d -> d.getLocalModelElement() == null ? Collections.emptyList() : Collections.singletonList(d.getLocalModelElement()), //
 					ExWithLocalModel.class,
-					d -> d.getLocalModelElement() == null ? Collections.emptyList() : Collections.singletonList(d.getLocalModelElement()), //
-			"The local model with values defined only for use within the element");
+					d -> d.getLocalModelElement() == null ? Collections.emptyList() : Collections.singletonList(d.getLocalModelElement()));
 
 	public static class Def extends ExAddOn.Def.Abstract<ExElement, ExWithLocalModel> {
 		private ObservableModelElement.DefaultModelElement.Def<?> theLocalModelElement;

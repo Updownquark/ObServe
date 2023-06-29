@@ -23,24 +23,19 @@ import org.qommons.config.QonfigInterpretationException;
 
 public class QuickStyleElement extends ExElement.Abstract {
 	private static final ExElement.AttributeValueGetter<QuickStyleElement, Interpreted, Def> ELEMENT//
-	= ExElement.AttributeValueGetter.of(Def::getStyleElement, i -> null, e -> null,
-		"The element or add-on type that the style applies to");
+	= ExElement.AttributeValueGetter.of(Def::getStyleElement, i -> null, e -> null);
 	private static final ExElement.AttributeValueGetter<QuickStyleElement, Interpreted, Def> ROLE//
-	= ExElement.AttributeValueGetter.of(Def::getChild, i -> null, e -> null, "The child role that the style applies to");
+	= ExElement.AttributeValueGetter.of(Def::getChild, i -> null, e -> null);
 	private static final ExElement.AttributeValueGetter.Expression<QuickStyleElement, Interpreted, Def, SettableValue<?>, SettableValue<Boolean>> CONDITION//
-	= ExElement.AttributeValueGetter.ofX(Def::getCondition, Interpreted::getCondition, QuickStyleElement::getCondition,
-		"The runtime condition for the style.  A style will only be applied when its condition, if present, is true.");
+	= ExElement.AttributeValueGetter.ofX(Def::getCondition, Interpreted::getCondition, QuickStyleElement::getCondition);
 	private static final ExElement.AttributeValueGetter<QuickStyleElement, Interpreted, Def> STYLE_SET//
-	= ExElement.AttributeValueGetter.of(Def::getStyleSet, i -> null, e -> null, "The style set to apply when this style applies");
+	= ExElement.AttributeValueGetter.of(Def::getStyleSet, i -> null, e -> null);
 	private static final ExElement.AttributeValueGetter<QuickStyleElement, Interpreted, Def> ATTRIBUTE//
-	= ExElement.AttributeValueGetter.of(Def::getDeclaredAttribute, i -> null, e -> null,
-		"The attribute whose value to change when this style applies");
+	= ExElement.AttributeValueGetter.of(Def::getDeclaredAttribute, i -> null, e -> null);
 	private static final ExElement.AttributeValueGetter.Expression<QuickStyleElement, Interpreted, Def, SettableValue<?>, SettableValue<?>> VALUE//
-	= ExElement.AttributeValueGetter.ofX(Def::getValue, Interpreted::getValue, QuickStyleElement::getValue,
-		"The value for the style's attribute, when it applies");
+	= ExElement.AttributeValueGetter.ofX(Def::getValue, Interpreted::getValue, QuickStyleElement::getValue);
 	private static final ExElement.ChildElementGetter<QuickStyleElement, Interpreted, Def> STYLE_ELEMENTS = ExElement.ChildElementGetter
-		.<QuickStyleElement, Interpreted, Def> of(Def::getChildren, Interpreted::getChildren, QuickStyleElement::getChildren,
-			"Styles declared on the element itself");
+		.<QuickStyleElement, Interpreted, Def> of(Def::getChildren, Interpreted::getChildren, QuickStyleElement::getChildren);
 
 	public static class Def extends ExElement.Def.Abstract<QuickStyleElement> {
 		private final QonfigElementOrAddOn theStyleElement;
@@ -210,12 +205,12 @@ public class QuickStyleElement extends ExElement.Abstract {
 		theCondition.set(myInterpreted.getCondition() == null ? null : myInterpreted.getCondition().get(myModels), null);
 		if (theValue != null)
 			((SettableValue<SettableValue<?>>) theValue)
-				.set(myInterpreted.getValue() == null ? null : myInterpreted.getValue().get(myModels), null);
+			.set(myInterpreted.getValue() == null ? null : myInterpreted.getValue().get(myModels), null);
 		CollectionUtils
-			.synchronize(theChildren, myInterpreted.getChildren(),
-				(inst, interp) -> inst.getIdentity() == interp.getDefinition().getIdentity())//
-			.<ModelInstantiationException> simpleE(interp -> interp.create(this))//
-			.onRightX(el -> el.getLeftValue().update(el.getRightValue(), myModels))
-			.onCommonX(el -> el.getLeftValue().update(el.getRightValue(), myModels)).adjust();
+		.synchronize(theChildren, myInterpreted.getChildren(),
+			(inst, interp) -> inst.getIdentity() == interp.getDefinition().getIdentity())//
+		.<ModelInstantiationException> simpleE(interp -> interp.create(this))//
+		.onRightX(el -> el.getLeftValue().update(el.getRightValue(), myModels))
+		.onCommonX(el -> el.getLeftValue().update(el.getRightValue(), myModels)).adjust();
 	}
 }

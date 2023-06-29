@@ -26,25 +26,22 @@ public interface ValueAction<T> extends ExElement {
 	public interface Def<T, A extends ValueAction<T>> extends ExElement.Def<A> {
 		public static final ExElement.AttributeValueGetter.Expression<ValueAction<?>, Interpreted<?, ?>, Def<?, ?>, ObservableAction<?>, ObservableAction<?>> ACTION = ExElement.AttributeValueGetter
 			.<ValueAction<?>, Interpreted<?, ?>, Def<?, ?>, ObservableAction<?>, ObservableAction<?>> ofX(Def::getAction,
-				Interpreted::getAction, ValueAction::getAction, "The action to perform when the user selects the action");
+				Interpreted::getAction, ValueAction::getAction);
 		public static final ExElement.AttributeValueGetter.Expression<ValueAction<?>, Interpreted<?, ?>, Def<?, ?>, SettableValue<?>, SettableValue<String>> NAME = ExElement.AttributeValueGetter
 			.<ValueAction<?>, Interpreted<?, ?>, Def<?, ?>, SettableValue<?>, SettableValue<String>> ofX(Def::getName, Interpreted::getName,
-				ValueAction::getName, "The name of the action to display to the user");
+				ValueAction::getName);
 		public static final ExElement.AttributeValueGetter<ValueAction<?>, Interpreted<?, ?>, Def<?, ?>> AS_BUTTON = ExElement.AttributeValueGetter
-			.<ValueAction<?>, Interpreted<?, ?>, Def<?, ?>> of(Def::isButton, i -> i.getDefinition().isButton(), ValueAction::isButton,
-				"Whether the action should be presented to the user as a button near the table");
+			.<ValueAction<?>, Interpreted<?, ?>, Def<?, ?>> of(Def::isButton, i -> i.getDefinition().isButton(), ValueAction::isButton);
 		public static final ExElement.AttributeValueGetter<ValueAction<?>, Interpreted<?, ?>, Def<?, ?>> AS_POPUP = ExElement.AttributeValueGetter
-			.<ValueAction<?>, Interpreted<?, ?>, Def<?, ?>> of(Def::isPopup, i -> i.getDefinition().isPopup(), ValueAction::isPopup,
-				"Whether the action should be presented to the user as a popup when they right-click on the table");
+			.<ValueAction<?>, Interpreted<?, ?>, Def<?, ?>> of(Def::isPopup, i -> i.getDefinition().isPopup(), ValueAction::isPopup);
 		public static final ExElement.AttributeValueGetter<ValueAction<?>, Interpreted<?, ?>, Def<?, ?>> ICON = ExElement.AttributeValueGetter
-			.<ValueAction<?>, Interpreted<?, ?>, Def<?, ?>> of(Def::getIcon, Interpreted::getIcon, ValueAction::getIcon,
-				"The icon to display to represent this action");
+			.<ValueAction<?>, Interpreted<?, ?>, Def<?, ?>> of(Def::getIcon, Interpreted::getIcon, ValueAction::getIcon);
 		public static final ExElement.AttributeValueGetter.Expression<ValueAction<?>, Interpreted<?, ?>, Def<?, ?>, SettableValue<?>, SettableValue<String>> ENABLED = ExElement.AttributeValueGetter
 			.<ValueAction<?>, Interpreted<?, ?>, Def<?, ?>, SettableValue<?>, SettableValue<String>> ofX(Def::isEnabled,
-				Interpreted::isEnabled, ValueAction::isEnabled, "Whether the action is currently enabled");
+				Interpreted::isEnabled, ValueAction::isEnabled);
 		public static final ExElement.AttributeValueGetter.Expression<ValueAction<?>, Interpreted<?, ?>, Def<?, ?>, SettableValue<?>, SettableValue<String>> TOOLTIP = ExElement.AttributeValueGetter
 			.<ValueAction<?>, Interpreted<?, ?>, Def<?, ?>, SettableValue<?>, SettableValue<String>> ofX(Def::getTooltip,
-				Interpreted::getTooltip, ValueAction::getTooltip, "The tooltip to display to the user to describe the action");
+				Interpreted::getTooltip, ValueAction::getTooltip);
 
 		CompiledExpression getName();
 
@@ -354,12 +351,10 @@ public interface ValueAction<T> extends ExElement {
 		public static final String SINGLE_VALUE_ACTION = "value-action";
 
 		private static final ExElement.AttributeValueGetter<Single<?>, Interpreted<?, ?>, Def<?, ?>> VALUE_NAME = ExElement.AttributeValueGetter
-			.<Single<?>, Interpreted<?, ?>, Def<?, ?>> of(Def::getValueName, i -> i.getDefinition().getValueName(), Single::getValueName,
-				"The variable name of the value that the action is invoked upon, for expressions");
+			.<Single<?>, Interpreted<?, ?>, Def<?, ?>> of(Def::getValueName, i -> i.getDefinition().getValueName(), Single::getValueName);
 		private static final ExElement.AttributeValueGetter<Single<?>, Interpreted<?, ?>, Def<?, ?>> ALLOW_FOR_MULTIPLE = ExElement.AttributeValueGetter
 			.<Single<?>, Interpreted<?, ?>, Def<?, ?>> of(Def::allowForMultiple, i -> i.getDefinition().allowForMultiple(),
-				Single::allowForMultiple,
-				"Whether an action can be invoked by the user for multiple values at once.  The action would then be invoked separately for each value.");
+				Single::allowForMultiple);
 		public static class Def<T, A extends Single<T>> extends ValueAction.Def.Abstract<T, A> {
 			private String theValueName;
 			private boolean allowForMultiple;
@@ -453,11 +448,9 @@ public interface ValueAction<T> extends ExElement {
 		public static final String MULTI_VALUE_ACTION = "multi-value-action";
 
 		private static final ExElement.AttributeValueGetter<Multi<?>, Interpreted<?, ?>, Def<?, ?>> VALUES_NAME = ExElement.AttributeValueGetter
-			.<Multi<?>, Interpreted<?, ?>, Def<?, ?>> of(Def::getValuesName, i -> i.getDefinition().getValuesName(), Multi::getValuesName,
-				"The variable name of the values that the action is invoked upon, for expressions");
+			.<Multi<?>, Interpreted<?, ?>, Def<?, ?>> of(Def::getValuesName, i -> i.getDefinition().getValuesName(), Multi::getValuesName);
 		private static final ExElement.AttributeValueGetter<Multi<?>, Interpreted<?, ?>, Def<?, ?>> ALLOW_FOR_EMPTY = ExElement.AttributeValueGetter
-			.<Multi<?>, Interpreted<?, ?>, Def<?, ?>> of(Def::allowForEmpty, i -> i.getDefinition().allowForEmpty(), Multi::allowForEmpty,
-				"Whether the action can be invoked upon an empty list of values");
+			.<Multi<?>, Interpreted<?, ?>, Def<?, ?>> of(Def::allowForEmpty, i -> i.getDefinition().allowForEmpty(), Multi::allowForEmpty);
 
 		public static class Def<T, A extends Multi<T>> extends ValueAction.Def.Abstract<T, A> {
 			private String theValuesName;

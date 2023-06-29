@@ -116,27 +116,17 @@ public interface QuickTableColumn<R, C> {
 		public static final String COLUMN_EDITING = "column-edit";
 
 		private static final ExElement.AttributeValueGetter<ColumnEditing<?, ?>, Interpreted<?, ?>, Def> TYPE = ExElement.AttributeValueGetter
-			.of(Def::getType, Interpreted::getType, ColumnEditing::getType,
-				"The type of column editing to use to update the data set with column edit operations");
+			.of(Def::getType, Interpreted::getType, ColumnEditing::getType);
 		private static final ExElement.AttributeValueGetter<ColumnEditing<?, ?>, Interpreted<?, ?>, Def> COLUMN_EDIT_VALUE_NAME = ExElement.AttributeValueGetter
-			.of(Def::getColumnEditValueName, i -> i.getDefinition().getColumnEditValueName(), ColumnEditing::getColumnEditValueName,
-				"The variable name of the column value being edited for expressions");
+			.of(Def::getColumnEditValueName, i -> i.getDefinition().getColumnEditValueName(), ColumnEditing::getColumnEditValueName);
 		private static final ExElement.AttributeValueGetter.Expression<ColumnEditing<?, ?>, Interpreted<?, ?>, Def, SettableValue<?>, SettableValue<String>> EDITABLE_IF = ExElement.AttributeValueGetter
-			.ofX(Def::isEditable, Interpreted::isEditable, ColumnEditing::isEditable,
-				"A filter on the column value that determines whether the column is editable for a particular row");
+			.ofX(Def::isEditable, Interpreted::isEditable, ColumnEditing::isEditable);
 		private static final ExElement.AttributeValueGetter.Expression<ColumnEditing<?, ?>, Interpreted<?, ?>, Def, SettableValue<?>, SettableValue<String>> ACCEPT = ExElement.AttributeValueGetter
-			.ofX(Def::isAcceptable, Interpreted::isAcceptable, ColumnEditing::isAcceptable,
-				"A filter that will prevent a column value from being committed");
+			.ofX(Def::isAcceptable, Interpreted::isAcceptable, ColumnEditing::isAcceptable);
 		private static final ExElement.AttributeValueGetter<ColumnEditing<?, ?>, Interpreted<?, ?>, Def> CLICKS = ExElement.AttributeValueGetter
-			.of(Def::getClicks, i -> i.getDefinition().getClicks(), ColumnEditing::getClicks,
-				"The number of clicks required to initiated editing on this column");
+			.of(Def::getClicks, i -> i.getDefinition().getClicks(), ColumnEditing::getClicks);
 
 		private static final ExElement.ChildElementGetter<ColumnEditing<?, ?>, Interpreted<?, ?>, Def> EDITOR = new ExElement.ChildElementGetter<ColumnEditing<?, ?>, Interpreted<?, ?>, Def>() {
-			@Override
-			public String getDescription() {
-				return "The widget that allows the user to create a new value for this column";
-			}
-
 			@Override
 			public List<? extends ExElement.Def<?>> getChildrenFromDef(Def def) {
 				return def.getEditor() == null ? Collections.emptyList() : Collections.singletonList(def.getEditor());
@@ -484,11 +474,10 @@ public interface QuickTableColumn<R, C> {
 			private static final ExAddOn.AddOnAttributeGetter.Expression<ColumnEditing<?, ?>, RowModifyEditType<?, ?>, Interpreted<?, ?>, Def, ObservableAction<?>, ObservableAction<?>> COMMIT = ExAddOn.AddOnAttributeGetter
 				.<ColumnEditing<?, ?>, RowModifyEditType<?, ?>, Interpreted<?, ?>, Def, ObservableAction<?>, ObservableAction<?>> ofX(
 					Def.class, Def::getCommit, Interpreted.class, Interpreted::getCommit, RowModifyEditType.class,
-					RowModifyEditType::getCommit, "The action to perform that modifies the row value with the column edit value");
+					RowModifyEditType::getCommit);
 			private static final ExAddOn.AddOnAttributeGetter<ColumnEditing<?, ?>, RowModifyEditType<?, ?>, Interpreted<?, ?>, Def> ROW_UPDATE = ExAddOn.AddOnAttributeGetter
 				.<ColumnEditing<?, ?>, RowModifyEditType<?, ?>, Interpreted<?, ?>, Def> of(Def.class, Def::isRowUpdate, Interpreted.class,
-					i -> i.getDefinition().isRowUpdate(), RowModifyEditType.class, RowModifyEditType::isRowUpdate,
-					"Whether to fire an update event on the row after a modification");
+					i -> i.getDefinition().isRowUpdate(), RowModifyEditType.class, RowModifyEditType::isRowUpdate);
 
 			public static class Def extends ColumnEditType.Def<RowModifyEditType<?, ?>> {
 				private CompiledExpression theCommit;
@@ -581,7 +570,7 @@ public interface QuickTableColumn<R, C> {
 			private static final ExAddOn.AddOnAttributeGetter.Expression<ColumnEditing<?, ?>, RowReplaceEditType<?, ?>, Interpreted<?, ?>, Def, SettableValue<?>, SettableValue<?>> REPLACEMENT = ExAddOn.AddOnAttributeGetter
 				.<ColumnEditing<?, ?>, RowReplaceEditType<?, ?>, Interpreted<?, ?>, Def, SettableValue<?>, SettableValue<?>> ofX(Def.class,
 					Def::getReplacement, Interpreted.class, Interpreted::getReplacement, RowReplaceEditType.class,
-					RowReplaceEditType::getReplacement, "The row value to replace in the model after the edit operation");
+					RowReplaceEditType::getReplacement);
 
 			public static class Def extends ColumnEditType.Def<RowReplaceEditType<?, ?>> {
 				private CompiledExpression theReplacement;
@@ -664,23 +653,15 @@ public interface QuickTableColumn<R, C> {
 		public static final String COLUMN = "column";
 
 		public static final ExElement.AttributeValueGetter.Expression<SingleColumnSet<?, ?>, Interpreted<?, ?>, Def, SettableValue<?>, SettableValue<String>> NAME = ExElement.AttributeValueGetter
-			.ofX(Def::getName, Interpreted::getName, SingleColumnSet::getName,
-				"The name of the column, to be displayed in the column header");
+			.ofX(Def::getName, Interpreted::getName, SingleColumnSet::getName);
 		public static final ExElement.AttributeValueGetter.Expression<SingleColumnSet<?, ?>, Interpreted<?, ?>, Def, SettableValue<?>, SettableValue<?>> VALUE = ExElement.AttributeValueGetter
-			.ofX(Def::getValue, Interpreted::getValue, SingleColumnSet::getValue, "The value for the column, as derived from the row");
+			.ofX(Def::getValue, Interpreted::getValue, SingleColumnSet::getValue);
 		public static final ExElement.AttributeValueGetter<SingleColumnSet<?, ?>, Interpreted<?, ?>, Def> COLUMN_VALUE_NAME = ExElement.AttributeValueGetter
-			.of(Def::getColumnValueName, i -> i.getDefinition().getColumnValueName(), SingleColumnSet::getColumnValueName,
-				"The name variable holding the column value to be rendered, for use in expressions");
+			.of(Def::getColumnValueName, i -> i.getDefinition().getColumnValueName(), SingleColumnSet::getColumnValueName);
 		public static final ExElement.AttributeValueGetter.Expression<SingleColumnSet<?, ?>, Interpreted<?, ?>, Def, SettableValue<?>, SettableValue<String>> HEADER_TOOLTIP = ExElement.AttributeValueGetter
-			.ofX(Def::getHeaderTooltip, Interpreted::getHeaderTooltip, SingleColumnSet::getHeaderTooltip,
-				"The tooltip to display for the column header");
+			.ofX(Def::getHeaderTooltip, Interpreted::getHeaderTooltip, SingleColumnSet::getHeaderTooltip);
 
 		public static final ExElement.ChildElementGetter<SingleColumnSet<?, ?>, Interpreted<?, ?>, Def> RENDERER = new ExElement.ChildElementGetter<SingleColumnSet<?, ?>, Interpreted<?, ?>, Def>() {
-			@Override
-			public String getDescription() {
-				return "The widget used to render the value for this column in each row";
-			}
-
 			@Override
 			public List<? extends ExElement.Def<?>> getChildrenFromDef(Def def) {
 				return def.getRenderer() == null ? Collections.emptyList() : Collections.singletonList(def.getRenderer());
@@ -698,11 +679,6 @@ public interface QuickTableColumn<R, C> {
 		};
 
 		public static final ExElement.ChildElementGetter<SingleColumnSet<?, ?>, Interpreted<?, ?>, Def> EDITING = new ExElement.ChildElementGetter<SingleColumnSet<?, ?>, Interpreted<?, ?>, Def>() {
-			@Override
-			public String getDescription() {
-				return "Configures the ability to update or replace the value of each row by providing a new value for the column";
-			}
-
 			@Override
 			public List<? extends ExElement.Def<?>> getChildrenFromDef(Def def) {
 				return def.getEditing() == null ? Collections.emptyList() : Collections.singletonList(def.getEditing());

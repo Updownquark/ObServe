@@ -36,21 +36,13 @@ public interface QuickWidget extends QuickTextElement {
 	public static final String WIDGET = "widget";
 
 	public static final ExElement.AttributeValueGetter<QuickWidget, Interpreted<? extends QuickWidget>, Def<? extends QuickWidget>> NAME = ExElement.AttributeValueGetter
-		.of(Def::getName, i -> i.getDefinition().getName(), QuickWidget::getName,
-			"The name of the widget.  Typically only used for debugging");
+		.of(Def::getName, i -> i.getDefinition().getName(), QuickWidget::getName);
 	public static final ExElement.AttributeValueGetter.Expression<QuickWidget, Interpreted<? extends QuickWidget>, Def<? extends QuickWidget>, SettableValue<?>, SettableValue<String>> TOOLTIP = ExElement.AttributeValueGetter
-		.ofX(Def::getTooltip, Interpreted::getTooltip, QuickWidget::getTooltip,
-			"The tooltip to display when the user hovers the mouse over the widget, for user feedback");
+		.ofX(Def::getTooltip, Interpreted::getTooltip, QuickWidget::getTooltip);
 	public static final ExElement.AttributeValueGetter.Expression<QuickWidget, Interpreted<? extends QuickWidget>, Def<? extends QuickWidget>, SettableValue<?>, SettableValue<Boolean>> VISIBLE = ExElement.AttributeValueGetter
-		.ofX(Def::isVisible, Interpreted::isVisible, QuickWidget::isVisible,
-			"Determines when the widget is displayed to the user or hidden");
+		.ofX(Def::isVisible, Interpreted::isVisible, QuickWidget::isVisible);
 
 	public static final ExElement.ChildElementGetter<QuickWidget, Interpreted<?>, Def<?>> BORDER = new ExElement.ChildElementGetter<QuickWidget, Interpreted<?>, Def<?>>() {
-		@Override
-		public String getDescription() {
-			return "The border to draw around the widget";
-		}
-
 		@Override
 		public List<? extends org.observe.expresso.qonfig.ExElement.Def<?>> getChildrenFromDef(Def<?> def) {
 			return def.getBorder() == null ? Collections.emptyList() : Collections.singletonList(def.getBorder());
@@ -68,11 +60,6 @@ public interface QuickWidget extends QuickTextElement {
 	};
 
 	public static final ExElement.ChildElementGetter<QuickWidget, Interpreted<?>, Def<?>> EVENT_LISTENERS = new ExElement.ChildElementGetter<QuickWidget, Interpreted<?>, Def<?>>() {
-		@Override
-		public String getDescription() {
-			return "Listeners to events like mouse clicks or key presses";
-		}
-
 		@Override
 		public List<? extends org.observe.expresso.qonfig.ExElement.Def<?>> getChildrenFromDef(Def<?> def) {
 			return def.getEventListeners();

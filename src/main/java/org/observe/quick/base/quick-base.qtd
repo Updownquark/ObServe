@@ -67,8 +67,11 @@
 		<add-on name="trailing" inherits="inline-alignment" />
 		<add-on name="justify" inherits="inline-alignment" />
 		<add-on name="inline-layout" requires="box" inherits="layout">
+			<?DOC Whether the components are arranged top-to-bottom or left-to-right?>
 			<attribute name="orientation" type="orientation" />
+			<?DOC The alignment strategy determining how all the components will share space along the main axis of the layout?>
 			<attribute name="main-align" type="inline-alignment" default="leading" />
+			<?DOC The alignment strategy for each component along the cross axis of the layout?>
 			<attribute name="cross-align" type="inline-alignment" default="justify" />
 			<attribute name="padding" type="int" default="2" />
 			<!--<child-mod child="box.content" inherits="generic-sizeable" />-->
@@ -83,6 +86,7 @@
 				<value name-attribute="value-name" priority="1" />
 				<value name="selected" type="boolean" priority="100" />
 			</element-model>
+			<?DOC The name of the currently applicable value, e.g. for rendering?>
 			<attribute name="value-name" type="identifier" default="value" />
 		</add-on>
 		<add-on name="tabular-widget" requires="multi-value-widget">
@@ -90,15 +94,19 @@
 				<value name="rowIndex" type="int" priority="2" />
 				<value name="columnIndex" type="int" priority="2" />
 			</element-model>
+			<?DOC A column or set of columns to display a category of data for each row in the table?>
 			<child-def name="columns" requires="column-set" max="inf" /> <!-- Need at least one column -->
 		</add-on>
 		<add-on name="column-set" abstract="true"/>
 		<add-on name="column-edit-type" requires="column-edit" abstract="true" />
 		<add-on name="modify-row-value" requires="column-edit" inherits="column-edit-type">
+			<?DOC The action to perform that modifies the row value with the column edit value?>
 			<attribute name="commit" type="expression" specify="optional" />
+			<?DOC Whether to fire an update event on the row after a modification?>
 			<attribute name="row-update" type="boolean" default="false" />
 		</add-on>
 		<add-on name="replace-row-value" requires="column-edit" inherits="column-edit-type">
+			<?DOC The row value to replace in the model after the edit operation?>
 			<attribute name="replacement" type="expression" />
 		</add-on>
 		<add-on name="cell-editor" requires="value-widget">
@@ -141,14 +149,17 @@
 			<attribute name="length" type="int" />
 		</element-def>
 		<element-def name="button" extends="widget">
+			<?DOC The text to display for the button?>
 			<value type="expression" specify="optional" />
+			<?DOC The icon to display for the button?>
 			<attribute name="icon" type="expression" specify="optional" />
+			<?DOC The action to perform when the button is pressed?>
 			<attribute name="action" type="expression" specify="required" />
 		</element-def>
 
 		<!-- Editors -->
 		<element-def name="check-box" extends="value-widget">
-			<!-- value here is the text for the check box's label -->
+			<?DOC The text to display for the check box?>
 			<value type="expression" specify="optional" />
 		</element-def>
 		<element-def name="toggle-button" extends="value-widget">
@@ -162,8 +173,10 @@
 		<element-def name="label" extends="text-widget">
 			<!-- The value is the text for the label.  If this text is specified, it takes the place of both value and format. -->
 			<value type="string" specify="optional" />
+			<?DOC For a label, either the 'value' attribute or the value text may specified on a label.  The value text is not an expression, but static text.?>
 			<attr-mod name="value-widget.value" specify="optional" default="" />
 			<attr-mod name="text-widget.editable" specify="forbidden" default="false" />
+			<?DOC The icon to display for the label?>
 			<attribute name="icon" type="expression" specify="optional" />
 		</element-def>
 		<element-def name="editable-text-widget" extends="text-widget">
@@ -171,17 +184,22 @@
 				<value name="error" type="String" priority="10000" />
 				<value name="warning" type="String" priority="5000" />
 			</element-model>
+			<?DOC Whether the widget's value is changed as the user types, or only when they take some action to commit, like typing enter or changing focus?>
 			<attribute name="commit-on-type" type="boolean" default="false" />
 		</element-def>
 		<element-def name="text-field" extends="editable-text-widget">
+			<?DOC The text cue to display to the user when the text field has no value?>
 			<attribute name="empty-text" type="expression" specify="optional" />
+			<?DOC The number of columns of characters to configure the text field's width?>
 			<attribute name="columns" type="int" specify="optional" />
 		</element-def>
 		<element-def name="text-area" extends="editable-text-widget" inherits="with-element-model">
 			<element-model>
 				<value name="mousePosition" type="int" priority="25" />
 			</element-model>
+			<?DOC The number of rows of text for the text area?>
 			<attribute name="rows" type="expression" specify="optional" />
+			<?DOC Whether to accept HTML content and format it accordingly?>
 			<attribute name="html" type="expression" default="false" />
 		</element-def>
 		<element-def name="styled-text-area" extends="text-widget">
@@ -223,7 +241,9 @@
 		<element-def name="toggle-buttons" extends="collection-selector-widget" />
 
 		<element-def name="multi-value-widget" extends="widget" inherits="multi-value-renderable">
+			<?DOC The value the the user has selected in the widget, or null if no value or multiple values are selected?>
 			<attribute name="selection" type="expression" specify="optional" />
+			<?DOC The values the the user has selected in the widget?>
 			<attribute name="multi-selection" type="expression" specify="optional" />
 		</element-def>
 		<element-def name="little-list" extends="multi-value-widget">
@@ -233,23 +253,35 @@
 			<element-model>
 				<value name-attribute="column-value-name" priority="2" />
 			</element-model>
+			<?DOC The name of the column, to be displayed in the column header?>
 			<attribute name="name" type="expression" />
+			<?DOC The value for the column, as derived from the row?>
 			<!-- Unspecified column-value means to use the model value for the column value -->
 			<attribute name="value" type="expression" specify="optional" />
+			<?DOC The name of the variable holding the column value to be rendered, for use in expressions?>
 			<attribute name="column-value-name" type="identifier" default="columnValue" />
+			<?DOC The tooltip to display for the column header?>
 			<attribute name="header-tooltip" type="expression" specify="optional" />
+			<?DOC The widget used to render the value for this column in each row?>
 			<child-def name="renderer" type="widget" inherits="renderer" min="0" />
+			<?DOC Configures the ability to update or replace the value of each row by providing a new value for the column?>
 			<child-def name="edit" type="column-edit" min="0" />
 		</element-def>
 		<element-def name="column-edit" inherits="with-element-model">
 			<element-model>
 				<value name-attribute="column-edit-value-name" />
 			</element-model>
+			<?DOC The type of column editing to use to update the data set with column edit operations?>
 			<attribute name="type" type="column-edit-type" />
+			<?DOC The variable name of the column value being edited for expressions?>
 			<attribute name="column-edit-value-name" type="identifier" default="columnEditValue" />
+			<?DOC A filter on the column value that determines whether the column is editable for a particular row?>
 			<attribute name="editable-if" type="expression" specify="optional" />
+			<?DOC A filter that will prevent a column value from being committed?>
 			<attribute name="accept" type="expression" specify="optional" />
+			<?DOC The number of clicks required to initiated editing on this column?>
 			<attribute name="clicks" type="int" specify="optional" />
+			<?DOC The widget that allows the user to create a new value for this column?>
 			<child-def name="editor" type="value-widget" min="0" inherits="cell-editor" />
 		</element-def>
 		<element-def name="columns-ref" inherits="column-set">
@@ -275,30 +307,44 @@
 			<child-def name="column" type="column" />
 		</element-def>
 		<element-def name="abstract-value-action" abstract="true">
+			<?DOC The name of the action to display to the user?>
 			<attribute name="name" type="expression" specify="optional" />
+			<?DOC Whether the action should be presented to the user as a button near the widget?>
 			<attribute name="as-button" type="boolean" default="true" />
+			<?DOC Whether the action should be presented to the user as a popup when they right-click on a value in the widget?>
 			<attribute name="as-popup" type="boolean" default="false" />
+			<?DOC The icon to display to represent this action?>
 			<attribute name="icon" type="expression" specify="optional" />
+			<?DOC Whether the action is currently enabled?>
 			<attribute name="enabled" type="expression" specify="optional" />
+			<?DOC The tooltip to display to the user to describe the action?>
 			<attribute name="tooltip" type="expression" specify="optional" />
+			<?DOC The action to perform when the user selects the action?>
 			<value type="expression" specify="required" />
 		</element-def>
 		<element-def name="value-action" extends="abstract-value-action" inherits="with-element-model">
 			<element-model>
 				<value name-attribute="value-name"/>
 			</element-model>
+			<?DOC The variable name of the value that the action is invoked upon, for expressions?>
 			<attribute name="value-name" type="identifier" default="actionValue" />
+			<?DOC Whether an action can be invoked by the user for multiple values at once.  The action would then be invoked separately for each value.?>
 			<attribute name="allow-for-multiple" type="boolean" default="false" />
 		</element-def>
 		<element-def name="multi-value-action" extends="abstract-value-action" inherits="with-element-model">
 			<element-model>
 				<list name-attribute="values-name"/>
 			</element-model>
+			<?DOC The variable name of the values that the action is invoked upon, for expressions?>
 			<attribute name="values-name" type="identifier" default="actionValues" />
+			<?DOC Whether the action can be invoked upon an empty list of values?>
 			<attribute name="allow-for-empty" type="boolean" default="false" />
 		</element-def>
+		<?DOC Displays rows of data, with each column exposing an attribute of the row element to the user for inspection and editing?>
 		<element-def name="table" extends="multi-value-widget" inherits="tabular-widget">
+			<?DOC The rows to display in the table?>
 			<attribute name="rows" type="expression" specify="required" />
+			<?DOC An action that may be performed on rows, groups of rows, or the data set as a whole?>
 			<child-def name="action" type="abstract-value-action" min="0" max="inf" />
 		</element-def>
 		<element-def name="tree" extends="multi-value-widget">
@@ -316,7 +362,9 @@
 
 		<!-- Containers -->
 		<element-def name="box" extends="container">
+			<?DOC The opacity of the box, between 0 (completely transparent) and 1 (completely opaque)?>
 			<attribute name="opacity" type="expression" specify="optional" />
+			<?DOC The layout that the box will use to arrange its contents?>
 			<attribute name="layout" type="layout" specify="required" />
 		</element-def>
 		<element-def name="field-panel" extends="container">

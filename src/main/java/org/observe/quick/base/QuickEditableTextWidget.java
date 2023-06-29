@@ -16,8 +16,7 @@ public interface QuickEditableTextWidget<T> extends QuickTextWidget<T> {
 	public static final String EDITABLE_TEXT_WIDGET = "editable-text-widget";
 
 	public static final ExElement.AttributeValueGetter<QuickEditableTextWidget<?>, Interpreted<?, ?>, Def<?>> COMMIT_ON_TYPE = ExElement.AttributeValueGetter
-		.<QuickEditableTextWidget<?>, Interpreted<?, ?>, Def<?>> of(Def::isCommitOnType, null, null,
-			"Whether the widget's value is changed as the user types, or only when they take some action to commit, like typing enter or changing focus");
+		.<QuickEditableTextWidget<?>, Interpreted<?, ?>, Def<?>> of(Def::isCommitOnType, null, null);
 
 	public interface Def<W extends QuickEditableTextWidget<?>> extends QuickTextWidget.Def<W> {
 		boolean isCommitOnType();

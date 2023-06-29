@@ -63,8 +63,7 @@ import com.google.common.reflect.TypeToken;
 
 public abstract class ObservableModelElement extends ExElement.Abstract {
 	public static final ExElement.ChildElementGetter<ObservableModelElement, Interpreted<?>, Def<?>> VALUES = ExElement.ChildElementGetter
-		.<ObservableModelElement, Interpreted<?>, Def<?>> of(Def::getValues, Interpreted::getValues, ObservableModelElement::getValues,
-			"A value declared in the model");
+		.<ObservableModelElement, Interpreted<?>, Def<?>> of(Def::getValues, Interpreted::getValues, ObservableModelElement::getValues);
 
 	public static abstract class Def<M extends ObservableModelElement> extends ExElement.Def.Abstract<M> {
 		private final List<ModelValueElement.Def<?, ?>> theValues;
@@ -125,8 +124,8 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 									v.getElement().getPositionInFile().getPosition()));
 							if (index >= 0)
 								((List<ExElement.Def<?>>) roleChildren).add(index + 1, newChild);
-								else
-									((List<ExElement.Def<?>>) roleChildren).add(-index - 1, newChild);
+							else
+								((List<ExElement.Def<?>>) roleChildren).add(-index - 1, newChild);
 						}
 					}
 					return element.preserve();
@@ -250,8 +249,7 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 
 	public static class ModelSetElement extends ExElement.Abstract {
 		private static final ExElement.ChildElementGetter<ModelSetElement, Interpreted<?>, Def<?>> MODELS = ExElement.ChildElementGetter
-			.<ModelSetElement, Interpreted<?>, Def<?>> of(Def::getSubModels, Interpreted::getSubModels, ModelSetElement::getSubModels,
-				"A model defined in the root model set");
+			.<ModelSetElement, Interpreted<?>, Def<?>> of(Def::getSubModels, Interpreted::getSubModels, ModelSetElement::getSubModels);
 
 		public static class Def<M extends ModelSetElement> extends ExElement.Def.Abstract<M> {
 			private final List<ObservableModelElement.Def<?>> theSubModels;
@@ -384,7 +382,7 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 	public static class DefaultModelElement extends ObservableModelElement {
 		private static final ExElement.ChildElementGetter<DefaultModelElement, Interpreted<?>, Def<?>> SUB_MODELS = ExElement.ChildElementGetter
 			.<DefaultModelElement, Interpreted<?>, Def<?>> of(Def::getSubModels, Interpreted::getSubModels,
-				DefaultModelElement::getSubModels, "A sub-model defined under the parent model");
+				DefaultModelElement::getSubModels);
 
 		public static class Def<M extends DefaultModelElement> extends ObservableModelElement.Def<M> {
 			private final List<DefaultModelElement.Def<?>> theSubModels;
@@ -515,8 +513,7 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 
 	public static class ExtModelElement extends ObservableModelElement {
 		private static final ExElement.ChildElementGetter<ExtModelElement, Interpreted<?>, Def<?>> SUB_MODELS = ExElement.ChildElementGetter
-			.<ExtModelElement, Interpreted<?>, Def<?>> of(Def::getSubModels, Interpreted::getSubModels, ExtModelElement::getSubModels,
-				"A sub-model defined under the parent model");
+			.<ExtModelElement, Interpreted<?>, Def<?>> of(Def::getSubModels, Interpreted::getSubModels, ExtModelElement::getSubModels);
 
 		public static class Def<M extends ExtModelElement> extends ObservableModelElement.Def<M> {
 			private final List<ExtModelElement.Def<?>> theSubModels;

@@ -21,7 +21,7 @@ public class QuickCheckBox extends QuickValueWidget.Abstract<Boolean> {
 
 	public static final ExElement.AttributeValueGetter.Expression<QuickCheckBox, Interpreted, Def, SettableValue<?>, SettableValue<String>> CHECK_BOX_TEXT = ExElement.AttributeValueGetter
 		.<QuickCheckBox, Interpreted, Def, SettableValue<?>, SettableValue<String>> ofX(Def::getText, Interpreted::getText,
-			QuickCheckBox::getText, "The text to display for the check box");
+			QuickCheckBox::getText);
 
 	public static class Def extends QuickValueWidget.Def.Abstract<Boolean, QuickCheckBox> {
 		private CompiledExpression theText;

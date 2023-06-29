@@ -486,10 +486,16 @@ public class Qwysiwyg {
 		}
 	}
 
-	private void renderDef(DocumentComponent component, ExElement.Def<?> def, String descrip) {
+	private void renderDef(DocumentComponent component, ExElement.Def<?> def, String roleDescrip) {
 		DocumentComponent elComponent = getSourceComponent(component, def.getElement().getPositionInFile().getPosition()).parent;
-		if (descrip != null)
-			elComponent.typeTooltip(descrip);
+		String typeDescrip = def.getElement().getType().getDescription();
+		if (roleDescrip != null) {
+			if (typeDescrip != null)
+				elComponent.typeTooltip(roleDescrip + "<br><br>" + typeDescrip);
+			else
+				elComponent.typeTooltip(roleDescrip);
+		} else if (typeDescrip != null)
+			elComponent.typeTooltip(typeDescrip);
 		for (Map.Entry<QonfigAttributeDef.Declared, QonfigValue> attr : def.getElement().getAttributes().entrySet()) {
 			PositionedContent position = attr.getValue().position;
 			if (position == null)
@@ -506,7 +512,7 @@ public class Qwysiwyg {
 							((LocatedExpression) defValue).getFilePosition(), attrValueComp);
 				}
 			}
-			String attrDescrip = def.getAttributeDescription(attr.getKey());
+			String attrDescrip = attr.getKey().getDescription();
 			if (attrDescrip != null)
 				attrComp.typeTooltip(attrDescrip + "<br><br>" + renderValueType(type, 1, attr.getKey()));
 			else
@@ -525,7 +531,7 @@ public class Qwysiwyg {
 							((LocatedExpression) defValue).getFilePosition(), attrValueComp);
 				}
 			}
-			String attrDescrip = def.getElementValueDescription();
+			String attrDescrip = def.getElement().getType().getValue().getDescription();
 			if (attrDescrip != null)
 				attrValueComp.typeTooltip(attrDescrip + "<br><br>" + renderValueType(type, 1, def.getElement().getType().getValue()));
 			else
@@ -536,12 +542,12 @@ public class Qwysiwyg {
 		for (QonfigElement child : def.getElement().getChildren()) {
 			String childDescrip = null;
 			for (QonfigChildDef role : child.getParentRoles()) {
-				String roleDescrip = def.getChildDescription(role);
-				if (roleDescrip != null) {
+				String childRoleDescrip = role.getDescription();
+				if (childRoleDescrip != null) {
 					if (childDescrip == null)
-						childDescrip = roleDescrip;
+						childDescrip = childRoleDescrip;
 					else
-						childDescrip += "<br><br>" + roleDescrip;
+						childDescrip += "<br><br>" + childRoleDescrip;
 				}
 			}
 			ExElement.Def<?> childDef = children.get(child);

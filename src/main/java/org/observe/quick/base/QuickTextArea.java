@@ -20,10 +20,10 @@ public class QuickTextArea<T> extends QuickEditableTextWidget.Abstract<T> {
 
 	public static final ExElement.AttributeValueGetter.Expression<QuickTextArea<?>, Interpreted<?>, Def<?>, SettableValue<?>, SettableValue<Integer>> ROWS = ExElement.AttributeValueGetter
 		.<QuickTextArea<?>, Interpreted<?>, Def<?>, SettableValue<?>, SettableValue<Integer>> ofX(Def::getRows, Interpreted::getRows,
-			QuickTextArea::getRows, "The number of rows of text for the text area");
+			QuickTextArea::getRows);
 	public static final ExElement.AttributeValueGetter.Expression<QuickTextArea<?>, Interpreted<?>, Def<?>, SettableValue<?>, SettableValue<Boolean>> HTML = ExElement.AttributeValueGetter
 		.<QuickTextArea<?>, Interpreted<?>, Def<?>, SettableValue<?>, SettableValue<Boolean>> ofX(Def::isHtml, Interpreted::isHtml,
-			QuickTextArea::isHovered, "Whether to accept HTML content and format it accordingly");
+			QuickTextArea::isHovered);
 
 	public static class Def<T> extends QuickEditableTextWidget.Def.Abstract<T, QuickTextArea<T>> {
 		private CompiledExpression theRows;
@@ -135,8 +135,7 @@ public class QuickTextArea<T> extends QuickEditableTextWidget.Abstract<T> {
 		isHtml = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Boolean>> parameterized(boolean.class))
 			.build();
 		theMousePosition = SettableValue
-			.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Integer>> parameterized(int.class))
-			.build();
+			.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Integer>> parameterized(int.class)).build();
 	}
 
 	public SettableValue<Integer> getRows() {

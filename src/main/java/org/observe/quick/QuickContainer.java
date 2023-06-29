@@ -21,8 +21,7 @@ public interface QuickContainer<C extends QuickWidget> extends QuickWidget {
 	public static final String CONTAINER = "container";
 
 	public static final ExElement.ChildElementGetter<QuickContainer<?>, Interpreted<?, ?>, Def<?, ?>> CONTENTS = ExElement.ChildElementGetter
-		.<QuickContainer<?>, Interpreted<?, ?>, Def<?, ?>> of(Def::getContents, Interpreted::getContents, QuickContainer::getContents,
-			"A widget displayed inside the container");
+		.<QuickContainer<?>, Interpreted<?, ?>, Def<?, ?>> of(Def::getContents, Interpreted::getContents, QuickContainer::getContents);
 
 	/**
 	 * The definition of a QuickContainer

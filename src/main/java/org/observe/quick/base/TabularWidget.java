@@ -27,11 +27,6 @@ import com.google.common.reflect.TypeToken;
 public interface TabularWidget<R> extends MultiValueWidget<R>, RowTyped<R> {
 	public static final ExElement.ChildElementGetter<TabularWidget<?>, Interpreted<?, ?>, Def<?>> COLUMNS = new ExElement.ChildElementGetter<TabularWidget<?>, TabularWidget.Interpreted<?, ?>, TabularWidget.Def<?>>() {
 		@Override
-		public String getDescription() {
-			return "A column or set of columns to display a category of data for each row in the table";
-		}
-
-		@Override
 		public List<? extends ExElement.Def<?>> getChildrenFromDef(Def<?> def) {
 			return def.getColumns();
 		}

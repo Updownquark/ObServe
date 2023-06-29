@@ -26,11 +26,6 @@ public class QuickDocument extends ExElement.Abstract {
 
 	public static final ExElement.ChildElementGetter<QuickDocument, Interpreted, Def> DOC_HEAD = new ExElement.ChildElementGetter<QuickDocument, Interpreted, Def>() {
 		@Override
-		public String getDescription() {
-			return "The head section of the Quick document, containing application models, style sheets, etc.";
-		}
-
-		@Override
 		public List<? extends ExElement.Def<?>> getChildrenFromDef(Def def) {
 			return Collections.singletonList(def.getHead());
 		}
@@ -47,11 +42,6 @@ public class QuickDocument extends ExElement.Abstract {
 	};
 
 	public static final ExElement.ChildElementGetter<QuickDocument, Interpreted, Def> DOC_BODY = new ExElement.ChildElementGetter<QuickDocument, Interpreted, Def>() {
-		@Override
-		public String getDescription() {
-			return "The widget content of the application";
-		}
-
 		@Override
 		public List<? extends ExElement.Def<?>> getChildrenFromDef(Def def) {
 			return Collections.singletonList(def.getBody());
@@ -196,11 +186,6 @@ public class QuickDocument extends ExElement.Abstract {
 
 		public static final ExElement.ChildElementGetter<ExElement, QuickHeadSection, QuickHeadSection.Def> MODELS = new ExElement.ChildElementGetter<ExElement, QuickHeadSection, QuickHeadSection.Def>() {
 			@Override
-			public String getDescription() {
-				return "The model of the document, defining values and other structures that can be used to control the behavior of elements in the document";
-			}
-
-			@Override
 			public List<? extends ExElement.Def<?>> getChildrenFromDef(QuickHeadSection.Def def) {
 				if (def.getModelElement() != null)
 					return Collections.singletonList(def.getModelElement());
@@ -223,11 +208,6 @@ public class QuickDocument extends ExElement.Abstract {
 		};
 
 		public static final ExElement.ChildElementGetter<ExElement, QuickHeadSection, QuickHeadSection.Def> STYLE_SHEET = new ExElement.ChildElementGetter<ExElement, QuickHeadSection, QuickHeadSection.Def>() {
-			@Override
-			public String getDescription() {
-				return "The style sheet of the document, defining styles that can be applied to sets of elements without being declared on each element";
-			}
-
 			@Override
 			public List<? extends ExElement.Def<?>> getChildrenFromDef(QuickHeadSection.Def def) {
 				if(def.getStyleSheet()!=null)

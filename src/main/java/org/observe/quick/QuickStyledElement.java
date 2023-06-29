@@ -31,11 +31,6 @@ public interface QuickStyledElement extends ExElement {
 	public static final ExElement.ChildElementGetter<QuickStyledElement, Interpreted<?>, Def<?>> STYLE_ELEMENTS//
 	= new ExElement.ChildElementGetter<QuickStyledElement, Interpreted<?>, Def<?>>() {
 		@Override
-		public String getDescription() {
-			return "Styles declared on the element itself";
-		}
-
-		@Override
 		public List<? extends QuickStyleElement.Def> getChildrenFromDef(Def<?> def) {
 			return def.getStyle().getStyleElements();
 		}
