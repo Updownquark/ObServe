@@ -191,7 +191,7 @@ public class QuickStyleInterpretation implements QonfigInterpretation {
 	private void modifyForStyle(StyleQIS session) throws QonfigInterpretationException {
 		ExpressoQIS exS = session.as(ExpressoQIS.class);
 		exS.setExpressoEnv(exS.getExpressoEnv().with(null, null)// Create a copy
-			.withNonStructuredParser(double.class, new FontValueParser()));
+			.withNonStructuredParser(double.class, new FontStyleParser()));
 	}
 
 	private StyleValues interpretStyle(StyleQIS session) throws QonfigInterpretationException {

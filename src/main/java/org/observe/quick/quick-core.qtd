@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
+<?DOC The core of the Quick architecture.  Contains types for defining an application with models and a user interface. ?>
 <qonfig-def name="Quick-Core" version="0.1" root="quick,style-sheet" extends:expresso="Expresso-Base v0.1" extends:style="Quick-Style v0.1">
 	<value-types>
 		<one-of name="window-close-action">
@@ -14,8 +15,11 @@
 		</one-of>
 
 		<one-of name="mouse-button">
+			<?DOC The left mouse button?>
 			<literal>left</literal>
+			<?DOC The right mouse button?>
 			<literal>right</literal>
+			<?DOC The middle mouse button?>
 			<literal>middle</literal>
 		</one-of>
 
@@ -42,13 +46,21 @@
 
 		<add-on name="with-text" inherits="styled" abstract="true">
 			<styles>
+				<?DOC The color of the text?>
 				<style-attribute name="font-color" type="java.awt.Color" trickle-down="true" />
+				<?DOC The size of the text?>
 				<style-attribute name="font-size" type="double" trickle-down="true" />
+				<?DOC The thickness of the text, e.g. `bold`, `extra-bold`, `normal` or `light`?>
 				<style-attribute name="font-weight" type="double" trickle-down="true" />
+				<?DOC The slant of the text, e.g. `italic` or `normal`?>
 				<style-attribute name="font-slant" type="double" trickle-down="true" />
+				<?DOC Whether the text is underlined?>
 				<style-attribute name="underline" type="boolean" trickle-down="false" />
+				<?DOC Whether the text is struck through?>
 				<style-attribute name="strike-through" type="boolean" trickle-down="false" />
+				<?DOC Whether the text is small and high?>
 				<style-attribute name="super-script" type="boolean" trickle-down="false" />
+				<?DOC Whether the text is small and low?>
 				<style-attribute name="sub-script" type="boolean" trickle-down="false" />
 			</styles>
 		</add-on>
@@ -57,9 +69,12 @@
 	</add-ons>
 
 	<elements>
+		<?DOC The root of a Quick application document?>
 		<element-def name="quick" inherits="with-element-model">
 			<element-model>
+				<?DOC An event that fires after the application's model's have been loaded?>
 				<event name="onModelLoad" type="Void" />
+				<?DOC An event that fires after the application's user interface body has been loaded?>
 				<event name="onBodyLoad" type="Void" />
 			</element-model>
 			<?DOC The head section of the Quick document, containing application models, style sheets, etc.?>
@@ -71,13 +86,19 @@
 
 		<element-def name="widget" abstract="true" inherits="with-text">
 			<element-model>
+				<?DOC Whether the mouse is currently hovered over the widget?>
 				<value name="hovered" type="boolean" priority="5" />
+				<?DOC Whether the widget currently has focus?>
 				<value name="focused" type="boolean" priority="1" />
+				<?DOC Whether the left mouse button is currently pressed over the widget?>
 				<value name="pressed" type="boolean" priority="1000" />
+				<?DOC Whether the right mouse button is currently pressed over the widget?>
 				<value name="rightPressed" type="boolean" priority="1001" />
 			</element-model>
 			<styles>
+				<?DOC The background color of the widget?>
 				<style-attribute name="color" type="java.awt.Color" />
+				<?DOC The cursor to display for the mouse when it is over the widget?>
 				<style-attribute name="mouse-cursor" type="org.observe.quick.MouseCursor" />
 			</styles>
 			<?DOC The name of the widget.  Typically only used for debugging?>
@@ -94,59 +115,81 @@
 
 		<element-def name="event-listener" inherits="with-element-model,with-local-model" abstract="true">
 			<element-model>
+				<?DOC Whether the Alt button on the keyboard is being held down during the event?>
 				<value name="altPressed" type="boolean" />
+				<?DOC Whether the Ctrl button on the keyboard is being held down during the event?>
 				<value name="ctrlPressed" type="boolean" />
+				<?DOC Whether the Shift button on the keyboard is being held down during the event?>
 				<value name="shiftPressed" type="boolean" />
 			</element-model>
+			<?DOC A test that must pass against an event for this listener to be invoked?>
 			<child-def name="filter" type="event-filter" min="0" max="inf" />
 			<?DOC The action to perform when the event occurs?>
 			<value type="expression" specify="required" />
 		</element-def>
 		<element-def name="event-filter">
+			<?DOC A boolean expression that must be true for the listener to be invoked?>
 			<value type="expression" specify="required" />
 		</element-def>
 		<element-def name="mouse-listener" extends="event-listener" abstract="true">
 			<element-model>
+				<?DOC The x-coordinate of the mouse relative in the widget?>
 				<value name="x" type="int" />
+				<?DOC The y-coordinate of the mouse relative in the widget?>
 				<value name="y" type="int" />
 			</element-model>
 		</element-def>
 		<element-def name="mouse-button-listener" extends="mouse-listener" abstract="true">
 			<element-model>
+				<?DOC The mouse button that the event is for?>
 				<value name="button" />
 			</element-model>
 			<?DOC The button that this listener will listen to.  If not specified, the listener will trigger for any button.?>
 			<attribute name="button" type="mouse-button" specify="optional" />
 		</element-def>
+		<?DOC Listens to mouse clicks, that is, the user pressing an releasing a mouse button in approximately the same location?>
 		<element-def name="on-click" extends="mouse-button-listener">
 			<element-model>
+				<?DOC The number of successive clicks that this event represents?>
 				<value name="clickCount" type="int" />
 			</element-model>
 			<?DOC The number of consecutive clicks necessary to trigger this listener.  If not specified, the listener will trigger for any number of clicks.?>
 			<attribute name="click-count" type="expression" specify="optional" />
 		</element-def>
+		<?DOC Listens to mouse button presses?>
 		<element-def name="on-mouse-press" extends="mouse-button-listener" />
+		<?DOC Listens to mouse button releases?>
 		<element-def name="on-mouse-release" extends="mouse-button-listener" />
+		<?DOC Listens to the mouse's location over a widget. This listener may not be invoked during drag events.?>
 		<element-def name="on-mouse-move" extends="mouse-listener" />
+		<?DOC Notified when the mouse enters the widget from outside?>
 		<element-def name="on-mouse-enter" extends="mouse-listener" />
+		<?DOC Notified when the mouse leaves a widget?>
 		<element-def name="on-mouse-exit" extends="mouse-listener" />
+		<?DOC Listens to scroll events?>
 		<element-def name="on-scroll" extends="mouse-listener">
 			<element-model>
+				<?DOC How much and in what direction the scroll event scrolled?> 
 				<value name="scrollAmount" type="int" />
 			</element-model>
 		</element-def>
 		<element-def name="key-listener" extends="event-listener" abstract="true" />
 		<element-def name="key-code-listener" extends="key-listener" abstract="true">
 			<element-model>
+				<?DOC The keyboard key that was pressed or release?>
 				<value name="keyCode" type="org.observe.quick.KeyCode" />
 			</element-model>
 			<?DOC The key code that this listener will be notified for.  If not specified, this listener will be notified for any key.?>
 			<attribute name="key" type="identifier" specify="optional" />
 		</element-def>
+		<?DOC Listens to keyboard key presses?>
 		<element-def name="on-key-press" extends="key-code-listener" />
+		<?DOC Listens to keyboard key releases?>
 		<element-def name="on-key-release" extends="key-code-listener" />
+		<?DOC Listens to "effective" keyboard events--when a character is typed?>
 		<element-def name="on-type" extends="key-listener">
 			<element-model>
+				<?DOC The character that was typed?>
 				<value name="typedChar" type="char" />
 			</element-model>
 			<?DOC The typed character that this listener will be notified for.  If not specified, this listener will be notified for any character.?>
@@ -160,11 +203,15 @@
 
 		<element-def name="border" abstract="true" inherits="styled">
 			<styles>
+				<?DOC The color of the border?>
 				<style-attribute name="border-color" type="java.awt.Color" />
+				<?DOC The thickness of the border in pixels?>
 				<style-attribute name="thickness" type="int" />
 			</styles>
 		</element-def>
+		<?DOC A simple line border?>
 		<element-def name="line-border" extends="border" />
+		<?DOC A line border with text in it?>
 		<element-def name="titled-border" extends="line-border" inherits="with-text">
 			<?DOC The title to display for the border?>
 			<attribute name="title" type="expression" specify="required" />
@@ -173,6 +220,7 @@
 		<!-- Now a basic outline of abstract Quick widgets -->
 		<element-def name="value-widget" extends="widget" abstract="true" >
 			<element-model>
+				<?DOC The value being managed by the widget?>
 				<value name-attribute="value-name" priority="1" />
 			</element-model>
 			<?DOC The name of this widget's value for use in internal expressions?>
@@ -183,7 +231,9 @@
 			<attribute name="disable-with" type="expression" specify="optional" />
 		</element-def>
 		<element-def name="text-widget" extends="value-widget" abstract="true">
-			<?DOC The format to use to display the widget's value to the user and allow them to edit it?>
+			<?DOC The format to use to display the widget's value to the user and allow them to edit it.<br>
+			This may not need to be specified for certain standard types, e.g String, int, double.<br>
+			The full list of default-formattable types is implementation-dependent.?>
 			<attribute name="format" type="expression" specify="optional" />
 			<?DOC Whether the user can modify the text in the widget.
 				This is distinct from disable-with in that some UIs differentiate visually between disabled and uneditable widgets.?>

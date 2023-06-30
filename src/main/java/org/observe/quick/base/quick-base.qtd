@@ -11,46 +11,76 @@
 	<add-ons>
 		<add-on name="border-layout-region" abstract="true" />
 		<add-on name="inline-alignment" />
+		<?DOC Places the widget at the center of the container. Only one widget in the container may use this region.?>
 		<add-on name="center" inherits="border-layout-region,inline-alignment" />
+		<?DOC Places the widget at the top of the container, directly below any other widgets previously declared with this region?>
 		<add-on name="north" inherits="border-layout-region,v-sizeable" />
+		<?DOC Places the widget at the bottom of the container, directly above any other widgets previously declared with this region?>
 		<add-on name="south" inherits="border-layout-region,v-sizeable" />
+		<?DOC Places the widget at the right side of the container, directly left of any other widgets previously declared with this region?>
 		<add-on name="east" inherits="border-layout-region,h-sizeable" />
+		<?DOC Places the widget at the left side of the container, directly right of any other widgets previously declared with this region?>
 		<add-on name="west" inherits="border-layout-region,h-sizeable" />
 
 		<add-on name="h-positionable">
-			<!-- These positions can be in pixels (px), percent (%), or lexips (pixels from trailing edge, xp) -->
+			<?DOC The position for the left edge of the widget.<br>
+				May be specified in pixels (e.g. `10px`), percent (of the container width, `50%`),
+				or lexips (pixels from the trailing edge of the container, e.g. `5xp`)?>
 			<attribute name="left" type="expression" specify="optional" />
+			<?DOC The position for the horizontal center of the widget.<br>
+				May be specified in pixels (e.g. `10px`), percent (of the container width, `50%`),
+				or lexips (pixels from the trailing edge of the container, e.g. `5xp`)?>
 			<attribute name="h-center" type="expression" specify="optional" />
+			<?DOC The position for the right edge of the widget.<br>
+				May be specified in pixels (e.g. `10px`), percent (of the container width, `50%`),
+				or lexips (pixels from the trailing edge of the container, e.g. `5xp`)?>
 			<attribute name="right" type="expression" specify="optional" />
 		</add-on>
 		<add-on name="v-positionable">
-			<!-- These positions can be in pixels (px), percent (%), or lexips (pixels from trailing edge, xp) -->
+			<?DOC The position for the top edge of the widget.<br>
+				May be specified in pixels (e.g. `10px`), percent (of the container height, `50%`),
+				or lexips (pixels from the trailing edge of the container, e.g. `5xp`)?>
 			<attribute name="top" type="expression" specify="optional" />
+			<?DOC The position for the vertical center of the widget.<br>
+				May be specified in pixels (e.g. `10px`), percent (of the container height, `50%`),
+				or lexips (pixels from the trailing edge of the container, e.g. `5xp`)?>
 			<attribute name="v-center" type="expression" specify="optional" />
+			<?DOC The position for the bottom edge of the widget.<br>
+				May be specified in pixels (e.g. `10px`), percent (of the container height, `50%`),
+				or lexips (pixels from the trailing edge of the container, e.g. `5xp`)?>
 			<attribute name="bottom" type="expression" specify="optional" />
 		</add-on>
 		<add-on name="h-sizeable">
-			<!-- Width can be in pixels (px) or percent (%) -->
+			<?DOC The width for the widget.<br>
+				May be specified in pixels (e.g. `10px`) or percent (of the container width `50%`)?>
 			<attribute name="width" type="expression" specify="optional" />
-			<!-- The types of the min/max/pref sizes are in pixels - not relative -->
+			<?DOC The minimum width for the widget in pixels?>
 			<attribute name="min-width" type="expression" specify="optional" />
+			<?DOC The preferred width for the widget in pixels?>
 			<attribute name="pref-width" type="expression" specify="optional" />
+			<?DOC The maximum width for the widget in pixels?>
 			<attribute name="max-width" type="expression" specify="optional" />
 		</add-on>
 		<add-on name="v-sizeable">
-			<!-- Height can be in pixels (px) or percent (%) -->
+			<?DOC The height for the widget.<br>
+				May be specified in pixels (e.g. `10px`) or percent (of the container height, `50%`)?>
 			<attribute name="height" type="expression" specify="optional" />
-			<!-- The types of the min/max/pref sizes are in pixels - not relative -->
+			<?DOC The minimum height for the widget in pixels?>
 			<attribute name="min-height" type="expression" specify="optional" />
+			<?DOC The preferred height for the widget in pixels?>
 			<attribute name="pref-height" type="expression" specify="optional" />
+			<?DOC The maximum height for the widget in pixels?>
 			<attribute name="max-height" type="expression" specify="optional" />
 		</add-on>
 		<add-on name="generic-sizeable">
-			<!-- Size can be in pixels (px) or percent (%) -->
+			<?DOC The size for the widget.<br>
+				May be specified in pixels (e.g. `10px`) or percent (of the container size, `50%`)?>
 			<attribute name="size" type="expression" specify="optional" />
-			<!-- The types of the min/max/pref sizes are in pixels - not relative -->
+			<?DOC The minimum size for the widget in pixels?>
 			<attribute name="min-size" type="expression" specify="optional" />
+			<?DOC The preferred size for the widget in pixels?>
 			<attribute name="pref-size" type="expression" specify="optional" />
+			<?DOC The maximum size for the widget in pixels?>
 			<attribute name="max-size" type="expression" specify="optional" />
 		</add-on>
 
@@ -58,14 +88,19 @@
 		<add-on name="layout" />
 
 		<add-on name="border-layout-child">
+			<?DOC The region (edge) that this widget should occupy in its parent?>
 			<attribute name="region" type="border-layout-region" />
 		</add-on>
 		<add-on name="border-layout" requires="box" inherits="layout">
 			<child-mod child="box.content" inherits="border-layout-child" />
 		</add-on>
+		<?DOC Components will be arranged toward the leading edge (top or left) of the container?>
 		<add-on name="leading" inherits="inline-alignment" />
+		<?DOC Components will be arranged toward the trailing edge (bottom or right) of the container?>
 		<add-on name="trailing" inherits="inline-alignment" />
+		<?DOC Components will be stretched to occupy the entire height or width of the container?>
 		<add-on name="justify" inherits="inline-alignment" />
+		<?DOC A layout that stacks components left-to-right or top-to-bottom (depending on the orientation)?>
 		<add-on name="inline-layout" requires="box" inherits="layout">
 			<?DOC Whether the components are arranged top-to-bottom or left-to-right?>
 			<attribute name="orientation" type="orientation" />
@@ -73,17 +108,21 @@
 			<attribute name="main-align" type="inline-alignment" default="leading" />
 			<?DOC The alignment strategy for each component along the cross axis of the layout?>
 			<attribute name="cross-align" type="inline-alignment" default="justify" />
+			<?DOC How much space to put between components?>
 			<attribute name="padding" type="int" default="2" />
 			<!--<child-mod child="box.content" inherits="generic-sizeable" />-->
 		</add-on>
 		<add-on name="simple-layout-child" inherits="h-positionable,v-positionable,h-sizeable,v-sizeable" />
+		<?DOC A layout that places each widget in the container independently with a large amount of control over positioning and size?>
 		<add-on name="simple-layout" requires="box" inherits="layout">
 			<child-mod child="box.content" inherits="simple-layout-child" />
 		</add-on>
 
 		<add-on name="multi-value-renderable" requires="widget">
 			<element-model>
+				<?DOC The value that is currently in use (e.g. being rendered, hovered, etc.)?>
 				<value name-attribute="value-name" priority="1" />
+				<?DOC Whether the current value is selected?>
 				<value name="selected" type="boolean" priority="100" />
 			</element-model>
 			<?DOC The name of the currently applicable value, e.g. for rendering?>
@@ -91,7 +130,9 @@
 		</add-on>
 		<add-on name="tabular-widget" requires="multi-value-widget">
 			<element-model>
+				<?DOC The row index of the value currently in use (e.g. being rendered, hovered, etc.)?>
 				<value name="rowIndex" type="int" priority="2" />
+				<?DOC The column index of the value currently in use (e.g. being rendered, hovered, etc.)?>
 				<value name="columnIndex" type="int" priority="2" />
 			</element-model>
 			<?DOC A column or set of columns to display a category of data for each row in the table?>
@@ -99,22 +140,27 @@
 		</add-on>
 		<add-on name="column-set" abstract="true"/>
 		<add-on name="column-edit-type" requires="column-edit" abstract="true" />
+		<?DOC Modifies the value in a list when editing a component (e.g. column) of it. The model element is preserved, but may be updated.?>
 		<add-on name="modify-row-value" requires="column-edit" inherits="column-edit-type">
 			<?DOC The action to perform that modifies the row value with the column edit value?>
 			<attribute name="commit" type="expression" specify="optional" />
 			<?DOC Whether to fire an update event on the row after a modification?>
 			<attribute name="row-update" type="boolean" default="false" />
 		</add-on>
+		<?DOC Replaces the value in a list when editing a component (e.g. column) of it.?>
 		<add-on name="replace-row-value" requires="column-edit" inherits="column-edit-type">
 			<?DOC The row value to replace in the model after the edit operation?>
 			<attribute name="replacement" type="expression" />
 		</add-on>
 		<add-on name="cell-editor" requires="value-widget">
+			<?DOC This is supplied by the editing architecture since the only thing that can be edited is the cell value itself?>
 			<attr-mod name="value-widget.value" specify="forbidden" default="" />
 		</add-on>
 
 		<add-on name="field" requires="widget">
+			<?DOC The name of the label for the field?>
 			<attribute name="field-label" type="expression" specify="optional" />
+			<?DOC Whether this widget should be stretched to fill the available width of the container?>
 			<attribute name="fill" type="boolean" specify="optional" />
 		</add-on>
 		
@@ -145,9 +191,12 @@
 			<attribute name="ref" type="string" specify="required" />
 		</element-def>
 
+		<?DOC An invisible space between components in a container?>
 		<element-def name="spacer" extends="widget">
+			<?DOC The width or height of the spacer, in pixels?>
 			<attribute name="length" type="int" />
 		</element-def>
+		<?DOC A button that does something when the user clicks it?>
 		<element-def name="button" extends="widget">
 			<?DOC The text to display for the button?>
 			<value type="expression" specify="optional" />
@@ -158,43 +207,56 @@
 		</element-def>
 
 		<!-- Editors -->
+		<?DOC A check box to edit a boolean value?>
 		<element-def name="check-box" extends="value-widget">
 			<?DOC The text to display for the check box?>
 			<value type="expression" specify="optional" />
 		</element-def>
+		<?DOC A toggle button to edit a boolean value?>
 		<element-def name="toggle-button" extends="value-widget">
-			<!-- value here is the toggle button's text -->
+			<?DOC The text to display for the button?>
 			<value type="expression" specify="optional" />
+			<?DOC The icon to display for the button?>
 			<attribute name="icon" type="expression" specify="optional" />
 		</element-def>
+		<?DOC A button that opens a file browser?>
 		<element-def name="file-button" extends="value-widget">
 			<attribute name="open" type="boolean" />
 		</element-def>
+		<?DOC A simple, un-editable text (or icon) component?>
 		<element-def name="label" extends="text-widget">
+			<?DOC The text for the label. If this is specified, it takes the place of both value and format.<br>
+			Note that this is simple text, not an expression.?>
 			<!-- The value is the text for the label.  If this text is specified, it takes the place of both value and format. -->
 			<value type="string" specify="optional" />
 			<?DOC For a label, either the 'value' attribute or the value text may specified on a label.  The value text is not an expression, but static text.?>
 			<attr-mod name="value-widget.value" specify="optional" default="" />
+			<?DOC Labels cannot be editable?>
 			<attr-mod name="text-widget.editable" specify="forbidden" default="false" />
 			<?DOC The icon to display for the label?>
 			<attribute name="icon" type="expression" specify="optional" />
 		</element-def>
 		<element-def name="editable-text-widget" extends="text-widget">
 			<element-model>
+				<?DOC Text provided by the widget when the currently entered text cannot be committed to the widget value?>
 				<value name="error" type="String" priority="10000" />
+				<?DOC Text provided by the widget when the currently entered text is something less than ideal in some way?>
 				<value name="warning" type="String" priority="5000" />
 			</element-model>
 			<?DOC Whether the widget's value is changed as the user types, or only when they take some action to commit, like typing enter or changing focus?>
 			<attribute name="commit-on-type" type="boolean" default="false" />
 		</element-def>
+		<?DOC A simple, one-line text widget to edit a text or formatted value?>
 		<element-def name="text-field" extends="editable-text-widget">
 			<?DOC The text cue to display to the user when the text field has no value?>
 			<attribute name="empty-text" type="expression" specify="optional" />
 			<?DOC The number of columns of characters to configure the text field's width?>
 			<attribute name="columns" type="int" specify="optional" />
 		</element-def>
+		<?DOC A multi-line text widget that may render simple or HTML text.  Functions similarly to a &lt;text-field>?>
 		<element-def name="text-area" extends="editable-text-widget" inherits="with-element-model">
 			<element-model>
+				<?DOC The mouse position as offset from zero in the displayed text?>
 				<value name="mousePosition" type="int" priority="25" />
 			</element-model>
 			<?DOC The number of rows of text for the text area?>
@@ -202,42 +264,66 @@
 			<?DOC Whether to accept HTML content and format it accordingly?>
 			<attribute name="html" type="expression" default="false" />
 		</element-def>
+		<?DOC A different kind of text area whose style is easier to manage than using a &lt;text-area> with HTML.<br>
+		The value provided is the root of a hierarchical structure.<br>
+		The format is used to render text for each element in the hierarchy. Style may be defined for each node based on the properties of the node.<br>
+		Then a list of children is provided for each node. Each node inherits its parent's style but may override it.?>
 		<element-def name="styled-text-area" extends="text-widget">
 			<element-model>
+				<?DOC The currently applicable value, e.g. the one being rendered or hovered?>
 				<value name="node" priority="100"/>
 			</element-model>
+			<?DOC The children of the current node?>
 			<attribute name="children" type="expression" specify="required" />
+			<?DOC Text to render for the current node AFTER its children, as opposed to the formatted text which is rendered before the children.<br>
+			Post text is rendered with the parent's style, and the parent node will be current when the post text is hovered?>
 			<attribute name="post-text" type="expression" specify="optional" />
+			<?DOC The number of rows of text for the text area?>
 			<attribute name="rows" type="expression" specify="optional" />
+			<?DOC The node over which the selection anchor is positioned?>
 			<attribute name="selection-start-value" type="expression" specify="optional" />
+			<?DOC The offset of the selection anchor relative to the start of the selected-start-value?>
 			<attribute name="selection-start-offset" type="expression" specify="optional" />
+			<?DOC The node over which the selection end is positioned?>
 			<attribute name="selection-end-value" type="expression" specify="optional" />
+			<?DOC The offset of the selection end relative to the start of the selected-end-value?>
 			<attribute name="selection-end-offset" type="expression" specify="optional" />
+			<?DOC The style to apply to text on or under the current node?>
 			<child-def name="text-style" type="text-style" min="0" />
 		</element-def>
 		<element-def name="text-style" inherits="with-text">
 			<styles>
+				<?DOC The background color behind the text?>
 				<style-attribute name="bg-color" type="java.awt.Color" />
 			</styles>
 		</element-def>
+		<?DOC A text field with up and down buttons for either fully specifying or quickly adjusting a value?>
 		<element-def name="spinner" extends="text-field">
 			<attribute name="increment" type="expression" specify="optional" />
 		</element-def>
+		<?DOC A progress bar?>
 		<element-def name="progress-bar" extends="value-widget">
+			<?DOC The maximum value for the progress bar?>
 			<attribute name="max" type="expression" specify="required" />
 		</element-def>
 		<element-def name="render-field-panel" extends="value-widget">
 			<child-def name="field" type="value-widget" min="0" max="inf" />
 		</element-def>
 
+		<?DOC A widget that allows the user to select between a collection of available values?>
 		<element-def name="collection-selector-widget" extends="value-widget" abstract="true">
 			<element-model>
+				<?DOC Whether the current value is selected?>
 				<value name="selected" type="boolean" priority="100" />
 			</element-model>
+			<?DOC The values to render in the widget?>
 			<attribute name="values" type="expression" specify="required" />
 		</element-def>
+		<?DOC A combo/drop-down box?>
 		<element-def name="combo" extends="collection-selector-widget" />
+		<?DOC A set of radio buttons, one for each available value, only one of which may be selected?>
 		<element-def name="radio-buttons" extends="collection-selector-widget" />
+		<?DOC A set of toggle buttons, one for each available value, only one of which may be selected?>
 		<element-def name="toggle-buttons" extends="collection-selector-widget" />
 
 		<element-def name="multi-value-widget" extends="widget" inherits="multi-value-renderable">
@@ -249,8 +335,10 @@
 		<element-def name="little-list" extends="multi-value-widget">
 			<attribute name="values" type="expression" specify="required" />
 		</element-def>
+		<?DOC A column in a tabular widget?>
 		<element-def name="column" inherits="column-set,styled">
 			<element-model>
+				<?DOC The current cell value, e.g. the one being rendered?>
 				<value name-attribute="column-value-name" priority="2" />
 			</element-model>
 			<?DOC The name of the column, to be displayed in the column header?>
@@ -267,8 +355,10 @@
 			<?DOC Configures the ability to update or replace the value of each row by providing a new value for the column?>
 			<child-def name="edit" type="column-edit" min="0" />
 		</element-def>
+		<?DOC A structure that configures a &lt;column>'s ability to edit its cell value and the model data behind it?>
 		<element-def name="column-edit" inherits="with-element-model">
 			<element-model>
+				<?DOC The value that the user has entered for the column?>
 				<value name-attribute="column-edit-value-name" />
 			</element-model>
 			<?DOC The type of column editing to use to update the data set with column edit operations?>
@@ -322,6 +412,8 @@
 			<?DOC The action to perform when the user selects the action?>
 			<value type="expression" specify="required" />
 		</element-def>
+		<?DOC An action that may be applied to a single value at a time in a collection editor.<br>
+		The action may potentially be applied to multiple values in the collection in a single user action, but each applicable element is acted upon independently.?>
 		<element-def name="value-action" extends="abstract-value-action" inherits="with-element-model">
 			<element-model>
 				<value name-attribute="value-name"/>
@@ -331,6 +423,7 @@
 			<?DOC Whether an action can be invoked by the user for multiple values at once.  The action would then be invoked separately for each value.?>
 			<attribute name="allow-for-multiple" type="boolean" default="false" />
 		</element-def>
+		<?DOC An action that may be applied to multiple values in a collection editor at once.?>
 		<element-def name="multi-value-action" extends="abstract-value-action" inherits="with-element-model">
 			<element-model>
 				<list name-attribute="values-name"/>
@@ -347,37 +440,50 @@
 			<?DOC An action that may be performed on rows, groups of rows, or the data set as a whole?>
 			<child-def name="action" type="abstract-value-action" min="0" max="inf" />
 		</element-def>
+		<?DOC A hierarchical display of values?>
 		<element-def name="tree" extends="multi-value-widget">
 			<element-model>
+				<?DOC The path to the current value (e.g. the one that is being rendered)?>
 				<value name-attribute="path-name" priority="1" />
+				<?DOC Whether the current value (e.g. the one being rendered) is a leaf node with no possibility of children?>
 				<value name="leaf" type="boolean" priority="20" />
 			</element-model>
+			<?DOC The root of the hierarchy?>
 			<attribute name="root" type="expression" specify="required" />
+			<?DOC The children of the current value?>
 			<attribute name="children" type="expression" specify="required" />
+			<?DOC Whether the current value is a leaf node with no possibility of children?>
 			<attribute name="leaf" type="expression" specify="optional" />
+			<?DOC The name of the model value containing the current value's path?>
 			<attribute name="path-name" type="identifier" default="path" />
+			<?DOC The column to render each value in the tree?>
 			<child-def name="tree-column" type="column" min="0" max="1" />
+			<?DOC Actions that may be performed against selected values in the tree?>
 			<child-def name="action" type="abstract-value-action" min="0" max="inf" />
 		</element-def>
 
 		<!-- Containers -->
+		<?DOC A simple container with a layout for arranging its contents?>
 		<element-def name="box" extends="container">
 			<?DOC The opacity of the box, between 0 (completely transparent) and 1 (completely opaque)?>
 			<attribute name="opacity" type="expression" specify="optional" />
 			<?DOC The layout that the box will use to arrange its contents?>
 			<attribute name="layout" type="layout" specify="required" />
 		</element-def>
+		<?DOC A panel for vertically listing various related fields, each with an optional field description for the user?>
 		<element-def name="field-panel" extends="container">
 			<child-mod child="content" inherits="field" />
 		</element-def>
 		<element-def name="singleton-container" extends="container" abstract="true">
 			<child-mod child="content" min="1" max="1" />
 		</element-def>
+		<?DOC A scroll pane that may display scroll bars if its content is bigger than the scroll pane is?>
 		<element-def name="scroll" extends="singleton-container">
 			<child-def name="row-header" type="widget" min="0" max="1" />
 			<child-def name="column-header" type="widget" min="0" max="1" />
 		</element-def>
-		
+
+		<?DOC A set of tabs that user can choose between, each of which displays a different widget?>
 		<element-def name="tabs" extends="container">
 			<element-model>
 				<value name="tabValue" priority="1" />
@@ -391,6 +497,7 @@
 			<attribute name="values" type="expression" />
 			<child-mod child="content" inherits="tab" min="1" max="1" />
 		</element-def>
+		<?DOC A split pane that displays two widgets adjacent to each other, with an adjustable bar in between?>
 		<element-def name="split" extends="container">
 			<attribute name="orientation" type="orientation" specify="required" />
 			<attribute name="split-position" type="expression" specify="optional" />

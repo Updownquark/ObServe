@@ -117,7 +117,7 @@ public class QuickTypeStyle {
 							e.getErrorLength());
 					}
 					declaredAttributes.put(name, new QuickStyleAttribute<>(styled, name, type, //
-						styleAttr.getAttribute(trickleAttr, boolean.class)));
+						styleAttr.getAttribute(trickleAttr, boolean.class), styleAttr.getDescription()));
 				}
 			}
 			attributes.putAll(declaredAttributes);

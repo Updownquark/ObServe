@@ -1,5 +1,7 @@
 package org.observe.quick.style;
 
+import org.qommons.SelfDescribed;
+
 import com.google.common.reflect.TypeToken;
 
 /**
@@ -9,11 +11,12 @@ import com.google.common.reflect.TypeToken;
  *
  * @param <T> The type of the attribute's values
  */
-public class QuickStyleAttribute<T> {
+public class QuickStyleAttribute<T> implements SelfDescribed {
 	private final QuickTypeStyle theDeclarer;
 	private final String theName;
 	private final TypeToken<T> theType;
 	private final boolean isTrickleDown;
+	private final String theDescription;
 
 	/**
 	 * @param declarer The type that declared this style attribute
@@ -22,11 +25,12 @@ public class QuickStyleAttribute<T> {
 	 * @param trickleDown Whether, if not {@link QuickStyleValue} {@link StyleApplicationDef#applies(org.qommons.config.QonfigElement)
 	 *        applies} to an element, its value will be that of its most recent ancestor element that for which this attribute also applies
 	 */
-	public QuickStyleAttribute(QuickTypeStyle declarer, String name, TypeToken<T> type, boolean trickleDown) {
+	public QuickStyleAttribute(QuickTypeStyle declarer, String name, TypeToken<T> type, boolean trickleDown, String description) {
 		theDeclarer=declarer;
 		theName=name;
 		theType=type;
 		isTrickleDown = trickleDown;
+		theDescription = description;
 	}
 
 	/** @return The type that declared this style attribute */
@@ -50,6 +54,11 @@ public class QuickStyleAttribute<T> {
 	 */
 	public boolean isTrickleDown() {
 		return isTrickleDown;
+	}
+
+	@Override
+	public String getDescription() {
+		return theDescription;
 	}
 
 	@Override

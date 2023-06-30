@@ -491,7 +491,7 @@ public class Qwysiwyg {
 		String typeDescrip = def.getElement().getType().getDescription();
 		if (roleDescrip != null) {
 			if (typeDescrip != null)
-				elComponent.typeTooltip(roleDescrip + "<br><br>" + typeDescrip);
+				elComponent.typeTooltip(typeDescrip + "<br><br>" + roleDescrip);
 			else
 				elComponent.typeTooltip(roleDescrip);
 		} else if (typeDescrip != null)
@@ -523,7 +523,7 @@ public class Qwysiwyg {
 			if (attrDescrip != null) {
 				if (attrValueDescrip != null)
 					attrComp
-						.typeTooltip(attrValueDescrip + "<br><br>" + attrDescrip + "<br><br>" + renderValueType(type, 1, attr.getKey()));
+					.typeTooltip(attrValueDescrip + "<br><br>" + attrDescrip + "<br><br>" + renderValueType(type, 1, attr.getKey()));
 				else
 					attrComp.typeTooltip(attrDescrip + "<br><br>" + renderValueType(type, 1, attr.getKey()));
 			} else if (attrValueDescrip != null)
@@ -821,6 +821,12 @@ public class Qwysiwyg {
 		} else if (descriptor instanceof ModelComponentNode) {
 			ModelComponentNode<?, ?> node = (ModelComponentNode<?, ?>) descriptor;
 			Object id = node.getValueIdentity() != null ? node.getValueIdentity() : node.getIdentity();
+			if (id instanceof DynamicModelValue.Identity) {
+				DynamicModelValue.Identity dmv = (DynamicModelValue.Identity) id;
+				if (dmv.getDeclaration().getDescription() != null)
+					return dmv.getDeclaration().getDescription();
+				return "Element value " + dmv.toString();
+			}
 			StringBuilder str = new StringBuilder();
 			Object thing = node.getThing();
 			if (thing instanceof ObservableModelSet)
@@ -859,6 +865,8 @@ public class Qwysiwyg {
 			return str.toString();
 		} else if (descriptor instanceof DynamicModelValue) {
 			DynamicModelValue<?, ?> dmv = (DynamicModelValue<?, ?>) descriptor;
+			if (dmv.getDeclaration().getDeclaration().getDescription() != null)
+				return dmv.getDeclaration().getDeclaration().getDescription();
 			return "Element value " + dmv.getDeclaration().toString();
 		} else if (descriptor instanceof SelfDescribed)
 			return ((SelfDescribed) descriptor).getDescription();
