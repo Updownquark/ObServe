@@ -10,15 +10,18 @@ import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
 public class QuickInlineLayout extends QuickLayout.Abstract {
-	public static final ExAddOn.AddOnAttributeGetter<QuickBox, QuickInlineLayout, Interpreted, Def> VERTICAL = ExAddOn.AddOnAttributeGetter
+	private static final ExAddOn.AddOnAttributeGetter<QuickBox, QuickInlineLayout, Interpreted, Def> VERTICAL = ExAddOn.AddOnAttributeGetter
 		.<QuickBox, QuickInlineLayout, Interpreted, Def> of(Def.class, Def::isVertical, Interpreted.class,
 			i -> i.getDefinition().isVertical(), QuickInlineLayout.class, QuickInlineLayout::isVertical);
-	public static final ExAddOn.AddOnAttributeGetter<QuickBox, QuickInlineLayout, Interpreted, Def> MAIN_ALIGN = ExAddOn.AddOnAttributeGetter
+	private static final ExAddOn.AddOnAttributeGetter<QuickBox, QuickInlineLayout, Interpreted, Def> MAIN_ALIGN = ExAddOn.AddOnAttributeGetter
 		.<QuickBox, QuickInlineLayout, Interpreted, Def> of(Def.class, Def::getMainAlign, Interpreted.class,
 			i -> i.getDefinition().getMainAlign(), QuickInlineLayout.class, QuickInlineLayout::getMainAlign);
-	public static final ExAddOn.AddOnAttributeGetter<QuickBox, QuickInlineLayout, Interpreted, Def> CROSS_ALIGN = ExAddOn.AddOnAttributeGetter
+	private static final ExAddOn.AddOnAttributeGetter<QuickBox, QuickInlineLayout, Interpreted, Def> CROSS_ALIGN = ExAddOn.AddOnAttributeGetter
 		.<QuickBox, QuickInlineLayout, Interpreted, Def> of(Def.class, Def::getCrossAlign, Interpreted.class,
 			i -> i.getDefinition().getCrossAlign(), QuickInlineLayout.class, QuickInlineLayout::getCrossAlign);
+	private static final ExAddOn.AddOnAttributeGetter<QuickBox, QuickInlineLayout, Interpreted, Def> PADDING = ExAddOn.AddOnAttributeGetter
+		.<QuickBox, QuickInlineLayout, Interpreted, Def> of(Def.class, Def::getPadding, Interpreted.class,
+			i -> i.getDefinition().getPadding(), QuickInlineLayout.class, QuickInlineLayout::getPadding);
 
 	public static class Def extends QuickLayout.Def<QuickInlineLayout> {
 		private boolean isVertical;
@@ -51,6 +54,7 @@ public class QuickInlineLayout extends QuickLayout.Abstract {
 			element.forAttribute(session.getAttributeDef(null, null, "orientation"), VERTICAL);
 			element.forAttribute(session.getAttributeDef(null, null, "main-align"), MAIN_ALIGN);
 			element.forAttribute(session.getAttributeDef(null, null, "cross-align"), CROSS_ALIGN);
+			element.forAttribute(session.getAttributeDef(null, null, "padding"), PADDING);
 			super.update(session, element);
 			isVertical = "vertical".equals(session.getAttributeText("orientation"));
 			theMainAlign = jblAlign("main-align", session.getAttributeText("main-align"), session);

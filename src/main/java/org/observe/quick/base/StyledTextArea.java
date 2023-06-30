@@ -1,6 +1,7 @@
 package org.observe.quick.base;
 
 import java.awt.Color;
+import java.util.Collections;
 import java.util.Map;
 
 import org.observe.ObservableValue;
@@ -33,6 +34,26 @@ import com.google.common.reflect.TypeToken;
 public class StyledTextArea<T> extends QuickTextWidget.Abstract<T> {
 	public static final String STYLED_TEXT_AREA = "styled-text-area";
 	public static final String TEXT_STYLE = "text-style";
+
+	private static final ExElement.AttributeValueGetter.Expression<StyledTextArea<?>, Interpreted<?>, Def<?>, ObservableCollection<?>, ObservableCollection<?>> CHILDREN = ExElement.AttributeValueGetter
+		.ofX(Def::getChildren, Interpreted::getChildren, null);
+	private static final ExElement.AttributeValueGetter.Expression<StyledTextArea<?>, Interpreted<?>, Def<?>, SettableValue<?>, SettableValue<String>> POST_TEXT = ExElement.AttributeValueGetter
+		.ofX(Def::getPostText, Interpreted::getPostText, null);
+	private static final ExElement.AttributeValueGetter.Expression<StyledTextArea<?>, Interpreted<?>, Def<?>, SettableValue<?>, SettableValue<Integer>> ROWS = ExElement.AttributeValueGetter
+		.ofX(Def::getRows, Interpreted::getRows, StyledTextArea::getRows);
+	private static final ExElement.AttributeValueGetter.Expression<StyledTextArea<?>, Interpreted<?>, Def<?>, SettableValue<?>, SettableValue<?>> SELECTION_START_VALUE = ExElement.AttributeValueGetter
+		.ofX(Def::getSelectionStartValue, Interpreted::getSelectionStartValue, StyledTextArea::getSelectionStartValue);
+	private static final ExElement.AttributeValueGetter.Expression<StyledTextArea<?>, Interpreted<?>, Def<?>, SettableValue<?>, SettableValue<Integer>> SELECTION_START_OFFSET = ExElement.AttributeValueGetter
+		.ofX(Def::getSelectionStartOffset, Interpreted::getSelectionStartOffset, StyledTextArea::getSelectionStartOffset);
+	private static final ExElement.AttributeValueGetter.Expression<StyledTextArea<?>, Interpreted<?>, Def<?>, SettableValue<?>, SettableValue<?>> SELECTION_END_VALUE = ExElement.AttributeValueGetter
+		.ofX(Def::getSelectionEndValue, Interpreted::getSelectionEndValue, StyledTextArea::getSelectionEndValue);
+	private static final ExElement.AttributeValueGetter.Expression<StyledTextArea<?>, Interpreted<?>, Def<?>, SettableValue<?>, SettableValue<Integer>> SELECTION_END_OFFSET = ExElement.AttributeValueGetter
+		.ofX(Def::getSelectionEndOffset, Interpreted::getSelectionEndOffset, StyledTextArea::getSelectionEndOffset);
+	// Ridiculous that I have to parameterize all these methods. Not sure what I'm doing wrong with the generics.
+	private static final ExElement.ChildElementGetter<StyledTextArea<?>, Interpreted<?>, Def<?>> TEXT_STYLE_GETTER = ExElement.ChildElementGetter
+		.<StyledTextArea<?>, Interpreted<?>, Def<?>> of(def -> Collections.<ExElement.Def<?>> singletonList(def.getTextStyle()),
+			interp -> Collections.<ExElement.Interpreted<?>> singletonList(interp.getTextStyle()),
+			widget -> Collections.singletonList(widget.getTextStyle()));
 
 	public static class Def<T> extends QuickTextWidget.Def.Abstract<T, StyledTextArea<? extends T>> {
 		private CompiledExpression theChildren;
@@ -87,8 +108,15 @@ public class StyledTextArea<T> extends QuickTextWidget.Abstract<T> {
 
 		@Override
 		public void update(ExpressoQIS session) throws QonfigInterpretationException {
-			ExElement.checkElement(session.getFocusType(), QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION,
-				STYLED_TEXT_AREA);
+			ExElement.checkElement(session.getFocusType(), QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, STYLED_TEXT_AREA);
+			forAttribute(session.getAttributeDef(null, null, "children"), CHILDREN);
+			forAttribute(session.getAttributeDef(null, null, "post-text"), POST_TEXT);
+			forAttribute(session.getAttributeDef(null, null, "rows"), ROWS);
+			forAttribute(session.getAttributeDef(null, null, "selection-start-value"), SELECTION_START_VALUE);
+			forAttribute(session.getAttributeDef(null, null, "selection-start-offset"), SELECTION_START_OFFSET);
+			forAttribute(session.getAttributeDef(null, null, "selection-end-value"), SELECTION_END_VALUE);
+			forAttribute(session.getAttributeDef(null, null, "selection-end-offset"), SELECTION_END_OFFSET);
+			forChild(session.getRole("text-style"), TEXT_STYLE_GETTER);
 			super.update(session.asElement(session.getFocusType().getSuperElement()));
 
 			theChildren = session.getAttributeExpression("children");
@@ -330,13 +358,13 @@ public class StyledTextArea<T> extends QuickTextWidget.Abstract<T> {
 		super.updateModel(interpreted, myModels);
 		theRows = myInterpreted.getRows() == null ? null : myInterpreted.getRows().get(myModels);
 		theSelectionStartValue
-			.set(myInterpreted.getSelectionStartValue() == null ? null : myInterpreted.getSelectionStartValue().get(myModels), null);
+		.set(myInterpreted.getSelectionStartValue() == null ? null : myInterpreted.getSelectionStartValue().get(myModels), null);
 		theSelectionStartOffset
-			.set(myInterpreted.getSelectionStartOffset() == null ? null : myInterpreted.getSelectionStartOffset().get(myModels), null);
+		.set(myInterpreted.getSelectionStartOffset() == null ? null : myInterpreted.getSelectionStartOffset().get(myModels), null);
 		theSelectionEndValue.set(myInterpreted.getSelectionEndValue() == null ? null : myInterpreted.getSelectionEndValue().get(myModels),
 			null);
 		theSelectionEndOffset
-			.set(myInterpreted.getSelectionEndOffset() == null ? null : myInterpreted.getSelectionEndOffset().get(myModels), null);
+		.set(myInterpreted.getSelectionEndOffset() == null ? null : myInterpreted.getSelectionEndOffset().get(myModels), null);
 		if (theTextStyle == null || theTextStyle.getIdentity() != myInterpreted.getTextStyle().getDefinition().getIdentity())
 			theTextStyle = myInterpreted.getTextStyle().create(this);
 		theTextStyle.update(myInterpreted.getTextStyle(), myModels);

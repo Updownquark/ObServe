@@ -59,8 +59,20 @@ public abstract class Positionable extends ExAddOn.Abstract<ExElement> {
 		}
 
 		public static class Vertical extends Def<Positionable.Vertical> {
+			private static final ExAddOn.AddOnAttributeGetter<ExElement, Positionable.Vertical, Interpreted.Vertical, Def.Vertical> TOP = ExAddOn.AddOnAttributeGetter
+				.of(Vertical.class, Vertical::getLeading, Interpreted.Vertical.class, Interpreted.Vertical::getLeading,
+					Positionable.Vertical.class, Positionable.Vertical::getLeading);
+			private static final ExAddOn.AddOnAttributeGetter<ExElement, Positionable.Vertical, Interpreted.Vertical, Def.Vertical> V_CENTER = ExAddOn.AddOnAttributeGetter
+				.of(Vertical.class, Vertical::getCenter, Interpreted.Vertical.class, Interpreted.Vertical::getCenter,
+					Positionable.Vertical.class, Positionable.Vertical::getCenter);
+			private static final ExAddOn.AddOnAttributeGetter<ExElement, Positionable.Vertical, Interpreted.Vertical, Def.Vertical> BOTTOM = ExAddOn.AddOnAttributeGetter
+				.of(Vertical.class, Vertical::getTrailing, Interpreted.Vertical.class, Interpreted.Vertical::getTrailing,
+					Positionable.Vertical.class, Positionable.Vertical::getTrailing);
 			public Vertical(QonfigAddOn type, ExElement.Def<?> element) {
 				super(true, type, element);
+				element.forAttribute(type.getAttribute("top"), TOP);
+				element.forAttribute(type.getAttribute("v-center"), V_CENTER);
+				element.forAttribute(type.getAttribute("bottom"), BOTTOM);
 			}
 
 			@Override
@@ -70,8 +82,21 @@ public abstract class Positionable extends ExAddOn.Abstract<ExElement> {
 		}
 
 		public static class Horizontal extends Def<Positionable.Horizontal> {
+			private static final ExAddOn.AddOnAttributeGetter<ExElement, Positionable.Horizontal, Interpreted.Horizontal, Def.Horizontal> LEFT = ExAddOn.AddOnAttributeGetter
+				.of(Horizontal.class, Horizontal::getLeading, Interpreted.Horizontal.class, Interpreted.Horizontal::getLeading,
+					Positionable.Horizontal.class, Positionable.Horizontal::getLeading);
+			private static final ExAddOn.AddOnAttributeGetter<ExElement, Positionable.Horizontal, Interpreted.Horizontal, Def.Horizontal> H_CENTER = ExAddOn.AddOnAttributeGetter
+				.of(Horizontal.class, Horizontal::getCenter, Interpreted.Horizontal.class, Interpreted.Horizontal::getCenter,
+					Positionable.Horizontal.class, Positionable.Horizontal::getCenter);
+			private static final ExAddOn.AddOnAttributeGetter<ExElement, Positionable.Horizontal, Interpreted.Horizontal, Def.Horizontal> RIGHT = ExAddOn.AddOnAttributeGetter
+				.of(Horizontal.class, Horizontal::getTrailing, Interpreted.Horizontal.class, Interpreted.Horizontal::getTrailing,
+					Positionable.Horizontal.class, Positionable.Horizontal::getTrailing);
+
 			public Horizontal(QonfigAddOn type, ExElement.Def<?> element) {
 				super(false, type, element);
+				element.forAttribute(type.getAttribute("left"), LEFT);
+				element.forAttribute(type.getAttribute("h-center"), H_CENTER);
+				element.forAttribute(type.getAttribute("right"), RIGHT);
 			}
 
 			@Override

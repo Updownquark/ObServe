@@ -1,5 +1,7 @@
 package org.observe.quick.base;
 
+import java.util.Collections;
+
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
@@ -15,6 +17,18 @@ import com.google.common.reflect.TypeToken;
 
 public class QuickScrollPane extends QuickContainer.Abstract<QuickWidget> {
 	public static final String SCROLL = "scroll";
+
+	private static final ExElement.ChildElementGetter<QuickScrollPane, Interpreted, Def> ROW_HEADER = ExElement.ChildElementGetter
+		.<QuickScrollPane, Interpreted, Def> of(
+			def -> def.getRowHeader() == null ? Collections.emptyList() : Collections.singletonList(def.getRowHeader()), //
+			interp -> interp.getRowHeader() == null ? Collections.emptyList() : Collections.singletonList(interp.getRowHeader()), //
+			scroll -> scroll.getRowHeader() == null ? Collections.emptyList() : Collections.singletonList(scroll.getRowHeader()));
+
+	private static final ExElement.ChildElementGetter<QuickScrollPane, Interpreted, Def> COLUMN_HEADER = ExElement.ChildElementGetter
+		.<QuickScrollPane, Interpreted, Def> of(
+			def -> def.getColumnHeader() == null ? Collections.emptyList() : Collections.singletonList(def.getColumnHeader()), //
+			interp -> interp.getColumnHeader() == null ? Collections.emptyList() : Collections.singletonList(interp.getColumnHeader()), //
+			scroll -> scroll.getColumnHeader() == null ? Collections.emptyList() : Collections.singletonList(scroll.getColumnHeader()));
 
 	public static class Def extends QuickContainer.Def.Abstract<QuickScrollPane, QuickWidget> {
 		private QuickWidget.Def<?> theRowHeader;
@@ -35,6 +49,8 @@ public class QuickScrollPane extends QuickContainer.Abstract<QuickWidget> {
 		@Override
 		public void update(ExpressoQIS session) throws QonfigInterpretationException {
 			ExElement.checkElement(session.getFocusType(), QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, SCROLL);
+			forChild(session.getRole("row-header"), ROW_HEADER);
+			forChild(session.getRole("column-header"), COLUMN_HEADER);
 			super.update(session.asElement(session.getFocusType().getSuperElement().getSuperElement())); // Skip singleton-container
 			theRowHeader = ExElement.useOrReplace(QuickWidget.Def.class, theRowHeader, session, "row-header");
 			theColumnHeader = ExElement.useOrReplace(QuickWidget.Def.class, theColumnHeader, session, "column-header");
