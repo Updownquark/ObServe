@@ -19,7 +19,7 @@ public class ExpressoTests extends AbstractExpressoTest<Expresso> {
 
 	/**
 	 * Tests the constant model type
-	 * 
+	 *
 	 * @throws ExpressoInterpretationException If an error occurs compiling the test
 	 * @throws ModelInstantiationException If an error occurs instantiating the test values
 	 */
@@ -59,6 +59,17 @@ public class ExpressoTests extends AbstractExpressoTest<Expresso> {
 	@Test
 	public void testList() throws ExpressoInterpretationException, ModelInstantiationException {
 		getTesting().executeTest("list");
+	}
+
+	/**
+	 * Tests binary operators
+	 *
+	 * @throws ExpressoInterpretationException If an error occurs compiling the test
+	 * @throws ModelInstantiationException If an error occurs instantiating the test values
+	 */
+	@Test
+	public void testBinaryOperators() throws ExpressoInterpretationException, ModelInstantiationException {
+		getTesting().executeTest("binaryOperators");
 	}
 
 	/**

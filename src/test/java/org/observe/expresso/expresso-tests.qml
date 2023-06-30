@@ -47,6 +47,7 @@
 			Binary operators
 				+, -, *, /, %
 				==, !=, <, <=, >, >=
+				&&, ||
 			Cast
 			Class instance (e.g. 'int.class')
 			Conditional (ternary)
@@ -190,6 +191,49 @@
 		<action name="addValue">models.list.add(17)</action>
 		<action name="checkSize2">assertEquals(ext.actionName, 6, size)</action>
 		<!-- TODO Need more -->
+	</test>
+	<test name="binaryOperators">
+		<model>
+			<value name="a" init="false" />
+			<value name="b" init="false" />
+	
+			<value name="or">a || b</value>
+			<value name="and">a &amp;&amp; b</value>
+
+			<watch name="watchOr">or</watch>
+			<watch name="watchAnd">and</watch>
+		</model>
+
+		<action name="checkOr1">assertFalse(or)</action>
+		<action name="checkWatchOr1">assertFalse(watchOr)</action>
+		<action name="checkAnd1">assertFalse(and)</action>
+		<action name="checkWatchAnd1">assertFalse(watchAnd)</action>
+		<action name="setA1">a=true</action>
+		<action name="checkOr2">assertTrue(or)</action>
+		<action name="checkWatchOr2">assertTrue(watchOr)</action>
+		<action name="checkAnd2">assertFalse(and)</action>
+		<action name="checkWatchAnd2">assertFalse(watchAnd)</action>
+		<action name="setB1">b=true</action>
+		<action name="checkOr3">assertTrue(or)</action>
+		<action name="checkWatchOr3">assertTrue(watchOr)</action>
+		<action name="checkAnd3">assertTrue(and)</action>
+		<action name="checkWatchAnd3">assertTrue(watchAnd)</action>
+		<action name="setA2">a=false</action>
+		<action name="checkOr4">assertTrue(or)</action>
+		<action name="checkWatchOr4">assertTrue(watchOr)</action>
+		<action name="checkAnd4">assertFalse(and)</action>
+		<action name="checkWatchAnd4">assertFalse(watchAnd)</action>
+		<action name="setB2">b=false</action>
+		<action name="checkOr3">assertFalse(or)</action>
+		<action name="checkWatchOr3">assertFalse(watchOr)</action>
+		<action name="checkAnd3">assertFalse(and)</action>
+		<action name="checkWatchAnd3">assertFalse(watchAnd)</action>
+
+		<!-- TODO
+			+, -, *, /, %
+			==, !=, <, <=, >, >=
+			&&, ||
+		 -->
 	</test>
 	<test name="mapTo">
 		<model>

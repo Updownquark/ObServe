@@ -463,7 +463,7 @@ public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>,
 
 	/**
 	 * @param until The observable to complete the value
-	 * @return An observable value identical to this one, but that will {@link Observer#onCompleted(Object) complete} when
+	 * @return An observable value identical to this one, but that will {@link Observer#onCompleted(Causable) complete} when
 	 *         <code>until</code> fires
 	 */
 	default ObservableValue<T> takeUntil(Observable<?> until) {
@@ -1763,6 +1763,7 @@ public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>,
 				Subscription outerSub = theValue.changes()
 					.subscribe(new Observer<ObservableValueEvent<? extends ObservableValue<? extends T>>>() {
 						private final ReentrantLock theLock = new ReentrantLock();
+						private ObservableValue<? extends T> theInnerObservable;
 
 						@Override
 						public <V extends ObservableValueEvent<? extends ObservableValue<? extends T>>> void onNext(V event) {
@@ -1771,44 +1772,45 @@ public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>,
 							try {
 								final ObservableValue<? extends T> innerObs = event.getNewValue();
 								// Shouldn't have 2 inner observables potentially generating events at the same time
-								if (!Objects.equals(innerObs, event.getOldValue()))
+								boolean differentObservables = !Objects.equals(innerObs, theInnerObservable);
+								if (differentObservables) {
+									theInnerObservable = innerObs;
 									Subscription.unsubscribe(innerSub.getAndSet(null));
-								if (innerObs != null && !innerObs.equals(event.getOldValue())) {
+								}
+								if (innerObs != null && differentObservables) {
 									boolean[] firedInit2 = new boolean[1];
-									Subscription.unsubscribe(
-										innerSub.getAndSet(innerObs.changes().subscribe(new Observer<ObservableValueEvent<? extends T>>() {
-											@Override
-											public <V2 extends ObservableValueEvent<? extends T>> void onNext(V2 event2) {
-												firedInit2[0] = true;
-												theLock.lock();
-												try {
-													T innerOld;
-													if (event2.isInitial())
-														innerOld = (T) old[0];
-													else
-														old[0] = innerOld = event2.getOldValue();
-													ObservableValueEvent<T> toFire;
-													if (event.isInitial() && event2.isInitial())
-														toFire = withInitialEvent
-														? retObs.createInitialEvent(event2.getNewValue(), event2.getCauses()) : null;
-													else
-														toFire = retObs.createChangeEvent(innerOld, event2.getNewValue(),
-															event2.getCauses());
-													if (toFire != null) {
-														try (Transaction t = toFire.use()) {
-															observer.onNext(toFire);
-														}
+									innerSub.getAndSet(innerObs.changes().subscribe(new Observer<ObservableValueEvent<? extends T>>() {
+										@Override
+										public <V2 extends ObservableValueEvent<? extends T>> void onNext(V2 event2) {
+											firedInit2[0] = true;
+											theLock.lock();
+											try {
+												T innerOld;
+												if (event2.isInitial())
+													innerOld = (T) old[0];
+												else
+													old[0] = innerOld = event2.getOldValue();
+												ObservableValueEvent<T> toFire;
+												if (event.isInitial() && event2.isInitial())
+													toFire = withInitialEvent
+													? retObs.createInitialEvent(event2.getNewValue(), event2.getCauses()) : null;
+												else
+													toFire = retObs.createChangeEvent(innerOld, event2.getNewValue(), event2.getCauses());
+												if (toFire != null) {
+													try (Transaction t = toFire.use()) {
+														observer.onNext(toFire);
 													}
-													old[0] = event2.getNewValue();
-												} finally {
-													theLock.unlock();
 												}
+												old[0] = event2.getNewValue();
+											} finally {
+												theLock.unlock();
 											}
+										}
 
-											@Override
-											public void onCompleted(Causable cause) {
-											}
-										})));
+										@Override
+										public void onCompleted(Causable cause) {
+										}
+									}));
 									if (!firedInit2[0])
 										throw new IllegalStateException(innerObs + " did not fire an initial value");
 								} else {
@@ -2011,6 +2013,11 @@ public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>,
 					public <V extends ObservableValueEvent<? extends T>> void onNext(V event) {
 						lock.lock();
 						try {
+							if (valueSubs[index] == null && !event.isInitial()) {
+								// This may happen if two values fire events on different threads
+								// We don't care about this, and we've unsubscribed to the value
+								return;
+							}
 							boolean found;
 							try {
 								found = theTest.test(event.getNewValue());
@@ -2085,7 +2092,7 @@ public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>,
 
 					private boolean allCompleted() {
 						for (boolean f : finished)
-							if (f)
+							if (!f)
 								return false;
 						return true;
 					}

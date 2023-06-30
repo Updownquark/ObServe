@@ -234,6 +234,39 @@ public class BinaryOperatorSet {
 		}
 	}
 
+	/** The boolean OR operation */
+	public static FirstArgDecisiveBinaryOp<Boolean, Boolean, Boolean> OR = FirstArgDecisiveBinaryOp.of("||", TypeTokens.get().BOOLEAN, //
+		b -> unwrapBool(b) ? true : null, (b1, b2) -> unwrapBool(b1) || unwrapBool(b2), //
+		(s, b2, r) -> {
+			if (unwrapBool(r)) { // Trying to make the expression true
+				if (unwrapBool(b2))
+					return s; // Leave it alone--the expression will be true regardless
+				else
+					return true;
+			} else { // Trying to make the expression false
+				if (unwrapBool(b2))
+					return null; // Can't make it false--should be prevented by the enabled fn
+				else
+					return false;
+			}
+		}, (s, b2, r) -> (!unwrapBool(r) && unwrapBool(b2)) ? "Or expression cannot be made false" : null, "Boolean OR operator");
+	/** The boolean AND operation */
+	public static FirstArgDecisiveBinaryOp<Boolean, Boolean, Boolean> AND = FirstArgDecisiveBinaryOp.of("&&", TypeTokens.get().BOOLEAN, //
+		b -> !unwrapBool(b) ? false : null, (b1, b2) -> unwrapBool(b1) && unwrapBool(b2), //
+		(s, b2, r) -> {
+			if (unwrapBool(r)) { // Trying to make the expression true
+				if (unwrapBool(b2))
+					return true;
+				else
+					return null; // Can't make it true--should be prevented by the enabled fn
+			} else { // Trying to make the expression false
+				if (unwrapBool(b2))
+					return false;
+				else
+					return s; // Leave it alone--the expression will be false regardless
+			}
+		}, (s, b2, r) -> (!unwrapBool(b2) && unwrapBool(r)) ? "And expression cannot be made true" : null, "Boolean AND operator");
+
 	/**
 	 * Represents a cast operation whereby a value of one type is transformed to an equivalent value of another type
 	 *
@@ -881,40 +914,10 @@ public class BinaryOperatorSet {
 			"Negative object identity comparison");
 
 		// Boolean ops
-		FirstArgDecisiveBinaryOp<Boolean, Boolean, Boolean> or = FirstArgDecisiveBinaryOp.of("||", TypeTokens.get().BOOLEAN, //
-			b -> unwrapBool(b) ? true : null, (b1, b2) -> unwrapBool(b1) || unwrapBool(b2), //
-				(s, b2, r) -> {
-					if (unwrapBool(r)) { // Trying to make the expression true
-						if (unwrapBool(b2))
-							return s; // Leave it alone--the expression will be true regardless
-						else
-							return true;
-					} else { // Trying to make the expression false
-						if (unwrapBool(b2))
-							return null; // Can't make it false--should be prevented by the enabled fn
-						else
-							return false;
-					}
-				}, (s, b2, r) -> (!unwrapBool(r) && unwrapBool(b2)) ? "Or expression cannot be made false" : null, "Boolean OR operator");
-		operators.with("||", Boolean.class, Boolean.class, or);
-		operators.with("|", Boolean.class, Boolean.class, or);
-		FirstArgDecisiveBinaryOp<Boolean, Boolean, Boolean> and = FirstArgDecisiveBinaryOp.of("&&", TypeTokens.get().BOOLEAN, //
-			b -> !unwrapBool(b) ? false : null, (b1, b2) -> unwrapBool(b1) && unwrapBool(b2), //
-				(s, b2, r) -> {
-					if (unwrapBool(r)) { // Trying to make the expression true
-						if (unwrapBool(b2))
-							return true;
-						else
-							return null; // Can't make it true--should be prevented by the enabled fn
-					} else { // Trying to make the expression false
-						if (unwrapBool(b2))
-							return false;
-						else
-							return s; // Leave it alone--the expression will be false regardless
-					}
-				}, (s, b2, r) -> (!unwrapBool(b2) && unwrapBool(r)) ? "And expression cannot be made true" : null, "Boolean AND operator");
-		operators.with("&&", Boolean.class, Boolean.class, and);
-		operators.with("&", Boolean.class, Boolean.class, and);
+		operators.with("||", Boolean.class, Boolean.class, OR);
+		operators.with("|", Boolean.class, Boolean.class, OR);
+		operators.with("&&", Boolean.class, Boolean.class, AND);
+		operators.with("&", Boolean.class, Boolean.class, AND);
 		operators.with("^", Boolean.class, Boolean.class, (b1, b2) -> unwrapBool(b1) ^ unwrapBool(b2), //
 			(s, b2, r) -> {
 				if (unwrapBool(r)) { // Trying to make the expression true

@@ -292,6 +292,16 @@ public class BinaryOperator implements ObservableExpression {
 				}
 
 				private SettableValue<Object> createOpValue(SettableValue<Object> leftV, SettableValue<Object> rightV) {
+					if (((BinaryOp<?, ?, ?>) op) == BinaryOperatorSet.OR)
+						return (SettableValue<Object>) (SettableValue<?>) SettableValue.firstValue(TypeTokens.get().BOOLEAN,
+							LambdaUtils.printablePred(Boolean.TRUE::equals, "true", null),
+							LambdaUtils.constantSupplier(false, "false", null), (SettableValue<Boolean>) (SettableValue<?>) leftV,
+							(SettableValue<Boolean>) (SettableValue<?>) rightV);
+					else if (((BinaryOp<?, ?, ?>) op) == BinaryOperatorSet.AND)
+						return (SettableValue<Object>) (SettableValue<?>) SettableValue
+							.firstValue(TypeTokens.get().BOOLEAN, LambdaUtils.printablePred(b -> !Boolean.TRUE.equals(b), "false", null),
+								LambdaUtils.constantSupplier(true, "true", null), (SettableValue<Boolean>) (SettableValue<?>) leftV,
+								(SettableValue<Boolean>) (SettableValue<?>) rightV);
 					SettableValue<Object> transformedV = leftV.transformReversible(resultType, tx -> tx.combineWith(rightV)//
 						.combine(LambdaUtils.printableBiFn((lft, rgt) -> {
 							try {
