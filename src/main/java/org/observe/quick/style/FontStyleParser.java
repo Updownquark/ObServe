@@ -12,7 +12,7 @@ import org.qommons.QommonsUtils;
 import com.google.common.reflect.TypeToken;
 
 /** Enables easier parsing of several font-related constants */
-public class FontValueParser implements NonStructuredParser {
+public class FontStyleParser implements NonStructuredParser {
 	// Font weights
 	/** The weight of normal text */
 	public static final double normalWeight = 1;
