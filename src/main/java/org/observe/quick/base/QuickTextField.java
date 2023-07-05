@@ -7,8 +7,10 @@ import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.qonfig.CompiledExpression;
+import org.observe.expresso.qonfig.ElementTypeTraceability;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExpressoQIS;
+import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigInterpretationException;
@@ -17,11 +19,10 @@ import com.google.common.reflect.TypeToken;
 
 public class QuickTextField<T> extends QuickEditableTextWidget.Abstract<T> {
 	public static final String TEXT_FIELD = "text-field";
-
-	private static final ExElement.AttributeValueGetter.Expression<QuickTextField<?>, Interpreted<?>, Def<?>, SettableValue<?>, SettableValue<String>> EMPTY_TEXT = ExElement.AttributeValueGetter
-		.ofX(Def::getEmptyText, Interpreted::getEmptyText, QuickTextField::getEmptyText);
-	private static final ExElement.AttributeValueGetter<QuickTextField<?>, Interpreted<?>, Def<?>> COLUMNS = ExElement.AttributeValueGetter
-		.of(Def::getColumns, i -> i.getDefinition().getColumns(), QuickTextField::getColumns);
+	private static final ElementTypeTraceability<QuickTextField<?>, Interpreted<?>, Def<?>> TRACEABILITY = ElementTypeTraceability
+		.<QuickTextField<?>, Interpreted<?>, Def<?>> build(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, TEXT_FIELD)//
+		.reflectMethods(Def.class, Interpreted.class, QuickTextField.class)//
+		.build();
 
 	public static class Def<T> extends QuickEditableTextWidget.Def.Abstract<T, QuickTextField<T>> {
 		private Integer theColumns;
@@ -36,19 +37,19 @@ public class QuickTextField<T> extends QuickEditableTextWidget.Abstract<T> {
 			return true;
 		}
 
+		@QonfigAttributeGetter("columns")
 		public Integer getColumns() {
 			return theColumns;
 		}
 
+		@QonfigAttributeGetter("empty-text")
 		public CompiledExpression getEmptyText() {
 			return theEmptyText;
 		}
 
 		@Override
 		public void update(ExpressoQIS session) throws QonfigInterpretationException {
-			ExElement.checkElement(session.getFocusType(), QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, TEXT_FIELD);
-			forAttribute(session.getAttributeDef(null, null, "empty-text"), EMPTY_TEXT);
-			forAttribute(session.getAttributeDef(null, null, "columns"), COLUMNS);
+			withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 			super.update(session.asElement(session.getFocusType().getSuperElement()));
 			theColumns = session.getAttribute("columns", Integer.class);
 			theEmptyText = session.getAttributeExpression("empty-text");

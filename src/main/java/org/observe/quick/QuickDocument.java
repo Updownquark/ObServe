@@ -1,7 +1,6 @@
 package org.observe.quick;
 
 import java.util.Collections;
-import java.util.List;
 
 import org.observe.Observable;
 import org.observe.SimpleObservable;
@@ -12,51 +11,26 @@ import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.qonfig.ClassViewElement;
+import org.observe.expresso.qonfig.ElementTypeTraceability;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExpressoQIS;
+import org.observe.expresso.qonfig.ExpressoSessionImplV0_1;
 import org.observe.expresso.qonfig.ObservableModelElement;
+import org.observe.expresso.qonfig.QonfigChildGetter;
 import org.observe.quick.style.QuickStyleSheet;
 import org.observe.quick.style.StyleQIS;
+import org.observe.quick.style.StyleSessionImplV0_1;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigInterpretationException;
 
 /** The root of a quick file, containing all information needed to power an application */
 public class QuickDocument extends ExElement.Abstract {
 	public static final String QUICK = "quick";
-
-	public static final ExElement.ChildElementGetter<QuickDocument, Interpreted, Def> DOC_HEAD = new ExElement.ChildElementGetter<QuickDocument, Interpreted, Def>() {
-		@Override
-		public List<? extends ExElement.Def<?>> getChildrenFromDef(Def def) {
-			return Collections.singletonList(def.getHead());
-		}
-
-		@Override
-		public List<? extends ExElement.Interpreted<?>> getChildrenFromInterpreted(Interpreted interp) {
-			return Collections.singletonList(interp.getHead());
-		}
-
-		@Override
-		public List<? extends ExElement> getChildrenFromElement(QuickDocument element) {
-			return Collections.emptyList();
-		}
-	};
-
-	public static final ExElement.ChildElementGetter<QuickDocument, Interpreted, Def> DOC_BODY = new ExElement.ChildElementGetter<QuickDocument, Interpreted, Def>() {
-		@Override
-		public List<? extends ExElement.Def<?>> getChildrenFromDef(Def def) {
-			return Collections.singletonList(def.getBody());
-		}
-
-		@Override
-		public List<? extends ExElement.Interpreted<?>> getChildrenFromInterpreted(Interpreted interp) {
-			return Collections.singletonList(interp.getBody());
-		}
-
-		@Override
-		public List<? extends ExElement> getChildrenFromElement(QuickDocument element) {
-			return Collections.singletonList(element.getBody());
-		}
-	};
+	private static final ElementTypeTraceability<QuickDocument, Interpreted, Def> TRACEABILITY = ElementTypeTraceability
+		.<QuickDocument, Interpreted, Def> build(QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, QUICK)//
+		.reflectMethods(Def.class, Interpreted.class, QuickDocument.class)//
+		.build();
 
 	/** The definition of a Quick document */
 	public static class Def extends ExElement.Def.Abstract<QuickDocument> {
@@ -72,20 +46,20 @@ public class QuickDocument extends ExElement.Abstract {
 		}
 
 		/** @return The head section definition of the document */
+		@QonfigChildGetter("head")
 		public QuickHeadSection.Def getHead() {
 			return theHead;
 		}
 
 		/** @return The body definition of the document */
+		@QonfigChildGetter("body")
 		public QuickWidget.Def<?> getBody() {
 			return theBody;
 		}
 
 		@Override
 		public void update(ExpressoQIS session) throws QonfigInterpretationException {
-			ExElement.checkElement(session.getFocusType(), QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, QUICK);
-			forChild(session.getRole(null, null, "head").getDeclared(), DOC_HEAD);
-			forChild(session.getRole(null, null, "body").getDeclared(), DOC_BODY);
+			withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 			super.update(session);
 			theHead = ExElement.useOrReplace(QuickHeadSection.Def.class, theHead, session, "head");
 			if (theHead != null) {
@@ -157,78 +131,28 @@ public class QuickDocument extends ExElement.Abstract {
 	/** Represents the head section of a Quick document, containing class-view, model, and style information */
 	public static class QuickHeadSection extends ExElement.Interpreted.Abstract<ExElement> {
 		public static final String HEAD = "head";
+		// Can't use reflection here because we're configuring 2 related Qonfig types for one java type
+		private static final ElementTypeTraceability<ExElement, QuickHeadSection, Def> EXPRESSO_TRACEABILITY = ElementTypeTraceability
+			.<ExElement, QuickHeadSection, Def> build(ExpressoSessionImplV0_1.TOOLKIT_NAME, ExpressoSessionImplV0_1.VERSION, "expresso")//
+			.withChild("imports",
+				d -> d.getClassViewElement() == null ? Collections.emptyList() : Collections.singletonList(d.getClassViewElement()), null,
+					null)//
+			.withChild("models",
+				d -> d.getModelElement() == null ? Collections.emptyList() : Collections.singletonList(d.getModelElement()), //
+					i -> i.getModelElement() == null ? Collections.emptyList() : Collections.singletonList(i.getModelElement()), //
+						null)//
+			.build();
 
-		// public static final ExElement.ChildElementGetter<ExElement, QuickHeadSection, QuickHeadSection.Def> IMPORTS = new
-		// ExElement.ChildElementGetter<ExElement, QuickHeadSection, QuickHeadSection.Def>() {
-		// @Override
-		// public String getDescription() {
-		// return "The imports of the document, allowing types and static fields and methods to be used by name without full qualification";
-		// }
-		//
-		// @Override
-		// public List<? extends ExElement.Def<?>> getChildrenFromDef(QuickHeadSection.Def def) {
-		// if(def.getClassView().getElement()!=null)
-		// return Collections.singletonList(def.getClassView());
-		// else
-		// return Collections.emptyList();
-		// }
-		//
-		// @Override
-		// public List<? extends ExElement.Interpreted<?>> getChildrenFromInterpreted(QuickHeadSection interp) {
-		// return Collections.emptyList();
-		// }
-		//
-		// @Override
-		// public List<? extends ExElement> getChildrenFromElement(ExElement element) {
-		// return Collections.emptyList();
-		// }
-		// };
-
-		public static final ExElement.ChildElementGetter<ExElement, QuickHeadSection, QuickHeadSection.Def> MODELS = new ExElement.ChildElementGetter<ExElement, QuickHeadSection, QuickHeadSection.Def>() {
-			@Override
-			public List<? extends ExElement.Def<?>> getChildrenFromDef(QuickHeadSection.Def def) {
-				if (def.getModelElement() != null)
-					return Collections.singletonList(def.getModelElement());
-				else
-					return Collections.emptyList();
-			}
-
-			@Override
-			public List<? extends ExElement.Interpreted<?>> getChildrenFromInterpreted(QuickHeadSection interp) {
-				if (interp.getModelElement() != null)
-					return Collections.singletonList(interp.getModelElement());
-				else
-					return Collections.emptyList();
-			}
-
-			@Override
-			public List<? extends ExElement> getChildrenFromElement(ExElement element) {
-				return Collections.emptyList();
-			}
-		};
-
-		public static final ExElement.ChildElementGetter<ExElement, QuickHeadSection, QuickHeadSection.Def> STYLE_SHEET = new ExElement.ChildElementGetter<ExElement, QuickHeadSection, QuickHeadSection.Def>() {
-			@Override
-			public List<? extends ExElement.Def<?>> getChildrenFromDef(QuickHeadSection.Def def) {
-				if(def.getStyleSheet()!=null)
-					return Collections.singletonList(def.getStyleSheet());
-				else
-					return Collections.emptyList();
-			}
-
-			@Override
-			public List<? extends ExElement.Interpreted<?>> getChildrenFromInterpreted(QuickHeadSection interp) {
-				return Collections.emptyList();
-			}
-
-			@Override
-			public List<? extends ExElement> getChildrenFromElement(ExElement element) {
-				return Collections.emptyList();
-			}
-		};
+		private static final ElementTypeTraceability<ExElement, QuickHeadSection, Def> WSS_TRACEABILITY = ElementTypeTraceability
+			.<ExElement, QuickHeadSection, Def> build(StyleSessionImplV0_1.NAME, StyleSessionImplV0_1.VERSION, "with-style-sheet")//
+			.withChild("style-sheet",
+				d -> d.getStyleSheet() == null ? Collections.emptyList() : Collections.singletonList(d.getStyleSheet()), //
+					null, null)//
+			.build();
 
 		/** The definition of a head section */
 		public static class Def extends ExElement.Def.Abstract<ExElement> {
+			private ClassViewElement theClassViewElement;
 			private ClassView theClassView;
 			private ObservableModelElement.ModelSetElement.Def<?> theModelElement;
 			private QuickStyleSheet theStyleSheet;
@@ -244,6 +168,10 @@ public class QuickDocument extends ExElement.Abstract {
 			/** @return The class view defined in this head section */
 			public ClassView getClassView() {
 				return theClassView;
+			}
+
+			public ClassViewElement getClassViewElement() {
+				return theClassViewElement;
 			}
 
 			/** @return The models defined in this head section */
@@ -263,27 +191,21 @@ public class QuickDocument extends ExElement.Abstract {
 
 			@Override
 			public void update(ExpressoQIS session) throws QonfigInterpretationException {
-				ExElement.checkElement(session.getFocusType(), QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, HEAD);
-				// forChild(session.getRole("imports"), IMPORTS);
-				forChild(session.getRole("models"), MODELS);
-				forChild(session.getRole("style-sheet"), STYLE_SHEET);
+				withTraceability(EXPRESSO_TRACEABILITY.validate(session.asElement("expresso").getFocusType(), session.reporting()));
+				withTraceability(WSS_TRACEABILITY.validate(session.asElement("with-style-sheet").getFocusType(), session.reporting()));
 				super.update(session);
-				ClassView cv = session.interpretChildren("imports", ClassView.class).peekFirst();
-				if (cv == null) {
-					ClassView defaultCV = ClassView.build()//
-						.withWildcardImport("java.lang")//
-						.withWildcardImport(MouseCursor.StandardCursors.class.getName())//
-						.build();
-					cv = defaultCV;
-				} else {
-					cv = cv.copy().withWildcardImport(MouseCursor.StandardCursors.class.getName()).build();
-				}
-				theClassView = cv;
+				theClassViewElement = ExElement.useOrReplace(ClassViewElement.class, theClassViewElement, session, "imports");
+				ClassView.Builder cvBuilder = ClassView.build()//
+					.withWildcardImport("java.lang")//
+					.withWildcardImport(MouseCursor.StandardCursors.class.getName());
+				if (theClassViewElement != null)
+					theClassViewElement.configureClassView(cvBuilder);
+				theClassView = cvBuilder.build();
 				// Install the class view now, so the model can use it
-				session.setExpressoEnv(session.getExpressoEnv().with(null, cv));
+				session.setExpressoEnv(session.getExpressoEnv().with(null, theClassView));
 				theModelElement = ExElement.useOrReplace(ObservableModelElement.ModelSetElement.Def.class, theModelElement, session,
 					"models");
-				session.setExpressoEnv(session.getExpressoEnv().with(getModels(), cv));
+				session.setExpressoEnv(session.getExpressoEnv().with(getModels(), theClassView));
 				theStyleSheet = session.as(StyleQIS.class).getStyleSheet();
 				if (theStyleSheet != null)
 					theStyleSheet.update(session.forChildren("style-sheet").getFirst());

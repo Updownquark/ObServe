@@ -7,8 +7,10 @@ import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.qonfig.CompiledExpression;
+import org.observe.expresso.qonfig.ElementTypeTraceability;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExpressoQIS;
+import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigInterpretationException;
@@ -17,13 +19,10 @@ import com.google.common.reflect.TypeToken;
 
 public class QuickTextArea<T> extends QuickEditableTextWidget.Abstract<T> {
 	public static final String TEXT_AREA = "text-area";
-
-	public static final ExElement.AttributeValueGetter.Expression<QuickTextArea<?>, Interpreted<?>, Def<?>, SettableValue<?>, SettableValue<Integer>> ROWS = ExElement.AttributeValueGetter
-		.<QuickTextArea<?>, Interpreted<?>, Def<?>, SettableValue<?>, SettableValue<Integer>> ofX(Def::getRows, Interpreted::getRows,
-			QuickTextArea::getRows);
-	public static final ExElement.AttributeValueGetter.Expression<QuickTextArea<?>, Interpreted<?>, Def<?>, SettableValue<?>, SettableValue<Boolean>> HTML = ExElement.AttributeValueGetter
-		.<QuickTextArea<?>, Interpreted<?>, Def<?>, SettableValue<?>, SettableValue<Boolean>> ofX(Def::isHtml, Interpreted::isHtml,
-			QuickTextArea::isHovered);
+	private static final ElementTypeTraceability<QuickTextArea<?>, Interpreted<?>, Def<?>> TRACEABILITY = ElementTypeTraceability
+		.<QuickTextArea<?>, Interpreted<?>, Def<?>> build(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, TEXT_AREA)//
+		.reflectMethods(Def.class, Interpreted.class, QuickTextArea.class)//
+		.build();
 
 	public static class Def<T> extends QuickEditableTextWidget.Def.Abstract<T, QuickTextArea<T>> {
 		private CompiledExpression theRows;
@@ -38,19 +37,19 @@ public class QuickTextArea<T> extends QuickEditableTextWidget.Abstract<T> {
 			return true;
 		}
 
+		@QonfigAttributeGetter("rows")
 		public CompiledExpression getRows() {
 			return theRows;
 		}
 
+		@QonfigAttributeGetter("html")
 		public CompiledExpression isHtml() {
 			return isHtml;
 		}
 
 		@Override
 		public void update(ExpressoQIS session) throws QonfigInterpretationException {
-			ExElement.checkElement(session.getFocusType(), QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, TEXT_AREA);
-			forAttribute(session.getAttributeDef(null, null, "rows"), ROWS);
-			forAttribute(session.getAttributeDef(null, null, "html"), HTML);
+			withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 			super.update(session.asElement(session.getFocusType().getSuperElement()));
 			theRows = session.getAttributeExpression("rows");
 			isHtml = session.getAttributeExpression("html");

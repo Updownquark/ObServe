@@ -431,13 +431,15 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 					QuickMouseListener.MouseButton listenerButton = mbl.getButton();
 					mbl.setListenerContext(
 						new QuickMouseListener.MouseButtonListenerContext.Default(altPressed, ctrlPressed, shiftPressed, x, y, button));
-					switch (mbl.getEventType()) {
-					case Click:
+					if (mbl instanceof QuickMouseListener.QuickMouseClickListener) {
+						int clickCount = ((QuickMouseListener.QuickMouseClickListener) mbl).getClickCount();
 						component.addMouseListener(new MouseAdapter() {
 							@Override
 							public void mouseClicked(MouseEvent evt) {
 								QuickMouseListener.MouseButton eventButton = checkMouseEventType(evt, listenerButton);
 								if (eventButton == null)
+									return;
+								else if (clickCount > 0 && evt.getClickCount() != clickCount)
 									return;
 								button.set(eventButton, evt);
 								altPressed.set(evt.isAltDown(), evt);
@@ -445,13 +447,12 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 								shiftPressed.set(evt.isShiftDown(), evt);
 								x.set(evt.getX(), evt);
 								y.set(evt.getY(), evt);
-								if (Boolean.FALSE.equals(ql.getFilter().get()))
+								if (!ql.testFilter())
 									return;
 								ql.getAction().act(evt);
 							}
 						});
-						break;
-					case Press:
+					} else if (mbl instanceof QuickMouseListener.QuickMousePressedListener) {
 						component.addMouseListener(new MouseAdapter() {
 							@Override
 							public void mousePressed(MouseEvent evt) {
@@ -464,13 +465,12 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 								shiftPressed.set(evt.isShiftDown(), evt);
 								x.set(evt.getX(), evt);
 								y.set(evt.getY(), evt);
-								if (Boolean.FALSE.equals(ql.getFilter().get()))
+								if (!ql.testFilter())
 									return;
 								ql.getAction().act(evt);
 							}
 						});
-						break;
-					case Release:
+					} else if (mbl instanceof QuickMouseListener.QuickMouseReleasedListener) {
 						component.addMouseListener(new MouseAdapter() {
 							@Override
 							public void mouseReleased(MouseEvent evt) {
@@ -483,16 +483,14 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 								shiftPressed.set(evt.isShiftDown(), evt);
 								x.set(evt.getX(), evt);
 								y.set(evt.getY(), evt);
-								if (Boolean.FALSE.equals(ql.getFilter().get()))
+								if (!ql.testFilter())
 									return;
 								ql.getAction().act(evt);
 							}
 						});
-						break;
-					default:
-						throw new ModelInstantiationException("Unrecognized mouse button event type: " + mbl.getEventType(),
+					} else
+						throw new ModelInstantiationException("Unrecognized mouse button listener type: " + mbl.getClass().getName(),
 							mbl.reporting().getFileLocation().getPosition(0), 0);
-					}
 				};
 			});
 			tx.with(QuickMouseListener.QuickMouseMoveListener.Interpreted.class, QuickSwingEventListener.class, (qil, tx2) -> {
@@ -516,7 +514,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 								shiftPressed.set(evt.isShiftDown(), evt);
 								x.set(evt.getX(), evt);
 								y.set(evt.getY(), evt);
-								if (Boolean.FALSE.equals(ql.getFilter().get()))
+								if (!ql.testFilter())
 									return;
 								ql.getAction().act(evt);
 							}
@@ -531,7 +529,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 								shiftPressed.set(evt.isShiftDown(), evt);
 								x.set(evt.getX(), evt);
 								y.set(evt.getY(), evt);
-								if (Boolean.FALSE.equals(ql.getFilter().get()))
+								if (!ql.testFilter())
 									return;
 								ql.getAction().act(evt);
 							}
@@ -546,7 +544,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 								shiftPressed.set(evt.isShiftDown(), evt);
 								x.set(evt.getX(), evt);
 								y.set(evt.getY(), evt);
-								if (Boolean.FALSE.equals(ql.getFilter().get()))
+								if (!ql.testFilter())
 									return;
 								ql.getAction().act(evt);
 							}
@@ -579,7 +577,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 							x.set(evt.getX(), evt);
 							y.set(evt.getY(), evt);
 							scrollAmount.set(evt.getUnitsToScroll(), evt);
-							if (Boolean.FALSE.equals(ql.getFilter().get()))
+							if (!ql.testFilter())
 								return;
 							ql.getAction().act(evt);
 						}
@@ -603,7 +601,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 							ctrlPressed.set(evt.isControlDown(), evt);
 							shiftPressed.set(evt.isShiftDown(), evt);
 							charTyped.set(evt.getKeyChar(), evt);
-							if (Boolean.FALSE.equals(ql.getFilter().get()))
+							if (!ql.testFilter())
 								return;
 							ql.getAction().act(evt);
 						}
@@ -641,7 +639,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 							ctrlPressed.set(evt.isControlDown(), evt);
 							shiftPressed.set(evt.isShiftDown(), evt);
 							keyCode.set(code, evt);
-							if (Boolean.FALSE.equals(ql.getFilter().get()))
+							if (!ql.testFilter())
 								return;
 							ql.getAction().act(evt);
 						}
@@ -1875,7 +1873,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 					quick.reporting().getFileLocation().getPosition(0).toShortString());
 				quick.setContext(ctx);
 				ComponentEditor<?, ?>[] parent = new ComponentEditor[1];
-				ObservableCollection<InterpretedSwingTableColumn<R, ?>> columns = quick.getColumns().flow()//
+				ObservableCollection<InterpretedSwingTableColumn<R, ?>> columns = quick.getAllColumns().flow()//
 					.map((Class<InterpretedSwingTableColumn<R, ?>>) (Class<?>) InterpretedSwingTableColumn.class, column -> {
 						try {
 							return new InterpretedSwingTableColumn<>(quick, column, ctx, tx, panel.getUntil(), () -> parent[0],

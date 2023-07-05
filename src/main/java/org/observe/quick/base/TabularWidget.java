@@ -10,8 +10,10 @@ import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.qonfig.DynamicModelValue;
+import org.observe.expresso.qonfig.ElementTypeTraceability;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExpressoQIS;
+import org.observe.expresso.qonfig.QonfigChildGetter;
 import org.observe.quick.QuickStyledElement;
 import org.observe.quick.QuickWidget;
 import org.observe.quick.base.QuickTableColumn.TableColumnSet;
@@ -25,24 +27,14 @@ import org.qommons.config.QonfigInterpretationException;
 import com.google.common.reflect.TypeToken;
 
 public interface TabularWidget<R> extends MultiValueWidget<R>, RowTyped<R> {
-	public static final ExElement.ChildElementGetter<TabularWidget<?>, Interpreted<?, ?>, Def<?>> COLUMNS = new ExElement.ChildElementGetter<TabularWidget<?>, TabularWidget.Interpreted<?, ?>, TabularWidget.Def<?>>() {
-		@Override
-		public List<? extends ExElement.Def<?>> getChildrenFromDef(Def<?> def) {
-			return def.getColumns();
-		}
-
-		@Override
-		public List<? extends ExElement.Interpreted<?>> getChildrenFromInterpreted(Interpreted<?, ?> interp) {
-			return interp.getColumns();
-		}
-
-		@Override
-		public List<? extends ExElement> getChildrenFromElement(TabularWidget<?> element) {
-			return element.getColumnSets();
-		}
-	};
+	public static final ElementTypeTraceability<TabularWidget<?>, Interpreted<?, ?>, Def<?>> TABULAR_WIDGET_TRACEABILITY = ElementTypeTraceability
+		.<TabularWidget<?>, Interpreted<?, ?>, Def<?>> build(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION,
+			"tabular-widget")//
+		.reflectMethods(Def.class, Interpreted.class, TabularWidget.class)//
+		.build();
 
 	public interface Def<W extends TabularWidget<?>> extends MultiValueWidget.Def<W>, RowTyped.Def<W> {
+		@QonfigChildGetter("columns")
 		List<QuickTableColumn.TableColumnSet.Def<?>> getColumns();
 
 		public abstract class Abstract<W extends TabularWidget<?>> extends QuickWidget.Def.Abstract<W> implements Def<W> {
@@ -60,10 +52,10 @@ public interface TabularWidget<R> extends MultiValueWidget<R>, RowTyped<R> {
 
 			@Override
 			public void update(ExpressoQIS session) throws QonfigInterpretationException {
-				forChild(session.getRole("columns"), COLUMNS);
-				forAttribute(session.getAttributeDef(null, null, "selection"), SELECTION);
-				forAttribute(session.getAttributeDef(null, null, "multi-selection"), MULTI_SELECTION);
-				forAttribute(session.getAttributeDef(null, null, "value-name"), VALUE_NAME);
+				withTraceability(TABULAR_WIDGET_TRACEABILITY.validate(session.getFocusType(), session.reporting()));
+				withTraceability(MV_WIDGET_TRACEABILITY.validate(session.getFocusType().getSuperElement(), session.reporting()));
+				withTraceability(
+					MV_RENDERABLE_TRACEABILITY.validate(session.asElement("multi-value-renderable").getFocusType(), session.reporting()));
 				super.update(session.asElement(session.getFocusType().getSuperElement() // multi-value-widget
 					.getSuperElement() // widget
 					));
@@ -239,9 +231,9 @@ public interface TabularWidget<R> extends MultiValueWidget<R>, RowTyped<R> {
 
 	void setContext(TabularContext<R> ctx) throws ModelInstantiationException;
 
-	ObservableCollection<QuickTableColumn.TableColumnSet<R>> getColumnSets();
+	ObservableCollection<QuickTableColumn.TableColumnSet<R>> getColumns();
 
-	ObservableCollection<QuickTableColumn<R, ?>> getColumns();
+	ObservableCollection<QuickTableColumn<R, ?>> getAllColumns();
 
 	public abstract class Abstract<R> extends QuickWidget.Abstract implements TabularWidget<R> {
 		private final TypeToken<R> theRowType;
@@ -273,12 +265,12 @@ public interface TabularWidget<R> extends MultiValueWidget<R>, RowTyped<R> {
 		}
 
 		@Override
-		public ObservableCollection<QuickTableColumn.TableColumnSet<R>> getColumnSets() {
+		public ObservableCollection<QuickTableColumn.TableColumnSet<R>> getColumns() {
 			return theColumnSets.flow().unmodifiable(false).collect();
 		}
 
 		@Override
-		public ObservableCollection<QuickTableColumn<R, ?>> getColumns() {
+		public ObservableCollection<QuickTableColumn<R, ?>> getAllColumns() {
 			return theColumns.flow().unmodifiable(false).collect();
 		}
 

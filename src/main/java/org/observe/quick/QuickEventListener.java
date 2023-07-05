@@ -5,9 +5,7 @@ import java.util.Collections;
 import java.util.List;
 
 import org.observe.ObservableAction;
-import org.observe.ObservableValue;
 import org.observe.SettableValue;
-import org.observe.collect.ObservableCollection;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
@@ -15,28 +13,34 @@ import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.qonfig.CompiledExpression;
+import org.observe.expresso.qonfig.ElementTypeTraceability;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExpressoQIS;
+import org.observe.expresso.qonfig.QonfigAttributeGetter;
+import org.observe.expresso.qonfig.QonfigChildGetter;
 import org.observe.util.TypeTokens;
+import org.qommons.collect.CollectionUtils;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigInterpretationException;
 
 public interface QuickEventListener extends ExElement {
-	public static final ExElement.AttributeValueGetter.Expression<QuickEventListener, Interpreted<?>, Def<?>, ObservableAction<?>, ObservableAction<?>> ACTION = ExElement.AttributeValueGetter
-		.<QuickEventListener, Interpreted<?>, Def<?>, ObservableAction<?>, ObservableAction<?>> ofX(Def::getAction, Interpreted::getAction,
-			QuickEventListener::getAction);
+	public static final String EVENT_LISTENER = "event-listener";
+	public static final ElementTypeTraceability<QuickEventListener, Interpreted<?>, Def<?>> LISTENER_TRACEABILITY = ElementTypeTraceability
+		.<QuickEventListener, Interpreted<?>, Def<?>> build(QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, "event-listener")//
+		.reflectMethods(Def.class, Interpreted.class, QuickEventListener.class)//
+		.build();
 
 	public interface Def<L extends QuickEventListener> extends ExElement.Def<L> {
-		public static final String EVENT_LISTENER = "event-listener";
+		@QonfigChildGetter("filter")
+		List<EventFilter.Def> getFilters();
 
-		List<CompiledExpression> getFilters();
-
+		@QonfigAttributeGetter
 		CompiledExpression getAction();
 
 		Interpreted<? extends L> interpret(ExElement.Interpreted<?> parent);
 
 		public abstract class Abstract<L extends QuickEventListener> extends ExElement.Def.Abstract<L> implements Def<L> {
-			private final List<CompiledExpression> theFilters;
+			private final List<EventFilter.Def> theFilters;
 			private CompiledExpression theAction;
 
 			protected Abstract(ExElement.Def<?> parent, QonfigElement element) {
@@ -50,19 +54,15 @@ public interface QuickEventListener extends ExElement {
 			}
 
 			@Override
-			public List<CompiledExpression> getFilters() {
+			public List<EventFilter.Def> getFilters() {
 				return Collections.unmodifiableList(theFilters);
 			}
 
 			@Override
 			public void update(ExpressoQIS session) throws QonfigInterpretationException {
-				ExElement.checkElement(session.getFocusType(), QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION,
-					EVENT_LISTENER);
-				forValue(ACTION);
+				withTraceability(LISTENER_TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 				super.update(session);
-				theFilters.clear();
-				for (ExpressoQIS filter : session.forChildren("filter"))
-					theFilters.add(filter.getValueExpression());
+				ExElement.syncDefs(EventFilter.Def.class, theFilters, session.forChildren("filter"));
 				theAction = session.getValueExpression();
 				if (theAction.getExpression() == ObservableExpression.EMPTY)
 					throw new QonfigInterpretationException("No action for event listener", session.getElement().getPositionInFile(), 0);
@@ -74,7 +74,7 @@ public interface QuickEventListener extends ExElement {
 		@Override
 		Def<? super L> getDefinition();
 
-		List<InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>>> getFilters();
+		List<EventFilter.Interpreted> getFilters();
 
 		InterpretedValueSynth<ObservableAction<?>, ObservableAction<?>> getAction();
 
@@ -84,7 +84,7 @@ public interface QuickEventListener extends ExElement {
 
 		public abstract class Abstract<L extends QuickEventListener> extends ExElement.Interpreted.Abstract<L>
 		implements Interpreted<L> {
-			private final List<InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>>> theFilters;
+			private final List<EventFilter.Interpreted> theFilters;
 			private InterpretedValueSynth<ObservableAction<?>, ObservableAction<?>> theAction;
 
 			protected Abstract(Def<? super L> definition, ExElement.Interpreted<?> parent) {
@@ -103,16 +103,19 @@ public interface QuickEventListener extends ExElement {
 			}
 
 			@Override
-			public List<InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>>> getFilters() {
+			public List<EventFilter.Interpreted> getFilters() {
 				return Collections.unmodifiableList(theFilters);
 			}
 
 			@Override
 			public void update() throws ExpressoInterpretationException {
 				super.update();
-				theFilters.clear();
-				for (CompiledExpression filter : getDefinition().getFilters())
-					theFilters.add(filter.evaluate(ModelTypes.Value.BOOLEAN).interpret());
+				CollectionUtils.synchronize(theFilters, getDefinition().getFilters(), (i, d) -> i.getDefinition() == d)//
+				.<ExpressoInterpretationException> simpleE(f -> f.interpret(this))//
+				.onLeft(el -> el.getLeftValue().destroy())//
+				.onRightX(el -> el.getLeftValue().update())//
+				.onCommonX(el -> el.getLeftValue().update())//
+				.addLast();
 				theAction = getDefinition().getAction().evaluate(ModelTypes.Action.any()).interpret();
 			}
 		}
@@ -161,13 +164,19 @@ public interface QuickEventListener extends ExElement {
 
 	void setListenerContext(ListenerContext ctx) throws ModelInstantiationException;
 
-	ObservableValue<Boolean> getFilter();
+	List<EventFilter> getFilters();
+
+	default boolean testFilter() {
+		for (EventFilter filter : getFilters())
+			if (!filter.filterPasses())
+				return false;
+		return true;
+	}
 
 	ObservableAction<?> getAction();
 
 	public abstract class Abstract extends ExElement.Abstract implements QuickEventListener {
-		private final ObservableCollection<SettableValue<Boolean>> theFilters;
-		private final ObservableValue<Boolean> theCondensedFilter;
+		private final List<EventFilter> theFilters;
 		private ObservableAction<?> theAction;
 		private final SettableValue<SettableValue<Boolean>> isAltPressed;
 		private final SettableValue<SettableValue<Boolean>> isCtrlPressed;
@@ -175,15 +184,7 @@ public interface QuickEventListener extends ExElement {
 
 		protected Abstract(QuickEventListener.Interpreted<?> interpreted, ExElement parent) {
 			super(interpreted, parent);
-			theFilters = ObservableCollection
-				.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Boolean>> parameterized(boolean.class)).build();
-			theCondensedFilter = theFilters.flow()//
-				.flattenValues(boolean.class, v -> v)//
-				.collect()//
-				.observeFind(b -> !b)//
-				.anywhere()//
-				.withDefault(() -> false).find()//
-				.map(found -> !found);
+			theFilters = new ArrayList<>();
 			isAltPressed = SettableValue
 				.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Boolean>> parameterized(boolean.class)).build();
 			isCtrlPressed = SettableValue.build(isAltPressed.getType()).build();
@@ -200,8 +201,8 @@ public interface QuickEventListener extends ExElement {
 		}
 
 		@Override
-		public ObservableValue<Boolean> getFilter() {
-			return theCondensedFilter;
+		public List<EventFilter> getFilters() {
+			return Collections.unmodifiableList(theFilters);
 		}
 
 		@Override
@@ -227,10 +228,91 @@ public interface QuickEventListener extends ExElement {
 			ExElement.satisfyContextValue("shiftPressed", ModelTypes.Value.BOOLEAN, SettableValue.flatten(isShiftPressed), myModels,
 				this);
 			QuickEventListener.Interpreted<?> myInterpreted = (QuickEventListener.Interpreted<?>) interpreted;
-			theFilters.clear();
-			for (InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> filter : myInterpreted.getFilters())
-				theFilters.add(filter.get(myModels));
+			CollectionUtils.synchronize(theFilters, myInterpreted.getFilters(), (f, i) -> f.getIdentity() == i.getIdentity())
+			.<ModelInstantiationException> simpleE(f -> f.create(this))//
+			.onRightX(el -> el.getLeftValue().update(el.getRightValue(), myModels))//
+			.onCommonX(el -> el.getLeftValue().update(el.getRightValue(), myModels))//
+			.adjust();
 			theAction = myInterpreted.getAction().get(myModels);
+		}
+	}
+
+	public class EventFilter extends ExElement.Abstract {
+		private static final ElementTypeTraceability<EventFilter, Interpreted, Def> TRACEABILITY = ElementTypeTraceability.<QuickEventListener.EventFilter, Interpreted, Def> build(
+			QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, "filter")//
+			.reflectMethods(Def.class, Interpreted.class, EventFilter.class)//
+			.build();
+
+		public static class Def extends ExElement.Def.Abstract<EventFilter> {
+			private CompiledExpression theCondition;
+
+			public Def(ExElement.Def<?> parent, QonfigElement element) {
+				super(parent, element);
+			}
+
+			@QonfigAttributeGetter
+			public CompiledExpression getCondition() {
+				return theCondition;
+			}
+
+			@Override
+			public void update(ExpressoQIS session) throws QonfigInterpretationException {
+				withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
+				super.update(session);
+				theCondition = session.getValueExpression();
+			}
+
+			public Interpreted interpret(ExElement.Interpreted<?> parent) {
+				return new Interpreted(this, parent);
+			}
+		}
+
+		public static class Interpreted extends ExElement.Interpreted.Abstract<EventFilter> {
+			private InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> theCondition;
+
+			public Interpreted(Def definition, ExElement.Interpreted<?> parent) {
+				super(definition, parent);
+			}
+
+			@Override
+			public Def getDefinition() {
+				return (Def) super.getDefinition();
+			}
+
+			public InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> getCondition() {
+				return theCondition;
+			}
+
+			@Override
+			public void update() throws ExpressoInterpretationException {
+				super.update();
+				theCondition = getDefinition().getCondition().evaluate(ModelTypes.Value.BOOLEAN).interpret();
+			}
+
+			public EventFilter create(ExElement parent) {
+				return new EventFilter(this, parent);
+			}
+		}
+
+		private SettableValue<Boolean> theCondition;
+
+		public EventFilter(Interpreted interpreted, ExElement parent) {
+			super(interpreted, parent);
+		}
+
+		public SettableValue<Boolean> getCondition() {
+			return theCondition;
+		}
+
+		public boolean filterPasses() {
+			return Boolean.TRUE.equals(theCondition.get());
+		}
+
+		@Override
+		protected void updateModel(ExElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
+			super.updateModel(interpreted, myModels);
+			Interpreted myInterpreted = (Interpreted) interpreted;
+			theCondition = myInterpreted.getCondition().get(myModels);
 		}
 	}
 }

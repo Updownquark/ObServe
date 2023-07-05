@@ -9,6 +9,7 @@ import java.util.Map;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.qonfig.ElementTypeTraceability;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.quick.style.CompiledStyleApplication;
@@ -18,6 +19,7 @@ import org.observe.quick.style.QuickInterpretedStyle;
 import org.observe.quick.style.QuickStyleElement;
 import org.observe.quick.style.QuickTypeStyle;
 import org.observe.quick.style.StyleQIS;
+import org.observe.quick.style.StyleSessionImplV0_1;
 import org.qommons.Version;
 import org.qommons.collect.CollectionUtils;
 import org.qommons.config.QonfigAddOn;
@@ -28,23 +30,12 @@ import org.qommons.config.QonfigToolkit;
 
 /** A Quick element that has style */
 public interface QuickStyledElement extends ExElement {
-	public static final ExElement.ChildElementGetter<QuickStyledElement, Interpreted<?>, Def<?>> STYLE_ELEMENTS//
-	= new ExElement.ChildElementGetter<QuickStyledElement, Interpreted<?>, Def<?>>() {
-		@Override
-		public List<? extends QuickStyleElement.Def> getChildrenFromDef(Def<?> def) {
-			return def.getStyle().getStyleElements();
-		}
-
-		@Override
-		public List<? extends QuickStyleElement.Interpreted> getChildrenFromInterpreted(Interpreted<?> interp) {
-			return interp.getStyle().getStyleElements();
-		}
-
-		@Override
-		public List<? extends QuickStyleElement> getChildrenFromElement(QuickStyledElement element) {
-			return element.getStyle().getStyleElements();
-		}
-	};
+	public static final ElementTypeTraceability<QuickStyledElement, Interpreted<?>, Def<?>> STYLED_TRACEABILITY = ElementTypeTraceability
+		.<QuickStyledElement, Interpreted<?>, Def<?>> build(StyleSessionImplV0_1.NAME, StyleSessionImplV0_1.VERSION, "styled")//
+		.reflectMethods(Def.class, Interpreted.class, QuickStyledElement.class)//
+		.withChild("style", def -> def.getStyle().getStyleElements(), interp -> interp.getStyle().getStyleElements(),
+			el -> el.getStyle().getStyleElements())//
+		.build();
 
 	/**
 	 * The definition of a styled element
@@ -78,7 +69,7 @@ public interface QuickStyledElement extends ExElement {
 
 			@Override
 			public void update(ExpressoQIS session) throws QonfigInterpretationException {
-				forChild(session.getRole("style"), STYLE_ELEMENTS);
+				withTraceability(STYLED_TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 				super.update(session);
 				ExElement.Def<?> parent = getParentElement();
 				while (parent != null && !(parent instanceof QuickStyledElement.Def))

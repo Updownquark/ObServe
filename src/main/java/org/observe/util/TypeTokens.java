@@ -340,7 +340,7 @@ public class TypeTokens implements TypeParser {
 		if (type instanceof Class)
 			return of((Class<?>) type);
 		else if (type instanceof ParameterizedType && ((ParameterizedType) type).getOwnerType() instanceof Class)
-			return keyFor((Class<?>) ((ParameterizedType) type).getOwnerType())
+			return keyFor((Class<?>) ((ParameterizedType) type).getRawType())
 				.parameterized(((ParameterizedType) type).getActualTypeArguments());
 		else
 			return TypeToken.of(type);

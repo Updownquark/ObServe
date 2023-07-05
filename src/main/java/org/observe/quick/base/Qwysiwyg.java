@@ -245,7 +245,7 @@ public class Qwysiwyg {
 				return;
 			} finally {
 				// Render interpretation and instances (if available)
-				renderInterpreted(theRoot, theDocumentInterpreted, theDocument);
+				renderInterpreted(theRoot, theDocumentInterpreted, theDocument, theModels);
 			}
 
 			try {
@@ -550,7 +550,7 @@ public class Qwysiwyg {
 			else
 				attrValueComp.typeTooltip(renderValueType(type, 1, def.getElement().getType().getValue()));
 		}
-		Map<QonfigElement, ExElement.Def<?>> children = def.getAllChildren().stream()
+		Map<QonfigElement, ExElement.Def<?>> children = def.getAllDefChildren().stream()
 			.collect(Collectors.toMap(ExElement.Def::getElement, d -> d));
 		for (QonfigElement child : def.getElement().getChildren()) {
 			String childDescrip = null;
@@ -632,7 +632,8 @@ public class Qwysiwyg {
 		return tt;
 	}
 
-	private <E extends ExElement> void renderInterpreted(DocumentComponent component, ExElement.Interpreted<E> interpreted, E element) {
+	private <E extends ExElement> void renderInterpreted(DocumentComponent component, ExElement.Interpreted<E> interpreted, E element,
+		ModelSetInstance models) {
 		ExElement.Def<? super E> def = interpreted.getDefinition();
 		DocumentComponent elComponent = getSourceComponent(component, def.getElement().getPositionInFile().getPosition()).parent;
 		for (Map.Entry<QonfigAttributeDef.Declared, QonfigValue> attr : def.getElement().getAttributes().entrySet()) {
@@ -648,7 +649,7 @@ public class Qwysiwyg {
 					if (interpValue instanceof InterpretedValueSynth) {
 						EvaluatedExpression<?, ?> expression = getEvaluatedExpression((InterpretedValueSynth<?, ?>) interpValue);
 						if (expression != null)
-							renderInterpretedExpression(expression, attrValueComp, element == null ? null : element.getUpdatingModels());
+							renderInterpretedExpression(expression, attrValueComp, models);
 					}
 				}
 			} else {
@@ -669,7 +670,7 @@ public class Qwysiwyg {
 					if (interpValue instanceof InterpretedValueSynth) {
 						EvaluatedExpression<?, ?> expression = getEvaluatedExpression((InterpretedValueSynth<?, ?>) interpValue);
 						if (expression != null)
-							renderInterpretedExpression(expression, attrValueComp, element == null ? null : element.getUpdatingModels());
+							renderInterpretedExpression(expression, attrValueComp, models);
 					}
 				}
 			} else {
@@ -679,13 +680,14 @@ public class Qwysiwyg {
 			}
 			// TODO describe interpreted value?
 		}
-		List<? extends ExElement.Interpreted<?>> interpretedChildren = def.getAllChildren(interpreted);
-		List<? extends ExElement> tempChildren = element == null ? Collections.emptyList() : def.getAllChildren(element);
-		Map<Integer, ? extends ExElement> instanceChildren = tempChildren.stream()
-			.collect(Collectors.toMap(ch -> ch.reporting().getFileLocation().getPosition(0).getPosition(), ch -> ch));
+		List<? extends ExElement.Interpreted<?>> interpretedChildren = def.getAllInterpretedChildren(interpreted);
+		List<? extends ExElement> tempChildren = element == null ? Collections.emptyList() : def.getAllElementChildren(element);
+		Map<Object, ? extends ExElement> instanceChildren = tempChildren.stream()
+			.collect(Collectors.toMap(ch -> ch.getIdentity(), ch -> ch));
 		for (ExElement.Interpreted<?> child : interpretedChildren) {
-			ExElement instance = instanceChildren.get(child.getDefinition().reporting().getFileLocation().getPosition(0).getPosition());
-			this.renderInterpreted(elComponent, (ExElement.Interpreted<ExElement>) child, instance);
+			ExElement instance = instanceChildren.get(child.getIdentity());
+			this.renderInterpreted(elComponent, (ExElement.Interpreted<ExElement>) child, instance,
+				instance != null ? instance.getUpdatingModels() : models);
 		}
 	}
 

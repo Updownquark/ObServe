@@ -8,8 +8,10 @@ import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.qonfig.CompiledExpression;
+import org.observe.expresso.qonfig.ElementTypeTraceability;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExpressoQIS;
+import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.quick.QuickTextWidget;
 import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElement;
@@ -21,16 +23,15 @@ import com.google.common.reflect.TypeToken;
 
 public class QuickLabel<T> extends QuickTextWidget.Abstract<T> {
 	public static final String LABEL = "label";
-
-	public static final ExElement.AttributeValueGetter<QuickLabel<?>, Interpreted<?, ?>, Def<?, ?>> VALUE_TEXT = ExElement.AttributeValueGetter
-		.<QuickLabel<?>, Interpreted<?, ?>, Def<?, ?>> of(Def::getValueText, null, null);
-	public static final ExElement.AttributeValueGetter<QuickLabel<?>, Interpreted<?, ?>, Def<?, ?>> ICON = ExElement.AttributeValueGetter
-		.<QuickLabel<?>, Interpreted<?, ?>, Def<?, ?>> of(Def::getIcon, Interpreted::getIcon, QuickLabel::getIcon);
+	private static final ElementTypeTraceability<QuickLabel<?>, Interpreted<?, ?>, Def<?, ?>> TRACEABILITY = ElementTypeTraceability
+		.<QuickLabel<?>, Interpreted<?, ?>, Def<?, ?>> build(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, LABEL)//
+		.reflectMethods(Def.class, Interpreted.class, QuickLabel.class)//
+		.build();
 
 	public static class Def<T, W extends QuickLabel<T>> extends QuickTextWidget.Def.Abstract<T, W> {
 		private String theStaticText;
 		private CompiledExpression theTextExpression;
-		private CompiledExpression theIcon;;
+		private CompiledExpression theIcon;
 
 		public Def(ExElement.Def<?> parent, QonfigElement element) {
 			super(parent, element);
@@ -48,19 +49,19 @@ public class QuickLabel<T> extends QuickTextWidget.Abstract<T> {
 			return theTextExpression;
 		}
 
+		@QonfigAttributeGetter
 		public String getValueText() {
 			return theStaticText;
 		}
 
+		@QonfigAttributeGetter("icon")
 		public CompiledExpression getIcon() {
 			return theIcon;
 		}
 
 		@Override
 		public void update(ExpressoQIS session) throws QonfigInterpretationException {
-			ExElement.checkElement(session.getFocusType(), QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, LABEL);
-			forAttribute(session.getAttributeDef(null, null, "icon"), ICON);
-			forValue(VALUE_TEXT);
+			withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 			super.update(session.asElement(session.getFocusType().getSuperElement()));
 			String staticText = session.getValueText();
 			if (staticText != null && staticText.isEmpty())

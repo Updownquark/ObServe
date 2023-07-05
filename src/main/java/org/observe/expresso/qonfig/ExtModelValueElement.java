@@ -16,36 +16,40 @@ import org.qommons.config.QonfigInterpretationException;
 import com.google.common.reflect.TypeToken;
 
 public class ExtModelValueElement<M, MV extends M> extends ModelValueElement.Default<M, MV> {
-	private static final ExElement.AttributeValueGetter.Expression<ExtModelValueElement<?, ?>, Interpreted<?, ?>, Def<?>, Object, Object> DEFAULT = ExElement.AttributeValueGetter
-		.<ExtModelValueElement<?, ?>, Interpreted<?, ?>, Def<?>, Object, Object> ofX(Def::getDefault,
-			i -> (InterpretedValueSynth<Object, Object>) i.getDefault(), ExtModelValueElement::getDefault);
+	private static final ElementTypeTraceability<ExtModelValueElement<?, ?>, Interpreted<?, ?>, Def<?>> TRACEABILITY = ElementTypeTraceability
+		.<ExtModelValueElement<?, ?>, Interpreted<?, ?>, Def<?>> build(ExpressoSessionImplV0_1.TOOLKIT_NAME,
+			ExpressoSessionImplV0_1.VERSION, "ext-model-value")//
+		.reflectMethods(Def.class, Interpreted.class, ExtModelValueElement.class)//
+		.build();
 
 	public static abstract class Def<M> extends ModelValueElement.Def.Simple<M, ExtModelValueElement<M, ?>> implements ExtModelValue<M> {
 		private CompiledExpression theDefault;
 
-		protected Def(ExElement.Def<?> parent, QonfigElement element, ModelType<M> modelType, String toolkitName, Version toolkitVersion,
-			String typeName) {
-			super(parent, element, modelType, toolkitName, toolkitVersion, typeName);
+		protected Def(ExElement.Def<?> parent, QonfigElement element, ModelType<M> modelType, String toolkitName, Version toolkitVersion) {
+			super(parent, element, modelType, toolkitName, toolkitVersion);
 		}
 
+		@QonfigAttributeGetter("default")
 		public CompiledExpression getDefault() {
 			return theDefault;
 		}
 
 		@Override
 		public void update(ExpressoQIS session) throws QonfigInterpretationException {
-			forAttribute(session.getAttributeDef(null, null, "default"), DEFAULT);
-			super.update(session);
+			withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
+			super.update(session.asElement(session.getFocusType().getSuperElement()));
 
 			theDefault = session.getAttributeExpression("default");
 		}
 
 		public static class Single<M> extends Def<M> {
+			private final String theTypeName;
 			private final VariableType theValueType;
 
 			public Single(ExElement.Def<?> parent, QonfigElement element, ModelType.SingleTyped<M> modelType, VariableType valueType,
 				String toolkitName, Version toolkitVersion, String typeName) {
-				super(parent, element, modelType, toolkitName, toolkitVersion, typeName);
+				super(parent, element, modelType, toolkitName, toolkitVersion);
+				theTypeName = typeName;
 				theValueType = valueType;
 			}
 
@@ -70,17 +74,26 @@ public class ExtModelValueElement<M, MV extends M> extends ModelValueElement.Def
 			public VariableType getValueType() {
 				return theValueType;
 			}
+
+			@Override
+			public void update(ExpressoQIS session) throws QonfigInterpretationException {
+				if (!session.getFocusType().getName().equals(theTypeName))
+					throw new IllegalStateException("Expected '" + theTypeName + "', not '" + session.getFocusType().getName() + "'");
+				super.update(session.asElement("ext-model-value"));
+			}
 		}
 
 		public static class Double<M> extends Def<M> {
+			private final String theTypeName;
 			private final VariableType theValueType1;
 			private final VariableType theValueType2;
 
 			public Double(ExElement.Def<?> parent, QonfigElement element, ModelType.DoubleTyped<M> modelType, VariableType valueType1,
 				VariableType valueType2, String toolkitName, Version toolkitVersion, String typeName) {
-				super(parent, element, modelType, toolkitName, toolkitVersion, typeName);
+				super(parent, element, modelType, toolkitName, toolkitVersion);
 				theValueType1 = valueType1;
 				theValueType2 = valueType2;
+				theTypeName = toolkitName;
 			}
 
 			@Override
@@ -115,6 +128,13 @@ public class ExtModelValueElement<M, MV extends M> extends ModelValueElement.Def
 
 			public VariableType getValueType2() {
 				return theValueType2;
+			}
+
+			@Override
+			public void update(ExpressoQIS session) throws QonfigInterpretationException {
+				if (!session.getFocusType().getName().equals(theTypeName))
+					throw new IllegalStateException("Expected '" + theTypeName + "', not '" + session.getFocusType().getName() + "'");
+				super.update(session.asElement("ext-model-value"));
 			}
 		}
 	}

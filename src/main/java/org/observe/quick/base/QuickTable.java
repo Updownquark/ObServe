@@ -13,8 +13,11 @@ import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.qonfig.CompiledExpression;
 import org.observe.expresso.qonfig.DynamicModelValue;
+import org.observe.expresso.qonfig.ElementTypeTraceability;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExpressoQIS;
+import org.observe.expresso.qonfig.QonfigAttributeGetter;
+import org.observe.expresso.qonfig.QonfigChildGetter;
 import org.observe.quick.QuickStyledElement;
 import org.observe.util.TypeTokens;
 import org.qommons.collect.CollectionUtils;
@@ -25,26 +28,10 @@ import com.google.common.reflect.TypeToken;
 
 public class QuickTable<R> extends TabularWidget.Abstract<R> {
 	public static final String TABLE = "table";
-
-	public static final ExElement.AttributeValueGetter<QuickTable<?>, Interpreted<?>, Def> ROWS = ExElement.AttributeValueGetter
-		.ofX(Def::getRows, Interpreted::getRows, QuickTable::getRows);
-
-	public static final ExElement.ChildElementGetter<QuickTable<?>, Interpreted<?>, Def> ACTIONS = new ExElement.ChildElementGetter<QuickTable<?>, Interpreted<?>, Def>() {
-		@Override
-		public List<? extends ExElement.Def<?>> getChildrenFromDef(Def def) {
-			return def.getActions();
-		}
-
-		@Override
-		public List<? extends ExElement.Interpreted<?>> getChildrenFromInterpreted(Interpreted<?> interp) {
-			return interp.getActions();
-		}
-
-		@Override
-		public List<? extends ExElement> getChildrenFromElement(QuickTable<?> element) {
-			return element.getActions();
-		}
-	};
+	private static final ElementTypeTraceability<QuickTable<?>, Interpreted<?>, Def> TRACEABILITY = ElementTypeTraceability
+		.<QuickTable<?>, Interpreted<?>, Def> build(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, TABLE)//
+		.reflectMethods(Def.class, Interpreted.class, QuickTable.class)//
+		.build();
 
 	public static class Def extends TabularWidget.Def.Abstract<QuickTable<?>> {
 		private CompiledExpression theRows;
@@ -73,20 +60,20 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 			return theMultiSelection;
 		}
 
+		@QonfigAttributeGetter("rows")
 		public CompiledExpression getRows() {
 			return theRows;
 		}
 
+		@QonfigChildGetter("action")
 		public List<ValueAction.Def<?, ?>> getActions() {
 			return Collections.unmodifiableList(theActions);
 		}
 
 		@Override
 		public void update(ExpressoQIS session) throws QonfigInterpretationException {
-			ExElement.checkElement(session.getFocusType(), QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, TABLE);
-			forAttribute(session.getAttributeDef(null, null, "rows"), ROWS);
-			forChild(session.getRole("action"), ACTIONS);
-			super.update(session); // table is a tabular widget, tabular-widget is an add-on. Don't get the multi-value-widget super
+			withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
+			super.update(session.asElement("tabular-widget"));
 			theRows = session.getAttributeExpression("rows");
 			theValueName = session.getAttributeText("value-name");
 			theSelection = session.getAttributeExpression("selection");

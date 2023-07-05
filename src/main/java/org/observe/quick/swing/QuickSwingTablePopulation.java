@@ -356,7 +356,7 @@ class QuickSwingTablePopulation {
 					QuickKeyListener.QuickKeyCodeListener keyL = (QuickKeyListener.QuickKeyCodeListener) listener;
 					if (!keyL.isPressed() || (keyL.getKeyCode() != null && keyL.getKeyCode() != code))
 						continue;
-					else if (!keyL.getFilter().get().booleanValue())
+					else if (!keyL.testFilter())
 						continue;
 					keyL.getAction().act(e);
 				}
@@ -377,7 +377,7 @@ class QuickSwingTablePopulation {
 					QuickKeyListener.QuickKeyCodeListener keyL = (QuickKeyListener.QuickKeyCodeListener) listener;
 					if (!keyL.isPressed() || (keyL.getKeyCode() != null && keyL.getKeyCode() != code))
 						continue;
-					else if (!keyL.getFilter().get().booleanValue())
+					else if (!keyL.testFilter())
 						continue;
 					keyL.getAction().act(e);
 				}
@@ -396,7 +396,7 @@ class QuickSwingTablePopulation {
 					QuickKeyListener.QuickKeyTypedListener keyL = (QuickKeyListener.QuickKeyTypedListener) listener;
 					if (keyL.getCharFilter() != 0 && keyL.getCharFilter() != ch)
 						continue;
-					else if (!keyL.getFilter().get().booleanValue())
+					else if (!keyL.testFilter())
 						continue;
 					keyL.getAction().act(e);
 				}
@@ -424,12 +424,13 @@ class QuickSwingTablePopulation {
 			theMouseContext.getX().set(e.getX(), e);
 			theMouseContext.getY().set(e.getY(), e);
 			for (QuickEventListener listener : theRenderer.getEventListeners()) {
-				if (listener instanceof QuickMouseListener.QuickMouseButtonListener) {
-					QuickMouseListener.QuickMouseButtonListener mouseL = (QuickMouseListener.QuickMouseButtonListener) listener;
-					if (mouseL.getEventType() != QuickMouseListener.MouseButtonEventType.Click
-						|| (mouseL.getButton() != null && mouseL.getButton() != eventButton))
+				if (listener instanceof QuickMouseListener.QuickMouseClickListener) {
+					QuickMouseListener.QuickMouseClickListener mouseL = (QuickMouseListener.QuickMouseClickListener) listener;
+					if (mouseL.getButton() != null && mouseL.getButton() != eventButton)
 						continue;
-					else if (!mouseL.getFilter().get().booleanValue())
+					else if (mouseL.getClickCount() > 0 && e.getClickCount() != mouseL.getClickCount())
+						continue;
+					else if (!mouseL.testFilter())
 						continue;
 					mouseL.getAction().act(e);
 				}
@@ -448,12 +449,11 @@ class QuickSwingTablePopulation {
 			theMouseContext.getX().set(e.getX(), e);
 			theMouseContext.getY().set(e.getY(), e);
 			for (QuickEventListener listener : theRenderer.getEventListeners()) {
-				if (listener instanceof QuickMouseListener.QuickMouseButtonListener) {
-					QuickMouseListener.QuickMouseButtonListener mouseL = (QuickMouseListener.QuickMouseButtonListener) listener;
-					if (mouseL.getEventType() != QuickMouseListener.MouseButtonEventType.Press
-						|| (mouseL.getButton() != null && mouseL.getButton() != eventButton))
+				if (listener instanceof QuickMouseListener.QuickMousePressedListener) {
+					QuickMouseListener.QuickMousePressedListener mouseL = (QuickMouseListener.QuickMousePressedListener) listener;
+					if (mouseL.getButton() != null && mouseL.getButton() != eventButton)
 						continue;
-					else if (!mouseL.getFilter().get().booleanValue())
+					else if (!mouseL.testFilter())
 						continue;
 					mouseL.getAction().act(e);
 				}
@@ -472,12 +472,11 @@ class QuickSwingTablePopulation {
 			theMouseContext.getX().set(e.getX(), e);
 			theMouseContext.getY().set(e.getY(), e);
 			for (QuickEventListener listener : theRenderer.getEventListeners()) {
-				if (listener instanceof QuickMouseListener.QuickMouseButtonListener) {
-					QuickMouseListener.QuickMouseButtonListener mouseL = (QuickMouseListener.QuickMouseButtonListener) listener;
-					if (mouseL.getEventType() != QuickMouseListener.MouseButtonEventType.Release
-						|| (mouseL.getButton() != null && mouseL.getButton() != eventButton))
+				if (listener instanceof QuickMouseListener.QuickMouseReleasedListener) {
+					QuickMouseListener.QuickMouseReleasedListener mouseL = (QuickMouseListener.QuickMouseReleasedListener) listener;
+					if (mouseL.getButton() != null && mouseL.getButton() != eventButton)
 						continue;
-					else if (!mouseL.getFilter().get().booleanValue())
+					else if (!mouseL.testFilter())
 						continue;
 					mouseL.getAction().act(e);
 				}
@@ -496,7 +495,7 @@ class QuickSwingTablePopulation {
 					QuickMouseListener.QuickMouseMoveListener mouseL = (QuickMouseListener.QuickMouseMoveListener) listener;
 					if (mouseL.getEventType() != QuickMouseListener.MouseMoveEventType.Enter)
 						continue;
-					else if (!mouseL.getFilter().get().booleanValue())
+					else if (!mouseL.testFilter())
 						continue;
 					mouseL.getAction().act(e);
 				}
@@ -515,7 +514,7 @@ class QuickSwingTablePopulation {
 					QuickMouseListener.QuickMouseMoveListener mouseL = (QuickMouseListener.QuickMouseMoveListener) listener;
 					if (mouseL.getEventType() != QuickMouseListener.MouseMoveEventType.Exit)
 						continue;
-					else if (!mouseL.getFilter().get().booleanValue())
+					else if (!mouseL.testFilter())
 						continue;
 					mouseL.getAction().act(e);
 				}
@@ -534,7 +533,7 @@ class QuickSwingTablePopulation {
 					QuickMouseListener.QuickMouseMoveListener mouseL = (QuickMouseListener.QuickMouseMoveListener) listener;
 					if (mouseL.getEventType() != QuickMouseListener.MouseMoveEventType.Move)
 						continue;
-					else if (!mouseL.getFilter().get().booleanValue())
+					else if (!mouseL.testFilter())
 						continue;
 					mouseL.getAction().act(e);
 				}

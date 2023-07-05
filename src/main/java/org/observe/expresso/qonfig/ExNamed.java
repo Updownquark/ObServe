@@ -7,9 +7,11 @@ import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
 public class ExNamed extends ExAddOn.Abstract<ExElement> implements Named {
-	private static final ExAddOn.AddOnAttributeGetter<ExElement, ExNamed, Interpreted, Def> NAME = ExAddOn.AddOnAttributeGetter
-		.<ExElement, ExNamed, Interpreted, Def> of(Def.class, Def::getName, Interpreted.class, i -> i.getDefinition().getName(),
-			ExNamed.class, ExNamed::getName);
+	private static final ElementTypeTraceability<ExElement, ExElement.Interpreted<?>, ExElement.Def<?>> TRACEABILITY = ElementTypeTraceability
+		.buildAddOn(ExpressoSessionImplV0_1.TOOLKIT_NAME, ExpressoSessionImplV0_1.VERSION, "named", Def.class, Interpreted.class,
+			ExNamed.class)//
+		.reflectAddOnMethods()//
+		.build();
 
 	public static class Def extends ExAddOn.Def.Abstract<ExElement, ExNamed> implements Named {
 		private String theName;
@@ -19,13 +21,14 @@ public class ExNamed extends ExAddOn.Abstract<ExElement> implements Named {
 		}
 
 		@Override
+		@QonfigAttributeGetter("name")
 		public String getName() {
 			return theName;
 		}
 
 		@Override
 		public void update(ExpressoQIS session, ExElement.Def<? extends ExElement> element) throws QonfigInterpretationException {
-			element.forAttribute(session.getAttributeDef(null, null, "name"), NAME);
+			element.withTraceability(TRACEABILITY.validate(getType(), element.reporting()));
 			super.update(session, element);
 			theName = session.getAttributeText("name");
 		}

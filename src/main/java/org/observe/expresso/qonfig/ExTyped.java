@@ -11,9 +11,11 @@ import org.qommons.config.QonfigInterpretationException;
 import com.google.common.reflect.TypeToken;
 
 public class ExTyped extends ExAddOn.Abstract<ExElement> {
-	public static final ExAddOn.AddOnAttributeGetter<ExElement, ExTyped, Interpreted, Def> VALUE_TYPE = ExAddOn.AddOnAttributeGetter
-		.<ExElement, ExTyped, Interpreted, Def> of(Def.class, Def::getValueType, Interpreted.class, Interpreted::getValueType,
-			ExTyped.class, ExTyped::getValueType);
+	private static final ElementTypeTraceability<ExElement, ExElement.Interpreted<?>, ExElement.Def<?>> TRACEABILITY = ElementTypeTraceability
+		.buildAddOn(ExpressoSessionImplV0_1.TOOLKIT_NAME, ExpressoSessionImplV0_1.VERSION, "typed", Def.class, Interpreted.class,
+			ExTyped.class)//
+		.reflectAddOnMethods()//
+		.build();
 
 	public static class Def extends ExAddOn.Def.Abstract<ExElement, ExTyped> {
 		private Object theValueType;
@@ -22,13 +24,14 @@ public class ExTyped extends ExAddOn.Abstract<ExElement> {
 			super(type, element);
 		}
 
+		@QonfigAttributeGetter("type")
 		public Object getValueType() {
 			return theValueType;
 		}
 
 		@Override
 		public void update(ExpressoQIS session, ExElement.Def<? extends ExElement> element) throws QonfigInterpretationException {
-			element.forAttribute(session.getAttributeDef(null, null, "type"), VALUE_TYPE);
+			element.withTraceability(TRACEABILITY.validate(getType(), element.reporting()));
 			super.update(session, element);
 
 			theValueType = session.get(ExpressoBaseV0_1.VALUE_TYPE_KEY);

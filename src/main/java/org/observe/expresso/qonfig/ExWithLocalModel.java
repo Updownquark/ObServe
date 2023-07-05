@@ -1,7 +1,5 @@
 package org.observe.expresso.qonfig;
 
-import java.util.Collections;
-
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
@@ -10,13 +8,11 @@ import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
 public class ExWithLocalModel extends ExAddOn.Abstract<ExElement> {
-	private static final ExAddOn.AddOnChildGetter<ExElement, ExWithLocalModel, Interpreted, Def> LOCAL_MODEL = ExAddOn.AddOnChildGetter
-		.<ExElement, ExWithLocalModel, Interpreted, Def> of(Def.class,
-			d -> d.getLocalModelElement() == null ? Collections.emptyList() : Collections.singletonList(d.getLocalModelElement()), //
-				Interpreted.class,
-				d -> d.getLocalModelElement() == null ? Collections.emptyList() : Collections.singletonList(d.getLocalModelElement()), //
-					ExWithLocalModel.class,
-					d -> d.getLocalModelElement() == null ? Collections.emptyList() : Collections.singletonList(d.getLocalModelElement()));
+	private static final ElementTypeTraceability<ExElement, ExElement.Interpreted<?>, ExElement.Def<?>> TRACEABILITY = ElementTypeTraceability
+		.buildAddOn(ExpressoSessionImplV0_1.TOOLKIT_NAME, ExpressoSessionImplV0_1.VERSION, "with-local-model", Def.class, Interpreted.class,
+			ExWithLocalModel.class)//
+		.reflectAddOnMethods()//
+		.build();
 
 	public static class Def extends ExAddOn.Def.Abstract<ExElement, ExWithLocalModel> {
 		private ObservableModelElement.DefaultModelElement.Def<?> theLocalModelElement;
@@ -25,13 +21,14 @@ public class ExWithLocalModel extends ExAddOn.Abstract<ExElement> {
 			super(type, element);
 		}
 
+		@QonfigChildGetter("model")
 		public ObservableModelElement.DefaultModelElement.Def<?> getLocalModelElement() {
 			return theLocalModelElement;
 		}
 
 		@Override
 		public void update(ExpressoQIS session, ExElement.Def<? extends ExElement> element) throws QonfigInterpretationException {
-			element.forChild(session.getRole("model"), LOCAL_MODEL);
+			element.withTraceability(TRACEABILITY.validate(getType(), element.reporting()));
 			super.update(session, element);
 			theLocalModelElement = session.get(ExpressoBaseV0_1.LOCAL_MODEL_ELEMENT_KEY,
 				ObservableModelElement.DefaultModelElement.Def.class);

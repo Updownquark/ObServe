@@ -18,13 +18,16 @@ import org.qommons.config.QonfigInterpretationException;
 import org.qommons.ex.ExSupplier;
 
 public interface ModelValueElement<M, MV extends M> extends ExElement {
-	public static final ExElement.AttributeValueGetter.Expression<ModelValueElement<?, ?>, Interpreted<?, ?, ?>, Def<?, ?>, Object, Object> MODEL_VALUE//
-	= ExElement.AttributeValueGetter.<ModelValueElement<?, ?>, Interpreted<?, ?, ?>, Def<?, ?>, Object, Object> ofX(Def::getValue,
-		i -> (InterpretedValueSynth<Object, Object>) i.getValue(), ModelValueElement::getValue);
+	static final ElementTypeTraceability<ModelValueElement<?, ?>, Interpreted<?, ?, ?>, Def<?, ?>> TRACEABILITY = ElementTypeTraceability
+		.<ModelValueElement<?, ?>, Interpreted<?, ?, ?>, Def<?, ?>> build(ExpressoSessionImplV0_1.TOOLKIT_NAME,
+			ExpressoSessionImplV0_1.VERSION, "model-value")//
+		.reflectMethods(Def.class, Interpreted.class, ModelValueElement.class)//
+		.build();
 
 	public interface Def<M, E extends ModelValueElement<M, ?>> extends ExElement.Def<E> {
 		ModelType<M> getModelType();
 
+		@QonfigAttributeGetter
 		CompiledExpression getValue();
 
 		Interpreted<M, ?, ? extends E> interpret(ObservableModelElement.Interpreted<?> modelElement, InterpretedModelSet models)
@@ -33,16 +36,14 @@ public interface ModelValueElement<M, MV extends M> extends ExElement {
 		public abstract class Simple<M, E extends ModelValueElement<M, ?>> extends ExElement.Def.Abstract<E> implements Def<M, E> {
 			private final String theToolkitName;
 			private final Version theToolkitVersion;
-			private final String theTypeName;
 			private final ModelType<M> theModelType;
 			private CompiledExpression theValue;
 
 			protected Simple(ExElement.Def<?> parent, QonfigElement element, ModelType<M> modelType, String toolkitName,
-				Version toolkitVersion, String typeName) {
+				Version toolkitVersion) {
 				super(parent, element);
 				theToolkitName = toolkitName;
 				theToolkitVersion = toolkitVersion;
-				theTypeName = typeName;
 				theModelType = modelType;
 			}
 
@@ -53,6 +54,7 @@ public interface ModelValueElement<M, MV extends M> extends ExElement {
 
 			protected abstract ModelInstanceType<M, ?> getType(ObservableModelSet models) throws ExpressoInterpretationException;
 
+			@QonfigAttributeGetter
 			@Override
 			public CompiledExpression getValue() {
 				return theValue;
@@ -60,9 +62,8 @@ public interface ModelValueElement<M, MV extends M> extends ExElement {
 
 			@Override
 			public void update(ExpressoQIS session) throws QonfigInterpretationException {
-				ExElement.checkElement(session.getFocusType(), theToolkitName, theToolkitVersion, theTypeName);
-				forValue(MODEL_VALUE);
-				super.update(session.asElement(session.getFocusType().getSuperElement()));
+				withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
+				super.update(session);
 				theValue = session.getValueExpression();
 			}
 
@@ -93,13 +94,15 @@ public interface ModelValueElement<M, MV extends M> extends ExElement {
 
 		public class Default<M, MV extends M> extends Def.Simple<M, ModelValueElement<M, MV>>
 		implements CompiledModelValueElement<M, MV, ModelValueElement<M, MV>> {
+			private final String theTypeName;
 			private final Supplier<String> theName;
 			private final ExSupplier<ModelValueSynth<M, MV>, ExpressoInterpretationException> theSynth;
 
 			public Default(ExElement.Def<?> parent, QonfigElement element, ModelType<M> modelType, String toolkitName,
 				Version toolkitVersion, String typeName, Supplier<String> name,
 				ExSupplier<ModelValueSynth<M, MV>, ExpressoInterpretationException> synth) {
-				super(parent, element, modelType, toolkitName, toolkitVersion, typeName);
+				super(parent, element, modelType, toolkitName, toolkitVersion);
+				theTypeName = typeName;
 				theName = name;
 				theSynth = synth;
 			}
@@ -112,6 +115,13 @@ public interface ModelValueElement<M, MV extends M> extends ExElement {
 			@Override
 			public ModelValueSynth<M, MV> createSynthesizer() throws ExpressoInterpretationException {
 				return theSynth.get();
+			}
+
+			@Override
+			public void update(ExpressoQIS session) throws QonfigInterpretationException {
+				if (!session.getFocusType().getName().equals(theTypeName))
+					throw new IllegalStateException("Expected '" + theTypeName + "', not '" + session.getFocusType().getName() + "'");
+				super.update(session.asElement(session.getFocusType().getSuperElement()));
 			}
 
 			@Override

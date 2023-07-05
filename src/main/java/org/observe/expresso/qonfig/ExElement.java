@@ -7,6 +7,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.function.Function;
 
@@ -21,22 +22,12 @@ import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
-import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.TypeConversionException;
 import org.qommons.ClassMap;
 import org.qommons.Identifiable;
-import org.qommons.Version;
 import org.qommons.collect.CollectionUtils;
-import org.qommons.config.AbstractQIS;
-import org.qommons.config.QonfigAddOn;
-import org.qommons.config.QonfigAttributeDef;
-import org.qommons.config.QonfigChildDef;
-import org.qommons.config.QonfigElement;
-import org.qommons.config.QonfigElementDef;
-import org.qommons.config.QonfigElementOrAddOn;
-import org.qommons.config.QonfigInterpretationException;
-import org.qommons.config.QonfigInterpreterCore;
+import org.qommons.config.*;
 import org.qommons.io.ErrorReporting;
 import org.qommons.io.LocatedFilePosition;
 
@@ -65,147 +56,6 @@ public interface ExElement extends Identifiable {
 		}
 	}
 
-	public interface AttributeValueGetter<E extends ExElement, I extends ExElement.Interpreted<? extends E>, D extends ExElement.Def<? extends E>> {
-		Object getFromDef(D def);
-
-		Object getFromInterpreted(I interp);
-
-		Object getFromElement(E element);
-
-		public static <E extends ExElement, I extends ExElement.Interpreted<? extends E>, D extends ExElement.Def<? extends E>> Default<E, I, D> of(
-			Function<? super D, ?> defGetter, Function<? super I, ?> interpretedGetter, Function<? super E, ?> elementGetter) {
-			return new Default<>(defGetter, interpretedGetter, elementGetter);
-		}
-
-		public static <E extends ExElement, I extends ExElement.Interpreted<? extends E>, D extends ExElement.Def<? extends E>, M, MV extends M> Expression<E, I, D, M, MV> ofX(
-			Function<? super D, ? extends CompiledExpression> defGetter,
-			Function<? super I, ? extends InterpretedValueSynth<M, ? extends MV>> interpretedGetter,
-				Function<? super E, ? extends MV> elementGetter) {
-			return new Expression<>(defGetter, interpretedGetter, elementGetter);
-		}
-
-		public static <E extends ExElement, AO extends ExAddOn<? super E>, I extends ExAddOn.Interpreted<? super E, ? extends AO>, D extends ExAddOn.Def<? super E, ? extends AO>> AddOn<E, AO, I, D> addOn(
-			Class<D> defType, Class<I> interpretedType, Class<AO> addOnType) {
-			return new AddOn<>(defType, interpretedType, addOnType);
-		}
-
-		public static class Default<E extends ExElement, I extends ExElement.Interpreted<? extends E>, D extends ExElement.Def<? extends E>>
-		implements AttributeValueGetter<E, I, D> {
-			private final Function<? super D, ?> theDefGetter;
-			private final Function<? super I, ?> theInterpretedGetter;
-			private final Function<? super E, ?> theElementGetter;
-
-			public Default(Function<? super D, ?> defGetter, Function<? super I, ?> interpretedGetter,
-				Function<? super E, ?> elementGetter) {
-				theDefGetter = defGetter;
-				theInterpretedGetter = interpretedGetter;
-				theElementGetter = elementGetter;
-			}
-
-			@Override
-			public Object getFromDef(D def) {
-				return theDefGetter.apply(def);
-			}
-
-			@Override
-			public Object getFromInterpreted(I interp) {
-				return theInterpretedGetter == null ? null : theInterpretedGetter.apply(interp);
-			}
-
-			@Override
-			public Object getFromElement(E element) {
-				return theElementGetter == null ? null : theElementGetter.apply(element);
-			}
-		}
-
-		public static class Expression<E extends ExElement, I extends ExElement.Interpreted<? extends E>, D extends ExElement.Def<? extends E>, M, MV extends M>
-		implements AttributeValueGetter<E, I, D> {
-			private final Function<? super D, ? extends LocatedExpression> theDefGetter;
-			private final Function<? super I, ? extends InterpretedValueSynth<M, ? extends MV>> theInterpretedGetter;
-			private final Function<? super E, ? extends MV> theElementGetter;
-
-			public Expression(Function<? super D, ? extends LocatedExpression> defGetter,
-				Function<? super I, ? extends InterpretedValueSynth<M, ? extends MV>> interpretedGetter,
-					Function<? super E, ? extends MV> elementGetter) {
-				theDefGetter = defGetter;
-				theInterpretedGetter = interpretedGetter;
-				theElementGetter = elementGetter;
-			}
-
-			@Override
-			public LocatedExpression getFromDef(D def) {
-				return theDefGetter.apply(def);
-			}
-
-			@Override
-			public InterpretedValueSynth<M, ? extends MV> getFromInterpreted(I interp) {
-				return theInterpretedGetter == null ? null : theInterpretedGetter.apply(interp);
-			}
-
-			@Override
-			public MV getFromElement(E element) {
-				return theElementGetter == null ? null : theElementGetter.apply(element);
-			}
-		}
-
-		public static class AddOn<E extends ExElement, AO extends ExAddOn<? super E>, I extends ExAddOn.Interpreted<? super E, ? extends AO>, D extends ExAddOn.Def<? super E, ? extends AO>>
-		implements AttributeValueGetter<E, ExElement.Interpreted<? extends E>, ExElement.Def<? extends E>> {
-			private final Class<D> theDefType;
-			private final Class<I> theInterpretedType;
-			private final Class<AO> theAddOnType;
-
-			public AddOn(Class<D> defType, Class<I> interpretedType, Class<AO> addOnType) {
-				theDefType = defType;
-				theInterpretedType = interpretedType;
-				theAddOnType = addOnType;
-			}
-
-			@Override
-			public D getFromDef(Def<? extends E> def) {
-				return def.getAddOn(theDefType);
-			}
-
-			@Override
-			public I getFromInterpreted(Interpreted<? extends E> interp) {
-				return interp.getAddOn(theInterpretedType);
-			}
-
-			@Override
-			public AO getFromElement(E element) {
-				return element.getAddOn(theAddOnType);
-			}
-		}
-	}
-
-	public interface ChildElementGetter<E extends ExElement, I extends ExElement.Interpreted<? extends E>, D extends ExElement.Def<? extends E>> {
-		List<? extends ExElement.Def<?>> getChildrenFromDef(D def);
-
-		List<? extends ExElement.Interpreted<?>> getChildrenFromInterpreted(I interp);
-
-		List<? extends ExElement> getChildrenFromElement(E element);
-
-		public static <E extends ExElement, I extends ExElement.Interpreted<? extends E>, D extends ExElement.Def<? extends E>> ChildElementGetter<E, I, D> of(
-			Function<D, List<? extends ExElement.Def<?>>> defGetter, Function<I, List<? extends ExElement.Interpreted<?>>> interpGetter,
-			Function<E, List<? extends ExElement>> elGetter) {
-			return new ChildElementGetter<E, I, D>() {
-				@Override
-				public List<? extends Def<?>> getChildrenFromDef(D def) {
-					return defGetter.apply(def);
-				}
-
-				@Override
-				public List<? extends Interpreted<?>> getChildrenFromInterpreted(I interp) {
-					return interpGetter == null ? Collections.emptyList() : interpGetter.apply(interp);
-				}
-
-				@Override
-				public List<? extends ExElement> getChildrenFromElement(E element) {
-					return elGetter == null ? Collections.emptyList() : elGetter.apply(element);
-				}
-			};
-		}
-	}
-
 	/**
 	 * The definition of an element, interpreted via {@link QonfigInterpreterCore Qonfig interpretation} from {@link QonfigElement}s
 	 *
@@ -226,130 +76,6 @@ public interface ExElement extends Identifiable {
 		ObservableModelSet.Built getModels();
 
 		Class<?> getCallingClass();
-
-		Object getAttribute(QonfigAttributeDef attr);
-
-		Object getElementValue();
-
-		List<? extends Def<?>> getChildren(QonfigChildDef role);
-
-		default List<Def<?>> getAllChildren() {
-			List<Def<?>> children = null;
-			Set<QonfigChildDef.Declared> fulfilled = null;
-			for (QonfigChildDef.Declared child : getElement().getType().getAllChildren().keySet()) {
-				if (fulfilled == null)
-					fulfilled = new HashSet<>();
-				if (!fulfilled.add(child))
-					continue;
-				List<? extends Def<?>> roleChildren = getChildren(child);
-				if (!roleChildren.isEmpty()) {
-					if (children == null)
-						children = new ArrayList<>();
-					children.addAll(roleChildren);
-				}
-			}
-			for (QonfigAddOn inh : getElement().getInheritance().getExpanded(QonfigAddOn::getInheritance)) {
-				for (QonfigChildDef.Declared child : inh.getDeclaredChildren().values()) {
-					if (fulfilled == null)
-						fulfilled = new HashSet<>();
-					if (!fulfilled.add(child))
-						continue;
-					List<? extends Def<?>> roleChildren = getChildren(child);
-					if (!roleChildren.isEmpty()) {
-						if (children == null)
-							children = new ArrayList<>();
-						children.addAll(roleChildren);
-					}
-				}
-			}
-			if (children != null)
-				Collections.sort(children, (c1, c2) -> Integer.compare(c1.reporting().getFileLocation().getPosition(0).getPosition(),
-					c2.reporting().getFileLocation().getPosition(0).getPosition()));
-			return children == null ? Collections.emptyList() : children;
-		}
-
-		Object getAttribute(Interpreted<? extends E> interpreted, QonfigAttributeDef attr);
-
-		Object getElementValue(Interpreted<? extends E> interpreted);
-
-		List<? extends Interpreted<?>> getChildren(Interpreted<? extends E> interpreted, QonfigChildDef role);
-
-		default List<Interpreted<?>> getAllChildren(Interpreted<? extends E> interpreted) {
-			List<Interpreted<?>> children = null;
-			Set<QonfigChildDef.Declared> fulfilled = null;
-			for (QonfigChildDef.Declared child : getElement().getType().getAllChildren().keySet()) {
-				if (fulfilled == null)
-					fulfilled = new HashSet<>();
-				if (!fulfilled.add(child))
-					continue;
-				List<? extends Interpreted<?>> roleChildren = getChildren(interpreted, child);
-				if (!roleChildren.isEmpty()) {
-					if (children == null)
-						children = new ArrayList<>();
-					children.addAll(roleChildren);
-				}
-			}
-			for (QonfigAddOn inh : getElement().getInheritance().getExpanded(QonfigAddOn::getInheritance)) {
-				for (QonfigChildDef.Declared child : inh.getDeclaredChildren().values()) {
-					if (fulfilled == null)
-						fulfilled = new HashSet<>();
-					if (!fulfilled.add(child))
-						continue;
-					List<? extends Interpreted<?>> roleChildren = getChildren(interpreted, child);
-					if (!roleChildren.isEmpty()) {
-						if (children == null)
-							children = new ArrayList<>();
-						children.addAll(roleChildren);
-					}
-				}
-			}
-			if (children != null)
-				Collections.sort(children,
-					(c1, c2) -> Integer.compare(c1.getDefinition().reporting().getFileLocation().getPosition(0).getPosition(),
-						c2.getDefinition().reporting().getFileLocation().getPosition(0).getPosition()));
-			return children == null ? Collections.emptyList() : children;
-		}
-
-		Object getAttribute(E element, QonfigAttributeDef attr);
-
-		Object getElementValue(E element);
-
-		List<? extends ExElement> getChildren(E element, QonfigChildDef role);
-
-		default List<ExElement> getAllChildren(E element) {
-			List<ExElement> children = null;
-			Set<QonfigChildDef.Declared> fulfilled = null;
-			for (QonfigChildDef.Declared child : getElement().getType().getAllChildren().keySet()) {
-				if (fulfilled == null)
-					fulfilled = new HashSet<>();
-				if (!fulfilled.add(child))
-					continue;
-				List<? extends ExElement> roleChildren = getChildren(element, child);
-				if (!roleChildren.isEmpty()) {
-					if (children == null)
-						children = new ArrayList<>();
-					children.addAll(roleChildren);
-				}
-			}
-			for (QonfigAddOn inh : getElement().getInheritance().getExpanded(QonfigAddOn::getInheritance)) {
-				for (QonfigChildDef.Declared child : inh.getDeclaredChildren().values()) {
-					if (fulfilled == null)
-						fulfilled = new HashSet<>();
-					if (!fulfilled.add(child))
-						continue;
-					List<? extends ExElement> roleChildren = getChildren(element, child);
-					if (!roleChildren.isEmpty()) {
-						if (children == null)
-							children = new ArrayList<>();
-						children.addAll(roleChildren);
-					}
-				}
-			}
-			if (children != null)
-				Collections.sort(children, (c1, c2) -> Integer.compare(c1.reporting().getFileLocation().getPosition(0).getPosition(),
-					c2.reporting().getFileLocation().getPosition(0).getPosition()));
-			return children == null ? Collections.emptyList() : children;
-		}
 
 		/**
 		 * @param <AO> The type of the add-on to get
@@ -373,11 +99,126 @@ public interface ExElement extends Identifiable {
 			return ao == null ? null : fn.apply(ao);
 		}
 
-		void forAttribute(QonfigAttributeDef attr, AttributeValueGetter<? super E, ?, ?> getter);
+		Object getAttribute(QonfigAttributeDef attr);
 
-		void forValue(AttributeValueGetter<? super E, ?, ?> getter);
+		Object getElementValue();
 
-		void forChild(QonfigChildDef child, ChildElementGetter<? super E, ?, ?> getter);
+		List<? extends Def<?>> getDefChildren(QonfigChildDef child);
+
+		default List<Def<?>> getAllDefChildren() {
+			List<Def<?>> children = null;
+			Set<QonfigChildDef.Declared> fulfilled = null;
+			for (QonfigChildDef.Declared child : getElement().getType().getAllChildren().keySet()) {
+				if (fulfilled == null)
+					fulfilled = new HashSet<>();
+				if (!fulfilled.add(child))
+					continue;
+				List<? extends Def<?>> roleChildren = getDefChildren(child);
+				if (!roleChildren.isEmpty()) {
+					if (children == null)
+						children = new ArrayList<>();
+					children.addAll(roleChildren);
+				}
+			}
+			for (QonfigAddOn inh : getElement().getInheritance().getExpanded(QonfigAddOn::getInheritance)) {
+				for (QonfigChildDef.Declared child : inh.getDeclaredChildren().values()) {
+					if (fulfilled == null)
+						fulfilled = new HashSet<>();
+					if (!fulfilled.add(child))
+						continue;
+					List<? extends Def<?>> roleChildren = getDefChildren(child);
+					if (!roleChildren.isEmpty()) {
+						if (children == null)
+							children = new ArrayList<>();
+						children.addAll(roleChildren);
+					}
+				}
+			}
+			if (children != null)
+				Collections.sort(children, (c1, c2) -> Integer.compare(c1.reporting().getFileLocation().getPosition(0).getPosition(),
+					c2.reporting().getFileLocation().getPosition(0).getPosition()));
+			return children == null ? Collections.emptyList() : children;
+		}
+
+		Object getAttribute(Interpreted<? extends E> interpreted, QonfigAttributeDef attr);
+
+		Object getElementValue(Interpreted<? extends E> interpreted);
+
+		List<? extends Interpreted<?>> getInterpretedChildren(Interpreted<? extends E> interpreted, QonfigChildDef child);
+
+		default List<Interpreted<?>> getAllInterpretedChildren(Interpreted<? extends E> interpreted) {
+			List<Interpreted<?>> children = null;
+			Set<QonfigChildDef.Declared> fulfilled = null;
+			for (QonfigChildDef.Declared child : getElement().getType().getAllChildren().keySet()) {
+				if (fulfilled == null)
+					fulfilled = new HashSet<>();
+				if (!fulfilled.add(child))
+					continue;
+				List<? extends Interpreted<?>> roleChildren = getInterpretedChildren(interpreted, child);
+				if (!roleChildren.isEmpty()) {
+					if (children == null)
+						children = new ArrayList<>();
+					children.addAll(roleChildren);
+				}
+			}
+			for (QonfigAddOn inh : getElement().getInheritance().getExpanded(QonfigAddOn::getInheritance)) {
+				for (QonfigChildDef.Declared child : inh.getDeclaredChildren().values()) {
+					if (fulfilled == null)
+						fulfilled = new HashSet<>();
+					if (!fulfilled.add(child))
+						continue;
+					List<? extends Interpreted<?>> roleChildren = getInterpretedChildren(interpreted, child);
+					if (!roleChildren.isEmpty()) {
+						if (children == null)
+							children = new ArrayList<>();
+						children.addAll(roleChildren);
+					}
+				}
+			}
+			if (children != null)
+				Collections.sort(children, (c1, c2) -> Integer.compare(c1.reporting().getFileLocation().getPosition(0).getPosition(),
+					c2.reporting().getFileLocation().getPosition(0).getPosition()));
+			return children == null ? Collections.emptyList() : children;
+		}
+
+		List<? extends ExElement> getElementChildren(E element, QonfigChildDef child);
+
+		default List<ExElement> getAllElementChildren(E element) {
+			List<ExElement> children = null;
+			Set<QonfigChildDef.Declared> fulfilled = null;
+			for (QonfigChildDef.Declared child : getElement().getType().getAllChildren().keySet()) {
+				if (fulfilled == null)
+					fulfilled = new HashSet<>();
+				if (!fulfilled.add(child))
+					continue;
+				List<? extends ExElement> roleChildren = getElementChildren(element, child);
+				if (!roleChildren.isEmpty()) {
+					if (children == null)
+						children = new ArrayList<>();
+					children.addAll(roleChildren);
+				}
+			}
+			for (QonfigAddOn inh : getElement().getInheritance().getExpanded(QonfigAddOn::getInheritance)) {
+				for (QonfigChildDef.Declared child : inh.getDeclaredChildren().values()) {
+					if (fulfilled == null)
+						fulfilled = new HashSet<>();
+					if (!fulfilled.add(child))
+						continue;
+					List<? extends ExElement> roleChildren = getElementChildren(element, child);
+					if (!roleChildren.isEmpty()) {
+						if (children == null)
+							children = new ArrayList<>();
+						children.addAll(roleChildren);
+					}
+				}
+			}
+			if (children != null)
+				Collections.sort(children, (c1, c2) -> Integer.compare(c1.reporting().getFileLocation().getPosition(0).getPosition(),
+					c2.reporting().getFileLocation().getPosition(0).getPosition()));
+			return children == null ? Collections.emptyList() : children;
+		}
+
+		ExElement.Def<?> withTraceability(ElementTypeTraceability<? super E, ?, ?> traceability);
 
 		/**
 		 * Updates this element definition. Must be called at least once after interpretation produces this object.
@@ -386,6 +227,56 @@ public interface ExElement extends Identifiable {
 		 * @throws QonfigInterpretationException If an error occurs interpreting some of this element's fields or content
 		 */
 		void update(ExpressoQIS session) throws QonfigInterpretationException;
+
+		public static class QonfigElementKey {
+			public String toolkitName;
+			public int toolkitMajorVersion;
+			public int toolkitMinorVersion;
+			public String typeName;
+
+			public QonfigElementKey(String toolkitName, int toolkitMajorVersion, int toolkitMinorVersion, String typeName) {
+				this.toolkitName = toolkitName;
+				this.toolkitMinorVersion = toolkitMinorVersion;
+				this.toolkitMajorVersion = toolkitMajorVersion;
+				this.typeName = typeName;
+			}
+
+			public QonfigElementKey(ElementTypeTraceability<?, ?, ?> traceability) {
+				toolkitName = traceability.getToolkitName();
+				toolkitMajorVersion = traceability.getToolkitVersion().majorVersion;
+				toolkitMinorVersion = traceability.getToolkitVersion().minorVersion;
+				typeName = traceability.getTypeName();
+			}
+
+			public QonfigElementKey(QonfigElementOrAddOn type) {
+				toolkitName = type.getDeclarer().getName();
+				toolkitMajorVersion = type.getDeclarer().getMajorVersion();
+				toolkitMinorVersion = type.getDeclarer().getMinorVersion();
+				typeName = type.getName();
+			}
+
+			@Override
+			public int hashCode() {
+				return Objects.hash(toolkitName, toolkitMajorVersion, toolkitMinorVersion, typeName);
+			}
+
+			@Override
+			public boolean equals(Object obj) {
+				if (obj == this)
+					return true;
+				else if (!(obj instanceof QonfigElementKey))
+					return false;
+				QonfigElementKey other = (QonfigElementKey) obj;
+				return toolkitName.equals(other.toolkitName) //
+					&& toolkitMajorVersion == other.toolkitMajorVersion && toolkitMinorVersion == other.toolkitMinorVersion//
+					&& typeName.equals(other.typeName);
+			}
+
+			@Override
+			public String toString() {
+				return toolkitName + " v" + toolkitMajorVersion + "." + toolkitMinorVersion + "." + typeName;
+			}
+		}
 
 		/**
 		 * An abstract implementation of {@link Def}
@@ -396,10 +287,8 @@ public interface ExElement extends Identifiable {
 			private final Identity theId;
 			private final ExElement.Def<?> theParent;
 			private QonfigElement theElement;
-			private final Map<QonfigAttributeDef.Declared, AttributeValueGetter<? super E, ?, ?>> theAttributes;
-			private AttributeValueGetter<? super E, ?, ?> theValue;
-			private final Map<QonfigChildDef.Declared, ChildElementGetter<? super E, ?, ?>> theChildren;
 			private final ClassMap<ExAddOn.Def<? super E, ?>> theAddOns;
+			private final Map<QonfigElementKey, ElementTypeTraceability<? super E, ?, ?>> theTraceability;
 			private ExpressoEnv theExpressoEnv;
 			private ObservableModelSet.Built theModels;
 			private ErrorReporting theReporting;
@@ -413,9 +302,8 @@ public interface ExElement extends Identifiable {
 				theId = element == null ? null : new Identity(element.getType().getName(), element.getPositionInFile());
 				theParent = parent;
 				theElement = element;
-				theAttributes = new HashMap<>();
-				theChildren = new HashMap<>();
 				theAddOns = new ClassMap<>();
+				theTraceability = new HashMap<>();
 			}
 
 			@Override
@@ -470,81 +358,92 @@ public interface ExElement extends Identifiable {
 
 			@Override
 			public Object getAttribute(QonfigAttributeDef attr) {
-				AttributeValueGetter<? super E, ?, ?> getter = theAttributes.get(attr.getDeclared());
-				if (getter == null)
+				QonfigElementOrAddOn owner = attr.getDeclared().getOwner();
+				QonfigToolkit declarer = owner.getDeclarer();
+				ElementTypeTraceability<E, Interpreted<? extends E>, Def<? extends E>> traceability = (ElementTypeTraceability<E, Interpreted<? extends E>, Def<? extends E>>) theTraceability
+					.get(new QonfigElementKey(declarer.getName(), declarer.getMajorVersion(), declarer.getMinorVersion(), owner.getName()));
+				if (traceability == null)
 					return null;
-				return ((AttributeValueGetter<? super E, ?, Def<E>>) getter).getFromDef(this);
+				return traceability.getDefAttribute(this, attr.getName());
 			}
 
 			@Override
 			public Object getElementValue() {
-				return theValue == null ? null : ((AttributeValueGetter<? super E, ?, Def<E>>) theValue).getFromDef(this);
+				QonfigValueDef def = theElement.getType().getValue();
+				if (def == null)
+					return null;
+				QonfigElementOrAddOn owner = def.getDeclared().getOwner();
+				QonfigToolkit declarer = owner.getDeclarer();
+				ElementTypeTraceability<E, Interpreted<? extends E>, Def<? extends E>> traceability = (ElementTypeTraceability<E, Interpreted<? extends E>, Def<? extends E>>) theTraceability
+					.get(new QonfigElementKey(declarer.getName(), declarer.getMajorVersion(), declarer.getMinorVersion(), owner.getName()));
+				if (traceability == null)
+					return null;
+				return traceability.getDefElementValue(this);
 			}
 
 			@Override
-			public List<? extends Def<?>> getChildren(QonfigChildDef role) {
-				ChildElementGetter<? super E, ?, ?> getter = theChildren.get(role.getDeclared());
-				if (getter == null)
+			public List<? extends Def<?>> getDefChildren(QonfigChildDef role) {
+				QonfigElementOrAddOn owner = role.getDeclared().getOwner();
+				QonfigToolkit declarer = owner.getDeclarer();
+				ElementTypeTraceability<E, Interpreted<? extends E>, Def<? extends E>> traceability = (ElementTypeTraceability<E, Interpreted<? extends E>, Def<? extends E>>) theTraceability
+					.get(new QonfigElementKey(declarer.getName(), declarer.getMajorVersion(), declarer.getMinorVersion(), owner.getName()));
+				if (traceability == null)
 					return Collections.emptyList();
-				return ((ChildElementGetter<? super E, ?, Def<E>>) getter).getChildrenFromDef(this);
+				return traceability.getDefChildren(this, role.getName());
 			}
 
 			@Override
 			public Object getAttribute(Interpreted<? extends E> interpreted, QonfigAttributeDef attr) {
-				AttributeValueGetter<? super E, ?, ?> getter = theAttributes.get(attr.getDeclared());
-				if (getter == null)
+				QonfigElementOrAddOn owner = attr.getDeclared().getOwner();
+				QonfigToolkit declarer = owner.getDeclarer();
+				ElementTypeTraceability<E, Interpreted<? extends E>, Def<? extends E>> traceability = (ElementTypeTraceability<E, Interpreted<? extends E>, Def<? extends E>>) theTraceability
+					.get(new QonfigElementKey(declarer.getName(), declarer.getMajorVersion(), declarer.getMinorVersion(), owner.getName()));
+				if (traceability == null)
 					return null;
-				return ((AttributeValueGetter<? super E, Interpreted<? extends E>, ?>) getter).getFromInterpreted(interpreted);
+				return traceability.getInterpretedAttribute(interpreted, attr.getName());
 			}
 
 			@Override
 			public Object getElementValue(Interpreted<? extends E> interpreted) {
-				return theValue == null ? null
-					: ((AttributeValueGetter<? super E, Interpreted<? extends E>, ?>) theValue).getFromInterpreted(interpreted);
-			}
-
-			@Override
-			public List<? extends Interpreted<?>> getChildren(Interpreted<? extends E> interpreted, QonfigChildDef role) {
-				ChildElementGetter<? super E, ?, ?> getter = theChildren.get(role.getDeclared());
-				if (getter == null)
-					return Collections.emptyList();
-				return ((ChildElementGetter<? super E, Interpreted<? extends E>, ?>) getter).getChildrenFromInterpreted(interpreted);
-			}
-
-			@Override
-			public Object getAttribute(E element, QonfigAttributeDef attr) {
-				AttributeValueGetter<? super E, ?, ?> getter = theAttributes.get(attr.getDeclared());
-				if (getter == null)
+				QonfigValueDef def = theElement.getType().getValue();
+				if (def == null)
 					return null;
-				return ((AttributeValueGetter<? super E, ?, ?>) getter).getFromElement(element);
+				QonfigElementOrAddOn owner = def.getDeclared().getOwner();
+				QonfigToolkit declarer = owner.getDeclarer();
+				ElementTypeTraceability<E, Interpreted<? extends E>, Def<? extends E>> traceability = (ElementTypeTraceability<E, Interpreted<? extends E>, Def<? extends E>>) theTraceability
+					.get(new QonfigElementKey(declarer.getName(), declarer.getMajorVersion(), declarer.getMinorVersion(), owner.getName()));
+				if (traceability == null)
+					return null;
+				return traceability.getInterpretedElementValue(interpreted);
 			}
 
 			@Override
-			public Object getElementValue(E element) {
-				return theValue == null ? null : ((AttributeValueGetter<? super E, ?, ?>) theValue).getFromElement(element);
-			}
-
-			@Override
-			public List<? extends ExElement> getChildren(E element, QonfigChildDef role) {
-				ChildElementGetter<? super E, ?, ?> getter = theChildren.get(role.getDeclared());
-				if (getter == null)
+			public List<? extends Interpreted<?>> getInterpretedChildren(Interpreted<? extends E> interpreted, QonfigChildDef role) {
+				QonfigElementOrAddOn owner = role.getDeclared().getOwner();
+				QonfigToolkit declarer = owner.getDeclarer();
+				ElementTypeTraceability<E, Interpreted<? extends E>, Def<? extends E>> traceability = (ElementTypeTraceability<E, Interpreted<? extends E>, Def<? extends E>>) theTraceability
+					.get(new QonfigElementKey(declarer.getName(), declarer.getMajorVersion(), declarer.getMinorVersion(), owner.getName()));
+				if (traceability == null)
 					return Collections.emptyList();
-				return ((ChildElementGetter<? super E, ?, ?>) getter).getChildrenFromElement(element);
+				return traceability.getInterpretedChildren(interpreted, role.getName());
 			}
 
 			@Override
-			public void forAttribute(QonfigAttributeDef attr, AttributeValueGetter<? super E, ?, ?> getter) {
-				theAttributes.putIfAbsent(attr.getDeclared(), getter);
+			public List<? extends ExElement> getElementChildren(E element, QonfigChildDef role) {
+				QonfigElementOrAddOn owner = role.getDeclared().getOwner();
+				QonfigToolkit declarer = owner.getDeclarer();
+				ElementTypeTraceability<E, Interpreted<? extends E>, Def<? extends E>> traceability = (ElementTypeTraceability<E, Interpreted<? extends E>, Def<? extends E>>) theTraceability
+					.get(new QonfigElementKey(declarer.getName(), declarer.getMajorVersion(), declarer.getMinorVersion(), owner.getName()));
+				if (traceability == null)
+					return Collections.emptyList();
+				return traceability.getElementChildren(element, role.getName());
 			}
 
 			@Override
-			public void forValue(AttributeValueGetter<? super E, ?, ?> getter) {
-				theValue = getter;
-			}
-
-			@Override
-			public void forChild(QonfigChildDef child, ChildElementGetter<? super E, ?, ?> getter) {
-				theChildren.putIfAbsent(child.getDeclared(), getter);
+			public ExElement.Def<?> withTraceability(ElementTypeTraceability<? super E, ?, ?> traceability) {
+				if (theTraceability.putIfAbsent(new QonfigElementKey(traceability), traceability) != null)
+					throw new IllegalArgumentException("Traceability has already been configured for " + traceability);
+				return this;
 			}
 
 			@Override
@@ -566,27 +465,10 @@ public interface ExElement extends Identifiable {
 					for (ExAddOn.Def<? super E, ?> addOn : theAddOns.getAllValues())
 						addOn.update(session.asElement(addOn.getType()), this);
 
-					// Ensure implementation added all attribute/child getters
-					if (theValue == null && theElement.getType().getValue() != null)
-						theReporting.warn(getClass() + ": Value getter not declared for " + theElement.getType().getValue().getOwner());
-					for (QonfigAttributeDef.Declared attr : session.getElement().getType().getAllAttributes().keySet()) {
-						if (!theAttributes.containsKey(attr))
-							theReporting.warn(getClass() + ": Attribute getter not declared for " + attr);
-					}
-					for (QonfigChildDef.Declared child : session.getElement().getType().getAllChildren().keySet()) {
-						if (!theChildren.containsKey(child))
-							theReporting.warn(getClass() + ": Child getter not declared for " + child);
-					}
-					for (QonfigAddOn addOn : session.getElement().getInheritance().getExpanded(QonfigAddOn::getInheritance)) {
-						for (QonfigAttributeDef.Declared attr : addOn.getDeclaredAttributes().values()) {
-							if (!theAttributes.containsKey(attr))
-								theReporting.warn(getClass() + ": Attribute getter not declared for " + attr);
-						}
-						for (QonfigChildDef.Declared child : addOn.getDeclaredChildren().values()) {
-							if (!theChildren.containsKey(child))
-								theReporting.warn(getClass() + ": Child getter not declared for " + child);
-						}
-					}
+					// Ensure implementation added all traceability
+					checkTraceability(theElement.getType());
+					for (QonfigAddOn inh : theElement.getInheritance().values())
+						checkTraceability(inh);
 				}
 			}
 
@@ -616,19 +498,27 @@ public interface ExElement extends Identifiable {
 					addAddOn(session, inh, tested);
 			}
 
+			private void checkTraceability(QonfigElementOrAddOn type) {
+				QonfigElementKey key = new QonfigElementKey(type);
+				if (!theTraceability.containsKey(key)) {
+					// Only warn about types that need any traceability
+					if (!type.getDeclaredAttributes().isEmpty() //
+						|| (type.getValue() != null && type.getValue().getOwner() == type)//
+						|| !type.getDeclaredChildren().isEmpty())
+						theReporting.warn(getClass() + ": Traceability not configured for " + key);
+				} else {
+					if (type.getSuperElement() != null)
+						checkTraceability(type.getSuperElement());
+					for (QonfigAddOn inh : type.getInheritance())
+						checkTraceability(inh);
+				}
+			}
+
 			@Override
 			public String toString() {
 				return theElement == null ? super.toString() : theElement.toString();
 			}
 		}
-	}
-
-	public static void checkElement(QonfigElementOrAddOn element, String tkName, Version tkVersion, String elementName) {
-		if (!element.getDeclarer().getName().equals(tkName) || element.getDeclarer().getMajorVersion() != tkVersion.major
-			|| element.getDeclarer().getMinorVersion() != tkVersion.minor || !element.getName().equals(elementName))
-			throw new IllegalStateException("This class is designed against " + tkName + " v" + tkVersion.major + "." + tkVersion.minor
-				+ " " + elementName + ", not " + element.getDeclarer().getName() + " v" + element.getDeclarer().getMajorVersion() + "."
-				+ element.getDeclarer().getMinorVersion() + " " + element.getName());
 	}
 
 	/**
@@ -637,12 +527,21 @@ public interface ExElement extends Identifiable {
 	 *
 	 * @param <E> The type of element that this interpretation is for
 	 */
-	public interface Interpreted<E extends ExElement> {
+	public interface Interpreted<E extends ExElement> extends Identifiable {
 		/** @return The definition that produced this interpretation */
 		Def<? super E> getDefinition();
 
-		/** @return The interpretation from the parent element */
+		@Override
+		default Object getIdentity() {
+			return getDefinition().getIdentity();
+		}
+
+		/** @return The interpretation of the parent element */
 		Interpreted<?> getParentElement();
+
+		default ErrorReporting reporting() {
+			return getDefinition().reporting();
+		}
 
 		/** @return This element's models */
 		InterpretedModelSet getModels();
@@ -707,6 +606,16 @@ public interface ExElement extends Identifiable {
 					theAddOns.put(interp.getClass(), interp);
 				}
 				isDestroyed = SettableValue.build(boolean.class).withValue(false).build();
+			}
+
+			@Override
+			public ErrorReporting reporting() {
+				return theDefinition.reporting();
+			}
+
+			@Override
+			public Object getIdentity() {
+				return theDefinition.getIdentity();
 			}
 
 			@Override

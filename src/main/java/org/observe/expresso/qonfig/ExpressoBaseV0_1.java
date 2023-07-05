@@ -38,9 +38,16 @@ import org.observe.collect.ObservableSortedCollection;
 import org.observe.collect.ObservableSortedSet;
 import org.observe.config.ObservableConfig;
 import org.observe.config.ObservableValueSet;
-import org.observe.expresso.*;
+import org.observe.expresso.ExpressoEnv;
+import org.observe.expresso.ExpressoInterpretationException;
+import org.observe.expresso.ModelException;
+import org.observe.expresso.ModelInstantiationException;
+import org.observe.expresso.ModelType;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelType.ModelInstanceType.SingleTyped;
+import org.observe.expresso.ModelTypes;
+import org.observe.expresso.ObservableExpression;
+import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.AbstractValueSynth;
 import org.observe.expresso.ObservableModelSet.CompiledModelValue;
 import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
@@ -48,6 +55,8 @@ import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueSynth;
 import org.observe.expresso.ObservableModelSet.RuntimeValuePlaceholder;
+import org.observe.expresso.TypeConversionException;
+import org.observe.expresso.VariableType;
 import org.observe.expresso.ops.NameExpression;
 import org.observe.expresso.qonfig.DynamicModelValue.Identity;
 import org.observe.expresso.qonfig.ModelValueElement.CompiledModelValueElement;
@@ -158,12 +167,6 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 
 	@Override
 	public QonfigInterpreterCore.Builder configureInterpreter(QonfigInterpreterCore.Builder interpreter) {
-		interpreter.createWith("expresso", Expresso.class, session -> {
-			ClassView classView = wrap(session).interpretChildren("imports", ClassView.class).peekFirst();
-			ObservableModelSet.Built models = wrap(session).setModels(null, classView)//
-				.interpretChildren("models", ObservableModelSet.Built.class).peekFirst();
-			return new Expresso(classView, models);
-		});
 		interpreter//
 		.modifyWith("with-element-model", Object.class, new ElementModelAugmentation<Object>() {
 			@Override
@@ -299,17 +302,12 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 	}
 
 	void configureBaseModels(QonfigInterpreterCore.Builder interpreter) {
-		interpreter.createWith("imports", ClassView.class, session -> {
-			ClassView.Builder builder = ClassView.build().withWildcardImport("java.lang");
-			for (CoreSession imp : session.forChildren("import")) {
-				if (imp.getValueText().endsWith(".*"))
-					builder.withWildcardImport(imp.getValueText().substring(0, imp.getValueText().length() - 2));
-				else
-					builder.withImport(imp.getValueText(), imp.reporting().at(imp.getValuePosition()));
-			}
-			ClassView cv = builder.build();
-			wrap(session).setModels(null, cv);
-			return cv;
+		interpreter.createWith("imports", ClassViewElement.class, session -> {
+			ExpressoQIS exS = session.as(ExpressoQIS.class);
+			return new ClassViewElement(exS.getElementRepresentation(), exS.getElement());
+		}).createWith("import", ClassViewElement.ImportElement.class, session -> {
+			ExpressoQIS exS = session.as(ExpressoQIS.class);
+			return new ClassViewElement.ImportElement(exS.getElementRepresentation(), exS.getElement());
 		}).createWith("models", ObservableModelSet.Built.class, session -> {
 			ExpressoQIS expressoSession = wrap(session);
 			ObservableModelSet.Builder builder = ObservableModelSet.build("models", ObservableModelSet.JAVA_NAME_CHECKER);

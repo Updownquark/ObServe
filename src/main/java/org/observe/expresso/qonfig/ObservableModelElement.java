@@ -62,8 +62,11 @@ import org.qommons.threading.QommonsTimer;
 import com.google.common.reflect.TypeToken;
 
 public abstract class ObservableModelElement extends ExElement.Abstract {
-	public static final ExElement.ChildElementGetter<ObservableModelElement, Interpreted<?>, Def<?>> VALUES = ExElement.ChildElementGetter
-		.<ObservableModelElement, Interpreted<?>, Def<?>> of(Def::getValues, Interpreted::getValues, ObservableModelElement::getValues);
+	private static final ElementTypeTraceability<ObservableModelElement, Interpreted<?>, Def<?>> TRACEABILITY = ElementTypeTraceability
+		.<ObservableModelElement, Interpreted<?>, Def<?>> build(ExpressoSessionImplV0_1.TOOLKIT_NAME, ExpressoSessionImplV0_1.VERSION,
+			"abst-model")//
+		.reflectMethods(Def.class, Interpreted.class, ObservableModelElement.class)//
+		.build();
 
 	public static abstract class Def<M extends ObservableModelElement> extends ExElement.Def.Abstract<M> {
 		private final List<ModelValueElement.Def<?, ?>> theValues;
@@ -75,70 +78,72 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 			theValues = new ArrayList<>();
 		}
 
+		@QonfigChildGetter("value")
 		public List<? extends ModelValueElement.Def<?, ?>> getValues() {
 			return Collections.unmodifiableList(theValues);
 		}
 
 		@Override
 		public void update(ExpressoQIS session) throws QonfigInterpretationException {
-			ExElement.checkElement(session.getFocusType(), ExpressoSessionImplV0_1.TOOLKIT_NAME, ExpressoSessionImplV0_1.VERSION,
-				"abst-model");
+			withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 			theValueRole = session.getRole("value");
-			forChild(theValueRole, VALUES);
 
 			ObservableModelSet.Builder builder = (ObservableModelSet.Builder) session.getExpressoEnv().getModels();
 			CollectionUtils
-			.synchronize(getAllChildren(), session.forChildren(), (me, ms) -> ExElement.typesEqual(me.getElement(), ms.getElement()))
-			.adjust(new CollectionUtils.CollectionSynchronizerE<ExElement.Def<?>, ExpressoQIS, QonfigInterpretationException>() {
-				@Override
-				public boolean getOrder(ElementSyncInput<ExElement.Def<?>, ExpressoQIS> element) throws QonfigInterpretationException {
-					return true;
-				}
-
-				@Override
-				public ElementSyncAction leftOnly(ElementSyncInput<ExElement.Def<?>, ExpressoQIS> element)
-					throws QonfigInterpretationException {
-					List<? extends ExElement.Def<?>> roleChildren = getRoleChildren(element.getLeftValue().getElement(),
-						Def.this.reporting());
-					if (roleChildren != null) {
-						int index = ArrayUtils.binarySearch(roleChildren,
-							v -> Integer.compare(element.getLeftValue().getElement().getPositionInFile().getPosition(),
-								v.getElement().getPositionInFile().getPosition()));
-						if (index >= 0)
-							roleChildren.remove(index);
+			.synchronize(getAllDefChildren(), session.forChildren(), (me, ms) -> ExElement.typesEqual(me.getElement(), ms.getElement()))
+			.adjust(
+					new CollectionUtils.CollectionSynchronizerE<ExElement.Def<?>, ExpressoQIS, QonfigInterpretationException>() {
+					@Override
+						public boolean getOrder(ElementSyncInput<ExElement.Def<?>, ExpressoQIS> element)
+						throws QonfigInterpretationException {
+						return true;
 					}
-					return element.preserve();
-				}
 
-				@Override
-				public ElementSyncAction rightOnly(ElementSyncInput<ExElement.Def<?>, ExpressoQIS> element)
-					throws QonfigInterpretationException {
-					List<? extends ExElement.Def<?>> roleChildren = getRoleChildren(element.getRightValue().getElement(),
-						element.getRightValue().reporting());
-					if (roleChildren != null) {
-						ExElement.Def<?> newChild = elementAdded(element.getRightValue(), builder);
-						if (newChild != null) {
-							newChild.update(element.getRightValue());
+					@Override
+						public ElementSyncAction leftOnly(ElementSyncInput<ExElement.Def<?>, ExpressoQIS> element)
+						throws QonfigInterpretationException {
+						List<? extends ExElement.Def<?>> roleChildren = getRoleChildren(element.getLeftValue().getElement(),
+							Def.this.reporting());
+						if (roleChildren != null) {
 							int index = ArrayUtils.binarySearch(roleChildren,
-								v -> Integer.compare(newChild.getElement().getPositionInFile().getPosition(),
+								v -> Integer.compare(element.getLeftValue().getElement().getPositionInFile().getPosition(),
 									v.getElement().getPositionInFile().getPosition()));
 							if (index >= 0)
-								((List<ExElement.Def<?>>) roleChildren).add(index + 1, newChild);
-							else
-								((List<ExElement.Def<?>>) roleChildren).add(-index - 1, newChild);
+								roleChildren.remove(index);
 						}
+						return element.preserve();
 					}
-					return element.preserve();
-				}
 
-				@Override
-				public ElementSyncAction common(ElementSyncInput<ExElement.Def<?>, ExpressoQIS> element)
-					throws QonfigInterpretationException {
-					elementUpdated(element.getLeftValue(), element.getRightValue(), builder);
-					element.getLeftValue().update(element.getRightValue());
-					return element.preserve();
-				}
-			}, CollectionUtils.AdjustmentOrder.RightOrder);
+					@Override
+						public ElementSyncAction rightOnly(ElementSyncInput<ExElement.Def<?>, ExpressoQIS> element)
+						throws QonfigInterpretationException {
+						List<? extends ExElement.Def<?>> roleChildren = getRoleChildren(element.getRightValue().getElement(),
+							element.getRightValue().reporting());
+						if (roleChildren != null) {
+							ExElement.Def<?> newChild = elementAdded(element.getRightValue(), builder);
+							if (newChild != null) {
+								newChild.update(element.getRightValue());
+								int index = ArrayUtils.binarySearch(roleChildren,
+									v -> Integer.compare(newChild.getElement().getPositionInFile().getPosition(),
+										v.getElement().getPositionInFile().getPosition()));
+								if (index >= 0)
+									((List<ExElement.Def<?>>) roleChildren).add(index + 1, newChild);
+								else
+									((List<ExElement.Def<?>>) roleChildren).add(-index - 1, newChild);
+							}
+						}
+						return element.preserve();
+					}
+
+					@Override
+						public ElementSyncAction common(ElementSyncInput<ExElement.Def<?>, ExpressoQIS> element)
+						throws QonfigInterpretationException {
+						elementUpdated(element.getLeftValue(), element.getRightValue(), builder);
+						if (element.getLeftValue() instanceof ExElement.Def)
+							((ExElement.Def<?>) element.getLeftValue()).update(element.getRightValue());
+						return element.preserve();
+					}
+				}, CollectionUtils.AdjustmentOrder.RightOrder);
 
 			super.update(session);
 		}
@@ -248,8 +253,11 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 	}
 
 	public static class ModelSetElement extends ExElement.Abstract {
-		private static final ExElement.ChildElementGetter<ModelSetElement, Interpreted<?>, Def<?>> MODELS = ExElement.ChildElementGetter
-			.<ModelSetElement, Interpreted<?>, Def<?>> of(Def::getSubModels, Interpreted::getSubModels, ModelSetElement::getSubModels);
+		private static final ElementTypeTraceability<ModelSetElement, Interpreted<?>, Def<?>> TRACEABILITY = ElementTypeTraceability
+			.<ModelSetElement, Interpreted<?>, Def<?>> build(ExpressoSessionImplV0_1.TOOLKIT_NAME, ExpressoSessionImplV0_1.VERSION,
+				"models")//
+			.reflectMethods(Def.class, Interpreted.class, ModelSetElement.class)//
+			.build();
 
 		public static class Def<M extends ModelSetElement> extends ExElement.Def.Abstract<M> {
 			private final List<ObservableModelElement.Def<?>> theSubModels;
@@ -264,15 +272,14 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 			}
 
 			// Would rather name this "getModels", but that name's taken in ExElement.Def
+			@QonfigChildGetter("model")
 			public List<? extends ObservableModelElement.Def<?>> getSubModels() {
 				return Collections.unmodifiableList(theSubModels);
 			}
 
 			@Override
 			public void update(ExpressoQIS session) throws QonfigInterpretationException {
-				ExElement.checkElement(session.getFocusType(), ExpressoSessionImplV0_1.TOOLKIT_NAME, ExpressoSessionImplV0_1.VERSION,
-					"models");
-				forChild(session.getRole("model"), MODELS);
+				withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 
 				ObservableModelSet.Builder builder = ObservableModelSet.build("models", ObservableModelSet.JAVA_NAME_CHECKER);
 				if (nonTrivial(session.getExpressoEnv().getModels()))
@@ -346,6 +353,7 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 			theSubModels = new ArrayList<>();
 		}
 
+		@QonfigChildGetter("model")
 		public List<? extends ObservableModelElement> getSubModels() {
 			return Collections.unmodifiableList(theSubModels);
 		}
@@ -380,9 +388,11 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 	}
 
 	public static class DefaultModelElement extends ObservableModelElement {
-		private static final ExElement.ChildElementGetter<DefaultModelElement, Interpreted<?>, Def<?>> SUB_MODELS = ExElement.ChildElementGetter
-			.<DefaultModelElement, Interpreted<?>, Def<?>> of(Def::getSubModels, Interpreted::getSubModels,
-				DefaultModelElement::getSubModels);
+		private static final ElementTypeTraceability<DefaultModelElement, Interpreted<?>, Def<?>> TRACEABILITY = ElementTypeTraceability
+			.<DefaultModelElement, Interpreted<?>, Def<?>> build(ExpressoSessionImplV0_1.TOOLKIT_NAME, ExpressoSessionImplV0_1.VERSION,
+				"model")//
+			.reflectMethods(Def.class, Interpreted.class, DefaultModelElement.class)//
+			.build();
 
 		public static class Def<M extends DefaultModelElement> extends ObservableModelElement.Def<M> {
 			private final List<DefaultModelElement.Def<?>> theSubModels;
@@ -398,16 +408,15 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 				return (Class<? extends DefaultModelElement.Def<?>>) (Class<?>) DefaultModelElement.Def.class;
 			}
 
+			@QonfigChildGetter("sub-model")
 			public List<? extends DefaultModelElement.Def<?>> getSubModels() {
 				return Collections.unmodifiableList(theSubModels);
 			}
 
 			@Override
 			public void update(ExpressoQIS session) throws QonfigInterpretationException {
-				ExElement.checkElement(session.getFocusType(), ExpressoSessionImplV0_1.TOOLKIT_NAME, ExpressoSessionImplV0_1.VERSION,
-					"model");
+				withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 				theSubModelRole = session.getRole("sub-model");
-				forChild(theSubModelRole, SUB_MODELS);
 				super.update(session.asElement(session.getFocusType().getSuperElement()));
 			}
 
@@ -512,8 +521,11 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 	}
 
 	public static class ExtModelElement extends ObservableModelElement {
-		private static final ExElement.ChildElementGetter<ExtModelElement, Interpreted<?>, Def<?>> SUB_MODELS = ExElement.ChildElementGetter
-			.<ExtModelElement, Interpreted<?>, Def<?>> of(Def::getSubModels, Interpreted::getSubModels, ExtModelElement::getSubModels);
+		private static final ElementTypeTraceability<ExtModelElement, Interpreted<?>, Def<?>> TRACEABILITY = ElementTypeTraceability
+			.<ExtModelElement, Interpreted<?>, Def<?>> build(ExpressoSessionImplV0_1.TOOLKIT_NAME, ExpressoSessionImplV0_1.VERSION,
+				"ext-model")//
+			.reflectMethods(Def.class, Interpreted.class, ExtModelElement.class)//
+			.build();
 
 		public static class Def<M extends ExtModelElement> extends ObservableModelElement.Def<M> {
 			private final List<ExtModelElement.Def<?>> theSubModels;
@@ -529,16 +541,15 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 				return (Class<? extends ExtModelElement.Def<?>>) (Class<?>) ExtModelElement.Def.class;
 			}
 
+			@QonfigChildGetter("sub-model")
 			public List<? extends ExtModelElement.Def<?>> getSubModels() {
 				return Collections.unmodifiableList(theSubModels);
 			}
 
 			@Override
 			public void update(ExpressoQIS session) throws QonfigInterpretationException {
-				ExElement.checkElement(session.getFocusType(), ExpressoSessionImplV0_1.TOOLKIT_NAME, ExpressoSessionImplV0_1.VERSION,
-					"ext-model");
+				withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 				theSubModelRole = session.getRole("sub-model");
-				forChild(theSubModelRole, SUB_MODELS);
 				super.update(session.asElement(session.getFocusType().getSuperElement()));
 			}
 
@@ -669,6 +680,11 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 	}
 
 	public static class ConfigModelElement extends ObservableModelElement {
+		private static final ElementTypeTraceability<ConfigModelElement, Interpreted<?>, Def<?>> TRACEABILITY = ElementTypeTraceability
+			.<ConfigModelElement, Interpreted<?>, Def<?>> build(ExpressoConfigV0_1.NAME, ExpressoConfigV0_1.VERSION, "config")//
+			.reflectMethods(Def.class, Interpreted.class, ConfigModelElement.class)//
+			.build();
+
 		public static class Def<M extends ConfigModelElement> extends ObservableModelElement.Def<M> {
 			private String theConfigName;
 			private CompiledExpression theConfigDir;
@@ -680,10 +696,12 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 				super(parent, element);
 			}
 
+			@QonfigAttributeGetter("config-name")
 			public String getConfigName() {
 				return theConfigName;
 			}
 
+			@QonfigAttributeGetter("config-dir")
 			public CompiledExpression getConfigDir() {
 				return theConfigDir;
 			}
@@ -694,7 +712,7 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 
 			@Override
 			public void update(ExpressoQIS session) throws QonfigInterpretationException {
-				ExElement.checkElement(session.getFocusType(), ExpressoConfigV0_1.CONFIG_NAME, ExpressoConfigV0_1.VERSION, "config");
+				withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 
 				theConfigName = session.getAttributeText("config-name");
 				theConfigDir = session.getAttributeExpression("config-dir");

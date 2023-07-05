@@ -10,8 +10,10 @@ import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.qonfig.CompiledExpression;
+import org.observe.expresso.qonfig.ElementTypeTraceability;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExpressoQIS;
+import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.quick.QuickStyledElement;
 import org.observe.quick.QuickWidget;
 import org.observe.util.TypeTokens;
@@ -23,14 +25,10 @@ import com.google.common.reflect.TypeToken;
 
 public class QuickButton extends QuickWidget.Abstract {
 	public static final String BUTTON = "button";
-
-	public static final ExElement.AttributeValueGetter.Expression<QuickButton, Interpreted<?>, Def<?>, ObservableAction<?>, ObservableAction<?>> ACTION = ExElement.AttributeValueGetter
-		.<QuickButton, Interpreted<?>, Def<?>, ObservableAction<?>, ObservableAction<?>> ofX(Def::getAction, Interpreted::getAction,
-			QuickButton::getAction);
-	public static final ExElement.AttributeValueGetter<QuickButton, Interpreted<?>, Def<?>> ICON = ExElement.AttributeValueGetter
-		.<QuickButton, Interpreted<?>, Def<?>> of(Def::getIcon, Interpreted::getIcon, QuickButton::getIcon);
-	public static final ExElement.AttributeValueGetter<QuickButton, Interpreted<?>, Def<?>> VALUE = ExElement.AttributeValueGetter
-		.<QuickButton, Interpreted<?>, Def<?>> of(Def::getText, Interpreted::getText, QuickButton::getText);
+	private static final ElementTypeTraceability<QuickButton, Interpreted<?>, Def<?>> TRACEABILITY = ElementTypeTraceability
+		.<QuickButton, Interpreted<?>, Def<?>> build(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, BUTTON)//
+		.reflectMethods(Def.class, Interpreted.class, QuickButton.class)//
+		.build();
 
 	public static class Def<B extends QuickButton> extends QuickWidget.Def.Abstract<B> {
 		private CompiledExpression theText;
@@ -41,24 +39,24 @@ public class QuickButton extends QuickWidget.Abstract {
 			super(parent, element);
 		}
 
+		@QonfigAttributeGetter
 		public CompiledExpression getText() {
 			return theText;
 		}
 
+		@QonfigAttributeGetter("icon")
 		public CompiledExpression getIcon() {
 			return theIcon;
 		}
 
+		@QonfigAttributeGetter("action")
 		public CompiledExpression getAction() {
 			return theAction;
 		}
 
 		@Override
 		public void update(ExpressoQIS session) throws QonfigInterpretationException {
-			ExElement.checkElement(session.getFocusType(), QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, BUTTON);
-			forAttribute(session.getAttributeDef(null, null, "action"), ACTION);
-			forAttribute(session.getAttributeDef(null, null, "icon"), ICON);
-			forValue(VALUE);
+			withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 			super.update(session.asElement(session.getFocusType().getSuperElement()));
 			theText = session.getValueExpression();
 			theIcon = session.getAttributeExpression("icon");

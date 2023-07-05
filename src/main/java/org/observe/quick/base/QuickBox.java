@@ -7,8 +7,10 @@ import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.qonfig.CompiledExpression;
+import org.observe.expresso.qonfig.ElementTypeTraceability;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExpressoQIS;
+import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.quick.QuickContainer;
 import org.observe.quick.QuickStyledElement;
 import org.observe.quick.QuickWidget;
@@ -20,11 +22,10 @@ import com.google.common.reflect.TypeToken;
 
 public class QuickBox extends QuickContainer.Abstract<QuickWidget> {
 	public static final String BOX = "box";
-
-	public static ExElement.AttributeValueGetter.AddOn<QuickBox, QuickLayout, QuickLayout.Interpreted<?>, QuickLayout.Def<?>> LAYOUT = ExElement.AttributeValueGetter
-		.addOn(QuickLayout.Def.class, QuickLayout.Interpreted.class, QuickLayout.class);
-	public static ExElement.AttributeValueGetter.Expression<QuickBox, Interpreted<? extends QuickBox>, Def<? extends QuickBox>, SettableValue<?>, SettableValue<Double>> OPACITY = ExElement.AttributeValueGetter
-		.ofX(Def::getOpacity, Interpreted::getOpacity, QuickBox::getOpacity);
+	private static final ElementTypeTraceability<QuickBox, Interpreted<?>, Def<?>> TRACEABILITY = ElementTypeTraceability
+		.<QuickBox, Interpreted<?>, Def<?>> build(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, BOX)//
+		.reflectMethods(Def.class, Interpreted.class, QuickBox.class)//
+		.build();
 
 	public static class Def<W extends QuickBox> extends QuickContainer.Def.Abstract<W, QuickWidget> {
 		private CompiledExpression theOpacity;
@@ -33,19 +34,19 @@ public class QuickBox extends QuickContainer.Abstract<QuickWidget> {
 			super(parent, element);
 		}
 
+		@QonfigAttributeGetter("layout")
 		public QuickLayout.Def<?> getLayout() {
 			return getAddOn(QuickLayout.Def.class);
 		}
 
+		@QonfigAttributeGetter("opacity")
 		public CompiledExpression getOpacity() {
 			return theOpacity;
 		}
 
 		@Override
 		public void update(ExpressoQIS session) throws QonfigInterpretationException {
-			ExElement.checkElement(session.getFocusType(), QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, BOX);
-			forAttribute(session.getAttributeDef(null, null, "layout"), LAYOUT);
-			forAttribute(session.getAttributeDef(null, null, "opacity"), OPACITY);
+			withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 			super.update(session.asElement(session.getFocusType().getSuperElement()));
 			if (getAddOn(QuickLayout.Def.class) == null) {
 				String layout = session.getAttributeText("layout");

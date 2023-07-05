@@ -53,22 +53,21 @@ public class QuickCoreInterpretation implements QonfigInterpretation {
 		interpreter.createWith(QuickDocument.QuickHeadSection.HEAD, QuickDocument.QuickHeadSection.Def.class,
 			session -> new QuickDocument.QuickHeadSection.Def((QuickDocument.Def) session.getElementRepresentation(),
 				session.getElement()));
-		interpreter.createWith("window", QuickWindow.Def.class,
-			session -> interpretAddOn(session, (p, ao) -> new QuickWindow.Def(ao, p)));
+		interpreter.createWith("window", QuickWindow.Def.class, session -> interpretAddOn(session, (p, ao) -> new QuickWindow.Def(ao, p)));
 		interpreter.createWith(QuickBorder.LineBorder.LINE_BORDER, QuickBorder.LineBorder.Def.class,
 			session -> interpretQuick(session, QuickBorder.LineBorder.Def::new));
 		interpreter.createWith(QuickBorder.TitledBorder.TITLED_BORDER, QuickBorder.TitledBorder.Def.class,
 			session -> interpretQuick(session, QuickBorder.TitledBorder.Def::new));
 
-		interpreter.createWith(QuickMouseListener.MouseButtonEventType.Click.elementName,
-			QuickMouseListener.QuickMouseButtonListener.Def.class, session -> interpretQuick(session,
-				(p, el) -> new QuickMouseListener.QuickMouseButtonListener.Def(p, el, QuickMouseListener.MouseButtonEventType.Click)));
-		interpreter.createWith(QuickMouseListener.MouseButtonEventType.Press.elementName,
-			QuickMouseListener.QuickMouseButtonListener.Def.class, session -> interpretQuick(session,
-				(p, el) -> new QuickMouseListener.QuickMouseButtonListener.Def(p, el, QuickMouseListener.MouseButtonEventType.Press)));
-		interpreter.createWith(QuickMouseListener.MouseButtonEventType.Release.elementName,
-			QuickMouseListener.QuickMouseButtonListener.Def.class, session -> interpretQuick(session,
-				(p, el) -> new QuickMouseListener.QuickMouseButtonListener.Def(p, el, QuickMouseListener.MouseButtonEventType.Release)));
+		interpreter.createWith(QuickMouseListener.QuickMouseClickListener.ON_MOUSE_CLICK,
+			QuickMouseListener.QuickMouseClickListener.Def.class,
+			session -> interpretQuick(session, (p, el) -> new QuickMouseListener.QuickMouseClickListener.Def(p, el)));
+		interpreter.createWith(QuickMouseListener.QuickMousePressedListener.ON_MOUSE_PRESSED,
+			QuickMouseListener.QuickMousePressedListener.Def.class,
+			session -> interpretQuick(session, (p, el) -> new QuickMouseListener.QuickMousePressedListener.Def(p, el)));
+		interpreter.createWith(QuickMouseListener.QuickMouseReleasedListener.ON_MOUSE_RELEASED,
+			QuickMouseListener.QuickMouseReleasedListener.Def.class,
+			session -> interpretQuick(session, (p, el) -> new QuickMouseListener.QuickMouseReleasedListener.Def(p, el)));
 		interpreter.createWith(QuickMouseListener.MouseMoveEventType.Move.elementName, QuickMouseListener.QuickMouseMoveListener.Def.class,
 			session -> interpretQuick(session,
 				(p, el) -> new QuickMouseListener.QuickMouseMoveListener.Def(p, el, QuickMouseListener.MouseMoveEventType.Move)));
@@ -115,8 +114,8 @@ public class QuickCoreInterpretation implements QonfigInterpretation {
 	 * @param addOn Produces the definition
 	 * @return The definition
 	 */
-	public static <E extends ExElement, AO extends ExAddOn<E>, D extends ExAddOn.Def<E, AO>> D interpretAddOn(
-		AbstractQIS<?> session, BiFunction<ExElement.Def<?>, QonfigAddOn, D> addOn) {
+	public static <E extends ExElement, AO extends ExAddOn<E>, D extends ExAddOn.Def<E, AO>> D interpretAddOn(AbstractQIS<?> session,
+		BiFunction<ExElement.Def<?>, QonfigAddOn, D> addOn) {
 		return addOn.apply((ExElement.Def<?>) session.getElementRepresentation(), (QonfigAddOn) session.getFocusType());
 	}
 }

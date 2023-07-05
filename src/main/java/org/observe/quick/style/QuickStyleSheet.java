@@ -2,14 +2,15 @@ package org.observe.quick.style;
 
 import java.net.URL;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
+import org.observe.expresso.qonfig.ElementTypeTraceability;
 import org.observe.expresso.qonfig.ExElement;
-import org.observe.expresso.qonfig.ExElement.Def;
-import org.observe.expresso.qonfig.ExElement.Interpreted;
 import org.observe.expresso.qonfig.ExpressoQIS;
+import org.observe.expresso.qonfig.QonfigAttributeGetter;
+import org.observe.expresso.qonfig.QonfigChildGetter;
+import org.qommons.QommonsUtils;
 import org.qommons.config.AbstractQIS;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigInterpretationException;
@@ -17,11 +18,10 @@ import org.qommons.config.QonfigInterpretationException;
 /** A structure containing many {@link #getValues() style values} that may apply to all &lt;styled> elements in a document */
 public class QuickStyleSheet extends ExElement.Def.Abstract<ExElement> {
 	public static class StyleSheetRef extends ExElement.Def.Abstract<ExElement> {
-		private static final ExElement.AttributeValueGetter<ExElement, ExElement.Interpreted<?>, StyleSheetRef> NAME//
-		= ExElement.AttributeValueGetter.of(StyleSheetRef::getName, null, null);
-		private static final ExElement.AttributeValueGetter<ExElement, ExElement.Interpreted<?>, StyleSheetRef> REF//
-		= ExElement.AttributeValueGetter.<ExElement, ExElement.Interpreted<?>, StyleSheetRef> of(StyleSheetRef::getReference, null,
-			null);
+		private static final ElementTypeTraceability<ExElement, ExElement.Interpreted<?>, StyleSheetRef> TRACEABILITY = ElementTypeTraceability.<ExElement, ExElement.Interpreted<?>, StyleSheetRef> build(
+			StyleSessionImplV0_1.NAME, StyleSessionImplV0_1.VERSION, "import-style-sheet")//
+			.reflectMethods(StyleSheetRef.class, null, null)//
+			.build();
 
 		private final String theName;
 		private final QuickStyleSheet theTarget;
@@ -30,10 +30,9 @@ public class QuickStyleSheet extends ExElement.Def.Abstract<ExElement> {
 			super(parent, session.getElement());
 			theName = session.getAttributeText("name");
 			theTarget = target;
-			forAttribute(session.getAttributeDef(null, null, "name"), NAME);
-			forAttribute(session.getAttributeDef(null, null, "ref"), REF);
 		}
 
+		@QonfigAttributeGetter("name")
 		public String getName() {
 			return theName;
 		}
@@ -42,62 +41,23 @@ public class QuickStyleSheet extends ExElement.Def.Abstract<ExElement> {
 			return theTarget;
 		}
 
+		@QonfigAttributeGetter("ref")
 		public URL getReference() {
 			return theTarget.getReference();
 		}
+
+		@Override
+		public void update(ExpressoQIS session) throws QonfigInterpretationException {
+			withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
+			super.update(session);
+		}
 	}
 
-	private static final ExElement.ChildElementGetter<ExElement, ExElement.Interpreted<?>, QuickStyleSheet> IMPORTED//
-	= new ExElement.ChildElementGetter<ExElement, ExElement.Interpreted<?>, QuickStyleSheet>() {
-		@Override
-		public List<? extends Def<?>> getChildrenFromDef(QuickStyleSheet def) {
-			return def.getImportedStyleSheetRefs();
-		}
-
-		@Override
-		public List<? extends Interpreted<?>> getChildrenFromInterpreted(Interpreted<?> interp) {
-			return Collections.emptyList();
-		}
-
-		@Override
-		public List<? extends ExElement> getChildrenFromElement(ExElement element) {
-			return Collections.emptyList();
-		}
-	};
-	private static final ExElement.ChildElementGetter<ExElement, ExElement.Interpreted<?>, QuickStyleSheet> STYLE_SETS//
-	= new ExElement.ChildElementGetter<ExElement, ExElement.Interpreted<?>, QuickStyleSheet>() {
-		@Override
-		public List<? extends Def<?>> getChildrenFromDef(QuickStyleSheet def) {
-			return new ArrayList<>(def.getStyleSets().values());
-		}
-
-		@Override
-		public List<? extends Interpreted<?>> getChildrenFromInterpreted(Interpreted<?> interp) {
-			return Collections.emptyList();
-		}
-
-		@Override
-		public List<? extends ExElement> getChildrenFromElement(ExElement element) {
-			return Collections.emptyList();
-		}
-	};
-	private static final ExElement.ChildElementGetter<ExElement, ExElement.Interpreted<?>, QuickStyleSheet> STYLE_ELEMENTS//
-	= new ExElement.ChildElementGetter<ExElement, ExElement.Interpreted<?>, QuickStyleSheet>() {
-		@Override
-		public List<? extends Def<?>> getChildrenFromDef(QuickStyleSheet def) {
-			return def.getStyleElements();
-		}
-
-		@Override
-		public List<? extends Interpreted<?>> getChildrenFromInterpreted(Interpreted<?> interp) {
-			return Collections.emptyList();
-		}
-
-		@Override
-		public List<? extends ExElement> getChildrenFromElement(ExElement element) {
-			return Collections.emptyList();
-		}
-	};
+	public static final ElementTypeTraceability<ExElement, ExElement.Interpreted<?>, QuickStyleSheet> TRACEABILITY = ElementTypeTraceability.<ExElement, ExElement.Interpreted<?>, QuickStyleSheet> build(
+		StyleSessionImplV0_1.NAME, StyleSessionImplV0_1.VERSION, "style-sheet")//
+		.reflectMethods(QuickStyleSheet.class, null, null)//
+		.withChild("style-set", ss -> QommonsUtils.unmodifiableCopy(ss.getStyleSets().values()), null, null)//
+		.build();
 
 	private final URL theReference;
 	private final Map<String, QuickStyleSet> theStyleSets;
@@ -122,9 +82,6 @@ public class QuickStyleSheet extends ExElement.Def.Abstract<ExElement> {
 		theImportedStyleSheets = importedStyleSheets;
 		theStyleSheetRefs = refs;
 		theStyleElements = styleElements;
-		forChild(session.getRole("style-sheet-ref"), IMPORTED);
-		forChild(session.getRole("style-set"), STYLE_SETS);
-		forChild(session.getRole("style"), STYLE_ELEMENTS);
 	}
 
 	/** @return The location where this standalone style sheet was parsed from */
@@ -142,6 +99,7 @@ public class QuickStyleSheet extends ExElement.Def.Abstract<ExElement> {
 		return theValues;
 	}
 
+	@QonfigChildGetter("style")
 	public List<QuickStyleElement.Def> getStyleElements() {
 		return theStyleElements;
 	}
@@ -151,6 +109,7 @@ public class QuickStyleSheet extends ExElement.Def.Abstract<ExElement> {
 		return theImportedStyleSheets;
 	}
 
+	@QonfigChildGetter("style-sheet-ref")
 	public List<StyleSheetRef> getImportedStyleSheetRefs() {
 		return theStyleSheetRefs;
 	}
@@ -203,6 +162,7 @@ public class QuickStyleSheet extends ExElement.Def.Abstract<ExElement> {
 
 	@Override
 	public void update(ExpressoQIS session) throws QonfigInterpretationException {
+		withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 		super.update(session);
 		int i = 0;
 		for (ExpressoQIS ssrSession : session.forChildren("style-sheet-ref"))

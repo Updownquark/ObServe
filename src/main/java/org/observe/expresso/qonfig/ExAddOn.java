@@ -1,12 +1,8 @@
 package org.observe.expresso.qonfig;
 
-import java.util.List;
-import java.util.function.Function;
-
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
-import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigInterpretationException;
@@ -17,224 +13,138 @@ import org.qommons.config.QonfigInterpretationException;
  * @param <E> The super type of element that this type of add-on may be added onto
  */
 public interface ExAddOn<E extends ExElement> {
-	public abstract class AddOnAttributeGetter<E extends ExElement, AO extends ExAddOn<? super E>, I extends Interpreted<? super E, ? extends AO>, D extends ExAddOn.Def<? super E, ? extends AO>> //
-	implements ExElement.AttributeValueGetter<E, ExElement.Interpreted<? extends E>, ExElement.Def<? extends E>> {
-		private final Class<D> theDefType;
-		private final Class<I> theInterpType;
-		private final Class<AO> theAddOnType;
-
-		protected AddOnAttributeGetter(Class<? super D> defType, Class<? super I> interpType, Class<? super AO> addOnType) {
-			theDefType = (Class<D>) (Class<?>) defType;
-			theInterpType = (Class<I>) (Class<?>) interpType;
-			theAddOnType = (Class<AO>) (Class<?>) addOnType;
-		}
-
-		public abstract Object getFromDef(D def);
-
-		public abstract Object getFromInterpreted(I interpreted);
-
-		public abstract Object getFromAddOn(AO addOn);
-
-		@Override
-		public Object getFromDef(ExElement.Def<? extends E> def) {
-			return def.getAddOnValue(theDefType, this::getFromDef);
-		}
-
-		@Override
-		public Object getFromInterpreted(ExElement.Interpreted<? extends E> interp) {
-			return interp.getAddOnValue(theInterpType, this::getFromInterpreted);
-		}
-
-		@Override
-		public Object getFromElement(ExElement element) {
-			return element.getAddOnValue(theAddOnType, this::getFromAddOn);
-		}
-
-		public static <E extends ExElement, AO extends ExAddOn<? super E>, I extends Interpreted<? super E, ? extends AO>, D extends ExAddOn.Def<? super E, ? extends AO>> Default<E, AO, I, D> of(
-			Class<? super D> defType, Function<? super D, ?> defGetter, Class<? super I> interpretedType,
-			Function<? super I, ?> interpretedGetter, Class<? super AO> addOnType, Function<? super AO, ?> addOnGetter) {
-			return new Default<>(defType, defGetter, interpretedType, interpretedGetter, addOnType, addOnGetter);
-		}
-
-		public static <E extends ExElement, AO extends ExAddOn<? super E>, I extends Interpreted<? super E, ? extends AO>, D extends ExAddOn.Def<? super E, ? extends AO>, M, MV extends M> Expression<E, AO, I, D, M, MV> ofX(
-			Class<? super D> defType, Function<? super D, ? extends CompiledExpression> defGetter, Class<? super I> interpretedType,
-			Function<? super I, ? extends InterpretedValueSynth<M, ? extends MV>> interpretedGetter, Class<? super AO> addOnType,
-				Function<? super AO, ? extends MV> addOnGetter) {
-			return new Expression<>(defType, defGetter, interpretedType, interpretedGetter, addOnType, addOnGetter);
-		}
-
-		public static class Default<E extends ExElement, AO extends ExAddOn<? super E>, I extends Interpreted<? super E, ? extends AO>, D extends ExAddOn.Def<? super E, ? extends AO>>
-		extends AddOnAttributeGetter<E, AO, I, D> {
-			private final Function<? super D, ?> theDefGetter;
-			private final Function<? super I, ?> theInterpretedGetter;
-			private final Function<? super AO, ?> theAddOnGetter;
-
-			public Default(Class<? super D> defType, Function<? super D, ?> defGetter, Class<? super I> interpType,
-				Function<? super I, ?> interpretedGetter, Class<? super AO> addOnType, Function<? super AO, ?> addOnGetter) {
-				super(defType, interpType, addOnType);
-				theDefGetter = defGetter;
-				theInterpretedGetter = interpretedGetter;
-				theAddOnGetter = addOnGetter;
-			}
-
-			@Override
-			public Object getFromDef(D def) {
-				return theDefGetter.apply(def);
-			}
-
-			@Override
-			public Object getFromInterpreted(I interpreted) {
-				return theInterpretedGetter.apply(interpreted);
-			}
-
-			@Override
-			public Object getFromAddOn(AO addOn) {
-				return theAddOnGetter.apply(addOn);
-			}
-		}
-
-		public static class Expression<E extends ExElement, AO extends ExAddOn<? super E>, I extends Interpreted<? super E, ? extends AO>, D extends ExAddOn.Def<? super E, ? extends AO>, M, MV extends M>
-		extends AddOnAttributeGetter<E, AO, I, D> {
-			private final Function<? super D, ? extends CompiledExpression> theDefGetter;
-			private final Function<? super I, ? extends InterpretedValueSynth<M, ? extends MV>> theInterpretedGetter;
-			private final Function<? super AO, ? extends MV> theAddOnGetter;
-
-			public Expression(Class<? super D> defType, Function<? super D, ? extends CompiledExpression> defGetter,
-				Class<? super I> interpType, Function<? super I, ? extends InterpretedValueSynth<M, ? extends MV>> interpretedGetter,
-					Class<? super AO> addOnType, Function<? super AO, ? extends MV> addOnGetter) {
-				super(defType, interpType, addOnType);
-				theDefGetter = defGetter;
-				theInterpretedGetter = interpretedGetter;
-				theAddOnGetter = addOnGetter;
-			}
-
-			@Override
-			public Object getFromDef(D def) {
-				return theDefGetter.apply(def);
-			}
-
-			@Override
-			public Object getFromInterpreted(I interpreted) {
-				return theInterpretedGetter.apply(interpreted);
-			}
-
-			@Override
-			public Object getFromAddOn(AO addOn) {
-				return theAddOnGetter.apply(addOn);
-			}
-		}
-	}
-
-	public abstract class AddOnChildGetter<E extends ExElement, AO extends ExAddOn<? super E>, I extends Interpreted<? super E, ? extends AO>, D extends ExAddOn.Def<? super E, ? extends AO>> //
-	implements ExElement.ChildElementGetter<E, ExElement.Interpreted<? extends E>, ExElement.Def<? extends E>> {
-		private final Class<D> theDefType;
-		private final Class<I> theInterpType;
-		private final Class<AO> theAddOnType;
-
-		protected AddOnChildGetter(Class<? super D> defType, Class<? super I> interpType, Class<? super AO> addOnType) {
-			theDefType = (Class<D>) (Class<?>) defType;
-			theInterpType = (Class<I>) (Class<?>) interpType;
-			theAddOnType = (Class<AO>) (Class<?>) addOnType;
-		}
-
-		public abstract List<? extends ExElement.Def<?>> getFromDef(D def);
-
-		public abstract List<? extends ExElement.Interpreted<?>> getFromInterpreted(I interpreted);
-
-		public abstract List<? extends ExElement> getFromAddOn(AO addOn);
-
-		@Override
-		public List<? extends ExElement.Def<?>> getChildrenFromDef(ExElement.Def<? extends E> def) {
-			return def.getAddOnValue(theDefType, this::getFromDef);
-		}
-
-		@Override
-		public List<? extends ExElement.Interpreted<?>> getChildrenFromInterpreted(ExElement.Interpreted<? extends E> interp) {
-			return interp.getAddOnValue(theInterpType, this::getFromInterpreted);
-		}
-
-		@Override
-		public List<? extends ExElement> getChildrenFromElement(E element) {
-			return element.getAddOnValue(theAddOnType, this::getFromAddOn);
-		}
-
-		public static <E extends ExElement, AO extends ExAddOn<? super E>, I extends Interpreted<? super E, ? extends AO>, D extends ExAddOn.Def<? super E, ? extends AO>> Default<E, AO, I, D> of(
-			Class<? super D> defType, Function<? super D, ? extends List<? extends ExElement.Def<?>>> defGetter,
-				Class<? super I> interpretedType, Function<? super I, ? extends List<? extends ExElement.Interpreted<?>>> interpretedGetter,
-					Class<? super AO> addOnType, Function<? super AO, ? extends List<? extends ExElement>> addOnGetter) {
-			return new Default<>(defType, defGetter, interpretedType, interpretedGetter, addOnType, addOnGetter);
-		}
-
-		public static <E extends ExElement, AO extends ExAddOn<? super E>, I extends Interpreted<? super E, ? extends AO>, D extends ExAddOn.Def<? super E, ? extends AO>, M, MV extends M> Expression<E, AO, I, D, M, MV> ofX(
-			Class<? super D> defType, Function<? super D, ? extends CompiledExpression> defGetter, Class<? super I> interpretedType,
-			Function<? super I, ? extends InterpretedValueSynth<M, ? extends MV>> interpretedGetter, Class<? super AO> addOnType,
-				Function<? super AO, ? extends MV> addOnGetter) {
-			return new Expression<>(defType, defGetter, interpretedType, interpretedGetter, addOnType, addOnGetter);
-		}
-
-		public static class Default<E extends ExElement, AO extends ExAddOn<? super E>, I extends Interpreted<? super E, ? extends AO>, D extends ExAddOn.Def<? super E, ? extends AO>>
-		extends AddOnChildGetter<E, AO, I, D> {
-			private final Function<? super D, ? extends List<? extends ExElement.Def<?>>> theDefGetter;
-			private final Function<? super I, ? extends List<? extends ExElement.Interpreted<?>>> theInterpretedGetter;
-			private final Function<? super AO, ? extends List<? extends ExElement>> theAddOnGetter;
-
-			public Default(Class<? super D> defType, Function<? super D, ? extends List<? extends ExElement.Def<?>>> defGetter,
-				Class<? super I> interpType, Function<? super I, ? extends List<? extends ExElement.Interpreted<?>>> interpretedGetter,
-					Class<? super AO> addOnType, Function<? super AO, ? extends List<? extends ExElement>> addOnGetter) {
-				super(defType, interpType, addOnType);
-				theDefGetter = defGetter;
-				theInterpretedGetter = interpretedGetter;
-				theAddOnGetter = addOnGetter;
-			}
-
-			@Override
-			public List<? extends org.observe.expresso.qonfig.ExElement.Def<?>> getFromDef(D def) {
-				return theDefGetter.apply(def);
-			}
-
-			@Override
-			public List<? extends org.observe.expresso.qonfig.ExElement.Interpreted<?>> getFromInterpreted(I interpreted) {
-				return theInterpretedGetter.apply(interpreted);
-			}
-
-			@Override
-			public List<? extends ExElement> getFromAddOn(AO addOn) {
-				return theAddOnGetter.apply(addOn);
-			}
-		}
-
-		public static class Expression<E extends ExElement, AO extends ExAddOn<? super E>, I extends Interpreted<? super E, ? extends AO>, D extends ExAddOn.Def<? super E, ? extends AO>, M, MV extends M>
-		extends AddOnAttributeGetter<E, AO, I, D> {
-			private final Function<? super D, ? extends CompiledExpression> theDefGetter;
-			private final Function<? super I, ? extends InterpretedValueSynth<M, ? extends MV>> theInterpretedGetter;
-			private final Function<? super AO, ? extends MV> theAddOnGetter;
-
-			public Expression(Class<? super D> defType, Function<? super D, ? extends CompiledExpression> defGetter,
-				Class<? super I> interpType, Function<? super I, ? extends InterpretedValueSynth<M, ? extends MV>> interpretedGetter,
-					Class<? super AO> addOnType, Function<? super AO, ? extends MV> addOnGetter) {
-				super(defType, interpType, addOnType);
-				theDefGetter = defGetter;
-				theInterpretedGetter = interpretedGetter;
-				theAddOnGetter = addOnGetter;
-			}
-
-			@Override
-			public Object getFromDef(D def) {
-				return theDefGetter.apply(def);
-			}
-
-			@Override
-			public Object getFromInterpreted(I interpreted) {
-				return theInterpretedGetter.apply(interpreted);
-			}
-
-			@Override
-			public Object getFromAddOn(AO addOn) {
-				return theAddOnGetter.apply(addOn);
-			}
-		}
-	}
-
+	// public abstract class AddOnAttributeGetter<E extends ExElement, AO extends ExAddOn<? super E>, I extends Interpreted<? super E, ?
+	// extends AO>, D extends ExAddOn.Def<? super E, ? extends AO>> //
+	// implements ExElement.AttributeValueGetter<E, ExElement.Interpreted<? extends E>, ExElement.Def<? extends E>> {
+	// private final Class<D> theDefType;
+	// private final Class<I> theInterpType;
+	//
+	// protected AddOnAttributeGetter(Class<? super D> defType, Class<? super I> interpType) {
+	// theDefType = (Class<D>) (Class<?>) defType;
+	// theInterpType = (Class<I>) (Class<?>) interpType;
+	// }
+	//
+	// public abstract Object getFromDef(D def);
+	//
+	// public abstract Object getFromInterpreted(I interpreted);
+	//
+	// @Override
+	// public Object getFromDef(ExElement.Def<? extends E> def) {
+	// return def.getAddOnValue(theDefType, this::getFromDef);
+	// }
+	//
+	// @Override
+	// public Object getFromInterpreted(ExElement.Interpreted<? extends E> interp) {
+	// return interp.getAddOnValue(theInterpType, this::getFromInterpreted);
+	// }
+	//
+	// public static <E extends ExElement, AO extends ExAddOn<? super E>, I extends Interpreted<? super E, ? extends AO>, D extends
+	// ExAddOn.Def<? super E, ? extends AO>> Default<E, AO, I, D> of(
+	// Class<? super D> defType, Function<? super D, ?> defGetter, Class<? super I> interpretedType,
+	// Function<? super I, ?> interpretedGetter) {
+	// return new Default<>(defType, defGetter, interpretedType, interpretedGetter);
+	// }
+	//
+	// public static class Default<E extends ExElement, AO extends ExAddOn<? super E>, I extends Interpreted<? super E, ? extends AO>, D
+	// extends ExAddOn.Def<? super E, ? extends AO>>
+	// extends AddOnAttributeGetter<E, AO, I, D> {
+	// private final Function<? super D, ?> theDefGetter;
+	// private final Function<? super I, ?> theInterpretedGetter;
+	//
+	// public Default(Class<? super D> defType, Function<? super D, ?> defGetter, Class<? super I> interpType,
+	// Function<? super I, ?> interpretedGetter) {
+	// super(defType, interpType);
+	// theDefGetter = defGetter;
+	// theInterpretedGetter = interpretedGetter;
+	// }
+	//
+	// @Override
+	// public Object getFromDef(D def) {
+	// return theDefGetter.apply(def);
+	// }
+	//
+	// @Override
+	// public Object getFromInterpreted(I interpreted) {
+	// return theInterpretedGetter.apply(interpreted);
+	// }
+	// }
+	// }
+	//
+	// public abstract class AddOnChildGetter<E extends ExElement, AO extends ExAddOn<? super E>, I extends Interpreted<? super E, ? extends
+	// AO>, D extends ExAddOn.Def<? super E, ? extends AO>> //
+	// implements ExElement.ChildElementGetter<E, ExElement.Interpreted<? extends E>, ExElement.Def<? extends E>> {
+	// private final Class<D> theDefType;
+	// private final Class<I> theInterpType;
+	// private final Class<AO> theAddOnType;
+	//
+	// protected AddOnChildGetter(Class<? super D> defType, Class<? super I> interpType, Class<? super AO> addOnType) {
+	// theDefType = (Class<D>) (Class<?>) defType;
+	// theInterpType = (Class<I>) (Class<?>) interpType;
+	// theAddOnType = (Class<AO>) (Class<?>) addOnType;
+	// }
+	//
+	// public abstract List<? extends ExElement.Def<?>> getFromDef(D def);
+	//
+	// public abstract List<? extends ExElement.Interpreted<?>> getFromInterpreted(I interpreted);
+	//
+	// public abstract List<? extends ExElement> getFromAddOn(AO addOn);
+	//
+	// @Override
+	// public List<? extends ExElement.Def<?>> getChildrenFromDef(ExElement.Def<? extends E> def) {
+	// return def.getAddOnValue(theDefType, this::getFromDef);
+	// }
+	//
+	// @Override
+	// public List<? extends ExElement.Interpreted<?>> getChildrenFromInterpreted(ExElement.Interpreted<? extends E> interp) {
+	// return interp.getAddOnValue(theInterpType, this::getFromInterpreted);
+	// }
+	//
+	// @Override
+	// public List<? extends ExElement> getChildrenFromElement(E element) {
+	// return element.getAddOnValue(theAddOnType, this::getFromAddOn);
+	// }
+	//
+	// public static <E extends ExElement, AO extends ExAddOn<? super E>, I extends Interpreted<? super E, ? extends AO>, D extends
+	// ExAddOn.Def<? super E, ? extends AO>> Default<E, AO, I, D> of(
+	// Class<? super D> defType, Function<? super D, ? extends List<? extends ExElement.Def<?>>> defGetter,
+	// Class<? super I> interpretedType, Function<? super I, ? extends List<? extends ExElement.Interpreted<?>>> interpretedGetter,
+	// Class<? super AO> addOnType, Function<? super AO, ? extends List<? extends ExElement>> addOnGetter) {
+	// return new Default<>(defType, defGetter, interpretedType, interpretedGetter, addOnType, addOnGetter);
+	// }
+	//
+	// public static class Default<E extends ExElement, AO extends ExAddOn<? super E>, I extends Interpreted<? super E, ? extends AO>, D
+	// extends ExAddOn.Def<? super E, ? extends AO>>
+	// extends AddOnChildGetter<E, AO, I, D> {
+	// private final Function<? super D, ? extends List<? extends ExElement.Def<?>>> theDefGetter;
+	// private final Function<? super I, ? extends List<? extends ExElement.Interpreted<?>>> theInterpretedGetter;
+	// private final Function<? super AO, ? extends List<? extends ExElement>> theAddOnGetter;
+	//
+	// public Default(Class<? super D> defType, Function<? super D, ? extends List<? extends ExElement.Def<?>>> defGetter,
+	// Class<? super I> interpType, Function<? super I, ? extends List<? extends ExElement.Interpreted<?>>> interpretedGetter,
+	// Class<? super AO> addOnType, Function<? super AO, ? extends List<? extends ExElement>> addOnGetter) {
+	// super(defType, interpType, addOnType);
+	// theDefGetter = defGetter;
+	// theInterpretedGetter = interpretedGetter;
+	// theAddOnGetter = addOnGetter;
+	// }
+	//
+	// @Override
+	// public List<? extends org.observe.expresso.qonfig.ExElement.Def<?>> getFromDef(D def) {
+	// return theDefGetter.apply(def);
+	// }
+	//
+	// @Override
+	// public List<? extends org.observe.expresso.qonfig.ExElement.Interpreted<?>> getFromInterpreted(I interpreted) {
+	// return theInterpretedGetter.apply(interpreted);
+	// }
+	//
+	// @Override
+	// public List<? extends ExElement> getFromAddOn(AO addOn) {
+	// return theAddOnGetter.apply(addOn);
+	// }
+	// }
+	// }
+	//
 	/**
 	 * The definition of a {@link ExAddOn}
 	 *
@@ -249,8 +159,8 @@ public interface ExAddOn<E extends ExElement> {
 		ExElement.Def<? extends E> getElement();
 
 		/**
-		 * Called from the {@link #getElement() element}'s {@link QonfigDefinedElement.Def#update(ExpressoQIS) update}, initializes or
-		 * updates this add-on definition
+		 * Called from the {@link #getElement() element}'s {@link ExElement.Def#update(ExpressoQIS) update}, initializes or updates this
+		 * add-on definition
 		 *
 		 * @param session The session to support this add-on
 		 * @throws QonfigInterpretationException If an error occurs updating this add-on

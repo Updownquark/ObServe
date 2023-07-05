@@ -17,6 +17,7 @@ import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueSynth;
 import org.observe.expresso.TypeConversionException;
+import org.observe.expresso.qonfig.ElementTypeTraceability;
 import org.observe.expresso.qonfig.ExAddOn;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExpressoQIS;
@@ -87,25 +88,23 @@ public abstract class Sizeable extends ExAddOn.Abstract<ExElement> {
 		}
 
 		public static class Vertical extends Def<Sizeable.Vertical> {
-			private static final ExAddOn.AddOnAttributeGetter<ExElement, Sizeable.Vertical, Interpreted.Vertical, Def.Vertical> HEIGHT = ExAddOn.AddOnAttributeGetter
-				.of(Vertical.class, Vertical::getSize, Interpreted.Vertical.class, Interpreted.Vertical::getSize, Sizeable.Vertical.class,
-					Sizeable.Vertical::getSize);
-			private static final ExAddOn.AddOnAttributeGetter<ExElement, Sizeable.Vertical, Interpreted.Vertical, Def.Vertical> MIN_HEIGHT = ExAddOn.AddOnAttributeGetter
-				.of(Vertical.class, Vertical::getMinimum, Interpreted.Vertical.class, Interpreted.Vertical::getMinimum,
-					Sizeable.Vertical.class, Sizeable.Vertical::getMinimum);
-			private static final ExAddOn.AddOnAttributeGetter<ExElement, Sizeable.Vertical, Interpreted.Vertical, Def.Vertical> PREF_HEIGHT = ExAddOn.AddOnAttributeGetter
-				.of(Vertical.class, Vertical::getPreferred, Interpreted.Vertical.class, Interpreted.Vertical::getPreferred,
-					Sizeable.Vertical.class, Sizeable.Vertical::getPreferred);
-			private static final ExAddOn.AddOnAttributeGetter<ExElement, Sizeable.Vertical, Interpreted.Vertical, Def.Vertical> MAX_HEIGHT = ExAddOn.AddOnAttributeGetter
-				.of(Vertical.class, Vertical::getMaximum, Interpreted.Vertical.class, Interpreted.Vertical::getMaximum,
-					Sizeable.Vertical.class, Sizeable.Vertical::getMaximum);
+			private static final ElementTypeTraceability<ExElement, ExElement.Interpreted<?>, ExElement.Def<?>> TRACEABILITY = ElementTypeTraceability
+				.<ExElement, Sizeable, Interpreted<?>, Def<?>> buildAddOn(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION,
+					"v-sizeable", Def.class, Interpreted.class, Sizeable.class)//
+				.withAddOnAttribute("height", Def::getSize, Interpreted::getSize)//
+				.withAddOnAttribute("min-height", Def::getMinimum, Interpreted::getMinimum)//
+				.withAddOnAttribute("pref-height", Def::getPreferred, Interpreted::getPreferred)//
+				.withAddOnAttribute("max-height", Def::getMaximum, Interpreted::getMaximum)//
+				.build();
 
 			public Vertical(QonfigAddOn type, ExElement.Def<?> element) {
 				super(Ternian.TRUE, type, element);
-				element.forAttribute(type.getAttribute("height"), HEIGHT);
-				element.forAttribute(type.getAttribute("min-height"), MIN_HEIGHT);
-				element.forAttribute(type.getAttribute("pref-height"), PREF_HEIGHT);
-				element.forAttribute(type.getAttribute("max-height"), MAX_HEIGHT);
+			}
+
+			@Override
+			public void update(ExpressoQIS session, ExElement.Def<?> element) throws QonfigInterpretationException {
+				element.withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
+				super.update(session, element);
 			}
 
 			@Override
@@ -115,25 +114,23 @@ public abstract class Sizeable extends ExAddOn.Abstract<ExElement> {
 		}
 
 		public static class Horizontal extends Def<Sizeable.Horizontal> {
-			private static final ExAddOn.AddOnAttributeGetter<ExElement, Sizeable.Horizontal, Interpreted.Horizontal, Def.Horizontal> WIDTH = ExAddOn.AddOnAttributeGetter
-				.of(Horizontal.class, Horizontal::getSize, Interpreted.Horizontal.class, Interpreted.Horizontal::getSize,
-					Sizeable.Horizontal.class, Sizeable.Horizontal::getSize);
-			private static final ExAddOn.AddOnAttributeGetter<ExElement, Sizeable.Horizontal, Interpreted.Horizontal, Def.Horizontal> MIN_WIDTH = ExAddOn.AddOnAttributeGetter
-				.of(Horizontal.class, Horizontal::getMinimum, Interpreted.Horizontal.class, Interpreted.Horizontal::getMinimum,
-					Sizeable.Horizontal.class, Sizeable.Horizontal::getMinimum);
-			private static final ExAddOn.AddOnAttributeGetter<ExElement, Sizeable.Horizontal, Interpreted.Horizontal, Def.Horizontal> PREF_WIDTH = ExAddOn.AddOnAttributeGetter
-				.of(Horizontal.class, Horizontal::getPreferred, Interpreted.Horizontal.class, Interpreted.Horizontal::getPreferred,
-					Sizeable.Horizontal.class, Sizeable.Horizontal::getPreferred);
-			private static final ExAddOn.AddOnAttributeGetter<ExElement, Sizeable.Horizontal, Interpreted.Horizontal, Def.Horizontal> MAX_WIDTH = ExAddOn.AddOnAttributeGetter
-				.of(Horizontal.class, Horizontal::getMaximum, Interpreted.Horizontal.class, Interpreted.Horizontal::getMaximum,
-					Sizeable.Horizontal.class, Sizeable.Horizontal::getMaximum);
+			private static final ElementTypeTraceability<ExElement, ExElement.Interpreted<?>, ExElement.Def<?>> TRACEABILITY = ElementTypeTraceability
+				.<ExElement, Sizeable, Interpreted<?>, Def<?>> buildAddOn(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION,
+					"h-sizeable", Def.class, Interpreted.class, Sizeable.class)//
+				.withAddOnAttribute("width", Def::getSize, Interpreted::getSize)//
+				.withAddOnAttribute("min-width", Def::getMinimum, Interpreted::getMinimum)//
+				.withAddOnAttribute("pref-width", Def::getPreferred, Interpreted::getPreferred)//
+				.withAddOnAttribute("max-width", Def::getMaximum, Interpreted::getMaximum)//
+				.build();
 
 			public Horizontal(QonfigAddOn type, ExElement.Def<?> element) {
 				super(Ternian.FALSE, type, element);
-				element.forAttribute(type.getAttribute("width"), WIDTH);
-				element.forAttribute(type.getAttribute("min-width"), MIN_WIDTH);
-				element.forAttribute(type.getAttribute("pref-width"), PREF_WIDTH);
-				element.forAttribute(type.getAttribute("max-width"), MAX_WIDTH);
+			}
+
+			@Override
+			public void update(ExpressoQIS session, ExElement.Def<?> element) throws QonfigInterpretationException {
+				element.withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
+				super.update(session, element);
 			}
 
 			@Override

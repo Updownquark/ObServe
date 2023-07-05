@@ -10,8 +10,10 @@ import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.qonfig.CompiledExpression;
 import org.observe.expresso.qonfig.DynamicModelValue;
+import org.observe.expresso.qonfig.ElementTypeTraceability;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExpressoQIS;
+import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigInterpretationException;
@@ -20,21 +22,19 @@ import com.google.common.reflect.TypeToken;
 
 public interface QuickValueWidget<T> extends QuickWidget {
 	public static final String VALUE_WIDGET = "value-widget";
-
-	public static final ExElement.AttributeValueGetter.Expression<QuickValueWidget<?>, Interpreted<?, ?>, Def<?>, SettableValue<?>, SettableValue<?>> VALUE//
-	= ExElement.AttributeValueGetter.<QuickValueWidget<?>, Interpreted<?, ?>, Def<?>, SettableValue<?>, SettableValue<?>> ofX(
-			Def::getValue, Interpreted::getValue, QuickValueWidget::getValue);
-	public static final ExElement.AttributeValueGetter.Expression<QuickValueWidget<?>, Interpreted<?, ?>, Def<?>, SettableValue<?>, SettableValue<String>> DISABLE_WITH//
-	= ExElement.AttributeValueGetter.<QuickValueWidget<?>, Interpreted<?, ?>, Def<?>, SettableValue<?>, SettableValue<String>> ofX(
-			Def::getDisabled, Interpreted::getDisabled, QuickValueWidget::getDisabled);
-	public static final ExElement.AttributeValueGetter<QuickValueWidget<?>, Interpreted<?, ?>, Def<?>> VALUE_NAME = ExElement.AttributeValueGetter
-		.<QuickValueWidget<?>, Interpreted<?, ?>, Def<?>> of(Def::getValueName, null, null);
+	public static final ElementTypeTraceability<QuickValueWidget<?>, Interpreted<?, ?>, Def<?>> VALUE_WIDGET_TRACEABILITY = ElementTypeTraceability
+		.<QuickValueWidget<?>, Interpreted<?, ?>, Def<?>> build(QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, VALUE_WIDGET)//
+		.reflectMethods(Def.class, Interpreted.class, QuickValueWidget.class)//
+		.build();
 
 	public interface Def<W extends QuickValueWidget<?>> extends QuickWidget.Def<W> {
+		@QonfigAttributeGetter("value-name")
 		String getValueName();
 
+		@QonfigAttributeGetter("value")
 		CompiledExpression getValue();
 
+		@QonfigAttributeGetter("disable-with")
 		CompiledExpression getDisabled();
 
 		@Override
@@ -66,10 +66,7 @@ public interface QuickValueWidget<T> extends QuickWidget {
 
 			@Override
 			public void update(ExpressoQIS session) throws QonfigInterpretationException {
-				ExElement.checkElement(session.getFocusType(), QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, VALUE_WIDGET);
-				forAttribute(session.getAttributeDef(null, null, "value"), VALUE);
-				forAttribute(session.getAttributeDef(null, null, "value-name"), VALUE_NAME);
-				forAttribute(session.getAttributeDef(null, null, "disable-with"), DISABLE_WITH);
+				withTraceability(VALUE_WIDGET_TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 				super.update(session.asElement(session.getFocusType().getSuperElement()));
 				theValueName = session.getAttributeText("value-name");
 				theValue = session.getAttributeExpression("value");

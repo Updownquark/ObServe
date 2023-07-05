@@ -12,8 +12,11 @@ import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.qonfig.CompiledExpression;
+import org.observe.expresso.qonfig.ElementTypeTraceability;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExpressoQIS;
+import org.observe.expresso.qonfig.QonfigAttributeGetter;
+import org.observe.expresso.qonfig.QonfigChildGetter;
 import org.observe.util.TypeTokens;
 import org.qommons.collect.CollectionUtils;
 import org.qommons.config.AbstractQIS;
@@ -22,20 +25,10 @@ import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
 public class QuickStyleElement extends ExElement.Abstract {
-	private static final ExElement.AttributeValueGetter<QuickStyleElement, Interpreted, Def> ELEMENT//
-	= ExElement.AttributeValueGetter.of(Def::getStyleElement, i -> null, e -> null);
-	private static final ExElement.AttributeValueGetter<QuickStyleElement, Interpreted, Def> ROLE//
-	= ExElement.AttributeValueGetter.of(Def::getChild, i -> null, e -> null);
-	private static final ExElement.AttributeValueGetter.Expression<QuickStyleElement, Interpreted, Def, SettableValue<?>, SettableValue<Boolean>> CONDITION//
-	= ExElement.AttributeValueGetter.ofX(Def::getCondition, Interpreted::getCondition, QuickStyleElement::getCondition);
-	private static final ExElement.AttributeValueGetter<QuickStyleElement, Interpreted, Def> STYLE_SET//
-	= ExElement.AttributeValueGetter.of(Def::getStyleSet, i -> null, e -> null);
-	private static final ExElement.AttributeValueGetter<QuickStyleElement, Interpreted, Def> ATTRIBUTE//
-	= ExElement.AttributeValueGetter.of(Def::getDeclaredAttribute, i -> null, e -> null);
-	private static final ExElement.AttributeValueGetter.Expression<QuickStyleElement, Interpreted, Def, SettableValue<?>, SettableValue<?>> VALUE//
-	= ExElement.AttributeValueGetter.ofX(Def::getValue, Interpreted::getValue, QuickStyleElement::getValue);
-	private static final ExElement.ChildElementGetter<QuickStyleElement, Interpreted, Def> STYLE_ELEMENTS = ExElement.ChildElementGetter
-		.<QuickStyleElement, Interpreted, Def> of(Def::getChildren, Interpreted::getChildren, QuickStyleElement::getChildren);
+	private static final ElementTypeTraceability<QuickStyleElement, Interpreted, Def> TRACEABILITY = ElementTypeTraceability
+		.<QuickStyleElement, Interpreted, Def> build(StyleSessionImplV0_1.NAME, StyleSessionImplV0_1.VERSION, "style")//
+		.reflectMethods(Def.class, Interpreted.class, QuickStyleElement.class)//
+		.build();
 
 	public static class Def extends ExElement.Def.Abstract<QuickStyleElement> {
 		private final QonfigElementOrAddOn theStyleElement;
@@ -51,14 +44,6 @@ public class QuickStyleElement extends ExElement.Abstract {
 			CompiledExpression condition, QuickStyleSet styleSet, QuickStyleAttribute<?> declaredAttribute,
 			QuickStyleAttribute<?> effectiveAttribute, CompiledExpression value, List<Def> children) {
 			super(parent, session.getElement());
-			forAttribute(session.getAttributeDef(null, null, "element"), ELEMENT);
-			forAttribute(session.getAttributeDef(null, null, "child"), ROLE);
-			forAttribute(session.getAttributeDef(null, null, "condition"), CONDITION);
-			forAttribute(session.getAttributeDef(null, null, "style-set"), STYLE_SET);
-			forAttribute(session.getAttributeDef(null, null, "attr"), ATTRIBUTE);
-			forAttribute(session.getAttributeDef(null, null, "element"), ELEMENT);
-			forValue(VALUE);
-			forChild(session.getRole("sub-style"), STYLE_ELEMENTS);
 			theStyleElement = styleElement;
 			theChild = child;
 			theCondition = condition;
@@ -69,22 +54,27 @@ public class QuickStyleElement extends ExElement.Abstract {
 			theChildren = children;
 		}
 
+		@QonfigAttributeGetter("element")
 		public QonfigElementOrAddOn getStyleElement() {
 			return theStyleElement;
 		}
 
+		@QonfigAttributeGetter("child")
 		public QonfigChildDef getChild() {
 			return theChild;
 		}
 
+		@QonfigAttributeGetter("condition")
 		public CompiledExpression getCondition() {
 			return theCondition;
 		}
 
+		@QonfigAttributeGetter("style-set")
 		public QuickStyleSet getStyleSet() {
 			return theStyleSet;
 		}
 
+		@QonfigAttributeGetter("attr")
 		public QuickStyleAttribute<?> getDeclaredAttribute() {
 			return theDeclaredAttribute;
 		}
@@ -93,16 +83,19 @@ public class QuickStyleElement extends ExElement.Abstract {
 			return theEffectiveAttribute;
 		}
 
+		@QonfigAttributeGetter
 		public CompiledExpression getValue() {
 			return theValue;
 		}
 
+		@QonfigChildGetter("sub-style")
 		public List<Def> getChildren() {
 			return theChildren;
 		}
 
 		@Override
 		public void update(ExpressoQIS session) throws QonfigInterpretationException {
+			withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 			super.update(session);
 			int i = 0;
 			for (ExpressoQIS subStyleSession : session.forChildren("sub-style"))

@@ -12,8 +12,10 @@ import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueSynth;
 import org.observe.expresso.qonfig.CompiledExpression;
+import org.observe.expresso.qonfig.ElementTypeTraceability;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExpressoQIS;
+import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigInterpretationException;
@@ -24,6 +26,10 @@ import com.google.common.reflect.TypeToken;
 
 public interface QuickTextWidget<T> extends QuickValueWidget<T> {
 	public static final String TEXT_WIDGET = "text-widget";
+	public static final ElementTypeTraceability<QuickTextWidget<?>, Interpreted<?, ?>, Def<?>> TEXT_WIDGET_TRACEABILITY = ElementTypeTraceability
+		.<QuickTextWidget<?>, Interpreted<?, ?>, Def<?>> build(QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, TEXT_WIDGET)//
+		.reflectMethods(Def.class, Interpreted.class, QuickTextWidget.class)//
+		.build();
 
 	public static final Format<Double> DEFAULT_DOUBLE_FORMAT = Format.doubleFormat(5)//
 		.printIntFor(5, false)//
@@ -50,18 +56,13 @@ public interface QuickTextWidget<T> extends QuickValueWidget<T> {
 		}
 	};
 
-	public static final ExElement.AttributeValueGetter.Expression<QuickTextWidget<?>, Interpreted<?, ?>, Def<?>, SettableValue<?>, SettableValue<? extends Format<?>>> FORMAT = ExElement.AttributeValueGetter
-		.<QuickTextWidget<?>, Interpreted<?, ?>, Def<?>, SettableValue<?>, SettableValue<? extends Format<?>>> ofX(def -> def.getFormat(),
-			interp -> interp.getFormat(), w -> w.getFormat());
-	public static final ExElement.AttributeValueGetter.Expression<QuickTextWidget<?>, Interpreted<?, ?>, Def<?>, SettableValue<?>, SettableValue<Boolean>> EDITABLE = ExElement.AttributeValueGetter
-		.<QuickTextWidget<?>, Interpreted<?, ?>, Def<?>, SettableValue<?>, SettableValue<Boolean>> ofX(Def::isEditable,
-			Interpreted::isEditable, QuickTextWidget::isEditable);
-
 	public interface Def<W extends QuickTextWidget<?>> extends QuickValueWidget.Def<W> {
+		@QonfigAttributeGetter("format")
 		CompiledExpression getFormat();
 
 		boolean isTypeEditable();
 
+		@QonfigAttributeGetter("editable")
 		CompiledExpression isEditable();
 
 		@Override
@@ -88,9 +89,7 @@ public interface QuickTextWidget<T> extends QuickValueWidget<T> {
 
 			@Override
 			public void update(ExpressoQIS session) throws QonfigInterpretationException {
-				ExElement.checkElement(session.getFocusType(), QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, TEXT_WIDGET);
-				forAttribute(session.getAttributeDef(null, null, "format"), FORMAT);
-				forAttribute(session.getAttributeDef(null, null, "editable"), EDITABLE);
+				withTraceability(TEXT_WIDGET_TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 				super.update(session.asElement(session.getFocusType().getSuperElement()));
 				theFormat = session.getAttributeExpression("format");
 				isEditable = session.getAttributeExpression("editable");

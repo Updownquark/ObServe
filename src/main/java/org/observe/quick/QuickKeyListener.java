@@ -4,8 +4,10 @@ import org.observe.SettableValue;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.qonfig.ElementTypeTraceability;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExpressoQIS;
+import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigInterpretationException;
@@ -67,9 +69,11 @@ public interface QuickKeyListener extends QuickEventListener {
 
 	public class QuickKeyTypedListener extends QuickEventListener.Abstract implements QuickKeyListener {
 		public static final String KEY_TYPED_LISTENER = "on-type";
-
-		private static final ExElement.AttributeValueGetter<QuickKeyTypedListener, Interpreted, Def> CHAR = ExElement.AttributeValueGetter
-			.of(Def::getCharFilter, i -> i.getDefinition().getCharFilter(), QuickKeyTypedListener::getCharFilter);
+		private static final ElementTypeTraceability<QuickKeyTypedListener, Interpreted, Def> TRACEABILITY = ElementTypeTraceability
+			.<QuickKeyTypedListener, Interpreted, Def> build(QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION,
+				KEY_TYPED_LISTENER)//
+			.reflectMethods(Def.class, Interpreted.class, QuickKeyTypedListener.class)//
+			.build();
 
 		public static class Def extends QuickEventListener.Def.Abstract<QuickKeyTypedListener>
 		implements QuickKeyListener.Def<QuickKeyTypedListener> {
@@ -79,15 +83,14 @@ public interface QuickKeyListener extends QuickEventListener {
 				super(parent, element);
 			}
 
+			@QonfigAttributeGetter("char")
 			public char getCharFilter() {
 				return theCharFilter;
 			}
 
 			@Override
 			public void update(ExpressoQIS session) throws QonfigInterpretationException {
-				ExElement.checkElement(session.getFocusType(), QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION,
-					KEY_TYPED_LISTENER);
-				forAttribute(session.getAttributeDef(null, null, "char"), CHAR);
+				withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 				super.update(session.asElement(session.getFocusType()// on-type
 					.getSuperElement() // key-listener
 					.getSuperElement() // event-listener
@@ -156,11 +159,13 @@ public interface QuickKeyListener extends QuickEventListener {
 
 	public class QuickKeyCodeListener extends QuickEventListener.Abstract implements QuickKeyListener {
 		public static final String KEY_CODE_LISTENER = "key-code-listener";
+		private static final ElementTypeTraceability<QuickKeyCodeListener, Interpreted, Def> TRACEABILITY = ElementTypeTraceability
+			.<QuickKeyCodeListener, Interpreted, Def> build(QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION,
+				KEY_CODE_LISTENER)//
+			.reflectMethods(Def.class, Interpreted.class, QuickKeyCodeListener.class)//
+			.build();
 		public static final String KEY_PRESSED_LISTENER = "on-key-press";
 		public static final String KEY_RELEASED_LISTENER = "on-key-release";
-
-		private static final ExElement.AttributeValueGetter<QuickKeyCodeListener, Interpreted, Def> KEY = ExElement.AttributeValueGetter.of(
-			Def::getKeyCode, i -> i.getDefinition().getKeyCode(), QuickKeyCodeListener::getKeyCode);
 
 		public static class Def extends QuickEventListener.Def.Abstract<QuickKeyCodeListener>
 		implements QuickKeyListener.Def<QuickKeyCodeListener> {
@@ -176,6 +181,7 @@ public interface QuickKeyListener extends QuickEventListener {
 				return isPressed;
 			}
 
+			@QonfigAttributeGetter("key")
 			public KeyCode getKeyCode() {
 				return theKeyCode;
 			}
@@ -191,9 +197,7 @@ public interface QuickKeyListener extends QuickEventListener {
 					break;
 				default:
 				}
-				ExElement.checkElement(session.getFocusType(), QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION,
-					KEY_CODE_LISTENER);
-				forAttribute(session.getAttributeDef(null, null, "key"), KEY);
+				withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 				super.update(session.asElement(session.getFocusType().getSuperElement()// key-listener
 					.getSuperElement() // event-listener
 					));

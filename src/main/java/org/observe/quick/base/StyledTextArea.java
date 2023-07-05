@@ -1,7 +1,6 @@
 package org.observe.quick.base;
 
 import java.awt.Color;
-import java.util.Collections;
 import java.util.Map;
 
 import org.observe.ObservableValue;
@@ -15,8 +14,11 @@ import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.qonfig.CompiledExpression;
 import org.observe.expresso.qonfig.DynamicModelValue;
+import org.observe.expresso.qonfig.ElementTypeTraceability;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExpressoQIS;
+import org.observe.expresso.qonfig.QonfigAttributeGetter;
+import org.observe.expresso.qonfig.QonfigChildGetter;
 import org.observe.quick.QuickStyledElement;
 import org.observe.quick.QuickTextElement;
 import org.observe.quick.QuickTextWidget;
@@ -33,27 +35,11 @@ import com.google.common.reflect.TypeToken;
 
 public class StyledTextArea<T> extends QuickTextWidget.Abstract<T> {
 	public static final String STYLED_TEXT_AREA = "styled-text-area";
+	private static final ElementTypeTraceability<StyledTextArea<?>, Interpreted<?>, Def<?>> TRACEABILITY = ElementTypeTraceability
+		.<StyledTextArea<?>, Interpreted<?>, Def<?>> build(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, STYLED_TEXT_AREA)//
+		.reflectMethods(Def.class, Interpreted.class, StyledTextArea.class)//
+		.build();
 	public static final String TEXT_STYLE = "text-style";
-
-	private static final ExElement.AttributeValueGetter.Expression<StyledTextArea<?>, Interpreted<?>, Def<?>, ObservableCollection<?>, ObservableCollection<?>> CHILDREN = ExElement.AttributeValueGetter
-		.ofX(Def::getChildren, Interpreted::getChildren, null);
-	private static final ExElement.AttributeValueGetter.Expression<StyledTextArea<?>, Interpreted<?>, Def<?>, SettableValue<?>, SettableValue<String>> POST_TEXT = ExElement.AttributeValueGetter
-		.ofX(Def::getPostText, Interpreted::getPostText, null);
-	private static final ExElement.AttributeValueGetter.Expression<StyledTextArea<?>, Interpreted<?>, Def<?>, SettableValue<?>, SettableValue<Integer>> ROWS = ExElement.AttributeValueGetter
-		.ofX(Def::getRows, Interpreted::getRows, StyledTextArea::getRows);
-	private static final ExElement.AttributeValueGetter.Expression<StyledTextArea<?>, Interpreted<?>, Def<?>, SettableValue<?>, SettableValue<?>> SELECTION_START_VALUE = ExElement.AttributeValueGetter
-		.ofX(Def::getSelectionStartValue, Interpreted::getSelectionStartValue, StyledTextArea::getSelectionStartValue);
-	private static final ExElement.AttributeValueGetter.Expression<StyledTextArea<?>, Interpreted<?>, Def<?>, SettableValue<?>, SettableValue<Integer>> SELECTION_START_OFFSET = ExElement.AttributeValueGetter
-		.ofX(Def::getSelectionStartOffset, Interpreted::getSelectionStartOffset, StyledTextArea::getSelectionStartOffset);
-	private static final ExElement.AttributeValueGetter.Expression<StyledTextArea<?>, Interpreted<?>, Def<?>, SettableValue<?>, SettableValue<?>> SELECTION_END_VALUE = ExElement.AttributeValueGetter
-		.ofX(Def::getSelectionEndValue, Interpreted::getSelectionEndValue, StyledTextArea::getSelectionEndValue);
-	private static final ExElement.AttributeValueGetter.Expression<StyledTextArea<?>, Interpreted<?>, Def<?>, SettableValue<?>, SettableValue<Integer>> SELECTION_END_OFFSET = ExElement.AttributeValueGetter
-		.ofX(Def::getSelectionEndOffset, Interpreted::getSelectionEndOffset, StyledTextArea::getSelectionEndOffset);
-	// Ridiculous that I have to parameterize all these methods. Not sure what I'm doing wrong with the generics.
-	private static final ExElement.ChildElementGetter<StyledTextArea<?>, Interpreted<?>, Def<?>> TEXT_STYLE_GETTER = ExElement.ChildElementGetter
-		.<StyledTextArea<?>, Interpreted<?>, Def<?>> of(def -> Collections.<ExElement.Def<?>> singletonList(def.getTextStyle()),
-			interp -> Collections.<ExElement.Interpreted<?>> singletonList(interp.getTextStyle()),
-			widget -> Collections.singletonList(widget.getTextStyle()));
 
 	public static class Def<T> extends QuickTextWidget.Def.Abstract<T, StyledTextArea<? extends T>> {
 		private CompiledExpression theChildren;
@@ -74,49 +60,49 @@ public class StyledTextArea<T> extends QuickTextWidget.Abstract<T> {
 			return false;
 		}
 
+		@QonfigAttributeGetter("children")
 		public CompiledExpression getChildren() {
 			return theChildren;
 		}
 
+		@QonfigAttributeGetter("post-text")
 		public CompiledExpression getPostText() {
 			return thePostText;
 		}
 
+		@QonfigAttributeGetter("rows")
 		public CompiledExpression getRows() {
 			return theRows;
 		}
 
+		@QonfigChildGetter("text-style")
 		public TextStyleElement.Def getTextStyle() {
 			return theTextStyle;
 		}
 
+		@QonfigAttributeGetter("selection-start-value")
 		public CompiledExpression getSelectionStartValue() {
 			return theSelectionStartValue;
 		}
 
+		@QonfigAttributeGetter("selection-start-offset")
 		public CompiledExpression getSelectionStartOffset() {
 			return theSelectionStartOffset;
 		}
 
+		@QonfigAttributeGetter("selection-end-value")
 		public CompiledExpression getSelectionEndValue() {
 			return theSelectionEndValue;
 		}
 
+		@QonfigAttributeGetter("selection-end-offset")
 		public CompiledExpression getSelectionEndOffset() {
 			return theSelectionEndOffset;
 		}
 
 		@Override
 		public void update(ExpressoQIS session) throws QonfigInterpretationException {
-			ExElement.checkElement(session.getFocusType(), QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, STYLED_TEXT_AREA);
-			forAttribute(session.getAttributeDef(null, null, "children"), CHILDREN);
-			forAttribute(session.getAttributeDef(null, null, "post-text"), POST_TEXT);
-			forAttribute(session.getAttributeDef(null, null, "rows"), ROWS);
-			forAttribute(session.getAttributeDef(null, null, "selection-start-value"), SELECTION_START_VALUE);
-			forAttribute(session.getAttributeDef(null, null, "selection-start-offset"), SELECTION_START_OFFSET);
-			forAttribute(session.getAttributeDef(null, null, "selection-end-value"), SELECTION_END_VALUE);
-			forAttribute(session.getAttributeDef(null, null, "selection-end-offset"), SELECTION_END_OFFSET);
-			forChild(session.getRole("text-style"), TEXT_STYLE_GETTER);
+			withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 			super.update(session.asElement(session.getFocusType().getSuperElement()));
 
 			theChildren = session.getAttributeExpression("children");
@@ -375,7 +361,12 @@ public class StyledTextArea<T> extends QuickTextWidget.Abstract<T> {
 	}
 
 	public static class TextStyleElement extends QuickStyledElement.Abstract implements QuickTextElement {
-		public static class Def extends QuickTextElement.Def.Abstract {
+		private static final ElementTypeTraceability<TextStyleElement, Interpreted, Def> TRACEABILITY = ElementTypeTraceability
+			.<TextStyleElement, Interpreted, Def> build(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, TEXT_STYLE)//
+			.reflectMethods(Def.class, Interpreted.class, TextStyleElement.class)//
+			.build();
+
+		public static class Def extends QuickTextElement.Def.Abstract<TextStyleElement> {
 			public Def(StyledTextArea.Def<?> parent, QonfigElement element) {
 				super(parent, element);
 			}
@@ -397,8 +388,8 @@ public class StyledTextArea<T> extends QuickTextWidget.Abstract<T> {
 
 			@Override
 			public void update(ExpressoQIS session) throws QonfigInterpretationException {
-				ExElement.checkElement(session.getFocusType(), QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, TEXT_STYLE);
-				super.update(session); // No super element
+				withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
+				super.update(session.asElement("styled")); // No super element
 			}
 
 			public Interpreted interpret(StyledTextArea.Interpreted<?> parent) {
@@ -406,7 +397,7 @@ public class StyledTextArea<T> extends QuickTextWidget.Abstract<T> {
 			}
 		}
 
-		public static class Interpreted extends QuickTextElement.Interpreted.Abstract {
+		public static class Interpreted extends QuickTextElement.Interpreted.Abstract<TextStyleElement> {
 			public Interpreted(TextStyleElement.Def definition, StyledTextArea.Interpreted<?> parent) {
 				super(definition, parent);
 			}

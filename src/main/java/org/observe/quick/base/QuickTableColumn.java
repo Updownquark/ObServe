@@ -1,10 +1,8 @@
 package org.observe.quick.base;
 
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.HashSet;
 import java.util.Iterator;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -22,9 +20,12 @@ import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.TypeConversionException;
 import org.observe.expresso.qonfig.CompiledExpression;
 import org.observe.expresso.qonfig.DynamicModelValue;
+import org.observe.expresso.qonfig.ElementTypeTraceability;
 import org.observe.expresso.qonfig.ExAddOn;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExpressoQIS;
+import org.observe.expresso.qonfig.QonfigAttributeGetter;
+import org.observe.expresso.qonfig.QonfigChildGetter;
 import org.observe.quick.QuickStyledElement;
 import org.observe.quick.QuickStyledElement.QuickInterpretationCache;
 import org.observe.quick.QuickValueWidget;
@@ -41,8 +42,8 @@ import org.qommons.config.QonfigInterpretationException;
 import com.google.common.reflect.TypeToken;
 
 public interface QuickTableColumn<R, C> {
-	public interface TableColumnSet<R> extends ExElement, RowTyped<R> {
-		public interface Def<CC extends TableColumnSet<?>> extends ExElement.Def<CC>, RowTyped.Def<CC> {
+	public interface TableColumnSet<R> extends RowTyped<R> {
+		public interface Def<CC extends TableColumnSet<?>> extends RowTyped.Def<CC> {
 			QuickWidget.Def<?> getRenderer();
 
 			ColumnEditing.Def getEditing();
@@ -50,7 +51,7 @@ public interface QuickTableColumn<R, C> {
 			<R> Interpreted<R, ? extends CC> interpret(ExElement.Interpreted<?> parent);
 		}
 
-		public interface Interpreted<R, CC extends TableColumnSet<R>> extends ExElement.Interpreted<CC>, RowTyped.Interpreted<R, CC> {
+		public interface Interpreted<R, CC extends TableColumnSet<R>> extends RowTyped.Interpreted<R, CC> {
 			@Override
 			Def<? super CC> getDefinition();
 
@@ -114,34 +115,11 @@ public interface QuickTableColumn<R, C> {
 
 	public class ColumnEditing<R, C> extends ExElement.Abstract implements QuickValueWidget.WidgetValueSupplier<C> {
 		public static final String COLUMN_EDITING = "column-edit";
-
-		private static final ExElement.AttributeValueGetter<ColumnEditing<?, ?>, Interpreted<?, ?>, Def> TYPE = ExElement.AttributeValueGetter
-			.of(Def::getType, Interpreted::getType, ColumnEditing::getType);
-		private static final ExElement.AttributeValueGetter<ColumnEditing<?, ?>, Interpreted<?, ?>, Def> COLUMN_EDIT_VALUE_NAME = ExElement.AttributeValueGetter
-			.of(Def::getColumnEditValueName, i -> i.getDefinition().getColumnEditValueName(), ColumnEditing::getColumnEditValueName);
-		private static final ExElement.AttributeValueGetter.Expression<ColumnEditing<?, ?>, Interpreted<?, ?>, Def, SettableValue<?>, SettableValue<String>> EDITABLE_IF = ExElement.AttributeValueGetter
-			.ofX(Def::isEditable, Interpreted::isEditable, ColumnEditing::isEditable);
-		private static final ExElement.AttributeValueGetter.Expression<ColumnEditing<?, ?>, Interpreted<?, ?>, Def, SettableValue<?>, SettableValue<String>> ACCEPT = ExElement.AttributeValueGetter
-			.ofX(Def::isAcceptable, Interpreted::isAcceptable, ColumnEditing::isAcceptable);
-		private static final ExElement.AttributeValueGetter<ColumnEditing<?, ?>, Interpreted<?, ?>, Def> CLICKS = ExElement.AttributeValueGetter
-			.of(Def::getClicks, i -> i.getDefinition().getClicks(), ColumnEditing::getClicks);
-
-		private static final ExElement.ChildElementGetter<ColumnEditing<?, ?>, Interpreted<?, ?>, Def> EDITOR = new ExElement.ChildElementGetter<ColumnEditing<?, ?>, Interpreted<?, ?>, Def>() {
-			@Override
-			public List<? extends ExElement.Def<?>> getChildrenFromDef(Def def) {
-				return def.getEditor() == null ? Collections.emptyList() : Collections.singletonList(def.getEditor());
-			}
-
-			@Override
-			public List<? extends ExElement.Interpreted<?>> getChildrenFromInterpreted(Interpreted<?, ?> interp) {
-				return interp.getEditor() == null ? Collections.emptyList() : Collections.singletonList(interp.getEditor());
-			}
-
-			@Override
-			public List<? extends ExElement> getChildrenFromElement(ColumnEditing<?, ?> element) {
-				return element.getEditor() == null ? Collections.emptyList() : Collections.singletonList(element.getEditor());
-			}
-		};
+		private static final ElementTypeTraceability<ColumnEditing<?, ?>, Interpreted<?, ?>, Def> TRACEABILITY = ElementTypeTraceability
+			.<ColumnEditing<?, ?>, Interpreted<?, ?>, Def> build(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION,
+				COLUMN_EDITING)//
+			.reflectMethods(Def.class, Interpreted.class, ColumnEditing.class)//
+			.build();
 
 		public static class Def extends ExElement.Def.Abstract<ColumnEditing<?, ?>>
 		implements QuickValueWidget.WidgetValueSupplier.Def<ColumnEditing<?, ?>> {
@@ -160,40 +138,39 @@ public interface QuickTableColumn<R, C> {
 				return (TableColumnSet.Def<?>) super.getParentElement();
 			}
 
+			@QonfigAttributeGetter("type")
 			public ColumnEditType.Def<?> getType() {
 				return getAddOn(ColumnEditType.Def.class);
 			}
 
+			@QonfigChildGetter("editor")
 			public QuickWidget.Def<?> getEditor() {
 				return theEditor;
 			}
 
+			@QonfigAttributeGetter("column-edit-value-name")
 			public String getColumnEditValueName() {
 				return theColumnEditValueName;
 			}
 
+			@QonfigAttributeGetter("editable-if")
 			public CompiledExpression isEditable() {
 				return isEditable;
 			}
 
+			@QonfigAttributeGetter("accept")
 			public CompiledExpression isAcceptable() {
 				return isAcceptable;
 			}
 
+			@QonfigAttributeGetter("clicks")
 			public Integer getClicks() {
 				return theClicks;
 			}
 
 			@Override
 			public void update(ExpressoQIS session) throws QonfigInterpretationException {
-				ExElement.checkElement(session.getFocusType(), QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION,
-					COLUMN_EDITING);
-				forAttribute(session.getAttributeDef(null, null, "type"), TYPE);
-				forAttribute(session.getAttributeDef(null, null, "column-edit-value-name"), COLUMN_EDIT_VALUE_NAME);
-				forAttribute(session.getAttributeDef(null, null, "editable-if"), EDITABLE_IF);
-				forAttribute(session.getAttributeDef(null, null, "accept"), ACCEPT);
-				forAttribute(session.getAttributeDef(null, null, "clicks"), CLICKS);
-				forChild(session.getRole("editor"), EDITOR);
+				withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 				super.update(session);
 				theEditor = ExElement.useOrReplace(QuickWidget.Def.class, theEditor, session, "editor");
 				theColumnEditValueName = session.getAttributeText("column-edit-value-name");
@@ -471,13 +448,12 @@ public interface QuickTableColumn<R, C> {
 		}
 
 		public static class RowModifyEditType<R, C> extends ColumnEditType<R, C> {
-			private static final ExAddOn.AddOnAttributeGetter.Expression<ColumnEditing<?, ?>, RowModifyEditType<?, ?>, Interpreted<?, ?>, Def, ObservableAction<?>, ObservableAction<?>> COMMIT = ExAddOn.AddOnAttributeGetter
-				.<ColumnEditing<?, ?>, RowModifyEditType<?, ?>, Interpreted<?, ?>, Def, ObservableAction<?>, ObservableAction<?>> ofX(
-					Def.class, Def::getCommit, Interpreted.class, Interpreted::getCommit, RowModifyEditType.class,
-					RowModifyEditType::getCommit);
-			private static final ExAddOn.AddOnAttributeGetter<ColumnEditing<?, ?>, RowModifyEditType<?, ?>, Interpreted<?, ?>, Def> ROW_UPDATE = ExAddOn.AddOnAttributeGetter
-				.<ColumnEditing<?, ?>, RowModifyEditType<?, ?>, Interpreted<?, ?>, Def> of(Def.class, Def::isRowUpdate, Interpreted.class,
-					i -> i.getDefinition().isRowUpdate(), RowModifyEditType.class, RowModifyEditType::isRowUpdate);
+			public static final String MODIFY = "modify-row";
+			private static final ElementTypeTraceability<ColumnEditing<?, ?>, ?, ?> TRACEABILITY = ElementTypeTraceability
+				.<ColumnEditing<?, ?>, RowModifyEditType<?, ?>, Interpreted<?, ?>, Def> buildAddOn(QuickBaseInterpretation.NAME,
+					QuickBaseInterpretation.VERSION, MODIFY, Def.class, Interpreted.class, RowModifyEditType.class)//
+				.reflectAddOnMethods()//
+				.build();
 
 			public static class Def extends ColumnEditType.Def<RowModifyEditType<?, ?>> {
 				private CompiledExpression theCommit;
@@ -487,10 +463,12 @@ public interface QuickTableColumn<R, C> {
 					super(type, element);
 				}
 
+				@QonfigAttributeGetter("commit")
 				public CompiledExpression getCommit() {
 					return theCommit;
 				}
 
+				@QonfigAttributeGetter("row-update")
 				public boolean isRowUpdate() {
 					return isRowUpdate;
 				}
@@ -498,10 +476,7 @@ public interface QuickTableColumn<R, C> {
 				@Override
 				public void update(ExpressoQIS session, ExElement.Def<? extends ColumnEditing<?, ?>> element)
 					throws QonfigInterpretationException {
-					ExElement.checkElement(session.getFocusType(), QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION,
-						"modify-row");
-					element.forAttribute(session.getAttributeDef(null, null, "commit"), COMMIT);
-					element.forAttribute(session.getAttributeDef(null, null, "row-update"), ROW_UPDATE);
+					element.withTraceability(TRACEABILITY.validate(getType(), session.reporting()));
 					super.update(session, element);
 					theCommit = session.getAttributeExpression("commit");
 					isRowUpdate = session.getAttribute("row-update", boolean.class);
@@ -567,10 +542,12 @@ public interface QuickTableColumn<R, C> {
 		}
 
 		public static class RowReplaceEditType<R, C> extends ColumnEditType<R, C> {
-			private static final ExAddOn.AddOnAttributeGetter.Expression<ColumnEditing<?, ?>, RowReplaceEditType<?, ?>, Interpreted<?, ?>, Def, SettableValue<?>, SettableValue<?>> REPLACEMENT = ExAddOn.AddOnAttributeGetter
-				.<ColumnEditing<?, ?>, RowReplaceEditType<?, ?>, Interpreted<?, ?>, Def, SettableValue<?>, SettableValue<?>> ofX(Def.class,
-					Def::getReplacement, Interpreted.class, Interpreted::getReplacement, RowReplaceEditType.class,
-					RowReplaceEditType::getReplacement);
+			public static final String REPLACE = "replace-row-value";
+			private static final ElementTypeTraceability<ColumnEditing<?, ?>, ?, ?> TRACEABILITY = ElementTypeTraceability
+				.<ColumnEditing<?, ?>, RowReplaceEditType<?, ?>, Interpreted<?, ?>, Def> buildAddOn(QuickBaseInterpretation.NAME,
+					QuickBaseInterpretation.VERSION, REPLACE, Def.class, Interpreted.class, RowReplaceEditType.class)//
+				.reflectAddOnMethods()//
+				.build();
 
 			public static class Def extends ColumnEditType.Def<RowReplaceEditType<?, ?>> {
 				private CompiledExpression theReplacement;
@@ -579,6 +556,7 @@ public interface QuickTableColumn<R, C> {
 					super(type, element);
 				}
 
+				@QonfigAttributeGetter("replacement")
 				public CompiledExpression getReplacement() {
 					return theReplacement;
 				}
@@ -586,9 +564,7 @@ public interface QuickTableColumn<R, C> {
 				@Override
 				public void update(ExpressoQIS session, ExElement.Def<? extends ColumnEditing<?, ?>> element)
 					throws QonfigInterpretationException {
-					ExElement.checkElement(session.getFocusType(), QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION,
-						"replace-row-value");
-					element.forAttribute(session.getAttributeDef(null, null, "replacement"), REPLACEMENT);
+					element.withTraceability(TRACEABILITY.validate(getType(), session.reporting()));
 					super.update(session, element);
 					theReplacement = session.getAttributeExpression("replacement");
 				}
@@ -651,49 +627,10 @@ public interface QuickTableColumn<R, C> {
 
 	public class SingleColumnSet<R, C> extends QuickStyledElement.Abstract implements TableColumnSet<R> {
 		public static final String COLUMN = "column";
-
-		public static final ExElement.AttributeValueGetter.Expression<SingleColumnSet<?, ?>, Interpreted<?, ?>, Def, SettableValue<?>, SettableValue<String>> NAME = ExElement.AttributeValueGetter
-			.ofX(Def::getName, Interpreted::getName, SingleColumnSet::getName);
-		public static final ExElement.AttributeValueGetter.Expression<SingleColumnSet<?, ?>, Interpreted<?, ?>, Def, SettableValue<?>, SettableValue<?>> VALUE = ExElement.AttributeValueGetter
-			.ofX(Def::getValue, Interpreted::getValue, SingleColumnSet::getValue);
-		public static final ExElement.AttributeValueGetter<SingleColumnSet<?, ?>, Interpreted<?, ?>, Def> COLUMN_VALUE_NAME = ExElement.AttributeValueGetter
-			.of(Def::getColumnValueName, i -> i.getDefinition().getColumnValueName(), SingleColumnSet::getColumnValueName);
-		public static final ExElement.AttributeValueGetter.Expression<SingleColumnSet<?, ?>, Interpreted<?, ?>, Def, SettableValue<?>, SettableValue<String>> HEADER_TOOLTIP = ExElement.AttributeValueGetter
-			.ofX(Def::getHeaderTooltip, Interpreted::getHeaderTooltip, SingleColumnSet::getHeaderTooltip);
-
-		public static final ExElement.ChildElementGetter<SingleColumnSet<?, ?>, Interpreted<?, ?>, Def> RENDERER = new ExElement.ChildElementGetter<SingleColumnSet<?, ?>, Interpreted<?, ?>, Def>() {
-			@Override
-			public List<? extends ExElement.Def<?>> getChildrenFromDef(Def def) {
-				return def.getRenderer() == null ? Collections.emptyList() : Collections.singletonList(def.getRenderer());
-			}
-
-			@Override
-			public List<? extends ExElement.Interpreted<?>> getChildrenFromInterpreted(Interpreted<?, ?> interp) {
-				return interp.getRenderer() == null ? Collections.emptyList() : Collections.singletonList(interp.getRenderer());
-			}
-
-			@Override
-			public List<? extends ExElement> getChildrenFromElement(SingleColumnSet<?, ?> element) {
-				return element.getRenderer() == null ? Collections.emptyList() : Collections.singletonList(element.getRenderer());
-			}
-		};
-
-		public static final ExElement.ChildElementGetter<SingleColumnSet<?, ?>, Interpreted<?, ?>, Def> EDITING = new ExElement.ChildElementGetter<SingleColumnSet<?, ?>, Interpreted<?, ?>, Def>() {
-			@Override
-			public List<? extends ExElement.Def<?>> getChildrenFromDef(Def def) {
-				return def.getEditing() == null ? Collections.emptyList() : Collections.singletonList(def.getEditing());
-			}
-
-			@Override
-			public List<? extends ExElement.Interpreted<?>> getChildrenFromInterpreted(Interpreted<?, ?> interp) {
-				return interp.getEditing() == null ? Collections.emptyList() : Collections.singletonList(interp.getEditing());
-			}
-
-			@Override
-			public List<? extends ExElement> getChildrenFromElement(SingleColumnSet<?, ?> element) {
-				return element.getEditing() == null ? Collections.emptyList() : Collections.singletonList(element.getEditing());
-			}
-		};
+		private static final ElementTypeTraceability<SingleColumnSet<?, ?>, Interpreted<?, ?>, Def> TRACEABILITY = ElementTypeTraceability
+			.<SingleColumnSet<?, ?>, Interpreted<?, ?>, Def> build(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, COLUMN)//
+			.reflectMethods(Def.class, Interpreted.class, SingleColumnSet.class)//
+			.build();
 
 		public static class Def extends QuickStyledElement.Def.Abstract<SingleColumnSet<?, ?>>
 		implements TableColumnSet.Def<SingleColumnSet<?, ?>> {
@@ -713,27 +650,33 @@ public interface QuickTableColumn<R, C> {
 				return (RowTyped.Def<?>) super.getParentElement();
 			}
 
+			@QonfigAttributeGetter("name")
 			public CompiledExpression getName() {
 				return theName;
 			}
 
+			@QonfigAttributeGetter("column-value-name")
 			public String getColumnValueName() {
 				return theColumnValueName;
 			}
 
+			@QonfigAttributeGetter("value")
 			public CompiledExpression getValue() {
 				return theValue;
 			}
 
+			@QonfigAttributeGetter("header-tooltip")
 			public CompiledExpression getHeaderTooltip() {
 				return theHeaderTooltip;
 			}
 
+			@QonfigChildGetter("renderer")
 			@Override
 			public QuickWidget.Def<?> getRenderer() {
 				return theRenderer;
 			}
 
+			@QonfigChildGetter("edit")
 			@Override
 			public ColumnEditing.Def getEditing() {
 				return theEditing;
@@ -741,14 +684,8 @@ public interface QuickTableColumn<R, C> {
 
 			@Override
 			public void update(ExpressoQIS session) throws QonfigInterpretationException {
-				ExElement.checkElement(session.getFocusType(), QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, COLUMN);
-				forAttribute(session.getAttributeDef(null, null, "name"), NAME);
-				forAttribute(session.getAttributeDef(null, null, "value"), VALUE);
-				forAttribute(session.getAttributeDef(null, null, "column-value-name"), COLUMN_VALUE_NAME);
-				forAttribute(session.getAttributeDef(null, null, "header-tooltip"), HEADER_TOOLTIP);
-				forChild(session.getRole("renderer"), RENDERER);
-				forChild(session.getRole("edit"), EDITING);
-				super.update(session);
+				withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
+				super.update(session.asElement("styled"));
 				theName = session.getAttributeExpression("name");
 				theColumnValueName = session.getAttributeText("column-value-name");
 				theValue = session.getAttributeExpression("value");

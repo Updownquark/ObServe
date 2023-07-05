@@ -2,17 +2,19 @@ package org.observe.quick.style;
 
 import java.util.List;
 
+import org.observe.expresso.qonfig.ElementTypeTraceability;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExpressoQIS;
+import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.qommons.Named;
 import org.qommons.config.AbstractQIS;
 import org.qommons.config.QonfigInterpretationException;
 
 public class QuickStyleSet extends ExElement.Def.Abstract<ExElement> implements Named {
-	private static final ExElement.AttributeValueGetter<ExElement, ExElement.Interpreted<?>, QuickStyleSet> NAME//
-	= ExElement.AttributeValueGetter.of(QuickStyleSet::getName, null, null);
-	private static final ExElement.ChildElementGetter<ExElement, ExElement.Interpreted<?>, QuickStyleSet> STYLE_ELEMENTS = ExElement.ChildElementGetter.<ExElement, ExElement.Interpreted<?>, QuickStyleSet> of(
-		QuickStyleSet::getStyleElements, null, null);
+	private static final ElementTypeTraceability<ExElement, ExElement.Interpreted<?>, QuickStyleSet> TRACEABILITY = ElementTypeTraceability.<ExElement, ExElement.Interpreted<?>, QuickStyleSet> build(
+		StyleSessionImplV0_1.NAME, StyleSessionImplV0_1.VERSION, "style-set")//
+		.reflectMethods(QuickStyleSet.class, null, null)//
+		.build();
 
 	private final String theName;
 	private final List<QuickStyleValue<?>> theValues;
@@ -21,13 +23,12 @@ public class QuickStyleSet extends ExElement.Def.Abstract<ExElement> implements 
 	public QuickStyleSet(QuickStyleSheet styleSheet, AbstractQIS<?> session, String name, List<QuickStyleValue<?>> values,
 		List<QuickStyleElement.Def> styleElements) {
 		super(styleSheet, session.getElement());
-		ExElement.checkElement(session.getFocusType(), StyleSessionImplV0_1.NAME, StyleSessionImplV0_1.VERSION, "style-set");
 		theName = name;
 		theValues = values;
 		theStyleElements = styleElements;
-		forAttribute(session.getAttributeDef(null, null, "name"), NAME);
 	}
 
+	@QonfigAttributeGetter("name")
 	@Override
 	public String getName() {
 		return theName;
@@ -43,6 +44,7 @@ public class QuickStyleSet extends ExElement.Def.Abstract<ExElement> implements 
 
 	@Override
 	public void update(ExpressoQIS session) throws QonfigInterpretationException {
+		withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 		super.update(session);
 		int i = 0;
 		for (ExpressoQIS valueS : session.forChildren("style"))

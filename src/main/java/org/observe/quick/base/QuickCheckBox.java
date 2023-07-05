@@ -7,8 +7,10 @@ import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.qonfig.CompiledExpression;
+import org.observe.expresso.qonfig.ElementTypeTraceability;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExpressoQIS;
+import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.quick.QuickValueWidget;
 import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElement;
@@ -18,10 +20,10 @@ import com.google.common.reflect.TypeToken;
 
 public class QuickCheckBox extends QuickValueWidget.Abstract<Boolean> {
 	public static final String CHECK_BOX = "check-box";
-
-	public static final ExElement.AttributeValueGetter.Expression<QuickCheckBox, Interpreted, Def, SettableValue<?>, SettableValue<String>> CHECK_BOX_TEXT = ExElement.AttributeValueGetter
-		.<QuickCheckBox, Interpreted, Def, SettableValue<?>, SettableValue<String>> ofX(Def::getText, Interpreted::getText,
-			QuickCheckBox::getText);
+	private static final ElementTypeTraceability<QuickCheckBox, Interpreted, Def> TRACEABILITY = ElementTypeTraceability
+		.<QuickCheckBox, Interpreted, Def> build(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, CHECK_BOX)//
+		.reflectMethods(Def.class, Interpreted.class, QuickCheckBox.class)//
+		.build();
 
 	public static class Def extends QuickValueWidget.Def.Abstract<Boolean, QuickCheckBox> {
 		private CompiledExpression theText;
@@ -30,14 +32,14 @@ public class QuickCheckBox extends QuickValueWidget.Abstract<Boolean> {
 			super(parent, element);
 		}
 
+		@QonfigAttributeGetter
 		public CompiledExpression getText() {
 			return theText;
 		}
 
 		@Override
 		public void update(ExpressoQIS session) throws QonfigInterpretationException {
-			ExElement.checkElement(session.getFocusType(), QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, CHECK_BOX);
-			forValue(CHECK_BOX_TEXT);
+			withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 			super.update(session.asElement(session.getFocusType().getSuperElement()));
 			theText = session.getValueExpression();
 		}

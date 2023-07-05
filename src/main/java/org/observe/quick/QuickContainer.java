@@ -3,8 +3,10 @@ package org.observe.quick;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.qonfig.ElementTypeTraceability;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExpressoQIS;
+import org.observe.expresso.qonfig.QonfigChildGetter;
 import org.observe.quick.style.QuickCompiledStyle;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.CollectionUtils;
@@ -20,8 +22,10 @@ import org.qommons.tree.BetterTreeList;
 public interface QuickContainer<C extends QuickWidget> extends QuickWidget {
 	public static final String CONTAINER = "container";
 
-	public static final ExElement.ChildElementGetter<QuickContainer<?>, Interpreted<?, ?>, Def<?, ?>> CONTENTS = ExElement.ChildElementGetter
-		.<QuickContainer<?>, Interpreted<?, ?>, Def<?, ?>> of(Def::getContents, Interpreted::getContents, QuickContainer::getContents);
+	public static final ElementTypeTraceability<QuickContainer<?>, Interpreted<?, ?>, Def<?, ?>> CONTAINER_TRACEABILITY = ElementTypeTraceability
+		.<QuickContainer<?>, Interpreted<?, ?>, Def<?, ?>> build(QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, CONTAINER)
+		.reflectMethods(Def.class, Interpreted.class, QuickContainer.class)//
+		.build();
 
 	/**
 	 * The definition of a QuickContainer
@@ -31,6 +35,7 @@ public interface QuickContainer<C extends QuickWidget> extends QuickWidget {
 	 */
 	public interface Def<W extends QuickContainer<C>, C extends QuickWidget> extends QuickWidget.Def<W> {
 		/** @return The definitions of all widgets that will be contained in the container produced by this definition */
+		@QonfigChildGetter("content")
 		BetterList<? extends QuickWidget.Def<? extends C>> getContents();
 
 		@Override
@@ -55,6 +60,7 @@ public interface QuickContainer<C extends QuickWidget> extends QuickWidget {
 				theContents = BetterTreeList.<QuickWidget.Def<? extends C>> build().build();
 			}
 
+			@QonfigChildGetter("content")
 			@Override
 			public BetterList<QuickWidget.Def<? extends C>> getContents() {
 				return theContents;
@@ -62,8 +68,7 @@ public interface QuickContainer<C extends QuickWidget> extends QuickWidget {
 
 			@Override
 			public void update(ExpressoQIS session) throws QonfigInterpretationException {
-				ExElement.checkElement(session.getFocusType(), QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, CONTAINER);
-				forChild(session.getRole("content").getDeclared(), CONTENTS);
+				withTraceability(CONTAINER_TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 				super.update(session.asElement(session.getFocusType().getSuperElement()));
 				ExElement.syncDefs(QuickWidget.Def.class, theContents, session.forChildren("content"));
 			}

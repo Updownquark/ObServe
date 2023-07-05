@@ -8,29 +8,21 @@ import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.qonfig.CompiledExpression;
+import org.observe.expresso.qonfig.ElementTypeTraceability;
 import org.observe.expresso.qonfig.ExAddOn;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExpressoQIS;
+import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
 /** An add-on for an element that is to be a window */
 public class QuickWindow extends ExAddOn.Abstract<ExElement> {
-	public static final ExAddOn.AddOnAttributeGetter.Expression<ExElement, QuickWindow, Interpreted, Def, SettableValue<?>, SettableValue<Integer>> X = ExAddOn.AddOnAttributeGetter
-		.ofX(Def.class, Def::getX, Interpreted.class, Interpreted::getX, QuickWindow.class, QuickWindow::getX);
-	public static final ExAddOn.AddOnAttributeGetter.Expression<ExElement, QuickWindow, Interpreted, Def, SettableValue<?>, SettableValue<Integer>> Y = ExAddOn.AddOnAttributeGetter
-		.ofX(Def.class, Def::getY, Interpreted.class, Interpreted::getY, QuickWindow.class, QuickWindow::getY);
-	public static final ExAddOn.AddOnAttributeGetter.Expression<ExElement, QuickWindow, Interpreted, Def, SettableValue<?>, SettableValue<Integer>> WIDTH = ExAddOn.AddOnAttributeGetter
-		.ofX(Def.class, Def::getWidth, Interpreted.class, Interpreted::getWidth, QuickWindow.class, QuickWindow::getWidth);
-	public static final ExAddOn.AddOnAttributeGetter.Expression<ExElement, QuickWindow, Interpreted, Def, SettableValue<?>, SettableValue<Integer>> HEIGHT = ExAddOn.AddOnAttributeGetter
-		.ofX(Def.class, Def::getHeight, Interpreted.class, Interpreted::getHeight, QuickWindow.class, QuickWindow::getHeight);
-	public static final ExAddOn.AddOnAttributeGetter.Expression<ExElement, QuickWindow, Interpreted, Def, SettableValue<?>, SettableValue<String>> TITLE = ExAddOn.AddOnAttributeGetter
-		.ofX(Def.class, Def::getTitle, Interpreted.class, Interpreted::getTitle, QuickWindow.class, QuickWindow::getTitle);
-	public static final ExAddOn.AddOnAttributeGetter.Expression<ExElement, QuickWindow, Interpreted, Def, SettableValue<?>, SettableValue<Boolean>> VISIBLE = ExAddOn.AddOnAttributeGetter
-		.ofX(Def.class, Def::isVisible, Interpreted.class, Interpreted::isVisible, QuickWindow.class, QuickWindow::isVisible);
-	public static final ExAddOn.AddOnAttributeGetter<ExElement, QuickWindow, Interpreted, Def> CLOSE_ACTION = ExAddOn.AddOnAttributeGetter
-		.of(Def.class, Def::getCloseAction, Interpreted.class, i -> i.getDefinition().getCloseAction(), QuickWindow.class,
-			QuickWindow::getCloseAction);
+	public static final String WINDOW = "window";
+	private static final ElementTypeTraceability<ExElement, ExElement.Interpreted<?>, ExElement.Def<?>> TRACEABILITY = ElementTypeTraceability
+		.buildAddOn(QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, WINDOW, Def.class, Interpreted.class, QuickWindow.class)//
+		.reflectAddOnMethods()//
+		.build();
 
 	/** An action to perform when the user closes the window (e.g. clicks the "X") */
 	public enum CloseAction {
@@ -63,49 +55,50 @@ public class QuickWindow extends ExAddOn.Abstract<ExElement> {
 		}
 
 		/** @return The expression defining the x-coordinate of the window--to move and be updated when the user moves it */
+		@QonfigAttributeGetter("x")
 		public CompiledExpression getX() {
 			return theX;
 		}
 
 		/** @return The expression defining the y-coordinate of the window--to move and be updated when the user moves it */
+		@QonfigAttributeGetter("y")
 		public CompiledExpression getY() {
 			return theY;
 		}
 
 		/** @return The expression defining the width of the window--to size and be updated when the user resizes it */
+		@QonfigAttributeGetter("width")
 		public CompiledExpression getWidth() {
 			return theWidth;
 		}
 
 		/** @return The expression defining the height of the window--to size and be updated when the user resizes it */
+		@QonfigAttributeGetter("height")
 		public CompiledExpression getHeight() {
 			return theHeight;
 		}
 
 		/** @return The expression defining the title for the window */
+		@QonfigAttributeGetter("title")
 		public CompiledExpression getTitle() {
 			return theTitle;
 		}
 
 		/** @return The expression defining when the window is visible--to hide/show and to be updated when the user closes the window */
+		@QonfigAttributeGetter("visible")
 		public CompiledExpression isVisible() {
 			return theVisible;
 		}
 
 		/** @return The action to perform when the user closes the window */
+		@QonfigAttributeGetter("close-action")
 		public CloseAction getCloseAction() {
 			return theCloseAction;
 		}
 
 		@Override
 		public void update(ExpressoQIS session, ExElement.Def<? extends ExElement> element) throws QonfigInterpretationException {
-			element.forAttribute(session.getFocusType().getAttribute("x").getDeclared(), X);
-			element.forAttribute(session.getFocusType().getAttribute("y").getDeclared(), Y);
-			element.forAttribute(session.getFocusType().getAttribute("width").getDeclared(), WIDTH);
-			element.forAttribute(session.getFocusType().getAttribute("height").getDeclared(), HEIGHT);
-			element.forAttribute(session.getFocusType().getAttribute("title").getDeclared(), TITLE);
-			element.forAttribute(session.getFocusType().getAttribute("visible").getDeclared(), VISIBLE);
-			element.forAttribute(session.getFocusType().getAttribute("close-action").getDeclared(), CLOSE_ACTION);
+			element.withTraceability(TRACEABILITY.validate(getType(), element.reporting()));
 			theX = session.getAttributeExpression("x");
 			theY = session.getAttributeExpression("y");
 			theWidth = session.getAttributeExpression("width");

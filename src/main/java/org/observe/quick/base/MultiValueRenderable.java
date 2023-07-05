@@ -5,19 +5,22 @@ import org.observe.collect.ObservableCollection;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.qonfig.CompiledExpression;
+import org.observe.expresso.qonfig.ElementTypeTraceability;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.quick.QuickWidget;
 
 public interface MultiValueRenderable<T> extends QuickWidget {
-	public static final ExElement.AttributeValueGetter.Expression<MultiValueRenderable<?>, Interpreted<?, ?>, Def<?>, SettableValue<?>, SettableValue<?>> SELECTION = ExElement.AttributeValueGetter
-		.<MultiValueRenderable<?>, Interpreted<?, ?>, Def<?>, SettableValue<?>, SettableValue<?>> ofX(Def::getSelection,
-			Interpreted::getSelection, MultiValueRenderable::getSelection);
-	public static final ExElement.AttributeValueGetter.Expression<MultiValueRenderable<?>, Interpreted<?, ?>, Def<?>, ObservableCollection<?>, ObservableCollection<?>> MULTI_SELECTION = ExElement.AttributeValueGetter
-		.<MultiValueRenderable<?>, Interpreted<?, ?>, Def<?>, ObservableCollection<?>, ObservableCollection<?>> ofX(Def::getMultiSelection,
-			Interpreted::getMultiSelection, MultiValueRenderable::getMultiSelection);
-	public static final ExElement.AttributeValueGetter<MultiValueRenderable<?>, Interpreted<?, ?>, Def<?>> VALUE_NAME = ExElement.AttributeValueGetter
-		.<MultiValueRenderable<?>, Interpreted<?, ?>, Def<?>> of(Def::getValueName, i -> i.getDefinition().getValueName(),
-			MultiValueRenderable::getValueName);
+	public static final ElementTypeTraceability<MultiValueRenderable<?>, Interpreted<?, ?>, Def<?>> MV_RENDERABLE_TRACEABILITY = ElementTypeTraceability
+		.<MultiValueRenderable<?>, Interpreted<?, ?>, Def<?>> build(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION,
+			"multi-value-renderable")//
+		.withAttribute("value-name", Def::getValueName, null)//
+		.build();
+	public static final ElementTypeTraceability<MultiValueRenderable<?>, Interpreted<?, ?>, Def<?>> MV_WIDGET_TRACEABILITY = ElementTypeTraceability
+		.<MultiValueRenderable<?>, Interpreted<?, ?>, Def<?>> build(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION,
+			"multi-value-widget")//
+		.withAttribute("selection", Def::getSelection, Interpreted::getSelection)//
+		.withAttribute("multi-selection", Def::getMultiSelection, Interpreted::getMultiSelection)//
+		.build();
 
 	public interface Def<W extends MultiValueRenderable<?>> extends QuickWidget.Def<W> {
 		String getValueName();

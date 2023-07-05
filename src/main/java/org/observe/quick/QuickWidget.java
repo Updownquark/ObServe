@@ -15,8 +15,11 @@ import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.qonfig.CompiledExpression;
+import org.observe.expresso.qonfig.ElementTypeTraceability;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExpressoQIS;
+import org.observe.expresso.qonfig.QonfigAttributeGetter;
+import org.observe.expresso.qonfig.QonfigChildGetter;
 import org.observe.quick.style.CompiledStyleApplication;
 import org.observe.quick.style.InterpretedStyleApplication;
 import org.observe.quick.style.QuickCompiledStyle;
@@ -34,47 +37,10 @@ import com.google.common.reflect.TypeToken;
 /** The base class for widgets in Quick */
 public interface QuickWidget extends QuickTextElement {
 	public static final String WIDGET = "widget";
-
-	public static final ExElement.AttributeValueGetter<QuickWidget, Interpreted<? extends QuickWidget>, Def<? extends QuickWidget>> NAME = ExElement.AttributeValueGetter
-		.of(Def::getName, i -> i.getDefinition().getName(), QuickWidget::getName);
-	public static final ExElement.AttributeValueGetter.Expression<QuickWidget, Interpreted<? extends QuickWidget>, Def<? extends QuickWidget>, SettableValue<?>, SettableValue<String>> TOOLTIP = ExElement.AttributeValueGetter
-		.ofX(Def::getTooltip, Interpreted::getTooltip, QuickWidget::getTooltip);
-	public static final ExElement.AttributeValueGetter.Expression<QuickWidget, Interpreted<? extends QuickWidget>, Def<? extends QuickWidget>, SettableValue<?>, SettableValue<Boolean>> VISIBLE = ExElement.AttributeValueGetter
-		.ofX(Def::isVisible, Interpreted::isVisible, QuickWidget::isVisible);
-
-	public static final ExElement.ChildElementGetter<QuickWidget, Interpreted<?>, Def<?>> BORDER = new ExElement.ChildElementGetter<QuickWidget, Interpreted<?>, Def<?>>() {
-		@Override
-		public List<? extends org.observe.expresso.qonfig.ExElement.Def<?>> getChildrenFromDef(Def<?> def) {
-			return def.getBorder() == null ? Collections.emptyList() : Collections.singletonList(def.getBorder());
-		}
-
-		@Override
-		public List<? extends org.observe.expresso.qonfig.ExElement.Interpreted<?>> getChildrenFromInterpreted(Interpreted<?> interp) {
-			return interp.getBorder() == null ? Collections.emptyList() : Collections.singletonList(interp.getBorder());
-		}
-
-		@Override
-		public List<? extends ExElement> getChildrenFromElement(QuickWidget element) {
-			return element.getBorder() == null ? Collections.emptyList() : Collections.singletonList(element.getBorder());
-		}
-	};
-
-	public static final ExElement.ChildElementGetter<QuickWidget, Interpreted<?>, Def<?>> EVENT_LISTENERS = new ExElement.ChildElementGetter<QuickWidget, Interpreted<?>, Def<?>>() {
-		@Override
-		public List<? extends org.observe.expresso.qonfig.ExElement.Def<?>> getChildrenFromDef(Def<?> def) {
-			return def.getEventListeners();
-		}
-
-		@Override
-		public List<? extends org.observe.expresso.qonfig.ExElement.Interpreted<?>> getChildrenFromInterpreted(Interpreted<?> interp) {
-			return interp.getEventListeners();
-		}
-
-		@Override
-		public List<? extends ExElement> getChildrenFromElement(QuickWidget element) {
-			return element.getEventListeners();
-		}
-	};
+	public static final ElementTypeTraceability<QuickWidget, Interpreted<?>, Def<?>> WIDGET_TRACEABILITY = ElementTypeTraceability
+		.<QuickWidget, Interpreted<?>, Def<?>> build(QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, WIDGET)//
+		.reflectMethods(Def.class, Interpreted.class, QuickWidget.class)//
+		.build();
 
 	/**
 	 * The definition of a {@link QuickWidget}
@@ -89,17 +55,22 @@ public interface QuickWidget extends QuickTextElement {
 		QuickContainer.Def<?, ?> getParent();
 
 		/** @return This widget's border */
+		@QonfigChildGetter("border")
 		QuickBorder.Def<?> getBorder();
 
 		/** @return This widget's name, typically for debugging */
+		@QonfigAttributeGetter("name")
 		String getName();
 
 		/** @return The tool tip to display when the user hovers over this widget */
+		@QonfigAttributeGetter("tooltip")
 		CompiledExpression getTooltip();
 
 		/** @return The expression determining when this widget is to be visible */
+		@QonfigAttributeGetter("visible")
 		CompiledExpression isVisible();
 
+		@QonfigChildGetter("event-listener")
 		List<QuickEventListener.Def<?>> getEventListeners();
 
 		/**
@@ -167,13 +138,8 @@ public interface QuickWidget extends QuickTextElement {
 
 			@Override
 			public void update(ExpressoQIS session) throws QonfigInterpretationException {
-				ExElement.checkElement(session.getFocusType(), QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, WIDGET);
-				forAttribute(session.getAttributeDef(null, null, "name").getDeclared(), NAME);
-				forAttribute(session.getAttributeDef(null, null, "tooltip").getDeclared(), TOOLTIP);
-				forAttribute(session.getAttributeDef(null, null, "visible").getDeclared(), VISIBLE);
-				forChild(session.getRole("border").getDeclared(), BORDER);
-				forChild(session.getRole("event-listener").getDeclared(), EVENT_LISTENERS);
-				super.update(session);
+				withTraceability(WIDGET_TRACEABILITY.validate(session.getFocusType(), session.reporting()));
+				super.update(session.asElement("styled"));
 				theBorder = ExElement.useOrReplace(QuickBorder.Def.class, theBorder, session, "border");
 				theName = session.getAttributeText("name");
 				theTooltip = session.getAttributeExpression("tooltip");
@@ -388,6 +354,7 @@ public interface QuickWidget extends QuickTextElement {
 	QuickBorder getBorder();
 
 	/** @return The tool tip to display when the user hovers over this widget */
+
 	SettableValue<String> getTooltip();
 
 	/** @return The value determining when this widget is to be visible */

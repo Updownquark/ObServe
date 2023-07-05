@@ -9,8 +9,10 @@ It does not include anything "useful" in the concrete, i.e. no values or transfo
 -->
 <qonfig-def name="Expresso-Core" version="0.1" root="expresso">
 	<value-types>
+		<?DOC A name for a variable?>
 		<pattern name="identifier">[_a-zA-Z$][_a-zA-Z0-9$]*</pattern>
 
+		<?DOC An expression consisting of some combination of values via operators?>
 		<external name="expression" />
 	</value-types>
 
@@ -22,41 +24,56 @@ It does not include anything "useful" in the concrete, i.e. no values or transfo
 			<child-def name="binary-operators" type="binary-operators" min="0" max="inf" />
 		</add-on>
 
+		<?DOC A structure with a name?>
 		<add-on name="named">
 			<?DOC The name of the item?>
 			<attribute name="name" type="identifier" specify="required" />
 		</add-on>
+		<?DOC A structure with a (potentially) declared value type?>
 		<add-on name="typed">
 			<?DOC The declared type of the variable?>
 			<attribute name="type" type="string" specify="optional" />
 		</add-on>
+		<?DOC A structure with a declared value type?>
 		<add-on name="type-required" inherits="typed">
 			<attr-mod name="typed.type" type="string" specify="required" />
 		</add-on>
 
+		<?DOC A named model value?>
 		<add-on name="model-element" requires="model-value" inherits="named" />
 
-		<!-- Elements that inherit this add-on commit to supply model values that are specific to the interpreted element value -->
+		<?DOC An element type that may declare values which must be supplied by the implementation?>
 		<add-on name="with-element-model" abstract="true">
 			<element-meta name="element-model" type="element-model" min="0" />
 		</add-on>
-		<!-- Elements that inherit this add-on may specify local variables with their values in the element -->
+		<?DOC Instances of this type may declare a &lt;model> element with local variables only available within the scope of the element?>
 		<add-on name="with-local-model" abstract="true">
 			<?DOC The local model with values defined only for use within the element?>
 			<child-def name="model" type="model" min="0" />
 		</add-on>
+		<?DOC An element value under a &lt;with-element-model> that must be supplied by the implementation of the element?>
 		<add-on name="element-model-value" requires="model-value" inherits="model-element" abstract="true">
+			<?DOC The <code>name-attribute</code> attribute may be specified instead, indicating that the name of this value
+				should be determined by the given identifier-typed attribute on the &lt;with-element-model>-tagged element?>
 			<attr-mod name="named.name" default="$" />
+			<?DOC If specified, this indicates that the name of this value should be determined
+				by the given identifier-typed attribute on the &lt;with-element-model>-tagged element?>
 			<attribute name="name-attribute" type="string" specify="optional" />
+			<?DOC If specified, this value will be set to the given expression-typed value on the &lt;with-element-model>-tagged element?>
 			<attribute name="source-attribute" type="string" specify="optional" />
+			<?DOC Cannot specify a value here.  The value is determined either by the attribute specified by <code>source-attribute</code>
+				or by the implementation?>
 			<value-mod specify="forbidden" /> <!-- External/element values are specified by code instantiating the model -->
 		</add-on>
 
+		<?DOC A tag for &lt;model-value> extensions that can be used under an &lt;ext-model> element?>
 		<add-on name="allow-ext-model" abstract="true" />
+		<?DOC Inherited by &lt;model-value>s under an &lt;ext-model> element?>
 		<add-on name="ext-model-value" requires="model-value" inherits="type-required" abstract="true">
 			<?DOC The default value to use if one is not supplied externally?>
 			<attribute name="default" type="expression" specify="optional" />
-			<value-mod specify="forbidden" /> <!-- External/element values are specified by code instantiating the model -->
+			<?DOC External values are specified by code instantiating the model ?>
+			<value-mod specify="forbidden" />
 		</add-on>
 	</add-ons>
 
@@ -73,11 +90,15 @@ It does not include anything "useful" in the concrete, i.e. no values or transfo
 		<element-def name="unary-operators" extends="operators" />
 		<element-def name="binary-operators" extends="operators" />
 
-		<element-def name="import">
-			<value type="string" specify="required" />
-		</element-def>
+		<?DOC A section containing imports that make it possible to specify certain types, fields, or methods from expressions without full-qualification?>
 		<element-def name="imports">
+			<?DOC An import type, field, method, or wildcard?>
 			<child-def name="import" type="import" min="0" max="inf" />
+		</element-def>
+		<?DOC An import element under a &lt;imports> section?>
+		<element-def name="import">
+			<?DOC The import type, field, method, or wildcard?>
+			<value type="string" specify="required" />
 		</element-def>
 		
 		<!-- Models, values and transformations -->
@@ -111,6 +132,7 @@ It does not include anything "useful" in the concrete, i.e. no values or transfo
 		</element-def>
 
 		<!-- Specified under an element-def declaration to define model values that must be supplied specifically for the interpreted value -->
+		<?DOC The element model metadata under a &lt;with-element-model> element containing values that must be supplied by the implementation?>
 		<element-def name="element-model" extends="abst-model">
 			<child-mod child="abst-model.value" requires="allow-ext-model" inherits="element-model-value" />
 		</element-def>

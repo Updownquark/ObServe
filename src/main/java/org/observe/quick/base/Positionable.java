@@ -9,6 +9,7 @@ import org.observe.expresso.ObservableModelSet.CompiledModelValue;
 import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.qonfig.ElementTypeTraceability;
 import org.observe.expresso.qonfig.ExAddOn;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExpressoQIS;
@@ -59,20 +60,22 @@ public abstract class Positionable extends ExAddOn.Abstract<ExElement> {
 		}
 
 		public static class Vertical extends Def<Positionable.Vertical> {
-			private static final ExAddOn.AddOnAttributeGetter<ExElement, Positionable.Vertical, Interpreted.Vertical, Def.Vertical> TOP = ExAddOn.AddOnAttributeGetter
-				.of(Vertical.class, Vertical::getLeading, Interpreted.Vertical.class, Interpreted.Vertical::getLeading,
-					Positionable.Vertical.class, Positionable.Vertical::getLeading);
-			private static final ExAddOn.AddOnAttributeGetter<ExElement, Positionable.Vertical, Interpreted.Vertical, Def.Vertical> V_CENTER = ExAddOn.AddOnAttributeGetter
-				.of(Vertical.class, Vertical::getCenter, Interpreted.Vertical.class, Interpreted.Vertical::getCenter,
-					Positionable.Vertical.class, Positionable.Vertical::getCenter);
-			private static final ExAddOn.AddOnAttributeGetter<ExElement, Positionable.Vertical, Interpreted.Vertical, Def.Vertical> BOTTOM = ExAddOn.AddOnAttributeGetter
-				.of(Vertical.class, Vertical::getTrailing, Interpreted.Vertical.class, Interpreted.Vertical::getTrailing,
-					Positionable.Vertical.class, Positionable.Vertical::getTrailing);
+			private static final ElementTypeTraceability<ExElement, ExElement.Interpreted<?>, ExElement.Def<?>> TRACEABILITY = ElementTypeTraceability
+				.<ExElement, Positionable, Interpreted<?>, Def<?>> buildAddOn(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION,
+					"v-positionable", Def.class, Interpreted.class, Positionable.class)//
+				.withAddOnAttribute("top", Def::getLeading, Interpreted::getLeading)//
+				.withAddOnAttribute("v-center", Def::getCenter, Interpreted::getCenter)//
+				.withAddOnAttribute("bottom", Def::getTrailing, Interpreted::getTrailing)//
+				.build();
+
 			public Vertical(QonfigAddOn type, ExElement.Def<?> element) {
 				super(true, type, element);
-				element.forAttribute(type.getAttribute("top"), TOP);
-				element.forAttribute(type.getAttribute("v-center"), V_CENTER);
-				element.forAttribute(type.getAttribute("bottom"), BOTTOM);
+			}
+
+			@Override
+			public void update(ExpressoQIS session, ExElement.Def<?> element) throws QonfigInterpretationException {
+				element.withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
+				super.update(session, element);
 			}
 
 			@Override
@@ -82,21 +85,22 @@ public abstract class Positionable extends ExAddOn.Abstract<ExElement> {
 		}
 
 		public static class Horizontal extends Def<Positionable.Horizontal> {
-			private static final ExAddOn.AddOnAttributeGetter<ExElement, Positionable.Horizontal, Interpreted.Horizontal, Def.Horizontal> LEFT = ExAddOn.AddOnAttributeGetter
-				.of(Horizontal.class, Horizontal::getLeading, Interpreted.Horizontal.class, Interpreted.Horizontal::getLeading,
-					Positionable.Horizontal.class, Positionable.Horizontal::getLeading);
-			private static final ExAddOn.AddOnAttributeGetter<ExElement, Positionable.Horizontal, Interpreted.Horizontal, Def.Horizontal> H_CENTER = ExAddOn.AddOnAttributeGetter
-				.of(Horizontal.class, Horizontal::getCenter, Interpreted.Horizontal.class, Interpreted.Horizontal::getCenter,
-					Positionable.Horizontal.class, Positionable.Horizontal::getCenter);
-			private static final ExAddOn.AddOnAttributeGetter<ExElement, Positionable.Horizontal, Interpreted.Horizontal, Def.Horizontal> RIGHT = ExAddOn.AddOnAttributeGetter
-				.of(Horizontal.class, Horizontal::getTrailing, Interpreted.Horizontal.class, Interpreted.Horizontal::getTrailing,
-					Positionable.Horizontal.class, Positionable.Horizontal::getTrailing);
+			private static final ElementTypeTraceability<ExElement, ExElement.Interpreted<?>, ExElement.Def<?>> TRACEABILITY = ElementTypeTraceability
+				.<ExElement, Positionable, Interpreted<?>, Def<?>> buildAddOn(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION,
+					"h-positionable", Def.class, Interpreted.class, Positionable.class)//
+				.withAddOnAttribute("left", Def::getLeading, Interpreted::getLeading)//
+				.withAddOnAttribute("h-center", Def::getCenter, Interpreted::getCenter)//
+				.withAddOnAttribute("right", Def::getTrailing, Interpreted::getTrailing)//
+				.build();
 
 			public Horizontal(QonfigAddOn type, ExElement.Def<?> element) {
 				super(false, type, element);
-				element.forAttribute(type.getAttribute("left"), LEFT);
-				element.forAttribute(type.getAttribute("h-center"), H_CENTER);
-				element.forAttribute(type.getAttribute("right"), RIGHT);
+			}
+
+			@Override
+			public void update(ExpressoQIS session, ExElement.Def<?> element) throws QonfigInterpretationException {
+				element.withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
+				super.update(session, element);
 			}
 
 			@Override

@@ -11,9 +11,11 @@ import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
 public class ExIntValue extends ExAddOn.Abstract<ExElement> {
-	private static final ExAddOn.AddOnAttributeGetter.Expression<ExElement, ExIntValue, Interpreted, Def, SettableValue<?>, SettableValue<?>> INIT = ExAddOn.AddOnAttributeGetter
-		.<ExElement, ExIntValue, Interpreted, Def, SettableValue<?>, SettableValue<?>> ofX(Def.class, Def::getInit, Interpreted.class,
-			Interpreted::getInit, ExIntValue.class, ExIntValue::getInit);
+	private static final ElementTypeTraceability<ExElement, ExElement.Interpreted<?>, ExElement.Def<?>> TRACEABILITY = ElementTypeTraceability
+		.buildAddOn(ExpressoBaseV0_1.NAME, ExpressoBaseV0_1.VERSION, "int-value", Def.class, Interpreted.class,
+			ExIntValue.class)//
+		.reflectAddOnMethods()//
+		.build();
 
 	public static class Def extends ExAddOn.Def.Abstract<ExElement, ExIntValue> {
 		private CompiledExpression theInit;
@@ -22,13 +24,14 @@ public class ExIntValue extends ExAddOn.Abstract<ExElement> {
 			super(type, element);
 		}
 
+		@QonfigAttributeGetter("init")
 		public CompiledExpression getInit() {
 			return theInit;
 		}
 
 		@Override
 		public void update(ExpressoQIS session, ExElement.Def<? extends ExElement> element) throws QonfigInterpretationException {
-			element.forAttribute(session.getAttributeDef(null, null, "init"), INIT);
+			element.withTraceability(TRACEABILITY.validate(getType(), element.reporting()));
 			super.update(session, element);
 		}
 

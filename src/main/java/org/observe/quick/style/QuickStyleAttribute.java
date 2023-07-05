@@ -24,6 +24,7 @@ public class QuickStyleAttribute<T> implements SelfDescribed {
 	 * @param type The type of the attribute
 	 * @param trickleDown Whether, if not {@link QuickStyleValue} {@link StyleApplicationDef#applies(org.qommons.config.QonfigElement)
 	 *        applies} to an element, its value will be that of its most recent ancestor element that for which this attribute also applies
+	 * @param description A description of the attribute
 	 */
 	public QuickStyleAttribute(QuickTypeStyle declarer, String name, TypeToken<T> type, boolean trickleDown, String description) {
 		theDeclarer=declarer;

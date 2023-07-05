@@ -2,26 +2,22 @@ package org.observe.quick.base;
 
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.qonfig.ElementTypeTraceability;
 import org.observe.expresso.qonfig.ExAddOn;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExpressoQIS;
+import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.util.swing.JustifiedBoxLayout;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
 public class QuickInlineLayout extends QuickLayout.Abstract {
-	private static final ExAddOn.AddOnAttributeGetter<QuickBox, QuickInlineLayout, Interpreted, Def> VERTICAL = ExAddOn.AddOnAttributeGetter
-		.<QuickBox, QuickInlineLayout, Interpreted, Def> of(Def.class, Def::isVertical, Interpreted.class,
-			i -> i.getDefinition().isVertical(), QuickInlineLayout.class, QuickInlineLayout::isVertical);
-	private static final ExAddOn.AddOnAttributeGetter<QuickBox, QuickInlineLayout, Interpreted, Def> MAIN_ALIGN = ExAddOn.AddOnAttributeGetter
-		.<QuickBox, QuickInlineLayout, Interpreted, Def> of(Def.class, Def::getMainAlign, Interpreted.class,
-			i -> i.getDefinition().getMainAlign(), QuickInlineLayout.class, QuickInlineLayout::getMainAlign);
-	private static final ExAddOn.AddOnAttributeGetter<QuickBox, QuickInlineLayout, Interpreted, Def> CROSS_ALIGN = ExAddOn.AddOnAttributeGetter
-		.<QuickBox, QuickInlineLayout, Interpreted, Def> of(Def.class, Def::getCrossAlign, Interpreted.class,
-			i -> i.getDefinition().getCrossAlign(), QuickInlineLayout.class, QuickInlineLayout::getCrossAlign);
-	private static final ExAddOn.AddOnAttributeGetter<QuickBox, QuickInlineLayout, Interpreted, Def> PADDING = ExAddOn.AddOnAttributeGetter
-		.<QuickBox, QuickInlineLayout, Interpreted, Def> of(Def.class, Def::getPadding, Interpreted.class,
-			i -> i.getDefinition().getPadding(), QuickInlineLayout.class, QuickInlineLayout::getPadding);
+	public static final String INLINE_LAYOUT = "inline-layout";
+	private static final ElementTypeTraceability<QuickBox, ?, ?> TRACEABILITY = ElementTypeTraceability
+		.<QuickBox, QuickInlineLayout, Interpreted, Def> buildAddOn(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION,
+			INLINE_LAYOUT, Def.class, Interpreted.class, QuickInlineLayout.class)//
+		.reflectAddOnMethods()//
+		.build();
 
 	public static class Def extends QuickLayout.Def<QuickInlineLayout> {
 		private boolean isVertical;
@@ -33,28 +29,29 @@ public class QuickInlineLayout extends QuickLayout.Abstract {
 			super(type, element);
 		}
 
+		@QonfigAttributeGetter("orientation")
 		public boolean isVertical() {
 			return isVertical;
 		}
 
+		@QonfigAttributeGetter("main-align")
 		public JustifiedBoxLayout.Alignment getMainAlign() {
 			return theMainAlign;
 		}
 
+		@QonfigAttributeGetter("cross-align")
 		public JustifiedBoxLayout.Alignment getCrossAlign() {
 			return theCrossAlign;
 		}
 
+		@QonfigAttributeGetter("padding")
 		public int getPadding() {
 			return thePadding;
 		}
 
 		@Override
 		public void update(ExpressoQIS session, ExElement.Def<? extends QuickBox> element) throws QonfigInterpretationException {
-			element.forAttribute(session.getAttributeDef(null, null, "orientation"), VERTICAL);
-			element.forAttribute(session.getAttributeDef(null, null, "main-align"), MAIN_ALIGN);
-			element.forAttribute(session.getAttributeDef(null, null, "cross-align"), CROSS_ALIGN);
-			element.forAttribute(session.getAttributeDef(null, null, "padding"), PADDING);
+			element.withTraceability(TRACEABILITY.validate(getType(), session.reporting()));
 			super.update(session, element);
 			isVertical = "vertical".equals(session.getAttributeText("orientation"));
 			theMainAlign = jblAlign("main-align", session.getAttributeText("main-align"), session);

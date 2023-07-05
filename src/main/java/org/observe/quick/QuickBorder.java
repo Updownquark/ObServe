@@ -11,8 +11,10 @@ import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.qonfig.CompiledExpression;
+import org.observe.expresso.qonfig.ElementTypeTraceability;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExpressoQIS;
+import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.quick.style.CompiledStyleApplication;
 import org.observe.quick.style.InterpretedStyleApplication;
 import org.observe.quick.style.QuickCompiledStyle;
@@ -43,6 +45,10 @@ public interface QuickBorder extends QuickStyledElement {
 
 	public class LineBorder extends QuickStyledElement.Abstract implements QuickBorder {
 		public static final String LINE_BORDER = "line-border";
+		private static final ElementTypeTraceability<LineBorder, Interpreted<?>, Def<?>> TRACEABILITY = ElementTypeTraceability
+			.<LineBorder, Interpreted<?>, Def<?>> build(QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, LINE_BORDER)//
+			.reflectMethods(Def.class, Interpreted.class, LineBorder.class)//
+			.build();
 
 		public static class Def<B extends LineBorder> extends QuickStyledElement.Def.Abstract<B> implements QuickBorder.Def<B> {
 			public Def(ExElement.Def<?> parent, QonfigElement element) {
@@ -56,8 +62,8 @@ public interface QuickBorder extends QuickStyledElement {
 
 			@Override
 			public void update(ExpressoQIS session) throws QonfigInterpretationException {
-				ExElement.checkElement(session.getFocusType(), QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, LINE_BORDER);
-				super.update(session.asElement(session.getFocusType().getSuperElement()));
+				withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
+				super.update(session.asElement("styled"));
 			}
 
 			@Override
@@ -105,10 +111,10 @@ public interface QuickBorder extends QuickStyledElement {
 
 	public class TitledBorder extends LineBorder implements QuickTextElement {
 		public static final String TITLED_BORDER = "titled-border";
-
-		public static final ExElement.AttributeValueGetter.Expression<TitledBorder, Interpreted<?>, Def<?>, SettableValue<?>, SettableValue<String>> TITLE = ExElement.AttributeValueGetter
-			.<TitledBorder, Interpreted<?>, Def<?>, SettableValue<?>, SettableValue<String>> ofX(Def::getTitle, Interpreted::getTitle,
-				TitledBorder::getTitle);
+		private static final ElementTypeTraceability<LineBorder, Interpreted<?>, Def<?>> TRACEABILITY = ElementTypeTraceability
+			.<LineBorder, Interpreted<?>, Def<?>> build(QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, TITLED_BORDER)//
+			.reflectMethods(Def.class, Interpreted.class, LineBorder.class)//
+			.build();
 
 		public static class Def<B extends TitledBorder> extends LineBorder.Def<B> {
 			private CompiledExpression theTitle;
@@ -117,15 +123,14 @@ public interface QuickBorder extends QuickStyledElement {
 				super(parent, element);
 			}
 
+			@QonfigAttributeGetter("title")
 			public CompiledExpression getTitle() {
 				return theTitle;
 			}
 
 			@Override
 			public void update(ExpressoQIS session) throws QonfigInterpretationException {
-				ExElement.checkElement(session.getFocusType(), QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION,
-					TITLED_BORDER);
-				forAttribute(session.getAttributeDef(null, null, "title"), TITLE);
+				withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 				super.update(session.asElement(session.getFocusType().getSuperElement()));
 				theTitle = session.getAttributeExpression("title");
 			}
