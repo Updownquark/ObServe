@@ -164,7 +164,7 @@ implements TreeTableEditor<F, P> {
 	@Override
 	public P withMultiAction(String actionName, Consumer<? super List<? extends BetterList<F>>> action,
 		Consumer<DataAction<BetterList<F>, ?>> actionMod) {
-		SimpleDataAction<BetterList<F>, ?> ta = new SimpleDataAction<>(actionName, this, action, this::getSelection, true);
+		SimpleDataAction<BetterList<F>, ?> ta = new SimpleDataAction<>(actionName, this, action, this::getSelection, true, getUntil());
 		actionMod.accept(ta);
 		theActions.add(ta);
 		return (P) this;

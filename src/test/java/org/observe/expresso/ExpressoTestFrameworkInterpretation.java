@@ -1,23 +1,25 @@
 package org.observe.expresso;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.LinkedHashMap;
+import static org.observe.expresso.qonfig.ExpressoBaseV0_1.creator;
+
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
-import org.observe.expresso.ExpressoTesting.ExpressoTest;
-import org.observe.expresso.ExpressoTesting.TestAction;
-import org.observe.expresso.ObservableModelSet.CompiledModelValue;
-import org.observe.expresso.ObservableModelSet.ModelValueSynth;
+import org.observe.expresso.ModelType.ModelInstanceType;
+import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
+import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.qonfig.CompiledExpression;
+import org.observe.expresso.qonfig.ExElement;
+import org.observe.expresso.qonfig.ExpressoBaseV0_1;
 import org.observe.expresso.qonfig.ExpressoQIS;
+import org.observe.expresso.qonfig.ModelValueElement;
 import org.qommons.QommonsUtils;
 import org.qommons.Version;
+import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretation;
+import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigInterpreterCore.Builder;
 import org.qommons.config.QonfigToolkit;
 import org.qommons.config.SpecialSession;
@@ -51,45 +53,117 @@ public class ExpressoTestFrameworkInterpretation implements QonfigInterpretation
 	@Override
 	public Builder configureInterpreter(Builder interpreter) {
 		interpreter//
-		.createWith("testing", ExpressoTesting.class, session -> {
-			ExpressoQIS exS = session.as(ExpressoQIS.class);
-			Expresso head = exS.forChildren("head").get(0).asElement("expresso").interpret(Expresso.class);
-			exS.setModels(head.getModels(), head.getClassView());
-			Map<String, ExpressoTest> tests = new LinkedHashMap<>();
-			for (ExpressoTest test : exS.interpretChildren("test", ExpressoTest.class)) {
-				if (tests.containsKey(test.getName()))
-						session.reporting().error("Duplicate tests named " + test.getName());
-				tests.put(test.getName(), test);
-			}
-			return new ExpressoTesting<>(head, Collections.unmodifiableMap(tests));
-		});
-		interpreter.createWith("test", ExpressoTest.class, session -> {
-			ExpressoQIS exS = session.as(ExpressoQIS.class);
-			List<TestAction> actions = new ArrayList<>();
-			for (ExpressoQIS actionS : exS.forChildren("test-action")) {
-				ExpressoQIS testActionS = actionS.asElement("test-action");
-				actions.add(
-					new TestAction(testActionS.getAttributeText("name"), exS.getExpressoEnv().getBuiltModels(), exS, //
-						actionS.interpret(CompiledModelValue.class), //
-						testActionS.getAttributeText("expect-throw"), testActionS.getAttribute("breakpoint", boolean.class),
-						testActionS.getElement().getPositionInFile()));
-			}
-			return new ExpressoTest(session.getAttributeText("name"), exS.getExpressoEnv().getBuiltModels(), exS,
-				Collections.unmodifiableList(actions));
-		});
-		interpreter.createWith("watch", CompiledModelValue.class, session -> {
-			CompiledExpression valueX = session.as(ExpressoQIS.class).getValueExpression();
-			return CompiledModelValue.of("watch", ModelTypes.Value, () -> {
-				ModelValueSynth<SettableValue<?>, SettableValue<?>> watching = valueX.evaluate(ModelTypes.Value.any());
-				return ModelValueSynth.of(watching.getType(), msi -> {
-					SettableValue<Object> value = (SettableValue<Object>) watching.get(msi);
-					SettableValue<Object> copy = SettableValue.build(value.getType()).withValue(value.get()).build();
-					value.noInitChanges().takeUntil(msi.getUntil()).act(evt -> copy.set(evt.getNewValue(), evt));
-					return value.disableWith(ObservableValue.of("A watched value cannot be modified"));
-				});
-			});
-		})//
-		;
+		.createWith("testing", ExpressoTesting.class, creator(ExpressoTesting::new));
+		interpreter.createWith("test", ExpressoTesting.ExpressoTest.Def.class, creator(ExpressoTesting.ExpressoTest.Def::new));
+		interpreter.createWith("test-action", ExpressoTesting.TestAction.class, creator(ExpressoTesting.TestAction::new));
+		interpreter.createWith("watch", ModelValueElement.CompiledSynth.class, ExpressoBaseV0_1.creator(WatchedValue::new));
 		return interpreter;
+	}
+
+	static class WatchedValue extends ExElement.Def.Abstract<ModelValueElement<SettableValue<?>, ?>>
+	implements ModelValueElement.CompiledSynth<SettableValue<?>, ModelValueElement<SettableValue<?>, ?>> {
+		private String theModelPath;
+		private CompiledExpression theValue;
+
+		public WatchedValue(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
+			super(parent, qonfigType);
+		}
+
+		@Override
+		public String getModelPath() {
+			return theModelPath;
+		}
+
+		@Override
+		public ModelType<SettableValue<?>> getModelType(CompiledExpressoEnv env) {
+			return ModelTypes.Value;
+		}
+
+		@Override
+		public CompiledExpression getElementValue() {
+			return theValue;
+		}
+
+		@Override
+		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
+			super.doUpdate(session);
+			theModelPath = session.get(ExpressoBaseV0_1.PATH_KEY, String.class);
+			theValue = session.getValueExpression();
+		}
+
+		@Override
+		public void prepareModelValue(ExpressoQIS session) {
+		}
+
+		@Override
+		public Interpreted<?> interpret() {
+			return new Interpreted<>(this);
+		}
+
+		static class Interpreted<T> extends ExElement.Interpreted.Abstract<ModelValueElement<SettableValue<?>, SettableValue<T>>> implements
+		ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<T>, ModelValueElement<SettableValue<?>, SettableValue<T>>> {
+			private InterpretedValueSynth<SettableValue<?>, SettableValue<T>> theValue;
+
+			public Interpreted(WatchedValue definition) {
+				super(definition, null);
+			}
+
+			@Override
+			public WatchedValue getDefinition() {
+				return (WatchedValue) super.getDefinition();
+			}
+
+			@Override
+			public Interpreted<T> setParentElement(ExElement.Interpreted<?> parent) {
+				super.setParentElement(parent);
+				return this;
+			}
+
+			@Override
+			public ModelInstanceType<SettableValue<?>, SettableValue<T>> getType() {
+				return theValue.getType();
+			}
+
+			@Override
+			public InterpretedValueSynth<?, ?> getElementValue() {
+				return theValue;
+			}
+
+			@Override
+			public void updateValue(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+				update(env);
+			}
+
+			@Override
+			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+				super.doUpdate(env);
+				theValue = getDefinition().getElementValue().interpret(ModelTypes.Value.<SettableValue<T>> anyAs(), getExpressoEnv());
+			}
+
+			@Override
+			public List<? extends InterpretedValueSynth<?, ?>> getComponents() {
+				return theValue.getComponents();
+			}
+
+			@Override
+			public SettableValue<T> get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
+				SettableValue<T> value = theValue.get(models);
+				SettableValue<T> copy = SettableValue.build(value.getType()).withValue(value.get()).build();
+				value.noInitChanges().takeUntil(models.getUntil()).act(evt -> copy.set(evt.getNewValue(), evt));
+				return copy.disableWith(ObservableValue.of("A watched value cannot be modified"));
+			}
+
+			@Override
+			public SettableValue<T> forModelCopy(SettableValue<T> value, ModelSetInstance sourceModels, ModelSetInstance newModels)
+				throws ModelInstantiationException {
+				return get(newModels);
+			}
+
+			@Override
+			public ModelValueElement<SettableValue<?>, SettableValue<T>> create(ExElement parent, ModelSetInstance models)
+				throws ModelInstantiationException {
+				return null;
+			}
+		}
 	}
 }

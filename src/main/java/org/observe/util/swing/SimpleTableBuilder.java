@@ -511,7 +511,7 @@ implements TableBuilder<R, P> {
 
 	@Override
 	public P withMultiAction(String actionName, Consumer<? super List<? extends R>> action, Consumer<DataAction<R, ?>> actionMod) {
-		SimpleDataAction<R, ?> ta = new SimpleDataAction<>(actionName, this, action, this::getSelection, true);
+		SimpleDataAction<R, ?> ta = new SimpleDataAction<>(actionName, this, action, this::getSelection, true, getUntil());
 		actionMod.accept(ta);
 		theActions.add(ta);
 		return (P) this;

@@ -8,16 +8,18 @@ import org.observe.SettableValue;
 import org.observe.expresso.ExpressoEvaluationException;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ExpressoParseException;
+import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
+import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet.CompiledModelValue;
-import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
-import org.observe.expresso.ObservableModelSet.ModelValueSynth;
 import org.observe.expresso.TypeConversionException;
+import org.observe.expresso.qonfig.CompiledExpression;
 import org.observe.expresso.qonfig.ElementTypeTraceability;
+import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.observe.expresso.qonfig.ExAddOn;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExpressoQIS;
@@ -32,10 +34,10 @@ import org.qommons.io.LocatedFilePosition;
 public abstract class Sizeable extends ExAddOn.Abstract<ExElement> {
 	public static abstract class Def<S extends Sizeable> extends ExAddOn.Def.Abstract<ExElement, S> {
 		private final Ternian isVertical;
-		private CompiledModelValue<SettableValue<?>, SettableValue<QuickSize>> theSize;
-		private CompiledModelValue<SettableValue<?>, SettableValue<QuickSize>> theMinimum;
-		private CompiledModelValue<SettableValue<?>, SettableValue<QuickSize>> thePreferred;
-		private CompiledModelValue<SettableValue<?>, SettableValue<QuickSize>> theMaximum;
+		private CompiledExpression theSize;
+		private CompiledExpression theMinimum;
+		private CompiledExpression thePreferred;
+		private CompiledExpression theMaximum;
 
 		protected Def(Ternian vertical, QonfigAddOn type, ExElement.Def<? extends ExElement> element) {
 			super(type, element);
@@ -46,19 +48,19 @@ public abstract class Sizeable extends ExAddOn.Abstract<ExElement> {
 			return isVertical;
 		}
 
-		public CompiledModelValue<SettableValue<?>, SettableValue<QuickSize>> getSize() {
+		public CompiledExpression getSize() {
 			return theSize;
 		}
 
-		public CompiledModelValue<SettableValue<?>, SettableValue<QuickSize>> getMinimum() {
+		public CompiledExpression getMinimum() {
 			return theMinimum;
 		}
 
-		public CompiledModelValue<SettableValue<?>, SettableValue<QuickSize>> getPreferred() {
+		public CompiledExpression getPreferred() {
 			return thePreferred;
 		}
 
-		public CompiledModelValue<SettableValue<?>, SettableValue<QuickSize>> getMaximum() {
+		public CompiledExpression getMaximum() {
 			return theMaximum;
 		}
 
@@ -67,28 +69,28 @@ public abstract class Sizeable extends ExAddOn.Abstract<ExElement> {
 			super.update(session, element);
 			switch (isVertical) {
 			case TRUE:
-				theSize = parseSize(session.getAttributeQV("height"), session, false);
-				theMinimum = parseSize(session.getAttributeQV("min-height"), session, false);
-				thePreferred = parseSize(session.getAttributeQV("pref-height"), session, false);
-				theMaximum = parseSize(session.getAttributeQV("max-height"), session, false);
+				theSize = session.getAttributeExpression("height");
+				theMinimum = session.getAttributeExpression("min-height");
+				thePreferred = session.getAttributeExpression("pref-height");
+				theMaximum = session.getAttributeExpression("max-height");
 				break;
 			case FALSE:
-				theSize = parseSize(session.getAttributeQV("width"), session, false);
-				theMinimum = parseSize(session.getAttributeQV("min-width"), session, false);
-				thePreferred = parseSize(session.getAttributeQV("pref-width"), session, false);
-				theMaximum = parseSize(session.getAttributeQV("max-width"), session, false);
+				theSize = session.getAttributeExpression("width");
+				theMinimum = session.getAttributeExpression("min-width");
+				thePreferred = session.getAttributeExpression("pref-width");
+				theMaximum = session.getAttributeExpression("max-width");
 				break;
 			default:
-				theSize = parseSize(session.getAttributeQV("size"), session, false);
-				theMinimum = parseSize(session.getAttributeQV("min-size"), session, false);
-				thePreferred = parseSize(session.getAttributeQV("pref-size"), session, false);
-				theMaximum = parseSize(session.getAttributeQV("max-size"), session, false);
+				theSize = session.getAttributeExpression("size");
+				theMinimum = session.getAttributeExpression("min-size");
+				thePreferred = session.getAttributeExpression("pref-size");
+				theMaximum = session.getAttributeExpression("max-size");
 				break;
 			}
 		}
 
 		public static class Vertical extends Def<Sizeable.Vertical> {
-			private static final ElementTypeTraceability<ExElement, ExElement.Interpreted<?>, ExElement.Def<?>> TRACEABILITY = ElementTypeTraceability
+			private static final SingleTypeTraceability<ExElement, ExElement.Interpreted<?>, ExElement.Def<?>> TRACEABILITY = ElementTypeTraceability
 				.<ExElement, Sizeable, Interpreted<?>, Def<?>> buildAddOn(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION,
 					"v-sizeable", Def.class, Interpreted.class, Sizeable.class)//
 				.withAddOnAttribute("height", Def::getSize, Interpreted::getSize)//
@@ -114,7 +116,7 @@ public abstract class Sizeable extends ExAddOn.Abstract<ExElement> {
 		}
 
 		public static class Horizontal extends Def<Sizeable.Horizontal> {
-			private static final ElementTypeTraceability<ExElement, ExElement.Interpreted<?>, ExElement.Def<?>> TRACEABILITY = ElementTypeTraceability
+			private static final SingleTypeTraceability<ExElement, ExElement.Interpreted<?>, ExElement.Def<?>> TRACEABILITY = ElementTypeTraceability
 				.<ExElement, Sizeable, Interpreted<?>, Def<?>> buildAddOn(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION,
 					"h-sizeable", Def.class, Interpreted.class, Sizeable.class)//
 				.withAddOnAttribute("width", Def::getSize, Interpreted::getSize)//
@@ -183,11 +185,12 @@ public abstract class Sizeable extends ExAddOn.Abstract<ExElement> {
 		}
 
 		@Override
-		public void update(InterpretedModelSet models) throws ExpressoInterpretationException {
-			theSize = getDefinition().getSize() == null ? null : getDefinition().getSize().createSynthesizer().interpret();
-			theMinimum = getDefinition().getMinimum() == null ? null : getDefinition().getMinimum().createSynthesizer().interpret();
-			thePreferred = getDefinition().getPreferred() == null ? null : getDefinition().getPreferred().createSynthesizer().interpret();
-			theMaximum = getDefinition().getMaximum() == null ? null : getDefinition().getMaximum().createSynthesizer().interpret();
+		public void update(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+			ModelInstanceType<SettableValue<?>, SettableValue<QuickSize>> sizeType = ModelTypes.Value.forType(QuickSize.class);
+			theSize = getDefinition().getSize() == null ? null : getDefinition().getSize().interpret(sizeType, env);
+			theMinimum = getDefinition().getMinimum() == null ? null : getDefinition().getMinimum().interpret(sizeType, env);
+			thePreferred = getDefinition().getPreferred() == null ? null : getDefinition().getPreferred().interpret(sizeType, env);
+			theMaximum = getDefinition().getMaximum() == null ? null : getDefinition().getMaximum().interpret(sizeType, env);
 		}
 
 		public static class Vertical extends Interpreted<Sizeable.Vertical> {
@@ -291,8 +294,8 @@ public abstract class Sizeable extends ExAddOn.Abstract<ExElement> {
 	 * @return The ModelValueSynth to produce the position value
 	 * @throws QonfigInterpretationException If the position could not be parsed
 	 */
-	public static CompiledModelValue<SettableValue<?>, SettableValue<QuickSize>> parseSize(QonfigValue value, ExpressoQIS session,
-		boolean position) throws QonfigInterpretationException {
+	public static CompiledModelValue<SettableValue<?>> parseSize(QonfigValue value, ExpressoQIS session, boolean position)
+		throws QonfigInterpretationException {
 		if (value == null)
 			return null;
 		else if (!(value.value instanceof QonfigExpression))
@@ -330,12 +333,12 @@ public abstract class Sizeable extends ExAddOn.Abstract<ExElement> {
 		}
 		boolean fPct = pct, fXp = xp;
 		int fUnit = unit;
-		return CompiledModelValue.of(expression::toString, ModelTypes.Value, () -> {
-			ModelValueSynth<SettableValue<?>, SettableValue<QuickSize>> positionValue;
+		return CompiledModelValue.of(expression::toString, ModelTypes.Value, env -> {
+			InterpretedValueSynth<SettableValue<?>, SettableValue<QuickSize>> positionValue;
 			if (fUnit > 0) {
-				ModelValueSynth<SettableValue<?>, SettableValue<Double>> num;
+				InterpretedValueSynth<SettableValue<?>, SettableValue<Double>> num;
 				try {
-					num = parsed.evaluate(ModelTypes.Value.forType(double.class), session.getExpressoEnv(), 0);
+					num = parsed.evaluate(ModelTypes.Value.forType(double.class), env, 0);
 				} catch (ExpressoEvaluationException e) {
 					throw new ExpressoInterpretationException(e.getMessage(),
 						new LocatedFilePosition(value.fileLocation, value.position.getPosition(e.getErrorOffset())), e.getErrorLength(), e);
@@ -355,7 +358,7 @@ public abstract class Sizeable extends ExAddOn.Abstract<ExElement> {
 					map = v -> v == null ? null : new QuickSize(0.0f, Math.round(v.floatValue()));
 					reverse = s -> s == null ? null : Double.valueOf(s.pixels);
 				}
-				positionValue = ModelValueSynth.of(ModelTypes.Value.forType(QuickSize.class), msi -> {
+				positionValue = InterpretedValueSynth.of(ModelTypes.Value.forType(QuickSize.class), msi -> {
 					SettableValue<Double> numV = num.get(msi);
 					return numV.transformReversible(QuickSize.class, tx -> tx//
 						.map(map)//
@@ -363,11 +366,11 @@ public abstract class Sizeable extends ExAddOn.Abstract<ExElement> {
 				});
 			} else {
 				try {
-					positionValue = parsed.evaluate(ModelTypes.Value.forType(QuickSize.class), session.getExpressoEnv(), 0);
+					positionValue = parsed.evaluate(ModelTypes.Value.forType(QuickSize.class), env, 0);
 				} catch (ExpressoEvaluationException e1) {
 					// If it doesn't parse as a position, try parsing as a number.
 					try {
-						positionValue = parsed.evaluate(ModelTypes.Value.forType(int.class), session.getExpressoEnv(), 0)//
+						positionValue = parsed.evaluate(ModelTypes.Value.forType(int.class), env, 0)//
 							.map(ModelTypes.Value.forType(QuickSize.class), v -> v.transformReversible(QuickSize.class,
 								tx -> tx.map(d -> new QuickSize(0.0f, d)).withReverse(pos -> pos.pixels)));
 					} catch (ExpressoEvaluationException e2) {

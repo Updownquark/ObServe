@@ -7,16 +7,16 @@ import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableSet;
-import org.observe.expresso.ExpressoEnv;
+import org.observe.expresso.CompiledExpressoEnv;
 import org.observe.expresso.ExpressoEvaluationException;
 import org.observe.expresso.ExpressoInterpretationException;
+import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelType;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
-import org.observe.expresso.ObservableModelSet.ModelValueSynth;
 import org.observe.expresso.TypeConversionException;
 import org.observe.util.TypeTokens;
 import org.qommons.LambdaUtils;
@@ -94,12 +94,12 @@ public class ConditionalExpression implements ObservableExpression {
 	}
 
 	@Override
-	public ModelType<?> getModelType(ExpressoEnv env) {
+	public ModelType<?> getModelType(CompiledExpressoEnv env) {
 		return thePrimary.getModelType(env).getCommonType(theSecondary.getModelType(env));
 	}
 
 	@Override
-	public <M, MV extends M> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env,
+	public <M, MV extends M> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, InterpretedExpressoEnv env,
 		int expressionOffset)
 			throws ExpressoEvaluationException, ExpressoInterpretationException {
 		if (type.getModelType() == ModelTypes.Value || type.getModelType() == ModelTypes.Collection
@@ -115,7 +115,7 @@ public class ConditionalExpression implements ObservableExpression {
 			throw new ExpressoEvaluationException(expressionOffset, theCondition.getExpressionLength(), e.getMessage(), e);
 		}
 		int primaryOffset = expressionOffset + theCondition.getExpressionLength() + 1;
-		ExpressoEnv primaryEnv = env.at(theCondition.getExpressionLength() + 1);
+		InterpretedExpressoEnv primaryEnv = env.at(theCondition.getExpressionLength() + 1);
 		EvaluatedExpression<M, MV> primaryV;
 		try {
 			primaryV = thePrimary.evaluate(type, primaryEnv, primaryOffset);
@@ -123,7 +123,7 @@ public class ConditionalExpression implements ObservableExpression {
 			throw new ExpressoEvaluationException(primaryOffset, thePrimary.getExpressionLength(), e.getMessage(), e);
 		}
 		int secondaryOffset = primaryOffset + thePrimary.getExpressionLength() + 1;
-		ExpressoEnv secondaryEnv = primaryEnv.at(thePrimary.getExpressionLength() + 1);
+		InterpretedExpressoEnv secondaryEnv = primaryEnv.at(thePrimary.getExpressionLength() + 1);
 		EvaluatedExpression<M, MV> secondaryV;
 		try {
 			secondaryV = theSecondary.evaluate(type, secondaryEnv, secondaryOffset);
@@ -210,9 +210,9 @@ public class ConditionalExpression implements ObservableExpression {
 				SettableValue<Boolean> sourceCondition = conditionV.get(sourceModels);
 				SettableValue<Boolean> newCondition = conditionV.get(newModels);
 				Object sourcePrimary = primaryV.get(sourceModels);
-				Object newPrimary = ((ModelValueSynth<Object, Object>) primaryV).get(newModels);
+				Object newPrimary = ((EvaluatedExpression<Object, Object>) primaryV).get(newModels);
 				Object sourceSecondary = secondaryV.get(sourceModels);
-				Object newSecondary = ((ModelValueSynth<Object, Object>) secondaryV).get(newModels);
+				Object newSecondary = ((EvaluatedExpression<Object, Object>) secondaryV).get(newModels);
 				if (sourceCondition == newCondition && sourcePrimary == newPrimary && sourceSecondary == newSecondary)
 					return value;
 				return createValue(newCondition, newPrimary, newSecondary);

@@ -5,14 +5,14 @@ import java.util.Collections;
 import java.util.List;
 import java.util.function.Function;
 
-import org.observe.expresso.ExpressoEnv;
+import org.observe.expresso.CompiledExpressoEnv;
 import org.observe.expresso.ExpressoEvaluationException;
+import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelType;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
-import org.observe.expresso.ObservableModelSet.ModelValueSynth;
 import org.observe.util.TypeTokens;
 
 import com.google.common.reflect.TypeToken;
@@ -62,12 +62,12 @@ public class ClassInstanceExpression implements ObservableExpression {
 	}
 
 	@Override
-	public ModelType<?> getModelType(ExpressoEnv env) {
+	public ModelType<?> getModelType(CompiledExpressoEnv env) {
 		return ModelTypes.Value;
 	}
 
 	@Override
-	public <M, MV extends M> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env,
+	public <M, MV extends M> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, InterpretedExpressoEnv env,
 		int expressionOffset) throws ExpressoEvaluationException {
 		if (type.getModelType() != ModelTypes.Value)
 			throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(),
@@ -86,7 +86,8 @@ public class ClassInstanceExpression implements ObservableExpression {
 			throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(),
 				theType + ".class cannot be evaluated as a " + type.getType(0));
 		return ObservableExpression.evEx(
-			(InterpretedValueSynth<M, MV>) ModelValueSynth.literal(ModelTypes.Value.forType(classType), clazz, theType + ".class"), clazz);
+			(InterpretedValueSynth<M, MV>) InterpretedValueSynth.literal(ModelTypes.Value.forType(classType), clazz, theType + ".class"),
+			clazz);
 	}
 
 	@Override

@@ -1,7 +1,7 @@
 package org.observe.quick;
 
 import org.observe.expresso.ClassView;
-import org.observe.expresso.Expresso;
+import org.observe.expresso.qonfig.Expresso;
 import org.observe.expresso.ObservableModelSet;
 import org.observe.quick.style.QuickStyleSheet;
 

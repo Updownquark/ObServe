@@ -1,6 +1,11 @@
 package org.observe.quick.base;
 
+import static org.observe.expresso.qonfig.ExpressoBaseV0_1.addOnCreator;
+import static org.observe.expresso.qonfig.ExpressoBaseV0_1.creator;
+
 import java.awt.Image;
+import java.awt.MediaTracker;
+import java.io.IOException;
 import java.net.URL;
 import java.util.Set;
 
@@ -8,12 +13,11 @@ import javax.swing.Icon;
 import javax.swing.ImageIcon;
 
 import org.observe.SettableValue;
-import org.observe.expresso.ExpressoEnv;
+import org.observe.expresso.CompiledExpressoEnv;
 import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.ModelInstantiationException;
+import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelTypes;
-import org.observe.expresso.ObservableModelSet.ModelSetInstance;
-import org.observe.expresso.ObservableModelSet.ModelValueSynth;
+import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ops.BinaryOperatorSet;
 import org.observe.expresso.ops.UnaryOperatorSet;
 import org.observe.expresso.qonfig.CompiledExpression;
@@ -21,11 +25,11 @@ import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.quick.QuickCoreInterpretation;
 import org.observe.quick.QuickDocument;
 import org.observe.quick.QuickWidget;
-import org.observe.quick.style.StyleQIS;
 import org.observe.util.TypeTokens;
 import org.observe.util.swing.ObservableSwingUtils;
 import org.qommons.QommonsUtils;
 import org.qommons.Version;
+import org.qommons.config.QommonsConfig;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigInterpretation;
 import org.qommons.config.QonfigInterpretationException;
@@ -34,7 +38,6 @@ import org.qommons.config.QonfigInterpreterCore.Builder;
 import org.qommons.config.QonfigInterpreterCore.CoreSession;
 import org.qommons.config.QonfigToolkit;
 import org.qommons.config.SpecialSession;
-import org.qommons.ex.ExFunction;
 
 import com.google.common.reflect.TypeToken;
 
@@ -62,7 +65,7 @@ public class QuickBaseInterpretation implements QonfigInterpretation {
 
 	@Override
 	public Set<Class<? extends SpecialSession<?>>> getExpectedAPIs() {
-		return QommonsUtils.unmodifiableDistinctCopy(ExpressoQIS.class, StyleQIS.class);
+		return QommonsUtils.unmodifiableDistinctCopy(ExpressoQIS.class);
 	}
 
 	@Override
@@ -87,7 +90,7 @@ public class QuickBaseInterpretation implements QonfigInterpretation {
 			@Override
 			public Object prepareSession(CoreSession session) throws QonfigInterpretationException {
 				ExpressoQIS exS = session.as(ExpressoQIS.class);
-				ExpressoEnv env = exS.getExpressoEnv();
+				CompiledExpressoEnv env = exS.getExpressoEnv();
 				exS.setExpressoEnv(env//
 					.withNonStructuredParser(QuickSize.class, new QuickSize.Parser(true))//
 					.withOperators(unaryOps(env.getUnaryOperators()), binaryOps(env.getBinaryOperators()))//
@@ -103,33 +106,22 @@ public class QuickBaseInterpretation implements QonfigInterpretation {
 		});
 
 		// Simple widgets
-		interpreter.createWith(QuickLabel.LABEL, QuickLabel.Def.class,
-			session -> QuickCoreInterpretation.interpretQuick(session, QuickLabel.Def::new));
-		interpreter.createWith(QuickTextField.TEXT_FIELD, QuickTextField.Def.class,
-			session -> QuickCoreInterpretation.interpretQuick(session, QuickTextField.Def::new));
-		interpreter.createWith(QuickCheckBox.CHECK_BOX, QuickCheckBox.Def.class,
-			session -> QuickCoreInterpretation.interpretQuick(session, QuickCheckBox.Def::new));
-		interpreter.createWith(QuickButton.BUTTON, QuickButton.Def.class,
-			session -> QuickCoreInterpretation.interpretQuick(session, QuickButton.Def::new));
-		interpreter.createWith(QuickTextArea.TEXT_AREA, QuickTextArea.Def.class,
-			session -> QuickCoreInterpretation.interpretQuick(session, QuickTextArea.Def::new));
-		interpreter.createWith(StyledTextArea.STYLED_TEXT_AREA, StyledTextArea.Def.class,
-			session -> QuickCoreInterpretation.interpretQuick(session, StyledTextArea.Def::new));
+		interpreter.createWith(QuickLabel.LABEL, QuickLabel.Def.class, creator(QuickLabel.Def::new));
+		interpreter.createWith(QuickTextField.TEXT_FIELD, QuickTextField.Def.class, creator(QuickTextField.Def::new));
+		interpreter.createWith(QuickCheckBox.CHECK_BOX, QuickCheckBox.Def.class, creator(QuickCheckBox.Def::new));
+		interpreter.createWith(QuickButton.BUTTON, QuickButton.Def.class, creator(QuickButton.Def::new));
+		interpreter.createWith(QuickTextArea.TEXT_AREA, QuickTextArea.Def.class, creator(QuickTextArea.Def::new));
+		interpreter.createWith(StyledTextArea.STYLED_TEXT_AREA, StyledTextArea.Def.class, creator(StyledTextArea.Def::new));
 		interpreter.createWith(StyledTextArea.TEXT_STYLE, StyledTextArea.TextStyleElement.Def.class,
-			session -> QuickCoreInterpretation.<StyledTextArea.TextStyleElement, StyledTextArea.TextStyleElement.Def> interpretQuick(
-				session, (parent, el) -> new StyledTextArea.TextStyleElement.Def((StyledTextArea.Def<Object>) parent, el)));
+			creator(StyledTextArea.Def.class, StyledTextArea.TextStyleElement.Def::new));
 
 		// Containers
-		interpreter.createWith(QuickBox.BOX, QuickBox.Def.class,
-			session -> QuickCoreInterpretation.interpretQuick(session, QuickBox.Def::new));
-		interpreter.createWith(QuickFieldPanel.FIELD_PANEL, QuickFieldPanel.Def.class,
-			session -> QuickCoreInterpretation.interpretQuick(session, QuickFieldPanel.Def::new));
+		interpreter.createWith(QuickBox.BOX, QuickBox.Def.class, creator(QuickBox.Def::new));
+		interpreter.createWith(QuickFieldPanel.FIELD_PANEL, QuickFieldPanel.Def.class, creator(QuickFieldPanel.Def::new));
 		interpreter.createWith("field", QuickField.Def.class,
-			session -> QuickCoreInterpretation.interpretAddOn(session, (p, ao) -> new QuickField.Def(ao, (QuickWidget.Def<?>) p)));
-		interpreter.createWith(QuickSplit.SPLIT, QuickSplit.Def.class,
-			session -> QuickCoreInterpretation.interpretQuick(session, QuickSplit.Def::new));
-		interpreter.createWith(QuickScrollPane.SCROLL, QuickScrollPane.Def.class,
-			session -> QuickCoreInterpretation.interpretQuick(session, QuickScrollPane.Def::new));
+			addOnCreator((Class<QuickWidget.Def<?>>) (Class<?>) QuickWidget.Def.class, QuickField.Def::new));
+		interpreter.createWith(QuickSplit.SPLIT, QuickSplit.Def.class, creator(QuickSplit.Def::new));
+		interpreter.createWith(QuickScrollPane.SCROLL, QuickScrollPane.Def.class, creator(QuickScrollPane.Def::new));
 
 		// Box layouts
 		interpreter.createWith("inline-layout", QuickInlineLayout.Def.class,
@@ -152,24 +144,19 @@ public class QuickBaseInterpretation implements QonfigInterpretation {
 			session -> QuickCoreInterpretation.interpretAddOn(session, (p, ao) -> new Sizeable.Def.Vertical(ao, p)));
 
 		// Table
-		interpreter.createWith(QuickTable.TABLE, QuickTable.Def.class,
-			session -> QuickCoreInterpretation.interpretQuick(session, QuickTable.Def::new));
+		interpreter.createWith(QuickTable.TABLE, QuickTable.Def.class, creator(QuickTable.Def::new));
 		interpreter.createWith(QuickTableColumn.SingleColumnSet.COLUMN, QuickTableColumn.SingleColumnSet.Def.class,
-			session -> QuickCoreInterpretation.interpretQuick(session,
-				(p, el) -> new QuickTableColumn.SingleColumnSet.Def((RowTyped.Def<?>) p, el)));
+			creator(RowTyped.Def.class, QuickTableColumn.SingleColumnSet.Def::new));
 		interpreter.createWith(QuickTableColumn.ColumnEditing.COLUMN_EDITING, QuickTableColumn.ColumnEditing.Def.class,
-			session -> QuickCoreInterpretation.interpretQuick(session,
-				(p, el) -> new QuickTableColumn.ColumnEditing.Def((QuickTableColumn.TableColumnSet.Def<?>) p, el)));
+			creator(QuickTableColumn.TableColumnSet.Def.class, QuickTableColumn.ColumnEditing.Def::new));
 		interpreter.createWith("modify-row-value", QuickTableColumn.ColumnEditType.RowModifyEditType.Def.class,
 			session -> new QuickTableColumn.ColumnEditType.RowModifyEditType.Def((QonfigAddOn) session.getFocusType(),
 				(QuickTableColumn.ColumnEditing.Def) session.getElementRepresentation()));
 		interpreter.createWith("replace-row-value", QuickTableColumn.ColumnEditType.RowReplaceEditType.Def.class,
 			session -> new QuickTableColumn.ColumnEditType.RowReplaceEditType.Def((QonfigAddOn) session.getFocusType(),
 				(QuickTableColumn.ColumnEditing.Def) session.getElementRepresentation()));
-		interpreter.createWith(ValueAction.Single.SINGLE_VALUE_ACTION, ValueAction.Single.Def.class,
-			session -> QuickCoreInterpretation.interpretQuick(session, (p, el) -> new ValueAction.Single.Def<>(p, el)));
-		interpreter.createWith(ValueAction.Multi.MULTI_VALUE_ACTION, ValueAction.Multi.Def.class,
-			session -> QuickCoreInterpretation.interpretQuick(session, (p, el) -> new ValueAction.Multi.Def<>(p, el)));
+		interpreter.createWith(ValueAction.Single.SINGLE_VALUE_ACTION, ValueAction.Single.Def.class, creator(ValueAction.Single.Def::new));
+		interpreter.createWith(ValueAction.Multi.MULTI_VALUE_ACTION, ValueAction.Multi.Def.class, creator(ValueAction.Multi.Def::new));
 		return interpreter;
 	}
 
@@ -202,32 +189,48 @@ public class QuickBaseInterpretation implements QonfigInterpretation {
 	 *
 	 * @param expression The expression to parse
 	 * @param env The expresso environment in which to parse the expression
-	 * @param callingClass The calling class of Quick for classpath resource resolution
+	 * @param sourceDocument The location of the document that the icon source may be relative to
 	 * @return The ModelValueSynth to produce the icon value
 	 * @throws ExpressoInterpretationException If the icon could not be evaluated
 	 */
-	public static ExFunction<ModelSetInstance, SettableValue<Icon>, ModelInstantiationException> evaluateIcon(CompiledExpression expression,
-		ExpressoEnv env, Class<?> callingClass) throws ExpressoInterpretationException {
+	public static InterpretedValueSynth<SettableValue<?>, SettableValue<Icon>> evaluateIcon(CompiledExpression expression,
+		InterpretedExpressoEnv env, String sourceDocument) throws ExpressoInterpretationException {
 		if (expression != null) {
-			ModelValueSynth<SettableValue<?>, SettableValue<?>> iconV = expression.evaluate(ModelTypes.Value.any(), env);
+			InterpretedValueSynth<SettableValue<?>, ? extends SettableValue<?>> iconV = expression.interpret(ModelTypes.Value.any(), env);
 			Class<?> iconType = TypeTokens.getRawType(iconV.getType().getType(0));
 			if (Icon.class.isAssignableFrom(iconType))
-				return msi -> (SettableValue<Icon>) iconV.get(msi);
-				else if (Image.class.isAssignableFrom(iconType)) {
-					return msi -> SettableValue.asSettable(iconV.get(msi).map(img -> img == null ? null : new ImageIcon((Image) img)),
-						__ -> "unsettable");
-				} else if (URL.class.isAssignableFrom(iconType)) {
-					return msi -> SettableValue.asSettable(iconV.get(msi).map(url -> url == null ? null : new ImageIcon((URL) url)),
-						__ -> "unsettable");
-				} else if (String.class.isAssignableFrom(iconType)) {
-					return msi -> SettableValue.asSettable(iconV.get(msi).map(loc -> loc == null ? null//
-						: ObservableSwingUtils.getFixedIcon(callingClass, (String) loc, 16, 16)), __ -> "unsettable");
-				} else {
-					env.reporting().warn("Cannot use value " + expression + ", type " + iconV.getType().getType(0) + " as an icon");
-					return msi -> SettableValue.of(Icon.class, null, "unsettable");
-				}
-		} else {
-			return msi -> SettableValue.of(Icon.class, null, "None provided");
-		}
+				return (InterpretedValueSynth<SettableValue<?>, SettableValue<Icon>>) iconV;
+			else if (Image.class.isAssignableFrom(iconType)) {
+				return iconV.map(ModelTypes.Value.forType(Icon.class),
+					sv -> SettableValue.asSettable(sv.map(img -> img == null ? null : new ImageIcon((Image) img)), __ -> "Unsettable"));
+			} else if (URL.class.isAssignableFrom(iconType)) {
+				return iconV.map(ModelTypes.Value.forType(Icon.class),
+					sv -> SettableValue.asSettable(sv.map(url -> url == null ? null : new ImageIcon((URL) url)), __ -> "unsettable"));
+			} else if (String.class.isAssignableFrom(iconType)) {
+				return iconV.map(ModelTypes.Value.forType(Icon.class), sv -> SettableValue.asSettable(sv.map(loc -> {
+					if (loc == null)
+						return null;
+					String relLoc;
+					try {
+						relLoc = QommonsConfig.resolve((String) loc, sourceDocument);
+					} catch (IOException e) {
+						System.err.println("Could not resolve icon location '" + loc + "' relative to document " + sourceDocument);
+						e.printStackTrace();
+						return null;
+					}
+					ImageIcon relIcon = new ImageIcon(relLoc);
+					if (relIcon.getImageLoadStatus() == MediaTracker.ERRORED)
+						return ObservableSwingUtils.getFixedIcon(null, (String) loc, 16, 16);
+					else {
+						relIcon = new ImageIcon(relIcon.getImage().getScaledInstance(16, 16, Image.SCALE_SMOOTH));
+						return relIcon;
+					}
+				}), __ -> "unsettable"));
+			} else {
+				env.reporting().warn("Cannot use value " + expression + ", type " + iconV.getType().getType(0) + " as an icon");
+				return InterpretedValueSynth.literal(TypeTokens.get().of(Icon.class), null, "Icon not provided");
+			}
+		} else
+			return InterpretedValueSynth.literal(TypeTokens.get().of(Icon.class), null, "None provided");
 	}
 }

@@ -3,24 +3,23 @@ package org.observe.quick.base;
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.expresso.ModelInstantiationException;
-import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.qonfig.ElementTypeTraceability;
+import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.observe.expresso.qonfig.ExElement;
+import org.observe.expresso.qonfig.ExWithElementModel;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.quick.QuickTextWidget;
 import org.observe.util.TypeTokens;
-import org.qommons.config.QonfigElement;
+import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
 public interface QuickEditableTextWidget<T> extends QuickTextWidget<T> {
 	public static final String EDITABLE_TEXT_WIDGET = "editable-text-widget";
-	public static final ElementTypeTraceability<QuickEditableTextWidget<?>, Interpreted<?, ?>, Def<?>> EDITABLE_TEXT_WIDGET_TRACEABILITY = ElementTypeTraceability
-		.<QuickEditableTextWidget<?>, Interpreted<?, ?>, Def<?>> build(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION,
-			EDITABLE_TEXT_WIDGET)//
-		.reflectMethods(Def.class, Interpreted.class, QuickEditableTextWidget.class)//
-		.build();
+	public static final SingleTypeTraceability<QuickEditableTextWidget<?>, Interpreted<?, ?>, Def<?>> EDITABLE_TEXT_WIDGET_TRACEABILITY = ElementTypeTraceability
+		.getElementTraceability(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, EDITABLE_TEXT_WIDGET, Def.class,
+			Interpreted.class, QuickEditableTextWidget.class);
 
 	public interface Def<W extends QuickEditableTextWidget<?>> extends QuickTextWidget.Def<W> {
 		@QonfigAttributeGetter("commit-on-type")
@@ -33,8 +32,8 @@ public interface QuickEditableTextWidget<T> extends QuickTextWidget<T> {
 		implements Def<W> {
 			private boolean isCommitOnType;
 
-			protected Abstract(ExElement.Def<?> parent, QonfigElement element) {
-				super(parent, element);
+			protected Abstract(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
+				super(parent, type);
 			}
 
 			@Override
@@ -43,9 +42,9 @@ public interface QuickEditableTextWidget<T> extends QuickTextWidget<T> {
 			}
 
 			@Override
-			public void update(ExpressoQIS session) throws QonfigInterpretationException {
+			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 				withTraceability(EDITABLE_TEXT_WIDGET_TRACEABILITY.validate(session.getFocusType(), session.reporting()));
-				super.update(session.asElement(session.getFocusType().getSuperElement()));
+				super.doUpdate(session.asElement(session.getFocusType().getSuperElement()));
 				isCommitOnType = session.getAttribute("commit-on-type", boolean.class);
 			}
 		}
@@ -122,8 +121,9 @@ public interface QuickEditableTextWidget<T> extends QuickTextWidget<T> {
 			super.updateModel(interpreted, myModels);
 			QuickEditableTextWidget.Interpreted<T, ?> myInterpreted = (QuickEditableTextWidget.Interpreted<T, ?>) interpreted;
 			isCommitOnType = myInterpreted.getDefinition().isCommitOnType();
-			ExElement.satisfyContextValue("error", ModelTypes.Value.STRING, SettableValue.flatten(theErrorStatus), myModels, this);
-			ExElement.satisfyContextValue("warning", ModelTypes.Value.STRING, SettableValue.flatten(theWarningStatus), myModels, this);
+			ExWithElementModel elModels = getAddOn(ExWithElementModel.class);
+			elModels.satisfyElementValue("error", SettableValue.flatten(theErrorStatus));
+			elModels.satisfyElementValue("warning", SettableValue.flatten(theWarningStatus));
 		}
 
 		@Override

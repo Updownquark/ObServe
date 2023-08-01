@@ -10,8 +10,7 @@ import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.util.TypeTokens;
 import org.qommons.StringUtils;
 import org.qommons.config.QonfigInterpretationException;
-import org.qommons.io.PositionedContent;
-import org.qommons.io.LocatedFilePosition;
+import org.qommons.io.LocatedPositionedContent;
 
 import com.google.common.reflect.TypeToken;
 
@@ -25,39 +24,34 @@ public interface VariableType {
 	 * @return This type, evaluated for the given models
 	 * @throws ExpressoInterpretationException If this type could not be evaluated with the given models
 	 */
-	TypeToken<?> getType(ObservableModelSet models) throws ExpressoInterpretationException;
+	TypeToken<?> getType(InterpretedExpressoEnv env) throws ExpressoInterpretationException;
 
-	/** @return Whether this type depends on the models passed to {@link #getType(ObservableModelSet)} */
+	LocatedPositionedContent getContent();
+
+	/** @return Whether this type depends on the models passed to {@link #getType(InterpretedExpressoEnv)} */
 	boolean isModelDependent();
 
 	/**
 	 * Parses a {@link VariableType}
 	 *
-	 * @param text The text to parse the type from
-	 * @param cv The class view to get the type from
-	 * @param file The name of the file that specified the type
-	 * @param position The position in the file where the type was specified
+	 * @param content The content to parse the type from
 	 * @return The new type
 	 * @throws QonfigInterpretationException If the type could not be parsed
 	 */
-	public static VariableType parseType(String text, ClassView cv, String file, PositionedContent position)
-		throws QonfigInterpretationException {
-		text = text.replace(" ", "");
+	public static VariableType parseType(LocatedPositionedContent content) throws QonfigInterpretationException {
 		int[] start = new int[1];
-		VariableType parsed = Parsing.parseType(text, start, cv, file, position);
-		if (start[0] != text.length())
-			throw new QonfigInterpretationException("Bad type: " + text, //
-				position == null ? null : new LocatedFilePosition(file, position.getPosition(start[0])), 0);
+		VariableType parsed = Parsing.parseType(content, start);
+		if (start[0] != content.length())
+			throw new QonfigInterpretationException("Bad type: " + content, content == null ? null : content.getPosition(start[0]), 0);
 		return parsed;
 	}
 
 	/** Parsing logic for the {@link VariableType} class */
 	class Parsing {
-		static VariableType parseType(String text, int[] start, ClassView cv, String file, PositionedContent position)
-			throws QonfigInterpretationException {
+		static VariableType parseType(LocatedPositionedContent content, int[] start) throws QonfigInterpretationException {
 			int c = start[0];
-			for (; c < text.length(); c++) {
-				switch (text.charAt(c)) {
+			for (; c < content.length(); c++) {
+				switch (content.charAt(c)) {
 				case '>':
 					// '{' and '}' aren't used for java types, and '<' in particular can't be used in XML as-is,
 					// so this flexibility makes it easier to specify generic types in XML
@@ -67,33 +61,29 @@ public interface VariableType {
 					break;
 				case '<':
 				case '{':
-					if (c == text.length() - 1)
-						throw new QonfigInterpretationException("Bad type (more expected): " + text, //
-							position == null ? null : new LocatedFilePosition(file, position.getPosition(start[0])), c - start[0]);
-					if (text.charAt(c) >= '0' && text.charAt(c) <= '9') {
-						String modelName = text.substring(start[0], c);
-						start[0] = c + 1;
-						int typeIndex = parseInt(text, start);
-						if (start[0] == text.length() || (text.charAt(start[0]) != '>' && text.charAt(start[0]) != '}'))
+					if (c == content.length() - 1)
+						throw new QonfigInterpretationException("Bad type (more expected): " + content, //
+							content.getPosition(start[0]), c - start[0]);
+					int paramsOffset = c;
+					if (content.charAt(c) >= '0' && content.charAt(c) <= '9') {
+						String modelName = content.toString().substring(start[0], c);
+						int typeIndex = parseInt(content, start);
+						if (start[0] == content.length() || (content.charAt(start[0]) != '>' && content.charAt(start[0]) != '}'))
 							throw new QonfigInterpretationException("'>' or '}' expected", //
-								position == null ? null : new LocatedFilePosition(file, position.getPosition(start[0])), c - start[0]);
+								content.getPosition(start[0]), c - start[0]);
 						start[0]++;
-						return new ModelType(modelName, typeIndex,
-							position == null ? null : new LocatedFilePosition(file, position.getPosition(start[0])), c - start[0]);
+						return new ModelType(content.subSequence(c), modelName, typeIndex, paramsOffset);
 					}
-					Class<?> baseType = cv.getType(text.substring(start[0], c));
-					if (baseType == null)
-						throw new QonfigInterpretationException("Unrecognized type '" + text.substring(start[0], c), //
-							position == null ? null : new LocatedFilePosition(file, position.getPosition(start[0])), c - start[0]);
+					String baseTypeName = content.toString().substring(start[0], c);
 					List<VariableType> params = new ArrayList<>();
 					paramLoop: while (true) {
 						start[0] = c + 1;
-						params.add(parseType(text, start, cv, file, position == null ? null : position));
-						if (start[0] == text.length())
+						params.add(parseType(content, start));
+						if (start[0] == content.length())
 							throw new QonfigInterpretationException("'>' or '}' expected", //
-								position == null ? null : new LocatedFilePosition(file, position.getPosition(start[0])), c - start[0]);
+								content == null ? null : content.getPosition(start[0]), c - start[0]);
 						c = start[0];
-						switch (text.charAt(c)) {
+						switch (content.charAt(c)) {
 						case ',':
 							continue;
 						case '<':
@@ -101,34 +91,21 @@ public interface VariableType {
 							start[0]++;
 							break paramLoop;
 						default:
-							throw new QonfigInterpretationException("'>' or '}' expected", //
-								position == null ? null : new LocatedFilePosition(file, position.getPosition(c)), 0);
+							throw new QonfigInterpretationException("'>' or '}' expected", content.getPosition(c), 0);
 						}
 					}
-					if (baseType.getTypeParameters().length != params.size())
-						throw new QonfigInterpretationException(
-							baseType.getName() + " has " + baseType.getTypeParameters().length + " parameter"
-								+ (baseType.getTypeParameters().length == 1 ? "" : "s") + ", not " + params.size()
-								+ ". Cannot be parameterized with <" + StringUtils.print(", ", params, Object::toString) + ">", //
-								position == null ? null : new LocatedFilePosition(file, position.getPosition(start[0])), c - start[0]);
-					return new Parameterized(baseType, Collections.unmodifiableList(params));
+					return new Parameterized(content, baseTypeName, Collections.unmodifiableList(params), paramsOffset);
 					// TODO [ ]
 				default:
 				}
 			}
 
-			VariableType type;
-			try {
-				type = new Simple<>(cv.parseType(text.substring(start[0])));
-			} catch (ParseException e) {
-				throw new QonfigInterpretationException(e.getMessage(), position == null ? null : new LocatedFilePosition(file, position.getPosition(start[0] + e.getErrorOffset())), //
-					0, e);
-			}
-			start[0] = text.length();
+			VariableType type = new Simple(content.subSequence(start[0]));
+			start[0] = content.length();
 			return type;
 		}
 
-		private static int parseInt(String text, int[] start) {
+		private static int parseInt(CharSequence text, int[] start) {
 			int i = 0;
 			while (text.charAt(start[0]) >= '0' && text.charAt(start[0]) <= '9') {
 				i = i * 10 + text.charAt(start[0]) - '0';
@@ -138,22 +115,32 @@ public interface VariableType {
 		}
 	}
 
-	/**
-	 * A simple type that does not depend on a model
-	 *
-	 * @param <T> The type
-	 */
-	class Simple<T> implements VariableType {
-		private final TypeToken<T> theType;
+	/** A simple type that does not depend on a model */
+	class Simple implements VariableType {
+		private final LocatedPositionedContent theContent;
+		private final String theTypeName;
 
-		/** @param type The type */
-		public Simple(TypeToken<T> type) {
-			theType = type;
+		/** @param content The name of the type */
+		public Simple(LocatedPositionedContent content) {
+			theContent = content;
+			theTypeName = content.toString().replaceAll("\\s+", "");
 		}
 
 		@Override
-		public TypeToken<T> getType(ObservableModelSet models) {
-			return theType;
+		public LocatedPositionedContent getContent() {
+			return theContent;
+		}
+
+		@Override
+		public TypeToken<?> getType(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+			Class<?> clazz;
+			try {
+				clazz = TypeTokens.getRawType(env.getClassView().parseType(theTypeName));
+			} catch (ParseException e) {
+				throw new ExpressoInterpretationException(e.getMessage(), //
+					env.reporting().getFileLocation().getPosition(e.getErrorOffset()), theContent.length() - e.getErrorOffset());
+			}
+			return TypeTokens.get().of(clazz);
 		}
 
 		@Override
@@ -163,45 +150,49 @@ public interface VariableType {
 
 		@Override
 		public int hashCode() {
-			return theType.hashCode();
+			return theContent.hashCode();
 		}
 
 		@Override
 		public boolean equals(Object obj) {
 			if (this == obj)
 				return true;
-			return obj instanceof Simple && theType.equals(((Simple<?>) obj).theType);
+			return obj instanceof Simple && theTypeName.equals(((Simple) obj).theTypeName);
 		}
 
 		@Override
 		public String toString() {
-			return theType.toString();
+			return theTypeName;
 		}
 	}
 
 	/** A type that depends on a model */
 	class ModelType implements VariableType {
-		private final String thePath;
+		private final LocatedPositionedContent theContent;
+		private final String theModelPath;
 		private final int theTypeIndex;
-		private final LocatedFilePosition thePosition;
-		private final int theLength;
+		private final int theIndexOffset;
 
 		/**
-		 * @param path The path of the model value to get the type of
+		 * @param modelPath The path of the model value to get the type of
 		 * @param typeIndex The type parameter index of the type to get
-		 * @param position The position in the file where this type was specified
-		 * @param length The length of the character sequence defininig this type
+		 * @param content The position in the file where this type was specified
 		 */
-		public ModelType(String path, int typeIndex, LocatedFilePosition position, int length) {
-			thePath = path;
+		public ModelType(LocatedPositionedContent content, String modelPath, int typeIndex, int indexOffset) {
+			theContent = content;
+			theModelPath = modelPath;
 			theTypeIndex = typeIndex;
-			thePosition = position;
-			theLength = length;
+			theIndexOffset = indexOffset;
+		}
+
+		@Override
+		public LocatedPositionedContent getContent() {
+			return theContent;
 		}
 
 		/** @return The path of the model value to get the type from */
-		public String getPath() {
-			return thePath;
+		public String getModelPath() {
+			return theModelPath;
 		}
 
 		/** @return The type parameter index of the type to get */
@@ -210,13 +201,17 @@ public interface VariableType {
 		}
 
 		@Override
-		public TypeToken<?> getType(ObservableModelSet models) throws ExpressoInterpretationException {
+		public TypeToken<?> getType(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 			ModelInstanceType<?, ?> type;
 			try {
-				type = models.getComponent(thePath).getType();
+				type = env.getModels().getComponent(theModelPath).interpreted().getType();
 			} catch (ModelException e) {
-				throw new ExpressoInterpretationException(e.getMessage(), thePosition, theLength, e);
+				throw new ExpressoInterpretationException(e.getMessage(), theContent.getPosition(0), theContent.length(), e);
 			}
+			if (theTypeIndex >= type.getModelType().getTypeCount())
+				throw new ExpressoInterpretationException("Model value '" + theModelPath + "' is of type " + type + ", with "
+					+ type.getModelType().getTypeCount() + " types. {" + theTypeIndex + "} is invalid",
+					theContent.getPosition(theIndexOffset), 0);
 			return type.getType(theTypeIndex);
 		}
 
@@ -227,7 +222,7 @@ public interface VariableType {
 
 		@Override
 		public int hashCode() {
-			return Objects.hash(thePath, theTypeIndex);
+			return Objects.hash(theModelPath, theTypeIndex);
 		}
 
 		@Override
@@ -237,32 +232,41 @@ public interface VariableType {
 			else if (!(obj instanceof ModelType))
 				return false;
 			ModelType other = (ModelType) obj;
-			return thePath.equals(other.thePath) && theTypeIndex == other.theTypeIndex;
+			return theModelPath.equals(other.theModelPath) && theTypeIndex == other.theTypeIndex;
 		}
 
 		@Override
 		public String toString() {
-			return thePath + "<" + theTypeIndex + ">";
+			return theModelPath + "<" + theTypeIndex + ">";
 		}
 	}
 
 	/** A parameterized type whose type parameters are {@link VariableType}s */
 	class Parameterized implements VariableType {
-		private final Class<?> theBaseType;
+		private final LocatedPositionedContent theContent;
+		private final String theBaseTypeName;
 		private final List<VariableType> theParameterTypes;
+		private final int theParametersOffset;
 
 		/**
 		 * @param baseType The raw type to parameterize
 		 * @param parameterTypes The parameter types
 		 */
-		public Parameterized(Class<?> baseType, List<VariableType> parameterTypes) {
-			theBaseType = baseType;
+		public Parameterized(LocatedPositionedContent content, String baseTypeName, List<VariableType> parameterTypes, int paramsOffset) {
+			theContent = content;
+			theBaseTypeName = baseTypeName;
 			theParameterTypes = parameterTypes;
+			theParametersOffset = paramsOffset;
+		}
+
+		@Override
+		public LocatedPositionedContent getContent() {
+			return theContent;
 		}
 
 		/** @return The raw type that is here parameterized */
-		public Class<?> getBaseType() {
-			return theBaseType;
+		public String getBaseTypeName() {
+			return theBaseTypeName;
 		}
 
 		/** @return The parameter types */
@@ -271,11 +275,21 @@ public interface VariableType {
 		}
 
 		@Override
-		public TypeToken<?> getType(ObservableModelSet models) throws ExpressoInterpretationException {
+		public TypeToken<?> getType(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+			Class<?> baseClass = env.getClassView().getType(theBaseTypeName);
+			if (baseClass == null)
+				throw new ExpressoInterpretationException("Unrecognized type '" + theBaseTypeName, //
+					env.reporting().getFileLocation().getPosition(0), theBaseTypeName.length());
+			else if (baseClass.getTypeParameters().length != theParameterTypes.size())
+				throw new ExpressoInterpretationException(
+					theBaseTypeName + " has " + baseClass.getTypeParameters().length + " parameter"
+						+ (baseClass.getTypeParameters().length == 1 ? "" : "s") + ", not " + theParameterTypes.size()
+						+ ". Cannot be parameterized with <" + StringUtils.print(", ", theParameterTypes, Object::toString) + ">", //
+						theContent.getPosition(theParametersOffset), 0);
 			TypeToken<?>[] params = new TypeToken[theParameterTypes.size()];
 			for (int i = 0; i < theParameterTypes.size(); i++)
-				params[i] = theParameterTypes.get(i).getType(models);
-			return TypeTokens.get().keyFor(theBaseType).parameterized(params);
+				params[i] = theParameterTypes.get(i).getType(env);
+			return TypeTokens.get().keyFor(baseClass).parameterized(params);
 		}
 
 		@Override
@@ -289,7 +303,7 @@ public interface VariableType {
 
 		@Override
 		public int hashCode() {
-			return Objects.hash(theBaseType, theParameterTypes);
+			return Objects.hash(theBaseTypeName, theParameterTypes);
 		}
 
 		@Override
@@ -299,12 +313,12 @@ public interface VariableType {
 			else if (!(obj instanceof Parameterized))
 				return false;
 			Parameterized other = (Parameterized) obj;
-			return theBaseType.equals(other.theBaseType) && theParameterTypes.equals(other.theParameterTypes);
+			return theBaseTypeName.equals(other.theBaseTypeName) && theParameterTypes.equals(other.theParameterTypes);
 		}
 
 		@Override
 		public String toString() {
-			StringBuilder str = new StringBuilder(theBaseType.toString());
+			StringBuilder str = new StringBuilder(theBaseTypeName);
 			str.append('<');
 			for (int i = 0; i < theParameterTypes.size(); i++) {
 				if (i > 0)

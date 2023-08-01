@@ -1,19 +1,20 @@
 package org.observe.quick;
 
 import java.awt.Color;
-import java.util.Map;
 
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.expresso.ExpressoInterpretationException;
+import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.qonfig.ExElement;
-import org.observe.quick.style.CompiledStyleApplication;
-import org.observe.quick.style.InterpretedStyleApplication;
 import org.observe.quick.style.QuickCompiledStyle;
 import org.observe.quick.style.QuickInterpretedStyle;
-import org.observe.quick.style.QuickStyleAttribute;
+import org.observe.quick.style.QuickInterpretedStyleCache;
+import org.observe.quick.style.QuickInterpretedStyleCache.Applications;
+import org.observe.quick.style.QuickStyleAttributeDef;
+import org.observe.quick.style.QuickStyledElement;
 import org.observe.quick.style.QuickTypeStyle;
 import org.observe.util.TypeTokens;
 
@@ -30,51 +31,51 @@ public interface QuickTextElement extends QuickStyledElement {
 
 	public interface QuickTextStyle extends QuickInstanceStyle {
 		public interface Def extends QuickInstanceStyle.Def {
-			QuickStyleAttribute<Color> getFontColor();
+			QuickStyleAttributeDef getFontColor();
 
-			QuickStyleAttribute<Double> getFontSize();
+			QuickStyleAttributeDef getFontSize();
 
-			QuickStyleAttribute<Double> getFontWeight();
+			QuickStyleAttributeDef getFontWeight();
 
-			QuickStyleAttribute<Double> getFontSlant();
+			QuickStyleAttributeDef getFontSlant();
 
-			QuickStyleAttribute<Boolean> isUnderline();
+			QuickStyleAttributeDef isUnderline();
 
-			QuickStyleAttribute<Boolean> isStrikeThrough();
+			QuickStyleAttributeDef isStrikeThrough();
 
-			QuickStyleAttribute<Boolean> isSuperScript();
+			QuickStyleAttributeDef isSuperScript();
 
-			QuickStyleAttribute<Boolean> isSubScript();
+			QuickStyleAttributeDef isSubScript();
 
 			@Override
 			Interpreted interpret(ExElement.Interpreted<?> parentEl, QuickInterpretedStyle parent,
-				Map<CompiledStyleApplication, InterpretedStyleApplication> applications) throws ExpressoInterpretationException;
+				InterpretedExpressoEnv env) throws ExpressoInterpretationException;
 
 			public abstract class Abstract extends QuickCompiledStyle.Wrapper implements Def {
 				private final Object theId;
 
-				private final QuickStyleAttribute<Color> theFontColor;
-				private final QuickStyleAttribute<Double> theFontSize;
-				private final QuickStyleAttribute<Double> theFontWeight;
-				private final QuickStyleAttribute<Double> theFontSlant;
-				private final QuickStyleAttribute<Boolean> isUnderline;
-				private final QuickStyleAttribute<Boolean> isStrikeThrough;
-				private final QuickStyleAttribute<Boolean> isSuperScript;
-				private final QuickStyleAttribute<Boolean> isSubScript;
+				private final QuickStyleAttributeDef theFontColor;
+				private final QuickStyleAttributeDef theFontSize;
+				private final QuickStyleAttributeDef theFontWeight;
+				private final QuickStyleAttributeDef theFontSlant;
+				private final QuickStyleAttributeDef isUnderline;
+				private final QuickStyleAttributeDef isStrikeThrough;
+				private final QuickStyleAttributeDef isSuperScript;
+				private final QuickStyleAttributeDef isSubScript;
 
 				protected Abstract(QuickCompiledStyle parent, QuickCompiledStyle wrapped) {
 					super(parent, wrapped);
 					theId = new Object();
 					QuickTypeStyle typeStyle = QuickStyledElement.getTypeStyle(wrapped.getStyleTypes(), wrapped.getElement(),
 						QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, "with-text");
-					theFontColor = (QuickStyleAttribute<Color>) typeStyle.getAttribute("font-color", Color.class);
-					theFontSize = (QuickStyleAttribute<Double>) typeStyle.getAttribute("font-size", double.class);
-					theFontWeight = (QuickStyleAttribute<Double>) typeStyle.getAttribute("font-weight", double.class);
-					theFontSlant = (QuickStyleAttribute<Double>) typeStyle.getAttribute("font-slant", double.class);
-					isUnderline = (QuickStyleAttribute<Boolean>) typeStyle.getAttribute("underline", boolean.class);
-					isStrikeThrough = (QuickStyleAttribute<Boolean>) typeStyle.getAttribute("strike-through", boolean.class);
-					isSuperScript = (QuickStyleAttribute<Boolean>) typeStyle.getAttribute("super-script", boolean.class);
-					isSubScript = (QuickStyleAttribute<Boolean>) typeStyle.getAttribute("sub-script", boolean.class);
+					theFontColor = typeStyle.getAttribute("font-color");
+					theFontSize = typeStyle.getAttribute("font-size");
+					theFontWeight = typeStyle.getAttribute("font-weight");
+					theFontSlant = typeStyle.getAttribute("font-slant");
+					isUnderline = typeStyle.getAttribute("underline");
+					isStrikeThrough = typeStyle.getAttribute("strike-through");
+					isSuperScript = typeStyle.getAttribute("super-script");
+					isSubScript = typeStyle.getAttribute("sub-script");
 				}
 
 				@Override
@@ -83,48 +84,48 @@ public interface QuickTextElement extends QuickStyledElement {
 				}
 
 				@Override
-				public QuickStyleAttribute<Color> getFontColor() {
+				public QuickStyleAttributeDef getFontColor() {
 					return theFontColor;
 				}
 
 				@Override
-				public QuickStyleAttribute<Double> getFontSize() {
+				public QuickStyleAttributeDef getFontSize() {
 					return theFontSize;
 				}
 
 				@Override
-				public QuickStyleAttribute<Double> getFontWeight() {
+				public QuickStyleAttributeDef getFontWeight() {
 					return theFontWeight;
 				}
 
 				@Override
-				public QuickStyleAttribute<Double> getFontSlant() {
+				public QuickStyleAttributeDef getFontSlant() {
 					return theFontSlant;
 				}
 
 				@Override
-				public QuickStyleAttribute<Boolean> isUnderline() {
+				public QuickStyleAttributeDef isUnderline() {
 					return isUnderline;
 				}
 
 				@Override
-				public QuickStyleAttribute<Boolean> isStrikeThrough() {
+				public QuickStyleAttributeDef isStrikeThrough() {
 					return isStrikeThrough;
 				}
 
 				@Override
-				public QuickStyleAttribute<Boolean> isSuperScript() {
+				public QuickStyleAttributeDef isSuperScript() {
 					return isSuperScript;
 				}
 
 				@Override
-				public QuickStyleAttribute<Boolean> isSubScript() {
+				public QuickStyleAttributeDef isSubScript() {
 					return isSubScript;
 				}
 
 				@Override
 				public abstract Interpreted interpret(ExElement.Interpreted<?> parentEl, QuickInterpretedStyle parent,
-					Map<CompiledStyleApplication, InterpretedStyleApplication> applications) throws ExpressoInterpretationException;
+					InterpretedExpressoEnv env) throws ExpressoInterpretationException;
 			}
 		}
 
@@ -149,32 +150,24 @@ public interface QuickTextElement extends QuickStyledElement {
 			QuickElementStyleAttribute<Boolean> isSubScript();
 
 			public abstract class Abstract extends QuickInterpretedStyle.Wrapper implements Interpreted {
-				private final Object theId;
-				private final QuickElementStyleAttribute<Color> theFontColor;
-				private final QuickElementStyleAttribute<Double> theFontSize;
-				private final QuickElementStyleAttribute<Double> theFontWeight;
-				private final QuickElementStyleAttribute<Double> theFontSlant;
-				private final QuickElementStyleAttribute<Boolean> isUnderline;
-				private final QuickElementStyleAttribute<Boolean> isStrikeThrough;
-				private final QuickElementStyleAttribute<Boolean> isSuperScript;
-				private final QuickElementStyleAttribute<Boolean> isSubScript;
+				private final Def theDefinition;
+				private QuickElementStyleAttribute<Color> theFontColor;
+				private QuickElementStyleAttribute<Double> theFontSize;
+				private QuickElementStyleAttribute<Double> theFontWeight;
+				private QuickElementStyleAttribute<Double> theFontSlant;
+				private QuickElementStyleAttribute<Boolean> isUnderline;
+				private QuickElementStyleAttribute<Boolean> isStrikeThrough;
+				private QuickElementStyleAttribute<Boolean> isSuperScript;
+				private QuickElementStyleAttribute<Boolean> isSubScript;
 
 				protected Abstract(Def definition, QuickInterpretedStyle parent, QuickInterpretedStyle wrapped) {
 					super(parent, wrapped);
-					theId = definition.getId();
-					theFontColor = wrapped.get(definition.getFontColor());
-					theFontSize = wrapped.get(definition.getFontSize());
-					theFontWeight = wrapped.get(definition.getFontWeight());
-					theFontSlant = wrapped.get(definition.getFontSlant());
-					isUnderline = wrapped.get(definition.isUnderline());
-					isStrikeThrough = wrapped.get(definition.isStrikeThrough());
-					isSuperScript = wrapped.get(definition.isSuperScript());
-					isSubScript = wrapped.get(definition.isSubScript());
+					theDefinition = definition;
 				}
 
 				@Override
-				public Object getId() {
-					return theId;
+				public Def getDefinition() {
+					return theDefinition;
 				}
 
 				@Override
@@ -215,6 +208,20 @@ public interface QuickTextElement extends QuickStyledElement {
 				@Override
 				public QuickElementStyleAttribute<Boolean> isSubScript() {
 					return isSubScript;
+				}
+
+				@Override
+				public void update(InterpretedExpressoEnv env, Applications appCache) throws ExpressoInterpretationException {
+					super.update(env, appCache);
+					QuickInterpretedStyleCache cache = QuickInterpretedStyleCache.get(env);
+					theFontColor = get(cache.getAttribute(getDefinition().getFontColor(), Color.class, env));
+					theFontSize = get(cache.getAttribute(getDefinition().getFontSize(), Double.class, env));
+					theFontWeight = get(cache.getAttribute(getDefinition().getFontWeight(), Double.class, env));
+					theFontSlant = get(cache.getAttribute(getDefinition().getFontSlant(), Double.class, env));
+					isUnderline = get(cache.getAttribute(getDefinition().isUnderline(), Boolean.class, env));
+					isStrikeThrough = get(cache.getAttribute(getDefinition().isStrikeThrough(), Boolean.class, env));
+					isSuperScript = get(cache.getAttribute(getDefinition().isSuperScript(), Boolean.class, env));
+					isSubScript = get(cache.getAttribute(getDefinition().isSubScript(), Boolean.class, env));
 				}
 			}
 		}

@@ -1,28 +1,32 @@
 package org.observe.quick;
 
 import java.awt.Color;
-import java.util.Map;
+import java.util.List;
 
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.expresso.ExpressoInterpretationException;
+import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.qonfig.CompiledExpression;
 import org.observe.expresso.qonfig.ElementTypeTraceability;
+import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
-import org.observe.quick.style.CompiledStyleApplication;
-import org.observe.quick.style.InterpretedStyleApplication;
 import org.observe.quick.style.QuickCompiledStyle;
 import org.observe.quick.style.QuickInterpretedStyle;
-import org.observe.quick.style.QuickStyleAttribute;
+import org.observe.quick.style.QuickInterpretedStyleCache;
+import org.observe.quick.style.QuickInterpretedStyleCache.Applications;
+import org.observe.quick.style.QuickStyleAttributeDef;
+import org.observe.quick.style.QuickStyleValue;
+import org.observe.quick.style.QuickStyledElement;
 import org.observe.quick.style.QuickTypeStyle;
 import org.observe.util.TypeTokens;
-import org.qommons.config.QonfigElement;
+import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
 public interface QuickBorder extends QuickStyledElement {
@@ -37,6 +41,8 @@ public interface QuickBorder extends QuickStyledElement {
 		@Override
 		QuickBorderStyle.Interpreted getStyle();
 
+		void updateBorder(InterpretedExpressoEnv env) throws ExpressoInterpretationException;
+
 		B create(ExElement parent);
 	}
 
@@ -45,14 +51,13 @@ public interface QuickBorder extends QuickStyledElement {
 
 	public class LineBorder extends QuickStyledElement.Abstract implements QuickBorder {
 		public static final String LINE_BORDER = "line-border";
-		private static final ElementTypeTraceability<LineBorder, Interpreted<?>, Def<?>> TRACEABILITY = ElementTypeTraceability
-			.<LineBorder, Interpreted<?>, Def<?>> build(QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, LINE_BORDER)//
-			.reflectMethods(Def.class, Interpreted.class, LineBorder.class)//
-			.build();
+		private static final SingleTypeTraceability<LineBorder, Interpreted<?>, Def<?>> TRACEABILITY = ElementTypeTraceability
+			.getElementTraceability(QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, LINE_BORDER, Def.class,
+				Interpreted.class, LineBorder.class);
 
 		public static class Def<B extends LineBorder> extends QuickStyledElement.Def.Abstract<B> implements QuickBorder.Def<B> {
-			public Def(ExElement.Def<?> parent, QonfigElement element) {
-				super(parent, element);
+			public Def(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
+				super(parent, type);
 			}
 
 			@Override
@@ -61,9 +66,9 @@ public interface QuickBorder extends QuickStyledElement {
 			}
 
 			@Override
-			public void update(ExpressoQIS session) throws QonfigInterpretationException {
+			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 				withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
-				super.update(session.asElement("styled"));
+				super.doUpdate(session.asElement("styled"));
 			}
 
 			@Override
@@ -94,6 +99,11 @@ public interface QuickBorder extends QuickStyledElement {
 			}
 
 			@Override
+			public void updateBorder(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+				update(env);
+			}
+
+			@Override
 			public B create(ExElement parent) {
 				return (B) new LineBorder(this, parent);
 			}
@@ -111,16 +121,15 @@ public interface QuickBorder extends QuickStyledElement {
 
 	public class TitledBorder extends LineBorder implements QuickTextElement {
 		public static final String TITLED_BORDER = "titled-border";
-		private static final ElementTypeTraceability<LineBorder, Interpreted<?>, Def<?>> TRACEABILITY = ElementTypeTraceability
-			.<LineBorder, Interpreted<?>, Def<?>> build(QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, TITLED_BORDER)//
-			.reflectMethods(Def.class, Interpreted.class, LineBorder.class)//
-			.build();
+		private static final SingleTypeTraceability<LineBorder, Interpreted<?>, Def<?>> TRACEABILITY = ElementTypeTraceability
+			.getElementTraceability(QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, TITLED_BORDER, Def.class,
+				Interpreted.class, LineBorder.class);
 
 		public static class Def<B extends TitledBorder> extends LineBorder.Def<B> {
 			private CompiledExpression theTitle;
 
-			public Def(ExElement.Def<?> parent, QonfigElement element) {
-				super(parent, element);
+			public Def(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
+				super(parent, type);
 			}
 
 			@QonfigAttributeGetter("title")
@@ -129,9 +138,9 @@ public interface QuickBorder extends QuickStyledElement {
 			}
 
 			@Override
-			public void update(ExpressoQIS session) throws QonfigInterpretationException {
+			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 				withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
-				super.update(session.asElement(session.getFocusType().getSuperElement()));
+				super.doUpdate(session.asElement(session.getFocusType().getSuperElement()));
 				theTitle = session.getAttributeExpression("title");
 			}
 
@@ -163,9 +172,9 @@ public interface QuickBorder extends QuickStyledElement {
 			}
 
 			@Override
-			public void update(QuickInterpretationCache cache) throws ExpressoInterpretationException {
-				super.update(cache);
-				theTitle = getDefinition().getTitle().evaluate(ModelTypes.Value.STRING).interpret();
+			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+				super.doUpdate(env);
+				theTitle = getDefinition().getTitle().interpret(ModelTypes.Value.STRING, getExpressoEnv());
 			}
 
 			@Override
@@ -200,42 +209,51 @@ public interface QuickBorder extends QuickStyledElement {
 
 		public static class QuickTitledBorderStyle extends QuickTextStyle.Abstract implements QuickBorderStyle {
 			public static class Def extends QuickTextStyle.Def.Abstract implements QuickBorderStyle.Def {
-				private final QuickStyleAttribute<Color> theBorderColor;
-				private final QuickStyleAttribute<Integer> theBorderThickness;
+				private final QuickStyleAttributeDef theBorderColor;
+				private final QuickStyleAttributeDef theBorderThickness;
 
 				public Def(QuickCompiledStyle parent, QuickCompiledStyle wrapped) {
 					super(parent, wrapped);
 					QuickTypeStyle typeStyle = QuickStyledElement.getTypeStyle(wrapped.getStyleTypes(), getElement(),
 						QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, "titled-border");
-					theBorderColor = (QuickStyleAttribute<Color>) typeStyle.getAttribute("border-color", Color.class);
-					theBorderThickness = (QuickStyleAttribute<Integer>) typeStyle.getAttribute("thickness", Integer.class);
+					theBorderColor = typeStyle.getAttribute("border-color");
+					theBorderThickness = typeStyle.getAttribute("thickness");
 				}
 
 				@Override
-				public QuickStyleAttribute<Color> getBorderColor() {
+				public QuickStyleAttributeDef getBorderColor() {
 					return theBorderColor;
 				}
 
 				@Override
-				public QuickStyleAttribute<Integer> getBorderThickness() {
+				public QuickStyleAttributeDef getBorderThickness() {
 					return theBorderThickness;
 				}
 
 				@Override
-				public Interpreted interpret(ExElement.Interpreted<?> parentEl, QuickInterpretedStyle parent,
-					Map<CompiledStyleApplication, InterpretedStyleApplication> applications) throws ExpressoInterpretationException {
-					return new Interpreted(this, parent, getWrapped().interpret(parentEl, parent, applications));
+				public void update(List<QuickStyleValue> declaredValues, List<QuickStyleValue> otherValues)
+					throws QonfigInterpretationException {
+					super.update(declaredValues, otherValues);
+				}
+
+				@Override
+				public Interpreted interpret(org.observe.expresso.qonfig.ExElement.Interpreted<?> parentEl, QuickInterpretedStyle parent,
+					InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+					return new Interpreted(this, parent, getWrapped().interpret(parentEl, parent, env));
 				}
 			}
 
 			public static class Interpreted extends QuickTextStyle.Interpreted.Abstract implements QuickBorderStyle.Interpreted {
-				private final QuickElementStyleAttribute<Color> theBorderColor;
-				private final QuickElementStyleAttribute<Integer> theBorderThickness;
+				private QuickElementStyleAttribute<Color> theBorderColor;
+				private QuickElementStyleAttribute<Integer> theBorderThickness;
 
 				public Interpreted(Def definition, QuickInterpretedStyle parent, QuickInterpretedStyle wrapped) {
 					super(definition, parent, wrapped);
-					theBorderColor = get(definition.getBorderColor());
-					theBorderThickness = get(definition.getBorderThickness());
+				}
+
+				@Override
+				public Def getDefinition() {
+					return (Def) super.getDefinition();
 				}
 
 				@Override
@@ -246,6 +264,14 @@ public interface QuickBorder extends QuickStyledElement {
 				@Override
 				public QuickElementStyleAttribute<Integer> getBorderThickness() {
 					return theBorderThickness;
+				}
+
+				@Override
+				public void update(InterpretedExpressoEnv env, Applications appCache) throws ExpressoInterpretationException {
+					super.update(env, appCache);
+					QuickInterpretedStyleCache cache = QuickInterpretedStyleCache.get(env);
+					theBorderColor = get(cache.getAttribute(getDefinition().getBorderColor(), Color.class, env));
+					theBorderThickness = get(cache.getAttribute(getDefinition().getBorderThickness(), Integer.class, env));
 				}
 
 				@Override
@@ -287,27 +313,27 @@ public interface QuickBorder extends QuickStyledElement {
 
 	public interface QuickBorderStyle extends QuickInstanceStyle {
 		public interface Def extends QuickInstanceStyle.Def {
-			QuickStyleAttribute<Color> getBorderColor();
+			QuickStyleAttributeDef getBorderColor();
 
-			QuickStyleAttribute<Integer> getBorderThickness();
+			QuickStyleAttributeDef getBorderThickness();
 
 			@Override
-			Interpreted interpret(ExElement.Interpreted<?> parentEl, QuickInterpretedStyle parent,
-				Map<CompiledStyleApplication, InterpretedStyleApplication> applications) throws ExpressoInterpretationException;
+			Interpreted interpret(ExElement.Interpreted<?> parentEl, QuickInterpretedStyle parent, InterpretedExpressoEnv env)
+				throws ExpressoInterpretationException;
 
 			public class Default extends QuickCompiledStyle.Wrapper implements Def {
 				private final Object theId;
 
-				private final QuickStyleAttribute<Color> theBorderColor;
-				private final QuickStyleAttribute<Integer> theBorderThickness;
+				private QuickStyleAttributeDef theBorderColor;
+				private QuickStyleAttributeDef theBorderThickness;
 
 				public Default(QuickCompiledStyle parent, QuickCompiledStyle wrapped) {
 					super(parent, wrapped);
 					theId = new Object();
 					QuickTypeStyle typeStyle = QuickStyledElement.getTypeStyle(wrapped.getStyleTypes(), getElement(),
 						QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, "border");
-					theBorderColor = (QuickStyleAttribute<Color>) typeStyle.getAttribute("border-color", Color.class);
-					theBorderThickness = (QuickStyleAttribute<Integer>) typeStyle.getAttribute("thickness", Integer.class);
+					theBorderColor = typeStyle.getAttribute("border-color");
+					theBorderThickness = typeStyle.getAttribute("thickness");
 				}
 
 				@Override
@@ -316,19 +342,25 @@ public interface QuickBorder extends QuickStyledElement {
 				}
 
 				@Override
-				public QuickStyleAttribute<Color> getBorderColor() {
+				public QuickStyleAttributeDef getBorderColor() {
 					return theBorderColor;
 				}
 
 				@Override
-				public QuickStyleAttribute<Integer> getBorderThickness() {
+				public QuickStyleAttributeDef getBorderThickness() {
 					return theBorderThickness;
 				}
 
 				@Override
-				public Interpreted interpret(ExElement.Interpreted<?> parentEl, QuickInterpretedStyle parent,
-					Map<CompiledStyleApplication, InterpretedStyleApplication> applications) throws ExpressoInterpretationException {
-					return new Interpreted.Default(this, parent, getWrapped().interpret(parentEl, parent, applications));
+				public void update(List<QuickStyleValue> declaredValues, List<QuickStyleValue> otherValues)
+					throws QonfigInterpretationException {
+					super.update(declaredValues, otherValues);
+				}
+
+				@Override
+				public Interpreted interpret(ExElement.Interpreted<?> parentEl, QuickInterpretedStyle parent, InterpretedExpressoEnv env)
+					throws ExpressoInterpretationException {
+					return new Interpreted.Default(this, parent, getWrapped().interpret(parentEl, parent, env));
 				}
 			}
 		}
@@ -342,20 +374,18 @@ public interface QuickBorder extends QuickStyledElement {
 			QuickBorderStyle create(QuickStyledElement styledElement);
 
 			public class Default extends QuickInterpretedStyle.Wrapper implements Interpreted {
-				private final Object theId;
-				private final QuickElementStyleAttribute<Color> theBorderColor;
-				private final QuickElementStyleAttribute<Integer> theBorderThickness;
+				private final Def theDefinition;
+				private QuickElementStyleAttribute<Color> theBorderColor;
+				private QuickElementStyleAttribute<Integer> theBorderThickness;
 
 				public Default(Def definition, QuickInterpretedStyle parent, QuickInterpretedStyle wrapped) {
 					super(parent, wrapped);
-					theId = definition.getId();
-					theBorderColor = get(definition.getBorderColor());
-					theBorderThickness = get(definition.getBorderThickness());
+					theDefinition = definition;
 				}
 
 				@Override
-				public Object getId() {
-					return theId;
+				public Def getDefinition() {
+					return theDefinition;
 				}
 
 				@Override
@@ -366,6 +396,14 @@ public interface QuickBorder extends QuickStyledElement {
 				@Override
 				public QuickElementStyleAttribute<Integer> getBorderThickness() {
 					return theBorderThickness;
+				}
+
+				@Override
+				public void update(InterpretedExpressoEnv env, Applications appCache) throws ExpressoInterpretationException {
+					super.update(env, appCache);
+					QuickInterpretedStyleCache cache = QuickInterpretedStyleCache.get(env);
+					theBorderColor = get(cache.getAttribute(getDefinition().getBorderColor(), Color.class, env));
+					theBorderThickness = get(cache.getAttribute(getDefinition().getBorderThickness(), Integer.class, env));
 				}
 
 				@Override

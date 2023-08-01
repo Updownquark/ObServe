@@ -4,9 +4,10 @@ import java.util.Collections;
 import java.util.List;
 import java.util.function.Function;
 
-import org.observe.expresso.ExpressoEnv;
+import org.observe.expresso.CompiledExpressoEnv;
 import org.observe.expresso.ExpressoEvaluationException;
 import org.observe.expresso.ExpressoInterpretationException;
+import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelType;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ObservableExpression;
@@ -49,12 +50,12 @@ public class ParentheticExpression implements ObservableExpression {
 	}
 
 	@Override
-	public ModelType<?> getModelType(ExpressoEnv env) {
+	public ModelType<?> getModelType(CompiledExpressoEnv env) {
 		return theContent.getModelType(env);
 	}
 
 	@Override
-	public <M, MV extends M> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env,
+	public <M, MV extends M> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, InterpretedExpressoEnv env,
 		int expressionOffset) throws ExpressoEvaluationException, ExpressoInterpretationException {
 		return ObservableExpression.wrap(theContent.evaluateInternal(type, env, expressionOffset));
 	}

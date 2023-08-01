@@ -7,31 +7,31 @@ import java.util.List;
 import org.observe.SettableValue;
 import org.observe.collect.ObservableCollection;
 import org.observe.expresso.ExpressoInterpretationException;
+import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.qonfig.CompiledExpression;
-import org.observe.expresso.qonfig.DynamicModelValue;
 import org.observe.expresso.qonfig.ElementTypeTraceability;
+import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.observe.expresso.qonfig.ExElement;
+import org.observe.expresso.qonfig.ExWithElementModel;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.expresso.qonfig.QonfigChildGetter;
-import org.observe.quick.QuickStyledElement;
 import org.observe.util.TypeTokens;
 import org.qommons.collect.CollectionUtils;
-import org.qommons.config.QonfigElement;
+import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
 import com.google.common.reflect.TypeToken;
 
 public class QuickTable<R> extends TabularWidget.Abstract<R> {
 	public static final String TABLE = "table";
-	private static final ElementTypeTraceability<QuickTable<?>, Interpreted<?>, Def> TRACEABILITY = ElementTypeTraceability
-		.<QuickTable<?>, Interpreted<?>, Def> build(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, TABLE)//
-		.reflectMethods(Def.class, Interpreted.class, QuickTable.class)//
-		.build();
+	private static final SingleTypeTraceability<QuickTable<?>, Interpreted<?>, Def> TRACEABILITY = ElementTypeTraceability
+		.getElementTraceability(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, TABLE, Def.class, Interpreted.class,
+			QuickTable.class);
 
 	public static class Def extends TabularWidget.Def.Abstract<QuickTable<?>> {
 		private CompiledExpression theRows;
@@ -40,8 +40,8 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 		private CompiledExpression theMultiSelection;
 		private final List<ValueAction.Def<?, ?>> theActions;
 
-		public Def(ExElement.Def<?> parent, QonfigElement element) {
-			super(parent, element);
+		public Def(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
+			super(parent, type);
 			theActions = new ArrayList<>();
 		}
 
@@ -71,14 +71,22 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 		}
 
 		@Override
-		public void update(ExpressoQIS session) throws QonfigInterpretationException {
+		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
-			super.update(session.asElement("tabular-widget"));
-			theRows = session.getAttributeExpression("rows");
 			theValueName = session.getAttributeText("value-name");
+			super.doUpdate(session.asElement("tabular-widget"));
+			theRows = session.getAttributeExpression("rows");
 			theSelection = session.getAttributeExpression("selection");
 			theMultiSelection = session.getAttributeExpression("multi-selection");
 			ExElement.syncDefs(ValueAction.Def.class, theActions, session.forChildren("action"));
+			getAddOn(ExWithElementModel.Def.class).satisfyElementValueType(theValueName, ModelTypes.Value,
+				(interp, env) -> ModelTypes.Value.forType(((Interpreted<?>) interp).getRowType()));
+		}
+
+		@Override
+		protected TypeToken<?> getRowType(TabularWidget.Interpreted<?, ?> interpreted, InterpretedExpressoEnv env)
+			throws ExpressoInterpretationException {
+			return ((Interpreted<?>) interpreted).getRowType();
 		}
 
 		@Override
@@ -132,23 +140,21 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 		}
 
 		@Override
-		public void update(QuickStyledElement.QuickInterpretationCache cache) throws ExpressoInterpretationException {
+		protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 			// Do this first so we have the row type
-			theRows = getDefinition().getRows().evaluate(ModelTypes.Collection.<R> anyAsV()).interpret();
-			DynamicModelValue.satisfyDynamicValueType(getDefinition().getValueName(), getDefinition().getModels(),
-				ModelTypes.Value.forType(theRows.getType().getType(0)));
-			super.update(cache);
+			theRows = getDefinition().getRows().interpret(ModelTypes.Collection.<R> anyAsV(), env);
+			super.doUpdate(env);
 			theSelection = getDefinition().getSelection() == null ? null
-				: getDefinition().getSelection().evaluate(ModelTypes.Value.forType(getRowType())).interpret();
+				: getDefinition().getSelection().interpret(ModelTypes.Value.forType(getRowType()), env);
 			theMultiSelection = getDefinition().getMultiSelection() == null ? null
-				: getDefinition().getMultiSelection().evaluate(ModelTypes.Collection.forType(getRowType())).interpret();
+				: getDefinition().getMultiSelection().interpret(ModelTypes.Collection.forType(getRowType()), env);
 			CollectionUtils.synchronize(theActions, getDefinition().getActions(), //
-				(a, d) -> a.getDefinition() == d)//
+				(a, d) -> a.getIdentity() == d.getIdentity())//
 			.<ExpressoInterpretationException> simpleE(
 				child -> (ValueAction.Interpreted<R, ?>) ((ValueAction.Def<R, ?>) child).interpret(this, getRowType()))//
 			.rightOrder()//
-			.onRightX(element -> element.getLeftValue().update())//
-			.onCommonX(element -> element.getLeftValue().update())//
+			.onRightX(element -> element.getLeftValue().updateAction(getExpressoEnv()))//
+			.onCommonX(element -> element.getLeftValue().updateAction(getExpressoEnv()))//
 			.adjust();
 		}
 
@@ -201,8 +207,7 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 		theSelection.set(myInterpreted.getSelection() == null ? null : myInterpreted.getSelection().get(myModels), null);
 		theMultiSelection.set(myInterpreted.getMultiSelection() == null ? null : myInterpreted.getMultiSelection().get(myModels), null);
 		CollectionUtils.synchronize(theActions, myInterpreted.getActions(), //
-			(a, i) -> a.getIdentity() == i.getDefinition().getIdentity())
-		.<ModelInstantiationException> simpleE(action -> action.create(this))//
+			(a, i) -> a.getIdentity() == i.getIdentity()).<ModelInstantiationException> simpleE(action -> action.create(this))//
 		.rightOrder()//
 		.onRightX(element -> element.getLeftValue().update(element.getRightValue(), myModels))//
 		.onCommonX(element -> element.getLeftValue().update(element.getRightValue(), myModels))//

@@ -1,33 +1,35 @@
 package org.observe.quick.style;
 
 import org.observe.SettableValue;
-import org.observe.expresso.ExpressoEnv;
-import org.observe.expresso.ObservableModelSet.ModelValueSynth;
+import org.observe.expresso.InterpretedExpressoEnv;
+import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 
 /**
- * A {@link QuickStyleValue style value} evaluated for an {@link ExpressoEnv environment}
+ * A {@link QuickStyleValue style value} evaluated for an {@link InterpretedExpressoEnv environment}
  *
  * @param <T> The type of the value
  */
 public class InterpretedStyleValue<T> implements Comparable<InterpretedStyleValue<?>> {
-	private final QuickStyleValue<T> theStyleValue;
+	private final QuickStyleValue theStyleValue;
 	private final InterpretedStyleApplication theApplication;
-	private final ModelValueSynth<SettableValue<?>, SettableValue<T>> theValue;
+	private final QuickStyleAttribute<T> theAttribute;
+	private final InterpretedValueSynth<SettableValue<?>, SettableValue<T>> theValue;
 
 	/**
 	 * @param styleValue The style value this structure is evaluated from
 	 * @param application The application for this value
 	 * @param value The value container
 	 */
-	public InterpretedStyleValue(QuickStyleValue<T> styleValue, InterpretedStyleApplication application,
-		ModelValueSynth<SettableValue<?>, SettableValue<T>> value) {
+	public InterpretedStyleValue(QuickStyleValue styleValue, InterpretedStyleApplication application, QuickStyleAttribute<T> attribute,
+		InterpretedValueSynth<SettableValue<?>, SettableValue<T>> value) {
 		theStyleValue = styleValue;
 		theApplication = application;
+		theAttribute = attribute;
 		theValue = value;
 	}
 
 	/** @return The style value this structure is evaluated from */
-	public QuickStyleValue<T> getStyleValue() {
+	public QuickStyleValue getStyleValue() {
 		return theStyleValue;
 	}
 
@@ -36,8 +38,12 @@ public class InterpretedStyleValue<T> implements Comparable<InterpretedStyleValu
 		return theApplication;
 	}
 
+	public QuickStyleAttribute<T> getAttribute() {
+		return theAttribute;
+	}
+
 	/** @return The value container */
-	public ModelValueSynth<SettableValue<?>, SettableValue<T>> getValue() {
+	public InterpretedValueSynth<SettableValue<?>, SettableValue<T>> getValue() {
 		return theValue;
 	}
 

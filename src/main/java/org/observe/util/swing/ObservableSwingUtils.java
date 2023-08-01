@@ -519,7 +519,8 @@ public class ObservableSwingUtils {
 				if (selModel.getMinSelectionIndex() >= 0 && selModel.getMinSelectionIndex() == selModel.getMaxSelectionIndex()
 					&& selModel.getMinSelectionIndex() < model.getSize()) {
 					E selectedValue = model.getElementAt(selModel.getMinSelectionIndex());
-					safeSelection.set(selectedValue, e);
+					if (safeSelection.isAcceptable(selectedValue) == null)
+						safeSelection.set(selectedValue, e);
 				} else if (safeSelection.get() != null)
 					safeSelection.set(null, e);
 			} finally {
@@ -547,7 +548,9 @@ public class ObservableSwingUtils {
 						Transaction t = selection.tryLock(true, e);
 						if (t != null) {
 							try {
-								selection.set(model.getElementAt(selModel.getMinSelectionIndex()), e);
+								E newSelection = model.getElementAt(selModel.getMinSelectionIndex());
+								if (selection.isAcceptable(newSelection) == null)
+									selection.set(newSelection, e);
 							} finally {
 								t.close();
 							}

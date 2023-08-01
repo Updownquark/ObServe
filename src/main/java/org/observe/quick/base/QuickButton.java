@@ -5,38 +5,37 @@ import javax.swing.Icon;
 import org.observe.ObservableAction;
 import org.observe.SettableValue;
 import org.observe.expresso.ExpressoInterpretationException;
+import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.qonfig.CompiledExpression;
 import org.observe.expresso.qonfig.ElementTypeTraceability;
+import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
-import org.observe.quick.QuickStyledElement;
 import org.observe.quick.QuickWidget;
 import org.observe.util.TypeTokens;
-import org.qommons.config.QonfigElement;
+import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
-import org.qommons.ex.ExFunction;
 
 import com.google.common.reflect.TypeToken;
 
 public class QuickButton extends QuickWidget.Abstract {
 	public static final String BUTTON = "button";
-	private static final ElementTypeTraceability<QuickButton, Interpreted<?>, Def<?>> TRACEABILITY = ElementTypeTraceability
-		.<QuickButton, Interpreted<?>, Def<?>> build(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, BUTTON)//
-		.reflectMethods(Def.class, Interpreted.class, QuickButton.class)//
-		.build();
+	private static final SingleTypeTraceability<QuickButton, Interpreted<?>, Def<?>> TRACEABILITY = ElementTypeTraceability
+		.getElementTraceability(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, BUTTON, Def.class, Interpreted.class,
+			QuickButton.class);
 
 	public static class Def<B extends QuickButton> extends QuickWidget.Def.Abstract<B> {
 		private CompiledExpression theText;
 		private CompiledExpression theIcon;
 		private CompiledExpression theAction;
 
-		public Def(ExElement.Def<?> parent, QonfigElement element) {
-			super(parent, element);
+		public Def(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
+			super(parent, type);
 		}
 
 		@QonfigAttributeGetter
@@ -55,9 +54,9 @@ public class QuickButton extends QuickWidget.Abstract {
 		}
 
 		@Override
-		public void update(ExpressoQIS session) throws QonfigInterpretationException {
+		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
-			super.update(session.asElement(session.getFocusType().getSuperElement()));
+			super.doUpdate(session.asElement(session.getFocusType().getSuperElement()));
 			theText = session.getValueExpression();
 			theIcon = session.getAttributeExpression("icon");
 			theAction = session.getAttributeExpression("action");
@@ -71,7 +70,7 @@ public class QuickButton extends QuickWidget.Abstract {
 
 	public static class Interpreted<B extends QuickButton> extends QuickWidget.Interpreted.Abstract<B> {
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<String>> theText;
-		private ExFunction<ModelSetInstance, SettableValue<Icon>, ModelInstantiationException> theIcon;
+		private InterpretedValueSynth<SettableValue<?>, SettableValue<Icon>> theIcon;
 		private InterpretedValueSynth<ObservableAction<?>, ObservableAction<?>> theAction;
 
 		public Interpreted(Def<? super B> definition, ExElement.Interpreted<?> parent) {
@@ -92,7 +91,7 @@ public class QuickButton extends QuickWidget.Abstract {
 			return theText;
 		}
 
-		public ExFunction<ModelSetInstance, SettableValue<Icon>, ModelInstantiationException> getIcon() {
+		public InterpretedValueSynth<SettableValue<?>, SettableValue<Icon>> getIcon() {
 			return theIcon;
 		}
 
@@ -101,13 +100,13 @@ public class QuickButton extends QuickWidget.Abstract {
 		}
 
 		@Override
-		public void update(QuickStyledElement.QuickInterpretationCache cache) throws ExpressoInterpretationException {
-			super.update(cache);
-			theText = getDefinition().getText() == null ? null : getDefinition().getText().evaluate(ModelTypes.Value.STRING).interpret();
+		protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+			super.doUpdate(env);
+			theText = getDefinition().getText() == null ? null : getDefinition().getText().interpret(ModelTypes.Value.STRING, env);
 			theIcon = getDefinition().getIcon() == null ? null
-				: QuickBaseInterpretation.evaluateIcon(getDefinition().getIcon(), getDefinition().getExpressoEnv(),
-					getDefinition().getCallingClass());
-			theAction = getDefinition().getAction().evaluate(ModelTypes.Action.any()).interpret();
+				: QuickBaseInterpretation.evaluateIcon(getDefinition().getIcon(), env,
+					getDefinition().getElement().getDocument().getLocation());
+			theAction = getDefinition().getAction().interpret(ModelTypes.Action.any(), env);
 		}
 
 		@Override
@@ -141,7 +140,7 @@ public class QuickButton extends QuickWidget.Abstract {
 		super.updateModel(interpreted, myModels);
 		QuickButton.Interpreted<?> myInterpreted = (QuickButton.Interpreted<?>) interpreted;
 		theText = myInterpreted.getText() == null ? null : myInterpreted.getText().get(myModels);
-		theIcon = myInterpreted.getIcon() == null ? null : myInterpreted.getIcon().apply(myModels);
+		theIcon = myInterpreted.getIcon() == null ? null : myInterpreted.getIcon().get(myModels);
 		theAction = myInterpreted.getAction().get(myModels);
 	}
 }

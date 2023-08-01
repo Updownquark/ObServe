@@ -2,30 +2,39 @@ package org.observe.quick.style;
 
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
-import org.observe.expresso.ExpressoEnv;
+import org.observe.expresso.ExpressoInterpretationException;
+import org.observe.expresso.InterpretedExpressoEnv;
+import org.observe.expresso.ModelException;
 import org.observe.expresso.ModelInstantiationException;
+import org.observe.expresso.ModelType.ModelInstanceType;
+import org.observe.expresso.ModelTypes;
+import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
-import org.observe.expresso.ObservableModelSet.ModelValueSynth;
+import org.observe.expresso.TypeConversionException;
 import org.qommons.LambdaUtils;
 
-/** A {@link StyleApplicationDef} evaluated for an {@link ExpressoEnv environment} */
+/** A {@link StyleApplicationDef} evaluated for an {@link InterpretedExpressoEnv environment} */
 public class InterpretedStyleApplication {
 	/** Constant value returning true */
 	public static final ObservableValue<Boolean> TRUE = ObservableValue.of(boolean.class, true);
 
+	public static final String PARENT_MODEL_NAME = "PARENT$MODEL$INSTANCE";
+	private static final ModelInstanceType<SettableValue<?>, SettableValue<ModelSetInstance>> PARENT_MODEL_TYPE = ModelTypes.Value
+		.forType(ModelSetInstance.class);
+
 	private final InterpretedStyleApplication theParent;
-	private final CompiledStyleApplication theApplication;
-	private final ModelValueSynth<SettableValue<?>, SettableValue<Boolean>> theCondition;
+	private final StyleApplicationDef theDefinition;
+	private final InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> theCondition;
 
 	/**
 	 * @param parent The parent application (see {@link StyleApplicationDef#getParent()})
-	 * @param application The application this structure is evaluated from
+	 * @param definition The application definition this structure is interpreted from
 	 * @param condition The condition value container
 	 */
-	public InterpretedStyleApplication(InterpretedStyleApplication parent, CompiledStyleApplication application,
-		ModelValueSynth<SettableValue<?>, SettableValue<Boolean>> condition) {
+	public InterpretedStyleApplication(InterpretedStyleApplication parent, StyleApplicationDef definition,
+		InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> condition) {
 		theParent = parent;
-		theApplication = application;
+		theDefinition = definition;
 		theCondition = condition;
 	}
 
@@ -34,13 +43,16 @@ public class InterpretedStyleApplication {
 		return theParent;
 	}
 
-	/** @return The application this structure is {@link CompiledStyleApplication#interpret(java.util.Map) interpreted} from */
-	public CompiledStyleApplication getApplication() {
-		return theApplication;
+	/**
+	 * @return The application definition this structure is {@link StyleApplicationDef#interpret(QuickInterpretedStyleCache) interpreted}
+	 *         from
+	 */
+	public StyleApplicationDef getDefinition() {
+		return theDefinition;
 	}
 
 	/** @return The condition value container */
-	public ModelValueSynth<SettableValue<?>, SettableValue<Boolean>> getCondition() {
+	public InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> getCondition() {
 		return theCondition;
 	}
 
@@ -54,7 +66,7 @@ public class InterpretedStyleApplication {
 		if (theParent == null)
 			parentCond = TRUE;
 		else
-			parentCond = theParent.getCondition(StyleQIS.getParentModels(model));
+			parentCond = theParent.getCondition(getParentModels(model));
 
 		ObservableValue<Boolean> localCond;
 		if (theCondition != null)
@@ -73,6 +85,19 @@ public class InterpretedStyleApplication {
 
 	@Override
 	public String toString() {
-		return theApplication.toString();
+		return theDefinition.toString();
+	}
+
+	/**
+	 * @param models The model instance to get the parent model from
+	 * @return The model instance for the parent &lt;styled> element
+	 */
+	public static ModelSetInstance getParentModels(ModelSetInstance models) {
+		try {
+			return models.getModel().getValue(PARENT_MODEL_NAME, PARENT_MODEL_TYPE).get(models).get();
+		} catch (ModelException | TypeConversionException | ExpressoInterpretationException | ModelInstantiationException
+			| IllegalStateException e) {
+			throw new IllegalStateException("Could not access parent models. Perhaps they have not been installed.", e);
+		}
 	}
 }

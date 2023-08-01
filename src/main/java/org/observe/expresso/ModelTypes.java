@@ -267,7 +267,7 @@ public class ModelTypes {
 
 			@Override
 			public boolean isSatisfied() {
-				return theContainer.get() == null;
+				return theContainer.get() != null;
 			}
 
 			@Override
@@ -302,6 +302,9 @@ public class ModelTypes {
 
 	/** See {@link ModelTypes#Action} */
 	public static class ActionModelType extends ModelType.SingleTyped<ObservableAction<?>> {
+		/** Action&lt;Void> type */
+		public final ModelInstanceType.SingleTyped<ObservableAction<?>, Void, ObservableAction<Void>> VOID = forType(TypeTokens.get().VOID);
+
 		private ActionModelType() {
 			super("Action", (Class<ObservableAction<?>>) (Class<?>) ObservableAction.class);
 		}
@@ -801,7 +804,7 @@ public class ModelTypes {
 			@Override
 			public void satisfy(SettableValue<T> realValue) throws IllegalStateException {
 				if (realValue == null)
-					throw new NullPointerException("Cannot satisfy a hollow value (Action<" + getType() + ">) with null");
+					throw new NullPointerException("Cannot satisfy a hollow value (Value<" + getType() + ">) with null");
 				theContainer.set(realValue, null);
 			}
 

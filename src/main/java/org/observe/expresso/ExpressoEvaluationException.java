@@ -1,7 +1,7 @@
 package org.observe.expresso;
 
 /**
- * Thrown from {@link ObservableExpression#evaluate(org.observe.expresso.ModelType.ModelInstanceType, ExpressoEnv, int)} when the expression
+ * Thrown from {@link ObservableExpression#evaluate(org.observe.expresso.ModelType.ModelInstanceType, InterpretedExpressoEnv, int)} when the expression
  * cannot be evaluated
  */
 public class ExpressoEvaluationException extends ExpressoException {

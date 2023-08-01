@@ -213,28 +213,7 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 	 *         a non-null value
 	 */
 	default SettableValue<T> disableWith(ObservableValue<String> enabled) {
-		return new WrappingSettableValue<T>(this) {
-			@Override
-			public <V extends T> String isAcceptable(V value) {
-				String msg = enabled.get();
-				if (msg != null)
-					return msg;
-				return getWrapped().isAcceptable(value);
-			}
-
-			@Override
-			public <V extends T> T set(V value, Object cause) throws IllegalArgumentException {
-				String msg = enabled.get();
-				if (msg != null)
-					throw new IllegalArgumentException(msg);
-				return getWrapped().set(value, cause);
-			}
-
-			@Override
-			public ObservableValue<String> isEnabled() {
-				return ObservableValue.firstValue(TypeTokens.get().STRING, s -> s != null, () -> null, enabled, getWrapped().isEnabled());
-			}
-		};
+		return new DisabledValue<>(this, enabled);
 	}
 
 	/**
@@ -502,7 +481,7 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 	 * @return A settable value that represents the current value in the inner observable
 	 */
 	public static <T> SettableValue<T> flatten(ObservableValue<SettableValue<T>> value, Supplier<? extends T> defaultValue) {
-		if (value instanceof ConstantObservableValue) {
+		if (value.getThreadConstraint() == ThreadConstraint.NONE) {
 			TypeToken<T> vType = (TypeToken<T>) value.getType().resolveType(ObservableValue.class.getTypeParameters()[0]);
 			SettableValue<? extends T> v = value.get();
 			if (v == null)
@@ -520,7 +499,7 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 	 */
 	public static <T> SettableValue<T> flattenAsSettable(ObservableValue<? extends ObservableValue<T>> value,
 		Supplier<? extends T> defaultValue) {
-		if (value instanceof ConstantObservableValue) {
+		if (value.getThreadConstraint() == ThreadConstraint.NONE) {
 			TypeToken<T> vType = (TypeToken<T>) value.getType().resolveType(ObservableValue.class.getTypeParameters()[0]);
 			ObservableValue<? extends T> v = value.get();
 			if (v == null)
@@ -542,7 +521,7 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 	 * @return A SettableValue that reflects the given value and is always enabled
 	 */
 	public static <T> SettableValue<T> asSettable(ObservableValue<T> value, Function<? super T, String> disabled){
-		return new DisabledValue<>(value, disabled);
+		return new AlwaysDisabledValue<>(value, disabled);
 	}
 
 	/**
@@ -1128,13 +1107,21 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 	 *
 	 * @param <T> The type of the value
 	 */
-	class DisabledValue<T> implements SettableValue<T> {
+	class AlwaysDisabledValue<T> implements SettableValue<T> {
 		private final ObservableValue<T> theValue;
 		private final Function<? super T, String> theDisablement;
 
-		DisabledValue(ObservableValue<T> value, Function<? super T, String> disablement) {
+		protected AlwaysDisabledValue(ObservableValue<T> value, Function<? super T, String> disablement) {
 			theValue = value;
 			theDisablement = disablement;
+		}
+
+		protected ObservableValue<T> getValue() {
+			return theValue;
+		}
+
+		protected Function<? super T, String> getDisablement() {
+			return theDisablement;
 		}
 
 		@Override
@@ -1207,12 +1194,46 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 
 		@Override
 		public boolean equals(Object obj) {
-			return obj instanceof DisabledValue && theValue.equals(((DisabledValue<?>) obj).theValue);
+			return obj instanceof AlwaysDisabledValue && theValue.equals(((AlwaysDisabledValue<?>) obj).theValue);
 		}
 
 		@Override
 		public String toString() {
 			return theValue.toString();
+		}
+	}
+
+	class DisabledValue<T> extends WrappingSettableValue<T> {
+		private final ObservableValue<String> isEnabled;
+
+		public DisabledValue(SettableValue<T> wrapped, ObservableValue<String> enabled) {
+			super(wrapped);
+			isEnabled = enabled;
+		}
+
+		protected ObservableValue<String> getEnabled() {
+			return isEnabled;
+		}
+
+		@Override
+		public <V extends T> String isAcceptable(V value) {
+			String msg = isEnabled.get();
+			if (msg != null)
+				return msg;
+			return getWrapped().isAcceptable(value);
+		}
+
+		@Override
+		public <V extends T> T set(V value, Object cause) throws IllegalArgumentException {
+			String msg = isEnabled.get();
+			if (msg != null)
+				throw new IllegalArgumentException(msg);
+			return getWrapped().set(value, cause);
+		}
+
+		@Override
+		public ObservableValue<String> isEnabled() {
+			return ObservableValue.firstValue(TypeTokens.get().STRING, s -> s != null, () -> null, isEnabled, getWrapped().isEnabled());
 		}
 	}
 

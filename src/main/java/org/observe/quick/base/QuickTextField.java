@@ -2,34 +2,35 @@ package org.observe.quick.base;
 
 import org.observe.SettableValue;
 import org.observe.expresso.ExpressoInterpretationException;
+import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.qonfig.CompiledExpression;
 import org.observe.expresso.qonfig.ElementTypeTraceability;
+import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.util.TypeTokens;
-import org.qommons.config.QonfigElement;
+import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
 import com.google.common.reflect.TypeToken;
 
 public class QuickTextField<T> extends QuickEditableTextWidget.Abstract<T> {
 	public static final String TEXT_FIELD = "text-field";
-	private static final ElementTypeTraceability<QuickTextField<?>, Interpreted<?>, Def<?>> TRACEABILITY = ElementTypeTraceability
-		.<QuickTextField<?>, Interpreted<?>, Def<?>> build(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, TEXT_FIELD)//
-		.reflectMethods(Def.class, Interpreted.class, QuickTextField.class)//
-		.build();
+	private static final SingleTypeTraceability<QuickTextField<?>, Interpreted<?>, Def<?>> TRACEABILITY = ElementTypeTraceability
+		.getElementTraceability(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, TEXT_FIELD, Def.class, Interpreted.class,
+			QuickTextField.class);
 
 	public static class Def<T> extends QuickEditableTextWidget.Def.Abstract<T, QuickTextField<T>> {
 		private Integer theColumns;
 		private CompiledExpression theEmptyText;
 
-		public Def(ExElement.Def<?> parent, QonfigElement element) {
-			super(parent, element);
+		public Def(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
+			super(parent, type);
 		}
 
 		@Override
@@ -48,9 +49,9 @@ public class QuickTextField<T> extends QuickEditableTextWidget.Abstract<T> {
 		}
 
 		@Override
-		public void update(ExpressoQIS session) throws QonfigInterpretationException {
+		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
-			super.update(session.asElement(session.getFocusType().getSuperElement()));
+			super.doUpdate(session.asElement(session.getFocusType().getSuperElement()));
 			theColumns = session.getAttribute("columns", Integer.class);
 			theEmptyText = session.getAttributeExpression("empty-text");
 		}
@@ -74,7 +75,7 @@ public class QuickTextField<T> extends QuickEditableTextWidget.Abstract<T> {
 		}
 
 		@Override
-		public TypeToken<QuickTextField<T>> getWidgetType() {
+		public TypeToken<QuickTextField<T>> getWidgetType() throws ExpressoInterpretationException {
 			return TypeTokens.get().keyFor(QuickTextField.class).parameterized(getValueType());
 		}
 
@@ -83,10 +84,10 @@ public class QuickTextField<T> extends QuickEditableTextWidget.Abstract<T> {
 		}
 
 		@Override
-		public void update(QuickInterpretationCache cache) throws ExpressoInterpretationException {
-			super.update(cache);
+		protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+			super.doUpdate(env);
 			theEmptyText = getDefinition().getEmptyText() == null ? null
-				: getDefinition().getEmptyText().evaluate(ModelTypes.Value.forType(String.class)).interpret();
+				: getDefinition().getEmptyText().interpret(ModelTypes.Value.forType(String.class), getExpressoEnv());
 		}
 
 		@Override

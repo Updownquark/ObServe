@@ -1,69 +1,54 @@
 package org.observe.quick.style;
 
+import org.qommons.Named;
 import org.qommons.SelfDescribed;
 
 import com.google.common.reflect.TypeToken;
 
-/**
- * An attribute whose value for a given element will be determined by the
- * highest-{@link StyleApplicationDef#compareTo(StyleApplicationDef) priority} {@link QuickStyleValue} that
- * {@link StyleApplicationDef#applies(org.qommons.config.QonfigElement) applies} to it.
- *
- * @param <T> The type of the attribute's values
- */
-public class QuickStyleAttribute<T> implements SelfDescribed {
-	private final QuickTypeStyle theDeclarer;
-	private final String theName;
+public class QuickStyleAttribute<T> implements Named, SelfDescribed {
+	private final QuickStyleAttributeDef theDefinition;
 	private final TypeToken<T> theType;
-	private final boolean isTrickleDown;
-	private final String theDescription;
 
-	/**
-	 * @param declarer The type that declared this style attribute
-	 * @param name The name for the attribute
-	 * @param type The type of the attribute
-	 * @param trickleDown Whether, if not {@link QuickStyleValue} {@link StyleApplicationDef#applies(org.qommons.config.QonfigElement)
-	 *        applies} to an element, its value will be that of its most recent ancestor element that for which this attribute also applies
-	 * @param description A description of the attribute
-	 */
-	public QuickStyleAttribute(QuickTypeStyle declarer, String name, TypeToken<T> type, boolean trickleDown, String description) {
-		theDeclarer=declarer;
-		theName=name;
-		theType=type;
-		isTrickleDown = trickleDown;
-		theDescription = description;
+	public QuickStyleAttribute(QuickStyleAttributeDef definition, TypeToken<T> type) {
+		theDefinition = definition;
+		theType = type;
 	}
 
-	/** @return The type that declared this style attribute */
-	public QuickTypeStyle getDeclarer() {
-		return theDeclarer;
+	public QuickStyleAttributeDef getDefinition() {
+		return theDefinition;
 	}
 
-	/** @return The name of this attribute */
-	public String getName() {
-		return theName;
-	}
-
-	/** @return The type of this attribute's values */
 	public TypeToken<T> getType() {
 		return theType;
 	}
 
-	/**
-	 * @return Whether, if not {@link QuickStyleValue} {@link StyleApplicationDef#applies(org.qommons.config.QonfigElement) applies} to an
-	 *         element, its value will be that of its most recent ancestor element that for which this attribute also applies
-	 */
-	public boolean isTrickleDown() {
-		return isTrickleDown;
+	@Override
+	public String getName() {
+		return theDefinition.getName();
 	}
 
 	@Override
 	public String getDescription() {
-		return theDescription;
+		return theDefinition.getDescription();
+	}
+
+	@Override
+	public int hashCode() {
+		return theDefinition.hashCode();
+	}
+
+	@Override
+	public boolean equals(Object obj) {
+		if (this == obj)
+			return true;
+		else if (!(obj instanceof QuickStyleAttribute))
+			return false;
+		QuickStyleAttribute<T> other = (QuickStyleAttribute<T>) obj;
+		return theDefinition.equals(other.theDefinition) && theType.equals(other.theType);
 	}
 
 	@Override
 	public String toString() {
-		return theDeclarer + "." + theName + "(" + theType + ")";
+		return theDefinition.toString();
 	}
 }

@@ -73,7 +73,7 @@
 		In new file, test Expresso-Config
 		In new file, test styles (make a test toolkit and impl?)
 	-->
-	<head>
+	<expresso>
 		<imports>
 			<import>org.observe.expresso.ExpressoTestEntity</import>
 			<import>org.junit.Assert.*</import>
@@ -152,7 +152,7 @@
 				</transform>
 			</model>
 		</models>
-	</head>
+	</expresso>
 	<test name="constant">
 		<model>
 			<value name="initInt" init="models.anyInt" />
@@ -232,7 +232,7 @@
 		<!-- TODO
 			+, -, *, /, %
 			==, !=, <, <=, >, >=
-			&&, ||
+			^, | &, Object ||
 		 -->
 	</test>
 	<test name="mapTo">
@@ -311,6 +311,20 @@
 		<action name="checkEqual">assertEquals(ext.actionName, models.expected, models.test)</action>
 		<action name="checkError2">assertNull(ext.actionName, models.error)</action>
 	</test>
+	<test name="hook">
+		<model>
+			<value name="changeCount" init="0" />
+			<hook name="hook" on="models.anyInt">changeCount++</hook>
+		</model>
+
+		<action name="checkChangeCount0">assertEquals(ext.actionName, 0, changeCount)</action>
+		<action name="change1">models.anyInt++</action>
+		<action name="checkChangeCount1">assertEquals(ext.actionName, 1, changeCount)</action>
+		<action name="change2">models.anyInt--</action>
+		<action name="checkChangeCount2">assertEquals(ext.actionName, 2, changeCount)</action>
+		<action name="change3">models.anyInt=1_571_823</action>
+		<action name="checkChangeCount3">assertEquals(ext.actionName, 3, changeCount)</action>
+	</test>
 	<test name="staticInternalState">
 		<model>
 			<stateful-struct name="struct1" derived-state="internalState + 10" />
@@ -329,6 +343,7 @@
 			<value name="struct4dv" type="int">struct4.getDerivedState()</value>
 		</model>
 
+		<!-- In code, the internalState is always initialized to 15 -->
 		<action name="checkState1">assertEquals(ext.actionName, 25, struct1dv)</action>
 		<action name="checkState2">assertEquals(ext.actionName, 5, struct2dv)</action>
 		<action name="checkState3">assertEquals(ext.actionName, 150, struct3dv)</action>

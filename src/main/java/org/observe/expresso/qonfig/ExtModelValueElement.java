@@ -1,32 +1,53 @@
 package org.observe.expresso.qonfig;
 
 import org.observe.expresso.ExpressoInterpretationException;
+import org.observe.expresso.InterpretedExpressoEnv;
+import org.observe.expresso.ModelException;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelType;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ObservableModelSet;
+import org.observe.expresso.ObservableModelSet.ExtValueRef;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.TypeConversionException;
 import org.observe.expresso.VariableType;
+import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.observe.util.TypeTokens;
-import org.qommons.Version;
-import org.qommons.config.QonfigElement;
+import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
+import org.qommons.io.LocatedFilePosition;
 
 import com.google.common.reflect.TypeToken;
 
 public class ExtModelValueElement<M, MV extends M> extends ModelValueElement.Default<M, MV> {
-	private static final ElementTypeTraceability<ExtModelValueElement<?, ?>, Interpreted<?, ?>, Def<?>> TRACEABILITY = ElementTypeTraceability
-		.<ExtModelValueElement<?, ?>, Interpreted<?, ?>, Def<?>> build(ExpressoSessionImplV0_1.TOOLKIT_NAME,
-			ExpressoSessionImplV0_1.VERSION, "ext-model-value")//
-		.reflectMethods(Def.class, Interpreted.class, ExtModelValueElement.class)//
-		.build();
+	private static final SingleTypeTraceability<ExtModelValueElement<?, ?>, Interpreted<?, ?>, Def<?>> TRACEABILITY = ElementTypeTraceability
+		.getElementTraceability(ExpressoSessionImplV0_1.TOOLKIT_NAME, ExpressoSessionImplV0_1.VERSION, "ext-model-value", Def.class,
+			Interpreted.class, ExtModelValueElement.class);
 
-	public static abstract class Def<M> extends ModelValueElement.Def.Simple<M, ExtModelValueElement<M, ?>> implements ExtModelValue<M> {
+	public static abstract class Def<M> extends ModelValueElement.Def.Abstract<M, ExtModelValueElement<M, ?>> implements ExtValueRef<M> {
 		private CompiledExpression theDefault;
 
-		protected Def(ExElement.Def<?> parent, QonfigElement element, ModelType<M> modelType, String toolkitName, Version toolkitVersion) {
-			super(parent, element, modelType, toolkitName, toolkitVersion);
+		protected Def(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType, ModelType<M> modelType) {
+			super(parent, qonfigType, modelType);
+		}
+
+		@Override
+		public ModelType<M> getModelType() {
+			return getModelType(null);
+		}
+
+		@Override
+		public void setParentElement(ExElement.Def<?> parent) {
+			super.setParentElement(parent);
+		}
+
+		@Override
+		public void populate(ObservableModelSet.Builder builder) throws QonfigInterpretationException {
+			String name = getAddOnValue(ExNamed.Def.class, ExNamed.Def::getName);
+			if (name == null)
+				throw new QonfigInterpretationException("Not named, cannot add to model set", getElement().getPositionInFile(), 0);
+			builder.withExternal(name, this, reporting().getFileLocation().getPosition(0));
 		}
 
 		@QonfigAttributeGetter("default")
@@ -35,22 +56,59 @@ public class ExtModelValueElement<M, MV extends M> extends ModelValueElement.Def
 		}
 
 		@Override
-		public void update(ExpressoQIS session) throws QonfigInterpretationException {
-			withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
-			super.update(session.asElement(session.getFocusType().getSuperElement()));
+		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
+			// This can be used with element-model values as well
+			boolean isExtValue = session.isInstance("ext-model-value") != null;
+			if (isExtValue)
+				withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
+			super.doUpdate(session.asElement(session.getFocusType().getSuperElement()));
 
-			theDefault = session.getAttributeExpression("default");
+			if (isExtValue)
+				theDefault = session.getAttributeExpression("default");
 		}
 
-		public static class Single<M> extends Def<M> {
-			private final String theTypeName;
-			private final VariableType theValueType;
+		@Override
+		protected void doPrepare(ExpressoQIS session) { // Nothing to do in general
+		}
 
-			public Single(ExElement.Def<?> parent, QonfigElement element, ModelType.SingleTyped<M> modelType, VariableType valueType,
-				String toolkitName, Version toolkitVersion, String typeName) {
-				super(parent, element, modelType, toolkitName, toolkitVersion);
+		@Override
+		public InterpretedValueSynth<M, ?> createSynthesizer(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+			ModelInstanceType<M, ?> type = getType(env);
+			try {
+				String path = getModelPath();
+				// Model path includes the root
+				path = path.substring(path.indexOf('.') + 1);
+				M value = env.getExtModels().getValue(path, type);
+				return InterpretedValueSynth.of((ModelInstanceType<M, M>) type, __ -> value);
+			} catch (ModelException e) {
+				// No such external model. Use the default if present
+				if (theDefault != null)
+					return theDefault.interpret(type, env);
+				else
+					throw new ExpressoInterpretationException(e.getMessage(), getFilePosition(), 0, e);
+			} catch (TypeConversionException e) {
+				throw new ExpressoInterpretationException(e.getMessage(), getFilePosition(), 0, e);
+			} catch (ModelInstantiationException e) {
+				throw new ExpressoInterpretationException(e.getMessage(), e.getPosition(), e.getErrorLength(), e);
+			}
+		}
+
+		@Override
+		public boolean hasDefault() {
+			return theDefault != null;
+		}
+
+		@Override
+		public LocatedFilePosition getFilePosition() {
+			return getElement().getPositionInFile();
+		}
+
+		public static class Single<M> extends ExtModelValueElement.Def<M> {
+			private final String theTypeName;
+
+			public Single(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType, ModelType.SingleTyped<M> modelType, String typeName) {
+				super(parent, qonfigType, modelType);
 				theTypeName = typeName;
-				theValueType = valueType;
 			}
 
 			@Override
@@ -58,42 +116,34 @@ public class ExtModelValueElement<M, MV extends M> extends ModelValueElement.Def
 				return (ModelType.SingleTyped<M>) super.getModelType();
 			}
 
-			@Override
-			public boolean isTypeSpecified() {
-				return theValueType != null;
+			public VariableType getValueType() {
+				return getAddOnValue(ExTyped.Def.class, ExTyped.Def::getValueType);
 			}
 
 			@Override
-			public ModelInstanceType<M, ?> getType(ObservableModelSet models) throws ExpressoInterpretationException {
-				if (theValueType != null)
-					return getModelType().forType(theValueType.getType(models));
+			public ModelInstanceType<M, ?> getType(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+				VariableType valueType = getValueType();
+				if (valueType != null)
+					return getModelType().forType(valueType.getType(env));
 				else
 					return getModelType().any();
 			}
 
-			public VariableType getValueType() {
-				return theValueType;
-			}
-
 			@Override
-			public void update(ExpressoQIS session) throws QonfigInterpretationException {
+			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 				if (!session.getFocusType().getName().equals(theTypeName))
 					throw new IllegalStateException("Expected '" + theTypeName + "', not '" + session.getFocusType().getName() + "'");
-				super.update(session.asElement("ext-model-value"));
+				QonfigElementOrAddOn extModelValue = session.isInstance("ext-model-value");
+				super.doUpdate(extModelValue == null ? session : session.asElement(extModelValue));
 			}
 		}
 
 		public static class Double<M> extends Def<M> {
 			private final String theTypeName;
-			private final VariableType theValueType1;
-			private final VariableType theValueType2;
 
-			public Double(ExElement.Def<?> parent, QonfigElement element, ModelType.DoubleTyped<M> modelType, VariableType valueType1,
-				VariableType valueType2, String toolkitName, Version toolkitVersion, String typeName) {
-				super(parent, element, modelType, toolkitName, toolkitVersion);
-				theValueType1 = valueType1;
-				theValueType2 = valueType2;
-				theTypeName = toolkitName;
+			public Double(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType, ModelType.DoubleTyped<M> modelType, String typeName) {
+				super(parent, qonfigType, modelType);
+				theTypeName = typeName;
 			}
 
 			@Override
@@ -101,51 +151,47 @@ public class ExtModelValueElement<M, MV extends M> extends ModelValueElement.Def
 				return (ModelType.DoubleTyped<M>) super.getModelType();
 			}
 
-			@Override
-			public boolean isTypeSpecified() {
-				return theValueType1 != null;
+			public VariableType getKeyType() {
+				return getAddOnValue(ExMapModelValue.Def.class, ExMapModelValue.Def::getKeyType);
+			}
+
+			public VariableType getValueType() {
+				return getAddOnValue(ExTyped.Def.class, ExTyped.Def::getValueType);
 			}
 
 			@Override
-			public ModelInstanceType<M, ?> getType(ObservableModelSet models) throws ExpressoInterpretationException {
-				if (theValueType1 != null && theValueType2 != null)
+			public ModelInstanceType<M, ?> getType(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+				VariableType keyType = getKeyType();
+				VariableType valueType = getValueType();
+				if (keyType != null && valueType != null)
 					return getModelType().forType(//
-						(TypeToken<?>) theValueType1.getType(models), //
-						(TypeToken<?>) theValueType2.getType(models)//
+						(TypeToken<?>) keyType.getType(env), //
+						(TypeToken<?>) valueType.getType(env)//
 						);
-				else if (theValueType1 == null && theValueType2 == null)
+				else if (keyType == null && valueType == null)
 					return getModelType().any();
 				else
 					return getModelType().forType(//
-						(TypeToken<?>) (theValueType1 == null ? TypeTokens.get().WILDCARD : theValueType1.getType(models)), //
-						(TypeToken<?>) (theValueType2 == null ? TypeTokens.get().WILDCARD : theValueType2.getType(models))//
+						(TypeToken<?>) (keyType == null ? TypeTokens.get().WILDCARD : keyType.getType(env)), //
+						(TypeToken<?>) (valueType == null ? TypeTokens.get().WILDCARD : valueType.getType(env))//
 						);
 			}
 
-			public VariableType getValueType1() {
-				return theValueType1;
-			}
-
-			public VariableType getValueType2() {
-				return theValueType2;
-			}
-
 			@Override
-			public void update(ExpressoQIS session) throws QonfigInterpretationException {
+			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 				if (!session.getFocusType().getName().equals(theTypeName))
 					throw new IllegalStateException("Expected '" + theTypeName + "', not '" + session.getFocusType().getName() + "'");
-				super.update(session.asElement("ext-model-value"));
+				super.doUpdate(session.asElement("ext-model-value"));
 			}
 		}
 	}
 
 	public static abstract class Interpreted<M, MV extends M>
-	extends ModelValueElement.Interpreted.Default<M, MV, ExtModelValueElement<M, MV>> {
+	extends ModelValueElement.Interpreted.Abstract<M, MV, ExtModelValueElement<M, MV>> {
 		private InterpretedValueSynth<M, MV> theDefault;
 
-		protected Interpreted(Def<M> definition, ExElement.Interpreted<?> parent, ModelInstanceType<M, MV> valueType)
-			throws ExpressoInterpretationException {
-			super(definition, parent, valueType);
+		protected Interpreted(Def<M> definition, ExElement.Interpreted<?> parent) throws ExpressoInterpretationException {
+			super(definition, parent);
 		}
 
 		@Override
@@ -158,10 +204,10 @@ public class ExtModelValueElement<M, MV extends M> extends ModelValueElement.Def
 		}
 
 		@Override
-		public void update() throws ExpressoInterpretationException {
-			super.update();
+		protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+			super.doUpdate(env);
 
-			theDefault = getDefinition().getDefault() == null ? null : getDefinition().getDefault().evaluate(getValueType()).interpret();
+			theDefault = getDefinition().getDefault() == null ? null : getDefinition().getDefault().interpret(getType(), getExpressoEnv());
 		}
 	}
 

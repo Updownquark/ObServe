@@ -1,35 +1,50 @@
 package org.observe.quick.style;
 
+import java.io.BufferedInputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.qonfig.ElementTypeTraceability;
+import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.observe.expresso.qonfig.ExElement;
+import org.observe.expresso.qonfig.ExElement.Def;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.expresso.qonfig.QonfigChildGetter;
-import org.qommons.QommonsUtils;
-import org.qommons.config.AbstractQIS;
+import org.qommons.config.DefaultQonfigParser;
+import org.qommons.config.QommonsConfig;
+import org.qommons.config.QonfigDocument;
 import org.qommons.config.QonfigElement;
+import org.qommons.config.QonfigElement.QonfigValue;
+import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
+import org.qommons.config.QonfigParseException;
+import org.qommons.config.QonfigToolkit;
+import org.qommons.io.LocatedFilePosition;
+import org.qommons.io.SimpleXMLParser;
 
 /** A structure containing many {@link #getValues() style values} that may apply to all &lt;styled> elements in a document */
-public class QuickStyleSheet extends ExElement.Def.Abstract<ExElement> {
-	public static class StyleSheetRef extends ExElement.Def.Abstract<ExElement> {
-		private static final ElementTypeTraceability<ExElement, ExElement.Interpreted<?>, StyleSheetRef> TRACEABILITY = ElementTypeTraceability.<ExElement, ExElement.Interpreted<?>, StyleSheetRef> build(
-			StyleSessionImplV0_1.NAME, StyleSessionImplV0_1.VERSION, "import-style-sheet")//
-			.reflectMethods(StyleSheetRef.class, null, null)//
-			.build();
+public class QuickStyleSheet extends ExElement.Def.Abstract<ExElement.Void> {
+	public static class StyleSheetRef extends ExElement.Def.Abstract<ExElement.Void> {
+		private static final SingleTypeTraceability<ExElement.Void, ExElement.Interpreted<ExElement.Void>, StyleSheetRef> TRACEABILITY = ElementTypeTraceability
+			.getElementTraceability(QuickStyleInterpretation.NAME, QuickStyleInterpretation.VERSION, "import-style-sheet",
+				StyleSheetRef.class, null, null);
 
-		private final String theName;
-		private final QuickStyleSheet theTarget;
+		private String theName;
+		private QuickStyleSheet theTarget;
+		private URL theReference;
 
-		StyleSheetRef(QuickStyleSheet parent, AbstractQIS<?> session, QuickStyleSheet target) {
-			super(parent, session.getElement());
-			theName = session.getAttributeText("name");
-			theTarget = target;
+		public StyleSheetRef(QuickStyleSheet parent, QonfigElementOrAddOn type) {
+			super(parent, type);
 		}
 
 		@QonfigAttributeGetter("name")
@@ -37,81 +52,111 @@ public class QuickStyleSheet extends ExElement.Def.Abstract<ExElement> {
 			return theName;
 		}
 
+		@QonfigAttributeGetter("ref")
+		public URL getReference() {
+			return theReference;
+		}
+
 		public QuickStyleSheet getTarget() {
 			return theTarget;
 		}
 
-		@QonfigAttributeGetter("ref")
-		public URL getReference() {
-			return theTarget.getReference();
-		}
-
 		@Override
-		public void update(ExpressoQIS session) throws QonfigInterpretationException {
+		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
-			super.update(session);
+			super.doUpdate(session);
+			theName = session.getAttributeText("name");
+
+			importStyleSheet(session);
+		}
+
+		private void importStyleSheet(ExpressoQIS session) throws QonfigInterpretationException {
+			DefaultQonfigParser parser = new DefaultQonfigParser();
+			for (QonfigToolkit tk : session.getElement().getDocument().getDocToolkit().getDependencies().values())
+				parser.withToolkit(tk);
+			QonfigValue address = session.getAttributeQV("ref");
+			URL ref;
+			try {
+				String urlStr = QommonsConfig.resolve(address.text, session.getElement().getDocument().getLocation());
+				ref = new URL(urlStr);
+			} catch (IOException e) {
+				throw new QonfigInterpretationException("Bad style-sheet reference: " + session.getAttributeText("ref"),
+					address.position == null ? null : new LocatedFilePosition(address.fileLocation, address.position.getPosition(0)), //
+						address.text.length(), e);
+			}
+			theReference = ref;
+			QonfigDocument ssDoc;
+			try (InputStream in = new BufferedInputStream(ref.openStream())) {
+				ssDoc = parser.parseDocument(ref.toString(), in);
+			} catch (IOException e) {
+				throw new QonfigInterpretationException("Could not access style-sheet reference " + ref,
+					address.position == null ? null : new LocatedFilePosition(address.fileLocation, address.position.getPosition(0)), //
+						address.text.length(), e);
+			} catch (SimpleXMLParser.XmlParseException e) {
+				throw new QonfigInterpretationException("Could not parse style-sheet reference " + ref,
+					address.position == null ? null : new LocatedFilePosition(address.fileLocation, address.position.getPosition(0)), //
+						address.text.length(), e);
+			} catch (QonfigParseException e) {
+				throw new QonfigInterpretationException("Malformed style-sheet reference " + ref,
+					address.position == null ? null : new LocatedFilePosition(address.fileLocation, address.position.getPosition(0)), //
+						address.text.length(), e);
+			}
+			if (!session.getFocusType().getDeclarer().getElement("style-sheet").isAssignableFrom(ssDoc.getRoot().getType()))
+				throw new QonfigInterpretationException(
+					"Style-sheet reference does not parse to a style-sheet (" + ssDoc.getRoot().getType() + "): " + ref, //
+					address.position == null ? null : new LocatedFilePosition(address.fileLocation, address.position.getPosition(0)),
+						address.text.length());
+			ExpressoQIS importSession = session.intepretRoot(ssDoc.getRoot());
+			importSession.as(ExpressoQIS.class)//
+			.setModels(ObservableModelSet.build(address.text, session.getExpressoEnv().getModels().getNameChecker()).build());
+			if (theTarget == null)
+				theTarget = importSession.interpret(QuickStyleSheet.class);
+			theTarget.update(importSession);
 		}
 	}
 
-	public static final ElementTypeTraceability<ExElement, ExElement.Interpreted<?>, QuickStyleSheet> TRACEABILITY = ElementTypeTraceability.<ExElement, ExElement.Interpreted<?>, QuickStyleSheet> build(
-		StyleSessionImplV0_1.NAME, StyleSessionImplV0_1.VERSION, "style-sheet")//
-		.reflectMethods(QuickStyleSheet.class, null, null)//
-		.withChild("style-set", ss -> QommonsUtils.unmodifiableCopy(ss.getStyleSets().values()), null, null)//
-		.build();
+	public static final SingleTypeTraceability<ExElement.Void, ExElement.Interpreted<ExElement.Void>, QuickStyleSheet> TRACEABILITY = ElementTypeTraceability
+		.getElementTraceability(QuickStyleInterpretation.NAME, QuickStyleInterpretation.VERSION, "style-sheet", QuickStyleSheet.class, null,
+			null);
 
-	private final URL theReference;
-	private final Map<String, QuickStyleSet> theStyleSets;
-	private final List<QuickStyleValue<?>> theValues;
-	private final Map<String, QuickStyleSheet> theImportedStyleSheets;
-	private final List<StyleSheetRef> theStyleSheetRefs;
 	private final List<QuickStyleElement.Def> theStyleElements;
+	private final List<StyleSheetRef> theStyleSheetRefs;
+	private final Map<String, QuickStyleSheet> theImportedStyleSheets;
+	private final List<QuickStyleSet> theStyleSetList;
+	private final Map<String, QuickStyleSet> theStyleSets;
 
-	/**
-	 * @param ref The location where this external style sheet was defined, or null if it is an inline style sheet
-	 * @param styleSets All style values defined for specific style-sets
-	 * @param values All values defined for the style sheet (not style-set specific)
-	 * @param importedStyleSheets All style sheets imported into this one
-	 */
-	public QuickStyleSheet(ExElement.Def<?> parent, AbstractQIS<?> session, //
-		URL ref, Map<String, QuickStyleSet> styleSets, List<QuickStyleValue<?>> values, Map<String, QuickStyleSheet> importedStyleSheets,
-		List<StyleSheetRef> refs, List<QuickStyleElement.Def> styleElements) {
-		super(parent, session.getElement());
-		theReference = ref;
-		theStyleSets = styleSets;
-		theValues = values;
-		theImportedStyleSheets = importedStyleSheets;
-		theStyleSheetRefs = refs;
-		theStyleElements = styleElements;
-	}
-
-	/** @return The location where this standalone style sheet was parsed from */
-	public URL getReference() {
-		return theReference;
+	public QuickStyleSheet(Def<?> parent, QonfigElementOrAddOn qonfigType) {
+		super(parent, qonfigType);
+		theStyleSetList = new ArrayList<>();
+		theStyleSets = new HashMap<>();
+		theStyleSheetRefs = new ArrayList<>();
+		theImportedStyleSheets = new LinkedHashMap<>();
+		theStyleElements = new ArrayList<>();
 	}
 
 	/** @return This style sheet's style sets, whose values can be inherited en-masse by name */
 	public Map<String, QuickStyleSet> getStyleSets() {
-		return theStyleSets;
+		return Collections.unmodifiableMap(theStyleSets);
 	}
 
-	/** @return The style values declared by this style sheet */
-	public List<QuickStyleValue<?>> getValues() {
-		return theValues;
+	@QonfigChildGetter("style-set")
+	public List<QuickStyleSet> getStyleSetList() {
+		return theStyleSetList;
 	}
 
 	@QonfigChildGetter("style")
 	public List<QuickStyleElement.Def> getStyleElements() {
-		return theStyleElements;
+		return Collections.unmodifiableList(theStyleElements);
 	}
 
 	/** @return All style sheets referred to by this style sheet */
 	public Map<String, QuickStyleSheet> getImportedStyleSheets() {
-		return theImportedStyleSheets;
+		return Collections.unmodifiableMap(theImportedStyleSheets);
 	}
 
 	@QonfigChildGetter("style-sheet-ref")
 	public List<StyleSheetRef> getImportedStyleSheetRefs() {
-		return theStyleSheetRefs;
+		return Collections.unmodifiableList(theStyleSheetRefs);
 	}
 
 	/**
@@ -136,42 +181,41 @@ public class QuickStyleSheet extends ExElement.Def.Abstract<ExElement> {
 	}
 
 	/**
+	 * @param styleValues Collection into which to add style values in this style sheet that
+	 *        {@link StyleApplicationDef#applies(QonfigElement) apply} to the given element
 	 * @param element The element to get style values for
-	 * @return All style values in this style sheet that {@link StyleApplicationDef#applies(QonfigElement) apply} to the given element
 	 */
-	public final List<QuickStyleValue<?>> getValues(QonfigElement element) {
-		List<QuickStyleValue<?>> values = new ArrayList<>();
-		for (QuickStyleValue<?> ssv : theValues) {
-			if (ssv.getApplication().applies(element))
-				values.add(ssv);
-			else if (ssv.isTrickleDown()) {
-				QonfigElement parent = element.getParent();
-				while (parent != null && !parent.isInstance(ssv.getAttribute().getDeclarer().getElement())) {
-					if (ssv.getApplication().applies(parent)) {
-						values.add(ssv);
-						break;
-					}
-					parent = parent.getParent();
-				}
-			}
-		}
+	public final void getStyleValues(Collection<QuickStyleValue> styleValues, QonfigElement element) {
+		for (QuickStyleElement.Def style : theStyleElements)
+			style.getStyleValues(styleValues, StyleApplicationDef.ALL, element);
 		for (QuickStyleSheet imported : theImportedStyleSheets.values())
-			values.addAll(imported.getValues(element));
-		return values;
+			imported.getStyleValues(styleValues, element);
 	}
 
 	@Override
-	public void update(ExpressoQIS session) throws QonfigInterpretationException {
+	protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 		withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
-		super.update(session);
-		int i = 0;
-		for (ExpressoQIS ssrSession : session.forChildren("style-sheet-ref"))
-			theStyleSheetRefs.get(i++).update(ssrSession);
-		for (ExpressoQIS ssSession : session.forChildren("style-set"))
-			theStyleSets.get(ssSession.getAttributeText("name")).update(ssSession);
-		i = 0;
-		for (ExpressoQIS valueS : session.forChildren("style"))
-			theStyleElements.get(i++).update(valueS);
+		super.doUpdate(session);
+
+		session.put(ExWithStyleSheet.QUICK_STYLE_SHEET, this);
+
+		ExElement.syncDefs(QuickStyleElement.Def.class, theStyleElements, session.forChildren("style"));
+
+		ExElement.syncDefs(StyleSheetRef.class, theStyleSheetRefs, session.forChildren("style-sheet-ref"));
+		theImportedStyleSheets.clear();
+		for (StyleSheetRef ref : theStyleSheetRefs) {
+			if (theImportedStyleSheets.put(ref.getName(), ref.getTarget()) != null)
+				throw new QonfigInterpretationException("Multiple imported style sheets named '" + ref.getName() + "'",
+					ref.reporting().getFileLocation().getPosition(0), 0);
+		}
+
+		ExElement.syncDefs(QuickStyleSet.class, theStyleSetList, session.forChildren("style-set"));
+		theStyleSets.clear();
+		for (QuickStyleSet styleSet : theStyleSetList) {
+			if (theStyleSets.put(styleSet.getName(), styleSet) != null)
+				throw new QonfigInterpretationException("Multiple style sets named '" + styleSet.getName() + "'",
+					styleSet.reporting().getFileLocation().getPosition(0), 0);
+		}
 	}
 
 	/**
@@ -184,10 +228,12 @@ public class QuickStyleSheet extends ExElement.Def.Abstract<ExElement> {
 	public StringBuilder print(StringBuilder str, int indent) {
 		if (str == null)
 			str = new StringBuilder();
-		if (theReference != null)
-			str.append(theReference);
 		str.append("{");
-		if (!theImportedStyleSheets.isEmpty() || !theValues.isEmpty())
+		for (QuickStyleElement.Def style : theStyleElements) {
+			indent(str, indent);
+			str.append(style);
+		}
+		if (!theImportedStyleSheets.isEmpty() || !theStyleElements.isEmpty())
 			str.append('\n');
 		for (Map.Entry<String, QuickStyleSheet> imp : theImportedStyleSheets.entrySet()) {
 			indent(str, indent);
@@ -195,10 +241,6 @@ public class QuickStyleSheet extends ExElement.Def.Abstract<ExElement> {
 			imp.getValue().print(str, indent + 1).append('\n');
 		}
 		// TODO Style sets
-		for (QuickStyleValue<?> qsv : theValues) {
-			indent(str, indent);
-			str.append(qsv);
-		}
 		return str.append("}");
 	}
 

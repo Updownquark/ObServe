@@ -1,12 +1,13 @@
 package org.observe.quick;
 
+import static org.observe.expresso.qonfig.ExpressoBaseV0_1.creator;
+
 import java.util.Set;
 import java.util.function.BiFunction;
 
 import org.observe.expresso.qonfig.ExAddOn;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExpressoQIS;
-import org.observe.quick.style.StyleQIS;
 import org.qommons.QommonsUtils;
 import org.qommons.Version;
 import org.qommons.config.AbstractQIS;
@@ -44,47 +45,46 @@ public class QuickCoreInterpretation implements QonfigInterpretation {
 
 	@Override
 	public Set<Class<? extends SpecialSession<?>>> getExpectedAPIs() {
-		return QommonsUtils.unmodifiableDistinctCopy(ExpressoQIS.class, StyleQIS.class);
+		return QommonsUtils.unmodifiableDistinctCopy(ExpressoQIS.class);
 	}
 
 	@Override
 	public Builder configureInterpreter(Builder interpreter) {
-		interpreter.createWith(QuickDocument.QUICK, QuickDocument.Def.class, session -> new QuickDocument.Def(null, session.getElement()));
+		interpreter.createWith(QuickDocument.QUICK, QuickDocument.Def.class, creator(QuickDocument.Def::new));
 		interpreter.createWith(QuickDocument.QuickHeadSection.HEAD, QuickDocument.QuickHeadSection.Def.class,
 			session -> new QuickDocument.QuickHeadSection.Def((QuickDocument.Def) session.getElementRepresentation(),
-				session.getElement()));
+				session.getFocusType()));
 		interpreter.createWith("window", QuickWindow.Def.class, session -> interpretAddOn(session, (p, ao) -> new QuickWindow.Def(ao, p)));
 		interpreter.createWith(QuickBorder.LineBorder.LINE_BORDER, QuickBorder.LineBorder.Def.class,
-			session -> interpretQuick(session, QuickBorder.LineBorder.Def::new));
+			creator(QuickBorder.LineBorder.Def::new));
 		interpreter.createWith(QuickBorder.TitledBorder.TITLED_BORDER, QuickBorder.TitledBorder.Def.class,
-			session -> interpretQuick(session, QuickBorder.TitledBorder.Def::new));
+			creator(QuickBorder.TitledBorder.Def::new));
 
 		interpreter.createWith(QuickMouseListener.QuickMouseClickListener.ON_MOUSE_CLICK,
-			QuickMouseListener.QuickMouseClickListener.Def.class,
-			session -> interpretQuick(session, (p, el) -> new QuickMouseListener.QuickMouseClickListener.Def(p, el)));
+			QuickMouseListener.QuickMouseClickListener.Def.class, creator(QuickMouseListener.QuickMouseClickListener.Def::new));
 		interpreter.createWith(QuickMouseListener.QuickMousePressedListener.ON_MOUSE_PRESSED,
-			QuickMouseListener.QuickMousePressedListener.Def.class,
-			session -> interpretQuick(session, (p, el) -> new QuickMouseListener.QuickMousePressedListener.Def(p, el)));
+			QuickMouseListener.QuickMousePressedListener.Def.class, creator(QuickMouseListener.QuickMousePressedListener.Def::new));
 		interpreter.createWith(QuickMouseListener.QuickMouseReleasedListener.ON_MOUSE_RELEASED,
-			QuickMouseListener.QuickMouseReleasedListener.Def.class,
-			session -> interpretQuick(session, (p, el) -> new QuickMouseListener.QuickMouseReleasedListener.Def(p, el)));
+			QuickMouseListener.QuickMouseReleasedListener.Def.class, creator(QuickMouseListener.QuickMouseReleasedListener.Def::new));
 		interpreter.createWith(QuickMouseListener.MouseMoveEventType.Move.elementName, QuickMouseListener.QuickMouseMoveListener.Def.class,
-			session -> interpretQuick(session,
-				(p, el) -> new QuickMouseListener.QuickMouseMoveListener.Def(p, el, QuickMouseListener.MouseMoveEventType.Move)));
+			session -> new QuickMouseListener.QuickMouseMoveListener.Def(session.as(ExpressoQIS.class).getElementRepresentation(),
+				session.getFocusType(), QuickMouseListener.MouseMoveEventType.Move));
 		interpreter.createWith(QuickMouseListener.MouseMoveEventType.Enter.elementName, QuickMouseListener.QuickMouseMoveListener.Def.class,
-			session -> interpretQuick(session,
-				(p, el) -> new QuickMouseListener.QuickMouseMoveListener.Def(p, el, QuickMouseListener.MouseMoveEventType.Enter)));
+			session -> new QuickMouseListener.QuickMouseMoveListener.Def(session.as(ExpressoQIS.class).getElementRepresentation(),
+				session.getFocusType(), QuickMouseListener.MouseMoveEventType.Enter));
 		interpreter.createWith(QuickMouseListener.MouseMoveEventType.Exit.elementName, QuickMouseListener.QuickMouseMoveListener.Def.class,
-			session -> interpretQuick(session,
-				(p, el) -> new QuickMouseListener.QuickMouseMoveListener.Def(p, el, QuickMouseListener.MouseMoveEventType.Exit)));
+			session -> new QuickMouseListener.QuickMouseMoveListener.Def(session.as(ExpressoQIS.class).getElementRepresentation(),
+				session.getFocusType(), QuickMouseListener.MouseMoveEventType.Exit));
 		interpreter.createWith(QuickMouseListener.QuickScrollListener.SCROLL_LISTENER, QuickMouseListener.QuickScrollListener.Def.class,
-			session -> interpretQuick(session, QuickMouseListener.QuickScrollListener.Def::new));
+			creator(QuickMouseListener.QuickScrollListener.Def::new));
 		interpreter.createWith(QuickKeyListener.QuickKeyTypedListener.KEY_TYPED_LISTENER, QuickKeyListener.QuickKeyTypedListener.Def.class,
-			session -> interpretQuick(session, QuickKeyListener.QuickKeyTypedListener.Def::new));
+			creator(QuickKeyListener.QuickKeyTypedListener.Def::new));
 		interpreter.createWith(QuickKeyListener.QuickKeyCodeListener.KEY_PRESSED_LISTENER, QuickKeyListener.QuickKeyCodeListener.Def.class,
-			session -> interpretQuick(session, (p, el) -> new QuickKeyListener.QuickKeyCodeListener.Def(p, el, true)));
+			session -> new QuickKeyListener.QuickKeyCodeListener.Def(session.as(ExpressoQIS.class).getElementRepresentation(),
+				session.getFocusType(), true));
 		interpreter.createWith(QuickKeyListener.QuickKeyCodeListener.KEY_RELEASED_LISTENER, QuickKeyListener.QuickKeyCodeListener.Def.class,
-			session -> interpretQuick(session, (p, el) -> new QuickKeyListener.QuickKeyCodeListener.Def(p, el, false)));
+			session -> new QuickKeyListener.QuickKeyCodeListener.Def(session.as(ExpressoQIS.class).getElementRepresentation(),
+				session.getFocusType(), false));
 
 		interpreter.createWith("renderer", QuickRenderer.Def.class,
 			session -> interpretAddOn(session, (p, ao) -> new QuickRenderer.Def(ao, (QuickWidget.Def<?>) p)));

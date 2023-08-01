@@ -4,13 +4,15 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 
+import org.observe.expresso.CompiledExpressoEnv;
 import org.observe.expresso.ExpressoInterpretationException;
+import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelType;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ObservableModelSet.CompiledModelValue;
+import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
-import org.observe.expresso.ObservableModelSet.ModelValueSynth;
 import org.qommons.BreakpointHere;
 import org.qommons.Version;
 import org.qommons.config.QonfigInterpretation;
@@ -50,8 +52,8 @@ public class ExpressoDebugV0_1 implements QonfigInterpretation {
 	@Override
 	public Builder configureInterpreter(Builder interpreter) {
 		interpreter//
-		.modifyWith("debug-value", (Class<CompiledModelValue<?, ?>>) (Class<?>) CompiledModelValue.class,
-			new QonfigValueModifier<CompiledModelValue<?, ?>>() {
+		.modifyWith("debug-value", (Class<CompiledModelValue<?>>) (Class<?>) CompiledModelValue.class,
+			new QonfigValueModifier<CompiledModelValue<?>>() {
 			@Override
 			public Object prepareSession(CoreSession session) throws QonfigInterpretationException {
 				String breakpointType = session.getAttributeText("break-on");
@@ -61,32 +63,34 @@ public class ExpressoDebugV0_1 implements QonfigInterpretation {
 			}
 
 			@Override
-			public CompiledModelValue<?, ?> modifyValue(CompiledModelValue<?, ?> value, CoreSession session, Object prepared)
+			public CompiledModelValue<?> modifyValue(CompiledModelValue<?> value, CoreSession session, Object prepared)
 				throws QonfigInterpretationException {
 				String breakpointType = session.getAttributeText("break-on");
 				if (breakpointType == null || "parse".equals(breakpointType))
 					return value;
-				return new CompiledModelValue<Object, Object>() {
+				return new CompiledModelValue<Object>() {
 					@Override
-					public ModelType<Object> getModelType() {
-						return (ModelType<Object>) value.getModelType();
+					public ModelType<Object> getModelType(CompiledExpressoEnv env) {
+						return (ModelType<Object>) value.getModelType(env);
 					}
 
 					@Override
-					public ModelValueSynth<Object, Object> createSynthesizer() throws ExpressoInterpretationException {
+					public InterpretedValueSynth<Object, ?> interpret(InterpretedExpressoEnv env)
+						throws ExpressoInterpretationException {
 						if ("createContainer".equals(breakpointType)) {
 							BreakpointHere.breakpoint();
-							return (ModelValueSynth<Object, Object>) value.createSynthesizer();
+							return (InterpretedValueSynth<Object, ?>) value.interpret(env);
 						} else {
-							ModelValueSynth<Object, Object> wrapped = (ModelValueSynth<Object, Object>) value.createSynthesizer();
-							return new ModelValueSynth<Object, Object>() {
+							InterpretedValueSynth<Object, Object> wrapped = (InterpretedValueSynth<Object, Object>) value
+								.interpret(env);
+							return new InterpretedValueSynth<Object, Object>() {
 								@Override
 								public ModelType<Object> getModelType() {
 									return wrapped.getModelType();
 								}
 
 								@Override
-								public ModelInstanceType<Object, Object> getType() throws ExpressoInterpretationException {
+								public ModelInstanceType<Object, Object> getType() {
 									return wrapped.getType();
 								}
 
@@ -104,7 +108,7 @@ public class ExpressoDebugV0_1 implements QonfigInterpretation {
 								}
 
 								@Override
-								public List<? extends ModelValueSynth<?, ?>> getComponents() {
+								public List<? extends InterpretedValueSynth<?, ?>> getComponents() {
 									return Collections.singletonList(wrapped);
 								}
 

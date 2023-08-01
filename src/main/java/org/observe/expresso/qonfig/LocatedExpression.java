@@ -1,11 +1,11 @@
 package org.observe.expresso.qonfig;
 
-import org.observe.expresso.ExpressoEnv;
+import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ExpressoEvaluationException;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ObservableExpression;
-import org.observe.expresso.ObservableModelSet.ModelValueSynth;
+import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.TypeConversionException;
 import org.qommons.io.LocatedFilePosition;
 import org.qommons.io.LocatedPositionedContent;
@@ -38,7 +38,7 @@ public interface LocatedExpression {
 	 * @return The evaluated expression
 	 * @throws ExpressoInterpretationException If the expression could not be evaluated as the given type
 	 */
-	default <M, MV extends M> ModelValueSynth<M, MV> evaluate(ModelInstanceType<M, MV> type, ExpressoEnv env)
+	default <M, MV extends M> InterpretedValueSynth<M, MV> interpret(ModelInstanceType<M, MV> type, InterpretedExpressoEnv env)
 		throws ExpressoInterpretationException {
 		try {
 			return getExpression().evaluate(type, env.at(getFilePosition()), 0);

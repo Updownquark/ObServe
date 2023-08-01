@@ -1,31 +1,36 @@
 package org.observe.quick.style;
 
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 
 import org.observe.expresso.qonfig.ElementTypeTraceability;
+import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.qommons.Named;
-import org.qommons.config.AbstractQIS;
+import org.qommons.config.QonfigElement;
+import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
-public class QuickStyleSet extends ExElement.Def.Abstract<ExElement> implements Named {
-	private static final ElementTypeTraceability<ExElement, ExElement.Interpreted<?>, QuickStyleSet> TRACEABILITY = ElementTypeTraceability.<ExElement, ExElement.Interpreted<?>, QuickStyleSet> build(
-		StyleSessionImplV0_1.NAME, StyleSessionImplV0_1.VERSION, "style-set")//
-		.reflectMethods(QuickStyleSet.class, null, null)//
-		.build();
+public class QuickStyleSet extends ExElement.Def.Abstract<ExElement.Void> implements Named {
+	private static final SingleTypeTraceability<ExElement.Void, ExElement.Interpreted<ExElement.Void>, QuickStyleSet> TRACEABILITY//
+	= ElementTypeTraceability.getElementTraceability(QuickStyleInterpretation.NAME, QuickStyleInterpretation.VERSION, "style-set",
+		QuickStyleSet.class, null, null);
 
-	private final String theName;
-	private final List<QuickStyleValue<?>> theValues;
+	private String theName;
 	private final List<QuickStyleElement.Def> theStyleElements;
 
-	public QuickStyleSet(QuickStyleSheet styleSheet, AbstractQIS<?> session, String name, List<QuickStyleValue<?>> values,
-		List<QuickStyleElement.Def> styleElements) {
-		super(styleSheet, session.getElement());
-		theName = name;
-		theValues = values;
-		theStyleElements = styleElements;
+	public QuickStyleSet(QuickStyleSheet styleSheet, QonfigElementOrAddOn styleSetEl) {
+		super(styleSheet, styleSetEl);
+		theStyleElements = new ArrayList<>();
+	}
+
+	@Override
+	public QuickStyleSheet getParentElement() {
+		return (QuickStyleSheet) super.getParentElement();
 	}
 
 	@QonfigAttributeGetter("name")
@@ -34,20 +39,21 @@ public class QuickStyleSet extends ExElement.Def.Abstract<ExElement> implements 
 		return theName;
 	}
 
-	public List<QuickStyleValue<?>> getValues() {
-		return theValues;
+	public List<QuickStyleElement.Def> getStyleElements() {
+		return Collections.unmodifiableList(theStyleElements);
 	}
 
-	public List<QuickStyleElement.Def> getStyleElements() {
-		return theStyleElements;
+	public void getStyleValues(Collection<QuickStyleValue> styleValues, StyleApplicationDef application, QonfigElement element) {
+		for (QuickStyleElement.Def styleEl : theStyleElements)
+			styleEl.getStyleValues(styleValues, application, element);
 	}
 
 	@Override
-	public void update(ExpressoQIS session) throws QonfigInterpretationException {
+	protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 		withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
-		super.update(session);
-		int i = 0;
-		for (ExpressoQIS valueS : session.forChildren("style"))
-			theStyleElements.get(i++).update(valueS);
+		super.doUpdate(session);
+
+		theName = session.getAttributeText("name");
+		ExElement.syncDefs(QuickStyleElement.Def.class, theStyleElements, session.forChildren("style"));
 	}
 }

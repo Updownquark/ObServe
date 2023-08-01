@@ -241,6 +241,16 @@ public interface ObservableAction<T> extends TypedValueContainer<T> {
 			theDisablement = disablement;
 		}
 
+		/** @return The action that this action wraps and performs */
+		protected ObservableAction<T> getParentAction() {
+			return theParentAction;
+		}
+
+		/** @return The additional disablement provided by this action */
+		protected ObservableValue<String> getDisablement() {
+			return theDisablement;
+		}
+
 		@Override
 		public TypeToken<T> getType() {
 			return theParentAction.getType();
@@ -256,8 +266,12 @@ public interface ObservableAction<T> extends TypedValueContainer<T> {
 
 		@Override
 		public ObservableValue<String> isEnabled() {
-			return ObservableValue.firstValue(TypeTokens.get().STRING, msg -> msg != null, () -> null, theDisablement,
-				theParentAction.isEnabled());
+			return ObservableValue.firstValue(TypeTokens.get().STRING, null, null, theDisablement, theParentAction.isEnabled());
+		}
+
+		@Override
+		public String toString() {
+			return theParentAction.toString();
 		}
 	}
 

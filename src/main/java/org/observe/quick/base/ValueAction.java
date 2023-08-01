@@ -7,29 +7,28 @@ import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.collect.ObservableCollection;
 import org.observe.expresso.ExpressoInterpretationException;
+import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.qonfig.CompiledExpression;
-import org.observe.expresso.qonfig.DynamicModelValue;
 import org.observe.expresso.qonfig.ElementTypeTraceability;
+import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.observe.expresso.qonfig.ExElement;
+import org.observe.expresso.qonfig.ExWithElementModel;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.util.TypeTokens;
-import org.qommons.config.QonfigElement;
+import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
-import org.qommons.ex.ExFunction;
 
 import com.google.common.reflect.TypeToken;
 
 public interface ValueAction<T> extends ExElement {
-	public static final ElementTypeTraceability<ValueAction<?>, Interpreted<?, ?>, Def<?, ?>> VALUE_ACTION_TRACEABILITY = ElementTypeTraceability
-		.<ValueAction<?>, Interpreted<?, ?>, Def<?, ?>> build(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION,
-			"abstract-value-action")//
-		.reflectMethods(Def.class, Interpreted.class, ValueAction.class)//
-		.build();
+	public static final SingleTypeTraceability<ValueAction<?>, Interpreted<?, ?>, Def<?, ?>> VALUE_ACTION_TRACEABILITY = ElementTypeTraceability
+		.getElementTraceability(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, "abstract-value-action", Def.class,
+			Interpreted.class, ValueAction.class);
 
 	public interface Def<T, A extends ValueAction<T>> extends ExElement.Def<A> {
 		@QonfigAttributeGetter("name")
@@ -66,8 +65,8 @@ public interface ValueAction<T> extends ExElement {
 			private CompiledExpression theTooltip;
 			private CompiledExpression theAction;
 
-			protected Abstract(ExElement.Def<?> parent, QonfigElement element) {
-				super(parent, element);
+			protected Abstract(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
+				super(parent, type);
 			}
 
 			@Override
@@ -106,9 +105,9 @@ public interface ValueAction<T> extends ExElement {
 			}
 
 			@Override
-			public void update(ExpressoQIS session) throws QonfigInterpretationException {
+			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 				withTraceability(VALUE_ACTION_TRACEABILITY.validate(session.getFocusType(), session.reporting()));
-				super.update(session);
+				super.doUpdate(session);
 				theName = session.getAttributeExpression("name");
 				isButton = session.getAttribute("as-button", boolean.class);
 				isPopup = session.getAttribute("as-popup", boolean.class);
@@ -128,7 +127,7 @@ public interface ValueAction<T> extends ExElement {
 
 		InterpretedValueSynth<SettableValue<?>, SettableValue<String>> getName();
 
-		ExFunction<ModelSetInstance, SettableValue<Icon>, ModelInstantiationException> getIcon();
+		InterpretedValueSynth<SettableValue<?>, SettableValue<Icon>> getIcon();
 
 		InterpretedValueSynth<SettableValue<?>, SettableValue<String>> isEnabled();
 
@@ -136,14 +135,14 @@ public interface ValueAction<T> extends ExElement {
 
 		InterpretedValueSynth<ObservableAction<?>, ObservableAction<?>> getAction();
 
-		void update() throws ExpressoInterpretationException;
+		void updateAction(InterpretedExpressoEnv env) throws ExpressoInterpretationException;
 
 		ValueAction<T> create(ExElement parent);
 
 		public abstract class Abstract<T, A extends ValueAction<T>> extends ExElement.Interpreted.Abstract<A> implements Interpreted<T, A> {
 			private final TypeToken<T> theValueType;
 			InterpretedValueSynth<SettableValue<?>, SettableValue<String>> theName;
-			ExFunction<ModelSetInstance, SettableValue<Icon>, ModelInstantiationException> theIcon;
+			InterpretedValueSynth<SettableValue<?>, SettableValue<Icon>> theIcon;
 			InterpretedValueSynth<SettableValue<?>, SettableValue<String>> isEnabled;
 			InterpretedValueSynth<SettableValue<?>, SettableValue<String>> theTooltip;
 			InterpretedValueSynth<ObservableAction<?>, ObservableAction<?>> theAction;
@@ -169,7 +168,7 @@ public interface ValueAction<T> extends ExElement {
 			}
 
 			@Override
-			public ExFunction<ModelSetInstance, SettableValue<Icon>, ModelInstantiationException> getIcon() {
+			public InterpretedValueSynth<SettableValue<?>, SettableValue<Icon>> getIcon() {
 				return theIcon;
 			}
 
@@ -189,17 +188,22 @@ public interface ValueAction<T> extends ExElement {
 			}
 
 			@Override
-			public void update() throws ExpressoInterpretationException {
-				super.update();
+			public void updateAction(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+				update(env);
+			}
+
+			@Override
+			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+				super.doUpdate(env);
 				theName = getDefinition().getName() == null ? null
-					: getDefinition().getName().evaluate(ModelTypes.Value.STRING).interpret();
+					: getDefinition().getName().interpret(ModelTypes.Value.STRING, getExpressoEnv());
 				theIcon = getDefinition().getIcon() == null ? null : QuickBaseInterpretation.evaluateIcon(getDefinition().getIcon(),
-					getDefinition().getExpressoEnv(), getDefinition().getCallingClass());
+					getExpressoEnv(), getDefinition().getElement().getDocument().getLocation());
 				isEnabled = getDefinition().isEnabled() == null ? null
-					: getDefinition().isEnabled().evaluate(ModelTypes.Value.STRING).interpret();
+					: getDefinition().isEnabled().interpret(ModelTypes.Value.STRING, getExpressoEnv());
 				theTooltip = getDefinition().getTooltip() == null ? null
-					: getDefinition().getTooltip().evaluate(ModelTypes.Value.STRING).interpret();
-				theAction = getDefinition().getAction().evaluate(ModelTypes.Action.any()).interpret();
+					: getDefinition().getTooltip().interpret(ModelTypes.Value.STRING, getExpressoEnv());
+				theAction = getDefinition().getAction().interpret(ModelTypes.Action.any(), getExpressoEnv());
 			}
 		}
 	}
@@ -275,21 +279,20 @@ public interface ValueAction<T> extends ExElement {
 
 		@Override
 		public ObservableAction<?> getAction() {
-			return theAction;
+			return theAction.disableWith(isEnabled());
 		}
 
 		@Override
-		public ModelSetInstance update(ExElement.Interpreted<?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
-			ModelSetInstance myModels = super.update(interpreted, models);
+		protected void updateModel(ExElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
+			super.updateModel(interpreted, myModels);
 			ValueAction.Interpreted<T, ?> myInterpreted = (ValueAction.Interpreted<T, ?>) interpreted;
 			theName.set(myInterpreted.getName() == null ? null : myInterpreted.getName().get(myModels), null);
 			isButton = myInterpreted.getDefinition().isButton();
 			isPopup = myInterpreted.getDefinition().isPopup();
-			theIcon.set(myInterpreted.getIcon() == null ? null : myInterpreted.getIcon().apply(myModels), null);
+			theIcon.set(myInterpreted.getIcon() == null ? null : myInterpreted.getIcon().get(myModels), null);
 			isEnabled.set(myInterpreted.isEnabled() == null ? null : myInterpreted.isEnabled().get(myModels), null);
 			theTooltip.set(myInterpreted.getTooltip() == null ? null : myInterpreted.getTooltip().get(myModels), null);
 			theAction = myInterpreted.getAction().get(myModels);
-			return myModels;
 		}
 	}
 
@@ -337,18 +340,16 @@ public interface ValueAction<T> extends ExElement {
 
 	public class Single<T> extends ValueAction.Abstract<T> {
 		public static final String SINGLE_VALUE_ACTION = "value-action";
-		private static final ElementTypeTraceability<Single<?>, Interpreted<?, ?>, Def<?, ?>> TRACEABILITY = ElementTypeTraceability
-			.<Single<?>, Interpreted<?, ?>, Def<?, ?>> build(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION,
-				SINGLE_VALUE_ACTION)//
-			.reflectMethods(Def.class, Interpreted.class, Single.class)//
-			.build();
+		private static final SingleTypeTraceability<Single<?>, Interpreted<?, ?>, Def<?, ?>> TRACEABILITY = ElementTypeTraceability
+			.getElementTraceability(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, SINGLE_VALUE_ACTION, Def.class,
+				Interpreted.class, Single.class);
 
 		public static class Def<T, A extends Single<T>> extends ValueAction.Def.Abstract<T, A> {
 			private String theValueName;
 			private boolean allowForMultiple;
 
-			public Def(ExElement.Def<?> parent, QonfigElement element) {
-				super(parent, element);
+			public Def(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
+				super(parent, type);
 			}
 
 			@QonfigAttributeGetter("value-name")
@@ -362,11 +363,13 @@ public interface ValueAction<T> extends ExElement {
 			}
 
 			@Override
-			public void update(ExpressoQIS session) throws QonfigInterpretationException {
+			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 				withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
-				super.update(session.asElement(session.getFocusType().getSuperElement()));
+				super.doUpdate(session.asElement(session.getFocusType().getSuperElement()));
 				theValueName = session.getAttributeText("value-name");
 				allowForMultiple = session.getAttribute("allow-for-multiple", boolean.class);
+				getAddOn(ExWithElementModel.Def.class).satisfyElementValueType(theValueName, ModelTypes.Value,
+					(interp, env) -> ModelTypes.Value.forType(((Interpreted<?, ?>) interp).getValueType()));
 			}
 
 			@Override
@@ -383,13 +386,6 @@ public interface ValueAction<T> extends ExElement {
 			@Override
 			public Def<? super T, ? super A> getDefinition() {
 				return (Def<? super T, ? super A>) super.getDefinition();
-			}
-
-			@Override
-			public void update() throws ExpressoInterpretationException {
-				DynamicModelValue.satisfyDynamicValueType(getDefinition().getValueName(), getDefinition().getModels(),
-					ModelTypes.Value.forType(getValueType()));
-				super.update();
 			}
 
 			@Override
@@ -426,25 +422,22 @@ public interface ValueAction<T> extends ExElement {
 			Interpreted<T, ?> myInterpreted = (Interpreted<T, ?>) interpreted;
 			theValueName = myInterpreted.getDefinition().getValueName();
 			allowForMultiple = myInterpreted.getDefinition().allowForMultiple();
-			ExElement.satisfyContextValue(theValueName, ModelTypes.Value.forType(getValueType()), SettableValue.flatten(theActionValue),
-				myModels, this);
+			getAddOn(ExWithElementModel.class).satisfyElementValue(theValueName, SettableValue.flatten(theActionValue));
 		}
 	}
 
 	public class Multi<T> extends ValueAction.Abstract<T> {
 		public static final String MULTI_VALUE_ACTION = "multi-value-action";
-		private static final ElementTypeTraceability<Multi<?>, Interpreted<?, ?>, Def<?, ?>> TRACEABILITY = ElementTypeTraceability
-			.<Multi<?>, Interpreted<?, ?>, Def<?, ?>> build(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION,
-				MULTI_VALUE_ACTION)//
-			.reflectMethods(Def.class, Interpreted.class, Multi.class)//
-			.build();
+		private static final SingleTypeTraceability<Multi<?>, Interpreted<?, ?>, Def<?, ?>> TRACEABILITY = ElementTypeTraceability
+			.getElementTraceability(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, MULTI_VALUE_ACTION, Def.class,
+				Interpreted.class, Multi.class);
 
 		public static class Def<T, A extends Multi<T>> extends ValueAction.Def.Abstract<T, A> {
 			private String theValuesName;
 			private boolean allowForEmpty;
 
-			public Def(ExElement.Def<?> parent, QonfigElement element) {
-				super(parent, element);
+			public Def(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
+				super(parent, type);
 			}
 
 			@QonfigAttributeGetter("values-name")
@@ -458,11 +451,13 @@ public interface ValueAction<T> extends ExElement {
 			}
 
 			@Override
-			public void update(ExpressoQIS session) throws QonfigInterpretationException {
+			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 				withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
-				super.update(session.asElement(session.getFocusType().getSuperElement()));
+				super.doUpdate(session.asElement(session.getFocusType().getSuperElement()));
 				theValuesName = session.getAttributeText("values-name");
 				allowForEmpty = session.getAttribute("allow-for-empty", boolean.class);
+				getAddOn(ExWithElementModel.Def.class).satisfyElementValueType(theValuesName, ModelTypes.Collection,
+					(interp, env) -> ModelTypes.Collection.forType(((Interpreted<?, ?>) interp).getValueType()));
 			}
 
 			@Override
@@ -480,13 +475,6 @@ public interface ValueAction<T> extends ExElement {
 			@Override
 			public Def<? super T, ? super A> getDefinition() {
 				return (Def<? super T, ? super A>) super.getDefinition();
-			}
-
-			@Override
-			public void update() throws ExpressoInterpretationException {
-				DynamicModelValue.satisfyDynamicValueType(getDefinition().getValuesName(), getDefinition().getModels(),
-					ModelTypes.Collection.forType(getValueType()));
-				super.update();
 			}
 
 			@Override
@@ -525,8 +513,7 @@ public interface ValueAction<T> extends ExElement {
 			Interpreted<T, ?> myInterpreted = (Interpreted<T, ?>) interpreted;
 			theValuesName = myInterpreted.getDefinition().getValuesName();
 			allowForEmpty = myInterpreted.getDefinition().allowForEmpty();
-			ExElement.satisfyContextValue(theValuesName, ModelTypes.Collection.forType(getValueType()),
-				ObservableCollection.flattenValue(theActionValues), myModels, this);
+			getAddOn(ExWithElementModel.class).satisfyElementValue(theValuesName, ObservableCollection.flattenValue(theActionValues));
 		}
 	}
 }

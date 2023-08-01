@@ -6,18 +6,19 @@ import java.time.Instant;
 
 import org.observe.SettableValue;
 import org.observe.expresso.ExpressoInterpretationException;
+import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
-import org.observe.expresso.ObservableModelSet.ModelValueSynth;
 import org.observe.expresso.qonfig.CompiledExpression;
 import org.observe.expresso.qonfig.ElementTypeTraceability;
+import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.util.TypeTokens;
-import org.qommons.config.QonfigElement;
+import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.io.Format;
 import org.qommons.io.SpinnerFormat;
@@ -26,10 +27,9 @@ import com.google.common.reflect.TypeToken;
 
 public interface QuickTextWidget<T> extends QuickValueWidget<T> {
 	public static final String TEXT_WIDGET = "text-widget";
-	public static final ElementTypeTraceability<QuickTextWidget<?>, Interpreted<?, ?>, Def<?>> TEXT_WIDGET_TRACEABILITY = ElementTypeTraceability
-		.<QuickTextWidget<?>, Interpreted<?, ?>, Def<?>> build(QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, TEXT_WIDGET)//
-		.reflectMethods(Def.class, Interpreted.class, QuickTextWidget.class)//
-		.build();
+	public static final SingleTypeTraceability<QuickTextWidget<?>, Interpreted<?, ?>, Def<?>> TEXT_WIDGET_TRACEABILITY = ElementTypeTraceability
+		.getElementTraceability(QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, TEXT_WIDGET, Def.class, Interpreted.class,
+			QuickTextWidget.class);
 
 	public static final Format<Double> DEFAULT_DOUBLE_FORMAT = Format.doubleFormat(5)//
 		.printIntFor(5, false)//
@@ -73,8 +73,8 @@ public interface QuickTextWidget<T> extends QuickValueWidget<T> {
 			private CompiledExpression theFormat;
 			private CompiledExpression isEditable;
 
-			protected Abstract(ExElement.Def<?> parent, QonfigElement element) {
-				super(parent, element);
+			protected Abstract(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
+				super(parent, type);
 			}
 
 			@Override
@@ -88,9 +88,9 @@ public interface QuickTextWidget<T> extends QuickValueWidget<T> {
 			}
 
 			@Override
-			public void update(ExpressoQIS session) throws QonfigInterpretationException {
+			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 				withTraceability(TEXT_WIDGET_TRACEABILITY.validate(session.getFocusType(), session.reporting()));
-				super.update(session.asElement(session.getFocusType().getSuperElement()));
+				super.doUpdate(session.asElement(session.getFocusType().getSuperElement()));
 				theFormat = session.getAttributeExpression("format");
 				isEditable = session.getAttributeExpression("editable");
 			}
@@ -130,12 +130,12 @@ public interface QuickTextWidget<T> extends QuickValueWidget<T> {
 			}
 
 			@Override
-			public void update(QuickStyledElement.QuickInterpretationCache cache) throws ExpressoInterpretationException {
-				super.update(cache);
+			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+				super.doUpdate(env);
 				TypeToken<T> valueType = getValueType();
 				TypeToken<Format<T>> formatType = TypeTokens.get().keyFor(Format.class).<Format<T>> parameterized(valueType);
 				if (getDefinition().getFormat() != null) {
-					theFormat = getDefinition().getFormat().evaluate(ModelTypes.Value.forType(formatType)).interpret();
+					theFormat = getDefinition().getFormat().interpret(ModelTypes.Value.forType(formatType), getExpressoEnv());
 				} else {
 					Class<T> raw = TypeTokens.get().unwrap(TypeTokens.getRawType(valueType));
 					Format<T> defaultFormat;
@@ -158,10 +158,10 @@ public interface QuickTextWidget<T> extends QuickValueWidget<T> {
 							getDefinition().reporting().getFileLocation().getPosition(0), 0);
 					else
 						defaultFormat = (Format<T>) TO_STRING_FORMAT;
-					theFormat = ModelValueSynth.literal(formatType, defaultFormat, "default-" + raw.getSimpleName() + "-format");
+					theFormat = InterpretedValueSynth.literal(formatType, defaultFormat, "default-" + raw.getSimpleName() + "-format");
 				}
 				isEditable = getDefinition().isEditable() == null ? null
-					: getDefinition().isEditable().evaluate(ModelTypes.Value.BOOLEAN).interpret();
+					: getDefinition().isEditable().interpret(ModelTypes.Value.BOOLEAN, getExpressoEnv());
 			}
 		}
 	}

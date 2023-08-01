@@ -1,6 +1,8 @@
 package org.observe.quick.style;
 
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -8,17 +10,22 @@ import java.util.Set;
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.expresso.ExpressoInterpretationException;
+import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
-import org.observe.quick.style.QuickStyleElement.Interpreted;
 import org.observe.util.TypeTokens;
 import org.qommons.LambdaUtils;
+import org.qommons.collect.BetterCollection;
+import org.qommons.collect.BetterHashMultiMap;
+import org.qommons.collect.BetterMultiMap;
 import org.qommons.config.QonfigElement;
 
 import com.google.common.reflect.TypeToken;
 
 /** Represents style information for a {@link QonfigElement} */
 public interface QuickInterpretedStyle {
+	QuickCompiledStyle getDefinition();
+
 	/** @return This element's {@link QonfigElement#getParent() parent}'s style */
 	QuickInterpretedStyle getParent();
 
@@ -26,7 +33,47 @@ public interface QuickInterpretedStyle {
 	List<InterpretedStyleValue<?>> getDeclaredValues();
 
 	/** @return All style attributes that apply to this element */
-	public Set<QuickStyleAttribute<?>> getAttributes();
+	Set<QuickStyleAttribute<?>> getAttributes();
+
+	/** @return A multi-map of all style values applicable to this style, keyed by name */
+	BetterMultiMap<String, QuickStyleAttribute<?>> getAttributesByName();
+
+	/**
+	 * Gets a style attribute in this style by name
+	 *
+	 * @param <T> The type of the style attribute to get
+	 * @param attributeName The name of the style attribute to get
+	 * @param type The type of the style attribute to get
+	 * @return The style attribute in this style with the given name
+	 * @throws IllegalArgumentException If there is no such attribute with the given name applicable to this style's element, there are
+	 *         multiple such styles, or the applicable style's {@link QuickStyleAttributeDef#getType() type} is not the same as that given
+	 */
+	default <T> QuickStyleAttribute<T> getAttribute(String attributeName, TypeToken<T> type) throws IllegalArgumentException {
+		BetterCollection<QuickStyleAttribute<?>> attrs = getAttributesByName().get(attributeName);
+		if (attrs.isEmpty())
+			throw new IllegalArgumentException("No such attribute: '" + attributeName + "'");
+		else if (attrs.size() > 1)
+			throw new IllegalArgumentException("Multiple attributes named '" + attributeName + "': " + attrs);
+		QuickStyleAttribute<?> attr = attrs.iterator().next();
+		if (!type.equals(attr.getType()) && !type.unwrap().equals(attr.getType().unwrap()))
+			throw new IllegalArgumentException("Attribute " + attr.getDefinition().getDeclarer().getElement().getName() + "."
+				+ attr.getName() + " is typed " + attr.getType() + ", not " + type);
+		return (QuickStyleAttribute<T>) attr;
+	}
+
+	/**
+	 * Gets a style attribute in this style by name
+	 *
+	 * @param <T> The type of the style attribute to get
+	 * @param attributeName The name of the style attribute to get
+	 * @param type The type of the style attribute to get
+	 * @return The style attribute in this style with the given name
+	 * @throws IllegalArgumentException If there is no such attribute with the given name applicable to this style's element, there are
+	 *         multiple such styles, or the applicable style's {@link QuickStyleAttributeDef#getType() type} is not the same as that given
+	 */
+	default <T> QuickStyleAttribute<T> getAttribute(String attributeName, Class<T> type) {
+		return getAttribute(attributeName, TypeTokens.get().of(type));
+	}
 
 	/**
 	 * @param <T> The type of the attribute
@@ -35,28 +82,63 @@ public interface QuickInterpretedStyle {
 	 */
 	<T> QuickElementStyleAttribute<T> get(QuickStyleAttribute<T> attr);
 
-	List<QuickStyleElement.Interpreted> getStyleElements();
+	default <T> QuickElementStyleAttribute<T> get(String attributeName, TypeToken<T> type) throws IllegalArgumentException {
+		return get(getAttribute(attributeName, type));
+	}
 
-	void update() throws ExpressoInterpretationException;
+	default <T> QuickElementStyleAttribute<T> get(String attributeName, Class<T> type) throws IllegalArgumentException {
+		return get(attributeName, TypeTokens.get().of(type));
+	}
+
+	void update(InterpretedExpressoEnv env, QuickInterpretedStyleCache.Applications appCache) throws ExpressoInterpretationException;
 
 	/** Default implementation */
 	public class Default implements QuickInterpretedStyle {
+		private final QuickCompiledStyle theDefinition;
 		private final QuickInterpretedStyle theParent;
 		private final List<InterpretedStyleValue<?>> theDeclaredValues;
 		private final Map<QuickStyleAttribute<?>, QuickElementStyleAttribute<?>> theValues;
-		private final List<QuickStyleElement.Interpreted> theStyleElements;
+		private final BetterMultiMap<String, QuickStyleAttribute<?>> theAttributesByName;
 
 		/**
 		 * @param parent The element style for the {@link QonfigElement#getParent() parent} element
-		 * @param declaredValues All style values declared specifically on this element
-		 * @param values All values for style attributes that vary on this style
 		 */
-		public Default(QuickInterpretedStyle parent, List<InterpretedStyleValue<?>> declaredValues,
-			Map<QuickStyleAttribute<?>, QuickElementStyleAttribute<?>> values, List<QuickStyleElement.Interpreted> styleElements) {
+		public Default(QuickCompiledStyle definition, QuickInterpretedStyle parent) {
+			theDefinition = definition;
 			theParent = parent;
-			theDeclaredValues = declaredValues;
-			theValues = values;
-			theStyleElements = styleElements;
+			theDeclaredValues = new ArrayList<>();
+			theValues = new HashMap<>();
+			theAttributesByName = BetterHashMultiMap.<String, QuickStyleAttribute<?>> buildHashed()//
+				.withDistinctValues().buildMultiMap();
+		}
+
+		@Override
+		public void update(InterpretedExpressoEnv env, QuickInterpretedStyleCache.Applications appCache)
+			throws ExpressoInterpretationException {
+			theDeclaredValues.clear();
+			for (QuickStyleValue value : getDefinition().getDeclaredValues())
+				theDeclaredValues.add(value.interpret(env, appCache));
+			QuickInterpretedStyleCache cache = QuickInterpretedStyleCache.get(env);
+			for (QuickStyleAttributeDef attr : getDefinition().getAttributes()) {
+				QuickStyleAttribute<Object> interpretedAttr = (QuickStyleAttribute<Object>) cache.getAttribute(attr, env);
+				QuickInterpretedStyle.QuickElementStyleAttribute<Object> inherited;
+				inherited = theParent != null && attr.isTrickleDown() ? getInherited(theParent, interpretedAttr) : null;
+				theValues.put(interpretedAttr, getDefinition().getValues(attr).interpret(this, inherited, env, appCache));
+			}
+			theAttributesByName.clear();
+			for (QuickStyleAttribute<?> attr : theValues.keySet())
+				theAttributesByName.add(attr.getName(), attr);
+		}
+
+		private static <T> QuickElementStyleAttribute<T> getInherited(QuickInterpretedStyle parent, QuickStyleAttribute<T> attr) {
+			while (parent != null && !parent.getAttributes().contains(attr))
+				parent = parent.getParent();
+			return parent == null ? null : parent.get(attr);
+		}
+
+		@Override
+		public QuickCompiledStyle getDefinition() {
+			return theDefinition;
 		}
 
 		@Override
@@ -75,23 +157,17 @@ public interface QuickInterpretedStyle {
 		}
 
 		@Override
+		public BetterMultiMap<String, QuickStyleAttribute<?>> getAttributesByName() {
+			return theAttributesByName;
+		}
+
+		@Override
 		public <T> QuickElementStyleAttribute<T> get(QuickStyleAttribute<T> attr) {
 			QuickElementStyleAttribute<T> value = (QuickElementStyleAttribute<T>) theValues.get(attr);
 			if (value != null)
 				return value;
 			return new QuickElementStyleAttribute<>(attr, this, Collections.emptyList(), //
-				theParent != null && attr.isTrickleDown() ? theParent.get(attr) : null);
-		}
-
-		@Override
-		public List<QuickStyleElement.Interpreted> getStyleElements() {
-			return theStyleElements;
-		}
-
-		@Override
-		public void update() throws ExpressoInterpretationException {
-			for (QuickStyleElement.Interpreted styleEl : theStyleElements)
-				styleEl.update();
+				theParent != null && attr.getDefinition().isTrickleDown() ? theParent.get(attr) : null);
 		}
 	}
 
@@ -132,18 +208,19 @@ public interface QuickInterpretedStyle {
 		}
 
 		@Override
+		public BetterMultiMap<String, QuickStyleAttribute<?>> getAttributesByName() {
+			return theWrapped.getAttributesByName();
+		}
+
+		@Override
 		public <T> QuickElementStyleAttribute<T> get(QuickStyleAttribute<T> attr) {
 			return theWrapped.get(attr);
 		}
 
 		@Override
-		public List<Interpreted> getStyleElements() {
-			return theWrapped.getStyleElements();
-		}
-
-		@Override
-		public void update() throws ExpressoInterpretationException {
-			theWrapped.update();
+		public void update(InterpretedExpressoEnv env, QuickInterpretedStyleCache.Applications appCache)
+			throws ExpressoInterpretationException {
+			theWrapped.update(env, appCache);
 		}
 
 		@Override
@@ -169,8 +246,8 @@ public interface QuickInterpretedStyle {
 		 * @param values All style values that may apply to the element for the attribute
 		 * @param inherited The structure for the same attribute for the {@link QuickInterpretedStyle#getParent() parent} style
 		 */
-		public QuickElementStyleAttribute(QuickStyleAttribute<T> attribute, QuickInterpretedStyle style, List<InterpretedStyleValue<T>> values,
-			QuickElementStyleAttribute<T> inherited) {
+		public QuickElementStyleAttribute(QuickStyleAttribute<T> attribute, QuickInterpretedStyle style,
+			List<InterpretedStyleValue<T>> values, QuickElementStyleAttribute<T> inherited) {
 			theAttribute = attribute;
 			theStyle = style;
 			theValues = values;
@@ -211,7 +288,7 @@ public interface QuickInterpretedStyle {
 					"ifPass(" + value + ")", null));
 			}
 			if (theInherited != null) {
-				ObservableValue<T> value = theInherited.evaluate(StyleQIS.getParentModels(models));
+				ObservableValue<T> value = theInherited.evaluate(InterpretedStyleApplication.getParentModels(models));
 				values[theValues.size()] = ObservableValue.of(new ConditionalValue<>(true, value));
 			}
 			ConditionalValue<T> defaultCV = new ConditionalValue<>(true, null);

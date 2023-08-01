@@ -1849,6 +1849,8 @@ public class PanelPopulation {
 
 		boolean isDisplayedWhenDisabled();
 
+		A disableWith(ObservableValue<String> disabled);
+
 		A allowWhen(Function<? super R, String> filter, Consumer<ActionEnablement<R>> operation);
 
 		A allowWhenMulti(Function<? super List<? extends R>, String> filter, Consumer<ActionEnablement<List<? extends R>>> operation);

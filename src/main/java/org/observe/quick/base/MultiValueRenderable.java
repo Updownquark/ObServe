@@ -6,16 +6,17 @@ import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.qonfig.CompiledExpression;
 import org.observe.expresso.qonfig.ElementTypeTraceability;
+import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.quick.QuickWidget;
 
 public interface MultiValueRenderable<T> extends QuickWidget {
-	public static final ElementTypeTraceability<MultiValueRenderable<?>, Interpreted<?, ?>, Def<?>> MV_RENDERABLE_TRACEABILITY = ElementTypeTraceability
+	public static final SingleTypeTraceability<MultiValueRenderable<?>, Interpreted<?, ?>, Def<?>> MV_RENDERABLE_TRACEABILITY = ElementTypeTraceability
 		.<MultiValueRenderable<?>, Interpreted<?, ?>, Def<?>> build(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION,
 			"multi-value-renderable")//
 		.withAttribute("value-name", Def::getValueName, null)//
 		.build();
-	public static final ElementTypeTraceability<MultiValueRenderable<?>, Interpreted<?, ?>, Def<?>> MV_WIDGET_TRACEABILITY = ElementTypeTraceability
+	public static final SingleTypeTraceability<MultiValueRenderable<?>, Interpreted<?, ?>, Def<?>> MV_WIDGET_TRACEABILITY = ElementTypeTraceability
 		.<MultiValueRenderable<?>, Interpreted<?, ?>, Def<?>> build(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION,
 			"multi-value-widget")//
 		.withAttribute("selection", Def::getSelection, Interpreted::getSelection)//

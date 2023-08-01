@@ -19,9 +19,10 @@ import org.observe.Observable;
 import org.observe.ObservableAction;
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
-import org.observe.expresso.ExpressoEnv;
+import org.observe.expresso.CompiledExpressoEnv;
 import org.observe.expresso.ExpressoEvaluationException;
 import org.observe.expresso.ExpressoInterpretationException;
+import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelType;
 import org.observe.expresso.ModelType.ModelInstanceConverter;
@@ -72,12 +73,12 @@ public abstract class Invocation implements ObservableExpression {
 	protected abstract int getInitialArgOffset();
 
 	@Override
-	public ModelType<?> getModelType(ExpressoEnv env) {
-		return ModelTypes.Value; // Gotta pick one
+	public ModelType<?> getModelType(CompiledExpressoEnv env) {
+		return ModelTypes.Value; // Could also be an action, but we gotta pick one
 	}
 
 	@Override
-	public <M, MV extends M> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env,
+	public <M, MV extends M> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, InterpretedExpressoEnv env,
 		int expressionOffset) throws ExpressoEvaluationException, ExpressoInterpretationException {
 		if (type.getModelType() == ModelTypes.Action) {
 			try (Transaction t = asAction()) {
@@ -99,7 +100,7 @@ public abstract class Invocation implements ObservableExpression {
 
 	/**
 	 * Represents an argument option supplied to
-	 * {@link Invocation#findMethod(Executable[], String, TypeToken, boolean, List, ModelInstanceType, ExpressoEnv, ExecutableImpl, ObservableExpression, int)}
+	 * {@link Invocation#findMethod(Executable[], String, TypeToken, boolean, List, ModelInstanceType, InterpretedExpressoEnv, ExecutableImpl, ObservableExpression, int)}
 	 */
 	public interface Args {
 		/** @return The number of arguments in the option */
@@ -128,13 +129,13 @@ public abstract class Invocation implements ObservableExpression {
 
 	/** An {@link Args} option representing a set of arguments to an invokable */
 	protected class ArgOption implements Args {
-		final ExpressoEnv theEnv;
+		final InterpretedExpressoEnv theEnv;
 		/** The arguments */
 		public final List<EvaluatedExpression<SettableValue<?>, SettableValue<?>>>[] args;
 		private final EvaluatedExpression<SettableValue<?>, SettableValue<?>>[] resolved;
 		private final int theExpressionOffset;
 
-		ArgOption(ExpressoEnv env, int argOffset) {
+		ArgOption(InterpretedExpressoEnv env, int argOffset) {
 			theEnv = env;
 			args = new List[theArguments.size()];
 			resolved = new EvaluatedExpression[theArguments.size()];
@@ -266,7 +267,7 @@ public abstract class Invocation implements ObservableExpression {
 	 * @throws ExpressoEvaluationException If an error occurs evaluating the invokable
 	 * @throws ExpressoInterpretationException If an expression on which this expression depends could not be interpreted
 	 */
-	protected abstract <M, MV extends M> InvokableResult<?, M, MV> evaluateInternal2(ModelInstanceType<M, MV> type, ExpressoEnv env,
+	protected abstract <M, MV extends M> InvokableResult<?, M, MV> evaluateInternal2(ModelInstanceType<M, MV> type, InterpretedExpressoEnv env,
 		ArgOption args, int expressionOffset) throws ExpressoEvaluationException, ExpressoInterpretationException;
 
 	private <X extends Executable, T> InvocationActionContainer<X, T> createActionContainer(
@@ -330,7 +331,7 @@ public abstract class Invocation implements ObservableExpression {
 	 */
 	public static <X extends Executable, M, MV extends M> MethodResult<X, MV> findMethod(X[] methods, String methodName,
 		TypeToken<?> contextType, boolean arg0Context, List<? extends Args> argOptions, ModelInstanceType<M, MV> targetType,
-		ExpressoEnv env, ExecutableImpl<X> impl, ObservableExpression invocation, int expressionOffset)
+		InterpretedExpressoEnv env, ExecutableImpl<X> impl, ObservableExpression invocation, int expressionOffset)
 			throws ExpressoEvaluationException, ExpressoInterpretationException {
 		Map<String, Exception> methodErrors = null;
 		MethodResult<X, MV> bestResult = null;
@@ -923,7 +924,7 @@ public abstract class Invocation implements ObservableExpression {
 		public final M method;
 		/**
 		 * The index of the option passed to
-		 * {@link Invocation#findMethod(Executable[], String, TypeToken, boolean, List, ModelInstanceType, ExpressoEnv, ExecutableImpl, ObservableExpression, int)}
+		 * {@link Invocation#findMethod(Executable[], String, TypeToken, boolean, List, ModelInstanceType, InterpretedExpressoEnv, ExecutableImpl, ObservableExpression, int)}
 		 * whose arguments match this invocation
 		 */
 		public final int argListOption;

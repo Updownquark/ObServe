@@ -1,26 +1,20 @@
 package org.observe.quick.style;
 
-import java.util.Map;
-
 import org.observe.SettableValue;
-import org.observe.expresso.ExpressoEnv;
+import org.observe.expresso.ExpressoInterpretationException;
+import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
-import org.observe.expresso.ObservableModelSet.CompiledModelValue;
+import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.qonfig.LocatedExpression;
 import org.qommons.StringUtils;
 import org.qommons.config.QonfigElementOrAddOn;
-import org.qommons.config.QonfigInterpretationException;
 
-/**
- * The definition of a conditional value for a style attribute in quick
- *
- * @param <T> The type of the value
- */
-public class QuickStyleValue<T> implements Comparable<QuickStyleValue<?>> {
+/** The definition of a conditional value for a style attribute in quick */
+public class QuickStyleValue implements Comparable<QuickStyleValue> {
 	private final QuickStyleSheet theStyleSheet;
 	private final StyleApplicationDef theApplication;
-	private final QuickStyleAttribute<T> theAttribute;
+	private final QuickStyleAttributeDef theAttribute;
 	private final LocatedExpression theValueExpression;
 	private final boolean isTrickleDown;
 
@@ -30,7 +24,7 @@ public class QuickStyleValue<T> implements Comparable<QuickStyleValue<?>> {
 	 * @param attribute THe attribute this value is for
 	 * @param value The expression defining this style value's value
 	 */
-	public QuickStyleValue(QuickStyleSheet styleSheet, StyleApplicationDef application, QuickStyleAttribute<T> attribute,
+	public QuickStyleValue(QuickStyleSheet styleSheet, StyleApplicationDef application, QuickStyleAttributeDef attribute,
 		LocatedExpression value) {
 		if (attribute == null)
 			throw new NullPointerException("Attribute is null");
@@ -69,7 +63,7 @@ public class QuickStyleValue<T> implements Comparable<QuickStyleValue<?>> {
 	}
 
 	/** @return The style attribute this value is for */
-	public QuickStyleAttribute<T> getAttribute() {
+	public QuickStyleAttributeDef getAttribute() {
 		return theAttribute;
 	}
 
@@ -85,7 +79,7 @@ public class QuickStyleValue<T> implements Comparable<QuickStyleValue<?>> {
 	 * </p>
 	 * <p>
 	 * E.g. one could specify a style for widget color against a table column. A table column is not a widget. Therefore, clearly the intent
-	 * is to apply the style to apply the color style against all the widgets belonging to the column, i.e. renderers and editors.
+	 * is to apply the color style against all the widgets belonging to the column, i.e. renderers and editors.
 	 * </p>
 	 *
 	 * @return Whether this style value should apply to the highest-level descendants that the attribute applies to of elements which match
@@ -96,19 +90,26 @@ public class QuickStyleValue<T> implements Comparable<QuickStyleValue<?>> {
 	}
 
 	/**
-	 * @param expressoEnv The expresso environment in which to
-	 *        {@link ObservableExpression#evaluate(org.observe.expresso.ModelType.ModelInstanceType, ExpressoEnv, int) evaluate} this
-	 *        value's expressions when the compiled result is {@link CompiledStyleValue#interpret(Map) interpreted}
-	 * @param applications A set of compiled style applications for re-use
+	 * @param cache The interpreted style cache to avoid duplicating attributes and applications, also containing the expresso environment
+	 *        in which to
+	 *        {@link ObservableExpression#evaluate(org.observe.expresso.ModelType.ModelInstanceType, InterpretedExpressoEnv, int) evaluate}
+	 *        this value's expressions
 	 * @return The compiled style value
-	 * @throws QonfigInterpretationException If the expressions could not be compiled
+	 * @throws ExpressoInterpretationException If the expressions could not be compiled
 	 */
-	public CompiledStyleValue<T> compile(ExpressoEnv expressoEnv, Map<StyleApplicationDef, CompiledStyleApplication> applications)
-		throws QonfigInterpretationException {
-		CompiledStyleApplication application = theApplication.compile(expressoEnv, applications);
-		CompiledModelValue<SettableValue<?>, SettableValue<T>> valueV = CompiledModelValue.of(theAttribute.getName(), ModelTypes.Value,
-			() -> theValueExpression.evaluate(ModelTypes.Value.forType(theAttribute.getType()), expressoEnv));
-		return new CompiledStyleValue<>(this, application, valueV);
+	public InterpretedStyleValue<?> interpret(InterpretedExpressoEnv env, QuickInterpretedStyleCache.Applications appCache)
+		throws ExpressoInterpretationException {
+		InterpretedStyleApplication application = appCache.getApplication(theApplication, env);
+		QuickInterpretedStyleCache cache = QuickInterpretedStyleCache.get(env);
+		QuickStyleAttribute<?> attribute = cache.getAttribute(theAttribute, env);
+		return _interpret(application, attribute, env);
+	}
+
+	private <T> InterpretedStyleValue<T> _interpret(InterpretedStyleApplication application, QuickStyleAttribute<T> attribute,
+		InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+		InterpretedValueSynth<SettableValue<?>, SettableValue<T>> value = theValueExpression
+			.interpret(ModelTypes.Value.forType(attribute.getType()), env);
+		return new InterpretedStyleValue<>(this, application, attribute, value);
 	}
 
 	/**
@@ -116,12 +117,12 @@ public class QuickStyleValue<T> implements Comparable<QuickStyleValue<?>> {
 	 * @return A new style value identical to this one, except whose {@link #getApplication() application} is the
 	 *         {@link StyleApplicationDef#and(StyleApplicationDef) AND} operation of this value's application and the one given
 	 */
-	public QuickStyleValue<T> when(StyleApplicationDef application) {
-		return new QuickStyleValue<>(theStyleSheet, theApplication.and(application), theAttribute, theValueExpression);
+	public QuickStyleValue when(StyleApplicationDef application) {
+		return new QuickStyleValue(theStyleSheet, theApplication.and(application), theAttribute, theValueExpression);
 	}
 
 	@Override
-	public int compareTo(QuickStyleValue<?> o) {
+	public int compareTo(QuickStyleValue o) {
 		int comp = theApplication.compareTo(o.theApplication);
 		// Compare the source style sheets
 		if (comp == 0) {

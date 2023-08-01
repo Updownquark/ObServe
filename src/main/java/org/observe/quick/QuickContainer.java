@@ -1,16 +1,18 @@
 package org.observe.quick;
 
 import org.observe.expresso.ExpressoInterpretationException;
+import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.qonfig.ElementTypeTraceability;
+import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigChildGetter;
 import org.observe.quick.style.QuickCompiledStyle;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.CollectionUtils;
-import org.qommons.config.QonfigElement;
+import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.tree.BetterTreeList;
 
@@ -22,10 +24,9 @@ import org.qommons.tree.BetterTreeList;
 public interface QuickContainer<C extends QuickWidget> extends QuickWidget {
 	public static final String CONTAINER = "container";
 
-	public static final ElementTypeTraceability<QuickContainer<?>, Interpreted<?, ?>, Def<?, ?>> CONTAINER_TRACEABILITY = ElementTypeTraceability
-		.<QuickContainer<?>, Interpreted<?, ?>, Def<?, ?>> build(QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, CONTAINER)
-		.reflectMethods(Def.class, Interpreted.class, QuickContainer.class)//
-		.build();
+	public static final SingleTypeTraceability<QuickContainer<?>, Interpreted<?, ?>, Def<?, ?>> CONTAINER_TRACEABILITY = ElementTypeTraceability
+		.getElementTraceability(QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, CONTAINER, Def.class, Interpreted.class,
+			QuickContainer.class);
 
 	/**
 	 * The definition of a QuickContainer
@@ -53,10 +54,10 @@ public interface QuickContainer<C extends QuickWidget> extends QuickWidget {
 
 			/**
 			 * @param parent The parent definition
-			 * @param element The element that this definition is interpreted from
+			 * @param type The element that this definition is interpreted from
 			 */
-			protected Abstract(ExElement.Def<?> parent, QonfigElement element) {
-				super(parent, element);
+			protected Abstract(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
+				super(parent, type);
 				theContents = BetterTreeList.<QuickWidget.Def<? extends C>> build().build();
 			}
 
@@ -67,9 +68,9 @@ public interface QuickContainer<C extends QuickWidget> extends QuickWidget {
 			}
 
 			@Override
-			public void update(ExpressoQIS session) throws QonfigInterpretationException {
+			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 				withTraceability(CONTAINER_TRACEABILITY.validate(session.getFocusType(), session.reporting()));
-				super.update(session.asElement(session.getFocusType().getSuperElement()));
+				super.doUpdate(session.asElement(session.getFocusType().getSuperElement()));
 				ExElement.syncDefs(QuickWidget.Def.class, theContents, session.forChildren("content"));
 			}
 
@@ -123,15 +124,15 @@ public interface QuickContainer<C extends QuickWidget> extends QuickWidget {
 			}
 
 			@Override
-			public void update(QuickStyledElement.QuickInterpretationCache cache) throws ExpressoInterpretationException {
-				super.update(cache);
+			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+				super.doUpdate(env);
 				CollectionUtils.synchronize(theContents, getDefinition().getContents(), //
-					(widget, child) -> widget.getDefinition() == child)//
+					(widget, child) -> widget.getIdentity() == child.getIdentity())//
 				.<ExpressoInterpretationException> simpleE(
 					child -> (QuickWidget.Interpreted<? extends C>) child.interpret(Interpreted.Abstract.this))//
 				.rightOrder()//
-				.onRightX(element -> element.getLeftValue().update(cache))//
-				.onCommonX(element -> element.getLeftValue().update(cache))//
+				.onRightX(element -> element.getLeftValue().updateElement(getExpressoEnv()))//
+				.onCommonX(element -> element.getLeftValue().updateElement(getExpressoEnv()))//
 				.adjust();
 			}
 
@@ -175,23 +176,21 @@ public interface QuickContainer<C extends QuickWidget> extends QuickWidget {
 			super.updateModel(interpreted, myModels);
 			QuickContainer.Interpreted<?, C> myInterpreted = (QuickContainer.Interpreted<?, C>) interpreted;
 			CollectionUtils.synchronize(theContents, myInterpreted.getContents(), //
-				(widget, child) -> widget.getIdentity() == child.getDefinition().getIdentity())//
+				(widget, child) -> widget.getIdentity() == child.getIdentity())//
 			.<ModelInstantiationException> simpleE(child -> (C) child.create(QuickContainer.Abstract.this))//
 			.rightOrder()//
 			.onRightX(element -> {
 				try {
 					element.getLeftValue().update(element.getRightValue(), myModels);
 				} catch (RuntimeException | Error e) {
-					element.getRightValue().getDefinition().reporting().error(e.getMessage() == null ? e.toString() : e.getMessage(),
-						e);
+					element.getRightValue().reporting().error(e.getMessage() == null ? e.toString() : e.getMessage(), e);
 				}
 			})//
 			.onCommonX(element -> {
 				try {
 					element.getLeftValue().update(element.getRightValue(), myModels);
 				} catch (RuntimeException | Error e) {
-					element.getRightValue().getDefinition().reporting().error(e.getMessage() == null ? e.toString() : e.getMessage(),
-						e);
+					element.getRightValue().reporting().error(e.getMessage() == null ? e.toString() : e.getMessage(), e);
 				}
 			})//
 			.adjust();

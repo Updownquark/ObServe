@@ -10,11 +10,10 @@
 
 	<elements>
 		<element-def name="testing">
-			<child-def name="head" type="head" min="0" />
+			<child-def name="head" type="expresso" min="0" />
 			<child-def name="test" type="test" max="inf" />
 		</element-def>
-		<element-def name="head" extends="expresso" />
-		<element-def name="test" inherits="with-local-model,named">
+		<element-def name="test" inherits="with-local-model,named,with-element-model">
 			<child-def name="test-action" type="action" inherits="test-action" max="inf" />
 		</element-def>
 		<element-def name="watch" extends="model-value">

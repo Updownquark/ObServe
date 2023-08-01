@@ -2,36 +2,37 @@ package org.observe.quick.base;
 
 import org.observe.SettableValue;
 import org.observe.expresso.ExpressoInterpretationException;
+import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.qonfig.CompiledExpression;
 import org.observe.expresso.qonfig.ElementTypeTraceability;
+import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.quick.QuickContainer;
 import org.observe.quick.QuickWidget;
 import org.observe.util.TypeTokens;
-import org.qommons.config.QonfigElement;
+import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
 import com.google.common.reflect.TypeToken;
 
 public class QuickSplit extends QuickContainer.Abstract<QuickWidget> {
 	public static final String SPLIT = "split";
-	private static final ElementTypeTraceability<QuickSplit, Interpreted<?>, Def<?>> TRACEABILITY = ElementTypeTraceability
-		.<QuickSplit, Interpreted<?>, Def<?>> build(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, SPLIT)//
-		.reflectMethods(Def.class, Interpreted.class, QuickSplit.class)//
-		.build();
+	private static final SingleTypeTraceability<QuickSplit, Interpreted<?>, Def<?>> TRACEABILITY = ElementTypeTraceability
+		.getElementTraceability(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, SPLIT, Def.class, Interpreted.class,
+			QuickSplit.class);
 
 	public static class Def<S extends QuickSplit> extends QuickContainer.Def.Abstract<S, QuickWidget> {
 		private boolean isVertical;
 		private CompiledExpression theSplitPosition;
 
-		public Def(ExElement.Def<?> parent, QonfigElement element) {
-			super(parent, element);
+		public Def(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
+			super(parent, type);
 		}
 
 		@QonfigAttributeGetter("orientation")
@@ -44,9 +45,9 @@ public class QuickSplit extends QuickContainer.Abstract<QuickWidget> {
 		}
 
 		@Override
-		public void update(ExpressoQIS session) throws QonfigInterpretationException {
+		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
-			super.update(session.asElement(session.getFocusType().getSuperElement()));
+			super.doUpdate(session.asElement(session.getFocusType().getSuperElement()));
 			switch (session.getAttributeText("orientation")) {
 			case "horizontal":
 				isVertical = false;
@@ -91,10 +92,10 @@ public class QuickSplit extends QuickContainer.Abstract<QuickWidget> {
 		}
 
 		@Override
-		public void update(QuickWidget.QuickInterpretationCache cache) throws ExpressoInterpretationException {
-			super.update(cache);
+		protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+			super.doUpdate(env);
 			theSplitPosition = getDefinition().getSplitPosition() == null ? null
-				: getDefinition().getSplitPosition().evaluate(ModelTypes.Value.forType(QuickSize.class)).interpret();
+				: getDefinition().getSplitPosition().interpret(ModelTypes.Value.forType(QuickSize.class), env);
 		}
 
 		@Override

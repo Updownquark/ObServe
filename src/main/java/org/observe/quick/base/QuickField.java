@@ -2,9 +2,9 @@ package org.observe.quick.base;
 
 import org.observe.SettableValue;
 import org.observe.expresso.ExpressoInterpretationException;
+import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
-import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.qonfig.CompiledExpression;
@@ -20,7 +20,7 @@ public class QuickField extends ExAddOn.Abstract<QuickWidget> {
 		private CompiledExpression theFieldLabel;
 		private boolean isFill;
 
-		public Def(QonfigAddOn type, ExElement.Def<? extends QuickWidget> element) {
+		public Def(QonfigAddOn type, QuickWidget.Def<?> element) {
 			super(type, element);
 		}
 
@@ -67,9 +67,9 @@ public class QuickField extends ExAddOn.Abstract<QuickWidget> {
 		}
 
 		@Override
-		public void update(InterpretedModelSet models) throws ExpressoInterpretationException {
+		public void update(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 			theName = getDefinition().getFieldLabel() == null ? null
-				: getDefinition().getFieldLabel().evaluate(ModelTypes.Value.STRING).interpret();
+				: getDefinition().getFieldLabel().interpret(ModelTypes.Value.STRING, env);
 		}
 
 		@Override

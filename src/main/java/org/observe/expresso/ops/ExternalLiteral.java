@@ -8,14 +8,15 @@ import java.util.function.Function;
 
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
-import org.observe.expresso.ExpressoEnv;
+import org.observe.expresso.CompiledExpressoEnv;
 import org.observe.expresso.ExpressoEvaluationException;
+import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelType;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.NonStructuredParser;
 import org.observe.expresso.ObservableExpression;
-import org.observe.expresso.ObservableModelSet.ModelValueSynth;
+import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.util.TypeTokens;
 import org.qommons.LambdaUtils;
 
@@ -59,18 +60,18 @@ public class ExternalLiteral implements ObservableExpression {
 	}
 
 	@Override
-	public ModelType<?> getModelType(ExpressoEnv env) {
+	public ModelType<?> getModelType(CompiledExpressoEnv env) {
 		return ModelTypes.Value;
 	}
 
 	@Override
-	public <M, MV extends M> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env,
+	public <M, MV extends M> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, InterpretedExpressoEnv env,
 		int expressionOffset) throws ExpressoEvaluationException {
 		if (type.getModelType() != ModelTypes.Value)
 			throw new ExpressoEvaluationException(expressionOffset, theText.length(), "'" + theText + "' cannot be evaluated as a " + type);
 		NonStructuredParser[] parser = new NonStructuredParser[1];
 		ObservableValue<?> value = _parseValue(type.getType(0), env, expressionOffset, parser);
-		return ObservableExpression.evEx(ModelValueSynth.of((ModelInstanceType<M, MV>) ModelTypes.Value.forType(value.getType()), //
+		return ObservableExpression.evEx(InterpretedValueSynth.of((ModelInstanceType<M, MV>) ModelTypes.Value.forType(value.getType()), //
 			LambdaUtils.constantExFn(//
 				(MV) SettableValue.asSettable(value, __ -> "Literal value cannot be modified"), theText, null)),
 			parser[0]);
@@ -84,12 +85,12 @@ public class ExternalLiteral implements ObservableExpression {
 	 * @return The parsed expression
 	 * @throws ExpressoEvaluationException If an error occurs parsing the expression
 	 */
-	public <T> ObservableValue<? extends T> parseValue(TypeToken<T> asType, ExpressoEnv env, int expressionOffset)
+	public <T> ObservableValue<? extends T> parseValue(TypeToken<T> asType, InterpretedExpressoEnv env, int expressionOffset)
 		throws ExpressoEvaluationException {
 		return _parseValue(asType, env, expressionOffset, null);
 	}
 
-	private <T> ObservableValue<? extends T> _parseValue(TypeToken<T> asType, ExpressoEnv env, int expressionOffset,
+	private <T> ObservableValue<? extends T> _parseValue(TypeToken<T> asType, InterpretedExpressoEnv env, int expressionOffset,
 		NonStructuredParser[] parserUsed) throws ExpressoEvaluationException {
 		// Get all parsers that may possibly be able to generate an appropriate value
 		Class<T> rawType = TypeTokens.getRawType(asType);

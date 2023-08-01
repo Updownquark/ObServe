@@ -2,16 +2,15 @@ package org.observe.expresso.qonfig;
 
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.qommons.Named;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
 public class ExNamed extends ExAddOn.Abstract<ExElement> implements Named {
-	private static final ElementTypeTraceability<ExElement, ExElement.Interpreted<?>, ExElement.Def<?>> TRACEABILITY = ElementTypeTraceability
-		.buildAddOn(ExpressoSessionImplV0_1.TOOLKIT_NAME, ExpressoSessionImplV0_1.VERSION, "named", Def.class, Interpreted.class,
-			ExNamed.class)//
-		.reflectAddOnMethods()//
-		.build();
+	private static final SingleTypeTraceability<ExElement, ExElement.Interpreted<?>, ExElement.Def<?>> TRACEABILITY = ElementTypeTraceability
+		.getAddOnTraceability(ExpressoSessionImplV0_1.TOOLKIT_NAME, ExpressoSessionImplV0_1.VERSION, "named", Def.class, Interpreted.class,
+			ExNamed.class);
 
 	public static class Def extends ExAddOn.Def.Abstract<ExElement, ExNamed> implements Named {
 		private String theName;

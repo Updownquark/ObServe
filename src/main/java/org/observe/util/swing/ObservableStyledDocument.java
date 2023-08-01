@@ -314,6 +314,11 @@ public abstract class ObservableStyledDocument<T> {
 			if (theParent != null)
 				theParent.contentLengthChanged(diff);
 		}
+
+		@Override
+		public String toString() {
+			return String.valueOf(theValue);
+		}
 	}
 
 	public static class ChangeEvent<T> extends Causable.AbstractCausable {

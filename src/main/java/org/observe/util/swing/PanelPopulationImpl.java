@@ -1928,8 +1928,9 @@ class PanelPopulationImpl {
 		class ListItemAction<A extends SimpleDataAction<R, A>> extends SimpleDataAction<R, A> {
 			private final List<R> theActionItems;
 
-			ListItemAction(String actionName, Consumer<? super List<? extends R>> action, Supplier<List<R>> selectedValues) {
-				super(actionName, SimpleListBuilder.this, action, selectedValues, false);
+			ListItemAction(String actionName, Consumer<? super List<? extends R>> action, Supplier<List<R>> selectedValues,
+				Observable<?> until) {
+				super(actionName, SimpleListBuilder.this, action, selectedValues, false, until);
 				theActionItems = new ArrayList<>();
 				displayAsPopup(false);
 			}
@@ -2072,7 +2073,7 @@ class PanelPopulationImpl {
 			if (theActions == null)
 				theActions = new ArrayList<>();
 			ListItemAction<?>[] tableAction = new ListItemAction[1];
-			tableAction[0] = new ListItemAction<>(actionName, action, () -> tableAction[0].theActionItems);
+			tableAction[0] = new ListItemAction<>(actionName, action, () -> tableAction[0].theActionItems, getUntil());
 			if (actionMod != null)
 				actionMod.accept(tableAction[0]);
 			theActions.add(tableAction[0]);
@@ -2160,12 +2161,10 @@ class PanelPopulationImpl {
 						if (s != null)
 							action.putValue(Action.LONG_DESCRIPTION, s);
 					}
-					if (tableAction.theEnabledString != null) {
-						s = tableAction.theEnabledString.get();
-						if (s != null) {
-							action.setEnabled(false);
-							action.putValue(Action.LONG_DESCRIPTION, s);
-						}
+					s = tableAction.isEnabled();
+					if (s != null) {
+						action.setEnabled(false);
+						action.putValue(Action.LONG_DESCRIPTION, s);
 					}
 					if (theDecorator != null)
 						action.putValue("decorator", theDecorator);
@@ -2178,11 +2177,9 @@ class PanelPopulationImpl {
 					tableAction.updateSelection(Arrays.asList(item), null);
 					if (tableAction.theButtonMod != null)
 						tableAction.theButtonMod.accept(this);
-					if (tableAction.theEnabledString != null) {
-						String s = tableAction.theEnabledString.get();
-						if (s != null)
-							isEnabled = false;
-					}
+					String s = tableAction.isEnabled();
+					if (s != null)
+						isEnabled = false;
 					if (isEnabled)
 						tableAction.theObservableAction.act(cause);
 				}
@@ -2348,13 +2345,15 @@ class PanelPopulationImpl {
 		SettableValue<String> theEnabledString;
 		SettableValue<String> theTooltipString;
 		Consumer<ButtonEditor<?, ?>> theButtonMod;
+		Observable<?> theUntil;
 
 		SimpleDataAction(String actionName, CollectionWidgetBuilder<R, ?, ?> widget, Consumer<? super List<? extends R>> action,
-			Supplier<List<R>> selectedValues, boolean defaultAsButton) {
+			Supplier<List<R>> selectedValues, boolean defaultAsButton, Observable<?> until) {
 			theWidget = widget;
 			theActionName = actionName;
 			theAction = action;
 			theSelectedValues = selectedValues;
+			theUntil = until;
 			theEnabledString = SettableValue.build(String.class).build();
 			theObservableAction = new ObservableAction<Object>() {
 				@Override
@@ -2375,6 +2374,11 @@ class PanelPopulationImpl {
 				@Override
 				public ObservableValue<String> isEnabled() {
 					return theEnabledString;
+				}
+
+				@Override
+				public String toString() {
+					return action.toString();
 				}
 			};
 			isDisplayedWhenDisabled = true;
@@ -2486,6 +2490,18 @@ class PanelPopulationImpl {
 		public A displayWhenDisabled(boolean displayedWhenDisabled) {
 			isDisplayedWhenDisabled = displayedWhenDisabled;
 			return (A) this;
+		}
+
+		@Override
+		public A disableWith(ObservableValue<String> disabled) {
+			theObservableAction = theObservableAction.disableWith(disabled);
+			disabled.noInitChanges().takeUntil(theUntil).act(evt -> refreshEnabled(evt));
+			return (A) this;
+		}
+
+		private void refreshEnabled(Object cause) {
+			List<R> selected = theSelectedValues.get();
+			updateSelection(selected, cause);
 		}
 
 		@Override

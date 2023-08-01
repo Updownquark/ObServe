@@ -3,7 +3,8 @@ package org.observe.expresso;
 import java.util.List;
 
 import org.junit.Test;
-import org.observe.expresso.qonfig.DynamicModelValue;
+import org.observe.expresso.qonfig.ElementModelValue;
+import org.observe.expresso.qonfig.Expresso;
 
 /** Some tests for Expresso functionality */
 public class ExpressoTests extends AbstractExpressoTest<Expresso> {
@@ -116,8 +117,13 @@ public class ExpressoTests extends AbstractExpressoTest<Expresso> {
 		getTesting().executeTest("assignInstant");
 	}
 
+	@Test
+	public void testHook() throws ExpressoInterpretationException, ModelInstantiationException {
+		getTesting().executeTest("hook");
+	}
+
 	/**
-	 * Tests value-derived model values (see {@link DynamicModelValue})
+	 * Tests value-derived model values (see {@link ElementModelValue})
 	 *
 	 * @throws ExpressoInterpretationException If an error occurs compiling the test
 	 * @throws ModelInstantiationException If an error occurs instantiating the test values
@@ -128,7 +134,7 @@ public class ExpressoTests extends AbstractExpressoTest<Expresso> {
 	}
 
 	/**
-	 * Tests dynamically-typed value-derived model values (see {@link DynamicModelValue})
+	 * Tests dynamically-typed value-derived model values (see {@link ElementModelValue})
 	 *
 	 * @throws ExpressoInterpretationException If an error occurs compiling the test
 	 * @throws ModelInstantiationException If an error occurs instantiating the test values

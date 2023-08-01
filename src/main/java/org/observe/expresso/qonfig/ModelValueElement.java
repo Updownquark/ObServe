@@ -1,132 +1,211 @@
 package org.observe.expresso.qonfig;
 
-import java.util.function.Supplier;
-
+import org.observe.expresso.CompiledExpressoEnv;
 import org.observe.expresso.ExpressoInterpretationException;
+import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelType;
 import org.observe.expresso.ModelType.ModelInstanceType;
+import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.CompiledModelValue;
-import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
-import org.observe.expresso.ObservableModelSet.ModelValueSynth;
-import org.qommons.Version;
-import org.qommons.config.QonfigElement;
+import org.observe.expresso.VariableType;
+import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
+import org.observe.util.TypeTokens;
+import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
-import org.qommons.ex.ExSupplier;
 
 public interface ModelValueElement<M, MV extends M> extends ExElement {
-	static final ElementTypeTraceability<ModelValueElement<?, ?>, Interpreted<?, ?, ?>, Def<?, ?>> TRACEABILITY = ElementTypeTraceability
-		.<ModelValueElement<?, ?>, Interpreted<?, ?, ?>, Def<?, ?>> build(ExpressoSessionImplV0_1.TOOLKIT_NAME,
-			ExpressoSessionImplV0_1.VERSION, "model-value")//
-		.reflectMethods(Def.class, Interpreted.class, ModelValueElement.class)//
-		.build();
+	static final SingleTypeTraceability<ModelValueElement<?, ?>, Interpreted<?, ?, ?>, Def<?, ?>> TRACEABILITY = ElementTypeTraceability
+		.getElementTraceability(ExpressoSessionImplV0_1.TOOLKIT_NAME, ExpressoSessionImplV0_1.VERSION, "model-value", Def.class,
+			Interpreted.class, ModelValueElement.class);
 
 	public interface Def<M, E extends ModelValueElement<M, ?>> extends ExElement.Def<E> {
-		ModelType<M> getModelType();
+		String getModelPath();
 
+		ModelType<M> getModelType(CompiledExpressoEnv env);
+
+		@Override
 		@QonfigAttributeGetter
-		CompiledExpression getValue();
+		CompiledExpression getElementValue();
 
-		Interpreted<M, ?, ? extends E> interpret(ObservableModelElement.Interpreted<?> modelElement, InterpretedModelSet models)
-			throws ExpressoInterpretationException;
+		void populate(ObservableModelSet.Builder builder) throws QonfigInterpretationException;
 
-		public abstract class Simple<M, E extends ModelValueElement<M, ?>> extends ExElement.Def.Abstract<E> implements Def<M, E> {
-			private final String theToolkitName;
-			private final Version theToolkitVersion;
+		void prepareModelValue(ExpressoQIS session) throws QonfigInterpretationException;
+
+		public abstract class Abstract<M, E extends ModelValueElement<M, ?>> extends ExElement.Def.Abstract<E> implements Def<M, E> {
 			private final ModelType<M> theModelType;
 			private CompiledExpression theValue;
+			private String theModelPath;
+			private boolean isPrepared;
 
-			protected Simple(ExElement.Def<?> parent, QonfigElement element, ModelType<M> modelType, String toolkitName,
-				Version toolkitVersion) {
-				super(parent, element);
-				theToolkitName = toolkitName;
-				theToolkitVersion = toolkitVersion;
+			protected Abstract(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType, ModelType<M> modelType) {
+				super(parent, qonfigType);
 				theModelType = modelType;
 			}
 
 			@Override
-			public ModelType<M> getModelType() {
+			public ModelType<M> getModelType(CompiledExpressoEnv env) {
 				return theModelType;
 			}
 
-			protected abstract ModelInstanceType<M, ?> getType(ObservableModelSet models) throws ExpressoInterpretationException;
+			@Override
+			public String getModelPath() {
+				return theModelPath;
+			}
 
 			@QonfigAttributeGetter
 			@Override
-			public CompiledExpression getValue() {
+			public CompiledExpression getElementValue() {
 				return theValue;
 			}
 
 			@Override
-			public void update(ExpressoQIS session) throws QonfigInterpretationException {
+			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
+				isPrepared = false;
 				withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
-				super.update(session);
+				super.doUpdate(session);
+				String name = getAddOnValue(ExNamed.Def.class, ExNamed.Def::getName);
+				if (name != null) {
+					theModelPath = session.get(ExpressoBaseV0_1.PATH_KEY, String.class);
+					if (theModelPath == null)
+						theModelPath = name;
+					else
+						theModelPath += "." + name;
+				}
 				theValue = session.getValueExpression();
 			}
 
 			@Override
-			public Interpreted<M, ?, ? extends E> interpret(ObservableModelElement.Interpreted<?> modelElement, InterpretedModelSet models)
-				throws ExpressoInterpretationException {
-				return (Interpreted<M, ?, ? extends E>) new Interpreted.Default<>((Def<M, ModelValueElement<M, M>>) this, modelElement,
-					(ModelInstanceType<M, M>) getType(models));
+			public final void prepareModelValue(ExpressoQIS session) throws QonfigInterpretationException {
+				if (isPrepared)
+					return;
+				isPrepared = true;
+				doPrepare(session);
 			}
-		}
-	}
 
-	public interface CompiledModelValueElement<M, MV extends M, E extends ModelValueElement<M, MV>>
-	extends Def<M, E>, CompiledModelValue<M, MV> {
-		/**
-		 * @param <M> The model type of the new value
-		 * @param <MV> The type of the new value
-		 * @param name The name of the value (for {@link Object#toString()})
-		 * @param modelType The type of the new value
-		 * @param synth The function to create the value synthesizer
-		 * @return The new compiled model value
-		 */
-		static <M, MV extends M> CompiledModelValueElement<M, MV, ModelValueElement<M, MV>> of(ExElement.Def<?> parent,
-			QonfigElement element, String toolkitName, Version toolkitVersion, String typeName, ModelType<M> modelType,
-			Supplier<String> name, ExSupplier<ModelValueSynth<M, MV>, ExpressoInterpretationException> synth) {
-			return new Default<>(parent, element, modelType, toolkitName, toolkitVersion, typeName, name, synth);
+			protected abstract void doPrepare(ExpressoQIS session) throws QonfigInterpretationException;
 		}
 
-		public class Default<M, MV extends M> extends Def.Simple<M, ModelValueElement<M, MV>>
-		implements CompiledModelValueElement<M, MV, ModelValueElement<M, MV>> {
-			private final String theTypeName;
-			private final Supplier<String> theName;
-			private final ExSupplier<ModelValueSynth<M, MV>, ExpressoInterpretationException> theSynth;
+		public abstract class SingleTyped<M, E extends ModelValueElement<M, ?>> extends Abstract<M, E> {
+			private VariableType theValueType;
 
-			public Default(ExElement.Def<?> parent, QonfigElement element, ModelType<M> modelType, String toolkitName,
-				Version toolkitVersion, String typeName, Supplier<String> name,
-				ExSupplier<ModelValueSynth<M, MV>, ExpressoInterpretationException> synth) {
-				super(parent, element, modelType, toolkitName, toolkitVersion);
-				theTypeName = typeName;
-				theName = name;
-				theSynth = synth;
+			protected SingleTyped(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType, ModelType.SingleTyped<M> modelType) {
+				super(parent, qonfigType, modelType);
 			}
 
 			@Override
-			protected ModelInstanceType<M, MV> getType(ObservableModelSet models) throws ExpressoInterpretationException {
-				return theSynth.get().getType();
+			public ModelType.SingleTyped<M> getModelType(CompiledExpressoEnv env) {
+				return (ModelType.SingleTyped<M>) super.getModelType(env);
+			}
+
+			public VariableType getValueType() {
+				return theValueType;
 			}
 
 			@Override
-			public ModelValueSynth<M, MV> createSynthesizer() throws ExpressoInterpretationException {
-				return theSynth.get();
+			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
+				super.doUpdate(session);
+				theValueType = session.get(ExpressoBaseV0_1.VALUE_TYPE_KEY, VariableType.class);
+			}
+
+			public static abstract class Interpreted<M, MV extends M, E extends ModelValueElement<M, MV>>
+			extends ModelValueElement.Interpreted.Abstract<M, MV, E> {
+				private ModelInstanceType<M, MV> theTargetType;
+
+				protected Interpreted(SingleTyped<M, ? super E> definition, ExElement.Interpreted<?> parent) {
+					super(definition, parent);
+				}
+
+				@Override
+				public SingleTyped<M, ? super E> getDefinition() {
+					return (SingleTyped<M, ? super E>) super.getDefinition();
+				}
+
+				@Override
+				protected ModelInstanceType<M, MV> getTargetType() {
+					return theTargetType;
+				}
+
+				@Override
+				protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+					if (getDefinition().getValueType() != null)
+						theTargetType = (ModelInstanceType<M, MV>) getDefinition().getModelType(env)
+						.forTypes(getDefinition().getValueType().getType(env));
+					else
+						theTargetType = getDefinition().getModelType(env).anyAs();
+					super.doUpdate(env);
+				}
+			}
+		}
+
+		public abstract class DoubleTyped<M, E extends ModelValueElement<M, ?>> extends Abstract<M, E> {
+			private VariableType theValueType1;
+			private VariableType theValueType2;
+
+			protected DoubleTyped(ExElement.Def<?> parent, QonfigElementOrAddOn element, ModelType.DoubleTyped<M> modelType) {
+				super(parent, element, modelType);
 			}
 
 			@Override
-			public void update(ExpressoQIS session) throws QonfigInterpretationException {
-				if (!session.getFocusType().getName().equals(theTypeName))
-					throw new IllegalStateException("Expected '" + theTypeName + "', not '" + session.getFocusType().getName() + "'");
-				super.update(session.asElement(session.getFocusType().getSuperElement()));
+			public ModelType.DoubleTyped<M> getModelType(CompiledExpressoEnv env) {
+				return (ModelType.DoubleTyped<M>) super.getModelType(env);
+			}
+
+			public VariableType getValueType1() {
+				return theValueType1;
+			}
+
+			public VariableType getValueType2() {
+				return theValueType2;
 			}
 
 			@Override
-			public String toString() {
-				return theName.get();
+			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
+				super.doUpdate(session);
+				theValueType1 = session.get(ExpressoBaseV0_1.KEY_TYPE_KEY, VariableType.class);
+				theValueType2 = session.get(ExpressoBaseV0_1.VALUE_TYPE_KEY, VariableType.class);
+			}
+
+			public static abstract class Interpreted<M, MV extends M, E extends ModelValueElement<M, MV>>
+			extends ModelValueElement.Interpreted.Abstract<M, MV, E> {
+				private ModelInstanceType<M, MV> theTargetType;
+
+				protected Interpreted(DoubleTyped<M, ? super E> definition, ExElement.Interpreted<?> parent) {
+					super(definition, parent);
+				}
+
+				@Override
+				public DoubleTyped<M, ? super E> getDefinition() {
+					return (DoubleTyped<M, ? super E>) super.getDefinition();
+				}
+
+				@Override
+				protected ModelInstanceType<M, MV> getTargetType() {
+					return theTargetType;
+				}
+
+				@Override
+				protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+					ModelInstanceType<?, ?> type;
+					if (getDefinition().getValueType1() != null) {
+						if (getDefinition().getValueType2() != null)
+							type = getDefinition().getModelType(env).forTypes(getDefinition().getValueType1().getType(env),
+								getDefinition().getValueType2().getType(env));
+						else
+							type = getDefinition().getModelType(env).forTypes(getDefinition().getValueType1().getType(env),
+								TypeTokens.get().WILDCARD);
+					} else if (getDefinition().getValueType2() != null)
+						type = getDefinition().getModelType(env).forTypes(TypeTokens.get().WILDCARD,
+							getDefinition().getValueType2().getType(env));
+					else
+						type = getDefinition().getModelType(env).any();
+					theTargetType = (ModelInstanceType<M, MV>) type;
+
+					super.doUpdate(env);
+				}
 			}
 		}
 	}
@@ -135,23 +214,22 @@ public interface ModelValueElement<M, MV extends M> extends ExElement {
 		@Override
 		Def<M, ? super E> getDefinition();
 
-		ModelInstanceType<M, MV> getValueType();
+		ModelInstanceType<M, MV> getType();
 
-		InterpretedValueSynth<M, MV> getValue();
+		InterpretedValueSynth<?, ?> getElementValue();
 
-		void update() throws ExpressoInterpretationException;
+		Interpreted<M, MV, E> setParentElement(ExElement.Interpreted<?> parent);
 
-		E create(ObservableModelElement modelElement, ModelSetInstance models) throws ModelInstantiationException;
+		void updateValue(InterpretedExpressoEnv env) throws ExpressoInterpretationException;
 
-		public class Default<M, MV extends M, E extends ModelValueElement<M, MV>> extends ExElement.Interpreted.Abstract<E>
+		E create(ExElement parent, ModelSetInstance models) throws ModelInstantiationException;
+
+		public abstract class Abstract<M, MV extends M, E extends ModelValueElement<M, MV>> extends ExElement.Interpreted.Abstract<E>
 		implements Interpreted<M, MV, E> {
-			private final ModelInstanceType<M, MV> theValueType;
 			private InterpretedValueSynth<M, MV> theValue;
 
-			protected Default(Def<M, ? super E> definition, ExElement.Interpreted<?> parent, ModelInstanceType<M, MV> valueType)
-				throws ExpressoInterpretationException {
+			protected Abstract(Def<M, ? super E> definition, ExElement.Interpreted<?> parent) {
 				super(definition, parent);
-				theValueType = valueType;
 			}
 
 			@Override
@@ -160,47 +238,97 @@ public interface ModelValueElement<M, MV extends M> extends ExElement {
 			}
 
 			@Override
-			public ModelInstanceType<M, MV> getValueType() {
-				return theValueType;
-			}
-
-			@Override
-			public InterpretedValueSynth<M, MV> getValue() {
+			public InterpretedValueSynth<M, MV> getElementValue() {
 				return theValue;
 			}
 
 			@Override
-			public void update() throws ExpressoInterpretationException {
-				super.update();
-				theValue = getDefinition().getValue() == null ? null : getDefinition().getValue().evaluate(getValueType()).interpret();
+			public Interpreted.Abstract<M, MV, E> setParentElement(ExElement.Interpreted<?> parent) {
+				super.setParentElement(parent);
+				return this;
+			}
+
+			protected abstract ModelInstanceType<M, MV> getTargetType();
+
+			@Override
+			public ModelInstanceType<M, MV> getType() {
+				if (theValue != null)
+					return theValue.getType();
+				else
+					return getTargetType();
 			}
 
 			@Override
-			public E create(ObservableModelElement modelElement, ModelSetInstance models) throws ModelInstantiationException {
-				return (E) new ModelValueElement.Default<>(this, modelElement);
+			public void updateValue(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+				update(env);
+			}
+
+			@Override
+			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+				super.doUpdate(env);
+				if (getDefinition().getElementValue() == null
+					|| getDefinition().getElementValue().getExpression() == ObservableExpression.EMPTY)
+					theValue = null;
+				else
+					theValue = getDefinition().getElementValue().interpret(getTargetType(), getExpressoEnv());
+			}
+
+			@Override
+			public E create(ExElement parent, ModelSetInstance models) throws ModelInstantiationException {
+				return (E) new ModelValueElement.Default<>(this, parent);
 			}
 		}
 	}
 
-	MV getValue();
+	Object getElementValue();
 
 	public class Default<M, MV extends M> extends ExElement.Abstract implements ModelValueElement<M, MV> {
-		private MV theValue;
+		private Object theElementValue;
 
 		public Default(ModelValueElement.Interpreted<M, MV, ?> interpreted, ExElement parent) {
 			super(interpreted, parent);
 		}
 
 		@Override
-		public MV getValue() {
-			return theValue;
+		public Object getElementValue() {
+			return theElementValue;
 		}
 
 		@Override
 		protected void updateModel(ExElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
 			super.updateModel(interpreted, myModels);
 			ModelValueElement.Interpreted<M, MV, ?> myInterpreted = (ModelValueElement.Interpreted<M, MV, ?>) interpreted;
-			theValue = myInterpreted.getValue() == null ? null : myInterpreted.getValue().get(myModels);
+			theElementValue = updateValue(myInterpreted, myModels);
 		}
+
+		protected Object updateValue(ModelValueElement.Interpreted<M, MV, ?> myInterpreted, ModelSetInstance myModels)
+			throws ModelInstantiationException {
+			return myInterpreted.getElementValue() == null ? null : myInterpreted.getElementValue().get(myModels);
+		}
+	}
+
+	public interface CompiledSynth<M, E extends ModelValueElement<M, ?>> extends ModelValueElement.Def<M, E>, CompiledModelValue<M> {
+		@Override
+		default void populate(ObservableModelSet.Builder builder) throws QonfigInterpretationException {
+			String name = getAddOnValue(ExNamed.Def.class, ExNamed.Def::getName);
+			if (name == null)
+				throw new QonfigInterpretationException("Not named, cannot add to model set", getElement().getPositionInFile(), 0);
+			builder.withMaker(name, this, reporting().getFileLocation().getPosition(0));
+		}
+
+		@Override
+		default InterpretedSynth<M, ?, ? extends E> interpret(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+			InterpretedSynth<M, ?, ? extends E> interpreted = interpret();
+			interpreted.updateValue(env);
+			return interpreted;
+		}
+
+		InterpretedSynth<M, ?, ? extends E> interpret();
+	}
+
+	public interface InterpretedSynth<M, MV extends M, E extends ModelValueElement<M, MV>>
+	extends ModelValueElement.Interpreted<M, MV, E>, InterpretedValueSynth<M, MV> {
+		@Override
+		InterpretedSynth<M, MV, E> setParentElement(ExElement.Interpreted<?> parent);
 	}
 }

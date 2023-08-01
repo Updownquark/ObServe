@@ -1,7 +1,6 @@
 package org.observe.expresso.qonfig;
 
-import org.observe.expresso.ClassView;
-import org.observe.expresso.ExpressoEnv;
+import org.observe.expresso.CompiledExpressoEnv;
 import org.observe.expresso.ExpressoParseException;
 import org.observe.expresso.ExpressoParser;
 import org.observe.expresso.ObservableExpression;
@@ -46,32 +45,31 @@ public class ExpressoQIS implements SpecialSession<ExpressoQIS> {
 	}
 
 	/** @return The expresso environment to use to evaluate expressions under this session */
-	public ExpressoEnv getExpressoEnv() {
-		return (ExpressoEnv) theWrapped.get("EXPRESSO_ENV");
+	public CompiledExpressoEnv getExpressoEnv() {
+		return theWrapped.get("EXPRESSO_ENV", CompiledExpressoEnv.class);
 	}
 
 	/**
 	 * @param env The expresso environment to use to evaluate expressions under this session
 	 * @return This session
 	 */
-	public ExpressoQIS setExpressoEnv(ExpressoEnv env) {
+	public ExpressoQIS setExpressoEnv(CompiledExpressoEnv env) {
 		theWrapped.put("EXPRESSO_ENV", env);
 		return this;
 	}
 
 	/**
 	 * @param models The models to use for evaluating expressions under this session (or null to keep this session's)
-	 * @param classView The class view to use for evaluating expressions under this session (or null to keep this session's)
 	 * @return This session
 	 */
-	public ExpressoQIS setModels(ObservableModelSet models, ClassView classView) {
-		setExpressoEnv(getExpressoEnv().with(models, classView));
+	public ExpressoQIS setModels(ObservableModelSet models) {
+		setExpressoEnv(getExpressoEnv().with(models));
 		return this;
 	}
 
 	/** @return This session's dynamic value cache */
-	public DynamicModelValue.Cache getDynamicValueCache() {
-		return theWrapped.get(DYNAMIC_VALUE_CACHE, DynamicModelValue.Cache.class);
+	public ElementModelValue.Cache getElementValueCache() {
+		return theWrapped.get(DYNAMIC_VALUE_CACHE, ElementModelValue.Cache.class);
 	}
 
 	@Override
@@ -85,7 +83,7 @@ public class ExpressoQIS implements SpecialSession<ExpressoQIS> {
 
 	@Override
 	public ExpressoQIS setElementRepresentation(Object def) {
-		if (!(def instanceof ExElement.Def))
+		if (def != null && !(def instanceof ExElement.Def))
 			throw new IllegalArgumentException(
 				"Expresso session can only accept representation by an " + ExElement.class.getName() + ".Def implementation");
 		SpecialSession.super.setElementRepresentation(def);

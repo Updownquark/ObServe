@@ -1,57 +1,68 @@
 package org.observe.quick.style;
 
+import java.text.ParseException;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 import org.observe.SettableValue;
 import org.observe.expresso.ExpressoInterpretationException;
+import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.qonfig.CompiledExpression;
+import org.observe.expresso.qonfig.ElementModelValue;
 import org.observe.expresso.qonfig.ElementTypeTraceability;
+import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExpressoQIS;
+import org.observe.expresso.qonfig.LocatedExpression;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.expresso.qonfig.QonfigChildGetter;
+import org.observe.quick.style.QuickTypeStyle.TypeStyleSet;
 import org.observe.util.TypeTokens;
+import org.qommons.MultiInheritanceSet;
 import org.qommons.collect.CollectionUtils;
-import org.qommons.config.AbstractQIS;
+import org.qommons.config.QonfigAttributeDef;
 import org.qommons.config.QonfigChildDef;
+import org.qommons.config.QonfigElement;
+import org.qommons.config.QonfigElement.QonfigValue;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
+import org.qommons.config.QonfigToolkit;
+import org.qommons.io.ErrorReporting;
+import org.qommons.io.LocatedFilePosition;
 
-public class QuickStyleElement extends ExElement.Abstract {
-	private static final ElementTypeTraceability<QuickStyleElement, Interpreted, Def> TRACEABILITY = ElementTypeTraceability
-		.<QuickStyleElement, Interpreted, Def> build(StyleSessionImplV0_1.NAME, StyleSessionImplV0_1.VERSION, "style")//
-		.reflectMethods(Def.class, Interpreted.class, QuickStyleElement.class)//
-		.build();
+public class QuickStyleElement<T> extends ExElement.Abstract {
+	public static final String STYLE_TYPE_SET = "Quick.Style.Type.Set";
 
-	public static class Def extends ExElement.Def.Abstract<QuickStyleElement> {
-		private final QonfigElementOrAddOn theStyleElement;
-		private final QonfigChildDef theChild;
-		private final CompiledExpression theCondition;
-		private final QuickStyleSet theStyleSet;
-		private final QuickStyleAttribute<?> theDeclaredAttribute;
-		private final QuickStyleAttribute<?> theEffectiveAttribute;
-		private final CompiledExpression theValue;
+	private static final SingleTypeTraceability<QuickStyleElement<?>, Interpreted<?>, Def> TRACEABILITY = ElementTypeTraceability
+		.getElementTraceability(QuickStyleInterpretation.NAME, QuickStyleInterpretation.VERSION, "style", Def.class, Interpreted.class,
+			QuickStyleElement.class);
+
+	public static class Def extends ExElement.Def.Abstract<QuickStyleElement<?>> {
+		private QonfigElementOrAddOn theStyleElement;
+		private List<QonfigChildDef> theRoles;
+		private CompiledExpression theCondition;
+		private QuickStyleSet theStyleSet;
+		private QuickStyleAttributeDef theDeclaredAttribute;
+		private QuickStyleAttributeDef theEffectiveAttribute;
+		private CompiledExpression theValue;
+		private StyleApplicationDef theApplication;
 		private final List<Def> theChildren;
+		private final List<QuickStyleValue> theStyleValues;
 
-		public Def(ExElement.Def<?> parent, AbstractQIS<?> session, QonfigElementOrAddOn styleElement, QonfigChildDef child,
-			CompiledExpression condition, QuickStyleSet styleSet, QuickStyleAttribute<?> declaredAttribute,
-			QuickStyleAttribute<?> effectiveAttribute, CompiledExpression value, List<Def> children) {
-			super(parent, session.getElement());
-			theStyleElement = styleElement;
-			theChild = child;
-			theCondition = condition;
-			theStyleSet = styleSet;
-			theDeclaredAttribute = declaredAttribute;
-			theEffectiveAttribute = effectiveAttribute;
-			theValue = value;
-			theChildren = children;
+		public Def(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
+			super(parent, qonfigType);
+			theRoles = new ArrayList<>();
+			theChildren = new ArrayList<>();
+			theStyleValues = new ArrayList<>();
 		}
 
 		@QonfigAttributeGetter("element")
@@ -60,8 +71,8 @@ public class QuickStyleElement extends ExElement.Abstract {
 		}
 
 		@QonfigAttributeGetter("child")
-		public QonfigChildDef getChild() {
-			return theChild;
+		public List<QonfigChildDef> getRoles() {
+			return Collections.unmodifiableList(theRoles);
 		}
 
 		@QonfigAttributeGetter("condition")
@@ -75,11 +86,11 @@ public class QuickStyleElement extends ExElement.Abstract {
 		}
 
 		@QonfigAttributeGetter("attr")
-		public QuickStyleAttribute<?> getDeclaredAttribute() {
+		public QuickStyleAttributeDef getDeclaredAttribute() {
 			return theDeclaredAttribute;
 		}
 
-		public QuickStyleAttribute<?> getEffectiveAttribute() {
+		public QuickStyleAttributeDef getEffectiveAttribute() {
 			return theEffectiveAttribute;
 		}
 
@@ -88,29 +99,376 @@ public class QuickStyleElement extends ExElement.Abstract {
 			return theValue;
 		}
 
+		public StyleApplicationDef getApplication() {
+			return theApplication;
+		}
+
 		@QonfigChildGetter("sub-style")
 		public List<Def> getChildren() {
-			return theChildren;
+			return Collections.unmodifiableList(theChildren);
+		}
+
+		public void getStyleValues(Collection<QuickStyleValue> values, StyleApplicationDef application, QonfigElement element) {
+			if (application == StyleApplicationDef.ALL) {
+				for (QuickStyleValue value : theStyleValues)
+					if (value.getApplication().applies(element))
+						values.add(value);
+			} else if (theApplication.applies(element)) {
+				for (QuickStyleValue value : theStyleValues) {
+					if (value.getApplication().applies(element))
+						values.add(value.when(application));
+				}
+			}
+			for (QuickStyleElement.Def child : theChildren)
+				child.getStyleValues(values, application, element);
+			if (theStyleSet != null)
+				theStyleSet.getStyleValues(values, theApplication.and(application), element);
 		}
 
 		@Override
-		public void update(ExpressoQIS session) throws QonfigInterpretationException {
+		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
-			super.update(session);
-			int i = 0;
-			for (ExpressoQIS subStyleSession : session.forChildren("sub-style"))
-				theChildren.get(i++).update(subStyleSession);
+			super.doUpdate(session);
+
+			QuickStyleElement.Def parent;
+			QonfigElement targetElement;
+			{
+				ExElement.Def<?> parentEl = getParentElement();
+				if (parentEl instanceof QuickStyleElement.Def)
+					parent = (QuickStyleElement.Def) parentEl;
+				else
+					parent = null;
+				while (parentEl instanceof QuickStyleElement.Def)
+					parentEl = parentEl.getParentElement();
+				if (parentEl instanceof QuickStyleSet || parentEl instanceof QuickStyleSheet)
+					targetElement = null;
+				else
+					targetElement = parentEl.getElement();
+			}
+			QuickStyleSheet styleSheet = session.get(ExWithStyleSheet.QUICK_STYLE_SHEET, QuickStyleSheet.class);
+			StyleApplicationDef application = parent == null ? StyleApplicationDef.ALL : parent.getApplication();
+			theRoles.clear();
+			QonfigValue rolePath = session.getAttributeQV("child");
+			if (rolePath != null && rolePath.value != null) { // Role path may be defaulted
+				if (application == null)
+					throw new QonfigInterpretationException("Cannot specify a style role without a type above it", //
+						rolePath.position == null ? null : new LocatedFilePosition(rolePath.fileLocation, rolePath.position.getPosition(0)),
+							rolePath.text.length());
+				for (String roleName : rolePath.text.split("\\.")) {
+					roleName = roleName.trim();
+					QonfigChildDef child = null;
+					if (application.getRole() != null) {
+						if (application.getRole().getType() != null)
+							child = application.getRole().getType().getChild(roleName);
+						else
+							throw new QonfigInterpretationException("No such role '" + roleName + "' for parent style " + application, //
+								rolePath.position == null ? null
+									: new LocatedFilePosition(rolePath.fileLocation, rolePath.position.getPosition(0)),
+									rolePath.text.length());
+					}
+					for (QonfigElementOrAddOn type : application.getTypes().values()) {
+						if (child != null)
+							break;
+						child = type.getChild(roleName);
+					}
+					if (child == null)
+						throw new QonfigInterpretationException("No such role '" + roleName + "' for parent style " + application, //
+							rolePath.position == null ? null
+								: new LocatedFilePosition(rolePath.fileLocation, rolePath.position.getPosition(0)),
+								rolePath.text.length());
+					theRoles.add(child);
+					application = application.forChild(child);
+				}
+			}
+
+			QonfigValue elName = session.getAttributeQV("element");
+			if (elName != null && elName.text != null) {
+				if (targetElement != null)
+					throw new QonfigInterpretationException("element may only be specified within a style-sheet",
+						reporting().at(elName.position).getFileLocation().getPosition(0), elName.position.length());
+				QonfigElementOrAddOn el;
+				try {
+					el = session.getElement().getDocument().getDocToolkit().getElementOrAddOn(elName.text);
+					if (el == null)
+						throw new QonfigInterpretationException("No such element found: " + elName, //
+							elName.position == null ? null : new LocatedFilePosition(elName.fileLocation, elName.position.getPosition(0)),
+								elName.text.length());
+				} catch (IllegalArgumentException e) {
+					throw new QonfigInterpretationException(e.getMessage(),
+						elName.position == null ? null : new LocatedFilePosition(elName.fileLocation, elName.position.getPosition(0)), //
+							elName.text.length(), e);
+				}
+				theStyleElement = el;
+				try {
+					application = application.forType(el);
+				} catch (IllegalArgumentException e) {
+					throw new QonfigInterpretationException(e.getMessage(),
+						elName.position == null ? null : new LocatedFilePosition(elName.fileLocation, elName.position.getPosition(0)), //
+							elName.text.length(), e);
+				}
+			}
+
+			ElementModelValue.Cache emvCache = session.getElementValueCache();
+			theCondition = session.getAttributeExpression("condition");
+			if (theCondition != null) {
+				QonfigAttributeDef.Declared priorityAttr = QuickTypeStyle.getPriorityAttr(getQonfigType().getDeclarer());
+				application = application.forCondition(theCondition, session.getExpressoEnv().getModels(), priorityAttr, styleSheet != null,
+					emvCache);
+			}
+			theApplication = application;
+
+			QonfigValue attrName = session.getAttributeQV("attr");
+			if (attrName != null) {
+				if (parent != null && parent.getEffectiveAttribute() != null)
+					throw new QonfigInterpretationException(
+						"Cannot specify an attribute (" + attrName.text + ") if an ancestor style has (" + parent.getEffectiveAttribute()
+						+ ")",
+						attrName.position == null ? null : new LocatedFilePosition(attrName.fileLocation, attrName.position.getPosition(0)),
+							attrName.text.length());
+				QuickTypeStyle.TypeStyleSet styleTypeSet = session.get(STYLE_TYPE_SET, QuickTypeStyle.TypeStyleSet.class);
+				if (styleTypeSet == null) {
+					styleTypeSet = new QuickTypeStyle.TypeStyleSet();
+					session.putGlobal(STYLE_TYPE_SET, styleTypeSet);
+				}
+				MultiInheritanceSet<QonfigElementOrAddOn> types;
+				if (targetElement == null)
+					types = application.getTypes();
+				else {
+					types = MultiInheritanceSet.create(QonfigElementOrAddOn::isAssignableFrom);
+					types.add(targetElement.getType());
+					types.addAll(targetElement.getInheritance().values());
+				}
+				theDeclaredAttribute = getAttribute(attrName, types, styleTypeSet, session.getWrapped().getInterpreter().getKnownToolkits(),
+					session.reporting().at(attrName.position), getQonfigType().getDeclarer());
+				theEffectiveAttribute = theDeclaredAttribute;
+			} else if (parent != null)
+				theEffectiveAttribute = parent.getEffectiveAttribute();
+			else
+				theEffectiveAttribute = null;
+
+			theStyleValues.clear();
+			theValue = session.getValueExpression();
+			if (theValue != null && theValue.getExpression() != ObservableExpression.EMPTY) {
+				if (theEffectiveAttribute == null)
+					throw new QonfigInterpretationException("Cannot specify a style value without an attribute",
+						theValue.getFilePosition().getPosition(0), theValue.length());
+				LocatedExpression replacedValue = theApplication.findModelValues(theValue, new HashSet<>(),
+					session.getExpressoEnv().getModels(), getQonfigType().getDeclarer(), styleSheet != null, emvCache);
+				theStyleValues.add(new QuickStyleValue(styleSheet, theApplication, theEffectiveAttribute, replacedValue));
+			}
+			QonfigValue styleSetName = session.getAttributeQV("style-set");
+			if (styleSetName != null) {
+				if (styleSheet == null)
+					throw new QonfigInterpretationException("No style-sheet available: Cannot refer to a style set", //
+						styleSetName.position == null ? null
+							: new LocatedFilePosition(styleSetName.fileLocation, styleSetName.position.getPosition(0)),
+							styleSetName.text.length());
+				if (theEffectiveAttribute != null)
+					throw new QonfigInterpretationException(
+						"Cannot refer to a style set when an attribute (" + theEffectiveAttribute + ") is specified", //
+						styleSetName.position == null ? null
+							: new LocatedFilePosition(styleSetName.fileLocation, styleSetName.position.getPosition(0)),
+							styleSetName.text.length());
+				try {
+					theStyleSet = styleSheet.getStyleSet(styleSetName.text);
+				} catch (IllegalArgumentException e) {
+					throw new QonfigInterpretationException(e.getMessage(), //
+						styleSetName.position == null ? null
+							: new LocatedFilePosition(styleSetName.fileLocation, styleSetName.position.getPosition(0)),
+							styleSetName.text.length());
+				}
+			} else
+				theStyleSet = null;
+
+			ExElement.syncDefs(QuickStyleElement.Def.class, theChildren, session.forChildren("sub-style"));
 		}
 
-		public Interpreted interpret(ExElement.Interpreted<?> parent) {
-			return new Interpreted(this, parent);
+		private QuickStyleAttributeDef getAttribute(QonfigValue attrName, MultiInheritanceSet<QonfigElementOrAddOn> types,
+			TypeStyleSet styleTypeSet, Set<QonfigToolkit> knownToolkits, ErrorReporting reporting, QonfigToolkit styleTK)
+				throws QonfigInterpretationException {
+			int dot = attrName.text.indexOf('.');
+			Set<QuickStyleAttributeDef> attrs = new HashSet<>();
+			if (dot >= 0) { // Type-qualified
+				QonfigElementOrAddOn type;
+				int colon = attrName.text.indexOf(':');
+				if (colon >= 0 && colon < dot) { // Toolkit-qualified
+					ToolkitSpec spec;
+					try {
+						spec = ToolkitSpec.parse(attrName.text.substring(0, colon));
+					} catch (ParseException e) {
+						throw new QonfigInterpretationException(
+							"To qualify an attribute name with a toolkit, use the form 'ToolkitName v1.2:element-name.attr-name",
+							new LocatedFilePosition(attrName.fileLocation, attrName.position.getPosition(0)), colon, e);
+					}
+					QonfigToolkit toolkit = null;
+					for (QonfigToolkit tk : knownToolkits) {
+						QonfigToolkit found = spec.find(tk);
+						if (found != null) {
+							if (toolkit != null && found != toolkit)
+								throw new QonfigInterpretationException("Multiple toolkits found matching " + spec,
+									new LocatedFilePosition(attrName.fileLocation, attrName.position.getPosition(0)), colon);
+							toolkit = found;
+						}
+					}
+					if (toolkit == null)
+						throw new QonfigInterpretationException("No loaded toolkits found matching " + spec,
+							new LocatedFilePosition(attrName.fileLocation, attrName.position.getPosition(0)), colon);
+					String typeName = attrName.text.substring(colon + 1, dot);
+					try {
+						type = toolkit.getElementOrAddOn(typeName);
+					} catch (IllegalArgumentException e) {
+						throw new QonfigInterpretationException(e.getMessage(),
+							new LocatedFilePosition(attrName.fileLocation, attrName.position.getPosition(colon + 1)), typeName.length(), e);
+					}
+					if (type == null)
+						throw new QonfigInterpretationException("No such element or add-on '" + typeName + "' found in toolkit " + toolkit,
+							new LocatedFilePosition(attrName.fileLocation, attrName.position.getPosition(colon + 1)), typeName.length());
+				} else {
+					String typeName = attrName.text.substring(0, dot);
+					type = null;
+					for (QonfigToolkit tk : knownToolkits) {
+						QonfigElementOrAddOn found;
+						try {
+							found = tk.getElementOrAddOn(typeName);
+						} catch (IllegalArgumentException e) {
+							throw new QonfigInterpretationException(e.getMessage(),
+								new LocatedFilePosition(attrName.fileLocation, attrName.position.getPosition(0)), typeName.length(), e);
+						}
+						if (found != null) {
+							if (type != null && type != found)
+								throw new QonfigInterpretationException(
+									"Multiple elements/add-ons named '" + typeName + "' found in loaded toolkits",
+									new LocatedFilePosition(attrName.fileLocation, attrName.position.getPosition(0)), typeName.length());
+							type = found;
+						}
+					}
+					if (type == null)
+						throw new QonfigInterpretationException("No such element or add-on '" + typeName + "' found in loaded toolkits",
+							new LocatedFilePosition(attrName.fileLocation, attrName.position.getPosition(colon + 1)), typeName.length());
+				}
+				QuickTypeStyle styled = styleTypeSet.getOrCompile(type, reporting, styleTK);
+				if (styled == null)
+					throw new QonfigInterpretationException("Element '" + attrName.text.substring(0, dot) + "' is not styled",
+						new LocatedFilePosition(attrName.fileLocation, attrName.position.getPosition(0)), dot);
+				attrs.addAll(styled.getAttributes(attrName.text.substring(dot + 1)));
+				if (attrs.isEmpty())
+					throw new QonfigInterpretationException("No such style attribute: " + attrName, //
+						attrName.position == null ? null : new LocatedFilePosition(attrName.fileLocation, attrName.position.getPosition(0)),
+							attrName.text.length());
+				else if (attrs.size() > 1)
+					throw new QonfigInterpretationException("Multiple style attributes found matching " + attrName + ": " + attrs, //
+						attrName.position == null ? null : new LocatedFilePosition(attrName.fileLocation, attrName.position.getPosition(0)),
+							attrName.text.length());
+			} else {
+				for (QonfigElementOrAddOn type : types.values()) {
+					if (attrs.size() > 1)
+						break;
+					QuickTypeStyle styled = styleTypeSet.getOrCompile(type, reporting, styleTK);
+					if (styled != null)
+						attrs.addAll(styled.getAttributes(attrName.text));
+				}
+				if (attrs.isEmpty())
+					throw new QonfigInterpretationException("No such style attribute: " + types + "." + attrName, //
+						attrName.position == null ? null : new LocatedFilePosition(attrName.fileLocation, attrName.position.getPosition(0)),
+							attrName.text.length());
+				else if (attrs.size() > 1)
+					throw new QonfigInterpretationException(
+						"Multiple style attributes found matching " + types + "." + attrName + ": " + attrs, //
+						attrName.position == null ? null : new LocatedFilePosition(attrName.fileLocation, attrName.position.getPosition(0)),
+							attrName.text.length());
+			}
+			return attrs.iterator().next();
+		}
+
+		private static class ToolkitSpec {
+			final String name;
+			final int major;
+			final int minor;
+
+			ToolkitSpec(String name, int major, int minor) {
+				this.name = name;
+				this.major = major;
+				this.minor = minor;
+			}
+
+			QonfigToolkit find(QonfigToolkit toolkit) {
+				if (name.equals(toolkit.getName())//
+					&& (major < 0 || major == toolkit.getMajorVersion())//
+					&& (minor < 0 || minor == toolkit.getMinorVersion()))
+					return toolkit;
+				for (QonfigToolkit dep : toolkit.getDependencies().values()) {
+					QonfigToolkit found = find(dep);
+					if (found != null)
+						return found;
+				}
+				return null;
+			}
+
+			public static ToolkitSpec parse(CharSequence text) throws ParseException {
+				int space = -1;
+				for (int c = 0; c < text.length(); c++) {
+					if (Character.isWhitespace(text.charAt(c))) {
+						space = c;
+						break;
+					}
+				}
+				if (space < 0)
+					return new ToolkitSpec(text.toString(), -1, -1);
+
+				String name = text.subSequence(0, space).toString();
+				int start = space + 1;
+				while (start < text.length() && Character.isWhitespace(text.charAt(start)))
+					start++;
+				if (start < text.length() && (text.charAt(start) == 'v' || text.charAt(start) == 'V'))
+					start++;
+				if (start == text.length())
+					throw new ParseException(
+						"When specifying a toolkit-qualified style attribute, either have no spaces or the space should separate the toolkit name from its version",
+						name.length());
+				int major = 0;
+				int majorStart = start;
+				while (start < text.length() && text.charAt(start) >= '0' && text.charAt(start) <= '9') {
+					major = major * 10 + text.charAt(start) - '0';
+					if (major < 0)
+						throw new ParseException("Major version is too large", majorStart);
+					start++;
+				}
+				if (start == majorStart)
+					throw new ParseException("Major version expected", majorStart);
+				if (start == text.length())
+					return new ToolkitSpec(name, major, -1);
+				if (text.charAt(start) != '.')
+					throw new ParseException("'.' separator expected between major an minor versions", start);
+				start++;
+				int minor = 0;
+				int minorStart = start;
+				while (start < text.length() && text.charAt(start) >= '0' && text.charAt(start) <= '9') {
+					minor = minor * 10 + text.charAt(start) - '0';
+					if (major < 0)
+						throw new ParseException("Minor version is too large", minorStart);
+					start++;
+				}
+				if (start == minorStart)
+					throw new ParseException("Minor version expected", minorStart);
+				while (start < text.length() && Character.isWhitespace(text.charAt(start)))
+					start++;
+				if (start != text.length())
+					throw new ParseException("Extra information prohibited after version specification", start);
+				return new ToolkitSpec(name, major, minor);
+			}
+		}
+
+		public Interpreted<?> interpret(ExElement.Interpreted<?> parent) {
+			return new Interpreted<>(this, parent);
 		}
 	}
 
-	public static class Interpreted extends ExElement.Interpreted.Abstract<QuickStyleElement> {
+	public static class Interpreted<T> extends ExElement.Interpreted.Abstract<QuickStyleElement<T>> {
+		private QuickStyleAttribute<T> theDeclaredAttribute;
+		private QuickStyleAttribute<T> theEffectiveAttribute;
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> theCondition;
-		private InterpretedValueSynth<SettableValue<?>, ? extends SettableValue<?>> theValue;
-		private final List<Interpreted> theChildren;
+		private InterpretedValueSynth<SettableValue<?>, SettableValue<T>> theValue;
+		private final List<Interpreted<?>> theChildren;
 
 		public Interpreted(Def definition, ExElement.Interpreted<?> parent) {
 			super(definition, parent);
@@ -122,56 +480,74 @@ public class QuickStyleElement extends ExElement.Abstract {
 			return (Def) super.getDefinition();
 		}
 
+		public QuickStyleAttribute<T> getDeclaredAttribute() {
+			return theDeclaredAttribute;
+		}
+
+		public QuickStyleAttribute<T> getEffectiveAttribute() {
+			return theEffectiveAttribute;
+		}
+
 		public InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> getCondition() {
 			return theCondition;
 		}
 
-		public InterpretedValueSynth<SettableValue<?>, ? extends SettableValue<?>> getValue() {
+		public InterpretedValueSynth<SettableValue<?>, SettableValue<T>> getValue() {
 			return theValue;
 		}
 
-		public List<Interpreted> getChildren() {
+		public List<Interpreted<?>> getChildren() {
 			return Collections.unmodifiableList(theChildren);
 		}
 
+		public void updateStyle(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+			update(env);
+		}
+
 		@Override
-		public void update() throws ExpressoInterpretationException {
-			super.update();
+		protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+			super.doUpdate(env);
+
+			QuickInterpretedStyleCache cache = QuickInterpretedStyleCache.get(env);
+			theDeclaredAttribute = (QuickStyleAttribute<T>) cache.getAttribute(getDefinition().getDeclaredAttribute(), env);
+			theEffectiveAttribute = (QuickStyleAttribute<T>) cache.getAttribute(getDefinition().getEffectiveAttribute(), env);
+
 			theCondition = getDefinition().getCondition() == null ? null
-				: getDefinition().getCondition().evaluate(ModelTypes.Value.BOOLEAN).interpret();
+				: getDefinition().getCondition().interpret(ModelTypes.Value.BOOLEAN, getExpressoEnv());
 			if (getDefinition().getValue() != null && getDefinition().getValue().getExpression() != ObservableExpression.EMPTY)
-				theValue = getDefinition().getValue().evaluate(ModelTypes.Value.forType(getDefinition().getEffectiveAttribute().getType()))
-				.interpret();
+				theValue = getDefinition().getValue().interpret(ModelTypes.Value.forType(getEffectiveAttribute().getType()),
+					getExpressoEnv());
 			else
 				theValue = null;
-			CollectionUtils.synchronize(theChildren, getDefinition().getChildren(), (interp, def) -> interp.getDefinition() == def)//
+			CollectionUtils
+			.synchronize(theChildren, getDefinition().getChildren(), (interp, def) -> interp.getIdentity() == def.getIdentity())//
 			.<ExpressoInterpretationException> simpleE(def -> def.interpret(this))//
 			.commonUses(true, false)//
 			.rightOrder()//
 			.onLeftX(el -> el.getLeftValue().destroy())//
-			.onRightX(el -> el.getLeftValue().update())//
-			.onCommonX(el -> el.getLeftValue().update())//
+			.onRightX(el -> el.getLeftValue().update(getExpressoEnv()))//
+			.onCommonX(el -> el.getLeftValue().update(getExpressoEnv()))//
 			.adjust();
 		}
 
-		public QuickStyleElement create(ExElement parent) {
-			return new QuickStyleElement(this, parent);
+		public QuickStyleElement<T> create(ExElement parent) {
+			return new QuickStyleElement<>(this, parent);
 		}
 	}
 
 	private final SettableValue<SettableValue<Boolean>> theCondition;
-	private final SettableValue<? extends SettableValue<?>> theValue;
-	private final List<QuickStyleElement> theChildren;
+	private final SettableValue<SettableValue<T>> theValue;
+	private final List<QuickStyleElement<?>> theChildren;
 
-	public QuickStyleElement(Interpreted interpreted, ExElement parent) {
+	public QuickStyleElement(Interpreted<T> interpreted, ExElement parent) {
 		super(interpreted, parent);
 		theCondition = SettableValue
 			.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Boolean>> parameterized(boolean.class)).build();
-		QuickStyleAttribute<?> attr = interpreted.getDefinition().getEffectiveAttribute();
+		QuickStyleAttribute<T> attr = interpreted.getEffectiveAttribute();
 		if (attr == null)
 			theValue = null;
 		else
-			theValue = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<?>> parameterized(attr.getType()))
+			theValue = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<T>> parameterized(attr.getType()))
 			.build();
 		theChildren = new ArrayList<>();
 	}
@@ -180,28 +556,25 @@ public class QuickStyleElement extends ExElement.Abstract {
 		return SettableValue.flatten(theCondition, () -> true);
 	}
 
-	public SettableValue<?> getValue() {
+	public SettableValue<T> getValue() {
 		if (theValue == null)
-			return SettableValue.of(Object.class, null, "Unsettable");
+			return (SettableValue<T>) SettableValue.of(Object.class, null, "Unsettable");
 		else
-			return SettableValue.flatten((SettableValue<SettableValue<Object>>) theValue);
+			return SettableValue.flatten(theValue);
 	}
 
-	public List<QuickStyleElement> getChildren() {
+	public List<QuickStyleElement<?>> getChildren() {
 		return Collections.unmodifiableList(theChildren);
 	}
 
 	@Override
 	protected void updateModel(ExElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
 		super.updateModel(interpreted, myModels);
-		Interpreted myInterpreted = (Interpreted) interpreted;
+		Interpreted<T> myInterpreted = (Interpreted<T>) interpreted;
 		theCondition.set(myInterpreted.getCondition() == null ? null : myInterpreted.getCondition().get(myModels), null);
 		if (theValue != null)
-			((SettableValue<SettableValue<?>>) theValue)
-			.set(myInterpreted.getValue() == null ? null : myInterpreted.getValue().get(myModels), null);
-		CollectionUtils
-		.synchronize(theChildren, myInterpreted.getChildren(),
-			(inst, interp) -> inst.getIdentity() == interp.getDefinition().getIdentity())//
+			theValue.set(myInterpreted.getValue() == null ? null : myInterpreted.getValue().get(myModels), null);
+		CollectionUtils.synchronize(theChildren, myInterpreted.getChildren(), (inst, interp) -> inst.getIdentity() == interp.getIdentity())//
 		.<ModelInstantiationException> simpleE(interp -> interp.create(this))//
 		.onRightX(el -> el.getLeftValue().update(el.getRightValue(), myModels))
 		.onCommonX(el -> el.getLeftValue().update(el.getRightValue(), myModels)).adjust();

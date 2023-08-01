@@ -65,12 +65,13 @@ import org.observe.util.swing.PanelPopulation.MenuBuilder;
 import org.observe.util.swing.PanelPopulation.PanelPopulator;
 import org.observe.util.swing.PanelPopulation.SliderEditor;
 import org.qommons.Causable;
+import org.qommons.LambdaUtils;
 import org.qommons.Transformer;
 import org.qommons.collect.CollectionUtils;
 import org.qommons.collect.ElementId;
 import org.qommons.io.Format;
 
-/** Code to populate Quick-sourced tables in Java wing */
+/** Code to populate Quick-sourced tables in Java swing */
 class QuickSwingTablePopulation {
 	static class InterpretedSwingTableColumn<R, C> {
 		private final QuickTableColumn<R, C> theColumn;
@@ -102,11 +103,13 @@ class QuickSwingTablePopulation {
 			theCRS.withValueTooltip(renderer::getTooltip);
 			// The listeners may take a performance hit, so only add listening if they're there
 			boolean[] mouseKey = new boolean[2];
-			for (QuickEventListener listener : column.getRenderer().getEventListeners()) {
-				if (listener instanceof QuickMouseListener)
-					mouseKey[0] = true;
-				else if (listener instanceof QuickKeyListener)
-					mouseKey[1] = true;
+			if (column.getRenderer() != null) {
+				for (QuickEventListener listener : column.getRenderer().getEventListeners()) {
+					if (listener instanceof QuickMouseListener)
+						mouseKey[0] = true;
+					else if (listener instanceof QuickKeyListener)
+						mouseKey[1] = true;
+				}
 			}
 			if (mouseKey[0])
 				theCRS.addMouseListener(renderer);
@@ -248,6 +251,7 @@ class QuickSwingTablePopulation {
 						.getEditing().getType();
 					mutation.mutateAttribute((rowValue, colValue) -> {
 						theEditContext.getRenderValue().set(rowValue, null);
+						theEditContext.getEditColumnValue().set(colValue, null);
 						editType.getCommit().act(null);
 					});
 					mutation.withRowUpdate(editType.isRowUpdate());
@@ -336,8 +340,12 @@ class QuickSwingTablePopulation {
 			Component render;
 			if (theDelegate != null)
 				render = theDelegate.getCellRendererComponent(parent, cell, ctx);
-			else
+			else if (theComponent != null)
 				render = theComponent.getComponent();
+			else { // No renderer specified, use default
+				theDelegate = ObservableCellRenderer.formatted(String::valueOf);
+				render = theDelegate.getCellRendererComponent(parent, cell, ctx);
+			}
 			theRenderUntil.onNext(null);
 			return render;
 		}
@@ -1127,18 +1135,19 @@ class QuickSwingTablePopulation {
 		return (table, action) -> {
 			ValueAction.SingleValueActionContext<R> ctx = new ValueAction.SingleValueActionContext.Default<>(action.getValueType());
 			action.setActionContext(ctx);
-			table.withAction(null, v -> {
+			table.withAction(null, LambdaUtils.printableConsumer(v -> {
 				ctx.getActionValue().set(v, null);
 				action.getAction().act(null);
-			}, ta -> {
+			}, () -> action.getAction().toString(), null), ta -> {
 				ta.allowForEmpty(false);
 				ta.allowForMultiple(action.allowForMultiple());
 				ta.displayAsButton(action.isButton());
 				ta.displayAsPopup(action.isPopup());
 				ta.allowWhen(v -> {
 					ctx.getActionValue().set(v, null);
-					return action.isEnabled().get();
+					return action.getAction().isEnabled().get();
 				}, null);
+				ta.disableWith(action.getAction().isEnabled());
 				ta.modifyButton(btn -> {
 					btn.withText(action.getName());
 					btn.withIcon(action.getIcon());
@@ -1154,20 +1163,21 @@ class QuickSwingTablePopulation {
 			ValueAction.MultiValueActionContext<R> ctx = new ValueAction.MultiValueActionContext.Default<>(action.getValueType());
 			action.setActionContext(ctx);
 			Supplier<List<R>>[] actionValues = new Supplier[1];
-			table.withMultiAction(null, values -> {
+			table.withMultiAction(null, LambdaUtils.printableConsumer(values -> {
 				ctx.getActionValues().addAll(values);
 				action.getAction().act(null);
 				CollectionUtils.synchronize(ctx.getActionValues(), actionValues[0].get()).simple(r -> r).adjust();
-			}, ta -> {
+			}, () -> action.getAction().toString(), null), ta -> {
 				actionValues[0] = ta::getActionItems;
-				ta.allowForEmpty(false);
-				ta.allowForMultiple(true);
+				ta.allowForEmpty(ta.isAllowedForEmpty());
+				ta.allowForMultiple(ta.isAllowedForMultiple());
 				ta.displayAsButton(action.isButton());
 				ta.displayAsPopup(action.isPopup());
 				ta.allowWhenMulti(values -> {
 					CollectionUtils.synchronize(ctx.getActionValues(), values).simple(r -> r).adjust();
 					return action.isEnabled().get();
 				}, null);
+				ta.disableWith(action.getAction().isEnabled());
 				ta.modifyButton(btn -> {
 					btn.withText(action.getName());
 					btn.withIcon(action.getIcon());

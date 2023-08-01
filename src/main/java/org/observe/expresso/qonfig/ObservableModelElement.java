@@ -1,183 +1,77 @@
 package org.observe.expresso.qonfig;
 
-import java.awt.Image;
-import java.awt.event.ComponentAdapter;
-import java.awt.event.ComponentEvent;
-import java.io.BufferedInputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.time.Duration;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
-import javax.swing.JFrame;
-
-import org.observe.ObservableValue;
-import org.observe.SettableValue;
-import org.observe.collect.CollectionChangeType;
-import org.observe.collect.ObservableCollection;
-import org.observe.config.ObservableConfig;
-import org.observe.config.ObservableConfig.ObservableConfigPersistence;
-import org.observe.config.ObservableConfigFormat;
-import org.observe.config.ObservableConfigPath;
-import org.observe.config.SyncValueSet;
 import org.observe.expresso.ExpressoInterpretationException;
+import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelException;
 import org.observe.expresso.ModelInstantiationException;
-import org.observe.expresso.ModelType;
-import org.observe.expresso.ModelType.ModelInstanceType;
-import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet;
-import org.observe.expresso.ObservableModelSet.CompiledModelValue;
+import org.observe.expresso.ObservableModelSet.InterpretedModelComponentNode;
+import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
-import org.observe.expresso.ObservableModelSet.ModelValueSynth;
-import org.observe.expresso.TypeConversionException;
-import org.observe.expresso.qonfig.ExpressoBaseV0_1.AppEnvironment;
-import org.observe.util.TypeTokens;
-import org.observe.util.swing.WindowPopulation;
-import org.qommons.ArrayUtils;
-import org.qommons.ThreadConstraint;
-import org.qommons.TimeUtils;
-import org.qommons.collect.BetterSortedSet;
+import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
+import org.observe.expresso.qonfig.ModelValueElement.CompiledSynth;
+import org.qommons.collect.BetterList;
 import org.qommons.collect.CollectionUtils;
-import org.qommons.collect.CollectionUtils.ElementSyncAction;
-import org.qommons.collect.CollectionUtils.ElementSyncInput;
-import org.qommons.config.QommonsConfig;
-import org.qommons.config.QonfigChildDef;
-import org.qommons.config.QonfigElement;
+import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
-import org.qommons.io.BetterFile;
-import org.qommons.io.ErrorReporting;
-import org.qommons.io.FileBackups;
-import org.qommons.io.Format;
-import org.qommons.io.LocatedFilePosition;
-import org.qommons.io.NativeFileSource;
-import org.qommons.io.SpinnerFormat;
-import org.qommons.io.TextParseException;
-import org.qommons.threading.QommonsTimer;
-
-import com.google.common.reflect.TypeToken;
 
 public abstract class ObservableModelElement extends ExElement.Abstract {
-	private static final ElementTypeTraceability<ObservableModelElement, Interpreted<?>, Def<?>> TRACEABILITY = ElementTypeTraceability
-		.<ObservableModelElement, Interpreted<?>, Def<?>> build(ExpressoSessionImplV0_1.TOOLKIT_NAME, ExpressoSessionImplV0_1.VERSION,
-			"abst-model")//
-		.reflectMethods(Def.class, Interpreted.class, ObservableModelElement.class)//
-		.build();
+	private static final SingleTypeTraceability<ObservableModelElement, Interpreted<?>, Def<?, ?>> TRACEABILITY = ElementTypeTraceability
+		.getElementTraceability(ExpressoSessionImplV0_1.TOOLKIT_NAME, ExpressoSessionImplV0_1.VERSION, "abst-model", Def.class,
+			Interpreted.class, ObservableModelElement.class);
 
-	public static abstract class Def<M extends ObservableModelElement> extends ExElement.Def.Abstract<M> {
-		private final List<ModelValueElement.Def<?, ?>> theValues;
+	public static abstract class Def<M extends ObservableModelElement, V extends ModelValueElement.Def<?, ?>>
+	extends ExElement.Def.Abstract<M> {
+		private String theModelPath;
+		private final List<V> theValues;
 
-		private QonfigChildDef theValueRole;
-
-		protected Def(ExElement.Def<?> parent, QonfigElement element) {
-			super(parent, element);
+		protected Def(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
+			super(parent, qonfigType);
 			theValues = new ArrayList<>();
 		}
 
+		public String getModelPath() {
+			return theModelPath;
+		}
+
+		public String getName() {
+			return getAddOnValue(ExNamed.Def.class, ExNamed.Def::getName);
+		}
+
 		@QonfigChildGetter("value")
-		public List<? extends ModelValueElement.Def<?, ?>> getValues() {
+		public List<V> getValues() {
 			return Collections.unmodifiableList(theValues);
 		}
 
+		protected abstract Class<V> getValueType();
+
 		@Override
-		public void update(ExpressoQIS session) throws QonfigInterpretationException {
+		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
-			theValueRole = session.getRole("value");
+			super.doUpdate(session);
+			theModelPath = session.get(ExpressoBaseV0_1.PATH_KEY, String.class);
+			String name = getName();
+			if (theModelPath == null) {
+				if (name == null)
+					name = "model";
+				theModelPath = name;
+			} else if (name != null)
+				theModelPath += "." + name;
+			session.put(ExpressoBaseV0_1.PATH_KEY, theModelPath);
 
-			ObservableModelSet.Builder builder = (ObservableModelSet.Builder) session.getExpressoEnv().getModels();
-			CollectionUtils
-			.synchronize(getAllDefChildren(), session.forChildren(), (me, ms) -> ExElement.typesEqual(me.getElement(), ms.getElement()))
-			.adjust(
-					new CollectionUtils.CollectionSynchronizerE<ExElement.Def<?>, ExpressoQIS, QonfigInterpretationException>() {
-					@Override
-						public boolean getOrder(ElementSyncInput<ExElement.Def<?>, ExpressoQIS> element)
-						throws QonfigInterpretationException {
-						return true;
-					}
-
-					@Override
-						public ElementSyncAction leftOnly(ElementSyncInput<ExElement.Def<?>, ExpressoQIS> element)
-						throws QonfigInterpretationException {
-						List<? extends ExElement.Def<?>> roleChildren = getRoleChildren(element.getLeftValue().getElement(),
-							Def.this.reporting());
-						if (roleChildren != null) {
-							int index = ArrayUtils.binarySearch(roleChildren,
-								v -> Integer.compare(element.getLeftValue().getElement().getPositionInFile().getPosition(),
-									v.getElement().getPositionInFile().getPosition()));
-							if (index >= 0)
-								roleChildren.remove(index);
-						}
-						return element.preserve();
-					}
-
-					@Override
-						public ElementSyncAction rightOnly(ElementSyncInput<ExElement.Def<?>, ExpressoQIS> element)
-						throws QonfigInterpretationException {
-						List<? extends ExElement.Def<?>> roleChildren = getRoleChildren(element.getRightValue().getElement(),
-							element.getRightValue().reporting());
-						if (roleChildren != null) {
-							ExElement.Def<?> newChild = elementAdded(element.getRightValue(), builder);
-							if (newChild != null) {
-								newChild.update(element.getRightValue());
-								int index = ArrayUtils.binarySearch(roleChildren,
-									v -> Integer.compare(newChild.getElement().getPositionInFile().getPosition(),
-										v.getElement().getPositionInFile().getPosition()));
-								if (index >= 0)
-									((List<ExElement.Def<?>>) roleChildren).add(index + 1, newChild);
-								else
-									((List<ExElement.Def<?>>) roleChildren).add(-index - 1, newChild);
-							}
-						}
-						return element.preserve();
-					}
-
-					@Override
-						public ElementSyncAction common(ElementSyncInput<ExElement.Def<?>, ExpressoQIS> element)
-						throws QonfigInterpretationException {
-						elementUpdated(element.getLeftValue(), element.getRightValue(), builder);
-						if (element.getLeftValue() instanceof ExElement.Def)
-							((ExElement.Def<?>) element.getLeftValue()).update(element.getRightValue());
-						return element.preserve();
-					}
-				}, CollectionUtils.AdjustmentOrder.RightOrder);
-
-			super.update(session);
+			BetterList<ExpressoQIS> valueSessions = session.forChildren("value");
+			ExElement.syncDefs(getValueType(), theValues, valueSessions);
+			for (ModelValueElement.Def<?, ?> value : theValues)
+				value.populate((ObservableModelSet.Builder) session.getExpressoEnv().getModels());
+			int i = 0;
+			for (ExpressoQIS vs : valueSessions)
+				theValues.get(i++).prepareModelValue(vs);
 		}
-
-		protected List<? extends ExElement.Def<?>> getRoleChildren(QonfigElement child, ErrorReporting reporting)
-			throws QonfigInterpretationException {
-			if (child.getDeclaredRoles().contains(theValueRole.getDeclared()))
-				return theValues;
-			else {
-				reporting.error("Unhandled " + getElement().getType().getName() + " element");
-				return null;
-			}
-		}
-
-		protected ExElement.Def<?> elementAdded(ExpressoQIS session, ObservableModelSet.Builder builder)
-			throws QonfigInterpretationException {
-			if (session.fulfills(theValueRole)) {
-				return interpretValue(session.getAttributeText("name"), session, null, builder);
-			} else {
-				session.reporting().error("Unhandled " + getElement().getType().getName() + " element");
-				return null;
-			}
-		}
-
-		protected void elementUpdated(ExElement.Def<?> element, ExpressoQIS session, ObservableModelSet.Builder builder)
-			throws QonfigInterpretationException {
-			if (!session.fulfills(theValueRole))
-				interpretValue(session.getAttributeText("name"), session, (ModelValueElement.Def<?, ?>) element, builder);
-			else
-				session.reporting().error("Unhandled " + getElement().getType().getName() + " element");
-		}
-
-		protected abstract ModelValueElement.Def<?, ?> interpretValue(String name, ExpressoQIS value, ModelValueElement.Def<?, ?> previous,
-			ObservableModelSet.Builder builder) throws QonfigInterpretationException;
 
 		public abstract Interpreted<? extends M> interpret(ExElement.Interpreted<?> parent) throws ExpressoInterpretationException;
 	}
@@ -185,31 +79,55 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 	public static abstract class Interpreted<M extends ObservableModelElement> extends ExElement.Interpreted.Abstract<M> {
 		private final List<ModelValueElement.Interpreted<?, ?, ?>> theValues;
 
-		protected Interpreted(Def<? super M> definition, ExElement.Interpreted<?> parent) {
+		protected Interpreted(Def<? super M, ?> definition, ExElement.Interpreted<?> parent) {
 			super(definition, parent);
 			theValues = new ArrayList<>();
 		}
 
 		@Override
-		public Def<? super M> getDefinition() {
-			return (Def<? super M>) super.getDefinition();
+		public Def<? super M, ?> getDefinition() {
+			return (Def<? super M, ?>) super.getDefinition();
 		}
 
 		public List<? extends ModelValueElement.Interpreted<?, ?, ?>> getValues() {
 			return Collections.unmodifiableList(theValues);
 		}
 
-		@Override
-		protected void update() throws ExpressoInterpretationException {
-			super.update();
+		public void updateSubModel(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+			InterpretedModelSet childModels;
+			try {
+				childModels = env.getModels().getSubModel(getDefinition().getName());
+			} catch (ModelException e) {
+				throw new IllegalStateException("Child model not added?", e);
+			}
+			update(env.with(childModels));
+		}
 
-			CollectionUtils.synchronize(theValues, getDefinition().getValues(), //
-				(widget, child) -> widget.getDefinition() == child)//
-			.<ExpressoInterpretationException> simpleE(child -> child.interpret(Interpreted.this, getModels()))//
-			.rightOrder()//
-			.onRightX(element -> element.getLeftValue().update())//
-			.onCommonX(element -> element.getLeftValue().update())//
-			.adjust();
+		@Override
+		protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+			// Find all the interpreted model values and initialize them with this as their parent before they are initialized properly
+			theValues.clear();
+			for (String name : env.getModels().getComponentNames()) {
+				InterpretedModelComponentNode<?, ?> mv = env.getModels().getLocalComponent(name).interpreted();
+				ModelValueElement.Interpreted<?, ?, ?> modelValue = findModelValue(mv.getValue());
+				if (modelValue != null && modelValue.getDefinition().getParentElement() == getDefinition()) {
+					modelValue.setParentElement(this);
+					theValues.add(modelValue);
+				}
+			}
+			Collections.sort(theValues, (mv1, mv2) -> Integer.compare(mv1.reporting().getFileLocation().getPosition(0).getPosition(),
+				mv2.reporting().getFileLocation().getPosition(0).getPosition()));
+
+			super.doUpdate(env);
+		}
+
+		private ModelValueElement.Interpreted<?, ?, ?> findModelValue(InterpretedValueSynth<?, ?> value) {
+			if (value instanceof ModelValueElement.InterpretedSynth)
+				return (ModelValueElement.Interpreted<?, ?, ?>) value;
+			List<? extends InterpretedValueSynth<?, ?>> components = value.getComponents();
+			if (components.size() != 1)
+				return null;
+			return findModelValue(components.get(0));
 		}
 
 		public abstract ObservableModelElement create(ExElement parent) throws ModelInstantiationException;
@@ -232,77 +150,87 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 		Interpreted<?> myInterpreted = (Interpreted<?>) interpreted;
 
 		CollectionUtils.synchronize(theValues, myInterpreted.getValues(), //
-			(inst, interp) -> inst.getIdentity() == interp.getDefinition().getIdentity())//
+			(inst, interp) -> inst.getIdentity() == interp.getIdentity())//
 		.<ModelInstantiationException> simpleE(interp -> interp.create(ObservableModelElement.this, myModels))//
 		.rightOrder()//
 		.onRightX(element -> {
 			try {
 				element.getLeftValue().update(element.getRightValue(), myModels);
 			} catch (RuntimeException | Error e) {
-				element.getRightValue().getDefinition().reporting().error(e.getMessage() == null ? e.toString() : e.getMessage(), e);
+				element.getRightValue().reporting().error(e.getMessage() == null ? e.toString() : e.getMessage(), e);
 			}
 		})//
 		.onCommonX(element -> {
 			try {
 				element.getLeftValue().update(element.getRightValue(), myModels);
 			} catch (RuntimeException | Error e) {
-				element.getRightValue().getDefinition().reporting().error(e.getMessage() == null ? e.toString() : e.getMessage(), e);
+				element.getRightValue().reporting().error(e.getMessage() == null ? e.toString() : e.getMessage(), e);
 			}
 		})//
 		.adjust();
 	}
 
 	public static class ModelSetElement extends ExElement.Abstract {
-		private static final ElementTypeTraceability<ModelSetElement, Interpreted<?>, Def<?>> TRACEABILITY = ElementTypeTraceability
-			.<ModelSetElement, Interpreted<?>, Def<?>> build(ExpressoSessionImplV0_1.TOOLKIT_NAME, ExpressoSessionImplV0_1.VERSION,
-				"models")//
-			.reflectMethods(Def.class, Interpreted.class, ModelSetElement.class)//
-			.build();
+		private static final SingleTypeTraceability<ModelSetElement, Interpreted<?>, Def<?>> TRACEABILITY = ElementTypeTraceability
+			.getElementTraceability(ExpressoSessionImplV0_1.TOOLKIT_NAME, ExpressoSessionImplV0_1.VERSION, "models", Def.class,
+				Interpreted.class, ModelSetElement.class);
 
 		public static class Def<M extends ModelSetElement> extends ExElement.Def.Abstract<M> {
-			private final List<ObservableModelElement.Def<?>> theSubModels;
+			private final List<ObservableModelElement.Def<?, ?>> theSubModels;
 
-			public Def(ExElement.Def<?> parent, QonfigElement element) {
-				super(parent, element);
+			public Def(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
+				super(parent, qonfigType);
 				theSubModels = new ArrayList<>();
 			}
 
-			protected Class<? extends ObservableModelElement.Def<?>> getModelType() {
-				return (Class<? extends ObservableModelElement.Def<?>>) (Class<?>) ObservableModelElement.Def.class;
+			protected Class<? extends ObservableModelElement.Def<?, ?>> getModelType() {
+				return (Class<? extends ObservableModelElement.Def<?, ?>>) (Class<?>) ObservableModelElement.Def.class;
 			}
 
 			// Would rather name this "getModels", but that name's taken in ExElement.Def
 			@QonfigChildGetter("model")
-			public List<? extends ObservableModelElement.Def<?>> getSubModels() {
+			public List<? extends ObservableModelElement.Def<?, ?>> getSubModels() {
 				return Collections.unmodifiableList(theSubModels);
 			}
 
 			@Override
-			public void update(ExpressoQIS session) throws QonfigInterpretationException {
+			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 				withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
+				super.doUpdate(session);
 
-				ObservableModelSet.Builder builder = ObservableModelSet.build("models", ObservableModelSet.JAVA_NAME_CHECKER);
-				if (nonTrivial(session.getExpressoEnv().getModels()))
-					builder.withAll(session.getExpressoEnv().getModels());
+				session.put(ExpressoBaseV0_1.PATH_KEY, session.getElement().getType().getName());
+				ObservableModelSet.Builder builder;
+				if (getExpressoEnv().getModels() instanceof ObservableModelSet.Builder)
+					builder = (ObservableModelSet.Builder) getExpressoEnv().getModels();
+				else {
+					builder = ObservableModelSet.build(getQonfigType().getName(), ObservableModelSet.JAVA_NAME_CHECKER);
+					if (nonTrivial(getExpressoEnv().getModels()))
+						builder.withAll(session.getExpressoEnv().getModels());
+					session.setModels(builder);
+					setExpressoEnv(session.getExpressoEnv());
+				}
 				CollectionUtils
 				.synchronize(theSubModels, session.forChildren("model"),
 					(me, ms) -> ExElement.typesEqual(me.getElement(), ms.getElement()))//
-				.simpleE(ms -> {
+				.<QonfigInterpretationException> simpleE(ms -> {
 					ObservableModelSet.Builder subModel = builder.createSubModel(ms.getAttributeText("named", "name"),
 						ms.getElement().getPositionInFile());
-					return ms.setModels(subModel, null).interpret(ObservableModelElement.Def.class);
+					return ms.setModels(subModel).interpret(ObservableModelElement.Def.class);
 				})//
 				.rightOrder()//
 				.onRightX(el -> el.getLeftValue().update(el.getRightValue()))//
 				.onCommonX(el -> el.getLeftValue().update(el.getRightValue()))//
 				.adjust();
-
-				session.setModels(builder.build(), null);
-				super.update(session);
+				//
+				// ObservableModelSet.Built built = builder.build();
+				// session.setModels(built);
+				// setExpressoEnv(getExpressoEnv().with(built));
 			}
 
 			private static boolean nonTrivial(ObservableModelSet models) {
-				if (!models.getComponents().isEmpty())
+				if (models == null)
+					return false;
+				else if (!models.getComponentNames().isEmpty())
 					return true;
 				for (ObservableModelSet inh : models.getInheritance().values()) {
 					if (nonTrivial(inh))
@@ -334,14 +262,14 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 			}
 
 			@Override
-			public void update() throws ExpressoInterpretationException {
-				super.update();
+			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+				super.doUpdate(env);
 				CollectionUtils.synchronize(theSubModels, getDefinition().getSubModels(), //
-					(widget, child) -> widget.getDefinition() == child)//
+					(widget, child) -> widget.getIdentity() == child.getIdentity())//
 				.<ExpressoInterpretationException> simpleE(child -> child.interpret(Interpreted.this))//
 				.rightOrder()//
-				.onRightX(element -> element.getLeftValue().update())//
-				.onCommonX(element -> element.getLeftValue().update())//
+				.onRightX(element -> element.getLeftValue().updateSubModel(getExpressoEnv()))//
+				.onCommonX(element -> element.getLeftValue().updateSubModel(getExpressoEnv()))//
 				.adjust();
 			}
 		}
@@ -364,23 +292,21 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 			Interpreted<?> myInterpreted = (Interpreted<?>) interpreted;
 
 			CollectionUtils.synchronize(theSubModels, myInterpreted.getSubModels(), //
-				(widget, child) -> widget.getIdentity() == child.getDefinition().getIdentity())//
+				(widget, child) -> widget.getIdentity() == child.getIdentity())//
 			.<ModelInstantiationException> simpleE(child -> child.create(ModelSetElement.this))//
 			.rightOrder()//
 			.onRightX(element -> {
 				try {
 					element.getLeftValue().update(element.getRightValue(), myModels);
 				} catch (RuntimeException | Error e) {
-					element.getRightValue().getDefinition().reporting().error(e.getMessage() == null ? e.toString() : e.getMessage(),
-						e);
+					element.getRightValue().reporting().error(e.getMessage() == null ? e.toString() : e.getMessage(), e);
 				}
 			})//
 			.onCommonX(element -> {
 				try {
 					element.getLeftValue().update(element.getRightValue(), myModels);
 				} catch (RuntimeException | Error e) {
-					element.getRightValue().getDefinition().reporting().error(e.getMessage() == null ? e.toString() : e.getMessage(),
-						e);
+					element.getRightValue().reporting().error(e.getMessage() == null ? e.toString() : e.getMessage(), e);
 				}
 			})//
 			.adjust();
@@ -388,20 +314,22 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 	}
 
 	public static class DefaultModelElement extends ObservableModelElement {
-		private static final ElementTypeTraceability<DefaultModelElement, Interpreted<?>, Def<?>> TRACEABILITY = ElementTypeTraceability
-			.<DefaultModelElement, Interpreted<?>, Def<?>> build(ExpressoSessionImplV0_1.TOOLKIT_NAME, ExpressoSessionImplV0_1.VERSION,
-				"model")//
-			.reflectMethods(Def.class, Interpreted.class, DefaultModelElement.class)//
-			.build();
+		private static final SingleTypeTraceability<DefaultModelElement, Interpreted<?>, Def<?>> TRACEABILITY = ElementTypeTraceability
+			.getElementTraceability(ExpressoSessionImplV0_1.TOOLKIT_NAME, ExpressoSessionImplV0_1.VERSION, "model", Def.class,
+				Interpreted.class, DefaultModelElement.class);
 
-		public static class Def<M extends DefaultModelElement> extends ObservableModelElement.Def<M> {
+		public static class Def<M extends DefaultModelElement>
+		extends ObservableModelElement.Def<M, ModelValueElement.CompiledSynth<?, ?>> {
 			private final List<DefaultModelElement.Def<?>> theSubModels;
 
-			private QonfigChildDef theSubModelRole;
-
-			public Def(ExElement.Def<?> parent, QonfigElement element) {
-				super(parent, element);
+			public Def(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
+				super(parent, qonfigType);
 				theSubModels = new ArrayList<>();
+			}
+
+			@Override
+			protected Class<CompiledSynth<?, ?>> getValueType() {
+				return (Class<ModelValueElement.CompiledSynth<?, ?>>) (Class<?>) ModelValueElement.CompiledSynth.class;
 			}
 
 			protected Class<? extends DefaultModelElement.Def<?>> getModelType() {
@@ -414,28 +342,10 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 			}
 
 			@Override
-			public void update(ExpressoQIS session) throws QonfigInterpretationException {
+			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 				withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
-				theSubModelRole = session.getRole("sub-model");
-				super.update(session.asElement(session.getFocusType().getSuperElement()));
-			}
-
-			@Override
-			protected List<? extends ExElement.Def<?>> getRoleChildren(QonfigElement child, ErrorReporting reporting)
-				throws QonfigInterpretationException {
-				if (child.getDeclaredRoles().contains(theSubModelRole.getDeclared()))
-					return theSubModels;
-				else
-					return super.getRoleChildren(child, reporting);
-			}
-
-			@Override
-			protected ModelValueElement.Def<?, ?> interpretValue(String name, ExpressoQIS value, ModelValueElement.Def<?, ?> previous,
-				ObservableModelSet.Builder builder) throws QonfigInterpretationException {
-				CompiledModelValue<?, ?> container = previous == null ? value.setModels(builder, null).interpret(CompiledModelValue.class)
-					: (CompiledModelValue<?, ?>) previous;
-				builder.withMaker(name, container, value.getElement().getPositionInFile());
-				return container instanceof ModelValueElement.Def ? (ModelValueElement.Def<?, ?>) container : null;
+				super.doUpdate(session.asElement(session.getFocusType().getSuperElement()));
+				ExElement.syncDefs(DefaultModelElement.Def.class, theSubModels, session.forChildren("sub-model"));
 			}
 
 			@Override
@@ -462,15 +372,15 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 			}
 
 			@Override
-			protected void update() throws ExpressoInterpretationException {
-				super.update();
+			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+				super.doUpdate(env);
 
 				CollectionUtils.synchronize(theSubModels, getDefinition().getSubModels(), //
 					(widget, child) -> widget.getDefinition() == child)//
 				.<ExpressoInterpretationException> simpleE(child -> child.interpret(Interpreted.this))//
 				.rightOrder()//
-				.onRightX(element -> element.getLeftValue().update())//
-				.onCommonX(element -> element.getLeftValue().update())//
+				.onRightX(element -> element.getLeftValue().updateSubModel(getExpressoEnv()))//
+				.onCommonX(element -> element.getLeftValue().updateSubModel(getExpressoEnv()))//
 				.adjust();
 			}
 
@@ -520,21 +430,28 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 		}
 	}
 
-	public static class ExtModelElement extends ObservableModelElement {
-		private static final ElementTypeTraceability<ExtModelElement, Interpreted<?>, Def<?>> TRACEABILITY = ElementTypeTraceability
-			.<ExtModelElement, Interpreted<?>, Def<?>> build(ExpressoSessionImplV0_1.TOOLKIT_NAME, ExpressoSessionImplV0_1.VERSION,
-				"ext-model")//
-			.reflectMethods(Def.class, Interpreted.class, ExtModelElement.class)//
-			.build();
+	public static class LocalModelElementDef extends DefaultModelElement.Def<DefaultModelElement> {
+		public LocalModelElementDef(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
+			super(parent, qonfigType);
+		}
+	}
 
-		public static class Def<M extends ExtModelElement> extends ObservableModelElement.Def<M> {
+	public static class ExtModelElement extends ObservableModelElement {
+		private static final SingleTypeTraceability<ExtModelElement, Interpreted<?>, Def<?>> TRACEABILITY = ElementTypeTraceability
+			.getElementTraceability(ExpressoSessionImplV0_1.TOOLKIT_NAME, ExpressoSessionImplV0_1.VERSION, "ext-model", Def.class,
+				Interpreted.class, ExtModelElement.class);
+
+		public static class Def<M extends ExtModelElement> extends ObservableModelElement.Def<M, ExtModelValueElement.Def<?>> {
 			private final List<ExtModelElement.Def<?>> theSubModels;
 
-			private QonfigChildDef theSubModelRole;
-
-			public Def(ExElement.Def<?> parent, QonfigElement element) {
-				super(parent, element);
+			public Def(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
+				super(parent, qonfigType);
 				theSubModels = new ArrayList<>();
+			}
+
+			@Override
+			protected Class<ExtModelValueElement.Def<?>> getValueType() {
+				return (Class<ExtModelValueElement.Def<?>>) (Class<?>) ExtModelValueElement.Def.class;
 			}
 
 			protected Class<? extends ExtModelElement.Def<?>> getModelType() {
@@ -547,55 +464,46 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 			}
 
 			@Override
-			public void update(ExpressoQIS session) throws QonfigInterpretationException {
+			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 				withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
-				theSubModelRole = session.getRole("sub-model");
-				super.update(session.asElement(session.getFocusType().getSuperElement()));
+				super.doUpdate(session.asElement(session.getFocusType().getSuperElement()));
+				ExElement.syncDefs(ExtModelElement.Def.class, theSubModels, session.forChildren("sub-model"));
 			}
 
-			@Override
-			protected List<? extends ExElement.Def<?>> getRoleChildren(QonfigElement child, ErrorReporting reporting)
-				throws QonfigInterpretationException {
-				if (child.getDeclaredRoles().contains(theSubModelRole.getDeclared()))
-					return theSubModels;
-				else
-					return super.getRoleChildren(child, reporting);
-			}
-
-			@Override
-			protected ModelValueElement.Def<?, ?> interpretValue(String name, ExpressoQIS valueEl, ModelValueElement.Def<?, ?> previous,
-				ObservableModelSet.Builder builder) throws QonfigInterpretationException {
-				ExtModelValue<?> container = valueEl.interpret(ExtModelValue.class);
-				ModelInstanceType<Object, Object> childType;
-				ObservableModelSet valueModel = valueEl.getExpressoEnv().getModels();
-				try {
-					childType = (ModelInstanceType<Object, Object>) container.getType(valueModel);
-				} catch (ExpressoInterpretationException e) {
-					throw new QonfigInterpretationException("Could not interpret type", e.getPosition(), e.getErrorLength(), e);
-				}
-				CompiledExpression defaultX = valueEl.getAttributeExpression("default");
-				String childPath = builder.getIdentity().getPath() + "." + name;
-				builder.withExternal(name, childType, valueEl.getElement().getPositionInFile(), extModels -> {
-					try {
-						return extModels.getValue(childPath, childType);
-					} catch (IllegalArgumentException | ModelException | TypeConversionException e) {
-						if (defaultX == null)
-							throw e;
-					}
-					return null;
-				}, models -> {
-					if (defaultX == null)
-						return null;
-					ModelValueSynth<Object, Object> defaultV;
-					try {
-						defaultV = defaultX.evaluate(childType);
-					} catch (ExpressoInterpretationException e) {
-						throw new ModelInstantiationException(e.getMessage(), e.getPosition(), e.getErrorLength(), e);
-					}
-					return defaultV.get(models);
-				});
-				return container instanceof ModelValueElement.Def ? (ModelValueElement.Def<?, ?>) container : null;
-			}
+			// @Override
+			// protected ModelValueElement.Def<?, ?> interpretValue(String name, ExpressoQIS valueEl, ModelValueElement.Def<?, ?> previous,
+			// ObservableModelSet.Builder builder) throws QonfigInterpretationException {
+			// ExtModelValue<?> container = valueEl.interpret(ExtModelValue.class);
+			// ModelInstanceType<Object, Object> childType;
+			// ObservableModelSet valueModel = valueEl.getExpressoEnv().getModels();
+			// try {
+			// childType = (ModelInstanceType<Object, Object>) container.getType(valueModel);
+			// } catch (ExpressoInterpretationException e) {
+			// throw new QonfigInterpretationException("Could not interpret type", e.getPosition(), e.getErrorLength(), e);
+			// }
+			// CompiledExpression defaultX = valueEl.getAttributeExpression("default");
+			// String childPath = builder.getIdentity().getPath() + "." + name;
+			// builder.withExternal(name, childType, valueEl.getElement().getPositionInFile(), extModels -> {
+			// try {
+			// return extModels.getValue(childPath, childType);
+			// } catch (IllegalArgumentException | ModelException | TypeConversionException e) {
+			// if (defaultX == null)
+			// throw e;
+			// }
+			// return null;
+			// }, models -> {
+			// if (defaultX == null)
+			// return null;
+			// ModelValueSynth<Object, Object> defaultV;
+			// try {
+			// defaultV = defaultX.evaluate(childType);
+			// } catch (ExpressoInterpretationException e) {
+			// throw new ModelInstantiationException(e.getMessage(), e.getPosition(), e.getErrorLength(), e);
+			// }
+			// return defaultV.get(models);
+			// });
+			// return container instanceof ModelValueElement.Def ? (ModelValueElement.Def<?, ?>) container : null;
+			// }
 
 			@Override
 			public Interpreted<? extends M> interpret(ExElement.Interpreted<?> parent) throws ExpressoInterpretationException {
@@ -621,15 +529,15 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 			}
 
 			@Override
-			protected void update() throws ExpressoInterpretationException {
-				super.update();
+			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+				super.doUpdate(env);
 
 				CollectionUtils.synchronize(theSubModels, getDefinition().getSubModels(), //
 					(widget, child) -> widget.getDefinition() == child)//
 				.<ExpressoInterpretationException> simpleE(child -> child.interpret(Interpreted.this))//
 				.rightOrder()//
-				.onRightX(element -> element.getLeftValue().update())//
-				.onCommonX(element -> element.getLeftValue().update())//
+				.onRightX(element -> element.getLeftValue().updateSubModel(getExpressoEnv()))//
+				.onCommonX(element -> element.getLeftValue().updateSubModel(getExpressoEnv()))//
 				.adjust();
 			}
 
@@ -679,7 +587,8 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 		}
 	}
 
-	public static class ConfigModelElement extends ObservableModelElement {
+	/*public static class ConfigModelElement extends ObservableModelElement {
+		public static final String APP_ENVIRONMENT_KEY = "EXPRESSO.APP.ENVIRONMENT";
 		private static final ElementTypeTraceability<ConfigModelElement, Interpreted<?>, Def<?>> TRACEABILITY = ElementTypeTraceability
 			.<ConfigModelElement, Interpreted<?>, Def<?>> build(ExpressoConfigV0_1.NAME, ExpressoConfigV0_1.VERSION, "config")//
 			.reflectMethods(Def.class, Interpreted.class, ConfigModelElement.class)//
@@ -722,7 +631,7 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 					theOldConfigNames.add(ch.getValueText());
 
 				isBackup = session.getAttribute("backup", boolean.class);
-				theApplicationEnvironment = session.get(ExpressoBaseV0_1.APP_ENVIRONMENT_KEY, AppEnvironment.class);
+				theApplicationEnvironment = session.get(APP_ENVIRONMENT_KEY, AppEnvironment.class);
 
 				((ObservableModelSet.Builder) session.getExpressoEnv().getModels()).withMaker(ExpressoConfigV0_1.CONFIG_NAME,
 					new ConfigValueMaker(), session.getElement().getPositionInFile());
@@ -730,41 +639,40 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 				super.update(session.asElement(session.getFocusType().getSuperElement()));
 			}
 
-			@Override
-			protected ModelValueElement.Def<?, ?> interpretValue(String name, ExpressoQIS child, ModelValueElement.Def<?, ?> previous,
-				ObservableModelSet.Builder builder) throws QonfigInterpretationException {
-				ModelValueSynth<SettableValue<?>, SettableValue<ObservableConfig>> configV;
-				try {
-					configV = (ModelValueSynth<SettableValue<?>, SettableValue<ObservableConfig>>) builder
-						.getComponent(ExpressoConfigV0_1.CONFIG_NAME);
-				} catch (ModelException e) {
-					throw new QonfigInterpretationException("But we just installed it!", child.getElement().getPositionInFile(), 0, e);
-				}
-				String path = child.getAttributeText("config-path");
-
-				if (path == null)
-					path = name;
-				ConfigModelValue<?, ?, ?> mv = child.interpret(ConfigModelValue.class);
-				builder.withMaker(name, createConfigValue(mv, configV, path, child), child.getElement().getPositionInFile());
-				return mv instanceof ModelValueElement.Def ? (ModelValueElement.Def<?, ?>) mv : null;
-			}
+			// @Override
+			// protected ModelValueElement.Def<?, ?> interpretValue(String name, ExpressoQIS child, ModelValueElement.Def<?, ?> previous,
+			// ObservableModelSet.Builder builder) throws QonfigInterpretationException {
+			// ModelValueSynth<SettableValue<?>, SettableValue<ObservableConfig>> configV;
+			// try {
+			// configV = (ModelValueSynth<SettableValue<?>, SettableValue<ObservableConfig>>) builder
+			// .getComponent(ExpressoConfigV0_1.CONFIG_NAME);
+			// } catch (ModelException e) {
+			// throw new QonfigInterpretationException("But we just installed it!", child.getElement().getPositionInFile(), 0, e);
+			// }
+			// String path = child.getAttributeText("config-path");
+			//
+			// if (path == null)
+			// path = name;
+			// ConfigModelValue<?, ?, ?> mv = child.interpret(ConfigModelValue.class);
+			// builder.withMaker(name, createConfigValue(mv, configV, path, child), child.getElement().getPositionInFile());
+			// return mv instanceof ModelValueElement.Def ? (ModelValueElement.Def<?, ?>) mv : null;
+			// }
 
 			@Override
 			public Interpreted<? extends M> interpret(ExElement.Interpreted<?> parent) throws ExpressoInterpretationException {
 				return new Interpreted<>(this, parent);
 			}
 
-			private <T, M2, MV extends M2> CompiledModelValue<M2, MV> createConfigValue(ConfigModelValue<T, M2, MV> configValue,
-				ModelValueSynth<SettableValue<?>, SettableValue<ObservableConfig>> configV, String path, ExpressoQIS session)
+			private <T, M2, MV extends M2> CompiledModelValue<M2> createConfigValue(ConfigModelValue<T, M2, MV> configValue,
+				InterpretedValueSynth<SettableValue<?>, SettableValue<ObservableConfig>> configV, String path, ExpressoQIS session)
 					throws QonfigInterpretationException {
 				ExpressoQIS formatSession = session.forChildren("format").peekFirst();
-				CompiledModelValue<?, ?> formatCreator = formatSession == null ? null : formatSession.interpret(CompiledModelValue.class);
+				CompiledModelValue<?> formatCreator = formatSession == null ? null : formatSession.interpret(CompiledModelValue.class);
 				return CompiledModelValue.of("value", configValue.getType().getModelType(), () -> {
 					configValue.init();
-					InterpretedValueSynth<SettableValue<?>, SettableValue<ObservableConfig>> iConfigV = configV.interpret();
 					TypeToken<T> formatType = (TypeToken<T>) configValue.getType()
 						.getType(configValue.getType().getModelType().getTypeCount() - 1);
-					ModelValueSynth<SettableValue<?>, SettableValue<ObservableConfigFormat<T>>> formatContainer;
+					InterpretedValueSynth<SettableValue<?>, SettableValue<ObservableConfigFormat<T>>> formatContainer;
 					ObservableConfigFormat<T> defaultFormat;
 					if (formatCreator != null) {
 						try {
@@ -787,20 +695,20 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 							throw new ExpressoInterpretationException("No default config format available for type " + formatType,
 								session.getElement().getPositionInFile(), 0);
 					}
-					return new ModelValueSynth<M2, MV>() {
+					return new InterpretedValueSynth<M2, MV>() {
 						@Override
 						public ModelType<M2> getModelType() {
 							return configValue.getType().getModelType();
 						}
 
 						@Override
-						public ModelInstanceType<M2, MV> getType() throws ExpressoInterpretationException {
+						public ModelInstanceType<M2, MV> getType() {
 							return configValue.getType();
 						}
 
 						@Override
 						public MV get(ModelSetInstance msi) throws ModelInstantiationException, IllegalStateException {
-							ObservableConfig config = iConfigV.get(msi).get();
+							ObservableConfig config = configV.get(msi).get();
 							ObservableConfig.ObservableConfigValueBuilder<T> builder = config//
 								.asValue(formatType).at(path)//
 								.until(msi.getUntil());
@@ -818,7 +726,7 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 						}
 
 						@Override
-						public List<? extends ModelValueSynth<?, ?>> getComponents() {
+						public List<? extends InterpretedValueSynth<?, ?>> getComponents() {
 							return Collections.emptyList();
 						}
 					};
@@ -899,20 +807,21 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 				return ObservableConfigFormat.ofQommonFormat(f, () -> defaultValue);
 			}
 
-			private class ConfigValueMaker implements CompiledModelValue<SettableValue<?>, SettableValue<ObservableConfig>> {
+			private class ConfigValueMaker implements CompiledModelValue<SettableValue<?>> {
 				@Override
-				public ModelType<SettableValue<?>> getModelType() {
+				public ModelType<SettableValue<?>> getModelType(CompiledExpressoEnv env) {
 					return ModelTypes.Value;
 				}
 
 				@Override
-				public ModelValueSynth<SettableValue<?>, SettableValue<ObservableConfig>> createSynthesizer()
+				public InterpretedValueSynth<SettableValue<?>, SettableValue<ObservableConfig>> createSynthesizer(
+					InterpretedExpressoEnv env)
 					throws ExpressoInterpretationException {
-					ModelValueSynth<SettableValue<?>, SettableValue<BetterFile>> configDir;
+					InterpretedValueSynth<SettableValue<?>, SettableValue<BetterFile>> configDir;
 					if (theConfigDir != null)
-						configDir = theConfigDir.evaluate(ModelTypes.Value.forType(BetterFile.class));
+						configDir = theConfigDir.evaluate(ModelTypes.Value.forType(BetterFile.class), env);
 					else {
-						configDir = ModelValueSynth.of(ModelTypes.Value.forType(BetterFile.class), msi -> {
+						configDir = InterpretedValueSynth.of(ModelTypes.Value.forType(BetterFile.class), msi -> {
 							String prop = System.getProperty(theConfigName + ".config");
 							if (prop != null)
 								return ObservableModelSet.literal(BetterFile.at(new NativeFileSource(), prop), prop);
@@ -922,7 +831,7 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 						});
 					}
 
-					return ModelValueSynth.of(ModelTypes.Value.forType(ObservableConfig.class), msi -> {
+					return InterpretedValueSynth.of(ModelTypes.Value.forType(ObservableConfig.class), msi -> {
 						BetterFile configDirFile = configDir == null ? null : configDir.get(msi).get();
 						if (configDirFile == null) {
 							String configProp = System.getProperty(theConfigName + ".config");
@@ -1008,14 +917,14 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 						boolean[] closingWithoutSave = new boolean[1];
 						AppEnvironment app = theApplicationEnvironment != null ? theApplicationEnvironment : new AppEnvironment() {
 							@Override
-							public ModelValueSynth<SettableValue<?>, ? extends ObservableValue<String>> getTitle() {
-								return ModelValueSynth.literal(TypeTokens.get().STRING, "Unspecified Application",
+							public InterpretedValueSynth<SettableValue<?>, SettableValue<String>> getTitle() {
+								return InterpretedValueSynth.literal(TypeTokens.get().STRING, "Unspecified Application",
 									"Unspecified Application");
 							}
 
 							@Override
-							public ModelValueSynth<SettableValue<?>, ? extends ObservableValue<Image>> getIcon() {
-								return ModelValueSynth.literal(TypeTokens.get().of(Image.class), null, "No Image");
+							public InterpretedValueSynth<SettableValue<?>, SettableValue<Image>> getIcon() {
+								return InterpretedValueSynth.literal(TypeTokens.get().of(Image.class), null, "No Image");
 							}
 						};
 						if (loaded)
@@ -1136,5 +1045,5 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 		public ConfigModelElement(Interpreted<?> interpreted, ExElement parent) {
 			super(interpreted, parent);
 		}
-	}
+	}*/
 }

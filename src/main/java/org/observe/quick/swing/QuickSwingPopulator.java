@@ -263,7 +263,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 					qw.getEventListeners().stream(), //
 					l -> tx2.transform(l, QuickSwingEventListener.class));
 				QuickSwingBorder border = tx2.transform(qw.getBorder(), QuickSwingBorder.class);
-				String name = qw.getDefinition().getName();
+				String name = qw.getName();
 				qsp.addModifier((comp, w) -> {
 					comp.withName(name);
 					ComponentDecorator deco = new ComponentDecorator();
@@ -1647,7 +1647,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 		}
 
 		static <T> QuickSwingPopulator<StyledTextArea<T>> interpretStyledTextArea(StyledTextArea.Interpreted<T> interpreted,
-			Transformer<ExpressoInterpretationException> tx) {
+			Transformer<ExpressoInterpretationException> tx) throws ExpressoInterpretationException {
 			TypeToken<T> valueType = interpreted.getValueType();
 			return createWidget((panel, quick) -> {
 				Format<T> format = quick.getFormat().get();
@@ -1723,11 +1723,13 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 						tf2.addCaretListener(e -> {
 							if (selectionCallbackLock[0])
 								return;
-							ObservableStyledDocument<T>.DocumentNode startNode = doc.getNodeAt(e.getDot());
-							ObservableStyledDocument<T>.DocumentNode endNode = doc.getNodeAt(e.getMark());
+							int selStart = Math.min(e.getDot(), e.getMark());
+							int selEnd = Math.max(e.getDot(), e.getMark());
+							ObservableStyledDocument<T>.DocumentNode startNode = doc.getNodeAt(selStart);
+							ObservableStyledDocument<T>.DocumentNode endNode = doc.getNodeAt(selEnd);
 							if (selectionStartValue.isAcceptable(startNode == null ? null : startNode.getValue()) == null) {
-								int startOffset = startNode == null ? 0 : e.getDot() - startNode.getStart();
-								int endOffset = endNode == null ? 0 : e.getMark() - endNode.getStart();
+								int startOffset = startNode == null ? 0 : selStart - startNode.getStart();
+								int endOffset = endNode == null ? 0 : selEnd - endNode.getStart();
 								selectionCallbackLock[0] = true;
 								try (Causable.CausableInUse cause = Causable.cause(e);
 									Transaction svt = selectionStartValue.lock(true, cause);
@@ -1820,37 +1822,36 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 						case add:
 							renderer = true;
 							if (evt.getNewValue().getRenderer() != null)
-								renderers.put(evt.getNewValue().getDefinition().getIdentity(),
+								renderers.put(evt.getNewValue().getIdentity(),
 									tx.transform(evt.getNewValue().getRenderer(), QuickSwingPopulator.class));
 							renderer = false;
 							if (evt.getNewValue().getEditing() != null && evt.getNewValue().getEditing().getEditor() != null)
-								editors.put(evt.getNewValue().getDefinition().getIdentity(),
+								editors.put(evt.getNewValue().getIdentity(),
 									tx.transform(evt.getNewValue().getEditing().getEditor(), QuickSwingPopulator.class));
 							break;
 						case remove:
-							renderers.remove(evt.getOldValue().getDefinition().getIdentity());
-							editors.remove(evt.getOldValue().getDefinition().getIdentity());
+							renderers.remove(evt.getOldValue().getIdentity());
+							editors.remove(evt.getOldValue().getIdentity());
 							break;
 						case set:
-							if (evt.getOldValue().getDefinition().getIdentity() != evt.getNewValue().getDefinition().getIdentity()) {
-								renderers.remove(evt.getOldValue().getDefinition().getIdentity());
-								editors.remove(evt.getOldValue().getDefinition().getIdentity());
+							if (evt.getOldValue().getIdentity() != evt.getNewValue().getIdentity()) {
+								renderers.remove(evt.getOldValue().getIdentity());
+								editors.remove(evt.getOldValue().getIdentity());
 							}
 							renderer = true;
 							if (evt.getNewValue().getRenderer() != null)
-								renderers.put(evt.getNewValue().getDefinition().getIdentity(),
+								renderers.put(evt.getNewValue().getIdentity(),
 									tx.transform(evt.getNewValue().getRenderer(), QuickSwingPopulator.class));
 							renderer = false;
 							if (evt.getNewValue().getEditing() != null && evt.getNewValue().getEditing().getEditor() != null)
-								editors.put(evt.getNewValue().getDefinition().getIdentity(),
+								editors.put(evt.getNewValue().getIdentity(),
 									tx.transform(evt.getNewValue().getEditing().getEditor(), QuickSwingPopulator.class));
 							break;
 						}
 					} catch (ExpressoInterpretationException e) {
 						if (renderersInitialized[0])
-							(renderer ? evt.getNewValue().getDefinition().getRenderer()
-								: evt.getNewValue().getDefinition().getEditing().getEditor()).reporting().at(e.getErrorOffset())
-							.error(e.getMessage(), e);
+							(renderer ? evt.getNewValue().getRenderer() : evt.getNewValue().getEditing().getEditor()).reporting()
+							.at(e.getErrorOffset()).error(e.getMessage(), e);
 						else
 							throw new CheckedExceptionWrapper(e);
 					}
@@ -1859,8 +1860,8 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 				if (e.getCause() instanceof ExpressoInterpretationException)
 					throw (ExpressoInterpretationException) e.getCause();
 				else
-					throw new ExpressoInterpretationException(e.getMessage(),
-						interpreted.getDefinition().reporting().getFileLocation().getPosition(0), 0, e.getCause());
+					throw new ExpressoInterpretationException(e.getMessage(), interpreted.reporting().getFileLocation().getPosition(0), 0,
+						e.getCause());
 			}
 			renderersInitialized[0] = true;
 			interpreted.destroyed().act(__ -> sub.unsubscribe());

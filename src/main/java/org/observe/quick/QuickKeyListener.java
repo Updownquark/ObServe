@@ -2,14 +2,15 @@ package org.observe.quick;
 
 import org.observe.SettableValue;
 import org.observe.expresso.ModelInstantiationException;
-import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.qonfig.ElementTypeTraceability;
+import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.observe.expresso.qonfig.ExElement;
+import org.observe.expresso.qonfig.ExWithElementModel;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.util.TypeTokens;
-import org.qommons.config.QonfigElement;
+import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
 public interface QuickKeyListener extends QuickEventListener {
@@ -69,18 +70,16 @@ public interface QuickKeyListener extends QuickEventListener {
 
 	public class QuickKeyTypedListener extends QuickEventListener.Abstract implements QuickKeyListener {
 		public static final String KEY_TYPED_LISTENER = "on-type";
-		private static final ElementTypeTraceability<QuickKeyTypedListener, Interpreted, Def> TRACEABILITY = ElementTypeTraceability
-			.<QuickKeyTypedListener, Interpreted, Def> build(QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION,
-				KEY_TYPED_LISTENER)//
-			.reflectMethods(Def.class, Interpreted.class, QuickKeyTypedListener.class)//
-			.build();
+		private static final SingleTypeTraceability<QuickKeyTypedListener, Interpreted, Def> TRACEABILITY = ElementTypeTraceability
+			.getElementTraceability(QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, KEY_TYPED_LISTENER, Def.class,
+				Interpreted.class, QuickKeyTypedListener.class);
 
 		public static class Def extends QuickEventListener.Def.Abstract<QuickKeyTypedListener>
 		implements QuickKeyListener.Def<QuickKeyTypedListener> {
 			private char theCharFilter;
 
-			public Def(ExElement.Def<?> parent, QonfigElement element) {
-				super(parent, element);
+			public Def(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
+				super(parent, type);
 			}
 
 			@QonfigAttributeGetter("char")
@@ -89,9 +88,9 @@ public interface QuickKeyListener extends QuickEventListener {
 			}
 
 			@Override
-			public void update(ExpressoQIS session) throws QonfigInterpretationException {
+			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 				withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
-				super.update(session.asElement(session.getFocusType()// on-type
+				super.doUpdate(session.asElement(session.getFocusType()// on-type
 					.getSuperElement() // key-listener
 					.getSuperElement() // event-listener
 					));
@@ -150,8 +149,7 @@ public interface QuickKeyListener extends QuickEventListener {
 		@Override
 		protected void updateModel(ExElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
 			super.updateModel(interpreted, myModels);
-			ExElement.satisfyContextValue("typedChar", ModelTypes.Value.forType(char.class), SettableValue.flatten(theTypedChar),
-				myModels, this);
+			getAddOn(ExWithElementModel.class).satisfyElementValue("typedChar", SettableValue.flatten(theTypedChar));
 			QuickKeyTypedListener.Interpreted myInterpreted = (QuickKeyTypedListener.Interpreted) interpreted;
 			theCharFilter = myInterpreted.getDefinition().getCharFilter();
 		}
@@ -159,11 +157,9 @@ public interface QuickKeyListener extends QuickEventListener {
 
 	public class QuickKeyCodeListener extends QuickEventListener.Abstract implements QuickKeyListener {
 		public static final String KEY_CODE_LISTENER = "key-code-listener";
-		private static final ElementTypeTraceability<QuickKeyCodeListener, Interpreted, Def> TRACEABILITY = ElementTypeTraceability
-			.<QuickKeyCodeListener, Interpreted, Def> build(QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION,
-				KEY_CODE_LISTENER)//
-			.reflectMethods(Def.class, Interpreted.class, QuickKeyCodeListener.class)//
-			.build();
+		private static final SingleTypeTraceability<QuickKeyCodeListener, Interpreted, Def> TRACEABILITY = ElementTypeTraceability
+			.getElementTraceability(QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, KEY_CODE_LISTENER, Def.class,
+				Interpreted.class, QuickKeyCodeListener.class);
 		public static final String KEY_PRESSED_LISTENER = "on-key-press";
 		public static final String KEY_RELEASED_LISTENER = "on-key-release";
 
@@ -172,8 +168,8 @@ public interface QuickKeyListener extends QuickEventListener {
 			private final boolean isPressed;
 			private KeyCode theKeyCode;
 
-			public Def(ExElement.Def<?> parent, QonfigElement element, boolean pressed) {
-				super(parent, element);
+			public Def(ExElement.Def<?> parent, QonfigElementOrAddOn type, boolean pressed) {
+				super(parent, type);
 				isPressed = pressed;
 			}
 
@@ -187,7 +183,7 @@ public interface QuickKeyListener extends QuickEventListener {
 			}
 
 			@Override
-			public void update(ExpressoQIS session) throws QonfigInterpretationException {
+			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 				switch (session.getFocusType().getName()) {
 				case KEY_PRESSED_LISTENER:
 				case KEY_RELEASED_LISTENER: // Don't need a separate subclass for these
@@ -198,7 +194,7 @@ public interface QuickKeyListener extends QuickEventListener {
 				default:
 				}
 				withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
-				super.update(session.asElement(session.getFocusType().getSuperElement()// key-listener
+				super.doUpdate(session.asElement(session.getFocusType().getSuperElement()// key-listener
 					.getSuperElement() // event-listener
 					));
 				String keyCodeStr = session.getAttributeText("key");
@@ -263,8 +259,7 @@ public interface QuickKeyListener extends QuickEventListener {
 		@Override
 		protected void updateModel(ExElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
 			super.updateModel(interpreted, myModels);
-			ExElement.satisfyContextValue("keyCode", ModelTypes.Value.forType(KeyCode.class), SettableValue.flatten(theEventKeyCode),
-				myModels, this);
+			getAddOn(ExWithElementModel.class).satisfyElementValue("keyCode", SettableValue.flatten(theEventKeyCode));
 			QuickKeyCodeListener.Interpreted myInterpreted = (QuickKeyCodeListener.Interpreted) interpreted;
 			isPressed = myInterpreted.getDefinition().isPressed();
 			theKeyCode = myInterpreted.getDefinition().getKeyCode();

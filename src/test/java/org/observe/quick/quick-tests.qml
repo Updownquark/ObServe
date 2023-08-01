@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
 <testing uses:test="Expresso-Testing 0.1" uses:quick="Quick-Testing 0.1" uses:base="Quick-Base v0.1" uses:debug="Expresso-Debug v0.1">
-	<test:head>
+	<expresso>
 		<imports>
 			<import>org.junit.Assert.*</import>
 		</imports>
@@ -15,7 +15,7 @@
 				<value name="intValue2" type="int" />
 			</model>
 		</models>
-	</test:head>
+	</expresso>
 	<test name="superBasic">
 		<box name="ui" layout="inline-layout" orientation="vertical" main-align="justify">
 			<label name="label1" value="model.intValue" />

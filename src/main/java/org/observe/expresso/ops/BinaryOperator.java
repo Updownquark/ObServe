@@ -13,9 +13,10 @@ import org.observe.SettableValue;
 import org.observe.Transformation;
 import org.observe.Transformation.ReverseQueryResult;
 import org.observe.Transformation.TransformationValues;
-import org.observe.expresso.ExpressoEnv;
+import org.observe.expresso.CompiledExpressoEnv;
 import org.observe.expresso.ExpressoEvaluationException;
 import org.observe.expresso.ExpressoInterpretationException;
+import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelType;
 import org.observe.expresso.ModelType.ModelInstanceType;
@@ -83,7 +84,7 @@ public class BinaryOperator implements ObservableExpression {
 
 	@Override
 	public int getExpressionLength() {
-		return theLeft.getExpressionLength() + 1 + theRight.getExpressionLength();
+		return theLeft.getExpressionLength() + theOperator.length() + theRight.getExpressionLength();
 	}
 
 	@Override
@@ -104,7 +105,7 @@ public class BinaryOperator implements ObservableExpression {
 	}
 
 	@Override
-	public ModelType<?> getModelType(ExpressoEnv env) {
+	public ModelType<?> getModelType(CompiledExpressoEnv env) {
 		boolean action = theOperator.charAt(theOperator.length() - 1) == '=';
 		if (action) {
 			switch (theOperator) {
@@ -120,7 +121,7 @@ public class BinaryOperator implements ObservableExpression {
 	}
 
 	@Override
-	public <M, MV extends M> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env,
+	public <M, MV extends M> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, InterpretedExpressoEnv env,
 		int expressionOffset) throws ExpressoEvaluationException, ExpressoInterpretationException {
 		if (type.getModelType() == ModelTypes.Action) {//
 		} else if (type.getModelType() == ModelTypes.Value) {//

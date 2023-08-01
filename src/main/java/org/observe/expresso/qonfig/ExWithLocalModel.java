@@ -1,28 +1,27 @@
 package org.observe.expresso.qonfig;
 
 import org.observe.expresso.ExpressoInterpretationException;
+import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
-import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
-public class ExWithLocalModel extends ExAddOn.Abstract<ExElement> {
-	private static final ElementTypeTraceability<ExElement, ExElement.Interpreted<?>, ExElement.Def<?>> TRACEABILITY = ElementTypeTraceability
-		.buildAddOn(ExpressoSessionImplV0_1.TOOLKIT_NAME, ExpressoSessionImplV0_1.VERSION, "with-local-model", Def.class, Interpreted.class,
-			ExWithLocalModel.class)//
-		.reflectAddOnMethods()//
-		.build();
+public class ExWithLocalModel extends ExModelAugmentation<ExElement> {
+	private static final SingleTypeTraceability<ExElement, ExElement.Interpreted<?>, ExElement.Def<?>> TRACEABILITY = ElementTypeTraceability
+		.getAddOnTraceability(ExpressoSessionImplV0_1.TOOLKIT_NAME, ExpressoSessionImplV0_1.VERSION, "with-local-model", Def.class,
+			Interpreted.class, ExWithLocalModel.class);
 
-	public static class Def extends ExAddOn.Def.Abstract<ExElement, ExWithLocalModel> {
-		private ObservableModelElement.DefaultModelElement.Def<?> theLocalModelElement;
+	public static class Def extends ExModelAugmentation.Def<ExElement, ExWithLocalModel> {
+		private ObservableModelElement.LocalModelElementDef theLocalModelElement;
 
 		public Def(QonfigAddOn type, ExElement.Def<? extends ExElement> element) {
 			super(type, element);
 		}
 
 		@QonfigChildGetter("model")
-		public ObservableModelElement.DefaultModelElement.Def<?> getLocalModelElement() {
+		public ObservableModelElement.LocalModelElementDef getLocalModelElement() {
 			return theLocalModelElement;
 		}
 
@@ -30,8 +29,16 @@ public class ExWithLocalModel extends ExAddOn.Abstract<ExElement> {
 		public void update(ExpressoQIS session, ExElement.Def<? extends ExElement> element) throws QonfigInterpretationException {
 			element.withTraceability(TRACEABILITY.validate(getType(), element.reporting()));
 			super.update(session, element);
-			theLocalModelElement = session.get(ExpressoBaseV0_1.LOCAL_MODEL_ELEMENT_KEY,
-				ObservableModelElement.DefaultModelElement.Def.class);
+			if (session.getChildren("model").isEmpty()) { // Don't create a local model if there's no reason to
+				theLocalModelElement = null;
+				return;
+			}
+			// Don't need to use the local model builder, just create it. The local model parsing below will populate it.
+			createBuilder(session);
+			theLocalModelElement = ExElement.useOrReplace(ObservableModelElement.LocalModelElementDef.class, theLocalModelElement, session,
+				"model");
+			session.setModels(theLocalModelElement.getExpressoEnv().getModels());
+			getElement().setExpressoEnv(getElement().getExpressoEnv().with(theLocalModelElement.getExpressoEnv().getModels()));
 		}
 
 		@Override
@@ -57,16 +64,18 @@ public class ExWithLocalModel extends ExAddOn.Abstract<ExElement> {
 		}
 
 		@Override
-		public void update(InterpretedModelSet models) throws ExpressoInterpretationException {
-			super.update(models);
+		public void update(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+			super.update(env);
 			if (theLocalModelElement == null || theLocalModelElement.getDefinition() != getDefinition().getLocalModelElement()) {
 				if (theLocalModelElement != null)
 					theLocalModelElement.destroy();
 				theLocalModelElement = getDefinition().getLocalModelElement() == null ? null
 					: getDefinition().getLocalModelElement().interpret(getElement());
 			}
-			if (theLocalModelElement != null)
-				theLocalModelElement.update();
+			if (theLocalModelElement != null) {
+				theLocalModelElement.update(env);
+				getElement().setExpressoEnv(env.with(theLocalModelElement.getExpressoEnv().getModels()));
+			}
 		}
 
 		@Override

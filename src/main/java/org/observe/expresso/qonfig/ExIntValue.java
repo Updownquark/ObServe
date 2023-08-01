@@ -2,20 +2,18 @@ package org.observe.expresso.qonfig;
 
 import org.observe.SettableValue;
 import org.observe.expresso.ExpressoInterpretationException;
+import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
-import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
 public class ExIntValue extends ExAddOn.Abstract<ExElement> {
-	private static final ElementTypeTraceability<ExElement, ExElement.Interpreted<?>, ExElement.Def<?>> TRACEABILITY = ElementTypeTraceability
-		.buildAddOn(ExpressoBaseV0_1.NAME, ExpressoBaseV0_1.VERSION, "int-value", Def.class, Interpreted.class,
-			ExIntValue.class)//
-		.reflectAddOnMethods()//
-		.build();
+	private static final SingleTypeTraceability<ExElement, ExElement.Interpreted<?>, ExElement.Def<?>> TRACEABILITY = ElementTypeTraceability
+		.getAddOnTraceability(ExpressoBaseV0_1.NAME, ExpressoBaseV0_1.VERSION, "int-value", Def.class, Interpreted.class, ExIntValue.class);
 
 	public static class Def extends ExAddOn.Def.Abstract<ExElement, ExIntValue> {
 		private CompiledExpression theInit;
@@ -33,6 +31,7 @@ public class ExIntValue extends ExAddOn.Abstract<ExElement> {
 		public void update(ExpressoQIS session, ExElement.Def<? extends ExElement> element) throws QonfigInterpretationException {
 			element.withTraceability(TRACEABILITY.validate(getType(), element.reporting()));
 			super.update(session, element);
+			theInit = session.getAttributeExpression("init");
 		}
 
 		@Override
@@ -58,16 +57,16 @@ public class ExIntValue extends ExAddOn.Abstract<ExElement> {
 		}
 
 		@Override
-		public void update(InterpretedModelSet models) throws ExpressoInterpretationException {
-			super.update(models);
+		public void update(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+			super.update(env);
 
 			ExTyped.Interpreted typed = getElement().getAddOn(ExTyped.Interpreted.class);
 			if (getDefinition().getInit() == null)
 				theInit = null;
 			else if (typed != null && typed.getValueType() != null)
-				theInit = getDefinition().getInit().evaluate(ModelTypes.Value.forType(typed.getValueType())).interpret();
+				theInit = getDefinition().getInit().interpret(ModelTypes.Value.forType(typed.getValueType()), env);
 			else
-				theInit = getDefinition().getInit().evaluate(ModelTypes.Value.any()).interpret();
+				theInit = getDefinition().getInit().interpret(ModelTypes.Value.any(), env);
 		}
 
 		@Override

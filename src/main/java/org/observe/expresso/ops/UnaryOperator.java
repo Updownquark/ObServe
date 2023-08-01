@@ -9,9 +9,10 @@ import java.util.function.Function;
 import org.observe.ObservableAction;
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
-import org.observe.expresso.ExpressoEnv;
+import org.observe.expresso.CompiledExpressoEnv;
 import org.observe.expresso.ExpressoEvaluationException;
 import org.observe.expresso.ExpressoInterpretationException;
+import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelType;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
@@ -96,7 +97,7 @@ public class UnaryOperator implements ObservableExpression {
 	}
 
 	@Override
-	public ModelType<?> getModelType(ExpressoEnv env) {
+	public ModelType<?> getModelType(CompiledExpressoEnv env) {
 		Set<UnaryOp<?, ?>> operators = env.getUnaryOperators().getOperators(theOperator);
 		if (operators.isEmpty())
 			throw new IllegalStateException("No such operator found: " + theOperator);
@@ -104,7 +105,7 @@ public class UnaryOperator implements ObservableExpression {
 	}
 
 	@Override
-	public <M, MV extends M> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env,
+	public <M, MV extends M> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, InterpretedExpressoEnv env,
 		int expressionOffset) throws ExpressoEvaluationException, ExpressoInterpretationException {
 		Set<Class<?>> types = env.getUnaryOperators().getSupportedInputTypes(theOperator);
 		TypeToken<?> targetOpType;
@@ -120,7 +121,7 @@ public class UnaryOperator implements ObservableExpression {
 			break;
 		}
 		int operandOffset = expressionOffset + getComponentOffset(0);
-		ExpressoEnv valueEnv = env.at(getComponentOffset(0));
+		InterpretedExpressoEnv valueEnv = env.at(getComponentOffset(0));
 		try {
 			return (EvaluatedExpression<M, MV>) doOperation(type,
 				theOperand.evaluate(ModelTypes.Value.forType(targetOpType), valueEnv, operandOffset), env, expressionOffset,
@@ -131,7 +132,7 @@ public class UnaryOperator implements ObservableExpression {
 	}
 
 	private <M, MV extends M, S> MV doOperation(ModelInstanceType<M, MV> type, EvaluatedExpression<SettableValue<?>, SettableValue<S>> op,
-		ExpressoEnv env, int expressionOffset, ErrorReporting valueReporting)
+		InterpretedExpressoEnv env, int expressionOffset, ErrorReporting valueReporting)
 			throws ExpressoEvaluationException, ExpressoInterpretationException {
 		TypeToken<S> opType = (TypeToken<S>) op.getType().getType(0);
 		UnaryOp<S, ?> operator = env.getUnaryOperators().getOperator(theOperator, TypeTokens.getRawType(opType));

@@ -8,16 +8,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-import org.observe.expresso.ExpressoEnv;
-import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.VariableType;
 import org.observe.expresso.qonfig.ExpressoQIS;
-import org.observe.util.TypeTokens;
 import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterCollections;
 import org.qommons.collect.BetterHashMultiMap;
 import org.qommons.collect.BetterMultiMap;
-import org.qommons.config.AbstractQIS;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigAttributeDef;
 import org.qommons.config.QonfigElement;
@@ -27,8 +23,7 @@ import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigToolkit;
 import org.qommons.io.ErrorReporting;
-
-import com.google.common.reflect.TypeToken;
+import org.qommons.io.LocatedPositionedContent;
 
 /** Represents style information for a {@link QonfigElementOrAddOn} */
 public class QuickTypeStyle {
@@ -44,7 +39,7 @@ public class QuickTypeStyle {
 		/**
 		 * @param element The element type to get the style type of
 		 * @return The style type for the given element type, or null if it has not been
-		 *         {@link #getOrCompile(QonfigElementOrAddOn, AbstractQIS, QonfigToolkit) compiled}
+		 *         {@link #getOrCompile(QonfigElementOrAddOn, ErrorReporting, QonfigToolkit) compiled}
 		 */
 		public QuickTypeStyle get(QonfigElementOrAddOn element) {
 			return theElementStyleTypes.get(element);
@@ -52,13 +47,13 @@ public class QuickTypeStyle {
 
 		/**
 		 * @param element The element type to get the style type of
-		 * @param session The session to get the {@link ExpressoQIS#getExpressoEnv() expresso environment} from and for
-		 *        {@link ErrorReporting#error(String) error reporting}
+		 * @param reporting The error reporting to use for errors to get the {@link ExpressoQIS#getExpressoEnv() expresso environment} from
+		 *        and for {@link ErrorReporting#error(String) error reporting}
 		 * @param style The toolkit inheriting Quick-Style
 		 * @return The style type for the given element type
 		 * @throws QonfigInterpretationException If an error occurs synthesizing the style information for the given element
 		 */
-		public QuickTypeStyle getOrCompile(QonfigElementOrAddOn element, AbstractQIS<?> session, QonfigToolkit style)
+		public QuickTypeStyle getOrCompile(QonfigElementOrAddOn element, ErrorReporting reporting, QonfigToolkit style)
 			throws QonfigInterpretationException {
 			QuickTypeStyle styled = get(element);
 			if (styled != null)
@@ -69,12 +64,12 @@ public class QuickTypeStyle {
 			List<QuickTypeStyle> parents = new ArrayList<>();
 			QonfigElementOrAddOn superEl = element.getSuperElement();
 			if (superEl != null) {
-				QuickTypeStyle parent = getOrCompile(superEl, session, style);
+				QuickTypeStyle parent = getOrCompile(superEl, reporting, style);
 				if (parent != null)
 					parents.add(parent);
 			}
 			for (QonfigAddOn inh : element.getInheritance()) {
-				QuickTypeStyle parent = getOrCompile(inh, session, style);
+				QuickTypeStyle parent = getOrCompile(inh, reporting, style);
 				if (parent != null)
 					parents.add(parent);
 			}
@@ -82,8 +77,8 @@ public class QuickTypeStyle {
 				parents = Collections.emptyList();
 			else
 				parents = Collections.unmodifiableList(parents);
-			Map<String, QuickStyleAttribute<?>> declaredAttributes = new LinkedHashMap<>();
-			BetterMultiMap<String, QuickStyleAttribute<?>> attributes = BetterHashMultiMap.<String, QuickStyleAttribute<?>> build()
+			Map<String, QuickStyleAttributeDef> declaredAttributes = new LinkedHashMap<>();
+			BetterMultiMap<String, QuickStyleAttributeDef> attributes = BetterHashMultiMap.<String, QuickStyleAttributeDef> build()
 				.buildMultiMap();
 			QonfigAttributeDef.Declared priorityAttr = getPriorityAttr(style);
 			styled = new QuickTypeStyle(this, element, parents, priorityAttr, Collections.unmodifiableMap(declaredAttributes),
@@ -99,24 +94,12 @@ public class QuickTypeStyle {
 				for (QonfigElement styleAttr : stylesEl.getChildrenInRole(style, "styles", STYLE_ATTRIBUTE)) {
 					String name = styleAttr.getAttributeText(nameAttr);
 					if (declaredAttributes.containsKey(name)) {
-						session.reporting().error("Multiple style attributes named '" + name + "' declared");
+						reporting.error("Multiple style attributes named '" + name + "' declared");
 						continue;
 					}
 					QonfigValue typeV = styleAttr.getAttributes().get(typeAttr);
-					ExpressoEnv env = session.as(ExpressoQIS.class).getExpressoEnv();
-					VariableType vblType = VariableType.parseType(typeV.text, env.getClassView(), typeV.fileLocation, typeV.position);
-					if (vblType.isModelDependent()) {
-						session.reporting().error("Style attributes (like '" + name + "') must be statically-typed");
-						continue;
-					}
-					TypeToken<?> type;
-					try {
-						type = vblType.getType(env.getModels());
-					} catch (ExpressoInterpretationException e) {
-						throw new QonfigInterpretationException("Could not interpret type of attribute '" + name + "'", e.getPosition(),
-							e.getErrorLength());
-					}
-					declaredAttributes.put(name, new QuickStyleAttribute<>(styled, name, type, //
+					VariableType type = VariableType.parseType(new LocatedPositionedContent.Default(typeV.fileLocation, typeV.position));
+					declaredAttributes.put(name, new QuickStyleAttributeDef(styled, name, type, //
 						styleAttr.getAttribute(trickleAttr, boolean.class), styleAttr.getDescription()));
 				}
 			}
@@ -141,13 +124,13 @@ public class QuickTypeStyle {
 	private final TypeStyleSet theStyleTypes;
 	private final QonfigElementOrAddOn theElement;
 	private final List<QuickTypeStyle> theSuperElements;
-	private final Map<String, QuickStyleAttribute<?>> theDeclaredAttributes;
-	private final BetterMultiMap<String, QuickStyleAttribute<?>> theAttributes;
+	private final Map<String, QuickStyleAttributeDef> theDeclaredAttributes;
+	private final BetterMultiMap<String, QuickStyleAttributeDef> theAttributes;
 	private final QonfigAttributeDef.Declared thePriorityAttr;
 
 	QuickTypeStyle(TypeStyleSet styleTypes, QonfigElementOrAddOn element, List<QuickTypeStyle> superElements,
 		QonfigAttributeDef.Declared priorityAttr, //
-		Map<String, QuickStyleAttribute<?>> declaredAttributes, BetterMultiMap<String, QuickStyleAttribute<?>> attributes) {
+		Map<String, QuickStyleAttributeDef> declaredAttributes, BetterMultiMap<String, QuickStyleAttributeDef> attributes) {
 		theStyleTypes = styleTypes;
 		theElement = element;
 		theSuperElements = superElements;
@@ -178,12 +161,12 @@ public class QuickTypeStyle {
 	}
 
 	/** @return All style attributes declared for this type specifically, by name */
-	public Map<String, QuickStyleAttribute<?>> getDeclaredAttributes() {
+	public Map<String, QuickStyleAttributeDef> getDeclaredAttributes() {
 		return theDeclaredAttributes;
 	}
 
 	/** @return All style attributes declared for this type and all its {@link #getSuperElements() super types} */
-	public BetterMultiMap<String, QuickStyleAttribute<?>> getAttributes() {
+	public BetterMultiMap<String, QuickStyleAttributeDef> getAttributes() {
 		return theAttributes;
 	}
 
@@ -192,13 +175,13 @@ public class QuickTypeStyle {
 	 * @return The attribute referred to by the given name
 	 * @throws IllegalArgumentException If no such attribute could be found, or if multiple attributes match the given name
 	 */
-	public QuickStyleAttribute<?> getAttribute(String name) throws IllegalArgumentException {
+	public QuickStyleAttributeDef getAttribute(String name) throws IllegalArgumentException {
 		int dot = name.indexOf('.');
 		if (dot < 0) {
-			QuickStyleAttribute<?> attr = theDeclaredAttributes.get(name);
+			QuickStyleAttributeDef attr = theDeclaredAttributes.get(name);
 			if (attr != null)
 				return attr;
-			BetterCollection<QuickStyleAttribute<?>> attrs = theAttributes.get(name);
+			BetterCollection<QuickStyleAttributeDef> attrs = theAttributes.get(name);
 			if (attrs.isEmpty())
 				throw new IllegalArgumentException("No such style attribute: " + theElement + "." + name);
 			else if (attrs.size() > 1)
@@ -221,7 +204,7 @@ public class QuickTypeStyle {
 	 * @return All attributes relevant to this type matching the given name
 	 * @throws IllegalArgumentException If the qualified element type could not be found or is not related to this element
 	 */
-	public Collection<QuickStyleAttribute<?>> getAttributes(String name) throws IllegalArgumentException {
+	public Collection<QuickStyleAttributeDef> getAttributes(String name) throws IllegalArgumentException {
 		int dot = name.indexOf('.');
 		if (dot < 0) {
 			return theAttributes.get(name);
@@ -235,32 +218,6 @@ public class QuickTypeStyle {
 				throw new IllegalArgumentException(theElement + " is not related to " + elName);
 			return styled.getAttributes(name.substring(dot + 1));
 		}
-	}
-
-	/**
-	 * @param name The name of the attribute (may be qualified by element type)
-	 * @param type The type of the attribute
-	 * @return The attribute referred to by the given name
-	 * @throws IllegalArgumentException If no such attribute could be found, if multiple attributes match the given name, or if the
-	 *         attribute does not match the given type
-	 */
-	public <T> QuickStyleAttribute<? extends T> getAttribute(String name, TypeToken<T> type) throws IllegalArgumentException {
-		QuickStyleAttribute<?> attr = getAttribute(name);
-		if (!TypeTokens.get().isAssignable(type, attr.getType()))
-			throw new IllegalArgumentException(
-				"Style attribute " + theElement + "." + name + " is of type " + attr.getType() + ", not " + type);
-		return (QuickStyleAttribute<? extends T>) attr;
-	}
-
-	/**
-	 * @param name The name of the attribute (may be qualified by element type)
-	 * @param type The type of the attribute
-	 * @return The attribute referred to by the given name
-	 * @throws IllegalArgumentException If no such attribute could be found, if multiple attributes match the given name, or if the
-	 *         attribute does not match the given type
-	 */
-	public <T> QuickStyleAttribute<? extends T> getAttribute(String name, Class<T> type) {
-		return getAttribute(name, TypeTokens.get().of(type));
 	}
 
 	@Override

@@ -4,17 +4,29 @@ import java.util.*;
 import java.util.function.Function;
 
 import org.observe.SettableValue;
-import org.observe.expresso.*;
+import org.observe.expresso.CompiledExpressoEnv;
+import org.observe.expresso.ExpressoEvaluationException;
+import org.observe.expresso.ExpressoInterpretationException;
+import org.observe.expresso.InterpretedExpressoEnv;
+import org.observe.expresso.ModelException;
+import org.observe.expresso.ModelType;
 import org.observe.expresso.ModelType.ModelInstanceType;
-import org.observe.expresso.ObservableModelSet.CompiledModelValue;
+import org.observe.expresso.ModelTypes;
+import org.observe.expresso.ObservableExpression;
+import org.observe.expresso.ObservableModelSet;
+import org.observe.expresso.ObservableModelSet.InterpretedModelComponentNode;
+import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
+import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelComponentNode;
-import org.observe.expresso.ObservableModelSet.ModelValueSynth;
+import org.observe.expresso.ObservableModelSet.ModelTag;
+import org.observe.expresso.TypeConversionException;
 import org.observe.expresso.ops.BinaryOperator;
 import org.observe.expresso.ops.BufferedExpression;
 import org.observe.expresso.ops.NameExpression;
-import org.observe.expresso.qonfig.DynamicModelValue;
+import org.observe.expresso.qonfig.ElementModelValue;
+import org.observe.expresso.qonfig.ElementModelValue.Identity;
 import org.observe.expresso.qonfig.LocatedExpression;
-import org.observe.expresso.qonfig.DynamicModelValue.Identity;
+import org.observe.util.TypeTokens;
 import org.qommons.BiTuple;
 import org.qommons.MultiInheritanceSet;
 import org.qommons.config.QonfigAddOn;
@@ -57,14 +69,16 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 		}
 	}, Collections.emptyMap());
 
-	private static final Map<DynamicModelValue.Identity, Integer> MODEL_VALUE_PRIORITY = new WeakHashMap<>();
+	public static final ModelTag<QonfigElement> STYLED_ELEMENT_TAG = ModelTag.of(QonfigElement.class.getSimpleName(),
+		TypeTokens.get().of(QonfigElement.class));
+	private static final Map<ElementModelValue.Identity, Integer> MODEL_VALUE_PRIORITY = new WeakHashMap<>();
 
 	/**
 	 * @param modelValue The model value definition
 	 * @param priorityAttr The style-model-value.priority attribute from the Quick-Style toolkit
 	 * @return The priority of the given model value
 	 */
-	public static synchronized int getPriority(DynamicModelValue.Identity modelValue, QonfigAttributeDef.Declared priorityAttr) {
+	public static synchronized int getPriority(ElementModelValue.Identity modelValue, QonfigAttributeDef.Declared priorityAttr) {
 		Integer priority = MODEL_VALUE_PRIORITY.get(modelValue);
 		if (priority != null)
 			return priority;
@@ -80,21 +94,21 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 	 * @param modelValues The model values to prioritize
 	 * @param known Model values for which the priority is already known, an optimization
 	 * @param priorityAttr The style-model-value.priority attribute from the Quick-Style toolkit
-	 * @return All of the given model values, sorted by priority (in the key set, highest first) and mapped to their priority
+	 * @param into The map into which to put all of the given model values, sorted by priority (in the key set, highest first) and mapped to
+	 *        their priority
 	 */
-	public static Map<DynamicModelValue.Identity, Integer> prioritizeModelValues(Collection<DynamicModelValue.Identity> modelValues,
-		Map<DynamicModelValue.Identity, Integer> known, QonfigAttributeDef.Declared priorityAttr) {
-		List<BiTuple<DynamicModelValue.Identity, Integer>> mvList = new ArrayList<>(modelValues.size());
-		for (DynamicModelValue.Identity mv : modelValues) {
+	public static void prioritizeModelValues(Collection<ElementModelValue.Identity> modelValues,
+		Map<ElementModelValue.Identity, Integer> known, QonfigAttributeDef.Declared priorityAttr,
+		Map<ElementModelValue.Identity, Integer> into) {
+		List<BiTuple<ElementModelValue.Identity, Integer>> mvList = new ArrayList<>(modelValues.size());
+		for (ElementModelValue.Identity mv : modelValues) {
 			Integer priority = known.get(mv);
 			mvList.add(new BiTuple<>(mv, priority != null ? priority.intValue() : getPriority(mv, priorityAttr)));
 		}
 		Collections.sort(mvList, (mv1, mv2) -> -mv1.getValue2().compareTo(mv2.getValue2()));
 
-		Map<DynamicModelValue.Identity, Integer> prioritizedMVs = new LinkedHashMap<>();
-		for (BiTuple<DynamicModelValue.Identity, Integer> mv : mvList)
-			prioritizedMVs.put(mv.getValue1(), mv.getValue2());
-		return Collections.unmodifiableMap(prioritizedMVs);
+		for (BiTuple<ElementModelValue.Identity, Integer> mv : mvList)
+			into.put(mv.getValue1(), mv.getValue2());
 	}
 
 	private final StyleApplicationDef theParent;
@@ -102,10 +116,10 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 	private final MultiInheritanceSet<QonfigElementOrAddOn> theTypes;
 	private final int theTypeComplexity;
 	private final LocatedExpression theCondition;
-	private final Map<DynamicModelValue.Identity, Integer> theModelValues;
+	private final Map<ElementModelValue.Identity, Integer> theModelValues;
 
 	private StyleApplicationDef(StyleApplicationDef parent, QonfigChildDef role, MultiInheritanceSet<QonfigElementOrAddOn> types,
-		LocatedExpression condition, Map<DynamicModelValue.Identity, Integer> modelValues) {
+		LocatedExpression condition, Map<ElementModelValue.Identity, Integer> modelValues) {
 		if ((parent != null) != (role != null))
 			throw new IllegalArgumentException("A role must be accompanied by a parent style application and vice-versa");
 		theParent = parent;
@@ -144,13 +158,13 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 	 * @param models The models to use to find referenced model values
 	 * @param expresso A toolkit inheriting Expresso-Core
 	 * @param styleSheet Whether the expression is from a style sheet. Model values that do not declare their
-	 *        {@link org.observe.expresso.qonfig.DynamicModelValue.Identity#getType() type} cannot be used as conditions in style sheets.
+	 *        {@link org.observe.expresso.qonfig.ElementModelValue.Identity#getType() type} cannot be used as conditions in style sheets.
 	 * @param dmvCache The model value cache to use
 	 * @return The expression to use in place of the given condition
 	 * @throws QonfigInterpretationException If a type-less condition is used from a style sheet
 	 */
-	public LocatedExpression findModelValues(LocatedExpression ex, Collection<DynamicModelValue.Identity> modelValues,
-		ObservableModelSet models, QonfigToolkit expresso, boolean styleSheet, DynamicModelValue.Cache dmvCache)
+	public LocatedExpression findModelValues(LocatedExpression ex, Collection<ElementModelValue.Identity> modelValues,
+		ObservableModelSet models, QonfigToolkit expresso, boolean styleSheet, ElementModelValue.Cache dmvCache)
 			throws QonfigInterpretationException {
 		ObservableExpression expression;
 		try {
@@ -177,7 +191,7 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 			}
 
 			@Override
-			public <M, MV extends M> ModelValueSynth<M, MV> evaluate(ModelInstanceType<M, MV> type, ExpressoEnv env)
+			public <M, MV extends M> InterpretedValueSynth<M, MV> interpret(ModelInstanceType<M, MV> type, InterpretedExpressoEnv env)
 				throws ExpressoInterpretationException {
 				try {
 					return expression.evaluate(type, env.at(getFilePosition()), 0);
@@ -206,22 +220,19 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 		};
 	}
 
-	private ObservableExpression _findModelValues(ObservableExpression ex, Collection<DynamicModelValue.Identity> modelValues,
-		ObservableModelSet models, QonfigToolkit expresso, boolean styleSheet, DynamicModelValue.Cache dmvCache, int expressionOffset)
+	private ObservableExpression _findModelValues(ObservableExpression ex, Collection<ElementModelValue.Identity> modelValues,
+		ObservableModelSet models, QonfigToolkit expresso, boolean styleSheet, ElementModelValue.Cache dmvCache, int expressionOffset)
 			throws ExpressoEvaluationException {
 		if (ex instanceof NameExpression && ((NameExpression) ex).getContext() == null) {
 			String name = ((NameExpression) ex).getNames().getFirst().getName();
-			ModelComponentNode<?, ?> node = models.getComponentIfExists(name);
+			ModelComponentNode<?> node = models.getComponentIfExists(name);
 			if (node != null) {
-				if (node.getValueIdentity() instanceof DynamicModelValue.Identity)
-					modelValues.add((DynamicModelValue.Identity) node.getValueIdentity());
+				if (node.getValueIdentity() instanceof ElementModelValue.Identity)
+					modelValues.add((ElementModelValue.Identity) node.getValueIdentity());
 			} else if (styleSheet) {
-				Map<String, DynamicModelValue.Identity> typeValues = getTypeValues(dmvCache, expresso, null);
-				DynamicModelValue.Identity mv = typeValues == null ? null : typeValues.get(name);
+				Map<String, ElementModelValue.Identity> typeValues = getTypeValues(dmvCache, expresso, null);
+				ElementModelValue.Identity mv = typeValues == null ? null : typeValues.get(name);
 				if (mv != null) {
-					if (mv.getType() == null)
-						throw new ExpressoEvaluationException(expressionOffset, ex.getExpressionLength(),
-							"Cannot use model value " + mv + " from a style-sheet, as its type is not defined here");
 					modelValues.add(mv);
 					return new ModelValueExpression(ex, mv);
 				}
@@ -249,8 +260,8 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 		return ex;
 	}
 
-	private Map<String, DynamicModelValue.Identity> getTypeValues(DynamicModelValue.Cache dmvCache, QonfigToolkit expresso,
-		Map<String, DynamicModelValue.Identity> values) {
+	private Map<String, ElementModelValue.Identity> getTypeValues(ElementModelValue.Cache dmvCache, QonfigToolkit expresso,
+		Map<String, ElementModelValue.Identity> values) {
 		for (QonfigElementOrAddOn type : theTypes.values())
 			values = dmvCache.getDynamicValues(expresso, type, values);
 		if (theRole != null && theRole.getType() != null)
@@ -260,10 +271,10 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 		return values;
 	}
 
-	/** Replacement expression for a {@link DynamicModelValue} in a spreadsheet condition */
+	/** Replacement expression for a {@link ElementModelValue} in a spreadsheet condition */
 	public static class ModelValueExpression implements ObservableExpression {
 		private final ObservableExpression theWrapped;
-		private final DynamicModelValue.Identity theModelValue;
+		private final ElementModelValue.Identity theModelValue;
 
 		/**
 		 * @param wrapped The expression from the style sheet referring to the model value
@@ -280,7 +291,7 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 		}
 
 		/** @return The model value referred to */
-		public DynamicModelValue.Identity getModelValue() {
+		public ElementModelValue.Identity getModelValue() {
 			return theModelValue;
 		}
 
@@ -297,7 +308,7 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 		}
 
 		@Override
-		public ModelType<?> getModelType(ExpressoEnv env) {
+		public ModelType<?> getModelType(CompiledExpressoEnv env) {
 			return theWrapped.getModelType(env);
 		}
 
@@ -318,11 +329,11 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 		}
 
 		@Override
-		public <M, MV extends M> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env,
+		public <M, MV extends M> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, InterpretedExpressoEnv env,
 			int expressionOffset) throws ExpressoEvaluationException, ExpressoInterpretationException {
-			ModelComponentNode<?, ?> node;
+			InterpretedModelComponentNode<?, ?> node;
 			try {
-				node = env.getModels().getIdentifiedValue(theModelValue);
+				node = env.getModels().getIdentifiedComponent(theModelValue).interpreted();
 			} catch (ModelException e) {
 				throw new ExpressoEvaluationException(expressionOffset, theModelValue.getName().length(),
 					"No such model value found: '" + theModelValue.getName() + "'", e);
@@ -425,7 +436,7 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 	 * @return All model values that this application's {@link #getCondition() condition} references, sorted by priority (in the key set,
 	 *         highest first) and mapped to their priority
 	 */
-	public Map<DynamicModelValue.Identity, Integer> getModelValues() {
+	public Map<ElementModelValue.Identity, Integer> getModelValues() {
 		return theModelValues;
 	}
 
@@ -497,7 +508,7 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 	 * @throws IllegalArgumentException If one of the given types is {{@link #isCompatible(QonfigElementOrAddOn...) incompatible} with
 	 *         another or one of the types in this application
 	 */
-	public StyleApplicationDef forType(QonfigElementOrAddOn... types) throws IllegalArgumentException{
+	public StyleApplicationDef forType(QonfigElementOrAddOn... types) throws IllegalArgumentException {
 		MultiInheritanceSet<QonfigElementOrAddOn> newTypes = null;
 		for (QonfigElementOrAddOn type : types) {
 			if (theTypes.contains(type))
@@ -564,30 +575,32 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 	 * @param dmvCache The model value cache to use
 	 * @return A {@link StyleApplicationDef} that applies to {@link QonfigElement}s that this application applies to <b>AND</b> whose model
 	 *         passes the given condition
-	 * @throws QonfigInterpretationException If the condition uses any unusable model values, such as un-typed {@link DynamicModelValue
+	 * @throws QonfigInterpretationException If the condition uses any unusable model values, such as un-typed {@link ElementModelValue
 	 *         model values} from a style-sheet
 	 */
-	public StyleApplicationDef forCondition(LocatedExpression condition, ExpressoEnv env, QonfigAttributeDef.Declared priorityAttr,
-		boolean styleSheet, DynamicModelValue.Cache dmvCache) throws QonfigInterpretationException {
+	public StyleApplicationDef forCondition(LocatedExpression condition, ObservableModelSet models,
+		QonfigAttributeDef.Declared priorityAttr, boolean styleSheet, ElementModelValue.Cache dmvCache)
+			throws QonfigInterpretationException {
 		LocatedExpression newCondition;
 		if (theCondition == null)
 			newCondition = condition;
 		else
 			newCondition = new LocatedAndExpression(theCondition, condition);
 
-		Map<DynamicModelValue.Identity, Integer> modelValues = getPrioritizedModelValues(newCondition, env.getModels(), priorityAttr,
-			styleSheet, dmvCache);
+		Map<ElementModelValue.Identity, Integer> modelValues = new HashMap<>();
+		newCondition = getPrioritizedModelValues(newCondition, models, priorityAttr, styleSheet, dmvCache, modelValues);
 		return new StyleApplicationDef(theParent, theRole, theTypes, newCondition, modelValues);
 	}
 
-	private Map<DynamicModelValue.Identity, Integer> getPrioritizedModelValues(LocatedExpression newCondition, ObservableModelSet models,
-		QonfigAttributeDef.Declared priorityAttr, boolean styleSheet, DynamicModelValue.Cache dmvCache)
-			throws QonfigInterpretationException {
-		Set<DynamicModelValue.Identity> mvs = new LinkedHashSet<>();
+	private LocatedExpression getPrioritizedModelValues(LocatedExpression newCondition, ObservableModelSet models,
+		QonfigAttributeDef.Declared priorityAttr, boolean styleSheet, ElementModelValue.Cache dmvCache,
+		Map<ElementModelValue.Identity, Integer> modelValues) throws QonfigInterpretationException {
+		Set<ElementModelValue.Identity> mvs = new LinkedHashSet<>();
 		// We don't need to worry about satisfying anything here. The model values just need to be available for the link level.
 		newCondition = findModelValues(newCondition, mvs, models, priorityAttr.getDeclarer(), styleSheet, dmvCache);
 		mvs.addAll(theModelValues.keySet());
-		return prioritizeModelValues(mvs, theModelValues, priorityAttr);
+		prioritizeModelValues(mvs, theModelValues, priorityAttr, modelValues);
+		return newCondition;
 	}
 
 	/**
@@ -831,59 +844,39 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 
 	/**
 	 *
-	 * @param expressoEnv The Expresso environment in which to {@link ObservableExpression#evaluate(ModelInstanceType, ExpressoEnv, int)
-	 *        evaluate} {@link #getCondition() conditions}
+	 * @param expressoEnv The Expresso environment in which to
+	 *        {@link ObservableExpression#evaluate(ModelInstanceType, InterpretedExpressoEnv, int) evaluate} {@link #getCondition()
+	 *        conditions}
 	 * @param applications A cache of compiled applications for re-use
 	 * @return An {@link InterpretedStyleApplication} for this application in the given environment
 	 * @throws QonfigInterpretationException If a condition could not be
-	 *         {@link ObservableExpression#evaluate(ModelInstanceType, ExpressoEnv, int) evaluated}
+	 *         {@link ObservableExpression#evaluate(ModelInstanceType, InterpretedExpressoEnv, int) evaluated}
 	 */
-	public CompiledStyleApplication compile(ExpressoEnv expressoEnv, Map<StyleApplicationDef, CompiledStyleApplication> applications)
-		throws QonfigInterpretationException {
-		CompiledStyleApplication parent;
+	public InterpretedStyleApplication interpret(InterpretedExpressoEnv env, QuickInterpretedStyleCache.Applications appCache)
+		throws ExpressoInterpretationException {
+		InterpretedStyleApplication parent;
 		if (theParent == null)
 			parent = null;
 		else {
-			parent = applications.get(theParent);
-			if (parent == null) {
-				parent = theParent.compile(expressoEnv.with(getParentModel(expressoEnv.getModels()), null), applications);
-				applications.put(theParent, parent);
-			}
+			parent = appCache.getApplication(theParent, env.with(getParentModel(env.getModels())));
 		}
-		CompiledModelValue<SettableValue<?>, SettableValue<Boolean>> conditionV = theCondition == null ? null
-			: CompiledModelValue.of(theCondition.toString(), ModelTypes.Value, //
-				() -> theCondition.evaluate(ModelTypes.Value.BOOLEAN, expressoEnv));
-		return new CompiledStyleApplication(parent, this, conditionV);
+		InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> condition = theCondition == null ? null : //
+			theCondition.interpret(ModelTypes.Value.BOOLEAN, env);
+		return new InterpretedStyleApplication(parent, this, condition);
 	}
 
-	// /**
-	// *
-	// * @param expressoEnv The Expresso environment in which to {@link ObservableExpression}{@link #evaluate(ExpressoEnv) evaluate}
-	// * {@link #getCondition() conditions}
-	// * @return An {@link InterpretedStyleApplication} for this application in the given environment
-	// * @throws ExpressoInterpretationException If a condition could not be
-	// * {@link ObservableExpression#evaluate(ModelInstanceType, ExpressoEnv, int) evaluated}
-	// */
-	// public InterpretedStyleApplication evaluate(ExpressoEnv expressoEnv) throws ExpressoInterpretationException {
-	// InterpretedStyleApplication parent = theParent == null ? null : theParent.evaluate(//
-	// expressoEnv.with(getParentModel(expressoEnv.getModels()), null));
-	// ModelValueSynth<SettableValue<?>, SettableValue<Boolean>> conditionV = theCondition == null ? null
-	// : theCondition.evaluate(ModelTypes.Value.BOOLEAN, expressoEnv, 0);
-	// return new InterpretedStyleApplication(parent, this, conditionV);
-	// }
-
-	private static ObservableModelSet getParentModel(ObservableModelSet models) {
+	private static InterpretedModelSet getParentModel(InterpretedModelSet models) {
 		// Get the models for the most recent styled ancestor element
-		QonfigElement element = models.getTagValue(StyleQIS.STYLED_ELEMENT_TAG);
+		QonfigElement element = models.getTagValue(STYLED_ELEMENT_TAG);
 		if (element == null)
 			return models;
-		ObservableModelSet inh = models;
+		InterpretedModelSet inh = models;
 		// Only consider direct descendants for now. See if we need to do better later.
 		while (true) {
 			if (inh.getInheritance().isEmpty())
 				return models;
 			inh = inh.getInheritance().values().iterator().next();
-			QonfigElement parentEl = inh.getTagValue(StyleQIS.STYLED_ELEMENT_TAG);
+			QonfigElement parentEl = inh.getTagValue(STYLED_ELEMENT_TAG);
 			if (parentEl == null)
 				return models;
 			else if (parentEl == element)

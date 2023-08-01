@@ -4,12 +4,15 @@ import org.observe.Observable;
 import org.observe.ObservableValueEvent;
 import org.observe.SettableValue;
 import org.observe.expresso.ExpressoInterpretationException;
+import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
-import org.observe.expresso.ObservableModelSet.CompiledModelValue;
-import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
+import org.observe.expresso.ModelType.ModelInstanceType;
+import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.qonfig.CompiledExpression;
 import org.observe.expresso.qonfig.ElementTypeTraceability;
+import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.observe.expresso.qonfig.ExAddOn;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExpressoQIS;
@@ -20,9 +23,9 @@ import org.qommons.config.QonfigInterpretationException;
 public abstract class Positionable extends ExAddOn.Abstract<ExElement> {
 	public static abstract class Def<P extends Positionable> extends ExAddOn.Def.Abstract<ExElement, P> {
 		private final boolean isVertical;
-		private CompiledModelValue<SettableValue<?>, SettableValue<QuickSize>> theLeading;
-		private CompiledModelValue<SettableValue<?>, SettableValue<QuickSize>> theCenter;
-		private CompiledModelValue<SettableValue<?>, SettableValue<QuickSize>> theTrailing;
+		private CompiledExpression theLeading;
+		private CompiledExpression theCenter;
+		private CompiledExpression theTrailing;
 
 		protected Def(boolean vertical, QonfigAddOn type, ExElement.Def<?> element) {
 			super(type, element);
@@ -33,15 +36,15 @@ public abstract class Positionable extends ExAddOn.Abstract<ExElement> {
 			return isVertical;
 		}
 
-		public CompiledModelValue<SettableValue<?>, SettableValue<QuickSize>> getLeading() {
+		public CompiledExpression getLeading() {
 			return theLeading;
 		}
 
-		public CompiledModelValue<SettableValue<?>, SettableValue<QuickSize>> getCenter() {
+		public CompiledExpression getCenter() {
 			return theCenter;
 		}
 
-		public CompiledModelValue<SettableValue<?>, SettableValue<QuickSize>> getTrailing() {
+		public CompiledExpression getTrailing() {
 			return theTrailing;
 		}
 
@@ -49,18 +52,18 @@ public abstract class Positionable extends ExAddOn.Abstract<ExElement> {
 		public void update(ExpressoQIS session, ExElement.Def<?> element) throws QonfigInterpretationException {
 			super.update(session, element);
 			if (isVertical) {
-				theLeading = Sizeable.parseSize(session.getAttributeQV("top"), session, true);
-				theCenter = Sizeable.parseSize(session.getAttributeQV("v-center"), session, true);
-				theTrailing = Sizeable.parseSize(session.getAttributeQV("bottom"), session, true);
+				theLeading = session.getAttributeExpression("top");
+				theCenter = session.getAttributeExpression("v-center");
+				theTrailing = session.getAttributeExpression("bottom");
 			} else {
-				theLeading = Sizeable.parseSize(session.getAttributeQV("left"), session, true);
-				theCenter = Sizeable.parseSize(session.getAttributeQV("h-center"), session, true);
-				theTrailing = Sizeable.parseSize(session.getAttributeQV("right"), session, true);
+				theLeading = session.getAttributeExpression("left");
+				theCenter = session.getAttributeExpression("h-center");
+				theTrailing = session.getAttributeExpression("right");
 			}
 		}
 
 		public static class Vertical extends Def<Positionable.Vertical> {
-			private static final ElementTypeTraceability<ExElement, ExElement.Interpreted<?>, ExElement.Def<?>> TRACEABILITY = ElementTypeTraceability
+			private static final SingleTypeTraceability<ExElement, ExElement.Interpreted<?>, ExElement.Def<?>> TRACEABILITY = ElementTypeTraceability
 				.<ExElement, Positionable, Interpreted<?>, Def<?>> buildAddOn(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION,
 					"v-positionable", Def.class, Interpreted.class, Positionable.class)//
 				.withAddOnAttribute("top", Def::getLeading, Interpreted::getLeading)//
@@ -85,7 +88,7 @@ public abstract class Positionable extends ExAddOn.Abstract<ExElement> {
 		}
 
 		public static class Horizontal extends Def<Positionable.Horizontal> {
-			private static final ElementTypeTraceability<ExElement, ExElement.Interpreted<?>, ExElement.Def<?>> TRACEABILITY = ElementTypeTraceability
+			private static final SingleTypeTraceability<ExElement, ExElement.Interpreted<?>, ExElement.Def<?>> TRACEABILITY = ElementTypeTraceability
 				.<ExElement, Positionable, Interpreted<?>, Def<?>> buildAddOn(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION,
 					"h-positionable", Def.class, Interpreted.class, Positionable.class)//
 				.withAddOnAttribute("left", Def::getLeading, Interpreted::getLeading)//
@@ -137,10 +140,11 @@ public abstract class Positionable extends ExAddOn.Abstract<ExElement> {
 		}
 
 		@Override
-		public void update(InterpretedModelSet models) throws ExpressoInterpretationException {
-			theLeading = getDefinition().getLeading() == null ? null : getDefinition().getLeading().createSynthesizer().interpret();
-			theCenter = getDefinition().getCenter() == null ? null : getDefinition().getCenter().createSynthesizer().interpret();
-			theTrailing = getDefinition().getTrailing() == null ? null : getDefinition().getTrailing().createSynthesizer().interpret();
+		public void update(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+			ModelInstanceType<SettableValue<?>, SettableValue<QuickSize>> sizeType = ModelTypes.Value.forType(QuickSize.class);
+			theLeading = getDefinition().getLeading() == null ? null : getDefinition().getLeading().interpret(sizeType, env);
+			theCenter = getDefinition().getCenter() == null ? null : getDefinition().getCenter().interpret(sizeType, env);
+			theTrailing = getDefinition().getTrailing() == null ? null : getDefinition().getTrailing().interpret(sizeType, env);
 		}
 
 		public static class Vertical extends Interpreted<Positionable.Vertical> {

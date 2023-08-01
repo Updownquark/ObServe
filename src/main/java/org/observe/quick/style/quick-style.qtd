@@ -23,8 +23,6 @@
 			<element-meta-mod meta="with-element-model.element-model" inherits="style-model" />
 			<element-model>
 				<value name="PARENT$MODEL$INSTANCE" type="org.observe.expresso.ObservableModelSet.ModelSetInstance" priority="0" />
-				<!-- This is pretty much just for debugging, and I might remove it sometime -->
-				<value name="MODEL$ELEMENT" type="org.qommons.config.QonfigElement" priority="0" />
 			</element-model>
 			<element-meta name="styles" type="styles" min="0" />
 			<?DOC Styles declared on the element itself?>
@@ -33,7 +31,7 @@
 		<add-on name="style-model" requires="element-model">
 			<child-mod child="element-model.value" inherits="style-model-value" />
 		</add-on>
-		<add-on name="style-model-value" requires="model-value">
+		<add-on name="style-model-value" requires="model-value" inherits="element-model-value">
 			<attribute name="priority" type="int" specify="required" />
 		</add-on>
 	</add-ons>

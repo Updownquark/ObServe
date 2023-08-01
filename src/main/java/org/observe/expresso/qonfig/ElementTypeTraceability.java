@@ -2,6 +2,7 @@ package org.observe.expresso.qonfig;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -24,7 +25,54 @@ import org.qommons.io.ErrorReporting;
 
 import com.google.common.reflect.TypeToken;
 
-public class ElementTypeTraceability<E extends ExElement, I extends ExElement.Interpreted<? extends E>, D extends ExElement.Def<? extends E>> {
+public interface ElementTypeTraceability<E extends ExElement, I extends ExElement.Interpreted<? extends E>, D extends ExElement.Def<? extends E>> {
+	ElementTypeTraceability<E, I, D> validate(QonfigElementOrAddOn type, ErrorReporting reporting);
+
+	default Object getDefAttribute(D def, QonfigAttributeDef attribute) {
+		attribute = attribute.getDeclared();
+		return getDefAttribute(def, attribute.getDeclarer().getName(), attribute.getDeclarer().getMajorVersion(),
+			attribute.getDeclarer().getMinorVersion(), attribute.getName());
+	}
+
+	Object getDefAttribute(D def, String toolkitName, int majorVersion, int minorVersion, String attribute);
+
+	Object getDefElementValue(D def);
+
+	default Object getInterpretedAttribute(I interp, QonfigAttributeDef attribute) {
+		attribute = attribute.getDeclared();
+		return getInterpretedAttribute(interp, attribute.getDeclarer().getName(), attribute.getDeclarer().getMajorVersion(),
+			attribute.getDeclarer().getMinorVersion(), attribute.getName());
+	}
+
+	Object getInterpretedAttribute(I interp, String toolkitName, int majorVersion, int minorVersion, String attribute);
+
+	Object getInterpretedElementValue(I interp);
+
+	default List<? extends ExElement.Def<?>> getDefChildren(D def, QonfigChildDef child) {
+		child = child.getDeclared();
+		return getDefChildren(def, child.getDeclarer().getName(), child.getDeclarer().getMajorVersion(),
+			child.getDeclarer().getMinorVersion(), child.getName());
+	}
+
+	List<? extends ExElement.Def<?>> getDefChildren(D def, String toolkitName, int majorVersion, int minorVersion, String child);
+
+	default List<? extends ExElement.Interpreted<?>> getInterpretedChildren(I interp, QonfigChildDef child) {
+		child = child.getDeclared();
+		return getInterpretedChildren(interp, child.getDeclarer().getName(), child.getDeclarer().getMajorVersion(),
+			child.getDeclarer().getMinorVersion(), child.getName());
+	}
+
+	List<? extends ExElement.Interpreted<?>> getInterpretedChildren(I interp, String toolkitName, int majorVersion, int minorVersion,
+		String child);
+
+	default List<? extends ExElement> getElementChildren(E element, QonfigChildDef child) {
+		child = child.getDeclared();
+		return getElementChildren(element, child.getDeclarer().getName(), child.getDeclarer().getMajorVersion(),
+			child.getDeclarer().getMinorVersion(), child.getName());
+	}
+
+	List<? extends ExElement> getElementChildren(E element, String toolkitName, int majorVersion, int minorVersion, String child);
+
 	public interface AttributeValueGetter<E extends ExElement, I extends ExElement.Interpreted<? extends E>, D extends ExElement.Def<? extends E>> {
 		Object getFromDef(D def);
 
@@ -66,8 +114,8 @@ public class ElementTypeTraceability<E extends ExElement, I extends ExElement.In
 
 		public static <E extends ExElement, I extends ExElement.Interpreted<? extends E>, D extends ExElement.Def<? extends E>> ChildElementGetter<E, I, D> of(
 			Function<? super D, ? extends List<? extends ExElement.Def<?>>> defGetter,
-			Function<? super I, ? extends List<? extends ExElement.Interpreted<?>>> interpGetter,
-			Function<? super E, ? extends List<? extends ExElement>> elGetter) {
+				Function<? super I, ? extends List<? extends ExElement.Interpreted<?>>> interpGetter,
+					Function<? super E, ? extends List<? extends ExElement>> elGetter) {
 			return new ChildElementGetter<E, I, D>() {
 				@Override
 				public List<? extends ExElement.Def<?>> getChildrenFromDef(D def) {
@@ -166,19 +214,22 @@ public class ElementTypeTraceability<E extends ExElement, I extends ExElement.In
 
 		@Override
 		public List<? extends ExElement.Interpreted<?>> getChildrenFromInterpreted(ExElement.Interpreted<? extends E> interp) {
+			if (theInterpType == null)
+				return Collections.emptyList();
 			return interp.getAddOnValue(theInterpType, this::getFromInterpreted);
 		}
 
 		@Override
 		public List<? extends ExElement> getChildrenFromElement(E element) {
+			if (theAddOnType == null)
+				return Collections.emptyList();
 			return element.getAddOnValue(theAddOnType, this::getFromAddOn);
 		}
 
 		public static <E extends ExElement, AO extends ExAddOn<? super E>, I extends ExAddOn.Interpreted<? super E, ? extends AO>, D extends ExAddOn.Def<? super E, ? extends AO>> Default<E, AO, I, D> of(
 			Class<? super D> defType, Function<? super D, ? extends List<? extends ExElement.Def<?>>> defGetter,
-				Class<? super I> interpretedType,
-			Function<? super I, ? extends List<? extends ExElement.Interpreted<?>>> interpretedGetter, Class<? super AO> addOnType,
-			Function<? super AO, ? extends List<? extends ExElement>> addOnGetter) {
+				Class<? super I> interpretedType, Function<? super I, ? extends List<? extends ExElement.Interpreted<?>>> interpretedGetter,
+					Class<? super AO> addOnType, Function<? super AO, ? extends List<? extends ExElement>> addOnGetter) {
 			return new Default<>(defType, defGetter, interpretedType, interpretedGetter, addOnType, addOnGetter);
 		}
 
@@ -189,9 +240,8 @@ public class ElementTypeTraceability<E extends ExElement, I extends ExElement.In
 			private final Function<? super AO, ? extends List<? extends ExElement>> theAddOnGetter;
 
 			public Default(Class<? super D> defType, Function<? super D, ? extends List<? extends ExElement.Def<?>>> defGetter,
-				Class<? super I> interpType,
-				Function<? super I, ? extends List<? extends ExElement.Interpreted<?>>> interpretedGetter, Class<? super AO> addOnType,
-				Function<? super AO, ? extends List<? extends ExElement>> addOnGetter) {
+				Class<? super I> interpType, Function<? super I, ? extends List<? extends ExElement.Interpreted<?>>> interpretedGetter,
+					Class<? super AO> addOnType, Function<? super AO, ? extends List<? extends ExElement>> addOnGetter) {
 				super(defType, interpType, addOnType);
 				theDefGetter = defGetter;
 				theInterpretedGetter = interpretedGetter;
@@ -215,125 +265,162 @@ public class ElementTypeTraceability<E extends ExElement, I extends ExElement.In
 		}
 	}
 
-	private final String theToolkitName;
-	private final QonfigToolkit.ToolkitDefVersion theToolkitVersion;
-	private final String theTypeName;
+	public static class SingleTypeTraceability<E extends ExElement, I extends ExElement.Interpreted<? extends E>, D extends ExElement.Def<? extends E>>
+	implements ElementTypeTraceability<E, I, D> {
+		private final String theToolkitName;
+		private final QonfigToolkit.ToolkitDefVersion theToolkitVersion;
+		private final String theTypeName;
 
-	private final Map<String, AttributeValueGetter<? super E, ? super I, ? super D>> theAttributes;
-	private final AttributeValueGetter<? super E, ? super I, ? super D> theValue;
-	private final Map<String, ChildElementGetter<? super E, ? super I, ? super D>> theChildren;
+		private final Map<String, AttributeValueGetter<? super E, ? super I, ? super D>> theAttributes;
+		private final AttributeValueGetter<? super E, ? super I, ? super D> theValue;
+		private final Map<String, ChildElementGetter<? super E, ? super I, ? super D>> theChildren;
 
-	private boolean isValidated;
+		private boolean isValidated;
 
-	private ElementTypeTraceability(String toolkitName, ToolkitDefVersion toolkitVersion, String elementName,
-		Map<String, AttributeValueGetter<? super E, ? super I, ? super D>> attributes,
-		AttributeValueGetter<? super E, ? super I, ? super D> value,
-		Map<String, ChildElementGetter<? super E, ? super I, ? super D>> children) {
-		theToolkitName = toolkitName;
-		theToolkitVersion = toolkitVersion;
-		theTypeName = elementName;
-		theAttributes = attributes;
-		theValue = value;
-		theChildren = children;
-	}
+		private SingleTypeTraceability(String toolkitName, ToolkitDefVersion toolkitVersion, String elementName,
+			Map<String, AttributeValueGetter<? super E, ? super I, ? super D>> attributes,
+			AttributeValueGetter<? super E, ? super I, ? super D> value,
+			Map<String, ChildElementGetter<? super E, ? super I, ? super D>> children) {
+			theToolkitName = toolkitName;
+			theToolkitVersion = toolkitVersion;
+			theTypeName = elementName;
+			theAttributes = attributes;
+			theValue = value;
+			theChildren = children;
+		}
 
-	public String getToolkitName() {
-		return theToolkitName;
-	}
+		public String getToolkitName() {
+			return theToolkitName;
+		}
 
-	public QonfigToolkit.ToolkitDefVersion getToolkitVersion() {
-		return theToolkitVersion;
-	}
+		public QonfigToolkit.ToolkitDefVersion getToolkitVersion() {
+			return theToolkitVersion;
+		}
 
-	public String getTypeName() {
-		return theTypeName;
-	}
+		public String getTypeName() {
+			return theTypeName;
+		}
 
-	public ElementTypeTraceability<E, I, D> validate(QonfigElementOrAddOn type, ErrorReporting reporting) {
-		// Only perform the validation and report any applicable warnings once
-		// We're assuming here that there's no possibility of differing elements with the same toolkit/name combo. Should be safe.
-		if (isValidated)
+		@Override
+		public SingleTypeTraceability<E, I, D> validate(QonfigElementOrAddOn type, ErrorReporting reporting) {
+			// Only perform the validation and report any applicable warnings once
+			// We're assuming here that there's no possibility of differing elements with the same toolkit/name combo. Should be safe.
+			if (isValidated)
+				return this;
+			isValidated = true;
+
+			if (!type.getDeclarer().getName().equals(theToolkitName)
+				|| theToolkitVersion.majorVersion != type.getDeclarer().getMajorVersion()
+				|| theToolkitVersion.minorVersion != type.getDeclarer().getMinorVersion() || !theTypeName.equals(type.getName()))
+				throw new IllegalStateException("This class is designed against " + this + ", not " + type.getDeclarer().getName() + " v"
+					+ type.getDeclarer().getMajorVersion() + "." + type.getDeclarer().getMinorVersion() + " " + type.getName());
+			Set<String> unusedAttrs = new HashSet<>(theAttributes.keySet());
+			for (QonfigAttributeDef.Declared attr : type.getDeclaredAttributes().values()) {
+				if (!unusedAttrs.remove(attr.getName()))
+					reporting.warn("No attribute '" + attr.getName() + "' configured for " + theToolkitName + " " + theToolkitVersion + "."
+						+ theTypeName);
+			}
+			if (!unusedAttrs.isEmpty())
+				reporting.warn("No such attributes: " + unusedAttrs + " found in element for " + theToolkitName + " " + theToolkitVersion
+					+ "." + theTypeName);
+
+			if (type.getValue() != null && type.getValue() instanceof QonfigValueDef.Declared && type.getValue().getOwner() == type) {
+				if (theValue == null)
+					reporting.warn("No value configured for " + theToolkitName + " " + theToolkitVersion + "." + theTypeName);
+			} else if (theValue != null)
+				reporting.warn("Value configured for value-less element " + theToolkitName + " " + theToolkitVersion + "." + theTypeName);
+
+			Set<String> unusedChildren = new HashSet<>(theChildren.keySet());
+			for (QonfigChildDef.Declared child : type.getDeclaredChildren().values()) {
+				if (!unusedChildren.remove(child.getName()))
+					reporting.warn("No child '" + child.getName() + "' configured for " + theToolkitName + " " + theToolkitVersion + "."
+						+ theTypeName);
+			}
+			if (!unusedChildren.isEmpty())
+				reporting.warn("No such children: " + unusedChildren + " found in element for " + theToolkitName + " " + theToolkitVersion
+					+ "." + theTypeName);
 			return this;
-		isValidated = true;
-
-		if (!type.getDeclarer().getName().equals(theToolkitName) || theToolkitVersion.majorVersion != type.getDeclarer().getMajorVersion()
-			|| theToolkitVersion.minorVersion != type.getDeclarer().getMinorVersion() || !theTypeName.equals(type.getName()))
-			throw new IllegalStateException("This class is designed against " + this + ", not " + type.getDeclarer().getName() + " v"
-				+ type.getDeclarer().getMajorVersion() + "." + type.getDeclarer().getMinorVersion() + " " + type.getName());
-		Set<String> unusedAttrs = new HashSet<>(theAttributes.keySet());
-		for (QonfigAttributeDef.Declared attr : type.getDeclaredAttributes().values()) {
-			if (!unusedAttrs.remove(attr.getName()))
-				reporting.warn(
-					"No attribute '" + attr.getName() + "' configured for " + theToolkitName + " " + theToolkitVersion + "." + theTypeName);
 		}
-		if (!unusedAttrs.isEmpty())
-			reporting.warn("No such attributes: " + unusedAttrs + " found in element for " + theToolkitName + " " + theToolkitVersion + "."
-				+ theTypeName);
 
-		if (type.getValue() != null && type.getValue() instanceof QonfigValueDef.Declared && type.getValue().getOwner() == type) {
-			if (theValue == null)
-				reporting.warn("No value configured for " + theToolkitName + " " + theToolkitVersion + "." + theTypeName);
-		} else if (theValue != null)
-			reporting.warn("Value configured for value-less element " + theToolkitName + " " + theToolkitVersion + "." + theTypeName);
-
-		Set<String> unusedChildren = new HashSet<>(theChildren.keySet());
-		for (QonfigChildDef.Declared child : type.getDeclaredChildren().values()) {
-			if (!unusedChildren.remove(child.getName()))
-				reporting.warn(
-					"No child '" + child.getName() + "' configured for " + theToolkitName + " " + theToolkitVersion + "." + theTypeName);
+		@Override
+		public Object getDefAttribute(D def, String toolkitName, int majorVersion, int minorVersion, String attribute) {
+			AttributeValueGetter<? super E, ? super I, ? super D> getter = theAttributes.get(attribute);
+			return getter == null ? null : getter.getFromDef(def);
 		}
-		if (!unusedChildren.isEmpty())
-			reporting.warn("No such children: " + unusedChildren + " found in element for " + theToolkitName + " " + theToolkitVersion + "."
-				+ theTypeName);
-		return this;
+
+		@Override
+		public Object getDefElementValue(D def) {
+			AttributeValueGetter<? super E, ? super I, ? super D> getter = theValue;
+			return getter == null ? null : getter.getFromDef(def);
+		}
+
+		@Override
+		public Object getInterpretedAttribute(I interp, String toolkitName, int majorVersion, int minorVersion, String attribute) {
+			AttributeValueGetter<? super E, ? super I, ? super D> getter = theAttributes.get(attribute);
+			return getter == null ? null : getter.getFromInterpreted(interp);
+		}
+
+		@Override
+		public Object getInterpretedElementValue(I interp) {
+			AttributeValueGetter<? super E, ? super I, ? super D> getter = theValue;
+			return getter == null ? null : getter.getFromInterpreted(interp);
+		}
+
+		@Override
+		public List<? extends ExElement.Def<?>> getDefChildren(D def, String toolkitName, int majorVersion, int minorVersion,
+			String child) {
+			ChildElementGetter<? super E, ? super I, ? super D> getter = theChildren.get(child);
+			return getter == null ? Collections.emptyList() : getter.getChildrenFromDef(def);
+		}
+
+		@Override
+		public List<? extends ExElement.Interpreted<?>> getInterpretedChildren(I interp, String toolkitName, int majorVersion,
+			int minorVersion, String child) {
+			ChildElementGetter<? super E, ? super I, ? super D> getter = theChildren.get(child);
+			return getter == null ? Collections.emptyList() : getter.getChildrenFromInterpreted(interp);
+		}
+
+		@Override
+		public List<? extends ExElement> getElementChildren(E element, String toolkitName, int majorVersion, int minorVersion,
+			String child) {
+			ChildElementGetter<? super E, ? super I, ? super D> getter = theChildren.get(child);
+			return getter == null ? Collections.emptyList() : getter.getChildrenFromElement(element);
+		}
+
+		@Override
+		public String toString() {
+			return theToolkitName + " " + theToolkitVersion + " " + theTypeName;
+		}
 	}
 
-	public Object getDefAttribute(D def, String attribute) {
-		AttributeValueGetter<? super E, ? super I, ? super D> getter = theAttributes.get(attribute);
-		return getter == null ? null : getter.getFromDef(def);
+	public static <E extends ExElement, I extends ExElement.Interpreted<? extends E>, D extends ExElement.Def<? extends E>> SingleTypeTraceability<E, I, D> getElementTraceability(
+		String toolkitName, Version toolkitVersion, String qonfigTypeName, Class<D> def, Class<I> interp, Class<E> element)
+			throws IllegalArgumentException {
+		SingleTypeTraceabilityBuilder<E, I, D> builder = build(toolkitName, toolkitVersion, qonfigTypeName);
+		builder.reflectMethods(def, interp, element);
+		return builder.build();
 	}
 
-	public Object getDefElementValue(D def) {
-		AttributeValueGetter<? super E, ? super I, ? super D> getter = theValue;
-		return getter == null ? null : getter.getFromDef(def);
+	public static <E extends ExElement, AO extends ExAddOn<? super E>, I extends ExAddOn.Interpreted<? super E, ? extends AO>, D extends ExAddOn.Def<? super E, ? extends AO>> SingleTypeTraceability<E, ExElement.Interpreted<? extends E>, ExElement.Def<? extends E>> getAddOnTraceability(
+		String toolkitName, Version toolkitVersion, String typeName, Class<? super D> defType, Class<? super I> interpType,
+		Class<? super AO> addOnType) {
+		return getAddOnTraceability(toolkitName, toolkitVersion.major, toolkitVersion.minor, typeName, defType, interpType, addOnType);
 	}
 
-	public Object getInterpretedAttribute(I interp, String attribute) {
-		AttributeValueGetter<? super E, ? super I, ? super D> getter = theAttributes.get(attribute);
-		return getter == null ? null : getter.getFromInterpreted(interp);
+	public static <E extends ExElement, AO extends ExAddOn<? super E>, I extends ExAddOn.Interpreted<? super E, ? extends AO>, D extends ExAddOn.Def<? super E, ? extends AO>> SingleTypeTraceability<E, ExElement.Interpreted<? extends E>, ExElement.Def<? extends E>> getAddOnTraceability(
+		String toolkitName, int majorVersion, int minorVersion, String typeName, Class<? super D> defType, Class<? super I> interpType,
+		Class<? super AO> addOnType) {
+		AddOnBuilder<E, AO, I, D> builder = buildAddOn(toolkitName, majorVersion, minorVersion, typeName, defType, interpType, addOnType);
+		builder.reflectAddOnMethods();
+		return builder.build();
 	}
 
-	public Object getInterpretedElementValue(I interp) {
-		AttributeValueGetter<? super E, ? super I, ? super D> getter = theValue;
-		return getter == null ? null : getter.getFromInterpreted(interp);
-	}
-
-	public List<? extends ExElement.Def<?>> getDefChildren(D def, String child) {
-		ChildElementGetter<? super E, ? super I, ? super D> getter = theChildren.get(child);
-		return getter == null ? Collections.emptyList() : getter.getChildrenFromDef(def);
-	}
-
-	public List<? extends ExElement.Interpreted<?>> getInterpretedChildren(I interp, String child) {
-		ChildElementGetter<? super E, ? super I, ? super D> getter = theChildren.get(child);
-		return getter == null ? Collections.emptyList() : getter.getChildrenFromInterpreted(interp);
-	}
-
-	public List<? extends ExElement> getElementChildren(E element, String child) {
-		ChildElementGetter<? super E, ? super I, ? super D> getter = theChildren.get(child);
-		return getter == null ? Collections.emptyList() : getter.getChildrenFromElement(element);
-	}
-
-	@Override
-	public String toString() {
-		return theToolkitName + " " + theToolkitVersion + " " + theTypeName;
-	}
-
-	public static <E extends ExElement, I extends ExElement.Interpreted<? extends E>, D extends ExElement.Def<? extends E>> Builder<E, I, D> build(
+	public static <E extends ExElement, I extends ExElement.Interpreted<? extends E>, D extends ExElement.Def<? extends E>> SingleTypeTraceabilityBuilder<E, I, D> build(
 		String toolkitName, int majorVersion, int minorVersion, String typeName) {
-		return new Builder<>(toolkitName, new QonfigToolkit.ToolkitDefVersion(majorVersion, minorVersion), typeName);
+		return new SingleTypeTraceabilityBuilder<>(toolkitName, new QonfigToolkit.ToolkitDefVersion(majorVersion, minorVersion), typeName);
 	}
 
-	public static <E extends ExElement, I extends ExElement.Interpreted<? extends E>, D extends ExElement.Def<? extends E>> Builder<E, I, D> build(
+	public static <E extends ExElement, I extends ExElement.Interpreted<? extends E>, D extends ExElement.Def<? extends E>> SingleTypeTraceabilityBuilder<E, I, D> build(
 		String toolkitName, Version toolkitVersion, String typeName) {
 		return build(toolkitName, toolkitVersion.major, toolkitVersion.minor, typeName);
 	}
@@ -351,7 +438,7 @@ public class ElementTypeTraceability<E extends ExElement, I extends ExElement.In
 		return buildAddOn(toolkitName, toolkitVersion.major, toolkitVersion.minor, typeName, defType, interpType, addOnType);
 	}
 
-	public static class Builder<E extends ExElement, I extends ExElement.Interpreted<? extends E>, D extends ExElement.Def<? extends E>> {
+	public static class SingleTypeTraceabilityBuilder<E extends ExElement, I extends ExElement.Interpreted<? extends E>, D extends ExElement.Def<? extends E>> {
 		private final String theToolkitName;
 		private final QonfigToolkit.ToolkitDefVersion theToolkitVersion;
 		private final String theTypeName;
@@ -360,7 +447,7 @@ public class ElementTypeTraceability<E extends ExElement, I extends ExElement.In
 		private AttributeValueGetter<? super E, ? super I, ? super D> theValue;
 		private final Map<String, ChildElementGetter<? super E, ? super I, ? super D>> theChildren;
 
-		Builder(String toolkitName, ToolkitDefVersion toolkitVersion, String typeName) {
+		SingleTypeTraceabilityBuilder(String toolkitName, ToolkitDefVersion toolkitVersion, String typeName) {
 			theToolkitName = toolkitName;
 			theToolkitVersion = toolkitVersion;
 			theTypeName = typeName;
@@ -368,7 +455,8 @@ public class ElementTypeTraceability<E extends ExElement, I extends ExElement.In
 			theChildren = new HashMap<>();
 		}
 
-		public Builder<E, I, D> reflectMethods(Class<? super D> defClass, Class<? super I> interpClass, Class<? super E> elementClass) {
+		public SingleTypeTraceabilityBuilder<E, I, D> reflectMethods(Class<? super D> defClass, Class<? super I> interpClass,
+			Class<? super E> elementClass) {
 			for (Method defMethod : defClass.getDeclaredMethods()) {
 				if (defMethod.getParameterCount() != 0 || defMethod.getReturnType() == void.class)
 					continue;
@@ -441,6 +529,19 @@ public class ElementTypeTraceability<E extends ExElement, I extends ExElement.In
 						withChild(child.value(), new ReflectedChildGetter<>(defMethod, interpMethod, elementMethod, listReturn));
 					}
 				}
+				TraceabilityConfiguration config = defMethod.getDeclaredAnnotation(TraceabilityConfiguration.class);
+				if (config != null) {
+					if (!Modifier.isStatic(defMethod.getModifiers()))
+						System.err.println("Traceability configuration method " + defMethod + " is not static");
+					else {
+						try {
+							defMethod.invoke(this);
+						} catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException e) {
+							System.err.println("Traceability configuration method " + defMethod + " failed");
+							e.printStackTrace();
+						}
+					}
+				}
 			}
 			return this;
 		}
@@ -474,43 +575,45 @@ public class ElementTypeTraceability<E extends ExElement, I extends ExElement.In
 			}
 		}
 
-		public Builder<E, I, D> withAttribute(String attribute, AttributeValueGetter<? super E, ? super I, ? super D> getter) {
+		public SingleTypeTraceabilityBuilder<E, I, D> withAttribute(String attribute,
+			AttributeValueGetter<? super E, ? super I, ? super D> getter) {
 			theAttributes.put(attribute, getter);
 			return this;
 		}
 
-		public Builder<E, I, D> withAttribute(String attribute, Function<? super D, ?> defGetter, Function<? super I, ?> interpGetter) {
+		public SingleTypeTraceabilityBuilder<E, I, D> withAttribute(String attribute, Function<? super D, ?> defGetter,
+			Function<? super I, ?> interpGetter) {
 			return withAttribute(attribute, AttributeValueGetter.of(defGetter, interpGetter));
 		}
 
-		public Builder<E, I, D> withValue(AttributeValueGetter<? super E, ? super I, ? super D> value) {
+		public SingleTypeTraceabilityBuilder<E, I, D> withValue(AttributeValueGetter<? super E, ? super I, ? super D> value) {
 			theValue = value;
 			return this;
 		}
 
-		public Builder<E, I, D> withValue(Function<? super D, ?> defGetter, Function<? super I, ?> interpGetter) {
+		public SingleTypeTraceabilityBuilder<E, I, D> withValue(Function<? super D, ?> defGetter, Function<? super I, ?> interpGetter) {
 			return withValue(AttributeValueGetter.of(defGetter, interpGetter));
 		}
 
-		public Builder<E, I, D> withChild(String child, ChildElementGetter<? super E, ? super I, ? super D> getter) {
+		public SingleTypeTraceabilityBuilder<E, I, D> withChild(String child, ChildElementGetter<? super E, ? super I, ? super D> getter) {
 			theChildren.put(child, getter);
 			return this;
 		}
 
-		public Builder<E, I, D> withChild(String child,
+		public SingleTypeTraceabilityBuilder<E, I, D> withChild(String child,
 			Function<? super D, ? extends List<? extends ExElement.Def<?>>> defGetter,
-			Function<? super I, ? extends List<? extends ExElement.Interpreted<?>>> interpGetter,
-			Function<? super E, ? extends List<? extends ExElement>> elementGetter) {
+				Function<? super I, ? extends List<? extends ExElement.Interpreted<?>>> interpGetter,
+					Function<? super E, ? extends List<? extends ExElement>> elementGetter) {
 			return withChild(child, ChildElementGetter.of(defGetter, interpGetter, elementGetter));
 		}
 
-		public ElementTypeTraceability<E, I, D> build() {
-			return new ElementTypeTraceability<>(theToolkitName, theToolkitVersion, theTypeName, theAttributes, theValue, theChildren);
+		public SingleTypeTraceability<E, I, D> build() {
+			return new SingleTypeTraceability<>(theToolkitName, theToolkitVersion, theTypeName, theAttributes, theValue, theChildren);
 		}
 	}
 
 	public static class AddOnBuilder<E extends ExElement, AO extends ExAddOn<? super E>, I extends ExAddOn.Interpreted<? super E, ? extends AO>, D extends ExAddOn.Def<? super E, ? extends AO>>
-	extends Builder<E, ExElement.Interpreted<? extends E>, ExElement.Def<? extends E>> {
+	extends SingleTypeTraceabilityBuilder<E, ExElement.Interpreted<? extends E>, ExElement.Def<? extends E>> {
 		private final Class<D> theDefClass;
 		private final Class<I> theInterpretedClass;
 		private final Class<AO> theAddOnClass;
@@ -598,6 +701,19 @@ public class ElementTypeTraceability<E extends ExElement, I extends ExElement.In
 							theAddOnClass, elementMethod, listReturn));
 					}
 				}
+				TraceabilityConfiguration config = defMethod.getDeclaredAnnotation(TraceabilityConfiguration.class);
+				if (config != null) {
+					if (!Modifier.isStatic(defMethod.getModifiers()))
+						System.err.println("Traceability configuration method " + defMethod + " is not static");
+					else {
+						try {
+							defMethod.invoke(this);
+						} catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException e) {
+							System.err.println("Traceability configuration method " + defMethod + " failed");
+							e.printStackTrace();
+						}
+					}
+				}
 			}
 			return this;
 		}
@@ -614,8 +730,8 @@ public class ElementTypeTraceability<E extends ExElement, I extends ExElement.In
 
 		public AddOnBuilder<E, AO, I, D> withAddOnChild(String child,
 			Function<? super D, ? extends List<? extends ExElement.Def<?>>> defGetter,
-			Function<? super I, ? extends List<? extends ExElement.Interpreted<?>>> interpGetter,
-			Function<? super AO, ? extends List<? extends ExElement>> elementGetter) {
+				Function<? super I, ? extends List<? extends ExElement.Interpreted<?>>> interpGetter,
+					Function<? super AO, ? extends List<? extends ExElement>> elementGetter) {
 			return withChild(child,
 				AddOnChildGetter.<E, AO, I, D> of(theDefClass, defGetter, theInterpretedClass, interpGetter, theAddOnClass, elementGetter));
 		}
@@ -659,7 +775,7 @@ public class ElementTypeTraceability<E extends ExElement, I extends ExElement.In
 		public AddOnBuilder<E, AO, I, D> withChild(String child,
 			Function<? super Def<? extends E>, ? extends List<? extends ExElement.Def<?>>> defGetter,
 				Function<? super ExElement.Interpreted<? extends E>, ? extends List<? extends Interpreted<?>>> interpGetter,
-			Function<? super E, ? extends List<? extends ExElement>> elementGetter) {
+					Function<? super E, ? extends List<? extends ExElement>> elementGetter) {
 			super.withChild(child, defGetter, interpGetter, elementGetter);
 			return this;
 		}

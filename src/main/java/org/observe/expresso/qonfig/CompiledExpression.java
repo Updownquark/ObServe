@@ -1,11 +1,9 @@
 package org.observe.expresso.qonfig;
 
-import org.observe.expresso.ExpressoEnv;
+import org.observe.expresso.CompiledExpressoEnv;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ModelType;
-import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ObservableExpression;
-import org.observe.expresso.ObservableModelSet.ModelValueSynth;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigValueDef;
@@ -22,7 +20,7 @@ public class CompiledExpression implements LocatedExpression {
 	private final QonfigValueDef theDef;
 	private final LocatedPositionedContent thePosition;
 	private ExpressoQIS theSession;
-	private ExpressoEnv theEnv;
+	private CompiledExpressoEnv theEnv;
 
 	/**
 	 * @param expression The expression to be evaluated
@@ -72,21 +70,6 @@ public class CompiledExpression implements LocatedExpression {
 			theSession = null; // Don't need it anymore--release it
 		}
 		return theExpression.getModelType(theEnv);
-	}
-
-	/**
-	 * @param <M> The model type to evaluate the expression as
-	 * @param <MV> The instance type to evaluate the expression as
-	 * @param type The type to evaluate the expression as
-	 * @return The evaluated expression
-	 * @throws ExpressoInterpretationException If the expression could not be evaluated as the given type
-	 */
-	public <M, MV extends M> ModelValueSynth<M, MV> evaluate(ModelInstanceType<M, MV> type) throws ExpressoInterpretationException {
-		if (theEnv == null) {
-			theEnv = theSession.getExpressoEnv();
-			theSession = null; // Don't need it anymore--release it
-		}
-		return evaluate(type, theEnv.at(getFilePosition()));
 	}
 
 	/**

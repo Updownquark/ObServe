@@ -2,30 +2,30 @@ package org.observe.quick;
 
 import org.observe.SettableValue;
 import org.observe.expresso.ExpressoInterpretationException;
+import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
-import org.observe.expresso.ObservableModelSet.CompiledModelValue;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.qonfig.CompiledExpression;
-import org.observe.expresso.qonfig.DynamicModelValue;
 import org.observe.expresso.qonfig.ElementTypeTraceability;
+import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.observe.expresso.qonfig.ExElement;
+import org.observe.expresso.qonfig.ExWithElementModel;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.util.TypeTokens;
-import org.qommons.config.QonfigElement;
+import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
 import com.google.common.reflect.TypeToken;
 
 public interface QuickValueWidget<T> extends QuickWidget {
 	public static final String VALUE_WIDGET = "value-widget";
-	public static final ElementTypeTraceability<QuickValueWidget<?>, Interpreted<?, ?>, Def<?>> VALUE_WIDGET_TRACEABILITY = ElementTypeTraceability
-		.<QuickValueWidget<?>, Interpreted<?, ?>, Def<?>> build(QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, VALUE_WIDGET)//
-		.reflectMethods(Def.class, Interpreted.class, QuickValueWidget.class)//
-		.build();
+	public static final SingleTypeTraceability<QuickValueWidget<?>, Interpreted<?, ?>, Def<?>> VALUE_WIDGET_TRACEABILITY = ElementTypeTraceability
+		.getElementTraceability(QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, VALUE_WIDGET, Def.class, Interpreted.class,
+			QuickValueWidget.class);
 
 	public interface Def<W extends QuickValueWidget<?>> extends QuickWidget.Def<W> {
 		@QonfigAttributeGetter("value-name")
@@ -45,8 +45,8 @@ public interface QuickValueWidget<T> extends QuickWidget {
 			private CompiledExpression theValue;
 			private CompiledExpression theDisabled;
 
-			protected Abstract(ExElement.Def<?> parent, QonfigElement element) {
-				super(parent, element);
+			protected Abstract(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
+				super(parent, type);
 			}
 
 			@Override
@@ -65,14 +65,16 @@ public interface QuickValueWidget<T> extends QuickWidget {
 			}
 
 			@Override
-			public void update(ExpressoQIS session) throws QonfigInterpretationException {
+			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 				withTraceability(VALUE_WIDGET_TRACEABILITY.validate(session.getFocusType(), session.reporting()));
-				super.update(session.asElement(session.getFocusType().getSuperElement()));
+				super.doUpdate(session.asElement(session.getFocusType().getSuperElement()));
 				theValueName = session.getAttributeText("value-name");
 				theValue = session.getAttributeExpression("value");
 				if (theValue.getExpression() == ObservableExpression.EMPTY && getParentElement() instanceof WidgetValueSupplier.Def)
 					theValue = null; // Value supplied by parent
 				theDisabled = session.getAttributeExpression("disable-with");
+				getAddOn(ExWithElementModel.Def.class).satisfyElementValueType(theValueName, ModelTypes.Value,
+					(interp, env) -> ((Interpreted<?, ?>) interp).getOrInitValue().getType());
 			}
 		}
 	}
@@ -83,10 +85,12 @@ public interface QuickValueWidget<T> extends QuickWidget {
 
 		InterpretedValueSynth<SettableValue<?>, SettableValue<T>> getValue();
 
+		InterpretedValueSynth<SettableValue<?>, SettableValue<T>> getOrInitValue() throws ExpressoInterpretationException;
+
 		InterpretedValueSynth<SettableValue<?>, SettableValue<String>> getDisabled();
 
-		default TypeToken<T> getValueType() {
-			return (TypeToken<T>) getValue().getType().getType(0);
+		default TypeToken<T> getValueType() throws ExpressoInterpretationException {
+			return (TypeToken<T>) getOrInitValue().getType().getType(0);
 		}
 
 		public abstract class Abstract<T, W extends QuickValueWidget<T>> extends QuickWidget.Interpreted.Abstract<W>
@@ -109,26 +113,29 @@ public interface QuickValueWidget<T> extends QuickWidget {
 			}
 
 			@Override
+			public InterpretedValueSynth<SettableValue<?>, SettableValue<T>> getOrInitValue() throws ExpressoInterpretationException {
+				if (theValue == null) {
+					if (getDefinition().getValue() != null)
+						theValue = getDefinition().getValue().interpret(ModelTypes.Value.<T> anyAsV(), getExpressoEnv());
+					else
+						theValue = ((WidgetValueSupplier.Interpreted<T, ?>) getParentElement()).getValue();
+				}
+				return theValue;
+			}
+
+			@Override
 			public InterpretedValueSynth<SettableValue<?>, SettableValue<String>> getDisabled() {
 				return theDisabled;
 			}
 
 			@Override
-			public void update(QuickStyledElement.QuickInterpretationCache cache) throws ExpressoInterpretationException {
-				InterpretedValueSynth<SettableValue<?>, SettableValue<T>> value;
-				if (getDefinition().getValue() != null)
-					theValue = getDefinition().getValue().evaluate(ModelTypes.Value.<T> anyAsV()).interpret();
-				else
-					theValue = ((WidgetValueSupplier.Interpreted<T, ?>) getParentElement()).getValue();
+			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+				theValue = null;
+				super.doUpdate(env);
+				getOrInitValue(); // Initialize theValue
+				getAddOn(ExWithElementModel.Interpreted.class).satisfyElementValue(getDefinition().getValueName(), theValue);
 				theDisabled = getDefinition().getDisabled() == null ? null
-					: getDefinition().getDisabled().evaluate(ModelTypes.Value.STRING).interpret();
-				DynamicModelValue.satisfyDynamicValue(getDefinition().getValueName(), getDefinition().getModels(),
-					CompiledModelValue.constant(theValue));
-				valueInterpreted();
-				super.update(cache);
-			}
-
-			protected void valueInterpreted() {
+					: getDefinition().getDisabled().interpret(ModelTypes.Value.STRING, env);
 			}
 		}
 	}
@@ -168,7 +175,8 @@ public interface QuickValueWidget<T> extends QuickWidget {
 	}
 
 	public interface WidgetValueSupplier<T> extends ExElement {
-		public interface Def<VS extends WidgetValueSupplier<?>> extends ExElement.Def<VS> {}
+		public interface Def<VS extends WidgetValueSupplier<?>> extends ExElement.Def<VS> {
+		}
 
 		public interface Interpreted<T, VS extends WidgetValueSupplier<T>> extends ExElement.Interpreted<VS> {
 			@Override

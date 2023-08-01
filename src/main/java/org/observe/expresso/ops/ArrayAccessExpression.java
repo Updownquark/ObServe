@@ -4,23 +4,21 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.function.Function;
-import java.util.stream.Stream;
 
 import org.observe.SettableValue;
-import org.observe.expresso.ExpressoEnv;
+import org.observe.expresso.CompiledExpressoEnv;
 import org.observe.expresso.ExpressoEvaluationException;
 import org.observe.expresso.ExpressoInterpretationException;
+import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelType;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
-import org.observe.expresso.ObservableModelSet.ModelValueSynth;
 import org.observe.expresso.TypeConversionException;
 import org.observe.util.TypeTokens;
 import org.qommons.QommonsUtils;
-import org.qommons.collect.BetterList;
 import org.qommons.io.ErrorReporting;
 
 import com.google.common.reflect.TypeToken;
@@ -84,12 +82,12 @@ public class ArrayAccessExpression implements ObservableExpression {
 	}
 
 	@Override
-	public ModelType<?> getModelType(ExpressoEnv env) {
+	public ModelType<?> getModelType(CompiledExpressoEnv env) {
 		return ModelTypes.Value;
 	}
 
 	@Override
-	public <M, MV extends M> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env,
+	public <M, MV extends M> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, InterpretedExpressoEnv env,
 		int expressionOffset) throws ExpressoEvaluationException, ExpressoInterpretationException {
 		if (type.getModelType() != ModelTypes.Value)
 			throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(),
@@ -104,7 +102,7 @@ public class ArrayAccessExpression implements ObservableExpression {
 				"array " + theArray + " cannot be evaluated as a " + type.getType(0) + "[]", e);
 		}
 		int indexOffset = expressionOffset + theArray.getExpressionLength() + 1;
-		ExpressoEnv indexEnv = env.at(theArray.getExpressionLength() + 1);
+		InterpretedExpressoEnv indexEnv = env.at(theArray.getExpressionLength() + 1);
 		EvaluatedExpression<SettableValue<?>, SettableValue<Integer>> indexValue;
 		try {
 			indexValue = theIndex.evaluate(ModelTypes.Value.forType(int.class), indexEnv, indexOffset);
@@ -177,11 +175,6 @@ public class ArrayAccessExpression implements ObservableExpression {
 					return value;
 				else
 					return createArrayValue(newArray, newIndex);
-			}
-
-			@Override
-			public BetterList<ModelValueSynth<?, ?>> getCores() {
-				return BetterList.of(Stream.of(arrayValue, indexValue), cv -> cv.getCores().stream());
 			}
 
 			@Override

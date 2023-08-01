@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
 <testing uses:style="Quick-Style-Test 0.1">
-	<head>
+	<expresso>
 		<imports>
 			<import>org.junit.Assert.*</import>
 			<import>org.observe.quick.style.QuickStyleTests.*</import>
@@ -18,16 +18,18 @@
 				<value name="m4" type="boolean "/>
 			</model>
 		</models>
-	</head>
+	</expresso>
 	<test name="basicStyleNoWatch">
-		<!-- Basic styles that depend on model values with various conditions with varying priority and complexity -->
-		<a name="a0" a="models.m0" b="models.m2" c="models.m1" d="models.m4">
-			<style attr="s0">a</style>
-			<style attr="s1">c*10</style>
-			<style attr="s1" condition="a">models.m1</style>
-			<style attr="s1" condition="b">models.m3</style>
-			<style attr="s1" condition="a &amp;&amp; d">models.m1 + models.m3</style>
-		</a>
+		<model>
+			<!-- Basic styles that depend on model values with various conditions with varying priority and complexity -->
+			<a name="a0" a="models.m0" b="models.m2" c="models.m1" d="models.m4">
+				<style attr="s0">a</style>
+				<style attr="s1">c*10</style>
+				<style attr="s1" condition="a">models.m1</style>
+				<style attr="s1" condition="b">models.m3</style>
+				<style attr="s1" condition="a &amp;&amp; d">models.m1 + models.m3</style>
+			</a>
+		</model>
 		<action name="assignA_1">models.m0=true</action>
 		<action name="checkS0_1">assertEquals(ext.actionName, models.m0, a0.s0)</action>
 
@@ -80,16 +82,16 @@
 	<test name="basicStyleWithWatch">
 		<!-- Basic styles that depend on model values with various conditions with varying priority and complexity -->
 		<model>
+			<a name="a0" a="models.m0" b="models.m2" c="models.m1" d="models.m4">
+				<style attr="s0">a</style>
+				<style attr="s1">c*10</style>
+				<style attr="s1" condition="a">models.m1</style>
+				<style attr="s1" condition="b">models.m3</style>
+				<style attr="s1" condition="a &amp;&amp; d">models.m1 + models.m3</style>
+			</a>
 			<watch name="w_a0_s0">a0.s0</watch>
 			<watch name="w_a0_s1">a0.s1</watch>
 		</model>
-		<a name="a0" a="models.m0" b="models.m2" c="models.m1" d="models.m4">
-			<style attr="s0">a</style>
-			<style attr="s1">c*10</style>
-			<style attr="s1" condition="a">models.m1</style>
-			<style attr="s1" condition="b">models.m3</style>
-			<style attr="s1" condition="a &amp;&amp; d">models.m1 + models.m3</style>
-		</a>
 		<action name="assignA_1">models.m0=true</action>
 		<action name="checkWS0_1">assertEquals(ext.actionName, models.m0, w_a0_s0)</action>
 
@@ -140,6 +142,52 @@
 		<action name="checkWS0_5">assertEquals(ext.actionName, 3000, w_a0_s1)</action>
 	</test>
 	<test name="localStyleSheet">
+		<model>
+			<!-- Test styles that are prescribed by a style sheet defined in this document -->
+			<a name="a0" a="localA" b="localB" c="localC" d="localD">
+				<model>
+					<value name="localA" type="boolean" init="false" />
+					<value name="localB" type="boolean" init="false" />
+					<value name="localC" type="int" init="0" />
+					<value name="localD" type="boolean" init="false" />
+				</model>
+			</a>
+			<b name="b0" e="localE" f="localF">
+				<model>
+					<value name="localA" type="boolean" init="false" />
+					<value name="localB" type="boolean" init="false" />
+					<value name="localC" type="int" init="0" />
+					<value name="localD" type="boolean" init="false" />
+					<value name="localE" type="boolean" init="false" />
+					<value name="localF" type="int" init="0" />
+				</model>
+				<a a="localA" b="localB" c="localC" d="localD" />
+			</b>
+			<c name="c0" e="localE" f="localF" g="localG">
+				<model>
+					<value name="localA" type="boolean" init="false" />
+					<value name="localB" type="boolean" init="false" />
+					<value name="localC" type="int" init="0" />
+					<value name="localD" type="boolean" init="false" />
+					<value name="localE" type="boolean" init="false" />
+					<value name="localF" type="int" init="0" />
+					<value name="localG" type="boolean" init="false" />
+				</model>
+				<a a="localA" b="localB" c="localC" d="localD" />
+			</c>
+			<d name="d0" e="localE" f="localF" h="localH">
+				<model>
+					<value name="localA" type="boolean" init="false" />
+					<value name="localB" type="boolean" init="false" />
+					<value name="localC" type="int" init="0" />
+					<value name="localD" type="boolean" init="false" />
+					<value name="localE" type="boolean" init="false" />
+					<value name="localF" type="int" init="0" />
+					<value name="localH" type="int" init="0" />
+				</model>
+				<a a="localA" b="localB" c="localC" d="localD" />
+			</d>
+		</model>
 		<style-sheet>
 			<style element="a">
 				<style attr="s0">!a</style>
@@ -156,56 +204,15 @@
 				<style attr="s3" condition="e">models.m3</style>
 				<style attr="s4" condition="!e">models.m1</style>
 				<style child="a">
-					<style condition="e">
+					<style condition="e"> <!-- A child style dependent on an element model value from the parent -->
 						<style attr="s1">f</style>
 					</style>
 				</style>
 			</style>
 		</style-sheet>
-		<!-- Test styles that are prescribed by a style sheet defined in this document -->
-		<a name="a0" a="localA" b="localB" c="localC" d="localD">
-			<model>
-				<value name="localA" type="boolean" init="false" />
-				<value name="localB" type="boolean" init="false" />
-				<value name="localC" type="int" init="0" />
-				<value name="localD" type="boolean" init="false" />
-			</model>
-		</a>
-		<b name="b0" e="localE" f="localF">
-			<model>
-				<value name="localA" type="boolean" init="false" />
-				<value name="localB" type="boolean" init="false" />
-				<value name="localC" type="int" init="0" />
-				<value name="localD" type="boolean" init="false" />
-				<value name="localE" type="boolean" init="false" />
-				<value name="localF" type="int" init="0" />
-			</model>
-			<a a="localA" b="localB" c="localC" d="localD" />
-		</b>
-		<c name="c0" e="localE" f="localF" g="localG">
-			<model>
-				<value name="localA" type="boolean" init="false" />
-				<value name="localB" type="boolean" init="false" />
-				<value name="localC" type="int" init="0" />
-				<value name="localD" type="boolean" init="false" />
-				<value name="localE" type="boolean" init="false" />
-				<value name="localF" type="int" init="0" />
-				<value name="localG" type="boolean" init="false" />
-			</model>
-			<a a="localA" b="localB" c="localC" d="localD" />
-		</c>
-		<d name="d0" e="localE" f="localF" h="localH">
-			<model>
-				<value name="localA" type="boolean" init="false" />
-				<value name="localB" type="boolean" init="false" />
-				<value name="localC" type="int" init="0" />
-				<value name="localD" type="boolean" init="false" />
-				<value name="localE" type="boolean" init="false" />
-				<value name="localF" type="int" init="0" />
-				<value name="localH" type="int" init="0" />
-			</model>
-			<a a="localA" b="localB" c="localC" d="localD" />
-		</d>
+		
+		<action name="initM1">models.m1=497683</action>
+		<action name="initM3">models.m3=-42</action>
 		
 		<!-- a, d, and e are false -->
 		<action name="init1">assertEquals(ext.actionName, true, a0.s0)</action>
@@ -242,6 +249,19 @@
 		<action name="blank">models.m0=true</action>
 	</test>
 	<test name="withStyleSets">
+		<model>
+			<!-- a1 has a copy of all the same styles as are contained in the style set -->
+			<a name="a1" a="models.m0" b="true" c="0" d="models.m2">
+				<style condition="a" attr="s1">217
+					<style condition="d">856</style>
+				</style>
+			</a>
+			<!-- a2 uses the style set.  Its style is the same as a1 when the style set applies to it, i.e. when a is true -->
+			<a name="a2" a="models.m0" b="true" c="0" d="models.m2">
+				<style attr="s0">false</style>
+				<style condition="a" style-set="testStyle" />
+			</a>
+		</model>
 		<style-sheet>
 			<style-set name="testStyle">
 				<style element="a" attr="s1">217
@@ -250,16 +270,6 @@
 				<style element="a" attr="s0">true</style> <!-- Just to test multiple styles in a style set -->
 			</style-set>
 		</style-sheet>
-
-		<a name="a1" a="models.m0" b="true" c="0" d="models.m2">
-			<style condition="a" attr="s1">217
-				<style condition="d">856</style>
-			</style>
-		</a>
-		<a name="a2" a="models.m0" b="true" c="0" d="models.m2">
-			<style attr="s0">false</style>
-			<style condition="a" style-set="testStyle" />
-		</a>
 
 		<action name="init10">assertEquals(0, a1.s1)</action>
 		<action name="applyStyleSet10">models.m0=true</action>

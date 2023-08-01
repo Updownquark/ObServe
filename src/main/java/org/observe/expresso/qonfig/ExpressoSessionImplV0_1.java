@@ -3,28 +3,12 @@ package org.observe.expresso.qonfig;
 import java.util.Collections;
 import java.util.Set;
 
-import org.observe.Observable;
-import org.observe.SettableValue;
-import org.observe.expresso.ExpressoEnv;
-import org.observe.expresso.ExpressoException;
-import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.ExpressoParser;
+import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.JavaExpressoParser;
-import org.observe.expresso.ModelInstantiationException;
-import org.observe.expresso.ModelTypes;
-import org.observe.expresso.ObservableModelSet;
-import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
-import org.observe.expresso.TypeConversionException;
 import org.observe.expresso.ops.BinaryOperatorSet;
-import org.observe.expresso.ops.UnaryOperatorSet;
 import org.observe.util.TypeTokens;
 import org.qommons.Version;
-import org.qommons.collect.BetterCollection;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
-import org.qommons.config.QonfigAddOn;
-import org.qommons.config.QonfigAttributeDef;
-import org.qommons.config.QonfigChildDef;
-import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigInterpreterCore;
 import org.qommons.config.QonfigInterpreterCore.CoreSession;
@@ -90,13 +74,7 @@ public class ExpressoSessionImplV0_1 implements SpecialSessionImplementation<Exp
 	};
 
 	private QonfigToolkit theToolkit;
-	private DynamicModelValue.Cache theDyamicValueCache;
-
-	private QonfigAddOn theParseableEl;
-	private QonfigChildDef.Declared theParserChild;
-	private QonfigAttributeDef theInheritOpsAttr;
-	private QonfigChildDef.Declared theUnaryOps;
-	private QonfigChildDef.Declared theBinaryOps;
+	private ElementModelValue.Cache theDyamicValueCache;
 
 	@Override
 	public String getToolkitName() {
@@ -122,7 +100,7 @@ public class ExpressoSessionImplV0_1 implements SpecialSessionImplementation<Exp
 	 * @param dmvCache The dynamic value cache for this session implementation to use, instead of creating a fresh one
 	 * @return This session implementation
 	 */
-	public ExpressoSessionImplV0_1 withDynamicValueCache(DynamicModelValue.Cache dmvCache) {
+	public ExpressoSessionImplV0_1 withDynamicValueCache(ElementModelValue.Cache dmvCache) {
 		theDyamicValueCache = dmvCache;
 		return this;
 	}
@@ -130,40 +108,30 @@ public class ExpressoSessionImplV0_1 implements SpecialSessionImplementation<Exp
 	@Override
 	public void init(QonfigToolkit toolkit) {
 		theToolkit = toolkit;
-		theParseableEl = toolkit.getAddOn("expresso-parseable");
-		theParserChild = theParseableEl.getChild("expresso-parser").getDeclared();
-		theInheritOpsAttr = theParseableEl.getAttribute("inherit-operators");
-		theUnaryOps = theParseableEl.getChild("unary-operators").getDeclared();
-		theBinaryOps = theParseableEl.getChild("binary-operators").getDeclared();
 	}
 
 	@Override
 	public ExpressoQIS viewOfRoot(CoreSession coreSession, ExpressoQIS source) throws QonfigInterpretationException {
 		if (coreSession.get(ExpressoQIS.DYNAMIC_VALUE_CACHE) == null) {
 			if (theDyamicValueCache == null)
-				theDyamicValueCache = new DynamicModelValue.Cache();
+				theDyamicValueCache = new ElementModelValue.Cache();
 			coreSession.put(ExpressoQIS.DYNAMIC_VALUE_CACHE, theDyamicValueCache);
 		}
 		ExpressoQIS qis = new ExpressoQIS(coreSession);
 		qis.setExpressoParser(new JavaExpressoParser());
-		ExpressoEnv.STANDARD_JAVA.reporting().ignoreClass(QonfigInterpreterCore.class.getName());
-		ExpressoEnv.STANDARD_JAVA.reporting().ignoreClass(QonfigInterpreterCore.CoreSession.class.getName());
-		qis.setExpressoEnv(ExpressoEnv.STANDARD_JAVA//
+		InterpretedExpressoEnv.INTERPRETED_STANDARD_JAVA.reporting().ignoreClass(QonfigInterpreterCore.class.getName());
+		InterpretedExpressoEnv.INTERPRETED_STANDARD_JAVA.reporting().ignoreClass(QonfigInterpreterCore.CoreSession.class.getName());
+		qis.setExpressoEnv(InterpretedExpressoEnv.INTERPRETED_STANDARD_JAVA//
 			.at(coreSession.getElement().getFilePosition())//
 			.withOperators(null, BinaryOperatorSet.STANDARD_JAVA.copy()//
 				.with("||", Object.class, Object.class, OBJECT_OR)//
 				.build()));
-		configureExpressionParsing(qis);
 		return qis;
 	}
 
 	@Override
 	public ExpressoQIS viewOfChild(ExpressoQIS parent, CoreSession coreSession) throws QonfigInterpretationException {
-		ExpressoQIS qis = new ExpressoQIS(coreSession);
-		qis.setExpressoParser(parent.getExpressoParser());
-		qis.setExpressoEnv(parent.getExpressoEnv());
-		configureExpressionParsing(qis);
-		return qis;
+		return new ExpressoQIS(coreSession);
 	}
 
 	@Override
@@ -184,91 +152,5 @@ public class ExpressoSessionImplV0_1 implements SpecialSessionImplementation<Exp
 
 	@Override
 	public void postInitParallel(ExpressoQIS session, ExpressoQIS parallel) throws QonfigInterpretationException {
-	}
-
-	/**
-	 * Configures expression parsing for the session's element's configuration
-	 *
-	 * @param session The session to configure
-	 * @throws QonfigInterpretationException If the session's element's parsing configuration cannot be set up for any reason
-	 */
-	protected void configureExpressionParsing(ExpressoQIS session) throws QonfigInterpretationException {
-		if (!session.getElement().isInstance(theParseableEl))
-			return;
-		QonfigElement parserEl = session.getElement().getChildrenByRole().get(theParserChild).peekFirst();
-		if (parserEl != null) {
-			ExpressoParser newParser;
-			try {
-				newParser = parseValue(parserEl.getValueText(), ExpressoParser.class, session.getElement(),
-					session.getExpressoEnv());
-			} catch (ModelInstantiationException | ExpressoException | ExpressoInterpretationException | TypeConversionException e) {
-				session.reporting().error("Could not interpret expresso parser for " + parserEl, e);
-				throw new IllegalStateException(e); // Shouldn't get here
-			}
-			session.setExpressoParser(newParser);
-		}
-		boolean inherit = session.getElement().getAttribute(theInheritOpsAttr, boolean.class);
-		BetterCollection<QonfigElement> unaryOps = session.getElement().getChildrenByRole().get(theUnaryOps);
-		BetterCollection<QonfigElement> binaryOps = session.getElement().getChildrenByRole().get(theBinaryOps);
-		if (!inherit || !unaryOps.isEmpty() || !binaryOps.isEmpty()) {
-			UnaryOperatorSet.Builder unaryOpsBuilder = inherit ? session.getExpressoEnv().getUnaryOperators().copy()
-				: UnaryOperatorSet.build();
-			BinaryOperatorSet.Builder binaryOpsBuilder = inherit ? session.getExpressoEnv().getBinaryOperators().copy()
-				: BinaryOperatorSet.build();
-			for (QonfigElement uo : unaryOps) {
-				UnaryOperatorSet.UnaryOperatorConfiguration ops;
-				try {
-					ops = parseValue(uo.getValueText(),
-						UnaryOperatorSet.UnaryOperatorConfiguration.class, uo, session.getExpressoEnv());
-				} catch (ModelInstantiationException | ExpressoException | ExpressoInterpretationException | TypeConversionException e) {
-					session.reporting().error("Could not interpret unary operator for " + uo, e);
-					throw new IllegalStateException(e); // Shouldn't get here
-				}
-				unaryOpsBuilder = ops.configure(unaryOpsBuilder);
-			}
-			for (QonfigElement bo : binaryOps) {
-				BinaryOperatorSet.BinaryOperatorConfiguration ops;
-				try {
-					ops = parseValue(bo.getValueText(),
-						BinaryOperatorSet.BinaryOperatorConfiguration.class, bo, session.getExpressoEnv());
-				} catch (ModelInstantiationException | ExpressoException | ExpressoInterpretationException | TypeConversionException e) {
-					session.reporting().error("Could not interpret binary operator for " + bo, e);
-					throw new IllegalStateException(e); // Shouldn't get here
-				}
-				binaryOpsBuilder = ops.configure(binaryOpsBuilder);
-			}
-			session.setExpressoEnv(session.getExpressoEnv().withOperators(unaryOpsBuilder.build(), binaryOpsBuilder.build()));
-		}
-	}
-
-	/**
-	 * @param <T> The type of the value to parse
-	 * @param parseText The text to parse
-	 * @param type The type of the value to parse
-	 * @param element The element to parse the value for
-	 * @param sourceEnv The Expresso environment to use to evaluate the parsed expression
-	 * @return The parsed and evaluated expression
-	 * @throws ExpressoException If the expression could not be parsed
-	 * @throws ExpressoInterpretationException If the expression could not be evaluated as a value of the given type
-	 * @throws ModelInstantiationException If the expression's resulting value could not be instantiated
-	 * @throws TypeConversionException If the expression's type does not match the given type
-	 */
-	protected <T> T parseValue(String parseText, Class<T> type, QonfigElement element, ExpressoEnv sourceEnv)
-		throws ExpressoException, ExpressoInterpretationException, ModelInstantiationException, TypeConversionException {
-		InterpretedModelSet models = ObservableModelSet
-			.build(element.getType().getName() + "_value", ObservableModelSet.JAVA_NAME_CHECKER)//
-			.with("toolkit", ModelTypes.Value.forType(QonfigToolkit.class),
-				m -> SettableValue.of(QonfigToolkit.class, theToolkit, "Not modifiable"), null)//
-			.with("element", ModelTypes.Value.forType(QonfigElement.class),
-				m -> SettableValue.of(QonfigElement.class, element, "Not modifiable"), element.getPositionInFile())//
-			.build()//
-			.interpret();
-		ExpressoEnv env = sourceEnv.with(models, null);
-
-		return new JavaExpressoParser().parse(parseText)//
-			.evaluate(ModelTypes.Value.forType(type), env, 0)//
-			.get(models.createInstance(ObservableModelSet.buildExternal(ObservableModelSet.JAVA_NAME_CHECKER).build(), Observable.empty())
-				.build())//
-			.get();
 	}
 }

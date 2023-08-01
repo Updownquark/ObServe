@@ -3,6 +3,7 @@ package org.observe.quick.base;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.qonfig.ElementTypeTraceability;
+import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.observe.expresso.qonfig.ExAddOn;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExpressoQIS;
@@ -13,11 +14,9 @@ import org.qommons.config.QonfigInterpretationException;
 
 public class QuickInlineLayout extends QuickLayout.Abstract {
 	public static final String INLINE_LAYOUT = "inline-layout";
-	private static final ElementTypeTraceability<QuickBox, ?, ?> TRACEABILITY = ElementTypeTraceability
-		.<QuickBox, QuickInlineLayout, Interpreted, Def> buildAddOn(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION,
-			INLINE_LAYOUT, Def.class, Interpreted.class, QuickInlineLayout.class)//
-		.reflectAddOnMethods()//
-		.build();
+	private static final SingleTypeTraceability<QuickBox, ?, ?> TRACEABILITY = ElementTypeTraceability
+		.<QuickBox, QuickInlineLayout, Interpreted, Def> getAddOnTraceability(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION,
+			INLINE_LAYOUT, Def.class, Interpreted.class, QuickInlineLayout.class);
 
 	public static class Def extends QuickLayout.Def<QuickInlineLayout> {
 		private boolean isVertical;

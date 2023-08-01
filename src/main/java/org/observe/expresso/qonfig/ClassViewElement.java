@@ -4,26 +4,26 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.observe.expresso.ClassView;
-import org.qommons.config.QonfigElement;
+import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
+import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
 public class ClassViewElement extends ExElement.Def.Abstract<ExElement> {
-	private static final ElementTypeTraceability<ExElement, ExElement.Interpreted<ExElement>, ClassViewElement> TRACEABILITY = ElementTypeTraceability
-		.<ExElement, ExElement.Interpreted<ExElement>, ClassViewElement> build(ExpressoSessionImplV0_1.TOOLKIT_NAME,
-			ExpressoSessionImplV0_1.VERSION, "imports")//
-		.reflectMethods(ClassViewElement.class, null, null)//
-		.build();
+	private static final SingleTypeTraceability<ExElement, ExElement.Interpreted<ExElement>, ClassViewElement> TRACEABILITY = ElementTypeTraceability
+		.getElementTraceability(ExpressoSessionImplV0_1.TOOLKIT_NAME, ExpressoSessionImplV0_1.VERSION, "imports", ClassViewElement.class,
+			null, null);
 
 	private final List<ImportElement> theImports;
 
-	public ClassViewElement(ExElement.Def<?> parent, QonfigElement element) {
-		super(parent, element);
+	public ClassViewElement(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
+		super(parent, qonfigType);
 		theImports = new ArrayList<>();
 	}
 
-	public void configureClassView(ClassView.Builder classView) {
+	public ClassView.Builder configureClassView(ClassView.Builder classView) {
 		for (ImportElement element : theImports)
 			element.addImport(classView);
+		return classView;
 	}
 
 	@QonfigChildGetter("import")
@@ -32,23 +32,22 @@ public class ClassViewElement extends ExElement.Def.Abstract<ExElement> {
 	}
 
 	@Override
-	public void update(ExpressoQIS session) throws QonfigInterpretationException {
+	protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 		withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
-		super.update(session);
+		super.doUpdate(session);
 		ExElement.syncDefs(ImportElement.class, theImports, session.forChildren("import"));
 	}
 
 	public static class ImportElement extends ExElement.Def.Abstract<ExElement> {
-		private static final ElementTypeTraceability<ExElement, ExElement.Interpreted<?>, ImportElement> TRACEABILITY = ElementTypeTraceability.<ExElement, ExElement.Interpreted<?>, ImportElement> build(
-			ExpressoSessionImplV0_1.TOOLKIT_NAME, ExpressoSessionImplV0_1.VERSION, "import")//
-			.reflectMethods(ImportElement.class, null, null)//
-			.build();
+		private static final SingleTypeTraceability<ExElement, ExElement.Interpreted<?>, ImportElement> TRACEABILITY = ElementTypeTraceability
+			.getElementTraceability(ExpressoSessionImplV0_1.TOOLKIT_NAME, ExpressoSessionImplV0_1.VERSION, "import", ImportElement.class,
+				null, null);
 
 		private String theImport;
 		private boolean isWildcard;
 
-		public ImportElement(ExElement.Def<?> parent, QonfigElement element) {
-			super(parent, element);
+		public ImportElement(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
+			super(parent, qonfigType);
 		}
 
 		public String getImport() {
@@ -75,9 +74,9 @@ public class ClassViewElement extends ExElement.Def.Abstract<ExElement> {
 		}
 
 		@Override
-		public void update(ExpressoQIS session) throws QonfigInterpretationException {
+		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
-			super.update(session);
+			super.doUpdate(session);
 			String text = session.getValueText();
 			isWildcard = text.endsWith(".*");
 			if (isWildcard)

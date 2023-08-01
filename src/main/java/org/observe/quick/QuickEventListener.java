@@ -7,6 +7,7 @@ import java.util.List;
 import org.observe.ObservableAction;
 import org.observe.SettableValue;
 import org.observe.expresso.ExpressoInterpretationException;
+import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
@@ -14,21 +15,22 @@ import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.qonfig.CompiledExpression;
 import org.observe.expresso.qonfig.ElementTypeTraceability;
+import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.observe.expresso.qonfig.ExElement;
+import org.observe.expresso.qonfig.ExWithElementModel;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.expresso.qonfig.QonfigChildGetter;
 import org.observe.util.TypeTokens;
 import org.qommons.collect.CollectionUtils;
-import org.qommons.config.QonfigElement;
+import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
 public interface QuickEventListener extends ExElement {
 	public static final String EVENT_LISTENER = "event-listener";
-	public static final ElementTypeTraceability<QuickEventListener, Interpreted<?>, Def<?>> LISTENER_TRACEABILITY = ElementTypeTraceability
-		.<QuickEventListener, Interpreted<?>, Def<?>> build(QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, "event-listener")//
-		.reflectMethods(Def.class, Interpreted.class, QuickEventListener.class)//
-		.build();
+	public static final SingleTypeTraceability<QuickEventListener, Interpreted<?>, Def<?>> LISTENER_TRACEABILITY = ElementTypeTraceability
+		.getElementTraceability(QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, "event-listener", Def.class,
+			Interpreted.class, QuickEventListener.class);
 
 	public interface Def<L extends QuickEventListener> extends ExElement.Def<L> {
 		@QonfigChildGetter("filter")
@@ -43,8 +45,8 @@ public interface QuickEventListener extends ExElement {
 			private final List<EventFilter.Def> theFilters;
 			private CompiledExpression theAction;
 
-			protected Abstract(ExElement.Def<?> parent, QonfigElement element) {
-				super(parent, element);
+			protected Abstract(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
+				super(parent, type);
 				theFilters = new ArrayList<>();
 			}
 
@@ -59,9 +61,9 @@ public interface QuickEventListener extends ExElement {
 			}
 
 			@Override
-			public void update(ExpressoQIS session) throws QonfigInterpretationException {
+			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 				withTraceability(LISTENER_TRACEABILITY.validate(session.getFocusType(), session.reporting()));
-				super.update(session);
+				super.doUpdate(session);
 				ExElement.syncDefs(EventFilter.Def.class, theFilters, session.forChildren("filter"));
 				theAction = session.getValueExpression();
 				if (theAction.getExpression() == ObservableExpression.EMPTY)
@@ -78,12 +80,11 @@ public interface QuickEventListener extends ExElement {
 
 		InterpretedValueSynth<ObservableAction<?>, ObservableAction<?>> getAction();
 
-		void update() throws ExpressoInterpretationException;
+		void updateListener(InterpretedExpressoEnv env) throws ExpressoInterpretationException;
 
 		L create(ExElement parent);
 
-		public abstract class Abstract<L extends QuickEventListener> extends ExElement.Interpreted.Abstract<L>
-		implements Interpreted<L> {
+		public abstract class Abstract<L extends QuickEventListener> extends ExElement.Interpreted.Abstract<L> implements Interpreted<L> {
 			private final List<EventFilter.Interpreted> theFilters;
 			private InterpretedValueSynth<ObservableAction<?>, ObservableAction<?>> theAction;
 
@@ -108,15 +109,20 @@ public interface QuickEventListener extends ExElement {
 			}
 
 			@Override
-			public void update() throws ExpressoInterpretationException {
-				super.update();
-				CollectionUtils.synchronize(theFilters, getDefinition().getFilters(), (i, d) -> i.getDefinition() == d)//
+			public void updateListener(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+				update(env);
+			}
+
+			@Override
+			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+				super.doUpdate(env);
+				CollectionUtils.synchronize(theFilters, getDefinition().getFilters(), (i, d) -> i.getIdentity() == d.getIdentity())//
 				.<ExpressoInterpretationException> simpleE(f -> f.interpret(this))//
 				.onLeft(el -> el.getLeftValue().destroy())//
-				.onRightX(el -> el.getLeftValue().update())//
-				.onCommonX(el -> el.getLeftValue().update())//
+				.onRightX(el -> el.getLeftValue().updateFilter(getExpressoEnv()))//
+				.onCommonX(el -> el.getLeftValue().updateFilter(getExpressoEnv()))//
 				.addLast();
-				theAction = getDefinition().getAction().evaluate(ModelTypes.Action.any()).interpret();
+				theAction = getDefinition().getAction().interpret(ModelTypes.Action.any(), getExpressoEnv());
 			}
 		}
 	}
@@ -223,10 +229,10 @@ public interface QuickEventListener extends ExElement {
 		@Override
 		protected void updateModel(ExElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
 			super.updateModel(interpreted, myModels);
-			ExElement.satisfyContextValue("altPressed", ModelTypes.Value.BOOLEAN, SettableValue.flatten(isAltPressed), myModels, this);
-			ExElement.satisfyContextValue("ctrlPressed", ModelTypes.Value.BOOLEAN, SettableValue.flatten(isCtrlPressed), myModels, this);
-			ExElement.satisfyContextValue("shiftPressed", ModelTypes.Value.BOOLEAN, SettableValue.flatten(isShiftPressed), myModels,
-				this);
+			ExWithElementModel elModels = getAddOn(ExWithElementModel.class);
+			elModels.satisfyElementValue("altPressed", SettableValue.flatten(isAltPressed));
+			elModels.satisfyElementValue("ctrlPressed", SettableValue.flatten(isCtrlPressed));
+			elModels.satisfyElementValue("shiftPressed", SettableValue.flatten(isShiftPressed));
 			QuickEventListener.Interpreted<?> myInterpreted = (QuickEventListener.Interpreted<?>) interpreted;
 			CollectionUtils.synchronize(theFilters, myInterpreted.getFilters(), (f, i) -> f.getIdentity() == i.getIdentity())
 			.<ModelInstantiationException> simpleE(f -> f.create(this))//
@@ -238,16 +244,15 @@ public interface QuickEventListener extends ExElement {
 	}
 
 	public class EventFilter extends ExElement.Abstract {
-		private static final ElementTypeTraceability<EventFilter, Interpreted, Def> TRACEABILITY = ElementTypeTraceability.<QuickEventListener.EventFilter, Interpreted, Def> build(
-			QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, "filter")//
-			.reflectMethods(Def.class, Interpreted.class, EventFilter.class)//
-			.build();
+		private static final SingleTypeTraceability<EventFilter, Interpreted, Def> TRACEABILITY = ElementTypeTraceability
+			.getElementTraceability(QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, "filter", Def.class, Interpreted.class,
+				EventFilter.class);
 
 		public static class Def extends ExElement.Def.Abstract<EventFilter> {
 			private CompiledExpression theCondition;
 
-			public Def(ExElement.Def<?> parent, QonfigElement element) {
-				super(parent, element);
+			public Def(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
+				super(parent, type);
 			}
 
 			@QonfigAttributeGetter
@@ -256,9 +261,9 @@ public interface QuickEventListener extends ExElement {
 			}
 
 			@Override
-			public void update(ExpressoQIS session) throws QonfigInterpretationException {
+			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 				withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
-				super.update(session);
+				super.doUpdate(session);
 				theCondition = session.getValueExpression();
 			}
 
@@ -283,10 +288,14 @@ public interface QuickEventListener extends ExElement {
 				return theCondition;
 			}
 
+			public void updateFilter(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+				update(env);
+			}
+
 			@Override
-			public void update() throws ExpressoInterpretationException {
-				super.update();
-				theCondition = getDefinition().getCondition().evaluate(ModelTypes.Value.BOOLEAN).interpret();
+			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+				super.doUpdate(env);
+				theCondition = getDefinition().getCondition().interpret(ModelTypes.Value.BOOLEAN, getExpressoEnv());
 			}
 
 			public EventFilter create(ExElement parent) {

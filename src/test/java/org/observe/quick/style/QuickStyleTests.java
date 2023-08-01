@@ -3,9 +3,9 @@ package org.observe.quick.style;
 import org.junit.Test;
 import org.observe.ObservableValue;
 import org.observe.expresso.AbstractExpressoTest;
-import org.observe.expresso.Expresso;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ModelInstantiationException;
+import org.observe.expresso.qonfig.Expresso;
 
 /** Tests the default implementation of the Quick-Style toolkit */
 public class QuickStyleTests extends AbstractExpressoTest<Expresso> {

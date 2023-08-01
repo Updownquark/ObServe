@@ -11,17 +11,19 @@ import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.SettableValue;
 import org.observe.SimpleObservable;
-import org.observe.expresso.ExpressoEnv;
+import org.observe.expresso.CompiledExpressoEnv;
 import org.observe.expresso.ExpressoEvaluationException;
 import org.observe.expresso.ExpressoInterpretationException;
+import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelType;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet;
+import org.observe.expresso.ObservableModelSet.InterpretableModelComponentNode;
+import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelComponentNode;
-import org.observe.expresso.ObservableModelSet.ModelValueSynth;
 import org.observe.expresso.TypeConversionException;
 import org.observe.util.TypeTokens;
 import org.qommons.Identifiable;
@@ -133,20 +135,20 @@ public class NameExpression implements ObservableExpression, Named {
 	 */
 
 	@Override
-	public ModelType<?> getModelType(ExpressoEnv env) {
+	public ModelType<?> getModelType(CompiledExpressoEnv env) {
 		if (theContext != null)
 			return ModelTypes.Value; // Just gotta guess
-		ModelComponentNode<?, ?> mv = env.getModels().getComponentIfExists(StringUtils.print(".", theNames, n -> n.getName()).toString());
+		ModelComponentNode<?> mv = env.getModels().getComponentIfExists(StringUtils.print(".", theNames, n -> n.getName()).toString());
 		if (mv != null)
-			return mv.getModelType();
+			return mv.getModelType(env);
 		return ModelTypes.Value; // Guess
 	}
 
 	@Override
-	public <M, MV extends M> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, ExpressoEnv env,
+	public <M, MV extends M> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, InterpretedExpressoEnv env,
 		int expressionOffset) throws ExpressoEvaluationException, ExpressoInterpretationException {
 		EvaluatedExpression<?, ?>[] divisions = new EvaluatedExpression[theNames.size()];
-		ModelValueSynth<?, ?> mv = null;
+		InterpretedValueSynth<?, ?> mv = null;
 		if (theContext != null) {
 			try {
 				mv = theContext.evaluate(ModelTypes.Value.any(), env, expressionOffset);
@@ -154,14 +156,14 @@ public class NameExpression implements ObservableExpression, Named {
 				throw new ExpressoEvaluationException(expressionOffset, theContext.getExpressionLength(), e.getMessage(), e);
 			}
 			return evaluateModel(//
-				mv.interpret(), 0, new StringBuilder(), type, env.getModels(), expressionOffset + theContext.getExpressionLength() + 1,
+				mv, 0, new StringBuilder(), type, env.getModels(), expressionOffset + theContext.getExpressionLength() + 1,
 				env.reporting().at(theContext.getExpressionLength() + 1), divisions, (EvaluatedExpression<?, ?>) mv);
 		} else {
-			mv = env.getModels().getComponentIfExists(theNames.getFirst().getName());
-			if (mv != null)
+			InterpretableModelComponentNode<?> interpretable = env.getModels().getComponentIfExists(theNames.getFirst().getName());
+			if (interpretable != null)
 				return evaluateModel(//
-					mv, 1, new StringBuilder(theNames.get(0).getName()), type, env.getModels(), expressionOffset, env.reporting(),
-					divisions, null);
+					interpretable.interpreted(), 1, new StringBuilder(theNames.get(0).getName()), type, env.getModels(), expressionOffset,
+					env.reporting(), divisions, null);
 		}
 		// Allow unqualified enum value references
 		if (theNames.size() == 1 && type.getModelType() == ModelTypes.Value) {
@@ -169,8 +171,8 @@ public class NameExpression implements ObservableExpression, Named {
 			if (paramType != null && paramType.isEnum()) {
 				for (Enum<?> value : ((Class<? extends Enum<?>>) paramType).getEnumConstants()) {
 					if (value.name().equals(theNames.getFirst().getName()))
-						return (EvaluatedExpression<M, MV>) ObservableExpression
-							.evEx(ModelValueSynth.literal(TypeTokens.get().of((Class<Object>) paramType), value, value.name()), value);
+						return (EvaluatedExpression<M, MV>) ObservableExpression.evEx(
+							InterpretedValueSynth.literal(TypeTokens.get().of((Class<Object>) paramType), value, value.name()), value);
 				}
 			}
 		}
@@ -201,53 +203,51 @@ public class NameExpression implements ObservableExpression, Named {
 			}
 			fieldValue = evaluateField(field, TypeTokens.get().of(field.getGenericType()), null, i, type, expressionOffset, env.reporting(),
 				divisions);
-			EvaluatedExpression<?, ?> classValue = ObservableExpression.evEx(
-				ModelValueSynth.literal(TypeTokens.get().keyFor(Class.class).<Class<?>> parameterized(clazz),
-					clazz, typeName.toString()),
-				clazz);
+			EvaluatedExpression<?, ?> classValue = ObservableExpression.evEx(InterpretedValueSynth
+				.literal(TypeTokens.get().keyFor(Class.class).<Class<?>> parameterized(clazz), clazz, typeName.toString()), clazz);
 			for (int d = 0; d < i; d++)
 				divisions[d] = classValue;
 		}
 		return ObservableExpression.evEx2(fieldValue, null, Collections.emptyList(), QommonsUtils.unmodifiableCopy(divisions));
 	}
 
-	private <M, MV extends M> EvaluatedExpression<M, MV> evaluateModel(ModelValueSynth<?, ?> mv, int nameIndex, StringBuilder path,
-		ModelInstanceType<M, MV> type, ObservableModelSet models, int expressionOffset, ErrorReporting reporting,
-		EvaluatedExpression<?, ?>[] divisions,
-		EvaluatedExpression<?, ?> context) throws ExpressoEvaluationException, ExpressoInterpretationException {
-		ModelInstanceType<?, ?> mvType = mv.getType();
+	private <M, MV extends M> EvaluatedExpression<M, MV> evaluateModel(InterpretedValueSynth<?, ?> mv, int nameIndex, StringBuilder path,
+		ModelInstanceType<M, MV> type, InterpretedModelSet models, int expressionOffset, ErrorReporting reporting,
+		EvaluatedExpression<?, ?>[] divisions, EvaluatedExpression<?, ?> context)
+			throws ExpressoEvaluationException, ExpressoInterpretationException {
+		ModelType<?> mvType = mv.getModelType();
 		if (nameIndex == theNames.size()) {
-			if (mvType.getModelType() == ModelTypes.Model)
+			if (mvType == ModelTypes.Model)
 				throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(),
 					this + " is a model, not a " + type.getModelType());
-			InterpretedValueSynth<M, MV> imv = (InterpretedValueSynth<M, MV>) mv.interpret();
+			InterpretedValueSynth<M, MV> imv = (InterpretedValueSynth<M, MV>) mv;
 			if (nameIndex > 0)
 				divisions[nameIndex - 1] = ObservableExpression.evEx(imv, mv);
-			return ObservableExpression.evEx2(imv, null,
-				context == null ? Collections.emptyList() : Collections.singletonList(context), QommonsUtils.unmodifiableCopy(divisions));
-		} else if (mvType.getModelType() == ModelTypes.Model) {
+			return ObservableExpression.evEx2(imv, null, context == null ? Collections.emptyList() : Collections.singletonList(context),
+				QommonsUtils.unmodifiableCopy(divisions));
+		} else if (mvType == ModelTypes.Model) {
 			String modelStr = path.toString();
 			ObservableModelSet model = models.getSubModelIfExists(modelStr);
 			if (nameIndex > 0)
 				divisions[nameIndex - 1] = ObservableExpression
-				.evEx(ModelValueSynth.literal(TypeTokens.get().of(ObservableModelSet.class), model, modelStr), mv);
+				.evEx(InterpretedValueSynth.literal(TypeTokens.get().of(ObservableModelSet.class), model, modelStr), mv);
 			path.append('.').append(theNames.get(nameIndex).getName());
 			String pathStr = path.toString();
-			ModelValueSynth<?, ?> nextMV = models.getComponentIfExists(pathStr);
+			InterpretableModelComponentNode<?> nextMV = models.getComponentIfExists(pathStr);
 			if (nextMV != null) {
 				return evaluateModel(//
-					nextMV.interpret(), nameIndex + 1, path, type, models, expressionOffset, reporting.at(theNames.get(nameIndex).length()),
-					divisions, context);
+					nextMV.interpreted(), nameIndex + 1, path, type, models, expressionOffset,
+					reporting.at(theNames.get(nameIndex).length()), divisions, context);
 			} else
 				throw new ExpressoEvaluationException(expressionOffset + getDivisionOffset(nameIndex),
 					getDivisionOffset(0) + theNames.get(nameIndex).length(), //
 					"'" + theNames.get(nameIndex) + "' cannot be resolved or is not a model value");
-		} else if (mvType.getModelType() == ModelTypes.Value) {
-			InterpretedValueSynth<SettableValue<?>, ? extends SettableValue<?>> imv = (InterpretedValueSynth<SettableValue<?>, ? extends SettableValue<?>>) mv
-				.interpret();
+		} else if (mvType == ModelTypes.Value) {
+			InterpretedValueSynth<SettableValue<?>, ? extends SettableValue<?>> imv = (InterpretedValueSynth<SettableValue<?>, ? extends SettableValue<?>>) mv;
+			ModelInstanceType<SettableValue<?>, ? extends SettableValue<?>> instType = imv.getType();
 			if (nameIndex > 0)
 				divisions[nameIndex - 1] = ObservableExpression.evEx(imv, mv);
-			Class<?> ctxType = TypeTokens.getRawType(mvType.getType(0));
+			Class<?> ctxType = TypeTokens.getRawType(instType.getType(0));
 			Field field;
 			try {
 				field = ctxType.getField(theNames.get(nameIndex).getName());
@@ -260,7 +260,7 @@ public class NameExpression implements ObservableExpression, Named {
 					getDivisionOffset(0) + theNames.get(nameIndex).length(), //
 					getPath(nameIndex) + " cannot be accessed", e);
 			}
-			return evaluateField(field, mvType.getType(0).resolveType(field.getGenericType()), //
+			return evaluateField(field, instType.getType(0).resolveType(field.getGenericType()), //
 				imv, nameIndex, type, expressionOffset, reporting.at(theNames.get(nameIndex).length() + 1), divisions);
 		} else
 			throw new ExpressoEvaluationException(expressionOffset + getDivisionOffset(nameIndex + 1),
@@ -270,8 +270,7 @@ public class NameExpression implements ObservableExpression, Named {
 
 	private <M, MV extends M, F> EvaluatedExpression<M, MV> evaluateField(Field field, TypeToken<F> fieldType,
 		InterpretedValueSynth<SettableValue<?>, ? extends SettableValue<?>> context, int nameIndex, ModelInstanceType<M, MV> type,
-			int expressionOffset, ErrorReporting reporting, EvaluatedExpression<?, ?>[] divisions)
-				throws ExpressoEvaluationException {
+			int expressionOffset, ErrorReporting reporting, EvaluatedExpression<?, ?>[] divisions) throws ExpressoEvaluationException {
 		if (!field.isAccessible()) {
 			try {
 				field.setAccessible(true);
@@ -334,10 +333,10 @@ public class NameExpression implements ObservableExpression, Named {
 	}
 
 	private <F, M> EvaluatedExpression<SettableValue<?>, SettableValue<M>> getFieldValue(Field field, TypeToken<F> fieldType,
-		ModelValueSynth<SettableValue<?>, ? extends SettableValue<?>> context, TypeToken<M> targetType, int nameIndex, int expressionOffset,
-			ErrorReporting reporting) throws ExpressoEvaluationException {
+		InterpretedValueSynth<SettableValue<?>, ? extends SettableValue<?>> context, TypeToken<M> targetType, int nameIndex,
+			int expressionOffset, ErrorReporting reporting) throws ExpressoEvaluationException {
 		ModelInstanceType<SettableValue<?>, SettableValue<F>> fieldModelType = ModelTypes.Value.forType(fieldType);
-		InterpretedValueSynth<SettableValue<?>, SettableValue<F>> fieldValue = ModelValueSynth.of(fieldModelType,
+		InterpretedValueSynth<SettableValue<?>, SettableValue<F>> fieldValue = InterpretedValueSynth.of(fieldModelType,
 			msi -> new FieldValue<>(context == null ? null : context.get(msi), field, fieldType, reporting));
 		if (targetType != null) {
 			ModelInstanceType<SettableValue<?>, SettableValue<M>> targetModelType = ModelTypes.Value.forType(targetType);
@@ -348,8 +347,8 @@ public class NameExpression implements ObservableExpression, Named {
 					e.getMessage(), e);
 			}
 		} else
-			return ObservableExpression.evEx((InterpretedValueSynth<SettableValue<?>, SettableValue<M>>) (ModelValueSynth<?, ?>) fieldValue,
-				null);
+			return ObservableExpression
+				.evEx((InterpretedValueSynth<SettableValue<?>, SettableValue<M>>) (InterpretedValueSynth<?, ?>) fieldValue, null);
 	}
 
 	static class FieldValue<M, F> extends Identifiable.AbstractIdentifiable implements SettableValue<F> {

@@ -8,13 +8,13 @@ import java.util.List;
 import java.util.function.Function;
 
 import org.observe.SettableValue;
-import org.observe.expresso.ExpressoEnv;
+import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ExpressoEvaluationException;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
-import org.observe.expresso.ObservableModelSet.ModelValueSynth;
+import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.TypeConversionException;
 import org.observe.util.TypeTokens;
 import org.qommons.ArrayUtils;
@@ -130,7 +130,7 @@ public class MethodInvocation extends Invocation {
 	}
 
 	@Override
-	protected <M, MV extends M> InvokableResult<?, M, MV> evaluateInternal2(ModelInstanceType<M, MV> type, ExpressoEnv env, ArgOption args,
+	protected <M, MV extends M> InvokableResult<?, M, MV> evaluateInternal2(ModelInstanceType<M, MV> type, InterpretedExpressoEnv env, ArgOption args,
 		int expressionOffset) throws ExpressoEvaluationException, ExpressoInterpretationException {
 		if (theContext != null) {
 			if (theContext instanceof NameExpression) {
@@ -144,7 +144,7 @@ public class MethodInvocation extends Invocation {
 						for (int a = 0; a < realArgs.length; a++)
 							realArgs[a] = args.args[a].get(0);
 						EvaluatedExpression<SettableValue<?>, ? extends SettableValue<?>> ctx = ObservableExpression
-							.evEx(ModelValueSynth.literal(TypeTokens.get().VOID, null, theContext.toString()), clazz);
+							.evEx(InterpretedValueSynth.literal(TypeTokens.get().VOID, null, theContext.toString()), clazz);
 						return new InvokableResult<>(result, ctx, true, Arrays.asList(realArgs), Invocation.ExecutableImpl.METHOD);
 					}
 					throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(),

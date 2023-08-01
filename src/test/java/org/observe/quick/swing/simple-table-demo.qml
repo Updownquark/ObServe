@@ -22,12 +22,8 @@
 				<transform name="addPrime" source="_addPrime">
 					<disable with="newValue&lt;=1 ? `Value must be greater than 1` : null" />
 				</transform>
-				<value name="valuesValue">values</value>
-				<transform name="valueSize" source="valuesValue">
-					<refresh on="values" />
-					<map-to source-as="v">
-						<map-with>v.size()</map-with>
-					</map-to>
+				<transform name="valueSize" source="values">
+					<size />
 				</transform>
 				<value name="selected" type="Integer" />
 				<list name="allSelected" type="Integer" />

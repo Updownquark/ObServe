@@ -1580,6 +1580,7 @@ public class TypeTokens implements TypeParser {
 				} else if (!isTrivialType(bound))
 					return false;
 			}
+			return true;
 		} else if (type instanceof TypeVariable) {
 			TypeVariable<?> vbl = (TypeVariable<?>) type;
 			for (Type bound : vbl.getBounds()) {
@@ -1589,6 +1590,7 @@ public class TypeTokens implements TypeParser {
 				} else if (!isTrivialType(bound))
 					return false;
 			}
+			return true;
 		}
 		return false;
 	}

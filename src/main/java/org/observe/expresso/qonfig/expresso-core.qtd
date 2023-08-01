@@ -17,13 +17,6 @@ It does not include anything "useful" in the concrete, i.e. no values or transfo
 	</value-types>
 
 	<add-ons>
-		<add-on name="expresso-parseable">
-			<child-def name="expresso-parser" type="expresso-parser" min="0" />
-			<attribute name="inherit-operators" type="boolean" default="true" />
-			<child-def name="unary-operators" type="unary-operators" min="0" max="inf" />
-			<child-def name="binary-operators" type="binary-operators" min="0" max="inf" />
-		</add-on>
-
 		<?DOC A structure with a name?>
 		<add-on name="named">
 			<?DOC The name of the item?>
@@ -78,18 +71,6 @@ It does not include anything "useful" in the concrete, i.e. no values or transfo
 	</add-ons>
 
 	<elements>
-		<element-def name="expresso-parser">
-			<value type="expression" specify="required" />
-		</element-def>
-		<element-def name="expresso-java" extends="expresso-parser">
-			<value-mod specify="optional" default="new org.observe.expresso.JavaExpressoParser()" />
-		</element-def>
-		<element-def name="operators" abstract="true">
-			<value type="string" specify="required" />
-		</element-def>
-		<element-def name="unary-operators" extends="operators" />
-		<element-def name="binary-operators" extends="operators" />
-
 		<?DOC A section containing imports that make it possible to specify certain types, fields, or methods from expressions without full-qualification?>
 		<element-def name="imports">
 			<?DOC An import type, field, method, or wildcard?>

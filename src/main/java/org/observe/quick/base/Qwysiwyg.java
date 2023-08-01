@@ -23,24 +23,18 @@ import org.observe.SettableValue;
 import org.observe.SimpleObservable;
 import org.observe.collect.CollectionChangeType;
 import org.observe.collect.ObservableCollection;
-import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.ModelInstantiationException;
-import org.observe.expresso.ModelType;
-import org.observe.expresso.ModelTypes;
-import org.observe.expresso.ObservableExpression;
+import org.observe.expresso.*;
 import org.observe.expresso.ObservableExpression.EvaluatedExpression;
-import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.CompiledModelValue;
 import org.observe.expresso.ObservableModelSet.ExtValueRef;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelComponentNode;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
-import org.observe.expresso.ObservableModelSet.RuntimeValuePlaceholder;
-import org.observe.expresso.TypeConversionException;
-import org.observe.expresso.qonfig.DynamicModelValue;
+import org.observe.expresso.qonfig.ElementModelValue;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExpressionValueType;
 import org.observe.expresso.qonfig.LocatedExpression;
+import org.observe.expresso.qonfig.ModelValueElement;
 import org.observe.quick.QuickApp;
 import org.observe.quick.QuickApplication;
 import org.observe.quick.QuickDocument;
@@ -84,6 +78,84 @@ import org.qommons.io.TextParseException;
 import com.google.common.reflect.TypeToken;
 
 public class Qwysiwyg {
+	public class WatchExpression {
+		private final SimpleObservable<Void> theRelease;
+		ElementId theId;
+		private ExElement.Interpreted<?> theInterpretedContext;
+		private ExElement theContext;
+		private String theExpressionText;
+		private ObservableExpression theExpression;
+		private InterpretedValueSynth<SettableValue<?>, SettableValue<?>> theInterpretedValue;
+		private SettableValue<?> theValue;
+		private String theValueText;
+
+		WatchExpression(ExElement.Interpreted<?> interpretedContext, ExElement context) {
+			theRelease = new SimpleObservable<>();
+			theInterpretedContext = interpretedContext;
+			theContext = context;
+			theExpressionText = "";
+			theValueText = "<No value selected>";
+		}
+
+		public String getExpressionText() {
+			return theExpressionText;
+		}
+
+		public void setExpressionText(String expressionText) {
+			theRelease.onNext(null);
+			theExpressionText = expressionText;
+			try {
+				theExpression = new JavaExpressoParser().parse(expressionText);
+			} catch (ExpressoParseException e) {
+				e.printStackTrace();
+				theExpression = null;
+				theValueText = "<Parse Error: " + e.getMessage() + ">";
+			}
+			if (theExpression != null) {
+				try {
+					theInterpretedValue = theExpression.evaluate(ModelTypes.Value.any(), theInterpretedContext.getExpressoEnv(), 0);
+				} catch (ExpressoInterpretationException | ExpressoEvaluationException | TypeConversionException e) {
+					e.printStackTrace();
+					theInterpretedValue = null;
+					theValueText = "<Interpret Error: " + e.getMessage() + ">";
+				}
+			}
+			if (theInterpretedValue != null) {
+				try {
+					theValue = theInterpretedValue.get(theContext.getUpdatingModels());
+				} catch (ModelInstantiationException e) {
+					e.printStackTrace();
+					theValue = null;
+					theValueText = "<Instantitate Error: " + e.getMessage() + ">";
+				}
+			}
+			if (theValue != null) {
+				theValueText = String.valueOf(theValue.get());
+				theValue.noInitChanges().takeUntil(theRelease).act(evt -> {
+					theValueText = String.valueOf(evt.getNewValue());
+					update();
+				});
+			}
+		}
+
+		public String getContext() {
+			return "<" + theContext.getTypeName() + "> " + theContext.reporting().getFileLocation().getPosition(0).toShortString();
+		}
+
+		public String getValue() {
+			return theValueText;
+		}
+
+		public void remove() {
+			theRelease.onNext(null);
+			watchExpressions.mutableElement(theId).remove();
+		}
+
+		private void update() {
+			watchExpressions.mutableElement(theId).set(this);
+		}
+	}
+
 	public static final Color ELEMENT_COLOR = Colors.green;
 	public static final Color ATTRIBUTE_NAME_COLOR = Colors.maroon;
 	public static final Color ATTRIBUTE_VALUE_COLOR = Colors.blue;
@@ -101,9 +173,11 @@ public class Qwysiwyg {
 	public final ObservableValue<String> tooltip;
 	public final SettableValue<DocumentComponent> hovered;
 	public final SettableValue<DocumentComponent> selectedNode;
+	public final SettableValue<DocumentComponent> selectedEndNode;
 	public final SettableValue<Integer> selectedStartIndex;
 	public final SettableValue<Integer> selectedEndIndex;
 	public final SettableValue<String> lineNumbers;
+	public final ObservableCollection<WatchExpression> watchExpressions;
 
 	private final SettableValue<DocumentComponent> theInternalDocumentRoot;
 	private final SettableValue<ObservableValue<String>> theInternalTooltip;
@@ -112,6 +186,7 @@ public class Qwysiwyg {
 	private String theAppLocation;
 	private String theDocumentURL;
 	private final StringBuilder theDocumentContent;
+	private CompiledExpressoEnv theCompiledEnv;
 	private QuickDocument.Def theDocumentDef;
 	private QuickDocument.Interpreted theDocumentInterpreted;
 	private QuickDocument theDocument;
@@ -130,10 +205,37 @@ public class Qwysiwyg {
 		theApplicationReplacement = new SimpleObservable<>();
 		hovered = SettableValue.build(DocumentComponent.class).build();
 		selectedNode = SettableValue.build(DocumentComponent.class).build();
+		selectedEndNode = SettableValue.build(DocumentComponent.class).build();
 		selectedStartIndex = SettableValue.build(int.class).withValue(0).build();
 		selectedEndIndex = SettableValue.build(int.class).withValue(0).build();
 		theDocumentContent = new StringBuilder();
 		lineNumbers = SettableValue.build(String.class).build();
+		watchExpressions = ObservableCollection.build(WatchExpression.class).build();
+		watchExpressions.onChange(evt -> {
+			if (evt.getType() == CollectionChangeType.add)
+				evt.getNewValue().theId = evt.getElementId();
+		});
+
+		selectedNode.changes().act(evt -> {
+			if (evt.getOldValue() == evt.getNewValue())
+				return;
+			if (evt.getOldValue() != null) {
+				evt.getOldValue().bold = false;
+				evt.getOldValue().update();
+				if (evt.getOldValue().opposite != null) {
+					evt.getOldValue().opposite.bold = false;
+					evt.getOldValue().opposite.update();
+				}
+			}
+			if (evt.getNewValue() != null) {
+				evt.getNewValue().bold = true;
+				evt.getNewValue().update();
+				if (evt.getNewValue().opposite != null) {
+					evt.getNewValue().opposite.bold = true;
+					evt.getNewValue().opposite.update();
+				}
+			}
+		});
 	}
 
 	public void init(String documentLocation, List<String> unmatched) {
@@ -195,6 +297,7 @@ public class Qwysiwyg {
 
 			try {
 				theDocumentDef = quickApp.parseQuick(theDocumentDef);
+				theCompiledEnv = theDocumentDef.getExpressoEnv();
 			} catch (IOException | RuntimeException e) {
 				logToConsole(e, null);
 				clearDef();
@@ -214,13 +317,17 @@ public class Qwysiwyg {
 
 			renderDef(theRoot, theDocumentDef, null);
 
-			ObservableModelSet.ExternalModelSet extModels = QuickApp.parseExtModels(theDocumentDef.getHead().getModels(),
-				quickApp.getCommandLineArgs(), ObservableModelSet.buildExternal(ObservableModelSet.JAVA_NAME_CHECKER));
+			ObservableModelSet.ExternalModelSet extModels = QuickApp.parseExtModels(
+				theDocumentDef.getHead().getExpressoEnv().getBuiltModels(), quickApp.getCommandLineArgs(),
+				ObservableModelSet.buildExternal(ObservableModelSet.JAVA_NAME_CHECKER), InterpretedExpressoEnv.INTERPRETED_STANDARD_JAVA);
 
 			try {
 				if (theDocumentInterpreted == null)
 					theDocumentInterpreted = theDocumentDef.interpret(null);
-				theDocumentInterpreted.update();
+
+				InterpretedExpressoEnv env = InterpretedExpressoEnv.INTERPRETED_STANDARD_JAVA//
+					.withExt(extModels);
+				theDocumentInterpreted.updateDocument(env);
 			} catch (TextParseException e) {
 				logToConsole(e, quickApp.getAppFile(), e.getPosition());
 				clearInterpreted();
@@ -236,7 +343,7 @@ public class Qwysiwyg {
 			try {
 				if (theDocument == null)
 					theDocument = theDocumentInterpreted.create();
-				theModels = theDocument.update(theDocumentInterpreted, extModels, theDocumentReplacement);
+				theModels = theDocument.update(theDocumentInterpreted, theDocumentReplacement);
 			} catch (TextParseException e) {
 				logToConsole(e, quickApp.getAppFile(), e.getPosition());
 				return;
@@ -328,6 +435,36 @@ public class Qwysiwyg {
 		theHoveredComponent = null;
 		if (oldHovered != null && isControlPressed)
 			oldHovered.update();
+	}
+
+	public void addWatchExpression(DocumentComponent selected) {
+		DocumentComponent context = selected;
+		while (context != null && context.element == null)
+			context = context.parent;
+		if (context == null) {
+			System.err.println("Cannot add watch expression at " + selected + "--no valid context");
+			return;
+		}
+		WatchExpression watch = new WatchExpression(context.interpreted, context.element);
+		Integer start = selectedStartIndex.get();
+		Integer end = selectedEndIndex.get();
+		if (start != null && end != null && !start.equals(end)) {
+			int absStart = selectedNode.get().start.getPosition() + start.intValue();
+			int absEnd = selectedEndNode.get().start.getPosition() + end.intValue();
+			String expression = theDocumentContent.substring(absStart, absEnd);
+			watch.setExpressionText(expression);
+		}
+		watchExpressions.add(watch);
+	}
+
+	public String canAddWatchExpression(DocumentComponent selected) {
+		if (selected == null)
+			return "No context selected";
+		while (selected != null && selected.element == null)
+			selected = selected.parent;
+		if (selected == null)
+			return selected + "is not a valid context";
+		return null;
 	}
 
 	DocumentComponent getSourceComponent(DocumentComponent parent, int sourcePosition) {
@@ -435,6 +572,8 @@ public class Qwysiwyg {
 					stack.add(elementComp);
 					DocumentComponent elStartComp = stack.getLast().addChild(element.getContent().getPosition(element.getNameOffset()));
 					stack.add(elStartComp);
+					elStartComp.addChild(element.getContent().getPosition(element.getNameOffset()))//
+					.end(element.getContent().getPosition(element.getNameOffset() + element.getName().length()));
 				}
 
 				@Override
@@ -472,13 +611,16 @@ public class Qwysiwyg {
 				public void handleElementEnd(XmlElementTerminal element, boolean selfClosing) {
 					// Remove the component either for the element start (if self-closing) or the element's content
 					stack.removeLast().end(element.getContent().getPosition(0));
+					DocumentComponent endComp;
 					if (!selfClosing) {
-						DocumentComponent elComp = stack.getLast().addChild(element.getContent().getPosition(0))
-							.color(ELEMENT_COLOR);
-						elComp.end(element.getContent().getPosition(element.getContent().length()));
-					}
+						endComp = stack.getLast().addChild(element.getContent().getPosition(0)).color(ELEMENT_COLOR);
+						endComp.end(element.getContent().getPosition(element.getContent().length()));
+					} else
+						endComp = null;
 					// Remove the component for the element
-					stack.removeLast().end(element.getContent().getPosition(element.getContent().length()));
+					DocumentComponent open = stack.removeLast().end(element.getContent().getPosition(element.getContent().length()));
+					if (endComp != null)
+						open.children.getFirst().children.getFirst().setOpposite(endComp);
 				}
 			});
 		} catch (IOException | XmlParseException e) {
@@ -636,6 +778,10 @@ public class Qwysiwyg {
 		ModelSetInstance models) {
 		ExElement.Def<? super E> def = interpreted.getDefinition();
 		DocumentComponent elComponent = getSourceComponent(component, def.getElement().getPositionInFile().getPosition()).parent;
+		elComponent.interpreted = interpreted;
+		elComponent.element = element;
+		if (models != null && interpreted instanceof ModelValueElement.InterpretedSynth)
+			renderInstance(elComponent, (ModelValueElement.InterpretedSynth<?, ?, ?>) interpreted, models);
 		for (Map.Entry<QonfigAttributeDef.Declared, QonfigValue> attr : def.getElement().getAttributes().entrySet()) {
 			PositionedContent position = attr.getValue().position;
 			if (position == null)
@@ -701,38 +847,8 @@ public class Qwysiwyg {
 		component.descriptor = expression.getDescriptor();
 		component.target = getLinkTarget(component.descriptor);
 		component.interpretedTooltip(() -> renderInterpretedDescriptor(component.descriptor));
-		if (models != null && isFundamentalValue(expression)) {
-			Object value;
-			Observable<?> update;
-			try {
-				value = expression.get(models);
-				if (value instanceof SettableValue)
-					component.instanceTooltip(((SettableValue<?>) value).map(String::valueOf));
-				else {
-					try {
-						update = expression.as(ModelTypes.Event.any()).get(models);
-					} catch (TypeConversionException e) {
-						update = null;
-					}
-					if (value instanceof Stamped)
-						component.instanceTooltip(
-							ObservableValue.of(String.class, () -> String.valueOf(value), ((Stamped) value)::getStamp, update));
-					else {
-						long[] stamp = new long[1];
-						if (update != null) {
-							update.takeUntil(models.getUntil()).act(__ -> stamp[0]++);
-							component
-							.instanceTooltip(ObservableValue.of(String.class, () -> String.valueOf(value), () -> stamp[0], update));
-						} else {
-							component.instanceTooltip(
-								ObservableValue.of(String.class, () -> String.valueOf(value), () -> stamp[0]++, Observable.empty()));
-						}
-					}
-				}
-			} catch (ModelInstantiationException e) {
-				logToConsole(e, new LocatedPositionedContent.SimpleLine(new LocatedFilePosition(theAppLocation, component.start), ""));
-			}
-		}
+		if (models != null && isFundamentalValue(expression))
+			renderInstance(component, expression, models);
 		List<? extends EvaluatedExpression<?, ?>> components = expression.getComponents();
 		List<? extends EvaluatedExpression<?, ?>> divisions = expression.getDivisions();
 		if (component.children.size() == components.size() + divisions.size()) {
@@ -744,12 +860,44 @@ public class Qwysiwyg {
 		}
 	}
 
+	private void renderInstance(DocumentComponent component, InterpretedValueSynth<?, ?> expression, ModelSetInstance models) {
+		Object value;
+		Observable<?> update;
+		try {
+			value = expression.get(models);
+			if (value instanceof SettableValue)
+				component.instanceTooltip(((SettableValue<?>) value).map(String::valueOf));
+			else {
+				try {
+					update = expression.as(ModelTypes.Event.any()).get(models);
+				} catch (TypeConversionException e) {
+					update = null;
+				}
+				if (value instanceof Stamped)
+					component.instanceTooltip(
+						ObservableValue.of(String.class, () -> String.valueOf(value), ((Stamped) value)::getStamp, update));
+				else {
+					long[] stamp = new long[1];
+					if (update != null) {
+						update.takeUntil(models.getUntil()).act(__ -> stamp[0]++);
+						component.instanceTooltip(ObservableValue.of(String.class, () -> String.valueOf(value), () -> stamp[0], update));
+					} else {
+						component.instanceTooltip(
+							ObservableValue.of(String.class, () -> String.valueOf(value), () -> stamp[0]++, Observable.empty()));
+					}
+				}
+			}
+		} catch (ModelInstantiationException e) {
+			logToConsole(e, new LocatedPositionedContent.SimpleLine(new LocatedFilePosition(theAppLocation, component.start), ""));
+		}
+	}
+
 	private boolean isFundamentalValue(EvaluatedExpression<?, ?> expression) {
 		if (!expression.getComponents().isEmpty())
 			return false;
 		Object descriptor = expression.getDescriptor();
 		if (descriptor instanceof ModelComponentNode) {
-			ModelType<?> modelType = ((ModelComponentNode<?, ?>) descriptor).getModelType();
+			ModelType<?> modelType = ((ModelComponentNode<?>) descriptor).getModelType(theCompiledEnv);
 			if (modelType == ModelTypes.Model || modelType == ModelTypes.Event || modelType == ModelTypes.Action)
 				return false;
 			return true;
@@ -761,9 +909,9 @@ public class Qwysiwyg {
 
 	private LocatedFilePosition getLinkTarget(Object descriptor) {
 		if (descriptor instanceof ModelComponentNode)
-			return ((ModelComponentNode<?, ?>) descriptor).getSourceLocation();
-		else if (descriptor instanceof DynamicModelValue) {
-			DynamicModelValue<?, ?> dmv = (DynamicModelValue<?, ?>) descriptor;
+			return ((ModelComponentNode<?>) descriptor).getSourceLocation();
+		else if (descriptor instanceof ElementModelValue) {
+			ElementModelValue<?> dmv = (ElementModelValue<?>) descriptor;
 			return dmv.getDeclaration().getDeclaration().getPositionInFile();
 		} else
 			return null;
@@ -821,10 +969,10 @@ public class Qwysiwyg {
 			str.append(')');
 			return str.toString();
 		} else if (descriptor instanceof ModelComponentNode) {
-			ModelComponentNode<?, ?> node = (ModelComponentNode<?, ?>) descriptor;
+			ModelComponentNode<?> node = (ModelComponentNode<?>) descriptor;
 			Object id = node.getValueIdentity() != null ? node.getValueIdentity() : node.getIdentity();
-			if (id instanceof DynamicModelValue.Identity) {
-				DynamicModelValue.Identity dmv = (DynamicModelValue.Identity) id;
+			if (id instanceof ElementModelValue.Identity) {
+				ElementModelValue.Identity dmv = (ElementModelValue.Identity) id;
 				if (dmv.getDeclaration().getDescription() != null)
 					return dmv.getDeclaration().getDescription();
 				return "Element value " + dmv.toString();
@@ -834,28 +982,19 @@ public class Qwysiwyg {
 			if (thing instanceof ObservableModelSet)
 				str.append("Model ").append(id);
 			else if (thing instanceof CompiledModelValue) {
-				if (id instanceof DynamicModelValue.Identity)
+				if (id instanceof ElementModelValue.Identity)
 					str.append("Element model value ");
 				else
 					str.append("Model value ");
-				try {
-					str.append(id.toString()).append(": ").append(renderType(node.getType()));
-				} catch (ExpressoInterpretationException e) {
-					e.printStackTrace();
-					return "Error retrieving type: " + e;
-				}
+				str.append(id.toString()).append(": ");
 			} else if (thing instanceof ExtValueRef)
-				str.append("External value ").append(id).append(": ").append(renderType(((ExtValueRef<?, ?>) thing).getType()));
-			else if (thing instanceof RuntimeValuePlaceholder) {
-				try {
-					str.append("Runtime value ").append(id).append(": ")
-					.append(renderType(((RuntimeValuePlaceholder<?, ?>) thing).getType()));
-				} catch (ExpressoInterpretationException e) {
-					e.printStackTrace();
-					return "Error retrieving type: " + e;
-				}
-			} else
+				str.append("External value ").append(id).append(": ");
+			else
 				str.append("Model component ").append(id);
+			if (node instanceof InterpretedValueSynth)
+				str.append(renderType(((InterpretedValueSynth<?, ?>) node).getType()));
+			else
+				str.append(renderType(node.getModelType(theCompiledEnv).any()));
 			if (node.getSourceLocation() != null) {
 				str.append("<br>");
 				if (node.getSourceLocation().getFileLocation() != null
@@ -865,15 +1004,20 @@ public class Qwysiwyg {
 				.append(node.getSourceLocation().getCharNumber() + 1);
 			}
 			return str.toString();
-		} else if (descriptor instanceof DynamicModelValue) {
-			DynamicModelValue<?, ?> dmv = (DynamicModelValue<?, ?>) descriptor;
+		} else if (descriptor instanceof ElementModelValue) {
+			ElementModelValue<?> dmv = (ElementModelValue<?>) descriptor;
 			if (dmv.getDeclaration().getDeclaration().getDescription() != null)
 				return dmv.getDeclaration().getDeclaration().getDescription();
 			return "Element value " + dmv.getDeclaration().toString();
 		} else if (descriptor instanceof SelfDescribed)
 			return ((SelfDescribed) descriptor).getDescription();
-		else
-			return TypeTokens.getSimpleName(TypeTokens.get().unwrap(descriptor.getClass())) + " literal '" + descriptor + "'";
+		else if (descriptor instanceof ObservableExpression.LiteralExpression) {
+			ObservableExpression.LiteralExpression<?> ex = (ObservableExpression.LiteralExpression<?>) descriptor;
+			if (ex.getValue() == null)
+				return "null literal";
+			return TypeTokens.getSimpleName(TypeTokens.get().unwrap(ex.getValue().getClass())) + " literal '" + ex.getValue() + "'";
+		} else
+			return "Unrecognized value descriptor: " + descriptor.getClass().getName() + ": " + descriptor;
 	}
 
 	static String renderType(Object type) {
@@ -916,8 +1060,11 @@ public class Qwysiwyg {
 		boolean bold;
 		Color fontColor;
 		public final ObservableCollection<DocumentComponent> children;
+		DocumentComponent opposite;
 		LocatedFilePosition target;
 		Object descriptor;
+		ExElement.Interpreted<?> interpreted;
+		ExElement element;
 
 		String typeTooltip;
 		Supplier<String> interpretedTooltip;
@@ -1005,13 +1152,17 @@ public class Qwysiwyg {
 			return this;
 		}
 
-		DocumentComponent color(Color color) {
-			fontColor = color;
+		DocumentComponent setOpposite(DocumentComponent opposite) {
+			if (this.opposite != null)
+				this.opposite.opposite = null;
+			this.opposite = opposite;
+			if (opposite != null)
+				opposite.opposite = this;
 			return this;
 		}
 
-		DocumentComponent bold() {
-			bold = true;
+		DocumentComponent color(Color color) {
+			fontColor = color;
 			return this;
 		}
 
@@ -1059,9 +1210,11 @@ public class Qwysiwyg {
 			DocumentComponent targetComponent = getSourceComponent(theRoot, target.getPosition());
 			try (Causable.CausableInUse cause = Causable.cause(); //
 				Transaction vt = selectedNode.lock(true, cause);
+				Transaction vt2 = selectedEndNode.lock(true, cause); //
 				Transaction sit = selectedStartIndex.lock(true, cause);
 				Transaction eit = selectedEndIndex.lock(true, cause)) {
 				selectedNode.set(targetComponent, cause);
+				selectedEndNode.set(targetComponent, cause);
 				selectedStartIndex.set(0, cause);
 				selectedEndIndex.set(targetComponent.getTextLength(), cause);
 			}

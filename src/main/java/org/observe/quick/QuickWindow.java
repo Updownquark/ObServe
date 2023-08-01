@@ -2,13 +2,14 @@ package org.observe.quick;
 
 import org.observe.SettableValue;
 import org.observe.expresso.ExpressoInterpretationException;
+import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
-import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.qonfig.CompiledExpression;
 import org.observe.expresso.qonfig.ElementTypeTraceability;
+import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.observe.expresso.qonfig.ExAddOn;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExpressoQIS;
@@ -19,10 +20,9 @@ import org.qommons.config.QonfigInterpretationException;
 /** An add-on for an element that is to be a window */
 public class QuickWindow extends ExAddOn.Abstract<ExElement> {
 	public static final String WINDOW = "window";
-	private static final ElementTypeTraceability<ExElement, ExElement.Interpreted<?>, ExElement.Def<?>> TRACEABILITY = ElementTypeTraceability
-		.buildAddOn(QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, WINDOW, Def.class, Interpreted.class, QuickWindow.class)//
-		.reflectAddOnMethods()//
-		.build();
+	private static final SingleTypeTraceability<ExElement, ExElement.Interpreted<?>, ExElement.Def<?>> TRACEABILITY = ElementTypeTraceability
+		.getAddOnTraceability(QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, WINDOW, Def.class, Interpreted.class,
+			QuickWindow.class);
 
 	/** An action to perform when the user closes the window (e.g. clicks the "X") */
 	public enum CloseAction {
@@ -189,14 +189,13 @@ public class QuickWindow extends ExAddOn.Abstract<ExElement> {
 		}
 
 		@Override
-		public void update(InterpretedModelSet models) throws ExpressoInterpretationException {
-			theX = getDefinition().getX() == null ? null : getDefinition().getX().evaluate(ModelTypes.Value.INT).interpret();
-			theY = getDefinition().getY() == null ? null : getDefinition().getY().evaluate(ModelTypes.Value.INT).interpret();
-			theWidth = getDefinition().getWidth() == null ? null : getDefinition().getWidth().evaluate(ModelTypes.Value.INT).interpret();
-			theHeight = getDefinition().getHeight() == null ? null : getDefinition().getHeight().evaluate(ModelTypes.Value.INT).interpret();
-			theTitle = getDefinition().getTitle() == null ? null : getDefinition().getTitle().evaluate(ModelTypes.Value.STRING).interpret();
-			theVisible = getDefinition().isVisible() == null ? null
-				: getDefinition().isVisible().evaluate(ModelTypes.Value.BOOLEAN).interpret();
+		public void update(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+			theX = getDefinition().getX() == null ? null : getDefinition().getX().interpret(ModelTypes.Value.INT, env);
+			theY = getDefinition().getY() == null ? null : getDefinition().getY().interpret(ModelTypes.Value.INT, env);
+			theWidth = getDefinition().getWidth() == null ? null : getDefinition().getWidth().interpret(ModelTypes.Value.INT, env);
+			theHeight = getDefinition().getHeight() == null ? null : getDefinition().getHeight().interpret(ModelTypes.Value.INT, env);
+			theTitle = getDefinition().getTitle() == null ? null : getDefinition().getTitle().interpret(ModelTypes.Value.STRING, env);
+			theVisible = getDefinition().isVisible() == null ? null : getDefinition().isVisible().interpret(ModelTypes.Value.BOOLEAN, env);
 		}
 
 		@Override

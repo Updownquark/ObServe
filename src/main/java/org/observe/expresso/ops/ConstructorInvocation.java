@@ -8,7 +8,7 @@ import java.util.List;
 import java.util.function.Function;
 
 import org.observe.SettableValue;
-import org.observe.expresso.ExpressoEnv;
+import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ExpressoEvaluationException;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ModelType.ModelInstanceType;
@@ -89,7 +89,7 @@ public class ConstructorInvocation extends Invocation {
 	}
 
 	@Override
-	protected <M, MV extends M> InvokableResult<?, M, MV> evaluateInternal2(ModelInstanceType<M, MV> type, ExpressoEnv env, ArgOption args,
+	protected <M, MV extends M> InvokableResult<?, M, MV> evaluateInternal2(ModelInstanceType<M, MV> type, InterpretedExpressoEnv env, ArgOption args,
 		int expressionOffset) throws ExpressoEvaluationException, ExpressoInterpretationException {
 		Class<?> constructorType = env.getClassView().getType(theType.getName());
 		if (constructorType == null)

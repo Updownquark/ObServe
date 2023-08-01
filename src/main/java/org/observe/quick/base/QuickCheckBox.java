@@ -2,34 +2,35 @@ package org.observe.quick.base;
 
 import org.observe.SettableValue;
 import org.observe.expresso.ExpressoInterpretationException;
+import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.qonfig.CompiledExpression;
 import org.observe.expresso.qonfig.ElementTypeTraceability;
+import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.quick.QuickValueWidget;
 import org.observe.util.TypeTokens;
-import org.qommons.config.QonfigElement;
+import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
 import com.google.common.reflect.TypeToken;
 
 public class QuickCheckBox extends QuickValueWidget.Abstract<Boolean> {
 	public static final String CHECK_BOX = "check-box";
-	private static final ElementTypeTraceability<QuickCheckBox, Interpreted, Def> TRACEABILITY = ElementTypeTraceability
-		.<QuickCheckBox, Interpreted, Def> build(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, CHECK_BOX)//
-		.reflectMethods(Def.class, Interpreted.class, QuickCheckBox.class)//
-		.build();
+	private static final SingleTypeTraceability<QuickCheckBox, Interpreted, Def> TRACEABILITY = ElementTypeTraceability
+		.getElementTraceability(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, CHECK_BOX, Def.class, Interpreted.class,
+			QuickCheckBox.class);
 
 	public static class Def extends QuickValueWidget.Def.Abstract<Boolean, QuickCheckBox> {
 		private CompiledExpression theText;
 
-		public Def(ExElement.Def<?> parent, QonfigElement element) {
-			super(parent, element);
+		public Def(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
+			super(parent, type);
 		}
 
 		@QonfigAttributeGetter
@@ -38,9 +39,9 @@ public class QuickCheckBox extends QuickValueWidget.Abstract<Boolean> {
 		}
 
 		@Override
-		public void update(ExpressoQIS session) throws QonfigInterpretationException {
+		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
-			super.update(session.asElement(session.getFocusType().getSuperElement()));
+			super.doUpdate(session.asElement(session.getFocusType().getSuperElement()));
 			theText = session.getValueExpression();
 		}
 
@@ -72,9 +73,9 @@ public class QuickCheckBox extends QuickValueWidget.Abstract<Boolean> {
 		}
 
 		@Override
-		public void update(QuickInterpretationCache cache) throws ExpressoInterpretationException {
-			super.update(cache);
-			theText = getDefinition().getText() == null ? null : getDefinition().getText().evaluate(ModelTypes.Value.STRING).interpret();
+		protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+			super.doUpdate(env);
+			theText = getDefinition().getText() == null ? null : getDefinition().getText().interpret(ModelTypes.Value.STRING, env);
 		}
 
 		@Override

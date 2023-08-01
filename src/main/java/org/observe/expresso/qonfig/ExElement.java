@@ -15,44 +15,32 @@ import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.SettableValue;
-import org.observe.expresso.ExpressoEnv;
+import org.observe.expresso.CompiledExpressoEnv;
 import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.ModelException;
+import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
-import org.observe.expresso.ModelType.ModelInstanceType;
-import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
-import org.observe.expresso.TypeConversionException;
+import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.qommons.ClassMap;
 import org.qommons.Identifiable;
 import org.qommons.collect.CollectionUtils;
 import org.qommons.config.*;
+import org.qommons.ex.ExBiConsumer;
 import org.qommons.io.ErrorReporting;
-import org.qommons.io.LocatedFilePosition;
 
 /** A base type for values interpreted from {@link QonfigElement}s */
 public interface ExElement extends Identifiable {
-	public static class Identity {
-		private final String theElementType;
-		private final LocatedFilePosition thePosition;
+	public static class ElementIdentity {
+		private String theStringRep;
 
-		public Identity(String elementType, LocatedFilePosition position) {
-			theElementType = elementType;
-			thePosition = position;
-		}
-
-		public String getElementType() {
-			return theElementType;
-		}
-
-		public LocatedFilePosition getPosition() {
-			return thePosition;
+		public void setStringRepresentation(String stringRep) {
+			theStringRep = stringRep;
 		}
 
 		@Override
 		public String toString() {
-			return new StringBuilder().append('<').append(theElementType).append('>').append(thePosition.toShortString()).toString();
+			return theStringRep;
 		}
 	}
 
@@ -65,17 +53,16 @@ public interface ExElement extends Identifiable {
 		/** @return The definition interpreted from the parent element */
 		Def<?> getParentElement();
 
+		QonfigElementOrAddOn getQonfigType();
+
 		/** @return The QonfigElement that this definition was interpreted from */
 		QonfigElement getElement();
 
 		ErrorReporting reporting();
 
-		ExpressoEnv getExpressoEnv();
+		CompiledExpressoEnv getExpressoEnv();
 
-		/** @return This element's models */
-		ObservableModelSet.Built getModels();
-
-		Class<?> getCallingClass();
+		void setExpressoEnv(CompiledExpressoEnv env);
 
 		/**
 		 * @param <AO> The type of the add-on to get
@@ -114,7 +101,7 @@ public interface ExElement extends Identifiable {
 				if (!fulfilled.add(child))
 					continue;
 				List<? extends Def<?>> roleChildren = getDefChildren(child);
-				if (!roleChildren.isEmpty()) {
+				if (roleChildren != null && !roleChildren.isEmpty()) {
 					if (children == null)
 						children = new ArrayList<>();
 					children.addAll(roleChildren);
@@ -127,7 +114,7 @@ public interface ExElement extends Identifiable {
 					if (!fulfilled.add(child))
 						continue;
 					List<? extends Def<?>> roleChildren = getDefChildren(child);
-					if (!roleChildren.isEmpty()) {
+					if (roleChildren != null && !roleChildren.isEmpty()) {
 						if (children == null)
 							children = new ArrayList<>();
 						children.addAll(roleChildren);
@@ -155,7 +142,7 @@ public interface ExElement extends Identifiable {
 				if (!fulfilled.add(child))
 					continue;
 				List<? extends Interpreted<?>> roleChildren = getInterpretedChildren(interpreted, child);
-				if (!roleChildren.isEmpty()) {
+				if (roleChildren != null && !roleChildren.isEmpty()) {
 					if (children == null)
 						children = new ArrayList<>();
 					children.addAll(roleChildren);
@@ -168,7 +155,7 @@ public interface ExElement extends Identifiable {
 					if (!fulfilled.add(child))
 						continue;
 					List<? extends Interpreted<?>> roleChildren = getInterpretedChildren(interpreted, child);
-					if (!roleChildren.isEmpty()) {
+					if (roleChildren != null && !roleChildren.isEmpty()) {
 						if (children == null)
 							children = new ArrayList<>();
 						children.addAll(roleChildren);
@@ -192,7 +179,7 @@ public interface ExElement extends Identifiable {
 				if (!fulfilled.add(child))
 					continue;
 				List<? extends ExElement> roleChildren = getElementChildren(element, child);
-				if (!roleChildren.isEmpty()) {
+				if (roleChildren != null && !roleChildren.isEmpty()) {
 					if (children == null)
 						children = new ArrayList<>();
 					children.addAll(roleChildren);
@@ -205,7 +192,7 @@ public interface ExElement extends Identifiable {
 					if (!fulfilled.add(child))
 						continue;
 					List<? extends ExElement> roleChildren = getElementChildren(element, child);
-					if (!roleChildren.isEmpty()) {
+					if (roleChildren != null && !roleChildren.isEmpty()) {
 						if (children == null)
 							children = new ArrayList<>();
 						children.addAll(roleChildren);
@@ -218,7 +205,7 @@ public interface ExElement extends Identifiable {
 			return children == null ? Collections.emptyList() : children;
 		}
 
-		ExElement.Def<?> withTraceability(ElementTypeTraceability<? super E, ?, ?> traceability);
+		ExElement.Def<?> withTraceability(SingleTypeTraceability<? super E, ?, ?> traceability);
 
 		/**
 		 * Updates this element definition. Must be called at least once after interpretation produces this object.
@@ -241,7 +228,7 @@ public interface ExElement extends Identifiable {
 				this.typeName = typeName;
 			}
 
-			public QonfigElementKey(ElementTypeTraceability<?, ?, ?> traceability) {
+			public QonfigElementKey(SingleTypeTraceability<?, ?, ?> traceability) {
 				toolkitName = traceability.getToolkitName();
 				toolkitMajorVersion = traceability.getToolkitVersion().majorVersion;
 				toolkitMinorVersion = traceability.getToolkitVersion().minorVersion;
@@ -284,36 +271,49 @@ public interface ExElement extends Identifiable {
 		 * @param <E> The type of the element that this definition is for
 		 */
 		public abstract class Abstract<E extends ExElement> implements Def<E> {
-			private final Identity theId;
-			private final ExElement.Def<?> theParent;
+			private final ElementIdentity theId;
+			private ExElement.Def<?> theParent;
+			private final QonfigElementOrAddOn theQonfigType;
 			private QonfigElement theElement;
 			private final ClassMap<ExAddOn.Def<? super E, ?>> theAddOns;
-			private final Map<QonfigElementKey, ElementTypeTraceability<? super E, ?, ?>> theTraceability;
-			private ExpressoEnv theExpressoEnv;
-			private ObservableModelSet.Built theModels;
+			private final Map<QonfigElementKey, SingleTypeTraceability<? super E, ?, ?>> theTraceability;
+			private CompiledExpressoEnv theExpressoEnv;
 			private ErrorReporting theReporting;
-			private Class<?> theCallingClass;
 
 			/**
 			 * @param parent The definition interpreted from the parent element
-			 * @param element The element that this definition is being interpreted from
 			 */
-			protected Abstract(ExElement.Def<?> parent, QonfigElement element) {
-				theId = element == null ? null : new Identity(element.getType().getName(), element.getPositionInFile());
+			protected Abstract(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
+				theId = new ElementIdentity();
+				theId.setStringRepresentation(qonfigType.getName());
 				theParent = parent;
-				theElement = element;
+				theQonfigType = qonfigType;
 				theAddOns = new ClassMap<>();
 				theTraceability = new HashMap<>();
 			}
 
 			@Override
-			public Identity getIdentity() {
+			public Object getIdentity() {
 				return theId;
 			}
 
 			@Override
 			public ExElement.Def<?> getParentElement() {
 				return theParent;
+			}
+
+			protected void setParentElement(ExElement.Def<?> parent) {
+				if (theParent != null) {
+					if (parent != theParent)
+						throw new IllegalArgumentException("Parent has already been set");
+					return;
+				}
+				theParent = parent;
+			}
+
+			@Override
+			public QonfigElementOrAddOn getQonfigType() {
+				return theQonfigType;
 			}
 
 			@Override
@@ -327,11 +327,6 @@ public interface ExElement extends Identifiable {
 			}
 
 			@Override
-			public Class<?> getCallingClass() {
-				return theCallingClass;
-			}
-
-			@Override
 			public <AO extends ExAddOn.Def<? super E, ?>> AO getAddOn(Class<AO> addOn) {
 				return (AO) theAddOns.get(addOn, ClassMap.TypeMatch.SUB_TYPE);
 			}
@@ -342,18 +337,8 @@ public interface ExElement extends Identifiable {
 			}
 
 			@Override
-			public ExpressoEnv getExpressoEnv() {
+			public CompiledExpressoEnv getExpressoEnv() {
 				return theExpressoEnv;
-			}
-
-			@Override
-			public ObservableModelSet.Built getModels() {
-				if (theModels == null && theExpressoEnv != null) {
-					ObservableModelSet models = theExpressoEnv.getModels();
-					theModels = models instanceof ObservableModelSet.Builder ? ((ObservableModelSet.Builder) models).build()
-						: (ObservableModelSet.Built) models;
-				}
-				return theModels;
 			}
 
 			@Override
@@ -364,7 +349,7 @@ public interface ExElement extends Identifiable {
 					.get(new QonfigElementKey(declarer.getName(), declarer.getMajorVersion(), declarer.getMinorVersion(), owner.getName()));
 				if (traceability == null)
 					return null;
-				return traceability.getDefAttribute(this, attr.getName());
+				return traceability.getDefAttribute(this, attr);
 			}
 
 			@Override
@@ -389,7 +374,7 @@ public interface ExElement extends Identifiable {
 					.get(new QonfigElementKey(declarer.getName(), declarer.getMajorVersion(), declarer.getMinorVersion(), owner.getName()));
 				if (traceability == null)
 					return Collections.emptyList();
-				return traceability.getDefChildren(this, role.getName());
+				return traceability.getDefChildren(this, role);
 			}
 
 			@Override
@@ -400,7 +385,7 @@ public interface ExElement extends Identifiable {
 					.get(new QonfigElementKey(declarer.getName(), declarer.getMajorVersion(), declarer.getMinorVersion(), owner.getName()));
 				if (traceability == null)
 					return null;
-				return traceability.getInterpretedAttribute(interpreted, attr.getName());
+				return traceability.getInterpretedAttribute(interpreted, attr);
 			}
 
 			@Override
@@ -425,7 +410,7 @@ public interface ExElement extends Identifiable {
 					.get(new QonfigElementKey(declarer.getName(), declarer.getMajorVersion(), declarer.getMinorVersion(), owner.getName()));
 				if (traceability == null)
 					return Collections.emptyList();
-				return traceability.getInterpretedChildren(interpreted, role.getName());
+				return traceability.getInterpretedChildren(interpreted, role);
 			}
 
 			@Override
@@ -436,35 +421,52 @@ public interface ExElement extends Identifiable {
 					.get(new QonfigElementKey(declarer.getName(), declarer.getMajorVersion(), declarer.getMinorVersion(), owner.getName()));
 				if (traceability == null)
 					return Collections.emptyList();
-				return traceability.getElementChildren(element, role.getName());
+				return traceability.getElementChildren(element, role);
 			}
 
 			@Override
-			public ExElement.Def<?> withTraceability(ElementTypeTraceability<? super E, ?, ?> traceability) {
+			public ExElement.Def<?> withTraceability(SingleTypeTraceability<? super E, ?, ?> traceability) {
 				if (theTraceability.putIfAbsent(new QonfigElementKey(traceability), traceability) != null)
 					throw new IllegalArgumentException("Traceability has already been configured for " + traceability);
 				return this;
 			}
 
 			@Override
-			public void update(ExpressoQIS session) throws QonfigInterpretationException {
+			public final void update(ExpressoQIS session) throws QonfigInterpretationException {
+				if (session.getFocusType() != theQonfigType)
+					session = session.asElement(theQonfigType);
+				theId.setStringRepresentation(theQonfigType.getName() + "@" + session.getElement().getPositionInFile().toShortString());
+
 				theReporting = session.reporting();
-				theCallingClass = session.getWrapped().getInterpreter().getCallingClass();
 				session.setElementRepresentation(this);
 				theElement = session.getElement();
-				theExpressoEnv = session.getExpressoEnv();
-				theModels = null; // Build this on demand, as it may still need to be built
+				if (theParent != null) { // Check that the parent configured is actually the parent element
+					if (theElement.getDocument() instanceof QonfigMetadata) {
+						if (!theParent.getElement().isInstance(((QonfigMetadata) theElement.getDocument()).getElement()))
+							throw new IllegalArgumentException(theParent + " is not the parent of " + this);
+					} else if (theParent.getElement() != theElement.getParent())
+						throw new IllegalArgumentException(theParent + " is not the parent of " + this);
+				}
+				setExpressoEnv(session.getExpressoEnv());
 
-				if (theAddOns.isEmpty()) {
+				boolean firstTime = theAddOns.isEmpty();
+				if (firstTime) {
 					// Add-ons can't change, because if they do, the element definition should be re-interpreted from the session
 					Set<QonfigElementOrAddOn> addOnsTested = new HashSet<>();
 					for (QonfigAddOn addOn : session.getElement().getInheritance().values())
 						addAddOn(session, addOn, addOnsTested);
 					addAddOns(session, session.getElement().getType(), addOnsTested);
+				}
 
-					for (ExAddOn.Def<? super E, ?> addOn : theAddOns.getAllValues())
-						addOn.update(session.asElement(addOn.getType()), this);
+				for (ExAddOn.Def<?, ?> addOn : theAddOns.getAllValues())
+					addOn.preUpdate(session.asElement(addOn.getType()));
 
+				doUpdate(session);
+
+				for (ExAddOn.Def<?, ?> addOn : theAddOns.getAllValues())
+					addOn.postUpdate(session.asElement(addOn.getType()));
+
+				if (firstTime) {
 					// Ensure implementation added all traceability
 					checkTraceability(theElement.getType());
 					for (QonfigAddOn inh : theElement.getInheritance().values())
@@ -472,11 +474,21 @@ public interface ExElement extends Identifiable {
 				}
 			}
 
+			@Override
+			public void setExpressoEnv(CompiledExpressoEnv env) {
+				theExpressoEnv = env;
+			}
+
+			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
+				for (ExAddOn.Def<? super E, ?> addOn : theAddOns.getAllValues())
+					addOn.update(session.asElement(addOn.getType()), this);
+			}
+
 			private void addAddOns(AbstractQIS<?> session, QonfigElementDef element, Set<QonfigElementOrAddOn> tested)
 				throws QonfigInterpretationException {
 				if (!tested.add(element))
 					return;
-				for (QonfigAddOn addOn : element.getFullInheritance().values())
+				for (QonfigAddOn addOn : element.getInheritance())
 					addAddOn(session, addOn, tested);
 				if (element.getSuperElement() != null)
 					addAddOns(session, element.getSuperElement(), tested);
@@ -494,7 +506,7 @@ public interface ExElement extends Identifiable {
 				}
 				if (addOn.getSuperElement() != null)
 					addAddOns(session, addOn.getSuperElement(), tested);
-				for (QonfigAddOn inh : session.getFocusType().getInheritance())
+				for (QonfigAddOn inh : addOn.getInheritance())
 					addAddOn(session, inh, tested);
 			}
 
@@ -546,6 +558,10 @@ public interface ExElement extends Identifiable {
 		/** @return This element's models */
 		InterpretedModelSet getModels();
 
+		InterpretedExpressoEnv getExpressoEnv();
+
+		void setExpressoEnv(InterpretedExpressoEnv env);
+
 		/**
 		 * @param <AO> The type of the add-on to get
 		 * @param addOn The type of the add-on to get
@@ -587,11 +603,12 @@ public interface ExElement extends Identifiable {
 		 */
 		public abstract class Abstract<E extends ExElement> implements Interpreted<E> {
 			private final Def<? super E> theDefinition;
-			private final Interpreted<?> theParent;
+			private Interpreted<?> theParent;
 			private final ClassMap<ExAddOn.Interpreted<? super E, ?>> theAddOns;
 			private final SettableValue<Boolean> isDestroyed;
-			private InterpretedModelSet theModels;
+			private InterpretedExpressoEnv theExpressoEnv;
 			private Boolean isModelInstancePersistent;
+			private boolean isInterpreting;
 
 			/**
 			 * @param definition The definition that is producing this interpretation
@@ -599,11 +616,13 @@ public interface ExElement extends Identifiable {
 			 */
 			protected Abstract(Def<? super E> definition, Interpreted<?> parent) {
 				theDefinition = definition;
-				theParent = parent;
+				if (parent != null)
+					setParentElement(parent);
 				theAddOns = new ClassMap<>();
 				for (ExAddOn.Def<? super E, ?> addOn : definition.getAddOns()) {
 					ExAddOn.Interpreted<? super E, ?> interp = (ExAddOn.Interpreted<? super E, ?>) addOn.interpret(this);
-					theAddOns.put(interp.getClass(), interp);
+					if (interp != null) // It is allowed for add-on definitions not to produce interpretations
+						theAddOns.put(interp.getClass(), interp);
 				}
 				isDestroyed = SettableValue.build(boolean.class).withValue(false).build();
 			}
@@ -628,9 +647,26 @@ public interface ExElement extends Identifiable {
 				return theParent;
 			}
 
+			protected Abstract<E> setParentElement(Interpreted<?> parent) {
+				if ((parent == null ? null : parent.getDefinition()) != theDefinition.getParentElement())
+					throw new IllegalArgumentException(parent + " is not the parent of " + this);
+				theParent = parent;
+				return this;
+			}
+
 			@Override
 			public InterpretedModelSet getModels() {
-				return theModels;
+				return theExpressoEnv.getModels();
+			}
+
+			@Override
+			public InterpretedExpressoEnv getExpressoEnv() {
+				return theExpressoEnv;
+			}
+
+			@Override
+			public void setExpressoEnv(InterpretedExpressoEnv env) {
+				theExpressoEnv = env;
 			}
 
 			@Override
@@ -666,6 +702,8 @@ public interface ExElement extends Identifiable {
 
 			@Override
 			public void destroy() {
+				for (ExElement.Interpreted<?> child : getDefinition().getAllInterpretedChildren(this))
+					child.destroy();
 				for (ExAddOn.Interpreted<?, ?> addOn : theAddOns.getAllValues())
 					addOn.destroy();
 				theAddOns.clear();
@@ -679,14 +717,31 @@ public interface ExElement extends Identifiable {
 			 *
 			 * @throws ExpressoInterpretationException If any model values in this element or any of its content fail to be interpreted
 			 */
-			protected void update() throws ExpressoInterpretationException {
-				// Do I need this?
-				theModels = getDefinition().getModels().interpret();
-				// theDefinition.getExpressoSession().setExpressoEnv(theDefinition.getExpressoSession().getExpressoEnv().with(models,
-				// null));
-				theDefinition.getExpressoEnv().interpretLocalModel();
+			protected final void update(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+				if (isInterpreting)
+					return;
+				isInterpreting = true;
+				try {
+					for (ExAddOn.Interpreted<?, ?> addOn : theAddOns.getAllValues())
+						addOn.preUpdate();
+					theExpressoEnv = env.forChild(theDefinition.getExpressoEnv());
+					doUpdate(theExpressoEnv);
+					// If our models are the same as the parent, then they're already interpreted or interpreting
+					// Can't always rely on having our parent correct, but we can tell from the definition
+					if (getDefinition().getParentElement() == null
+						|| getDefinition().getExpressoEnv().getModels() != getDefinition().getParentElement().getExpressoEnv().getModels())
+						theExpressoEnv.getModels().interpret(theExpressoEnv); // Interpret any remaining values
+					for (ExAddOn.Interpreted<?, ?> addOn : theAddOns.getAllValues())
+						addOn.postUpdate();
+				} finally {
+					isInterpreting = false;
+				}
+			}
+
+			protected void doUpdate(InterpretedExpressoEnv expressoEnv) throws ExpressoInterpretationException {
+				theExpressoEnv = expressoEnv;
 				for (ExAddOn.Interpreted<?, ?> addOn : theAddOns.getAllValues())
-					addOn.update(theModels);
+					addOn.update(theExpressoEnv);
 			}
 
 			@Override
@@ -695,6 +750,8 @@ public interface ExElement extends Identifiable {
 			}
 		}
 	}
+
+	String getTypeName();
 
 	/** @return The parent element */
 	ExElement getParentElement();
@@ -756,9 +813,10 @@ public interface ExElement extends Identifiable {
 	public abstract class Abstract implements ExElement {
 		private final Object theId;
 		private final ExElement theParent;
-		private final ClassMap<ExAddOn<?>> theAddOns;
-		private final ClassMap<Class<? extends ExAddOn.Interpreted<?, ?>>> theAddOnInterpretations;
+		private final ClassMap<AddOnInstance<?, ?>> theAddOns;
+		private final List<ExAddOn<?>> theAddOnInstances;
 		private final ErrorReporting theReporting;
+		private String theTypeName;
 		private ModelSetInstance theUpdatingModels;
 
 		/**
@@ -766,16 +824,26 @@ public interface ExElement extends Identifiable {
 		 * @param parent The parent element
 		 */
 		protected Abstract(Interpreted<?> interpreted, ExElement parent) {
-			theId = interpreted.getDefinition().getIdentity();
+			theId = interpreted.getIdentity();
 			theParent = parent;
 			theAddOns = new ClassMap<>();
-			theAddOnInterpretations = new ClassMap<>();
+			ArrayList<ExAddOn<?>> addOns = new ArrayList<>();
 			for (ExAddOn.Interpreted<?, ?> addOn : interpreted.getAddOns()) {
 				ExAddOn<?> inst = ((ExAddOn.Interpreted<ExElement, ?>) addOn).create(this);
-				theAddOns.put(inst.getClass(), inst);
-				theAddOnInterpretations.put(inst.getClass(), (Class<? extends ExAddOn.Interpreted<?, ?>>) addOn.getClass());
+				if (inst != null) {// It is acceptable for add-ons to not produce instances
+					addOns.add(inst);
+					theAddOns.put(inst.getClass(), new AddOnInstance<>(
+						(Class<ExAddOn.Interpreted<ExElement, ExAddOn<ExElement>>>) addOn.getClass(), (ExAddOn<ExElement>) inst));
+				}
 			}
-			theReporting = interpreted.getDefinition().reporting();
+			addOns.trimToSize();
+			theAddOnInstances = Collections.unmodifiableList(addOns);
+			theReporting = interpreted.reporting();
+		}
+
+		@Override
+		public String getTypeName() {
+			return theTypeName;
 		}
 
 		@Override
@@ -790,12 +858,13 @@ public interface ExElement extends Identifiable {
 
 		@Override
 		public <AO extends ExAddOn<?>> AO getAddOn(Class<AO> addOn) {
-			return (AO) theAddOns.get(addOn, ClassMap.TypeMatch.SUB_TYPE);
+			AddOnInstance<?, ?> inst = theAddOns.get(addOn, ClassMap.TypeMatch.SUB_TYPE);
+			return inst == null ? null : (AO) inst.addOn;
 		}
 
 		@Override
 		public Collection<ExAddOn<?>> getAddOns() {
-			return theAddOns.getAllValues();
+			return theAddOnInstances;
 		}
 
 		@Override
@@ -809,10 +878,18 @@ public interface ExElement extends Identifiable {
 		}
 
 		@Override
-		public ModelSetInstance update(Interpreted<?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
+		public final ModelSetInstance update(Interpreted<?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
+			theTypeName = interpreted.getDefinition().getElement().getType().getName();
+			for (AddOnInstance<?, ?> addOn : theAddOns.getAllValues())
+				addOn.preUpdate(interpreted.getAddOn((Class<? extends ExAddOn.Interpreted<ExElement, ?>>) addOn.interpretationClass));
+
 			ModelSetInstance myModels = createElementModel(interpreted, models);
 			try {
 				updateModel(interpreted, myModels);
+
+				for (AddOnInstance<?, ?> addOn : theAddOns.getAllValues())
+					addOn.postUpdate(interpreted.getAddOn((Class<? extends ExAddOn.Interpreted<ExElement, ?>>) addOn.interpretationClass),
+						myModels);
 			} finally {
 				if (!interpreted.isModelInstancePersistent())
 					theUpdatingModels = null;
@@ -822,18 +899,15 @@ public interface ExElement extends Identifiable {
 
 		protected ModelSetInstance createElementModel(Interpreted<?> interpreted, ModelSetInstance parentModels)
 			throws ModelInstantiationException {
-			theUpdatingModels = interpreted.getDefinition().getExpressoEnv().wrapLocal(parentModels);
+			theUpdatingModels = interpreted.getExpressoEnv().wrapLocal(parentModels);
 			return theUpdatingModels;
 		}
 
 		protected void updateModel(Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
-			for (ExAddOn<?> addOn : theAddOns.getAllValues()) {
-				Class<? extends ExAddOn.Interpreted<ExElement, ?>> addOnInterpType;
-				addOnInterpType = (Class<? extends ExAddOn.Interpreted<ExElement, ?>>) theAddOnInterpretations.get(addOn.getClass(),
-					ClassMap.TypeMatch.EXACT);
-				ExAddOn.Interpreted<?, ?> interpretedAddOn = interpreted.getAddOn(addOnInterpType);
-				((ExAddOn<ExElement>) addOn).update(interpretedAddOn, myModels);
-			}
+			theUpdatingModels = myModels;
+			for (AddOnInstance<?, ?> addOn : theAddOns.getAllValues())
+				addOn.update(interpreted.getAddOn((Class<? extends ExAddOn.Interpreted<ExElement, ?>>) addOn.interpretationClass),
+					myModels);
 		}
 
 		@Override
@@ -841,9 +915,26 @@ public interface ExElement extends Identifiable {
 			return theId.toString();
 		}
 
-		protected <M, MV extends M> void satisfyContextValue(String valueName, ModelInstanceType<M, MV> type, MV value,
-			ModelSetInstance models) throws ModelInstantiationException {
-			ExElement.satisfyContextValue(valueName, type, value, models, this);
+		private static class AddOnInstance<E extends ExElement, AO extends ExAddOn<E>> {
+			final Class<? extends ExAddOn.Interpreted<E, AO>> interpretationClass;
+			final AO addOn;
+
+			AddOnInstance(Class<? extends ExAddOn.Interpreted<E, AO>> interpretationClass, AO addOn) {
+				this.interpretationClass = interpretationClass;
+				this.addOn = addOn;
+			}
+
+			void preUpdate(ExAddOn.Interpreted<?, ?> interpreted) {
+				addOn.preUpdate(interpreted);
+			}
+
+			void update(ExAddOn.Interpreted<?, ?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
+				addOn.update(interpreted, models);
+			}
+
+			void postUpdate(ExAddOn.Interpreted<?, ?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
+				addOn.postUpdate(interpreted, models);
+			}
 		}
 	}
 
@@ -854,20 +945,6 @@ public interface ExElement extends Identifiable {
 	 */
 	public static boolean typesEqual(QonfigElement element1, QonfigElement element2) {
 		return element1.getType() == element2.getType() && element1.getInheritance().equals(element2.getInheritance());
-	}
-
-	public static <M, MV extends M> void satisfyContextValue(String valueName, ModelInstanceType<M, MV> type, MV value,
-		ModelSetInstance models, ExElement element) throws ModelInstantiationException {
-		if (value != null) {
-			try {
-				DynamicModelValue.satisfyDynamicValue(valueName, type, models, value);
-			} catch (ModelException e) {
-				throw new ModelInstantiationException("No " + valueName + " value?", element.reporting().getFileLocation().getPosition(0),
-					0, e);
-			} catch (TypeConversionException e) {
-				throw new IllegalStateException(valueName + " is not a " + type + "?", e);
-			}
-		}
 	}
 
 	/**
@@ -888,19 +965,35 @@ public interface ExElement extends Identifiable {
 		else if (def != null && typesEqual(def.getElement(), element))
 			return def;
 		ExpressoQIS childSession = session.forChildren(childName).getFirst();
-		def = childSession.interpret(type);
-		def.update(childSession);
+		def = childSession.interpret(type, (d, s) -> d.update(s));
 		return def;
 	}
 
 	public static <T extends ExElement.Def<?>> void syncDefs(Class<T> defType, List<? extends T> defs, List<ExpressoQIS> sessions)
 		throws QonfigInterpretationException {
-		CollectionUtils.synchronize((List<T>) defs, sessions, //
-			(widget, child) -> ExElement.typesEqual(widget.getElement(), child.getElement()))//
-		.simpleE(child -> child.interpret(defType))//
-		.rightOrder()//
-		.onRightX(element -> element.getLeftValue().update(element.getRightValue()))//
-		.onCommonX(element -> element.getLeftValue().update(element.getRightValue()))//
-		.adjust();
+		syncDefs(defType, defs, sessions, (d, s) -> d.update(s));
+	}
+
+	public static <T extends ExElement.Def<?>> void syncDefs(Class<T> defType, List<? extends T> defs, List<ExpressoQIS> sessions,
+		ExBiConsumer<? super T, ExpressoQIS, QonfigInterpretationException> update) throws QonfigInterpretationException {
+		CollectionUtils.SimpleAdjustment<T, ExpressoQIS, QonfigInterpretationException> adjustment = CollectionUtils
+			.synchronize((List<T>) defs, sessions, //
+				(widget, child) -> ExElement.typesEqual(widget.getElement(), child.getElement()))//
+			.simpleE(child -> child.interpret(defType, update))//
+			.rightOrder();
+		if (update != null)
+			adjustment.onCommonX(element -> update.accept(element.getLeftValue(), element.getRightValue()));
+		adjustment.adjust();
+	}
+
+	/**
+	 * An element that can never be instantiated, intended for use as a type parameter for {@link ExElement.Def definition} and
+	 * {@link ExElement.Interpreted interpretation} implementations to signify that they do not actually produce an element
+	 */
+	public static class Void extends ExElement.Abstract {
+		private Void() {
+			super(null, null);
+			throw new IllegalStateException("Impossible");
+		}
 	}
 }

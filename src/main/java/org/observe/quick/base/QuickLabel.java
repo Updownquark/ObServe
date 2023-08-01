@@ -4,37 +4,38 @@ import javax.swing.Icon;
 
 import org.observe.SettableValue;
 import org.observe.expresso.ExpressoInterpretationException;
+import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ObservableExpression;
+import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.qonfig.CompiledExpression;
 import org.observe.expresso.qonfig.ElementTypeTraceability;
+import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.quick.QuickTextWidget;
 import org.observe.util.TypeTokens;
-import org.qommons.config.QonfigElement;
+import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
-import org.qommons.ex.ExFunction;
 import org.qommons.io.LocatedPositionedContent;
 
 import com.google.common.reflect.TypeToken;
 
 public class QuickLabel<T> extends QuickTextWidget.Abstract<T> {
 	public static final String LABEL = "label";
-	private static final ElementTypeTraceability<QuickLabel<?>, Interpreted<?, ?>, Def<?, ?>> TRACEABILITY = ElementTypeTraceability
-		.<QuickLabel<?>, Interpreted<?, ?>, Def<?, ?>> build(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, LABEL)//
-		.reflectMethods(Def.class, Interpreted.class, QuickLabel.class)//
-		.build();
+	private static final SingleTypeTraceability<QuickLabel<?>, Interpreted<?, ?>, Def<?, ?>> TRACEABILITY = ElementTypeTraceability
+		.getElementTraceability(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, LABEL, Def.class, Interpreted.class,
+			QuickLabel.class);
 
 	public static class Def<T, W extends QuickLabel<T>> extends QuickTextWidget.Def.Abstract<T, W> {
 		private String theStaticText;
 		private CompiledExpression theTextExpression;
 		private CompiledExpression theIcon;
 
-		public Def(ExElement.Def<?> parent, QonfigElement element) {
-			super(parent, element);
+		public Def(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
+			super(parent, type);
 		}
 
 		@Override
@@ -60,9 +61,9 @@ public class QuickLabel<T> extends QuickTextWidget.Abstract<T> {
 		}
 
 		@Override
-		public void update(ExpressoQIS session) throws QonfigInterpretationException {
+		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
-			super.update(session.asElement(session.getFocusType().getSuperElement()));
+			super.doUpdate(session.asElement(session.getFocusType().getSuperElement()));
 			String staticText = session.getValueText();
 			if (staticText != null && staticText.isEmpty())
 				staticText = null;
@@ -93,7 +94,7 @@ public class QuickLabel<T> extends QuickTextWidget.Abstract<T> {
 	}
 
 	public static class Interpreted<T, W extends QuickLabel<T>> extends QuickTextWidget.Interpreted.Abstract<T, W> {
-		private ExFunction<ModelSetInstance, SettableValue<Icon>, ModelInstantiationException> theIcon;
+		private InterpretedValueSynth<SettableValue<?>, SettableValue<Icon>> theIcon;
 
 		public Interpreted(QuickLabel.Def<T, ? super W> definition, ExElement.Interpreted<?> parent) {
 			super(definition, parent);
@@ -104,24 +105,21 @@ public class QuickLabel<T> extends QuickTextWidget.Abstract<T> {
 			return (Def<T, ? super W>) super.getDefinition();
 		}
 
-		public ExFunction<ModelSetInstance, SettableValue<Icon>, ModelInstantiationException> getIcon() {
+		public InterpretedValueSynth<SettableValue<?>, SettableValue<Icon>> getIcon() {
 			return theIcon;
 		}
 
-		public void setIcon(ExFunction<ModelSetInstance, SettableValue<Icon>, ModelInstantiationException> icon) {
-			theIcon = icon;
-		}
-
 		@Override
-		public TypeToken<W> getWidgetType() {
+		public TypeToken<W> getWidgetType() throws ExpressoInterpretationException {
 			return (TypeToken<W>) TypeTokens.get().keyFor(QuickLabel.class).parameterized(getValueType());
 		}
 
 		@Override
-		public void update(QuickInterpretationCache cache) throws ExpressoInterpretationException {
-			super.update(cache);
-			theIcon = getDefinition().getIcon() == null ? null : QuickBaseInterpretation.evaluateIcon(getDefinition().getIcon(),
-				getDefinition().getExpressoEnv(), getDefinition().getCallingClass());
+		protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+			super.doUpdate(env);
+			theIcon = getDefinition().getIcon() == null ? null
+				: QuickBaseInterpretation.evaluateIcon(getDefinition().getIcon(), env,
+					getDefinition().getElement().getDocument().getLocation());
 		}
 
 		@Override
@@ -144,6 +142,6 @@ public class QuickLabel<T> extends QuickTextWidget.Abstract<T> {
 	protected void updateModel(ExElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
 		super.updateModel(interpreted, myModels);
 		QuickLabel.Interpreted<T, ?> myInterpreted = (QuickLabel.Interpreted<T, ?>) interpreted;
-		theIcon = myInterpreted.getIcon() == null ? null : myInterpreted.getIcon().apply(myModels);
+		theIcon = myInterpreted.getIcon() == null ? null : myInterpreted.getIcon().get(myModels);
 	}
 }

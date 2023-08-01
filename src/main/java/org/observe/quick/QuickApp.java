@@ -9,7 +9,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.function.Consumer;
 import java.util.jar.Manifest;
@@ -24,9 +23,11 @@ import org.observe.collect.ObservableSet;
 import org.observe.collect.ObservableSortedCollection;
 import org.observe.collect.ObservableSortedSet;
 import org.observe.expresso.ExpressoInterpretationException;
+import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelException;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelType;
+import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.ExtValueRef;
@@ -166,17 +167,18 @@ public class QuickApp extends QonfigApp {
 
 		QuickDocument.Def quickDocDef = quickApp.parseQuick(null);
 
-		ObservableModelSet.ExternalModelSet extModels = parseExtModels(quickDocDef.getHead().getModels(), quickApp.getCommandLineArgs(),
-			ObservableModelSet.buildExternal(ObservableModelSet.JAVA_NAME_CHECKER));
+		InterpretedExpressoEnv env = InterpretedExpressoEnv.INTERPRETED_STANDARD_JAVA;
+		ObservableModelSet.ExternalModelSet extModels = parseExtModels(quickDocDef.getHead().getExpressoEnv().getBuiltModels(),
+			quickApp.getCommandLineArgs(), ObservableModelSet.buildExternal(ObservableModelSet.JAVA_NAME_CHECKER), env);
 
 		QuickDocument.Interpreted interpretedDoc = quickDocDef.interpret(null);
 		quickDocDef = null; // Free up memory
-		interpretedDoc.update();
+		interpretedDoc.updateDocument(env.withExt(extModels));
 
 		QuickApplication app = quickApp.interpretQuickApplication(interpretedDoc);
 
 		QuickDocument doc = interpretedDoc.create();
-		doc.update(interpretedDoc, extModels, Observable.empty());
+		doc.update(interpretedDoc, Observable.empty());
 
 		// Clean up to free memory
 		interpretedDoc.destroy();
@@ -228,38 +230,39 @@ public class QuickApp extends QonfigApp {
 	}
 
 	public static ObservableModelSet.ExternalModelSet parseExtModels(ObservableModelSet.Built models, List<String> clArgs,
-		ObservableModelSet.ExternalModelSetBuilder ext) {
+		ObservableModelSet.ExternalModelSetBuilder ext, InterpretedExpressoEnv env) {
 		ArgumentParsing.ParserBuilder apBuilder = ArgumentParsing.build();
 		// Inspect external models and build an ArgumentParser
-		buildArgumentParser(models, apBuilder, null, new StringBuilder());
+		buildArgumentParser(models, apBuilder, null, new StringBuilder(), env);
 		// Apply to command-line arguments
 		ArgumentParsing.Arguments parsedArgs = apBuilder.build()//
 			.parse(clArgs);
 		// Create external models from argument values
-		populateExtModel(models, ext, parsedArgs, null, new StringBuilder());
+		populateExtModel(models, ext, parsedArgs, null, new StringBuilder(), env);
 		return ext.build();
 	}
 
 	private static void buildArgumentParser(ObservableModelSet.Built models, ArgumentParsing.ParserBuilder builder, String modelName,
-		StringBuilder path) {
+		StringBuilder path, InterpretedExpressoEnv env) {
 		int preLen = path.length();
-		for (Map.Entry<String, ? extends ObservableModelSet.ModelComponentNode<?, ?>> comp : models.getComponents().entrySet()) {
-			if (comp.getValue().getThing() instanceof ExtValueRef) {
+		for (String name : models.getComponentNames()) {
+			ObservableModelSet.ModelComponentNode<?> comp = models.getComponentIfExists(name);
+			if (comp.getThing() instanceof ExtValueRef) {
 				if (path.length() > 0)
 					path.append('.');
-				path.append(toArgName(comp.getKey()));
-				buildArgument(modelName, path.toString(), (ExtValueRef<?, ?>) comp.getValue().getThing(), builder);
-			} else if (comp.getValue().getThing() instanceof ObservableModelSet) {
+				path.append(toArgName(name));
+				buildArgument(modelName, path.toString(), (ExtValueRef<?>) comp.getThing(), builder, env);
+			} else if (comp.getThing() instanceof ObservableModelSet) {
 				String compModelName;
 				if (modelName == null)
-					compModelName = comp.getKey();
+					compModelName = name;
 				else {
 					compModelName = modelName;
 					if (path.length() > 0)
 						path.append('.');
-					path.append(toArgName(comp.getKey()));
+					path.append(toArgName(name));
 				}
-				buildArgumentParser((ObservableModelSet.Built) comp.getValue().getThing(), builder, compModelName, path);
+				buildArgumentParser((ObservableModelSet.Built) comp.getThing(), builder, compModelName, path, env);
 			}
 			path.setLength(preLen);
 		}
@@ -271,8 +274,9 @@ public class QuickApp extends QonfigApp {
 		return StringUtils.parseByCase(name, true).toKebabCase();
 	}
 
-	protected static <M, MV extends M> void buildArgument(String modelName, String name, ExtValueRef<M, MV> thing, ParserBuilder builder) {
-		ModelType<M> modelType = thing.getType().getModelType();
+	protected static <M, MV extends M> void buildArgument(String modelName, String name, ExtValueRef<M> thing, ParserBuilder builder,
+		InterpretedExpressoEnv env) {
+		ModelType<M> modelType = thing.getModelType();
 		if (modelType.getTypeCount() != 1)
 			throw new IllegalArgumentException("External model value '" + modelName + "." + name
 				+ "' cannot be satisfied via command-line.  Model type " + modelType + " is unsupported.");
@@ -295,7 +299,12 @@ public class QuickApp extends QonfigApp {
 			argConfig = arg -> arg.required();
 		}
 		Consumer<ArgumentParsing.ValuedArgumentSetBuilder> argsBuilder;
-		Class<?> type = TypeTokens.get().unwrap(TypeTokens.getRawType(thing.getType().getType(0)));
+		Class<?> type;
+		try {
+			type = TypeTokens.get().unwrap(TypeTokens.getRawType(thing.getType(env).getType(0)));
+		} catch (ExpressoInterpretationException e) {
+			throw new IllegalArgumentException("Unable to evaluate type of external component " + thing, e);
+		}
 		if (type == boolean.class) {
 			if (!hasDefault && modelType == ModelTypes.Value) {
 				builder.forFlagPattern(p -> p.add(name, null));
@@ -339,64 +348,73 @@ public class QuickApp extends QonfigApp {
 	}
 
 	private static void populateExtModel(ObservableModelSet.Built models, ExternalModelSetBuilder ext, Arguments parsedArgs,
-		String modelName, StringBuilder path) {
+		String modelName, StringBuilder path, InterpretedExpressoEnv env) {
 		int preLen = path.length();
-		for (Map.Entry<String, ? extends ObservableModelSet.ModelComponentNode<?, ?>> comp : models.getComponents().entrySet()) {
-			if (comp.getValue().getThing() instanceof ExtValueRef) {
+		for (String name : models.getComponentNames()) {
+			ObservableModelSet.ModelComponentNode<?> comp = models.getComponentIfExists(name);
+			if (comp.getThing() instanceof ExtValueRef) {
 				if (path.length() > 0)
 					path.append('.');
-				path.append(comp.getKey());
-				satisfyArgument(path.toString(), (ExtValueRef<?, ?>) comp.getValue().getThing(), ext, parsedArgs);
-			} else if (comp.getValue().getThing() instanceof ObservableModelSet) {
+				path.append(name);
+				satisfyArgument(path.toString(), (ExtValueRef<?>) comp.getThing(), ext, parsedArgs, env);
+			} else if (comp.getThing() instanceof ObservableModelSet) {
 				String compModelName;
 				if (modelName == null)
-					compModelName = comp.getKey();
+					compModelName = name;
 				else {
 					compModelName = modelName;
 					if (path.length() > 0)
 						path.append('.');
-					path.append(toArgName(comp.getKey()));
+					path.append(toArgName(name));
 				}
 				ExternalModelSetBuilder subModel;
 				try {
-					subModel = ext.addSubModel(comp.getKey());
+					subModel = ext.addSubModel(name);
 				} catch (ModelException e) {
 					throw new IllegalStateException("Argument conflict", e);
 				}
-				populateExtModel((ObservableModelSet.Built) comp.getValue().getThing(), subModel, parsedArgs, compModelName, path);
+				populateExtModel((ObservableModelSet.Built) comp.getThing(), subModel, parsedArgs, compModelName, path, env);
 			}
 			path.setLength(preLen);
 		}
 	}
 
-	protected static <M, MV extends M> void satisfyArgument(String valueName, ExtValueRef<M, MV> thing, ExternalModelSetBuilder ext,
-		Arguments parsedArgs) {
+	protected static <M, MV extends M> void satisfyArgument(String valueName, ExtValueRef<M> thing, ExternalModelSetBuilder ext,
+		Arguments parsedArgs, InterpretedExpressoEnv env) {
 		String argName = String.join(".", Arrays.stream(valueName.split("\\.")).map(n -> StringUtils.parseByCase(n, true).toKebabCase())//
 			.collect(Collectors.toList()));
-		ModelType<M> modelType = thing.getType().getModelType();
+		ModelType<M> modelType = thing.getModelType();
 		boolean hasDefault = thing.hasDefault();
-		Class<?> type = TypeTokens.get().unwrap(TypeTokens.getRawType(thing.getType().getType(0)));
+		ModelInstanceType<M, MV> type;
+		try {
+			type = (ModelInstanceType<M, MV>) thing.getType(env);
+		} catch (ExpressoInterpretationException e) {
+			throw new IllegalArgumentException("Unable to evaluate type of external component " + thing, e);
+		}
+		Class<?> valueType = TypeTokens.get().unwrap(TypeTokens.getRawType(type.getType(0)));
 		MV value;
 		if (modelType == ModelTypes.Value) {
-			if (type == boolean.class && !hasDefault)
+			if (valueType == boolean.class && !hasDefault)
 				value = (MV) SettableValue.of(boolean.class, parsedArgs.has(argName), "Command-line argument");
 			else
-				value = (MV) SettableValue.of((Class<Object>) type, parsedArgs.get(argName), "Command-line argument");
+				value = (MV) SettableValue.of((Class<Object>) valueType, parsedArgs.get(argName), "Command-line argument");
 		} else {
 			ObservableCollection<Object> collection;
 			if (modelType == ModelTypes.Collection)
-				collection = ObservableCollection.build((Class<Object>) type).build();
+				collection = ObservableCollection.build((Class<Object>) valueType).build();
 			else if (modelType == ModelTypes.SortedCollection) {
-				if (!Comparable.class.isAssignableFrom(TypeTokens.get().wrap(type)))
+				if (!Comparable.class.isAssignableFrom(TypeTokens.get().wrap(valueType)))
 					return;
-				collection = ObservableSortedCollection.build((Class<Object>) type, (o1, o2) -> ((Comparable<Object>) o1).compareTo(o2))
+				collection = ObservableSortedCollection
+					.build((Class<Object>) valueType, (o1, o2) -> ((Comparable<Object>) o1).compareTo(o2))
 					.build();
 			} else if (modelType == ModelTypes.Set)
-				collection = ObservableSet.build((Class<Object>) type).build();
+				collection = ObservableSet.build((Class<Object>) valueType).build();
 			else if (modelType == ModelTypes.SortedSet) {
-				if (!Comparable.class.isAssignableFrom(TypeTokens.get().wrap(type)))
+				if (!Comparable.class.isAssignableFrom(TypeTokens.get().wrap(valueType)))
 					return;
-				collection = ObservableSortedSet.build((Class<Object>) type, (o1, o2) -> ((Comparable<Object>) o1).compareTo(o2)).build();
+				collection = ObservableSortedSet.build((Class<Object>) valueType, (o1, o2) -> ((Comparable<Object>) o1).compareTo(o2))
+					.build();
 			} else
 				return;
 
@@ -408,7 +426,7 @@ public class QuickApp extends QonfigApp {
 			value = (MV) collection.flow().unmodifiable(false).collect();
 		}
 		try {
-			ext.with(valueName, thing.getType(), value);
+			ext.with(valueName, type, value);
 		} catch (ModelException e) {
 			throw new IllegalStateException("Failed to satisfy external model value " + thing + " with command-line argument", e);
 		}

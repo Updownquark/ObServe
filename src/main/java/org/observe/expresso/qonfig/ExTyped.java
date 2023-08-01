@@ -1,31 +1,32 @@
 package org.observe.expresso.qonfig;
 
 import org.observe.expresso.ExpressoInterpretationException;
+import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
-import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.VariableType;
+import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.qommons.config.QonfigAddOn;
+import org.qommons.config.QonfigElement.QonfigValue;
 import org.qommons.config.QonfigInterpretationException;
+import org.qommons.io.LocatedPositionedContent;
 
 import com.google.common.reflect.TypeToken;
 
 public class ExTyped extends ExAddOn.Abstract<ExElement> {
-	private static final ElementTypeTraceability<ExElement, ExElement.Interpreted<?>, ExElement.Def<?>> TRACEABILITY = ElementTypeTraceability
-		.buildAddOn(ExpressoSessionImplV0_1.TOOLKIT_NAME, ExpressoSessionImplV0_1.VERSION, "typed", Def.class, Interpreted.class,
-			ExTyped.class)//
-		.reflectAddOnMethods()//
-		.build();
+	private static final SingleTypeTraceability<ExElement, ExElement.Interpreted<?>, ExElement.Def<?>> TRACEABILITY = ElementTypeTraceability
+		.getAddOnTraceability(ExpressoSessionImplV0_1.TOOLKIT_NAME, ExpressoSessionImplV0_1.VERSION, "typed", Def.class, Interpreted.class,
+			ExTyped.class);
 
 	public static class Def extends ExAddOn.Def.Abstract<ExElement, ExTyped> {
-		private Object theValueType;
+		private VariableType theValueType;
 
 		public Def(QonfigAddOn type, ExElement.Def<? extends ExElement> element) {
 			super(type, element);
 		}
 
 		@QonfigAttributeGetter("type")
-		public Object getValueType() {
+		public VariableType getValueType() {
 			return theValueType;
 		}
 
@@ -33,8 +34,12 @@ public class ExTyped extends ExAddOn.Abstract<ExElement> {
 		public void update(ExpressoQIS session, ExElement.Def<? extends ExElement> element) throws QonfigInterpretationException {
 			element.withTraceability(TRACEABILITY.validate(getType(), element.reporting()));
 			super.update(session, element);
-
-			theValueType = session.get(ExpressoBaseV0_1.VALUE_TYPE_KEY);
+			QonfigValue typeV = session.getAttributeQV("type");
+			if (typeV != null && !typeV.text.isEmpty()) {
+				theValueType = VariableType.parseType(new LocatedPositionedContent.Default(typeV.fileLocation, typeV.position));
+				session.put(ExpressoBaseV0_1.VALUE_TYPE_KEY, theValueType);
+			} else
+				theValueType = session.get(ExpressoBaseV0_1.VALUE_TYPE_KEY, VariableType.class);
 		}
 
 		@Override
@@ -60,18 +65,13 @@ public class ExTyped extends ExAddOn.Abstract<ExElement> {
 		}
 
 		@Override
-		public void update(InterpretedModelSet models) throws ExpressoInterpretationException {
-			super.update(models);
+		public void update(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+			super.update(env);
 
 			if (getDefinition().getValueType() == null)
 				theValueType = null;
-			else if (getDefinition().getValueType() instanceof TypeToken)
-				theValueType = (TypeToken<?>) getDefinition().getValueType();
-			else if (getDefinition().getValueType() instanceof VariableType)
-				theValueType = ((VariableType) getDefinition().getValueType()).getType(models);
 			else
-				throw new ExpressoInterpretationException("Unrecognized value type: " + getDefinition().getValueType().getClass().getName(),
-					getElement().getDefinition().getElement().getPositionInFile(), 0);
+				theValueType = getDefinition().getValueType().getType(env);
 		}
 
 		@Override
@@ -86,7 +86,7 @@ public class ExTyped extends ExAddOn.Abstract<ExElement> {
 		super(interpreted, element);
 	}
 
-	public Object getValueType() {
+	public TypeToken<?> getValueType() {
 		return theValueType;
 	}
 

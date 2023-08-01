@@ -6,7 +6,7 @@ import java.util.Objects;
 import java.util.function.Function;
 
 import org.observe.SettableValue;
-import org.observe.expresso.ExpressoEnv;
+import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ExpressoEvaluationException;
 import org.observe.expresso.ExpressoParseException;
 import org.observe.expresso.ExpressoParser;

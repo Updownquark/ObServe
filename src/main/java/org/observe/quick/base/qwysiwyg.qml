@@ -15,19 +15,19 @@
 				<hook name="clArgsChange" on="clArgs.$UNMATCHED$">qwysiwyg.init(clArgs.targetQuickApp, clArgs.$UNMATCHED$)</hook>
 			</model>
 			<model name="window">
-				<value name="width" init="640" />
-				<value name="height" init="640" />
+				<value name="width" init="860" />
+				<value name="height" init="860" />
 			</model>
 		</models>
 	</head>
 	<box layout="inline-layout" orientation="vertical" main-align="justify" tooltip="app.qwysiwyg.tooltip">
 		<scroll>
 			<box role="row-header" layout="simple-layout"> <!-- This outer box is so we can control the width -->
-				<text-area value="app.qwysiwyg.lineNumbers" editable="false" width="65px" />
+				<text-area value="app.qwysiwyg.lineNumbers" editable="false" width="`65px`" />
 			</box>
 			<styled-text-area role="content" editable="false" value="app.qwysiwyg.documentRoot" children="node.children"
 				post-text="node.getPostText()" tooltip="app.qwysiwyg.tooltip"
-				selection-start-value="app.qwysiwyg.selectedNode" selection-end-value="app.qwysiwyg.selectedNode"
+				selection-start-value="app.qwysiwyg.selectedNode" selection-end-value="app.qwysiwyg.selectedEndNode"
 				selection-start-offset="app.qwysiwyg.selectedStartIndex" selection-end-offset="app.qwysiwyg.selectedEndIndex">
 				<text-style>
 					<style attr="font-weight" condition="node!=null &amp;&amp; node.isBold()">`bold`</style>
@@ -45,5 +45,21 @@
 				<on-mouse-exit>app.qwysiwyg.mouseExit()</on-mouse-exit>
 			</styled-text-area>
 		</scroll>
+		<table rows="app.qwysiwyg.watchExpressions" value-name="ex">
+			<column name="`Expression`" value="ex.getExpressionText()">
+				<column-edit column-edit-value-name="newEx" type="modify-row-value" commit="ex.setExpressionText(newEx)">
+					<text-field />
+				</column-edit>
+			</column>
+			<column name="`Context`" value="ex.getContext()" />
+			<column name="`Value`" value="ex.getValue()" />
+			<multi-value-action allow-for-empty="true" icon="&quot;icons/add.png&quot;"
+				enabled="app.qwysiwyg.canAddWatchExpression(app.qwysiwyg.selectedNode)">
+				app.qwysiwyg.addWatchExpression(app.qwysiwyg.selectedNode)
+			</multi-value-action>
+			<value-action allow-for-multiple="true" icon="&quot;icons/remove.png&quot;" value-name="exp">
+				exp.remove()
+			</value-action>
+		</table>
 	</box>
 </quick>

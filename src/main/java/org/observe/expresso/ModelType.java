@@ -12,7 +12,6 @@ import java.util.function.Function;
 
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
-import org.observe.expresso.ObservableModelSet.ModelValueSynth;
 import org.observe.util.TypeTokens;
 import org.observe.util.TypeTokens.TypeConverter;
 import org.qommons.LambdaUtils;
@@ -819,7 +818,7 @@ public abstract class ModelType<M> implements Named {
 		 * @param name The name of the model type
 		 * @param type The super type of the model type
 		 */
-		public SingleTyped(String name, Class<M> type) {
+		protected SingleTyped(String name, Class<M> type) {
 			super(name, type);
 		}
 
@@ -1117,7 +1116,7 @@ public abstract class ModelType<M> implements Named {
 		}
 
 		/** @return The lowest-level source value that is converted by this value */
-		public ModelValueSynth<?, ?> getSourceRoot() {
+		public InterpretedValueSynth<?, ?> getSourceRoot() {
 			if (theSource instanceof ConvertedValue)
 				return ((ConvertedValue<?, ?, ?, ?>) theSource).getSourceRoot();
 			else

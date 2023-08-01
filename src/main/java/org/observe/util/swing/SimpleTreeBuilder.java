@@ -173,7 +173,7 @@ public class SimpleTreeBuilder<F, P extends SimpleTreeBuilder<F, P>> extends Abs
 	@Override
 	public P withMultiAction(String actionName, Consumer<? super List<? extends BetterList<F>>> action,
 		Consumer<DataAction<BetterList<F>, ?>> actionMod) {
-		SimpleDataAction<BetterList<F>, ?> ta = new SimpleDataAction<>(actionName, this, action, this::getSelection, false);
+		SimpleDataAction<BetterList<F>, ?> ta = new SimpleDataAction<>(actionName, this, action, this::getSelection, false, getUntil());
 		actionMod.accept(ta);
 		theActions.add(ta);
 		return (P) this;

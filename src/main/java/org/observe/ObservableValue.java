@@ -1913,8 +1913,8 @@ public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>,
 			Supplier<? extends T> def) {
 			theType = type;
 			theValues = values;
-			theTest = test == null ? v -> v != null : test;
-			theDefault = def == null ? () -> null : def;
+			theTest = test;
+			theDefault = def;
 		}
 
 		/** @return The component values of this value */
@@ -1938,7 +1938,11 @@ public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>,
 		@Override
 		public Object getIdentity() {
 			if (theIdentity == null) {
-				StringBuilder str = new StringBuilder("first:").append(theTest).append('(');
+				StringBuilder str = new StringBuilder("first");
+				if (theTest != null)
+					str.append(":(").append(theTest).append('(');
+				else
+					str.append('(');
 				List<Object> obsIds = new ArrayList<>(theValues.length + 2);
 				for (int i = 0; i < theValues.length; i++) {
 					obsIds.add(theValues[i].getIdentity());
@@ -1946,9 +1950,13 @@ public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>,
 					if (i < theValues.length - 1)
 						str.append(", ");
 				}
-				obsIds.add(theTest);
-				obsIds.add(theDefault);
-				str.append("):").append(theDefault);
+				if (theTest != null)
+					obsIds.add(theTest);
+				if (theDefault != null) {
+					obsIds.add(theDefault);
+					str.append("):").append(theDefault);
+				} else
+					str.append(')');
 				theIdentity = Identifiable.baseId(str.toString(), obsIds);
 			}
 			return theIdentity;
@@ -1963,10 +1971,15 @@ public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>,
 		public T get() {
 			for (ObservableValue<? extends T> v : theValues) {
 				T value = v.get();
-				if (theTest.test(value))
+				if (theTest != null) {
+					if (theTest.test(value))
+						return value;
+				} else if (value != null)
 					return value;
 			}
-			return theDefault.get();
+			if (theDefault != null)
+				return theDefault.get();
+			return null;
 		}
 
 		@Override
@@ -2020,7 +2033,10 @@ public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>,
 							}
 							boolean found;
 							try {
-								found = theTest.test(event.getNewValue());
+								if (theTest != null)
+									found = theTest.test(event.getNewValue());
+								else
+									found = event.getNewValue() != null;
 							} catch (RuntimeException e) {
 								e.printStackTrace();
 								found = false;
@@ -2040,7 +2056,7 @@ public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>,
 								} else {
 									T def;
 									try {
-										def = theDefault.get();
+										def = theDefault == null ? null : theDefault.get();
 									} catch (RuntimeException e) {
 										def = null;
 										e.printStackTrace();

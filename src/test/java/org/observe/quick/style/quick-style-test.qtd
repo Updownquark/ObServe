@@ -1,12 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
 <qonfig-def name="Quick-Style-Test" version="0.1" extends:expresso="Expresso-Testing v0.1" extends:style="Quick-Style v0.1">
-	<add-ons>
-		<add-on name="styled-test" requires="test" inherits="with-style-sheet">
-			<child-def name="styled-value" type="styled-value" min="0" max="inf" inherits="named" />
-		</add-on>
-	</add-ons>
-
 	<elements>
 		<element-def name="styled-value" extends="model-value" inherits="styled" abstract="true" />
 
@@ -61,7 +55,7 @@
 	</elements>
 
 	<auto-inheritance>
-		<auto-inherit inherits="styled-test">
+		<auto-inherit inherits="with-style-sheet">
 			<target element="test" />
 		</auto-inherit>
 	</auto-inheritance>
