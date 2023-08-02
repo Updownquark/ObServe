@@ -1118,7 +1118,7 @@
 		<action>assertEquals((byte) 110, doubleToByte)</action>
 
 		<!-- Now test assignments -->
-		<action breakpoint="true">byteToDouble=10</action>
+		<action>byteToDouble=10</action>
 		<action>assertEquals((byte) 10, byteV)</action>
 		<action>shortToDouble=11</action>
 		<action>assertEquals((short) 11, shortV)</action>
@@ -1129,7 +1129,85 @@
 		<action>longToDouble=14</action>
 		<action>assertEquals(14, longV)</action>
 		<action>floatToDouble=15</action>
-		<action>assertEquals(15, floatV)</action>
+		<action>assertEquals(15, floatV, 1E-5f)</action>
+
+		<action>byteToFloat=100</action>
+		<action>assertEquals((byte) 100, byteV)</action>
+		<action>shortToFloat=101</action>
+		<action>assertEquals((short) 101, shortV)</action>
+		<action>charToFloat=102</action>
+		<action>assertEquals((char) 102, charV)</action>
+		<action>intToFloat=103</action>
+		<action>assertEquals(103, intV)</action>
+		<action>longToFloat=104</action>
+		<action>assertEquals(104, longV)</action>
+		<action>doubleToFloat=105</action>
+		<action>assertEquals(105, doubleV, 1E-14)</action>
+
+		<action>byteToLong=10</action>
+		<action>assertEquals((byte) 10, byteV)</action>
+		<action>shortToLong=11</action>
+		<action>assertEquals((short) 11, shortV)</action>
+		<action>charToLong=12</action>
+		<action>assertEquals((char) 12, charV)</action>
+		<action>intToLong=13</action>
+		<action>assertEquals(13, intV)</action>
+		<action>floatToLong=14</action>
+		<action>assertEquals(14, floatV, 1e-5f)</action>
+		<action>doubleToFloat=15</action>
+		<action>assertEquals(15, doubleV, 1e-14)</action>
+
+		<action>byteToInt=100</action>
+		<action>assertEquals((byte) 100, byteV)</action>
+		<action>shortToInt=101</action>
+		<action>assertEquals((short) 101, shortV)</action>
+		<action>charToInt=102</action>
+		<action>assertEquals((char) 102, charV)</action>
+		<action>longToInt=103</action>
+		<action>assertEquals(103, longV)</action>
+		<action>floatToInt=104</action>
+		<action>assertEquals(104, floatV, 1e-5f)</action>
+		<action>doubleToInt=105</action>
+		<action>assertEquals(105, doubleV, 1e-14)</action>
+
+		<action>byteToShort=(short)10</action>
+		<action>assertEquals((byte) 10, byteV)</action>
+		<action>charToShort=(short)11</action>
+		<action>assertEquals((char) 11, charV)</action>
+		<action>intToShort=(short)12</action>
+		<action>assertEquals(12, intV)</action>
+		<action>longToShort=(short)13</action>
+		<action>assertEquals(13, longV)</action>
+		<action>floatToInt=(short)14</action>
+		<action>assertEquals(14, floatV, 1e-5f)</action>
+		<action>doubleToInt=(short)15</action>
+		<action>assertEquals(15, doubleV, 1e-14)</action>
+
+		<action>byteToChar=(char)100</action>
+		<action>assertEquals((byte) 100, byteV)</action>
+		<action>shortToChar=(char) 101</action>
+		<action>assertEquals((short) 101, shortV)</action>
+		<action>intToChar=(char) 102</action>
+		<action>assertEquals(102, intV)</action>
+		<action>longToChar=(char) 103</action>
+		<action>assertEquals(103, longV)</action>
+		<action>floatToChar=(char) 104</action>
+		<action>assertEquals(104, floatV, 1e-5f)</action>
+		<action>doubleToChar=(char) 105</action>
+		<action>assertEquals(105, doubleV, 1e-14)</action>
+
+		<action>charToByte=(byte)10</action>
+		<action>assertEquals((char) 10, charV)</action>
+		<action>shortToByte=(byte) 11</action>
+		<action>assertEquals((short) 11, shortV)</action>
+		<action>intToByte=(byte) 12</action>
+		<action>assertEquals(12, intV)</action>
+		<action>longToByte=(byte) 13</action>
+		<action>assertEquals(13, longV)</action>
+		<action>floatToByte=(byte) 14</action>
+		<action>assertEquals(14, floatV, 1e-5f)</action>
+		<action>doubleToByte=(byte) 15</action>
+		<action>assertEquals(15, doubleV, 1e-14)</action>
 	</test>
 	<test name="stringConcat">
 		<!-- TODO -->
