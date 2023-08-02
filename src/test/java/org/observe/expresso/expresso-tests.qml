@@ -80,9 +80,6 @@
 			<import>org.observe.expresso.ExpressoTests.*</import>
 		</imports>
 		<models>
-			<ext-model name="ext">
-				<value name="actionName" type="String" />
-			</ext-model>
 			<model name="models">
 				<constant name="constant">5</constant>
 				<value name="alsoConstant">5</value>
@@ -118,13 +115,13 @@
 						<map-reverse type="modify-source" target-as="intValue">entity.setInt(intValue-other)</map-reverse>
 					</map-to>
 				</transform>
-	
+
 				<action name="assignInt">test.setInt(anyInt)</action>
 				<action name="assignDbl">test.setDouble(anyDbl)</action>
 				<action name="assignBool">test.setBoolean(anyBool)</action>
 				<action name="assignStr">test.setString(anyStr)</action>
 				<action name="assignInst">test.setInstant(anyInst)</action>
-	
+
 				<value name="error">test.assertEquals(expected)</value>
 	
 				<list name="list" type="int">
@@ -157,39 +154,39 @@
 		<model>
 			<value name="initInt" init="models.anyInt" />
 		</model>
-		<action name="testConstant">assertEquals(ext.actionName, 5, models.constant)</action>
-		<action name="testConstantAssignment" expect-throw="UnsupportedOperationException">models.constant=6</action>
-		<action name="testConstant2">assertEquals(ext.actionName, initInt, models.constant2)</action>
-		<action name="modifyConstantSource">models.anyInt+=50</action>
-		<action name="testConstant3">assertEquals(ext.actionName, initInt, models.constant2)</action>
+		<action>assertEquals(5, models.constant)</action>
+		<action expect-throw="UnsupportedOperationException">models.constant=6</action>
+		<action>assertEquals(initInt, models.constant2)</action>
+		<action>models.anyInt+=50</action>
+		<action>assertEquals(initInt, models.constant2)</action>
 	</test>
 	<test name="simpleValue">
-		<action name="testConstant">assertEquals(ext.actionName, 5, models.alsoConstant)</action>
-		<action name="testConstantAssignment" expect-throw="UnsupportedOperationException">models.alsoConstant=6</action>
-		<action name="testEmptyValue">assertEquals(ext.actionName, null, models.emptyValue)</action>
-		<action name="testAssignEmptyVal">models.emptyValue=5</action>
-		<action name="testEmptyValue2">assertEquals(ext.actionName, 5, models.emptyValue)</action>
-		<action name="testSimpleValue">assertEquals(ext.actionName, 10, models.anyInt)</action>
-		<action name="testAssignSimpleValue">models.anyInt=5</action>
-		<action name="testSimpleValue2">assertEquals(ext.actionName, 5, models.anyInt)</action>
+		<action>assertEquals(5, models.alsoConstant)</action>
+		<action expect-throw="UnsupportedOperationException">models.alsoConstant=6</action>
+		<action>assertEquals(null, models.emptyValue)</action>
+		<action>models.emptyValue=5</action>
+		<action>assertEquals(5, models.emptyValue)</action>
+		<action>assertEquals(10, models.anyInt)</action>
+		<action>models.anyInt=5</action>
+		<action>assertEquals(5, models.anyInt)</action>
 	</test>
 	<test name="derivedValue">
-		<action name="assignTestField">models.test.setInt(30)</action>
-		<action name="checkTestValue">assertEquals(ext.actionName, 30, models.testInt)</action>
-		<action name="assignTestValue" expect-throw="UnsupportedOperationException">models.testInt=20</action>
+		<action>models.test.setInt(30)</action>
+		<action>assertEquals(30, models.testInt)</action>
+		<action expect-throw="UnsupportedOperationException">models.testInt=20</action>
 
-		<action name="checkDerivedValue">assertEquals(ext.actionName, 100, models.derivedInt)</action>
-		<action name="assignDerivedValue">models.derivedInt=150</action>
-		<action name="checkDerivedValue2">assertEquals(ext.actionName, 150, models.derivedInt)</action>
-		<action name="checkSourceValue">assertEquals(ext.actionName, 15, models.anyInt)</action>
+		<action>assertEquals(100, models.derivedInt)</action>
+		<action>models.derivedInt=150</action>
+		<action>assertEquals(150, models.derivedInt)</action>
+		<action>assertEquals(15, models.anyInt)</action>
 	</test>
 	<test name="list">
 		<model>
 			<value name="size" type="int">models.list.observeSize()</value>
 		</model>
-		<action name="checkSize">assertEquals(ext.actionName, 5, size)</action>
-		<action name="addValue">models.list.add(17)</action>
-		<action name="checkSize2">assertEquals(ext.actionName, 6, size)</action>
+		<action>assertEquals(5, size)</action>
+		<action>models.list.add(17)</action>
+		<action>assertEquals(6, size)</action>
 		<!-- TODO Need more -->
 	</test>
 	<test name="binaryOperators">
@@ -204,30 +201,30 @@
 			<watch name="watchAnd">and</watch>
 		</model>
 
-		<action name="checkOr1">assertFalse(or)</action>
-		<action name="checkWatchOr1">assertFalse(watchOr)</action>
-		<action name="checkAnd1">assertFalse(and)</action>
-		<action name="checkWatchAnd1">assertFalse(watchAnd)</action>
-		<action name="setA1">a=true</action>
-		<action name="checkOr2">assertTrue(or)</action>
-		<action name="checkWatchOr2">assertTrue(watchOr)</action>
-		<action name="checkAnd2">assertFalse(and)</action>
-		<action name="checkWatchAnd2">assertFalse(watchAnd)</action>
-		<action name="setB1">b=true</action>
-		<action name="checkOr3">assertTrue(or)</action>
-		<action name="checkWatchOr3">assertTrue(watchOr)</action>
-		<action name="checkAnd3">assertTrue(and)</action>
-		<action name="checkWatchAnd3">assertTrue(watchAnd)</action>
-		<action name="setA2">a=false</action>
-		<action name="checkOr4">assertTrue(or)</action>
-		<action name="checkWatchOr4">assertTrue(watchOr)</action>
-		<action name="checkAnd4">assertFalse(and)</action>
-		<action name="checkWatchAnd4">assertFalse(watchAnd)</action>
-		<action name="setB2">b=false</action>
-		<action name="checkOr3">assertFalse(or)</action>
-		<action name="checkWatchOr3">assertFalse(watchOr)</action>
-		<action name="checkAnd3">assertFalse(and)</action>
-		<action name="checkWatchAnd3">assertFalse(watchAnd)</action>
+		<action>assertFalse(or)</action>
+		<action>assertFalse(watchOr)</action>
+		<action>assertFalse(and)</action>
+		<action>assertFalse(watchAnd)</action>
+		<action>a=true</action>
+		<action>assertTrue(or)</action>
+		<action>assertTrue(watchOr)</action>
+		<action>assertFalse(and)</action>
+		<action>assertFalse(watchAnd)</action>
+		<action>b=true</action>
+		<action>assertTrue(or)</action>
+		<action>assertTrue(watchOr)</action>
+		<action>assertTrue(and)</action>
+		<action>assertTrue(watchAnd)</action>
+		<action>a=false</action>
+		<action>assertTrue(or)</action>
+		<action>assertTrue(watchOr)</action>
+		<action>assertFalse(and)</action>
+		<action>assertFalse(watchAnd)</action>
+		<action>b=false</action>
+		<action>assertFalse(or)</action>
+		<action>assertFalse(watchOr)</action>
+		<action>assertFalse(and)</action>
+		<action>assertFalse(watchAnd)</action>
 
 		<!-- TODO
 			+, -, *, /, %
@@ -246,24 +243,24 @@
 			<value name="initSource" init="models.anyInt" />
 		</model>
 
-		<action name="checkMapped">assertEquals(ext.actionName, models.anyInt+10, mapped)</action>
-		<action name="modifyMapped">mapped+=25</action>
-		<action name="checkSource">assertEquals(ext.actionName, models.anyInt, initSource+25)</action>
-		<action name="checkMapped2">assertEquals(ext.actionName, models.anyInt+10, mapped)</action>
+		<action>assertEquals(models.anyInt+10, mapped)</action>
+		<action>mapped+=25</action>
+		<action>assertEquals(models.anyInt, initSource+25)</action>
+		<action>assertEquals(models.anyInt+10, mapped)</action>
 
-		<action name="assignInitSource">initSource=models.test.getInt()</action>
-		<action name="checkDerived">assertEquals(ext.actionName, initSource, models.derivedIntModifiable)</action>
-		<action name="assignDerived">models.derivedIntModifiable+=500</action>
-		<action name="checkDerivedChanged">assertNotEquals(ext.actionName, initSource, models.derivedIntModifiable)</action>
-		<action name="checkDerived2">assertEquals(ext.actionName, models.derivedIntModifiable, models.test.getInt())</action>
+		<action>initSource=models.test.getInt()</action>
+		<action>assertEquals(initSource, models.derivedIntModifiable)</action>
+		<action>models.derivedIntModifiable+=500</action>
+		<action>assertNotEquals(initSource, models.derivedIntModifiable)</action>
+		<action>assertEquals(models.derivedIntModifiable, models.test.getInt())</action>
 
-		<action name="checkCombined">assertEquals(ext.actionName, models.test.getInt()+models.anyInt, models.combinedInt)</action>
-		<action name="modifyCombinedSource">models.test.setInt(22)</action>
-		<action name="checkCombinedChanged">assertEquals(ext.actionName, models.test.getInt()+models.anyInt, models.combinedInt)</action>
-		<action name="modifyCombinedOther">models.anyInt=42</action>
-		<action name="checkCombinedChanged2">assertEquals(ext.actionName, models.test.getInt()+models.anyInt, models.combinedInt)</action>
-		<action name="modifyCombined">models.combinedInt=-37</action>
-		<action name="checkCombinedChanged3">assertEquals(ext.actionName, models.test.getInt()+models.anyInt, models.combinedInt)</action>
+		<action>assertEquals(models.test.getInt()+models.anyInt, models.combinedInt)</action>
+		<action>models.test.setInt(22)</action>
+		<action>assertEquals(models.test.getInt()+models.anyInt, models.combinedInt)</action>
+		<action>models.anyInt=42</action>
+		<action>assertEquals(models.test.getInt()+models.anyInt, models.combinedInt)</action>
+		<action>models.combinedInt=-37</action>
+		<action>assertEquals(models.test.getInt()+models.anyInt, models.combinedInt)</action>
 		<!-- TODO Test enabled, accept, add, add-accept attributes for map-to -->
 	</test>
 	<test name="sort">
@@ -293,23 +290,23 @@
 			</loop>
 		</model>
 
-		<action name="test">modifyList</action>
+		<action>modifyList</action>
 	</test>
 	<test name="assignInt">
-		<action name="setExpectInt">models.expected.setInt(models.anyInt)</action>
-		<action name="checkNotEqual">assertNotEquals(ext.actionName, models.expected, models.test)</action>
-		<action name="checkError">assertNotNull(ext.actionName, models.error)</action>
-		<action name="assignInt">models.assignInt</action>
-		<action name="checkEqual">assertEquals(ext.actionName, models.expected, models.test)</action>
-		<action name="checkError2">assertNull(ext.actionName, models.error)</action>
+		<action>models.expected.setInt(models.anyInt)</action>
+		<action>assertNotEquals(models.expected, models.test)</action>
+		<action>assertNotNull(models.error)</action>
+		<action>models.assignInt</action>
+		<action>assertEquals(models.expected, models.test)</action>
+		<action>assertNull(models.error)</action>
 	</test>
 	<test name="assignInstant">
-		<action name="setExpectInst">models.expected.setInstant(models.anyInst)</action>
-		<action name="checkNotEqual">assertNotEquals(ext.actionName, models.expected, models.test)</action>
-		<action name="checkError">assertNotNull(ext.actionName, models.error)</action>
-		<action name="assignInst">models.assignInst</action>
-		<action name="checkEqual">assertEquals(ext.actionName, models.expected, models.test)</action>
-		<action name="checkError2">assertNull(ext.actionName, models.error)</action>
+		<action>models.expected.setInstant(models.anyInst)</action>
+		<action>assertNotEquals(models.expected, models.test)</action>
+		<action>assertNotNull(models.error)</action>
+		<action>models.assignInst</action>
+		<action>assertEquals(models.expected, models.test)</action>
+		<action>assertNull(models.error)</action>
 	</test>
 	<test name="hook">
 		<model>
@@ -317,13 +314,13 @@
 			<hook name="hook" on="models.anyInt">changeCount++</hook>
 		</model>
 
-		<action name="checkChangeCount0">assertEquals(ext.actionName, 0, changeCount)</action>
-		<action name="change1">models.anyInt++</action>
-		<action name="checkChangeCount1">assertEquals(ext.actionName, 1, changeCount)</action>
-		<action name="change2">models.anyInt--</action>
-		<action name="checkChangeCount2">assertEquals(ext.actionName, 2, changeCount)</action>
-		<action name="change3">models.anyInt=1_571_823</action>
-		<action name="checkChangeCount3">assertEquals(ext.actionName, 3, changeCount)</action>
+		<action>assertEquals(0, changeCount)</action>
+		<action>models.anyInt++</action>
+		<action>assertEquals(1, changeCount)</action>
+		<action>models.anyInt--</action>
+		<action>assertEquals(2, changeCount)</action>
+		<action>models.anyInt=1_571_823</action>
+		<action>assertEquals(3, changeCount)</action>
 	</test>
 	<test name="staticInternalState">
 		<model>
@@ -344,20 +341,20 @@
 		</model>
 
 		<!-- In code, the internalState is always initialized to 15 -->
-		<action name="checkState1">assertEquals(ext.actionName, 25, struct1dv)</action>
-		<action name="checkState2">assertEquals(ext.actionName, 5, struct2dv)</action>
-		<action name="checkState3">assertEquals(ext.actionName, 150, struct3dv)</action>
-		<action name="checkState4">assertEquals(ext.actionName, 5, struct4dv)</action>
+		<action>assertEquals(25, struct1dv)</action>
+		<action>assertEquals(5, struct2dv)</action>
+		<action>assertEquals(150, struct3dv)</action>
+		<action>assertEquals(5, struct4dv)</action>
 
-		<action name="modState1">struct1iv=1</action>
-		<action name="modState2">struct2iv=2</action>
-		<action name="modState3">struct3iv=3</action>
-		<action name="modState4">struct4iv=4</action>
+		<action>struct1iv=1</action>
+		<action>struct2iv=2</action>
+		<action>struct3iv=3</action>
+		<action>struct4iv=4</action>
 
-		<action name="checkState1_2">assertEquals(ext.actionName, 11, struct1dv)</action>
-		<action name="checkState2_2">assertEquals(ext.actionName, -8, struct2dv)</action>
-		<action name="checkState3_2">assertEquals(ext.actionName, 30, struct3dv)</action>
-		<action name="checkState4_2">assertEquals(ext.actionName, 4, struct4dv)</action>
+		<action>assertEquals(11, struct1dv)</action>
+		<action>assertEquals(-8, struct2dv)</action>
+		<action>assertEquals(30, struct3dv)</action>
+		<action>assertEquals(4, struct4dv)</action>
 	</test>
 	<test name="dynamicTypeInternalState">
 		<!-- This test checks the functionality of dynamically-typed internal values specified by element-models in toolkit metadata -->
@@ -383,24 +380,24 @@
 			<value name="struct4dv" type="String">(String) struct4.getDerivedState()</value>
 		</model>
 
-		<action name="setInitInt">models.anyInt=10</action>
-		<action name="setInitDbl">models.anyDbl=15</action>
-		<action name="setInitStr">models.anyStr="initStr"</action>
+		<action>models.anyInt=10</action>
+		<action>models.anyDbl=15</action>
+		<action>models.anyStr="initStr"</action>
 
-		<action name="checkState1">assertEquals(ext.actionName, 20, struct1dv)</action>
-		<action name="checkState2">assertEquals(ext.actionName, 1.5, struct2dv, 1E-10)</action>
-		<action name="checkState3">assertEquals(ext.actionName, false, struct3dv)</action>
-		<action name="checkState4">assertEquals(ext.actionName, "initStr-derived", struct4dv)</action>
+		<action>assertEquals(20, struct1dv)</action>
+		<action>assertEquals(1.5, struct2dv, 1E-10)</action>
+		<action>assertEquals(false, struct3dv)</action>
+		<action>assertEquals("initStr-derived", struct4dv)</action>
 
-		<action name="modState1">struct1iv=25</action>
-		<action name="modState2">struct2iv=-9.75</action>
-		<action name="modState3">struct3iv=false</action>
-		<action name="modState4">struct4iv="changedStr"</action>
+		<action>struct1iv=25</action>
+		<action>struct2iv=-9.75</action>
+		<action>struct3iv=false</action>
+		<action>struct4iv="changedStr"</action>
 
-		<action name="checkState1_2">assertEquals(ext.actionName, 35, struct1dv)</action>
-		<action name="checkState2_2">assertEquals(ext.actionName, -0.975, struct2dv, 1E-10)</action>
-		<action name="checkState3_2">assertEquals(ext.actionName, true, struct3dv)</action>
-		<action name="checkState4_2">assertEquals(ext.actionName, "changedStr-derived", struct4dv)</action>
+		<action>assertEquals(35, struct1dv)</action>
+		<action>assertEquals(-0.975, struct2dv, 1E-10)</action>
+		<action>assertEquals(true, struct3dv)</action>
+		<action>assertEquals("changedStr-derived", struct4dv)</action>
 	</test>
 	<test name="dynamicTypeInternalState2">
 		<!-- This test checks the functionality of dynamically-typed internal values specified by element-models in toolkit metadata -->
@@ -426,23 +423,23 @@
 			<value name="struct4dv" type="String">(String) struct4.getDerivedState()</value>
 		</model>
 
-		<action name="setInitInt">models.anyInt=10</action>
-		<action name="setInitDbl">models.anyDbl=15</action>
-		<action name="setInitStr">models.anyStr="initStr"</action>
+		<action>models.anyInt=10</action>
+		<action>models.anyDbl=15</action>
+		<action>models.anyStr="initStr"</action>
 
-		<action name="checkState1">assertEquals(ext.actionName, 20, struct1dv)</action>
-		<action name="checkState2">assertEquals(ext.actionName, 1.5, struct2dv, 1E-10)</action>
-		<action name="checkState3">assertEquals(ext.actionName, false, struct3dv)</action>
-		<action name="checkState4">assertEquals(ext.actionName, "initStr-derived", struct4dv)</action>
+		<action>assertEquals(20, struct1dv)</action>
+		<action>assertEquals(1.5, struct2dv, 1E-10)</action>
+		<action>assertEquals(false, struct3dv)</action>
+		<action>assertEquals("initStr-derived", struct4dv)</action>
 
-		<action name="modState1">struct1iv=25</action>
-		<action name="modState2">struct2iv=-9.75</action>
-		<action name="modState3">struct3iv=false</action>
-		<action name="modState4">struct4iv="changedStr"</action>
+		<action>struct1iv=25</action>
+		<action>struct2iv=-9.75</action>
+		<action>struct3iv=false</action>
+		<action>struct4iv="changedStr"</action>
 
-		<action name="checkState1_2">assertEquals(ext.actionName, 35, struct1dv)</action>
-		<action name="checkState2_2">assertEquals(ext.actionName, -0.975, struct2dv, 1E-10)</action>
-		<action name="checkState3_2">assertEquals(ext.actionName, true, struct3dv)</action>
-		<action name="checkState4_2">assertEquals(ext.actionName, "changedStr-derived", struct4dv)</action>
+		<action>assertEquals(35, struct1dv)</action>
+		<action>assertEquals(-0.975, struct2dv, 1E-10)</action>
+		<action>assertEquals(true, struct3dv)</action>
+		<action>assertEquals("changedStr-derived", struct4dv)</action>
 	</test>
 </testing>

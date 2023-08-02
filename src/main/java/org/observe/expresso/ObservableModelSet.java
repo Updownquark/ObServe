@@ -2538,11 +2538,11 @@ public interface ObservableModelSet extends Identifiable {
 			@Override
 			public ModelSetInstance build() throws ModelInstantiationException {
 				StringBuilder error = null;
-				for (Map.Entry<ModelComponentId, ? extends InterpretedModelSet> inh : theMSI.getModel().getInheritance().entrySet()) {
-					if (!theInheritance.containsKey(inh.getKey())) {
+				for (ModelComponentId inh : theMSI.getModel().getInheritance().keySet()) {
+					if (!theInheritance.containsKey(inh)) {
 						if (error == null)
 							error = new StringBuilder();
-						error.append("Inherited model " + inh.getKey() + " not satisfied");
+						error.append("Inherited model " + inh + " not satisfied");
 					}
 				}
 				if (error != null)

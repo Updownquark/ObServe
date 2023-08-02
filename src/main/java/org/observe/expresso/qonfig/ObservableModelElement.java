@@ -17,6 +17,8 @@ import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceabilit
 import org.observe.expresso.qonfig.ModelValueElement.CompiledSynth;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.CollectionUtils;
+import org.qommons.collect.CollectionUtils.ElementSyncAction;
+import org.qommons.collect.CollectionUtils.ElementSyncInput;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
@@ -122,7 +124,9 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 		}
 
 		private ModelValueElement.Interpreted<?, ?, ?> findModelValue(InterpretedValueSynth<?, ?> value) {
-			if (value instanceof ModelValueElement.InterpretedSynth)
+			if (value == null)
+				return null;
+			else if (value instanceof ModelValueElement.InterpretedSynth)
 				return (ModelValueElement.Interpreted<?, ?, ?>) value;
 			List<? extends InterpretedValueSynth<?, ?>> components = value.getComponents();
 			if (components.size() != 1)
@@ -151,23 +155,41 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 
 		CollectionUtils.synchronize(theValues, myInterpreted.getValues(), //
 			(inst, interp) -> inst.getIdentity() == interp.getIdentity())//
-		.<ModelInstantiationException> simpleE(interp -> interp.create(ObservableModelElement.this, myModels))//
-		.rightOrder()//
-		.onRightX(element -> {
-			try {
-				element.getLeftValue().update(element.getRightValue(), myModels);
-			} catch (RuntimeException | Error e) {
-				element.getRightValue().reporting().error(e.getMessage() == null ? e.toString() : e.getMessage(), e);
-			}
-		})//
-		.onCommonX(element -> {
-			try {
-				element.getLeftValue().update(element.getRightValue(), myModels);
-			} catch (RuntimeException | Error e) {
-				element.getRightValue().reporting().error(e.getMessage() == null ? e.toString() : e.getMessage(), e);
-			}
-		})//
-		.adjust();
+		.adjust(
+			new CollectionUtils.CollectionSynchronizerE<ModelValueElement<?, ?>, ModelValueElement.Interpreted<?, ?, ?>, ModelInstantiationException>() {
+				@Override
+				public boolean getOrder(ElementSyncInput<ModelValueElement<?, ?>, ModelValueElement.Interpreted<?, ?, ?>> element)
+					throws ModelInstantiationException {
+					return true;
+				}
+
+				@Override
+				public ElementSyncAction leftOnly(
+					ElementSyncInput<ModelValueElement<?, ?>, ModelValueElement.Interpreted<?, ?, ?>> element)
+						throws ModelInstantiationException {
+					return element.remove();
+				}
+
+				@Override
+				public ElementSyncAction rightOnly(
+					ElementSyncInput<ModelValueElement<?, ?>, ModelValueElement.Interpreted<?, ?, ?>> element)
+						throws ModelInstantiationException {
+					ModelValueElement<?, ?> instance = element.getRightValue().create(ObservableModelElement.this, myModels);
+					if (instance != null) {
+						instance.update(element.getRightValue(), myModels);
+						return element.useValue(instance);
+					} else
+						return element.remove();
+				}
+
+				@Override
+				public ElementSyncAction common(
+					ElementSyncInput<ModelValueElement<?, ?>, ModelValueElement.Interpreted<?, ?, ?>> element)
+						throws ModelInstantiationException {
+					element.getLeftValue().update(element.getRightValue(), myModels);
+					return element.preserve();
+				}
+			}, CollectionUtils.AdjustmentOrder.RightOrder);
 	}
 
 	public static class ModelSetElement extends ExElement.Abstract {

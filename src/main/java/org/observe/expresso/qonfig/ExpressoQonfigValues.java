@@ -102,6 +102,11 @@ public class ExpressoQonfigValues {
 		}
 
 		@Override
+		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
+			super.doUpdate(session.asElement(session.getFocusType().getSuperElement()));
+		}
+
+		@Override
 		public Interpreted<?> interpret() {
 			return new Interpreted<>(this);
 		}

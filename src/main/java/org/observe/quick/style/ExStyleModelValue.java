@@ -31,7 +31,7 @@ public class ExStyleModelValue extends ExElementModelValue {
 		public void update(ExpressoQIS session, ExElement.Def<? extends ExtModelValueElement<?, ?>> element)
 			throws QonfigInterpretationException {
 			element.withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
-			super.update(session, element);
+			super.update(session.asElement("element-model-value"), element);
 			thePriority = Integer.parseInt(session.getAttributeText("priority"));
 		}
 

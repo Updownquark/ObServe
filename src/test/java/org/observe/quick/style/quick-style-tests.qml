@@ -30,54 +30,54 @@
 				<style attr="s1" condition="a &amp;&amp; d">models.m1 + models.m3</style>
 			</a>
 		</model>
-		<action name="assignA_1">models.m0=true</action>
-		<action name="checkS0_1">assertEquals(ext.actionName, models.m0, a0.s0)</action>
+		<action>models.m0=true</action>
+		<action>assertEquals(models.m0, a0.s0)</action>
 
 		<!-- Default s1 condition, c=models.m1=0, so s1 should be 0 -->
-		<action name="checkS1_1">assertEquals(ext.actionName, 0, a0.s1)</action>
+		<action>assertEquals(0, a0.s1)</action>
 
 		<!-- Change the value of the active -->
-		<action name="assignM1_1">models.m1=25</action>
-		<action name="checkS1_1">assertEquals(ext.actionName, 25, a0.s1)</action>
+		<action>models.m1=25</action>
+		<action>assertEquals(25, a0.s1)</action>
 
 		<!-- Revert to default condition -->
-		<action name="assignA_2">models.m0=false</action>
-		<action name="checkS1_1">assertEquals(ext.actionName, 250, a0.s1)</action>
+		<action>models.m0=false</action>
+		<action>assertEquals(250, a0.s1)</action>
 
 		<!-- Verify no change for value with unmet condition -->
-		<action name="assignM3">models.m3=50</action>
-		<action name="checkS1_2">assertEquals(ext.actionName, 250, a0.s1)</action>
+		<action>models.m3=50</action>
+		<action>assertEquals(250, a0.s1)</action>
 
 		<!-- Change to b condition -->
-		<action name="assignB_1">models.m2=true</action>
-		<action name="checkS1_3">assertEquals(ext.actionName, 50, a0.s1)</action>
+		<action>models.m2=true</action>
+		<action>assertEquals(50, a0.s1)</action>
 
 		<!-- b=models.m2 has higher priority than a=models.m0, so making 'a' true won't affect s1 -->
-		<action name="assignA_3">models.m0=true</action>
-		<action name="checkS1_3">assertEquals(ext.actionName, 50, a0.s1)</action>
+		<action>models.m0=true</action>
+		<action>assertEquals(50, a0.s1)</action>
 
 		<!-- a && d has higher priority than b though -->
-		<action name="assignD_1">models.m4=true</action>
-		<action name="checkS1_3">assertEquals(ext.actionName, 75, a0.s1)</action>
+		<action>models.m4=true</action>
+		<action>assertEquals(75, a0.s1)</action>
 		<!-- Back to b condition -->
-		<action name="assignD_2">models.m4=false</action>
-		<action name="checkS1_3">assertEquals(ext.actionName, 50, a0.s1)</action>
+		<action>models.m4=false</action>
+		<action>assertEquals(50, a0.s1)</action>
 
 		<!-- Verify no change for value with unmet condition -->
-		<action name="assignM1_2">models.m1=300</action>
-		<action name="checkS1_4">assertEquals(ext.actionName, 50, a0.s1)</action>
+		<action>models.m1=300</action>
+		<action>assertEquals(50, a0.s1)</action>
 
 		<!-- Back to a condition -->
-		<action name="assignB_2">models.m2=false</action>
-		<action name="checkS1_4">assertEquals(ext.actionName, 300, a0.s1)</action>
+		<action>models.m2=false</action>
+		<action>assertEquals(300, a0.s1)</action>
 
 		<!-- Revert to default condition -->
-		<action name="assignA_4">models.m0=false</action>
-		<action name="checkS1_5">assertEquals(ext.actionName, 3000, a0.s1)</action>
+		<action>models.m0=false</action>
+		<action>assertEquals(3000, a0.s1)</action>
 
 		<!-- No change, needs both a and d -->
-		<action name="assignD_3">models.m4=true</action>
-		<action name="checkS1_5">assertEquals(ext.actionName, 3000, a0.s1)</action>
+		<action>models.m4=true</action>
+		<action>assertEquals(3000, a0.s1)</action>
 	</test>
 	<test name="basicStyleWithWatch">
 		<!-- Basic styles that depend on model values with various conditions with varying priority and complexity -->
@@ -92,54 +92,54 @@
 			<watch name="w_a0_s0">a0.s0</watch>
 			<watch name="w_a0_s1">a0.s1</watch>
 		</model>
-		<action name="assignA_1">models.m0=true</action>
-		<action name="checkWS0_1">assertEquals(ext.actionName, models.m0, w_a0_s0)</action>
+		<action>models.m0=true</action>
+		<action>assertEquals(models.m0, w_a0_s0)</action>
 
 		<!-- Default s1 condition, c=models.m1=0, so s1 should be 0 -->
-		<action name="checkWS0_1">assertEquals(ext.actionName, 0, w_a0_s1)</action>
+		<action>assertEquals(0, w_a0_s1)</action>
 
 		<!-- Change the value of the active -->
-		<action name="assignM1_1">models.m1=25</action>
-		<action name="checkWS0_1">assertEquals(ext.actionName, 25, w_a0_s1)</action>
+		<action>models.m1=25</action>
+		<action>assertEquals(25, w_a0_s1)</action>
 
 		<!-- Revert to default condition -->
-		<action name="assignA_2">models.m0=false</action>
-		<action name="checkWS0_1">assertEquals(ext.actionName, 250, w_a0_s1)</action>
+		<action>models.m0=false</action>
+		<action>assertEquals(250, w_a0_s1)</action>
 
 		<!-- Verify no change for value with unmet condition -->
-		<action name="assignM3">models.m3=50</action>
-		<action name="checkWS0_2">assertEquals(ext.actionName, 250, w_a0_s1)</action>
+		<action>models.m3=50</action>
+		<action>assertEquals(250, w_a0_s1)</action>
 
 		<!-- Change to b condition -->
-		<action name="assignB_1">models.m2=true</action>
-		<action name="checkWS0_3">assertEquals(ext.actionName, 50, w_a0_s1)</action>
+		<action>models.m2=true</action>
+		<action>assertEquals(50, w_a0_s1)</action>
 
 		<!-- b=models.m2 has higher priority than a=models.m0, so making 'a' true won't affect s1 -->
-		<action name="assignA_3">models.m0=true</action>
-		<action name="checkWS0_3">assertEquals(ext.actionName, 50, w_a0_s1)</action>
+		<action>models.m0=true</action>
+		<action>assertEquals(50, w_a0_s1)</action>
 
 		<!-- a && d has higher priority than b though -->
-		<action name="assignD_1">models.m4=true</action>
-		<action name="checkWS0_3">assertEquals(ext.actionName, 75, w_a0_s1)</action>
+		<action>models.m4=true</action>
+		<action>assertEquals(75, w_a0_s1)</action>
 		<!-- Back to b condition -->
-		<action name="assignD_2">models.m4=false</action>
-		<action name="checkWS0_3">assertEquals(ext.actionName, 50, w_a0_s1)</action>
+		<action>models.m4=false</action>
+		<action>assertEquals(50, w_a0_s1)</action>
 
 		<!-- Verify no change for value with unmet condition -->
-		<action name="assignM1_2">models.m1=300</action>
-		<action name="checkWS0_4">assertEquals(ext.actionName, 50, w_a0_s1)</action>
+		<action>models.m1=300</action>
+		<action>assertEquals(50, w_a0_s1)</action>
 
 		<!-- Back to a condition -->
-		<action name="assignB_2">models.m2=false</action>
-		<action name="checkWS0_4">assertEquals(ext.actionName, 300, w_a0_s1)</action>
+		<action>models.m2=false</action>
+		<action>assertEquals(300, w_a0_s1)</action>
 
 		<!-- Revert to default condition -->
-		<action name="assignA_4">models.m0=false</action>
-		<action name="checkWS0_5">assertEquals(ext.actionName, 3000, w_a0_s1)</action>
+		<action>models.m0=false</action>
+		<action>assertEquals(3000, w_a0_s1)</action>
 
 		<!-- No change, needs both a and d -->
-		<action name="assignD_3">models.m4=true</action>
-		<action name="checkWS0_5">assertEquals(ext.actionName, 3000, w_a0_s1)</action>
+		<action>models.m4=true</action>
+		<action>assertEquals(3000, w_a0_s1)</action>
 	</test>
 	<test name="localStyleSheet">
 		<model>
@@ -211,42 +211,42 @@
 			</style>
 		</style-sheet>
 		
-		<action name="initM1">models.m1=497683</action>
-		<action name="initM3">models.m3=-42</action>
+		<action>models.m1=497683</action>
+		<action>models.m3=-42</action>
 		
 		<!-- a, d, and e are false -->
-		<action name="init1">assertEquals(ext.actionName, true, a0.s0)</action>
-		<action name="init2">assertEquals(ext.actionName, 0, a0.s1)</action>
-		<action name="init3">assertEquals(ext.actionName, null, b0.s3)</action>
-		<action name="init4">assertEquals(ext.actionName, models.m1, b0.s4)</action>
+		<action>assertEquals(true, a0.s0)</action>
+		<action>assertEquals(0, a0.s1)</action>
+		<action>assertEquals(null, b0.s3)</action>
+		<action>assertEquals(models.m1, b0.s4)</action>
 
-		<action name="assignB_1">a0.b=true</action>
-		<action name="assignC_1">a0.c=250</action>
-		<action name="checkA0S0_1">assertEquals(ext.actionName, false, a0.s0)</action>
-		<action name="checkA0S1_1">assertEquals(ext.actionName, 25_000, a0.s1)</action>
+		<action>a0.b=true</action>
+		<action>a0.c=250</action>
+		<action>assertEquals(false, a0.s0)</action>
+		<action>assertEquals(25_000, a0.s1)</action>
 
-		<action name="assignB0E_1">b0.e=true</action>
-		<action name="checkB0S3_1">assertEquals(ext.actionName, models.m3, b0.s3)</action>
-		<action name="checkB0S4_1">assertEquals(ext.actionName, null, b0.s4)</action>
+		<action>b0.e=true</action>
+		<action>assertEquals(models.m3, b0.s3)</action>
+		<action>assertEquals(null, b0.s4)</action>
 
-		<action name="assignB0F_0">b0.f=18</action>
-		<action name="assignB0ChC_0">b0.a.get(0).c=179</action>
-		<action name="checkBChild_0">assertEquals(ext.actionName, 18, b0.a.get(0).s1)</action>
-		<action name="assignB0E_1">b0.e=false</action>
-		<action name="checkBChild_0">assertEquals(ext.actionName, 179, b0.a.get(0).s1)</action>
+		<action>b0.f=18</action>
+		<action>b0.a.get(0).c=179</action>
+		<action>assertEquals(18, b0.a.get(0).s1)</action>
+		<action>b0.e=false</action>
+		<action>assertEquals(179, b0.a.get(0).s1)</action>
 		<!-- TODO Include local styles also-->
 	</test>
 	<test name="importedStyleSheet">
 		<!-- TODO Test styles that are prescribed by a style sheet imported from outside this document -->
 		<model>
 		</model>
-		<action name="blank">models.m0=true</action>
+		<action>models.m0=true</action>
 	</test>
 	<test name="inheritedStyle">
 		<!-- TODO Test inheritance of styles from parent elements -->
 		<model>
 		</model>
-		<action name="blank">models.m0=true</action>
+		<action>models.m0=true</action>
 	</test>
 	<test name="withStyleSets">
 		<model>
@@ -271,26 +271,26 @@
 			</style-set>
 		</style-sheet>
 
-		<action name="init10">assertEquals(0, a1.s1)</action>
-		<action name="applyStyleSet10">models.m0=true</action>
-		<action name="test11">assertEquals(217, a1.s1)</action>
-		<action name="applyCondition10">models.m2=true</action>
-		<action name="test12">assertEquals(856, a1.s1)</action>
-		<action name="applyStyleSet11">models.m0=false</action>
-		<action name="test13">assertEquals(0, a1.s1)</action>
+		<action>assertEquals(0, a1.s1)</action>
+		<action>models.m0=true</action>
+		<action>assertEquals(217, a1.s1)</action>
+		<action>models.m2=true</action>
+		<action>assertEquals(856, a1.s1)</action>
+		<action>models.m0=false</action>
+		<action>assertEquals(0, a1.s1)</action>
 
-		<action name="reset0">models.m2=false</action>
+		<action>models.m2=false</action>
 
-		<action name="init20">assertEquals(0, a2.s1)</action>
-		<action name="applyStyleSet20">models.m0=true</action>
-		<action name="test21">assertEquals(217, a2.s1)</action>
-		<action name="applyCondition20">models.m2=true</action>
-		<action name="test22">assertEquals(856, a2.s1)</action>
-		<action name="applyStyleSet21">models.m0=false</action>
-		<action name="test23">assertEquals(0, a2.s1)</action>
+		<action>assertEquals(0, a2.s1)</action>
+		<action>models.m0=true</action>
+		<action>assertEquals(217, a2.s1)</action>
+		<action>models.m2=true</action>
+		<action>assertEquals(856, a2.s1)</action>
+		<action>models.m0=false</action>
+		<action>assertEquals(0, a2.s1)</action>
 
-		<action name="init30">assertEquals(false, a2.s0)</action>
-		<action name="applyStyleSet30">models.m0=true</action>
-		<action name="init30">assertEquals(true, a2.s0)</action>
+		<action>assertEquals(false, a2.s0)</action>
+		<action>models.m0=true</action>
+		<action>assertEquals(true, a2.s0)</action>
 	</test>
 </testing>

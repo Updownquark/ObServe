@@ -104,14 +104,14 @@ public class QuickDocument extends ExElement.Abstract {
 		public void updateDocument(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 			if (getDefinition().getHead().getClassViewElement() != null)
 				env = env.with(getDefinition().getHead().getClassViewElement().configureClassView(env.getClassView().copy()).build());
+			env = env.with(env.getClassView().copy()//
+				.withWildcardImport(MouseCursor.StandardCursors.class.getName())//
+				.build());
 			update(env);
 		}
 
 		@Override
 		protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-			env = env.with(env.getClassView().copy()//
-				.withWildcardImport(MouseCursor.StandardCursors.class.getName())//
-				.build());
 			super.doUpdate(env);
 			if (getDefinition().getHead() == null) {
 				theHead = null;

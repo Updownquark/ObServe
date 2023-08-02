@@ -110,8 +110,7 @@ public class ExpressoTesting extends ExElement.Def.Abstract<ExElement> {
 
 		public void execute(SettableValue<String> actionName) {
 			for (TestAction.TestActionElement<?> action : theActions) {
-				actionName.set(action.getName(), null);
-				System.out.print(action.getName());
+				System.out.print(action.reporting().getFileLocation().getPosition(0).printPosition());
 				System.out.flush();
 				System.out.println(":");
 				ObservableAction<?> obsAction = action.getAction();
@@ -144,17 +143,12 @@ public class ExpressoTesting extends ExElement.Def.Abstract<ExElement> {
 	}
 
 	/** An action to execute for a test */
-	public static class TestAction extends ExpressoQonfigValues.Action implements Named {
+	public static class TestAction extends ExpressoQonfigValues.Action {
 		private String theExpectedException;
 		private boolean isBreakpoint;
 
 		public TestAction(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
 			super(parent, type);
-		}
-
-		@Override
-		public String getName() {
-			return getAddOn(ExNamed.Def.class).getName();
 		}
 
 		/** @return The name of the exception type that is expected to be thrown by this test action */
@@ -202,10 +196,6 @@ public class ExpressoTesting extends ExElement.Def.Abstract<ExElement> {
 				return (TestAction) super.getDefinition();
 			}
 
-			public String getName() {
-				return getDefinition().getName();
-			}
-
 			@Override
 			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 				super.doUpdate(env);
@@ -240,19 +230,13 @@ public class ExpressoTesting extends ExElement.Def.Abstract<ExElement> {
 			}
 		}
 
-		static class TestActionElement<T> extends ExElement.Abstract implements Named {
+		static class TestActionElement<T> extends ExElement.Abstract {
 			private ObservableAction<T> theAction;
-			private String theName;
 			private Class<? extends Throwable> theExpectedException;
 			private boolean isBreakpoint;
 
 			public TestActionElement(TestAction.Interpreted<T> interpreted, ExElement parent) {
 				super(interpreted, parent);
-			}
-
-			@Override
-			public String getName() {
-				return theName;
 			}
 
 			public ObservableAction<T> getAction() {
@@ -272,7 +256,6 @@ public class ExpressoTesting extends ExElement.Def.Abstract<ExElement> {
 				super.updateModel(interpreted, myModels);
 				TestAction.Interpreted<T> myInterpreted = (TestAction.Interpreted<T>) interpreted;
 				theAction = myInterpreted.get(myModels);
-				theName = myInterpreted.getName();
 				theExpectedException = myInterpreted.getExpectedException();
 				isBreakpoint = myInterpreted.isBreakpoint();
 			}
@@ -340,6 +323,8 @@ public class ExpressoTesting extends ExElement.Def.Abstract<ExElement> {
 			throw new IllegalStateException("Could not assemble external model", e);
 		}
 		Expresso head = theHead.interpret(null);
+		if (theHead.getClassViewElement() != null)
+			env = env.with(theHead.getClassViewElement().configureClassView(env.getClassView().copy()).build());
 		head.updateExpresso(env);
 		env = head.getExpressoEnv(); // Use all the models and imports from the head section
 		System.out.println("complete");

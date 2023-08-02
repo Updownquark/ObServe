@@ -140,7 +140,7 @@ public class TestInterpretation implements QonfigInterpretation {
 
 			@Override
 			public StyledTestElement<T> create(ExElement parent, ModelSetInstance models) throws ModelInstantiationException {
-				throw new IllegalStateException();
+				return null;
 			}
 		}
 

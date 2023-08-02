@@ -195,8 +195,22 @@ public class ClassView implements TypeParser {
 		return theParser.removeTypeRetriever(typeRetriever);
 	}
 
+	/** @return A builder containing all of this class view's imports */
 	public Builder copy() {
 		return new Builder(this);
+	}
+
+	@Override
+	public String toString() {
+		if (theImportedTypes.isEmpty() && theWildcardImports.isEmpty())
+			return "<imports />";
+		StringBuilder str = new StringBuilder("<imports>");
+		for (String imp : theImportedTypes.keySet())
+			str.append("\n\t<import>").append(imp).append("</import>");
+		for (String imp : theWildcardImports)
+			str.append("\n\t<import>").append(imp).append(".*</import>");
+		str.append("\n</imports>");
+		return str.toString();
 	}
 
 	/** @return A builder to create a new class view */

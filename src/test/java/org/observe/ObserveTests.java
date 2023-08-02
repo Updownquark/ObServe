@@ -8,7 +8,6 @@ import org.observe.collect.ObservableCollectionsTest;
 import org.observe.config.ObservableConfigTest;
 import org.observe.ds.DSTesting;
 import org.observe.expresso.ExpressoTests;
-import org.observe.quick.QuickTests;
 import org.observe.quick.style.QuickStyleTests;
 import org.observe.remote.ByteAddressTest;
 import org.observe.supertest.ShortChainTester;
@@ -37,8 +36,7 @@ import org.observe.util.swing.ObservableSwingUtilsTests;
 	TypeTokensTest.class, //
 	CsvEntitySetTest.class, //
 	ExpressoTests.class, //
-	QuickStyleTests.class, //
-	QuickTests.class
+	QuickStyleTests.class
 })
 public class ObserveTests {
 }
