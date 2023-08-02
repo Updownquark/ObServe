@@ -16,6 +16,7 @@ import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
 
 import org.qommons.ClassMap;
+import org.qommons.LambdaUtils;
 import org.qommons.QommonsUtils;
 import org.qommons.StringUtils;
 
@@ -731,8 +732,6 @@ public class TypeTokens implements TypeParser {
 		return (T) value;
 	}
 
-	private final ThreadLocal<Set<TypeVariable<?>>> ASSIGNABLE_VARIABLE_STACK = ThreadLocal.withInitial(HashSet::new);
-
 	/**
 	 * Similar to {@link TypeToken#isSupertypeOf(TypeToken)}, but this method allows for assignments where conversion is required, e.g.
 	 * auto-(un)boxing and primitive number type conversion.
@@ -742,13 +741,13 @@ public class TypeTokens implements TypeParser {
 	 * @return Whether the given value type can be assigned to the given variable type
 	 */
 	public boolean isAssignable(TypeToken<?> left, TypeToken<?> right) {
-		if (left.getType() instanceof WildcardType && ((WildcardType) left.getType()).getLowerBounds().length == 0) {
-			// As far as I can tell, Google seems to have broken this.
-			// TypeToken.isAssignableFrom(TypeToken) used to return true for this case,
-			// but now TypeToken.isSuperTypeOf(TypeToken)returns false, which seems clearly wrong.
+		return isAssignable(left, right, new LinkedHashSet<>());
+	}
+
+	private boolean isAssignable(TypeToken<?> left, TypeToken<?> right, Set<TypeToken<?>> stack) {
+		if (!stack.add(left))
 			return true;
-		}
-		if (left.isSupertypeOf(right))
+		if (left.isSupertypeOf(wrap(right)))
 			return true;
 		Class<?> rawRight = unwrap(getRawType(right));
 		Class<?> rawLeft = unwrap(getRawType(left));
@@ -760,6 +759,8 @@ public class TypeTokens implements TypeParser {
 			else if (rawRight == boolean.class)
 				return false;
 			else if (rawLeft == Number.class)
+				return true;
+			else if (rawLeft == Comparable.class)
 				return true;
 			else if (!rawLeft.isPrimitive())
 				return false;
@@ -774,29 +775,30 @@ public class TypeTokens implements TypeParser {
 			else if (rawRight == byte.class)
 				return rawLeft == short.class || rawLeft == char.class;
 		}
-
 		// Neither is primitive
+
 		if (left.getType() instanceof Class)
 			return false; // Simple type, not compatible
 		else if (left.getType() instanceof TypeVariable) {
-			if (!ASSIGNABLE_VARIABLE_STACK.get().add((TypeVariable<?>) left.getType()))
-				return true; // Recursive, already checked
 			for (Type bound : ((TypeVariable<?>) left.getType()).getBounds()) {
 				TypeToken<?> boundToken = left.resolveType(bound);
-				if (!isAssignable(boundToken, right))
+				if (!isAssignable(boundToken, right, stack))
 					return false;
+				stack.remove(boundToken);
 			}
 			return true;
 		} else if (left.getType() instanceof WildcardType) {
 			for (Type bound : ((WildcardType) left.getType()).getUpperBounds()) {
 				TypeToken<?> boundToken = left.resolveType(bound);
-				if (!isAssignable(boundToken, right))
+				if (!isAssignable(boundToken, right, stack))
 					return false;
+				stack.remove(boundToken);
 			}
 			for (Type bound : ((WildcardType) left.getType()).getLowerBounds()) {
 				TypeToken<?> boundToken = left.resolveType(bound);
-				if (!isAssignable(right, boundToken))
+				if (!isAssignable(right, boundToken, stack))
 					return false;
+				stack.remove(right);
 			}
 			return true;
 		} else if (left.getType() instanceof ParameterizedType) {
@@ -806,13 +808,14 @@ public class TypeTokens implements TypeParser {
 				TypeToken<?> leftTP = left.resolveType(rawLeft.getTypeParameters()[p]);
 				TypeToken<?> rightTP = right.resolveType(rawLeft.getTypeParameters()[p]);
 
-				if (!isAssignable(leftTP, rightTP))
+				if (!isAssignable(leftTP, rightTP, stack))
 					return false;
+				stack.remove(leftTP);
 			}
 			return true;
-		} else if (left.isArray()) {
+		} else if (left.isArray())
 			return right.isArray() && isAssignable(left.getComponentType(), right.getComponentType());
-		} else
+		else
 			return false; // Dunno what it could be, but we can't resolve it
 	}
 
@@ -843,6 +846,10 @@ public class TypeTokens implements TypeParser {
 			return theConverter.apply(t);
 		}
 
+		public boolean isTrivial() {
+			return theConverter == LambdaUtils.identity();
+		}
+
 		@Override
 		public int hashCode() {
 			return theConverter.hashCode();
@@ -869,7 +876,7 @@ public class TypeTokens implements TypeParser {
 	 *         if the value is null and the left type is primitive
 	 * @throws IllegalArgumentException If values of the right type cannot be cast to the left type in general
 	 */
-	public <T, X> TypeConverter<T, X> getCast(TypeToken<T> left, TypeToken<X> right) throws IllegalArgumentException {
+	public <T, X> TypeConverter<T, X> getCast(TypeToken<X> left, TypeToken<T> right) throws IllegalArgumentException {
 		return getCast(left, right, false);
 	}
 
@@ -888,23 +895,23 @@ public class TypeTokens implements TypeParser {
 	/**
 	 * @param <S> The compile-time type to cast from
 	 * @param <T> The compile-time type to cast to
-	 * @param source The type to cast from
 	 * @param target The type to cast to
+	 * @param source The type to cast from
 	 * @param safe For primitive right types, whether to use a safe value (0 or false) if the left value is null, as opposed to throwing a
 	 *        {@link NullPointerException}
 	 * @return A function that takes an instance of the right type and returns it as an instance of the left type, throwing a a
 	 *         {@link NullPointerException} if the right value is null and the left type is primitive
 	 * @throws IllegalArgumentException If values of the right type cannot be cast to the left type in general
 	 */
-	public <S, T> TypeConverter<S, T> getCast(TypeToken<S> source, TypeToken<T> target, boolean safe) throws IllegalArgumentException {
-		return getCast(source, target, safe, true);
+	public <S, T> TypeConverter<S, T> getCast(TypeToken<T> target, TypeToken<S> source, boolean safe) throws IllegalArgumentException {
+		return getCast(target, source, safe, true);
 	}
 
 	/**
 	 * @param <S> The compile-time type to cast from
 	 * @param <T> The compile-time type to cast to
-	 * @param source The type to cast from
 	 * @param target The type to cast to
+	 * @param source The type to cast from
 	 * @param safe For primitive right types, whether to use a safe value (0 or false) if the left value is null, as opposed to throwing a
 	 *        {@link NullPointerException}
 	 * @param downCastOnly Whether to only allow down casts (e.g. int->double) or to also facilitate upcasts (e.g. double->int)
@@ -912,7 +919,7 @@ public class TypeTokens implements TypeParser {
 	 *         {@link NullPointerException} if the right value is null and the left type is primitive
 	 * @throws IllegalArgumentException If values of the right type cannot be cast to the left type in general
 	 */
-	public <S, T> TypeConverter<S, T> getCast(TypeToken<S> source, TypeToken<T> target, boolean safe, boolean downCastOnly)
+	public <S, T> TypeConverter<S, T> getCast(TypeToken<T> target, TypeToken<S> source, boolean safe, boolean downCastOnly)
 		throws IllegalArgumentException {
 
 		if (target.getType() instanceof TypeVariable && ((TypeVariable<?>) target.getType()).getBounds().length == 1)
@@ -921,7 +928,7 @@ public class TypeTokens implements TypeParser {
 			// As far as I can tell, Google seems to have broken this.
 			// TypeToken.isAssignableFrom(TypeToken) used to return true for this case,
 			// but now TypeToken.isSuperTypeOf(TypeToken)returns false, which seems clearly wrong.
-			return new TypeConverter<>((TypeToken<T>) source, "no-op", v -> (T) v);
+			return new TypeConverter<>((TypeToken<T>) source, "no-op", LambdaUtils.<S, T> unenforcedCast());
 		} else if (target.isSupertypeOf(source)) {
 			if (target.isPrimitive() && !source.isPrimitive()) {
 				T safeValue = safe ? (T) SAFE_VALUES.get(getRawType(source)) : null;
@@ -934,7 +941,7 @@ public class TypeTokens implements TypeParser {
 					return (T) v;
 				});
 			} else
-				return new TypeConverter<>((TypeToken<T>) source, "no-op", v -> (T) v);
+				return new TypeConverter<>((TypeToken<T>) source, "no-op", LambdaUtils.<S, T> unenforcedCast());
 		}
 		Class<S> wrappedSource = getRawType(wrap(source));
 		Class<T> wrappedTarget = getRawType(wrap(target));
@@ -942,8 +949,8 @@ public class TypeTokens implements TypeParser {
 			if (!source.isArray() || source.isPrimitive() || target.isPrimitive())
 				return specialCast(source, target, wrappedSource, wrappedTarget);
 			try {
-				getCast(source.getComponentType(), target.getComponentType()); // Don't need the actual cast, just the check
-				return new TypeConverter<>((TypeToken<T>) source, "no-op", v -> (T) v);
+				getCast(target.getComponentType(), source.getComponentType()); // Don't need the actual cast, just the check
+				return new TypeConverter<>((TypeToken<T>) source, "no-op", LambdaUtils.<S, T> unenforcedCast());
 			} catch (IllegalArgumentException e) {
 				return specialCast(source, target, wrappedSource, wrappedTarget);
 			}
@@ -961,14 +968,13 @@ public class TypeTokens implements TypeParser {
 				}
 				return v;
 			};
-		} else {
-			nullCheck = v -> v;
-		}
+		} else
+			nullCheck = LambdaUtils.identity();
 		if (primitiveSource.isPrimitive()) {
 			if (primitiveSource == primitiveTarget)
-				return new TypeConverter<>((TypeToken<T>) source, "wrapping-cast", v -> (T) nullCheck.apply(v));
+				return new TypeConverter<>((TypeToken<T>) source, "wrapping-cast", (Function<S, T>) nullCheck);
 			else if (wrappedTarget.isAssignableFrom(wrappedSource))
-				return new TypeConverter<>((TypeToken<T>) TypeTokens.get().of(wrappedSource), "wrapping-cast", v -> (T) nullCheck.apply(v));
+				return new TypeConverter<>((TypeToken<T>) TypeTokens.get().of(wrappedSource), "wrapping-cast", (Function<S, T>) nullCheck);
 			else if (!primitiveTarget.isPrimitive())
 				return specialCast(source, target, wrappedSource, wrappedTarget);
 			else if (primitiveSource == boolean.class)
@@ -977,7 +983,7 @@ public class TypeTokens implements TypeParser {
 			if (primitiveSource == char.class) {
 				toNumber = v -> Integer.valueOf((Character) nullCheck.apply(v));
 			} else {
-				toNumber = v -> (Number) nullCheck.apply(v);
+				toNumber = (Function<S, Number>) nullCheck;
 			}
 			Function<S, Object> fn;
 			if (primitiveTarget == double.class) {
@@ -986,41 +992,48 @@ public class TypeTokens implements TypeParser {
 					return n == null ? null : n.doubleValue();
 				};
 				// Now left!=right and left!=double.class
-			} else if (primitiveSource == double.class || primitiveSource == float.class || primitiveSource == long.class)
+			} else if (primitiveSource == double.class)
 				fn = null;
+			else if (primitiveTarget == float.class)
+				fn = v -> {
+					Number n = toNumber.apply(v);
+					return n == null ? null : n.floatValue();
+				};
+				else if (primitiveSource == float.class || primitiveSource == long.class)
+					fn = null;
 			// Now right can only be int, short, byte, or char
-			else if (primitiveTarget == long.class) {
-				fn = v -> {
-					Number n = toNumber.apply(v);
-					return n == null ? null : n.longValue();
-				};
-			} else if (primitiveTarget == int.class) {
-				fn = v -> {
-					Number n = toNumber.apply(v);
-					return n == null ? null : n.intValue();
-				};
-			} else if (primitiveSource == byte.class) {
-				if (primitiveTarget == short.class) {
+				else if (primitiveTarget == long.class) {
 					fn = v -> {
 						Number n = toNumber.apply(v);
-						return n == null ? null : n.shortValue();
+						return n == null ? null : n.longValue();
 					};
-				} else if (primitiveTarget == char.class) {
+				} else if (primitiveTarget == int.class) {
 					fn = v -> {
 						Number n = toNumber.apply(v);
-						if (n == null)
-							return null;
-						else
-							return Character.valueOf((char) n.byteValue());
+						return n == null ? null : n.intValue();
 					};
+				} else if (primitiveSource == byte.class) {
+					if (primitiveTarget == short.class) {
+						fn = v -> {
+							Number n = toNumber.apply(v);
+							return n == null ? null : n.shortValue();
+						};
+					} else if (primitiveTarget == char.class) {
+						fn = v -> {
+							Number n = toNumber.apply(v);
+							if (n == null)
+								return null;
+							else
+								return Character.valueOf((char) n.byteValue());
+						};
+					} else
+						fn = null;
 				} else
 					fn = null;
-			} else
-				fn = null;
 
 			if (fn == null) {
 				if (downCastOnly)
-					throw new IllegalArgumentException("Cannot cast " + target + " to " + source);
+					throw new IllegalArgumentException("Cannot cast " + source + " to " + target);
 				if (primitiveTarget == float.class) {
 					fn = v -> {
 						Number n = toNumber.apply(v);
@@ -1055,7 +1068,7 @@ public class TypeTokens implements TypeParser {
 			}
 			return new TypeConverter<>(target, "primitive-cast", (Function<S, T>) fn);
 		} else if (isAssignable(target, source))
-			return new TypeConverter<>((TypeToken<T>) source, "no-op", v -> (T) v);
+			return new TypeConverter<>((TypeToken<T>) source, "no-op", LambdaUtils.<S, T> unenforcedCast());
 		else
 			return specialCast(source, target, wrappedSource, wrappedTarget);
 	}

@@ -214,29 +214,65 @@ public class UnaryOperator implements ObservableExpression {
 	private <S, T> EvaluatedExpression<SettableValue<?>, SettableValue<T>> evaluateValue(TypeToken<S> opType, TypeToken<T> type,
 		EvaluatedExpression<SettableValue<?>, SettableValue<S>> op, UnaryOp<S, T> operator, int expressionOffset,
 		ErrorReporting operatorReporting) throws ExpressoEvaluationException {
-		if (TypeTokens.get().isAssignable(type, TypeTokens.get().of(operator.getTargetType())))
-			type = TypeTokens.get().of(operator.getTargetType());
-		else
-			throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(),
-				this + " cannot be evaluated as a " + ModelTypes.Value.getName() + "<" + opType + ">");
+		TypeToken<T> operatorType = TypeTokens.get().of(operator.getTargetType());
+		TypeTokens.TypeConverter<T, T> cast, reverse;
+		if (TypeTokens.get().wrap(type).equals(TypeTokens.get().wrap(operatorType))) {
+			type = operatorType;
+			cast = reverse = null;
+		} else {
+			try {
+				cast = TypeTokens.get().getCast(type, operatorType);
+			} catch (IllegalArgumentException e) {
+				throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(),
+					this + " cannot be evaluated as a " + ModelTypes.Value.getName() + "<" + opType + ">", e);
+			}
+			type = cast.getConvertedType();
+			try {
+				reverse = TypeTokens.get().getCast(operatorType, type);
+			} catch (IllegalArgumentException e) {
+				reverse = null;
+			}
+		}
 		TypeToken<T> fType = type;
-		return ObservableExpression.evEx(op.map(ModelTypes.Value.forType(type), opV -> opV.transformReversible(fType, tx -> tx//
-			.map(LambdaUtils.printableFn(v -> {
-				try {
-					return operator.apply(v);
-				} catch (RuntimeException | Error e) {
-					operatorReporting.error(null, e);
-					return null;
-				}
-			}, operator::toString, operator))//
-			.withReverse(v -> {
-				try {
-					return operator.reverse(v);
-				} catch (RuntimeException | Error e) {
-					operatorReporting.error(null, e);
-					return null;
-				}
-			}))), operator, op);
+		if (reverse != null || cast == null) { // Reversible operation
+			TypeTokens.TypeConverter<T, T> fReverse = reverse;
+			return ObservableExpression.evEx(op.map(ModelTypes.Value.forType(type), opV -> opV.transformReversible(fType, tx -> tx//
+				.map(LambdaUtils.printableFn(v -> {
+					try {
+						T result = operator.apply(v);
+						if (cast != null)
+							result = cast.apply(result);
+						return result;
+					} catch (RuntimeException | Error e) {
+						operatorReporting.error(null, e);
+						return null;
+					}
+				}, operator::toString, operator))//
+				.withReverse(v -> {
+					try {
+						if (fReverse != null)
+							v = fReverse.apply(v);
+						return operator.reverse(v);
+					} catch (RuntimeException | Error e) {
+						operatorReporting.error(null, e);
+						return null;
+					}
+				}))), operator, op);
+		} else {
+			return ObservableExpression
+				.evEx(op.map(ModelTypes.Value.forType(type), opV -> SettableValue.asSettable(opV.transform(fType, tx -> tx//
+					.map(LambdaUtils.printableFn(v -> {
+						try {
+							T result = operator.apply(v);
+							if (cast != null)
+								result = cast.apply(result);
+							return result;
+						} catch (RuntimeException | Error e) {
+							operatorReporting.error(null, e);
+							return null;
+						}
+					}, operator::toString, operator))), __ -> "Not reversible")), operator, op);
+		}
 	}
 
 	@Override

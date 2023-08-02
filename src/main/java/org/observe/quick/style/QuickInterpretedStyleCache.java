@@ -40,7 +40,7 @@ public class QuickInterpretedStyleCache {
 		QuickStyleAttribute<?> attr = getAttribute(definition, env);
 		if (!TypeTokens.get().isAssignable(type, attr.getType()))
 			throw new ExpressoInterpretationException("Attribute " + attr + " is of type " + attr.getType() + ", not " + type,
-				env.reporting().getFileLocation().getPosition(0), 0);
+				env.reporting().getPosition(), 0);
 		return (QuickStyleAttribute<T>) attr;
 	}
 

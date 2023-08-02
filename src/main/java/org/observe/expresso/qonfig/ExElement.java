@@ -25,8 +25,10 @@ import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceabilit
 import org.qommons.ClassMap;
 import org.qommons.Identifiable;
 import org.qommons.collect.CollectionUtils;
+import org.qommons.collect.ListenerList;
 import org.qommons.config.*;
 import org.qommons.ex.ExBiConsumer;
+import org.qommons.ex.ExConsumer;
 import org.qommons.io.ErrorReporting;
 
 /** A base type for values interpreted from {@link QonfigElement}s */
@@ -122,8 +124,8 @@ public interface ExElement extends Identifiable {
 				}
 			}
 			if (children != null)
-				Collections.sort(children, (c1, c2) -> Integer.compare(c1.reporting().getFileLocation().getPosition(0).getPosition(),
-					c2.reporting().getFileLocation().getPosition(0).getPosition()));
+				Collections.sort(children, (c1, c2) -> Integer.compare(c1.reporting().getPosition().getPosition(),
+					c2.reporting().getPosition().getPosition()));
 			return children == null ? Collections.emptyList() : children;
 		}
 
@@ -163,8 +165,8 @@ public interface ExElement extends Identifiable {
 				}
 			}
 			if (children != null)
-				Collections.sort(children, (c1, c2) -> Integer.compare(c1.reporting().getFileLocation().getPosition(0).getPosition(),
-					c2.reporting().getFileLocation().getPosition(0).getPosition()));
+				Collections.sort(children, (c1, c2) -> Integer.compare(c1.reporting().getPosition().getPosition(),
+					c2.reporting().getPosition().getPosition()));
 			return children == null ? Collections.emptyList() : children;
 		}
 
@@ -200,12 +202,14 @@ public interface ExElement extends Identifiable {
 				}
 			}
 			if (children != null)
-				Collections.sort(children, (c1, c2) -> Integer.compare(c1.reporting().getFileLocation().getPosition(0).getPosition(),
-					c2.reporting().getFileLocation().getPosition(0).getPosition()));
+				Collections.sort(children, (c1, c2) -> Integer.compare(c1.reporting().getPosition().getPosition(),
+					c2.reporting().getPosition().getPosition()));
 			return children == null ? Collections.emptyList() : children;
 		}
 
 		ExElement.Def<?> withTraceability(SingleTypeTraceability<? super E, ?, ?> traceability);
+
+		Runnable onInterpretation(ExConsumer<? super ExElement.Interpreted<? extends E>, ExpressoInterpretationException> task);
 
 		/**
 		 * Updates this element definition. Must be called at least once after interpretation produces this object.
@@ -279,6 +283,7 @@ public interface ExElement extends Identifiable {
 			private final Map<QonfigElementKey, SingleTypeTraceability<? super E, ?, ?>> theTraceability;
 			private CompiledExpressoEnv theExpressoEnv;
 			private ErrorReporting theReporting;
+			private ListenerList<ExConsumer<? super ExElement.Interpreted<? extends E>, ExpressoInterpretationException>> theOnInterprets;
 
 			/**
 			 * @param parent The definition interpreted from the parent element
@@ -429,6 +434,24 @@ public interface ExElement extends Identifiable {
 				if (theTraceability.putIfAbsent(new QonfigElementKey(traceability), traceability) != null)
 					throw new IllegalArgumentException("Traceability has already been configured for " + traceability);
 				return this;
+			}
+
+			@Override
+			public Runnable onInterpretation(ExConsumer<? super Interpreted<? extends E>, ExpressoInterpretationException> task) {
+				if (theOnInterprets == null)
+					theOnInterprets = ListenerList.build().build();
+				return theOnInterprets.add(task, false);
+			}
+
+			protected void interpreted(ExElement.Interpreted<? extends E> interpreted) {
+				if (theOnInterprets != null)
+					theOnInterprets.forEach(l -> {
+						try {
+							l.accept(interpreted);
+						} catch (ExpressoInterpretationException e) {
+							e.printStackTrace();
+						}
+					});
 			}
 
 			@Override
@@ -588,6 +611,8 @@ public interface ExElement extends Identifiable {
 
 		Interpreted<E> persistModelInstances(boolean persist);
 
+		Runnable onInstantiation(ExConsumer<? super E, ModelInstantiationException> task);
+
 		ObservableValue<Boolean> isDestroyed();
 
 		default Observable<ObservableValueEvent<Boolean>> destroyed() {
@@ -609,6 +634,7 @@ public interface ExElement extends Identifiable {
 			private InterpretedExpressoEnv theExpressoEnv;
 			private Boolean isModelInstancePersistent;
 			private boolean isInterpreting;
+			private ListenerList<ExConsumer<? super E, ModelInstantiationException>> theOnInstantiations;
 
 			/**
 			 * @param definition The definition that is producing this interpretation
@@ -616,6 +642,8 @@ public interface ExElement extends Identifiable {
 			 */
 			protected Abstract(Def<? super E> definition, Interpreted<?> parent) {
 				theDefinition = definition;
+				if (theDefinition instanceof Def.Abstract)
+					((Def.Abstract<? super E>) theDefinition).interpreted(this);
 				if (parent != null)
 					setParentElement(parent);
 				theAddOns = new ClassMap<>();
@@ -693,6 +721,24 @@ public interface ExElement extends Identifiable {
 			public Interpreted<E> persistModelInstances(boolean persist) {
 				isModelInstancePersistent = persist;
 				return this;
+			}
+
+			@Override
+			public Runnable onInstantiation(ExConsumer<? super E, ModelInstantiationException> task) {
+				if (theOnInstantiations == null)
+					theOnInstantiations = ListenerList.build().build();
+				return theOnInstantiations.add(task, false);
+			}
+
+			protected void instantiated(E element) {
+				if (theOnInstantiations != null)
+					theOnInstantiations.forEach(l -> {
+						try {
+							l.accept(element);
+						} catch (ModelInstantiationException e) {
+							e.printStackTrace();
+						}
+					});
 			}
 
 			@Override
@@ -826,6 +872,8 @@ public interface ExElement extends Identifiable {
 		protected Abstract(Interpreted<?> interpreted, ExElement parent) {
 			theId = interpreted.getIdentity();
 			theParent = parent;
+			if (interpreted instanceof Interpreted.Abstract)
+				((Interpreted.Abstract<ExElement>) interpreted).instantiated(this);
 			theAddOns = new ClassMap<>();
 			ArrayList<ExAddOn<?>> addOns = new ArrayList<>();
 			for (ExAddOn.Interpreted<?, ?> addOn : interpreted.getAddOns()) {

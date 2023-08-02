@@ -339,7 +339,7 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 					"No such model value found: '" + theModelValue.getName() + "'", e);
 			}
 			try {
-				return ObservableExpression.evEx(node.as(type), theModelValue);
+				return ObservableExpression.evEx(node.as(type, env), theModelValue);
 			} catch (TypeConversionException e) {
 				throw new ExpressoEvaluationException(expressionOffset, theModelValue.getName().length(), e.getMessage(), e);
 			}

@@ -78,7 +78,7 @@ public class ExtModelValueElement<M, MV extends M> extends ModelValueElement.Def
 				String path = getModelPath();
 				// Model path includes the root
 				path = path.substring(path.indexOf('.') + 1);
-				M value = env.getExtModels().getValue(path, type);
+				M value = env.getExtModels().getValue(path, type, env);
 				return InterpretedValueSynth.of((ModelInstanceType<M, M>) type, __ -> value);
 			} catch (ModelException e) {
 				// No such external model. Use the default if present

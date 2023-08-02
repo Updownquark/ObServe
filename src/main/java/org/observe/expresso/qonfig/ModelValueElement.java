@@ -133,7 +133,7 @@ public interface ModelValueElement<M, MV extends M> extends ExElement {
 				protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 					if (getDefinition().getValueType() != null)
 						theTargetType = (ModelInstanceType<M, MV>) getDefinition().getModelType(env)
-						.forTypes(getDefinition().getValueType().getType(env));
+							.forTypes(getDefinition().getValueType().getType(env));
 					else
 						theTargetType = getDefinition().getModelType(env).anyAs();
 					super.doUpdate(env);

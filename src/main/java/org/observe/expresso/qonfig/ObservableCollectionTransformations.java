@@ -971,11 +971,11 @@ public class ObservableCollectionTransformations {
 			theSort = ExElement.useOrReplace(ExSort.ExRootSort.class, theSort, session, "sort");
 			if (theSourceType == ModelTypes.Collection)
 				throw new QonfigInterpretationException("map-equivalent is not valid for a simple collection",
-					session.reporting().getFileLocation().getPosition(0), 0);
+					session.reporting().getPosition(), 0);
 			else if (theSourceType == ModelTypes.Set) {
 				if (theSort != null)
 					throw new QonfigInterpretationException("Sorting is invalid for map-equivalent on a non-sorted set",
-						theSort.reporting().getFileLocation().getPosition(0), 0);
+						theSort.reporting().getPosition(), 0);
 				else if (getReverse() == null)
 					throw new QonfigInterpretationException("Reverse required for map-equivalent on a non-sorted set",
 						reporting().getFileLocation().getPosition(0), 0);

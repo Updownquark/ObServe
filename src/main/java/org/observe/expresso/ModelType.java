@@ -39,7 +39,8 @@ public abstract class ModelType<M> implements Named {
 		 * @return A converter capable of converting from the given source type to the given target type, or null if this converter cannot
 		 *         create an instance converter for the given source/target types be made
 		 */
-		ModelInstanceConverter<M1, M2> convert(ModelInstanceType<M1, ?> source, ModelInstanceType<M2, ?> target);
+		ModelInstanceConverter<M1, M2> convert(ModelInstanceType<M1, ?> source, ModelInstanceType<M2, ?> target,
+			InterpretedExpressoEnv env);
 
 		/**
 		 * A model converter for an {@link UnTyped un-typed} model type
@@ -49,8 +50,9 @@ public abstract class ModelType<M> implements Named {
 		 */
 		public interface SimpleUnTyped<M1, M2> extends ModelConverter<M1, M2> {
 			@Override
-			default ModelInstanceConverter<M1, M2> convert(ModelInstanceType<M1, ?> source, ModelInstanceType<M2, ?> dest)
-				throws IllegalArgumentException {
+			default ModelInstanceConverter<M1, M2> convert(ModelInstanceType<M1, ?> source, ModelInstanceType<M2, ?> dest,
+				InterpretedExpressoEnv env)
+					throws IllegalArgumentException {
 				return new ModelInstanceConverter<M1, M2>() {
 					@Override
 					public M2 convert(M1 src) {
@@ -79,8 +81,9 @@ public abstract class ModelType<M> implements Named {
 		 */
 		public interface SimpleSingleTyped<M1, M2> extends ModelConverter<M1, M2> {
 			@Override
-			default ModelInstanceConverter<M1, M2> convert(ModelInstanceType<M1, ?> source, ModelInstanceType<M2, ?> dest)
-				throws IllegalArgumentException {
+			default ModelInstanceConverter<M1, M2> convert(ModelInstanceType<M1, ?> source, ModelInstanceType<M2, ?> dest,
+				InterpretedExpressoEnv env)
+					throws IllegalArgumentException {
 				TypeConverter<Object, Object> cast;
 				TypeConverter<Object, Object> reverse;
 				TypeToken<?> type;
@@ -90,11 +93,11 @@ public abstract class ModelType<M> implements Named {
 					type = source.getType(0);
 					cast = reverse = null;
 				} else {
-					cast = TypeTokens.get().getCast((TypeToken<Object>) source.getType(0), (TypeToken<Object>) dest.getType(0), true);
+					cast = TypeTokens.get().getCast((TypeToken<Object>) dest.getType(0), (TypeToken<Object>) source.getType(0), true);
 					if (cast == null)
 						throw new IllegalArgumentException("Cannot convert " + source + " to " + dest);
 					type = cast.getConvertedType();
-					reverse = TypeTokens.get().getCast((TypeToken<Object>) dest.getType(0), (TypeToken<Object>) source.getType(0), true);
+					reverse = TypeTokens.get().getCast((TypeToken<Object>) source.getType(0), (TypeToken<Object>) dest.getType(0), true);
 				}
 				return new ModelInstanceConverter<M1, M2>() {
 					@Override
@@ -129,8 +132,9 @@ public abstract class ModelType<M> implements Named {
 		 */
 		public interface SimpleDoubleTyped<M1, M2> extends ModelConverter<M1, M2> {
 			@Override
-			default ModelInstanceConverter<M1, M2> convert(ModelInstanceType<M1, ?> source, ModelInstanceType<M2, ?> dest)
-				throws IllegalArgumentException {
+			default ModelInstanceConverter<M1, M2> convert(ModelInstanceType<M1, ?> source, ModelInstanceType<M2, ?> dest,
+				InterpretedExpressoEnv env)
+					throws IllegalArgumentException {
 				TypeToken<?> keyType;
 				TypeConverter<Object, Object> keyCast;
 				TypeConverter<Object, Object> keyReverse;
@@ -140,11 +144,11 @@ public abstract class ModelType<M> implements Named {
 					keyType = source.getType(0);
 					keyCast = keyReverse = null;
 				} else {
-					keyCast = TypeTokens.get().getCast((TypeToken<Object>) source.getType(0), (TypeToken<Object>) dest.getType(0), true);
+					keyCast = TypeTokens.get().getCast((TypeToken<Object>) dest.getType(0), (TypeToken<Object>) source.getType(0), true);
 					if (keyCast == null)
 						throw new IllegalArgumentException("Cannot convert " + source + " to " + dest);
 					keyType = keyCast.getConvertedType();
-					keyReverse = TypeTokens.get().getCast((TypeToken<Object>) dest.getType(0), (TypeToken<Object>) source.getType(0), true);
+					keyReverse = TypeTokens.get().getCast((TypeToken<Object>) source.getType(0), (TypeToken<Object>) dest.getType(0), true);
 				}
 				TypeToken<?> valueType;
 				TypeConverter<Object, Object> valueCast;
@@ -155,11 +159,11 @@ public abstract class ModelType<M> implements Named {
 					valueType = source.getType(1);
 					valueCast = valueReverse = null;
 				} else {
-					valueCast = TypeTokens.get().getCast((TypeToken<Object>) source.getType(1), (TypeToken<Object>) dest.getType(1), true);
+					valueCast = TypeTokens.get().getCast((TypeToken<Object>) dest.getType(1), (TypeToken<Object>) source.getType(1), true);
 					if (valueCast == null)
 						throw new IllegalArgumentException("Cannot convert " + source + " to " + dest);
 					valueType = valueCast.getConvertedType();
-					valueReverse = TypeTokens.get().getCast((TypeToken<Object>) dest.getType(1), (TypeToken<Object>) source.getType(1),
+					valueReverse = TypeTokens.get().getCast((TypeToken<Object>) source.getType(1), (TypeToken<Object>) dest.getType(1),
 						true);
 				}
 				return new ModelInstanceConverter<M1, M2>() {
@@ -347,10 +351,10 @@ public abstract class ModelType<M> implements Named {
 		 * @param target The type to convert to
 		 * @return A converter capable of converting instances of this type to instances of the given target type
 		 */
-		public <M2> ModelInstanceConverter<M, M2> convert(ModelInstanceType<M2, ? extends M2> target) {
+		public <M2> ModelInstanceConverter<M, M2> convert(ModelInstanceType<M2, ? extends M2> target, InterpretedExpressoEnv env) {
 			if (target == null) {
 				ModelConverter<M, M2> selfConverter = (ModelConverter<M, M2>) SELF_CONVERSION_TARGETS.get(getModelType());
-				ModelInstanceConverter<M, M2> selfInstConverter = selfConverter == null ? null : selfConverter.convert(this, target);
+				ModelInstanceConverter<M, M2> selfInstConverter = selfConverter == null ? null : selfConverter.convert(this, target, env);
 				if (selfInstConverter == null)
 					return (ModelInstanceConverter<M, M2>) nullConverter(this);
 				else
@@ -362,7 +366,8 @@ public abstract class ModelType<M> implements Named {
 					goodType = target.getType(i).equals(getType(i));
 				if (goodType) {
 					ModelConverter<M, M2> selfConverter = (ModelConverter<M, M2>) SELF_CONVERSION_TARGETS.get(getModelType());
-					ModelInstanceConverter<M, M2> selfInstConverter = selfConverter == null ? null : selfConverter.convert(this, target);
+					ModelInstanceConverter<M, M2> selfInstConverter = selfConverter == null ? null
+						: selfConverter.convert(this, target, env);
 					if (selfInstConverter == null)
 						return (ModelInstanceConverter<M, M2>) nullConverter(target);
 					else
@@ -373,20 +378,23 @@ public abstract class ModelType<M> implements Named {
 				TypeConverter<Object, Object>[] reverses = new TypeConverter[casts.length];
 				boolean trivial = true, reversible = true, exit = false;
 				for (int i = 0; i < getModelType().getTypeCount(); i++) {
-					if (target.getType(i).equals(getType(i))) {
+					TypeToken<?> myType = TypeTokens.get().unwrap(getType(i));
+					TypeToken<?> targetType = TypeTokens.get().unwrap(target.getType(i));
+					if (myType.equals(targetType)) {
 						params[i] = getType(i);
 						continue;
-					} else if (TypeTokens.get().isAssignable(target.getType(i), getType(i))
-						&& (target.getType(i).getType() instanceof WildcardType
-							|| TypeTokens.get().isAssignable(getType(i), target.getType(i)))) {
-						params[i] = getType(i);
+					} else if (!myType.isPrimitive() && !targetType.isPrimitive() //
+						&& TypeTokens.get().isAssignable(targetType, myType)//
+						&& (targetType.getType() instanceof WildcardType || TypeTokens.get().isAssignable(myType, targetType))) {
+						params[i] = myType;
 						casts[i] = null;
 					} else {
-						trivial = false;
+						trivial = true;
 						try {
 							casts[i] = (TypeConverter<Object, Object>) TypeTokens.get()//
-								.getCast(//
-									getType(i), target.getType(i), true);
+								.getCast(targetType, myType, true);
+							if (!casts[i].isTrivial())
+								trivial = false;
 							params[i] = casts[i].getConvertedType();
 						} catch (IllegalArgumentException e) {
 							exit = true;
@@ -395,7 +403,7 @@ public abstract class ModelType<M> implements Named {
 					}
 					if (reversible) {
 						try {
-							reverses[i] = (TypeConverter<Object, Object>) TypeTokens.get().getCast(params[i], getType(i), true);
+							reverses[i] = (TypeConverter<Object, Object>) TypeTokens.get().getCast(myType, params[i], true);
 						} catch (IllegalArgumentException e) {
 							reversible = false;
 						}
@@ -416,7 +424,7 @@ public abstract class ModelType<M> implements Named {
 					ModelInstanceConverter<M, M2> firstConverter = converter(converter, newType);
 					ModelConverter<M2, M2> selfConverter = (ModelConverter<M2, M2>) SELF_CONVERSION_TARGETS.get(target.getModelType());
 					ModelInstanceConverter<M2, M2> selfInstConverter = selfConverter == null ? null
-						: selfConverter.convert(newType, target);
+						: selfConverter.convert(newType, target, env);
 					if (selfInstConverter != null)
 						return firstConverter.and(selfInstConverter);
 					else
@@ -426,14 +434,14 @@ public abstract class ModelType<M> implements Named {
 			ModelConverter<M, M2> modelConverter = (ModelConverter<M, M2>) CONVERSION_TARGETS
 				.getOrDefault(getModelType(), Collections.emptyMap())//
 				.get(target.getModelType());
-			ModelInstanceConverter<M, M2> firstConverter = modelConverter == null ? null : modelConverter.convert(this, target);
+			ModelInstanceConverter<M, M2> firstConverter = modelConverter == null ? null : modelConverter.convert(this, target, env);
 			if (firstConverter == null) {
 				modelConverter = (ModelConverter<M, M2>) FLEX_CONVERSION_FROM_TARGETS.get(target.getModelType());
-				firstConverter = modelConverter == null ? null : modelConverter.convert(this, target);
+				firstConverter = modelConverter == null ? null : modelConverter.convert(this, target, env);
 			}
 			if (firstConverter == null) {
 				modelConverter = (ModelConverter<M, M2>) FLEX_CONVERSION_TO_TARGETS.get(getModelType());
-				firstConverter = modelConverter == null ? null : modelConverter.convert(this, target);
+				firstConverter = modelConverter == null ? null : modelConverter.convert(this, target, env);
 			}
 			if (firstConverter == null)
 				return null;
@@ -444,7 +452,7 @@ public abstract class ModelType<M> implements Named {
 				if (allMatch)
 					return firstConverter;
 			}
-			ModelInstanceConverter<M2, M2> secondConverter = firstConverter.getType().convert(target);
+			ModelInstanceConverter<M2, M2> secondConverter = firstConverter.getType().convert(target, env);
 			if (secondConverter == null)
 				return null;
 			return firstConverter.and(secondConverter);
@@ -459,11 +467,13 @@ public abstract class ModelType<M> implements Named {
 		 * @throws TypeConversionException If no converter is available for the conversion from this type to the given type
 		 */
 		public <M2, MV2 extends M2> InterpretedValueSynth<M2, MV2> as(InterpretedValueSynth<M, MV> source,
-			ModelInstanceType<M2, MV2> targetType) throws TypeConversionException {
+			ModelInstanceType<M2, MV2> targetType, InterpretedExpressoEnv env) throws TypeConversionException {
 			ModelInstanceType<M, MV> sourceType = source.getType();
-			ModelType.ModelInstanceConverter<M, M2> converter = sourceType.convert(targetType);
+			ModelType.ModelInstanceConverter<M, M2> converter = sourceType.convert(targetType, env);
 			if (converter == null) {
-				sourceType.convert(targetType); // TODO DEBUG REMOVE
+				// This next line is for debugging. I'm going to keep it here because it continues to be useful,
+				// and it's only a performance hit when there's a conversion error, and then only a slight one.
+				sourceType.convert(targetType, env);
 				throw new TypeConversionException(source.toString(), sourceType, targetType);
 			} else if (converter instanceof NoOpConverter)
 				return (InterpretedValueSynth<M2, MV2>) source;

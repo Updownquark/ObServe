@@ -7,7 +7,9 @@ import java.util.Map;
 import java.util.Set;
 import java.util.function.BiFunction;
 import java.util.function.Function;
+import java.util.function.IntPredicate;
 
+import org.observe.expresso.ExpressoEvaluationException;
 import org.observe.util.TypeTokens;
 import org.qommons.BiTuple;
 import org.qommons.ClassMap;
@@ -34,9 +36,13 @@ public class BinaryOperatorSet {
 		/**
 		 * @param leftOpType The type of the left operand
 		 * @param rightOpType The type of the right operand
+		 * @param offset The offset of the operator in the expression
+		 * @param length The length of the expression
 		 * @return The type of output produced by this operator for the given operand types
+		 * @throws ExpressoEvaluationException If this operation cannot be used for the combination of the given operand types
 		 */
-		TypeToken<V> getTargetType(TypeToken<? extends S> leftOpType, TypeToken<? extends T> rightOpType);
+		TypeToken<V> getTargetType(TypeToken<? extends S> leftOpType, TypeToken<? extends T> rightOpType, int offset, int length)
+			throws ExpressoEvaluationException;
 
 		/**
 		 * Performs the operation
@@ -111,7 +117,8 @@ public class BinaryOperatorSet {
 				}
 
 				@Override
-				public TypeToken<V> getTargetType(TypeToken<? extends S> leftOpType, TypeToken<? extends T> rightOpType) {
+				public TypeToken<V> getTargetType(TypeToken<? extends S> leftOpType, TypeToken<? extends T> rightOpType, int offset,
+					int length) {
 					return type;
 				}
 
@@ -195,7 +202,8 @@ public class BinaryOperatorSet {
 				}
 
 				@Override
-				public TypeToken<T> getTargetType(TypeToken<? extends T> leftOpType, TypeToken<? extends T> rightOpType) {
+				public TypeToken<T> getTargetType(TypeToken<? extends T> leftOpType, TypeToken<? extends T> rightOpType, int offset,
+					int length) {
 					return type;
 				}
 
@@ -237,35 +245,35 @@ public class BinaryOperatorSet {
 	/** The boolean OR operation */
 	public static FirstArgDecisiveBinaryOp<Boolean, Boolean, Boolean> OR = FirstArgDecisiveBinaryOp.of("||", TypeTokens.get().BOOLEAN, //
 		b -> unwrapBool(b) ? true : null, (b1, b2) -> unwrapBool(b1) || unwrapBool(b2), //
-		(s, b2, r) -> {
-			if (unwrapBool(r)) { // Trying to make the expression true
-				if (unwrapBool(b2))
-					return s; // Leave it alone--the expression will be true regardless
-				else
-					return true;
-			} else { // Trying to make the expression false
-				if (unwrapBool(b2))
-					return null; // Can't make it false--should be prevented by the enabled fn
-				else
-					return false;
-			}
-		}, (s, b2, r) -> (!unwrapBool(r) && unwrapBool(b2)) ? "Or expression cannot be made false" : null, "Boolean OR operator");
+			(s, b2, r) -> {
+				if (unwrapBool(r)) { // Trying to make the expression true
+					if (unwrapBool(b2))
+						return s; // Leave it alone--the expression will be true regardless
+					else
+						return true;
+				} else { // Trying to make the expression false
+					if (unwrapBool(b2))
+						return null; // Can't make it false--should be prevented by the enabled fn
+					else
+						return false;
+				}
+			}, (s, b2, r) -> (!unwrapBool(r) && unwrapBool(b2)) ? "Or expression cannot be made false" : null, "Boolean OR operator");
 	/** The boolean AND operation */
 	public static FirstArgDecisiveBinaryOp<Boolean, Boolean, Boolean> AND = FirstArgDecisiveBinaryOp.of("&&", TypeTokens.get().BOOLEAN, //
 		b -> !unwrapBool(b) ? false : null, (b1, b2) -> unwrapBool(b1) && unwrapBool(b2), //
-		(s, b2, r) -> {
-			if (unwrapBool(r)) { // Trying to make the expression true
-				if (unwrapBool(b2))
-					return true;
-				else
-					return null; // Can't make it true--should be prevented by the enabled fn
-			} else { // Trying to make the expression false
-				if (unwrapBool(b2))
-					return false;
-				else
-					return s; // Leave it alone--the expression will be false regardless
-			}
-		}, (s, b2, r) -> (!unwrapBool(b2) && unwrapBool(r)) ? "And expression cannot be made true" : null, "Boolean AND operator");
+			(s, b2, r) -> {
+				if (unwrapBool(r)) { // Trying to make the expression true
+					if (unwrapBool(b2))
+						return true;
+					else
+						return null; // Can't make it true--should be prevented by the enabled fn
+				} else { // Trying to make the expression false
+					if (unwrapBool(b2))
+						return false;
+					else
+						return s; // Leave it alone--the expression will be false regardless
+				}
+			}, (s, b2, r) -> (!unwrapBool(b2) && unwrapBool(r)) ? "And expression cannot be made true" : null, "Boolean AND operator");
 
 	/**
 	 * Represents a cast operation whereby a value of one type is transformed to an equivalent value of another type
@@ -473,8 +481,9 @@ public class BinaryOperatorSet {
 				}
 
 				@Override
-				public TypeToken<V> getTargetType(TypeToken<? extends S> leftOpType, TypeToken<? extends T> rightOpType) {
-					return op.getTargetType(getType(leftOpType), rightOpType);
+				public TypeToken<V> getTargetType(TypeToken<? extends S> leftOpType, TypeToken<? extends T> rightOpType, int offset,
+					int length) throws ExpressoEvaluationException {
+					return op.getTargetType(getType(leftOpType), rightOpType, offset, length);
 				}
 
 				@Override
@@ -518,8 +527,9 @@ public class BinaryOperatorSet {
 				}
 
 				@Override
-				public TypeToken<V> getTargetType(TypeToken<? extends T> leftOpType, TypeToken<? extends S> rightOpType) {
-					return op.getTargetType(leftOpType, getType(rightOpType));
+				public TypeToken<V> getTargetType(TypeToken<? extends T> leftOpType, TypeToken<? extends S> rightOpType, int offset,
+					int length) throws ExpressoEvaluationException {
+					return op.getTargetType(leftOpType, getType(rightOpType), offset, length);
 				}
 
 				@Override
@@ -562,8 +572,9 @@ public class BinaryOperatorSet {
 				}
 
 				@Override
-				public TypeToken<V> getTargetType(TypeToken<? extends S> leftOpType, TypeToken<? extends T> rightOpType) {
-					return op.getTargetType(sourceCast.getType(leftOpType), otherCast.getType(rightOpType));
+				public TypeToken<V> getTargetType(TypeToken<? extends S> leftOpType, TypeToken<? extends T> rightOpType, int offset,
+					int length) throws ExpressoEvaluationException {
+					return op.getTargetType(sourceCast.getType(leftOpType), otherCast.getType(rightOpType), offset, length);
 				}
 
 				@Override
@@ -950,12 +961,24 @@ public class BinaryOperatorSet {
 			int num = unwrapI(v);
 			int den = unwrapI(s2);
 			return den == 0 ? num : num / den;
-		}, null, "Integer multiplication operator");
+		}, (s, s2, v) -> {
+			int num = unwrapI(v);
+			int den = unwrapI(s2);
+			if (num % den != 0)
+				return "Value assigned to a multiplication operation must be an even multiple of the denominator (" + den + ")";
+			return null;
+		}, "Integer multiplication operator");
 		operators.withLongArithmeticOp("*", (s1, s2) -> unwrapL(s1) * unwrapL(s2), (s, s2, v) -> {
 			long num = unwrapI(v);
 			long den = unwrapI(s2);
 			return den == 0 ? num : num / den;
-		}, null, "Long integer multiplication operator");
+		}, (s, s2, v) -> {
+			long num = unwrapI(v);
+			long den = unwrapI(s2);
+			if (num % den != 0)
+				return "Value assigned to a multiplication operation must be an even multiple of the denominator (" + den + ")";
+			return null;
+		}, "Long integer multiplication operator");
 		operators.withFloatArithmeticOp("*", (s1, s2) -> unwrapF(s1) * unwrapF(s2), (s, s2, v) -> unwrapF(v) / unwrapF(s2), null,
 			"Floating-point multiplication operator");
 		operators.withDoubleArithmeticOp("*", (s1, s2) -> unwrapD(s1) * unwrapD(s2), (s, s2, v) -> unwrapD(v) / unwrapD(s2), null,
@@ -967,8 +990,8 @@ public class BinaryOperatorSet {
 			return den == 0 ? num : num / den;
 		}, (s, s2, v) -> unwrapI(v) * unwrapI(s2), null, "Integer division operator");
 		operators.withLongArithmeticOp("/", (s1, s2) -> {
-			long num = unwrapI(s1);
-			long den = unwrapI(s2);
+			long num = unwrapL(s1);
+			long den = unwrapL(s2);
 			return den == 0 ? num : num / den;
 		}, (s, s2, v) -> unwrapL(v) * unwrapL(s2), null, "Long integer division operator");
 		operators.withFloatArithmeticOp("/", (s1, s2) -> unwrapF(s1) / unwrapF(s2), (s, s2, v) -> unwrapF(v) * unwrapF(s2), null,
@@ -980,21 +1003,49 @@ public class BinaryOperatorSet {
 			int num = unwrapI(s1);
 			int den = unwrapI(s2);
 			return den == 0 ? num : num % den;
-		}, (s, s2, v) -> unwrapI(v), //
-			(s, s2, v) -> Math.abs(unwrapI(v)) >= Math.abs(unwrapI(s2)) ? "Cannot set a modulus to less than the divisor" : null,
+		}, (s, s2, v) -> {
+			int num = unwrapI(s);
+			int den = unwrapI(s2);
+			int currentMod = num % den;
+			if (currentMod == v)
+				return num;
+			else
+				return num - currentMod + v;
+		}, (s, s2, v) -> Math.abs(unwrapI(v)) >= Math.abs(unwrapI(s2)) ? "Cannot set a modulus to greater than the divisor" : null,
 			"Integer modulus operator");
 		operators.withLongArithmeticOp("%", (s1, s2) -> {
-			long num = unwrapI(s1);
-			long den = unwrapI(s2);
+			long num = unwrapL(s1);
+			long den = unwrapL(s2);
 			return den == 0 ? num : num % den;
-		}, (s, s2, v) -> unwrapL(v) * unwrapL(s2), //
-			(s, s2, v) -> Math.abs(unwrapL(v)) >= Math.abs(unwrapL(s2)) ? "Cannot set a modulus to less than the divisor" : null,
+		}, (s, s2, v) -> {
+			long num = unwrapL(s);
+			long den = unwrapL(s2);
+			long currentMod = num % den;
+			if (currentMod == v)
+				return num;
+			else
+				return num - currentMod + v;
+		}, (s, s2, v) -> Math.abs(unwrapL(v)) >= Math.abs(unwrapL(s2)) ? "Cannot set a modulus to greater than the divisor" : null,
 			"Long integer modulus operator");
-		operators.withFloatArithmeticOp("%", (s1, s2) -> unwrapF(s1) % unwrapF(s2), (s, s2, v) -> unwrapF(v) * unwrapF(s2), //
-			(s, s2, v) -> Math.abs(unwrapF(v)) >= Math.abs(unwrapF(s2)) ? "Cannot set a modulus to less than the divisor" : null,
+		operators.withFloatArithmeticOp("%", (s1, s2) -> unwrapF(s1) % unwrapF(s2), (s, s2, v) -> {
+			float num = unwrapF(s);
+			float den = unwrapF(s2);
+			float currentMod = num % den;
+			if (currentMod == v)
+				return num;
+			else
+				return num - currentMod + v;
+		}, (s, s2, v) -> Math.abs(unwrapF(v)) >= Math.abs(unwrapF(s2)) ? "Cannot set a modulus to greater than the divisor" : null,
 			"Floating-point modulus operator");
-		operators.withDoubleArithmeticOp("%", (s1, s2) -> unwrapD(s1) % unwrapD(s2), (s, s2, v) -> unwrapD(v) * unwrapD(s2), //
-			(s, s2, v) -> Math.abs(unwrapD(v)) >= Math.abs(unwrapD(s2)) ? "Cannot set a modulus to less than the divisor" : null,
+		operators.withDoubleArithmeticOp("%", (s1, s2) -> unwrapD(s1) % unwrapD(s2), (s, s2, v) -> {
+			double num = unwrapD(s);
+			double den = unwrapD(s2);
+			double currentMod = num % den;
+			if (currentMod == v)
+				return num;
+			else
+				return num - currentMod + v;
+		}, (s, s2, v) -> Math.abs(unwrapD(v)) >= Math.abs(unwrapD(s2)) ? "Cannot set a modulus to greater than the divisor" : null,
 			"Double-precision floating-point modulus operator");
 
 		// Comparison ops
@@ -1021,6 +1072,76 @@ public class BinaryOperatorSet {
 			"Double-precision floating-point greater than comparison");
 		operators.withDoubleComparisonOp(">=", (s1, s2) -> unwrapD(s1) >= unwrapD(s2),
 			"Double-precision floating-point greater than or equal to comparison");
+
+		// Comparable comparison ops
+		class ComparableComparisonOp implements BinaryOp<Comparable<?>, Comparable<?>, Boolean> {
+			private final String theName;
+			private final String theDescription;
+			private final IntPredicate theTest;
+
+			public ComparableComparisonOp(String name, String description, IntPredicate test) {
+				theName = name;
+				theDescription = description + " comparison between java.lang.Comparables";
+				theTest = test;
+			}
+
+			@Override
+			public String getDescription() {
+				return theDescription;
+			}
+
+			@Override
+			public Class<Boolean> getTargetSuperType() {
+				return boolean.class;
+			}
+
+			@Override
+			public TypeToken<Boolean> getTargetType(TypeToken<? extends Comparable<?>> leftOpType,
+				TypeToken<? extends Comparable<?>> rightOpType, int offset, int length) throws ExpressoEvaluationException {
+				TypeToken<?> leftTarget = leftOpType.resolveType(Comparable.class.getTypeParameters()[0]);
+				if (!TypeTokens.get().isAssignable(leftTarget, rightOpType))
+					throw new ExpressoEvaluationException(offset, length,
+						"Comparable comparison cannot be used for incompatible types " + leftOpType + " and " + rightOpType);
+				return TypeTokens.get().BOOLEAN;
+			}
+
+			@Override
+			public Boolean apply(Comparable<?> source, Comparable<?> other) {
+				// Put nulls at the end
+				if (source == null) {
+					if (other == null)
+						return theTest.test(0);
+					else
+						return theTest.test(1);
+				} else if (other == null)
+					return theTest.test(-1);
+				else
+					return theTest.test(((Comparable<Object>) source).compareTo(other));
+			}
+
+			@Override
+			public String canReverse(Comparable<?> currentSource, Comparable<?> other, Boolean value) {
+				return "Comparison operations cannot be reversed";
+			}
+
+			@Override
+			public Comparable<?> reverse(Comparable<?> currentSource, Comparable<?> other, Boolean value) {
+				throw new IllegalStateException("Comparison operations cannot be reversed");
+			}
+
+			@Override
+			public String toString() {
+				return theName;
+			}
+		}
+		operators.with("<", (Class<Comparable<?>>) (Class<?>) Comparable.class, (Class<Comparable<?>>) (Class<?>) Comparable.class,
+			new ComparableComparisonOp("<", "Less than", i -> i < 0));
+		operators.with("<=", (Class<Comparable<?>>) (Class<?>) Comparable.class, (Class<Comparable<?>>) (Class<?>) Comparable.class,
+			new ComparableComparisonOp("<=", "Less than or equal", i -> i <= 0));
+		operators.with(">", (Class<Comparable<?>>) (Class<?>) Comparable.class, (Class<Comparable<?>>) (Class<?>) Comparable.class,
+			new ComparableComparisonOp(">", "Greater than", i -> i > 0));
+		operators.with(">=", (Class<Comparable<?>>) (Class<?>) Comparable.class, (Class<Comparable<?>>) (Class<?>) Comparable.class,
+			new ComparableComparisonOp(">=", "Greater than or equal", i -> i >= 0));
 
 		// Bit shifting
 		operators.withIntArithmeticOp("<<", (s1, s2) -> unwrapI(s1) << unwrapI(s2), (s, s2, r) -> unwrapI(r) >>> unwrapI(s2), null,
@@ -1413,6 +1534,10 @@ public class BinaryOperatorSet {
 			String description) {
 			with(operator, Integer.class, Integer.class, op, reverse, canReverse, description);
 
+			withCastPrimary(operator, Character.class, Integer.class, int.class, CastOp.charInt);
+			withCastPrimary(operator, Byte.class, Integer.class, int.class, CastOp.byteInt);
+			withCastPrimary(operator, Short.class, Integer.class, int.class, CastOp.shortInt);
+
 			withCastSecondary(operator, Integer.class, Character.class, int.class, CastOp.charInt);
 			withCastSecondary(operator, Integer.class, Byte.class, int.class, CastOp.byteInt);
 			withCastSecondary(operator, Integer.class, Short.class, int.class, CastOp.shortInt);
@@ -1445,12 +1570,15 @@ public class BinaryOperatorSet {
 			TriFunction<Long, Long, Long, String> canReverse, String description) {
 			with(operator, Long.class, Long.class, op, reverse, canReverse, description);
 
+			withCastPrimary(operator, Character.class, Long.class, long.class, CastOp.charLong);
+			withCastPrimary(operator, Byte.class, Long.class, long.class, CastOp.byteLong);
+			withCastPrimary(operator, Short.class, Long.class, long.class, CastOp.shortLong);
+			withCastPrimary(operator, Integer.class, Long.class, long.class, CastOp.intLong);
+
 			withCastSecondary(operator, Long.class, Character.class, long.class, CastOp.charLong);
 			withCastSecondary(operator, Long.class, Byte.class, long.class, CastOp.byteLong);
 			withCastSecondary(operator, Long.class, Short.class, long.class, CastOp.shortLong);
 			withCastSecondary(operator, Long.class, Integer.class, long.class, CastOp.intLong);
-
-			withCastPrimary(operator, Integer.class, Long.class, long.class, CastOp.intLong);
 
 			return this;
 		}
@@ -1469,14 +1597,17 @@ public class BinaryOperatorSet {
 			TriFunction<Float, Float, Float, Float> reverse, TriFunction<Float, Float, Float, String> canReverse, String description) {
 			with(operator, Float.class, Float.class, op, reverse, canReverse, description);
 
+			withCastPrimary(operator, Character.class, Float.class, float.class, CastOp.charFloat);
+			withCastPrimary(operator, Byte.class, Float.class, float.class, CastOp.byteFloat);
+			withCastPrimary(operator, Short.class, Float.class, float.class, CastOp.shortFloat);
+			withCastPrimary(operator, Integer.class, Float.class, float.class, CastOp.intFloat);
+			withCastPrimary(operator, Long.class, Float.class, float.class, CastOp.longFloat);
+
 			withCastSecondary(operator, Float.class, Character.class, float.class, CastOp.charFloat);
 			withCastSecondary(operator, Float.class, Byte.class, float.class, CastOp.byteFloat);
 			withCastSecondary(operator, Float.class, Short.class, float.class, CastOp.shortFloat);
 			withCastSecondary(operator, Float.class, Integer.class, float.class, CastOp.intFloat);
 			withCastSecondary(operator, Float.class, Long.class, float.class, CastOp.longFloat);
-
-			withCastPrimary(operator, Integer.class, Float.class, float.class, CastOp.intFloat);
-			withCastPrimary(operator, Long.class, Float.class, float.class, CastOp.longFloat);
 
 			return this;
 		}
@@ -1496,16 +1627,19 @@ public class BinaryOperatorSet {
 			String description) {
 			with(operator, Double.class, Double.class, op, reverse, canReverse, description);
 
+			withCastPrimary(operator, Character.class, Double.class, double.class, CastOp.charDouble);
+			withCastPrimary(operator, Byte.class, Double.class, double.class, CastOp.byteDouble);
+			withCastPrimary(operator, Short.class, Double.class, double.class, CastOp.shortDouble);
+			withCastPrimary(operator, Integer.class, Double.class, double.class, CastOp.intDouble);
+			withCastPrimary(operator, Long.class, Double.class, double.class, CastOp.longDouble);
+			withCastPrimary(operator, Float.class, Double.class, double.class, CastOp.floatDouble);
+
 			withCastSecondary(operator, Double.class, Character.class, double.class, CastOp.charDouble);
 			withCastSecondary(operator, Double.class, Byte.class, double.class, CastOp.byteDouble);
 			withCastSecondary(operator, Double.class, Short.class, double.class, CastOp.shortDouble);
 			withCastSecondary(operator, Double.class, Integer.class, double.class, CastOp.intDouble);
 			withCastSecondary(operator, Double.class, Long.class, double.class, CastOp.longDouble);
 			withCastSecondary(operator, Double.class, Float.class, double.class, CastOp.floatDouble);
-
-			withCastPrimary(operator, Integer.class, Double.class, double.class, CastOp.intDouble);
-			withCastPrimary(operator, Long.class, Double.class, double.class, CastOp.longDouble);
-			withCastPrimary(operator, Float.class, Double.class, double.class, CastOp.floatDouble);
 
 			return this;
 		}

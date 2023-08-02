@@ -367,20 +367,20 @@ public class JavaExpressoParser implements ExpressoParser {
 			else
 				return literalExpression(expression, Integer.parseInt(text.replace("_", ""), radix));
 		case "floatLiteral":
-			Expression type = expression.search().get("FloatingTypeSuffix").findAny();
 			text = expression.toString();
-			if (type != null)
+			boolean isFloat = text.endsWith("f");
+			if (isFloat)
 				text = text.substring(0, text.length() - 1);
-			if (type == null || type.toString().equalsIgnoreCase("d"))
-				return literalExpression(expression, Double.parseDouble(text.replace("_", "")));
-			else
+			if (isFloat)
 				return literalExpression(expression, Float.parseFloat(text.replace("_", "")));
+			else
+				return literalExpression(expression, Double.parseDouble(text.replace("_", "")));
 		case "BOOL_LITERAL":
 			return literalExpression(expression, "true".equals(expression.toString()));
 		case "CHAR_LITERAL":
 			Expression escaped = expression.search().get("EscapeSequence").findAny();
 			if (escaped == null)
-				return literalExpression(expression, expression.toString().charAt(0));
+				return literalExpression(expression, parseChar(expression.toString()));
 			else
 				return literalExpression(expression, evaluateEscape(escaped));
 		case "STRING_LITERAL":
@@ -504,6 +504,38 @@ public class JavaExpressoParser implements ExpressoParser {
 				str.append(ch);
 		}
 		return str == null ? content : str.toString();
+	}
+
+	private static char parseChar(String content) {
+		if (content.length() == 3)
+			return content.charAt(1);
+		else if (content.charAt(1) != '\\')
+			throw new IllegalArgumentException("Unrecognized first char in multi-char char literal: " + content);
+		switch (content.charAt(2)) {
+		case 'n':
+			return '\n';
+		case 't':
+			return '\t';
+		case 'r':
+			return '\r';
+		case '\\':
+			return '\\';
+		case '`':
+		case '\'':
+		case '"':
+			return content.charAt(2);
+		case 'u':
+			int unicode = 0;
+			for (int i = 3; i < content.length() - 1; i++)
+				unicode = (unicode << 4) | StringUtils.hexDigit(content.charAt(i));
+			return (char) unicode;
+		case 'b':
+			return '\b';
+		case 'f':
+			return '\f';
+		default:
+			throw new IllegalStateException("Unrecognized escaped character: \\" + content.charAt(2));
+		}
 	}
 
 	private static BufferedType parseType(Expression expression) throws ExpressoParseException {

@@ -10,7 +10,6 @@ import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
-import org.observe.expresso.TypeConversionException;
 import org.qommons.LambdaUtils;
 
 /** A {@link StyleApplicationDef} evaluated for an {@link InterpretedExpressoEnv environment} */
@@ -94,8 +93,8 @@ public class InterpretedStyleApplication {
 	 */
 	public static ModelSetInstance getParentModels(ModelSetInstance models) {
 		try {
-			return models.getModel().getValue(PARENT_MODEL_NAME, PARENT_MODEL_TYPE).get(models).get();
-		} catch (ModelException | TypeConversionException | ExpressoInterpretationException | ModelInstantiationException
+			return ((SettableValue<ModelSetInstance>) models.getModel().getComponent(PARENT_MODEL_NAME).interpreted().get(models)).get();
+		} catch (ModelException | ExpressoInterpretationException | ModelInstantiationException | ClassCastException
 			| IllegalStateException e) {
 			throw new IllegalStateException("Could not access parent models. Perhaps they have not been installed.", e);
 		}

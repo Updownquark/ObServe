@@ -3,6 +3,7 @@ package org.observe.expresso.qonfig;
 import java.util.Collections;
 import java.util.Set;
 
+import org.observe.expresso.ExpressoEvaluationException;
 import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.JavaExpressoParser;
 import org.observe.expresso.ops.BinaryOperatorSet;
@@ -34,8 +35,10 @@ public class ExpressoSessionImplV0_1 implements SpecialSessionImplementation<Exp
 			return Object.class;
 		}
 
+
 		@Override
-		public TypeToken<Object> getTargetType(TypeToken<? extends Object> leftOpType, TypeToken<? extends Object> rightOpType) {
+		public TypeToken<Object> getTargetType(TypeToken<? extends Object> leftOpType, TypeToken<? extends Object> rightOpType, int offset,
+			int length) throws ExpressoEvaluationException {
 			return TypeTokens.get().getCommonType(leftOpType, rightOpType);
 		}
 

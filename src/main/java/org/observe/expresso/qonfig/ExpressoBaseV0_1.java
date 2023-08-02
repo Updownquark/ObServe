@@ -131,7 +131,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 			ExElement.Def<?> parent = session.as(ExpressoQIS.class).getElementRepresentation();
 			if (parent != null && !parentType.isInstance(parent))
 				throw new QonfigInterpretationException("This implementation requires a parent of type " + parentType.getName() + ", not "
-					+ (parent == null ? "null" : parent.getClass().getName()), session.reporting().getFileLocation().getPosition(0), 0);
+					+ (parent == null ? "null" : parent.getClass().getName()), session.reporting().getPosition(), 0);
 			return creator.apply((P) parent, session.getFocusType());
 		};
 	}
@@ -142,7 +142,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 			ExElement.Def<?> def = session.as(ExpressoQIS.class).getElementRepresentation();
 			if (def != null && !defType.isInstance(def))
 				throw new QonfigInterpretationException("This implementation requires an element definition of type " + defType.getName()
-				+ ", not " + (def == null ? "null" : def.getClass().getName()), session.reporting().getFileLocation().getPosition(0),
+				+ ", not " + (def == null ? "null" : def.getClass().getName()), session.reporting().getPosition(),
 				0);
 			return creator.apply((QonfigAddOn) session.getFocusType(), (D) def);
 		};

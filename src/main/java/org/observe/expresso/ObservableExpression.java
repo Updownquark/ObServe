@@ -246,7 +246,7 @@ public interface ObservableExpression {
 		EvaluatedExpression<M, MV> value = evaluateInternal(type, env, expressionOffset);
 		if (value == null)
 			return null;
-		InterpretedValueSynth<M, MV> cast = value.as(type);
+		InterpretedValueSynth<M, MV> cast = value.as(type, env);
 		if (cast instanceof EvaluatedExpression) // Generally means a cast was not necessary
 			return (EvaluatedExpression<M, MV>) cast;
 		else
@@ -333,8 +333,8 @@ public interface ObservableExpression {
 					.evEx(InterpretedValueSynth.of((ModelInstanceType<M, MV>) ModelTypes.Value.forType(theValue.getClass()),
 						LambdaUtils.constantExFn(value, theText, null)), this);
 			} else if (TypeTokens.get().isAssignable(type.getType(0), TypeTokens.get().of(theValue.getClass()))) {
-				TypeTokens.TypeConverter<T, Object> convert = TypeTokens.get().getCast(TypeTokens.get().of((Class<T>) theValue.getClass()),
-					(TypeToken<Object>) type.getType(0));
+				TypeTokens.TypeConverter<T, Object> convert = TypeTokens.get().getCast((TypeToken<Object>) type.getType(0),
+					TypeTokens.get().of((Class<T>) theValue.getClass()));
 				MV value = (MV) createValue(type.getType(0), convert.apply(theValue));
 				return ObservableExpression
 					.evEx(InterpretedValueSynth.of((ModelInstanceType<M, MV>) ModelTypes.Value.forType(theValue.getClass()),

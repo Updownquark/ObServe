@@ -7,9 +7,6 @@
 			<import>org.observe.quick.style.QuickStyleTests.*</import>
 		</imports>
 		<models>
-			<ext-model name="ext">
-				<value name="actionName" type="String" />
-			</ext-model>
 			<model name="models">
 				<value name="m0" type="boolean" />
 				<value name="m1" type="int" />

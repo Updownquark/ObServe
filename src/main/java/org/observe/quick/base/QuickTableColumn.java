@@ -231,15 +231,16 @@ public interface QuickTableColumn<R, C> {
 			@Override
 			public InterpretedValueSynth<SettableValue<?>, SettableValue<C>> getValue() throws ExpressoInterpretationException {
 				try {
-					return getModels().getValue(getDefinition().getColumnEditValueName(), ModelTypes.Value.forType(theColumnType));
+					return getModels().getValue(getDefinition().getColumnEditValueName(), ModelTypes.Value.forType(theColumnType),
+						getExpressoEnv());
 				} catch (ModelException e) {
 					throw new ExpressoInterpretationException(
 						"Could not get column value '" + getDefinition().getColumnEditValueName() + "'",
-						getDefinition().reporting().getFileLocation().getPosition(0), 0, e);
+						getDefinition().reporting().getPosition(), 0, e);
 				} catch (TypeConversionException e) {
 					throw new ExpressoInterpretationException(
 						"Could not convert column value '" + getDefinition().getColumnEditValueName() + "'",
-						getDefinition().reporting().getFileLocation().getPosition(0), 0, e);
+						getDefinition().reporting().getPosition(), 0, e);
 				}
 			}
 

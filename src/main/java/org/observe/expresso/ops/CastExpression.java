@@ -118,16 +118,15 @@ public class CastExpression implements ObservableExpression {
 		EvaluatedExpression<SettableValue<?>, SettableValue<S>> valueContainer, TypeToken<T> valueType, int expressionOffset)
 			throws ExpressoEvaluationException {
 		TypeToken<S> sourceType = (TypeToken<S>) valueContainer.getType().getType(0);
-		if (!TypeTokens.get().isAssignable(sourceType, valueType)//
-			&& !TypeTokens.get().isAssignable(valueType, sourceType))
-			throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(),
-				"Cannot cast value of type " + sourceType + " to " + valueType);
+
 		TypeTokens.TypeConverter<S, T> converter;
 		try {
-			converter = TypeTokens.get().getCast(sourceType, valueType, true, false);
+			converter = TypeTokens.get().getCast(valueType, sourceType, true, false);
+			if (converter.isTrivial())
+				return (EvaluatedExpression<SettableValue<?>, SettableValue<T>>) (EvaluatedExpression<?, ?>) valueContainer;
 			TypeTokens.TypeConverter<T, S> reverse;
 			try {
-				reverse = TypeTokens.get().getCast(valueType, sourceType, true, false);
+				reverse = TypeTokens.get().getCast(sourceType, valueType, true, false);
 				return ObservableExpression
 					.evEx(valueContainer.map(ModelTypes.Value.forType(valueType), vc -> vc.transformReversible(valueType, tx -> tx//
 						.map(converter).withReverse(reverse))), valueType, valueContainer);
@@ -139,6 +138,10 @@ public class CastExpression implements ObservableExpression {
 					valueContainer);
 			}
 		} catch (IllegalArgumentException e) {
+			if (!TypeTokens.get().isAssignable(sourceType, valueType)//
+				&& !TypeTokens.get().isAssignable(valueType, sourceType))
+				throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(),
+					"Cannot cast value of type " + sourceType + " to " + valueType);
 		}
 		Class<T> valueClass = TypeTokens.get().wrap(TypeTokens.getRawType(valueType));
 		Class<S> sourceClass = TypeTokens.getRawType(sourceType);

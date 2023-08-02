@@ -8,7 +8,6 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 import org.observe.ObservableAction;
-import org.observe.SettableValue;
 import org.observe.SimpleObservable;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.qonfig.ExElement;
@@ -108,9 +107,9 @@ public class ExpressoTesting extends ExElement.Def.Abstract<ExElement> {
 			theActions = new ArrayList<>();
 		}
 
-		public void execute(SettableValue<String> actionName) {
+		public void execute() {
 			for (TestAction.TestActionElement<?> action : theActions) {
-				System.out.print(action.reporting().getFileLocation().getPosition(0).printPosition());
+				System.out.print(action.reporting().getPosition().printPosition());
 				System.out.flush();
 				System.out.println(":");
 				ObservableAction<?> obsAction = action.getAction();
@@ -119,13 +118,13 @@ public class ExpressoTesting extends ExElement.Def.Abstract<ExElement> {
 				try {
 					obsAction.act(null);
 					if (action.getExpectedException() != null)
-						throw new AssertionError("Expected action " + actionName.get() + " to throw " + action.getExpectedException());
+						throw new AssertionError(action.reporting().getPosition() + ":\n\tExpected exception "
+							+ action.getExpectedException());
 				} catch (RuntimeException e) {
 					if (action.getExpectedException() == null || !action.getExpectedException().isInstance(e))
-						throw new IllegalStateException(action.reporting().getFileLocation().getPosition(0)
-							+ ": Unexpected exception on test action " + actionName.get(), e);
+						throw new AssertionError(action.reporting().getPosition() + ":\n\tUnexpected exception", e);
 				} catch (AssertionError e) {
-					throw new AssertionError(action.reporting().getFileLocation().getPosition(0) + ":\n\t" + e.getMessage(), e);
+					throw new AssertionError(action.reporting().getPosition() + ":\n\t" + e.getMessage(), e);
 				}
 			}
 		}
@@ -313,15 +312,7 @@ public class ExpressoTesting extends ExElement.Def.Abstract<ExElement> {
 
 		System.out.print("Interpreting global models...");
 		System.out.flush();
-		SettableValue<String> actionName = SettableValue.build(String.class).build();
-		InterpretedExpressoEnv env;
-		try {
-			env = InterpretedExpressoEnv.INTERPRETED_STANDARD_JAVA//
-				.withExt(ObservableModelSet.buildExternal(ObservableModelSet.JAVA_NAME_CHECKER)
-					.withSubModel("ext", sm -> sm.with("actionName", ModelTypes.Value.STRING, actionName)).build());
-		} catch (ModelException e) {
-			throw new IllegalStateException("Could not assemble external model", e);
-		}
+		InterpretedExpressoEnv env = InterpretedExpressoEnv.INTERPRETED_STANDARD_JAVA;
 		Expresso head = theHead.interpret(null);
 		if (theHead.getClassViewElement() != null)
 			env = env.with(theHead.getClassViewElement().configureClassView(env.getClassView().copy()).build());
@@ -349,7 +340,7 @@ public class ExpressoTesting extends ExElement.Def.Abstract<ExElement> {
 			System.out.println("complete");
 
 			System.out.println("Executing test " + testName + "...");
-			test.execute(actionName);
+			test.execute();
 		} finally {
 			until.onNext(null);
 		}

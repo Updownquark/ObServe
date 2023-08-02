@@ -187,11 +187,12 @@ public class BinaryOperator implements ObservableExpression {
 		BinaryOp<Object, Object, Object> op;
 		op = (BinaryOp<Object, Object, Object>) env.getBinaryOperators().getOperator(operator, targetType, //
 			leftType, TypeTokens.getRawType(rightTypeT));
+		int opOffset = expressionOffset + theLeft.getExpressionLength();
 		if (op == null)
-			throw new ExpressoEvaluationException(expressionOffset + theLeft.getExpressionLength(), theOperator.length(),
+			throw new ExpressoEvaluationException(opOffset, theOperator.length(),
 				"Binary operator '" + theOperator + "' is not supported or implemented for operand types " + leftTypeT + " and "
 					+ rightTypeT + ", target type " + targetType.getName());
-		TypeToken<Object> resultType = op.getTargetType(leftTypeT, rightTypeT);
+		TypeToken<Object> resultType = op.getTargetType(leftTypeT, rightTypeT, opOffset, theOperator.length());
 		ErrorReporting reporting = env.reporting();
 		ErrorReporting operatorReporting = env.reporting().at(theLeft.getExpressionLength());
 		if (action) {

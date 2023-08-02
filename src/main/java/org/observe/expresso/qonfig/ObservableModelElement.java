@@ -117,8 +117,8 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 					theValues.add(modelValue);
 				}
 			}
-			Collections.sort(theValues, (mv1, mv2) -> Integer.compare(mv1.reporting().getFileLocation().getPosition(0).getPosition(),
-				mv2.reporting().getFileLocation().getPosition(0).getPosition()));
+			Collections.sort(theValues, (mv1, mv2) -> Integer.compare(mv1.reporting().getPosition().getPosition(),
+				mv2.reporting().getPosition().getPosition()));
 
 			super.doUpdate(env);
 		}

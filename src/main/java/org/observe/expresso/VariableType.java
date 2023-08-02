@@ -20,12 +20,13 @@ import com.google.common.reflect.TypeToken;
  */
 public interface VariableType {
 	/**
-	 * @param models The models to use to get the type
+	 * @param env The interpreted environment to use to interpret this type
 	 * @return This type, evaluated for the given models
 	 * @throws ExpressoInterpretationException If this type could not be evaluated with the given models
 	 */
 	TypeToken<?> getType(InterpretedExpressoEnv env) throws ExpressoInterpretationException;
 
+	/** @return The content that was used to parse this type */
 	LocatedPositionedContent getContent();
 
 	/** @return Whether this type depends on the models passed to {@link #getType(InterpretedExpressoEnv)} */
@@ -138,7 +139,7 @@ public interface VariableType {
 				clazz = TypeTokens.getRawType(env.getClassView().parseType(theTypeName));
 			} catch (ParseException e) {
 				throw new ExpressoInterpretationException(e.getMessage(), //
-					env.reporting().getFileLocation().getPosition(e.getErrorOffset()), theContent.length() - e.getErrorOffset());
+					theContent.getPosition(e.getErrorOffset()), theContent.length() - e.getErrorOffset());
 			}
 			return TypeTokens.get().of(clazz);
 		}
@@ -177,6 +178,7 @@ public interface VariableType {
 		 * @param modelPath The path of the model value to get the type of
 		 * @param typeIndex The type parameter index of the type to get
 		 * @param content The position in the file where this type was specified
+		 * @param indexOffset The offset of the model type index from the beginning of the content
 		 */
 		public ModelType(LocatedPositionedContent content, String modelPath, int typeIndex, int indexOffset) {
 			theContent = content;
@@ -249,8 +251,10 @@ public interface VariableType {
 		private final int theParametersOffset;
 
 		/**
-		 * @param baseType The raw type to parameterize
+		 * @param content The positioned content from which the type was parsed
+		 * @param baseTypeName The name of the raw type to parameterize
 		 * @param parameterTypes The parameter types
+		 * @param paramsOffset The integer offset of the start of the parameters from the beginning of the content
 		 */
 		public Parameterized(LocatedPositionedContent content, String baseTypeName, List<VariableType> parameterTypes, int paramsOffset) {
 			theContent = content;
@@ -279,7 +283,7 @@ public interface VariableType {
 			Class<?> baseClass = env.getClassView().getType(theBaseTypeName);
 			if (baseClass == null)
 				throw new ExpressoInterpretationException("Unrecognized type '" + theBaseTypeName, //
-					env.reporting().getFileLocation().getPosition(0), theBaseTypeName.length());
+					theContent.getPosition(0), theBaseTypeName.length());
 			else if (baseClass.getTypeParameters().length != theParameterTypes.size())
 				throw new ExpressoInterpretationException(
 					theBaseTypeName + " has " + baseClass.getTypeParameters().length + " parameter"

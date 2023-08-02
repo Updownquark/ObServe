@@ -433,7 +433,7 @@ public abstract class Invocation implements ObservableExpression {
 					if (ok) {
 						TypeToken<?> returnType = tva.resolve(impl.getReturnType(m));
 
-						ModelInstanceConverter<?, ?> converter = ModelTypes.Value.forType(returnType).convert(targetType);
+						ModelInstanceConverter<?, ?> converter = ModelTypes.Value.forType(returnType).convert(targetType, env);
 						if (converter == null)
 							throw new ExpressoEvaluationException(expressionOffset, invocation.getExpressionLength(), "Return type "
 								+ returnType + " of method " + Invocation.printSignature(m) + " cannot be assigned to type " + targetType);

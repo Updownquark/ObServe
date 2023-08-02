@@ -68,7 +68,7 @@ public class QuickStyleInterpretation implements QonfigInterpretation {
 		interpreter.createWith("style-set", QuickStyleSet.class, session -> {
 			if (!(session.getElementRepresentation() instanceof QuickStyleSheet))
 				throw new QonfigInterpretationException("This interpretation is only valid as a child of a style-sheet",
-					session.reporting().getFileLocation().getPosition(0), 0);
+					session.reporting().getPosition(), 0);
 			return new QuickStyleSet((QuickStyleSheet) session.getElementRepresentation(), session.getFocusType());
 		});
 		interpreter.createWith("import-style-sheet", QuickStyleSheet.StyleSheetRef.class,

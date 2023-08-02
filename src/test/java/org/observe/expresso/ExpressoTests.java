@@ -1,10 +1,15 @@
 package org.observe.expresso;
 
 import java.util.List;
+import java.util.function.Supplier;
 
 import org.junit.Test;
+import org.observe.SettableValue;
+import org.observe.SimpleObservable;
 import org.observe.expresso.qonfig.ElementModelValue;
 import org.observe.expresso.qonfig.Expresso;
+import org.observe.util.TypeTokens;
+import org.qommons.testing.TestUtil;
 
 /** Some tests for Expresso functionality */
 public class ExpressoTests extends AbstractExpressoTest<Expresso> {
@@ -21,7 +26,7 @@ public class ExpressoTests extends AbstractExpressoTest<Expresso> {
 	/**
 	 * Tests the constant model type
 	 *
-	 * @throws ExpressoInterpretationException If an error occurs compiling the test
+	 * @throws ExpressoInterpretationException If an error occurs interpreting the test
 	 * @throws ModelInstantiationException If an error occurs instantiating the test values
 	 */
 	@Test
@@ -32,7 +37,7 @@ public class ExpressoTests extends AbstractExpressoTest<Expresso> {
 	/**
 	 * Tests the value model type, initialized with or set to a simple value
 	 *
-	 * @throws ExpressoInterpretationException If an error occurs compiling the test
+	 * @throws ExpressoInterpretationException If an error occurs interpreting the test
 	 * @throws ModelInstantiationException If an error occurs instantiating the test values
 	 */
 	@Test
@@ -43,7 +48,7 @@ public class ExpressoTests extends AbstractExpressoTest<Expresso> {
 	/**
 	 * Tests the value model type, slaved to an expression
 	 *
-	 * @throws ExpressoInterpretationException If an error occurs compiling the test
+	 * @throws ExpressoInterpretationException If an error occurs interpreting the test
 	 * @throws ModelInstantiationException If an error occurs instantiating the test values
 	 */
 	@Test
@@ -54,7 +59,7 @@ public class ExpressoTests extends AbstractExpressoTest<Expresso> {
 	/**
 	 * Tests the list model type
 	 *
-	 * @throws ExpressoInterpretationException If an error occurs compiling the test
+	 * @throws ExpressoInterpretationException If an error occurs interpreting the test
 	 * @throws ModelInstantiationException If an error occurs instantiating the test values
 	 */
 	@Test
@@ -63,20 +68,97 @@ public class ExpressoTests extends AbstractExpressoTest<Expresso> {
 	}
 
 	/**
-	 * Tests binary operators
+	 * Tests boolean operators
 	 *
-	 * @throws ExpressoInterpretationException If an error occurs compiling the test
+	 * @throws ExpressoInterpretationException If an error occurs interpreting the test
 	 * @throws ModelInstantiationException If an error occurs instantiating the test values
 	 */
 	@Test
-	public void testBinaryOperators() throws ExpressoInterpretationException, ModelInstantiationException {
-		getTesting().executeTest("binaryOperators");
+	public void testBooleanOperators() throws ExpressoInterpretationException, ModelInstantiationException {
+		getTesting().executeTest("booleanOperators");
+	}
+
+	/**
+	 * Tests comparison operators
+	 *
+	 * @throws ExpressoInterpretationException If an error occurs interpreting the test
+	 * @throws ModelInstantiationException If an error occurs instantiating the test values
+	 */
+	@Test
+	public void testComparisonOperators() throws ExpressoInterpretationException, ModelInstantiationException {
+		getTesting().executeTest("comparisonOperators");
+	}
+
+	/**
+	 * Tests math operators
+	 *
+	 * @throws ExpressoInterpretationException If an error occurs interpreting the test
+	 * @throws ModelInstantiationException If an error occurs instantiating the test values
+	 */
+	@Test
+	public void testMathOperators() throws ExpressoInterpretationException, ModelInstantiationException {
+		getTesting().executeTest("mathOperators");
+	}
+
+	/**
+	 * Tests cast operators
+	 *
+	 * @throws ExpressoInterpretationException If an error occurs interpreting the test
+	 * @throws ModelInstantiationException If an error occurs instantiating the test values
+	 */
+	@Test
+	public void testCasts() throws ExpressoInterpretationException, ModelInstantiationException {
+		getTesting().executeTest("casts");
+	}
+
+	/**
+	 * Tests the string concatenation operator (+)
+	 *
+	 * @throws ExpressoInterpretationException If an error occurs interpreting the test
+	 * @throws ModelInstantiationException If an error occurs instantiating the test values
+	 */
+	@Test
+	public void testStringConcat() throws ExpressoInterpretationException, ModelInstantiationException {
+		getTesting().executeTest("stringConcat");
+	}
+
+	/**
+	 * Tests bitwise operators
+	 *
+	 * @throws ExpressoInterpretationException If an error occurs interpreting the test
+	 * @throws ModelInstantiationException If an error occurs instantiating the test values
+	 */
+	@Test
+	public void testBitwiseOperators() throws ExpressoInterpretationException, ModelInstantiationException {
+		getTesting().executeTest("bitwiseOperators");
+	}
+
+	/**
+	 * Tests the Object OR operation
+	 *
+	 * @throws ExpressoInterpretationException If an error occurs interpreting the test
+	 * @throws ModelInstantiationException If an error occurs instantiating the test values
+	 */
+	@Test
+	public void testObjectOr() throws ExpressoInterpretationException, ModelInstantiationException {
+		getTesting().executeTest("objectOr");
+	}
+
+	/**
+	 * Tests the conditional operator (condition ? primary : secondary)
+	 *
+	 * @throws ExpressoInterpretationException If an error occurs interpreting the test
+	 * @throws ModelInstantiationException If an error occurs instantiating the test values
+	 */
+	@Test
+	public void testConditionalOperator() throws ExpressoInterpretationException, ModelInstantiationException {
+		getTesting().executeTest("conditionalOperator");
 	}
 
 	/**
 	 * Tests the mapping transformation type
 	 *
-	 * @throws ExpressoInterpretationException If an error occurs compiling the test
+	 * @throws ExpressoInterpretationException If an error occurs interpreting the test
 	 * @throws ModelInstantiationException If an error occurs instantiating the test values
 	 */
 	@Test
@@ -87,7 +169,7 @@ public class ExpressoTests extends AbstractExpressoTest<Expresso> {
 	/**
 	 * Tests the sort transformation type
 	 *
-	 * @throws ExpressoInterpretationException If an error occurs compiling the test
+	 * @throws ExpressoInterpretationException If an error occurs interpreting the test
 	 * @throws ModelInstantiationException If an error occurs instantiating the test values
 	 */
 	@Test
@@ -98,7 +180,7 @@ public class ExpressoTests extends AbstractExpressoTest<Expresso> {
 	/**
 	 * Tests int assignment
 	 *
-	 * @throws ExpressoInterpretationException If an error occurs compiling the test
+	 * @throws ExpressoInterpretationException If an error occurs interpreting the test
 	 * @throws ModelInstantiationException If an error occurs instantiating the test values
 	 */
 	@Test
@@ -109,7 +191,7 @@ public class ExpressoTests extends AbstractExpressoTest<Expresso> {
 	/**
 	 * Tests instant assignment
 	 *
-	 * @throws ExpressoInterpretationException If an error occurs compiling the test
+	 * @throws ExpressoInterpretationException If an error occurs interpreting the test
 	 * @throws ModelInstantiationException If an error occurs instantiating the test values
 	 */
 	@Test
@@ -117,6 +199,12 @@ public class ExpressoTests extends AbstractExpressoTest<Expresso> {
 		getTesting().executeTest("assignInstant");
 	}
 
+	/**
+	 * Tests instant assignment
+	 *
+	 * @throws ExpressoInterpretationException If an error occurs interpreting the test
+	 * @throws ModelInstantiationException If an error occurs instantiating the test values
+	 */
 	@Test
 	public void testHook() throws ExpressoInterpretationException, ModelInstantiationException {
 		getTesting().executeTest("hook");
@@ -125,7 +213,7 @@ public class ExpressoTests extends AbstractExpressoTest<Expresso> {
 	/**
 	 * Tests value-derived model values (see {@link ElementModelValue})
 	 *
-	 * @throws ExpressoInterpretationException If an error occurs compiling the test
+	 * @throws ExpressoInterpretationException If an error occurs interpreting the test
 	 * @throws ModelInstantiationException If an error occurs instantiating the test values
 	 */
 	@Test
@@ -136,7 +224,7 @@ public class ExpressoTests extends AbstractExpressoTest<Expresso> {
 	/**
 	 * Tests dynamically-typed value-derived model values (see {@link ElementModelValue})
 	 *
-	 * @throws ExpressoInterpretationException If an error occurs compiling the test
+	 * @throws ExpressoInterpretationException If an error occurs interpreting the test
 	 * @throws ModelInstantiationException If an error occurs instantiating the test values
 	 */
 	@Test
@@ -147,7 +235,7 @@ public class ExpressoTests extends AbstractExpressoTest<Expresso> {
 	/**
 	 * Tests dynamically-typed value-derived model values where the model value is tied to the attribute via API
 	 *
-	 * @throws ExpressoInterpretationException If an error occurs compiling the test
+	 * @throws ExpressoInterpretationException If an error occurs interpreting the test
 	 * @throws ModelInstantiationException If an error occurs instantiating the test values
 	 */
 	@Test
@@ -168,5 +256,97 @@ public class ExpressoTests extends AbstractExpressoTest<Expresso> {
 				throw new AssertionError(prev + ">" + entity);
 			prev = entity;
 		}
+	}
+
+	public static <C extends Comparable<C>> void testComparison(SettableValue<C> a, SettableValue<C> b, //
+		SettableValue<Boolean> lt, SettableValue<Boolean> lte, SettableValue<Boolean> gt, SettableValue<Boolean> gte,
+		SettableValue<Boolean> eq, SettableValue<Boolean> neq) {
+		TestUtil helper = new TestUtil(123456789, 0);
+		Supplier<C> random = getRandom(TypeTokens.getRawType(a.getType()), helper);
+		checkComparison(a, b, lt, lte, gt, gte, eq, neq);
+
+		// Do some random operations with nobody listening to the values
+		for (int i = 0; i < 1000; i++) {
+			C newValue = random.get();
+			(i % 2 == 0 ? a : b).set(newValue, null);
+			checkComparison(a, b, lt, lte, gt, gte, eq, neq);
+		}
+
+		// Now listen to all the comparables and make sure they report the right changes
+		SettableValue<Boolean> ltCopy = SettableValue.build(boolean.class).withValue(false).build();
+		SettableValue<Boolean> lteCopy = SettableValue.build(boolean.class).withValue(false).build();
+		SettableValue<Boolean> gtCopy = SettableValue.build(boolean.class).withValue(false).build();
+		SettableValue<Boolean> gteCopy = SettableValue.build(boolean.class).withValue(false).build();
+		SettableValue<Boolean> eqCopy = eq == null ? null : SettableValue.build(boolean.class).withValue(false).build();
+		SettableValue<Boolean> neqCopy = neq == null ? null : SettableValue.build(boolean.class).withValue(false).build();
+		SimpleObservable<Void> until = new SimpleObservable<>();
+		lt.changes().act(evt -> ltCopy.set(evt.getNewValue(), evt));
+		lte.changes().act(evt -> lteCopy.set(evt.getNewValue(), evt));
+		gt.changes().act(evt -> gtCopy.set(evt.getNewValue(), evt));
+		gte.changes().act(evt -> gteCopy.set(evt.getNewValue(), evt));
+		if (eq != null)
+			eq.changes().act(evt -> eqCopy.set(evt.getNewValue(), evt));
+		if (neq != null)
+			neq.changes().act(evt -> neqCopy.set(evt.getNewValue(), evt));
+
+		checkComparison(a, b, ltCopy, lteCopy, gtCopy, gteCopy, eqCopy, neqCopy);
+		for (int i = 0; i < 1000; i++) {
+			C newValue = random.get();
+			(i % 2 == 0 ? a : b).set(newValue, null);
+			checkComparison(a, b, ltCopy, lteCopy, gtCopy, gteCopy, eqCopy, neqCopy);
+		}
+
+		until.onNext(null);
+	}
+
+	private static <C extends Comparable<C>> Supplier<C> getRandom(Class<C> type, TestUtil helper) {
+		type = TypeTokens.get().unwrap(type);
+		if (type == byte.class) {
+			return () -> (C) Byte.valueOf(helper.getBytes(1)[0]);
+		} else if (type == short.class) {
+			return () -> (C) Short.valueOf((short) helper.getAnyInt());
+		} else if (type == int.class) {
+			return () -> (C) Integer.valueOf(helper.getAnyInt());
+		} else if (type == long.class) {
+			return () -> (C) Long.valueOf(helper.getAnyLong());
+		} else if (type == float.class) {
+			// Would be nice to test NaNs as well, but with this way of just representing them as comparables it's pretty difficult
+			return () -> {
+				float r = helper.getAnyFloat();
+				while (Float.isNaN(r))
+					r = helper.getAnyFloat();
+				return (C) Float.valueOf(r);
+			};
+		} else if (type == double.class) {
+			return () -> {
+				double r = helper.getAnyDouble();
+				while (Double.isNaN(r))
+					r = helper.getAnyDouble();
+				return (C) Double.valueOf(r);
+			};
+		} else if (type == char.class) {
+			return () -> (C) Character.valueOf((char) helper.getAnyInt());
+		} else if (type == String.class) {
+			return () -> (C) helper.getAlphaNumericString(4, 6);
+		} else
+			throw new IllegalArgumentException("Unrecognized comparable type: " + type.getName());
+	}
+
+	private static <C extends Comparable<C>> void checkComparison(SettableValue<C> a, SettableValue<C> b, SettableValue<Boolean> lt,
+		SettableValue<Boolean> lte, SettableValue<Boolean> gt, SettableValue<Boolean> gte, SettableValue<Boolean> eq,
+		SettableValue<Boolean> neq) {
+		int comp = a.get().compareTo(b.get());
+		if ((comp < 0) != lt.get())
+			throw new AssertionError(a.get() + "<" + b.get() + " reported as " + lt.get());
+		if ((comp <= 0) != lte.get())
+			throw new AssertionError(a.get() + "<=" + b.get() + " reported as " + lte.get());
+		if ((comp > 0) != gt.get())
+			throw new AssertionError(a.get() + ">" + b.get() + " reported as " + gt.get());
+		if ((comp >= 0) != gte.get())
+			throw new AssertionError(a.get() + ">=" + b.get() + " reported as " + gte.get());
+		if (eq != null && (comp == 0) != eq.get())
+			throw new AssertionError(a.get() + "==" + b.get() + " reported as " + eq.get());
+		if (neq != null && (comp != 0) != neq.get())
+			throw new AssertionError(a.get() + "!=" + b.get() + " reported as " + neq.get());
 	}
 }

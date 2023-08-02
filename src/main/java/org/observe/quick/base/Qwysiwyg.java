@@ -139,7 +139,7 @@ public class Qwysiwyg {
 		}
 
 		public String getContext() {
-			return "<" + theContext.getTypeName() + "> " + theContext.reporting().getFileLocation().getPosition(0).toShortString();
+			return "<" + theContext.getTypeName() + "> " + theContext.reporting().getPosition().toShortString();
 		}
 
 		public String getValue() {
@@ -776,12 +776,13 @@ public class Qwysiwyg {
 
 	private <E extends ExElement> void renderInterpreted(DocumentComponent component, ExElement.Interpreted<E> interpreted, E element,
 		ModelSetInstance models) {
+		InterpretedExpressoEnv env = interpreted == null ? null : interpreted.getExpressoEnv();
 		ExElement.Def<? super E> def = interpreted.getDefinition();
 		DocumentComponent elComponent = getSourceComponent(component, def.getElement().getPositionInFile().getPosition()).parent;
 		elComponent.interpreted = interpreted;
 		elComponent.element = element;
 		if (models != null && interpreted instanceof ModelValueElement.InterpretedSynth)
-			renderInstance(elComponent, (ModelValueElement.InterpretedSynth<?, ?, ?>) interpreted, models);
+			renderInstance(elComponent, (ModelValueElement.InterpretedSynth<?, ?, ?>) interpreted, env, models);
 		for (Map.Entry<QonfigAttributeDef.Declared, QonfigValue> attr : def.getElement().getAttributes().entrySet()) {
 			PositionedContent position = attr.getValue().position;
 			if (position == null)
@@ -795,7 +796,7 @@ public class Qwysiwyg {
 					if (interpValue instanceof InterpretedValueSynth) {
 						EvaluatedExpression<?, ?> expression = getEvaluatedExpression((InterpretedValueSynth<?, ?>) interpValue);
 						if (expression != null)
-							renderInterpretedExpression(expression, attrValueComp, models);
+							renderInterpretedExpression(expression, attrValueComp, env, models);
 					}
 				}
 			} else {
@@ -816,7 +817,7 @@ public class Qwysiwyg {
 					if (interpValue instanceof InterpretedValueSynth) {
 						EvaluatedExpression<?, ?> expression = getEvaluatedExpression((InterpretedValueSynth<?, ?>) interpValue);
 						if (expression != null)
-							renderInterpretedExpression(expression, attrValueComp, models);
+							renderInterpretedExpression(expression, attrValueComp, env, models);
 					}
 				}
 			} else {
@@ -843,24 +844,26 @@ public class Qwysiwyg {
 		return value instanceof EvaluatedExpression ? (EvaluatedExpression<?, ?>) value : null;
 	}
 
-	private void renderInterpretedExpression(EvaluatedExpression<?, ?> expression, DocumentComponent component, ModelSetInstance models) {
+	private void renderInterpretedExpression(EvaluatedExpression<?, ?> expression, DocumentComponent component, InterpretedExpressoEnv env,
+		ModelSetInstance models) {
 		component.descriptor = expression.getDescriptor();
 		component.target = getLinkTarget(component.descriptor);
 		component.interpretedTooltip(() -> renderInterpretedDescriptor(component.descriptor));
 		if (models != null && isFundamentalValue(expression))
-			renderInstance(component, expression, models);
+			renderInstance(component, expression, env, models);
 		List<? extends EvaluatedExpression<?, ?>> components = expression.getComponents();
 		List<? extends EvaluatedExpression<?, ?>> divisions = expression.getDivisions();
 		if (component.children.size() == components.size() + divisions.size()) {
 			int c = 0;
 			for (EvaluatedExpression<?, ?> child : components)
-				renderInterpretedExpression(child, component.children.get(c++), models);
+				renderInterpretedExpression(child, component.children.get(c++), env, models);
 			for (EvaluatedExpression<?, ?> div : divisions)
-				renderInterpretedExpression(div, component.children.get(c++), models);
+				renderInterpretedExpression(div, component.children.get(c++), env, models);
 		}
 	}
 
-	private void renderInstance(DocumentComponent component, InterpretedValueSynth<?, ?> expression, ModelSetInstance models) {
+	private void renderInstance(DocumentComponent component, InterpretedValueSynth<?, ?> expression, InterpretedExpressoEnv env,
+		ModelSetInstance models) {
 		Object value;
 		Observable<?> update;
 		try {
@@ -869,7 +872,7 @@ public class Qwysiwyg {
 				component.instanceTooltip(((SettableValue<?>) value).map(String::valueOf));
 			else {
 				try {
-					update = expression.as(ModelTypes.Event.any()).get(models);
+					update = expression.as(ModelTypes.Event.any(), env).get(models);
 				} catch (TypeConversionException e) {
 					update = null;
 				}

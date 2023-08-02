@@ -6,9 +6,12 @@ This file defines syntax for debugging expresso models
 <qonfig-def name="Expresso-Debug" version="0.1" extends:expresso="Expresso-Core v0.1">
 	<value-types>
 		<one-of name="breakpoint-type">
-			<literal>parse</literal>
-			<literal>createContainer</literal>
-			<literal>createValue</literal>
+			<?DOC Catch a breakpoint as the value is being parsed and compiled?>
+			<literal>compile</literal>
+			<?DOC Catch a breakpoint as the value is being interpreted?>
+			<literal>interpret</literal>
+			<?DOC Catch a breakpoint as the value is being instantiated?>
+			<literal>instantiate</literal>
 		</one-of>
 	</value-types>
 

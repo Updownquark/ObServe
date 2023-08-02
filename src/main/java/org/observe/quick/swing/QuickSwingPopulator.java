@@ -490,7 +490,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 						});
 					} else
 						throw new ModelInstantiationException("Unrecognized mouse button listener type: " + mbl.getClass().getName(),
-							mbl.reporting().getFileLocation().getPosition(0), 0);
+							mbl.reporting().getPosition(), 0);
 				};
 			});
 			tx.with(QuickMouseListener.QuickMouseMoveListener.Interpreted.class, QuickSwingEventListener.class, (qil, tx2) -> {
@@ -552,7 +552,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 						break;
 					default:
 						throw new ModelInstantiationException("Unrecognized mouse move event type: " + mml.getEventType(),
-							mml.reporting().getFileLocation().getPosition(0), 0);
+							mml.reporting().getPosition(), 0);
 					}
 				};
 			});
@@ -1860,7 +1860,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 				if (e.getCause() instanceof ExpressoInterpretationException)
 					throw (ExpressoInterpretationException) e.getCause();
 				else
-					throw new ExpressoInterpretationException(e.getMessage(), interpreted.reporting().getFileLocation().getPosition(0), 0,
+					throw new ExpressoInterpretationException(e.getMessage(), interpreted.reporting().getPosition(), 0,
 						e.getCause());
 			}
 			renderersInitialized[0] = true;
@@ -1871,7 +1871,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 				interpreted.getActions().stream(), a -> (QuickSwingTableAction<R, ?>) tx.transform(a, QuickSwingTableAction.class));
 			QuickSwingPopulator<QuickTable<R>> swingTable = createWidget((panel, quick) -> {
 				TabularWidget.TabularContext<R> ctx = new TabularWidget.TabularContext.Default<>(rowType,
-					quick.reporting().getFileLocation().getPosition(0).toShortString());
+					quick.reporting().getPosition().toShortString());
 				quick.setContext(ctx);
 				ComponentEditor<?, ?>[] parent = new ComponentEditor[1];
 				ObservableCollection<InterpretedSwingTableColumn<R, ?>> columns = quick.getAllColumns().flow()//

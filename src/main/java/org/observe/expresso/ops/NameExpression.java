@@ -157,13 +157,13 @@ public class NameExpression implements ObservableExpression, Named {
 			}
 			return evaluateModel(//
 				mv, 0, new StringBuilder(), type, env.getModels(), expressionOffset + theContext.getExpressionLength() + 1,
-				env.reporting().at(theContext.getExpressionLength() + 1), divisions, (EvaluatedExpression<?, ?>) mv);
+				env.reporting().at(theContext.getExpressionLength() + 1), divisions, (EvaluatedExpression<?, ?>) mv, env);
 		} else {
 			InterpretableModelComponentNode<?> interpretable = env.getModels().getComponentIfExists(theNames.getFirst().getName());
 			if (interpretable != null)
 				return evaluateModel(//
 					interpretable.interpreted(), 1, new StringBuilder(theNames.get(0).getName()), type, env.getModels(), expressionOffset,
-					env.reporting(), divisions, null);
+					env.reporting(), divisions, null, env);
 		}
 		// Allow unqualified enum value references
 		if (theNames.size() == 1 && type.getModelType() == ModelTypes.Value) {
@@ -180,7 +180,7 @@ public class NameExpression implements ObservableExpression, Named {
 		Field field = env.getClassView().getImportedStaticField(theNames.getFirst().getName());
 		if (field != null) {
 			fieldValue = evaluateField(field, TypeTokens.get().of(field.getGenericType()), null, 0, type, expressionOffset, env.reporting(),
-				divisions);
+				divisions, env);
 		} else {
 			StringBuilder typeName = new StringBuilder().append(theNames.get(0).getName());
 			Class<?> clazz = env.getClassView().getType(typeName.toString());
@@ -202,7 +202,7 @@ public class NameExpression implements ObservableExpression, Named {
 					clazz.getName() + "." + theNames.get(i) + " cannot be accessed", e);
 			}
 			fieldValue = evaluateField(field, TypeTokens.get().of(field.getGenericType()), null, i, type, expressionOffset, env.reporting(),
-				divisions);
+				divisions, env);
 			EvaluatedExpression<?, ?> classValue = ObservableExpression.evEx(InterpretedValueSynth
 				.literal(TypeTokens.get().keyFor(Class.class).<Class<?>> parameterized(clazz), clazz, typeName.toString()), clazz);
 			for (int d = 0; d < i; d++)
@@ -213,7 +213,7 @@ public class NameExpression implements ObservableExpression, Named {
 
 	private <M, MV extends M> EvaluatedExpression<M, MV> evaluateModel(InterpretedValueSynth<?, ?> mv, int nameIndex, StringBuilder path,
 		ModelInstanceType<M, MV> type, InterpretedModelSet models, int expressionOffset, ErrorReporting reporting,
-		EvaluatedExpression<?, ?>[] divisions, EvaluatedExpression<?, ?> context)
+		EvaluatedExpression<?, ?>[] divisions, EvaluatedExpression<?, ?> context, InterpretedExpressoEnv env)
 			throws ExpressoEvaluationException, ExpressoInterpretationException {
 		ModelType<?> mvType = mv.getModelType();
 		if (nameIndex == theNames.size()) {
@@ -237,7 +237,7 @@ public class NameExpression implements ObservableExpression, Named {
 			if (nextMV != null) {
 				return evaluateModel(//
 					nextMV.interpreted(), nameIndex + 1, path, type, models, expressionOffset,
-					reporting.at(theNames.get(nameIndex).length()), divisions, context);
+					reporting.at(theNames.get(nameIndex).length()), divisions, context, env);
 			} else
 				throw new ExpressoEvaluationException(expressionOffset + getDivisionOffset(nameIndex),
 					getDivisionOffset(0) + theNames.get(nameIndex).length(), //
@@ -261,7 +261,7 @@ public class NameExpression implements ObservableExpression, Named {
 					getPath(nameIndex) + " cannot be accessed", e);
 			}
 			return evaluateField(field, instType.getType(0).resolveType(field.getGenericType()), //
-				imv, nameIndex, type, expressionOffset, reporting.at(theNames.get(nameIndex).length() + 1), divisions);
+				imv, nameIndex, type, expressionOffset, reporting.at(theNames.get(nameIndex).length() + 1), divisions, env);
 		} else
 			throw new ExpressoEvaluationException(expressionOffset + getDivisionOffset(nameIndex + 1),
 				getDivisionOffset(0) + theNames.get(nameIndex + 1).length(), //
@@ -270,7 +270,8 @@ public class NameExpression implements ObservableExpression, Named {
 
 	private <M, MV extends M, F> EvaluatedExpression<M, MV> evaluateField(Field field, TypeToken<F> fieldType,
 		InterpretedValueSynth<SettableValue<?>, ? extends SettableValue<?>> context, int nameIndex, ModelInstanceType<M, MV> type,
-			int expressionOffset, ErrorReporting reporting, EvaluatedExpression<?, ?>[] divisions) throws ExpressoEvaluationException {
+			int expressionOffset, ErrorReporting reporting, EvaluatedExpression<?, ?>[] divisions, InterpretedExpressoEnv env)
+				throws ExpressoEvaluationException {
 		if (!field.isAccessible()) {
 			try {
 				field.setAccessible(true);
@@ -281,7 +282,7 @@ public class NameExpression implements ObservableExpression, Named {
 			}
 		}
 		EvaluatedExpression<SettableValue<?>, ? extends SettableValue<?>> fieldValue = getFieldValue(field, fieldType, context, null,
-			nameIndex, expressionOffset, reporting);
+			nameIndex, expressionOffset, reporting, env);
 		divisions[nameIndex] = fieldValue;
 		EvaluatedExpression<M, MV> value;
 		if (nameIndex == theNames.size() - 1) {
@@ -289,7 +290,7 @@ public class NameExpression implements ObservableExpression, Named {
 				value = (EvaluatedExpression<M, MV>) fieldValue;
 			else {
 				try {
-					value = ObservableExpression.evEx2(fieldValue.as(type), fieldValue.getDescriptor(), fieldValue.getComponents(),
+					value = ObservableExpression.evEx2(fieldValue.as(type, env), fieldValue.getDescriptor(), fieldValue.getComponents(),
 						fieldValue.getDivisions());
 				} catch (TypeConversionException e) {
 					throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(), e.getMessage(), e);
@@ -309,7 +310,7 @@ public class NameExpression implements ObservableExpression, Named {
 					getPath(nameIndex) + " cannot be accessed", e);
 			}
 			value = evaluateField(newField, fieldType.resolveType(newField.getGenericType()), //
-				fieldValue, nameIndex + 1, type, expressionOffset, reporting.at(theNames.get(nameIndex).length() + 1), divisions);
+				fieldValue, nameIndex + 1, type, expressionOffset, reporting.at(theNames.get(nameIndex).length() + 1), divisions, env);
 		}
 		return value;
 	}
@@ -334,14 +335,14 @@ public class NameExpression implements ObservableExpression, Named {
 
 	private <F, M> EvaluatedExpression<SettableValue<?>, SettableValue<M>> getFieldValue(Field field, TypeToken<F> fieldType,
 		InterpretedValueSynth<SettableValue<?>, ? extends SettableValue<?>> context, TypeToken<M> targetType, int nameIndex,
-			int expressionOffset, ErrorReporting reporting) throws ExpressoEvaluationException {
+			int expressionOffset, ErrorReporting reporting, InterpretedExpressoEnv env) throws ExpressoEvaluationException {
 		ModelInstanceType<SettableValue<?>, SettableValue<F>> fieldModelType = ModelTypes.Value.forType(fieldType);
 		InterpretedValueSynth<SettableValue<?>, SettableValue<F>> fieldValue = InterpretedValueSynth.of(fieldModelType,
 			msi -> new FieldValue<>(context == null ? null : context.get(msi), field, fieldType, reporting));
 		if (targetType != null) {
 			ModelInstanceType<SettableValue<?>, SettableValue<M>> targetModelType = ModelTypes.Value.forType(targetType);
 			try {
-				return ObservableExpression.evEx(fieldValue.as(targetModelType), null);
+				return ObservableExpression.evEx(fieldValue.as(targetModelType, env), null);
 			} catch (TypeConversionException e) {
 				throw new ExpressoEvaluationException(expressionOffset, getDivisionOffset(nameIndex) + theNames.get(nameIndex).length(),
 					e.getMessage(), e);

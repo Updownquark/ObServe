@@ -1,18 +1,8 @@
 package org.observe.expresso.qonfig;
 
 import java.util.Collections;
-import java.util.List;
 import java.util.Set;
 
-import org.observe.expresso.CompiledExpressoEnv;
-import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.InterpretedExpressoEnv;
-import org.observe.expresso.ModelInstantiationException;
-import org.observe.expresso.ModelType;
-import org.observe.expresso.ModelType.ModelInstanceType;
-import org.observe.expresso.ObservableModelSet.CompiledModelValue;
-import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
-import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.qommons.BreakpointHere;
 import org.qommons.Version;
 import org.qommons.config.QonfigInterpretation;
@@ -51,83 +41,41 @@ public class ExpressoDebugV0_1 implements QonfigInterpretation {
 
 	@Override
 	public Builder configureInterpreter(Builder interpreter) {
-		interpreter//
-		.modifyWith("debug-value", (Class<CompiledModelValue<?>>) (Class<?>) CompiledModelValue.class,
-			new QonfigValueModifier<CompiledModelValue<?>>() {
+		interpreter.modifyWith("debug-value",
+			(Class<ModelValueElement.CompiledSynth<?, ?>>) (Class<?>) ModelValueElement.CompiledSynth.class,
+			new QonfigValueModifier<ModelValueElement.CompiledSynth<?, ?>>() {
 			@Override
 			public Object prepareSession(CoreSession session) throws QonfigInterpretationException {
 				String breakpointType = session.getAttributeText("break-on");
-				if ("parse".equals(breakpointType))
+				if ("compile".equals(breakpointType))
 					BreakpointHere.breakpoint();
 				return null;
 			}
 
 			@Override
-			public CompiledModelValue<?> modifyValue(CompiledModelValue<?> value, CoreSession session, Object prepared)
-				throws QonfigInterpretationException {
+			public ModelValueElement.CompiledSynth<?, ?> modifyValue(ModelValueElement.CompiledSynth<?, ?> value, CoreSession session,
+				Object prepared) throws QonfigInterpretationException {
 				String breakpointType = session.getAttributeText("break-on");
-				if (breakpointType == null || "parse".equals(breakpointType))
+				if (breakpointType == null)
 					return value;
-				return new CompiledModelValue<Object>() {
-					@Override
-					public ModelType<Object> getModelType(CompiledExpressoEnv env) {
-						return (ModelType<Object>) value.getModelType(env);
-					}
-
-					@Override
-					public InterpretedValueSynth<Object, ?> interpret(InterpretedExpressoEnv env)
-						throws ExpressoInterpretationException {
-						if ("createContainer".equals(breakpointType)) {
-							BreakpointHere.breakpoint();
-							return (InterpretedValueSynth<Object, ?>) value.interpret(env);
-						} else {
-							InterpretedValueSynth<Object, Object> wrapped = (InterpretedValueSynth<Object, Object>) value
-								.interpret(env);
-							return new InterpretedValueSynth<Object, Object>() {
-								@Override
-								public ModelType<Object> getModelType() {
-									return wrapped.getModelType();
-								}
-
-								@Override
-								public ModelInstanceType<Object, Object> getType() {
-									return wrapped.getType();
-								}
-
-								@Override
-								public Object get(ModelSetInstance models) throws ModelInstantiationException {
-									if ("createValue".equals(breakpointType))
-										BreakpointHere.breakpoint();
-									return wrapped.get(models);
-								}
-
-								@Override
-								public Object forModelCopy(Object oldValue, ModelSetInstance sourceModels,
-									ModelSetInstance newModels) throws ModelInstantiationException {
-									return wrapped.forModelCopy(value, sourceModels, newModels);
-								}
-
-								@Override
-								public List<? extends InterpretedValueSynth<?, ?>> getComponents() {
-									return Collections.singletonList(wrapped);
-								}
-
-								@Override
-								public String toString() {
-									return wrapped.toString();
-								}
-							};
-						}
-					}
-
-					@Override
-					public String toString() {
-						return value.toString();
-					}
-				};
+				switch (breakpointType) {
+				case "compile":
+					return value;
+				case "interpret":
+					value.onInterpretation(interpreted -> {
+						BreakpointHere.breakpoint();
+					});
+					return value;
+				case "instantiate":
+						// TODO
+						throw new QonfigInterpretationException("Instantiation breakpoint is no longer implemented",
+							session.reporting().getPosition(), 0);
+				default:
+					throw new QonfigInterpretationException("Unrecognized break-on value: " + breakpointType,
+						session.reporting().getPosition(), 0);
+				}
 			}
-		})//
-		;
+		});
 		return interpreter;
 	}
 }

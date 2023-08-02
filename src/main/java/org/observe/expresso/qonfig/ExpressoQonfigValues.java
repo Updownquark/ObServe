@@ -1183,7 +1183,7 @@ public class ExpressoQonfigValues {
 				if (value.getModelType(getExpressoEnv()) != ModelTypes.Value)
 					throw new QonfigInterpretationException(
 						"Only value-type components are allowed for a <" + getElement().getType().getName() + "> element",
-						value.reporting().getFileLocation().getPosition(0), 0);
+						value.reporting().getPosition(), 0);
 			}
 		}
 

@@ -67,14 +67,14 @@ public abstract class ExFlexibleElementModelAddOn<E extends ExElement> extends E
 			CompiledModelValue<?> value = theElementValues.get(elementValueName);
 			if (value == null)
 				throw new QonfigInterpretationException("No such element value '" + elementValueName + "'",
-					getElement().reporting().getFileLocation().getPosition(0), 0);
+					getElement().reporting().getPosition(), 0);
 			else if (!(value instanceof PlaceholderModelValue))
 				throw new QonfigInterpretationException("Element value '" + elementValueName + "' is not dynamically-typed",
-					getElement().reporting().getFileLocation().getPosition(0), 0);
+					getElement().reporting().getPosition(), 0);
 			if (value.getModelType(null) != modelType)
 				throw new QonfigInterpretationException(
 					"Element value '" + elementValueName + "' is not a " + value.getModelType(null) + ", not a " + modelType,
-					getElement().reporting().getFileLocation().getPosition(0), 0);
+					getElement().reporting().getPosition(), 0);
 			((PlaceholderModelValue<M>) value).satisfyType(this::getCurrentInterpreting,
 				(ExBiFunction<ExElement.Interpreted<?>, InterpretedExpressoEnv, ? extends ModelInstanceType<M, ?>, ExpressoInterpretationException>) type);
 		}
@@ -140,7 +140,7 @@ public abstract class ExFlexibleElementModelAddOn<E extends ExElement> extends E
 				CompiledModelValue<?> defValue = getDefinition().getElementValues().get(elementValueName);
 				if (defValue == null)
 					throw new ExpressoInterpretationException("No such element value '" + elementValueName + "'",
-						getElement().reporting().getFileLocation().getPosition(0), 0);
+						getElement().reporting().getPosition(), 0);
 				InterpretableModelComponentNode<?> node = getElement().getExpressoEnv().getModels().getComponentIfExists(elementValueName,
 					false);
 				value = node.interpreted();
@@ -154,7 +154,7 @@ public abstract class ExFlexibleElementModelAddOn<E extends ExElement> extends E
 			InterpretedModelComponentNode<?, ?> value = getElementValue(elementValueName);
 			if (!(value.getValue() instanceof PlaceholderModelValue.Interpreted))
 				throw new ExpressoInterpretationException("Element value '" + elementValueName + "' is not dynamic",
-					getElement().reporting().getFileLocation().getPosition(0), 0);
+					getElement().reporting().getPosition(), 0);
 			((PlaceholderModelValue.Interpreted<M, MV>) value.getValue()).satisfy(satisfier);
 		}
 
@@ -168,20 +168,20 @@ public abstract class ExFlexibleElementModelAddOn<E extends ExElement> extends E
 			InterpretedModelComponentNode<?, ?> elementValue = theElementValues.get(elementValueName);
 			if (elementValue == null)
 				throw new ModelInstantiationException("No such element value '" + elementValueName + "'",
-					getElement().reporting().getFileLocation().getPosition(0), 0);
+					getElement().reporting().getPosition(), 0);
 			else if (!(elementValue.getValue() instanceof PlaceholderModelValue.Interpreted))
 				throw new ModelInstantiationException("Element value '" + elementValueName + "' is not dynamic",
-					getElement().reporting().getFileLocation().getPosition(0), 0);
+					getElement().reporting().getPosition(), 0);
 			Object modelValue = models.get(elementValue);
 			if (!(modelValue instanceof ModelType.HollowModelValue))
 				throw new ModelInstantiationException("Element value '" + elementValueName + "' is not dynamic",
-					getElement().reporting().getFileLocation().getPosition(0), 0);
+					getElement().reporting().getPosition(), 0);
 			ModelType.HollowModelValue<Object, Object> hollow = (ModelType.HollowModelValue<Object, Object>) modelValue;
 			if (hollow.isSatisfied()) {
 				switch (ifPreSatisfied) {
 				case Error:
 					throw new ModelInstantiationException("Element value '" + elementValueName + "' is already satisfied",
-						getElement().reporting().getFileLocation().getPosition(0), 0);
+						getElement().reporting().getPosition(), 0);
 				case Ignore:
 					return;
 				case Replace:
@@ -228,11 +228,11 @@ public abstract class ExFlexibleElementModelAddOn<E extends ExElement> extends E
 		if (elementValue == null) {
 			if (theInterpreted == null)
 				throw new ModelInstantiationException("No such element value '" + elementValueName + "'",
-					getElement().reporting().getFileLocation().getPosition(0), 0);
+					getElement().reporting().getPosition(), 0);
 			InterpretedModelComponentNode<?, ?> node = theInterpreted.getElementValues().get(elementValueName);
 			if (node == null)
 				throw new ModelInstantiationException("No such element value '" + elementValueName + "'",
-					getElement().reporting().getFileLocation().getPosition(0), 0);
+					getElement().reporting().getPosition(), 0);
 			elementValue = new ElementValueHolder(elementValueName, node.getValueIdentity(), node.get(getElement().getUpdatingModels()));
 			theElementValues.put(elementValueName, elementValue);
 		}
@@ -248,13 +248,13 @@ public abstract class ExFlexibleElementModelAddOn<E extends ExElement> extends E
 		ElementValueHolder elementValue = getElementValue(elementValueName);
 		if (!(elementValue.value instanceof ModelType.HollowModelValue))
 			throw new ModelInstantiationException("Element value '" + elementValueName + "' is not dynamic",
-				getElement().reporting().getFileLocation().getPosition(0), 0);
+				getElement().reporting().getPosition(), 0);
 		ModelType.HollowModelValue<Object, Object> hollow = (ModelType.HollowModelValue<Object, Object>) elementValue.value;
 		if (hollow.isSatisfied()) {
 			switch (ifPreSatisfied) {
 			case Error:
 				throw new ModelInstantiationException("Element value '" + elementValueName + "' is already satisfied",
-					getElement().reporting().getFileLocation().getPosition(0), 0);
+					getElement().reporting().getPosition(), 0);
 			case Ignore:
 				return;
 			case Replace:
@@ -273,7 +273,7 @@ public abstract class ExFlexibleElementModelAddOn<E extends ExElement> extends E
 		ElementValueHolder elementValue = getElementValue(elementValueName);
 		if (!(elementValue.value instanceof ModelType.HollowModelValue))
 			throw new ModelInstantiationException("Element value '" + elementValueName + "' is not dynamic",
-				getElement().reporting().getFileLocation().getPosition(0), 0);
+				getElement().reporting().getPosition(), 0);
 		InterpretedModelComponentNode<?, ?> node;
 		try {
 			if (elementValue.id != null)
@@ -283,20 +283,20 @@ public abstract class ExFlexibleElementModelAddOn<E extends ExElement> extends E
 		} catch (ModelException e) {
 			throw new ModelInstantiationException(
 				"Bad model instance--could not locate value " + (elementValue.id != null ? elementValue.id : elementValue.name),
-				getElement().reporting().getFileLocation().getPosition(0), 0, e);
+				getElement().reporting().getPosition(), 0, e);
 		} catch (ExpressoInterpretationException e) {
 			throw new IllegalStateException("Not interpreted?", e);
 		}
 		Object modelValue = models.get(node);
 		if (!(modelValue instanceof ModelType.HollowModelValue)) // Already checked this for local models, but whatever
 			throw new ModelInstantiationException("Element value '" + elementValueName + "' is not dynamic",
-				getElement().reporting().getFileLocation().getPosition(0), 0);
+				getElement().reporting().getPosition(), 0);
 		ModelType.HollowModelValue<Object, Object> hollow = (ModelType.HollowModelValue<Object, Object>) modelValue;
 		if (hollow.isSatisfied()) {
 			switch (ifPreSatisfied) {
 			case Error:
 				throw new ModelInstantiationException("Element value '" + elementValueName + "' is already satisfied",
-					getElement().reporting().getFileLocation().getPosition(0), 0);
+					getElement().reporting().getPosition(), 0);
 			case Ignore:
 				return;
 			case Replace:
@@ -338,7 +338,7 @@ public abstract class ExFlexibleElementModelAddOn<E extends ExElement> extends E
 					if (!TypeTokens.get().isAssignable(defaultType.getType(t), pt))
 						throw new ExpressoInterpretationException(
 							"Dynamic model value '" + this + "' (" + defaultType + ") satisfied with " + targetType,
-							env.reporting().getFileLocation().getPosition(0), 0);
+							env.reporting().getPosition(), 0);
 				}
 				type = (ModelInstanceType<M, MV>) targetType;
 			} else {
@@ -348,7 +348,7 @@ public abstract class ExFlexibleElementModelAddOn<E extends ExElement> extends E
 				if (wildcard)
 					throw new ExpressoInterpretationException(
 						"Type not specified for dynamic model value '" + this + "' (" + defaultType + ") before being needed",
-						env.reporting().getFileLocation().getPosition(0), 0);
+						env.reporting().getPosition(), 0);
 				type = defaultType;
 			}
 			return interpret(type);

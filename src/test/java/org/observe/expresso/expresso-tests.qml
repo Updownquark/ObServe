@@ -189,48 +189,959 @@
 		<action>assertEquals(6, size)</action>
 		<!-- TODO Need more -->
 	</test>
-	<test name="binaryOperators">
+	<test name="booleanOperators">
 		<model>
 			<value name="a" init="false" />
 			<value name="b" init="false" />
 	
 			<value name="or">a || b</value>
 			<value name="and">a &amp;&amp; b</value>
+			<value name="xor">a ^ b</value>
 
 			<watch name="watchOr">or</watch>
 			<watch name="watchAnd">and</watch>
+			<watch name="watchXor">xor</watch>
 		</model>
 
+		<!-- Boolean AND/OR tests -->
 		<action>assertFalse(or)</action>
 		<action>assertFalse(watchOr)</action>
 		<action>assertFalse(and)</action>
 		<action>assertFalse(watchAnd)</action>
+		<action>assertFalse(xor)</action>
+		<action>assertFalse(watchXor)</action>
 		<action>a=true</action>
 		<action>assertTrue(or)</action>
 		<action>assertTrue(watchOr)</action>
 		<action>assertFalse(and)</action>
 		<action>assertFalse(watchAnd)</action>
+		<action>assertTrue(xor)</action>
+		<action>assertTrue(watchXor)</action>
 		<action>b=true</action>
 		<action>assertTrue(or)</action>
 		<action>assertTrue(watchOr)</action>
 		<action>assertTrue(and)</action>
 		<action>assertTrue(watchAnd)</action>
+		<action>assertFalse(xor)</action>
+		<action>assertFalse(watchXor)</action>
 		<action>a=false</action>
 		<action>assertTrue(or)</action>
 		<action>assertTrue(watchOr)</action>
 		<action>assertFalse(and)</action>
 		<action>assertFalse(watchAnd)</action>
+		<action>assertTrue(xor)</action>
+		<action>assertTrue(watchXor)</action>
 		<action>b=false</action>
 		<action>assertFalse(or)</action>
 		<action>assertFalse(watchOr)</action>
 		<action>assertFalse(and)</action>
 		<action>assertFalse(watchAnd)</action>
+		<action>assertFalse(xor)</action>
+		<action>assertFalse(watchXor)</action>
+	</test>
+	<test name="comparisonOperators">
+		<model>
+			<!-- Create two of each comparable type -->
+			<value name="intA" type="int"/>
+			<value name="intB" type="int" />
 
-		<!-- TODO
-			+, -, *, /, %
-			==, !=, <, <=, >, >=
-			^, | &, Object ||
-		 -->
+			<value name="dblA" type="double" />
+			<value name="dblB" type="double" />
+
+			<value name="longA" type="long" />
+			<value name="longB" type="long" />
+
+			<value name="fltA" type="float" />
+			<value name="fltB" type="float" />
+
+			<value name="shortA" type="short" />
+			<value name="shortB" type="short" />
+
+			<value name="byteA" type="byte" />
+			<value name="byteB" type="byte" />
+
+			<value name="charA" type="char" />
+			<value name="charB" type="char" />
+
+			<value name="stringA" init="&quot;&quot;" />
+			<value name="stringB" init="&quot;&quot;" />
+
+			<value name="intAltB">intA&lt;intB</value>
+			<value name="intAlteB">intA&lt;=intB</value>
+			<value name="intAgtB">intA>intB</value>
+			<value name="intAgteB">intA>=intB</value>
+			<value name="intAeqB">intA==intB</value>
+			<value name="intAneqB">intA!=intB</value>
+
+			<value name="dblAltB">dblA&lt;dblB</value>
+			<value name="dblAlteB">dblA&lt;=dblB</value>
+			<value name="dblAgtB">dblA>dblB</value>
+			<value name="dblAgteB">dblA>=dblB</value>
+			<value name="dblAeqB">dblA==dblB</value>
+			<value name="dblAneqB">dblA!=dblB</value>
+
+			<value name="longAltB">longA&lt;longB</value>
+			<value name="longAlteB">longA&lt;=longB</value>
+			<value name="longAgtB">longA>longB</value>
+			<value name="longAgteB">longA>=longB</value>
+			<value name="longAeqB">longA==longB</value>
+			<value name="longAneqB">longA!=longB</value>
+
+			<value name="fltAltB">fltA&lt;fltB</value>
+			<value name="fltAlteB">fltA&lt;=fltB</value>
+			<value name="fltAgtB">fltA>fltB</value>
+			<value name="fltAgteB">fltA>=fltB</value>
+			<value name="fltAeqB">fltA==fltB</value>
+			<value name="fltAneqB">fltA!=fltB</value>
+
+			<value name="shortAltB">shortA&lt;shortB</value>
+			<value name="shortAlteB">shortA&lt;=shortB</value>
+			<value name="shortAgtB">shortA>shortB</value>
+			<value name="shortAgteB">shortA>=shortB</value>
+			<value name="shortAeqB">shortA==shortB</value>
+			<value name="shortAneqB">shortA!=shortB</value>
+
+			<value name="byteAltB">byteA&lt;byteB</value>
+			<value name="byteAlteB">byteA&lt;=byteB</value>
+			<value name="byteAgtB">byteA>byteB</value>
+			<value name="byteAgteB">byteA>=byteB</value>
+			<value name="byteAeqB">byteA==byteB</value>
+			<value name="byteAneqB">byteA!=byteB</value>
+
+			<value name="charAltB">charA&lt;charB</value>
+			<value name="charAlteB">charA&lt;=charB</value>
+			<value name="charAgtB">charA>charB</value>
+			<value name="charAgteB">charA>=charB</value>
+			<value name="charAeqB">charA==charB</value>
+			<value name="charAneqB">charA!=charB</value>
+
+			<value name="stringAltB">stringA&lt;stringB</value>
+			<value name="stringAlteB">stringA&lt;=stringB</value>
+			<value name="stringAgtB">stringA>stringB</value>
+			<value name="stringAgteB">stringA>=stringB</value>
+			<!-- Equality and inequality operators are different for objects -->
+		</model>
+
+		<action>testComparison(intA, intB, intAltB, intAlteB, intAgtB, intAgteB, intAeqB, intAneqB)</action>
+
+		<action>testComparison(dblA, dblB, dblAltB, dblAlteB, dblAgtB, dblAgteB, dblAeqB, dblAneqB)</action>
+
+		<action>testComparison(longA, longB, longAltB, longAlteB, longAgtB, longAgteB, longAeqB, longAneqB)</action>
+
+		<action>testComparison(fltA, fltB, fltAltB, fltAlteB, fltAgtB, fltAgteB, fltAeqB, fltAneqB)</action>
+
+		<action>testComparison(shortA, shortB, shortAltB, shortAlteB, shortAgtB, shortAgteB, shortAeqB, shortAneqB)</action>
+
+		<action>testComparison(byteA, byteB, byteAltB, byteAlteB, byteAgtB, byteAgteB, byteAeqB, byteAneqB)</action>
+
+		<action>testComparison(charA, charB, charAltB, charAlteB, charAgtB, charAgteB, charAeqB, charAneqB)</action>
+
+		<action>testComparison(stringA, stringB, stringAltB, stringAlteB, stringAgtB, stringAgteB, null, null)</action>
+	</test>
+	<test name="mathOperators">
+		<!--
+			This test is obnoxiously long, but it pretty well needs to be.
+			Because java (and Expresso) treats primitive types all differently, the binary operations for the different types are also
+			completely different, independent bits of code that need to be tested separately.
+			So please forgive all the copy/paste here, it's unavoidable.
+		-->
+		<model>
+			<value name="intA" type="int"/>
+			<value name="intB" type="int" />
+
+			<value name="dblA" type="double" />
+			<value name="dblB" type="double" />
+
+			<value name="longA" type="long" />
+			<value name="longB" type="long" />
+
+			<value name="fltA" type="float" />
+			<value name="fltB" type="float" />
+
+			<value name="shortA" type="short" />
+			<value name="shortB" type="short" />
+
+			<value name="byteA" type="byte" />
+			<value name="byteB" type="byte" />
+
+			<value name="charA" type="char" />
+			<value name="charB" type="char" />
+
+			<value name="intAplusB">intA+intB</value>
+			<value name="intAminusB">intA-intB</value>
+			<value name="intAtimesB">intA*intB</value>
+			<value name="intAdivB">intA/intB</value>
+			<value name="intAmodB">intA%intB</value>
+
+			<value name="dblAplusB">dblA+dblB</value>
+			<value name="dblAminusB">dblA-dblB</value>
+			<value name="dblAtimesB">dblA*dblB</value>
+			<value name="dblAdivB">dblA/dblB</value>
+			<value name="dblAmodB">dblA%dblB</value>
+			<value name="dblTol">1e-14</value>
+
+			<value name="longAplusB">longA+longB</value>
+			<value name="longAminusB">longA-longB</value>
+			<value name="longAtimesB">longA*longB</value>
+			<value name="longAdivB">longA/longB</value>
+			<value name="longAmodB">longA%longB</value>
+
+			<value name="fltAplusB">fltA+fltB</value>
+			<value name="fltAminusB">fltA-fltB</value>
+			<value name="fltAtimesB">fltA*fltB</value>
+			<value name="fltAdivB">fltA/fltB</value>
+			<value name="fltAmodB">fltA%fltB</value>
+			<value name="fltTol">1e-5f</value>
+
+			<value name="shortAplusB">shortA+shortB</value>
+			<value name="shortAminusB">shortA-shortB</value>
+			<value name="shortAtimesB">shortA*shortB</value>
+			<value name="shortAdivB">shortA/shortB</value>
+			<value name="shortAmodB">shortA%shortB</value>
+
+			<value name="byteAplusB">byteA+byteB</value>
+			<value name="byteAminusB">byteA-byteB</value>
+			<value name="byteAtimesB">byteA*byteB</value>
+			<value name="byteAdivB">byteA/byteB</value>
+			<value name="byteAmodB">byteA%byteB</value>
+
+			<value name="charAplusB">charA+charB</value>
+			<value name="charAminusB">charA-charB</value>
+			<value name="charAtimesB">charA*charB</value>
+			<value name="charAdivB">charA/charB</value>
+			<value name="charAmodB">charA%charB</value>
+
+			<!--
+				We're not going to worry about performing the test with watches.
+				The individual operators don't care whether the value is watched,
+				and we test watching of binary operator expressions elsewhere (see the comparison operator test).
+			-->
+		</model>
+
+		<action>assertEquals(0, intAplusB)</action>
+		<action>assertEquals(0, intAminusB)</action>
+		<action>assertEquals(0, intAtimesB)</action>
+		<!-- The operators are set up to treat division and modulus by zero as the same as division by 1, or the unity operation -->
+		<action>assertEquals(0, intAdivB)</action>
+		<action>assertEquals(0, intAmodB)</action>
+
+		<!-- Ensure changes to either value are effective in the result -->
+		<action>intA=5</action>
+		<action>assertEquals(5, intAplusB)</action>
+		<action>assertEquals(5, intAminusB)</action>
+		<action>assertEquals(0, intAtimesB)</action>
+		<action>assertEquals(5, intAdivB)</action>
+		<action>assertEquals(5, intAmodB)</action>
+
+		<action>intB=3</action>
+		<action>assertEquals(8, intAplusB)</action>
+		<action>assertEquals(2, intAminusB)</action>
+		<action>assertEquals(15, intAtimesB)</action>
+		<action>assertEquals(1, intAdivB)</action>
+		<action>assertEquals(2, intAmodB)</action>
+
+		<action>intA=-7</action>
+		<action>assertEquals(-4, intAplusB)</action>
+		<action>assertEquals(-10, intAminusB)</action>
+		<action>assertEquals(-21, intAtimesB)</action>
+		<action>assertEquals(-2, intAdivB)</action>
+		<action>assertEquals(-1, intAmodB)</action>
+
+		<!-- Test assignments to all kinds of results -->
+		<action>intAplusB=12</action>
+		<action>assertEquals(9, intA)</action>
+		<action>assertEquals(12, intAplusB)</action>
+		<action>assertEquals(6, intAminusB)</action>
+		<action>assertEquals(27, intAtimesB)</action>
+		<action>assertEquals(3, intAdivB)</action>
+		<action>assertEquals(0, intAmodB)</action>
+
+		<action>intAminusB=13</action>
+		<action>assertEquals(16, intA)</action>
+		<action>assertEquals(19, intAplusB)</action>
+		<action>assertEquals(13, intAminusB)</action>
+		<action>assertEquals(48, intAtimesB)</action>
+		<action>assertEquals(5, intAdivB)</action>
+		<action>assertEquals(1, intAmodB)</action>
+
+		<action>intAtimesB=21</action>
+		<action>assertEquals(7, intA)</action>
+		<action>assertEquals(10, intAplusB)</action>
+		<action>assertEquals(4, intAminusB)</action>
+		<action>assertEquals(21, intAtimesB)</action>
+		<action>assertEquals(2, intAdivB)</action>
+		<action>assertEquals(1, intAmodB)</action>
+
+		<!-- The operator throws an IllegalArgumentException, but this is converted to an IllegalStateException by the assignment action -->
+		<action expect-throw="IllegalStateException">intAtimesB=4</action>
+
+		<action>intAdivB=10</action>
+		<action>assertEquals(30, intA)</action>
+		<action>assertEquals(33, intAplusB)</action>
+		<action>assertEquals(27, intAminusB)</action>
+		<action>assertEquals(90, intAtimesB)</action>
+		<action>assertEquals(10, intAdivB)</action>
+		<action>assertEquals(0, intAmodB)</action>
+
+		<!-- This is a little squirrely, but it's supported so we'll test it -->
+		<action>intAmodB=2</action>
+		<action>assertEquals(32, intA)</action>
+		<action>assertEquals(35, intAplusB)</action>
+		<action>assertEquals(29, intAminusB)</action>
+		<action>assertEquals(96, intAtimesB)</action>
+		<action>assertEquals(10, intAdivB)</action>
+		<action>assertEquals(2, intAmodB)</action>
+		
+		<action expect-throw="IllegalStateException">intAmodB=4</action>
+
+		<!-- Now, same thing for other types, starting with double -->
+		<action>assertEquals(0, dblAplusB, 0.0)</action>
+		<action>assertEquals(0, dblAminusB, 0.0)</action>
+		<action>assertEquals(0, dblAtimesB, 0.0)</action>
+		<action>assertEquals(Double.NaN, dblAdivB, 0.0)</action>
+		<action>assertEquals(Double.NaN, dblAmodB, 0.0)</action>
+
+		<action>dblA=5</action>
+		<action>assertEquals(5, dblAplusB, 0.0)</action>
+		<action>assertEquals(5, dblAminusB, 0.0)</action>
+		<action>assertEquals(0, dblAtimesB, 0.0)</action>
+		<action>assertEquals(Double.POSITIVE_INFINITY, dblAdivB, 0.0)</action>
+		<action>assertEquals(Double.NaN, dblAmodB, 0.0)</action>
+
+		<action>dblB=3.125</action>
+		<action>assertEquals(8.125, dblAplusB, dblTol)</action>
+		<action>assertEquals(1.875, dblAminusB, dblTol)</action>
+		<action>assertEquals(15.625, dblAtimesB, dblTol)</action>
+		<action>assertEquals(1.6, dblAdivB, dblTol)</action>
+		<action>assertEquals(1.875, dblAmodB, dblTol)</action>
+
+		<action>dblA=-7</action>
+		<action>assertEquals(-3.875, dblAplusB, dblTol)</action>
+		<action>assertEquals(-10.125, dblAminusB, dblTol)</action>
+		<action>assertEquals(-21.875, dblAtimesB, dblTol)</action>
+		<action>assertEquals(-2.24, dblAdivB, dblTol)</action>
+		<action>assertEquals(-0.75, dblAmodB, dblTol)</action>
+
+		<action>dblAplusB=12</action>
+		<action>assertEquals(8.875, dblA, dblTol)</action>
+		<action>assertEquals(12, dblAplusB, dblTol)</action>
+		<action>assertEquals(5.75, dblAminusB, dblTol)</action>
+		<action>assertEquals(27.734375, dblAtimesB, dblTol)</action>
+		<action>assertEquals(2.84, dblAdivB, dblTol)</action>
+		<action>assertEquals(2.625, dblAmodB, dblTol)</action>
+
+		<action>dblAminusB=13</action>
+		<action>assertEquals(16.125, dblA, dblTol)</action>
+		<action>assertEquals(19.25, dblAplusB, dblTol)</action>
+		<action>assertEquals(13, dblAminusB, dblTol)</action>
+		<action>assertEquals(50.390625, dblAtimesB, dblTol)</action>
+		<action>assertEquals(5.16, dblAdivB, dblTol)</action>
+		<action>assertEquals(0.5, dblAmodB, dblTol)</action>
+
+		<action>dblAtimesB=21</action>
+		<action>assertEquals(6.72, dblA, dblTol)</action>
+		<action>assertEquals(9.845, dblAplusB, dblTol)</action>
+		<action>assertEquals(3.595, dblAminusB, dblTol)</action>
+		<action>assertEquals(21, dblAtimesB, dblTol)</action>
+		<action>assertEquals(2.1504, dblAdivB, dblTol)</action>
+		<action>assertEquals(0.47, dblAmodB, dblTol)</action>
+
+		<!-- The double operation doesn't throw an exception -->
+		<action>dblAtimesB=4</action>
+		<action>assertEquals(1.28, dblA, dblTol)</action>
+		<action>assertEquals(4.405, dblAplusB, dblTol)</action>
+		<action>assertEquals(-1.845, dblAminusB, dblTol)</action>
+		<action>assertEquals(4, dblAtimesB, dblTol)</action>
+		<action>assertEquals(0.4096, dblAdivB, dblTol)</action>
+		<action>assertEquals(1.28, dblAmodB, dblTol)</action>
+
+		<action>dblAdivB=10</action>
+		<action>assertEquals(31.25, dblA, dblTol)</action>
+		<action>assertEquals(34.375, dblAplusB, dblTol)</action>
+		<action>assertEquals(28.125, dblAminusB, dblTol)</action>
+		<action>assertEquals(97.65625, dblAtimesB, dblTol)</action>
+		<action>assertEquals(10, dblAdivB, dblTol)</action>
+		<action>assertEquals(0, dblAmodB, dblTol)</action>
+
+		<action>dblAmodB=2</action>
+		<action>assertEquals(33.25, dblA, dblTol)</action>
+		<action>assertEquals(36.375, dblAplusB, dblTol)</action>
+		<action>assertEquals(30.125, dblAminusB, dblTol)</action>
+		<action>assertEquals(103.90625, dblAtimesB, dblTol)</action>
+		<action>assertEquals(10.64, dblAdivB, dblTol)</action>
+		<action>assertEquals(2, dblAmodB, dblTol)</action>
+		
+		<action expect-throw="IllegalStateException">dblAmodB=4</action>
+
+		<!-- long -->
+		<action>assertEquals(0, longAplusB)</action>
+		<action>assertEquals(0, longAminusB)</action>
+		<action>assertEquals(0, longAtimesB)</action>
+		<action>assertEquals(0, longAdivB)</action>
+		<action>assertEquals(0, longAmodB)</action>
+
+		<action>longA=5</action>
+		<action>assertEquals(5, longAplusB)</action>
+		<action>assertEquals(5, longAminusB)</action>
+		<action>assertEquals(0, longAtimesB)</action>
+		<action>assertEquals(5, longAdivB)</action>
+		<action>assertEquals(5, longAmodB)</action>
+
+		<action>longB=3</action>
+		<action>assertEquals(8, longAplusB)</action>
+		<action>assertEquals(2, longAminusB)</action>
+		<action>assertEquals(15, longAtimesB)</action>
+		<action>assertEquals(1, longAdivB)</action>
+		<action>assertEquals(2, longAmodB)</action>
+
+		<action>longA=-7</action>
+		<action>assertEquals(-4, longAplusB)</action>
+		<action>assertEquals(-10, longAminusB)</action>
+		<action>assertEquals(-21, longAtimesB)</action>
+		<action>assertEquals(-2, longAdivB)</action>
+		<action>assertEquals(-1, longAmodB)</action>
+
+		<action>longAplusB=12</action>
+		<action>assertEquals(9, longA)</action>
+		<action>assertEquals(12, longAplusB)</action>
+		<action>assertEquals(6, longAminusB)</action>
+		<action>assertEquals(27, longAtimesB)</action>
+		<action>assertEquals(3, longAdivB)</action>
+		<action>assertEquals(0, longAmodB)</action>
+
+		<action>longAminusB=13</action>
+		<action>assertEquals(16, longA)</action>
+		<action>assertEquals(19, longAplusB)</action>
+		<action>assertEquals(13, longAminusB)</action>
+		<action>assertEquals(48, longAtimesB)</action>
+		<action>assertEquals(5, longAdivB)</action>
+		<action>assertEquals(1, longAmodB)</action>
+
+		<action>longAtimesB=21</action>
+		<action>assertEquals(7, longA)</action>
+		<action>assertEquals(10, longAplusB)</action>
+		<action>assertEquals(4, longAminusB)</action>
+		<action>assertEquals(21, longAtimesB)</action>
+		<action>assertEquals(2, longAdivB)</action>
+		<action>assertEquals(1, longAmodB)</action>
+
+		<action expect-throw="IllegalStateException">longAtimesB=4</action>
+
+		<action>longAdivB=10</action>
+		<action>assertEquals(30, longA)</action>
+		<action>assertEquals(33, longAplusB)</action>
+		<action>assertEquals(27, longAminusB)</action>
+		<action>assertEquals(90, longAtimesB)</action>
+		<action>assertEquals(10, longAdivB)</action>
+		<action>assertEquals(0, longAmodB)</action>
+
+		<action>longAmodB=2</action>
+		<action>assertEquals(32, longA)</action>
+		<action>assertEquals(35, longAplusB)</action>
+		<action>assertEquals(29, longAminusB)</action>
+		<action>assertEquals(96, longAtimesB)</action>
+		<action>assertEquals(10, longAdivB)</action>
+		<action>assertEquals(2, longAmodB)</action>
+		
+		<action expect-throw="IllegalStateException">longAmodB=4</action>
+
+		<!-- float -->
+		<action>assertEquals(0, fltAplusB, 0.0)</action>
+		<action>assertEquals(0, fltAminusB, 0.0)</action>
+		<action>assertEquals(0, fltAtimesB, 0.0)</action>
+		<action>assertEquals(Double.NaN, fltAdivB, 0.0)</action>
+		<action>assertEquals(Double.NaN, fltAmodB, 0.0)</action>
+
+		<action>fltA=5</action>
+		<action>assertEquals(5, fltAplusB, 0.0)</action>
+		<action>assertEquals(5, fltAminusB, 0.0)</action>
+		<action>assertEquals(0, fltAtimesB, 0.0)</action>
+		<action>assertEquals(Double.POSITIVE_INFINITY, fltAdivB, 0.0)</action>
+		<action>assertEquals(Double.NaN, fltAmodB, 0.0)</action>
+
+		<action>fltB=3.125f</action>
+		<action>assertEquals(8.125f, fltAplusB, fltTol)</action>
+		<action>assertEquals(1.875f, fltAminusB, fltTol)</action>
+		<action>assertEquals(15.625f, fltAtimesB, fltTol)</action>
+		<action>assertEquals(1.6f, fltAdivB, fltTol)</action>
+		<action>assertEquals(1.875f, fltAmodB, fltTol)</action>
+
+		<action>fltA=-7</action>
+		<action>assertEquals(-3.875f, fltAplusB, fltTol)</action>
+		<action>assertEquals(-10.125f, fltAminusB, fltTol)</action>
+		<action>assertEquals(-21.875f, fltAtimesB, fltTol)</action>
+		<action>assertEquals(-2.24f, fltAdivB, fltTol)</action>
+		<action>assertEquals(-0.75f, fltAmodB, fltTol)</action>
+
+		<action>fltAplusB=12</action>
+		<action>assertEquals(8.875f, fltA, fltTol)</action>
+		<action>assertEquals(12f, fltAplusB, fltTol)</action>
+		<action>assertEquals(5.75f, fltAminusB, fltTol)</action>
+		<action>assertEquals(27.734375f, fltAtimesB, fltTol)</action>
+		<action>assertEquals(2.84f, fltAdivB, fltTol)</action>
+		<action>assertEquals(2.625f, fltAmodB, fltTol)</action>
+
+		<action>fltAminusB=13</action>
+		<action>assertEquals(16.125f, fltA, fltTol)</action>
+		<action>assertEquals(19.25f, fltAplusB, fltTol)</action>
+		<action>assertEquals(13f, fltAminusB, fltTol)</action>
+		<action>assertEquals(50.390625f, fltAtimesB, fltTol)</action>
+		<action>assertEquals(5.16f, fltAdivB, fltTol)</action>
+		<action>assertEquals(0.5f, fltAmodB, fltTol)</action>
+
+		<action>fltAtimesB=21</action>
+		<action>assertEquals(6.72f, fltA, fltTol)</action>
+		<action>assertEquals(9.845f, fltAplusB, fltTol)</action>
+		<action>assertEquals(3.595f, fltAminusB, fltTol)</action>
+		<action>assertEquals(21f, fltAtimesB, fltTol)</action>
+		<action>assertEquals(2.1504f, fltAdivB, fltTol)</action>
+		<action>assertEquals(0.47f, fltAmodB, fltTol)</action>
+
+		<action>fltAtimesB=4</action>
+		<action>assertEquals(1.28f, fltA, fltTol)</action>
+		<action>assertEquals(4.405f, fltAplusB, fltTol)</action>
+		<action>assertEquals(-1.845f, fltAminusB, fltTol)</action>
+		<action>assertEquals(4f, fltAtimesB, fltTol)</action>
+		<action>assertEquals(0.4096f, fltAdivB, fltTol)</action>
+		<action>assertEquals(1.28f, fltAmodB, fltTol)</action>
+
+		<action>fltAdivB=10</action>
+		<action>assertEquals(31.25f, fltA, fltTol)</action>
+		<action>assertEquals(34.375f, fltAplusB, fltTol)</action>
+		<action>assertEquals(28.125f, fltAminusB, fltTol)</action>
+		<action>assertEquals(97.65625f, fltAtimesB, fltTol)</action>
+		<action>assertEquals(10f, fltAdivB, fltTol)</action>
+		<action>assertEquals(0f, fltAmodB, fltTol)</action>
+
+		<action>fltAmodB=2</action>
+		<action>assertEquals(33.25f, fltA, fltTol)</action>
+		<action>assertEquals(36.375f, fltAplusB, fltTol)</action>
+		<action>assertEquals(30.125f, fltAminusB, fltTol)</action>
+		<action>assertEquals(103.90625f, fltAtimesB, fltTol)</action>
+		<action>assertEquals(10.64f, fltAdivB, fltTol)</action>
+		<action>assertEquals(2f, fltAmodB, fltTol)</action>
+		
+		<action expect-throw="IllegalStateException">fltAmodB=4</action>
+
+		<!-- short -->
+		<action>assertEquals(0, shortAplusB)</action>
+		<action>assertEquals(0, shortAminusB)</action>
+		<action>assertEquals(0, shortAtimesB)</action>
+		<action>assertEquals(0, shortAdivB)</action>
+		<action>assertEquals(0, shortAmodB)</action>
+
+		<action>shortA=(short) 5</action>
+		<action>assertEquals(5, shortAplusB)</action>
+		<action>assertEquals(5, shortAminusB)</action>
+		<action>assertEquals(0, shortAtimesB)</action>
+		<action>assertEquals(5, shortAdivB)</action>
+		<action>assertEquals(5, shortAmodB)</action>
+
+		<action>shortB=(short) 3</action>
+		<action>assertEquals(8, shortAplusB)</action>
+		<action>assertEquals(2, shortAminusB)</action>
+		<action>assertEquals(15, shortAtimesB)</action>
+		<action>assertEquals(1, shortAdivB)</action>
+		<action>assertEquals(2, shortAmodB)</action>
+
+		<action>shortA=(short) -7</action>
+		<action>assertEquals(-4, shortAplusB)</action>
+		<action>assertEquals(-10, shortAminusB)</action>
+		<action>assertEquals(-21, shortAtimesB)</action>
+		<action>assertEquals(-2, shortAdivB)</action>
+		<action>assertEquals(-1, shortAmodB)</action>
+
+		<action>shortAplusB=(short) 12</action>
+		<action>assertEquals(9, shortA)</action>
+		<action>assertEquals(12, shortAplusB)</action>
+		<action>assertEquals(6, shortAminusB)</action>
+		<action>assertEquals(27, shortAtimesB)</action>
+		<action>assertEquals(3, shortAdivB)</action>
+		<action>assertEquals(0, shortAmodB)</action>
+
+		<action>shortAminusB=(short) 13</action>
+		<action>assertEquals(16, shortA)</action>
+		<action>assertEquals(19, shortAplusB)</action>
+		<action>assertEquals(13, shortAminusB)</action>
+		<action>assertEquals(48, shortAtimesB)</action>
+		<action>assertEquals(5, shortAdivB)</action>
+		<action>assertEquals(1, shortAmodB)</action>
+
+		<action>shortAtimesB=(short) 21</action>
+		<action>assertEquals(7, shortA)</action>
+		<action>assertEquals(10, shortAplusB)</action>
+		<action>assertEquals(4, shortAminusB)</action>
+		<action>assertEquals(21, shortAtimesB)</action>
+		<action>assertEquals(2, shortAdivB)</action>
+		<action>assertEquals(1, shortAmodB)</action>
+
+		<action expect-throw="IllegalStateException">shortAtimesB=(short) 4</action>
+
+		<action>shortAdivB=(short) 10</action>
+		<action>assertEquals(30, shortA)</action>
+		<action>assertEquals(33, shortAplusB)</action>
+		<action>assertEquals(27, shortAminusB)</action>
+		<action>assertEquals(90, shortAtimesB)</action>
+		<action>assertEquals(10, shortAdivB)</action>
+		<action>assertEquals(0, shortAmodB)</action>
+
+		<action>shortAmodB=(short) 2</action>
+		<action>assertEquals(32, shortA)</action>
+		<action>assertEquals(35, shortAplusB)</action>
+		<action>assertEquals(29, shortAminusB)</action>
+		<action>assertEquals(96, shortAtimesB)</action>
+		<action>assertEquals(10, shortAdivB)</action>
+		<action>assertEquals(2, shortAmodB)</action>
+		
+		<action expect-throw="IllegalStateException">shortAmodB=(short) 4</action>
+
+		<!-- byte -->
+		<action>assertEquals(0, byteAplusB)</action>
+		<action>assertEquals(0, byteAminusB)</action>
+		<action>assertEquals(0, byteAtimesB)</action>
+		<action>assertEquals(0, byteAdivB)</action>
+		<action>assertEquals(0, byteAmodB)</action>
+
+		<action>byteA=(byte) 5</action>
+		<action>assertEquals(5, byteAplusB)</action>
+		<action>assertEquals(5, byteAminusB)</action>
+		<action>assertEquals(0, byteAtimesB)</action>
+		<action>assertEquals(5, byteAdivB)</action>
+		<action>assertEquals(5, byteAmodB)</action>
+
+		<action>byteB=(byte) 3</action>
+		<action>assertEquals(8, byteAplusB)</action>
+		<action>assertEquals(2, byteAminusB)</action>
+		<action>assertEquals(15, byteAtimesB)</action>
+		<action>assertEquals(1, byteAdivB)</action>
+		<action>assertEquals(2, byteAmodB)</action>
+
+		<action>byteA=(byte) -7</action>
+		<action>assertEquals(-4, byteAplusB)</action>
+		<action>assertEquals(-10, byteAminusB)</action>
+		<action>assertEquals(-21, byteAtimesB)</action>
+		<action>assertEquals(-2, byteAdivB)</action>
+		<action>assertEquals(-1, byteAmodB)</action>
+
+		<action>byteAplusB=(byte) 12</action>
+		<action>assertEquals(9, byteA)</action>
+		<action>assertEquals(12, byteAplusB)</action>
+		<action>assertEquals(6, byteAminusB)</action>
+		<action>assertEquals(27, byteAtimesB)</action>
+		<action>assertEquals(3, byteAdivB)</action>
+		<action>assertEquals(0, byteAmodB)</action>
+
+		<action>byteAminusB=(byte) 13</action>
+		<action>assertEquals(16, byteA)</action>
+		<action>assertEquals(19, byteAplusB)</action>
+		<action>assertEquals(13, byteAminusB)</action>
+		<action>assertEquals(48, byteAtimesB)</action>
+		<action>assertEquals(5, byteAdivB)</action>
+		<action>assertEquals(1, byteAmodB)</action>
+
+		<action>byteAtimesB=(byte) 21</action>
+		<action>assertEquals(7, byteA)</action>
+		<action>assertEquals(10, byteAplusB)</action>
+		<action>assertEquals(4, byteAminusB)</action>
+		<action>assertEquals(21, byteAtimesB)</action>
+		<action>assertEquals(2, byteAdivB)</action>
+		<action>assertEquals(1, byteAmodB)</action>
+
+		<action expect-throw="IllegalStateException">byteAtimesB=(byte) 4</action>
+
+		<action>byteAdivB=(byte) 10</action>
+		<action>assertEquals(30, byteA)</action>
+		<action>assertEquals(33, byteAplusB)</action>
+		<action>assertEquals(27, byteAminusB)</action>
+		<action>assertEquals(90, byteAtimesB)</action>
+		<action>assertEquals(10, byteAdivB)</action>
+		<action>assertEquals(0, byteAmodB)</action>
+
+		<action>byteAmodB=(byte) 2</action>
+		<action>assertEquals(32, byteA)</action>
+		<action>assertEquals(35, byteAplusB)</action>
+		<action>assertEquals(29, byteAminusB)</action>
+		<action>assertEquals(96, byteAtimesB)</action>
+		<action>assertEquals(10, byteAdivB)</action>
+		<action>assertEquals(2, byteAmodB)</action>
+		
+		<action expect-throw="IllegalStateException">byteAmodB=(byte) 4</action>
+
+		<!-- char -->
+		<action>assertEquals(0, charAplusB)</action>
+		<action>assertEquals(0, charAminusB)</action>
+		<action>assertEquals(0, charAtimesB)</action>
+		<action>assertEquals(0, charAdivB)</action>
+		<action>assertEquals(0, charAmodB)</action>
+
+		<action>charA=(char) 5</action>
+		<action>assertEquals(5, charAplusB)</action>
+		<action>assertEquals(5, charAminusB)</action>
+		<action>assertEquals(0, charAtimesB)</action>
+		<action>assertEquals(5, charAdivB)</action>
+		<action>assertEquals(5, charAmodB)</action>
+
+		<action>charB=(char) 3</action>
+		<action>assertEquals(8, charAplusB)</action>
+		<action>assertEquals(2, charAminusB)</action>
+		<action>assertEquals(15, charAtimesB)</action>
+		<action>assertEquals(1, charAdivB)</action>
+		<action>assertEquals(2, charAmodB)</action>
+
+		<!-- char is java's only unsigned type, so the negative test doesn't make much sense -->
+		
+		<action>charAplusB=(char) 12</action>
+		<action>assertEquals(9, charA)</action>
+		<action>assertEquals(12, charAplusB)</action>
+		<action>assertEquals(6, charAminusB)</action>
+		<action>assertEquals(27, charAtimesB)</action>
+		<action>assertEquals(3, charAdivB)</action>
+		<action>assertEquals(0, charAmodB)</action>
+
+		<action>charAminusB=(char) 13</action>
+		<action>assertEquals(16, charA)</action>
+		<action>assertEquals(19, charAplusB)</action>
+		<action>assertEquals(13, charAminusB)</action>
+		<action>assertEquals(48, charAtimesB)</action>
+		<action>assertEquals(5, charAdivB)</action>
+		<action>assertEquals(1, charAmodB)</action>
+
+		<action>charAtimesB=(char) 21</action>
+		<action>assertEquals(7, charA)</action>
+		<action>assertEquals(10, charAplusB)</action>
+		<action>assertEquals(4, charAminusB)</action>
+		<action>assertEquals(21, charAtimesB)</action>
+		<action>assertEquals(2, charAdivB)</action>
+		<action>assertEquals(1, charAmodB)</action>
+
+		<action expect-throw="IllegalStateException">charAtimesB=(char) 4</action>
+
+		<action>charAdivB=(char) 10</action>
+		<action>assertEquals(30, charA)</action>
+		<action>assertEquals(33, charAplusB)</action>
+		<action>assertEquals(27, charAminusB)</action>
+		<action>assertEquals(90, charAtimesB)</action>
+		<action>assertEquals(10, charAdivB)</action>
+		<action>assertEquals(0, charAmodB)</action>
+
+		<action>charAmodB=(char) 2</action>
+		<action>assertEquals(32, charA)</action>
+		<action>assertEquals(35, charAplusB)</action>
+		<action>assertEquals(29, charAminusB)</action>
+		<action>assertEquals(96, charAtimesB)</action>
+		<action>assertEquals(10, charAdivB)</action>
+		<action>assertEquals(2, charAmodB)</action>
+		
+		<action expect-throw="IllegalStateException">charAmodB=(char) 4</action>
+
+		<!-- Test all math operations with different type operands -->
+		<action>intA=5</action>
+		<action>intB=5</action>
+		<action>longA=5</action>
+		<action>longB=5</action>
+		<action>fltA=5</action>
+		<action>fltB=5</action>
+		<action>dblA=5</action>
+		<action>dblB=5</action>
+		<action>shortA=(short)5</action>
+		<action>shortB=(short)5</action>
+		<action>byteA=(byte)5</action>
+		<action>byteB=(byte)5</action>
+		<action>charA=(char)5</action>
+		<action>charB=(char)5</action>
+
+		<action>assertEquals(10, byteA+charB)</action>
+		<action>assertEquals(10, byteA+shortB)</action>
+		<action>assertEquals(10, byteA+intB)</action>
+		<action>assertEquals(10, byteA+longB)</action>
+		<action>assertEquals(10, byteA+fltB, fltTol)</action>
+		<action>assertEquals(10, byteA+dblB, dblTol)</action>
+
+		<action>assertEquals(10, shortA+byteB)</action>
+		<action>assertEquals(10, shortA+charB)</action>
+		<action>assertEquals(10, shortA+intB)</action>
+		<action>assertEquals(10, shortA+longB)</action>
+		<action>assertEquals(10, shortA+fltB, fltTol)</action>
+		<action>assertEquals(10, shortA+dblB, dblTol)</action>
+
+		<action>assertEquals(10, charA+byteB)</action>
+		<action>assertEquals(10, charA+shortB)</action>
+		<action>assertEquals(10, charA+intB)</action>
+		<action>assertEquals(10, charA+longB)</action>
+		<action>assertEquals(10, charA+fltB, fltTol)</action>
+		<action>assertEquals(10, charA+dblB, dblTol)</action>
+
+		<action>assertEquals(10, intA+byteB)</action>
+		<action>assertEquals(10, intA+shortB)</action>
+		<action>assertEquals(10, intA+charB)</action>
+		<action>assertEquals(10, intA+longB)</action>
+		<action>assertEquals(10, intA+fltB, fltTol)</action>
+		<action>assertEquals(10, intA+dblB, dblTol)</action>
+
+		<action>assertEquals(10, longA+byteB)</action>
+		<action>assertEquals(10, longA+shortB)</action>
+		<action>assertEquals(10, longA+charB)</action>
+		<action>assertEquals(10, longA+intB)</action>
+		<action>assertEquals(10, longA+fltB, fltTol)</action>
+		<action>assertEquals(10, longA+dblB, dblTol)</action>
+
+		<action>assertEquals(10, fltA+byteB, fltTol)</action>
+		<action>assertEquals(10, fltA+shortB, fltTol)</action>
+		<action>assertEquals(10, fltA+charB, fltTol)</action>
+		<action>assertEquals(10, fltA+intB, fltTol)</action>
+		<action>assertEquals(10, fltA+longB, fltTol)</action>
+		<action>assertEquals(10, fltA+dblB, dblTol)</action>
+
+		<action>assertEquals(10, dblA+byteB, dblTol)</action>
+		<action>assertEquals(10, dblA+shortB, dblTol)</action>
+		<action>assertEquals(10, dblA+charB, dblTol)</action>
+		<action>assertEquals(10, dblA+intB, dblTol)</action>
+		<action>assertEquals(10, dblA+longB, dblTol)</action>
+		<action>assertEquals(10, dblA+fltB, dblTol)</action>
+	</test>
+	<test name="casts">
+		<model>
+			<value name="byteV" type="byte" />
+			<value name="shortV" type="short" />
+			<value name="charV" type="char" />
+			<value name="intV" type="int" />
+			<value name="longV" type="long" />
+			<value name="floatV" type="float" />
+			<value name="doubleV" type="double" />
+
+			<value name="byteToDouble" type="double">byteV</value>
+			<value name="byteToFloat" type="float">byteV</value>
+			<value name="byteToLong" type="long">byteV</value>
+			<value name="byteToInt" type="int">byteV</value>
+			<value name="byteToShort" type="short">byteV</value>
+			<value name="byteToChar" type="char">byteV</value>
+
+			<value name="shortToDouble" type="double">shortV</value>
+			<value name="shortToFloat" type="float">shortV</value>
+			<value name="shortToLong" type="long">shortV</value>
+			<value name="shortToInt" type="int">shortV</value>
+			<value name="shortToChar" type="char">(char) shortV</value>
+			<value name="shortToByte" type="byte">(byte) shortV</value>
+
+			<value name="charToDouble" type="double">charV</value>
+			<value name="charToFloat" type="float">charV</value>
+			<value name="charToLong" type="long">charV</value>
+			<value name="charToInt" type="int">charV</value>
+			<value name="charToShort" type="short">(short) charV</value>
+			<value name="charToByte" type="byte">(byte)charV</value>
+
+			<value name="intToDouble" type="double">intV</value>
+			<value name="intToFloat" type="float">intV</value>
+			<value name="intToLong" type="long">intV</value>
+			<value name="intToChar" type="char">(char) intV</value>
+			<value name="intToShort" type="short">(short)intV</value>
+			<value name="intToByte" type="byte">(byte) intV</value>
+
+			<value name="longToDouble" type="double">longV</value>
+			<value name="longToFloat" type="float">longV</value>
+			<value name="longToInt" type="int">(int) longV</value>
+			<value name="longToChar" type="char">(char) longV</value>
+			<value name="longToShort" type="short">(short)longV</value>
+			<value name="longToByte" type="byte">(byte) longV</value>
+
+			<value name="floatToDouble" type="double">floatV</value>
+			<value name="floatToLong" type="long">(long) floatV</value>
+			<value name="floatToInt" type="int">(int) floatV</value>
+			<value name="floatToChar" type="char">(char) floatV</value>
+			<value name="floatToShort" type="short">(short)floatV</value>
+			<value name="floatToByte" type="byte">(byte) floatV</value>
+
+			<value name="doubleToFloat" type="float">(float) doubleV</value>
+			<value name="doubleToLong" type="long">(long) doubleV</value>
+			<value name="doubleToInt" type="int">(int) doubleV</value>
+			<value name="doubleToChar" type="char">(char) doubleV</value>
+			<value name="doubleToShort" type="short">(short)doubleV</value>
+			<value name="doubleToByte" type="byte">(byte) doubleV</value>
+		</model>
+
+		<!--All values need to be between 0 and 127 so none of the types wrap and testing is easy -->
+		<action>byteV=(byte) 108</action>
+		<action>charV='\n'</action> <!-- ASCII 10 -->
+		<action>shortV=(short) 96</action>
+		<action>intV=76</action>
+		<action>longV=12L</action>
+		<action>floatV=1E2f</action>
+		<action>doubleV=1.1E2</action>
+
+		<action>assertEquals(108, byteToDouble, 0.0)</action>
+		<action>assertEquals(108, byteToFloat, 0.0f)</action>
+		<action>assertEquals(108, byteToLong)</action>
+		<action>assertEquals(108, byteToInt)</action>
+		<action>assertEquals((short) 108, byteToShort)</action>
+		<action>assertEquals((char) 108, byteToChar)</action>
+
+		<action>assertEquals(10, charToDouble, 0.0)</action>
+		<action>assertEquals(10, charToFloat, 0.0f)</action>
+		<action>assertEquals(10, charToLong)</action>
+		<action>assertEquals(10, charToInt)</action>
+		<action>assertEquals((short) 10, charToShort)</action>
+		<action>assertEquals((byte) 10, charToByte)</action>
+
+		<action>assertEquals(96, shortToDouble, 0.0)</action>
+		<action>assertEquals(96, shortToFloat, 0.0f)</action>
+		<action>assertEquals(96, shortToLong)</action>
+		<action>assertEquals(96, shortToInt)</action>
+		<action>assertEquals((char) 96, shortToChar)</action>
+		<action>assertEquals((byte) 96, shortToByte)</action>
+
+		<action>assertEquals(76, intToDouble, 0.0)</action>
+		<action>assertEquals(76, intToFloat, 0.0f)</action>
+		<action>assertEquals(76, intToLong)</action>
+		<action>assertEquals((char) 76, intToChar)</action>
+		<action>assertEquals((short) 76, intToShort)</action>
+		<action>assertEquals((byte) 76, intToByte)</action>
+
+		<action>assertEquals(12, longToDouble, 0.0)</action>
+		<action>assertEquals(12, longToFloat, 0.0f)</action>
+		<action>assertEquals(12, longToInt)</action>
+		<action>assertEquals((char) 12, longToChar)</action>
+		<action>assertEquals((short) 12, longToShort)</action>
+		<action>assertEquals((byte) 12, longToByte)</action>
+
+		<action>assertEquals(100, floatToDouble, 0.0)</action>
+		<action>assertEquals(100, floatToLong)</action>
+		<action>assertEquals(100, floatToInt, 0.0f)</action>
+		<action>assertEquals((char) 100, floatToChar)</action>
+		<action>assertEquals((short) 100, floatToShort)</action>
+		<action>assertEquals((byte) 100, floatToByte)</action>
+
+		<action>assertEquals(110, doubleToFloat, 0.0f)</action>
+		<action>assertEquals(110, doubleToLong)</action>
+		<action>assertEquals(110, doubleToInt, 0.0f)</action>
+		<action>assertEquals((char) 110, doubleToChar)</action>
+		<action>assertEquals((short) 110, doubleToShort)</action>
+		<action>assertEquals((byte) 110, doubleToByte)</action>
+
+		<!-- Now test assignments -->
+		<action breakpoint="true">byteToDouble=10</action>
+		<action>assertEquals((byte) 10, byteV)</action>
+		<action>shortToDouble=11</action>
+		<action>assertEquals((short) 11, shortV)</action>
+		<action>charToDouble=12</action>
+		<action>assertEquals((char) 12, charV)</action>
+		<action>intToDouble=13</action>
+		<action>assertEquals(13, intV)</action>
+		<action>longToDouble=14</action>
+		<action>assertEquals(14, longV)</action>
+		<action>floatToDouble=15</action>
+		<action>assertEquals(15, floatV)</action>
+	</test>
+	<test name="stringConcat">
+		<!-- TODO -->
+	</test>
+	<test name="bitwiseOperators">
+		<!-- TODO -->
+	</test>
+	<test name="objectOr">
+		<!-- TODO -->
+	</test>
+	<test name="conditionalOperator">
+		<!-- TODO -->
 	</test>
 	<test name="mapTo">
 		<model>

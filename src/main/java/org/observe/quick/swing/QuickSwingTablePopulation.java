@@ -185,7 +185,7 @@ class QuickSwingTablePopulation {
 				}
 				theEditContext = new QuickTableColumn.ColumnEditContext.Default<>(theColumn.getColumnSet().getRowType(),
 					theColumn.getType(),
-					theColumn.getEditing().reporting().getFileLocation().getPosition(0).toShortString());
+					theColumn.getEditing().reporting().getPosition().toShortString());
 				theColumn.getEditing().setEditorContext(theEditContext);
 			} else
 				theEditContext = null;

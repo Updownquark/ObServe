@@ -206,7 +206,7 @@ public class QuickStyleSheet extends ExElement.Def.Abstract<ExElement.Void> {
 		for (StyleSheetRef ref : theStyleSheetRefs) {
 			if (theImportedStyleSheets.put(ref.getName(), ref.getTarget()) != null)
 				throw new QonfigInterpretationException("Multiple imported style sheets named '" + ref.getName() + "'",
-					ref.reporting().getFileLocation().getPosition(0), 0);
+					ref.reporting().getPosition(), 0);
 		}
 
 		ExElement.syncDefs(QuickStyleSet.class, theStyleSetList, session.forChildren("style-set"));
@@ -214,7 +214,7 @@ public class QuickStyleSheet extends ExElement.Def.Abstract<ExElement.Void> {
 		for (QuickStyleSet styleSet : theStyleSetList) {
 			if (theStyleSets.put(styleSet.getName(), styleSet) != null)
 				throw new QonfigInterpretationException("Multiple style sets named '" + styleSet.getName() + "'",
-					styleSet.reporting().getFileLocation().getPosition(0), 0);
+					styleSet.reporting().getPosition(), 0);
 		}
 	}
 

@@ -220,8 +220,9 @@ public interface ObservableModelSet extends Identifiable {
 		 */
 		MV forModelCopy(MV value, ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException;
 
-		default <M2, MV2 extends M2> InterpretedValueSynth<M2, MV2> as(ModelInstanceType<M2, MV2> type) throws TypeConversionException {
-			return getType().as(this, type);
+		default <M2, MV2 extends M2> InterpretedValueSynth<M2, MV2> as(ModelInstanceType<M2, MV2> type, InterpretedExpressoEnv env)
+			throws TypeConversionException {
+			return getType().as(this, type, env);
 		}
 
 		/**
@@ -278,8 +279,9 @@ public interface ObservableModelSet extends Identifiable {
 			}
 
 			@Override
-			public <M3, MV3 extends M3> InterpretedValueSynth<M3, MV3> as(ModelInstanceType<M3, MV3> type) throws TypeConversionException {
-				return InterpretedValueSynth.super.as(type);
+			public <M3, MV3 extends M3> InterpretedValueSynth<M3, MV3> as(ModelInstanceType<M3, MV3> type, InterpretedExpressoEnv env)
+				throws TypeConversionException {
+				return InterpretedValueSynth.super.as(type, env);
 			}
 
 			@Override
@@ -751,7 +753,7 @@ public interface ObservableModelSet extends Identifiable {
 			public InterpretedValueSynth<M, ?> createSynthesizer(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 				ModelInstanceType<M, ?> type = getType(env);
 				try {
-					M value = env.getExtModels().getValue(getModelPath(), type);
+					M value = env.getExtModels().getValue(getModelPath(), type, env);
 					return InterpretedValueSynth.of((ModelInstanceType<M, M>) type, msi -> value);
 				} catch (ModelException e) {
 					// No such model--use the default if present
@@ -1275,12 +1277,12 @@ public interface ObservableModelSet extends Identifiable {
 		 * @throws ModelException If no such value exists accessible at the given path
 		 * @throws TypeConversionException If the value at the path could not be converted to the target type
 		 */
-		default <M, MV extends M> InterpretedValueSynth<M, MV> getValue(String path, ModelInstanceType<M, MV> type)
-			throws ModelException, ExpressoInterpretationException, TypeConversionException {
+		default <M, MV extends M> InterpretedValueSynth<M, MV> getValue(String path, ModelInstanceType<M, MV> type,
+			InterpretedExpressoEnv env) throws ModelException, ExpressoInterpretationException, TypeConversionException {
 			InterpretedModelComponentNode<?, ?> node = getComponent(path).interpreted();
 			if (node.getModel() != null)
 				throw new ModelException("'" + path + "' is a sub-model, not a value");
-			return node.as(type);
+			return node.as(type, env);
 		}
 
 		@Override
@@ -1406,7 +1408,7 @@ public interface ObservableModelSet extends Identifiable {
 		 *         convert)
 		 * @throws ModelInstantiationException If the actual conversion to the given type fails
 		 */
-		<M, MV extends M> MV getValue(String path, ModelInstanceType<M, MV> type)
+		<M, MV extends M> MV getValue(String path, ModelInstanceType<M, MV> type, InterpretedExpressoEnv env)
 			throws ModelException, TypeConversionException, ModelInstantiationException;
 	}
 
@@ -1438,18 +1440,18 @@ public interface ObservableModelSet extends Identifiable {
 		}
 
 		@Override
-		public <M, MV extends M> MV getValue(String path, ModelInstanceType<M, MV> type)
+		public <M, MV extends M> MV getValue(String path, ModelInstanceType<M, MV> type, InterpretedExpressoEnv env)
 			throws ModelException, TypeConversionException, ModelInstantiationException {
 			int dot = path.lastIndexOf('.');
 			if (dot >= 0) {
 				DefaultExternalModelSet subModel = theRoot.getSubModel(path.substring(0, dot));
-				return subModel.getValue(path.substring(dot + 1), type);
+				return subModel.getValue(path.substring(dot + 1), type, env);
 			}
 			theNameChecker.checkName(path);
 			Placeholder thing = theComponents.get(path);
 			if (thing == null)
 				throw new ModelException("No such " + type + " declared: '" + pathTo(path) + "'");
-			ModelType.ModelInstanceConverter<Object, M> converter = ((ModelInstanceType<Object, Object>) thing.type).convert(type);
+			ModelType.ModelInstanceConverter<Object, M> converter = ((ModelInstanceType<Object, Object>) thing.type).convert(type, env);
 			if (converter == null)
 				throw new TypeConversionException(path, thing.type, type);
 			return (MV) converter.convert(thing.thing);
@@ -1772,8 +1774,8 @@ public interface ObservableModelSet extends Identifiable {
 			private final ExtValueRef<M> theExtRef;
 			private final DefaultModelSet theModel;
 
-			ModelNodeImpl(ModelComponentId id, CompiledModelValue<M> creator,
-				ExtValueRef<M> extRef, DefaultModelSet model, LocatedFilePosition sourceLocation) {
+			ModelNodeImpl(ModelComponentId id, CompiledModelValue<M> creator, ExtValueRef<M> extRef, DefaultModelSet model,
+				LocatedFilePosition sourceLocation) {
 				theNodeId = id;
 				theCreator = creator;
 				theExtRef = extRef;
@@ -1839,16 +1841,15 @@ public interface ObservableModelSet extends Identifiable {
 			public InterpretedModelComponentNode<M, ?> createInterpretation(InterpretedExpressoEnv env)
 				throws ExpressoInterpretationException {
 				if (theModel instanceof DefaultBuilt)
-					return new InterpretedModelNodeImpl<>(theNodeId, null, null, null,
-						((DefaultBuilt) theModel).createInterpreted(env), theSourceLocation);
+					return new InterpretedModelNodeImpl<>(theNodeId, null, null, null, ((DefaultBuilt) theModel).createInterpreted(env),
+						theSourceLocation);
 				else if (theModel != null)
 					throw new IllegalStateException("Cannot interpret a model element here");
 				else if (theCreator != null)
 					return new InterpretedModelNodeImpl<>(theNodeId, theCreator, //
 						getInterpretedValue(env), null, null, theSourceLocation);
 				else if (theExtRef != null)
-					return new InterpretedModelNodeImpl<>(theNodeId, null, getInterpretedValue(env), theExtRef, null,
-						theSourceLocation);
+					return new InterpretedModelNodeImpl<>(theNodeId, null, getInterpretedValue(env), theExtRef, null, theSourceLocation);
 				else
 					throw new IllegalArgumentException("Unrecognized node value: " + getThing().getClass().getName());
 			}
@@ -1873,8 +1874,7 @@ public interface ObservableModelSet extends Identifiable {
 			private final DefaultInterpreted theModel;
 
 			public InterpretedModelNodeImpl(ModelComponentId nodeId, CompiledModelValue<M> creator, InterpretedValueSynth<M, MV> value,
-				ExtValueRef<M> extRef, DefaultInterpreted model,
-				LocatedFilePosition sourceLocation) {
+				ExtValueRef<M> extRef, DefaultInterpreted model, LocatedFilePosition sourceLocation) {
 				theNodeId = nodeId;
 				theSourceLocation = sourceLocation;
 				theCreator = creator;
@@ -2118,8 +2118,7 @@ public interface ObservableModelSet extends Identifiable {
 			 * @return The new component node
 			 */
 			protected <M> ModelComponentNode<M> createPlaceholder(ModelComponentId componentId, CompiledModelValue<M> creator,
-				ExtValueRef<M> extRef, DefaultModelSet subModel,
-				LocatedFilePosition sourceLocation) {
+				ExtValueRef<M> extRef, DefaultModelSet subModel, LocatedFilePosition sourceLocation) {
 				return new ModelNodeImpl<>(componentId, creator, extRef, subModel, sourceLocation);
 			}
 

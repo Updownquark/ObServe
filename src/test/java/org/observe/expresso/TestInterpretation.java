@@ -278,7 +278,8 @@ public class TestInterpretation implements QonfigInterpretation {
 				System.out.println("Interpret " + getDefinition().getModelPath());
 				// Satisfy the internalState value with the internalState container
 				getAddOn(ExWithElementModel.Interpreted.class).satisfyElementValue("internalState", getInternalState());
-				theDerivedState = getDefinition().getDerivedState().interpret(ModelTypes.Value.<SettableValue<T>> anyAs(), getExpressoEnv());
+				theDerivedState = getDefinition().getDerivedState().interpret(ModelTypes.Value.<SettableValue<T>> anyAs(),
+					getExpressoEnv());
 			}
 
 			@Override
@@ -395,11 +396,13 @@ public class TestInterpretation implements QonfigInterpretation {
 				super.doUpdate(env);
 				System.out.println("Interpret " + getDefinition().getModelPath());
 				try {
-					theInternalState = getExpressoEnv().getModels().getValue("internalState", ModelTypes.Value.<SettableValue<T>> anyAs());
+					theInternalState = getExpressoEnv().getModels().getValue("internalState", ModelTypes.Value.<SettableValue<T>> anyAs(),
+						env);
 				} catch (ModelException | TypeConversionException e) {
 					throw new ExpressoInterpretationException(e.getMessage(), reporting().getFileLocation().getPosition(0), 0, e);
 				}
-				theDerivedState = getDefinition().getDerivedState().interpret(ModelTypes.Value.<SettableValue<T>> anyAs(), getExpressoEnv());
+				theDerivedState = getDefinition().getDerivedState().interpret(ModelTypes.Value.<SettableValue<T>> anyAs(),
+					getExpressoEnv());
 			}
 
 			@Override
