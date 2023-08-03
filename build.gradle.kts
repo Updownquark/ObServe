@@ -24,13 +24,13 @@ group = "ObServe"
 version = "2.0.0"
 description = "A library of observables and many utilities for them"
 
-java {                                      
+java {
     sourceCompatibility = JavaVersion.VERSION_1_8
     targetCompatibility = JavaVersion.VERSION_1_8
 }
 
 dependencies {
-	api(project("Qommons"))
+	api(project("../Qommons"))
     api("com.google.guava:guava:32.0.0-jre")
     antlr("org.antlr:antlr4:4.9.2")
 
