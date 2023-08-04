@@ -13,7 +13,6 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import java.util.function.Supplier;
-import java.util.function.UnaryOperator;
 
 import org.qommons.ClassMap;
 import org.qommons.LambdaUtils;
@@ -50,6 +49,7 @@ public class TypeTokens implements TypeParser {
 		private TypeToken<?> parameterizedType;
 		/** Whether this type is extends {@link Comparable} */
 		public final boolean comparable;
+		public final TypeConverter<T, T, T, T> unity;
 		private int theComplexity = -1;
 		private Map<List<TypeToken<?>>, TypeToken<? extends T>> theCompoundTypes;
 		private Map<Object, Object> theCache;
@@ -61,6 +61,7 @@ public class TypeTokens implements TypeParser {
 			comparable = clazz.isPrimitive() || Comparable.class.isAssignableFrom(clazz);
 			if (typeParameters > 0)
 				theCompoundTypes = new ConcurrentHashMap<>();
+			unity = new TypeConverter<>("no-op", "no-op", type, type, null, LambdaUtils.identity(), null, LambdaUtils.identity());
 		}
 
 		/**
@@ -68,32 +69,13 @@ public class TypeTokens implements TypeParser {
 		 *         quantitative, but qualitative--it doesn't represent an exact value relating to anything
 		 */
 		public int getSpecificity() {
-			if (theComplexity >= 0)
-				return theComplexity;
-			Class<?> unwrapped = unwrap(clazz);
-			if (unwrapped.isPrimitive()) {
-				if (unwrapped == void.class)
-					theComplexity = 0;
-				else if (unwrapped == double.class)
-					theComplexity = 1;
-				else if (unwrapped == float.class)
-					theComplexity = 2;
-				else if (unwrapped == long.class)
-					theComplexity = 3;
-				else if (unwrapped == int.class)
-					theComplexity = 4;
-				else if (unwrapped == short.class)
-					theComplexity = 5;
-				else if (unwrapped == byte.class)
-					theComplexity = 6;
-				else if (unwrapped == char.class)
-					theComplexity = 7;
-				else if (unwrapped == boolean.class)
-					theComplexity = 8;
-				else
-					throw new IllegalStateException("Unaccounted primitive " + clazz);
-				return theComplexity;
-			} else if (clazz == Object.class)
+			if (theComplexity < 0)
+				theComplexity = computeSpecificity();
+			return theComplexity;
+		}
+
+		int computeSpecificity() {
+			if (clazz == Object.class)
 				return theComplexity = 0;
 			else if (clazz.isInterface())
 				return theComplexity = 10 + addIntfs(clazz, new HashSet<>(Arrays.asList(clazz))).size();
@@ -189,6 +171,94 @@ public class TypeTokens implements TypeParser {
 		}
 	}
 
+	private static final Function<Object, String> ALWAYS_NULL = LambdaUtils.constantFn(null, "null", null);
+
+	public class PrimitiveTypeData<T> extends TypeKey<T> {
+		public final Class<T> primitiveClass;
+		public final TypeToken<T> primitiveType;
+		public final TypeConverter<T, T, T, T> primitiveUnity;
+		public final boolean number;
+		public final boolean bool;
+		public final boolean isVoid;
+		public final boolean isChar;
+		public final int size;
+		public final T defaultValue;
+		public final TypeConverter<T, T, T, T> safeCast;
+		public final TypeConverter<T, T, T, T> unsafeCast;
+
+		private final Map<Class<?>, TypeConverter<?, ?, T, T>> thePrimitiveCasts;
+
+		PrimitiveTypeData(Class<T> wrapper, Class<T> primitive, boolean number, boolean bool, boolean isVoid, boolean isChar, int size,
+			T defaultValue) {
+			super(wrapper);
+			this.primitiveClass = primitive;
+			primitiveType = TypeToken.of(primitive);
+			this.number = number;
+			this.bool = bool;
+			this.isVoid = isVoid;
+			this.isChar = isChar;
+			this.size = size;
+			this.defaultValue = defaultValue;
+			thePrimitiveCasts = new HashMap<>();
+			primitiveUnity = new TypeConverter<>("no-op", "no-op", primitiveType, primitiveType, //
+				null, LambdaUtils.identity(), null, LambdaUtils.identity());
+			safeCast = isVoid ? null : new TypeConverter<>("safeCast", "primitiveWrap", type, primitiveType, //
+				ALWAYS_NULL, LambdaUtils.printableFn(w -> w != null ? w : defaultValue, "safeCast", null), //
+				ALWAYS_NULL, LambdaUtils.identity());
+			String castError = "Null cannot be cast to primitive type " + primitive.getName();
+			unsafeCast = isVoid ? null : new TypeConverter<>("unsafeCast", "primitiveWrap", type, primitiveType, //
+				LambdaUtils.printableFn(w -> w == null ? castError : null, "nullCheck", null), LambdaUtils.identity(), //
+				ALWAYS_NULL, LambdaUtils.identity());
+			thePrimitiveCasts.put(primitiveClass, unsafeCast);
+		}
+
+		@Override
+		int computeSpecificity() {
+			if (isVoid)
+				return 0;
+			else if (primitiveClass == double.class)
+				return 1;
+			else if (primitiveClass == float.class)
+				return 2;
+			else if (primitiveClass == long.class)
+				return 3;
+			else if (primitiveClass == int.class)
+				return 4;
+			else if (primitiveClass == short.class)
+				return 5;
+			else if (primitiveClass == byte.class)
+				return 6;
+			else if (isChar)
+				return 7;
+			else if (bool)
+				return 8;
+			else
+				throw new IllegalStateException("Unaccounted primitive " + clazz);
+		}
+
+		public <S> TypeConverter<S, S, T, T> getPrimitiveCast(Class<S> primitiveType) {
+			return (TypeConverter<S, S, T, T>) thePrimitiveCasts.get(primitiveType);
+		}
+
+		<S> void populatePrimitiveCast(PrimitiveTypeData<S> typeData, TypeConverter<S, S, T, T> converter) {
+			thePrimitiveCasts.put(typeData.primitiveClass, converter);
+			typeData.thePrimitiveCasts.put(primitiveClass, converter.reverse());
+		}
+	}
+
+	public class NumberTypeData<T extends Number> extends PrimitiveTypeData<T> {
+		private final boolean isFloatingPoint;
+
+		public NumberTypeData(Class<T> wrapper, Class<T> primitive, int size, T defaultValue, boolean floatingPoint) {
+			super(wrapper, primitive, true, false, false, false, size, defaultValue);
+			isFloatingPoint = floatingPoint;
+		}
+
+		public boolean isFloatingPoint() {
+			return isFloatingPoint;
+		}
+	}
+
 	/**
 	 * May be {@link TypeTokens#addTypeRetriever(TypeRetriever) added} to {@link TypeTokens} to enable retrieval of non-Class types or types
 	 * that may not be retrievable by the {@link TypeTokens} class using {@link Class#forName(String)}
@@ -222,6 +292,10 @@ public class TypeTokens implements TypeParser {
 		 * @return The cast value
 		 */
 		T cast(S source);
+
+		boolean isSafe();
+
+		String canCast(S source);
 	}
 
 	private final ConcurrentHashMap<Class<?>, TypeKey<?>> TYPES;
@@ -279,29 +353,250 @@ public class TypeTokens implements TypeParser {
 		theParser = new TypeTokensParser();
 		theSupplementaryCasts = new ClassMap<>();
 
+		// Populate the primitive types as both the primitive type and the wrapper
+		PrimitiveTypeData<Void> voidData = new PrimitiveTypeData<>(Void.class, void.class, false, false, true, false, 0, null);
+		TYPES.put(void.class, voidData);
+		TYPES.put(Void.class, voidData);
+		VOID = voidData.type;
+		PR_VOID = voidData.primitiveType;
+		PrimitiveTypeData<Boolean> boolData = new PrimitiveTypeData<>(Boolean.class, boolean.class, false, true, false, false, 1,
+			Boolean.FALSE);
+		TYPES.put(boolean.class, boolData);
+		TYPES.put(Boolean.class, boolData);
+		BOOLEAN = boolData.type;
+		PR_BOOLEAN = boolData.primitiveType;
+		PrimitiveTypeData<Character> charData = new PrimitiveTypeData<>(Character.class, char.class, false, false, false, true, 2,
+			Character.valueOf((char) 0));
+		TYPES.put(char.class, charData);
+		TYPES.put(Character.class, charData);
+		CHAR = charData.type;
+		PR_CHAR = charData.primitiveType;
+		NumberTypeData<Byte> byteData = new NumberTypeData<>(Byte.class, byte.class, 1, Byte.valueOf((byte) 0), false);
+		TYPES.put(byte.class, byteData);
+		TYPES.put(Byte.class, byteData);
+		BYTE = byteData.type;
+		PR_BYTE = byteData.primitiveType;
+		NumberTypeData<Short> shortData = new NumberTypeData<>(Short.class, short.class, 2, Short.valueOf((short) 0), false);
+		TYPES.put(short.class, shortData);
+		TYPES.put(Short.class, shortData);
+		SHORT = shortData.type;
+		PR_SHORT = shortData.primitiveType;
+		NumberTypeData<Integer> intData = new NumberTypeData<>(Integer.class, int.class, 4, Integer.valueOf(0), false);
+		TYPES.put(int.class, intData);
+		TYPES.put(Integer.class, intData);
+		INT = intData.type;
+		PR_INT = intData.primitiveType;
+		NumberTypeData<Long> longData = new NumberTypeData<>(Long.class, long.class, 8, Long.valueOf(0L), false);
+		TYPES.put(long.class, longData);
+		TYPES.put(Long.class, longData);
+		LONG = longData.type;
+		PR_LONG = longData.primitiveType;
+		NumberTypeData<Float> floatData = new NumberTypeData<>(Float.class, float.class, 4, Float.valueOf(0.0f), true);
+		TYPES.put(float.class, floatData);
+		TYPES.put(Float.class, floatData);
+		FLOAT = floatData.type;
+		PR_FLOAT = floatData.primitiveType;
+		NumberTypeData<Double> doubleData = new NumberTypeData<>(Double.class, double.class, 8, Double.valueOf(0.0), true);
+		TYPES.put(double.class, doubleData);
+		TYPES.put(Double.class, doubleData);
+		DOUBLE = doubleData.type;
+		PR_DOUBLE = doubleData.primitiveType;
+
+		populatePrimitiveCasts(voidData, boolData, charData, byteData, shortData, intData, longData, floatData, doubleData);
+
 		STRING = of(String.class);
-		BOOLEAN = of(Boolean.class);
-		PR_BOOLEAN = of(boolean.class);
-		DOUBLE = of(Double.class);
-		PR_DOUBLE = of(double.class);
-		FLOAT = of(Float.class);
-		PR_FLOAT = of(float.class);
-		LONG = of(Long.class);
-		PR_LONG = of(long.class);
-		INT = of(Integer.class);
-		PR_INT = of(int.class);
-		SHORT = of(Short.class);
-		PR_SHORT = of(short.class);
-		BYTE = of(Byte.class);
-		PR_BYTE = of(byte.class);
-		CHAR = of(Character.class);
-		PR_CHAR = of(char.class);
 		OBJECT = of(Object.class);
-		VOID = of(Void.class);
-		PR_VOID = of(void.class);
 		WILDCARD = TypeToken.of(new WildcardTypeImpl());
 		CLASS = keyFor(Class.class).wildCard();
 		// WILDCARD = new TypeToken<Class<?>>() {}.resolveType(Class.class.getTypeParameters()[0]);
+	}
+
+	private void populatePrimitiveCasts(PrimitiveTypeData<Void> voidData, PrimitiveTypeData<Boolean> boolData,
+		PrimitiveTypeData<Character> charData, NumberTypeData<Byte> byteData, NumberTypeData<Short> shortData,
+		NumberTypeData<Integer> intData, NumberTypeData<Long> longData, NumberTypeData<Float> floatData,
+		NumberTypeData<Double> doubleData) {
+		// Allow conversion of to void (null) and void to the primitive default value
+		Function<Object, Void> toVoid = LambdaUtils.constantFn(null, "null", null);
+		voidData.populatePrimitiveCast(boolData, //
+			new TypeConverter<>("null-to-void", "null", boolData.primitiveType, voidData.primitiveType, //
+				null, toVoid, null, LambdaUtils.constantFn(boolData.defaultValue, "false", null)));
+		voidData.populatePrimitiveCast(charData, //
+			new TypeConverter<>("null-to-void", "null", charData.primitiveType, voidData.primitiveType, //
+				null, toVoid, null, LambdaUtils.constantFn(charData.defaultValue, "false", null)));
+		voidData.populatePrimitiveCast(byteData, //
+			new TypeConverter<>("null-to-void", "null", byteData.primitiveType, voidData.primitiveType, //
+				null, toVoid, null, LambdaUtils.constantFn(byteData.defaultValue, "false", null)));
+		voidData.populatePrimitiveCast(shortData, //
+			new TypeConverter<>("null-to-void", "null", shortData.primitiveType, voidData.primitiveType, //
+				null, toVoid, null, LambdaUtils.constantFn(shortData.defaultValue, "false", null)));
+		voidData.populatePrimitiveCast(intData, //
+			new TypeConverter<>("null-to-void", "null", intData.primitiveType, voidData.primitiveType, //
+				null, toVoid, null, LambdaUtils.constantFn(intData.defaultValue, "false", null)));
+		voidData.populatePrimitiveCast(longData, //
+			new TypeConverter<>("null-to-void", "null", longData.primitiveType, voidData.primitiveType, //
+				null, toVoid, null, LambdaUtils.constantFn(longData.defaultValue, "false", null)));
+		voidData.populatePrimitiveCast(floatData, //
+			new TypeConverter<>("null-to-void", "null", floatData.primitiveType, voidData.primitiveType, //
+				null, toVoid, null, LambdaUtils.constantFn(floatData.defaultValue, "false", null)));
+		voidData.populatePrimitiveCast(doubleData, //
+			new TypeConverter<>("null-to-void", "null", doubleData.primitiveType, voidData.primitiveType, //
+				null, toVoid, null, LambdaUtils.constantFn(doubleData.defaultValue, "false", null)));
+
+		// No boolean conversions except with void above
+
+		// Character conversions
+		charData.populatePrimitiveCast(byteData, //
+			new TypeConverter<>("byte-to-char", "char-to-byte", byteData.primitiveType, charData.primitiveType, //
+				null, LambdaUtils.printableFn(b -> (char) b.byteValue(), "byte-to-char", null), //
+				LambdaUtils.printableFn(ch -> ch <= (char) Byte.MAX_VALUE ? null : "Char value " + (int) ch + " is not in byte range",
+					"check-byte-range", null),
+				LambdaUtils.printableFn(ch -> (byte) ch.charValue(), "char-to-byte", null)));
+		charData.populatePrimitiveCast(shortData, //
+			new TypeConverter<>("short-to-char", "char-to-short", shortData.primitiveType, charData.primitiveType, //
+				LambdaUtils.printableFn(sh -> sh >= 0 ? null : "Negative short value cannot be cast to a char", "check-char-range", null),
+				LambdaUtils.printableFn(sh -> (char) sh.shortValue(), "short-to-char", null), //
+				LambdaUtils.printableFn(ch -> ch <= (char) Short.MAX_VALUE ? null : "Char value " + (int) ch + " is not in short range",
+					"check-short-range", null),
+				LambdaUtils.printableFn(ch -> (short) ch.charValue(), "char-to-short", null)));
+		charData.populatePrimitiveCast(intData, //
+			new TypeConverter<>("int-to-char", "char-to-int", intData.primitiveType, charData.primitiveType, //
+				LambdaUtils.printableFn(i -> (i >= 0 && i <= Character.MAX_VALUE) ? null : "Int value " + i + " is not in char range",
+					"check-char-range", null),
+				LambdaUtils.printableFn(i -> (char) i.intValue(), "int-to-char", null), //
+				null, LambdaUtils.printableFn(ch -> (int) ch.charValue(), "char-to-int", null)));
+		charData.populatePrimitiveCast(longData, //
+			new TypeConverter<>("long-to-char", "char-to-long", longData.primitiveType, charData.primitiveType, //
+				LambdaUtils.printableFn(i -> (i >= 0 && i <= Character.MAX_VALUE) ? null : "Long value " + i + " is not in char range",
+					"check-char-range", null),
+				LambdaUtils.printableFn(i -> (char) i.longValue(), "long-to-char", null), //
+				null, LambdaUtils.printableFn(ch -> (long) ch.charValue(), "char-to-long", null)));
+		charData.populatePrimitiveCast(floatData, //
+			new TypeConverter<>("float-to-char", "char-to-float", floatData.primitiveType, charData.primitiveType, //
+				LambdaUtils.printableFn(f -> (f >= 0 && f <= Character.MAX_VALUE) ? null : "Float value " + f + " is not in char range",
+					"check-char-range", null),
+				LambdaUtils.printableFn(f -> (char) f.floatValue(), "float-to-char", null), //
+				null, LambdaUtils.printableFn(ch -> (float) ch.charValue(), "char-to-float", null)));
+		charData.populatePrimitiveCast(doubleData, //
+			new TypeConverter<>("double-to-char", "char-to-double", doubleData.primitiveType, charData.primitiveType, //
+				LambdaUtils.printableFn(d -> (d >= 0 && d <= Character.MAX_VALUE) ? null : "Double value " + d + " is not in char range",
+					"check-char-range", null),
+				LambdaUtils.printableFn(d -> (char) d.floatValue(), "float-to-char", null), //
+				null, LambdaUtils.printableFn(ch -> (double) ch.charValue(), "char-to-double", null)));
+
+		// Byte conversions
+		byteData.populatePrimitiveCast(shortData, //
+			new TypeConverter<>("short-to-byte", "byte-to-short", shortData.primitiveType, byteData.primitiveType, //
+				LambdaUtils.printableFn(
+					sh -> (sh >= Byte.MIN_VALUE && sh <= Byte.MAX_VALUE) ? null : "Short value " + sh + " is not in byte range",
+						"check-byte-range", null),
+				LambdaUtils.printableFn(sh -> (byte) sh.shortValue(), "short-to-byte", null), //
+				null, LambdaUtils.printableFn(b -> (short) b.byteValue(), "byte-to-short", null)));
+		byteData.populatePrimitiveCast(intData, //
+			new TypeConverter<>("int-to-byte", "byte-to-int", intData.primitiveType, byteData.primitiveType, //
+				LambdaUtils.printableFn(
+					i -> (i >= Byte.MIN_VALUE && i <= Byte.MAX_VALUE) ? null : "Int value " + i + " is not in byte range",
+						"check-byte-range", null),
+				LambdaUtils.printableFn(i -> (byte) i.intValue(), "int-to-byte", null), //
+				null, LambdaUtils.printableFn(b -> (int) b.byteValue(), "byte-to-int", null)));
+		byteData.populatePrimitiveCast(longData, //
+			new TypeConverter<>("long-to-byte", "byte-to-long", longData.primitiveType, byteData.primitiveType, //
+				LambdaUtils.printableFn(
+					i -> (i >= Byte.MIN_VALUE && i <= Byte.MAX_VALUE) ? null : "Long value " + i + " is not in byte range",
+						"check-byte-range", null),
+				LambdaUtils.printableFn(sh -> (byte) sh.longValue(), "short-to-byte", null), //
+				null, LambdaUtils.printableFn(b -> (long) b.byteValue(), "byte-to-long", null)));
+		byteData.populatePrimitiveCast(floatData, //
+			new TypeConverter<>("float-to-byte", "byte-to-float", floatData.primitiveType, byteData.primitiveType, //
+				LambdaUtils.printableFn(
+					f -> (f >= Byte.MIN_VALUE && f <= Byte.MAX_VALUE) ? null : "Float value " + f + " is not in byte range",
+						"check-byte-range", null),
+				LambdaUtils.printableFn(f -> (byte) f.floatValue(), "float-to-byte", null), //
+				null, LambdaUtils.printableFn(b -> (float) b.byteValue(), "byte-to-float", null)));
+		byteData.populatePrimitiveCast(doubleData, //
+			new TypeConverter<>("double-to-byte", "byte-to-double", doubleData.primitiveType, byteData.primitiveType, //
+				LambdaUtils.printableFn(
+					d -> (d >= Byte.MIN_VALUE && d <= Byte.MAX_VALUE) ? null : "Double value " + d + " is not in byte range",
+						"check-byte-range", null),
+				LambdaUtils.printableFn(d -> (byte) d.doubleValue(), "double-to-byte", null), //
+				null, LambdaUtils.printableFn(b -> (double) b.byteValue(), "byte-to-double", null)));
+
+		// Short conversions
+		shortData.populatePrimitiveCast(intData, //
+			new TypeConverter<>("int-to-short", "short-to-int", intData.primitiveType, shortData.primitiveType, //
+				LambdaUtils.printableFn(
+					i -> (i >= Short.MIN_VALUE && i <= Short.MAX_VALUE) ? null : "Int value " + i + " is not in short range",
+						"check-short-range", null),
+				LambdaUtils.printableFn(i -> (short) i.intValue(), "int-to-short", null), //
+				null, LambdaUtils.printableFn(b -> (int) b.shortValue(), "short-to-int", null)));
+		shortData.populatePrimitiveCast(longData, //
+			new TypeConverter<>("long-to-short", "short-to-long", longData.primitiveType, shortData.primitiveType, //
+				LambdaUtils.printableFn(
+					i -> (i >= Short.MIN_VALUE && i <= Short.MAX_VALUE) ? null : "Long value " + i + " is not in short range",
+						"check-short-range", null),
+				LambdaUtils.printableFn(i -> (short) i.longValue(), "long-to-short", null), //
+				null, LambdaUtils.printableFn(b -> (long) b.shortValue(), "short-to-long", null)));
+		shortData.populatePrimitiveCast(floatData, //
+			new TypeConverter<>("float-to-short", "short-to-float", floatData.primitiveType, shortData.primitiveType, //
+				LambdaUtils.printableFn(
+					f -> (f >= Short.MIN_VALUE && f <= Short.MAX_VALUE) ? null : "Float value " + f + " is not in short range",
+						"check-short-range", null),
+				LambdaUtils.printableFn(i -> (short) i.floatValue(), "float-to-short", null), //
+				null, LambdaUtils.printableFn(b -> (float) b.shortValue(), "short-to-float", null)));
+		shortData.populatePrimitiveCast(doubleData, //
+			new TypeConverter<>("double-to-short", "short-to-double", doubleData.primitiveType, shortData.primitiveType, //
+				LambdaUtils.printableFn(
+					d -> (d >= Short.MIN_VALUE && d <= Short.MAX_VALUE) ? null : "Double value " + d + " is not in short range",
+						"check-short-range", null),
+				LambdaUtils.printableFn(i -> (short) i.doubleValue(), "double-to-short", null), //
+				null, LambdaUtils.printableFn(b -> (double) b.shortValue(), "short-to-double", null)));
+
+		// Int conversions
+		intData.populatePrimitiveCast(longData, //
+			new TypeConverter<>("long-to-int", "int-to-long", longData.primitiveType, intData.primitiveType, //
+				LambdaUtils.printableFn(
+					i -> (i >= Integer.MIN_VALUE && i <= Integer.MAX_VALUE) ? null : "Long value " + i + " is not in int range",
+						"check-int-range", null),
+				LambdaUtils.printableFn(i -> (int) i.longValue(), "long-to-int", null), //
+				null, LambdaUtils.printableFn(b -> (long) b.intValue(), "int-to-long", null)));
+		intData.populatePrimitiveCast(floatData, //
+			new TypeConverter<>("float-to-int", "int-to-float", floatData.primitiveType, intData.primitiveType, //
+				LambdaUtils.printableFn(
+					f -> (f >= Integer.MIN_VALUE && f <= Integer.MAX_VALUE) ? null : "Float value " + f + " is not in int range",
+						"check-int-range", null),
+				LambdaUtils.printableFn(i -> (int) i.floatValue(), "float-to-int", null), //
+				null, LambdaUtils.printableFn(b -> (float) b.intValue(), "int-to-float", null)));
+		intData.populatePrimitiveCast(doubleData, //
+			new TypeConverter<>("double-to-int", "int-to-double", doubleData.primitiveType, intData.primitiveType, //
+				LambdaUtils.printableFn(
+					d -> (d >= Integer.MIN_VALUE && d <= Integer.MAX_VALUE) ? null : "Double value " + d + " is not in int range",
+						"check-int-range", null),
+				LambdaUtils.printableFn(i -> (int) i.doubleValue(), "double-to-int", null), //
+				null, LambdaUtils.printableFn(b -> (double) b.intValue(), "int-to-double", null)));
+
+		// Long conversions
+		longData.populatePrimitiveCast(floatData, //
+			new TypeConverter<>("float-to-long", "long-to-float", floatData.primitiveType, longData.primitiveType, //
+				LambdaUtils.printableFn(
+					f -> (f >= Long.MIN_VALUE && f <= Long.MAX_VALUE) ? null : "Float value " + f + " is not in long range",
+						"check-long-range", null),
+				LambdaUtils.printableFn(i -> (long) i.floatValue(), "float-to-long", null), //
+				null, LambdaUtils.printableFn(b -> (float) b.longValue(), "long-to-float", null)));
+		longData.populatePrimitiveCast(doubleData, //
+			new TypeConverter<>("double-to-long", "long-to-double", doubleData.primitiveType, longData.primitiveType, //
+				LambdaUtils.printableFn(
+					d -> (d >= Long.MIN_VALUE && d <= Long.MAX_VALUE) ? null : "Double value " + d + " is not in long range",
+						"check-long-range", null),
+				LambdaUtils.printableFn(i -> (long) i.doubleValue(), "double-to-long", null), //
+				null, LambdaUtils.printableFn(b -> (double) b.longValue(), "long-to-double", null)));
+
+		// Float conversion
+		floatData.populatePrimitiveCast(doubleData, //
+			new TypeConverter<>("double-to-float", "float-to-double", doubleData.primitiveType, floatData.primitiveType, //
+				LambdaUtils.printableFn(
+					d -> (d >= Float.MIN_VALUE && d <= Float.MAX_VALUE) ? null : "Double value " + d + " is not in float range",
+						"check-float-range", null),
+				LambdaUtils.printableFn(i -> (float) i.doubleValue(), "double-to-float", null), //
+				null, LambdaUtils.printableFn(b -> (double) b.floatValue(), "float-to-double", null)));
 	}
 
 	/**
@@ -519,26 +814,8 @@ public class TypeTokens implements TypeParser {
 	public <T> T getDefaultValue(Class<T> type) {
 		if (!type.isPrimitive())
 			return null;
-		else if (type == void.class)
-			return null;
-		else if (type == boolean.class)
-			return (T) Boolean.FALSE;
-		else if (type == char.class)
-			return (T) Character.valueOf((char) 0);
-		else if (type == byte.class)
-			return (T) Byte.valueOf((byte) 0);
-		else if (type == short.class)
-			return (T) Short.valueOf((short) 0);
-		else if (type == int.class)
-			return (T) Integer.valueOf(0);
-		else if (type == long.class)
-			return (T) Long.valueOf(0L);
-		else if (type == float.class)
-			return (T) Float.valueOf(0.0f);
-		else if (type == double.class)
-			return (T) Double.valueOf(0.0);
-		else
-			throw new IllegalStateException("Unrecognized primitive type: " + type);
+		TypeKey<T> key = (TypeKey<T>) TYPES.get(type);
+		return key instanceof PrimitiveTypeData ? ((PrimitiveTypeData<T>) key).defaultValue : null;
 	}
 
 	/**
@@ -666,25 +943,7 @@ public class TypeTokens implements TypeParser {
 	 * @return A default value for the given type, accommodating primitives, which cannot be null
 	 */
 	public <T> T getPrimitiveDefault(Class<T> type) {
-		type = unwrap(type);
-		if (type == boolean.class)
-			return (T) Boolean.FALSE;
-		else if (type == int.class)
-			return (T) Integer.valueOf(0);
-		else if (type == long.class)
-			return (T) Long.valueOf(0);
-		else if (type == double.class)
-			return (T) Double.valueOf(0);
-		else if (type == float.class)
-			return (T) Float.valueOf(0);
-		else if (type == char.class)
-			return (T) Character.valueOf(' ');
-		else if (type == byte.class)
-			return (T) Byte.valueOf((byte) 0);
-		else if (type == short.class)
-			return (T) Short.valueOf((short) 0);
-		else
-			return null;
+		return getDefaultValue(type);
 	}
 
 	/**
@@ -699,22 +958,7 @@ public class TypeTokens implements TypeParser {
 			return false;
 		} else if (type == OBJECT)
 			return true;
-		// This code is a necessary optimization because TypeToken.getRawType is apparently expensive
-		if (isBoolean(type)) {
-			return value instanceof Boolean;
-		} else if (type == DOUBLE) {
-			return value instanceof Double;
-		} else if (type == LONG) {
-			return value instanceof Long;
-		} else if (type == INT) {
-			return value instanceof Integer;
-		} else if (type == STRING) {
-			return value instanceof String;
-		}
 		Class<?> rawType = getRawType(type.getType());
-		if (rawType == null) {
-			rawType = type.getRawType();
-		}
 		rawType = wrap(rawType);
 		return rawType.isInstance(value);
 	}
@@ -822,18 +1066,43 @@ public class TypeTokens implements TypeParser {
 	/**
 	 * Converts from one type to another
 	 *
-	 * @param <S> The source type
-	 * @param <T> The target type
+	 * @param <S> The super type of all values that this converter can convert
+	 * @param <R> The super type which all reversed values will extend
+	 * @param <TR> The super type of all values that this converter can {@link #reverse(T target)}
+	 * @param <T> The super typw which all converted values will extend
 	 */
-	public static class TypeConverter<S, T> implements Function<S, T> {
-		private final TypeToken<T> theConvertedType;
-		private final Function<S, T> theConverter;
+	public static class TypeConverter<S, R extends S, TR, T extends TR> implements Function<S, T> {
 		private final String theName;
+		private final String theReverseName;
+		private final TypeToken<R> theReverseType;
+		private final TypeToken<T> theConvertedType;
+		private final Function<? super S, String> theApplicability;
+		private final Function<? super S, T> theConverter;
+		private final Function<? super TR, String> theReversibility;
+		private final Function<? super TR, R> theReverse;
 
-		TypeConverter(TypeToken<T> convertedType, String name, Function<S, T> converter) {
-			theConvertedType = convertedType;
-			theConverter = converter;
+		private TypeConverter<TR, T, S, R> theReversed;
+
+		public TypeConverter(String name, String reverseName, //
+			TypeToken<R> sourceType, TypeToken<T> convertedType, //
+			Function<? super S, String> applicability, Function<? super S, T> converter, //
+			Function<? super TR, String> reversibility, Function<? super TR, R> reverse) {
 			theName = name;
+			theReverseName = reverseName;
+			theReverseType = sourceType;
+			theConvertedType = convertedType;
+			theApplicability = applicability;
+			theConverter = converter;
+			theReversibility = reversibility;
+			theReverse = reverse;
+		}
+
+		public String getName() {
+			return theName;
+		}
+
+		public String getReverseName() {
+			return theReverseName;
 		}
 
 		/** @return The {@link TypeToken} of the target type */
@@ -841,13 +1110,94 @@ public class TypeTokens implements TypeParser {
 			return theConvertedType;
 		}
 
+		public String isApplicable(S source) {
+			return theApplicability == null ? null : theApplicability.apply(source);
+		}
+
 		@Override
-		public T apply(S t) {
-			return theConverter.apply(t);
+		public T apply(S source) {
+			String app = isApplicable(source);
+			if (app != null)
+				throw new IllegalArgumentException(app);
+			return theConverter.apply(source);
+		}
+
+		public String isReversible(TR target) {
+			return theReversibility == null ? null : theReversibility.apply(target);
+		}
+
+		public R reverse(TR target) {
+			String app = isReversible(target);
+			if (app != null)
+				throw new IllegalArgumentException(app);
+			return theReverse.apply(target);
 		}
 
 		public boolean isTrivial() {
-			return theConverter == LambdaUtils.identity();
+			return theConverter == LambdaUtils.identity() && theReverse == LambdaUtils.identity();
+		}
+
+		public boolean isSafe() {
+			return theApplicability == null;
+		}
+
+		public boolean isReverseSafe() {
+			return theReversibility == null;
+		}
+
+		public Function<? super S, String> getApplicability() {
+			return theApplicability;
+		}
+
+		public Function<? super T, String> getReversibility() {
+			return theReversibility;
+		}
+
+		public TypeConverter<TR, T, S, R> reverse() {
+			if (theReversed == null) {
+				theReversed = new TypeConverter<>(theReverseName, theName, theConvertedType, theReverseType, //
+					theReversibility, theReverse, theApplicability, theConverter);
+				theReversed.theReversed = this;
+			}
+			return theReversed;
+		}
+
+		public <TR2, T2 extends TR2> TypeConverter<S, R, TR2, T2> andThen(TypeConverter<? super T, ? extends T, TR2, T2> other) {
+			Function<? super S, String> applicability;
+			Function<? super TR2, String> reversibility;
+			if (other.theApplicability == null)
+				applicability = theApplicability;
+			else {
+				Function<? super S, String> myApp = theApplicability;
+				Function<? super S, T> myConverter = theConverter;
+				Function<? super T, String> otherApp = other.theApplicability;
+				applicability = LambdaUtils.printableFn(s -> {
+					String msg = myApp == null ? null : myApp.apply(s);
+					if (msg != null)
+						return msg;
+					T interm = myConverter.apply(s);
+					return otherApp.apply(interm);
+				}, () -> myApp + "->" + otherApp, null);
+			}
+			if (theReversibility == null)
+				reversibility = other.theReversibility;
+			else {
+				Function<? super T, String> myRev = theReversibility;
+				Function<? super TR2, ? extends T> otherReverse = other.theReverse;
+				Function<? super TR2, String> otherRev = other.theReversibility;
+				reversibility = LambdaUtils.printableFn(s -> {
+					String msg = otherRev == null ? null : otherRev.apply(s);
+					if (msg != null)
+						return msg;
+					T interm = otherReverse.apply(s);
+					return myRev.apply(interm);
+				}, () -> myRev + "->" + otherRev, null);
+			}
+			Function<? super S, T2> convert = theConverter.andThen(other.theConverter);
+			Function<? super TR2, R> reverse = other.theReverse.andThen(theReverse);
+			return new TypeConverter<>(theName + "->" + other.theName, other.theReverseName + "->" + theReverseName, //
+				theReverseType, other.theConvertedType, //
+				applicability, convert, reversibility, reverse);
 		}
 
 		@Override
@@ -857,7 +1207,7 @@ public class TypeTokens implements TypeParser {
 
 		@Override
 		public boolean equals(Object obj) {
-			return obj instanceof TypeConverter && theConverter.equals(((TypeConverter<?, ?>) obj).theConverter);
+			return obj instanceof TypeConverter && theConverter.equals(((TypeConverter<?, ?, ?, ?>) obj).theConverter);
 		}
 
 		@Override
@@ -876,7 +1226,8 @@ public class TypeTokens implements TypeParser {
 	 *         if the value is null and the left type is primitive
 	 * @throws IllegalArgumentException If values of the right type cannot be cast to the left type in general
 	 */
-	public <T, X> TypeConverter<T, X> getCast(TypeToken<X> left, TypeToken<T> right) throws IllegalArgumentException {
+	public <T, X> TypeConverter<? super T, ? extends T, ? super X, ? extends X> getCast(TypeToken<X> left, TypeToken<T> right)
+		throws IllegalArgumentException {
 		return getCast(left, right, false);
 	}
 
@@ -903,8 +1254,35 @@ public class TypeTokens implements TypeParser {
 	 *         {@link NullPointerException} if the right value is null and the left type is primitive
 	 * @throws IllegalArgumentException If values of the right type cannot be cast to the left type in general
 	 */
-	public <S, T> TypeConverter<S, T> getCast(TypeToken<T> target, TypeToken<S> source, boolean safe) throws IllegalArgumentException {
+	public <S, T> TypeConverter<? super S, ? extends S, ? super T, ? extends T> getCast(TypeToken<T> target, TypeToken<S> source,
+		boolean safe) throws IllegalArgumentException {
 		return getCast(target, source, safe, true);
+	}
+
+	private static class InstanceChecker<T> {
+		final String checkString;
+		final Function<Object, String> check;
+		final Function<Object, T> cast;
+
+		InstanceChecker(Class<T> type) {
+			String error = "Not an instance of " + type.getName();
+			checkString = "check" + type.getSimpleName();
+			check = LambdaUtils.printableFn(value -> {
+				if (value == null)
+					return null;
+				else if (type.isInstance(value))
+					return null;
+				else
+					return error;
+			}, checkString, null);
+			String castString = "cast" + type.getSimpleName();
+			cast = LambdaUtils.printableFn(value -> type.cast(value), castString, null);
+		}
+
+		@Override
+		public String toString() {
+			return checkString;
+		};
 	}
 
 	/**
@@ -919,168 +1297,138 @@ public class TypeTokens implements TypeParser {
 	 *         {@link NullPointerException} if the right value is null and the left type is primitive
 	 * @throws IllegalArgumentException If values of the right type cannot be cast to the left type in general
 	 */
-	public <S, T> TypeConverter<S, T> getCast(TypeToken<T> target, TypeToken<S> source, boolean safe, boolean downCastOnly)
-		throws IllegalArgumentException {
+	public <S, T> TypeConverter<? super S, ? extends S, ? super T, ? extends T> getCast(TypeToken<T> target, TypeToken<S> source,
+		boolean safe, boolean downCastOnly) throws IllegalArgumentException {
+		Class<S> rawSource = getRawType(source);
+		TypeKey<S> sourceKey = keyFor(rawSource);
+		if (target.equals(source)) {
+			if (source.isPrimitive())
+				return (TypeConverter<S, S, T, T>) ((PrimitiveTypeData<S>) sourceKey).primitiveUnity;
+			return (TypeConverter<S, S, T, T>) sourceKey.unity;
+		}
+		// Handle the other primitive cases first, as they're cheap and make the complexity much less later
+		// We only care about this if it's primitive--no need to compute
+		Class<T> rawTarget = getRawType(target);
+		TypeKey<T> targetKey = (TypeKey<T>) TYPES.get(rawTarget);
+		if (targetKey instanceof PrimitiveTypeData) {
+			PrimitiveTypeData<T> primTarget = (PrimitiveTypeData<T>) targetKey;
+			if (sourceKey instanceof PrimitiveTypeData) {
+				PrimitiveTypeData<S> primSource = (PrimitiveTypeData<S>) sourceKey;
+				if (primSource.primitiveType == primTarget.primitiveType) { // Same type, but one is primitive and the other a wrapper
+					if (source.isPrimitive())
+						return (TypeConverter<S, S, T, T>) (safe ? primSource.safeCast : primSource.unsafeCast).reverse();
+					else
+						return (TypeConverter<S, S, T, T>) (safe ? primSource.safeCast : primSource.unsafeCast);
+				}
+				TypeConverter<S, S, T, T> primitiveCast = primTarget.getPrimitiveCast(primSource.primitiveClass);
+				if (primitiveCast == null)
+					throw new IllegalArgumentException("Cannot convert between " + source + " and " + target);
+				else if (downCastOnly && !primitiveCast.isSafe())
+					throw new IllegalArgumentException("Cannot safely convert from " + source + " to " + target);
+				else if (target.isPrimitive()) {
+					if (source.isPrimitive())
+						return primitiveCast;
+					else
+						return (safe ? primSource.safeCast : primSource.unsafeCast).andThen(primitiveCast);
+				} else if (primTarget.isVoid)
+					return primitiveCast; // Void is chill if target is nullable
+				else if (source.isPrimitive())
+					return primitiveCast.andThen((safe ? primTarget.safeCast : primTarget.unsafeCast).reverse());
+				else
+					return new TypeConverter<>(primitiveCast.getName(), primitiveCast.getReverseName(), source, target, //
+						primitiveCast.isSafe() ? null
+							: LambdaUtils.printableFn(s -> s == null ? null : primitiveCast.isApplicable(s),
+								primitiveCast.getApplicability()::toString, null), //
+							LambdaUtils.printableFn(s -> s == null ? null : primitiveCast.apply(s), primitiveCast.getName(), null), //
+							primitiveCast.isReverseSafe() ? null
+								: LambdaUtils.printableFn(t -> t == null ? null : primitiveCast.isReversible(t),
+									primitiveCast.getReversibility()::toString, null), //
+								LambdaUtils.printableFn(t -> t == null ? null : primitiveCast.reverse(t), primitiveCast.getReverseName(), null));
+			}
+			TypeConverter<S, ? extends S, ? super T, T> suppConvert = getSpecialCast(source, target, rawSource, rawTarget);
+			if (suppConvert != null)
+				return suppConvert;
 
+			if (downCastOnly)
+				throw new IllegalArgumentException("Cannot safely convert from " + source + " to " + target);
+			else if (rawSource.isAssignableFrom(Comparable.class) // All remaining possible primitives are comparable
+				|| (primTarget.number && rawSource.isAssignableFrom(Number.class))) {
+				InstanceChecker<T> checker = new InstanceChecker<>(primTarget.clazz);
+				TypeConverter<S, S, T, T> typeCheckConverter = new TypeConverter<>(checker.checkString, "no-op", (TypeToken<S>) target,
+					target, //
+					checker.check, checker.cast, null, LambdaUtils.<T, S> unenforcedCast());
+				if (!target.isPrimitive() || primTarget.isVoid)
+					return typeCheckConverter;
+				else
+					return typeCheckConverter.andThen(safe ? primTarget.safeCast : primTarget.unsafeCast);
+			}
+		} else if (sourceKey instanceof PrimitiveTypeData) { // Source is primitive or a wrapper but target is not
+			// We've handled this case in the reverse above
+			TypeConverter<? super T, ? extends T, ? super S, ? extends S> reverseConverter = getCast(source, target, safe, false);
+			TypeConverter<? super S, ? extends S, ? super T, ? extends T> converter = reverseConverter.reverse();
+			if (downCastOnly && !converter.isSafe())
+				throw new IllegalArgumentException("Cannot safely convert from " + source + " to " + target);
+			return converter;
+		}
+		// Now neither type is primitive or a wrapper
 		if (target.getType() instanceof TypeVariable && ((TypeVariable<?>) target.getType()).getBounds().length == 1)
 			target = (TypeToken<T>) of(((TypeVariable<?>) target.getType()).getBounds()[0]);
 		if (source.getType() instanceof WildcardType && ((WildcardType) source.getType()).getLowerBounds().length == 0) {
 			// As far as I can tell, Google seems to have broken this.
 			// TypeToken.isAssignableFrom(TypeToken) used to return true for this case,
 			// but now TypeToken.isSuperTypeOf(TypeToken)returns false, which seems clearly wrong.
-			return new TypeConverter<>((TypeToken<T>) source, "no-op", LambdaUtils.<S, T> unenforcedCast());
-		} else if (target.isSupertypeOf(source)) {
-			if (target.isPrimitive() && !source.isPrimitive()) {
-				T safeValue = safe ? (T) SAFE_VALUES.get(getRawType(source)) : null;
-				return new TypeConverter<>((TypeToken<T>) source, "primitive-safe-cast", v -> {
-					if (v == null) {
-						if (safeValue != null)
-							return safeValue;
-						throw new NullPointerException("Cannot cast null to primitive type " + source);
-					}
-					return (T) v;
-				});
+			return new TypeConverter<>("no-op", "no-op", source, (TypeToken<T>) source, null, LambdaUtils.<S, T> unenforcedCast(), null,
+				LambdaUtils.<T, S> unenforcedCast());
+		} else if (isAssignable(target, source)) {
+			if (isAssignable(source, target))
+				return new TypeConverter<>("no-op", "no-op", source, target, //
+					null, LambdaUtils.<S, T> unenforcedCast(), null, LambdaUtils.<T, S> unenforcedCast());
+			else {
+				InstanceChecker<S> sourceChecker = new InstanceChecker<>(rawSource);
+				return new TypeConverter<>("no-op", sourceChecker.checkString, source, (TypeToken<T>) source, //
+					null, LambdaUtils.<S, T> unenforcedCast(), sourceChecker.check, sourceChecker.cast);
+			}
+		} else if (target.isArray()) {
+			if (!source.isArray() || source.isPrimitive() || target.isPrimitive()) {
+				TypeConverter<S, ? extends S, ? super T, T> suppConvert = getSpecialCast(source, target, rawSource, rawTarget);
+				if (suppConvert != null)
+					return suppConvert;
+				else
+					throw new IllegalArgumentException("Cannot convert from " + source + " to " + target);
 			} else
-				return new TypeConverter<>((TypeToken<T>) source, "no-op", LambdaUtils.<S, T> unenforcedCast());
+				throw new IllegalArgumentException("Cannot convert from " + source + " to " + target);
 		}
-		Class<S> wrappedSource = getRawType(wrap(source));
-		Class<T> wrappedTarget = getRawType(wrap(target));
-		if (target.isArray()) {
-			if (!source.isArray() || source.isPrimitive() || target.isPrimitive())
-				return specialCast(source, target, wrappedSource, wrappedTarget);
-			try {
-				getCast(target.getComponentType(), source.getComponentType()); // Don't need the actual cast, just the check
-				return new TypeConverter<>((TypeToken<T>) source, "no-op", LambdaUtils.<S, T> unenforcedCast());
-			} catch (IllegalArgumentException e) {
-				return specialCast(source, target, wrappedSource, wrappedTarget);
-			}
-		}
-		Class<?> primitiveTarget = getRawType(unwrap(target));
-		Class<?> primitiveSource = getRawType(unwrap(source));
-		UnaryOperator<S> nullCheck;
-		if (target.isPrimitive() && !source.isPrimitive()) {
-			S safeValue = safe ? (S) SAFE_VALUES.get(primitiveSource) : null;
-			nullCheck = v -> {
-				if (v == null) {
-					if (safeValue != null)
-						return safeValue;
-					throw new NullPointerException("Cannot cast null to primitive type " + source);
-				}
-				return v;
-			};
-		} else
-			nullCheck = LambdaUtils.identity();
-		if (primitiveSource.isPrimitive()) {
-			if (primitiveSource == primitiveTarget)
-				return new TypeConverter<>((TypeToken<T>) source, "wrapping-cast", (Function<S, T>) nullCheck);
-			else if (wrappedTarget.isAssignableFrom(wrappedSource))
-				return new TypeConverter<>((TypeToken<T>) TypeTokens.get().of(wrappedSource), "wrapping-cast", (Function<S, T>) nullCheck);
-			else if (!primitiveTarget.isPrimitive())
-				return specialCast(source, target, wrappedSource, wrappedTarget);
-			else if (primitiveSource == boolean.class)
-				return specialCast(source, target, wrappedSource, wrappedTarget);
-			Function<S, Number> toNumber;
-			if (primitiveSource == char.class) {
-				toNumber = v -> Integer.valueOf((Character) nullCheck.apply(v));
-			} else {
-				toNumber = (Function<S, Number>) nullCheck;
-			}
-			Function<S, Object> fn;
-			if (primitiveTarget == double.class) {
-				fn = v -> {
-					Number n = toNumber.apply(v);
-					return n == null ? null : n.doubleValue();
-				};
-				// Now left!=right and left!=double.class
-			} else if (primitiveSource == double.class)
-				fn = null;
-			else if (primitiveTarget == float.class)
-				fn = v -> {
-					Number n = toNumber.apply(v);
-					return n == null ? null : n.floatValue();
-				};
-				else if (primitiveSource == float.class || primitiveSource == long.class)
-					fn = null;
-			// Now right can only be int, short, byte, or char
-				else if (primitiveTarget == long.class) {
-					fn = v -> {
-						Number n = toNumber.apply(v);
-						return n == null ? null : n.longValue();
-					};
-				} else if (primitiveTarget == int.class) {
-					fn = v -> {
-						Number n = toNumber.apply(v);
-						return n == null ? null : n.intValue();
-					};
-				} else if (primitiveSource == byte.class) {
-					if (primitiveTarget == short.class) {
-						fn = v -> {
-							Number n = toNumber.apply(v);
-							return n == null ? null : n.shortValue();
-						};
-					} else if (primitiveTarget == char.class) {
-						fn = v -> {
-							Number n = toNumber.apply(v);
-							if (n == null)
-								return null;
-							else
-								return Character.valueOf((char) n.byteValue());
-						};
-					} else
-						fn = null;
-				} else
-					fn = null;
 
-			if (fn == null) {
-				if (downCastOnly)
-					throw new IllegalArgumentException("Cannot cast " + source + " to " + target);
-				if (primitiveTarget == float.class) {
-					fn = v -> {
-						Number n = toNumber.apply(v);
-						return n == null ? null : n.floatValue();
-					};
-				} else if (primitiveTarget == long.class) {
-					fn = v -> {
-						Number n = toNumber.apply(v);
-						return n == null ? null : n.longValue();
-					};
-				} else if (primitiveTarget == int.class) {
-					fn = v -> {
-						Number n = toNumber.apply(v);
-						return n == null ? null : n.intValue();
-					};
-				} else if (primitiveTarget == short.class) {
-					fn = v -> {
-						Number n = toNumber.apply(v);
-						return n == null ? null : n.shortValue();
-					};
-				} else if (primitiveTarget == byte.class) {
-					fn = v -> {
-						Number n = toNumber.apply(v);
-						return n == null ? null : n.byteValue();
-					};
-				} else if (primitiveTarget == char.class) {
-					fn = v -> {
-						Number n = toNumber.apply(v);
-						return n == null ? null : Character.valueOf((char) n.intValue());
-					};
-				}
-			}
-			return new TypeConverter<>(target, "primitive-cast", (Function<S, T>) fn);
-		} else if (isAssignable(target, source))
-			return new TypeConverter<>((TypeToken<T>) source, "no-op", LambdaUtils.<S, T> unenforcedCast());
+		TypeConverter<S, ? extends S, ? super T, T> suppConvert = getSpecialCast(source, target, rawSource, rawTarget);
+		if (suppConvert != null)
+			return suppConvert;
 		else
-			return specialCast(source, target, wrappedSource, wrappedTarget);
+			throw new IllegalArgumentException("Cannot convert from " + source + " to " + target);
 	}
 
-	private <S, T> TypeConverter<S, T> specialCast(TypeToken<S> sourceType, TypeToken<T> targetType, Class<S> sourceClass,
-		Class<T> targetClass) {
+	private <S, T> TypeConverter<S, ? extends S, ? super T, T> getSpecialCast(TypeToken<S> sourceType, TypeToken<T> targetType,
+		Class<S> sourceClass, Class<T> targetClass) {
 		ClassMap<SupplementaryCast<?, ?>> sourceCasts = theSupplementaryCasts.get(targetClass, ClassMap.TypeMatch.SUB_TYPE);
 		SupplementaryCast<S, T> suppCast = sourceCasts == null ? null
 			: (SupplementaryCast<S, T>) sourceCasts.get(sourceClass, ClassMap.TypeMatch.SUPER_TYPE);
-		if (suppCast != null)
-			return new TypeConverter<>((TypeToken<T>) suppCast.getCastType(sourceType), suppCast.toString(), suppCast::cast);
-		throw new IllegalArgumentException("Cannot cast " + sourceType + " to " + targetType);
+		if (suppCast != null) {
+			ClassMap<SupplementaryCast<?, ?>> targetCasts = theSupplementaryCasts.get(sourceClass, ClassMap.TypeMatch.SUB_TYPE);
+			SupplementaryCast<T, S> reverseCast = targetCasts == null ? null
+				: (SupplementaryCast<T, S>) targetCasts.get(targetClass, ClassMap.TypeMatch.SUPER_TYPE);
+			if (reverseCast != null)
+				return new TypeConverter<>(suppCast.toString(), reverseCast.toString(), //
+					sourceType, (TypeToken<T>) suppCast.getCastType(sourceType), //
+					suppCast.isSafe() ? null : suppCast::canCast, suppCast::cast, //
+						reverseCast.isSafe() ? null : reverseCast::canCast, reverseCast::cast);
+			else
+				return new TypeConverter<>(suppCast.toString(), "Impossible", //
+					sourceType, (TypeToken<T>) suppCast.getCastType(sourceType), //
+					suppCast.isSafe() ? null : suppCast::canCast, suppCast::cast, //
+						LambdaUtils.constantFn("Impossible", "Impossible", null), __ -> {
+							throw new IllegalStateException("Impossible");
+						});
+		}
+		return null;
 	}
 
 	/**

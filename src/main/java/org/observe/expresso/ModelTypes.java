@@ -30,6 +30,7 @@ import org.observe.collect.ObservableSortedSet;
 import org.observe.config.ObservableValueSet;
 import org.observe.util.ObservableCollectionWrapper;
 import org.observe.util.TypeTokens;
+import org.observe.util.TypeTokens.TypeConverter;
 import org.qommons.BiTuple;
 import org.qommons.ClassMap;
 import org.qommons.ClassMap.TypeMatch;
@@ -217,7 +218,7 @@ public class ModelTypes {
 
 		@Override
 		protected Function<Observable<?>, Observable<?>> convertType(ModelInstanceType<Observable<?>, ?> target,
-			Function<Object, Object>[] casts, Function<Object, Object>[] reverses) {
+			TypeConverter<Object, Object, Object, Object>[] casts) {
 			return src -> src.map(casts[0]);
 		}
 
@@ -364,7 +365,7 @@ public class ModelTypes {
 
 		@Override
 		protected Function<ObservableAction<?>, ObservableAction<?>> convertType(ModelInstanceType<ObservableAction<?>, ?> target,
-			Function<Object, Object>[] casts, Function<Object, Object>[] reverses) {
+			TypeConverter<Object, Object, Object, Object>[] casts) {
 			return src -> src.map((TypeToken<Object>) target.getType(0), casts[0]);
 		}
 
@@ -541,14 +542,9 @@ public class ModelTypes {
 
 		@Override
 		protected Function<SettableValue<?>, SettableValue<?>> convertType(ModelInstanceType<SettableValue<?>, ?> target,
-			Function<Object, Object>[] casts, Function<Object, Object>[] reverses) {
-			if (reverses != null) {
-				return src -> ((SettableValue<Object>) src).transformReversible((TypeToken<Object>) target.getType(0),
-					transformReversible(casts[0], reverses[0]));
-			} else {
-				return src -> SettableValue.asSettable(
-					((SettableValue<Object>) src).transform((TypeToken<Object>) target.getType(0), transform(casts[0])), NOT_REVERSIBLE);
-			}
+			TypeConverter<Object, Object, Object, Object>[] casts) {
+			return src -> ((SettableValue<Object>) src).transformReversible((TypeToken<Object>) target.getType(0),
+				transformReversible(casts[0]));
 		}
 
 		@Override
@@ -571,10 +567,10 @@ public class ModelTypes {
 				}
 
 				@Override
-				public <S, T> Observable<?> convert(SettableValue<?> source, TypeToken<T> targetType, Function<S, T> cast,
-					Function<T, S> reverse) {
-					if (cast != null)
-						return ((SettableValue<S>) source).value().noInit().map(cast);
+				public <S, T> Observable<?> convert(SettableValue<?> source, TypeToken<T> targetType,
+					TypeConverter<S, ?, ?, ? extends T> converter) {
+					if (converter != null)
+						return ((SettableValue<S>) source).value().noInit().map(converter);
 					else
 						return source.value().noInit();
 				}
@@ -891,14 +887,9 @@ public class ModelTypes {
 
 		@Override
 		protected Function<ObservableCollection<?>, ObservableCollection<?>> convertType(
-			ModelInstanceType<ObservableCollection<?>, ?> target, Function<Object, Object>[] casts, Function<Object, Object>[] reverses) {
-			if (reverses != null)
-				return src -> ((ObservableCollection<Object>) src).flow()
-					.transform((TypeToken<Object>) target.getType(0), transformReversible(casts[0], reverses[0])).collectPassive();
-				else
-					return src -> ((ObservableCollection<Object>) src).flow()
-						.transform((TypeToken<Object>) target.getType(0), transform(casts[0])).filterMod(opts -> opts.noAdd("Not reversible"))
-						.collectPassive();
+			ModelInstanceType<ObservableCollection<?>, ?> target, TypeConverter<Object, Object, Object, Object>[] casts) {
+			return src -> ((ObservableCollection<Object>) src).flow()
+				.transform((TypeToken<Object>) target.getType(0), transformReversible(casts[0])).collectPassive();
 		}
 
 		@Override
@@ -1037,14 +1028,9 @@ public class ModelTypes {
 
 		@Override
 		protected Function<ObservableSortedCollection<?>, ObservableSortedCollection<?>> convertType(
-			ModelInstanceType<ObservableSortedCollection<?>, ?> target, Function<Object, Object>[] casts,
-			Function<Object, Object>[] reverses) {
-			if (reverses != null) {
-				return src -> ((ObservableSortedCollection<Object>) src).flow()
-					.transformEquivalent((TypeToken<Object>) target.getType(0), transformReversible(casts[0], reverses[0]))
-					.collectPassive();
-			} else
-				return null; // Need reverse for transformEquivalent
+			ModelInstanceType<ObservableSortedCollection<?>, ?> target, TypeConverter<Object, Object, Object, Object>[] casts) {
+			return src -> ((ObservableSortedCollection<Object>) src).flow()
+				.transformEquivalent((TypeToken<Object>) target.getType(0), transformReversible(casts[0])).collectPassive();
 		}
 
 		@Override
@@ -1157,13 +1143,9 @@ public class ModelTypes {
 
 		@Override
 		protected Function<ObservableSet<?>, ObservableSet<?>> convertType(ModelInstanceType<ObservableSet<?>, ?> target,
-			Function<Object, Object>[] casts, Function<Object, Object>[] reverses) {
-			if (reverses != null) {
-				return src -> ((ObservableSet<Object>) src).flow()
-					.transformEquivalent((TypeToken<Object>) target.getType(0), transformReversible(casts[0], reverses[0]))
-					.collectPassive();
-			} else
-				return null; // Need reverse for transformEquivalent
+			TypeConverter<Object, Object, Object, Object>[] casts) {
+			return src -> ((ObservableSet<Object>) src).flow()
+				.transformEquivalent((TypeToken<Object>) target.getType(0), transformReversible(casts[0])).collectPassive();
 		}
 
 		@Override
@@ -1346,13 +1328,9 @@ public class ModelTypes {
 
 		@Override
 		protected Function<ObservableSortedSet<?>, ObservableSortedSet<?>> convertType(ModelInstanceType<ObservableSortedSet<?>, ?> target,
-			Function<Object, Object>[] casts, Function<Object, Object>[] reverses) {
-			if (reverses != null) {
-				return src -> ((ObservableSortedSet<Object>) src).flow()
-					.transformEquivalent((TypeToken<Object>) target.getType(0), transformReversible(casts[0], reverses[0]))
-					.collectPassive();
-			} else
-				return null; // Need reverse to transform equivalent
+			TypeConverter<Object, Object, Object, Object>[] casts) {
+			return src -> ((ObservableSortedSet<Object>) src).flow()
+				.transformEquivalent((TypeToken<Object>) target.getType(0), transformReversible(casts[0])).collectPassive();
 		}
 
 		@Override
@@ -1458,7 +1436,7 @@ public class ModelTypes {
 
 		@Override
 		protected Function<ObservableValueSet<?>, ObservableValueSet<?>> convertType(ModelInstanceType<ObservableValueSet<?>, ?> target,
-			Function<Object, Object>[] casts, Function<Object, Object>[] reverses) {
+			TypeConverter<Object, Object, Object, Object>[] casts) {
 			return null;
 		}
 
@@ -1570,7 +1548,7 @@ public class ModelTypes {
 
 		@Override
 		protected Function<ObservableMap<?, ?>, ObservableMap<?, ?>> convertType(ModelInstanceType<ObservableMap<?, ?>, ?> target,
-			Function<Object, Object>[] casts, Function<Object, Object>[] reverses) {
+			TypeConverter<Object, Object, Object, Object>[] casts) {
 			return null; // ObservableMap doesn't have flow at the moment at least
 		}
 
@@ -1678,7 +1656,7 @@ public class ModelTypes {
 
 		@Override
 		protected Function<ObservableSortedMap<?, ?>, ObservableSortedMap<?, ?>> convertType(
-			ModelInstanceType<ObservableSortedMap<?, ?>, ?> target, Function<Object, Object>[] casts, Function<Object, Object>[] reverses) {
+			ModelInstanceType<ObservableSortedMap<?, ?>, ?> target, TypeConverter<Object, Object, Object, Object>[] casts) {
 			return null; // ObservableMap doesn't have flow at the moment at least
 		}
 
@@ -1790,23 +1768,16 @@ public class ModelTypes {
 
 		@Override
 		protected Function<ObservableMultiMap<?, ?>, ObservableMultiMap<?, ?>> convertType(
-			ModelInstanceType<ObservableMultiMap<?, ?>, ?> target, Function<Object, Object>[] casts, Function<Object, Object>[] reverses) {
-			if (casts[0] != null && reverses[0] == null)
-				return null; // Need reverse for key mapping
+			ModelInstanceType<ObservableMultiMap<?, ?>, ?> target, TypeConverter<Object, Object, Object, Object>[] casts) {
 			return src -> {
 				ObservableMultiMap.MultiMapFlow<Object, Object> flow = ((ObservableMultiMap<Object, Object>) src).flow();
 				if (casts[0] != null) {
 					flow = flow.withKeys(keyFlow -> keyFlow.transformEquivalent((TypeToken<Object>) target.getType(0),
-						transformReversible(casts[0], reverses[0])));
+						transformReversible(casts[0])));
 				}
 				if (casts[1] != null) {
-					if (reverses[1] != null) {
-						flow = flow.withValues(valueFlow -> valueFlow.transform((TypeToken<Object>) target.getType(1),
-							transformReversible(casts[1], reverses[1])));
-					} else {
-						flow = flow
-							.withValues(valueFlow -> valueFlow.transform((TypeToken<Object>) target.getType(1), transform(casts[1])));
-					}
+					flow = flow
+						.withValues(valueFlow -> valueFlow.transform((TypeToken<Object>) target.getType(1), transformReversible(casts[1])));
 				}
 				return flow.gatherPassive();
 			};
@@ -1916,24 +1887,16 @@ public class ModelTypes {
 
 		@Override
 		protected Function<ObservableSortedMultiMap<?, ?>, ObservableSortedMultiMap<?, ?>> convertType(
-			ModelInstanceType<ObservableSortedMultiMap<?, ?>, ?> target, Function<Object, Object>[] casts,
-			Function<Object, Object>[] reverses) {
-			if (casts[0] != null && reverses[0] == null)
-				return null; // Need reverse for key mapping
+			ModelInstanceType<ObservableSortedMultiMap<?, ?>, ?> target, TypeConverter<Object, Object, Object, Object>[] casts) {
 			return src -> {
 				ObservableSortedMultiMap.SortedMultiMapFlow<Object, Object> flow = ((ObservableSortedMultiMap<Object, Object>) src).flow();
 				if (casts[0] != null) {
 					flow = flow.withStillSortedKeys(keyFlow -> keyFlow.transformEquivalent((TypeToken<Object>) target.getType(0),
-						transformReversible(casts[0], reverses[0])));
+						transformReversible(casts[0])));
 				}
 				if (casts[1] != null) {
-					if (reverses[1] != null) {
-						flow = flow.withValues(valueFlow -> valueFlow.transform((TypeToken<Object>) target.getType(1),
-							transformReversible(casts[1], reverses[1])));
-					} else {
-						flow = flow
-							.withValues(valueFlow -> valueFlow.transform((TypeToken<Object>) target.getType(1), transform(casts[1])));
-					}
+					flow = flow
+						.withValues(valueFlow -> valueFlow.transform((TypeToken<Object>) target.getType(1), transformReversible(casts[1])));
 				}
 				return flow.gatherPassive();
 			};
@@ -1988,7 +1951,7 @@ public class ModelTypes {
 	}
 
 	static Function<Transformation.ReversibleTransformationPrecursor<Object, Object, ?>, Transformation.ReversibleTransformation<Object, Object>> transformReversible(
-		Function<Object, Object> cast, Function<Object, Object> reverse) {
-		return tx -> tx.cache(false).map(cast).withReverse(reverse);
+		TypeConverter<Object, Object, Object, Object> cast) {
+		return tx -> tx.cache(false).map(cast).replaceSource(cast::reverse, rev -> rev.rejectWith(cast::isReversible));
 	}
 }

@@ -58,7 +58,17 @@ public class QuickBaseInterpretation implements QonfigInterpretation {
 
 			@Override
 			public QuickSize cast(Integer source) {
-				return QuickSize.ofPixels(source.intValue());
+				return source == null ? null : QuickSize.ofPixels(source.intValue());
+			}
+
+			@Override
+			public boolean isSafe() {
+				return true;
+			}
+
+			@Override
+			public String canCast(Integer source) {
+				return null;
 			}
 		});
 	}

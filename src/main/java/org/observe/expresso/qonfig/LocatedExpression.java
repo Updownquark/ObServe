@@ -1,8 +1,8 @@
 package org.observe.expresso.qonfig;
 
-import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ExpressoEvaluationException;
 import org.observe.expresso.ExpressoInterpretationException;
+import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
@@ -41,7 +41,9 @@ public interface LocatedExpression {
 	default <M, MV extends M> InterpretedValueSynth<M, MV> interpret(ModelInstanceType<M, MV> type, InterpretedExpressoEnv env)
 		throws ExpressoInterpretationException {
 		try {
-			return getExpression().evaluate(type, env.at(getFilePosition()), 0);
+			return getExpression()//
+				.evaluate(//
+					type, env.at(getFilePosition()), 0);
 		} catch (TypeConversionException e) {
 			throw new ExpressoInterpretationException(e.getMessage(), getFilePosition(0), 0, e);
 		} catch (ExpressoEvaluationException e) {

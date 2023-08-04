@@ -119,24 +119,16 @@ public class CastExpression implements ObservableExpression {
 			throws ExpressoEvaluationException {
 		TypeToken<S> sourceType = (TypeToken<S>) valueContainer.getType().getType(0);
 
-		TypeTokens.TypeConverter<S, T> converter;
+		TypeTokens.TypeConverter<? super S, ? extends S, ? super T, ? extends T> converter;
 		try {
 			converter = TypeTokens.get().getCast(valueType, sourceType, true, false);
 			if (converter.isTrivial())
 				return (EvaluatedExpression<SettableValue<?>, SettableValue<T>>) (EvaluatedExpression<?, ?>) valueContainer;
-			TypeTokens.TypeConverter<T, S> reverse;
-			try {
-				reverse = TypeTokens.get().getCast(sourceType, valueType, true, false);
-				return ObservableExpression
-					.evEx(valueContainer.map(ModelTypes.Value.forType(valueType), vc -> vc.transformReversible(valueType, tx -> tx//
-						.map(converter).withReverse(reverse))), valueType, valueContainer);
-			} catch (IllegalArgumentException e) {
-				String reverseError = "Cannot convert from " + valueType + " to " + sourceType;
-				return ObservableExpression.evEx(
-					valueContainer.map(ModelTypes.Value.forType(valueType), vc -> SettableValue.asSettable(vc.transform(valueType, tx -> tx//
-						.map(converter)), __ -> reverseError)),
+			return ObservableExpression.evEx(
+				valueContainer.map(ModelTypes.Value.forType(valueType), vc -> vc.transformReversible(valueType, tx -> tx//
+					.map(converter).replaceSource(converter::reverse, rev -> rev.rejectWith(converter::isReversible)))),
+				valueType,
 					valueContainer);
-			}
 		} catch (IllegalArgumentException e) {
 			if (!TypeTokens.get().isAssignable(sourceType, valueType)//
 				&& !TypeTokens.get().isAssignable(valueType, sourceType))

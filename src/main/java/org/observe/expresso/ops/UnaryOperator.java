@@ -20,6 +20,7 @@ import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.TypeConversionException;
 import org.observe.expresso.ops.UnaryOperatorSet.UnaryOp;
 import org.observe.util.TypeTokens;
+import org.observe.util.TypeTokens.TypeConverter;
 import org.qommons.LambdaUtils;
 import org.qommons.io.ErrorReporting;
 
@@ -215,64 +216,47 @@ public class UnaryOperator implements ObservableExpression {
 		EvaluatedExpression<SettableValue<?>, SettableValue<S>> op, UnaryOp<S, T> operator, int expressionOffset,
 		ErrorReporting operatorReporting) throws ExpressoEvaluationException {
 		TypeToken<T> operatorType = TypeTokens.get().of(operator.getTargetType());
-		TypeTokens.TypeConverter<T, T> cast, reverse;
+		TypeTokens.TypeConverter<T, T, T, T> cast;
 		if (TypeTokens.get().wrap(type).equals(TypeTokens.get().wrap(operatorType))) {
 			type = operatorType;
-			cast = reverse = null;
+			cast = null;
 		} else {
 			try {
-				cast = TypeTokens.get().getCast(type, operatorType);
+				cast = (TypeConverter<T, T, T, T>) TypeTokens.get().getCast(type, operatorType);
 			} catch (IllegalArgumentException e) {
 				throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(),
 					this + " cannot be evaluated as a " + ModelTypes.Value.getName() + "<" + opType + ">", e);
 			}
 			type = cast.getConvertedType();
-			try {
-				reverse = TypeTokens.get().getCast(operatorType, type);
-			} catch (IllegalArgumentException e) {
-				reverse = null;
-			}
 		}
 		TypeToken<T> fType = type;
-		if (reverse != null || cast == null) { // Reversible operation
-			TypeTokens.TypeConverter<T, T> fReverse = reverse;
-			return ObservableExpression.evEx(op.map(ModelTypes.Value.forType(type), opV -> opV.transformReversible(fType, tx -> tx//
-				.map(LambdaUtils.printableFn(v -> {
-					try {
-						T result = operator.apply(v);
-						if (cast != null)
-							result = cast.apply(result);
-						return result;
-					} catch (RuntimeException | Error e) {
-						operatorReporting.error(null, e);
-						return null;
-					}
-				}, operator::toString, operator))//
-				.withReverse(v -> {
-					try {
-						if (fReverse != null)
-							v = fReverse.apply(v);
-						return operator.reverse(v);
-					} catch (RuntimeException | Error e) {
-						operatorReporting.error(null, e);
-						return null;
-					}
-				}))), operator, op);
-		} else {
-			return ObservableExpression
-				.evEx(op.map(ModelTypes.Value.forType(type), opV -> SettableValue.asSettable(opV.transform(fType, tx -> tx//
-					.map(LambdaUtils.printableFn(v -> {
-						try {
-							T result = operator.apply(v);
-							if (cast != null)
-								result = cast.apply(result);
-							return result;
-						} catch (RuntimeException | Error e) {
-							operatorReporting.error(null, e);
-							return null;
-						}
-					}, operator::toString, operator))), __ -> "Not reversible")), operator, op);
-		}
+		return ObservableExpression.evEx(op.map(ModelTypes.Value.forType(type), opV -> opV.transformReversible(fType, tx -> tx//
+			.map(LambdaUtils.printableFn(v -> {
+				try {
+					T result = operator.apply(v);
+					if (cast != null)
+						result = cast.apply(result);
+					return result;
+				} catch (RuntimeException | Error e) {
+					operatorReporting.error(null, e);
+					return null;
+				}
+			}, operator::toString, operator))//
+			.replaceSource(v -> {
+				try {
+					if (cast != null)
+						v = cast.reverse(v);
+					return operator.reverse(v);
+				} catch (RuntimeException | Error e) {
+					operatorReporting.error(null, e);
+					return null;
+				}
+			}, rev -> {
+				if (cast == null)
+					return rev;
+				else
+					return rev.rejectWith(cast::isReversible);
+			}))), operator, op);
 	}
 
 	@Override

@@ -1101,7 +1101,7 @@ public class BinaryOperatorSet {
 				TypeToken<?> leftTarget = leftOpType.resolveType(Comparable.class.getTypeParameters()[0]);
 				if (!TypeTokens.get().isAssignable(leftTarget, rightOpType))
 					throw new ExpressoEvaluationException(offset, length,
-						"Comparable comparison cannot be used for incompatible types " + leftOpType + " and " + rightOpType);
+						"Comparable comparison cannot be used for incompatible types " + leftTarget + " and " + rightOpType);
 				return TypeTokens.get().BOOLEAN;
 			}
 

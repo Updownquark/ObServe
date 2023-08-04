@@ -1142,10 +1142,13 @@ public class ExpressoTransformations {
 				theSourceType = sourceType;
 				super.update(env);
 				if (getParentElement().getEvaluatedTargetType() != null)
-					theMap = getDefinition().getMap().interpret(ModelTypes.Value.forType(getParentElement().getEvaluatedTargetType()),
-						getExpressoEnv());
+					theMap = getDefinition().getMap()//
+					.interpret(//
+						ModelTypes.Value.forType(getParentElement().getEvaluatedTargetType()), getExpressoEnv());
 				else
-					theMap = getDefinition().getMap().interpret(ModelTypes.Value.<SettableValue<T>> anyAs(), getExpressoEnv());
+					theMap = getDefinition().getMap()//
+					.interpret(//
+						ModelTypes.Value.<SettableValue<T>> anyAs(), getExpressoEnv());
 			}
 
 			public BetterList<InterpretedValueSynth<?, ?>> getComponents() {
@@ -1414,7 +1417,7 @@ public class ExpressoTransformations {
 				ModelSetInstance models) throws ModelInstantiationException {
 				models = getExpressoEnv().wrapLocal(models);
 
-				SettableValue<T> targetV = SettableValue.build(targetType).build();
+				SettableValue<T> targetV = SettableValue.build(targetType).withValue(TypeTokens.get().getDefaultValue(targetType)).build();
 				getAddOn(ExWithElementModel.Interpreted.class).satisfyElementValue(getDefinition().getTargetName(), models, targetV);
 				SettableValue<String> enabledEvld = theEnabled == null ? null : theEnabled.get(models);
 				SettableValue<String> acceptEvld = theAccept == null ? null : theAccept.get(models);

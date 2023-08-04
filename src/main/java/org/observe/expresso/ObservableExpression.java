@@ -11,6 +11,7 @@ import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.util.TypeTokens;
+import org.observe.util.TypeTokens.TypeConverter;
 import org.qommons.LambdaUtils;
 import org.qommons.QommonsUtils;
 import org.qommons.collect.BetterList;
@@ -241,8 +242,8 @@ public interface ObservableExpression {
 	 * @throws ExpressoInterpretationException If an expression on which this expression depends fails to evaluate
 	 * @throws TypeConversionException If this expression could not be interpreted as the given type
 	 */
-	default <M, MV extends M> EvaluatedExpression<M, MV> evaluate(ModelInstanceType<M, MV> type, InterpretedExpressoEnv env, int expressionOffset)
-		throws ExpressoEvaluationException, ExpressoInterpretationException, TypeConversionException {
+	default <M, MV extends M> EvaluatedExpression<M, MV> evaluate(ModelInstanceType<M, MV> type, InterpretedExpressoEnv env,
+		int expressionOffset) throws ExpressoEvaluationException, ExpressoInterpretationException, TypeConversionException {
 		EvaluatedExpression<M, MV> value = evaluateInternal(type, env, expressionOffset);
 		if (value == null)
 			return null;
@@ -265,8 +266,8 @@ public interface ObservableExpression {
 	 * @throws ExpressoEvaluationException If the expression cannot be evaluated in the given environment as the given type
 	 * @throws ExpressoInterpretationException If a dependency
 	 */
-	<M, MV extends M> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, InterpretedExpressoEnv env, int expressionOffset)
-		throws ExpressoEvaluationException, ExpressoInterpretationException;
+	<M, MV extends M> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, InterpretedExpressoEnv env,
+		int expressionOffset) throws ExpressoEvaluationException, ExpressoInterpretationException;
 
 	/**
 	 * An expression that always returns a constant value
@@ -333,11 +334,13 @@ public interface ObservableExpression {
 					.evEx(InterpretedValueSynth.of((ModelInstanceType<M, MV>) ModelTypes.Value.forType(theValue.getClass()),
 						LambdaUtils.constantExFn(value, theText, null)), this);
 			} else if (TypeTokens.get().isAssignable(type.getType(0), TypeTokens.get().of(theValue.getClass()))) {
-				TypeTokens.TypeConverter<T, Object> convert = TypeTokens.get().getCast((TypeToken<Object>) type.getType(0),
-					TypeTokens.get().of((Class<T>) theValue.getClass()));
-				MV value = (MV) createValue(type.getType(0), convert.apply(theValue));
+				TypeToken<Object> targetType = (TypeToken<Object>) type.getType(0);
+				TypeTokens.TypeConverter<T, ?, ?, Object> convert = (TypeConverter<T, ?, ?, Object>) TypeTokens.get()
+					.getCast(targetType, TypeTokens.get().of((Class<T>) theValue.getClass()));
+				targetType = convert.getConvertedType();
+				MV value = (MV) createValue(targetType, convert.apply(theValue));
 				return ObservableExpression
-					.evEx(InterpretedValueSynth.of((ModelInstanceType<M, MV>) ModelTypes.Value.forType(theValue.getClass()),
+					.evEx(InterpretedValueSynth.of((ModelInstanceType<M, MV>) ModelTypes.Value.forType(targetType),
 						LambdaUtils.constantExFn(value, theText, null)), this);
 			} else {
 				// Don't throw this. Maybe the type architecture can convert it.
