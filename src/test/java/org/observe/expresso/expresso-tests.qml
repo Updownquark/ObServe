@@ -1229,12 +1229,23 @@
 					<map-reverse type="replace-source" target-as="target">target-10</map-reverse>
 				</map-to>
 			</transform>
+			<!-- Test the default reverse functionality of map-to -->
+			<transform name="mappedValueDR" source="models.anyInt">
+				<map-to source-as="source">
+					<map-with>source+25</map-with>
+				</map-to>
+			</transform>
+			<transform name="mappedListDR" source="models.list">
+				<map-to source-as="source">
+					<map-with>source+100</map-with>
+				</map-to>
+			</transform>
 			<value name="initSource" init="models.anyInt" />
 		</model>
 
 		<action>assertEquals(models.anyInt+10, mapped)</action>
 		<action>mapped+=25</action>
-		<action>assertEquals(models.anyInt, initSource+25)</action>
+		<action>assertEquals(initSource+25, models.anyInt)</action>
 		<action>assertEquals(models.anyInt+10, mapped)</action>
 
 		<action>initSource=models.test.getInt()</action>
@@ -1251,6 +1262,18 @@
 		<action>models.combinedInt=-37</action>
 		<action>assertEquals(models.test.getInt()+models.anyInt, models.combinedInt)</action>
 		<!-- TODO Test enabled, accept, add, add-accept attributes for map-to -->
+
+		<!-- Value map-to default reverse -->
+		<action>assertEquals(models.anyInt+25, mappedValueDR)</action>
+		<action>mappedValueDR=0</action>
+		<action>assertEquals(-25, models.anyInt)</action>
+
+		<!-- Collection map-to default reverse -->
+		<action>assertEquals(models.list.get(0)+100, mappedListDR.get(0))</action>
+		<action>mappedListDR.set(0, 500)</action>
+		<action>assertEquals(400, models.list.get(0))</action>
+		<action>mappedListDR.add(25)</action>
+		<action>assertEquals(-75, models.list.get(5))</action>
 	</test>
 	<test name="sort">
 		<model>

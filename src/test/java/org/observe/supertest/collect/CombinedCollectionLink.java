@@ -100,7 +100,7 @@ public class CombinedCollectionLink<S, V, T> extends AbstractMappedCollectionLin
 
 				Transformation<S, T> def;
 				if (withReverse)
-					def = builder.build(map).replaceSourceWith(reverse);
+					def = builder.build(map).replaceSourceWith(reverse).withTesting(true);
 				else
 					def = builder.build(map);
 				options.accept(def);

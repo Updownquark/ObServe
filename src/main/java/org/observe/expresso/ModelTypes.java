@@ -1945,13 +1945,14 @@ public class ModelTypes {
 		}
 	}
 
-	static Function<Transformation.TransformationPrecursor<Object, Object, ?>, Transformation<Object, Object>> transform(
-		Function<Object, Object> cast) {
-		return tx -> tx.cache(false).map(cast);
-	}
-
 	static Function<Transformation.ReversibleTransformationPrecursor<Object, Object, ?>, Transformation.ReversibleTransformation<Object, Object>> transformReversible(
 		TypeConverter<Object, Object, Object, Object> cast) {
-		return tx -> tx.cache(false).map(cast).replaceSource(cast::reverse, rev -> rev.rejectWith(cast::isReversible));
+		TypeConverter<Object, Object, Object, Object> reverse = cast.reverse();
+		return tx -> tx.cache(false).map(cast).replaceSource(reverse, rev -> {
+			if (reverse.getApplicability() == null)
+				return rev;
+			else
+				return rev.rejectWith(reverse.getApplicability());
+		});
 	}
 }

@@ -249,6 +249,8 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 	default <R> SettableValue<R> transformReversible(TypeToken<R> type,
 		Function<Transformation.ReversibleTransformationPrecursor<T, R, ?>, Transformation.ReversibleTransformation<T, R>> combination) {
 		Transformation.ReversibleTransformation<T, R> def = combination.apply(new Transformation.ReversibleTransformationPrecursor<>());
+		if (def.getArgs().isEmpty() && getType().equals(type) && LambdaUtils.isTrivial(def.getCombination()))
+			return (SettableValue<R>) this;
 		return new TransformedSettableValue<>(type, this, def);
 	}
 
@@ -776,7 +778,10 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 		public <V extends T> T set(V value, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
 			try (Transaction t = lock(true, cause)) {
 				BiTuple<TransformedElement<S, T>, TransformationState> state = getState();
-				S source = state.getValue1().set(value, state.getValue2(), false).getReversed();
+				S source = state.getValue1()//
+					.set(//
+						value, state.getValue2(), false)
+					.getReversed();
 				T prevResult = getTransformation().isCached() ? get() : null;
 				S oldSource = getSource().set(source, cause);
 				return getTransformation().getCombination().apply(oldSource, new Transformation.TransformationValues<S, T>() {

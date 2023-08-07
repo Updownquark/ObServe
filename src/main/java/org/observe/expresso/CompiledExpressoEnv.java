@@ -101,7 +101,7 @@ public class CompiledExpressoEnv {
 			extModels = ObservableModelSet.buildExternal(ObservableModelSet.JAVA_NAME_CHECKER).build();
 
 		InterpretedExpressoEnv interpreted = new InterpretedExpressoEnv(null, extModels, classView, getNonStructuredParsers(),
-			getUnaryOperators(), getBinaryOperators(), reporting, new HashMap<>());
+			getUnaryOperators(), getBinaryOperators(), reporting, new HashMap<>(), false);
 		if (configure != null)
 			interpreted = configure.apply(interpreted);
 

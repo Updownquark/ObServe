@@ -157,6 +157,7 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 	private final Map<ObservableValue<?>, Integer> theArgs;
 	private final BiFunction<? super S, ? super TransformationValues<? extends S, ? extends T>, ? extends T> theCombination;
 	private final Equivalence<? super T> theResultEquivalence;
+	private final boolean isTesting;
 
 	/**
 	 * @param options The transformation options to copy into this definition
@@ -167,12 +168,26 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 	protected Transformation(XformOptions options, Map<ObservableValue<?>, Integer> args,
 		BiFunction<? super S, ? super TransformationValues<? extends S, ? extends T>, ? extends T> combination,
 		Equivalence<? super T> resultEquivalence) {
+		this(options, args, combination, resultEquivalence, false);
+	}
+
+	/**
+	 * @param options The transformation options to copy into this definition
+	 * @param args External arguments to affect the result, identity-keyed, index-valued
+	 * @param combination The combination operation to convert source plus environment into results
+	 * @param resultEquivalence The equivalence to use for the result values
+	 * @param testing Whether this transformation is taking place in a test environment
+	 */
+	protected Transformation(XformOptions options, Map<ObservableValue<?>, Integer> args,
+		BiFunction<? super S, ? super TransformationValues<? extends S, ? extends T>, ? extends T> combination,
+		Equivalence<? super T> resultEquivalence, boolean testing) {
 		super(options);
 		if (combination == null)
 			throw new NullPointerException("Mapping/combination function cannot be null");
 		theArgs = args;
 		theCombination = combination;
 		theResultEquivalence = resultEquivalence;
+		isTesting = testing;
 	}
 
 	Map<ObservableValue<?>, Integer> _getArgs() {
@@ -182,6 +197,11 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 	/** @return The equivalence to use for result values */
 	public Equivalence<? super T> equivalence() {
 		return theResultEquivalence;
+	}
+
+	/** @return Whether this transformation is taking place in a test environment */
+	public boolean isTesting() {
+		return isTesting;
 	}
 
 	/**
@@ -204,7 +224,17 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 	public Transformation<S, T> withEquivalence(Equivalence<? super T> resultEquivalence) {
 		if (resultEquivalence.equals(equivalence()))
 			return this;
-		return new Transformation<>(toOptions(), theArgs, theCombination, resultEquivalence);
+		return new Transformation<>(toOptions(), theArgs, theCombination, resultEquivalence, isTesting);
+	}
+
+	/**
+	 * @param testing Whether this transformation is taking place in a test environment
+	 * @return This transformation, but in a testing or non-testing environment, as specified
+	 */
+	public Transformation<S, T> withTesting(boolean testing) {
+		if (testing == isTesting)
+			return this;
+		return new Transformation<>(toOptions(), theArgs, theCombination, equivalence(), testing);
 	}
 
 	@Override
@@ -515,15 +545,31 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 	 */
 	public static class MaybeReversibleTransformation<S, T> extends Transformation<S, T> {
 		/** @see Transformation#Transformation(XformOptions, Map, BiFunction, Equivalence) */
-		protected MaybeReversibleTransformation(XformOptions options, Map<ObservableValue<?>, Integer> args,
+		public MaybeReversibleTransformation(XformOptions options, Map<ObservableValue<?>, Integer> args,
 			BiFunction<? super S, ? super TransformationValues<? extends S, ? extends T>, ? extends T> combination,
 			Equivalence<? super T> resultEquivalence) {
 			super(options, args, combination, resultEquivalence);
 		}
 
+		/** @see Transformation#Transformation(XformOptions, Map, BiFunction, Equivalence, boolean) */
+		protected MaybeReversibleTransformation(XformOptions options, Map<ObservableValue<?>, Integer> args,
+			BiFunction<? super S, ? super TransformationValues<? extends S, ? extends T>, ? extends T> combination,
+			Equivalence<? super T> resultEquivalence, boolean testing) {
+			super(options, args, combination, resultEquivalence, testing);
+		}
+
 		@Override
 		public MaybeReversibleTransformation<S, T> withEquivalence(Equivalence<? super T> resultEquivalence) {
-			return new MaybeReversibleTransformation<>(toOptions(), _getArgs(), getCombination(), resultEquivalence);
+			if (equivalence().equals(resultEquivalence))
+				return this;
+			return new MaybeReversibleTransformation<>(toOptions(), _getArgs(), getCombination(), resultEquivalence, isTesting());
+		}
+
+		@Override
+		public MaybeReversibleTransformation<S, T> withTesting(boolean testing) {
+			if (testing == isTesting())
+				return this;
+			return new MaybeReversibleTransformation<>(toOptions(), _getArgs(), getCombination(), equivalence(), testing);
 		}
 
 		/**
@@ -592,7 +638,7 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 		 * @return The reversible transformation
 		 */
 		public ReversibleTransformation<S, T> withReverse(TransformReverse<S, T> reverse) {
-			return new ReversibleTransformation<>(this, _getArgs(), getCombination(), equivalence(), reverse);
+			return new ReversibleTransformation<>(this, _getArgs(), getCombination(), equivalence(), reverse, isTesting());
 		}
 	}
 
@@ -622,9 +668,36 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 			theReverse = reverse;
 		}
 
+		/**
+		 * @param options The transformation options to copy into this definition
+		 * @param args External arguments to affect the result, identity-keyed, index-valued
+		 * @param combination The combination operation to convert source plus environment into results
+		 * @param resultEquivalence The equivalence to use for the result values
+		 * @param reverse The reverse operation to convert result plus environment back into source values
+		 * @param testing Whether this transformation is taking place in a test environment
+		 * @see Transformation#Transformation(XformOptions, Map, BiFunction, Equivalence)
+		 */
+		protected ReversibleTransformation(Transformation<S, T> options, Map<ObservableValue<?>, Integer> args,
+			BiFunction<? super S, ? super TransformationValues<? extends S, ? extends T>, ? extends T> combination,
+			Equivalence<? super T> resultEquivalence, TransformReverse<S, T> reverse, boolean testing) {
+			super(options.toOptions(), args, combination, resultEquivalence, testing);
+			if (reverse == null)
+				throw new NullPointerException("Reverse function cannot be null");
+			theReverse = reverse;
+		}
+
 		@Override
 		public ReversibleTransformation<S, T> withEquivalence(Equivalence<? super T> resultEquivalence) {
-			return new ReversibleTransformation<>(this, _getArgs(), getCombination(), resultEquivalence, getReverse());
+			if (equivalence().equals(resultEquivalence))
+				return this;
+			return new ReversibleTransformation<>(this, _getArgs(), getCombination(), resultEquivalence, getReverse(), isTesting());
+		}
+
+		@Override
+		public ReversibleTransformation<S, T> withTesting(boolean testing) {
+			if (testing == isTesting())
+				return this;
+			return new ReversibleTransformation<>(this, _getArgs(), getCombination(), equivalence(), getReverse(), testing);
 		}
 
 		/** @return This transformation's reverse operation */
@@ -2308,6 +2381,8 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 			try {
 				return theTransformation.getCombination().apply(newSource, tv);
 			} catch (RuntimeException e) {
+				if (theTransformation.isTesting())
+					throw e;
 				e.printStackTrace();
 				return null; // This will probably cause problems, but at least the works aren't gummed up
 			}

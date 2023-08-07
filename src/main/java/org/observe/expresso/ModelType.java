@@ -368,8 +368,8 @@ public abstract class ModelType<M> implements Named {
 				TypeConverter<Object, Object, Object, Object>[] casts = new TypeConverter[params.length];
 				boolean trivial = true, exit = false;
 				for (int i = 0; i < getModelType().getTypeCount(); i++) {
-					TypeToken<?> myType = TypeTokens.get().unwrap(getType(i));
-					TypeToken<?> targetType = TypeTokens.get().unwrap(target.getType(i));
+					TypeToken<?> myType = getType(i);
+					TypeToken<?> targetType = target.getType(i);
 					if (myType.equals(targetType)) {
 						params[i] = getType(i);
 						continue;

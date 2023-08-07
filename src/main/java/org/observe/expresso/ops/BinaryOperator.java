@@ -439,6 +439,11 @@ public class BinaryOperator implements ObservableExpression {
 		public ObservableValue<String> isEnabled() {
 			return isEnabled;
 		}
+
+		@Override
+		public String toString() {
+			return theLeft.toString() + theOperator + "=" + theRight;
+		}
 	}
 
 	static class FirstArgDecisiveBinaryValue<S, T, V> implements SettableValue<V> {

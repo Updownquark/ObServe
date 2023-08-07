@@ -453,15 +453,21 @@ public class TypeTokens implements TypeParser {
 				LambdaUtils.printableFn(ch -> (byte) ch.charValue(), "char-to-byte", null)));
 		charData.populatePrimitiveCast(shortData, //
 			new TypeConverter<>("short-to-char", "char-to-short", shortData.primitiveType, charData.primitiveType, //
-				LambdaUtils.printableFn(sh -> sh >= 0 ? null : "Negative short value cannot be cast to a char", "check-char-range", null),
+				LambdaUtils.printableFn(sh -> sh >= 0 ? null : "A character cannot be negative", "check-char-range", null),
 				LambdaUtils.printableFn(sh -> (char) sh.shortValue(), "short-to-char", null), //
 				LambdaUtils.printableFn(ch -> ch <= (char) Short.MAX_VALUE ? null : "Char value " + (int) ch + " is not in short range",
 					"check-short-range", null),
 				LambdaUtils.printableFn(ch -> (short) ch.charValue(), "char-to-short", null)));
 		charData.populatePrimitiveCast(intData, //
 			new TypeConverter<>("int-to-char", "char-to-int", intData.primitiveType, charData.primitiveType, //
-				LambdaUtils.printableFn(i -> (i >= 0 && i <= Character.MAX_VALUE) ? null : "Int value " + i + " is not in char range",
-					"check-char-range", null),
+				LambdaUtils.printableFn(i -> {
+					if (i < 0)
+						return "A character cannot be negative";
+					else if (i > Character.MAX_VALUE)
+						return "Int value " + i + " is not in char range";
+					else
+						return null;
+				}, "check-char-range", null),
 				LambdaUtils.printableFn(i -> (char) i.intValue(), "int-to-char", null), //
 				null, LambdaUtils.printableFn(ch -> (int) ch.charValue(), "char-to-int", null)));
 		charData.populatePrimitiveCast(longData, //
@@ -472,14 +478,30 @@ public class TypeTokens implements TypeParser {
 				null, LambdaUtils.printableFn(ch -> (long) ch.charValue(), "char-to-long", null)));
 		charData.populatePrimitiveCast(floatData, //
 			new TypeConverter<>("float-to-char", "char-to-float", floatData.primitiveType, charData.primitiveType, //
-				LambdaUtils.printableFn(f -> (f >= 0 && f <= Character.MAX_VALUE) ? null : "Float value " + f + " is not in char range",
-					"check-char-range", null),
+				LambdaUtils.printableFn(f -> {
+					if (f < 0)
+						return "A character cannot be negative";
+					else if (f > Character.MAX_VALUE)
+						return "Float value " + f + " is not in char range";
+					float rem = f % 1;
+					if (rem != 0)
+						return "Float value has decimal--cannot be assigned to a char";
+					return null;
+				}, "check-char-range", null),
 				LambdaUtils.printableFn(f -> (char) f.floatValue(), "float-to-char", null), //
 				null, LambdaUtils.printableFn(ch -> (float) ch.charValue(), "char-to-float", null)));
 		charData.populatePrimitiveCast(doubleData, //
 			new TypeConverter<>("double-to-char", "char-to-double", doubleData.primitiveType, charData.primitiveType, //
-				LambdaUtils.printableFn(d -> (d >= 0 && d <= Character.MAX_VALUE) ? null : "Double value " + d + " is not in char range",
-					"check-char-range", null),
+				LambdaUtils.printableFn(d -> {
+					if (d < 0)
+						return "A character cannot be negative";
+					else if (d > Character.MAX_VALUE)
+						return "Double value " + d + " is not in char range";
+					double rem = d % 1;
+					if (rem != 0)
+						return "Double value has decimal--cannot be assigned to a char";
+					return null;
+				}, "check-char-range", null),
 				LambdaUtils.printableFn(d -> (char) d.floatValue(), "float-to-char", null), //
 				null, LambdaUtils.printableFn(ch -> (double) ch.charValue(), "char-to-double", null)));
 
@@ -507,16 +529,26 @@ public class TypeTokens implements TypeParser {
 				null, LambdaUtils.printableFn(b -> (long) b.byteValue(), "byte-to-long", null)));
 		byteData.populatePrimitiveCast(floatData, //
 			new TypeConverter<>("float-to-byte", "byte-to-float", floatData.primitiveType, byteData.primitiveType, //
-				LambdaUtils.printableFn(
-					f -> (f >= Byte.MIN_VALUE && f <= Byte.MAX_VALUE) ? null : "Float value " + f + " is not in byte range",
-						"check-byte-range", null),
+				LambdaUtils.printableFn(f -> {
+					if (f < Byte.MIN_VALUE || f > Byte.MAX_VALUE)
+						return "Float value " + f + " is not in byte range";
+					float rem = f % 1;
+					if (rem != 0)
+						return "Float value has decimal--cannot be assigned to a byte";
+					return null;
+				}, "check-byte-range", null),
 				LambdaUtils.printableFn(f -> (byte) f.floatValue(), "float-to-byte", null), //
 				null, LambdaUtils.printableFn(b -> (float) b.byteValue(), "byte-to-float", null)));
 		byteData.populatePrimitiveCast(doubleData, //
 			new TypeConverter<>("double-to-byte", "byte-to-double", doubleData.primitiveType, byteData.primitiveType, //
-				LambdaUtils.printableFn(
-					d -> (d >= Byte.MIN_VALUE && d <= Byte.MAX_VALUE) ? null : "Double value " + d + " is not in byte range",
-						"check-byte-range", null),
+				LambdaUtils.printableFn(d -> {
+					if (d < Byte.MIN_VALUE || d > Byte.MAX_VALUE)
+						return "Double value " + d + " is not in byte range";
+					double rem = d % 1;
+					if (rem != 0)
+						return "Double value has decimal--cannot be assigned to a byte";
+					return null;
+				}, "check-byte-range", null),
 				LambdaUtils.printableFn(d -> (byte) d.doubleValue(), "double-to-byte", null), //
 				null, LambdaUtils.printableFn(b -> (double) b.byteValue(), "byte-to-double", null)));
 
@@ -537,16 +569,26 @@ public class TypeTokens implements TypeParser {
 				null, LambdaUtils.printableFn(b -> (long) b.shortValue(), "short-to-long", null)));
 		shortData.populatePrimitiveCast(floatData, //
 			new TypeConverter<>("float-to-short", "short-to-float", floatData.primitiveType, shortData.primitiveType, //
-				LambdaUtils.printableFn(
-					f -> (f >= Short.MIN_VALUE && f <= Short.MAX_VALUE) ? null : "Float value " + f + " is not in short range",
-						"check-short-range", null),
+				LambdaUtils.printableFn(f -> {
+					if (f < Short.MIN_VALUE || f > Short.MAX_VALUE)
+						return "FLoat value " + f + " is not in short range";
+					float rem = f % 1;
+					if (rem != 0)
+						return "Float value has decimal--cannot be assigned to a short";
+					return null;
+				}, "check-short-range", null),
 				LambdaUtils.printableFn(i -> (short) i.floatValue(), "float-to-short", null), //
 				null, LambdaUtils.printableFn(b -> (float) b.shortValue(), "short-to-float", null)));
 		shortData.populatePrimitiveCast(doubleData, //
 			new TypeConverter<>("double-to-short", "short-to-double", doubleData.primitiveType, shortData.primitiveType, //
-				LambdaUtils.printableFn(
-					d -> (d >= Short.MIN_VALUE && d <= Short.MAX_VALUE) ? null : "Double value " + d + " is not in short range",
-						"check-short-range", null),
+				LambdaUtils.printableFn(d -> {
+					if (d < Short.MIN_VALUE || d > Short.MAX_VALUE)
+						return "Double value " + d + " is not in short range";
+					double rem = d % 1;
+					if (rem != 0)
+						return "Double value has decimal--cannot be assigned to a short";
+					return null;
+				}, "check-short-range", null),
 				LambdaUtils.printableFn(i -> (short) i.doubleValue(), "double-to-short", null), //
 				null, LambdaUtils.printableFn(b -> (double) b.shortValue(), "short-to-double", null)));
 
@@ -560,41 +602,66 @@ public class TypeTokens implements TypeParser {
 				null, LambdaUtils.printableFn(b -> (long) b.intValue(), "int-to-long", null)));
 		intData.populatePrimitiveCast(floatData, //
 			new TypeConverter<>("float-to-int", "int-to-float", floatData.primitiveType, intData.primitiveType, //
-				LambdaUtils.printableFn(
-					f -> (f >= Integer.MIN_VALUE && f <= Integer.MAX_VALUE) ? null : "Float value " + f + " is not in int range",
-						"check-int-range", null),
+				LambdaUtils.printableFn(f -> {
+					if (f < Integer.MIN_VALUE || f > Integer.MAX_VALUE)
+						return "Float value " + f + " is not in int range";
+					float rem = f % 1;
+					if (rem != 0)
+						return "Float value has decimal--cannot be assigned to an int";
+					return null;
+				}, "check-int-range", null),
 				LambdaUtils.printableFn(i -> (int) i.floatValue(), "float-to-int", null), //
 				null, LambdaUtils.printableFn(b -> (float) b.intValue(), "int-to-float", null)));
 		intData.populatePrimitiveCast(doubleData, //
 			new TypeConverter<>("double-to-int", "int-to-double", doubleData.primitiveType, intData.primitiveType, //
-				LambdaUtils.printableFn(
-					d -> (d >= Integer.MIN_VALUE && d <= Integer.MAX_VALUE) ? null : "Double value " + d + " is not in int range",
-						"check-int-range", null),
+				LambdaUtils.printableFn(d -> {
+					if (d < Integer.MIN_VALUE || d > Integer.MAX_VALUE)
+						return "Double value " + d + " is not in int range";
+					double rem = d % 1;
+					if (rem != 0)
+						return "Double value has decimal--cannot be assigned to an int";
+					return null;
+				}, "check-int-range", null),
 				LambdaUtils.printableFn(i -> (int) i.doubleValue(), "double-to-int", null), //
 				null, LambdaUtils.printableFn(b -> (double) b.intValue(), "int-to-double", null)));
 
 		// Long conversions
 		longData.populatePrimitiveCast(floatData, //
 			new TypeConverter<>("float-to-long", "long-to-float", floatData.primitiveType, longData.primitiveType, //
-				LambdaUtils.printableFn(
-					f -> (f >= Long.MIN_VALUE && f <= Long.MAX_VALUE) ? null : "Float value " + f + " is not in long range",
-						"check-long-range", null),
+				LambdaUtils.printableFn(f -> {
+					if (f < Long.MIN_VALUE || f > Long.MAX_VALUE)
+						return "Float value " + f + " is not in long range";
+					float rem = f % 1;
+					if (rem != 0)
+						return "Float value has decimal--cannot be assigned to a long";
+					return null;
+				}, "check-long-range", null),
 				LambdaUtils.printableFn(i -> (long) i.floatValue(), "float-to-long", null), //
 				null, LambdaUtils.printableFn(b -> (float) b.longValue(), "long-to-float", null)));
 		longData.populatePrimitiveCast(doubleData, //
 			new TypeConverter<>("double-to-long", "long-to-double", doubleData.primitiveType, longData.primitiveType, //
-				LambdaUtils.printableFn(
-					d -> (d >= Long.MIN_VALUE && d <= Long.MAX_VALUE) ? null : "Double value " + d + " is not in long range",
-						"check-long-range", null),
+				LambdaUtils.printableFn(d -> {
+					if (d < Long.MIN_VALUE || d > Long.MAX_VALUE)
+						return "Double value " + d + " is not in long range";
+					double rem = d % 1;
+					if (rem != 0)
+						return "Double value has decimal--cannot be assigned to a long";
+					return null;
+				}, "check-long-range", null),
 				LambdaUtils.printableFn(i -> (long) i.doubleValue(), "double-to-long", null), //
 				null, LambdaUtils.printableFn(b -> (double) b.longValue(), "long-to-double", null)));
 
 		// Float conversion
 		floatData.populatePrimitiveCast(doubleData, //
 			new TypeConverter<>("double-to-float", "float-to-double", doubleData.primitiveType, floatData.primitiveType, //
-				LambdaUtils.printableFn(
-					d -> (d >= Float.MIN_VALUE && d <= Float.MAX_VALUE) ? null : "Double value " + d + " is not in float range",
-						"check-float-range", null),
+				LambdaUtils.printableFn(d -> {
+					if (d < Float.MIN_VALUE || d > Float.MAX_VALUE)
+						return "Double value is too large for a float";
+					float f = d.floatValue();
+					if (f != d)
+						return "Double value has decimal precision that cannot be stored in a float";
+					return null;
+				}, "check-float-range", null),
 				LambdaUtils.printableFn(i -> (float) i.doubleValue(), "double-to-float", null), //
 				null, LambdaUtils.printableFn(b -> (double) b.floatValue(), "float-to-double", null)));
 	}
@@ -617,13 +684,35 @@ public class TypeTokens implements TypeParser {
 		return (TypeKey<T>) TYPES.computeIfAbsent(type, this::createKey);
 	}
 
+	public <T> PrimitiveTypeData<T> primitiveKeyFor(Class<T> type) {
+		TypeKey<T> key = keyFor(type);
+		if (!(key instanceof PrimitiveTypeData))
+			throw new IllegalArgumentException(type.getName() + " is not a primitive type or wrapper");
+		return (PrimitiveTypeData<T>) key;
+	}
+
+	public <N extends Number> NumberTypeData<N> numberKeyFor(Class<N> type) {
+		TypeKey<N> key = keyFor(type);
+		if (key instanceof NumberTypeData)
+			return (NumberTypeData<N>) key;
+		else if (!(key instanceof PrimitiveTypeData))
+			throw new IllegalArgumentException(type.getName() + " is not a primitive type or wrapper");
+		else
+			throw new IllegalArgumentException(
+				"Primitive type " + ((PrimitiveTypeData<N>) key).primitiveClass.getName() + " is not a number type");
+	}
+
 	/**
 	 * @param <T> The compile-time type to get the type token for
 	 * @param type The type to get the type token for
 	 * @return The type token for the given type
 	 */
 	public <T> TypeToken<T> of(Class<T> type) {
-		return keyFor(type).type;
+		TypeKey<T> key = keyFor(type);
+		if (type.isPrimitive())
+			return ((PrimitiveTypeData<T>) key).primitiveType;
+		else
+			return key.type;
 	}
 
 	/**
@@ -1068,8 +1157,8 @@ public class TypeTokens implements TypeParser {
 	 *
 	 * @param <S> The super type of all values that this converter can convert
 	 * @param <R> The super type which all reversed values will extend
-	 * @param <TR> The super type of all values that this converter can {@link #reverse(T target)}
-	 * @param <T> The super typw which all converted values will extend
+	 * @param <TR> The super type of all values that this converter can {@link #reverse(Object target)}
+	 * @param <T> The super type which all converted values will extend
 	 */
 	public static class TypeConverter<S, R extends S, TR, T extends TR> implements Function<S, T> {
 		private final String theName;
@@ -1163,6 +1252,20 @@ public class TypeTokens implements TypeParser {
 		}
 
 		public <TR2, T2 extends TR2> TypeConverter<S, R, TR2, T2> andThen(TypeConverter<? super T, ? extends T, TR2, T2> other) {
+			// If one or the other is trivial, keep it simple
+			if (theConverter == LambdaUtils.identity()) {
+				if (theReverseType.equals(other.theReverseType))
+					return (TypeConverter<S, R, TR2, T2>) other;
+				return new TypeConverter<>(other.theName, other.theReverseName, theReverseType, other.theConvertedType, //
+					(Function<S, String>) other.theApplicability, (Function<S, T2>) other.theConverter, //
+					other.theReversibility, (Function<TR2, R>) other.theReverse);
+			} else if (other.theConverter == LambdaUtils.identity()) {
+				if (theConvertedType.equals(other.theConvertedType))
+					return (TypeConverter<S, R, TR2, T2>) this;
+				return new TypeConverter<>(theName, theReverseName, theReverseType, other.theConvertedType, //
+					theApplicability, (Function<S, T2>) theConverter, //
+					(Function<TR2, String>) theReversibility, (Function<TR2, R>) theReverse);
+			}
 			Function<? super S, String> applicability;
 			Function<? super TR2, String> reversibility;
 			if (other.theApplicability == null)
@@ -1993,6 +2096,11 @@ public class TypeTokens implements TypeParser {
 		ParameterizedTypeImpl(Type ownerType, Type... typeArgs) {
 			theOwnerType = ownerType;
 			theTypeArgs = typeArgs;
+			TypeTokens tokens = TypeTokens.get();
+			for (int t = 0; t < theTypeArgs.length; t++) {
+				if (tokens != null)
+					theTypeArgs[t] = tokens.wrap(theTypeArgs[t]);
+			}
 		}
 
 		@Override
@@ -2049,6 +2157,15 @@ public class TypeTokens implements TypeParser {
 		public WildcardTypeImpl(Type[] lowerBounds, Type[] upperBounds) {
 			theLowerBounds = lowerBounds;
 			theUpperBounds = upperBounds;
+			TypeTokens tokens = TypeTokens.get();
+			for (int t = 0; t < theLowerBounds.length; t++) {
+				if (tokens != null)
+					theLowerBounds[t] = tokens.wrap(theLowerBounds[t]);
+			}
+			for (int t = 0; t < theUpperBounds.length; t++) {
+				if (tokens != null)
+					theUpperBounds[t] = tokens.wrap(theUpperBounds[t]);
+			}
 		}
 
 		@Override

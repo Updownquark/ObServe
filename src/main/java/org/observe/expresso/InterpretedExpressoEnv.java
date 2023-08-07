@@ -42,15 +42,17 @@ public class InterpretedExpressoEnv extends CompiledExpressoEnv {
 	private final ClassView theClassView;
 	private final ErrorReporting theErrorReporting;
 	private final Map<Object, Object> theProperties;
+	private final boolean isTesting;
 
 	InterpretedExpressoEnv(InterpretedModelSet models, ExternalModelSet extModels, ClassView classView,
 		ClassMap<Set<NonStructuredParser>> nonStructuredParsers, UnaryOperatorSet unaryOperators, BinaryOperatorSet binaryOperators,
-		ErrorReporting reporting, Map<Object, Object> properties) {
+		ErrorReporting reporting, Map<Object, Object> properties, boolean testing) {
 		super(models, nonStructuredParsers, unaryOperators, binaryOperators);
 		theExtModels = extModels;
 		theClassView = classView;
 		theErrorReporting = reporting;
 		theProperties = properties;
+		isTesting = testing;
 	}
 
 	@Override
@@ -59,7 +61,7 @@ public class InterpretedExpressoEnv extends CompiledExpressoEnv {
 		if (models != null && !(models instanceof InterpretedModelSet))
 			return super.copy(models, nonStructuredParsers, unaryOperators, binaryOperators);
 		return new InterpretedExpressoEnv((InterpretedModelSet) models, theExtModels, theClassView, nonStructuredParsers, unaryOperators,
-			binaryOperators, theErrorReporting, theProperties);
+			binaryOperators, theErrorReporting, theProperties, isTesting);
 	}
 
 	public InterpretedExpressoEnv forChild(CompiledExpressoEnv child) {
@@ -92,6 +94,10 @@ public class InterpretedExpressoEnv extends CompiledExpressoEnv {
 		return theErrorReporting;
 	}
 
+	public boolean isTesting() {
+		return isTesting;
+	}
+
 	/**
 	 * All {@link ObservableModelSet.ModelValueSynth}s for expressions parsed under this session should be
 	 * {@link ObservableModelSet.ModelValueSynth#get(ModelSetInstance) satisfied} with a model set wrapped by this method if this element
@@ -118,14 +124,14 @@ public class InterpretedExpressoEnv extends CompiledExpressoEnv {
 		if (models == getModels())
 			return this;
 		return new InterpretedExpressoEnv(models, theExtModels, theClassView, getNonStructuredParsers(), getUnaryOperators(),
-			getBinaryOperators(), reporting(), theProperties);
+			getBinaryOperators(), reporting(), theProperties, isTesting);
 	}
 
 	public InterpretedExpressoEnv with(ClassView classView) {
 		if (classView == theClassView)
 			return this;
 		return new InterpretedExpressoEnv(getModels(), theExtModels, classView, getNonStructuredParsers(), getUnaryOperators(),
-			getBinaryOperators(), reporting(), theProperties);
+			getBinaryOperators(), reporting(), theProperties, isTesting);
 	}
 
 	@Override
@@ -174,7 +180,7 @@ public class InterpretedExpressoEnv extends CompiledExpressoEnv {
 		if (extModels == theExtModels)
 			return this;
 		return new InterpretedExpressoEnv(getModels(), extModels, theClassView, getNonStructuredParsers(), getUnaryOperators(),
-			getBinaryOperators(), reporting(), theProperties);
+			getBinaryOperators(), reporting(), theProperties, isTesting);
 	}
 
 	/**
@@ -186,7 +192,7 @@ public class InterpretedExpressoEnv extends CompiledExpressoEnv {
 		if (reporting == reporting())
 			return this;
 		return new InterpretedExpressoEnv(getModels(), theExtModels, theClassView, getNonStructuredParsers(), getUnaryOperators(),
-			getBinaryOperators(), reporting, theProperties);
+			getBinaryOperators(), reporting, theProperties, isTesting);
 	}
 
 	/**
@@ -198,7 +204,14 @@ public class InterpretedExpressoEnv extends CompiledExpressoEnv {
 		if (reporting == reporting())
 			return this;
 		return new InterpretedExpressoEnv(getModels(), theExtModels, theClassView, getNonStructuredParsers(), getUnaryOperators(),
-			getBinaryOperators(), reporting, theProperties);
+			getBinaryOperators(), reporting, theProperties, isTesting);
+	}
+
+	public InterpretedExpressoEnv forTesting(boolean testing) {
+		if (isTesting == testing)
+			return this;
+		return new InterpretedExpressoEnv(getModels(), theExtModels, theClassView, getNonStructuredParsers(), getUnaryOperators(),
+			getBinaryOperators(), theErrorReporting, theProperties, testing);
 	}
 
 	public <T> T getProperty(Object key, Class<T> type) {

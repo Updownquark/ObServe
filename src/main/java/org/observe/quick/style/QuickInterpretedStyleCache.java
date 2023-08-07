@@ -26,7 +26,9 @@ public class QuickInterpretedStyleCache {
 			synchronized (theAttributes) {
 				attr = theAttributes.get(definition);
 				if (attr == null) {
-					TypeToken<?> type = definition.getType().getType(env);
+					// Style attributes always have a null value when not specified, so the type must not be primitive
+					// We'll allow specification of primitive types as a shorthand for the wrapper type though
+					TypeToken<?> type = TypeTokens.get().wrap(definition.getType().getType(env));
 					attr = new QuickStyleAttribute<>(definition, type);
 					theAttributes.put(definition, attr);
 				}

@@ -51,7 +51,7 @@ public abstract class Invocation implements ObservableExpression {
 	 * @param typeArguments The type arguments to the invocation
 	 * @param arguments The arguments to use to invoke the invokable
 	 */
-	public Invocation(List<BufferedType> typeArguments, List<ObservableExpression> arguments) {
+	protected Invocation(List<BufferedType> typeArguments, List<ObservableExpression> arguments) {
 		theTypeArguments = typeArguments;
 		theArguments = arguments;
 	}
@@ -85,16 +85,15 @@ public abstract class Invocation implements ObservableExpression {
 				InvokableResult<?, SettableValue<?>, ? extends SettableValue<?>> result = evaluateInternal2(
 					ModelTypes.Value.forType(type.getType(0)), env, new ArgOption(env, expressionOffset + getInitialArgOffset()),
 					expressionOffset);
-				return ObservableExpression.evEx(
-					(InterpretedValueSynth<M, MV>) createActionContainer(
-						(InvokableResult<?, SettableValue<?>, SettableValue<Object>>) result, env.reporting().at(getMethodNameOffset())),
-					result.method.method, result.getAllChildren());
+				return ObservableExpression.evEx((InterpretedValueSynth<M, MV>) createActionContainer(
+					(InvokableResult<?, SettableValue<?>, SettableValue<Object>>) result, env.reporting().at(getMethodNameOffset()),
+					env.isTesting()), result.method.method, result.getAllChildren());
 			}
 		} else {
 			InvokableResult<?, M, MV> result = evaluateInternal2(type, env, new ArgOption(env, expressionOffset + getInitialArgOffset()),
 				expressionOffset);
-			return ObservableExpression.evEx(createValueContainer(result, env.reporting().at(getMethodNameOffset())), result.method.method,
-				result.getAllChildren());
+			return ObservableExpression.evEx(createValueContainer(result, env.reporting().at(getMethodNameOffset()), env.isTesting()),
+				result.method.method, result.getAllChildren());
 		}
 	}
 
@@ -171,7 +170,8 @@ public abstract class Invocation implements ObservableExpression {
 				argOffset += theArguments.get(i).getExpressionLength();
 			}
 			c = (EvaluatedExpression<SettableValue<?>, SettableValue<?>>) (EvaluatedExpression<?, ?>) theArguments.get(arg)
-				.evaluate(ModelTypes.Value.forType(paramType), theEnv.at(argOffset), theExpressionOffset + argOffset);
+				.evaluate(//
+					ModelTypes.Value.forType(paramType), theEnv.at(argOffset), theExpressionOffset + argOffset);
 			args[arg].add(0, c);
 			return true;
 		}
@@ -267,19 +267,20 @@ public abstract class Invocation implements ObservableExpression {
 	 * @throws ExpressoEvaluationException If an error occurs evaluating the invokable
 	 * @throws ExpressoInterpretationException If an expression on which this expression depends could not be interpreted
 	 */
-	protected abstract <M, MV extends M> InvokableResult<?, M, MV> evaluateInternal2(ModelInstanceType<M, MV> type, InterpretedExpressoEnv env,
-		ArgOption args, int expressionOffset) throws ExpressoEvaluationException, ExpressoInterpretationException;
+	protected abstract <M, MV extends M> InvokableResult<?, M, MV> evaluateInternal2(ModelInstanceType<M, MV> type,
+		InterpretedExpressoEnv env, ArgOption args, int expressionOffset)
+			throws ExpressoEvaluationException, ExpressoInterpretationException;
 
 	private <X extends Executable, T> InvocationActionContainer<X, T> createActionContainer(
-		InvokableResult<X, SettableValue<?>, SettableValue<T>> result, ErrorReporting reporting) {
+		InvokableResult<X, SettableValue<?>, SettableValue<T>> result, ErrorReporting reporting, boolean testing) {
 		return new InvocationActionContainer<>(result.method, result.trivialContext ? null : result.context, result.arguments, result.impl,
-			reporting);
+			reporting, testing);
 	}
 
 	private <X extends Executable, M, MV extends M> InterpretedValueSynth<M, MV> createValueContainer(InvokableResult<X, M, MV> result,
-		ErrorReporting reporting) {
+		ErrorReporting reporting, boolean testing) {
 		return new InvocationThingContainer<>(result.method, result.trivialContext ? null : result.context, result.arguments, result.impl,
-			reporting);
+			reporting, testing);
 	}
 
 	/**
@@ -539,10 +540,11 @@ public abstract class Invocation implements ObservableExpression {
 		protected final Invocation.ExecutableImpl<X> theImpl;
 		protected final boolean isCaching;
 		protected final ErrorReporting theReporting;
+		protected final boolean isTesting;
 
 		InvocationContainer(Invocation.MethodResult<X, R> method, EvaluatedExpression<SettableValue<?>, ? extends SettableValue<?>> context,
 			List<EvaluatedExpression<SettableValue<?>, ? extends SettableValue<?>>> arguments, ModelInstanceType<M, MV> type,
-			Invocation.ExecutableImpl<X> impl, ErrorReporting reporting) {
+			Invocation.ExecutableImpl<X> impl, ErrorReporting reporting, boolean testing) {
 			theMethod = method;
 			theArguments = arguments;
 			theType = type;
@@ -558,6 +560,7 @@ public abstract class Invocation implements ObservableExpression {
 			theImpl = impl;
 			isCaching = !Boolean.TRUE.equals(AS_ACTION.get());
 			theReporting = reporting;
+			isTesting = testing;
 		}
 
 		@Override
@@ -656,15 +659,17 @@ public abstract class Invocation implements ObservableExpression {
 			private final Invocation.ExecutableImpl<X> theImpl;
 			private final SettableValue<Object> theContext;
 			private final SettableValue<?>[] theArguments;
+			protected final boolean isTesting;
 
 			protected InvocationThing(MethodResult<X, R> method, boolean caching, ErrorReporting reporting, ExecutableImpl<X> impl,
-				SettableValue<Object> context, SettableValue<?>[] arguments) {
+				SettableValue<Object> context, SettableValue<?>[] arguments, boolean testing) {
 				theMethod = method;
 				isCaching = caching;
 				theReporting = reporting;
 				theImpl = impl;
 				theContext = context;
 				theArguments = arguments;
+				isTesting = testing;
 			}
 
 			protected Object invoke(boolean asAction)
@@ -673,7 +678,10 @@ public abstract class Invocation implements ObservableExpression {
 					return theCachedValue;
 				Object ctx = theContext == null ? null : theContext.get();
 				if (ctx == null && theContext != null) {
-					theReporting.error(theContext + " is null, cannot call " + theMethod);
+					String msg = theContext + " is null, cannot call " + theMethod;
+					if (isTesting)
+						throw new NullPointerException(msg);
+					theReporting.error(msg);
 					// Although throwing an exception is better in theory, all the conditionals needed to work around this are obnoxious
 					// throw new NullPointerException(ctxV + " is null, cannot call " + theMethod);
 					return null;
@@ -689,7 +697,10 @@ public abstract class Invocation implements ObservableExpression {
 					try {
 						theContext.set(theContext.get(), null);
 					} catch (RuntimeException e) {
-						theReporting.error("Could not update context after method invocation " + this);
+						String msg = "Could not update context after method invocation " + this;
+						if (isTesting)
+							throw new IllegalStateException(msg, e);
+						theReporting.error(msg, e);
 						e.printStackTrace();
 					} finally {
 						isUpdatingContext = false;
@@ -758,9 +769,9 @@ public abstract class Invocation implements ObservableExpression {
 		InvocationActionContainer(Invocation.MethodResult<X, SettableValue<T>> method,
 			EvaluatedExpression<SettableValue<?>, ? extends SettableValue<?>> context,
 				List<EvaluatedExpression<SettableValue<?>, ? extends SettableValue<?>>> arguments, Invocation.ExecutableImpl<X> impl,
-				ErrorReporting reporting) {
+				ErrorReporting reporting, boolean testing) {
 			super(method, context, arguments, ModelTypes.Action.forType((TypeToken<T>) method.converter.getType().getType(0)), impl,
-				reporting);
+				reporting, testing);
 		}
 
 		@Override
@@ -770,7 +781,7 @@ public abstract class Invocation implements ObservableExpression {
 
 		@Override
 		protected ObservableAction<T> createModelValue(SettableValue<?> ctxV, SettableValue<?>[] argVs, Observable<Object> changes) {
-			return new InvocationAction<>(getMethod(), isCaching, theReporting, theImpl, (SettableValue<Object>) ctxV, argVs,
+			return new InvocationAction<>(getMethod(), isCaching, theReporting, theImpl, (SettableValue<Object>) ctxV, argVs, isTesting,
 				getType().getValueType());
 		}
 
@@ -778,8 +789,8 @@ public abstract class Invocation implements ObservableExpression {
 			private final TypeToken<R> theType;
 
 			protected InvocationAction(MethodResult<X, SettableValue<R>> method, boolean caching, ErrorReporting reporting,
-				ExecutableImpl<X> impl, SettableValue<Object> context, SettableValue<?>[] arguments, TypeToken<R> type) {
-				super(method, caching, reporting, impl, context, arguments);
+				ExecutableImpl<X> impl, SettableValue<Object> context, SettableValue<?>[] arguments, boolean testing, TypeToken<R> type) {
+				super(method, caching, reporting, impl, context, arguments, testing);
 				theType = type;
 			}
 
@@ -793,13 +804,30 @@ public abstract class Invocation implements ObservableExpression {
 				try {
 					Object retValue = invoke(true);
 					return getMethod().converter.convert(SettableValue.of(Object.class, retValue, "")).get();
+				} catch (InstantiationException | IllegalAccessException | ModelInstantiationException e) {
+					if (isTesting)
+						throw new IllegalStateException(e);
+					getReporting().error(e.getMessage(), e);
+					return null;
 				} catch (InvocationTargetException e) {
-					// For the sake of unit testing, let this one exception through
-					if (e.getTargetException() instanceof AssertionError)
-						throw (AssertionError) e.getTargetException();
+					if (isTesting) {
+						if (e.getTargetException() instanceof RuntimeException)
+							throw (RuntimeException) e.getTargetException();
+						else if (e.getTargetException() instanceof Error)
+							throw (Error) e.getTargetException();
+						else
+							throw new IllegalStateException(e.getTargetException());
+					}
 					getReporting().error(e.getTargetException().getMessage(), e.getTargetException());
 					return null;
-				} catch (Throwable e) {
+				} catch (RuntimeException e) {
+					if (isTesting)
+						throw e;
+					getReporting().error(e.getMessage(), e);
+					return null;
+				} catch (Error e) {
+					if (isTesting)
+						throw e;
 					getReporting().error(e.getMessage(), e);
 					return null;
 				}
@@ -816,15 +844,15 @@ public abstract class Invocation implements ObservableExpression {
 		InvocationThingContainer(Invocation.MethodResult<X, MV> method,
 			EvaluatedExpression<SettableValue<?>, ? extends SettableValue<?>> context,
 				List<EvaluatedExpression<SettableValue<?>, ? extends SettableValue<?>>> arguments, Invocation.ExecutableImpl<X> impl,
-				ErrorReporting reporting) {
-			super(method, context, arguments, (ModelInstanceType<M, MV>) method.converter.getType(), impl, reporting);
+				ErrorReporting reporting, boolean testing) {
+			super(method, context, arguments, (ModelInstanceType<M, MV>) method.converter.getType(), impl, reporting, testing);
 		}
 
 		@Override
 		protected MV createModelValue(SettableValue<?> ctxV, SettableValue<?>[] argVs, Observable<Object> changes)
 			throws ModelInstantiationException {
 			SettableValue<Object> value = new InvocationThing<>(getMethod(), isCaching, theReporting, theImpl, (SettableValue<Object>) ctxV,
-				argVs).syntheticResultValue(TypeTokens.get().OBJECT, ctxV, argVs, changes);
+				argVs, isTesting).syntheticResultValue(TypeTokens.get().OBJECT, ctxV, argVs, changes);
 			return getMethod().converter.convert(value);
 		}
 	}

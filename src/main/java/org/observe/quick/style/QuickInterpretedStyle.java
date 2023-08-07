@@ -283,7 +283,7 @@ public interface QuickInterpretedStyle {
 			ObservableValue<ConditionalValue<T>>[] values = new ObservableValue[theValues.size() + (theInherited == null ? 0 : 1)];
 			for (int i = 0; i < theValues.size(); i++) {
 				ObservableValue<Boolean> condition = theValues.get(i).getApplication().getCondition(models);
-				SettableValue<? extends T> value = theValues.get(i).getValue().get(models);
+				SettableValue<T> value = theValues.get(i).getValue().get(models);
 				values[i] = condition.map(LambdaUtils.printableFn(pass -> new ConditionalValue<>(Boolean.TRUE.equals(pass), value),
 					"ifPass(" + value + ")", null));
 			}
@@ -303,14 +303,16 @@ public interface QuickInterpretedStyle {
 				conditionalValue = ObservableValue.firstValue(cvType, //
 					LambdaUtils.printablePred(cv -> cv.pass, "pass", null), //
 					LambdaUtils.printableSupplier(() -> defaultCV, () -> "null", null), values);
-			return ObservableValue.flatten(conditionalValue.map(LambdaUtils.printableFn(cv -> cv.value, "value", null)));
+			TypeToken<ObservableValue<T>> ovType = TypeTokens.get().keyFor(ObservableValue.class)
+				.<ObservableValue<T>> parameterized(theAttribute.getType());
+			return ObservableValue.flatten(conditionalValue.map(ovType, LambdaUtils.printableFn(cv -> cv.value, "value", null)));
 		}
 
 		private static class ConditionalValue<T> {
 			final boolean pass;
-			final ObservableValue<? extends T> value;
+			final ObservableValue<T> value;
 
-			ConditionalValue(boolean pass, ObservableValue<? extends T> value) {
+			ConditionalValue(boolean pass, ObservableValue<T> value) {
 				this.pass = pass;
 				this.value = value;
 			}

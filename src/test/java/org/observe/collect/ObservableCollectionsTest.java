@@ -158,7 +158,8 @@ public class ObservableCollectionsTest {
 		if (BARRAGE_USE_COMBINE) {
 			combinedOL = coll.flow().transform(intType, combine -> {
 				return combine.combineWith(combineVar).build((s, cv) -> //
-				combineFn.apply(s, cv.get(combineVar))).withReverse(reverseCombineFn);
+				combineFn.apply(s, cv.get(combineVar))).withReverse(reverseCombineFn)//
+					.withTesting(true);
 			}).collect();
 			d().set("combined@" + depth, combinedOL);
 			combinedTester = new ObservableCollectionTester<>("combined", combinedOL);
@@ -1013,7 +1014,7 @@ public class ObservableCollectionsTest {
 		Set<Integer> correct = new TreeSet<>();
 		set.flow()//
 		.transform(intType, combine -> {
-			return combine.combineWith(value1).build((s, cv) -> s * cv.get(value1));
+			return combine.combineWith(value1).build((s, cv) -> s * cv.get(value1)).withTesting(true);
 		}).filter(value -> value != null && value % 3 == 0 ? null : StdMsg.ILLEGAL_ELEMENT)//
 		.collect().subscribe(evt -> {
 			switch (evt.getType()) {
@@ -1461,7 +1462,7 @@ public class ObservableCollectionsTest {
 		SettableValue<Integer> value1 = SettableValue.build(Integer.TYPE).withValue(1).build();
 		ObservableCollectionTester<Integer> tester = new ObservableCollectionTester<>("combined", list.flow()//
 			.transform(intType, combine -> {
-				return combine.combineWith(value1).build((s, cv) -> s * cv.get(value1));
+				return combine.combineWith(value1).build((s, cv) -> s * cv.get(value1)).withTesting(true);
 			}).filter(value -> value != null && value % 3 == 0 ? null : StdMsg.ILLEGAL_ELEMENT)//
 			.collect());
 
@@ -2043,7 +2044,7 @@ public class ObservableCollectionsTest {
 		mult.set(1, null);
 		ObservableCollection<Integer> product = list.flow().transform(intType, combine -> {
 			return combine.combineWith(mult).build((s, cv) -> //
-			s * cv.get(mult));
+			s * cv.get(mult)).withTesting(true);
 		}).collect();
 
 		for(int i = 0; i < 30; i++)

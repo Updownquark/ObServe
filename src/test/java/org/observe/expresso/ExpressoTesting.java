@@ -312,7 +312,7 @@ public class ExpressoTesting extends ExElement.Def.Abstract<ExElement> {
 
 		System.out.print("Interpreting global models...");
 		System.out.flush();
-		InterpretedExpressoEnv env = InterpretedExpressoEnv.INTERPRETED_STANDARD_JAVA;
+		InterpretedExpressoEnv env = InterpretedExpressoEnv.INTERPRETED_STANDARD_JAVA.forTesting(true);
 		Expresso head = theHead.interpret(null);
 		if (theHead.getClassViewElement() != null)
 			env = env.with(theHead.getClassViewElement().configureClassView(env.getClassView().copy()).build());

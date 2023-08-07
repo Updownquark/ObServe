@@ -197,7 +197,7 @@ public class ObservableTest {
 			Integer v2 = cv.get(obs2);
 			Integer v3 = cv.get(obs3);
 			return o1 * v2 + v3;
-		})).changes()
+		}).withTesting(true)).changes()
 		.act(event -> {
 			events[0]++;
 			received[0] = event.getNewValue();

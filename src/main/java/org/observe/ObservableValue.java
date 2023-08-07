@@ -256,6 +256,8 @@ public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>,
 	default <R> ObservableValue<R> transform(TypeToken<R> targetType, //
 		Function<Transformation.TransformationPrecursor<T, R, ?>, Transformation<T, R>> transform) {
 		Transformation<T, R> def = transform.apply(new Transformation.TransformationPrecursor<>());
+		if (def.getArgs().isEmpty() && getType().equals(targetType) && LambdaUtils.isTrivial(def.getCombination()))
+			return (ObservableValue<R>) this;
 		ObservableValue<?>[] argValues = new ObservableValue[def.getArgs().size() + 1];
 		argValues[0] = this;
 		Map<ObservableValue<?>, Integer> otherArgs = new HashMap<>((int) Math.ceil(def.getArgs().size() * 1.5));
@@ -875,7 +877,7 @@ public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>,
 			theSource = source;
 			theTransformation = transformation;
 			theEngine = theTransformation.createEngine(Equivalence.DEFAULT);
-			theElement = theEngine.createElement(theSource::get);
+			theElement = theEngine.createElement(LambdaUtils.printableSupplier(theSource::get, theSource::toString, null));
 			theSourceStamp = -1;
 			theObservers = ListenerList.build().withInUse(new ListenerList.InUseListener() {
 				private Subscription theSourceSub;
@@ -1940,7 +1942,7 @@ public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>,
 			if (theIdentity == null) {
 				StringBuilder str = new StringBuilder("first");
 				if (theTest != null)
-					str.append(":(").append(theTest).append('(');
+					str.append(":").append(theTest).append('(');
 				else
 					str.append('(');
 				List<Object> obsIds = new ArrayList<>(theValues.length + 2);

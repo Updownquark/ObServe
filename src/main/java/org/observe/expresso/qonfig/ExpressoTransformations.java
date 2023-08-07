@@ -7,6 +7,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.stream.Stream;
 
@@ -16,8 +17,8 @@ import org.observe.ObservableAction;
 import org.observe.SettableValue;
 import org.observe.Transformation;
 import org.observe.Transformation.MaybeReversibleTransformation;
+import org.observe.Transformation.ReversibleTransformationBuilder;
 import org.observe.Transformation.TransformReverse;
-import org.observe.Transformation.TransformationBuilder;
 import org.observe.Transformation.TransformationValues;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
@@ -35,7 +36,9 @@ import org.observe.expresso.VariableType;
 import org.observe.expresso.ops.NameExpression;
 import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.observe.expresso.qonfig.ExElement.Def;
+import org.observe.expresso.qonfig.ExpressoTransformations.CombineWith.TransformationModification;
 import org.observe.util.TypeTokens;
+import org.qommons.LambdaUtils;
 import org.qommons.Named;
 import org.qommons.TriFunction;
 import org.qommons.collect.BetterList;
@@ -708,11 +711,8 @@ public class ExpressoTransformations {
 			 * @throws ModelInstantiationException If the transformation could not be produced
 			 */
 			default Transformation<S, T> transform(ModelSetInstance models) throws ModelInstantiationException {
-				Transformation.TransformationPrecursor<S, T, ?> precursor;
-				if (getDefinition().isReversible())
-					precursor = new Transformation.ReversibleTransformationPrecursor<>();
-				else
-					precursor = new Transformation.TransformationPrecursor<>();
+				Transformation.ReversibleTransformationPrecursor<S, T, ?> precursor;
+				precursor = new Transformation.ReversibleTransformationPrecursor<>();
 				return transform(precursor, models);
 			}
 
@@ -721,7 +721,7 @@ public class ExpressoTransformations {
 			 * @return The observable transformation
 			 * @throws ModelInstantiationException If the transformation could not be produced
 			 */
-			Transformation<S, T> transform(Transformation.TransformationPrecursor<S, T, ?> precursor, ModelSetInstance models)
+			Transformation<S, T> transform(Transformation.ReversibleTransformationPrecursor<S, T, ?> precursor, ModelSetInstance models)
 				throws ModelInstantiationException;
 
 			/**
@@ -1005,14 +1005,15 @@ public class ExpressoTransformations {
 			}
 
 			@Override
-			public Transformation<S, T> transform(Transformation.TransformationPrecursor<S, T, ?> precursor, ModelSetInstance models)
-				throws ModelInstantiationException {
+			public Transformation<S, T> transform(Transformation.ReversibleTransformationPrecursor<S, T, ?> precursor,
+				ModelSetInstance models) throws ModelInstantiationException {
 				models = getExpressoEnv().wrapLocal(models);
-				SettableValue<S> sourceV = SettableValue.build(theMapWith.getSourceType()).build();
+				SettableValue<S> sourceV = SettableValue.build(theMapWith.getSourceType())//
+					.withValue(TypeTokens.get().getDefaultValue(theMapWith.getSourceType()))//
+					.build();
 				ExWithElementModel.Interpreted withElModel = getAddOn(ExWithElementModel.Interpreted.class);
-				withElModel.satisfyElementValue(getDefinition().getSourceName(), models,
-					sourceV.disableWith(SettableValue.ALWAYS_DISABLED));
-				Transformation.TransformationBuilder<S, T, ?> builder = precursor//
+				withElModel.satisfyElementValue(getDefinition().getSourceName(), models, sourceV);
+				Transformation.ReversibleTransformationBuilder<S, T, ?> builder = precursor//
 					.cache(getDefinition().isCached())//
 					.reEvalOnUpdate(getDefinition().isReEvalOnUpdate())//
 					.fireIfUnchanged(getDefinition().isFireIfUnchanged())//
@@ -1020,25 +1021,27 @@ public class ExpressoTransformations {
 					.manyToOne(getDefinition().isManyToOne())//
 					.oneToMany(getDefinition().isOneToMany());
 				List<CombineWith.TransformationModification<S, T>> modifications = new ArrayList<>(theCombinedValues.size());
-				for (CombineWith.Interpreted<?, ?> combinedValue : theCombinedValues) {
-					builder = combinedValue.addTo(builder, models);
-					CombineWith.TransformationModification<S, T> mod = combinedValue.modifyTransformation(models);
-					if (mod != null)
-						modifications.add(mod);
-				}
+				for (CombineWith.Interpreted<?, ?> combinedValue : theCombinedValues)
+					builder = combinedValue.addTo(builder, models, modifications::add);
 				modifications = Collections.unmodifiableList(modifications);
 
 				SettableValue<T> targetV = theMapWith.getMap().get(models);
-				Transformation<S, T> transformation = theMapWith.buildTransformation(builder, sourceV, targetV, modifications, models);
+				MaybeReversibleTransformation<S, T> transformation = theMapWith.buildTransformation(builder, sourceV, targetV,
+					modifications, models);
 
-				if (getDefinition().isReversible() && theReverse != null)
-					transformation = ((MaybeReversibleTransformation<S, T>) transformation).withReverse(//
+				Transformation<S, T> finalTransformation;
+				if (theReverse != null)
+					finalTransformation = transformation.withReverse(//
 						theReverse.reverse(sourceV, targetV.getType(), modifications, transformation, models));
+				else
+					finalTransformation = transformation.withReverse(//
+						theMapWith.reverse(sourceV, targetV, modifications, transformation, models));
+
 				if (theEquivalence != null) {
 					Equivalence<? super T> equivalence = theEquivalence.get(models).get();
-					transformation = transformation.withEquivalence(equivalence);
+					finalTransformation = finalTransformation.withEquivalence(equivalence);
 				}
-				return transformation;
+				return finalTransformation;
 			}
 
 			@Override
@@ -1111,6 +1114,7 @@ public class ExpressoTransformations {
 		protected static class Interpreted<S, T, E extends ExElement> extends ExElement.Interpreted.Abstract<E> {
 			private TypeToken<S> theSourceType;
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<T>> theMap;
+			private boolean isTesting;
 
 			protected Interpreted(MapWith<? super E> definition, AbstractCompiledTransformation.Interpreted<?, S, T, ?, ?, ?, ?> parent) {
 				super(definition, parent);
@@ -1149,23 +1153,64 @@ public class ExpressoTransformations {
 					theMap = getDefinition().getMap()//
 					.interpret(//
 						ModelTypes.Value.<SettableValue<T>> anyAs(), getExpressoEnv());
+				isTesting = env.isTesting();
 			}
 
 			public BetterList<InterpretedValueSynth<?, ?>> getComponents() {
 				return BetterList.of(theMap);
 			}
 
-			public Transformation<S, T> buildTransformation(Transformation.TransformationBuilder<S, T, ?> builder,
+			public MaybeReversibleTransformation<S, T> buildTransformation(ReversibleTransformationBuilder<S, T, ?> builder,
 				SettableValue<S> sourceValue, SettableValue<T> mappedValue,
 				List<CombineWith.TransformationModification<S, T>> modifications, ModelSetInstance models)
 					throws ModelInstantiationException {
-				BiFunction<S, Transformation.TransformationValues<? extends S, ? extends T>, T> mapFn = (source, tvs) -> {
-					sourceValue.set(source, null);
-					for (CombineWith.TransformationModification<S, T> mod : modifications)
-						mod.prepareTransformOperation(tvs);
-					return mappedValue.get();
+				BiFunction<S, Transformation.TransformationValues<? extends S, ? extends T>, T> mapFn = LambdaUtils
+					.printableBiFn((source, tvs) -> {
+						sourceValue.set(source, null);
+						for (CombineWith.TransformationModification<S, T> mod : modifications)
+							mod.prepareTransformOperation(tvs);
+						return mappedValue.get();
+					}, theMap::toString, null);
+				return builder.build(mapFn).withTesting(isTesting);
+			}
+
+			public TransformReverse<S, T> reverse(SettableValue<S> sourceV, SettableValue<T> mappedValue,
+				List<TransformationModification<S, T>> modifications, MaybeReversibleTransformation<S, T> transformation,
+				ModelSetInstance models) throws ModelInstantiationException {
+				BiFunction<T, Transformation.TransformationValues<? extends S, ? extends T>, S> reverseFn;
+				Function<Transformation.TransformationValues<? extends S, ? extends T>, String> enabledFn;
+				BiFunction<T, Transformation.TransformationValues<? extends S, ? extends T>, String> acceptFn;
+				TriFunction<T, Transformation.TransformationValues<? extends S, ? extends T>, Boolean, S> addFn;
+				BiFunction<T, Transformation.TransformationValues<? extends S, ? extends T>, String> addAcceptFn;
+				reverseFn = (target, tvs) -> {
+					prepareTx(tvs, modifications);
+					mappedValue.set(target, null);
+					return sourceV.get();
 				};
-				return builder.build(mapFn);
+				enabledFn = tvs -> {
+					prepareTx(tvs, modifications);
+					return mappedValue.isEnabled().get();
+				};
+				acceptFn = (target, tvs) -> {
+					prepareTx(tvs, modifications);
+					return mappedValue.isAcceptable(target);
+				};
+				addFn = (target, tvs, test) -> {
+					return reverseFn.apply(target, tvs);
+				};
+				addAcceptFn = acceptFn;
+				return new Transformation.SourceReplacingReverse<>(transformation, reverseFn, enabledFn, acceptFn, addFn, addAcceptFn,
+					false, false);
+			}
+
+			/**
+			 * A utility function to populate needed model values for each transformation operation. Must be static because this is invoked
+			 * from the evaluated phase.
+			 */
+			protected static <S, T> void prepareTx(Transformation.TransformationValues<? extends S, ? extends T> tvs,
+				List<CombineWith.TransformationModification<S, T>> modifications) {
+				for (CombineWith.TransformationModification<S, T> mod : modifications)
+					mod.prepareTransformOperation(tvs);
 			}
 
 			public boolean isDifferent(ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException {
@@ -1239,21 +1284,16 @@ public class ExpressoTransformations {
 				getValue(env);
 			}
 
-			public <S, T2> TransformationBuilder<S, T2, ?> addTo(TransformationBuilder<S, T2, ?> builder, ModelSetInstance models)
-				throws ModelInstantiationException {
-				SettableValue<T> v = theValue.get(models);
-				SettableValue<T> value = SettableValue.build((TypeToken<T>) theValue.getType().getType(0)).build();
-				return builder.combineWith(v);
-			}
-
-			public <S, T2> TransformationModification<S, T2> modifyTransformation(ModelSetInstance models)
-				throws ModelInstantiationException {
+			public <S, T2> ReversibleTransformationBuilder<S, T2, ?> addTo(ReversibleTransformationBuilder<S, T2, ?> builder,
+				ModelSetInstance models, Consumer<? super TransformationModification<S, T2>> modify)
+					throws ModelInstantiationException {
 				SettableValue<T> sourceV = theValue.get(models);
 				SettableValue<T> targetV = SettableValue.build(sourceV.getType())
 					.withValue(TypeTokens.get().getDefaultValue(sourceV.getType())).build();
 				getParentElement().getAddOn(ExWithElementModel.Interpreted.class).satisfyElementValue(getDefinition().getName(), models,
 					targetV.disableWith(SettableValue.ALWAYS_DISABLED));
-				return new DefaultTransformationModification<>(sourceV, targetV);
+				modify.accept(new DefaultTransformationModification<>(sourceV, targetV));
+				return builder.combineWith(sourceV);
 			}
 
 			public boolean isDifferent(ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException {
@@ -1430,22 +1470,22 @@ public class ExpressoTransformations {
 				BiFunction<T, Transformation.TransformationValues<? extends S, ? extends T>, String> acceptFn;
 				TriFunction<T, Transformation.TransformationValues<? extends S, ? extends T>, Boolean, S> addFn;
 				BiFunction<T, Transformation.TransformationValues<? extends S, ? extends T>, String> addAcceptFn;
-				enabledFn = enabledEvld == null ? null : tvs -> {
+				enabledFn = enabledEvld == null ? null : LambdaUtils.printableFn(tvs -> {
 					prepareTx(tvs, stateful, sourceV, targetV, null, modifications);
 					return acceptEvld.get();
-				};
-				acceptFn = enabledEvld == null ? null : (target, tvs) -> {
+				}, enabledEvld::toString, enabledEvld);
+				acceptFn = acceptEvld == null ? null : LambdaUtils.printableBiFn((target, tvs) -> {
 					prepareTx(tvs, stateful, sourceV, targetV, target, modifications);
 					return acceptEvld.get();
-				};
-				addFn = addEvld == null ? null : (target, tvs, test) -> {
+				}, acceptEvld::toString, acceptEvld);
+				addFn = addEvld == null ? null : LambdaUtils.printableTriFn((target, tvs, test) -> {
 					prepareTx(tvs, stateful, sourceV, targetV, target, modifications);
 					return addEvld.get();
-				};
-				addAcceptFn = addAcceptEvld == null ? null : (target, tvs) -> {
+				}, addEvld::toString, addEvld);
+				addAcceptFn = addAcceptEvld == null ? null : LambdaUtils.printableBiFn((target, tvs) -> {
 					prepareTx(tvs, stateful, sourceV, targetV, target, modifications);
 					return addAcceptEvld.get();
-				};
+				}, addAcceptEvld::toString, addAcceptEvld);
 				return createReverse(new ReverseParameters<>(sourceV, targetV, modifications, transformation, enabledFn, acceptFn, addFn,
 					addAcceptFn, stateful), models);
 			}
@@ -1600,10 +1640,10 @@ public class ExpressoTransformations {
 
 				SettableValue<S> reversedEvld = theReverse.get(models);
 				BiFunction<T, Transformation.TransformationValues<? extends S, ? extends T>, S> reverseFn;
-				reverseFn = (target, tvs) -> {
+				reverseFn = LambdaUtils.printableBiFn((target, tvs) -> {
 					prepareTx(tvs, stateful, sourceV, targetV, target, mods);
 					return reversedEvld.get();
-				};
+				}, reversedEvld::toString, reversedEvld);
 				return new Transformation.SourceReplacingReverse<>(parameters.transformation, reverseFn, parameters.enabledFn,
 					parameters.acceptFn, parameters.addFn, parameters.addAcceptFn, stateful, getDefinition().isInexact());
 			}

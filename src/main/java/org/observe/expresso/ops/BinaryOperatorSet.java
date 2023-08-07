@@ -275,205 +275,81 @@ public class BinaryOperatorSet {
 				}
 			}, (s, b2, r) -> (!unwrapBool(b2) && unwrapBool(r)) ? "And expression cannot be made true" : null, "Boolean AND operator");
 
-	/**
-	 * Represents a cast operation whereby a value of one type is transformed to an equivalent value of another type
-	 *
-	 * @param <S> The source type of the cast
-	 * @param <T> The target type of the cast
-	 */
-	public interface CastOp<S, T> {
-		/** Cast from byte to short */
-		CastOp<Byte, Short> byteShort = CastOp.of(TypeTokens.get().PR_SHORT, s -> unwrapS(s),
-			v -> (v < Byte.MIN_VALUE || v > Byte.MAX_VALUE) ? "Short value is too large for a byte" : null, v -> unwrapByte(v));
-		/** Cast from byte to int */
-		CastOp<Byte, Integer> byteInt = CastOp.of(TypeTokens.get().PR_INT, s -> unwrapI(s),
-			v -> (v < Byte.MIN_VALUE || v > Byte.MAX_VALUE) ? "Integer value is too large for a byte" : null, v -> unwrapByte(v));
-		/** Cast from byte to long */
-		CastOp<Byte, Long> byteLong = CastOp.of(TypeTokens.get().PR_LONG, s -> unwrapL(s),
-			v -> (v < Byte.MIN_VALUE || v > Byte.MAX_VALUE) ? "Long value is too large for a byte" : null, v -> unwrapByte(v));
-		/** Cast from byte to char */
-		CastOp<Byte, Character> byteChar = CastOp.of(TypeTokens.get().PR_CHAR, s -> s == null ? (char) 0 : (char) s.byteValue(),
-			v -> v > Byte.MAX_VALUE ? "Character value is too large for a byte" : null, v -> v == null ? (byte) 0 : (byte) v.charValue());
-		/** Cast from byte to float */
-		CastOp<Byte, Float> byteFloat = CastOp.of(TypeTokens.get().PR_FLOAT, s -> unwrapF(s), v -> {
-			if (v < Byte.MIN_VALUE || v > Byte.MAX_VALUE)
-				return "Float value is too large for a byte";
-			float rem = v % 1;
-			if (rem != 0)
-				return "Float value has decimal--cannot be assigned to an integer";
-			return null;
-		}, v -> unwrapByte(v));
-		/** Cast from byte to double */
-		CastOp<Byte, Double> byteDouble = CastOp.of(TypeTokens.get().PR_DOUBLE, s -> unwrapD(s), v -> {
-			if (v < Byte.MIN_VALUE || v > Byte.MAX_VALUE)
-				return "Double value is too large for a byte";
-			double rem = v % 1;
-			if (rem != 0)
-				return "Double value has decimal--cannot be assigned to an integer";
-			return null;
-		}, v -> unwrapByte(v));
+	static class CastOp<S, T> {
+		static final CastOp<Byte, Short> byteShort = new CastOp<>(byte.class, short.class);
+		static final CastOp<Byte, Integer> byteInt = new CastOp<>(byte.class, int.class);
+		static final CastOp<Byte, Long> byteLong = new CastOp<>(byte.class, long.class);
+		static final CastOp<Byte, Character> byteChar = new CastOp<>(byte.class, char.class);
+		static final CastOp<Byte, Float> byteFloat = new CastOp<>(byte.class, float.class);
+		static final CastOp<Byte, Double> byteDouble = new CastOp<>(byte.class, double.class);
 
-		/** Cast from short to int */
-		CastOp<Short, Integer> shortInt = CastOp.of(TypeTokens.get().PR_INT, s -> unwrapI(s),
-			v -> (v < Short.MIN_VALUE || v > Short.MAX_VALUE) ? "Integer value is too large for a short" : null, v -> unwrapS(v));
-		/** Cast from short to long */
-		CastOp<Short, Long> shortLong = CastOp.of(TypeTokens.get().PR_LONG, s -> unwrapL(s),
-			v -> (v < Short.MIN_VALUE || v > Short.MAX_VALUE) ? "Long value is too large for a short" : null, v -> unwrapS(v));
-		/** Cast from short to char */
-		CastOp<Short, Character> shortChar = CastOp.of(TypeTokens.get().PR_CHAR, s -> s == null ? (char) 0 : (char) s.shortValue(),
-			v -> v > Short.MAX_VALUE ? "Character value is too large for a short" : null,
-				v -> v == null ? (short) 0 : (short) v.charValue());
-		/** Cast from short to float */
-		CastOp<Short, Float> shortFloat = CastOp.of(TypeTokens.get().PR_FLOAT, s -> unwrapF(s), v -> {
-			if (v < Short.MIN_VALUE || v > Short.MAX_VALUE)
-				return "Float value is too large for a short";
-			float rem = v % 1;
-			if (rem != 0)
-				return "Float value has decimal--cannot be assigned to an integer";
-			return null;
-		}, v -> unwrapS(v));
-		/** Cast from short to double */
-		CastOp<Short, Double> shortDouble = CastOp.of(TypeTokens.get().PR_DOUBLE, s -> unwrapD(s), v -> {
-			if (v < Short.MIN_VALUE || v > Short.MAX_VALUE)
-				return "Double value is too large for a short";
-			double rem = v % 1;
-			if (rem != 0)
-				return "Double value has decimal--cannot be assigned to an integer";
-			return null;
-		}, v -> unwrapS(v));
+		static final CastOp<Short, Integer> shortInt = new CastOp<>(short.class, int.class);
+		static final CastOp<Short, Long> shortLong = new CastOp<>(short.class, long.class);
+		static final CastOp<Short, Character> shortChar = new CastOp<>(short.class, char.class);
+		static final CastOp<Short, Float> shortFloat = new CastOp<>(short.class, float.class);
+		static final CastOp<Short, Double> shortDouble = new CastOp<>(short.class, double.class);
 
-		/** Cast from int to long */
-		CastOp<Integer, Long> intLong = CastOp.of(TypeTokens.get().PR_LONG, s -> unwrapL(s),
-			v -> (v < Integer.MIN_VALUE || v > Integer.MAX_VALUE) ? "Long value is too large for an integer" : null, v -> unwrapI(v));
-		/** Cast from int to char */
-		CastOp<Integer, Character> intChar = CastOp.of(TypeTokens.get().PR_CHAR, s -> s == null ? (char) 0 : (char) s.intValue(), null,
-			v -> v == null ? (int) 0 : (int) v.charValue());
-		/** Cast from int to float */
-		CastOp<Integer, Float> intFloat = CastOp.of(TypeTokens.get().PR_FLOAT, s -> unwrapF(s), v -> {
-			if (v < Integer.MIN_VALUE || v > Integer.MAX_VALUE)
-				return "Float value is too large for an integer";
-			float rem = v % 1;
-			if (rem != 0)
-				return "Float value has decimal--cannot be assigned to an integer";
-			return null;
-		}, v -> unwrapI(v));
-		/** Cast from int to double */
-		CastOp<Integer, Double> intDouble = CastOp.of(TypeTokens.get().PR_DOUBLE, s -> unwrapD(s), v -> {
-			if (v < Integer.MIN_VALUE || v > Integer.MAX_VALUE)
-				return "Double value is too large for an integer";
-			double rem = v % 1;
-			if (rem != 0)
-				return "Double value has decimal--cannot be assigned to an integer";
-			return null;
-		}, v -> unwrapI(v));
+		static final CastOp<Integer, Long> intLong = new CastOp<>(int.class, long.class);
+		static final CastOp<Integer, Character> intChar = new CastOp<>(int.class, char.class);
+		static final CastOp<Integer, Float> intFloat = new CastOp<>(int.class, float.class);
+		static final CastOp<Integer, Double> intDouble = new CastOp<>(int.class, double.class);
 
-		/** Cast from long to char */
-		CastOp<Long, Character> longChar = CastOp.of(TypeTokens.get().PR_CHAR, s -> s == null ? (char) 0 : (char) s.longValue(), null,
-			v -> v == null ? (long) 0 : (long) v.charValue());
-		/** Cast from long to float */
-		CastOp<Long, Float> longFloat = CastOp.of(TypeTokens.get().PR_FLOAT, s -> unwrapF(s), v -> {
-			if (v < Long.MIN_VALUE || v > Long.MAX_VALUE)
-				return "Float value is too large for a long";
-			float rem = v % 1;
-			if (rem != 0)
-				return "Float value has decimal--cannot be assigned to an integer";
-			return null;
-		}, v -> unwrapL(v));
-		/** Cast from long to double */
-		CastOp<Long, Double> longDouble = CastOp.of(TypeTokens.get().PR_DOUBLE, s -> unwrapD(s), v -> {
-			if (v < Long.MIN_VALUE || v > Long.MAX_VALUE)
-				return "Double value is too large for a long";
-			double rem = v % 1;
-			if (rem != 0)
-				return "Double value has decimal--cannot be assigned to an integer";
-			return null;
-		}, v -> unwrapL(v));
+		static final CastOp<Long, Character> longChar = new CastOp<>(long.class, char.class);
+		static final CastOp<Long, Float> longFloat = new CastOp<>(long.class, float.class);
+		static final CastOp<Long, Double> longDouble = new CastOp<>(long.class, double.class);
 
-		/** Cast from char to short */
-		CastOp<Character, Short> charShort = CastOp.of(TypeTokens.get().PR_SHORT, s -> s == null ? (short) 0 : (short) s.charValue(),
-			v -> v < 0 ? "A character cannot be negative" : null, v -> v == null ? (char) 0 : (char) v.shortValue());
-		/** Cast from char to int */
-		CastOp<Character, Integer> charInt = CastOp.of(TypeTokens.get().PR_INT, s -> s == null ? (int) 0 : (int) s.charValue(), v -> {
-			if (v < 0)
-				return "A character cannot be negative";
-			else if (v > Character.MAX_VALUE)
-				return "Integer value is to large for a character";
-			else
-				return null;
-		}, v -> v == null ? (char) 0 : (char) v.intValue());
-		/** Cast from char to long */
-		CastOp<Character, Long> charLong = CastOp.of(TypeTokens.get().PR_LONG, s -> s == null ? (long) 0 : (long) s.charValue(), v -> {
-			if (v < 0)
-				return "A character cannot be negative";
-			else if (v > Character.MAX_VALUE)
-				return "Long value is to large for a character";
-			else
-				return null;
-		}, v -> v == null ? (char) 0 : (char) v.intValue());
-		/** Cast from char to short */
-		CastOp<Character, Float> charFloat = CastOp.of(TypeTokens.get().PR_FLOAT, s -> s == null ? (float) 0 : (float) s.charValue(), v -> {
-			if (v < 0)
-				return "A character cannot be negative";
-			else if (v > Character.MAX_VALUE)
-				return "Float value is to large for a character";
-			float rem = v % 1;
-			if (rem != 0)
-				return "Float value has decimal--cannot be assigned to a character";
-			return null;
-		}, v -> v == null ? (char) 0 : (char) v.intValue());
-		/** Cast from char to double */
-		CastOp<Character, Double> charDouble = CastOp.of(TypeTokens.get().PR_DOUBLE, s -> s == null ? (double) 0 : (double) s.charValue(),
-			v -> {
-				if (v < 0)
-					return "A character cannot be negative";
-				else if (v > Character.MAX_VALUE)
-					return "Double value is to large for a character";
-				double rem = v % 1;
-				if (rem != 0)
-					return "Double value has decimal--cannot be assigned to a character";
-				return null;
-			}, v -> v == null ? (char) 0 : (char) v.intValue());
+		static final CastOp<Character, Short> charShort = new CastOp<>(char.class, short.class);
+		static final CastOp<Character, Integer> charInt = new CastOp<>(char.class, int.class);
+		static final CastOp<Character, Long> charLong = new CastOp<>(char.class, long.class);
+		static final CastOp<Character, Float> charFloat = new CastOp<>(char.class, float.class);
+		static final CastOp<Character, Double> charDouble = new CastOp<>(char.class, double.class);
 
-		/** Cast from float to double */
-		CastOp<Float, Double> floatDouble = CastOp.of(TypeTokens.get().PR_DOUBLE, s -> unwrapD(s), v -> {
-			if (v < Float.MIN_VALUE || v > Float.MAX_VALUE)
-				return "Float value is too large for a byte";
-			float f = v.floatValue();
-			if (f != v)
-				return "Double value has decimal precision that cannot be stored in a float";
-			return null;
-		}, v -> unwrapF(v));
+		static final CastOp<Float, Double> floatDouble = new CastOp<>(float.class, double.class);
+
+		private final TypeTokens.TypeConverter<S, S, T, T> theConverter;
+
+		CastOp(Class<S> sourceType, Class<T> targetType) {
+			theConverter = TypeTokens.get().primitiveKeyFor(targetType).getPrimitiveCast(sourceType);
+		}
 
 		/**
 		 * @param sourceType The type of the source argument being cast
 		 * @return The result type of the cast
 		 */
-		TypeToken<? extends T> getType(TypeToken<? extends S> sourceType);
+		TypeToken<? extends T> getType(TypeToken<? extends S> sourceType) {
+			return theConverter.getConvertedType();
+		}
 
 		/**
 		 * @param source The source value
 		 * @return A target-type value equivalent to the given source value
 		 */
-		T cast(S source);
+		T cast(S source) {
+			return theConverter.apply(source);
+		}
 
 		/**
 		 * @param target The target value
 		 * @return Whether the given value can be reverse-cast to an equivalent source-type value
 		 */
-		String canReverse(T target);
+		String canReverse(T target) {
+			return theConverter.isReversible(target);
+		}
 
 		/**
 		 * @param target The target value
 		 * @return A source-type value equivalent to the given target value
 		 */
-		S reverse(T target);
+		S reverse(T target) {
+			return theConverter.reverse(target);
+		}
 
 		/**
 		 * @param <V> The output type of the operator
 		 * @param op The binary operator to convert
 		 * @return An equivalent binary operator whose primary input type is this cast's source type
 		 */
-		default <V> BinaryOp<S, T, V> castPrimary(BinaryOp<T, T, V> op) {
+		<V> BinaryOp<S, T, V> castPrimary(BinaryOp<T, T, V> op) {
 			return new BinaryOp<S, T, V>() {
 				@Override
 				public Class<V> getTargetSuperType() {
@@ -519,7 +395,7 @@ public class BinaryOperatorSet {
 		 * @param op The binary operator to convert
 		 * @return An equivalent binary operator whose secondary input type is this cast's source type
 		 */
-		default <V> BinaryOp<T, S, V> castSecondary(BinaryOp<T, T, V> op) {
+		<V> BinaryOp<T, S, V> castSecondary(BinaryOp<T, T, V> op) {
 			return new BinaryOp<T, S, V>() {
 				@Override
 				public Class<V> getTargetSuperType() {
@@ -605,42 +481,42 @@ public class BinaryOperatorSet {
 				}
 			};
 		}
-
-		/**
-		 * Produces a cast object from functions
-		 *
-		 * @param <S> The source type for the cast
-		 * @param <T> The target type for the cast
-		 * @param type The target type of the cast
-		 * @param cast The function to use for {@link CastOp#cast(Object)}
-		 * @param canReverse The function to use for {@link CastOp#canReverse(Object)}, or null if the cast is always reversible
-		 * @param reverse The function to use for {@link CastOp#reverse(Object)}
-		 * @return The cast backed by the given functions
-		 */
-		static <S, T> CastOp<S, T> of(TypeToken<T> type, Function<? super S, ? extends T> cast, Function<? super T, String> canReverse,
-			Function<? super T, ? extends S> reverse) {
-			return new CastOp<S, T>() {
-				@Override
-				public TypeToken<T> getType(TypeToken<? extends S> sourceType) {
-					return type;
-				}
-
-				@Override
-				public T cast(S source) {
-					return cast.apply(source);
-				}
-
-				@Override
-				public String canReverse(T target) {
-					return canReverse == null ? null : canReverse.apply(target);
-				}
-
-				@Override
-				public S reverse(T target) {
-					return reverse.apply(target);
-				}
-			};
-		}
+		//
+		// /**
+		// * Produces a cast object from functions
+		// *
+		// * @param <S> The source type for the cast
+		// * @param <T> The target type for the cast
+		// * @param type The target type of the cast
+		// * @param cast The function to use for {@link CastOp#cast(Object)}
+		// * @param canReverse The function to use for {@link CastOp#canReverse(Object)}, or null if the cast is always reversible
+		// * @param reverse The function to use for {@link CastOp#reverse(Object)}
+		// * @return The cast backed by the given functions
+		// */
+		// static <S, T> CastOp<S, T> of(TypeToken<T> type, Function<? super S, ? extends T> cast, Function<? super T, String> canReverse,
+		// Function<? super T, ? extends S> reverse) {
+		// return new CastOp<S, T>() {
+		// @Override
+		// public TypeToken<T> getType(TypeToken<? extends S> sourceType) {
+		// return type;
+		// }
+		//
+		// @Override
+		// public T cast(S source) {
+		// return cast.apply(source);
+		// }
+		//
+		// @Override
+		// public String canReverse(T target) {
+		// return canReverse == null ? null : canReverse.apply(target);
+		// }
+		//
+		// @Override
+		// public S reverse(T target) {
+		// return reverse.apply(target);
+		// }
+		// };
+		// }
 	}
 
 	/** Represents something that can configure a {@link Builder} to support some set of binary operations */
@@ -964,6 +840,8 @@ public class BinaryOperatorSet {
 		}, (s, s2, v) -> {
 			int num = unwrapI(v);
 			int den = unwrapI(s2);
+			if (den == 0)
+				return null;
 			if (num % den != 0)
 				return "Value assigned to a multiplication operation must be an even multiple of the denominator (" + den + ")";
 			return null;
@@ -975,6 +853,8 @@ public class BinaryOperatorSet {
 		}, (s, s2, v) -> {
 			long num = unwrapI(v);
 			long den = unwrapI(s2);
+			if (den == 0)
+				return null;
 			if (num % den != 0)
 				return "Value assigned to a multiplication operation must be an even multiple of the denominator (" + den + ")";
 			return null;
@@ -1006,6 +886,8 @@ public class BinaryOperatorSet {
 		}, (s, s2, v) -> {
 			int num = unwrapI(s);
 			int den = unwrapI(s2);
+			if (den == 0)
+				return num;
 			int currentMod = num % den;
 			if (currentMod == v)
 				return num;
