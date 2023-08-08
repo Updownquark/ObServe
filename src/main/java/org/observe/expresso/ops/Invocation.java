@@ -1001,7 +1001,8 @@ public abstract class Invocation implements ObservableExpression {
 					System.arraycopy(args, 0, parameters, 0, parameters.length - 1);
 					int lastArgLen = args.length - parameters.length + 1;
 					Object lastArg = Array.newInstance(method.getParameterTypes()[parameters.length - 1].getComponentType(), lastArgLen);
-					System.arraycopy(args, parameters.length - 1, lastArg, 0, lastArgLen);
+					for (int srcI = parameters.length - 1, destI = 0; destI < lastArgLen; srcI++, destI++)
+						Array.set(lastArg, destI, args[srcI]);
 					parameters[parameters.length - 1] = lastArg;
 				}
 			} else

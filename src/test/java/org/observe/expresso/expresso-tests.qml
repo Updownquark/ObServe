@@ -40,26 +40,9 @@
 		
 		Test expressions
 			Array access
-			Assignment
-			Unary operators
-				!, ~, -
-				++, - - (pre and post)
 			Class instance (e.g. 'int.class')
-			Constructor
-				Value should not change upon repeated access (at least for simple values)
-				Test with arguments that change (should be re-invoked when args change)
 			External Literals (all types)
 			instanceof
-			Lambda (-> and ::)
-			Method
-				Value should not change upon repeated access (at least for simple values)
-				Test with arguments that change (should be re-invoked when args change)
-				Function
-				Static
-				Non-static
-				var-args
-				type-parameterized
-			Field access/set
 			Parenthetic
 
 		Test external models
@@ -68,6 +51,7 @@
 	<expresso>
 		<imports>
 			<import>org.observe.expresso.ExpressoTestEntity</import>
+			<import>org.observe.expresso.ExpressoReflectTester</import>
 			<import>org.junit.Assert.*</import>
 			<import>org.observe.expresso.ExpressoTests.*</import>
 		</imports>
@@ -180,6 +164,36 @@
 		<action>models.list.add(17)</action>
 		<action>assertEquals(6, size)</action>
 		<!-- TODO Need more -->
+	</test>
+	<test name="unaryOperators">
+		<model>
+			<value name="a" type="boolean" />
+			<value name="b" type="int" />
+	
+			<value name="notA">!a</value>
+			<value name="negB">-b</value>
+		</model>
+
+		<action>assertTrue(notA)</action>
+		<action>assertEquals(0, negB)</action>
+
+		<action>a=true</action>
+		<action>assertFalse(notA)</action>
+
+		<action>b=25</action>
+		<action>assertEquals(-25, negB)</action>
+
+		<action>b++</action>
+		<action>assertEquals(26, b)</action>
+
+		<action>++b</action>
+		<action>assertEquals(27, b)</action>
+
+		<action>b--</action>
+		<action>assertEquals(26, b)</action>
+
+		<action>--b</action>
+		<action>assertEquals(25, b)</action>
 	</test>
 	<test name="booleanOperators">
 		<model>
@@ -1650,6 +1664,48 @@
 		<action>models.assignInst</action>
 		<action>assertEquals(models.expected, models.test)</action>
 		<action>assertNull(models.error)</action>
+	</test>
+	<?DOC Test constructor and method invocation, field get and set.?>
+	<test name="reflection">
+		<model>
+			<value name="str" type="String" />
+			<value name="tester">new ExpressoReflectTester(str)</value>
+			<value name="methodLen">tester.getLength()</value>
+			<value name="i" type="int" />
+			<value name="lenPlusI">tester.getLengthPlus(i)</value>
+		</model>
+
+		<!-- Constructed variable should not be re-evaluated on repeated access -->
+		<action>assertEquals(-1, tester.length)</action>
+		<action>assertEquals(-1, methodLen)</action>
+		<action>assertEquals(1, tester.lengthCalled)</action>
+		<action>assertEquals(-1, methodLen)</action>
+		<!-- The length value is cached and won't be re-invoked upon repeated access to this variable -->
+		<action>assertEquals(1, tester.lengthCalled)</action>
+		<action>assertEquals(1, ExpressoReflectTester.CREATED)</action>
+		<action>assertEquals(-1, lenPlusI)</action>
+
+		<action>tester.length=0</action>
+		<action>assertEquals(-1, methodLen)</action>
+		<action>assertEquals(-1, lenPlusI)</action>
+
+		<action>i=21</action>
+		<action>assertEquals(21, lenPlusI)</action>
+
+		<action>str="New String"</action>
+		<action>assertEquals(10, tester.length)</action>
+		<action>assertEquals(10, methodLen)</action>
+		<action>assertEquals(1, tester.lengthCalled)</action>
+		<action>assertEquals(2, ExpressoReflectTester.CREATED)</action>
+		<action>assertEquals(31, lenPlusI)</action>
+
+		<action>i=15</action>
+		<action>assertEquals(25, lenPlusI)</action>
+		<action>assertEquals(2, ExpressoReflectTester.CREATED)</action>
+
+		<action>assertEquals(15, tester.varArgsCall(1, 2, 3, 4, 5))</action>
+		<action>assertEquals(6, tester.varArgsCall(1, 2, 3))</action>
+		<!-- TODO Type parameterization -->
 	</test>
 	<test name="hook">
 		<model>

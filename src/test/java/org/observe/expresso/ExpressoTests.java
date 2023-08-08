@@ -68,6 +68,17 @@ public class ExpressoTests extends AbstractExpressoTest<Expresso> {
 	}
 
 	/**
+	 * Tests unary operators
+	 *
+	 * @throws ExpressoInterpretationException If an error occurs interpreting the test
+	 * @throws ModelInstantiationException If an error occurs instantiating the test values
+	 */
+	@Test
+	public void testUnaryOperators() throws ExpressoInterpretationException, ModelInstantiationException {
+		getTesting().executeTest("unaryOperators");
+	}
+
+	/**
 	 * Tests boolean operators
 	 *
 	 * @throws ExpressoInterpretationException If an error occurs interpreting the test
@@ -197,6 +208,17 @@ public class ExpressoTests extends AbstractExpressoTest<Expresso> {
 	@Test
 	public void testAssignInstant() throws ExpressoInterpretationException, ModelInstantiationException {
 		getTesting().executeTest("assignInstant");
+	}
+
+	/**
+	 * Tests reflection operations
+	 *
+	 * @throws ExpressoInterpretationException If an error occurs interpreting the test
+	 * @throws ModelInstantiationException If an error occurs instantiating the test values
+	 */
+	@Test
+	public void testReflection() throws ExpressoInterpretationException, ModelInstantiationException {
+		getTesting().executeTest("reflection");
 	}
 
 	/**
