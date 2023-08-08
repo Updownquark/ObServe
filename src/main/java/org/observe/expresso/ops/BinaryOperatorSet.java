@@ -1030,126 +1030,159 @@ public class BinaryOperatorSet {
 			"Integer left bit-shift operator");
 		operators.withIntArithmeticOp(">>", (s1, s2) -> unwrapI(s1) >> unwrapI(s2), (s, s2, r) -> unwrapI(r) << unwrapI(s2), null,
 			"Integer right bit-shift operator");
-		operators.withIntArithmeticOp(">>", (s1, s2) -> unwrapI(s1) >>> unwrapI(s2), (s, s2, r) -> unwrapI(r) << unwrapI(s2), null,
+		operators.withIntArithmeticOp(">>>", (s1, s2) -> unwrapI(s1) >>> unwrapI(s2), (s, s2, r) -> unwrapI(r) << unwrapI(s2), null,
 			"Integer unsigned right bit-shift operator");
 		operators.withLongArithmeticOp("<<", (s1, s2) -> unwrapL(s1) << unwrapL(s2), (s, s2, r) -> unwrapL(r) >>> unwrapL(s2), null,
 			"Long integer left bit-shift operator");
 		operators.withLongArithmeticOp(">>", (s1, s2) -> unwrapL(s1) >> unwrapL(s2), (s, s2, r) -> unwrapL(r) << unwrapL(s2), null,
 			"Long integer right bit-shift operator");
-		operators.withLongArithmeticOp(">>", (s1, s2) -> unwrapL(s1) >>> unwrapL(s2), (s, s2, r) -> unwrapL(r) << unwrapL(s2), null,
+		operators.withLongArithmeticOp(">>>", (s1, s2) -> unwrapL(s1) >>> unwrapL(s2), (s, s2, r) -> unwrapL(r) << unwrapL(s2), null,
 			"Long integer unsigned right bit-shift operator");
 
 		// Bitwise operators
 		operators.withIntArithmeticOp("|", (s1, s2) -> unwrapI(s1) | unwrapI(s2), (s, s2, r) -> unwrapI(r), (s, s2, r) -> {
-			if ((unwrapI(r) & ~unwrapI(s2)) != 0)
-				return "Invalid bitwise operator reverse";
+			int ri = unwrapI(r);
+			if ((ri | unwrapI(s2)) != ri)
+				return "Invalid bitwise OR reverse";
 			return null;
 		}, "Integer bitwise OR operator");
 		operators.withLongArithmeticOp("|", (s1, s2) -> unwrapL(s1) | unwrapL(s2), (s, s2, r) -> unwrapL(r), (s, s2, r) -> {
-			if ((unwrapL(r) & ~unwrapL(s2)) != 0)
-				return "Invalid bitwise operator reverse";
+			long rl = unwrapL(r);
+			if ((rl | unwrapL(s2)) != rl)
+				return "Invalid bitwise OR reverse";
 			return null;
 		}, "Long integer bitwise OR operator");
-
-		// String append
-		operators.with2("+", String.class, Object.class, String.class, (s1, s2) -> s1 + s2, null,
-			(s, s2, r) -> "Cannot reverse string append", "String concatenation operator");
-		operators.with2("+", Object.class, String.class, String.class, (s1, s2) -> s1 + s2, null,
-			(s, s2, r) -> "Cannot reverse string append", "String concatenation operator");
-		// Unfortunately I don't support general string reversal here, but at least for some simple cases we can
-		operators.with2("+", String.class, String.class, String.class, (s1, s2) -> s1 + s2, (s, s2, r) -> {
-			return r.substring(0, r.length() - s2.length());
-		}, (s, s2, r) -> {
-			if (r == null || !r.endsWith(s2))
-				return "String does not end with \"" + s2 + "\"";
+		operators.withIntArithmeticOp("&", (s1, s2) -> unwrapI(s1) & unwrapI(s2), (s, s2, r) -> unwrapI(r), (s, s2, r) -> {
+			int ri = unwrapI(r);
+			if ((ri & unwrapI(s2)) != ri)
+				return "Invalid bitwise AND reverse";
 			return null;
-		}, "String concatenation operator");
-		operators.with2("+", Boolean.class, String.class, String.class, (s1, s2) -> s1 + s2, (s, s2, r) -> {
-			return Boolean.valueOf(r.substring(0, r.length() - s2.length()));
-		}, (s, s2, r) -> {
-			if (r == null || !r.endsWith(s2))
-				return "String does not end with \"" + s2 + "\"";
-			String begin = r.substring(0, r.length() - s2.length());
-			switch (begin) {
-			case "true":
-			case "false":
+		}, "Integer bitwise AND operator");
+		operators.withLongArithmeticOp("&", (s1, s2) -> unwrapL(s1) & unwrapL(s2), (s, s2, r) -> unwrapL(r), (s, s2, r) -> {
+			long rl = unwrapL(r);
+			if ((rl & unwrapL(s2)) != rl)
+				return "Invalid bitwise AND reverse";
+			return null;
+		}, "Long integer bitwise AND operator");
+		operators.withIntArithmeticOp("^", (s1, s2) -> unwrapI(s1) ^ unwrapI(s2), (s, s2, r) -> unwrapI(r) ^ unwrapI(s2), //
+			(s, s2, r) -> null, "Integer bitwise XOR operator");
+		operators.withLongArithmeticOp("^", (s1, s2) -> unwrapL(s1) ^ unwrapL(s2), (s, s2, r) -> unwrapL(r) ^ unwrapL(s2), //
+			(s, s2, r) -> null, "Long integer bitwise XOR operator");
+
+		// String concatenation
+		operators.with2("+", String.class, Object.class, String.class, //
+			(s1, s2) -> (s1 == null ? "null" : s1) + (s2 == null ? "null" : s2), (s, o, r) -> {
+				return r.substring(0, r.length() - (o == null ? 4 : o.toString().length()));
+			}, //
+			(s, o, r) -> {
+				String oStr = o == null ? "null" : o.toString();
+				if (r == null || !r.endsWith(oStr))
+					return "String does not end with \"" + oStr + "\"";
 				return null;
-			default:
-				return "'true' or 'false' expected";
-			}
-		}, "String concatenation operator");
+			}, "String concatenation operator");
+		operators.with2("+", Object.class, String.class, String.class, //
+			(s1, s2) -> (s1 == null ? "null" : s1) + (s2 == null ? "null" : s2), null, (s, s2, r) -> "Cannot reverse string append",
+			"String concatenation operator");
+		// Unfortunately I don't support general string reversal here, but at least for some simple cases we can
+		operators.with2("+", String.class, String.class, String.class, //
+			(s1, s2) -> (s1 == null ? "null" : s1) + (s2 == null ? "null" : s2), (s, s2, r) -> {
+				return r.substring(0, r.length() - (s2 == null ? 4 : s2.length()));
+			}, (s, s2, r) -> {
+				if (r == null || !r.endsWith((s2 == null ? "null" : s2)))
+					return "String does not end with \"" + s2 + "\"";
+				return null;
+			}, "String concatenation operator");
+		operators.with2("+", Boolean.class, String.class, String.class, //
+			(s1, s2) -> (s1 == null ? "null" : s1) + (s2 == null ? "null" : s2), (s, s2, r) -> {
+				return Boolean.valueOf(r.substring(0, r.length() - (s2 == null ? 4 : s2.length())));
+			}, (s, s2, r) -> {
+				if (r == null || !r.endsWith((s2 == null ? "null" : s2)))
+					return "String does not end with \"" + s2 + "\"";
+				String begin = r.substring(0, r.length() - (s2 == null ? 4 : s2.length()));
+				switch (begin) {
+				case "true":
+				case "false":
+					return null;
+				default:
+					return "'true' or 'false' expected";
+				}
+			}, "String concatenation operator");
 		String MIN_INT_STR = String.valueOf(Integer.MIN_VALUE).substring(1);
 		String MAX_INT_STR = String.valueOf(Integer.MAX_VALUE);
-		operators.with2("+", Integer.class, String.class, String.class, (s1, s2) -> s1 + s2, (s, s2, r) -> {
-			return Integer.valueOf(r.substring(0, r.length() - s2.length()));
-		}, (s, s2, r) -> {
-			if (r == null || !r.endsWith(s2))
-				return "String does not end with \"" + s2 + "\"";
-			String begin = r.substring(0, r.length() - s2.length());
-			int i = 0;
-			boolean neg = i < begin.length() && begin.charAt(i) == '-';
-			if (neg)
-				i++;
-			for (; i < begin.length(); i++)
-				if (begin.charAt(i) < '0' || begin.charAt(i) > '9')
-					return "integer expected";
-			if (!neg && StringUtils.compareNumberTolerant(begin, MAX_INT_STR, false, true) > 0)
-				return "integer is too large for int type";
-			else if (neg
-				&& StringUtils.compareNumberTolerant(StringUtils.cheapSubSequence(begin, 1, begin.length()), MIN_INT_STR, false, true) > 0)
-				return "negative integer is too large for int type";
-			return null;
-		}, "String concatenation operator");
+		operators.with2("+", Integer.class, String.class, String.class, //
+			(s1, s2) -> (s1 == null ? "null" : s1) + (s2 == null ? "null" : s2), (s, s2, r) -> {
+				return Integer.valueOf(r.substring(0, r.length() - (s2 == null ? 4 : s2.length())));
+			}, (s, s2, r) -> {
+				if (r == null || !r.endsWith((s2 == null ? "null" : s2)))
+					return "String does not end with \"" + s2 + "\"";
+				String begin = r.substring(0, r.length() - (s2 == null ? 4 : s2.length()));
+				int i = 0;
+				boolean neg = i < begin.length() && begin.charAt(i) == '-';
+				if (neg)
+					i++;
+				for (; i < begin.length(); i++)
+					if (begin.charAt(i) < '0' || begin.charAt(i) > '9')
+						return "integer expected";
+				if (!neg && StringUtils.compareNumberTolerant(begin, MAX_INT_STR, false, true) > 0)
+					return "integer is too large for int type";
+				else if (neg && StringUtils.compareNumberTolerant(StringUtils.cheapSubSequence(begin, 1, begin.length()), MIN_INT_STR,
+					false, true) > 0)
+					return "negative integer is too large for int type";
+				return null;
+			}, "String concatenation operator");
 		String MIN_LONG_STR = String.valueOf(Long.MIN_VALUE).substring(1);
 		String MAX_LONG_STR = String.valueOf(Long.MAX_VALUE);
-		operators.with2("+", Long.class, String.class, String.class, (s1, s2) -> s1 + s2, (s, s2, r) -> {
-			return Long.valueOf(r.substring(0, r.length() - s2.length()));
-		}, (s, s2, r) -> {
-			if (r == null || !r.endsWith(s2))
-				return "String does not end with \"" + s2 + "\"";
-			String begin = r.substring(0, r.length() - s2.length());
-			int i = 0;
-			boolean neg = i < begin.length() && begin.charAt(i) == '-';
-			if (neg)
-				i++;
-			for (; i < begin.length(); i++)
-				if (begin.charAt(i) < '0' || begin.charAt(i) > '9')
-					return "integer expected";
-			if (!neg && StringUtils.compareNumberTolerant(begin, MAX_LONG_STR, false, true) > 0)
-				return "integer is too large for long type";
-			else if (neg
-				&& StringUtils.compareNumberTolerant(StringUtils.cheapSubSequence(begin, 1, begin.length()), MIN_LONG_STR, false, true) > 0)
-				return "negative integer is too large for long type";
-			return null;
-		}, "String concatenation operator");
-		operators.with2("+", Double.class, String.class, String.class, (s1, s2) -> s1 + s2, (s, s2, r) -> {
-			return Double.valueOf(r.substring(0, r.length() - s2.length()));
-		}, (s, s2, r) -> {
-			if (r == null || !r.endsWith(s2))
-				return "String does not end with \"" + s2 + "\"";
-			String begin = r.substring(0, r.length() - s2.length());
-			// Can't think of a better way to do this than to just parse it twice
-			try {
-				Double.parseDouble(begin);
+		operators.with2("+", Long.class, String.class, String.class, //
+			(s1, s2) -> (s1 == null ? "null" : s1) + (s2 == null ? "null" : s2), (s, s2, r) -> {
+				return Long.valueOf(r.substring(0, r.length() - (s2 == null ? 4 : s2.length())));
+			}, (s, s2, r) -> {
+				if (r == null || !r.endsWith((s2 == null ? "null" : s2)))
+					return "String does not end with \"" + s2 + "\"";
+				String begin = r.substring(0, r.length() - (s2 == null ? 4 : s2.length()));
+				int i = 0;
+				boolean neg = i < begin.length() && begin.charAt(i) == '-';
+				if (neg)
+					i++;
+				for (; i < begin.length(); i++)
+					if (begin.charAt(i) < '0' || begin.charAt(i) > '9')
+						return "integer expected";
+				if (!neg && StringUtils.compareNumberTolerant(begin, MAX_LONG_STR, false, true) > 0)
+					return "integer is too large for long type";
+				else if (neg && StringUtils.compareNumberTolerant(StringUtils.cheapSubSequence(begin, 1, begin.length()), MIN_LONG_STR,
+					false, true) > 0)
+					return "negative integer is too large for long type";
 				return null;
-			} catch (NumberFormatException e) {
-				return e.getMessage();
-			}
-		}, "String concatenation operator");
-		operators.with2("+", Float.class, String.class, String.class, (s1, s2) -> s1 + s2, (s, s2, r) -> {
-			return Float.valueOf(r.substring(0, r.length() - s2.length()));
-		}, (s, s2, r) -> {
-			if (r == null || !r.endsWith(s2))
-				return "String does not end with \"" + s2 + "\"";
-			String begin = r.substring(0, r.length() - s2.length());
-			// Can't think of a better way to do this than to just parse it twice
-			try {
-				Float.parseFloat(begin);
-				return null;
-			} catch (NumberFormatException e) {
-				return e.getMessage();
-			}
-		}, "String concatenation operator");
+			}, "String concatenation operator");
+		operators.with2("+", Double.class, String.class, String.class, //
+			(s1, s2) -> (s1 == null ? "null" : s1) + (s2 == null ? "null" : s2), (s, s2, r) -> {
+				return Double.valueOf(r.substring(0, r.length() - (s2 == null ? 4 : s2.length())));
+			}, (s, s2, r) -> {
+				if (r == null || !r.endsWith((s2 == null ? "null" : s2)))
+					return "String does not end with \"" + s2 + "\"";
+				String begin = r.substring(0, r.length() - (s2 == null ? 4 : s2.length()));
+				// Can't think of a better way to do this than to just parse it twice
+				try {
+					Double.parseDouble(begin);
+					return null;
+				} catch (NumberFormatException e) {
+					return e.getMessage();
+				}
+			}, "String concatenation operator");
+		operators.with2("+", Float.class, String.class, String.class, //
+			(s1, s2) -> (s1 == null ? "null" : s1) + (s2 == null ? "null" : s2), (s, s2, r) -> {
+				return Float.valueOf(r.substring(0, r.length() - (s2 == null ? 4 : s2.length())));
+			}, (s, s2, r) -> {
+				if (r == null || !r.endsWith((s2 == null ? "null" : s2)))
+					return "String does not end with \"" + s2 + "\"";
+				String begin = r.substring(0, r.length() - (s2 == null ? 4 : s2.length()));
+				// Can't think of a better way to do this than to just parse it twice
+				try {
+					Float.parseFloat(begin);
+					return null;
+				} catch (NumberFormatException e) {
+					return e.getMessage();
+				}
+			}, "String concatenation operator");
 		return operators;
 	}
 

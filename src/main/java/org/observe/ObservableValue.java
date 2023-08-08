@@ -876,7 +876,7 @@ public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>,
 				.resolveType(BiFunction.class.getTypeParameters()[1]);
 			theSource = source;
 			theTransformation = transformation;
-			theEngine = theTransformation.createEngine(Equivalence.DEFAULT);
+			theEngine = theTransformation.createEngine(source, Equivalence.DEFAULT);
 			theElement = theEngine.createElement(LambdaUtils.printableSupplier(theSource::get, theSource::toString, null));
 			theSourceStamp = -1;
 			theObservers = ListenerList.build().withInUse(new ListenerList.InUseListener() {

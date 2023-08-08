@@ -496,7 +496,8 @@ public class ObservableCollectionPassiveManagers {
 
 		@Override
 		public long getStamp() {
-			return Stamped.compositeStamp(getParent().getStamp(), getTransformation().createEngine(getParent().equivalence()).getStamp());
+			return Stamped.compositeStamp(getParent().getStamp(),
+				getTransformation().createEngine(null, getParent().equivalence()).getStamp());
 		}
 
 		@Override

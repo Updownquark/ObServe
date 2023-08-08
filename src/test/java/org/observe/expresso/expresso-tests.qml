@@ -9,6 +9,7 @@
 		Simple Maps, Sorted Maps, Multi-Maps, Sorted Multi-Maps with configured entries
 		Derived Maps, Sorted Maps, Multi-Maps, Sorted Multi-Maps (+ test set)
 		Event
+			Any type can be cast to an Event
 
 		Transformation (values, collections, (multi-)maps, actions
 			disable
@@ -21,7 +22,6 @@
 			refresh(-each)
 			distinct
 			sort
-			with-equivalance
 			unmodifiable
 			filter-mod
 			map-equivalent
@@ -44,13 +44,7 @@
 			Unary operators
 				!, ~, -
 				++, - - (pre and post)
-			Binary operators
-				+, -, *, /, %
-				==, !=, <, <=, >, >=
-				&&, ||
-			Cast
 			Class instance (e.g. 'int.class')
-			Conditional (ternary)
 			Constructor
 				Value should not change upon repeated access (at least for simple values)
 				Test with arguments that change (should be re-invoked when args change)
@@ -66,12 +60,10 @@
 				var-args
 				type-parameterized
 			Field access/set
-			Model value (e.g. 'model.value')
 			Parenthetic
 
 		Test external models
 		In new file, test Expresso-Config
-		In new file, test styles (make a test toolkit and impl?)
 	-->
 	<expresso>
 		<imports>
@@ -1210,16 +1202,355 @@
 		<action>assertEquals(15, doubleV, 1e-14)</action>
 	</test>
 	<test name="stringConcat">
-		<!-- TODO -->
+		<model>
+			<value name="str1" type="String" />
+			<value name="str2" type="String" />
+			<value name="str3" type="String" />
+			
+			<value name="b" type="byte" />
+			<value name="s" type="short" />
+			<value name="i" type="int" />
+			<value name="l" type="long" />
+			<value name="c" type="char" init="'a'"/>
+			<value name="f" type="float" />
+			<value name="d" type="double" />
+			<value name="inst" type="java.time.Instant" init="`12am 01Jan2020`" />
+			<value name="instS">inst.toString()</value>
+
+			<value name="str1plus1">str1+str1</value>
+			<value name="str1plus2">str1+str2</value>
+			<value name="str1plus2plus3">str1+str2+str3</value>
+
+			<value name="strPlusB">str1+b</value>
+			<value name="bPlusStr">b+str1</value>
+			<value name="strPlusS">str1+s</value>
+			<value name="sPlusStr">s+str1</value>
+			<value name="strPlusI">str1+i</value>
+			<value name="iPlusStr">i+str1</value>
+			<value name="strPlusL">str1+l</value>
+			<value name="lPlusStr">l+str1</value>
+			<value name="strPlusC">str1+c</value>
+			<value name="cPlusStr">c+str1</value>
+			<value name="strPlusF">str1+f</value>
+			<value name="fPlusStr">f+str1</value>
+			<value name="strPlusD">str1+d</value>
+			<value name="dPlusStr">d+str1</value>
+			<value name="strPlusInst">str1+inst</value>
+		</model>
+
+		<action>assertEquals("nullnull", str1plus1)</action>
+		<action>assertEquals("nullnull", str1plus2)</action>
+		<action>assertEquals("nullnullnull", str1plus2plus3)</action>
+		<action>assertEquals("null0", strPlusB)</action>
+		<action>assertEquals("0null", bPlusStr)</action>
+		<action>assertEquals("null0", strPlusS)</action>
+		<action>assertEquals("0null", sPlusStr)</action>
+		<action>assertEquals("null0", strPlusI)</action>
+		<action>assertEquals("0null", iPlusStr)</action>
+		<action>assertEquals("null0", strPlusL)</action>
+		<action>assertEquals("0null", lPlusStr)</action>
+		<action>assertEquals("nulla", strPlusC)</action>
+		<action>assertEquals("anull", cPlusStr)</action>
+		<action>assertEquals("null0.0", strPlusF)</action>
+		<action>assertEquals("0.0null", fPlusStr)</action>
+		<action>assertEquals("null0.0", strPlusD)</action>
+		<action>assertEquals("0.0null", dPlusStr)</action>
+		<action>assertEquals("null"+instS, strPlusInst)</action>
+
+		<action>str1="First"</action>
+		<action>str2="Second"</action>
+		<action>str3="Third"</action>
+		<action>assertEquals("FirstFirst", str1plus1)</action>
+		<action>assertEquals("FirstSecond", str1plus2)</action>
+		<action>assertEquals("FirstSecondThird", str1plus2plus3)</action>
+		<action>assertEquals("First0", strPlusB)</action>
+		<action>assertEquals("0First", bPlusStr)</action>
+		<action>assertEquals("First0", strPlusS)</action>
+		<action>assertEquals("0First", sPlusStr)</action>
+		<action>assertEquals("First0", strPlusI)</action>
+		<action>assertEquals("0First", iPlusStr)</action>
+		<action>assertEquals("First0", strPlusL)</action>
+		<action>assertEquals("0First", lPlusStr)</action>
+		<action>assertEquals("Firsta", strPlusC)</action>
+		<action>assertEquals("aFirst", cPlusStr)</action>
+		<action>assertEquals("First0.0", strPlusF)</action>
+		<action>assertEquals("0.0First", fPlusStr)</action>
+		<action>assertEquals("First0.0", strPlusD)</action>
+		<action>assertEquals("0.0First", dPlusStr)</action>
+		<action>assertEquals("First"+instS, strPlusInst)</action>
+
+		<!-- These operators throws IllegalArgumentExceptions, but this is converted to an IllegalStateException by the assignment actions -->
+		<!-- If an assignment results in a value that is not what was assigned, it is not allowed -->
+		<action expect-throw="IllegalStateException">str1plus1="BlahFirst"</action>
+		<!-- The assigned value must end with the concatenated strings, because only the first string may be modified by the assignment -->
+		<action expect-throw="IllegalStateException">str1plus2="BlahBlah"</action>
+
+		<!-- Assignment of string concatenated values -->
+		<action>str1plus2="NewFirstSecond"</action>
+		<action>assertEquals("NewFirst", str1)</action>
+		<action>assertEquals("NewFirstNewFirst", str1plus1)</action>
+		<action>assertEquals("NewFirstSecond", str1plus2)</action>
+		<action>assertEquals("NewFirstSecondThird", str1plus2plus3)</action>
+		<action>assertEquals("NewFirst0", strPlusB)</action>
+		<action>assertEquals("0NewFirst", bPlusStr)</action>
+		<action>assertEquals("NewFirst0", strPlusS)</action>
+		<action>assertEquals("0NewFirst", sPlusStr)</action>
+		<action>assertEquals("NewFirst0", strPlusI)</action>
+		<action>assertEquals("0NewFirst", iPlusStr)</action>
+		<action>assertEquals("NewFirst0", strPlusL)</action>
+		<action>assertEquals("0NewFirst", lPlusStr)</action>
+		<action>assertEquals("NewFirsta", strPlusC)</action>
+		<action>assertEquals("aNewFirst", cPlusStr)</action>
+		<action>assertEquals("NewFirst0.0", strPlusF)</action>
+		<action>assertEquals("0.0NewFirst", fPlusStr)</action>
+		<action>assertEquals("NewFirst0.0", strPlusD)</action>
+		<action>assertEquals("0.0NewFirst", dPlusStr)</action>
+		<action>assertEquals("NewFirst"+instS, strPlusInst)</action>
+
+		<action>str1plus2plus3="FirstAgainSecondThird"</action>
+		<action>assertEquals("FirstAgain", str1)</action>
+		<action>assertEquals("FirstAgainFirstAgain", str1plus1)</action>
+		<action>assertEquals("FirstAgainSecond", str1plus2)</action>
+		<action>assertEquals("FirstAgainSecondThird", str1plus2plus3)</action>
+		<action>assertEquals("FirstAgain0", strPlusB)</action>
+		<action>assertEquals("0FirstAgain", bPlusStr)</action>
+		<action>assertEquals("FirstAgain0", strPlusS)</action>
+		<action>assertEquals("0FirstAgain", sPlusStr)</action>
+		<action>assertEquals("FirstAgain0", strPlusI)</action>
+		<action>assertEquals("0FirstAgain", iPlusStr)</action>
+		<action>assertEquals("FirstAgain0", strPlusL)</action>
+		<action>assertEquals("0FirstAgain", lPlusStr)</action>
+		<action>assertEquals("FirstAgaina", strPlusC)</action>
+		<action>assertEquals("aFirstAgain", cPlusStr)</action>
+		<action>assertEquals("FirstAgain0.0", strPlusF)</action>
+		<action>assertEquals("0.0FirstAgain", fPlusStr)</action>
+		<action>assertEquals("FirstAgain0.0", strPlusD)</action>
+		<action>assertEquals("0.0FirstAgain", dPlusStr)</action>
+		<action>assertEquals("FirstAgain"+instS, strPlusInst)</action>
+
+		<!-- Assignment of non-String concatenated values -->
+		<action expect-throw="IllegalStateException">strPlusB="Test1"</action>
+		<action>strPlusB="TestB0"</action>
+		<action>assertEquals("TestB", str1)</action>
+		<!-- We'll lay off testing the other values, we've ensured the change will propagate by now -->
+
+		<action expect-throw="IllegalStateException">strPlusS="Test1"</action>
+		<action>strPlusS="TestS0"</action>
+		<action>assertEquals("TestS", str1)</action>
+
+		<action expect-throw="IllegalStateException">strPlusI="Test1"</action>
+		<action>strPlusI="TestI0"</action>
+		<action>assertEquals("TestI", str1)</action>
+
+		<action expect-throw="IllegalStateException">strPlusL="Test1"</action>
+		<action>strPlusL="TestL0"</action>
+		<action>assertEquals("TestL", str1)</action>
+
+		<action expect-throw="IllegalStateException">strPlusC="Test1"</action>
+		<action>strPlusC="TestCa"</action>
+		<action>assertEquals("TestC", str1)</action>
+
+		<action expect-throw="IllegalStateException">strPlusF="Test1"</action>
+		<action>strPlusF="TestF0.0"</action>
+		<action>assertEquals("TestF", str1)</action>
+
+		<action expect-throw="IllegalStateException">strPlusD="Test1"</action>
+		<action>strPlusD="TestD0.0"</action>
+		<action>assertEquals("TestD", str1)</action>
+
+		<action expect-throw="IllegalStateException">strPlusInst="Test1/1/1"</action>
+		<action>strPlusInst="TestInst"+instS</action>
+		<action>assertEquals("TestInst", str1)</action>
 	</test>
 	<test name="bitwiseOperators">
-		<!-- TODO -->
+		<model>
+			<value name="intA" type="int" />
+			<value name="intB" type="int" />
+			<value name="shift" type="int" />
+			<value name="tempI" type="int" />
+
+			<value name="intAComp">~intA</value>
+			<value name="intAOrB">intA | intB</value>
+			<value name="intAAndB">intA &amp; intB</value>
+			<value name="intAXorB">intA ^ intB</value>
+			<value name="intALeft">intA&lt;&lt;shift</value>
+			<value name="intARight">intA>>shift</value>
+			<value name="intAUnsRight">intA>>>shift</value>
+
+			<value name="longA" type="long" />
+			<value name="longB" type="long" />
+			<value name="tempL" type="long" />
+
+			<value name="longAComp">~longA</value>
+			<value name="longAOrB">longA | longB</value>
+			<value name="longAAndB">longA &amp; longB</value>
+			<value name="longAXorB">longA ^ longB</value>
+			<value name="longALeft">longA&lt;&lt;shift</value>
+			<value name="longARight">longA>>shift</value>
+			<value name="longAUnsRight">longA>>>shift</value>
+		</model>
+
+		<!-- int -->
+		<action>intA=0b11110101</action>
+		<action>assertEquals(0b11111111111111111111111100001010, intAComp)</action>
+		<action>assertEquals(intA, intAOrB)</action>
+		<action>assertEquals(0, intAAndB)</action>
+		<action>assertEquals(intA, intAXorB)</action>
+		<action>assertEquals(intA, intALeft)</action>
+		<action>assertEquals(intA, intARight)</action>
+		<action>assertEquals(intA, intAUnsRight)</action>
+
+		<action>intB=0b10101010</action>
+		<action>assertEquals(0b11111111, intAOrB)</action>
+		<action>assertEquals(0b10100000, intAAndB)</action>
+		<action>assertEquals(0b01011111, intAXorB)</action>
+
+		<action>shift=4</action>
+		<action>assertEquals(0b111101010000, intALeft)</action>
+		<action>assertEquals(0b1111, intARight)</action>
+		<action>assertEquals(0b1111, intAUnsRight)</action>
+
+		<action>intA=0x80000084</action>
+		<action>assertEquals(0x840, intALeft)</action>
+		<action>assertEquals(0xf8000008, intARight)</action>
+		<action>assertEquals(0x8000008, intAUnsRight)</action>
+
+		<!-- Assignments -->
+		<action>tempI=0b10111110</action>
+		<action>intAOrB=tempI</action>
+		<action>assertEquals(tempI, intA)</action>
+		<action>assertEquals(tempI, intAOrB)</action>
+		<!-- Assignment can't modify b, so the assigned value must have all 1 bits that b has -->
+		<action expect-throw="IllegalStateException">intAOrB=0b10110110</action>
+
+		<action>tempI=0b10000010</action>
+		<action>intAAndB=tempI</action>
+		<action>assertEquals(tempI, intA)</action>
+		<action>assertEquals(tempI, intAAndB)</action>
+		<!-- Assignment can't modify b, so the assigned value must have all 0 bits that b has -->
+		<action expect-throw="IllegalStateException">intAAndB=0b10110110</action>
+
+		<action>tempI=0b11001100</action>
+		<action>intAXorB=tempI</action>
+		<action>assertEquals(0b01100110, intA)</action>
+		<action>assertEquals(tempI, intAXorB)</action>
+
+		<!-- long -->
+		<action>shift=0</action>
+		<action>longA=0b11110101L</action>
+		<action>assertEquals(0b1111111111111111111111111111111111111111111111111111111100001010, longAComp)</action>
+		<action>assertEquals(longA, longAOrB)</action>
+		<action>assertEquals(0, longAAndB)</action>
+		<action>assertEquals(longA, longAXorB)</action>
+		<action>assertEquals(longA, longALeft)</action>
+		<action>assertEquals(longA, longARight)</action>
+		<action>assertEquals(longA, longAUnsRight)</action>
+
+		<action>longB=0b10101010L</action>
+		<action>assertEquals(0b11111111L, longAOrB)</action>
+		<action>assertEquals(0b10100000L, longAAndB)</action>
+		<action>assertEquals(0b01011111L, longAXorB)</action>
+
+		<action>shift=4</action>
+		<action>assertEquals(0b111101010000L, longALeft)</action>
+		<action>assertEquals(0b1111L, longARight)</action>
+		<action>assertEquals(0b1111L, longAUnsRight)</action>
+
+		<action>longA=0x8000000000000084L</action>
+		<action>assertEquals(0x840L, longALeft)</action>
+		<action>assertEquals(0xf800000000000008L, longARight)</action>
+		<action>assertEquals(0x800000000000008L, longAUnsRight)</action>
+
+		<!-- Assignments -->
+		<action>tempL=0b10111110L</action>
+		<action>longAOrB=tempL</action>
+		<action>assertEquals(tempL, longA)</action>
+		<action>assertEquals(tempL, longAOrB)</action>
+		<!-- Assignment can't modify b, so the assigned value must have all 1 bits that b has -->
+		<action expect-throw="IllegalStateException">longAOrB=0b10110110L</action>
+
+		<action>tempL=0b10000010L</action>
+		<action>longAAndB=tempL</action>
+		<action>assertEquals(tempL, longA)</action>
+		<action>assertEquals(tempL, longAAndB)</action>
+		<!-- Assignment can't modify b, so the assigned value must have all 0 bits that b has -->
+		<action expect-throw="IllegalStateException">longAAndB=0b10110110L</action>
+
+		<action>tempL=0b11001100L</action>
+		<action>longAXorB=tempL</action>
+		<action>assertEquals(0b01100110L, longA)</action>
+		<action>assertEquals(tempL, longAXorB)</action>
 	</test>
 	<test name="objectOr">
-		<!-- TODO -->
+		<model>
+			<value name="a" type="String" />
+			<value name="b" type="String" />
+			<value name="c" type="String" />
+
+			<value name="or">a || b || c</value>
+		</model>
+
+		<action>assertEquals(null, or)</action>
+
+		<action>c="Something"</action>
+		<action>assertEquals("Something", or)</action>
+
+		<action>b="Something else"</action>
+		<action>assertEquals("Something else", or)</action>
+
+		<action>c="Blah"</action>
+		<action>assertEquals("Something else", or)</action>
+
+		<action>b="Something"</action>
+		<action>assertEquals("Something", or)</action>
+
+		<action>a="String"</action>
+		<action>assertEquals("String", or)</action>
+
+		<action>b=null</action>
+		<action>assertEquals("String", or)</action>
+
+		<action>a=null</action>
+		<action>assertEquals("Blah", or)</action>
 	</test>
 	<test name="conditionalOperator">
-		<!-- TODO -->
+		<model>
+			<value name="b" init="false" />
+			<value name="p" type="String" />
+			<value name="s" type="String" />
+
+			<value name="c">b ? p : s</value>
+		</model>
+
+		<action>assertEquals(null, c)</action>
+
+		<action>b=true</action>
+		<action>assertEquals(null, c)</action>
+
+		<action>s="Something"</action>
+		<action>assertEquals(null, c)</action>
+
+		<action>p="Something else"</action>
+		<action>assertEquals("Something else", c)</action>
+
+		<action>b=false</action>
+		<action>assertEquals("Something", c)</action>
+
+		<action>p="Something 2"</action>
+		<action>assertEquals("Something", c)</action>
+
+		<action>s="Blah"</action>
+		<action>assertEquals("Blah", c)</action>
+
+		<!-- Assignment -->
+		<action>c="Test"</action>
+		<action>assertEquals("Test", s)</action>
+		<action>assertEquals("Something 2", p)</action>
+
+		<action>b=true</action>
+		<action>c="Test2"</action>
+		<action>assertEquals("Test2", p)</action>
+		<action>assertEquals("Test", s)</action>
 	</test>
 	<test name="mapTo">
 		<model>

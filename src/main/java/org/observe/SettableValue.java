@@ -1208,6 +1208,11 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 		}
 	}
 
+	/**
+	 * Implements {@link SettableValue#asSettable(ObservableValue, Function)}
+	 *
+	 * @param <T> The type of the value
+	 */
 	class DisabledValue<T> extends WrappingSettableValue<T> {
 		private final ObservableValue<String> isEnabled;
 

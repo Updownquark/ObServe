@@ -950,17 +950,17 @@ public class ObservableCollectionDataFlowImpl {
 					// If 1 is added to the distinct collection, the actual value that will be added is 0 ( 1 / 2 )
 					// This difference must be handled correctly and this is done though the peculiar mapping equivalence.
 					Function<? super I, ? extends T> map = LambdaUtils.printableFn(v -> {
-						Transformation.Engine<I, T> engine = def.createEngine(sourceEquivalence);
+						Transformation.Engine<I, T> engine = def.createEngine(null, sourceEquivalence);
 						return engine.map(v, engine.get());
 					}, def::toString, def);
 					Equivalence<T> mappedEquivalence = sourceEquivalence.map(target, //
 						LambdaUtils.printablePred(v -> {
-							Transformation.Engine<I, T> engine = def.createEngine(sourceEquivalence);
+							Transformation.Engine<I, T> engine = def.createEngine(null, sourceEquivalence);
 							Transformation.ReverseQueryResult<I> rq = engine.reverse(v, false, true);
 							return rq.getError() == null;
 						}, def + ".filter", def), map, //
 						LambdaUtils.printableFn(v -> {
-							Transformation.Engine<I, T> engine = def.createEngine(sourceEquivalence);
+							Transformation.Engine<I, T> engine = def.createEngine(null, sourceEquivalence);
 							Transformation.ReverseQueryResult<I> rq = engine.reverse(v, false, true);
 							return rq.getReversed();
 						}, reverse::toString, reverse));
@@ -1310,7 +1310,7 @@ public class ObservableCollectionDataFlowImpl {
 			Transformation<I, T> transformation, Equivalence<? super T> equivalence) {
 			theParent = parent;
 			theTargetType = targetType;
-			theEngine = transformation.createEngine(theParent.equivalence());
+			theEngine = transformation.createEngine(null, theParent.equivalence());
 			propagateUpdatesToParent = true;
 			theEquivalence = equivalence;
 		}

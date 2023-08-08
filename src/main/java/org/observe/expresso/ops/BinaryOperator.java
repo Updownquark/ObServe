@@ -3,6 +3,7 @@ package org.observe.expresso.ops;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
+import java.util.function.BiFunction;
 import java.util.function.Function;
 
 import org.observe.Observable;
@@ -304,6 +305,7 @@ public class BinaryOperator implements ObservableExpression {
 							.firstValue(TypeTokens.get().BOOLEAN, LambdaUtils.printablePred(b -> !Boolean.TRUE.equals(b), "false", null),
 								LambdaUtils.constantSupplier(true, "true", null), (SettableValue<Boolean>) (SettableValue<?>) leftV,
 								(SettableValue<Boolean>) (SettableValue<?>) rightV);
+					BinaryOperatorReverseFn reverse = new BinaryOperatorReverseFn(rightV, op);
 					SettableValue<Object> transformedV = leftV.transformReversible(resultType, tx -> tx.combineWith(rightV)//
 						.combine(LambdaUtils.printableBiFn((lft, rgt) -> {
 							try {
@@ -313,7 +315,7 @@ public class BinaryOperator implements ObservableExpression {
 								return null;
 							}
 						}, op::toString, op))//
-						.withReverse(new BinaryOperatorReverse(rightV, op, reporting)));
+						.replaceSourceWith(reverse, rev -> rev.rejectWith(reverse::canReverse, true, true)));
 					if (op instanceof BinaryOperatorSet.FirstArgDecisiveBinaryOp)
 						return new FirstArgDecisiveBinaryValue<>(resultType, leftV, rightV,
 							(BinaryOperatorSet.FirstArgDecisiveBinaryOp<Object, Object, Object>) op, transformedV);
@@ -355,6 +357,31 @@ public class BinaryOperator implements ObservableExpression {
 
 	// These classes can't be anonymous because they'll keep references to compiled objects that we don't want to keep
 
+	static class BinaryOperatorReverseFn implements BiFunction<Object, Transformation.TransformationValues<?, ?>, Object> {
+		private final SettableValue<Object> theRight;
+		private final BinaryOp<Object, Object, Object> theOperator;
+
+		BinaryOperatorReverseFn(SettableValue<Object> right, BinaryOp<Object, Object, Object> operator) {
+			theRight = right;
+			theOperator = operator;
+		}
+
+		@Override
+		public Object apply(Object newValue, Transformation.TransformationValues<?, ?> transformValues) {
+			Object rgt = transformValues.get(theRight);
+			String msg = theOperator.canReverse(transformValues.getCurrentSource(), rgt, newValue);
+			if (msg != null)
+				throw new IllegalArgumentException(msg);
+
+			return theOperator.reverse(transformValues.getCurrentSource(), rgt, newValue);
+		}
+
+		public String canReverse(Object newValue, Transformation.TransformationValues<?, ?> transformValues) {
+			Object rgt = transformValues.get(theRight);
+			return theOperator.canReverse(transformValues.getCurrentSource(), rgt, newValue);
+		}
+	}
+
 	static class BinaryOperatorReverse implements Transformation.TransformReverse<Object, Object> {
 		private final SettableValue<Object> theRight;
 		private final BinaryOp<Object, Object, Object> theOperator;
@@ -383,6 +410,7 @@ public class BinaryOperator implements ObservableExpression {
 			String msg = theOperator.canReverse(transformValues.getCurrentSource(), rgt, newValue);
 			if (msg != null)
 				return ReverseQueryResult.reject(msg);
+
 			try {
 				return ReverseQueryResult.value(theOperator.reverse(transformValues.getCurrentSource(), rgt, newValue));
 			} catch (RuntimeException | Error e) {

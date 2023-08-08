@@ -107,6 +107,8 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 	 * reverse} is not allowed.
 	 */
 	public static final String INEXACT_REVERSE_MSG = "Given value does not map exactly to a source value";
+	/** Error message given by transformation reversal when reversal is attempted on a value that is combined with itself. */
+	public static final String SELF_COMBINED_ERROR = "Value is combined with itself--reversal not supported";
 
 	/**
 	 * Contains information about a particular transformation operation
@@ -307,8 +309,8 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 	 *        like {@link #isReEvalOnUpdate() re-eval-on-update}.
 	 * @return An engine to drive a transformed observable structure
 	 */
-	public Engine<S, T> createEngine(Equivalence<? super S> sourceEquivalence) {
-		return new EngineImpl<>(this, sourceEquivalence);
+	public Engine<S, T> createEngine(ObservableValue<S> sourceValue, Equivalence<? super S> sourceEquivalence) {
+		return new EngineImpl<>(this, hasArg(sourceValue), sourceEquivalence);
 	}
 
 	@Override
@@ -2133,12 +2135,14 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 
 	static class EngineImpl<S, T> implements Engine<S, T> {
 		final Transformation<S, T> theTransformation;
+		final boolean isSelfCombined;
 		private volatile StampedArgValues theCachedValues;
 		private final ListenerList<Observer<? super ObservableValueEvent<TransformationState>>> theChanges;
 		final Equivalence<? super S> theSourceEquivalence;
 
-		EngineImpl(Transformation<S, T> transformation, Equivalence<? super S> sourceEquivalence) {
+		EngineImpl(Transformation<S, T> transformation, boolean selfCombined, Equivalence<? super S> sourceEquivalence) {
 			theTransformation = transformation;
+			isSelfCombined = selfCombined;
 			theSourceEquivalence = sourceEquivalence;
 			if (theTransformation.getArgs().isEmpty()) {
 				theChanges = null;
@@ -2563,6 +2567,8 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 				ReverseQueryResult<S> qr;
 				if (oldResult != null && theTransformation.equivalence().elementEquals(tx.getPreviousResult(), value))
 					qr = ReverseQueryResult.value(currentSource.get()); // Update, no need to do a reverse
+				else if (isSelfCombined)
+					qr = ReverseQueryResult.reject(SELF_COMBINED_ERROR);
 				else
 					qr = reversible.getReverse().reverse(value, tx, false, test);
 				return qr;

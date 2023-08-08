@@ -11,6 +11,7 @@ import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CommonTokenStream;
 import org.antlr.v4.runtime.tree.ParseTree;
 import org.observe.expresso.ops.*;
+import org.qommons.DefaultCharSubSequence;
 import org.qommons.StringUtils;
 import org.qommons.collect.BetterList;
 
@@ -157,7 +158,8 @@ public class JavaExpressoParser implements ExpressoParser {
 					value = BufferedExpression.buffer(getWhiteSpaceBefore(fullText, valueX.getStartIndex(), 0), value, 0);
 					return new CastExpression(value, type);
 				}
-				switch (expression.getComponents().get(1).getText()) {
+				String operator = expression.getComponents().get(1).getText();
+				switch (operator) {
 				case ".":
 					ObservableExpression context = _parse(firstChild, fullText);
 					int buffer = getWhiteSpaceAt(fullText, firstChild.getStartIndex() + context.getExpressionLength());
@@ -248,13 +250,16 @@ public class JavaExpressoParser implements ExpressoParser {
 				case "<<=":
 				case ">>=":
 				case ">>>=":
+					// Binary operator. Some operators are split up into separate expression components, so handle that now
+					for (int c = 2; c < expression.getComponents().size() - 1; c++)
+						operator += expression.getComponents().get(c);
 					ObservableExpression left = _parse(firstChild, fullText);
 					left = BufferedExpression.buffer(0, left,
 						getWhiteSpaceAt(fullText, firstChild.getStartIndex() + left.getExpressionLength()));
 					Expression rightX = expression.getComponents().getLast();
 					ObservableExpression right = _parse(rightX, fullText);
 					right = BufferedExpression.buffer(getWhiteSpaceBefore(fullText, rightX.getStartIndex(), 0), right, 0);
-					return new BinaryOperator(expression.getComponents().get(1).getText(), left, right);
+					return new BinaryOperator(operator, left, right);
 				case "instanceof":
 					left = _parse(firstChild, fullText);
 					left = BufferedExpression.buffer(0, left,
@@ -346,26 +351,28 @@ public class JavaExpressoParser implements ExpressoParser {
 			return new MethodInvocation(null, methodName, null, args);
 		case "integerLiteral":
 			String text = expression.getText();
-			char lastChar = text.charAt(text.length() - 1);
+			int start = 0, end = text.length();
+			char lastChar = text.charAt(end - 1);
 			boolean isLong = lastChar == 'l' || lastChar == 'L';
 			if (isLong)
-				text = text.substring(0, text.length() - 1);
+				end--;
 			int radix;
 			if (expression.getText().startsWith("0x")) {
 				radix = 16;
-				text = text.substring(2);
+				start = 2;
 			} else if (expression.getText().startsWith("0b")) {
 				radix = 2;
-				text = text.substring(1);
+				start = 2;
 			} else if (expression.getText().length() > 1 && expression.getText().startsWith("0")) {
 				radix = 8;
-				text = text.substring(1);
+				start = 1;
 			} else
 				radix = 10;
+			CharSequence numStr = trimNumberString(text, start, end, radix, isLong, expression);
 			if (isLong)
-				return literalExpression(expression, Long.parseLong(text.replace("_", ""), radix));
+				return literalExpression(expression, parseLong(numStr, radix));
 			else
-				return literalExpression(expression, Integer.parseInt(text.replace("_", ""), radix));
+				return literalExpression(expression, parseInt(numStr, radix));
 		case "floatLiteral":
 			text = expression.toString();
 			boolean isFloat = text.endsWith("f");
@@ -536,6 +543,101 @@ public class JavaExpressoParser implements ExpressoParser {
 		default:
 			throw new IllegalStateException("Unrecognized escaped character: \\" + content.charAt(2));
 		}
+	}
+
+	private static final int MAX_OCT_INT_LEN = 0;
+	private static final int MAX_OCT_LONG_LEN = 0;
+	private static final char MAX_OCT_TERM_DIG_INT = '4';
+	private static final char MAX_OCT_TERM_DIG_LONG = '1';
+	private static final int MAX_DEC_INT_LEN = 11;
+	private static final int MAX_DEC_LONG_LEN = 22;
+	private static final String MAX_DEC_INT_SEQ = String.valueOf(Integer.MAX_VALUE);
+	private static final String MAX_DEC_LONG_SEQ = String.valueOf(Long.MAX_VALUE);
+	private static final int MAX_HEX_INT_LEN = 8;
+	private static final int MAX_HEX_LONG_LEN = 16;
+
+	private static CharSequence trimNumberString(String str, int start, int end, int radix, boolean isLong, Expression expression)
+		throws ExpressoParseException {
+		int c = start;
+		while (c < end && str.charAt(c) == '0')
+			c++;
+		if (c == end)
+			return "0";
+		int length = end - c;
+		int maxLen;
+		switch (radix) {
+		case 2:
+			maxLen = isLong ? 32 : 64;
+			if (length > maxLen)
+				throw new ExpressoParseException(expression,
+					"Number is too long for " + (isLong ? "long" : "int") + "): " + length + " vs. " + maxLen + " maximum");
+			break;
+		case 8:
+			maxLen = isLong ? MAX_OCT_LONG_LEN : MAX_OCT_INT_LEN;
+			if (length > maxLen)
+				throw new ExpressoParseException(expression,
+					"Number is too long for " + (isLong ? "long" : "int") + "): " + length + " vs. " + maxLen + " maximum");
+			else if (length == maxLen && str.charAt(c) >= (isLong ? MAX_OCT_TERM_DIG_LONG : MAX_OCT_TERM_DIG_INT))
+				throw new ExpressoParseException(expression,
+					"Number is too long for " + (isLong ? "long" : "int") + "): " + str.substring(start, end));
+			break;
+		case 10:
+			maxLen = isLong ? MAX_DEC_LONG_LEN : MAX_DEC_INT_LEN;
+			if (length > maxLen)
+				throw new ExpressoParseException(expression,
+					"Number is too long for " + (isLong ? "long" : "int") + "): " + length + " vs. " + maxLen + " maximum");
+			else if (length == maxLen && str.compareTo(isLong ? MAX_DEC_LONG_SEQ : MAX_DEC_INT_SEQ) > 0)
+				throw new ExpressoParseException(expression,
+					"Number is too long for " + (isLong ? "long" : "int") + "): " + str.substring(start, end));
+			break;
+		case 16:
+			maxLen = isLong ? MAX_HEX_LONG_LEN : MAX_HEX_INT_LEN;
+			if (length > maxLen)
+				throw new ExpressoParseException(expression,
+					"Number is too long for " + (isLong ? "long" : "int") + "): " + length + " vs. " + maxLen + " maximum");
+			break;
+		default:
+			throw new IllegalStateException("Unrecognized number parse radix: " + radix);
+		}
+		return new DefaultCharSubSequence(str, c, end);
+	}
+
+	private static int parseInt(CharSequence str, int radix) {
+		// Unlike Integer.parseInt(String, int), at this point we already know that the number is valid,
+		// so we don't need to worry about any validation
+		int result = 0;
+		for (int i = 0; i < str.length(); i++) {
+			char c = str.charAt(i);
+			if (c == '_')
+				continue;
+			int dig = getDigit(c);
+			result = result * radix + dig;
+		}
+		return result;
+	}
+
+	private static long parseLong(CharSequence str, int radix) {
+		// Unlike Long.parseLong(String, int), at this point we already know that the number is valid,
+		// so we don't need to worry about any validation
+		long result = 0;
+		for (int i = 0; i < str.length(); i++) {
+			char c = str.charAt(i);
+			if (c == '_')
+				continue;
+			int dig = getDigit(c);
+			result = result * radix + dig;
+		}
+		return result;
+	}
+
+	private static int getDigit(char c) {
+		// '0' < 'A' < 'a'
+		if (c <= '9')
+			return c - '0';
+		else if (c <= 'F')
+			return 10 + c - 'A';
+		else
+			return 10 + c - 'a';
 	}
 
 	private static BufferedType parseType(Expression expression) throws ExpressoParseException {

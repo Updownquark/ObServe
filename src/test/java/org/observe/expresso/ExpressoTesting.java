@@ -125,6 +125,8 @@ public class ExpressoTesting extends ExElement.Def.Abstract<ExElement> {
 						throw new AssertionError(action.reporting().getPosition() + ":\n\tUnexpected exception", e);
 				} catch (AssertionError e) {
 					throw new AssertionError(action.reporting().getPosition() + ":\n\t" + e.getMessage(), e);
+				} catch (Error e) {
+					throw new AssertionError(action.reporting().getPosition() + ":\n\tUnexpected exception", e);
 				}
 			}
 		}
@@ -312,7 +314,10 @@ public class ExpressoTesting extends ExElement.Def.Abstract<ExElement> {
 
 		System.out.print("Interpreting global models...");
 		System.out.flush();
-		InterpretedExpressoEnv env = InterpretedExpressoEnv.INTERPRETED_STANDARD_JAVA.forTesting(true);
+		InterpretedExpressoEnv env = InterpretedExpressoEnv.INTERPRETED_STANDARD_JAVA//
+			.withAllNonStructuredParsers(getExpressoEnv())//
+			.withOperators(getExpressoEnv().getUnaryOperators(), getExpressoEnv().getBinaryOperators())//
+			.forTesting(true);
 		Expresso head = theHead.interpret(null);
 		if (theHead.getClassViewElement() != null)
 			env = env.with(theHead.getClassViewElement().configureClassView(env.getClassView().copy()).build());
