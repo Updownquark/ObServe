@@ -222,6 +222,17 @@ public class ExpressoTests extends AbstractExpressoTest<Expresso> {
 	}
 
 	/**
+	 * Tests for class instances (e.g. 'int.class') and instanceof
+	 *
+	 * @throws ExpressoInterpretationException If an error occurs interpreting the test
+	 * @throws ModelInstantiationException If an error occurs instantiating the test values
+	 */
+	@Test
+	public void testClasses() throws ExpressoInterpretationException, ModelInstantiationException {
+		getTesting().executeTest("classes");
+	}
+
+	/**
 	 * Tests instant assignment
 	 *
 	 * @throws ExpressoInterpretationException If an error occurs interpreting the test

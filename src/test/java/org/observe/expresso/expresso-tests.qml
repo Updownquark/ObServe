@@ -40,8 +40,8 @@
 		
 		Test expressions
 			Array access
-			Class instance (e.g. 'int.class')
 			External Literals (all types)
+			Class instance (e.g. 'int.class')
 			instanceof
 			Parenthetic
 
@@ -1706,6 +1706,32 @@
 		<action>assertEquals(15, tester.varArgsCall(1, 2, 3, 4, 5))</action>
 		<action>assertEquals(6, tester.varArgsCall(1, 2, 3))</action>
 		<!-- TODO Type parameterization -->
+	</test>
+	<test name="classes">
+		<model>
+			<value name="object" type="Object" />
+
+			<value name="io">object instanceof Number</value>
+		</model>
+
+		<!-- Test Class instance -->
+		<action>assertEquals(3, int.class.getName().length())</action>
+		<action>assertEquals(16, Object.class.getName().length())</action>
+
+		<!-- Test instanceof -->
+		<action>assertFalse(io)</action>
+
+		<action>object="String"</action>
+		<action>assertFalse(io)</action>
+
+		<action>object=27</action>
+		<action>assertTrue(io)</action>
+
+		<action>object=81.1</action>
+		<action>assertTrue(io)</action>
+
+		<action>object=new Object()</action>
+		<action>assertFalse(io)</action>
 	</test>
 	<test name="hook">
 		<model>

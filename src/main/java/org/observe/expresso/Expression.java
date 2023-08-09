@@ -118,8 +118,11 @@ public interface Expression {
 		}
 
 		static BetterList<Expression> getComponents(Expression root, String[] type) {
+			int startIdx = root.getType().equals(type[0]) ? 1 : 0;
+			if (startIdx == type.length)
+				return BetterList.of(root);
 			List<Expression> found = new ArrayList<>(3);
-			getComponents(root, type, 0, found::add);
+			getComponents(root, type, startIdx, found::add);
 			return BetterList.of(found);
 		}
 
