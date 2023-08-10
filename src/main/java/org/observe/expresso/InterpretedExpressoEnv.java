@@ -2,7 +2,6 @@ package org.observe.expresso;
 
 import java.util.Map;
 import java.util.Set;
-import java.util.function.Function;
 
 import org.observe.expresso.ObservableModelSet.ExternalModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
@@ -29,8 +28,7 @@ public class InterpretedExpressoEnv extends CompiledExpressoEnv {
 		InterpretedExpressoEnv env;
 		try {
 			env = CompiledExpressoEnv.STANDARD_JAVA.interpret(ObservableModelSet.buildExternal(ObservableModelSet.JAVA_NAME_CHECKER),
-				ClassView.build().withWildcardImport("java.lang").build(), new ErrorReporting.Default(LocatedPositionedContent.EMPTY),
-				null);
+				ClassView.build().withWildcardImport("java.lang").build(), new ErrorReporting.Default(LocatedPositionedContent.EMPTY));
 			env.getModels().interpret(env);
 		} catch (ExpressoInterpretationException e) {
 			throw new IllegalStateException(e);
@@ -64,6 +62,10 @@ public class InterpretedExpressoEnv extends CompiledExpressoEnv {
 			binaryOperators, theErrorReporting, theProperties, isTesting);
 	}
 
+	/**
+	 * @param child The compilation of the interpreted environment to create
+	 * @return An interpreted environment that is an amalgamation of this envronment and the child
+	 */
 	public InterpretedExpressoEnv forChild(CompiledExpressoEnv child) {
 		InterpretedExpressoEnv env = this;
 		if (getModels() != null) {
@@ -80,6 +82,7 @@ public class InterpretedExpressoEnv extends CompiledExpressoEnv {
 		return (InterpretedModelSet) super.getModels();
 	}
 
+	/** @return The external model set in this environment */
 	public ExternalModelSet getExtModels() {
 		return theExtModels;
 	}
@@ -94,14 +97,15 @@ public class InterpretedExpressoEnv extends CompiledExpressoEnv {
 		return theErrorReporting;
 	}
 
+	/** @return Whether this environment is to be used for testing */
 	public boolean isTesting() {
 		return isTesting;
 	}
 
 	/**
-	 * All {@link ObservableModelSet.ModelValueSynth}s for expressions parsed under this session should be
-	 * {@link ObservableModelSet.ModelValueSynth#get(ModelSetInstance) satisfied} with a model set wrapped by this method if this element
-	 * extends with-local-models.
+	 * All {@link ObservableModelSet.InterpretedValueSynth}s for expressions parsed under this session should be
+	 * {@link ObservableModelSet.InterpretedValueSynth#get(ModelSetInstance) satisfied} with a model set wrapped by this method if this
+	 * element extends with-local-models.
 	 *
 	 * @param models The model instance
 	 * @return The wrapped model instance containing data for this element's local models
@@ -115,11 +119,14 @@ public class InterpretedExpressoEnv extends CompiledExpressoEnv {
 	}
 
 	@Override
-	public InterpretedExpressoEnv interpret(ExternalModelSet extModels, ClassView classView, ErrorReporting reporting,
-		Function<InterpretedExpressoEnv, InterpretedExpressoEnv> configure) {
+	public InterpretedExpressoEnv interpret(ExternalModelSet extModels, ClassView classView, ErrorReporting reporting) {
 		return this;
 	}
 
+	/**
+	 * @param models The model set
+	 * @return A copy of this environment with the given models set
+	 */
 	public InterpretedExpressoEnv with(InterpretedModelSet models) {
 		if (models == getModels())
 			return this;
@@ -127,6 +134,10 @@ public class InterpretedExpressoEnv extends CompiledExpressoEnv {
 			getBinaryOperators(), reporting(), theProperties, isTesting);
 	}
 
+	/**
+	 * @param classView The class view
+	 * @return A copy of this environment with the given class view
+	 */
 	public InterpretedExpressoEnv with(ClassView classView) {
 		if (classView == theClassView)
 			return this;
@@ -176,6 +187,10 @@ public class InterpretedExpressoEnv extends CompiledExpressoEnv {
 		return (InterpretedExpressoEnv) super.withAllNonStructuredParsers(env);
 	}
 
+	/**
+	 * @param extModels The external model set
+	 * @return A copy of this environment with the given external model set
+	 */
 	public InterpretedExpressoEnv withExt(ExternalModelSet extModels) {
 		if (extModels == theExtModels)
 			return this;
@@ -207,6 +222,10 @@ public class InterpretedExpressoEnv extends CompiledExpressoEnv {
 			getBinaryOperators(), reporting, theProperties, isTesting);
 	}
 
+	/**
+	 * @param testing Whether the environment is for testing
+	 * @return A copy of this environment with the {@link #isTesting() testing} flag set to the given value
+	 */
 	public InterpretedExpressoEnv forTesting(boolean testing) {
 		if (isTesting == testing)
 			return this;
@@ -214,6 +233,12 @@ public class InterpretedExpressoEnv extends CompiledExpressoEnv {
 			getBinaryOperators(), theErrorReporting, theProperties, testing);
 	}
 
+	/**
+	 * @param <T> The type of the property
+	 * @param key The key for the property
+	 * @param type The type of the property
+	 * @return The value of the property in this environment
+	 */
 	public <T> T getProperty(Object key, Class<T> type) {
 		Object value = theProperties.get(key);
 		if (value == null || type == null)
@@ -221,6 +246,11 @@ public class InterpretedExpressoEnv extends CompiledExpressoEnv {
 		return type.cast(value);
 	}
 
+	/**
+	 * @param key The key for the property
+	 * @param value The value for the given property for this environment
+	 * @return This environment
+	 */
 	public InterpretedExpressoEnv setProperty(Object key, Object value) {
 		theProperties.put(key, value);
 		return this;

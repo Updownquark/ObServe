@@ -55,10 +55,14 @@ public interface ObservableModelSet extends Identifiable {
 	 * @param <M> The model type of the value
 	 */
 	public interface CompiledModelValue<M> {
-		/** @return The model type of the values that this compiled structure creates */
+		/**
+		 * @param env The compiled environment, which may be needed to interpret the model type for some model structures
+		 * @return The model type of the values that this compiled structure creates
+		 */
 		ModelType<M> getModelType(CompiledExpressoEnv env);
 
 		/**
+		 * @param env The environment in which to interpret this model set's values
 		 * @return The created value container
 		 * @throws ExpressoInterpretationException If this value could not be interpreted
 		 */
@@ -146,36 +150,6 @@ public interface ObservableModelSet extends Identifiable {
 	 * @param <M> The model type of the value
 	 */
 	public interface IdentifiableCompiledValue<M> extends CompiledModelValue<M>, Identifiable {
-		/**
-		 * @param <M> The model type of the value
-		 * @param <MV> The type of the value
-		 * @param identity The identity of the value
-		 * @param container The value
-		 * @return An identifiable value container for the given value
-		 */
-		static <M, MV extends M> IdentifiableCompiledValue<M> of(Object identity, InterpretedValueSynth<M, ?> container) {
-			return new IdentifiableCompiledValue<M>() {
-				@Override
-				public Object getIdentity() {
-					return identity;
-				}
-
-				@Override
-				public ModelType<M> getModelType(CompiledExpressoEnv env) {
-					return container.getModelType();
-				}
-
-				@Override
-				public InterpretedValueSynth<M, ?> interpret(InterpretedExpressoEnv env) {
-					return container;
-				}
-
-				@Override
-				public String toString() {
-					return identity + ":" + container;
-				}
-			};
-		}
 	}
 
 	/**
@@ -185,12 +159,15 @@ public interface ObservableModelSet extends Identifiable {
 	 * @param <MV> The type of the value
 	 */
 	public interface InterpretedValueSynth<M, MV extends M> {
+		/** @return The model type of the values that this interpreted structure creates */
 		default ModelType<M> getModelType() {
 			return getType().getModelType();
 		}
 
+		/** @return The instance type of the values that this interpreted structure creates */
 		ModelInstanceType<M, MV> getType();
 
+		/** @return All components of this value synthesizer */
 		List<? extends InterpretedValueSynth<?, ?>> getComponents();
 
 		/** @return All the self-sufficient (fundamental) containers that compose this value container */
@@ -220,6 +197,16 @@ public interface ObservableModelSet extends Identifiable {
 		 */
 		MV forModelCopy(MV value, ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException;
 
+		/**
+		 * Converts this value interpretation to another type
+		 *
+		 * @param <M2> The model type to convert to
+		 * @param <MV2> The instance type to convert to
+		 * @param type The type to convert to
+		 * @param env The interpreted environment which may be needed for the conversion
+		 * @return The converted value
+		 * @throws TypeConversionException If the conversion could not be made
+		 */
 		default <M2, MV2 extends M2> InterpretedValueSynth<M2, MV2> as(ModelInstanceType<M2, MV2> type, InterpretedExpressoEnv env)
 			throws TypeConversionException {
 			return getType().as(this, type, env);
@@ -307,60 +294,6 @@ public interface ObservableModelSet extends Identifiable {
 			@Override
 			public String toString() {
 				return theMap + "(" + getType() + ")";
-			}
-		}
-
-		default InterpretedValueSynth<M, MV> wrapModels(
-			ExFunction<ModelSetInstance, ModelSetInstance, ModelInstantiationException> modelWrapper) {
-			return new ModelMappedIVC<>(this, modelWrapper);
-		}
-
-		/**
-		 * An interpreted value container that wraps the input model instance passed to {@link #get(ModelSetInstance)} before handing it off
-		 * to another
-		 *
-		 * @param <M> The model type of the container
-		 * @param <MV> The instance type of the container
-		 */
-		class ModelMappedIVC<M, MV extends M> implements InterpretedValueSynth<M, MV> {
-			private final InterpretedValueSynth<M, MV> theSource;
-			private final ExFunction<ModelSetInstance, ModelSetInstance, ModelInstantiationException> theModelWrapper;
-			public ModelMappedIVC(InterpretedValueSynth<M, MV> source,
-				ExFunction<ModelSetInstance, ModelSetInstance, ModelInstantiationException> modelWrapper) {
-				theSource = source;
-				theModelWrapper = modelWrapper;
-			}
-
-			protected InterpretedValueSynth<M, MV> getSource() {
-				return theSource;
-			}
-
-			@Override
-			public ModelInstanceType<M, MV> getType() {
-				return getSource().getType();
-			}
-
-			@Override
-			public MV get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
-				ModelSetInstance wrappedModels = theModelWrapper.apply(models);
-				return theSource.get(wrappedModels);
-			}
-
-			@Override
-			public MV forModelCopy(MV value, ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException {
-				ModelSetInstance wrappedNew = theModelWrapper.apply(newModels);
-				MV sourceValue = theSource.get(sourceModels);
-				return theSource.forModelCopy(sourceValue, sourceModels, wrappedNew);
-			}
-
-			@Override
-			public List<? extends InterpretedValueSynth<?, ?>> getComponents() {
-				return Collections.singletonList(getSource());
-			}
-
-			@Override
-			public String toString() {
-				return theSource.toString();
 			}
 		}
 
@@ -569,15 +502,12 @@ public interface ObservableModelSet extends Identifiable {
 	 *
 	 * @param <M> The model type of the component
 	 */
-	public interface ModelComponentNode<M> extends Identifiable {
+	public interface ModelComponentNode<M> extends CompiledModelValue<M>, Identifiable {
 		@Override
 		ModelComponentId getIdentity();
 
 		/** @return The {@link IdentifiableCompiledValue#getIdentity() identity} of the value itself, independent of this model */
 		Object getValueIdentity();
-
-		/** @return The model type of the values that this compiled structure creates */
-		ModelType<M> getModelType(CompiledExpressoEnv env);
 
 		/** @return The sub-model held by this component, or null if this component is not a sub-model */
 		ObservableModelSet getModel();
@@ -591,9 +521,6 @@ public interface ObservableModelSet extends Identifiable {
 		 *         <li>A {@link ExtValueRef} if this component represents a placeholder for an external model value installed with
 		 *         {@link ObservableModelSet.Builder#withExternal(String, ExtValueRef, LocatedFilePosition)} or another external value
 		 *         method</li>
-		 *         <li>A {@link RuntimeValuePlaceholder} if this component represents a placeholder for a model value to be
-		 *         {@link ModelSetInstanceBuilder#with(RuntimeValuePlaceholder, Object) installed} at runtime, installed with
-		 *         {@link ObservableModelSet.Builder#withRuntimeValue(String, ModelInstanceType, LocatedFilePosition)}</li>
 		 *         <li>An {@link ObservableModelSet} if this component represents a sub-model installed with
 		 *         {@link ObservableModelSet.Builder#createSubModel(String, LocatedFilePosition)}</li>
 		 *         <li>Potentially anything else if this model is extended from the default</li>
@@ -604,18 +531,37 @@ public interface ObservableModelSet extends Identifiable {
 		/** @return The location where this value was declared in its source file. May be null. */
 		LocatedFilePosition getSourceLocation();
 
-		InterpretedModelComponentNode<M, ?> createInterpretation(InterpretedExpressoEnv env) throws ExpressoInterpretationException;
+		@Override
+		InterpretedModelComponentNode<M, ?> interpret(InterpretedExpressoEnv env) throws ExpressoInterpretationException;
 	}
 
+	/**
+	 * <p>
+	 * A placeholder in-between a {@link ModelComponentNode} and an {@link InterpretableModelComponentNode}. A node in this state <i>may</i>
+	 * have been interpreted, but may not have been. Its {@link #interpret(InterpretedExpressoEnv)} or {@link #interpreted()} methods return
+	 * an {@link InterpretableModelComponentNode} which has been interpreted.
+	 * </p>
+	 * <p>
+	 * This additional layer between compiled and interpreted is necessary because the interpretation of a value may require the
+	 * interpretation of another value, and so on. Facilitating this graph resolution requires a structure containing both interpreted and
+	 * not-yet-interpreted model values.
+	 * </p>
+	 *
+	 * @param <M> The model type of the value
+	 */
 	public interface InterpretableModelComponentNode<M> extends ModelComponentNode<M> {
 		@Override
 		InterpretedModelSet getModel();
 
+		/**
+		 * @return The interpreted model node, interpreted using the environment passed to
+		 *         {@link Built#createInterpreted(InterpretedExpressoEnv)}
+		 * @throws ExpressoInterpretationException If this value could not be interpreted
+		 */
 		InterpretedModelComponentNode<M, ?> interpreted() throws ExpressoInterpretationException;
 
 		@Override
-		default InterpretedModelComponentNode<M, ?> createInterpretation(InterpretedExpressoEnv env)
-			throws ExpressoInterpretationException {
+		default InterpretedModelComponentNode<M, ?> interpret(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 			return interpreted();
 		}
 	}
@@ -648,17 +594,13 @@ public interface ObservableModelSet extends Identifiable {
 		@Override
 		InterpretedModelSet getModel();
 
+		/** @return The interpreted value evaluated from this node */
 		InterpretedValueSynth<M, MV> getValue();
 
 		/**
-		 * Identical to {@link ObservableModelSet.ModelComponentNode#getThing()}, except that:<br />
-		 * <ul>
-		 * <li>If the component is a sub-model installed with
+		 * Identical to {@link ObservableModelSet.ModelComponentNode#getThing()}, except that if the component is a sub-model installed with
 		 * {@link ObservableModelSet.Builder#createSubModel(String, LocatedFilePosition)}, the value will also be an instance of
-		 * {@link InterpretedModelSet}</li>
-		 * <li>If the component is a runtime value installed with {@link ModelSetInstanceBuilder#with(RuntimeValuePlaceholder, Object)
-		 * installed}, the value will also be an instance of {@link ObservableModelSet.RuntimeValuePlaceholder.Interpreted}</li>
-		 * </ul>
+		 * {@link InterpretedModelSet}.
 		 */
 		@Override
 		Object getThing();
@@ -717,27 +659,60 @@ public interface ObservableModelSet extends Identifiable {
 	/** Singleton instance of {@link JavaNameChecker} */
 	public static final JavaNameChecker JAVA_NAME_CHECKER = new JavaNameChecker();
 
+	/**
+	 * An external value reference in an {@link ObservableModelSet}. These are installed using
+	 * {@link Builder#withExternal(String, ExtValueRef, LocatedFilePosition)}, and upon {@link InterpretableModelComponentNode#interpreted()
+	 * interpretation}, the reference is evaluated, typically by resolving the reference to a model value from the
+	 * {@link InterpretedExpressoEnv environment}'s {@link InterpretedExpressoEnv#getExtModels() external models}.
+	 *
+	 * @param <M> The model type of the external value reference
+	 */
 	public interface ExtValueRef<M> {
+		/**
+		 * @return The model type of the external value. Unlike {@link CompiledModelValue}s, {@link ExtValueRef}s must know their model type
+		 *         upon declaration
+		 */
 		ModelType<M> getModelType();
 
+		/**
+		 * @param env The interpreted environment in which to evaluate the external reference
+		 * @return The instance type of the external value in the environment
+		 * @throws ExpressoInterpretationException If the external reference could not be resolved
+		 */
 		ModelInstanceType<M, ?> getType(InterpretedExpressoEnv env) throws ExpressoInterpretationException;
 
+		/**
+		 * @param env The interpreted environment in which to evaluate the external reference
+		 * @return The interpretation of the external value reference in the environment
+		 * @throws ExpressoInterpretationException If the external reference could not be resolved
+		 */
 		InterpretedValueSynth<M, ?> createSynthesizer(InterpretedExpressoEnv env) throws ExpressoInterpretationException;
 
+		/** @return Whether this value reference has a default value that shall be used if the external value is missing */
 		boolean hasDefault();
 
 		/** @return This reference's location in its source file */
 		LocatedFilePosition getFilePosition();
 
+		/**
+		 * Abstract {@link ExtValueRef} implementation
+		 *
+		 * @param <M> The model type of the external value reference
+		 */
 		public static abstract class Abstract<M> implements ExtValueRef<M> {
 			private final ModelType<M> theModelType;
 			private final CompiledModelValue<M> theDefault;
 
+			/**
+			 * @param modelType The model type of the reference
+			 * @param def The default value to use if the reference is not satisfied (may be null)
+			 */
 			protected Abstract(ModelType<M> modelType, CompiledModelValue<M> def) {
 				theModelType = modelType;
 				theDefault = def;
 			}
 
+			/** @return The model path to look for the external value in */
 			protected abstract String getModelPath();
 
 			@Override
@@ -745,6 +720,7 @@ public interface ObservableModelSet extends Identifiable {
 				return theModelType;
 			}
 
+			/** @return The default value to use if the reference is not satisfied */
 			protected CompiledModelValue<M> getDefault() {
 				return theDefault;
 			}
@@ -781,9 +757,8 @@ public interface ObservableModelSet extends Identifiable {
 	}
 
 	/**
-	 * A tag on a model set. This tag is not used by the
-	 * {@link ObservableModelSet.InterpretedModelSet#createInstance(ObservableModelSet.ExternalModelSet, Observable) instance}, but just
-	 * serves as a marker on the model set itself.
+	 * A tag on a model set. This tag is not used by the {@link ObservableModelSet.InterpretedModelSet#createInstance(Observable) instance},
+	 * but just serves as a marker on the model set itself.
 	 *
 	 * @param <T> The type of values for the tag
 	 */
@@ -879,7 +854,7 @@ public interface ObservableModelSet extends Identifiable {
 	Set<String> getComponentNames();
 
 	/**
-	 * @param path The name of the component to get
+	 * @param name The name of the component to get
 	 * @return The node representing the target component, or null if no such component exists in this model
 	 */
 	ModelComponentNode<?> getLocalComponent(String name);
@@ -1213,6 +1188,13 @@ public interface ObservableModelSet extends Identifiable {
 			return (Built) ObservableModelSet.super.getSubModel(path);
 		}
 
+		/**
+		 * Creates the interpretation of this model, but does not perform the actual
+		 * {@link InterpretedModelSet#interpret(InterpretedExpressoEnv) interpretation} yet
+		 *
+		 * @param env The environment to do the interpretation in
+		 * @return The interpretation
+		 */
 		InterpretedModelSet createInterpreted(InterpretedExpressoEnv env);
 	}
 
@@ -1273,8 +1255,10 @@ public interface ObservableModelSet extends Identifiable {
 		 * @param <MV> The type of the value to get
 		 * @param path The dot-separated path of the value to get
 		 * @param type The type of the value to get
+		 * @param env The environment to assist with the conversion
 		 * @return The container of the value in this model at the given path, converted to the given type if needed
 		 * @throws ModelException If no such value exists accessible at the given path
+		 * @throws ExpressoInterpretationException If the value could not be interpreted
 		 * @throws TypeConversionException If the value at the path could not be converted to the target type
 		 */
 		default <M, MV extends M> InterpretedValueSynth<M, MV> getValue(String path, ModelInstanceType<M, MV> type,
@@ -1291,9 +1275,9 @@ public interface ObservableModelSet extends Identifiable {
 		}
 
 		/**
-		 * Interprets all of this model set's components
+		 * Interprets all of this model set's components which have not yet been interpreted
 		 *
-		 * @return An {@link ObservableModelSet.InterpretedModelSet} with all the components of this model set interpreted
+		 * @param env The environment in which to do the interpretation
 		 * @throws ExpressoInterpretationException If any of this model set's components could not be
 		 *         {@link CompiledModelValue#interpret(InterpretedExpressoEnv) interpreted}
 		 */
@@ -1402,6 +1386,7 @@ public interface ObservableModelSet extends Identifiable {
 		 * @param <MV> The type of the value to get
 		 * @param path The dot-separated path of the value to get
 		 * @param type The type of the value to get
+		 * @param env The environment that may be needed to interpret any default values, for example
 		 * @return The value in this model at the given path, converted to the given type if needed
 		 * @throws ModelException If no such value exists accessible at the given path
 		 * @throws TypeConversionException If the value at the path could not be converted to the target type (i.e. there's no known way to
@@ -1644,7 +1629,7 @@ public interface ObservableModelSet extends Identifiable {
 		 * @param parent The parent model for the new model, or null if the new model is to be the root
 		 * @param tagValues Model tag values for this model
 		 * @param inheritance The new model's {@link ObservableModelSet#getInheritance() inheritance}
-		 * @param components The {@link ObservableModelSet#getComponents() components} for the new model
+		 * @param components The {@link ObservableModelSet#getComponentNames() components} for the new model
 		 * @param identifiedComponents All {@link IdentifiableCompiledValue identified} values in the model
 		 * @param nameChecker The {@link ObservableModelSet#getNameChecker() name checker} for the new model
 		 */
@@ -1676,10 +1661,12 @@ public interface ObservableModelSet extends Identifiable {
 			return theParent;
 		}
 
+		/** @return This model's (modifiable) components */
 		protected Map<String, ? extends ModelComponentNode<?>> getComponents() {
 			return theComponents;
 		}
 
+		/** @return This model's (modifiable) identified components */
 		protected Map<Object, ? extends ModelComponentNode<?>> getIdentifiedComponents() {
 			return theIdentifiedComponents;
 		}
@@ -1838,8 +1825,7 @@ public interface ObservableModelSet extends Identifiable {
 			}
 
 			@Override
-			public InterpretedModelComponentNode<M, ?> createInterpretation(InterpretedExpressoEnv env)
-				throws ExpressoInterpretationException {
+			public InterpretedModelComponentNode<M, ?> interpret(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 				if (theModel instanceof DefaultBuilt)
 					return new InterpretedModelNodeImpl<>(theNodeId, null, null, null, ((DefaultBuilt) theModel).createInterpreted(env),
 						theSourceLocation);
@@ -2240,6 +2226,12 @@ public interface ObservableModelSet extends Identifiable {
 				return createInterpreted(null, null, env);
 			}
 
+			/**
+			 * @param root The root interpreted model
+			 * @param parent The parent for the interpreted model
+			 * @param env The environment in which to do the interpretation
+			 * @return The interpreted model implementation, not yet interpreted
+			 */
 			protected DefaultInterpreted createInterpreted(DefaultInterpreted root, DefaultInterpreted parent, InterpretedExpressoEnv env) {
 				if (theInterpreted != null)
 					return theInterpreted;
@@ -2259,11 +2251,12 @@ public interface ObservableModelSet extends Identifiable {
 			}
 
 			/**
-			 * Creates a {@link DefaultModelSet} from {@link #interpret()}
+			 * Creates an {@link DefaultInterpreted} for {@link #createInterpreted(InterpretedExpressoEnv)}
 			 *
 			 * @param root The root model, or null if the new model is to be the root
 			 * @param parent The parent model, or null if the new model is to be the root
 			 * @param inheritance The inheritance for the new model
+			 * @param env The environment to interpret the values in
 			 * @return The new model
 			 */
 			protected DefaultInterpreted createModel(DefaultInterpreted root, DefaultInterpreted parent,
@@ -2291,6 +2284,8 @@ public interface ObservableModelSet extends Identifiable {
 			 * @param tagValues Model tag values for this model
 			 * @param inheritance The new model's {@link ObservableModelSet#getInheritance() inheritance}
 			 * @param nameChecker The {@link ObservableModelSet#getNameChecker() name checker} for the new model
+			 * @param source The model this is the interpretation of
+			 * @param env The environment to interpret in
 			 */
 			public DefaultInterpreted(ModelComponentId id, DefaultInterpreted root, DefaultInterpreted parent,
 				Map<ModelTag<?>, Object> tagValues, Map<ModelComponentId, InterpretedModelSet> inheritance, NameChecker nameChecker,
@@ -2397,7 +2392,7 @@ public interface ObservableModelSet extends Identifiable {
 				for (String name : theSource.getComponentNames()) {
 					InterpretedModelComponentNode<?, ?> localNode = getComponents().get(name);
 					if (localNode == null)
-						interpret(theSource.getLocalComponent(name));
+						interpretComponent(theSource.getLocalComponent(name));
 					else if (localNode.getModel() instanceof DefaultInterpreted)
 						((DefaultInterpreted) localNode.getModel()).interpret(theExpressoEnv);
 				}
@@ -2407,7 +2402,8 @@ public interface ObservableModelSet extends Identifiable {
 				theCycleChecker = null;
 			}
 
-			<M> InterpretedModelComponentNode<M, ?> interpret(ModelComponentNode<M> sourceNode) throws ExpressoInterpretationException {
+			<M> InterpretedModelComponentNode<M, ?> interpretComponent(ModelComponentNode<M> sourceNode)
+				throws ExpressoInterpretationException {
 				if (!theCycleChecker.add(sourceNode)) {
 					String depPath;
 					if (theCycleChecker.size() == 1)
@@ -2417,7 +2413,7 @@ public interface ObservableModelSet extends Identifiable {
 					throw new IllegalStateException("Dependency cycle detected: " + depPath);
 				}
 				try {
-					InterpretedModelComponentNode<M, ?> interpreted = sourceNode.createInterpretation(theExpressoEnv);
+					InterpretedModelComponentNode<M, ?> interpreted = sourceNode.interpret(theExpressoEnv);
 					getComponents().put(sourceNode.getIdentity().getName(), interpreted);
 					if (sourceNode.getValueIdentity() != null)
 						getIdentifiedComponents().put(sourceNode.getValueIdentity(), interpreted);
@@ -2469,7 +2465,7 @@ public interface ObservableModelSet extends Identifiable {
 					InterpretedModelComponentNode<?, ?> localNode = getComponents().get(theSourceNode.getIdentity().getName());
 					if (localNode != null)
 						return (InterpretedModelComponentNode<M, ?>) localNode;
-					return interpret(theSourceNode);
+					return interpretComponent(theSourceNode);
 				}
 			}
 		}

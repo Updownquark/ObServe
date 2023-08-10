@@ -60,22 +60,72 @@ public interface ObservableExpression {
 		}
 	};
 
+	/**
+	 * The {@link InterpretedValueSynth} extension returned by
+	 * {@link ObservableExpression#evaluate(ModelInstanceType, InterpretedExpressoEnv, int)}
+	 *
+	 * @param <M> The model type of the interpreted expression
+	 * @param <MV> The instance type of the interpreted expression
+	 */
 	public interface EvaluatedExpression<M, MV extends M> extends InterpretedValueSynth<M, MV> {
+		/** @return A descriptor object which provides some information about the interpreted expression */
 		Object getDescriptor();
 
 		@Override
 		List<? extends EvaluatedExpression<?, ?>> getComponents();
 
+		/**
+		 * @return The interpreted divisions advertised by the expression
+		 * @see ObservableExpression#getDivisionCount()
+		 * @see ObservableExpression#getDivisionOffset(int)
+		 * @see ObservableExpression#getDivisionLength(int)
+		 */
 		default List<? extends EvaluatedExpression<?, ?>> getDivisions() {
 			return Collections.emptyList();
 		}
 	}
 
+	/**
+	 * Utility method to create an {@link EvaluatedExpression} with no {@link EvaluatedExpression#getDivisions()}
+	 *
+	 * @param <M> The model type of the value
+	 * @param <MV> The instance type of the value
+	 * @param value The type of the value
+	 * @param descriptor The expression descriptor
+	 * @param children The children of the expression
+	 * @return The evaluated expression
+	 */
+	static <M, MV extends M> EvaluatedExpression<M, MV> evEx(InterpretedValueSynth<M, MV> value, Object descriptor,
+		EvaluatedExpression<?, ?>... children) {
+		return evEx(value, descriptor, QommonsUtils.unmodifiableCopy(children));
+	}
+
+	/**
+	 * Utility method to create an {@link EvaluatedExpression} with no {@link EvaluatedExpression#getDivisions()}
+	 *
+	 * @param <M> The model type of the value
+	 * @param <MV> The instance type of the value
+	 * @param value The type of the value
+	 * @param descriptor The expression descriptor
+	 * @param children The children of the expression
+	 * @return The evaluated expression
+	 */
 	static <M, MV extends M> EvaluatedExpression<M, MV> evEx(InterpretedValueSynth<M, MV> value, Object descriptor,
 		List<? extends EvaluatedExpression<?, ?>> children) {
 		return evEx2(value, descriptor, children, Collections.emptyList());
 	}
 
+	/**
+	 * Utility method to create an {@link EvaluatedExpression} with possible {@link EvaluatedExpression#getDivisions()}
+	 *
+	 * @param <M> The model type of the value
+	 * @param <MV> The instance type of the value
+	 * @param value The type of the value
+	 * @param descriptor The expression descriptor
+	 * @param children The children of the expression
+	 * @param divisions The divisions of the expression
+	 * @return The evaluated expression
+	 */
 	static <M, MV extends M> EvaluatedExpression<M, MV> evEx2(InterpretedValueSynth<M, MV> value, Object descriptor,
 		List<? extends EvaluatedExpression<?, ?>> children, List<? extends EvaluatedExpression<?, ?>> divisions) {
 		return new EvaluatedExpression<M, MV>() {
@@ -117,11 +167,14 @@ public interface ObservableExpression {
 		};
 	}
 
-	static <M, MV extends M> EvaluatedExpression<M, MV> evEx(InterpretedValueSynth<M, MV> value, Object descriptor,
-		EvaluatedExpression<?, ?>... children) {
-		return evEx(value, descriptor, QommonsUtils.unmodifiableCopy(children));
-	}
-
+	/**
+	 * Wraps another expression, for expressions that perform no operation on their only component
+	 *
+	 * @param <M> The model type of the value
+	 * @param <MV> The instance type of the value
+	 * @param wrapped The value to wrap
+	 * @return The wrapped expression value
+	 */
 	static <M, MV extends M> EvaluatedExpression<M, MV> wrap(EvaluatedExpression<M, MV> wrapped) {
 		return new EvaluatedExpression<M, MV>() {
 			@Override
@@ -168,6 +221,7 @@ public interface ObservableExpression {
 	/** @return The total number of characters in the textual representation of this expression */
 	int getExpressionLength();
 
+	/** @return The number of divisions in this expression's text */
 	default int getDivisionCount() {
 		return 0;
 	}

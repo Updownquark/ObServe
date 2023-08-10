@@ -36,6 +36,7 @@ public abstract class ModelType<M> implements Named {
 		/**
 		 * @param source The type to convert from
 		 * @param target The type to convert to
+		 * @param env The environment which may contain needed resources for the conversion
 		 * @return A converter capable of converting from the given source type to the given target type, or null if this converter cannot
 		 *         create an instance converter for the given source/target types be made
 		 */
@@ -112,8 +113,7 @@ public abstract class ModelType<M> implements Named {
 			 * @param <T> The value-type of the target to convert to
 			 * @param source The source value to convert
 			 * @param targetType The target value type
-			 * @param cast The function to cast source values to target values
-			 * @param reverse The function to cast target values back to source values (if possible)
+			 * @param converter The function to cast source values to target values and back
 			 * @return The source model value, converted to this type
 			 */
 			<S, T> M2 convert(M1 source, TypeToken<T> targetType, TypeConverter<S, ?, ?, ? extends T> converter);
@@ -340,6 +340,7 @@ public abstract class ModelType<M> implements Named {
 		/**
 		 * @param <M2> The type to convert to
 		 * @param target The type to convert to
+		 * @param env The environment which may contain information needed for the conversion
 		 * @return A converter capable of converting instances of this type to instances of the given target type
 		 */
 		public <M2> ModelInstanceConverter<M, M2> convert(ModelInstanceType<M2, ? extends M2> target, InterpretedExpressoEnv env) {
@@ -445,6 +446,7 @@ public abstract class ModelType<M> implements Named {
 		 * @param <MV2> The type to convert to
 		 * @param source The source value of this type
 		 * @param targetType The type to convert to
+		 * @param env The environment which may contain information needed for the conversion
 		 * @return A value equivalent to this value, but with the given type
 		 * @throws TypeConversionException If no converter is available for the conversion from this type to the given type
 		 */

@@ -105,6 +105,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 
 	@Override
 	public void init(QonfigToolkit toolkit) {
+		// Not needed
 	}
 
 	@Override

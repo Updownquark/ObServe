@@ -281,8 +281,8 @@ public class NameExpression implements ObservableExpression, Named {
 					"Could not access field " + getPath(nameIndex), e);
 			}
 		}
-		EvaluatedExpression<SettableValue<?>, ? extends SettableValue<?>> fieldValue = getFieldValue(field, fieldType, context, null,
-			nameIndex, expressionOffset, reporting, env);
+		EvaluatedExpression<SettableValue<?>, ? extends SettableValue<?>> fieldValue = getFieldValue(field, fieldType, context, nameIndex,
+			expressionOffset, reporting, env);
 		divisions[nameIndex] = fieldValue;
 		EvaluatedExpression<M, MV> value;
 		if (nameIndex == theNames.size() - 1) {
@@ -334,22 +334,13 @@ public class NameExpression implements ObservableExpression, Named {
 	}
 
 	private <F, M> EvaluatedExpression<SettableValue<?>, SettableValue<M>> getFieldValue(Field field, TypeToken<F> fieldType,
-		InterpretedValueSynth<SettableValue<?>, ? extends SettableValue<?>> context, TypeToken<M> targetType, int nameIndex,
-			int expressionOffset, ErrorReporting reporting, InterpretedExpressoEnv env) throws ExpressoEvaluationException {
+		InterpretedValueSynth<SettableValue<?>, ? extends SettableValue<?>> context, int nameIndex, int expressionOffset,
+			ErrorReporting reporting, InterpretedExpressoEnv env) throws ExpressoEvaluationException {
 		ModelInstanceType<SettableValue<?>, SettableValue<F>> fieldModelType = ModelTypes.Value.forType(fieldType);
 		InterpretedValueSynth<SettableValue<?>, SettableValue<F>> fieldValue = InterpretedValueSynth.of(fieldModelType,
 			msi -> new FieldValue<>(context == null ? null : context.get(msi), field, fieldType, reporting));
-		if (targetType != null) {
-			ModelInstanceType<SettableValue<?>, SettableValue<M>> targetModelType = ModelTypes.Value.forType(targetType);
-			try {
-				return ObservableExpression.evEx(fieldValue.as(targetModelType, env), null);
-			} catch (TypeConversionException e) {
-				throw new ExpressoEvaluationException(expressionOffset, getDivisionOffset(nameIndex) + theNames.get(nameIndex).length(),
-					e.getMessage(), e);
-			}
-		} else
-			return ObservableExpression
-				.evEx((InterpretedValueSynth<SettableValue<?>, SettableValue<M>>) (InterpretedValueSynth<?, ?>) fieldValue, null);
+		return ObservableExpression
+			.evEx((InterpretedValueSynth<SettableValue<?>, SettableValue<M>>) (InterpretedValueSynth<?, ?>) fieldValue, null);
 	}
 
 	static class FieldValue<M, F> extends Identifiable.AbstractIdentifiable implements SettableValue<F> {

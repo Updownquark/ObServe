@@ -61,26 +61,24 @@ public class ClassView implements TypeParser {
 	 * @return The statically-imported field with the given name in this class view, or null if there is no such statically-imported field
 	 */
 	public Field getImportedStaticField(String fieldName) {
-		ValueHolder<Field> cached = theFieldCache.get(fieldName);
-		if (cached != null)
-			return cached.get();
-		Field found = null;
-		for (String wildcard : theWildcardImports) {
-			Class<?> type = getType(wildcard);
-			if (type == null)
-				continue;
-			for (Field field : type.getDeclaredFields()) {
-				int mod = field.getModifiers();
-				if (Modifier.isPublic(mod) && Modifier.isStatic(mod) && field.getName().equals(fieldName)) {
-					found = field;
-					break;
+		return theFieldCache.computeIfAbsent(fieldName, __ -> {
+			Field found = null;
+			for (String wildcard : theWildcardImports) {
+				Class<?> type = getType(wildcard);
+				if (type == null)
+					continue;
+				for (Field field : type.getDeclaredFields()) {
+					int mod = field.getModifiers();
+					if (Modifier.isPublic(mod) && Modifier.isStatic(mod) && field.getName().equals(fieldName)) {
+						found = field;
+						break;
+					}
 				}
+				if (found != null)
+					break;
 			}
-			if (found != null)
-				break;
-		}
-		theFieldCache.put(fieldName, new ValueHolder<>(found));
-		return found;
+			return new ValueHolder<>(found);
+		}).get();
 	}
 
 	/**
@@ -88,21 +86,20 @@ public class ClassView implements TypeParser {
 	 * @return All statically-imported methods with the given name in this class view
 	 */
 	public List<Method> getImportedStaticMethods(String methodName) {
-		List<Method> methods = theMethodCache.get(methodName);
-		if (methods != null)
-			return methods;
-		methods = new ArrayList<>();
-		for (String wildcard : theWildcardImports) {
-			Class<?> type = getType(wildcard);
-			if (type == null)
-				continue;
-			for (Method method : type.getDeclaredMethods()) {
-				int mod = method.getModifiers();
-				if (Modifier.isPublic(mod) && Modifier.isStatic(mod) && method.getName().equals(methodName))
-					methods.add(method);
+		List<Method> methods = theMethodCache.computeIfAbsent(methodName, __ -> {
+			List<Method> m = new ArrayList<>();
+			for (String wildcard : theWildcardImports) {
+				Class<?> type = getType(wildcard);
+				if (type == null)
+					continue;
+				for (Method method : type.getDeclaredMethods()) {
+					int mod = method.getModifiers();
+					if (Modifier.isPublic(mod) && Modifier.isStatic(mod) && method.getName().equals(methodName))
+						m.add(method);
+				}
 			}
-		}
-		theMethodCache.put(methodName, Collections.unmodifiableList(methods));
+			return m;
+		});
 		return Collections.unmodifiableList(methods);
 	}
 

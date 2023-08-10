@@ -8,7 +8,6 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.Set;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import org.observe.expresso.ObservableModelSet.ExternalModelSet;
@@ -25,7 +24,14 @@ import org.qommons.io.ErrorReporting;
 
 import com.google.common.reflect.TypeToken;
 
+/**
+ * An environment to support some operations on {@link ObservableModelSet.CompiledModelValue compiled model values}.
+ */
 public class CompiledExpressoEnv {
+	/**
+	 * A compiled environment with standard java operators (and some {@link #withDefaultNonStructuredParsing() default}
+	 * {@link NonStructuredParser}s
+	 */
 	public static final CompiledExpressoEnv STANDARD_JAVA = new CompiledExpressoEnv(//
 		ObservableModelSet.build("StandardJava", ObservableModelSet.JAVA_NAME_CHECKER).build(), //
 		UnaryOperatorSet.STANDARD_JAVA, BinaryOperatorSet.STANDARD_JAVA).withDefaultNonStructuredParsing();
@@ -39,12 +45,17 @@ public class CompiledExpressoEnv {
 	 * @param models The model set containing all values and sub-models available to expressions
 	 * @param unaryOperators The set of unary operators available for expressions
 	 * @param binaryOperators The set of binary operators available for expressions
-	 * @param reporting The error reporting for this environment
 	 */
 	public CompiledExpressoEnv(ObservableModelSet models, UnaryOperatorSet unaryOperators, BinaryOperatorSet binaryOperators) {
 		this(models, null, unaryOperators, binaryOperators);
 	}
 
+	/**
+	 * @param models The models for the environment
+	 * @param nonStructuredParsers The non-structured parsers for the environment
+	 * @param unaryOperators The unary operators for the environment
+	 * @param binaryOperators The binary operators for the environment
+	 */
 	protected CompiledExpressoEnv(ObservableModelSet models, ClassMap<Set<NonStructuredParser>> nonStructuredParsers,
 		UnaryOperatorSet unaryOperators, BinaryOperatorSet binaryOperators) {
 		theModels = models;
@@ -55,6 +66,13 @@ public class CompiledExpressoEnv {
 			theNonStructuredParsers.putAll(nonStructuredParsers);
 	}
 
+	/**
+	 * @param models The models for the environment
+	 * @param nonStructuredParsers The non-structured parsers for the environment
+	 * @param unaryOperators The unary operators for the environment
+	 * @param binaryOperators The binary operators for the environment
+	 * @return A copy of this environment with the given information
+	 */
 	protected CompiledExpressoEnv copy(ObservableModelSet models, ClassMap<Set<NonStructuredParser>> nonStructuredParsers,
 		UnaryOperatorSet unaryOperators, BinaryOperatorSet binaryOperators) {
 		return new CompiledExpressoEnv(models, nonStructuredParsers, unaryOperators, binaryOperators);
@@ -70,6 +88,7 @@ public class CompiledExpressoEnv {
 		return buildModel(theModels);
 	}
 
+	/** @return All this environment's {@link NonStructuredParser}s */
 	protected ClassMap<Set<NonStructuredParser>> getNonStructuredParsers() {
 		return theNonStructuredParsers;
 	}
@@ -95,20 +114,27 @@ public class CompiledExpressoEnv {
 			throw new IllegalStateException("Models is a " + model.getClass().getName() + ", not either built or a builder");
 	}
 
-	public InterpretedExpressoEnv interpret(ExternalModelSet extModels, ClassView classView, ErrorReporting reporting,
-		Function<InterpretedExpressoEnv, InterpretedExpressoEnv> configure) {
+	/**
+	 * @param extModels The external models for the interpreted environment
+	 * @param classView The class view for the interpreted environment
+	 * @param reporting The error reporting for the interpreted environment
+	 * @return The interpretation of this compiled environment
+	 */
+	public InterpretedExpressoEnv interpret(ExternalModelSet extModels, ClassView classView, ErrorReporting reporting) {
 		if (extModels == null)
 			extModels = ObservableModelSet.buildExternal(ObservableModelSet.JAVA_NAME_CHECKER).build();
 
 		InterpretedExpressoEnv interpreted = new InterpretedExpressoEnv(null, extModels, classView, getNonStructuredParsers(),
 			getUnaryOperators(), getBinaryOperators(), reporting, new HashMap<>(), false);
-		if (configure != null)
-			interpreted = configure.apply(interpreted);
 
 		InterpretedModelSet interpretedModels = getBuiltModels().createInterpreted(interpreted);
 		return interpreted.with(interpretedModels);
 	}
 
+	/**
+	 * @param models The model set
+	 * @return A copy of this environment with the given model set
+	 */
 	public CompiledExpressoEnv with(ObservableModelSet models) {
 		if (models == theModels)
 			return this;
@@ -175,6 +201,10 @@ public class CompiledExpressoEnv {
 		return theNonStructuredParsers.getAll(type, null).stream().flatMap(Set::stream).collect(Collectors.toSet());
 	}
 
+	/**
+	 * @param env The environment to copy all the {@link NonStructuredParser}s from
+	 * @return A copy of this environment with all the {@link NonStructuredParser}s from this environment and the other
+	 */
 	public CompiledExpressoEnv withAllNonStructuredParsers(CompiledExpressoEnv env) {
 		ClassMap<Set<NonStructuredParser>> nspCopy = null;
 		for (BiTuple<Class<?>, Set<NonStructuredParser>> entry : env.theNonStructuredParsers.getAllEntries()) {
@@ -216,6 +246,7 @@ public class CompiledExpressoEnv {
 		return copy(null, theNonStructuredParsers, theUnaryOperators, theBinaryOperators);
 	}
 
+	/** @return A copy of this environment */
 	public CompiledExpressoEnv copy() {
 		return copy(theModels, theNonStructuredParsers.copy(), theUnaryOperators, theBinaryOperators);
 	}

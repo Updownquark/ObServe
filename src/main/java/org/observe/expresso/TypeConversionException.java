@@ -3,8 +3,8 @@ package org.observe.expresso;
 import org.observe.expresso.ModelType.ModelInstanceType;
 
 /**
- * Thrown from {@link ObservableModelSet.ModelValueSynth#as(ModelInstanceType)} if the value could not be converted to a value of the
- * specified type
+ * Thrown from {@link ObservableModelSet.InterpretedValueSynth#as(ModelInstanceType, InterpretedExpressoEnv)} if the value could not be
+ * converted to a value of the specified type
  */
 public class TypeConversionException extends Exception {
 	private final ModelInstanceType<?, ?> theSourceType;

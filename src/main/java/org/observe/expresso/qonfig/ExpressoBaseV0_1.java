@@ -1,8 +1,6 @@
 package org.observe.expresso.qonfig;
 
-import java.util.ArrayList;
 import java.util.Collections;
-import java.util.List;
 import java.util.Set;
 
 import org.observe.expresso.ModelType.ModelInstanceType;
@@ -41,17 +39,6 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 	 */
 	public static final String KEY_TYPE_KEY = "key-type";
 
-	// /** Represents an application so that various models in this class can provide intelligent interaction with the user */
-	// public interface AppEnvironment {
-	// /** @return A function to provide the title of the application */
-	// ModelValueSynth<SettableValue<?>, ? extends ObservableValue<String>> getTitle();
-	//
-	// /** @return A function to provide the icon representing the application */
-	// ModelValueSynth<SettableValue<?>, ? extends ObservableValue<Image>> getIcon();
-	// }
-
-	private QonfigToolkit theExpressoToolkit;
-
 	@Override
 	public Set<Class<? extends SpecialSession<?>>> getExpectedAPIs() {
 		return Collections.singleton(ExpressoQIS.class);
@@ -69,32 +56,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 
 	@Override
 	public void init(QonfigToolkit toolkit) {
-		theExpressoToolkit = toolkit;
-	}
-
-	static class ExtModelValueElHolder {
-		private final List<ExtModelValueElement.Def<?>> values;
-		private final List<ExpressoQIS> sessions;
-
-		private ExtModelValueElHolder() {
-			values = new ArrayList<>();
-			sessions = new ArrayList<>();
-		}
-
-		void update(ExElement.Def<?> parent) throws QonfigInterpretationException {
-			for (int i = 0; i < values.size(); i++) {
-				values.get(i).setParentElement(parent);
-				values.get(i).update(sessions.get(i));
-			}
-		}
-
-		static ExtModelValueElHolder add(ExtModelValueElHolder holder, ExtModelValueElement.Def<?> value, ExpressoQIS session) {
-			if (holder == null)
-				holder = new ExtModelValueElHolder();
-			holder.values.add(value);
-			holder.sessions.add(session);
-			return holder;
-		}
+		// Not needed
 	}
 
 	@Override
@@ -116,10 +78,6 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		interpreter.createWith("hook", ModelValueElement.CompiledSynth.class, ExElement.creator(ExpressoQonfigValues.Hook::new));
 		ExpressoTransformations.configureTransformation(interpreter);
 		return interpreter;
-	}
-
-	ExpressoQIS wrap(CoreSession session) throws QonfigInterpretationException {
-		return session.as(ExpressoQIS.class);
 	}
 
 	void configureBaseModels(QonfigInterpreterCore.Builder interpreter) {
