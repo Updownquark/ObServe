@@ -38,6 +38,7 @@ import org.observe.expresso.qonfig.ModelValueElement;
 import org.observe.quick.QuickApp;
 import org.observe.quick.QuickApplication;
 import org.observe.quick.QuickDocument;
+import org.observe.quick.QuickWindow;
 import org.observe.util.TypeTokens;
 import org.qommons.ArrayUtils;
 import org.qommons.Causable;
@@ -169,6 +170,7 @@ public class Qwysiwyg {
 	public static final Color EXT_LITERAL_COLOR = Colors.dodgerBlue;
 	public static final Color TYPE_COLOR = Colors.darkGoldenrod;
 
+	public final SettableValue<String> title;
 	public final SettableValue<DocumentComponent> documentRoot;
 	public final ObservableValue<String> tooltip;
 	public final SettableValue<DocumentComponent> hovered;
@@ -196,6 +198,7 @@ public class Qwysiwyg {
 	private DocumentComponent theRoot;
 
 	public Qwysiwyg() {
+		title = SettableValue.build(String.class).withValue("QWYSIWYG").build();
 		theInternalDocumentRoot = SettableValue.build(Qwysiwyg.DocumentComponent.class).build();
 		theInternalTooltip = SettableValue
 			.build(TypeTokens.get().keyFor(ObservableValue.class).<ObservableValue<String>> parameterized(String.class)).build();
@@ -239,6 +242,7 @@ public class Qwysiwyg {
 	}
 
 	public void init(String documentLocation, List<String> unmatched) {
+		title.set("QWYSIWYG: " + documentLocation, null);
 		boolean sameDoc = Objects.equals(documentLocation, theAppLocation);
 		theAppLocation = documentLocation;
 		if (!sameDoc) {
@@ -344,6 +348,13 @@ public class Qwysiwyg {
 				if (theDocument == null)
 					theDocument = theDocumentInterpreted.create();
 				theModels = theDocument.update(theDocumentInterpreted, theDocumentReplacement);
+				QuickWindow window = theDocument.getAddOn(QuickWindow.class);
+				if (window != null && window.getTitle() != null) {
+					window.getTitle().changes().takeUntil(theDocumentReplacement).act(evt -> {
+						title.set("QWYSIWYG: " + evt.getNewValue(), evt);
+					});
+				} else
+					title.set("QWYSIWYG: " + documentLocation, null);
 			} catch (TextParseException e) {
 				logToConsole(e, quickApp.getAppFile(), e.getPosition());
 				return;

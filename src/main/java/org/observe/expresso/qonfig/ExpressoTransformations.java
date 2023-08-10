@@ -1,7 +1,5 @@
 package org.observe.expresso.qonfig;
 
-import static org.observe.expresso.qonfig.ExpressoBaseV0_1.creator;
-
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -563,7 +561,7 @@ public class ExpressoTransformations {
 	}
 
 	public static void configureTransformation(QonfigInterpreterCore.Builder interpreter) {
-		interpreter.createWith("transform", ModelValueElement.CompiledSynth.class, creator(ExpressoTransformedElement::new));
+		interpreter.createWith("transform", ModelValueElement.CompiledSynth.class, ExElement.creator(ExpressoTransformedElement::new));
 
 		ObservableTransformations.configureTransformation(interpreter);
 

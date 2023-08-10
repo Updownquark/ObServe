@@ -2,8 +2,10 @@ package org.observe.expresso;
 
 import java.text.ParseException;
 
-import org.observe.ObservableValue;
+import org.observe.SettableValue;
+import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.util.TypeTokens;
+import org.qommons.LambdaUtils;
 import org.qommons.SelfDescribed;
 import org.qommons.ex.ExBiFunction;
 
@@ -27,7 +29,8 @@ public interface NonStructuredParser extends SelfDescribed {
 	 * @return The value of the expression
 	 * @throws ParseException If the expression could not be parsed
 	 */
-	<T> ObservableValue<? extends T> parse(TypeToken<T> type, String text) throws ParseException;
+	<T> InterpretedValueSynth<SettableValue<?>, ? extends SettableValue<? extends T>> parse(TypeToken<T> type, String text)
+		throws ParseException;
 
 	/**
 	 * A simple parser that produces constant values
@@ -38,23 +41,25 @@ public interface NonStructuredParser extends SelfDescribed {
 		private final TypeToken<T> theType;
 
 		/** @param type The type of values this parser may be able to parse */
-		public Simple(TypeToken<T> type) {
+		protected Simple(TypeToken<T> type) {
 			theType = type;
 		}
 
 		@Override
 		public boolean canParse(TypeToken<?> type, String text) {
-			return theType == null || TypeTokens.get().isAssignable(theType, type);
+			return theType == null || TypeTokens.get().isAssignable(type, theType);
 		}
 
 		@Override
-		public <T2> ObservableValue<? extends T2> parse(TypeToken<T2> type, String text) throws ParseException {
+		public <T2> InterpretedValueSynth<SettableValue<?>, ? extends SettableValue<? extends T2>> parse(TypeToken<T2> type, String text)
+			throws ParseException {
 			if (theType != null && !TypeTokens.get().isAssignable(theType, type))
 				throw new IllegalArgumentException("This literal parser can only parse " + theType + ", not " + type);
 			T2 value = (T2) parseValue((TypeToken<? extends T>) type, text);
 			if (value != null && !TypeTokens.get().isInstance(type, value))
 				throw new IllegalStateException("Parser " + this + " parsed a value of type " + value.getClass() + " for type " + type);
-			return ObservableValue.of(type, value);
+			return InterpretedValueSynth.of(ModelTypes.Value.forType(type),
+				LambdaUtils.printableExFn(msi -> SettableValue.of(type, value, "Literal"), text, null));
 		}
 
 		/**
@@ -63,7 +68,7 @@ public interface NonStructuredParser extends SelfDescribed {
 		 * @return The value of the expression
 		 * @throws ParseException If the expression could not be parsed
 		 */
-		abstract <T2 extends T> T2 parseValue(TypeToken<T2> type, String text) throws ParseException;
+		protected abstract <T2 extends T> T2 parseValue(TypeToken<T2> type, String text) throws ParseException;
 	}
 
 	/**
@@ -90,7 +95,7 @@ public interface NonStructuredParser extends SelfDescribed {
 		String description) {
 		return new Simple<T>(null) {
 			@Override
-			<T2 extends T> T2 parseValue(TypeToken<T2> type2, String text) throws ParseException {
+			protected <T2 extends T> T2 parseValue(TypeToken<T2> type2, String text) throws ParseException {
 				return (T2) parser.apply(type2, text);
 			}
 

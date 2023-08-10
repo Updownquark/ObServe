@@ -29,7 +29,7 @@ It builds on the Expresso-Base toolkit and allows specification of persisted con
 			 ObservableConfig.  Some of these allow specification of default values, but these are only used if the persistent data
 			 for the value has not been initialized. -->
 		<element-def name="config" extends="abst-model">
-			<attribute name="config-name" type="string" specify="optional" />
+			<attribute name="config-name" type="string" />
 			<attribute name="config-dir" type="expression" specify="optional" />
 			<child-def name="old-config-name" type="old-config-name" min="0" max="inf" />
 			<child-mod child="abst-model.value" requires="allow-config-model" inherits="config-model-value" />
@@ -40,28 +40,19 @@ It builds on the Expresso-Base toolkit and allows specification of persisted con
 		</element-def>
 
 		<!-- Elements to support formats -->		
-		<element-def name="archive-method">
-			<attribute name="type" type="archive-type" />
-		</element-def>
-		<element-def name="file-source" extends="model-value">
-			<attr-mod name="model-value.type" specify="forbidden" default="" />
-			<attribute name="type" type="file-source-type" default="native" />
-			<child-def name="archive" type="archive-method" min="0" max="inf" />
-		</element-def>
-
 		<element-def name="format" extends="model-value" abstract="true">
 			<child-def name="validate" type="validate" min="0" max="inf" />
 		</element-def>
 		<element-def name="validate" abstract="true" />
-		<element-def name="format-from-model" extends="format" inherits="from-model" />
+		<element-def name="format-from-model" extends="format" />
 		<element-def name="text-format" extends="format" />
 		<element-def name="file-format" extends="format">
 			<!-- Default is native -->
-			<child-def name="file-source" type="file-source" specify="optional" />
+			<child-def name="file-source" type="file-source" min="0" />
 			<attribute name="working-dir" type="expression" specify="optional" />
 			<attribute name="allow-empty" type="boolean" default="false" />
 		</element-def>
-		<element-def name="file-source" extends="model-value" abstract="true">
+		<element-def name="file-source" extends="model-value">
 			<attr-mod name="model-value.type" specify="forbidden" default="" />
 		</element-def>
 		<element-def name="file-source-from-model" extends="file-source" inherits="model-reference" />
@@ -90,7 +81,7 @@ It builds on the Expresso-Base toolkit and allows specification of persisted con
 		<element-def name="int-format" extends="format">
 			<attribute name="grouping-separator" type="string" specify="optional" />
 		</element-def>
-		<element-def name="long-format" inherits="int-format" />
+		<element-def name="long-format" extends="int-format" />
 		<element-def name="double-format" extends="format">
 			<attribute name="sig-digs" type="int" />
 			<attribute name="unit" type="string" specify="optional" />
@@ -130,7 +121,7 @@ It builds on the Expresso-Base toolkit and allows specification of persisted con
 		
 		<element-def name="config-format" extends="model-value" abstract="true">
 		</element-def>
-		<element-def name="config-format-from-model" extends="model-reference">
+		<element-def name="config-format-from-model" inherits="model-reference">
 			<attribute name="ref" type="expression" />
 		</element-def>
 		<element-def name="text-config-format" extends="config-format">

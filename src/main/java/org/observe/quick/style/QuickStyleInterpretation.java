@@ -1,11 +1,9 @@
 package org.observe.quick.style;
 
-import static org.observe.expresso.qonfig.ExpressoBaseV0_1.addOnCreator;
-import static org.observe.expresso.qonfig.ExpressoBaseV0_1.creator;
-
 import java.util.Set;
 
 import org.observe.expresso.qonfig.ExAddOn;
+import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.ExtModelValueElement;
 import org.qommons.QommonsUtils;
@@ -63,8 +61,8 @@ public class QuickStyleInterpretation implements QonfigInterpretation {
 		});
 		interpreter.createWith("with-style-sheet", ExAddOn.Def.class, session -> new ExWithStyleSheet((QonfigAddOn) session.getFocusType(),
 			session.as(ExpressoQIS.class).getElementRepresentation()));
-		interpreter.createWith("style", QuickStyleElement.Def.class, creator(QuickStyleElement.Def::new));
-		interpreter.createWith("style-sheet", QuickStyleSheet.class, creator(QuickStyleSheet::new));
+		interpreter.createWith("style", QuickStyleElement.Def.class, ExElement.creator(QuickStyleElement.Def::new));
+		interpreter.createWith("style-sheet", QuickStyleSheet.class, ExElement.creator(QuickStyleSheet::new));
 		interpreter.createWith("style-set", QuickStyleSet.class, session -> {
 			if (!(session.getElementRepresentation() instanceof QuickStyleSheet))
 				throw new QonfigInterpretationException("This interpretation is only valid as a child of a style-sheet",
@@ -72,9 +70,9 @@ public class QuickStyleInterpretation implements QonfigInterpretation {
 			return new QuickStyleSet((QuickStyleSheet) session.getElementRepresentation(), session.getFocusType());
 		});
 		interpreter.createWith("import-style-sheet", QuickStyleSheet.StyleSheetRef.class,
-			creator(QuickStyleSheet.class, QuickStyleSheet.StyleSheetRef::new));
+			ExElement.creator(QuickStyleSheet.class, QuickStyleSheet.StyleSheetRef::new));
 		interpreter.createWith("style-model-value", ExStyleModelValue.Def.class,
-			addOnCreator(ExtModelValueElement.Def.class, ExStyleModelValue.Def::new));
+			ExAddOn.creator(ExtModelValueElement.Def.class, ExStyleModelValue.Def::new));
 		return interpreter;
 	}
 }

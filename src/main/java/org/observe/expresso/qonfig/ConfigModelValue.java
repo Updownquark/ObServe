@@ -1,13 +1,30 @@
 package org.observe.expresso.qonfig;
 
+import java.util.ArrayList;
+import java.util.List;
+
+import org.observe.SettableValue;
 import org.observe.config.ObservableConfig;
+import org.observe.config.ObservableConfigFormat;
+import org.observe.config.ObservableConfigFormatSet;
+import org.observe.config.ObservableConfigPath;
 import org.observe.expresso.ExpressoInterpretationException;
+import org.observe.expresso.InterpretedExpressoEnv;
+import org.observe.expresso.ModelException;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelType;
-import org.observe.expresso.ObservableModelSet;
-import org.observe.expresso.ModelType.ModelInstanceType;
+import org.observe.expresso.ModelTypes;
+import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.TypeConversionException;
+import org.observe.expresso.VariableType;
+import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
+import org.observe.util.TypeTokens;
+import org.qommons.config.QonfigElementOrAddOn;
+import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigInterpreterCore.QonfigValueCreator;
+
+import com.google.common.reflect.TypeToken;
 
 /**
  * Provided to
@@ -18,24 +35,164 @@ import org.qommons.config.QonfigInterpreterCore.QonfigValueCreator;
  * @param <M> The model type of the result
  * @param <MV> The value type of the result
  */
-public interface ConfigModelValue<T, M, MV extends M> {
-	/**
-	 * Called to interpret any expressions needed for the value
-	 *
-	 * @throws ExpressoInterpretationException If an error occurs parsing the the value
-	 */
-	void init() throws ExpressoInterpretationException;
+public interface ConfigModelValue<T, M, MV extends M> extends ModelValueElement<M, MV> {
+	public static final String FORMAT_SET_KEY = "Expresso.Config.FormatSet";
+	public static final SingleTypeTraceability<ConfigModelValue<?, ?, ?>, Interpreted<?, ?, ?>, Def<?>> TRACEABILITY = ElementTypeTraceability
+		.getElementTraceability(ExpressoConfigV0_1.NAME, ExpressoConfigV0_1.VERSION, "config-model-value", Def.class, Interpreted.class,
+			ConfigModelValue.class);
 
-	/** @return The type of this value */
-	ModelInstanceType<M, MV> getType();
+	public interface Def<M> extends ModelValueElement.CompiledSynth<M, ConfigModelValue<?, M, ?>> {
+		VariableType getValueType();
 
-	/**
-	 * Creates the value
-	 *
-	 * @param config The config value builder to use to build the structure
-	 * @param msi The model set to use to build the structure
-	 * @return The created value
-	 * @throws ModelInstantiationException If the value could not be instantiated
-	 */
-	MV create(ObservableConfig.ObservableConfigValueBuilder<T> config, ModelSetInstance msi) throws ModelInstantiationException;
+		@QonfigAttributeGetter("config-path")
+		ObservableConfigPath getConfigPath();
+
+		@QonfigChildGetter("format")
+		CompiledSynth<SettableValue<?>, ?> getFormat();
+
+		@Override
+		Interpreted<?, M, ?> interpret();
+
+		public abstract class Abstract<M> extends ModelValueElement.Def.Abstract<M, ConfigModelValue<?, M, ?>> implements Def<M> {
+			private VariableType theValueType;
+			private ObservableConfigPath theConfigPath;
+			private ModelValueElement.CompiledSynth<SettableValue<?>, ?> theFormat;
+
+			protected Abstract(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType, ModelType<M> modelType) {
+				super(parent, qonfigType, modelType);
+			}
+
+			@Override
+			public VariableType getValueType() {
+				return theValueType;
+			}
+
+			@Override
+			public ObservableConfigPath getConfigPath() {
+				return theConfigPath;
+			}
+
+			@Override
+			public CompiledSynth<SettableValue<?>, ?> getFormat() {
+				return theFormat;
+			}
+
+			@Override
+			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
+				withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
+				super.doUpdate(session);
+				theValueType = getAddOn(ExTyped.Def.class).getValueType();
+				String configPath = session.getAttributeText("config-path");
+				if (configPath != null)
+					theConfigPath = ObservableConfigPath.create(configPath);
+				else
+					theConfigPath = ObservableConfigPath.create(getAddOn(ExNamed.Def.class).getName());
+				theFormat = session.interpretChildren("format", ModelValueElement.CompiledSynth.class).peekFirst();
+			}
+		}
+	}
+
+	public interface Interpreted<T, M, MV extends M> extends ModelValueElement.InterpretedSynth<M, MV, ConfigModelValue<T, M, MV>> {
+		@Override
+		Def<M> getDefinition();
+
+		@Override
+		default ConfigModelValue<T, M, MV> create(ExElement parent, ModelSetInstance models) throws ModelInstantiationException {
+			return null;
+		}
+
+		TypeToken<T> getValueType();
+
+		/**
+		 * Creates the value
+		 *
+		 * @param config The config value builder to use to build the structure
+		 * @param msi The model set to use to build the structure
+		 * @return The created value
+		 * @throws ModelInstantiationException If the value could not be instantiated
+		 */
+		MV create(ObservableConfig.ObservableConfigValueBuilder<T> config, ModelSetInstance msi) throws ModelInstantiationException;
+
+		@Override
+		default MV forModelCopy(MV value, ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException {
+			return value; // Same value, because the config doesn't change with model copy
+		}
+
+		public abstract class Abstract<T, M, MV extends M> extends ModelValueElement.Interpreted.Abstract<M, MV, ConfigModelValue<T, M, MV>>
+		implements Interpreted<T, M, MV> {
+			private TypeToken<T> theValueType;
+			private InterpretedValueSynth<SettableValue<?>, SettableValue<ObservableConfig>> theConfigValue;
+			private ObservableConfigPath theConfigPath;
+			private InterpretedValueSynth<SettableValue<?>, SettableValue<ObservableConfigFormat<T>>> theFormat;
+			private ObservableConfigFormatSet theFormatSet;
+
+			protected Abstract(Def<M> definition) {
+				super(definition, null);
+			}
+
+			@Override
+			public Def<M> getDefinition() {
+				return (Def<M>) super.getDefinition();
+			}
+
+			@Override
+			public Interpreted.Abstract<T, M, MV> setParentElement(ExElement.Interpreted<?> parent) {
+				super.setParentElement(parent);
+				return this;
+			}
+
+			@Override
+			public TypeToken<T> getValueType() {
+				return theValueType;
+			}
+
+			protected List<? extends InterpretedValueSynth<?, ?>> getComponents(InterpretedValueSynth<?, ?>... others) {
+				List<InterpretedValueSynth<?, ?>> components = new ArrayList<>();
+				components.add(theConfigValue);
+				if (theFormat != null)
+					components.add(theFormat);
+				for (InterpretedValueSynth<?, ?> other : others) {
+					if (other != null)
+						components.add(other);
+				}
+				return components;
+			}
+
+			@Override
+			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+				super.doUpdate(env);
+				theValueType = (TypeToken<T>) getDefinition().getValueType().getType(env);
+				try {
+					theConfigValue = env.getModels().getValue(ExpressoConfigV0_1.CONFIG_NAME,
+						ModelTypes.Value.forType(ObservableConfig.class), env);
+				} catch (ModelException | TypeConversionException e) {
+					throw new ExpressoInterpretationException("Could not retrieve " + ObservableConfig.class.getSimpleName() + " value",
+						reporting().getPosition(), 0, e);
+				}
+				theConfigPath = getDefinition().getConfigPath();
+				try {
+					theFormat = getDefinition().getFormat() == null ? null
+						: getDefinition().getFormat().interpret(env).as(ModelTypes.Value.forType(TypeTokens.get()
+							.keyFor(ObservableConfigFormat.class).<ObservableConfigFormat<T>> parameterized(getValueType())), env);
+				} catch (TypeConversionException e) {
+					throw new ExpressoInterpretationException("Could not interpret format",
+						getDefinition().getFormat().reporting().getPosition(), 0, e);
+				}
+				theFormatSet = theFormat == null ? env.getProperty(FORMAT_SET_KEY, ObservableConfigFormatSet.class) : null;
+			}
+
+			@Override
+			public MV get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
+				ObservableConfig config = theConfigValue.get(models).get();
+				ObservableConfig.ObservableConfigValueBuilder<T> builder = config.asValue(getValueType());
+				builder = builder.at(theConfigPath);
+				if (theFormat != null) {
+					ObservableConfigFormat<T> format = theFormat.get(models).get();
+					builder.withFormat(format);
+				} else
+					builder.withFormatSet(theFormatSet);
+				return create(builder, models);
+			}
+		}
+	}
 }

@@ -1,11 +1,14 @@
 package org.observe.expresso.qonfig;
 
+import java.util.function.BiFunction;
+
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigInterpretationException;
+import org.qommons.config.QonfigInterpreterCore;
 
 /**
  * The interpretation of a {@link QonfigAddOn}. Hangs on to an {@link ExElement} and provides specialized functionality to it.
@@ -212,5 +215,21 @@ public interface ExAddOn<E extends ExElement> {
 			super(null, null);
 			throw new IllegalStateException("Impossible");
 		}
+	}
+
+	static <AO extends Def<?, ?>> QonfigInterpreterCore.QonfigValueCreator<AO> creator(
+		BiFunction<QonfigAddOn, ExElement.Def<?>, AO> creator) {
+		return session -> creator.apply((QonfigAddOn) session.getFocusType(), session.as(ExpressoQIS.class).getElementRepresentation());
+	}
+
+	static <D extends ExElement.Def<?>, AO extends Def<?, ?>> QonfigInterpreterCore.QonfigValueCreator<AO> creator(Class<D> defType,
+		BiFunction<QonfigAddOn, D, AO> creator) {
+		return session -> {
+			ExElement.Def<?> def = session.as(ExpressoQIS.class).getElementRepresentation();
+			if (def != null && !defType.isInstance(def))
+				throw new QonfigInterpretationException("This implementation requires an element definition of type " + defType.getName()
+					+ ", not " + (def == null ? "null" : def.getClass().getName()), session.reporting().getPosition(), 0);
+			return creator.apply((QonfigAddOn) session.getFocusType(), (D) def);
+		};
 	}
 }

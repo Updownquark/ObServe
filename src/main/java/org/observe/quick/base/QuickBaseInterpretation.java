@@ -1,8 +1,5 @@
 package org.observe.quick.base;
 
-import static org.observe.expresso.qonfig.ExpressoBaseV0_1.addOnCreator;
-import static org.observe.expresso.qonfig.ExpressoBaseV0_1.creator;
-
 import java.awt.Image;
 import java.awt.MediaTracker;
 import java.io.IOException;
@@ -21,6 +18,8 @@ import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ops.BinaryOperatorSet;
 import org.observe.expresso.ops.UnaryOperatorSet;
 import org.observe.expresso.qonfig.CompiledExpression;
+import org.observe.expresso.qonfig.ExAddOn;
+import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.quick.QuickCoreInterpretation;
 import org.observe.quick.QuickDocument;
@@ -116,22 +115,22 @@ public class QuickBaseInterpretation implements QonfigInterpretation {
 		});
 
 		// Simple widgets
-		interpreter.createWith(QuickLabel.LABEL, QuickLabel.Def.class, creator(QuickLabel.Def::new));
-		interpreter.createWith(QuickTextField.TEXT_FIELD, QuickTextField.Def.class, creator(QuickTextField.Def::new));
-		interpreter.createWith(QuickCheckBox.CHECK_BOX, QuickCheckBox.Def.class, creator(QuickCheckBox.Def::new));
-		interpreter.createWith(QuickButton.BUTTON, QuickButton.Def.class, creator(QuickButton.Def::new));
-		interpreter.createWith(QuickTextArea.TEXT_AREA, QuickTextArea.Def.class, creator(QuickTextArea.Def::new));
-		interpreter.createWith(StyledTextArea.STYLED_TEXT_AREA, StyledTextArea.Def.class, creator(StyledTextArea.Def::new));
+		interpreter.createWith(QuickLabel.LABEL, QuickLabel.Def.class, ExElement.creator(QuickLabel.Def::new));
+		interpreter.createWith(QuickTextField.TEXT_FIELD, QuickTextField.Def.class, ExElement.creator(QuickTextField.Def::new));
+		interpreter.createWith(QuickCheckBox.CHECK_BOX, QuickCheckBox.Def.class, ExElement.creator(QuickCheckBox.Def::new));
+		interpreter.createWith(QuickButton.BUTTON, QuickButton.Def.class, ExElement.creator(QuickButton.Def::new));
+		interpreter.createWith(QuickTextArea.TEXT_AREA, QuickTextArea.Def.class, ExElement.creator(QuickTextArea.Def::new));
+		interpreter.createWith(StyledTextArea.STYLED_TEXT_AREA, StyledTextArea.Def.class, ExElement.creator(StyledTextArea.Def::new));
 		interpreter.createWith(StyledTextArea.TEXT_STYLE, StyledTextArea.TextStyleElement.Def.class,
-			creator(StyledTextArea.Def.class, StyledTextArea.TextStyleElement.Def::new));
+			ExElement.creator(StyledTextArea.Def.class, StyledTextArea.TextStyleElement.Def::new));
 
 		// Containers
-		interpreter.createWith(QuickBox.BOX, QuickBox.Def.class, creator(QuickBox.Def::new));
-		interpreter.createWith(QuickFieldPanel.FIELD_PANEL, QuickFieldPanel.Def.class, creator(QuickFieldPanel.Def::new));
+		interpreter.createWith(QuickBox.BOX, QuickBox.Def.class, ExElement.creator(QuickBox.Def::new));
+		interpreter.createWith(QuickFieldPanel.FIELD_PANEL, QuickFieldPanel.Def.class, ExElement.creator(QuickFieldPanel.Def::new));
 		interpreter.createWith("field", QuickField.Def.class,
-			addOnCreator((Class<QuickWidget.Def<?>>) (Class<?>) QuickWidget.Def.class, QuickField.Def::new));
-		interpreter.createWith(QuickSplit.SPLIT, QuickSplit.Def.class, creator(QuickSplit.Def::new));
-		interpreter.createWith(QuickScrollPane.SCROLL, QuickScrollPane.Def.class, creator(QuickScrollPane.Def::new));
+			ExAddOn.creator((Class<QuickWidget.Def<?>>) (Class<?>) QuickWidget.Def.class, QuickField.Def::new));
+		interpreter.createWith(QuickSplit.SPLIT, QuickSplit.Def.class, ExElement.creator(QuickSplit.Def::new));
+		interpreter.createWith(QuickScrollPane.SCROLL, QuickScrollPane.Def.class, ExElement.creator(QuickScrollPane.Def::new));
 
 		// Box layouts
 		interpreter.createWith("inline-layout", QuickInlineLayout.Def.class,
@@ -154,19 +153,19 @@ public class QuickBaseInterpretation implements QonfigInterpretation {
 			session -> QuickCoreInterpretation.interpretAddOn(session, (p, ao) -> new Sizeable.Def.Vertical(ao, p)));
 
 		// Table
-		interpreter.createWith(QuickTable.TABLE, QuickTable.Def.class, creator(QuickTable.Def::new));
+		interpreter.createWith(QuickTable.TABLE, QuickTable.Def.class, ExElement.creator(QuickTable.Def::new));
 		interpreter.createWith(QuickTableColumn.SingleColumnSet.COLUMN, QuickTableColumn.SingleColumnSet.Def.class,
-			creator(RowTyped.Def.class, QuickTableColumn.SingleColumnSet.Def::new));
+			ExElement.creator(RowTyped.Def.class, QuickTableColumn.SingleColumnSet.Def::new));
 		interpreter.createWith(QuickTableColumn.ColumnEditing.COLUMN_EDITING, QuickTableColumn.ColumnEditing.Def.class,
-			creator(QuickTableColumn.TableColumnSet.Def.class, QuickTableColumn.ColumnEditing.Def::new));
+			ExElement.creator(QuickTableColumn.TableColumnSet.Def.class, QuickTableColumn.ColumnEditing.Def::new));
 		interpreter.createWith("modify-row-value", QuickTableColumn.ColumnEditType.RowModifyEditType.Def.class,
 			session -> new QuickTableColumn.ColumnEditType.RowModifyEditType.Def((QonfigAddOn) session.getFocusType(),
 				(QuickTableColumn.ColumnEditing.Def) session.getElementRepresentation()));
 		interpreter.createWith("replace-row-value", QuickTableColumn.ColumnEditType.RowReplaceEditType.Def.class,
 			session -> new QuickTableColumn.ColumnEditType.RowReplaceEditType.Def((QonfigAddOn) session.getFocusType(),
 				(QuickTableColumn.ColumnEditing.Def) session.getElementRepresentation()));
-		interpreter.createWith(ValueAction.Single.SINGLE_VALUE_ACTION, ValueAction.Single.Def.class, creator(ValueAction.Single.Def::new));
-		interpreter.createWith(ValueAction.Multi.MULTI_VALUE_ACTION, ValueAction.Multi.Def.class, creator(ValueAction.Multi.Def::new));
+		interpreter.createWith(ValueAction.Single.SINGLE_VALUE_ACTION, ValueAction.Single.Def.class, ExElement.creator(ValueAction.Single.Def::new));
+		interpreter.createWith(ValueAction.Multi.MULTI_VALUE_ACTION, ValueAction.Multi.Def.class, ExElement.creator(ValueAction.Multi.Def::new));
 		return interpreter;
 	}
 

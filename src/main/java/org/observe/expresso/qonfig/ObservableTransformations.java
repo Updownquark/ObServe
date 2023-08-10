@@ -1,7 +1,5 @@
 package org.observe.expresso.qonfig;
 
-import static org.observe.expresso.qonfig.ExpressoBaseV0_1.creator;
-
 import java.util.function.Supplier;
 
 import org.observe.Observable;
@@ -40,13 +38,13 @@ public class ObservableTransformations {
 	}
 
 	public static void configureTransformation(QonfigInterpreterCore.Builder interpreter) {
-		interpreter.createWith("no-init", ObservableTransform.class, creator(NoInitObservableTransform::new));
-		interpreter.createWith("skip", ObservableTransform.class, creator(SkippingObservableTransform::new));
-		interpreter.createWith("take", ObservableTransform.class, creator(TakeObservableTransform::new));
-		interpreter.createWith("take-until", ObservableTransform.class, creator(TakeUntilObservableTransform::new));
-		interpreter.createWith("map-to", ObservableTransform.class, creator(MappedObservableTransform::new));
-		interpreter.createWith("filter", ObservableTransform.class, creator(FilteredObservableTransform::new));
-		interpreter.createWith("filter-by-type", ObservableTransform.class, creator(TypeFilteredObservableTransform::new));
+		interpreter.createWith("no-init", ObservableTransform.class, ExElement.creator(NoInitObservableTransform::new));
+		interpreter.createWith("skip", ObservableTransform.class, ExElement.creator(SkippingObservableTransform::new));
+		interpreter.createWith("take", ObservableTransform.class, ExElement.creator(TakeObservableTransform::new));
+		interpreter.createWith("take-until", ObservableTransform.class, ExElement.creator(TakeUntilObservableTransform::new));
+		interpreter.createWith("map-to", ObservableTransform.class, ExElement.creator(MappedObservableTransform::new));
+		interpreter.createWith("filter", ObservableTransform.class, ExElement.creator(FilteredObservableTransform::new));
+		interpreter.createWith("filter-by-type", ObservableTransform.class, ExElement.creator(TypeFilteredObservableTransform::new));
 	}
 
 	static class NoInitObservableTransform extends TypePreservingTransform<Observable<?>>

@@ -4,7 +4,6 @@ import java.awt.font.TextAttribute;
 import java.text.ParseException;
 import java.util.Map;
 
-import org.observe.ObservableValue;
 import org.observe.expresso.NonStructuredParser;
 import org.observe.util.TypeTokens;
 import org.qommons.QommonsUtils;
@@ -12,7 +11,7 @@ import org.qommons.QommonsUtils;
 import com.google.common.reflect.TypeToken;
 
 /** Enables easier parsing of several font-related constants */
-public class FontStyleParser implements NonStructuredParser {
+public class FontStyleParser extends NonStructuredParser.Simple<Double> {
 	// Font weights
 	/** The weight of normal text */
 	public static final double normalWeight = 1;
@@ -63,19 +62,24 @@ public class FontStyleParser implements NonStructuredParser {
 		.with("italic", italic)//
 		.getUnmodifiable();
 
+	/** Creates a FontStyleParser */
+	public FontStyleParser() {
+		super(TypeTokens.get().DOUBLE);
+	}
+
 	@Override
 	public boolean canParse(TypeToken<?> type, String text) {
-		if (!TypeTokens.get().isAssignable(type, TypeTokens.get().DOUBLE))
+		if (!super.canParse(type, text))
 			return false;
 		return NAMED_WEIGHTS.containsKey(text) || NAMED_SLANTS.containsKey(text);
 	}
 
 	@Override
-	public <T> ObservableValue<? extends T> parse(TypeToken<T> type, String text) throws ParseException {
+	protected <T2 extends Double> T2 parseValue(TypeToken<T2> type, String text) throws ParseException {
 		Double value = NAMED_WEIGHTS.get(text);
 		if (value == null)
 			value = NAMED_SLANTS.get(text);
-		return (ObservableValue<? extends T>) ObservableValue.of(double.class, value);
+		return (T2) value;
 	}
 
 	@Override

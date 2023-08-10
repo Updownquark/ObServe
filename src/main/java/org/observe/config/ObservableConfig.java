@@ -1156,7 +1156,17 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped, Event
 	 * @return The persistence operation to use
 	 */
 	public static ObservableConfigPersistence<IOException> toFile(File file, XmlEncoding encoding) {
-		return toWriter(() -> new BufferedWriter(new FileWriter(file)), encoding);
+		return toWriter(new WriterSupplier() {
+			@Override
+			public Writer createWriter() throws IOException {
+				return new BufferedWriter(new FileWriter(file));
+			}
+
+			@Override
+			public String toString() {
+				return file.getPath();
+			}
+		}, encoding);
 	}
 
 	/**
@@ -1167,16 +1177,30 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped, Event
 	 * @return The persistence operation to use
 	 */
 	public static ObservableConfigPersistence<IOException> toFile(BetterFile file, XmlEncoding encoding) {
-		return toWriter(() -> new BufferedWriter(new OutputStreamWriter(file.write())), encoding);
+		return toWriter(new WriterSupplier() {
+			@Override
+			public Writer createWriter() throws IOException {
+				return new BufferedWriter(new OutputStreamWriter(file.write()));
+			}
+
+			@Override
+			public String toString() {
+				return file.getPath();
+			}
+		}, encoding);
 	}
 
 	/** Creates a {@link Writer} */
-	public interface WriterSupplier {
+	public static abstract class WriterSupplier {
 		/**
 		 * @return The writer to store character data
 		 * @throws IOException If the writer cannot be created
 		 */
-		Writer createWriter() throws IOException;
+		public abstract Writer createWriter() throws IOException;
+
+		/** A string representation of the location this writer is writing to */
+		@Override
+		public abstract String toString();
 	}
 
 	/**
@@ -1193,6 +1217,11 @@ public interface ObservableConfig extends Nameable, Transactable, Stamped, Event
 				try (Writer w = writer.createWriter()) {
 					ObservableConfig.writeXml(cfg, w, encoding, "\t");
 				}
+			}
+
+			@Override
+			public String toString() {
+				return "Persist:" + writer;
 			}
 		};
 	}

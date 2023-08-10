@@ -268,13 +268,13 @@ public class WindowPopulation {
 					if (x != null && x.get() != null) {
 						boundsObs.add(x.noInitChanges());
 						int xv = x.get();
-						if (xv > 0)
+						if (xv != -1)
 							bounds.x = xv;
 					}
 					if (y != null && y.get() != null) {
 						boundsObs.add(y.noInitChanges());
 						int yv = y.get();
-						if (yv > 0)
+						if (yv != -1)
 							bounds.y = yv;
 					}
 					if (w != null && w.get() != null) {

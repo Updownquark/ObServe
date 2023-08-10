@@ -41,8 +41,6 @@
 		Test expressions
 			Array access
 			External Literals (all types)
-			Class instance (e.g. 'int.class')
-			instanceof
 			Parenthetic
 
 		Test external models

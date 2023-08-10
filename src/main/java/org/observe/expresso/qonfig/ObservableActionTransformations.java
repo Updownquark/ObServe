@@ -25,7 +25,7 @@ public class ObservableActionTransformations {
 	}
 
 	public static void configureTransformation(QonfigInterpreterCore.Builder interpreter) {
-		interpreter.createWith("disable", ActionTransform.class, ExpressoBaseV0_1.creator(DisabledActionTransform::new));
+		interpreter.createWith("disable", ActionTransform.class, ExElement.creator(DisabledActionTransform::new));
 	}
 
 	static class DisabledActionTransform extends TypePreservingTransform<ObservableAction<?>>

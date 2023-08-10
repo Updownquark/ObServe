@@ -1,7 +1,5 @@
 package org.observe.quick.style;
 
-import static org.observe.expresso.qonfig.ExpressoBaseV0_1.creator;
-
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -62,10 +60,10 @@ public class TestInterpretation implements QonfigInterpretation {
 
 	@Override
 	public Builder configureInterpreter(Builder interpreter) {
-		interpreter.createWith("a", ModelValueElement.CompiledSynth.class, creator(A.Def::new));
-		interpreter.createWith("b", ModelValueElement.CompiledSynth.class, creator(B.Def::new));
-		interpreter.createWith("c", ModelValueElement.CompiledSynth.class, creator(C.Def::new));
-		interpreter.createWith("d", ModelValueElement.CompiledSynth.class, creator(D.Def::new));
+		interpreter.createWith("a", ModelValueElement.CompiledSynth.class, ExElement.creator(A.Def::new));
+		interpreter.createWith("b", ModelValueElement.CompiledSynth.class, ExElement.creator(B.Def::new));
+		interpreter.createWith("c", ModelValueElement.CompiledSynth.class, ExElement.creator(C.Def::new));
+		interpreter.createWith("d", ModelValueElement.CompiledSynth.class, ExElement.creator(D.Def::new));
 		return interpreter;
 	}
 

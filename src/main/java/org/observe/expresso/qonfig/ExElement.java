@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.BiFunction;
 import java.util.function.Function;
 
 import org.observe.Observable;
@@ -1043,5 +1044,20 @@ public interface ExElement extends Identifiable {
 			super(null, null);
 			throw new IllegalStateException("Impossible");
 		}
+	}
+
+	static <P extends Def<?>, T> QonfigInterpreterCore.QonfigValueCreator<T> creator(Class<P> parentType,
+		BiFunction<P, QonfigElementOrAddOn, T> creator) {
+		return session -> {
+			Def<?> parent = session.as(ExpressoQIS.class).getElementRepresentation();
+			if (parent != null && !parentType.isInstance(parent))
+				throw new QonfigInterpretationException("This implementation requires a parent of type " + parentType.getName() + ", not "
+					+ (parent == null ? "null" : parent.getClass().getName()), session.reporting().getPosition(), 0);
+			return creator.apply((P) parent, session.getFocusType());
+		};
+	}
+
+	static <T> QonfigInterpreterCore.QonfigValueCreator<T> creator(BiFunction<Def<?>, QonfigElementOrAddOn, T> creator) {
+		return session -> creator.apply(session.as(ExpressoQIS.class).getElementRepresentation(), session.getFocusType());
 	}
 }

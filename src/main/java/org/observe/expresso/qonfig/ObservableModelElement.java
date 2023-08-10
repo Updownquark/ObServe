@@ -1,26 +1,68 @@
 package org.observe.expresso.qonfig;
 
+import java.awt.Image;
+import java.awt.event.ComponentAdapter;
+import java.awt.event.ComponentEvent;
+import java.io.BufferedInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
+import javax.swing.JFrame;
+
+import org.observe.ObservableValue;
+import org.observe.SettableValue;
+import org.observe.collect.CollectionChangeType;
+import org.observe.collect.ObservableCollection;
+import org.observe.config.ObservableConfig;
+import org.observe.config.ObservableConfig.ObservableConfigPersistence;
+import org.observe.config.ObservableConfigFormat;
+import org.observe.config.ObservableConfigFormatSet;
+import org.observe.config.ObservableConfigPath;
+import org.observe.config.SyncValueSet;
+import org.observe.expresso.CompiledExpressoEnv;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelException;
 import org.observe.expresso.ModelInstantiationException;
+import org.observe.expresso.ModelType;
+import org.observe.expresso.ModelType.ModelInstanceType;
+import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet;
+import org.observe.expresso.ObservableModelSet.CompiledModelValue;
 import org.observe.expresso.ObservableModelSet.InterpretedModelComponentNode;
 import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.observe.expresso.qonfig.ModelValueElement.CompiledSynth;
+import org.observe.util.TypeTokens;
+import org.observe.util.swing.WindowPopulation;
+import org.qommons.ThreadConstraint;
+import org.qommons.TimeUtils;
+import org.qommons.Transaction;
 import org.qommons.collect.BetterList;
+import org.qommons.collect.BetterSortedSet;
 import org.qommons.collect.CollectionUtils;
 import org.qommons.collect.CollectionUtils.ElementSyncAction;
 import org.qommons.collect.CollectionUtils.ElementSyncInput;
+import org.qommons.collect.StampedLockingStrategy;
+import org.qommons.config.QommonsConfig;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
+import org.qommons.io.BetterFile;
+import org.qommons.io.FileBackups;
+import org.qommons.io.Format;
+import org.qommons.io.NativeFileSource;
+import org.qommons.io.SpinnerFormat;
+import org.qommons.io.TextParseException;
+import org.qommons.threading.QommonsTimer;
+
+import com.google.common.reflect.TypeToken;
 
 public abstract class ObservableModelElement extends ExElement.Abstract {
 	private static final SingleTypeTraceability<ObservableModelElement, Interpreted<?>, Def<?, ?>> TRACEABILITY = ElementTypeTraceability
@@ -117,8 +159,8 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 					theValues.add(modelValue);
 				}
 			}
-			Collections.sort(theValues, (mv1, mv2) -> Integer.compare(mv1.reporting().getPosition().getPosition(),
-				mv2.reporting().getPosition().getPosition()));
+			Collections.sort(theValues,
+				(mv1, mv2) -> Integer.compare(mv1.reporting().getPosition().getPosition(), mv2.reporting().getPosition().getPosition()));
 
 			super.doUpdate(env);
 		}
@@ -609,22 +651,23 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 		}
 	}
 
-	/*public static class ConfigModelElement extends ObservableModelElement {
+	public static class ConfigModelElement extends ObservableModelElement {
 		public static final String APP_ENVIRONMENT_KEY = "EXPRESSO.APP.ENVIRONMENT";
-		private static final ElementTypeTraceability<ConfigModelElement, Interpreted<?>, Def<?>> TRACEABILITY = ElementTypeTraceability
+		private static final SingleTypeTraceability<ConfigModelElement, Interpreted<?>, Def<?>> TRACEABILITY = ElementTypeTraceability
 			.<ConfigModelElement, Interpreted<?>, Def<?>> build(ExpressoConfigV0_1.NAME, ExpressoConfigV0_1.VERSION, "config")//
 			.reflectMethods(Def.class, Interpreted.class, ConfigModelElement.class)//
 			.build();
 
-		public static class Def<M extends ConfigModelElement> extends ObservableModelElement.Def<M> {
+		public static class Def<M extends ConfigModelElement> extends ObservableModelElement.Def<M, ConfigModelValue.Def<M>> {
 			private String theConfigName;
 			private CompiledExpression theConfigDir;
-			private List<String> theOldConfigNames;
+			private final List<OldConfigName> theOldConfigNames;
 			private boolean isBackup;
 			private AppEnvironment theApplicationEnvironment;
 
-			public Def(ExElement.Def<?> parent, QonfigElement element) {
-				super(parent, element);
+			public Def(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
+				super(parent, qonfigType);
+				theOldConfigNames = new ArrayList<>();
 			}
 
 			@QonfigAttributeGetter("config-name")
@@ -637,20 +680,29 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 				return theConfigDir;
 			}
 
-			public List<String> getOldConfigNames() {
+			@QonfigChildGetter("old-config-name")
+			public List<OldConfigName> getOldConfigNames() {
 				return Collections.unmodifiableList(theOldConfigNames);
 			}
 
+			@QonfigAttributeGetter("backup")
+			public boolean isBackup() {
+				return isBackup;
+			}
+
 			@Override
-			public void update(ExpressoQIS session) throws QonfigInterpretationException {
+			protected Class<ConfigModelValue.Def<M>> getValueType() {
+				return (Class<ConfigModelValue.Def<M>>) (Class<?>) ConfigModelValue.Def.class;
+			}
+
+			@Override
+			public void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 				withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 
 				theConfigName = session.getAttributeText("config-name");
 				theConfigDir = session.getAttributeExpression("config-dir");
 
-				theOldConfigNames.clear();
-				for (QonfigElement ch : session.getChildren("old-config-name"))
-					theOldConfigNames.add(ch.getValueText());
+				ExElement.syncDefs(OldConfigName.class, theOldConfigNames, session.forChildren("old-config-name"));
 
 				isBackup = session.getAttribute("backup", boolean.class);
 				theApplicationEnvironment = session.get(APP_ENVIRONMENT_KEY, AppEnvironment.class);
@@ -658,104 +710,209 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 				((ObservableModelSet.Builder) session.getExpressoEnv().getModels()).withMaker(ExpressoConfigV0_1.CONFIG_NAME,
 					new ConfigValueMaker(), session.getElement().getPositionInFile());
 
-				super.update(session.asElement(session.getFocusType().getSuperElement()));
+				super.doUpdate(session.asElement(session.getFocusType().getSuperElement()));
 			}
-
-			// @Override
-			// protected ModelValueElement.Def<?, ?> interpretValue(String name, ExpressoQIS child, ModelValueElement.Def<?, ?> previous,
-			// ObservableModelSet.Builder builder) throws QonfigInterpretationException {
-			// ModelValueSynth<SettableValue<?>, SettableValue<ObservableConfig>> configV;
-			// try {
-			// configV = (ModelValueSynth<SettableValue<?>, SettableValue<ObservableConfig>>) builder
-			// .getComponent(ExpressoConfigV0_1.CONFIG_NAME);
-			// } catch (ModelException e) {
-			// throw new QonfigInterpretationException("But we just installed it!", child.getElement().getPositionInFile(), 0, e);
-			// }
-			// String path = child.getAttributeText("config-path");
-			//
-			// if (path == null)
-			// path = name;
-			// ConfigModelValue<?, ?, ?> mv = child.interpret(ConfigModelValue.class);
-			// builder.withMaker(name, createConfigValue(mv, configV, path, child), child.getElement().getPositionInFile());
-			// return mv instanceof ModelValueElement.Def ? (ModelValueElement.Def<?, ?>) mv : null;
-			// }
 
 			@Override
 			public Interpreted<? extends M> interpret(ExElement.Interpreted<?> parent) throws ExpressoInterpretationException {
 				return new Interpreted<>(this, parent);
 			}
 
-			private <T, M2, MV extends M2> CompiledModelValue<M2> createConfigValue(ConfigModelValue<T, M2, MV> configValue,
-				InterpretedValueSynth<SettableValue<?>, SettableValue<ObservableConfig>> configV, String path, ExpressoQIS session)
-					throws QonfigInterpretationException {
-				ExpressoQIS formatSession = session.forChildren("format").peekFirst();
-				CompiledModelValue<?> formatCreator = formatSession == null ? null : formatSession.interpret(CompiledModelValue.class);
-				return CompiledModelValue.of("value", configValue.getType().getModelType(), () -> {
-					configValue.init();
-					TypeToken<T> formatType = (TypeToken<T>) configValue.getType()
-						.getType(configValue.getType().getModelType().getTypeCount() - 1);
-					InterpretedValueSynth<SettableValue<?>, SettableValue<ObservableConfigFormat<T>>> formatContainer;
-					ObservableConfigFormat<T> defaultFormat;
-					if (formatCreator != null) {
-						try {
-							formatContainer = formatCreator.createSynthesizer().as(ModelTypes.Value.forType(TypeTokens.get()
-								.keyFor(ObservableConfigFormat.class).<ObservableConfigFormat<T>> parameterized(formatType)));
-						} catch (TypeConversionException e) {
-							LocatedFilePosition position;
-							if (formatSession != null)
-								position = formatSession.getElement().getPositionInFile();
-							else
-								position = session.getElement().getPositionInFile();
-							throw new ExpressoInterpretationException("Could not evaluate " + formatCreator + " as a config format",
-								position, 0, e);
-						}
-						defaultFormat = null;
-					} else {
-						formatContainer = null;
-						defaultFormat = getDefaultConfigFormat(formatType);
-						if (defaultFormat == null)
-							throw new ExpressoInterpretationException("No default config format available for type " + formatType,
-								session.getElement().getPositionInFile(), 0);
-					}
-					return new InterpretedValueSynth<M2, MV>() {
-						@Override
-						public ModelType<M2> getModelType() {
-							return configValue.getType().getModelType();
-						}
-
-						@Override
-						public ModelInstanceType<M2, MV> getType() {
-							return configValue.getType();
-						}
-
-						@Override
-						public MV get(ModelSetInstance msi) throws ModelInstantiationException, IllegalStateException {
-							ObservableConfig config = configV.get(msi).get();
-							ObservableConfig.ObservableConfigValueBuilder<T> builder = config//
-								.asValue(formatType).at(path)//
-								.until(msi.getUntil());
-							if (formatContainer != null)
-								builder.withFormat(formatContainer.get(msi).get());
-							else
-								builder.withFormat(defaultFormat);
-							return configValue.create(builder, msi);
-						}
-
-						@Override
-						public MV forModelCopy(MV value, ModelSetInstance sourceModels, ModelSetInstance newModels) {
-							// Should be the same thing, since the config hasn't changed
-							return value;
-						}
-
-						@Override
-						public List<? extends InterpretedValueSynth<?, ?>> getComponents() {
-							return Collections.emptyList();
-						}
-					};
-				});
+			private static <T> ObservableConfigFormat<T> getDefaultConfigFormat(TypeToken<T> valueType) {
+				Format<T> f;
+				Class<?> type = TypeTokens.get().unwrap(TypeTokens.getRawType(valueType));
+				if (type == String.class)
+					f = (Format<T>) SpinnerFormat.NUMERICAL_TEXT;
+				else if (type == int.class)
+					f = (Format<T>) SpinnerFormat.INT;
+				else if (type == long.class)
+					f = (Format<T>) SpinnerFormat.LONG;
+				else if (type == double.class)
+					f = (Format<T>) Format.doubleFormat(4).build();
+				else if (type == float.class)
+					f = (Format<T>) Format.doubleFormat(4).buildFloat();
+				else if (type == boolean.class)
+					f = (Format<T>) Format.BOOLEAN;
+				else if (Enum.class.isAssignableFrom(type))
+					f = (Format<T>) Format.enumFormat((Class<Enum<?>>) type);
+				else if (type == Instant.class)
+					f = (Format<T>) SpinnerFormat.flexDate(Instant::now, "EEE MMM dd, yyyy", null);
+				else if (type == Duration.class)
+					f = (Format<T>) SpinnerFormat.flexDuration(false);
+				else
+					return null;
+				T defaultValue = TypeTokens.get().getDefaultValue(valueType);
+				return ObservableConfigFormat.ofQommonFormat(f, () -> defaultValue);
 			}
 
-			private void build2(ObservableConfig config, BetterFile configFile, FileBackups backups, boolean[] closingWithoutSave) {
+			private class ConfigValueMaker implements CompiledModelValue<SettableValue<?>> {
+				@Override
+				public ModelType<SettableValue<?>> getModelType(CompiledExpressoEnv env) {
+					return ModelTypes.Value;
+				}
+
+				@Override
+				public InterpretedValueSynth<SettableValue<?>, ?> interpret(InterpretedExpressoEnv env)
+					throws ExpressoInterpretationException {
+					InterpretedValueSynth<SettableValue<?>, SettableValue<BetterFile>> configDir;
+					if (theConfigDir != null)
+						configDir = theConfigDir.interpret(ModelTypes.Value.forType(BetterFile.class), env);
+					else {
+						configDir = InterpretedValueSynth.of(ModelTypes.Value.forType(BetterFile.class), msi -> {
+							String prop = System.getProperty(theConfigName + ".config");
+							if (prop != null)
+								return ObservableModelSet.literal(BetterFile.at(new NativeFileSource(), prop), prop);
+							else
+								return ObservableModelSet.literal(BetterFile.at(new NativeFileSource(), "./" + theConfigName),
+									"./" + theConfigName);
+						});
+					}
+					return new Interpreted(configDir);
+				}
+
+				class Interpreted implements InterpretedValueSynth<SettableValue<?>, SettableValue<ObservableConfig>> {
+					private final InterpretedValueSynth<SettableValue<?>, SettableValue<BetterFile>> theInterpretedConfigDir;
+
+					Interpreted(InterpretedValueSynth<SettableValue<?>, SettableValue<BetterFile>> configDir) {
+						theInterpretedConfigDir = configDir;
+					}
+
+					@Override
+					public ModelInstanceType<SettableValue<?>, SettableValue<ObservableConfig>> getType() {
+						return ModelTypes.Value.forType(ObservableConfig.class);
+					}
+
+					@Override
+					public List<? extends InterpretedValueSynth<?, ?>> getComponents() {
+						return BetterList.of(theInterpretedConfigDir);
+					}
+
+					@Override
+					public SettableValue<ObservableConfig> get(ModelSetInstance models)
+						throws ModelInstantiationException, IllegalStateException {
+						BetterFile configDirFile = theInterpretedConfigDir == null ? null : theInterpretedConfigDir.get(models).get();
+						if (configDirFile == null) {
+							String configProp = System.getProperty(theConfigName + ".config");
+							if (configProp != null)
+								configDirFile = BetterFile.at(new NativeFileSource(), configProp);
+							else
+								configDirFile = BetterFile.at(new NativeFileSource(), "./" + theConfigName);
+						}
+						if (!configDirFile.exists()) {
+							try {
+								configDirFile.create(true);
+							} catch (IOException e) {
+								throw new IllegalStateException("Could not create config directory " + configDirFile.getPath(), e);
+							}
+						} else if (!configDirFile.isDirectory())
+							throw new IllegalStateException("Not a directory: " + configDirFile.getPath());
+
+						BetterFile configFile = configDirFile.at(theConfigName + ".xml");
+						if (!configFile.exists()) {
+							BetterFile oldConfigFile = configDirFile.getParent().at(theConfigName + ".config");
+							if (oldConfigFile.exists()) {
+								try {
+									oldConfigFile.move(configFile);
+								} catch (IOException e) {
+									System.err.println(
+										"Could not move old configuration " + oldConfigFile.getPath() + " to " + configFile.getPath());
+									e.printStackTrace();
+								}
+							}
+						}
+
+						FileBackups backups = isBackup ? new FileBackups(configFile) : null;
+
+						if (!configFile.exists() && theOldConfigNames != null) {
+							boolean found = false;
+							for (OldConfigName oldConfigName : theOldConfigNames) {
+								BetterFile oldConfigFile = configDirFile.at(oldConfigName.getOldConfigName());
+								if (oldConfigFile.exists()) {
+									try {
+										oldConfigFile.move(configFile);
+									} catch (IOException e) {
+										System.err.println("Could not rename " + oldConfigFile.getPath() + " to " + configFile.getPath());
+										e.printStackTrace();
+									}
+									if (backups != null)
+										backups.renamedFrom(oldConfigFile);
+									found = true;
+									break;
+								}
+								if (!found) {
+									oldConfigFile = configDirFile.getParent().at(oldConfigName + "/" + oldConfigName + ".xml");
+									if (oldConfigFile.exists()) {
+										try {
+											oldConfigFile.move(configFile);
+										} catch (IOException e) {
+											System.err
+											.println("Could not rename " + oldConfigFile.getPath() + " to " + configFile.getPath());
+											e.printStackTrace();
+										}
+										if (backups != null)
+											backups.renamedFrom(oldConfigFile);
+										found = true;
+										break;
+									}
+								}
+							}
+						}
+						ObservableConfig config = ObservableConfig.createRoot(theConfigName, null,
+							owner -> new StampedLockingStrategy(owner, ThreadConstraint.ANY));
+						ObservableConfig.XmlEncoding encoding = ObservableConfig.XmlEncoding.DEFAULT;
+						boolean loaded = false;
+						if (configFile.exists()) {
+							try {
+								try (InputStream configStream = new BufferedInputStream(configFile.read());
+									Transaction t = config.lock(true, null)) {
+									ObservableConfig.readXml(config, configStream, encoding);
+								}
+								loaded = true;
+							} catch (IOException | TextParseException e) {
+								System.out.println("Could not read config file " + configFile.getPath());
+								e.printStackTrace(System.out);
+							}
+						}
+						boolean[] closingWithoutSave = new boolean[1];
+						AppEnvironment app = theApplicationEnvironment != null ? theApplicationEnvironment : new AppEnvironment() {
+							@Override
+							public InterpretedValueSynth<SettableValue<?>, SettableValue<String>> getTitle() {
+								return InterpretedValueSynth.literal(TypeTokens.get().STRING, "Unspecified Application",
+									"Unspecified Application");
+							}
+
+							@Override
+							public InterpretedValueSynth<SettableValue<?>, SettableValue<Image>> getIcon() {
+								return InterpretedValueSynth.literal(TypeTokens.get().of(Image.class), null, "No Image");
+							}
+						};
+						if (loaded)
+							installConfigPersistence(config, configFile, backups, closingWithoutSave);
+						else if (backups != null && !backups.getBackups().isEmpty()) {
+							restoreBackup(true, config, backups, () -> {
+								config.setName(theConfigName);
+								installConfigPersistence(config, configFile, backups, closingWithoutSave);
+							}, () -> {
+								config.setName(theConfigName);
+								installConfigPersistence(config, configFile, backups, closingWithoutSave);
+							}, app, closingWithoutSave, models);
+						} else {
+							config.setName(theConfigName);
+							installConfigPersistence(config, configFile, backups, closingWithoutSave);
+						}
+						return SettableValue.of(ObservableConfig.class, config, "Not Settable");
+					}
+
+					@Override
+					public SettableValue<ObservableConfig> forModelCopy(SettableValue<ObservableConfig> value,
+						ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException {
+						return value; // Config doesn't change between model copies
+					}
+				}
+			}
+
+			static void installConfigPersistence(ObservableConfig config, BetterFile configFile, FileBackups backups,
+				boolean[] closingWithoutSave) {
 				if (configFile != null) {
 					ObservableConfigPersistence<IOException> actuallyPersist = ObservableConfig.toFile(configFile,
 						ObservableConfig.XmlEncoding.DEFAULT);
@@ -798,172 +955,6 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 								ex.printStackTrace();
 							}
 						}, persistDelay);
-					});
-				}
-			}
-
-			private static <T> ObservableConfigFormat<T> getDefaultConfigFormat(TypeToken<T> valueType) {
-				Format<T> f;
-				Class<?> type = TypeTokens.get().unwrap(TypeTokens.getRawType(valueType));
-				if (type == String.class)
-					f = (Format<T>) SpinnerFormat.NUMERICAL_TEXT;
-				else if (type == int.class)
-					f = (Format<T>) SpinnerFormat.INT;
-				else if (type == long.class)
-					f = (Format<T>) SpinnerFormat.LONG;
-				else if (type == double.class)
-					f = (Format<T>) Format.doubleFormat(4).build();
-				else if (type == float.class)
-					f = (Format<T>) Format.doubleFormat(4).buildFloat();
-				else if (type == boolean.class)
-					f = (Format<T>) Format.BOOLEAN;
-				else if (Enum.class.isAssignableFrom(type))
-					f = (Format<T>) Format.enumFormat((Class<Enum<?>>) type);
-				else if (type == Instant.class)
-					f = (Format<T>) SpinnerFormat.flexDate(Instant::now, "EEE MMM dd, yyyy", null);
-				else if (type == Duration.class)
-					f = (Format<T>) SpinnerFormat.flexDuration(false);
-				else
-					return null;
-				T defaultValue = TypeTokens.get().getDefaultValue(valueType);
-				return ObservableConfigFormat.ofQommonFormat(f, () -> defaultValue);
-			}
-
-			private class ConfigValueMaker implements CompiledModelValue<SettableValue<?>> {
-				@Override
-				public ModelType<SettableValue<?>> getModelType(CompiledExpressoEnv env) {
-					return ModelTypes.Value;
-				}
-
-				@Override
-				public InterpretedValueSynth<SettableValue<?>, SettableValue<ObservableConfig>> createSynthesizer(
-					InterpretedExpressoEnv env)
-					throws ExpressoInterpretationException {
-					InterpretedValueSynth<SettableValue<?>, SettableValue<BetterFile>> configDir;
-					if (theConfigDir != null)
-						configDir = theConfigDir.evaluate(ModelTypes.Value.forType(BetterFile.class), env);
-					else {
-						configDir = InterpretedValueSynth.of(ModelTypes.Value.forType(BetterFile.class), msi -> {
-							String prop = System.getProperty(theConfigName + ".config");
-							if (prop != null)
-								return ObservableModelSet.literal(BetterFile.at(new NativeFileSource(), prop), prop);
-							else
-								return ObservableModelSet.literal(BetterFile.at(new NativeFileSource(), "./" + theConfigName),
-									"./" + theConfigName);
-						});
-					}
-
-					return InterpretedValueSynth.of(ModelTypes.Value.forType(ObservableConfig.class), msi -> {
-						BetterFile configDirFile = configDir == null ? null : configDir.get(msi).get();
-						if (configDirFile == null) {
-							String configProp = System.getProperty(theConfigName + ".config");
-							if (configProp != null)
-								configDirFile = BetterFile.at(new NativeFileSource(), configProp);
-							else
-								configDirFile = BetterFile.at(new NativeFileSource(), "./" + theConfigName);
-						}
-						if (!configDirFile.exists()) {
-							try {
-								configDirFile.create(true);
-							} catch (IOException e) {
-								throw new IllegalStateException("Could not create config directory " + configDirFile.getPath(), e);
-							}
-						} else if (!configDirFile.isDirectory())
-							throw new IllegalStateException("Not a directory: " + configDirFile.getPath());
-
-						BetterFile configFile = configDirFile.at(theConfigName + ".xml");
-						if (!configFile.exists()) {
-							BetterFile oldConfigFile = configDirFile.getParent().at(theConfigName + ".config");
-							if (oldConfigFile.exists()) {
-								try {
-									oldConfigFile.move(configFile);
-								} catch (IOException e) {
-									System.err.println(
-										"Could not move old configuration " + oldConfigFile.getPath() + " to " + configFile.getPath());
-									e.printStackTrace();
-								}
-							}
-						}
-
-						FileBackups backups = isBackup ? new FileBackups(configFile) : null;
-
-						if (!configFile.exists() && theOldConfigNames != null) {
-							boolean found = false;
-							for (String oldConfigName : theOldConfigNames) {
-								BetterFile oldConfigFile = configDirFile.at(oldConfigName);
-								if (oldConfigFile.exists()) {
-									try {
-										oldConfigFile.move(configFile);
-									} catch (IOException e) {
-										System.err.println("Could not rename " + oldConfigFile.getPath() + " to " + configFile.getPath());
-										e.printStackTrace();
-									}
-									if (backups != null)
-										backups.renamedFrom(oldConfigFile);
-									found = true;
-									break;
-								}
-								if (!found) {
-									oldConfigFile = configDirFile.getParent().at(oldConfigName + "/" + oldConfigName + ".xml");
-									if (oldConfigFile.exists()) {
-										try {
-											oldConfigFile.move(configFile);
-										} catch (IOException e) {
-											System.err
-											.println("Could not rename " + oldConfigFile.getPath() + " to " + configFile.getPath());
-											e.printStackTrace();
-										}
-										if (backups != null)
-											backups.renamedFrom(oldConfigFile);
-										found = true;
-										break;
-									}
-								}
-							}
-						}
-						ObservableConfig config = ObservableConfig.createRoot(theConfigName, ThreadConstraint.EDT);
-						ObservableConfig.XmlEncoding encoding = ObservableConfig.XmlEncoding.DEFAULT;
-						boolean loaded = false;
-						if (configFile.exists()) {
-							try {
-								try (InputStream configStream = new BufferedInputStream(configFile.read())) {
-									ObservableConfig.readXml(config, configStream, encoding);
-								}
-								config.setName(theConfigName);
-								loaded = true;
-							} catch (IOException | TextParseException e) {
-								System.out.println("Could not read config file " + configFile.getPath());
-								e.printStackTrace(System.out);
-							}
-						}
-						boolean[] closingWithoutSave = new boolean[1];
-						AppEnvironment app = theApplicationEnvironment != null ? theApplicationEnvironment : new AppEnvironment() {
-							@Override
-							public InterpretedValueSynth<SettableValue<?>, SettableValue<String>> getTitle() {
-								return InterpretedValueSynth.literal(TypeTokens.get().STRING, "Unspecified Application",
-									"Unspecified Application");
-							}
-
-							@Override
-							public InterpretedValueSynth<SettableValue<?>, SettableValue<Image>> getIcon() {
-								return InterpretedValueSynth.literal(TypeTokens.get().of(Image.class), null, "No Image");
-							}
-						};
-						if (loaded)
-							build2(config, configFile, backups, closingWithoutSave);
-						else if (backups != null && !backups.getBackups().isEmpty()) {
-							restoreBackup(true, config, backups, () -> {
-								config.setName(theConfigName);
-								build2(config, configFile, backups, closingWithoutSave);
-							}, () -> {
-								config.setName(theConfigName);
-								build2(config, configFile, backups, closingWithoutSave);
-							}, app, closingWithoutSave, msi);
-						} else {
-							config.setName(theConfigName);
-							build2(config, configFile, backups, closingWithoutSave);
-						}
-						return SettableValue.of(ObservableConfig.class, config, "Not Settable");
 					});
 				}
 			}
@@ -1059,6 +1050,13 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 			}
 
 			@Override
+			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+				if (env.getProperty(ConfigModelValue.FORMAT_SET_KEY, ObservableConfigFormatSet.class) == null)
+					env.setProperty(ConfigModelValue.FORMAT_SET_KEY, new ObservableConfigFormatSet());
+				super.doUpdate(env);
+			}
+
+			@Override
 			public ConfigModelElement create(ExElement parent) throws ModelInstantiationException {
 				return new ConfigModelElement(this, parent);
 			}
@@ -1067,5 +1065,29 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 		public ConfigModelElement(Interpreted<?> interpreted, ExElement parent) {
 			super(interpreted, parent);
 		}
-	}*/
+
+		static class OldConfigName extends ExElement.Def.Abstract<ExElement> {
+			private static final SingleTypeTraceability<ExElement, ExElement.Interpreted<ExElement>, OldConfigName> TRACEABILITY = ElementTypeTraceability
+				.getElementTraceability(ExpressoConfigV0_1.NAME, ExpressoConfigV0_1.VERSION, "old-config-name", OldConfigName.class, null,
+					null);
+
+			private String theOldConfigName;
+
+			OldConfigName(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
+				super(parent, qonfigType);
+			}
+
+			@QonfigAttributeGetter
+			public String getOldConfigName() {
+				return theOldConfigName;
+			}
+
+			@Override
+			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
+				withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
+				super.doUpdate(session);
+				theOldConfigName = session.getValueText();
+			}
+		}
+	}
 }

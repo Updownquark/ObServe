@@ -1,7 +1,5 @@
 package org.observe.expresso.qonfig;
 
-import static org.observe.expresso.qonfig.ExpressoBaseV0_1.creator;
-
 import java.util.Comparator;
 
 import org.observe.Equivalence;
@@ -51,12 +49,12 @@ public class ObservableValueTransformations {
 	}
 
 	public static void configureTransformation(QonfigInterpreterCore.Builder interpreter) {
-		interpreter.createWith("disable", ValueTransform.class, creator(DisabledValueTransform::new));
-		interpreter.createWith("filter-accept", ValueTransform.class, creator(FilterAcceptValueTransform::new));
-		interpreter.createWith("map-to", ValueTransform.class, creator(MapValueTransform::new));
-		interpreter.createWith("refresh", ValueTransform.class, creator(RefreshValueTransform::new));
-		interpreter.createWith("unmodifiable", ValueTransform.class, creator(UnmodifiableValueTransform::new));
-		interpreter.createWith("flatten", ValueTransform.class, creator(FlattenValueTransform::new));
+		interpreter.createWith("disable", ValueTransform.class, ExElement.creator(DisabledValueTransform::new));
+		interpreter.createWith("filter-accept", ValueTransform.class, ExElement.creator(FilterAcceptValueTransform::new));
+		interpreter.createWith("map-to", ValueTransform.class, ExElement.creator(MapValueTransform::new));
+		interpreter.createWith("refresh", ValueTransform.class, ExElement.creator(RefreshValueTransform::new));
+		interpreter.createWith("unmodifiable", ValueTransform.class, ExElement.creator(UnmodifiableValueTransform::new));
+		interpreter.createWith("flatten", ValueTransform.class, ExElement.creator(FlattenValueTransform::new));
 	}
 
 	static class DisabledValueTransform extends TypePreservingTransform<SettableValue<?>>

@@ -1,7 +1,5 @@
 package org.observe.expresso;
 
-import static org.observe.expresso.qonfig.ExpressoBaseV0_1.creator;
-
 import java.util.List;
 import java.util.Set;
 
@@ -53,10 +51,10 @@ public class ExpressoTestFrameworkInterpretation implements QonfigInterpretation
 	@Override
 	public Builder configureInterpreter(Builder interpreter) {
 		interpreter//
-		.createWith("testing", ExpressoTesting.class, creator(ExpressoTesting::new));
-		interpreter.createWith("test", ExpressoTesting.ExpressoTest.Def.class, creator(ExpressoTesting.ExpressoTest.Def::new));
-		interpreter.createWith("test-action", ExpressoTesting.TestAction.class, creator(ExpressoTesting.TestAction::new));
-		interpreter.createWith("watch", ModelValueElement.CompiledSynth.class, ExpressoBaseV0_1.creator(WatchedValue::new));
+		.createWith("testing", ExpressoTesting.class, ExElement.creator(ExpressoTesting::new));
+		interpreter.createWith("test", ExpressoTesting.ExpressoTest.Def.class, ExElement.creator(ExpressoTesting.ExpressoTest.Def::new));
+		interpreter.createWith("test-action", ExpressoTesting.TestAction.class, ExElement.creator(ExpressoTesting.TestAction::new));
+		interpreter.createWith("watch", ModelValueElement.CompiledSynth.class, ExElement.creator(WatchedValue::new));
 		return interpreter;
 	}
 

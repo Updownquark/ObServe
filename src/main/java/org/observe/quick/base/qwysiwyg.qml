@@ -1,22 +1,24 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<quick uses:base="Quick-Base v0.1" with-extension="window" title="`Simple Quick Table Demo`" close-action="exit"
-	width="window.width" height="window.height">
+<quick uses:base="Quick-Base v0.1" uses:config="Expresso-Config v0.1" with-extension="window" title="app.qwysiwyg.title" close-action="exit"
+	x="config.x" y="config.y" width="config.width" height="config.height">
 	<head>
 		<models>
 			<ext-model name="clArgs">
 				<value name="targetQuickApp" type="String" />
 				<list name="$UNMATCHED$" type="String" />
 			</ext-model>
+			<config name="config" config-name="qwysiwyg">
+				<value name="x" type="int" />
+				<value name="y" type="int" />
+				<value name="width" type="int" default="860" />
+				<value name="height" type="int" default="860" />
+			</config>
 			<model name="app">
 				<value name="qwysiwyg">new org.observe.quick.base.Qwysiwyg()</value>
 				<hook name="modelLoad" on="onModelLoad">qwysiwyg.init(clArgs.targetQuickApp, clArgs.$UNMATCHED$)</hook>
 				<hook name="targetChange" on="clArgs.targetQuickApp">qwysiwyg.init(clArgs.targetQuickApp, clArgs.$UNMATCHED$)</hook>
 				<hook name="clArgsChange" on="clArgs.$UNMATCHED$">qwysiwyg.init(clArgs.targetQuickApp, clArgs.$UNMATCHED$)</hook>
-			</model>
-			<model name="window">
-				<value name="width" init="860" />
-				<value name="height" init="860" />
 			</model>
 		</models>
 	</head>

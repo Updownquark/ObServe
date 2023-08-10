@@ -3,8 +3,8 @@ package org.observe.quick.base;
 import java.text.ParseException;
 import java.util.Objects;
 
-import org.observe.ObservableValue;
 import org.observe.expresso.NonStructuredParser;
+import org.observe.util.TypeTokens;
 
 import com.google.common.reflect.TypeToken;
 
@@ -108,7 +108,6 @@ public class QuickSize {
 			return new QuickSize(0.0f, Integer.parseInt(text));
 	}
 
-
 	/**
 	 * @param text The text to parse
 	 * @return The size represented by the text
@@ -124,16 +123,17 @@ public class QuickSize {
 	}
 
 	/** Parses {@link QuickSize}s for Expresso */
-	public static class Parser implements NonStructuredParser {
+	public static class Parser extends NonStructuredParser.Simple<QuickSize> {
 		private final boolean isPosition;
 
 		/** @param position Whether this parser should parse positions (potentially with "xp" unit) or sizes */
 		public Parser(boolean position) {
+			super(TypeTokens.get().of(QuickSize.class));
 			this.isPosition = position;
 		}
 
 		@Override
-		public <T> ObservableValue<? extends T> parse(TypeToken<T> type, String text) throws ParseException {
+		protected <T2 extends QuickSize> T2 parseValue(TypeToken<T2> type, String text) throws ParseException {
 			boolean pct, xp;
 			int unit;
 			if (text.endsWith("%")) {
@@ -176,7 +176,7 @@ public class QuickSize {
 				} catch (NumberFormatException e) {
 					throw new ParseException("Could not parse " + (isPosition ? "position" : "size") + " value: '" + numberStr + "'", 0);
 				}
-				return (ObservableValue<? extends T>) ObservableValue.of(QuickSize.class, new QuickSize(value, 0));
+				return (T2) new QuickSize(value, 0);
 			} else {
 				int value;
 				try {
@@ -185,9 +185,9 @@ public class QuickSize {
 					throw new ParseException("Could not parse " + (isPosition ? "position" : "size") + " value: '" + numberStr + "'", 0);
 				}
 				if (xp)
-					return (ObservableValue<? extends T>) ObservableValue.of(QuickSize.class, new QuickSize(100.0f, -value));
+					return (T2) new QuickSize(100.0f, -value);
 				else
-					return (ObservableValue<? extends T>) ObservableValue.of(QuickSize.class, new QuickSize(0.0f, value));
+					return (T2) new QuickSize(0.0f, value);
 			}
 		}
 

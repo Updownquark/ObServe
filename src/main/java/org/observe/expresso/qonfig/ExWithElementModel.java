@@ -49,7 +49,7 @@ public class ExWithElementModel extends ExFlexibleElementModelAddOn<ExElement> {
 					ExtModelValueElement.Def<?> spec = dvSession.interpret(ExtModelValueElement.Def.class);
 					spec.update(dvSession);
 					if (dv.getSourceChild() != null) {
-						for (ExpressoQIS childSession : session.asElement(dv.getOwner()).forChildren(dv.getSourceChild(), null, null, null))
+						for (ExpressoQIS childSession : session.asElement(dv.getOwner()).forChildren(dv.getSourceChild()))
 							builder = handleDynamicValue(dv, builder, childSession, spec);
 					} else
 						builder = handleDynamicValue(dv, builder, session.asElement(dv.getOwner()), spec);

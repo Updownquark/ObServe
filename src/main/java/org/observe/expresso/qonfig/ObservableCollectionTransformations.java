@@ -1,7 +1,5 @@
 package org.observe.expresso.qonfig;
 
-import static org.observe.expresso.qonfig.ExpressoBaseV0_1.creator;
-
 import java.util.Comparator;
 import java.util.function.Function;
 
@@ -56,23 +54,23 @@ public class ObservableCollectionTransformations {
 	}
 
 	public static void configureTransformation(QonfigInterpreterCore.Builder interpreter) {
-		interpreter.createWith("map-to", CollectionTransform.class, creator(MapCollectionTransform::new));
-		interpreter.createWith("filter", CollectionTransform.class, creator(FilterCollectionTransform::new));
-		interpreter.createWith("filter-by-type", CollectionTransform.class, creator(TypeFilteredCollectionTransform::new));
-		interpreter.createWith("reverse", CollectionTransform.class, creator(ReverseCollectionTransform::new));
-		interpreter.createWith("refresh", CollectionTransform.class, creator(RefreshCollectionTransform::new));
-		interpreter.createWith("refresh-each", CollectionTransform.class, creator(RefreshEachCollectionTransform::new));
-		interpreter.createWith("distinct", CollectionTransform.class, creator(DistinctCollectionTransform::new));
-		interpreter.createWith("sort", CollectionTransform.class, creator(SortedCollectionTransform::new));
-		interpreter.createWith("unmodifiable", CollectionTransform.class, creator(UnmodifiableCollectionTransform::new));
-		interpreter.createWith("filter-mod", CollectionTransform.class, creator(FilterModCollectionTransform::new));
-		interpreter.createWith("map-equivalent", CollectionTransform.class, creator(MapEquivalentCollectionTransform::new));
-		interpreter.createWith("flatten", CollectionTransform.class, creator(FlattenCollectionTransform::new));
-		interpreter.createWith("cross", CollectionTransform.class, creator(CrossCollectionTransform::new));
-		interpreter.createWith("where-contained", CollectionTransform.class, creator(WhereContainedCollectionTransform::new));
-		interpreter.createWith("group-by", CollectionTransform.class, creator(GroupByCollectionTransform::new));
-		interpreter.createWith("size", CollectionTransform.class, creator(SizeCollectionTransform::new));
-		interpreter.createWith("collect", CollectionTransform.class, creator(CollectCollectionTransform::new));
+		interpreter.createWith("map-to", CollectionTransform.class, ExElement.creator(MapCollectionTransform::new));
+		interpreter.createWith("filter", CollectionTransform.class, ExElement.creator(FilterCollectionTransform::new));
+		interpreter.createWith("filter-by-type", CollectionTransform.class, ExElement.creator(TypeFilteredCollectionTransform::new));
+		interpreter.createWith("reverse", CollectionTransform.class, ExElement.creator(ReverseCollectionTransform::new));
+		interpreter.createWith("refresh", CollectionTransform.class, ExElement.creator(RefreshCollectionTransform::new));
+		interpreter.createWith("refresh-each", CollectionTransform.class, ExElement.creator(RefreshEachCollectionTransform::new));
+		interpreter.createWith("distinct", CollectionTransform.class, ExElement.creator(DistinctCollectionTransform::new));
+		interpreter.createWith("sort", CollectionTransform.class, ExElement.creator(SortedCollectionTransform::new));
+		interpreter.createWith("unmodifiable", CollectionTransform.class, ExElement.creator(UnmodifiableCollectionTransform::new));
+		interpreter.createWith("filter-mod", CollectionTransform.class, ExElement.creator(FilterModCollectionTransform::new));
+		interpreter.createWith("map-equivalent", CollectionTransform.class, ExElement.creator(MapEquivalentCollectionTransform::new));
+		interpreter.createWith("flatten", CollectionTransform.class, ExElement.creator(FlattenCollectionTransform::new));
+		interpreter.createWith("cross", CollectionTransform.class, ExElement.creator(CrossCollectionTransform::new));
+		interpreter.createWith("where-contained", CollectionTransform.class, ExElement.creator(WhereContainedCollectionTransform::new));
+		interpreter.createWith("group-by", CollectionTransform.class, ExElement.creator(GroupByCollectionTransform::new));
+		interpreter.createWith("size", CollectionTransform.class, ExElement.creator(SizeCollectionTransform::new));
+		interpreter.createWith("collect", CollectionTransform.class, ExElement.creator(CollectCollectionTransform::new));
 
 		// TODO Probably should support value-set transformations here, just grabbing the values and returning a collection
 		// This can always be overridden later

@@ -1,7 +1,5 @@
 package org.observe.expresso;
 
-import static org.observe.expresso.qonfig.ExpressoBaseV0_1.creator;
-
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
@@ -53,11 +51,11 @@ public class TestInterpretation implements QonfigInterpretation {
 
 	@Override
 	public Builder configureInterpreter(Builder interpreter) {
-		interpreter.createWith("stateful-struct", ModelValueElement.CompiledSynth.class, creator(StatefulStruct::new));
+		interpreter.createWith("stateful-struct", ModelValueElement.CompiledSynth.class, ExElement.creator(StatefulStruct::new));
 		interpreter.createWith("dynamic-type-stateful-struct", ModelValueElement.CompiledSynth.class,
-			creator(DynamicTypeStatefulStruct::new));
+			ExElement.creator(DynamicTypeStatefulStruct::new));
 		interpreter.createWith("dynamic-type-stateful-struct2", ModelValueElement.CompiledSynth.class,
-			creator(DynamicTypeStatefulStruct2::new));
+			ExElement.creator(DynamicTypeStatefulStruct2::new));
 		return interpreter;
 	}
 
