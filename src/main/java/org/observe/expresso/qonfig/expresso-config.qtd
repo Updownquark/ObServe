@@ -121,7 +121,7 @@ It builds on the Expresso-Base toolkit and allows specification of persisted con
 		
 		<element-def name="config-format" extends="model-value" abstract="true">
 		</element-def>
-		<element-def name="config-format-from-model" inherits="model-reference">
+		<element-def name="config-format-from-model" extends="model-value" inherits="model-reference">
 			<attribute name="ref" type="expression" />
 		</element-def>
 		<element-def name="text-config-format" extends="config-format">

@@ -1,7 +1,6 @@
 package org.observe.quick.base;
 
 import java.awt.Color;
-import java.util.List;
 
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
@@ -28,8 +27,8 @@ import org.observe.quick.style.QuickInterpretedStyle;
 import org.observe.quick.style.QuickInterpretedStyleCache;
 import org.observe.quick.style.QuickInterpretedStyleCache.Applications;
 import org.observe.quick.style.QuickStyleAttributeDef;
-import org.observe.quick.style.QuickStyleValue;
 import org.observe.quick.style.QuickStyledElement;
+import org.observe.quick.style.QuickTypeStyle;
 import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
@@ -379,7 +378,8 @@ public class StyledTextArea<T> extends QuickTextWidget.Abstract<T> {
 			.getElementTraceability(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, TEXT_STYLE, Def.class, Interpreted.class,
 				TextStyleElement.class);
 
-		public static class Def extends QuickTextElement.Def.Abstract<TextStyleElement> {
+		public static class Def extends QuickStyledElement.Def.Abstract<TextStyleElement>
+		implements QuickTextElement.Def<TextStyleElement> {
 			public Def(StyledTextArea.Def<?> parent, QonfigElementOrAddOn type) {
 				super(parent, type);
 			}
@@ -396,7 +396,7 @@ public class StyledTextArea<T> extends QuickTextWidget.Abstract<T> {
 
 			@Override
 			protected TextStyle.Def wrap(QuickStyledElement.QuickInstanceStyle.Def parentStyle, QuickCompiledStyle style) {
-				return new TextStyle.Def(parentStyle, style);
+				return new TextStyle.Def(parentStyle, this, style);
 			}
 
 			@Override
@@ -410,7 +410,8 @@ public class StyledTextArea<T> extends QuickTextWidget.Abstract<T> {
 			}
 		}
 
-		public static class Interpreted extends QuickTextElement.Interpreted.Abstract<TextStyleElement> {
+		public static class Interpreted extends QuickStyledElement.Interpreted.Abstract<TextStyleElement>
+		implements QuickTextElement.Interpreted<TextStyleElement> {
 			public Interpreted(TextStyleElement.Def definition, StyledTextArea.Interpreted<?> parent) {
 				super(definition, parent);
 			}
@@ -454,8 +455,11 @@ public class StyledTextArea<T> extends QuickTextWidget.Abstract<T> {
 		public static class Def extends QuickTextElement.QuickTextStyle.Def.Abstract {
 			private QuickStyleAttributeDef theBackground;
 
-			public Def(QuickCompiledStyle parent, QuickCompiledStyle wrapped) {
-				super(parent, wrapped);
+			public Def(QuickInstanceStyle.Def parent, TextStyleElement.Def styledElement, QuickCompiledStyle wrapped) {
+				super(parent, styledElement, wrapped);
+				QuickTypeStyle typeStyle = QuickStyledElement.getTypeStyle(wrapped.getStyleTypes(), wrapped.getElement(),
+					QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, TEXT_STYLE);
+				theBackground = addApplicableAttribute(typeStyle.getAttribute("bg-color"));
 			}
 
 			public QuickStyleAttributeDef getBackground() {
@@ -463,24 +467,19 @@ public class StyledTextArea<T> extends QuickTextWidget.Abstract<T> {
 			}
 
 			@Override
-			public void update(List<QuickStyleValue> declaredValues, List<QuickStyleValue> otherValues)
-				throws QonfigInterpretationException {
-				super.update(declaredValues, otherValues);
-				theBackground = getWrapped().getAttribute("bg-color");
-			}
-
-			@Override
 			public Interpreted interpret(ExElement.Interpreted<?> parentEl, QuickInterpretedStyle parent, InterpretedExpressoEnv env)
 				throws ExpressoInterpretationException {
-				return new Interpreted(this, parent, getWrapped().interpret(parentEl, parent, env));
+				return new Interpreted(this, (TextStyleElement.Interpreted) parentEl, (QuickInstanceStyle.Interpreted) parent,
+					getWrapped().interpret(parentEl, parent, env));
 			}
 		}
 
 		public static class Interpreted extends QuickTextElement.QuickTextStyle.Interpreted.Abstract {
 			private QuickElementStyleAttribute<Color> theBackground;
 
-			public Interpreted(Def definition, QuickInterpretedStyle parent, QuickInterpretedStyle wrapped) {
-				super(definition, parent, wrapped);
+			public Interpreted(Def definition, TextStyleElement.Interpreted styledElement, QuickInstanceStyle.Interpreted parent,
+				QuickInterpretedStyle wrapped) {
+				super(definition, styledElement, parent, wrapped);
 			}
 
 			@Override
@@ -501,19 +500,19 @@ public class StyledTextArea<T> extends QuickTextWidget.Abstract<T> {
 
 			@Override
 			public TextStyle create(QuickStyledElement styledElement) {
-				return new TextStyle(getId(), (TextStyleElement) styledElement);
+				return new TextStyle(this, (TextStyleElement) styledElement);
 			}
 		}
 
-		private final SettableValue<ObservableValue<Color>> theBackground;
+		private final ObservableValue<Color> theBackground;
 
 		// We need to keep this around to make copies of ourself
-		private Interpreted theInterpreted;
+		private final Interpreted theInterpreted;
 
-		public TextStyle(Object interpretedId, TextStyleElement styledElement) {
-			super(interpretedId, styledElement);
-			theBackground = SettableValue
-				.build(TypeTokens.get().keyFor(ObservableValue.class).<ObservableValue<Color>> parameterized(Color.class)).build();
+		public TextStyle(Interpreted interpreted, TextStyleElement styledElement) {
+			super(interpreted, styledElement);
+			theInterpreted = interpreted;
+			theBackground = getApplicableAttribute(interpreted.getBackground().getAttribute());
 		}
 
 		@Override
@@ -522,20 +521,13 @@ public class StyledTextArea<T> extends QuickTextWidget.Abstract<T> {
 		}
 
 		public ObservableValue<Color> getBackground() {
-			return ObservableValue.flatten(theBackground);
+			return theBackground;
 		}
 
 		public TextStyle copy(ModelSetInstance styleElementModels) throws ModelInstantiationException {
-			TextStyle copy = new TextStyle(getId(), getStyledElement());
+			TextStyle copy = new TextStyle(theInterpreted, getStyledElement());
 			copy.update(theInterpreted, styleElementModels);
 			return copy;
-		}
-
-		@Override
-		public void update(QuickInstanceStyle.Interpreted interpreted, ModelSetInstance models) throws ModelInstantiationException {
-			super.update(interpreted, models);
-			theInterpreted = (Interpreted) interpreted;
-			theBackground.set(theInterpreted.getBackground().evaluate(models), null);
 		}
 	}
 }

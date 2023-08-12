@@ -90,8 +90,8 @@ public class QuickStyleValue implements Comparable<QuickStyleValue> {
 	}
 
 	/**
-	 * @param cache The interpreted style cache to avoid duplicating attributes and applications, also containing the expresso environment
-	 *        in which to
+	 * @param appCache The interpreted style cache to avoid duplicating applications
+	 * @param env The expresso environment with which to
 	 *        {@link ObservableExpression#evaluate(org.observe.expresso.ModelType.ModelInstanceType, InterpretedExpressoEnv, int) evaluate}
 	 *        this value's expressions
 	 * @return The compiled style value

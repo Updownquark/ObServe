@@ -15,7 +15,7 @@
 				<value name="height" type="int" default="860" />
 			</config>
 			<model name="app">
-				<value name="qwysiwyg">new org.observe.quick.base.Qwysiwyg()</value>
+				<value name="qwysiwyg">new org.observe.quick.qwysiwyg.Qwysiwyg()</value>
 				<hook name="modelLoad" on="onModelLoad">qwysiwyg.init(clArgs.targetQuickApp, clArgs.$UNMATCHED$)</hook>
 				<hook name="targetChange" on="clArgs.targetQuickApp">qwysiwyg.init(clArgs.targetQuickApp, clArgs.$UNMATCHED$)</hook>
 				<hook name="clArgsChange" on="clArgs.$UNMATCHED$">qwysiwyg.init(clArgs.targetQuickApp, clArgs.$UNMATCHED$)</hook>
@@ -63,5 +63,20 @@
 				exp.remove()
 			</value-action>
 		</table>
+		<box layout="inline-layout" orientation="vertical" main-align="justify" cross-align="justify">
+			<titled-border title="`Style`" />
+			<box layout="inline-layout" orientation="horizontal">
+				<combo values="app.qwysiwyg.availableStyles" value="app.qwysiwyg.selectedStyle" />
+			</box>
+			<table rows="app.qwysiwyg.styleDebugValues">
+					<style attr="with-text.font-weight" condition="value!=null &amp;&amp; value.isActive()">`bold`</style>
+				<column name="`Source`"  value="value.getSourceElement()" />
+				<column name="`Condition`" value="value.getCondition()" />
+				<column name="`Value`" value="value.getValueExpression()" />
+				<column name="`Active Value`" value="value.getCurrentValue()">
+					<style attr="with-text.font-slant" condition="!value.isActive()">`italic`</style>
+				</column>
+			</table>
+		</box>
 	</box>
 </quick>

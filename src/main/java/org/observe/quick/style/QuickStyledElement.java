@@ -2,8 +2,15 @@ package org.observe.quick.style;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
+import org.observe.Observable;
+import org.observe.ObservableValue;
+import org.observe.ObservableValueEvent;
 import org.observe.SettableValue;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.InterpretedExpressoEnv;
@@ -15,6 +22,8 @@ import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExWithElementModel;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigChildGetter;
+import org.observe.quick.style.QuickInterpretedStyleCache.Applications;
+import org.observe.util.TypeTokens;
 import org.qommons.Version;
 import org.qommons.collect.CollectionUtils;
 import org.qommons.config.QonfigAddOn;
@@ -269,33 +278,149 @@ public interface QuickStyledElement extends ExElement {
 		public interface Def extends QuickCompiledStyle {
 			Object getId();
 
+			QuickStyledElement.Def<?> getStyledElement();
+
 			@Override
 			Interpreted interpret(ExElement.Interpreted<?> parentEl, QuickInterpretedStyle parent, InterpretedExpressoEnv env)
 				throws ExpressoInterpretationException;
+
+			Set<QuickStyleAttributeDef> getApplicableAttributes();
+
+			public static abstract class Abstract extends QuickCompiledStyle.Wrapper implements Def {
+				private final QuickStyledElement.Def<?> theStyledElement;
+				private final Object theId;
+				private final Set<QuickStyleAttributeDef> theApplicableAttributes;
+
+				protected Abstract(Def parent, QuickStyledElement.Def<?> styledElement, QuickCompiledStyle wrapped) {
+					super(parent, wrapped);
+					theStyledElement = styledElement;
+					theId = new Object();
+					theApplicableAttributes = new LinkedHashSet<>();
+				}
+
+				@Override
+				public Def getParent() {
+					return (Def) super.getParent();
+				}
+
+				@Override
+				public Object getId() {
+					return theId;
+				}
+
+				@Override
+				public QuickStyledElement.Def<?> getStyledElement() {
+					return theStyledElement;
+				}
+
+				@Override
+				public Set<QuickStyleAttributeDef> getApplicableAttributes() {
+					return Collections.unmodifiableSet(theApplicableAttributes);
+				}
+
+				protected QuickStyleAttributeDef addApplicableAttribute(QuickStyleAttributeDef attr) {
+					theApplicableAttributes.add(attr);
+					return attr;
+				}
+
+				@Override
+				public abstract Interpreted interpret(ExElement.Interpreted<?> parentEl, QuickInterpretedStyle parent,
+					InterpretedExpressoEnv env) throws ExpressoInterpretationException;
+			}
 		}
 
 		public interface Interpreted extends QuickInterpretedStyle {
 			@Override
 			Def getDefinition();
 
+			QuickStyledElement.Interpreted<?> getStyledElement();
+
 			default Object getId() {
 				return getDefinition().getId();
 			}
 
+			Map<QuickStyleAttributeDef, QuickStyleAttribute<?>> getApplicableAttributes();
+
 			QuickInstanceStyle create(QuickStyledElement parent);
+
+			public static abstract class Abstract extends QuickInterpretedStyle.Wrapper implements Interpreted {
+				private final Def theDefinition;
+				private final QuickStyledElement.Interpreted<?> theStyledElement;
+				private final Map<QuickStyleAttributeDef, QuickStyleAttribute<?>> theApplicableAttributes;
+
+				protected Abstract(Def definition, QuickStyledElement.Interpreted<?> styledElement, QuickInstanceStyle.Interpreted parent,
+					QuickInterpretedStyle wrapped) {
+					super(parent, wrapped);
+					theDefinition = definition;
+					theStyledElement = styledElement;
+					theApplicableAttributes = new LinkedHashMap<>();
+				}
+
+				@Override
+				public Def getDefinition() {
+					return theDefinition;
+				}
+
+				@Override
+				public Interpreted getParent() {
+					return (Interpreted) super.getParent();
+				}
+
+				@Override
+				public QuickStyledElement.Interpreted<?> getStyledElement() {
+					return theStyledElement;
+				}
+
+				@Override
+				public Map<QuickStyleAttributeDef, QuickStyleAttribute<?>> getApplicableAttributes() {
+					return Collections.unmodifiableMap(theApplicableAttributes);
+				}
+
+				@Override
+				public void update(InterpretedExpressoEnv env, Applications appCache) throws ExpressoInterpretationException {
+					super.update(env, appCache);
+					theApplicableAttributes.clear();
+					QuickInterpretedStyleCache cache = QuickInterpretedStyleCache.get(env);
+					for (QuickStyleAttributeDef attr : getDefinition().getApplicableAttributes())
+						theApplicableAttributes.put(attr, cache.getAttribute(attr, env));
+				}
+			}
 		}
 
 		Object getId();
+
+		Set<QuickStyleAttribute<?>> getApplicableAttributes();
+
+		<T> ObservableValue<T> getApplicableAttribute(QuickStyleAttribute<T> attribute);
+
+		Observable<ObservableValueEvent<?>> changes();
 
 		void update(Interpreted interpreted, ModelSetInstance models) throws ModelInstantiationException;
 
 		public abstract class Abstract implements QuickInstanceStyle {
 			private final QuickStyledElement theStyledElement;
 			private final Object theId;
+			private final Map<QuickStyleAttribute<?>, SettableValue<? extends ObservableValue<?>>> theApplicableAttributes;
+			private final Map<QuickStyleAttribute<?>, ObservableValue<?>> theFlattenedAttributes;
+			private Observable<ObservableValueEvent<?>> theChanges;
 
-			protected Abstract(Object interpretedId, QuickStyledElement styledElement) {
-				theId = interpretedId;
+			protected Abstract(Interpreted interpreted, QuickStyledElement styledElement) {
+				theId = interpreted.getId();
 				theStyledElement = styledElement;
+				theApplicableAttributes = new LinkedHashMap<>();
+				theFlattenedAttributes = new LinkedHashMap<>();
+
+				for (QuickStyleAttribute<?> attr : interpreted.getApplicableAttributes().values())
+					initAttribute(attr);
+			}
+
+			private <T> SettableValue<ObservableValue<T>> initAttribute(QuickStyleAttribute<T> attr) {
+				return (SettableValue<ObservableValue<T>>) theApplicableAttributes.computeIfAbsent(attr, __ -> {
+					SettableValue<ObservableValue<T>> value = SettableValue
+						.build(TypeTokens.get().keyFor(ObservableValue.class).<ObservableValue<T>> parameterized(attr.getType())).build();
+					theFlattenedAttributes.put(attr, ObservableValue.flatten(value));
+					return value;
+				});
 			}
 
 			public QuickStyledElement getStyledElement() {
@@ -308,7 +433,58 @@ public interface QuickStyledElement extends ExElement {
 			}
 
 			@Override
+			public Set<QuickStyleAttribute<?>> getApplicableAttributes() {
+				return Collections.unmodifiableSet(theApplicableAttributes.keySet());
+			}
+
+			@Override
+			public <T> ObservableValue<T> getApplicableAttribute(QuickStyleAttribute<T> attribute) {
+				ObservableValue<T> value = (ObservableValue<T>) theFlattenedAttributes.get(attribute);
+				if (value == null)
+					throw new IllegalArgumentException(
+						"Attribute " + attribute + " is not advertised as applicable to " + getClass().getName());
+				return value;
+			}
+
+			@Override
+			public Observable<ObservableValueEvent<?>> changes() {
+				if (theChanges == null) {
+					Observable<? extends ObservableValueEvent<?>>[] changes = new Observable[theFlattenedAttributes.size()];
+					int i = 0;
+					for (ObservableValue<?> value : theFlattenedAttributes.values())
+						changes[i++] = value.noInitChanges();
+					theChanges = Observable.or(changes);
+				}
+				return theChanges;
+			}
+
+			@Override
 			public void update(Interpreted interpreted, ModelSetInstance models) throws ModelInstantiationException {
+				for (QuickStyleAttribute<?> attr : interpreted.getApplicableAttributes().values())
+					checkAttribute(attr, interpreted, models);
+			}
+
+			private <T> void checkAttribute(QuickStyleAttribute<T> attr, Interpreted interpreted, ModelSetInstance models)
+				throws ModelInstantiationException {
+				SettableValue<ObservableValue<T>> value = initAttribute(attr);
+				value.set(interpreted.get(attr).evaluate(models), null);
+			}
+
+			@Override
+			public String toString() {
+				StringBuilder str = new StringBuilder(theStyledElement.getTypeName()).append(".style{");
+				boolean any = false;
+				for (Map.Entry<QuickStyleAttribute<?>, ObservableValue<?>> attr : theFlattenedAttributes.entrySet()) {
+					Object value = attr.getValue().get();
+					if (value != null) {
+						str.append('\n').append(attr.getKey().getName()).append('=').append(value);
+						any = true;
+					}
+				}
+				if (any)
+					str.append('\n');
+				str.append('}');
+				return str.toString();
 			}
 		}
 	}

@@ -117,6 +117,7 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 	private final int theTypeComplexity;
 	private final LocatedExpression theCondition;
 	private final Map<ElementModelValue.Identity, Integer> theModelValues;
+	private final long thePriority;
 
 	private StyleApplicationDef(StyleApplicationDef parent, QonfigChildDef role, MultiInheritanceSet<QonfigElementOrAddOn> types,
 		LocatedExpression condition, Map<ElementModelValue.Identity, Integer> modelValues) {
@@ -141,6 +142,7 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 			localComplexity = visited.size();
 		}
 		theTypeComplexity = localComplexity + (theParent == null ? 0 : theParent.getTypeComplexity());
+		thePriority = modelValues.values().stream().mapToLong(Integer::longValue).sum();
 	}
 
 	private static void addHierarchy(QonfigElementOrAddOn type, Set<QonfigElementOrAddOn> visited) {
@@ -224,7 +226,8 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 		ObservableModelSet models, QonfigToolkit expresso, boolean styleSheet, ElementModelValue.Cache dmvCache, int expressionOffset)
 			throws ExpressoEvaluationException {
 		if (ex instanceof NameExpression && ((NameExpression) ex).getContext() == null) {
-			String name = ((NameExpression) ex).getNames().getFirst().getName();
+			NameExpression nameEx = (NameExpression) ex;
+			String name = nameEx.getNames().getFirst().getName();
 			ModelComponentNode<?> node = models.getComponentIfExists(name);
 			if (node != null) {
 				if (node.getValueIdentity() instanceof ElementModelValue.Identity)
@@ -235,7 +238,10 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 				if (mv != null) {
 					modelValues.add(mv);
 					return new ModelValueExpression(ex, mv);
-				}
+				} // else
+				// I'd love to throw an exception here if the name we found isn't an element value,
+				// but it could be e.g. a static call to something that's perfectly valid.
+				// Unfortunately, this will just have to throw an exception in each place it can't be interpreted.
 			}
 		} else {
 			IdentityHashMap<ObservableExpression, ObservableExpression>[] replace = new IdentityHashMap[1];
@@ -442,28 +448,17 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 
 	@Override
 	public int compareTo(StyleApplicationDef o) {
+		int comp;
+		// Compare the priority of model values used in the condition and value
+		comp = -Long.compare(thePriority, o.thePriority);
+
 		// Compare the complexity of the role path
-		int comp = -Integer.compare(getDepth(), o.getDepth());
+		if (comp == 0)
+			comp = -Integer.compare(getDepth(), o.getDepth());
 
 		// Compare the complexity of the element type
 		if (comp == 0)
 			comp = -Integer.compare(getTypeComplexity(), o.getTypeComplexity());
-
-		// Compare the priority of model values used in the condition and value
-		Iterator<Integer> iter1 = theModelValues.values().iterator();
-		Iterator<Integer> iter2 = o.theModelValues.values().iterator();
-		while (comp == 0) {
-			if (iter1.hasNext()) {
-				if (iter2.hasNext())
-					comp = -iter1.next().compareTo(iter2.next());
-				else
-					comp = -1; // We use more model values--higher priority
-			} else if (iter2.hasNext()) {
-				comp = 1; // We user fewer model values--lower priority
-			} else {
-				break;
-			}
-		}
 		return comp;
 	}
 
@@ -569,7 +564,7 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 
 	/**
 	 * @param condition The condition to apply to
-	 * @param env The Expresso environment containing model values that the condition may use
+	 * @param models The model set containing model values that the condition may use
 	 * @param priorityAttr The style-model-value.priority attribute from the Quick-Style toolkit
 	 * @param styleSheet Whether the application is defined from a style-sheet, as opposed to inline under the element
 	 * @param dmvCache The model value cache to use
@@ -615,7 +610,7 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 		StyleApplicationDef parent;
 		if (theParent != null) {
 			if (other.theParent != null) {
-				parent = theParent.and(other.theParent);// , models, priorityAttr, styleSheet, dmvCache);
+				parent = theParent.and(other.theParent);
 				if (parent == NONE)
 					return NONE;
 			} else
@@ -844,12 +839,11 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 
 	/**
 	 *
-	 * @param expressoEnv The Expresso environment in which to
-	 *        {@link ObservableExpression#evaluate(ModelInstanceType, InterpretedExpressoEnv, int) evaluate} {@link #getCondition()
-	 *        conditions}
-	 * @param applications A cache of compiled applications for re-use
+	 * @param env The Expresso environment in which to {@link ObservableExpression#evaluate(ModelInstanceType, InterpretedExpressoEnv, int)
+	 *        evaluate} {@link #getCondition() conditions}
+	 * @param appCache A cache of compiled applications for re-use
 	 * @return An {@link InterpretedStyleApplication} for this application in the given environment
-	 * @throws QonfigInterpretationException If a condition could not be
+	 * @throws ExpressoInterpretationException If a condition could not be
 	 *         {@link ObservableExpression#evaluate(ModelInstanceType, InterpretedExpressoEnv, int) evaluated}
 	 */
 	public InterpretedStyleApplication interpret(InterpretedExpressoEnv env, QuickInterpretedStyleCache.Applications appCache)
@@ -908,8 +902,8 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 					if (count == 0)
 						lastType = type.getName();
 					else if (count == 1) {
-						lastType = null;
 						str.append('[').append(lastType).append(", ").append(type.getName());
+						lastType = null;
 					} else
 						str.append(", ").append(type.getName());
 					count++;

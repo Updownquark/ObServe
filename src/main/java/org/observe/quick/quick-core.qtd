@@ -66,6 +66,11 @@
 		</add-on>
 
 		<add-on name="renderer" requires="widget" abstract="true" />
+		<add-on name="rendering" abstract="true">
+			<element-meta name="default-renderer" type="widget" inherits="renderer" min="0" />
+			<?DOC The widget used to render each value for this rendering widget?>
+			<child-def name="renderer" type="widget" inherits="renderer" min="0" />
+		</add-on>
 	</add-ons>
 
 	<elements>

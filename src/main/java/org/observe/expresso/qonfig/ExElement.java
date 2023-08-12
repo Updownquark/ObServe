@@ -1008,12 +1008,11 @@ public interface ExElement extends Identifiable {
 	 */
 	public static <D extends ExElement.Def<?>> D useOrReplace(Class<? extends D> type, D def, ExpressoQIS session, String childName)
 		throws QonfigInterpretationException, IllegalArgumentException {
-		QonfigElement element = session.getChildren(childName).peekFirst();
-		if (element == null)
+		ExpressoQIS childSession = childName == null ? session : session.forChildren(childName).peekFirst();
+		if (childSession == null)
 			return null;
-		else if (def != null && typesEqual(def.getElement(), element))
+		else if (def != null && typesEqual(def.getElement(), childSession.getElement()))
 			return def;
-		ExpressoQIS childSession = session.forChildren(childName).getFirst();
 		def = childSession.interpret(type, (d, s) -> d.update(s));
 		return def;
 	}

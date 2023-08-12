@@ -29,6 +29,7 @@ import org.observe.expresso.qonfig.ExWithElementModel;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.expresso.qonfig.QonfigChildGetter;
+import org.observe.quick.QuickCoreInterpretation;
 import org.observe.quick.QuickValueWidget;
 import org.observe.quick.QuickWidget;
 import org.observe.quick.style.QuickCompiledStyle;
@@ -631,8 +632,12 @@ public interface QuickTableColumn<R, C> {
 
 	public class SingleColumnSet<R, C> extends QuickStyledElement.Abstract implements TableColumnSet<R> {
 		public static final String COLUMN = "column";
-		private static final SingleTypeTraceability<SingleColumnSet<?, ?>, Interpreted<?, ?>, Def> TRACEABILITY = ElementTypeTraceability
+		private static final SingleTypeTraceability<SingleColumnSet<?, ?>, Interpreted<?, ?>, Def> COLUMN_TRACEABILITY = ElementTypeTraceability
 			.getElementTraceability(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, COLUMN, Def.class, Interpreted.class,
+				SingleColumnSet.class);
+		private static final SingleTypeTraceability<SingleColumnSet<?, ?>, Interpreted<?, ?>, Def> RENDERING_TRACEABILITY = ElementTypeTraceability
+			.getElementTraceability(QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, "rendering", Def.class,
+				Interpreted.class,
 				SingleColumnSet.class);
 
 		public static class Def extends QuickStyledElement.Def.Abstract<SingleColumnSet<?, ?>>
@@ -653,33 +658,33 @@ public interface QuickTableColumn<R, C> {
 				return (RowTyped.Def<?>) super.getParentElement();
 			}
 
-			@QonfigAttributeGetter("name")
+			@QonfigAttributeGetter(asType = "column", value = "name")
 			public CompiledExpression getName() {
 				return theName;
 			}
 
-			@QonfigAttributeGetter("column-value-name")
+			@QonfigAttributeGetter(asType = "column", value = "column-value-name")
 			public String getColumnValueName() {
 				return theColumnValueName;
 			}
 
-			@QonfigAttributeGetter("value")
+			@QonfigAttributeGetter(asType = "column", value = "value")
 			public CompiledExpression getValue() {
 				return theValue;
 			}
 
-			@QonfigAttributeGetter("header-tooltip")
+			@QonfigAttributeGetter(asType = "column", value = "header-tooltip")
 			public CompiledExpression getHeaderTooltip() {
 				return theHeaderTooltip;
 			}
 
-			@QonfigChildGetter("renderer")
+			@QonfigChildGetter(asType = "rendering", value = "renderer")
 			@Override
 			public QuickWidget.Def<?> getRenderer() {
 				return theRenderer;
 			}
 
-			@QonfigChildGetter("edit")
+			@QonfigChildGetter(asType = "column", value = "edit")
 			@Override
 			public ColumnEditing.Def getEditing() {
 				return theEditing;
@@ -687,13 +692,21 @@ public interface QuickTableColumn<R, C> {
 
 			@Override
 			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
-				withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
+				withTraceability(COLUMN_TRACEABILITY.validate(session.getFocusType(), session.reporting()));
+				withTraceability(RENDERING_TRACEABILITY.validate(session.asElement("rendering").getFocusType(), session.reporting()));
 				super.doUpdate(session.asElement("styled"));
 				theName = session.getAttributeExpression("name");
 				theColumnValueName = session.getAttributeText("column-value-name");
 				theValue = session.getAttributeExpression("value");
 				theHeaderTooltip = session.getAttributeExpression("header-tooltip");
-				theRenderer = ExElement.useOrReplace(QuickWidget.Def.class, theRenderer, session, "renderer");
+				ExpressoQIS renderer = session.forChildren("renderer").peekFirst();
+				// This seems pretty dumb, but there's currently not a way for the default renderer to point to the column value attribute,
+				// nor is there a way for us to alter the QonfigElement after the fact to insert it.
+				// So we can only use the default renderer if we use the default column-value-name
+				// The implementation should provide some default rendering with out this, but it won't have style
+				if (renderer == null && theColumnValueName.equals("columnValue"))
+					renderer = session.forMetadata("default-renderer").peekFirst();
+				theRenderer = ExElement.useOrReplace(QuickWidget.Def.class, theRenderer, renderer, null);
 				theEditing = ExElement.useOrReplace(ColumnEditing.Def.class, theEditing, session, "edit");
 				getAddOn(ExWithElementModel.Def.class).satisfyElementValueType(theColumnValueName, ModelTypes.Value,
 					(interp, env) -> ModelTypes.Value.forType(((Interpreted<?, ?>) interp).getType()));
@@ -701,7 +714,7 @@ public interface QuickTableColumn<R, C> {
 
 			@Override
 			protected ColumnStyle.Def wrap(QuickInstanceStyle.Def parentStyle, QuickCompiledStyle style) {
-				return new ColumnStyle.Def(parentStyle, style);
+				return new ColumnStyle.Def(parentStyle, this, style);
 			}
 
 			@Override
@@ -895,7 +908,7 @@ public interface QuickTableColumn<R, C> {
 			theHeaderTooltip.set(myInterpreted.getHeaderTooltip() == null ? null : myInterpreted.getHeaderTooltip().get(myModels), null);
 
 			if (myInterpreted.getRenderer() == null)
-				theRenderer = null; // TODO Dispose?
+				theRenderer = null;
 			else if (theRenderer == null || theRenderer.getIdentity() != myInterpreted.getRenderer().getIdentity()) {
 				try {
 					theRenderer = myInterpreted.getRenderer().create(this);
@@ -914,7 +927,7 @@ public interface QuickTableColumn<R, C> {
 			}
 
 			if (myInterpreted.getEditing() == null)
-				theEditing = null; // TODO Dispose?
+				theEditing = null;
 			else if (theEditing == null || theEditing.getIdentity() != myInterpreted.getEditing().getIdentity())
 				theEditing = myInterpreted.getEditing().create(this, theColumn.getFirst());
 			if (theEditing != null)
@@ -968,48 +981,43 @@ public interface QuickTableColumn<R, C> {
 		}
 
 		public static class ColumnStyle extends QuickStyledElement.QuickInstanceStyle.Abstract {
-			public static class Def extends QuickCompiledStyle.Wrapper implements QuickStyledElement.QuickInstanceStyle.Def {
-				private final Object theId;
-
-				public Def(QuickCompiledStyle parent, QuickCompiledStyle wrapped) {
-					super(parent, wrapped);
-					theId = new Object();
-				}
-
-				@Override
-				public Object getId() {
-					return theId;
+			public static class Def extends QuickInstanceStyle.Def.Abstract {
+				public Def(QuickInstanceStyle.Def parent, SingleColumnSet.Def styledElement, QuickCompiledStyle wrapped) {
+					super(parent, styledElement, wrapped);
 				}
 
 				@Override
 				public Interpreted interpret(ExElement.Interpreted<?> parentEl, QuickInterpretedStyle parent, InterpretedExpressoEnv env)
 					throws ExpressoInterpretationException {
-					return new Interpreted(this, parent, getWrapped().interpret(parentEl, parent, env));
+					return new Interpreted(this, (SingleColumnSet.Interpreted<?, ?>) parentEl, (QuickInstanceStyle.Interpreted) parent,
+						getWrapped().interpret(parentEl, parent, env));
 				}
 			}
 
-			public static class Interpreted extends QuickInterpretedStyle.Wrapper
-			implements QuickStyledElement.QuickInstanceStyle.Interpreted {
-				private final Def theDefinition;
-
-				public Interpreted(Def compiled, QuickInterpretedStyle parent, QuickInterpretedStyle wrapped) {
-					super(parent, wrapped);
-					theDefinition = compiled;
+			public static class Interpreted extends QuickInstanceStyle.Interpreted.Abstract {
+				public Interpreted(Def compiled, SingleColumnSet.Interpreted<?, ?> styledElement, QuickInstanceStyle.Interpreted parent,
+					QuickInterpretedStyle wrapped) {
+					super(compiled, styledElement, parent, wrapped);
 				}
 
 				@Override
 				public Def getDefinition() {
-					return theDefinition;
+					return (Def) super.getDefinition();
 				}
 
 				@Override
 				public QuickInstanceStyle create(QuickStyledElement styled) {
-					return new ColumnStyle(getId(), (SingleColumnSet<?, ?>) styled);
+					return new ColumnStyle(this, (SingleColumnSet<?, ?>) styled);
 				}
 			}
 
-			ColumnStyle(Object interpretedId, SingleColumnSet<?, ?> parent) {
-				super(interpretedId, parent);
+			public ColumnStyle(Interpreted interpreted, SingleColumnSet<?, ?> styledElement) {
+				super(interpreted, styledElement);
+			}
+
+			@Override
+			public SingleColumnSet<?, ?> getStyledElement() {
+				return (SingleColumnSet<?, ?>) super.getStyledElement();
 			}
 		}
 	}

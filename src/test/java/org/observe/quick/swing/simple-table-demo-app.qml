@@ -8,6 +8,7 @@
 	<toolkit def="/org/observe/quick/style/quick-style.qtd" />
 	<toolkit def="/org/observe/quick/quick-core.qtd" />
 	<toolkit def="/org/observe/quick/base/quick-base.qtd" />
+	<toolkit def="/org/observe/quick/qwysiwyg/qwysiwyg.qtd" />
 	<special-session>org.observe.expresso.qonfig.ExpressoSessionImplV0_1</special-session>
 	<interpretation>org.observe.expresso.qonfig.ExpressoBaseV0_1</interpretation>
 	<interpretation>org.observe.quick.style.QuickStyleInterpretation</interpretation>

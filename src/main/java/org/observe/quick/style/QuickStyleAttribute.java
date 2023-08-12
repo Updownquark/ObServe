@@ -44,7 +44,7 @@ public class QuickStyleAttribute<T> implements Named, SelfDescribed {
 		else if (!(obj instanceof QuickStyleAttribute))
 			return false;
 		QuickStyleAttribute<T> other = (QuickStyleAttribute<T>) obj;
-		return theDefinition.equals(other.theDefinition) && theType.equals(other.theType);
+		return theDefinition.equals(other.theDefinition);
 	}
 
 	@Override

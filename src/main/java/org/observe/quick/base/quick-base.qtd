@@ -320,7 +320,9 @@
 			<attribute name="values" type="expression" specify="required" />
 		</element-def>
 		<?DOC A combo/drop-down box?>
-		<element-def name="combo" extends="collection-selector-widget" />
+		<element-def name="combo" extends="collection-selector-widget">
+			<!-- TODO Renderer -->
+		</element-def>
 		<?DOC A set of radio buttons, one for each available value, only one of which may be selected?>
 		<element-def name="radio-buttons" extends="collection-selector-widget" />
 		<?DOC A set of toggle buttons, one for each available value, only one of which may be selected?>
@@ -336,7 +338,8 @@
 			<attribute name="values" type="expression" specify="required" />
 		</element-def>
 		<?DOC A column in a tabular widget?>
-		<element-def name="column" inherits="column-set,styled">
+		<element-def name="column" inherits="column-set,styled,rendering">
+			<label role="default-renderer" value="columnValue" />
 			<element-model>
 				<?DOC The current cell value, e.g. the one being rendered?>
 				<value name-attribute="column-value-name" priority="2" />
@@ -350,8 +353,6 @@
 			<attribute name="column-value-name" type="identifier" default="columnValue" />
 			<?DOC The tooltip to display for the column header?>
 			<attribute name="header-tooltip" type="expression" specify="optional" />
-			<?DOC The widget used to render the value for this column in each row?>
-			<child-def name="renderer" type="widget" inherits="renderer" min="0" />
 			<?DOC Configures the ability to update or replace the value of each row by providing a new value for the column?>
 			<child-def name="edit" type="column-edit" min="0" />
 		</element-def>

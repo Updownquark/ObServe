@@ -93,9 +93,7 @@ public interface QuickCompiledStyle {
 
 		/**
 		 * @param styleTypes The style type set for this compiled style
-		 * @param declaredValues All style values declared specifically on this element
 		 * @param parent The element style for the {@link QonfigElement#getParent() parent} element
-		 * @param styleSheet The style sheet applying to the element
 		 * @param element The element this style is for
 		 * @param reporting The error reporting for errors
 		 * @param style The toolkit inheriting Quick-Style
@@ -262,11 +260,7 @@ public interface QuickCompiledStyle {
 		}
 	}
 
-	/**
-	 * A structure containing all information necessary to get the value of a style attribute for an element
-	 *
-	 * @param <T> The type of the attribute
-	 */
+	/** A structure containing all information necessary to get the value of a style attribute for an element */
 	public static class QuickCompiledStyleAttribute {
 		private final QuickStyleAttributeDef theAttribute;
 		private final QuickCompiledStyle theStyle;
@@ -302,6 +296,7 @@ public interface QuickCompiledStyle {
 		 * @param elementStyle The element style to interpret this attribute value into
 		 * @param inherited The inherited style for the attribute
 		 * @param env The expresso environment to use to evaluate the style values
+		 * @param appCache The application cache for re-use of {@link InterpretedStyleApplication}s
 		 * @return The interpreted value for this style attribute on the element
 		 * @throws ExpressoInterpretationException If the condition or the value could not be interpreted
 		 */

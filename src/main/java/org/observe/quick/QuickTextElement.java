@@ -3,11 +3,8 @@ package org.observe.quick;
 import java.awt.Color;
 
 import org.observe.ObservableValue;
-import org.observe.SettableValue;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.InterpretedExpressoEnv;
-import org.observe.expresso.ModelInstantiationException;
-import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.quick.style.QuickCompiledStyle;
 import org.observe.quick.style.QuickInterpretedStyle;
@@ -16,7 +13,6 @@ import org.observe.quick.style.QuickInterpretedStyleCache.Applications;
 import org.observe.quick.style.QuickStyleAttributeDef;
 import org.observe.quick.style.QuickStyledElement;
 import org.observe.quick.style.QuickTypeStyle;
-import org.observe.util.TypeTokens;
 
 public interface QuickTextElement extends QuickStyledElement {
 	public interface Def<E extends QuickTextElement> extends QuickStyledElement.Def<E> {
@@ -48,12 +44,10 @@ public interface QuickTextElement extends QuickStyledElement {
 			QuickStyleAttributeDef isSubScript();
 
 			@Override
-			Interpreted interpret(ExElement.Interpreted<?> parentEl, QuickInterpretedStyle parent,
-				InterpretedExpressoEnv env) throws ExpressoInterpretationException;
+			Interpreted interpret(ExElement.Interpreted<?> parentEl, QuickInterpretedStyle parent, InterpretedExpressoEnv env)
+				throws ExpressoInterpretationException;
 
-			public abstract class Abstract extends QuickCompiledStyle.Wrapper implements Def {
-				private final Object theId;
-
+			public abstract class Abstract extends QuickInstanceStyle.Def.Abstract implements Def {
 				private final QuickStyleAttributeDef theFontColor;
 				private final QuickStyleAttributeDef theFontSize;
 				private final QuickStyleAttributeDef theFontWeight;
@@ -63,24 +57,18 @@ public interface QuickTextElement extends QuickStyledElement {
 				private final QuickStyleAttributeDef isSuperScript;
 				private final QuickStyleAttributeDef isSubScript;
 
-				protected Abstract(QuickCompiledStyle parent, QuickCompiledStyle wrapped) {
-					super(parent, wrapped);
-					theId = new Object();
+				protected Abstract(QuickInstanceStyle.Def parent, QuickTextElement.Def<?> styledElement, QuickCompiledStyle wrapped) {
+					super(parent, styledElement, wrapped);
 					QuickTypeStyle typeStyle = QuickStyledElement.getTypeStyle(wrapped.getStyleTypes(), wrapped.getElement(),
 						QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, "with-text");
-					theFontColor = typeStyle.getAttribute("font-color");
-					theFontSize = typeStyle.getAttribute("font-size");
-					theFontWeight = typeStyle.getAttribute("font-weight");
-					theFontSlant = typeStyle.getAttribute("font-slant");
-					isUnderline = typeStyle.getAttribute("underline");
-					isStrikeThrough = typeStyle.getAttribute("strike-through");
-					isSuperScript = typeStyle.getAttribute("super-script");
-					isSubScript = typeStyle.getAttribute("sub-script");
-				}
-
-				@Override
-				public Object getId() {
-					return theId;
+					theFontColor = addApplicableAttribute(typeStyle.getAttribute("font-color"));
+					theFontSize = addApplicableAttribute(typeStyle.getAttribute("font-size"));
+					theFontWeight = addApplicableAttribute(typeStyle.getAttribute("font-weight"));
+					theFontSlant = addApplicableAttribute(typeStyle.getAttribute("font-slant"));
+					isUnderline = addApplicableAttribute(typeStyle.getAttribute("underline"));
+					isStrikeThrough = addApplicableAttribute(typeStyle.getAttribute("strike-through"));
+					isSuperScript = addApplicableAttribute(typeStyle.getAttribute("super-script"));
+					isSubScript = addApplicableAttribute(typeStyle.getAttribute("sub-script"));
 				}
 
 				@Override
@@ -149,8 +137,7 @@ public interface QuickTextElement extends QuickStyledElement {
 
 			QuickElementStyleAttribute<Boolean> isSubScript();
 
-			public abstract class Abstract extends QuickInterpretedStyle.Wrapper implements Interpreted {
-				private final Def theDefinition;
+			public abstract class Abstract extends QuickInstanceStyle.Interpreted.Abstract implements Interpreted {
 				private QuickElementStyleAttribute<Color> theFontColor;
 				private QuickElementStyleAttribute<Double> theFontSize;
 				private QuickElementStyleAttribute<Double> theFontWeight;
@@ -160,14 +147,14 @@ public interface QuickTextElement extends QuickStyledElement {
 				private QuickElementStyleAttribute<Boolean> isSuperScript;
 				private QuickElementStyleAttribute<Boolean> isSubScript;
 
-				protected Abstract(Def definition, QuickInterpretedStyle parent, QuickInterpretedStyle wrapped) {
-					super(parent, wrapped);
-					theDefinition = definition;
+				protected Abstract(Def definition, QuickTextElement.Interpreted<?> styledElement, QuickInstanceStyle.Interpreted parent,
+					QuickInterpretedStyle wrapped) {
+					super(definition, styledElement, parent, wrapped);
 				}
 
 				@Override
 				public Def getDefinition() {
-					return theDefinition;
+					return (Def) super.getDefinition();
 				}
 
 				@Override
@@ -243,82 +230,65 @@ public interface QuickTextElement extends QuickStyledElement {
 		ObservableValue<Boolean> isSubScript();
 
 		public abstract class Abstract extends QuickInstanceStyle.Abstract implements QuickTextStyle {
-			private final SettableValue<ObservableValue<Color>> theFontColor;
-			private final SettableValue<ObservableValue<Double>> theFontSize;
-			private final SettableValue<ObservableValue<Double>> theFontWeight;
-			private final SettableValue<ObservableValue<Double>> theFontSlant;
-			private final SettableValue<ObservableValue<Boolean>> isUnderline;
-			private final SettableValue<ObservableValue<Boolean>> isStrikeThrough;
-			private final SettableValue<ObservableValue<Boolean>> isSuperScript;
-			private final SettableValue<ObservableValue<Boolean>> isSubScript;
+			private final ObservableValue<Color> theFontColor;
+			private final ObservableValue<Double> theFontSize;
+			private final ObservableValue<Double> theFontWeight;
+			private final ObservableValue<Double> theFontSlant;
+			private final ObservableValue<Boolean> isUnderline;
+			private final ObservableValue<Boolean> isStrikeThrough;
+			private final ObservableValue<Boolean> isSuperScript;
+			private final ObservableValue<Boolean> isSubScript;
 
-			protected Abstract(Object interpretedId, QuickTextElement styledElement) {
-				super(interpretedId, styledElement);
-				theFontColor = SettableValue
-					.build(TypeTokens.get().keyFor(ObservableValue.class).<ObservableValue<Color>> parameterized(Color.class)).build();
-				theFontSize = SettableValue
-					.build(TypeTokens.get().keyFor(ObservableValue.class).<ObservableValue<Double>> parameterized(Double.class)).build();
-				theFontWeight = SettableValue.build(theFontSize.getType()).build();
-				theFontSlant = SettableValue.build(theFontSize.getType()).build();
-				isUnderline = SettableValue
-					.build(TypeTokens.get().keyFor(ObservableValue.class).<ObservableValue<Boolean>> parameterized(boolean.class)).build();
-				isStrikeThrough = SettableValue.build(isUnderline.getType()).build();
-				isSuperScript = SettableValue.build(isUnderline.getType()).build();
-				isSubScript = SettableValue.build(isUnderline.getType()).build();
+			protected Abstract(QuickTextStyle.Interpreted interpreted, QuickTextElement styledElement) {
+				super(interpreted, styledElement);
+				theFontColor = getApplicableAttribute(interpreted.getFontColor().getAttribute());
+				theFontSize = getApplicableAttribute(interpreted.getFontSize().getAttribute());
+				theFontWeight = getApplicableAttribute(interpreted.getFontWeight().getAttribute());
+				theFontSlant = getApplicableAttribute(interpreted.getFontSlant().getAttribute());
+				isUnderline = getApplicableAttribute(interpreted.isUnderline().getAttribute());
+				isStrikeThrough = getApplicableAttribute(interpreted.isStrikeThrough().getAttribute());
+				isSuperScript = getApplicableAttribute(interpreted.isSuperScript().getAttribute());
+				isSubScript = getApplicableAttribute(interpreted.isSubScript().getAttribute());
 			}
 
 			@Override
 			public ObservableValue<Color> getFontColor() {
-				return ObservableValue.flatten(theFontColor);
+				return theFontColor;
 			}
 
 			@Override
 			public ObservableValue<Double> getFontSize() {
-				return ObservableValue.flatten(theFontSize);
+				return theFontSize;
 			}
 
 			@Override
 			public ObservableValue<Double> getFontWeight() {
-				return ObservableValue.flatten(theFontWeight);
+				return theFontWeight;
 			}
 
 			@Override
 			public ObservableValue<Double> getFontSlant() {
-				return ObservableValue.flatten(theFontSlant);
+				return theFontSlant;
 			}
 
 			@Override
 			public ObservableValue<Boolean> isUnderline() {
-				return ObservableValue.flatten(isUnderline);
+				return isUnderline;
 			}
 
 			@Override
 			public ObservableValue<Boolean> isStrikeThrough() {
-				return ObservableValue.flatten(isStrikeThrough);
+				return isStrikeThrough;
 			}
 
 			@Override
 			public ObservableValue<Boolean> isSuperScript() {
-				return ObservableValue.flatten(isSuperScript);
+				return isSuperScript;
 			}
 
 			@Override
 			public ObservableValue<Boolean> isSubScript() {
-				return ObservableValue.flatten(isSubScript);
-			}
-
-			@Override
-			public void update(QuickInstanceStyle.Interpreted interpreted, ModelSetInstance models) throws ModelInstantiationException {
-				super.update(interpreted, models);
-				QuickTextStyle.Interpreted myInterpreted = (QuickTextStyle.Interpreted) interpreted;
-				theFontColor.set(myInterpreted.getFontColor().evaluate(models), null);
-				theFontSize.set(myInterpreted.getFontSize().evaluate(models), null);
-				theFontWeight.set(myInterpreted.getFontWeight().evaluate(models), null);
-				theFontSlant.set(myInterpreted.getFontSlant().evaluate(models), null);
-				isUnderline.set(myInterpreted.isUnderline().evaluate(models), null);
-				isStrikeThrough.set(myInterpreted.isStrikeThrough().evaluate(models), null);
-				isSuperScript.set(myInterpreted.isSuperScript().evaluate(models), null);
-				isSubScript.set(myInterpreted.isSubScript().evaluate(models), null);
+				return isSubScript;
 			}
 		}
 	}

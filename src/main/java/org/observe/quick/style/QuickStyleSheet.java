@@ -107,8 +107,14 @@ public class QuickStyleSheet extends ExElement.Def.Abstract<ExElement.Void> {
 					address.position == null ? null : new LocatedFilePosition(address.fileLocation, address.position.getPosition(0)),
 						address.text.length());
 			ExpressoQIS importSession = session.intepretRoot(ssDoc.getRoot());
+			QuickTypeStyle.TypeStyleSet styleTypeSet = session.get(QuickStyleElement.STYLE_TYPE_SET, QuickTypeStyle.TypeStyleSet.class);
+			if (styleTypeSet == null) {
+				styleTypeSet = new QuickTypeStyle.TypeStyleSet();
+				session.putGlobal(QuickStyleElement.STYLE_TYPE_SET, styleTypeSet);
+			}
 			importSession.as(ExpressoQIS.class)//
-			.setModels(ObservableModelSet.build(address.text, session.getExpressoEnv().getModels().getNameChecker()).build());
+			.setModels(ObservableModelSet.build(address.text, session.getExpressoEnv().getModels().getNameChecker()).build())//
+			.put(QuickStyleElement.STYLE_TYPE_SET, styleTypeSet);
 			if (theTarget == null)
 				theTarget = importSession.interpret(QuickStyleSheet.class);
 			theTarget.update(importSession);

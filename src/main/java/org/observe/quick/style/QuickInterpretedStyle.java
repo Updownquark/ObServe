@@ -14,11 +14,13 @@ import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.util.TypeTokens;
+import org.qommons.BiTuple;
 import org.qommons.LambdaUtils;
 import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterHashMultiMap;
 import org.qommons.collect.BetterMultiMap;
 import org.qommons.config.QonfigElement;
+import org.qommons.config.QonfigElementOrAddOn;
 
 import com.google.common.reflect.TypeToken;
 
@@ -122,7 +124,7 @@ public interface QuickInterpretedStyle {
 			for (QuickStyleAttributeDef attr : getDefinition().getAttributes()) {
 				QuickStyleAttribute<Object> interpretedAttr = (QuickStyleAttribute<Object>) cache.getAttribute(attr, env);
 				QuickInterpretedStyle.QuickElementStyleAttribute<Object> inherited;
-				inherited = theParent != null && attr.isTrickleDown() ? getInherited(theParent, interpretedAttr) : null;
+				inherited = getInherited(theParent, interpretedAttr);
 				theValues.put(interpretedAttr, getDefinition().getValues(attr).interpret(this, inherited, env, appCache));
 			}
 			theAttributesByName.clear();
@@ -130,9 +132,37 @@ public interface QuickInterpretedStyle {
 				theAttributesByName.add(attr.getName(), attr);
 		}
 
-		private static <T> QuickElementStyleAttribute<T> getInherited(QuickInterpretedStyle parent, QuickStyleAttribute<T> attr) {
-			while (parent != null && !parent.getAttributes().contains(attr))
+		private <T> QuickElementStyleAttribute<T> getInherited(QuickInterpretedStyle parent, QuickStyleAttribute<T> attr) {
+			if (parent == null)
+				return null;
+
+			/* This part is a little confusing, but hear me out:
+			 * If the attribute is marked trickle down, then it should inherit from the nearest ancestor for which the attribute has a value.
+			 *
+			 * So far, so good.
+			 *
+			 * But there is another more subtle case where an attribute that is *not* marked trickle-down should inherit from an ancestor.
+			 * If a value for the attribute is defined on an ancestor to which the attribute doesn't actually apply,
+			 * this is obviously intended to apply to the descendants of the element, since otherwise the value could never apply to anything.
+			 *
+			 * An example use case of this is to set the widget color for a column.  Column has no styles itself, but it inherits styled
+			 * explicitly to support targeting with styles which will be used by its descendants, e.g. the renderer and editor.
+			 */
+			QonfigElementOrAddOn testType;
+			if (attr.getDefinition().isTrickleDown())
+				testType = null; // Trickle down, so there's no test--always inherit
+			else
+				testType = attr.getDefinition().getDeclarer().getElement();
+			while (parent != null) {
+				if (testType != null && parent.getDefinition().getElement().isInstance(testType))
+					return null;
+				else if (parent.getAttributes().contains(attr))
+					break;
 				parent = parent.getParent();
+			}
+			if (parent == null)
+				return null;
+			// We have an ancestor for which the attribute has a value
 			return parent == null ? null : parent.get(attr);
 		}
 
@@ -166,8 +196,12 @@ public interface QuickInterpretedStyle {
 			QuickElementStyleAttribute<T> value = (QuickElementStyleAttribute<T>) theValues.get(attr);
 			if (value != null)
 				return value;
-			return new QuickElementStyleAttribute<>(attr, this, Collections.emptyList(), //
-				theParent != null && attr.getDefinition().isTrickleDown() ? theParent.get(attr) : null);
+			return new QuickElementStyleAttribute<>(attr, this, Collections.emptyList(), getInherited(theParent, attr));
+		}
+
+		@Override
+		public String toString() {
+			return theDefinition.toString();
 		}
 	}
 
@@ -274,58 +308,71 @@ public interface QuickInterpretedStyle {
 			return theInherited;
 		}
 
+		public List<BiTuple<QuickInterpretedStyle, InterpretedStyleValue<T>>> getAllValues() {
+			List<BiTuple<QuickInterpretedStyle, InterpretedStyleValue<T>>> values = new ArrayList<>();
+			for (InterpretedStyleValue<T> value : theValues)
+				values.add(new BiTuple<>(theStyle, value));
+			if (theInherited != null)
+				values.addAll(theInherited.getAllValues());
+			return values;
+		}
+
+		public List<ObservableValue<ConditionalValue<T>>> getConditionalValues(ModelSetInstance models) throws ModelInstantiationException {
+			List<ObservableValue<ConditionalValue<T>>> values = new ArrayList<>();
+			for (int i = 0; i < theValues.size(); i++) {
+				ObservableValue<Boolean> condition = theValues.get(i).getApplication().getCondition(models);
+				SettableValue<T> value = theValues.get(i).getValue().get(models);
+				values.add(condition.map(LambdaUtils.printableFn(pass -> new ConditionalValue<>(Boolean.TRUE.equals(pass), value),
+					"ifPass(" + value + ")", null)));
+			}
+			if (theInherited != null)
+				values.addAll(theInherited.getConditionalValues(InterpretedStyleApplication.getParentModels(models)));
+			return values;
+		}
+
 		/**
 		 * @param models The model instance to get the value for
 		 * @return The value for this style attribute on the element
 		 * @throws ModelInstantiationException If the condition or the value could not be evaluated
 		 */
 		public ObservableValue<T> evaluate(ModelSetInstance models) throws ModelInstantiationException {
-			ObservableValue<ConditionalValue<T>>[] values = new ObservableValue[theValues.size() + (theInherited == null ? 0 : 1)];
-			for (int i = 0; i < theValues.size(); i++) {
-				ObservableValue<Boolean> condition = theValues.get(i).getApplication().getCondition(models);
-				SettableValue<T> value = theValues.get(i).getValue().get(models);
-				values[i] = condition.map(LambdaUtils.printableFn(pass -> new ConditionalValue<>(Boolean.TRUE.equals(pass), value),
-					"ifPass(" + value + ")", null));
-			}
-			if (theInherited != null) {
-				ObservableValue<T> value = theInherited.evaluate(InterpretedStyleApplication.getParentModels(models));
-				values[theValues.size()] = ObservableValue.of(new ConditionalValue<>(true, value));
-			}
-			ConditionalValue<T> defaultCV = new ConditionalValue<>(true, null);
-			TypeToken<ConditionalValue<T>> cvType = (TypeToken<ConditionalValue<T>>) (TypeToken<?>) TypeTokens.get()
-				.of(ConditionalValue.class);
-			ObservableValue<ConditionalValue<T>> conditionalValue;
-			if (values.length == 0)
-				conditionalValue = ObservableValue.of(cvType, defaultCV);
-			else if (values.length == 1)
-				conditionalValue = values[0].map(LambdaUtils.printableFn(cv -> cv.pass ? cv : defaultCV, "passOrNull", null));
-			else
-				conditionalValue = ObservableValue.firstValue(cvType, //
-					LambdaUtils.printablePred(cv -> cv.pass, "pass", null), //
-					LambdaUtils.printableSupplier(() -> defaultCV, () -> "null", null), values);
+			List<ObservableValue<ConditionalValue<T>>> valueList = getConditionalValues(models);
+			if (valueList.isEmpty())
+				return ObservableValue.of(theAttribute.getType(), null);
 			TypeToken<ObservableValue<T>> ovType = TypeTokens.get().keyFor(ObservableValue.class)
 				.<ObservableValue<T>> parameterized(theAttribute.getType());
-			return ObservableValue.flatten(conditionalValue.map(ovType, LambdaUtils.printableFn(cv -> cv.value, "value", null)));
-		}
-
-		private static class ConditionalValue<T> {
-			final boolean pass;
-			final ObservableValue<T> value;
-
-			ConditionalValue(boolean pass, ObservableValue<T> value) {
-				this.pass = pass;
-				this.value = value;
+			ObservableValue<ConditionalValue<T>> conditionalValue;
+			if (valueList.size() == 1)
+				conditionalValue = valueList.get(0);
+			else {
+				ObservableValue<ConditionalValue<T>>[] values = valueList.toArray(new ObservableValue[valueList.size()]);
+				TypeToken<ConditionalValue<T>> cvType = TypeTokens.get().keyFor(ConditionalValue.class)
+					.<ConditionalValue<T>> parameterized(theAttribute.getType());
+				conditionalValue = ObservableValue.firstValue(cvType, //
+					LambdaUtils.printablePred(cv -> cv.pass, "pass", null), LambdaUtils.constantSupplier(null, "null", null), values);
 			}
-
-			@Override
-			public String toString() {
-				return value == null ? "StyleDefault" : value.toString();
-			}
+			return ObservableValue.flatten(
+				conditionalValue.map(ovType, LambdaUtils.printableFn(cv -> (cv != null && cv.pass) ? cv.value : null, "value", null)));
 		}
 
 		@Override
 		public String toString() {
 			return theAttribute.toString();
+		}
+	}
+
+	public static class ConditionalValue<T> {
+		public final boolean pass;
+		public final ObservableValue<T> value;
+
+		ConditionalValue(boolean pass, ObservableValue<T> value) {
+			this.pass = pass;
+			this.value = value;
+		}
+
+		@Override
+		public String toString() {
+			return value == null ? "StyleDefault" : value.toString();
 		}
 	}
 }

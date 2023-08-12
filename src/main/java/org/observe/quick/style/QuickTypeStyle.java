@@ -34,7 +34,12 @@ public class QuickTypeStyle {
 
 	/** A set of {@link QuickTypeStyle}s */
 	public static class TypeStyleSet {
-		private final Map<QonfigElementOrAddOn, QuickTypeStyle> theElementStyleTypes = new ConcurrentHashMap<>();
+		private final Map<QonfigElementOrAddOn, QuickTypeStyle> theElementStyleTypes;
+
+		/** Creates the type style set */
+		public TypeStyleSet() {
+			theElementStyleTypes = new ConcurrentHashMap<>();
+		}
 
 		/**
 		 * @param element The element type to get the style type of

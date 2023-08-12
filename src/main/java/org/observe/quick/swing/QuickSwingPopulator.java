@@ -1374,6 +1374,8 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 				QuickBaseSwing.gen(QuickCheckBox.Interpreted.class), QuickBaseSwing::interpretCheckBox);
 			QuickSwingPopulator.<QuickButton, QuickButton.Interpreted<QuickButton>> interpretWidget(tx, gen(QuickButton.Interpreted.class),
 				QuickBaseSwing::interpretButton);
+			QuickSwingPopulator.<QuickComboBox<?>, QuickComboBox.Interpreted<?>> interpretWidget(tx,
+				QuickBaseSwing.gen(QuickComboBox.Interpreted.class), QuickBaseSwing::interpretComboBox);
 			QuickSwingPopulator.<QuickTextArea<?>, QuickTextArea.Interpreted<?>> interpretWidget(tx,
 				QuickBaseSwing.gen(QuickTextArea.Interpreted.class), QuickBaseSwing::interpretTextArea);
 			QuickSwingPopulator.<StyledTextArea<?>, StyledTextArea.Interpreted<?>> interpretWidget(tx,
@@ -1613,6 +1615,13 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 					if (quick.getText() != null)
 						btn.withText(quick.getText());
 				});
+			});
+		}
+
+		static <T> QuickSwingPopulator<QuickComboBox<T>> interpretComboBox(QuickComboBox.Interpreted<T> interpreted,
+			Transformer<ExpressoInterpretationException> tx) {
+			return createWidget((panel, quick) -> {
+				panel.addComboField(null, quick.getValue(), quick.getValues(), null);
 			});
 		}
 
@@ -1860,12 +1869,12 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 				if (e.getCause() instanceof ExpressoInterpretationException)
 					throw (ExpressoInterpretationException) e.getCause();
 				else
-					throw new ExpressoInterpretationException(e.getMessage(), interpreted.reporting().getPosition(), 0,
-						e.getCause());
+					throw new ExpressoInterpretationException(e.getMessage(), interpreted.reporting().getPosition(), 0, e.getCause());
 			}
 			renderersInitialized[0] = true;
 			interpreted.destroyed().act(__ -> sub.unsubscribe());
 			boolean[] tableInitialized = new boolean[1];
+			int[] rendering = new int[1];
 			// TODO Changes to actions collection?
 			List<QuickSwingTableAction<R, ?>> interpretedActions = BetterList.<ValueAction.Interpreted<R, ?>, QuickSwingTableAction<R, ?>, ExpressoInterpretationException> of2(
 				interpreted.getActions().stream(), a -> (QuickSwingTableAction<R, ?>) tx.transform(a, QuickSwingTableAction.class));
@@ -1878,7 +1887,8 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 					.map((Class<InterpretedSwingTableColumn<R, ?>>) (Class<?>) InterpretedSwingTableColumn.class, column -> {
 						try {
 							return new InterpretedSwingTableColumn<>(quick, column, ctx, tx, panel.getUntil(), () -> parent[0],
-								renderers.get(column.getColumnSet().getIdentity()), editors.get(column.getColumnSet().getIdentity()));
+								renderers.get(column.getColumnSet().getIdentity()), editors.get(column.getColumnSet().getIdentity()),
+								rendering);
 						} catch (ModelInstantiationException e) {
 							if (tableInitialized[0]) {
 								column.getColumnSet().reporting().error(e.getMessage(), e);

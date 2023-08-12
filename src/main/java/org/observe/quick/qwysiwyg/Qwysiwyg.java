@@ -1,4 +1,4 @@
-package org.observe.quick.base;
+package org.observe.quick.qwysiwyg;
 
 import java.awt.Color;
 import java.io.IOException;
@@ -10,6 +10,7 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.Type;
 import java.net.URL;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -32,6 +33,7 @@ import org.observe.expresso.ObservableModelSet.ModelComponentNode;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.qonfig.ElementModelValue;
 import org.observe.expresso.qonfig.ExElement;
+import org.observe.expresso.qonfig.ExWithElementModel;
 import org.observe.expresso.qonfig.ExpressionValueType;
 import org.observe.expresso.qonfig.LocatedExpression;
 import org.observe.expresso.qonfig.ModelValueElement;
@@ -39,15 +41,27 @@ import org.observe.quick.QuickApp;
 import org.observe.quick.QuickApplication;
 import org.observe.quick.QuickDocument;
 import org.observe.quick.QuickWindow;
+import org.observe.quick.style.InterpretedStyleValue;
+import org.observe.quick.style.QuickInterpretedStyle;
+import org.observe.quick.style.QuickInterpretedStyle.ConditionalValue;
+import org.observe.quick.style.QuickInterpretedStyle.QuickElementStyleAttribute;
+import org.observe.quick.style.QuickStyleAttribute;
+import org.observe.quick.style.QuickStyleValue;
+import org.observe.quick.style.QuickStyledElement;
+import org.observe.quick.style.QuickStyledElement.QuickInstanceStyle;
 import org.observe.util.TypeTokens;
 import org.qommons.ArrayUtils;
+import org.qommons.BiTuple;
 import org.qommons.Causable;
 import org.qommons.Colors;
+import org.qommons.LambdaUtils;
 import org.qommons.SelfDescribed;
 import org.qommons.Stamped;
 import org.qommons.Transaction;
+import org.qommons.Version;
 import org.qommons.collect.CircularArrayList;
 import org.qommons.collect.CollectionElement;
+import org.qommons.collect.CollectionUtils;
 import org.qommons.collect.DequeList;
 import org.qommons.collect.ElementId;
 import org.qommons.config.CustomValueType;
@@ -57,6 +71,7 @@ import org.qommons.config.QonfigChildDef;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigElement.QonfigValue;
 import org.qommons.config.QonfigParseException;
+import org.qommons.config.QonfigToolkit;
 import org.qommons.config.QonfigValueDef;
 import org.qommons.config.QonfigValueType;
 import org.qommons.io.CircularCharBuffer;
@@ -114,7 +129,10 @@ public class Qwysiwyg {
 			}
 			if (theExpression != null) {
 				try {
-					theInterpretedValue = theExpression.evaluate(ModelTypes.Value.any(), theInterpretedContext.getExpressoEnv(), 0);
+					LocatedPositionedContent content = LocatedPositionedContent.of("QWYSIWYG Watch Expression",
+						new PositionedContent.Simple(FilePosition.START, expressionText));
+					theInterpretedValue = theExpression.evaluate(ModelTypes.Value.any(), theInterpretedContext.getExpressoEnv()//
+						.withErrorReporting(new ErrorReporting.Default(content)), 0);
 				} catch (ExpressoInterpretationException | ExpressoEvaluationException | TypeConversionException e) {
 					e.printStackTrace();
 					theInterpretedValue = null;
@@ -157,6 +175,78 @@ public class Qwysiwyg {
 		}
 	}
 
+	public static class StyleDebugValue<T> {
+		private final QuickInterpretedStyle theSource;
+		private final QuickStyleValue theStyleValue;
+		private final ObservableValue<QuickInterpretedStyle.ConditionalValue<T>> theConditionalValue;
+		private boolean isPassing;
+		private Object theValue;
+
+		StyleDebugValue(QuickInterpretedStyle source, QuickStyleValue styleValue,
+			ObservableValue<ConditionalValue<T>> conditionalValue) {
+			theSource = source;
+			theStyleValue = styleValue;
+			theConditionalValue = conditionalValue;
+		}
+
+		boolean update() {
+			QuickInterpretedStyle.ConditionalValue<T> cv = theConditionalValue.get();
+			boolean update;
+			if (cv.pass) {
+				Object newValue = cv.value.get();
+				if (isPassing)
+					update = !Objects.equals(theValue, newValue);
+				else
+					update = true;
+				isPassing = true;
+				theValue = newValue;
+			} else if (isPassing) {
+				isPassing = false;
+				theValue = null;
+				update = true;
+			} else
+				update = false;
+			return update;
+		}
+
+		public String getStyleSheet() {
+			return theStyleValue.getStyleSheet().getElement().getDocument().getLocation();
+		}
+
+		public String getSourceElement() {
+			QonfigElement element = theSource.getDefinition().getElement();
+			return element.getType().getName() + " " + element.getPositionInFile().printPosition();
+		}
+
+		public String getCondition() {
+			return theStyleValue.getApplication().getCondition() == null ? "" : theStyleValue.getApplication().getCondition().toString();
+		}
+
+		public String getValueExpression() {
+			return theStyleValue.getValueExpression().toString();
+		}
+
+		public boolean isActive() {
+			return isPassing;
+		}
+
+		public String getCurrentValue() {
+			if (!isPassing)
+				return "(not active)";
+			else if (theValue == null)
+				return "null";
+			else if (theValue instanceof Color)
+				return Colors.toString((Color) theValue);
+			else
+				return theValue.toString();
+		}
+
+		@Override
+		public String toString() {
+			return theStyleValue.toString();
+		}
+	}
+
 	public static final Color ELEMENT_COLOR = Colors.green;
 	public static final Color ATTRIBUTE_NAME_COLOR = Colors.maroon;
 	public static final Color ATTRIBUTE_VALUE_COLOR = Colors.blue;
@@ -180,6 +270,9 @@ public class Qwysiwyg {
 	public final SettableValue<Integer> selectedEndIndex;
 	public final SettableValue<String> lineNumbers;
 	public final ObservableCollection<WatchExpression> watchExpressions;
+	public final ObservableCollection<QuickStyleAttribute<?>> availableStyles;
+	public final SettableValue<QuickStyleAttribute<?>> selectedStyle;
+	public final ObservableCollection<StyleDebugValue<?>> styleDebugValues;
 
 	private final SettableValue<DocumentComponent> theInternalDocumentRoot;
 	private final SettableValue<ObservableValue<String>> theInternalTooltip;
@@ -194,6 +287,9 @@ public class Qwysiwyg {
 	private QuickDocument theDocument;
 	private ModelSetInstance theModels;
 	private QuickApplication theApplication;
+
+	private DocumentComponent theStyledNode;
+	private final ObservableValue<QuickElementStyleAttribute<?>> theDebuggingStyle;
 
 	private DocumentComponent theRoot;
 
@@ -213,11 +309,20 @@ public class Qwysiwyg {
 		selectedEndIndex = SettableValue.build(int.class).withValue(0).build();
 		theDocumentContent = new StringBuilder();
 		lineNumbers = SettableValue.build(String.class).build();
+		availableStyles = ObservableCollection.build((Class<QuickStyleAttribute<?>>) (Class<?>) QuickStyleAttribute.class).build();
+		selectedStyle = SettableValue.build(availableStyles.getType()).build();
 		watchExpressions = ObservableCollection.build(WatchExpression.class).build();
 		watchExpressions.onChange(evt -> {
 			if (evt.getType() == CollectionChangeType.add)
 				evt.getNewValue().theId = evt.getElementId();
 		});
+		styleDebugValues = ObservableCollection.build((Class<StyleDebugValue<?>>) (Class<?>) StyleDebugValue.class).build();
+		theDebuggingStyle = selectedNode.transform((Class<QuickElementStyleAttribute<?>>) (Class<?>) QuickElementStyleAttribute.class,
+			tx -> tx.cache(true).fireIfUnchanged(false).combineWith(selectedStyle).combine((node, style) -> {
+				if (theStyledNode == null || style == null)
+					return null;
+				return ((QuickStyledElement.Interpreted<?>) theStyledNode.interpreted).getStyle().get(style);
+			}));
 
 		selectedNode.changes().act(evt -> {
 			if (evt.getOldValue() == evt.getNewValue())
@@ -230,6 +335,9 @@ public class Qwysiwyg {
 					evt.getOldValue().opposite.update();
 				}
 			}
+			theStyledNode = evt.getNewValue();
+			while (theStyledNode != null && !(theStyledNode.element instanceof QuickStyledElement))
+				theStyledNode = theStyledNode.parent;
 			if (evt.getNewValue() != null) {
 				evt.getNewValue().bold = true;
 				evt.getNewValue().update();
@@ -237,8 +345,69 @@ public class Qwysiwyg {
 					evt.getNewValue().opposite.bold = true;
 					evt.getNewValue().opposite.update();
 				}
+				if (theStyledNode != null) {
+					QuickStyledElement styled = (QuickStyledElement) theStyledNode.element;
+					try (Transaction t = availableStyles.lock(true, evt)) {
+						CollectionUtils.synchronize(availableStyles, new ArrayList<>(styled.getStyle().getApplicableAttributes()))//
+						.simple(LambdaUtils.identity())//
+						.adjust();
+					}
+
+				} else {
+					availableStyles.clear();
+					selectedStyle.set(null, null);
+				}
+			} else {
+				availableStyles.clear();
+				selectedStyle.set(null, null);
 			}
 		});
+
+		theDebuggingStyle.changes().act(evt -> {
+			styleDebugValues.clear();
+			if (evt.getNewValue() != null)
+				populateDebugStyle(evt.getNewValue(), ((QuickStyledElement) theStyledNode.element).getStyle());
+		});
+	}
+
+	private <T> void populateDebugStyle(QuickElementStyleAttribute<T> attr, QuickInstanceStyle style) {
+		List<ObservableValue<QuickInterpretedStyle.ConditionalValue<T>>> values;
+		try {
+			values = attr.getConditionalValues(theStyledNode.element.getUpdatingModels());
+		} catch (ModelInstantiationException e) {
+			System.err.println("Could not debug style");
+			e.printStackTrace();
+			return;
+		}
+		List<BiTuple<QuickInterpretedStyle, InterpretedStyleValue<T>>> interpretedValues = attr.getAllValues();
+		for (int v = 0; v < values.size(); v++)
+			styleDebugValues.add(new StyleDebugValue<>(interpretedValues.get(v).getValue1(),
+				interpretedValues.get(v).getValue2().getStyleValue(), values.get(v)));
+
+		updateDebugStyle();
+		Observable<?> changes = Observable
+			.onRootFinish(style.getApplicableAttribute(attr.getAttribute()).noInitChanges().takeUntil(theDebuggingStyle.noInitChanges()));
+		changes.act(__ -> {
+			System.out.println("Debug style changed");
+			updateDebugStyle();
+		});
+	}
+
+	private void updateDebugStyle() {
+		boolean found = false;
+		for (CollectionElement<StyleDebugValue<?>> dv : styleDebugValues.elements()) {
+			if (!found) {
+				if (dv.get().update())
+					styleDebugValues.mutableElement(dv.getElementId()).set(dv.get()); // Update
+				found = dv.get().isPassing;
+				if (found)
+					System.out.println("Active=" + dv.get().getCondition());
+			} else if (dv.get().isPassing) {
+				dv.get().isPassing = false;
+				dv.get().theValue = null;
+				styleDebugValues.mutableElement(dv.getElementId()).set(dv.get()); // Update
+			}
+		}
 	}
 
 	public void init(String documentLocation, List<String> unmatched) {
@@ -397,7 +566,7 @@ public class Qwysiwyg {
 
 	public void hover(DocumentComponent hoveredComp, boolean ctrl) {
 		if (hoveredComp == null) {
-			hovered.set(hoveredComp, null);
+			setHoveredComponent(null, false);
 			return;
 		}
 		boolean ctrlChanged = isControlPressed != ctrl;
@@ -410,19 +579,44 @@ public class Qwysiwyg {
 					break;
 				hoveredComp = hoveredComp.parent;
 			}
-			if (hoveredComp == theHoveredComponent) {
-				if (ctrlChanged && theHoveredComponent != null)
-					theHoveredComponent.update();
-				return;
-			}
-			theInternalTooltip.set(tt, null);
-			theHoveredComponent = hoveredComp;
-			if (hoveredComp != null && isControlPressed)
-				hoveredComp.update();
-			hovered.set(hoveredComp, null);
+			setHoveredComponent(hoveredComp, ctrlChanged);
 		} catch (RuntimeException | Error e) {
 			e.printStackTrace();
 		}
+	}
+
+	void setHoveredComponent(DocumentComponent hoveredComp, boolean ctrlChanged) {
+		if (hoveredComp == theHoveredComponent) {
+			if (ctrlChanged)
+				theHoveredComponent.update();
+			return;
+		}
+		if (theHoveredComponent != null && theHoveredComponent != hoveredComp) {
+			if (theHoveredComponent.elementHovered != null)
+				theHoveredComponent.elementHovered.set(false, null);
+			else if (theHoveredComponent.opposite != null && theHoveredComponent.opposite.elementHovered != null)
+				theHoveredComponent.opposite.elementHovered.set(false, null);
+		}
+		// System.out.println("Hovered: " + //
+		// (theHoveredComponent == null ? "null" : (theHoveredComponent.print() + "=" + theHoveredComponent.element)) + "->" //
+		// + (hoveredComp == null ? "null" : (hoveredComp.print() + "=" + hoveredComp.element)));
+		DocumentComponent oldHovered = theHoveredComponent;
+		theHoveredComponent = hoveredComp;
+		if (hoveredComp == null) {
+			if (oldHovered != null)
+				oldHovered.update();
+			hovered.set(hoveredComp, null);
+			theInternalTooltip.set(null, null);
+			return;
+		}
+		theInternalTooltip.set(hoveredComp.getTooltip(), null);
+		if (isControlPressed)
+			hoveredComp.update();
+		hovered.set(hoveredComp, null);
+		if (hoveredComp.elementHovered != null)
+			hoveredComp.elementHovered.set(true, null);
+		else if (hoveredComp.opposite != null && hoveredComp.opposite.elementHovered != null)
+			hoveredComp.opposite.elementHovered.set(true, null);
 	}
 
 	public void clicked(DocumentComponent clicked, int clickCount, boolean ctrl) {
@@ -442,10 +636,7 @@ public class Qwysiwyg {
 	}
 
 	public void mouseExit() {
-		DocumentComponent oldHovered = theHoveredComponent;
-		theHoveredComponent = null;
-		if (oldHovered != null && isControlPressed)
-			oldHovered.update();
+		setHoveredComponent(null, isControlPressed);
 	}
 
 	public void addWatchExpression(DocumentComponent selected) {
@@ -504,6 +695,7 @@ public class Qwysiwyg {
 	private void clearDef() {
 		clearInterpreted();
 		theDocumentDef = null;
+		theQwysiwygEdAddOn = null;
 	}
 
 	private void clearInterpreted() {
@@ -785,11 +977,52 @@ public class Qwysiwyg {
 		return tt;
 	}
 
+	private static final String TOOLKIT_NAME = "QWYSIWYG";
+	private static final Version TOOLKIT_VERSION = new Version(0, 1, 0);
+	private static final String QWYSIWYG_ED_NAME = "qwysiwyg-ed";
+	private static final String QWYSIWYG_HOVERED = "qwysiwygHovered";
+	private static final String QWYSIWYG_SELECTED = "qwysiwygSelected";
+
+	private QonfigAddOn theQwysiwygEdAddOn;
+
+	static QonfigAddOn findQwysiwygEdAddOn(QonfigToolkit toolkit) {
+		if (toolkit.getName().equals(TOOLKIT_NAME) && toolkit.getMajorVersion() == TOOLKIT_VERSION.major
+			&& toolkit.getMinorVersion() == TOOLKIT_VERSION.minor) {
+			for (QonfigAddOn addOn : toolkit.getDeclaredAddOns().values()) {
+				if (addOn.getName().equals(QWYSIWYG_ED_NAME))
+					return addOn;
+			}
+		} else {
+			for (QonfigToolkit dep : toolkit.getDependencies().values()) {
+				QonfigAddOn found = findQwysiwygEdAddOn(dep);
+				if (found != null)
+					return found;
+			}
+		}
+		return null;
+	}
+
 	private <E extends ExElement> void renderInterpreted(DocumentComponent component, ExElement.Interpreted<E> interpreted, E element,
 		ModelSetInstance models) {
+		if (interpreted.getParentElement() == null && theQwysiwygEdAddOn == null) {
+			theQwysiwygEdAddOn = findQwysiwygEdAddOn(interpreted.getDefinition().getElement().getDocument().getDocToolkit());
+		}
 		InterpretedExpressoEnv env = interpreted == null ? null : interpreted.getExpressoEnv();
 		ExElement.Def<? super E> def = interpreted.getDefinition();
 		DocumentComponent elComponent = getSourceComponent(component, def.getElement().getPositionInFile().getPosition()).parent;
+		if (models != null && theQwysiwygEdAddOn != null && interpreted.getDefinition().getElement().isInstance(theQwysiwygEdAddOn)) {
+			try {
+				ExWithElementModel.Interpreted elModels = interpreted.getAddOn(ExWithElementModel.Interpreted.class);
+				elComponent.elementHovered = SettableValue.build(boolean.class).withValue(false).build();
+				elModels.satisfyElementValue(QWYSIWYG_HOVERED, models, elComponent.elementHovered);
+				elComponent.elementSelected = SettableValue.build(boolean.class).withValue(false).build();
+				elModels.satisfyElementValue(QWYSIWYG_SELECTED, models, elComponent.elementSelected);
+			} catch (ModelInstantiationException e) {
+				System.err.println("Could not install " + TOOLKIT_NAME + " toolkit values");
+				e.printStackTrace();
+			}
+		}
+
 		elComponent.interpreted = interpreted;
 		elComponent.element = element;
 		if (models != null && interpreted instanceof ModelValueElement.InterpretedSynth)
@@ -815,7 +1048,6 @@ public class Qwysiwyg {
 				if (interpValue instanceof SelfDescribed)
 					attrValueComp.interpretedTooltip(((SelfDescribed) interpValue)::getDescription);
 			}
-			// TODO describe interpreted value?
 		}
 		if (def.getElement().getValue() != null && def.getElement().getValue().position != null) {
 			PositionedContent position = def.getElement().getValue().position;
@@ -836,7 +1068,6 @@ public class Qwysiwyg {
 				if (interpValue instanceof SelfDescribed)
 					attrValueComp.interpretedTooltip(((SelfDescribed) interpValue)::getDescription);
 			}
-			// TODO describe interpreted value?
 		}
 		List<? extends ExElement.Interpreted<?>> interpretedChildren = def.getAllInterpretedChildren(interpreted);
 		List<? extends ExElement> tempChildren = element == null ? Collections.emptyList() : def.getAllElementChildren(element);
@@ -1080,6 +1311,9 @@ public class Qwysiwyg {
 		ExElement.Interpreted<?> interpreted;
 		ExElement element;
 
+		SettableValue<Boolean> elementHovered;
+		SettableValue<Boolean> elementSelected;
+
 		String typeTooltip;
 		Supplier<String> interpretedTooltip;
 		ObservableValue<String> instanceTooltip;
@@ -1119,7 +1353,7 @@ public class Qwysiwyg {
 				DocumentComponent nextSib = CollectionElement.get(parent.children.getAdjacentElement(parentChild, true));
 				if (nextSib != null)
 					domainEnd = nextSib.start.getPosition();
-				else if (parent != null && parent.end != null)
+				else if (parent.end != null)
 					domainEnd = parent.end.getPosition();
 				else
 					domainEnd = theDocumentContent.length();
@@ -1232,6 +1466,10 @@ public class Qwysiwyg {
 				selectedStartIndex.set(0, cause);
 				selectedEndIndex.set(targetComponent.getTextLength(), cause);
 			}
+		}
+
+		public String print() {
+			return "\"" + toString() + start;
 		}
 
 		public StringBuilder printHierarchy(StringBuilder str, int indent) {

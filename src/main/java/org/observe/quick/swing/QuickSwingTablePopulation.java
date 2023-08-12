@@ -24,6 +24,7 @@ import javax.swing.ListCellRenderer;
 import org.observe.Observable;
 import org.observe.ObservableAction;
 import org.observe.ObservableValue;
+import org.observe.ObservableValueEvent;
 import org.observe.SettableValue;
 import org.observe.SimpleObservable;
 import org.observe.collect.ObservableCollection;
@@ -81,7 +82,7 @@ class QuickSwingTablePopulation {
 
 		public InterpretedSwingTableColumn(QuickWidget quickParent, QuickTableColumn<R, C> column, TabularContext<R> context,
 			Transformer<ExpressoInterpretationException> tx, Observable<?> until, Supplier<ComponentEditor<?, ?>> parent,
-			QuickSwingPopulator<QuickWidget> swingRenderer, QuickSwingPopulator<QuickWidget> swingEditor)
+			QuickSwingPopulator<QuickWidget> swingRenderer, QuickSwingPopulator<QuickWidget> swingEditor, int[] rendering)
 				throws ModelInstantiationException {
 			theColumn = column;
 			theCRS = new CategoryRenderStrategy<>(column.getName().get(), column.getType(), row -> {
@@ -98,7 +99,29 @@ class QuickSwingTablePopulation {
 				refresh();
 			});
 			QuickSwingTableColumn<R, C> renderer = new QuickSwingTableColumn<>(quickParent, column, context, tx, until, parent,
-				swingRenderer, swingEditor);
+				swingRenderer, swingEditor, rendering);
+			/* We need to listen to the style so external changes will re-render the table.
+			 * But we need to be careful, because the style depends on element values of the cell which are changed as the table renders
+			 * different cells.  So if we blindly listen for changes, this will keep re-rendering forever.
+			 */
+			Observable<ObservableValueEvent<?>> reRender;
+			if (theColumn.getRenderer() != null) {
+				if (theColumn.getEditing() != null && theColumn.getEditing().getEditor() != null)
+					reRender = Observable.or(theColumn.getRenderer().getStyle().changes(),
+						theColumn.getEditing().getEditor().getStyle().changes());
+				else
+					reRender = theColumn.getRenderer().getStyle().changes();
+			} else if (theColumn.getEditing() != null && theColumn.getEditing().getEditor() != null)
+				reRender = theColumn.getEditing().getEditor().getStyle().changes();
+			else
+				reRender = null;
+			if (reRender != null) {
+				Observable.onRootFinish(reRender).takeUntil(until).act(evt -> {
+					if (rendering[0] > 0)
+						return; // We're mucking with stuff during a render operation--don't create a cycle
+					refresh();
+				});
+			}
 			theCRS.withRenderer(renderer);
 			theCRS.withValueTooltip(renderer::getTooltip);
 			// The listeners may take a performance hit, so only add listening if they're there
@@ -159,9 +182,11 @@ class QuickSwingTablePopulation {
 		private final QuickKeyListener.KeyTypedContext theKeyTypeContext;
 		private final QuickKeyListener.KeyCodeContext theKeyCodeContext;
 
+		private final int[] isRendering;
+
 		QuickSwingTableColumn(QuickWidget quickParent, QuickTableColumn<R, C> column, TabularWidget.TabularContext<R> ctx,
 			Transformer<ExpressoInterpretationException> tx, Observable<?> until, Supplier<ComponentEditor<?, ?>> parent,
-			QuickSwingPopulator<QuickWidget> swingRenderer, QuickSwingPopulator<QuickWidget> swingEditor)
+			QuickSwingPopulator<QuickWidget> swingRenderer, QuickSwingPopulator<QuickWidget> swingEditor, int[] rendering)
 				throws ModelInstantiationException {
 			theQuickParent = quickParent;
 			theColumn = column;
@@ -169,6 +194,7 @@ class QuickSwingTablePopulation {
 			theRenderTableContext = ctx;
 			theParent = parent;
 			theRenderUntil = new SimpleObservable<>();
+			isRendering = rendering;
 
 			// TODO The interpretation/transformation of the renderer and editor should be done elsewhere
 			if (swingRenderer != null) {
@@ -184,8 +210,7 @@ class QuickSwingTablePopulation {
 						theColumn.getEditing().getEditor());
 				}
 				theEditContext = new QuickTableColumn.ColumnEditContext.Default<>(theColumn.getColumnSet().getRowType(),
-					theColumn.getType(),
-					theColumn.getEditing().reporting().getPosition().toShortString());
+					theColumn.getType(), theColumn.getEditing().reporting().getPosition().toShortString());
 				theColumn.getEditing().setEditorContext(theEditContext);
 			} else
 				theEditContext = null;
@@ -233,35 +258,55 @@ class QuickSwingTablePopulation {
 		void mutation(CategoryRenderStrategy<R, C>.CategoryMutationStrategy mutation) {
 			if (theColumn.getEditing() != null) {
 				mutation.editableIf((rowValue, colValue) -> {
-					theRenderTableContext.getRenderValue().set(rowValue, null);
-					theRenderTableContext.getRowIndex().set(0, null);
-					theRenderTableContext.getColumnIndex().set(0, null);
-					theRenderTableContext.isSelected().set(false, null);
-					return theColumn.getEditing().getFilteredColumnEditValue().isEnabled().get() == null;
+					isRendering[0]++;
+					try {
+						theRenderTableContext.getRenderValue().set(rowValue, null);
+						theRenderTableContext.getRowIndex().set(0, null);
+						theRenderTableContext.getColumnIndex().set(0, null);
+						theRenderTableContext.isSelected().set(false, null);
+						return theColumn.getEditing().getFilteredColumnEditValue().isEnabled().get() == null;
+					} finally {
+						isRendering[0]--;
+					}
 				});
 				mutation.filterAccept((rowEl, colValue) -> {
-					theRenderTableContext.getRenderValue().set(rowEl.get(), null);
-					theRenderTableContext.getRowIndex().set(0, null);
-					theRenderTableContext.getColumnIndex().set(0, null);
-					theRenderTableContext.isSelected().set(false, null);
-					return theColumn.getEditing().getFilteredColumnEditValue().isAcceptable(colValue);
+					isRendering[0]++;
+					try {
+						theRenderTableContext.getRenderValue().set(rowEl.get(), null);
+						theRenderTableContext.getRowIndex().set(0, null);
+						theRenderTableContext.getColumnIndex().set(0, null);
+						theRenderTableContext.isSelected().set(false, null);
+						return theColumn.getEditing().getFilteredColumnEditValue().isAcceptable(colValue);
+					} finally {
+						isRendering[0]--;
+					}
 				});
 				if (theColumn.getEditing().getType() instanceof QuickTableColumn.ColumnEditType.RowModifyEditType) {
 					QuickTableColumn.ColumnEditType.RowModifyEditType<R, C> editType = (QuickTableColumn.ColumnEditType.RowModifyEditType<R, C>) theColumn
 						.getEditing().getType();
 					mutation.mutateAttribute((rowValue, colValue) -> {
-						theEditContext.getRenderValue().set(rowValue, null);
-						theEditContext.getEditColumnValue().set(colValue, null);
-						editType.getCommit().act(null);
+						isRendering[0]++;
+						try {
+							theEditContext.getRenderValue().set(rowValue, null);
+							theEditContext.getEditColumnValue().set(colValue, null);
+							editType.getCommit().act(null);
+						} finally {
+							isRendering[0]--;
+						}
 					});
 					mutation.withRowUpdate(editType.isRowUpdate());
 				} else if (theColumn.getEditing().getType() instanceof QuickTableColumn.ColumnEditType.RowReplaceEditType) {
 					QuickTableColumn.ColumnEditType.RowReplaceEditType<R, C> editType = (QuickTableColumn.ColumnEditType.RowReplaceEditType<R, C>) theColumn
 						.getEditing().getType();
 					mutation.withRowValueSwitch((rowValue, colValue) -> {
-						theEditContext.getRenderValue().set(rowValue, null);
-						theEditContext.getEditColumnValue().set(colValue, null);
-						return editType.getReplacement().get();
+						isRendering[0]++;
+						try {
+							theEditContext.getRenderValue().set(rowValue, null);
+							theEditContext.getEditColumnValue().set(colValue, null);
+							return editType.getReplacement().get();
+						} finally {
+							isRendering[0]--;
+						}
 					});
 				} else
 					theColumn.getEditing().reporting().error("Unhandled column edit type: " + theColumn.getEditing().getType());
@@ -292,6 +337,7 @@ class QuickSwingTablePopulation {
 		}
 
 		void setCellContext(ModelCell<? extends R, ? extends C> cell, TabularWidget.TabularContext<R> tableCtx) {
+			isRendering[0]++;
 			try (Causable.CausableInUse cause = Causable.cause()) {
 				tableCtx.isSelected().set(cell.isSelected(), cause);
 				tableCtx.getRowIndex().set(cell.getRowIndex(), cause);
@@ -307,13 +353,20 @@ class QuickSwingTablePopulation {
 						theRendererContext.isRightPressed().set(false, cause);
 					}
 				}
+			} finally {
+				isRendering[0]--;
 			}
 		}
 
 		String getTooltip(R modelValue, C columnValue) {
 			if (theTooltip == null)
 				return null;
-			theRenderTableContext.getRenderValue().set(modelValue, null);
+			isRendering[0]++;
+			try {
+				theRenderTableContext.getRenderValue().set(modelValue, null);
+			} finally {
+				isRendering[0]--;
+			}
 			return theTooltip.get();
 		}
 

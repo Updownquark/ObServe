@@ -17,6 +17,8 @@ import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
+import com.google.common.reflect.TypeToken;
+
 public interface ModelValueElement<M, MV extends M> extends ExElement {
 	static final SingleTypeTraceability<ModelValueElement<?, ?>, Interpreted<?, ?, ?>, Def<?, ?>> TRACEABILITY = ElementTypeTraceability
 		.getElementTraceability(ExpressoSessionImplV0_1.TOOLKIT_NAME, ExpressoSessionImplV0_1.VERSION, "model-value", Def.class,
@@ -111,6 +113,10 @@ public interface ModelValueElement<M, MV extends M> extends ExElement {
 				theValueType = session.get(ExpressoBaseV0_1.VALUE_TYPE_KEY, VariableType.class);
 			}
 
+			protected boolean useWrapperType() {
+				return false;
+			}
+
 			public static abstract class Interpreted<M, MV extends M, E extends ModelValueElement<M, MV>>
 			extends ModelValueElement.Interpreted.Abstract<M, MV, E> {
 				private ModelInstanceType<M, MV> theTargetType;
@@ -131,10 +137,12 @@ public interface ModelValueElement<M, MV extends M> extends ExElement {
 
 				@Override
 				protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-					if (getDefinition().getValueType() != null)
-						theTargetType = (ModelInstanceType<M, MV>) getDefinition().getModelType(env)
-							.forTypes(getDefinition().getValueType().getType(env));
-					else
+					if (getDefinition().getValueType() != null) {
+						TypeToken<?> valueType = getDefinition().getValueType().getType(env);
+						if (getDefinition().useWrapperType())
+							valueType = TypeTokens.get().wrap(valueType);
+						theTargetType = (ModelInstanceType<M, MV>) getDefinition().getModelType(env).forTypes(valueType);
+					} else
 						theTargetType = getDefinition().getModelType(env).anyAs();
 					super.doUpdate(env);
 				}
@@ -169,6 +177,10 @@ public interface ModelValueElement<M, MV extends M> extends ExElement {
 				theValueType2 = session.get(ExpressoBaseV0_1.VALUE_TYPE_KEY, VariableType.class);
 			}
 
+			protected boolean useWrapperType() {
+				return false;
+			}
+
 			public static abstract class Interpreted<M, MV extends M, E extends ModelValueElement<M, MV>>
 			extends ModelValueElement.Interpreted.Abstract<M, MV, E> {
 				private ModelInstanceType<M, MV> theTargetType;
@@ -191,16 +203,23 @@ public interface ModelValueElement<M, MV extends M> extends ExElement {
 				protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 					ModelInstanceType<?, ?> type;
 					if (getDefinition().getValueType1() != null) {
-						if (getDefinition().getValueType2() != null)
-							type = getDefinition().getModelType(env).forTypes(getDefinition().getValueType1().getType(env),
-								getDefinition().getValueType2().getType(env));
-						else
+						TypeToken<?> valueType1 = getDefinition().getValueType1().getType(env);
+						if (getDefinition().useWrapperType())
+							valueType1 = TypeTokens.get().wrap(valueType1);
+						if (getDefinition().getValueType2() != null) {
+							TypeToken<?> valueType2 = getDefinition().getValueType2().getType(env);
+							if (getDefinition().useWrapperType())
+								valueType2 = TypeTokens.get().wrap(valueType2);
+							type = getDefinition().getModelType(env).forTypes(valueType1, valueType2);
+						} else
 							type = getDefinition().getModelType(env).forTypes(getDefinition().getValueType1().getType(env),
 								TypeTokens.get().WILDCARD);
-					} else if (getDefinition().getValueType2() != null)
-						type = getDefinition().getModelType(env).forTypes(TypeTokens.get().WILDCARD,
-							getDefinition().getValueType2().getType(env));
-					else
+					} else if (getDefinition().getValueType2() != null) {
+						TypeToken<?> valueType2 = getDefinition().getValueType2().getType(env);
+						if (getDefinition().useWrapperType())
+							valueType2 = TypeTokens.get().wrap(valueType2);
+						type = getDefinition().getModelType(env).forTypes(TypeTokens.get().WILDCARD, valueType2);
+					} else
 						type = getDefinition().getModelType(env).any();
 					theTargetType = (ModelInstanceType<M, MV>) type;
 

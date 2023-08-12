@@ -12,6 +12,7 @@ import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.qommons.Identifiable;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigToolkit;
@@ -98,6 +99,10 @@ public class ExWithElementModel extends ExFlexibleElementModelAddOn<ExElement> {
 				builder = createBuilder(session);
 			addElementValue(name, value, builder, spec.getElement().getPositionInFile());
 			return builder;
+		}
+
+		public ElementModelValue.Identity getElementValueId(String elementValueName) throws QonfigInterpretationException {
+			return (ElementModelValue.Identity) ((Identifiable) getElementValue(elementValueName)).getIdentity();
 		}
 
 		@Override

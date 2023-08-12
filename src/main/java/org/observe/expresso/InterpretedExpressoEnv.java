@@ -97,6 +97,15 @@ public class InterpretedExpressoEnv extends CompiledExpressoEnv {
 		return theErrorReporting;
 	}
 
+	/**
+	 * @param reporting The reporting for the new environment
+	 * @return A copy of this environment with the given reporting
+	 */
+	public InterpretedExpressoEnv withErrorReporting(ErrorReporting reporting) {
+		return new InterpretedExpressoEnv(getModels(), theExtModels, theClassView, getNonStructuredParsers(), getUnaryOperators(),
+			getBinaryOperators(), reporting, theProperties, isTesting);
+	}
+
 	/** @return Whether this environment is to be used for testing */
 	public boolean isTesting() {
 		return isTesting;

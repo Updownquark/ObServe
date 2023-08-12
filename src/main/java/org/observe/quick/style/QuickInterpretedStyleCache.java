@@ -17,6 +17,10 @@ public class QuickInterpretedStyleCache {
 		theAttributes = new HashMap<>();
 	}
 
+	public QuickStyleAttribute<?> getAttribute(QuickStyleAttributeDef definition) {
+		return theAttributes.get(definition);
+	}
+
 	public QuickStyleAttribute<?> getAttribute(QuickStyleAttributeDef definition, InterpretedExpressoEnv env)
 		throws ExpressoInterpretationException {
 		if (definition == null)

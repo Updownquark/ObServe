@@ -3224,7 +3224,7 @@ public final class ObservableCollectionImpl {
 			ObservableCollection<? extends E> coll = theCollectionObservable.get();
 			if (coll != null) {
 				long collStamp = coll.getStamp();
-				stamp ^= Long.rotateRight(collStamp, 32);
+				stamp = Stamped.compositeStamp(stamp, collStamp);
 			}
 			return stamp;
 		}

@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<quick uses:base="Quick-Base v0.1" uses:expresso="Expresso-Base v0.1" with-extension="window"
-	title="`Simple Quick Table Demo`" close-action="exit">
+<quick uses:base="Quick-Base v0.1" uses:expresso="Expresso-Base v0.1" uses:qwysiwyg="QWYSIWYG v0.1"
+	with-extension="window" title="`Simple Quick Table Demo`" close-action="exit">
+	<!--uses:qwysiwyg="QWYSIWYG v0.1"-->
 	<head>
 		<imports>
 			<import>org.qommons.Primes</import>
@@ -36,6 +37,7 @@
 		</models>
 		<style-sheet>
 			<import-style-sheet name="tests" ref="quick-tests.qss" />
+			<import-style-sheet name="qwysiwyg" ref="../../../../../../src/main/java/org/observe/quick/qwysiwyg/qwysiwyg-default.qss" />
 		</style-sheet>
 	</head>
 	<box layout="inline-layout" orientation="vertical" cross-align="justify">

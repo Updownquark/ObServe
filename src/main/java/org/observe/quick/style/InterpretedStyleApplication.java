@@ -43,8 +43,8 @@ public class InterpretedStyleApplication {
 	}
 
 	/**
-	 * @return The application definition this structure is {@link StyleApplicationDef#interpret(QuickInterpretedStyleCache) interpreted}
-	 *         from
+	 * @return The application definition this structure is
+	 *         {@link StyleApplicationDef#interpret(InterpretedExpressoEnv, QuickInterpretedStyleCache.Applications) interpreted} from
 	 */
 	public StyleApplicationDef getDefinition() {
 		return theDefinition;

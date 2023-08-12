@@ -448,10 +448,15 @@ public class ObservableTableModel<R> implements TableModel {
 
 				@Override
 				public void contentsChanged(ListDataEvent e) {
-					for (int i = e.getIndex0(); i <= e.getIndex1(); i++)
+					for (int i = e.getIndex0(); i <= e.getIndex1(); i++) {
 						hookUp(table, table.getColumnModel().getColumn(i),
 							(CategoryRenderStrategy<R, Object>) model.theColumnModel.getElementAt(i), model, ctx, ml::getHoveredRow,
 							ml::getHoveredColumn);
+						if (table.getRowCount() > 0) {
+							Rectangle bounds = table.getCellRect(0, table.convertColumnIndexToModel(i), false);
+							table.repaint(bounds.x, 0, bounds.width, table.getHeight());
+						}
+					}
 				}
 			};
 			model.getColumnModel().addListDataListener(columnListener);
@@ -817,7 +822,7 @@ public class ObservableTableModel<R> implements TableModel {
 		private int theHoveredRow = -1;
 		private int theHoveredColumn = -1;
 
-		public TableMouseListener(Component component) {
+		protected TableMouseListener(Component component) {
 			theComponent = component;
 		}
 

@@ -427,6 +427,11 @@ public class ExpressoQonfigValues {
 		}
 
 		@Override
+		protected boolean useWrapperType() {
+			return true;
+		}
+
+		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			super.doUpdate(session);
 			if (session.isInstance("int-list") != null) {
@@ -789,6 +794,11 @@ public class ExpressoQonfigValues {
 		}
 
 		@Override
+		protected boolean useWrapperType() {
+			return true;
+		}
+
+		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			super.doUpdate(session);
 			if (session.isInstance("int-map") != null) {
@@ -976,6 +986,11 @@ public class ExpressoQonfigValues {
 
 		public List<MapEntry> getEntries() {
 			return Collections.unmodifiableList(theEntries);
+		}
+
+		@Override
+		protected boolean useWrapperType() {
+			return true;
 		}
 
 		@Override

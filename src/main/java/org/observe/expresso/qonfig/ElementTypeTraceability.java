@@ -10,6 +10,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.observe.expresso.qonfig.ExElement.Def;
 import org.observe.expresso.qonfig.ExElement.Interpreted;
@@ -455,12 +457,17 @@ public interface ElementTypeTraceability<E extends ExElement, I extends ExElemen
 			theChildren = new HashMap<>();
 		}
 
+		static final Pattern AS_TYPE_PATTERN = Pattern
+			.compile("((?<tkName>[A-Za-z0-9_\\-]+)(\\s+\\v?(?<major>\\d+)\\.(?<minor>\\d+))?\\:)?(?<typeName>[A-Za-z0-9_\\-]+)");
+
 		public SingleTypeTraceabilityBuilder<E, I, D> reflectMethods(Class<? super D> defClass, Class<? super I> interpClass,
 			Class<? super E> elementClass) {
 			for (Method defMethod : defClass.getDeclaredMethods()) {
 				if (defMethod.getParameterCount() != 0 || defMethod.getReturnType() == void.class)
 					continue;
 				QonfigAttributeGetter attr = defMethod.getAnnotation(QonfigAttributeGetter.class);
+				if (attr != null && !checkAsType(defMethod, attr.asType()))
+					attr = null;
 				if (attr != null) {
 					Method interpMethod;
 					try {
@@ -475,6 +482,9 @@ public interface ElementTypeTraceability<E extends ExElement, I extends ExElemen
 						withAttribute(attr.value(), new ReflectedAttributeGetter<>(defMethod, interpMethod));
 				}
 				QonfigChildGetter child = defMethod.getAnnotation(QonfigChildGetter.class);
+				if (child != null && !checkAsType(defMethod, child.asType())) {
+					child = null;
+				}
 				if (child != null) {
 					Boolean listReturn = checkReturnType(defMethod, ExElement.Def.class);
 					if (listReturn != null) {
@@ -544,6 +554,30 @@ public interface ElementTypeTraceability<E extends ExElement, I extends ExElemen
 				}
 			}
 			return this;
+		}
+
+		boolean checkAsType(Method method, String asType) {
+			if (asType.isEmpty())
+				return true;
+			Matcher m = AS_TYPE_PATTERN.matcher(asType);
+			if (!m.matches()) {
+				System.err.println(
+					"For " + method.getDeclaringClass().getName() + "." + method.getName() + "(), expected 'Toolkit vM.m:element'");
+				return false;
+			}
+			if (!theTypeName.equals(m.group("typeName")))
+				return false;
+			String tkName = m.group("tkName");
+			if (tkName != null && !theToolkitName.equals(tkName))
+				return false;
+			String major = m.group("major");
+			if (major != null) {
+				if (theToolkitVersion.majorVersion != Integer.parseInt(major))
+					return false;
+				if (theToolkitVersion.minorVersion != Integer.parseInt(m.group("minor")))
+					return false;
+			}
+			return true;
 		}
 
 		static Boolean checkReturnType(Method method, Class<?> targetClass) {
@@ -631,6 +665,8 @@ public interface ElementTypeTraceability<E extends ExElement, I extends ExElemen
 				if (defMethod.getParameterCount() != 0 || defMethod.getReturnType() == void.class)
 					continue;
 				QonfigAttributeGetter attr = defMethod.getAnnotation(QonfigAttributeGetter.class);
+				if (attr != null && !checkAsType(defMethod, attr.asType()))
+					attr = null;
 				if (attr != null) {
 					Method interpMethod;
 					try {
@@ -646,6 +682,8 @@ public interface ElementTypeTraceability<E extends ExElement, I extends ExElemen
 							new ReflectedAddOnAttributeGetter<>(theDefClass, defMethod, theInterpretedClass, interpMethod));
 				}
 				QonfigChildGetter child = defMethod.getAnnotation(QonfigChildGetter.class);
+				if (child != null && !checkAsType(defMethod, child.asType()))
+					child = null;
 				if (child != null) {
 					Boolean listReturn = checkReturnType(defMethod, ExElement.Def.class);
 					if (listReturn != null) {

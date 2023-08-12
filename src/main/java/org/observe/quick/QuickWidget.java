@@ -157,7 +157,7 @@ public interface QuickWidget extends QuickTextElement {
 
 			@Override
 			protected QuickWidgetStyle.Def wrap(QuickInstanceStyle.Def parentStyle, QuickCompiledStyle style) {
-				return new QuickWidgetStyle.Def.Default(parentStyle, style);
+				return new QuickWidgetStyle.Def.Default(parentStyle, this, style);
 			}
 		}
 	}
@@ -516,12 +516,12 @@ public interface QuickWidget extends QuickTextElement {
 				private final QuickStyleAttributeDef theColor;
 				private final QuickStyleAttributeDef theMouseCursor;
 
-				public Default(QuickCompiledStyle parent, QuickCompiledStyle wrapped) {
-					super(parent, wrapped);
+				public Default(QuickInstanceStyle.Def parent, QuickWidget.Def<?> styledElement, QuickCompiledStyle wrapped) {
+					super(parent, styledElement, wrapped);
 					QuickTypeStyle typeStyle = QuickStyledElement.getTypeStyle(wrapped.getStyleTypes(), getElement(),
 						QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, "widget");
-					theColor = typeStyle.getAttribute("color");
-					theMouseCursor = typeStyle.getAttribute("mouse-cursor");
+					theColor = addApplicableAttribute(typeStyle.getAttribute("color"));
+					theMouseCursor = addApplicableAttribute(typeStyle.getAttribute("mouse-cursor"));
 				}
 
 				@Override
@@ -537,7 +537,8 @@ public interface QuickWidget extends QuickTextElement {
 				@Override
 				public QuickWidgetStyle.Interpreted interpret(ExElement.Interpreted<?> parentEl, QuickInterpretedStyle parent,
 					InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-					return new Interpreted.Default(this, parent, getWrapped().interpret(parentEl, parent, env));
+					return new Interpreted.Default(this, (QuickWidget.Interpreted<?>) parentEl, (QuickInstanceStyle.Interpreted) parent,
+						getWrapped().interpret(parentEl, parent, env));
 				}
 			}
 		}
@@ -554,8 +555,9 @@ public interface QuickWidget extends QuickTextElement {
 				private QuickElementStyleAttribute<Color> theColor;
 				private QuickElementStyleAttribute<MouseCursor> theMouseCursor;
 
-				public Default(Def definition, QuickInterpretedStyle parent, QuickInterpretedStyle wrapped) {
-					super(definition, parent, wrapped);
+				public Default(Def definition, QuickWidget.Interpreted<?> styledElement, QuickInstanceStyle.Interpreted parent,
+					QuickInterpretedStyle wrapped) {
+					super(definition, styledElement, parent, wrapped);
 				}
 
 				@Override
@@ -583,7 +585,7 @@ public interface QuickWidget extends QuickTextElement {
 
 				@Override
 				public QuickWidgetStyle create(QuickStyledElement styledElement) {
-					return new QuickWidgetStyle.Default(getId(), (QuickWidget) styledElement);
+					return new QuickWidgetStyle.Default(this, (QuickWidget) styledElement);
 				}
 			}
 		}
@@ -593,34 +595,23 @@ public interface QuickWidget extends QuickTextElement {
 		ObservableValue<MouseCursor> getMouseCursor();
 
 		public class Default extends QuickTextStyle.Abstract implements QuickWidgetStyle {
-			private final SettableValue<ObservableValue<Color>> theColor;
-			private final SettableValue<ObservableValue<MouseCursor>> theMouseCursor;
+			private final ObservableValue<Color> theColor;
+			private final ObservableValue<MouseCursor> theMouseCursor;
 
-			public Default(Object interpretedId, QuickWidget widget) {
-				super(interpretedId, widget);
-				theColor = SettableValue
-					.build(TypeTokens.get().keyFor(ObservableValue.class).<ObservableValue<Color>> parameterized(Color.class)).build();
-				theMouseCursor = SettableValue
-					.build(TypeTokens.get().keyFor(ObservableValue.class).<ObservableValue<MouseCursor>> parameterized(MouseCursor.class))
-					.build();
+			public Default(QuickWidgetStyle.Interpreted interpreted, QuickWidget widget) {
+				super(interpreted, widget);
+				theColor = getApplicableAttribute(interpreted.getColor().getAttribute());
+				theMouseCursor = getApplicableAttribute(interpreted.getMouseCursor().getAttribute());
 			}
 
 			@Override
 			public ObservableValue<Color> getColor() {
-				return ObservableValue.flatten(theColor);
+				return theColor;
 			}
 
 			@Override
 			public ObservableValue<MouseCursor> getMouseCursor() {
-				return ObservableValue.flatten(theMouseCursor);
-			}
-
-			@Override
-			public void update(QuickInstanceStyle.Interpreted interpreted, ModelSetInstance models) throws ModelInstantiationException {
-				super.update(interpreted, models);
-				QuickWidgetStyle.Interpreted myInterpreted = (QuickWidgetStyle.Interpreted) interpreted;
-				theColor.set(myInterpreted.getColor().evaluate(models), null);
-				theMouseCursor.set(myInterpreted.getMouseCursor().evaluate(models), null);
+				return theMouseCursor;
 			}
 		}
 	}

@@ -1677,7 +1677,7 @@ public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>,
 			long stamp = theValue.getStamp();
 			ObservableValue<? extends T> wrapped = theValue.get();
 			if (wrapped != null)
-				stamp ^= Long.rotateRight(wrapped.getStamp(), 32);
+				stamp = Stamped.compositeStamp(stamp, wrapped.getStamp());
 			return stamp;
 		}
 

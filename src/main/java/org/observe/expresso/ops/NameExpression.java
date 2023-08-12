@@ -186,19 +186,22 @@ public class NameExpression implements ObservableExpression, Named {
 			Class<?> clazz = env.getClassView().getType(typeName.toString());
 			int i;
 			for (i = 1; i < theNames.size() - 1; i++) {
-				typeName.append(theNames.get(i).getName());
+				typeName.append('.').append(theNames.get(i).getName());
 				clazz = env.getClassView().getType(typeName.toString());
 			}
 			if (clazz == null)
-				throw new ExpressoEvaluationException(getDivisionOffset(0), getDivisionOffset(0) + theNames.get(0).length(), //
+				throw new ExpressoEvaluationException(expressionOffset + getDivisionOffset(0),
+					expressionOffset + getDivisionOffset(0) + theNames.get(0).length(), //
 					"'" + theNames.get(0) + "' cannot be resolved to a variable ");
 			try {
 				field = clazz.getField(theNames.get(i).getName());
 			} catch (NoSuchFieldException e) {
-				throw new ExpressoEvaluationException(getDivisionOffset(i), getDivisionOffset(i) + theNames.get(0).length(), //
+				throw new ExpressoEvaluationException(expressionOffset + getDivisionOffset(i),
+					expressionOffset + getDivisionOffset(i) + theNames.get(0).length(), //
 					"'" + theNames.get(i) + "' cannot be resolved or is not a field");
 			} catch (SecurityException e) {
-				throw new ExpressoEvaluationException(getDivisionOffset(i), getDivisionOffset(i) + theNames.get(0).length(), //
+				throw new ExpressoEvaluationException(expressionOffset + getDivisionOffset(i),
+					expressionOffset + getDivisionOffset(i) + theNames.get(0).length(), //
 					clazz.getName() + "." + theNames.get(i) + " cannot be accessed", e);
 			}
 			fieldValue = evaluateField(field, TypeTokens.get().of(field.getGenericType()), null, i, type, expressionOffset, env.reporting(),
@@ -254,7 +257,7 @@ public class NameExpression implements ObservableExpression, Named {
 			} catch (NoSuchFieldException e) {
 				throw new ExpressoEvaluationException(expressionOffset + getDivisionOffset(nameIndex),
 					getDivisionOffset(0) + theNames.get(nameIndex).length(), //
-					getPath(nameIndex) + "' cannot be resolved or is not a field of " + ctxType.getName());
+					"'" + getPath(nameIndex) + "' cannot be resolved or is not a field of " + ctxType.getName());
 			} catch (SecurityException e) {
 				throw new ExpressoEvaluationException(expressionOffset + getDivisionOffset(nameIndex),
 					getDivisionOffset(0) + theNames.get(nameIndex).length(), //

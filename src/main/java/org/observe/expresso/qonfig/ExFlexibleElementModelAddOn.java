@@ -61,14 +61,19 @@ public abstract class ExFlexibleElementModelAddOn<E extends ExElement> extends E
 			builder.withMaker(name, value, position);
 		}
 
-		protected <I extends ExElement.Interpreted<?>, M> void satisfyElementValueType(String elementValueName, ModelType<M> modelType,
-			ExBiFunction<I, InterpretedExpressoEnv, ? extends ModelInstanceType<M, ?>, ExpressoInterpretationException> type)
-				throws QonfigInterpretationException {
+		protected CompiledModelValue<?> getElementValue(String elementValueName) throws QonfigInterpretationException {
 			CompiledModelValue<?> value = theElementValues.get(elementValueName);
 			if (value == null)
 				throw new QonfigInterpretationException("No such element value '" + elementValueName + "'",
 					getElement().reporting().getPosition(), 0);
-			else if (!(value instanceof PlaceholderModelValue))
+			return value;
+		}
+
+		protected <I extends ExElement.Interpreted<?>, M> void satisfyElementValueType(String elementValueName, ModelType<M> modelType,
+			ExBiFunction<I, InterpretedExpressoEnv, ? extends ModelInstanceType<M, ?>, ExpressoInterpretationException> type)
+				throws QonfigInterpretationException {
+			CompiledModelValue<?> value = getElementValue(elementValueName);
+			if (!(value instanceof PlaceholderModelValue))
 				throw new QonfigInterpretationException("Element value '" + elementValueName + "' is not dynamically-typed",
 					getElement().reporting().getPosition(), 0);
 			if (value.getModelType(null) != modelType)

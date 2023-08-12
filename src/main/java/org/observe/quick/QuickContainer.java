@@ -9,7 +9,6 @@ import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceabilit
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigChildGetter;
-import org.observe.quick.style.QuickCompiledStyle;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.CollectionUtils;
 import org.qommons.config.QonfigElementOrAddOn;
@@ -72,11 +71,6 @@ public interface QuickContainer<C extends QuickWidget> extends QuickWidget {
 				withTraceability(CONTAINER_TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 				super.doUpdate(session.asElement(session.getFocusType().getSuperElement()));
 				ExElement.syncDefs(QuickWidget.Def.class, theContents, session.forChildren("content"));
-			}
-
-			@Override
-			protected QuickWidgetStyle.Def wrap(QuickInstanceStyle.Def parentStyle, QuickCompiledStyle style) {
-				return new QuickWidgetStyle.Def.Default(parentStyle, style);
 			}
 		}
 	}
