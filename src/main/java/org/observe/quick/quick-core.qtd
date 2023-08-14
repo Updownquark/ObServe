@@ -23,7 +23,7 @@
 			<literal>middle</literal>
 		</one-of>
 
-		<pattern name="widget-name">((?&lt;ns&gt;[a-zA-Z_\\-]+)\:)?(?&lt;widget&gt;[a-zA-Z_\\-]+)</pattern>
+		<pattern name="widget-name">((?&lt;ns&gt;[a-zA-Z0-9_\\-]+)\:)?(?&lt;widget&gt;[a-zA-Z0-9_\\-]+)</pattern>
 	</value-types>
 
 	<add-ons>

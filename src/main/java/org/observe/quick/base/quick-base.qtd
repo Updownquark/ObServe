@@ -339,7 +339,7 @@
 		</element-def>
 		<?DOC A column in a tabular widget?>
 		<element-def name="column" inherits="column-set,styled,rendering">
-			<label role="default-renderer" value="columnValue" />
+			<label role="default-renderer" value="{column-value-name}" />
 			<element-model>
 				<?DOC The current cell value, e.g. the one being rendered?>
 				<value name-attribute="column-value-name" priority="2" />

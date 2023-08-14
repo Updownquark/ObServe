@@ -700,11 +700,7 @@ public interface QuickTableColumn<R, C> {
 				theValue = session.getAttributeExpression("value");
 				theHeaderTooltip = session.getAttributeExpression("header-tooltip");
 				ExpressoQIS renderer = session.forChildren("renderer").peekFirst();
-				// This seems pretty dumb, but there's currently not a way for the default renderer to point to the column value attribute,
-				// nor is there a way for us to alter the QonfigElement after the fact to insert it.
-				// So we can only use the default renderer if we use the default column-value-name
-				// The implementation should provide some default rendering with out this, but it won't have style
-				if (renderer == null && theColumnValueName.equals("columnValue"))
+				if (renderer == null)
 					renderer = session.forMetadata("default-renderer").peekFirst();
 				theRenderer = ExElement.useOrReplace(QuickWidget.Def.class, theRenderer, renderer, null);
 				theEditing = ExElement.useOrReplace(ColumnEditing.Def.class, theEditing, session, "edit");
