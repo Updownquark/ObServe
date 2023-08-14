@@ -23,9 +23,12 @@ import com.google.common.reflect.TypeToken;
 
 public class QuickComboBox<T> extends QuickValueWidget.Abstract<T> {
 	public static final String COMBO_BOX = "combo";
-	private static final SingleTypeTraceability<QuickComboBox<?>, Interpreted<?>, Def<?>> TRACEABILITY = ElementTypeTraceability
+	private static final SingleTypeTraceability<QuickComboBox<?>, Interpreted<?>, Def<?>> COMBO_TRACEABILITY = ElementTypeTraceability
 		.getElementTraceability(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, COMBO_BOX, Def.class, Interpreted.class,
 			QuickComboBox.class);
+	private static final SingleTypeTraceability<QuickComboBox<?>, Interpreted<?>, Def<?>> COLLECTION_SELECTOR_TRACEABILITY = ElementTypeTraceability
+		.getElementTraceability(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, "collection-selector-widget", Def.class,
+			Interpreted.class, QuickComboBox.class);
 
 	public static class Def<T> extends QuickValueWidget.Def.Abstract<T, QuickComboBox<T>> {
 		private CompiledExpression theValues;
@@ -34,14 +37,16 @@ public class QuickComboBox<T> extends QuickValueWidget.Abstract<T> {
 			super(parent, type);
 		}
 
-		@QonfigAttributeGetter("values")
+		@QonfigAttributeGetter(asType = "collection-selector-widget", value = "values")
 		public CompiledExpression getValues() {
 			return theValues;
 		}
 
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
-			withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
+			withTraceability(COMBO_TRACEABILITY.validate(session.getFocusType(), session.reporting()));
+			withTraceability(COLLECTION_SELECTOR_TRACEABILITY.validate(session.asElement("collection-selector-widget").getFocusType(),
+				session.reporting()));
 			super.doUpdate(session.asElement(session.getFocusType().getSuperElement()));
 			theValues = session.getAttributeExpression("values");
 		}
@@ -105,8 +110,7 @@ public class QuickComboBox<T> extends QuickValueWidget.Abstract<T> {
 	}
 
 	@Override
-	protected void updateModel(ExElement.Interpreted<?> interpreted, ModelSetInstance myModels)
-		throws ModelInstantiationException {
+	protected void updateModel(ExElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
 		super.updateModel(interpreted, myModels);
 		Interpreted<T> myInterpreted = (Interpreted<T>) interpreted;
 		theValues.set(myInterpreted.getValues() == null ? null : myInterpreted.getValues().get(myModels), null);
