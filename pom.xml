@@ -89,6 +89,14 @@
 				<groupId>org.antlr</groupId>
 				<artifactId>antlr4-maven-plugin</artifactId>
 				<version>4.3</version>
+				<configuration>
+					<sourceDirectory>${basedir}/src/main/antlr</sourceDirectory>
+					<outputDirectory>${project.build.directory}/generated-sources/antlr4/org/observe/expresso</outputDirectory>
+					<arguments>
+						<argument>-package</argument>
+						<argument>org.observe.expresso</argument>
+					</arguments>
+				</configuration>
 				<executions>
 					<execution>
 						<id>antlr</id>
