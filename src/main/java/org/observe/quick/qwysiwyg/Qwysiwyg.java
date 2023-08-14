@@ -981,7 +981,6 @@ public class Qwysiwyg {
 	private static final Version TOOLKIT_VERSION = new Version(0, 1, 0);
 	private static final String QWYSIWYG_ED_NAME = "qwysiwyg-ed";
 	private static final String QWYSIWYG_HOVERED = "qwysiwygHovered";
-	private static final String QWYSIWYG_SELECTED = "qwysiwygSelected";
 
 	private QonfigAddOn theQwysiwygEdAddOn;
 
@@ -1015,8 +1014,6 @@ public class Qwysiwyg {
 				ExWithElementModel.Interpreted elModels = interpreted.getAddOn(ExWithElementModel.Interpreted.class);
 				elComponent.elementHovered = SettableValue.build(boolean.class).withValue(false).build();
 				elModels.satisfyElementValue(QWYSIWYG_HOVERED, models, elComponent.elementHovered);
-				elComponent.elementSelected = SettableValue.build(boolean.class).withValue(false).build();
-				elModels.satisfyElementValue(QWYSIWYG_SELECTED, models, elComponent.elementSelected);
 			} catch (ModelInstantiationException e) {
 				System.err.println("Could not install " + TOOLKIT_NAME + " toolkit values");
 				e.printStackTrace();
@@ -1322,7 +1319,6 @@ public class Qwysiwyg {
 		ExElement element;
 
 		SettableValue<Boolean> elementHovered;
-		SettableValue<Boolean> elementSelected;
 
 		String typeTooltip;
 		Supplier<String> interpretedTooltip;

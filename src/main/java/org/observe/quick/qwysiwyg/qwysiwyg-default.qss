@@ -2,7 +2,7 @@
 
 <style-sheet uses:qwysiwyg="QWYSIWYG v0.1" uses:quick-base="Quick-Base v0.1">
 	<style element="qwysiwyg-ed">
-		<style condition="qwysiwygSelected">
+		<style condition="qwysiwygHovered">
 			<style element="with-text">
 				<style attr="font-weight">`ultra-bold`</style>
 				<style attr="font-color">`dark-violet`</style>
@@ -14,22 +14,10 @@
 				<style attr="thickness">3</style>
 				<style attr="border-color">`blue`</style>
 			</style>
-		</style>
-
-		<style condition="qwysiwygHovered">
-			<style element="with-text">
-				<style attr="font-weight">`bold`</style>
-				<style element="widget">
-					<style attr="color">`gold`</style>
-				</style>
-			</style>
-			<style element="border">
-				<style attr="thickness">2</style>
-				<style attr="border-color">`green`</style>
-			</style>
 			<style element="column">
-				<style attr="with-text.font-weight">`bold`</style>
-				<style attr="widget.color">`gold`</style>
+				<style attr="with-text.font-weight">`ultra-bold`</style>
+				<style attr="with-text.font-color">`dark-violet`</style>
+				<style attr="widget.color">`cadet-blue`</style>
 			</style>
 		</style>
 

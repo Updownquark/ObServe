@@ -6,8 +6,6 @@
 			<element-model>
 				<?DOC True when the user hovers over the element's representation in QWYSIWYG?>
 				<value name="qwysiwygHovered" type="boolean" priority="10000" />
-				<?DOC True when the user selects the element's representation in QWYSIWYG?>
-				<value name="qwysiwygSelected" type="boolean" priority="10100" />
 				<?DOC The maximum severity of issues reported on the element?>
 				<value name="qwysiwygSeverity" type="org.qommons.io.ErrorReporting.IssueSeverity" priority="10" />
 				<?DOC When a highlight event occurs in QWYSIWYG against the given element, this transitions from 100 back to 0 over an interval?>
