@@ -71,7 +71,7 @@ public class InstanceofExpression implements ObservableExpression {
 	}
 
 	@Override
-	public ModelType<?> getModelType(CompiledExpressoEnv env) {
+	public ModelType<?> getModelType(CompiledExpressoEnv env, int expressionOffset) {
 		return ModelTypes.Value;
 	}
 

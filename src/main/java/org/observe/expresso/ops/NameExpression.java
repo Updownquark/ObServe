@@ -12,6 +12,7 @@ import org.observe.ObservableValueEvent;
 import org.observe.SettableValue;
 import org.observe.SimpleObservable;
 import org.observe.expresso.CompiledExpressoEnv;
+import org.observe.expresso.ExpressoCompilationException;
 import org.observe.expresso.ExpressoEvaluationException;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.InterpretedExpressoEnv;
@@ -135,7 +136,7 @@ public class NameExpression implements ObservableExpression, Named {
 	 */
 
 	@Override
-	public ModelType<?> getModelType(CompiledExpressoEnv env) {
+	public ModelType<?> getModelType(CompiledExpressoEnv env, int expressionOffset) throws ExpressoCompilationException {
 		if (theContext != null)
 			return ModelTypes.Value; // Just gotta guess
 		ModelComponentNode<?> mv = env.getModels().getComponentIfExists(StringUtils.print(".", theNames, n -> n.getName()).toString());

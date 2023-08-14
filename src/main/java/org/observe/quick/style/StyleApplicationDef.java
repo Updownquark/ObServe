@@ -4,22 +4,13 @@ import java.util.*;
 import java.util.function.Function;
 
 import org.observe.SettableValue;
-import org.observe.expresso.CompiledExpressoEnv;
-import org.observe.expresso.ExpressoEvaluationException;
-import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.InterpretedExpressoEnv;
-import org.observe.expresso.ModelException;
-import org.observe.expresso.ModelType;
+import org.observe.expresso.*;
 import org.observe.expresso.ModelType.ModelInstanceType;
-import org.observe.expresso.ModelTypes;
-import org.observe.expresso.ObservableExpression;
-import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretedModelComponentNode;
 import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelComponentNode;
 import org.observe.expresso.ObservableModelSet.ModelTag;
-import org.observe.expresso.TypeConversionException;
 import org.observe.expresso.ops.BinaryOperator;
 import org.observe.expresso.ops.BufferedExpression;
 import org.observe.expresso.ops.NameExpression;
@@ -314,8 +305,9 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 		}
 
 		@Override
-		public ModelType<?> getModelType(CompiledExpressoEnv env) {
-			return theWrapped.getModelType(env);
+		public ModelType<?> getModelType(CompiledExpressoEnv env, int expressionOffset)
+			throws ExpressoCompilationException, ExpressoEvaluationException {
+			return theWrapped.getModelType(env, expressionOffset);
 		}
 
 		@Override

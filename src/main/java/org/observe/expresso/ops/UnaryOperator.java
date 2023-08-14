@@ -98,7 +98,7 @@ public class UnaryOperator implements ObservableExpression {
 	}
 
 	@Override
-	public ModelType<?> getModelType(CompiledExpressoEnv env) {
+	public ModelType<?> getModelType(CompiledExpressoEnv env, int expressionOffset) {
 		Set<UnaryOp<?, ?>> operators = env.getUnaryOperators().getOperators(theOperator);
 		if (operators.isEmpty())
 			throw new IllegalStateException("No such operator found: " + theOperator);

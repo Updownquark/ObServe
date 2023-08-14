@@ -6,7 +6,9 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -24,9 +26,7 @@ import org.qommons.io.ErrorReporting;
 
 import com.google.common.reflect.TypeToken;
 
-/**
- * An environment to support some operations on {@link ObservableModelSet.CompiledModelValue compiled model values}.
- */
+/** An environment to support some operations on {@link ObservableModelSet.CompiledModelValue compiled model values} */
 public class CompiledExpressoEnv {
 	/**
 	 * A compiled environment with standard java operators (and some {@link #withDefaultNonStructuredParsing() default}
@@ -37,6 +37,7 @@ public class CompiledExpressoEnv {
 		UnaryOperatorSet.STANDARD_JAVA, BinaryOperatorSet.STANDARD_JAVA).withDefaultNonStructuredParsing();
 
 	private final ObservableModelSet theModels;
+	private final Map<String, String> theAttributes;
 	private final UnaryOperatorSet theUnaryOperators;
 	private final BinaryOperatorSet theBinaryOperators;
 	private final ClassMap<Set<NonStructuredParser>> theNonStructuredParsers;
@@ -47,18 +48,21 @@ public class CompiledExpressoEnv {
 	 * @param binaryOperators The set of binary operators available for expressions
 	 */
 	public CompiledExpressoEnv(ObservableModelSet models, UnaryOperatorSet unaryOperators, BinaryOperatorSet binaryOperators) {
-		this(models, null, unaryOperators, binaryOperators);
+		this(models, Collections.emptyMap(), null, unaryOperators, binaryOperators);
 	}
 
 	/**
 	 * @param models The models for the environment
+	 * @param attributes A mapping of attribute name to variable name for values that are named via a text attribute
 	 * @param nonStructuredParsers The non-structured parsers for the environment
 	 * @param unaryOperators The unary operators for the environment
 	 * @param binaryOperators The binary operators for the environment
 	 */
-	protected CompiledExpressoEnv(ObservableModelSet models, ClassMap<Set<NonStructuredParser>> nonStructuredParsers,
+	protected CompiledExpressoEnv(ObservableModelSet models, Map<String, String> attributes,
+		ClassMap<Set<NonStructuredParser>> nonStructuredParsers,
 		UnaryOperatorSet unaryOperators, BinaryOperatorSet binaryOperators) {
 		theModels = models;
+		theAttributes = attributes;
 		theUnaryOperators = unaryOperators;
 		theBinaryOperators = binaryOperators;
 		theNonStructuredParsers = new ClassMap<>();
@@ -68,14 +72,16 @@ public class CompiledExpressoEnv {
 
 	/**
 	 * @param models The models for the environment
+	 * @param attributes A mapping of attribute name to variable name for values that are named via a text attribute
 	 * @param nonStructuredParsers The non-structured parsers for the environment
 	 * @param unaryOperators The unary operators for the environment
 	 * @param binaryOperators The binary operators for the environment
 	 * @return A copy of this environment with the given information
 	 */
-	protected CompiledExpressoEnv copy(ObservableModelSet models, ClassMap<Set<NonStructuredParser>> nonStructuredParsers,
+	protected CompiledExpressoEnv copy(ObservableModelSet models, Map<String, String> attributes,
+		ClassMap<Set<NonStructuredParser>> nonStructuredParsers,
 		UnaryOperatorSet unaryOperators, BinaryOperatorSet binaryOperators) {
-		return new CompiledExpressoEnv(models, nonStructuredParsers, unaryOperators, binaryOperators);
+		return new CompiledExpressoEnv(models, attributes, nonStructuredParsers, unaryOperators, binaryOperators);
 	}
 
 	/** @return The model set containing all values and sub-models available to expressions */
@@ -86,6 +92,11 @@ public class CompiledExpressoEnv {
 	/** @return This environment's {@link #getModels() model}, built if it is a {@link ObservableModelSet.Builder} */
 	public ObservableModelSet.Built getBuiltModels() {
 		return buildModel(theModels);
+	}
+
+	/** @return A mapping of attribute name to variable name for values that are named via a text attribute */
+	protected Map<String, String> getAttributes() {
+		return theAttributes;
 	}
 
 	/** @return All this environment's {@link NonStructuredParser}s */
@@ -124,8 +135,8 @@ public class CompiledExpressoEnv {
 		if (extModels == null)
 			extModels = ObservableModelSet.buildExternal(ObservableModelSet.JAVA_NAME_CHECKER).build();
 
-		InterpretedExpressoEnv interpreted = new InterpretedExpressoEnv(null, extModels, classView, getNonStructuredParsers(),
-			getUnaryOperators(), getBinaryOperators(), reporting, new HashMap<>(), false);
+		InterpretedExpressoEnv interpreted = new InterpretedExpressoEnv(null, extModels, classView, Collections.emptyMap(),
+			getNonStructuredParsers(), getUnaryOperators(), getBinaryOperators(), reporting, new HashMap<>(), false);
 
 		InterpretedModelSet interpretedModels = getBuiltModels().createInterpreted(interpreted);
 		return interpreted.with(interpretedModels);
@@ -139,7 +150,7 @@ public class CompiledExpressoEnv {
 		if (models == theModels)
 			return this;
 		else
-			return copy(models, theNonStructuredParsers, theUnaryOperators, theBinaryOperators);
+			return copy(models, theAttributes, theNonStructuredParsers, theUnaryOperators, theBinaryOperators);
 	}
 
 	/**
@@ -150,7 +161,7 @@ public class CompiledExpressoEnv {
 	public CompiledExpressoEnv withOperators(UnaryOperatorSet unaryOps, BinaryOperatorSet binaryOps) {
 		if ((unaryOps == null || theUnaryOperators == unaryOps) && (binaryOps == null || theBinaryOperators == binaryOps))
 			return this;
-		return copy(theModels, theNonStructuredParsers, //
+		return copy(theModels, theAttributes, theNonStructuredParsers, //
 			unaryOps == null ? theUnaryOperators : unaryOps, //
 				binaryOps == null ? theBinaryOperators : binaryOps);
 	}
@@ -166,7 +177,7 @@ public class CompiledExpressoEnv {
 			return this;
 		ClassMap<Set<NonStructuredParser>> nspCopy = nspCopy();
 		nspCopy.computeIfAbsent(type, () -> new LinkedHashSet<>()).add(parser);
-		return copy(theModels, nspCopy, theUnaryOperators, theBinaryOperators);
+		return copy(theModels, theAttributes, nspCopy, theUnaryOperators, theBinaryOperators);
 	}
 
 	ClassMap<Set<NonStructuredParser>> nspCopy() {
@@ -190,7 +201,7 @@ public class CompiledExpressoEnv {
 			return this;
 		ClassMap<Set<NonStructuredParser>> nspCopy = nspCopy();
 		nspCopy.get(type, ClassMap.TypeMatch.EXACT).remove(parser);
-		return copy(theModels, nspCopy, theUnaryOperators, theBinaryOperators);
+		return copy(theModels, theAttributes, nspCopy, theUnaryOperators, theBinaryOperators);
 	}
 
 	/**
@@ -222,7 +233,7 @@ public class CompiledExpressoEnv {
 		}
 		if (nspCopy == null)
 			return this;
-		return copy(theModels, nspCopy, theUnaryOperators, theBinaryOperators);
+		return copy(theModels, theAttributes, nspCopy, theUnaryOperators, theBinaryOperators);
 	}
 
 	/**
@@ -241,14 +252,49 @@ public class CompiledExpressoEnv {
 			.withNonStructuredParser(Color.class, NonStructuredParser.simple((t, s) -> Colors.parseColor(s), "Color literal"));
 	}
 
+	/**
+	 * Adds a mapping of an attribute name to its text value, so that attribute reference expressions can retrieve values via a reference to
+	 * the attribute name, without knowing what the value of that attribute might be in a given context
+	 *
+	 * @param attributeName The name of the attribute
+	 * @param value The value of the attribute
+	 * @return The (possible) copy of this environment containing the mapping
+	 */
+	public CompiledExpressoEnv withAttribute(String attributeName, String value) {
+		CompiledExpressoEnv env;
+		if (theAttributes.isEmpty())
+			env = copy(theModels, new LinkedHashMap<>(), theNonStructuredParsers, theUnaryOperators, theBinaryOperators);
+		else
+			env = this;
+		env.theAttributes.put(attributeName, value);
+		return env;
+	}
+
+	/**
+	 * @param name The name of the attribute to get
+	 * @return The value of the attribute
+	 */
+	public String getAttribute(String name) {
+		return theAttributes.get(name);
+	}
+
 	/** @return A new environment with null model and class view */
 	public CompiledExpressoEnv clearModels() {
-		return copy(null, theNonStructuredParsers, theUnaryOperators, theBinaryOperators);
+		if (theModels == null && theAttributes == Collections.EMPTY_MAP)
+			return this;
+		return copy(null, Collections.emptyMap(), theNonStructuredParsers, theUnaryOperators, theBinaryOperators);
+	}
+
+	/** @return A (possible) copy of this environment with its attribute mappings cleared */
+	public CompiledExpressoEnv clearAttributes() {
+		if (theAttributes == Collections.EMPTY_MAP)
+			return this;
+		return copy(theModels, Collections.emptyMap(), theNonStructuredParsers, theUnaryOperators, theBinaryOperators);
 	}
 
 	/** @return A copy of this environment */
 	public CompiledExpressoEnv copy() {
-		return copy(theModels, theNonStructuredParsers.copy(), theUnaryOperators, theBinaryOperators);
+		return copy(theModels, new LinkedHashMap<>(theAttributes), theNonStructuredParsers.copy(), theUnaryOperators, theBinaryOperators);
 	}
 
 	@Override

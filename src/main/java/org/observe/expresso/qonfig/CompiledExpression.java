@@ -1,6 +1,8 @@
 package org.observe.expresso.qonfig;
 
 import org.observe.expresso.CompiledExpressoEnv;
+import org.observe.expresso.ExpressoCompilationException;
+import org.observe.expresso.ExpressoEvaluationException;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ModelType;
 import org.observe.expresso.ObservableExpression;
@@ -63,13 +65,20 @@ public class CompiledExpression implements LocatedExpression {
 		return theExpression.getExpressionLength();
 	}
 
-	/** @return The model type of this expression */
-	public ModelType<?> getModelType() {
+	/**
+	 * @return The model type of this expression
+	 * @throws ExpressoCompilationException If the model type could not be evaluated
+	 */
+	public ModelType<?> getModelType() throws ExpressoCompilationException {
 		if (theEnv == null) {
 			theEnv = theSession.getExpressoEnv();
 			theSession = null; // Don't need it anymore--release it
 		}
-		return theExpression.getModelType(theEnv);
+		try {
+			return theExpression.getModelType(theEnv);
+		} catch (ExpressoEvaluationException e) {
+			throw new ExpressoCompilationException(e.getMessage(), getFilePosition(e.getErrorOffset()), e.getErrorLength(), e);
+		}
 	}
 
 	/**

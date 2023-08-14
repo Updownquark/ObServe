@@ -7,6 +7,7 @@ import java.util.Map;
 import java.util.function.Supplier;
 
 import org.observe.expresso.CompiledExpressoEnv;
+import org.observe.expresso.ExpressoCompilationException;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelException;
@@ -76,10 +77,14 @@ public abstract class ExFlexibleElementModelAddOn<E extends ExElement> extends E
 			if (!(value instanceof PlaceholderModelValue))
 				throw new QonfigInterpretationException("Element value '" + elementValueName + "' is not dynamically-typed",
 					getElement().reporting().getPosition(), 0);
-			if (value.getModelType(null) != modelType)
-				throw new QonfigInterpretationException(
-					"Element value '" + elementValueName + "' is not a " + value.getModelType(null) + ", not a " + modelType,
-					getElement().reporting().getPosition(), 0);
+			try {
+				if (value.getModelType(null) != modelType)
+					throw new QonfigInterpretationException(
+						"Element value '" + elementValueName + "' is not a " + value.getModelType(null) + ", not a " + modelType,
+						getElement().reporting().getPosition(), 0);
+			} catch (ExpressoCompilationException e) {
+				throw new QonfigInterpretationException(e.getMessage(), e.getPosition(), e.getErrorLength(), e);
+			}
 			((PlaceholderModelValue<M>) value).satisfyType(this::getCurrentInterpreting,
 				(ExBiFunction<ExElement.Interpreted<?>, InterpretedExpressoEnv, ? extends ModelInstanceType<M, ?>, ExpressoInterpretationException>) type);
 		}

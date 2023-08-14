@@ -61,12 +61,16 @@ public class ExWithElementModel extends ExFlexibleElementModelAddOn<ExElement> {
 		private ObservableModelSet.Builder handleDynamicValue(ElementModelValue.Identity dv, ObservableModelSet.Builder builder,
 			ExpressoQIS session, ExtModelValueElement.Def<?> spec) throws QonfigInterpretationException {
 			String name;
-			if (dv.getNameAttribute() == null)
+			if (dv.getNameAttribute() == null) {
 				name = dv.getName();
-			else {
+			} else {
 				name = session.getElement().getAttributeText(dv.getNameAttribute());
 				if (name == null) // If name attribute is not specified, value shall not be declared
 					return builder;
+				CompiledExpressoEnv env = session.getExpressoEnv();
+				env = env.withAttribute(dv.getNameAttribute().getName(), name);
+				session.setExpressoEnv(env);
+				getElement().setExpressoEnv(env);
 			}
 			ElementModelValue<?> prev = getElementValues().get(name);
 			if (prev != null) {

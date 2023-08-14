@@ -4,6 +4,7 @@ import java.awt.EventQueue;
 import java.io.File;
 import java.io.IOException;
 import java.io.OutputStreamWriter;
+import java.io.Writer;
 import java.lang.reflect.InvocationTargetException;
 import java.net.URL;
 import java.nio.charset.Charset;
@@ -280,8 +281,17 @@ class DefaultInteractiveTestSuite implements InteractiveTestSuite {
 						.copy(result)//
 						.create();
 					}
-					ObservableConfig
-					.toWriter(() -> new OutputStreamWriter(testFailFile.write(), Charset.forName("UTF-8")), XmlEncoding.DEFAULT)//
+					ObservableConfig.toWriter(new ObservableConfig.WriterSupplier() {
+						@Override
+						public Writer createWriter() throws IOException {
+							return new OutputStreamWriter(testFailFile.write(), Charset.forName("UTF-8"));
+						}
+
+						@Override
+						public String toString() {
+							return testFailFile.getPath();
+						}
+					}, XmlEncoding.DEFAULT)//
 					.persist(resultsConfig);
 					until.onNext(null);
 				}

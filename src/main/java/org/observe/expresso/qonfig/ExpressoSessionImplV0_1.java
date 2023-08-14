@@ -134,7 +134,9 @@ public class ExpressoSessionImplV0_1 implements SpecialSessionImplementation<Exp
 
 	@Override
 	public ExpressoQIS viewOfChild(ExpressoQIS parent, CoreSession coreSession) throws QonfigInterpretationException {
-		return new ExpressoQIS(coreSession);
+		ExpressoQIS child = new ExpressoQIS(coreSession);
+		child.setExpressoEnv(child.getExpressoEnv().clearAttributes());
+		return child;
 	}
 
 	@Override

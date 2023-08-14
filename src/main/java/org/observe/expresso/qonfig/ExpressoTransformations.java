@@ -21,6 +21,7 @@ import org.observe.Transformation.TransformationValues;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.expresso.CompiledExpressoEnv;
+import org.observe.expresso.ExpressoCompilationException;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
@@ -110,7 +111,12 @@ public class ExpressoTransformations {
 			if (isPrepared)
 				return;
 			isPrepared = true;
-			ModelType<?> modelType = theSource.getModelType();
+			ModelType<?> modelType;
+			try {
+				modelType = theSource.getModelType();
+			} catch (ExpressoCompilationException e) {
+				throw new QonfigInterpretationException(e.getMessage(), e.getPosition(), e.getErrorLength(), e);
+			}
 			int i = 0;
 			for (ExpressoQIS op : session.forChildren("op")) {
 				@SuppressWarnings("rawtypes")
@@ -227,8 +233,12 @@ public class ExpressoTransformations {
 			@Override
 			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 				super.doUpdate(env);
-				theSource = getDefinition().getSource().interpret(((ModelType<M1>) getDefinition().getSource().getModelType()).<MV1> anyAs(),
-					getExpressoEnv());
+				try {
+					theSource = getDefinition().getSource()
+						.interpret(((ModelType<M1>) getDefinition().getSource().getModelType()).<MV1> anyAs(), getExpressoEnv());
+				} catch (ExpressoCompilationException e) {
+					throw new ExpressoInterpretationException(e.getMessage(), e.getPosition(), e.getErrorLength(), e);
+				}
 
 				boolean efficientCopy = false;
 				ModelInstanceType<?, ?> sourceType = theSource.getType();

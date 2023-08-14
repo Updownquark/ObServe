@@ -106,7 +106,7 @@ public class BinaryOperator implements ObservableExpression {
 	}
 
 	@Override
-	public ModelType<?> getModelType(CompiledExpressoEnv env) {
+	public ModelType<?> getModelType(CompiledExpressoEnv env, int expressionOffset) {
 		boolean action = theOperator.charAt(theOperator.length() - 1) == '=';
 		if (action) {
 			switch (theOperator) {

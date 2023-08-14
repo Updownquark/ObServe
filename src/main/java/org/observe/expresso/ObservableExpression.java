@@ -43,7 +43,7 @@ public interface ObservableExpression {
 		}
 
 		@Override
-		public ModelType<?> getModelType(CompiledExpressoEnv env) {
+		public ModelType<?> getModelType(CompiledExpressoEnv env, int expressionOffset) {
 			return ModelTypes.Value;
 		}
 
@@ -280,8 +280,22 @@ public interface ObservableExpression {
 	/**
 	 * @param env The environment in which the expression will be evaluated
 	 * @return A best guess as to the model type that this expression would evaluate to in the given environment
+	 * @throws ExpressoCompilationException If the model type could not be evaluated
+	 * @throws ExpressoEvaluationException If the model type could not be evaluated
 	 */
-	ModelType<?> getModelType(CompiledExpressoEnv env);
+	default ModelType<?> getModelType(CompiledExpressoEnv env) throws ExpressoCompilationException, ExpressoEvaluationException {
+		return getModelType(env, 0);
+	}
+
+	/**
+	 * @param env The environment in which the expression will be evaluated
+	 * @param expressionOffset The offset of this expression in the evaluated root
+	 * @return A best guess as to the model type that this expression would evaluate to in the given environment
+	 * @throws ExpressoCompilationException If the model type could not be evaluated
+	 * @throws ExpressoEvaluationException If the model type could not be evaluated
+	 */
+	ModelType<?> getModelType(CompiledExpressoEnv env, int expressionOffset)
+		throws ExpressoCompilationException, ExpressoEvaluationException;
 
 	/**
 	 * Attempts to evaluate this expression
@@ -366,7 +380,7 @@ public interface ObservableExpression {
 		}
 
 		@Override
-		public ModelType<?> getModelType(CompiledExpressoEnv env) {
+		public ModelType<?> getModelType(CompiledExpressoEnv env, int expressionOffset) {
 			return ModelTypes.Value;
 		}
 
@@ -389,13 +403,12 @@ public interface ObservableExpression {
 						LambdaUtils.constantExFn(value, theText, null)), this);
 			} else if (TypeTokens.get().isAssignable(type.getType(0), TypeTokens.get().of(theValue.getClass()))) {
 				TypeToken<Object> targetType = (TypeToken<Object>) type.getType(0);
-				TypeTokens.TypeConverter<T, ?, ?, Object> convert = (TypeConverter<T, ?, ?, Object>) TypeTokens.get()
-					.getCast(targetType, TypeTokens.get().of((Class<T>) theValue.getClass()));
+				TypeTokens.TypeConverter<T, ?, ?, Object> convert = (TypeConverter<T, ?, ?, Object>) TypeTokens.get().getCast(targetType,
+					TypeTokens.get().of((Class<T>) theValue.getClass()));
 				targetType = convert.getConvertedType();
 				MV value = (MV) createValue(targetType, convert.apply(theValue));
-				return ObservableExpression
-					.evEx(InterpretedValueSynth.of((ModelInstanceType<M, MV>) ModelTypes.Value.forType(targetType),
-						LambdaUtils.constantExFn(value, theText, null)), this);
+				return ObservableExpression.evEx(InterpretedValueSynth.of((ModelInstanceType<M, MV>) ModelTypes.Value.forType(targetType),
+					LambdaUtils.constantExFn(value, theText, null)), this);
 			} else {
 				// Don't throw this. Maybe the type architecture can convert it.
 				// throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(),

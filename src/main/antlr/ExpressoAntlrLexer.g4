@@ -132,6 +132,7 @@ CHAR_LITERAL:       '\'' (~['\\\r\n] | EscapeSequence) '\'';
 
 STRING_LITERAL:     '"' (~["`\\\r\n] | EscapeSequence)* '"';
 EXTERNAL_LITERAL:   '`' (~["`\\\r\n] | EscapeSequence)* '`';
+ATTRIBUTE_REFERENCE: '{' ([a-zA-Z0-9_\\-]+) '}';
 TEXT_BLOCK:         '"""' [ \t]* [\r\n] (. | EscapeSequence)*? '"""';
 NULL_LITERAL:       'null';
 // Separators

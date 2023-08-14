@@ -72,7 +72,7 @@ public class CastExpression implements ObservableExpression {
 	}
 
 	@Override
-	public ModelType<?> getModelType(CompiledExpressoEnv env) {
+	public ModelType<?> getModelType(CompiledExpressoEnv env, int expressionOffset) {
 		return ModelTypes.Value;
 	}
 
@@ -128,7 +128,7 @@ public class CastExpression implements ObservableExpression {
 				valueContainer.map(ModelTypes.Value.forType(valueType), vc -> vc.transformReversible(valueType, tx -> tx//
 					.map(converter).replaceSource(converter::reverse, rev -> rev.rejectWith(converter::isReversible)))),
 				valueType,
-					valueContainer);
+				valueContainer);
 		} catch (IllegalArgumentException e) {
 			if (!TypeTokens.get().isAssignable(sourceType, valueType)//
 				&& !TypeTokens.get().isAssignable(valueType, sourceType))

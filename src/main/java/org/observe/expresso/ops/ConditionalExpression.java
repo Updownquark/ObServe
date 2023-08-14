@@ -8,6 +8,7 @@ import org.observe.SettableValue;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableSet;
 import org.observe.expresso.CompiledExpressoEnv;
+import org.observe.expresso.ExpressoCompilationException;
 import org.observe.expresso.ExpressoEvaluationException;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.InterpretedExpressoEnv;
@@ -94,8 +95,11 @@ public class ConditionalExpression implements ObservableExpression {
 	}
 
 	@Override
-	public ModelType<?> getModelType(CompiledExpressoEnv env) {
-		return thePrimary.getModelType(env).getCommonType(theSecondary.getModelType(env));
+	public ModelType<?> getModelType(CompiledExpressoEnv env, int expressionOffset)
+		throws ExpressoCompilationException, ExpressoEvaluationException {
+		int primaryOffset = expressionOffset + getComponentOffset(1);
+		return thePrimary.getModelType(env, primaryOffset).getCommonType(//
+			theSecondary.getModelType(env, primaryOffset + thePrimary.getExpressionLength() + 1));
 	}
 
 	@Override

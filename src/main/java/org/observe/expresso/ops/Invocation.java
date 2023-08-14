@@ -73,7 +73,7 @@ public abstract class Invocation implements ObservableExpression {
 	protected abstract int getInitialArgOffset();
 
 	@Override
-	public ModelType<?> getModelType(CompiledExpressoEnv env) {
+	public ModelType<?> getModelType(CompiledExpressoEnv env, int expressionOffset) {
 		return ModelTypes.Value; // Could also be an action, but we gotta pick one
 	}
 

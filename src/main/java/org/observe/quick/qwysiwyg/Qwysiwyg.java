@@ -1142,7 +1142,13 @@ public class Qwysiwyg {
 			return false;
 		Object descriptor = expression.getDescriptor();
 		if (descriptor instanceof ModelComponentNode) {
-			ModelType<?> modelType = ((ModelComponentNode<?>) descriptor).getModelType(theCompiledEnv);
+			ModelType<?> modelType;
+			try {
+				modelType = ((ModelComponentNode<?>) descriptor).getModelType(theCompiledEnv);
+			} catch (ExpressoCompilationException e) {
+				e.printStackTrace();
+				return false;
+			}
 			if (modelType == ModelTypes.Model || modelType == ModelTypes.Event || modelType == ModelTypes.Action)
 				return false;
 			return true;
@@ -1238,8 +1244,12 @@ public class Qwysiwyg {
 				str.append("Model component ").append(id);
 			if (node instanceof InterpretedValueSynth)
 				str.append(renderType(((InterpretedValueSynth<?, ?>) node).getType()));
-			else
-				str.append(renderType(node.getModelType(theCompiledEnv).any()));
+			else {
+				try {
+					str.append(renderType(node.getModelType(theCompiledEnv).any()));
+				} catch (ExpressoCompilationException e) {
+				}
+			}
 			if (node.getSourceLocation() != null) {
 				str.append("<br>");
 				if (node.getSourceLocation().getFileLocation() != null

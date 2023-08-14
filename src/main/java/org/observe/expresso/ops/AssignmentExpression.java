@@ -84,7 +84,7 @@ public class AssignmentExpression implements ObservableExpression {
 	}
 
 	@Override
-	public ModelType<?> getModelType(CompiledExpressoEnv env) {
+	public ModelType<?> getModelType(CompiledExpressoEnv env, int expressionOffset) {
 		return ModelTypes.Action;
 	}
 

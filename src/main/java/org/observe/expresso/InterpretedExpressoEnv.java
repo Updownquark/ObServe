@@ -42,10 +42,10 @@ public class InterpretedExpressoEnv extends CompiledExpressoEnv {
 	private final Map<Object, Object> theProperties;
 	private final boolean isTesting;
 
-	InterpretedExpressoEnv(InterpretedModelSet models, ExternalModelSet extModels, ClassView classView,
+	InterpretedExpressoEnv(InterpretedModelSet models, ExternalModelSet extModels, ClassView classView, Map<String, String> attributes,
 		ClassMap<Set<NonStructuredParser>> nonStructuredParsers, UnaryOperatorSet unaryOperators, BinaryOperatorSet binaryOperators,
 		ErrorReporting reporting, Map<Object, Object> properties, boolean testing) {
-		super(models, nonStructuredParsers, unaryOperators, binaryOperators);
+		super(models, attributes, nonStructuredParsers, unaryOperators, binaryOperators);
 		theExtModels = extModels;
 		theClassView = classView;
 		theErrorReporting = reporting;
@@ -54,17 +54,17 @@ public class InterpretedExpressoEnv extends CompiledExpressoEnv {
 	}
 
 	@Override
-	protected CompiledExpressoEnv copy(ObservableModelSet models, ClassMap<Set<NonStructuredParser>> nonStructuredParsers,
-		UnaryOperatorSet unaryOperators, BinaryOperatorSet binaryOperators) {
+	protected CompiledExpressoEnv copy(ObservableModelSet models, Map<String, String> attributes,
+		ClassMap<Set<NonStructuredParser>> nonStructuredParsers, UnaryOperatorSet unaryOperators, BinaryOperatorSet binaryOperators) {
 		if (models != null && !(models instanceof InterpretedModelSet))
-			return super.copy(models, nonStructuredParsers, unaryOperators, binaryOperators);
-		return new InterpretedExpressoEnv((InterpretedModelSet) models, theExtModels, theClassView, nonStructuredParsers, unaryOperators,
-			binaryOperators, theErrorReporting, theProperties, isTesting);
+			return super.copy(models, attributes, nonStructuredParsers, unaryOperators, binaryOperators);
+		return new InterpretedExpressoEnv((InterpretedModelSet) models, theExtModels, theClassView, attributes, nonStructuredParsers,
+			unaryOperators, binaryOperators, theErrorReporting, theProperties, isTesting);
 	}
 
 	/**
 	 * @param child The compilation of the interpreted environment to create
-	 * @return An interpreted environment that is an amalgamation of this envronment and the child
+	 * @return An interpreted environment that is an amalgamation of this environment and the child
 	 */
 	public InterpretedExpressoEnv forChild(CompiledExpressoEnv child) {
 		InterpretedExpressoEnv env = this;
@@ -73,6 +73,8 @@ public class InterpretedExpressoEnv extends CompiledExpressoEnv {
 				env = env.with(child.getBuiltModels().createInterpreted(this));
 		} else if (child.getModels() != null)
 			env = env.with(child.getBuiltModels().createInterpreted(this));
+		for (Map.Entry<String, String> attr : child.getAttributes().entrySet())
+			env = env.withAttribute(attr.getKey(), attr.getValue());
 		env = env.withAllNonStructuredParsers(child);
 		return env;
 	}
@@ -102,8 +104,8 @@ public class InterpretedExpressoEnv extends CompiledExpressoEnv {
 	 * @return A copy of this environment with the given reporting
 	 */
 	public InterpretedExpressoEnv withErrorReporting(ErrorReporting reporting) {
-		return new InterpretedExpressoEnv(getModels(), theExtModels, theClassView, getNonStructuredParsers(), getUnaryOperators(),
-			getBinaryOperators(), reporting, theProperties, isTesting);
+		return new InterpretedExpressoEnv(getModels(), theExtModels, theClassView, getAttributes(), getNonStructuredParsers(),
+			getUnaryOperators(), getBinaryOperators(), reporting, theProperties, isTesting);
 	}
 
 	/** @return Whether this environment is to be used for testing */
@@ -139,8 +141,8 @@ public class InterpretedExpressoEnv extends CompiledExpressoEnv {
 	public InterpretedExpressoEnv with(InterpretedModelSet models) {
 		if (models == getModels())
 			return this;
-		return new InterpretedExpressoEnv(models, theExtModels, theClassView, getNonStructuredParsers(), getUnaryOperators(),
-			getBinaryOperators(), reporting(), theProperties, isTesting);
+		return new InterpretedExpressoEnv(models, theExtModels, theClassView, getAttributes(), getNonStructuredParsers(),
+			getUnaryOperators(), getBinaryOperators(), reporting(), theProperties, isTesting);
 	}
 
 	/**
@@ -150,8 +152,8 @@ public class InterpretedExpressoEnv extends CompiledExpressoEnv {
 	public InterpretedExpressoEnv with(ClassView classView) {
 		if (classView == theClassView)
 			return this;
-		return new InterpretedExpressoEnv(getModels(), theExtModels, classView, getNonStructuredParsers(), getUnaryOperators(),
-			getBinaryOperators(), reporting(), theProperties, isTesting);
+		return new InterpretedExpressoEnv(getModels(), theExtModels, classView, getAttributes(), getNonStructuredParsers(),
+			getUnaryOperators(), getBinaryOperators(), reporting(), theProperties, isTesting);
 	}
 
 	@Override
@@ -196,6 +198,11 @@ public class InterpretedExpressoEnv extends CompiledExpressoEnv {
 		return (InterpretedExpressoEnv) super.withAllNonStructuredParsers(env);
 	}
 
+	@Override
+	public InterpretedExpressoEnv withAttribute(String attributeName, String value) {
+		return (InterpretedExpressoEnv) super.withAttribute(attributeName, value);
+	}
+
 	/**
 	 * @param extModels The external model set
 	 * @return A copy of this environment with the given external model set
@@ -203,8 +210,8 @@ public class InterpretedExpressoEnv extends CompiledExpressoEnv {
 	public InterpretedExpressoEnv withExt(ExternalModelSet extModels) {
 		if (extModels == theExtModels)
 			return this;
-		return new InterpretedExpressoEnv(getModels(), extModels, theClassView, getNonStructuredParsers(), getUnaryOperators(),
-			getBinaryOperators(), reporting(), theProperties, isTesting);
+		return new InterpretedExpressoEnv(getModels(), extModels, theClassView, getAttributes(), getNonStructuredParsers(),
+			getUnaryOperators(), getBinaryOperators(), reporting(), theProperties, isTesting);
 	}
 
 	/**
@@ -215,8 +222,8 @@ public class InterpretedExpressoEnv extends CompiledExpressoEnv {
 		ErrorReporting reporting = reporting().at(position);
 		if (reporting == reporting())
 			return this;
-		return new InterpretedExpressoEnv(getModels(), theExtModels, theClassView, getNonStructuredParsers(), getUnaryOperators(),
-			getBinaryOperators(), reporting, theProperties, isTesting);
+		return new InterpretedExpressoEnv(getModels(), theExtModels, theClassView, getAttributes(), getNonStructuredParsers(),
+			getUnaryOperators(), getBinaryOperators(), reporting, theProperties, isTesting);
 	}
 
 	/**
@@ -227,8 +234,8 @@ public class InterpretedExpressoEnv extends CompiledExpressoEnv {
 		ErrorReporting reporting = reporting().at(positionOffset);
 		if (reporting == reporting())
 			return this;
-		return new InterpretedExpressoEnv(getModels(), theExtModels, theClassView, getNonStructuredParsers(), getUnaryOperators(),
-			getBinaryOperators(), reporting, theProperties, isTesting);
+		return new InterpretedExpressoEnv(getModels(), theExtModels, theClassView, getAttributes(), getNonStructuredParsers(),
+			getUnaryOperators(), getBinaryOperators(), reporting, theProperties, isTesting);
 	}
 
 	/**
@@ -238,8 +245,8 @@ public class InterpretedExpressoEnv extends CompiledExpressoEnv {
 	public InterpretedExpressoEnv forTesting(boolean testing) {
 		if (isTesting == testing)
 			return this;
-		return new InterpretedExpressoEnv(getModels(), theExtModels, theClassView, getNonStructuredParsers(), getUnaryOperators(),
-			getBinaryOperators(), theErrorReporting, theProperties, testing);
+		return new InterpretedExpressoEnv(getModels(), theExtModels, theClassView, getAttributes(), getNonStructuredParsers(),
+			getUnaryOperators(), getBinaryOperators(), theErrorReporting, theProperties, testing);
 	}
 
 	/**

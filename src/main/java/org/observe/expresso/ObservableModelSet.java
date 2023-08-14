@@ -58,8 +58,9 @@ public interface ObservableModelSet extends Identifiable {
 		/**
 		 * @param env The compiled environment, which may be needed to interpret the model type for some model structures
 		 * @return The model type of the values that this compiled structure creates
+		 * @throws ExpressoCompilationException If the model type cannot be evaluated
 		 */
-		ModelType<M> getModelType(CompiledExpressoEnv env);
+		ModelType<M> getModelType(CompiledExpressoEnv env) throws ExpressoCompilationException;
 
 		/**
 		 * @param env The environment in which to interpret this model set's values
@@ -158,10 +159,20 @@ public interface ObservableModelSet extends Identifiable {
 	 * @param <M> The model type of the value
 	 * @param <MV> The type of the value
 	 */
-	public interface InterpretedValueSynth<M, MV extends M> {
+	public interface InterpretedValueSynth<M, MV extends M> extends CompiledModelValue<M> {
 		/** @return The model type of the values that this interpreted structure creates */
 		default ModelType<M> getModelType() {
 			return getType().getModelType();
+		}
+
+		@Override
+		default ModelType<M> getModelType(CompiledExpressoEnv env) {
+			return getModelType();
+		}
+
+		@Override
+		default InterpretedValueSynth<M, ?> interpret(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+			return this;
 		}
 
 		/** @return The instance type of the values that this interpreted structure creates */
@@ -578,8 +589,8 @@ public interface ObservableModelSet extends Identifiable {
 		ModelType<M> getModelType();
 
 		@Override
-		default ModelType<M> getModelType(CompiledExpressoEnv env) {
-			return getModelType();
+		default InterpretedModelComponentNode<M, ?> interpret(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+			return InterpretableModelComponentNode.super.interpret(env);
 		}
 
 		/**
@@ -1786,7 +1797,7 @@ public interface ObservableModelSet extends Identifiable {
 			}
 
 			@Override
-			public ModelType<M> getModelType(CompiledExpressoEnv env) {
+			public ModelType<M> getModelType(CompiledExpressoEnv env) throws ExpressoCompilationException {
 				if (theCreator != null)
 					return theCreator.getModelType(env);
 				else if (theExtRef != null)
@@ -2441,7 +2452,7 @@ public interface ObservableModelSet extends Identifiable {
 				}
 
 				@Override
-				public ModelType<M> getModelType(CompiledExpressoEnv env) {
+				public ModelType<M> getModelType(CompiledExpressoEnv env) throws ExpressoCompilationException {
 					return theSourceNode.getModelType(env);
 				}
 

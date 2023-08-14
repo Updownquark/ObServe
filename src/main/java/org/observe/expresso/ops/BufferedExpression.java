@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.function.Function;
 
 import org.observe.expresso.CompiledExpressoEnv;
+import org.observe.expresso.ExpressoCompilationException;
 import org.observe.expresso.ExpressoEvaluationException;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.InterpretedExpressoEnv;
@@ -58,8 +59,9 @@ public class BufferedExpression implements ObservableExpression {
 	}
 
 	@Override
-	public ModelType<?> getModelType(CompiledExpressoEnv env) {
-		return theExpression.getModelType(env);
+	public ModelType<?> getModelType(CompiledExpressoEnv env, int expressionOffset)
+		throws ExpressoCompilationException, ExpressoEvaluationException {
+		return theExpression.getModelType(env, expressionOffset + theBefore);
 	}
 
 	@Override

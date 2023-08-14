@@ -809,6 +809,10 @@ public class TestInterpretation implements QonfigInterpretation {
 				super(interpreted, styledElement);
 			}
 
+			public ObservableValue<Boolean> getS5() {
+				return s5;
+			}
+
 			@Override
 			public void update(QuickStyledElement.QuickInstanceStyle.Interpreted interpreted, ModelSetInstance models)
 				throws ModelInstantiationException {
