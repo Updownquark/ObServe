@@ -3,14 +3,17 @@ package org.observe.quick.swing;
 import java.awt.Component;
 import java.awt.Container;
 import java.awt.LayoutManager;
+import java.awt.Point;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseEvent;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.IntSupplier;
 import java.util.function.Supplier;
+import java.util.function.ToIntFunction;
 
 import javax.swing.Icon;
 import javax.swing.JButton;
@@ -19,6 +22,7 @@ import javax.swing.JComboBox;
 import javax.swing.JLabel;
 import javax.swing.JList;
 import javax.swing.JPopupMenu;
+import javax.swing.JTable;
 import javax.swing.ListCellRenderer;
 
 import org.observe.Observable;
@@ -30,12 +34,15 @@ import org.observe.SimpleObservable;
 import org.observe.collect.ObservableCollection;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ModelInstantiationException;
+import org.observe.expresso.qonfig.ExFlexibleElementModelAddOn;
+import org.observe.expresso.qonfig.ExWithElementModel;
 import org.observe.quick.KeyCode;
 import org.observe.quick.QuickEventListener;
 import org.observe.quick.QuickKeyListener;
 import org.observe.quick.QuickMouseListener;
 import org.observe.quick.QuickTextWidget;
 import org.observe.quick.QuickWidget;
+import org.observe.quick.TextMouseListener;
 import org.observe.quick.base.QuickTableColumn;
 import org.observe.quick.base.TabularWidget;
 import org.observe.quick.base.TabularWidget.TabularContext;
@@ -65,8 +72,10 @@ import org.observe.util.swing.PanelPopulation.FieldEditor;
 import org.observe.util.swing.PanelPopulation.MenuBuilder;
 import org.observe.util.swing.PanelPopulation.PanelPopulator;
 import org.observe.util.swing.PanelPopulation.SliderEditor;
+import org.observe.util.swing.PanelPopulation.TableBuilder;
 import org.qommons.Causable;
 import org.qommons.LambdaUtils;
+import org.qommons.Transaction;
 import org.qommons.Transformer;
 import org.qommons.collect.CollectionUtils;
 import org.qommons.collect.ElementId;
@@ -81,13 +90,15 @@ class QuickSwingTablePopulation {
 		private ElementId theElementId;
 
 		public InterpretedSwingTableColumn(QuickWidget quickParent, QuickTableColumn<R, C> column, TabularContext<R> context,
-			Transformer<ExpressoInterpretationException> tx, Observable<?> until, Supplier<ComponentEditor<?, ?>> parent,
-			QuickSwingPopulator<QuickWidget> swingRenderer, QuickSwingPopulator<QuickWidget> swingEditor, int[] rendering)
+			Transformer<ExpressoInterpretationException> tx, Observable<?> until, Supplier<TableBuilder<R, ?>> parent,
+			QuickSwingPopulator<QuickWidget> swingRenderer, QuickSwingPopulator<QuickWidget> swingEditor)
 				throws ModelInstantiationException {
 			theColumn = column;
 			theCRS = new CategoryRenderStrategy<>(column.getName().get(), column.getType(), row -> {
-				context.getRenderValue().set(row, null);
-				return column.getValue().get();
+				try (Transaction t = QuickCoreSwing.rendering()) {
+					context.getRenderValue().set(row, null);
+					return column.getValue().get();
+				}
 			});
 
 			theColumn.getName().noInitChanges().takeUntil(until).act(evt -> {
@@ -99,7 +110,7 @@ class QuickSwingTablePopulation {
 				refresh();
 			});
 			QuickSwingTableColumn<R, C> renderer = new QuickSwingTableColumn<>(quickParent, column, context, tx, until, parent,
-				swingRenderer, swingEditor, rendering);
+				swingRenderer, swingEditor);
 			/* We need to listen to the style so external changes will re-render the table.
 			 * But we need to be careful, because the style depends on element values of the cell which are changed as the table renders
 			 * different cells.  So if we blindly listen for changes, this will keep re-rendering forever.
@@ -117,8 +128,6 @@ class QuickSwingTablePopulation {
 				reRender = null;
 			if (reRender != null) {
 				Observable.onRootFinish(reRender).takeUntil(until).act(evt -> {
-					if (rendering[0] > 0)
-						return; // We're mucking with stuff during a render operation--don't create a cycle
 					refresh();
 				});
 			}
@@ -156,7 +165,7 @@ class QuickSwingTablePopulation {
 		}
 
 		void refresh() {
-			if (theElementId != null)
+			if (theElementId != null && !QuickCoreSwing.isRendering())
 				theColumns.mutableElement(theElementId).set(this);
 		}
 	}
@@ -168,7 +177,7 @@ class QuickSwingTablePopulation {
 		private final QuickWidget theRenderer;
 		private final QuickWidget.WidgetContext theRendererContext;
 		private final TabularWidget.TabularContext<R> theRenderTableContext;
-		private final Supplier<ComponentEditor<?, ?>> theParent;
+		private final Supplier<TableBuilder<R, ?>> theParent;
 		private final SimpleObservable<Void> theRenderUntil;
 		private ObservableCellRenderer<R, C> theDelegate;
 		private AbstractComponentEditor<?, ?> theComponent;
@@ -182,11 +191,13 @@ class QuickSwingTablePopulation {
 		private final QuickKeyListener.KeyTypedContext theKeyTypeContext;
 		private final QuickKeyListener.KeyCodeContext theKeyCodeContext;
 
-		private final int[] isRendering;
+		private JTable theTable;
+		private SettableValue<Integer> theOffset;
+		private ToIntFunction<Point> theOffsetGetter;
 
 		QuickSwingTableColumn(QuickWidget quickParent, QuickTableColumn<R, C> column, TabularWidget.TabularContext<R> ctx,
-			Transformer<ExpressoInterpretationException> tx, Observable<?> until, Supplier<ComponentEditor<?, ?>> parent,
-			QuickSwingPopulator<QuickWidget> swingRenderer, QuickSwingPopulator<QuickWidget> swingEditor, int[] rendering)
+			Transformer<ExpressoInterpretationException> tx, Observable<?> until, Supplier<TableBuilder<R, ?>> parent,
+			QuickSwingPopulator<QuickWidget> swingRenderer, QuickSwingPopulator<QuickWidget> swingEditor)
 				throws ModelInstantiationException {
 			theQuickParent = quickParent;
 			theColumn = column;
@@ -194,16 +205,21 @@ class QuickSwingTablePopulation {
 			theRenderTableContext = ctx;
 			theParent = parent;
 			theRenderUntil = new SimpleObservable<>();
-			isRendering = rendering;
 
 			// TODO The interpretation/transformation of the renderer and editor should be done elsewhere
+			SwingCellPopulator<R, C> renderPopulator;
 			if (swingRenderer != null) {
-				swingRenderer.populate(new SwingCellPopulator<>(this, true, Observable.or(until, theRenderUntil)), theRenderer);
+				renderPopulator = new SwingCellPopulator<>(this, true, Observable.or(until, theRenderUntil));
+				renderPopulator.addModifier(ce -> ce.modifyComponent(comp -> {
+					theTable = parent.get().getEditor();
+				}));
 
 				theRendererContext = new QuickWidget.WidgetContext.Default();
 				theRenderer.setContext(theRendererContext);
-			} else
+			} else {
+				renderPopulator = null;
 				theRendererContext = null;
+			}
 			if (theColumn.getEditing() != null) {
 				if (swingEditor != null) {
 					swingEditor.populate(new SwingCellPopulator<>(this, false, Observable.or(until, theRenderUntil)),
@@ -221,18 +237,46 @@ class QuickSwingTablePopulation {
 
 			if (theRenderer != null) {
 				for (QuickEventListener listener : theRenderer.getEventListeners()) {
-					if (listener instanceof QuickMouseListener.QuickMouseButtonListener)
+					if (listener instanceof QuickMouseListener.QuickMouseButtonListener) {
+						if (listener.getAddOn(TextMouseListener.class) != null) {
+							if (theOffset == null)
+								theOffset = SettableValue.build(int.class).withValue(0).build();
+							listener.getAddOn(ExWithElementModel.class).satisfyElementValue("offset", theOffset,
+								ExFlexibleElementModelAddOn.ActionIfSatisfied.Replace);
+						}
 						((QuickMouseListener.QuickMouseButtonListener) listener).setListenerContext(theMouseContext);
-					else if (listener instanceof QuickMouseListener)
+					} else if (listener instanceof QuickMouseListener) {
+						if (listener.getAddOn(TextMouseListener.class) != null) {
+							if (theOffset == null)
+								theOffset = SettableValue.build(int.class).withValue(0).build();
+							listener.getAddOn(ExWithElementModel.class).satisfyElementValue("offset", theOffset,
+								ExFlexibleElementModelAddOn.ActionIfSatisfied.Replace);
+						}
 						((QuickMouseListener) listener).setListenerContext(theMouseContext);
-					else if (listener instanceof QuickKeyListener.QuickKeyTypedListener)
+					} else if (listener instanceof QuickKeyListener.QuickKeyTypedListener)
 						((QuickKeyListener.QuickKeyTypedListener) listener).setListenerContext(theKeyTypeContext);
 					else if (listener instanceof QuickKeyListener.QuickKeyCodeListener)
 						((QuickKeyListener.QuickKeyCodeListener) listener).setListenerContext(theKeyCodeContext);
 					else
 						listener.reporting().error("Unhandled cell renderer listener type: " + listener.getClass().getName());
 				}
+				if (theOffset != null && theRenderer instanceof QuickTextWidget) {
+					QuickTextWidget<C> qtw = (QuickTextWidget<C>) theRenderer;
+					renderPopulator.addModifier(ce -> ce.modifyComponent(comp -> {
+						theOffsetGetter = QuickSwingPopulator.QuickCoreSwing.getTextOffset(comp, () -> {
+							try (Transaction t = QuickCoreSwing.rendering()) {
+								return qtw.getFormat().get().format(qtw.getValue().get());
+							}
+						}, () -> {
+							int columnIdx = column.getColumnSet().getColumns().indexOf(column);
+							return parent.get().getEditor().getColumnModel().getColumn(columnIdx).getWidth();
+						}, parent.get().getComponent().getGraphics());
+					}));
+				}
 			}
+
+			if (renderPopulator != null)
+				swingRenderer.populate(renderPopulator, theRenderer);
 		}
 
 		public QuickTableColumn<R, C> getColumn() {
@@ -258,40 +302,31 @@ class QuickSwingTablePopulation {
 		void mutation(CategoryRenderStrategy<R, C>.CategoryMutationStrategy mutation) {
 			if (theColumn.getEditing() != null) {
 				mutation.editableIf((rowValue, colValue) -> {
-					isRendering[0]++;
-					try {
+					try (Transaction t = QuickCoreSwing.rendering()) {
 						theRenderTableContext.getRenderValue().set(rowValue, null);
 						theRenderTableContext.getRowIndex().set(0, null);
 						theRenderTableContext.getColumnIndex().set(0, null);
 						theRenderTableContext.isSelected().set(false, null);
 						return theColumn.getEditing().getFilteredColumnEditValue().isEnabled().get() == null;
-					} finally {
-						isRendering[0]--;
 					}
 				});
 				mutation.filterAccept((rowEl, colValue) -> {
-					isRendering[0]++;
-					try {
+					try (Transaction t = QuickCoreSwing.rendering()) {
 						theRenderTableContext.getRenderValue().set(rowEl.get(), null);
 						theRenderTableContext.getRowIndex().set(0, null);
 						theRenderTableContext.getColumnIndex().set(0, null);
 						theRenderTableContext.isSelected().set(false, null);
 						return theColumn.getEditing().getFilteredColumnEditValue().isAcceptable(colValue);
-					} finally {
-						isRendering[0]--;
 					}
 				});
 				if (theColumn.getEditing().getType() instanceof QuickTableColumn.ColumnEditType.RowModifyEditType) {
 					QuickTableColumn.ColumnEditType.RowModifyEditType<R, C> editType = (QuickTableColumn.ColumnEditType.RowModifyEditType<R, C>) theColumn
 						.getEditing().getType();
 					mutation.mutateAttribute((rowValue, colValue) -> {
-						isRendering[0]++;
-						try {
+						try (Transaction t = QuickCoreSwing.rendering()) {
 							theEditContext.getRenderValue().set(rowValue, null);
 							theEditContext.getEditColumnValue().set(colValue, null);
 							editType.getCommit().act(null);
-						} finally {
-							isRendering[0]--;
 						}
 					});
 					mutation.withRowUpdate(editType.isRowUpdate());
@@ -299,13 +334,10 @@ class QuickSwingTablePopulation {
 					QuickTableColumn.ColumnEditType.RowReplaceEditType<R, C> editType = (QuickTableColumn.ColumnEditType.RowReplaceEditType<R, C>) theColumn
 						.getEditing().getType();
 					mutation.withRowValueSwitch((rowValue, colValue) -> {
-						isRendering[0]++;
-						try {
+						try (Transaction t = QuickCoreSwing.rendering()) {
 							theEditContext.getRenderValue().set(rowValue, null);
 							theEditContext.getEditColumnValue().set(colValue, null);
 							return editType.getReplacement().get();
-						} finally {
-							isRendering[0]--;
 						}
 					});
 				} else
@@ -337,8 +369,7 @@ class QuickSwingTablePopulation {
 		}
 
 		void setCellContext(ModelCell<? extends R, ? extends C> cell, TabularWidget.TabularContext<R> tableCtx) {
-			isRendering[0]++;
-			try (Causable.CausableInUse cause = Causable.cause()) {
+			try (Transaction t = QuickCoreSwing.rendering(); Causable.CausableInUse cause = Causable.cause()) {
 				tableCtx.isSelected().set(cell.isSelected(), cause);
 				tableCtx.getRowIndex().set(cell.getRowIndex(), cause);
 				tableCtx.getColumnIndex().set(cell.getColumnIndex(), cause);
@@ -353,19 +384,14 @@ class QuickSwingTablePopulation {
 						theRendererContext.isRightPressed().set(false, cause);
 					}
 				}
-			} finally {
-				isRendering[0]--;
 			}
 		}
 
 		String getTooltip(R modelValue, C columnValue) {
 			if (theTooltip == null)
 				return null;
-			isRendering[0]++;
-			try {
+			try (Transaction t = QuickCoreSwing.rendering()) {
 				theRenderTableContext.getRenderValue().set(modelValue, null);
-			} finally {
-				isRendering[0]--;
 			}
 			return theTooltip.get();
 		}
@@ -391,13 +417,15 @@ class QuickSwingTablePopulation {
 			if (thePreRender != null)
 				thePreRender.run();
 			Component render;
-			if (theDelegate != null)
-				render = theDelegate.getCellRendererComponent(parent, cell, ctx);
-			else if (theComponent != null)
-				render = theComponent.getComponent();
-			else { // No renderer specified, use default
-				theDelegate = ObservableCellRenderer.formatted(String::valueOf);
-				render = theDelegate.getCellRendererComponent(parent, cell, ctx);
+			try (Transaction t = QuickCoreSwing.rendering()) {
+				if (theDelegate != null)
+					render = theDelegate.getCellRendererComponent(parent, cell, ctx);
+				else if (theComponent != null)
+					render = theComponent.getComponent();
+				else { // No renderer specified, use default
+					theDelegate = ObservableCellRenderer.formatted(String::valueOf);
+					render = theDelegate.getCellRendererComponent(parent, cell, ctx);
+				}
 			}
 			theRenderUntil.onNext(null);
 			return render;
@@ -407,20 +435,26 @@ class QuickSwingTablePopulation {
 		public void keyPressed(ModelCell<? extends R, ? extends C> cell, KeyEvent e) {
 			if (cell == null)
 				return;
-			setCellContext(cell, theRenderTableContext);
-			KeyCode code = QuickCoreSwing.getKeyCodeFromAWT(e.getKeyCode(), e.getKeyLocation());
-			if (code == null)
-				return;
-			theKeyCodeContext.getKeyCode().set(code, e);
-			for (QuickEventListener listener : theRenderer.getEventListeners()) {
-				if (listener instanceof QuickKeyListener.QuickKeyCodeListener) {
-					QuickKeyListener.QuickKeyCodeListener keyL = (QuickKeyListener.QuickKeyCodeListener) listener;
-					if (!keyL.isPressed() || (keyL.getKeyCode() != null && keyL.getKeyCode() != code))
-						continue;
-					else if (!keyL.testFilter())
-						continue;
-					keyL.getAction().act(e);
+			try (Transaction t = QuickCoreSwing.rendering()) {
+				setCellContext(cell, theRenderTableContext);
+				KeyCode code = QuickCoreSwing.getKeyCodeFromAWT(e.getKeyCode(), e.getKeyLocation());
+				if (code == null)
+					return;
+				theKeyCodeContext.getKeyCode().set(code, e);
+				String tt = theTooltip == null ? null : theTooltip.get();
+				for (QuickEventListener listener : theRenderer.getEventListeners()) {
+					if (listener instanceof QuickKeyListener.QuickKeyCodeListener) {
+						QuickKeyListener.QuickKeyCodeListener keyL = (QuickKeyListener.QuickKeyCodeListener) listener;
+						if (!keyL.isPressed() || (keyL.getKeyCode() != null && keyL.getKeyCode() != code))
+							continue;
+						else if (!keyL.testFilter())
+							continue;
+						keyL.getAction().act(e);
+					}
 				}
+				String newTT = theTooltip == null ? null : theTooltip.get();
+				if (!Objects.equals(tt, newTT))
+					theTable.setToolTipText(newTT);
 			}
 		}
 
@@ -428,20 +462,26 @@ class QuickSwingTablePopulation {
 		public void keyReleased(ModelCell<? extends R, ? extends C> cell, KeyEvent e) {
 			if (cell == null)
 				return;
-			setCellContext(cell, theRenderTableContext);
-			KeyCode code = QuickCoreSwing.getKeyCodeFromAWT(e.getKeyCode(), e.getKeyLocation());
-			if (code == null)
-				return;
-			theKeyCodeContext.getKeyCode().set(code, e);
-			for (QuickEventListener listener : theRenderer.getEventListeners()) {
-				if (listener instanceof QuickKeyListener.QuickKeyCodeListener) {
-					QuickKeyListener.QuickKeyCodeListener keyL = (QuickKeyListener.QuickKeyCodeListener) listener;
-					if (!keyL.isPressed() || (keyL.getKeyCode() != null && keyL.getKeyCode() != code))
-						continue;
-					else if (!keyL.testFilter())
-						continue;
-					keyL.getAction().act(e);
+			try (Transaction t = QuickCoreSwing.rendering()) {
+				setCellContext(cell, theRenderTableContext);
+				KeyCode code = QuickCoreSwing.getKeyCodeFromAWT(e.getKeyCode(), e.getKeyLocation());
+				if (code == null)
+					return;
+				theKeyCodeContext.getKeyCode().set(code, e);
+				String tt = theTooltip == null ? null : theTooltip.get();
+				for (QuickEventListener listener : theRenderer.getEventListeners()) {
+					if (listener instanceof QuickKeyListener.QuickKeyCodeListener) {
+						QuickKeyListener.QuickKeyCodeListener keyL = (QuickKeyListener.QuickKeyCodeListener) listener;
+						if (!keyL.isPressed() || (keyL.getKeyCode() != null && keyL.getKeyCode() != code))
+							continue;
+						else if (!keyL.testFilter())
+							continue;
+						keyL.getAction().act(e);
+					}
 				}
+				String newTT = theTooltip == null ? null : theTooltip.get();
+				if (!Objects.equals(tt, newTT))
+					theTable.setToolTipText(newTT);
 			}
 		}
 
@@ -449,18 +489,24 @@ class QuickSwingTablePopulation {
 		public void keyTyped(ModelCell<? extends R, ? extends C> cell, KeyEvent e) {
 			if (cell == null)
 				return;
-			setCellContext(cell, theRenderTableContext);
-			char ch = e.getKeyChar();
-			theKeyTypeContext.getTypedChar().set(ch, e);
-			for (QuickEventListener listener : theRenderer.getEventListeners()) {
-				if (listener instanceof QuickKeyListener.QuickKeyTypedListener) {
-					QuickKeyListener.QuickKeyTypedListener keyL = (QuickKeyListener.QuickKeyTypedListener) listener;
-					if (keyL.getCharFilter() != 0 && keyL.getCharFilter() != ch)
-						continue;
-					else if (!keyL.testFilter())
-						continue;
-					keyL.getAction().act(e);
+			try (Transaction t = QuickCoreSwing.rendering()) {
+				setCellContext(cell, theRenderTableContext);
+				char ch = e.getKeyChar();
+				theKeyTypeContext.getTypedChar().set(ch, e);
+				String tt = theTooltip == null ? null : theTooltip.get();
+				for (QuickEventListener listener : theRenderer.getEventListeners()) {
+					if (listener instanceof QuickKeyListener.QuickKeyTypedListener) {
+						QuickKeyListener.QuickKeyTypedListener keyL = (QuickKeyListener.QuickKeyTypedListener) listener;
+						if (keyL.getCharFilter() != 0 && keyL.getCharFilter() != ch)
+							continue;
+						else if (!keyL.testFilter())
+							continue;
+						keyL.getAction().act(e);
+					}
 				}
+				String newTT = theTooltip == null ? null : theTooltip.get();
+				if (!Objects.equals(tt, newTT))
+					theTable.setToolTipText(newTT);
 			}
 		}
 
@@ -477,24 +523,32 @@ class QuickSwingTablePopulation {
 		public void mouseClicked(ModelCell<? extends R, ? extends C> cell, MouseEvent e) {
 			if (cell == null)
 				return;
-			QuickMouseListener.MouseButton eventButton = QuickCoreSwing.checkMouseEventType(e, null);
-			if (eventButton == null)
-				return;
-			setCellContext(cell, theRenderTableContext);
-			theMouseContext.getMouseButton().set(eventButton, e);
-			theMouseContext.getX().set(e.getX(), e);
-			theMouseContext.getY().set(e.getY(), e);
-			for (QuickEventListener listener : theRenderer.getEventListeners()) {
-				if (listener instanceof QuickMouseListener.QuickMouseClickListener) {
-					QuickMouseListener.QuickMouseClickListener mouseL = (QuickMouseListener.QuickMouseClickListener) listener;
-					if (mouseL.getButton() != null && mouseL.getButton() != eventButton)
-						continue;
-					else if (mouseL.getClickCount() > 0 && e.getClickCount() != mouseL.getClickCount())
-						continue;
-					else if (!mouseL.testFilter())
-						continue;
-					mouseL.getAction().act(e);
+			try (Transaction t = QuickCoreSwing.rendering()) {
+				QuickMouseListener.MouseButton eventButton = QuickCoreSwing.checkMouseEventType(e, null);
+				if (eventButton == null)
+					return;
+				setCellContext(cell, theRenderTableContext);
+				theMouseContext.getMouseButton().set(eventButton, e);
+				theMouseContext.getX().set(e.getX(), e);
+				theMouseContext.getY().set(e.getY(), e);
+				if (theOffsetGetter != null)
+					theOffset.set(theOffsetGetter.applyAsInt(e.getPoint()), e);
+				String tt = theTooltip == null ? null : theTooltip.get();
+				for (QuickEventListener listener : theRenderer.getEventListeners()) {
+					if (listener instanceof QuickMouseListener.QuickMouseClickListener) {
+						QuickMouseListener.QuickMouseClickListener mouseL = (QuickMouseListener.QuickMouseClickListener) listener;
+						if (mouseL.getButton() != null && mouseL.getButton() != eventButton)
+							continue;
+						else if (mouseL.getClickCount() > 0 && e.getClickCount() != mouseL.getClickCount())
+							continue;
+						else if (!mouseL.testFilter())
+							continue;
+						mouseL.getAction().act(e);
+					}
 				}
+				String newTT = theTooltip == null ? null : theTooltip.get();
+				if (!Objects.equals(tt, newTT))
+					theTable.setToolTipText(newTT);
 			}
 		}
 
@@ -502,22 +556,30 @@ class QuickSwingTablePopulation {
 		public void mousePressed(ModelCell<? extends R, ? extends C> cell, MouseEvent e) {
 			if (cell == null)
 				return;
-			QuickMouseListener.MouseButton eventButton = QuickCoreSwing.checkMouseEventType(e, null);
-			if (eventButton == null)
-				return;
-			setCellContext(cell, theRenderTableContext);
-			theMouseContext.getMouseButton().set(eventButton, e);
-			theMouseContext.getX().set(e.getX(), e);
-			theMouseContext.getY().set(e.getY(), e);
-			for (QuickEventListener listener : theRenderer.getEventListeners()) {
-				if (listener instanceof QuickMouseListener.QuickMousePressedListener) {
-					QuickMouseListener.QuickMousePressedListener mouseL = (QuickMouseListener.QuickMousePressedListener) listener;
-					if (mouseL.getButton() != null && mouseL.getButton() != eventButton)
-						continue;
-					else if (!mouseL.testFilter())
-						continue;
-					mouseL.getAction().act(e);
+			try (Transaction t = QuickCoreSwing.rendering()) {
+				QuickMouseListener.MouseButton eventButton = QuickCoreSwing.checkMouseEventType(e, null);
+				if (eventButton == null)
+					return;
+				setCellContext(cell, theRenderTableContext);
+				theMouseContext.getMouseButton().set(eventButton, e);
+				theMouseContext.getX().set(e.getX(), e);
+				theMouseContext.getY().set(e.getY(), e);
+				if (theOffsetGetter != null)
+					theOffset.set(theOffsetGetter.applyAsInt(e.getPoint()), e);
+				String tt = theTooltip == null ? null : theTooltip.get();
+				for (QuickEventListener listener : theRenderer.getEventListeners()) {
+					if (listener instanceof QuickMouseListener.QuickMousePressedListener) {
+						QuickMouseListener.QuickMousePressedListener mouseL = (QuickMouseListener.QuickMousePressedListener) listener;
+						if (mouseL.getButton() != null && mouseL.getButton() != eventButton)
+							continue;
+						else if (!mouseL.testFilter())
+							continue;
+						mouseL.getAction().act(e);
+					}
 				}
+				String newTT = theTooltip == null ? null : theTooltip.get();
+				if (!Objects.equals(tt, newTT))
+					theTable.setToolTipText(newTT);
 			}
 		}
 
@@ -525,22 +587,30 @@ class QuickSwingTablePopulation {
 		public void mouseReleased(ModelCell<? extends R, ? extends C> cell, MouseEvent e) {
 			if (cell == null)
 				return;
-			QuickMouseListener.MouseButton eventButton = QuickCoreSwing.checkMouseEventType(e, null);
-			if (eventButton == null)
-				return;
-			setCellContext(cell, theRenderTableContext);
-			theMouseContext.getMouseButton().set(eventButton, e);
-			theMouseContext.getX().set(e.getX(), e);
-			theMouseContext.getY().set(e.getY(), e);
-			for (QuickEventListener listener : theRenderer.getEventListeners()) {
-				if (listener instanceof QuickMouseListener.QuickMouseReleasedListener) {
-					QuickMouseListener.QuickMouseReleasedListener mouseL = (QuickMouseListener.QuickMouseReleasedListener) listener;
-					if (mouseL.getButton() != null && mouseL.getButton() != eventButton)
-						continue;
-					else if (!mouseL.testFilter())
-						continue;
-					mouseL.getAction().act(e);
+			try (Transaction t = QuickCoreSwing.rendering()) {
+				QuickMouseListener.MouseButton eventButton = QuickCoreSwing.checkMouseEventType(e, null);
+				if (eventButton == null)
+					return;
+				setCellContext(cell, theRenderTableContext);
+				theMouseContext.getMouseButton().set(eventButton, e);
+				theMouseContext.getX().set(e.getX(), e);
+				theMouseContext.getY().set(e.getY(), e);
+				if (theOffsetGetter != null)
+					theOffset.set(theOffsetGetter.applyAsInt(e.getPoint()), e);
+				String tt = theTooltip == null ? null : theTooltip.get();
+				for (QuickEventListener listener : theRenderer.getEventListeners()) {
+					if (listener instanceof QuickMouseListener.QuickMouseReleasedListener) {
+						QuickMouseListener.QuickMouseReleasedListener mouseL = (QuickMouseListener.QuickMouseReleasedListener) listener;
+						if (mouseL.getButton() != null && mouseL.getButton() != eventButton)
+							continue;
+						else if (!mouseL.testFilter())
+							continue;
+						mouseL.getAction().act(e);
+					}
 				}
+				String newTT = theTooltip == null ? null : theTooltip.get();
+				if (!Objects.equals(tt, newTT))
+					theTable.setToolTipText(newTT);
 			}
 		}
 
@@ -548,18 +618,26 @@ class QuickSwingTablePopulation {
 		public void mouseEntered(ModelCell<? extends R, ? extends C> cell, MouseEvent e) {
 			if (cell == null)
 				return;
-			setCellContext(cell, theRenderTableContext);
-			theMouseContext.getX().set(e.getX(), e);
-			theMouseContext.getY().set(e.getY(), e);
-			for (QuickEventListener listener : theRenderer.getEventListeners()) {
-				if (listener instanceof QuickMouseListener.QuickMouseMoveListener) {
-					QuickMouseListener.QuickMouseMoveListener mouseL = (QuickMouseListener.QuickMouseMoveListener) listener;
-					if (mouseL.getEventType() != QuickMouseListener.MouseMoveEventType.Enter)
-						continue;
-					else if (!mouseL.testFilter())
-						continue;
-					mouseL.getAction().act(e);
+			try (Transaction t = QuickCoreSwing.rendering()) {
+				setCellContext(cell, theRenderTableContext);
+				theMouseContext.getX().set(e.getX(), e);
+				theMouseContext.getY().set(e.getY(), e);
+				if (theOffsetGetter != null)
+					theOffset.set(theOffsetGetter.applyAsInt(e.getPoint()), e);
+				String tt = theTooltip == null ? null : theTooltip.get();
+				for (QuickEventListener listener : theRenderer.getEventListeners()) {
+					if (listener instanceof QuickMouseListener.QuickMouseMoveListener) {
+						QuickMouseListener.QuickMouseMoveListener mouseL = (QuickMouseListener.QuickMouseMoveListener) listener;
+						if (mouseL.getEventType() != QuickMouseListener.MouseMoveEventType.Enter)
+							continue;
+						else if (!mouseL.testFilter())
+							continue;
+						mouseL.getAction().act(e);
+					}
 				}
+				String newTT = theTooltip == null ? null : theTooltip.get();
+				if (!Objects.equals(tt, newTT))
+					theTable.setToolTipText(newTT);
 			}
 		}
 
@@ -567,18 +645,26 @@ class QuickSwingTablePopulation {
 		public void mouseExited(ModelCell<? extends R, ? extends C> cell, MouseEvent e) {
 			if (cell == null)
 				return;
-			setCellContext(cell, theRenderTableContext);
-			theMouseContext.getX().set(e.getX(), e);
-			theMouseContext.getY().set(e.getY(), e);
-			for (QuickEventListener listener : theRenderer.getEventListeners()) {
-				if (listener instanceof QuickMouseListener.QuickMouseMoveListener) {
-					QuickMouseListener.QuickMouseMoveListener mouseL = (QuickMouseListener.QuickMouseMoveListener) listener;
-					if (mouseL.getEventType() != QuickMouseListener.MouseMoveEventType.Exit)
-						continue;
-					else if (!mouseL.testFilter())
-						continue;
-					mouseL.getAction().act(e);
+			try (Transaction t = QuickCoreSwing.rendering()) {
+				setCellContext(cell, theRenderTableContext);
+				theMouseContext.getX().set(e.getX(), e);
+				theMouseContext.getY().set(e.getY(), e);
+				if (theOffsetGetter != null)
+					theOffset.set(theOffsetGetter.applyAsInt(e.getPoint()), e);
+				String tt = theTooltip == null ? null : theTooltip.get();
+				for (QuickEventListener listener : theRenderer.getEventListeners()) {
+					if (listener instanceof QuickMouseListener.QuickMouseMoveListener) {
+						QuickMouseListener.QuickMouseMoveListener mouseL = (QuickMouseListener.QuickMouseMoveListener) listener;
+						if (mouseL.getEventType() != QuickMouseListener.MouseMoveEventType.Exit)
+							continue;
+						else if (!mouseL.testFilter())
+							continue;
+						mouseL.getAction().act(e);
+					}
 				}
+				String newTT = theTooltip == null ? null : theTooltip.get();
+				if (!Objects.equals(tt, newTT))
+					theTable.setToolTipText(newTT);
 			}
 		}
 
@@ -586,18 +672,26 @@ class QuickSwingTablePopulation {
 		public void mouseMoved(ModelCell<? extends R, ? extends C> cell, MouseEvent e) {
 			if (cell == null)
 				return;
-			setCellContext(cell, theRenderTableContext);
-			theMouseContext.getX().set(e.getX(), e);
-			theMouseContext.getY().set(e.getY(), e);
-			for (QuickEventListener listener : theRenderer.getEventListeners()) {
-				if (listener instanceof QuickMouseListener.QuickMouseMoveListener) {
-					QuickMouseListener.QuickMouseMoveListener mouseL = (QuickMouseListener.QuickMouseMoveListener) listener;
-					if (mouseL.getEventType() != QuickMouseListener.MouseMoveEventType.Move)
-						continue;
-					else if (!mouseL.testFilter())
-						continue;
-					mouseL.getAction().act(e);
+			try (Transaction t = QuickCoreSwing.rendering()) {
+				setCellContext(cell, theRenderTableContext);
+				theMouseContext.getX().set(e.getX(), e);
+				theMouseContext.getY().set(e.getY(), e);
+				if (theOffsetGetter != null)
+					theOffset.set(theOffsetGetter.applyAsInt(e.getPoint()), e);
+				String tt = theTooltip == null ? null : theTooltip.get();
+				for (QuickEventListener listener : theRenderer.getEventListeners()) {
+					if (listener instanceof QuickMouseListener.QuickMouseMoveListener) {
+						QuickMouseListener.QuickMouseMoveListener mouseL = (QuickMouseListener.QuickMouseMoveListener) listener;
+						if (mouseL.getEventType() != QuickMouseListener.MouseMoveEventType.Move)
+							continue;
+						else if (!mouseL.testFilter())
+							continue;
+						mouseL.getAction().act(e);
+					}
 				}
+				String newTT = theTooltip == null ? null : theTooltip.get();
+				if (!Objects.equals(tt, newTT))
+					theTable.setToolTipText(newTT);
 			}
 		}
 	}

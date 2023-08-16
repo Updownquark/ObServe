@@ -69,7 +69,7 @@ public class ExternalLiteral implements ObservableExpression {
 			throw new ExpressoEvaluationException(expressionOffset, theText.length(), "'" + theText + "' cannot be evaluated as a " + type);
 		NonStructuredParser[] parser = new NonStructuredParser[1];
 		InterpretedValueSynth<SettableValue<?>, ?> value = _parseValue(type.getType(0), env, expressionOffset, parser);
-		return (EvaluatedExpression<M, MV>) ObservableExpression.evEx(value, parser[0]);
+		return (EvaluatedExpression<M, MV>) ObservableExpression.evEx(expressionOffset, getExpressionLength(), value, parser[0]);
 	}
 
 	private <T> InterpretedValueSynth<SettableValue<?>, ? extends SettableValue<? extends T>> _parseValue(TypeToken<T> asType,

@@ -85,7 +85,7 @@ public class ClassInstanceExpression implements ObservableExpression {
 		if (!TypeTokens.get().isAssignable(type.getType(0), classType))
 			throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(),
 				theType + ".class cannot be evaluated as a " + type.getType(0));
-		return ObservableExpression.evEx(
+		return ObservableExpression.evEx(expressionOffset, getExpressionLength(),
 			(InterpretedValueSynth<M, MV>) InterpretedValueSynth.literal(ModelTypes.Value.forType(classType), clazz, theType + ".class"),
 			clazz);
 	}

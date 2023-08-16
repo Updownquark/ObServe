@@ -103,7 +103,8 @@ public class InstanceofExpression implements ObservableExpression {
 				return SettableValue.asSettable(lv.map(TypeTokens.get().BOOLEAN, v -> v != null && testType.isInstance(v)),
 					__ -> "instanceof expressions are not reversible");
 			});
-		return ObservableExpression.evEx((InterpretedValueSynth<M, MV>) container, testType, leftValue);
+		return ObservableExpression.evEx(expressionOffset, getExpressionLength(), (InterpretedValueSynth<M, MV>) container, testType,
+			leftValue);
 	}
 
 	@Override

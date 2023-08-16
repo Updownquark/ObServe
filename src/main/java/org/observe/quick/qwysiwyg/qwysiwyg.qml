@@ -3,6 +3,9 @@
 <quick uses:base="Quick-Base v0.1" uses:config="Expresso-Config v0.1" with-extension="window" title="app.qwysiwyg.title" close-action="exit"
 	x="config.x" y="config.y" width="config.width" height="config.height">
 	<head>
+		<imports>
+			<import>org.observe.quick.qwysiwyg.Qwysiwyg</import>
+		</imports>
 		<models>
 			<ext-model name="clArgs">
 				<value name="targetQuickApp" type="String" />
@@ -15,7 +18,7 @@
 				<value name="height" type="int" default="860" />
 			</config>
 			<model name="app">
-				<value name="qwysiwyg">new org.observe.quick.qwysiwyg.Qwysiwyg()</value>
+				<value name="qwysiwyg">new Qwysiwyg()</value>
 				<hook name="modelLoad" on="onModelLoad">qwysiwyg.init(clArgs.targetQuickApp, clArgs.$UNMATCHED$)</hook>
 				<hook name="targetChange" on="clArgs.targetQuickApp">qwysiwyg.init(clArgs.targetQuickApp, clArgs.$UNMATCHED$)</hook>
 				<hook name="clArgsChange" on="clArgs.$UNMATCHED$">qwysiwyg.init(clArgs.targetQuickApp, clArgs.$UNMATCHED$)</hook>
@@ -27,25 +30,32 @@
 			<box role="row-header" layout="simple-layout"> <!-- This outer box is so we can control the width -->
 				<text-area value="app.qwysiwyg.lineNumbers" editable="false" width="`65px`" />
 			</box>
-			<styled-text-area role="content" editable="false" value="app.qwysiwyg.documentRoot" children="node.children"
-				post-text="node.getPostText()" tooltip="app.qwysiwyg.tooltip"
+			<text-area role="content" editable="false" tooltip="app.qwysiwyg.tooltip">
+				<model>
+					<value name="hoveredNode" type="Qwysiwyg.DocumentComponent" />
+				</model>
+				<dynamic-styled-document root="app.qwysiwyg.documentRoot" children="node.children" post-text="node.getPostText()"
 				selection-start-value="app.qwysiwyg.selectedNode" selection-end-value="app.qwysiwyg.selectedEndNode"
 				selection-start-offset="app.qwysiwyg.selectedStartIndex" selection-end-offset="app.qwysiwyg.selectedEndIndex">
-				<text-style>
-					<style attr="font-weight" condition="node!=null &amp;&amp; node.isBold()">`bold`</style>
-					<style attr="font-color">node==null ? null : node.getFontColor()</style>
-					<style attr="underline" condition="node!=null &amp;&amp; node.isActiveLink()">true</style>
-				</text-style>
+					<model>
+						<hook name="updateHoverNode" on="node">hoveredNode=node</hook>
+					</model>
+					<text-style>
+						<style attr="font-weight" condition="node!=null &amp;&amp; node.isBold()">`bold`</style>
+						<style attr="font-color">node==null ? null : node.getFontColor()</style>
+						<style attr="underline" condition="node!=null &amp;&amp; node.isActiveLink()">true</style>
+					</text-style>
+				</dynamic-styled-document>
 				<style>
 					<style attr="mouse-cursor" condition="app.qwysiwyg.hovered!=null &amp;&amp; app.qwysiwyg.hovered.isActiveLink()">HAND</style>
 				</style>
 				<on-mouse-enter>app.qwysiwyg.controlPressed(ctrlPressed)</on-mouse-enter>
 				<on-key-press>app.qwysiwyg.controlPressed(ctrlPressed)</on-key-press>
 				<on-key-release>app.qwysiwyg.controlPressed(ctrlPressed)</on-key-release>
-				<on-mouse-move>app.qwysiwyg.hover(node, ctrlPressed)</on-mouse-move>
-				<on-click>app.qwysiwyg.clicked(node, clickCount, ctrlPressed)</on-click>
+				<on-mouse-move>app.qwysiwyg.hover(hoveredNode, ctrlPressed)</on-mouse-move>
+				<on-click>app.qwysiwyg.clicked(hoveredNode, clickCount, ctrlPressed)</on-click>
 				<on-mouse-exit>app.qwysiwyg.mouseExit()</on-mouse-exit>
-			</styled-text-area>
+			</text-area>
 		</scroll>
 		<table rows="app.qwysiwyg.watchExpressions" value-name="ex">
 			<column name="`Expression`" value="ex.getExpressionText()">
@@ -68,13 +78,32 @@
 			<box layout="inline-layout" orientation="horizontal">
 				<combo values="app.qwysiwyg.availableStyles" value="app.qwysiwyg.selectedStyle" />
 			</box>
-			<table rows="app.qwysiwyg.styleDebugValues">
-					<style attr="with-text.font-weight" condition="value!=null &amp;&amp; value.isActive()">`bold`</style>
-				<column name="`Source`"  value="value.getSourceElement()" />
-				<column name="`Condition`" value="value.getCondition()" />
-				<column name="`Value`" value="value.getValueExpression()" />
-				<column name="`Active Value`" value="value.getCurrentValue()">
-					<style attr="with-text.font-slant" condition="!value.isActive()">`italic`</style>
+			<table rows="app.qwysiwyg.styleDebugValues" value-name="row">
+				<style attr="with-text.font-weight" condition="row!=null &amp;&amp; row.isActive()">`bold`</style>
+				<column name="`Source File`" value="row.getSourceFile()">
+					<label value="columnValue" tooltip="row.getFullSourceFile()" />
+				</column>
+				<column name="`Source`" value="row.getSourceElement()">
+					<label value="columnValue">
+						<style condition="row!=null &amp;&amp; row.isSourceElementLink()">
+							<style attr="underline">true</style>
+							<style attr="font-color">`blue`</style>
+						</style>
+						<on-click>row.followSourceElementLink()</on-click>
+					</label>
+				</column>
+				<column name="`Condition`" value="row.getCondition()">
+					<label value="columnValue" tooltip="row.getConditionTooltip(hoverOffset)">
+						<model>
+							<value name="hoverOffset" type="int" />
+							<!--<hook name="hook" on="hoverOffset">System.out.println("Hover offset="+hoverOffset)</hook>-->
+						</model>
+						<on-mouse-move>hoverOffset=offset</on-mouse-move>
+					</label>
+				</column>
+				<column name="`Value`" value="row.getValueExpression()" />
+				<column name="`Active Value`" value="row.getCurrentValue()">
+					<style attr="with-text.font-slant" condition="row!=null &amp;&amp; !row.isActive()">`italic`</style>
 				</column>
 			</table>
 		</box>

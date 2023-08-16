@@ -21,11 +21,11 @@ import com.google.common.reflect.TypeToken;
 
 public class QuickTextField<T> extends QuickEditableTextWidget.Abstract<T> {
 	public static final String TEXT_FIELD = "text-field";
-	private static final SingleTypeTraceability<QuickTextField<?>, Interpreted<?>, Def<?>> TRACEABILITY = ElementTypeTraceability
+	private static final SingleTypeTraceability<QuickTextField<?>, Interpreted<?>, Def> TRACEABILITY = ElementTypeTraceability
 		.getElementTraceability(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, TEXT_FIELD, Def.class, Interpreted.class,
 			QuickTextField.class);
 
-	public static class Def<T> extends QuickEditableTextWidget.Def.Abstract<T, QuickTextField<T>> {
+	public static class Def extends QuickEditableTextWidget.Def.Abstract<QuickTextField<?>> {
 		private Integer theColumns;
 		private CompiledExpression theEmptyText;
 
@@ -57,7 +57,7 @@ public class QuickTextField<T> extends QuickEditableTextWidget.Abstract<T> {
 		}
 
 		@Override
-		public Interpreted<T> interpret(ExElement.Interpreted<?> parent) {
+		public Interpreted<?> interpret(ExElement.Interpreted<?> parent) {
 			return new Interpreted<>(this, parent);
 		}
 	}
@@ -65,13 +65,13 @@ public class QuickTextField<T> extends QuickEditableTextWidget.Abstract<T> {
 	public static class Interpreted<T> extends QuickEditableTextWidget.Interpreted.Abstract<T, QuickTextField<T>> {
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<String>> theEmptyText;
 
-		public Interpreted(Def<T> definition, ExElement.Interpreted<?> parent) {
+		public Interpreted(Def definition, ExElement.Interpreted<?> parent) {
 			super(definition, parent);
 		}
 
 		@Override
-		public QuickTextField.Def<T> getDefinition() {
-			return (Def<T>) super.getDefinition();
+		public QuickTextField.Def getDefinition() {
+			return (Def) super.getDefinition();
 		}
 
 		@Override

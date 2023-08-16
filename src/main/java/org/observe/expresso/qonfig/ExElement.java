@@ -780,6 +780,7 @@ public interface ExElement extends Identifiable {
 						theExpressoEnv.getModels().interpret(theExpressoEnv); // Interpret any remaining values
 					for (ExAddOn.Interpreted<?, ?> addOn : theAddOns.getAllValues())
 						addOn.postUpdate();
+					postUpdate();
 				} finally {
 					isInterpreting = false;
 				}
@@ -789,6 +790,9 @@ public interface ExElement extends Identifiable {
 				theExpressoEnv = expressoEnv;
 				for (ExAddOn.Interpreted<?, ?> addOn : theAddOns.getAllValues())
 					addOn.update(theExpressoEnv);
+			}
+
+			protected void postUpdate() throws ExpressoInterpretationException {
 			}
 
 			@Override

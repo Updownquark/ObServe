@@ -22,13 +22,12 @@ import com.google.common.reflect.TypeToken;
 
 public class QuickTextArea<T> extends QuickEditableTextWidget.Abstract<T> {
 	public static final String TEXT_AREA = "text-area";
-	private static final SingleTypeTraceability<QuickTextArea<?>, Interpreted<?>, Def<?>> TRACEABILITY = ElementTypeTraceability
+	private static final SingleTypeTraceability<QuickTextArea<?>, Interpreted<?>, Def> TRACEABILITY = ElementTypeTraceability
 		.getElementTraceability(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, TEXT_AREA, Def.class, Interpreted.class,
 			QuickTextArea.class);
 
-	public static class Def<T> extends QuickEditableTextWidget.Def.Abstract<T, QuickTextArea<T>> {
+	public static class Def extends QuickEditableTextWidget.Def.Abstract<QuickTextArea<?>> {
 		private CompiledExpression theRows;
-		private CompiledExpression isHtml;
 
 		public Def(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
 			super(parent, type);
@@ -44,36 +43,29 @@ public class QuickTextArea<T> extends QuickEditableTextWidget.Abstract<T> {
 			return theRows;
 		}
 
-		@QonfigAttributeGetter("html")
-		public CompiledExpression isHtml() {
-			return isHtml;
-		}
-
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 			super.doUpdate(session.asElement(session.getFocusType().getSuperElement()));
 			theRows = session.getAttributeExpression("rows");
-			isHtml = session.getAttributeExpression("html");
 		}
 
 		@Override
-		public Interpreted<T> interpret(ExElement.Interpreted<?> parent) {
+		public Interpreted<?> interpret(ExElement.Interpreted<?> parent) {
 			return new Interpreted<>(this, parent);
 		}
 	}
 
 	public static class Interpreted<T> extends QuickEditableTextWidget.Interpreted.Abstract<T, QuickTextArea<T>> {
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> theRows;
-		private InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> isHtml;
 
-		public Interpreted(Def<T> definition, ExElement.Interpreted<?> parent) {
+		public Interpreted(Def definition, ExElement.Interpreted<?> parent) {
 			super(definition, parent);
 		}
 
 		@Override
-		public QuickTextArea.Def<T> getDefinition() {
-			return (Def<T>) super.getDefinition();
+		public Def getDefinition() {
+			return (Def) super.getDefinition();
 		}
 
 		@Override
@@ -85,17 +77,11 @@ public class QuickTextArea<T> extends QuickEditableTextWidget.Abstract<T> {
 			return theRows;
 		}
 
-		public InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> isHtml() {
-			return isHtml;
-		}
-
 		@Override
 		protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 			super.doUpdate(env);
 			theRows = getDefinition().getRows() == null ? null
 				: getDefinition().getRows().interpret(ModelTypes.Value.forType(Integer.class), getExpressoEnv());
-			isHtml = getDefinition().isHtml() == null ? null
-				: getDefinition().isHtml().interpret(ModelTypes.Value.forType(boolean.class), getExpressoEnv());
 		}
 
 		@Override
@@ -126,14 +112,11 @@ public class QuickTextArea<T> extends QuickEditableTextWidget.Abstract<T> {
 	}
 
 	private final SettableValue<SettableValue<Integer>> theRows;
-	private final SettableValue<SettableValue<Boolean>> isHtml;
 	private final SettableValue<SettableValue<Integer>> theMousePosition;
 
 	public QuickTextArea(Interpreted<T> interpreted, ExElement parent) {
 		super(interpreted, parent);
 		theRows = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Integer>> parameterized(Integer.class))
-			.build();
-		isHtml = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Boolean>> parameterized(boolean.class))
 			.build();
 		theMousePosition = SettableValue
 			.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Integer>> parameterized(int.class)).build();
@@ -141,10 +124,6 @@ public class QuickTextArea<T> extends QuickEditableTextWidget.Abstract<T> {
 
 	public SettableValue<Integer> getRows() {
 		return SettableValue.flatten(theRows, () -> 0);
-	}
-
-	public SettableValue<Boolean> isHtml() {
-		return SettableValue.flatten(isHtml, () -> false);
 	}
 
 	public SettableValue<Integer> getMousePosition() {
@@ -161,6 +140,5 @@ public class QuickTextArea<T> extends QuickEditableTextWidget.Abstract<T> {
 		getAddOn(ExWithElementModel.class).satisfyElementValue("mousePosition", getMousePosition());
 		QuickTextArea.Interpreted<T> myInterpreted = (QuickTextArea.Interpreted<T>) interpreted;
 		theRows.set(myInterpreted.getRows() == null ? null : myInterpreted.getRows().get(myModels), null);
-		isHtml.set(myInterpreted.isHtml() == null ? null : myInterpreted.isHtml().get(myModels), null);
 	}
 }

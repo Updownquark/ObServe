@@ -9,6 +9,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import org.observe.expresso.ObservableModelSet;
 import org.qommons.Named;
+import org.qommons.SelfDescribed;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigAttributeDef;
 import org.qommons.config.QonfigChildDef;
@@ -25,7 +26,7 @@ import org.qommons.config.QonfigValueType;
  */
 public interface ElementModelValue<M> extends ObservableModelSet.IdentifiableCompiledValue<M>, Named {
 	/** The definition of a dynamic model value */
-	public static class Identity implements Named {
+	public static class Identity implements Named, SelfDescribed {
 		private final QonfigElementOrAddOn theOwner;
 		private final String theName;
 		private final QonfigChildDef theSourceChild;
@@ -104,6 +105,23 @@ public interface ElementModelValue<M> extends ObservableModelSet.IdentifiableCom
 		/** @return The metadata that is the declaration for this dynamic value */
 		public QonfigElement getDeclaration() {
 			return theDeclaration;
+		}
+
+		@Override
+		public String getDescription() {
+			StringBuilder str = new StringBuilder(theOwner.toString()).append('.');
+			if (theName != null)
+				str.append(theName);
+			else
+				str.append('{').append(theNameAttribute.getName()).append('}');
+			String descrip = theDeclaration.getDescription();
+			if (descrip != null) {
+				if (descrip.startsWith("<html>"))
+					str.insert(0, "<html>").append(":<br />").append(descrip);
+				else
+					str.append(": ").append(descrip);
+			}
+			return str.toString();
 		}
 
 		@Override

@@ -23,14 +23,14 @@ import com.google.common.reflect.TypeToken;
 
 public class QuickComboBox<T> extends QuickValueWidget.Abstract<T> {
 	public static final String COMBO_BOX = "combo";
-	private static final SingleTypeTraceability<QuickComboBox<?>, Interpreted<?>, Def<?>> COMBO_TRACEABILITY = ElementTypeTraceability
+	private static final SingleTypeTraceability<QuickComboBox<?>, Interpreted<?>, Def> COMBO_TRACEABILITY = ElementTypeTraceability
 		.getElementTraceability(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, COMBO_BOX, Def.class, Interpreted.class,
 			QuickComboBox.class);
-	private static final SingleTypeTraceability<QuickComboBox<?>, Interpreted<?>, Def<?>> COLLECTION_SELECTOR_TRACEABILITY = ElementTypeTraceability
+	private static final SingleTypeTraceability<QuickComboBox<?>, Interpreted<?>, Def> COLLECTION_SELECTOR_TRACEABILITY = ElementTypeTraceability
 		.getElementTraceability(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, "collection-selector-widget", Def.class,
 			Interpreted.class, QuickComboBox.class);
 
-	public static class Def<T> extends QuickValueWidget.Def.Abstract<T, QuickComboBox<T>> {
+	public static class Def extends QuickValueWidget.Def.Abstract<QuickComboBox<?>> {
 		private CompiledExpression theValues;
 
 		public Def(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
@@ -52,7 +52,7 @@ public class QuickComboBox<T> extends QuickValueWidget.Abstract<T> {
 		}
 
 		@Override
-		public Interpreted<T> interpret(ExElement.Interpreted<?> parent) {
+		public Interpreted<?> interpret(ExElement.Interpreted<?> parent) {
 			return new Interpreted<>(this, parent);
 		}
 	}
@@ -61,13 +61,13 @@ public class QuickComboBox<T> extends QuickValueWidget.Abstract<T> {
 		private InterpretedValueSynth<ObservableCollection<?>, ObservableCollection<T>> theValues;
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<T>> theSelectedValue;
 
-		public Interpreted(Def<T> definition, ExElement.Interpreted<?> parent) {
+		public Interpreted(Def definition, ExElement.Interpreted<?> parent) {
 			super(definition, parent);
 		}
 
 		@Override
-		public Def<T> getDefinition() {
-			return (Def<T>) super.getDefinition();
+		public Def getDefinition() {
+			return (Def) super.getDefinition();
 		}
 
 		public InterpretedValueSynth<ObservableCollection<?>, ObservableCollection<T>> getValues() {

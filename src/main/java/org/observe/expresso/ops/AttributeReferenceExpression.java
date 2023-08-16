@@ -80,7 +80,7 @@ public class AttributeReferenceExpression implements ObservableExpression {
 		} catch (ModelException | TypeConversionException e) {
 			throw new ExpressoEvaluationException(expressionOffset + 1, theAttributeName.length(), e.getMessage(), e);
 		}
-		return ObservableExpression.evEx(value, this);
+		return ObservableExpression.evEx(expressionOffset, getExpressionLength(), value, this);
 	}
 
 	@Override

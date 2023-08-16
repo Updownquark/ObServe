@@ -26,7 +26,7 @@ public class QuickCheckBox extends QuickValueWidget.Abstract<Boolean> {
 		.getElementTraceability(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, CHECK_BOX, Def.class, Interpreted.class,
 			QuickCheckBox.class);
 
-	public static class Def extends QuickValueWidget.Def.Abstract<Boolean, QuickCheckBox> {
+	public static class Def extends QuickValueWidget.Def.Abstract<QuickCheckBox> {
 		private CompiledExpression theText;
 
 		public Def(ExElement.Def<?> parent, QonfigElementOrAddOn type) {

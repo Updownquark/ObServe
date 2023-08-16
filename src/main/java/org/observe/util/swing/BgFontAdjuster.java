@@ -7,6 +7,7 @@ import java.text.AttributedCharacterIterator.Attribute;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
 
 import javax.swing.JComponent;
@@ -15,6 +16,7 @@ import javax.swing.text.StyleConstants;
 
 public class BgFontAdjuster extends FontAdjuster {
 	private Color theBackground;
+	private Supplier<Color> theDefaultBackground;
 
 	public BgFontAdjuster() {
 		super();
@@ -32,6 +34,11 @@ public class BgFontAdjuster extends FontAdjuster {
 		theBackground = bg;
 		if (getFontAttributes() != null)
 			StyleConstants.setBackground(getFontAttributes(), bg);
+		return this;
+	}
+
+	public BgFontAdjuster withDefaultBackground(Supplier<Color> defaultBG) {
+		theDefaultBackground = defaultBG;
 		return this;
 	}
 
@@ -140,7 +147,10 @@ public class BgFontAdjuster extends FontAdjuster {
 			revert.add(() -> {
 				if (!oldNonOpaque)
 					((JComponent) c).setOpaque(false);
-				c.setBackground(oldBG);
+				if (theDefaultBackground != null)
+					c.setBackground(theDefaultBackground.get());
+				else
+					c.setBackground(oldBG);
 			});
 		}
 		return () -> {

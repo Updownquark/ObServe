@@ -121,9 +121,9 @@ public class QuickBaseInterpretation implements QonfigInterpretation {
 		interpreter.createWith(QuickButton.BUTTON, QuickButton.Def.class, ExElement.creator(QuickButton.Def::new));
 		interpreter.createWith(QuickComboBox.COMBO_BOX, QuickComboBox.Def.class, ExElement.creator(QuickComboBox.Def::new));
 		interpreter.createWith(QuickTextArea.TEXT_AREA, QuickTextArea.Def.class, ExElement.creator(QuickTextArea.Def::new));
-		interpreter.createWith(StyledTextArea.STYLED_TEXT_AREA, StyledTextArea.Def.class, ExElement.creator(StyledTextArea.Def::new));
-		interpreter.createWith(StyledTextArea.TEXT_STYLE, StyledTextArea.TextStyleElement.Def.class,
-			ExElement.creator(StyledTextArea.Def.class, StyledTextArea.TextStyleElement.Def::new));
+		interpreter.createWith(DynamicStyledDocument.DYNAMIC_STYLED_DOCUMENT, DynamicStyledDocument.Def.class, ExElement.creator(DynamicStyledDocument.Def::new));
+		interpreter.createWith(StyledDocument.TEXT_STYLE, StyledDocument.TextStyleElement.Def.class,
+			ExElement.creator(StyledDocument.Def.class, StyledDocument.TextStyleElement.Def::new));
 
 		// Containers
 		interpreter.createWith(QuickBox.BOX, QuickBox.Def.class, ExElement.creator(QuickBox.Def::new));

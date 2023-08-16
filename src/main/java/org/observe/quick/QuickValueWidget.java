@@ -40,7 +40,7 @@ public interface QuickValueWidget<T> extends QuickWidget {
 		@Override
 		Interpreted<?, ? extends W> interpret(ExElement.Interpreted<?> parent);
 
-		public abstract class Abstract<T, W extends QuickValueWidget<? extends T>> extends QuickWidget.Def.Abstract<W> implements Def<W> {
+		public abstract class Abstract<W extends QuickValueWidget<?>> extends QuickWidget.Def.Abstract<W> implements Def<W> {
 			private String theValueName;
 			private CompiledExpression theValue;
 			private CompiledExpression theDisabled;
@@ -136,6 +136,15 @@ public interface QuickValueWidget<T> extends QuickWidget {
 				getAddOn(ExWithElementModel.Interpreted.class).satisfyElementValue(getDefinition().getValueName(), theValue);
 				theDisabled = getDefinition().getDisabled() == null ? null
 					: getDefinition().getDisabled().interpret(ModelTypes.Value.STRING, env);
+			}
+
+			@Override
+			protected void postUpdate() throws ExpressoInterpretationException {
+				super.postUpdate();
+				checkValidModel();
+			}
+
+			protected void checkValidModel() throws ExpressoInterpretationException {
 			}
 		}
 	}

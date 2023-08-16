@@ -209,69 +209,69 @@ public class BinaryOperator implements ObservableExpression {
 			else
 				throw new ExpressoEvaluationException(expressionOffset + theLeft.getExpressionLength(), theOperator.length(),
 					this + " cannot be evaluated as an " + ModelTypes.Action.getName() + "<" + type.getType(0) + ">");
-			return ObservableExpression
-				.evEx((InterpretedValueSynth<M, MV>) new InterpretedValueSynth<ObservableAction<?>, ObservableAction<Object>>() {
-					@Override
-					public ModelType<ObservableAction<?>> getModelType() {
-						return ModelTypes.Action;
-					}
+			return ObservableExpression.evEx(expressionOffset, getExpressionLength(),
+				(InterpretedValueSynth<M, MV>) new InterpretedValueSynth<ObservableAction<?>, ObservableAction<Object>>() {
+				@Override
+				public ModelType<ObservableAction<?>> getModelType() {
+					return ModelTypes.Action;
+				}
 
-					@Override
-					public ModelInstanceType<ObservableAction<?>, ObservableAction<Object>> getType() {
-						return ModelTypes.Action.forType(actionType);
-					}
+				@Override
+				public ModelInstanceType<ObservableAction<?>, ObservableAction<Object>> getType() {
+					return ModelTypes.Action.forType(actionType);
+				}
 
-					@Override
-					public ObservableAction<Object> get(ModelSetInstance msi) throws ModelInstantiationException {
-						SettableValue<Object> leftV = left.get(msi);
-						SettableValue<Object> rightV = right.get(msi);
-						return createOpAction(leftV, rightV);
-					}
+				@Override
+				public ObservableAction<Object> get(ModelSetInstance msi) throws ModelInstantiationException {
+					SettableValue<Object> leftV = left.get(msi);
+					SettableValue<Object> rightV = right.get(msi);
+					return createOpAction(leftV, rightV);
+				}
 
-					private ObservableAction<Object> createOpAction(SettableValue<Object> leftV, SettableValue<Object> rightV) {
-						ObservableValue<String> enabled = leftV.isEnabled().transform(String.class, tx -> tx//
-							.combineWith(leftV).combineWith(rightV)//
-							.combine((en, lft, rgt) -> {
-								if (en != null)
-									return en;
-								Object res;
-								try {
-									res = op.apply(lft, rgt);
-								} catch (RuntimeException | Error e) {
-									operatorReporting.error(null, e);
-									return "Error";
-								}
-								String msg = op.canReverse(lft, rgt, res);
-								if (msg != null)
-									return msg;
-								return leftV.isAcceptable(res);
-							}));
-						return new BinaryOperatorAction(resultType, leftV, rightV, op, enabled, reporting, operatorReporting);
-					}
+				private ObservableAction<Object> createOpAction(SettableValue<Object> leftV, SettableValue<Object> rightV) {
+					ObservableValue<String> enabled = leftV.isEnabled().transform(String.class, tx -> tx//
+						.combineWith(leftV).combineWith(rightV)//
+						.combine((en, lft, rgt) -> {
+							if (en != null)
+								return en;
+							Object res;
+							try {
+								res = op.apply(lft, rgt);
+							} catch (RuntimeException | Error e) {
+								operatorReporting.error(null, e);
+								return "Error";
+							}
+							String msg = op.canReverse(lft, rgt, res);
+							if (msg != null)
+								return msg;
+							return leftV.isAcceptable(res);
+						}));
+					return new BinaryOperatorAction(resultType, leftV, rightV, op, enabled, reporting, operatorReporting);
+				}
 
-					@Override
-					public ObservableAction<Object> forModelCopy(ObservableAction<Object> value, ModelSetInstance sourceModels,
-						ModelSetInstance newModels) throws ModelInstantiationException {
-						SettableValue<Object> sourceLeft = left.get(sourceModels);
-						SettableValue<Object> newLeft = left.get(newModels);
-						SettableValue<Object> sourceRight = right.get(sourceModels);
-						SettableValue<Object> newRight = right.get(newModels);
-						if (sourceLeft == newLeft && sourceRight == newRight)
-							return value;
-						else
-							return createOpAction(newLeft, newRight);
-					}
+				@Override
+				public ObservableAction<Object> forModelCopy(ObservableAction<Object> value, ModelSetInstance sourceModels,
+					ModelSetInstance newModels) throws ModelInstantiationException {
+					SettableValue<Object> sourceLeft = left.get(sourceModels);
+					SettableValue<Object> newLeft = left.get(newModels);
+					SettableValue<Object> sourceRight = right.get(sourceModels);
+					SettableValue<Object> newRight = right.get(newModels);
+					if (sourceLeft == newLeft && sourceRight == newRight)
+						return value;
+					else
+						return createOpAction(newLeft, newRight);
+				}
 
-					@Override
-					public List<? extends InterpretedValueSynth<?, ?>> getComponents() {
-						return QommonsUtils.unmodifiableCopy(left, right);
-					}
+				@Override
+				public List<? extends InterpretedValueSynth<?, ?>> getComponents() {
+					return QommonsUtils.unmodifiableCopy(left, right);
+				}
 
-					@Override
-					public String toString() {
-						return BinaryOperator.this.toString();
-					}
-				}, op, left, right);
+				@Override
+				public String toString() {
+					return BinaryOperator.this.toString();
+				}
+			}, op, left, right);
 		} else {
 			if (type.getModelType() != ModelTypes.Value)
 				throw new ExpressoEvaluationException(expressionOffset + theLeft.getExpressionLength(), theOperator.length(),
@@ -301,10 +301,10 @@ public class BinaryOperator implements ObservableExpression {
 							LambdaUtils.constantSupplier(false, "false", null), (SettableValue<Boolean>) (SettableValue<?>) leftV,
 							(SettableValue<Boolean>) (SettableValue<?>) rightV);
 					else if (((BinaryOp<?, ?, ?>) op) == BinaryOperatorSet.AND)
-						return (SettableValue<Object>) (SettableValue<?>) SettableValue
-							.firstValue(TypeTokens.get().BOOLEAN, LambdaUtils.printablePred(b -> !Boolean.TRUE.equals(b), "false", null),
-								LambdaUtils.constantSupplier(true, "true", null), (SettableValue<Boolean>) (SettableValue<?>) leftV,
-								(SettableValue<Boolean>) (SettableValue<?>) rightV);
+						return (SettableValue<Object>) (SettableValue<?>) SettableValue.firstValue(TypeTokens.get().BOOLEAN,
+							LambdaUtils.printablePred(b -> !Boolean.TRUE.equals(b), "false", null),
+							LambdaUtils.constantSupplier(true, "true", null), (SettableValue<Boolean>) (SettableValue<?>) leftV,
+							(SettableValue<Boolean>) (SettableValue<?>) rightV);
 					BinaryOperatorReverseFn reverse = new BinaryOperatorReverseFn(rightV, op);
 					SettableValue<Object> transformedV = leftV.transformReversible(resultType, tx -> tx.combineWith(rightV)//
 						.combine(LambdaUtils.printableBiFn((lft, rgt) -> {
@@ -346,7 +346,8 @@ public class BinaryOperator implements ObservableExpression {
 					return BinaryOperator.this.toString();
 				}
 			};
-			return ObservableExpression.evEx((InterpretedValueSynth<M, MV>) operated, op, left, right);
+			return ObservableExpression.evEx(expressionOffset, getExpressionLength(), (InterpretedValueSynth<M, MV>) operated, op, left,
+				right);
 		}
 	}
 

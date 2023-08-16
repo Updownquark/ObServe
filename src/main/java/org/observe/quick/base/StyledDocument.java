@@ -4,7 +4,6 @@ import java.awt.Color;
 
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
-import org.observe.collect.ObservableCollection;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
@@ -16,18 +15,16 @@ import org.observe.expresso.qonfig.CompiledExpression;
 import org.observe.expresso.qonfig.ElementTypeTraceability;
 import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.observe.expresso.qonfig.ExElement;
-import org.observe.expresso.qonfig.ExWithElementModel;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
-import org.observe.expresso.qonfig.QonfigChildGetter;
 import org.observe.quick.QuickTextElement;
-import org.observe.quick.QuickTextWidget;
 import org.observe.quick.style.QuickCompiledStyle;
 import org.observe.quick.style.QuickInterpretedStyle;
 import org.observe.quick.style.QuickInterpretedStyleCache;
 import org.observe.quick.style.QuickInterpretedStyleCache.Applications;
 import org.observe.quick.style.QuickStyleAttributeDef;
 import org.observe.quick.style.QuickStyledElement;
+import org.observe.quick.style.QuickStyledElement.QuickInstanceStyle;
 import org.observe.quick.style.QuickTypeStyle;
 import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElementOrAddOn;
@@ -35,51 +32,24 @@ import org.qommons.config.QonfigInterpretationException;
 
 import com.google.common.reflect.TypeToken;
 
-public class StyledTextArea<T> extends QuickTextWidget.Abstract<T> {
-	public static final String STYLED_TEXT_AREA = "styled-text-area";
-	private static final SingleTypeTraceability<StyledTextArea<?>, Interpreted<?>, Def<?>> TRACEABILITY = ElementTypeTraceability
-		.getElementTraceability(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, STYLED_TEXT_AREA, Def.class,
-			Interpreted.class, StyledTextArea.class);
+public abstract class StyledDocument<T> extends ExElement.Abstract {
+	public static final String STYLED_DOCUMENT = "styled-document";
+	private static final SingleTypeTraceability<StyledDocument<?>, Interpreted<?, ?>, Def<?>> TRACEABILITY = ElementTypeTraceability
+		.getElementTraceability(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, STYLED_DOCUMENT, Def.class,
+			Interpreted.class, StyledDocument.class);
 	public static final String TEXT_STYLE = "text-style";
 
-	public static class Def<T> extends QuickTextWidget.Def.Abstract<T, StyledTextArea<? extends T>> {
-		private CompiledExpression theChildren;
-		private CompiledExpression thePostText;
-		private CompiledExpression theRows;
+	public static abstract class Def<D extends StyledDocument<?>> extends ExElement.Def.Abstract<D> {
 		private CompiledExpression theSelectionStartValue;
 		private CompiledExpression theSelectionStartOffset;
 		private CompiledExpression theSelectionEndValue;
 		private CompiledExpression theSelectionEndOffset;
-		private TextStyleElement.Def theTextStyle;
 
-		public Def(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
+		protected Def(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
 			super(parent, type);
 		}
 
-		@Override
-		public boolean isTypeEditable() {
-			return false;
-		}
-
-		@QonfigAttributeGetter("children")
-		public CompiledExpression getChildren() {
-			return theChildren;
-		}
-
-		@QonfigAttributeGetter("post-text")
-		public CompiledExpression getPostText() {
-			return thePostText;
-		}
-
-		@QonfigAttributeGetter("rows")
-		public CompiledExpression getRows() {
-			return theRows;
-		}
-
-		@QonfigChildGetter("text-style")
-		public TextStyleElement.Def getTextStyle() {
-			return theTextStyle;
-		}
+		public abstract boolean isTypeEditable();
 
 		@QonfigAttributeGetter("selection-start-value")
 		public CompiledExpression getSelectionStartValue() {
@@ -104,75 +74,33 @@ public class StyledTextArea<T> extends QuickTextWidget.Abstract<T> {
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
-			super.doUpdate(session.asElement(session.getFocusType().getSuperElement()));
+			super.doUpdate(session);
 
-			theChildren = session.getAttributeExpression("children");
-			thePostText = session.getAttributeExpression("post-text");
-			theRows = session.getAttributeExpression("rows");
 			theSelectionStartValue = session.getAttributeExpression("selection-start-value");
 			theSelectionStartOffset = session.getAttributeExpression("selection-start-offset");
 			theSelectionEndValue = session.getAttributeExpression("selection-end-value");
 			theSelectionEndOffset = session.getAttributeExpression("selection-end-offset");
-			theTextStyle = ExElement.useOrReplace(TextStyleElement.Def.class, theTextStyle, session, "text-style");
-			getAddOn(ExWithElementModel.Def.class).satisfyElementValueType("node", ModelTypes.Value,
-				(interp, env) -> ModelTypes.Value.forType(((Interpreted<?>) interp).getValueType()));
 		}
 
-		@Override
-		public Interpreted<? extends T> interpret(ExElement.Interpreted<?> parent) {
-			return new Interpreted<>(this, parent);
-		}
+		public abstract Interpreted<?, ? extends D> interpret(ExElement.Interpreted<?> parent);
 	}
 
-	public static class Interpreted<T> extends QuickTextWidget.Interpreted.Abstract<T, StyledTextArea<T>> {
-		private InterpretedValueSynth<ObservableCollection<?>, ObservableCollection<T>> theChildren;
-		private InterpretedValueSynth<SettableValue<?>, SettableValue<String>> thePostText;
-		private InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> theRows;
+	public static abstract class Interpreted<T, D extends StyledDocument<T>> extends ExElement.Interpreted.Abstract<D> {
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<T>> theSelectionStartValue;
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> theSelectionStartOffset;
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<T>> theSelectionEndValue;
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> theSelectionEndOffset;
-		private TextStyleElement.Interpreted theTextStyle;
 
-		public Interpreted(Def<? super T> definition, ExElement.Interpreted<?> parent) {
+		protected Interpreted(Def<? super D> definition, ExElement.Interpreted<?> parent) {
 			super(definition, parent);
-			/* TODO
-			 * It's really unfortunate that we have to do this, but in order to generate an independent, listenable collection for each node,
-			 * we have to keep the model instance around to create copies.
-			 *
-			 * In other widgets I've created so far, the values needed from elements in a collection could be transient, where the value is
-			 * inspected and then the observable value could be repurposed for the next child.  But we need to keep the child collection
-			 * around for each node independently so we can be notified of changes deep in the hierarchy.
-			 *
-			 * This is a problem because the ModelSetInstance API currently keeps and exposes its source models.
-			 * This means that the structures used to create the models, including expressions, text, Qonfig elements, etc.
-			 * must be kept around in memory.  Up to now I'd been able to get away with releasing these after the widget instances were built.
-			 *
-			 * We also need a reference to the InterpretedValueSynth to create the collection from model copies.  That structure is typically
-			 * composed of references to other model values in the form of InterpretedModelComponentNodes, which have references to the models.
-			 *
-			 * I think the solution to this is to divorce ModelSetInstance and InterpretedValueSynth from the source models.
-			 * Once that's done, I think we can delete this comment and accept the way this is done.
-			 */
-			persistModelInstances(true);
 		}
 
 		@Override
-		public Def<? super T> getDefinition() {
-			return (Def<? super T>) super.getDefinition();
+		public Def<? super D> getDefinition() {
+			return (Def<? super D>) super.getDefinition();
 		}
 
-		public InterpretedValueSynth<ObservableCollection<?>, ObservableCollection<T>> getChildren() {
-			return theChildren;
-		}
-
-		public InterpretedValueSynth<SettableValue<?>, SettableValue<String>> getPostText() {
-			return thePostText;
-		}
-
-		public InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> getRows() {
-			return theRows;
-		}
+		public abstract TypeToken<T> getValueType() throws ExpressoInterpretationException;
 
 		public InterpretedValueSynth<SettableValue<?>, SettableValue<T>> getSelectionStartValue() {
 			return theSelectionStartValue;
@@ -190,24 +118,14 @@ public class StyledTextArea<T> extends QuickTextWidget.Abstract<T> {
 			return theSelectionEndOffset;
 		}
 
-		public TextStyleElement.Interpreted getTextStyle() {
-			return theTextStyle;
-		}
-
-		@Override
-		public TypeToken<StyledTextArea<T>> getWidgetType() throws ExpressoInterpretationException {
-			return TypeTokens.get().keyFor(StyledTextArea.class).<StyledTextArea<T>> parameterized(getValueType());
+		public void updateDocument(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+			update(env);
 		}
 
 		@Override
 		protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 			super.doUpdate(env);
 
-			theChildren = getDefinition().getChildren().interpret(ModelTypes.Collection.forType(getValueType()), getExpressoEnv());
-			thePostText = getDefinition().getPostText() == null ? null
-				: getDefinition().getPostText().interpret(ModelTypes.Value.STRING, getExpressoEnv());
-			theRows = getDefinition().getRows() == null ? null
-				: getDefinition().getRows().interpret(ModelTypes.Value.INT, getExpressoEnv());
 			theSelectionStartValue = getDefinition().getSelectionStartValue() == null ? null
 				: getDefinition().getSelectionStartValue().interpret(ModelTypes.Value.forType(getValueType()), getExpressoEnv());
 			theSelectionStartOffset = getDefinition().getSelectionStartOffset() == null ? null
@@ -216,51 +134,19 @@ public class StyledTextArea<T> extends QuickTextWidget.Abstract<T> {
 				: getDefinition().getSelectionEndValue().interpret(ModelTypes.Value.forType(getValueType()), getExpressoEnv());
 			theSelectionEndOffset = getDefinition().getSelectionEndOffset() == null ? null
 				: getDefinition().getSelectionEndOffset().interpret(ModelTypes.Value.forType(int.class), getExpressoEnv());
-			if (theTextStyle == null || theTextStyle.getDefinition() != getDefinition().getTextStyle())
-				theTextStyle = getDefinition().getTextStyle().interpret(this);
-			theTextStyle.updateElement(getExpressoEnv());
 		}
 
-		@Override
-		public StyledTextArea<T> create(ExElement parent) {
-			return new StyledTextArea<>(this, parent);
-		}
+		public abstract StyledDocument<T> create(ExElement parent);
 	}
 
-	public interface StyledTextAreaContext<T> {
-		SettableValue<T> getNodeValue();
-
-		public class Default<T> implements StyledTextAreaContext<T> {
-			private final SettableValue<T> theNodeValue;
-
-			public Default(SettableValue<T> nodeValue) {
-				theNodeValue = nodeValue;
-			}
-
-			public Default(TypeToken<T> type) {
-				this(SettableValue.build(type).build());
-			}
-
-			@Override
-			public SettableValue<T> getNodeValue() {
-				return theNodeValue;
-			}
-		}
-	}
-
-	private SettableValue<Integer> theRows;
-	private TextStyleElement theTextStyle;
-	private final SettableValue<SettableValue<T>> theNodeValue;
 	private final SettableValue<SettableValue<T>> theSelectionStartValue;
 	private final SettableValue<SettableValue<Integer>> theSelectionStartOffset;
 	private final SettableValue<SettableValue<T>> theSelectionEndValue;
 	private final SettableValue<SettableValue<Integer>> theSelectionEndOffset;
 
 	private ModelInstanceType.SingleTyped<SettableValue<?>, T, SettableValue<T>> theValueType;
-	private InterpretedValueSynth<ObservableCollection<?>, ObservableCollection<T>> theChildrenSynth;
-	private InterpretedValueSynth<SettableValue<?>, SettableValue<String>> thePostTextSynth;
 
-	public StyledTextArea(Interpreted<T> interpreted, ExElement parent) {
+	protected StyledDocument(Interpreted<T, ?> interpreted, ExElement parent) {
 		super(interpreted, parent);
 		TypeToken<T> valueType;
 		try {
@@ -268,33 +154,17 @@ public class StyledTextArea<T> extends QuickTextWidget.Abstract<T> {
 		} catch (ExpressoInterpretationException e) {
 			throw new IllegalStateException("Not interpreted?", e);
 		}
-		theNodeValue = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<T>> parameterized(valueType))
-			.build();
-		theSelectionStartValue = SettableValue.build(theNodeValue.getType()).build();
+		TypeToken<SettableValue<T>> containerType = TypeTokens.get().keyFor(SettableValue.class)
+			.<SettableValue<T>> parameterized(valueType);
+		theSelectionStartValue = SettableValue.build(containerType).build();
 		theSelectionStartOffset = SettableValue
 			.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Integer>> parameterized(int.class)).build();
-		theSelectionEndValue = SettableValue.build(theSelectionStartValue.getType()).build();
+		theSelectionEndValue = SettableValue.build(containerType).build();
 		theSelectionEndOffset = SettableValue.build(theSelectionStartOffset.getType()).build();
 	}
 
 	public ModelInstanceType.SingleTyped<SettableValue<?>, T, SettableValue<T>> getValueType() {
 		return theValueType;
-	}
-
-	public boolean hasPostText() {
-		return thePostTextSynth != null;
-	}
-
-	public SettableValue<Integer> getRows() {
-		return theRows;
-	}
-
-	public TextStyleElement getTextStyle() {
-		return theTextStyle;
-	}
-
-	public SettableValue<T> getNodeValue() {
-		return SettableValue.flatten(theNodeValue);
 	}
 
 	public SettableValue<T> getSelectionStartValue() {
@@ -313,43 +183,10 @@ public class StyledTextArea<T> extends QuickTextWidget.Abstract<T> {
 		return SettableValue.flatten(theSelectionEndOffset, () -> 0);
 	}
 
-	public ObservableCollection<? extends T> getChildren(StyledTextAreaContext<T> ctx) throws ModelInstantiationException {
-		ModelSetInstance modelCopy = getUpdatingModels().copy().build();
-		getAddOn(ExWithElementModel.class).satisfyElementValue("node", ctx.getNodeValue(), modelCopy,
-			ExWithElementModel.ActionIfSatisfied.Replace);
-		// After synthesizing and returning the children for the node, we can discard the model copy
-		return theChildrenSynth.get(modelCopy);
-	}
-
-	public TextStyle getStyle(StyledTextAreaContext<T> ctx) throws ModelInstantiationException {
-		ModelSetInstance widgetModelCopy = getUpdatingModels().copy().build();
-		getAddOn(ExWithElementModel.class).satisfyElementValue("node", ctx.getNodeValue(), widgetModelCopy,
-			ExWithElementModel.ActionIfSatisfied.Replace);
-		ModelSetInstance styleElementModelCopy = getTextStyle().getUpdatingModels().copy()//
-			.withAll(widgetModelCopy)//
-			.build();
-
-		return theTextStyle.getStyle().copy(styleElementModelCopy);
-	}
-
-	public SettableValue<String> getPostText(StyledTextAreaContext<T> ctx) throws ModelInstantiationException {
-		ModelSetInstance modelCopy = getUpdatingModels().copy().build();
-		getAddOn(ExWithElementModel.class).satisfyElementValue("node", ctx.getNodeValue(), modelCopy,
-			ExWithElementModel.ActionIfSatisfied.Replace);
-		// After synthesizing and returning the post text, we can discard the model copy
-		return thePostTextSynth.get(modelCopy);
-	}
-
-	public void setTextAreaContext(StyledTextAreaContext<T> ctx) {
-		theNodeValue.set(ctx.getNodeValue(), null);
-	}
-
 	@Override
 	protected void updateModel(ExElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
-		Interpreted<T> myInterpreted = (Interpreted<T>) interpreted;
-		getAddOn(ExWithElementModel.class).satisfyElementValue("node", getNodeValue());
+		Interpreted<T, ?> myInterpreted = (Interpreted<T, ?>) interpreted;
 		super.updateModel(interpreted, myModels);
-		theRows = myInterpreted.getRows() == null ? null : myInterpreted.getRows().get(myModels);
 		theSelectionStartValue
 		.set(myInterpreted.getSelectionStartValue() == null ? null : myInterpreted.getSelectionStartValue().get(myModels), null);
 		theSelectionStartOffset
@@ -358,9 +195,6 @@ public class StyledTextArea<T> extends QuickTextWidget.Abstract<T> {
 			null);
 		theSelectionEndOffset
 		.set(myInterpreted.getSelectionEndOffset() == null ? null : myInterpreted.getSelectionEndOffset().get(myModels), null);
-		if (theTextStyle == null || theTextStyle.getIdentity() != myInterpreted.getTextStyle().getDefinition().getIdentity())
-			theTextStyle = myInterpreted.getTextStyle().create(this);
-		theTextStyle.update(myInterpreted.getTextStyle(), myModels);
 
 		TypeToken<T> valueType;
 		try {
@@ -369,8 +203,6 @@ public class StyledTextArea<T> extends QuickTextWidget.Abstract<T> {
 			throw new ModelInstantiationException("Not evaluated yet??!!", e.getPosition(), e.getErrorLength(), e);
 		}
 		theValueType = ModelTypes.Value.forType(valueType);
-		theChildrenSynth = myInterpreted.getChildren();
-		thePostTextSynth = myInterpreted.getPostText();
 	}
 
 	public static class TextStyleElement extends QuickStyledElement.Abstract implements QuickTextElement {
@@ -380,13 +212,8 @@ public class StyledTextArea<T> extends QuickTextWidget.Abstract<T> {
 
 		public static class Def extends QuickStyledElement.Def.Abstract<TextStyleElement>
 		implements QuickTextElement.Def<TextStyleElement> {
-			public Def(StyledTextArea.Def<?> parent, QonfigElementOrAddOn type) {
+			public Def(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
 				super(parent, type);
-			}
-
-			@Override
-			public StyledTextArea.Def<?> getParentElement() {
-				return (StyledTextArea.Def<?>) super.getParentElement();
 			}
 
 			@Override
@@ -405,14 +232,14 @@ public class StyledTextArea<T> extends QuickTextWidget.Abstract<T> {
 				super.doUpdate(session.asElement("styled")); // No super element
 			}
 
-			public Interpreted interpret(StyledTextArea.Interpreted<?> parent) {
+			public Interpreted interpret(ExElement.Interpreted<?> parent) {
 				return new Interpreted(this, parent);
 			}
 		}
 
 		public static class Interpreted extends QuickStyledElement.Interpreted.Abstract<TextStyleElement>
 		implements QuickTextElement.Interpreted<TextStyleElement> {
-			public Interpreted(TextStyleElement.Def definition, StyledTextArea.Interpreted<?> parent) {
+			public Interpreted(TextStyleElement.Def definition, ExElement.Interpreted<?> parent) {
 				super(definition, parent);
 			}
 
@@ -422,27 +249,22 @@ public class StyledTextArea<T> extends QuickTextWidget.Abstract<T> {
 			}
 
 			@Override
-			public StyledTextArea.Interpreted<?> getParentElement() {
-				return (StyledTextArea.Interpreted<?>) super.getParentElement();
-			}
-
-			@Override
 			public TextStyle.Interpreted getStyle() {
 				return (TextStyle.Interpreted) super.getStyle();
 			}
 
-			public TextStyleElement create(StyledTextArea<?> parent) {
+			public TextStyleElement create(StyledDocument<?> parent) {
 				return new TextStyleElement(this, parent);
 			}
 		}
 
-		public TextStyleElement(Interpreted interpreted, StyledTextArea<?> parent) {
+		public TextStyleElement(Interpreted interpreted, StyledDocument<?> parent) {
 			super(interpreted, parent);
 		}
 
 		@Override
-		public StyledTextArea<?> getParentElement() {
-			return (StyledTextArea<?>) super.getParentElement();
+		public StyledDocument<?> getParentElement() {
+			return (StyledDocument<?>) super.getParentElement();
 		}
 
 		@Override

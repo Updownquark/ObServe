@@ -15,7 +15,6 @@ import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceabilit
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
-import org.observe.quick.QuickTextWidget;
 import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
@@ -23,13 +22,13 @@ import org.qommons.io.LocatedPositionedContent;
 
 import com.google.common.reflect.TypeToken;
 
-public class QuickLabel<T> extends QuickTextWidget.Abstract<T> {
+public class QuickLabel<T> extends BaseTextWidget.Abstract<T> {
 	public static final String LABEL = "label";
-	private static final SingleTypeTraceability<QuickLabel<?>, Interpreted<?, ?>, Def<?, ?>> TRACEABILITY = ElementTypeTraceability
+	private static final SingleTypeTraceability<QuickLabel<?>, Interpreted<?, ?>, Def<?>> TRACEABILITY = ElementTypeTraceability
 		.getElementTraceability(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, LABEL, Def.class, Interpreted.class,
 			QuickLabel.class);
 
-	public static class Def<T, W extends QuickLabel<T>> extends QuickTextWidget.Def.Abstract<T, W> {
+	public static class Def<W extends QuickLabel<?>> extends BaseTextWidget.Def.Abstract<W> {
 		private String theStaticText;
 		private CompiledExpression theTextExpression;
 		private CompiledExpression theIcon;
@@ -88,21 +87,22 @@ public class QuickLabel<T> extends QuickTextWidget.Abstract<T> {
 		}
 
 		@Override
-		public Interpreted<T, ? extends W> interpret(ExElement.Interpreted<?> parent) {
-			return new Interpreted<>(this, parent);
+		public Interpreted<?, ? extends W> interpret(ExElement.Interpreted<?> parent) {
+			// Stupid generics
+			return (Interpreted<?, ? extends W>) new Interpreted<>((Def<QuickLabel<Object>>) this, parent);
 		}
 	}
 
-	public static class Interpreted<T, W extends QuickLabel<T>> extends QuickTextWidget.Interpreted.Abstract<T, W> {
+	public static class Interpreted<T, W extends QuickLabel<T>> extends BaseTextWidget.Interpreted.Abstract<T, W> {
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<Icon>> theIcon;
 
-		public Interpreted(QuickLabel.Def<T, ? super W> definition, ExElement.Interpreted<?> parent) {
+		public Interpreted(QuickLabel.Def<? super W> definition, ExElement.Interpreted<?> parent) {
 			super(definition, parent);
 		}
 
 		@Override
-		public Def<T, ? super W> getDefinition() {
-			return (Def<T, ? super W>) super.getDefinition();
+		public Def<? super W> getDefinition() {
+			return (Def<? super W>) super.getDefinition();
 		}
 
 		public InterpretedValueSynth<SettableValue<?>, SettableValue<Icon>> getIcon() {

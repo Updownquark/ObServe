@@ -8,9 +8,9 @@ import java.util.List;
 import java.util.function.Function;
 
 import org.observe.SettableValue;
-import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ExpressoEvaluationException;
 import org.observe.expresso.ExpressoInterpretationException;
+import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
@@ -130,8 +130,8 @@ public class MethodInvocation extends Invocation {
 	}
 
 	@Override
-	protected <M, MV extends M> InvokableResult<?, M, MV> evaluateInternal2(ModelInstanceType<M, MV> type, InterpretedExpressoEnv env, ArgOption args,
-		int expressionOffset) throws ExpressoEvaluationException, ExpressoInterpretationException {
+	protected <M, MV extends M> InvokableResult<?, M, MV> evaluateInternal2(ModelInstanceType<M, MV> type, InterpretedExpressoEnv env,
+		ArgOption args, int expressionOffset) throws ExpressoEvaluationException, ExpressoInterpretationException {
 		if (theContext != null) {
 			if (theContext instanceof NameExpression) {
 				Class<?> clazz = env.getClassView().getType(((NameExpression) theContext).getName());
@@ -143,8 +143,9 @@ public class MethodInvocation extends Invocation {
 						EvaluatedExpression<SettableValue<?>, SettableValue<?>>[] realArgs = new EvaluatedExpression[getArguments().size()];
 						for (int a = 0; a < realArgs.length; a++)
 							realArgs[a] = args.args[a].get(0);
-						EvaluatedExpression<SettableValue<?>, ? extends SettableValue<?>> ctx = ObservableExpression
-							.evEx(InterpretedValueSynth.literal(TypeTokens.get().VOID, null, theContext.toString()), clazz);
+						EvaluatedExpression<SettableValue<?>, ? extends SettableValue<?>> ctx = ObservableExpression.evEx(expressionOffset,
+							getExpressionLength(), InterpretedValueSynth.literal(TypeTokens.get().VOID, null, theContext.toString()),
+							clazz);
 						return new InvokableResult<>(result, ctx, true, Arrays.asList(realArgs), Invocation.ExecutableImpl.METHOD);
 					}
 					throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(),

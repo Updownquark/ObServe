@@ -172,7 +172,7 @@ public class UnaryOperator implements ObservableExpression {
 		}
 		boolean prefix = isPrefix;
 		TypeToken<A> fActionType = actionType;
-		return ObservableExpression.evEx(op.map(ModelTypes.Action.forType(actionType), opV -> {
+		return ObservableExpression.evEx(expressionOffset, getExpressionLength(), op.map(ModelTypes.Action.forType(actionType), opV -> {
 			ObservableAction<T> assignmentAction = opV.assignmentTo(opV.map(operator::apply));
 			return new ObservableAction<A>() {
 				@Override
@@ -230,33 +230,35 @@ public class UnaryOperator implements ObservableExpression {
 			type = cast.getConvertedType();
 		}
 		TypeToken<T> fType = type;
-		return ObservableExpression.evEx(op.map(ModelTypes.Value.forType(type), opV -> opV.transformReversible(fType, tx -> tx//
-			.map(LambdaUtils.printableFn(v -> {
-				try {
-					T result = operator.apply(v);
-					if (cast != null)
-						result = cast.apply(result);
-					return result;
-				} catch (RuntimeException | Error e) {
-					operatorReporting.error(null, e);
-					return null;
-				}
-			}, operator::toString, operator))//
-			.replaceSource(v -> {
-				try {
-					if (cast != null)
-						v = cast.reverse(v);
-					return operator.reverse(v);
-				} catch (RuntimeException | Error e) {
-					operatorReporting.error(null, e);
-					return null;
-				}
-			}, rev -> {
-				if (cast == null)
-					return rev;
-				else
-					return rev.rejectWith(cast::isReversible);
-			}))), operator, op);
+		return ObservableExpression.evEx(expressionOffset, getExpressionLength(),
+			op.map(ModelTypes.Value.forType(type), opV -> opV.transformReversible(fType, tx -> tx//
+				.map(LambdaUtils.printableFn(v -> {
+					try {
+						T result = operator.apply(v);
+						if (cast != null)
+							result = cast.apply(result);
+						return result;
+					} catch (RuntimeException | Error e) {
+						operatorReporting.error(null, e);
+						return null;
+					}
+				}, operator::toString, operator))//
+				.replaceSource(v -> {
+					try {
+						if (cast != null)
+							v = cast.reverse(v);
+						return operator.reverse(v);
+					} catch (RuntimeException | Error e) {
+						operatorReporting.error(null, e);
+						return null;
+					}
+				}, rev -> {
+					if (cast == null)
+						return rev;
+					else
+						return rev.rejectWith(cast::isReversible);
+				}))),
+			operator, op);
 	}
 
 	@Override

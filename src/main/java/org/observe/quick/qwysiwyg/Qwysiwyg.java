@@ -175,18 +175,24 @@ public class Qwysiwyg {
 		}
 	}
 
-	public static class StyleDebugValue<T> {
+	public class StyleDebugValue<T> {
 		private final QuickInterpretedStyle theSource;
 		private final QuickStyleValue theStyleValue;
+		private final EvaluatedExpression<SettableValue<?>, SettableValue<Boolean>> theConditionX;
+		private final EvaluatedExpression<SettableValue<?>, SettableValue<T>> theValueX;
 		private final ObservableValue<QuickInterpretedStyle.ConditionalValue<T>> theConditionalValue;
 		private boolean isPassing;
 		private Object theValue;
 
-		StyleDebugValue(QuickInterpretedStyle source, QuickStyleValue styleValue,
-			ObservableValue<ConditionalValue<T>> conditionalValue) {
+		StyleDebugValue(QuickInterpretedStyle source, QuickStyleValue styleValue, QuickStyleAttribute<T> attr,
+			ObservableValue<ConditionalValue<T>> conditionalValue, InterpretedExpressoEnv env)
+				throws ExpressoInterpretationException, ExpressoEvaluationException, TypeConversionException {
 			theSource = source;
 			theStyleValue = styleValue;
 			theConditionalValue = conditionalValue;
+			theConditionX = styleValue.getApplication().getCondition() == null ? null
+				: styleValue.getApplication().getCondition().evaluate(ModelTypes.Value.BOOLEAN, env, 0);
+			theValueX = styleValue.getValueExpression().interpret(ModelTypes.Value.forType(attr.getType()), env);
 		}
 
 		boolean update() {
@@ -209,8 +215,14 @@ public class Qwysiwyg {
 			return update;
 		}
 
-		public String getStyleSheet() {
-			return theStyleValue.getStyleSheet().getElement().getDocument().getLocation();
+		public String getSourceFile() {
+			QonfigElement element = theSource.getDefinition().getElement();
+			return element.getPositionInFile().getFileName();
+		}
+
+		public String getFullSourceFile() {
+			QonfigElement element = theSource.getDefinition().getElement();
+			return element.getPositionInFile().getFileLocation();
 		}
 
 		public String getSourceElement() {
@@ -218,8 +230,83 @@ public class Qwysiwyg {
 			return element.getType().getName() + " " + element.getPositionInFile().printPosition();
 		}
 
+		public boolean isSourceElementLink() {
+			LocatedFilePosition pos = theSource.getDefinition().getElement().getPositionInFile();
+			if (pos == null)
+				return false;
+			String file = pos.getFileLocation();
+			return theDocumentURL.endsWith(file);
+		}
+
+		public void followSourceElementLink() {
+			LocatedFilePosition pos = theSource.getDefinition().getElement().getPositionInFile();
+			if (pos == null)
+				return;
+			String file = pos.getFileLocation();
+			if (!theDocumentURL.endsWith(file))
+				return;
+			DocumentComponent target = getSourceComponent(theRoot, pos.getPosition());
+			if (target != null && target.parent != null)
+				goTo(target.parent);
+		}
+
 		public String getCondition() {
-			return theStyleValue.getApplication().getCondition() == null ? "" : theStyleValue.getApplication().getCondition().toString();
+			ObservableExpression ex = theStyleValue.getApplication().getCondition();
+			if (ex == null)
+				return "";
+			// return ex.toString();
+			StringBuilder str = new StringBuilder("<html>");
+			renderHtmlExpression(ex, ex.toString(), 0, str);
+			return str.toString();
+		}
+
+		private void renderHtmlExpression(ObservableExpression ex, String str, int offset, StringBuilder sb) {
+			Color color = null;
+			int c = 0;
+			int offset2 = 0;
+			for (ObservableExpression comp : ex.getComponents()) {
+				int compOffset = ex.getComponentOffset(c);
+				if (compOffset > offset2) {
+					if (color == null) {
+						color = getExpressionColor(ex);
+						if (color != null)
+							sb.append("<font color=\"" + Colors.toHTML(color) + "\">");
+					}
+					sb.append(str, offset + offset2, offset + compOffset);
+					offset2 = compOffset;
+				}
+				renderHtmlExpression(comp, str, offset + compOffset, sb);
+				offset2 = compOffset + comp.getExpressionLength();
+				c++;
+			}
+			if (ex.getExpressionLength() > offset2) {
+				if (color == null) {
+					color = getExpressionColor(ex);
+					if (color != null)
+						sb.append("<font color=\"" + Colors.toHTML(color) + "\">");
+				}
+				sb.append(str, offset + offset2, offset + ex.getExpressionLength());
+			}
+			if (color != null)
+				sb.append("</font>");
+		}
+
+		public String getConditionTooltip(int offset) {
+			if (theConditionX == null)
+				return null;
+			System.out.println("Offset=" + offset);
+			EvaluatedExpression<?, ?> hoveredX = getHoveredDivision(theConditionX, offset);
+			return renderInterpretedDescriptor(hoveredX.getDescriptor());
+		}
+
+		private EvaluatedExpression<?, ?> getHoveredDivision(EvaluatedExpression<?, ?> ex, int expressionOffset) {
+			for (EvaluatedExpression<?, ?> div : ex.getComponents()) {
+				if (div.getExpressionOffset() > expressionOffset)
+					return ex;
+				if (expressionOffset < div.getExpressionOffset() + div.getExpressionLength())
+					return getHoveredDivision(div, expressionOffset);
+			}
+			return ex;
 		}
 
 		public String getValueExpression() {
@@ -380,9 +467,15 @@ public class Qwysiwyg {
 			return;
 		}
 		List<BiTuple<QuickInterpretedStyle, InterpretedStyleValue<T>>> interpretedValues = attr.getAllValues();
-		for (int v = 0; v < values.size(); v++)
-			styleDebugValues.add(new StyleDebugValue<>(interpretedValues.get(v).getValue1(),
-				interpretedValues.get(v).getValue2().getStyleValue(), values.get(v)));
+		for (int v = 0; v < values.size(); v++) {
+			try {
+				styleDebugValues.add(new StyleDebugValue<>(interpretedValues.get(v).getValue1(),
+					interpretedValues.get(v).getValue2().getStyleValue(), attr.getAttribute(), values.get(v),
+					theStyledNode.interpreted.getExpressoEnv().withErrorReporting(new ErrorReporting.Default(null))));
+			} catch (Exception e) {
+				e.printStackTrace();
+			}
+		}
 
 		updateDebugStyle();
 		Observable<?> changes = Observable
@@ -609,7 +702,8 @@ public class Qwysiwyg {
 			theInternalTooltip.set(null, null);
 			return;
 		}
-		theInternalTooltip.set(hoveredComp.getTooltip(), null);
+		ObservableValue<String> tt = hoveredComp.getTooltip();
+		theInternalTooltip.set(tt, null);
 		if (isControlPressed)
 			hoveredComp.update();
 		hovered.set(hoveredComp, null);
@@ -731,6 +825,19 @@ public class Qwysiwyg {
 	private void logToConsole(ErrorReporting.Issue issue) {
 		// TODO
 		System.err.println(issue.toString());
+	}
+
+	void goTo(DocumentComponent target) {
+		try (Causable.CausableInUse cause = Causable.cause(); //
+			Transaction vt = selectedNode.lock(true, cause);
+			Transaction vt2 = selectedEndNode.lock(true, cause); //
+			Transaction sit = selectedStartIndex.lock(true, cause);
+			Transaction eit = selectedEndIndex.lock(true, cause)) {
+			selectedNode.set(target, cause);
+			selectedEndNode.set(target, cause);
+			selectedStartIndex.set(0, cause);
+			selectedEndIndex.set(target.getTextLength(), cause);
+		}
 	}
 
 	private void renderXml(URL quickFile) {
@@ -1462,16 +1569,7 @@ public class Qwysiwyg {
 		public void followLink() {
 			System.out.println("Go to " + target);
 			DocumentComponent targetComponent = getSourceComponent(theRoot, target.getPosition());
-			try (Causable.CausableInUse cause = Causable.cause(); //
-				Transaction vt = selectedNode.lock(true, cause);
-				Transaction vt2 = selectedEndNode.lock(true, cause); //
-				Transaction sit = selectedStartIndex.lock(true, cause);
-				Transaction eit = selectedEndIndex.lock(true, cause)) {
-				selectedNode.set(targetComponent, cause);
-				selectedEndNode.set(targetComponent, cause);
-				selectedStartIndex.set(0, cause);
-				selectedEndIndex.set(targetComponent.getTextLength(), cause);
-			}
+			goTo(targetComponent);
 		}
 
 		public String print() {

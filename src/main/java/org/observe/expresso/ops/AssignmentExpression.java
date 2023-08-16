@@ -116,52 +116,52 @@ public class AssignmentExpression implements ObservableExpression {
 			throw new ExpressoEvaluationException(valueOffset, theValue.getExpressionLength(), e.getMessage(), e);
 		}
 		ErrorReporting reporting = env.reporting();
-		return ObservableExpression
-			.evEx((InterpretedValueSynth<M, MV>) new InterpretedValueSynth<ObservableAction<?>, ObservableAction<?>>() {
-				@Override
-				public ModelType<ObservableAction<?>> getModelType() {
-					return ModelTypes.Action;
-				}
+		return ObservableExpression.evEx(expressionOffset, getExpressionLength(),
+			(InterpretedValueSynth<M, MV>) new InterpretedValueSynth<ObservableAction<?>, ObservableAction<?>>() {
+			@Override
+			public ModelType<ObservableAction<?>> getModelType() {
+				return ModelTypes.Action;
+			}
 
-				@Override
-				public ModelInstanceType<ObservableAction<?>, ObservableAction<?>> getType() {
-					if (isVoid)
-						return (ModelInstanceType<ObservableAction<?>, ObservableAction<?>>) type;
-					else
-						return (ModelInstanceType<ObservableAction<?>, ObservableAction<?>>) (ModelInstanceType<?, ?>) ModelTypes.Action
-							.forType(target.getType().getType(0));
-				}
+			@Override
+			public ModelInstanceType<ObservableAction<?>, ObservableAction<?>> getType() {
+				if (isVoid)
+					return (ModelInstanceType<ObservableAction<?>, ObservableAction<?>>) type;
+				else
+					return (ModelInstanceType<ObservableAction<?>, ObservableAction<?>>) (ModelInstanceType<?, ?>) ModelTypes.Action
+						.forType(target.getType().getType(0));
+			}
 
-				@Override
-				public ObservableAction<?> get(ModelSetInstance models) throws ModelInstantiationException {
-					SettableValue<Object> ctxValue = target.get(models);
-					SettableValue<Object> valueValue = value.get(models);
-					return ctxValue.assignmentTo(valueValue, err -> reporting.error(null, err));
-				}
+			@Override
+			public ObservableAction<?> get(ModelSetInstance models) throws ModelInstantiationException {
+				SettableValue<Object> ctxValue = target.get(models);
+				SettableValue<Object> valueValue = value.get(models);
+				return ctxValue.assignmentTo(valueValue, err -> reporting.error(null, err));
+			}
 
-				@Override
-				public ObservableAction<?> forModelCopy(ObservableAction<?> value2, ModelSetInstance sourceModels,
-					ModelSetInstance newModels) throws ModelInstantiationException {
-					SettableValue<Object> sourceCtx = target.get(sourceModels);
-					SettableValue<Object> newCtx = target.get(newModels);
-					SettableValue<Object> sourceValue = value.get(sourceModels);
-					SettableValue<Object> newValue = value.get(newModels);
-					if (sourceCtx == newCtx && sourceValue == newValue)
-						return value2;
-					else
-						return newCtx.assignmentTo(newValue);
-				}
+			@Override
+			public ObservableAction<?> forModelCopy(ObservableAction<?> value2, ModelSetInstance sourceModels,
+				ModelSetInstance newModels) throws ModelInstantiationException {
+				SettableValue<Object> sourceCtx = target.get(sourceModels);
+				SettableValue<Object> newCtx = target.get(newModels);
+				SettableValue<Object> sourceValue = value.get(sourceModels);
+				SettableValue<Object> newValue = value.get(newModels);
+				if (sourceCtx == newCtx && sourceValue == newValue)
+					return value2;
+				else
+					return newCtx.assignmentTo(newValue);
+			}
 
-				@Override
-				public List<? extends InterpretedValueSynth<?, ?>> getComponents() {
-					return QommonsUtils.unmodifiableCopy(target, value);
-				}
+			@Override
+			public List<? extends InterpretedValueSynth<?, ?>> getComponents() {
+				return QommonsUtils.unmodifiableCopy(target, value);
+			}
 
-				@Override
-				public String toString() {
-					return AssignmentExpression.this.toString();
-				}
-			}, null, target, value);
+			@Override
+			public String toString() {
+				return AssignmentExpression.this.toString();
+			}
+		}, null, target, value);
 	}
 
 	@Override

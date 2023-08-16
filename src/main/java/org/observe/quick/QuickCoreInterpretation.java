@@ -58,12 +58,16 @@ public class QuickCoreInterpretation implements QonfigInterpretation {
 		interpreter.createWith(QuickBorder.TitledBorder.TITLED_BORDER, QuickBorder.TitledBorder.Def.class,
 			ExElement.creator(QuickBorder.TitledBorder.Def::new));
 
+		interpreter.createWith(TextMouseListener.TEXT_MOUSE_LISTENER, TextMouseListener.Def.class,
+			ExAddOn.creator(QuickMouseListener.Def.class, TextMouseListener.Def::new));
 		interpreter.createWith(QuickMouseListener.QuickMouseClickListener.ON_MOUSE_CLICK,
 			QuickMouseListener.QuickMouseClickListener.Def.class, ExElement.creator(QuickMouseListener.QuickMouseClickListener.Def::new));
 		interpreter.createWith(QuickMouseListener.QuickMousePressedListener.ON_MOUSE_PRESSED,
-			QuickMouseListener.QuickMousePressedListener.Def.class, ExElement.creator(QuickMouseListener.QuickMousePressedListener.Def::new));
+			QuickMouseListener.QuickMousePressedListener.Def.class,
+			ExElement.creator(QuickMouseListener.QuickMousePressedListener.Def::new));
 		interpreter.createWith(QuickMouseListener.QuickMouseReleasedListener.ON_MOUSE_RELEASED,
-			QuickMouseListener.QuickMouseReleasedListener.Def.class, ExElement.creator(QuickMouseListener.QuickMouseReleasedListener.Def::new));
+			QuickMouseListener.QuickMouseReleasedListener.Def.class,
+			ExElement.creator(QuickMouseListener.QuickMouseReleasedListener.Def::new));
 		interpreter.createWith(QuickMouseListener.MouseMoveEventType.Move.elementName, QuickMouseListener.QuickMouseMoveListener.Def.class,
 			session -> new QuickMouseListener.QuickMouseMoveListener.Def(session.as(ExpressoQIS.class).getElementRepresentation(),
 				session.getFocusType(), QuickMouseListener.MouseMoveEventType.Move));

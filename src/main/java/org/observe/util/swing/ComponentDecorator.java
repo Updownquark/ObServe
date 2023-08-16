@@ -282,6 +282,11 @@ public class ComponentDecorator extends BgFontAdjuster {
 			c.setCursor(theCursor);
 			revert.add(() -> c.setCursor(oldCursor));
 		}
+		if (isEnabled != null && isEnabled.booleanValue() != c.isEnabled()) {
+			c.setEnabled(isEnabled.booleanValue());
+			boolean revertEnabled = !isEnabled;
+			revert.add(() -> c.setEnabled(revertEnabled));
+		}
 
 		return () -> {
 			for (Runnable r : revert)

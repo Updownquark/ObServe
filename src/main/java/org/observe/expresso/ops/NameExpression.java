@@ -172,7 +172,7 @@ public class NameExpression implements ObservableExpression, Named {
 			if (paramType != null && paramType.isEnum()) {
 				for (Enum<?> value : ((Class<? extends Enum<?>>) paramType).getEnumConstants()) {
 					if (value.name().equals(theNames.getFirst().getName()))
-						return (EvaluatedExpression<M, MV>) ObservableExpression.evEx(
+						return (EvaluatedExpression<M, MV>) ObservableExpression.evEx(expressionOffset, getExpressionLength(),
 							InterpretedValueSynth.literal(TypeTokens.get().of((Class<Object>) paramType), value, value.name()), value);
 				}
 			}
@@ -193,7 +193,7 @@ public class NameExpression implements ObservableExpression, Named {
 			if (clazz == null)
 				throw new ExpressoEvaluationException(expressionOffset + getDivisionOffset(0),
 					expressionOffset + getDivisionOffset(0) + theNames.get(0).length(), //
-					"'" + theNames.get(0) + "' cannot be resolved to a variable ");
+					"'" + theNames.get(0) + "' cannot be resolved to a variable");
 			try {
 				field = clazz.getField(theNames.get(i).getName());
 			} catch (NoSuchFieldException e) {
@@ -207,12 +207,13 @@ public class NameExpression implements ObservableExpression, Named {
 			}
 			fieldValue = evaluateField(field, TypeTokens.get().of(field.getGenericType()), null, i, type, expressionOffset, env.reporting(),
 				divisions, env);
-			EvaluatedExpression<?, ?> classValue = ObservableExpression.evEx(InterpretedValueSynth
+			EvaluatedExpression<?, ?> classValue = ObservableExpression.evEx(expressionOffset, getExpressionLength(), InterpretedValueSynth
 				.literal(TypeTokens.get().keyFor(Class.class).<Class<?>> parameterized(clazz), clazz, typeName.toString()), clazz);
 			for (int d = 0; d < i; d++)
 				divisions[d] = classValue;
 		}
-		return ObservableExpression.evEx2(fieldValue, null, Collections.emptyList(), QommonsUtils.unmodifiableCopy(divisions));
+		return ObservableExpression.evEx2(expressionOffset, getExpressionLength(), fieldValue, null, Collections.emptyList(),
+			QommonsUtils.unmodifiableCopy(divisions));
 	}
 
 	private <M, MV extends M> EvaluatedExpression<M, MV> evaluateModel(InterpretedValueSynth<?, ?> mv, int nameIndex, StringBuilder path,
@@ -226,15 +227,17 @@ public class NameExpression implements ObservableExpression, Named {
 					this + " is a model, not a " + type.getModelType());
 			InterpretedValueSynth<M, MV> imv = (InterpretedValueSynth<M, MV>) mv;
 			if (nameIndex > 0)
-				divisions[nameIndex - 1] = ObservableExpression.evEx(imv, mv);
-			return ObservableExpression.evEx2(imv, null, context == null ? Collections.emptyList() : Collections.singletonList(context),
-				QommonsUtils.unmodifiableCopy(divisions));
+				divisions[nameIndex - 1] = ObservableExpression.evEx(expressionOffset, getExpressionLength(), imv, mv);
+			Object descriptor = imv instanceof ObservableModelSet.InterpretedModelComponentNode
+				? ((ObservableModelSet.InterpretedModelComponentNode<?, ?>) imv).getValueIdentity() : null;
+			return ObservableExpression.evEx2(expressionOffset, getExpressionLength(), imv, descriptor,
+				context == null ? Collections.emptyList() : Collections.singletonList(context), QommonsUtils.unmodifiableCopy(divisions));
 		} else if (mvType == ModelTypes.Model) {
 			String modelStr = path.toString();
 			ObservableModelSet model = models.getSubModelIfExists(modelStr);
 			if (nameIndex > 0)
-				divisions[nameIndex - 1] = ObservableExpression
-				.evEx(InterpretedValueSynth.literal(TypeTokens.get().of(ObservableModelSet.class), model, modelStr), mv);
+				divisions[nameIndex - 1] = ObservableExpression.evEx(expressionOffset, getExpressionLength(),
+					InterpretedValueSynth.literal(TypeTokens.get().of(ObservableModelSet.class), model, modelStr), mv);
 			path.append('.').append(theNames.get(nameIndex).getName());
 			String pathStr = path.toString();
 			InterpretableModelComponentNode<?> nextMV = models.getComponentIfExists(pathStr);
@@ -250,7 +253,7 @@ public class NameExpression implements ObservableExpression, Named {
 			InterpretedValueSynth<SettableValue<?>, ? extends SettableValue<?>> imv = (InterpretedValueSynth<SettableValue<?>, ? extends SettableValue<?>>) mv;
 			ModelInstanceType<SettableValue<?>, ? extends SettableValue<?>> instType = imv.getType();
 			if (nameIndex > 0)
-				divisions[nameIndex - 1] = ObservableExpression.evEx(imv, mv);
+				divisions[nameIndex - 1] = ObservableExpression.evEx(expressionOffset, getExpressionLength(), imv, mv);
 			Class<?> ctxType = TypeTokens.getRawType(instType.getType(0));
 			Field field;
 			try {
@@ -294,8 +297,9 @@ public class NameExpression implements ObservableExpression, Named {
 				value = (EvaluatedExpression<M, MV>) fieldValue;
 			else {
 				try {
-					value = ObservableExpression.evEx2(fieldValue.as(type, env), fieldValue.getDescriptor(), fieldValue.getComponents(),
-						fieldValue.getDivisions());
+					value = ObservableExpression.evEx2(expressionOffset, getExpressionLength(), fieldValue.as(type, env),
+						fieldValue.getDescriptor(),
+						fieldValue.getComponents(), fieldValue.getDivisions());
 				} catch (TypeConversionException e) {
 					throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(), e.getMessage(), e);
 				}
@@ -343,8 +347,8 @@ public class NameExpression implements ObservableExpression, Named {
 		ModelInstanceType<SettableValue<?>, SettableValue<F>> fieldModelType = ModelTypes.Value.forType(fieldType);
 		InterpretedValueSynth<SettableValue<?>, SettableValue<F>> fieldValue = InterpretedValueSynth.of(fieldModelType,
 			msi -> new FieldValue<>(context == null ? null : context.get(msi), field, fieldType, reporting));
-		return ObservableExpression
-			.evEx((InterpretedValueSynth<SettableValue<?>, SettableValue<M>>) (InterpretedValueSynth<?, ?>) fieldValue, null);
+		return ObservableExpression.evEx(expressionOffset, getExpressionLength(),
+			(InterpretedValueSynth<SettableValue<?>, SettableValue<M>>) (InterpretedValueSynth<?, ?>) fieldValue, null);
 	}
 
 	static class FieldValue<M, F> extends Identifiable.AbstractIdentifiable implements SettableValue<F> {

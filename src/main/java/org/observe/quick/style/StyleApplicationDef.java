@@ -6,6 +6,7 @@ import java.util.function.Function;
 import org.observe.SettableValue;
 import org.observe.expresso.*;
 import org.observe.expresso.ModelType.ModelInstanceType;
+import org.observe.expresso.ObservableExpression.EvaluatedExpression;
 import org.observe.expresso.ObservableModelSet.InterpretedModelComponentNode;
 import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
@@ -184,7 +185,7 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 			}
 
 			@Override
-			public <M, MV extends M> InterpretedValueSynth<M, MV> interpret(ModelInstanceType<M, MV> type, InterpretedExpressoEnv env)
+			public <M, MV extends M> EvaluatedExpression<M, MV> interpret(ModelInstanceType<M, MV> type, InterpretedExpressoEnv env)
 				throws ExpressoInterpretationException {
 				try {
 					return expression.evaluate(type, env.at(getFilePosition()), 0);
@@ -337,7 +338,7 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 					"No such model value found: '" + theModelValue.getName() + "'", e);
 			}
 			try {
-				return ObservableExpression.evEx(node.as(type, env), theModelValue);
+				return ObservableExpression.evEx(expressionOffset, getExpressionLength(), node.as(type, env), theModelValue);
 			} catch (TypeConversionException e) {
 				throw new ExpressoEvaluationException(expressionOffset, theModelValue.getName().length(), e.getMessage(), e);
 			}

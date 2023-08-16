@@ -14,6 +14,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Stream;
 
 import org.observe.Observable;
 import org.observe.ObservableAction;
@@ -36,6 +37,7 @@ import org.observe.expresso.TypeConversionException;
 import org.observe.util.TypeTokens;
 import org.qommons.ArrayUtils;
 import org.qommons.QommonsUtils;
+import org.qommons.Stamped;
 import org.qommons.StringUtils;
 import org.qommons.Transaction;
 import org.qommons.io.ErrorReporting;
@@ -85,15 +87,18 @@ public abstract class Invocation implements ObservableExpression {
 				InvokableResult<?, SettableValue<?>, ? extends SettableValue<?>> result = evaluateInternal2(
 					ModelTypes.Value.forType(type.getType(0)), env, new ArgOption(env, expressionOffset + getInitialArgOffset()),
 					expressionOffset);
-				return ObservableExpression.evEx((InterpretedValueSynth<M, MV>) createActionContainer(
-					(InvokableResult<?, SettableValue<?>, SettableValue<Object>>) result, env.reporting().at(getMethodNameOffset()),
-					env.isTesting()), result.method.method, result.getAllChildren());
+				return ObservableExpression.evEx(expressionOffset, getExpressionLength(),
+					(InterpretedValueSynth<M, MV>) createActionContainer(
+						(InvokableResult<?, SettableValue<?>, SettableValue<Object>>) result, env.reporting().at(getMethodNameOffset()),
+						env.isTesting()),
+					result.method.method, result.getAllChildren());
 			}
 		} else {
 			InvokableResult<?, M, MV> result = evaluateInternal2(type, env, new ArgOption(env, expressionOffset + getInitialArgOffset()),
 				expressionOffset);
-			return ObservableExpression.evEx(createValueContainer(result, env.reporting().at(getMethodNameOffset()), env.isTesting()),
-				result.method.method, result.getAllChildren());
+			return ObservableExpression.evEx(expressionOffset, getExpressionLength(),
+				createValueContainer(result, env.reporting().at(getMethodNameOffset()), env.isTesting()), result.method.method,
+				result.getAllChildren());
 		}
 	}
 
@@ -169,9 +174,8 @@ public abstract class Invocation implements ObservableExpression {
 					argOffset++;
 				argOffset += theArguments.get(i).getExpressionLength();
 			}
-			c = (EvaluatedExpression<SettableValue<?>, SettableValue<?>>) (EvaluatedExpression<?, ?>) theArguments.get(arg)
-				.evaluate(//
-					ModelTypes.Value.forType(paramType), theEnv.at(argOffset), theExpressionOffset + argOffset);
+			c = (EvaluatedExpression<SettableValue<?>, SettableValue<?>>) (EvaluatedExpression<?, ?>) theArguments.get(arg).evaluate(//
+				ModelTypes.Value.forType(paramType), theEnv.at(argOffset), theExpressionOffset + argOffset);
 			args[arg].add(0, c);
 			return true;
 		}
@@ -720,12 +724,11 @@ public abstract class Invocation implements ObservableExpression {
 						return null;
 					}
 				}, () -> {
-					long stamp = ctxV == null ? 0 : ctxV.getStamp();
-					for (SettableValue<?> argV : argVs) {
-						if (argV != null)
-							stamp = Long.rotateLeft(stamp, 13) ^ argV.getStamp();
-					}
-					return stamp;
+					if (ctxV != null)
+						return Stamped.compositeStamp(Stream.concat(Stream.of(ctxV), Arrays.stream(argVs)).mapToLong(Stamped::getStamp),
+							argVs.length + 1);
+					else
+						return Stamped.compositeStamp(Arrays.asList(argVs));
 				}, changes, () -> this);
 				if (isCaching) {
 					return SettableValue.asSettable(backing.cached(), //
@@ -736,9 +739,8 @@ public abstract class Invocation implements ObservableExpression {
 						() -> {
 							stamp[0]++;
 							return backing.get();
-						}, () -> {
-							return backing.getStamp() ^ stamp[0];
-						}, changes, () -> this), //
+						}, () -> Stamped.compositeStamp(backing.getStamp(), stamp[0]), //
+						changes, () -> this), //
 						__ -> theImpl + "s are not reversible");
 				}
 			}

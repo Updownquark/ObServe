@@ -8,7 +8,9 @@ import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseListener;
+import java.awt.event.MouseMotionListener;
 import java.awt.event.MouseWheelEvent;
+import java.awt.font.FontRenderContext;
 import java.awt.font.TextAttribute;
 import java.io.File;
 import java.lang.reflect.InvocationTargetException;
@@ -21,10 +23,14 @@ import java.util.WeakHashMap;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.IntSupplier;
 import java.util.function.Supplier;
+import java.util.function.ToIntFunction;
 
 import javax.swing.*;
+import javax.swing.event.CaretListener;
 import javax.swing.text.BadLocationException;
+import javax.swing.text.JTextComponent;
 
 import org.jdesktop.swingx.JXCollapsiblePane;
 import org.jdesktop.swingx.JXPanel;
@@ -37,6 +43,8 @@ import org.observe.collect.ObservableCollection;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.qonfig.ExAddOn;
+import org.observe.expresso.qonfig.ExFlexibleElementModelAddOn;
+import org.observe.expresso.qonfig.ExWithElementModel;
 import org.observe.quick.*;
 import org.observe.quick.QuickTextElement.QuickTextStyle;
 import org.observe.quick.base.*;
@@ -46,7 +54,6 @@ import org.observe.util.TypeTokens;
 import org.observe.util.swing.*;
 import org.observe.util.swing.MultiRangeSlider.Range;
 import org.observe.util.swing.PanelPopulation.*;
-import org.observe.util.swing.PanelPopulation.ScrollPane;
 import org.qommons.Causable;
 import org.qommons.Identifiable;
 import org.qommons.LambdaUtils;
@@ -182,6 +189,16 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 		void addListener(Component c, L listener) throws ModelInstantiationException;
 	}
 
+	public interface QuickSwingDocument<T> {
+		ObservableStyledDocument<T> interpret(StyledDocument<T> quickDoc, Observable<?> until) throws ModelInstantiationException;
+
+		MouseMotionListener mouseListener(StyledDocument<T> quickDoc, ObservableStyledDocument<T> doc, JTextComponent widget,
+			Observable<?> until);
+
+		CaretListener caretListener(StyledDocument<T> quickDoc, ObservableStyledDocument<T> doc, JTextComponent widget,
+			Observable<?> until);
+	}
+
 	public interface QuickSwingTableAction<R, A extends ValueAction<R>> {
 		void addAction(PanelPopulation.CollectionWidgetBuilder<R, ?, ?> table, A action) throws ModelInstantiationException;
 	}
@@ -189,6 +206,17 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 	/** Quick interpretation of the core toolkit for Swing */
 	public class QuickCoreSwing implements QuickInterpretation {
 		private static final WeakHashMap<Component, QuickWidget> QUICK_SWING_WIDGETS = new WeakHashMap<>();
+
+		private static int isRendering;
+
+		public static Transaction rendering() {
+			isRendering++;
+			return () -> isRendering--;
+		}
+
+		public static boolean isRendering() {
+			return isRendering > 0;
+		}
 
 		@Override
 		public void configure(Builder<ExpressoInterpretationException> tx) {
@@ -341,7 +369,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 							if (component[0] != null) {
 								revert[0].run();
 								revert[0] = deco.decorate(component[0]);
-								if (!renderer)
+								if (!renderer && !isRendering())
 									component[0].repaint();
 							}
 						});
@@ -389,7 +417,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 					deco.withLineBorder(color.get(), thick.get(), false);
 					Observable.or(color.noInitChanges(), thick.noInitChanges()).act(__ -> {
 						deco.withLineBorder(color.get(), thick.get(), false);
-						if (component[0] != null)
+						if (component[0] != null && !isRendering())
 							component[0].repaint();
 					});
 				};
@@ -412,12 +440,13 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 						revert[0] = deco.withTitledBorder(title.get(), color.get(), font);
 						// This call will just modify the thickness of the titled border
 						deco.withLineBorder(color.get(), thick.get(), false);
-						if (component[0] != null)
+						if (component[0] != null && !isRendering())
 							component[0].repaint();
 					});
 				};
 			});
 			tx.with(QuickMouseListener.QuickMouseButtonListener.Interpreted.class, QuickSwingEventListener.class, (qil, tx2) -> {
+				boolean textListener = qil.getAddOn(TextMouseListener.Interpreted.class) != null;
 				return (component, ql) -> {
 					SettableValue<Boolean> altPressed = SettableValue.build(boolean.class).withValue(false).build();
 					SettableValue<Boolean> ctrlPressed = SettableValue.build(boolean.class).withValue(false).build();
@@ -426,6 +455,14 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 						.build();
 					SettableValue<Integer> x = SettableValue.build(int.class).withValue(0).build();
 					SettableValue<Integer> y = SettableValue.build(int.class).withValue(0).build();
+
+					SettableValue<Integer> offset;
+					if (textListener && (component instanceof JTextComponent || component instanceof JLabel)) {
+						offset = SettableValue.build(int.class).withValue(0).build();
+						ql.getAddOn(ExWithElementModel.class).satisfyElementValue("offset", offset,
+							ExFlexibleElementModelAddOn.ActionIfSatisfied.Replace);
+					} else
+						offset = null;
 
 					QuickMouseListener.QuickMouseButtonListener mbl = (QuickMouseListener.QuickMouseButtonListener) ql;
 					QuickMouseListener.MouseButton listenerButton = mbl.getButton();
@@ -447,6 +484,8 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 								shiftPressed.set(evt.isShiftDown(), evt);
 								x.set(evt.getX(), evt);
 								y.set(evt.getY(), evt);
+								if (offset != null)
+									offset.set(((JTextComponent) component).viewToModel(evt.getLocationOnScreen()), evt);
 								if (!ql.testFilter())
 									return;
 								ql.getAction().act(evt);
@@ -465,6 +504,8 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 								shiftPressed.set(evt.isShiftDown(), evt);
 								x.set(evt.getX(), evt);
 								y.set(evt.getY(), evt);
+								if (offset != null)
+									offset.set(((JTextComponent) component).viewToModel(evt.getLocationOnScreen()), evt);
 								if (!ql.testFilter())
 									return;
 								ql.getAction().act(evt);
@@ -483,6 +524,14 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 								shiftPressed.set(evt.isShiftDown(), evt);
 								x.set(evt.getX(), evt);
 								y.set(evt.getY(), evt);
+								if (offset != null) {
+									int o;
+									if (component instanceof JTextComponent)
+										o = ((JTextComponent) component).viewToModel(evt.getPoint());
+									else
+										o = ((JLabel) component).getAccessibleContext().getAccessibleText().getIndexAtPoint(evt.getPoint());
+									offset.set(o, evt);
+								}
 								if (!ql.testFilter())
 									return;
 								ql.getAction().act(evt);
@@ -494,12 +543,28 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 				};
 			});
 			tx.with(QuickMouseListener.QuickMouseMoveListener.Interpreted.class, QuickSwingEventListener.class, (qil, tx2) -> {
+				boolean textListener = qil.getAddOn(TextMouseListener.Interpreted.class) != null;
 				return (component, ql) -> {
 					SettableValue<Boolean> altPressed = SettableValue.build(boolean.class).withValue(false).build();
 					SettableValue<Boolean> ctrlPressed = SettableValue.build(boolean.class).withValue(false).build();
 					SettableValue<Boolean> shiftPressed = SettableValue.build(boolean.class).withValue(false).build();
 					SettableValue<Integer> x = SettableValue.build(int.class).withValue(0).build();
 					SettableValue<Integer> y = SettableValue.build(int.class).withValue(0).build();
+
+					SettableValue<Integer> offset;
+					ToIntFunction<Point> offsetGetter;
+					if (textListener) {
+						offsetGetter = getTextOffset(component);
+						if (offsetGetter != null) {
+							offset = SettableValue.build(int.class).withValue(0).build();
+							ql.getAddOn(ExWithElementModel.class).satisfyElementValue("offset", offset,
+								ExFlexibleElementModelAddOn.ActionIfSatisfied.Replace);
+						} else
+							offset = null;
+					} else {
+						offsetGetter = null;
+						offset = null;
+					}
 
 					QuickMouseListener.QuickMouseMoveListener mml = (QuickMouseListener.QuickMouseMoveListener) ql;
 					mml.setListenerContext(
@@ -514,6 +579,10 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 								shiftPressed.set(evt.isShiftDown(), evt);
 								x.set(evt.getX(), evt);
 								y.set(evt.getY(), evt);
+								if (offset != null) {
+									int o = offsetGetter.applyAsInt(evt.getPoint());
+									offset.set(o, evt);
+								}
 								if (!ql.testFilter())
 									return;
 								ql.getAction().act(evt);
@@ -529,6 +598,10 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 								shiftPressed.set(evt.isShiftDown(), evt);
 								x.set(evt.getX(), evt);
 								y.set(evt.getY(), evt);
+								if (offset != null) {
+									int o = offsetGetter.applyAsInt(evt.getPoint());
+									offset.set(o, evt);
+								}
 								if (!ql.testFilter())
 									return;
 								ql.getAction().act(evt);
@@ -544,6 +617,10 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 								shiftPressed.set(evt.isShiftDown(), evt);
 								x.set(evt.getX(), evt);
 								y.set(evt.getY(), evt);
+								if (offset != null) {
+									int o = offsetGetter.applyAsInt(evt.getPoint());
+									offset.set(o, evt);
+								}
 								if (!ql.testFilter())
 									return;
 								ql.getAction().act(evt);
@@ -557,6 +634,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 				};
 			});
 			tx.with(QuickMouseListener.QuickScrollListener.Interpreted.class, QuickSwingEventListener.class, (qil, tx2) -> {
+				boolean textListener = qil.getAddOn(TextMouseListener.Interpreted.class) != null;
 				return (component, ql) -> {
 					SettableValue<Boolean> altPressed = SettableValue.build(boolean.class).withValue(false).build();
 					SettableValue<Boolean> ctrlPressed = SettableValue.build(boolean.class).withValue(false).build();
@@ -564,6 +642,14 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 					SettableValue<Integer> x = SettableValue.build(int.class).withValue(0).build();
 					SettableValue<Integer> y = SettableValue.build(int.class).withValue(0).build();
 					SettableValue<Integer> scrollAmount = SettableValue.build(int.class).withValue(0).build();
+
+					SettableValue<Integer> offset;
+					if (textListener && component instanceof JTextComponent) {
+						offset = SettableValue.build(int.class).withValue(0).build();
+						ql.getAddOn(ExWithElementModel.class).satisfyElementValue("offset", offset,
+							ExFlexibleElementModelAddOn.ActionIfSatisfied.Replace);
+					} else
+						offset = null;
 
 					QuickMouseListener.QuickScrollListener sl = (QuickMouseListener.QuickScrollListener) ql;
 					sl.setListenerContext(
@@ -576,6 +662,8 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 							shiftPressed.set(evt.isShiftDown(), evt);
 							x.set(evt.getX(), evt);
 							y.set(evt.getY(), evt);
+							if (offset != null)
+								offset.set(((JTextComponent) component).viewToModel(evt.getLocationOnScreen()), evt);
 							scrollAmount.set(evt.getUnitsToScroll(), evt);
 							if (!ql.testFilter())
 								return;
@@ -646,6 +734,101 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 					});
 				};
 			});
+		}
+
+		public static ToIntFunction<Point> getTextOffset(Component component) {
+			return getTextOffset(component, null, component::getWidth, component::getGraphics);
+		}
+
+		public static ToIntFunction<Point> getTextOffset(Component component, Supplier<String> textGetter, IntSupplier width,
+			Graphics graphics) {
+			return getTextOffset(component, textGetter, width, () -> graphics);
+		}
+
+		public static ToIntFunction<Point> getTextOffset(Component component, Supplier<String> textGetter, IntSupplier width,
+			Supplier<Graphics> graphics) {
+			if (component instanceof JTextComponent)
+				return ((JTextComponent) component)::viewToModel;
+			else if (component instanceof JLabel) {
+				// TODO This needs a lot of perfecting as well as filling in the gaps
+				JLabel label = (JLabel) component;
+				return pos -> {
+					if (label.getAccessibleContext().getAccessibleText() != null) {
+						if (textGetter != null)
+							label.setText(textGetter.get());
+						int idx = label.getAccessibleContext().getAccessibleText().getIndexAtPoint(pos);
+						if (idx > 0)
+							return idx;
+					}
+					String text = textGetter == null ? label.getText() : textGetter.get();
+					if (text == null || text.length() <= 1)
+						return 0;
+					Graphics g = graphics.get();
+					if (!(g instanceof Graphics2D))
+						return 0;
+					FontRenderContext ctx = ((Graphics2D) g).getFontRenderContext();
+					int availableLength = width.getAsInt() - label.getInsets().left - label.getInsets().right;
+					if (label.getIcon() != null)
+						availableLength -= label.getIcon().getIconWidth() - label.getIconTextGap();
+					if (availableLength <= 0)
+						return 0;
+
+					int textOffset = label.getInsets().left;
+					// Apologies, I just can't figure out how to determine whether the label is right-to-left right now
+					boolean rtl = false;
+					int align = label.getHorizontalTextPosition();
+					if (label.getIcon() != null && (align == SwingConstants.LEFT || ((align == SwingConstants.TRAILING) == rtl)))
+						textOffset += label.getIcon().getIconWidth() + label.getIconTextGap();
+					return getPosition(//
+						pos.x - textOffset, label.getFont(), text, ctx);
+				};
+			} else
+				return null;
+		}
+
+		private static int getPosition(int x, Font font, String text, FontRenderContext ctx) {
+			if (x <= 2)
+				return 0;
+			int totalWidth = (int) Math.round(font.getStringBounds(text, ctx).getWidth());
+			if (x >= totalWidth - 1)
+				return text.length() - 1;
+			int min = 0, max = text.length() - 1;
+			int guess = Math.round(x * 1.0f / totalWidth * text.length());
+			if (guess >= max)
+				return max;
+			int pos = guess;
+			while (min < max) {
+				int width = (int) Math.round(font.getStringBounds(text, 0, guess, ctx).getWidth());
+				if (width < x) {
+					min = guess + 1;
+					pos = max;
+				} else if (width > x) {
+					max = guess - 1;
+					pos = max;
+				} else
+					return guess;
+				guess = (max + min) / 2;
+			}
+			return pos;
+		}
+
+		private static int getPositionFromEnd(int x, Font font, String text, FontRenderContext ctx) {
+			int min = 0, max = text.length() - 1;
+			int mid = text.length() / 2;
+			int pos = mid;
+			while (min < max) {
+				int width = (int) Math.round(font.getStringBounds(text, mid, text.length(), ctx).getWidth());
+				if (width < x) {
+					max = mid - 1;
+					pos = max;
+				} else if (width > x) {
+					min = mid + 1;
+					pos = mid;
+				} else
+					return mid;
+				mid = (max + min) / 2;
+			}
+			return pos;
 		}
 
 		public static QuickMouseListener.MouseButton checkMouseEventType(MouseEvent evt, QuickMouseListener.MouseButton listenerButton) {
@@ -1345,18 +1528,19 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 		}
 
 		public static void scrollTo(Component component, Rectangle bounds) {
-			while (component != null && component.isVisible()) {
-				if (component instanceof JViewport) {
-					JViewport vp = (JViewport) component;
+			Container parent = component.getParent();
+			while (parent != null && component.isVisible()) {
+				if (parent instanceof JViewport) {
+					JViewport vp = (JViewport) parent;
 					Point viewPos = vp.getViewPosition();
 					bounds.x -= viewPos.x;
 					bounds.y -= viewPos.y;
 					vp.scrollRectToVisible(bounds);
-				} else {
-					bounds.x += component.getX();
-					bounds.y += component.getY();
 				}
-				component = component.getParent();
+				bounds.x += component.getX();
+				bounds.y += component.getY();
+				component = parent;
+				parent = parent.getParent();
 			}
 		}
 	}
@@ -1378,8 +1562,8 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 				QuickBaseSwing.gen(QuickComboBox.Interpreted.class), QuickBaseSwing::interpretComboBox);
 			QuickSwingPopulator.<QuickTextArea<?>, QuickTextArea.Interpreted<?>> interpretWidget(tx,
 				QuickBaseSwing.gen(QuickTextArea.Interpreted.class), QuickBaseSwing::interpretTextArea);
-			QuickSwingPopulator.<StyledTextArea<?>, StyledTextArea.Interpreted<?>> interpretWidget(tx,
-				QuickBaseSwing.gen(StyledTextArea.Interpreted.class), QuickBaseSwing::interpretStyledTextArea);
+			tx.with(DynamicStyledDocument.Interpreted.class, QuickSwingDocument.class,
+				(qd, tx2) -> QuickBaseSwing.interpretDynamicStyledDoc(qd, tx2));
 
 			// Containers
 			QuickSwingPopulator.<QuickBox, QuickBox.Interpreted<?>> interpretContainer(tx, gen(QuickBox.Interpreted.class),
@@ -1626,194 +1810,220 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 		}
 
 		static <T> QuickSwingPopulator<QuickTextArea<T>> interpretTextArea(QuickTextArea.Interpreted<T> interpreted,
-			Transformer<ExpressoInterpretationException> tx) {
+			Transformer<ExpressoInterpretationException> tx) throws ExpressoInterpretationException {
+			QuickSwingDocument<T> swingDoc = tx.transform(interpreted.getDocument(), QuickSwingDocument.class);
 			return createWidget((panel, quick) -> {
 				Format<T> format = quick.getFormat().get();
 				boolean commitOnType = quick.isCommitOnType();
 				SettableValue<Integer> rows = quick.getRows();
-				SettableValue<Boolean> html = quick.isHtml();
-				panel.addTextArea(null, quick.getValue(), format, tf -> {
+				Consumer<FieldEditor<ObservableTextArea<T>, ?>> modifier = tf -> {
 					tf.modifyEditor(tf2 -> {
-						try {
-							quick.setContext(new QuickEditableTextWidget.EditableTextWidgetContext.Default(//
-								tf2.getErrorState(), tf2.getWarningState()));
-						} catch (ModelInstantiationException e) {
-							quick.reporting().error(e.getMessage(), e);
-							return;
+						if (tf2.getErrorState() != null) {
+							try {
+								quick.setContext(new QuickEditableTextWidget.EditableTextWidgetContext.Default(//
+									tf2.getErrorState(), tf2.getWarningState()));
+							} catch (ModelInstantiationException e) {
+								quick.reporting().error(e.getMessage(), e);
+								return;
+							}
 						}
 						if (commitOnType)
 							tf2.setCommitOnType(commitOnType);
 						rows.changes().takeUntil(tf.getUntil()).act(evt -> tf2.withRows(evt.getNewValue()));
-						html.changes().takeUntil(tf.getUntil()).act(evt -> tf2.asHtml(evt.getNewValue()));
 						QuickTextArea.QuickTextAreaContext ctx = new QuickTextArea.QuickTextAreaContext.Default();
 						tf2.addMouseListener(pos -> ctx.getMousePosition().set(pos, null));
 						quick.setTextAreaContext(ctx);
 						quick.isEditable().changes().takeUntil(tf.getUntil())
 						.act(evt -> tf2.setEditable(!Boolean.FALSE.equals(evt.getNewValue())));
 					});
-				});
-			});
-		}
-
-		static <T> QuickSwingPopulator<StyledTextArea<T>> interpretStyledTextArea(StyledTextArea.Interpreted<T> interpreted,
-			Transformer<ExpressoInterpretationException> tx) throws ExpressoInterpretationException {
-			TypeToken<T> valueType = interpreted.getValueType();
-			return createWidget((panel, quick) -> {
-				Format<T> format = quick.getFormat().get();
-				SettableValue<Integer> rows = quick.getRows();
-				SettableValue<T> selectionStartValue = quick.getSelectionStartValue();
-				SettableValue<Integer> selectionStartOffset = quick.getSelectionStartOffset();
-				SettableValue<T> selectionEndValue = quick.getSelectionEndValue();
-				SettableValue<Integer> selectionEndOffset = quick.getSelectionEndOffset();
-				ObservableStyledDocument<T> doc = new ObservableStyledDocument<T>(quick.getValue(), format, ThreadConstraint.EDT,
-					panel.getUntil()) {
-					@Override
-					protected ObservableCollection<? extends T> getChildren(T value) {
-						try {
-							return quick.getChildren(staCtx(valueType, value));
-						} catch (ModelInstantiationException e) {
-							quick.reporting().error(e.getMessage(), e);
-							return ObservableCollection.of(valueType);
-						}
-					}
-
-					@Override
-					protected void adjustStyle(T value, BgFontAdjuster style) {
-						StyledTextArea.TextStyle textStyle;
-						try {
-							textStyle = quick.getStyle(staCtx(valueType, value));
-						} catch (ModelInstantiationException e) {
-							quick.reporting().error(e.getMessage(), e);
-							return;
-						}
-						QuickCoreSwing.adjustFont(style, textStyle);
-						Color bg = textStyle.getBackground().get();
-						if (bg != null)
-							style.withBackground(bg);
-					}
 				};
-				if (quick.hasPostText()) {
-					doc.withPostNodeText(node -> {
-						try {
-							return quick.getPostText(staCtx(valueType, node)).get();
-						} catch (ModelInstantiationException e) {
-							quick.reporting().error(e.getMessage(), e);
-							return null;
-						}
+				if (swingDoc != null) {
+					ObservableStyledDocument<T> docInst = swingDoc.interpret(quick.getDocument(), panel.getUntil());
+					panel.addStyledTextArea(null, docInst, tf -> {
+						modifier.accept(tf);
+						tf.modifyEditor(tf2 -> {
+							tf2.addMouseMotionListener(swingDoc.mouseListener(quick.getDocument(), docInst, tf2, tf.getUntil()));
+							tf2.addCaretListener(swingDoc.caretListener(quick.getDocument(), docInst, tf2, tf.getUntil()));
+						});
+					});
+				} else {
+					panel.addTextArea(null, quick.getValue(), format, tf -> {
+						tf.modifyEditor(tf2 -> {
+							try {
+								quick.setContext(new QuickEditableTextWidget.EditableTextWidgetContext.Default(//
+									tf2.getErrorState(), tf2.getWarningState()));
+							} catch (ModelInstantiationException e) {
+								quick.reporting().error(e.getMessage(), e);
+								return;
+							}
+							if (commitOnType)
+								tf2.setCommitOnType(commitOnType);
+							rows.changes().takeUntil(tf.getUntil()).act(evt -> tf2.withRows(evt.getNewValue()));
+							QuickTextArea.QuickTextAreaContext ctx = new QuickTextArea.QuickTextAreaContext.Default();
+							tf2.addMouseListener(pos -> ctx.getMousePosition().set(pos, null));
+							quick.setTextAreaContext(ctx);
+							quick.isEditable().changes().takeUntil(tf.getUntil())
+							.act(evt -> tf2.setEditable(!Boolean.FALSE.equals(evt.getNewValue())));
+						});
 					});
 				}
-				StyledTextArea.StyledTextAreaContext<T> mouseCtx = new StyledTextArea.StyledTextAreaContext.Default<>(valueType);
-				quick.setTextAreaContext(mouseCtx);
-				panel.addStyledTextArea(null, doc, tf -> {
-					tf.modifyEditor(tf2 -> {
-						tf2.addMouseMotionListener(new MouseAdapter() {
-							@Override
-							public void mouseMoved(MouseEvent e) {
-								int docPos = tf2.viewToModel(e.getPoint());
-								ObservableStyledDocument<T>.DocumentNode node = doc.getNodeAt(docPos);
-								mouseCtx.getNodeValue().set(node == null ? null : node.getValue(), e);
-							}
-						});
-						if (rows != null) {
-							rows.changes().takeUntil(tf.getUntil()).act(evt -> {
-								int r = evt.getNewValue();
-								if (r > 0) {
-									Graphics2D g = (Graphics2D) tf2.getGraphics();
-									int h = (int) Math.ceil(g.getFont().getLineMetrics("Mgp!q", g.getFontRenderContext()).getHeight());
-									tf2.setPreferredSize(new Dimension(tf2.getPreferredSize().width, h * r));
-									tf2.setMinimumSize(new Dimension(tf2.getMinimumSize().width, h * r));
-								} else {
-									tf2.setPreferredSize(null);
-									tf2.setMinimumSize(null);
-								}
-							});
-						}
-						boolean[] selectionCallbackLock = new boolean[1];
-						tf2.addCaretListener(e -> {
-							if (selectionCallbackLock[0])
-								return;
-							int selStart = Math.min(e.getDot(), e.getMark());
-							int selEnd = Math.max(e.getDot(), e.getMark());
-							ObservableStyledDocument<T>.DocumentNode startNode = doc.getNodeAt(selStart);
-							ObservableStyledDocument<T>.DocumentNode endNode = doc.getNodeAt(selEnd);
-							if (selectionStartValue.isAcceptable(startNode == null ? null : startNode.getValue()) == null) {
-								int startOffset = startNode == null ? 0 : selStart - startNode.getStart();
-								int endOffset = endNode == null ? 0 : selEnd - endNode.getStart();
-								selectionCallbackLock[0] = true;
-								try (Causable.CausableInUse cause = Causable.cause(e);
-									Transaction svt = selectionStartValue.lock(true, cause);
-									Transaction sot = selectionStartOffset.lock(true, cause);
-									Transaction evt = selectionEndValue.lock(true, cause);
-									Transaction eot = selectionEndOffset.lock(true, cause)) {
-									selectionStartValue.set(startNode == null ? null : startNode.getValue(), cause);
-									if (selectionStartOffset.isAcceptable(startOffset) == null)
-										selectionStartOffset.set(startOffset, cause);
-									if (selectionEndValue.isAcceptable(endNode == null ? null : endNode.getValue()) == null) {
-										selectionEndValue.set(endNode == null ? null : endNode.getValue(), cause);
-										if (selectionEndOffset.isAcceptable(endOffset) == null)
-											selectionEndOffset.set(endOffset, cause);
-									}
-								} finally {
-									selectionCallbackLock[0] = false;
-								}
-							}
-						});
-						Observable.onRootFinish(Observable.or(selectionStartValue.noInitChanges(), selectionStartOffset.noInitChanges(),
-							selectionEndValue.noInitChanges(), selectionEndOffset.noInitChanges())).act(__ -> {
-								if (selectionCallbackLock[0])
-									return;
-								selectionCallbackLock[0] = true;
-								try {
-									T sv = selectionStartValue.get();
-									T ev = selectionEndValue.get();
-									ObservableStyledDocument<T>.DocumentNode startNode = sv == null ? null : doc.getNodeFor(sv);
-									if (sv == null) {
-										tf2.setCaretPosition(0);
-										return;
-									}
-									ObservableStyledDocument<T>.DocumentNode endNode = sv == null ? null : doc.getNodeFor(ev);
-									int startIndex = startNode.getStart() + selectionStartOffset.get();
-									if (startIndex < 0)
-										startIndex = 0;
-									else if (startIndex > tf2.getDocument().getLength())
-										startIndex = tf2.getDocument().getLength();
-									tf2.setCaretPosition(startIndex);
-									Rectangle selectionBounds;
-									try {
-										selectionBounds = tf2.modelToView(startIndex);
-									} catch (BadLocationException e) {
-										quick.reporting().error(e.getMessage(), e);
-										selectionBounds = null;
-									}
-									if (endNode != null) {
-										int endIndex = endNode.getStart() + selectionEndOffset.get();
-										if (endIndex >= 0 && endIndex <= tf2.getDocument().getLength())
-											tf2.select(Math.min(startIndex, endIndex), Math.max(startIndex, endIndex));
-										Rectangle end;
-										try {
-											end = tf2.modelToView(endIndex);
-											if (selectionBounds == null)
-												selectionBounds = end;
-											else
-												selectionBounds = selectionBounds.union(end);
-										} catch (BadLocationException e) {
-											quick.reporting().error(e.getMessage(), e);
-										}
-									}
-									if (selectionBounds != null) {
-										QuickCoreSwing.scrollTo(tf2.getParent(), selectionBounds);
-									}
-								} finally {
-									selectionCallbackLock[0] = false;
-								}
-							});
-					});
-				});
 			});
 		}
 
-		static <T> StyledTextArea.StyledTextAreaContext<T> staCtx(TypeToken<T> type, T value) {
-			return new StyledTextArea.StyledTextAreaContext.Default<>(SettableValue.of(type, value, "Unmodifiable"));
+		static <T> QuickSwingDocument<T> interpretDynamicStyledDoc(DynamicStyledDocument.Interpreted<T, ?> interpreted,
+			Transformer<ExpressoInterpretationException> tx) throws ExpressoInterpretationException {
+			TypeToken<T> valueType = interpreted.getValueType();
+			return new QuickSwingDocument<T>() {
+				@Override
+				public ObservableStyledDocument<T> interpret(StyledDocument<T> quickDoc, Observable<?> until)
+					throws ModelInstantiationException {
+					DynamicStyledDocument<T> doc = (DynamicStyledDocument<T>) quickDoc;
+					Format<T> format = doc.getFormat();
+					ObservableStyledDocument<T> swingDoc = new ObservableStyledDocument<T>(doc.getRoot(), format, ThreadConstraint.EDT,
+						until) {
+						@Override
+						protected ObservableCollection<? extends T> getChildren(T value) {
+							try {
+								return doc.getChildren(staCtx(valueType, value));
+							} catch (ModelInstantiationException e) {
+								doc.reporting().error(e.getMessage(), e);
+								return ObservableCollection.of(valueType);
+							}
+						}
+
+						@Override
+						protected void adjustStyle(T value, BgFontAdjuster style) {
+							StyledDocument.TextStyle textStyle;
+							try {
+								textStyle = doc.getStyle(staCtx(valueType, value));
+							} catch (ModelInstantiationException e) {
+								doc.reporting().error(e.getMessage(), e);
+								return;
+							}
+							QuickCoreSwing.adjustFont(style, textStyle);
+							Color bg = textStyle.getBackground().get();
+							if (bg != null)
+								style.withBackground(bg);
+						}
+					};
+					if (doc.hasPostText()) {
+						swingDoc.withPostNodeText(node -> {
+							try {
+								return doc.getPostText(staCtx(valueType, node)).get();
+							} catch (ModelInstantiationException e) {
+								doc.reporting().error(e.getMessage(), e);
+								return null;
+							}
+						});
+					}
+					return swingDoc;
+				}
+
+				@Override
+				public MouseMotionListener mouseListener(StyledDocument<T> quickDoc, ObservableStyledDocument<T> doc, JTextComponent widget,
+					Observable<?> until) {
+					return new MouseAdapter() {
+						@Override
+						public void mouseMoved(MouseEvent e) {
+							int docPos = widget.viewToModel(e.getPoint());
+							ObservableStyledDocument<T>.DocumentNode node = doc.getNodeAt(docPos);
+							((DynamicStyledDocument<T>) quickDoc).getNodeValue().set(node == null ? null : node.getValue(), e);
+						}
+					};
+				}
+
+				@Override
+				public CaretListener caretListener(StyledDocument<T> quickDoc, ObservableStyledDocument<T> doc, JTextComponent widget,
+					Observable<?> until) {
+					boolean[] selectionCallbackLock = new boolean[1];
+					SettableValue<T> selectionStartValue = quickDoc.getSelectionStartValue();
+					SettableValue<Integer> selectionStartOffset = quickDoc.getSelectionStartOffset();
+					SettableValue<T> selectionEndValue = quickDoc.getSelectionEndValue();
+					SettableValue<Integer> selectionEndOffset = quickDoc.getSelectionEndOffset();
+					Observable.onRootFinish(Observable.or(selectionStartValue.noInitChanges(), selectionStartOffset.noInitChanges(),
+						selectionEndValue.noInitChanges(), selectionEndOffset.noInitChanges())).act(__ -> {
+							if (selectionCallbackLock[0])
+								return;
+							selectionCallbackLock[0] = true;
+							try {
+								T sv = selectionStartValue.get();
+								T ev = selectionEndValue.get();
+								ObservableStyledDocument<T>.DocumentNode startNode = sv == null ? null : doc.getNodeFor(sv);
+								if (sv == null) {
+									widget.setCaretPosition(0);
+									return;
+								}
+								ObservableStyledDocument<T>.DocumentNode endNode = sv == null ? null : doc.getNodeFor(ev);
+								int startIndex = startNode.getStart() + selectionStartOffset.get();
+								if (startIndex < 0)
+									startIndex = 0;
+								else if (startIndex > widget.getDocument().getLength())
+									startIndex = widget.getDocument().getLength();
+								widget.setCaretPosition(startIndex);
+								Rectangle selectionBounds;
+								try {
+									selectionBounds = widget.modelToView(startIndex);
+								} catch (BadLocationException e) {
+									quickDoc.reporting().error(e.getMessage(), e);
+									selectionBounds = null;
+								}
+								if (endNode != null) {
+									int endIndex = endNode.getStart() + selectionEndOffset.get();
+									if (endIndex >= 0 && endIndex <= widget.getDocument().getLength())
+										widget.select(Math.min(startIndex, endIndex), Math.max(startIndex, endIndex));
+									Rectangle end;
+									try {
+										end = widget.modelToView(endIndex);
+										if (selectionBounds == null)
+											selectionBounds = end;
+										else
+											selectionBounds = selectionBounds.union(end);
+									} catch (BadLocationException e) {
+										quickDoc.reporting().error(e.getMessage(), e);
+									}
+								}
+								if (selectionBounds != null) {
+									QuickCoreSwing.scrollTo(widget, selectionBounds);
+								}
+							} finally {
+								selectionCallbackLock[0] = false;
+							}
+						});
+					return e -> {
+						if (selectionCallbackLock[0])
+							return;
+						int selStart = Math.min(e.getDot(), e.getMark());
+						int selEnd = Math.max(e.getDot(), e.getMark());
+						ObservableStyledDocument<T>.DocumentNode startNode = doc.getNodeAt(selStart);
+						ObservableStyledDocument<T>.DocumentNode endNode = doc.getNodeAt(selEnd);
+						if (selectionStartValue.isAcceptable(startNode == null ? null : startNode.getValue()) == null) {
+							int startOffset = startNode == null ? 0 : selStart - startNode.getStart();
+							int endOffset = endNode == null ? 0 : selEnd - endNode.getStart();
+							selectionCallbackLock[0] = true;
+							try (Causable.CausableInUse cause = Causable.cause(e);
+								Transaction svt = selectionStartValue.lock(true, cause);
+								Transaction sot = selectionStartOffset.lock(true, cause);
+								Transaction evt = selectionEndValue.lock(true, cause);
+								Transaction eot = selectionEndOffset.lock(true, cause)) {
+								selectionStartValue.set(startNode == null ? null : startNode.getValue(), cause);
+								if (selectionStartOffset.isAcceptable(startOffset) == null)
+									selectionStartOffset.set(startOffset, cause);
+								if (selectionEndValue.isAcceptable(endNode == null ? null : endNode.getValue()) == null) {
+									selectionEndValue.set(endNode == null ? null : endNode.getValue(), cause);
+									if (selectionEndOffset.isAcceptable(endOffset) == null)
+										selectionEndOffset.set(endOffset, cause);
+								}
+							} finally {
+								selectionCallbackLock[0] = false;
+							}
+						}
+					};
+				}
+			};
+		}
+
+		static <T> DynamicStyledDocument.StyledTextAreaContext<T> staCtx(TypeToken<T> type, T value) {
+			return new DynamicStyledDocument.StyledTextAreaContext.Default<>(SettableValue.of(type, value, "Unmodifiable"));
 		}
 
 		static <R> QuickSwingPopulator<QuickTable<R>> interpretTable(QuickTable.Interpreted<R> interpreted,
@@ -1874,7 +2084,6 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 			renderersInitialized[0] = true;
 			interpreted.destroyed().act(__ -> sub.unsubscribe());
 			boolean[] tableInitialized = new boolean[1];
-			int[] rendering = new int[1];
 			// TODO Changes to actions collection?
 			List<QuickSwingTableAction<R, ?>> interpretedActions = BetterList.<ValueAction.Interpreted<R, ?>, QuickSwingTableAction<R, ?>, ExpressoInterpretationException> of2(
 				interpreted.getActions().stream(), a -> (QuickSwingTableAction<R, ?>) tx.transform(a, QuickSwingTableAction.class));
@@ -1882,13 +2091,12 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 				TabularWidget.TabularContext<R> ctx = new TabularWidget.TabularContext.Default<>(rowType,
 					quick.reporting().getPosition().toShortString());
 				quick.setContext(ctx);
-				ComponentEditor<?, ?>[] parent = new ComponentEditor[1];
+				TableBuilder<R, ?>[] parent = new TableBuilder[1];
 				ObservableCollection<InterpretedSwingTableColumn<R, ?>> columns = quick.getAllColumns().flow()//
 					.map((Class<InterpretedSwingTableColumn<R, ?>>) (Class<?>) InterpretedSwingTableColumn.class, column -> {
 						try {
 							return new InterpretedSwingTableColumn<>(quick, column, ctx, tx, panel.getUntil(), () -> parent[0],
-								renderers.get(column.getColumnSet().getIdentity()), editors.get(column.getColumnSet().getIdentity()),
-								rendering);
+								renderers.get(column.getColumnSet().getIdentity()), editors.get(column.getColumnSet().getIdentity()));
 						} catch (ModelInstantiationException e) {
 							if (tableInitialized[0]) {
 								column.getColumnSet().reporting().error(e.getMessage(), e);
@@ -2009,7 +2217,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 		private static class ScrollPopulator extends AbstractQuickContainerPopulator {
 			private final PanelPopulation.ScrollPane<?> theScroll;
 
-			ScrollPopulator(ScrollPane<?> scroll) {
+			ScrollPopulator(PanelPopulation.ScrollPane<?> scroll) {
 				theScroll = scroll;
 			}
 
@@ -2035,7 +2243,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 		private static class ScrollRowHeaderPopulator extends AbstractQuickContainerPopulator {
 			private final PanelPopulation.ScrollPane<?> theScroll;
 
-			ScrollRowHeaderPopulator(ScrollPane<?> scroll) {
+			ScrollRowHeaderPopulator(PanelPopulation.ScrollPane<?> scroll) {
 				theScroll = scroll;
 			}
 
@@ -2061,7 +2269,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 		private static class ScrollColumnHeaderPopulator extends AbstractQuickContainerPopulator {
 			private final PanelPopulation.ScrollPane<?> theScroll;
 
-			ScrollColumnHeaderPopulator(ScrollPane<?> scroll) {
+			ScrollColumnHeaderPopulator(PanelPopulation.ScrollPane<?> scroll) {
 				theScroll = scroll;
 			}
 
@@ -2173,7 +2381,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 
 		@Override
 		public <F> AbstractQuickContainerPopulator addStyledTextArea(String fieldName, ObservableStyledDocument<F> doc,
-			Consumer<FieldEditor<JTextPane, ?>> modify) {
+			Consumer<FieldEditor<ObservableTextArea<F>, ?>> modify) {
 			return addHPanel(null, new JustifiedBoxLayout(true).mainJustified().crossJustified(),
 				p -> modify(p).addStyledTextArea(fieldName, doc, modify));
 		}

@@ -223,6 +223,16 @@ public class ConditionalExpression implements ObservableExpression {
 			}
 
 			@Override
+			public int getExpressionOffset() {
+				return expressionOffset;
+			}
+
+			@Override
+			public int getExpressionLength() {
+				return ConditionalExpression.this.getExpressionLength();
+			}
+
+			@Override
 			public Object getDescriptor() {
 				return null;
 			}

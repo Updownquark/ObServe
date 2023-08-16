@@ -124,11 +124,10 @@ public class CastExpression implements ObservableExpression {
 			converter = TypeTokens.get().getCast(valueType, sourceType, true, false);
 			if (converter.isTrivial())
 				return (EvaluatedExpression<SettableValue<?>, SettableValue<T>>) (EvaluatedExpression<?, ?>) valueContainer;
-			return ObservableExpression.evEx(
+			return ObservableExpression.evEx(expressionOffset, getExpressionLength(),
 				valueContainer.map(ModelTypes.Value.forType(valueType), vc -> vc.transformReversible(valueType, tx -> tx//
 					.map(converter).replaceSource(converter::reverse, rev -> rev.rejectWith(converter::isReversible)))),
-				valueType,
-				valueContainer);
+				valueType, valueContainer);
 		} catch (IllegalArgumentException e) {
 			if (!TypeTokens.get().isAssignable(sourceType, valueType)//
 				&& !TypeTokens.get().isAssignable(valueType, sourceType))
@@ -137,8 +136,8 @@ public class CastExpression implements ObservableExpression {
 		}
 		Class<T> valueClass = TypeTokens.get().wrap(TypeTokens.getRawType(valueType));
 		Class<S> sourceClass = TypeTokens.getRawType(sourceType);
-		return ObservableExpression
-			.evEx(valueContainer.map(ModelTypes.Value.forType(valueType), vc -> vc.transformReversible(valueType, tx -> tx//
+		return ObservableExpression.evEx(expressionOffset, getExpressionLength(),
+			valueContainer.map(ModelTypes.Value.forType(valueType), vc -> vc.transformReversible(valueType, tx -> tx//
 				.map(v -> {
 					if (v == null || valueClass.isInstance(v))
 						return (T) v;
@@ -150,7 +149,8 @@ public class CastExpression implements ObservableExpression {
 					if (v != null && !sourceClass.isInstance(v))
 						return theValue + " (" + v.getClass().getName() + ") is not an instance of " + sourceType;
 					return null;
-				})))), valueContainer);
+				})))),
+			valueContainer);
 	}
 
 	@Override

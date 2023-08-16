@@ -71,6 +71,12 @@
 			<?DOC The widget used to render each value for this rendering widget?>
 			<child-def name="renderer" type="widget" inherits="renderer" min="0" />
 		</add-on>
+
+		<add-on name="text-widget-mouse-listener" requires="mouse-listener" inherits="with-element-model">
+			<element-model>
+				<value name="offset" type="int" />
+			</element-model>
+		</add-on>
 	</add-ons>
 
 	<elements>
@@ -245,4 +251,11 @@
 			<attribute name="editable" type="expression" specify="optional" />
 		</element-def>
 	</elements>
+
+	<auto-inheritance>
+		<auto-inherit inherits="text-widget-mouse-listener">
+			<target element="mouse-listener" role="text-widget.event-listener" />
+			<target element="on-scroll" role="text-widget.event-listener" />
+		</auto-inherit>
+	</auto-inheritance>
 </qonfig-def>

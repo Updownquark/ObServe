@@ -110,11 +110,11 @@ public class ArrayAccessExpression implements ObservableExpression {
 			throw new ExpressoEvaluationException(indexOffset, theIndex.getExpressionLength(),
 				"index " + theArray + " cannot be evaluated as an integer", e);
 		}
-		return (EvaluatedExpression<M, MV>) this.<Object> doEval(//
+		return (EvaluatedExpression<M, MV>) this.<Object> doEval(expressionOffset, //
 			arrayValue, indexValue, env.reporting(), indexEnv.reporting());
 	}
 
-	private <T> EvaluatedExpression<SettableValue<?>, SettableValue<T>> doEval(
+	private <T> EvaluatedExpression<SettableValue<?>, SettableValue<T>> doEval(int expressionOffset,
 		EvaluatedExpression<SettableValue<?>, SettableValue<T[]>> arrayValue,
 		EvaluatedExpression<SettableValue<?>, SettableValue<Integer>> indexValue, ErrorReporting arrayReporting,
 		ErrorReporting indexReporting) throws ExpressoInterpretationException {
@@ -175,6 +175,16 @@ public class ArrayAccessExpression implements ObservableExpression {
 					return value;
 				else
 					return createArrayValue(newArray, newIndex);
+			}
+
+			@Override
+			public int getExpressionOffset() {
+				return expressionOffset;
+			}
+
+			@Override
+			public int getExpressionLength() {
+				return ArrayAccessExpression.this.getExpressionLength();
 			}
 
 			@Override

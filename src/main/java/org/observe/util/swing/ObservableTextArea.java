@@ -15,7 +15,7 @@ import java.awt.event.MouseMotionListener;
 import java.util.function.BiConsumer;
 import java.util.function.Function;
 
-import javax.swing.JEditorPane;
+import javax.swing.JTextPane;
 import javax.swing.UIManager;
 import javax.swing.text.BadLocationException;
 
@@ -31,7 +31,7 @@ import org.qommons.io.Format;
  *
  * @param <E> The type of value edited by the text area
  */
-public class ObservableTextArea<E> extends JEditorPane implements ObservableTextEditorWidget<E, ObservableTextArea<E>> {
+public class ObservableTextArea<E> extends JTextPane implements ObservableTextEditorWidget<E, ObservableTextArea<E>> {
 	public interface TextAreaMouseListener {
 		public void mouseMoved(int position);
 	}
@@ -49,15 +49,18 @@ public class ObservableTextArea<E> extends JEditorPane implements ObservableText
 	 * @param until An observable that, when fired will release this text field's resources
 	 */
 	public ObservableTextArea(SettableValue<E> value, Format<E> format, Observable<?> until) {
-		theEditor = new ObservableTextEditor<E>(this, value, format, until, //
-			super::setEditable, //
-			super::setToolTipText) {
-			@Override
-			protected ObservableTextEditor<E> setText(String text) {
-				updateText(text);
-				return this;
-			}
-		}.setSelectAllOnFocus(false);
+		if (value != null) {
+			theEditor = new ObservableTextEditor<E>(this, value, format, until, //
+				super::setEditable, //
+				super::setToolTipText) {
+				@Override
+				protected ObservableTextEditor<E> setText(String text) {
+					updateText(text);
+					return this;
+				}
+			}.setSelectAllOnFocus(false);
+		} else
+			theEditor = null;
 		addFocusListener(new FocusAdapter() {
 			@Override
 			public void focusGained(FocusEvent e) {
@@ -122,69 +125,93 @@ public class ObservableTextArea<E> extends JEditorPane implements ObservableText
 
 	@Override
 	public SettableValue<E> getValue() {
+		if (theEditor == null)
+			return null;
 		return theEditor.getValue();
 	}
 
 	@Override
 	public Format<E> getFormat() {
+		if (theEditor == null)
+			return null;
 		return theEditor.getFormat();
 	}
 
 	@Override
 	public ObservableTextArea<E> withWarning(Function<? super E, String> warning) {
+		if (theEditor == null)
+			return this;
 		theEditor.withWarning(warning);
 		return this;
 	}
 
 	@Override
 	public ObservableTextArea<E> clearWarning() {
+		if (theEditor == null)
+			return this;
 		theEditor.clearWarning();
 		return this;
 	}
 
 	@Override
 	public boolean isSelectAllOnFocus() {
+		if (theEditor == null)
+			return false;
 		return theEditor.isSelectAllOnFocus();
 	}
 
 	@Override
 	public ObservableTextArea<E> setSelectAllOnFocus(boolean selectAll) {
+		if (theEditor == null)
+			return this;
 		theEditor.setSelectAllOnFocus(selectAll);
 		return this;
 	}
 
 	@Override
 	public ObservableTextArea<E> setReformatOnCommit(boolean format) {
+		if (theEditor == null)
+			return this;
 		theEditor.setReformatOnCommit(format);
 		return this;
 	}
 
 	@Override
 	public ObservableTextArea<E> setRevertOnFocusLoss(boolean revert) {
+		if (theEditor == null)
+			return this;
 		theEditor.setRevertOnFocusLoss(revert);
 		return this;
 	}
 
 	@Override
 	public ObservableTextArea<E> setCommitOnType(boolean commit) {
+		if (theEditor == null)
+			return this;
 		theEditor.setCommitOnType(commit);
 		return this;
 	}
 
 	@Override
 	public ObservableTextArea<E> setCommitAdjustmentImmediately(boolean commitImmediately) {
+		if (theEditor == null)
+			return this;
 		theEditor.setCommitAdjustmentImmediately(commitImmediately);
 		return this;
 	}
 
 	@Override
 	public ObservableTextArea<E> onEnter(BiConsumer<? super E, ? super KeyEvent> action) {
+		if (theEditor == null)
+			return this;
 		theEditor.onEnter(action);
 		return this;
 	}
 
 	@Override
 	public ObservableTextArea<E> withToolTip(String tooltip) {
+		if (theEditor == null)
+			return this;
 		theEditor.withToolTip(tooltip);
 		return this;
 	}
@@ -252,12 +279,16 @@ public class ObservableTextArea<E> extends JEditorPane implements ObservableText
 
 	@Override
 	public void setEnabled(boolean enabled) {
-		theEditor.setEnabled(enabled);
+		if (theEditor != null)
+			theEditor.setEnabled(enabled);
 	}
 
 	@Override
 	public void setToolTipText(String text) {
-		theEditor.setToolTipText(text);
+		if (theEditor != null)
+			theEditor.setToolTipText(text);
+		else
+			super.setToolTipText(text);
 	}
 
 	public Runnable addMouseListener(TextAreaMouseListener listener) {
@@ -296,47 +327,62 @@ public class ObservableTextArea<E> extends JEditorPane implements ObservableText
 
 	@Override
 	public boolean isDirty() {
+		if (theEditor == null)
+			return false;
 		return theEditor.isDirty();
 	}
 
 	@Override
 	public void revertEdits() {
-		theEditor.revertEdits();
+		if (theEditor != null)
+			theEditor.revertEdits();
 	}
 
 	@Override
 	public boolean flushEdits(Object cause) {
+		if (theEditor == null)
+			return false;
 		return theEditor.flushEdits(cause);
 	}
 
 	@Override
 	public String getEditError() {
+		if (theEditor == null)
+			return null;
 		return theEditor.getEditError();
 	}
 
 	@Override
 	public String getEditWarning() {
+		if (theEditor == null)
+			return null;
 		return theEditor.getEditWarning();
 	}
 
 	@Override
 	public ObservableValue<String> getErrorState() {
+		if (theEditor == null)
+			return null;
 		return theEditor.getErrorState();
 	}
 
 	@Override
 	public ObservableValue<String> getWarningState() {
+		if (theEditor == null)
+			return null;
 		return theEditor.getWarningState();
 	}
 
 	/** Re-displays the parsing error message from this text field as a tooltip */
 	public void redisplayErrorTooltip() {
-		theEditor.redisplayErrorTooltip();
+		if (theEditor != null)
+			theEditor.redisplayErrorTooltip();
 	}
 
 	/** Re-displays the warning message from this text field as a tooltip */
 	public void redisplayWarningTooltip() {
-		theEditor.redisplayWarningTooltip();
+		if (theEditor != null)
+			theEditor.redisplayWarningTooltip();
 	}
 
 	@Override

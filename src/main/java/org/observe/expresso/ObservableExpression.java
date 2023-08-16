@@ -50,8 +50,8 @@ public interface ObservableExpression {
 		@Override
 		public <M, MV extends M> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, InterpretedExpressoEnv env,
 			int expressionOffset) throws ExpressoEvaluationException {
-			return ObservableExpression
-				.evEx((InterpretedValueSynth<M, MV>) InterpretedValueSynth.literal(TypeTokens.get().WILDCARD, null, "(empty)"), null);
+			return ObservableExpression.evEx(expressionOffset, 0,
+				(InterpretedValueSynth<M, MV>) InterpretedValueSynth.literal(TypeTokens.get().WILDCARD, null, "(empty)"), null);
 		}
 
 		@Override
@@ -68,6 +68,12 @@ public interface ObservableExpression {
 	 * @param <MV> The instance type of the interpreted expression
 	 */
 	public interface EvaluatedExpression<M, MV extends M> extends InterpretedValueSynth<M, MV> {
+		/** @return The offset of this expression in the root */
+		int getExpressionOffset();
+
+		/** @return The length of this expression */
+		int getExpressionLength();
+
 		/** @return A descriptor object which provides some information about the interpreted expression */
 		Object getDescriptor();
 
@@ -90,14 +96,15 @@ public interface ObservableExpression {
 	 *
 	 * @param <M> The model type of the value
 	 * @param <MV> The instance type of the value
+	 * @param offset The offset of the expression in the root
 	 * @param value The type of the value
 	 * @param descriptor The expression descriptor
 	 * @param children The children of the expression
 	 * @return The evaluated expression
 	 */
-	static <M, MV extends M> EvaluatedExpression<M, MV> evEx(InterpretedValueSynth<M, MV> value, Object descriptor,
+	static <M, MV extends M> EvaluatedExpression<M, MV> evEx(int offset, int length, InterpretedValueSynth<M, MV> value, Object descriptor,
 		EvaluatedExpression<?, ?>... children) {
-		return evEx(value, descriptor, QommonsUtils.unmodifiableCopy(children));
+		return evEx(offset, length, value, descriptor, QommonsUtils.unmodifiableCopy(children));
 	}
 
 	/**
@@ -105,14 +112,15 @@ public interface ObservableExpression {
 	 *
 	 * @param <M> The model type of the value
 	 * @param <MV> The instance type of the value
+	 * @param offset The offset of the expression in the root
 	 * @param value The type of the value
 	 * @param descriptor The expression descriptor
 	 * @param children The children of the expression
 	 * @return The evaluated expression
 	 */
-	static <M, MV extends M> EvaluatedExpression<M, MV> evEx(InterpretedValueSynth<M, MV> value, Object descriptor,
+	static <M, MV extends M> EvaluatedExpression<M, MV> evEx(int offset, int length, InterpretedValueSynth<M, MV> value, Object descriptor,
 		List<? extends EvaluatedExpression<?, ?>> children) {
-		return evEx2(value, descriptor, children, Collections.emptyList());
+		return evEx2(offset, length, value, descriptor, children, Collections.emptyList());
 	}
 
 	/**
@@ -120,13 +128,14 @@ public interface ObservableExpression {
 	 *
 	 * @param <M> The model type of the value
 	 * @param <MV> The instance type of the value
+	 * @param offset The offset of the expression in the root
 	 * @param value The type of the value
 	 * @param descriptor The expression descriptor
 	 * @param children The children of the expression
 	 * @param divisions The divisions of the expression
 	 * @return The evaluated expression
 	 */
-	static <M, MV extends M> EvaluatedExpression<M, MV> evEx2(InterpretedValueSynth<M, MV> value, Object descriptor,
+	static <M, MV extends M> EvaluatedExpression<M, MV> evEx2(int offset, int length, InterpretedValueSynth<M, MV> value, Object descriptor,
 		List<? extends EvaluatedExpression<?, ?>> children, List<? extends EvaluatedExpression<?, ?>> divisions) {
 		return new EvaluatedExpression<M, MV>() {
 			@Override
@@ -143,6 +152,16 @@ public interface ObservableExpression {
 			public MV forModelCopy(MV value2, ModelSetInstance sourceModels, ModelSetInstance newModels)
 				throws ModelInstantiationException {
 				return value.forModelCopy(value2, sourceModels, newModels);
+			}
+
+			@Override
+			public int getExpressionOffset() {
+				return offset;
+			}
+
+			@Override
+			public int getExpressionLength() {
+				return length;
 			}
 
 			@Override
@@ -190,6 +209,16 @@ public interface ObservableExpression {
 			@Override
 			public MV forModelCopy(MV value, ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException {
 				return wrapped.forModelCopy(value, sourceModels, newModels);
+			}
+
+			@Override
+			public int getExpressionOffset() {
+				return wrapped.getExpressionOffset();
+			}
+
+			@Override
+			public int getExpressionLength() {
+				return wrapped.getExpressionLength();
 			}
 
 			@Override
@@ -319,7 +348,7 @@ public interface ObservableExpression {
 		if (cast instanceof EvaluatedExpression) // Generally means a cast was not necessary
 			return (EvaluatedExpression<M, MV>) cast;
 		else
-			return evEx2(cast, value.getDescriptor(), value.getComponents(), value.getDivisions());
+			return evEx2(expressionOffset, getExpressionLength(), cast, value.getDescriptor(), value.getComponents(), value.getDivisions());
 	}
 
 	/**
@@ -395,28 +424,31 @@ public interface ObservableExpression {
 					throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(),
 						"Cannot assign null to a primitive type (" + type.getType(0));
 				MV value = (MV) createValue(type.getType(0), null);
-				return ObservableExpression.evEx(InterpretedValueSynth.of(type, LambdaUtils.constantExFn(value, theText, null)), this);
+				return ObservableExpression.evEx(expressionOffset, getExpressionLength(),
+					InterpretedValueSynth.of(type, LambdaUtils.constantExFn(value, theText, null)), this);
 			} else if (TypeTokens.get().isInstance(type.getType(0), theValue)) {
 				MV value = (MV) createValue(type.getType(0), theValue);
-				return ObservableExpression
-					.evEx(InterpretedValueSynth.of((ModelInstanceType<M, MV>) ModelTypes.Value.forType(theValue.getClass()),
-						LambdaUtils.constantExFn(value, theText, null)), this);
+				return ObservableExpression.evEx(expressionOffset, getExpressionLength(),
+					InterpretedValueSynth.of((ModelInstanceType<M, MV>) ModelTypes.Value.forType(theValue.getClass()),
+						LambdaUtils.constantExFn(value, theText, null)),
+					this);
 			} else if (TypeTokens.get().isAssignable(type.getType(0), TypeTokens.get().of(theValue.getClass()))) {
 				TypeToken<Object> targetType = (TypeToken<Object>) type.getType(0);
 				TypeTokens.TypeConverter<T, ?, ?, Object> convert = (TypeConverter<T, ?, ?, Object>) TypeTokens.get().getCast(targetType,
 					TypeTokens.get().of((Class<T>) theValue.getClass()));
 				targetType = convert.getConvertedType();
 				MV value = (MV) createValue(targetType, convert.apply(theValue));
-				return ObservableExpression.evEx(InterpretedValueSynth.of((ModelInstanceType<M, MV>) ModelTypes.Value.forType(targetType),
-					LambdaUtils.constantExFn(value, theText, null)), this);
+				return ObservableExpression.evEx(expressionOffset, getExpressionLength(), InterpretedValueSynth.of(
+					(ModelInstanceType<M, MV>) ModelTypes.Value.forType(targetType), LambdaUtils.constantExFn(value, theText, null)), this);
 			} else {
 				// Don't throw this. Maybe the type architecture can convert it.
 				// throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(),
 				// "'" + theText + "' cannot be evaluated as a " + type);
 				MV value = (MV) createValue(TypeTokens.get().of(theValue.getClass()), theValue);
-				return ObservableExpression
-					.evEx(InterpretedValueSynth.of((ModelInstanceType<M, MV>) ModelTypes.Value.forType(theValue.getClass()),
-						LambdaUtils.constantExFn(value, theText, null)), this);
+				return ObservableExpression.evEx(expressionOffset, getExpressionLength(),
+					InterpretedValueSynth.of((ModelInstanceType<M, MV>) ModelTypes.Value.forType(theValue.getClass()),
+						LambdaUtils.constantExFn(value, theText, null)),
+					this);
 			}
 		}
 

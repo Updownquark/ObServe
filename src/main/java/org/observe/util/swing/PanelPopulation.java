@@ -220,7 +220,7 @@ public class PanelPopulation {
 
 		default <F> P addStyledTextArea(String fieldName, SettableValue<F> root, Format<F> format,
 			Function<? super F, ? extends ObservableCollection<? extends F>> children, BiConsumer<? super F, ? super BgFontAdjuster> style,
-				Consumer<FieldEditor<JTextPane, ?>> modify) {
+				Consumer<FieldEditor<ObservableTextArea<F>, ?>> modify) {
 			return addStyledTextArea(fieldName, new ObservableStyledDocument<F>(root, format, ThreadConstraint.EDT, getUntil()) {
 				@Override
 				protected ObservableCollection<? extends F> getChildren(F value) {
@@ -234,7 +234,7 @@ public class PanelPopulation {
 			}, modify);
 		}
 
-		<F> P addStyledTextArea(String fieldName, ObservableStyledDocument<F> doc, Consumer<FieldEditor<JTextPane, ?>> modify);
+		<F> P addStyledTextArea(String fieldName, ObservableStyledDocument<F> doc, Consumer<FieldEditor<ObservableTextArea<F>, ?>> modify);
 
 		default P addLabel(String fieldName, String label, Consumer<FieldEditor<JLabel, ?>> modify) {
 			return addLabel(fieldName, ObservableValue.of(label), v -> v, modify);
@@ -431,8 +431,9 @@ public class PanelPopulation {
 		}
 
 		@Override
-		default <F> P addStyledTextArea(String fieldName, ObservableStyledDocument<F> doc, Consumer<FieldEditor<JTextPane, ?>> modify) {
-			JTextPane editor = new JTextPane();
+		default <F> P addStyledTextArea(String fieldName, ObservableStyledDocument<F> doc,
+			Consumer<FieldEditor<ObservableTextArea<F>, ?>> modify) {
+			ObservableTextArea<F> editor = new ObservableTextArea<>(null, null, null);
 			editor.setEditable(false); // Editing not currently supported
 			// Default tabs are ridiculously long. Btw, I don't know what the units here are, but they're not characters. Maybe pixels.
 			if (doc.getRootStyle().getFontAttributes().getAttribute(StyleConstants.TabSet) == null) {
@@ -459,11 +460,11 @@ public class PanelPopulation {
 			}
 			ObservableStyledDocument.synchronize(doc, styledDoc, getUntil());
 
-			SimpleFieldEditor<JTextPane, ?> fieldPanel = new SimpleFieldEditor<>(fieldName, editor, getUntil());
+			SimpleFieldEditor<ObservableTextArea<F>, ?> fieldPanel = new SimpleFieldEditor<>(fieldName, editor, getUntil());
 			modify(fieldPanel);
-			fieldPanel.getTooltip().changes().takeUntil(getUntil()).act(evt -> fieldPanel.getEditor().setToolTipText(evt.getNewValue()));
 			if (modify != null)
 				modify.accept(fieldPanel);
+			fieldPanel.getTooltip().changes().takeUntil(getUntil()).act(evt -> fieldPanel.getEditor().setToolTipText(evt.getNewValue()));
 			if (fieldPanel.isDecorated())
 				doc.getRootValue().noInitChanges().safe(ThreadConstraint.EDT).takeUntil(getUntil())
 				.act(__ -> fieldPanel.decorate(fieldPanel.getComponent()));
