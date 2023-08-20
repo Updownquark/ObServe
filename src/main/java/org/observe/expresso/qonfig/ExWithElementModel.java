@@ -11,6 +11,8 @@ import org.observe.expresso.ModelType;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
+import org.observe.expresso.ObservableModelSet.ModelComponentId;
+import org.observe.expresso.ObservableModelSet.ModelComponentNode;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.qommons.Identifiable;
 import org.qommons.config.QonfigAddOn;
@@ -94,19 +96,24 @@ public class ExWithElementModel extends ExFlexibleElementModelAddOn<ExElement> {
 					throw new QonfigInterpretationException("Could not obtain source-attribute expression for " + dv.getSourceAttribute(),
 						e.getPosition(), e.getErrorLength(), e);
 			}
-			ElementModelValue<?> value;
+			ElementModelValuePlaceholder<?> value;
 			if (sourceAttrX != null)
 				value = new AttributeBackedElementValue<>(dv, name, spec, sourceAttrX);
 			else
 				value = new PlaceholderElementValue<>(dv, name, spec);
 			if (builder == null)
 				builder = createBuilder(session);
-			addElementValue(name, value, builder, spec.getElement().getPositionInFile());
+			ModelComponentNode<?> modelNode = addElementValue(name, value, builder, spec.getElement().getPositionInFile());
+			value.setModelId(modelNode.getIdentity());
 			return builder;
 		}
 
 		public ElementModelValue.Identity getElementValueId(String elementValueName) throws QonfigInterpretationException {
 			return (ElementModelValue.Identity) ((Identifiable) getElementValue(elementValueName)).getIdentity();
+		}
+
+		public ModelComponentId getElementValueModelId(String elementValueName) throws QonfigInterpretationException {
+			return ((ElementModelValuePlaceholder<?>) super.getElementValue(elementValueName)).getModelId();
 		}
 
 		@Override
@@ -187,11 +194,23 @@ public class ExWithElementModel extends ExFlexibleElementModelAddOn<ExElement> {
 		super.satisfyElementValue(elementValueName, value, models, ifPreSatisfied);
 	}
 
-	static class AttributeBackedElementValue<M> implements ElementModelValue<M> {
+	interface ElementModelValuePlaceholder<M> extends ElementModelValue<M> {
+		@Override
+		default ElementModelValue.Identity getIdentity() {
+			return getDeclaration();
+		}
+
+		ModelComponentId getModelId();
+
+		void setModelId(ModelComponentId modelId);
+	}
+
+	static class AttributeBackedElementValue<M> implements ElementModelValuePlaceholder<M> {
 		private final ElementModelValue.Identity theId;
 		private final String theName;
 		private final ExtModelValueElement.Def<M> theSpec;
 		private final CompiledExpression theAttributeValue;
+		private ModelComponentId theModelId;
 
 		AttributeBackedElementValue(ElementModelValue.Identity id, String name, ExtModelValueElement.Def<M> spec,
 			CompiledExpression attributeValue) {
@@ -207,13 +226,18 @@ public class ExWithElementModel extends ExFlexibleElementModelAddOn<ExElement> {
 		}
 
 		@Override
-		public ElementModelValue.Identity getIdentity() {
-			return theId;
+		public ModelType<M> getModelType(CompiledExpressoEnv env) {
+			return theSpec.getModelType();
 		}
 
 		@Override
-		public ModelType<M> getModelType(CompiledExpressoEnv env) {
-			return theSpec.getModelType();
+		public ModelComponentId getModelId() {
+			return theModelId;
+		}
+
+		@Override
+		public void setModelId(ModelComponentId modelId) {
+			theModelId = modelId;
 		}
 
 		@Override
@@ -240,9 +264,11 @@ public class ExWithElementModel extends ExFlexibleElementModelAddOn<ExElement> {
 		}
 	}
 
-	static class PlaceholderElementValue<M> extends ExFlexibleElementModelAddOn.PlaceholderModelValue<M> implements ElementModelValue<M> {
+	static class PlaceholderElementValue<M> extends ExFlexibleElementModelAddOn.PlaceholderModelValue<M>
+		implements ElementModelValuePlaceholder<M> {
 		private final ElementModelValue.Identity theId;
 		private final ExtModelValueElement.Def<M> theSpec;
+		private ModelComponentId theModelId;
 
 		PlaceholderElementValue(ElementModelValue.Identity id, String name, ExtModelValueElement.Def<M> spec) {
 			super(name);
@@ -263,6 +289,16 @@ public class ExWithElementModel extends ExFlexibleElementModelAddOn<ExElement> {
 		@Override
 		public ModelType<M> getModelType() {
 			return theSpec.getModelType();
+		}
+
+		@Override
+		public ModelComponentId getModelId() {
+			return theModelId;
+		}
+
+		@Override
+		public void setModelId(ModelComponentId modelId) {
+			theModelId = modelId;
 		}
 
 		@Override

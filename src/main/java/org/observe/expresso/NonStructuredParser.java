@@ -5,7 +5,6 @@ import java.text.ParseException;
 import org.observe.SettableValue;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.util.TypeTokens;
-import org.qommons.LambdaUtils;
 import org.qommons.SelfDescribed;
 import org.qommons.ex.ExBiFunction;
 
@@ -58,8 +57,7 @@ public interface NonStructuredParser extends SelfDescribed {
 			T2 value = (T2) parseValue((TypeToken<? extends T>) type, text);
 			if (value != null && !TypeTokens.get().isInstance(type, value))
 				throw new IllegalStateException("Parser " + this + " parsed a value of type " + value.getClass() + " for type " + type);
-			return InterpretedValueSynth.of(ModelTypes.Value.forType(type),
-				LambdaUtils.printableExFn(msi -> SettableValue.of(type, value, "Literal"), text, null));
+			return InterpretedValueSynth.literal(ModelTypes.Value.forType(type), SettableValue.of(type, value, "Literal"), text);
 		}
 
 		/**

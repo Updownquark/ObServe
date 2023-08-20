@@ -15,10 +15,15 @@ import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
+import org.observe.expresso.ObservableModelSet.ModelComponentId;
+import org.observe.expresso.ObservableModelSet.ModelInstantiator;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
+import org.observe.expresso.qonfig.ExSort.Interpreted.SortInstantiator;
 import org.observe.util.TypeTokens;
 import org.qommons.LambdaUtils;
+import org.qommons.QommonsUtils;
 import org.qommons.StringUtils;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.CollectionUtils;
@@ -46,8 +51,8 @@ public abstract class ExSort extends ExElement.Def.Abstract<ExElement> {
 	private static final SingleTypeTraceability<ExElement, Interpreted<?, ?>, ExSort> TRACEABILITY = ElementTypeTraceability
 		.getElementTraceability(ExpressoBaseV0_1.NAME, ExpressoBaseV0_1.VERSION, "sort", ExSort.class, Interpreted.class, null);
 
-	private String theSortValueName;
-	private String theSortCompareValueName;
+	private ModelComponentId theSortValue;
+	private ModelComponentId theSortCompareValue;
 	private CompiledExpression theSortWith;
 	private final List<ExSortBy> theSortBy;
 	private boolean isAscending;
@@ -58,13 +63,13 @@ public abstract class ExSort extends ExElement.Def.Abstract<ExElement> {
 	}
 
 	@QonfigAttributeGetter("sort-value-as")
-	public String getSortValueName() {
-		return theSortValueName;
+	public ModelComponentId getSortValue() {
+		return theSortValue;
 	}
 
 	@QonfigAttributeGetter("sort-compare-value-as")
-	public String getSortCompareValueName() {
-		return theSortCompareValueName;
+	public ModelComponentId getSortCompareValue() {
+		return theSortCompareValue;
 	}
 
 	@QonfigAttributeGetter("sort-with")
@@ -86,9 +91,12 @@ public abstract class ExSort extends ExElement.Def.Abstract<ExElement> {
 	protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 		withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 		super.doUpdate(session.asElement(session.getFocusType().getSuperElement()));
-		theSortValueName = session.getAttributeText("sort-value-as");
+		ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
+		String sortValueName = session.getAttributeText("sort-value-as");
+		theSortValue = sortValueName == null ? null : elModels.getElementValueModelId(sortValueName);
 		LocatedPositionedContent sortValueNamePosition = session.getAttributeValuePosition("sort-value-as");
-		theSortCompareValueName = session.getAttributeText("sort-compare-value-as");
+		String sortValueCompareName = session.getAttributeText("sort-compare-value-as");
+		theSortCompareValue = sortValueCompareName == null ? null : elModels.getElementValueModelId(sortValueCompareName);
 		LocatedPositionedContent sortCompareValueNamePosition = session.getAttributeValuePosition("sort-compare-value-as");
 		theSortWith = session.getAttributeExpression("sort-with");
 		isAscending = session.getAttribute("ascending", boolean.class);
@@ -97,31 +105,31 @@ public abstract class ExSort extends ExElement.Def.Abstract<ExElement> {
 		if (theSortWith != null) {
 			if (!theSortBy.isEmpty())
 				reporting().error("sort-with or sort-by may be used, but not both");
-			if (theSortValueName == null)
+			if (theSortValue == null)
 				throw new QonfigInterpretationException("sort-with must be used with sort-value-as",
 					theSortWith.getElement().getPositionInFile(), 0);
-			else if (theSortCompareValueName == null)
+			else if (theSortCompareValue == null)
 				throw new QonfigInterpretationException("sort-with must be used with sort-compare-value-as",
 					theSortWith.getElement().getPositionInFile(), 0);
 		} else if (!theSortBy.isEmpty()) {
-			if (theSortValueName == null)
+			if (theSortValue == null)
 				throw new QonfigInterpretationException("sort-by must be used with sort-value-as", getElement().getPositionInFile(), 0);
-			if (theSortCompareValueName != null)
+			if (theSortCompareValue != null)
 				reporting().at(sortCompareValueNamePosition).warn("sort-compare-value-as is not used with sort-by");
 		} else {
-			if (theSortValueName != null)
+			if (theSortValue != null)
 				reporting().at(sortValueNamePosition).warn("sort-value-as is not used with default sorting");
-			if (theSortCompareValueName != null)
+			if (theSortCompareValue != null)
 				reporting().at(sortCompareValueNamePosition).warn("sort-compare-value-as is not used with default sorting");
 		}
 
-		if (theSortValueName != null || theSortCompareValueName != null) {
+		if (theSortValue != null || theSortCompareValue != null) {
 			ExWithElementModel.Def withElModel = getAddOn(ExWithElementModel.Def.class);
-			if (theSortValueName != null)
-				withElModel.<Interpreted<?, ?>, SettableValue<?>> satisfyElementValueType(theSortValueName, ModelTypes.Value,
+			if (theSortValue != null)
+				withElModel.<Interpreted<?, ?>, SettableValue<?>> satisfyElementValueType(theSortValue.getName(), ModelTypes.Value,
 					(interp, env) -> ModelTypes.Value.forType(interp.getSortType()));
-			if (theSortCompareValueName != null)
-				withElModel.<Interpreted<?, ?>, SettableValue<?>> satisfyElementValueType(theSortCompareValueName, ModelTypes.Value,
+			if (theSortCompareValue != null)
+				withElModel.<Interpreted<?, ?>, SettableValue<?>> satisfyElementValueType(theSortCompareValue.getName(), ModelTypes.Value,
 					(interp, env) -> ModelTypes.Value.forType(interp.getSortType()));
 		}
 	}
@@ -185,14 +193,15 @@ public abstract class ExSort extends ExElement.Def.Abstract<ExElement> {
 				theDefaultSorting = null;
 		}
 
-		public Comparator<? super OT> getSorting(ModelSetInstance models) throws ModelInstantiationException {
-			SettableValue<OT> left = SettableValue.build(getSortType()).withDescription(getDefinition().getSortValueName())
-				.withValue(TypeTokens.get().getDefaultValue(getSortType())).build();
-			SettableValue<OT> right = SettableValue.build(getSortType()).withDescription(getDefinition().getSortValueName())
-				.withValue(TypeTokens.get().getDefaultValue(getSortType())).build();
-			Supplier<Integer> sorting = getExternalSorting(models, left, right);
-			return new SortWithComparator<>(left, right, sorting, getDefinition().isAscending());
+		protected List<SortInstantiator<IT, ?>> instantiateSortBy() {
+			return QommonsUtils.map(theSortBy, sb -> sb.doInstantiateSort(), true);
 		}
+
+		public ModelValueInstantiator<Comparator<? super OT>> instantiateSort() {
+			return doInstantiateSort();
+		}
+
+		protected abstract SortInstantiator<OT, IT> doInstantiateSort();
 
 		public BetterList<InterpretedValueSynth<?, ?>> getComponents() {
 			if (theSortWith != null)
@@ -201,24 +210,61 @@ public abstract class ExSort extends ExElement.Def.Abstract<ExElement> {
 				return BetterList.of(theSortBy.stream().flatMap(sb -> sb.getComponents().stream()));
 		}
 
-		protected abstract Supplier<Integer> getExternalSorting(ModelSetInstance parentModels, SettableValue<OT> left,
-			SettableValue<OT> right) throws ModelInstantiationException;
+		static abstract class SortInstantiator<OT, IT> implements ModelValueInstantiator<Comparator<? super OT>> {
+			protected final TypeToken<OT> theSortType;
+			protected final ModelComponentId theSortValue;
+			protected final ModelComponentId theSortCompareValue;
+			protected final ModelValueInstantiator<SettableValue<Integer>> theSortWith;
+			protected final List<SortInstantiator<IT, ?>> theSortBy;
+			protected final Comparator<? super IT> theDefaultSorting;
+			protected final boolean isAscending;
 
-		protected Supplier<Integer> getInternalSorting(ModelSetInstance models, SettableValue<IT> left, SettableValue<IT> right)
-			throws ModelInstantiationException {
-			if (theSortWith != null) {
-				ExWithElementModel.Interpreted withElModel = getAddOn(ExWithElementModel.Interpreted.class);
-				withElModel.satisfyElementValue(getDefinition().getSortValueName(), models, left);
-				withElModel.satisfyElementValue(getDefinition().getSortCompareValueName(), models, right);
-				return theSortWith.get(models);
-			} else if (!theSortBy.isEmpty()) {
-				Supplier<Integer>[] sortBy = new Supplier[theSortBy.size()];
-				int i = 0;
-				for (ExSortBy.Interpreted<IT, ?> sb : theSortBy)
-					sortBy[i++] = sb.getExternalSorting(models, left, right);
-				return new CompositeIntSupplier(sortBy);
-			} else
-				return new DefaultSortSupplier<>(left, right, theDefaultSorting);
+			protected SortInstantiator(TypeToken<OT> sortType, ModelComponentId sortValue, ModelComponentId sortCompareValue,
+				ModelValueInstantiator<SettableValue<Integer>> sortWith, List<SortInstantiator<IT, ?>> sortBy,
+				Comparator<? super IT> defaultSorting, boolean ascending) {
+				theSortType = sortType;
+				theSortValue = sortValue;
+				theSortCompareValue = sortCompareValue;
+				theSortWith = sortWith;
+				theSortBy = sortBy;
+				theDefaultSorting = defaultSorting;
+				isAscending = ascending;
+			}
+
+			@Override
+			public Comparator<? super OT> get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
+				SettableValue<OT> left = SettableValue.build(theSortType).withDescription(theSortValue.getName())
+					.withValue(TypeTokens.get().getDefaultValue(theSortType)).build();
+				SettableValue<OT> right = SettableValue.build(theSortType).withDescription(theSortValue.getName())
+					.withValue(TypeTokens.get().getDefaultValue(theSortType)).build();
+				Supplier<Integer> sorting = getExternalSorting(models, left, right);
+				return new SortWithComparator<>(left, right, sorting, isAscending);
+			}
+
+			@Override
+			public Comparator<? super OT> forModelCopy(Comparator<? super OT> value, ModelSetInstance sourceModels,
+				ModelSetInstance newModels) throws ModelInstantiationException {
+				return get(newModels);
+			}
+
+			protected abstract Supplier<Integer> getExternalSorting(ModelSetInstance parentModels, SettableValue<OT> left,
+				SettableValue<OT> right) throws ModelInstantiationException;
+
+			protected Supplier<Integer> getInternalSorting(ModelSetInstance models, SettableValue<IT> left, SettableValue<IT> right)
+				throws ModelInstantiationException {
+				if (theSortWith != null) {
+					ExFlexibleElementModelAddOn.satisfyElementValue(theSortValue, models, left);
+					ExFlexibleElementModelAddOn.satisfyElementValue(theSortCompareValue, models, right);
+					return theSortWith.get(models);
+				} else if (!theSortBy.isEmpty()) {
+					Supplier<Integer>[] sortBy = new Supplier[theSortBy.size()];
+					int i = 0;
+					for (SortInstantiator<IT, ?> sb : theSortBy)
+						sortBy[i++] = sb.getExternalSorting(models, left, right);
+					return new CompositeIntSupplier(sortBy);
+				} else
+					return new DefaultSortSupplier<>(left, right, theDefaultSorting);
+			}
 		}
 
 		public static class SortWithComparator<T> implements Comparator<T> {
@@ -368,17 +414,35 @@ public abstract class ExSort extends ExElement.Def.Abstract<ExElement> {
 			}
 
 			@Override
-			public Comparator<? super T> getSorting(ModelSetInstance models) throws ModelInstantiationException {
+			public ModelValueInstantiator<Comparator<? super T>> instantiateSort() {
 				if (getDefaultSorting() != null)
-					return getDefaultSorting();
-				return super.getSorting(models);
+					return ModelValueInstantiator.literal(getDefaultSorting(), "default");
+				return super.instantiateSort();
+			}
+
+			@Override
+			protected SortInstantiator<T, T> doInstantiateSort() {
+				return new RootSortInstantiator<>(getSortType(), getDefinition().getSortValue(), getDefinition().getSortCompareValue(), //
+					getSortWith() == null ? null : getSortWith().instantiate(), //
+						instantiateSortBy(), getDefaultSorting(), getDefinition().isAscending(), getExpressoEnv().getModels().instantiate());
+			}
+		}
+
+		static class RootSortInstantiator<T> extends SortInstantiator<T, T> {
+			private final ModelInstantiator theLocalModel;
+
+			RootSortInstantiator(TypeToken<T> sortType, ModelComponentId sortValue, ModelComponentId sortCompareValue,
+				ModelValueInstantiator<SettableValue<Integer>> sortWith, List<SortInstantiator<T, ?>> sortBy,
+				Comparator<? super T> defaultSorting, boolean ascending, ModelInstantiator localModel) {
+				super(sortType, sortValue, sortCompareValue, sortWith, sortBy, defaultSorting, ascending);
+				theLocalModel = localModel;
 			}
 
 			@Override
 			protected Supplier<Integer> getExternalSorting(ModelSetInstance parentModels, SettableValue<T> left, SettableValue<T> right)
 				throws ModelInstantiationException {
-				ModelSetInstance models = getExpressoEnv().wrapLocal(parentModels);
-				return getInternalSorting(models, left, right);
+				parentModels = theLocalModel.wrap(parentModels);
+				return getInternalSorting(parentModels, left, right);
 			}
 		}
 	}
@@ -448,24 +512,47 @@ public abstract class ExSort extends ExElement.Def.Abstract<ExElement> {
 			}
 
 			@Override
+			public BetterList<InterpretedValueSynth<?, ?>> getComponents() {
+				return BetterList.of(Stream.concat(Stream.of(theAttribute), super.getComponents().stream()));
+			}
+
+			@Override
+			protected SortInstantiator<OT, IT> doInstantiateSort() {
+				return new SortByInstantiator<>(getSortType(), getDefinition().getSortValue(), getDefinition().getSortCompareValue(),
+					getSortWith() == null ? null : getSortWith().instantiate(), instantiateSortBy(), getDefaultSorting(),
+					getDefinition().isAscending(), getExpressoEnv().getModels().instantiate(),
+					getParentElement().getDefinition().getSortValue(), theAttribute.instantiate());
+			}
+		}
+
+		static class SortByInstantiator<OT, IT> extends SortInstantiator<OT, IT> {
+			private final ModelInstantiator theLocalModel;
+			private final ModelComponentId theParentSortValue;
+			private final ModelValueInstantiator<SettableValue<IT>> theAttribute;
+
+			SortByInstantiator(TypeToken<OT> sortType, ModelComponentId sortValue, ModelComponentId sortCompareValue,
+				ModelValueInstantiator<SettableValue<Integer>> sortWith, List<SortInstantiator<IT, ?>> sortBy,
+				Comparator<? super IT> defaultSorting, boolean ascending, ModelInstantiator localModel,
+				ModelComponentId parentSortValue, ModelValueInstantiator<SettableValue<IT>> attribute) {
+				super(sortType, sortValue, sortCompareValue, sortWith, sortBy, defaultSorting, ascending);
+				theLocalModel = localModel;
+				theParentSortValue = parentSortValue;
+				theAttribute = attribute;
+			}
+
+			@Override
 			protected Supplier<Integer> getExternalSorting(ModelSetInstance parentModels, SettableValue<OT> left, SettableValue<OT> right)
 				throws ModelInstantiationException {
-				ModelSetInstance models = getExpressoEnv().wrapLocal(parentModels);
+				ModelSetInstance models = theLocalModel.wrap(parentModels);
 				ModelSetInstance leftCopy = models.copy().build();
-				ExWithElementModel.Interpreted withElModel = getParentElement().getAddOn(ExWithElementModel.Interpreted.class);
-				withElModel.satisfyElementValue(getParentElement().getDefinition().getSortValueName(), leftCopy, left,
-					ExWithElementModel.ActionIfSatisfied.Replace);
 				ModelSetInstance rightCopy = models.copy().build();
-				withElModel.satisfyElementValue(getParentElement().getDefinition().getSortValueName(), rightCopy, right,
+				ExFlexibleElementModelAddOn.satisfyElementValue(theParentSortValue, leftCopy, left,
+					ExWithElementModel.ActionIfSatisfied.Replace);
+				ExFlexibleElementModelAddOn.satisfyElementValue(theParentSortValue, rightCopy, right,
 					ExWithElementModel.ActionIfSatisfied.Replace);
 				SettableValue<IT> internalLeft = theAttribute.get(leftCopy);
 				SettableValue<IT> internalRight = theAttribute.get(rightCopy);
 				return getInternalSorting(models, internalLeft, internalRight);
-			}
-
-			@Override
-			public BetterList<InterpretedValueSynth<?, ?>> getComponents() {
-				return BetterList.of(Stream.concat(Stream.of(theAttribute), super.getComponents().stream()));
 			}
 		}
 	}

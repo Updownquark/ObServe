@@ -15,6 +15,7 @@ import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceabilit
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
+import org.observe.quick.QuickTextWidget;
 import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
@@ -22,13 +23,13 @@ import org.qommons.io.LocatedPositionedContent;
 
 import com.google.common.reflect.TypeToken;
 
-public class QuickLabel<T> extends BaseTextWidget.Abstract<T> {
+public class QuickLabel<T> extends QuickTextWidget.Abstract<T> {
 	public static final String LABEL = "label";
 	private static final SingleTypeTraceability<QuickLabel<?>, Interpreted<?, ?>, Def<?>> TRACEABILITY = ElementTypeTraceability
 		.getElementTraceability(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, LABEL, Def.class, Interpreted.class,
 			QuickLabel.class);
 
-	public static class Def<W extends QuickLabel<?>> extends BaseTextWidget.Def.Abstract<W> {
+	public static class Def<W extends QuickLabel<?>> extends QuickTextWidget.Def.Abstract<W> {
 		private String theStaticText;
 		private CompiledExpression theTextExpression;
 		private CompiledExpression theIcon;
@@ -71,11 +72,9 @@ public class QuickLabel<T> extends BaseTextWidget.Abstract<T> {
 					throw new QonfigInterpretationException("Cannot specify both 'value' attribute and element value",
 						session.getValuePosition(0), 0);
 				if (getFormat() != null)
-					throw new QonfigInterpretationException("Cannot specify format with and element value",
+					throw new QonfigInterpretationException("Cannot specify format with an element value",
 						session.getAttributeValuePosition("format", 0), 0);
-			} else if (super.getValue().getExpression() == ObservableExpression.EMPTY)
-				throw new QonfigInterpretationException("Must specify either 'value' attribute or element value",
-					session.getElement().getPositionInFile(), 0);
+			}
 			theStaticText = staticText;
 			if (theStaticText != null) {
 				theTextExpression = new CompiledExpression(//
@@ -93,7 +92,7 @@ public class QuickLabel<T> extends BaseTextWidget.Abstract<T> {
 		}
 	}
 
-	public static class Interpreted<T, W extends QuickLabel<T>> extends BaseTextWidget.Interpreted.Abstract<T, W> {
+	public static class Interpreted<T, W extends QuickLabel<T>> extends QuickTextWidget.Interpreted.Abstract<T, W> {
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<Icon>> theIcon;
 
 		public Interpreted(QuickLabel.Def<? super W> definition, ExElement.Interpreted<?> parent) {
@@ -142,6 +141,6 @@ public class QuickLabel<T> extends BaseTextWidget.Abstract<T> {
 	protected void updateModel(ExElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
 		super.updateModel(interpreted, myModels);
 		QuickLabel.Interpreted<T, ?> myInterpreted = (QuickLabel.Interpreted<T, ?>) interpreted;
-		theIcon = myInterpreted.getIcon() == null ? null : myInterpreted.getIcon().get(myModels);
+		theIcon = myInterpreted.getIcon() == null ? null : myInterpreted.getIcon().instantiate().get(myModels);
 	}
 }

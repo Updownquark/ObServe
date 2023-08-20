@@ -286,13 +286,13 @@ public interface ValueAction<T> extends ExElement {
 		protected void updateModel(ExElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
 			super.updateModel(interpreted, myModels);
 			ValueAction.Interpreted<T, ?> myInterpreted = (ValueAction.Interpreted<T, ?>) interpreted;
-			theName.set(myInterpreted.getName() == null ? null : myInterpreted.getName().get(myModels), null);
+			theName.set(myInterpreted.getName() == null ? null : myInterpreted.getName().instantiate().get(myModels), null);
 			isButton = myInterpreted.getDefinition().isButton();
 			isPopup = myInterpreted.getDefinition().isPopup();
-			theIcon.set(myInterpreted.getIcon() == null ? null : myInterpreted.getIcon().get(myModels), null);
-			isEnabled.set(myInterpreted.isEnabled() == null ? null : myInterpreted.isEnabled().get(myModels), null);
-			theTooltip.set(myInterpreted.getTooltip() == null ? null : myInterpreted.getTooltip().get(myModels), null);
-			theAction = myInterpreted.getAction().get(myModels);
+			theIcon.set(myInterpreted.getIcon() == null ? null : myInterpreted.getIcon().instantiate().get(myModels), null);
+			isEnabled.set(myInterpreted.isEnabled() == null ? null : myInterpreted.isEnabled().instantiate().get(myModels), null);
+			theTooltip.set(myInterpreted.getTooltip() == null ? null : myInterpreted.getTooltip().instantiate().get(myModels), null);
+			theAction = myInterpreted.getAction().instantiate().get(myModels);
 		}
 	}
 

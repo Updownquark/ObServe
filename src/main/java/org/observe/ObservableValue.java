@@ -719,7 +719,7 @@ public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>,
 		protected final ObservableValue<F> theWrapped;
 		private Object theIdentity;
 
-		public WrappingObservableValue(ObservableValue<F> wrapped) {
+		protected WrappingObservableValue(ObservableValue<F> wrapped) {
 			theWrapped = wrapped;
 		}
 
@@ -1644,11 +1644,10 @@ public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>,
 	 *
 	 * @param <T> The type of the value
 	 */
-	class FlattenedObservableValue<T> implements ObservableValue<T> {
+	class FlattenedObservableValue<T> extends AbstractIdentifiable implements ObservableValue<T> {
 		private final ObservableValue<? extends ObservableValue<? extends T>> theValue;
 		private final TypeToken<T> theType;
 		private final Supplier<? extends T> theDefaultValue;
-		private Object theIdentity;
 		private Object theChangesIdentity;
 		private Object theNoInitChangesIdentity;
 
@@ -1666,10 +1665,8 @@ public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>,
 		}
 
 		@Override
-		public Object getIdentity() {
-			if (theIdentity == null)
-				theIdentity = Identifiable.wrap(theValue.getIdentity(), "flatten");
-			return theIdentity;
+		protected Object createIdentity() {
+			return Identifiable.wrap(theValue.getIdentity(), "flat");
 		}
 
 		@Override

@@ -113,7 +113,7 @@ public class QuickBox extends QuickContainer.Abstract<QuickWidget> {
 	protected void updateModel(ExElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
 		super.updateModel(interpreted, myModels);
 		QuickBox.Interpreted<?> myInterpreted = (QuickBox.Interpreted<?>) interpreted;
-		theOpacity = myInterpreted.getOpacity() == null ? null : myInterpreted.getOpacity().get(myModels);
+		theOpacity = myInterpreted.getOpacity() == null ? null : myInterpreted.getOpacity().instantiate().get(myModels);
 	}
 
 	public SettableValue<Double> getOpacity() {

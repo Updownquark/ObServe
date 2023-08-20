@@ -1,8 +1,11 @@
 package org.observe.quick.style;
 
+import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.expresso.InterpretedExpressoEnv;
+import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
+import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 
 /**
  * A {@link QuickStyleValue style value} evaluated for an {@link InterpretedExpressoEnv environment}
@@ -47,6 +50,10 @@ public class InterpretedStyleValue<T> implements Comparable<InterpretedStyleValu
 		return theValue;
 	}
 
+	public StyleValueInstantiator<T> instantiate(InterpretedModelSet models) {
+		return new StyleValueInstantiator<>(theApplication.getConditionInstantiator(models), theValue.instantiate());
+	}
+
 	@Override
 	public int compareTo(InterpretedStyleValue<?> o) {
 		return theStyleValue.compareTo(o.theStyleValue);
@@ -55,5 +62,21 @@ public class InterpretedStyleValue<T> implements Comparable<InterpretedStyleValu
 	@Override
 	public String toString() {
 		return theStyleValue.toString();
+	}
+
+	public static class StyleValueInstantiator<T> {
+		public final ModelValueInstantiator<ObservableValue<Boolean>> condition;
+		public final ModelValueInstantiator<SettableValue<T>> value;
+
+		public StyleValueInstantiator(ModelValueInstantiator<ObservableValue<Boolean>> condition,
+			ModelValueInstantiator<SettableValue<T>> value) {
+			this.condition = condition;
+			this.value = value;
+		}
+
+		@Override
+		public String toString() {
+			return condition + " -> " + value;
+		}
 	}
 }

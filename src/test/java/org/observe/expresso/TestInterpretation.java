@@ -7,9 +7,13 @@ import java.util.Set;
 import org.observe.SettableValue;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
+import org.observe.expresso.ObservableModelSet.ModelComponentId;
+import org.observe.expresso.ObservableModelSet.ModelInstantiator;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.qonfig.CompiledExpression;
 import org.observe.expresso.qonfig.ExElement;
+import org.observe.expresso.qonfig.ExFlexibleElementModelAddOn;
 import org.observe.expresso.qonfig.ExWithElementModel;
 import org.observe.expresso.qonfig.ExpressoBaseV0_1;
 import org.observe.expresso.qonfig.ExpressoQIS;
@@ -64,6 +68,7 @@ public class TestInterpretation implements QonfigInterpretation {
 	ModelValueElement.CompiledSynth<SettableValue<?>, ModelValueElement<SettableValue<?>, SettableValue<StatefulTestStructure>>> {
 		private String theModelPath;
 		private CompiledExpression theDerivedState;
+		private ModelComponentId theInternalStateVariable;
 
 		public StatefulStruct(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
 			super(parent, qonfigType);
@@ -83,6 +88,10 @@ public class TestInterpretation implements QonfigInterpretation {
 			return theDerivedState;
 		}
 
+		public ModelComponentId getInternalStateVariable() {
+			return theInternalStateVariable;
+		}
+
 		@Override
 		public CompiledExpression getElementValue() {
 			return null;
@@ -93,6 +102,7 @@ public class TestInterpretation implements QonfigInterpretation {
 			super.doUpdate(session);
 			theModelPath = session.get(ExpressoBaseV0_1.PATH_KEY, String.class);
 			theDerivedState = session.getAttributeExpression("derived-state");
+			theInternalStateVariable = getAddOn(ExWithElementModel.Def.class).getElementValueModelId("internalState");
 		}
 
 		@Override
@@ -151,11 +161,36 @@ public class TestInterpretation implements QonfigInterpretation {
 			}
 
 			@Override
+			public ModelValueInstantiator<SettableValue<StatefulTestStructure>> instantiate() {
+				return new Instantiator(getExpressoEnv().getModels().instantiate(), theDerivedState.instantiate(),
+					getDefinition().getInternalStateVariable());
+			}
+
+			@Override
+			public ModelValueElement<SettableValue<?>, SettableValue<StatefulTestStructure>> create(ExElement parent,
+				ModelSetInstance models) throws ModelInstantiationException {
+				return null;
+			}
+		}
+
+		static class Instantiator implements ModelValueInstantiator<SettableValue<StatefulTestStructure>> {
+			private final ModelInstantiator theLocalModel;
+			private final ModelValueInstantiator<SettableValue<Integer>> theDerivedState;
+			private final ModelComponentId theInternalStateVariable;
+
+			Instantiator(ModelInstantiator localModel, ModelValueInstantiator<SettableValue<Integer>> derivedState,
+				ModelComponentId internalStateVariable) {
+				theLocalModel = localModel;
+				theDerivedState = derivedState;
+				theInternalStateVariable = internalStateVariable;
+			}
+
+			@Override
 			public SettableValue<StatefulTestStructure> get(ModelSetInstance models)
 				throws ModelInstantiationException, IllegalStateException {
-				models = getExpressoEnv().wrapLocal(models);
+				models = theLocalModel.wrap(models);
 				StatefulTestStructure structure = new StatefulTestStructure(theDerivedState.get(models));
-				getAddOn(ExWithElementModel.Interpreted.class).satisfyElementValue("internalState", models, structure.getInternalState());
+				ExFlexibleElementModelAddOn.satisfyElementValue(theInternalStateVariable, models, structure.getInternalState());
 				return SettableValue.of(StatefulTestStructure.class, structure, "Not Settable");
 			}
 
@@ -163,12 +198,6 @@ public class TestInterpretation implements QonfigInterpretation {
 			public SettableValue<StatefulTestStructure> forModelCopy(SettableValue<StatefulTestStructure> value,
 				ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException {
 				return get(newModels);
-			}
-
-			@Override
-			public ModelValueElement<SettableValue<?>, SettableValue<StatefulTestStructure>> create(ExElement parent,
-				ModelSetInstance models) throws ModelInstantiationException {
-				return null;
 			}
 		}
 	}
@@ -286,9 +315,34 @@ public class TestInterpretation implements QonfigInterpretation {
 			}
 
 			@Override
+			public ModelValueInstantiator<SettableValue<DynamicTypeStatefulTestStructure>> instantiate() {
+				return new Instantiator<>(getExpressoEnv().getModels().instantiate(), theInternalState.instantiate(),
+					theDerivedState.instantiate());
+			}
+
+			@Override
+			public ModelValueElement<SettableValue<?>, SettableValue<DynamicTypeStatefulTestStructure>> create(ExElement parent,
+				ModelSetInstance models) throws ModelInstantiationException {
+				return null;
+			}
+		}
+
+		static class Instantiator<T> implements ModelValueInstantiator<SettableValue<DynamicTypeStatefulTestStructure>> {
+			private final ModelInstantiator theLocalModel;
+			private final ModelValueInstantiator<SettableValue<T>> theInternalState;
+			private final ModelValueInstantiator<SettableValue<T>> theDerivedState;
+
+			Instantiator(ModelInstantiator localModel, ModelValueInstantiator<SettableValue<T>> internalState,
+				ModelValueInstantiator<SettableValue<T>> derivedState) {
+				theLocalModel = localModel;
+				theInternalState = internalState;
+				theDerivedState = derivedState;
+			}
+
+			@Override
 			public SettableValue<DynamicTypeStatefulTestStructure> get(ModelSetInstance models)
 				throws ModelInstantiationException, IllegalStateException {
-				models = getExpressoEnv().wrapLocal(models);
+				models = theLocalModel.wrap(models);
 				DynamicTypeStatefulTestStructure structure = new DynamicTypeStatefulTestStructure(//
 					theInternalState.get(models), theDerivedState.get(models));
 				return SettableValue.of(DynamicTypeStatefulTestStructure.class, structure, "Not Settable");
@@ -298,12 +352,6 @@ public class TestInterpretation implements QonfigInterpretation {
 			public SettableValue<DynamicTypeStatefulTestStructure> forModelCopy(SettableValue<DynamicTypeStatefulTestStructure> value,
 				ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException {
 				return get(newModels);
-			}
-
-			@Override
-			public ModelValueElement<SettableValue<?>, SettableValue<DynamicTypeStatefulTestStructure>> create(ExElement parent,
-				ModelSetInstance models) throws ModelInstantiationException {
-				return null;
 			}
 		}
 	}
@@ -409,9 +457,34 @@ public class TestInterpretation implements QonfigInterpretation {
 			}
 
 			@Override
+			public ModelValueInstantiator<SettableValue<DynamicTypeStatefulTestStructure>> instantiate() {
+				return new Instantiator<>(getExpressoEnv().getModels().instantiate(), theInternalState.instantiate(),
+					theDerivedState.instantiate());
+			}
+
+			@Override
+			public ModelValueElement<SettableValue<?>, SettableValue<DynamicTypeStatefulTestStructure>> create(ExElement parent,
+				ModelSetInstance models) throws ModelInstantiationException {
+				return null;
+			}
+		}
+
+		static class Instantiator<T> implements ModelValueInstantiator<SettableValue<DynamicTypeStatefulTestStructure>> {
+			private final ModelInstantiator theLocalModel;
+			private final ModelValueInstantiator<SettableValue<T>> theInternalState;
+			private final ModelValueInstantiator<SettableValue<T>> theDerivedState;
+
+			Instantiator(ModelInstantiator localModel, ModelValueInstantiator<SettableValue<T>> internalState,
+				ModelValueInstantiator<SettableValue<T>> derivedState) {
+				theLocalModel = localModel;
+				theInternalState = internalState;
+				theDerivedState = derivedState;
+			}
+
+			@Override
 			public SettableValue<DynamicTypeStatefulTestStructure> get(ModelSetInstance models)
 				throws ModelInstantiationException, IllegalStateException {
-				models = getExpressoEnv().wrapLocal(models);
+				models = theLocalModel.wrap(models);
 				DynamicTypeStatefulTestStructure structure = new DynamicTypeStatefulTestStructure(//
 					theInternalState.get(models), theDerivedState.get(models));
 				return SettableValue.of(DynamicTypeStatefulTestStructure.class, structure, "Not Settable");
@@ -421,12 +494,6 @@ public class TestInterpretation implements QonfigInterpretation {
 			public SettableValue<DynamicTypeStatefulTestStructure> forModelCopy(SettableValue<DynamicTypeStatefulTestStructure> value,
 				ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException {
 				return get(newModels);
-			}
-
-			@Override
-			public ModelValueElement<SettableValue<?>, SettableValue<DynamicTypeStatefulTestStructure>> create(ExElement parent,
-				ModelSetInstance models) throws ModelInstantiationException {
-				return null;
 			}
 		}
 	}

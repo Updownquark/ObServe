@@ -10,24 +10,25 @@ import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExWithElementModel;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
+import org.observe.quick.QuickTextWidget;
 import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
-public interface QuickEditableTextWidget<T> extends BaseTextWidget<T> {
+public interface QuickEditableTextWidget<T> extends QuickTextWidget<T> {
 	public static final String EDITABLE_TEXT_WIDGET = "editable-text-widget";
 	public static final SingleTypeTraceability<QuickEditableTextWidget<?>, Interpreted<?, ?>, Def<?>> EDITABLE_TEXT_WIDGET_TRACEABILITY = ElementTypeTraceability
 		.getElementTraceability(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, EDITABLE_TEXT_WIDGET, Def.class,
 			Interpreted.class, QuickEditableTextWidget.class);
 
-	public interface Def<W extends QuickEditableTextWidget<?>> extends BaseTextWidget.Def<W> {
+	public interface Def<W extends QuickEditableTextWidget<?>> extends QuickTextWidget.Def<W> {
 		@QonfigAttributeGetter("commit-on-type")
 		boolean isCommitOnType();
 
 		@Override
 		Interpreted<?, ? extends W> interpret(ExElement.Interpreted<?> parent);
 
-		public abstract class Abstract<W extends QuickEditableTextWidget<?>> extends BaseTextWidget.Def.Abstract<W>
+		public abstract class Abstract<W extends QuickEditableTextWidget<?>> extends QuickTextWidget.Def.Abstract<W>
 		implements Def<W> {
 			private boolean isCommitOnType;
 
@@ -49,11 +50,11 @@ public interface QuickEditableTextWidget<T> extends BaseTextWidget<T> {
 		}
 	}
 
-	public interface Interpreted<T, W extends QuickEditableTextWidget<T>> extends BaseTextWidget.Interpreted<T, W> {
+	public interface Interpreted<T, W extends QuickEditableTextWidget<T>> extends QuickTextWidget.Interpreted<T, W> {
 		@Override
 		Def<? super W> getDefinition();
 
-		public abstract class Abstract<T, W extends QuickEditableTextWidget<T>> extends BaseTextWidget.Interpreted.Abstract<T, W>
+		public abstract class Abstract<T, W extends QuickEditableTextWidget<T>> extends QuickTextWidget.Interpreted.Abstract<T, W>
 		implements Interpreted<T, W> {
 			protected Abstract(QuickEditableTextWidget.Def<? super W> definition, ExElement.Interpreted<?> parent) {
 				super(definition, parent);
@@ -99,7 +100,7 @@ public interface QuickEditableTextWidget<T> extends BaseTextWidget<T> {
 
 	QuickEditableTextWidget<T> setContext(EditableTextWidgetContext ctx) throws ModelInstantiationException;
 
-	public static abstract class Abstract<T> extends BaseTextWidget.Abstract<T> implements QuickEditableTextWidget<T> {
+	public static abstract class Abstract<T> extends QuickTextWidget.Abstract<T> implements QuickEditableTextWidget<T> {
 		private boolean isCommitOnType;
 		private final SettableValue<SettableValue<String>> theErrorStatus;
 		private final SettableValue<SettableValue<String>> theWarningStatus;

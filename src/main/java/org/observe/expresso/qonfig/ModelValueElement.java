@@ -322,7 +322,7 @@ public interface ModelValueElement<M, MV extends M> extends ExElement {
 
 		protected Object updateValue(ModelValueElement.Interpreted<M, MV, ?> myInterpreted, ModelSetInstance myModels)
 			throws ModelInstantiationException {
-			return myInterpreted.getElementValue() == null ? null : myInterpreted.getElementValue().get(myModels);
+			return myInterpreted.getElementValue() == null ? null : myInterpreted.getElementValue().instantiate().get(myModels);
 		}
 	}
 

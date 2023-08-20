@@ -159,7 +159,7 @@ public class ClassView implements TypeParser {
 		for (ClassLoader cl : theClassLoaders) {
 			try {
 				return cl.loadClass(name);
-			} catch (ClassNotFoundException e) { // It's fine, we'll try with the configured class loaders
+			} catch (ClassNotFoundException | NoClassDefFoundError e) { // It's fine, we'll try with the configured class loaders
 			}
 		}
 		int dot = name.lastIndexOf('.');

@@ -15,7 +15,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 import org.observe.Observable;
@@ -28,6 +27,7 @@ import org.observe.expresso.*;
 import org.observe.expresso.ObservableExpression.EvaluatedExpression;
 import org.observe.expresso.ObservableModelSet.CompiledModelValue;
 import org.observe.expresso.ObservableModelSet.ExtValueRef;
+import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelComponentNode;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
@@ -41,6 +41,7 @@ import org.observe.quick.QuickApp;
 import org.observe.quick.QuickApplication;
 import org.observe.quick.QuickDocument;
 import org.observe.quick.QuickWindow;
+import org.observe.quick.qwysiwyg.StyledQuickDocument.DocumentComponent;
 import org.observe.quick.style.InterpretedStyleValue;
 import org.observe.quick.style.QuickInterpretedStyle;
 import org.observe.quick.style.QuickInterpretedStyle.ConditionalValue;
@@ -50,7 +51,6 @@ import org.observe.quick.style.QuickStyleValue;
 import org.observe.quick.style.QuickStyledElement;
 import org.observe.quick.style.QuickStyledElement.QuickInstanceStyle;
 import org.observe.util.TypeTokens;
-import org.qommons.ArrayUtils;
 import org.qommons.BiTuple;
 import org.qommons.Causable;
 import org.qommons.Colors;
@@ -141,7 +141,7 @@ public class Qwysiwyg {
 			}
 			if (theInterpretedValue != null) {
 				try {
-					theValue = theInterpretedValue.get(theContext.getUpdatingModels());
+					theValue = theInterpretedValue.instantiate().get(theContext.getUpdatingModels());
 				} catch (ModelInstantiationException e) {
 					e.printStackTrace();
 					theValue = null;
@@ -183,15 +183,26 @@ public class Qwysiwyg {
 		private final ObservableValue<QuickInterpretedStyle.ConditionalValue<T>> theConditionalValue;
 		private boolean isPassing;
 		private Object theValue;
+		private final StyledQuickDocument theConditionDoc;
 
 		StyleDebugValue(QuickInterpretedStyle source, QuickStyleValue styleValue, QuickStyleAttribute<T> attr,
-			ObservableValue<ConditionalValue<T>> conditionalValue, InterpretedExpressoEnv env)
+			ObservableValue<ConditionalValue<T>> conditionalValue, InterpretedExpressoEnv env, ModelSetInstance models)
 				throws ExpressoInterpretationException, ExpressoEvaluationException, TypeConversionException {
 			theSource = source;
 			theStyleValue = styleValue;
 			theConditionalValue = conditionalValue;
 			theConditionX = styleValue.getApplication().getCondition() == null ? null
 				: styleValue.getApplication().getCondition().evaluate(ModelTypes.Value.BOOLEAN, env, 0);
+			if (theConditionX != null) {
+				LocatedPositionedContent conditionContent = new LocatedPositionedContent.Default(styleValue + ".condition",
+					new PositionedContent.Simple(FilePosition.START, styleValue.getApplication().getCondition().toString()));
+				theConditionDoc = new StyledQuickDocument(conditionContent.getFileLocation(),
+					styleValue.getApplication().getCondition().toString(), Qwysiwyg.this::goTo);
+				theConditionDoc.getRoot().end(conditionContent.getPosition(conditionContent.length()));
+				renderCompiledExpression(styleValue.getApplication().getCondition(), conditionContent, theConditionDoc.getRoot());
+				renderInterpretedExpression(theConditionX, theConditionDoc.getRoot(), env, models);
+			} else
+				theConditionDoc = null;
 			theValueX = styleValue.getValueExpression().interpret(ModelTypes.Value.forType(attr.getType()), env);
 		}
 
@@ -245,58 +256,21 @@ public class Qwysiwyg {
 			String file = pos.getFileLocation();
 			if (!theDocumentURL.endsWith(file))
 				return;
-			DocumentComponent target = getSourceComponent(theRoot, pos.getPosition());
+			DocumentComponent target = StyledQuickDocument.getSourceComponent(document.get().getRoot(), pos.getPosition());
 			if (target != null && target.parent != null)
 				goTo(target.parent);
 		}
 
-		public String getCondition() {
-			ObservableExpression ex = theStyleValue.getApplication().getCondition();
-			if (ex == null)
-				return "";
-			// return ex.toString();
-			StringBuilder str = new StringBuilder("<html>");
-			renderHtmlExpression(ex, ex.toString(), 0, str);
-			return str.toString();
-		}
-
-		private void renderHtmlExpression(ObservableExpression ex, String str, int offset, StringBuilder sb) {
-			Color color = null;
-			int c = 0;
-			int offset2 = 0;
-			for (ObservableExpression comp : ex.getComponents()) {
-				int compOffset = ex.getComponentOffset(c);
-				if (compOffset > offset2) {
-					if (color == null) {
-						color = getExpressionColor(ex);
-						if (color != null)
-							sb.append("<font color=\"" + Colors.toHTML(color) + "\">");
-					}
-					sb.append(str, offset + offset2, offset + compOffset);
-					offset2 = compOffset;
-				}
-				renderHtmlExpression(comp, str, offset + compOffset, sb);
-				offset2 = compOffset + comp.getExpressionLength();
-				c++;
-			}
-			if (ex.getExpressionLength() > offset2) {
-				if (color == null) {
-					color = getExpressionColor(ex);
-					if (color != null)
-						sb.append("<font color=\"" + Colors.toHTML(color) + "\">");
-				}
-				sb.append(str, offset + offset2, offset + ex.getExpressionLength());
-			}
-			if (color != null)
-				sb.append("</font>");
+		public DocumentComponent getCondition() {
+			return theConditionDoc == null ? null : theConditionDoc.getRoot();
 		}
 
 		public String getConditionTooltip(int offset) {
-			if (theConditionX == null)
-				return null;
+			// if (theConditionX == null)
 			System.out.println("Offset=" + offset);
-			EvaluatedExpression<?, ?> hoveredX = getHoveredDivision(theConditionX, offset);
-			return renderInterpretedDescriptor(hoveredX.getDescriptor());
+			return null;
+			// EvaluatedExpression<?, ?> hoveredX = getHoveredDivision(theConditionX, offset);
+			// return renderInterpretedDescriptor(hoveredX.getDescriptor());
 		}
 
 		private EvaluatedExpression<?, ?> getHoveredDivision(EvaluatedExpression<?, ?> ex, int expressionOffset) {
@@ -348,9 +322,7 @@ public class Qwysiwyg {
 	public static final Color TYPE_COLOR = Colors.darkGoldenrod;
 
 	public final SettableValue<String> title;
-	public final SettableValue<DocumentComponent> documentRoot;
-	public final ObservableValue<String> tooltip;
-	public final SettableValue<DocumentComponent> hovered;
+	public final SettableValue<StyledQuickDocument> document;
 	public final SettableValue<DocumentComponent> selectedNode;
 	public final SettableValue<DocumentComponent> selectedEndNode;
 	public final SettableValue<Integer> selectedStartIndex;
@@ -361,8 +333,6 @@ public class Qwysiwyg {
 	public final SettableValue<QuickStyleAttribute<?>> selectedStyle;
 	public final ObservableCollection<StyleDebugValue<?>> styleDebugValues;
 
-	private final SettableValue<DocumentComponent> theInternalDocumentRoot;
-	private final SettableValue<ObservableValue<String>> theInternalTooltip;
 	private final SimpleObservable<Void> theDocumentReplacement;
 	private final SimpleObservable<Void> theApplicationReplacement;
 	private String theAppLocation;
@@ -378,18 +348,13 @@ public class Qwysiwyg {
 	private DocumentComponent theStyledNode;
 	private final ObservableValue<QuickElementStyleAttribute<?>> theDebuggingStyle;
 
-	private DocumentComponent theRoot;
+	// private DocumentComponent theRoot;
 
 	public Qwysiwyg() {
 		title = SettableValue.build(String.class).withValue("QWYSIWYG").build();
-		theInternalDocumentRoot = SettableValue.build(Qwysiwyg.DocumentComponent.class).build();
-		theInternalTooltip = SettableValue
-			.build(TypeTokens.get().keyFor(ObservableValue.class).<ObservableValue<String>> parameterized(String.class)).build();
-		documentRoot = theInternalDocumentRoot; // .unsettable(); This is settable so the tooltip can display
-		tooltip = ObservableValue.flatten(theInternalTooltip);
+		document = SettableValue.build(StyledQuickDocument.class).build();
 		theDocumentReplacement = new SimpleObservable<>();
 		theApplicationReplacement = new SimpleObservable<>();
-		hovered = SettableValue.build(DocumentComponent.class).build();
 		selectedNode = SettableValue.build(DocumentComponent.class).build();
 		selectedEndNode = SettableValue.build(DocumentComponent.class).build();
 		selectedStartIndex = SettableValue.build(int.class).withValue(0).build();
@@ -453,14 +418,15 @@ public class Qwysiwyg {
 		theDebuggingStyle.changes().act(evt -> {
 			styleDebugValues.clear();
 			if (evt.getNewValue() != null)
-				populateDebugStyle(evt.getNewValue(), ((QuickStyledElement) theStyledNode.element).getStyle());
+				populateDebugStyle(evt.getNewValue(), theStyledNode.interpreted.getExpressoEnv().getModels(),
+					((QuickStyledElement) theStyledNode.element).getStyle());
 		});
 	}
 
-	private <T> void populateDebugStyle(QuickElementStyleAttribute<T> attr, QuickInstanceStyle style) {
+	private <T> void populateDebugStyle(QuickElementStyleAttribute<T> attr, InterpretedModelSet models, QuickInstanceStyle style) {
 		List<ObservableValue<QuickInterpretedStyle.ConditionalValue<T>>> values;
 		try {
-			values = attr.getConditionalValues(theStyledNode.element.getUpdatingModels());
+			values = attr.instantiate(models).getConditionalValues(theStyledNode.element.getUpdatingModels());
 		} catch (ModelInstantiationException e) {
 			System.err.println("Could not debug style");
 			e.printStackTrace();
@@ -471,7 +437,8 @@ public class Qwysiwyg {
 			try {
 				styleDebugValues.add(new StyleDebugValue<>(interpretedValues.get(v).getValue1(),
 					interpretedValues.get(v).getValue2().getStyleValue(), attr.getAttribute(), values.get(v),
-					theStyledNode.interpreted.getExpressoEnv().withErrorReporting(new ErrorReporting.Default(null))));
+					theStyledNode.interpreted.getExpressoEnv().withErrorReporting(new ErrorReporting.Default(null)),
+					theStyledNode.element.getUpdatingModels()));
 			} catch (Exception e) {
 				e.printStackTrace();
 			}
@@ -508,7 +475,7 @@ public class Qwysiwyg {
 		boolean sameDoc = Objects.equals(documentLocation, theAppLocation);
 		theAppLocation = documentLocation;
 		if (!sameDoc) {
-			theInternalDocumentRoot.set(null, null);
+			document.set(null, null);
 			clearDef();
 		}
 		if (theAppLocation == null) {
@@ -581,7 +548,7 @@ public class Qwysiwyg {
 				return;
 			}
 
-			renderDef(theRoot, theDocumentDef, null);
+			renderDef(document.get().getRoot(), theDocumentDef, null);
 
 			ObservableModelSet.ExternalModelSet extModels = QuickApp.parseExtModels(
 				theDocumentDef.getHead().getExpressoEnv().getBuiltModels(), quickApp.getCommandLineArgs(),
@@ -625,7 +592,7 @@ public class Qwysiwyg {
 				return;
 			} finally {
 				// Render interpretation and instances (if available)
-				renderInterpreted(theRoot, theDocumentInterpreted, theDocument, theModels);
+				renderInterpreted(document.get().getRoot(), theDocumentInterpreted, theDocument, theModels);
 			}
 
 			try {
@@ -646,71 +613,16 @@ public class Qwysiwyg {
 		}
 	}
 
-	private DocumentComponent theHoveredComponent;
-	private boolean isControlPressed;
-
 	public void controlPressed(boolean ctrl) {
-		if (ctrl == isControlPressed)
-			return;
-		isControlPressed = ctrl;
-		if (theHoveredComponent != null)
-			theHoveredComponent.update();
+		StyledQuickDocument doc = document.get();
+		if (doc != null)
+			doc.setCtrlPressed(ctrl);
 	}
 
 	public void hover(DocumentComponent hoveredComp, boolean ctrl) {
-		if (hoveredComp == null) {
-			setHoveredComponent(null, false);
-			return;
-		}
-		boolean ctrlChanged = isControlPressed != ctrl;
-		isControlPressed = ctrl;
-		try {
-			ObservableValue<String> tt = null;
-			while (hoveredComp != null) {
-				tt = hoveredComp.getTooltip();
-				if (tt != null)
-					break;
-				hoveredComp = hoveredComp.parent;
-			}
-			setHoveredComponent(hoveredComp, ctrlChanged);
-		} catch (RuntimeException | Error e) {
-			e.printStackTrace();
-		}
-	}
-
-	void setHoveredComponent(DocumentComponent hoveredComp, boolean ctrlChanged) {
-		if (hoveredComp == theHoveredComponent) {
-			if (ctrlChanged)
-				theHoveredComponent.update();
-			return;
-		}
-		if (theHoveredComponent != null && theHoveredComponent != hoveredComp) {
-			if (theHoveredComponent.elementHovered != null)
-				theHoveredComponent.elementHovered.set(false, null);
-			else if (theHoveredComponent.opposite != null && theHoveredComponent.opposite.elementHovered != null)
-				theHoveredComponent.opposite.elementHovered.set(false, null);
-		}
-		// System.out.println("Hovered: " + //
-		// (theHoveredComponent == null ? "null" : (theHoveredComponent.print() + "=" + theHoveredComponent.element)) + "->" //
-		// + (hoveredComp == null ? "null" : (hoveredComp.print() + "=" + hoveredComp.element)));
-		DocumentComponent oldHovered = theHoveredComponent;
-		theHoveredComponent = hoveredComp;
-		if (hoveredComp == null) {
-			if (oldHovered != null)
-				oldHovered.update();
-			hovered.set(hoveredComp, null);
-			theInternalTooltip.set(null, null);
-			return;
-		}
-		ObservableValue<String> tt = hoveredComp.getTooltip();
-		theInternalTooltip.set(tt, null);
-		if (isControlPressed)
-			hoveredComp.update();
-		hovered.set(hoveredComp, null);
-		if (hoveredComp.elementHovered != null)
-			hoveredComp.elementHovered.set(true, null);
-		else if (hoveredComp.opposite != null && hoveredComp.opposite.elementHovered != null)
-			hoveredComp.opposite.elementHovered.set(true, null);
+		StyledQuickDocument doc = document.get();
+		if (doc != null)
+			doc.setHoveredComponent(hoveredComp, ctrl);
 	}
 
 	public void clicked(DocumentComponent clicked, int clickCount, boolean ctrl) {
@@ -730,7 +642,9 @@ public class Qwysiwyg {
 	}
 
 	public void mouseExit() {
-		setHoveredComponent(null, isControlPressed);
+		StyledQuickDocument doc = document.get();
+		if (doc != null)
+			doc.setHoveredComponent(null, false);
 	}
 
 	public void addWatchExpression(DocumentComponent selected) {
@@ -763,27 +677,11 @@ public class Qwysiwyg {
 		return null;
 	}
 
-	DocumentComponent getSourceComponent(DocumentComponent parent, int sourcePosition) {
-		if (parent.start.getPosition() == sourcePosition)
-			return parent;
-		if (!parent.children.isEmpty()) {
-			int childIdx = ArrayUtils.binarySearch(parent.children, child -> Integer.compare(sourcePosition, child.start.getPosition()));
-			if (childIdx < 0) {
-				childIdx = -childIdx - 2;
-				if (childIdx < 0 || sourcePosition >= parent.children.get(childIdx).getEnd().getPosition())
-					return parent;
-				return getSourceComponent(parent.children.get(childIdx), sourcePosition);
-			} else
-				return parent.children.get(childIdx);
-		}
-		return parent;
-	}
-
 	private void clear() {
 		clearDef();
 		theDocumentContent.setLength(0);
 		clearRender();
-		theInternalDocumentRoot.set(null, null);
+		document.set(null, null);
 	}
 
 	private void clearDef() {
@@ -810,7 +708,7 @@ public class Qwysiwyg {
 	}
 
 	private void clearRender() {
-		theRoot = createRoot();
+		document.set(new StyledQuickDocument(theDocumentURL, theDocumentContent.toString(), this::goTo), null);
 	}
 
 	private void logToConsole(Throwable e, LocatedPositionedContent position) {
@@ -843,7 +741,7 @@ public class Qwysiwyg {
 	private void renderXml(URL quickFile) {
 		clearRender();
 		DequeList<DocumentComponent> stack = new CircularArrayList<>();
-		stack.add(theRoot);
+		stack.add(document.get().getRoot());
 		try (InputStream in = quickFile.openStream()) {
 			new SimpleXMLParser().parseXml(in, new SimpleXMLParser.ParseHandler() {
 				@Override
@@ -939,7 +837,8 @@ public class Qwysiwyg {
 	}
 
 	private void renderDef(DocumentComponent component, ExElement.Def<?> def, String roleDescrip) {
-		DocumentComponent elComponent = getSourceComponent(component, def.getElement().getPositionInFile().getPosition()).parent;
+		DocumentComponent elComponent = StyledQuickDocument.getSourceComponent(component,
+			def.getElement().getPositionInFile().getPosition()).parent;
 		String typeDescrip = def.getElement().getType().getDescription();
 		if (roleDescrip != null) {
 			if (typeDescrip != null)
@@ -952,7 +851,7 @@ public class Qwysiwyg {
 			PositionedContent position = attr.getValue().position;
 			if (position == null)
 				continue;
-			DocumentComponent attrValueComp = getSourceComponent(elComponent, position.getPosition(0).getPosition());
+			DocumentComponent attrValueComp = StyledQuickDocument.getSourceComponent(elComponent, position.getPosition(0).getPosition());
 			DocumentComponent attrComp = attrValueComp.parent;
 			QonfigValueType type = attr.getKey().getType();
 			String attrValueDescrip = null;
@@ -985,7 +884,7 @@ public class Qwysiwyg {
 		}
 		if (def.getElement().getValue() != null && def.getElement().getValue().position != null) {
 			PositionedContent position = def.getElement().getValue().position;
-			DocumentComponent attrValueComp = getSourceComponent(elComponent, position.getPosition(0).getPosition());
+			DocumentComponent attrValueComp = StyledQuickDocument.getSourceComponent(elComponent, position.getPosition(0).getPosition());
 			QonfigValueType type = def.getElement().getType().getValue().getType();
 			if (type instanceof QonfigValueType.Custom) {
 				CustomValueType customType = ((QonfigValueType.Custom) type).getCustomType();
@@ -1019,7 +918,8 @@ public class Qwysiwyg {
 			if (childDef != null)
 				renderDef(elComponent, childDef, childDescrip);
 			else if (childDescrip != null)
-				getSourceComponent(elComponent, child.getPositionInFile().getPosition()).parent.typeTooltip(childDescrip);
+				StyledQuickDocument.getSourceComponent(elComponent, child.getPositionInFile().getPosition()).parent
+				.typeTooltip(childDescrip);
 		}
 	}
 
@@ -1115,7 +1015,8 @@ public class Qwysiwyg {
 		}
 		InterpretedExpressoEnv env = interpreted == null ? null : interpreted.getExpressoEnv();
 		ExElement.Def<? super E> def = interpreted.getDefinition();
-		DocumentComponent elComponent = getSourceComponent(component, def.getElement().getPositionInFile().getPosition()).parent;
+		DocumentComponent elComponent = StyledQuickDocument.getSourceComponent(component,
+			def.getElement().getPositionInFile().getPosition()).parent;
 		if (models != null && theQwysiwygEdAddOn != null && interpreted.getDefinition().getElement().isInstance(theQwysiwygEdAddOn)) {
 			try {
 				ExWithElementModel.Interpreted elModels = interpreted.getAddOn(ExWithElementModel.Interpreted.class);
@@ -1135,7 +1036,7 @@ public class Qwysiwyg {
 			PositionedContent position = attr.getValue().position;
 			if (position == null)
 				continue;
-			DocumentComponent attrValueComp = getSourceComponent(elComponent, position.getPosition(0).getPosition());
+			DocumentComponent attrValueComp = StyledQuickDocument.getSourceComponent(elComponent, position.getPosition(0).getPosition());
 			QonfigValueType type = attr.getKey().getType();
 			if (type instanceof QonfigValueType.Custom) {
 				CustomValueType customType = ((QonfigValueType.Custom) type).getCustomType();
@@ -1155,7 +1056,7 @@ public class Qwysiwyg {
 		}
 		if (def.getElement().getValue() != null && def.getElement().getValue().position != null) {
 			PositionedContent position = def.getElement().getValue().position;
-			DocumentComponent attrValueComp = getSourceComponent(elComponent, position.getPosition(0).getPosition());
+			DocumentComponent attrValueComp = StyledQuickDocument.getSourceComponent(elComponent, position.getPosition(0).getPosition());
 			QonfigValueType type = def.getElement().getType().getValue().getType();
 			if (type instanceof QonfigValueType.Custom) {
 				CustomValueType customType = ((QonfigValueType.Custom) type).getCustomType();
@@ -1213,12 +1114,12 @@ public class Qwysiwyg {
 		Object value;
 		Observable<?> update;
 		try {
-			value = expression.get(models);
+			value = expression.instantiate().get(models);
 			if (value instanceof SettableValue)
 				component.instanceTooltip(((SettableValue<?>) value).map(String::valueOf));
 			else {
 				try {
-					update = expression.as(ModelTypes.Event.any(), env).get(models);
+					update = expression.as(ModelTypes.Event.any(), env).instantiate().get(models);
 				} catch (TypeConversionException e) {
 					update = null;
 				}
@@ -1397,231 +1298,6 @@ public class Qwysiwyg {
 		str.append("Line ").append(line + 1).append(':');
 
 		lineNumbers.set(str.toString(), null);
-		theInternalDocumentRoot.set(theRoot, null);
-
-		// System.out.println("Hierarchy:");
-		// System.out.println(theRoot.printHierarchy(new StringBuilder(), 0));
-	}
-
-	DocumentComponent createRoot() {
-		return new DocumentComponent(null, FilePosition.START);
-	}
-
-	boolean isEqual(String fileLocation, String docURL) {
-		return docURL.endsWith(fileLocation);
-	}
-
-	public class DocumentComponent {
-		final DocumentComponent parent;
-		ElementId parentChild;
-		final FilePosition start;
-		private FilePosition end;
-		boolean bold;
-		Color fontColor;
-		public final ObservableCollection<DocumentComponent> children;
-		DocumentComponent opposite;
-		LocatedFilePosition target;
-		Object descriptor;
-		ExElement.Interpreted<?> interpreted;
-		ExElement element;
-
-		SettableValue<Boolean> elementHovered;
-
-		String typeTooltip;
-		Supplier<String> interpretedTooltip;
-		ObservableValue<String> instanceTooltip;
-
-		DocumentComponent(DocumentComponent parent, FilePosition start) {
-			this.parent = parent;
-			this.start = start;
-			children = ObservableCollection.build(DocumentComponent.class).build();
-			children.onChange(evt -> {
-				if (evt.getType() == CollectionChangeType.add)
-					evt.getNewValue().parentChild = evt.getElementId();
-			});
-			end = null;
-		}
-
-		public FilePosition getEnd() {
-			return end;
-		}
-
-		public boolean isBold() {
-			return bold;
-		}
-
-		public boolean isActiveLink() {
-			return target != null && theHoveredComponent == this && isControlPressed && isEqual(target.getFileLocation(), theDocumentURL);
-		}
-
-		public Color getFontColor() {
-			return fontColor;
-		}
-
-		public String getPostText() {
-			int domainEnd;
-			if (parent == null)
-				domainEnd = theDocumentContent.length();
-			else {
-				DocumentComponent nextSib = CollectionElement.get(parent.children.getAdjacentElement(parentChild, true));
-				if (nextSib != null)
-					domainEnd = nextSib.start.getPosition();
-				else if (parent.end != null)
-					domainEnd = parent.end.getPosition();
-				else
-					domainEnd = theDocumentContent.length();
-			}
-
-			int endPos;
-			if (end != null)
-				endPos = end.getPosition();
-			else
-				return null;
-			if (endPos == domainEnd)
-				return null;
-			return theDocumentContent.substring(endPos, domainEnd);
-		}
-
-		void update() {
-			if (parentChild != null)
-				parent.children.mutableElement(parentChild).set(this);
-		}
-
-		DocumentComponent addChild(FilePosition childStart) {
-			if (childStart instanceof LocatedFilePosition)
-				childStart = new FilePosition(childStart.getPosition(), childStart.getLineNumber(), childStart.getCharNumber());
-			if (start.getPosition() > childStart.getPosition())
-				throw new IllegalArgumentException("Adding child before the parent");
-			else if (!children.isEmpty() && childStart.getPosition() < children.getLast().end.getPosition())
-				throw new IllegalArgumentException("Adding child before end of the previous one");
-
-			DocumentComponent child = new DocumentComponent(this, childStart);
-			children.add(child);
-			return child;
-		}
-
-		DocumentComponent end(FilePosition e) {
-			if (e instanceof LocatedFilePosition)
-				e = new FilePosition(e.getPosition(), e.getLineNumber(), e.getCharNumber());
-			if (e.getPosition() < start.getPosition())
-				throw new IllegalArgumentException("Ending before beginning");
-			if (children != null && !children.isEmpty() && e.getPosition() < children.get(children.size() - 1).end.getPosition())
-				throw new IllegalArgumentException("Ending parent before last child");
-			if (parent != null && parent.end != null && parent.end.getPosition() > 0 && e.getPosition() > parent.end.getPosition())
-				throw new IllegalArgumentException("Ending child after parent");
-			this.end = e;
-			return this;
-		}
-
-		DocumentComponent setOpposite(DocumentComponent opposite) {
-			if (this.opposite != null)
-				this.opposite.opposite = null;
-			this.opposite = opposite;
-			if (opposite != null)
-				opposite.opposite = this;
-			return this;
-		}
-
-		DocumentComponent color(Color color) {
-			fontColor = color;
-			return this;
-		}
-
-		ObservableValue<String> getTooltip() {
-			String intTT = interpretedTooltip == null ? null : interpretedTooltip.get();
-			if (typeTooltip == null && intTT == null && instanceTooltip == null)
-				return null;
-			StringBuilder str = new StringBuilder("<html>");
-			if (typeTooltip != null) {
-				str.append(typeTooltip);
-				if (interpretedTooltip != null)
-					str.append("<br><br>").append(intTT);
-			} else
-				str.append(intTT);
-			if (instanceTooltip == null)
-				return ObservableValue.of(str.toString());
-			else {
-				int preLen = str.length();
-				return instanceTooltip.map(instTT -> {
-					str.setLength(preLen);
-					if (instTT != null)
-						str.append("<br><br>Current Value: ").append(instTT);
-					return str.toString();
-				});
-			}
-		}
-
-		DocumentComponent typeTooltip(String tt) {
-			typeTooltip = tt;
-			return this;
-		}
-
-		DocumentComponent interpretedTooltip(Supplier<String> tt) {
-			interpretedTooltip = tt;
-			return this;
-		}
-
-		DocumentComponent instanceTooltip(ObservableValue<String> tt) {
-			instanceTooltip = tt;
-			return this;
-		}
-
-		public void followLink() {
-			System.out.println("Go to " + target);
-			DocumentComponent targetComponent = getSourceComponent(theRoot, target.getPosition());
-			goTo(targetComponent);
-		}
-
-		public String print() {
-			return "\"" + toString() + start;
-		}
-
-		public StringBuilder printHierarchy(StringBuilder str, int indent) {
-			for (int i = 0; i < indent; i++)
-				str.append('\t');
-			str.append(start).append("..").append(end).append('(');
-			if (descriptor != null)
-				str.append("d:").append(renderInterpretedDescriptor(descriptor)).append(' ');
-			if (fontColor != null)
-				str.append("fc:").append(Colors.toString(fontColor)).append(' ');
-			str.append("): ");
-
-			str.append(toString().replace("\t", "\\t").replace("\n", "\\n")).append('\n');
-
-			for (DocumentComponent child : children)
-				child.printHierarchy(str, indent + 1);
-
-			String post = getPostText();
-			if (post != null) {
-				for (int i = 0; i < indent; i++)
-					str.append('\t');
-				str.append(post.replace("\t", "\\t").replace("\n", "\\n")).append('\n');
-			}
-
-			return str;
-		}
-
-		int getTextLength() {
-			int textEnd;
-			if (!children.isEmpty())
-				textEnd = children.getFirst().start.getPosition();
-			else if (end != null)
-				textEnd = end.getPosition();
-			else
-				textEnd = theDocumentContent.length();
-			return textEnd - start.getPosition();
-		}
-
-		@Override
-		public String toString() {
-			int textEnd;
-			if (!children.isEmpty())
-				textEnd = children.getFirst().start.getPosition();
-			else if (end != null)
-				textEnd = end.getPosition();
-			else
-				textEnd = theDocumentContent.length();
-			return theDocumentContent.substring(start.getPosition(), textEnd);
-		}
+		document.set(document.get(), null);
 	}
 }

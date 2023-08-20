@@ -113,6 +113,6 @@ public class QuickComboBox<T> extends QuickValueWidget.Abstract<T> {
 	protected void updateModel(ExElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
 		super.updateModel(interpreted, myModels);
 		Interpreted<T> myInterpreted = (Interpreted<T>) interpreted;
-		theValues.set(myInterpreted.getValues() == null ? null : myInterpreted.getValues().get(myModels), null);
+		theValues.set(myInterpreted.getValues() == null ? null : myInterpreted.getValues().instantiate().get(myModels), null);
 	}
 }

@@ -208,9 +208,9 @@ public abstract class Positionable extends ExAddOn.Abstract<ExElement> {
 	public void update(ExAddOn.Interpreted<?, ?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
 		super.update(interpreted, models);
 		Positionable.Interpreted<?> myInterpreted = (Positionable.Interpreted<?>) interpreted;
-		theLeading.set(myInterpreted.getLeading() == null ? null : myInterpreted.getLeading().get(models), null);
-		theCenter.set(myInterpreted.getCenter() == null ? null : myInterpreted.getCenter().get(models), null);
-		theTrailing.set(myInterpreted.getTrailing() == null ? null : myInterpreted.getTrailing().get(models), null);
+		theLeading.set(myInterpreted.getLeading() == null ? null : myInterpreted.getLeading().instantiate().get(models), null);
+		theCenter.set(myInterpreted.getCenter() == null ? null : myInterpreted.getCenter().instantiate().get(models), null);
+		theTrailing.set(myInterpreted.getTrailing() == null ? null : myInterpreted.getTrailing().instantiate().get(models), null);
 	}
 
 	public Observable<ObservableValueEvent<QuickSize>> changes() {

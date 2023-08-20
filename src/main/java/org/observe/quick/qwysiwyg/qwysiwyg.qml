@@ -4,7 +4,7 @@
 	x="config.x" y="config.y" width="config.width" height="config.height">
 	<head>
 		<imports>
-			<import>org.observe.quick.qwysiwyg.Qwysiwyg</import>
+			<import>org.observe.quick.qwysiwyg.*</import>
 		</imports>
 		<models>
 			<ext-model name="clArgs">
@@ -25,16 +25,16 @@
 			</model>
 		</models>
 	</head>
-	<box layout="inline-layout" orientation="vertical" main-align="justify" tooltip="app.qwysiwyg.tooltip">
+	<box layout="inline-layout" orientation="vertical" main-align="justify">
 		<scroll>
 			<box role="row-header" layout="simple-layout"> <!-- This outer box is so we can control the width -->
 				<text-area value="app.qwysiwyg.lineNumbers" editable="false" width="`65px`" />
 			</box>
-			<text-area role="content" editable="false" tooltip="app.qwysiwyg.tooltip">
+			<text-area role="content" editable="false" tooltip="app.qwysiwyg.document.getTooltip()">
 				<model>
-					<value name="hoveredNode" type="Qwysiwyg.DocumentComponent" />
+					<value name="hoveredNode" type="StyledQuickDocument.DocumentComponent" />
 				</model>
-				<dynamic-styled-document root="app.qwysiwyg.documentRoot" children="node.children" post-text="node.getPostText()"
+				<dynamic-styled-document root="app.qwysiwyg.document.getRoot()" children="node.children" post-text="node.getPostText()"
 				selection-start-value="app.qwysiwyg.selectedNode" selection-end-value="app.qwysiwyg.selectedEndNode"
 				selection-start-offset="app.qwysiwyg.selectedStartIndex" selection-end-offset="app.qwysiwyg.selectedEndIndex">
 					<model>
@@ -47,7 +47,7 @@
 					</text-style>
 				</dynamic-styled-document>
 				<style>
-					<style attr="mouse-cursor" condition="app.qwysiwyg.hovered!=null &amp;&amp; app.qwysiwyg.hovered.isActiveLink()">HAND</style>
+					<style attr="mouse-cursor" condition="hoveredNode!=null &amp;&amp; hoveredNode.isActiveLink()">HAND</style>
 				</style>
 				<on-mouse-enter>app.qwysiwyg.controlPressed(ctrlPressed)</on-mouse-enter>
 				<on-key-press>app.qwysiwyg.controlPressed(ctrlPressed)</on-key-press>
@@ -93,13 +93,16 @@
 					</label>
 				</column>
 				<column name="`Condition`" value="row.getCondition()">
-					<label value="columnValue" tooltip="row.getConditionTooltip(hoverOffset)">
-						<model>
-							<value name="hoverOffset" type="int" />
-							<!--<hook name="hook" on="hoverOffset">System.out.println("Hover offset="+hoverOffset)</hook>-->
-						</model>
-						<on-mouse-move>hoverOffset=offset</on-mouse-move>
-					</label>
+					<text-area rows="1" value="" tooltip="row.getConditionTooltip(mousePosition)">
+						<dynamic-styled-document root="columnValue" children="node==null ? null : node.children"
+							post-text="node==null ? null : node.getPostText()">
+							<text-style>
+								<style attr="font-weight" condition="node!=null &amp;&amp; node.isBold()">`bold`</style>
+								<style attr="font-color">node==null ? null : node.getFontColor()</style>
+								<style attr="underline" condition="node!=null &amp;&amp; node.isActiveLink()">true</style>
+							</text-style>
+						</dynamic-styled-document>
+					</text-area>
 				</column>
 				<column name="`Value`" value="row.getValueExpression()" />
 				<column name="`Active Value`" value="row.getCurrentValue()">

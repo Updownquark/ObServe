@@ -16,6 +16,7 @@ import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.TypeConversionException;
 import org.observe.util.TypeTokens;
 import org.qommons.QommonsUtils;
@@ -135,46 +136,8 @@ public class ArrayAccessExpression implements ObservableExpression {
 			}
 
 			@Override
-			public SettableValue<T> get(ModelSetInstance models) throws ModelInstantiationException {
-				SettableValue<T[]> arrayV = arrayValue.get(models);
-				SettableValue<Integer> indexV = indexValue.get(models);
-				return createArrayValue(arrayV, indexV);
-			}
-
-			private SettableValue<T> createArrayValue(SettableValue<T[]> arrayV, SettableValue<Integer> indexV) {
-				return arrayV.transformReversible(targetType, tx -> tx.combineWith(indexV)//
-					.combine((a, idx) -> {
-						if (a == null) {
-							arrayReporting.error("Array " + theArray + " is null");
-							return null;
-						} else if (idx < 0 || idx >= a.length) {
-							indexReporting.error("Index " + theIndex + " evaluates to " + idx + ", which is outside the array length of "
-								+ theArray + "(" + a.length + ")");
-							return null;
-						} else
-							return a[idx];
-					}).modifySource((a, idx, newValue) -> {
-						if (a == null) {
-							arrayReporting.error("Array " + theArray + " is null");
-						} else if (idx < 0 || idx >= a.length) {
-							indexReporting.error("Index " + theIndex + " evaluates to " + idx + ", which is outside the array length of "
-								+ theArray + "(" + a.length + ")");
-						} else
-							a[idx] = newValue;
-					}));
-			}
-
-			@Override
-			public SettableValue<T> forModelCopy(SettableValue<T> value, ModelSetInstance sourceModels, ModelSetInstance newModels)
-				throws ModelInstantiationException {
-				SettableValue<T[]> sourceArray = arrayValue.get(sourceModels);
-				SettableValue<T[]> newArray = arrayValue.get(newModels);
-				SettableValue<Integer> sourceIndex = indexValue.get(sourceModels);
-				SettableValue<Integer> newIndex = indexValue.get(newModels);
-				if (sourceArray == newArray && sourceIndex == newIndex)
-					return value;
-				else
-					return createArrayValue(newArray, newIndex);
+			public ModelValueInstantiator<SettableValue<T>> instantiate() {
+				return new Instantiator<>(targetType, arrayValue.instantiate(), arrayReporting, indexValue.instantiate(), indexReporting);
 			}
 
 			@Override
@@ -202,5 +165,71 @@ public class ArrayAccessExpression implements ObservableExpression {
 	@Override
 	public String toString() {
 		return theArray + "[" + theIndex + "]";
+	}
+
+	static class Instantiator<T> implements ModelValueInstantiator<SettableValue<T>> {
+		private final TypeToken<T> theTargetType;
+		private final ModelValueInstantiator<SettableValue<T[]>> theArray;
+		private final ErrorReporting theArrayReporting;
+		private final ModelValueInstantiator<SettableValue<Integer>> theIndex;
+		private final ErrorReporting theIndexReporting;
+
+		public Instantiator(TypeToken<T> targetType, ModelValueInstantiator<SettableValue<T[]>> array, ErrorReporting arrayReporting,
+			ModelValueInstantiator<SettableValue<Integer>> index,
+			ErrorReporting indexReporting) {
+			theTargetType = targetType;
+			theArray = array;
+			theArrayReporting = arrayReporting;
+			theIndex = index;
+			theIndexReporting = indexReporting;
+		}
+
+		@Override
+		public SettableValue<T> get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
+			SettableValue<T[]> arrayV = theArray.get(models);
+			SettableValue<Integer> indexV = theIndex.get(models);
+			return createArrayValue(arrayV, indexV);
+		}
+
+		private SettableValue<T> createArrayValue(SettableValue<T[]> arrayV, SettableValue<Integer> indexV) {
+			return arrayV.transformReversible(theTargetType, tx -> tx.combineWith(indexV)//
+				.combine((a, idx) -> {
+					if (a == null) {
+						theArrayReporting.error("Array " + theArray + " is null");
+						return null;
+					} else if (idx < 0 || idx >= a.length) {
+						theIndexReporting.error("Index " + theIndex + " evaluates to " + idx + ", which is outside the array length of "
+							+ theArray + "(" + a.length + ")");
+						return null;
+					} else
+						return a[idx];
+				}).modifySource((a, idx, newValue) -> {
+					if (a == null) {
+						theArrayReporting.error("Array " + theArray + " is null");
+					} else if (idx < 0 || idx >= a.length) {
+						theIndexReporting.error("Index " + theIndex + " evaluates to " + idx + ", which is outside the array length of "
+							+ theArray + "(" + a.length + ")");
+					} else
+						a[idx] = newValue;
+				}));
+		}
+
+		@Override
+		public SettableValue<T> forModelCopy(SettableValue<T> value, ModelSetInstance sourceModels, ModelSetInstance newModels)
+			throws ModelInstantiationException {
+			SettableValue<T[]> sourceArray = theArray.get(sourceModels);
+			SettableValue<T[]> newArray = theArray.forModelCopy(sourceArray, sourceModels, newModels);
+			SettableValue<Integer> sourceIndex = theIndex.get(sourceModels);
+			SettableValue<Integer> newIndex = theIndex.forModelCopy(sourceIndex, sourceModels, newModels);
+			if (sourceArray == newArray && sourceIndex == newIndex)
+				return value;
+			else
+				return createArrayValue(newArray, newIndex);
+		}
+
+		@Override
+		public String toString() {
+			return theArray + "[" + theIndex + "]";
+		}
 	}
 }

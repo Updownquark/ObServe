@@ -11,21 +11,14 @@ import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.SettableValue;
 import org.observe.SimpleObservable;
-import org.observe.expresso.CompiledExpressoEnv;
-import org.observe.expresso.ExpressoCompilationException;
-import org.observe.expresso.ExpressoEvaluationException;
-import org.observe.expresso.ExpressoInterpretationException;
-import org.observe.expresso.InterpretedExpressoEnv;
-import org.observe.expresso.ModelType;
+import org.observe.expresso.*;
 import org.observe.expresso.ModelType.ModelInstanceType;
-import org.observe.expresso.ModelTypes;
-import org.observe.expresso.ObservableExpression;
-import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretableModelComponentNode;
 import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelComponentNode;
-import org.observe.expresso.TypeConversionException;
+import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.util.TypeTokens;
 import org.qommons.Identifiable;
 import org.qommons.LambdaUtils;
@@ -298,8 +291,7 @@ public class NameExpression implements ObservableExpression, Named {
 			else {
 				try {
 					value = ObservableExpression.evEx2(expressionOffset, getExpressionLength(), fieldValue.as(type, env),
-						fieldValue.getDescriptor(),
-						fieldValue.getComponents(), fieldValue.getDivisions());
+						fieldValue.getDescriptor(), fieldValue.getComponents(), fieldValue.getDivisions());
 				} catch (TypeConversionException e) {
 					throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(), e.getMessage(), e);
 				}
@@ -342,16 +334,58 @@ public class NameExpression implements ObservableExpression, Named {
 	}
 
 	private <F, M> EvaluatedExpression<SettableValue<?>, SettableValue<M>> getFieldValue(Field field, TypeToken<F> fieldType,
-		InterpretedValueSynth<SettableValue<?>, ? extends SettableValue<?>> context, int nameIndex, int expressionOffset,
-			ErrorReporting reporting, InterpretedExpressoEnv env) throws ExpressoEvaluationException {
+		InterpretedValueSynth<SettableValue<?>, ?> context, int nameIndex, int expressionOffset, ErrorReporting reporting,
+		InterpretedExpressoEnv env) throws ExpressoEvaluationException {
 		ModelInstanceType<SettableValue<?>, SettableValue<F>> fieldModelType = ModelTypes.Value.forType(fieldType);
 		InterpretedValueSynth<SettableValue<?>, SettableValue<F>> fieldValue = InterpretedValueSynth.of(fieldModelType,
-			msi -> new FieldValue<>(context == null ? null : context.get(msi), field, fieldType, reporting));
+			() -> new FieldInstantiator<>(//
+				context == null ? null : ((InterpretedValueSynth<SettableValue<?>, SettableValue<Object>>) context).instantiate(), field,
+					fieldType, reporting));
 		return ObservableExpression.evEx(expressionOffset, getExpressionLength(),
 			(InterpretedValueSynth<SettableValue<?>, SettableValue<M>>) (InterpretedValueSynth<?, ?>) fieldValue, null);
 	}
 
-	static class FieldValue<M, F> extends Identifiable.AbstractIdentifiable implements SettableValue<F> {
+	static class FieldInstantiator<C, F> implements ModelValueInstantiator<SettableValue<F>> {
+		private final ModelValueInstantiator<SettableValue<C>> theContext;
+		private final Field theField;
+		private final TypeToken<F> theType;
+		private final ErrorReporting theReporting;
+
+		FieldInstantiator(ModelValueInstantiator<SettableValue<C>> context, Field field, TypeToken<F> type, ErrorReporting reporting) {
+			theContext = context;
+			theField = field;
+			theType = type;
+			theReporting = reporting;
+		}
+
+		@Override
+		public SettableValue<F> get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
+			SettableValue<C> ctx = theContext == null ? null : theContext.get(models);
+			return new FieldValue<>(ctx, theField, theType, theReporting);
+		}
+
+		@Override
+		public SettableValue<F> forModelCopy(SettableValue<F> value, ModelSetInstance sourceModels, ModelSetInstance newModels)
+			throws ModelInstantiationException {
+			if (theContext == null)
+				return value;
+			SettableValue<C> oldCtx = theContext.get(sourceModels);
+			SettableValue<C> newCtx = theContext.forModelCopy(oldCtx, sourceModels, newModels);
+			if (oldCtx == newCtx)
+				return value;
+			return new FieldValue<>(newCtx, theField, theType, theReporting);
+		}
+
+		@Override
+		public String toString() {
+			if (theContext != null)
+				return theContext + "." + theField.getName();
+			else
+				return theField.getDeclaringClass().getName() + "." + theField.getName();
+		}
+	}
+
+	static class FieldValue<F> extends Identifiable.AbstractIdentifiable implements SettableValue<F> {
 		private final SettableValue<?> theContext;
 		private final Field theField;
 		private final TypeToken<F> theType;

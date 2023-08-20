@@ -13,7 +13,9 @@ import org.observe.expresso.ModelType;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
+import org.observe.expresso.ObservableModelSet.ModelComponentId;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.VariableType;
 import org.observe.expresso.qonfig.ExElement.Def;
 import org.observe.expresso.qonfig.ExpressoTransformations.ObservableTransform;
@@ -58,12 +60,28 @@ public class ObservableTransformations {
 			return new Interpreted<>(this, parent);
 		}
 
-		static class Interpreted<T> extends TypePreservingTransform.Interpreted<Observable<?>, Observable<T>> implements
-		ExpressoTransformations.Operation.EfficientCopyingInterpreted<Observable<?>, Observable<T>, Observable<?>, Observable<T>, ExElement> {
+		static class Interpreted<T> extends TypePreservingTransform.Interpreted<Observable<?>, Observable<T>> {
 			public Interpreted(NoInitObservableTransform definition, ExElement.Interpreted<?> parent) {
 				super(definition, parent);
 			}
 
+			@Override
+			public BetterList<InterpretedValueSynth<?, ?>> getComponents() {
+				return BetterList.empty();
+			}
+
+			@Override
+			public Instantiator<T> instantiate() {
+				return new Instantiator<>();
+			}
+
+			@Override
+			public String toString() {
+				return "noInit";
+			}
+		}
+
+		static class Instantiator<T> implements Operation.EfficientCopyingInstantiator<Observable<T>, Observable<T>> {
 			@Override
 			public boolean isEfficientCopy() {
 				return true;
@@ -72,11 +90,6 @@ public class ObservableTransformations {
 			@Override
 			public Observable<T> transform(Observable<T> source, ModelSetInstance models) throws ModelInstantiationException {
 				return new NoInitObservable<>(source);
-			}
-
-			@Override
-			public BetterList<InterpretedValueSynth<?, ?>> getComponents() {
-				return BetterList.empty();
 			}
 
 			@Override
@@ -97,11 +110,6 @@ public class ObservableTransformations {
 					return prevValue;
 				else
 					return new NoInitObservable<>(newSource);
-			}
-
-			@Override
-			public String toString() {
-				return "noInit";
 			}
 		}
 
@@ -140,8 +148,7 @@ public class ObservableTransformations {
 			return new Interpreted<>(this, parent);
 		}
 
-		static class Interpreted<T> extends TypePreservingTransform.Interpreted<Observable<?>, Observable<T>> implements
-		ExpressoTransformations.Operation.EfficientCopyingInterpreted<Observable<?>, Observable<T>, Observable<?>, Observable<T>, ExElement> {
+		static class Interpreted<T> extends TypePreservingTransform.Interpreted<Observable<?>, Observable<T>> {
 			public Interpreted(SkippingObservableTransform definition, org.observe.expresso.qonfig.ExElement.Interpreted<?> parent) {
 				super(definition, parent);
 			}
@@ -152,19 +159,37 @@ public class ObservableTransformations {
 			}
 
 			@Override
+			public BetterList<InterpretedValueSynth<?, ?>> getComponents() {
+				return BetterList.empty();
+			}
+
+			@Override
+			public Instantiator<T> instantiate() {
+				return new Instantiator<>(getDefinition().getSkipCount());
+			}
+
+			@Override
+			public String toString() {
+				return "skip(" + getDefinition().getSkipCount() + ")";
+			}
+		}
+
+		static class Instantiator<T> implements Operation.EfficientCopyingInstantiator<Observable<T>, Observable<T>> {
+			private final int theSkipCount;
+
+			Instantiator(int skipCount) {
+				theSkipCount = skipCount;
+			}
+
+			@Override
 			public boolean isEfficientCopy() {
 				return true;
 			}
 
 			@Override
 			public Observable<T> transform(Observable<T> source, ModelSetInstance models) throws ModelInstantiationException {
-				int times = getDefinition().getSkipCount();
+				int times = theSkipCount;
 				return new SkippingObservable<>(source, LambdaUtils.constantSupplier(times, () -> String.valueOf(times), null));
-			}
-
-			@Override
-			public BetterList<InterpretedValueSynth<?, ?>> getComponents() {
-				return BetterList.empty();
 			}
 
 			@Override
@@ -186,11 +211,6 @@ public class ObservableTransformations {
 					return prevValue;
 				else
 					return new SkippingObservable<>(newSource, skipping.getTimes());
-			}
-
-			@Override
-			public String toString() {
-				return "skip(" + getDefinition().getSkipCount() + ")";
 			}
 		}
 
@@ -228,8 +248,7 @@ public class ObservableTransformations {
 			return new Interpreted<>(this, parent);
 		}
 
-		static class Interpreted<T> extends TypePreservingTransform.Interpreted<Observable<?>, Observable<T>> implements
-		ExpressoTransformations.Operation.EfficientCopyingInterpreted<Observable<?>, Observable<T>, Observable<?>, Observable<T>, ExElement> {
+		static class Interpreted<T> extends TypePreservingTransform.Interpreted<Observable<?>, Observable<T>> {
 			Interpreted(TakeObservableTransform definition, ExElement.Interpreted<?> parent) {
 				super(definition, parent);
 			}
@@ -240,18 +259,36 @@ public class ObservableTransformations {
 			}
 
 			@Override
+			public BetterList<InterpretedValueSynth<?, ?>> getComponents() {
+				return BetterList.empty();
+			}
+
+			@Override
+			public Instantiator<T> instantiate() {
+				return new Instantiator<>(getDefinition().getTimes());
+			}
+
+			@Override
+			public String toString() {
+				return "take(" + getDefinition().getTimes() + ")";
+			}
+		}
+
+		static class Instantiator<T> implements Operation.EfficientCopyingInstantiator<Observable<T>, Observable<T>> {
+			private final int theTimes;
+
+			Instantiator(int times) {
+				theTimes = times;
+			}
+
+			@Override
 			public boolean isEfficientCopy() {
 				return true;
 			}
 
 			@Override
 			public Observable<T> transform(Observable<T> source, ModelSetInstance models) throws ModelInstantiationException {
-				return new TakeObservable<>(source, getDefinition().getTimes());
-			}
-
-			@Override
-			public BetterList<InterpretedValueSynth<?, ?>> getComponents() {
-				return BetterList.empty();
+				return new TakeObservable<>(source, theTimes);
 			}
 
 			@Override
@@ -273,11 +310,6 @@ public class ObservableTransformations {
 					return prevValue;
 				else
 					return new TakeObservable<>(newSource, take.getTimes());
-			}
-
-			@Override
-			public String toString() {
-				return "take(" + getDefinition().getTimes() + ")";
 			}
 		}
 
@@ -321,8 +353,7 @@ public class ObservableTransformations {
 			return new Interpreted<>(this, parent);
 		}
 
-		static class Interpreted<T> extends TypePreservingTransform.Interpreted<Observable<?>, Observable<T>> implements
-		ExpressoTransformations.Operation.EfficientCopyingInterpreted<Observable<?>, Observable<T>, Observable<?>, Observable<T>, ExElement> {
+		static class Interpreted<T> extends TypePreservingTransform.Interpreted<Observable<?>, Observable<T>> {
 			private InterpretedValueSynth<Observable<?>, Observable<?>> theUntil;
 
 			public Interpreted(TakeUntilObservableTransform definition, ExElement.Interpreted<?> parent) {
@@ -335,11 +366,6 @@ public class ObservableTransformations {
 			}
 
 			@Override
-			public boolean isEfficientCopy() {
-				return true;
-			}
-
-			@Override
 			public void update(ModelInstanceType<Observable<?>, Observable<T>> sourceType, InterpretedExpressoEnv env)
 				throws ExpressoInterpretationException {
 				super.update(sourceType, env);
@@ -347,14 +373,37 @@ public class ObservableTransformations {
 			}
 
 			@Override
-			public Observable<T> transform(Observable<T> source, ModelSetInstance models) throws ModelInstantiationException {
-				Observable<?> until = theUntil.get(models);
-				return new TakeUntilObservable<>(source, until);
+			public BetterList<InterpretedValueSynth<?, ?>> getComponents() {
+				return BetterList.of(theUntil);
 			}
 
 			@Override
-			public BetterList<InterpretedValueSynth<?, ?>> getComponents() {
-				return BetterList.of(theUntil);
+			public Instantiator<T> instantiate() {
+				return new Instantiator<>(theUntil.instantiate());
+			}
+
+			@Override
+			public String toString() {
+				return "takeUntil(" + theUntil + ")";
+			}
+		}
+
+		static class Instantiator<T> implements Operation.EfficientCopyingInstantiator<Observable<T>, Observable<T>> {
+			private ModelValueInstantiator<Observable<?>> theUntil;
+
+			Instantiator(ModelValueInstantiator<Observable<?>> until) {
+				theUntil = until;
+			}
+
+			@Override
+			public boolean isEfficientCopy() {
+				return true;
+			}
+
+			@Override
+			public Observable<T> transform(Observable<T> source, ModelSetInstance models) throws ModelInstantiationException {
+				Observable<?> until = theUntil.get(models);
+				return new TakeUntilObservable<>(source, until);
 			}
 
 			@Override
@@ -378,11 +427,6 @@ public class ObservableTransformations {
 				else
 					return new TakeUntilObservable<>(newSource, until);
 			}
-
-			@Override
-			public String toString() {
-				return "takeUntil(" + theUntil + ")";
-			}
 		}
 
 		static class TakeUntilObservable<T> extends Observable.ObservableTakenUntil<T> {
@@ -404,7 +448,7 @@ public class ObservableTransformations {
 
 	static class MappedObservableTransform extends ExElement.Def.Abstract<ExElement>
 	implements ObservableTransform<Observable<?>, ExElement> {
-		private String theSourceName;
+		private ModelComponentId theSourceVariable;
 		private CompiledExpression theMap;
 
 		public MappedObservableTransform(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
@@ -416,8 +460,8 @@ public class ObservableTransformations {
 			return ModelTypes.Event;
 		}
 
-		public String getSourceName() {
-			return theSourceName;
+		public ModelComponentId getSourceVariable() {
+			return theSourceVariable;
 		}
 
 		public CompiledExpression getMap() {
@@ -427,9 +471,11 @@ public class ObservableTransformations {
 		@Override
 		public void update(ExpressoQIS session, ModelType<Observable<?>> sourceModelType) throws QonfigInterpretationException {
 			super.update(session);
-			theSourceName = session.getAttributeText("source-as");
+			String sourceAs = session.getAttributeText("source-as");
+			ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
+			theSourceVariable = elModels.getElementValueModelId(sourceAs);
 			theMap = session.getAttributeExpression("map");
-			getAddOn(ExWithElementModel.Def.class).<Interpreted<?, ?>, SettableValue<?>> satisfyElementValueType(theSourceName,
+			elModels.<Interpreted<?, ?>, SettableValue<?>> satisfyElementValueType(theSourceVariable.getName(),
 				ModelTypes.Value, (interp, env) -> ModelTypes.Value.forType(interp.getSourceType()));
 		}
 
@@ -440,7 +486,7 @@ public class ObservableTransformations {
 		}
 
 		static class Interpreted<S, T> extends ExElement.Interpreted.Abstract<ExElement>
-		implements Operation.EfficientCopyingInterpreted<Observable<?>, Observable<S>, Observable<?>, Observable<T>, ExElement> {
+		implements Operation.Interpreted<Observable<?>, Observable<S>, Observable<?>, Observable<T>, ExElement> {
 			private TypeToken<S> theSourceType;
 			private ModelInstanceType<Observable<?>, Observable<T>> theType;
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<T>> theMap;
@@ -452,11 +498,6 @@ public class ObservableTransformations {
 			@Override
 			public MappedObservableTransform getDefinition() {
 				return (MappedObservableTransform) super.getDefinition();
-			}
-
-			@Override
-			public boolean isEfficientCopy() {
-				return true;
 			}
 
 			public TypeToken<S> getSourceType() {
@@ -483,9 +524,36 @@ public class ObservableTransformations {
 			}
 
 			@Override
+			public Instantiator<S, T> instantiate() {
+				return new Instantiator<>(theSourceType, getDefinition().getSourceVariable(), theMap.instantiate());
+			}
+
+			@Override
+			public String toString() {
+				return "map(" + theMap + ")";
+			}
+		}
+
+		static class Instantiator<S, T> implements Operation.EfficientCopyingInstantiator<Observable<S>, Observable<T>> {
+			private final TypeToken<S> theSourceType;
+			private final ModelComponentId theSourceVariable;
+			private final ModelValueInstantiator<SettableValue<T>> theMap;
+
+			Instantiator(TypeToken<S> sourceType, ModelComponentId sourceVariable, ModelValueInstantiator<SettableValue<T>> map) {
+				theSourceType = sourceType;
+				theSourceVariable = sourceVariable;
+				theMap = map;
+			}
+
+			@Override
+			public boolean isEfficientCopy() {
+				return true;
+			}
+
+			@Override
 			public Observable<T> transform(Observable<S> source, ModelSetInstance models) throws ModelInstantiationException {
 				SettableValue<S> sourceV = SettableValue.build(theSourceType).build();
-				getAddOn(ExWithElementModel.Interpreted.class).satisfyElementValue(getDefinition().getSourceName(), models, sourceV);
+				ExFlexibleElementModelAddOn.satisfyElementValue(theSourceVariable, models, sourceV);
 				SettableValue<T> targetV = theMap.get(models);
 				return new MappedObservable<>(source, sourceV, targetV);
 			}
@@ -510,15 +578,9 @@ public class ObservableTransformations {
 					return prevValue;
 				else {
 					SettableValue<S> newSourceV = SettableValue.build(theSourceType).build();
-					getAddOn(ExWithElementModel.Interpreted.class).satisfyElementValue(getDefinition().getSourceName(), newModels,
-						newSourceV);
+					ExFlexibleElementModelAddOn.satisfyElementValue(theSourceVariable, newModels, newSourceV);
 					return new MappedObservable<>(newSource, newSourceV, newTarget);
 				}
-			}
-
-			@Override
-			public String toString() {
-				return "map(" + theMap + ")";
 			}
 		}
 
@@ -567,15 +629,15 @@ public class ObservableTransformations {
 
 	static class FilteredObservableTransform extends TypePreservingTransform<Observable<?>>
 	implements ObservableTransform<Observable<?>, ExElement> {
-		private String theSourceName;
+		private ModelComponentId theSourceVariable;
 		private CompiledExpression theTest;
 
 		FilteredObservableTransform(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
 			super(parent, qonfigType);
 		}
 
-		public String getSourceName() {
-			return theSourceName;
+		public ModelComponentId getSourceVariable() {
+			return theSourceVariable;
 		}
 
 		public CompiledExpression getTest() {
@@ -585,9 +647,11 @@ public class ObservableTransformations {
 		@Override
 		public void update(ExpressoQIS session, ModelType<Observable<?>> sourceModelType) throws QonfigInterpretationException {
 			super.update(session, sourceModelType);
-			theSourceName = session.getAttributeText("source-as");
+			String sourceAs = session.getAttributeText("source-as");
+			ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
+			theSourceVariable = elModels.getElementValueModelId(sourceAs);
 			theTest = session.getAttributeExpression("test");
-			getAddOn(ExWithElementModel.Def.class).<Interpreted<?>, SettableValue<?>> satisfyElementValueType(theSourceName,
+			elModels.<Interpreted<?>, SettableValue<?>> satisfyElementValueType(theSourceVariable.getName(),
 				ModelTypes.Value, (interp, env) -> ModelTypes.Value.forType(interp.getSourceType()));
 		}
 
@@ -596,8 +660,7 @@ public class ObservableTransformations {
 			return new Interpreted<>(this, parent);
 		}
 
-		static class Interpreted<T> extends TypePreservingTransform.Interpreted<Observable<?>, Observable<T>> implements
-		ExpressoTransformations.Operation.EfficientCopyingInterpreted<Observable<?>, Observable<T>, Observable<?>, Observable<T>, ExElement> {
+		static class Interpreted<T> extends TypePreservingTransform.Interpreted<Observable<?>, Observable<T>> {
 			private TypeToken<T> theSourceType;
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<String>> theTest;
 
@@ -608,11 +671,6 @@ public class ObservableTransformations {
 			@Override
 			public FilteredObservableTransform getDefinition() {
 				return (FilteredObservableTransform) super.getDefinition();
-			}
-
-			@Override
-			public boolean isEfficientCopy() {
-				return true;
 			}
 
 			public TypeToken<T> getSourceType() {
@@ -633,9 +691,36 @@ public class ObservableTransformations {
 			}
 
 			@Override
+			public Instantiator<T> instantiate() {
+				return new Instantiator<>(theSourceType, getDefinition().getSourceVariable(), theTest.instantiate());
+			}
+
+			@Override
+			public String toString() {
+				return "filter(" + theTest + ")";
+			}
+		}
+
+		static class Instantiator<T> implements Operation.EfficientCopyingInstantiator<Observable<T>, Observable<T>> {
+			private final TypeToken<T> theSourceType;
+			private final ModelComponentId theSourceVariable;
+			private final ModelValueInstantiator<SettableValue<String>> theTest;
+
+			Instantiator(TypeToken<T> sourceType, ModelComponentId sourceVariable, ModelValueInstantiator<SettableValue<String>> test) {
+				theSourceType = sourceType;
+				theSourceVariable = sourceVariable;
+				theTest = test;
+			}
+
+			@Override
+			public boolean isEfficientCopy() {
+				return true;
+			}
+
+			@Override
 			public Observable<T> transform(Observable<T> source, ModelSetInstance models) throws ModelInstantiationException {
 				SettableValue<T> sourceV = SettableValue.build(theSourceType).build();
-				getAddOn(ExWithElementModel.Interpreted.class).satisfyElementValue(getDefinition().getSourceName(), models, sourceV);
+				ExFlexibleElementModelAddOn.satisfyElementValue(theSourceVariable, models, sourceV);
 				SettableValue<String> testV = theTest.get(models);
 				return new FilteredObservable<>(source, sourceV, testV);
 			}
@@ -660,15 +745,9 @@ public class ObservableTransformations {
 					return prevValue;
 				else {
 					SettableValue<T> newSourceV = SettableValue.build(theSourceType).build();
-					getAddOn(ExWithElementModel.Interpreted.class).satisfyElementValue(getDefinition().getSourceName(), newModels,
-						newSourceV);
+					ExFlexibleElementModelAddOn.satisfyElementValue(theSourceVariable, newModels, newSourceV);
 					return new FilteredObservable<>(newSource, newSourceV, newTest);
 				}
-			}
-
-			@Override
-			public String toString() {
-				return "filter(" + theTest + ")";
 			}
 		}
 
@@ -743,8 +822,7 @@ public class ObservableTransformations {
 			return new Interpreted<>(this, parent);
 		}
 
-		static class Interpreted<T> extends TypePreservingTransform.Interpreted<Observable<?>, Observable<T>> implements
-		ExpressoTransformations.Operation.EfficientCopyingInterpreted<Observable<?>, Observable<T>, Observable<?>, Observable<T>, ExElement> {
+		static class Interpreted<T> extends TypePreservingTransform.Interpreted<Observable<?>, Observable<T>> {
 			private Class<?> theType;
 
 			Interpreted(TypeFilteredObservableTransform definition, ExElement.Interpreted<?> parent) {
@@ -754,11 +832,6 @@ public class ObservableTransformations {
 			@Override
 			public TypeFilteredObservableTransform getDefinition() {
 				return (TypeFilteredObservableTransform) super.getDefinition();
-			}
-
-			@Override
-			public boolean isEfficientCopy() {
-				return true;
 			}
 
 			public Class<?> getType() {
@@ -775,6 +848,24 @@ public class ObservableTransformations {
 			@Override
 			public BetterList<InterpretedValueSynth<?, ?>> getComponents() {
 				return BetterList.empty();
+			}
+
+			@Override
+			public Instantiator<T> instantiate() {
+				return new Instantiator<>(theType);
+			}
+		}
+
+		static class Instantiator<T> implements Operation.EfficientCopyingInstantiator<Observable<T>, Observable<T>> {
+			private final Class<?> theType;
+
+			Instantiator(Class<?> type) {
+				theType = type;
+			}
+
+			@Override
+			public boolean isEfficientCopy() {
+				return true;
 			}
 
 			@Override

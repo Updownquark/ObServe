@@ -22,6 +22,7 @@ import org.observe.quick.style.QuickCompiledStyle;
 import org.observe.quick.style.QuickInterpretedStyle;
 import org.observe.quick.style.QuickInterpretedStyleCache;
 import org.observe.quick.style.QuickInterpretedStyleCache.Applications;
+import org.observe.quick.style.QuickStyleAttribute;
 import org.observe.quick.style.QuickStyleAttributeDef;
 import org.observe.quick.style.QuickStyledElement;
 import org.observe.quick.style.QuickStyledElement.QuickInstanceStyle;
@@ -187,14 +188,16 @@ public abstract class StyledDocument<T> extends ExElement.Abstract {
 	protected void updateModel(ExElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
 		Interpreted<T, ?> myInterpreted = (Interpreted<T, ?>) interpreted;
 		super.updateModel(interpreted, myModels);
-		theSelectionStartValue
-		.set(myInterpreted.getSelectionStartValue() == null ? null : myInterpreted.getSelectionStartValue().get(myModels), null);
-		theSelectionStartOffset
-		.set(myInterpreted.getSelectionStartOffset() == null ? null : myInterpreted.getSelectionStartOffset().get(myModels), null);
-		theSelectionEndValue.set(myInterpreted.getSelectionEndValue() == null ? null : myInterpreted.getSelectionEndValue().get(myModels),
-			null);
-		theSelectionEndOffset
-		.set(myInterpreted.getSelectionEndOffset() == null ? null : myInterpreted.getSelectionEndOffset().get(myModels), null);
+		theSelectionStartValue.set(
+			myInterpreted.getSelectionStartValue() == null ? null : myInterpreted.getSelectionStartValue().instantiate().get(myModels),
+				null);
+		theSelectionStartOffset.set(
+			myInterpreted.getSelectionStartOffset() == null ? null : myInterpreted.getSelectionStartOffset().instantiate().get(myModels),
+				null);
+		theSelectionEndValue.set(
+			myInterpreted.getSelectionEndValue() == null ? null : myInterpreted.getSelectionEndValue().instantiate().get(myModels), null);
+		theSelectionEndOffset.set(
+			myInterpreted.getSelectionEndOffset() == null ? null : myInterpreted.getSelectionEndOffset().instantiate().get(myModels), null);
 
 		TypeToken<T> valueType;
 		try {
@@ -326,15 +329,13 @@ public abstract class StyledDocument<T> extends ExElement.Abstract {
 			}
 		}
 
-		private final ObservableValue<Color> theBackground;
-
-		// We need to keep this around to make copies of ourself
-		private final Interpreted theInterpreted;
+		private final QuickStyleAttribute<Color> theBgAttr;
+		private ObservableValue<Color> theBackground;
 
 		public TextStyle(Interpreted interpreted, TextStyleElement styledElement) {
 			super(interpreted, styledElement);
-			theInterpreted = interpreted;
-			theBackground = getApplicableAttribute(interpreted.getBackground().getAttribute());
+			theBgAttr = interpreted.getBackground().getAttribute();
+			theBackground = getApplicableAttribute(theBgAttr);
 		}
 
 		@Override
@@ -346,9 +347,12 @@ public abstract class StyledDocument<T> extends ExElement.Abstract {
 			return theBackground;
 		}
 
+		@Override
 		public TextStyle copy(ModelSetInstance styleElementModels) throws ModelInstantiationException {
-			TextStyle copy = new TextStyle(theInterpreted, getStyledElement());
-			copy.update(theInterpreted, styleElementModels);
+			TextStyle copy = (TextStyle) super.copy(styleElementModels);
+
+			copy.theBackground = copy.getApplicableAttribute(theBgAttr);
+
 			return copy;
 		}
 	}

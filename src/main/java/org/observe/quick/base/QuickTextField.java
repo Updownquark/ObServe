@@ -118,6 +118,6 @@ public class QuickTextField<T> extends QuickEditableTextWidget.Abstract<T> {
 		super.updateModel(interpreted, myModels);
 		QuickTextField.Interpreted<T> myInterpreted = (QuickTextField.Interpreted<T>) interpreted;
 		theColumns = myInterpreted.getDefinition().getColumns();
-		theEmptyText.set(myInterpreted.getEmptyText() == null ? null : myInterpreted.getEmptyText().get(myModels), null);
+		theEmptyText.set(myInterpreted.getEmptyText() == null ? null : myInterpreted.getEmptyText().instantiate().get(myModels), null);
 	}
 }

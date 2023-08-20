@@ -259,11 +259,11 @@ public class QuickWindow extends ExAddOn.Abstract<ExElement> {
 		super.update(interpreted, models);
 		QuickWindow.Interpreted myInterpreted = (QuickWindow.Interpreted) interpreted;
 		theCloseAction = myInterpreted.getDefinition().getCloseAction();
-		theX = myInterpreted.getX() == null ? null : myInterpreted.getX().get(models);
-		theY = myInterpreted.getY() == null ? null : myInterpreted.getY().get(models);
-		theWidth = myInterpreted.getWidth() == null ? null : myInterpreted.getWidth().get(models);
-		theHeight = myInterpreted.getHeight() == null ? null : myInterpreted.getHeight().get(models);
-		theTitle = myInterpreted.getTitle() == null ? null : myInterpreted.getTitle().get(models);
-		theVisible = myInterpreted.isVisible() == null ? null : myInterpreted.isVisible().get(models);
+		theX = myInterpreted.getX() == null ? null : myInterpreted.getX().instantiate().get(models);
+		theY = myInterpreted.getY() == null ? null : myInterpreted.getY().instantiate().get(models);
+		theWidth = myInterpreted.getWidth() == null ? null : myInterpreted.getWidth().instantiate().get(models);
+		theHeight = myInterpreted.getHeight() == null ? null : myInterpreted.getHeight().instantiate().get(models);
+		theTitle = myInterpreted.getTitle() == null ? null : myInterpreted.getTitle().instantiate().get(models);
+		theVisible = myInterpreted.isVisible() == null ? null : myInterpreted.isVisible().instantiate().get(models);
 	}
 }

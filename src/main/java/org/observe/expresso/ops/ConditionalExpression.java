@@ -18,6 +18,7 @@ import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.TypeConversionException;
 import org.observe.util.TypeTokens;
 import org.qommons.LambdaUtils;
@@ -104,10 +105,9 @@ public class ConditionalExpression implements ObservableExpression {
 
 	@Override
 	public <M, MV extends M> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, InterpretedExpressoEnv env,
-		int expressionOffset)
-			throws ExpressoEvaluationException, ExpressoInterpretationException {
-		if (type.getModelType() == ModelTypes.Value || type.getModelType() == ModelTypes.Collection
-			|| type.getModelType() == ModelTypes.Set) {//
+		int expressionOffset) throws ExpressoEvaluationException, ExpressoInterpretationException {
+		if (type.getModelType() == ModelTypes.Action || type.getModelType() == ModelTypes.Value
+			|| type.getModelType() == ModelTypes.Collection || type.getModelType() == ModelTypes.Set) {//
 		} else
 			throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(),
 				"Conditional expressions not supported for model type " + type.getModelType() + " (" + this + ")");
@@ -134,30 +134,19 @@ public class ConditionalExpression implements ObservableExpression {
 		} catch (TypeConversionException e) {
 			throw new ExpressoEvaluationException(secondaryOffset, theSecondary.getExpressionLength(), e.getMessage(), e);
 		}
-		// TODO reconcile compatible model types, like Collection and Set
-		ModelInstanceType<M, MV> primaryType = primaryV.getType();
-		ModelInstanceType<M, MV> secondaryType = secondaryV.getType();
-		if (primaryType.getModelType() != secondaryType.getModelType())
-			throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(), "Incompatible expressions: " + thePrimary
-				+ ", evaluated to " + primaryType + " and " + theSecondary + ", evaluated to " + secondaryType);
-		if (primaryType.getModelType() == ModelTypes.Value || primaryType.getModelType() == ModelTypes.Collection
-			|| primaryType.getModelType() == ModelTypes.Set) {//
-		} else
-			throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(),
-				"Conditional expressions not supported for model type " + primaryType.getModelType() + " (" + this + ")");
 
 		ModelInstanceType<M, MV> resultType;
-		if (primaryType.equals(secondaryType))
-			resultType = primaryType;
+		if (primaryV.getType().equals(secondaryV.getType()))
+			resultType = primaryV.getType();
 		else if (thePrimary instanceof LiteralExpression && ((LiteralExpression<?>) thePrimary).getValue() == null)
-			resultType = secondaryType;
+			resultType = secondaryV.getType();
 		else if (theSecondary instanceof LiteralExpression && ((LiteralExpression<?>) theSecondary).getValue() == null)
-			resultType = primaryType;
+			resultType = primaryV.getType();
 		else {
-			TypeToken<?>[] types = new TypeToken[primaryType.getModelType().getTypeCount()];
+			TypeToken<?>[] types = new TypeToken[primaryV.getType().getModelType().getTypeCount()];
 			for (int i = 0; i < types.length; i++)
-				types[i] = TypeTokens.get().getCommonType(primaryType.getType(i), secondaryType.getType(i));
-			resultType = (ModelInstanceType<M, MV>) primaryType.getModelType().forTypes(types);
+				types[i] = TypeTokens.get().getCommonType(primaryV.getType().getType(i), secondaryV.getType().getType(i));
+			resultType = (ModelInstanceType<M, MV>) primaryV.getType().getModelType().forTypes(types);
 		}
 		return new EvaluatedExpression<M, MV>() {
 			@Override
@@ -168,58 +157,6 @@ public class ConditionalExpression implements ObservableExpression {
 			@Override
 			public ModelInstanceType<M, MV> getType() {
 				return resultType;
-			}
-
-			@Override
-			public MV get(ModelSetInstance msi) throws ModelInstantiationException {
-				SettableValue<Boolean> conditionX = conditionV.get(msi);
-				Object primaryX = primaryV.get(msi);
-				Object secondaryX = secondaryV.get(msi);
-				return createValue(conditionX, primaryX, secondaryX);
-			}
-
-			private MV createValue(SettableValue<Boolean> conditionX, Object primaryX, Object secondaryX) {
-				if (primaryType.getModelType() == ModelTypes.Value) {
-					return (MV) SettableValue.flattenAsSettable(conditionX.map(
-						TypeTokens.get().keyFor(ObservableValue.class).<SettableValue<Object>> parameterized(resultType.getType(0)),
-						LambdaUtils.printableFn(c -> {
-							if (c != null && c)
-								return (SettableValue<Object>) primaryX;
-							else
-								return (SettableValue<Object>) secondaryX;
-						}, () -> "? " + primaryX + ": " + secondaryX, null)), null);
-				} else if (primaryType.getModelType() == ModelTypes.Collection) {
-					return (MV) ObservableCollection.flattenValue(conditionX.map(TypeTokens.get().keyFor(ObservableCollection.class)
-						.<ObservableCollection<Object>> parameterized(resultType.getType(0)), LambdaUtils.printableFn(c -> {
-							if (c != null && c)
-								return (ObservableCollection<Object>) primaryX;
-							else
-								return (ObservableCollection<Object>) secondaryX;
-						}, () -> "? " + primaryX + ": " + secondaryX, null)));
-				} else if (primaryType.getModelType() == ModelTypes.Set) {
-					return (MV) ObservableSet.flattenValue(conditionX.map(
-						TypeTokens.get().keyFor(ObservableSet.class).<ObservableSet<Object>> parameterized(resultType.getType(0)),
-						LambdaUtils.printableFn(c -> {
-							if (c != null && c)
-								return (ObservableSet<Object>) primaryX;
-							else
-								return (ObservableSet<Object>) secondaryX;
-						}, () -> "? " + primaryX + ": " + secondaryX, null)));
-				} else
-					throw new IllegalStateException("Conditional expressions not supported for model type " + primaryType.getModelType());
-			}
-
-			@Override
-			public MV forModelCopy(MV value, ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException {
-				SettableValue<Boolean> sourceCondition = conditionV.get(sourceModels);
-				SettableValue<Boolean> newCondition = conditionV.get(newModels);
-				Object sourcePrimary = primaryV.get(sourceModels);
-				Object newPrimary = ((EvaluatedExpression<Object, Object>) primaryV).get(newModels);
-				Object sourceSecondary = secondaryV.get(sourceModels);
-				Object newSecondary = ((EvaluatedExpression<Object, Object>) secondaryV).get(newModels);
-				if (sourceCondition == newCondition && sourcePrimary == newPrimary && sourceSecondary == newSecondary)
-					return value;
-				return createValue(newCondition, newPrimary, newSecondary);
 			}
 
 			@Override
@@ -243,6 +180,11 @@ public class ConditionalExpression implements ObservableExpression {
 			}
 
 			@Override
+			public ModelValueInstantiator<MV> instantiate() {
+				return new Instantiator<>(resultType, conditionV.instantiate(), primaryV.instantiate(), secondaryV.instantiate());
+			}
+
+			@Override
 			public String toString() {
 				return conditionV + " ? " + primaryV + " : " + secondaryV;
 			}
@@ -252,5 +194,74 @@ public class ConditionalExpression implements ObservableExpression {
 	@Override
 	public String toString() {
 		return theCondition + "?" + thePrimary + ":" + theSecondary;
+	}
+
+	static class Instantiator<M, MV extends M> implements ModelValueInstantiator<MV> {
+		private final ModelInstanceType<M, MV> theType;
+		private final ModelValueInstantiator<SettableValue<Boolean>> theCondition;
+		private final ModelValueInstantiator<MV> thePrimary;
+		private final ModelValueInstantiator<MV> theSecondary;
+
+		public Instantiator(ModelInstanceType<M, MV> type, ModelValueInstantiator<SettableValue<Boolean>> condition,
+			ModelValueInstantiator<MV> primary, ModelValueInstantiator<MV> secondary) {
+			theType = type;
+			theCondition = condition;
+			thePrimary = primary;
+			theSecondary = secondary;
+		}
+
+		@Override
+		public MV get(ModelSetInstance msi) throws ModelInstantiationException {
+			SettableValue<Boolean> conditionX = theCondition.get(msi);
+			Object primaryX = thePrimary.get(msi);
+			Object secondaryX = theSecondary.get(msi);
+			return createValue(conditionX, primaryX, secondaryX);
+		}
+
+		private MV createValue(SettableValue<Boolean> conditionX, Object primaryX, Object secondaryX) {
+			if (theType.getModelType() == ModelTypes.Value) {
+				return (MV) SettableValue.flattenAsSettable(
+					conditionX.map(TypeTokens.get().keyFor(ObservableValue.class).<SettableValue<Object>> parameterized(theType.getType(0)),
+						LambdaUtils.printableFn(c -> {
+							if (c != null && c)
+								return (SettableValue<Object>) primaryX;
+							else
+								return (SettableValue<Object>) secondaryX;
+						}, () -> "? " + primaryX + ": " + secondaryX, null)),
+					null);
+			} else if (theType.getModelType() == ModelTypes.Collection) {
+				return (MV) ObservableCollection.flattenValue(conditionX.map(
+					TypeTokens.get().keyFor(ObservableCollection.class).<ObservableCollection<Object>> parameterized(theType.getType(0)),
+					LambdaUtils.printableFn(c -> {
+						if (c != null && c)
+							return (ObservableCollection<Object>) primaryX;
+						else
+							return (ObservableCollection<Object>) secondaryX;
+					}, () -> "? " + primaryX + ": " + secondaryX, null)));
+			} else if (theType.getModelType() == ModelTypes.Set) {
+				return (MV) ObservableSet.flattenValue(
+					conditionX.map(TypeTokens.get().keyFor(ObservableSet.class).<ObservableSet<Object>> parameterized(theType.getType(0)),
+						LambdaUtils.printableFn(c -> {
+							if (c != null && c)
+								return (ObservableSet<Object>) primaryX;
+							else
+								return (ObservableSet<Object>) secondaryX;
+						}, () -> "? " + primaryX + ": " + secondaryX, null)));
+			} else
+				throw new IllegalStateException("Conditional expressions not supported for model type " + theType.getModelType());
+		}
+
+		@Override
+		public MV forModelCopy(MV value, ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException {
+			SettableValue<Boolean> sourceCondition = theCondition.get(sourceModels);
+			SettableValue<Boolean> newCondition = theCondition.forModelCopy(sourceCondition, sourceModels, newModels);
+			MV sourcePrimary = thePrimary.get(sourceModels);
+			MV newPrimary = thePrimary.forModelCopy(sourcePrimary, sourceModels, newModels);
+			MV sourceSecondary = theSecondary.get(sourceModels);
+			MV newSecondary = theSecondary.forModelCopy(sourceSecondary, sourceModels, newModels);
+			if (sourceCondition == newCondition && sourcePrimary == newPrimary && sourceSecondary == newSecondary)
+				return value;
+			return createValue(newCondition, newPrimary, newSecondary);
+		}
 	}
 }

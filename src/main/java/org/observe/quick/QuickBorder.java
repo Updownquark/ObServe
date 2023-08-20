@@ -215,7 +215,7 @@ public interface QuickBorder extends QuickStyledElement {
 		protected void updateModel(ExElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
 			super.updateModel(interpreted, myModels);
 			TitledBorder.Interpreted<?> myInterpreted = (TitledBorder.Interpreted<?>) interpreted;
-			theTitle.set(myInterpreted.getTitle().get(myModels), null);
+			theTitle.set(myInterpreted.getTitle().instantiate().get(myModels), null);
 		}
 
 		public static class QuickTitledBorderStyle extends QuickTextStyle.Abstract implements QuickBorderStyle {

@@ -5,6 +5,7 @@ import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
+import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.qonfig.CompiledExpression;
@@ -14,6 +15,7 @@ import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExWithElementModel;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
+import org.observe.expresso.qonfig.QonfigChildGetter;
 import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
@@ -28,6 +30,7 @@ public class QuickTextArea<T> extends QuickEditableTextWidget.Abstract<T> {
 
 	public static class Def extends QuickEditableTextWidget.Def.Abstract<QuickTextArea<?>> {
 		private CompiledExpression theRows;
+		private StyledDocument.Def<?> theDocument;
 
 		public Def(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
 			super(parent, type);
@@ -43,11 +46,18 @@ public class QuickTextArea<T> extends QuickEditableTextWidget.Abstract<T> {
 			return theRows;
 		}
 
+		@QonfigChildGetter("document")
+		public StyledDocument.Def<?> getDocument() {
+			return theDocument;
+		}
+
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 			super.doUpdate(session.asElement(session.getFocusType().getSuperElement()));
+
 			theRows = session.getAttributeExpression("rows");
+			theDocument = ExElement.useOrReplace(StyledDocument.Def.class, theDocument, session, "document");
 		}
 
 		@Override
@@ -58,6 +68,8 @@ public class QuickTextArea<T> extends QuickEditableTextWidget.Abstract<T> {
 
 	public static class Interpreted<T> extends QuickEditableTextWidget.Interpreted.Abstract<T, QuickTextArea<T>> {
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> theRows;
+		private StyledDocument.Interpreted<T, ?> theDocument;
+		private boolean isDocumentStale;
 
 		public Interpreted(Def definition, ExElement.Interpreted<?> parent) {
 			super(definition, parent);
@@ -73,15 +85,62 @@ public class QuickTextArea<T> extends QuickEditableTextWidget.Abstract<T> {
 			return TypeTokens.get().keyFor(QuickTextArea.class).parameterized(getValueType());
 		}
 
+		@Override
+		public TypeToken<T> getValueType() throws ExpressoInterpretationException {
+			getOrInitValue();
+			if (theDocument != null)
+				return theDocument.getValueType();
+			else
+				return super.getValueType();
+		}
+
 		public InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> getRows() {
 			return theRows;
 		}
 
+		public StyledDocument.Interpreted<T, ?> getDocument() {
+			return theDocument;
+		}
+
+		@Override
+		public InterpretedValueSynth<SettableValue<?>, SettableValue<T>> getOrInitValue() throws ExpressoInterpretationException {
+			super.getOrInitValue();
+			if (isDocumentStale) {
+				isDocumentStale = false;
+				if (getDefinition().getDocument() == null) {
+					if (theDocument != null)
+						theDocument.destroy();
+					theDocument = null;
+				} else if (theDocument == null || theDocument.getIdentity() != getDefinition().getDocument().getIdentity()) {
+					if (theDocument != null)
+						theDocument.destroy();
+					theDocument = (StyledDocument.Interpreted<T, ?>) getDefinition().getDocument().interpret(this);
+				}
+				if (theDocument != null)
+					theDocument.updateDocument(getExpressoEnv());
+			}
+			return getValue();
+		}
+
 		@Override
 		protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+			isDocumentStale = true;
 			super.doUpdate(env);
 			theRows = getDefinition().getRows() == null ? null
 				: getDefinition().getRows().interpret(ModelTypes.Value.forType(Integer.class), getExpressoEnv());
+		}
+
+		@Override
+		protected void checkValidModel() throws ExpressoInterpretationException {
+			if (theDocument != null) {
+				if (getValue() != null && getDefinition().getValue().getExpression() != ObservableExpression.EMPTY)
+					throw new ExpressoInterpretationException("Both document and value are specified, but only one is allowed",
+						getDefinition().getValue().getFilePosition(0), getDefinition().getValue().getExpression().getExpressionLength());
+				if (getFormat() != null)
+					throw new ExpressoInterpretationException("Format is not needed when document is specified",
+						getDefinition().getFormat().getFilePosition(0), getDefinition().getFormat().getExpression().getExpressionLength());
+			} else
+				super.checkValidModel();
 		}
 
 		@Override
@@ -111,6 +170,7 @@ public class QuickTextArea<T> extends QuickEditableTextWidget.Abstract<T> {
 		}
 	}
 
+	private StyledDocument<T> theDocument;
 	private final SettableValue<SettableValue<Integer>> theRows;
 	private final SettableValue<SettableValue<Integer>> theMousePosition;
 
@@ -120,6 +180,10 @@ public class QuickTextArea<T> extends QuickEditableTextWidget.Abstract<T> {
 			.build();
 		theMousePosition = SettableValue
 			.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Integer>> parameterized(int.class)).build();
+	}
+
+	public StyledDocument<T> getDocument() {
+		return theDocument;
 	}
 
 	public SettableValue<Integer> getRows() {
@@ -139,6 +203,9 @@ public class QuickTextArea<T> extends QuickEditableTextWidget.Abstract<T> {
 		super.updateModel(interpreted, myModels);
 		getAddOn(ExWithElementModel.class).satisfyElementValue("mousePosition", getMousePosition());
 		QuickTextArea.Interpreted<T> myInterpreted = (QuickTextArea.Interpreted<T>) interpreted;
-		theRows.set(myInterpreted.getRows() == null ? null : myInterpreted.getRows().get(myModels), null);
+		theRows.set(myInterpreted.getRows() == null ? null : myInterpreted.getRows().instantiate().get(myModels), null);
+		theDocument = myInterpreted.getDocument() == null ? null : myInterpreted.getDocument().create(this);
+		if (theDocument != null)
+			theDocument.update(myInterpreted.getDocument(), myModels);
 	}
 }

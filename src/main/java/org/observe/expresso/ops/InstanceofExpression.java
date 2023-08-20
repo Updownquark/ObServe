@@ -10,11 +10,14 @@ import org.observe.expresso.CompiledExpressoEnv;
 import org.observe.expresso.ExpressoEvaluationException;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.InterpretedExpressoEnv;
+import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelType;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
+import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.TypeConversionException;
 import org.observe.util.TypeTokens;
 
@@ -99,10 +102,7 @@ public class InstanceofExpression implements ObservableExpression {
 					e.getMessage(), e);
 		}
 		InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> container = leftValue.map(ModelTypes.Value.forType(boolean.class),
-			(lv, msi) -> {
-				return SettableValue.asSettable(lv.map(TypeTokens.get().BOOLEAN, v -> v != null && testType.isInstance(v)),
-					__ -> "instanceof expressions are not reversible");
-			});
+			lv -> new Instantiator<>(lv, testType));
 		return ObservableExpression.evEx(expressionOffset, getExpressionLength(), (InterpretedValueSynth<M, MV>) container, testType,
 			leftValue);
 	}
@@ -110,5 +110,35 @@ public class InstanceofExpression implements ObservableExpression {
 	@Override
 	public String toString() {
 		return theLeft + " instanceof " + theType;
+	}
+
+	static class Instantiator<S> implements ModelValueInstantiator<SettableValue<Boolean>> {
+		private final ModelValueInstantiator<SettableValue<S>> theValue;
+		private final Class<?> theTest;
+
+		Instantiator(ModelValueInstantiator<? extends SettableValue<S>> value, Class<?> test) {
+			theValue = (ModelValueInstantiator<SettableValue<S>>) value;
+			theTest = test;
+		}
+
+		@Override
+		public SettableValue<Boolean> get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
+			return test(theValue.get(models));
+		}
+
+		private SettableValue<Boolean> test(SettableValue<?> value) {
+			return SettableValue.asSettable(value.map(TypeTokens.get().BOOLEAN, v -> v != null && theTest.isInstance(v)),
+				__ -> "instanceof expressions are not reversible");
+		}
+
+		@Override
+		public SettableValue<Boolean> forModelCopy(SettableValue<Boolean> value, ModelSetInstance sourceModels, ModelSetInstance newModels)
+			throws ModelInstantiationException {
+			SettableValue<S> oldSource = theValue.get(sourceModels);
+			SettableValue<S> newSource = theValue.forModelCopy(oldSource, sourceModels, newModels);
+			if (oldSource == newSource)
+				return value;
+			return test(newSource);
+		}
 	}
 }

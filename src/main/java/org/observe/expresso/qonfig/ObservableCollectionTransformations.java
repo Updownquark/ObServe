@@ -1,8 +1,10 @@
 package org.observe.expresso.qonfig;
 
 import java.util.Comparator;
+import java.util.List;
 import java.util.function.Function;
 
+import org.observe.Equivalence;
 import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.Observer;
@@ -24,18 +26,23 @@ import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelType.ModelInstanceType.SingleTyped;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
+import org.observe.expresso.ObservableModelSet.ModelComponentId;
+import org.observe.expresso.ObservableModelSet.ModelInstantiator;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.VariableType;
 import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.observe.expresso.qonfig.ExElement.Def;
+import org.observe.expresso.qonfig.ExpressoTransformations.AbstractCompiledTransformation;
 import org.observe.expresso.qonfig.ExpressoTransformations.CollectionTransform;
-import org.observe.expresso.qonfig.ExpressoTransformations.FlowTransformElement;
+import org.observe.expresso.qonfig.ExpressoTransformations.FlowTransformInstantiator;
 import org.observe.expresso.qonfig.ExpressoTransformations.Operation;
 import org.observe.expresso.qonfig.ExpressoTransformations.TypePreservingTransform;
 import org.observe.util.TypeTokens;
 import org.qommons.Causable;
 import org.qommons.Identifiable;
 import org.qommons.LambdaUtils;
+import org.qommons.QommonsUtils;
 import org.qommons.collect.BetterList;
 import org.qommons.config.QonfigElement.QonfigValue;
 import org.qommons.config.QonfigElementOrAddOn;
@@ -118,8 +125,7 @@ public class ObservableCollectionTransformations {
 		}
 
 		static class Interpreted<C1 extends ObservableCollection<?>, S, T, CV1 extends C1, C2 extends ObservableCollection<?>, CV2 extends C2>
-		extends ExpressoTransformations.AbstractCompiledTransformation.Interpreted<C1, S, T, CV1, C2, CV2, ExElement>
-		implements FlowTransformElement<C1, CV1, S, T, C2, CV2, ExElement> {
+		extends ExpressoTransformations.AbstractCompiledTransformation.Interpreted<C1, S, T, CV1, C2, CV2, ExElement> {
 			private ModelInstanceType<C2, CV2> theTargetModelType;
 
 			Interpreted(MapCollectionTransform<C1, C2> definition, ExElement.Interpreted<?> parent) {
@@ -143,6 +149,32 @@ public class ObservableCollectionTransformations {
 			}
 
 			@Override
+			public ExpressoTransformations.CompiledTransformation.Instantiator<S, T, CV1, CV2> instantiate() {
+				return new Instantiator<>(getExpressoEnv().getModels().instantiate(), getMapWith().instantiate(),
+					QommonsUtils.map(getCombinedValues(), cv -> cv.instantiate(), true),
+					getReverse() == null ? null : getReverse().instantiate(), getDefinition().getSourceName(), getDefinition().isCached(),
+						getDefinition().isReEvalOnUpdate(), getDefinition().isFireIfUnchanged(), getDefinition().isNullToNull(),
+						getDefinition().isManyToOne(), getDefinition().isOneToMany(),
+						getEquivalence() == null ? null : getEquivalence().instantiate(), getTargetValueType());
+			}
+		}
+
+		static class Instantiator<S, T, CV1 extends ObservableCollection<?>, CV2 extends ObservableCollection<?>>
+		extends ExpressoTransformations.AbstractCompiledTransformation.Instantiator<S, T, CV1, CV2>
+		implements FlowTransformInstantiator<CV1, CV2, S, T> {
+			private final TypeToken<T> theTargetValueType;
+
+			Instantiator(ModelInstantiator localModel, ExpressoTransformations.MapWith.Instantiator<S, T> mapWith,
+				List<ExpressoTransformations.CombineWith.Instantiator<?>> combinedValues,
+				ExpressoTransformations.CompiledMapReverse.Instantiator<S, T> reverse, ModelComponentId sourceVariable, boolean cached,
+				boolean reEvalOnUpdate, boolean fireIfUnchanged, boolean nullToNull, boolean manyToOne, boolean oneToMany,
+				ModelValueInstantiator<SettableValue<Equivalence<? super T>>> equivalence, TypeToken<T> targetValueType) {
+				super(localModel, mapWith, combinedValues, reverse, sourceVariable, cached, reEvalOnUpdate, fireIfUnchanged, nullToNull,
+					manyToOne, oneToMany, equivalence);
+				theTargetValueType = targetValueType;
+			}
+
+			@Override
 			public CV2 transform(CV1 source, ModelSetInstance models) throws ModelInstantiationException {
 				CollectionDataFlow<?, ?, T> flow = transformToFlow(source, models);
 				if (flow.prefersPassive())
@@ -155,7 +187,7 @@ public class ObservableCollectionTransformations {
 			public CollectionDataFlow<?, ?, T> transformFlow(CollectionDataFlow<?, ?, S> source, ModelSetInstance models)
 				throws ModelInstantiationException {
 				try {
-					return source.transform(getTargetValueType(), tx -> {
+					return source.transform(theTargetValueType, tx -> {
 						try {
 							return transform(tx, models);
 						} catch (ModelInstantiationException e) {
@@ -176,15 +208,15 @@ public class ObservableCollectionTransformations {
 
 	static class FilterCollectionTransform<C extends ObservableCollection<?>> extends TypePreservingTransform<C>
 	implements CollectionTransform<C, C, ExElement> {
-		private String theSourceName;
+		private ModelComponentId theSourceVariable;
 		private CompiledExpression theTest;
 
 		FilterCollectionTransform(Def<?> parent, QonfigElementOrAddOn qonfigType) {
 			super(parent, qonfigType);
 		}
 
-		public String getSourceName() {
-			return theSourceName;
+		public ModelComponentId getSourceVariable() {
+			return theSourceVariable;
 		}
 
 		public CompiledExpression getTest() {
@@ -194,10 +226,12 @@ public class ObservableCollectionTransformations {
 		@Override
 		public void update(ExpressoQIS session, ModelType<C> sourceModelType) throws QonfigInterpretationException {
 			super.update(session, sourceModelType);
-			theSourceName = session.getAttributeText("source-as");
+			String sourceAs = session.getAttributeText("source-as");
+			ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
+			theSourceVariable = elModels.getElementValueModelId(sourceAs);
 			theTest = session.getAttributeExpression("test");
-			getAddOn(ExWithElementModel.Def.class).<Interpreted<?, ?, ?>, SettableValue<?>> satisfyElementValueType(theSourceName,
-				ModelTypes.Value, (interp, env) -> ModelTypes.Value.forType(interp.getSourceType()));
+			elModels.<Interpreted<?, ?, ?>, SettableValue<?>> satisfyElementValueType(theSourceVariable.getName(), ModelTypes.Value,
+				(interp, env) -> ModelTypes.Value.forType(interp.getSourceType()));
 		}
 
 		@Override
@@ -205,8 +239,7 @@ public class ObservableCollectionTransformations {
 			return new Interpreted<>(this, parent);
 		}
 
-		static class Interpreted<T, C extends ObservableCollection<?>, CV extends C> extends TypePreservingTransform.Interpreted<C, CV>
-		implements FlowTransformElement<C, CV, T, T, C, CV, ExElement> {
+		static class Interpreted<T, C extends ObservableCollection<?>, CV extends C> extends TypePreservingTransform.Interpreted<C, CV> {
 			private TypeToken<T> theSourceType;
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<String>> theTest;
 
@@ -236,10 +269,27 @@ public class ObservableCollectionTransformations {
 			}
 
 			@Override
+			public Operation.Instantiator<CV, CV> instantiate() {
+				return new Instantiator<>(theSourceType, getDefinition().getSourceVariable(), theTest.instantiate());
+			}
+		}
+
+		static class Instantiator<T, CV extends ObservableCollection<?>> implements FlowTransformInstantiator<CV, CV, T, T> {
+			private final TypeToken<T> theSourceType;
+			private final ModelComponentId theSourceVariable;
+			private final ModelValueInstantiator<SettableValue<String>> theTest;
+
+			Instantiator(TypeToken<T> sourceType, ModelComponentId sourceVariable, ModelValueInstantiator<SettableValue<String>> test) {
+				theSourceType = sourceType;
+				theSourceVariable = sourceVariable;
+				theTest = test;
+			}
+
+			@Override
 			public CollectionDataFlow<?, ?, T> transformFlow(CollectionDataFlow<?, ?, T> source, ModelSetInstance models)
 				throws ModelInstantiationException {
 				SettableValue<T> sourceV = SettableValue.build(theSourceType).build();
-				getAddOn(ExWithElementModel.Interpreted.class).satisfyElementValue(getDefinition().getSourceName(), models, sourceV);
+				ExFlexibleElementModelAddOn.satisfyElementValue(theSourceVariable, models, sourceV);
 				SettableValue<String> testV = theTest.get(models);
 				String print = theTest.toString();
 				Function<T, String> filter = LambdaUtils.printableFn(v -> {
@@ -290,8 +340,7 @@ public class ObservableCollectionTransformations {
 			return new Interpreted<>(this, parent);
 		}
 
-		static class Interpreted<T, C extends ObservableCollection<?>, CV extends C> extends TypePreservingTransform.Interpreted<C, CV>
-		implements FlowTransformElement<C, CV, T, T, C, CV, ExElement> {
+		static class Interpreted<T, C extends ObservableCollection<?>, CV extends C> extends TypePreservingTransform.Interpreted<C, CV> {
 			private Class<?> theType;
 
 			Interpreted(TypeFilteredCollectionTransform<C> definition, ExElement.Interpreted<?> parent) {
@@ -316,6 +365,19 @@ public class ObservableCollectionTransformations {
 			@Override
 			public BetterList<InterpretedValueSynth<?, ?>> getComponents() {
 				return BetterList.empty();
+			}
+
+			@Override
+			public Operation.Instantiator<CV, CV> instantiate() {
+				return new Instantiator<>(theType);
+			}
+		}
+
+		static class Instantiator<T, CV extends ObservableCollection<?>> implements FlowTransformInstantiator<CV, CV, T, T> {
+			private final Class<?> theType;
+
+			Instantiator(Class<?> type) {
+				theType = type;
 			}
 
 			@Override
@@ -393,8 +455,7 @@ public class ObservableCollectionTransformations {
 			return new Interpreted<>(this, parent);
 		}
 
-		static class Interpreted<T, C extends ObservableCollection<?>, CV extends C> extends TypePreservingTransform.Interpreted<C, CV>
-		implements FlowTransformElement<C, CV, T, T, C, CV, ExElement> {
+		static class Interpreted<T, C extends ObservableCollection<?>, CV extends C> extends TypePreservingTransform.Interpreted<C, CV> {
 			Interpreted(ReverseCollectionTransform<C> definition, ExElement.Interpreted<?> parent) {
 				super(definition, parent);
 			}
@@ -404,6 +465,18 @@ public class ObservableCollectionTransformations {
 				return BetterList.empty();
 			}
 
+			@Override
+			public Instantiator<CV, CV> instantiate() {
+				return new Instantiator<>();
+			}
+
+			@Override
+			public String toString() {
+				return "reverse()";
+			}
+		}
+
+		static class Instantiator<T, CV extends ObservableCollection<?>> implements FlowTransformInstantiator<CV, CV, T, T> {
 			@Override
 			public CV transform(CV source, ModelSetInstance models) throws ModelInstantiationException {
 				return (CV) source.reverse();
@@ -423,11 +496,6 @@ public class ObservableCollectionTransformations {
 			@Override
 			public boolean isDifferent(ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException {
 				return false;
-			}
-
-			@Override
-			public String toString() {
-				return "reverse()";
 			}
 		}
 	}
@@ -460,8 +528,7 @@ public class ObservableCollectionTransformations {
 			return new Interpreted<>(this, parent);
 		}
 
-		static class Interpreted<T, C extends ObservableCollection<?>, CV extends C> extends TypePreservingTransform.Interpreted<C, CV>
-		implements FlowTransformElement<C, CV, T, T, C, CV, ExElement> {
+		static class Interpreted<T, C extends ObservableCollection<?>, CV extends C> extends TypePreservingTransform.Interpreted<C, CV> {
 			private InterpretedValueSynth<Observable<?>, Observable<?>> theRefresh;
 
 			Interpreted(RefreshCollectionTransform<C> definition, ExElement.Interpreted<?> parent) {
@@ -489,6 +556,24 @@ public class ObservableCollectionTransformations {
 			}
 
 			@Override
+			public Operation.Instantiator<CV, CV> instantiate() {
+				return new Instantiator<>(theRefresh.instantiate());
+			}
+
+			@Override
+			public String toString() {
+				return "refresh(" + theRefresh + ")";
+			}
+		}
+
+		static class Instantiator<T, CV extends ObservableCollection<?>> implements FlowTransformInstantiator<CV, CV, T, T> {
+			private final ModelValueInstantiator<Observable<?>> theRefresh;
+
+			Instantiator(ModelValueInstantiator<Observable<?>> refresh) {
+				theRefresh = refresh;
+			}
+
+			@Override
 			public CollectionDataFlow<?, ?, T> transformFlow(CollectionDataFlow<?, ?, T> source, ModelSetInstance models)
 				throws ModelInstantiationException {
 				Observable<?> refresh = theRefresh.get(models);
@@ -505,24 +590,19 @@ public class ObservableCollectionTransformations {
 				Observable<?> refresh = theRefresh.get(sourceModels);
 				return refresh != theRefresh.forModelCopy(refresh, sourceModels, newModels);
 			}
-
-			@Override
-			public String toString() {
-				return "refresh(" + theRefresh + ")";
-			}
 		}
 	}
 
 	static class RefreshEachCollectionTransform<C extends ObservableCollection<?>> extends TypePreservingTransform<C>
 	implements CollectionTransform<C, C, ExElement> {
-		private String theSourceName;
+		private ModelComponentId theSourceName;
 		private CompiledExpression theRefresh;
 
 		RefreshEachCollectionTransform(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
 			super(parent, qonfigType);
 		}
 
-		public String getSourceName() {
+		public ModelComponentId getSourceVariable() {
 			return theSourceName;
 		}
 
@@ -533,10 +613,12 @@ public class ObservableCollectionTransformations {
 		@Override
 		public void update(ExpressoQIS session, ModelType<C> sourceModelType) throws QonfigInterpretationException {
 			super.update(session, sourceModelType);
-			theSourceName = session.getAttributeText("source-as");
+			String sourceAs = session.getAttributeText("source-as");
+			ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
+			theSourceName = elModels.getElementValueModelId(sourceAs);
 			theRefresh = session.getAttributeExpression("on");
-			getAddOn(ExWithElementModel.Def.class).<Interpreted<?, ?, ?>, SettableValue<?>> satisfyElementValueType(theSourceName,
-				ModelTypes.Value, (interp, env) -> ModelTypes.Value.forType(interp.getSourceType()));
+			elModels.<Interpreted<?, ?, ?>, SettableValue<?>> satisfyElementValueType(theSourceName.getName(), ModelTypes.Value,
+				(interp, env) -> ModelTypes.Value.forType(interp.getSourceType()));
 		}
 
 		@Override
@@ -544,8 +626,7 @@ public class ObservableCollectionTransformations {
 			return new Interpreted<>(this, parent);
 		}
 
-		static class Interpreted<T, C extends ObservableCollection<?>, CV extends C> extends TypePreservingTransform.Interpreted<C, CV>
-		implements FlowTransformElement<C, CV, T, T, C, CV, ExElement> {
+		static class Interpreted<T, C extends ObservableCollection<?>, CV extends C> extends TypePreservingTransform.Interpreted<C, CV> {
 			private TypeToken<T> theSourceType;
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<Observable<?>>> theRefresh;
 
@@ -580,11 +661,37 @@ public class ObservableCollectionTransformations {
 			}
 
 			@Override
+			public Operation.Instantiator<CV, CV> instantiate() {
+				return new Instantiator<>(getExpressoEnv().getModels().instantiate(), theSourceType, getDefinition().getSourceVariable(),
+					theRefresh.instantiate());
+			}
+
+			@Override
+			public String toString() {
+				return "refreshEach(" + theRefresh + ")";
+			}
+		}
+
+		static class Instantiator<T, CV extends ObservableCollection<?>> implements FlowTransformInstantiator<CV, CV, T, T> {
+			private final ModelInstantiator theLocalModel;
+			private final TypeToken<T> theSourceType;
+			private final ModelComponentId theSourceVariable;
+			private final ModelValueInstantiator<SettableValue<Observable<?>>> theRefresh;
+
+			Instantiator(ModelInstantiator localModel, TypeToken<T> sourceType, ModelComponentId sourceVariable,
+				ModelValueInstantiator<SettableValue<Observable<?>>> refresh) {
+				theLocalModel = localModel;
+				theSourceType = sourceType;
+				theSourceVariable = sourceVariable;
+				theRefresh = refresh;
+			}
+
+			@Override
 			public CollectionDataFlow<?, ?, T> transformFlow(CollectionDataFlow<?, ?, T> source, ModelSetInstance models)
 				throws ModelInstantiationException {
-				models = getExpressoEnv().wrapLocal(models);
+				models = theLocalModel.wrap(models);
 				SettableValue<T> sourceV = SettableValue.build(theSourceType).build();
-				getAddOn(ExWithElementModel.Interpreted.class).satisfyElementValue(getDefinition().getSourceName(), models, sourceV);
+				ExFlexibleElementModelAddOn.satisfyElementValue(theSourceVariable, models, sourceV);
 				SettableValue<Observable<?>> refresh = theRefresh.get(models);
 				String print = theRefresh.toString();
 				Function<T, Observable<?>> refreshFn = LambdaUtils.printableFn(v -> {
@@ -603,11 +710,6 @@ public class ObservableCollectionTransformations {
 			public boolean isDifferent(ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException {
 				SettableValue<Observable<?>> refresh = theRefresh.get(sourceModels);
 				return refresh != theRefresh.forModelCopy(refresh, sourceModels, newModels);
-			}
-
-			@Override
-			public String toString() {
-				return "refreshEach(" + theRefresh + ")";
 			}
 		}
 	}
@@ -658,7 +760,7 @@ public class ObservableCollectionTransformations {
 		}
 
 		static class Interpreted<T, C1 extends ObservableCollection<?>, CV1 extends C1, C2 extends ObservableSet<?>, CV2 extends C2>
-		extends ExElement.Interpreted.Abstract<ExElement> implements FlowTransformElement<C1, CV1, T, T, C2, CV2, ExElement> {
+		extends ExElement.Interpreted.Abstract<ExElement> implements Operation.Interpreted<C1, CV1, C2, CV2, ExElement> {
 			private TypeToken<T> theValueType;
 			private ExSort.ExRootSort.Interpreted<T> theSort;
 
@@ -704,12 +806,31 @@ public class ObservableCollectionTransformations {
 
 			@Override
 			public BetterList<InterpretedValueSynth<?, ?>> getComponents() {
-				return BetterList.empty();
+				return theSort == null ? BetterList.empty() : theSort.getComponents();
+			}
+
+			@Override
+			public Operation.Instantiator<CV1, CV2> instantiate() {
+				return new Instantiator<>(theSort == null ? null : theSort.instantiateSort(), getDefinition().isUseFirst(),
+					getDefinition().isPreservingSourceOrder());
+			}
+		}
+
+		static class Instantiator<T, CV1 extends ObservableCollection<?>, CV2 extends ObservableSet<?>>
+		implements FlowTransformInstantiator<CV1, CV2, T, T> {
+			private final ModelValueInstantiator<Comparator<? super T>> theSort;
+			private final boolean isUseFirst;
+			private final boolean isPreservingSourceOrder;
+
+			Instantiator(ModelValueInstantiator<Comparator<? super T>> sort, boolean useFirst, boolean preservingSourceOrder) {
+				theSort = sort;
+				isUseFirst = useFirst;
+				isPreservingSourceOrder = preservingSourceOrder;
 			}
 
 			@Override
 			public boolean isDifferent(ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException {
-				if (theSort != null && theSort.getSorting(sourceModels) != theSort.getSorting(newModels))
+				if (theSort != null && theSort.get(sourceModels) != theSort.get(newModels))
 					return true;
 				return false;
 			}
@@ -723,12 +844,12 @@ public class ObservableCollectionTransformations {
 			public CollectionDataFlow<?, ?, T> transformFlow(CollectionDataFlow<?, ?, T> source, ModelSetInstance models)
 				throws ModelInstantiationException {
 				if (theSort != null) {
-					Comparator<? super T> sort = theSort.getSorting(models);
-					return source.distinctSorted(sort, getDefinition().isUseFirst());
+					Comparator<? super T> sort = theSort.get(models);
+					return source.distinctSorted(sort, isUseFirst);
 				} else {
 					return source.distinct(uo -> uo//
-						.preserveSourceOrder(getDefinition().isPreservingSourceOrder())//
-						.useFirst(getDefinition().isUseFirst()));
+						.preserveSourceOrder(isPreservingSourceOrder)//
+						.useFirst(isUseFirst));
 				}
 			}
 
@@ -761,7 +882,7 @@ public class ObservableCollectionTransformations {
 		}
 
 		static class Interpreted<T, C1 extends ObservableCollection<?>, CV1 extends C1, CV2 extends ObservableSortedCollection<?>> extends
-		ExSort.ExRootSort.Interpreted<T> implements FlowTransformElement<C1, CV1, T, T, ObservableSortedCollection<?>, CV2, ExElement> {
+		ExSort.ExRootSort.Interpreted<T> implements Operation.Interpreted<C1, CV1, ObservableSortedCollection<?>, CV2, ExElement> {
 			private ModelInstanceType.SingleTyped<ObservableSortedCollection<?>, T, CV2> theTargetType;
 
 			Interpreted(SortedCollectionTransform<C1> definition, ExElement.Interpreted<?> parent) {
@@ -786,6 +907,20 @@ public class ObservableCollectionTransformations {
 			}
 
 			@Override
+			public Operation.Instantiator<CV1, CV2> instantiate() {
+				return new Instantiator<>(instantiateSort());
+			}
+		}
+
+		static class Instantiator<T, CV1 extends ObservableCollection<?>, CV2 extends ObservableSortedCollection<?>>
+		implements FlowTransformInstantiator<CV1, CV2, T, T> {
+			private final ModelValueInstantiator<Comparator<? super T>> theSorting;
+
+			Instantiator(ModelValueInstantiator<Comparator<? super T>> sorting) {
+				theSorting = sorting;
+			}
+
+			@Override
 			public CV2 transform(CV1 source, ModelSetInstance models) throws ModelInstantiationException {
 				return (CV2) transformFlow((CollectionDataFlow<?, ?, T>) source.flow(), models).collectActive(models.getUntil());
 			}
@@ -793,7 +928,7 @@ public class ObservableCollectionTransformations {
 			@Override
 			public CollectionDataFlow<?, ?, T> transformFlow(CollectionDataFlow<?, ?, T> source, ModelSetInstance models)
 				throws ModelInstantiationException {
-				Comparator<? super T> sorting = getSorting(models);
+				Comparator<? super T> sorting = theSorting.get(models);
 				return source.sorted(sorting);
 			}
 
@@ -804,7 +939,7 @@ public class ObservableCollectionTransformations {
 
 			@Override
 			public boolean isDifferent(ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException {
-				if (getSorting(sourceModels) != getSorting(newModels))
+				if (theSorting.get(sourceModels) != theSorting.get(newModels))
 					return true;
 				return false;
 			}
@@ -838,8 +973,7 @@ public class ObservableCollectionTransformations {
 			return new Interpreted<>(this, parent);
 		}
 
-		static class Interpreted<T, C extends ObservableCollection<?>, CV extends C> extends TypePreservingTransform.Interpreted<C, CV>
-		implements FlowTransformElement<C, CV, T, T, C, CV, ExElement> {
+		static class Interpreted<T, C extends ObservableCollection<?>, CV extends C> extends TypePreservingTransform.Interpreted<C, CV> {
 			Interpreted(UnmodifiableCollectionTransform<C> definition, ExElement.Interpreted<?> parent) {
 				super(definition, parent);
 			}
@@ -855,9 +989,27 @@ public class ObservableCollectionTransformations {
 			}
 
 			@Override
+			public Instantiator<CV, CV> instantiate() {
+				return new Instantiator<>(getDefinition().isAllowUpdates());
+			}
+
+			@Override
+			public String toString() {
+				return "unmodifiable()";
+			}
+		}
+
+		static class Instantiator<T, CV extends ObservableCollection<?>> implements FlowTransformInstantiator<CV, CV, T, T> {
+			private final boolean isAllowUpdates;
+
+			Instantiator(boolean allowUpdates) {
+				isAllowUpdates = allowUpdates;
+			}
+
+			@Override
 			public CollectionDataFlow<?, ?, T> transformFlow(CollectionDataFlow<?, ?, T> source, ModelSetInstance models)
 				throws ModelInstantiationException {
-				return source.unmodifiable(getDefinition().isAllowUpdates());
+				return source.unmodifiable(isAllowUpdates);
 			}
 
 			@Override
@@ -868,11 +1020,6 @@ public class ObservableCollectionTransformations {
 			@Override
 			public boolean isDifferent(ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException {
 				return false;
-			}
-
-			@Override
-			public String toString() {
-				return "unmodifiable()";
 			}
 		}
 	}
@@ -898,8 +1045,7 @@ public class ObservableCollectionTransformations {
 			return new Interpreted<>(this, parent);
 		}
 
-		static class Interpreted<T, C extends ObservableCollection<?>, CV extends C> extends TypePreservingTransform.Interpreted<C, CV>
-		implements FlowTransformElement<C, CV, T, T, C, CV, ExElement> {
+		static class Interpreted<T, C extends ObservableCollection<?>, CV extends C> extends TypePreservingTransform.Interpreted<C, CV> {
 			Interpreted(FilterModCollectionTransform<C> definition, ExElement.Interpreted<?> parent) {
 				super(definition, parent);
 			}
@@ -921,19 +1067,8 @@ public class ObservableCollectionTransformations {
 			}
 
 			@Override
-			public CollectionDataFlow<?, ?, T> transformFlow(CollectionDataFlow<?, ?, T> source, ModelSetInstance models)
-				throws ModelInstantiationException {
-				throw new UnsupportedOperationException();
-			}
-
-			@Override
-			public CollectionDataFlow<?, ?, T> transformToFlow(CV source, ModelSetInstance models) throws ModelInstantiationException {
-				return transformFlow((CollectionDataFlow<?, ?, T>) source.flow(), models);
-			}
-
-			@Override
-			public boolean isDifferent(ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException {
-				throw new UnsupportedOperationException();
+			public Instantiator<CV, CV> instantiate() {
+				throw new UnsupportedOperationException("Not yet implemented");
 			}
 
 			@Override
@@ -994,10 +1129,9 @@ public class ObservableCollectionTransformations {
 		}
 
 		static class Interpreted<C extends ObservableCollection<?>, S, T, CV1 extends C, CV2 extends C>
-		extends ExpressoTransformations.AbstractCompiledTransformation.Interpreted<C, S, T, CV1, C, CV2, ExElement>
-		implements FlowTransformElement<C, CV1, S, T, C, CV2, ExElement> {
+		extends ExpressoTransformations.AbstractCompiledTransformation.Interpreted<C, S, T, CV1, C, CV2, ExElement> {
 			private ModelInstanceType<C, CV2> theTargetModelType;
-			private ExSort.ExRootSort.Interpreted<? super T> theSort;
+			private ExSort.ExRootSort.Interpreted<T> theSort;
 
 			Interpreted(MapEquivalentCollectionTransform<C> definition, ExElement.Interpreted<?> parent) {
 				super(definition, parent);
@@ -1023,7 +1157,7 @@ public class ObservableCollectionTransformations {
 				} else if (theSort == null || theSort.getIdentity() != getDefinition().getSort().getIdentity()) {
 					if (theSort != null)
 						theSort.destroy();
-					theSort = (ExSort.ExRootSort.Interpreted<? super T>) getDefinition().getSort().interpret(this);
+					theSort = (ExSort.ExRootSort.Interpreted<T>) getDefinition().getSort().interpret(this);
 				}
 				if (theSort != null)
 					theSort.update(getExpressoEnv());
@@ -1032,6 +1166,37 @@ public class ObservableCollectionTransformations {
 			@Override
 			public ModelInstanceType<? extends C, ? extends CV2> getTargetType() {
 				return theTargetModelType;
+			}
+
+			@Override
+			public ExpressoTransformations.CompiledTransformation.Instantiator<S, T, CV1, CV2> instantiate() {
+				return new Instantiator<>(getExpressoEnv().getModels().instantiate(), getMapWith().instantiate(),
+					QommonsUtils.map(getCombinedValues(), cv -> cv.instantiate(), true),
+					getReverse() == null ? null : getReverse().instantiate(), getDefinition().getSourceName(), getDefinition().isCached(),
+						getDefinition().isReEvalOnUpdate(), getDefinition().isFireIfUnchanged(), getDefinition().isNullToNull(),
+						getDefinition().isManyToOne(), getDefinition().isOneToMany(),
+						getEquivalence() == null ? null : getEquivalence().instantiate(), getTargetValueType(),
+							theSort == null ? null : theSort.instantiateSort(), reporting().getPosition());
+			}
+		}
+
+		static class Instantiator<S, T, CV1 extends ObservableCollection<?>, CV2 extends ObservableCollection<?>>
+		extends AbstractCompiledTransformation.Instantiator<S, T, CV1, CV2> implements FlowTransformInstantiator<CV1, CV2, S, T> {
+			private final TypeToken<T> theTargetValueType;
+			private final ModelValueInstantiator<Comparator<? super T>> theSort;
+			private final LocatedFilePosition theLocation;
+
+			Instantiator(ModelInstantiator localModel, ExpressoTransformations.MapWith.Instantiator<S, T> mapWith,
+				List<ExpressoTransformations.CombineWith.Instantiator<?>> combinedValues,
+				ExpressoTransformations.CompiledMapReverse.Instantiator<S, T> reverse, ModelComponentId sourceVariable, boolean cached,
+				boolean reEvalOnUpdate, boolean fireIfUnchanged, boolean nullToNull, boolean manyToOne, boolean oneToMany,
+				ModelValueInstantiator<SettableValue<Equivalence<? super T>>> equivalence, TypeToken<T> targetValueType,
+				ModelValueInstantiator<Comparator<? super T>> sort, LocatedFilePosition location) {
+				super(localModel, mapWith, combinedValues, reverse, sourceVariable, cached, reEvalOnUpdate, fireIfUnchanged, nullToNull,
+					manyToOne, oneToMany, equivalence);
+				theTargetValueType = targetValueType;
+				theSort = sort;
+				theLocation = location;
 			}
 
 			@Override
@@ -1049,8 +1214,8 @@ public class ObservableCollectionTransformations {
 				try {
 					if (source instanceof SortedDataFlow) {
 						if (theSort != null) {
-							Comparator<? super T> sort = theSort.getSorting(models);
-							return ((SortedDataFlow<?, ?, S>) source).transformEquivalent(getTargetValueType(), tx -> {
+							Comparator<? super T> sort = theSort.get(models);
+							return ((SortedDataFlow<?, ?, S>) source).transformEquivalent(theTargetValueType, tx -> {
 								try {
 									return transform(tx, models);
 								} catch (ModelInstantiationException e) {
@@ -1058,7 +1223,7 @@ public class ObservableCollectionTransformations {
 								}
 							}, sort);
 						} else {
-							return ((SortedDataFlow<?, ?, S>) source).transformEquivalent(getTargetValueType(), tx -> {
+							return ((SortedDataFlow<?, ?, S>) source).transformEquivalent(theTargetValueType, tx -> {
 								try {
 									return (Transformation.ReversibleTransformation<S, T>) transform(tx, models);
 								} catch (ModelInstantiationException e) {
@@ -1067,7 +1232,7 @@ public class ObservableCollectionTransformations {
 							});
 						}
 					} else if (source instanceof DistinctDataFlow) {
-						return ((DistinctDataFlow<?, ?, S>) source).transformEquivalent(getTargetValueType(), tx -> {
+						return ((DistinctDataFlow<?, ?, S>) source).transformEquivalent(theTargetValueType, tx -> {
 							try {
 								return (Transformation.ReversibleTransformation<S, T>) transform(tx, models);
 							} catch (ModelInstantiationException e) {
@@ -1076,7 +1241,7 @@ public class ObservableCollectionTransformations {
 						});
 					} else
 						throw new ModelInstantiationException("Source flow is neither distinct nor sorted: " + source.getClass().getName(),
-							reporting().getFileLocation().getPosition(0), 0);
+							theLocation, 0);
 				} catch (CheckedExceptionWrapper e) {
 					throw CheckedExceptionWrapper.getThrowable(e, ModelInstantiationException.class);
 				}
@@ -1090,7 +1255,7 @@ public class ObservableCollectionTransformations {
 	}
 
 	static class FlattenCollectionTransform<C1 extends ObservableCollection<?>, C2 extends ObservableCollection<?>>
-		extends ExElement.Def.Abstract<ExElement> implements CollectionTransform<C1, C2, ExElement> {
+	extends ExElement.Def.Abstract<ExElement> implements CollectionTransform<C1, C2, ExElement> {
 		private ModelType.SingleTyped<C2> theTargetModelType;
 		private ExSort.ExRootSort theSort;
 		private boolean isPropagateToParent;
@@ -1164,9 +1329,9 @@ public class ObservableCollectionTransformations {
 		}
 
 		static class Interpreted<C1 extends ObservableCollection<?>, CV1 extends C1, S, T, C2 extends ObservableCollection<?>, CV2 extends C2>
-			extends ExElement.Interpreted.Abstract<ExElement> implements FlowTransformElement<C1, CV1, S, T, C2, CV2, ExElement> {
+		extends ExElement.Interpreted.Abstract<ExElement> implements Operation.Interpreted<C1, CV1, C2, CV2, ExElement> {
 			private TypeToken<T> theResultType;
-			private ExSort.ExRootSort.Interpreted<? super T> theSort;
+			private ExSort.ExRootSort.Interpreted<T> theSort;
 			private ExBiFunction<CollectionDataFlow<?, ?, ?>, ModelSetInstance, CollectionDataFlow<?, ?, T>, ModelInstantiationException> theFlatten;
 
 			Interpreted(FlattenCollectionTransform<C1, C2> definition, ExElement.Interpreted<?> parent) {
@@ -1182,23 +1347,19 @@ public class ObservableCollectionTransformations {
 			public void update(ModelInstanceType<C1, CV1> sourceType, InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 				Class<?> raw = TypeTokens.getRawType(sourceType.getType(0));
 				TypeToken<T> resultType;
-				String txName;
 				if (ObservableValue.class.isAssignableFrom(raw)) {
 					resultType = (TypeToken<T>) sourceType.getType(0).resolveType(ObservableValue.class.getTypeParameters()[0]);
-					theFlatten = (flow, models) -> flow.flattenValues(resultType, v -> (ObservableValue<? extends T>) v);
-					txName = "flatValues";
+					theFlatten = flatValues(resultType);
 				} else if (ObservableCollection.class.isAssignableFrom(raw)) {
 					System.err.println("WARNING: Collection flatten is not fully implemented.  Many options are unsupported.");
 					// TODO Use map options, reverse
 					resultType = (TypeToken<T>) sourceType.getType(0).resolveType(ObservableCollection.class.getTypeParameters()[0]);
-					theFlatten = (flow, models) -> flow.flatMap(resultType, v -> ((ObservableCollection<? extends T>) v).flow());
-					txName = "flatCollections";
+					theFlatten = flatCollections(resultType);
 				} else if (CollectionDataFlow.class.isAssignableFrom(raw)) {
 					System.err.println("WARNING: Collection flatten is not fully implemented.  Many options are unsupported.");
 					// TODO Use map options, reverse
 					resultType = (TypeToken<T>) sourceType.getType(0).resolveType(CollectionDataFlow.class.getTypeParameters()[2]);
-					theFlatten = (flow, models) -> flow.flatMap(resultType, v -> (CollectionDataFlow<?, ?, ? extends T>) v);
-					txName = "flatFlows";
+					theFlatten = flatFlows(resultType);
 				} else
 					throw new ExpressoInterpretationException("Cannot flatten a collection of type " + sourceType.getType(0),
 						reporting().getFileLocation().getPosition(0), 0);
@@ -1213,7 +1374,7 @@ public class ObservableCollectionTransformations {
 				} else if (theSort == null || theSort.getIdentity() != getDefinition().getSort().getIdentity()) {
 					if (theSort != null)
 						theSort.destroy();
-					theSort = (ExSort.ExRootSort.Interpreted<? super T>) getDefinition().getSort().interpret(this);
+					theSort = (ExSort.ExRootSort.Interpreted<T>) getDefinition().getSort().interpret(this);
 				}
 				if (theSort != null)
 					theSort.update(getExpressoEnv());
@@ -1233,8 +1394,46 @@ public class ObservableCollectionTransformations {
 			}
 
 			@Override
+			public Operation.Instantiator<CV1, CV2> instantiate() {
+				return new Instantiator<S, T, CV1, CV2>((ModelType<CV2>) getDefinition().getTargetModelType(),
+					theSort == null ? null : theSort.instantiateSort(), theFlatten);
+			}
+		}
+
+		static <T> ExBiFunction<CollectionDataFlow<?, ?, ?>, ModelSetInstance, CollectionDataFlow<?, ?, T>, ModelInstantiationException> flatValues(
+			TypeToken<T> resultType) {
+			return LambdaUtils.printableExBiFn((flow, models) -> flow.flattenValues(resultType, v -> (ObservableValue<? extends T>) v),
+				"flatValues", null);
+		}
+
+		static <T> ExBiFunction<CollectionDataFlow<?, ?, ?>, ModelSetInstance, CollectionDataFlow<?, ?, T>, ModelInstantiationException> flatCollections(
+			TypeToken<T> resultType) {
+			return LambdaUtils.printableExBiFn(
+				(flow, models) -> flow.flatMap(resultType, v -> ((ObservableCollection<? extends T>) v).flow()), "FlatCollections", null);
+		}
+
+		static <T> ExBiFunction<CollectionDataFlow<?, ?, ?>, ModelSetInstance, CollectionDataFlow<?, ?, T>, ModelInstantiationException> flatFlows(
+			TypeToken<T> resultType) {
+			return LambdaUtils.printableExBiFn((flow, models) -> flow.flatMap(resultType, v -> (CollectionDataFlow<?, ?, ? extends T>) v),
+				"flatFlows", null);
+		}
+
+		static class Instantiator<S, T, CV1 extends ObservableCollection<?>, CV2 extends ObservableCollection<?>>
+		implements FlowTransformInstantiator<CV1, CV2, S, T> {
+			private final ModelType<CV2> theTargetModelType;
+			private final ModelValueInstantiator<Comparator<? super T>> theSort;
+			private ExBiFunction<CollectionDataFlow<?, ?, ?>, ModelSetInstance, CollectionDataFlow<?, ?, T>, ModelInstantiationException> theFlatten;
+
+			Instantiator(ModelType<CV2> targetModelType, ModelValueInstantiator<Comparator<? super T>> sort,
+				ExBiFunction<CollectionDataFlow<?, ?, ?>, ModelSetInstance, CollectionDataFlow<?, ?, T>, ModelInstantiationException> flatten) {
+				theTargetModelType = targetModelType;
+				theSort = sort;
+				theFlatten = flatten;
+			}
+
+			@Override
 			public boolean isDifferent(ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException {
-				if (theSort != null && theSort.getSorting(sourceModels) != theSort.getSorting(newModels))
+				if (theSort != null && theSort.get(sourceModels) != theSort.get(newModels))
 					return true;
 				return false;
 			}
@@ -1247,10 +1446,9 @@ public class ObservableCollectionTransformations {
 			@Override
 			public CollectionDataFlow<?, ?, T> transformFlow(CollectionDataFlow<?, ?, S> source, ModelSetInstance models)
 				throws ModelInstantiationException {
-				Comparator<? super T> sort = theSort == null ? null : theSort.getSorting(models);
+				Comparator<? super T> sort = theSort == null ? null : theSort.get(models);
 				CollectionDataFlow<?, ?, T> mapped = theFlatten.apply(source, models);
-				boolean distinct = getDefinition().getTargetModelType() == ModelTypes.SortedSet
-					|| getDefinition().getTargetModelType() == ModelTypes.Set;
+				boolean distinct = theTargetModelType == ModelTypes.SortedSet || theTargetModelType == ModelTypes.Set;
 				if (distinct) {
 					if (theSort != null)
 						mapped = mapped.distinctSorted(sort, false);
@@ -1339,8 +1537,7 @@ public class ObservableCollectionTransformations {
 			return new Interpreted<>(this, parent);
 		}
 
-		static class Interpreted<T, C extends ObservableCollection<?>, CV extends C> extends TypePreservingTransform.Interpreted<C, CV>
-		implements FlowTransformElement<C, CV, T, T, C, CV, ExElement> {
+		static class Interpreted<T, C extends ObservableCollection<?>, CV extends C> extends TypePreservingTransform.Interpreted<C, CV> {
 			private InterpretedValueSynth<ObservableCollection<?>, ObservableCollection<?>> theFilter;
 
 			Interpreted(WhereContainedCollectionTransform<C> definition, ExElement.Interpreted<?> parent) {
@@ -1368,10 +1565,30 @@ public class ObservableCollectionTransformations {
 			}
 
 			@Override
+			public Operation.Instantiator<CV, CV> instantiate() {
+				return new Instantiator<>(theFilter.instantiate(), getDefinition().isInclusive());
+			}
+
+			@Override
+			public String toString() {
+				return "whereContained(" + theFilter + ", " + getDefinition().isInclusive() + ")";
+			}
+		}
+
+		static class Instantiator<T, CV extends ObservableCollection<?>> implements FlowTransformInstantiator<CV, CV, T, T> {
+			private final ModelValueInstantiator<ObservableCollection<?>> theFilter;
+			private final boolean isInclusive;
+
+			Instantiator(ModelValueInstantiator<ObservableCollection<?>> filter, boolean inclusive) {
+				theFilter = filter;
+				isInclusive = inclusive;
+			}
+
+			@Override
 			public CollectionDataFlow<?, ?, T> transformFlow(CollectionDataFlow<?, ?, T> source, ModelSetInstance models)
 				throws ModelInstantiationException {
 				ObservableCollection<?> filter = theFilter.get(models);
-				return source.whereContained(filter.flow(), getDefinition().isInclusive());
+				return source.whereContained(filter.flow(), isInclusive);
 			}
 
 			@Override
@@ -1383,11 +1600,6 @@ public class ObservableCollectionTransformations {
 			public boolean isDifferent(ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException {
 				ObservableCollection<?> filter = theFilter.get(sourceModels);
 				return theFilter.forModelCopy(filter, sourceModels, newModels) != filter;
-			}
-
-			@Override
-			public String toString() {
-				return "whereContained(" + theFilter + ", " + getDefinition().isInclusive() + ")";
 			}
 		}
 	}
@@ -1467,14 +1679,9 @@ public class ObservableCollectionTransformations {
 		}
 
 		static class Interpreted<C extends ObservableCollection<?>, CV extends C> extends ExElement.Interpreted.Abstract<ExElement>
-		implements Operation.EfficientCopyingInterpreted<C, CV, SettableValue<?>, SettableValue<Integer>, ExElement> {
+		implements Operation.Interpreted<C, CV, SettableValue<?>, SettableValue<Integer>, ExElement> {
 			Interpreted(SizeCollectionTransform<C> definition, ExElement.Interpreted<?> parent) {
 				super(definition, parent);
-			}
-
-			@Override
-			public boolean isEfficientCopy() {
-				return true;
 			}
 
 			@Override
@@ -1490,6 +1697,19 @@ public class ObservableCollectionTransformations {
 			@Override
 			public BetterList<InterpretedValueSynth<?, ?>> getComponents() {
 				return BetterList.empty();
+			}
+
+			@Override
+			public Operation.Instantiator<CV, SettableValue<Integer>> instantiate() {
+				return new Instantiator<>();
+			}
+		}
+
+		static class Instantiator<CV extends ObservableCollection<?>>
+		implements Operation.EfficientCopyingInstantiator<CV, SettableValue<Integer>> {
+			@Override
+			public boolean isEfficientCopy() {
+				return true;
 			}
 
 			@Override
@@ -1514,23 +1734,23 @@ public class ObservableCollectionTransformations {
 					return prevValue;
 				return new CollectionSizeObservable<>(newSource);
 			}
+		}
 
-			static class CollectionSizeObservable<CV extends ObservableCollection<?>> extends SettableValue.AlwaysDisabledValue<Integer> {
-				private final CV theCollection;
+		static class CollectionSizeObservable<CV extends ObservableCollection<?>> extends SettableValue.AlwaysDisabledValue<Integer> {
+			private final CV theCollection;
 
-				CollectionSizeObservable(CV collection) {
-					super(collection.observeSize(), __ -> "Size cannot be assigned directly");
-					theCollection = collection;
-				}
+			CollectionSizeObservable(CV collection) {
+				super(collection.observeSize(), __ -> "Size cannot be assigned directly");
+				theCollection = collection;
+			}
 
-				protected CV getSource() {
-					return theCollection;
-				}
+			protected CV getSource() {
+				return theCollection;
+			}
 
-				@Override
-				public String toString() {
-					return theCollection.getIdentity() + ".size()";
-				}
+			@Override
+			public String toString() {
+				return theCollection.getIdentity() + ".size()";
 			}
 		}
 	}
@@ -1568,8 +1788,7 @@ public class ObservableCollectionTransformations {
 			return "collect(" + (isActive == null ? "" : (isActive ? "active" : "passive")) + ")";
 		}
 
-		static class Interpreted<T, C extends ObservableCollection<?>, CV extends C> extends TypePreservingTransform.Interpreted<C, CV>
-		implements FlowTransformElement<C, CV, T, T, C, CV, ExElement> {
+		static class Interpreted<T, C extends ObservableCollection<?>, CV extends C> extends TypePreservingTransform.Interpreted<C, CV> {
 			Interpreted(CollectCollectionTransform<C> definition, ExElement.Interpreted<?> parent) {
 				super(definition, parent);
 			}
@@ -1590,12 +1809,29 @@ public class ObservableCollectionTransformations {
 			}
 
 			@Override
+			public Operation.Instantiator<CV, CV> instantiate() {
+				return new Instantiator<>(getDefinition().isActive());
+			}
+
+			@Override
+			public String toString() {
+				return getDefinition().toString();
+			}
+		}
+
+		static class Instantiator<T, CV extends ObservableCollection<?>> implements FlowTransformInstantiator<CV, CV, T, T> {
+			private final Boolean isActive;
+
+			Instantiator(Boolean active) {
+				isActive = active;
+			}
+
+			@Override
 			public CollectionDataFlow<?, ?, T> transformFlow(CollectionDataFlow<?, ?, T> source, ModelSetInstance models)
 				throws ModelInstantiationException {
-				Boolean active = getDefinition().isActive();
 				boolean reallyActive;
-				if (active != null)
-					reallyActive = active.booleanValue();
+				if (isActive != null)
+					reallyActive = isActive.booleanValue();
 				else
 					reallyActive = !source.prefersPassive();
 				if (reallyActive)
@@ -1612,11 +1848,6 @@ public class ObservableCollectionTransformations {
 			@Override
 			public boolean isDifferent(ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException {
 				return false;
-			}
-
-			@Override
-			public String toString() {
-				return getDefinition().toString();
 			}
 		}
 	}

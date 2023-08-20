@@ -12,6 +12,7 @@ import java.util.function.Function;
 
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.util.TypeTokens;
 import org.observe.util.TypeTokens.TypeConverter;
 import org.qommons.LambdaUtils;
@@ -1124,6 +1125,31 @@ public abstract class ModelType<M> implements Named {
 		}
 
 		@Override
+		public ModelValueInstantiator<MVT> instantiate() {
+			return new ConvertedInstantiator<>(theSource.instantiate(), theConverter);
+		}
+
+		@Override
+		public List<? extends InterpretedValueSynth<?, ?>> getComponents() {
+			return Collections.singletonList(theSource);
+		}
+
+		@Override
+		public String toString() {
+			return theSource.toString();
+		}
+	}
+
+	public static class ConvertedInstantiator<MS, MVS extends MS, MT, MVT extends MT> implements ModelValueInstantiator<MVT> {
+		private final ModelValueInstantiator<MVS> theSource;
+		private final ModelType.ModelInstanceConverter<MS, MT> theConverter;
+
+		public ConvertedInstantiator(ModelValueInstantiator<MVS> source, ModelType.ModelInstanceConverter<MS, MT> converter) {
+			theSource = source;
+			theConverter = converter;
+		}
+
+		@Override
 		public MVT get(ModelSetInstance extModels) throws ModelInstantiationException {
 			MVS modelV = theSource.get(extModels);
 			MVT converted = (MVT) theConverter.convert(modelV);
@@ -1138,11 +1164,6 @@ public abstract class ModelType<M> implements Named {
 				return value;
 			else
 				return (MVT) theConverter.convert(newSourceV);
-		}
-
-		@Override
-		public List<? extends InterpretedValueSynth<?, ?>> getComponents() {
-			return Collections.singletonList(theSource);
 		}
 
 		@Override

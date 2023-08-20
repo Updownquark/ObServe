@@ -89,6 +89,6 @@ public class ExIntValue extends ExAddOn.Abstract<ExElement> {
 	public void update(ExAddOn.Interpreted<?, ?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
 		super.update(interpreted, models);
 		Interpreted myInterpreted = (Interpreted) interpreted;
-		theInit = myInterpreted.getInit() == null ? null : myInterpreted.getInit().get(models);
+		theInit = myInterpreted.getInit() == null ? null : myInterpreted.getInit().instantiate().get(models);
 	}
 }

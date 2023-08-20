@@ -239,7 +239,7 @@ public interface QuickEventListener extends ExElement {
 			.onRightX(el -> el.getLeftValue().update(el.getRightValue(), myModels))//
 			.onCommonX(el -> el.getLeftValue().update(el.getRightValue(), myModels))//
 			.adjust();
-			theAction = myInterpreted.getAction().get(myModels);
+			theAction = myInterpreted.getAction().instantiate().get(myModels);
 		}
 	}
 
@@ -321,7 +321,7 @@ public interface QuickEventListener extends ExElement {
 		protected void updateModel(ExElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
 			super.updateModel(interpreted, myModels);
 			Interpreted myInterpreted = (Interpreted) interpreted;
-			theCondition = myInterpreted.getCondition().get(myModels);
+			theCondition = myInterpreted.getCondition().instantiate().get(myModels);
 		}
 	}
 }

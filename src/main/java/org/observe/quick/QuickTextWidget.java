@@ -223,8 +223,8 @@ public interface QuickTextWidget<T> extends QuickValueWidget<T> {
 		protected void updateModel(ExElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
 			super.updateModel(interpreted, myModels);
 			QuickTextWidget.Interpreted<T, ?> myInterpreted = (QuickTextWidget.Interpreted<T, ?>) interpreted;
-			theFormat.set(myInterpreted.getFormat() == null ? null : myInterpreted.getFormat().get(myModels), null);
-			isEditable.set(myInterpreted.isEditable() == null ? null : myInterpreted.isEditable().get(myModels), null);
+			theFormat.set(myInterpreted.getFormat() == null ? null : myInterpreted.getFormat().instantiate().get(myModels), null);
+			isEditable.set(myInterpreted.isEditable() == null ? null : myInterpreted.isEditable().instantiate().get(myModels), null);
 		}
 	}
 }

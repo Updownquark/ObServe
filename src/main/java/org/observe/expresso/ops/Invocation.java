@@ -33,6 +33,7 @@ import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.TypeConversionException;
 import org.observe.util.TypeTokens;
 import org.qommons.ArrayUtils;
@@ -585,6 +586,87 @@ public abstract class Invocation implements ObservableExpression {
 			return theReporting;
 		}
 
+		public Invocation.ExecutableImpl<X> getImpl() {
+			return theImpl;
+		}
+
+		public boolean isCaching() {
+			return isCaching;
+		}
+
+		public boolean isTesting() {
+			return isTesting;
+		}
+
+		@Override
+		public List<? extends InterpretedValueSynth<?, ?>> getComponents() {
+			if (theContext != null) {
+				if (theArguments.isEmpty())
+					return Collections.singletonList(theContext);
+				ArrayList<InterpretedValueSynth<?, ?>> components = new ArrayList<>(theArguments.size() + 1);
+				components.add(theContext);
+				components.addAll(theArguments);
+				return Collections.unmodifiableList(components);
+			} else
+				return theArguments;
+		}
+
+		protected ModelValueInstantiator<? extends SettableValue<?>> contextInstantiator() {
+			return theContext == null ? null : theContext.instantiate();
+		}
+
+		protected List<ModelValueInstantiator<? extends SettableValue<?>>> argumentInstantiators() {
+			ModelValueInstantiator<? extends SettableValue<?>>[] args = new ModelValueInstantiator[theArguments.size()];
+			for (int i = 0; i < args.length; i++)
+				args[i] = theArguments.get(i).instantiate();
+			return Arrays.asList(args);
+		}
+
+		@Override
+		public String toString() {
+			StringBuilder str = new StringBuilder();
+			if (theContext != null)
+				str.append(theContext).append('.');
+			str.append(theMethod.method.getName()).append('(');
+			for (int i = 0; i < theArguments.size(); i++) {
+				if (i > 0)
+					str.append(", ");
+				str.append(theArguments.get(i));
+			}
+			return str.append(')').toString();
+		}
+	}
+
+	static abstract class InvocationInstantiator<X extends Executable, R, M, MV extends M> implements ModelValueInstantiator<MV> {
+		private final Invocation.MethodResult<X, R> theMethod;
+		private final ModelValueInstantiator<? extends SettableValue<?>> theContext;
+		private final List<ModelValueInstantiator<? extends SettableValue<?>>> theArguments;
+		protected final Invocation.ExecutableImpl<X> theImpl;
+		protected final boolean isCaching;
+		protected final ErrorReporting theReporting;
+		protected final boolean isTesting;
+
+		InvocationInstantiator(MethodResult<X, R> method, ModelValueInstantiator<? extends SettableValue<?>> context,
+			List<ModelValueInstantiator<? extends SettableValue<?>>> arguments, ExecutableImpl<X> impl, boolean caching,
+			ErrorReporting reporting, boolean testing) {
+			super();
+			theMethod = method;
+			theContext = context;
+			theArguments = arguments;
+			theImpl = impl;
+			isCaching = caching;
+			theReporting = reporting;
+			isTesting = testing;
+		}
+
+		protected Invocation.MethodResult<X, R> getMethod() {
+			return theMethod;
+		}
+
+		public ErrorReporting getReporting() {
+			return theReporting;
+		}
+
 		@Override
 		public MV get(ModelSetInstance models) throws ModelInstantiationException {
 			SettableValue<?> ctxV = theContext == null ? null : theContext.get(models);
@@ -601,6 +683,9 @@ public abstract class Invocation implements ObservableExpression {
 			return createModelValue(ctxV, argVs, //
 				Observable.or(changeSources));
 		}
+
+		protected abstract MV createModelValue(SettableValue<?> ctxV, SettableValue<?>[] argVs, Observable<Object> changes)
+			throws ModelInstantiationException;
 
 		@Override
 		public MV forModelCopy(MV value, ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException {
@@ -625,22 +710,6 @@ public abstract class Invocation implements ObservableExpression {
 		}
 
 		@Override
-		public List<? extends InterpretedValueSynth<?, ?>> getComponents() {
-			if (theContext != null) {
-				if (theArguments.isEmpty())
-					return Collections.singletonList(theContext);
-				ArrayList<InterpretedValueSynth<?, ?>> components = new ArrayList<>(theArguments.size() + 1);
-				components.add(theContext);
-				components.addAll(theArguments);
-				return Collections.unmodifiableList(components);
-			} else
-				return theArguments;
-		}
-
-		protected abstract MV createModelValue(SettableValue<?> ctxV, SettableValue<?>[] argVs, Observable<Object> changes)
-			throws ModelInstantiationException;
-
-		@Override
 		public String toString() {
 			StringBuilder str = new StringBuilder();
 			if (theContext != null)
@@ -653,116 +722,116 @@ public abstract class Invocation implements ObservableExpression {
 			}
 			return str.append(')').toString();
 		}
+	}
 
-		static class InvocationThing<X extends Executable, R> {
-			private final Invocation.MethodResult<X, R> theMethod;
-			private boolean isUpdatingContext;
-			private final boolean isCaching;
-			private Object theCachedValue;
-			protected final ErrorReporting theReporting;
-			private final Invocation.ExecutableImpl<X> theImpl;
-			private final SettableValue<Object> theContext;
-			private final SettableValue<?>[] theArguments;
-			protected final boolean isTesting;
+	static class InvocationInstance<X extends Executable, R> {
+		private final Invocation.MethodResult<X, R> theMethod;
+		private boolean isUpdatingContext;
+		private final boolean isCaching;
+		private Object theCachedValue;
+		protected final ErrorReporting theReporting;
+		private final Invocation.ExecutableImpl<X> theImpl;
+		private final SettableValue<Object> theContext;
+		private final SettableValue<?>[] theArguments;
+		protected final boolean isTesting;
 
-			protected InvocationThing(MethodResult<X, R> method, boolean caching, ErrorReporting reporting, ExecutableImpl<X> impl,
-				SettableValue<Object> context, SettableValue<?>[] arguments, boolean testing) {
-				theMethod = method;
-				isCaching = caching;
-				theReporting = reporting;
-				theImpl = impl;
-				theContext = context;
-				theArguments = arguments;
-				isTesting = testing;
+		protected InvocationInstance(MethodResult<X, R> method, boolean caching, ErrorReporting reporting, ExecutableImpl<X> impl,
+			SettableValue<Object> context, SettableValue<?>[] arguments, boolean testing) {
+			theMethod = method;
+			isCaching = caching;
+			theReporting = reporting;
+			theImpl = impl;
+			theContext = context;
+			theArguments = arguments;
+			isTesting = testing;
+		}
+
+		protected Object invoke(boolean asAction)
+			throws IllegalAccessException, IllegalArgumentException, InvocationTargetException, InstantiationException {
+			if (isUpdatingContext)
+				return theCachedValue;
+			Object ctx = theContext == null ? null : theContext.get();
+			if (ctx == null && theContext != null) {
+				String msg = theContext + " is null, cannot call " + theMethod;
+				if (isTesting)
+					throw new NullPointerException(msg);
+				theReporting.error(msg);
+				// Although throwing an exception is better in theory, all the conditionals needed to work around this are obnoxious
+				// throw new NullPointerException(ctxV + " is null, cannot call " + theMethod);
+				return null;
 			}
-
-			protected Object invoke(boolean asAction)
-				throws IllegalAccessException, IllegalArgumentException, InvocationTargetException, InstantiationException {
-				if (isUpdatingContext)
-					return theCachedValue;
-				Object ctx = theContext == null ? null : theContext.get();
-				if (ctx == null && theContext != null) {
-					String msg = theContext + " is null, cannot call " + theMethod;
+			Object[] args = new Object[theArguments.length];
+			for (int a = 0; a < args.length; a++)
+				args[a] = theArguments[a].get();
+			Object returnValue = theMethod.invoke(ctx, args, theImpl);
+			if (asAction && !isUpdatingContext && theContext != null && theImpl.updateContext()
+				&& theContext.isAcceptable(theContext.get()) == null) {
+				isUpdatingContext = true;
+				theCachedValue = returnValue;
+				try {
+					theContext.set(theContext.get(), null);
+				} catch (RuntimeException e) {
+					String msg = "Could not update context after method invocation " + this;
 					if (isTesting)
-						throw new NullPointerException(msg);
-					theReporting.error(msg);
-					// Although throwing an exception is better in theory, all the conditionals needed to work around this are obnoxious
-					// throw new NullPointerException(ctxV + " is null, cannot call " + theMethod);
+						throw new IllegalStateException(msg, e);
+					theReporting.error(msg, e);
+					e.printStackTrace();
+				} finally {
+					isUpdatingContext = false;
+					theCachedValue = null;
+				}
+			}
+			return returnValue;
+		}
+
+		protected <X2> SettableValue<X2> syntheticResultValue(TypeToken<X2> type, SettableValue<?> ctxV, SettableValue<?>[] argVs,
+			Observable<?> changes) {
+			ObservableValue.SyntheticObservable<X2> backing = ObservableValue.of(type, () -> {
+				try {
+					return (X2) invoke(false);
+				} catch (Throwable e) {
+					theReporting.error(null, e);
 					return null;
 				}
-				Object[] args = new Object[theArguments.length];
-				for (int a = 0; a < args.length; a++)
-					args[a] = theArguments[a].get();
-				Object returnValue = theMethod.invoke(ctx, args, theImpl);
-				if (asAction && !isUpdatingContext && theContext != null && theImpl.updateContext()
-					&& theContext.isAcceptable(theContext.get()) == null) {
-					isUpdatingContext = true;
-					theCachedValue = returnValue;
-					try {
-						theContext.set(theContext.get(), null);
-					} catch (RuntimeException e) {
-						String msg = "Could not update context after method invocation " + this;
-						if (isTesting)
-							throw new IllegalStateException(msg, e);
-						theReporting.error(msg, e);
-						e.printStackTrace();
-					} finally {
-						isUpdatingContext = false;
-						theCachedValue = null;
-					}
-				}
-				return returnValue;
+			}, () -> {
+				if (ctxV != null)
+					return Stamped.compositeStamp(Stream.concat(Stream.of(ctxV), Arrays.stream(argVs)).mapToLong(Stamped::getStamp),
+						argVs.length + 1);
+				else
+					return Stamped.compositeStamp(Arrays.asList(argVs));
+			}, changes, () -> this);
+			if (isCaching) {
+				return SettableValue.asSettable(backing.cached(), //
+					__ -> theImpl + "s are not reversible");
+			} else {
+				long[] stamp = new long[1];
+				return SettableValue.asSettable(ObservableValue.of(type, //
+					() -> {
+						stamp[0]++;
+						return backing.get();
+					}, () -> Stamped.compositeStamp(backing.getStamp(), stamp[0]), //
+					changes, () -> this), //
+					__ -> theImpl + "s are not reversible");
 			}
+		}
 
-			protected <X2> SettableValue<X2> syntheticResultValue(TypeToken<X2> type, SettableValue<?> ctxV, SettableValue<?>[] argVs,
-				Observable<?> changes) {
-				ObservableValue.SyntheticObservable<X2> backing = ObservableValue.of(type, () -> {
-					try {
-						return (X2) invoke(false);
-					} catch (Throwable e) {
-						theReporting.error(null, e);
-						return null;
-					}
-				}, () -> {
-					if (ctxV != null)
-						return Stamped.compositeStamp(Stream.concat(Stream.of(ctxV), Arrays.stream(argVs)).mapToLong(Stamped::getStamp),
-							argVs.length + 1);
-					else
-						return Stamped.compositeStamp(Arrays.asList(argVs));
-				}, changes, () -> this);
-				if (isCaching) {
-					return SettableValue.asSettable(backing.cached(), //
-						__ -> theImpl + "s are not reversible");
-				} else {
-					long[] stamp = new long[1];
-					return SettableValue.asSettable(ObservableValue.of(type, //
-						() -> {
-							stamp[0]++;
-							return backing.get();
-						}, () -> Stamped.compositeStamp(backing.getStamp(), stamp[0]), //
-						changes, () -> this), //
-						__ -> theImpl + "s are not reversible");
-				}
-			}
+		public Invocation.MethodResult<X, R> getMethod() {
+			return theMethod;
+		}
 
-			public Invocation.MethodResult<X, R> getMethod() {
-				return theMethod;
-			}
+		public ErrorReporting getReporting() {
+			return theReporting;
+		}
 
-			public ErrorReporting getReporting() {
-				return theReporting;
-			}
-
-			@Override
-			public String toString() {
-				StringBuilder str = new StringBuilder();
-				if (theContext != null)
-					str.append(theContext).append('.');
-				str.append(theMethod.method.getName()).append('(');
-				StringUtils.print(str, ", ", Arrays.asList(theArguments), StringBuilder::append);
-				str.append(')');
-				return str.toString();
-			}
+		@Override
+		public String toString() {
+			StringBuilder str = new StringBuilder();
+			if (theContext != null)
+				str.append(theContext).append('.');
+			str.append(theMethod.method.getName()).append('(');
+			StringUtils.print(str, ", ", Arrays.asList(theArguments), StringBuilder::append);
+			str.append(')');
+			return str.toString();
 		}
 	}
 
@@ -782,27 +851,46 @@ public abstract class Invocation implements ObservableExpression {
 		}
 
 		@Override
-		protected ObservableAction<T> createModelValue(SettableValue<?> ctxV, SettableValue<?>[] argVs, Observable<Object> changes) {
-			return new InvocationAction<>(getMethod(), isCaching, theReporting, theImpl, (SettableValue<Object>) ctxV, argVs, isTesting,
-				getType().getValueType());
+		public ModelValueInstantiator<ObservableAction<T>> instantiate() {
+			return new ActionInstantiator<>(getMethod(), contextInstantiator(), argumentInstantiators(), getImpl(), isCaching(),
+				getReporting(), isTesting(), getType().getValueType());
 		}
 
-		static class InvocationAction<X extends Executable, R> extends InvocationThing<X, SettableValue<R>> implements ObservableAction<R> {
-			private final TypeToken<R> theType;
+		static class ActionInstantiator<X extends Executable, T>
+		extends InvocationInstantiator<X, SettableValue<T>, ObservableAction<?>, ObservableAction<T>> {
+			private final TypeToken<T> theType;
 
-			protected InvocationAction(MethodResult<X, SettableValue<R>> method, boolean caching, ErrorReporting reporting,
-				ExecutableImpl<X> impl, SettableValue<Object> context, SettableValue<?>[] arguments, boolean testing, TypeToken<R> type) {
+			ActionInstantiator(MethodResult<X, SettableValue<T>> method, ModelValueInstantiator<? extends SettableValue<?>> context,
+				List<ModelValueInstantiator<? extends SettableValue<?>>> arguments, ExecutableImpl<X> impl, boolean caching,
+				ErrorReporting reporting, boolean testing, TypeToken<T> type) {
+				super(method, context, arguments, impl, caching, reporting, testing);
+				theType = type;
+			}
+
+			@Override
+			protected ObservableAction<T> createModelValue(SettableValue<?> ctxV, SettableValue<?>[] argVs, Observable<Object> changes) {
+				return new InvocationAction<>(getMethod(), isCaching, theReporting, theImpl, (SettableValue<Object>) ctxV, argVs, isTesting,
+					theType);
+			}
+		}
+
+		static class InvocationAction<X extends Executable, T> extends InvocationInstance<X, SettableValue<T>>
+		implements ObservableAction<T> {
+			private final TypeToken<T> theType;
+
+			protected InvocationAction(MethodResult<X, SettableValue<T>> method, boolean caching, ErrorReporting reporting,
+				ExecutableImpl<X> impl, SettableValue<Object> context, SettableValue<?>[] arguments, boolean testing, TypeToken<T> type) {
 				super(method, caching, reporting, impl, context, arguments, testing);
 				theType = type;
 			}
 
 			@Override
-			public TypeToken<R> getType() {
+			public TypeToken<T> getType() {
 				return theType;
 			}
 
 			@Override
-			public R act(Object cause) throws IllegalStateException {
+			public T act(Object cause) throws IllegalStateException {
 				try {
 					Object retValue = invoke(true);
 					return getMethod().converter.convert(SettableValue.of(Object.class, retValue, "")).get();
@@ -851,11 +939,25 @@ public abstract class Invocation implements ObservableExpression {
 		}
 
 		@Override
-		protected MV createModelValue(SettableValue<?> ctxV, SettableValue<?>[] argVs, Observable<Object> changes)
-			throws ModelInstantiationException {
-			SettableValue<Object> value = new InvocationThing<>(getMethod(), isCaching, theReporting, theImpl, (SettableValue<Object>) ctxV,
-				argVs, isTesting).syntheticResultValue(TypeTokens.get().OBJECT, ctxV, argVs, changes);
-			return getMethod().converter.convert(value);
+		public ModelValueInstantiator<MV> instantiate() {
+			return new ThingInstantiator<>(getMethod(), contextInstantiator(), argumentInstantiators(), getImpl(), isCaching(),
+				getReporting(), isTesting());
+		}
+
+		static class ThingInstantiator<X extends Executable, M, MV extends M> extends InvocationInstantiator<X, MV, M, MV> {
+			ThingInstantiator(MethodResult<X, MV> method, ModelValueInstantiator<? extends SettableValue<?>> context,
+				List<ModelValueInstantiator<? extends SettableValue<?>>> arguments, ExecutableImpl<X> impl, boolean caching,
+				ErrorReporting reporting, boolean testing) {
+				super(method, context, arguments, impl, caching, reporting, testing);
+			}
+
+			@Override
+			protected MV createModelValue(SettableValue<?> ctxV, SettableValue<?>[] argVs, Observable<Object> changes)
+				throws ModelInstantiationException {
+				SettableValue<Object> value = new InvocationInstance<>(getMethod(), isCaching, theReporting, theImpl,
+					(SettableValue<Object>) ctxV, argVs, isTesting).syntheticResultValue(TypeTokens.get().OBJECT, ctxV, argVs, changes);
+				return getMethod().converter.convert(value);
+			}
 		}
 	}
 

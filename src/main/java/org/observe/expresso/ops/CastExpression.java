@@ -10,12 +10,17 @@ import org.observe.expresso.CompiledExpressoEnv;
 import org.observe.expresso.ExpressoEvaluationException;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.InterpretedExpressoEnv;
+import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelType;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
+import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.TypeConversionException;
 import org.observe.util.TypeTokens;
+import org.observe.util.TypeTokens.TypeConverter;
+import org.qommons.io.ErrorReporting;
 
 import com.google.common.reflect.TypeToken;
 
@@ -105,8 +110,9 @@ public class CastExpression implements ObservableExpression {
 		} catch (ExpressoEvaluationException | ExpressoInterpretationException | TypeConversionException e) {
 			// If the result can't be evaluated as the given type, evaluate it as any value and cast it dynamically
 			try {
-				return ObservableExpression.wrap(evalAsDynamicCast(
-					theValue.evaluate(ModelTypes.Value.anyAsV(), env.at(theType.length() + 2), valueOffset), valueType, valueOffset));
+				return ObservableExpression
+					.wrap(evalAsDynamicCast(theValue.evaluate(ModelTypes.Value.anyAsV(), env.at(theType.length() + 2), valueOffset),
+						valueType, valueOffset, env.reporting().at(1)));
 			} catch (TypeConversionException e2) {
 				throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(), "'" + theValue + "' is not a scalar value",
 					e2);
@@ -115,8 +121,8 @@ public class CastExpression implements ObservableExpression {
 	}
 
 	private <S, T> EvaluatedExpression<SettableValue<?>, SettableValue<T>> evalAsDynamicCast(
-		EvaluatedExpression<SettableValue<?>, SettableValue<S>> valueContainer, TypeToken<T> valueType, int expressionOffset)
-			throws ExpressoEvaluationException {
+		EvaluatedExpression<SettableValue<?>, SettableValue<S>> valueContainer, TypeToken<T> valueType, int expressionOffset,
+		ErrorReporting reporting) throws ExpressoEvaluationException {
 		TypeToken<S> sourceType = (TypeToken<S>) valueContainer.getType().getType(0);
 
 		TypeTokens.TypeConverter<? super S, ? extends S, ? super T, ? extends T> converter;
@@ -125,36 +131,102 @@ public class CastExpression implements ObservableExpression {
 			if (converter.isTrivial())
 				return (EvaluatedExpression<SettableValue<?>, SettableValue<T>>) (EvaluatedExpression<?, ?>) valueContainer;
 			return ObservableExpression.evEx(expressionOffset, getExpressionLength(),
-				valueContainer.map(ModelTypes.Value.forType(valueType), vc -> vc.transformReversible(valueType, tx -> tx//
-					.map(converter).replaceSource(converter::reverse, rev -> rev.rejectWith(converter::isReversible)))),
-				valueType, valueContainer);
+				valueContainer.map(ModelTypes.Value.forType(valueType), vc -> new ConvertedInstantiator<>(vc, converter)), valueType,
+				valueContainer);
 		} catch (IllegalArgumentException e) {
 			if (!TypeTokens.get().isAssignable(sourceType, valueType)//
 				&& !TypeTokens.get().isAssignable(valueType, sourceType))
 				throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(),
 					"Cannot cast value of type " + sourceType + " to " + valueType);
 		}
-		Class<T> valueClass = TypeTokens.get().wrap(TypeTokens.getRawType(valueType));
 		Class<S> sourceClass = TypeTokens.getRawType(sourceType);
-		return ObservableExpression.evEx(expressionOffset, getExpressionLength(),
-			valueContainer.map(ModelTypes.Value.forType(valueType), vc -> vc.transformReversible(valueType, tx -> tx//
-				.map(v -> {
-					if (v == null || valueClass.isInstance(v))
-						return (T) v;
-					else {
-						System.err.println("Cast failed: " + v + " (" + v.getClass().getName() + ") to " + valueType);
-						return null;
-					}
-				}).replaceSource(v -> (S) v, replace -> replace.rejectWith(v -> {
-					if (v != null && !sourceClass.isInstance(v))
-						return theValue + " (" + v.getClass().getName() + ") is not an instance of " + sourceType;
-					return null;
-				})))),
-			valueContainer);
+		return ObservableExpression.evEx(expressionOffset, getExpressionLength(), valueContainer.map(ModelTypes.Value.forType(valueType),
+			vc -> new CheckingInstantiator<>(vc, sourceClass, valueType, reporting)), valueContainer);
 	}
 
 	@Override
 	public String toString() {
 		return "(" + theType + ")" + theValue;
+	}
+
+	static class ConvertedInstantiator<S, T> implements ModelValueInstantiator<SettableValue<T>> {
+		private final ModelValueInstantiator<SettableValue<S>> theValue;
+		private final TypeTokens.TypeConverter<? super S, ? extends S, ? super T, ? extends T> theConverter;
+
+		ConvertedInstantiator(ModelValueInstantiator<SettableValue<S>> value,
+			TypeConverter<? super S, ? extends S, ? super T, ? extends T> converter) {
+			theValue = value;
+			theConverter = converter;
+		}
+
+		@Override
+		public SettableValue<T> get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
+			SettableValue<S> value = theValue.get(models);
+			return transform(value);
+		}
+
+		private SettableValue<T> transform(SettableValue<S> value) {
+			return value.transformReversible((TypeToken<T>) theConverter.getConvertedType(), tx -> tx//
+				.map(theConverter).replaceSource(theConverter::reverse, rev -> rev.rejectWith(theConverter::isReversible)));
+		}
+
+		@Override
+		public SettableValue<T> forModelCopy(SettableValue<T> value, ModelSetInstance sourceModels, ModelSetInstance newModels)
+			throws ModelInstantiationException {
+			SettableValue<S> oldSource = theValue.get(sourceModels);
+			SettableValue<S> newSource = theValue.forModelCopy(oldSource, sourceModels, newModels);
+			if (oldSource == newSource)
+				return value;
+			return transform(newSource);
+		}
+	}
+
+	static class CheckingInstantiator<S, T> implements ModelValueInstantiator<SettableValue<T>> {
+		private final ModelValueInstantiator<SettableValue<S>> theValue;
+		private final Class<S> theSourceClass;
+		private final TypeToken<T> theType;
+		private final Class<T> theCastClass;
+		private final ErrorReporting theReporting;
+
+		public CheckingInstantiator(ModelValueInstantiator<SettableValue<S>> value, Class<S> sourceClass, TypeToken<T> type,
+			ErrorReporting reporting) {
+			theValue = value;
+			theSourceClass = sourceClass;
+			theType = type;
+			theCastClass = TypeTokens.getRawType(theType);
+			theReporting = reporting;
+		}
+
+		@Override
+		public SettableValue<T> get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
+			SettableValue<S> value = theValue.get(models);
+			return transform(value);
+		}
+
+		private SettableValue<T> transform(SettableValue<S> value) {
+			return value.transformReversible(theType, tx -> tx//
+				.map(v -> {
+					if (v == null || theCastClass.isInstance(v))
+						return (T) v;
+					else {
+						theReporting.error("Cast failed: " + v + " (" + v.getClass().getName() + ") to " + theType);
+						return null;
+					}
+				}).replaceSource(v -> (S) v, replace -> replace.rejectWith(v -> {
+					if (v != null && !theSourceClass.isInstance(v))
+						return theValue + " (" + v.getClass().getName() + ") is not an instance of " + theType;
+					return null;
+				})));
+		}
+
+		@Override
+		public SettableValue<T> forModelCopy(SettableValue<T> value, ModelSetInstance sourceModels, ModelSetInstance newModels)
+			throws ModelInstantiationException {
+			SettableValue<S> oldSource = theValue.get(sourceModels);
+			SettableValue<S> newSource = theValue.forModelCopy(oldSource, sourceModels, newModels);
+			if (oldSource == newSource)
+				return value;
+			return transform(newSource);
+		}
 	}
 }

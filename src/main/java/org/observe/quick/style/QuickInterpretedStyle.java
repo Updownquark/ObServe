@@ -11,11 +11,16 @@ import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.InterpretedExpressoEnv;
+import org.observe.expresso.ModelException;
 import org.observe.expresso.ModelInstantiationException;
+import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
+import org.observe.expresso.ObservableModelSet.ModelComponentId;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.quick.style.InterpretedStyleValue.StyleValueInstantiator;
 import org.observe.util.TypeTokens;
 import org.qommons.BiTuple;
 import org.qommons.LambdaUtils;
+import org.qommons.QommonsUtils;
 import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterHashMultiMap;
 import org.qommons.collect.BetterMultiMap;
@@ -317,16 +322,66 @@ public interface QuickInterpretedStyle {
 			return values;
 		}
 
+		public QuickStyleAttributeInstantiator<T> instantiate(InterpretedModelSet models) {
+			QuickStyleAttributeInstantiator<T> inherited;
+			ModelComponentId parentModelValue;
+			if (theInherited != null) {
+				try {
+					parentModelValue = models.getComponent(InterpretedStyleApplication.PARENT_MODEL_NAME).getIdentity();
+				} catch (ModelException e) {
+					throw new IllegalStateException("No parent model installed", e);
+				}
+				inherited = theInherited.instantiate(StyleApplicationDef.getParentModel(models));
+			} else {
+				inherited = null;
+				parentModelValue = null;
+			}
+			return new QuickStyleAttributeInstantiator<>(theAttribute, QommonsUtils.map(theValues, v -> v.instantiate(models), true),
+				inherited, parentModelValue);
+		}
+
+		@Override
+		public String toString() {
+			return theAttribute.toString();
+		}
+	}
+
+	public static class QuickStyleAttributeInstantiator<T> {
+		private final QuickStyleAttribute<T> theAttribute;
+		private final List<InterpretedStyleValue.StyleValueInstantiator<T>> theValues;
+		private final QuickStyleAttributeInstantiator<T> theInherited;
+		private final ModelComponentId theParentModelValue;
+
+		public QuickStyleAttributeInstantiator(QuickStyleAttribute<T> attribute, List<StyleValueInstantiator<T>> values,
+			QuickStyleAttributeInstantiator<T> inherited, ModelComponentId parentModelValue) {
+			theAttribute = attribute;
+			theValues = values;
+			theInherited = inherited;
+			theParentModelValue = parentModelValue;
+		}
+
+		public QuickStyleAttribute<T> getAttribute() {
+			return theAttribute;
+		}
+
+		public List<InterpretedStyleValue.StyleValueInstantiator<T>> getValues() {
+			return theValues;
+		}
+
+		public QuickStyleAttributeInstantiator<T> getInherited() {
+			return theInherited;
+		}
+
 		public List<ObservableValue<ConditionalValue<T>>> getConditionalValues(ModelSetInstance models) throws ModelInstantiationException {
 			List<ObservableValue<ConditionalValue<T>>> values = new ArrayList<>();
 			for (int i = 0; i < theValues.size(); i++) {
-				ObservableValue<Boolean> condition = theValues.get(i).getApplication().getCondition(models);
-				SettableValue<T> value = theValues.get(i).getValue().get(models);
+				ObservableValue<Boolean> condition = theValues.get(i).condition.get(models);
+				SettableValue<T> value = theValues.get(i).value.get(models);
 				values.add(condition.map(LambdaUtils.printableFn(pass -> new ConditionalValue<>(Boolean.TRUE.equals(pass), value),
 					"ifPass(" + value + ")", null)));
 			}
 			if (theInherited != null)
-				values.addAll(theInherited.getConditionalValues(InterpretedStyleApplication.getParentModels(models)));
+				values.addAll(theInherited.getConditionalValues(InterpretedStyleApplication.getParentModels(models, theParentModelValue)));
 			return values;
 		}
 
@@ -353,11 +408,6 @@ public interface QuickInterpretedStyle {
 			}
 			return ObservableValue.flatten(
 				conditionalValue.map(ovType, LambdaUtils.printableFn(cv -> (cv != null && cv.pass) ? cv.value : null, "value", null)));
-		}
-
-		@Override
-		public String toString() {
-			return theAttribute.toString();
 		}
 	}
 

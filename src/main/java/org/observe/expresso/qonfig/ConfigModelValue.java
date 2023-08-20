@@ -16,6 +16,7 @@ import org.observe.expresso.ModelType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.TypeConversionException;
 import org.observe.expresso.VariableType;
 import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
@@ -78,6 +79,10 @@ public interface ConfigModelValue<T, M, MV extends M> extends ModelValueElement<
 			}
 
 			@Override
+			protected void doPrepare(ExpressoQIS session) throws QonfigInterpretationException {
+			}
+
+			@Override
 			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 				withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 				super.doUpdate(session);
@@ -103,21 +108,6 @@ public interface ConfigModelValue<T, M, MV extends M> extends ModelValueElement<
 
 		TypeToken<T> getValueType();
 
-		/**
-		 * Creates the value
-		 *
-		 * @param config The config value builder to use to build the structure
-		 * @param msi The model set to use to build the structure
-		 * @return The created value
-		 * @throws ModelInstantiationException If the value could not be instantiated
-		 */
-		MV create(ObservableConfig.ObservableConfigValueBuilder<T> config, ModelSetInstance msi) throws ModelInstantiationException;
-
-		@Override
-		default MV forModelCopy(MV value, ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException {
-			return value; // Same value, because the config doesn't change with model copy
-		}
-
 		public abstract class Abstract<T, M, MV extends M> extends ModelValueElement.Interpreted.Abstract<M, MV, ConfigModelValue<T, M, MV>>
 		implements Interpreted<T, M, MV> {
 			private TypeToken<T> theValueType;
@@ -139,6 +129,22 @@ public interface ConfigModelValue<T, M, MV extends M> extends ModelValueElement<
 			public Interpreted.Abstract<T, M, MV> setParentElement(ExElement.Interpreted<?> parent) {
 				super.setParentElement(parent);
 				return this;
+			}
+
+			public InterpretedValueSynth<SettableValue<?>, SettableValue<ObservableConfig>> getConfigValue() {
+				return theConfigValue;
+			}
+
+			public ObservableConfigPath getConfigPath() {
+				return theConfigPath;
+			}
+
+			public InterpretedValueSynth<SettableValue<?>, SettableValue<ObservableConfigFormat<T>>> getFormat() {
+				return theFormat;
+			}
+
+			public ObservableConfigFormatSet getFormatSet() {
+				return theFormatSet;
 			}
 
 			@Override
@@ -180,19 +186,53 @@ public interface ConfigModelValue<T, M, MV extends M> extends ModelValueElement<
 				}
 				theFormatSet = theFormat == null ? env.getProperty(FORMAT_SET_KEY, ObservableConfigFormatSet.class) : null;
 			}
+		}
+	}
 
-			@Override
-			public MV get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
-				ObservableConfig config = theConfigValue.get(models).get();
-				ObservableConfig.ObservableConfigValueBuilder<T> builder = config.asValue(getValueType());
-				builder = builder.at(theConfigPath);
-				if (theFormat != null) {
-					ObservableConfigFormat<T> format = theFormat.get(models).get();
-					builder.withFormat(format);
-				} else
-					builder.withFormatSet(theFormatSet);
-				return create(builder, models);
-			}
+	public static abstract class Instantiator<T, MV> implements ModelValueInstantiator<MV> {
+		private final ModelValueInstantiator<SettableValue<ObservableConfig>> theConfigValue;
+		private final TypeToken<T> theValueType;
+		private final ObservableConfigPath theConfigPath;
+		private ModelValueInstantiator<SettableValue<ObservableConfigFormat<T>>> theFormat;
+		private ObservableConfigFormatSet theFormatSet;
+
+		protected Instantiator(ModelValueInstantiator<SettableValue<ObservableConfig>> configValue, TypeToken<T> valueType,
+			ObservableConfigPath configPath, ModelValueInstantiator<SettableValue<ObservableConfigFormat<T>>> format,
+			ObservableConfigFormatSet formatSet) {
+			theConfigValue = configValue;
+			theValueType = valueType;
+			theConfigPath = configPath;
+			theFormat = format;
+			theFormatSet = formatSet;
+		}
+
+		@Override
+		public MV get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
+			ObservableConfig config = theConfigValue.get(models).get();
+			ObservableConfig.ObservableConfigValueBuilder<T> builder = config.asValue(theValueType);
+			builder = builder.at(theConfigPath);
+			if (theFormat != null) {
+				ObservableConfigFormat<T> format = theFormat.get(models).get();
+				builder.withFormat(format);
+			} else
+				builder.withFormatSet(theFormatSet);
+			return create(builder, models);
+		}
+
+		/**
+		 * Creates the value
+		 *
+		 * @param config The config value builder to use to build the structure
+		 * @param msi The model set to use to build the structure
+		 * @return The created value
+		 * @throws ModelInstantiationException If the value could not be instantiated
+		 */
+		public abstract MV create(ObservableConfig.ObservableConfigValueBuilder<T> config, ModelSetInstance msi)
+			throws ModelInstantiationException;
+
+		@Override
+		public MV forModelCopy(MV value, ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException {
+			return value; // Same value, because the config doesn't change with model copy
 		}
 	}
 }

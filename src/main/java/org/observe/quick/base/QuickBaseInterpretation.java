@@ -211,13 +211,13 @@ public class QuickBaseInterpretation implements QonfigInterpretation {
 			if (Icon.class.isAssignableFrom(iconType))
 				return (InterpretedValueSynth<SettableValue<?>, SettableValue<Icon>>) iconV;
 			else if (Image.class.isAssignableFrom(iconType)) {
-				return iconV.map(ModelTypes.Value.forType(Icon.class),
-					sv -> SettableValue.asSettable(sv.map(img -> img == null ? null : new ImageIcon((Image) img)), __ -> "Unsettable"));
+				return iconV.map(ModelTypes.Value.forType(Icon.class), mvi -> mvi.map(
+					sv -> SettableValue.asSettable(sv.map(img -> img == null ? null : new ImageIcon((Image) img)), __ -> "Unsettable")));
 			} else if (URL.class.isAssignableFrom(iconType)) {
-				return iconV.map(ModelTypes.Value.forType(Icon.class),
-					sv -> SettableValue.asSettable(sv.map(url -> url == null ? null : new ImageIcon((URL) url)), __ -> "unsettable"));
+				return iconV.map(ModelTypes.Value.forType(Icon.class), mvi -> mvi
+					.map(sv -> SettableValue.asSettable(sv.map(url -> url == null ? null : new ImageIcon((URL) url)), __ -> "unsettable")));
 			} else if (String.class.isAssignableFrom(iconType)) {
-				return iconV.map(ModelTypes.Value.forType(Icon.class), sv -> SettableValue.asSettable(sv.map(loc -> {
+				return iconV.map(ModelTypes.Value.forType(Icon.class), mvi -> mvi.map(sv -> SettableValue.asSettable(sv.map(loc -> {
 					if (loc == null)
 						return null;
 					String relLoc;
@@ -235,7 +235,7 @@ public class QuickBaseInterpretation implements QonfigInterpretation {
 						relIcon = new ImageIcon(relIcon.getImage().getScaledInstance(16, 16, Image.SCALE_SMOOTH));
 						return relIcon;
 					}
-				}), __ -> "unsettable"));
+				}), __ -> "unsettable")));
 			} else {
 				env.reporting().warn("Cannot use value " + expression + ", type " + iconV.getType().getType(0) + " as an icon");
 				return InterpretedValueSynth.literal(TypeTokens.get().of(Icon.class), null, "Icon not provided");

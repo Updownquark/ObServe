@@ -489,9 +489,9 @@ public interface QuickWidget extends QuickTextElement {
 			theBorder = myInterpreted.getBorder() == null ? null : myInterpreted.getBorder().create(this);
 			if (theBorder != null)
 				theBorder.update(myInterpreted.getBorder(), myModels);
-			theTooltip.set(myInterpreted.getTooltip() == null ? null : myInterpreted.getTooltip().get(myModels), null);
+			theTooltip.set(myInterpreted.getTooltip() == null ? null : myInterpreted.getTooltip().instantiate().get(myModels), null);
 			if (myInterpreted.isVisible() != null)
-				isVisible.set(myInterpreted.isVisible().get(myModels), null);
+				isVisible.set(myInterpreted.isVisible().instantiate().get(myModels), null);
 			try (Transaction t = theEventListeners.lock(true, null)) {
 				CollectionUtils
 				.synchronize(theEventListeners, myInterpreted.getEventListeners(), (l, i) -> l.getIdentity() == i.getIdentity())//

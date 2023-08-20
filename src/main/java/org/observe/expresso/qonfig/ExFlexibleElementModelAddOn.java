@@ -10,7 +10,6 @@ import org.observe.expresso.CompiledExpressoEnv;
 import org.observe.expresso.ExpressoCompilationException;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.InterpretedExpressoEnv;
-import org.observe.expresso.ModelException;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelType;
 import org.observe.expresso.ModelType.HollowModelValue;
@@ -20,7 +19,10 @@ import org.observe.expresso.ObservableModelSet.CompiledModelValue;
 import org.observe.expresso.ObservableModelSet.InterpretableModelComponentNode;
 import org.observe.expresso.ObservableModelSet.InterpretedModelComponentNode;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
+import org.observe.expresso.ObservableModelSet.ModelComponentId;
+import org.observe.expresso.ObservableModelSet.ModelComponentNode;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigInterpretationException;
@@ -30,6 +32,30 @@ import org.qommons.io.LocatedFilePosition;
 import com.google.common.reflect.TypeToken;
 
 public abstract class ExFlexibleElementModelAddOn<E extends ExElement> extends ExModelAugmentation<E> {
+	public static void satisfyElementValue(ModelComponentId elementValueId, ModelSetInstance models, Object value)
+		throws ModelInstantiationException {
+		satisfyElementValue(elementValueId, models, value, ActionIfSatisfied.Error);
+	}
+
+	public static void satisfyElementValue(ModelComponentId elementValueId, ModelSetInstance models, Object value,
+		ActionIfSatisfied ifPreSatisfied) throws ModelInstantiationException {
+		Object modelValue = models.get(elementValueId);
+		if (!(modelValue instanceof ModelType.HollowModelValue))
+			throw new IllegalArgumentException("Element value '" + elementValueId + "' is not dynamic");
+		ModelType.HollowModelValue<Object, Object> hollow = (ModelType.HollowModelValue<Object, Object>) modelValue;
+		if (hollow.isSatisfied()) {
+			switch (ifPreSatisfied) {
+			case Error:
+				throw new IllegalArgumentException("Element value '" + elementValueId + "' is already satisfied");
+			case Ignore:
+				return;
+			case Replace:
+				break;
+			}
+		}
+		hollow.satisfy(value);
+	}
+
 	public static abstract class Def<E extends ExElement, AO extends ExFlexibleElementModelAddOn<? super E>>
 	extends ExModelAugmentation.Def<E, AO> {
 		private Map<String, CompiledModelValue<?>> theElementValues;
@@ -51,7 +77,7 @@ public abstract class ExFlexibleElementModelAddOn<E extends ExElement> extends E
 			return Collections.unmodifiableMap(theElementValues);
 		}
 
-		protected void addElementValue(String name, CompiledModelValue<?> value, ObservableModelSet.Builder builder,
+		protected <M> ModelComponentNode<M> addElementValue(String name, CompiledModelValue<M> value, ObservableModelSet.Builder builder,
 			LocatedFilePosition position) throws QonfigInterpretationException {
 			if (theElementValues.isEmpty())
 				theElementValues = new LinkedHashMap<>();
@@ -60,6 +86,7 @@ public abstract class ExFlexibleElementModelAddOn<E extends ExElement> extends E
 				throw new QonfigInterpretationException("Multiple conflicting element values named '" + name + "' declared", position, 0);
 			theElementValues.put(name, value);
 			builder.withMaker(name, value, position);
+			return (ModelComponentNode<M>) builder.getLocalComponent(name);
 		}
 
 		protected CompiledModelValue<?> getElementValue(String elementValueName) throws QonfigInterpretationException {
@@ -182,7 +209,7 @@ public abstract class ExFlexibleElementModelAddOn<E extends ExElement> extends E
 			else if (!(elementValue.getValue() instanceof PlaceholderModelValue.Interpreted))
 				throw new ModelInstantiationException("Element value '" + elementValueName + "' is not dynamic",
 					getElement().reporting().getPosition(), 0);
-			Object modelValue = models.get(elementValue);
+			Object modelValue = models.get(elementValue.getIdentity());
 			if (!(modelValue instanceof ModelType.HollowModelValue))
 				throw new ModelInstantiationException("Element value '" + elementValueName + "' is not dynamic",
 					getElement().reporting().getPosition(), 0);
@@ -228,8 +255,8 @@ public abstract class ExFlexibleElementModelAddOn<E extends ExElement> extends E
 	public void postUpdate(ExAddOn.Interpreted<?, ?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
 		super.postUpdate(interpreted, models);
 		for (Map.Entry<String, InterpretedModelComponentNode<?, ?>> elementValue : theInterpreted.getElementValues().entrySet())
-			theElementValues.put(elementValue.getKey(), new ElementValueHolder(elementValue.getKey(),
-				elementValue.getValue().getValueIdentity(), elementValue.getValue().get(models)));
+			theElementValues.put(elementValue.getKey(), new ElementValueHolder(elementValue.getKey(), elementValue.getValue().getIdentity(),
+				elementValue.getValue().getValueIdentity(), models.get(elementValue.getValue().getIdentity())));
 		theInterpreted = null;
 	}
 
@@ -243,7 +270,8 @@ public abstract class ExFlexibleElementModelAddOn<E extends ExElement> extends E
 			if (node == null)
 				throw new ModelInstantiationException("No such element value '" + elementValueName + "'",
 					getElement().reporting().getPosition(), 0);
-			elementValue = new ElementValueHolder(elementValueName, node.getValueIdentity(), node.get(getElement().getUpdatingModels()));
+			elementValue = new ElementValueHolder(elementValueName, node.getIdentity(), node.getValueIdentity(),
+				getElement().getUpdatingModels().get(node.getIdentity()));
 			theElementValues.put(elementValueName, elementValue);
 		}
 		return elementValue;
@@ -284,20 +312,7 @@ public abstract class ExFlexibleElementModelAddOn<E extends ExElement> extends E
 		if (!(elementValue.value instanceof ModelType.HollowModelValue))
 			throw new ModelInstantiationException("Element value '" + elementValueName + "' is not dynamic",
 				getElement().reporting().getPosition(), 0);
-		InterpretedModelComponentNode<?, ?> node;
-		try {
-			if (elementValue.id != null)
-				node = models.getModel().getIdentifiedComponent(elementValue.id).interpreted();
-			else
-				node = models.getModel().getComponent(elementValue.name).interpreted();
-		} catch (ModelException e) {
-			throw new ModelInstantiationException(
-				"Bad model instance--could not locate value " + (elementValue.id != null ? elementValue.id : elementValue.name),
-				getElement().reporting().getPosition(), 0, e);
-		} catch (ExpressoInterpretationException e) {
-			throw new IllegalStateException("Not interpreted?", e);
-		}
-		Object modelValue = models.get(node);
+		Object modelValue = models.get(elementValue.componentId);
 		if (!(modelValue instanceof ModelType.HollowModelValue)) // Already checked this for local models, but whatever
 			throw new ModelInstantiationException("Element value '" + elementValueName + "' is not dynamic",
 				getElement().reporting().getPosition(), 0);
@@ -420,22 +435,11 @@ public abstract class ExFlexibleElementModelAddOn<E extends ExElement> extends E
 			}
 
 			@Override
-			public MV get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
+			public ModelValueInstantiator<MV> instantiate() {
 				if (theSatisfier != null)
-					return theSatisfier.get(models);
+					return theSatisfier.instantiate();
 				else
-					return (MV) theType.getModelType().createHollowValue(theName, getType());
-			}
-
-			@Override
-			public MV forModelCopy(MV value, ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException {
-				if (theSatisfier != null)
-					return theSatisfier.forModelCopy(value, sourceModels, newModels);
-				else {
-					HollowModelValue<M, MV> hollow = theType.getModelType().createHollowValue(theName, getType());
-					hollow.satisfy(value);
-					return (MV) hollow;
-				}
+					return new HollowValueInstantiator<>(theName, theType);
 			}
 
 			@Override
@@ -443,16 +447,40 @@ public abstract class ExFlexibleElementModelAddOn<E extends ExElement> extends E
 				return theName;
 			}
 		}
+
+		protected static class HollowValueInstantiator<M, MV extends M> implements ModelValueInstantiator<MV> {
+			private final String theName;
+			private final ModelInstanceType<M, MV> theType;
+
+			protected HollowValueInstantiator(String name, ModelInstanceType<M, MV> type) {
+				theName = name;
+				theType = type;
+			}
+
+			@Override
+			public MV get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
+				return (MV) theType.getModelType().createHollowValue(theName, theType);
+			}
+
+			@Override
+			public MV forModelCopy(MV value, ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException {
+				HollowModelValue<M, MV> hollow = theType.getModelType().createHollowValue(theName, theType);
+				hollow.satisfy(value);
+				return (MV) hollow;
+			}
+		}
 	}
 
 	static class ElementValueHolder {
 		final String name;
-		final Object id;
+		final ModelComponentId componentId;
+		final Object valueId;
 		final Object value;
 
-		ElementValueHolder(String name, Object id, Object value) {
+		ElementValueHolder(String name, ModelComponentId componentId, Object valueId, Object value) {
 			this.name = name;
-			this.id = id;
+			this.componentId = componentId;
+			this.valueId = valueId;
 			this.value = value;
 		}
 	}

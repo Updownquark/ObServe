@@ -92,6 +92,6 @@ public class QuickField extends ExAddOn.Abstract<QuickWidget> {
 	public void update(ExAddOn.Interpreted<?, ?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
 		super.update(interpreted, models);
 		QuickField.Interpreted myInterpreted = (QuickField.Interpreted) interpreted;
-		theFieldLabel = myInterpreted.getFieldLabel() == null ? null : myInterpreted.getFieldLabel().get(models);
+		theFieldLabel = myInterpreted.getFieldLabel() == null ? null : myInterpreted.getFieldLabel().instantiate().get(models);
 	}
 }

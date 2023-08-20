@@ -1,6 +1,5 @@
 package org.observe.expresso.qonfig;
 
-import java.text.ParseException;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
@@ -8,20 +7,15 @@ import java.util.Set;
 import org.observe.SettableValue;
 import org.observe.config.ObservableConfig;
 import org.observe.config.ObservableConfig.ObservableConfigValueBuilder;
-import org.observe.config.ObservableConfigFormat;
-import org.observe.expresso.CompiledExpressoEnv;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
-import org.observe.expresso.NonStructuredParser;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
-import org.observe.util.TypeTokens;
-import org.qommons.LambdaUtils;
-import org.qommons.Transaction;
 import org.qommons.Version;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretation;
@@ -29,9 +23,6 @@ import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigInterpreterCore;
 import org.qommons.config.QonfigToolkit;
 import org.qommons.config.SpecialSession;
-import org.qommons.io.Format;
-
-import com.google.common.reflect.TypeToken;
 
 /** Qonfig Interpretation for the ExpressoConfigV0_1 API */
 public class ExpressoConfigV0_1 implements QonfigInterpretation {
@@ -135,11 +126,9 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			.getElementTraceability(NAME, VERSION, "config-value", ConfigValue.class, Interpreted.class, null);
 
 		private CompiledExpression theDefaultValue;
-		private final ConfigFormatNSP<?> theConfigFormatNSP;
 
 		public ConfigValue(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
 			super(parent, type, ModelTypes.Value);
-			theConfigFormatNSP = new ConfigFormatNSP<>();
 		}
 
 		@QonfigAttributeGetter("default")
@@ -151,27 +140,6 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			withTraceability(TRACEABILITY.validate(session.asElement("config-value").getFocusType(), session.reporting()));
 			super.doUpdate(session.asElement("config-model-value"));
-		}
-
-		@Override
-		protected void doPrepare(ExpressoQIS session) throws QonfigInterpretationException {
-			CompiledExpressoEnv origEnv = session.getExpressoEnv();
-			session = session.setExpressoEnv(origEnv.withNonStructuredParser(Object.class, theConfigFormatNSP));
-			try {
-				theDefaultValue = session.asElement("config-value").getAttributeExpression("default");
-			} finally {
-				session = session.setExpressoEnv(origEnv);
-			}
-		}
-
-		<T> Transaction withTextFormat(TypeToken<T> type, Format<T> format) {
-			ConfigFormatNSP<T> cfnsp = (ConfigFormatNSP<T>) theConfigFormatNSP;
-			cfnsp.valueType = type;
-			cfnsp.format = format;
-			return () -> {
-				cfnsp.valueType = null;
-				cfnsp.format = null;
-			};
 		}
 
 		@Override
@@ -213,48 +181,27 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			}
 
 			@Override
-			public SettableValue<T> create(ObservableConfigValueBuilder<T> config, ModelSetInstance msi)
-				throws ModelInstantiationException {
-				SettableValue<T> value = config.buildValue(null);
-				if (theDefaultValue != null && config.getConfig().getChild(config.getPath(), false, null) == null) {
-					if (config.getFormat() instanceof ObservableConfigFormat.Impl.SimpleConfigFormat) {
-						try (Transaction t = getDefinition().withTextFormat(value.getType(), //
-							((ObservableConfigFormat.Impl.SimpleConfigFormat<T>) config.getFormat()).format)) {
-							value.set(theDefaultValue.get(msi).get(), null);
-						}
-					} else
-						value.set(theDefaultValue.get(msi).get(), null);
-				}
-				return value;
+			public ModelValueInstantiator<SettableValue<T>> instantiate() {
+				return new Instantiator<>(this);
 			}
 		}
 
-		static class ConfigFormatNSP<T> implements NonStructuredParser {
-			TypeToken<T> valueType;
-			Format<T> format;
+		static class Instantiator<T> extends ConfigModelValue.Instantiator<T, SettableValue<T>> {
+			private final ModelValueInstantiator<SettableValue<T>> theDefaultValue;
 
-			@Override
-			public String getDescription() {
-				return "Config default value parser";
+			Instantiator(Interpreted<T> interpreted) {
+				super(interpreted.getConfigValue().instantiate(), interpreted.getValueType(), interpreted.getConfigPath(),
+					interpreted.getFormat() == null ? null : interpreted.getFormat().instantiate(), interpreted.getFormatSet());
+				theDefaultValue = interpreted.getDefaultValue() == null ? null : interpreted.getDefaultValue().instantiate();
 			}
 
 			@Override
-			public boolean canParse(TypeToken<?> type, String text) {
-				if (format == null)
-					return false;
-				else if (!TypeTokens.get().isAssignable(type, valueType))
-					return false;
-				else
-					return NonStructuredParser.super.canParse(type, text);
-			}
-
-			@Override
-			public <T2> InterpretedValueSynth<SettableValue<?>, ? extends SettableValue<? extends T2>> parse(TypeToken<T2> type,
-				String text) throws ParseException {
-				T value = format.parse(text);
-				return (InterpretedValueSynth<SettableValue<?>, ? extends SettableValue<? extends T2>>) InterpretedValueSynth.of(
-					ModelTypes.Value.forType(valueType), //
-					LambdaUtils.printableExFn(msi -> SettableValue.of(valueType, value, "Literal"), text, null));
+			public SettableValue<T> create(ObservableConfigValueBuilder<T> config, ModelSetInstance msi)
+				throws ModelInstantiationException {
+				SettableValue<T> value = config.buildValue(null);
+				if (theDefaultValue != null && config.getConfig().getChild(config.getPath(), false, null) == null)
+					value.set(theDefaultValue.get(msi).get(), null);
+				return value;
 			}
 		}
 	}

@@ -256,7 +256,7 @@ public class ExpressoTesting extends ExElement.Def.Abstract<ExElement> {
 			protected void updateModel(ExElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
 				super.updateModel(interpreted, myModels);
 				TestAction.Interpreted<T> myInterpreted = (TestAction.Interpreted<T>) interpreted;
-				theAction = myInterpreted.get(myModels);
+				theAction = myInterpreted.instantiate().get(myModels);
 				theExpectedException = myInterpreted.getExpectedException();
 				isBreakpoint = myInterpreted.isBreakpoint();
 			}

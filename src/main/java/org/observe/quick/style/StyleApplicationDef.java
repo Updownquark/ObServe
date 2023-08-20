@@ -852,7 +852,7 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 		return new InterpretedStyleApplication(parent, this, condition);
 	}
 
-	private static InterpretedModelSet getParentModel(InterpretedModelSet models) {
+	public static InterpretedModelSet getParentModel(InterpretedModelSet models) {
 		// Get the models for the most recent styled ancestor element
 		QonfigElement element = models.getTagValue(STYLED_ELEMENT_TAG);
 		if (element == null)

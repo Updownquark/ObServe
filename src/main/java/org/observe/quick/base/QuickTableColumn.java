@@ -356,8 +356,8 @@ public interface QuickTableColumn<R, C> {
 			ColumnEditing.Interpreted<R, C> myInterpreted = (ColumnEditing.Interpreted<R, C>) interpreted;
 			theColumnEditValueName = myInterpreted.getDefinition().getColumnEditValueName();
 			theClicks = myInterpreted.getDefinition().getClicks();
-			isEditable.set(myInterpreted.isEditable() == null ? null : myInterpreted.isEditable().get(myModels), null);
-			isAcceptable.set(myInterpreted.isAcceptable() == null ? null : myInterpreted.isAcceptable().get(myModels), null);
+			isEditable.set(myInterpreted.isEditable() == null ? null : myInterpreted.isEditable().instantiate().get(myModels), null);
+			isAcceptable.set(myInterpreted.isAcceptable() == null ? null : myInterpreted.isAcceptable().instantiate().get(myModels), null);
 
 			if (myInterpreted.getEditor() == null)
 				theEditor = null;
@@ -368,7 +368,8 @@ public interface QuickTableColumn<R, C> {
 			elModels.satisfyElementValue(theColumnEditValueName, SettableValue.flatten(theEditColumnValue));
 			if (theEditor != null) {
 				Set<String> lookingForValues = new HashSet<>(Arrays.asList(theValueName, "rowIndex", "columnIndex", "selected"));
-				ModelSetInstance editorModels = createEditorModels(myModels.copy(), lookingForValues);
+				ModelSetInstance editorModels = createEditorModels(myInterpreted.getExpressoEnv().getModels(), myModels.copy(),
+					lookingForValues);
 				ExWithElementModel tableElModels = getParentElement().getParentElement().getAddOn(ExWithElementModel.class);
 				if (theValueName != null)
 					tableElModels.satisfyElementValue(theValueName, SettableValue.flatten(theEditRowValue), editorModels,
@@ -390,13 +391,14 @@ public interface QuickTableColumn<R, C> {
 			}
 		}
 
-		protected ModelSetInstance createEditorModels(ObservableModelSet.ModelSetInstanceBuilder editingModels,
-			Set<String> lookingForValues) throws ModelInstantiationException {
+		protected ModelSetInstance createEditorModels(InterpretedModelSet interpModels,
+			ObservableModelSet.ModelSetInstanceBuilder editingModels, Set<String> lookingForValues) throws ModelInstantiationException {
 			if (!lookingForValues.isEmpty()) {
-				for (Map.Entry<ObservableModelSet.ModelComponentId, ? extends InterpretedModelSet> inh : editingModels.getModel()
-					.getInheritance().entrySet()) {
+				for (Map.Entry<ObservableModelSet.ModelComponentId, ? extends InterpretedModelSet> inh : interpModels.getInheritance()
+					.entrySet()) {
 					if (!lookingForValues.isEmpty() && hasAny(inh.getValue(), lookingForValues))
-						editingModels.withAll(createEditorModels(editingModels.getInherited(inh.getKey()).copy(), lookingForValues));
+						editingModels
+						.withAll(createEditorModels(inh.getValue(), editingModels.getInherited(inh.getKey()).copy(), lookingForValues));
 				}
 			}
 			return editingModels.build();
@@ -543,7 +545,7 @@ public interface QuickTableColumn<R, C> {
 				super.update(interpreted, models);
 				RowModifyEditType.Interpreted<R, C> myInterpreted = (RowModifyEditType.Interpreted<R, C>) interpreted;
 				isRowUpdate = myInterpreted.getDefinition().isRowUpdate();
-				theCommit.set(myInterpreted.getCommit() == null ? null : myInterpreted.getCommit().get(models), null);
+				theCommit.set(myInterpreted.getCommit() == null ? null : myInterpreted.getCommit().instantiate().get(models), null);
 			}
 		}
 
@@ -625,7 +627,8 @@ public interface QuickTableColumn<R, C> {
 			public void update(ExAddOn.Interpreted<?, ?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
 				super.update(interpreted, models);
 				RowReplaceEditType.Interpreted<R, C> myInterpreted = (RowReplaceEditType.Interpreted<R, C>) interpreted;
-				theReplacement.set(myInterpreted.getReplacement() == null ? null : myInterpreted.getReplacement().get(models), null);
+				theReplacement.set(myInterpreted.getReplacement() == null ? null : myInterpreted.getReplacement().instantiate().get(models),
+					null);
 			}
 		}
 	}
@@ -637,8 +640,7 @@ public interface QuickTableColumn<R, C> {
 				SingleColumnSet.class);
 		private static final SingleTypeTraceability<SingleColumnSet<?, ?>, Interpreted<?, ?>, Def> RENDERING_TRACEABILITY = ElementTypeTraceability
 			.getElementTraceability(QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, "rendering", Def.class,
-				Interpreted.class,
-				SingleColumnSet.class);
+				Interpreted.class, SingleColumnSet.class);
 
 		public static class Def extends QuickStyledElement.Def.Abstract<SingleColumnSet<?, ?>>
 		implements TableColumnSet.Def<SingleColumnSet<?, ?>> {
@@ -898,10 +900,11 @@ public interface QuickTableColumn<R, C> {
 			SingleColumnSet.Interpreted<R, C> myInterpreted = (SingleColumnSet.Interpreted<R, C>) interpreted;
 			getAddOn(ExWithElementModel.class).satisfyElementValue(myInterpreted.getDefinition().getColumnValueName(), getValue(),
 				ExWithElementModel.ActionIfSatisfied.Ignore);
-			theName.set(myInterpreted.getName().get(myModels), null);
+			theName.set(myInterpreted.getName().instantiate().get(myModels), null);
 			theColumnValueName = myInterpreted.getDefinition().getColumnValueName();
-			theValue.set(myInterpreted.getValue().get(myModels), null);
-			theHeaderTooltip.set(myInterpreted.getHeaderTooltip() == null ? null : myInterpreted.getHeaderTooltip().get(myModels), null);
+			theValue.set(myInterpreted.getValue().instantiate().get(myModels), null);
+			theHeaderTooltip
+			.set(myInterpreted.getHeaderTooltip() == null ? null : myInterpreted.getHeaderTooltip().instantiate().get(myModels), null);
 
 			if (myInterpreted.getRenderer() == null)
 				theRenderer = null;

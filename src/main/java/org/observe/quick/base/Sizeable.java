@@ -16,6 +16,7 @@ import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet.CompiledModelValue;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.TypeConversionException;
 import org.observe.expresso.qonfig.CompiledExpression;
 import org.observe.expresso.qonfig.ElementTypeTraceability;
@@ -275,10 +276,10 @@ public abstract class Sizeable extends ExAddOn.Abstract<ExElement> {
 	@Override
 	public void update(ExAddOn.Interpreted<?, ?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
 		Sizeable.Interpreted<?> myInterpreted = (Sizeable.Interpreted<?>) interpreted;
-		theSize.set(myInterpreted.getSize() == null ? null : myInterpreted.getSize().get(models), null);
-		theMinimum.set(myInterpreted.getMinimum() == null ? null : myInterpreted.getMinimum().get(models), null);
-		thePreferred.set(myInterpreted.getPreferred() == null ? null : myInterpreted.getPreferred().get(models), null);
-		theMaximum.set(myInterpreted.getMaximum() == null ? null : myInterpreted.getMaximum().get(models), null);
+		theSize.set(myInterpreted.getSize() == null ? null : myInterpreted.getSize().instantiate().get(models), null);
+		theMinimum.set(myInterpreted.getMinimum() == null ? null : myInterpreted.getMinimum().instantiate().get(models), null);
+		thePreferred.set(myInterpreted.getPreferred() == null ? null : myInterpreted.getPreferred().instantiate().get(models), null);
+		theMaximum.set(myInterpreted.getMaximum() == null ? null : myInterpreted.getMaximum().instantiate().get(models), null);
 	}
 
 	public Observable<ObservableValueEvent<QuickSize>> changes() {
@@ -358,12 +359,13 @@ public abstract class Sizeable extends ExAddOn.Abstract<ExElement> {
 					map = v -> v == null ? null : new QuickSize(0.0f, Math.round(v.floatValue()));
 					reverse = s -> s == null ? null : Double.valueOf(s.pixels);
 				}
-				positionValue = InterpretedValueSynth.of(ModelTypes.Value.forType(QuickSize.class), msi -> {
-					SettableValue<Double> numV = num.get(msi);
+				ModelValueInstantiator<SettableValue<Double>> numInst = num.instantiate();
+				positionValue = InterpretedValueSynth.simple(ModelTypes.Value.forType(QuickSize.class), ModelValueInstantiator.of(msi -> {
+					SettableValue<Double> numV = numInst.get(msi);
 					return numV.transformReversible(QuickSize.class, tx -> tx//
 						.map(map)//
 						.replaceSource(reverse, rev -> rev.allowInexactReverse(true)));
-				});
+				}));
 			} else {
 				try {
 					positionValue = parsed.evaluate(ModelTypes.Value.forType(QuickSize.class), env, 0);
@@ -371,8 +373,8 @@ public abstract class Sizeable extends ExAddOn.Abstract<ExElement> {
 					// If it doesn't parse as a position, try parsing as a number.
 					try {
 						positionValue = parsed.evaluate(ModelTypes.Value.forType(int.class), env, 0)//
-							.map(ModelTypes.Value.forType(QuickSize.class), v -> v.transformReversible(QuickSize.class,
-								tx -> tx.map(d -> new QuickSize(0.0f, d)).withReverse(pos -> pos.pixels)));
+							.map(ModelTypes.Value.forType(QuickSize.class), mvi -> mvi.map(v -> v.transformReversible(QuickSize.class,
+								tx -> tx.map(d -> new QuickSize(0.0f, d)).withReverse(pos -> pos.pixels))));
 					} catch (ExpressoEvaluationException e2) {
 						throw new ExpressoInterpretationException(e2.getMessage(),
 							new LocatedFilePosition(value.fileLocation, value.position.getPosition(e2.getErrorOffset())),

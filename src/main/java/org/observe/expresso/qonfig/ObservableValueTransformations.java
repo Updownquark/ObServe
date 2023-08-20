@@ -1,6 +1,7 @@
 package org.observe.expresso.qonfig;
 
 import java.util.Comparator;
+import java.util.List;
 
 import org.observe.Equivalence;
 import org.observe.Observable;
@@ -23,14 +24,19 @@ import org.observe.expresso.ModelType;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
+import org.observe.expresso.ObservableModelSet.ModelComponentId;
+import org.observe.expresso.ObservableModelSet.ModelInstantiator;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.observe.expresso.qonfig.ExElement.Def;
+import org.observe.expresso.qonfig.ExpressoTransformations.AbstractCompiledTransformation;
 import org.observe.expresso.qonfig.ExpressoTransformations.Operation;
 import org.observe.expresso.qonfig.ExpressoTransformations.TypePreservingTransform;
 import org.observe.expresso.qonfig.ExpressoTransformations.ValueTransform;
 import org.observe.util.TypeTokens;
 import org.qommons.LambdaUtils;
+import org.qommons.QommonsUtils;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterList;
@@ -80,8 +86,7 @@ public class ObservableValueTransformations {
 			return new Interpreted<>(this, parent);
 		}
 
-		static class Interpreted<T> extends TypePreservingTransform.Interpreted<SettableValue<?>, SettableValue<T>> implements
-		ExpressoTransformations.Operation.EfficientCopyingInterpreted<SettableValue<?>, SettableValue<T>, SettableValue<?>, SettableValue<T>, ExElement> {
+		static class Interpreted<T> extends TypePreservingTransform.Interpreted<SettableValue<?>, SettableValue<T>> {
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<String>> theDisablement;
 
 			Interpreted(DisabledValueTransform definition, ExElement.Interpreted<?> parent) {
@@ -94,11 +99,6 @@ public class ObservableValueTransformations {
 			}
 
 			@Override
-			public boolean isEfficientCopy() {
-				return true;
-			}
-
-			@Override
 			public void update(ModelInstanceType<SettableValue<?>, SettableValue<T>> sourceType, InterpretedExpressoEnv env)
 				throws ExpressoInterpretationException {
 				super.update(sourceType, env);
@@ -108,6 +108,29 @@ public class ObservableValueTransformations {
 			@Override
 			public BetterList<InterpretedValueSynth<?, ?>> getComponents() {
 				return BetterList.of(theDisablement);
+			}
+
+			@Override
+			public Operation.Instantiator<SettableValue<T>, SettableValue<T>> instantiate() {
+				return new Instantiator<>(theDisablement.instantiate());
+			}
+
+			@Override
+			public String toString() {
+				return "disableWith(" + theDisablement + ")";
+			}
+		}
+
+		static class Instantiator<T> implements Operation.EfficientCopyingInstantiator<SettableValue<T>, SettableValue<T>> {
+			private final ModelValueInstantiator<SettableValue<String>> theDisablement;
+
+			Instantiator(ModelValueInstantiator<SettableValue<String>> disablement) {
+				theDisablement = disablement;
+			}
+
+			@Override
+			public boolean isEfficientCopy() {
+				return true;
 			}
 
 			@Override
@@ -138,41 +161,36 @@ public class ObservableValueTransformations {
 				else
 					return new DisabledValue<>(newSource, newDisabled);
 			}
+		}
 
-			@Override
-			public String toString() {
-				return "disableWith(" + theDisablement + ")";
+		static class DisabledValue<T> extends SettableValue.DisabledValue<T> {
+			DisabledValue(SettableValue<T> wrapped, ObservableValue<String> enabled) {
+				super(wrapped, enabled);
 			}
 
-			static class DisabledValue<T> extends SettableValue.DisabledValue<T> {
-				DisabledValue(SettableValue<T> wrapped, ObservableValue<String> enabled) {
-					super(wrapped, enabled);
-				}
+			@Override
+			protected ObservableValue<String> getEnabled() {
+				return super.getEnabled();
+			}
 
-				@Override
-				protected ObservableValue<String> getEnabled() {
-					return super.getEnabled();
-				}
-
-				@Override
-				protected SettableValue<T> getWrapped() {
-					return super.getWrapped();
-				}
+			@Override
+			protected SettableValue<T> getWrapped() {
+				return super.getWrapped();
 			}
 		}
 	}
 
 	static class FilterAcceptValueTransform extends TypePreservingTransform<SettableValue<?>>
 	implements ValueTransform<SettableValue<?>, ExElement> {
-		private String theSourceName;
+		private ModelComponentId theSourceVariable;
 		private CompiledExpression theTest;
 
 		FilterAcceptValueTransform(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
 			super(parent, qonfigType);
 		}
 
-		public String getSourceName() {
-			return theSourceName;
+		public ModelComponentId getSourceVariable() {
+			return theSourceVariable;
 		}
 
 		public CompiledExpression getTest() {
@@ -182,9 +200,11 @@ public class ObservableValueTransformations {
 		@Override
 		public void update(ExpressoQIS session, ModelType<SettableValue<?>> sourceModelType) throws QonfigInterpretationException {
 			super.update(session, sourceModelType);
-			theSourceName = session.getAttributeText("source-as");
+			String sourceAs = session.getAttributeText("source-as");
+			ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
+			theSourceVariable = elModels.getElementValueModelId(sourceAs);
 			theTest = session.getAttributeExpression("test");
-			getAddOn(ExWithElementModel.Def.class).<Interpreted<?>, SettableValue<?>> satisfyElementValueType(theSourceName,
+			elModels.<Interpreted<?>, SettableValue<?>> satisfyElementValueType(theSourceVariable.getName(),
 				ModelTypes.Value, (interp, env) -> ModelTypes.Value.forType(interp.getSourceType()));
 		}
 
@@ -193,8 +213,7 @@ public class ObservableValueTransformations {
 			return new Interpreted<>(this, parent);
 		}
 
-		static class Interpreted<T> extends TypePreservingTransform.Interpreted<SettableValue<?>, SettableValue<T>> implements
-		ExpressoTransformations.Operation.EfficientCopyingInterpreted<SettableValue<?>, SettableValue<T>, SettableValue<?>, SettableValue<T>, ExElement> {
+		static class Interpreted<T> extends TypePreservingTransform.Interpreted<SettableValue<?>, SettableValue<T>> {
 			private TypeToken<T> theSourceType;
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<String>> theTest;
 
@@ -205,11 +224,6 @@ public class ObservableValueTransformations {
 			@Override
 			public FilterAcceptValueTransform getDefinition() {
 				return (FilterAcceptValueTransform) super.getDefinition();
-			}
-
-			@Override
-			public boolean isEfficientCopy() {
-				return true;
 			}
 
 			public TypeToken<T> getSourceType() {
@@ -230,9 +244,36 @@ public class ObservableValueTransformations {
 			}
 
 			@Override
+			public Operation.Instantiator<SettableValue<T>, SettableValue<T>> instantiate() {
+				return new Instantiator<>(theSourceType, getDefinition().getSourceVariable(), theTest.instantiate());
+			}
+
+			@Override
+			public String toString() {
+				return "filterAccept(" + theTest + ")";
+			}
+		}
+
+		static class Instantiator<T> implements Operation.EfficientCopyingInstantiator<SettableValue<T>, SettableValue<T>> {
+			private final TypeToken<T> theSourceType;
+			private final ModelComponentId theSourceVariable;
+			private final ModelValueInstantiator<SettableValue<String>> theTest;
+
+			Instantiator(TypeToken<T> sourceType, ModelComponentId sourceVariable, ModelValueInstantiator<SettableValue<String>> test) {
+				theSourceType = sourceType;
+				theSourceVariable = sourceVariable;
+				theTest = test;
+			}
+
+			@Override
+			public boolean isEfficientCopy() {
+				return true;
+			}
+
+			@Override
 			public SettableValue<T> transform(SettableValue<T> source, ModelSetInstance models) throws ModelInstantiationException {
 				SettableValue<T> sourceV = SettableValue.build(theSourceType).build();
-				getAddOn(ExWithElementModel.Interpreted.class).satisfyElementValue(getDefinition().getSourceName(), models, sourceV);
+				ExFlexibleElementModelAddOn.satisfyElementValue(theSourceVariable, models, sourceV);
 				SettableValue<String> test = theTest.get(models);
 				return new FilterEnabledValue<>(source, sourceV, test);
 			}
@@ -257,15 +298,9 @@ public class ObservableValueTransformations {
 					return prevValue;
 				else {
 					SettableValue<T> newSourceV = SettableValue.build(theSourceType).build();
-					getAddOn(ExWithElementModel.Interpreted.class).satisfyElementValue(getDefinition().getSourceName(), newModels,
-						newSourceV);
+					ExFlexibleElementModelAddOn.satisfyElementValue(theSourceVariable, newModels, newSourceV);
 					return new FilterEnabledValue<>(newSource, newSourceV, newTest);
 				}
-			}
-
-			@Override
-			public String toString() {
-				return "filterAccept(" + theTest + ")";
 			}
 		}
 
@@ -309,7 +344,7 @@ public class ObservableValueTransformations {
 		}
 
 		static class Interpreted<S, T> extends
-		ExpressoTransformations.AbstractCompiledTransformation.EfficientCopyingInterpreted<SettableValue<?>, S, T, SettableValue<S>, SettableValue<?>, SettableValue<T>, ExElement> {
+		ExpressoTransformations.AbstractCompiledTransformation.Interpreted<SettableValue<?>, S, T, SettableValue<S>, SettableValue<?>, SettableValue<T>, ExElement> {
 			public Interpreted(MapValueTransform definition, ExElement.Interpreted<?> parent) {
 				super(definition, parent);
 			}
@@ -325,6 +360,31 @@ public class ObservableValueTransformations {
 			}
 
 			@Override
+			public ExpressoTransformations.CompiledTransformation.Instantiator<S, T, SettableValue<S>, SettableValue<T>> instantiate() {
+				return new Instantiator<>(getExpressoEnv().getModels().instantiate(), getMapWith().instantiate(), //
+					QommonsUtils.map(getCombinedValues(), cv -> cv.instantiate(), true),
+					getReverse() == null ? null : getReverse().instantiate(), getDefinition().getSourceName(), getDefinition().isCached(),
+						getDefinition().isReEvalOnUpdate(), getDefinition().isFireIfUnchanged(), getDefinition().isNullToNull(),
+						getDefinition().isManyToOne(), getDefinition().isOneToMany(),
+						getEquivalence() == null ? null : getEquivalence().instantiate(), getTargetValueType());
+			}
+		}
+
+		static class Instantiator<S, T>
+		extends AbstractCompiledTransformation.EfficientCopyingInstantiator<S, T, SettableValue<S>, SettableValue<T>> {
+			private final TypeToken<T> theTargetValueType;
+
+			Instantiator(ModelInstantiator localModel, ExpressoTransformations.MapWith.Instantiator<S, T> mapWith,
+				List<ExpressoTransformations.CombineWith.Instantiator<?>> combinedValues,
+				ExpressoTransformations.CompiledMapReverse.Instantiator<S, T> reverse, ModelComponentId sourceVariable, boolean cached,
+				boolean reEvalOnUpdate, boolean fireIfUnchanged, boolean nullToNull, boolean manyToOne, boolean oneToMany,
+				ModelValueInstantiator<SettableValue<Equivalence<? super T>>> equivalence, TypeToken<T> targetValueType) {
+				super(localModel, mapWith, combinedValues, reverse, sourceVariable, cached, reEvalOnUpdate, fireIfUnchanged, nullToNull,
+					manyToOne, oneToMany, equivalence);
+				theTargetValueType = targetValueType;
+			}
+
+			@Override
 			public boolean isEfficientCopy() {
 				return true;
 			}
@@ -333,10 +393,10 @@ public class ObservableValueTransformations {
 			public SettableValue<T> transform(SettableValue<S> source, ModelSetInstance models) throws ModelInstantiationException {
 				Transformation<S, T> transformation = transform(models);
 				if (transformation instanceof Transformation.ReversibleTransformation)
-					return new TransformedSettableValue<>(getTargetValueType(), source,
+					return new TransformedSettableValue<>(theTargetValueType, source,
 						(Transformation.ReversibleTransformation<S, T>) transformation);
 				else
-					return new TransformedUnsettableValue<>(getTargetValueType(), source, transformation);
+					return new TransformedUnsettableValue<>(theTargetValueType, source, transformation);
 			}
 
 			@Override
@@ -434,8 +494,7 @@ public class ObservableValueTransformations {
 			return new Interpreted<>(this, parent);
 		}
 
-		static class Interpreted<T> extends TypePreservingTransform.Interpreted<SettableValue<?>, SettableValue<T>> implements
-		ExpressoTransformations.Operation.EfficientCopyingInterpreted<SettableValue<?>, SettableValue<T>, SettableValue<?>, SettableValue<T>, ExElement> {
+		static class Interpreted<T> extends TypePreservingTransform.Interpreted<SettableValue<?>, SettableValue<T>> {
 			private InterpretedValueSynth<Observable<?>, Observable<?>> theRefresh;
 
 			Interpreted(RefreshValueTransform definition, ExElement.Interpreted<?> parent) {
@@ -452,17 +511,6 @@ public class ObservableValueTransformations {
 			}
 
 			@Override
-			public boolean isEfficientCopy() {
-				return true;
-			}
-
-			@Override
-			public boolean isDifferent(ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException {
-				Observable<?> refresh = theRefresh.get(sourceModels);
-				return refresh != theRefresh.forModelCopy(refresh, sourceModels, newModels);
-			}
-
-			@Override
 			public void update(ModelInstanceType<SettableValue<?>, SettableValue<T>> sourceType, InterpretedExpressoEnv env)
 				throws ExpressoInterpretationException {
 				super.update(sourceType, env);
@@ -472,6 +520,35 @@ public class ObservableValueTransformations {
 			@Override
 			public BetterList<InterpretedValueSynth<?, ?>> getComponents() {
 				return BetterList.of(theRefresh);
+			}
+
+			@Override
+			public Operation.Instantiator<SettableValue<T>, SettableValue<T>> instantiate() {
+				return new Instantiator<>(theRefresh.instantiate());
+			}
+
+			@Override
+			public String toString() {
+				return "refresh(" + theRefresh + ")";
+			}
+		}
+
+		static class Instantiator<T> implements Operation.EfficientCopyingInstantiator<SettableValue<T>, SettableValue<T>> {
+			private final ModelValueInstantiator<Observable<?>> theRefresh;
+
+			Instantiator(ModelValueInstantiator<Observable<?>> refresh) {
+				theRefresh = refresh;
+			}
+
+			@Override
+			public boolean isEfficientCopy() {
+				return true;
+			}
+
+			@Override
+			public boolean isDifferent(ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException {
+				Observable<?> refresh = theRefresh.get(sourceModels);
+				return refresh != theRefresh.forModelCopy(refresh, sourceModels, newModels);
 			}
 
 			@Override
@@ -494,11 +571,6 @@ public class ObservableValueTransformations {
 					return prevValue;
 				else
 					return new RefreshingValue<>(newSource, newRefresh);
-			}
-
-			@Override
-			public String toString() {
-				return "refresh(" + theRefresh + ")";
 			}
 		}
 
@@ -542,8 +614,7 @@ public class ObservableValueTransformations {
 			return new Interpreted<>(this, parent);
 		}
 
-		static class Interpreted<T> extends TypePreservingTransform.Interpreted<SettableValue<?>, SettableValue<T>> implements
-		ExpressoTransformations.Operation.EfficientCopyingInterpreted<SettableValue<?>, SettableValue<T>, SettableValue<?>, SettableValue<T>, ExElement> {
+		static class Interpreted<T> extends TypePreservingTransform.Interpreted<SettableValue<?>, SettableValue<T>> {
 			Interpreted(UnmodifiableValueTransform definition, ExElement.Interpreted<?> parent) {
 				super(definition, parent);
 			}
@@ -554,18 +625,36 @@ public class ObservableValueTransformations {
 			}
 
 			@Override
-			public boolean isEfficientCopy() {
-				return true;
-			}
-
-			@Override
 			public BetterList<InterpretedValueSynth<?, ?>> getComponents() {
 				return BetterList.empty();
 			}
 
 			@Override
+			public Operation.Instantiator<SettableValue<T>, SettableValue<T>> instantiate() {
+				return new Instantiator<>(getDefinition().isAllowUpdates());
+			}
+
+			@Override
+			public String toString() {
+				return getDefinition().isAllowUpdates() ? "updateOnly" : "unmodifiable";
+			}
+		}
+
+		static class Instantiator<T> implements Operation.EfficientCopyingInstantiator<SettableValue<T>, SettableValue<T>> {
+			private final boolean isAllowUpdates;
+
+			Instantiator(boolean allowUpdates) {
+				isAllowUpdates = allowUpdates;
+			}
+
+			@Override
+			public boolean isEfficientCopy() {
+				return true;
+			}
+
+			@Override
 			public SettableValue<T> transform(SettableValue<T> source, ModelSetInstance models) throws ModelInstantiationException {
-				return new UnmodifiableValue<>(source, getDefinition().isAllowUpdates());
+				return new UnmodifiableValue<>(source, isAllowUpdates);
 			}
 
 			@Override
@@ -586,11 +675,6 @@ public class ObservableValueTransformations {
 					return prevValue;
 				else
 					return new UnmodifiableValue<>(newSource, unmodifiable.isAllowUpdates());
-			}
-
-			@Override
-			public String toString() {
-				return getDefinition().isAllowUpdates() ? "updateOnly" : "unmodifiable";
 			}
 		}
 
@@ -743,7 +827,7 @@ public class ObservableValueTransformations {
 		}
 
 		static abstract class Interpreted<M, MV extends M> extends ExElement.Interpreted.Abstract<ExElement>
-		implements Operation.EfficientCopyingInterpreted<SettableValue<?>, SettableValue<?>, M, MV, ExElement> {
+		implements Operation.Interpreted<SettableValue<?>, SettableValue<?>, M, MV, ExElement> {
 			Interpreted(FlattenValueTransform<M> definition, ExElement.Interpreted<?> parent) {
 				super(definition, parent);
 			}
@@ -751,11 +835,6 @@ public class ObservableValueTransformations {
 			@Override
 			public FlattenValueTransform<M> getDefinition() {
 				return (FlattenValueTransform<M>) super.getDefinition();
-			}
-
-			@Override
-			public boolean isEfficientCopy() {
-				return true;
 			}
 
 			@Override
@@ -801,6 +880,26 @@ public class ObservableValueTransformations {
 			@Override
 			public BetterList<InterpretedValueSynth<?, ?>> getComponents() {
 				return BetterList.empty();
+			}
+
+			@Override
+			public Operation.Instantiator<SettableValue<?>, SettableValue<T>> instantiate() {
+				return new FlattenedValueInstantiator<>(theValueType, isSettable);
+			}
+		}
+
+		static class FlattenedValueInstantiator<T> implements Operation.EfficientCopyingInstantiator<SettableValue<?>, SettableValue<T>> {
+			private final TypeToken<T> theValueType;
+			private final boolean isSettable;
+
+			FlattenedValueInstantiator(TypeToken<T> valueType, boolean settable) {
+				theValueType = valueType;
+				isSettable = settable;
+			}
+
+			@Override
+			public boolean isEfficientCopy() {
+				return true;
 			}
 
 			@Override
@@ -905,6 +1004,7 @@ public class ObservableValueTransformations {
 		extends Interpreted<C, CV> {
 			private TypeToken<T> theValueType;
 			private ModelInstanceType<C, CV> theModelType;
+			private boolean isSorted;
 			private ExSort.ExRootSort.Interpreted<T> theSorting;
 			private Comparator<? super T> theDefaultSorting;
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<Equivalence<? super T>>> theEquivalence;
@@ -930,10 +1030,12 @@ public class ObservableValueTransformations {
 						ModelTypes.Value.forType(TypeTokens.get().keyFor(Equivalence.class)
 							.<Equivalence<? super T>> parameterized(TypeTokens.get().getSuperWildcard(theValueType))),
 						getExpressoEnv());
+					isSorted = false;
 					if (theSorting != null)
 						theSorting.destroy();
 					theSorting = null;
 				} else if (modelType == ModelTypes.SortedCollection || modelType == ModelTypes.SortedSet) {//
+					isSorted = true;
 					theEquivalence = null;
 					theSorting = getDefinition().getSorting() == null ? null
 						: (ExSort.ExRootSort.Interpreted<T>) getDefinition().getSorting().interpret(this);
@@ -956,41 +1058,6 @@ public class ObservableValueTransformations {
 			}
 
 			@Override
-			public CV transform(SettableValue<?> source, ModelSetInstance models) throws ModelInstantiationException {
-				Equivalence<? super T> equivalence = theEquivalence == null ? null : theEquivalence.get(models).get();
-				if (equivalence == null)
-					equivalence = Equivalence.DEFAULT;
-				Comparator<? super T> sorting = theSorting == null ? theDefaultSorting : theSorting.getSorting(models);
-
-				ModelType<C> modelType = (ModelType<C>) getDefinition().getTargetModelType();
-				if (modelType == ModelTypes.Collection)
-					return (CV) new FlattenedCollection<>((SettableValue<? extends ObservableCollection<? extends T>>) source, equivalence);
-				else if (modelType == ModelTypes.Set)
-					return (CV) new FlattenedSet<>((SettableValue<? extends ObservableSet<? extends T>>) source, equivalence);
-				else if (modelType == ModelTypes.SortedCollection)
-					return (CV) new FlattenedSortedCollection<>((SettableValue<? extends ObservableSortedCollection<? extends T>>) source,
-						sorting);
-				else if (modelType == ModelTypes.SortedSet)
-					return (CV) new FlattenedSortedSet<>((SettableValue<? extends ObservableSortedSet<? extends T>>) source, sorting);
-				else
-					throw new IllegalStateException("Unrecognized collection type: " + modelType);
-			}
-
-			@Override
-			public boolean isDifferent(ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException {
-				if (theEquivalence != null && theEquivalence.get(sourceModels) != theEquivalence.get(newModels))
-					return true;
-				if (theSorting != null && theSorting.getSorting(sourceModels) != theSorting.getSorting(newModels))
-					return true;
-				return false;
-			}
-
-			@Override
-			public SettableValue<?> getSource(CV value) {
-				return ((FlattenedCollectionValue<?, ?>) value).getWrapped();
-			}
-
-			@Override
 			public BetterList<InterpretedValueSynth<?, ?>> getComponents() {
 				if (theSorting != null)
 					return theSorting.getComponents();
@@ -998,6 +1065,73 @@ public class ObservableValueTransformations {
 					return BetterList.of(theEquivalence);
 				else
 					return BetterList.empty();
+			}
+
+			@Override
+			public Operation.Instantiator<SettableValue<?>, CV> instantiate() {
+				ModelValueInstantiator<Comparator<? super T>> sorting;
+				if (!isSorted)
+					sorting = null;
+				else if (theSorting != null)
+					sorting = theSorting.instantiateSort();
+				else
+					sorting = ModelValueInstantiator.literal(theDefaultSorting, "default");
+				return new FlattenedCollectionValueInstantiator<>(getDefinition().getTargetModelType(),
+					theEquivalence == null ? null : theEquivalence.instantiate(), sorting);
+			}
+		}
+
+		static class FlattenedCollectionValueInstantiator<T, CV extends ObservableCollection<?>>
+		implements Operation.EfficientCopyingInstantiator<SettableValue<?>, CV> {
+			private final ModelType<? extends ObservableCollection<?>> theTargetModelType;
+			private final ModelValueInstantiator<SettableValue<Equivalence<? super T>>> theEquivalence;
+			private final ModelValueInstantiator<Comparator<? super T>> theSorting;
+
+			FlattenedCollectionValueInstantiator(ModelType<? extends ObservableCollection<?>> targetModelType,
+				ModelValueInstantiator<SettableValue<Equivalence<? super T>>> equivalence,
+				ModelValueInstantiator<Comparator<? super T>> sorting) {
+				theTargetModelType = targetModelType;
+				theEquivalence = equivalence;
+				theSorting = sorting;
+			}
+
+			@Override
+			public boolean isEfficientCopy() {
+				return true;
+			}
+
+			@Override
+			public CV transform(SettableValue<?> source, ModelSetInstance models) throws ModelInstantiationException {
+				Equivalence<? super T> equivalence = theEquivalence == null ? null : theEquivalence.get(models).get();
+				if (equivalence == null)
+					equivalence = Equivalence.DEFAULT;
+				Comparator<? super T> sorting = theSorting == null ? null : theSorting.get(models);
+
+				if (theTargetModelType == ModelTypes.Collection)
+					return (CV) new FlattenedCollection<>((SettableValue<? extends ObservableCollection<? extends T>>) source, equivalence);
+				else if (theTargetModelType == ModelTypes.Set)
+					return (CV) new FlattenedSet<>((SettableValue<? extends ObservableSet<? extends T>>) source, equivalence);
+				else if (theTargetModelType == ModelTypes.SortedCollection)
+					return (CV) new FlattenedSortedCollection<>((SettableValue<? extends ObservableSortedCollection<? extends T>>) source,
+						sorting);
+				else if (theTargetModelType == ModelTypes.SortedSet)
+					return (CV) new FlattenedSortedSet<>((SettableValue<? extends ObservableSortedSet<? extends T>>) source, sorting);
+				else
+					throw new IllegalStateException("Unrecognized collection type: " + theTargetModelType);
+			}
+
+			@Override
+			public boolean isDifferent(ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException {
+				if (theEquivalence != null && theEquivalence.get(sourceModels) != theEquivalence.get(newModels))
+					return true;
+				if (theSorting != null && theSorting.get(sourceModels) != theSorting.get(newModels))
+					return true;
+				return false;
+			}
+
+			@Override
+			public SettableValue<?> getSource(CV value) {
+				return ((FlattenedCollectionValue<?, ?>) value).getWrapped();
 			}
 
 			@Override
@@ -1012,7 +1146,7 @@ public class ObservableValueTransformations {
 					if (equivalence != prevValue.equivalence())
 						return transform(newSource, newModels);
 				}
-				if (theSorting != null && theSorting.getSorting(newModels) != ((ObservableSortedCollection<?>) prevValue).comparator())
+				if (theSorting != null && theSorting.get(newModels) != ((ObservableSortedCollection<?>) prevValue).comparator())
 					return transform(newSource, newModels);
 				return prevValue;
 			}

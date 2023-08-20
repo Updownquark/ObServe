@@ -361,7 +361,7 @@ class PanelPopulationImpl {
 		}
 
 		@Override
-		protected Component decorate(Component c) {
+		public Component decorate(Component c) {
 			if (theFont != null)
 				new FontAdjuster().configure(theFont).adjust(c);
 			return super.decorate(c);
@@ -2255,10 +2255,17 @@ class PanelPopulationImpl {
 
 				@Override
 				public P2 decorate(Consumer<ComponentDecorator> decoration) {
-					if (theDecorator != null)
+					if (theDecorator == null)
 						theDecorator = new ComponentDecorator();
 					decoration.accept(theDecorator);
 					return (P2) this;
+				}
+
+				@Override
+				public Component decorate(Component c) {
+					if (theDecorator != null)
+						theDecorator.decorate(c);
+					return c;
 				}
 
 				@Override

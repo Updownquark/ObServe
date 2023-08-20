@@ -179,7 +179,7 @@ public interface QuickValueWidget<T> extends QuickWidget {
 		protected void updateModel(ExElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
 			super.updateModel(interpreted, myModels);
 			QuickValueWidget.Interpreted<T, ?> myInterpreted = (QuickValueWidget.Interpreted<T, ?>) interpreted;
-			theValue.set(myInterpreted.getValue().get(myModels), null);
+			theValue.set(myInterpreted.getValue().instantiate().get(myModels), null);
 		}
 	}
 

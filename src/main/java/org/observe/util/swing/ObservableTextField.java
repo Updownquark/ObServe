@@ -44,15 +44,18 @@ public class ObservableTextField<E> extends JPasswordField implements Observable
 	 * @param until An observable that, when fired will release this text field's resources
 	 */
 	public ObservableTextField(SettableValue<E> value, Format<E> format, Observable<?> until) {
-		theEditor = new ObservableTextEditor<E>(this, value, format, until, //
-			e -> super.setEnabled(e), //
-			tt -> super.setToolTipText(tt)) {
-			@Override
-			protected void adjust(boolean up, Object cause) {
-				if (getEchoChar() == 0)
-					super.adjust(up, cause);
-			}
-		};
+		if (value != null) {
+			theEditor = new ObservableTextEditor<E>(this, value, format, until, //
+				e -> super.setEnabled(e), //
+				tt -> super.setToolTipText(tt)) {
+				@Override
+				protected void adjust(boolean up, Object cause) {
+					if (getEchoChar() == 0)
+						super.adjust(up, cause);
+				}
+			};
+		} else
+			theEditor = null;
 		Border border = UIManager.getBorder("TextField.border");
 		dummyInsets = border.getBorderInsets(this);
 		asPassword((char) 0);
@@ -74,70 +77,87 @@ public class ObservableTextField<E> extends JPasswordField implements Observable
 
 	@Override
 	public SettableValue<E> getValue() {
+		if (theEditor == null)
+			return null;
 		return theEditor.getValue();
 	}
 
 	@Override
 	public Format<E> getFormat() {
+		if (theEditor == null)
+			return null;
 		return theEditor.getFormat();
 	}
 
 	@Override
 	public ObservableTextField<E> withWarning(Function<? super E, String> warning) {
-		theEditor.withWarning(warning);
+		if (theEditor != null)
+			theEditor.withWarning(warning);
 		return this;
 	}
 
 	@Override
 	public ObservableTextField<E> clearWarning() {
-		theEditor.clearWarning();
+		if (theEditor != null)
+			theEditor.clearWarning();
 		return this;
 	}
 
 	@Override
 	public boolean isSelectAllOnFocus() {
+		if (theEditor == null)
+			return false;
 		return theEditor.isSelectAllOnFocus();
 	}
 
 	@Override
 	public ObservableTextField<E> setSelectAllOnFocus(boolean selectAll) {
-		theEditor.setSelectAllOnFocus(selectAll);
+		if (theEditor != null)
+			theEditor.setSelectAllOnFocus(selectAll);
 		return this;
 	}
 
 	@Override
 	public ObservableTextField<E> setReformatOnCommit(boolean format) {
-		theEditor.setReformatOnCommit(format);
+		if (theEditor != null)
+			theEditor.setReformatOnCommit(format);
 		return this;
 	}
 
 	@Override
 	public ObservableTextField<E> setRevertOnFocusLoss(boolean revert) {
-		theEditor.setRevertOnFocusLoss(revert);
+		if (theEditor != null)
+			theEditor.setRevertOnFocusLoss(revert);
 		return this;
 	}
 
 	@Override
 	public ObservableTextField<E> setCommitOnType(boolean commit) {
-		theEditor.setCommitOnType(commit);
+		if (theEditor != null)
+			theEditor.setCommitOnType(commit);
 		return this;
 	}
 
 	@Override
 	public ObservableTextField<E> setCommitAdjustmentImmediately(boolean commitImmediately) {
-		theEditor.setCommitAdjustmentImmediately(commitImmediately);
+		if (theEditor != null)
+			theEditor.setCommitAdjustmentImmediately(commitImmediately);
 		return this;
 	}
 
 	@Override
 	public ObservableTextField<E> onEnter(BiConsumer<? super E, ? super KeyEvent> action) {
-		theEditor.onEnter(action);
+		if (theEditor != null)
+			theEditor.onEnter(action);
 		return this;
 	}
 
 	@Override
 	public ObservableTextField<E> withToolTip(String tooltip) {
-		theEditor.withToolTip(tooltip);
+		if (theEditor != null)
+			theEditor.withToolTip(tooltip);
+		else
+			super.setToolTipText(tooltip);
 		return this;
 	}
 
@@ -197,12 +217,18 @@ public class ObservableTextField<E> extends JPasswordField implements Observable
 
 	@Override
 	public void setEnabled(boolean enabled) {
-		theEditor.setEnabled(enabled);
+		if (theEditor != null)
+			theEditor.setEnabled(enabled);
+		else
+			super.setEnabled(enabled);
 	}
 
 	@Override
 	public void setToolTipText(String text) {
-		theEditor.setToolTipText(text);
+		if (theEditor != null)
+			theEditor.setToolTipText(text);
+		else
+			super.setToolTipText(text);
 	}
 
 	@Override
@@ -260,13 +286,16 @@ public class ObservableTextField<E> extends JPasswordField implements Observable
 	/** @return Whether the user has entered text to change this field's value */
 	@Override
 	public boolean isDirty() {
+		if (theEditor == null)
+			return false;
 		return theEditor.isDirty();
 	}
 
 	/** Undoes any edits in this field's text, reverting to the formatted current value */
 	@Override
 	public void revertEdits() {
-		theEditor.revertEdits();
+		if (theEditor != null)
+			theEditor.revertEdits();
 	}
 
 	/**
@@ -278,6 +307,8 @@ public class ObservableTextField<E> extends JPasswordField implements Observable
 	 */
 	@Override
 	public boolean flushEdits(Object cause) {
+		if (theEditor == null)
+			return false;
 		return theEditor.flushEdits(cause);
 	}
 
@@ -291,31 +322,41 @@ public class ObservableTextField<E> extends JPasswordField implements Observable
 	 */
 	@Override
 	public String getEditError() {
+		if (theEditor == null)
+			return null;
 		return theEditor.getEditError();
 	}
 
 	@Override
 	public String getEditWarning() {
+		if (theEditor == null)
+			return null;
 		return theEditor.getEditWarning();
 	}
 
 	@Override
 	public ObservableValue<String> getErrorState() {
+		if (theEditor == null)
+			return null;
 		return theEditor.getErrorState();
 	}
 
 	@Override
 	public ObservableValue<String> getWarningState() {
+		if (theEditor == null)
+			return null;
 		return theEditor.getWarningState();
 	}
 
 	/** Re-displays the parsing error message from this text field as a tooltip */
 	public void redisplayErrorTooltip() {
-		theEditor.redisplayErrorTooltip();
+		if (theEditor != null)
+			theEditor.redisplayErrorTooltip();
 	}
 
 	/** Re-displays the warning message from this text field as a tooltip */
 	public void redisplayWarningTooltip() {
-		theEditor.redisplayWarningTooltip();
+		if (theEditor != null)
+			theEditor.redisplayWarningTooltip();
 	}
 }

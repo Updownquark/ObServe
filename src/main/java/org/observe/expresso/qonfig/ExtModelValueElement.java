@@ -79,7 +79,7 @@ public class ExtModelValueElement<M, MV extends M> extends ModelValueElement.Def
 				// Model path includes the root
 				path = path.substring(path.indexOf('.') + 1);
 				M value = env.getExtModels().getValue(path, type, env);
-				return InterpretedValueSynth.of((ModelInstanceType<M, M>) type, __ -> value);
+				return InterpretedValueSynth.literal((ModelInstanceType<M, M>) type, value, getModelPath());
 			} catch (ModelException e) {
 				// No such external model. Use the default if present
 				if (theDefault != null)
@@ -225,6 +225,6 @@ public class ExtModelValueElement<M, MV extends M> extends ModelValueElement.Def
 	protected void updateModel(ExElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
 		super.updateModel(interpreted, myModels);
 		Interpreted<M, MV> myInterpreted = (Interpreted<M, MV>) interpreted;
-		theDefault = myInterpreted.getDefault() == null ? null : myInterpreted.getDefault().get(myModels);
+		theDefault = myInterpreted.getDefault() == null ? null : myInterpreted.getDefault().instantiate().get(myModels);
 	}
 }

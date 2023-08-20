@@ -16,12 +16,16 @@ import org.observe.expresso.ModelType;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.CompiledModelValue;
+import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
+import org.observe.expresso.ObservableModelSet.ModelInstantiator;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.qonfig.CompiledExpression;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.ModelValueElement;
+import org.observe.quick.style.QuickInterpretedStyle.QuickStyleAttributeInstantiator;
 import org.observe.quick.style.QuickStyledElement.QuickInstanceStyle;
 import org.qommons.QommonsUtils;
 import org.qommons.Version;
@@ -254,18 +258,49 @@ public class TestInterpretation implements QonfigInterpretation {
 			}
 
 			@Override
+			public ModelValueInstantiator<SettableValue<A>> instantiate() {
+				return new Instantiator(this);
+			}
+		}
+
+		static class Instantiator implements ModelValueInstantiator<SettableValue<A>> {
+			private final ModelInstantiator theLocalModel;
+			private final ModelValueInstantiator<SettableValue<Boolean>> a;
+			private final ModelValueInstantiator<SettableValue<Boolean>> b;
+			private final ModelValueInstantiator<SettableValue<Integer>> c;
+			private final ModelValueInstantiator<SettableValue<Boolean>> d;
+
+			private final QuickStyleAttributeInstantiator<Boolean> s0;
+			private final QuickStyleAttributeInstantiator<Integer> s1;
+			private final QuickStyleAttributeInstantiator<Boolean> s2;
+
+			Instantiator(Interpreted interpreted) {
+				InterpretedModelSet models = interpreted.getExpressoEnv().getModels();
+				theLocalModel = models.instantiate();
+
+				a = interpreted.a.instantiate();
+				b = interpreted.b.instantiate();
+				c = interpreted.c.instantiate();
+				d = interpreted.d.instantiate();
+
+				s0 = interpreted.getStyle().getS0().instantiate(models);
+				s1 = interpreted.getStyle().getS1().instantiate(models);
+				s2 = interpreted.getStyle().getS2().instantiate(models);
+			}
+
+			@Override
 			public SettableValue<A> get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
-				models = getExpressoEnv().wrapLocal(models);
+				models = theLocalModel.wrap(models);
 				SettableValue<Boolean> aInst = a.get(models);
 				SettableValue<Boolean> bInst = b.get(models);
 				SettableValue<Integer> cInst = c.get(models);
 				SettableValue<Boolean> dInst = d.get(models);
 
-				ObservableValue<Boolean> s0 = getStyle().getS0().evaluate(models);
-				ObservableValue<Integer> s1 = getStyle().getS1().evaluate(models);
-				ObservableValue<Boolean> s2 = getStyle().getS2().evaluate(models);
+				ObservableValue<Boolean> s0Inst = s0.evaluate(models);
+				ObservableValue<Integer> s1Inst = s1.evaluate(models);
+				ObservableValue<Boolean> s2Inst = s2.evaluate(models);
 
-				return SettableValue.of(A.class, new A(aInst, bInst, cInst, dInst, s0, s1, s2), "Unsettable");
+				return SettableValue.of(A.class, new A(aInst, bInst, cInst, dInst, s0Inst, s1Inst, s2Inst), "Unsettable");
 			}
 
 			@Override
@@ -279,11 +314,11 @@ public class TestInterpretation implements QonfigInterpretation {
 				if (aInst == value.get().a && bInst == value.get().b && cInst == value.get().c && dInst == value.get().d)
 					return value;
 
-				ObservableValue<Boolean> s0 = getStyle().getS0().evaluate(newModels);
-				ObservableValue<Integer> s1 = getStyle().getS1().evaluate(newModels);
-				ObservableValue<Boolean> s2 = getStyle().getS2().evaluate(newModels);
+				ObservableValue<Boolean> s0Inst = s0.evaluate(newModels);
+				ObservableValue<Integer> s1Inst = s1.evaluate(newModels);
+				ObservableValue<Boolean> s2Inst = s2.evaluate(newModels);
 
-				return SettableValue.of(A.class, new A(aInst, bInst, cInst, dInst, s0, s1, s2), "Unsettable");
+				return SettableValue.of(A.class, new A(aInst, bInst, cInst, dInst, s0Inst, s1Inst, s2Inst), "Unsettable");
 			}
 		}
 
@@ -397,9 +432,9 @@ public class TestInterpretation implements QonfigInterpretation {
 				throws ModelInstantiationException {
 				super.update(interpreted, models);
 				Interpreted myInterpreted = (Interpreted) interpreted;
-				s0 = myInterpreted.getS0().evaluate(models);
-				s1 = myInterpreted.getS1().evaluate(models);
-				s2 = myInterpreted.getS2().evaluate(models);
+				s0 = getApplicableAttribute(myInterpreted.getS0().getAttribute());
+				s1 = getApplicableAttribute(myInterpreted.getS1().getAttribute());
+				s2 = getApplicableAttribute(myInterpreted.getS2().getAttribute());
 			}
 		}
 
@@ -539,24 +574,54 @@ public class TestInterpretation implements QonfigInterpretation {
 			}
 
 			@Override
+			public ModelValueInstantiator<SettableValue<T>> instantiate() {
+				return new Instantiator<>(this);
+			}
+		}
+
+		static class Instantiator<T extends B> implements ModelValueInstantiator<SettableValue<T>> {
+			private final ModelInstantiator theLocalModel;
+
+			private final ModelValueInstantiator<SettableValue<Boolean>> e;
+			private final ModelValueInstantiator<SettableValue<Integer>> f;
+
+			private final QuickStyleAttributeInstantiator<Integer> s3;
+			private final QuickStyleAttributeInstantiator<Integer> s4;
+
+			private final List<ModelValueInstantiator<SettableValue<A>>> theChildren;
+
+			Instantiator(Interpreted<T> interpreted) {
+				InterpretedModelSet model = interpreted.getExpressoEnv().getModels();
+				theLocalModel = model.instantiate();
+
+				e = interpreted.e.instantiate();
+				f = interpreted.f.instantiate();
+
+				s3 = interpreted.getStyle().getS3().instantiate(model);
+				s4 = interpreted.getStyle().getS4().instantiate(model);
+
+				theChildren = QommonsUtils.map(interpreted.theChildren, ch -> ch.instantiate(), true);
+			}
+
+			@Override
 			public SettableValue<T> get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
-				models = getExpressoEnv().wrapLocal(models);
+				models = theLocalModel.wrap(models);
 				SettableValue<Boolean> eInst = e.get(models);
 				SettableValue<Integer> fInst = f.get(models);
 
-				ObservableValue<Integer> s3 = getStyle().getS3().evaluate(models);
-				ObservableValue<Integer> s4 = getStyle().getS4().evaluate(models);
+				ObservableValue<Integer> s3Inst = s3.evaluate(models);
+				ObservableValue<Integer> s4Inst = s4.evaluate(models);
 
 				List<A> childrenInst = new ArrayList<>(theChildren.size());
-				for (InterpretedValueSynth<SettableValue<?>, ? extends SettableValue<? extends A>> child : theChildren)
+				for (ModelValueInstantiator<SettableValue<A>> child : theChildren)
 					childrenInst.add(child.get(models).get());
 
-				return create(eInst, fInst, s3, s4, childrenInst, models);
+				return create(eInst, fInst, s3Inst, s4Inst, childrenInst, models);
 			}
 
-			protected SettableValue<T> create(SettableValue<Boolean> eInst, SettableValue<Integer> fInst, ObservableValue<Integer> s3,
-				ObservableValue<Integer> s4, List<A> children, ModelSetInstance models) throws ModelInstantiationException {
-				return (SettableValue<T>) SettableValue.of(B.class, new B(eInst, fInst, s3, s4, children), "Not settable");
+			protected SettableValue<T> create(SettableValue<Boolean> eInst, SettableValue<Integer> fInst, ObservableValue<Integer> s3Inst,
+				ObservableValue<Integer> s4Inst, List<A> children, ModelSetInstance models) throws ModelInstantiationException {
+				return (SettableValue<T>) SettableValue.of(B.class, new B(eInst, fInst, s3Inst, s4Inst, children), "Not settable");
 			}
 
 			@Override
@@ -659,8 +724,8 @@ public class TestInterpretation implements QonfigInterpretation {
 				throws ModelInstantiationException {
 				super.update(interpreted, models);
 				Interpreted myInterpreted = (Interpreted) interpreted;
-				s3 = myInterpreted.getS3().evaluate(models);
-				s4 = myInterpreted.getS4().evaluate(models);
+				s3 = getApplicableAttribute(myInterpreted.getS3().getAttribute());
+				s4 = getApplicableAttribute(myInterpreted.getS4().getAttribute());
 			}
 		}
 
@@ -746,11 +811,30 @@ public class TestInterpretation implements QonfigInterpretation {
 			}
 
 			@Override
+			public ModelValueInstantiator<SettableValue<C>> instantiate() {
+				return new Instantiator(this);
+			}
+		}
+
+		static class Instantiator extends B.Instantiator<C> {
+			private final ModelValueInstantiator<SettableValue<Boolean>> g;
+
+			private final QuickStyleAttributeInstantiator<Boolean> s5;
+
+			public Instantiator(Interpreted interpreted) {
+				super(interpreted);
+
+				g = interpreted.g.instantiate();
+
+				s5 = interpreted.getStyle().getS5().instantiate(interpreted.getExpressoEnv().getModels());
+			}
+
+			@Override
 			protected SettableValue<C> create(SettableValue<Boolean> eInst, SettableValue<Integer> fInst, ObservableValue<Integer> s3,
 				ObservableValue<Integer> s4, List<A> children, ModelSetInstance models) throws ModelInstantiationException {
 				SettableValue<Boolean> gInst = g.get(models);
-				ObservableValue<Boolean> s5 = getStyle().getS5().evaluate(models);
-				return SettableValue.of(C.class, new C(eInst, fInst, gInst, s3, s4, s5, children), "Not settable");
+				ObservableValue<Boolean> s5Inst = s5.evaluate(models);
+				return SettableValue.of(C.class, new C(eInst, fInst, gInst, s3, s4, s5Inst, children), "Not settable");
 			}
 		}
 
@@ -818,7 +902,7 @@ public class TestInterpretation implements QonfigInterpretation {
 				throws ModelInstantiationException {
 				super.update(interpreted, models);
 				Interpreted myInterpreted = (Interpreted) interpreted;
-				s5 = myInterpreted.getS5().evaluate(models);
+				s5 = getApplicableAttribute(myInterpreted.getS5().getAttribute());
 			}
 		}
 
@@ -897,12 +981,31 @@ public class TestInterpretation implements QonfigInterpretation {
 			}
 
 			@Override
+			public ModelValueInstantiator<SettableValue<D>> instantiate() {
+				return new Instantiator(this);
+			}
+		}
+
+		static class Instantiator extends B.Instantiator<D> {
+			private final ModelValueInstantiator<SettableValue<Integer>> h;
+
+			private final QuickStyleAttributeInstantiator<Integer> s6;
+
+			public Instantiator(Interpreted interpreted) {
+				super(interpreted);
+
+				h = interpreted.h.instantiate();
+
+				s6 = interpreted.getStyle().getS6().instantiate(interpreted.getExpressoEnv().getModels());
+			}
+
+			@Override
 			protected SettableValue<D> create(SettableValue<Boolean> eInst, SettableValue<Integer> fInst, ObservableValue<Integer> s3,
 				ObservableValue<Integer> s4, List<A> children, ModelSetInstance models) throws ModelInstantiationException {
 				SettableValue<Integer> hInst = h.get(models);
-				ObservableValue<Integer> s6 = getStyle().getS6().evaluate(models);
+				ObservableValue<Integer> s6Inst = s6.evaluate(models);
 
-				return SettableValue.of(D.class, new D(eInst, fInst, hInst, s3, s4, s6, children), "Not settable");
+				return SettableValue.of(D.class, new D(eInst, fInst, hInst, s3, s4, s6Inst, children), "Not settable");
 			}
 		}
 

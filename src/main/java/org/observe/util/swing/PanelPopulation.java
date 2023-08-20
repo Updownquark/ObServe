@@ -34,6 +34,7 @@ import java.util.function.Supplier;
 
 import javax.swing.*;
 import javax.swing.text.DefaultStyledDocument;
+import javax.swing.text.JTextComponent;
 import javax.swing.text.StyleConstants;
 import javax.swing.text.StyledDocument;
 import javax.swing.text.TabSet;
@@ -388,6 +389,10 @@ public class PanelPopulation {
 
 		void doAdd(AbstractComponentEditor<?, ?> field, Component fieldLabel, Component postLabel, boolean scrolled);
 
+		default boolean isSyntheticRenderer() {
+			return false;
+		}
+
 		<C2 extends ComponentEditor<?, ?>> C2 modify(C2 component);
 
 		default void doAdd(AbstractComponentEditor<?, ?> field) {
@@ -451,14 +456,7 @@ public class PanelPopulation {
 			}
 			// Make the document's style the master
 			editor.setParagraphAttributes(doc.getRootStyle().getFontAttributes(), true);
-			StyledDocument styledDoc;
-			if (editor.getDocument() instanceof StyledDocument)
-				styledDoc = (StyledDocument) editor.getDocument();
-			else {
-				styledDoc = new DefaultStyledDocument();
-				editor.setDocument(styledDoc);
-			}
-			ObservableStyledDocument.synchronize(doc, styledDoc, getUntil());
+			hookUpStyledDocument(doc, editor);
 
 			SimpleFieldEditor<ObservableTextArea<F>, ?> fieldPanel = new SimpleFieldEditor<>(fieldName, editor, getUntil());
 			modify(fieldPanel);
@@ -472,19 +470,34 @@ public class PanelPopulation {
 			return (P) this;
 		}
 
+		default <F> void hookUpStyledDocument(ObservableStyledDocument<F> doc, JTextComponent editor) {
+			StyledDocument styledDoc;
+			if (editor.getDocument() instanceof StyledDocument)
+				styledDoc = (StyledDocument) editor.getDocument();
+			else {
+				styledDoc = new DefaultStyledDocument();
+				editor.setDocument(styledDoc);
+			}
+			ObservableStyledDocument.synchronize(doc, styledDoc, getUntil());
+		}
+
 		@Override
 		default <F> P addLabel(String fieldName, ObservableValue<F> field, Function<? super F, String> format,
 			Consumer<FieldEditor<JLabel, ?>> modify) {
 			JLabel label = new JLabel();
-			field.changes().takeUntil(getUntil()).act(evt -> {
-				label.setText(format.apply(evt.getNewValue()));
-			});
+			if (!isSyntheticRenderer()) {
+				field.changes().takeUntil(getUntil()).act(evt -> {
+					label.setText(format.apply(evt.getNewValue()));
+				});
+			}
 			SimpleFieldEditor<JLabel, ?> fieldPanel = new SimpleFieldEditor<>(fieldName, label, getUntil());
 			modify(fieldPanel);
-			fieldPanel.getTooltip().changes().takeUntil(getUntil()).act(evt -> fieldPanel.getEditor().setToolTipText(evt.getNewValue()));
+			if (!isSyntheticRenderer())
+				fieldPanel.getTooltip().changes().takeUntil(getUntil())
+				.act(evt -> fieldPanel.getEditor().setToolTipText(evt.getNewValue()));
 			if (modify != null)
 				modify.accept(fieldPanel);
-			if (fieldPanel.isDecorated())
+			if (fieldPanel.isDecorated() && !isSyntheticRenderer())
 				field.noInitChanges().safe(ThreadConstraint.EDT).takeUntil(getUntil())
 				.act(__ -> fieldPanel.decorate(fieldPanel.getComponent()));
 			doAdd(fieldPanel);
@@ -887,6 +900,8 @@ public class PanelPopulation {
 	public interface ComponentEditor<E, P extends ComponentEditor<E, P>> extends Tooltipped<P> {
 		Observable<?> getUntil();
 
+		Component decorate(Component c);
+
 		default P withFieldName(String fieldName) {
 			return withFieldName(fieldName == null ? null : ObservableValue.of(fieldName));
 		}
@@ -1204,7 +1219,8 @@ public class PanelPopulation {
 
 		private boolean decorated = false;
 
-		protected Component decorate(Component c) {
+		@Override
+		public Component decorate(Component c) {
 			if (!isTooltipHandled && theEditor instanceof JComponent)
 				theTooltip.changes().takeUntil(getUntil()).act(evt -> ((JComponent) theEditor).setToolTipText(evt.getNewValue()));
 			if (theDecorator != null)

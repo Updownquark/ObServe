@@ -2,8 +2,8 @@ package org.observe.quick.swing;
 
 import java.awt.Component;
 import java.awt.Container;
+import java.awt.Insets;
 import java.awt.LayoutManager;
-import java.awt.Point;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseEvent;
 import java.util.ArrayList;
@@ -13,7 +13,6 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.IntSupplier;
 import java.util.function.Supplier;
-import java.util.function.ToIntFunction;
 
 import javax.swing.Icon;
 import javax.swing.JButton;
@@ -24,6 +23,7 @@ import javax.swing.JList;
 import javax.swing.JPopupMenu;
 import javax.swing.JTable;
 import javax.swing.ListCellRenderer;
+import javax.swing.text.StyledDocument;
 
 import org.observe.Observable;
 import org.observe.ObservableAction;
@@ -34,15 +34,12 @@ import org.observe.SimpleObservable;
 import org.observe.collect.ObservableCollection;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ModelInstantiationException;
-import org.observe.expresso.qonfig.ExFlexibleElementModelAddOn;
-import org.observe.expresso.qonfig.ExWithElementModel;
 import org.observe.quick.KeyCode;
 import org.observe.quick.QuickEventListener;
 import org.observe.quick.QuickKeyListener;
 import org.observe.quick.QuickMouseListener;
 import org.observe.quick.QuickTextWidget;
 import org.observe.quick.QuickWidget;
-import org.observe.quick.TextMouseListener;
 import org.observe.quick.base.QuickTableColumn;
 import org.observe.quick.base.TabularWidget;
 import org.observe.quick.base.TabularWidget.TabularContext;
@@ -50,19 +47,11 @@ import org.observe.quick.base.ValueAction;
 import org.observe.quick.swing.QuickSwingPopulator.QuickCoreSwing;
 import org.observe.quick.swing.QuickSwingPopulator.QuickSwingTableAction;
 import org.observe.util.TypeTokens;
-import org.observe.util.swing.CategoryRenderStrategy;
+import org.observe.util.swing.*;
 import org.observe.util.swing.CategoryRenderStrategy.CategoryKeyListener;
 import org.observe.util.swing.CategoryRenderStrategy.CategoryMouseListener;
-import org.observe.util.swing.ComponentDecorator;
-import org.observe.util.swing.FontAdjuster;
-import org.observe.util.swing.ModelCell;
-import org.observe.util.swing.MultiRangeSlider;
-import org.observe.util.swing.ObservableCellEditor;
-import org.observe.util.swing.ObservableCellRenderer;
 import org.observe.util.swing.ObservableCellRenderer.AbstractObservableCellRenderer;
 import org.observe.util.swing.ObservableCellRenderer.CellRenderContext;
-import org.observe.util.swing.ObservableTextField;
-import org.observe.util.swing.PanelPopulation;
 import org.observe.util.swing.PanelPopulation.AbstractComponentEditor;
 import org.observe.util.swing.PanelPopulation.Alert;
 import org.observe.util.swing.PanelPopulation.ButtonEditor;
@@ -192,8 +181,6 @@ class QuickSwingTablePopulation {
 		private final QuickKeyListener.KeyCodeContext theKeyCodeContext;
 
 		private JTable theTable;
-		private SettableValue<Integer> theOffset;
-		private ToIntFunction<Point> theOffsetGetter;
 
 		QuickSwingTableColumn(QuickWidget quickParent, QuickTableColumn<R, C> column, TabularWidget.TabularContext<R> ctx,
 			Transformer<ExpressoInterpretationException> tx, Observable<?> until, Supplier<TableBuilder<R, ?>> parent,
@@ -209,7 +196,7 @@ class QuickSwingTablePopulation {
 			// TODO The interpretation/transformation of the renderer and editor should be done elsewhere
 			SwingCellPopulator<R, C> renderPopulator;
 			if (swingRenderer != null) {
-				renderPopulator = new SwingCellPopulator<>(this, true, Observable.or(until, theRenderUntil));
+				renderPopulator = new SwingCellPopulator<>(this, true);
 				renderPopulator.addModifier(ce -> ce.modifyComponent(comp -> {
 					theTable = parent.get().getEditor();
 				}));
@@ -222,7 +209,7 @@ class QuickSwingTablePopulation {
 			}
 			if (theColumn.getEditing() != null) {
 				if (swingEditor != null) {
-					swingEditor.populate(new SwingCellPopulator<>(this, false, Observable.or(until, theRenderUntil)),
+					swingEditor.populate(new SwingCellPopulator<>(this, false),
 						theColumn.getEditing().getEditor());
 				}
 				theEditContext = new QuickTableColumn.ColumnEditContext.Default<>(theColumn.getColumnSet().getRowType(),
@@ -237,41 +224,16 @@ class QuickSwingTablePopulation {
 
 			if (theRenderer != null) {
 				for (QuickEventListener listener : theRenderer.getEventListeners()) {
-					if (listener instanceof QuickMouseListener.QuickMouseButtonListener) {
-						if (listener.getAddOn(TextMouseListener.class) != null) {
-							if (theOffset == null)
-								theOffset = SettableValue.build(int.class).withValue(0).build();
-							listener.getAddOn(ExWithElementModel.class).satisfyElementValue("offset", theOffset,
-								ExFlexibleElementModelAddOn.ActionIfSatisfied.Replace);
-						}
+					if (listener instanceof QuickMouseListener.QuickMouseButtonListener)
 						((QuickMouseListener.QuickMouseButtonListener) listener).setListenerContext(theMouseContext);
-					} else if (listener instanceof QuickMouseListener) {
-						if (listener.getAddOn(TextMouseListener.class) != null) {
-							if (theOffset == null)
-								theOffset = SettableValue.build(int.class).withValue(0).build();
-							listener.getAddOn(ExWithElementModel.class).satisfyElementValue("offset", theOffset,
-								ExFlexibleElementModelAddOn.ActionIfSatisfied.Replace);
-						}
+					else if (listener instanceof QuickMouseListener)
 						((QuickMouseListener) listener).setListenerContext(theMouseContext);
-					} else if (listener instanceof QuickKeyListener.QuickKeyTypedListener)
+					else if (listener instanceof QuickKeyListener.QuickKeyTypedListener)
 						((QuickKeyListener.QuickKeyTypedListener) listener).setListenerContext(theKeyTypeContext);
 					else if (listener instanceof QuickKeyListener.QuickKeyCodeListener)
 						((QuickKeyListener.QuickKeyCodeListener) listener).setListenerContext(theKeyCodeContext);
 					else
 						listener.reporting().error("Unhandled cell renderer listener type: " + listener.getClass().getName());
-				}
-				if (theOffset != null && theRenderer instanceof QuickTextWidget) {
-					QuickTextWidget<C> qtw = (QuickTextWidget<C>) theRenderer;
-					renderPopulator.addModifier(ce -> ce.modifyComponent(comp -> {
-						theOffsetGetter = QuickSwingPopulator.QuickCoreSwing.getTextOffset(comp, () -> {
-							try (Transaction t = QuickCoreSwing.rendering()) {
-								return qtw.getFormat().get().format(qtw.getValue().get());
-							}
-						}, () -> {
-							int columnIdx = column.getColumnSet().getColumns().indexOf(column);
-							return parent.get().getEditor().getColumnModel().getColumn(columnIdx).getWidth();
-						}, parent.get().getComponent().getGraphics());
-					}));
 				}
 			}
 
@@ -531,8 +493,6 @@ class QuickSwingTablePopulation {
 				theMouseContext.getMouseButton().set(eventButton, e);
 				theMouseContext.getX().set(e.getX(), e);
 				theMouseContext.getY().set(e.getY(), e);
-				if (theOffsetGetter != null)
-					theOffset.set(theOffsetGetter.applyAsInt(e.getPoint()), e);
 				String tt = theTooltip == null ? null : theTooltip.get();
 				for (QuickEventListener listener : theRenderer.getEventListeners()) {
 					if (listener instanceof QuickMouseListener.QuickMouseClickListener) {
@@ -564,8 +524,6 @@ class QuickSwingTablePopulation {
 				theMouseContext.getMouseButton().set(eventButton, e);
 				theMouseContext.getX().set(e.getX(), e);
 				theMouseContext.getY().set(e.getY(), e);
-				if (theOffsetGetter != null)
-					theOffset.set(theOffsetGetter.applyAsInt(e.getPoint()), e);
 				String tt = theTooltip == null ? null : theTooltip.get();
 				for (QuickEventListener listener : theRenderer.getEventListeners()) {
 					if (listener instanceof QuickMouseListener.QuickMousePressedListener) {
@@ -595,8 +553,6 @@ class QuickSwingTablePopulation {
 				theMouseContext.getMouseButton().set(eventButton, e);
 				theMouseContext.getX().set(e.getX(), e);
 				theMouseContext.getY().set(e.getY(), e);
-				if (theOffsetGetter != null)
-					theOffset.set(theOffsetGetter.applyAsInt(e.getPoint()), e);
 				String tt = theTooltip == null ? null : theTooltip.get();
 				for (QuickEventListener listener : theRenderer.getEventListeners()) {
 					if (listener instanceof QuickMouseListener.QuickMouseReleasedListener) {
@@ -622,8 +578,6 @@ class QuickSwingTablePopulation {
 				setCellContext(cell, theRenderTableContext);
 				theMouseContext.getX().set(e.getX(), e);
 				theMouseContext.getY().set(e.getY(), e);
-				if (theOffsetGetter != null)
-					theOffset.set(theOffsetGetter.applyAsInt(e.getPoint()), e);
 				String tt = theTooltip == null ? null : theTooltip.get();
 				for (QuickEventListener listener : theRenderer.getEventListeners()) {
 					if (listener instanceof QuickMouseListener.QuickMouseMoveListener) {
@@ -649,8 +603,6 @@ class QuickSwingTablePopulation {
 				setCellContext(cell, theRenderTableContext);
 				theMouseContext.getX().set(e.getX(), e);
 				theMouseContext.getY().set(e.getY(), e);
-				if (theOffsetGetter != null)
-					theOffset.set(theOffsetGetter.applyAsInt(e.getPoint()), e);
 				String tt = theTooltip == null ? null : theTooltip.get();
 				for (QuickEventListener listener : theRenderer.getEventListeners()) {
 					if (listener instanceof QuickMouseListener.QuickMouseMoveListener) {
@@ -676,8 +628,6 @@ class QuickSwingTablePopulation {
 				setCellContext(cell, theRenderTableContext);
 				theMouseContext.getX().set(e.getX(), e);
 				theMouseContext.getY().set(e.getY(), e);
-				if (theOffsetGetter != null)
-					theOffset.set(theOffsetGetter.applyAsInt(e.getPoint()), e);
 				String tt = theTooltip == null ? null : theTooltip.get();
 				for (QuickEventListener listener : theRenderer.getEventListeners()) {
 					if (listener instanceof QuickMouseListener.QuickMouseMoveListener) {
@@ -699,13 +649,11 @@ class QuickSwingTablePopulation {
 	static class SwingCellPopulator<R, C> implements PanelPopulation.PartialPanelPopulatorImpl<Container, SwingCellPopulator<R, C>> {
 		private final QuickSwingTableColumn<R, C> theCell;
 		private final boolean isRenderer;
-		private final Observable<?> theUntil;
 		private final List<Consumer<ComponentEditor<?, ?>>> theModifiers;
 
-		public SwingCellPopulator(QuickSwingTableColumn<R, C> cell, boolean renderer, Observable<?> until) {
+		public SwingCellPopulator(QuickSwingTableColumn<R, C> cell, boolean renderer) {
 			theCell = cell;
 			isRenderer = renderer;
-			theUntil = until;
 			theModifiers = new ArrayList<>();
 		}
 
@@ -722,6 +670,16 @@ class QuickSwingTablePopulation {
 		@Override
 		public Container getContainer() {
 			throw new IllegalStateException("Container retrieval unsupported for cell " + (isRenderer ? "renderer" : "editor") + " holder");
+		}
+
+		@Override
+		public Component decorate(Component c) {
+			return c;
+		}
+
+		@Override
+		public boolean isSyntheticRenderer() {
+			return true;
 		}
 
 		@Override
@@ -821,12 +779,11 @@ class QuickSwingTablePopulation {
 
 		@Override
 		public Observable<?> getUntil() {
-			return theUntil;
+			return Observable.constant(null);
 		}
 
 		@Override
 		public <C2 extends ComponentEditor<?, ?>> C2 modify(C2 component) {
-			unsupported("General component modifier");
 			return component;
 		}
 
@@ -842,16 +799,35 @@ class QuickSwingTablePopulation {
 		public <F> SwingCellPopulator<R, C> addLabel(String fieldName, ObservableValue<F> field, Function<? super F, String> format,
 			Consumer<FieldEditor<JLabel, ?>> modify) {
 			if (isRenderer) {
-				ObservableCellRenderer<R, C> delegate = ObservableCellRenderer.formatted((r, c) -> {
-					theCell.getContext().getRenderValue().set(r, null);
-					F fieldValue = field.get();
-					return format.apply(fieldValue);
-				});
 				FieldRenderEditor<JLabel> editor = new FieldRenderEditor<>(theCell);
 				if (modify != null)
 					modify.accept(editor);
 				for (Consumer<ComponentEditor<?, ?>> modifier : theModifiers)
 					modifier.accept(editor);
+				JLabel[] label = new JLabel[1];
+				PanelPopulation.PartialPanelPopulatorImpl.super.addLabel(fieldName, field, format, tf -> {
+					if (modify != null)
+						modify.accept(tf);
+					for (Consumer<ComponentEditor<?, ?>> modifier : theModifiers)
+						modifier.accept(tf);
+					label[0] = tf.getEditor();
+				});
+
+				ObservableCellRenderer<R, C> delegate = new AbstractObservableCellRenderer<R, C>() {
+					@Override
+					public String renderAsText(ModelCell<? extends R, ? extends C> cell) {
+						theCell.getContext().getRenderValue().set(cell.getModelValue(), null);
+						return format.apply(field.get());
+					}
+
+					@Override
+					protected Component renderCell(Component parent, ModelCell<? extends R, ? extends C> cell, CellRenderContext ctx) {
+						theCell.getContext().getRenderValue().set(cell.getModelValue(), null);
+						label[0].setText(format.apply(field.get()));
+						editor.decorate(label[0]);
+						return label[0];
+					}
+				};
 				theCell.delegateTo(delegate);
 			} else
 				unsupported("Label");
@@ -969,6 +945,50 @@ class QuickSwingTablePopulation {
 		}
 
 		@Override
+		public <F> SwingCellPopulator<R, C> addStyledTextArea(String fieldName, ObservableStyledDocument<F> doc,
+			Consumer<FieldEditor<ObservableTextArea<F>, ?>> modify) {
+			if (isRenderer) {
+				FieldRenderEditor<ObservableTextArea<F>> editor = new FieldRenderEditor<>(theCell);
+				if (modify != null)
+					modify.accept(editor);
+				for (Consumer<ComponentEditor<?, ?>> modifier : theModifiers)
+					modifier.accept(editor);
+				ObservableTextArea<F>[] textArea = new ObservableTextArea[1];
+				SimpleObservable<Void> renderUntil = new SimpleObservable<>();
+				PanelPopulation.PartialPanelPopulatorImpl.super.addStyledTextArea(fieldName, doc, tf -> {
+					if (modify != null)
+						modify.accept(tf);
+					for (Consumer<ComponentEditor<?, ?>> modifier : theModifiers)
+						modifier.accept(tf);
+					textArea[0] = tf.getEditor();
+				});
+				textArea[0].setMargin(new Insets(0, 0, 0, 0));
+
+				ObservableCellRenderer<R, C> delegate = new AbstractObservableCellRenderer<R, C>() {
+					@Override
+					public String renderAsText(ModelCell<? extends R, ? extends C> cell) {
+						theCell.getContext().getRenderValue().set(cell.getModelValue(), null);
+						return doc.toString();
+					}
+
+					@Override
+					protected Component renderCell(Component parent, ModelCell<? extends R, ? extends C> cell, CellRenderContext ctx) {
+						theCell.getContext().getRenderValue().set(cell.getModelValue(), null);
+						editor.decorate(textArea[0]);
+						doc.refresh(null);
+						ObservableStyledDocument.synchronize(doc, ((StyledDocument) textArea[0].getDocument()), renderUntil);
+						textArea[0].setDocument(textArea[0].getDocument());
+						renderUntil.onNext(null);
+						return textArea[0];
+					}
+				};
+				theCell.delegateTo(delegate);
+			} else
+				unsupported("Text Area");
+			return this;
+		}
+
+		@Override
 		public SwingCellPopulator<R, C> addSlider(String fieldName, SettableValue<Double> value,
 			Consumer<SliderEditor<MultiRangeSlider, ?>> modify) {
 			if (isRenderer)
@@ -1009,7 +1029,7 @@ class QuickSwingTablePopulation {
 				theCellEditor = null;
 			}
 
-			public AbstractFieldRenderEditor(ObservableCellEditor<R, C> cellEditor) {
+			protected AbstractFieldRenderEditor(ObservableCellEditor<R, C> cellEditor) {
 				theCellRenderer = null;
 				theCellEditor = cellEditor;
 			}
@@ -1029,6 +1049,11 @@ class QuickSwingTablePopulation {
 			}
 
 			@Override
+			public Component decorate(Component c) {
+				return c;
+			}
+
+			@Override
 			public E withTooltip(ObservableValue<String> tooltip) {
 				theCell.setTooltip(tooltip);
 				return (E) this;
@@ -1036,7 +1061,7 @@ class QuickSwingTablePopulation {
 
 			@Override
 			public Observable<?> getUntil() {
-				return theUntil;
+				return SwingCellPopulator.this.getUntil();
 			}
 
 			@Override

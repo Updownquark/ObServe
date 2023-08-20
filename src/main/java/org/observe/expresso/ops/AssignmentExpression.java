@@ -17,6 +17,7 @@ import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.TypeConversionException;
 import org.observe.util.TypeTokens;
 import org.qommons.QommonsUtils;
@@ -94,11 +95,16 @@ public class AssignmentExpression implements ObservableExpression {
 		if (type.getModelType() != ModelTypes.Action)
 			throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(),
 				"Assignments cannot be used as " + type.getModelType() + "s");
-		EvaluatedExpression<SettableValue<?>, SettableValue<Object>> target;
+		return (EvaluatedExpression<M, MV>) this
+			.<Object, Object> _evaluate((ModelInstanceType<ObservableAction<?>, ObservableAction<Object>>) type, env, expressionOffset);
+	}
+
+	private <S, T extends S> EvaluatedExpression<ObservableAction<?>, ObservableAction<T>> _evaluate(
+		ModelInstanceType<ObservableAction<?>, ObservableAction<T>> type, InterpretedExpressoEnv env, int expressionOffset)
+			throws ExpressoEvaluationException, ExpressoInterpretationException {
+		EvaluatedExpression<SettableValue<?>, SettableValue<S>> target;
 		try {
-			target = theTarget.evaluate(
-				(ModelInstanceType<SettableValue<?>, SettableValue<Object>>) (ModelInstanceType<?, ?>) ModelTypes.Value.any(), env,
-				expressionOffset);
+			target = theTarget.evaluate(ModelTypes.Value.anyAs(), env, expressionOffset);
 		} catch (TypeConversionException e) {
 			throw new ExpressoEvaluationException(expressionOffset, theTarget.getExpressionLength(), e.getMessage(), e);
 		}
@@ -106,55 +112,39 @@ public class AssignmentExpression implements ObservableExpression {
 		if (!isVoid && !TypeTokens.get().isAssignable(type.getType(0), target.getType().getType(0)))
 			throw new ExpressoEvaluationException(expressionOffset, theTarget.getExpressionLength(),
 				"Cannot assign " + target + ", type " + type.getType(0) + " to " + target.getType().getType(0));
-		EvaluatedExpression<SettableValue<?>, SettableValue<Object>> value;
+		EvaluatedExpression<SettableValue<?>, SettableValue<T>> value;
 		int valueOffset = expressionOffset + theTarget.getExpressionLength() + 1;
 		try (Transaction t = Invocation.asAction()) {
 			value = theValue.evaluate(
-				ModelTypes.Value.forType((TypeToken<Object>) TypeTokens.get().getExtendsWildcard(target.getType().getType(0))),
+				ModelTypes.Value.forType((TypeToken<T>) TypeTokens.get().getExtendsWildcard(target.getType().getType(0))),
 				env.at(theTarget.getExpressionLength() + 1), valueOffset);
 		} catch (TypeConversionException e) {
 			throw new ExpressoEvaluationException(valueOffset, theValue.getExpressionLength(), e.getMessage(), e);
 		}
 		ErrorReporting reporting = env.reporting();
 		return ObservableExpression.evEx(expressionOffset, getExpressionLength(),
-			(InterpretedValueSynth<M, MV>) new InterpretedValueSynth<ObservableAction<?>, ObservableAction<?>>() {
+			new InterpretedValueSynth<ObservableAction<?>, ObservableAction<T>>() {
 			@Override
 			public ModelType<ObservableAction<?>> getModelType() {
 				return ModelTypes.Action;
 			}
 
 			@Override
-			public ModelInstanceType<ObservableAction<?>, ObservableAction<?>> getType() {
+			public ModelInstanceType<ObservableAction<?>, ObservableAction<T>> getType() {
 				if (isVoid)
-					return (ModelInstanceType<ObservableAction<?>, ObservableAction<?>>) type;
+					return type;
 				else
-					return (ModelInstanceType<ObservableAction<?>, ObservableAction<?>>) (ModelInstanceType<?, ?>) ModelTypes.Action
-						.forType(target.getType().getType(0));
-			}
-
-			@Override
-			public ObservableAction<?> get(ModelSetInstance models) throws ModelInstantiationException {
-				SettableValue<Object> ctxValue = target.get(models);
-				SettableValue<Object> valueValue = value.get(models);
-				return ctxValue.assignmentTo(valueValue, err -> reporting.error(null, err));
-			}
-
-			@Override
-			public ObservableAction<?> forModelCopy(ObservableAction<?> value2, ModelSetInstance sourceModels,
-				ModelSetInstance newModels) throws ModelInstantiationException {
-				SettableValue<Object> sourceCtx = target.get(sourceModels);
-				SettableValue<Object> newCtx = target.get(newModels);
-				SettableValue<Object> sourceValue = value.get(sourceModels);
-				SettableValue<Object> newValue = value.get(newModels);
-				if (sourceCtx == newCtx && sourceValue == newValue)
-					return value2;
-				else
-					return newCtx.assignmentTo(newValue);
+					return ModelTypes.Action.forType((TypeToken<T>) value.getType().getType(0));
 			}
 
 			@Override
 			public List<? extends InterpretedValueSynth<?, ?>> getComponents() {
 				return QommonsUtils.unmodifiableCopy(target, value);
+			}
+
+			@Override
+			public ModelValueInstantiator<ObservableAction<T>> instantiate() {
+				return new Instantiator<>(target.instantiate(), value.instantiate(), reporting);
 			}
 
 			@Override
@@ -178,5 +168,38 @@ public class AssignmentExpression implements ObservableExpression {
 	@Override
 	public String toString() {
 		return theTarget + "=" + theValue;
+	}
+
+	static class Instantiator<S, T extends S> implements ModelValueInstantiator<ObservableAction<T>> {
+		private final ModelValueInstantiator<SettableValue<S>> theTarget;
+		private final ModelValueInstantiator<SettableValue<T>> theSource;
+		private final ErrorReporting theReporting;
+
+		Instantiator(ModelValueInstantiator<SettableValue<S>> target, ModelValueInstantiator<SettableValue<T>> source,
+			ErrorReporting reporting) {
+			theTarget = target;
+			theSource = source;
+			theReporting = reporting;
+		}
+
+		@Override
+		public ObservableAction<T> get(ModelSetInstance models) throws ModelInstantiationException {
+			SettableValue<S> ctxValue = theTarget.get(models);
+			SettableValue<T> valueValue = theSource.get(models);
+			return ctxValue.assignmentTo(valueValue, err -> theReporting.error(null, err));
+		}
+
+		@Override
+		public ObservableAction<T> forModelCopy(ObservableAction<T> value2, ModelSetInstance sourceModels, ModelSetInstance newModels)
+			throws ModelInstantiationException {
+			SettableValue<S> oldTarget = theTarget.get(sourceModels);
+			SettableValue<S> newTarget = theTarget.forModelCopy(oldTarget, sourceModels, newModels);
+			SettableValue<T> oldSource = theSource.get(sourceModels);
+			SettableValue<T> newSource = theSource.get(newModels);
+			if (oldTarget == newTarget && oldSource == newSource)
+				return value2;
+			else
+				return newTarget.assignmentTo(newSource);
+		}
 	}
 }

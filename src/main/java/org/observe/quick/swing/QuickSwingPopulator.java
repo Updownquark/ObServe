@@ -43,8 +43,6 @@ import org.observe.collect.ObservableCollection;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.qonfig.ExAddOn;
-import org.observe.expresso.qonfig.ExFlexibleElementModelAddOn;
-import org.observe.expresso.qonfig.ExWithElementModel;
 import org.observe.quick.*;
 import org.observe.quick.QuickTextElement.QuickTextStyle;
 import org.observe.quick.base.*;
@@ -446,7 +444,6 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 				};
 			});
 			tx.with(QuickMouseListener.QuickMouseButtonListener.Interpreted.class, QuickSwingEventListener.class, (qil, tx2) -> {
-				boolean textListener = qil.getAddOn(TextMouseListener.Interpreted.class) != null;
 				return (component, ql) -> {
 					SettableValue<Boolean> altPressed = SettableValue.build(boolean.class).withValue(false).build();
 					SettableValue<Boolean> ctrlPressed = SettableValue.build(boolean.class).withValue(false).build();
@@ -455,14 +452,6 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 						.build();
 					SettableValue<Integer> x = SettableValue.build(int.class).withValue(0).build();
 					SettableValue<Integer> y = SettableValue.build(int.class).withValue(0).build();
-
-					SettableValue<Integer> offset;
-					if (textListener && (component instanceof JTextComponent || component instanceof JLabel)) {
-						offset = SettableValue.build(int.class).withValue(0).build();
-						ql.getAddOn(ExWithElementModel.class).satisfyElementValue("offset", offset,
-							ExFlexibleElementModelAddOn.ActionIfSatisfied.Replace);
-					} else
-						offset = null;
 
 					QuickMouseListener.QuickMouseButtonListener mbl = (QuickMouseListener.QuickMouseButtonListener) ql;
 					QuickMouseListener.MouseButton listenerButton = mbl.getButton();
@@ -484,8 +473,6 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 								shiftPressed.set(evt.isShiftDown(), evt);
 								x.set(evt.getX(), evt);
 								y.set(evt.getY(), evt);
-								if (offset != null)
-									offset.set(((JTextComponent) component).viewToModel(evt.getLocationOnScreen()), evt);
 								if (!ql.testFilter())
 									return;
 								ql.getAction().act(evt);
@@ -504,8 +491,6 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 								shiftPressed.set(evt.isShiftDown(), evt);
 								x.set(evt.getX(), evt);
 								y.set(evt.getY(), evt);
-								if (offset != null)
-									offset.set(((JTextComponent) component).viewToModel(evt.getLocationOnScreen()), evt);
 								if (!ql.testFilter())
 									return;
 								ql.getAction().act(evt);
@@ -524,14 +509,6 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 								shiftPressed.set(evt.isShiftDown(), evt);
 								x.set(evt.getX(), evt);
 								y.set(evt.getY(), evt);
-								if (offset != null) {
-									int o;
-									if (component instanceof JTextComponent)
-										o = ((JTextComponent) component).viewToModel(evt.getPoint());
-									else
-										o = ((JLabel) component).getAccessibleContext().getAccessibleText().getIndexAtPoint(evt.getPoint());
-									offset.set(o, evt);
-								}
 								if (!ql.testFilter())
 									return;
 								ql.getAction().act(evt);
@@ -543,28 +520,12 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 				};
 			});
 			tx.with(QuickMouseListener.QuickMouseMoveListener.Interpreted.class, QuickSwingEventListener.class, (qil, tx2) -> {
-				boolean textListener = qil.getAddOn(TextMouseListener.Interpreted.class) != null;
 				return (component, ql) -> {
 					SettableValue<Boolean> altPressed = SettableValue.build(boolean.class).withValue(false).build();
 					SettableValue<Boolean> ctrlPressed = SettableValue.build(boolean.class).withValue(false).build();
 					SettableValue<Boolean> shiftPressed = SettableValue.build(boolean.class).withValue(false).build();
 					SettableValue<Integer> x = SettableValue.build(int.class).withValue(0).build();
 					SettableValue<Integer> y = SettableValue.build(int.class).withValue(0).build();
-
-					SettableValue<Integer> offset;
-					ToIntFunction<Point> offsetGetter;
-					if (textListener) {
-						offsetGetter = getTextOffset(component);
-						if (offsetGetter != null) {
-							offset = SettableValue.build(int.class).withValue(0).build();
-							ql.getAddOn(ExWithElementModel.class).satisfyElementValue("offset", offset,
-								ExFlexibleElementModelAddOn.ActionIfSatisfied.Replace);
-						} else
-							offset = null;
-					} else {
-						offsetGetter = null;
-						offset = null;
-					}
 
 					QuickMouseListener.QuickMouseMoveListener mml = (QuickMouseListener.QuickMouseMoveListener) ql;
 					mml.setListenerContext(
@@ -579,10 +540,6 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 								shiftPressed.set(evt.isShiftDown(), evt);
 								x.set(evt.getX(), evt);
 								y.set(evt.getY(), evt);
-								if (offset != null) {
-									int o = offsetGetter.applyAsInt(evt.getPoint());
-									offset.set(o, evt);
-								}
 								if (!ql.testFilter())
 									return;
 								ql.getAction().act(evt);
@@ -598,10 +555,6 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 								shiftPressed.set(evt.isShiftDown(), evt);
 								x.set(evt.getX(), evt);
 								y.set(evt.getY(), evt);
-								if (offset != null) {
-									int o = offsetGetter.applyAsInt(evt.getPoint());
-									offset.set(o, evt);
-								}
 								if (!ql.testFilter())
 									return;
 								ql.getAction().act(evt);
@@ -617,10 +570,6 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 								shiftPressed.set(evt.isShiftDown(), evt);
 								x.set(evt.getX(), evt);
 								y.set(evt.getY(), evt);
-								if (offset != null) {
-									int o = offsetGetter.applyAsInt(evt.getPoint());
-									offset.set(o, evt);
-								}
 								if (!ql.testFilter())
 									return;
 								ql.getAction().act(evt);
@@ -634,7 +583,6 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 				};
 			});
 			tx.with(QuickMouseListener.QuickScrollListener.Interpreted.class, QuickSwingEventListener.class, (qil, tx2) -> {
-				boolean textListener = qil.getAddOn(TextMouseListener.Interpreted.class) != null;
 				return (component, ql) -> {
 					SettableValue<Boolean> altPressed = SettableValue.build(boolean.class).withValue(false).build();
 					SettableValue<Boolean> ctrlPressed = SettableValue.build(boolean.class).withValue(false).build();
@@ -642,14 +590,6 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 					SettableValue<Integer> x = SettableValue.build(int.class).withValue(0).build();
 					SettableValue<Integer> y = SettableValue.build(int.class).withValue(0).build();
 					SettableValue<Integer> scrollAmount = SettableValue.build(int.class).withValue(0).build();
-
-					SettableValue<Integer> offset;
-					if (textListener && component instanceof JTextComponent) {
-						offset = SettableValue.build(int.class).withValue(0).build();
-						ql.getAddOn(ExWithElementModel.class).satisfyElementValue("offset", offset,
-							ExFlexibleElementModelAddOn.ActionIfSatisfied.Replace);
-					} else
-						offset = null;
 
 					QuickMouseListener.QuickScrollListener sl = (QuickMouseListener.QuickScrollListener) ql;
 					sl.setListenerContext(
@@ -662,8 +602,6 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 							shiftPressed.set(evt.isShiftDown(), evt);
 							x.set(evt.getX(), evt);
 							y.set(evt.getY(), evt);
-							if (offset != null)
-								offset.set(((JTextComponent) component).viewToModel(evt.getLocationOnScreen()), evt);
 							scrollAmount.set(evt.getUnitsToScroll(), evt);
 							if (!ql.testFilter())
 								return;
@@ -1732,7 +1670,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 		}
 
 		static <T> QuickSwingPopulator<QuickLabel<T>> interpretLabel(QuickLabel.Interpreted<T, ?> interpreted,
-			Transformer<ExpressoInterpretationException> tx) {
+			Transformer<ExpressoInterpretationException> tx) throws ExpressoInterpretationException {
 			return QuickSwingPopulator.<QuickLabel<T>, QuickLabel.Interpreted<T, QuickLabel<T>>> createWidget((panel, quick) -> {
 				Format<T> format = quick.getFormat().get();
 				panel.addLabel(null, quick.getValue(), format, null);
@@ -1740,7 +1678,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 		}
 
 		static <T> QuickSwingPopulator<QuickTextField<T>> interpretTextField(QuickTextField.Interpreted<T> interpreted,
-			Transformer<ExpressoInterpretationException> tx) {
+			Transformer<ExpressoInterpretationException> tx) throws ExpressoInterpretationException {
 			return createWidget((panel, quick) -> {
 				Format<T> format = quick.getFormat().get();
 				boolean commitOnType = quick.isCommitOnType();
@@ -1763,49 +1701,6 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 						.act(evt -> tf2.setEditable(!Boolean.FALSE.equals(evt.getNewValue())));
 					});
 				});
-			});
-		}
-
-		static QuickSwingPopulator<QuickCheckBox> interpretCheckBox(QuickCheckBox.Interpreted interpreted,
-			Transformer<ExpressoInterpretationException> tx) {
-			return createWidget((panel, quick) -> {
-				panel.addCheckField(null, quick.getValue(), null);
-			});
-		}
-
-		static QuickSwingContainerPopulator<QuickFieldPanel> interpretFieldPanel(QuickFieldPanel.Interpreted interpreted,
-			Transformer<ExpressoInterpretationException> tx) throws ExpressoInterpretationException {
-			BetterList<QuickSwingPopulator<QuickWidget>> contents = BetterList.<QuickWidget.Interpreted<?>, QuickSwingPopulator<QuickWidget>, ExpressoInterpretationException> of2(
-				interpreted.getContents().stream(), content -> tx.transform(content, QuickSwingPopulator.class));
-			return createContainer((panel, quick) -> {
-				panel.addVPanel(p -> {
-					int c = 0;
-					for (QuickWidget content : quick.getContents()) {
-						try {
-							contents.get(c).populate(p, content);
-						} catch (ModelInstantiationException e) {
-							content.reporting().error(e.getMessage(), e);
-						}
-						c++;
-					}
-				});
-			});
-		}
-
-		static QuickSwingPopulator<QuickButton> interpretButton(QuickButton.Interpreted<QuickButton> interpreted,
-			Transformer<ExpressoInterpretationException> tx) {
-			return createWidget((panel, quick) -> {
-				panel.addButton(null, quick.getAction(), btn -> {
-					if (quick.getText() != null)
-						btn.withText(quick.getText());
-				});
-			});
-		}
-
-		static <T> QuickSwingPopulator<QuickComboBox<T>> interpretComboBox(QuickComboBox.Interpreted<T> interpreted,
-			Transformer<ExpressoInterpretationException> tx) {
-			return createWidget((panel, quick) -> {
-				panel.addComboField(null, quick.getValue(), quick.getValues(), null);
 			});
 		}
 
@@ -1900,10 +1795,12 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 								doc.reporting().error(e.getMessage(), e);
 								return;
 							}
-							QuickCoreSwing.adjustFont(style, textStyle);
-							Color bg = textStyle.getBackground().get();
-							if (bg != null)
-								style.withBackground(bg);
+							if (textStyle != null) {
+								QuickCoreSwing.adjustFont(style, textStyle);
+								Color bg = textStyle.getBackground().get();
+								if (bg != null)
+									style.withBackground(bg);
+							}
 						}
 					};
 					if (doc.hasPostText()) {
@@ -2024,6 +1921,49 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 
 		static <T> DynamicStyledDocument.StyledTextAreaContext<T> staCtx(TypeToken<T> type, T value) {
 			return new DynamicStyledDocument.StyledTextAreaContext.Default<>(SettableValue.of(type, value, "Unmodifiable"));
+		}
+
+		static QuickSwingPopulator<QuickCheckBox> interpretCheckBox(QuickCheckBox.Interpreted interpreted,
+			Transformer<ExpressoInterpretationException> tx) {
+			return createWidget((panel, quick) -> {
+				panel.addCheckField(null, quick.getValue(), null);
+			});
+		}
+
+		static QuickSwingContainerPopulator<QuickFieldPanel> interpretFieldPanel(QuickFieldPanel.Interpreted interpreted,
+			Transformer<ExpressoInterpretationException> tx) throws ExpressoInterpretationException {
+			BetterList<QuickSwingPopulator<QuickWidget>> contents = BetterList.<QuickWidget.Interpreted<?>, QuickSwingPopulator<QuickWidget>, ExpressoInterpretationException> of2(
+				interpreted.getContents().stream(), content -> tx.transform(content, QuickSwingPopulator.class));
+			return createContainer((panel, quick) -> {
+				panel.addVPanel(p -> {
+					int c = 0;
+					for (QuickWidget content : quick.getContents()) {
+						try {
+							contents.get(c).populate(p, content);
+						} catch (ModelInstantiationException e) {
+							content.reporting().error(e.getMessage(), e);
+						}
+						c++;
+					}
+				});
+			});
+		}
+
+		static QuickSwingPopulator<QuickButton> interpretButton(QuickButton.Interpreted<QuickButton> interpreted,
+			Transformer<ExpressoInterpretationException> tx) {
+			return createWidget((panel, quick) -> {
+				panel.addButton(null, quick.getAction(), btn -> {
+					if (quick.getText() != null)
+						btn.withText(quick.getText());
+				});
+			});
+		}
+
+		static <T> QuickSwingPopulator<QuickComboBox<T>> interpretComboBox(QuickComboBox.Interpreted<T> interpreted,
+			Transformer<ExpressoInterpretationException> tx) {
+			return createWidget((panel, quick) -> {
+				panel.addComboField(null, quick.getValue(), quick.getValues(), null);
+			});
 		}
 
 		static <R> QuickSwingPopulator<QuickTable<R>> interpretTable(QuickTable.Interpreted<R> interpreted,
@@ -2302,6 +2242,11 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 
 		@Override
 		public abstract AbstractQuickContainerPopulator addVPanel(Consumer<PanelPopulator<JPanel, ?>> panel);
+
+		@Override
+		public Component decorate(Component c) {
+			return c;
+		}
 
 		@Override
 		public <R> AbstractQuickContainerPopulator addTable(ObservableCollection<R> rows, Consumer<TableBuilder<R, ?>> table) {

@@ -9,7 +9,6 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.regex.Pattern;
@@ -26,6 +25,7 @@ import org.qommons.Named;
 import org.qommons.QommonsUtils;
 import org.qommons.StringUtils;
 import org.qommons.collect.BetterList;
+import org.qommons.ex.ExBiFunction;
 import org.qommons.ex.ExConsumer;
 import org.qommons.ex.ExFunction;
 import org.qommons.io.LocatedFilePosition;
@@ -189,24 +189,7 @@ public interface ObservableModelSet extends Identifiable {
 			return BetterList.of(components.stream(), v -> v.getCores().stream());
 		}
 
-		/**
-		 * @param models The model instance set to get the model value for this container from
-		 * @return The model value for this container in the given model instance set
-		 * @throws ModelInstantiationException If this value could not be instantiated
-		 * @throws IllegalStateException If this value is a part of a dependency cycle, depending on values that depend upon it
-		 */
-		MV get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException;
-
-		/**
-		 * @param value The value to copy
-		 * @param sourceModels The model instance that the value is from
-		 * @param newModels The new model to copy the value into
-		 * @return A copy of the given value for the new model instance. Often this will be exactly the source <code>value</code>, but if
-		 *         the value is a composite of values that have been replaced in the target models, the return value will be a re-built
-		 *         composite using the copied components.
-		 * @throws ModelInstantiationException If the value could not be copied
-		 */
-		MV forModelCopy(MV value, ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException;
+		ModelValueInstantiator<MV> instantiate();
 
 		/**
 		 * Converts this value interpretation to another type
@@ -231,20 +214,13 @@ public interface ObservableModelSet extends Identifiable {
 		 * @return A ModelValueSynth that returns this container's value, transformed to the given type
 		 */
 		default <M2, MV2 extends M2> InterpretedValueSynth<M2, MV2> map(ModelInstanceType<M2, MV2> type,
-			Function<? super MV, ? extends MV2> map) {
-			return map(type, LambdaUtils.printableBiFn((mv, msi) -> map.apply(mv), map::toString, map));
+			Function<ModelValueInstantiator<MV>, ModelValueInstantiator<MV2>> map) {
+			return new MappedIVC<>(this, type, map);
 		}
 
-		/**
-		 * @param <M2> The model type for the mapped value
-		 * @param <MV2> The type for the mapped value
-		 * @param type The type for the mapped value
-		 * @param map The function to take a value of this container's type and transform it to the target type
-		 * @return A ModelValueSynth that returns this container's value, transformed to the given type
-		 */
-		default <M2, MV2 extends M2> InterpretedValueSynth<M2, MV2> map(ModelInstanceType<M2, MV2> type,
-			BiFunction<? super MV, ModelSetInstance, ? extends MV2> map) {
-			return new MappedIVC<>(this, type, map);
+		default <M2, MV2 extends M2> InterpretedValueSynth<M2, MV2> mapValue(ModelInstanceType<M2, MV2> type,
+			ExFunction<? super MV, ? extends MV2, ModelInstantiationException> map) {
+			return new MappedIVC<>(this, type, LambdaUtils.printableFn(inst -> inst.map(map), map::toString, map));
 		}
 
 		/**
@@ -258,10 +234,10 @@ public interface ObservableModelSet extends Identifiable {
 		class MappedIVC<M, MV extends M, M2, MV2 extends M2> implements InterpretedValueSynth<M2, MV2> {
 			private final InterpretedValueSynth<M, MV> theSource;
 			private final ModelInstanceType<M2, MV2> theType;
-			private final BiFunction<? super MV, ModelSetInstance, ? extends MV2> theMap;
+			private final Function<ModelValueInstantiator<MV>, ModelValueInstantiator<MV2>> theMap;
 
 			public MappedIVC(InterpretedValueSynth<M, MV> source, ModelInstanceType<M2, MV2> type,
-				BiFunction<? super MV, ModelSetInstance, ? extends MV2> map) {
+				Function<ModelValueInstantiator<MV>, ModelValueInstantiator<MV2>> map) {
 				theSource = source;
 				theType = type;
 				theMap = map;
@@ -283,18 +259,8 @@ public interface ObservableModelSet extends Identifiable {
 			}
 
 			@Override
-			public MV2 get(ModelSetInstance models) throws ModelInstantiationException {
-				return theMap.apply(theSource.get(models), models);
-			}
-
-			@Override
-			public MV2 forModelCopy(MV2 value, ModelSetInstance sourceModels, ModelSetInstance newModels)
-				throws ModelInstantiationException {
-				MV sourceValue = theSource.get(sourceModels);
-				MV sourceCopy = theSource.forModelCopy(sourceValue, sourceModels, newModels);
-				if (sourceCopy == sourceValue)
-					return value;
-				return theMap.apply(sourceCopy, newModels);
+			public ModelValueInstantiator<MV2> instantiate() {
+				return theMap.apply(theSource.instantiate());
 			}
 
 			@Override
@@ -304,7 +270,7 @@ public interface ObservableModelSet extends Identifiable {
 
 			@Override
 			public String toString() {
-				return theMap + "(" + getType() + ")";
+				return theSource + "." + theMap + "(" + getType() + ")";
 			}
 		}
 
@@ -331,18 +297,13 @@ public interface ObservableModelSet extends Identifiable {
 				}
 
 				@Override
-				public SettableValue<T> get(ObservableModelSet.ModelSetInstance extModels) {
-					return theValue;
-				}
-
-				@Override
-				public SettableValue<T> forModelCopy(SettableValue<T> value2, ModelSetInstance sourceModels, ModelSetInstance newModels) {
-					return theValue;
-				}
-
-				@Override
 				public List<? extends InterpretedValueSynth<?, ?>> getComponents() {
 					return Collections.emptyList();
+				}
+
+				@Override
+				public ModelValueInstantiator<SettableValue<T>> instantiate() {
+					return ModelValueInstantiator.literal(theValue, text);
 				}
 
 				@Override
@@ -360,44 +321,7 @@ public interface ObservableModelSet extends Identifiable {
 		 * @return A ModelValueSynth that always produces a constant value for the given value
 		 */
 		static <T> InterpretedValueSynth<SettableValue<?>, SettableValue<T>> literal(TypeToken<T> type, T value, String text) {
-			return new InterpretedValueSynth<SettableValue<?>, SettableValue<T>>() {
-				private final SettableValue<T> theValue = ObservableModelSet.literal(type, value, text);
-
-				@Override
-				public ModelType<SettableValue<?>> getModelType() {
-					return ModelTypes.Value;
-				}
-
-				@Override
-				public ModelInstanceType<SettableValue<?>, SettableValue<T>> getType() {
-					return ModelTypes.Value.forType(theValue.getType());
-				}
-
-				@Override
-				public BetterList<InterpretedValueSynth<?, ?>> getCores() {
-					return BetterList.of(this);
-				}
-
-				@Override
-				public SettableValue<T> get(ObservableModelSet.ModelSetInstance models) {
-					return theValue;
-				}
-
-				@Override
-				public SettableValue<T> forModelCopy(SettableValue<T> value2, ModelSetInstance sourceModels, ModelSetInstance newModels) {
-					return theValue;
-				}
-
-				@Override
-				public List<? extends InterpretedValueSynth<?, ?>> getComponents() {
-					return Collections.emptyList();
-				}
-
-				@Override
-				public String toString() {
-					return text;
-				}
-			};
+			return literal(ModelTypes.Value.forType(type), value, text);
 		}
 
 		/**
@@ -409,7 +333,7 @@ public interface ObservableModelSet extends Identifiable {
 		 * @return A value container with the given type, implemented by the given function
 		 */
 		static <M, MV extends M> InterpretedValueSynth<M, MV> of(ModelInstanceType<M, MV> type,
-			ExFunction<ModelSetInstance, MV, ModelInstantiationException> value, InterpretedValueSynth<?, ?>... components) {
+			Supplier<ModelValueInstantiator<MV>> value, InterpretedValueSynth<?, ?>... components) {
 			class SimpleVC implements InterpretedValueSynth<M, MV> {
 				@Override
 				public ModelType<M> getModelType() {
@@ -422,19 +346,91 @@ public interface ObservableModelSet extends Identifiable {
 				}
 
 				@Override
-				public MV get(ModelSetInstance models) throws ModelInstantiationException {
-					return value.apply(models);
+				public List<? extends InterpretedValueSynth<?, ?>> getComponents() {
+					return QommonsUtils.unmodifiableCopy(components);
 				}
 
 				@Override
-				public MV forModelCopy(MV value2, ModelSetInstance sourceModels, ModelSetInstance newModels)
-					throws ModelInstantiationException {
-					return value.apply(newModels);
+				public ModelValueInstantiator<MV> instantiate() {
+					return value.get();
+				}
+
+				@Override
+				public String toString() {
+					return type.toString();
+				}
+			}
+			return new SimpleVC();
+		}
+
+		/**
+		 * @param <M> The model type for the value
+		 * @param <MV> The type for the value
+		 * @param type The type for the value
+		 * @param value Produces the value from a model instance set
+		 * @param components The components of the model value
+		 * @return A value container with the given type, implemented by the given function
+		 */
+		static <M, MV extends M> InterpretedValueSynth<M, MV> simple(ModelInstanceType<M, MV> type, ModelValueInstantiator<MV> value,
+			InterpretedValueSynth<?, ?>... components) {
+			class SimpleVC implements InterpretedValueSynth<M, MV> {
+				@Override
+				public ModelType<M> getModelType() {
+					return type.getModelType();
+				}
+
+				@Override
+				public ModelInstanceType<M, MV> getType() {
+					return type;
 				}
 
 				@Override
 				public List<? extends InterpretedValueSynth<?, ?>> getComponents() {
 					return QommonsUtils.unmodifiableCopy(components);
+				}
+
+				@Override
+				public ModelValueInstantiator<MV> instantiate() {
+					return value;
+				}
+
+				@Override
+				public String toString() {
+					return type.toString();
+				}
+			}
+			return new SimpleVC();
+		}
+
+		/**
+		 * @param <M> The model type for the value
+		 * @param <MV> The type for the value
+		 * @param type The type for the value
+		 * @param value Produces the value from a model instance set
+		 * @param components The components of the model value
+		 * @return A value container with the given type, implemented by the given function
+		 */
+		static <M, MV extends M> InterpretedValueSynth<M, MV> literal(ModelInstanceType<M, MV> type, MV value, String text,
+			InterpretedValueSynth<?, ?>... components) {
+			class SimpleVC implements InterpretedValueSynth<M, MV> {
+				@Override
+				public ModelType<M> getModelType() {
+					return type.getModelType();
+				}
+
+				@Override
+				public ModelInstanceType<M, MV> getType() {
+					return type;
+				}
+
+				@Override
+				public List<? extends InterpretedValueSynth<?, ?>> getComponents() {
+					return QommonsUtils.unmodifiableCopy(components);
+				}
+
+				@Override
+				public ModelValueInstantiator<MV> instantiate() {
+					return ModelValueInstantiator.literal(value, text);
 				}
 
 				@Override
@@ -446,11 +442,120 @@ public interface ObservableModelSet extends Identifiable {
 		}
 	}
 
+	public interface ModelValueInstantiator<MV> {
+		/**
+		 * @param models The model instance set to get the model value for this container from
+		 * @return The model value for this container in the given model instance set
+		 * @throws ModelInstantiationException If this value could not be instantiated
+		 * @throws IllegalStateException If this value is a part of a dependency cycle, depending on values that depend upon it
+		 */
+		MV get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException;
+
+		/**
+		 * @param value The value to copy
+		 * @param sourceModels The model instance that the value is from
+		 * @param newModels The new model to copy the value into
+		 * @return A copy of the given value for the new model instance. Often this will be exactly the source <code>value</code>, but if
+		 *         the value is a composite of values that have been replaced in the target models, the return value will be a re-built
+		 *         composite using the copied components.
+		 * @throws ModelInstantiationException If the value could not be copied
+		 */
+		MV forModelCopy(MV value, ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException;
+
+		default <MV2> ModelValueInstantiator<MV2> map(ExFunction<? super MV, ? extends MV2, ModelInstantiationException> map) {
+			return map(LambdaUtils.printableExBiFn((src, msi) -> map.apply(src), map::toString, map));
+		}
+
+		default <MV2> ModelValueInstantiator<MV2> map(
+			ExBiFunction<? super MV, ModelSetInstance, ? extends MV2, ModelInstantiationException> map) {
+			return new MappedMVI<>(this, map);
+		}
+
+		class MappedMVI<MV, MV2> implements ModelValueInstantiator<MV2> {
+			private final ModelValueInstantiator<MV> theSource;
+			private final ExBiFunction<? super MV, ModelSetInstance, ? extends MV2, ModelInstantiationException> theMap;
+
+			public MappedMVI(ModelValueInstantiator<MV> source,
+				ExBiFunction<? super MV, ModelSetInstance, ? extends MV2, ModelInstantiationException> map) {
+				theSource = source;
+				theMap = map;
+			}
+
+			@Override
+			public MV2 get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
+				MV sourceV = theSource.get(models);
+				return theMap.apply(sourceV, models);
+			}
+
+			@Override
+			public MV2 forModelCopy(MV2 value, ModelSetInstance sourceModels, ModelSetInstance newModels)
+				throws ModelInstantiationException {
+				MV sourceV = theSource.get(sourceModels);
+				MV sourceCopy = theSource.forModelCopy(sourceV, sourceModels, newModels);
+				if (sourceCopy == sourceV)
+					return value;
+				return theMap.apply(sourceCopy, newModels);
+			}
+
+			@Override
+			public String toString() {
+				return theSource + "." + theMap;
+			}
+		}
+
+		static <MV> ModelValueInstantiator<MV> literal(MV value, String text) {
+			return new ModelValueInstantiator<MV>() {
+				@Override
+				public MV get(ObservableModelSet.ModelSetInstance extModels) {
+					return value;
+				}
+
+				@Override
+				public MV forModelCopy(MV value2, ModelSetInstance sourceModels, ModelSetInstance newModels) {
+					return value2;
+				}
+
+				@Override
+				public String toString() {
+					return text;
+				}
+			};
+		}
+
+		/**
+		 * @param <MV> The type for the value
+		 * @param type The type for the value
+		 * @param value Produces the value from a model instance set
+		 * @param components The components of the model value
+		 * @return A value container with the given type, implemented by the given function
+		 */
+		static <MV> ModelValueInstantiator<MV> of(ExFunction<ModelSetInstance, MV, ModelInstantiationException> value) {
+			return new ModelValueInstantiator<MV>() {
+				@Override
+				public MV get(ModelSetInstance models) throws ModelInstantiationException {
+					return value.apply(models);
+				}
+
+				@Override
+				public MV forModelCopy(MV value2, ModelSetInstance sourceModels, ModelSetInstance newModels)
+					throws ModelInstantiationException {
+					return value.apply(newModels);
+				}
+
+				@Override
+				public String toString() {
+					return value.toString();
+				}
+			};
+		}
+	}
+
 	/** An identifier for a model or model component */
 	public final class ModelComponentId {
 		private final ModelComponentId theRootId;
 		private final ModelComponentId theOwnerId;
 		private final String theName;
+		private final int theDepth;
 		private final int theHashCode;
 
 		/**
@@ -461,6 +566,10 @@ public interface ObservableModelSet extends Identifiable {
 			theRootId = ownerId == null ? this : ownerId.theRootId;
 			theOwnerId = ownerId;
 			theName = name;
+			if (ownerId == null)
+				theDepth = 0;
+			else
+				theDepth = ownerId.theDepth + 1;
 			theHashCode = System.identityHashCode(this);
 		}
 
@@ -477,6 +586,33 @@ public interface ObservableModelSet extends Identifiable {
 		/** @return The name of this component in its model, or the name of the root model */
 		public String getName() {
 			return theName;
+		}
+
+		/** @return Zero if this is the root node, otherwise the sub-model depth below the root node of this component */
+		public int getDepth() {
+			return theDepth;
+		}
+
+		/**
+		 * @param includeRoot Whether to include the root at the start of the path
+		 * @param includeSelf Whether to include this node's name at the end of the path
+		 * @return The path of this component ID below its root
+		 */
+		public List<String> getPath(boolean includeRoot, boolean includeSelf) {
+			int size = theDepth;
+			if (includeRoot)
+				size++;
+			if (!includeSelf)
+				size--;
+			if (size <= 0) // If !includeRoot and !includeSelf and we're the root, this will be -1
+				return Collections.emptyList();
+			String[] path = new String[size];
+			ModelComponentId node = includeSelf ? this : theOwnerId;
+			for (int i = path.length - 1; i >= 0; i--) {
+				path[i] = node.theName;
+				node = node.theOwnerId;
+			}
+			return Arrays.asList(path);
 		}
 
 		@Override
@@ -593,15 +729,6 @@ public interface ObservableModelSet extends Identifiable {
 			return InterpretableModelComponentNode.super.interpret(env);
 		}
 
-		/**
-		 * Creates a value for this model component
-		 *
-		 * @param modelSet The model set instance to create the value for
-		 * @return The value to use for this component for the model set instance
-		 * @throws ModelInstantiationException If this node's model value could not be created
-		 */
-		MV create(ModelSetInstance modelSet) throws ModelInstantiationException;
-
 		@Override
 		InterpretedModelSet getModel();
 
@@ -620,6 +747,20 @@ public interface ObservableModelSet extends Identifiable {
 		default InterpretedModelComponentNode<M, ?> interpreted() {
 			return this;
 		}
+	}
+
+	public interface ModelComponentInstantiator<MV> extends ModelValueInstantiator<MV>, Identifiable {
+		@Override
+		ModelComponentId getIdentity();
+
+		/**
+		 * Creates a value for this model component
+		 *
+		 * @param modelSet The model set instance to create the value for
+		 * @return The value to use for this component for the model set instance
+		 * @throws ModelInstantiationException If this node's model value could not be created
+		 */
+		MV create(ModelSetInstance modelSet) throws ModelInstantiationException;
 	}
 
 	/** Checks names of model components to ensure they are accessible as identifiers from expressions */
@@ -741,7 +882,7 @@ public interface ObservableModelSet extends Identifiable {
 				ModelInstanceType<M, ?> type = getType(env);
 				try {
 					M value = env.getExtModels().getValue(getModelPath(), type, env);
-					return InterpretedValueSynth.of((ModelInstanceType<M, M>) type, msi -> value);
+					return InterpretedValueSynth.literal((ModelInstanceType<M, M>) type, value, getModelPath());
 				} catch (ModelException e) {
 					// No such model--use the default if present
 					if (theDefault != null)
@@ -937,6 +1078,42 @@ public interface ObservableModelSet extends Identifiable {
 		if (node == null)
 			throw new ModelException("Nothing at '" + path + "'");
 		return node;
+	}
+
+	/**
+	 * @param id The identity of the component to get
+	 * @return The component in this model or any of its inherited models with the given ID
+	 * @throws IllegalArgumentException If the given component does not exist in this model
+	 */
+	default ModelComponentNode<?> getComponent(ModelComponentId id) throws IllegalArgumentException {
+		if (id.getOwnerId() == getIdentity()) { // A component we own
+			ModelComponentNode<?> component = getLocalComponent(id.getName());
+			if (component == null)
+				throw new IllegalArgumentException("No such local component " + id + ".  Did you make that up??");
+			return component;
+		} else if (id.getRootId() == getIdentity().getRootId()) { // We don't own it locally, but it belongs to this model structure
+			List<String> path = id.getPath(false, false);
+			ObservableModelSet model = getRoot();
+			for (String pathEl : path) {
+				ModelComponentNode<?> child = model.getLocalComponent(pathEl);
+				if (child == null)
+					throw new IllegalArgumentException(
+						"No such component " + model.getIdentity() + "." + pathEl + ".  Did you make that up??");
+				model = child.getModel();
+				if (model == null)
+					throw new IllegalArgumentException(
+						"Component " + child.getIdentity() + " is not a model, so " + id + " does not exist.  Did you make that up??");
+			}
+			ModelComponentNode<?> component = model.getLocalComponent(id.getName());
+			if (component == null)
+				throw new IllegalArgumentException("No such component " + id + ".  Did you make that up??");
+			return component;
+		} else {
+			ObservableModelSet inh = getInheritance().get(id.getRootId());
+			if (inh == null)
+				throw new IllegalArgumentException("Component " + id + " is for a model unrelated to this one (" + getIdentity() + ")");
+			return inh.getComponent(id);
+		}
 	}
 
 	/** @return The identities of all {@link IdentifiableCompiledValue identified} components in this model */
@@ -1170,9 +1347,9 @@ public interface ObservableModelSet extends Identifiable {
 		 * @param sourceLocation The location in the source file where the value was declared. May be null.
 		 * @return This builder
 		 */
-		default <M, MV extends M> Builder with(String name, ModelInstanceType<M, MV> type,
-			ExFunction<ModelSetInstance, MV, ModelInstantiationException> value, LocatedFilePosition sourceLocation) {
-			return with(name, InterpretedValueSynth.of(type, value), sourceLocation);
+		default <M, MV extends M> Builder with(String name, ModelInstanceType<M, MV> type, ModelValueInstantiator<MV> value,
+			LocatedFilePosition sourceLocation) {
+			return with(name, InterpretedValueSynth.simple(type, value), sourceLocation);
 		}
 
 		/** @return The immutable {@link ObservableModelSet} configured with this builder */
@@ -1252,6 +1429,11 @@ public interface ObservableModelSet extends Identifiable {
 		}
 
 		@Override
+		default InterpretableModelComponentNode<?> getComponent(ModelComponentId id) throws IllegalArgumentException {
+			return (InterpretableModelComponentNode<?>) Built.super.getComponent(id);
+		}
+
+		@Override
 		default InterpretableModelComponentNode<?> getIdentifiedComponent(Object valueIdentifier) throws ModelException {
 			return (InterpretableModelComponentNode<?>) Built.super.getIdentifiedComponent(valueIdentifier);
 		}
@@ -1294,6 +1476,38 @@ public interface ObservableModelSet extends Identifiable {
 		 */
 		void interpret(InterpretedExpressoEnv env) throws ExpressoInterpretationException;
 
+		ModelInstantiator instantiate();
+
+		/**
+		 * Creates a builder for a {@link ModelSetInstance} which will contain values for all the components in this model set
+		 *
+		 * @param until An observable that fires when the lifetime of the new model instance set expires (or null if the lifetime of the new
+		 *        model instance set is to be infinite)
+		 * @return A builder for the new instance set
+		 */
+		default ModelSetInstanceBuilder createInstance(Observable<?> until) {
+			ModelInstantiator instantiated = instantiate();
+			instantiated.instantiate();
+			return instantiated.createInstance(until);
+		}
+	}
+
+	public interface ModelInstantiator extends Identifiable {
+		@Override
+		ModelComponentId getIdentity();
+
+		Set<ModelComponentId> getComponents();
+
+		/**
+		 * @param component The {@link ModelComponentNode#getIdentity() ID} of the component to get
+		 * @return The value instantiator for the given component
+		 */
+		ModelValueInstantiator<?> getComponent(ModelComponentId component);
+
+		Set<ModelComponentId> getInheritance();
+
+		ModelInstantiator getInheritance(ModelComponentId inherited);
+
 		/**
 		 * Creates a builder for a {@link ModelSetInstance} which will contain values for all the components in this model set
 		 *
@@ -1302,27 +1516,32 @@ public interface ObservableModelSet extends Identifiable {
 		 * @return A builder for the new instance set
 		 */
 		ModelSetInstanceBuilder createInstance(Observable<?> until);
+
+		void instantiate();
+
+		default ModelSetInstance wrap(ModelSetInstance models) throws ModelInstantiationException {
+			instantiate();
+			if (getIdentity() != models.getModel().getIdentity())
+				return createInstance(models.getUntil()).withAll(models).build();
+			else
+				return models;
+		}
 	}
 
 	/** A set of actual values created by the containers declared in an {@link ObservableModelSet} */
 	public interface ModelSetInstance {
-		/**
-		 * @return The model set that this instance was {@link ObservableModelSet.InterpretedModelSet#createInstance(Observable) created}
-		 *         for
-		 */
-		InterpretedModelSet getModel();
+		ModelInstantiator getModel();
 
 		/** @return An observable that will fire when this model instance set's lifetime expires */
 		Observable<?> getUntil();
 
 		/**
-		 * @param <M> The model type of the component to get the value for
-		 * @param <MV> The type of the component to get the value for
-		 * @param component The component to get the value for
+		 * @param component The {@link ModelComponentNode#getIdentity() ID} of the model component to get the value for
 		 * @return The model value in this model instance set for the given component
 		 * @throws ModelInstantiationException If the model component could not be instantiated
+		 * @throws IllegalArgumentException If the component does not belong to this model or is a sub-model
 		 */
-		<M, MV extends M> MV get(InterpretedModelComponentNode<M, MV> component) throws ModelInstantiationException;
+		Object get(ModelComponentId component) throws ModelInstantiationException, IllegalArgumentException;
 
 		/**
 		 * @param modelId The id of the inherited model
@@ -1332,17 +1551,23 @@ public interface ObservableModelSet extends Identifiable {
 		ModelSetInstance getInherited(ModelComponentId modelId) throws IllegalArgumentException;
 
 		/**
-		 * @return A builder containing all of this model's data, but whose runtime components may be replaced
-		 * @throws ModelInstantiationException If any of this model's components could not be copied
+		 * @return A builder that will produce a {@link ModelSetInstance} containing
+		 *         {@link ModelValueInstantiator#forModelCopy(Object, ModelSetInstance, ModelSetInstance) copies} of this model's data.
 		 */
-		ModelSetInstanceBuilder copy() throws ModelInstantiationException;
+		default ModelSetInstanceBuilder copy() {
+			return copy(getUntil());
+		}
+
+		/**
+		 * @param until The observable to destroy the model copy
+		 * @return A builder that will produce a {@link ModelSetInstance} containing
+		 *         {@link ModelValueInstantiator#forModelCopy(Object, ModelSetInstance, ModelSetInstance) copies} of this model's data.
+		 */
+		ModelSetInstanceBuilder copy(Observable<?> until);
 	}
 
 	/** Builds a {@link ModelSetInstance} */
 	public interface ModelSetInstanceBuilder {
-		/** @return The interpreted model set that this is an instance of */
-		InterpretedModelSet getModel();
-
 		/** @return The observable that the model set instance {@link #build() built} with this builder will die with */
 		Observable<?> getUntil();
 
@@ -1357,7 +1582,7 @@ public interface ObservableModelSet extends Identifiable {
 		 * @param other The model instance set created for one of the {@link ObservableModelSet#getInheritance() inherited} models of the
 		 *        model that this instance set is being built for
 		 * @return This builder
-		 * @throws ModelInstantiationException If any of the components from the other model could not be copied into this one
+		 * @throws ModelInstantiationException If any of <code>other</code>'s components could not be instantiated
 		 */
 		ModelSetInstanceBuilder withAll(ModelSetInstance other) throws ModelInstantiationException;
 
@@ -1906,6 +2131,11 @@ public interface ObservableModelSet extends Identifiable {
 			}
 
 			@Override
+			public ModelValueInstantiator<MV> instantiate() {
+				return new DefaultComponentInstantiator<>(this);
+			}
+
+			@Override
 			public Object getThing() {
 				if (theCreator != null)
 					return theCreator;
@@ -1926,49 +2156,11 @@ public interface ObservableModelSet extends Identifiable {
 			}
 
 			@Override
-			public MV get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
-				return models.get(this);
-			}
-
-			@Override
-			public MV forModelCopy(MV value, ModelSetInstance sourceModels, ModelSetInstance newModels)
-				throws ModelInstantiationException, IllegalStateException {
-				if (theValue != null)
-					return theValue.forModelCopy(value, sourceModels, newModels);
-				else
-					return value;
-			}
-
-			@Override
 			public List<? extends InterpretedValueSynth<?, ?>> getComponents() {
 				if (theValue == null)
 					return Collections.emptyList();
 				else
 					return Collections.singletonList(theValue);
-			}
-
-			@Override
-			public MV create(ModelSetInstance modelSet) throws ModelInstantiationException {
-				if (theCreator != null || theExtRef != null)
-					return theValue.get(modelSet);
-				// else if (theExtRef != null) {
-				// MV value;
-				// try {
-				// value = extModels == null ? null : theExtRef.get(extModels);
-				// if (value == null)
-				// value = theExtRef.getDefault(modelSet);
-				// } catch (ModelException | TypeConversionException e) {
-				// throw new ModelInstantiationException(theExtRef.getFilePosition(), 0, e);
-				// }
-				// if (value == null) {
-				// if (extModels == null)
-				// throw new IllegalArgumentException("No such external model: " + theNodeId.getOwnerId());
-				// else
-				// throw new IllegalArgumentException("No such external value specified: " + theNodeId);
-				// } else
-				// return value;
-				else
-					throw new IllegalStateException(theNodeId + " is not an internal value");
 			}
 
 			@Override
@@ -1984,6 +2176,51 @@ public interface ObservableModelSet extends Identifiable {
 			@Override
 			public String toString() {
 				return getThing().toString();
+			}
+		}
+
+		static class DefaultComponentInstantiator<MV> implements ModelComponentInstantiator<MV> {
+			private final ModelComponentId theIdentity;
+			private ModelValueInstantiator<MV> theInstantiator;
+
+			DefaultComponentInstantiator(InterpretedModelComponentNode<?, MV> component) {
+				theIdentity = component.getIdentity();
+				theInstantiator = component.getValue().instantiate();
+			}
+
+			@Override
+			public ModelComponentId getIdentity() {
+				return theIdentity;
+			}
+
+			@Override
+			public MV get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
+				return (MV) models.get(theIdentity);
+			}
+
+			@Override
+			public MV create(ModelSetInstance modelSet) throws ModelInstantiationException {
+				return theInstantiator.get(modelSet);
+			}
+
+			@Override
+			public MV forModelCopy(MV value, ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException {
+				return theInstantiator.forModelCopy(value, sourceModels, newModels);
+			}
+
+			@Override
+			public int hashCode() {
+				return theIdentity.hashCode();
+			}
+
+			@Override
+			public boolean equals(Object obj) {
+				return obj instanceof ModelComponentInstantiator && theIdentity.equals(((ModelComponentInstantiator<?>) obj).getIdentity());
+			}
+
+			@Override
+			public String toString() {
+				return theIdentity.toString();
 			}
 		}
 
@@ -2288,6 +2525,8 @@ public interface ObservableModelSet extends Identifiable {
 			private Set<ModelComponentNode<?>> theCycleChecker;
 			private boolean isInterpreting;
 
+			private ModelInstantiator theInstantiator;
+
 			/**
 			 * @param id The component id for the new model
 			 * @param root The root model for the new model, or null if the new model is to be the root
@@ -2388,8 +2627,15 @@ public interface ObservableModelSet extends Identifiable {
 			}
 
 			@Override
-			public ModelSetInstanceBuilder createInstance(Observable<?> until) {
-				return new DefaultMSIBuilder(this, null, until);
+			public ModelInstantiator instantiate() {
+				if (theSource != null)
+					throw new IllegalStateException(
+						"Attempting to instantiate a model that has not finished being interpreted: " + theSource);
+				if (getParent() != null)
+					return getParent().instantiate();
+				else if (theInstantiator == null)
+					theInstantiator = new ModelInstantiatorImpl(this);
+				return theInstantiator;
 			}
 
 			@Override
@@ -2481,20 +2727,140 @@ public interface ObservableModelSet extends Identifiable {
 			}
 		}
 
+		static class ModelInstantiatorImpl implements ModelInstantiator {
+			private final ModelComponentId theModelId;
+			private final Map<ModelComponentId, ModelValueInstantiator<?>> theComponents;
+			private final Map<ModelComponentId, ModelInstantiator> theInheritance;
+			private InterpretedModelSet theInterpretedModels;
+			// It may be noticed that I'm not checking for cycles here.
+			// I figure I already did that with the compiled and interpreted structures.
+
+			ModelInstantiatorImpl(InterpretedModelSet interpreted) {
+				theModelId = interpreted.getIdentity();
+				theInterpretedModels = interpreted;
+				if (interpreted.getComponentNames().isEmpty())
+					theComponents = Collections.emptyMap();
+				else
+					theComponents = new HashMap<>();
+				if (interpreted.getInheritance().isEmpty())
+					theInheritance = Collections.emptyMap();
+				else {
+					theInheritance = new HashMap<>(interpreted.getInheritance().size() * 3 / 2 + 1);
+					for (Map.Entry<ModelComponentId, ? extends InterpretedModelSet> inh : interpreted.getInheritance().entrySet())
+						theInheritance.put(inh.getKey(), inh.getValue().instantiate());
+				}
+			}
+
+			@Override
+			public ModelComponentId getIdentity() {
+				return theModelId;
+			}
+
+			@Override
+			public Set<ModelComponentId> getComponents() {
+				return theComponents.keySet();
+			}
+
+			@Override
+			public ModelValueInstantiator<?> getComponent(ModelComponentId component) {
+				ModelComponentId rootModelId = component.getRootId();
+				if (rootModelId != theModelId.getRootId()) {
+					ModelInstantiator inh = theInheritance.get(rootModelId);
+					if (inh != null)
+						return inh.getComponent(component);
+					else
+						throw new IllegalArgumentException(
+							"This model component (" + component + ") is for an unrelated model (" + rootModelId + ")");
+				}
+				ModelValueInstantiator<?> valueOrModel = theComponents.get(component);
+				if (valueOrModel == null) {
+					if (theInterpretedModels != null) {
+						InterpretableModelComponentNode<?> interpretableNode;
+						try {
+							interpretableNode = theInterpretedModels.getComponent(component);
+						} catch (IllegalArgumentException e) {
+							theInterpretedModels.getComponent(component);
+							throw new IllegalArgumentException("Unrecognized model component: " + component, e);
+						}
+						if (interpretableNode != null) {
+							if (interpretableNode.getModel() != null)
+								throw new IllegalArgumentException("Component is a model, not a value: " + component);
+							InterpretedModelComponentNode<?, ?> interpreted;
+							try {
+								interpreted = interpretableNode.interpreted();
+							} catch (ExpressoInterpretationException e) {
+								throw new IllegalStateException("Attempting to instantiate a model that is not completely interpreted", e);
+							}
+							ModelValueInstantiator<?> instantiated = interpreted.instantiate();
+							theComponents.put(interpreted.getIdentity(), instantiated);
+							return instantiated;
+						}
+					}
+					throw new IllegalArgumentException("Unrecognized model component: " + component);
+				}
+				return valueOrModel;
+			}
+
+			@Override
+			public Set<ModelComponentId> getInheritance() {
+				return theInheritance.keySet();
+			}
+
+			@Override
+			public ModelInstantiator getInheritance(ModelComponentId inherited) {
+				return theInheritance.get(inherited);
+			}
+
+			@Override
+			public ModelSetInstanceBuilder createInstance(Observable<?> until) {
+				if (theInterpretedModels != null)
+					throw new IllegalStateException(
+						"Attempting to build a model instance set from a model instantiator that has not been completely instantiated");
+				return new DefaultMSIBuilder(this, null, until);
+			}
+
+			@Override
+			public void instantiate() {
+				if (theInterpretedModels == null)
+					return;
+				instantiate(theInterpretedModels);
+				for (Map.Entry<ModelComponentId, ? extends InterpretedModelSet> inh : theInterpretedModels.getInheritance().entrySet())
+					theInheritance.computeIfAbsent(inh.getKey(), __ -> inh.getValue().instantiate());
+				theInterpretedModels = null;
+			}
+
+			private void instantiate(InterpretedModelSet models) {
+				for (String name : models.getComponentNames()) {
+					InterpretableModelComponentNode<?> interpretableNode = models.getLocalComponent(name);
+					if (interpretableNode.getModel() != null)
+						instantiate(interpretableNode.getModel());
+					else {
+						Object found = theComponents.get(interpretableNode.getIdentity());
+						if (found == null) {
+							InterpretedModelComponentNode<?, ?> component;
+							try {
+								component = interpretableNode.interpreted();
+							} catch (ExpressoInterpretationException e) {
+								throw new IllegalStateException("Attempting to instantiate a model that is not completely interpreted", e);
+							}
+							theComponents.put(component.getIdentity(), component.instantiate());
+						}
+					}
+				}
+				for (ModelInstantiator inh : theInheritance.values())
+					inh.instantiate();
+			}
+		}
+
 		static class DefaultMSIBuilder implements ModelSetInstanceBuilder {
 			private final Map<ModelComponentId, Object> theComponents;
 			private final Map<ModelComponentId, ModelSetInstance> theInheritance;
 			private final DefaultMSI theMSI;
 
-			DefaultMSIBuilder(InterpretedModelSet models, ModelSetInstance sourceModel, Observable<?> until) {
+			DefaultMSIBuilder(ModelInstantiatorImpl modelInstantiator, ModelSetInstance sourceModel, Observable<?> until) {
 				theComponents = new HashMap<>();
 				theInheritance = new LinkedHashMap<>();
-				theMSI = new DefaultMSI(models.getRoot(), sourceModel, until, theComponents, Collections.unmodifiableMap(theInheritance));
-			}
-
-			@Override
-			public InterpretedModelSet getModel() {
-				return theMSI.getModel();
+				theMSI = new DefaultMSI(modelInstantiator, sourceModel, until, theComponents, Collections.unmodifiableMap(theInheritance));
 			}
 
 			@Override
@@ -2511,40 +2877,28 @@ public interface ObservableModelSet extends Identifiable {
 			public ModelSetInstanceBuilder withAll(ModelSetInstance other) throws ModelInstantiationException {
 				if (theMSI.getModel().getIdentity().equals(other.getModel().getIdentity())) {
 					addAll(theMSI.getModel(), other);
-					for (ModelComponentId inh : theMSI.getModel().getInheritance().keySet())
+					for (ModelComponentId inh : theMSI.getModel().getInheritance())
 						theInheritance.put(inh, other);
-				} else if (!theMSI.getModel().getInheritance().containsKey(other.getModel().getIdentity().getRootId())) {
-					throw new IllegalArgumentException("Model " + other.getModel().getIdentity() + " is not related to this model ("
-						+ theMSI.getModel().getIdentity() + ")");
+				} else if (!theMSI.getModel().getInheritance().contains(other.getModel().getIdentity().getRootId())) {
+					throw new IllegalArgumentException(
+						"Model " + other.getModel().getIdentity() + " is not related to this model (" + theMSI.getModel().getIdentity()
+						+ ")");
 				}
 				theInheritance.put(other.getModel().getIdentity().getRootId(), other);
-				for (ModelComponentId modelId : other.getModel().getInheritance().keySet())
+				for (ModelComponentId modelId : other.getModel().getInheritance())
 					theInheritance.put(modelId, other);
 				return this;
 			}
 
-			private void addAll(InterpretedModelSet model, ModelSetInstance other) throws ModelInstantiationException {
-				for (String name : model.getComponentNames()) {
-					InterpretableModelComponentNode<?> component = model.getLocalComponent(name);
-					if (component.getModel() != null)
-						addAll(component.getModel(), other);
-					else {
-						InterpretedModelComponentNode<?, ?> interpreted;
-						try {
-							interpreted = component.interpreted();
-						} catch (ExpressoInterpretationException e) {
-							throw new IllegalStateException(
-								"Should not be creating instances of a model set that is not completely interpreted", e);
-						}
-						theComponents.put(component.getIdentity(), other.get(interpreted));
-					}
-				}
+			private void addAll(ModelInstantiator model, ModelSetInstance other) throws ModelInstantiationException {
+				for (ModelComponentId comp : model.getComponents())
+					theComponents.put(comp, other.get(comp));
 			}
 
 			@Override
 			public ModelSetInstance build() throws ModelInstantiationException {
 				StringBuilder error = null;
-				for (ModelComponentId inh : theMSI.getModel().getInheritance().keySet()) {
+				for (ModelComponentId inh : theMSI.getModel().getInheritance()) {
 					if (!theInheritance.containsKey(inh)) {
 						if (error == null)
 							error = new StringBuilder();
@@ -2558,53 +2912,44 @@ public interface ObservableModelSet extends Identifiable {
 				return theMSI;
 			}
 
-			private void fulfill(InterpretedModelSet model) throws ModelInstantiationException {
-				for (String name : model.getComponentNames()) {
-					InterpretableModelComponentNode<?> component = model.getLocalComponent(name);
-					if (component.getIdentity().getRootId() != theMSI.getModel().getIdentity())
+			private void fulfill(ModelInstantiator model) throws ModelInstantiationException {
+				for (ModelComponentId comp : model.getComponents()) {
+					// Don't remember what this is for or how it could happen. Shouldn't do any harm though.
+					if (comp.getRootId() != theMSI.getModel().getIdentity())
 						continue;
-					if (component.getModel() != null)
-						fulfill(component.getModel());
-					else {
-						InterpretedModelComponentNode<?, ?> interpreted;
-						try {
-							interpreted = component.interpreted();
-						} catch (ExpressoInterpretationException e) {
-							throw new IllegalStateException(
-								"Should not be creating instances of a model set that is not completely interpreted", e);
-						}
-						theMSI.get(interpreted);
-					}
+					theMSI.get(comp);
 				}
 			}
 
 			@Override
 			public String toString() {
-				return "instanceBuilder:" + theMSI.getModel();
+				return "instanceBuilder:" + theMSI.getModel().getIdentity();
 			}
 		}
 
 		static class DefaultMSI implements ModelSetInstance {
-			private final InterpretedModelSet theModel;
-			private final ModelSetInstance theSourceModel;
-			private final Observable<?> theUntil;
+			private final ModelInstantiatorImpl theModelInstantiator;
 			protected final Map<ModelComponentId, Object> theComponents;
 			private final Map<ModelComponentId, ModelSetInstance> theInheritance;
-			private Set<ModelComponentNode<?>> theCircularityDetector;
+			private final Observable<?> theUntil;
 
-			protected DefaultMSI(InterpretedModelSet models, ModelSetInstance sourceModel, Observable<?> until,
-				Map<ModelComponentId, Object> components, Map<ModelComponentId, ModelSetInstance> inheritance) {
-				theModel = models;
-				theSourceModel = sourceModel;
-				theUntil = until;
+			private ModelSetInstance theSourceModel;
+			private Set<ModelComponentId> theCircularityDetector;
+
+			protected DefaultMSI(ModelInstantiatorImpl instantiator, ModelSetInstance sourceModel,
+				Observable<?> until, Map<ModelComponentId, Object> components, Map<ModelComponentId, ModelSetInstance> inheritance) {
+				theModelInstantiator = instantiator;
 				theComponents = components;
 				theInheritance = inheritance;
+				theUntil = until;
+
+				theSourceModel = sourceModel;
 				theCircularityDetector = new LinkedHashSet<>();
 			}
 
 			@Override
-			public InterpretedModelSet getModel() {
-				return theModel;
+			public ModelInstantiator getModel() {
+				return theModelInstantiator;
 			}
 
 			@Override
@@ -2613,21 +2958,29 @@ public interface ObservableModelSet extends Identifiable {
 			}
 
 			@Override
-			public <M, MV extends M> MV get(InterpretedModelComponentNode<M, MV> component)
-				throws ModelInstantiationException, IllegalStateException {
-				ModelComponentId rootModelId = component.getIdentity().getRootId();
-				if (rootModelId != theModel.getIdentity()) {
+			public Object get(ModelComponentId component) throws ModelInstantiationException {
+				ModelComponentId rootModelId = component.getRootId();
+				if (rootModelId != theModelInstantiator.getIdentity()) {
 					ModelSetInstance inh = theInheritance.get(rootModelId);
 					if (inh != null)
 						return inh.get(component);
-					else if (theModel.getInheritance().containsKey(rootModelId))
+					else if (theModelInstantiator.getInheritance().contains(rootModelId))
 						throw new IllegalStateException(
-							"Missing inheritance " + rootModelId + ": use ModelSetInstanceBuilder.withAll(ModelSetInstance)");
+							"Inheritance " + rootModelId + "not satisfied: use ModelSetInstanceBuilder.withAll(ModelSetInstance)");
 					else
-						throw new IllegalArgumentException(
-							"This model component (" + component + ") is for an unrelated model (" + rootModelId + ")");
+						throw new IllegalArgumentException("This model component (" + component + ") is for an unrelated model this=("
+							+ theModelInstantiator.getIdentity() + ")");
 				}
-				MV thing = (MV) theComponents.get(component.getIdentity());
+				// Component is local
+				Object valueOrModel = theModelInstantiator.getComponent(component);
+				if (valueOrModel instanceof ModelInstantiatorImpl)
+					throw new IllegalArgumentException("Model component " + component + " is a model, not a value");
+				return getLocalComponent(component, (ModelComponentInstantiator<?>) valueOrModel);
+			}
+
+			private <MV> MV getLocalComponent(ModelComponentId component, ModelComponentInstantiator<MV> instantiator)
+				throws ModelInstantiationException {
+				MV thing = (MV) theComponents.get(component);
 				if (thing != null)
 					return thing;
 				else if (theCircularityDetector == null)
@@ -2637,10 +2990,12 @@ public interface ObservableModelSet extends Identifiable {
 						"Dynamic value circularity detected: " + StringUtils.print("<-", theCircularityDetector, Object::toString));
 				try {
 					if (theSourceModel != null)
-						thing = component.forModelCopy(component.get(theSourceModel), theSourceModel, this);
+						thing = instantiator.forModelCopy((MV) theSourceModel.get(component), theSourceModel, this);
 					else
-						thing = component.create(this);
-					theComponents.put(component.getIdentity(), thing);
+						thing = instantiator.create(this);
+					if (thing == null)
+						throw new NullPointerException(instantiator + " create a null component");
+					theComponents.put(component, thing);
 				} finally {
 					theCircularityDetector.remove(component);
 				}
@@ -2648,29 +3003,41 @@ public interface ObservableModelSet extends Identifiable {
 			}
 
 			@Override
-			public ModelSetInstance getInherited(ModelComponentId modelId) throws IllegalArgumentException {
-				ModelSetInstance inh = theInheritance.get(modelId);
-				if (inh == null)
-					throw new IllegalArgumentException(theModel.getIdentity() + " inherits no such model: " + modelId);
-				return inh;
-			}
+			public ModelSetInstanceBuilder copy(Observable<?> until) {
+				if (theCircularityDetector != null)
+					throw new IllegalStateException("Cannot create a copy of a model that is currently being built");
+				ModelSetInstanceBuilder builder = new DefaultMSIBuilder(theModelInstantiator, this, until);
 
-			@Override
-			public ModelSetInstanceBuilder copy() throws ModelInstantiationException {
-				ModelSetInstanceBuilder builder = new DefaultMSIBuilder(theModel, this, theUntil);
-
-				for (ModelSetInstance inh : theInheritance.values())
-					builder.withAll(inh);
+				for (ModelSetInstance inh : theInheritance.values()) {
+					try {
+						builder.withAll(inh);
+					} catch (ModelInstantiationException e) {
+						throw new IllegalStateException("Inherited model not completely instantiated?", e);
+					}
+				}
 				return builder;
 			}
 
+			@Override
+			public ModelSetInstance getInherited(ModelComponentId modelId) throws IllegalArgumentException {
+				ModelSetInstance inh = theInheritance.get(modelId);
+				if (inh != null)
+					return inh;
+				else if (theModelInstantiator.getInheritance().contains(modelId))
+					throw new IllegalStateException(
+						"Inheritance " + modelId + "not satisfied: use ModelSetInstanceBuilder.withAll(ModelSetInstance)");
+				else
+					throw new IllegalArgumentException(theModelInstantiator.getIdentity() + " inherits no such model: " + modelId);
+			}
+
 			void built() {
+				theSourceModel = null;
 				theCircularityDetector = null;
 			}
 
 			@Override
 			public String toString() {
-				return "instance:" + theModel;
+				return "instance:" + theModelInstantiator.getIdentity();
 			}
 		}
 	}

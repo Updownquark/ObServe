@@ -10,9 +10,9 @@ import org.observe.SettableValue;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.util.TypeTokens;
 import org.observe.util.TypeTokens.TypeConverter;
-import org.qommons.LambdaUtils;
 import org.qommons.QommonsUtils;
 import org.qommons.collect.BetterList;
 
@@ -144,14 +144,8 @@ public interface ObservableExpression {
 			}
 
 			@Override
-			public MV get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
-				return value.get(models);
-			}
-
-			@Override
-			public MV forModelCopy(MV value2, ModelSetInstance sourceModels, ModelSetInstance newModels)
-				throws ModelInstantiationException {
-				return value.forModelCopy(value2, sourceModels, newModels);
+			public ModelValueInstantiator<MV> instantiate() {
+				return value.instantiate();
 			}
 
 			@Override
@@ -202,13 +196,8 @@ public interface ObservableExpression {
 			}
 
 			@Override
-			public MV get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
-				return wrapped.get(models);
-			}
-
-			@Override
-			public MV forModelCopy(MV value, ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException {
-				return wrapped.forModelCopy(value, sourceModels, newModels);
+			public ModelValueInstantiator<MV> instantiate() {
+				return wrapped.instantiate();
 			}
 
 			@Override
@@ -416,21 +405,26 @@ public interface ObservableExpression {
 		@Override
 		public <M, MV extends M> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, InterpretedExpressoEnv env,
 			int expressionOffset) throws ExpressoEvaluationException {
-			if (type.getModelType() != ModelTypes.Value)
-				throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(),
-					"'" + theText + "' cannot be evaluated as a " + type);
+			if (type.getModelType() != ModelTypes.Value) {
+				if (theValue == null)
+					return ObservableExpression.evEx(expressionOffset, getExpressionLength(),
+						InterpretedValueSynth.literal(type, null, "null"),
+						this);
+				else
+					throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(),
+						"'" + theText + "' cannot be evaluated as a " + type);
+			}
 			if (theValue == null) {
 				if (type.getType(0).isPrimitive())
 					throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(),
 						"Cannot assign null to a primitive type (" + type.getType(0));
 				MV value = (MV) createValue(type.getType(0), null);
 				return ObservableExpression.evEx(expressionOffset, getExpressionLength(),
-					InterpretedValueSynth.of(type, LambdaUtils.constantExFn(value, theText, null)), this);
+					InterpretedValueSynth.literal(type, value, theText), this);
 			} else if (TypeTokens.get().isInstance(type.getType(0), theValue)) {
 				MV value = (MV) createValue(type.getType(0), theValue);
 				return ObservableExpression.evEx(expressionOffset, getExpressionLength(),
-					InterpretedValueSynth.of((ModelInstanceType<M, MV>) ModelTypes.Value.forType(theValue.getClass()),
-						LambdaUtils.constantExFn(value, theText, null)),
+					InterpretedValueSynth.literal((ModelInstanceType<M, MV>) ModelTypes.Value.forType(theValue.getClass()), value, theText),
 					this);
 			} else if (TypeTokens.get().isAssignable(type.getType(0), TypeTokens.get().of(theValue.getClass()))) {
 				TypeToken<Object> targetType = (TypeToken<Object>) type.getType(0);
@@ -438,16 +432,15 @@ public interface ObservableExpression {
 					TypeTokens.get().of((Class<T>) theValue.getClass()));
 				targetType = convert.getConvertedType();
 				MV value = (MV) createValue(targetType, convert.apply(theValue));
-				return ObservableExpression.evEx(expressionOffset, getExpressionLength(), InterpretedValueSynth.of(
-					(ModelInstanceType<M, MV>) ModelTypes.Value.forType(targetType), LambdaUtils.constantExFn(value, theText, null)), this);
+				return ObservableExpression.evEx(expressionOffset, getExpressionLength(),
+					InterpretedValueSynth.literal((ModelInstanceType<M, MV>) ModelTypes.Value.forType(targetType), value, theText), this);
 			} else {
 				// Don't throw this. Maybe the type architecture can convert it.
 				// throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(),
 				// "'" + theText + "' cannot be evaluated as a " + type);
 				MV value = (MV) createValue(TypeTokens.get().of(theValue.getClass()), theValue);
 				return ObservableExpression.evEx(expressionOffset, getExpressionLength(),
-					InterpretedValueSynth.of((ModelInstanceType<M, MV>) ModelTypes.Value.forType(theValue.getClass()),
-						LambdaUtils.constantExFn(value, theText, null)),
+					InterpretedValueSynth.literal((ModelInstanceType<M, MV>) ModelTypes.Value.forType(theValue.getClass()), value, theText),
 					this);
 			}
 		}

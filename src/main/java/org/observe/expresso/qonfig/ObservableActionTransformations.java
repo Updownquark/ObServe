@@ -11,8 +11,10 @@ import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.observe.expresso.qonfig.ExpressoTransformations.ActionTransform;
+import org.observe.expresso.qonfig.ExpressoTransformations.Operation;
 import org.observe.expresso.qonfig.ExpressoTransformations.TypePreservingTransform;
 import org.observe.util.TypeTokens;
 import org.qommons.collect.BetterList;
@@ -59,8 +61,7 @@ public class ObservableActionTransformations {
 			return new Interpreted<>(this, parent);
 		}
 
-		static class Interpreted<T> extends TypePreservingTransform.Interpreted<ObservableAction<?>, ObservableAction<T>> implements
-		ExpressoTransformations.Operation.EfficientCopyingInterpreted<ObservableAction<?>, ObservableAction<T>, ObservableAction<?>, ObservableAction<T>, ExElement> {
+		static class Interpreted<T> extends TypePreservingTransform.Interpreted<ObservableAction<?>, ObservableAction<T>> {
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<String>> theDisablement;
 
 			Interpreted(DisabledActionTransform definition, ExElement.Interpreted<?> parent) {
@@ -70,11 +71,6 @@ public class ObservableActionTransformations {
 			@Override
 			public DisabledActionTransform getDefinition() {
 				return (DisabledActionTransform) super.getDefinition();
-			}
-
-			@Override
-			public boolean isEfficientCopy() {
-				return true;
 			}
 
 			public InterpretedValueSynth<SettableValue<?>, SettableValue<String>> getDisablement() {
@@ -91,6 +87,29 @@ public class ObservableActionTransformations {
 			@Override
 			public BetterList<InterpretedValueSynth<?, ?>> getComponents() {
 				return BetterList.of(theDisablement);
+			}
+
+			@Override
+			public Instantiator<T> instantiate() {
+				return new Instantiator<>(theDisablement.instantiate());
+			}
+
+			@Override
+			public String toString() {
+				return "disableWith(" + theDisablement + ")";
+			}
+		}
+
+		static class Instantiator<T> implements Operation.EfficientCopyingInstantiator<ObservableAction<T>, ObservableAction<T>> {
+			private final ModelValueInstantiator<SettableValue<String>> theDisablement;
+
+			Instantiator(ModelValueInstantiator<SettableValue<String>> disablement) {
+				theDisablement = disablement;
+			}
+
+			@Override
+			public boolean isEfficientCopy() {
+				return true;
 			}
 
 			@Override
@@ -120,11 +139,6 @@ public class ObservableActionTransformations {
 					return prevValue;
 				else
 					return new DisabledAction<>(newSource, newDisablement);
-			}
-
-			@Override
-			public String toString() {
-				return "disableWith(" + theDisablement + ")";
 			}
 		}
 

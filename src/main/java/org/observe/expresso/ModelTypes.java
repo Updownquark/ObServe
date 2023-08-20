@@ -727,28 +727,23 @@ public class ModelTypes {
 			return (HollowModelValue<SettableValue<?>, MV>) new HollowValue<>(name, (TypeToken<Object>) type.getType(0));
 		}
 
-		static class HollowValue<T> extends AbstractIdentifiable
-		implements HollowModelValue<SettableValue<?>, SettableValue<T>>, SettableValue<T> {
+		static class HollowValue<T> extends SettableValue.SettableFlattenedObservableValue<T>
+			implements HollowModelValue<SettableValue<?>, SettableValue<T>> {
 			private final NamedUniqueIdentity theId;
-			private final SettableValue<SettableValue<T>> theContainer;
-			private final SettableValue<T> theFlatValue;
 
 			public HollowValue(String name, TypeToken<T> type) {
+				this(name, type, TypeTokens.get().getDefaultValue(type));
+			}
+
+			private HollowValue(String name, TypeToken<T> type, T defaultValue) {
+				super(SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<T>> parameterized(type)).build(),
+					() -> defaultValue);
 				theId = new NamedUniqueIdentity(name);
-				theContainer = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<T>> parameterized(type))
-					.build();
-				T defaultValue = TypeTokens.get().getDefaultValue(type);
-				theFlatValue = SettableValue.flatten(theContainer, () -> defaultValue);
 			}
 
 			@Override
-			public T get() {
-				return theFlatValue.get();
-			}
-
-			@Override
-			public Observable<ObservableValueEvent<T>> noInitChanges() {
-				return theFlatValue.noInitChanges();
+			protected SettableValue<SettableValue<T>> getWrapped() {
+				return (SettableValue<SettableValue<T>>) super.getWrapped();
 			}
 
 			@Override
@@ -757,55 +752,15 @@ public class ModelTypes {
 			}
 
 			@Override
-			public long getStamp() {
-				return theFlatValue.getStamp();
-			}
-
-			@Override
-			public Transaction lock(boolean write, Object cause) {
-				return theFlatValue.lock(write, cause);
-			}
-
-			@Override
-			public Transaction tryLock(boolean write, Object cause) {
-				return theFlatValue.tryLock(write, cause);
-			}
-
-			@Override
-			public TypeToken<T> getType() {
-				return theFlatValue.getType();
-			}
-
-			@Override
-			public boolean isLockSupported() {
-				return theFlatValue.isLockSupported();
-			}
-
-			@Override
-			public <V extends T> T set(V value, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
-				return theFlatValue.set(value, cause);
-			}
-
-			@Override
-			public <V extends T> String isAcceptable(V value) {
-				return theFlatValue.isAcceptable(value);
-			}
-
-			@Override
-			public ObservableValue<String> isEnabled() {
-				return theFlatValue.isEnabled();
-			}
-
-			@Override
 			public void satisfy(SettableValue<T> realValue) throws IllegalStateException {
 				if (realValue == null)
 					throw new NullPointerException("Cannot satisfy a hollow value (Value<" + getType() + ">) with null");
-				theContainer.set(realValue, null);
+				getWrapped().set(realValue, null);
 			}
 
 			@Override
 			public boolean isSatisfied() {
-				return theContainer.get() != null;
+				return getWrapped().get() != null;
 			}
 		}
 

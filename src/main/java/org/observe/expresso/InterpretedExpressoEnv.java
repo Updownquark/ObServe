@@ -122,12 +122,12 @@ public class InterpretedExpressoEnv extends CompiledExpressoEnv {
 	 * @return The wrapped model instance containing data for this element's local models
 	 * @throws ModelInstantiationException If the local model instantiation fails
 	 */
-	public ModelSetInstance wrapLocal(ModelSetInstance models) throws ModelInstantiationException {
-		if (getModels().getIdentity() != models.getModel().getIdentity())
-			return getModels().createInstance(models.getUntil()).withAll(models).build();
-		else
-			return models;
-	}
+	// public ModelSetInstance wrapLocal(ModelSetInstance models) throws ModelInstantiationException {
+	// if (getModels().getIdentity() != models.getModel().getIdentity())
+	// return getModels().createInstance(models.getUntil()).withAll(models).build();
+	// else
+	// return models;
+	// }
 
 	@Override
 	public InterpretedExpressoEnv interpret(ExternalModelSet extModels, ClassView classView, ErrorReporting reporting) {

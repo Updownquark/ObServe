@@ -139,8 +139,8 @@ public class QuickButton extends QuickWidget.Abstract {
 	protected void updateModel(ExElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
 		super.updateModel(interpreted, myModels);
 		QuickButton.Interpreted<?> myInterpreted = (QuickButton.Interpreted<?>) interpreted;
-		theText = myInterpreted.getText() == null ? null : myInterpreted.getText().get(myModels);
-		theIcon = myInterpreted.getIcon() == null ? null : myInterpreted.getIcon().get(myModels);
-		theAction = myInterpreted.getAction().get(myModels);
+		theText = myInterpreted.getText() == null ? null : myInterpreted.getText().instantiate().get(myModels);
+		theIcon = myInterpreted.getIcon() == null ? null : myInterpreted.getIcon().instantiate().get(myModels);
+		theAction = myInterpreted.getAction().instantiate().get(myModels);
 	}
 }

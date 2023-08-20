@@ -56,8 +56,8 @@ public abstract class ObservableStyledDocument<T> {
 		if (EventQueue.isDispatchThread())
 			theRoot.noInitChanges().takeUntil(theUntil).act(evt -> theRootNode.changed(evt.getNewValue(), evt, true, false));
 		else
-			EventQueue.invokeLater(
-				() -> theRoot.noInitChanges().takeUntil(theUntil).act(evt -> theRootNode.changed(evt.getNewValue(), evt, true, false)));
+			EventQueue.invokeLater(() -> theRoot.noInitChanges().takeUntil(theUntil)
+				.act(evt -> theRootNode.changed(evt.getNewValue(), Causable.broken(evt), true, false)));
 	}
 
 	public ObservableStyledDocument<T> withPostNodeText(Function<? super T, String> postText) {
@@ -79,6 +79,14 @@ public abstract class ObservableStyledDocument<T> {
 
 	public ObservableValue<? extends T> getRootValue() {
 		return theRoot;
+	}
+
+	public void refresh(Object cause) {
+		if (EventQueue.isDispatchThread())
+			theRootNode.changed(theRoot.get(), cause, true, false);
+		else
+			EventQueue.invokeLater(() -> theRootNode.changed(theRoot.get(), Causable.broken(cause), true, false));
+
 	}
 
 	protected abstract ObservableCollection<? extends T> getChildren(T value);

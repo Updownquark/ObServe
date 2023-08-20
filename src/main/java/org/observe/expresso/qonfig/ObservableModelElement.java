@@ -38,10 +38,12 @@ import org.observe.expresso.ObservableModelSet.InterpretedModelComponentNode;
 import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.observe.expresso.qonfig.ModelValueElement.CompiledSynth;
 import org.observe.util.TypeTokens;
 import org.observe.util.swing.WindowPopulation;
+import org.qommons.QommonsUtils;
 import org.qommons.ThreadConstraint;
 import org.qommons.TimeUtils;
 import org.qommons.Transaction;
@@ -707,8 +709,10 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 				isBackup = session.getAttribute("backup", boolean.class);
 				theApplicationEnvironment = session.get(APP_ENVIRONMENT_KEY, AppEnvironment.class);
 
+				ConfigValueMaker configValueMaker = new ConfigValueMaker(theConfigDir, theConfigName, isBackup(), //
+					QommonsUtils.map(getOldConfigNames(), ocn -> ocn.getOldConfigName(), true), theApplicationEnvironment);
 				((ObservableModelSet.Builder) session.getExpressoEnv().getModels()).withMaker(ExpressoConfigV0_1.CONFIG_NAME,
-					new ConfigValueMaker(), session.getElement().getPositionInFile());
+					configValueMaker, session.getElement().getPositionInFile());
 
 				super.doUpdate(session.asElement(session.getFocusType().getSuperElement()));
 			}
@@ -745,7 +749,22 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 				return ObservableConfigFormat.ofQommonFormat(f, () -> defaultValue);
 			}
 
-			private class ConfigValueMaker implements CompiledModelValue<SettableValue<?>> {
+			private static class ConfigValueMaker implements CompiledModelValue<SettableValue<?>> {
+				private final CompiledExpression theConfigDir;
+				private final String theConfigName;
+				private final boolean isBackup;
+				private final List<String> theOldConfigNames;
+				private final AppEnvironment theApplicationEnvironment;
+
+				ConfigValueMaker(CompiledExpression configDir, String configName, boolean backup, List<String> oldConfigNames,
+					AppEnvironment applicationEnvironment) {
+					theConfigDir = configDir;
+					isBackup = backup;
+					theConfigName = configName;
+					theOldConfigNames = oldConfigNames;
+					theApplicationEnvironment = applicationEnvironment;
+				}
+
 				@Override
 				public ModelType<SettableValue<?>> getModelType(CompiledExpressoEnv env) {
 					return ModelTypes.Value;
@@ -758,14 +777,15 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 					if (theConfigDir != null)
 						configDir = theConfigDir.interpret(ModelTypes.Value.forType(BetterFile.class), env);
 					else {
-						configDir = InterpretedValueSynth.of(ModelTypes.Value.forType(BetterFile.class), msi -> {
-							String prop = System.getProperty(theConfigName + ".config");
-							if (prop != null)
-								return ObservableModelSet.literal(BetterFile.at(new NativeFileSource(), prop), prop);
-							else
-								return ObservableModelSet.literal(BetterFile.at(new NativeFileSource(), "./" + theConfigName),
-									"./" + theConfigName);
-						});
+						configDir = InterpretedValueSynth.simple(ModelTypes.Value.forType(BetterFile.class),
+							ModelValueInstantiator.of(msi -> {
+								String prop = System.getProperty(theConfigName + ".config");
+								if (prop != null)
+									return ObservableModelSet.literal(BetterFile.at(new NativeFileSource(), prop), prop);
+								else
+									return ObservableModelSet.literal(BetterFile.at(new NativeFileSource(), "./" + theConfigName),
+										"./" + theConfigName);
+							}));
 					}
 					return new Interpreted(configDir);
 				}
@@ -785,6 +805,31 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 					@Override
 					public List<? extends InterpretedValueSynth<?, ?>> getComponents() {
 						return BetterList.of(theInterpretedConfigDir);
+					}
+
+					@Override
+					public ModelValueInstantiator<SettableValue<ObservableConfig>> instantiate() {
+						return new Instantiator(theInterpretedConfigDir == null ? null : theInterpretedConfigDir.instantiate(), //
+							theConfigName, isBackup, theOldConfigNames, //
+							theApplicationEnvironment == null ? null : theApplicationEnvironment.instantiate());
+					}
+				}
+
+				static class Instantiator implements ModelValueInstantiator<SettableValue<ObservableConfig>> {
+					private final ModelValueInstantiator<SettableValue<BetterFile>> theInterpretedConfigDir;
+					private final String theConfigName;
+					private final boolean isBackup;
+					private final List<String> theOldConfigNames;
+					private final AppEnvironment.Instantiator theApplicationEnvironment;
+
+					public Instantiator(ModelValueInstantiator<SettableValue<BetterFile>> interpretedConfigDir, String configName,
+						boolean backup, List<String> oldConfigNames,
+						org.observe.expresso.qonfig.AppEnvironment.Instantiator applicationEnvironment) {
+						theInterpretedConfigDir = interpretedConfigDir;
+						theConfigName = configName;
+						isBackup = backup;
+						theOldConfigNames = oldConfigNames;
+						theApplicationEnvironment = applicationEnvironment;
 					}
 
 					@Override
@@ -825,8 +870,8 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 
 						if (!configFile.exists() && theOldConfigNames != null) {
 							boolean found = false;
-							for (OldConfigName oldConfigName : theOldConfigNames) {
-								BetterFile oldConfigFile = configDirFile.at(oldConfigName.getOldConfigName());
+							for (String oldConfigName : theOldConfigNames) {
+								BetterFile oldConfigFile = configDirFile.at(oldConfigName);
 								if (oldConfigFile.exists()) {
 									try {
 										oldConfigFile.move(configFile);
@@ -874,18 +919,11 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 							}
 						}
 						boolean[] closingWithoutSave = new boolean[1];
-						AppEnvironment app = theApplicationEnvironment != null ? theApplicationEnvironment : new AppEnvironment() {
-							@Override
-							public InterpretedValueSynth<SettableValue<?>, SettableValue<String>> getTitle() {
-								return InterpretedValueSynth.literal(TypeTokens.get().STRING, "Unspecified Application",
-									"Unspecified Application");
-							}
-
-							@Override
-							public InterpretedValueSynth<SettableValue<?>, SettableValue<Image>> getIcon() {
-								return InterpretedValueSynth.literal(TypeTokens.get().of(Image.class), null, "No Image");
-							}
-						};
+						AppEnvironment.Instantiator app = theApplicationEnvironment != null ? theApplicationEnvironment
+							: new AppEnvironment.Instantiator(
+								ModelValueInstantiator.literal(SettableValue.of(String.class, "Unspecified Application", "Not Settable"),
+									"Unspecified Application"), //
+								ModelValueInstantiator.literal(SettableValue.of(Image.class, null, "Not Settable"), "No Image"));
 						if (loaded)
 							installConfigPersistence(config, configFile, backups, closingWithoutSave);
 						else if (backups != null && !backups.getBackups().isEmpty()) {
@@ -960,7 +998,7 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 			}
 
 			static void restoreBackup(boolean fromError, ObservableConfig config, FileBackups backups, Runnable onBackup,
-				Runnable onNoBackup, AppEnvironment app, boolean[] closingWithoutSave, ModelSetInstance msi)
+				Runnable onNoBackup, AppEnvironment.Instantiator app, boolean[] closingWithoutSave, ModelSetInstance msi)
 					throws ModelInstantiationException {
 				BetterSortedSet<Instant> backupTimes = backups == null ? null : backups.getBackups();
 				if (backupTimes == null || backupTimes.isEmpty()) {
@@ -973,10 +1011,9 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 					.withMaxResolution(TimeUtils.DateElementType.Second).withEvaluationType(TimeUtils.RelativeInstantEvaluation.Past));
 				JFrame[] frame = new JFrame[1];
 				boolean[] backedUp = new boolean[1];
-				ObservableValue<String> title = (app == null || app.getTitle() == null) ? ObservableValue.of("Unnamed Application")
-					: app.getTitle().get(msi);
-				ObservableValue<Image> icon = (app == null || app.getIcon() == null) ? ObservableValue.of(Image.class, null)
-					: app.getIcon().get(msi);
+				ObservableValue<String> title = (app == null || app.title == null) ? ObservableValue.of("Unnamed Application")
+					: app.title.get(msi);
+				ObservableValue<Image> icon = (app == null || app.icon == null) ? ObservableValue.of(Image.class, null) : app.icon.get(msi);
 				frame[0] = WindowPopulation.populateWindow(null, null, false, false)//
 					.withTitle((app == null || title.get() == null) ? "Backup" : title.get() + " Backup")//
 					.withIcon(app == null ? ObservableValue.of(Image.class, null) : icon)//

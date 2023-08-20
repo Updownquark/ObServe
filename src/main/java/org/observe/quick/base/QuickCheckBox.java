@@ -101,6 +101,6 @@ public class QuickCheckBox extends QuickValueWidget.Abstract<Boolean> {
 		throws ModelInstantiationException {
 		super.updateModel(interpreted, myModels);
 		Interpreted myInterpreted = (Interpreted) interpreted;
-		theText.set(myInterpreted.getText() == null ? null : myInterpreted.getText().get(myModels), null);
+		theText.set(myInterpreted.getText() == null ? null : myInterpreted.getText().instantiate().get(myModels), null);
 	}
 }

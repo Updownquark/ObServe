@@ -25,6 +25,7 @@ import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.TypeConversionException;
 import org.observe.expresso.ops.BinaryOperatorSet.BinaryOp;
 import org.observe.expresso.ops.BinaryOperatorSet.FirstArgDecisiveBinaryOp;
@@ -129,6 +130,11 @@ public class BinaryOperator implements ObservableExpression {
 		} else
 			throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(),
 				"Binary operator " + theOperator + " can only be evaluated as a value or an action");
+		return _evaluate(type, env, expressionOffset);
+	}
+
+	private <M, MV extends M, S, T, V, R> EvaluatedExpression<M, MV> _evaluate(ModelInstanceType<M, MV> type, InterpretedExpressoEnv env,
+		int expressionOffset) throws ExpressoEvaluationException, ExpressoInterpretationException {
 		boolean action = theOperator.charAt(theOperator.length() - 1) == '=';
 		if (action) {
 			switch (theOperator) {
@@ -155,14 +161,14 @@ public class BinaryOperator implements ObservableExpression {
 			targetOpType = TypeTokens.get().WILDCARD;
 			break;
 		}
-		EvaluatedExpression<SettableValue<?>, SettableValue<Object>> left;
+		EvaluatedExpression<SettableValue<?>, SettableValue<S>> left;
 		try {
-			left = theLeft.evaluate(ModelTypes.Value.forType((TypeToken<Object>) targetOpType), env, expressionOffset);
+			left = theLeft.evaluate(ModelTypes.Value.forType((TypeToken<S>) targetOpType), env, expressionOffset);
 		} catch (ExpressoInterpretationException | TypeConversionException e) {
 			throw new ExpressoEvaluationException(expressionOffset, theLeft.getExpressionLength(), e.getMessage(), e);
 		}
-		TypeToken<?> leftTypeT = left.getType().getType(0);
-		Class<?> leftType = TypeTokens.getRawType(leftTypeT);
+		TypeToken<S> leftTypeT = (TypeToken<S>) left.getType().getType(0);
+		Class<S> leftType = TypeTokens.getRawType(leftTypeT);
 		types = env.getBinaryOperators().getSupportedSecondaryInputTypes(operator, targetType, leftType);
 		switch (types.size()) {
 		case 0:
@@ -177,94 +183,53 @@ public class BinaryOperator implements ObservableExpression {
 			break;
 		}
 		int rightOffset = expressionOffset + theLeft.getExpressionLength() + theOperator.length();
-		EvaluatedExpression<SettableValue<?>, SettableValue<Object>> right;
+		EvaluatedExpression<SettableValue<?>, SettableValue<T>> right;
 		try {
-			right = theRight.evaluate(ModelTypes.Value.forType((TypeToken<Object>) targetOpType),
+			right = theRight.evaluate(ModelTypes.Value.forType((TypeToken<T>) targetOpType),
 				env.at(theLeft.getExpressionLength() + theOperator.length()), rightOffset);
 		} catch (ExpressoInterpretationException | TypeConversionException e) {
 			throw new ExpressoEvaluationException(rightOffset, theRight.getExpressionLength(), e.getMessage(), e);
 		}
-		TypeToken<?> rightTypeT = right.getType().getType(0);
-		BinaryOp<Object, Object, Object> op;
-		op = (BinaryOp<Object, Object, Object>) env.getBinaryOperators().getOperator(operator, targetType, //
-			leftType, TypeTokens.getRawType(rightTypeT));
+		TypeToken<T> rightTypeT = (TypeToken<T>) right.getType().getType(0);
+		BinaryOp<S, T, V> op;
+		op = (BinaryOp<S, T, V>) env.getBinaryOperators().getOperator(operator, targetType, leftType, TypeTokens.getRawType(rightTypeT));
 		int opOffset = expressionOffset + theLeft.getExpressionLength();
 		if (op == null)
 			throw new ExpressoEvaluationException(opOffset, theOperator.length(),
 				"Binary operator '" + theOperator + "' is not supported or implemented for operand types " + leftTypeT + " and "
 					+ rightTypeT + ", target type " + targetType.getName());
-		TypeToken<Object> resultType = op.getTargetType(leftTypeT, rightTypeT, opOffset, theOperator.length());
+		TypeToken<V> resultType = op.getTargetType(leftTypeT, rightTypeT, opOffset, theOperator.length());
 		ErrorReporting reporting = env.reporting();
 		ErrorReporting operatorReporting = env.reporting().at(theLeft.getExpressionLength());
 		if (action) {
 			if (type.getModelType() != ModelTypes.Action)
 				throw new ExpressoEvaluationException(expressionOffset + theLeft.getExpressionLength(), theOperator.length(),
 					"Binary operator " + theOperator + " can only be evaluated as an action");
-			TypeToken<Object> actionType;
 			boolean voidAction = TypeTokens.get().unwrap(TypeTokens.getRawType(type.getType(0))) == void.class;
-			if (voidAction)
-				actionType = (TypeToken<Object>) (TypeToken<?>) TypeTokens.get().VOID;
-			else if (TypeTokens.get().isAssignable(type.getType(0), resultType))
-				actionType = resultType;
-			else
+			if (!voidAction && !TypeTokens.get().isAssignable(type.getType(0), leftTypeT))
 				throw new ExpressoEvaluationException(expressionOffset + theLeft.getExpressionLength(), theOperator.length(),
 					this + " cannot be evaluated as an " + ModelTypes.Action.getName() + "<" + type.getType(0) + ">");
 			return ObservableExpression.evEx(expressionOffset, getExpressionLength(),
-				(InterpretedValueSynth<M, MV>) new InterpretedValueSynth<ObservableAction<?>, ObservableAction<Object>>() {
+				(InterpretedValueSynth<M, MV>) new InterpretedValueSynth<ObservableAction<?>, ObservableAction<R>>() {
 				@Override
 				public ModelType<ObservableAction<?>> getModelType() {
 					return ModelTypes.Action;
 				}
 
 				@Override
-				public ModelInstanceType<ObservableAction<?>, ObservableAction<Object>> getType() {
-					return ModelTypes.Action.forType(actionType);
-				}
-
-				@Override
-				public ObservableAction<Object> get(ModelSetInstance msi) throws ModelInstantiationException {
-					SettableValue<Object> leftV = left.get(msi);
-					SettableValue<Object> rightV = right.get(msi);
-					return createOpAction(leftV, rightV);
-				}
-
-				private ObservableAction<Object> createOpAction(SettableValue<Object> leftV, SettableValue<Object> rightV) {
-					ObservableValue<String> enabled = leftV.isEnabled().transform(String.class, tx -> tx//
-						.combineWith(leftV).combineWith(rightV)//
-						.combine((en, lft, rgt) -> {
-							if (en != null)
-								return en;
-							Object res;
-							try {
-								res = op.apply(lft, rgt);
-							} catch (RuntimeException | Error e) {
-								operatorReporting.error(null, e);
-								return "Error";
-							}
-							String msg = op.canReverse(lft, rgt, res);
-							if (msg != null)
-								return msg;
-							return leftV.isAcceptable(res);
-						}));
-					return new BinaryOperatorAction(resultType, leftV, rightV, op, enabled, reporting, operatorReporting);
-				}
-
-				@Override
-				public ObservableAction<Object> forModelCopy(ObservableAction<Object> value, ModelSetInstance sourceModels,
-					ModelSetInstance newModels) throws ModelInstantiationException {
-					SettableValue<Object> sourceLeft = left.get(sourceModels);
-					SettableValue<Object> newLeft = left.get(newModels);
-					SettableValue<Object> sourceRight = right.get(sourceModels);
-					SettableValue<Object> newRight = right.get(newModels);
-					if (sourceLeft == newLeft && sourceRight == newRight)
-						return value;
-					else
-						return createOpAction(newLeft, newRight);
+				public ModelInstanceType<ObservableAction<?>, ObservableAction<R>> getType() {
+					return ModelTypes.Action.forType((TypeToken<R>) (voidAction ? TypeTokens.get().VOID : leftTypeT));
 				}
 
 				@Override
 				public List<? extends InterpretedValueSynth<?, ?>> getComponents() {
 					return QommonsUtils.unmodifiableCopy(left, right);
+				}
+
+				@Override
+				public ModelValueInstantiator<ObservableAction<R>> instantiate() {
+					return new ActionInstantiator<>(voidAction, left.instantiate(), right.instantiate(), op, reporting,
+						operatorReporting);
 				}
 
 				@Override
@@ -276,69 +241,38 @@ public class BinaryOperator implements ObservableExpression {
 			if (type.getModelType() != ModelTypes.Value)
 				throw new ExpressoEvaluationException(expressionOffset + theLeft.getExpressionLength(), theOperator.length(),
 					"Binary operator " + theOperator + " can only be evaluated as a value");
-			InterpretedValueSynth<SettableValue<?>, SettableValue<Object>> operated = new InterpretedValueSynth<SettableValue<?>, SettableValue<Object>>() {
+			InterpretedValueSynth<SettableValue<?>, SettableValue<V>> operated = new InterpretedValueSynth<SettableValue<?>, SettableValue<V>>() {
 				@Override
 				public ModelType<SettableValue<?>> getModelType() {
 					return ModelTypes.Value;
 				}
 
 				@Override
-				public ModelInstanceType<SettableValue<?>, SettableValue<Object>> getType() {
+				public ModelInstanceType<SettableValue<?>, SettableValue<V>> getType() {
 					return ModelTypes.Value.forType(resultType);
-				}
-
-				@Override
-				public SettableValue<Object> get(ModelSetInstance msi) throws ModelInstantiationException {
-					SettableValue<Object> leftV = left.get(msi);
-					SettableValue<Object> rightV = right.get(msi);
-					return createOpValue(leftV, rightV);
-				}
-
-				private SettableValue<Object> createOpValue(SettableValue<Object> leftV, SettableValue<Object> rightV) {
-					if (((BinaryOp<?, ?, ?>) op) == BinaryOperatorSet.OR)
-						return (SettableValue<Object>) (SettableValue<?>) SettableValue.firstValue(TypeTokens.get().BOOLEAN,
-							LambdaUtils.printablePred(Boolean.TRUE::equals, "true", null),
-							LambdaUtils.constantSupplier(false, "false", null), (SettableValue<Boolean>) (SettableValue<?>) leftV,
-							(SettableValue<Boolean>) (SettableValue<?>) rightV);
-					else if (((BinaryOp<?, ?, ?>) op) == BinaryOperatorSet.AND)
-						return (SettableValue<Object>) (SettableValue<?>) SettableValue.firstValue(TypeTokens.get().BOOLEAN,
-							LambdaUtils.printablePred(b -> !Boolean.TRUE.equals(b), "false", null),
-							LambdaUtils.constantSupplier(true, "true", null), (SettableValue<Boolean>) (SettableValue<?>) leftV,
-							(SettableValue<Boolean>) (SettableValue<?>) rightV);
-					BinaryOperatorReverseFn reverse = new BinaryOperatorReverseFn(rightV, op);
-					SettableValue<Object> transformedV = leftV.transformReversible(resultType, tx -> tx.combineWith(rightV)//
-						.combine(LambdaUtils.printableBiFn((lft, rgt) -> {
-							try {
-								return op.apply(lft, rgt);
-							} catch (RuntimeException | Error e) {
-								reporting.error(null, e);
-								return null;
-							}
-						}, op::toString, op))//
-						.replaceSourceWith(reverse, rev -> rev.rejectWith(reverse::canReverse, true, true)));
-					if (op instanceof BinaryOperatorSet.FirstArgDecisiveBinaryOp)
-						return new FirstArgDecisiveBinaryValue<>(resultType, leftV, rightV,
-							(BinaryOperatorSet.FirstArgDecisiveBinaryOp<Object, Object, Object>) op, transformedV);
-					else
-						return transformedV;
-				}
-
-				@Override
-				public SettableValue<Object> forModelCopy(SettableValue<Object> value, ModelSetInstance sourceModels,
-					ModelSetInstance newModels) throws ModelInstantiationException {
-					SettableValue<Object> sourceLeft = left.get(sourceModels);
-					SettableValue<Object> newLeft = left.get(newModels);
-					SettableValue<Object> sourceRight = right.get(sourceModels);
-					SettableValue<Object> newRight = right.get(newModels);
-					if (sourceLeft == newLeft && sourceRight == newRight)
-						return value;
-					else
-						return createOpValue(newLeft, newRight);
 				}
 
 				@Override
 				public List<? extends InterpretedValueSynth<?, ?>> getComponents() {
 					return QommonsUtils.unmodifiableCopy(left, right);
+				}
+
+				@Override
+				public ModelValueInstantiator<SettableValue<V>> instantiate() {
+					if (op == BinaryOperatorSet.OR)
+						return (ModelValueInstantiator<SettableValue<V>>) (ModelValueInstantiator<?>) new OrValue(
+							(TypeToken<Boolean>) resultType, //
+							(ModelValueInstantiator<SettableValue<Boolean>>) (ModelValueInstantiator<?>) left.instantiate(),
+							(ModelValueInstantiator<SettableValue<Boolean>>) (ModelValueInstantiator<?>) right.instantiate(), //
+							BinaryOperatorSet.OR, reporting);
+					else if (op == BinaryOperatorSet.AND)
+						return (ModelValueInstantiator<SettableValue<V>>) (ModelValueInstantiator<?>) new AndValue(
+							(TypeToken<Boolean>) resultType, //
+							(ModelValueInstantiator<SettableValue<Boolean>>) (ModelValueInstantiator<?>) left.instantiate(),
+							(ModelValueInstantiator<SettableValue<Boolean>>) (ModelValueInstantiator<?>) right.instantiate(), //
+							BinaryOperatorSet.AND, reporting);
+					else
+						return new ValueInstantiator<>(resultType, left.instantiate(), right.instantiate(), op, reporting);
 				}
 
 				@Override
@@ -356,20 +290,174 @@ public class BinaryOperator implements ObservableExpression {
 		return theLeft + theOperator + theRight;
 	}
 
-	// These classes can't be anonymous because they'll keep references to compiled objects that we don't want to keep
+	// These classes can't be anonymous because anonymous classes would keep references to compiled objects that we don't want to keep
 
-	static class BinaryOperatorReverseFn implements BiFunction<Object, Transformation.TransformationValues<?, ?>, Object> {
-		private final SettableValue<Object> theRight;
-		private final BinaryOp<Object, Object, Object> theOperator;
+	static class ActionInstantiator<S, T, V, R> implements ModelValueInstantiator<ObservableAction<R>> {
+		private final boolean isVoid;
+		private final ModelValueInstantiator<SettableValue<S>> theLeft;
+		private final ModelValueInstantiator<SettableValue<T>> theRight;
+		private final BinaryOp<S, T, V> theOperator;
+		private final ErrorReporting theLeftReporting;
+		private final ErrorReporting theOperatorReporting;
 
-		BinaryOperatorReverseFn(SettableValue<Object> right, BinaryOp<Object, Object, Object> operator) {
+		ActionInstantiator(boolean void1, ModelValueInstantiator<SettableValue<S>> left, ModelValueInstantiator<SettableValue<T>> right,
+			BinaryOp<S, T, V> operator, ErrorReporting leftReporting, ErrorReporting operatorReporting) {
+			isVoid = void1;
+			theLeft = left;
+			theRight = right;
+			theOperator = operator;
+			theLeftReporting = leftReporting;
+			theOperatorReporting = operatorReporting;
+		}
+
+		@Override
+		public ObservableAction<R> get(ModelSetInstance msi) throws ModelInstantiationException {
+			SettableValue<S> leftV = theLeft.get(msi);
+			SettableValue<T> rightV = theRight.get(msi);
+			return createOpAction(leftV, rightV);
+		}
+
+		private ObservableAction<R> createOpAction(SettableValue<S> leftV, SettableValue<T> rightV) {
+			ObservableValue<String> enabled = leftV.isEnabled().transform(String.class, tx -> tx//
+				.combineWith(leftV).combineWith(rightV)//
+				.combine((en, lft, rgt) -> {
+					if (en != null)
+						return en;
+					V res;
+					try {
+						res = theOperator.apply(lft, rgt);
+					} catch (RuntimeException | Error e) {
+						theOperatorReporting.error(null, e);
+						return "Error";
+					}
+					String msg = theOperator.canReverse(lft, rgt, res);
+					if (msg != null)
+						return msg;
+					return leftV.isAcceptable((S) res);
+				}));
+			return new BinaryOperatorAction<>(isVoid, leftV, rightV, theOperator, enabled, theLeftReporting, theOperatorReporting);
+		}
+
+		@Override
+		public ObservableAction<R> forModelCopy(ObservableAction<R> value, ModelSetInstance sourceModels, ModelSetInstance newModels)
+			throws ModelInstantiationException {
+			SettableValue<S> sourceLeft = theLeft.get(sourceModels);
+			SettableValue<S> newLeft = theLeft.forModelCopy(sourceLeft, sourceModels, newModels);
+			SettableValue<T> sourceRight = theRight.get(sourceModels);
+			SettableValue<T> newRight = theRight.forModelCopy(sourceRight, sourceModels, newModels);
+			if (sourceLeft == newLeft && sourceRight == newRight)
+				return value;
+			else
+				return createOpAction(newLeft, newRight);
+		}
+
+		@Override
+		public String toString() {
+			return theLeft.toString() + theOperator + theRight;
+		}
+	}
+
+	static class ValueInstantiator<S, T, V> implements ModelValueInstantiator<SettableValue<V>> {
+		private final TypeToken<V> theResultType;
+		private final ModelValueInstantiator<SettableValue<S>> theLeft;
+		private final ModelValueInstantiator<SettableValue<T>> theRight;
+		private final BinaryOp<S, T, V> theOperator;
+		private final ErrorReporting theReporting;
+
+		ValueInstantiator(TypeToken<V> resultType, ModelValueInstantiator<SettableValue<S>> left,
+			ModelValueInstantiator<SettableValue<T>> right, BinaryOp<S, T, V> operator, ErrorReporting reporting) {
+			theResultType = resultType;
+			theLeft = left;
+			theRight = right;
+			theOperator = operator;
+			theReporting = reporting;
+		}
+
+		@Override
+		public SettableValue<V> get(ModelSetInstance msi) throws ModelInstantiationException {
+			SettableValue<S> leftV = theLeft.get(msi);
+			SettableValue<T> rightV = theRight.get(msi);
+			return createOpValue(leftV, rightV);
+		}
+
+		SettableValue<V> createOpValue(SettableValue<S> leftV, SettableValue<T> rightV) {
+			BinaryOperatorReverseFn<S, T, V> reverse = new BinaryOperatorReverseFn<>(rightV, theOperator);
+			SettableValue<V> transformedV = leftV.transformReversible(theResultType, tx -> tx.combineWith(rightV)//
+				.combine(LambdaUtils.printableBiFn((lft, rgt) -> {
+					try {
+						return theOperator.apply(lft, rgt);
+					} catch (RuntimeException | Error e) {
+						theReporting.error(null, e);
+						return null;
+					}
+				}, theOperator::toString, theOperator))//
+				.replaceSourceWith(reverse, rev -> rev.rejectWith(reverse::canReverse, true, true)));
+			if (theOperator instanceof BinaryOperatorSet.FirstArgDecisiveBinaryOp)
+				return new FirstArgDecisiveBinaryValue<>(theResultType, leftV, rightV, (FirstArgDecisiveBinaryOp<S, T, V>) theOperator,
+					transformedV);
+			else
+				return transformedV;
+		}
+
+		@Override
+		public SettableValue<V> forModelCopy(SettableValue<V> value, ModelSetInstance sourceModels, ModelSetInstance newModels)
+			throws ModelInstantiationException {
+			SettableValue<S> sourceLeft = theLeft.get(sourceModels);
+			SettableValue<S> newLeft = theLeft.forModelCopy(sourceLeft, sourceModels, newModels);
+			SettableValue<T> sourceRight = theRight.get(sourceModels);
+			SettableValue<T> newRight = theRight.forModelCopy(sourceRight, sourceModels, newModels);
+			if (sourceLeft == newLeft && sourceRight == newRight)
+				return value;
+			else
+				return createOpValue(newLeft, newRight);
+		}
+
+		@Override
+		public String toString() {
+			return theLeft.toString() + theOperator + theRight;
+		}
+	}
+
+	static class OrValue extends ValueInstantiator<Boolean, Boolean, Boolean> {
+		OrValue(TypeToken<Boolean> resultType, ModelValueInstantiator<SettableValue<Boolean>> left,
+			ModelValueInstantiator<SettableValue<Boolean>> right, BinaryOp<Boolean, Boolean, Boolean> operator, ErrorReporting reporting) {
+			super(resultType, left, right, operator, reporting);
+		}
+
+		@Override
+		SettableValue<Boolean> createOpValue(SettableValue<Boolean> leftV, SettableValue<Boolean> rightV) {
+			return SettableValue.firstValue(TypeTokens.get().BOOLEAN, LambdaUtils.printablePred(Boolean.TRUE::equals, "true", null),
+				LambdaUtils.constantSupplier(false, "false", null), leftV, rightV);
+		}
+	}
+
+	static class AndValue extends ValueInstantiator<Boolean, Boolean, Boolean> {
+		AndValue(TypeToken<Boolean> resultType, ModelValueInstantiator<SettableValue<Boolean>> left,
+			ModelValueInstantiator<SettableValue<Boolean>> right, BinaryOp<Boolean, Boolean, Boolean> operator, ErrorReporting reporting) {
+			super(resultType, left, right, operator, reporting);
+		}
+
+		@Override
+		SettableValue<Boolean> createOpValue(SettableValue<Boolean> leftV, SettableValue<Boolean> rightV) {
+			return SettableValue.firstValue(TypeTokens.get().BOOLEAN,
+				LambdaUtils.printablePred(b -> !Boolean.TRUE.equals(b), "false", null), LambdaUtils.constantSupplier(true, "true", null),
+				leftV, rightV);
+		}
+	}
+
+	static class BinaryOperatorReverseFn<S, T, V>
+	implements BiFunction<V, Transformation.TransformationValues<? extends S, ? extends V>, S> {
+		private final SettableValue<T> theRight;
+		private final BinaryOp<S, T, V> theOperator;
+
+		BinaryOperatorReverseFn(SettableValue<T> right, BinaryOp<S, T, V> operator) {
 			theRight = right;
 			theOperator = operator;
 		}
 
 		@Override
-		public Object apply(Object newValue, Transformation.TransformationValues<?, ?> transformValues) {
-			Object rgt = transformValues.get(theRight);
+		public S apply(V newValue, Transformation.TransformationValues<? extends S, ? extends V> transformValues) {
+			T rgt = transformValues.get(theRight);
 			String msg = theOperator.canReverse(transformValues.getCurrentSource(), rgt, newValue);
 			if (msg != null)
 				throw new IllegalArgumentException(msg);
@@ -377,8 +465,8 @@ public class BinaryOperator implements ObservableExpression {
 			return theOperator.reverse(transformValues.getCurrentSource(), rgt, newValue);
 		}
 
-		public String canReverse(Object newValue, Transformation.TransformationValues<?, ?> transformValues) {
-			Object rgt = transformValues.get(theRight);
+		public String canReverse(V newValue, Transformation.TransformationValues<? extends S, ? extends V> transformValues) {
+			T rgt = transformValues.get(theRight);
 			return theOperator.canReverse(transformValues.getCurrentSource(), rgt, newValue);
 		}
 	}
@@ -421,19 +509,18 @@ public class BinaryOperator implements ObservableExpression {
 		}
 	}
 
-	static class BinaryOperatorAction implements ObservableAction<Object> {
-		private final TypeToken<Object> theResultType;
-		private final SettableValue<Object> theLeft;
-		private final SettableValue<Object> theRight;
-		private final BinaryOp<Object, Object, Object> theOperator;
+	static class BinaryOperatorAction<S, T, V, R> implements ObservableAction<R> {
+		private final boolean isVoid;
+		private final SettableValue<S> theLeft;
+		private final SettableValue<T> theRight;
+		private final BinaryOp<S, T, V> theOperator;
 		private final ObservableValue<String> isEnabled;
 		private final ErrorReporting theLeftReporting;
 		private final ErrorReporting theOperatorReporting;
 
-		BinaryOperatorAction(TypeToken<Object> resultType, SettableValue<Object> left, SettableValue<Object> right,
-			BinaryOp<Object, Object, Object> operator, ObservableValue<String> enabled, ErrorReporting leftReporting,
-			ErrorReporting operatorReporting) {
-			theResultType = resultType;
+		BinaryOperatorAction(boolean isVoid, SettableValue<S> left, SettableValue<T> right, BinaryOp<S, T, V> operator,
+			ObservableValue<String> enabled, ErrorReporting leftReporting, ErrorReporting operatorReporting) {
+			this.isVoid = isVoid;
 			theLeft = left;
 			theRight = right;
 			theOperator = operator;
@@ -443,13 +530,16 @@ public class BinaryOperator implements ObservableExpression {
 		}
 
 		@Override
-		public TypeToken<Object> getType() {
-			return theResultType;
+		public TypeToken<R> getType() {
+			if (isVoid)
+				return (TypeToken<R>) TypeTokens.get().VOID;
+			else
+				return (TypeToken<R>) theLeft.getType();
 		}
 
 		@Override
-		public Object act(Object cause) throws IllegalStateException {
-			Object res;
+		public R act(Object cause) throws IllegalStateException {
+			V res;
 			try {
 				res = theOperator.apply(theLeft.get(), theRight.get());
 			} catch (RuntimeException | Error e) {
@@ -457,7 +547,8 @@ public class BinaryOperator implements ObservableExpression {
 				return null;
 			}
 			try {
-				return theLeft.set(res, cause);
+				S prev = theLeft.set((S) res, cause);
+				return isVoid ? null : (R) prev;
 			} catch (RuntimeException | Error e) {
 				theLeftReporting.error(null, e);
 				return null;

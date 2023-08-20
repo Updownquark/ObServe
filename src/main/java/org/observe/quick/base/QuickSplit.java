@@ -123,7 +123,7 @@ public class QuickSplit extends QuickContainer.Abstract<QuickWidget> {
 		QuickSplit.Interpreted<?> myInterpreted = (QuickSplit.Interpreted<?>) interpreted;
 		isVertical = myInterpreted.getDefinition().isVertical();
 		if (myInterpreted.getSplitPosition() != null)
-			theSplitPosition.set(myInterpreted.getSplitPosition().get(myModels), null);
+			theSplitPosition.set(myInterpreted.getSplitPosition().instantiate().get(myModels), null);
 		else {
 			SettableValue<QuickSize> splitPos = SettableValue.build(QuickSize.class).build();
 			if (theSplitPosition.get() != null)

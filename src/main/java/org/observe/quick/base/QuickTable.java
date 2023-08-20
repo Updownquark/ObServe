@@ -203,9 +203,10 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 	protected void updateModel(ExElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
 		super.updateModel(interpreted, myModels);
 		QuickTable.Interpreted<R> myInterpreted = (QuickTable.Interpreted<R>) interpreted;
-		theRows.set(myInterpreted.getRows().get(myModels), null);
-		theSelection.set(myInterpreted.getSelection() == null ? null : myInterpreted.getSelection().get(myModels), null);
-		theMultiSelection.set(myInterpreted.getMultiSelection() == null ? null : myInterpreted.getMultiSelection().get(myModels), null);
+		theRows.set(myInterpreted.getRows().instantiate().get(myModels), null);
+		theSelection.set(myInterpreted.getSelection() == null ? null : myInterpreted.getSelection().instantiate().get(myModels), null);
+		theMultiSelection
+		.set(myInterpreted.getMultiSelection() == null ? null : myInterpreted.getMultiSelection().instantiate().get(myModels), null);
 		CollectionUtils.synchronize(theActions, myInterpreted.getActions(), //
 			(a, i) -> a.getIdentity() == i.getIdentity()).<ModelInstantiationException> simpleE(action -> action.create(this))//
 		.rightOrder()//

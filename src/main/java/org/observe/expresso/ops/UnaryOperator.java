@@ -13,10 +13,13 @@ import org.observe.expresso.CompiledExpressoEnv;
 import org.observe.expresso.ExpressoEvaluationException;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.InterpretedExpressoEnv;
+import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelType;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
+import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.TypeConversionException;
 import org.observe.expresso.ops.UnaryOperatorSet.UnaryOp;
 import org.observe.util.TypeTokens;
@@ -172,44 +175,8 @@ public class UnaryOperator implements ObservableExpression {
 		}
 		boolean prefix = isPrefix;
 		TypeToken<A> fActionType = actionType;
-		return ObservableExpression.evEx(expressionOffset, getExpressionLength(), op.map(ModelTypes.Action.forType(actionType), opV -> {
-			ObservableAction<T> assignmentAction = opV.assignmentTo(opV.map(operator::apply));
-			return new ObservableAction<A>() {
-				@Override
-				public TypeToken<A> getType() {
-					return fActionType;
-				}
-
-				@Override
-				public A act(Object cause) throws IllegalStateException {
-					T newValue;
-					try {
-						newValue = operator.apply(opV.get());
-					} catch (RuntimeException | Error e) {
-						valueReporting.error(null, e);
-						return null;
-					}
-					T oldValue;
-					try {
-						oldValue = opV.set(newValue, cause);
-					} catch (RuntimeException | Error e) {
-						operatorReporting.error(null, e);
-						return null;
-					}
-					if (voidAction)
-						return null;
-					else if (prefix)
-						return (A) newValue;
-					else
-						return (A) oldValue;
-				}
-
-				@Override
-				public ObservableValue<String> isEnabled() {
-					return assignmentAction.isEnabled();
-				}
-			};
-		}), operator, op);
+		return ObservableExpression.evEx(expressionOffset, getExpressionLength(), op.map(ModelTypes.Action.forType(actionType),
+			opV -> new ActionInstantiator<>(voidAction, prefix, opV, operator, valueReporting, operatorReporting)), operator, op);
 	}
 
 	private <S, T> EvaluatedExpression<SettableValue<?>, SettableValue<T>> evaluateValue(TypeToken<S> opType, TypeToken<T> type,
@@ -230,35 +197,8 @@ public class UnaryOperator implements ObservableExpression {
 			type = cast.getConvertedType();
 		}
 		TypeToken<T> fType = type;
-		return ObservableExpression.evEx(expressionOffset, getExpressionLength(),
-			op.map(ModelTypes.Value.forType(type), opV -> opV.transformReversible(fType, tx -> tx//
-				.map(LambdaUtils.printableFn(v -> {
-					try {
-						T result = operator.apply(v);
-						if (cast != null)
-							result = cast.apply(result);
-						return result;
-					} catch (RuntimeException | Error e) {
-						operatorReporting.error(null, e);
-						return null;
-					}
-				}, operator::toString, operator))//
-				.replaceSource(v -> {
-					try {
-						if (cast != null)
-							v = cast.reverse(v);
-						return operator.reverse(v);
-					} catch (RuntimeException | Error e) {
-						operatorReporting.error(null, e);
-						return null;
-					}
-				}, rev -> {
-					if (cast == null)
-						return rev;
-					else
-						return rev.rejectWith(cast::isReversible);
-				}))),
-			operator, op);
+		return ObservableExpression.evEx(expressionOffset, getExpressionLength(), op.map(ModelTypes.Value.forType(type),
+			opV -> new ValueInstantiator<>(fType, op.instantiate(), operator, cast, operatorReporting)), operator, op);
 	}
 
 	@Override
@@ -282,5 +222,143 @@ public class UnaryOperator implements ObservableExpression {
 			return theOperator.toString() + theOperand;
 		else
 			return theOperand + theOperator.toString();
+	}
+
+	static class ActionInstantiator<T, R> implements ModelValueInstantiator<ObservableAction<R>> {
+		private final boolean isVoid;
+		private final boolean isPrefix;
+		private final ModelValueInstantiator<SettableValue<T>> theValue;
+		private final UnaryOp<T, T> theOperator;
+		private final ErrorReporting theValueReporting;
+		private final ErrorReporting theOperatorReporting;
+
+		ActionInstantiator(boolean void1, boolean prefix, ModelValueInstantiator<SettableValue<T>> value, UnaryOp<T, T> operator,
+			ErrorReporting valueReporting, ErrorReporting operatorReporting) {
+			isVoid = void1;
+			isPrefix = prefix;
+			theValue = value;
+			theOperator = operator;
+			theValueReporting = valueReporting;
+			theOperatorReporting = operatorReporting;
+		}
+
+		@Override
+		public ObservableAction<R> get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
+			SettableValue<T> value = theValue.get(models);
+			return actionFor(value);
+		}
+
+		private ObservableAction<R> actionFor(SettableValue<T> value) {
+			ObservableValue<String> enabled = value.assignmentTo(value.map(theOperator::apply)).isEnabled();
+			return new ObservableAction<R>() {
+				@Override
+				public TypeToken<R> getType() {
+					return (TypeToken<R>) (isVoid ? TypeTokens.get().VOID : value.getType());
+				}
+
+				@Override
+				public R act(Object cause) throws IllegalStateException {
+					T newValue;
+					try {
+						newValue = theOperator.apply(value.get());
+					} catch (RuntimeException | Error e) {
+						theValueReporting.error(null, e);
+						return null;
+					}
+					T oldValue;
+					try {
+						oldValue = value.set(newValue, cause);
+					} catch (RuntimeException | Error e) {
+						theOperatorReporting.error(null, e);
+						return null;
+					}
+					if (isVoid)
+						return null;
+					else if (isPrefix)
+						return (R) newValue;
+					else
+						return (R) oldValue;
+				}
+
+				@Override
+				public ObservableValue<String> isEnabled() {
+					return enabled;
+				}
+			};
+		}
+
+		@Override
+		public ObservableAction<R> forModelCopy(ObservableAction<R> value, ModelSetInstance sourceModels, ModelSetInstance newModels)
+			throws ModelInstantiationException {
+			SettableValue<T> oldSource = theValue.get(sourceModels);
+			SettableValue<T> newSource = theValue.forModelCopy(oldSource, sourceModels, newModels);
+			if (oldSource == newSource)
+				return value;
+			return actionFor(newSource);
+		}
+	}
+
+	static class ValueInstantiator<S, T> implements ModelValueInstantiator<SettableValue<T>> {
+		private final TypeToken<T> theResultType;
+		private final ModelValueInstantiator<SettableValue<S>> theSource;
+		private final UnaryOp<S, T> theOperator;
+		private final TypeTokens.TypeConverter<T, T, T, T> theCast;
+		private final ErrorReporting theOperatorReporting;
+
+		ValueInstantiator(TypeToken<T> resultType, ModelValueInstantiator<SettableValue<S>> source, UnaryOp<S, T> operator,
+			TypeConverter<T, T, T, T> cast, ErrorReporting operatorReporting) {
+			theResultType = resultType;
+			theSource = source;
+			theOperator = operator;
+			theCast = cast;
+			theOperatorReporting = operatorReporting;
+		}
+
+		@Override
+		public SettableValue<T> get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
+			SettableValue<S> sourceV = theSource.get(models);
+			return transform(sourceV);
+		}
+
+		private SettableValue<T> transform(SettableValue<S> sourceV) {
+			return sourceV.transformReversible(theResultType, tx -> tx//
+				.map(LambdaUtils.printableFn(v -> {
+					try {
+						T result = theOperator.apply(v);
+						if (theCast != null)
+							result = theCast.apply(result);
+						return result;
+					} catch (RuntimeException | Error e) {
+						theOperatorReporting.error(null, e);
+						return null;
+					}
+				}, theOperator::toString, theOperator))//
+				.replaceSource(v -> {
+					try {
+						if (theCast != null)
+							v = theCast.reverse(v);
+						return theOperator.reverse(v);
+					} catch (RuntimeException | Error e) {
+						theOperatorReporting.error(null, e);
+						return null;
+					}
+				}, rev -> {
+					if (theCast == null)
+						return rev;
+					else
+						return rev.rejectWith(theCast::isReversible);
+				}));
+		}
+
+		@Override
+		public SettableValue<T> forModelCopy(SettableValue<T> value, ModelSetInstance sourceModels, ModelSetInstance newModels)
+			throws ModelInstantiationException {
+			SettableValue<S> oldSource = theSource.get(sourceModels);
+			SettableValue<S> newSource = theSource.forModelCopy(oldSource, sourceModels, newModels);
+			if (oldSource == newSource)
+				return value;
+			else
+				return transform(newSource);
+		}
 	}
 }

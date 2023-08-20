@@ -276,22 +276,19 @@
 			<child-def name="child" type="styled-value" min="0" max="inf" />
 		</element-def>
 		
-		<element-def name="base-text-widget" extends="text-widget">
-			<?DOC The value to represent with this widget.  Either the 'value' attribute, the value text, or a document may specified.?>
-			<attr-mod name="value-widget.value" specify="optional" default="" />
-			<child-def name="document" type="styled-document" min="0" />
-		</element-def>
 		<?DOC A simple, un-editable text (or icon) component?>
-		<element-def name="label" extends="base-text-widget">
+		<element-def name="label" extends="text-widget">
 			<?DOC The text for the label. If this is specified, it takes the place of both value and format.<br>
 			Note that this is simple text, not an expression.?>
 			<value type="string" specify="optional" />
+			<?DOC The value to represent with this widget.  Either the 'value' attribute or the value text may specified.?>
+			<attr-mod name="value-widget.value" specify="optional" default="" />
 			<?DOC Labels cannot be editable?>
 			<attr-mod name="text-widget.editable" specify="forbidden" default="false" />
 			<?DOC The icon to display for the label?>
 			<attribute name="icon" type="expression" specify="optional" />
 		</element-def>
-		<element-def name="editable-text-widget" extends="base-text-widget">
+		<element-def name="editable-text-widget" extends="text-widget">
 			<element-model>
 				<?DOC Text provided by the widget when the currently entered text cannot be committed to the widget value?>
 				<value name="error" type="String" priority="10000" />
@@ -316,6 +313,9 @@
 			</element-model>
 			<?DOC The number of rows of text for the text area?>
 			<attribute name="rows" type="expression" specify="optional" />
+			<?DOC The value to represent with this widget.  Either the 'value' attribute, the value text, or a document may specified.?>
+			<attr-mod name="value-widget.value" specify="optional" default="" />
+			<child-def name="document" type="styled-document" min="0" />
 		</element-def>
 		<?DOC A text field with up and down buttons for either fully specifying or quickly adjusting a value?>
 		<element-def name="spinner" extends="text-field">

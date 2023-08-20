@@ -5,6 +5,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import org.observe.Observable;
@@ -33,10 +34,14 @@ import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.CompiledModelValue;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
+import org.observe.expresso.ObservableModelSet.ModelComponentId;
+import org.observe.expresso.ObservableModelSet.ModelInstantiator;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.VariableType;
 import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.observe.expresso.qonfig.ExElement.Def;
+import org.observe.expresso.qonfig.ExpressoQonfigValues.CollectionElement.CollectionPopulator;
 import org.observe.expresso.qonfig.ModelValueElement.InterpretedSynth;
 import org.observe.util.TypeTokens;
 import org.qommons.Causable;
@@ -52,6 +57,7 @@ import org.qommons.collect.CollectionUtils;
 import org.qommons.collect.FastFailLockingStrategy;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
+import org.qommons.io.ErrorReporting;
 
 import com.google.common.reflect.TypeToken;
 
@@ -112,8 +118,6 @@ public class ExpressoQonfigValues {
 		}
 
 		public static class Interpreted<T> extends AbstractCompiledValue.Interpreted<T, AbstractCompiledValue.VoidElement<T>> {
-			private ModelInstanceType<SettableValue<?>, SettableValue<T>> theType;
-
 			public Interpreted(ConstantValueDef definition) {
 				super(definition, null);
 			}
@@ -129,24 +133,35 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
+			public void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+				super.doUpdate(env);
+			}
+
+			@Override
+			public ModelValueInstantiator<SettableValue<T>> instantiate() {
+				return new Instantiator<>(getDefinition().getModelPath(), getElementValue().instantiate());
+			}
+		}
+
+		static class Instantiator<T> implements ModelValueInstantiator<SettableValue<T>> {
+			private final String theModelPath;
+			private final ModelValueInstantiator<SettableValue<T>> theSource;
+
+			Instantiator(String modelPath, ModelValueInstantiator<SettableValue<T>> source) {
+				theModelPath = modelPath;
+				theSource = source;
+			}
+
+			@Override
 			public SettableValue<T> get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
-				SettableValue<T> initV = getElementValue().get(models);
-				return new ConstantValue<>(getDefinition().getModelPath(), initV.getType(), initV.get());
+				SettableValue<T> initV = theSource.get(models);
+				return new ConstantValue<>(theModelPath, initV.getType(), initV.get());
 			}
 
 			@Override
 			public SettableValue<T> forModelCopy(SettableValue<T> value, ModelSetInstance sourceModels, ModelSetInstance newModels)
 				throws ModelInstantiationException {
 				return value; // Constants are constant--no need to copy
-			}
-
-			@Override
-			public void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-				super.doUpdate(env);
-				if (getDefinition().getValueType() != null)
-					theType = ModelTypes.Value.forType((TypeToken<T>) getDefinition().getValueType().getType(getExpressoEnv()));
-				else
-					theType = getElementValue().getType();
 			}
 		}
 
@@ -287,37 +302,56 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
+			public ModelValueInstantiator<SettableValue<T>> instantiate() {
+				return new Instantiator<>(getDefinition().getModelPath(), (TypeToken<T>) getType().getType(0),
+					getElementValue() == null ? null : getElementValue().instantiate(), //
+						getInit() == null ? null : getInit().instantiate());
+			}
+
+			@Override
+			public Element<T> create(ExElement parent, ModelSetInstance models) throws ModelInstantiationException {
+				return new Element<>(this, parent);
+			}
+		}
+
+		static class Instantiator<T> implements ModelValueInstantiator<SettableValue<T>> {
+			private final String theModelPath;
+			private final TypeToken<T> theType;
+			private final ModelValueInstantiator<SettableValue<T>> theValue;
+			private final ModelValueInstantiator<SettableValue<T>> theInit;
+
+			Instantiator(String modelPath, TypeToken<T> type, ModelValueInstantiator<SettableValue<T>> value,
+				ModelValueInstantiator<SettableValue<T>> init) {
+				theModelPath = modelPath;
+				theValue = value;
+				theInit = init;
+				theType = type;
+			}
+
+			@Override
 			public SettableValue<T> get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
-				InterpretedValueSynth<SettableValue<?>, SettableValue<T>> init = getInit();
-				if (getElementValue() != null)
-					return getElementValue().get(models);
+				if (theValue != null)
+					return theValue.get(models);
 				else {
-					TypeToken<T> valueType = (TypeToken<T>) getType().getType(0);
-					SettableValue.Builder<T> builder = SettableValue.build(valueType);
-					if (getDefinition().getModelPath() != null)
-						builder.withDescription(getDefinition().getModelPath());
-					if (init != null) {
-						SettableValue<T> initV = init.get(models);
-						return builder.withValue(initV.get()).build();
-					} else {
-						return builder.withValue(TypeTokens.get().getDefaultValue(valueType))//
-							.build();
-					}
+					SettableValue.Builder<T> builder = SettableValue.build(theType);
+					if (theModelPath != null)
+						builder.withDescription(theModelPath);
+					if (theInit != null) {
+						SettableValue<T> initV = theInit.get(models);
+						builder.withValue(initV.get());
+					} else
+						builder.withValue(TypeTokens.get().getDefaultValue(theType));
+					return builder.build();
 				}
 			}
 
 			@Override
 			public SettableValue<T> forModelCopy(SettableValue<T> value, ModelSetInstance sourceModels, ModelSetInstance newModels)
 				throws ModelInstantiationException {
-				if (getElementValue() != null)
-					return getElementValue().forModelCopy(value, sourceModels, newModels);
+				if (theValue != null)
+					return theValue.forModelCopy(value, sourceModels, newModels);
 				else
 					return value; // Independent (fundamental) value
-			}
-
-			@Override
-			public Element<T> create(ExElement parent, ModelSetInstance models) throws ModelInstantiationException {
-				return new Element<>(this, parent);
 			}
 		}
 
@@ -380,29 +414,43 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
-			public SettableValue<T> get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
-				return getElementValue().get(models);
+			public ModelValueInstantiator<SettableValue<T>> instantiate() {
+				return getElementValue().instantiate();
 			}
 
-			@Override
-			public SettableValue<T> forModelCopy(SettableValue<T> value, ModelSetInstance sourceModels, ModelSetInstance newModels)
-				throws ModelInstantiationException {
-				return value; // This is for initialization only, no need to make copy code
+			public CollectionPopulator<T> populator() {
+				return new CollectionPopulator.Default<>(instantiate(),
+					reporting().at(getDefinition().getElementValue().getFilePosition()));
 			}
+		}
 
-			public boolean populateCollection(BetterCollection<? super T> collection, ModelSetInstance models)
-				throws ModelInstantiationException {
-				SettableValue<T> elValue = getElementValue().get(models);
-				T value = elValue.get();
-				String msg = collection.canAdd(value);
-				if (msg != null) {
-					reporting().at(getDefinition().getElementValue().getFilePosition()).warn(msg);
-					return false;
-				} else if (!collection.add(value)) {
-					reporting().at(getDefinition().getElementValue().getFilePosition()).warn("Value not added for unspecified reason");
-					return false;
-				} else
-					return true;
+		public interface CollectionPopulator<T> {
+			boolean populateCollection(BetterCollection<? super T> collection, ModelSetInstance models) throws ModelInstantiationException;
+
+			static class Default<T> implements CollectionPopulator<T> {
+				private final ModelValueInstantiator<SettableValue<T>> theValue;
+				private final ErrorReporting theReporting;
+
+				public Default(ModelValueInstantiator<SettableValue<T>> value, ErrorReporting reporting) {
+					theValue = value;
+					theReporting = reporting;
+				}
+
+				@Override
+				public boolean populateCollection(BetterCollection<? super T> collection, ModelSetInstance models)
+					throws ModelInstantiationException {
+					SettableValue<T> elValue = theValue.get(models);
+					T value = elValue.get();
+					String msg = collection.canAdd(value);
+					if (msg != null) {
+						theReporting.warn(msg);
+						return false;
+					} else if (!collection.add(value)) {
+						theReporting.warn("Value not added for unspecified reason");
+						return false;
+					} else
+						return true;
+				}
 			}
 		}
 	}
@@ -483,28 +531,6 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
-			public C get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
-				TypeToken<T> type = TypeTokens.get().wrap((TypeToken<T>) getType().getType(0));
-				ObservableCollectionBuilder<T, ?> builder = create(type, models);
-				if (getDefinition().getModelPath() != null)
-					builder.withDescription(getDefinition().getModelPath());
-				C collection = (C) builder.build();
-				for (CollectionElement.Interpreted<T> element : theElements)
-					element.populateCollection(collection, models);
-				return collection;
-			}
-
-			protected abstract ObservableCollectionBuilder<T, ?> create(TypeToken<T> type, ModelSetInstance models)
-				throws ModelInstantiationException;
-
-			@Override
-			public C forModelCopy(C value, ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException {
-				// Configured elements are merely initialized, not slaved, and the collection may have been modified
-				// since it was created. There's no sense to making a re-initialized copy here.
-				return value;
-			}
-
-			@Override
 			public Interpreted<T, C> setParentElement(ExElement.Interpreted<?> parent) {
 				super.setParentElement(parent);
 				return this;
@@ -521,10 +547,51 @@ public class ExpressoQonfigValues {
 				.adjust();
 			}
 
+			protected TypeToken<T> getValueType() {
+				return TypeTokens.get().wrap((TypeToken<T>) getTargetType().getType(0));
+			}
+
+			protected List<CollectionElement.CollectionPopulator<T>> instantiateElements() {
+				return theElements.stream().map(el -> el.populator()).collect(Collectors.toList());
+			}
+
 			@Override
 			public ModelValueElement<C, C> create(ExElement parent, ModelSetInstance models) throws ModelInstantiationException {
 				return new ModelValueElement.Default<>(this, parent);
 			}
+		}
+
+		protected static abstract class Instantiator<T, C extends ObservableCollection<T>> implements ModelValueInstantiator<C> {
+			private final String theModelPath;
+			private final TypeToken<T> theType;
+			private final List<CollectionElement.CollectionPopulator<T>> theElements;
+
+			protected Instantiator(String modelPath, TypeToken<T> type, List<CollectionPopulator<T>> elements) {
+				theModelPath = modelPath;
+				theType = type;
+				theElements = elements;
+			}
+
+			@Override
+			public C get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
+				ObservableCollectionBuilder<T, ?> builder = create(theType, models);
+				if (theModelPath != null)
+					builder.withDescription(theModelPath);
+				C collection = (C) builder.build();
+				for (CollectionElement.CollectionPopulator<T> element : theElements)
+					element.populateCollection(collection, models);
+				return collection;
+			}
+
+			@Override
+			public C forModelCopy(C value, ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException {
+				// Configured elements are merely initialized, not slaved, and the collection may have been modified
+				// since it was created. There's no sense to making a re-initialized copy here.
+				return value;
+			}
+
+			protected abstract ObservableCollectionBuilder<T, ?> create(TypeToken<T> type, ModelSetInstance models)
+				throws ModelInstantiationException;
 		}
 	}
 
@@ -541,6 +608,17 @@ public class ExpressoQonfigValues {
 		public static class Interpreted<T> extends AbstractCollectionDef.Interpreted<T, ObservableCollection<T>> {
 			public Interpreted(PlainCollectionDef definition) {
 				super(definition);
+			}
+
+			@Override
+			public ModelValueInstantiator<ObservableCollection<T>> instantiate() {
+				return new PlainInstantiator<>(getDefinition().getModelPath(), getValueType(), instantiateElements());
+			}
+		}
+
+		static class PlainInstantiator<T> extends Instantiator<T, ObservableCollection<T>> {
+			public PlainInstantiator(String modelPath, TypeToken<T> type, List<CollectionPopulator<T>> elements) {
+				super(modelPath, type, elements);
 			}
 
 			@Override
@@ -575,6 +653,7 @@ public class ExpressoQonfigValues {
 		public static abstract class Interpreted<T, C extends ObservableSortedCollection<T>>
 		extends AbstractCollectionDef.Interpreted<T, C> {
 			private ExSort.ExRootSort.Interpreted<T> theSort;
+			private Comparator<? super T> theDefaultSorting;
 
 			protected Interpreted(AbstractSortedCollectionDef<?> definition) {
 				super(definition);
@@ -597,13 +676,35 @@ public class ExpressoQonfigValues {
 				if (theSort != null) {
 					TypeToken<T> valueType = (TypeToken<T>) getType().getType(0);
 					theSort.update(valueType, getExpressoEnv());
+				} else {
+					theDefaultSorting = ExSort.getDefaultSorting(TypeTokens.getRawType(getValueType()));
+					if (theDefaultSorting == null)
+						throw new ExpressoInterpretationException(
+							"No default sorting available for type " + getValueType() + ". Specify sorting", reporting().getPosition(), 0);
 				}
+			}
+
+			protected ModelValueInstantiator<Comparator<? super T>> instantiateSort() {
+				if (theSort != null)
+					return theSort.instantiateSort();
+				else
+					return ModelValueInstantiator.literal(theDefaultSorting, "default");
+			}
+		}
+
+		static abstract class SortedInstantiator<T, C extends ObservableSortedCollection<T>> extends Instantiator<T, C> {
+			private final ModelValueInstantiator<Comparator<? super T>> theSort;
+
+			protected SortedInstantiator(String modelPath, TypeToken<T> type, ModelValueInstantiator<Comparator<? super T>> sort,
+				List<CollectionPopulator<T>> elements) {
+				super(modelPath, type, elements);
+				theSort = sort;
 			}
 
 			@Override
 			protected ObservableCollectionBuilder.SortedBuilder<T, ?> create(TypeToken<T> type, ModelSetInstance models)
 				throws ModelInstantiationException {
-				Comparator<? super T> sort = theSort.getSorting(models);
+				Comparator<? super T> sort = theSort.get(models);
 				return create(type, sort, models);
 			}
 
@@ -625,6 +726,19 @@ public class ExpressoQonfigValues {
 		public static class Interpreted<T> extends AbstractSortedCollectionDef.Interpreted<T, ObservableSortedCollection<T>> {
 			public Interpreted(AbstractSortedCollectionDef<?> definition) {
 				super(definition);
+			}
+
+			@Override
+			public ModelValueInstantiator<ObservableSortedCollection<T>> instantiate() {
+				return new SimpleSortedInstantiator<>(getDefinition().getModelPath(), getValueType(), instantiateSort(),
+					instantiateElements());
+			}
+		}
+
+		static class SimpleSortedInstantiator<T> extends SortedInstantiator<T, ObservableSortedCollection<T>> {
+			SimpleSortedInstantiator(String modelPath, TypeToken<T> type, ModelValueInstantiator<Comparator<? super T>> sort,
+				List<CollectionPopulator<T>> elements) {
+				super(modelPath, type, sort, elements);
 			}
 
 			@Override
@@ -651,6 +765,17 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
+			public ModelValueInstantiator<ObservableSet<T>> instantiate() {
+				return new SetInstantiator<>(getDefinition().getModelPath(), getValueType(), instantiateElements());
+			}
+		}
+
+		static class SetInstantiator<T> extends Instantiator<T, ObservableSet<T>> {
+			public SetInstantiator(String modelPath, TypeToken<T> type, List<CollectionPopulator<T>> elements) {
+				super(modelPath, type, elements);
+			}
+
+			@Override
 			protected ObservableCollectionBuilder<T, ?> create(TypeToken<T> type, ModelSetInstance models)
 				throws ModelInstantiationException {
 				return ObservableSet.build(type);
@@ -674,8 +799,22 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
-			protected SortedBuilder<T, ?> create(TypeToken<T> type, Comparator<? super T> sort, ModelSetInstance models) {
-				return ObservableCollection.build(type).sortBy(sort);
+			public ModelValueInstantiator<ObservableSortedSet<T>> instantiate() {
+				return new SortedSetInstantiator<>(getDefinition().getModelPath(), getValueType(), instantiateSort(),
+					instantiateElements());
+			}
+		}
+
+		static class SortedSetInstantiator<T> extends SortedInstantiator<T, ObservableSortedSet<T>> {
+			SortedSetInstantiator(String modelPath, TypeToken<T> type, ModelValueInstantiator<Comparator<? super T>> sort,
+				List<CollectionPopulator<T>> elements) {
+				super(modelPath, type, sort, elements);
+			}
+
+			@Override
+			protected ObservableCollectionBuilder.DistinctSortedBuilder<T, ?> create(TypeToken<T> type, Comparator<? super T> sort,
+				ModelSetInstance models) {
+				return ObservableCollection.build(type).distinctSorted(sort);
 			}
 		}
 	}
@@ -741,36 +880,62 @@ public class ExpressoQonfigValues {
 				theValue = getDefinition().getElementValue().interpret(ModelTypes.Value.forType(valueType), env);
 			}
 
-			public boolean populateMap(BetterMap<? super K, ? super V> map, ModelSetInstance models) throws ModelInstantiationException {
-				SettableValue<K> keyValue = theKey.get(models);
-				SettableValue<V> vValue = theValue.get(models);
-				K key = keyValue.get();
-				V value = vValue.get();
-				String msg = map.canPut(key, value);
-				if (msg != null) {
-					reporting().at(getDefinition().getElementValue().getFilePosition()).warn(msg);
-					return false;
-				}
-				map.put(key, value);
-				return true;
+			public MapPopulator<K, V> populator() {
+				return new MapPopulator.Default<>(theKey.instantiate(), theValue.instantiate(),
+					reporting().at(getDefinition().getElementValue().getFilePosition()));
 			}
+		}
 
-			public boolean populateMultiMap(BetterMultiMap<? super K, ? super V> map, ModelSetInstance models)
-				throws ModelInstantiationException {
-				SettableValue<K> keyValue = theKey.get(models);
-				SettableValue<V> vValue = theValue.get(models);
-				K key = keyValue.get();
-				V value = vValue.get();
-				BetterCollection<? super V> values = map.get(key);
-				String msg = values.canAdd(value);
-				if (msg != null) {
-					reporting().at(getDefinition().getElementValue().getFilePosition()).warn(msg);
-					return false;
-				} else if (!values.add(value)) {
-					reporting().at(getDefinition().getElementValue().getFilePosition()).warn("Value not added for unspecified reason");
-					return false;
-				} else
+		protected interface MapPopulator<K, V> {
+			boolean populateMap(BetterMap<? super K, ? super V> map, ModelSetInstance models) throws ModelInstantiationException;
+
+			boolean populateMultiMap(BetterMultiMap<? super K, ? super V> map, ModelSetInstance models) throws ModelInstantiationException;
+			static class Default<K, V> implements MapPopulator<K, V> {
+				private final ModelValueInstantiator<SettableValue<K>> theKey;
+				private final ModelValueInstantiator<SettableValue<V>> theValue;
+				private final ErrorReporting theReporting;
+
+				public Default(ModelValueInstantiator<SettableValue<K>> key, ModelValueInstantiator<SettableValue<V>> value,
+					ErrorReporting reporting) {
+					theKey = key;
+					theValue = value;
+					theReporting = reporting;
+				}
+
+				@Override
+				public boolean populateMap(BetterMap<? super K, ? super V> map, ModelSetInstance models)
+					throws ModelInstantiationException {
+					SettableValue<K> keyValue = theKey.get(models);
+					SettableValue<V> vValue = theValue.get(models);
+					K key = keyValue.get();
+					V value = vValue.get();
+					String msg = map.canPut(key, value);
+					if (msg != null) {
+						theReporting.warn(msg);
+						return false;
+					}
+					map.put(key, value);
 					return true;
+				}
+
+				@Override
+				public boolean populateMultiMap(BetterMultiMap<? super K, ? super V> map, ModelSetInstance models)
+					throws ModelInstantiationException {
+					SettableValue<K> keyValue = theKey.get(models);
+					SettableValue<V> vValue = theValue.get(models);
+					K key = keyValue.get();
+					V value = vValue.get();
+					BetterCollection<? super V> values = map.get(key);
+					String msg = values.canAdd(value);
+					if (msg != null) {
+						theReporting.warn(msg);
+						return false;
+					} else if (!values.add(value)) {
+						theReporting.warn("Entry not added for unspecified reason");
+						return false;
+					} else
+						return true;
+				}
 			}
 		}
 	}
@@ -843,27 +1008,12 @@ public class ExpressoQonfigValues {
 				return Collections.emptyList(); // Elements are initialization only, this value is independent (fundamental)
 			}
 
-			@Override
-			public M get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
-				TypeToken<K> keyType = TypeTokens.get().wrap((TypeToken<K>) getType().getType(0));
-				TypeToken<V> valueType = TypeTokens.get().wrap((TypeToken<V>) getType().getType(1));
-				ObservableMap.Builder<K, V, ?> builder = create(keyType, valueType, models);
-				if (getDefinition().getModelPath() != null)
-					builder.withDescription(getDefinition().getModelPath());
-				M map = (M) builder.build();
-				for (MapEntry.Interpreted<K, V> element : theEntries)
-					element.populateMap(map, models);
-				return map;
+			protected TypeToken<K> getKeyType() {
+				return TypeTokens.get().wrap((TypeToken<K>) getType().getType(0));
 			}
 
-			protected abstract ObservableMap.Builder<K, V, ?> create(TypeToken<K> keyType, TypeToken<V> valueType, ModelSetInstance models)
-				throws ModelInstantiationException;
-
-			@Override
-			public M forModelCopy(M value, ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException {
-				// Configured entries are merely initialized, not slaved, and the map may have been modified
-				// since it was created. There's no sense to making a re-initialized copy here.
-				return value;
+			protected TypeToken<V> getValueType() {
+				return TypeTokens.get().wrap((TypeToken<V>) getType().getType(1));
 			}
 
 			@Override
@@ -886,10 +1036,50 @@ public class ExpressoQonfigValues {
 				.adjust();
 			}
 
+			protected List<MapEntry.MapPopulator<K, V>> instantiateEntries() {
+				return theEntries.stream().map(e -> e.populator()).collect(Collectors.toList());
+			}
+
 			@Override
 			public ModelValueElement<M, M> create(ExElement parent, ModelSetInstance models) throws ModelInstantiationException {
 				return new ModelValueElement.Default<>(this, parent);
 			}
+		}
+
+		protected static abstract class Instantiator<K, V, M extends ObservableMap<K, V>> implements ModelValueInstantiator<M> {
+			private final String theModelPath;
+			private final TypeToken<K> theKeyType;
+			private final TypeToken<V> theValueType;
+			private final List<MapEntry.MapPopulator<K, V>> theEntries;
+
+			protected Instantiator(String modelPath, TypeToken<K> keyType, TypeToken<V> valueType,
+				List<MapEntry.MapPopulator<K, V>> elements) {
+				theModelPath = modelPath;
+				theKeyType = keyType;
+				theValueType = valueType;
+				theEntries = elements;
+			}
+
+			@Override
+			public M get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
+				ObservableMap.Builder<K, V, ?> builder = create(theKeyType, theValueType, models);
+				if (theModelPath != null)
+					builder.withDescription(theModelPath);
+				M map = (M) builder.build();
+				for (MapEntry.MapPopulator<K, V> entry : theEntries)
+					entry.populateMap(map, models);
+				return map;
+			}
+
+			@Override
+			public M forModelCopy(M value, ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException {
+				// Configured entries are merely initialized, not slaved, and the map may have been modified
+				// since it was created. There's no sense to making a re-initialized copy here.
+				return value;
+			}
+
+			protected abstract ObservableMap.Builder<K, V, ?> create(TypeToken<K> keyType, TypeToken<V> valueType, ModelSetInstance models)
+				throws ModelInstantiationException;
 		}
 	}
 
@@ -906,6 +1096,18 @@ public class ExpressoQonfigValues {
 		public static class Interpreted<K, V> extends AbstractMapDef.Interpreted<K, V, ObservableMap<K, V>> {
 			public Interpreted(PlainMapDef definition) {
 				super(definition);
+			}
+
+			@Override
+			public ModelValueInstantiator<ObservableMap<K, V>> instantiate() {
+				return new PlainInstantiator<>(getDefinition().getModelPath(), getKeyType(), getValueType(), instantiateEntries());
+			}
+		}
+
+		static class PlainInstantiator<K, V> extends Instantiator<K, V, ObservableMap<K, V>> {
+			public PlainInstantiator(String modelPath, TypeToken<K> keyType, TypeToken<V> valueType,
+				List<MapEntry.MapPopulator<K, V>> entries) {
+				super(modelPath, keyType, valueType, entries);
 			}
 
 			@Override
@@ -940,6 +1142,7 @@ public class ExpressoQonfigValues {
 
 		public static class Interpreted<K, V, M extends ObservableSortedMap<K, V>> extends AbstractMapDef.Interpreted<K, V, M> {
 			private ExSort.ExRootSort.Interpreted<K> theSort;
+			private Comparator<? super K> theDefaultSorting;
 
 			public Interpreted(SortedMapDef definition) {
 				super(definition);
@@ -962,13 +1165,41 @@ public class ExpressoQonfigValues {
 				if (theSort != null) {
 					TypeToken<K> keyType = (TypeToken<K>) getType().getType(0);
 					theSort.update(keyType, getExpressoEnv());
+				} else {
+					theDefaultSorting = ExSort.getDefaultSorting(TypeTokens.getRawType(getKeyType()));
+					if (theDefaultSorting == null)
+						throw new ExpressoInterpretationException(
+							"No default sorting available for type " + getKeyType() + ". Specify sorting", reporting().getPosition(), 0);
 				}
+			}
+
+			protected ModelValueInstantiator<Comparator<? super K>> instantiateSort() {
+				if (theSort != null)
+					return theSort.instantiateSort();
+				else
+					return ModelValueInstantiator.literal(theDefaultSorting, "default");
+			}
+
+			@Override
+			public ModelValueInstantiator<M> instantiate() {
+				return new SortedInstantiator<>(getDefinition().getModelPath(), getKeyType(), getValueType(), instantiateSort(),
+					instantiateEntries());
+			}
+		}
+
+		static class SortedInstantiator<K, V, M extends ObservableMap<K, V>> extends Instantiator<K, V, M> {
+			private final ModelValueInstantiator<Comparator<? super K>> theSort;
+
+			protected SortedInstantiator(String modelPath, TypeToken<K> keyType, TypeToken<V> valueType,
+				ModelValueInstantiator<Comparator<? super K>> sort, List<MapEntry.MapPopulator<K, V>> entries) {
+				super(modelPath, keyType, valueType, entries);
+				theSort = sort;
 			}
 
 			@Override
 			protected ObservableMap.Builder<K, V, ?> create(TypeToken<K> keyType, TypeToken<V> valueType, ModelSetInstance models)
 				throws ModelInstantiationException {
-				Comparator<? super K> sort = theSort.getSorting(models);
+				Comparator<? super K> sort = theSort.get(models);
 				return ObservableSortedMap.build(keyType, valueType, sort);
 			}
 		}
@@ -1036,29 +1267,6 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
-			public M get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
-				TypeToken<K> keyType = TypeTokens.get().wrap((TypeToken<K>) getType().getType(0));
-				TypeToken<V> valueType = TypeTokens.get().wrap((TypeToken<V>) getType().getType(1));
-				ObservableMultiMap.Builder<K, V, ?> builder = create(keyType, valueType, models);
-				if (getDefinition().getModelPath() != null)
-					builder.withDescription(getDefinition().getModelPath());
-				M map = (M) builder.build(models.getUntil());
-				for (MapEntry.Interpreted<K, V> element : theEntries)
-					element.populateMultiMap(map, models);
-				return map;
-			}
-
-			protected abstract ObservableMultiMap.Builder<K, V, ?> create(TypeToken<K> keyType, TypeToken<V> valueType,
-				ModelSetInstance models) throws ModelInstantiationException;
-
-			@Override
-			public M forModelCopy(M value, ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException {
-				// Configured entries are merely initialized, not slaved, and the map may have been modified
-				// since it was created. There's no sense to making a re-initialized copy here.
-				return value;
-			}
-
-			@Override
 			public Interpreted<K, V, M> setParentElement(ExElement.Interpreted<?> parent) {
 				super.setParentElement(parent);
 				return this;
@@ -1078,10 +1286,58 @@ public class ExpressoQonfigValues {
 				.adjust();
 			}
 
+			protected TypeToken<K> getKeyType() {
+				return TypeTokens.get().wrap((TypeToken<K>) getType().getType(0));
+			}
+
+			protected TypeToken<V> getValueType() {
+				return TypeTokens.get().wrap((TypeToken<V>) getType().getType(1));
+			}
+
+			protected List<MapEntry.MapPopulator<K, V>> instantiateEntries() {
+				return theEntries.stream().map(e -> e.populator()).collect(Collectors.toList());
+			}
+
 			@Override
 			public ModelValueElement<M, M> create(ExElement parent, ModelSetInstance models) throws ModelInstantiationException {
 				return new ModelValueElement.Default<>(this, parent);
 			}
+		}
+
+		protected static abstract class Instantiator<K, V, M extends ObservableMultiMap<K, V>> implements ModelValueInstantiator<M> {
+			private final String theModelPath;
+			private final TypeToken<K> theKeyType;
+			private final TypeToken<V> theValueType;
+			private final List<MapEntry.MapPopulator<K, V>> theEntries;
+
+			protected Instantiator(String modelPath, TypeToken<K> keyType, TypeToken<V> valueType,
+				List<MapEntry.MapPopulator<K, V>> elements) {
+				theModelPath = modelPath;
+				theKeyType = keyType;
+				theValueType = valueType;
+				theEntries = elements;
+			}
+
+			@Override
+			public M get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
+				ObservableMultiMap.Builder<K, V, ?> builder = create(theKeyType, theValueType, models);
+				if (theModelPath != null)
+					builder.withDescription(theModelPath);
+				M map = (M) builder.build(models.getUntil());
+				for (MapEntry.MapPopulator<K, V> entry : theEntries)
+					entry.populateMultiMap(map, models);
+				return map;
+			}
+
+			@Override
+			public M forModelCopy(M value, ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException {
+				// Configured entries are merely initialized, not slaved, and the map may have been modified
+				// since it was created. There's no sense to making a re-initialized copy here.
+				return value;
+			}
+
+			protected abstract ObservableMultiMap.Builder<K, V, ?> create(TypeToken<K> keyType, TypeToken<V> valueType,
+				ModelSetInstance models) throws ModelInstantiationException;
 		}
 	}
 
@@ -1098,6 +1354,18 @@ public class ExpressoQonfigValues {
 		public static class Interpreted<K, V> extends AbstractMultiMapDef.Interpreted<K, V, ObservableMultiMap<K, V>> {
 			public Interpreted(PlainMultiMapDef definition) {
 				super(definition);
+			}
+
+			@Override
+			public ModelValueInstantiator<ObservableMultiMap<K, V>> instantiate() {
+				return new PlainInstantiator<>(getDefinition().getModelPath(), getKeyType(), getValueType(), instantiateEntries());
+			}
+		}
+
+		static class PlainInstantiator<K, V> extends Instantiator<K, V, ObservableMultiMap<K, V>> {
+			public PlainInstantiator(String modelPath, TypeToken<K> keyType, TypeToken<V> valueType,
+				List<MapEntry.MapPopulator<K, V>> entries) {
+				super(modelPath, keyType, valueType, entries);
 			}
 
 			@Override
@@ -1132,6 +1400,7 @@ public class ExpressoQonfigValues {
 
 		public static class Interpreted<K, V, M extends ObservableSortedMultiMap<K, V>> extends AbstractMultiMapDef.Interpreted<K, V, M> {
 			private ExSort.ExRootSort.Interpreted<K> theSort;
+			private Comparator<? super K> theDefaultSorting;
 
 			public Interpreted(SortedMultiMapDef definition) {
 				super(definition);
@@ -1154,13 +1423,41 @@ public class ExpressoQonfigValues {
 				if (theSort != null) {
 					TypeToken<K> keyType = (TypeToken<K>) getType().getType(0);
 					theSort.update(keyType, getExpressoEnv());
+				} else {
+					theDefaultSorting = ExSort.getDefaultSorting(TypeTokens.getRawType(getKeyType()));
+					if (theDefaultSorting == null)
+						throw new ExpressoInterpretationException(
+							"No default sorting available for type " + getKeyType() + ". Specify sorting", reporting().getPosition(), 0);
 				}
+			}
+
+			protected ModelValueInstantiator<Comparator<? super K>> instantiateSort() {
+				if (theSort != null)
+					return theSort.instantiateSort();
+				else
+					return ModelValueInstantiator.literal(theDefaultSorting, "default");
+			}
+
+			@Override
+			public ModelValueInstantiator<M> instantiate() {
+				return new SortedInstantiator<>(getDefinition().getModelPath(), getKeyType(), getValueType(), instantiateSort(),
+					instantiateEntries());
+			}
+		}
+
+		static class SortedInstantiator<K, V, M extends ObservableMultiMap<K, V>> extends Instantiator<K, V, M> {
+			private final ModelValueInstantiator<Comparator<? super K>> theSort;
+
+			protected SortedInstantiator(String modelPath, TypeToken<K> keyType, TypeToken<V> valueType,
+				ModelValueInstantiator<Comparator<? super K>> sort, List<MapEntry.MapPopulator<K, V>> entries) {
+				super(modelPath, keyType, valueType, entries);
+				theSort = sort;
 			}
 
 			@Override
 			protected ObservableMultiMap.Builder<K, V, ?> create(TypeToken<K> keyType, TypeToken<V> valueType, ModelSetInstance models)
 				throws ModelInstantiationException {
-				Comparator<? super K> sort = theSort.getSorting(models);
+				Comparator<? super K> sort = theSort.get(models);
 				return ObservableMultiMap.build(keyType, valueType).sortedBy(sort);
 			}
 		}
@@ -1273,11 +1570,26 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
+			public ModelValueInstantiator<SettableValue<T>> instantiate() {
+				return new Instantiator<>(theCommonType, QommonsUtils.map(theValues, v -> v.instantiate(), true));
+			}
+		}
+
+		static class Instantiator<T> implements ModelValueInstantiator<SettableValue<T>> {
+			private final TypeToken<T> theType;
+			private final List<ModelValueInstantiator<? extends SettableValue<? extends T>>> theValues;
+
+			public Instantiator(TypeToken<T> type, List<ModelValueInstantiator<? extends SettableValue<? extends T>>> values) {
+				theType = type;
+				theValues = values;
+			}
+
+			@Override
 			public SettableValue<T> get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
 				SettableValue<? extends T>[] vs = new SettableValue[theValues.size()];
 				for (int i = 0; i < vs.length; i++)
 					vs[i] = theValues.get(i).get(models);
-				return new FirstValueValue<>(theCommonType, vs);
+				return new FirstValueValue<>(theType, vs);
 			}
 
 			@Override
@@ -1288,17 +1600,16 @@ public class ExpressoQonfigValues {
 				boolean different = false;
 				for (int i = 0; i < vs.length; i++) {
 					SettableValue<? extends T> sv = fsv.getValues().get(i);
-					SettableValue<? extends T> nv = ((ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<T>, ?>) theValues
-						.get(i)).forModelCopy((SettableValue<T>) sv, sourceModels, newModels);
+					SettableValue<? extends T> nv = ((ModelValueInstantiator<SettableValue<T>>) theValues.get(i))
+						.forModelCopy((SettableValue<T>) sv, sourceModels, newModels);
 					different |= sv != nv;
 					vs[i] = nv;
 				}
 				if (different)
-					return new FirstValueValue<>(theCommonType, vs);
+					return new FirstValueValue<>(theType, vs);
 				else
 					return value;
 			}
-
 		}
 
 		static class FirstValueValue<T> extends SettableValue.FirstSettableValue<T> {
@@ -1323,6 +1634,7 @@ public class ExpressoQonfigValues {
 		private String theModelPath;
 		private CompiledExpression theEvent;
 		private CompiledExpression theAction;
+		private ModelComponentId theEventVariable;
 
 		public Hook(Def<?> parent, QonfigElementOrAddOn qonfigType) {
 			super(parent, qonfigType);
@@ -1356,6 +1668,10 @@ public class ExpressoQonfigValues {
 			return theAction;
 		}
 
+		public ModelComponentId getEventVariable() {
+			return theEventVariable;
+		}
+
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
@@ -1364,10 +1680,11 @@ public class ExpressoQonfigValues {
 			theModelPath = session.get(ExpressoBaseV0_1.PATH_KEY, String.class);
 			theEvent = session.getAttributeExpression("on");
 			theAction = session.getValueExpression();
-			getAddOn(ExWithElementModel.Def.class).<Interpreted<?>, SettableValue<?>> satisfyElementValueType("event", ModelTypes.Value,
-				(interp, env) -> {
-					return ModelTypes.Value.forType(interp.getOrEvalEventType(env));
-				});
+			ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
+			theEventVariable = elModels.getElementValueModelId("event");
+			elModels.<Interpreted<?>, SettableValue<?>> satisfyElementValueType("event", ModelTypes.Value, (interp, env) -> {
+				return ModelTypes.Value.forType(interp.getOrEvalEventType(env));
+			});
 		}
 
 		@Override
@@ -1454,13 +1771,46 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
+			public ModelValueInstantiator<Observable<T>> instantiate() {
+				return new Instantiator<>(theEventType, getExpressoEnv().getModels().instantiate(), //
+					theEvent == null ? null : theEvent.instantiate(), theAction.instantiate(), getDefinition().getEventVariable());
+			}
+
+			@Override
+			public ModelValueElement<Observable<?>, Observable<T>> create(ExElement parent, ModelSetInstance models)
+				throws ModelInstantiationException {
+				return null;
+			}
+		}
+
+		static class Instantiator<T, A> implements ModelValueInstantiator<Observable<T>> {
+			private final TypeToken<T> theType;
+			private final ModelInstantiator theLocalModels;
+			private final ModelValueInstantiator<Observable<T>> theEvent;
+			private final ModelValueInstantiator<ObservableAction<A>> theAction;
+			private final ModelComponentId theEventValue;
+
+			Instantiator(TypeToken<T> type, ModelInstantiator localModels, ModelValueInstantiator<Observable<T>> event,
+				ModelValueInstantiator<? extends ObservableAction<?>> action, ModelComponentId eventValue) {
+				theType = type;
+				theLocalModels = localModels;
+				theEvent = event;
+				theAction = (ModelValueInstantiator<ObservableAction<A>>) action;
+				theEventValue = eventValue;
+			}
+
+			@Override
 			public Observable<T> get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
-				models = getExpressoEnv().wrapLocal(models);
+				models = theLocalModels.wrap(models);
 				Observable<T> on = theEvent == null ? null : theEvent.get(models);
-				ObservableAction<?> action = theAction.get(models);
-				SettableValue<T> event = SettableValue.build(theEventType)//
-					.withValue(TypeTokens.get().getDefaultValue(theEventType)).build();
-				getAddOn(ExWithElementModel.Interpreted.class).satisfyElementValue("event", models, event);
+				ObservableAction<A> action = theAction.get(models);
+				return create(on, action, models);
+			}
+
+			Observable<T> create(Observable<T> on, ObservableAction<A> action, ModelSetInstance models) throws ModelInstantiationException {
+				SettableValue<T> event = SettableValue.build(theType)//
+					.withValue(TypeTokens.get().getDefaultValue(theType)).build();
+				ExFlexibleElementModelAddOn.satisfyElementValue(theEventValue, models, event);
 				if (on != null) {
 					on.takeUntil(models.getUntil()).act(v -> {
 						event.set(v, null);
@@ -1476,14 +1826,14 @@ public class ExpressoQonfigValues {
 			@Override
 			public Observable<T> forModelCopy(Observable<T> value, ModelSetInstance sourceModels, ModelSetInstance newModels)
 				throws ModelInstantiationException {
-				// TODO Can do this better some day
-				return get(newModels);
-			}
-
-			@Override
-			public ModelValueElement<Observable<?>, Observable<T>> create(ExElement parent, ModelSetInstance models)
-				throws ModelInstantiationException {
-				return null;
+				Observable<T> oldEvent = theEvent == null ? null : theEvent.get(sourceModels);
+				Observable<T> newEvent = theEvent == null ? null : theEvent.forModelCopy(oldEvent, sourceModels, newModels);
+				ObservableAction<A> oldAction = theAction.get(sourceModels);
+				ObservableAction<A> newAction = theAction.forModelCopy(oldAction, sourceModels, newModels);
+				if (oldEvent == newEvent && oldAction == newAction)
+					return value;
+				else
+					return create(newEvent, newAction, theLocalModels.wrap(newModels));
 			}
 		}
 	}
@@ -1544,14 +1894,8 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
-			public ObservableAction<T> get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
-				return getElementValue().get(models);
-			}
-
-			@Override
-			public ObservableAction<T> forModelCopy(ObservableAction<T> value, ModelSetInstance sourceModels, ModelSetInstance newModels)
-				throws ModelInstantiationException {
-				return getElementValue().forModelCopy(value, sourceModels, newModels);
+			public ModelValueInstantiator<ObservableAction<T>> instantiate() {
+				return getElementValue().instantiate();
 			}
 		}
 	}
@@ -1641,6 +1985,19 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
+			public ModelValueInstantiator<ObservableAction<Void>> instantiate() {
+				return new Instantiator(QommonsUtils.map(theActions, a -> a.instantiate(), true));
+			}
+		}
+
+		static class Instantiator implements ModelValueInstantiator<ObservableAction<Void>> {
+			private final List<ModelValueInstantiator<? extends ObservableAction<?>>> theActions;
+
+			Instantiator(List<ModelValueInstantiator<? extends ObservableAction<?>>> actions) {
+				theActions = actions;
+			}
+
+			@Override
 			public ObservableAction<Void> get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
 				ObservableAction<?>[] actions = new ObservableAction[theActions.size()];
 				for (int i = 0; i < actions.length; i++)
@@ -1655,7 +2012,7 @@ public class ExpressoQonfigValues {
 				ObservableAction<?>[] actionCopies = new ObservableAction[action.getActions().length];
 				boolean different = false;
 				for (int i = 0; i < theActions.size(); i++) {
-					actionCopies[i] = ((Action.Interpreted<Object>) theActions.get(i))
+					actionCopies[i] = ((ModelValueInstantiator<ObservableAction<Object>>) theActions.get(i))
 						.forModelCopy((ObservableAction<Object>) action.getActions()[i], sourceModels, newModels);
 					if (actionCopies[i] != action.getActions()[i])
 						different = true;
@@ -1843,14 +2200,53 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
-			public ObservableAction<Object> get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
-				models = getExpressoEnv().wrapLocal(models);
+			public ModelValueInstantiator<ObservableAction<?>> instantiate() {
+				return new Instantiator(getExpressoEnv().getModels().instantiate(), //
+					theInit == null ? null : theInit.instantiate(), //
+						theBefore == null ? null : theBefore.instantiate(), //
+							theWhile.instantiate(), //
+							theBeforeBody == null ? null : theBeforeBody.instantiate(), //
+								QommonsUtils.map(theBody, b -> b.instantiate(), true), //
+								theAfterBody == null ? null : theAfterBody.instantiate(), //
+									theFinally == null ? null : theFinally.instantiate());
+			}
+		}
+
+		static class Instantiator implements ModelValueInstantiator<ObservableAction<?>> {
+			private final ModelInstantiator theLocalModels;
+			private final ModelValueInstantiator<? extends ObservableAction<?>> theInit;
+			private final ModelValueInstantiator<? extends ObservableAction<?>> theBefore;
+			private final ModelValueInstantiator<SettableValue<Boolean>> theWhile;
+			private final ModelValueInstantiator<? extends ObservableAction<?>> theBeforeBody;
+			private final List<? extends ModelValueInstantiator<? extends ObservableAction<?>>> theBody;
+			private final ModelValueInstantiator<? extends ObservableAction<?>> theAfterBody;
+			private final ModelValueInstantiator<? extends ObservableAction<?>> theFinally;
+
+			Instantiator(ModelInstantiator localModels, ModelValueInstantiator<? extends ObservableAction<?>> init,
+				ModelValueInstantiator<? extends ObservableAction<?>> before, ModelValueInstantiator<SettableValue<Boolean>> while1,
+					ModelValueInstantiator<? extends ObservableAction<?>> beforeBody,
+						List<? extends ModelValueInstantiator<? extends ObservableAction<?>>> body,
+							ModelValueInstantiator<? extends ObservableAction<?>> afterBody,
+								ModelValueInstantiator<? extends ObservableAction<?>> finally1) {
+				theLocalModels = localModels;
+				theInit = init;
+				theBefore = before;
+				theWhile = while1;
+				theBeforeBody = beforeBody;
+				theBody = body;
+				theAfterBody = afterBody;
+				theFinally = finally1;
+			}
+
+			@Override
+			public ObservableAction<?> get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
+				models = theLocalModels.wrap(models);
 				ObservableAction<?> init = theInit == null ? null : theInit.get(models);
 				ObservableAction<?> before = theBefore == null ? null : theBefore.get(models);
 				SettableValue<Boolean> condition = theWhile.get(models);
 				ObservableAction<?> beforeBody = theBeforeBody == null ? null : theBeforeBody.get(models);
 				List<ObservableAction<?>> body = new ArrayList<>(theBody.size());
-				for (InterpretedValueSynth<ObservableAction<?>, ?> b : theBody)
+				for (ModelValueInstantiator<? extends ObservableAction<?>> b : theBody)
 					body.add(b.get(models));
 				ObservableAction<?> afterBody = theAfterBody == null ? null : theAfterBody.get(models);
 				ObservableAction<?> last = theFinally == null ? null : theFinally.get(models);
@@ -1861,28 +2257,31 @@ public class ExpressoQonfigValues {
 			public ObservableAction<?> forModelCopy(ObservableAction<?> value, ModelSetInstance sourceModels, ModelSetInstance newModels)
 				throws ModelInstantiationException {
 				LoopAction loop = (LoopAction) value;
-				ObservableAction<?> initS = loop.getInit();
-				ObservableAction<?> initA = theInit == null ? null : theInit.forModelCopy(initS, sourceModels, newModels);
-				ObservableAction<?> beforeS = loop.getBeforeCondition();
-				ObservableAction<?> beforeA = theBefore == null ? null : theBefore.forModelCopy(beforeS, sourceModels, newModels);
+				ObservableAction<Object> initS = (ObservableAction<Object>) loop.getInit();
+				ObservableAction<Object> initA = theInit == null ? null
+					: ((ModelValueInstantiator<ObservableAction<Object>>) theInit).forModelCopy(initS, sourceModels, newModels);
+				ObservableAction<Object> beforeS = (ObservableAction<Object>) loop.getBeforeCondition();
+				ObservableAction<Object> beforeA = theBefore == null ? null
+					: ((ModelValueInstantiator<ObservableAction<Object>>) theBefore).forModelCopy(beforeS, sourceModels, newModels);
 				SettableValue<Boolean> whileS = (SettableValue<Boolean>) loop.getCondition();
 				SettableValue<Boolean> whileA = theWhile.forModelCopy(whileS, sourceModels, newModels);
-				ObservableAction<?> beforeBodyS = loop.getBeforeBody();
-				ObservableAction<?> beforeBodyA = theBeforeBody == null ? null
-					: theBeforeBody.forModelCopy(beforeBodyS, sourceModels, newModels);
+				ObservableAction<Object> beforeBodyS = (ObservableAction<Object>) loop.getBeforeBody();
+				ObservableAction<Object> beforeBodyA = theBeforeBody == null ? null
+					: ((ModelValueInstantiator<ObservableAction<Object>>) theBeforeBody).forModelCopy(beforeBodyS, sourceModels, newModels);
 				boolean different = initS != initA || beforeS != beforeA || whileS != whileA || beforeBodyS != beforeBodyA;
 				List<ObservableAction<?>> execAs = new ArrayList<>(theBody.size());
 				for (int i = 0; i < theBody.size(); i++) {
 					ObservableAction<?> bodyS = loop.getBody().get(i);
-					ObservableAction<?> bodyA = ((InterpretedValueSynth<ObservableAction<?>, ObservableAction<?>>) theBody.get(i))
-						.forModelCopy(bodyS, sourceModels, newModels);
+					ObservableAction<?> bodyA = ((ModelValueInstantiator<ObservableAction<?>>) theBody.get(i)).forModelCopy(bodyS,
+						sourceModels, newModels);
 					different |= bodyS != bodyA;
 				}
-				ObservableAction<?> afterBodyS = loop.getAfterBody();
-				ObservableAction<?> afterBodyA = theAfterBody == null ? null
-					: theAfterBody.forModelCopy(afterBodyS, sourceModels, newModels);
-				ObservableAction<?> finallyS = loop.getFinally();
-				ObservableAction<?> finallyA = theFinally == null ? null : theFinally.forModelCopy(finallyS, sourceModels, newModels);
+				ObservableAction<Object> afterBodyS = (ObservableAction<Object>) loop.getAfterBody();
+				ObservableAction<Object> afterBodyA = theAfterBody == null ? null
+					: ((ModelValueInstantiator<ObservableAction<Object>>) theAfterBody).forModelCopy(afterBodyS, sourceModels, newModels);
+				ObservableAction<Object> finallyS = (ObservableAction<Object>) loop.getFinally();
+				ObservableAction<Object> finallyA = theFinally == null ? null
+					: ((ModelValueInstantiator<ObservableAction<Object>>) theFinally).forModelCopy(finallyS, sourceModels, newModels);
 				different |= afterBodyS != afterBodyA || finallyS != finallyA;
 				if (different)
 					return new LoopAction(initA, beforeA, whileA, beforeBodyA, execAs, afterBodyA, finallyA);
@@ -2024,13 +2423,26 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
+			public ModelValueInstantiator<ObservableValueSet<T>> instantiate() {
+				return new Instantiator<>((TypeToken<T>) getType().getType(0));
+			}
+		}
+
+		static class Instantiator<T> implements ModelValueInstantiator<ObservableValueSet<T>> {
+			private final TypeToken<T> theType;
+
+			Instantiator(TypeToken<T> type) {
+				theType = type;
+			}
+
+			@Override
 			public ObservableValueSet<T> get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
 				// Although a purely in-memory value set would be more efficient, I have yet to implement one.
 				// Easiest path forward for this right now is to make an unpersisted ObservableConfig and use it to back the value set.
 				// TODO At some point I should come back and make an in-memory implementation and use it here.
 				ObservableConfig config = ObservableConfig.createRoot("root", null,
 					__ -> new FastFailLockingStrategy(ThreadConstraint.ANY));
-				return config.asValue((TypeToken<T>) getType().getType(0)).buildEntitySet(null);
+				return config.asValue(theType).buildEntitySet(null);
 			}
 
 			@Override

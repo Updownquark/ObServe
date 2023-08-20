@@ -571,9 +571,9 @@ public class QuickStyleElement<T> extends ExElement.Abstract {
 	protected void updateModel(ExElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
 		super.updateModel(interpreted, myModels);
 		Interpreted<T> myInterpreted = (Interpreted<T>) interpreted;
-		theCondition.set(myInterpreted.getCondition() == null ? null : myInterpreted.getCondition().get(myModels), null);
+		theCondition.set(myInterpreted.getCondition() == null ? null : myInterpreted.getCondition().instantiate().get(myModels), null);
 		if (theValue != null)
-			theValue.set(myInterpreted.getValue() == null ? null : myInterpreted.getValue().get(myModels), null);
+			theValue.set(myInterpreted.getValue() == null ? null : myInterpreted.getValue().instantiate().get(myModels), null);
 		CollectionUtils.synchronize(theChildren, myInterpreted.getChildren(), (inst, interp) -> inst.getIdentity() == interp.getIdentity())//
 		.<ModelInstantiationException> simpleE(interp -> interp.create(this))//
 		.onRightX(el -> el.getLeftValue().update(el.getRightValue(), myModels))

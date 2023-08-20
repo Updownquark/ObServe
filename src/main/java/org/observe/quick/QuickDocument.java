@@ -218,7 +218,7 @@ public class QuickDocument extends ExElement.Abstract {
 		ExWithElementModel elModel = getAddOn(ExWithElementModel.class);
 		elModel.satisfyElementValue("onModelLoad", theModelLoad.readOnly());
 		elModel.satisfyElementValue("onBodyLoad", theBodyLoad.readOnly());
-		ModelSetInstance headModels = myInterpreted.getHead().getExpressoEnv().wrapLocal(myModels);
+		ModelSetInstance headModels = myInterpreted.getHead().getExpressoEnv().getModels().instantiate().wrap(myModels);
 		theModelLoad.onNext(null);
 		if (theBody == null)
 			theBody = myInterpreted.getBody().create(this);

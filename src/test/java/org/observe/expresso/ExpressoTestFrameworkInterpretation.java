@@ -8,6 +8,7 @@ import org.observe.SettableValue;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.qonfig.CompiledExpression;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExpressoBaseV0_1;
@@ -144,8 +145,27 @@ public class ExpressoTestFrameworkInterpretation implements QonfigInterpretation
 			}
 
 			@Override
+			public ModelValueInstantiator<SettableValue<T>> instantiate() {
+				return new Instantiator<>(theValue.instantiate());
+			}
+
+			@Override
+			public ModelValueElement<SettableValue<?>, SettableValue<T>> create(ExElement parent, ModelSetInstance models)
+				throws ModelInstantiationException {
+				return null;
+			}
+		}
+
+		static class Instantiator<T> implements ModelValueInstantiator<SettableValue<T>> {
+			private final ModelValueInstantiator<SettableValue<T>> theSource;
+
+			Instantiator(ModelValueInstantiator<SettableValue<T>> source) {
+				theSource = source;
+			}
+
+			@Override
 			public SettableValue<T> get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
-				SettableValue<T> value = theValue.get(models);
+				SettableValue<T> value = theSource.get(models);
 				SettableValue<T> copy = SettableValue.build(value.getType()).withValue(value.get()).build();
 				value.noInitChanges().takeUntil(models.getUntil()).act(evt -> copy.set(evt.getNewValue(), evt));
 				return copy.disableWith(ObservableValue.of("A watched value cannot be modified"));
@@ -155,12 +175,6 @@ public class ExpressoTestFrameworkInterpretation implements QonfigInterpretation
 			public SettableValue<T> forModelCopy(SettableValue<T> value, ModelSetInstance sourceModels, ModelSetInstance newModels)
 				throws ModelInstantiationException {
 				return get(newModels);
-			}
-
-			@Override
-			public ModelValueElement<SettableValue<?>, SettableValue<T>> create(ExElement parent, ModelSetInstance models)
-				throws ModelInstantiationException {
-				return null;
 			}
 		}
 	}

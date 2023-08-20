@@ -482,13 +482,17 @@ public interface ExElement extends Identifiable {
 					addAddOns(session, session.getElement().getType(), addOnsTested);
 				}
 
-				for (ExAddOn.Def<?, ?> addOn : theAddOns.getAllValues())
-					addOn.preUpdate(session.asElement(addOn.getType()));
+				try {
+					for (ExAddOn.Def<?, ?> addOn : theAddOns.getAllValues())
+						addOn.preUpdate(session.asElement(addOn.getType()));
 
-				doUpdate(session);
+					doUpdate(session);
 
-				for (ExAddOn.Def<?, ?> addOn : theAddOns.getAllValues())
-					addOn.postUpdate(session.asElement(addOn.getType()));
+					for (ExAddOn.Def<?, ?> addOn : theAddOns.getAllValues())
+						addOn.postUpdate(session.asElement(addOn.getType()));
+				} catch (RuntimeException | Error e) {
+					reporting().error(e.getMessage(), e);
+				}
 
 				if (firstTime) {
 					// Ensure implementation added all traceability
@@ -775,12 +779,15 @@ public interface ExElement extends Identifiable {
 					doUpdate(theExpressoEnv);
 					// If our models are the same as the parent, then they're already interpreted or interpreting
 					// Can't always rely on having our parent correct, but we can tell from the definition
-					if (getDefinition().getParentElement() == null
-						|| getDefinition().getExpressoEnv().getModels() != getDefinition().getParentElement().getExpressoEnv().getModels())
+					boolean hasUniqueModels = getDefinition().getParentElement() == null
+						|| getDefinition().getExpressoEnv().getModels() != getDefinition().getParentElement().getExpressoEnv().getModels();
+					if (hasUniqueModels)
 						theExpressoEnv.getModels().interpret(theExpressoEnv); // Interpret any remaining values
 					for (ExAddOn.Interpreted<?, ?> addOn : theAddOns.getAllValues())
 						addOn.postUpdate();
 					postUpdate();
+				} catch (RuntimeException | Error e) {
+					reporting().error(e.getMessage(), e);
 				} finally {
 					isInterpreting = false;
 				}
@@ -933,26 +940,31 @@ public interface ExElement extends Identifiable {
 		@Override
 		public final ModelSetInstance update(Interpreted<?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
 			theTypeName = interpreted.getDefinition().getElement().getType().getName();
-			for (AddOnInstance<?, ?> addOn : theAddOns.getAllValues())
-				addOn.preUpdate(interpreted.getAddOn((Class<? extends ExAddOn.Interpreted<ExElement, ?>>) addOn.interpretationClass));
-
-			ModelSetInstance myModels = createElementModel(interpreted, models);
+			ModelSetInstance myModels = null;
 			try {
-				updateModel(interpreted, myModels);
-
 				for (AddOnInstance<?, ?> addOn : theAddOns.getAllValues())
-					addOn.postUpdate(interpreted.getAddOn((Class<? extends ExAddOn.Interpreted<ExElement, ?>>) addOn.interpretationClass),
-						myModels);
-			} finally {
-				if (!interpreted.isModelInstancePersistent())
-					theUpdatingModels = null;
+					addOn.preUpdate(interpreted.getAddOn((Class<? extends ExAddOn.Interpreted<ExElement, ?>>) addOn.interpretationClass));
+
+				myModels = createElementModel(interpreted, models);
+				try {
+					updateModel(interpreted, myModels);
+
+					for (AddOnInstance<?, ?> addOn : theAddOns.getAllValues())
+						addOn.postUpdate(
+							interpreted.getAddOn((Class<? extends ExAddOn.Interpreted<ExElement, ?>>) addOn.interpretationClass), myModels);
+				} finally {
+					if (!interpreted.isModelInstancePersistent())
+						theUpdatingModels = null;
+				}
+			} catch (RuntimeException | Error e) {
+				reporting().error(e.getMessage(), e);
 			}
 			return myModels;
 		}
 
 		protected ModelSetInstance createElementModel(Interpreted<?> interpreted, ModelSetInstance parentModels)
 			throws ModelInstantiationException {
-			theUpdatingModels = interpreted.getExpressoEnv().wrapLocal(parentModels);
+			theUpdatingModels = interpreted.getExpressoEnv().getModels().instantiate().wrap(parentModels);
 			return theUpdatingModels;
 		}
 

@@ -74,6 +74,7 @@ public class Expresso extends ExElement.Interpreted.Abstract<ExElement> {
 
 	public void updateExpresso(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 		update(env);
+		getExpressoEnv().getModels().interpret(getExpressoEnv());
 	}
 
 	@Override
