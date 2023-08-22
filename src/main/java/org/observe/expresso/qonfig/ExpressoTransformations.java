@@ -274,39 +274,46 @@ public class ExpressoTransformations {
 
 			@Override
 			public ModelValueInstantiator<MV2> instantiate() {
-				List<Operation.Instantiator<MV1, MV2>> operations = new ArrayList<>(theOperations.size());
+				List<Operation.Instantiator<?, ?>> operations = new ArrayList<>(theOperations.size());
 				boolean efficientCopy = true;
 				TransformInstantiator<M1, ?> fullTransform = TransformInstantiator.unity();
 				for (Operation.Interpreted<?, ?, ?, ?, ?> op : theOperations) {
 					Operation.Instantiator<?, ?> opInst = op.instantiate();
+					operations.add(opInst);
 					if (efficientCopy)
 						efficientCopy = opInst instanceof Operation.EfficientCopyingInstantiator
 						&& ((Operation.EfficientCopyingInstantiator<?, ?>) opInst).isEfficientCopy();
-					fullTransform = ((Operation.Instantiator<Object, ?>) opInst)
-						.after((TransformInstantiator<M1, Object>) fullTransform);
+					fullTransform = ((Operation.Instantiator<Object, ?>) opInst).after((TransformInstantiator<M1, Object>) fullTransform);
 				}
 				return new Instantiator<>(theSource.instantiate(), Collections.unmodifiableList(operations), efficientCopy,
 					(TransformInstantiator<MV1, MV2>) fullTransform);
 			}
 
 			@Override
-			public ModelValueElement<M2, MV2> create(ExElement parent, ModelSetInstance models) throws ModelInstantiationException {
+			public ModelValueElement<M2, MV2> create() {
 				return null;
 			}
 		}
 
 		static class Instantiator<MV1, MV2> implements ModelValueInstantiator<MV2> {
 			private final ModelValueInstantiator<MV1> theSource;
-			private final List<Operation.Instantiator<MV1, MV2>> theOperations;
+			private final List<Operation.Instantiator<?, ?>> theOperations;
 			private final boolean isEfficientCopy;
 			private final TransformInstantiator<MV1, MV2> theFullTransform;
 
-			public Instantiator(ModelValueInstantiator<MV1> source, List<Operation.Instantiator<MV1, MV2>> operations,
+			public Instantiator(ModelValueInstantiator<MV1> source, List<Operation.Instantiator<?, ?>> operations,
 				boolean efficientCopy, TransformInstantiator<MV1, MV2> fullTransform) {
 				theSource = source;
 				theOperations = operations;
 				isEfficientCopy = efficientCopy;
 				theFullTransform = fullTransform;
+			}
+
+			@Override
+			public void instantiate() {
+				theSource.instantiate();
+				for (Operation.Instantiator<?, ?> op : theOperations)
+					op.instantiate();
 			}
 
 			@Override
@@ -323,16 +330,15 @@ public class ExpressoTransformations {
 					chain[theOperations.size()] = value;
 					Object target = value;
 					for (int i = theOperations.size() - 1; i >= 0; i--) {
-						chain[i] = ((Operation.EfficientCopyingInstantiator<?, Object>) theOperations.get(i))
-							.getSource(target);
+						chain[i] = ((Operation.EfficientCopyingInstantiator<?, Object>) theOperations.get(i)).getSource(target);
 						target = chain[i];
 					}
 					target = chain[0];
 					for (int i = 0; i < theOperations.size(); i++) {
 						Object sourceValue = target;
 						target = chain[i + 1];
-						target = ((Operation.EfficientCopyingInstantiator<Object, Object>) theOperations.get(i))
-							.forModelCopy(target, sourceValue, sourceModels, newModels);
+						target = ((Operation.EfficientCopyingInstantiator<Object, Object>) theOperations.get(i)).forModelCopy(target,
+							sourceValue, sourceModels, newModels);
 					}
 
 					return (MV2) target;
@@ -379,8 +385,7 @@ public class ExpressoTransformations {
 		 * @return A transformer for transforming actual values
 		 * @throws ExpressoInterpretationException If the transformer could not be produced
 		 */
-		Interpreted<M1, ?, M2, ?, ? extends E> interpret(ExElement.Interpreted<?> parent)
-			throws ExpressoInterpretationException;
+		Interpreted<M1, ?, M2, ?, ? extends E> interpret(ExElement.Interpreted<?> parent) throws ExpressoInterpretationException;
 
 		/**
 		 * The interpretation of an Operation
@@ -407,6 +412,8 @@ public class ExpressoTransformations {
 		}
 
 		public interface Instantiator<MV1, MV2> extends TransformInstantiator<MV1, MV2> {
+			void instantiate();
+
 			/**
 			 * Helps support the {@link ModelValueSynth#forModelCopy(Object, ModelSetInstance, ModelSetInstance)} method
 			 *
@@ -801,6 +808,8 @@ public class ExpressoTransformations {
 		}
 
 		public interface Instantiator<S, T> {
+			void instantiate();
+
 			/**
 			 * @param transformation The transformation to reverse
 			 * @param models The model instance
@@ -929,10 +938,9 @@ public class ExpressoTransformations {
 			theReverse = ExElement.useOrReplace(CompiledMapReverse.class, theReverse, session, "reverse");
 
 			for (CombineWith<?> combine : theCombinedValues)
-				withElModel.satisfyElementValueType(combine.getName(), ModelTypes.Value, //
+				withElModel.satisfyElementValueType(combine.getValueVariable(), ModelTypes.Value, //
 					(interp, env) -> combine.getElementValue().interpret(ModelTypes.Value.any(), env).getType());
-			withElModel.<Interpreted<M1, ?, ?, ?, M2, ?, E>, SettableValue<?>> satisfyElementValueType(theSourceName.getName(),
-				ModelTypes.Value, //
+			withElModel.<Interpreted<M1, ?, ?, ?, M2, ?, E>, SettableValue<?>> satisfyElementValueType(theSourceName, ModelTypes.Value, //
 				(interp, env) -> ModelTypes.Value.forType(interp.getSourceType()));
 		}
 
@@ -1076,6 +1084,18 @@ public class ExpressoTransformations {
 				isManyToOne = manyToOne;
 				isOneToMany = oneToMany;
 				theEquivalence = equivalence;
+			}
+
+			@Override
+			public void instantiate() {
+				theLocalModel.instantiate();
+				theMapWith.instantiate();
+				for (CombineWith.Instantiator<?> combinedValue : theCombinedValues)
+					combinedValue.instantiate();
+				if (theReverse != null)
+					theReverse.instantiate();
+				if (theEquivalence != null)
+					theEquivalence.instantiate();
 			}
 
 			@Override
@@ -1255,6 +1275,10 @@ public class ExpressoTransformations {
 				return theMap;
 			}
 
+			public void instantiate() {
+				theMap.instantiate();
+			}
+
 			public MaybeReversibleTransformation<S, T> buildTransformation(ReversibleTransformationBuilder<S, T, ?> builder,
 				SettableValue<S> sourceValue, SettableValue<T> mappedValue,
 				List<CombineWith.TransformationModification<S, T>> modifications, ModelSetInstance models)
@@ -1399,9 +1423,12 @@ public class ExpressoTransformations {
 				theValueVariable = valueVariable;
 			}
 
+			void instantiate() {
+				theValue.instantiate();
+			}
+
 			public <S, T2> ReversibleTransformationBuilder<S, T2, ?> addTo(ReversibleTransformationBuilder<S, T2, ?> builder,
-				ModelSetInstance models, Consumer<? super TransformationModification<S, T2>> modify)
-					throws ModelInstantiationException {
+				ModelSetInstance models, Consumer<? super TransformationModification<S, T2>> modify) throws ModelInstantiationException {
 				SettableValue<T> sourceV = theValue.get(models);
 				SettableValue<T> targetV = SettableValue.build(sourceV.getType())
 					.withValue(TypeTokens.get().getDefaultValue(sourceV.getType())).build();
@@ -1503,8 +1530,7 @@ public class ExpressoTransformations {
 				|| (theEnabled != null && refersToSource(theEnabled.getExpression(), getParentElement().getSourceName().getName()))//
 				|| (theAccept != null && refersToSource(theAccept.getExpression(), getParentElement().getSourceName().getName()));
 
-			getAddOn(ExWithElementModel.Def.class).<Interpreted<?, ?, E>, SettableValue<?>> satisfyElementValueType(
-				theTargetVariable.getName(),
+			getAddOn(ExWithElementModel.Def.class).<Interpreted<?, ?, E>, SettableValue<?>> satisfyElementValueType(theTargetVariable,
 				ModelTypes.Value, (interp, env) -> ModelTypes.Value.forType(interp.getTargetType()));
 		}
 
@@ -1631,6 +1657,20 @@ public class ExpressoTransformations {
 			}
 
 			@Override
+			public void instantiate() {
+				theLocalModel.instantiate();
+				if (theEnabled != null)
+					theEnabled.instantiate();
+				if (theAccept != null)
+					theAccept.instantiate();
+				if (theAdd != null)
+					theAdd.instantiate();
+				if (theAddAccept != null)
+					theAddAccept.instantiate();
+				theReverse.instantiate();
+			}
+
+			@Override
 			public TransformReverse<S, T> reverse(SettableValue<S> sourceV, TypeToken<T> targetType,
 				List<CombineWith.TransformationModification<S, T>> modifications, Transformation<S, T> transformation,
 				ModelSetInstance models) throws ModelInstantiationException {
@@ -1687,8 +1727,7 @@ public class ExpressoTransformations {
 			@Override
 			public boolean isDifferent(ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException {
 				Object srcReversed = theReverse.get(sourceModels);
-				Object newReversed = ((ModelValueInstantiator<Object>) theReverse).forModelCopy(srcReversed, sourceModels,
-					newModels);
+				Object newReversed = ((ModelValueInstantiator<Object>) theReverse).forModelCopy(srcReversed, sourceModels, newModels);
 				if (srcReversed != newReversed)
 					return true;
 				if (theEnabled != null) {

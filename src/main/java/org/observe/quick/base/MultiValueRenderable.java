@@ -4,17 +4,17 @@ import org.observe.SettableValue;
 import org.observe.collect.ObservableCollection;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
+import org.observe.expresso.ObservableModelSet.ModelComponentId;
 import org.observe.expresso.qonfig.CompiledExpression;
 import org.observe.expresso.qonfig.ElementTypeTraceability;
 import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
-import org.observe.expresso.qonfig.ExElement;
 import org.observe.quick.QuickWidget;
 
 public interface MultiValueRenderable<T> extends QuickWidget {
 	public static final SingleTypeTraceability<MultiValueRenderable<?>, Interpreted<?, ?>, Def<?>> MV_RENDERABLE_TRACEABILITY = ElementTypeTraceability
 		.<MultiValueRenderable<?>, Interpreted<?, ?>, Def<?>> build(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION,
 			"multi-value-renderable")//
-		.withAttribute("value-name", Def::getValueName, null)//
+		.withAttribute("value-name", Def::getValueVariable, null)//
 		.build();
 	public static final SingleTypeTraceability<MultiValueRenderable<?>, Interpreted<?, ?>, Def<?>> MV_WIDGET_TRACEABILITY = ElementTypeTraceability
 		.<MultiValueRenderable<?>, Interpreted<?, ?>, Def<?>> build(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION,
@@ -24,7 +24,7 @@ public interface MultiValueRenderable<T> extends QuickWidget {
 		.build();
 
 	public interface Def<W extends MultiValueRenderable<?>> extends QuickWidget.Def<W> {
-		String getValueName();
+		ModelComponentId getValueVariable();
 
 		CompiledExpression getSelection();
 
@@ -40,7 +40,7 @@ public interface MultiValueRenderable<T> extends QuickWidget {
 		InterpretedValueSynth<ObservableCollection<?>, ObservableCollection<T>> getMultiSelection();
 
 		@Override
-		W create(ExElement parent);
+		W create();
 	}
 
 	public interface MultiValueRenderContext<T> {
@@ -73,7 +73,7 @@ public interface MultiValueRenderable<T> extends QuickWidget {
 
 	ObservableCollection<T> getMultiSelection();
 
-	String getValueName();
+	ModelComponentId getValueVariable();
 
 	public void setContext(MultiValueRenderContext<T> ctx) throws ModelInstantiationException;
 }

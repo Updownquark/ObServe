@@ -7,6 +7,7 @@ import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.qonfig.CompiledExpression;
 import org.observe.expresso.qonfig.ElementTypeTraceability;
 import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
@@ -79,15 +80,16 @@ public class QuickCheckBox extends QuickValueWidget.Abstract<Boolean> {
 		}
 
 		@Override
-		public QuickCheckBox create(ExElement parent) {
-			return new QuickCheckBox(this, parent);
+		public QuickCheckBox create() {
+			return new QuickCheckBox(getIdentity());
 		}
 	}
 
-	private final SettableValue<SettableValue<String>> theText;
+	private ModelValueInstantiator<SettableValue<String>> theTextInstantiator;
+	private SettableValue<SettableValue<String>> theText;
 
-	public QuickCheckBox(Interpreted interpreted, ExElement parent) {
-		super(interpreted, parent);
+	public QuickCheckBox(Object id) {
+		super(id);
 		theText = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<String>> parameterized(String.class))
 			.build();
 	}
@@ -97,10 +99,31 @@ public class QuickCheckBox extends QuickValueWidget.Abstract<Boolean> {
 	}
 
 	@Override
-	protected void updateModel(org.observe.expresso.qonfig.ExElement.Interpreted<?> interpreted, ModelSetInstance myModels)
-		throws ModelInstantiationException {
-		super.updateModel(interpreted, myModels);
+	protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+		super.doUpdate(interpreted);
 		Interpreted myInterpreted = (Interpreted) interpreted;
-		theText.set(myInterpreted.getText() == null ? null : myInterpreted.getText().instantiate().get(myModels), null);
+		theTextInstantiator = myInterpreted.getText() == null ? null : myInterpreted.getText().instantiate();
+	}
+
+	@Override
+	public void instantiated() {
+		super.instantiated();
+		if (theTextInstantiator != null)
+			theTextInstantiator.instantiate();
+	}
+
+	@Override
+	protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+		super.doInstantiate(myModels);
+		theText.set(theTextInstantiator == null ? null : theTextInstantiator.get(myModels), null);
+	}
+
+	@Override
+	protected QuickCheckBox clone() {
+		QuickCheckBox copy = (QuickCheckBox) super.clone();
+
+		copy.theText = SettableValue.build(theText.getType()).build();
+
+		return copy;
 	}
 }

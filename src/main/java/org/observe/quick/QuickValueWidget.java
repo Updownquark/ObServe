@@ -7,7 +7,9 @@ import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
+import org.observe.expresso.ObservableModelSet.ModelComponentId;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.qonfig.CompiledExpression;
 import org.observe.expresso.qonfig.ElementTypeTraceability;
 import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
@@ -29,7 +31,7 @@ public interface QuickValueWidget<T> extends QuickWidget {
 
 	public interface Def<W extends QuickValueWidget<?>> extends QuickWidget.Def<W> {
 		@QonfigAttributeGetter("value-name")
-		String getValueName();
+		ModelComponentId getValueVariable();
 
 		@QonfigAttributeGetter("value")
 		CompiledExpression getValue();
@@ -44,14 +46,15 @@ public interface QuickValueWidget<T> extends QuickWidget {
 			private String theValueName;
 			private CompiledExpression theValue;
 			private CompiledExpression theDisabled;
+			private ModelComponentId theValueVariable;
 
 			protected Abstract(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
 				super(parent, type);
 			}
 
 			@Override
-			public String getValueName() {
-				return theValueName;
+			public ModelComponentId getValueVariable() {
+				return theValueVariable;
 			}
 
 			@Override
@@ -68,12 +71,14 @@ public interface QuickValueWidget<T> extends QuickWidget {
 			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 				withTraceability(VALUE_WIDGET_TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 				super.doUpdate(session.asElement(session.getFocusType().getSuperElement()));
-				theValueName = session.getAttributeText("value-name");
+				String valueName = session.getAttributeText("value-name");
 				theValue = session.getAttributeExpression("value");
 				if (theValue.getExpression() == ObservableExpression.EMPTY && getParentElement() instanceof WidgetValueSupplier.Def)
 					theValue = null; // Value supplied by parent
 				theDisabled = session.getAttributeExpression("disable-with");
-				getAddOn(ExWithElementModel.Def.class).satisfyElementValueType(theValueName, ModelTypes.Value,
+				ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
+				theValueVariable = elModels.getElementValueModelId(valueName);
+				elModels.satisfyElementValueType(theValueVariable, ModelTypes.Value,
 					(interp, env) -> ((Interpreted<?, ?>) interp).getOrInitValue().getType());
 			}
 		}
@@ -133,7 +138,7 @@ public interface QuickValueWidget<T> extends QuickWidget {
 				theValue = null;
 				super.doUpdate(env);
 				getOrInitValue(); // Initialize theValue
-				getAddOn(ExWithElementModel.Interpreted.class).satisfyElementValue(getDefinition().getValueName(), theValue);
+				getAddOn(ExWithElementModel.Interpreted.class).satisfyElementValue(getDefinition().getValueVariable().getName(), theValue);
 				theDisabled = getDefinition().getDisabled() == null ? null
 					: getDefinition().getDisabled().interpret(ModelTypes.Value.STRING, env);
 			}
@@ -154,13 +159,14 @@ public interface QuickValueWidget<T> extends QuickWidget {
 	SettableValue<String> getDisabled();
 
 	public abstract class Abstract<T> extends QuickWidget.Abstract implements QuickValueWidget<T> {
-		private final SettableValue<SettableValue<T>> theValue;
-		private final SettableValue<SettableValue<String>> theDisabled;
+		private ModelComponentId theValueVariable;
+		private ModelValueInstantiator<SettableValue<T>> theValueInstantiator;
+		private ModelValueInstantiator<SettableValue<String>> theDisabledInstantiator;
+		private SettableValue<SettableValue<T>> theValue;
+		private SettableValue<SettableValue<String>> theDisabled;
 
-		protected Abstract(QuickValueWidget.Interpreted<T, ?> interpreted, ExElement parent) {
-			super(interpreted, parent);
-			theValue = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class)
-				.<SettableValue<T>> parameterized((TypeToken<T>) interpreted.getValue().getType().getType(0))).build();
+		protected Abstract(Object id) {
+			super(id);
 			theDisabled = SettableValue
 				.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<String>> parameterized(String.class)).build();
 		}
@@ -176,10 +182,40 @@ public interface QuickValueWidget<T> extends QuickWidget {
 		}
 
 		@Override
-		protected void updateModel(ExElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
-			super.updateModel(interpreted, myModels);
+		protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+			super.doUpdate(interpreted);
 			QuickValueWidget.Interpreted<T, ?> myInterpreted = (QuickValueWidget.Interpreted<T, ?>) interpreted;
-			theValue.set(myInterpreted.getValue().instantiate().get(myModels), null);
+			theValueVariable = myInterpreted.getDefinition().getValueVariable();
+			theValueInstantiator = myInterpreted.getValue().instantiate();
+			theDisabledInstantiator = myInterpreted.getDisabled() == null ? null : myInterpreted.getDisabled().instantiate();
+			if (theValue == null)
+				theValue = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class)
+					.<SettableValue<T>> parameterized((TypeToken<T>) myInterpreted.getValue().getType().getType(0))).build();
+		}
+
+		@Override
+		public void instantiated() {
+			super.instantiated();
+			theValueInstantiator.instantiate();
+			if (theDisabledInstantiator != null)
+				theDisabledInstantiator.instantiate();
+		}
+
+		@Override
+		protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+			super.doInstantiate(myModels);
+			theValue.set(theValueInstantiator.get(myModels), null);
+			theDisabled.set(theDisabledInstantiator == null ? null : theDisabledInstantiator.get(myModels), null);
+		}
+
+		@Override
+		public QuickValueWidget.Abstract<T> copy(ExElement parent) {
+			QuickValueWidget.Abstract<T> copy = (QuickValueWidget.Abstract<T>) super.copy(parent);
+
+			copy.theValue = SettableValue.build(theValue.getType()).build();
+			copy.theDisabled = SettableValue.build(theDisabled.getType()).build();
+
+			return copy;
 		}
 	}
 

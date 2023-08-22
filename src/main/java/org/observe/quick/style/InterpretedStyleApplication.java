@@ -87,6 +87,14 @@ public class InterpretedStyleApplication {
 		}
 
 		@Override
+		public void instantiate() {
+			if(theParentCondition!=null)
+				theParentCondition.instantiate();
+			if(theCondition!=null)
+				theCondition.instantiate();
+		}
+
+		@Override
 		public ObservableValue<Boolean> get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
 			ObservableValue<Boolean> parentCond;
 			if (theParentCondition == null)

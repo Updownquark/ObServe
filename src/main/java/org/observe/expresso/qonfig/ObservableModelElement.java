@@ -178,13 +178,13 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 			return findModelValue(components.get(0));
 		}
 
-		public abstract ObservableModelElement create(ExElement parent) throws ModelInstantiationException;
+		public abstract ObservableModelElement create(ExElement parent);
 	}
 
 	private final List<ModelValueElement<?, ?>> theValues;
 
-	protected ObservableModelElement(Interpreted<?> interpreted, ExElement parent) {
-		super(interpreted, parent);
+	protected ObservableModelElement(Object id) {
+		super(id);
 		theValues = new ArrayList<>();
 	}
 
@@ -193,47 +193,56 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 	}
 
 	@Override
-	protected void updateModel(ExElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
-		super.updateModel(interpreted, myModels);
+	protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+		super.doUpdate(interpreted);
+
 		Interpreted<?> myInterpreted = (Interpreted<?>) interpreted;
 
 		CollectionUtils.synchronize(theValues, myInterpreted.getValues(), //
 			(inst, interp) -> inst.getIdentity() == interp.getIdentity())//
-		.adjust(
-			new CollectionUtils.CollectionSynchronizerE<ModelValueElement<?, ?>, ModelValueElement.Interpreted<?, ?, ?>, ModelInstantiationException>() {
-				@Override
-				public boolean getOrder(ElementSyncInput<ModelValueElement<?, ?>, ModelValueElement.Interpreted<?, ?, ?>> element)
-					throws ModelInstantiationException {
-					return true;
-				}
+		.adjust(new CollectionUtils.CollectionSynchronizer<ModelValueElement<?, ?>, ModelValueElement.Interpreted<?, ?, ?>>() {
+			@Override
+			public boolean getOrder(ElementSyncInput<ModelValueElement<?, ?>, ModelValueElement.Interpreted<?, ?, ?>> element) {
+				return true;
+			}
 
-				@Override
-				public ElementSyncAction leftOnly(
-					ElementSyncInput<ModelValueElement<?, ?>, ModelValueElement.Interpreted<?, ?, ?>> element)
-						throws ModelInstantiationException {
+			@Override
+			public ElementSyncAction leftOnly(
+				ElementSyncInput<ModelValueElement<?, ?>, ModelValueElement.Interpreted<?, ?, ?>> element) {
+				return element.remove();
+			}
+
+			@Override
+			public ElementSyncAction rightOnly(
+				ElementSyncInput<ModelValueElement<?, ?>, ModelValueElement.Interpreted<?, ?, ?>> element) {
+				ModelValueElement<?, ?> instance = element.getRightValue().create();
+				if (instance != null) {
+					instance.update(element.getRightValue(), ObservableModelElement.this);
+					return element.useValue(instance);
+				} else
 					return element.remove();
-				}
+			}
 
-				@Override
-				public ElementSyncAction rightOnly(
-					ElementSyncInput<ModelValueElement<?, ?>, ModelValueElement.Interpreted<?, ?, ?>> element)
-						throws ModelInstantiationException {
-					ModelValueElement<?, ?> instance = element.getRightValue().create(ObservableModelElement.this, myModels);
-					if (instance != null) {
-						instance.update(element.getRightValue(), myModels);
-						return element.useValue(instance);
-					} else
-						return element.remove();
-				}
+			@Override
+			public ElementSyncAction common(ElementSyncInput<ModelValueElement<?, ?>, ModelValueElement.Interpreted<?, ?, ?>> element) {
+				element.getLeftValue().update(element.getRightValue(), ObservableModelElement.this);
+				return element.preserve();
+			}
+		}, CollectionUtils.AdjustmentOrder.RightOrder);
+	}
 
-				@Override
-				public ElementSyncAction common(
-					ElementSyncInput<ModelValueElement<?, ?>, ModelValueElement.Interpreted<?, ?, ?>> element)
-						throws ModelInstantiationException {
-					element.getLeftValue().update(element.getRightValue(), myModels);
-					return element.preserve();
-				}
-			}, CollectionUtils.AdjustmentOrder.RightOrder);
+	@Override
+	public void instantiated() {
+		super.instantiated();
+		for (ModelValueElement<?, ?> value : theValues)
+			value.instantiated();
+	}
+
+	@Override
+	protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+		super.doInstantiate(myModels);
+		for (ModelValueElement<?, ?> value : theValues)
+			value.instantiate(myModels);
 	}
 
 	public static class ModelSetElement extends ExElement.Abstract {
@@ -342,8 +351,8 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 
 		private final List<ObservableModelElement> theSubModels;
 
-		public ModelSetElement(ExElement.Interpreted<?> interpreted, ExElement parent) {
-			super(interpreted, parent);
+		public ModelSetElement(Object id) {
+			super(id);
 			theSubModels = new ArrayList<>();
 		}
 
@@ -353,29 +362,43 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 		}
 
 		@Override
-		protected void updateModel(ExElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
-			super.updateModel(interpreted, myModels);
+		protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+			super.doUpdate(interpreted);
 			Interpreted<?> myInterpreted = (Interpreted<?>) interpreted;
 
 			CollectionUtils.synchronize(theSubModels, myInterpreted.getSubModels(), //
 				(widget, child) -> widget.getIdentity() == child.getIdentity())//
-			.<ModelInstantiationException> simpleE(child -> child.create(ModelSetElement.this))//
+			.simple(child -> child.create(ModelSetElement.this))//
 			.rightOrder()//
-			.onRightX(element -> {
+			.onRight(element -> {
 				try {
-					element.getLeftValue().update(element.getRightValue(), myModels);
+					element.getLeftValue().update(element.getRightValue(), ModelSetElement.this);
 				} catch (RuntimeException | Error e) {
 					element.getRightValue().reporting().error(e.getMessage() == null ? e.toString() : e.getMessage(), e);
 				}
 			})//
-			.onCommonX(element -> {
+			.onCommon(element -> {
 				try {
-					element.getLeftValue().update(element.getRightValue(), myModels);
+					element.getLeftValue().update(element.getRightValue(), ModelSetElement.this);
 				} catch (RuntimeException | Error e) {
 					element.getRightValue().reporting().error(e.getMessage() == null ? e.toString() : e.getMessage(), e);
 				}
 			})//
 			.adjust();
+		}
+
+		@Override
+		public void instantiated() {
+			super.instantiated();
+			for (ObservableModelElement subModel : theSubModels)
+				subModel.instantiated();
+		}
+
+		@Override
+		protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+			super.doInstantiate(myModels);
+			for (ObservableModelElement subModel : theSubModels)
+				subModel.instantiate(myModels);
 		}
 	}
 
@@ -451,15 +474,15 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 			}
 
 			@Override
-			public DefaultModelElement create(ExElement parent) throws ModelInstantiationException {
-				return new DefaultModelElement(this, parent);
+			public DefaultModelElement create(ExElement parent) {
+				return new DefaultModelElement(getIdentity());
 			}
 		}
 
 		private final List<DefaultModelElement> theSubModels;
 
-		public DefaultModelElement(Interpreted<?> interpreted, ExElement parent) {
-			super(interpreted, parent);
+		public DefaultModelElement(Object id) {
+			super(id);
 			theSubModels = new ArrayList<>();
 		}
 
@@ -468,31 +491,45 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 		}
 
 		@Override
-		protected void updateModel(ExElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
-			super.updateModel(interpreted, myModels);
+		protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+			super.doUpdate(interpreted);
 			Interpreted<?> myInterpreted = (Interpreted<?>) interpreted;
 
 			CollectionUtils.synchronize(theSubModels, myInterpreted.getSubModels(), //
 				(widget, child) -> widget.getIdentity() == child.getDefinition().getIdentity())//
-			.<ModelInstantiationException> simpleE(child -> child.create(DefaultModelElement.this))//
+			.simple(child -> child.create(DefaultModelElement.this))//
 			.rightOrder()//
-			.onRightX(element -> {
+			.onRight(element -> {
 				try {
-					element.getLeftValue().update(element.getRightValue(), myModels);
+					element.getLeftValue().update(element.getRightValue(), DefaultModelElement.this);
 				} catch (RuntimeException | Error e) {
 					element.getRightValue().getDefinition().reporting().error(e.getMessage() == null ? e.toString() : e.getMessage(),
 						e);
 				}
 			})//
-			.onCommonX(element -> {
+			.onCommon(element -> {
 				try {
-					element.getLeftValue().update(element.getRightValue(), myModels);
+					element.getLeftValue().update(element.getRightValue(), DefaultModelElement.this);
 				} catch (RuntimeException | Error e) {
 					element.getRightValue().getDefinition().reporting().error(e.getMessage() == null ? e.toString() : e.getMessage(),
 						e);
 				}
 			})//
 			.adjust();
+		}
+
+		@Override
+		public void instantiated() {
+			super.instantiated();
+			for (DefaultModelElement subModel : theSubModels)
+				subModel.instantiated();
+		}
+
+		@Override
+		protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+			super.doInstantiate(myModels);
+			for (DefaultModelElement subModel : theSubModels)
+				subModel.instantiate(myModels);
 		}
 	}
 
@@ -608,15 +645,15 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 			}
 
 			@Override
-			public ExtModelElement create(ExElement parent) throws ModelInstantiationException {
-				return new ExtModelElement(this, parent);
+			public ExtModelElement create(ExElement parent) {
+				return new ExtModelElement(getIdentity());
 			}
 		}
 
 		private final List<ExtModelElement> theSubModels;
 
-		public ExtModelElement(Interpreted<?> interpreted, ExElement parent) {
-			super(interpreted, parent);
+		public ExtModelElement(Object id) {
+			super(id);
 			theSubModels = new ArrayList<>();
 		}
 
@@ -625,31 +662,38 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 		}
 
 		@Override
-		protected void updateModel(ExElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
-			super.updateModel(interpreted, myModels);
+		protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+			super.doUpdate(interpreted);
 			Interpreted<?> myInterpreted = (Interpreted<?>) interpreted;
 
 			CollectionUtils.synchronize(theSubModels, myInterpreted.getSubModels(), //
 				(widget, child) -> widget.getIdentity() == child.getDefinition().getIdentity())//
-			.<ModelInstantiationException> simpleE(child -> child.create(ExtModelElement.this))//
+			.simple(child -> child.create(ExtModelElement.this))//
 			.rightOrder()//
-			.onRightX(element -> {
+			.onRight(element -> {
 				try {
-					element.getLeftValue().update(element.getRightValue(), myModels);
+					element.getLeftValue().update(element.getRightValue(), ExtModelElement.this);
 				} catch (RuntimeException | Error e) {
 					element.getRightValue().getDefinition().reporting().error(e.getMessage() == null ? e.toString() : e.getMessage(),
 						e);
 				}
 			})//
-			.onCommonX(element -> {
+			.onCommon(element -> {
 				try {
-					element.getLeftValue().update(element.getRightValue(), myModels);
+					element.getLeftValue().update(element.getRightValue(), ExtModelElement.this);
 				} catch (RuntimeException | Error e) {
 					element.getRightValue().getDefinition().reporting().error(e.getMessage() == null ? e.toString() : e.getMessage(),
 						e);
 				}
 			})//
 			.adjust();
+		}
+
+		@Override
+		public void instantiated() {
+			super.instantiated();
+			for (ExtModelElement subModel : theSubModels)
+				subModel.instantiated();
 		}
 	}
 
@@ -830,6 +874,12 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 						isBackup = backup;
 						theOldConfigNames = oldConfigNames;
 						theApplicationEnvironment = applicationEnvironment;
+					}
+
+					@Override
+					public void instantiate() {
+						if (theInterpretedConfigDir != null)
+							theInterpretedConfigDir.instantiate();
 					}
 
 					@Override
@@ -1094,13 +1144,13 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 			}
 
 			@Override
-			public ConfigModelElement create(ExElement parent) throws ModelInstantiationException {
-				return new ConfigModelElement(this, parent);
+			public ConfigModelElement create(ExElement parent) {
+				return new ConfigModelElement(getIdentity());
 			}
 		}
 
-		public ConfigModelElement(Interpreted<?> interpreted, ExElement parent) {
-			super(interpreted, parent);
+		public ConfigModelElement(Object id) {
+			super(id);
 		}
 
 		static class OldConfigName extends ExElement.Def.Abstract<ExElement> {

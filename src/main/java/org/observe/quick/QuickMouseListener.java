@@ -3,10 +3,12 @@ package org.observe.quick;
 import org.observe.SettableValue;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
+import org.observe.expresso.ObservableModelSet.ModelComponentId;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.qonfig.ElementTypeTraceability;
 import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.observe.expresso.qonfig.ExElement;
+import org.observe.expresso.qonfig.ExFlexibleElementModelAddOn;
 import org.observe.expresso.qonfig.ExWithElementModel;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
@@ -21,14 +23,29 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 			QuickMouseListener.class);
 
 	public static abstract class Def<L extends QuickMouseListener> extends QuickEventListener.Def.Abstract<L> {
+		private ModelComponentId theEventXValue;
+		private ModelComponentId theEventYValue;
+
 		protected Def(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
 			super(parent, type);
+		}
+
+		public ModelComponentId getEventXValue() {
+			return theEventXValue;
+		}
+
+		public ModelComponentId getEventYValue() {
+			return theEventYValue;
 		}
 
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 			super.doUpdate(session.asElement(session.getFocusType().getSuperElement()));
+
+			ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
+			theEventXValue = elModels.getElementValueModelId("x");
+			theEventYValue = elModels.getElementValueModelId("y");
 		}
 
 		@Override
@@ -78,11 +95,13 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 		}
 	}
 
-	private final SettableValue<SettableValue<Integer>> theEventX;
-	private final SettableValue<SettableValue<Integer>> theEventY;
+	private ModelComponentId theEventXValue;
+	private ModelComponentId theEventYValue;
+	private SettableValue<SettableValue<Integer>> theEventX;
+	private SettableValue<SettableValue<Integer>> theEventY;
 
-	protected QuickMouseListener(QuickMouseListener.Interpreted<?> interpreted, ExElement parent) {
-		super(interpreted, parent);
+	protected QuickMouseListener(Object id) {
+		super(id);
 		theEventX = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Integer>> parameterized(int.class))
 			.build();
 		theEventY = SettableValue.build(theEventX.getType()).build();
@@ -95,11 +114,28 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 	}
 
 	@Override
-	protected void updateModel(ExElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
-		super.updateModel(interpreted, myModels);
-		ExWithElementModel elModels = getAddOn(ExWithElementModel.class);
-		elModels.satisfyElementValue("x", SettableValue.flatten(theEventX));
-		elModels.satisfyElementValue("y", SettableValue.flatten(theEventY));
+	protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+		super.doUpdate(interpreted);
+		QuickMouseListener.Interpreted<?> myInterpreted = (QuickMouseListener.Interpreted<?>) interpreted;
+		theEventXValue = myInterpreted.getDefinition().getEventXValue();
+		theEventYValue = myInterpreted.getDefinition().getEventYValue();
+	}
+
+	@Override
+	protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+		super.doInstantiate(myModels);
+		ExFlexibleElementModelAddOn.satisfyElementValue(theEventXValue, myModels, SettableValue.flatten(theEventX));
+		ExFlexibleElementModelAddOn.satisfyElementValue(theEventYValue, myModels, SettableValue.flatten(theEventY));
+	}
+
+	@Override
+	protected QuickMouseListener clone() {
+		QuickMouseListener copy = (QuickMouseListener) super.clone();
+
+		copy.theEventX = SettableValue.build(theEventX.getType()).build();
+		copy.theEventY = SettableValue.build(theEventX.getType()).build();
+
+		return copy;
 	}
 
 	public enum MouseButton {
@@ -197,15 +233,15 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 			}
 
 			@Override
-			public QuickMouseMoveListener create(ExElement parent) {
-				return new QuickMouseMoveListener(this, parent);
+			public QuickMouseMoveListener create() {
+				return new QuickMouseMoveListener(getIdentity());
 			}
 		}
 
 		private MouseMoveEventType theEventType;
 
-		public QuickMouseMoveListener(Interpreted interpreted, ExElement parent) {
-			super(interpreted, parent);
+		public QuickMouseMoveListener(Object id) {
+			super(id);
 		}
 
 		public MouseMoveEventType getEventType() {
@@ -213,8 +249,8 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 		}
 
 		@Override
-		protected void updateModel(ExElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
-			super.updateModel(interpreted, myModels);
+		protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+			super.doUpdate(interpreted);
 			QuickMouseMoveListener.Interpreted myInterpreted = (QuickMouseMoveListener.Interpreted) interpreted;
 			theEventType = myInterpreted.getDefinition().getEventType();
 		}
@@ -227,10 +263,15 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 				Interpreted.class, QuickMouseButtonListener.class);
 
 		public static abstract class Def<L extends QuickMouseButtonListener> extends QuickMouseListener.Def<L> {
+			private ModelComponentId theButtonValue;
 			private MouseButton theButton;
 
 			protected Def(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
 				super(parent, type);
+			}
+
+			public ModelComponentId getButtonValue() {
+				return theButtonValue;
 			}
 
 			@QonfigAttributeGetter("button")
@@ -242,6 +283,10 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 				withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 				super.doUpdate(session.asElement(session.getFocusType().getSuperElement()));
+
+				ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
+				theButtonValue = elModels.getElementValueModelId("button");
+
 				String button = session.getAttributeText("button");
 				if (button == null)
 					theButton = null;
@@ -260,7 +305,7 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 						throw new IllegalStateException("Unrecognized mouse button: '" + button + "'");
 					}
 				}
-				getAddOn(ExWithElementModel.Def.class).satisfyElementValueType("button", ModelTypes.Value.forType(MouseButton.class));
+				getAddOn(ExWithElementModel.Def.class).satisfyElementValueType(theButtonValue, ModelTypes.Value.forType(MouseButton.class));
 			}
 		}
 
@@ -275,11 +320,12 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 			}
 		}
 
-		private final SettableValue<SettableValue<MouseButton>> theEventButton;
+		private ModelComponentId theEventButtonValue;
+		private SettableValue<SettableValue<MouseButton>> theEventButton;
 		private MouseButton theButton;
 
-		protected QuickMouseButtonListener(Interpreted<?> interpreted, ExElement parent) {
-			super(interpreted, parent);
+		protected QuickMouseButtonListener(Object id) {
+			super(id);
 			theEventButton = SettableValue
 				.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<MouseButton>> parameterized(MouseButton.class)).build();
 		}
@@ -294,11 +340,26 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 		}
 
 		@Override
-		protected void updateModel(ExElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
-			super.updateModel(interpreted, myModels);
-			getAddOn(ExWithElementModel.class).satisfyElementValue("button", SettableValue.flatten(theEventButton));
+		protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+			super.doUpdate(interpreted);
 			Interpreted<?> myInterpreted = (Interpreted<?>) interpreted;
+			theEventButtonValue = myInterpreted.getDefinition().getButtonValue();
 			theButton = myInterpreted.getDefinition().getButton();
+		}
+
+		@Override
+		protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+			super.doInstantiate(myModels);
+			ExFlexibleElementModelAddOn.satisfyElementValue(theEventButtonValue, myModels, SettableValue.flatten(theEventButton));
+		}
+
+		@Override
+		public QuickMouseButtonListener copy(ExElement parent) {
+			QuickMouseButtonListener copy = (QuickMouseButtonListener) super.copy(parent);
+
+			copy.theEventButton = SettableValue.build(theEventButton.getType()).build();
+
+			return copy;
 		}
 	}
 
@@ -354,15 +415,15 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 			}
 
 			@Override
-			public QuickMouseClickListener create(ExElement parent) {
-				return new QuickMouseClickListener(this, parent);
+			public QuickMouseClickListener create() {
+				return new QuickMouseClickListener(getIdentity());
 			}
 		}
 
 		private int theClickCount;
 
-		public QuickMouseClickListener(Interpreted interpreted, ExElement parent) {
-			super(interpreted, parent);
+		public QuickMouseClickListener(Object id) {
+			super(id);
 		}
 
 		public int getClickCount() {
@@ -370,8 +431,8 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 		}
 
 		@Override
-		protected void updateModel(ExElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
-			super.updateModel(interpreted, myModels);
+		protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+			super.doUpdate(interpreted);
 			Interpreted myInterpreted = (Interpreted) interpreted;
 			theClickCount = myInterpreted.getDefinition().getClickCount();
 		}
@@ -413,13 +474,13 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 			}
 
 			@Override
-			public QuickMousePressedListener create(ExElement parent) {
-				return new QuickMousePressedListener(this, parent);
+			public QuickMousePressedListener create() {
+				return new QuickMousePressedListener(getIdentity());
 			}
 		}
 
-		public QuickMousePressedListener(Interpreted interpreted, ExElement parent) {
-			super(interpreted, parent);
+		public QuickMousePressedListener(Object id) {
+			super(id);
 		}
 	}
 
@@ -459,13 +520,13 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 			}
 
 			@Override
-			public QuickMouseReleasedListener create(ExElement parent) {
-				return new QuickMouseReleasedListener(this, parent);
+			public QuickMouseReleasedListener create() {
+				return new QuickMouseReleasedListener(getIdentity());
 			}
 		}
 
-		public QuickMouseReleasedListener(Interpreted interpreted, ExElement parent) {
-			super(interpreted, parent);
+		public QuickMouseReleasedListener(Object id) {
+			super(id);
 		}
 	}
 
@@ -476,14 +537,23 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 				Interpreted.class, QuickScrollListener.class);
 
 		public static class Def extends QuickMouseListener.Def<QuickScrollListener> {
+			private ModelComponentId theScrollAmountValue;
+
 			public Def(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
 				super(parent, type);
+			}
+
+			public ModelComponentId getScrollAmountValue() {
+				return theScrollAmountValue;
 			}
 
 			@Override
 			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 				withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 				super.doUpdate(session.asElement(session.getFocusType().getSuperElement()));
+
+				ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
+				theScrollAmountValue = elModels.getElementValueModelId("scrollAmount");
 			}
 
 			@Override
@@ -503,15 +573,16 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 			}
 
 			@Override
-			public QuickScrollListener create(ExElement parent) {
-				return new QuickScrollListener(this, parent);
+			public QuickScrollListener create() {
+				return new QuickScrollListener(getIdentity());
 			}
 		}
 
-		private final SettableValue<SettableValue<Integer>> theScrollAmount;
+		private ModelComponentId theScrollAmountValue;
+		private SettableValue<SettableValue<Integer>> theScrollAmount;
 
-		public QuickScrollListener(Interpreted interpreted, ExElement parent) {
-			super(interpreted, parent);
+		public QuickScrollListener(Object id) {
+			super(id);
 			theScrollAmount = SettableValue
 				.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Integer>> parameterized(Integer.class)).build();
 		}
@@ -522,9 +593,27 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 		}
 
 		@Override
-		protected void updateModel(ExElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
-			super.updateModel(interpreted, myModels);
-			getAddOn(ExWithElementModel.class).satisfyElementValue("scrollAmount", SettableValue.flatten(theScrollAmount));
+		protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+			super.doUpdate(interpreted);
+
+			QuickScrollListener.Interpreted myInterpreted = (QuickScrollListener.Interpreted) interpreted;
+			theScrollAmountValue = myInterpreted.getDefinition().getScrollAmountValue();
+		}
+
+		@Override
+		protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+			super.doInstantiate(myModels);
+
+			ExFlexibleElementModelAddOn.satisfyElementValue(theScrollAmountValue, myModels, SettableValue.flatten(theScrollAmount));
+		}
+
+		@Override
+		protected QuickScrollListener clone() {
+			QuickScrollListener copy = (QuickScrollListener) super.clone();
+
+			copy.theScrollAmount = SettableValue.build(theScrollAmount.getType()).build();
+
+			return copy;
 		}
 	}
 }

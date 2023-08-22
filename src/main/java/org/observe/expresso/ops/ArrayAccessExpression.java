@@ -185,6 +185,12 @@ public class ArrayAccessExpression implements ObservableExpression {
 		}
 
 		@Override
+		public void instantiate() {
+			theArray.instantiate();
+			theIndex.instantiate();
+		}
+
+		@Override
 		public SettableValue<T> get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
 			SettableValue<T[]> arrayV = theArray.get(models);
 			SettableValue<Integer> indexV = theIndex.get(models);

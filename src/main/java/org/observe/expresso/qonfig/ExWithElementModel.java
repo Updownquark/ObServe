@@ -117,16 +117,17 @@ public class ExWithElementModel extends ExFlexibleElementModelAddOn<ExElement> {
 		}
 
 		@Override
-		public <I extends ExElement.Interpreted<?>, M> void satisfyElementValueType(String elementValueName, ModelType<M> modelType,
+		public <I extends ExElement.Interpreted<?>, M> void satisfyElementValueType(ModelComponentId elementValueId, ModelType<M> modelType,
 			ExBiFunction<I, InterpretedExpressoEnv, ? extends ModelInstanceType<M, ?>, ExpressoInterpretationException> type)
 				throws QonfigInterpretationException {
-			super.satisfyElementValueType(elementValueName, modelType, type);
+			super.satisfyElementValueType(elementValueId, modelType, type);
 		}
 
 		@Override
-		public <I extends ExElement.Interpreted<?>, M> void satisfyElementValueType(String elementValueName, ModelInstanceType<M, ?> type)
-			throws QonfigInterpretationException {
-			super.satisfyElementValueType(elementValueName, type);
+		public <I extends ExElement.Interpreted<?>, M> void satisfyElementValueType(ModelComponentId elementValueId,
+			ModelInstanceType<M, ?> type)
+				throws QonfigInterpretationException {
+			super.satisfyElementValueType(elementValueId, type);
 		}
 
 		@Override
@@ -164,34 +165,17 @@ public class ExWithElementModel extends ExFlexibleElementModelAddOn<ExElement> {
 
 		@Override
 		public ExWithElementModel create(ExElement element) {
-			return new ExWithElementModel(this, element);
+			return new ExWithElementModel(element);
 		}
 	}
 
-	public ExWithElementModel(Interpreted interpreted, ExElement element) {
-		super(interpreted, element);
+	public ExWithElementModel(ExElement element) {
+		super(element);
 	}
 
 	@Override
-	public void satisfyElementValue(String elementValueName, Object value) throws ModelInstantiationException {
-		super.satisfyElementValue(elementValueName, value);
-	}
-
-	@Override
-	public void satisfyElementValue(String elementValueName, Object value, ActionIfSatisfied ifPreSatisfied)
-		throws ModelInstantiationException {
-		super.satisfyElementValue(elementValueName, value, ifPreSatisfied);
-	}
-
-	@Override
-	public void satisfyElementValue(String elementValueName, Object value, ModelSetInstance models) throws ModelInstantiationException {
-		super.satisfyElementValue(elementValueName, value, models);
-	}
-
-	@Override
-	public void satisfyElementValue(String elementValueName, Object value, ModelSetInstance models, ActionIfSatisfied ifPreSatisfied)
-		throws ModelInstantiationException {
-		super.satisfyElementValue(elementValueName, value, models, ifPreSatisfied);
+	public Class<Interpreted> getInterpretationType() {
+		return (Class<Interpreted>) (Class<?>) Interpreted.class;
 	}
 
 	interface ElementModelValuePlaceholder<M> extends ElementModelValue<M> {
@@ -265,7 +249,7 @@ public class ExWithElementModel extends ExFlexibleElementModelAddOn<ExElement> {
 	}
 
 	static class PlaceholderElementValue<M> extends ExFlexibleElementModelAddOn.PlaceholderModelValue<M>
-		implements ElementModelValuePlaceholder<M> {
+	implements ElementModelValuePlaceholder<M> {
 		private final ElementModelValue.Identity theId;
 		private final ExtModelValueElement.Def<M> theSpec;
 		private ModelComponentId theModelId;

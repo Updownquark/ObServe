@@ -122,6 +122,11 @@ public class InstanceofExpression implements ObservableExpression {
 		}
 
 		@Override
+		public void instantiate() {
+			theValue.instantiate();
+		}
+
+		@Override
 		public SettableValue<Boolean> get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
 			return test(theValue.get(models));
 		}

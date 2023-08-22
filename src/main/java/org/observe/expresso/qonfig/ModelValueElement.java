@@ -11,6 +11,7 @@ import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.CompiledModelValue;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.VariableType;
 import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.observe.util.TypeTokens;
@@ -241,7 +242,7 @@ public interface ModelValueElement<M, MV extends M> extends ExElement {
 
 		void updateValue(InterpretedExpressoEnv env) throws ExpressoInterpretationException;
 
-		E create(ExElement parent, ModelSetInstance models) throws ModelInstantiationException;
+		E create();
 
 		public abstract class Abstract<M, MV extends M, E extends ModelValueElement<M, MV>> extends ExElement.Interpreted.Abstract<E>
 		implements Interpreted<M, MV, E> {
@@ -293,8 +294,8 @@ public interface ModelValueElement<M, MV extends M> extends ExElement {
 			}
 
 			@Override
-			public E create(ExElement parent, ModelSetInstance models) throws ModelInstantiationException {
-				return (E) new ModelValueElement.Default<>(this, parent);
+			public E create() {
+				return (E) new ModelValueElement.Default<>(getIdentity());
 			}
 		}
 	}
@@ -302,10 +303,11 @@ public interface ModelValueElement<M, MV extends M> extends ExElement {
 	Object getElementValue();
 
 	public class Default<M, MV extends M> extends ExElement.Abstract implements ModelValueElement<M, MV> {
+		private ModelValueInstantiator<?> theElementValueInstantiator;
 		private Object theElementValue;
 
-		public Default(ModelValueElement.Interpreted<M, MV, ?> interpreted, ExElement parent) {
-			super(interpreted, parent);
+		public Default(Object id) {
+			super(id);
 		}
 
 		@Override
@@ -314,15 +316,27 @@ public interface ModelValueElement<M, MV extends M> extends ExElement {
 		}
 
 		@Override
-		protected void updateModel(ExElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
-			super.updateModel(interpreted, myModels);
-			ModelValueElement.Interpreted<M, MV, ?> myInterpreted = (ModelValueElement.Interpreted<M, MV, ?>) interpreted;
-			theElementValue = updateValue(myInterpreted, myModels);
+		protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+			super.doUpdate(interpreted);
+
+			theElementValue = instantiateElementValue((ModelValueElement.Interpreted<M, MV, ?>) interpreted);
 		}
 
-		protected Object updateValue(ModelValueElement.Interpreted<M, MV, ?> myInterpreted, ModelSetInstance myModels)
-			throws ModelInstantiationException {
-			return myInterpreted.getElementValue() == null ? null : myInterpreted.getElementValue().instantiate().get(myModels);
+		@Override
+		public void instantiated() {
+			super.instantiated();
+			if (theElementValueInstantiator != null)
+				theElementValueInstantiator.instantiate();
+		}
+
+		protected ModelValueInstantiator<?> instantiateElementValue(ModelValueElement.Interpreted<M, MV, ?> interpreted) {
+			return interpreted.getElementValue() == null ? null : interpreted.getElementValue().instantiate();
+		}
+
+		@Override
+		protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+			super.doInstantiate(myModels);
+			theElementValue = theElementValueInstantiator == null ? null : theElementValueInstantiator.get(myModels);
 		}
 	}
 

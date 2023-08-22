@@ -196,6 +196,13 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			}
 
 			@Override
+			public void instantiate() {
+				super.instantiate();
+				if (theDefaultValue != null)
+					theDefaultValue.instantiate();
+			}
+
+			@Override
 			public SettableValue<T> create(ObservableConfigValueBuilder<T> config, ModelSetInstance msi)
 				throws ModelInstantiationException {
 				SettableValue<T> value = config.buildValue(null);

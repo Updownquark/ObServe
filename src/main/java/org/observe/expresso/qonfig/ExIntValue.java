@@ -7,15 +7,16 @@ import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
-public class ExIntValue extends ExAddOn.Abstract<ExElement> {
+public class ExIntValue<T> extends ExAddOn.Abstract<ExElement> {
 	private static final SingleTypeTraceability<ExElement, ExElement.Interpreted<?>, ExElement.Def<?>> TRACEABILITY = ElementTypeTraceability
 		.getAddOnTraceability(ExpressoBaseV0_1.NAME, ExpressoBaseV0_1.VERSION, "int-value", Def.class, Interpreted.class, ExIntValue.class);
 
-	public static class Def extends ExAddOn.Def.Abstract<ExElement, ExIntValue> {
+	public static class Def extends ExAddOn.Def.Abstract<ExElement, ExIntValue<?>> {
 		private CompiledExpression theInit;
 
 		public Def(QonfigAddOn type, ExElement.Def<? extends ExElement> element) {
@@ -35,13 +36,13 @@ public class ExIntValue extends ExAddOn.Abstract<ExElement> {
 		}
 
 		@Override
-		public Interpreted interpret(ExElement.Interpreted<? extends ExElement> element) {
-			return new Interpreted(this, element);
+		public Interpreted<?> interpret(ExElement.Interpreted<? extends ExElement> element) {
+			return new Interpreted<>(this, element);
 		}
 	}
 
-	public static class Interpreted extends ExAddOn.Interpreted.Abstract<ExElement, ExIntValue> {
-		private InterpretedValueSynth<SettableValue<?>, ? extends SettableValue<?>> theInit;
+	public static class Interpreted<T> extends ExAddOn.Interpreted.Abstract<ExElement, ExIntValue<T>> {
+		private InterpretedValueSynth<SettableValue<?>, SettableValue<T>> theInit;
 
 		public Interpreted(Def definition, ExElement.Interpreted<? extends ExElement> element) {
 			super(definition, element);
@@ -52,7 +53,7 @@ public class ExIntValue extends ExAddOn.Abstract<ExElement> {
 			return (Def) super.getDefinition();
 		}
 
-		public InterpretedValueSynth<SettableValue<?>, ? extends SettableValue<?>> getInit() {
+		public InterpretedValueSynth<SettableValue<?>, SettableValue<T>> getInit() {
 			return theInit;
 		}
 
@@ -60,25 +61,31 @@ public class ExIntValue extends ExAddOn.Abstract<ExElement> {
 		public void update(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 			super.update(env);
 
-			ExTyped.Interpreted typed = getElement().getAddOn(ExTyped.Interpreted.class);
+			ExTyped.Interpreted<T> typed = getElement().getAddOn(ExTyped.Interpreted.class);
 			if (getDefinition().getInit() == null)
 				theInit = null;
 			else if (typed != null && typed.getValueType() != null)
 				theInit = getDefinition().getInit().interpret(ModelTypes.Value.forType(typed.getValueType()), env);
 			else
-				theInit = getDefinition().getInit().interpret(ModelTypes.Value.any(), env);
+				theInit = getDefinition().getInit().interpret(ModelTypes.Value.anyAsV(), env);
 		}
 
 		@Override
-		public ExIntValue create(ExElement element) {
-			return new ExIntValue(this, element);
+		public ExIntValue<T> create(ExElement element) {
+			return new ExIntValue<>(element);
 		}
 	}
 
-	private SettableValue<?> theInit;
+	private ModelValueInstantiator<SettableValue<T>> theInitInstantiator;
+	private SettableValue<T> theInit;
 
-	public ExIntValue(Interpreted interpreted, ExElement element) {
-		super(interpreted, element);
+	public ExIntValue(ExElement element) {
+		super(element);
+	}
+
+	@Override
+	public Class<Interpreted<?>> getInterpretationType() {
+		return (Class<Interpreted<?>>) (Class<?>) Interpreted.class;
 	}
 
 	public SettableValue<?> getInit() {
@@ -86,9 +93,15 @@ public class ExIntValue extends ExAddOn.Abstract<ExElement> {
 	}
 
 	@Override
-	public void update(ExAddOn.Interpreted<?, ?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
-		super.update(interpreted, models);
-		Interpreted myInterpreted = (Interpreted) interpreted;
-		theInit = myInterpreted.getInit() == null ? null : myInterpreted.getInit().instantiate().get(models);
+	public void update(ExAddOn.Interpreted<?, ?> interpreted) {
+		super.update(interpreted);
+		Interpreted<T> myInterpreted = (Interpreted<T>) interpreted;
+		theInitInstantiator = myInterpreted.getInit() == null ? null : myInterpreted.getInit().instantiate();
+	}
+
+	@Override
+	public void instantiate(ModelSetInstance models) throws ModelInstantiationException {
+		super.instantiate(models);
+		theInit = theInitInstantiator == null ? null : theInitInstantiator.get(models);
 	}
 }

@@ -7,6 +7,7 @@ import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.qonfig.CompiledExpression;
 import org.observe.expresso.qonfig.ElementTypeTraceability;
 import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
@@ -99,16 +100,17 @@ public class QuickSplit extends QuickContainer.Abstract<QuickWidget> {
 		}
 
 		@Override
-		public S create(ExElement parent) {
-			return (S) new QuickSplit(this, parent);
+		public S create() {
+			return (S) new QuickSplit(getIdentity());
 		}
 	}
 
 	private boolean isVertical;
-	private final SettableValue<SettableValue<QuickSize>> theSplitPosition;
+	private ModelValueInstantiator<SettableValue<QuickSize>> theSplitPositionInstantiator;
+	private SettableValue<SettableValue<QuickSize>> theSplitPosition;
 
-	public QuickSplit(Interpreted<?> interpreted, ExElement parent) {
-		super(interpreted, parent);
+	public QuickSplit(Object id) {
+		super(id);
 		theSplitPosition = SettableValue
 			.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<QuickSize>> parameterized(QuickSize.class)).build();
 	}
@@ -118,17 +120,33 @@ public class QuickSplit extends QuickContainer.Abstract<QuickWidget> {
 	}
 
 	@Override
-	protected void updateModel(ExElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
-		super.updateModel(interpreted, myModels);
+	protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+		super.doUpdate(interpreted);
 		QuickSplit.Interpreted<?> myInterpreted = (QuickSplit.Interpreted<?>) interpreted;
 		isVertical = myInterpreted.getDefinition().isVertical();
-		if (myInterpreted.getSplitPosition() != null)
-			theSplitPosition.set(myInterpreted.getSplitPosition().instantiate().get(myModels), null);
-		else {
-			SettableValue<QuickSize> splitPos = SettableValue.build(QuickSize.class).build();
-			if (theSplitPosition.get() != null)
-				splitPos.set(theSplitPosition.get().get(), null);
-			theSplitPosition.set(splitPos, null);
-		}
+		theSplitPositionInstantiator = myInterpreted.getSplitPosition() == null ? null : myInterpreted.getSplitPosition().instantiate();
+	}
+
+	@Override
+	public void instantiated() {
+		super.instantiated();
+		if (theSplitPositionInstantiator != null)
+			theSplitPositionInstantiator.instantiate();
+	}
+
+	@Override
+	protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+		super.doInstantiate(myModels);
+		theSplitPosition.set(
+			theSplitPosition == null ? SettableValue.build(QuickSize.class).build() : theSplitPositionInstantiator.get(myModels), null);
+	}
+
+	@Override
+	public QuickSplit copy(ExElement parent) {
+		QuickSplit copy = (QuickSplit) super.copy(parent);
+
+		theSplitPosition = SettableValue.build(theSplitPosition.getType()).build();
+
+		return copy;
 	}
 }

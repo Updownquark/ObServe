@@ -160,6 +160,8 @@ public interface ExAddOn<E extends ExElement> {
 		}
 	}
 
+	Class<? extends Interpreted<?, ?>> getInterpretationType();
+
 	/** @return The element that this add-on is added onto */
 	E getElement();
 
@@ -170,27 +172,41 @@ public interface ExAddOn<E extends ExElement> {
 	 * Called by the {@link #getElement() element's} update, initializes or updates this add-on
 	 *
 	 * @param interpreted The interpretation producing this add-on
+	 */
+	void update(ExAddOn.Interpreted<?, ?> interpreted);
+
+	default void postUpdate(ExAddOn.Interpreted<?, ?> interpreted) {
+	}
+
+	void instantiated();
+
+	default void preInstantiate() {
+	}
+
+	/**
+	 * Called by the {@link #getElement() element's} instantiate, initializes model instantiators in this add-on
+	 *
+	 * @param interpreted The interpretation producing this add-on
 	 * @param models The models to support this add-on
 	 * @throws ModelInstantiationException If any models in this add-on could not be instantiated
 	 */
-	void update(ExAddOn.Interpreted<?, ?> interpreted, ModelSetInstance models) throws ModelInstantiationException;
+	void instantiate(ModelSetInstance models) throws ModelInstantiationException;
 
-	default void postUpdate(ExAddOn.Interpreted<?, ?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
+	default void postInstantiate(ModelSetInstance models) throws ModelInstantiationException {
 	}
+
+	ExAddOn<E> copy(E element);
 
 	/**
 	 * An abstract {@link ExAddOn} implementation
 	 *
 	 * @param <E> The type of element that this add-on is added onto
 	 */
-	public abstract class Abstract<E extends ExElement> implements ExAddOn<E> {
-		private final E theElement;
+	public abstract class Abstract<E extends ExElement> implements ExAddOn<E>, Cloneable {
+		private E theElement;
 
-		/**
-		 * @param interpreted The interpretation producing this add-on
-		 * @param element The element that this add-on is added onto
-		 */
-		protected Abstract(Interpreted<? super E, ?> interpreted, E element) {
+		/** @param element The element that this add-on is added onto */
+		protected Abstract(E element) {
 			theElement = element;
 		}
 
@@ -200,7 +216,31 @@ public interface ExAddOn<E extends ExElement> {
 		}
 
 		@Override
-		public void update(ExAddOn.Interpreted<?, ?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
+		public void update(ExAddOn.Interpreted<?, ?> interpreted) {
+		}
+
+		@Override
+		public void instantiated() {
+		}
+
+		@Override
+		public void instantiate(ModelSetInstance models) throws ModelInstantiationException {
+		}
+
+		@Override
+		public Abstract<E> copy(E element) {
+			Abstract<E> copy = clone();
+			copy.theElement = element;
+			return copy;
+		}
+
+		@Override
+		protected Abstract<E> clone() {
+			try {
+				return (Abstract<E>) super.clone();
+			} catch (CloneNotSupportedException e) {
+				throw new IllegalStateException("Clone not supported?", e);
+			}
 		}
 	}
 
@@ -212,8 +252,13 @@ public interface ExAddOn<E extends ExElement> {
 	 */
 	public static class Void<E extends ExElement> extends ExAddOn.Abstract<E> {
 		private Void() {
-			super(null, null);
+			super(null);
 			throw new IllegalStateException("Impossible");
+		}
+
+		@Override
+		public Class<? extends Interpreted<?, ? super E>> getInterpretationType() {
+			return null;
 		}
 	}
 
@@ -228,7 +273,7 @@ public interface ExAddOn<E extends ExElement> {
 			ExElement.Def<?> def = session.as(ExpressoQIS.class).getElementRepresentation();
 			if (def != null && !defType.isInstance(def))
 				throw new QonfigInterpretationException("This implementation requires an element definition of type " + defType.getName()
-					+ ", not " + (def == null ? "null" : def.getClass().getName()), session.reporting().getPosition(), 0);
+				+ ", not " + (def == null ? "null" : def.getClass().getName()), session.reporting().getPosition(), 0);
 			return creator.apply((QonfigAddOn) session.getFocusType(), (D) def);
 		};
 	}

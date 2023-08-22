@@ -514,9 +514,9 @@
 			<child-mod child="content" inherits="tab" />
 			<child-def name="tab-set" type="tab-set" min="0" max="inf" />
 		</element-def>
-		<element-def name="tab-set" extends="container">
+		<element-def name="tab-set">
 			<attribute name="values" type="expression" />
-			<child-mod child="content" inherits="tab" min="1" max="1" />
+			<child-def name="content" type="widget" inherits="tab" />
 		</element-def>
 		<?DOC A split pane that displays two widgets adjacent to each other, with an adjustable bar in between?>
 		<element-def name="split" extends="container">

@@ -10,6 +10,7 @@ import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.qonfig.CompiledExpression;
 import org.observe.expresso.qonfig.ElementTypeTraceability;
 import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
@@ -110,17 +111,21 @@ public class QuickButton extends QuickWidget.Abstract {
 		}
 
 		@Override
-		public B create(ExElement parent) {
-			return (B) new QuickButton(this, parent);
+		public B create() {
+			return (B) new QuickButton(getIdentity());
 		}
 	}
+
+	private ModelValueInstantiator<SettableValue<String>> theTextInstantiator;
+	private ModelValueInstantiator<SettableValue<Icon>> theIconInstantiator;
+	private ModelValueInstantiator<ObservableAction<?>> theActionInstantiator;
 
 	private SettableValue<String> theText;
 	private SettableValue<Icon> theIcon;
 	private ObservableAction<?> theAction;
 
-	public QuickButton(Interpreted<?> interpreted, ExElement parent) {
-		super(interpreted, parent);
+	public QuickButton(Object id) {
+		super(id);
 	}
 
 	public SettableValue<String> getText() {
@@ -136,11 +141,30 @@ public class QuickButton extends QuickWidget.Abstract {
 	}
 
 	@Override
-	protected void updateModel(ExElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
-		super.updateModel(interpreted, myModels);
+	protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+		super.doUpdate(interpreted);
 		QuickButton.Interpreted<?> myInterpreted = (QuickButton.Interpreted<?>) interpreted;
-		theText = myInterpreted.getText() == null ? null : myInterpreted.getText().instantiate().get(myModels);
-		theIcon = myInterpreted.getIcon() == null ? null : myInterpreted.getIcon().instantiate().get(myModels);
-		theAction = myInterpreted.getAction().instantiate().get(myModels);
+		theTextInstantiator = myInterpreted.getText() == null ? null : myInterpreted.getText().instantiate();
+		theIconInstantiator = myInterpreted.getIcon() == null ? null : myInterpreted.getIcon().instantiate();
+		theActionInstantiator = myInterpreted.getAction().instantiate();
+	}
+
+	@Override
+	public void instantiated() {
+		super.instantiated();
+
+		if (theTextInstantiator != null)
+			theTextInstantiator.instantiate();
+		if (theIconInstantiator != null)
+			theIconInstantiator.instantiate();
+		theActionInstantiator.instantiate();
+	}
+
+	@Override
+	protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+		super.doInstantiate(myModels);
+		theText = theTextInstantiator == null ? null : theTextInstantiator.get(myModels);
+		theIcon = theIconInstantiator == null ? null : theIconInstantiator.get(myModels);
+		theAction = theActionInstantiator.get(myModels);
 	}
 }

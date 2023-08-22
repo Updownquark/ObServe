@@ -12,11 +12,14 @@ import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
+import org.observe.expresso.ObservableModelSet.ModelComponentId;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.qonfig.CompiledExpression;
 import org.observe.expresso.qonfig.ElementTypeTraceability;
 import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.observe.expresso.qonfig.ExElement;
+import org.observe.expresso.qonfig.ExFlexibleElementModelAddOn;
 import org.observe.expresso.qonfig.ExWithElementModel;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
@@ -39,11 +42,20 @@ public interface QuickEventListener extends ExElement {
 		@QonfigAttributeGetter
 		CompiledExpression getAction();
 
+		ModelComponentId getAltPressedValue();
+
+		ModelComponentId getCtrlPressedValue();
+
+		ModelComponentId getShiftPressedValue();
+
 		Interpreted<? extends L> interpret(ExElement.Interpreted<?> parent);
 
 		public abstract class Abstract<L extends QuickEventListener> extends ExElement.Def.Abstract<L> implements Def<L> {
 			private final List<EventFilter.Def> theFilters;
 			private CompiledExpression theAction;
+			private ModelComponentId theAltPressedValue;
+			private ModelComponentId theCtrlPressedValue;
+			private ModelComponentId theShiftPressedValue;
 
 			protected Abstract(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
 				super(parent, type);
@@ -61,9 +73,28 @@ public interface QuickEventListener extends ExElement {
 			}
 
 			@Override
+			public ModelComponentId getAltPressedValue() {
+				return theAltPressedValue;
+			}
+
+			@Override
+			public ModelComponentId getCtrlPressedValue() {
+				return theCtrlPressedValue;
+			}
+
+			@Override
+			public ModelComponentId getShiftPressedValue() {
+				return theShiftPressedValue;
+			}
+
+			@Override
 			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 				withTraceability(LISTENER_TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 				super.doUpdate(session);
+				ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
+				theAltPressedValue = elModels.getElementValueModelId("altPressed");
+				theCtrlPressedValue = elModels.getElementValueModelId("ctrlPressed");
+				theShiftPressedValue = elModels.getElementValueModelId("shiftPressed");
 				ExElement.syncDefs(EventFilter.Def.class, theFilters, session.forChildren("filter"));
 				theAction = session.getValueExpression();
 				if (theAction.getExpression() == ObservableExpression.EMPTY)
@@ -82,7 +113,7 @@ public interface QuickEventListener extends ExElement {
 
 		void updateListener(InterpretedExpressoEnv env) throws ExpressoInterpretationException;
 
-		L create(ExElement parent);
+		L create();
 
 		public abstract class Abstract<L extends QuickEventListener> extends ExElement.Interpreted.Abstract<L> implements Interpreted<L> {
 			private final List<EventFilter.Interpreted> theFilters;
@@ -181,15 +212,25 @@ public interface QuickEventListener extends ExElement {
 
 	ObservableAction<?> getAction();
 
-	public abstract class Abstract extends ExElement.Abstract implements QuickEventListener {
-		private final List<EventFilter> theFilters;
-		private ObservableAction<?> theAction;
-		private final SettableValue<SettableValue<Boolean>> isAltPressed;
-		private final SettableValue<SettableValue<Boolean>> isCtrlPressed;
-		private final SettableValue<SettableValue<Boolean>> isShiftPressed;
+	@Override
+	QuickEventListener copy(ExElement parent);
 
-		protected Abstract(QuickEventListener.Interpreted<?> interpreted, ExElement parent) {
-			super(interpreted, parent);
+	public abstract class Abstract extends ExElement.Abstract implements QuickEventListener {
+		private List<EventFilter> theFilters;
+
+		private ModelValueInstantiator<? extends ObservableAction<?>> theActionInstantiator;
+		private ObservableAction<?> theAction;
+
+		private ModelComponentId theAltPressedValue;
+		private ModelComponentId theCtrlPressedValue;
+		private ModelComponentId theShiftPressedValue;
+
+		private SettableValue<SettableValue<Boolean>> isAltPressed;
+		private SettableValue<SettableValue<Boolean>> isCtrlPressed;
+		private SettableValue<SettableValue<Boolean>> isShiftPressed;
+
+		protected Abstract(Object id) {
+			super(id);
 			theFilters = new ArrayList<>();
 			isAltPressed = SettableValue
 				.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Boolean>> parameterized(boolean.class)).build();
@@ -227,19 +268,59 @@ public interface QuickEventListener extends ExElement {
 		}
 
 		@Override
-		protected void updateModel(ExElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
-			super.updateModel(interpreted, myModels);
-			ExWithElementModel elModels = getAddOn(ExWithElementModel.class);
-			elModels.satisfyElementValue("altPressed", SettableValue.flatten(isAltPressed));
-			elModels.satisfyElementValue("ctrlPressed", SettableValue.flatten(isCtrlPressed));
-			elModels.satisfyElementValue("shiftPressed", SettableValue.flatten(isShiftPressed));
+		protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+			super.doUpdate(interpreted);
+
 			QuickEventListener.Interpreted<?> myInterpreted = (QuickEventListener.Interpreted<?>) interpreted;
+			theAltPressedValue = myInterpreted.getDefinition().getAltPressedValue();
+			theCtrlPressedValue = myInterpreted.getDefinition().getCtrlPressedValue();
+			theShiftPressedValue = myInterpreted.getDefinition().getShiftPressedValue();
+
+			theActionInstantiator = myInterpreted.getAction().instantiate();
+
 			CollectionUtils.synchronize(theFilters, myInterpreted.getFilters(), (f, i) -> f.getIdentity() == i.getIdentity())
-			.<ModelInstantiationException> simpleE(f -> f.create(this))//
-			.onRightX(el -> el.getLeftValue().update(el.getRightValue(), myModels))//
-			.onCommonX(el -> el.getLeftValue().update(el.getRightValue(), myModels))//
+			.simple(f -> f.create(this))//
+			.onRight(el -> el.getLeftValue().update(el.getRightValue(), this))//
+			.onCommon(el -> el.getLeftValue().update(el.getRightValue(), this))//
 			.adjust();
-			theAction = myInterpreted.getAction().instantiate().get(myModels);
+		}
+
+		@Override
+		public void instantiated() {
+			super.instantiated();
+
+			theActionInstantiator.instantiate();
+
+			for (EventFilter filter : theFilters)
+				filter.instantiated();
+		}
+
+		@Override
+		protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+			super.doInstantiate(myModels);
+
+			ExFlexibleElementModelAddOn.satisfyElementValue(theAltPressedValue, myModels, SettableValue.flatten(isAltPressed));
+			ExFlexibleElementModelAddOn.satisfyElementValue(theCtrlPressedValue, myModels, SettableValue.flatten(isCtrlPressed));
+			ExFlexibleElementModelAddOn.satisfyElementValue(theShiftPressedValue, myModels, SettableValue.flatten(isShiftPressed));
+
+			for (EventFilter filter : theFilters)
+				filter.instantiate(myModels);
+
+			theAction = theActionInstantiator.get(myModels);
+		}
+
+		@Override
+		public QuickEventListener.Abstract copy(ExElement parent) {
+			QuickEventListener.Abstract copy = (QuickEventListener.Abstract) super.copy(parent);
+
+			copy.theFilters = new ArrayList<>();
+			for (EventFilter filter : theFilters)
+				copy.theFilters.add(filter.copy(copy));
+			copy.isAltPressed = SettableValue.build(isAltPressed.getType()).build();
+			copy.isCtrlPressed = SettableValue.build(isAltPressed.getType()).build();
+			copy.isShiftPressed = SettableValue.build(isAltPressed.getType()).build();
+
+			return copy;
 		}
 	}
 
@@ -299,14 +380,15 @@ public interface QuickEventListener extends ExElement {
 			}
 
 			public EventFilter create(ExElement parent) {
-				return new EventFilter(this, parent);
+				return new EventFilter(parent);
 			}
 		}
 
+		private ModelValueInstantiator<SettableValue<Boolean>> theConditionInstantiator;
 		private SettableValue<Boolean> theCondition;
 
-		public EventFilter(Interpreted interpreted, ExElement parent) {
-			super(interpreted, parent);
+		public EventFilter(ExElement parent) {
+			super(parent);
 		}
 
 		public SettableValue<Boolean> getCondition() {
@@ -318,10 +400,27 @@ public interface QuickEventListener extends ExElement {
 		}
 
 		@Override
-		protected void updateModel(ExElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
-			super.updateModel(interpreted, myModels);
+		protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+			super.doUpdate(interpreted);
 			Interpreted myInterpreted = (Interpreted) interpreted;
-			theCondition = myInterpreted.getCondition().instantiate().get(myModels);
+			theConditionInstantiator = myInterpreted.getCondition().instantiate();
+		}
+
+		@Override
+		public void instantiated() {
+			super.instantiated();
+			theConditionInstantiator.instantiate();
+		}
+
+		@Override
+		protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+			super.doInstantiate(myModels);
+			theCondition = theConditionInstantiator.get(myModels);
+		}
+
+		@Override
+		public EventFilter copy(ExElement parent) {
+			return (EventFilter) super.copy(parent);
 		}
 	}
 }

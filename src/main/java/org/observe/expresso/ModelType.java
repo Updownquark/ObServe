@@ -1150,6 +1150,11 @@ public abstract class ModelType<M> implements Named {
 		}
 
 		@Override
+		public void instantiate() {
+			theSource.instantiate();
+		}
+
+		@Override
 		public MVT get(ModelSetInstance extModels) throws ModelInstantiationException {
 			MVS modelV = theSource.get(extModels);
 			MVT converted = (MVT) theConverter.convert(modelV);

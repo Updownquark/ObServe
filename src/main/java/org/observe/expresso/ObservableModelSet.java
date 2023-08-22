@@ -443,6 +443,8 @@ public interface ObservableModelSet extends Identifiable {
 	}
 
 	public interface ModelValueInstantiator<MV> {
+		void instantiate();
+
 		/**
 		 * @param models The model instance set to get the model value for this container from
 		 * @return The model value for this container in the given model instance set
@@ -482,6 +484,11 @@ public interface ObservableModelSet extends Identifiable {
 			}
 
 			@Override
+			public void instantiate() {
+				theSource.instantiate();
+			}
+
+			@Override
 			public MV2 get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
 				MV sourceV = theSource.get(models);
 				return theMap.apply(sourceV, models);
@@ -505,6 +512,10 @@ public interface ObservableModelSet extends Identifiable {
 
 		static <MV> ModelValueInstantiator<MV> literal(MV value, String text) {
 			return new ModelValueInstantiator<MV>() {
+				@Override
+				public void instantiate() {
+				}
+
 				@Override
 				public MV get(ObservableModelSet.ModelSetInstance extModels) {
 					return value;
@@ -531,6 +542,10 @@ public interface ObservableModelSet extends Identifiable {
 		 */
 		static <MV> ModelValueInstantiator<MV> of(ExFunction<ModelSetInstance, MV, ModelInstantiationException> value) {
 			return new ModelValueInstantiator<MV>() {
+				@Override
+				public void instantiate() {
+				}
+
 				@Override
 				public MV get(ModelSetInstance models) throws ModelInstantiationException {
 					return value.apply(models);
@@ -1462,6 +1477,25 @@ public interface ObservableModelSet extends Identifiable {
 			return node.as(type, env);
 		}
 
+		/**
+		 * @param <M> The model type of the value to get
+		 * @param <MV> The type of the value to get
+		 * @param componentId The component ID of the value to get
+		 * @param type The type of the value to get
+		 * @param env The environment to assist with the conversion
+		 * @return The container of the value in this model at the given path, converted to the given type if needed
+		 * @throws ModelException If no such value exists accessible at the given path
+		 * @throws ExpressoInterpretationException If the value could not be interpreted
+		 * @throws TypeConversionException If the value at the path could not be converted to the target type
+		 */
+		default <M, MV extends M> InterpretedValueSynth<M, MV> getValue(ModelComponentId componentId, ModelInstanceType<M, MV> type,
+			InterpretedExpressoEnv env) throws ModelException, ExpressoInterpretationException, TypeConversionException {
+			InterpretedModelComponentNode<?, ?> node = getComponent(componentId).interpreted();
+			if (node.getModel() != null)
+				throw new ModelException("'" + componentId + "' is a sub-model, not a value");
+			return node.as(type, env);
+		}
+
 		@Override
 		default InterpretedModelSet createInterpreted(InterpretedExpressoEnv env) {
 			return this;
@@ -1520,7 +1554,6 @@ public interface ObservableModelSet extends Identifiable {
 		void instantiate();
 
 		default ModelSetInstance wrap(ModelSetInstance models) throws ModelInstantiationException {
-			instantiate();
 			if (getIdentity() != models.getModel().getIdentity())
 				return createInstance(models.getUntil()).withAll(models).build();
 			else
@@ -2194,6 +2227,11 @@ public interface ObservableModelSet extends Identifiable {
 			}
 
 			@Override
+			public void instantiate() {
+				theInstantiator.instantiate();
+			}
+
+			@Override
 			public MV get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
 				return (MV) models.get(theIdentity);
 			}
@@ -2827,6 +2865,8 @@ public interface ObservableModelSet extends Identifiable {
 				for (Map.Entry<ModelComponentId, ? extends InterpretedModelSet> inh : theInterpretedModels.getInheritance().entrySet())
 					theInheritance.computeIfAbsent(inh.getKey(), __ -> inh.getValue().instantiate());
 				theInterpretedModels = null;
+				for (ModelValueInstantiator<?> component : theComponents.values())
+					component.instantiate();
 			}
 
 			private void instantiate(InterpretedModelSet models) {
@@ -2849,6 +2889,11 @@ public interface ObservableModelSet extends Identifiable {
 				}
 				for (ModelInstantiator inh : theInheritance.values())
 					inh.instantiate();
+			}
+
+			@Override
+			public String toString() {
+				return "Instantiator: " + theModelId;
 			}
 		}
 
@@ -2886,7 +2931,7 @@ public interface ObservableModelSet extends Identifiable {
 				}
 				theInheritance.put(other.getModel().getIdentity().getRootId(), other);
 				for (ModelComponentId modelId : other.getModel().getInheritance())
-					theInheritance.put(modelId, other);
+					theInheritance.put(modelId, other.getInherited(modelId));
 				return this;
 			}
 

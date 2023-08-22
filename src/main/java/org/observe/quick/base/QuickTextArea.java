@@ -7,11 +7,14 @@ import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
+import org.observe.expresso.ObservableModelSet.ModelComponentId;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.qonfig.CompiledExpression;
 import org.observe.expresso.qonfig.ElementTypeTraceability;
 import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.observe.expresso.qonfig.ExElement;
+import org.observe.expresso.qonfig.ExFlexibleElementModelAddOn;
 import org.observe.expresso.qonfig.ExWithElementModel;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
@@ -31,6 +34,7 @@ public class QuickTextArea<T> extends QuickEditableTextWidget.Abstract<T> {
 	public static class Def extends QuickEditableTextWidget.Def.Abstract<QuickTextArea<?>> {
 		private CompiledExpression theRows;
 		private StyledDocument.Def<?> theDocument;
+		private ModelComponentId theMousePositionVariable;
 
 		public Def(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
 			super(parent, type);
@@ -51,6 +55,10 @@ public class QuickTextArea<T> extends QuickEditableTextWidget.Abstract<T> {
 			return theDocument;
 		}
 
+		public ModelComponentId getMousePositionVariable() {
+			return theMousePositionVariable;
+		}
+
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
@@ -58,6 +66,9 @@ public class QuickTextArea<T> extends QuickEditableTextWidget.Abstract<T> {
 
 			theRows = session.getAttributeExpression("rows");
 			theDocument = ExElement.useOrReplace(StyledDocument.Def.class, theDocument, session, "document");
+
+			ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
+			theMousePositionVariable = elModels.getElementValueModelId("mousePosition");
 		}
 
 		@Override
@@ -144,8 +155,8 @@ public class QuickTextArea<T> extends QuickEditableTextWidget.Abstract<T> {
 		}
 
 		@Override
-		public QuickTextArea<T> create(ExElement parent) {
-			return new QuickTextArea<>(this, parent);
+		public QuickTextArea<T> create() {
+			return new QuickTextArea<>(getIdentity());
 		}
 	}
 
@@ -170,12 +181,14 @@ public class QuickTextArea<T> extends QuickEditableTextWidget.Abstract<T> {
 		}
 	}
 
+	private ModelComponentId theMousePositionVariable;
 	private StyledDocument<T> theDocument;
-	private final SettableValue<SettableValue<Integer>> theRows;
-	private final SettableValue<SettableValue<Integer>> theMousePosition;
+	private ModelValueInstantiator<SettableValue<Integer>> theRowsInstantiator;
+	private SettableValue<SettableValue<Integer>> theRows;
+	private SettableValue<SettableValue<Integer>> theMousePosition;
 
-	public QuickTextArea(Interpreted<T> interpreted, ExElement parent) {
-		super(interpreted, parent);
+	public QuickTextArea(Object id) {
+		super(id);
 		theRows = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Integer>> parameterized(Integer.class))
 			.build();
 		theMousePosition = SettableValue
@@ -199,13 +212,46 @@ public class QuickTextArea<T> extends QuickEditableTextWidget.Abstract<T> {
 	}
 
 	@Override
-	protected void updateModel(ExElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
-		super.updateModel(interpreted, myModels);
-		getAddOn(ExWithElementModel.class).satisfyElementValue("mousePosition", getMousePosition());
+	protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+		super.doUpdate(interpreted);
 		QuickTextArea.Interpreted<T> myInterpreted = (QuickTextArea.Interpreted<T>) interpreted;
-		theRows.set(myInterpreted.getRows() == null ? null : myInterpreted.getRows().instantiate().get(myModels), null);
-		theDocument = myInterpreted.getDocument() == null ? null : myInterpreted.getDocument().create(this);
+		theMousePositionVariable = myInterpreted.getDefinition().getMousePositionVariable();
+		theRowsInstantiator = myInterpreted.getRows() == null ? null : myInterpreted.getRows().instantiate();
+		theDocument = myInterpreted.getDocument() == null ? null : myInterpreted.getDocument().create();
 		if (theDocument != null)
-			theDocument.update(myInterpreted.getDocument(), myModels);
+			theDocument.update(myInterpreted.getDocument(), this);
+	}
+
+	@Override
+	public void instantiated() {
+		super.instantiated();
+
+		if (theRowsInstantiator != null)
+			theRowsInstantiator.instantiate();
+
+		if (theDocument != null)
+			theDocument.instantiated();
+	}
+
+	@Override
+	protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+		super.doInstantiate(myModels);
+		theRows.set(theRowsInstantiator == null ? null : theRowsInstantiator.get(myModels), null);
+		if (theDocument != null)
+			theDocument.instantiate(myModels);
+		ExFlexibleElementModelAddOn.satisfyElementValue(theMousePositionVariable, myModels, getMousePosition());
+	}
+
+	@Override
+	public QuickTextArea<T> copy(ExElement parent) {
+		QuickTextArea<T> copy = (QuickTextArea<T>) super.copy(parent);
+
+		copy.theRows = SettableValue.build(theRows.getType()).build();
+		copy.theMousePosition = SettableValue.build(theMousePosition.getType()).build();
+
+		if (theDocument != null)
+			copy.theDocument = theDocument.copy(copy);
+
+		return copy;
 	}
 }

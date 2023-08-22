@@ -10,6 +10,7 @@ import org.observe.expresso.ModelType;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
+import org.observe.expresso.ObservableModelSet.ModelComponentId;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
@@ -36,6 +37,7 @@ public class ObservableActionTransformations {
 			.getElementTraceability(ExpressoBaseV0_1.NAME, ExpressoBaseV0_1.VERSION, "disable", DisabledActionTransform.class,
 				Interpreted.class, null);
 		private CompiledExpression theDisablement;
+		private ModelComponentId theSourceVariable;
 
 		DisabledActionTransform(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
 			super(parent, qonfigType);
@@ -51,9 +53,12 @@ public class ObservableActionTransformations {
 			withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 			super.update(session, sourceModelType);
 			String sourceAs = session.getAttributeText("source-as");
+			ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
+			theSourceVariable = sourceAs == null ? null : elModels.getElementValueModelId(sourceAs);
 			theDisablement = session.getAttributeExpression("with");
 			// Not useable for action--there's no value, but we still have to satisfy the type
-			getAddOn(ExWithElementModel.Def.class).satisfyElementValueType(sourceAs, ModelTypes.Value.forType(TypeTokens.get().VOID));
+			if (theSourceVariable != null)
+				elModels.satisfyElementValueType(theSourceVariable, ModelTypes.Value.forType(TypeTokens.get().VOID));
 		}
 
 		@Override
@@ -110,6 +115,11 @@ public class ObservableActionTransformations {
 			@Override
 			public boolean isEfficientCopy() {
 				return true;
+			}
+
+			@Override
+			public void instantiate() {
+				theDisablement.instantiate();
 			}
 
 			@Override

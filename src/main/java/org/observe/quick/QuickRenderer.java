@@ -39,11 +39,16 @@ public class QuickRenderer extends ExAddOn.Abstract<QuickWidget> {
 
 		@Override
 		public QuickRenderer create(QuickWidget element) {
-			return new QuickRenderer(this, element);
+			return new QuickRenderer(element);
 		}
 	}
 
-	public QuickRenderer(Interpreted interpreted, QuickWidget element) {
-		super(interpreted, element);
+	public QuickRenderer(QuickWidget element) {
+		super(element);
+	}
+
+	@Override
+	public Class<Interpreted> getInterpretationType() {
+		return Interpreted.class;
 	}
 }

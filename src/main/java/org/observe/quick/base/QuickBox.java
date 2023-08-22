@@ -7,6 +7,7 @@ import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.qonfig.CompiledExpression;
 import org.observe.expresso.qonfig.ElementTypeTraceability;
 import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
@@ -94,15 +95,16 @@ public class QuickBox extends QuickContainer.Abstract<QuickWidget> {
 		}
 
 		@Override
-		public W create(ExElement parent) {
-			return (W) new QuickBox(this, parent);
+		public W create() {
+			return (W) new QuickBox(getIdentity());
 		}
 	}
 
+	private ModelValueInstantiator<SettableValue<Double>> theOpacityInstantiator;
 	private SettableValue<Double> theOpacity;
 
-	public QuickBox(Interpreted<?> interpreted, ExElement parent) {
-		super(interpreted, parent);
+	public QuickBox(Object id) {
+		super(id);
 	}
 
 	public QuickLayout getLayout() {
@@ -110,10 +112,23 @@ public class QuickBox extends QuickContainer.Abstract<QuickWidget> {
 	}
 
 	@Override
-	protected void updateModel(ExElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
-		super.updateModel(interpreted, myModels);
+	protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+		super.doUpdate(interpreted);
 		QuickBox.Interpreted<?> myInterpreted = (QuickBox.Interpreted<?>) interpreted;
-		theOpacity = myInterpreted.getOpacity() == null ? null : myInterpreted.getOpacity().instantiate().get(myModels);
+		theOpacityInstantiator = myInterpreted.getOpacity() == null ? null : myInterpreted.getOpacity().instantiate();
+	}
+
+	@Override
+	public void instantiated() {
+		super.instantiated();
+		if (theOpacityInstantiator != null)
+			theOpacityInstantiator.instantiate();
+	}
+
+	@Override
+	protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+		super.doInstantiate(myModels);
+		theOpacity = theOpacityInstantiator == null ? null : theOpacityInstantiator.get(myModels);
 	}
 
 	public SettableValue<Double> getOpacity() {

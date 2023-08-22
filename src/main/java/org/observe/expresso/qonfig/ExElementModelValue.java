@@ -56,11 +56,16 @@ public class ExElementModelValue extends ExAddOn.Abstract<ExtModelValueElement<?
 
 		@Override
 		public AO create(ExtModelValueElement<?, ?> element) {
-			return (AO) new ExElementModelValue(this, element);
+			return (AO) new ExElementModelValue(element);
 		}
 	}
 
-	protected ExElementModelValue(Interpreted<?> interpreted, ExtModelValueElement<?, ?> element) {
-		super(interpreted, element);
+	protected ExElementModelValue(ExtModelValueElement<?, ?> element) {
+		super(element);
+	}
+
+	@Override
+	public Class<Interpreted<?>> getInterpretationType() {
+		return (Class<Interpreted<?>>) (Class<?>) Interpreted.class;
 	}
 }

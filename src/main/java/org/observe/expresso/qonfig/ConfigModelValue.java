@@ -102,7 +102,7 @@ public interface ConfigModelValue<T, M, MV extends M> extends ModelValueElement<
 		Def<M> getDefinition();
 
 		@Override
-		default ConfigModelValue<T, M, MV> create(ExElement parent, ModelSetInstance models) throws ModelInstantiationException {
+		default ConfigModelValue<T, M, MV> create() {
 			return null;
 		}
 
@@ -193,8 +193,8 @@ public interface ConfigModelValue<T, M, MV extends M> extends ModelValueElement<
 		private final ModelValueInstantiator<SettableValue<ObservableConfig>> theConfigValue;
 		private final TypeToken<T> theValueType;
 		private final ObservableConfigPath theConfigPath;
-		private ModelValueInstantiator<SettableValue<ObservableConfigFormat<T>>> theFormat;
-		private ObservableConfigFormatSet theFormatSet;
+		private final ModelValueInstantiator<SettableValue<ObservableConfigFormat<T>>> theFormat;
+		private final ObservableConfigFormatSet theFormatSet;
 
 		protected Instantiator(ModelValueInstantiator<SettableValue<ObservableConfig>> configValue, TypeToken<T> valueType,
 			ObservableConfigPath configPath, ModelValueInstantiator<SettableValue<ObservableConfigFormat<T>>> format,
@@ -204,6 +204,13 @@ public interface ConfigModelValue<T, M, MV extends M> extends ModelValueElement<
 			theConfigPath = configPath;
 			theFormat = format;
 			theFormatSet = formatSet;
+		}
+
+		@Override
+		public void instantiate() {
+			theConfigValue.instantiate();
+			if (theFormat != null)
+				theFormat.instantiate();
 		}
 
 		@Override

@@ -46,12 +46,12 @@ public class QuickFieldPanel extends QuickContainer.Abstract<QuickWidget> {
 		}
 
 		@Override
-		public QuickFieldPanel create(ExElement parent) {
-			return new QuickFieldPanel(this, parent);
+		public QuickFieldPanel create() {
+			return new QuickFieldPanel(getIdentity());
 		}
 	}
 
-	public QuickFieldPanel(Interpreted interpreted, ExElement parent) {
-		super(interpreted, parent);
+	public QuickFieldPanel(Object id) {
+		super(id);
 	}
 }

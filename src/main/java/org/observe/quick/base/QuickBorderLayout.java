@@ -1,7 +1,5 @@
 package org.observe.quick.base;
 
-import org.observe.expresso.ModelInstantiationException;
-import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.qonfig.ExAddOn;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExpressoQIS;
@@ -43,12 +41,17 @@ public class QuickBorderLayout extends QuickLayout.Abstract {
 
 		@Override
 		public QuickBorderLayout create(QuickBox element) {
-			return new QuickBorderLayout(this, element);
+			return new QuickBorderLayout(element);
 		}
 	}
 
-	public QuickBorderLayout(Interpreted interpreted, QuickBox element) {
-		super(interpreted, element);
+	public QuickBorderLayout(QuickBox element) {
+		super(element);
+	}
+
+	@Override
+	public Class<Interpreted> getInterpretationType() {
+		return Interpreted.class;
 	}
 
 	public enum Region {
@@ -111,14 +114,19 @@ public class QuickBorderLayout extends QuickLayout.Abstract {
 
 			@Override
 			public Child create(QuickWidget element) {
-				return new Child(this, element);
+				return new Child(element);
 			}
 		}
 
 		private Region theRegion;
 
-		public Child(Interpreted interpreted, QuickWidget element) {
-			super(interpreted, element);
+		public Child(QuickWidget element) {
+			super(element);
+		}
+
+		@Override
+		public Class<Interpreted> getInterpretationType() {
+			return Interpreted.class;
 		}
 
 		public Region getRegion() {
@@ -126,8 +134,8 @@ public class QuickBorderLayout extends QuickLayout.Abstract {
 		}
 
 		@Override
-		public void update(ExAddOn.Interpreted<?, ?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
-			super.update(interpreted, models);
+		public void update(ExAddOn.Interpreted<?, ?> interpreted) {
+			super.update(interpreted);
 			Child.Interpreted myInterpreted = (Child.Interpreted) interpreted;
 			theRegion = myInterpreted.getDefinition().getRegion();
 		}

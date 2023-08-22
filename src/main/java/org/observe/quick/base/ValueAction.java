@@ -11,11 +11,14 @@ import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
+import org.observe.expresso.ObservableModelSet.ModelComponentId;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.qonfig.CompiledExpression;
 import org.observe.expresso.qonfig.ElementTypeTraceability;
 import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.observe.expresso.qonfig.ExElement;
+import org.observe.expresso.qonfig.ExFlexibleElementModelAddOn;
 import org.observe.expresso.qonfig.ExWithElementModel;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
@@ -137,7 +140,7 @@ public interface ValueAction<T> extends ExElement {
 
 		void updateAction(InterpretedExpressoEnv env) throws ExpressoInterpretationException;
 
-		ValueAction<T> create(ExElement parent);
+		ValueAction<T> create();
 
 		public abstract class Abstract<T, A extends ValueAction<T>> extends ExElement.Interpreted.Abstract<A> implements Interpreted<T, A> {
 			private final TypeToken<T> theValueType;
@@ -222,19 +225,26 @@ public interface ValueAction<T> extends ExElement {
 
 	ObservableAction<?> getAction();
 
+	@Override
+	ValueAction<T> copy(ExElement parent);
+
 	public abstract class Abstract<T> extends ExElement.Abstract implements ValueAction<T> {
-		private final TypeToken<T> theValueType;
-		private final SettableValue<SettableValue<String>> theName;
+		private TypeToken<T> theValueType;
+		private ModelValueInstantiator<SettableValue<String>> theNameInstantiator;
+		private ModelValueInstantiator<SettableValue<Icon>> theIconInstantiator;
+		private ModelValueInstantiator<SettableValue<String>> theEnabledInstantiator;
+		private ModelValueInstantiator<SettableValue<String>> theTooltipInstantiator;
+		private ModelValueInstantiator<ObservableAction<?>> theActionInstantiator;
+		private SettableValue<SettableValue<String>> theName;
 		private boolean isButton;
 		private boolean isPopup;
-		private final SettableValue<SettableValue<Icon>> theIcon;
-		private final SettableValue<SettableValue<String>> isEnabled;
-		private final SettableValue<SettableValue<String>> theTooltip;
+		private SettableValue<SettableValue<Icon>> theIcon;
+		private SettableValue<SettableValue<String>> isEnabled;
+		private SettableValue<SettableValue<String>> theTooltip;
 		private ObservableAction<?> theAction;
 
-		protected Abstract(ValueAction.Interpreted<T, ?> interpreted, ExElement parent) {
-			super(interpreted, parent);
-			theValueType = interpreted.getValueType();
+		protected Abstract(Object id) {
+			super(id);
 			theName = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<String>> parameterized(String.class))
 				.build();
 			theIcon = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Icon>> parameterized(Icon.class))
@@ -283,16 +293,55 @@ public interface ValueAction<T> extends ExElement {
 		}
 
 		@Override
-		protected void updateModel(ExElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
-			super.updateModel(interpreted, myModels);
+		protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+			super.doUpdate(interpreted);
 			ValueAction.Interpreted<T, ?> myInterpreted = (ValueAction.Interpreted<T, ?>) interpreted;
-			theName.set(myInterpreted.getName() == null ? null : myInterpreted.getName().instantiate().get(myModels), null);
+			theValueType = myInterpreted.getValueType();
+			theNameInstantiator = myInterpreted.getName() == null ? null : myInterpreted.getName().instantiate();
 			isButton = myInterpreted.getDefinition().isButton();
 			isPopup = myInterpreted.getDefinition().isPopup();
-			theIcon.set(myInterpreted.getIcon() == null ? null : myInterpreted.getIcon().instantiate().get(myModels), null);
-			isEnabled.set(myInterpreted.isEnabled() == null ? null : myInterpreted.isEnabled().instantiate().get(myModels), null);
-			theTooltip.set(myInterpreted.getTooltip() == null ? null : myInterpreted.getTooltip().instantiate().get(myModels), null);
-			theAction = myInterpreted.getAction().instantiate().get(myModels);
+			theIconInstantiator = myInterpreted.getIcon() == null ? null : myInterpreted.getIcon().instantiate();
+			theEnabledInstantiator = myInterpreted.isEnabled() == null ? null : myInterpreted.isEnabled().instantiate();
+			theTooltipInstantiator = myInterpreted.getTooltip() == null ? null : myInterpreted.getTooltip().instantiate();
+			theActionInstantiator = myInterpreted.getAction().instantiate();
+		}
+
+		@Override
+		public void instantiated() {
+			super.instantiated();
+
+			if (theNameInstantiator != null)
+				theNameInstantiator.instantiate();
+			if (theIconInstantiator != null)
+				theIconInstantiator.instantiate();
+			if (theEnabledInstantiator != null)
+				theEnabledInstantiator.instantiate();
+			if (theTooltipInstantiator != null)
+				theTooltipInstantiator.instantiate();
+			theActionInstantiator.instantiate();
+		}
+
+		@Override
+		protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+			super.doInstantiate(myModels);
+
+			theName.set(theNameInstantiator == null ? null : theNameInstantiator.get(myModels), null);
+			theIcon.set(theIconInstantiator == null ? null : theIconInstantiator.get(myModels), null);
+			isEnabled.set(theEnabledInstantiator == null ? null : theEnabledInstantiator.get(myModels), null);
+			theTooltip.set(theTooltipInstantiator == null ? null : theTooltipInstantiator.get(myModels), null);
+			theAction = theActionInstantiator.get(myModels);
+		}
+
+		@Override
+		public ValueAction.Abstract<T> copy(ExElement parent) {
+			ValueAction.Abstract<T> copy = (ValueAction.Abstract<T>) super.copy(parent);
+
+			copy.theName = SettableValue.build(theName.getType()).build();
+			copy.theIcon = SettableValue.build(theIcon.getType()).build();
+			copy.isEnabled = SettableValue.build(isEnabled.getType()).build();
+			copy.theTooltip = SettableValue.build(theTooltip.getType()).build();
+
+			return copy;
 		}
 	}
 
@@ -347,6 +396,7 @@ public interface ValueAction<T> extends ExElement {
 		public static class Def<T, A extends Single<T>> extends ValueAction.Def.Abstract<T, A> {
 			private String theValueName;
 			private boolean allowForMultiple;
+			private ModelComponentId theValueVariable;
 
 			public Def(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
 				super(parent, type);
@@ -362,13 +412,20 @@ public interface ValueAction<T> extends ExElement {
 				return allowForMultiple;
 			}
 
+			@QonfigAttributeGetter("value-name")
+			public ModelComponentId getValueVariable() {
+				return theValueVariable;
+			}
+
 			@Override
 			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 				withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 				super.doUpdate(session.asElement(session.getFocusType().getSuperElement()));
 				theValueName = session.getAttributeText("value-name");
 				allowForMultiple = session.getAttribute("allow-for-multiple", boolean.class);
-				getAddOn(ExWithElementModel.Def.class).satisfyElementValueType(theValueName, ModelTypes.Value,
+				ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
+				theValueVariable = elModels.getElementValueModelId(theValueName);
+				elModels.satisfyElementValueType(theValueVariable, ModelTypes.Value,
 					(interp, env) -> ModelTypes.Value.forType(((Interpreted<?, ?>) interp).getValueType()));
 			}
 
@@ -389,23 +446,17 @@ public interface ValueAction<T> extends ExElement {
 			}
 
 			@Override
-			public Single<T> create(ExElement parent) {
-				return new Single<>(this, parent);
+			public Single<T> create() {
+				return new Single<>(getIdentity());
 			}
 		}
 
-		private final SettableValue<SettableValue<T>> theActionValue;
-		private String theValueName;
+		private ModelComponentId theValueVariable;
+		private SettableValue<SettableValue<T>> theActionValue;
 		private boolean allowForMultiple;
 
-		public Single(Interpreted<T, ?> interpreted, ExElement parent) {
-			super(interpreted, parent);
-			theActionValue = SettableValue
-				.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<T>> parameterized(interpreted.getValueType())).build();
-		}
-
-		public String getValueName() {
-			return theValueName;
+		public Single(Object id) {
+			super(id);
 		}
 
 		public boolean allowForMultiple() {
@@ -417,12 +468,28 @@ public interface ValueAction<T> extends ExElement {
 		}
 
 		@Override
-		protected void updateModel(ExElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
-			super.updateModel(interpreted, myModels);
+		protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+			super.doUpdate(interpreted);
 			Interpreted<T, ?> myInterpreted = (Interpreted<T, ?>) interpreted;
-			theValueName = myInterpreted.getDefinition().getValueName();
+			theValueVariable = myInterpreted.getDefinition().getValueVariable();
 			allowForMultiple = myInterpreted.getDefinition().allowForMultiple();
-			getAddOn(ExWithElementModel.class).satisfyElementValue(theValueName, SettableValue.flatten(theActionValue));
+			theActionValue = SettableValue
+				.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<T>> parameterized(myInterpreted.getValueType())).build();
+		}
+
+		@Override
+		protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+			super.doInstantiate(myModels);
+			ExFlexibleElementModelAddOn.satisfyElementValue(theValueVariable, myModels, SettableValue.flatten(theActionValue));
+		}
+
+		@Override
+		public Single<T> copy(ExElement parent) {
+			Single<T> copy = (Single<T>) super.copy(parent);
+
+			copy.theActionValue = SettableValue.build(theActionValue.getType()).build();
+
+			return copy;
 		}
 	}
 
@@ -435,6 +502,7 @@ public interface ValueAction<T> extends ExElement {
 		public static class Def<T, A extends Multi<T>> extends ValueAction.Def.Abstract<T, A> {
 			private String theValuesName;
 			private boolean allowForEmpty;
+			private ModelComponentId theValuesVariable;
 
 			public Def(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
 				super(parent, type);
@@ -450,13 +518,20 @@ public interface ValueAction<T> extends ExElement {
 				return allowForEmpty;
 			}
 
+			@QonfigAttributeGetter("values-name")
+			public ModelComponentId getValuesVariable() {
+				return theValuesVariable;
+			}
+
 			@Override
 			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 				withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 				super.doUpdate(session.asElement(session.getFocusType().getSuperElement()));
 				theValuesName = session.getAttributeText("values-name");
 				allowForEmpty = session.getAttribute("allow-for-empty", boolean.class);
-				getAddOn(ExWithElementModel.Def.class).satisfyElementValueType(theValuesName, ModelTypes.Collection,
+				ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
+				theValuesVariable = elModels.getElementValueModelId(theValuesName);
+				elModels.satisfyElementValueType(theValuesVariable, ModelTypes.Collection,
 					(interp, env) -> ModelTypes.Collection.forType(((Interpreted<?, ?>) interp).getValueType()));
 			}
 
@@ -478,25 +553,17 @@ public interface ValueAction<T> extends ExElement {
 			}
 
 			@Override
-			public Multi<T> create(ExElement parent) {
-				return new Multi<>(this, parent);
+			public Multi<T> create() {
+				return new Multi<>(getIdentity());
 			}
 		}
 
-		private final SettableValue<ObservableCollection<T>> theActionValues;
-		private String theValuesName;
+		private ModelComponentId theValuesVariable;
+		private SettableValue<ObservableCollection<T>> theActionValues;
 		private boolean allowForEmpty;
 
-		public Multi(Interpreted<T, ?> interpreted, ExElement parent) {
-			super(interpreted, parent);
-			theActionValues = SettableValue
-				.build(
-					TypeTokens.get().keyFor(ObservableCollection.class).<ObservableCollection<T>> parameterized(interpreted.getValueType()))
-				.build();
-		}
-
-		public String getValuesName() {
-			return theValuesName;
+		public Multi(Object id) {
+			super(id);
 		}
 
 		public boolean allowForEmpty() {
@@ -508,12 +575,30 @@ public interface ValueAction<T> extends ExElement {
 		}
 
 		@Override
-		protected void updateModel(ExElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
-			super.updateModel(interpreted, myModels);
+		protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+			super.doUpdate(interpreted);
 			Interpreted<T, ?> myInterpreted = (Interpreted<T, ?>) interpreted;
-			theValuesName = myInterpreted.getDefinition().getValuesName();
+			theValuesVariable = myInterpreted.getDefinition().getValuesVariable();
 			allowForEmpty = myInterpreted.getDefinition().allowForEmpty();
-			getAddOn(ExWithElementModel.class).satisfyElementValue(theValuesName, ObservableCollection.flattenValue(theActionValues));
+			theActionValues = SettableValue.build(
+				TypeTokens.get().keyFor(ObservableCollection.class).<ObservableCollection<T>> parameterized(myInterpreted.getValueType()))
+				.build();
+		}
+
+		@Override
+		protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+			super.doInstantiate(myModels);
+			ExFlexibleElementModelAddOn.satisfyElementValue(theValuesVariable, myModels,
+				ObservableCollection.flattenValue(theActionValues));
+		}
+
+		@Override
+		public Multi<T> copy(ExElement parent) {
+			Multi<T> copy = (Multi<T>) super.copy(parent);
+
+			copy.theActionValues = SettableValue.build(theActionValues.getType()).build();
+
+			return copy;
 		}
 	}
 }

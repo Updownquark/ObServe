@@ -372,6 +372,13 @@ public interface QuickInterpretedStyle {
 			return theInherited;
 		}
 
+		public void instantiate() {
+			for (InterpretedStyleValue.StyleValueInstantiator<T> value : theValues)
+				value.instantiate();
+			if (theInherited != null)
+				theInherited.instantiate();
+		}
+
 		public List<ObservableValue<ConditionalValue<T>>> getConditionalValues(ModelSetInstance models) throws ModelInstantiationException {
 			List<ObservableValue<ConditionalValue<T>>> values = new ArrayList<>();
 			for (int i = 0; i < theValues.size(); i++) {

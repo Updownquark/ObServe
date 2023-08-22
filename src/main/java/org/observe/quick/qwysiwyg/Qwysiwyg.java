@@ -576,7 +576,9 @@ public class Qwysiwyg {
 			try {
 				if (theDocument == null)
 					theDocument = theDocumentInterpreted.create();
-				theModels = theDocument.update(theDocumentInterpreted, theDocumentReplacement);
+				theDocument.update(theDocumentInterpreted);
+				theDocument.instantiated();
+				theModels = theDocument.instantiate(theDocumentReplacement);
 				QuickWindow window = theDocument.getAddOn(QuickWindow.class);
 				if (window != null && window.getTitle() != null) {
 					window.getTitle().changes().takeUntil(theDocumentReplacement).act(evt -> {

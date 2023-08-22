@@ -211,6 +211,13 @@ public class ConditionalExpression implements ObservableExpression {
 		}
 
 		@Override
+		public void instantiate() {
+			theCondition.instantiate();
+			thePrimary.instantiate();
+			theSecondary.instantiate();
+		}
+
+		@Override
 		public MV get(ModelSetInstance msi) throws ModelInstantiationException {
 			SettableValue<Boolean> conditionX = theCondition.get(msi);
 			Object primaryX = thePrimary.get(msi);

@@ -9,7 +9,9 @@ import java.util.stream.Collectors;
 
 import org.observe.ObservableAction;
 import org.observe.SimpleObservable;
+import org.observe.expresso.ExpressoTesting.TestAction.TestActionElement;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExNamed;
 import org.observe.expresso.qonfig.Expresso;
@@ -96,14 +98,14 @@ public class ExpressoTesting extends ExElement.Def.Abstract<ExElement> {
 			}
 
 			public ExpressoTest create(ExElement parent) {
-				return new ExpressoTest(this, parent);
+				return new ExpressoTest(getIdentity());
 			}
 		}
 
 		private final List<TestAction.TestActionElement<?>> theActions;
 
-		public ExpressoTest(Interpreted interpreted, ExElement parent) {
-			super(interpreted, parent);
+		public ExpressoTest(Object id) {
+			super(id);
 			theActions = new ArrayList<>();
 		}
 
@@ -132,14 +134,28 @@ public class ExpressoTesting extends ExElement.Def.Abstract<ExElement> {
 		}
 
 		@Override
-		protected void updateModel(ExElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
-			super.updateModel(interpreted, myModels);
+		protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+			super.doUpdate(interpreted);
 			Interpreted myInterpreted = (Interpreted) interpreted;
 			CollectionUtils.synchronize(theActions, myInterpreted.getActions(), (a, i) -> a.getIdentity() == i.getIdentity())//
-			.<ModelInstantiationException> simpleE(i -> i.create(this))//
-			.onRightX(el -> el.getLeftValue().update(el.getRightValue(), myModels))//
-			.onCommonX(el -> el.getLeftValue().update(el.getRightValue(), myModels))//
+			.simple(i -> i.create(this))//
+			.onRight(el -> el.getLeftValue().update(el.getRightValue(), this))//
+			.onCommon(el -> el.getLeftValue().update(el.getRightValue(), this))//
 			.adjust();
+		}
+
+		@Override
+		public void instantiated() {
+			super.instantiated();
+			for (TestActionElement<?> action : theActions)
+				action.instantiated();
+		}
+
+		@Override
+		protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+			super.doInstantiate(myModels);
+			for (TestAction.TestActionElement<?> action : theActions)
+				action.instantiate(myModels);
 		}
 	}
 
@@ -227,17 +243,18 @@ public class ExpressoTesting extends ExElement.Def.Abstract<ExElement> {
 			}
 
 			public TestActionElement<T> create(ExElement parent) {
-				return new TestActionElement<>(this, parent);
+				return new TestActionElement<>(getIdentity());
 			}
 		}
 
 		static class TestActionElement<T> extends ExElement.Abstract {
+			private ModelValueInstantiator<ObservableAction<T>> theActionInstantiator;
 			private ObservableAction<T> theAction;
 			private Class<? extends Throwable> theExpectedException;
 			private boolean isBreakpoint;
 
-			public TestActionElement(TestAction.Interpreted<T> interpreted, ExElement parent) {
-				super(interpreted, parent);
+			public TestActionElement(Object id) {
+				super(id);
 			}
 
 			public ObservableAction<T> getAction() {
@@ -253,12 +270,18 @@ public class ExpressoTesting extends ExElement.Def.Abstract<ExElement> {
 			}
 
 			@Override
-			protected void updateModel(ExElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
-				super.updateModel(interpreted, myModels);
+			protected void doUpdate(Interpreted<?> interpreted) {
+				super.doUpdate(interpreted);
 				TestAction.Interpreted<T> myInterpreted = (TestAction.Interpreted<T>) interpreted;
-				theAction = myInterpreted.instantiate().get(myModels);
+				theActionInstantiator = myInterpreted.instantiate();
 				theExpectedException = myInterpreted.getExpectedException();
 				isBreakpoint = myInterpreted.isBreakpoint();
+			}
+
+			@Override
+			protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+				super.doInstantiate(myModels);
+				theAction = theActionInstantiator.get(myModels);
 			}
 		}
 	}
@@ -341,7 +364,9 @@ public class ExpressoTesting extends ExElement.Def.Abstract<ExElement> {
 			System.out.print("Instantiating test " + testName + "...");
 			System.out.flush();
 			ExpressoTest test = testInterp.create(null);
-			test.update(testInterp, models);
+			test.update(testInterp, null);
+			test.instantiated();
+			test.instantiate(models);
 			System.out.println("complete");
 
 			System.out.println("Executing test " + testName + "...");

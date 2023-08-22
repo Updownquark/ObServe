@@ -5,10 +5,13 @@ import org.observe.SimpleObservable;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
+import org.observe.expresso.ObservableModelSet.ModelComponentId;
+import org.observe.expresso.ObservableModelSet.ModelInstantiator;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.qonfig.ElementTypeTraceability;
 import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.observe.expresso.qonfig.ExElement;
+import org.observe.expresso.qonfig.ExFlexibleElementModelAddOn;
 import org.observe.expresso.qonfig.ExWithElementModel;
 import org.observe.expresso.qonfig.Expresso;
 import org.observe.expresso.qonfig.ExpressoQIS;
@@ -30,6 +33,8 @@ public class QuickDocument extends ExElement.Abstract {
 	public static class Def extends ExElement.Def.Abstract<QuickDocument> {
 		private QuickHeadSection.Def theHead;
 		private QuickWidget.Def<?> theBody;
+		private ModelComponentId theModelLoadValue;
+		private ModelComponentId theBodyLoadValue;
 
 		/**
 		 * @param parent The parent of this document, typically null
@@ -51,10 +56,23 @@ public class QuickDocument extends ExElement.Abstract {
 			return theBody;
 		}
 
+		public ModelComponentId getModelLoadValue() {
+			return theModelLoadValue;
+		}
+
+		public ModelComponentId getBodyLoadValue() {
+			return theBodyLoadValue;
+		}
+
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 			super.doUpdate(session);
+
+			ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
+			theModelLoadValue = elModels.getElementValueModelId("onModelLoad");
+			theBodyLoadValue = elModels.getElementValueModelId("onBodyLoad");
+
 			theHead = ExElement.useOrReplace(QuickHeadSection.Def.class, theHead, session, "head");
 			if (theHead != null) {
 				setExpressoEnv(theHead.getExpressoEnv());
@@ -129,7 +147,7 @@ public class QuickDocument extends ExElement.Abstract {
 
 		/** @return The new document */
 		public QuickDocument create() {
-			return new QuickDocument(this);
+			return new QuickDocument(getIdentity());
 		}
 	}
 
@@ -189,13 +207,15 @@ public class QuickDocument extends ExElement.Abstract {
 		}
 	}
 
+	private ModelInstantiator theModels;
 	private QuickWidget theBody;
-	private final SimpleObservable<Void> theModelLoad;
-	private final SimpleObservable<Void> theBodyLoad;
+	private ModelComponentId theModelLoadValue;
+	private ModelComponentId theBodyLoadValue;
+	private SimpleObservable<Void> theModelLoad;
+	private SimpleObservable<Void> theBodyLoad;
 
-	/** @param interpreted The interpreted document that is creating this document */
-	public QuickDocument(Interpreted interpreted) {
-		super(interpreted, null);
+	public QuickDocument(Object id) {
+		super(id);
 		theModelLoad = new SimpleObservable<>();
 		theBodyLoad = new SimpleObservable<>();
 	}
@@ -205,24 +225,57 @@ public class QuickDocument extends ExElement.Abstract {
 		return theBody;
 	}
 
-	public ModelSetInstance update(QuickDocument.Interpreted interpreted, Observable<?> until) throws ModelInstantiationException {
+	public void update(QuickDocument.Interpreted interpreted) {
+		update(interpreted, null);
+	}
+
+	public ModelSetInstance instantiate(Observable<?> until) throws ModelInstantiationException {
 		ModelSetInstance models = InterpretedExpressoEnv.INTERPRETED_STANDARD_JAVA.getModels().createInstance(until).build();
-		return update(interpreted, models);
+		return instantiate(models);
 	}
 
 	@Override
-	protected void updateModel(ExElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
-		super.updateModel(interpreted, myModels);
+	protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+		super.doUpdate(interpreted);
 
 		QuickDocument.Interpreted myInterpreted = (QuickDocument.Interpreted) interpreted;
-		ExWithElementModel elModel = getAddOn(ExWithElementModel.class);
-		elModel.satisfyElementValue("onModelLoad", theModelLoad.readOnly());
-		elModel.satisfyElementValue("onBodyLoad", theBodyLoad.readOnly());
-		ModelSetInstance headModels = myInterpreted.getHead().getExpressoEnv().getModels().instantiate().wrap(myModels);
-		theModelLoad.onNext(null);
+
+		theModelLoadValue = myInterpreted.getDefinition().getModelLoadValue();
+		theBodyLoadValue = myInterpreted.getDefinition().getBodyLoadValue();
+
+		theModels = myInterpreted.getHead().getExpressoEnv().getModels().instantiate();
 		if (theBody == null)
-			theBody = myInterpreted.getBody().create(this);
-		theBody.update(myInterpreted.getBody(), headModels);
+			theBody = myInterpreted.getBody().create();
+		theBody.update(myInterpreted.getBody(), this);
 		theBodyLoad.onNext(null);
+	}
+
+	@Override
+	public void instantiated() {
+		theModels.instantiate();
+		super.instantiated();
+		theBody.instantiated();
+	}
+
+	@Override
+	protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+		super.doInstantiate(myModels);
+
+		ExFlexibleElementModelAddOn.satisfyElementValue(theModelLoadValue, myModels, theModelLoad.readOnly());
+		ExFlexibleElementModelAddOn.satisfyElementValue(theBodyLoadValue, myModels, theBodyLoad.readOnly());
+		ModelSetInstance headModels = theModels.wrap(myModels);
+		theModelLoad.onNext(null);
+		theBody.instantiate(headModels);
+		theBodyLoad.onNext(null);
+	}
+
+	@Override
+	protected QuickDocument clone() {
+		QuickDocument copy = (QuickDocument) super.clone();
+
+		copy.theModelLoad = new SimpleObservable<>();
+		copy.theBodyLoad = new SimpleObservable<>();
+
+		return copy;
 	}
 }

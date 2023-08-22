@@ -74,6 +74,12 @@ public class InterpretedStyleValue<T> implements Comparable<InterpretedStyleValu
 			this.value = value;
 		}
 
+		void instantiate() {
+			if (condition != null)
+				condition.instantiate();
+			value.instantiate();
+		}
+
 		@Override
 		public String toString() {
 			return condition + " -> " + value;

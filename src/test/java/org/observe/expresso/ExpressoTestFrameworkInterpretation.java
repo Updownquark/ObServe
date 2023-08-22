@@ -150,8 +150,7 @@ public class ExpressoTestFrameworkInterpretation implements QonfigInterpretation
 			}
 
 			@Override
-			public ModelValueElement<SettableValue<?>, SettableValue<T>> create(ExElement parent, ModelSetInstance models)
-				throws ModelInstantiationException {
+			public ModelValueElement<SettableValue<?>, SettableValue<T>> create() {
 				return null;
 			}
 		}
@@ -161,6 +160,11 @@ public class ExpressoTestFrameworkInterpretation implements QonfigInterpretation
 
 			Instantiator(ModelValueInstantiator<SettableValue<T>> source) {
 				theSource = source;
+			}
+
+			@Override
+			public void instantiate() {
+				theSource.instantiate();
 			}
 
 			@Override

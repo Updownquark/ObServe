@@ -32,9 +32,9 @@ blah -->
 		</box>
 		<box layout="inline-layout" orientation="horizontal" main-align="justify">
 			<box layout="inline-layout" orientation="horizontal">
-				<text-field value="app.text" />
+				<text-field value="app.text" columns="20" />
 			</box>
-			<box layout="inline-layout" orientation="horizontal" main-align="trailing">
+			<box layout="inline-layout" orientation="horizontal" main-align="center">
 				<label value="app.text" tooltip="app.text"/>
 			</box>
 		</box>

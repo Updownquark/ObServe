@@ -86,14 +86,14 @@ public class ExpressoQonfigValues {
 		}
 
 		public static abstract class Element<T> extends ModelValueElement.Default<SettableValue<?>, SettableValue<T>> {
-			protected Element(ModelValueElement.Interpreted<SettableValue<?>, SettableValue<T>, ?> interpreted, ExElement parent) {
-				super(interpreted, parent);
+			protected Element(Object id) {
+				super(id);
 			}
 		}
 
 		public static abstract class VoidElement<T> extends Element<T> {
 			private VoidElement() {
-				super(null, null);
+				super(null);
 			}
 		}
 	}
@@ -153,6 +153,11 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
+			public void instantiate() {
+				theSource.instantiate();
+			}
+
+			@Override
 			public SettableValue<T> get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
 				SettableValue<T> initV = theSource.get(models);
 				return new ConstantValue<>(theModelPath, initV.getType(), initV.get());
@@ -170,10 +175,10 @@ public class ExpressoQonfigValues {
 			private final TypeToken<T> theType;
 			private final T theValue;
 
-			public ConstantValue(String path, TypeToken<T> type, T value2) {
+			public ConstantValue(String path, TypeToken<T> type, T value) {
 				theModelPath = path;
 				theType = type;
-				theValue = value2;
+				theValue = value;
 			}
 
 			@Override
@@ -282,8 +287,7 @@ public class ExpressoQonfigValues {
 			}
 
 			public InterpretedValueSynth<SettableValue<?>, SettableValue<T>> getInit() {
-				return (InterpretedValueSynth<SettableValue<?>, SettableValue<T>>) getAddOnValue(ExIntValue.Interpreted.class,
-					ExIntValue.Interpreted::getInit);
+				return getAddOnValue(ExIntValue.Interpreted.class, ExIntValue.Interpreted::getInit);
 			}
 
 			@Override
@@ -309,8 +313,8 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
-			public Element<T> create(ExElement parent, ModelSetInstance models) throws ModelInstantiationException {
-				return new Element<>(this, parent);
+			public Element<T> create() {
+				return new Element<>(getIdentity());
 			}
 		}
 
@@ -326,6 +330,14 @@ public class ExpressoQonfigValues {
 				theValue = value;
 				theInit = init;
 				theType = type;
+			}
+
+			@Override
+			public void instantiate() {
+				if (theValue != null)
+					theValue.instantiate();
+				if (theInit != null)
+					theInit.instantiate();
 			}
 
 			@Override
@@ -356,8 +368,8 @@ public class ExpressoQonfigValues {
 		}
 
 		public static class Element<T> extends AbstractCompiledValue.Element<T> {
-			public Element(SimpleValueDef.Interpreted<T> interpreted, ExElement parent) {
-				super(interpreted, parent);
+			public Element(Object id) {
+				super(id);
 			}
 		}
 	}
@@ -425,6 +437,8 @@ public class ExpressoQonfigValues {
 		}
 
 		public interface CollectionPopulator<T> {
+			void instantiate();
+
 			boolean populateCollection(BetterCollection<? super T> collection, ModelSetInstance models) throws ModelInstantiationException;
 
 			static class Default<T> implements CollectionPopulator<T> {
@@ -434,6 +448,11 @@ public class ExpressoQonfigValues {
 				public Default(ModelValueInstantiator<SettableValue<T>> value, ErrorReporting reporting) {
 					theValue = value;
 					theReporting = reporting;
+				}
+
+				@Override
+				public void instantiate() {
+					theValue.instantiate();
 				}
 
 				@Override
@@ -556,8 +575,8 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
-			public ModelValueElement<C, C> create(ExElement parent, ModelSetInstance models) throws ModelInstantiationException {
-				return new ModelValueElement.Default<>(this, parent);
+			public ModelValueElement<C, C> create() {
+				return new ModelValueElement.Default<>(getIdentity());
 			}
 		}
 
@@ -570,6 +589,12 @@ public class ExpressoQonfigValues {
 				theModelPath = modelPath;
 				theType = type;
 				theElements = elements;
+			}
+
+			@Override
+			public void instantiate() {
+				for (CollectionElement.CollectionPopulator<T> element : theElements)
+					element.instantiate();
 			}
 
 			@Override
@@ -699,6 +724,12 @@ public class ExpressoQonfigValues {
 				List<CollectionPopulator<T>> elements) {
 				super(modelPath, type, elements);
 				theSort = sort;
+			}
+
+			@Override
+			public void instantiate() {
+				super.instantiate();
+				theSort.instantiate();
 			}
 
 			@Override
@@ -887,6 +918,8 @@ public class ExpressoQonfigValues {
 		}
 
 		protected interface MapPopulator<K, V> {
+			void instantiate();
+
 			boolean populateMap(BetterMap<? super K, ? super V> map, ModelSetInstance models) throws ModelInstantiationException;
 
 			boolean populateMultiMap(BetterMultiMap<? super K, ? super V> map, ModelSetInstance models) throws ModelInstantiationException;
@@ -900,6 +933,12 @@ public class ExpressoQonfigValues {
 					theKey = key;
 					theValue = value;
 					theReporting = reporting;
+				}
+
+				@Override
+				public void instantiate() {
+					theKey.instantiate();
+					theValue.instantiate();
 				}
 
 				@Override
@@ -1041,8 +1080,8 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
-			public ModelValueElement<M, M> create(ExElement parent, ModelSetInstance models) throws ModelInstantiationException {
-				return new ModelValueElement.Default<>(this, parent);
+			public ModelValueElement<M, M> create() {
+				return new ModelValueElement.Default<>(getIdentity());
 			}
 		}
 
@@ -1058,6 +1097,12 @@ public class ExpressoQonfigValues {
 				theKeyType = keyType;
 				theValueType = valueType;
 				theEntries = elements;
+			}
+
+			@Override
+			public void instantiate() {
+				for (MapEntry.MapPopulator<?, ?> entry : theEntries)
+					entry.instantiate();
 			}
 
 			@Override
@@ -1197,6 +1242,12 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
+			public void instantiate() {
+				super.instantiate();
+				theSort.instantiate();
+			}
+
+			@Override
 			protected ObservableMap.Builder<K, V, ?> create(TypeToken<K> keyType, TypeToken<V> valueType, ModelSetInstance models)
 				throws ModelInstantiationException {
 				Comparator<? super K> sort = theSort.get(models);
@@ -1299,8 +1350,8 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
-			public ModelValueElement<M, M> create(ExElement parent, ModelSetInstance models) throws ModelInstantiationException {
-				return new ModelValueElement.Default<>(this, parent);
+			public ModelValueElement<M, M> create() {
+				return new ModelValueElement.Default<>(getIdentity());
 			}
 		}
 
@@ -1316,6 +1367,12 @@ public class ExpressoQonfigValues {
 				theKeyType = keyType;
 				theValueType = valueType;
 				theEntries = elements;
+			}
+
+			@Override
+			public void instantiate() {
+				for (MapEntry.MapPopulator<?, ?> entry : theEntries)
+					entry.instantiate();
 			}
 
 			@Override
@@ -1455,6 +1512,12 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
+			public void instantiate() {
+				super.instantiate();
+				theSort.instantiate();
+			}
+
+			@Override
 			protected ObservableMultiMap.Builder<K, V, ?> create(TypeToken<K> keyType, TypeToken<V> valueType, ModelSetInstance models)
 				throws ModelInstantiationException {
 				Comparator<? super K> sort = theSort.get(models);
@@ -1585,6 +1648,12 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
+			public void instantiate() {
+				for (ModelValueInstantiator<?> value : theValues)
+					value.instantiate();
+			}
+
+			@Override
 			public SettableValue<T> get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
 				SettableValue<? extends T>[] vs = new SettableValue[theValues.size()];
 				for (int i = 0; i < vs.length; i++)
@@ -1682,7 +1751,7 @@ public class ExpressoQonfigValues {
 			theAction = session.getValueExpression();
 			ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
 			theEventVariable = elModels.getElementValueModelId("event");
-			elModels.<Interpreted<?>, SettableValue<?>> satisfyElementValueType("event", ModelTypes.Value, (interp, env) -> {
+			elModels.<Interpreted<?>, SettableValue<?>> satisfyElementValueType(theEventVariable, ModelTypes.Value, (interp, env) -> {
 				return ModelTypes.Value.forType(interp.getOrEvalEventType(env));
 			});
 		}
@@ -1777,8 +1846,7 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
-			public ModelValueElement<Observable<?>, Observable<T>> create(ExElement parent, ModelSetInstance models)
-				throws ModelInstantiationException {
+			public ModelValueElement<Observable<?>, Observable<T>> create() {
 				return null;
 			}
 		}
@@ -1797,6 +1865,13 @@ public class ExpressoQonfigValues {
 				theEvent = event;
 				theAction = (ModelValueInstantiator<ObservableAction<A>>) action;
 				theEventValue = eventValue;
+			}
+
+			@Override
+			public void instantiate() {
+				theLocalModels.instantiate();
+				theEvent.instantiate();
+				theAction.instantiate();
 			}
 
 			@Override
@@ -1995,6 +2070,12 @@ public class ExpressoQonfigValues {
 
 			Instantiator(List<ModelValueInstantiator<? extends ObservableAction<?>>> actions) {
 				theActions = actions;
+			}
+
+			@Override
+			public void instantiate() {
+				for (ModelValueInstantiator<?> action : theActions)
+					action.instantiate();
 			}
 
 			@Override
@@ -2239,6 +2320,25 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
+			public void instantiate() {
+				if (theLocalModels != null)
+					theLocalModels.instantiate();
+				if (theInit != null)
+					theInit.instantiate();
+				if (theBefore != null)
+					theBefore.instantiate();
+				theWhile.instantiate();
+				if (theBeforeBody != null)
+					theBeforeBody.instantiate();
+				for (ModelValueInstantiator<?> body : theBody)
+					body.instantiate();
+				if (theAfterBody != null)
+					theAfterBody.instantiate();
+				if (theFinally != null)
+					theFinally.instantiate();
+			}
+
+			@Override
 			public ObservableAction<?> get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
 				models = theLocalModels.wrap(models);
 				ObservableAction<?> init = theInit == null ? null : theInit.get(models);
@@ -2433,6 +2533,10 @@ public class ExpressoQonfigValues {
 
 			Instantiator(TypeToken<T> type) {
 				theType = type;
+			}
+
+			@Override
+			public void instantiate() {
 			}
 
 			@Override

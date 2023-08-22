@@ -142,13 +142,13 @@ public class TestInterpretation implements QonfigInterpretation {
 			}
 
 			@Override
-			public StyledTestElement<T> create(ExElement parent, ModelSetInstance models) throws ModelInstantiationException {
+			public StyledTestElement<T> create() {
 				return null;
 			}
 		}
 
-		public StyledTestElement(Interpreted<T> interpreted, ExElement parent) {
-			super(interpreted, parent);
+		public StyledTestElement(Object id) {
+			super(id);
 			throw new IllegalStateException();
 		}
 	}
@@ -289,6 +289,15 @@ public class TestInterpretation implements QonfigInterpretation {
 			}
 
 			@Override
+			public void instantiate() {
+				theLocalModel.instantiate();
+				a.instantiate();
+				b.instantiate();
+				c.instantiate();
+				d.instantiate();
+			}
+
+			@Override
 			public SettableValue<A> get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
 				models = theLocalModel.wrap(models);
 				SettableValue<Boolean> aInst = a.get(models);
@@ -324,24 +333,17 @@ public class TestInterpretation implements QonfigInterpretation {
 
 		static class Style extends QuickStyledElement.QuickInstanceStyle.Abstract {
 			static class Def extends QuickInstanceStyle.Def.Abstract {
-				private final Object theId;
 				private final QuickStyleAttributeDef s0;
 				private final QuickStyleAttributeDef s1;
 				private final QuickStyleAttributeDef s2;
 
 				public Def(QuickInstanceStyle.Def parent, A.Def styledElement, QuickCompiledStyle wrapped) {
 					super(parent, styledElement, wrapped);
-					theId = new Object();
 					QuickTypeStyle typeStyle = QuickStyledElement.getTypeStyle(wrapped.getStyleTypes(), wrapped.getElement(), TOOLKIT_NAME,
 						VERSION, "a");
 					s0 = addApplicableAttribute(typeStyle.getAttribute("s0"));
 					s1 = addApplicableAttribute(typeStyle.getAttribute("s1"));
 					s2 = addApplicableAttribute(typeStyle.getAttribute("s2"));
-				}
-
-				@Override
-				public Object getId() {
-					return theId;
 				}
 
 				public QuickStyleAttributeDef getS0() {
@@ -403,17 +405,17 @@ public class TestInterpretation implements QonfigInterpretation {
 
 				@Override
 				public Style create(QuickStyledElement parent) {
-					return new Style(this, parent);
+					return new Style();
 				}
 			}
+
+			private QuickStyleAttribute<Boolean> s0Attr;
+			private QuickStyleAttribute<Integer> s1Attr;
+			private QuickStyleAttribute<Boolean> s2Attr;
 
 			private ObservableValue<Boolean> s0;
 			private ObservableValue<Integer> s1;
 			private ObservableValue<Boolean> s2;
-
-			public Style(Interpreted interpreted, QuickStyledElement styledElement) {
-				super(interpreted, styledElement);
-			}
 
 			public ObservableValue<Boolean> getS0() {
 				return s0;
@@ -428,13 +430,28 @@ public class TestInterpretation implements QonfigInterpretation {
 			}
 
 			@Override
-			public void update(QuickStyledElement.QuickInstanceStyle.Interpreted interpreted, ModelSetInstance models)
-				throws ModelInstantiationException {
-				super.update(interpreted, models);
+			public void update(QuickInstanceStyle.Interpreted interpreted, QuickStyledElement styledElement) {
+				super.update(interpreted, styledElement);
+
 				Interpreted myInterpreted = (Interpreted) interpreted;
-				s0 = getApplicableAttribute(myInterpreted.getS0().getAttribute());
-				s1 = getApplicableAttribute(myInterpreted.getS1().getAttribute());
-				s2 = getApplicableAttribute(myInterpreted.getS2().getAttribute());
+
+				s0Attr = myInterpreted.getS0().getAttribute();
+				s1Attr = myInterpreted.getS1().getAttribute();
+				s2Attr = myInterpreted.getS2().getAttribute();
+				s0 = getApplicableAttribute(s0Attr);
+				s1 = getApplicableAttribute(s1Attr);
+				s2 = getApplicableAttribute(s2Attr);
+			}
+
+			@Override
+			public Abstract copy(QuickStyledElement styledElement) {
+				Style copy = (Style) super.copy(styledElement);
+
+				copy.s0 = copy.getApplicableAttribute(s0Attr);
+				copy.s1 = copy.getApplicableAttribute(s1Attr);
+				copy.s2 = copy.getApplicableAttribute(s2Attr);
+
+				return copy;
 			}
 		}
 
@@ -604,6 +621,16 @@ public class TestInterpretation implements QonfigInterpretation {
 			}
 
 			@Override
+			public void instantiate() {
+				theLocalModel.instantiate();
+				e.instantiate();
+				f.instantiate();
+
+				for (ModelValueInstantiator<?> child : theChildren)
+					child.instantiate();
+			}
+
+			@Override
 			public SettableValue<T> get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
 				models = theLocalModel.wrap(models);
 				SettableValue<Boolean> eInst = e.get(models);
@@ -633,22 +660,15 @@ public class TestInterpretation implements QonfigInterpretation {
 
 		static class Style extends QuickStyledElement.QuickInstanceStyle.Abstract {
 			static class Def extends QuickStyledElement.QuickInstanceStyle.Def.Abstract {
-				private final Object theId;
 				private final QuickStyleAttributeDef s3;
 				private final QuickStyleAttributeDef s4;
 
 				public Def(QuickInstanceStyle.Def parent, B.Def<?> styledElement, QuickCompiledStyle wrapped) {
 					super(parent, styledElement, wrapped);
-					theId = new Object();
 					QuickTypeStyle typeStyle = QuickStyledElement.getTypeStyle(wrapped.getStyleTypes(), wrapped.getElement(), TOOLKIT_NAME,
 						VERSION, "b");
 					s3 = addApplicableAttribute(typeStyle.getAttribute("s3"));
 					s4 = addApplicableAttribute(typeStyle.getAttribute("s4"));
-				}
-
-				@Override
-				public Object getId() {
-					return theId;
 				}
 
 				public QuickStyleAttributeDef getS3() {
@@ -700,16 +720,15 @@ public class TestInterpretation implements QonfigInterpretation {
 
 				@Override
 				public Style create(QuickStyledElement parent) {
-					return new Style(this, parent);
+					return new Style();
 				}
 			}
 
+			private QuickStyleAttribute<Integer> s3Attr;
+			private QuickStyleAttribute<Integer> s4Attr;
+
 			private ObservableValue<Integer> s3;
 			private ObservableValue<Integer> s4;
-
-			public Style(Interpreted interpreted, QuickStyledElement styledElement) {
-				super(interpreted, styledElement);
-			}
 
 			public ObservableValue<Integer> getS3() {
 				return s3;
@@ -720,12 +739,25 @@ public class TestInterpretation implements QonfigInterpretation {
 			}
 
 			@Override
-			public void update(QuickStyledElement.QuickInstanceStyle.Interpreted interpreted, ModelSetInstance models)
-				throws ModelInstantiationException {
-				super.update(interpreted, models);
+			public void update(QuickStyledElement.QuickInstanceStyle.Interpreted interpreted, QuickStyledElement styledElement) {
+				super.update(interpreted, styledElement);
 				Interpreted myInterpreted = (Interpreted) interpreted;
-				s3 = getApplicableAttribute(myInterpreted.getS3().getAttribute());
-				s4 = getApplicableAttribute(myInterpreted.getS4().getAttribute());
+
+				s3Attr = myInterpreted.getS3().getAttribute();
+				s4Attr = myInterpreted.getS4().getAttribute();
+
+				s3 = getApplicableAttribute(s3Attr);
+				s4 = getApplicableAttribute(s4Attr);
+			}
+
+			@Override
+			public Style copy(QuickStyledElement styledElement) {
+				Style copy = (Style) super.copy(styledElement);
+
+				copy.s3 = copy.getApplicableAttribute(s3Attr);
+				copy.s4 = copy.getApplicableAttribute(s4Attr);
+
+				return copy;
 			}
 		}
 
@@ -830,6 +862,12 @@ public class TestInterpretation implements QonfigInterpretation {
 			}
 
 			@Override
+			public void instantiate() {
+				super.instantiate();
+				g.instantiate();
+			}
+
+			@Override
 			protected SettableValue<C> create(SettableValue<Boolean> eInst, SettableValue<Integer> fInst, ObservableValue<Integer> s3,
 				ObservableValue<Integer> s4, List<A> children, ModelSetInstance models) throws ModelInstantiationException {
 				SettableValue<Boolean> gInst = g.get(models);
@@ -887,22 +925,29 @@ public class TestInterpretation implements QonfigInterpretation {
 				}
 			}
 
+			private QuickStyleAttribute<Boolean> s5Attr;
 			private ObservableValue<Boolean> s5;
-
-			public Style(Interpreted interpreted, QuickStyledElement styledElement) {
-				super(interpreted, styledElement);
-			}
 
 			public ObservableValue<Boolean> getS5() {
 				return s5;
 			}
 
 			@Override
-			public void update(QuickStyledElement.QuickInstanceStyle.Interpreted interpreted, ModelSetInstance models)
-				throws ModelInstantiationException {
-				super.update(interpreted, models);
+			public void update(QuickInstanceStyle.Interpreted interpreted, QuickStyledElement styledElement) {
+				super.update(interpreted, styledElement);
+
 				Interpreted myInterpreted = (Interpreted) interpreted;
-				s5 = getApplicableAttribute(myInterpreted.getS5().getAttribute());
+				s5Attr = myInterpreted.getS5().getAttribute();
+				s5 = getApplicableAttribute(s5Attr);
+			}
+
+			@Override
+			public Style copy(QuickStyledElement styledElement) {
+				Style copy = (Style) super.copy(styledElement);
+
+				copy.s5 = copy.getApplicableAttribute(s5Attr);
+
+				return copy;
 			}
 		}
 
@@ -1000,6 +1045,12 @@ public class TestInterpretation implements QonfigInterpretation {
 			}
 
 			@Override
+			public void instantiate() {
+				super.instantiate();
+				h.instantiate();
+			}
+
+			@Override
 			protected SettableValue<D> create(SettableValue<Boolean> eInst, SettableValue<Integer> fInst, ObservableValue<Integer> s3,
 				ObservableValue<Integer> s4, List<A> children, ModelSetInstance models) throws ModelInstantiationException {
 				SettableValue<Integer> hInst = h.get(models);
@@ -1056,10 +1107,6 @@ public class TestInterpretation implements QonfigInterpretation {
 					QuickInterpretedStyleCache cache = QuickInterpretedStyleCache.get(env);
 					s6 = get(cache.getAttribute(getDefinition().getS6(), int.class, env));
 				}
-			}
-
-			public Style(Interpreted interpreted, QuickStyledElement styledElement) {
-				super(interpreted, styledElement);
 			}
 		}
 

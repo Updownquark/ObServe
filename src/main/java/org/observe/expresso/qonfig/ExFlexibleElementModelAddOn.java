@@ -97,28 +97,29 @@ public abstract class ExFlexibleElementModelAddOn<E extends ExElement> extends E
 			return value;
 		}
 
-		protected <I extends ExElement.Interpreted<?>, M> void satisfyElementValueType(String elementValueName, ModelType<M> modelType,
+		protected <I extends ExElement.Interpreted<?>, M> void satisfyElementValueType(ModelComponentId elementValueId,
+			ModelType<M> modelType,
 			ExBiFunction<I, InterpretedExpressoEnv, ? extends ModelInstanceType<M, ?>, ExpressoInterpretationException> type)
 				throws QonfigInterpretationException {
-			CompiledModelValue<?> value = getElementValue(elementValueName);
-			if (!(value instanceof PlaceholderModelValue))
-				throw new QonfigInterpretationException("Element value '" + elementValueName + "' is not dynamically-typed",
+			ModelComponentNode<?> value = getElement().getExpressoEnv().getModels().getComponent(elementValueId);
+			if (!(value.getThing() instanceof PlaceholderModelValue))
+				throw new QonfigInterpretationException("Element value '" + elementValueId + "' is not dynamically-typed",
 					getElement().reporting().getPosition(), 0);
 			try {
 				if (value.getModelType(null) != modelType)
 					throw new QonfigInterpretationException(
-						"Element value '" + elementValueName + "' is not a " + value.getModelType(null) + ", not a " + modelType,
+						"Element value '" + elementValueId + "' is not a " + value.getModelType(null) + ", not a " + modelType,
 						getElement().reporting().getPosition(), 0);
 			} catch (ExpressoCompilationException e) {
 				throw new QonfigInterpretationException(e.getMessage(), e.getPosition(), e.getErrorLength(), e);
 			}
-			((PlaceholderModelValue<M>) value).satisfyType(this::getCurrentInterpreting,
+			((PlaceholderModelValue<M>) value.getThing()).satisfyType(this::getCurrentInterpreting,
 				(ExBiFunction<ExElement.Interpreted<?>, InterpretedExpressoEnv, ? extends ModelInstanceType<M, ?>, ExpressoInterpretationException>) type);
 		}
 
-		protected <I extends ExElement.Interpreted<?>, M> void satisfyElementValueType(String elementValueName,
+		protected <I extends ExElement.Interpreted<?>, M> void satisfyElementValueType(ModelComponentId elementValueId,
 			ModelInstanceType<M, ?> type) throws QonfigInterpretationException {
-			satisfyElementValueType(elementValueName, type.getModelType(), (interp, env) -> type);
+			satisfyElementValueType(elementValueId, type.getModelType(), (interp, env) -> type);
 		}
 
 		@Override
@@ -233,102 +234,8 @@ public abstract class ExFlexibleElementModelAddOn<E extends ExElement> extends E
 		Error, Ignore, Replace
 	}
 
-	private final Map<String, ElementValueHolder> theElementValues;
-	// This value is only kept around during the update operation, then it is released
-	private Interpreted<? super E, ?> theInterpreted;
-
-	protected ExFlexibleElementModelAddOn(Interpreted<? super E, ?> interpreted, E element) {
-		super(interpreted, element);
-		if (interpreted.getElementValues().isEmpty())
-			theElementValues = Collections.emptyMap();
-		else
-			theElementValues = new LinkedHashMap<>();
-	}
-
-	@Override
-	public void preUpdate(ExAddOn.Interpreted<?, ?> interpreted) {
-		theInterpreted = (Interpreted<? super E, ?>) interpreted;
-		super.preUpdate(interpreted);
-	}
-
-	@Override
-	public void postUpdate(ExAddOn.Interpreted<?, ?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
-		super.postUpdate(interpreted, models);
-		for (Map.Entry<String, InterpretedModelComponentNode<?, ?>> elementValue : theInterpreted.getElementValues().entrySet())
-			theElementValues.put(elementValue.getKey(), new ElementValueHolder(elementValue.getKey(), elementValue.getValue().getIdentity(),
-				elementValue.getValue().getValueIdentity(), models.get(elementValue.getValue().getIdentity())));
-		theInterpreted = null;
-	}
-
-	ElementValueHolder getElementValue(String elementValueName) throws ModelInstantiationException {
-		ElementValueHolder elementValue = theElementValues.get(elementValueName);
-		if (elementValue == null) {
-			if (theInterpreted == null)
-				throw new ModelInstantiationException("No such element value '" + elementValueName + "'",
-					getElement().reporting().getPosition(), 0);
-			InterpretedModelComponentNode<?, ?> node = theInterpreted.getElementValues().get(elementValueName);
-			if (node == null)
-				throw new ModelInstantiationException("No such element value '" + elementValueName + "'",
-					getElement().reporting().getPosition(), 0);
-			elementValue = new ElementValueHolder(elementValueName, node.getIdentity(), node.getValueIdentity(),
-				getElement().getUpdatingModels().get(node.getIdentity()));
-			theElementValues.put(elementValueName, elementValue);
-		}
-		return elementValue;
-	}
-
-	protected void satisfyElementValue(String elementValueName, Object value) throws ModelInstantiationException {
-		satisfyElementValue(elementValueName, value, ActionIfSatisfied.Error);
-	}
-
-	protected void satisfyElementValue(String elementValueName, Object value, ActionIfSatisfied ifPreSatisfied)
-		throws ModelInstantiationException {
-		ElementValueHolder elementValue = getElementValue(elementValueName);
-		if (!(elementValue.value instanceof ModelType.HollowModelValue))
-			throw new ModelInstantiationException("Element value '" + elementValueName + "' is not dynamic",
-				getElement().reporting().getPosition(), 0);
-		ModelType.HollowModelValue<Object, Object> hollow = (ModelType.HollowModelValue<Object, Object>) elementValue.value;
-		if (hollow.isSatisfied()) {
-			switch (ifPreSatisfied) {
-			case Error:
-				throw new ModelInstantiationException("Element value '" + elementValueName + "' is already satisfied",
-					getElement().reporting().getPosition(), 0);
-			case Ignore:
-				return;
-			case Replace:
-				break;
-			}
-		}
-		hollow.satisfy(value);
-	}
-
-	protected void satisfyElementValue(String elementValueName, Object value, ModelSetInstance models) throws ModelInstantiationException {
-		satisfyElementValue(elementValueName, value, models, ActionIfSatisfied.Error);
-	}
-
-	protected void satisfyElementValue(String elementValueName, Object value, ModelSetInstance models, ActionIfSatisfied ifPreSatisfied)
-		throws ModelInstantiationException {
-		ElementValueHolder elementValue = getElementValue(elementValueName);
-		if (!(elementValue.value instanceof ModelType.HollowModelValue))
-			throw new ModelInstantiationException("Element value '" + elementValueName + "' is not dynamic",
-				getElement().reporting().getPosition(), 0);
-		Object modelValue = models.get(elementValue.componentId);
-		if (!(modelValue instanceof ModelType.HollowModelValue)) // Already checked this for local models, but whatever
-			throw new ModelInstantiationException("Element value '" + elementValueName + "' is not dynamic",
-				getElement().reporting().getPosition(), 0);
-		ModelType.HollowModelValue<Object, Object> hollow = (ModelType.HollowModelValue<Object, Object>) modelValue;
-		if (hollow.isSatisfied()) {
-			switch (ifPreSatisfied) {
-			case Error:
-				throw new ModelInstantiationException("Element value '" + elementValueName + "' is already satisfied",
-					getElement().reporting().getPosition(), 0);
-			case Ignore:
-				return;
-			case Replace:
-				break;
-			}
-		}
-		hollow.satisfy(value);
+	protected ExFlexibleElementModelAddOn(E element) {
+		super(element);
 	}
 
 	protected static abstract class PlaceholderModelValue<M> implements CompiledModelValue<M> {
@@ -458,6 +365,10 @@ public abstract class ExFlexibleElementModelAddOn<E extends ExElement> extends E
 			}
 
 			@Override
+			public void instantiate() {
+			}
+
+			@Override
 			public MV get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
 				return (MV) theType.getModelType().createHollowValue(theName, theType);
 			}
@@ -468,20 +379,6 @@ public abstract class ExFlexibleElementModelAddOn<E extends ExElement> extends E
 				hollow.satisfy(value);
 				return (MV) hollow;
 			}
-		}
-	}
-
-	static class ElementValueHolder {
-		final String name;
-		final ModelComponentId componentId;
-		final Object valueId;
-		final Object value;
-
-		ElementValueHolder(String name, ModelComponentId componentId, Object valueId, Object value) {
-			this.name = name;
-			this.componentId = componentId;
-			this.valueId = valueId;
-			this.value = value;
 		}
 	}
 }

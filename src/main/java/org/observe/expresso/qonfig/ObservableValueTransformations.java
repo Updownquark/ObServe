@@ -134,6 +134,11 @@ public class ObservableValueTransformations {
 			}
 
 			@Override
+			public void instantiate() {
+				theDisablement.instantiate();
+			}
+
+			@Override
 			public SettableValue<T> transform(SettableValue<T> source, ModelSetInstance models) throws ModelInstantiationException {
 				SettableValue<String> disabled = theDisablement.get(models);
 				return new DisabledValue<>(source, disabled);
@@ -204,8 +209,8 @@ public class ObservableValueTransformations {
 			ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
 			theSourceVariable = elModels.getElementValueModelId(sourceAs);
 			theTest = session.getAttributeExpression("test");
-			elModels.<Interpreted<?>, SettableValue<?>> satisfyElementValueType(theSourceVariable.getName(),
-				ModelTypes.Value, (interp, env) -> ModelTypes.Value.forType(interp.getSourceType()));
+			elModels.<Interpreted<?>, SettableValue<?>> satisfyElementValueType(theSourceVariable, ModelTypes.Value,
+				(interp, env) -> ModelTypes.Value.forType(interp.getSourceType()));
 		}
 
 		@Override
@@ -268,6 +273,11 @@ public class ObservableValueTransformations {
 			@Override
 			public boolean isEfficientCopy() {
 				return true;
+			}
+
+			@Override
+			public void instantiate() {
+				theTest.instantiate();
 			}
 
 			@Override
@@ -546,6 +556,11 @@ public class ObservableValueTransformations {
 			}
 
 			@Override
+			public void instantiate() {
+				theRefresh.instantiate();
+			}
+
+			@Override
 			public boolean isDifferent(ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException {
 				Observable<?> refresh = theRefresh.get(sourceModels);
 				return refresh != theRefresh.forModelCopy(refresh, sourceModels, newModels);
@@ -650,6 +665,10 @@ public class ObservableValueTransformations {
 			@Override
 			public boolean isEfficientCopy() {
 				return true;
+			}
+
+			@Override
+			public void instantiate() {
 			}
 
 			@Override
@@ -903,6 +922,10 @@ public class ObservableValueTransformations {
 			}
 
 			@Override
+			public void instantiate() {
+			}
+
+			@Override
 			public SettableValue<T> transform(SettableValue<?> source, ModelSetInstance models) throws ModelInstantiationException {
 				if (source == null)
 					return new WrappedSettableValue<>((SettableValue<? extends ObservableValue<? extends T>>) source,
@@ -1098,6 +1121,14 @@ public class ObservableValueTransformations {
 			@Override
 			public boolean isEfficientCopy() {
 				return true;
+			}
+
+			@Override
+			public void instantiate() {
+				if (theEquivalence != null)
+					theEquivalence.instantiate();
+				if (theSorting != null)
+					theSorting.instantiate();
 			}
 
 			@Override

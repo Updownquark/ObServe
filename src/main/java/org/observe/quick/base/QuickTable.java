@@ -12,11 +12,11 @@ import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.qonfig.CompiledExpression;
 import org.observe.expresso.qonfig.ElementTypeTraceability;
 import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.observe.expresso.qonfig.ExElement;
-import org.observe.expresso.qonfig.ExWithElementModel;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.expresso.qonfig.QonfigChildGetter;
@@ -35,7 +35,6 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 
 	public static class Def extends TabularWidget.Def.Abstract<QuickTable<?>> {
 		private CompiledExpression theRows;
-		private String theValueName;
 		private CompiledExpression theSelection;
 		private CompiledExpression theMultiSelection;
 		private final List<ValueAction.Def<?, ?>> theActions;
@@ -46,8 +45,8 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 		}
 
 		@Override
-		public String getValueName() {
-			return theValueName;
+		protected String getValueVariableName(ExpressoQIS session) {
+			return session.getAttributeText("value-name");
 		}
 
 		@Override
@@ -73,14 +72,11 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
-			theValueName = session.getAttributeText("value-name");
 			super.doUpdate(session.asElement("tabular-widget"));
 			theRows = session.getAttributeExpression("rows");
 			theSelection = session.getAttributeExpression("selection");
 			theMultiSelection = session.getAttributeExpression("multi-selection");
 			ExElement.syncDefs(ValueAction.Def.class, theActions, session.forChildren("action"));
-			getAddOn(ExWithElementModel.Def.class).satisfyElementValueType(theValueName, ModelTypes.Value,
-				(interp, env) -> ModelTypes.Value.forType(((Interpreted<?>) interp).getRowType()));
 		}
 
 		@Override
@@ -159,26 +155,22 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 		}
 
 		@Override
-		public QuickTable<R> create(ExElement parent) {
-			return new QuickTable<>(this, parent);
+		public QuickTable<R> create() {
+			return new QuickTable<>(getIdentity());
 		}
 	}
 
-	private final SettableValue<ObservableCollection<R>> theRows;
-	private final SettableValue<SettableValue<R>> theSelection;
-	private final SettableValue<ObservableCollection<R>> theMultiSelection;
-	private final ObservableCollection<ValueAction<R>> theActions;
+	private ModelValueInstantiator<ObservableCollection<R>> theRowsInstantiator;
+	private ModelValueInstantiator<SettableValue<R>> theSelectionInstantiator;
+	private ModelValueInstantiator<ObservableCollection<R>> theMultiSelectionInstantiator;
 
-	public QuickTable(Interpreted<R> interpreted, ExElement parent) {
-		super(interpreted, parent);
-		theRows = SettableValue
-			.build(TypeTokens.get().keyFor(ObservableCollection.class).<ObservableCollection<R>> parameterized(getRowType())).build();
-		theSelection = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<R>> parameterized(getRowType()))
-			.build();
-		theMultiSelection = SettableValue
-			.build(TypeTokens.get().keyFor(ObservableCollection.class).<ObservableCollection<R>> parameterized(getRowType())).build();
-		theActions = ObservableCollection.build(TypeTokens.get().keyFor(ValueAction.class).<ValueAction<R>> parameterized(getRowType()))
-			.build();
+	private SettableValue<ObservableCollection<R>> theRows;
+	private SettableValue<SettableValue<R>> theSelection;
+	private SettableValue<ObservableCollection<R>> theMultiSelection;
+	private ObservableCollection<ValueAction<R>> theActions;
+
+	public QuickTable(Object id) {
+		super(id);
 	}
 
 	public ObservableCollection<R> getRows() {
@@ -200,18 +192,69 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 	}
 
 	@Override
-	protected void updateModel(ExElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
-		super.updateModel(interpreted, myModels);
+	protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+		super.doUpdate(interpreted);
 		QuickTable.Interpreted<R> myInterpreted = (QuickTable.Interpreted<R>) interpreted;
-		theRows.set(myInterpreted.getRows().instantiate().get(myModels), null);
-		theSelection.set(myInterpreted.getSelection() == null ? null : myInterpreted.getSelection().instantiate().get(myModels), null);
-		theMultiSelection
-		.set(myInterpreted.getMultiSelection() == null ? null : myInterpreted.getMultiSelection().instantiate().get(myModels), null);
+
+		theRows = SettableValue
+			.build(TypeTokens.get().keyFor(ObservableCollection.class).<ObservableCollection<R>> parameterized(getRowType())).build();
+		theSelection = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<R>> parameterized(getRowType()))
+			.build();
+		theMultiSelection = SettableValue
+			.build(TypeTokens.get().keyFor(ObservableCollection.class).<ObservableCollection<R>> parameterized(getRowType())).build();
+		theActions = ObservableCollection.build(TypeTokens.get().keyFor(ValueAction.class).<ValueAction<R>> parameterized(getRowType()))
+			.build();
+
+		theRowsInstantiator = myInterpreted.getRows().instantiate();
+		theSelectionInstantiator = myInterpreted.getSelection() == null ? null : myInterpreted.getSelection().instantiate();
+		theMultiSelectionInstantiator = myInterpreted.getMultiSelection() == null ? null : myInterpreted.getMultiSelection().instantiate();
 		CollectionUtils.synchronize(theActions, myInterpreted.getActions(), //
-			(a, i) -> a.getIdentity() == i.getIdentity()).<ModelInstantiationException> simpleE(action -> action.create(this))//
+			(a, i) -> a.getIdentity() == i.getIdentity())//
+		.simple(action -> action.create())//
 		.rightOrder()//
-		.onRightX(element -> element.getLeftValue().update(element.getRightValue(), myModels))//
-		.onCommonX(element -> element.getLeftValue().update(element.getRightValue(), myModels))//
+		.onRight(element -> element.getLeftValue().update(element.getRightValue(), this))//
+		.onCommon(element -> element.getLeftValue().update(element.getRightValue(), this))//
 		.adjust();
+	}
+
+	@Override
+	public void instantiated() {
+		super.instantiated();
+
+		theRowsInstantiator.instantiate();
+		if (theSelectionInstantiator != null)
+			theSelectionInstantiator.instantiate();
+		if (theMultiSelectionInstantiator != null)
+			theMultiSelectionInstantiator.instantiate();
+
+		for (ValueAction<R> action : theActions)
+			action.instantiated();
+	}
+
+	@Override
+	protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+		super.doInstantiate(myModels);
+
+		theRows.set(theRowsInstantiator.get(myModels), null);
+		theSelection.set(theSelectionInstantiator == null ? null : theSelectionInstantiator.get(myModels), null);
+		theMultiSelection.set(theMultiSelectionInstantiator == null ? null : theMultiSelectionInstantiator.get(myModels), null);
+
+		for (ValueAction<R> action : theActions)
+			action.instantiate(myModels);
+	}
+
+	@Override
+	public QuickTable<R> copy(ExElement parent) {
+		QuickTable<R> copy = (QuickTable<R>) super.copy(parent);
+
+		copy.theRows = SettableValue.build(theRows.getType()).build();
+		copy.theSelection = SettableValue.build(theSelection.getType()).build();
+		copy.theMultiSelection = SettableValue.build(theMultiSelection.getType()).build();
+		copy.theActions = ObservableCollection.build(theActions.getType()).build();
+
+		for (ValueAction<R> action : theActions)
+			copy.theActions.add(action.copy(copy));
+
+		return copy;
 	}
 }

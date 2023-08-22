@@ -5,7 +5,6 @@ import org.observe.collect.ObservableCollection;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
-import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelComponentId;
@@ -93,7 +92,7 @@ public class DynamicStyledDocument<T> extends StyledDocument<T> {
 			theTextStyle = ExElement.useOrReplace(TextStyleElement.Def.class, theTextStyle, session, "text-style");
 			ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
 			theNodeValue = elModels.getElementValueModelId("node");
-			elModels.satisfyElementValueType("node", ModelTypes.Value,
+			elModels.satisfyElementValueType(theNodeValue, ModelTypes.Value,
 				(interp, env) -> ModelTypes.Value.forType(((Interpreted<?, ?>) interp).getValueType()));
 		}
 
@@ -201,8 +200,8 @@ public class DynamicStyledDocument<T> extends StyledDocument<T> {
 		}
 
 		@Override
-		public DynamicStyledDocument<T> create(ExElement parent) {
-			return new DynamicStyledDocument<>(this, parent);
+		public DynamicStyledDocument<T> create() {
+			return new DynamicStyledDocument<>(getIdentity());
 		}
 	}
 
@@ -227,32 +226,20 @@ public class DynamicStyledDocument<T> extends StyledDocument<T> {
 		}
 	}
 
+	private ModelValueInstantiator<SettableValue<T>> theRootInstantiator;
+	private ModelValueInstantiator<SettableValue<Format<T>>> theFormatInstantiator;
+
 	private SettableValue<SettableValue<T>> theRoot;
 	private TextStyleElement theTextStyle;
-	private final SettableValue<T> theNodeValue;
+	private SettableValue<T> theNodeValue;
 	private Format<T> theFormat;
 
-	private ModelInstanceType.SingleTyped<SettableValue<?>, T, SettableValue<T>> theValueType;
 	private ModelValueInstantiator<ObservableCollection<T>> theChildrenSynth;
 	private ModelValueInstantiator<SettableValue<String>> thePostTextSynth;
 	private ModelComponentId theNodeValueId;
 
-	public DynamicStyledDocument(Interpreted<T, ?> interpreted, ExElement parent) {
-		super(interpreted, parent);
-		TypeToken<T> valueType;
-		try {
-			valueType = interpreted.getValueType();
-		} catch (ExpressoInterpretationException e) {
-			throw new IllegalStateException("Not interpreted?", e);
-		}
-		theRoot = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<T>> parameterized(valueType))
-			.build();
-		theNodeValue = SettableValue.build(valueType).build();
-	}
-
-	@Override
-	public ModelInstanceType.SingleTyped<SettableValue<?>, T, SettableValue<T>> getValueType() {
-		return theValueType;
+	public DynamicStyledDocument(Object id) {
+		super(id);
 	}
 
 	public SettableValue<T> getRoot() {
@@ -293,40 +280,81 @@ public class DynamicStyledDocument<T> extends StyledDocument<T> {
 			.withAll(widgetModelCopy)//
 			.build();
 
-		return theTextStyle.getStyle().copy(styleElementModelCopy);
+		TextStyle styleCopy = theTextStyle.getStyle().copy(theTextStyle);
+		styleCopy.instantiate(styleElementModelCopy);
+		return styleCopy;
 	}
 
 	public SettableValue<String> getPostText(StyledTextAreaContext<T> ctx) throws ModelInstantiationException {
 		ModelSetInstance modelCopy = getUpdatingModels().copy().build();
-		getAddOn(ExWithElementModel.class).satisfyElementValue("node", ctx.getNodeValue(), modelCopy,
-			ExWithElementModel.ActionIfSatisfied.Replace);
+		ExFlexibleElementModelAddOn.satisfyElementValue(theNodeValueId, modelCopy, ctx.getNodeValue(),
+			ExFlexibleElementModelAddOn.ActionIfSatisfied.Replace);
 		// After synthesizing and returning the post text, we can discard the model copy
 		return thePostTextSynth.get(modelCopy);
 	}
 
 	@Override
-	protected void updateModel(ExElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
+	protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+		super.doUpdate(interpreted);
 		Interpreted<T, ?> myInterpreted = (Interpreted<T, ?>) interpreted;
-		getAddOn(ExWithElementModel.class).satisfyElementValue("node", getNodeValue());
-		super.updateModel(interpreted, myModels);
 		theNodeValueId = myInterpreted.getDefinition().getNodeValue();
-		theRoot.set(myInterpreted.getRoot().instantiate().get(myModels), null);
-		theFormat = myInterpreted.getFormat().instantiate().get(myModels).get();
-		if (myInterpreted.getTextStyle() == null)
-			theTextStyle = null;
-		else if (theTextStyle == null || theTextStyle.getIdentity() != myInterpreted.getTextStyle().getDefinition().getIdentity())
-			theTextStyle = myInterpreted.getTextStyle().create(this);
-		if (theTextStyle != null)
-			theTextStyle.update(myInterpreted.getTextStyle(), myModels);
-
 		TypeToken<T> valueType;
 		try {
 			valueType = myInterpreted.getValueType();
 		} catch (ExpressoInterpretationException e) {
-			throw new ModelInstantiationException("Not evaluated yet??!!", e.getPosition(), e.getErrorLength(), e);
+			throw new IllegalStateException("Not interpreted?", e);
 		}
-		theValueType = ModelTypes.Value.forType(valueType);
+		if (theRoot == null || !valueType.equals(getValueType().getType(0))) {
+			theRoot = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<T>> parameterized(valueType)).build();
+			theNodeValue = SettableValue.build(valueType).build();
+		}
+
+		theRootInstantiator = myInterpreted.getRoot().instantiate();
+		theFormatInstantiator = myInterpreted.getFormat().instantiate();
+		if (myInterpreted.getTextStyle() == null)
+			theTextStyle = null;
+		else if (theTextStyle == null || theTextStyle.getIdentity() != myInterpreted.getTextStyle().getDefinition().getIdentity())
+			theTextStyle = myInterpreted.getTextStyle().create();
+		if (theTextStyle != null)
+			theTextStyle.update(myInterpreted.getTextStyle(), this);
 		theChildrenSynth = myInterpreted.getChildren().instantiate();
 		thePostTextSynth = myInterpreted.getPostText().instantiate();
+	}
+
+	@Override
+	public void instantiated() {
+		super.instantiated();
+
+		theRootInstantiator.instantiate();
+		if (theFormatInstantiator != null)
+			theFormatInstantiator.instantiate();
+		theChildrenSynth.instantiate();
+		if (thePostTextSynth != null)
+			thePostTextSynth.instantiate();
+
+		if (theTextStyle != null)
+			theTextStyle.instantiated();
+	}
+
+	@Override
+	protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+		super.doInstantiate(myModels);
+		ExFlexibleElementModelAddOn.satisfyElementValue(theNodeValueId, myModels, getNodeValue(),
+			ExWithElementModel.ActionIfSatisfied.Replace);
+		theRoot.set(theRootInstantiator.get(myModels), null);
+		theFormat = theFormatInstantiator.get(myModels).get();
+
+		if (theTextStyle != null)
+			theTextStyle.instantiate(myModels);
+	}
+
+	@Override
+	public DynamicStyledDocument<T> copy(ExElement parent) {
+		DynamicStyledDocument<T> copy = (DynamicStyledDocument<T>) super.copy(parent);
+
+		copy.theRoot = SettableValue.build(theRoot.getType()).build();
+		copy.theNodeValue = SettableValue.build(theNodeValue.getType()).build();
+
+		return copy;
 	}
 }

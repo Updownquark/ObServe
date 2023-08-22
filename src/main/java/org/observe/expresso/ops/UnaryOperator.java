@@ -243,6 +243,11 @@ public class UnaryOperator implements ObservableExpression {
 		}
 
 		@Override
+		public void instantiate() {
+			theValue.instantiate();
+		}
+
+		@Override
 		public ObservableAction<R> get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
 			SettableValue<T> value = theValue.get(models);
 			return actionFor(value);
@@ -312,6 +317,11 @@ public class UnaryOperator implements ObservableExpression {
 			theOperator = operator;
 			theCast = cast;
 			theOperatorReporting = operatorReporting;
+		}
+
+		@Override
+		public void instantiate() {
+			theSource.instantiate();
 		}
 
 		@Override

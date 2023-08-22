@@ -149,14 +149,10 @@ public interface QuickContainer<C extends QuickWidget> extends QuickWidget {
 	 * @param <C> The type of the contained widgets
 	 */
 	public abstract class Abstract<C extends QuickWidget> extends QuickWidget.Abstract implements QuickContainer<C> {
-		private final BetterList<C> theContents;
+		private BetterList<C> theContents;
 
-		/**
-		 * @param interpreted The interpretation producing this container
-		 * @param parent The parent element
-		 */
-		protected Abstract(QuickContainer.Interpreted<?, ?> interpreted, ExElement parent) {
-			super(interpreted, parent);
+		protected Abstract(Object id) {
+			super(id);
 			theContents = BetterTreeList.<C> build().build();
 		}
 
@@ -166,28 +162,55 @@ public interface QuickContainer<C extends QuickWidget> extends QuickWidget {
 		}
 
 		@Override
-		protected void updateModel(ExElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
-			super.updateModel(interpreted, myModels);
+		protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+			super.doUpdate(interpreted);
+
 			QuickContainer.Interpreted<?, C> myInterpreted = (QuickContainer.Interpreted<?, C>) interpreted;
 			CollectionUtils.synchronize(theContents, myInterpreted.getContents(), //
 				(widget, child) -> widget.getIdentity() == child.getIdentity())//
-			.<ModelInstantiationException> simpleE(child -> (C) child.create(QuickContainer.Abstract.this))//
+			.simple(child -> (C) child.create())//
 			.rightOrder()//
-			.onRightX(element -> {
+			.onRight(element -> {
 				try {
-					element.getLeftValue().update(element.getRightValue(), myModels);
+					element.getLeftValue().update(element.getRightValue(), this);
 				} catch (RuntimeException | Error e) {
 					element.getRightValue().reporting().error(e.getMessage() == null ? e.toString() : e.getMessage(), e);
 				}
 			})//
-			.onCommonX(element -> {
+			.onCommon(element -> {
 				try {
-					element.getLeftValue().update(element.getRightValue(), myModels);
+					element.getLeftValue().update(element.getRightValue(), this);
 				} catch (RuntimeException | Error e) {
 					element.getRightValue().reporting().error(e.getMessage() == null ? e.toString() : e.getMessage(), e);
 				}
 			})//
 			.adjust();
+		}
+
+		@Override
+		public void instantiated() {
+			super.instantiated();
+			for (C content : theContents)
+				content.instantiated();
+		}
+
+		@Override
+		protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+			super.doInstantiate(myModels);
+
+			for (C content : theContents)
+				content.instantiate(myModels);
+		}
+
+		@Override
+		public QuickContainer.Abstract<C> copy(ExElement parent) {
+			QuickContainer.Abstract<C> copy = (QuickContainer.Abstract<C>) super.copy(parent);
+
+			copy.theContents = BetterTreeList.<C> build().build();
+			for (C content : theContents)
+				copy.theContents.add((C) content.copy(copy));
+
+			return copy;
 		}
 	}
 }

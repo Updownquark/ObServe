@@ -1467,10 +1467,23 @@ public class TypeTokens implements TypeParser {
 			}
 		} else if (sourceKey instanceof PrimitiveTypeData) { // Source is primitive or a wrapper but target is not
 			// We've handled this case in the reverse above
-			TypeConverter<? super T, ? extends T, ? super S, ? extends S> reverseConverter = getCast(source, target, safe, false);
+			TypeConverter<S, ? extends S, ? super T, T> suppConvert = getSpecialCast(source, target, rawSource, rawTarget);
+			TypeConverter<? super T, ? extends T, ? super S, ? extends S> reverseConverter;
+			if (suppConvert == null)
+				reverseConverter = getCast(source, target, safe, false);
+			else {
+				try {
+					reverseConverter = getCast(source, target, safe, false);
+				} catch (IllegalArgumentException e) {
+					return suppConvert;
+				}
+			}
 			TypeConverter<? super S, ? extends S, ? super T, ? extends T> converter = reverseConverter.reverse();
-			if (downCastOnly && !converter.isSafe())
+			if (downCastOnly && !converter.isSafe()) {
+				if (suppConvert != null)
+					return suppConvert;
 				throw new IllegalArgumentException("Cannot safely convert from " + source + " to " + target);
+			}
 			return converter;
 		}
 		// Now neither type is primitive or a wrapper

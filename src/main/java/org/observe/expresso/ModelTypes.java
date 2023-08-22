@@ -728,7 +728,7 @@ public class ModelTypes {
 		}
 
 		static class HollowValue<T> extends SettableValue.SettableFlattenedObservableValue<T>
-			implements HollowModelValue<SettableValue<?>, SettableValue<T>> {
+		implements HollowModelValue<SettableValue<?>, SettableValue<T>> {
 			private final NamedUniqueIdentity theId;
 
 			public HollowValue(String name, TypeToken<T> type) {
@@ -761,6 +761,11 @@ public class ModelTypes {
 			@Override
 			public boolean isSatisfied() {
 				return getWrapped().get() != null;
+			}
+
+			@Override
+			public String toString() {
+				return theId.theName;
 			}
 		}
 

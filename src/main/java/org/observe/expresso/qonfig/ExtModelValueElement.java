@@ -10,6 +10,7 @@ import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.ExtValueRef;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.TypeConversionException;
 import org.observe.expresso.VariableType;
 import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
@@ -211,10 +212,11 @@ public class ExtModelValueElement<M, MV extends M> extends ModelValueElement.Def
 		}
 	}
 
+	private ModelValueInstantiator<MV> theDefaultInstantiator;
 	private MV theDefault;
 
-	public ExtModelValueElement(Interpreted<M, MV> interpreted, ExElement parent) {
-		super(interpreted, parent);
+	public ExtModelValueElement(Object id) {
+		super(id);
 	}
 
 	public MV getDefault() {
@@ -222,9 +224,22 @@ public class ExtModelValueElement<M, MV extends M> extends ModelValueElement.Def
 	}
 
 	@Override
-	protected void updateModel(ExElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
-		super.updateModel(interpreted, myModels);
+	protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+		super.doUpdate(interpreted);
 		Interpreted<M, MV> myInterpreted = (Interpreted<M, MV>) interpreted;
-		theDefault = myInterpreted.getDefault() == null ? null : myInterpreted.getDefault().instantiate().get(myModels);
+		theDefaultInstantiator = myInterpreted.getDefault() == null ? null : myInterpreted.getDefault().instantiate();
+	}
+
+	@Override
+	public void instantiated() {
+		super.instantiated();
+		if (theDefaultInstantiator != null)
+			theDefaultInstantiator.instantiate();
+	}
+
+	@Override
+	protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+		super.doInstantiate(myModels);
+		theDefault = theDefaultInstantiator == null ? null : theDefaultInstantiator.get(myModels);
 	}
 }

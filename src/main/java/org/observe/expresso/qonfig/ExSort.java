@@ -126,10 +126,10 @@ public abstract class ExSort extends ExElement.Def.Abstract<ExElement> {
 		if (theSortValue != null || theSortCompareValue != null) {
 			ExWithElementModel.Def withElModel = getAddOn(ExWithElementModel.Def.class);
 			if (theSortValue != null)
-				withElModel.<Interpreted<?, ?>, SettableValue<?>> satisfyElementValueType(theSortValue.getName(), ModelTypes.Value,
+				withElModel.<Interpreted<?, ?>, SettableValue<?>> satisfyElementValueType(theSortValue, ModelTypes.Value,
 					(interp, env) -> ModelTypes.Value.forType(interp.getSortType()));
 			if (theSortCompareValue != null)
-				withElModel.<Interpreted<?, ?>, SettableValue<?>> satisfyElementValueType(theSortCompareValue.getName(), ModelTypes.Value,
+				withElModel.<Interpreted<?, ?>, SettableValue<?>> satisfyElementValueType(theSortCompareValue, ModelTypes.Value,
 					(interp, env) -> ModelTypes.Value.forType(interp.getSortType()));
 		}
 	}
@@ -439,6 +439,11 @@ public abstract class ExSort extends ExElement.Def.Abstract<ExElement> {
 			}
 
 			@Override
+			public void instantiate() {
+				theLocalModel.instantiate();
+			}
+
+			@Override
 			protected Supplier<Integer> getExternalSorting(ModelSetInstance parentModels, SettableValue<T> left, SettableValue<T> right)
 				throws ModelInstantiationException {
 				parentModels = theLocalModel.wrap(parentModels);
@@ -520,8 +525,8 @@ public abstract class ExSort extends ExElement.Def.Abstract<ExElement> {
 			protected SortInstantiator<OT, IT> doInstantiateSort() {
 				return new SortByInstantiator<>(getSortType(), getDefinition().getSortValue(), getDefinition().getSortCompareValue(),
 					getSortWith() == null ? null : getSortWith().instantiate(), instantiateSortBy(), getDefaultSorting(),
-					getDefinition().isAscending(), getExpressoEnv().getModels().instantiate(),
-					getParentElement().getDefinition().getSortValue(), theAttribute.instantiate());
+						getDefinition().isAscending(), getExpressoEnv().getModels().instantiate(),
+						getParentElement().getDefinition().getSortValue(), theAttribute.instantiate());
 			}
 		}
 
@@ -532,12 +537,18 @@ public abstract class ExSort extends ExElement.Def.Abstract<ExElement> {
 
 			SortByInstantiator(TypeToken<OT> sortType, ModelComponentId sortValue, ModelComponentId sortCompareValue,
 				ModelValueInstantiator<SettableValue<Integer>> sortWith, List<SortInstantiator<IT, ?>> sortBy,
-				Comparator<? super IT> defaultSorting, boolean ascending, ModelInstantiator localModel,
-				ModelComponentId parentSortValue, ModelValueInstantiator<SettableValue<IT>> attribute) {
+				Comparator<? super IT> defaultSorting, boolean ascending, ModelInstantiator localModel, ModelComponentId parentSortValue,
+				ModelValueInstantiator<SettableValue<IT>> attribute) {
 				super(sortType, sortValue, sortCompareValue, sortWith, sortBy, defaultSorting, ascending);
 				theLocalModel = localModel;
 				theParentSortValue = parentSortValue;
 				theAttribute = attribute;
+			}
+
+			@Override
+			public void instantiate() {
+				theLocalModel.instantiate();
+				theAttribute.instantiate();
 			}
 
 			@Override

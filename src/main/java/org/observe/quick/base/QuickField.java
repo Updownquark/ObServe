@@ -7,6 +7,7 @@ import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.qonfig.CompiledExpression;
 import org.observe.expresso.qonfig.ExAddOn;
 import org.observe.expresso.qonfig.ExElement;
@@ -74,14 +75,15 @@ public class QuickField extends ExAddOn.Abstract<QuickWidget> {
 
 		@Override
 		public QuickField create(QuickWidget widget) {
-			return new QuickField(this, widget);
+			return new QuickField(widget);
 		}
 	}
 
+	private ModelValueInstantiator<SettableValue<String>> theFieldLabelInstantiator;
 	private SettableValue<String> theFieldLabel;
 
-	public QuickField(Interpreted interpreted, QuickWidget widget) {
-		super(interpreted, widget);
+	public QuickField(QuickWidget widget) {
+		super(widget);
 	}
 
 	public SettableValue<String> getFieldLabel() {
@@ -89,9 +91,20 @@ public class QuickField extends ExAddOn.Abstract<QuickWidget> {
 	}
 
 	@Override
-	public void update(ExAddOn.Interpreted<?, ?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
-		super.update(interpreted, models);
+	public Class<Interpreted> getInterpretationType() {
+		return Interpreted.class;
+	}
+
+	@Override
+	public void update(ExAddOn.Interpreted<?, ?> interpreted) {
+		super.update(interpreted);
 		QuickField.Interpreted myInterpreted = (QuickField.Interpreted) interpreted;
-		theFieldLabel = myInterpreted.getFieldLabel() == null ? null : myInterpreted.getFieldLabel().instantiate().get(models);
+		theFieldLabelInstantiator = myInterpreted.getFieldLabel() == null ? null : myInterpreted.getFieldLabel().instantiate();
+	}
+
+	@Override
+	public void instantiate(ModelSetInstance models) throws ModelInstantiationException {
+		super.instantiate(models);
+		theFieldLabel = theFieldLabelInstantiator == null ? null : theFieldLabelInstantiator.get(models);
 	}
 }

@@ -8,6 +8,7 @@ import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.qonfig.CompiledExpression;
 import org.observe.expresso.qonfig.ElementTypeTraceability;
 import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
@@ -91,18 +92,16 @@ public class QuickComboBox<T> extends QuickValueWidget.Abstract<T> {
 		}
 
 		@Override
-		public QuickComboBox<T> create(ExElement parent) {
-			return new QuickComboBox<>(this, parent);
+		public QuickComboBox<T> create() {
+			return new QuickComboBox<>(getIdentity());
 		}
 	}
 
-	private final SettableValue<ObservableCollection<T>> theValues;
+	private ModelValueInstantiator<ObservableCollection<T>> theValuesInstantiator;
+	private SettableValue<ObservableCollection<T>> theValues;
 
-	public QuickComboBox(Interpreted interpreted, ExElement parent) {
-		super(interpreted, parent);
-		TypeToken<T> valueType = interpreted.getValue().getType().getType(0);
-		theValues = SettableValue
-			.build(TypeTokens.get().keyFor(ObservableCollection.class).<ObservableCollection<T>> parameterized(valueType)).build();
+	public QuickComboBox(Object id) {
+		super(id);
 	}
 
 	public ObservableCollection<T> getValues() {
@@ -110,9 +109,36 @@ public class QuickComboBox<T> extends QuickValueWidget.Abstract<T> {
 	}
 
 	@Override
-	protected void updateModel(ExElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
-		super.updateModel(interpreted, myModels);
+	protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+		super.doUpdate(interpreted);
 		Interpreted<T> myInterpreted = (Interpreted<T>) interpreted;
-		theValues.set(myInterpreted.getValues() == null ? null : myInterpreted.getValues().instantiate().get(myModels), null);
+		TypeToken<T> valueType = (TypeToken<T>) myInterpreted.getValue().getType().getType(0);
+		if (theValues == null || !getValues().getType().equals(valueType)) {
+			theValues = SettableValue
+				.build(TypeTokens.get().keyFor(ObservableCollection.class).<ObservableCollection<T>> parameterized(valueType)).build();
+		}
+		theValuesInstantiator = myInterpreted.getValues() == null ? null : myInterpreted.getValues().instantiate();
+	}
+
+	@Override
+	public void instantiated() {
+		super.instantiated();
+		if (theValuesInstantiator != null)
+			theValuesInstantiator.instantiate();
+	}
+
+	@Override
+	protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+		super.doInstantiate(myModels);
+		theValues.set(theValuesInstantiator == null ? null : theValuesInstantiator.get(myModels), null);
+	}
+
+	@Override
+	protected QuickComboBox<T> clone() {
+		QuickComboBox<T> copy = (QuickComboBox<T>) super.clone();
+
+		copy.theValues = SettableValue.build(theValues.getType()).build();
+
+		return copy;
 	}
 }

@@ -88,6 +88,10 @@ public class ObservableTransformations {
 			}
 
 			@Override
+			public void instantiate() {
+			}
+
+			@Override
 			public Observable<T> transform(Observable<T> source, ModelSetInstance models) throws ModelInstantiationException {
 				return new NoInitObservable<>(source);
 			}
@@ -184,6 +188,10 @@ public class ObservableTransformations {
 			@Override
 			public boolean isEfficientCopy() {
 				return true;
+			}
+
+			@Override
+			public void instantiate() {
 			}
 
 			@Override
@@ -284,6 +292,10 @@ public class ObservableTransformations {
 			@Override
 			public boolean isEfficientCopy() {
 				return true;
+			}
+
+			@Override
+			public void instantiate() {
 			}
 
 			@Override
@@ -401,6 +413,11 @@ public class ObservableTransformations {
 			}
 
 			@Override
+			public void instantiate() {
+				theUntil.instantiate();
+			}
+
+			@Override
 			public Observable<T> transform(Observable<T> source, ModelSetInstance models) throws ModelInstantiationException {
 				Observable<?> until = theUntil.get(models);
 				return new TakeUntilObservable<>(source, until);
@@ -475,8 +492,8 @@ public class ObservableTransformations {
 			ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
 			theSourceVariable = elModels.getElementValueModelId(sourceAs);
 			theMap = session.getAttributeExpression("map");
-			elModels.<Interpreted<?, ?>, SettableValue<?>> satisfyElementValueType(theSourceVariable.getName(),
-				ModelTypes.Value, (interp, env) -> ModelTypes.Value.forType(interp.getSourceType()));
+			elModels.<Interpreted<?, ?>, SettableValue<?>> satisfyElementValueType(theSourceVariable, ModelTypes.Value,
+				(interp, env) -> ModelTypes.Value.forType(interp.getSourceType()));
 		}
 
 		@Override
@@ -548,6 +565,11 @@ public class ObservableTransformations {
 			@Override
 			public boolean isEfficientCopy() {
 				return true;
+			}
+
+			@Override
+			public void instantiate() {
+				theMap.instantiate();
 			}
 
 			@Override
@@ -651,8 +673,8 @@ public class ObservableTransformations {
 			ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
 			theSourceVariable = elModels.getElementValueModelId(sourceAs);
 			theTest = session.getAttributeExpression("test");
-			elModels.<Interpreted<?>, SettableValue<?>> satisfyElementValueType(theSourceVariable.getName(),
-				ModelTypes.Value, (interp, env) -> ModelTypes.Value.forType(interp.getSourceType()));
+			elModels.<Interpreted<?>, SettableValue<?>> satisfyElementValueType(theSourceVariable, ModelTypes.Value,
+				(interp, env) -> ModelTypes.Value.forType(interp.getSourceType()));
 		}
 
 		@Override
@@ -715,6 +737,11 @@ public class ObservableTransformations {
 			@Override
 			public boolean isEfficientCopy() {
 				return true;
+			}
+
+			@Override
+			public void instantiate() {
+				theTest.instantiate();
 			}
 
 			@Override
@@ -866,6 +893,10 @@ public class ObservableTransformations {
 			@Override
 			public boolean isEfficientCopy() {
 				return true;
+			}
+
+			@Override
+			public void instantiate() {
 			}
 
 			@Override

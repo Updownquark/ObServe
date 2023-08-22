@@ -311,6 +311,12 @@ public class BinaryOperator implements ObservableExpression {
 		}
 
 		@Override
+		public void instantiate() {
+			theLeft.instantiate();
+			theRight.instantiate();
+		}
+
+		@Override
 		public ObservableAction<R> get(ModelSetInstance msi) throws ModelInstantiationException {
 			SettableValue<S> leftV = theLeft.get(msi);
 			SettableValue<T> rightV = theRight.get(msi);
@@ -371,6 +377,12 @@ public class BinaryOperator implements ObservableExpression {
 			theRight = right;
 			theOperator = operator;
 			theReporting = reporting;
+		}
+
+		@Override
+		public void instantiate() {
+			theLeft.instantiate();
+			theRight.instantiate();
 		}
 
 		@Override

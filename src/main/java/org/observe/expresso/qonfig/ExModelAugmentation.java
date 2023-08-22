@@ -8,7 +8,7 @@ public abstract class ExModelAugmentation<E extends ExElement> extends ExAddOn.A
 	public static final String CREATED_LOCAL_MODEL_COPY = "Expresso.Created.Local.Copy";
 
 	public static abstract class Def<E extends ExElement, AO extends ExModelAugmentation<? super E>> extends ExAddOn.Def.Abstract<E, AO> {
-		public Def(QonfigAddOn type, ExElement.Def<? extends E> element) {
+		protected Def(QonfigAddOn type, ExElement.Def<? extends E> element) {
 			super(type, element);
 		}
 
@@ -35,7 +35,7 @@ public abstract class ExModelAugmentation<E extends ExElement> extends ExAddOn.A
 		}
 	}
 
-	protected ExModelAugmentation(ExAddOn.Interpreted<? super E, ?> interpreted, E element) {
-		super(interpreted, element);
+	protected ExModelAugmentation(E element) {
+		super(element);
 	}
 }

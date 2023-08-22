@@ -107,16 +107,16 @@ public class QuickScrollPane extends QuickContainer.Abstract<QuickWidget> {
 		}
 
 		@Override
-		public QuickScrollPane create(ExElement parent) {
-			return new QuickScrollPane(this, parent);
+		public QuickScrollPane create() {
+			return new QuickScrollPane(getIdentity());
 		}
 	}
 
 	private QuickWidget theRowHeader;
 	private QuickWidget theColumnHeader;
 
-	public QuickScrollPane(Interpreted interpreted, ExElement parent) {
-		super(interpreted, parent);
+	public QuickScrollPane(Object id) {
+		super(id);
 	}
 
 	public QuickWidget getRowHeader() {
@@ -128,20 +128,50 @@ public class QuickScrollPane extends QuickContainer.Abstract<QuickWidget> {
 	}
 
 	@Override
-	protected void updateModel(ExElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
-		super.updateModel(interpreted, myModels);
+	protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+		super.doUpdate(interpreted);
 		Interpreted myInterpreted = (Interpreted) interpreted;
 
 		if (myInterpreted.getRowHeader() != null) {
 			if (theRowHeader == null || theRowHeader.getIdentity() != myInterpreted.getRowHeader().getIdentity())
-				theRowHeader = myInterpreted.getRowHeader().create(this);
-			theRowHeader.update(myInterpreted.getRowHeader(), myModels);
+				theRowHeader = myInterpreted.getRowHeader().create();
+			theRowHeader.update(myInterpreted.getRowHeader(), this);
 		}
 
 		if (myInterpreted.getColumnHeader() != null) {
 			if (theColumnHeader == null || theColumnHeader.getIdentity() != myInterpreted.getColumnHeader().getIdentity())
-				theColumnHeader = myInterpreted.getColumnHeader().create(this);
-			theColumnHeader.update(myInterpreted.getColumnHeader(), myModels);
+				theColumnHeader = myInterpreted.getColumnHeader().create();
+			theColumnHeader.update(myInterpreted.getColumnHeader(), this);
 		}
+	}
+
+	@Override
+	public void instantiated() {
+		super.instantiated();
+		if (theRowHeader != null)
+			theRowHeader.instantiated();
+		if (theColumnHeader != null)
+			theColumnHeader.instantiated();
+	}
+
+	@Override
+	protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+		super.doInstantiate(myModels);
+		if (theRowHeader != null)
+			theRowHeader.instantiate(myModels);
+		if (theColumnHeader != null)
+			theColumnHeader.instantiate(myModels);
+	}
+
+	@Override
+	public QuickScrollPane copy(ExElement parent) {
+		QuickScrollPane copy = (QuickScrollPane) super.clone();
+
+		if (theRowHeader != null)
+			copy.theRowHeader = theRowHeader.copy(copy);
+		if (theColumnHeader != null)
+			copy.theColumnHeader = theColumnHeader.copy(copy);
+
+		return copy;
 	}
 }

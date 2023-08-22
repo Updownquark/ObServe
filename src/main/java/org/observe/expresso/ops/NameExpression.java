@@ -359,6 +359,12 @@ public class NameExpression implements ObservableExpression, Named {
 		}
 
 		@Override
+		public void instantiate() {
+			if (theContext != null)
+				theContext.instantiate();
+		}
+
+		@Override
 		public SettableValue<F> get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
 			SettableValue<C> ctx = theContext == null ? null : theContext.get(models);
 			return new FieldValue<>(ctx, theField, theType, theReporting);

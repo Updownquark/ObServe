@@ -3,10 +3,12 @@ package org.observe.quick.base;
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.expresso.ModelInstantiationException;
+import org.observe.expresso.ObservableModelSet.ModelComponentId;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.qonfig.ElementTypeTraceability;
 import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.observe.expresso.qonfig.ExElement;
+import org.observe.expresso.qonfig.ExFlexibleElementModelAddOn;
 import org.observe.expresso.qonfig.ExWithElementModel;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
@@ -25,12 +27,18 @@ public interface QuickEditableTextWidget<T> extends QuickTextWidget<T> {
 		@QonfigAttributeGetter("commit-on-type")
 		boolean isCommitOnType();
 
+		ModelComponentId getErrorVariable();
+
+		ModelComponentId getWarningVariable();
+
 		@Override
 		Interpreted<?, ? extends W> interpret(ExElement.Interpreted<?> parent);
 
 		public abstract class Abstract<W extends QuickEditableTextWidget<?>> extends QuickTextWidget.Def.Abstract<W>
 		implements Def<W> {
 			private boolean isCommitOnType;
+			private ModelComponentId theErrorVariable;
+			private ModelComponentId theWarningVariable;
 
 			protected Abstract(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
 				super(parent, type);
@@ -42,10 +50,24 @@ public interface QuickEditableTextWidget<T> extends QuickTextWidget<T> {
 			}
 
 			@Override
+			public ModelComponentId getErrorVariable() {
+				return theErrorVariable;
+			}
+
+			@Override
+			public ModelComponentId getWarningVariable() {
+				return theWarningVariable;
+			}
+
+			@Override
 			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 				withTraceability(EDITABLE_TEXT_WIDGET_TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 				super.doUpdate(session.asElement(session.getFocusType().getSuperElement()));
 				isCommitOnType = session.getAttribute("commit-on-type", boolean.class);
+
+				ExWithElementModel.Def elValues = getAddOn(ExWithElementModel.Def.class);
+				theErrorVariable = elValues.getElementValueModelId("error");
+				theWarningVariable = elValues.getElementValueModelId("warning");
 			}
 		}
 	}
@@ -102,11 +124,13 @@ public interface QuickEditableTextWidget<T> extends QuickTextWidget<T> {
 
 	public static abstract class Abstract<T> extends QuickTextWidget.Abstract<T> implements QuickEditableTextWidget<T> {
 		private boolean isCommitOnType;
-		private final SettableValue<SettableValue<String>> theErrorStatus;
-		private final SettableValue<SettableValue<String>> theWarningStatus;
+		private ModelComponentId theErrorVariable;
+		private ModelComponentId theWarningVariable;
+		private SettableValue<SettableValue<String>> theErrorStatus;
+		private SettableValue<SettableValue<String>> theWarningStatus;
 
-		protected Abstract(QuickEditableTextWidget.Interpreted<T, ?> interpreted, ExElement parent) {
-			super(interpreted, parent);
+		protected Abstract(Object id) {
+			super(id);
 			theErrorStatus = SettableValue
 				.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<String>> parameterized(String.class)).build();
 			theWarningStatus = SettableValue.build(theErrorStatus.getType()).build();
@@ -117,20 +141,36 @@ public interface QuickEditableTextWidget<T> extends QuickTextWidget<T> {
 		}
 
 		@Override
-		protected void updateModel(ExElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
-			super.updateModel(interpreted, myModels);
-			QuickEditableTextWidget.Interpreted<T, ?> myInterpreted = (QuickEditableTextWidget.Interpreted<T, ?>) interpreted;
-			isCommitOnType = myInterpreted.getDefinition().isCommitOnType();
-			ExWithElementModel elModels = getAddOn(ExWithElementModel.class);
-			elModels.satisfyElementValue("error", SettableValue.flatten(theErrorStatus));
-			elModels.satisfyElementValue("warning", SettableValue.flatten(theWarningStatus));
-		}
-
-		@Override
 		public QuickEditableTextWidget<T> setContext(EditableTextWidgetContext ctx) throws ModelInstantiationException {
 			theErrorStatus.set(ctx.getError(), null);
 			theWarningStatus.set(ctx.getWarning(), null);
 			return this;
+		}
+
+		@Override
+		protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+			super.doUpdate(interpreted);
+			QuickEditableTextWidget.Interpreted<T, ?> myInterpreted = (QuickEditableTextWidget.Interpreted<T, ?>) interpreted;
+			theErrorVariable = myInterpreted.getDefinition().getErrorVariable();
+			theWarningVariable = myInterpreted.getDefinition().getWarningVariable();
+			isCommitOnType = myInterpreted.getDefinition().isCommitOnType();
+		}
+
+		@Override
+		protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+			super.doInstantiate(myModels);
+			ExFlexibleElementModelAddOn.satisfyElementValue(theErrorVariable, myModels, SettableValue.flatten(theErrorStatus));
+			ExFlexibleElementModelAddOn.satisfyElementValue(theWarningVariable, myModels, SettableValue.flatten(theWarningStatus));
+		}
+
+		@Override
+		public QuickEditableTextWidget.Abstract<T> copy(ExElement parent) {
+			QuickEditableTextWidget.Abstract<T> copy = (QuickEditableTextWidget.Abstract<T>) super.copy(parent);
+
+			copy.theErrorStatus = SettableValue.build(theErrorStatus.getType()).build();
+			copy.theWarningStatus = SettableValue.build(theErrorStatus.getType()).build();
+
+			return copy;
 		}
 	}
 }

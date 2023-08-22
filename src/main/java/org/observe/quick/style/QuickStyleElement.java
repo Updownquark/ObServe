@@ -16,6 +16,7 @@ import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.qonfig.CompiledExpression;
 import org.observe.expresso.qonfig.ElementModelValue;
 import org.observe.expresso.qonfig.ElementTypeTraceability;
@@ -530,25 +531,21 @@ public class QuickStyleElement<T> extends ExElement.Abstract {
 			.adjust();
 		}
 
-		public QuickStyleElement<T> create(ExElement parent) {
-			return new QuickStyleElement<>(this, parent);
+		public QuickStyleElement<T> create() {
+			return new QuickStyleElement<>(getIdentity());
 		}
 	}
 
+	private ModelValueInstantiator<SettableValue<Boolean>> theConditionInstantiator;
+	private ModelValueInstantiator<SettableValue<T>> theValueInstantiator;
 	private final SettableValue<SettableValue<Boolean>> theCondition;
-	private final SettableValue<SettableValue<T>> theValue;
+	private SettableValue<SettableValue<T>> theValue;
 	private final List<QuickStyleElement<?>> theChildren;
 
-	public QuickStyleElement(Interpreted<T> interpreted, ExElement parent) {
-		super(interpreted, parent);
+	public QuickStyleElement(Object id) {
+		super(id);
 		theCondition = SettableValue
 			.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Boolean>> parameterized(boolean.class)).build();
-		QuickStyleAttribute<T> attr = interpreted.getEffectiveAttribute();
-		if (attr == null)
-			theValue = null;
-		else
-			theValue = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<T>> parameterized(attr.getType()))
-			.build();
 		theChildren = new ArrayList<>();
 	}
 
@@ -568,15 +565,44 @@ public class QuickStyleElement<T> extends ExElement.Abstract {
 	}
 
 	@Override
-	protected void updateModel(ExElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
-		super.updateModel(interpreted, myModels);
+	protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+		super.doUpdate(interpreted);
 		Interpreted<T> myInterpreted = (Interpreted<T>) interpreted;
-		theCondition.set(myInterpreted.getCondition() == null ? null : myInterpreted.getCondition().instantiate().get(myModels), null);
+		QuickStyleAttribute<T> attr = myInterpreted.getEffectiveAttribute();
+		if (attr == null || myInterpreted.getValue() == null)
+			theValue = null;
+		else
+			theValue = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<T>> parameterized(attr.getType()))
+			.build();
+		theConditionInstantiator = myInterpreted.getCondition() == null ? null : myInterpreted.getCondition().instantiate();
 		if (theValue != null)
-			theValue.set(myInterpreted.getValue() == null ? null : myInterpreted.getValue().instantiate().get(myModels), null);
+			theValueInstantiator = myInterpreted.getValue().instantiate();
 		CollectionUtils.synchronize(theChildren, myInterpreted.getChildren(), (inst, interp) -> inst.getIdentity() == interp.getIdentity())//
-		.<ModelInstantiationException> simpleE(interp -> interp.create(this))//
-		.onRightX(el -> el.getLeftValue().update(el.getRightValue(), myModels))
-		.onCommonX(el -> el.getLeftValue().update(el.getRightValue(), myModels)).adjust();
+		.simple(interp -> interp.create())//
+		.onRight(el -> el.getLeftValue().update(el.getRightValue(), this))
+		.onCommon(el -> el.getLeftValue().update(el.getRightValue(), this)).adjust();
+	}
+
+	@Override
+	public void instantiated() {
+		super.instantiated();
+
+		if (theConditionInstantiator != null)
+			theConditionInstantiator.instantiate();
+		if (theValueInstantiator != null)
+			theValueInstantiator.instantiate();
+
+		for (QuickStyleElement<?> subStyle : theChildren)
+			subStyle.instantiated();
+	}
+
+	@Override
+	protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+		super.doInstantiate(myModels);
+		theCondition.set(theConditionInstantiator == null ? null : theConditionInstantiator.get(myModels), null);
+		if (theValue != null)
+			theValue.set(theValueInstantiator.get(myModels), null);
+		for (QuickStyleElement<?> child : theChildren)
+			child.instantiate(myModels);
 	}
 }

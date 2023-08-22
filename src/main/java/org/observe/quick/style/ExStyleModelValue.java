@@ -48,11 +48,11 @@ public class ExStyleModelValue extends ExElementModelValue {
 
 		@Override
 		public AO create(ExtModelValueElement<?, ?> element) {
-			return (AO) new ExStyleModelValue(this, element);
+			return (AO) new ExStyleModelValue(element);
 		}
 	}
 
-	protected ExStyleModelValue(Interpreted<?> interpreted, ExtModelValueElement<?, ?> element) {
-		super(interpreted, element);
+	protected ExStyleModelValue(ExtModelValueElement<?, ?> element) {
+		super(element);
 	}
 }

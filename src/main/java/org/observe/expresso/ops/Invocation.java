@@ -668,6 +668,14 @@ public abstract class Invocation implements ObservableExpression {
 		}
 
 		@Override
+		public void instantiate() {
+			if (theContext != null)
+				theContext.instantiate();
+			for (ModelValueInstantiator<?> arg : theArguments)
+				arg.instantiate();
+		}
+
+		@Override
 		public MV get(ModelSetInstance models) throws ModelInstantiationException {
 			SettableValue<?> ctxV = theContext == null ? null : theContext.get(models);
 			SettableValue<?>[] argVs = new SettableValue[theArguments.size()];

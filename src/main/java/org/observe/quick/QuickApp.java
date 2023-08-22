@@ -178,12 +178,14 @@ public class QuickApp extends QonfigApp {
 		QuickApplication app = quickApp.interpretQuickApplication(interpretedDoc);
 
 		QuickDocument doc = interpretedDoc.create();
-		doc.update(interpretedDoc, Observable.empty());
+		doc.update(interpretedDoc);
+		doc.instantiated();
 
 		// Clean up to free memory
 		interpretedDoc.destroy();
 		interpretedDoc = null;
 
+		doc.instantiate(Observable.empty());
 		app.runApplication(doc, Observable.empty());
 	}
 

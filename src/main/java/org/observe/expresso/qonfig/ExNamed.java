@@ -1,7 +1,5 @@
 package org.observe.expresso.qonfig;
 
-import org.observe.expresso.ModelInstantiationException;
-import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.qommons.Named;
 import org.qommons.config.QonfigAddOn;
@@ -50,15 +48,19 @@ public class ExNamed extends ExAddOn.Abstract<ExElement> implements Named {
 
 		@Override
 		public ExNamed create(ExElement element) {
-			return new ExNamed(this, element);
+			return new ExNamed(element);
 		}
 	}
 
 	private String theName;
 
-	public ExNamed(Interpreted interpreted, ExElement element) {
-		super(interpreted, element);
-		theName = interpreted.getDefinition().getName();
+	public ExNamed(ExElement element) {
+		super(element);
+	}
+
+	@Override
+	public Class<Interpreted> getInterpretationType() {
+		return (Class<Interpreted>) (Class<?>) Interpreted.class;
 	}
 
 	@Override
@@ -67,8 +69,8 @@ public class ExNamed extends ExAddOn.Abstract<ExElement> implements Named {
 	}
 
 	@Override
-	public void update(ExAddOn.Interpreted<?, ?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
-		super.update(interpreted, models);
+	public void update(ExAddOn.Interpreted<?, ?> interpreted) {
+		super.update(interpreted);
 		Interpreted myInterpreted = (Interpreted) interpreted;
 		theName = myInterpreted.getDefinition().getName();
 	}

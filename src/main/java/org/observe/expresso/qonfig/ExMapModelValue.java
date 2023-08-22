@@ -2,8 +2,6 @@ package org.observe.expresso.qonfig;
 
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.InterpretedExpressoEnv;
-import org.observe.expresso.ModelInstantiationException;
-import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.VariableType;
 import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.qommons.config.QonfigAddOn;
@@ -13,12 +11,12 @@ import org.qommons.io.LocatedPositionedContent;
 
 import com.google.common.reflect.TypeToken;
 
-public class ExMapModelValue extends ExAddOn.Abstract<ExElement> {
+public class ExMapModelValue<K> extends ExAddOn.Abstract<ExElement> {
 	private static final SingleTypeTraceability<ExElement, ExElement.Interpreted<?>, ExElement.Def<?>> TRACEABILITY = ElementTypeTraceability
 		.getAddOnTraceability(ExpressoSessionImplV0_1.TOOLKIT_NAME, ExpressoSessionImplV0_1.VERSION, "map-model-value", Def.class,
 			Interpreted.class, ExMapModelValue.class);
 
-	public static class Def extends ExAddOn.Def.Abstract<ExElement, ExMapModelValue> {
+	public static class Def extends ExAddOn.Def.Abstract<ExElement, ExMapModelValue<?>> {
 		private VariableType theKeyType;
 
 		public Def(QonfigAddOn type, ExElement.Def<? extends ExElement> element) {
@@ -48,8 +46,8 @@ public class ExMapModelValue extends ExAddOn.Abstract<ExElement> {
 		}
 	}
 
-	public static class Interpreted extends ExAddOn.Interpreted.Abstract<ExElement, ExMapModelValue> {
-		private TypeToken<?> theKeyType;
+	public static class Interpreted<K> extends ExAddOn.Interpreted.Abstract<ExElement, ExMapModelValue<K>> {
+		private TypeToken<K> theKeyType;
 
 		public Interpreted(Def definition, ExElement.Interpreted<? extends ExElement> element) {
 			super(definition, element);
@@ -60,7 +58,7 @@ public class ExMapModelValue extends ExAddOn.Abstract<ExElement> {
 			return (Def) super.getDefinition();
 		}
 
-		public TypeToken<?> getKeyType() {
+		public TypeToken<K> getKeyType() {
 			return theKeyType;
 		}
 
@@ -71,19 +69,24 @@ public class ExMapModelValue extends ExAddOn.Abstract<ExElement> {
 			if (getDefinition().getKeyType() == null)
 				theKeyType = null;
 			else
-				theKeyType = getDefinition().getKeyType().getType(env);
+				theKeyType = (TypeToken<K>) getDefinition().getKeyType().getType(env);
 		}
 
 		@Override
-		public ExMapModelValue create(ExElement element) {
-			return new ExMapModelValue(this, element);
+		public ExMapModelValue<K> create(ExElement element) {
+			return new ExMapModelValue<>(element);
 		}
 	}
 
 	private TypeToken<?> theValueType;
 
-	public ExMapModelValue(Interpreted interpreted, ExElement element) {
-		super(interpreted, element);
+	public ExMapModelValue(ExElement element) {
+		super(element);
+	}
+
+	@Override
+	public Class<Interpreted<?>> getInterpretationType() {
+		return (Class<Interpreted<?>>) (Class<?>) Interpreted.class;
 	}
 
 	public TypeToken<?> getValueType() {
@@ -91,9 +94,9 @@ public class ExMapModelValue extends ExAddOn.Abstract<ExElement> {
 	}
 
 	@Override
-	public void update(ExAddOn.Interpreted<?, ?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
-		super.update(interpreted, models);
-		Interpreted myInterpreted = (Interpreted) interpreted;
+	public void update(ExAddOn.Interpreted<?, ?> interpreted) {
+		super.update(interpreted);
+		Interpreted<K> myInterpreted = (Interpreted<K>) interpreted;
 		theValueType = myInterpreted.getKeyType();
 	}
 }

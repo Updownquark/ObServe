@@ -16,6 +16,7 @@ import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ObservableModelSet;
+import org.observe.expresso.ObservableModelSet.ModelComponentId;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.qonfig.ElementTypeTraceability;
 import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
@@ -55,6 +56,8 @@ public interface QuickStyledElement extends ExElement {
 		@QonfigChildGetter("style")
 		List<QuickStyleElement.Def> getStyleElements();
 
+		ModelComponentId getParentStyleValue();
+
 		/**
 		 * An abstract {@link Def} implementation
 		 *
@@ -63,6 +66,7 @@ public interface QuickStyledElement extends ExElement {
 		public abstract class Abstract<S extends QuickStyledElement> extends ExElement.Def.Abstract<S> implements Def<S> {
 			private final List<QuickStyleElement.Def> theStyleElements;
 			private QuickInstanceStyle.Def theStyle;
+			private ModelComponentId theParentStyleValue;
 
 			/**
 			 * @param parent The parent container definition
@@ -84,16 +88,23 @@ public interface QuickStyledElement extends ExElement {
 			}
 
 			@Override
+			public ModelComponentId getParentStyleValue() {
+				return theParentStyleValue;
+			}
+
+			@Override
 			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 				withTraceability(STYLED_TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 				super.doUpdate(session);
+				theParentStyleValue = getAddOn(ExWithElementModel.Def.class)
+					.getElementValueModelId(InterpretedStyleApplication.PARENT_MODEL_NAME);
 
 				ObservableModelSet.Builder builder;
 				if (getExpressoEnv().getModels() instanceof ObservableModelSet.Builder)
 					builder = (ObservableModelSet.Builder) getExpressoEnv().getModels();
 				else
 					builder = ObservableModelSet.build(getElement().getType().getName() + ".local", ObservableModelSet.JAVA_NAME_CHECKER)
-						.withAll(getExpressoEnv().getModels());
+					.withAll(getExpressoEnv().getModels());
 				builder.withTagValue(StyleApplicationDef.STYLED_ELEMENT_TAG, getElement());
 				if (builder != getExpressoEnv().getModels()) {
 					setExpressoEnv(getExpressoEnv().with(builder.build()));
@@ -218,7 +229,7 @@ public interface QuickStyledElement extends ExElement {
 			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 				super.doUpdate(env);
 
-				if (theStyle == null || theStyle.getId() != getDefinition().getStyle().getId()) {
+				if (theStyle == null) {
 					ExElement.Interpreted<?> parent = getParentElement();
 					while (parent != null && !(parent instanceof QuickStyledElement.Interpreted))
 						parent = parent.getParentElement();
@@ -246,13 +257,10 @@ public interface QuickStyledElement extends ExElement {
 	public abstract class Abstract extends ExElement.Abstract implements QuickStyledElement {
 		private QuickInstanceStyle theStyle;
 		private final List<QuickStyleElement<?>> theStyleElements;
+		private ModelComponentId theParentStyleValue;
 
-		/**
-		 * @param interpreted The interpretation that is creating this element
-		 * @param parent The parent element
-		 */
-		protected Abstract(QuickStyledElement.Interpreted<?> interpreted, ExElement parent) {
-			super(interpreted, parent);
+		protected Abstract(Object id) {
+			super(id);
 			theStyleElements = new ArrayList<>();
 		}
 
@@ -267,35 +275,67 @@ public interface QuickStyledElement extends ExElement {
 		}
 
 		@Override
-		protected void updateModel(ExElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
-			super.updateModel(interpreted, myModels);
+		protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+			super.doUpdate(interpreted);
+
 			QuickStyledElement.Interpreted<?> myInterpreted = (QuickStyledElement.Interpreted<?>) interpreted;
+			theParentStyleValue = myInterpreted.getDefinition().getParentStyleValue();
+
+			ExElement parent = getParentElement();
+			while (parent != null && !(parent instanceof QuickStyledElement.Abstract))
+				parent = parent.getParentElement();
+			if (theStyle == null)
+				theStyle = myInterpreted.getStyle().create(this);
+			theStyle.update(myInterpreted.getStyle(), (QuickStyledElement) parent);
+
+			CollectionUtils
+			.synchronize(theStyleElements, myInterpreted.getStyleElements(),
+				(inst, interp) -> inst.getIdentity() == interp.getIdentity())//
+			.simple(interp -> interp.create()).onRight(el -> el.getLeftValue().update(el.getRightValue(), this))//
+			.onCommon(el -> el.getLeftValue().update(el.getRightValue(), this))//
+			.adjust();
+		}
+
+		@Override
+		public void instantiated() {
+			super.instantiated();
+
+			theStyle.instantiated();
+
+			for (QuickStyleElement<?> styleEl : theStyleElements)
+				styleEl.instantiated();
+		}
+
+		@Override
+		protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+			super.doInstantiate(myModels);
 
 			ExElement parent = getParentElement();
 			while (parent != null && !(parent instanceof QuickStyledElement.Abstract))
 				parent = parent.getParentElement();
 			ModelSetInstance parentModels = parent == null ? null : ((QuickStyledElement.Abstract) parent).getUpdatingModels();
-			getAddOn(ExWithElementModel.class).satisfyElementValue(InterpretedStyleApplication.PARENT_MODEL_NAME,
+			ExFlexibleElementModelAddOn.satisfyElementValue(theParentStyleValue, getUpdatingModels(),
 				SettableValue.of(ModelSetInstance.class, parentModels, "Not settable"),
 				ExFlexibleElementModelAddOn.ActionIfSatisfied.Replace);
-			if (theStyle == null || theStyle.getId() != myInterpreted.getStyle().getId())
-				theStyle = myInterpreted.getStyle().create(this);
-			theStyle.update(myInterpreted.getStyle(), myModels);
 
-			CollectionUtils
-			.synchronize(theStyleElements, myInterpreted.getStyleElements(),
-				(inst, interp) -> inst.getIdentity() == interp.getIdentity())//
-			.<ModelInstantiationException> simpleE(interp -> interp.create(this))
-			.onRightX(el -> el.getLeftValue().update(el.getRightValue(), myModels))//
-			.onCommonX(el -> el.getLeftValue().update(el.getRightValue(), myModels))//
-			.adjust();
+			theStyle.instantiate(myModels);
+
+			for (QuickStyleElement<?> styleEl : theStyleElements)
+				styleEl.instantiate(myModels);
+		}
+
+		@Override
+		public QuickStyledElement.Abstract copy(ExElement parent) {
+			QuickStyledElement.Abstract copy = (QuickStyledElement.Abstract) super.copy(parent);
+
+			copy.theStyle = theStyle.copy(copy);
+
+			return copy;
 		}
 	}
 
 	public interface QuickInstanceStyle {
 		public interface Def extends QuickCompiledStyle {
-			Object getId();
-
 			QuickStyledElement.Def<?> getStyledElement();
 
 			@Override
@@ -306,24 +346,17 @@ public interface QuickStyledElement extends ExElement {
 
 			public static abstract class Abstract extends QuickCompiledStyle.Wrapper implements Def {
 				private final QuickStyledElement.Def<?> theStyledElement;
-				private final Object theId;
 				private final Set<QuickStyleAttributeDef> theApplicableAttributes;
 
 				protected Abstract(Def parent, QuickStyledElement.Def<?> styledElement, QuickCompiledStyle wrapped) {
 					super(parent, wrapped);
 					theStyledElement = styledElement;
-					theId = new Object();
 					theApplicableAttributes = new LinkedHashSet<>();
 				}
 
 				@Override
 				public Def getParent() {
 					return (Def) super.getParent();
-				}
-
-				@Override
-				public Object getId() {
-					return theId;
 				}
 
 				@Override
@@ -352,10 +385,6 @@ public interface QuickStyledElement extends ExElement {
 			Def getDefinition();
 
 			QuickStyledElement.Interpreted<?> getStyledElement();
-
-			default Object getId() {
-				return getDefinition().getId();
-			}
 
 			Map<QuickStyleAttributeDef, QuickStyleAttribute<?>> getApplicableAttributes();
 
@@ -405,44 +434,34 @@ public interface QuickStyledElement extends ExElement {
 			}
 		}
 
-		Object getId();
-
 		Set<QuickStyleAttribute<?>> getApplicableAttributes();
 
 		<T> ObservableValue<T> getApplicableAttribute(QuickStyleAttribute<T> attribute);
 
 		Observable<ObservableValueEvent<?>> changes();
 
-		void update(Interpreted interpreted, ModelSetInstance models) throws ModelInstantiationException;
+		void update(Interpreted interpreted, QuickStyledElement styledElement);
 
-		public QuickInstanceStyle copy(ModelSetInstance models) throws ModelInstantiationException;
+		void instantiated();
+
+		void instantiate(ModelSetInstance models) throws ModelInstantiationException;
+
+		public QuickInstanceStyle copy(QuickStyledElement styledElement);
 
 		public abstract class Abstract implements QuickInstanceStyle, Cloneable {
-			private final QuickStyledElement theStyledElement;
-			private final Object theId;
+			private QuickStyledElement theStyledElement;
 			private Map<QuickStyleAttribute<?>, StyleAttributeData<?>> theApplicableAttributes;
-			private Observable<ObservableValueEvent<?>> theChanges;
+			private SettableValue<Observable<ObservableValueEvent<?>>> theChanges;
+			private Observable<ObservableValueEvent<?>> theFlatChanges;
 
-			protected Abstract(Interpreted interpreted, QuickStyledElement styledElement) {
-				theId = interpreted.getId();
-				theStyledElement = styledElement;
+			protected Abstract() {
 				theApplicableAttributes = new LinkedHashMap<>();
-
-				try {
-					for (QuickStyleAttribute<?> attr : interpreted.getApplicableAttributes().values())
-						checkAttribute(attr, interpreted, null);
-				} catch (ModelInstantiationException e) {
-					throw new IllegalStateException("Should not happen here", e);
-				}
+				theChanges = SettableValue.build((Class<Observable<ObservableValueEvent<?>>>) (Class<?>) Observable.class).build();
+				theFlatChanges = ObservableValue.flattenObservableValue(theChanges);
 			}
 
 			public QuickStyledElement getStyledElement() {
 				return theStyledElement;
-			}
-
-			@Override
-			public Object getId() {
-				return theId;
 			}
 
 			@Override
@@ -461,48 +480,70 @@ public interface QuickStyledElement extends ExElement {
 
 			@Override
 			public Observable<ObservableValueEvent<?>> changes() {
-				return theChanges;
+				return theFlatChanges;
 			}
 
 			@Override
-			public void update(Interpreted interpreted, ModelSetInstance models) throws ModelInstantiationException {
-				theChanges = null;
+			public void update(Interpreted interpreted, QuickStyledElement styledElement) {
+				theStyledElement = styledElement;
+				boolean[] different = new boolean[1];
+				different[0] = theApplicableAttributes.keySet().retainAll(interpreted.getApplicableAttributes().values());
 				for (QuickStyleAttribute<?> attr : interpreted.getApplicableAttributes().values())
-					checkAttribute(attr, interpreted, models);
-				initChanges(models);
+					initAttribute(attr, interpreted, different);
+
+				if (different[0])
+					initChanges();
 			}
 
-			private void initChanges(ModelSetInstance models) {
+			private void initChanges() {
 				Observable<? extends ObservableValueEvent<?>>[] changes = new Observable[theApplicableAttributes.size()];
 				int i = 0;
 				for (StyleAttributeData<?> attr : theApplicableAttributes.values())
 					changes[i++] = attr.flatValue.noInitChanges();
-				theChanges = Observable.or(changes).takeUntil(models.getUntil());
+				theChanges.set(Observable.or(changes), null);
 			}
 
-			private <T> void checkAttribute(QuickStyleAttribute<T> attr, Interpreted interpreted, ModelSetInstance models)
-				throws ModelInstantiationException {
+			private <T> void initAttribute(QuickStyleAttribute<T> attr, Interpreted interpreted, boolean[] different) {
 				QuickStyleAttributeInstantiator<T> instantiator = interpreted.get(attr)
 					.instantiate(interpreted.getStyledElement().getModels());
-				StyleAttributeData<T> data = (StyleAttributeData<T>) theApplicableAttributes.computeIfAbsent(attr,
-					__ -> new StyleAttributeData<>(instantiator));
-				if (models != null)
-					data.update(instantiator, models);
+				theApplicableAttributes.computeIfAbsent(attr, __ -> {
+					different[0] = true;
+					return new StyleAttributeData<>(instantiator);
+				});
 			}
 
 			@Override
-			public Abstract copy(ModelSetInstance models) throws ModelInstantiationException {
-				Abstract copy;
+			public void instantiated() {
+				for (StyleAttributeData<?> attr : theApplicableAttributes.values())
+					attr.theInstantiator.instantiate();
+			}
+
+			@Override
+			public void instantiate(ModelSetInstance models) throws ModelInstantiationException {
+				for (StyleAttributeData<?> attr : theApplicableAttributes.values())
+					attr.update(models);
+			}
+
+			@Override
+			public Abstract copy(QuickStyledElement styledElement) {
+				Abstract copy = clone();
+				copy.theStyledElement = styledElement;
+				copy.theApplicableAttributes = new LinkedHashMap<>();
+				for (Map.Entry<QuickStyleAttribute<?>, StyleAttributeData<?>> attr : theApplicableAttributes.entrySet())
+					copy.theApplicableAttributes.put(attr.getKey(), new StyleAttributeData<>(attr.getValue().theInstantiator));
+				copy.theChanges = SettableValue.build((Class<Observable<ObservableValueEvent<?>>>) (Class<?>) Observable.class).build();
+				copy.theFlatChanges = ObservableValue.flattenObservableValue(copy.theChanges);
+				copy.initChanges();
+				return copy;
+			}
+
+			@Override
+			protected Abstract clone() {
 				try {
-					copy = (Abstract) clone();
+					return (Abstract) super.clone();
 				} catch (CloneNotSupportedException e) {
 					throw new IllegalStateException("Not cloneable?", e);
 				}
-				copy.theApplicableAttributes = new LinkedHashMap<>();
-				for (Map.Entry<QuickStyleAttribute<?>, StyleAttributeData<?>> attr : theApplicableAttributes.entrySet())
-					copy.theApplicableAttributes.put(attr.getKey(), attr.getValue().copy(models));
-				initChanges(models);
-				return copy;
 			}
 
 			@Override
@@ -523,7 +564,7 @@ public interface QuickStyledElement extends ExElement {
 			}
 
 			static class StyleAttributeData<T> {
-				private QuickStyleAttributeInstantiator<T> theInstantiator;
+				QuickStyleAttributeInstantiator<T> theInstantiator;
 				private final SettableValue<ObservableValue<T>> theValueContainer;
 				final ObservableValue<T> flatValue;
 
@@ -542,13 +583,6 @@ public interface QuickStyledElement extends ExElement {
 
 				void update(ModelSetInstance models) throws ModelInstantiationException {
 					theValueContainer.set(theInstantiator.evaluate(models), null);
-				}
-
-				StyleAttributeData<T> copy(ModelSetInstance models) throws ModelInstantiationException {
-					StyleAttributeData<T> copy = new StyleAttributeData<>(theInstantiator);
-					ObservableValue<T> valueCopy = theInstantiator.evaluate(models);
-					copy.theValueContainer.set(valueCopy, null);
-					return copy;
 				}
 			}
 		}

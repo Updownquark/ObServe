@@ -11,6 +11,7 @@ import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.qonfig.CompiledExpression;
 import org.observe.expresso.qonfig.ElementTypeTraceability;
 import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
@@ -137,31 +138,23 @@ public abstract class StyledDocument<T> extends ExElement.Abstract {
 				: getDefinition().getSelectionEndOffset().interpret(ModelTypes.Value.forType(int.class), getExpressoEnv());
 		}
 
-		public abstract StyledDocument<T> create(ExElement parent);
+		public abstract StyledDocument<T> create();
 	}
 
-	private final SettableValue<SettableValue<T>> theSelectionStartValue;
-	private final SettableValue<SettableValue<Integer>> theSelectionStartOffset;
-	private final SettableValue<SettableValue<T>> theSelectionEndValue;
-	private final SettableValue<SettableValue<Integer>> theSelectionEndOffset;
+	private ModelValueInstantiator<SettableValue<T>> theSelectionStartValueInstantiator;
+	private ModelValueInstantiator<SettableValue<Integer>> theSelectionStartOffsetInstantiator;
+	private ModelValueInstantiator<SettableValue<T>> theSelectionEndValueInstantiator;
+	private ModelValueInstantiator<SettableValue<Integer>> theSelectionEndOffsetInstantiator;
+
+	private SettableValue<SettableValue<T>> theSelectionStartValue;
+	private SettableValue<SettableValue<Integer>> theSelectionStartOffset;
+	private SettableValue<SettableValue<T>> theSelectionEndValue;
+	private SettableValue<SettableValue<Integer>> theSelectionEndOffset;
 
 	private ModelInstanceType.SingleTyped<SettableValue<?>, T, SettableValue<T>> theValueType;
 
-	protected StyledDocument(Interpreted<T, ?> interpreted, ExElement parent) {
-		super(interpreted, parent);
-		TypeToken<T> valueType;
-		try {
-			valueType = interpreted.getValueType();
-		} catch (ExpressoInterpretationException e) {
-			throw new IllegalStateException("Not interpreted?", e);
-		}
-		TypeToken<SettableValue<T>> containerType = TypeTokens.get().keyFor(SettableValue.class)
-			.<SettableValue<T>> parameterized(valueType);
-		theSelectionStartValue = SettableValue.build(containerType).build();
-		theSelectionStartOffset = SettableValue
-			.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Integer>> parameterized(int.class)).build();
-		theSelectionEndValue = SettableValue.build(containerType).build();
-		theSelectionEndOffset = SettableValue.build(theSelectionStartOffset.getType()).build();
+	protected StyledDocument(Object id) {
+		super(id);
 	}
 
 	public ModelInstanceType.SingleTyped<SettableValue<?>, T, SettableValue<T>> getValueType() {
@@ -185,27 +178,71 @@ public abstract class StyledDocument<T> extends ExElement.Abstract {
 	}
 
 	@Override
-	protected void updateModel(ExElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
+	protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+		super.doUpdate(interpreted);
 		Interpreted<T, ?> myInterpreted = (Interpreted<T, ?>) interpreted;
-		super.updateModel(interpreted, myModels);
-		theSelectionStartValue.set(
-			myInterpreted.getSelectionStartValue() == null ? null : myInterpreted.getSelectionStartValue().instantiate().get(myModels),
-				null);
-		theSelectionStartOffset.set(
-			myInterpreted.getSelectionStartOffset() == null ? null : myInterpreted.getSelectionStartOffset().instantiate().get(myModels),
-				null);
-		theSelectionEndValue.set(
-			myInterpreted.getSelectionEndValue() == null ? null : myInterpreted.getSelectionEndValue().instantiate().get(myModels), null);
-		theSelectionEndOffset.set(
-			myInterpreted.getSelectionEndOffset() == null ? null : myInterpreted.getSelectionEndOffset().instantiate().get(myModels), null);
 
 		TypeToken<T> valueType;
 		try {
 			valueType = myInterpreted.getValueType();
 		} catch (ExpressoInterpretationException e) {
-			throw new ModelInstantiationException("Not evaluated yet??!!", e.getPosition(), e.getErrorLength(), e);
+			throw new IllegalStateException("Not interpreted?", e);
 		}
-		theValueType = ModelTypes.Value.forType(valueType);
+		if (theSelectionStartValue == null || !theValueType.getType(0).equals(valueType)) {
+			theValueType = ModelTypes.Value.forType(valueType);
+			TypeToken<SettableValue<T>> containerType = TypeTokens.get().keyFor(SettableValue.class)
+				.<SettableValue<T>> parameterized(valueType);
+			theSelectionStartValue = SettableValue.build(containerType).build();
+			theSelectionStartOffset = SettableValue
+				.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Integer>> parameterized(int.class)).build();
+			theSelectionEndValue = SettableValue.build(containerType).build();
+			theSelectionEndOffset = SettableValue.build(theSelectionStartOffset.getType()).build();
+		}
+		theSelectionStartValueInstantiator = myInterpreted.getSelectionStartValue() == null ? null
+			: myInterpreted.getSelectionStartValue().instantiate();
+		theSelectionStartOffsetInstantiator = myInterpreted.getSelectionStartOffset() == null ? null
+			: myInterpreted.getSelectionStartOffset().instantiate();
+		theSelectionEndValueInstantiator = myInterpreted.getSelectionEndValue() == null ? null
+			: myInterpreted.getSelectionEndValue().instantiate();
+		theSelectionEndOffsetInstantiator = myInterpreted.getSelectionEndOffset() == null ? null
+			: myInterpreted.getSelectionEndOffset().instantiate();
+	}
+
+	@Override
+	public void instantiated() {
+		super.instantiated();
+
+		if (theSelectionStartValueInstantiator != null)
+			theSelectionStartValueInstantiator.instantiate();
+		if (theSelectionStartOffsetInstantiator != null)
+			theSelectionStartOffsetInstantiator.instantiate();
+		if (theSelectionEndValueInstantiator != null)
+			theSelectionEndValueInstantiator.instantiate();
+		if (theSelectionEndOffsetInstantiator != null)
+			theSelectionEndOffsetInstantiator.instantiate();
+	}
+
+	@Override
+	protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+		super.doInstantiate(myModels);
+		theSelectionStartValue.set(theSelectionStartValueInstantiator == null ? null : theSelectionStartValueInstantiator.get(myModels),
+			null);
+		theSelectionStartOffset.set(theSelectionStartOffsetInstantiator == null ? null : theSelectionStartOffsetInstantiator.get(myModels),
+			null);
+		theSelectionEndValue.set(theSelectionEndValueInstantiator == null ? null : theSelectionEndValueInstantiator.get(myModels), null);
+		theSelectionEndOffset.set(theSelectionEndOffsetInstantiator == null ? null : theSelectionEndOffsetInstantiator.get(myModels), null);
+	}
+
+	@Override
+	public StyledDocument<T> copy(ExElement parent) {
+		StyledDocument<T> copy = (StyledDocument<T>) super.copy(parent);
+
+		copy.theSelectionStartValue = SettableValue.build(theSelectionStartValue.getType()).build();
+		copy.theSelectionStartOffset = SettableValue.build(theSelectionStartOffset.getType()).build();
+		copy.theSelectionEndValue = SettableValue.build(theSelectionStartValue.getType()).build();
+		copy.theSelectionEndOffset = SettableValue.build(theSelectionStartOffset.getType()).build();
+
+		return copy;
 	}
 
 	public static class TextStyleElement extends QuickStyledElement.Abstract implements QuickTextElement {
@@ -256,13 +293,13 @@ public abstract class StyledDocument<T> extends ExElement.Abstract {
 				return (TextStyle.Interpreted) super.getStyle();
 			}
 
-			public TextStyleElement create(StyledDocument<?> parent) {
-				return new TextStyleElement(this, parent);
+			public TextStyleElement create() {
+				return new TextStyleElement(getIdentity());
 			}
 		}
 
-		public TextStyleElement(Interpreted interpreted, StyledDocument<?> parent) {
-			super(interpreted, parent);
+		public TextStyleElement(Object id) {
+			super(id);
 		}
 
 		@Override
@@ -325,18 +362,12 @@ public abstract class StyledDocument<T> extends ExElement.Abstract {
 
 			@Override
 			public TextStyle create(QuickStyledElement styledElement) {
-				return new TextStyle(this, (TextStyleElement) styledElement);
+				return new TextStyle();
 			}
 		}
 
-		private final QuickStyleAttribute<Color> theBgAttr;
+		private QuickStyleAttribute<Color> theBgAttr;
 		private ObservableValue<Color> theBackground;
-
-		public TextStyle(Interpreted interpreted, TextStyleElement styledElement) {
-			super(interpreted, styledElement);
-			theBgAttr = interpreted.getBackground().getAttribute();
-			theBackground = getApplicableAttribute(theBgAttr);
-		}
 
 		@Override
 		public TextStyleElement getStyledElement() {
@@ -348,8 +379,17 @@ public abstract class StyledDocument<T> extends ExElement.Abstract {
 		}
 
 		@Override
-		public TextStyle copy(ModelSetInstance styleElementModels) throws ModelInstantiationException {
-			TextStyle copy = (TextStyle) super.copy(styleElementModels);
+		public void update(QuickInstanceStyle.Interpreted interpreted, QuickStyledElement styledElement) {
+			super.update(interpreted, styledElement);
+
+			TextStyle.Interpreted myInterpreted = (TextStyle.Interpreted) interpreted;
+			theBgAttr = myInterpreted.getBackground().getAttribute();
+			theBackground = getApplicableAttribute(theBgAttr);
+		}
+
+		@Override
+		public TextStyle copy(QuickStyledElement styledElement) {
+			TextStyle copy = (TextStyle) super.copy(styledElement);
 
 			copy.theBackground = copy.getApplicableAttribute(theBgAttr);
 

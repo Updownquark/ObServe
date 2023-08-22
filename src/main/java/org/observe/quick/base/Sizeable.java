@@ -206,7 +206,7 @@ public abstract class Sizeable extends ExAddOn.Abstract<ExElement> {
 
 			@Override
 			public Sizeable.Vertical create(ExElement element) {
-				return new Sizeable.Vertical(this, element);
+				return new Sizeable.Vertical(element);
 			}
 		}
 
@@ -222,7 +222,7 @@ public abstract class Sizeable extends ExAddOn.Abstract<ExElement> {
 
 			@Override
 			public Sizeable.Horizontal create(ExElement element) {
-				return new Sizeable.Horizontal(this, element);
+				return new Sizeable.Horizontal(element);
 			}
 		}
 
@@ -238,18 +238,23 @@ public abstract class Sizeable extends ExAddOn.Abstract<ExElement> {
 
 			@Override
 			public Sizeable.Generic create(ExElement element) {
-				return new Sizeable.Generic(this, element);
+				return new Sizeable.Generic(element);
 			}
 		}
 	}
 
-	private final SettableValue<SettableValue<QuickSize>> theSize;
-	private final SettableValue<SettableValue<QuickSize>> theMinimum;
-	private final SettableValue<SettableValue<QuickSize>> thePreferred;
-	private final SettableValue<SettableValue<QuickSize>> theMaximum;
+	private ModelValueInstantiator<SettableValue<QuickSize>> theSizeInstantiator;
+	private ModelValueInstantiator<SettableValue<QuickSize>> theMinimumInstantiator;
+	private ModelValueInstantiator<SettableValue<QuickSize>> thePreferredInstantiator;
+	private ModelValueInstantiator<SettableValue<QuickSize>> theMaximumInstantiator;
 
-	protected Sizeable(Interpreted interpreted, ExElement element) {
-		super(interpreted, element);
+	private SettableValue<SettableValue<QuickSize>> theSize;
+	private SettableValue<SettableValue<QuickSize>> theMinimum;
+	private SettableValue<SettableValue<QuickSize>> thePreferred;
+	private SettableValue<SettableValue<QuickSize>> theMaximum;
+
+	protected Sizeable(ExElement element) {
+		super(element);
 		theSize = SettableValue
 			.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<QuickSize>> parameterized(QuickSize.class)).build();
 		theMinimum = SettableValue.build(theSize.getType()).build();
@@ -274,12 +279,34 @@ public abstract class Sizeable extends ExAddOn.Abstract<ExElement> {
 	}
 
 	@Override
-	public void update(ExAddOn.Interpreted<?, ?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
+	public void update(ExAddOn.Interpreted<?, ?> interpreted) {
+		super.update(interpreted);
 		Sizeable.Interpreted<?> myInterpreted = (Sizeable.Interpreted<?>) interpreted;
-		theSize.set(myInterpreted.getSize() == null ? null : myInterpreted.getSize().instantiate().get(models), null);
-		theMinimum.set(myInterpreted.getMinimum() == null ? null : myInterpreted.getMinimum().instantiate().get(models), null);
-		thePreferred.set(myInterpreted.getPreferred() == null ? null : myInterpreted.getPreferred().instantiate().get(models), null);
-		theMaximum.set(myInterpreted.getMaximum() == null ? null : myInterpreted.getMaximum().instantiate().get(models), null);
+		theSizeInstantiator = myInterpreted.getSize() == null ? null : myInterpreted.getSize().instantiate();
+		theMinimumInstantiator = myInterpreted.getMinimum() == null ? null : myInterpreted.getMinimum().instantiate();
+		thePreferredInstantiator = myInterpreted.getPreferred() == null ? null : myInterpreted.getPreferred().instantiate();
+		theMaximumInstantiator = myInterpreted.getMaximum() == null ? null : myInterpreted.getMaximum().instantiate();
+	}
+
+	@Override
+	public void instantiate(ModelSetInstance models) throws ModelInstantiationException {
+		super.instantiate(models);
+		theSize.set(theSizeInstantiator == null ? null : theSizeInstantiator.get(models), null);
+		theMinimum.set(theMinimumInstantiator == null ? null : theMinimumInstantiator.get(models), null);
+		thePreferred.set(thePreferredInstantiator == null ? null : thePreferredInstantiator.get(models), null);
+		theMaximum.set(theMaximumInstantiator == null ? null : theMaximumInstantiator.get(models), null);
+	}
+
+	@Override
+	protected Sizeable clone() {
+		Sizeable copy = (Sizeable) super.clone();
+
+		copy.theSize = SettableValue.build(theSize.getType()).build();
+		copy.theMinimum = SettableValue.build(theSize.getType()).build();
+		copy.thePreferred = SettableValue.build(theSize.getType()).build();
+		copy.theMaximum = SettableValue.build(theSize.getType()).build();
+
+		return copy;
 	}
 
 	public Observable<ObservableValueEvent<QuickSize>> changes() {
@@ -393,20 +420,35 @@ public abstract class Sizeable extends ExAddOn.Abstract<ExElement> {
 	}
 
 	public static class Vertical extends Sizeable {
-		public Vertical(Interpreted.Vertical interpreted, ExElement element) {
-			super(interpreted, element);
+		public Vertical(ExElement element) {
+			super(element);
+		}
+
+		@Override
+		public Class<Interpreted.Vertical> getInterpretationType() {
+			return Interpreted.Vertical.class;
 		}
 	}
 
 	public static class Horizontal extends Sizeable {
-		public Horizontal(Interpreted.Horizontal interpreted, ExElement element) {
-			super(interpreted, element);
+		public Horizontal(ExElement element) {
+			super(element);
+		}
+
+		@Override
+		public Class<Interpreted.Horizontal> getInterpretationType() {
+			return Interpreted.Horizontal.class;
 		}
 	}
 
 	public static class Generic extends Sizeable {
-		public Generic(Interpreted.Generic interpreted, ExElement element) {
-			super(interpreted, element);
+		public Generic(ExElement element) {
+			super(element);
+		}
+
+		@Override
+		public Class<Interpreted.Generic> getInterpretationType() {
+			return Interpreted.Generic.class;
 		}
 	}
 }

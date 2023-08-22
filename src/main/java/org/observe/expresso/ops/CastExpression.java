@@ -160,6 +160,11 @@ public class CastExpression implements ObservableExpression {
 		}
 
 		@Override
+		public void instantiate() {
+			theValue.instantiate();
+		}
+
+		@Override
 		public SettableValue<T> get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
 			SettableValue<S> value = theValue.get(models);
 			return transform(value);
@@ -195,6 +200,11 @@ public class CastExpression implements ObservableExpression {
 			theType = type;
 			theCastClass = TypeTokens.getRawType(theType);
 			theReporting = reporting;
+		}
+
+		@Override
+		public void instantiate() {
+			theValue.instantiate();
 		}
 
 		@Override

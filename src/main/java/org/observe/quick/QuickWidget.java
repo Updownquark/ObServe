@@ -13,11 +13,14 @@ import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
+import org.observe.expresso.ObservableModelSet.ModelComponentId;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.qonfig.CompiledExpression;
 import org.observe.expresso.qonfig.ElementTypeTraceability;
 import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.observe.expresso.qonfig.ExElement;
+import org.observe.expresso.qonfig.ExFlexibleElementModelAddOn;
 import org.observe.expresso.qonfig.ExWithElementModel;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
@@ -26,6 +29,7 @@ import org.observe.quick.style.QuickCompiledStyle;
 import org.observe.quick.style.QuickInterpretedStyle;
 import org.observe.quick.style.QuickInterpretedStyleCache;
 import org.observe.quick.style.QuickInterpretedStyleCache.Applications;
+import org.observe.quick.style.QuickStyleAttribute;
 import org.observe.quick.style.QuickStyleAttributeDef;
 import org.observe.quick.style.QuickStyledElement;
 import org.observe.quick.style.QuickTypeStyle;
@@ -56,10 +60,6 @@ public interface QuickWidget extends QuickTextElement {
 		/** @return The container definition that this widget is a child of */
 		QuickContainer.Def<?, ?> getParent();
 
-		/** @return This widget's border */
-		@QonfigChildGetter("border")
-		QuickBorder.Def<?> getBorder();
-
 		/** @return This widget's name, typically for debugging */
 		@QonfigAttributeGetter("name")
 		String getName();
@@ -71,6 +71,18 @@ public interface QuickWidget extends QuickTextElement {
 		/** @return The expression determining when this widget is to be visible */
 		@QonfigAttributeGetter("visible")
 		CompiledExpression isVisible();
+
+		ModelComponentId getHoveredValue();
+
+		ModelComponentId getFocusedValue();
+
+		ModelComponentId getPressedValue();
+
+		ModelComponentId getRightPressedValue();
+
+		/** @return This widget's border */
+		@QonfigChildGetter("border")
+		QuickBorder.Def<?> getBorder();
 
 		@QonfigChildGetter("event-listener")
 		List<QuickEventListener.Def<?>> getEventListeners();
@@ -87,10 +99,16 @@ public interface QuickWidget extends QuickTextElement {
 		 * @param <W> The type of widget that this definition is for
 		 */
 		public abstract class Abstract<W extends QuickWidget> extends QuickStyledElement.Def.Abstract<W> implements Def<W> {
-			private QuickBorder.Def<?> theBorder;
 			private String theName;
 			private CompiledExpression theTooltip;
 			private CompiledExpression isVisible;
+
+			private ModelComponentId theHoveredValue;
+			private ModelComponentId theFocusedValue;
+			private ModelComponentId thePressedValue;
+			private ModelComponentId theRightPressedValue;
+
+			private QuickBorder.Def<?> theBorder;
 			private final List<QuickEventListener.Def<?>> theEventListeners;
 
 			/**
@@ -114,11 +132,6 @@ public interface QuickWidget extends QuickTextElement {
 			}
 
 			@Override
-			public QuickBorder.Def<?> getBorder() {
-				return theBorder;
-			}
-
-			@Override
 			public String getName() {
 				return theName;
 			}
@@ -134,6 +147,31 @@ public interface QuickWidget extends QuickTextElement {
 			}
 
 			@Override
+			public ModelComponentId getHoveredValue() {
+				return theHoveredValue;
+			}
+
+			@Override
+			public ModelComponentId getFocusedValue() {
+				return theFocusedValue;
+			}
+
+			@Override
+			public ModelComponentId getPressedValue() {
+				return thePressedValue;
+			}
+
+			@Override
+			public ModelComponentId getRightPressedValue() {
+				return theRightPressedValue;
+			}
+
+			@Override
+			public QuickBorder.Def<?> getBorder() {
+				return theBorder;
+			}
+
+			@Override
 			public List<QuickEventListener.Def<?>> getEventListeners() {
 				return Collections.unmodifiableList(theEventListeners);
 			}
@@ -142,10 +180,16 @@ public interface QuickWidget extends QuickTextElement {
 			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 				withTraceability(WIDGET_TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 				super.doUpdate(session.asElement("styled"));
-				theBorder = ExElement.useOrReplace(QuickBorder.Def.class, theBorder, session, "border");
 				theName = session.getAttributeText("name");
 				theTooltip = session.getAttributeExpression("tooltip");
 				isVisible = session.getAttributeExpression("visible");
+				ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
+				theHoveredValue = elModels.getElementValueModelId("hovered");
+				theFocusedValue = elModels.getElementValueModelId("focused");
+				thePressedValue = elModels.getElementValueModelId("pressed");
+				theRightPressedValue = elModels.getElementValueModelId("rightPressed");
+
+				theBorder = ExElement.useOrReplace(QuickBorder.Def.class, theBorder, session, "border");
 				CollectionUtils.synchronize(theEventListeners, session.forChildren("event-listener"),
 					(l, s) -> ExElement.typesEqual(l.getElement(), s.getElement())).simpleE(s -> {
 						QuickEventListener.Def<?> listener = s.interpret(QuickEventListener.Def.class);
@@ -198,10 +242,9 @@ public interface QuickWidget extends QuickTextElement {
 		/**
 		 * Produces a widget instance
 		 *
-		 * @param parent The parent container, if any
 		 * @return The new widget
 		 */
-		W create(ExElement parent);
+		W create();
 
 		/**
 		 * An abstract {@link Interpreted} implementation
@@ -379,25 +422,32 @@ public interface QuickWidget extends QuickTextElement {
 
 	void setContext(WidgetContext ctx) throws ModelInstantiationException;
 
+	@Override
+	QuickWidget copy(ExElement parent);
+
 	/** An abstract {@link QuickWidget} implementation */
 	public abstract class Abstract extends QuickStyledElement.Abstract implements QuickWidget {
-		private final SettableValue<String> theName;
-		private final SettableValue<SettableValue<Boolean>> isHovered;
-		private final SettableValue<SettableValue<Boolean>> isFocused;
-		private final SettableValue<SettableValue<Boolean>> isPressed;
-		private final SettableValue<SettableValue<Boolean>> isRightPressed;
+		private SettableValue<String> theName;
+		private SettableValue<SettableValue<Boolean>> isHovered;
+		private SettableValue<SettableValue<Boolean>> isFocused;
+		private SettableValue<SettableValue<Boolean>> isPressed;
+		private SettableValue<SettableValue<Boolean>> isRightPressed;
+
+		private ModelValueInstantiator<SettableValue<String>> theTooltipInstantiator;
+		private ModelValueInstantiator<SettableValue<Boolean>> theVisibleInstantiator;
+		private ModelComponentId theHoveredValue;
+		private ModelComponentId theFocusedValue;
+		private ModelComponentId thePressedValue;
+		private ModelComponentId theRightPressedValue;
+
+		private SettableValue<SettableValue<String>> theTooltip;
+		private SettableValue<SettableValue<Boolean>> isVisible;
 
 		private QuickBorder theBorder;
-		private final SettableValue<SettableValue<String>> theTooltip;
-		private final SettableValue<SettableValue<Boolean>> isVisible;
-		private final ObservableCollection<QuickEventListener> theEventListeners;
+		private ObservableCollection<QuickEventListener> theEventListeners;
 
-		/**
-		 * @param interpreted The interpretation instantiating this widget
-		 * @param parent The parent element
-		 */
-		protected Abstract(QuickWidget.Interpreted<?> interpreted, ExElement parent) {
-			super(interpreted, parent);
+		protected Abstract(Object id) {
+			super(id);
 			theName = SettableValue.build(String.class).build();
 			theTooltip = SettableValue
 				.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<String>> parameterized(String.class)).build();
@@ -477,32 +527,94 @@ public interface QuickWidget extends QuickTextElement {
 		}
 
 		@Override
-		protected void updateModel(ExElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
-			super.updateModel(interpreted, myModels);
-			ExWithElementModel extModels = getAddOn(ExWithElementModel.class);
-			extModels.satisfyElementValue("hovered", SettableValue.flatten(isHovered));
-			extModels.satisfyElementValue("focused", SettableValue.flatten(isFocused));
-			extModels.satisfyElementValue("pressed", SettableValue.flatten(isPressed));
-			extModels.satisfyElementValue("rightPressed", SettableValue.flatten(isRightPressed));
+		protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+			super.doUpdate(interpreted);
+
 			QuickWidget.Interpreted<?> myInterpreted = (QuickWidget.Interpreted<?>) interpreted;
+
+			theHoveredValue = myInterpreted.getDefinition().getHoveredValue();
+			theFocusedValue = myInterpreted.getDefinition().getFocusedValue();
+			thePressedValue = myInterpreted.getDefinition().getPressedValue();
+			theRightPressedValue = myInterpreted.getDefinition().getRightPressedValue();
+
 			theName.set(myInterpreted.getName(), null);
-			theBorder = myInterpreted.getBorder() == null ? null : myInterpreted.getBorder().create(this);
+			theTooltipInstantiator = myInterpreted.getTooltip() == null ? null : myInterpreted.getTooltip().instantiate();
+			theVisibleInstantiator = myInterpreted.isVisible() == null ? null : myInterpreted.isVisible().instantiate();
+
+			theBorder = myInterpreted.getBorder() == null ? null : myInterpreted.getBorder().create();
 			if (theBorder != null)
-				theBorder.update(myInterpreted.getBorder(), myModels);
-			theTooltip.set(myInterpreted.getTooltip() == null ? null : myInterpreted.getTooltip().instantiate().get(myModels), null);
-			if (myInterpreted.isVisible() != null)
-				isVisible.set(myInterpreted.isVisible().instantiate().get(myModels), null);
+				theBorder.update(myInterpreted.getBorder(), this);
+
 			try (Transaction t = theEventListeners.lock(true, null)) {
 				CollectionUtils
 				.synchronize(theEventListeners, myInterpreted.getEventListeners(), (l, i) -> l.getIdentity() == i.getIdentity())//
-				.<ModelInstantiationException> simpleE(l -> {
-					QuickEventListener listener = l.create(this);
-					listener.update(l, myModels);
+				.simple(l -> {
+					QuickEventListener listener = l.create();
+					listener.update(l, this);
 					return listener;
 				})//
-				.onCommonX(el -> el.getLeftValue().update(el.getRightValue(), myModels))//
+				.onCommon(el -> el.getLeftValue().update(el.getRightValue(), this))//
 				.adjust();
 			}
+		}
+
+		@Override
+		public void instantiated() {
+			super.instantiated();
+
+			if (theTooltipInstantiator != null)
+				theTooltipInstantiator.instantiate();
+			if (theVisibleInstantiator != null)
+				theVisibleInstantiator.instantiate();
+
+			if (theBorder != null)
+				theBorder.instantiated();
+			for (QuickEventListener listener : theEventListeners)
+				listener.instantiated();
+		}
+
+		@Override
+		protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+			super.doInstantiate(myModels);
+
+			ExFlexibleElementModelAddOn.satisfyElementValue(theHoveredValue, myModels, SettableValue.flatten(isHovered));
+			ExFlexibleElementModelAddOn.satisfyElementValue(theFocusedValue, myModels, SettableValue.flatten(isFocused));
+			ExFlexibleElementModelAddOn.satisfyElementValue(thePressedValue, myModels, SettableValue.flatten(isPressed));
+			ExFlexibleElementModelAddOn.satisfyElementValue(theRightPressedValue, myModels, SettableValue.flatten(isRightPressed));
+
+			theTooltip.set(theTooltipInstantiator == null ? null : theTooltipInstantiator.get(myModels), null);
+			isVisible.set(theVisibleInstantiator == null ? null : theVisibleInstantiator.get(myModels), null);
+
+			if (theBorder != null)
+				theBorder.instantiate(myModels);
+
+			for (QuickEventListener listener : theEventListeners)
+				listener.instantiate(myModels);
+		}
+
+		@Override
+		public QuickWidget.Abstract copy(ExElement parent) {
+			QuickWidget.Abstract copy = (QuickWidget.Abstract) super.copy(parent);
+
+			copy.theName = SettableValue.build(String.class).build();
+			copy.theTooltip = SettableValue
+				.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<String>> parameterized(String.class)).build();
+			copy.isVisible = SettableValue
+				.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Boolean>> parameterized(boolean.class)).build();
+			copy.theEventListeners = ObservableCollection.build(QuickEventListener.class).build();
+
+			copy.isHovered = SettableValue
+				.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Boolean>> parameterized(boolean.class)).build();
+			copy.isFocused = SettableValue.build(isHovered.getType()).build();
+			copy.isPressed = SettableValue.build(isHovered.getType()).build();
+			copy.isRightPressed = SettableValue.build(isHovered.getType()).build();
+
+			if (theBorder != null)
+				copy.theBorder = theBorder.copy(copy);
+			for (QuickEventListener listener : theEventListeners)
+				copy.theEventListeners.add(listener.copy(copy));
+
+			return copy;
 		}
 	}
 
@@ -585,7 +697,7 @@ public interface QuickWidget extends QuickTextElement {
 
 				@Override
 				public QuickWidgetStyle create(QuickStyledElement styledElement) {
-					return new QuickWidgetStyle.Default(this, (QuickWidget) styledElement);
+					return new QuickWidgetStyle.Default();
 				}
 			}
 		}
@@ -595,14 +707,10 @@ public interface QuickWidget extends QuickTextElement {
 		ObservableValue<MouseCursor> getMouseCursor();
 
 		public class Default extends QuickTextStyle.Abstract implements QuickWidgetStyle {
-			private final ObservableValue<Color> theColor;
-			private final ObservableValue<MouseCursor> theMouseCursor;
-
-			public Default(QuickWidgetStyle.Interpreted interpreted, QuickWidget widget) {
-				super(interpreted, widget);
-				theColor = getApplicableAttribute(interpreted.getColor().getAttribute());
-				theMouseCursor = getApplicableAttribute(interpreted.getMouseCursor().getAttribute());
-			}
+			private QuickStyleAttribute<Color> theColorAttr;
+			private QuickStyleAttribute<MouseCursor> theMouseCursorAttr;
+			private ObservableValue<Color> theColor;
+			private ObservableValue<MouseCursor> theMouseCursor;
 
 			@Override
 			public ObservableValue<Color> getColor() {
@@ -612,6 +720,29 @@ public interface QuickWidget extends QuickTextElement {
 			@Override
 			public ObservableValue<MouseCursor> getMouseCursor() {
 				return theMouseCursor;
+			}
+
+			@Override
+			public void update(QuickInstanceStyle.Interpreted interpreted, QuickStyledElement styledElement) {
+				super.update(interpreted, styledElement);
+
+				QuickWidgetStyle.Interpreted myInterpreted = (QuickWidgetStyle.Interpreted) interpreted;
+
+				theColorAttr = myInterpreted.getColor().getAttribute();
+				theMouseCursorAttr = myInterpreted.getMouseCursor().getAttribute();
+
+				theColor = getApplicableAttribute(theColorAttr);
+				theMouseCursor = getApplicableAttribute(theMouseCursorAttr);
+			}
+
+			@Override
+			public Default copy(QuickStyledElement styledElement) {
+				Default copy = (Default) super.copy(styledElement);
+
+				copy.theColor = copy.getApplicableAttribute(theColorAttr);
+				copy.theMouseCursor = copy.getApplicableAttribute(theMouseCursorAttr);
+
+				return copy;
 			}
 		}
 	}

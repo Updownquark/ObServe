@@ -80,14 +80,19 @@ public class ExWithLocalModel extends ExModelAugmentation<ExElement> {
 
 		@Override
 		public ExWithLocalModel create(ExElement element) {
-			return new ExWithLocalModel(this, element);
+			return new ExWithLocalModel(element);
 		}
 	}
 
 	private ObservableModelElement.DefaultModelElement theLocalModelElement;
 
-	public ExWithLocalModel(Interpreted interpreted, ExElement element) {
-		super(interpreted, element);
+	public ExWithLocalModel(ExElement element) {
+		super(element);
+	}
+
+	@Override
+	public Class<Interpreted> getInterpretationType() {
+		return (Class<Interpreted>) (Class<?>) Interpreted.class;
 	}
 
 	public ObservableModelElement.DefaultModelElement getLocalModelElement() {
@@ -95,8 +100,9 @@ public class ExWithLocalModel extends ExModelAugmentation<ExElement> {
 	}
 
 	@Override
-	public void update(ExAddOn.Interpreted<?, ?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
-		super.update(interpreted, models);
+	public void update(ExAddOn.Interpreted<?, ?> interpreted) {
+		super.update(interpreted);
+
 		Interpreted myInterpreted = (Interpreted) interpreted;
 		if (myInterpreted.getLocalModelElement() == null)
 			theLocalModelElement = null;
@@ -104,6 +110,20 @@ public class ExWithLocalModel extends ExModelAugmentation<ExElement> {
 			|| theLocalModelElement.getIdentity() != myInterpreted.getLocalModelElement().getDefinition().getIdentity())
 			theLocalModelElement = myInterpreted.getLocalModelElement().create(getElement());
 		if (theLocalModelElement != null)
-			theLocalModelElement.update(myInterpreted.getLocalModelElement(), models);
+			theLocalModelElement.update(myInterpreted.getLocalModelElement(), getElement());
+	}
+
+	@Override
+	public void instantiated() {
+		super.instantiated();
+		if (theLocalModelElement != null)
+			theLocalModelElement.instantiated();
+	}
+
+	@Override
+	public void instantiate(ModelSetInstance models) throws ModelInstantiationException {
+		super.instantiate(models);
+		if (theLocalModelElement != null)
+			theLocalModelElement.instantiate(models);
 	}
 }

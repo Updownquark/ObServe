@@ -2,8 +2,6 @@ package org.observe.expresso.qonfig;
 
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.InterpretedExpressoEnv;
-import org.observe.expresso.ModelInstantiationException;
-import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.VariableType;
 import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.qommons.config.QonfigAddOn;
@@ -13,12 +11,12 @@ import org.qommons.io.LocatedPositionedContent;
 
 import com.google.common.reflect.TypeToken;
 
-public class ExTyped extends ExAddOn.Abstract<ExElement> {
+public class ExTyped<T> extends ExAddOn.Abstract<ExElement> {
 	private static final SingleTypeTraceability<ExElement, ExElement.Interpreted<?>, ExElement.Def<?>> TRACEABILITY = ElementTypeTraceability
 		.getAddOnTraceability(ExpressoSessionImplV0_1.TOOLKIT_NAME, ExpressoSessionImplV0_1.VERSION, "typed", Def.class, Interpreted.class,
 			ExTyped.class);
 
-	public static class Def extends ExAddOn.Def.Abstract<ExElement, ExTyped> {
+	public static class Def extends ExAddOn.Def.Abstract<ExElement, ExTyped<?>> {
 		private VariableType theValueType;
 
 		public Def(QonfigAddOn type, ExElement.Def<? extends ExElement> element) {
@@ -43,13 +41,13 @@ public class ExTyped extends ExAddOn.Abstract<ExElement> {
 		}
 
 		@Override
-		public Interpreted interpret(ExElement.Interpreted<? extends ExElement> element) {
-			return new Interpreted(this, element);
+		public Interpreted<?> interpret(ExElement.Interpreted<? extends ExElement> element) {
+			return new Interpreted<>(this, element);
 		}
 	}
 
-	public static class Interpreted extends ExAddOn.Interpreted.Abstract<ExElement, ExTyped> {
-		private TypeToken<?> theValueType;
+	public static class Interpreted<T> extends ExAddOn.Interpreted.Abstract<ExElement, ExTyped<T>> {
+		private TypeToken<T> theValueType;
 
 		public Interpreted(Def definition, ExElement.Interpreted<? extends ExElement> element) {
 			super(definition, element);
@@ -60,7 +58,7 @@ public class ExTyped extends ExAddOn.Abstract<ExElement> {
 			return (Def) super.getDefinition();
 		}
 
-		public TypeToken<?> getValueType() {
+		public TypeToken<T> getValueType() {
 			return theValueType;
 		}
 
@@ -71,29 +69,34 @@ public class ExTyped extends ExAddOn.Abstract<ExElement> {
 			if (getDefinition().getValueType() == null)
 				theValueType = null;
 			else
-				theValueType = getDefinition().getValueType().getType(env);
+				theValueType = (TypeToken<T>) getDefinition().getValueType().getType(env);
 		}
 
 		@Override
-		public ExTyped create(ExElement element) {
-			return new ExTyped(this, element);
+		public ExTyped<T> create(ExElement element) {
+			return new ExTyped<>(element);
 		}
 	}
 
-	private TypeToken<?> theValueType;
+	private TypeToken<T> theValueType;
 
-	public ExTyped(Interpreted interpreted, ExElement element) {
-		super(interpreted, element);
+	public ExTyped(ExElement element) {
+		super(element);
 	}
 
-	public TypeToken<?> getValueType() {
+	@Override
+	public Class<Interpreted<?>> getInterpretationType() {
+		return (Class<Interpreted<?>>) (Class<?>) Interpreted.class;
+	}
+
+	public TypeToken<T> getValueType() {
 		return theValueType;
 	}
 
 	@Override
-	public void update(ExAddOn.Interpreted<?, ?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
-		super.update(interpreted, models);
-		Interpreted myInterpreted = (Interpreted) interpreted;
+	public void update(ExAddOn.Interpreted<?, ?> interpreted) {
+		super.update(interpreted);
+		Interpreted<T> myInterpreted = (Interpreted<T>) interpreted;
 		theValueType = myInterpreted.getValueType();
 	}
 }

@@ -39,12 +39,17 @@ public class QuickSimpleLayout extends QuickLayout.Abstract {
 
 		@Override
 		public QuickSimpleLayout create(QuickBox element) {
-			return new QuickSimpleLayout(this, element);
+			return new QuickSimpleLayout(element);
 		}
 	}
 
-	public QuickSimpleLayout(Interpreted interpreted, QuickBox element) {
-		super(interpreted, element);
+	public QuickSimpleLayout(QuickBox element) {
+		super(element);
+	}
+
+	@Override
+	public Class<Interpreted> getInterpretationType() {
+		return Interpreted.class;
 	}
 
 	public static class Child extends ExAddOn.Abstract<QuickWidget> {
@@ -66,12 +71,17 @@ public class QuickSimpleLayout extends QuickLayout.Abstract {
 
 			@Override
 			public Child create(QuickWidget element) {
-				return new Child(this, element);
+				return new Child(element);
 			}
 		}
 
-		public Child(Interpreted interpreted, QuickWidget element) {
-			super(interpreted, element);
+		public Child(QuickWidget element) {
+			super(element);
+		}
+
+		@Override
+		public Class<Interpreted> getInterpretationType() {
+			return Interpreted.class;
 		}
 	}
 }

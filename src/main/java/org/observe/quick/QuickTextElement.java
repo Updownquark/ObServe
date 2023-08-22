@@ -5,8 +5,6 @@ import java.awt.Color;
 import org.observe.ObservableValue;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.InterpretedExpressoEnv;
-import org.observe.expresso.ModelInstantiationException;
-import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.quick.style.QuickCompiledStyle;
 import org.observe.quick.style.QuickInterpretedStyle;
@@ -233,43 +231,22 @@ public interface QuickTextElement extends QuickStyledElement {
 		ObservableValue<Boolean> isSubScript();
 
 		public abstract class Abstract extends QuickInstanceStyle.Abstract implements QuickTextStyle {
-			private final QuickStyleAttribute<Color> theFontColorAttr;
+			private QuickStyleAttribute<Color> theFontColorAttr;
 			private ObservableValue<Color> theFontColor;
-			private final QuickStyleAttribute<Double> theFontSizeAttr;
+			private QuickStyleAttribute<Double> theFontSizeAttr;
 			private ObservableValue<Double> theFontSize;
-			private final QuickStyleAttribute<Double> theFontWeightAttr;
+			private QuickStyleAttribute<Double> theFontWeightAttr;
 			private ObservableValue<Double> theFontWeight;
-			private final QuickStyleAttribute<Double> theFontSlantAttr;
+			private QuickStyleAttribute<Double> theFontSlantAttr;
 			private ObservableValue<Double> theFontSlant;
-			private final QuickStyleAttribute<Boolean> theUnderlineAttr;
+			private QuickStyleAttribute<Boolean> theUnderlineAttr;
 			private ObservableValue<Boolean> isUnderline;
-			private final QuickStyleAttribute<Boolean> theStrikeThroughAttr;
+			private QuickStyleAttribute<Boolean> theStrikeThroughAttr;
 			private ObservableValue<Boolean> isStrikeThrough;
-			private final QuickStyleAttribute<Boolean> theSuperScriptAttr;
+			private QuickStyleAttribute<Boolean> theSuperScriptAttr;
 			private ObservableValue<Boolean> isSuperScript;
-			private final QuickStyleAttribute<Boolean> theSubScriptAttr;
+			private QuickStyleAttribute<Boolean> theSubScriptAttr;
 			private ObservableValue<Boolean> isSubScript;
-
-			protected Abstract(QuickTextStyle.Interpreted interpreted, QuickTextElement styledElement) {
-				super(interpreted, styledElement);
-				theFontColorAttr = interpreted.getFontColor().getAttribute();
-				theFontSizeAttr = interpreted.getFontSize().getAttribute();
-				theFontWeightAttr = interpreted.getFontWeight().getAttribute();
-				theFontSlantAttr = interpreted.getFontSlant().getAttribute();
-				theUnderlineAttr = interpreted.isUnderline().getAttribute();
-				theStrikeThroughAttr = interpreted.isStrikeThrough().getAttribute();
-				theSuperScriptAttr = interpreted.isSuperScript().getAttribute();
-				theSubScriptAttr = interpreted.isSubScript().getAttribute();
-
-				theFontColor = getApplicableAttribute(theFontColorAttr);
-				theFontSize = getApplicableAttribute(theFontSizeAttr);
-				theFontWeight = getApplicableAttribute(theFontWeightAttr);
-				theFontSlant = getApplicableAttribute(theFontSlantAttr);
-				isUnderline = getApplicableAttribute(theUnderlineAttr);
-				isStrikeThrough = getApplicableAttribute(theStrikeThroughAttr);
-				isSuperScript = getApplicableAttribute(theSuperScriptAttr);
-				isSubScript = getApplicableAttribute(theSubScriptAttr);
-			}
 
 			@Override
 			public ObservableValue<Color> getFontColor() {
@@ -312,8 +289,32 @@ public interface QuickTextElement extends QuickStyledElement {
 			}
 
 			@Override
-			public QuickTextStyle.Abstract copy(ModelSetInstance models) throws ModelInstantiationException {
-				QuickTextStyle.Abstract copy = (QuickTextStyle.Abstract) super.copy(models);
+			public void update(QuickInstanceStyle.Interpreted interpreted, QuickStyledElement styledElement) {
+				super.update(interpreted, styledElement);
+
+				QuickTextStyle.Interpreted myInterpreted = (QuickTextStyle.Interpreted) interpreted;
+				theFontColorAttr = myInterpreted.getFontColor().getAttribute();
+				theFontSizeAttr = myInterpreted.getFontSize().getAttribute();
+				theFontWeightAttr = myInterpreted.getFontWeight().getAttribute();
+				theFontSlantAttr = myInterpreted.getFontSlant().getAttribute();
+				theUnderlineAttr = myInterpreted.isUnderline().getAttribute();
+				theStrikeThroughAttr = myInterpreted.isStrikeThrough().getAttribute();
+				theSuperScriptAttr = myInterpreted.isSuperScript().getAttribute();
+				theSubScriptAttr = myInterpreted.isSubScript().getAttribute();
+
+				theFontColor = getApplicableAttribute(theFontColorAttr);
+				theFontSize = getApplicableAttribute(theFontSizeAttr);
+				theFontWeight = getApplicableAttribute(theFontWeightAttr);
+				theFontSlant = getApplicableAttribute(theFontSlantAttr);
+				isUnderline = getApplicableAttribute(theUnderlineAttr);
+				isStrikeThrough = getApplicableAttribute(theStrikeThroughAttr);
+				isSuperScript = getApplicableAttribute(theSuperScriptAttr);
+				isSubScript = getApplicableAttribute(theSubScriptAttr);
+			}
+
+			@Override
+			public QuickTextStyle.Abstract copy(QuickStyledElement styledElement) {
+				QuickTextStyle.Abstract copy = (QuickTextStyle.Abstract) super.copy(styledElement);
 
 				copy.theFontColor = copy.getApplicableAttribute(theFontColorAttr);
 				copy.theFontSize = copy.getApplicableAttribute(theFontSizeAttr);

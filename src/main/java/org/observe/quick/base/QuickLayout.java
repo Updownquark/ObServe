@@ -26,8 +26,8 @@ public interface QuickLayout extends ExAddOn<QuickBox> {
 	}
 
 	public abstract class Abstract extends ExAddOn.Abstract<QuickBox> implements QuickLayout {
-		protected Abstract(QuickLayout.Interpreted<?> interpreted, QuickBox element) {
-			super(interpreted, element);
+		protected Abstract(QuickBox element) {
+			super(element);
 		}
 	}
 }

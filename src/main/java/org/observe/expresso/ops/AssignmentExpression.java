@@ -183,6 +183,12 @@ public class AssignmentExpression implements ObservableExpression {
 		}
 
 		@Override
+		public void instantiate() {
+			theTarget.instantiate();
+			theSource.instantiate();
+		}
+
+		@Override
 		public ObservableAction<T> get(ModelSetInstance models) throws ModelInstantiationException {
 			SettableValue<S> ctxValue = theTarget.get(models);
 			SettableValue<T> valueValue = theSource.get(models);

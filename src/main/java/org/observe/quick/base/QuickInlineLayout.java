@@ -1,7 +1,5 @@
 package org.observe.quick.base;
 
-import org.observe.expresso.ModelInstantiationException;
-import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.qonfig.ElementTypeTraceability;
 import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.observe.expresso.qonfig.ExAddOn;
@@ -93,7 +91,7 @@ public class QuickInlineLayout extends QuickLayout.Abstract {
 
 		@Override
 		public QuickInlineLayout create(QuickBox element) {
-			return new QuickInlineLayout(this, element);
+			return new QuickInlineLayout(element);
 		}
 	}
 
@@ -102,8 +100,8 @@ public class QuickInlineLayout extends QuickLayout.Abstract {
 	private JustifiedBoxLayout.Alignment theCrossAlign;
 	private int thePadding;
 
-	public QuickInlineLayout(Interpreted interpreted, QuickBox element) {
-		super(interpreted, element);
+	public QuickInlineLayout(QuickBox element) {
+		super(element);
 	}
 
 	public boolean isVertical() {
@@ -123,8 +121,13 @@ public class QuickInlineLayout extends QuickLayout.Abstract {
 	}
 
 	@Override
-	public void update(ExAddOn.Interpreted<?, ?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
-		super.update(interpreted, models);
+	public Class<Interpreted> getInterpretationType() {
+		return Interpreted.class;
+	}
+
+	@Override
+	public void update(ExAddOn.Interpreted<?, ?> interpreted) {
+		super.update(interpreted);
 		QuickInlineLayout.Interpreted myInterpreted = (QuickInlineLayout.Interpreted) interpreted;
 		isVertical = myInterpreted.getDefinition().isVertical();
 		theMainAlign = myInterpreted.getDefinition().getMainAlign();

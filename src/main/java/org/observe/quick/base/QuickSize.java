@@ -10,6 +10,7 @@ import com.google.common.reflect.TypeToken;
 
 /** Represents the linear size of one dimension of a widget */
 public class QuickSize {
+	/** A size of zero */
 	public static final QuickSize ZERO = new QuickSize(0.0f, 0);
 
 	/** The size relative to the container size */

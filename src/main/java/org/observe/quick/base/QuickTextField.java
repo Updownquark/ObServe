@@ -7,6 +7,7 @@ import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.qonfig.CompiledExpression;
 import org.observe.expresso.qonfig.ElementTypeTraceability;
 import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
@@ -52,7 +53,8 @@ public class QuickTextField<T> extends QuickEditableTextWidget.Abstract<T> {
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 			super.doUpdate(session.asElement(session.getFocusType().getSuperElement()));
-			theColumns = session.getAttribute("columns", Integer.class);
+			String columnsStr = session.getAttributeText("columns");
+			theColumns = columnsStr == null ? null : Integer.parseInt(columnsStr);
 			theEmptyText = session.getAttributeExpression("empty-text");
 		}
 
@@ -91,16 +93,17 @@ public class QuickTextField<T> extends QuickEditableTextWidget.Abstract<T> {
 		}
 
 		@Override
-		public QuickTextField<T> create(ExElement parent) {
-			return new QuickTextField<>(this, parent);
+		public QuickTextField<T> create() {
+			return new QuickTextField<>(getIdentity());
 		}
 	}
 
+	private ModelValueInstantiator<SettableValue<String>> theEmptyTextInstantiator;
 	private Integer theColumns;
-	private final SettableValue<SettableValue<String>> theEmptyText;
+	private SettableValue<SettableValue<String>> theEmptyText;
 
-	public QuickTextField(Interpreted<T> interpreted, ExElement parent) {
-		super(interpreted, parent);
+	public QuickTextField(Object id) {
+		super(id);
 		theEmptyText = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<String>> parameterized(String.class))
 			.build();
 	}
@@ -114,10 +117,32 @@ public class QuickTextField<T> extends QuickEditableTextWidget.Abstract<T> {
 	}
 
 	@Override
-	protected void updateModel(ExElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
-		super.updateModel(interpreted, myModels);
+	protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+		super.doUpdate(interpreted);
 		QuickTextField.Interpreted<T> myInterpreted = (QuickTextField.Interpreted<T>) interpreted;
 		theColumns = myInterpreted.getDefinition().getColumns();
-		theEmptyText.set(myInterpreted.getEmptyText() == null ? null : myInterpreted.getEmptyText().instantiate().get(myModels), null);
+		theEmptyTextInstantiator = myInterpreted.getEmptyText() == null ? null : myInterpreted.getEmptyText().instantiate();
+	}
+
+	@Override
+	public void instantiated() {
+		super.instantiated();
+		if (theEmptyTextInstantiator != null)
+			theEmptyTextInstantiator.instantiate();
+	}
+
+	@Override
+	protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+		super.doInstantiate(myModels);
+		theEmptyText.set(theEmptyTextInstantiator == null ? null : theEmptyTextInstantiator.get(myModels), null);
+	}
+
+	@Override
+	public QuickTextField<T> copy(ExElement parent) {
+		QuickTextField<T> copy = (QuickTextField<T>) super.copy(parent);
+
+		copy.theEmptyText = SettableValue.build(theEmptyText.getType()).build();
+
+		return copy;
 	}
 }

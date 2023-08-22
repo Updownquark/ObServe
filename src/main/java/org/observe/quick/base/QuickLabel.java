@@ -9,6 +9,7 @@ import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.qonfig.CompiledExpression;
 import org.observe.expresso.qonfig.ElementTypeTraceability;
 import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
@@ -122,15 +123,16 @@ public class QuickLabel<T> extends QuickTextWidget.Abstract<T> {
 		}
 
 		@Override
-		public W create(ExElement parent) {
-			return (W) new QuickLabel<>(this, parent);
+		public W create() {
+			return (W) new QuickLabel<>(getIdentity());
 		}
 	}
 
+	private ModelValueInstantiator<SettableValue<Icon>> theIconInstantiator;
 	private SettableValue<Icon> theIcon;
 
-	public QuickLabel(Interpreted<T, ?> interpreted, ExElement parent) {
-		super(interpreted, parent);
+	public QuickLabel(Object id) {
+		super(id);
 	}
 
 	public SettableValue<Icon> getIcon() {
@@ -138,9 +140,22 @@ public class QuickLabel<T> extends QuickTextWidget.Abstract<T> {
 	}
 
 	@Override
-	protected void updateModel(ExElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
-		super.updateModel(interpreted, myModels);
+	protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+		super.doUpdate(interpreted);
 		QuickLabel.Interpreted<T, ?> myInterpreted = (QuickLabel.Interpreted<T, ?>) interpreted;
-		theIcon = myInterpreted.getIcon() == null ? null : myInterpreted.getIcon().instantiate().get(myModels);
+		theIconInstantiator = myInterpreted.getIcon() == null ? null : myInterpreted.getIcon().instantiate();
+	}
+
+	@Override
+	public void instantiated() {
+		super.instantiated();
+		if (theIconInstantiator != null)
+			theIconInstantiator.instantiate();
+	}
+
+	@Override
+	protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+		super.doInstantiate(myModels);
+		theIcon = theIconInstantiator == null ? null : theIconInstantiator.get(myModels);
 	}
 }

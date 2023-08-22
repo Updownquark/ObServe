@@ -10,6 +10,7 @@ import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.qonfig.CompiledExpression;
 import org.observe.expresso.qonfig.ElementTypeTraceability;
 import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
@@ -159,7 +160,7 @@ public abstract class Positionable extends ExAddOn.Abstract<ExElement> {
 
 			@Override
 			public Positionable.Vertical create(ExElement element) {
-				return new Positionable.Vertical(this, element);
+				return new Positionable.Vertical(element);
 			}
 		}
 
@@ -175,17 +176,21 @@ public abstract class Positionable extends ExAddOn.Abstract<ExElement> {
 
 			@Override
 			public Positionable.Horizontal create(ExElement element) {
-				return new Positionable.Horizontal(this, element);
+				return new Positionable.Horizontal(element);
 			}
 		}
 	}
 
-	private final SettableValue<SettableValue<QuickSize>> theLeading;
-	private final SettableValue<SettableValue<QuickSize>> theCenter;
-	private final SettableValue<SettableValue<QuickSize>> theTrailing;
+	private ModelValueInstantiator<SettableValue<QuickSize>> theLeadingInstantiator;
+	private ModelValueInstantiator<SettableValue<QuickSize>> theCenterInstantiator;
+	private ModelValueInstantiator<SettableValue<QuickSize>> theTrailingInstantiator;
 
-	protected Positionable(Interpreted<?> interpreted, ExElement element) {
-		super(interpreted, element);
+	private SettableValue<SettableValue<QuickSize>> theLeading;
+	private SettableValue<SettableValue<QuickSize>> theCenter;
+	private SettableValue<SettableValue<QuickSize>> theTrailing;
+
+	protected Positionable(ExElement element) {
+		super(element);
 		theLeading = SettableValue
 			.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<QuickSize>> parameterized(QuickSize.class)).build();
 		theCenter = SettableValue.build(theLeading.getType()).build();
@@ -205,12 +210,31 @@ public abstract class Positionable extends ExAddOn.Abstract<ExElement> {
 	}
 
 	@Override
-	public void update(ExAddOn.Interpreted<?, ?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
-		super.update(interpreted, models);
+	public void update(ExAddOn.Interpreted<?, ?> interpreted) {
+		super.update(interpreted);
 		Positionable.Interpreted<?> myInterpreted = (Positionable.Interpreted<?>) interpreted;
-		theLeading.set(myInterpreted.getLeading() == null ? null : myInterpreted.getLeading().instantiate().get(models), null);
-		theCenter.set(myInterpreted.getCenter() == null ? null : myInterpreted.getCenter().instantiate().get(models), null);
-		theTrailing.set(myInterpreted.getTrailing() == null ? null : myInterpreted.getTrailing().instantiate().get(models), null);
+		theLeadingInstantiator = myInterpreted.getLeading() == null ? null : myInterpreted.getLeading().instantiate();
+		theCenterInstantiator = myInterpreted.getCenter() == null ? null : myInterpreted.getCenter().instantiate();
+		theTrailingInstantiator = myInterpreted.getTrailing() == null ? null : myInterpreted.getTrailing().instantiate();
+	}
+
+	@Override
+	public void instantiate(ModelSetInstance models) throws ModelInstantiationException {
+		super.instantiate(models);
+		theLeading.set(theLeadingInstantiator == null ? null : theLeadingInstantiator.get(models), null);
+		theCenter.set(theCenterInstantiator == null ? null : theCenterInstantiator.get(models), null);
+		theTrailing.set(theTrailingInstantiator == null ? null : theTrailingInstantiator.get(models), null);
+	}
+
+	@Override
+	protected Positionable clone() {
+		Positionable copy = (Positionable) super.clone();
+
+		copy.theLeading = SettableValue.build(theLeading.getType()).build();
+		copy.theCenter = SettableValue.build(theLeading.getType()).build();
+		copy.theTrailing = SettableValue.build(theLeading.getType()).build();
+
+		return copy;
 	}
 
 	public Observable<ObservableValueEvent<QuickSize>> changes() {
@@ -218,14 +242,24 @@ public abstract class Positionable extends ExAddOn.Abstract<ExElement> {
 	}
 
 	public static class Vertical extends Positionable {
-		public Vertical(Interpreted.Vertical interpreted, ExElement element) {
-			super(interpreted, element);
+		public Vertical(ExElement element) {
+			super(element);
+		}
+
+		@Override
+		public Class<Interpreted.Vertical> getInterpretationType() {
+			return Interpreted.Vertical.class;
 		}
 	}
 
 	public static class Horizontal extends Positionable {
-		public Horizontal(Interpreted.Horizontal interpreted, ExElement element) {
-			super(interpreted, element);
+		public Horizontal(ExElement element) {
+			super(element);
+		}
+
+		@Override
+		public Class<Interpreted.Horizontal> getInterpretationType() {
+			return Interpreted.Horizontal.class;
 		}
 	}
 }

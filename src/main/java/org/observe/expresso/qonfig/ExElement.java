@@ -21,6 +21,7 @@ import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
+import org.observe.expresso.ObservableModelSet.ModelInstantiator;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.qommons.ClassMap;
@@ -125,8 +126,8 @@ public interface ExElement extends Identifiable {
 				}
 			}
 			if (children != null)
-				Collections.sort(children, (c1, c2) -> Integer.compare(c1.reporting().getPosition().getPosition(),
-					c2.reporting().getPosition().getPosition()));
+				Collections.sort(children,
+					(c1, c2) -> Integer.compare(c1.reporting().getPosition().getPosition(), c2.reporting().getPosition().getPosition()));
 			return children == null ? Collections.emptyList() : children;
 		}
 
@@ -166,8 +167,8 @@ public interface ExElement extends Identifiable {
 				}
 			}
 			if (children != null)
-				Collections.sort(children, (c1, c2) -> Integer.compare(c1.reporting().getPosition().getPosition(),
-					c2.reporting().getPosition().getPosition()));
+				Collections.sort(children,
+					(c1, c2) -> Integer.compare(c1.reporting().getPosition().getPosition(), c2.reporting().getPosition().getPosition()));
 			return children == null ? Collections.emptyList() : children;
 		}
 
@@ -203,8 +204,8 @@ public interface ExElement extends Identifiable {
 				}
 			}
 			if (children != null)
-				Collections.sort(children, (c1, c2) -> Integer.compare(c1.reporting().getPosition().getPosition(),
-					c2.reporting().getPosition().getPosition()));
+				Collections.sort(children,
+					(c1, c2) -> Integer.compare(c1.reporting().getPosition().getPosition(), c2.reporting().getPosition().getPosition()));
 			return children == null ? Collections.emptyList() : children;
 		}
 
@@ -836,6 +837,9 @@ public interface ExElement extends Identifiable {
 		return ao == null ? null : fn.apply(ao);
 	}
 
+	/** @return The instantiator for this element's models */
+	ModelInstantiator getModels();
+
 	/**
 	 * <p>
 	 * Retrieves the model instance by which this element is populated with expression values.
@@ -859,46 +863,45 @@ public interface ExElement extends Identifiable {
 	ErrorReporting reporting();
 
 	/**
-	 * Updates this element. Must be called at least once after being produced by its interpretation.
+	 * Instantiates model value instantiators in this element this element. Must be called at least once after being produced by its
+	 * interpretation.
 	 *
 	 * @param interpreted The interpretation producing this element
 	 * @param models The model instance for this element
+	 */
+	void update(Interpreted<?> interpreted, ExElement parent);
+
+	void instantiated();
+
+	/**
+	 * Instantiates all model values in this element this element. Must be called at least once after being produced by its interpretation.
+	 *
+	 * @param interpreted The interpretation producing this element
+	 * @param models The model instance for this element
+	 * @return The models applicable to this element
 	 * @throws ModelInstantiationException If an error occurs instantiating any model values needed by this element or its content
 	 */
-	ModelSetInstance update(Interpreted<?> interpreted, ModelSetInstance models) throws ModelInstantiationException;
+	ModelSetInstance instantiate(ModelSetInstance models) throws ModelInstantiationException;
+
+	ExElement copy(ExElement parent);
 
 	/** Abstract {@link ExElement} implementation */
-	public abstract class Abstract implements ExElement {
+	public abstract class Abstract implements ExElement, Cloneable {
 		private final Object theId;
-		private final ExElement theParent;
-		private final ClassMap<AddOnInstance<?, ?>> theAddOns;
-		private final List<ExAddOn<?>> theAddOnInstances;
-		private final ErrorReporting theReporting;
+		private ExElement theParent;
+		private ModelInstantiator theLocalModel;
+		private boolean isModelPersistent;
+		private ClassMap<ExAddOn<?>> theAddOns;
+		private ErrorReporting theReporting;
 		private String theTypeName;
 		private ModelSetInstance theUpdatingModels;
 
-		/**
-		 * @param interpreted The interpretation producing this element
-		 * @param parent The parent element
-		 */
-		protected Abstract(Interpreted<?> interpreted, ExElement parent) {
-			theId = interpreted.getIdentity();
-			theParent = parent;
-			if (interpreted instanceof Interpreted.Abstract)
-				((Interpreted.Abstract<ExElement>) interpreted).instantiated(this);
+		/** @param id The identification for this element */
+		protected Abstract(Object id) {
+			if (id == null)
+				throw new NullPointerException();
+			theId = id;
 			theAddOns = new ClassMap<>();
-			ArrayList<ExAddOn<?>> addOns = new ArrayList<>();
-			for (ExAddOn.Interpreted<?, ?> addOn : interpreted.getAddOns()) {
-				ExAddOn<?> inst = ((ExAddOn.Interpreted<ExElement, ?>) addOn).create(this);
-				if (inst != null) {// It is acceptable for add-ons to not produce instances
-					addOns.add(inst);
-					theAddOns.put(inst.getClass(), new AddOnInstance<>(
-						(Class<ExAddOn.Interpreted<ExElement, ExAddOn<ExElement>>>) addOn.getClass(), (ExAddOn<ExElement>) inst));
-				}
-			}
-			addOns.trimToSize();
-			theAddOnInstances = Collections.unmodifiableList(addOns);
-			theReporting = interpreted.reporting();
 		}
 
 		@Override
@@ -918,13 +921,17 @@ public interface ExElement extends Identifiable {
 
 		@Override
 		public <AO extends ExAddOn<?>> AO getAddOn(Class<AO> addOn) {
-			AddOnInstance<?, ?> inst = theAddOns.get(addOn, ClassMap.TypeMatch.SUB_TYPE);
-			return inst == null ? null : (AO) inst.addOn;
+			return (AO) theAddOns.get(addOn, ClassMap.TypeMatch.SUB_TYPE);
 		}
 
 		@Override
 		public Collection<ExAddOn<?>> getAddOns() {
-			return theAddOnInstances;
+			return theAddOns.getAllValues();
+		}
+
+		@Override
+		public ModelInstantiator getModels() {
+			return theLocalModel;
 		}
 
 		@Override
@@ -938,22 +945,73 @@ public interface ExElement extends Identifiable {
 		}
 
 		@Override
-		public final ModelSetInstance update(Interpreted<?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
+		public final void update(Interpreted<?> interpreted, ExElement parent) {
+			if (theId != interpreted.getIdentity())
+				throw new IllegalArgumentException("Wrong interpretation: " + interpreted + " for " + this);
+			if (interpreted instanceof Interpreted.Abstract)
+				((Interpreted.Abstract<ExElement>) interpreted).instantiated(this);
+			theReporting = interpreted.reporting();
+			theParent = parent;
 			theTypeName = interpreted.getDefinition().getElement().getType().getName();
+
+			// Create add-ons
+			CollectionUtils
+			.synchronize(new ArrayList<>(theAddOns.getAllValues()), new ArrayList<>(interpreted.getAddOns()),
+				(inst, interp) -> inst.getInterpretationType() == interp.getClass())//
+			.simple(interp -> ((ExAddOn.Interpreted<ExElement, ?>) interp).create(this))//
+			.onLeft(el -> theAddOns.compute(el.getLeftValue().getClass(), __ -> null))//
+			.onRight(el -> theAddOns.put(el.getLeftValue().getClass(), el.getLeftValue()))//
+			.adjust();
+
+			if (interpreted.getParentElement() == null || interpreted.getExpressoEnv().getModels().getIdentity() != interpreted
+				.getParentElement().getExpressoEnv().getModels().getIdentity())
+				theLocalModel = interpreted.getExpressoEnv().getModels().instantiate();
+			else
+				theLocalModel = null;
+			isModelPersistent = interpreted.isModelInstancePersistent();
+			try {
+				for (ExAddOn<?> addOn : theAddOns.getAllValues())
+					addOn.preUpdate(
+						interpreted.getAddOn((Class<? extends ExAddOn.Interpreted<ExElement, ?>>) addOn.getInterpretationType()));
+
+				doUpdate(interpreted);
+
+				for (ExAddOn<?> addOn : theAddOns.getAllValues())
+					addOn.postUpdate(
+						interpreted.getAddOn((Class<? extends ExAddOn.Interpreted<ExElement, ?>>) addOn.getInterpretationType()));
+			} catch (RuntimeException | Error e) {
+				reporting().error(e.getMessage(), e);
+			}
+		}
+
+		protected void doUpdate(Interpreted<?> interpreted) {
+			for (ExAddOn<?> addOn : theAddOns.getAllValues())
+				addOn.update(interpreted.getAddOn((Class<? extends ExAddOn.Interpreted<ExElement, ?>>) addOn.getInterpretationType()));
+		}
+
+		@Override
+		public void instantiated() {
+			if (theLocalModel != null)
+				theLocalModel.instantiate();
+			for (ExAddOn<?> addOn : theAddOns.getAllValues())
+				addOn.instantiated();
+		}
+
+		@Override
+		public final ModelSetInstance instantiate(ModelSetInstance models) throws ModelInstantiationException {
 			ModelSetInstance myModels = null;
 			try {
-				for (AddOnInstance<?, ?> addOn : theAddOns.getAllValues())
-					addOn.preUpdate(interpreted.getAddOn((Class<? extends ExAddOn.Interpreted<ExElement, ?>>) addOn.interpretationClass));
+				for (ExAddOn<?> addOn : theAddOns.getAllValues())
+					addOn.preInstantiate();
 
-				myModels = createElementModel(interpreted, models);
+				myModels = createElementModel(models);
 				try {
-					updateModel(interpreted, myModels);
+					doInstantiate(myModels);
 
-					for (AddOnInstance<?, ?> addOn : theAddOns.getAllValues())
-						addOn.postUpdate(
-							interpreted.getAddOn((Class<? extends ExAddOn.Interpreted<ExElement, ?>>) addOn.interpretationClass), myModels);
+					for (ExAddOn<?> addOn : theAddOns.getAllValues())
+						addOn.postInstantiate(myModels);
 				} finally {
-					if (!interpreted.isModelInstancePersistent())
+					if (!isModelPersistent)
 						theUpdatingModels = null;
 				}
 			} catch (RuntimeException | Error e) {
@@ -962,44 +1020,44 @@ public interface ExElement extends Identifiable {
 			return myModels;
 		}
 
-		protected ModelSetInstance createElementModel(Interpreted<?> interpreted, ModelSetInstance parentModels)
-			throws ModelInstantiationException {
-			theUpdatingModels = interpreted.getExpressoEnv().getModels().instantiate().wrap(parentModels);
+		protected ModelSetInstance createElementModel(ModelSetInstance parentModels) throws ModelInstantiationException {
+			if (theLocalModel != null)
+				theUpdatingModels = theLocalModel.wrap(parentModels);
+			else
+				theUpdatingModels = parentModels;
 			return theUpdatingModels;
 		}
 
-		protected void updateModel(Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
+		protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
 			theUpdatingModels = myModels;
-			for (AddOnInstance<?, ?> addOn : theAddOns.getAllValues())
-				addOn.update(interpreted.getAddOn((Class<? extends ExAddOn.Interpreted<ExElement, ?>>) addOn.interpretationClass),
-					myModels);
+			for (ExAddOn<?> addOn : theAddOns.getAllValues())
+				addOn.instantiate(myModels);
+		}
+
+		@Override
+		public Abstract copy(ExElement parent) {
+			Abstract copy = clone();
+			copy.theParent = parent;
+			copy.theAddOns.clear();
+			for (ExAddOn<?> addOn : theAddOns.getAllValues()) {
+				ExAddOn<?> addOnCopy = ((ExAddOn<ExElement>) addOn).copy(parent);
+				copy.theAddOns.put(addOnCopy.getClass(), addOnCopy);
+			}
+			return copy;
+		}
+
+		@Override
+		protected Abstract clone() {
+			try {
+				return (Abstract) super.clone();
+			} catch (CloneNotSupportedException e) {
+				throw new IllegalStateException("Not cloneable?", e);
+			}
 		}
 
 		@Override
 		public String toString() {
 			return theId.toString();
-		}
-
-		private static class AddOnInstance<E extends ExElement, AO extends ExAddOn<E>> {
-			final Class<? extends ExAddOn.Interpreted<E, AO>> interpretationClass;
-			final AO addOn;
-
-			AddOnInstance(Class<? extends ExAddOn.Interpreted<E, AO>> interpretationClass, AO addOn) {
-				this.interpretationClass = interpretationClass;
-				this.addOn = addOn;
-			}
-
-			void preUpdate(ExAddOn.Interpreted<?, ?> interpreted) {
-				addOn.preUpdate(interpreted);
-			}
-
-			void update(ExAddOn.Interpreted<?, ?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
-				addOn.update(interpreted, models);
-			}
-
-			void postUpdate(ExAddOn.Interpreted<?, ?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
-				addOn.postUpdate(interpreted, models);
-			}
 		}
 	}
 
@@ -1056,7 +1114,7 @@ public interface ExElement extends Identifiable {
 	 */
 	public static class Void extends ExElement.Abstract {
 		private Void() {
-			super(null, null);
+			super(null);
 			throw new IllegalStateException("Impossible");
 		}
 	}

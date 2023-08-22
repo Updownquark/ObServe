@@ -11,6 +11,7 @@ import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.qonfig.CompiledExpression;
 import org.observe.expresso.qonfig.ElementTypeTraceability;
 import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
@@ -192,19 +193,13 @@ public interface QuickTextWidget<T> extends QuickValueWidget<T> {
 	}
 
 	public abstract class Abstract<T> extends QuickValueWidget.Abstract<T> implements QuickTextWidget<T> {
-		private final SettableValue<SettableValue<Format<T>>> theFormat;
-		private final SettableValue<SettableValue<Boolean>> isEditable;
+		private ModelValueInstantiator<SettableValue<Format<T>>> theFormatInstantiator;
+		private ModelValueInstantiator<SettableValue<Boolean>> theEditableInstantiator;
+		private SettableValue<SettableValue<Format<T>>> theFormat;
+		private SettableValue<SettableValue<Boolean>> isEditable;
 
-		protected Abstract(QuickTextWidget.Interpreted<T, ?> interpreted, ExElement parent) {
-			super(interpreted, parent);
-			TypeToken<Format<T>> formatType;
-			try {
-				formatType = TypeTokens.get().keyFor(Format.class).<Format<T>> parameterized(interpreted.getValueType());
-			} catch (ExpressoInterpretationException e) {
-				throw new IllegalStateException("Value type not evaluated?", e);
-			}
-			theFormat = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Format<T>>> parameterized(//
-				formatType)).build();
+		protected Abstract(Object id) {
+			super(id);
 			isEditable = SettableValue
 				.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Boolean>> parameterized(boolean.class)).build();
 		}
@@ -220,11 +215,49 @@ public interface QuickTextWidget<T> extends QuickValueWidget<T> {
 		}
 
 		@Override
-		protected void updateModel(ExElement.Interpreted<?> interpreted, ModelSetInstance myModels) throws ModelInstantiationException {
-			super.updateModel(interpreted, myModels);
+		protected void doUpdate(ExElement.Interpreted<?> interpreted) {
+			super.doUpdate(interpreted);
 			QuickTextWidget.Interpreted<T, ?> myInterpreted = (QuickTextWidget.Interpreted<T, ?>) interpreted;
-			theFormat.set(myInterpreted.getFormat() == null ? null : myInterpreted.getFormat().instantiate().get(myModels), null);
-			isEditable.set(myInterpreted.isEditable() == null ? null : myInterpreted.isEditable().instantiate().get(myModels), null);
+			if (theFormat == null) {
+				TypeToken<Format<T>> formatType;
+				try {
+					formatType = TypeTokens.get().keyFor(Format.class).<Format<T>> parameterized(myInterpreted.getValueType());
+				} catch (ExpressoInterpretationException e) {
+					throw new IllegalStateException("Value type not evaluated?", e);
+				}
+				theFormat = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Format<T>>> parameterized(//
+					formatType)).build();
+			}
+
+			theFormatInstantiator = myInterpreted.getFormat() == null ? null : myInterpreted.getFormat().instantiate();
+			theEditableInstantiator = myInterpreted.isEditable() == null ? null : myInterpreted.isEditable().instantiate();
+		}
+
+		@Override
+		public void instantiated() {
+			super.instantiated();
+			if (theFormatInstantiator != null)
+				theFormatInstantiator.instantiate();
+			if (theEditableInstantiator != null)
+				theEditableInstantiator.instantiate();
+		}
+
+		@Override
+		protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
+			super.doInstantiate(myModels);
+
+			theFormat.set(theFormatInstantiator == null ? null : theFormatInstantiator.get(myModels), null);
+			isEditable.set(theEditableInstantiator == null ? null : theEditableInstantiator.get(myModels), null);
+		}
+
+		@Override
+		public QuickTextWidget.Abstract<T> copy(ExElement parent) {
+			QuickTextWidget.Abstract<T> copy = (QuickTextWidget.Abstract<T>) super.copy(parent);
+
+			copy.theFormat = SettableValue.build(theFormat.getType()).build();
+			copy.isEditable = SettableValue.build(isEditable.getType()).build();
+
+			return copy;
 		}
 	}
 }

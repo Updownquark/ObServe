@@ -7,6 +7,7 @@ import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
+import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.qonfig.CompiledExpression;
 import org.observe.expresso.qonfig.ElementTypeTraceability;
 import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
@@ -200,10 +201,16 @@ public class QuickWindow extends ExAddOn.Abstract<ExElement> {
 
 		@Override
 		public QuickWindow create(ExElement element) {
-			return new QuickWindow(this, element);
+			return new QuickWindow(element);
 		}
 	}
 
+	private ModelValueInstantiator<SettableValue<Integer>> theXInstantiator;
+	private ModelValueInstantiator<SettableValue<Integer>> theYInstantiator;
+	private ModelValueInstantiator<SettableValue<Integer>> theWidthInstantiator;
+	private ModelValueInstantiator<SettableValue<Integer>> theHeightInstantiator;
+	private ModelValueInstantiator<SettableValue<String>> theTitleInstantiator;
+	private ModelValueInstantiator<SettableValue<Boolean>> theVisibleInstantiator;
 	private CloseAction theCloseAction;
 	private SettableValue<Integer> theX;
 	private SettableValue<Integer> theY;
@@ -212,12 +219,14 @@ public class QuickWindow extends ExAddOn.Abstract<ExElement> {
 	private SettableValue<String> theTitle;
 	private SettableValue<Boolean> theVisible;
 
-	/**
-	 * @param interpreted The interpretation producing this window
-	 * @param element The element that this add-on is added onto
-	 */
-	public QuickWindow(Interpreted interpreted, ExElement element) {
-		super(interpreted, element);
+	/** @param element The element that this add-on is added onto */
+	public QuickWindow(ExElement element) {
+		super(element);
+	}
+
+	@Override
+	public Class<Interpreted> getInterpretationType() {
+		return Interpreted.class;
 	}
 
 	public CloseAction getCloseAction() {
@@ -255,15 +264,27 @@ public class QuickWindow extends ExAddOn.Abstract<ExElement> {
 	}
 
 	@Override
-	public void update(ExAddOn.Interpreted<?, ?> interpreted, ModelSetInstance models) throws ModelInstantiationException {
-		super.update(interpreted, models);
+	public void update(ExAddOn.Interpreted<?, ?> interpreted) {
+		super.update(interpreted);
 		QuickWindow.Interpreted myInterpreted = (QuickWindow.Interpreted) interpreted;
 		theCloseAction = myInterpreted.getDefinition().getCloseAction();
-		theX = myInterpreted.getX() == null ? null : myInterpreted.getX().instantiate().get(models);
-		theY = myInterpreted.getY() == null ? null : myInterpreted.getY().instantiate().get(models);
-		theWidth = myInterpreted.getWidth() == null ? null : myInterpreted.getWidth().instantiate().get(models);
-		theHeight = myInterpreted.getHeight() == null ? null : myInterpreted.getHeight().instantiate().get(models);
-		theTitle = myInterpreted.getTitle() == null ? null : myInterpreted.getTitle().instantiate().get(models);
-		theVisible = myInterpreted.isVisible() == null ? null : myInterpreted.isVisible().instantiate().get(models);
+		theXInstantiator = myInterpreted.getX() == null ? null : myInterpreted.getX().instantiate();
+		theYInstantiator = myInterpreted.getY() == null ? null : myInterpreted.getY().instantiate();
+		theWidthInstantiator = myInterpreted.getWidth() == null ? null : myInterpreted.getWidth().instantiate();
+		theHeightInstantiator = myInterpreted.getHeight() == null ? null : myInterpreted.getHeight().instantiate();
+		theTitleInstantiator = myInterpreted.getTitle() == null ? null : myInterpreted.getTitle().instantiate();
+		theVisibleInstantiator = myInterpreted.isVisible() == null ? null : myInterpreted.isVisible().instantiate();
+	}
+
+	@Override
+	public void instantiate(ModelSetInstance models) throws ModelInstantiationException {
+		super.instantiate(models);
+
+		theX = theXInstantiator == null ? null : theXInstantiator.get(models);
+		theY = theYInstantiator == null ? null : theYInstantiator.get(models);
+		theWidth = theWidthInstantiator == null ? null : theWidthInstantiator.get(models);
+		theHeight = theHeightInstantiator == null ? null : theHeightInstantiator.get(models);
+		theTitle = theTitleInstantiator == null ? null : theTitleInstantiator.get(models);
+		theVisible = theVisibleInstantiator == null ? null : theVisibleInstantiator.get(models);
 	}
 }
