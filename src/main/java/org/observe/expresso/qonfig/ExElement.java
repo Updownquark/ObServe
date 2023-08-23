@@ -898,7 +898,7 @@ public interface ExElement extends Identifiable {
 		private ClassMap<ExAddOn<?>> theAddOns;
 		private ErrorReporting theReporting;
 		private String theTypeName;
-		private final SettableValue<Boolean> isDestroyed;
+		private SettableValue<Boolean> isDestroyed;
 		private ModelSetInstance theUpdatingModels;
 
 		/** @param id The identification for this element */
@@ -1048,7 +1048,8 @@ public interface ExElement extends Identifiable {
 		public Abstract copy(ExElement parent) {
 			Abstract copy = clone();
 			copy.theParent = parent;
-			copy.theAddOns.clear();
+			copy.theAddOns = new ClassMap<>();
+			copy.isDestroyed = SettableValue.build(boolean.class).withValue(false).build();
 			for (ExAddOn<?> addOn : theAddOns.getAllValues()) {
 				ExAddOn<?> addOnCopy = ((ExAddOn<ExElement>) addOn).copy(parent);
 				copy.theAddOns.put(addOnCopy.getClass(), addOnCopy);

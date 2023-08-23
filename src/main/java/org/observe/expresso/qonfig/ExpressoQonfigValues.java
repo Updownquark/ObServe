@@ -1,6 +1,7 @@
 package org.observe.expresso.qonfig;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
@@ -2479,6 +2480,46 @@ public class ExpressoQonfigValues {
 							theFinally.act(cause2);
 					}
 				}
+			}
+		}
+	}
+
+	public static class Event extends ModelValueElement.Def.SingleTyped<Observable<?>, ModelValueElement<Observable<?>, ?>>
+	implements ModelValueElement.CompiledSynth<Observable<?>, ModelValueElement<Observable<?>, ?>> {
+		public Event(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
+			super(parent, qonfigType, ModelTypes.Event);
+		}
+
+		@Override
+		protected void doPrepare(ExpressoQIS session) throws QonfigInterpretationException { // Nothing to do
+		}
+
+		@Override
+		public Interpreted<?> interpret() {
+			return new Interpreted<>(this);
+		}
+
+		public static class Interpreted<T> extends
+		ModelValueElement.Def.SingleTyped.Interpreted<Observable<?>, Observable<T>, ModelValueElement<Observable<?>, Observable<T>>>
+		implements ModelValueElement.InterpretedSynth<Observable<?>, Observable<T>, ModelValueElement<Observable<?>, Observable<T>>> {
+			Interpreted(Event definition) {
+				super(definition, null);
+			}
+
+			@Override
+			public Interpreted<T> setParentElement(ExElement.Interpreted<?> parent) {
+				super.setParentElement(parent);
+				return this;
+			}
+
+			@Override
+			public List<? extends InterpretedValueSynth<?, ?>> getComponents() {
+				return Arrays.asList(getElementValue());
+			}
+
+			@Override
+			public ModelValueInstantiator<Observable<T>> instantiate() {
+				return getElementValue().instantiate();
 			}
 		}
 	}

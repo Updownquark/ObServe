@@ -170,7 +170,6 @@
 			</element-model>
 			<attribute name="tab-name" type="expression" specify="optional" />
 			<attribute name="tab-icon" type="expression" specify="optional" />
-			<attribute name="select-on" type="expression" specify="optional" />
 			<attribute name="on-select" type="expression" specify="optional" />
 		</add-on>
 		<add-on name="tab" requires="widget" inherits="abstract-tab">

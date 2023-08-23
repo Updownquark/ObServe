@@ -2250,7 +2250,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 					case add:
 						QuickSwingPopulator<QuickWidget> renderer = renderers.get(evt.getNewValue().getRenderer().getIdentity());
 						try {
-							renderer.populate(new TabsPopulator<>(tabs[0], evt.getNewValue(), evt.getIndex()),
+							renderer.populate(new TabsPopulator<>(tabs[0], quick, evt.getNewValue(), evt.getIndex()),
 								evt.getNewValue().getRenderer());
 						} catch (ModelInstantiationException e) {
 							evt.getNewValue().getRenderer().reporting().error("Failed to populate tab", e);
@@ -2260,15 +2260,19 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 					case set:
 					}
 				}, true);
+				tabs[0].withSelectedTab(quick.getSelectedTab());
 			});
 		}
 
 		private static class TabsPopulator<T> extends AbstractQuickContainerPopulator {
-			private final PanelPopulation.TabPaneEditor<?, ?> theTabs;
-			private final QuickTabs.TabInstance<T> theTab;
+			private final PanelPopulation.TabPaneEditor<?, ?> theTabEditor;
+			private final QuickTabs<T> theTabs;
+			private final QuickTabs.TabInstance<? extends T> theTab;
 			private final int theTabIndex;
 
-			TabsPopulator(PanelPopulation.TabPaneEditor<?, ?> tabs, QuickTabs.TabInstance<T> tab, int index) {
+			TabsPopulator(PanelPopulation.TabPaneEditor<?, ?> tabEditor, QuickTabs<T> tabs, QuickTabs.TabInstance<? extends T> tab,
+				int index) {
+				theTabEditor = tabEditor;
 				theTabs = tabs;
 				theTab = tab;
 				theTabIndex = index;
@@ -2276,20 +2280,20 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 
 			@Override
 			public Observable<?> getUntil() {
-				return theTabs.getUntil();
+				return theTabEditor.getUntil();
 			}
 
 			@Override
 			public AbstractQuickContainerPopulator addHPanel(String fieldName, LayoutManager layout,
 				Consumer<PanelPopulator<JPanel, ?>> panel) {
-				theTabs.withHTab(theTab.getTabValue(), theTabIndex, layout, (Consumer<PanelPopulator<?, ?>>) (Consumer<?>) panel,
+				theTabEditor.withHTab(theTab.getTabValue(), theTabIndex, layout, (Consumer<PanelPopulator<?, ?>>) (Consumer<?>) panel,
 					this::configureTab);
 				return this;
 			}
 
 			@Override
 			public AbstractQuickContainerPopulator addVPanel(Consumer<PanelPopulator<JPanel, ?>> panel) {
-				theTabs.withVTab(theTab.getTabValue(), theTabIndex, (Consumer<PanelPopulator<?, ?>>) (Consumer<?>) panel,
+				theTabEditor.withVTab(theTab.getTabValue(), theTabIndex, (Consumer<PanelPopulator<?, ?>>) (Consumer<?>) panel,
 					this::configureTab);
 				return this;
 			}
@@ -2299,7 +2303,12 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 				tab.setIcon(theTab.getTabIcon());
 				tab.setRemovable(theTab.isRemovable().get());
 				tab.onRemove(__ -> theTab.onRemove());
-				tab.onSelect(__ -> theTab.onSelect());
+				tab.onSelect(onSelect -> {
+					onSelect.changes().takeUntil(theTab.getRenderer().isDestroyed().noInitChanges().take(1)).act(evt -> {
+						if (evt.getNewValue())
+							theTab.onSelect();
+					});
+				});
 			}
 		}
 	}
