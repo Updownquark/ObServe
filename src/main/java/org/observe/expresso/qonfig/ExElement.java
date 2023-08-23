@@ -622,7 +622,7 @@ public interface ExElement extends Identifiable {
 		ObservableValue<Boolean> isDestroyed();
 
 		default Observable<ObservableValueEvent<Boolean>> destroyed() {
-			return isDestroyed().changes().filter(evt -> Boolean.TRUE.equals(evt.getNewValue())).take(1);
+			return isDestroyed().changes().filterP(evt -> Boolean.TRUE.equals(evt.getNewValue())).take(1);
 		}
 
 		void destroy();
@@ -885,6 +885,10 @@ public interface ExElement extends Identifiable {
 
 	ExElement copy(ExElement parent);
 
+	ObservableValue<Boolean> isDestroyed();
+
+	void destroy();
+
 	/** Abstract {@link ExElement} implementation */
 	public abstract class Abstract implements ExElement, Cloneable {
 		private final Object theId;
@@ -894,6 +898,7 @@ public interface ExElement extends Identifiable {
 		private ClassMap<ExAddOn<?>> theAddOns;
 		private ErrorReporting theReporting;
 		private String theTypeName;
+		private final SettableValue<Boolean> isDestroyed;
 		private ModelSetInstance theUpdatingModels;
 
 		/** @param id The identification for this element */
@@ -902,6 +907,7 @@ public interface ExElement extends Identifiable {
 				throw new NullPointerException();
 			theId = id;
 			theAddOns = new ClassMap<>();
+			isDestroyed = SettableValue.build(boolean.class).withValue(false).build();
 		}
 
 		@Override
@@ -942,6 +948,10 @@ public interface ExElement extends Identifiable {
 		@Override
 		public ErrorReporting reporting() {
 			return theReporting;
+		}
+
+		protected void persistModels() {
+			isModelPersistent = true;
 		}
 
 		@Override
@@ -1053,6 +1063,16 @@ public interface ExElement extends Identifiable {
 			} catch (CloneNotSupportedException e) {
 				throw new IllegalStateException("Not cloneable?", e);
 			}
+		}
+
+		@Override
+		public ObservableValue<Boolean> isDestroyed() {
+			return isDestroyed.unsettable();
+		}
+
+		@Override
+		public void destroy() {
+			isDestroyed.set(true, null);
 		}
 
 		@Override

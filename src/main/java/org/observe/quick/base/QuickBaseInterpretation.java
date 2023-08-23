@@ -167,6 +167,14 @@ public class QuickBaseInterpretation implements QonfigInterpretation {
 				(QuickTableColumn.ColumnEditing.Def) session.getElementRepresentation()));
 		interpreter.createWith(ValueAction.Single.SINGLE_VALUE_ACTION, ValueAction.Single.Def.class, ExElement.creator(ValueAction.Single.Def::new));
 		interpreter.createWith(ValueAction.Multi.MULTI_VALUE_ACTION, ValueAction.Multi.Def.class, ExElement.creator(ValueAction.Multi.Def::new));
+
+		// Tabs
+		interpreter.createWith(QuickTabs.TABS, QuickTabs.Def.class, ExElement.creator(QuickTabs.Def::new));
+		interpreter.createWith(QuickTabs.AbstractTab.ABSTRACT_TAB, QuickTabs.AbstractTab.Def.class,
+			ExAddOn.creator(QuickTabs.AbstractTab.Def::new));
+		interpreter.createWith(QuickTabs.Tab.TAB, QuickTabs.Tab.Def.class, ExAddOn.creator(QuickWidget.Def.class, QuickTabs.Tab.Def::new));
+		interpreter.createWith(QuickTabs.TabSet.TAB_SET, QuickTabs.TabSet.Def.class, ExElement.creator(QuickTabs.TabSet.Def::new));
+
 		return interpreter;
 	}
 

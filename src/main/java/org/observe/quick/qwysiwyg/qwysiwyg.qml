@@ -57,58 +57,60 @@
 				<on-mouse-exit>app.qwysiwyg.mouseExit()</on-mouse-exit>
 			</text-area>
 		</scroll>
-		<table rows="app.qwysiwyg.watchExpressions" value-name="ex">
-			<column name="`Expression`" value="ex.getExpressionText()">
-				<column-edit column-edit-value-name="newEx" type="modify-row-value" commit="ex.setExpressionText(newEx)">
-					<text-field />
-				</column-edit>
-			</column>
-			<column name="`Context`" value="ex.getContext()" />
-			<column name="`Value`" value="ex.getValue()" />
-			<multi-value-action allow-for-empty="true" icon="&quot;icons/add.png&quot;"
-				enabled="app.qwysiwyg.canAddWatchExpression(app.qwysiwyg.selectedNode)">
-				app.qwysiwyg.addWatchExpression(app.qwysiwyg.selectedNode)
-			</multi-value-action>
-			<value-action allow-for-multiple="true" icon="&quot;icons/remove.png&quot;" value-name="exp">
-				exp.remove()
-			</value-action>
-		</table>
-		<box layout="inline-layout" orientation="vertical" main-align="justify" cross-align="justify">
-			<titled-border title="`Style`" />
-			<box layout="inline-layout" orientation="horizontal">
-				<combo values="app.qwysiwyg.availableStyles" value="app.qwysiwyg.selectedStyle" />
-			</box>
-			<table rows="app.qwysiwyg.styleDebugValues" value-name="row">
-				<style attr="with-text.font-weight" condition="row!=null &amp;&amp; row.isActive()">`bold`</style>
-				<column name="`Source File`" value="row.getSourceFile()">
-					<label value="columnValue" tooltip="row.getFullSourceFile()" />
+		<tabs>
+			<table tab-id="&quot;Watch Expressions&quot;" tab-name="`Watch Expressions`" rows="app.qwysiwyg.watchExpressions" value-name="ex">
+				<column name="`Expression`" value="ex.getExpressionText()">
+					<column-edit column-edit-value-name="newEx" type="modify-row-value" commit="ex.setExpressionText(newEx)">
+						<text-field />
+					</column-edit>
 				</column>
-				<column name="`Source`" value="row.getSourceElement()">
-					<label value="columnValue">
-						<style condition="row!=null &amp;&amp; row.isSourceElementLink()">
-							<style attr="underline">true</style>
-							<style attr="font-color">`blue`</style>
-						</style>
-						<on-click>row.followSourceElementLink()</on-click>
-					</label>
-				</column>
-				<column name="`Condition`" value="row.getCondition()">
-					<text-area rows="1" value="" tooltip="row.getConditionTooltip(mousePosition)">
-						<dynamic-styled-document root="columnValue" children="node==null ? null : node.children"
-							post-text="node==null ? null : node.getPostText()">
-							<text-style>
-								<style attr="font-weight" condition="node!=null &amp;&amp; node.isBold()">`bold`</style>
-								<style attr="font-color">node==null ? null : node.getFontColor()</style>
-								<style attr="underline" condition="node!=null &amp;&amp; node.isActiveLink()">true</style>
-							</text-style>
-						</dynamic-styled-document>
-					</text-area>
-				</column>
-				<column name="`Value`" value="row.getValueExpression()" />
-				<column name="`Active Value`" value="row.getCurrentValue()">
-					<style attr="with-text.font-slant" condition="row!=null &amp;&amp; !row.isActive()">`italic`</style>
-				</column>
+				<column name="`Context`" value="ex.getContext()" />
+				<column name="`Value`" value="ex.getValue()" />
+				<multi-value-action allow-for-empty="true" icon="&quot;icons/add.png&quot;"
+					enabled="app.qwysiwyg.canAddWatchExpression(app.qwysiwyg.selectedNode)">
+					app.qwysiwyg.addWatchExpression(app.qwysiwyg.selectedNode)
+				</multi-value-action>
+				<value-action allow-for-multiple="true" icon="&quot;icons/remove.png&quot;" value-name="exp">
+					exp.remove()
+				</value-action>
 			</table>
-		</box>
+			<box tab-id="&quot;Style&quot;" tab-name="`Style`"
+				layout="inline-layout" orientation="vertical" main-align="justify" cross-align="justify">
+				<box layout="inline-layout" orientation="horizontal">
+					<combo values="app.qwysiwyg.availableStyles" value="app.qwysiwyg.selectedStyle" />
+				</box>
+				<table rows="app.qwysiwyg.styleDebugValues" value-name="row">
+					<style attr="with-text.font-weight" condition="row!=null &amp;&amp; row.isActive()">`bold`</style>
+					<column name="`Source File`" value="row.getSourceFile()">
+						<label value="columnValue" tooltip="row.getFullSourceFile()" />
+					</column>
+					<column name="`Source`" value="row.getSourceElement()">
+						<label value="columnValue">
+							<style condition="row!=null &amp;&amp; row.isSourceElementLink()">
+								<style attr="underline">true</style>
+								<style attr="font-color">`blue`</style>
+							</style>
+							<on-click>row.followSourceElementLink()</on-click>
+						</label>
+					</column>
+					<column name="`Condition`" value="row.getCondition()">
+						<text-area rows="1" value="" tooltip="row.getConditionTooltip(mousePosition)">
+							<dynamic-styled-document root="columnValue" children="node==null ? null : node.children"
+								post-text="node==null ? null : node.getPostText()">
+								<text-style>
+									<style attr="font-weight" condition="node!=null &amp;&amp; node.isBold()">`bold`</style>
+									<style attr="font-color">node==null ? null : node.getFontColor()</style>
+									<style attr="underline" condition="node!=null &amp;&amp; node.isActiveLink()">true</style>
+								</text-style>
+							</dynamic-styled-document>
+						</text-area>
+					</column>
+					<column name="`Value`" value="row.getValueExpression()" />
+					<column name="`Active Value`" value="row.getCurrentValue()">
+						<style attr="with-text.font-slant" condition="row!=null &amp;&amp; !row.isActive()">`italic`</style>
+					</column>
+				</table>
+			</box>
+		</tabs>
 	</box>
 </quick>

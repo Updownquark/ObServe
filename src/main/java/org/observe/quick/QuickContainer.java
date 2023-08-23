@@ -1,5 +1,6 @@
 package org.observe.quick;
 
+import org.observe.collect.ObservableCollection;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
@@ -149,15 +150,15 @@ public interface QuickContainer<C extends QuickWidget> extends QuickWidget {
 	 * @param <C> The type of the contained widgets
 	 */
 	public abstract class Abstract<C extends QuickWidget> extends QuickWidget.Abstract implements QuickContainer<C> {
-		private BetterList<C> theContents;
+		private ObservableCollection<C> theContents;
 
 		protected Abstract(Object id) {
 			super(id);
-			theContents = BetterTreeList.<C> build().build();
+			theContents = ObservableCollection.build((Class<C>) QuickWidget.class).build();
 		}
 
 		@Override
-		public BetterList<C> getContents() {
+		public ObservableCollection<C> getContents() {
 			return theContents;
 		}
 
@@ -206,7 +207,7 @@ public interface QuickContainer<C extends QuickWidget> extends QuickWidget {
 		public QuickContainer.Abstract<C> copy(ExElement parent) {
 			QuickContainer.Abstract<C> copy = (QuickContainer.Abstract<C>) super.copy(parent);
 
-			copy.theContents = BetterTreeList.<C> build().build();
+			copy.theContents = ObservableCollection.build((Class<C>) QuickWidget.class).build();
 			for (C content : theContents)
 				copy.theContents.add((C) content.copy(copy));
 

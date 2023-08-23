@@ -9,6 +9,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 import org.qommons.Causable;
@@ -79,6 +80,14 @@ public interface Observable<T> extends Lockable, Identifiable, Eventable {
 	 */
 	default Observable<T> filter(Function<? super T, Boolean> func) {
 		return filterMap(LambdaUtils.printableFn(value -> (value != null && func.apply(value)) ? value : null, func::toString, func));
+	}
+
+	/**
+	 * @param func The filter function
+	 * @return An observable that provides the same values as this observable minus those that the filter function returns false for
+	 */
+	default Observable<T> filterP(Predicate<? super T> func) {
+		return filterMap(LambdaUtils.printableFn(value -> func.test(value) ? value : null, func::toString, func));
 	}
 
 	/**

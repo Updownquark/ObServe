@@ -1532,6 +1532,10 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 				QuickBaseSwing::interpretTable);
 			tx.with(ValueAction.Single.Interpreted.class, QuickSwingTableAction.class, QuickSwingTablePopulation::interpretValueAction);
 			tx.with(ValueAction.Multi.Interpreted.class, QuickSwingTableAction.class, QuickSwingTablePopulation::interpretMultiValueAction);
+
+			// Tabs
+			QuickSwingPopulator.<QuickTabs<?>, QuickTabs.Interpreted<?>> interpretWidget(tx, gen(QuickTabs.Interpreted.class),
+				QuickBaseSwing::interpretTabs);
 		}
 
 		static <T> Class<T> gen(Class<? super T> rawClass) {
@@ -2228,6 +2232,74 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 			@Override
 			public AbstractQuickContainerPopulator addVPanel(Consumer<PanelPopulator<JPanel, ?>> vPanel) {
 				throw new IllegalArgumentException("Vertical panel makes no sense for a column header");
+			}
+		}
+
+		static <T> QuickSwingContainerPopulator<QuickTabs<T>> interpretTabs(QuickTabs.Interpreted<T> interpreted,
+			Transformer<ExpressoInterpretationException> tx) throws ExpressoInterpretationException {
+			Map<Object, QuickSwingPopulator<QuickWidget>> renderers = new HashMap<>();
+			for (QuickWidget.Interpreted<?> content : interpreted.getContents())
+				renderers.put(content.getIdentity(), tx.transform(content, QuickSwingPopulator.class));
+			for (QuickTabs.TabSet.Interpreted<? extends T> tabSet : interpreted.getTabSets())
+				renderers.put(tabSet.getRenderer().getIdentity(), tx.transform(tabSet.getRenderer(), QuickSwingPopulator.class));
+			return createContainer((panel, quick) -> {
+				PanelPopulation.TabPaneEditor<?, ?>[] tabs = new PanelPopulation.TabPaneEditor[1];
+				panel.addTabs(t -> tabs[0] = t);
+				quick.getTabs().subscribe(evt -> {
+					switch (evt.getType()) {
+					case add:
+						QuickSwingPopulator<QuickWidget> renderer = renderers.get(evt.getNewValue().getRenderer().getIdentity());
+						try {
+							renderer.populate(new TabsPopulator<>(tabs[0], evt.getNewValue(), evt.getIndex()),
+								evt.getNewValue().getRenderer());
+						} catch (ModelInstantiationException e) {
+							evt.getNewValue().getRenderer().reporting().error("Failed to populate tab", e);
+						}
+						break;
+					case remove:
+					case set:
+					}
+				}, true);
+			});
+		}
+
+		private static class TabsPopulator<T> extends AbstractQuickContainerPopulator {
+			private final PanelPopulation.TabPaneEditor<?, ?> theTabs;
+			private final QuickTabs.TabInstance<T> theTab;
+			private final int theTabIndex;
+
+			TabsPopulator(PanelPopulation.TabPaneEditor<?, ?> tabs, QuickTabs.TabInstance<T> tab, int index) {
+				theTabs = tabs;
+				theTab = tab;
+				theTabIndex = index;
+			}
+
+			@Override
+			public Observable<?> getUntil() {
+				return theTabs.getUntil();
+			}
+
+			@Override
+			public AbstractQuickContainerPopulator addHPanel(String fieldName, LayoutManager layout,
+				Consumer<PanelPopulator<JPanel, ?>> panel) {
+				theTabs.withHTab(theTab.getTabValue(), theTabIndex, layout, (Consumer<PanelPopulator<?, ?>>) (Consumer<?>) panel,
+					this::configureTab);
+				return this;
+			}
+
+			@Override
+			public AbstractQuickContainerPopulator addVPanel(Consumer<PanelPopulator<JPanel, ?>> panel) {
+				theTabs.withVTab(theTab.getTabValue(), theTabIndex, (Consumer<PanelPopulator<?, ?>>) (Consumer<?>) panel,
+					this::configureTab);
+				return this;
+			}
+
+			void configureTab(PanelPopulation.TabEditor<?> tab) {
+				tab.setName(theTab.getTabName());
+				tab.setIcon(theTab.getTabIcon());
+				tab.setRemovable(theTab.isRemovable().get());
+				tab.onRemove(__ -> theTab.onRemove());
+				tab.onSelect(__ -> theTab.onSelect());
 			}
 		}
 	}

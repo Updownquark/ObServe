@@ -164,18 +164,17 @@
 			<attribute name="fill" type="boolean" specify="optional" />
 		</add-on>
 		
-		<add-on name="abstract-tab" inherits="with-element-model">
-			<attribute name="tab-id" type="expression" specify="optional" />
+		<add-on name="abstract-tab" abstract="true" inherits="styled,with-element-model">
+			<element-model>
+				<value name="tabSelected" type="boolean" priority="100" />
+			</element-model>
 			<attribute name="tab-name" type="expression" specify="optional" />
 			<attribute name="tab-icon" type="expression" specify="optional" />
-			<attribute name="removable" type="boolean" default="false" />
-			<attribute name="on-remove" type="expression" specify="optional" />
 			<attribute name="select-on" type="expression" specify="optional" />
 			<attribute name="on-select" type="expression" specify="optional" />
 		</add-on>
-
 		<add-on name="tab" requires="widget" inherits="abstract-tab">
-			<attr-mod name="abstract-tab.tab-id" type="expression" specify="required" />
+			<attribute name="tab-id" type="expression" />
 		</add-on>
 
 		<add-on name="menu-container">
@@ -507,16 +506,18 @@
 		<?DOC A set of tabs that user can choose between, each of which displays a different widget?>
 		<element-def name="tabs" extends="container">
 			<element-model>
-				<value name="tabValue" priority="1" />
-				<value name="tabSelected" type="boolean" priority="100" />
+				<value name="selectedTab" priority="1" />
 			</element-model>
 			<attribute name="selected" type="expression" specify="optional" />
 			<child-mod child="content" inherits="tab" />
 			<child-def name="tab-set" type="tab-set" min="0" max="inf" />
 		</element-def>
-		<element-def name="tab-set">
+		<element-def name="tab-set" inherits="with-element-model">
+			<element-model>
+				<value name="tabId" />
+			</element-model>
 			<attribute name="values" type="expression" />
-			<child-def name="content" type="widget" inherits="tab" />
+			<child-def name="renderer" type="widget" inherits="abstract-tab" />
 		</element-def>
 		<?DOC A split pane that displays two widgets adjacent to each other, with an adjustable bar in between?>
 		<element-def name="split" extends="container">
