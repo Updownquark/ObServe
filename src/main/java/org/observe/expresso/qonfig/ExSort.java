@@ -575,7 +575,7 @@ public abstract class ExSort extends ExElement.Def.Abstract<ExElement> {
 				throws ExpressoInterpretationException {
 				Comparator<T> compare = getDefaultSorting(TypeTokens.getRawType(TypeTokens.get().wrap(type)));
 				if (compare != null)
-					return InterpretedValueSynth.literal(TypeTokens.get().keyFor(Comparator.class).parameterized(type), compare,
+					return InterpretedValueSynth.literalValue(TypeTokens.get().keyFor(Comparator.class).parameterized(type), compare,
 						compare.toString());
 				else
 					throw new ExpressoInterpretationException(type + " is not Comparable, use either sort-with or sort-by", position, 0);

@@ -762,7 +762,7 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 	 */
 	static <E> CollectionDataFlow<?, ?, E> flattenCollections(TypeToken<E> innerType, ObservableCollection<? extends E>... colls) {
 		return of(TypeTokens.get().keyFor(ObservableCollection.class).parameterized(innerType), colls).flow().flatMap(innerType,
-			LambdaUtils.printableFn(ObservableCollection::flow, "flow", "flow"));
+			LambdaUtils.printableFn(coll -> coll == null ? null : coll.flow(), "flow", "flow"));
 	}
 
 	/**

@@ -246,9 +246,9 @@ public class QuickBaseInterpretation implements QonfigInterpretation {
 				}), __ -> "unsettable")));
 			} else {
 				env.reporting().warn("Cannot use value " + expression + ", type " + iconV.getType().getType(0) + " as an icon");
-				return InterpretedValueSynth.literal(TypeTokens.get().of(Icon.class), null, "Icon not provided");
+				return InterpretedValueSynth.literalValue(TypeTokens.get().of(Icon.class), null, "Icon not provided");
 			}
 		} else
-			return InterpretedValueSynth.literal(TypeTokens.get().of(Icon.class), null, "None provided");
+			return InterpretedValueSynth.literalValue(TypeTokens.get().of(Icon.class), null, "None provided");
 	}
 }

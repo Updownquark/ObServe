@@ -51,7 +51,7 @@ public interface ObservableExpression {
 		public <M, MV extends M> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, InterpretedExpressoEnv env,
 			int expressionOffset) throws ExpressoEvaluationException {
 			return ObservableExpression.evEx(expressionOffset, 0,
-				(InterpretedValueSynth<M, MV>) InterpretedValueSynth.literal(TypeTokens.get().WILDCARD, null, "(empty)"), null);
+				(InterpretedValueSynth<M, MV>) InterpretedValueSynth.literalValue(TypeTokens.get().WILDCARD, null, "(empty)"), null);
 		}
 
 		@Override

@@ -1,16 +1,6 @@
 package org.observe.collect;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.NoSuchElementException;
-import java.util.Objects;
+import java.util.*;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -1807,16 +1797,18 @@ public class ObservableCollectionActiveManagers2 {
 					}
 					CollectionDataFlow<?, ?, ? extends V> newFlow = theMap.apply(newValue);
 					if (manager == null || !Objects.equals(theFlow, newFlow)) {
-						ActiveCollectionManager<?, ?, ? extends V> newManager = newFlow.manageActive();
+						ActiveCollectionManager<?, ?, ? extends V> newManager = newFlow == null ? null : newFlow.manageActive();
 						clearSubElements(cause);
 						theFlow = newFlow;
 						manager = newManager;
-						manager.begin(isFromStart, (childEl, innerCause) -> {
-							try (Transaction innerParentT = theParent.lock(false, null); Transaction innerLocalT = lockLocal()) {
-								FlattenedElement flatEl = new FlattenedElement(this, childEl, false);
-								theAccepter.accept(flatEl, innerCause);
-							}
-						}, theChildListening.getListening());
+						if (manager != null) {
+							manager.begin(isFromStart, (childEl, innerCause) -> {
+								try (Transaction innerParentT = theParent.lock(false, null); Transaction innerLocalT = lockLocal()) {
+									FlattenedElement flatEl = new FlattenedElement(this, childEl, false);
+									theAccepter.accept(flatEl, innerCause);
+								}
+							}, theChildListening.getListening());
+						}
 					} else if (theOptions != null) {
 						I oldSource = theOptions.isCached() ? theCacheHandler.getSourceCache() : oldValue;
 						Ternian update = theCacheHandler.isSourceUpdate(oldValue, newValue);

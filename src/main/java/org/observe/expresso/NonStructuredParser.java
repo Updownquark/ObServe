@@ -52,7 +52,7 @@ public interface NonStructuredParser extends SelfDescribed {
 		@Override
 		public <T2> InterpretedValueSynth<SettableValue<?>, ? extends SettableValue<? extends T2>> parse(TypeToken<T2> type, String text)
 			throws ParseException {
-			if (theType != null && !TypeTokens.get().isAssignable(theType, type))
+			if (theType != null && !TypeTokens.get().isAssignable(type, theType))
 				throw new IllegalArgumentException("This literal parser can only parse " + theType + ", not " + type);
 			T2 value = (T2) parseValue((TypeToken<? extends T>) type, text);
 			if (value != null && !TypeTokens.get().isInstance(type, value))
@@ -99,6 +99,11 @@ public interface NonStructuredParser extends SelfDescribed {
 
 			@Override
 			public String getDescription() {
+				return description;
+			}
+
+			@Override
+			public String toString() {
 				return description;
 			}
 		};

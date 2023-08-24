@@ -140,7 +140,7 @@ public interface ObservableModelSet extends Identifiable {
 		 * @return A {@link CompiledModelValue} that always returns a value container which produces a constant value for the given value
 		 */
 		static <T> CompiledModelValue<SettableValue<?>> literal(TypeToken<T> type, T value, String text) {
-			return constant(InterpretedValueSynth.literal(ModelTypes.Value.forType(type), value, text));
+			return constant(InterpretedValueSynth.literalValue(type, value, text));
 		}
 	}
 
@@ -281,47 +281,8 @@ public interface ObservableModelSet extends Identifiable {
 		 * @param text The text to represent the value
 		 * @return A ModelValueSynth that always produces a constant value for the given value
 		 */
-		static <T> InterpretedValueSynth<SettableValue<?>, SettableValue<T>> literal(
-			ModelInstanceType<SettableValue<?>, SettableValue<T>> type, T value, String text) {
-			return new InterpretedValueSynth<SettableValue<?>, SettableValue<T>>() {
-				private final SettableValue<T> theValue = ObservableModelSet.literal((TypeToken<T>) type.getType(0), value, text);
-
-				@Override
-				public ModelType<SettableValue<?>> getModelType() {
-					return type.getModelType();
-				}
-
-				@Override
-				public ModelInstanceType<SettableValue<?>, SettableValue<T>> getType() {
-					return type;
-				}
-
-				@Override
-				public List<? extends InterpretedValueSynth<?, ?>> getComponents() {
-					return Collections.emptyList();
-				}
-
-				@Override
-				public ModelValueInstantiator<SettableValue<T>> instantiate() {
-					return ModelValueInstantiator.literal(theValue, text);
-				}
-
-				@Override
-				public String toString() {
-					return text;
-				}
-			};
-		}
-
-		/**
-		 * @param <T> The type of the value
-		 * @param type The type of the value
-		 * @param value The value to wrap
-		 * @param text The text to represent the value
-		 * @return A ModelValueSynth that always produces a constant value for the given value
-		 */
-		static <T> InterpretedValueSynth<SettableValue<?>, SettableValue<T>> literal(TypeToken<T> type, T value, String text) {
-			return literal(ModelTypes.Value.forType(type), value, text);
+		static <T> InterpretedValueSynth<SettableValue<?>, SettableValue<T>> literalValue(TypeToken<T> type, T value, String text) {
+			return literal(ModelTypes.Value.forType(type), SettableValue.of(type, value, "Literal"), text);
 		}
 
 		/**

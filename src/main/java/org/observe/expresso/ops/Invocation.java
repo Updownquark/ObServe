@@ -170,11 +170,8 @@ public abstract class Invocation implements ObservableExpression {
 			}
 			// Not found, try to evaluate it
 			int argOffset = 0;
-			for (int i = 0; i < arg; i++) {
-				if (i > 0)
-					argOffset++;
-				argOffset += theArguments.get(i).getExpressionLength();
-			}
+			for (int i = 0; i < arg; i++)
+				argOffset += theArguments.get(i).getExpressionLength() + 1;
 			c = (EvaluatedExpression<SettableValue<?>, SettableValue<?>>) (EvaluatedExpression<?, ?>) theArguments.get(arg).evaluate(//
 				ModelTypes.Value.forType(paramType), theEnv.at(argOffset), theExpressionOffset + argOffset);
 			args[arg].add(0, c);

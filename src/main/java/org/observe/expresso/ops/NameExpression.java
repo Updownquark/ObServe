@@ -166,7 +166,7 @@ public class NameExpression implements ObservableExpression, Named {
 				for (Enum<?> value : ((Class<? extends Enum<?>>) paramType).getEnumConstants()) {
 					if (value.name().equals(theNames.getFirst().getName()))
 						return (EvaluatedExpression<M, MV>) ObservableExpression.evEx(expressionOffset, getExpressionLength(),
-							InterpretedValueSynth.literal(TypeTokens.get().of((Class<Object>) paramType), value, value.name()), value);
+							InterpretedValueSynth.literalValue(TypeTokens.get().of((Class<Object>) paramType), value, value.name()), value);
 				}
 			}
 		}
@@ -201,7 +201,7 @@ public class NameExpression implements ObservableExpression, Named {
 			fieldValue = evaluateField(field, TypeTokens.get().of(field.getGenericType()), null, i, type, expressionOffset, env.reporting(),
 				divisions, env);
 			EvaluatedExpression<?, ?> classValue = ObservableExpression.evEx(expressionOffset, getExpressionLength(), InterpretedValueSynth
-				.literal(TypeTokens.get().keyFor(Class.class).<Class<?>> parameterized(clazz), clazz, typeName.toString()), clazz);
+				.literalValue(TypeTokens.get().keyFor(Class.class).<Class<?>> parameterized(clazz), clazz, typeName.toString()), clazz);
 			for (int d = 0; d < i; d++)
 				divisions[d] = classValue;
 		}
@@ -230,7 +230,7 @@ public class NameExpression implements ObservableExpression, Named {
 			ObservableModelSet model = models.getSubModelIfExists(modelStr);
 			if (nameIndex > 0)
 				divisions[nameIndex - 1] = ObservableExpression.evEx(expressionOffset, getExpressionLength(),
-					InterpretedValueSynth.literal(TypeTokens.get().of(ObservableModelSet.class), model, modelStr), mv);
+					InterpretedValueSynth.literalValue(TypeTokens.get().of(ObservableModelSet.class), model, modelStr), mv);
 			path.append('.').append(theNames.get(nameIndex).getName());
 			String pathStr = path.toString();
 			InterpretableModelComponentNode<?> nextMV = models.getComponentIfExists(pathStr);

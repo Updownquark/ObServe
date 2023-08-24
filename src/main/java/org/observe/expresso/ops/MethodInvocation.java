@@ -144,7 +144,7 @@ public class MethodInvocation extends Invocation {
 						for (int a = 0; a < realArgs.length; a++)
 							realArgs[a] = args.args[a].get(0);
 						EvaluatedExpression<SettableValue<?>, ? extends SettableValue<?>> ctx = ObservableExpression.evEx(expressionOffset,
-							getExpressionLength(), InterpretedValueSynth.literal(TypeTokens.get().VOID, null, theContext.toString()),
+							getExpressionLength(), InterpretedValueSynth.literalValue(TypeTokens.get().VOID, null, theContext.toString()),
 							clazz);
 						return new InvokableResult<>(result, ctx, true, Arrays.asList(realArgs), Invocation.ExecutableImpl.METHOD);
 					}

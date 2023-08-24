@@ -209,7 +209,8 @@ public class CompiledExpressoEnv {
 	 * @return All non-structured parsers that may be able to parse a value of the given type
 	 */
 	public Set<NonStructuredParser> getNonStructuredParsers(Class<?> type) {
-		return theNonStructuredParsers.getAll(type, null).stream().flatMap(Set::stream).collect(Collectors.toSet());
+		return theNonStructuredParsers.getAll(type, null).stream().flatMap(Set::stream)
+			.collect(Collectors.toCollection(LinkedHashSet::new));
 	}
 
 	/**

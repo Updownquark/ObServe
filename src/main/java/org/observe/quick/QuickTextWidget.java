@@ -174,7 +174,7 @@ public interface QuickTextWidget<T> extends QuickValueWidget<T> {
 		else
 			defaultFormat = (Format<T>) TO_STRING_FORMAT;
 		TypeToken<Format<T>> formatType = TypeTokens.get().keyFor(Format.class).<Format<T>> parameterized(valueType);
-		return InterpretedValueSynth.literal(formatType, defaultFormat, "default-" + raw.getSimpleName() + "-format");
+		return InterpretedValueSynth.literalValue(formatType, defaultFormat, "default-" + raw.getSimpleName() + "-format");
 	}
 
 	SettableValue<Format<T>> getFormat();
