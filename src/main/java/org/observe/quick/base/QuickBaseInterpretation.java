@@ -127,6 +127,7 @@ public class QuickBaseInterpretation implements QonfigInterpretation {
 		interpreter.createWith(DynamicStyledDocument.DYNAMIC_STYLED_DOCUMENT, DynamicStyledDocument.Def.class, ExElement.creator(DynamicStyledDocument.Def::new));
 		interpreter.createWith(StyledDocument.TEXT_STYLE, StyledDocument.TextStyleElement.Def.class,
 			ExElement.creator(StyledDocument.Def.class, StyledDocument.TextStyleElement.Def::new));
+		interpreter.createWith(QuickSpacer.SPACER, QuickSpacer.Def.class, ExElement.creator(QuickSpacer.Def::new));
 
 		// Containers
 		interpreter.createWith(QuickBox.BOX, QuickBox.Def.class, ExElement.creator(QuickBox.Def::new));

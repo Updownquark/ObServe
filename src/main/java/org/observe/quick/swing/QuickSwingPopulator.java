@@ -1502,6 +1502,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 				QuickBaseSwing.gen(QuickTextArea.Interpreted.class), QuickBaseSwing::interpretTextArea);
 			tx.with(DynamicStyledDocument.Interpreted.class, QuickSwingDocument.class,
 				(qd, tx2) -> QuickBaseSwing.interpretDynamicStyledDoc(qd, tx2));
+			interpretWidget(tx, QuickBaseSwing.gen(QuickSpacer.Interpreted.class), QuickBaseSwing::interpretSpacer);
 
 			// Containers
 			QuickSwingPopulator.<QuickBox, QuickBox.Interpreted<?>> interpretContainer(tx, gen(QuickBox.Interpreted.class),
@@ -1671,6 +1672,13 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 			return new BorderLayout.Constraints(region, //
 				size.getSize(), enforceAbsolute(size.getMinimum()), enforceAbsolute(size.getPreferred()),
 				enforceAbsolute(size.getMaximum()));
+		}
+
+		static QuickSwingPopulator<QuickSpacer> interpretSpacer(QuickSpacer.Interpreted interpreted,
+			Transformer<ExpressoInterpretationException> tx) throws ExpressoInterpretationException {
+			return QuickSwingPopulator.<QuickSpacer, QuickSpacer.Interpreted> createWidget((panel, quick) -> {
+				panel.spacer(quick.getLength());
+			});
 		}
 
 		static <T> QuickSwingPopulator<QuickLabel<T>> interpretLabel(QuickLabel.Interpreted<T, ?> interpreted,
