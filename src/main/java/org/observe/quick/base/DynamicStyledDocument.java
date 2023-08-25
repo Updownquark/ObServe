@@ -11,9 +11,8 @@ import org.observe.expresso.ObservableModelSet.ModelComponentId;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.qonfig.CompiledExpression;
-import org.observe.expresso.qonfig.ElementTypeTraceability;
-import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.observe.expresso.qonfig.ExElement;
+import org.observe.expresso.qonfig.ExElementTraceable;
 import org.observe.expresso.qonfig.ExFlexibleElementModelAddOn;
 import org.observe.expresso.qonfig.ExWithElementModel;
 import org.observe.expresso.qonfig.ExpressoQIS;
@@ -30,10 +29,11 @@ import com.google.common.reflect.TypeToken;
 
 public class DynamicStyledDocument<T> extends StyledDocument<T> {
 	public static final String DYNAMIC_STYLED_DOCUMENT = "dynamic-styled-document";
-	private static final SingleTypeTraceability<DynamicStyledDocument<?>, Interpreted<?, ?>, Def<?>> TRACEABILITY = ElementTypeTraceability
-		.getElementTraceability(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, DYNAMIC_STYLED_DOCUMENT, Def.class,
-			Interpreted.class, DynamicStyledDocument.class);
 
+	@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
+		qonfigType = DYNAMIC_STYLED_DOCUMENT,
+		interpretation = Interpreted.class,
+		instance = DynamicStyledDocument.class)
 	public static class Def<D extends DynamicStyledDocument<?>> extends StyledDocument.Def<D> {
 		private CompiledExpression theRoot;
 		private CompiledExpression theChildren;
@@ -82,7 +82,6 @@ public class DynamicStyledDocument<T> extends StyledDocument<T> {
 
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
-			withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 			super.doUpdate(session.asElement(session.getFocusType().getSuperElement()));
 
 			theRoot = session.getAttributeExpression("root");

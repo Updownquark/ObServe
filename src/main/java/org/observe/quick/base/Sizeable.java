@@ -19,11 +19,11 @@ import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.TypeConversionException;
 import org.observe.expresso.qonfig.CompiledExpression;
-import org.observe.expresso.qonfig.ElementTypeTraceability;
-import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.observe.expresso.qonfig.ExAddOn;
 import org.observe.expresso.qonfig.ExElement;
+import org.observe.expresso.qonfig.ExElementTraceable;
 import org.observe.expresso.qonfig.ExpressoQIS;
+import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.expresso.qonfig.QonfigExpression;
 import org.observe.util.TypeTokens;
 import org.qommons.Ternian;
@@ -90,23 +90,41 @@ public abstract class Sizeable extends ExAddOn.Abstract<ExElement> {
 			}
 		}
 
+		@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
+			qonfigType = "v-sizeable",
+			interpretation = Interpreted.Vertical.class,
+			instance = Sizeable.Vertical.class)
 		public static class Vertical extends Def<Sizeable.Vertical> {
-			private static final SingleTypeTraceability<ExElement, ExElement.Interpreted<?>, ExElement.Def<?>> TRACEABILITY = ElementTypeTraceability
-				.<ExElement, Sizeable, Interpreted<?>, Def<?>> buildAddOn(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION,
-					"v-sizeable", Def.class, Interpreted.class, Sizeable.class)//
-				.withAddOnAttribute("height", Def::getSize, Interpreted::getSize)//
-				.withAddOnAttribute("min-height", Def::getMinimum, Interpreted::getMinimum)//
-				.withAddOnAttribute("pref-height", Def::getPreferred, Interpreted::getPreferred)//
-				.withAddOnAttribute("max-height", Def::getMaximum, Interpreted::getMaximum)//
-				.build();
-
 			public Vertical(QonfigAddOn type, ExElement.Def<?> element) {
 				super(Ternian.TRUE, type, element);
 			}
 
 			@Override
+			@QonfigAttributeGetter("height")
+			public CompiledExpression getSize() {
+				return super.getSize();
+			}
+
+			@Override
+			@QonfigAttributeGetter("min-height")
+			public CompiledExpression getMinimum() {
+				return super.getMinimum();
+			}
+
+			@Override
+			@QonfigAttributeGetter("pref-height")
+			public CompiledExpression getPreferred() {
+				return super.getPreferred();
+			}
+
+			@Override
+			@QonfigAttributeGetter("max-height")
+			public CompiledExpression getMaximum() {
+				return super.getMaximum();
+			}
+
+			@Override
 			public void update(ExpressoQIS session, ExElement.Def<?> element) throws QonfigInterpretationException {
-				element.withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 				super.update(session, element);
 			}
 
@@ -117,22 +135,36 @@ public abstract class Sizeable extends ExAddOn.Abstract<ExElement> {
 		}
 
 		public static class Horizontal extends Def<Sizeable.Horizontal> {
-			private static final SingleTypeTraceability<ExElement, ExElement.Interpreted<?>, ExElement.Def<?>> TRACEABILITY = ElementTypeTraceability
-				.<ExElement, Sizeable, Interpreted<?>, Def<?>> buildAddOn(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION,
-					"h-sizeable", Def.class, Interpreted.class, Sizeable.class)//
-				.withAddOnAttribute("width", Def::getSize, Interpreted::getSize)//
-				.withAddOnAttribute("min-width", Def::getMinimum, Interpreted::getMinimum)//
-				.withAddOnAttribute("pref-width", Def::getPreferred, Interpreted::getPreferred)//
-				.withAddOnAttribute("max-width", Def::getMaximum, Interpreted::getMaximum)//
-				.build();
-
 			public Horizontal(QonfigAddOn type, ExElement.Def<?> element) {
 				super(Ternian.FALSE, type, element);
 			}
 
 			@Override
+			@QonfigAttributeGetter("width")
+			public CompiledExpression getSize() {
+				return super.getSize();
+			}
+
+			@Override
+			@QonfigAttributeGetter("min-width")
+			public CompiledExpression getMinimum() {
+				return super.getMinimum();
+			}
+
+			@Override
+			@QonfigAttributeGetter("pref-width")
+			public CompiledExpression getPreferred() {
+				return super.getPreferred();
+			}
+
+			@Override
+			@QonfigAttributeGetter("max-width")
+			public CompiledExpression getMaximum() {
+				return super.getMaximum();
+			}
+
+			@Override
 			public void update(ExpressoQIS session, ExElement.Def<?> element) throws QonfigInterpretationException {
-				element.withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 				super.update(session, element);
 			}
 

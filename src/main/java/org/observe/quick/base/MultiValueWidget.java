@@ -5,13 +5,19 @@ import org.observe.collect.ObservableCollection;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelComponentId;
 import org.observe.expresso.qonfig.CompiledExpression;
+import org.observe.expresso.qonfig.ExElementTraceable;
+import org.observe.expresso.qonfig.QonfigAttributeGetter;
 
 public interface MultiValueWidget<T> extends MultiValueRenderable<T> {
+	@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
+		qonfigType = "multi-value-widget",
+		interpretation = Interpreted.class,
+		instance = MultiValueWidget.class)
 	public interface Def<W extends MultiValueWidget<?>> extends MultiValueRenderable.Def<W> {
-		@Override
+		@QonfigAttributeGetter("selection")
 		CompiledExpression getSelection();
 
-		@Override
+		@QonfigAttributeGetter("multi-selection")
 		CompiledExpression getMultiSelection();
 	}
 
@@ -19,10 +25,8 @@ public interface MultiValueWidget<T> extends MultiValueRenderable<T> {
 		@Override
 		Def<? super W> getDefinition();
 
-		@Override
 		InterpretedValueSynth<SettableValue<?>, SettableValue<T>> getSelection();
 
-		@Override
 		InterpretedValueSynth<ObservableCollection<?>, ObservableCollection<T>> getMultiSelection();
 
 		@Override
@@ -35,9 +39,7 @@ public interface MultiValueWidget<T> extends MultiValueRenderable<T> {
 
 	ModelComponentId getColumnIndexVariable();
 
-	@Override
 	SettableValue<T> getSelection();
 
-	@Override
 	ObservableCollection<T> getMultiSelection();
 }

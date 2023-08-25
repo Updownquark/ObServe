@@ -3,11 +3,10 @@ package org.observe.expresso.qonfig;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
 import java.util.function.BiFunction;
 import java.util.function.Function;
@@ -209,10 +208,6 @@ public interface ExElement extends Identifiable {
 			return children == null ? Collections.emptyList() : children;
 		}
 
-		ExElement.Def<?> withTraceability(SingleTypeTraceability<? super E, ?, ?> traceability);
-
-		Runnable onInterpretation(ExConsumer<? super ExElement.Interpreted<? extends E>, ExpressoInterpretationException> task);
-
 		/**
 		 * Updates this element definition. Must be called at least once after interpretation produces this object.
 		 *
@@ -220,56 +215,6 @@ public interface ExElement extends Identifiable {
 		 * @throws QonfigInterpretationException If an error occurs interpreting some of this element's fields or content
 		 */
 		void update(ExpressoQIS session) throws QonfigInterpretationException;
-
-		public static class QonfigElementKey {
-			public String toolkitName;
-			public int toolkitMajorVersion;
-			public int toolkitMinorVersion;
-			public String typeName;
-
-			public QonfigElementKey(String toolkitName, int toolkitMajorVersion, int toolkitMinorVersion, String typeName) {
-				this.toolkitName = toolkitName;
-				this.toolkitMinorVersion = toolkitMinorVersion;
-				this.toolkitMajorVersion = toolkitMajorVersion;
-				this.typeName = typeName;
-			}
-
-			public QonfigElementKey(SingleTypeTraceability<?, ?, ?> traceability) {
-				toolkitName = traceability.getToolkitName();
-				toolkitMajorVersion = traceability.getToolkitVersion().majorVersion;
-				toolkitMinorVersion = traceability.getToolkitVersion().minorVersion;
-				typeName = traceability.getTypeName();
-			}
-
-			public QonfigElementKey(QonfigElementOrAddOn type) {
-				toolkitName = type.getDeclarer().getName();
-				toolkitMajorVersion = type.getDeclarer().getMajorVersion();
-				toolkitMinorVersion = type.getDeclarer().getMinorVersion();
-				typeName = type.getName();
-			}
-
-			@Override
-			public int hashCode() {
-				return Objects.hash(toolkitName, toolkitMajorVersion, toolkitMinorVersion, typeName);
-			}
-
-			@Override
-			public boolean equals(Object obj) {
-				if (obj == this)
-					return true;
-				else if (!(obj instanceof QonfigElementKey))
-					return false;
-				QonfigElementKey other = (QonfigElementKey) obj;
-				return toolkitName.equals(other.toolkitName) //
-					&& toolkitMajorVersion == other.toolkitMajorVersion && toolkitMinorVersion == other.toolkitMinorVersion//
-					&& typeName.equals(other.typeName);
-			}
-
-			@Override
-			public String toString() {
-				return toolkitName + " v" + toolkitMajorVersion + "." + toolkitMinorVersion + "." + typeName;
-			}
-		}
 
 		/**
 		 * An abstract implementation of {@link Def}
@@ -282,10 +227,9 @@ public interface ExElement extends Identifiable {
 			private final QonfigElementOrAddOn theQonfigType;
 			private QonfigElement theElement;
 			private final ClassMap<ExAddOn.Def<? super E, ?>> theAddOns;
-			private final Map<QonfigElementKey, SingleTypeTraceability<? super E, ?, ?>> theTraceability;
+			private Map<ElementTypeTraceability.QonfigElementKey, SingleTypeTraceability<? super E, ?, ?>> theTraceability;
 			private CompiledExpressoEnv theExpressoEnv;
 			private ErrorReporting theReporting;
-			private ListenerList<ExConsumer<? super ExElement.Interpreted<? extends E>, ExpressoInterpretationException>> theOnInterprets;
 
 			/**
 			 * @param parent The definition interpreted from the parent element
@@ -296,7 +240,6 @@ public interface ExElement extends Identifiable {
 				theParent = parent;
 				theQonfigType = qonfigType;
 				theAddOns = new ClassMap<>();
-				theTraceability = new HashMap<>();
 			}
 
 			@Override
@@ -353,7 +296,8 @@ public interface ExElement extends Identifiable {
 				QonfigElementOrAddOn owner = attr.getDeclared().getOwner();
 				QonfigToolkit declarer = owner.getDeclarer();
 				ElementTypeTraceability<E, Interpreted<? extends E>, Def<? extends E>> traceability = (ElementTypeTraceability<E, Interpreted<? extends E>, Def<? extends E>>) theTraceability
-					.get(new QonfigElementKey(declarer.getName(), declarer.getMajorVersion(), declarer.getMinorVersion(), owner.getName()));
+					.get(new ElementTypeTraceability.QonfigElementKey(declarer.getName(), declarer.getMajorVersion(),
+						declarer.getMinorVersion(), owner.getName()));
 				if (traceability == null)
 					return null;
 				return traceability.getDefAttribute(this, attr);
@@ -367,7 +311,8 @@ public interface ExElement extends Identifiable {
 				QonfigElementOrAddOn owner = def.getDeclared().getOwner();
 				QonfigToolkit declarer = owner.getDeclarer();
 				ElementTypeTraceability<E, Interpreted<? extends E>, Def<? extends E>> traceability = (ElementTypeTraceability<E, Interpreted<? extends E>, Def<? extends E>>) theTraceability
-					.get(new QonfigElementKey(declarer.getName(), declarer.getMajorVersion(), declarer.getMinorVersion(), owner.getName()));
+					.get(new ElementTypeTraceability.QonfigElementKey(declarer.getName(), declarer.getMajorVersion(),
+						declarer.getMinorVersion(), owner.getName()));
 				if (traceability == null)
 					return null;
 				return traceability.getDefElementValue(this);
@@ -378,7 +323,8 @@ public interface ExElement extends Identifiable {
 				QonfigElementOrAddOn owner = role.getDeclared().getOwner();
 				QonfigToolkit declarer = owner.getDeclarer();
 				ElementTypeTraceability<E, Interpreted<? extends E>, Def<? extends E>> traceability = (ElementTypeTraceability<E, Interpreted<? extends E>, Def<? extends E>>) theTraceability
-					.get(new QonfigElementKey(declarer.getName(), declarer.getMajorVersion(), declarer.getMinorVersion(), owner.getName()));
+					.get(new ElementTypeTraceability.QonfigElementKey(declarer.getName(), declarer.getMajorVersion(),
+						declarer.getMinorVersion(), owner.getName()));
 				if (traceability == null)
 					return Collections.emptyList();
 				return traceability.getDefChildren(this, role);
@@ -389,7 +335,8 @@ public interface ExElement extends Identifiable {
 				QonfigElementOrAddOn owner = attr.getDeclared().getOwner();
 				QonfigToolkit declarer = owner.getDeclarer();
 				ElementTypeTraceability<E, Interpreted<? extends E>, Def<? extends E>> traceability = (ElementTypeTraceability<E, Interpreted<? extends E>, Def<? extends E>>) theTraceability
-					.get(new QonfigElementKey(declarer.getName(), declarer.getMajorVersion(), declarer.getMinorVersion(), owner.getName()));
+					.get(new ElementTypeTraceability.QonfigElementKey(declarer.getName(), declarer.getMajorVersion(),
+						declarer.getMinorVersion(), owner.getName()));
 				if (traceability == null)
 					return null;
 				return traceability.getInterpretedAttribute(interpreted, attr);
@@ -403,7 +350,8 @@ public interface ExElement extends Identifiable {
 				QonfigElementOrAddOn owner = def.getDeclared().getOwner();
 				QonfigToolkit declarer = owner.getDeclarer();
 				ElementTypeTraceability<E, Interpreted<? extends E>, Def<? extends E>> traceability = (ElementTypeTraceability<E, Interpreted<? extends E>, Def<? extends E>>) theTraceability
-					.get(new QonfigElementKey(declarer.getName(), declarer.getMajorVersion(), declarer.getMinorVersion(), owner.getName()));
+					.get(new ElementTypeTraceability.QonfigElementKey(declarer.getName(), declarer.getMajorVersion(),
+						declarer.getMinorVersion(), owner.getName()));
 				if (traceability == null)
 					return null;
 				return traceability.getInterpretedElementValue(interpreted);
@@ -414,7 +362,8 @@ public interface ExElement extends Identifiable {
 				QonfigElementOrAddOn owner = role.getDeclared().getOwner();
 				QonfigToolkit declarer = owner.getDeclarer();
 				ElementTypeTraceability<E, Interpreted<? extends E>, Def<? extends E>> traceability = (ElementTypeTraceability<E, Interpreted<? extends E>, Def<? extends E>>) theTraceability
-					.get(new QonfigElementKey(declarer.getName(), declarer.getMajorVersion(), declarer.getMinorVersion(), owner.getName()));
+					.get(new ElementTypeTraceability.QonfigElementKey(declarer.getName(), declarer.getMajorVersion(),
+						declarer.getMinorVersion(), owner.getName()));
 				if (traceability == null)
 					return Collections.emptyList();
 				return traceability.getInterpretedChildren(interpreted, role);
@@ -425,35 +374,11 @@ public interface ExElement extends Identifiable {
 				QonfigElementOrAddOn owner = role.getDeclared().getOwner();
 				QonfigToolkit declarer = owner.getDeclarer();
 				ElementTypeTraceability<E, Interpreted<? extends E>, Def<? extends E>> traceability = (ElementTypeTraceability<E, Interpreted<? extends E>, Def<? extends E>>) theTraceability
-					.get(new QonfigElementKey(declarer.getName(), declarer.getMajorVersion(), declarer.getMinorVersion(), owner.getName()));
+					.get(new ElementTypeTraceability.QonfigElementKey(declarer.getName(), declarer.getMajorVersion(),
+						declarer.getMinorVersion(), owner.getName()));
 				if (traceability == null)
 					return Collections.emptyList();
 				return traceability.getElementChildren(element, role);
-			}
-
-			@Override
-			public ExElement.Def<?> withTraceability(SingleTypeTraceability<? super E, ?, ?> traceability) {
-				if (theTraceability.putIfAbsent(new QonfigElementKey(traceability), traceability) != null)
-					throw new IllegalArgumentException("Traceability has already been configured for " + traceability);
-				return this;
-			}
-
-			@Override
-			public Runnable onInterpretation(ExConsumer<? super Interpreted<? extends E>, ExpressoInterpretationException> task) {
-				if (theOnInterprets == null)
-					theOnInterprets = ListenerList.build().build();
-				return theOnInterprets.add(task, false);
-			}
-
-			protected void interpreted(ExElement.Interpreted<? extends E> interpreted) {
-				if (theOnInterprets != null)
-					theOnInterprets.forEach(l -> {
-						try {
-							l.accept(interpreted);
-						} catch (ExpressoInterpretationException e) {
-							e.printStackTrace();
-						}
-					});
 			}
 
 			@Override
@@ -462,9 +387,14 @@ public interface ExElement extends Identifiable {
 					session = session.asElement(theQonfigType);
 				theId.setStringRepresentation(theQonfigType.getName() + "@" + session.getElement().getPositionInFile().toShortString());
 
-				theReporting = session.reporting();
-				session.setElementRepresentation(this);
 				theElement = session.getElement();
+				theReporting = session.reporting();
+				boolean firstTime = theTraceability == null;
+				if (firstTime) {
+					theTraceability = new LinkedHashMap<>(ElementTypeTraceability.SingleTypeTraceability.traceabilityFor(getClass(),
+						theElement.getDocument().getDocToolkit(), theReporting));
+				}
+				session.setElementRepresentation(this);
 				if (theParent != null) { // Check that the parent configured is actually the parent element
 					if (theElement.getDocument() instanceof QonfigMetadata) {
 						if (!theParent.getElement().isInstance(((QonfigMetadata) theElement.getDocument()).getElement()))
@@ -474,7 +404,6 @@ public interface ExElement extends Identifiable {
 				}
 				setExpressoEnv(session.getExpressoEnv());
 
-				boolean firstTime = theAddOns.isEmpty();
 				if (firstTime) {
 					// Add-ons can't change, because if they do, the element definition should be re-interpreted from the session
 					Set<QonfigElementOrAddOn> addOnsTested = new HashSet<>();
@@ -531,6 +460,8 @@ public interface ExElement extends Identifiable {
 				Class<?> addOnType = session.getInterpretationSupport(ExAddOn.Def.class);
 				if (addOnType != null && theAddOns.get(addOnType, ClassMap.TypeMatch.SUB_TYPE) == null) {
 					ExAddOn.Def<? super E, ?> exAddOn = session.interpret(ExAddOn.Def.class);
+					SingleTypeTraceability.join(theTraceability,
+						SingleTypeTraceability.traceabilityFor(exAddOn.getClass(), theElement.getDocument().getDocToolkit(), theReporting));
 					theAddOns.put(exAddOn.getClass(), exAddOn);
 				}
 				if (addOn.getSuperElement() != null)
@@ -540,7 +471,7 @@ public interface ExElement extends Identifiable {
 			}
 
 			private void checkTraceability(QonfigElementOrAddOn type) {
-				QonfigElementKey key = new QonfigElementKey(type);
+				ElementTypeTraceability.QonfigElementKey key = new ElementTypeTraceability.QonfigElementKey(type);
 				if (!theTraceability.containsKey(key)) {
 					// Only warn about types that need any traceability
 					if (!type.getDeclaredAttributes().isEmpty() //
@@ -648,8 +579,6 @@ public interface ExElement extends Identifiable {
 			 */
 			protected Abstract(Def<? super E> definition, Interpreted<?> parent) {
 				theDefinition = definition;
-				if (theDefinition instanceof Def.Abstract)
-					((Def.Abstract<? super E>) theDefinition).interpreted(this);
 				if (parent != null)
 					setParentElement(parent);
 				theAddOns = new ClassMap<>();

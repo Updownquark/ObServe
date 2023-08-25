@@ -11,9 +11,8 @@ import org.observe.expresso.ObservableModelSet.ModelComponentId;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.qonfig.CompiledExpression;
-import org.observe.expresso.qonfig.ElementTypeTraceability;
-import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.observe.expresso.qonfig.ExElement;
+import org.observe.expresso.qonfig.ExElementTraceable;
 import org.observe.expresso.qonfig.ExWithElementModel;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
@@ -25,10 +24,11 @@ import com.google.common.reflect.TypeToken;
 
 public interface QuickValueWidget<T> extends QuickWidget {
 	public static final String VALUE_WIDGET = "value-widget";
-	public static final SingleTypeTraceability<QuickValueWidget<?>, Interpreted<?, ?>, Def<?>> VALUE_WIDGET_TRACEABILITY = ElementTypeTraceability
-		.getElementTraceability(QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, VALUE_WIDGET, Def.class, Interpreted.class,
-			QuickValueWidget.class);
 
+	@ExElementTraceable(toolkit = QuickCoreInterpretation.CORE,
+		qonfigType = VALUE_WIDGET,
+		interpretation = Interpreted.class,
+		instance = QuickValueWidget.class)
 	public interface Def<W extends QuickValueWidget<?>> extends QuickWidget.Def<W> {
 		@QonfigAttributeGetter("value-name")
 		ModelComponentId getValueVariable();
@@ -69,7 +69,6 @@ public interface QuickValueWidget<T> extends QuickWidget {
 
 			@Override
 			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
-				withTraceability(VALUE_WIDGET_TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 				super.doUpdate(session.asElement(session.getFocusType().getSuperElement()));
 				String valueName = session.getAttributeText("value-name");
 				theValue = session.getAttributeExpression("value");

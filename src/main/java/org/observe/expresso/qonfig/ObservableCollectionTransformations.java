@@ -31,7 +31,6 @@ import org.observe.expresso.ObservableModelSet.ModelInstantiator;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.VariableType;
-import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.observe.expresso.qonfig.ExElement.Def;
 import org.observe.expresso.qonfig.ExpressoTransformations.AbstractCompiledTransformation;
 import org.observe.expresso.qonfig.ExpressoTransformations.CollectionTransform;
@@ -512,11 +511,11 @@ public class ObservableCollectionTransformations {
 		}
 	}
 
+	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE,
+		qonfigType = "refresh",
+		interpretation = RefreshCollectionTransform.Interpreted.class)
 	static class RefreshCollectionTransform<C extends ObservableCollection<?>> extends TypePreservingTransform<C>
 	implements CollectionTransform<C, C, ExElement> {
-		private static final SingleTypeTraceability<ExElement, Interpreted<?, ?, ?>, RefreshCollectionTransform<?>> TRACEABILITY = ElementTypeTraceability
-			.getElementTraceability(ExpressoBaseV0_1.NAME, ExpressoBaseV0_1.VERSION, "refresh", RefreshCollectionTransform.class,
-				Interpreted.class, null);
 		private CompiledExpression theRefresh;
 
 		RefreshCollectionTransform(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
@@ -530,7 +529,6 @@ public class ObservableCollectionTransformations {
 
 		@Override
 		public void update(ExpressoQIS session, ModelType<C> sourceModelType) throws QonfigInterpretationException {
-			withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 			super.update(session, sourceModelType);
 			theRefresh = session.getAttributeExpression("on");
 		}
@@ -980,11 +978,11 @@ public class ObservableCollectionTransformations {
 		}
 	}
 
+	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE,
+		qonfigType = "unmodifiable",
+		interpretation = UnmodifiableCollectionTransform.Interpreted.class)
 	static class UnmodifiableCollectionTransform<C extends ObservableCollection<?>> extends TypePreservingTransform<C>
 	implements CollectionTransform<C, C, ExElement> {
-		private static final SingleTypeTraceability<ExElement, Interpreted<?, ?, ?>, RefreshCollectionTransform<?>> TRACEABILITY = ElementTypeTraceability
-			.getElementTraceability(ExpressoBaseV0_1.NAME, ExpressoBaseV0_1.VERSION, "unmodifiable", RefreshCollectionTransform.class,
-				Interpreted.class, null);
 		private boolean isAllowUpdates;
 
 		UnmodifiableCollectionTransform(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
@@ -997,7 +995,6 @@ public class ObservableCollectionTransformations {
 
 		@Override
 		public void update(ExpressoQIS session, ModelType<C> sourceModelType) throws QonfigInterpretationException {
-			withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 			super.update(session, sourceModelType);
 			isAllowUpdates = session.getAttribute("allow-updates", boolean.class);
 		}
@@ -1062,19 +1059,17 @@ public class ObservableCollectionTransformations {
 		}
 	}
 
+	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE,
+		qonfigType = "refresh",
+		interpretation = FilterModCollectionTransform.Interpreted.class)
 	static class FilterModCollectionTransform<C extends ObservableCollection<?>> extends TypePreservingTransform<C>
 	implements CollectionTransform<C, C, ExElement> {
-		private static final SingleTypeTraceability<ExElement, Interpreted<?, ?, ?>, RefreshCollectionTransform<?>> TRACEABILITY = ElementTypeTraceability
-			.getElementTraceability(ExpressoBaseV0_1.NAME, ExpressoBaseV0_1.VERSION, "refresh", RefreshCollectionTransform.class,
-				Interpreted.class, null);
-
 		FilterModCollectionTransform(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
 			super(parent, qonfigType);
 		}
 
 		@Override
 		public void update(ExpressoQIS session, ModelType<C> sourceModelType) throws QonfigInterpretationException {
-			withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 			super.update(session, sourceModelType);
 		}
 
@@ -1551,11 +1546,11 @@ public class ObservableCollectionTransformations {
 		}
 	}
 
+	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE,
+		qonfigType = "where-contained",
+		interpretation = WhereContainedCollectionTransform.Interpreted.class)
 	static class WhereContainedCollectionTransform<C extends ObservableCollection<?>> extends TypePreservingTransform<C>
 	implements CollectionTransform<C, C, ExElement> {
-		private static final SingleTypeTraceability<ExElement, Interpreted<?, ?, ?>, WhereContainedCollectionTransform<?>> TRACEABILITY = ElementTypeTraceability
-			.getElementTraceability(ExpressoBaseV0_1.NAME, ExpressoBaseV0_1.VERSION, "where-contained",
-				WhereContainedCollectionTransform.class, Interpreted.class, null);
 		private CompiledExpression theFilter;
 		private boolean isInclusive;
 
@@ -1574,7 +1569,6 @@ public class ObservableCollectionTransformations {
 
 		@Override
 		public void update(ExpressoQIS session, ModelType<C> sourceModelType) throws QonfigInterpretationException {
-			withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 			super.update(session, sourceModelType);
 			theFilter = session.getAttributeExpression("filter");
 			isInclusive = session.getAttribute("inclusive", boolean.class);
@@ -1694,12 +1688,9 @@ public class ObservableCollectionTransformations {
 		}
 	}
 
+	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE, qonfigType = "size", interpretation = SizeCollectionTransform.Interpreted.class)
 	static class SizeCollectionTransform<C extends ObservableCollection<?>> extends ExElement.Def.Abstract<ExElement>
 	implements CollectionTransform<C, SettableValue<?>, ExElement> {
-		private static final SingleTypeTraceability<ExElement, Interpreted<?, ?>, SizeCollectionTransform<?>> TRACEABILITY = ElementTypeTraceability
-			.getElementTraceability(ExpressoBaseV0_1.NAME, ExpressoBaseV0_1.VERSION, "size", SizeCollectionTransform.class,
-				Interpreted.class, null);
-
 		private QonfigValueType.Literal theType;
 
 		SizeCollectionTransform(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
@@ -1718,7 +1709,6 @@ public class ObservableCollectionTransformations {
 
 		@Override
 		public void update(ExpressoQIS session, ModelType<C> sourceModelType) throws QonfigInterpretationException {
-			withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 			super.update(session);
 			theType = session.getAttribute("type", QonfigValueType.Literal.class);
 			if (!"value".equals(theType.getValue()))
@@ -1812,11 +1802,11 @@ public class ObservableCollectionTransformations {
 		}
 	}
 
+	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE,
+		qonfigType = "collect",
+		interpretation = CollectCollectionTransform.Interpreted.class)
 	static class CollectCollectionTransform<C extends ObservableCollection<?>> extends TypePreservingTransform<C>
 	implements CollectionTransform<C, C, ExElement> {
-		private static final SingleTypeTraceability<ExElement, Interpreted<?, ?, ?>, CollectCollectionTransform<?>> TRACEABILITY = ElementTypeTraceability
-			.getElementTraceability(ExpressoBaseV0_1.NAME, ExpressoBaseV0_1.VERSION, "collect", CollectCollectionTransform.class,
-				Interpreted.class, null);
 		Boolean isActive;
 
 		CollectCollectionTransform(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
@@ -1830,7 +1820,6 @@ public class ObservableCollectionTransformations {
 
 		@Override
 		public void update(ExpressoQIS session, ModelType<C> sourceModelType) throws QonfigInterpretationException {
-			withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 			super.update(session, sourceModelType);
 			isActive = session.getAttribute("active", Boolean.class);
 		}

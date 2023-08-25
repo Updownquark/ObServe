@@ -23,6 +23,9 @@ public class QuickCoreInterpretation implements QonfigInterpretation {
 	/** The supported version of the Quick-Core toolkit */
 	public static final Version VERSION = new Version(0, 1, 0);
 
+	/** {@link #NAME} and {@link #VERSION} combined */
+	public static final String CORE = "Quick-Core v0.1";
+
 	@SuppressWarnings("unused")
 	private QonfigToolkit theCoreToolkit;
 

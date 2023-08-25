@@ -9,10 +9,9 @@ import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.qonfig.CompiledExpression;
-import org.observe.expresso.qonfig.ElementTypeTraceability;
-import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.observe.expresso.qonfig.ExAddOn;
 import org.observe.expresso.qonfig.ExElement;
+import org.observe.expresso.qonfig.ExElementTraceable;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.qommons.config.QonfigAddOn;
@@ -21,9 +20,6 @@ import org.qommons.config.QonfigInterpretationException;
 /** An add-on for an element that is to be a window */
 public class QuickWindow extends ExAddOn.Abstract<ExElement> {
 	public static final String WINDOW = "window";
-	private static final SingleTypeTraceability<ExElement, ExElement.Interpreted<?>, ExElement.Def<?>> TRACEABILITY = ElementTypeTraceability
-		.getAddOnTraceability(QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, WINDOW, Def.class, Interpreted.class,
-			QuickWindow.class);
 
 	/** An action to perform when the user closes the window (e.g. clicks the "X") */
 	public enum CloseAction {
@@ -38,6 +34,10 @@ public class QuickWindow extends ExAddOn.Abstract<ExElement> {
 	}
 
 	/** The definition of a {@link QuickWindow} */
+	@ExElementTraceable(toolkit = QuickCoreInterpretation.CORE,
+		qonfigType = WINDOW,
+		interpretation = Interpreted.class,
+		instance = QuickWindow.class)
 	public static class Def extends ExAddOn.Def.Abstract<ExElement, QuickWindow> {
 		private CompiledExpression theX;
 		private CompiledExpression theY;
@@ -99,7 +99,6 @@ public class QuickWindow extends ExAddOn.Abstract<ExElement> {
 
 		@Override
 		public void update(ExpressoQIS session, ExElement.Def<? extends ExElement> element) throws QonfigInterpretationException {
-			element.withTraceability(TRACEABILITY.validate(getType(), element.reporting()));
 			theX = session.getAttributeExpression("x");
 			theY = session.getAttributeExpression("y");
 			theWidth = session.getAttributeExpression("width");

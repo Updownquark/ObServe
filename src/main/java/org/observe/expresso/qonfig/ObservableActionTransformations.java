@@ -13,7 +13,6 @@ import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelComponentId;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
-import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.observe.expresso.qonfig.ExpressoTransformations.ActionTransform;
 import org.observe.expresso.qonfig.ExpressoTransformations.Operation;
 import org.observe.expresso.qonfig.ExpressoTransformations.TypePreservingTransform;
@@ -31,11 +30,9 @@ public class ObservableActionTransformations {
 		interpreter.createWith("disable", ActionTransform.class, ExElement.creator(DisabledActionTransform::new));
 	}
 
+	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE, qonfigType = "disable", interpretation = DisabledActionTransform.Interpreted.class)
 	static class DisabledActionTransform extends TypePreservingTransform<ObservableAction<?>>
 	implements ActionTransform<ObservableAction<?>, ExElement> {
-		private static final SingleTypeTraceability<ExElement, Interpreted<?>, DisabledActionTransform> TRACEABILITY = ElementTypeTraceability
-			.getElementTraceability(ExpressoBaseV0_1.NAME, ExpressoBaseV0_1.VERSION, "disable", DisabledActionTransform.class,
-				Interpreted.class, null);
 		private CompiledExpression theDisablement;
 		private ModelComponentId theSourceVariable;
 
@@ -50,7 +47,6 @@ public class ObservableActionTransformations {
 
 		@Override
 		public void update(ExpressoQIS session, ModelType<ObservableAction<?>> sourceModelType) throws QonfigInterpretationException {
-			withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 			super.update(session, sourceModelType);
 			String sourceAs = session.getAttributeText("source-as");
 			ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);

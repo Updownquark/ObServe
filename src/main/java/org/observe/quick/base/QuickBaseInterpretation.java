@@ -48,6 +48,9 @@ public class QuickBaseInterpretation implements QonfigInterpretation {
 	/** The version of the toolkit */
 	public static final Version VERSION = new Version(0, 1, 0);
 
+	/** {@link #NAME} and {@link #VERSION} combined */
+	public static final String BASE = "Quick-Base v0.1";
+
 	static {
 		TypeTokens.get().addSupplementaryCast(Integer.class, QuickSize.class, new TypeTokens.SupplementaryCast<Integer, QuickSize>() {
 			@Override

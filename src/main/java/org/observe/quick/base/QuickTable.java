@@ -14,9 +14,8 @@ import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.qonfig.CompiledExpression;
-import org.observe.expresso.qonfig.ElementTypeTraceability;
-import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.observe.expresso.qonfig.ExElement;
+import org.observe.expresso.qonfig.ExElementTraceable;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.expresso.qonfig.QonfigChildGetter;
@@ -29,10 +28,11 @@ import com.google.common.reflect.TypeToken;
 
 public class QuickTable<R> extends TabularWidget.Abstract<R> {
 	public static final String TABLE = "table";
-	private static final SingleTypeTraceability<QuickTable<?>, Interpreted<?>, Def> TRACEABILITY = ElementTypeTraceability
-		.getElementTraceability(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, TABLE, Def.class, Interpreted.class,
-			QuickTable.class);
 
+	@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
+		qonfigType = TABLE,
+		interpretation = Interpreted.class,
+		instance = QuickTable.class)
 	public static class Def extends TabularWidget.Def.Abstract<QuickTable<?>> {
 		private CompiledExpression theRows;
 		private CompiledExpression theSelection;
@@ -71,7 +71,6 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
-			withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 			super.doUpdate(session.asElement("tabular-widget"));
 			theRows = session.getAttributeExpression("rows");
 			theSelection = session.getAttributeExpression("selection");

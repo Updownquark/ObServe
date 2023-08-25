@@ -12,11 +12,11 @@ import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.qonfig.CompiledExpression;
-import org.observe.expresso.qonfig.ElementTypeTraceability;
-import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.observe.expresso.qonfig.ExAddOn;
 import org.observe.expresso.qonfig.ExElement;
+import org.observe.expresso.qonfig.ExElementTraceable;
 import org.observe.expresso.qonfig.ExpressoQIS;
+import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigInterpretationException;
@@ -63,23 +63,31 @@ public abstract class Positionable extends ExAddOn.Abstract<ExElement> {
 			}
 		}
 
+		@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
+			qonfigType = "v-positionable",
+			interpretation = Interpreted.Vertical.class,
+			instance = Positionable.Vertical.class)
 		public static class Vertical extends Def<Positionable.Vertical> {
-			private static final SingleTypeTraceability<ExElement, ExElement.Interpreted<?>, ExElement.Def<?>> TRACEABILITY = ElementTypeTraceability
-				.<ExElement, Positionable, Interpreted<?>, Def<?>> buildAddOn(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION,
-					"v-positionable", Def.class, Interpreted.class, Positionable.class)//
-				.withAddOnAttribute("top", Def::getLeading, Interpreted::getLeading)//
-				.withAddOnAttribute("v-center", Def::getCenter, Interpreted::getCenter)//
-				.withAddOnAttribute("bottom", Def::getTrailing, Interpreted::getTrailing)//
-				.build();
-
 			public Vertical(QonfigAddOn type, ExElement.Def<?> element) {
 				super(true, type, element);
 			}
 
 			@Override
-			public void update(ExpressoQIS session, ExElement.Def<?> element) throws QonfigInterpretationException {
-				element.withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
-				super.update(session, element);
+			@QonfigAttributeGetter("top")
+			public CompiledExpression getLeading() {
+				return super.getLeading();
+			}
+
+			@Override
+			@QonfigAttributeGetter("v-center")
+			public CompiledExpression getCenter() {
+				return super.getCenter();
+			}
+
+			@Override
+			@QonfigAttributeGetter("bottom")
+			public CompiledExpression getTrailing() {
+				return super.getTrailing();
 			}
 
 			@Override
@@ -88,23 +96,31 @@ public abstract class Positionable extends ExAddOn.Abstract<ExElement> {
 			}
 		}
 
+		@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
+			qonfigType = "h-positionable",
+			interpretation = Interpreted.Horizontal.class,
+			instance = Positionable.Horizontal.class)
 		public static class Horizontal extends Def<Positionable.Horizontal> {
-			private static final SingleTypeTraceability<ExElement, ExElement.Interpreted<?>, ExElement.Def<?>> TRACEABILITY = ElementTypeTraceability
-				.<ExElement, Positionable, Interpreted<?>, Def<?>> buildAddOn(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION,
-					"h-positionable", Def.class, Interpreted.class, Positionable.class)//
-				.withAddOnAttribute("left", Def::getLeading, Interpreted::getLeading)//
-				.withAddOnAttribute("h-center", Def::getCenter, Interpreted::getCenter)//
-				.withAddOnAttribute("right", Def::getTrailing, Interpreted::getTrailing)//
-				.build();
-
 			public Horizontal(QonfigAddOn type, ExElement.Def<?> element) {
 				super(false, type, element);
 			}
 
 			@Override
-			public void update(ExpressoQIS session, ExElement.Def<?> element) throws QonfigInterpretationException {
-				element.withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
-				super.update(session, element);
+			@QonfigAttributeGetter("left")
+			public CompiledExpression getLeading() {
+				return super.getLeading();
+			}
+
+			@Override
+			@QonfigAttributeGetter("h-center")
+			public CompiledExpression getCenter() {
+				return super.getCenter();
+			}
+
+			@Override
+			@QonfigAttributeGetter("right")
+			public CompiledExpression getTrailing() {
+				return super.getTrailing();
 			}
 
 			@Override

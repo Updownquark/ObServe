@@ -4,15 +4,14 @@ import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
-import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
 public class ExWithLocalModel extends ExModelAugmentation<ExElement> {
-	private static final SingleTypeTraceability<ExElement, ExElement.Interpreted<?>, ExElement.Def<?>> TRACEABILITY = ElementTypeTraceability
-		.getAddOnTraceability(ExpressoSessionImplV0_1.TOOLKIT_NAME, ExpressoSessionImplV0_1.VERSION, "with-local-model", Def.class,
-			Interpreted.class, ExWithLocalModel.class);
-
+	@ExElementTraceable(toolkit = ExpressoSessionImplV0_1.CORE,
+		qonfigType = "with-local-model",
+		interpretation = Interpreted.class,
+		instance = ExWithLocalModel.class)
 	public static class Def extends ExModelAugmentation.Def<ExElement, ExWithLocalModel> {
 		private ObservableModelElement.LocalModelElementDef theLocalModelElement;
 
@@ -27,7 +26,6 @@ public class ExWithLocalModel extends ExModelAugmentation<ExElement> {
 
 		@Override
 		public void update(ExpressoQIS session, ExElement.Def<? extends ExElement> element) throws QonfigInterpretationException {
-			element.withTraceability(TRACEABILITY.validate(getType(), element.reporting()));
 			super.update(session, element);
 			if (session.getChildren("model").isEmpty()) { // Don't create a local model if there's no reason to
 				theLocalModelElement = null;

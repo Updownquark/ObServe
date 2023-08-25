@@ -12,9 +12,8 @@ import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.qonfig.CompiledExpression;
-import org.observe.expresso.qonfig.ElementTypeTraceability;
-import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.observe.expresso.qonfig.ExElement;
+import org.observe.expresso.qonfig.ExElementTraceable;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.quick.QuickWidget;
@@ -26,10 +25,11 @@ import com.google.common.reflect.TypeToken;
 
 public class QuickButton extends QuickWidget.Abstract {
 	public static final String BUTTON = "button";
-	private static final SingleTypeTraceability<QuickButton, Interpreted<?>, Def<?>> TRACEABILITY = ElementTypeTraceability
-		.getElementTraceability(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, BUTTON, Def.class, Interpreted.class,
-			QuickButton.class);
 
+	@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
+		qonfigType = BUTTON,
+		interpretation = Interpreted.class,
+		instance = QuickButton.class)
 	public static class Def<B extends QuickButton> extends QuickWidget.Def.Abstract<B> {
 		private CompiledExpression theText;
 		private CompiledExpression theIcon;
@@ -56,7 +56,6 @@ public class QuickButton extends QuickWidget.Abstract {
 
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
-			withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 			super.doUpdate(session.asElement(session.getFocusType().getSuperElement()));
 			theText = session.getValueExpression();
 			theIcon = session.getAttributeExpression("icon");
@@ -104,9 +103,8 @@ public class QuickButton extends QuickWidget.Abstract {
 		protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 			super.doUpdate(env);
 			theText = getDefinition().getText() == null ? null : getDefinition().getText().interpret(ModelTypes.Value.STRING, env);
-			theIcon = getDefinition().getIcon() == null ? null
-				: QuickBaseInterpretation.evaluateIcon(getDefinition().getIcon(), env,
-					getDefinition().getElement().getDocument().getLocation());
+			theIcon = getDefinition().getIcon() == null ? null : QuickBaseInterpretation.evaluateIcon(getDefinition().getIcon(), env,
+				getDefinition().getElement().getDocument().getLocation());
 			theAction = getDefinition().getAction().interpret(ModelTypes.Action.any(), env);
 		}
 

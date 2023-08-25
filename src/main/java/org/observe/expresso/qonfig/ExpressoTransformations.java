@@ -36,7 +36,6 @@ import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.VariableType;
 import org.observe.expresso.ops.NameExpression;
-import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.observe.expresso.qonfig.ExElement.Def;
 import org.observe.expresso.qonfig.ExpressoTransformations.CombineWith.TransformationModification;
 import org.observe.util.TypeTokens;
@@ -58,12 +57,11 @@ public class ExpressoTransformations {
 	private ExpressoTransformations() {
 	}
 
+	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE,
+		qonfigType = "transform",
+		interpretation = ExpressoTransformedElement.Interpreted.class)
 	public static class ExpressoTransformedElement<M1, M2> extends ExElement.Def.Abstract<ModelValueElement<M2, ?>>
 	implements ModelValueElement.CompiledSynth<M2, ModelValueElement<M2, ?>> {
-		private static final SingleTypeTraceability<ModelValueElement<?, ?>, Interpreted<?, ?, ?, ?>, ExpressoTransformedElement<?, ?>> TRACEABILITY = ElementTypeTraceability
-			.getElementTraceability(ExpressoBaseV0_1.NAME, ExpressoBaseV0_1.VERSION, "transform", ExpressoTransformedElement.class,
-				Interpreted.class, null);
-
 		private String theModelPath;
 		private CompiledExpression theSource;
 		private final List<Operation<?, ?, ?>> theOperations;
@@ -101,8 +99,6 @@ public class ExpressoTransformations {
 
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
-			withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
-			withTraceability(ModelValueElement.TRACEABILITY.validate(session.getFocusType().getSuperElement(), session.reporting()));
 			super.doUpdate(session);
 			theModelPath = session.get(ExpressoBaseV0_1.PATH_KEY, String.class);
 			theSource = session.getAttributeExpression("source");
@@ -832,12 +828,15 @@ public class ExpressoTransformations {
 		}
 	}
 
+	@ExMultiElementTraceable({
+		@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE,
+			qonfigType = "map-to",
+			interpretation = AbstractCompiledTransformation.Interpreted.class),
+		@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE,
+		qonfigType = "abst-map-op",
+		interpretation = AbstractCompiledTransformation.Interpreted.class) })
 	public static abstract class AbstractCompiledTransformation<M1, M2, E extends ExElement> extends ExElement.Def.Abstract<E>
 	implements CompiledTransformation<M1, M2, E> {
-		private static final SingleTypeTraceability<ExElement, Interpreted<?, ?, ?, ?, ?, ?, ?>, AbstractCompiledTransformation<?, ?, ?>> TRACEABILITY = ElementTypeTraceability
-			.getElementTraceability(ExpressoBaseV0_1.NAME, ExpressoBaseV0_1.VERSION, "map-to", AbstractCompiledTransformation.class,
-				Interpreted.class, null);
-
 		private ModelComponentId theSourceName;
 		private VariableType theType;
 		private MapWith<?> theMapWith;
@@ -866,59 +865,58 @@ public class ExpressoTransformations {
 			return theType;
 		}
 
-		@QonfigAttributeGetter("cache")
+		@QonfigAttributeGetter(asType = "abst-map-op", value = "cache")
 		public boolean isCached() {
 			return isCached;
 		}
 
-		@QonfigAttributeGetter("re-eval-on-update")
+		@QonfigAttributeGetter(asType = "abst-map-op", value = "re-eval-on-update")
 		public boolean isReEvalOnUpdate() {
 			return isReEvalOnUpdate;
 		}
 
-		@QonfigAttributeGetter("fire-if-unchanged")
+		@QonfigAttributeGetter(asType = "abst-map-op", value = "fire-if-unchanged")
 		public boolean isFireIfUnchanged() {
 			return isFireIfUnchanged;
 		}
 
-		@QonfigAttributeGetter("null-to-null")
+		@QonfigAttributeGetter(asType = "abst-map-op", value = "null-to-null")
 		public boolean isNullToNull() {
 			return isNullToNull;
 		}
 
-		@QonfigAttributeGetter("many-to-one")
+		@QonfigAttributeGetter(asType = "abst-map-op", value = "many-to-one")
 		public boolean isManyToOne() {
 			return isManyToOne;
 		}
 
-		@QonfigAttributeGetter("one-to-many")
+		@QonfigAttributeGetter(asType = "abst-map-op", value = "one-to-many")
 		public boolean isOneToMany() {
 			return isOneToMany;
 		}
 
-		@QonfigChildGetter("map")
+		@QonfigChildGetter(asType = "map-to", value = "map")
 		public MapWith<?> getMapWith() {
 			return theMapWith;
 		}
 
-		@QonfigAttributeGetter("equivalence")
+		@QonfigAttributeGetter(asType = "map-to", value = "equivalence")
 		public CompiledExpression getEquivalence() {
 			return theEquivalence;
 		}
 
-		@QonfigAttributeGetter("combined-value")
+		@QonfigChildGetter(asType = "map-to", value = "combined-value")
 		public List<CombineWith<?>> getCombinedValues() {
 			return Collections.unmodifiableList(theCombinedValues);
 		}
 
-		@QonfigChildGetter("reverse")
+		@QonfigChildGetter(asType = "map-to", value = "reverse")
 		public CompiledMapReverse<?> getReverse() {
 			return theReverse;
 		}
 
 		@Override
 		public void update(ExpressoQIS session, ModelType<M1> sourceModelType) throws QonfigInterpretationException {
-			withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 			super.update(session);
 			// This is quicker than retrieving and grabbing it from the add-on
 			String sourceAs = session.getAttributeText("source-as");

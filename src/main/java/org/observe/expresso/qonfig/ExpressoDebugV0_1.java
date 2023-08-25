@@ -5,29 +5,31 @@ import java.util.Set;
 
 import org.qommons.BreakpointHere;
 import org.qommons.Version;
+import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigInterpretation;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigInterpreterCore.Builder;
-import org.qommons.config.QonfigInterpreterCore.CoreSession;
-import org.qommons.config.QonfigInterpreterCore.QonfigValueModifier;
 import org.qommons.config.QonfigToolkit;
 import org.qommons.config.SpecialSession;
 
 /** Implementation of the Expresso-Debug toolkit */
 public class ExpressoDebugV0_1 implements QonfigInterpretation {
 	/** The name of the toolkit */
-	public static final String TOOLKIT_NAME = "Expresso-Debug";
+	public static final String NAME = "Expresso-Debug";
 	/** The version of the toolkit */
-	public static final Version TOOLKIT_VERSION = new Version(0, 1, 0);
+	public static final Version VERSION = new Version(0, 1, 0);
+
+	/** {@link #NAME} and {@link #VERSION} combined */
+	public static final String DEBUG = "Expresso-Debug v0.1";
 
 	@Override
 	public String getToolkitName() {
-		return TOOLKIT_NAME;
+		return NAME;
 	}
 
 	@Override
 	public Version getVersion() {
-		return TOOLKIT_VERSION;
+		return VERSION;
 	}
 
 	@Override
@@ -41,41 +43,92 @@ public class ExpressoDebugV0_1 implements QonfigInterpretation {
 
 	@Override
 	public Builder configureInterpreter(Builder interpreter) {
-		interpreter.modifyWith("debug-value",
-			(Class<ModelValueElement.CompiledSynth<?, ?>>) (Class<?>) ModelValueElement.CompiledSynth.class,
-			new QonfigValueModifier<ModelValueElement.CompiledSynth<?, ?>>() {
-			@Override
-			public Object prepareSession(CoreSession session) throws QonfigInterpretationException {
-				String breakpointType = session.getAttributeText("break-on");
-				if ("compile".equals(breakpointType))
-					BreakpointHere.breakpoint();
-				return null;
+		interpreter.createWith("debug-value", DebugValue.Def.class, ExAddOn.creator(DebugValue.Def::new));
+		return interpreter;
+	}
+
+	public static class DebugValue extends ExAddOn.Abstract<ExElement> {
+		public enum BreakType {
+			compile, interpret, instantiate
+		}
+
+		@ExElementTraceable(toolkit = DEBUG, qonfigType = "debug-value", interpretation = Interpreted.class, instance = DebugValue.class)
+		public static class Def extends ExAddOn.Def.Abstract<ExElement, DebugValue> {
+			private BreakType theBreakType;
+
+			public Def(QonfigAddOn type, ExElement.Def<? extends ExElement> element) {
+				super(type, element);
+			}
+
+			@QonfigAttributeGetter("break-on")
+			public BreakType getBreakType() {
+				return theBreakType;
 			}
 
 			@Override
-			public ModelValueElement.CompiledSynth<?, ?> modifyValue(ModelValueElement.CompiledSynth<?, ?> value, CoreSession session,
-				Object prepared) throws QonfigInterpretationException {
-				String breakpointType = session.getAttributeText("break-on");
-				if (breakpointType == null)
-					return value;
-				switch (breakpointType) {
-				case "compile":
-					return value;
-				case "interpret":
-					value.onInterpretation(interpreted -> {
-						BreakpointHere.breakpoint();
-					});
-					return value;
-				case "instantiate":
-						// TODO
-						throw new QonfigInterpretationException("Instantiation breakpoint is no longer implemented",
-							session.reporting().getPosition(), 0);
-				default:
-					throw new QonfigInterpretationException("Unrecognized break-on value: " + breakpointType,
-						session.reporting().getPosition(), 0);
+			public void preUpdate(ExpressoQIS session) throws QonfigInterpretationException {
+				if (theBreakType == BreakType.compile)
+					BreakpointHere.breakpoint();
+				super.preUpdate(session);
+			}
+
+			@Override
+			public void update(ExpressoQIS session, ExElement.Def<?> element) throws QonfigInterpretationException {
+				super.update(session, element);
+				String breakType = session.getAttributeText("break-on");
+				try {
+					theBreakType = theBreakType == null ? null : BreakType.valueOf(breakType);
+				} catch (IllegalArgumentException e) {
+					element.reporting().error("Unrecognized break type: " + breakType, e);
 				}
 			}
-		});
-		return interpreter;
+
+			@Override
+			public Interpreted interpret(ExElement.Interpreted<? extends ExElement> element) {
+				return new Interpreted(this, element);
+			}
+		}
+
+		public static class Interpreted extends ExAddOn.Interpreted.Abstract<ExElement, DebugValue> {
+			public Interpreted(Def definition, ExElement.Interpreted<? extends ExElement> element) {
+				super(definition, element);
+			}
+
+			@Override
+			public Def getDefinition() {
+				return (Def) super.getDefinition();
+			}
+
+			@Override
+			public void preUpdate() {
+				if (getDefinition().getBreakType() == BreakType.interpret)
+					BreakpointHere.breakpoint();
+				super.preUpdate();
+			}
+
+			@Override
+			public DebugValue create(ExElement element) {
+				return new DebugValue(element, getDefinition().getBreakType());
+			}
+		}
+
+		private BreakType theBreakType;
+
+		public DebugValue(ExElement element, BreakType breakType) {
+			super(element);
+			theBreakType = breakType;
+		}
+
+		@Override
+		public Class<Interpreted> getInterpretationType() {
+			return Interpreted.class;
+		}
+
+		@Override
+		public void preInstantiate() {
+			if (theBreakType == BreakType.instantiate)
+				BreakpointHere.breakpoint();
+			super.preInstantiate();
+		}
 	}
 }

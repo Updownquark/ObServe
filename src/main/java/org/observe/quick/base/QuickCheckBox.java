@@ -9,9 +9,8 @@ import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.qonfig.CompiledExpression;
-import org.observe.expresso.qonfig.ElementTypeTraceability;
-import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.observe.expresso.qonfig.ExElement;
+import org.observe.expresso.qonfig.ExElementTraceable;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.quick.QuickValueWidget;
@@ -23,10 +22,11 @@ import com.google.common.reflect.TypeToken;
 
 public class QuickCheckBox extends QuickValueWidget.Abstract<Boolean> {
 	public static final String CHECK_BOX = "check-box";
-	private static final SingleTypeTraceability<QuickCheckBox, Interpreted, Def> TRACEABILITY = ElementTypeTraceability
-		.getElementTraceability(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, CHECK_BOX, Def.class, Interpreted.class,
-			QuickCheckBox.class);
 
+	@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
+		qonfigType = CHECK_BOX,
+		interpretation = Interpreted.class,
+		instance = MultiValueWidget.class)
 	public static class Def extends QuickValueWidget.Def.Abstract<QuickCheckBox> {
 		private CompiledExpression theText;
 
@@ -41,7 +41,6 @@ public class QuickCheckBox extends QuickValueWidget.Abstract<Boolean> {
 
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
-			withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 			super.doUpdate(session.asElement(session.getFocusType().getSuperElement()));
 			theText = session.getValueExpression();
 		}

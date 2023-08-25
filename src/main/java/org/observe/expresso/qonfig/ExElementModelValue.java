@@ -1,6 +1,5 @@
 package org.observe.expresso.qonfig;
 
-import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigAttributeDef;
 import org.qommons.config.QonfigElementOrAddOn;
@@ -8,11 +7,10 @@ import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigMetadata;
 
 public class ExElementModelValue extends ExAddOn.Abstract<ExtModelValueElement<?, ?>> {
-	private static SingleTypeTraceability<ExtModelValueElement<?, ?>, ExElement.Interpreted<? extends ExtModelValueElement<?, ?>>, ExElement.Def<? extends ExtModelValueElement<?, ?>>> TRACEABILITY = ElementTypeTraceability//
-		.<ExtModelValueElement<?, ?>, ExElementModelValue, Interpreted<?>, Def<?>> getAddOnTraceability(
-			ExpressoSessionImplV0_1.TOOLKIT_NAME, ExpressoSessionImplV0_1.VERSION, "element-model-value", Def.class,
-			Interpreted.class, ExElementModelValue.class);
-
+	@ExElementTraceable(toolkit = ExpressoSessionImplV0_1.CORE,
+		qonfigType = "element-model-value",
+		interpretation = Interpreted.class,
+		instance = ExElementModelValue.class)
 	public static class Def<AO extends ExElementModelValue> extends ExAddOn.Def.Abstract<ExtModelValueElement<?, ?>, AO> {
 		private ElementModelValue.Identity theElementValue;
 
@@ -33,7 +31,6 @@ public class ExElementModelValue extends ExAddOn.Abstract<ExtModelValueElement<?
 		@Override
 		public void update(ExpressoQIS session, ExElement.Def<? extends ExtModelValueElement<?, ?>> element)
 			throws QonfigInterpretationException {
-			element.withTraceability(TRACEABILITY.validate(session.getFocusType(), element.reporting()));
 			super.update(session, element);
 			if (session.getElement().getDocument() instanceof QonfigMetadata) {
 				QonfigElementOrAddOn owner = ((QonfigMetadata) session.getElement().getDocument()).getElement();

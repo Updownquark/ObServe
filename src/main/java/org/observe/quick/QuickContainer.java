@@ -5,9 +5,8 @@ import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
-import org.observe.expresso.qonfig.ElementTypeTraceability;
-import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.observe.expresso.qonfig.ExElement;
+import org.observe.expresso.qonfig.ExElementTraceable;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigChildGetter;
 import org.qommons.collect.BetterList;
@@ -24,16 +23,16 @@ import org.qommons.tree.BetterTreeList;
 public interface QuickContainer<C extends QuickWidget> extends QuickWidget {
 	public static final String CONTAINER = "container";
 
-	public static final SingleTypeTraceability<QuickContainer<?>, Interpreted<?, ?>, Def<?, ?>> CONTAINER_TRACEABILITY = ElementTypeTraceability
-		.getElementTraceability(QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, CONTAINER, Def.class, Interpreted.class,
-			QuickContainer.class);
-
 	/**
 	 * The definition of a QuickContainer
 	 *
 	 * @param <W> The type of the container that this definition is for
 	 * @param <C> The type of widgets that the container will contain
 	 */
+	@ExElementTraceable(toolkit = QuickCoreInterpretation.CORE,
+		qonfigType = CONTAINER,
+		interpretation = Interpreted.class,
+		instance = QuickContainer.class)
 	public interface Def<W extends QuickContainer<C>, C extends QuickWidget> extends QuickWidget.Def<W> {
 		/** @return The definitions of all widgets that will be contained in the container produced by this definition */
 		@QonfigChildGetter("content")
@@ -69,7 +68,6 @@ public interface QuickContainer<C extends QuickWidget> extends QuickWidget {
 
 			@Override
 			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
-				withTraceability(CONTAINER_TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 				super.doUpdate(session.asElement(session.getFocusType().getSuperElement()));
 				ExElement.syncDefs(QuickWidget.Def.class, theContents, session.forChildren("content"));
 			}

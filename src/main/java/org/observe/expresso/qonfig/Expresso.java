@@ -3,18 +3,13 @@ package org.observe.expresso.qonfig;
 import org.observe.expresso.ClassView;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.InterpretedExpressoEnv;
-import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.observe.expresso.qonfig.ExElement.Interpreted;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
 /** A simple structure consisting of a class view and models, the definition for a set of models for an application */
 public class Expresso extends ExElement.Interpreted.Abstract<ExElement> {
-	// Can't use reflection here because we're configuring traceability for 2 related Qonfig types for one java type
-	private static final SingleTypeTraceability<ExElement, Expresso, Def> TRACEABILITY = ElementTypeTraceability
-		.<ExElement, Expresso, Def> getElementTraceability(ExpressoSessionImplV0_1.TOOLKIT_NAME, ExpressoSessionImplV0_1.VERSION,
-			"expresso", Def.class, Expresso.class, null);
-
+	@ExElementTraceable(toolkit = ExpressoSessionImplV0_1.CORE, qonfigType = "expresso", interpretation = Expresso.class)
 	public static class Def extends ExElement.Def.Abstract<ExElement> {
 		private ClassViewElement theClassView;
 		private ObservableModelElement.ModelSetElement.Def<?> theModels;
@@ -35,7 +30,6 @@ public class Expresso extends ExElement.Interpreted.Abstract<ExElement> {
 
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
-			withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 			super.doUpdate(session);
 			theClassView = ExElement.useOrReplace(ClassViewElement.class, theClassView, session, "imports");
 			theModels = ExElement.useOrReplace(ObservableModelElement.ModelSetElement.Def.class, theModels, session, "models");

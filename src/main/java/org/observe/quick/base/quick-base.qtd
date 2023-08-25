@@ -223,7 +223,7 @@
 		</element-def>
 
 		<!-- Text components -->
-		<element-def name="styled-document" abstract="true">
+		<element-def name="styled-document" abstract="true" inherits="with-local-model">
 			<?DOC The node over which the selection anchor is positioned?>
 			<attribute name="selection-start-value" type="expression" specify="optional" />
 			<?DOC The offset of the selection anchor relative to the start of the selected-start-value?>
@@ -242,10 +242,10 @@
 		<?DOC A document that may be applied to a <b>base-text-widget</b> that allows styling of the text.<br>
 		The format is used to render text for each element in the hierarchy. Style may be defined for each node based on the properties of the node.<br>
 		Then a list of children is provided for each node. Each node inherits its parent's style but may override it.?>
-		<element-def name="dynamic-styled-document" extends="styled-document" inherits="styled">
+		<element-def name="dynamic-styled-document" extends="styled-document" inherits="with-element-model">
 			<element-model>
 				<?DOC The currently applicable value, e.g. the one being rendered or hovered?>
-				<value name="node" priority="100"/>
+				<value name="node" with-extension="style-model-value" priority="100"/>
 			</element-model>
 
 			<attribute name="root" type="expression" specify="required" />

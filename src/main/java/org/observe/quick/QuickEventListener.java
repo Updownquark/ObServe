@@ -16,9 +16,8 @@ import org.observe.expresso.ObservableModelSet.ModelComponentId;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.qonfig.CompiledExpression;
-import org.observe.expresso.qonfig.ElementTypeTraceability;
-import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.observe.expresso.qonfig.ExElement;
+import org.observe.expresso.qonfig.ExElementTraceable;
 import org.observe.expresso.qonfig.ExFlexibleElementModelAddOn;
 import org.observe.expresso.qonfig.ExWithElementModel;
 import org.observe.expresso.qonfig.ExpressoQIS;
@@ -31,10 +30,11 @@ import org.qommons.config.QonfigInterpretationException;
 
 public interface QuickEventListener extends ExElement {
 	public static final String EVENT_LISTENER = "event-listener";
-	public static final SingleTypeTraceability<QuickEventListener, Interpreted<?>, Def<?>> LISTENER_TRACEABILITY = ElementTypeTraceability
-		.getElementTraceability(QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, "event-listener", Def.class,
-			Interpreted.class, QuickEventListener.class);
 
+	@ExElementTraceable(toolkit = QuickCoreInterpretation.CORE,
+		qonfigType = EVENT_LISTENER,
+		interpretation = Interpreted.class,
+		instance = QuickEventListener.class)
 	public interface Def<L extends QuickEventListener> extends ExElement.Def<L> {
 		@QonfigChildGetter("filter")
 		List<EventFilter.Def> getFilters();
@@ -89,7 +89,6 @@ public interface QuickEventListener extends ExElement {
 
 			@Override
 			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
-				withTraceability(LISTENER_TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 				super.doUpdate(session);
 				ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
 				theAltPressedValue = elModels.getElementValueModelId("altPressed");
@@ -325,10 +324,10 @@ public interface QuickEventListener extends ExElement {
 	}
 
 	public class EventFilter extends ExElement.Abstract {
-		private static final SingleTypeTraceability<EventFilter, Interpreted, Def> TRACEABILITY = ElementTypeTraceability
-			.getElementTraceability(QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, "filter", Def.class, Interpreted.class,
-				EventFilter.class);
-
+		@ExElementTraceable(toolkit = QuickCoreInterpretation.CORE,
+			qonfigType = "event-filter",
+			interpretation = Interpreted.class,
+			instance = EventFilter.class)
 		public static class Def extends ExElement.Def.Abstract<EventFilter> {
 			private CompiledExpression theCondition;
 
@@ -343,7 +342,6 @@ public interface QuickEventListener extends ExElement {
 
 			@Override
 			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
-				withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 				super.doUpdate(session);
 				theCondition = session.getValueExpression();
 			}

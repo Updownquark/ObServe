@@ -9,9 +9,8 @@ import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.qonfig.CompiledExpression;
-import org.observe.expresso.qonfig.ElementTypeTraceability;
-import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.observe.expresso.qonfig.ExElement;
+import org.observe.expresso.qonfig.ExElementTraceable;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.quick.QuickContainer;
@@ -24,10 +23,11 @@ import com.google.common.reflect.TypeToken;
 
 public class QuickBox extends QuickContainer.Abstract<QuickWidget> {
 	public static final String BOX = "box";
-	private static final SingleTypeTraceability<QuickBox, Interpreted<?>, Def<?>> TRACEABILITY = ElementTypeTraceability
-		.getElementTraceability(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, BOX, Def.class, Interpreted.class,
-			QuickBox.class);
 
+	@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
+		qonfigType = BOX,
+		interpretation = Interpreted.class,
+		instance = QuickBox.class)
 	public static class Def<W extends QuickBox> extends QuickContainer.Def.Abstract<W, QuickWidget> {
 		private CompiledExpression theOpacity;
 
@@ -47,7 +47,6 @@ public class QuickBox extends QuickContainer.Abstract<QuickWidget> {
 
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
-			withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 			super.doUpdate(session.asElement(session.getFocusType().getSuperElement()));
 			if (getAddOn(QuickLayout.Def.class) == null) {
 				String layout = session.getAttributeText("layout");

@@ -11,9 +11,8 @@ import org.observe.expresso.ObservableModelSet.ModelComponentId;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.qonfig.CompiledExpression;
-import org.observe.expresso.qonfig.ElementTypeTraceability;
-import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.observe.expresso.qonfig.ExElement;
+import org.observe.expresso.qonfig.ExElementTraceable;
 import org.observe.expresso.qonfig.ExFlexibleElementModelAddOn;
 import org.observe.expresso.qonfig.ExWithElementModel;
 import org.observe.expresso.qonfig.ExpressoQIS;
@@ -27,10 +26,11 @@ import com.google.common.reflect.TypeToken;
 
 public class QuickTextArea<T> extends QuickEditableTextWidget.Abstract<T> {
 	public static final String TEXT_AREA = "text-area";
-	private static final SingleTypeTraceability<QuickTextArea<?>, Interpreted<?>, Def> TRACEABILITY = ElementTypeTraceability
-		.getElementTraceability(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, TEXT_AREA, Def.class, Interpreted.class,
-			QuickTextArea.class);
 
+	@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
+		qonfigType = TEXT_AREA,
+		interpretation = Interpreted.class,
+		instance = QuickTextArea.class)
 	public static class Def extends QuickEditableTextWidget.Def.Abstract<QuickTextArea<?>> {
 		private CompiledExpression theRows;
 		private StyledDocument.Def<?> theDocument;
@@ -61,7 +61,6 @@ public class QuickTextArea<T> extends QuickEditableTextWidget.Abstract<T> {
 
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
-			withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 			super.doUpdate(session.asElement(session.getFocusType().getSuperElement()));
 
 			theRows = session.getAttributeExpression("rows");

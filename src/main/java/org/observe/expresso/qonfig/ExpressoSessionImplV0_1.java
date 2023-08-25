@@ -22,9 +22,13 @@ import com.google.common.reflect.TypeToken;
 /** Supports Qonfig evaluation using the {@link ExpressoQIS} session type */
 public class ExpressoSessionImplV0_1 implements SpecialSessionImplementation<ExpressoQIS> {
 	/** The name of the core toolkit */
-	public static final String TOOLKIT_NAME = "Expresso-Core";
+	public static final String NAME = "Expresso-Core";
 	/** The Expresso version supported by this class */
 	public static final Version VERSION = new Version(0, 1, 0);
+
+	/** {@link #NAME} and {@link #VERSION} combined */
+	public static final String CORE = "Expresso-Core v0.1";
+
 	/**
 	 * An extra convenience operator that is an OR operation (||) for objects. This operator returns the first argument if it is not null,
 	 * otherwise it returns the second.
@@ -81,7 +85,7 @@ public class ExpressoSessionImplV0_1 implements SpecialSessionImplementation<Exp
 
 	@Override
 	public String getToolkitName() {
-		return TOOLKIT_NAME;
+		return NAME;
 	}
 
 	@Override

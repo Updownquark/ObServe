@@ -13,7 +13,6 @@ import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.TypeConversionException;
 import org.observe.expresso.VariableType;
-import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
@@ -22,10 +21,7 @@ import org.qommons.io.LocatedFilePosition;
 import com.google.common.reflect.TypeToken;
 
 public class ExtModelValueElement<M, MV extends M> extends ModelValueElement.Default<M, MV> {
-	private static final SingleTypeTraceability<ExtModelValueElement<?, ?>, Interpreted<?, ?>, Def<?>> TRACEABILITY = ElementTypeTraceability
-		.getElementTraceability(ExpressoSessionImplV0_1.TOOLKIT_NAME, ExpressoSessionImplV0_1.VERSION, "ext-model-value", Def.class,
-			Interpreted.class, ExtModelValueElement.class);
-
+	@ExElementTraceable(toolkit = ExpressoSessionImplV0_1.CORE, qonfigType = "ext-model-value", interpretation = Interpreted.class)
 	public static abstract class Def<M> extends ModelValueElement.Def.Abstract<M, ExtModelValueElement<M, ?>> implements ExtValueRef<M> {
 		private CompiledExpression theDefault;
 
@@ -60,8 +56,6 @@ public class ExtModelValueElement<M, MV extends M> extends ModelValueElement.Def
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			// This can be used with element-model values as well
 			boolean isExtValue = session.isInstance("ext-model-value") != null;
-			if (isExtValue)
-				withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 			super.doUpdate(session.asElement(session.getFocusType().getSuperElement()));
 
 			if (isExtValue)

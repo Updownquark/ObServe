@@ -15,7 +15,6 @@ import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
-import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.qommons.Version;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretation;
@@ -76,6 +75,9 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 	/** The version of this implementation of the expresso config toolkit */
 	public static final Version VERSION = new Version(0, 1, 0);
 
+	/** {@link #NAME} and {@link #VERSION} combined */
+	public static final String CONFIG = "Expresso-Config v0.1";
+
 	/** The name of the model value to store the {@link ObservableConfig} in the model */
 	public static final String CONFIG_NAME = "$CONFIG$";
 
@@ -121,10 +123,8 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		// interpreter.createWith("sorted-multi-map", ConfigModelValue.class, sortedMultiMapCreator());
 	}
 
+	@ExElementTraceable(toolkit = CONFIG, qonfigType = "config-value", interpretation = ConfigValue.Interpreted.class)
 	static class ConfigValue extends ConfigModelValue.Def.Abstract<SettableValue<?>> {
-		private static final SingleTypeTraceability<ConfigModelValue<?, ?, ?>, Interpreted<?>, ConfigValue> TRACEABILITY = ElementTypeTraceability
-			.getElementTraceability(NAME, VERSION, "config-value", ConfigValue.class, Interpreted.class, null);
-
 		private CompiledExpression theDefaultValue;
 
 		public ConfigValue(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
@@ -138,7 +138,6 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
-			withTraceability(TRACEABILITY.validate(session.asElement("config-value").getFocusType(), session.reporting()));
 			super.doUpdate(session.asElement("config-model-value"));
 		}
 

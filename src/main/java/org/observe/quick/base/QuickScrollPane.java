@@ -4,9 +4,8 @@ import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
-import org.observe.expresso.qonfig.ElementTypeTraceability;
-import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.observe.expresso.qonfig.ExElement;
+import org.observe.expresso.qonfig.ExElementTraceable;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigChildGetter;
 import org.observe.quick.QuickContainer;
@@ -19,10 +18,11 @@ import com.google.common.reflect.TypeToken;
 
 public class QuickScrollPane extends QuickContainer.Abstract<QuickWidget> {
 	public static final String SCROLL = "scroll";
-	private static final SingleTypeTraceability<QuickScrollPane, Interpreted, Def> TRACEABILITY = ElementTypeTraceability
-		.getElementTraceability(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, SCROLL, Def.class, Interpreted.class,
-			QuickScrollPane.class);
 
+	@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
+		qonfigType = SCROLL,
+		interpretation = Interpreted.class,
+		instance = QuickScrollPane.class)
 	public static class Def extends QuickContainer.Def.Abstract<QuickScrollPane, QuickWidget> {
 		private QuickWidget.Def<?> theRowHeader;
 		private QuickWidget.Def<?> theColumnHeader;
@@ -43,7 +43,6 @@ public class QuickScrollPane extends QuickContainer.Abstract<QuickWidget> {
 
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
-			withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 			super.doUpdate(session.asElement(session.getFocusType().getSuperElement().getSuperElement())); // Skip singleton-container
 			theRowHeader = ExElement.useOrReplace(QuickWidget.Def.class, theRowHeader, session, "row-header");
 			theColumnHeader = ExElement.useOrReplace(QuickWidget.Def.class, theColumnHeader, session, "column-header");

@@ -19,9 +19,8 @@ import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.qonfig.CompiledExpression;
 import org.observe.expresso.qonfig.ElementModelValue;
-import org.observe.expresso.qonfig.ElementTypeTraceability;
-import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.observe.expresso.qonfig.ExElement;
+import org.observe.expresso.qonfig.ExElementTraceable;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.LocatedExpression;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
@@ -43,10 +42,10 @@ import org.qommons.io.LocatedFilePosition;
 public class QuickStyleElement<T> extends ExElement.Abstract {
 	public static final String STYLE_TYPE_SET = "Quick.Style.Type.Set";
 
-	private static final SingleTypeTraceability<QuickStyleElement<?>, Interpreted<?>, Def> TRACEABILITY = ElementTypeTraceability
-		.getElementTraceability(QuickStyleInterpretation.NAME, QuickStyleInterpretation.VERSION, "style", Def.class, Interpreted.class,
-			QuickStyleElement.class);
-
+	@ExElementTraceable(toolkit = QuickStyleInterpretation.STYLE,
+		qonfigType = "style",
+		interpretation = Interpreted.class,
+		instance = QuickStyledElement.class)
 	public static class Def extends ExElement.Def.Abstract<QuickStyleElement<?>> {
 		private QonfigElementOrAddOn theStyleElement;
 		private List<QonfigChildDef> theRoles;
@@ -128,7 +127,6 @@ public class QuickStyleElement<T> extends ExElement.Abstract {
 
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
-			withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 			super.doUpdate(session);
 
 			QuickStyleElement.Def parent;

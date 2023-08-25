@@ -1,15 +1,14 @@
 package org.observe.expresso.qonfig;
 
-import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.qommons.Named;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
 public class ExNamed extends ExAddOn.Abstract<ExElement> implements Named {
-	private static final SingleTypeTraceability<ExElement, ExElement.Interpreted<?>, ExElement.Def<?>> TRACEABILITY = ElementTypeTraceability
-		.getAddOnTraceability(ExpressoSessionImplV0_1.TOOLKIT_NAME, ExpressoSessionImplV0_1.VERSION, "named", Def.class, Interpreted.class,
-			ExNamed.class);
-
+	@ExElementTraceable(toolkit = ExpressoSessionImplV0_1.CORE,
+		qonfigType = "named",
+		interpretation = Interpreted.class,
+		instance = ExNamed.class)
 	public static class Def extends ExAddOn.Def.Abstract<ExElement, ExNamed> implements Named {
 		private String theName;
 
@@ -25,7 +24,6 @@ public class ExNamed extends ExAddOn.Abstract<ExElement> implements Named {
 
 		@Override
 		public void update(ExpressoQIS session, ExElement.Def<? extends ExElement> element) throws QonfigInterpretationException {
-			element.withTraceability(TRACEABILITY.validate(getType(), element.reporting()));
 			super.update(session, element);
 			theName = session.getAttributeText("name");
 		}

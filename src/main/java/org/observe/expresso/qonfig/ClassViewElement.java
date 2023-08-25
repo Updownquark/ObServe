@@ -4,15 +4,11 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.observe.expresso.ClassView;
-import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
+@ExElementTraceable(toolkit = ExpressoSessionImplV0_1.CORE, qonfigType = "imports")
 public class ClassViewElement extends ExElement.Def.Abstract<ExElement> {
-	private static final SingleTypeTraceability<ExElement, ExElement.Interpreted<ExElement>, ClassViewElement> TRACEABILITY = ElementTypeTraceability
-		.getElementTraceability(ExpressoSessionImplV0_1.TOOLKIT_NAME, ExpressoSessionImplV0_1.VERSION, "imports", ClassViewElement.class,
-			null, null);
-
 	private final List<ImportElement> theImports;
 
 	public ClassViewElement(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
@@ -33,16 +29,12 @@ public class ClassViewElement extends ExElement.Def.Abstract<ExElement> {
 
 	@Override
 	protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
-		withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 		super.doUpdate(session);
 		ExElement.syncDefs(ImportElement.class, theImports, session.forChildren("import"));
 	}
 
+	@ExElementTraceable(toolkit = ExpressoSessionImplV0_1.CORE, qonfigType = "import")
 	public static class ImportElement extends ExElement.Def.Abstract<ExElement> {
-		private static final SingleTypeTraceability<ExElement, ExElement.Interpreted<?>, ImportElement> TRACEABILITY = ElementTypeTraceability
-			.getElementTraceability(ExpressoSessionImplV0_1.TOOLKIT_NAME, ExpressoSessionImplV0_1.VERSION, "import", ImportElement.class,
-				null, null);
-
 		private String theImport;
 		private boolean isWildcard;
 
@@ -75,7 +67,6 @@ public class ClassViewElement extends ExElement.Def.Abstract<ExElement> {
 
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
-			withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 			super.doUpdate(session);
 			String text = session.getValueText();
 			isWildcard = text.endsWith(".*");

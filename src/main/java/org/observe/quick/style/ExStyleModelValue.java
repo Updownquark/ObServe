@@ -1,9 +1,8 @@
 package org.observe.quick.style;
 
-import org.observe.expresso.qonfig.ElementTypeTraceability;
-import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExElementModelValue;
+import org.observe.expresso.qonfig.ExElementTraceable;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.ExtModelValueElement;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
@@ -11,10 +10,7 @@ import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
 public class ExStyleModelValue extends ExElementModelValue {
-	private static SingleTypeTraceability<ExtModelValueElement<?, ?>, ExElement.Interpreted<? extends ExtModelValueElement<?, ?>>, ExElement.Def<? extends ExtModelValueElement<?, ?>>> TRACEABILITY = ElementTypeTraceability//
-		.<ExtModelValueElement<?, ?>, ExStyleModelValue, Interpreted<?>, Def<?>> getAddOnTraceability(QuickStyleInterpretation.NAME,
-			QuickStyleInterpretation.VERSION, "style-model-value", Def.class, Interpreted.class, ExStyleModelValue.class);
-
+	@ExElementTraceable(toolkit = QuickStyleInterpretation.STYLE, qonfigType = "style-model-value", interpretation = Interpreted.class)
 	public static class Def<AO extends ExStyleModelValue> extends ExElementModelValue.Def<AO> {
 		private int thePriority;
 
@@ -30,7 +26,6 @@ public class ExStyleModelValue extends ExElementModelValue {
 		@Override
 		public void update(ExpressoQIS session, ExElement.Def<? extends ExtModelValueElement<?, ?>> element)
 			throws QonfigInterpretationException {
-			element.withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 			super.update(session.asElement("element-model-value"), element);
 			thePriority = Integer.parseInt(session.getAttributeText("priority"));
 		}

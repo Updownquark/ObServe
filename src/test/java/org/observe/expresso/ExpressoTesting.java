@@ -13,10 +13,13 @@ import org.observe.expresso.ExpressoTesting.TestAction.TestActionElement;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.qonfig.ExElement;
+import org.observe.expresso.qonfig.ExElementTraceable;
 import org.observe.expresso.qonfig.ExNamed;
 import org.observe.expresso.qonfig.Expresso;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.ExpressoQonfigValues;
+import org.observe.expresso.qonfig.QonfigAttributeGetter;
+import org.observe.expresso.qonfig.QonfigChildGetter;
 import org.qommons.BreakpointHere;
 import org.qommons.Named;
 import org.qommons.collect.CollectionUtils;
@@ -24,12 +27,14 @@ import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.io.LocatedFilePosition;
 
-/**
- * A testing structure parsed from a Qonfig XML file for testing expresso or expresso-dependent toolkits
- */
+/** A testing structure parsed from a Qonfig XML file for testing expresso or expresso-dependent toolkits */
 public class ExpressoTesting extends ExElement.Def.Abstract<ExElement> {
 	/** A test to execute */
 	public static class ExpressoTest extends ExElement.Abstract {
+		@ExElementTraceable(toolkit = ExpressoTestFrameworkInterpretation.TESTING,
+			qonfigType = "test",
+			interpretation = Interpreted.class,
+			instance = ExpressoTest.class)
 		public static class Def extends ExElement.Def.Abstract<ExpressoTest> implements Named {
 			private final List<TestAction> theActions;
 
@@ -109,6 +114,11 @@ public class ExpressoTesting extends ExElement.Def.Abstract<ExElement> {
 			theActions = new ArrayList<>();
 		}
 
+		@QonfigChildGetter("action")
+		public List<TestAction.TestActionElement<?>> getActions() {
+			return theActions;
+		}
+
 		public void execute() {
 			for (TestAction.TestActionElement<?> action : theActions) {
 				System.out.print(action.reporting().getPosition().printPosition());
@@ -160,6 +170,10 @@ public class ExpressoTesting extends ExElement.Def.Abstract<ExElement> {
 	}
 
 	/** An action to execute for a test */
+	@ExElementTraceable(toolkit = ExpressoTestFrameworkInterpretation.TESTING,
+		qonfigType = "test-action",
+		interpretation = TestAction.Interpreted.class,
+		instance = TestAction.TestActionElement.class)
 	public static class TestAction extends ExpressoQonfigValues.Action {
 		private String theExpectedException;
 		private boolean isBreakpoint;
@@ -169,11 +183,13 @@ public class ExpressoTesting extends ExElement.Def.Abstract<ExElement> {
 		}
 
 		/** @return The name of the exception type that is expected to be thrown by this test action */
+		@QonfigAttributeGetter("expect-throw")
 		public String getExpectedException() {
 			return theExpectedException;
 		}
 
 		/** @return Whether a {@link BreakpointHere breakpoint} should be caught before executing this action */
+		@QonfigAttributeGetter("breakpoint")
 		public boolean isBreakpoint() {
 			return isBreakpoint;
 		}

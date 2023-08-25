@@ -26,6 +26,9 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 	/** The version of this implementation of the expresso base toolkit */
 	public static final Version VERSION = new Version(0, 1, 0);
 
+	/** {@link #NAME} and {@link #VERSION} combined */
+	public static final String BASE = "Expresso-Base 0.1";
+
 	/** Session key containing a model value's path */
 	public static final String PATH_KEY = "model-path";
 	/**

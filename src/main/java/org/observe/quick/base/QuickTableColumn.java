@@ -14,11 +14,11 @@ import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.TypeConversionException;
 import org.observe.expresso.qonfig.CompiledExpression;
-import org.observe.expresso.qonfig.ElementTypeTraceability;
-import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.observe.expresso.qonfig.ExAddOn;
 import org.observe.expresso.qonfig.ExElement;
+import org.observe.expresso.qonfig.ExElementTraceable;
 import org.observe.expresso.qonfig.ExFlexibleElementModelAddOn;
+import org.observe.expresso.qonfig.ExMultiElementTraceable;
 import org.observe.expresso.qonfig.ExWithElementModel;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
@@ -116,10 +116,11 @@ public interface QuickTableColumn<R, C> {
 
 	public class ColumnEditing<R, C> extends ExElement.Abstract implements QuickValueWidget.WidgetValueSupplier<C> {
 		public static final String COLUMN_EDITING = "column-edit";
-		private static final SingleTypeTraceability<ColumnEditing<?, ?>, Interpreted<?, ?>, Def> TRACEABILITY = ElementTypeTraceability
-			.getElementTraceability(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, COLUMN_EDITING, Def.class,
-				Interpreted.class, ColumnEditing.class);
 
+		@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
+			qonfigType = COLUMN_EDITING,
+			interpretation = Interpreted.class,
+			instance = ColumnEditing.class)
 		public static class Def extends ExElement.Def.Abstract<ColumnEditing<?, ?>>
 		implements QuickValueWidget.WidgetValueSupplier.Def<ColumnEditing<?, ?>> {
 			private QuickWidget.Def<?> theEditor;
@@ -169,7 +170,6 @@ public interface QuickTableColumn<R, C> {
 
 			@Override
 			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
-				withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 				super.doUpdate(session);
 				theEditor = ExElement.useOrReplace(QuickWidget.Def.class, theEditor, session, "editor");
 				String columnEditValueName = session.getAttributeText("column-edit-value-name");
@@ -488,10 +488,11 @@ public interface QuickTableColumn<R, C> {
 
 		public static class RowModifyEditType<R, C> extends ColumnEditType<R, C> {
 			public static final String MODIFY = "modify-row-value";
-			private static final SingleTypeTraceability<ColumnEditing<?, ?>, ?, ?> TRACEABILITY = ElementTypeTraceability
-				.<ColumnEditing<?, ?>, RowModifyEditType<?, ?>, Interpreted<?, ?>, Def> getAddOnTraceability(QuickBaseInterpretation.NAME,
-					QuickBaseInterpretation.VERSION, MODIFY, Def.class, Interpreted.class, RowModifyEditType.class);
 
+			@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
+				qonfigType = MODIFY,
+				interpretation = Interpreted.class,
+				instance = RowModifyEditType.class)
 			public static class Def extends ColumnEditType.Def<RowModifyEditType<?, ?>> {
 				private CompiledExpression theCommit;
 				private boolean isRowUpdate;
@@ -513,7 +514,6 @@ public interface QuickTableColumn<R, C> {
 				@Override
 				public void update(ExpressoQIS session, ExElement.Def<? extends ColumnEditing<?, ?>> element)
 					throws QonfigInterpretationException {
-					element.withTraceability(TRACEABILITY.validate(getType(), session.reporting()));
 					super.update(session, element);
 					theCommit = session.getAttributeExpression("commit");
 					isRowUpdate = session.getAttribute("row-update", boolean.class);
@@ -602,10 +602,11 @@ public interface QuickTableColumn<R, C> {
 
 		public static class RowReplaceEditType<R, C> extends ColumnEditType<R, C> {
 			public static final String REPLACE = "replace-row-value";
-			private static final SingleTypeTraceability<ColumnEditing<?, ?>, ?, ?> TRACEABILITY = ElementTypeTraceability
-				.<ColumnEditing<?, ?>, RowReplaceEditType<?, ?>, Interpreted<?, ?>, Def> getAddOnTraceability(QuickBaseInterpretation.NAME,
-					QuickBaseInterpretation.VERSION, REPLACE, Def.class, Interpreted.class, RowReplaceEditType.class);
 
+			@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
+				qonfigType = REPLACE,
+				interpretation = Interpreted.class,
+				instance = RowModifyEditType.class)
 			public static class Def extends ColumnEditType.Def<RowReplaceEditType<?, ?>> {
 				private CompiledExpression theReplacement;
 
@@ -621,7 +622,6 @@ public interface QuickTableColumn<R, C> {
 				@Override
 				public void update(ExpressoQIS session, ExElement.Def<? extends ColumnEditing<?, ?>> element)
 					throws QonfigInterpretationException {
-					element.withTraceability(TRACEABILITY.validate(getType(), session.reporting()));
 					super.update(session, element);
 					theReplacement = session.getAttributeExpression("replacement");
 				}
@@ -706,13 +706,16 @@ public interface QuickTableColumn<R, C> {
 
 	public class SingleColumnSet<R, C> extends QuickStyledElement.Abstract implements TableColumnSet<R> {
 		public static final String COLUMN = "column";
-		private static final SingleTypeTraceability<SingleColumnSet<?, ?>, Interpreted<?, ?>, Def> COLUMN_TRACEABILITY = ElementTypeTraceability
-			.getElementTraceability(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, COLUMN, Def.class, Interpreted.class,
-				SingleColumnSet.class);
-		private static final SingleTypeTraceability<SingleColumnSet<?, ?>, Interpreted<?, ?>, Def> RENDERING_TRACEABILITY = ElementTypeTraceability
-			.getElementTraceability(QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, "rendering", Def.class,
-				Interpreted.class, SingleColumnSet.class);
 
+		@ExMultiElementTraceable({
+			@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
+				qonfigType = COLUMN,
+				interpretation = Interpreted.class,
+				instance = SingleColumnSet.class),
+			@ExElementTraceable(toolkit = QuickCoreInterpretation.CORE,
+			qonfigType = "rendering",
+			interpretation = Interpreted.class,
+			instance = SingleColumnSet.class) })
 		public static class Def extends QuickStyledElement.Def.Abstract<SingleColumnSet<?, ?>>
 		implements TableColumnSet.Def<SingleColumnSet<?, ?>> {
 			private CompiledExpression theName;
@@ -765,8 +768,6 @@ public interface QuickTableColumn<R, C> {
 
 			@Override
 			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
-				withTraceability(COLUMN_TRACEABILITY.validate(session.getFocusType(), session.reporting()));
-				withTraceability(RENDERING_TRACEABILITY.validate(session.asElement("rendering").getFocusType(), session.reporting()));
 				super.doUpdate(session.asElement("styled"));
 				theName = session.getAttributeExpression("name");
 				String columnValueName = session.getAttributeText("column-value-name");

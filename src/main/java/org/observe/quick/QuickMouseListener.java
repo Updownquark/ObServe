@@ -5,10 +5,10 @@ import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.ModelComponentId;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
-import org.observe.expresso.qonfig.ElementTypeTraceability;
-import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.observe.expresso.qonfig.ExElement;
+import org.observe.expresso.qonfig.ExElementTraceable;
 import org.observe.expresso.qonfig.ExFlexibleElementModelAddOn;
+import org.observe.expresso.qonfig.ExMultiElementTraceable;
 import org.observe.expresso.qonfig.ExWithElementModel;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
@@ -18,10 +18,11 @@ import org.qommons.config.QonfigInterpretationException;
 
 public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 	public static final String MOUSE_LISTENER = "mouse-listener";
-	private static final SingleTypeTraceability<QuickMouseListener, Interpreted<?>, Def<?>> TRACEABILITY = ElementTypeTraceability
-		.getElementTraceability(QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, MOUSE_LISTENER, Def.class, Interpreted.class,
-			QuickMouseListener.class);
 
+	@ExElementTraceable(toolkit = QuickCoreInterpretation.CORE,
+		qonfigType = MOUSE_LISTENER,
+		interpretation = Interpreted.class,
+		instance = QuickMouseListener.class)
 	public static abstract class Def<L extends QuickMouseListener> extends QuickEventListener.Def.Abstract<L> {
 		private ModelComponentId theEventXValue;
 		private ModelComponentId theEventYValue;
@@ -40,7 +41,6 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
-			withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 			super.doUpdate(session.asElement(session.getFocusType().getSuperElement()));
 
 			ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
@@ -146,12 +146,9 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 		Move("on-mouse-move"), Enter("on-mouse-enter"), Exit("on-mouse-exit");
 
 		public final String elementName;
-		public final SingleTypeTraceability<QuickMouseMoveListener, QuickMouseMoveListener.Interpreted, QuickMouseMoveListener.Def> traceability;
 
 		private MouseMoveEventType(String elementName) {
 			this.elementName = elementName;
-			traceability = ElementTypeTraceability.getElementTraceability(QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION,
-				elementName, QuickMouseMoveListener.Def.class, QuickMouseMoveListener.Interpreted.class, QuickMouseMoveListener.class);
 		}
 	}
 
@@ -198,6 +195,19 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 	}
 
 	public static class QuickMouseMoveListener extends QuickMouseListener {
+		@ExMultiElementTraceable({
+			@ExElementTraceable(toolkit = QuickCoreInterpretation.CORE,
+				qonfigType = "on-mouse-move",
+				interpretation = Interpreted.class,
+				instance = QuickMouseMoveListener.class),
+			@ExElementTraceable(toolkit = QuickCoreInterpretation.CORE,
+			qonfigType = "on-mouse-enter",
+			interpretation = Interpreted.class,
+			instance = QuickMouseMoveListener.class),
+			@ExElementTraceable(toolkit = QuickCoreInterpretation.CORE,
+			qonfigType = "on-mouse-exit",
+			interpretation = Interpreted.class,
+			instance = QuickMouseMoveListener.class) })
 		public static class Def extends QuickMouseListener.Def<QuickMouseMoveListener> {
 			private final MouseMoveEventType theEventType;
 
@@ -212,7 +222,6 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 
 			@Override
 			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
-				withTraceability(theEventType.traceability.validate(session.getFocusType(), session.reporting()));
 				super.doUpdate(session.asElement(session.getFocusType().getSuperElement()));
 			}
 
@@ -258,10 +267,11 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 
 	public static abstract class QuickMouseButtonListener extends QuickMouseListener {
 		public static final String MOUSE_BUTTON_LISTENER = "mouse-button-listener";
-		private static final SingleTypeTraceability<QuickMouseButtonListener, Interpreted<?>, Def<?>> TRACEABILITY = ElementTypeTraceability
-			.getElementTraceability(QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, MOUSE_BUTTON_LISTENER, Def.class,
-				Interpreted.class, QuickMouseButtonListener.class);
 
+		@ExElementTraceable(toolkit = QuickCoreInterpretation.CORE,
+			qonfigType = MOUSE_BUTTON_LISTENER,
+			interpretation = Interpreted.class,
+			instance = QuickMouseButtonListener.class)
 		public static abstract class Def<L extends QuickMouseButtonListener> extends QuickMouseListener.Def<L> {
 			private ModelComponentId theButtonValue;
 			private MouseButton theButton;
@@ -281,7 +291,6 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 
 			@Override
 			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
-				withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 				super.doUpdate(session.asElement(session.getFocusType().getSuperElement()));
 
 				ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
@@ -365,10 +374,11 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 
 	public static class QuickMouseClickListener extends QuickMouseButtonListener {
 		public static final String ON_MOUSE_CLICK = "on-click";
-		private static final SingleTypeTraceability<QuickMouseClickListener, Interpreted, Def> TRACEABILITY = ElementTypeTraceability
-			.getElementTraceability(QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, ON_MOUSE_CLICK, Def.class,
-				Interpreted.class, QuickMouseClickListener.class);
 
+		@ExElementTraceable(toolkit = QuickCoreInterpretation.CORE,
+			qonfigType = ON_MOUSE_CLICK,
+			interpretation = Interpreted.class,
+			instance = QuickMouseClickListener.class)
 		public static class Def extends QuickMouseButtonListener.Def<QuickMouseClickListener> {
 			private int theClickCount;
 
@@ -383,7 +393,6 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 
 			@Override
 			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
-				withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 				super.doUpdate(session.asElement(session.getFocusType().getSuperElement()));
 
 				String txt = session.getAttributeText("click-count");
@@ -440,10 +449,11 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 
 	public static class QuickMousePressedListener extends QuickMouseButtonListener {
 		public static final String ON_MOUSE_PRESSED = "on-mouse-press";
-		private static final SingleTypeTraceability<QuickMousePressedListener, Interpreted, Def> TRACEABILITY = ElementTypeTraceability
-			.getElementTraceability(QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, ON_MOUSE_PRESSED, Def.class,
-				Interpreted.class, QuickMousePressedListener.class);
 
+		@ExElementTraceable(toolkit = QuickCoreInterpretation.CORE,
+			qonfigType = ON_MOUSE_PRESSED,
+			interpretation = Interpreted.class,
+			instance = QuickMousePressedListener.class)
 		public static class Def extends QuickMouseButtonListener.Def<QuickMousePressedListener> {
 
 			public Def(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
@@ -452,7 +462,6 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 
 			@Override
 			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
-				withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 				super.doUpdate(session.asElement(session.getFocusType().getSuperElement()));
 			}
 
@@ -486,10 +495,11 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 
 	public static class QuickMouseReleasedListener extends QuickMouseButtonListener {
 		public static final String ON_MOUSE_RELEASED = "on-mouse-release";
-		private static final SingleTypeTraceability<QuickMouseReleasedListener, Interpreted, Def> TRACEABILITY = ElementTypeTraceability
-			.getElementTraceability(QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, ON_MOUSE_RELEASED, Def.class,
-				Interpreted.class, QuickMouseReleasedListener.class);
 
+		@ExElementTraceable(toolkit = QuickCoreInterpretation.CORE,
+			qonfigType = ON_MOUSE_RELEASED,
+			interpretation = Interpreted.class,
+			instance = QuickMouseReleasedListener.class)
 		public static class Def extends QuickMouseButtonListener.Def<QuickMouseReleasedListener> {
 
 			public Def(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
@@ -498,7 +508,6 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 
 			@Override
 			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
-				withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 				super.doUpdate(session.asElement(session.getFocusType().getSuperElement()));
 			}
 
@@ -532,10 +541,11 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 
 	public static class QuickScrollListener extends QuickMouseListener {
 		public static final String SCROLL_LISTENER = "on-scroll";
-		private static final SingleTypeTraceability<QuickScrollListener, Interpreted, Def> TRACEABILITY = ElementTypeTraceability
-			.getElementTraceability(QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, SCROLL_LISTENER, Def.class,
-				Interpreted.class, QuickScrollListener.class);
 
+		@ExElementTraceable(toolkit = QuickCoreInterpretation.CORE,
+			qonfigType = SCROLL_LISTENER,
+			interpretation = Interpreted.class,
+			instance = QuickScrollListener.class)
 		public static class Def extends QuickMouseListener.Def<QuickScrollListener> {
 			private ModelComponentId theScrollAmountValue;
 
@@ -549,7 +559,6 @@ public abstract class QuickMouseListener extends QuickEventListener.Abstract {
 
 			@Override
 			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
-				withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 				super.doUpdate(session.asElement(session.getFocusType().getSuperElement()));
 
 				ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);

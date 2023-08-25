@@ -8,14 +8,14 @@ import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
-import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
 public class ExIntValue<T> extends ExAddOn.Abstract<ExElement> {
-	private static final SingleTypeTraceability<ExElement, ExElement.Interpreted<?>, ExElement.Def<?>> TRACEABILITY = ElementTypeTraceability
-		.getAddOnTraceability(ExpressoBaseV0_1.NAME, ExpressoBaseV0_1.VERSION, "int-value", Def.class, Interpreted.class, ExIntValue.class);
-
+	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE,
+		qonfigType = "int-value",
+		interpretation = Interpreted.class,
+		instance = ExIntValue.class)
 	public static class Def extends ExAddOn.Def.Abstract<ExElement, ExIntValue<?>> {
 		private CompiledExpression theInit;
 
@@ -30,7 +30,6 @@ public class ExIntValue<T> extends ExAddOn.Abstract<ExElement> {
 
 		@Override
 		public void update(ExpressoQIS session, ExElement.Def<? extends ExElement> element) throws QonfigInterpretationException {
-			element.withTraceability(TRACEABILITY.validate(getType(), element.reporting()));
 			super.update(session, element);
 			theInit = session.getAttributeExpression("init");
 		}

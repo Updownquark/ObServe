@@ -39,7 +39,6 @@ import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
-import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.observe.expresso.qonfig.ModelValueElement.CompiledSynth;
 import org.observe.util.TypeTokens;
 import org.observe.util.swing.WindowPopulation;
@@ -67,10 +66,7 @@ import org.qommons.threading.QommonsTimer;
 import com.google.common.reflect.TypeToken;
 
 public abstract class ObservableModelElement extends ExElement.Abstract {
-	private static final SingleTypeTraceability<ObservableModelElement, Interpreted<?>, Def<?, ?>> TRACEABILITY = ElementTypeTraceability
-		.getElementTraceability(ExpressoSessionImplV0_1.TOOLKIT_NAME, ExpressoSessionImplV0_1.VERSION, "abst-model", Def.class,
-			Interpreted.class, ObservableModelElement.class);
-
+	@ExElementTraceable(toolkit = ExpressoSessionImplV0_1.CORE, qonfigType = "abst-model", interpretation = Interpreted.class)
 	public static abstract class Def<M extends ObservableModelElement, V extends ModelValueElement.Def<?, ?>>
 	extends ExElement.Def.Abstract<M> {
 		private String theModelPath;
@@ -98,7 +94,6 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
-			withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 			super.doUpdate(session);
 			theModelPath = session.get(ExpressoBaseV0_1.PATH_KEY, String.class);
 			String name = getName();
@@ -246,10 +241,7 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 	}
 
 	public static class ModelSetElement extends ExElement.Abstract {
-		private static final SingleTypeTraceability<ModelSetElement, Interpreted<?>, Def<?>> TRACEABILITY = ElementTypeTraceability
-			.getElementTraceability(ExpressoSessionImplV0_1.TOOLKIT_NAME, ExpressoSessionImplV0_1.VERSION, "models", Def.class,
-				Interpreted.class, ModelSetElement.class);
-
+		@ExElementTraceable(toolkit = ExpressoSessionImplV0_1.CORE, qonfigType = "models", interpretation = Interpreted.class)
 		public static class Def<M extends ModelSetElement> extends ExElement.Def.Abstract<M> {
 			private final List<ObservableModelElement.Def<?, ?>> theSubModels;
 
@@ -270,7 +262,6 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 
 			@Override
 			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
-				withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 				super.doUpdate(session);
 
 				session.put(ExpressoBaseV0_1.PATH_KEY, session.getElement().getType().getName());
@@ -403,10 +394,7 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 	}
 
 	public static class DefaultModelElement extends ObservableModelElement {
-		private static final SingleTypeTraceability<DefaultModelElement, Interpreted<?>, Def<?>> TRACEABILITY = ElementTypeTraceability
-			.getElementTraceability(ExpressoSessionImplV0_1.TOOLKIT_NAME, ExpressoSessionImplV0_1.VERSION, "model", Def.class,
-				Interpreted.class, DefaultModelElement.class);
-
+		@ExElementTraceable(toolkit = ExpressoSessionImplV0_1.CORE, qonfigType = "model", interpretation = Interpreted.class)
 		public static class Def<M extends DefaultModelElement>
 		extends ObservableModelElement.Def<M, ModelValueElement.CompiledSynth<?, ?>> {
 			private final List<DefaultModelElement.Def<?>> theSubModels;
@@ -432,7 +420,6 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 
 			@Override
 			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
-				withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 				super.doUpdate(session.asElement(session.getFocusType().getSuperElement()));
 				ExElement.syncDefs(DefaultModelElement.Def.class, theSubModels, session.forChildren("sub-model"));
 			}
@@ -540,10 +527,7 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 	}
 
 	public static class ExtModelElement extends ObservableModelElement {
-		private static final SingleTypeTraceability<ExtModelElement, Interpreted<?>, Def<?>> TRACEABILITY = ElementTypeTraceability
-			.getElementTraceability(ExpressoSessionImplV0_1.TOOLKIT_NAME, ExpressoSessionImplV0_1.VERSION, "ext-model", Def.class,
-				Interpreted.class, ExtModelElement.class);
-
+		@ExElementTraceable(toolkit = ExpressoSessionImplV0_1.CORE, qonfigType = "ext-model", interpretation = Interpreted.class)
 		public static class Def<M extends ExtModelElement> extends ObservableModelElement.Def<M, ExtModelValueElement.Def<?>> {
 			private final List<ExtModelElement.Def<?>> theSubModels;
 
@@ -568,7 +552,6 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 
 			@Override
 			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
-				withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 				super.doUpdate(session.asElement(session.getFocusType().getSuperElement()));
 				ExElement.syncDefs(ExtModelElement.Def.class, theSubModels, session.forChildren("sub-model"));
 			}
@@ -699,11 +682,8 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 
 	public static class ConfigModelElement extends ObservableModelElement {
 		public static final String APP_ENVIRONMENT_KEY = "EXPRESSO.APP.ENVIRONMENT";
-		private static final SingleTypeTraceability<ConfigModelElement, Interpreted<?>, Def<?>> TRACEABILITY = ElementTypeTraceability
-			.<ConfigModelElement, Interpreted<?>, Def<?>> build(ExpressoConfigV0_1.NAME, ExpressoConfigV0_1.VERSION, "config")//
-			.reflectMethods(Def.class, Interpreted.class, ConfigModelElement.class)//
-			.build();
 
+		@ExElementTraceable(toolkit = ExpressoConfigV0_1.CONFIG, qonfigType = "config", interpretation = Interpreted.class)
 		public static class Def<M extends ConfigModelElement> extends ObservableModelElement.Def<M, ConfigModelValue.Def<M>> {
 			private String theConfigName;
 			private CompiledExpression theConfigDir;
@@ -743,8 +723,6 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 
 			@Override
 			public void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
-				withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
-
 				theConfigName = session.getAttributeText("config-name");
 				theConfigDir = session.getAttributeExpression("config-dir");
 
@@ -1153,11 +1131,8 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 			super(id);
 		}
 
+		@ExElementTraceable(toolkit = ExpressoConfigV0_1.CONFIG, qonfigType = "old-config-name")
 		static class OldConfigName extends ExElement.Def.Abstract<ExElement> {
-			private static final SingleTypeTraceability<ExElement, ExElement.Interpreted<ExElement>, OldConfigName> TRACEABILITY = ElementTypeTraceability
-				.getElementTraceability(ExpressoConfigV0_1.NAME, ExpressoConfigV0_1.VERSION, "old-config-name", OldConfigName.class, null,
-					null);
-
 			private String theOldConfigName;
 
 			OldConfigName(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
@@ -1171,7 +1146,6 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 
 			@Override
 			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
-				withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 				super.doUpdate(session);
 				theOldConfigName = session.getValueText();
 			}

@@ -10,9 +10,9 @@ import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.qonfig.CompiledExpression;
-import org.observe.expresso.qonfig.ElementTypeTraceability;
-import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.observe.expresso.qonfig.ExElement;
+import org.observe.expresso.qonfig.ExElementTraceable;
+import org.observe.expresso.qonfig.ExMultiElementTraceable;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.quick.QuickValueWidget;
@@ -24,13 +24,16 @@ import com.google.common.reflect.TypeToken;
 
 public class QuickComboBox<T> extends QuickValueWidget.Abstract<T> {
 	public static final String COMBO_BOX = "combo";
-	private static final SingleTypeTraceability<QuickComboBox<?>, Interpreted<?>, Def> COMBO_TRACEABILITY = ElementTypeTraceability
-		.getElementTraceability(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, COMBO_BOX, Def.class, Interpreted.class,
-			QuickComboBox.class);
-	private static final SingleTypeTraceability<QuickComboBox<?>, Interpreted<?>, Def> COLLECTION_SELECTOR_TRACEABILITY = ElementTypeTraceability
-		.getElementTraceability(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, "collection-selector-widget", Def.class,
-			Interpreted.class, QuickComboBox.class);
 
+	@ExMultiElementTraceable({
+		@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
+			qonfigType = COMBO_BOX,
+			interpretation = Interpreted.class,
+			instance = QuickComboBox.class),
+		@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
+		qonfigType = "collection-selector-widget",
+		interpretation = Interpreted.class,
+		instance = QuickComboBox.class) })
 	public static class Def extends QuickValueWidget.Def.Abstract<QuickComboBox<?>> {
 		private CompiledExpression theValues;
 
@@ -45,9 +48,6 @@ public class QuickComboBox<T> extends QuickValueWidget.Abstract<T> {
 
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
-			withTraceability(COMBO_TRACEABILITY.validate(session.getFocusType(), session.reporting()));
-			withTraceability(COLLECTION_SELECTOR_TRACEABILITY.validate(session.asElement("collection-selector-widget").getFocusType(),
-				session.reporting()));
 			super.doUpdate(session.asElement(session.getFocusType().getSuperElement()));
 			theValues = session.getAttributeExpression("values");
 		}

@@ -1,8 +1,7 @@
 package org.observe.quick.base;
 
-import org.observe.expresso.qonfig.ElementTypeTraceability;
-import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.observe.expresso.qonfig.ExElement;
+import org.observe.expresso.qonfig.ExElementTraceable;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.quick.QuickContainer;
 import org.observe.quick.QuickWidget;
@@ -14,10 +13,11 @@ import com.google.common.reflect.TypeToken;
 
 public class QuickFieldPanel extends QuickContainer.Abstract<QuickWidget> {
 	public static final String FIELD_PANEL = "field-panel";
-	private static final SingleTypeTraceability<QuickFieldPanel, Interpreted, Def> TRACEABILITY = ElementTypeTraceability
-		.getElementTraceability(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, FIELD_PANEL, Def.class, Interpreted.class,
-			QuickFieldPanel.class);
 
+	@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
+		qonfigType = FIELD_PANEL,
+		interpretation = Interpreted.class,
+		instance = QuickFieldPanel.class)
 	public static class Def extends QuickContainer.Def.Abstract<QuickFieldPanel, QuickWidget> {
 		public Def(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
 			super(parent, type);
@@ -25,7 +25,6 @@ public class QuickFieldPanel extends QuickContainer.Abstract<QuickWidget> {
 
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
-			withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 			super.doUpdate(session.asElement(session.getFocusType().getSuperElement()));
 		}
 

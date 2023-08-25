@@ -3,12 +3,16 @@ package org.observe.expresso.qonfig;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
+import java.text.ParseException;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
+import java.util.WeakHashMap;
 import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -16,6 +20,7 @@ import java.util.regex.Pattern;
 import org.observe.expresso.qonfig.ExElement.Def;
 import org.observe.expresso.qonfig.ExElement.Interpreted;
 import org.observe.util.TypeTokens;
+import org.qommons.Identifiable;
 import org.qommons.Version;
 import org.qommons.config.QonfigAttributeDef;
 import org.qommons.config.QonfigChildDef;
@@ -269,6 +274,117 @@ public interface ElementTypeTraceability<E extends ExElement, I extends ExElemen
 
 	public static class SingleTypeTraceability<E extends ExElement, I extends ExElement.Interpreted<? extends E>, D extends ExElement.Def<? extends E>>
 	implements ElementTypeTraceability<E, I, D> {
+		private static WeakHashMap<QonfigToolkit, Map<Class<?>, Map<QonfigElementKey, ? extends SingleTypeTraceability<?, ?, ?>>>> TRACEABILITY = new WeakHashMap<>();
+
+		public static synchronized <E extends ExElement> Map<QonfigElementKey, SingleTypeTraceability<? super E, ?, ?>> traceabilityFor(
+			Class<?> type, QonfigToolkit toolkit, ErrorReporting reporting) {
+			if (type == Object.class || type == Identifiable.class)
+				return Collections.emptyMap();
+			Map<Class<?>, Map<QonfigElementKey, ? extends SingleTypeTraceability<?, ?, ?>>> tkTraceability = TRACEABILITY
+				.computeIfAbsent(toolkit, __ -> new HashMap<>());
+			Map<QonfigElementKey, SingleTypeTraceability<? super E, ?, ?>> traceability = (Map<QonfigElementKey, SingleTypeTraceability<? super E, ?, ?>>) tkTraceability
+				.get(type);
+			if (traceability != null)
+				return traceability;
+			traceability = new LinkedHashMap<>();
+			ExElementTraceable traceable = type.getAnnotation(ExElementTraceable.class);
+			if (traceable != null)
+				parseTraceability(type, toolkit, traceable, traceability, reporting);
+			ExMultiElementTraceable multiTraceable = type.getAnnotation(ExMultiElementTraceable.class);
+			if (multiTraceable != null) {
+				for (ExElementTraceable element : multiTraceable.value())
+					parseTraceability(type, toolkit, element, traceability, reporting);
+			}
+			if (type.getSuperclass() != null)
+				join(traceability, traceabilityFor(type.getSuperclass(), toolkit, reporting));
+			for (Class<?> intf : type.getInterfaces())
+				join(traceability, traceabilityFor(intf, toolkit, reporting));
+
+			// Now validate everything
+			for (Map.Entry<QonfigElementKey, SingleTypeTraceability<? super E, ?, ?>> entry : traceability.entrySet()) {
+				// Shouldn't be any danger of not finding the type here, since if the traceability is there it means we found it earlier
+				QonfigElementOrAddOn qonfigType = findToolkit(toolkit,
+					new QonfigToolkit.ToolkitDef(entry.getKey().toolkitName, entry.getKey().toolkitMajorVersion,
+						entry.getKey().toolkitMinorVersion))//
+					.getElementOrAddOn(entry.getKey().typeName);
+				entry.getValue().validate(qonfigType, reporting);
+			}
+			traceability = Collections.unmodifiableMap(traceability);
+			tkTraceability.put(type, traceability);
+			return traceability;
+		}
+
+		private static <E extends ExElement> void parseTraceability(Class<?> type, QonfigToolkit toolkit, ExElementTraceable traceable,
+			Map<QonfigElementKey, SingleTypeTraceability<? super E, ?, ?>> traceability, ErrorReporting reporting) {
+			QonfigToolkit.ToolkitDef tk;
+			try {
+				tk = QonfigToolkit.ToolkitDef.parse(traceable.toolkit());
+			} catch (ParseException e) {
+				reporting.warn("Could not parse toolkit for traceable class " + type.getName(), e);
+				tk = null;
+			}
+			QonfigToolkit targetTK = tk == null ? null : findToolkit(toolkit, tk);
+			if (tk != null && targetTK == null) {
+				if (tk.name.equals(toolkit.getName()) && tk.majorVersion == toolkit.getMajorVersion()
+					&& tk.minorVersion == toolkit.getMinorVersion())
+					targetTK = toolkit;
+				else
+					reporting.warn("For traceable class " + type.getName() + ": No such toolkit found: " + tk);
+			}
+			QonfigElementOrAddOn qonfigType;
+			try {
+				qonfigType = targetTK == null ? null : targetTK.getElementOrAddOn(traceable.qonfigType());
+			} catch (IllegalArgumentException e) {
+				reporting.warn("For traceable class " + type.getName() + ": " + e.getMessage());
+				qonfigType = null;
+			}
+			if (targetTK != null && qonfigType == null)
+				reporting
+				.warn("For traceable class " + type.getName() + ": No such Qonfig type: " + targetTK + "." + traceable.qonfigType());
+			if (ExElement.Def.class.isAssignableFrom(type)) {
+				Class<ExElement.Interpreted<E>> interpretation = traceable.interpretation() == void.class ? null
+					: (Class<Interpreted<E>>) traceable.interpretation();
+				Class<E> instance = traceable.instance() == void.class ? null : (Class<E>) traceable.instance();
+				SingleTypeTraceability<E, ExElement.Interpreted<E>, ExElement.Def<? extends E>> typeTraceability = getElementTraceability(
+					tk.name, new Version(tk.majorVersion, tk.minorVersion, 0), qonfigType.getName(),
+					(Class<ExElement.Def<? extends E>>) type, interpretation, instance);
+				traceability.compute(new QonfigElementKey(qonfigType), (key, old) -> old == null ? typeTraceability
+					: ((SingleTypeTraceability<E, ExElement.Interpreted<E>, ExElement.Def<? extends E>>) old).combine(typeTraceability));
+			} else if (ExAddOn.Def.class.isAssignableFrom(type)) {
+				SingleTypeTraceability<E, ExElement.Interpreted<E>, ExElement.Def<? extends E>> typeTraceability = _traceAddOn(type, tk,
+					qonfigType, traceable);
+				traceability.compute(new QonfigElementKey(qonfigType), (key, old) -> old == null ? typeTraceability
+					: ((SingleTypeTraceability<E, ExElement.Interpreted<E>, ExElement.Def<? extends E>>) old).combine(typeTraceability));
+			} else
+				reporting.error("Can't use traceability on type " + type.getName());
+		}
+
+		private static QonfigToolkit findToolkit(QonfigToolkit toolkit, QonfigToolkit.ToolkitDef search) {
+			if (search.name.equals(toolkit.getName()) && search.majorVersion == toolkit.getMajorVersion()
+				&& search.minorVersion == toolkit.getMinorVersion())
+				return toolkit;
+			else
+				return toolkit.getDependenciesByDefinition().getOrDefault(search.name, Collections.emptyNavigableMap()).get(search);
+		}
+
+		@SuppressWarnings("rawtypes")
+		private static <E extends ExElement, AO extends ExAddOn<E>> SingleTypeTraceability<E, Interpreted<E>, Def<? extends E>> _traceAddOn(
+			Class<?> type, QonfigToolkit.ToolkitDef tk, QonfigElementOrAddOn qonfigType, ExElementTraceable traceable) {
+			Class interpretation = traceable.interpretation() == void.class ? null : traceable.interpretation();
+			Class instance = traceable.instance() == void.class ? null : traceable.instance();
+			return getAddOnTraceability(tk.name, tk.majorVersion, tk.minorVersion, qonfigType.getName(), (Class) type, interpretation,
+				instance);
+		}
+
+		public static <E extends ExElement> void join(Map<QonfigElementKey, SingleTypeTraceability<? super E, ?, ?>> traceability,
+			Map<QonfigElementKey, ? extends SingleTypeTraceability<?, ?, ?>> other) {
+			for (Map.Entry<QonfigElementKey, ? extends SingleTypeTraceability<?, ?, ?>> entry : other.entrySet())
+				traceability.compute(entry.getKey(),
+					(key, old) -> old == null ? (SingleTypeTraceability<? super E, ?, ?>) entry.getValue()
+						: ((SingleTypeTraceability<E, ExElement.Interpreted<E>, ExElement.Def<? extends E>>) old)
+						.combine((SingleTypeTraceability<E, ExElement.Interpreted<E>, ExElement.Def<? extends E>>) entry.getValue()));
+		}
+
 		private final String theToolkitName;
 		private final QonfigToolkit.ToolkitDefVersion theToolkitVersion;
 		private final String theTypeName;
@@ -301,6 +417,46 @@ public interface ElementTypeTraceability<E extends ExElement, I extends ExElemen
 
 		public String getTypeName() {
 			return theTypeName;
+		}
+
+		public SingleTypeTraceability<E, I, D> combine(SingleTypeTraceability<E, I, D> other) {
+			if (this == other)
+				return this;
+			if (!theToolkitName.equals(other.theToolkitName) || !theToolkitVersion.equals(other.theToolkitVersion)
+				|| !theTypeName.equals(other.theTypeName))
+				throw new IllegalArgumentException("Traceabilities are for different types: " + this + " and " + other);
+
+			Map<String, AttributeValueGetter<? super E, ? super I, ? super D>> attributes;
+			AttributeValueGetter<? super E, ? super I, ? super D> value;
+			Map<String, ChildElementGetter<? super E, ? super I, ? super D>> children;
+
+			if (theAttributes.isEmpty())
+				attributes = other.theAttributes;
+			else if (other.theAttributes.isEmpty())
+				attributes = theAttributes;
+			else {
+				attributes = new LinkedHashMap<>();
+				attributes.putAll(theAttributes);
+				attributes.putAll(other.theAttributes);
+				attributes = Collections.unmodifiableMap(attributes);
+			}
+			if (theValue == null)
+				value = other.theValue;
+			else
+				value = theValue;
+
+			if (theChildren.isEmpty())
+				children = other.theChildren;
+			else if (other.theChildren.isEmpty())
+				children = theChildren;
+			else {
+				children = new LinkedHashMap<>();
+				children.putAll(theChildren);
+				children.putAll(other.theChildren);
+				children = Collections.unmodifiableMap(children);
+			}
+
+			return new SingleTypeTraceability<>(theToolkitName, theToolkitVersion, theTypeName, attributes, value, children);
 		}
 
 		@Override
@@ -460,8 +616,7 @@ public interface ElementTypeTraceability<E extends ExElement, I extends ExElemen
 		static final Pattern AS_TYPE_PATTERN = Pattern
 			.compile("((?<tkName>[A-Za-z0-9_\\-]+)(\\s+\\v?(?<major>\\d+)\\.(?<minor>\\d+))?\\:)?(?<typeName>[A-Za-z0-9_\\-]+)");
 
-		public SingleTypeTraceabilityBuilder<E, I, D> reflectMethods(Class<? super D> defClass, Class<? super I> interpClass,
-			Class<? super E> elementClass) {
+		public SingleTypeTraceabilityBuilder<E, I, D> reflectMethods(Class<?> defClass, Class<?> interpClass, Class<?> elementClass) {
 			for (Method defMethod : defClass.getDeclaredMethods()) {
 				if (defMethod.getParameterCount() != 0 || defMethod.getReturnType() == void.class)
 					continue;
@@ -1036,6 +1191,56 @@ public interface ElementTypeTraceability<E extends ExElement, I extends ExElemen
 				return (List<? extends ExElement>) ret;
 			else
 				return Collections.singletonList((ExElement) ret);
+		}
+	}
+
+	class QonfigElementKey {
+		public String toolkitName;
+		public int toolkitMajorVersion;
+		public int toolkitMinorVersion;
+		public String typeName;
+
+		public QonfigElementKey(String toolkitName, int toolkitMajorVersion, int toolkitMinorVersion, String typeName) {
+			this.toolkitName = toolkitName;
+			this.toolkitMinorVersion = toolkitMinorVersion;
+			this.toolkitMajorVersion = toolkitMajorVersion;
+			this.typeName = typeName;
+		}
+
+		public QonfigElementKey(SingleTypeTraceability<?, ?, ?> traceability) {
+			toolkitName = traceability.getToolkitName();
+			toolkitMajorVersion = traceability.getToolkitVersion().majorVersion;
+			toolkitMinorVersion = traceability.getToolkitVersion().minorVersion;
+			typeName = traceability.getTypeName();
+		}
+
+		public QonfigElementKey(QonfigElementOrAddOn type) {
+			toolkitName = type.getDeclarer().getName();
+			toolkitMajorVersion = type.getDeclarer().getMajorVersion();
+			toolkitMinorVersion = type.getDeclarer().getMinorVersion();
+			typeName = type.getName();
+		}
+
+		@Override
+		public int hashCode() {
+			return Objects.hash(toolkitName, toolkitMajorVersion, toolkitMinorVersion, typeName);
+		}
+
+		@Override
+		public boolean equals(Object obj) {
+			if (obj == this)
+				return true;
+			else if (!(obj instanceof QonfigElementKey))
+				return false;
+			QonfigElementKey other = (QonfigElementKey) obj;
+			return toolkitName.equals(other.toolkitName) //
+				&& toolkitMajorVersion == other.toolkitMajorVersion && toolkitMinorVersion == other.toolkitMinorVersion//
+				&& typeName.equals(other.typeName);
+		}
+
+		@Override
+		public String toString() {
+			return toolkitName + " v" + toolkitMajorVersion + "." + toolkitMinorVersion + "." + typeName;
 		}
 	}
 }

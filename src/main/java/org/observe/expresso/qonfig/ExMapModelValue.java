@@ -3,7 +3,6 @@ package org.observe.expresso.qonfig;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.VariableType;
-import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigElement.QonfigValue;
 import org.qommons.config.QonfigInterpretationException;
@@ -12,10 +11,10 @@ import org.qommons.io.LocatedPositionedContent;
 import com.google.common.reflect.TypeToken;
 
 public class ExMapModelValue<K> extends ExAddOn.Abstract<ExElement> {
-	private static final SingleTypeTraceability<ExElement, ExElement.Interpreted<?>, ExElement.Def<?>> TRACEABILITY = ElementTypeTraceability
-		.getAddOnTraceability(ExpressoSessionImplV0_1.TOOLKIT_NAME, ExpressoSessionImplV0_1.VERSION, "map-model-value", Def.class,
-			Interpreted.class, ExMapModelValue.class);
-
+	@ExElementTraceable(toolkit = ExpressoSessionImplV0_1.CORE,
+		qonfigType = "map-model-value",
+		interpretation = Interpreted.class,
+		instance = ExMapModelValue.class)
 	public static class Def extends ExAddOn.Def.Abstract<ExElement, ExMapModelValue<?>> {
 		private VariableType theKeyType;
 
@@ -30,7 +29,6 @@ public class ExMapModelValue<K> extends ExAddOn.Abstract<ExElement> {
 
 		@Override
 		public void update(ExpressoQIS session, ExElement.Def<? extends ExElement> element) throws QonfigInterpretationException {
-			element.withTraceability(TRACEABILITY.validate(getType(), element.reporting()));
 			super.update(session, element);
 			QonfigValue keyTypeV = session.getAttributeQV("key-type");
 			if (keyTypeV != null && !keyTypeV.text.isEmpty()) {

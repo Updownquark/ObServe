@@ -17,9 +17,8 @@ import org.observe.expresso.ObservableModelSet.ModelComponentId;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.qonfig.CompiledExpression;
-import org.observe.expresso.qonfig.ElementTypeTraceability;
-import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.observe.expresso.qonfig.ExElement;
+import org.observe.expresso.qonfig.ExElementTraceable;
 import org.observe.expresso.qonfig.ExFlexibleElementModelAddOn;
 import org.observe.expresso.qonfig.ExWithElementModel;
 import org.observe.expresso.qonfig.ExpressoQIS;
@@ -44,15 +43,16 @@ import com.google.common.reflect.TypeToken;
 /** The base class for widgets in Quick */
 public interface QuickWidget extends QuickTextElement {
 	public static final String WIDGET = "widget";
-	public static final SingleTypeTraceability<QuickWidget, Interpreted<?>, Def<?>> WIDGET_TRACEABILITY = ElementTypeTraceability
-		.getElementTraceability(QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, WIDGET, Def.class, Interpreted.class,
-			QuickWidget.class);
 
 	/**
 	 * The definition of a {@link QuickWidget}
 	 *
 	 * @param <W> The type of widget that this definition is for
 	 */
+	@ExElementTraceable(toolkit = QuickCoreInterpretation.CORE,
+		qonfigType = WIDGET,
+		interpretation = Interpreted.class,
+		instance = QuickWidget.class)
 	public interface Def<W extends QuickWidget> extends QuickTextElement.Def<W> {
 		@Override
 		QuickWidgetStyle.Def getStyle();
@@ -178,7 +178,6 @@ public interface QuickWidget extends QuickTextElement {
 
 			@Override
 			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
-				withTraceability(WIDGET_TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 				super.doUpdate(session.asElement("styled"));
 				theName = session.getAttributeText("name");
 				theTooltip = session.getAttributeExpression("tooltip");

@@ -15,9 +15,8 @@ import org.observe.expresso.ObservableModelSet.ModelComponentId;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.qonfig.CompiledExpression;
-import org.observe.expresso.qonfig.ElementTypeTraceability;
-import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.observe.expresso.qonfig.ExElement;
+import org.observe.expresso.qonfig.ExElementTraceable;
 import org.observe.expresso.qonfig.ExFlexibleElementModelAddOn;
 import org.observe.expresso.qonfig.ExWithElementModel;
 import org.observe.expresso.qonfig.ExpressoQIS;
@@ -29,10 +28,10 @@ import org.qommons.config.QonfigInterpretationException;
 import com.google.common.reflect.TypeToken;
 
 public interface ValueAction<T> extends ExElement {
-	public static final SingleTypeTraceability<ValueAction<?>, Interpreted<?, ?>, Def<?, ?>> VALUE_ACTION_TRACEABILITY = ElementTypeTraceability
-		.getElementTraceability(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, "abstract-value-action", Def.class,
-			Interpreted.class, ValueAction.class);
-
+	@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
+		qonfigType = "abstract-value-action",
+		interpretation = Interpreted.class,
+		instance = ValueAction.class)
 	public interface Def<T, A extends ValueAction<T>> extends ExElement.Def<A> {
 		@QonfigAttributeGetter("name")
 		CompiledExpression getName();
@@ -109,7 +108,6 @@ public interface ValueAction<T> extends ExElement {
 
 			@Override
 			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
-				withTraceability(VALUE_ACTION_TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 				super.doUpdate(session);
 				theName = session.getAttributeExpression("name");
 				isButton = session.getAttribute("as-button", boolean.class);
@@ -389,10 +387,11 @@ public interface ValueAction<T> extends ExElement {
 
 	public class Single<T> extends ValueAction.Abstract<T> {
 		public static final String SINGLE_VALUE_ACTION = "value-action";
-		private static final SingleTypeTraceability<Single<?>, Interpreted<?, ?>, Def<?, ?>> TRACEABILITY = ElementTypeTraceability
-			.getElementTraceability(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, SINGLE_VALUE_ACTION, Def.class,
-				Interpreted.class, Single.class);
 
+		@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
+			qonfigType = SINGLE_VALUE_ACTION,
+			interpretation = Interpreted.class,
+			instance = Single.class)
 		public static class Def<T, A extends Single<T>> extends ValueAction.Def.Abstract<T, A> {
 			private String theValueName;
 			private boolean allowForMultiple;
@@ -419,7 +418,6 @@ public interface ValueAction<T> extends ExElement {
 
 			@Override
 			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
-				withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 				super.doUpdate(session.asElement(session.getFocusType().getSuperElement()));
 				theValueName = session.getAttributeText("value-name");
 				allowForMultiple = session.getAttribute("allow-for-multiple", boolean.class);
@@ -495,10 +493,11 @@ public interface ValueAction<T> extends ExElement {
 
 	public class Multi<T> extends ValueAction.Abstract<T> {
 		public static final String MULTI_VALUE_ACTION = "multi-value-action";
-		private static final SingleTypeTraceability<Multi<?>, Interpreted<?, ?>, Def<?, ?>> TRACEABILITY = ElementTypeTraceability
-			.getElementTraceability(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, MULTI_VALUE_ACTION, Def.class,
-				Interpreted.class, Multi.class);
 
+		@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
+			qonfigType = MULTI_VALUE_ACTION,
+			interpretation = Interpreted.class,
+			instance = Multi.class)
 		public static class Def<T, A extends Multi<T>> extends ValueAction.Def.Abstract<T, A> {
 			private String theValuesName;
 			private boolean allowForEmpty;
@@ -525,7 +524,6 @@ public interface ValueAction<T> extends ExElement {
 
 			@Override
 			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
-				withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 				super.doUpdate(session.asElement(session.getFocusType().getSuperElement()));
 				theValuesName = session.getAttributeText("values-name");
 				allowForEmpty = session.getAttribute("allow-for-empty", boolean.class);

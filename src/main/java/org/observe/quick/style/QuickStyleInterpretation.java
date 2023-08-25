@@ -24,6 +24,9 @@ public class QuickStyleInterpretation implements QonfigInterpretation {
 	/** The supported version of the Quick-Style toolkit */
 	public static final Version VERSION = new Version(0, 1, 0);
 
+	/** {@link #NAME} and {@link #VERSION} combined */
+	public static final String STYLE = "Quick-Style v0.1";
+
 	@Override
 	public String getToolkitName() {
 		return NAME;

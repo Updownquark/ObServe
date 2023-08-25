@@ -26,9 +26,12 @@ import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.qonfig.CompiledExpression;
 import org.observe.expresso.qonfig.ExAddOn;
 import org.observe.expresso.qonfig.ExElement;
+import org.observe.expresso.qonfig.ExElementTraceable;
 import org.observe.expresso.qonfig.ExFlexibleElementModelAddOn;
 import org.observe.expresso.qonfig.ExWithElementModel;
 import org.observe.expresso.qonfig.ExpressoQIS;
+import org.observe.expresso.qonfig.QonfigAttributeGetter;
+import org.observe.expresso.qonfig.QonfigChildGetter;
 import org.observe.quick.QuickContainer;
 import org.observe.quick.QuickWidget;
 import org.observe.util.TypeTokens;
@@ -47,6 +50,10 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 	public static class AbstractTab extends ExAddOn.Abstract<ExElement> {
 		public static final String ABSTRACT_TAB = "abstract-tab";
 
+		@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
+			qonfigType = "abstract-tab",
+			interpretation = Interpreted.class,
+			instance = QuickTabs.class)
 		public static class Def extends ExAddOn.Def.Abstract<ExElement, AbstractTab> {
 			private CompiledExpression theTabName;
 			private CompiledExpression theTabIcon;
@@ -57,14 +64,17 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 				super(type, element);
 			}
 
+			@QonfigAttributeGetter("tab-name")
 			public CompiledExpression getTabName() {
 				return theTabName;
 			}
 
+			@QonfigAttributeGetter("tab-icon")
 			public CompiledExpression getTabIcon() {
 				return theTabIcon;
 			}
 
+			@QonfigAttributeGetter("on-select")
 			public CompiledExpression getOnSelect() {
 				return theOnSelect;
 			}
@@ -234,6 +244,10 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 	public static class Tab<T> extends ExAddOn.Abstract<QuickWidget> {
 		public static final String TAB = "tab";
 
+		@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
+			qonfigType = "tab",
+			interpretation = Interpreted.class,
+			instance = QuickTabs.class)
 		public static class Def extends ExAddOn.Def.Abstract<QuickWidget, Tab<?>> {
 			private CompiledExpression theTabId;
 
@@ -241,6 +255,7 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 				super(type, element);
 			}
 
+			@QonfigAttributeGetter("tab-id")
 			public CompiledExpression getTabId() {
 				return theTabId;
 			}
@@ -331,6 +346,10 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 	public static class TabSet<T> extends ExElement.Abstract implements TabSource<T> {
 		public static final String TAB_SET = "tab-set";
 
+		@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
+			qonfigType = "tab-set",
+			interpretation = Interpreted.class,
+			instance = QuickTabs.class)
 		public static class Def extends ExElement.Def.Abstract<TabSet<?>> {
 			private CompiledExpression theValues;
 			private ModelComponentId theTabIdVariable;
@@ -340,6 +359,7 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 				super(parent, qonfigType);
 			}
 
+			@QonfigAttributeGetter("values")
 			public CompiledExpression getValues() {
 				return theValues;
 			}
@@ -619,6 +639,10 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 		}
 	}
 
+	@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
+		qonfigType = "tabs",
+		interpretation = Interpreted.class,
+		instance = QuickTabs.class)
 	public static class Def extends QuickContainer.Def.Abstract<QuickTabs<?>, QuickWidget> {
 		private CompiledExpression theSelectedTab;
 		private final List<TabSet.Def> theTabSets;
@@ -629,10 +653,12 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 			theTabSets = new ArrayList<>();
 		}
 
+		@QonfigAttributeGetter("selected")
 		public CompiledExpression getSelectedTab() {
 			return theSelectedTab;
 		}
 
+		@QonfigChildGetter("tab-set")
 		public List<TabSet.Def> getTabSets() {
 			return Collections.unmodifiableList(theTabSets);
 		}

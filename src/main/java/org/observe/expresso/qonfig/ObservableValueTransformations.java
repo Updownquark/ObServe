@@ -28,7 +28,6 @@ import org.observe.expresso.ObservableModelSet.ModelComponentId;
 import org.observe.expresso.ObservableModelSet.ModelInstantiator;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
-import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.observe.expresso.qonfig.ExElement.Def;
 import org.observe.expresso.qonfig.ExpressoTransformations.AbstractCompiledTransformation;
 import org.observe.expresso.qonfig.ExpressoTransformations.Operation;
@@ -476,11 +475,9 @@ public class ObservableValueTransformations {
 		}
 	}
 
+	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE, qonfigType = "refresh", interpretation = RefreshValueTransform.Interpreted.class)
 	static class RefreshValueTransform extends TypePreservingTransform<SettableValue<?>>
 	implements ValueTransform<SettableValue<?>, ExElement> {
-		private static final SingleTypeTraceability<ExElement, Interpreted<?>, RefreshValueTransform> TRACEABILITY = ElementTypeTraceability
-			.getElementTraceability(ExpressoBaseV0_1.NAME, ExpressoBaseV0_1.VERSION, "refresh", RefreshValueTransform.class,
-				Interpreted.class, null);
 		private CompiledExpression theRefresh;
 
 		RefreshValueTransform(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
@@ -494,7 +491,6 @@ public class ObservableValueTransformations {
 
 		@Override
 		public void update(ExpressoQIS session, ModelType<SettableValue<?>> sourceModelType) throws QonfigInterpretationException {
-			withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 			super.update(session, sourceModelType);
 			theRefresh = session.getAttributeExpression("on");
 		}

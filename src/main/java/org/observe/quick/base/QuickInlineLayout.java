@@ -1,9 +1,8 @@
 package org.observe.quick.base;
 
-import org.observe.expresso.qonfig.ElementTypeTraceability;
-import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.observe.expresso.qonfig.ExAddOn;
 import org.observe.expresso.qonfig.ExElement;
+import org.observe.expresso.qonfig.ExElementTraceable;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.util.swing.JustifiedBoxLayout;
@@ -12,10 +11,11 @@ import org.qommons.config.QonfigInterpretationException;
 
 public class QuickInlineLayout extends QuickLayout.Abstract {
 	public static final String INLINE_LAYOUT = "inline-layout";
-	private static final SingleTypeTraceability<QuickBox, ?, ?> TRACEABILITY = ElementTypeTraceability
-		.<QuickBox, QuickInlineLayout, Interpreted, Def> getAddOnTraceability(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION,
-			INLINE_LAYOUT, Def.class, Interpreted.class, QuickInlineLayout.class);
 
+	@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
+		qonfigType = INLINE_LAYOUT,
+		interpretation = Interpreted.class,
+		instance = QuickInlineLayout.class)
 	public static class Def extends QuickLayout.Def<QuickInlineLayout> {
 		private boolean isVertical;
 		private JustifiedBoxLayout.Alignment theMainAlign;
@@ -48,7 +48,6 @@ public class QuickInlineLayout extends QuickLayout.Abstract {
 
 		@Override
 		public void update(ExpressoQIS session, ExElement.Def<? extends QuickBox> element) throws QonfigInterpretationException {
-			element.withTraceability(TRACEABILITY.validate(getType(), session.reporting()));
 			super.update(session, element);
 			isVertical = "vertical".equals(session.getAttributeText("orientation"));
 			theMainAlign = jblAlign("main-align", session.getAttributeText("main-align"), session);

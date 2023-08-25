@@ -13,9 +13,8 @@ import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.qonfig.CompiledExpression;
-import org.observe.expresso.qonfig.ElementTypeTraceability;
-import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.observe.expresso.qonfig.ExElement;
+import org.observe.expresso.qonfig.ExElementTraceable;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.quick.QuickTextElement;
@@ -36,11 +35,12 @@ import com.google.common.reflect.TypeToken;
 
 public abstract class StyledDocument<T> extends ExElement.Abstract {
 	public static final String STYLED_DOCUMENT = "styled-document";
-	private static final SingleTypeTraceability<StyledDocument<?>, Interpreted<?, ?>, Def<?>> TRACEABILITY = ElementTypeTraceability
-		.getElementTraceability(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, STYLED_DOCUMENT, Def.class,
-			Interpreted.class, StyledDocument.class);
 	public static final String TEXT_STYLE = "text-style";
 
+	@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
+		qonfigType = STYLED_DOCUMENT,
+		interpretation = Interpreted.class,
+		instance = StyledDocument.class)
 	public static abstract class Def<D extends StyledDocument<?>> extends ExElement.Def.Abstract<D> {
 		private CompiledExpression theSelectionStartValue;
 		private CompiledExpression theSelectionStartOffset;
@@ -75,7 +75,6 @@ public abstract class StyledDocument<T> extends ExElement.Abstract {
 
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
-			withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 			super.doUpdate(session);
 
 			theSelectionStartValue = session.getAttributeExpression("selection-start-value");
@@ -246,10 +245,10 @@ public abstract class StyledDocument<T> extends ExElement.Abstract {
 	}
 
 	public static class TextStyleElement extends QuickStyledElement.Abstract implements QuickTextElement {
-		private static final SingleTypeTraceability<TextStyleElement, Interpreted, Def> TRACEABILITY = ElementTypeTraceability
-			.getElementTraceability(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, TEXT_STYLE, Def.class, Interpreted.class,
-				TextStyleElement.class);
-
+		@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
+			qonfigType = TEXT_STYLE,
+			interpretation = Interpreted.class,
+			instance = TextStyleElement.class)
 		public static class Def extends QuickStyledElement.Def.Abstract<TextStyleElement>
 		implements QuickTextElement.Def<TextStyleElement> {
 			public Def(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
@@ -268,7 +267,6 @@ public abstract class StyledDocument<T> extends ExElement.Abstract {
 
 			@Override
 			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
-				withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 				super.doUpdate(session.asElement("styled")); // No super element
 			}
 

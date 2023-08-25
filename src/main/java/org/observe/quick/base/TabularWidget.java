@@ -11,9 +11,8 @@ import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.ModelComponentId;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
-import org.observe.expresso.qonfig.ElementTypeTraceability;
-import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.observe.expresso.qonfig.ExElement;
+import org.observe.expresso.qonfig.ExElementTraceable;
 import org.observe.expresso.qonfig.ExFlexibleElementModelAddOn;
 import org.observe.expresso.qonfig.ExWithElementModel;
 import org.observe.expresso.qonfig.ExpressoQIS;
@@ -30,10 +29,10 @@ import org.qommons.config.QonfigInterpretationException;
 import com.google.common.reflect.TypeToken;
 
 public interface TabularWidget<R> extends MultiValueWidget<R>, RowTyped<R> {
-	public static final SingleTypeTraceability<TabularWidget<?>, Interpreted<?, ?>, Def<?>> TABULAR_WIDGET_TRACEABILITY = ElementTypeTraceability
-		.getElementTraceability(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, "tabular-widget", Def.class,
-			Interpreted.class, TabularWidget.class);
-
+	@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
+		qonfigType = "tabular-widget",
+		interpretation = Interpreted.class,
+		instance = TabularWidget.class)
 	public interface Def<W extends TabularWidget<?>> extends MultiValueWidget.Def<W>, RowTyped.Def<W> {
 		@QonfigChildGetter("columns")
 		List<QuickTableColumn.TableColumnSet.Def<?>> getColumns();
@@ -85,10 +84,6 @@ public interface TabularWidget<R> extends MultiValueWidget<R>, RowTyped<R> {
 
 			@Override
 			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
-				withTraceability(TABULAR_WIDGET_TRACEABILITY.validate(session.getFocusType(), session.reporting()));
-				withTraceability(MV_WIDGET_TRACEABILITY.validate(session.getFocusType().getSuperElement(), session.reporting()));
-				withTraceability(
-					MV_RENDERABLE_TRACEABILITY.validate(session.asElement("multi-value-renderable").getFocusType(), session.reporting()));
 				super.doUpdate(session.asElement(session.getFocusType().getSuperElement() // multi-value-widget
 					.getSuperElement() // widget
 					));

@@ -11,9 +11,8 @@ import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.qonfig.CompiledExpression;
-import org.observe.expresso.qonfig.ElementTypeTraceability;
-import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.observe.expresso.qonfig.ExElement;
+import org.observe.expresso.qonfig.ExElementTraceable;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.quick.QuickTextWidget;
@@ -26,10 +25,11 @@ import com.google.common.reflect.TypeToken;
 
 public class QuickLabel<T> extends QuickTextWidget.Abstract<T> {
 	public static final String LABEL = "label";
-	private static final SingleTypeTraceability<QuickLabel<?>, Interpreted<?, ?>, Def<?>> TRACEABILITY = ElementTypeTraceability
-		.getElementTraceability(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, LABEL, Def.class, Interpreted.class,
-			QuickLabel.class);
 
+	@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
+		qonfigType = LABEL,
+		interpretation = Interpreted.class,
+		instance = QuickLabel.class)
 	public static class Def<W extends QuickLabel<?>> extends QuickTextWidget.Def.Abstract<W> {
 		private String theStaticText;
 		private CompiledExpression theTextExpression;
@@ -63,7 +63,6 @@ public class QuickLabel<T> extends QuickTextWidget.Abstract<T> {
 
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
-			withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 			super.doUpdate(session.asElement(session.getFocusType().getSuperElement()));
 			String staticText = session.getValueText();
 			if (staticText != null && staticText.isEmpty())
@@ -117,9 +116,8 @@ public class QuickLabel<T> extends QuickTextWidget.Abstract<T> {
 		@Override
 		protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 			super.doUpdate(env);
-			theIcon = getDefinition().getIcon() == null ? null
-				: QuickBaseInterpretation.evaluateIcon(getDefinition().getIcon(), env,
-					getDefinition().getElement().getDocument().getLocation());
+			theIcon = getDefinition().getIcon() == null ? null : QuickBaseInterpretation.evaluateIcon(getDefinition().getIcon(), env,
+				getDefinition().getElement().getDocument().getLocation());
 		}
 
 		@Override

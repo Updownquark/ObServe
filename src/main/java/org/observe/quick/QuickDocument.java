@@ -8,9 +8,8 @@ import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ObservableModelSet.ModelComponentId;
 import org.observe.expresso.ObservableModelSet.ModelInstantiator;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
-import org.observe.expresso.qonfig.ElementTypeTraceability;
-import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.observe.expresso.qonfig.ExElement;
+import org.observe.expresso.qonfig.ExElementTraceable;
 import org.observe.expresso.qonfig.ExFlexibleElementModelAddOn;
 import org.observe.expresso.qonfig.ExWithElementModel;
 import org.observe.expresso.qonfig.Expresso;
@@ -25,11 +24,12 @@ import org.qommons.config.QonfigInterpretationException;
 public class QuickDocument extends ExElement.Abstract {
 	/** Name of the Qonfig element type that this interpretation is for */
 	public static final String QUICK = "quick";
-	private static final SingleTypeTraceability<QuickDocument, Interpreted, Def> TRACEABILITY = ElementTypeTraceability
-		.getElementTraceability(QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, QUICK, Def.class, Interpreted.class,
-			QuickDocument.class);
 
 	/** The definition of a Quick document */
+	@ExElementTraceable(toolkit = QuickCoreInterpretation.CORE,
+		qonfigType = QUICK,
+		interpretation = Interpreted.class,
+		instance = QuickDocument.class)
 	public static class Def extends ExElement.Def.Abstract<QuickDocument> {
 		private QuickHeadSection.Def theHead;
 		private QuickWidget.Def<?> theBody;
@@ -66,7 +66,6 @@ public class QuickDocument extends ExElement.Abstract {
 
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
-			withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 			super.doUpdate(session);
 
 			ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);

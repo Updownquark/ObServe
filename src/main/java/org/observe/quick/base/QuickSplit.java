@@ -9,9 +9,8 @@ import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.qonfig.CompiledExpression;
-import org.observe.expresso.qonfig.ElementTypeTraceability;
-import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.observe.expresso.qonfig.ExElement;
+import org.observe.expresso.qonfig.ExElementTraceable;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.quick.QuickContainer;
@@ -24,10 +23,11 @@ import com.google.common.reflect.TypeToken;
 
 public class QuickSplit extends QuickContainer.Abstract<QuickWidget> {
 	public static final String SPLIT = "split";
-	private static final SingleTypeTraceability<QuickSplit, Interpreted<?>, Def<?>> TRACEABILITY = ElementTypeTraceability
-		.getElementTraceability(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, SPLIT, Def.class, Interpreted.class,
-			QuickSplit.class);
 
+	@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
+		qonfigType = SPLIT,
+		interpretation = Interpreted.class,
+		instance = QuickSplit.class)
 	public static class Def<S extends QuickSplit> extends QuickContainer.Def.Abstract<S, QuickWidget> {
 		private boolean isVertical;
 		private CompiledExpression theSplitPosition;
@@ -47,7 +47,6 @@ public class QuickSplit extends QuickContainer.Abstract<QuickWidget> {
 
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
-			withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 			super.doUpdate(session.asElement(session.getFocusType().getSuperElement()));
 			switch (session.getAttributeText("orientation")) {
 			case "horizontal":

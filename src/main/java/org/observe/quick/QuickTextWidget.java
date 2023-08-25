@@ -13,9 +13,8 @@ import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.qonfig.CompiledExpression;
-import org.observe.expresso.qonfig.ElementTypeTraceability;
-import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.observe.expresso.qonfig.ExElement;
+import org.observe.expresso.qonfig.ExElementTraceable;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.util.TypeTokens;
@@ -29,9 +28,6 @@ import com.google.common.reflect.TypeToken;
 
 public interface QuickTextWidget<T> extends QuickValueWidget<T> {
 	public static final String TEXT_WIDGET = "text-widget";
-	public static final SingleTypeTraceability<QuickTextWidget<?>, Interpreted<?, ?>, Def<?>> TEXT_WIDGET_TRACEABILITY = ElementTypeTraceability
-		.getElementTraceability(QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, TEXT_WIDGET, Def.class, Interpreted.class,
-			QuickTextWidget.class);
 
 	public static final Format<Double> DEFAULT_DOUBLE_FORMAT = Format.doubleFormat(5)//
 		.printIntFor(5, false)//
@@ -58,6 +54,10 @@ public interface QuickTextWidget<T> extends QuickValueWidget<T> {
 		}
 	};
 
+	@ExElementTraceable(toolkit = QuickCoreInterpretation.CORE,
+		qonfigType = TEXT_WIDGET,
+		interpretation = Interpreted.class,
+		instance = QuickTextWidget.class)
 	public interface Def<W extends QuickTextWidget<?>> extends QuickValueWidget.Def<W> {
 		@QonfigAttributeGetter("format")
 		CompiledExpression getFormat();
@@ -91,7 +91,6 @@ public interface QuickTextWidget<T> extends QuickValueWidget<T> {
 
 			@Override
 			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
-				withTraceability(TEXT_WIDGET_TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 				super.doUpdate(session.asElement(session.getFocusType().getSuperElement()));
 				theFormat = session.getAttributeExpression("format");
 				isEditable = session.getAttributeExpression("editable");

@@ -9,9 +9,8 @@ import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.qonfig.CompiledExpression;
-import org.observe.expresso.qonfig.ElementTypeTraceability;
-import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.observe.expresso.qonfig.ExElement;
+import org.observe.expresso.qonfig.ExElementTraceable;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.util.TypeTokens;
@@ -22,10 +21,11 @@ import com.google.common.reflect.TypeToken;
 
 public class QuickTextField<T> extends QuickEditableTextWidget.Abstract<T> {
 	public static final String TEXT_FIELD = "text-field";
-	private static final SingleTypeTraceability<QuickTextField<?>, Interpreted<?>, Def> TRACEABILITY = ElementTypeTraceability
-		.getElementTraceability(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION, TEXT_FIELD, Def.class, Interpreted.class,
-			QuickTextField.class);
 
+	@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
+		qonfigType = TEXT_FIELD,
+		interpretation = Interpreted.class,
+		instance = QuickTextField.class)
 	public static class Def extends QuickEditableTextWidget.Def.Abstract<QuickTextField<?>> {
 		private Integer theColumns;
 		private CompiledExpression theEmptyText;
@@ -51,7 +51,6 @@ public class QuickTextField<T> extends QuickEditableTextWidget.Abstract<T> {
 
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
-			withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 			super.doUpdate(session.asElement(session.getFocusType().getSuperElement()));
 			String columnsStr = session.getAttributeText("columns");
 			theColumns = columnsStr == null ? null : Integer.parseInt(columnsStr);

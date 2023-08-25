@@ -1,43 +1,26 @@
 package org.observe.quick.base;
 
 import org.observe.SettableValue;
-import org.observe.collect.ObservableCollection;
 import org.observe.expresso.ModelInstantiationException;
-import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelComponentId;
-import org.observe.expresso.qonfig.CompiledExpression;
-import org.observe.expresso.qonfig.ElementTypeTraceability;
-import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
+import org.observe.expresso.qonfig.ExElementTraceable;
+import org.observe.expresso.qonfig.QonfigAttributeGetter;
+import org.observe.quick.QuickMouseListener.QuickMouseButtonListener;
 import org.observe.quick.QuickWidget;
 
 public interface MultiValueRenderable<T> extends QuickWidget {
-	public static final SingleTypeTraceability<MultiValueRenderable<?>, Interpreted<?, ?>, Def<?>> MV_RENDERABLE_TRACEABILITY = ElementTypeTraceability
-		.<MultiValueRenderable<?>, Interpreted<?, ?>, Def<?>> build(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION,
-			"multi-value-renderable")//
-		.withAttribute("value-name", Def::getValueVariable, null)//
-		.build();
-	public static final SingleTypeTraceability<MultiValueRenderable<?>, Interpreted<?, ?>, Def<?>> MV_WIDGET_TRACEABILITY = ElementTypeTraceability
-		.<MultiValueRenderable<?>, Interpreted<?, ?>, Def<?>> build(QuickBaseInterpretation.NAME, QuickBaseInterpretation.VERSION,
-			"multi-value-widget")//
-		.withAttribute("selection", Def::getSelection, Interpreted::getSelection)//
-		.withAttribute("multi-selection", Def::getMultiSelection, Interpreted::getMultiSelection)//
-		.build();
-
+	@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
+		qonfigType = "multi-value-renderable",
+		interpretation = Interpreted.class,
+		instance = QuickMouseButtonListener.class)
 	public interface Def<W extends MultiValueRenderable<?>> extends QuickWidget.Def<W> {
+		@QonfigAttributeGetter("value-name")
 		ModelComponentId getValueVariable();
-
-		CompiledExpression getSelection();
-
-		CompiledExpression getMultiSelection();
 	}
 
 	public interface Interpreted<T, W extends MultiValueRenderable<T>> extends QuickWidget.Interpreted<W> {
 		@Override
 		Def<? super W> getDefinition();
-
-		InterpretedValueSynth<SettableValue<?>, SettableValue<T>> getSelection();
-
-		InterpretedValueSynth<ObservableCollection<?>, ObservableCollection<T>> getMultiSelection();
 
 		@Override
 		W create();
@@ -68,10 +51,6 @@ public interface MultiValueRenderable<T> extends QuickWidget {
 			}
 		}
 	}
-
-	SettableValue<T> getSelection();
-
-	ObservableCollection<T> getMultiSelection();
 
 	ModelComponentId getValueVariable();
 

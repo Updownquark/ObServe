@@ -18,9 +18,8 @@ import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.ModelComponentId;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
-import org.observe.expresso.qonfig.ElementTypeTraceability;
-import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.observe.expresso.qonfig.ExElement;
+import org.observe.expresso.qonfig.ExElementTraceable;
 import org.observe.expresso.qonfig.ExFlexibleElementModelAddOn;
 import org.observe.expresso.qonfig.ExWithElementModel;
 import org.observe.expresso.qonfig.ExpressoQIS;
@@ -40,15 +39,15 @@ import com.google.common.reflect.TypeToken;
 
 /** A Quick element that has style */
 public interface QuickStyledElement extends ExElement {
-	public static final SingleTypeTraceability<QuickStyledElement, Interpreted<?>, Def<?>> STYLED_TRACEABILITY = ElementTypeTraceability
-		.getElementTraceability(QuickStyleInterpretation.NAME, QuickStyleInterpretation.VERSION, "styled", Def.class, Interpreted.class,
-			QuickStyledElement.class);
-
 	/**
 	 * The definition of a styled element
 	 *
 	 * @param <S> The type of the styled element that this definition is for
 	 */
+	@ExElementTraceable(toolkit = QuickStyleInterpretation.STYLE,
+		qonfigType = "styled",
+		interpretation = Interpreted.class,
+		instance = QuickStyledElement.class)
 	public interface Def<S extends QuickStyledElement> extends ExElement.Def<S> {
 		/** @return This element's style */
 		QuickInstanceStyle.Def getStyle();
@@ -94,7 +93,6 @@ public interface QuickStyledElement extends ExElement {
 
 			@Override
 			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
-				withTraceability(STYLED_TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 				super.doUpdate(session);
 				theParentStyleValue = getAddOn(ExWithElementModel.Def.class)
 					.getElementValueModelId(InterpretedStyleApplication.PARENT_MODEL_NAME);

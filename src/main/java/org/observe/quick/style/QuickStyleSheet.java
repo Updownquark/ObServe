@@ -13,10 +13,9 @@ import java.util.List;
 import java.util.Map;
 
 import org.observe.expresso.ObservableModelSet;
-import org.observe.expresso.qonfig.ElementTypeTraceability;
-import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExElement.Def;
+import org.observe.expresso.qonfig.ExElementTraceable;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.expresso.qonfig.QonfigChildGetter;
@@ -33,12 +32,10 @@ import org.qommons.io.LocatedFilePosition;
 import org.qommons.io.SimpleXMLParser;
 
 /** A structure containing many {@link #getValues() style values} that may apply to all &lt;styled> elements in a document */
+@ExElementTraceable(toolkit = QuickStyleInterpretation.STYLE, qonfigType = "style-sheet")
 public class QuickStyleSheet extends ExElement.Def.Abstract<ExElement.Void> {
+	@ExElementTraceable(toolkit = QuickStyleInterpretation.STYLE, qonfigType = "import-style-sheet")
 	public static class StyleSheetRef extends ExElement.Def.Abstract<ExElement.Void> {
-		private static final SingleTypeTraceability<ExElement.Void, ExElement.Interpreted<ExElement.Void>, StyleSheetRef> TRACEABILITY = ElementTypeTraceability
-			.getElementTraceability(QuickStyleInterpretation.NAME, QuickStyleInterpretation.VERSION, "import-style-sheet",
-				StyleSheetRef.class, null, null);
-
 		private String theName;
 		private QuickStyleSheet theTarget;
 		private URL theReference;
@@ -63,7 +60,6 @@ public class QuickStyleSheet extends ExElement.Def.Abstract<ExElement.Void> {
 
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
-			withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 			super.doUpdate(session);
 			theName = session.getAttributeText("name");
 
@@ -120,10 +116,6 @@ public class QuickStyleSheet extends ExElement.Def.Abstract<ExElement.Void> {
 			theTarget.update(importSession);
 		}
 	}
-
-	public static final SingleTypeTraceability<ExElement.Void, ExElement.Interpreted<ExElement.Void>, QuickStyleSheet> TRACEABILITY = ElementTypeTraceability
-		.getElementTraceability(QuickStyleInterpretation.NAME, QuickStyleInterpretation.VERSION, "style-sheet", QuickStyleSheet.class, null,
-			null);
 
 	private final List<QuickStyleElement.Def> theStyleElements;
 	private final List<StyleSheetRef> theStyleSheetRefs;
@@ -200,7 +192,6 @@ public class QuickStyleSheet extends ExElement.Def.Abstract<ExElement.Void> {
 
 	@Override
 	protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
-		withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 		super.doUpdate(session);
 
 		session.put(ExWithStyleSheet.QUICK_STYLE_SHEET, this);

@@ -4,9 +4,8 @@ import org.observe.SettableValue;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ObservableModelSet.ModelComponentId;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
-import org.observe.expresso.qonfig.ElementTypeTraceability;
-import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.observe.expresso.qonfig.ExElement;
+import org.observe.expresso.qonfig.ExElementTraceable;
 import org.observe.expresso.qonfig.ExFlexibleElementModelAddOn;
 import org.observe.expresso.qonfig.ExWithElementModel;
 import org.observe.expresso.qonfig.ExpressoQIS;
@@ -72,10 +71,11 @@ public interface QuickKeyListener extends QuickEventListener {
 
 	public class QuickKeyTypedListener extends QuickEventListener.Abstract implements QuickKeyListener {
 		public static final String KEY_TYPED_LISTENER = "on-type";
-		private static final SingleTypeTraceability<QuickKeyTypedListener, Interpreted, Def> TRACEABILITY = ElementTypeTraceability
-			.getElementTraceability(QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, KEY_TYPED_LISTENER, Def.class,
-				Interpreted.class, QuickKeyTypedListener.class);
 
+		@ExElementTraceable(toolkit = QuickCoreInterpretation.CORE,
+			qonfigType = KEY_TYPED_LISTENER,
+			interpretation = Interpreted.class,
+			instance = QuickKeyTypedListener.class)
 		public static class Def extends QuickEventListener.Def.Abstract<QuickKeyTypedListener>
 		implements QuickKeyListener.Def<QuickKeyTypedListener> {
 			private char theCharFilter;
@@ -96,7 +96,6 @@ public interface QuickKeyListener extends QuickEventListener {
 
 			@Override
 			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
-				withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 				super.doUpdate(session.asElement(session.getFocusType()// on-type
 					.getSuperElement() // key-listener
 					.getSuperElement() // event-listener
@@ -183,12 +182,13 @@ public interface QuickKeyListener extends QuickEventListener {
 
 	public class QuickKeyCodeListener extends QuickEventListener.Abstract implements QuickKeyListener {
 		public static final String KEY_CODE_LISTENER = "key-code-listener";
-		private static final SingleTypeTraceability<QuickKeyCodeListener, Interpreted, Def> TRACEABILITY = ElementTypeTraceability
-			.getElementTraceability(QuickCoreInterpretation.NAME, QuickCoreInterpretation.VERSION, KEY_CODE_LISTENER, Def.class,
-				Interpreted.class, QuickKeyCodeListener.class);
 		public static final String KEY_PRESSED_LISTENER = "on-key-press";
 		public static final String KEY_RELEASED_LISTENER = "on-key-release";
 
+		@ExElementTraceable(toolkit = QuickCoreInterpretation.CORE,
+			qonfigType = KEY_CODE_LISTENER,
+			interpretation = Interpreted.class,
+			instance = QuickKeyCodeListener.class)
 		public static class Def extends QuickEventListener.Def.Abstract<QuickKeyCodeListener>
 		implements QuickKeyListener.Def<QuickKeyCodeListener> {
 			private final boolean isPressed;
@@ -224,7 +224,6 @@ public interface QuickKeyListener extends QuickEventListener {
 					break;
 				default:
 				}
-				withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 				super.doUpdate(session.asElement(session.getFocusType().getSuperElement()// key-listener
 					.getSuperElement() // event-listener
 					));

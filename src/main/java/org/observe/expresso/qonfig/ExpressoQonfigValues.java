@@ -40,7 +40,6 @@ import org.observe.expresso.ObservableModelSet.ModelInstantiator;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.VariableType;
-import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.observe.expresso.qonfig.ExElement.Def;
 import org.observe.expresso.qonfig.ExpressoQonfigValues.CollectionElement.CollectionPopulator;
 import org.observe.expresso.qonfig.ModelValueElement.InterpretedSynth;
@@ -376,11 +375,8 @@ public class ExpressoQonfigValues {
 	}
 
 	/** ExElement definition for the Expresso &lt;element>. */
+	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE, qonfigType = "element", interpretation = CollectionElement.Interpreted.class)
 	public static class CollectionElement extends AbstractCompiledValue<AbstractCompiledValue.VoidElement<?>> {
-		private static final SingleTypeTraceability<AbstractCompiledValue.VoidElement<?>, Interpreted<?>, CollectionElement> TRACEABILITY = ElementTypeTraceability
-			.getElementTraceability(ExpressoBaseV0_1.NAME, ExpressoBaseV0_1.VERSION, "element", CollectionElement.class, Interpreted.class,
-				null);
-
 		public CollectionElement(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
 			super(parent, qonfigType);
 		}
@@ -397,7 +393,6 @@ public class ExpressoQonfigValues {
 
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
-			withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 			super.doUpdate(session);
 		}
 
@@ -475,13 +470,10 @@ public class ExpressoQonfigValues {
 		}
 	}
 
+	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE, qonfigType = "int-list", interpretation = AbstractCollectionDef.Interpreted.class)
 	public static abstract class AbstractCollectionDef<C extends ObservableCollection<?>>
 	extends ModelValueElement.Def.SingleTyped<C, ModelValueElement<C, C>>
 	implements ModelValueElement.CompiledSynth<C, ModelValueElement<C, C>> {
-		private static final SingleTypeTraceability<ModelValueElement<?, ?>, Interpreted<?, ?>, AbstractCollectionDef<?>> INT_LIST_TRACEABILITY = ElementTypeTraceability
-			.getElementTraceability(ExpressoBaseV0_1.NAME, ExpressoBaseV0_1.VERSION, "int-list", AbstractCollectionDef.class,
-				Interpreted.class, null);
-
 		private final List<CollectionElement> theElements;
 
 		protected AbstractCollectionDef(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType, ModelType.SingleTyped<C> modelType) {
@@ -504,7 +496,6 @@ public class ExpressoQonfigValues {
 			super.doUpdate(session);
 			if (session.isInstance("int-list") != null) {
 				ExpressoQIS intListSession = session.asElement("int-list");
-				withTraceability(INT_LIST_TRACEABILITY.validate(intListSession.getFocusType(), session.reporting()));
 				ExElement.syncDefs(CollectionElement.class, theElements, intListSession.forChildren("element"));
 			}
 		}
@@ -655,6 +646,9 @@ public class ExpressoQonfigValues {
 		}
 	}
 
+	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE,
+		qonfigType = "sorted-model-value",
+		interpretation = AbstractSortedCollectionDef.Interpreted.class)
 	public static abstract class AbstractSortedCollectionDef<C extends ObservableSortedCollection<?>> extends AbstractCollectionDef<C> {
 		private ExSort.ExRootSort theSort;
 
@@ -663,6 +657,7 @@ public class ExpressoQonfigValues {
 			super(parent, qonfigType, modelType);
 		}
 
+		@QonfigChildGetter("sort")
 		public ExSort.ExRootSort getSort() {
 			return theSort;
 		}
@@ -852,10 +847,8 @@ public class ExpressoQonfigValues {
 	}
 
 	/** ExElement definition for the Expresso &lt;entry>. */
+	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE, qonfigType = "entry", interpretation = MapEntry.Interpreted.class)
 	public static class MapEntry extends ExElement.Def.Abstract<ExElement> {
-		private static final SingleTypeTraceability<ExElement, Interpreted<?, ?>, MapEntry> TRACEABILITY = ElementTypeTraceability
-			.getElementTraceability(ExpressoBaseV0_1.NAME, ExpressoBaseV0_1.VERSION, "entry", MapEntry.class, Interpreted.class, null);
-
 		private CompiledExpression theKey;
 		private CompiledExpression theValue;
 
@@ -876,7 +869,6 @@ public class ExpressoQonfigValues {
 
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
-			withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 			super.doUpdate(session);
 		}
 
@@ -980,12 +972,10 @@ public class ExpressoQonfigValues {
 		}
 	}
 
+	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE, qonfigType = "int-map", interpretation = AbstractMapDef.Interpreted.class)
 	public static abstract class AbstractMapDef<M extends ObservableMap<?, ?>>
 	extends ModelValueElement.Def.DoubleTyped<M, ModelValueElement<M, M>>
 	implements ModelValueElement.CompiledSynth<M, ModelValueElement<M, M>> {
-		private static final SingleTypeTraceability<ModelValueElement<?, ?>, Interpreted<?, ?, ?>, AbstractMapDef<?>> INT_MAP_TRACEABILITY = ElementTypeTraceability
-			.getElementTraceability(ExpressoBaseV0_1.NAME, ExpressoBaseV0_1.VERSION, "int-map", AbstractMapDef.class, Interpreted.class,
-				null);
 		private final List<MapEntry> theEntries;
 
 		protected AbstractMapDef(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType, ModelType.DoubleTyped<M> modelType) {
@@ -1008,7 +998,6 @@ public class ExpressoQonfigValues {
 			super.doUpdate(session);
 			if (session.isInstance("int-map") != null) {
 				ExpressoQIS intMapSession = session.asElement("int-map");
-				withTraceability(INT_MAP_TRACEABILITY.validate(intMapSession.getFocusType(), session.reporting()));
 				ExElement.syncDefs(MapEntry.class, theEntries, intMapSession.forChildren("entry"));
 			}
 		}
@@ -1696,11 +1685,9 @@ public class ExpressoQonfigValues {
 		}
 	}
 
+	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE, qonfigType = "hook", interpretation = Hook.Interpreted.class)
 	public static class Hook extends ExElement.Def.Abstract<ModelValueElement<Observable<?>, ?>>
 	implements ModelValueElement.CompiledSynth<Observable<?>, ModelValueElement<Observable<?>, ?>> {
-		private static SingleTypeTraceability<ModelValueElement<Observable<?>, ?>, Interpreted<?>, Hook> TRACEABILITY = ElementTypeTraceability//
-			.getElementTraceability(ExpressoBaseV0_1.NAME, ExpressoBaseV0_1.VERSION, "hook", Hook.class, Interpreted.class, null);
-
 		private String theModelPath;
 		private CompiledExpression theEvent;
 		private CompiledExpression theAction;
@@ -1744,8 +1731,6 @@ public class ExpressoQonfigValues {
 
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
-			withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
-			withTraceability(ModelValueElement.TRACEABILITY.validate(session.getFocusType().getSuperElement(), session.reporting()));
 			super.doUpdate(session);
 			theModelPath = session.get(ExpressoBaseV0_1.PATH_KEY, String.class);
 			theEvent = session.getAttributeExpression("on");
@@ -1976,12 +1961,10 @@ public class ExpressoQonfigValues {
 		}
 	}
 
+	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE, qonfigType = "action-group", interpretation = ActionGroup.Interpreted.class)
 	public static class ActionGroup
 	extends ModelValueElement.Def.Abstract<ObservableAction<?>, ModelValueElement<ObservableAction<?>, ObservableAction<Void>>>
 	implements ModelValueElement.CompiledSynth<ObservableAction<?>, ModelValueElement<ObservableAction<?>, ObservableAction<Void>>> {
-		private static final SingleTypeTraceability<ModelValueElement<?, ?>, Interpreted, ActionGroup> TRACEABILITY = ElementTypeTraceability
-			.getElementTraceability(ExpressoBaseV0_1.NAME, ExpressoBaseV0_1.VERSION, "action-group", ActionGroup.class, Interpreted.class,
-				null);
 		private final List<ModelValueElement.CompiledSynth<ObservableAction<?>, ?>> theActions;
 
 		public ActionGroup(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
@@ -1996,7 +1979,6 @@ public class ExpressoQonfigValues {
 
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
-			withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 			super.doUpdate(session);
 			ExElement.syncDefs(ModelValueElement.CompiledSynth.class, theActions, session.forChildren("action"));
 		}

@@ -11,6 +11,7 @@ import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.qonfig.CompiledExpression;
 import org.observe.expresso.qonfig.ExElement;
+import org.observe.expresso.qonfig.ExElementTraceable;
 import org.observe.expresso.qonfig.ExpressoBaseV0_1;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.ModelValueElement;
@@ -29,6 +30,8 @@ public class ExpressoTestFrameworkInterpretation implements QonfigInterpretation
 	public static final String TOOLKIT_NAME = "Expresso-Testing";
 	/** The version of the test toolkit */
 	public static final Version VERSION = new Version(0, 1, 0);
+
+	public static final String TESTING = "Expresso-Testing v0.1";
 
 	@Override
 	public Set<Class<? extends SpecialSession<?>>> getExpectedAPIs() {
@@ -59,6 +62,7 @@ public class ExpressoTestFrameworkInterpretation implements QonfigInterpretation
 		return interpreter;
 	}
 
+	@ExElementTraceable(toolkit = TESTING, qonfigType = "watch", interpretation = WatchedValue.Interpreted.class)
 	static class WatchedValue extends ExElement.Def.Abstract<ModelValueElement<SettableValue<?>, ?>>
 	implements ModelValueElement.CompiledSynth<SettableValue<?>, ModelValueElement<SettableValue<?>, ?>> {
 		private String theModelPath;

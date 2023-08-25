@@ -19,7 +19,6 @@ import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.TypeConversionException;
 import org.observe.expresso.VariableType;
-import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
@@ -38,10 +37,11 @@ import com.google.common.reflect.TypeToken;
  */
 public interface ConfigModelValue<T, M, MV extends M> extends ModelValueElement<M, MV> {
 	public static final String FORMAT_SET_KEY = "Expresso.Config.FormatSet";
-	public static final SingleTypeTraceability<ConfigModelValue<?, ?, ?>, Interpreted<?, ?, ?>, Def<?>> TRACEABILITY = ElementTypeTraceability
-		.getElementTraceability(ExpressoConfigV0_1.NAME, ExpressoConfigV0_1.VERSION, "config-model-value", Def.class, Interpreted.class,
-			ConfigModelValue.class);
 
+	@ExElementTraceable(toolkit = ExpressoConfigV0_1.CONFIG,
+		qonfigType = "config-model-value",
+		interpretation = Interpreted.class,
+		instance = ConfigModelValue.class)
 	public interface Def<M> extends ModelValueElement.CompiledSynth<M, ConfigModelValue<?, M, ?>> {
 		VariableType getValueType();
 
@@ -84,7 +84,6 @@ public interface ConfigModelValue<T, M, MV extends M> extends ModelValueElement<
 
 			@Override
 			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
-				withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 				super.doUpdate(session);
 				theValueType = getAddOn(ExTyped.Def.class).getValueType();
 				String configPath = session.getAttributeText("config-path");

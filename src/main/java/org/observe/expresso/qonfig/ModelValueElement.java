@@ -13,7 +13,6 @@ import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.VariableType;
-import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
@@ -21,10 +20,7 @@ import org.qommons.config.QonfigInterpretationException;
 import com.google.common.reflect.TypeToken;
 
 public interface ModelValueElement<M, MV extends M> extends ExElement {
-	static final SingleTypeTraceability<ModelValueElement<?, ?>, Interpreted<?, ?, ?>, Def<?, ?>> TRACEABILITY = ElementTypeTraceability
-		.getElementTraceability(ExpressoSessionImplV0_1.TOOLKIT_NAME, ExpressoSessionImplV0_1.VERSION, "model-value", Def.class,
-			Interpreted.class, ModelValueElement.class);
-
+	@ExElementTraceable(toolkit = ExpressoSessionImplV0_1.CORE, qonfigType = "model-value", interpretation = Interpreted.class)
 	public interface Def<M, E extends ModelValueElement<M, ?>> extends ExElement.Def<E> {
 		String getModelPath();
 
@@ -68,7 +64,6 @@ public interface ModelValueElement<M, MV extends M> extends ExElement {
 			@Override
 			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 				isPrepared = false;
-				withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 				super.doUpdate(session);
 				String name = getAddOnValue(ExNamed.Def.class, ExNamed.Def::getName);
 				if (name != null) {

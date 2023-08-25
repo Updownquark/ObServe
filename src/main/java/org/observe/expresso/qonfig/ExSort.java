@@ -19,7 +19,6 @@ import org.observe.expresso.ObservableModelSet.ModelComponentId;
 import org.observe.expresso.ObservableModelSet.ModelInstantiator;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
-import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceability;
 import org.observe.expresso.qonfig.ExSort.Interpreted.SortInstantiator;
 import org.observe.util.TypeTokens;
 import org.qommons.LambdaUtils;
@@ -35,6 +34,7 @@ import org.qommons.io.LocatedPositionedContent;
 
 import com.google.common.reflect.TypeToken;
 
+@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE, qonfigType = "sort", interpretation = ExSort.Interpreted.class)
 public abstract class ExSort extends ExElement.Def.Abstract<ExElement> {
 	/** A structure parsed from a {@link QonfigElement} that is capable of generating a {@link Comparator} for sorting */
 	public interface CompiledSorting {
@@ -47,9 +47,6 @@ public abstract class ExSort extends ExElement.Def.Abstract<ExElement> {
 		<T> InterpretedValueSynth<SettableValue<?>, SettableValue<Comparator<T>>> evaluate(TypeToken<T> type)
 			throws ExpressoInterpretationException;
 	}
-
-	private static final SingleTypeTraceability<ExElement, Interpreted<?, ?>, ExSort> TRACEABILITY = ElementTypeTraceability
-		.getElementTraceability(ExpressoBaseV0_1.NAME, ExpressoBaseV0_1.VERSION, "sort", ExSort.class, Interpreted.class, null);
 
 	private ModelComponentId theSortValue;
 	private ModelComponentId theSortCompareValue;
@@ -89,7 +86,6 @@ public abstract class ExSort extends ExElement.Def.Abstract<ExElement> {
 
 	@Override
 	protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
-		withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 		super.doUpdate(session.asElement(session.getFocusType().getSuperElement()));
 		ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
 		String sortValueName = session.getAttributeText("sort-value-as");
@@ -452,9 +448,8 @@ public abstract class ExSort extends ExElement.Def.Abstract<ExElement> {
 		}
 	}
 
+	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE, qonfigType = "sort-by", interpretation = ExSortBy.Interpreted.class)
 	public static class ExSortBy extends ExSort {
-		private static final SingleTypeTraceability<ExElement, Interpreted<?, ?>, ExSortBy> TRACEABILITY = ElementTypeTraceability
-			.getElementTraceability(ExpressoBaseV0_1.NAME, ExpressoBaseV0_1.VERSION, "sort-by", ExSort.class, Interpreted.class, null);
 		private CompiledExpression theAttribute;
 
 		public ExSortBy(ExSort parent, QonfigElementOrAddOn qonfigType) {
@@ -473,7 +468,6 @@ public abstract class ExSort extends ExElement.Def.Abstract<ExElement> {
 
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
-			withTraceability(TRACEABILITY.validate(session.getFocusType(), session.reporting()));
 			super.doUpdate(session.asElement(session.getFocusType().getSuperElement()));
 			theAttribute = session.getValueExpression();
 		}
