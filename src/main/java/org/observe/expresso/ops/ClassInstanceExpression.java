@@ -13,7 +13,9 @@ import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
+import org.observe.expresso.TypeConversionException;
 import org.observe.util.TypeTokens;
+import org.qommons.ex.ExceptionHandler;
 
 import com.google.common.reflect.TypeToken;
 
@@ -67,11 +69,14 @@ public class ClassInstanceExpression implements ObservableExpression {
 	}
 
 	@Override
-	public <M, MV extends M> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, InterpretedExpressoEnv env,
-		int expressionOffset) throws ExpressoEvaluationException {
-		if (type.getModelType() != ModelTypes.Value)
-			throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(),
-				"A class instance expression can only be evaluated to a value");
+	public <M, MV extends M, TX extends Throwable> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type,
+		InterpretedExpressoEnv env, int expressionOffset, ExceptionHandler.Single<TypeConversionException, TX> exHandler)
+		throws ExpressoEvaluationException, TX {
+		if (type.getModelType() != ModelTypes.Value) {
+			exHandler.handle1(new TypeConversionException("A class instance expression can only be evaluated to a value", type,
+				env.reporting().getPosition()));
+			return null;
+		}
 		Class<?> clazz;
 		try {
 			clazz = TypeTokens.getRawType(env.getClassView().parseType(theType.getName()));
@@ -82,9 +87,11 @@ public class ClassInstanceExpression implements ObservableExpression {
 				throw new ExpressoEvaluationException(expressionOffset + e.getErrorOffset(), 0, e.getMessage(), e);
 		}
 		TypeToken<Class<?>> classType = TypeTokens.get().keyFor(Class.class).parameterized(clazz);
-		if (!TypeTokens.get().isAssignable(type.getType(0), classType))
-			throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(),
-				theType + ".class cannot be evaluated as a " + type.getType(0));
+		if (!TypeTokens.get().isAssignable(type.getType(0), classType)) {
+			exHandler.handle1(new TypeConversionException(theType + ".class cannot be evaluated as a " + type.getType(0), type,
+				env.reporting().getPosition()));
+			return null;
+		}
 		return ObservableExpression.evEx(expressionOffset, getExpressionLength(),
 			(InterpretedValueSynth<M, MV>) InterpretedValueSynth.literalValue(classType, clazz, theType + ".class"), clazz);
 	}

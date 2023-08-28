@@ -74,6 +74,7 @@ import org.qommons.config.QonfigParseException;
 import org.qommons.config.QonfigToolkit;
 import org.qommons.config.QonfigValueDef;
 import org.qommons.config.QonfigValueType;
+import org.qommons.ex.ExceptionHandler;
 import org.qommons.io.CircularCharBuffer;
 import org.qommons.io.ErrorReporting;
 import org.qommons.io.FilePosition;
@@ -132,7 +133,7 @@ public class Qwysiwyg {
 					LocatedPositionedContent content = LocatedPositionedContent.of("QWYSIWYG Watch Expression",
 						new PositionedContent.Simple(FilePosition.START, expressionText));
 					theInterpretedValue = theExpression.evaluate(ModelTypes.Value.any(), theInterpretedContext.getExpressoEnv()//
-						.withErrorReporting(new ErrorReporting.Default(content)), 0);
+						.withErrorReporting(new ErrorReporting.Default(content)), 0, ExceptionHandler.get1());
 				} catch (ExpressoInterpretationException | ExpressoEvaluationException | TypeConversionException e) {
 					e.printStackTrace();
 					theInterpretedValue = null;
@@ -192,7 +193,7 @@ public class Qwysiwyg {
 			theStyleValue = styleValue;
 			theConditionalValue = conditionalValue;
 			theConditionX = styleValue.getApplication().getCondition() == null ? null
-				: styleValue.getApplication().getCondition().evaluate(ModelTypes.Value.BOOLEAN, env, 0);
+				: styleValue.getApplication().getCondition().evaluate(ModelTypes.Value.BOOLEAN, env, 0, ExceptionHandler.get1());
 			if (theConditionX != null) {
 				LocatedPositionedContent conditionContent = new LocatedPositionedContent.Default(styleValue + ".condition",
 					new PositionedContent.Simple(FilePosition.START, styleValue.getApplication().getCondition().toString()));
@@ -1121,7 +1122,7 @@ public class Qwysiwyg {
 				component.instanceTooltip(((SettableValue<?>) value).map(String::valueOf));
 			else {
 				try {
-					update = expression.as(ModelTypes.Event.any(), env).instantiate().get(models);
+					update = expression.as(ModelTypes.Event.any(), env, ExceptionHandler.get1(), component.start).instantiate().get(models);
 				} catch (TypeConversionException e) {
 					update = null;
 				}

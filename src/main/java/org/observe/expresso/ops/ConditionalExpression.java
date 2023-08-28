@@ -23,6 +23,7 @@ import org.observe.expresso.TypeConversionException;
 import org.observe.util.TypeTokens;
 import org.qommons.LambdaUtils;
 import org.qommons.QommonsUtils;
+import org.qommons.ex.ExceptionHandler;
 
 import com.google.common.reflect.TypeToken;
 
@@ -104,36 +105,31 @@ public class ConditionalExpression implements ObservableExpression {
 	}
 
 	@Override
-	public <M, MV extends M> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, InterpretedExpressoEnv env,
-		int expressionOffset) throws ExpressoEvaluationException, ExpressoInterpretationException {
+	public <M, MV extends M, TX extends Throwable> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type,
+		InterpretedExpressoEnv env, int expressionOffset, ExceptionHandler.Single<TypeConversionException, TX> exHandler)
+		throws ExpressoEvaluationException, ExpressoInterpretationException, TX {
 		if (type.getModelType() == ModelTypes.Action || type.getModelType() == ModelTypes.Value
 			|| type.getModelType() == ModelTypes.Collection || type.getModelType() == ModelTypes.Set) {//
-		} else
-			throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(),
-				"Conditional expressions not supported for model type " + type.getModelType() + " (" + this + ")");
-		EvaluatedExpression<SettableValue<?>, SettableValue<Boolean>> conditionV;
-		try {
-			conditionV = theCondition.evaluate(//
-				ModelTypes.Value.forType(boolean.class), env, expressionOffset);
-		} catch (TypeConversionException e) {
-			throw new ExpressoEvaluationException(expressionOffset, theCondition.getExpressionLength(), e.getMessage(), e);
+		} else {
+			exHandler.handle1(new TypeConversionException(
+				"Conditional expressions not supported for model type " + type.getModelType() + " (" + this + ")", type,
+				env.reporting().getPosition()));
+			return null;
 		}
+		EvaluatedExpression<SettableValue<?>, SettableValue<Boolean>> conditionV = theCondition.evaluate(//
+			ModelTypes.Value.forType(boolean.class), env, expressionOffset, exHandler);
+		if (conditionV == null)
+			return null;
 		int primaryOffset = expressionOffset + theCondition.getExpressionLength() + 1;
 		InterpretedExpressoEnv primaryEnv = env.at(theCondition.getExpressionLength() + 1);
-		EvaluatedExpression<M, MV> primaryV;
-		try {
-			primaryV = thePrimary.evaluate(type, primaryEnv, primaryOffset);
-		} catch (TypeConversionException e) {
-			throw new ExpressoEvaluationException(primaryOffset, thePrimary.getExpressionLength(), e.getMessage(), e);
-		}
+		EvaluatedExpression<M, MV> primaryV = thePrimary.evaluate(type, primaryEnv, primaryOffset, exHandler);
+		if (primaryV == null)
+			return null;
 		int secondaryOffset = primaryOffset + thePrimary.getExpressionLength() + 1;
 		InterpretedExpressoEnv secondaryEnv = primaryEnv.at(thePrimary.getExpressionLength() + 1);
-		EvaluatedExpression<M, MV> secondaryV;
-		try {
-			secondaryV = theSecondary.evaluate(type, secondaryEnv, secondaryOffset);
-		} catch (TypeConversionException e) {
-			throw new ExpressoEvaluationException(secondaryOffset, theSecondary.getExpressionLength(), e.getMessage(), e);
-		}
+		EvaluatedExpression<M, MV> secondaryV = theSecondary.evaluate(type, secondaryEnv, secondaryOffset, exHandler);
+		if (secondaryV == null)
+			return null;
 
 		ModelInstanceType<M, MV> resultType;
 		if (primaryV.getType().equals(secondaryV.getType()))

@@ -12,6 +12,8 @@ import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelType;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ObservableExpression;
+import org.observe.expresso.TypeConversionException;
+import org.qommons.ex.ExceptionHandler;
 
 /** An expression buffered by white space on either side */
 public class BufferedExpression implements ObservableExpression {
@@ -65,9 +67,10 @@ public class BufferedExpression implements ObservableExpression {
 	}
 
 	@Override
-	public <M, MV extends M> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, InterpretedExpressoEnv env,
-		int expressionOffset) throws ExpressoEvaluationException, ExpressoInterpretationException {
-		return ObservableExpression.wrap(theExpression.evaluateInternal(type, env, expressionOffset + theBefore));
+	public <M, MV extends M, TX extends Throwable> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type,
+		InterpretedExpressoEnv env, int expressionOffset, ExceptionHandler.Single<TypeConversionException, TX> exHandler)
+			throws ExpressoEvaluationException, ExpressoInterpretationException, TX {
+		return ObservableExpression.wrap(theExpression.evaluateInternal(type, env, expressionOffset + theBefore, exHandler));
 	}
 
 	@Override

@@ -20,6 +20,7 @@ import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.TypeConversionException;
 import org.observe.util.TypeTokens;
 import org.observe.util.TypeTokens.TypeConverter;
+import org.qommons.ex.ExceptionHandler;
 import org.qommons.io.ErrorReporting;
 
 import com.google.common.reflect.TypeToken;
@@ -82,16 +83,20 @@ public class CastExpression implements ObservableExpression {
 	}
 
 	@Override
-	public <M, MV extends M> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, InterpretedExpressoEnv env,
-		int expressionOffset) throws ExpressoEvaluationException, ExpressoInterpretationException {
+	public <M, MV extends M, TX extends Throwable> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type,
+		InterpretedExpressoEnv env, int expressionOffset, ExceptionHandler.Single<TypeConversionException, TX> exHandler)
+			throws ExpressoEvaluationException, ExpressoInterpretationException, TX {
 		if (type.getModelType() != ModelTypes.Value)
 			throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(),
 				"A cast expression can only be evaluated as a value");
-		return (EvaluatedExpression<M, MV>) doEval((ModelInstanceType<SettableValue<?>, SettableValue<?>>) type, env, expressionOffset);
+		return (EvaluatedExpression<M, MV>) doEval((ModelInstanceType<SettableValue<?>, SettableValue<?>>) type, env, expressionOffset,
+			exHandler);
 	}
 
-	private <T> EvaluatedExpression<SettableValue<?>, SettableValue<T>> doEval(ModelInstanceType<SettableValue<?>, SettableValue<?>> type,
-		InterpretedExpressoEnv env, int expressionOffset) throws ExpressoEvaluationException, ExpressoInterpretationException {
+	private <T, TX extends Throwable> EvaluatedExpression<SettableValue<?>, SettableValue<T>> doEval(
+		ModelInstanceType<SettableValue<?>, SettableValue<?>> type, InterpretedExpressoEnv env, int expressionOffset,
+		ExceptionHandler.Single<TypeConversionException, TX> exHandler)
+			throws ExpressoEvaluationException, ExpressoInterpretationException, TX {
 		TypeToken<T> valueType;
 		try {
 			valueType = (TypeToken<T>) env.getClassView().parseType(theType.getName());
@@ -102,22 +107,16 @@ public class CastExpression implements ObservableExpression {
 			throw new ExpressoEvaluationException(expressionOffset + 1, theType.length(),
 				"Cannot assign " + valueType + " to " + type.getType(0));
 		int valueOffset = expressionOffset + theType.length() + 2;
-		try {
-			// First, see if we can evaluate the expression as the cast type.
-			// This can work around some issues such as where flattening is needed, and if it succeeds it's simpler and less troublesome
-			return ObservableExpression
-				.wrap(theValue.evaluate(ModelTypes.Value.forType(valueType), env.at(theType.length() + 2), valueOffset));
-		} catch (ExpressoEvaluationException | ExpressoInterpretationException | TypeConversionException e) {
-			// If the result can't be evaluated as the given type, evaluate it as any value and cast it dynamically
-			try {
-				return ObservableExpression
-					.wrap(evalAsDynamicCast(theValue.evaluate(ModelTypes.Value.anyAsV(), env.at(theType.length() + 2), valueOffset),
-						valueType, valueOffset, env.reporting().at(1)));
-			} catch (TypeConversionException e2) {
-				throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(), "'" + theValue + "' is not a scalar value",
-					e2);
-			}
-		}
+
+		// First, see if we can evaluate the expression as the cast type.
+		// This can work around some issues such as where flattening is needed, and if it succeeds it's simpler and less troublesome
+		EvaluatedExpression<SettableValue<?>, SettableValue<T>> evaldX = theValue.evaluate(ModelTypes.Value.forType(valueType),
+			env.at(theType.length() + 2), valueOffset, ExceptionHandler.<TypeConversionException> get1().hold1());
+		if (evaldX != null)
+			return ObservableExpression.wrap(evaldX);
+		return ObservableExpression
+			.wrap(evalAsDynamicCast(theValue.evaluate(ModelTypes.Value.anyAsV(), env.at(theType.length() + 2), valueOffset, exHandler),
+				valueType, valueOffset, env.reporting().at(1)));
 	}
 
 	private <S, T> EvaluatedExpression<SettableValue<?>, SettableValue<T>> evalAsDynamicCast(
@@ -126,22 +125,24 @@ public class CastExpression implements ObservableExpression {
 		TypeToken<S> sourceType = (TypeToken<S>) valueContainer.getType().getType(0);
 
 		TypeTokens.TypeConverter<? super S, ? extends S, ? super T, ? extends T> converter;
-		try {
-			converter = TypeTokens.get().getCast(valueType, sourceType, true, false);
+		ExceptionHandler.Container0<IllegalArgumentException> iae = ExceptionHandler.<IllegalArgumentException> get1().hold1();
+		converter = TypeTokens.get().getCast(valueType, sourceType, true, false, iae);
+		if (converter != null) {
 			if (converter.isTrivial())
 				return (EvaluatedExpression<SettableValue<?>, SettableValue<T>>) (EvaluatedExpression<?, ?>) valueContainer;
 			return ObservableExpression.evEx(expressionOffset, getExpressionLength(),
 				valueContainer.map(ModelTypes.Value.forType(valueType), vc -> new ConvertedInstantiator<>(vc, converter)), valueType,
 				valueContainer);
-		} catch (IllegalArgumentException e) {
-			if (!TypeTokens.get().isAssignable(sourceType, valueType)//
-				&& !TypeTokens.get().isAssignable(valueType, sourceType))
-				throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(),
-					"Cannot cast value of type " + sourceType + " to " + valueType);
+		} else if (!TypeTokens.get().isAssignable(sourceType, valueType)//
+			&& !TypeTokens.get().isAssignable(valueType, sourceType))
+			throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(),
+				"Cannot cast value of type " + sourceType + " to " + valueType);
+		else {
+			Class<S> sourceClass = TypeTokens.getRawType(sourceType);
+			return ObservableExpression.evEx(expressionOffset, getExpressionLength(), valueContainer
+				.map(ModelTypes.Value.forType(valueType), vc -> new CheckingInstantiator<>(vc, sourceClass, valueType, reporting)),
+				valueContainer);
 		}
-		Class<S> sourceClass = TypeTokens.getRawType(sourceType);
-		return ObservableExpression.evEx(expressionOffset, getExpressionLength(), valueContainer.map(ModelTypes.Value.forType(valueType),
-			vc -> new CheckingInstantiator<>(vc, sourceClass, valueType, reporting)), valueContainer);
 	}
 
 	@Override

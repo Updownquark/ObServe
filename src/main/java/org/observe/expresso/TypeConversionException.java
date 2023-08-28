@@ -1,12 +1,15 @@
 package org.observe.expresso;
 
 import org.observe.expresso.ModelType.ModelInstanceType;
+import org.qommons.ex.ExceptionHandler;
+import org.qommons.io.FilePosition;
+import org.qommons.io.TextParseException;
 
 /**
- * Thrown from {@link ObservableModelSet.InterpretedValueSynth#as(ModelInstanceType, InterpretedExpressoEnv)} if the value could not be
- * converted to a value of the specified type
+ * Thrown from {@link ObservableModelSet.InterpretedValueSynth#as(ModelInstanceType, InterpretedExpressoEnv, ExceptionHandler.Single)} if
+ * the value could not be converted to a value of the specified type
  */
-public class TypeConversionException extends Exception {
+public class TypeConversionException extends TextParseException {
 	private final ModelInstanceType<?, ?> theSourceType;
 	private final ModelInstanceType<?, ?> theTargetType;
 
@@ -15,9 +18,22 @@ public class TypeConversionException extends Exception {
 	 * @param sourceType The type of the expression
 	 * @param targetType The type to which conversion was attempted
 	 */
-	public TypeConversionException(String expression, ModelInstanceType<?, ?> sourceType, ModelInstanceType<?, ?> targetType) {
-		super("Cannot convert '" + expression + "' " + toConvertString(sourceType, targetType));
+	public TypeConversionException(String expression, ModelInstanceType<?, ?> sourceType, ModelInstanceType<?, ?> targetType,
+		FilePosition position) {
+		super("Cannot convert '" + expression + "' " + toConvertString(sourceType, targetType), position);
 		theSourceType = sourceType;
+		theTargetType = targetType;
+	}
+
+	public TypeConversionException(String message, ModelInstanceType<?, ?> targetType, FilePosition position) {
+		super(message, position);
+		theSourceType = null;
+		theTargetType = targetType;
+	}
+
+	public TypeConversionException(String message, ModelInstanceType<?, ?> targetType, FilePosition position, Throwable cause) {
+		super(message, position, cause);
+		theSourceType = null;
 		theTargetType = targetType;
 	}
 

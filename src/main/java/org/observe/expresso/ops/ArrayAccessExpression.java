@@ -20,6 +20,7 @@ import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.TypeConversionException;
 import org.observe.util.TypeTokens;
 import org.qommons.QommonsUtils;
+import org.qommons.ex.ExceptionHandler;
 import org.qommons.io.ErrorReporting;
 
 import com.google.common.reflect.TypeToken;
@@ -88,29 +89,24 @@ public class ArrayAccessExpression implements ObservableExpression {
 	}
 
 	@Override
-	public <M, MV extends M> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, InterpretedExpressoEnv env,
-		int expressionOffset) throws ExpressoEvaluationException, ExpressoInterpretationException {
+	public <M, MV extends M, TX extends Throwable> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type,
+		InterpretedExpressoEnv env, int expressionOffset, ExceptionHandler.Single<TypeConversionException, TX> exHandler)
+			throws ExpressoEvaluationException, ExpressoInterpretationException, TX {
 		if (type.getModelType() != ModelTypes.Value)
 			throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(),
 				"An array access expression can only be evaluated as a value");
 
 		EvaluatedExpression<SettableValue<?>, SettableValue<Object[]>> arrayValue;
-		try {
-			arrayValue = theArray.evaluate(ModelTypes.Value.forType(//
-				(TypeToken<Object[]>) TypeTokens.get().getArrayType(type.getType(0), 1)), env, expressionOffset);
-		} catch (TypeConversionException e) {
-			throw new ExpressoEvaluationException(expressionOffset, theArray.getExpressionLength(),
-				"array " + theArray + " cannot be evaluated as a " + type.getType(0) + "[]", e);
-		}
+		arrayValue = theArray.evaluate(ModelTypes.Value.forType(//
+			(TypeToken<Object[]>) TypeTokens.get().getArrayType(type.getType(0), 1)), env, expressionOffset, exHandler);
+		if (arrayValue == null)
+			return null;
 		int indexOffset = expressionOffset + theArray.getExpressionLength() + 1;
 		InterpretedExpressoEnv indexEnv = env.at(theArray.getExpressionLength() + 1);
 		EvaluatedExpression<SettableValue<?>, SettableValue<Integer>> indexValue;
-		try {
-			indexValue = theIndex.evaluate(ModelTypes.Value.forType(int.class), indexEnv, indexOffset);
-		} catch (TypeConversionException e) {
-			throw new ExpressoEvaluationException(indexOffset, theIndex.getExpressionLength(),
-				"index " + theArray + " cannot be evaluated as an integer", e);
-		}
+		indexValue = theIndex.evaluate(ModelTypes.Value.forType(int.class), indexEnv, indexOffset, exHandler);
+		if (indexValue == null)
+			return null;
 		return (EvaluatedExpression<M, MV>) this.<Object> doEval(expressionOffset, //
 			arrayValue, indexValue, env.reporting(), indexEnv.reporting());
 	}
@@ -175,8 +171,7 @@ public class ArrayAccessExpression implements ObservableExpression {
 		private final ErrorReporting theIndexReporting;
 
 		public Instantiator(TypeToken<T> targetType, ModelValueInstantiator<SettableValue<T[]>> array, ErrorReporting arrayReporting,
-			ModelValueInstantiator<SettableValue<Integer>> index,
-			ErrorReporting indexReporting) {
+			ModelValueInstantiator<SettableValue<Integer>> index, ErrorReporting indexReporting) {
 			theTargetType = targetType;
 			theArray = array;
 			theArrayReporting = arrayReporting;

@@ -29,6 +29,7 @@ import org.qommons.config.QonfigElementDef;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigToolkit;
+import org.qommons.ex.ExceptionHandler;
 import org.qommons.io.LocatedFilePosition;
 import org.qommons.io.LocatedPositionedContent;
 
@@ -188,7 +189,7 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 			public <M, MV extends M> EvaluatedExpression<M, MV> interpret(ModelInstanceType<M, MV> type, InterpretedExpressoEnv env)
 				throws ExpressoInterpretationException {
 				try {
-					return expression.evaluate(type, env.at(getFilePosition()), 0);
+					return expression.evaluate(type, env.at(getFilePosition()), 0, ExceptionHandler.get1());
 				} catch (TypeConversionException e) {
 					throw new ExpressoInterpretationException(e.getMessage(), ex.getFilePosition(0), 0, e);
 				} catch (ExpressoEvaluationException e) {
@@ -328,8 +329,9 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 		}
 
 		@Override
-		public <M, MV extends M> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, InterpretedExpressoEnv env,
-			int expressionOffset) throws ExpressoEvaluationException, ExpressoInterpretationException {
+		public <M, MV extends M, TX extends Throwable> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type,
+			InterpretedExpressoEnv env, int expressionOffset, ExceptionHandler.Single<TypeConversionException, TX> exHandler)
+			throws ExpressoEvaluationException, ExpressoInterpretationException, TX {
 			InterpretedModelComponentNode<?, ?> node;
 			try {
 				node = env.getModels().getIdentifiedComponent(theModelValue).interpreted();
@@ -337,11 +339,8 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 				throw new ExpressoEvaluationException(expressionOffset, theModelValue.getName().length(),
 					"No such model value found: '" + theModelValue.getName() + "'", e);
 			}
-			try {
-				return ObservableExpression.evEx(expressionOffset, getExpressionLength(), node.as(type, env), theModelValue);
-			} catch (TypeConversionException e) {
-				throw new ExpressoEvaluationException(expressionOffset, theModelValue.getName().length(), e.getMessage(), e);
-			}
+			return ObservableExpression.evEx(expressionOffset, getExpressionLength(),
+				node.as(type, env, exHandler, env.reporting().getPosition()), theModelValue);
 		}
 
 		@Override

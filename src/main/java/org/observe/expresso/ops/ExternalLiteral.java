@@ -16,7 +16,9 @@ import org.observe.expresso.ModelTypes;
 import org.observe.expresso.NonStructuredParser;
 import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
+import org.observe.expresso.TypeConversionException;
 import org.observe.util.TypeTokens;
+import org.qommons.ex.ExceptionHandler;
 
 import com.google.common.reflect.TypeToken;
 
@@ -63,24 +65,30 @@ public class ExternalLiteral implements ObservableExpression {
 	}
 
 	@Override
-	public <M, MV extends M> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, InterpretedExpressoEnv env,
-		int expressionOffset) throws ExpressoEvaluationException {
-		if (type.getModelType() != ModelTypes.Value)
-			throw new ExpressoEvaluationException(expressionOffset, theText.length(), "'" + theText + "' cannot be evaluated as a " + type);
+	public <M, MV extends M, TX extends Throwable> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type,
+		InterpretedExpressoEnv env, int expressionOffset, ExceptionHandler.Single<TypeConversionException, TX> exHandler)
+			throws ExpressoEvaluationException, TX {
+		if (type.getModelType() != ModelTypes.Value) {
+			exHandler.handle1(
+				new TypeConversionException("'" + theText + "' cannot be evaluated as a " + type, type, env.reporting().getPosition()));
+			return null;
+		}
 		NonStructuredParser[] parser = new NonStructuredParser[1];
-		InterpretedValueSynth<SettableValue<?>, ?> value = _parseValue(type.getType(0), env, expressionOffset, parser);
+		InterpretedValueSynth<SettableValue<?>, ?> value = _parseValue(type.getType(0), env, expressionOffset, parser, exHandler);
 		return (EvaluatedExpression<M, MV>) ObservableExpression.evEx(expressionOffset, getExpressionLength(), value, parser[0]);
 	}
 
-	private <T> InterpretedValueSynth<SettableValue<?>, ? extends SettableValue<? extends T>> _parseValue(TypeToken<T> asType,
-		InterpretedExpressoEnv env, int expressionOffset,
-		NonStructuredParser[] parserUsed) throws ExpressoEvaluationException {
+	private <T, TX extends Throwable> InterpretedValueSynth<SettableValue<?>, ? extends SettableValue<? extends T>> _parseValue(
+		TypeToken<T> asType, InterpretedExpressoEnv env, int expressionOffset, NonStructuredParser[] parserUsed,
+		ExceptionHandler.Single<TypeConversionException, TX> exHandler) throws ExpressoEvaluationException, TX {
 		// Get all parsers that may possibly be able to generate an appropriate value
 		Class<T> rawType = TypeTokens.getRawType(asType);
 		Set<NonStructuredParser> parsers = env.getNonStructuredParsers(rawType);
-		if (parsers.isEmpty())
-			throw new ExpressoEvaluationException(expressionOffset + 1, theText.length(),
-				"No literal parsers available for type " + rawType.getName());
+		if (parsers.isEmpty()) {
+			exHandler.handle1(new TypeConversionException("No literal parsers available for type " + rawType.getName(),
+				ModelTypes.Value.forType(asType), env.reporting().getPosition()));
+			return null;
+		}
 		NonStructuredParser parser = null;
 		for (NonStructuredParser p : parsers) {
 			if (p.canParse(asType, theText)) {

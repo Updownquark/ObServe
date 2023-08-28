@@ -20,6 +20,7 @@ import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.TypeConversionException;
 import org.observe.util.TypeTokens;
+import org.qommons.ex.ExceptionHandler;
 
 /** An expression that returns a boolean for whether a given expression's value is an instance of a constant type */
 public class InstanceofExpression implements ObservableExpression {
@@ -79,17 +80,18 @@ public class InstanceofExpression implements ObservableExpression {
 	}
 
 	@Override
-	public <M, MV extends M> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, InterpretedExpressoEnv env,
-		int expressionOffset) throws ExpressoEvaluationException, ExpressoInterpretationException {
-		if (type.getModelType() != ModelTypes.Value && !TypeTokens.get().isAssignable(type.getType(0), TypeTokens.get().BOOLEAN))
-			throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(),
-				"instanceof expressions can only be evaluated to Value<Boolean>");
-		EvaluatedExpression<SettableValue<?>, SettableValue<?>> leftValue;
-		try {
-			leftValue = theLeft.evaluate(ModelTypes.Value.any(), env, expressionOffset);
-		} catch (TypeConversionException e) {
-			throw new ExpressoEvaluationException(expressionOffset, theLeft.getExpressionLength(), e.getMessage(), e);
+	public <M, MV extends M, TX extends Throwable> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type,
+		InterpretedExpressoEnv env, int expressionOffset, ExceptionHandler.Single<TypeConversionException, TX> exHandler)
+		throws ExpressoEvaluationException, ExpressoInterpretationException, TX {
+		if (type.getModelType() != ModelTypes.Value && !TypeTokens.get().isAssignable(type.getType(0), TypeTokens.get().BOOLEAN)) {
+			exHandler.handle1(new TypeConversionException("instanceof expressions can only be evaluated to Value<Boolean>", type,
+				env.reporting().getPosition()));
+			return null;
 		}
+		EvaluatedExpression<SettableValue<?>, SettableValue<?>> leftValue = theLeft.evaluate(ModelTypes.Value.any(), env, expressionOffset,
+			exHandler);
+		if (leftValue == null)
+			return null;
 		Class<?> testType;
 		try {
 			testType = TypeTokens.getRawType(env.getClassView().parseType(theType.getName()));

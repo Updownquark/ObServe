@@ -18,6 +18,7 @@ import org.qommons.ClassMap;
 import org.qommons.LambdaUtils;
 import org.qommons.QommonsUtils;
 import org.qommons.StringUtils;
+import org.qommons.ex.ExceptionHandler;
 
 import com.google.common.reflect.TypeParameter;
 import com.google.common.reflect.TypeToken;
@@ -1359,7 +1360,7 @@ public class TypeTokens implements TypeParser {
 	 */
 	public <S, T> TypeConverter<? super S, ? extends S, ? super T, ? extends T> getCast(TypeToken<T> target, TypeToken<S> source,
 		boolean safe) throws IllegalArgumentException {
-		return getCast(target, source, safe, true);
+		return getCast(target, source, safe, true, ExceptionHandler.get1());
 	}
 
 	private static class InstanceChecker<T> {
@@ -1400,8 +1401,9 @@ public class TypeTokens implements TypeParser {
 	 *         {@link NullPointerException} if the right value is null and the left type is primitive
 	 * @throws IllegalArgumentException If values of the right type cannot be cast to the left type in general
 	 */
-	public <S, T> TypeConverter<? super S, ? extends S, ? super T, ? extends T> getCast(TypeToken<T> target, TypeToken<S> source,
-		boolean safe, boolean downCastOnly) throws IllegalArgumentException {
+	public <S, T, TX extends Throwable> TypeConverter<? super S, ? extends S, ? super T, ? extends T> getCast(TypeToken<T> target,
+		TypeToken<S> source, boolean safe, boolean downCastOnly, ExceptionHandler.Single<IllegalArgumentException, TX> exHandler)
+		throws IllegalArgumentException, TX {
 		Class<S> rawSource = getRawType(source);
 		TypeKey<S> sourceKey = keyFor(rawSource);
 		if (target.equals(source)) {
@@ -1424,10 +1426,13 @@ public class TypeTokens implements TypeParser {
 						return (TypeConverter<S, S, T, T>) (safe ? primSource.safeCast : primSource.unsafeCast);
 				}
 				TypeConverter<S, S, T, T> primitiveCast = primTarget.getPrimitiveCast(primSource.primitiveClass);
-				if (primitiveCast == null)
-					throw new IllegalArgumentException("Cannot convert between " + source + " and " + target);
-				else if (downCastOnly && !primitiveCast.isSafe())
-					throw new IllegalArgumentException("Cannot safely convert from " + source + " to " + target);
+				if (primitiveCast == null) {
+					exHandler.handle1(new IllegalArgumentException("Cannot convert between " + source + " and " + target));
+					return null;
+				} else if (downCastOnly && !primitiveCast.isSafe()) {
+					exHandler.handle1(new IllegalArgumentException("Cannot safely convert from " + source + " to " + target));
+					return null;
+				}
 				else if (target.isPrimitive()) {
 					if (source.isPrimitive())
 						return primitiveCast;
@@ -1452,9 +1457,10 @@ public class TypeTokens implements TypeParser {
 			if (suppConvert != null)
 				return suppConvert;
 
-			if (downCastOnly)
-				throw new IllegalArgumentException("Cannot safely convert from " + source + " to " + target);
-			else if (rawSource.isAssignableFrom(Comparable.class) // All remaining possible primitives are comparable
+			if (downCastOnly) {
+				exHandler.handle1(new IllegalArgumentException("Cannot safely convert from " + source + " to " + target));
+				return null;
+			} else if (rawSource.isAssignableFrom(Comparable.class) // All remaining possible primitives are comparable
 				|| (primTarget.number && rawSource.isAssignableFrom(Number.class))) {
 				InstanceChecker<T> checker = new InstanceChecker<>(primTarget.clazz);
 				TypeConverter<S, S, T, T> typeCheckConverter = new TypeConverter<>(checker.checkString, "no-op", (TypeToken<S>) target,
@@ -1469,20 +1475,22 @@ public class TypeTokens implements TypeParser {
 			// We've handled this case in the reverse above
 			TypeConverter<S, ? extends S, ? super T, T> suppConvert = getSpecialCast(source, target, rawSource, rawTarget);
 			TypeConverter<? super T, ? extends T, ? super S, ? extends S> reverseConverter;
-			if (suppConvert == null)
-				reverseConverter = getCast(source, target, safe, false);
-			else {
-				try {
-					reverseConverter = getCast(source, target, safe, false);
-				} catch (IllegalArgumentException e) {
+			if (suppConvert == null) {
+				reverseConverter = getCast(source, target, safe, false, exHandler);
+				if (reverseConverter == null)
+					return null;
+			} else {
+				ExceptionHandler.Container0<IllegalArgumentException> iae = ExceptionHandler.<IllegalArgumentException> get1().hold1();
+				reverseConverter = getCast(source, target, safe, false, iae);
+				if (reverseConverter == null)
 					return suppConvert;
-				}
 			}
 			TypeConverter<? super S, ? extends S, ? super T, ? extends T> converter = reverseConverter.reverse();
 			if (downCastOnly && !converter.isSafe()) {
 				if (suppConvert != null)
 					return suppConvert;
-				throw new IllegalArgumentException("Cannot safely convert from " + source + " to " + target);
+				exHandler.handle1(new IllegalArgumentException("Cannot safely convert from " + source + " to " + target));
+				return null;
 			}
 			return converter;
 		}
@@ -1509,17 +1517,23 @@ public class TypeTokens implements TypeParser {
 				TypeConverter<S, ? extends S, ? super T, T> suppConvert = getSpecialCast(source, target, rawSource, rawTarget);
 				if (suppConvert != null)
 					return suppConvert;
-				else
-					throw new IllegalArgumentException("Cannot convert from " + source + " to " + target);
-			} else
-				throw new IllegalArgumentException("Cannot convert from " + source + " to " + target);
+				else {
+					exHandler.handle1(new IllegalArgumentException("Cannot convert from " + source + " to " + target));
+					return null;
+				}
+			} else {
+				exHandler.handle1(new IllegalArgumentException("Cannot convert from " + source + " to " + target));
+				return null;
+			}
 		}
 
 		TypeConverter<S, ? extends S, ? super T, T> suppConvert = getSpecialCast(source, target, rawSource, rawTarget);
 		if (suppConvert != null)
 			return suppConvert;
-		else
-			throw new IllegalArgumentException("Cannot convert from " + source + " to " + target);
+		else {
+			exHandler.handle1(new IllegalArgumentException("Cannot convert from " + source + " to " + target));
+			return null;
+		}
 	}
 
 	private <S, T> TypeConverter<S, ? extends S, ? super T, T> getSpecialCast(TypeToken<S> sourceType, TypeToken<T> targetType,

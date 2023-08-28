@@ -36,6 +36,7 @@ import org.qommons.Lockable;
 import org.qommons.QommonsUtils;
 import org.qommons.Stamped;
 import org.qommons.Transaction;
+import org.qommons.ex.ExceptionHandler;
 import org.qommons.io.ErrorReporting;
 
 import com.google.common.reflect.TypeToken;
@@ -123,18 +124,23 @@ public class BinaryOperator implements ObservableExpression {
 	}
 
 	@Override
-	public <M, MV extends M> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, InterpretedExpressoEnv env,
-		int expressionOffset) throws ExpressoEvaluationException, ExpressoInterpretationException {
+	public <M, MV extends M, TX extends Throwable> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type,
+		InterpretedExpressoEnv env, int expressionOffset, ExceptionHandler.Single<TypeConversionException, TX> exHandler)
+			throws ExpressoEvaluationException, ExpressoInterpretationException, TX {
 		if (type.getModelType() == ModelTypes.Action) {//
 		} else if (type.getModelType() == ModelTypes.Value) {//
-		} else
-			throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(),
-				"Binary operator " + theOperator + " can only be evaluated as a value or an action");
-		return _evaluate(type, env, expressionOffset);
+		} else {
+			exHandler
+				.handle1(new TypeConversionException("Binary operator " + theOperator + " can only be evaluated as a value or an action",
+					type, env.reporting().at(theLeft.getExpressionLength()).getPosition()));
+			return null;
+		}
+		return _evaluate(type, env, expressionOffset, exHandler);
 	}
 
-	private <M, MV extends M, S, T, V, R> EvaluatedExpression<M, MV> _evaluate(ModelInstanceType<M, MV> type, InterpretedExpressoEnv env,
-		int expressionOffset) throws ExpressoEvaluationException, ExpressoInterpretationException {
+	private <M, MV extends M, S, T, V, R, TX extends Throwable> EvaluatedExpression<M, MV> _evaluate(ModelInstanceType<M, MV> type,
+		InterpretedExpressoEnv env, int expressionOffset, ExceptionHandler.Single<TypeConversionException, TX> exHandler)
+			throws ExpressoEvaluationException, ExpressoInterpretationException, TX {
 		boolean action = theOperator.charAt(theOperator.length() - 1) == '=';
 		if (action) {
 			switch (theOperator) {
@@ -162,11 +168,9 @@ public class BinaryOperator implements ObservableExpression {
 			break;
 		}
 		EvaluatedExpression<SettableValue<?>, SettableValue<S>> left;
-		try {
-			left = theLeft.evaluate(ModelTypes.Value.forType((TypeToken<S>) targetOpType), env, expressionOffset);
-		} catch (ExpressoInterpretationException | TypeConversionException e) {
-			throw new ExpressoEvaluationException(expressionOffset, theLeft.getExpressionLength(), e.getMessage(), e);
-		}
+		left = theLeft.evaluate(ModelTypes.Value.forType((TypeToken<S>) targetOpType), env, expressionOffset, exHandler);
+		if (left == null)
+			return null;
 		TypeToken<S> leftTypeT = (TypeToken<S>) left.getType().getType(0);
 		Class<S> leftType = TypeTokens.getRawType(leftTypeT);
 		types = env.getBinaryOperators().getSupportedSecondaryInputTypes(operator, targetType, leftType);
@@ -184,12 +188,10 @@ public class BinaryOperator implements ObservableExpression {
 		}
 		int rightOffset = expressionOffset + theLeft.getExpressionLength() + theOperator.length();
 		EvaluatedExpression<SettableValue<?>, SettableValue<T>> right;
-		try {
-			right = theRight.evaluate(ModelTypes.Value.forType((TypeToken<T>) targetOpType),
-				env.at(theLeft.getExpressionLength() + theOperator.length()), rightOffset);
-		} catch (ExpressoInterpretationException | TypeConversionException e) {
-			throw new ExpressoEvaluationException(rightOffset, theRight.getExpressionLength(), e.getMessage(), e);
-		}
+		right = theRight.evaluate(ModelTypes.Value.forType((TypeToken<T>) targetOpType),
+			env.at(theLeft.getExpressionLength() + theOperator.length()), rightOffset, exHandler);
+		if (right == null)
+			return null;
 		TypeToken<T> rightTypeT = (TypeToken<T>) right.getType().getType(0);
 		BinaryOp<S, T, V> op;
 		op = (BinaryOp<S, T, V>) env.getBinaryOperators().getOperator(operator, targetType, leftType, TypeTokens.getRawType(rightTypeT));

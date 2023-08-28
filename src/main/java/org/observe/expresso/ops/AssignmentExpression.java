@@ -22,6 +22,7 @@ import org.observe.expresso.TypeConversionException;
 import org.observe.util.TypeTokens;
 import org.qommons.QommonsUtils;
 import org.qommons.Transaction;
+import org.qommons.ex.ExceptionHandler;
 import org.qommons.io.ErrorReporting;
 
 import com.google.common.reflect.TypeToken;
@@ -90,24 +91,24 @@ public class AssignmentExpression implements ObservableExpression {
 	}
 
 	@Override
-	public <M, MV extends M> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, InterpretedExpressoEnv env,
-		int expressionOffset) throws ExpressoEvaluationException, ExpressoInterpretationException {
+	public <M, MV extends M, TX extends Throwable> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type,
+		InterpretedExpressoEnv env, int expressionOffset, ExceptionHandler.Single<TypeConversionException, TX> exHandler)
+			throws ExpressoEvaluationException, ExpressoInterpretationException, TX {
 		if (type.getModelType() != ModelTypes.Action)
 			throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(),
 				"Assignments cannot be used as " + type.getModelType() + "s");
-		return (EvaluatedExpression<M, MV>) this
-			.<Object, Object> _evaluate((ModelInstanceType<ObservableAction<?>, ObservableAction<Object>>) type, env, expressionOffset);
+		return (EvaluatedExpression<M, MV>) this.<Object, Object, TX> _evaluate(
+			(ModelInstanceType<ObservableAction<?>, ObservableAction<Object>>) type, env, expressionOffset, exHandler);
 	}
 
-	private <S, T extends S> EvaluatedExpression<ObservableAction<?>, ObservableAction<T>> _evaluate(
-		ModelInstanceType<ObservableAction<?>, ObservableAction<T>> type, InterpretedExpressoEnv env, int expressionOffset)
-			throws ExpressoEvaluationException, ExpressoInterpretationException {
+	private <S, T extends S, TX extends Throwable> EvaluatedExpression<ObservableAction<?>, ObservableAction<T>> _evaluate(
+		ModelInstanceType<ObservableAction<?>, ObservableAction<T>> type, InterpretedExpressoEnv env, int expressionOffset,
+		ExceptionHandler.Single<TypeConversionException, TX> exHandler)
+			throws ExpressoEvaluationException, ExpressoInterpretationException, TX {
 		EvaluatedExpression<SettableValue<?>, SettableValue<S>> target;
-		try {
-			target = theTarget.evaluate(ModelTypes.Value.anyAs(), env, expressionOffset);
-		} catch (TypeConversionException e) {
-			throw new ExpressoEvaluationException(expressionOffset, theTarget.getExpressionLength(), e.getMessage(), e);
-		}
+		target = theTarget.evaluate(ModelTypes.Value.anyAs(), env, expressionOffset, exHandler);
+		if (target == null)
+			return null;
 		boolean isVoid = type.getType(0).getType() == void.class || type.getType(0).getType() == Void.class;
 		if (!isVoid && !TypeTokens.get().isAssignable(type.getType(0), target.getType().getType(0)))
 			throw new ExpressoEvaluationException(expressionOffset, theTarget.getExpressionLength(),
@@ -117,9 +118,9 @@ public class AssignmentExpression implements ObservableExpression {
 		try (Transaction t = Invocation.asAction()) {
 			value = theValue.evaluate(
 				ModelTypes.Value.forType((TypeToken<T>) TypeTokens.get().getExtendsWildcard(target.getType().getType(0))),
-				env.at(theTarget.getExpressionLength() + 1), valueOffset);
-		} catch (TypeConversionException e) {
-			throw new ExpressoEvaluationException(valueOffset, theValue.getExpressionLength(), e.getMessage(), e);
+				env.at(theTarget.getExpressionLength() + 1), valueOffset, exHandler);
+			if (value == null)
+				return null;
 		}
 		ErrorReporting reporting = env.reporting();
 		return ObservableExpression.evEx(expressionOffset, getExpressionLength(),

@@ -25,6 +25,7 @@ import org.observe.expresso.ops.UnaryOperatorSet.UnaryOp;
 import org.observe.util.TypeTokens;
 import org.observe.util.TypeTokens.TypeConverter;
 import org.qommons.LambdaUtils;
+import org.qommons.ex.ExceptionHandler;
 import org.qommons.io.ErrorReporting;
 
 import com.google.common.reflect.TypeToken;
@@ -109,8 +110,9 @@ public class UnaryOperator implements ObservableExpression {
 	}
 
 	@Override
-	public <M, MV extends M> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, InterpretedExpressoEnv env,
-		int expressionOffset) throws ExpressoEvaluationException, ExpressoInterpretationException {
+	public <M, MV extends M, TX extends Throwable> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type,
+		InterpretedExpressoEnv env, int expressionOffset, ExceptionHandler.Single<TypeConversionException, TX> exHandler)
+			throws ExpressoEvaluationException, ExpressoInterpretationException, TX {
 		Set<Class<?>> types = env.getUnaryOperators().getSupportedInputTypes(theOperator);
 		TypeToken<?> targetOpType;
 		switch (types.size()) {
@@ -126,18 +128,15 @@ public class UnaryOperator implements ObservableExpression {
 		}
 		int operandOffset = expressionOffset + getComponentOffset(0);
 		InterpretedExpressoEnv valueEnv = env.at(getComponentOffset(0));
-		try {
-			return (EvaluatedExpression<M, MV>) doOperation(type,
-				theOperand.evaluate(ModelTypes.Value.forType(targetOpType), valueEnv, operandOffset), env, expressionOffset,
-				valueEnv.reporting());
-		} catch (TypeConversionException e) {
-			throw new ExpressoEvaluationException(operandOffset, theOperand.getExpressionLength(), e.getMessage(), e);
-		}
+		return (EvaluatedExpression<M, MV>) doOperation(type,
+			theOperand.evaluate(ModelTypes.Value.forType(targetOpType), valueEnv, operandOffset, exHandler), env, expressionOffset,
+			valueEnv.reporting(), exHandler);
 	}
 
-	private <M, MV extends M, S> MV doOperation(ModelInstanceType<M, MV> type, EvaluatedExpression<SettableValue<?>, SettableValue<S>> op,
-		InterpretedExpressoEnv env, int expressionOffset, ErrorReporting valueReporting)
-			throws ExpressoEvaluationException, ExpressoInterpretationException {
+	private <M, MV extends M, S, TX extends Throwable> MV doOperation(ModelInstanceType<M, MV> type,
+		EvaluatedExpression<SettableValue<?>, SettableValue<S>> op, InterpretedExpressoEnv env, int expressionOffset,
+		ErrorReporting valueReporting, ExceptionHandler.Single<TypeConversionException, TX> exHandler)
+			throws ExpressoEvaluationException, ExpressoInterpretationException, TX {
 		TypeToken<S> opType = (TypeToken<S>) op.getType().getType(0);
 		UnaryOp<S, ?> operator = env.getUnaryOperators().getOperator(theOperator, TypeTokens.getRawType(opType));
 		ErrorReporting operatorReporting;
@@ -152,47 +151,55 @@ public class UnaryOperator implements ObservableExpression {
 			if (type.getModelType() != ModelTypes.Action)
 				throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(),
 					"Unary operator " + theOperator + " can only be evaluated as an action");
-			return (MV) evaluateAction(type.getType(0), op, (UnaryOp<S, S>) operator, expressionOffset, valueReporting, operatorReporting);
+			return (MV) evaluateAction(type.getType(0), op, (UnaryOp<S, S>) operator, expressionOffset, valueReporting, operatorReporting,
+				exHandler);
 		} else {
 			if (!operator.isActionOnly() && type.getModelType() != ModelTypes.Value)
 				throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(),
 					"Unary operator " + theOperator + " can only be evaluated as a value");
 			return (MV) evaluateValue(opType, (TypeToken<Object>) type.getType(0), op, (UnaryOp<S, Object>) operator, expressionOffset,
-				operatorReporting);
+				operatorReporting, exHandler);
 		}
 	}
 
-	private <T, A> EvaluatedExpression<ObservableAction<?>, ObservableAction<A>> evaluateAction(TypeToken<A> actionType,
-		EvaluatedExpression<SettableValue<?>, SettableValue<T>> op, UnaryOp<T, T> operator, int expressionOffset,
-		ErrorReporting valueReporting, ErrorReporting operatorReporting) throws ExpressoEvaluationException {
+	private <T, A, TX extends Throwable> EvaluatedExpression<ObservableAction<?>, ObservableAction<A>> evaluateAction(
+		TypeToken<A> actionType, EvaluatedExpression<SettableValue<?>, SettableValue<T>> op, UnaryOp<T, T> operator, int expressionOffset,
+		ErrorReporting valueReporting, ErrorReporting operatorReporting, ExceptionHandler.Single<TypeConversionException, TX> exHandler)
+			throws ExpressoEvaluationException, TX {
 		boolean voidAction = TypeTokens.get().unwrap(TypeTokens.getRawType(actionType)) == void.class;
 		if (!voidAction) {
 			if (TypeTokens.get().isAssignable(actionType, TypeTokens.get().of(operator.getTargetType())))
 				actionType = (TypeToken<A>) TypeTokens.get().of(operator.getTargetType());
-			else
-				throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(),
-					this + " cannot be evaluated as an " + ModelTypes.Action.getName() + "<" + actionType + ">");
+			else {
+				exHandler.handle1(
+					new TypeConversionException(this + " cannot be evaluated as an " + ModelTypes.Action.getName() + "<" + actionType + ">",
+						ModelTypes.Action.forType(actionType), operatorReporting.getPosition()));
+				return null;
+			}
 		}
 		boolean prefix = isPrefix;
-		TypeToken<A> fActionType = actionType;
 		return ObservableExpression.evEx(expressionOffset, getExpressionLength(), op.map(ModelTypes.Action.forType(actionType),
 			opV -> new ActionInstantiator<>(voidAction, prefix, opV, operator, valueReporting, operatorReporting)), operator, op);
 	}
 
-	private <S, T> EvaluatedExpression<SettableValue<?>, SettableValue<T>> evaluateValue(TypeToken<S> opType, TypeToken<T> type,
-		EvaluatedExpression<SettableValue<?>, SettableValue<S>> op, UnaryOp<S, T> operator, int expressionOffset,
-		ErrorReporting operatorReporting) throws ExpressoEvaluationException {
+	private <S, T, TX extends Throwable> EvaluatedExpression<SettableValue<?>, SettableValue<T>> evaluateValue(TypeToken<S> opType,
+		TypeToken<T> type, EvaluatedExpression<SettableValue<?>, SettableValue<S>> op, UnaryOp<S, T> operator, int expressionOffset,
+		ErrorReporting operatorReporting, ExceptionHandler.Single<TypeConversionException, TX> exHandler)
+			throws ExpressoEvaluationException, TX {
 		TypeToken<T> operatorType = TypeTokens.get().of(operator.getTargetType());
 		TypeTokens.TypeConverter<T, T, T, T> cast;
 		if (TypeTokens.get().wrap(type).equals(TypeTokens.get().wrap(operatorType))) {
 			type = operatorType;
 			cast = null;
 		} else {
-			try {
-				cast = (TypeConverter<T, T, T, T>) TypeTokens.get().getCast(type, operatorType);
-			} catch (IllegalArgumentException e) {
-				throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(),
-					this + " cannot be evaluated as a " + ModelTypes.Value.getName() + "<" + opType + ">", e);
+			ExceptionHandler.Container0<IllegalArgumentException> iae = ExceptionHandler.<IllegalArgumentException> get1().hold1()
+				.fillStackTrace(true);
+			cast = (TypeConverter<T, T, T, T>) TypeTokens.get().getCast(type, operatorType, false, true, iae);
+			if (cast == null) {
+				exHandler.handle1(
+					new TypeConversionException(this + " cannot be evaluated as a " + ModelTypes.Value.getName() + "<" + opType + ">",
+						ModelTypes.Value.forType(type), operatorReporting.getPosition(), iae.get1()));
+				return null;
 			}
 			type = cast.getConvertedType();
 		}

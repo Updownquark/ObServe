@@ -15,6 +15,7 @@ import org.observe.util.TypeTokens;
 import org.observe.util.TypeTokens.TypeConverter;
 import org.qommons.QommonsUtils;
 import org.qommons.collect.BetterList;
+import org.qommons.ex.ExceptionHandler;
 
 import com.google.common.reflect.TypeToken;
 
@@ -48,8 +49,9 @@ public interface ObservableExpression {
 		}
 
 		@Override
-		public <M, MV extends M> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, InterpretedExpressoEnv env,
-			int expressionOffset) throws ExpressoEvaluationException {
+		public <M, MV extends M, TX extends Throwable> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type,
+			InterpretedExpressoEnv env, int expressionOffset, ExceptionHandler.Single<TypeConversionException, TX> exHandler)
+				throws ExpressoEvaluationException, TX {
 			return ObservableExpression.evEx(expressionOffset, 0,
 				(InterpretedValueSynth<M, MV>) InterpretedValueSynth.literalValue(TypeTokens.get().WILDCARD, null, "(empty)"), null);
 		}
@@ -137,6 +139,8 @@ public interface ObservableExpression {
 	 */
 	static <M, MV extends M> EvaluatedExpression<M, MV> evEx2(int offset, int length, InterpretedValueSynth<M, MV> value, Object descriptor,
 		List<? extends EvaluatedExpression<?, ?>> children, List<? extends EvaluatedExpression<?, ?>> divisions) {
+		if (value == null)
+			return null;
 		return new EvaluatedExpression<M, MV>() {
 			@Override
 			public ModelInstanceType<M, MV> getType() {
@@ -189,6 +193,8 @@ public interface ObservableExpression {
 	 * @return The wrapped expression value
 	 */
 	static <M, MV extends M> EvaluatedExpression<M, MV> wrap(EvaluatedExpression<M, MV> wrapped) {
+		if (wrapped == null)
+			return null;
 		return new EvaluatedExpression<M, MV>() {
 			@Override
 			public ModelInstanceType<M, MV> getType() {
@@ -326,14 +332,15 @@ public interface ObservableExpression {
 	 * @return A value container to generate the expression's value from a {@link ModelSetInstance model instance}
 	 * @throws ExpressoEvaluationException If the expression cannot be evaluated in the given environment as the given type
 	 * @throws ExpressoInterpretationException If an expression on which this expression depends fails to evaluate
-	 * @throws TypeConversionException If this expression could not be interpreted as the given type
+	 * @throws TX If this expression could not be interpreted as the given type
 	 */
-	default <M, MV extends M> EvaluatedExpression<M, MV> evaluate(ModelInstanceType<M, MV> type, InterpretedExpressoEnv env,
-		int expressionOffset) throws ExpressoEvaluationException, ExpressoInterpretationException, TypeConversionException {
-		EvaluatedExpression<M, MV> value = evaluateInternal(type, env, expressionOffset);
+	default <M, MV extends M, TX extends Throwable> EvaluatedExpression<M, MV> evaluate(ModelInstanceType<M, MV> type,
+		InterpretedExpressoEnv env, int expressionOffset, ExceptionHandler.Single<TypeConversionException, TX> exHandler)
+			throws ExpressoEvaluationException, ExpressoInterpretationException, TX {
+		EvaluatedExpression<M, MV> value = evaluateInternal(type, env, expressionOffset, exHandler);
 		if (value == null)
 			return null;
-		InterpretedValueSynth<M, MV> cast = value.as(type, env);
+		InterpretedValueSynth<M, MV> cast = value.as(type, env, exHandler, env.reporting().getPosition());
 		if (cast instanceof EvaluatedExpression) // Generally means a cast was not necessary
 			return (EvaluatedExpression<M, MV>) cast;
 		else
@@ -352,8 +359,9 @@ public interface ObservableExpression {
 	 * @throws ExpressoEvaluationException If the expression cannot be evaluated in the given environment as the given type
 	 * @throws ExpressoInterpretationException If a dependency
 	 */
-	<M, MV extends M> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, InterpretedExpressoEnv env,
-		int expressionOffset) throws ExpressoEvaluationException, ExpressoInterpretationException;
+	<M, MV extends M, TX extends Throwable> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type,
+		InterpretedExpressoEnv env, int expressionOffset, ExceptionHandler.Single<TypeConversionException, TX> exHandler)
+			throws ExpressoEvaluationException, ExpressoInterpretationException, TX;
 
 	/**
 	 * An expression that always returns a constant value
@@ -403,21 +411,26 @@ public interface ObservableExpression {
 		}
 
 		@Override
-		public <M, MV extends M> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, InterpretedExpressoEnv env,
-			int expressionOffset) throws ExpressoEvaluationException {
+		public <M, MV extends M, TX extends Throwable> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type,
+			InterpretedExpressoEnv env, int expressionOffset, ExceptionHandler.Single<TypeConversionException, TX> exHandler)
+				throws ExpressoEvaluationException, TX {
 			if (type.getModelType() != ModelTypes.Value) {
 				if (theValue == null)
 					return ObservableExpression.evEx(expressionOffset, getExpressionLength(),
 						InterpretedValueSynth.literal(type, null, "null"),
 						this);
-				else
-					throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(),
-						"'" + theText + "' cannot be evaluated as a " + type);
+				else {
+					exHandler.handle1(new TypeConversionException(theText, ModelTypes.Value.forType(theValue.getClass()), type,
+						env.reporting().getPosition()));
+					return null;
+				}
 			}
 			if (theValue == null) {
-				if (type.getType(0).isPrimitive())
-					throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(),
-						"Cannot assign null to a primitive type (" + type.getType(0));
+				if (type.getType(0).isPrimitive()) {
+					exHandler.handle1(new TypeConversionException("Cannot assign null to a primitive type (" + type.getType(0) + ")", type,
+						env.reporting().getPosition()));
+					return null;
+				}
 				MV value = (MV) createValue(type.getType(0), null);
 				return ObservableExpression.evEx(expressionOffset, getExpressionLength(),
 					InterpretedValueSynth.literal(type, value, theText), this);

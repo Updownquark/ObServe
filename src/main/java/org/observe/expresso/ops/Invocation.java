@@ -41,6 +41,7 @@ import org.qommons.QommonsUtils;
 import org.qommons.Stamped;
 import org.qommons.StringUtils;
 import org.qommons.Transaction;
+import org.qommons.ex.ExceptionHandler;
 import org.qommons.io.ErrorReporting;
 
 import com.google.common.reflect.TypeToken;
@@ -81,13 +82,16 @@ public abstract class Invocation implements ObservableExpression {
 	}
 
 	@Override
-	public <M, MV extends M> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, InterpretedExpressoEnv env,
-		int expressionOffset) throws ExpressoEvaluationException, ExpressoInterpretationException {
+	public <M, MV extends M, TX extends Throwable> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type,
+		InterpretedExpressoEnv env, int expressionOffset, ExceptionHandler.Single<TypeConversionException, TX> exHandler)
+			throws ExpressoEvaluationException, ExpressoInterpretationException, TX {
 		if (type.getModelType() == ModelTypes.Action) {
 			try (Transaction t = asAction()) {
 				InvokableResult<?, SettableValue<?>, ? extends SettableValue<?>> result = evaluateInternal2(
 					ModelTypes.Value.forType(type.getType(0)), env, new ArgOption(env, expressionOffset + getInitialArgOffset()),
-					expressionOffset);
+					expressionOffset, exHandler);
+				if (result == null)
+					return null;
 				return ObservableExpression.evEx(expressionOffset, getExpressionLength(),
 					(InterpretedValueSynth<M, MV>) createActionContainer(
 						(InvokableResult<?, SettableValue<?>, SettableValue<Object>>) result, env.reporting().at(getMethodNameOffset()),
@@ -96,7 +100,9 @@ public abstract class Invocation implements ObservableExpression {
 			}
 		} else {
 			InvokableResult<?, M, MV> result = evaluateInternal2(type, env, new ArgOption(env, expressionOffset + getInitialArgOffset()),
-				expressionOffset);
+				expressionOffset, exHandler);
+			if (result == null)
+				return null;
 			return ObservableExpression.evEx(expressionOffset, getExpressionLength(),
 				createValueContainer(result, env.reporting().at(getMethodNameOffset()), env.isTesting()), result.method.method,
 				result.getAllChildren());
@@ -117,19 +123,18 @@ public abstract class Invocation implements ObservableExpression {
 		 * @return Whether the given parameter can be matched to the given argument
 		 * @throws ExpressoEvaluationException If an error occurs making the determination
 		 * @throws ExpressoInterpretationException If the argument could not be interpreted
-		 * @throws TypeConversionException If the argument could not be interpreted as the given type
 		 */
 		boolean matchesType(int arg, TypeToken<?> paramType)
-			throws ExpressoEvaluationException, ExpressoInterpretationException, TypeConversionException;
+			throws ExpressoEvaluationException, ExpressoInterpretationException;
 
 		/**
 		 * @param arg The argument index
 		 * @return The argument type at the given index
 		 * @throws ExpressoEvaluationException If an error occurs making the determination
 		 * @throws ExpressoInterpretationException If the argument could not be interpreted
-		 * @throws TypeConversionException If the argument could not be interpreted as a value
 		 */
-		TypeToken<?> resolve(int arg) throws ExpressoEvaluationException, ExpressoInterpretationException, TypeConversionException;
+		<TX extends Throwable> TypeToken<?> resolve(int arg, ExceptionHandler.Single<TypeConversionException, TX> exHandler)
+			throws ExpressoEvaluationException, TX;
 	}
 
 	/** An {@link Args} option representing a set of arguments to an invokable */
@@ -156,7 +161,7 @@ public abstract class Invocation implements ObservableExpression {
 
 		@Override
 		public boolean matchesType(int arg, TypeToken<?> paramType)
-			throws ExpressoEvaluationException, ExpressoInterpretationException, TypeConversionException {
+			throws ExpressoEvaluationException, ExpressoInterpretationException {
 			EvaluatedExpression<SettableValue<?>, SettableValue<?>> c;
 			for (int i = 0; i < args[arg].size(); i++) {
 				c = args[arg].get(i);
@@ -172,14 +177,19 @@ public abstract class Invocation implements ObservableExpression {
 			int argOffset = 0;
 			for (int i = 0; i < arg; i++)
 				argOffset += theArguments.get(i).getExpressionLength() + 1;
+			ExceptionHandler.Container0<TypeConversionException> tce = ExceptionHandler.<TypeConversionException> get1().hold1();
 			c = (EvaluatedExpression<SettableValue<?>, SettableValue<?>>) (EvaluatedExpression<?, ?>) theArguments.get(arg).evaluate(//
-				ModelTypes.Value.forType(paramType), theEnv.at(argOffset), theExpressionOffset + argOffset);
-			args[arg].add(0, c);
-			return true;
+				ModelTypes.Value.forType(paramType), theEnv.at(argOffset), theExpressionOffset + argOffset, tce);
+			if (c != null) {
+				args[arg].add(0, c);
+				return true;
+			} else
+				return false;
 		}
 
 		@Override
-		public TypeToken<?> resolve(int arg) throws ExpressoEvaluationException, ExpressoInterpretationException, TypeConversionException {
+		public <TX extends Throwable> TypeToken<?> resolve(int arg, ExceptionHandler.Single<TypeConversionException, TX> exHandler)
+			throws ExpressoEvaluationException, TX {
 			try {
 				if (resolved[arg] == null) {
 					if (args[arg].isEmpty()) {
@@ -190,7 +200,7 @@ public abstract class Invocation implements ObservableExpression {
 							argOffset += theArguments.get(i).getExpressionLength();
 						}
 						resolved[arg] = theArguments.get(arg).evaluate(ModelTypes.Value.any(), theEnv.at(argOffset),
-							theExpressionOffset + argOffset);
+							theExpressionOffset + argOffset, exHandler);
 					} else
 						resolved[arg] = args[arg].get(0);
 				}
@@ -269,9 +279,9 @@ public abstract class Invocation implements ObservableExpression {
 	 * @throws ExpressoEvaluationException If an error occurs evaluating the invokable
 	 * @throws ExpressoInterpretationException If an expression on which this expression depends could not be interpreted
 	 */
-	protected abstract <M, MV extends M> InvokableResult<?, M, MV> evaluateInternal2(ModelInstanceType<M, MV> type,
-		InterpretedExpressoEnv env, ArgOption args, int expressionOffset)
-			throws ExpressoEvaluationException, ExpressoInterpretationException;
+	protected abstract <M, MV extends M, TX extends Throwable> InvokableResult<?, M, MV> evaluateInternal2(ModelInstanceType<M, MV> type,
+		InterpretedExpressoEnv env, ArgOption args, int expressionOffset, ExceptionHandler.Single<TypeConversionException, TX> exHandler)
+			throws ExpressoEvaluationException, ExpressoInterpretationException, TX;
 
 	private <X extends Executable, T> InvocationActionContainer<X, T> createActionContainer(
 		InvokableResult<X, SettableValue<?>, SettableValue<T>> result, ErrorReporting reporting, boolean testing) {
@@ -332,10 +342,12 @@ public abstract class Invocation implements ObservableExpression {
 	 * @throws ExpressoEvaluationException If a suitable invokable is found, but there is an error with its invocation
 	 * @throws ExpressoInterpretationException If a method argument could not be interpreted
 	 */
-	public static <X extends Executable, M, MV extends M> MethodResult<X, MV> findMethod(X[] methods, String methodName,
+	public static <X extends Executable, M, MV extends M, TX extends Throwable> MethodResult<X, MV> findMethod(X[] methods,
+		String methodName,
 		TypeToken<?> contextType, boolean arg0Context, List<? extends Args> argOptions, ModelInstanceType<M, MV> targetType,
-		InterpretedExpressoEnv env, ExecutableImpl<X> impl, ObservableExpression invocation, int expressionOffset)
-			throws ExpressoEvaluationException, ExpressoInterpretationException {
+		InterpretedExpressoEnv env, ExecutableImpl<X> impl, ObservableExpression invocation, int expressionOffset,
+		ExceptionHandler.Single<TypeConversionException, TX> exHandler)
+			throws ExpressoEvaluationException, ExpressoInterpretationException, TX {
 		Map<String, Exception> methodErrors = null;
 		MethodResult<X, MV> bestResult = null;
 		for (X m : methods) {
@@ -379,7 +391,7 @@ public abstract class Invocation implements ObservableExpression {
 						// Use the first argument as context
 						if (!option.matchesType(0, contextType))
 							continue;
-						tvaResolver = option.resolve(0);
+						tvaResolver = option.resolve(0, exHandler);
 						methodArgStart = 1;
 						if (paramTypes == null) {
 							paramTypes = new TypeToken[m.getParameterTypes().length];
@@ -413,14 +425,14 @@ public abstract class Invocation implements ObservableExpression {
 							try {
 								TypeToken<?> ptComp = paramType.getComponentType();
 								varArgs = option.matchesType(a, ptComp);
-								if (varArgs && !tva.accumulate(ptComp, option.resolve(a)))
+								if (varArgs && !tva.accumulate(ptComp, option.resolve(a, exHandler)))
 									ok = false;
-							} catch (ExpressoEvaluationException | ExpressoInterpretationException | TypeConversionException e) {
+							} catch (ExpressoEvaluationException | ExpressoInterpretationException e) {
 								ex = e;
 							}
 							if (!varArgs && option.size() == paramTypes.length) { // Check for non-var-args invocation
 								if (option.matchesType(a, paramType)) {
-									if (!tva.accumulate(paramType, option.resolve(a)))
+									if (!tva.accumulate(paramType, option.resolve(a, exHandler)))
 										ok = false;
 								} else {
 									ok = false;
@@ -430,16 +442,19 @@ public abstract class Invocation implements ObservableExpression {
 							}
 						} else if (!option.matchesType(a, paramType))
 							ok = false;
-						else if (!tva.accumulate(paramType, option.resolve(a)))
+						else if (!tva.accumulate(paramType, option.resolve(a, exHandler)))
 							ok = false;
 					}
 					if (ok) {
 						TypeToken<?> returnType = tva.resolve(impl.getReturnType(m));
 
 						ModelInstanceConverter<?, ?> converter = ModelTypes.Value.forType(returnType).convert(targetType, env);
-						if (converter == null)
-							throw new ExpressoEvaluationException(expressionOffset, invocation.getExpressionLength(), "Return type "
-								+ returnType + " of method " + Invocation.printSignature(m) + " cannot be assigned to type " + targetType);
+						if (converter == null) {
+							exHandler.handle1(
+								new TypeConversionException("Return type " + returnType + " of method " + Invocation.printSignature(m)
+								+ " cannot be assigned to type " + targetType, targetType, env.reporting().getPosition()));
+							return null;
+						}
 						if (specificity < 0) {
 							specificity = 0;
 							for (TypeToken<?> pt : paramTypes)
@@ -448,7 +463,7 @@ public abstract class Invocation implements ObservableExpression {
 						bestResult = new Invocation.MethodResult<>(m, o, false, specificity,
 							(ModelInstanceConverter<SettableValue<Object>, MV>) converter);
 					}
-				} catch (ExpressoEvaluationException | ExpressoInterpretationException | TypeConversionException e) {
+				} catch (ExpressoEvaluationException | ExpressoInterpretationException e) {
 					if (errors == null)
 						errors = new ArrayList<>(3);
 					errors.add(e);

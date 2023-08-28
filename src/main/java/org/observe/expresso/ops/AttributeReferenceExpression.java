@@ -13,8 +13,10 @@ import org.observe.expresso.ModelException;
 import org.observe.expresso.ModelType;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ObservableExpression;
+import org.observe.expresso.ObservableModelSet.InterpretedModelComponentNode;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.TypeConversionException;
+import org.qommons.ex.ExceptionHandler;
 
 /**
  * <p>
@@ -68,18 +70,20 @@ public class AttributeReferenceExpression implements ObservableExpression {
 	}
 
 	@Override
-	public <M, MV extends M> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type, InterpretedExpressoEnv env,
-		int expressionOffset) throws ExpressoEvaluationException, ExpressoInterpretationException {
+	public <M, MV extends M, TX extends Throwable> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type,
+		InterpretedExpressoEnv env, int expressionOffset, ExceptionHandler.Single<TypeConversionException, TX> exHandler)
+			throws ExpressoEvaluationException, ExpressoInterpretationException, TX {
 		String modelValueName = env.getAttribute(theAttributeName);
 		if (modelValueName == null)
 			throw new ExpressoEvaluationException(expressionOffset + 1, theAttributeName.length(),
 				"'" + theAttributeName + "' is not an available attribute name");
-		InterpretedValueSynth<M, MV> value;
+		InterpretedModelComponentNode<?, ?> node;
 		try {
-			value = env.getModels().getValue(modelValueName, type, env);
-		} catch (ModelException | TypeConversionException e) {
+			node = env.getModels().getComponent(modelValueName).interpret(env);
+		} catch (ModelException e) {
 			throw new ExpressoEvaluationException(expressionOffset + 1, theAttributeName.length(), e.getMessage(), e);
 		}
+		InterpretedValueSynth<M, MV> value = node.as(type, env, exHandler, env.reporting().getPosition());
 		return ObservableExpression.evEx(expressionOffset, getExpressionLength(), value, this);
 	}
 

@@ -6,6 +6,7 @@ import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.TypeConversionException;
+import org.qommons.ex.ExceptionHandler;
 import org.qommons.io.LocatedFilePosition;
 import org.qommons.io.LocatedPositionedContent;
 
@@ -40,11 +41,19 @@ public interface LocatedExpression {
 	default <M, MV extends M> ObservableExpression.EvaluatedExpression<M, MV> interpret(ModelInstanceType<M, MV> type,
 		InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 		try {
-			return getExpression()//
-				.evaluate(//
-					type, env.at(getFilePosition()), 0);
+			return interpret(type, env, ExceptionHandler.get1());
 		} catch (TypeConversionException e) {
 			throw new ExpressoInterpretationException(e.getMessage(), getFilePosition(0), 0, e);
+		}
+	}
+
+	default <M, MV extends M, TX extends Throwable> ObservableExpression.EvaluatedExpression<M, MV> interpret(ModelInstanceType<M, MV> type,
+		InterpretedExpressoEnv env, ExceptionHandler.Single<TypeConversionException, TX> exHandler)
+		throws ExpressoInterpretationException, TX {
+		try {
+			return getExpression()//
+				.evaluate(//
+					type, env.at(getFilePosition()), 0, exHandler);
 		} catch (ExpressoEvaluationException e) {
 			throw new ExpressoInterpretationException(e.getMessage(), getFilePosition(e.getErrorOffset()), e.getErrorLength(), e);
 		}

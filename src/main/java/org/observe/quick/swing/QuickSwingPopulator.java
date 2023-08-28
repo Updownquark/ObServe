@@ -2158,7 +2158,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 						if (rowHeader != null)
 							rowHeader.populate(new ScrollRowHeaderPopulator(s), quick.getRowHeader());
 						if (columnHeader != null)
-							columnHeader.populate(new ScrollRowHeaderPopulator(s), quick.getColumnHeader());
+							columnHeader.populate(new ScrollColumnHeaderPopulator(s), quick.getColumnHeader());
 					} catch (ModelInstantiationException e) {
 						throw new CheckedExceptionWrapper(e);
 					}

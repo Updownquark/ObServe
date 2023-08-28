@@ -15,6 +15,7 @@ import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
+import org.observe.expresso.TypeConversionException;
 import org.observe.expresso.ops.BinaryOperatorSet;
 import org.observe.expresso.ops.UnaryOperatorSet;
 import org.observe.expresso.qonfig.CompiledExpression;
@@ -37,6 +38,7 @@ import org.qommons.config.QonfigInterpreterCore.Builder;
 import org.qommons.config.QonfigInterpreterCore.CoreSession;
 import org.qommons.config.QonfigToolkit;
 import org.qommons.config.SpecialSession;
+import org.qommons.ex.ExceptionHandler;
 
 import com.google.common.reflect.TypeToken;
 
@@ -218,23 +220,33 @@ public class QuickBaseInterpretation implements QonfigInterpretation {
 	public static InterpretedValueSynth<SettableValue<?>, SettableValue<Icon>> evaluateIcon(CompiledExpression expression,
 		InterpretedExpressoEnv env, String sourceDocument) throws ExpressoInterpretationException {
 		if (expression != null) {
-			InterpretedValueSynth<SettableValue<?>, ? extends SettableValue<?>> iconV = expression.interpret(ModelTypes.Value.any(), env);
-			Class<?> iconType = TypeTokens.getRawType(iconV.getType().getType(0));
-			if (Icon.class.isAssignableFrom(iconType))
-				return (InterpretedValueSynth<SettableValue<?>, SettableValue<Icon>>) iconV;
-			else if (Image.class.isAssignableFrom(iconType)) {
-				return iconV.map(ModelTypes.Value.forType(Icon.class), mvi -> mvi.map(
-					sv -> SettableValue.asSettable(sv.map(img -> img == null ? null : new ImageIcon((Image) img)), __ -> "Unsettable")));
-			} else if (URL.class.isAssignableFrom(iconType)) {
-				return iconV.map(ModelTypes.Value.forType(Icon.class), mvi -> mvi
-					.map(sv -> SettableValue.asSettable(sv.map(url -> url == null ? null : new ImageIcon((URL) url)), __ -> "unsettable")));
-			} else if (String.class.isAssignableFrom(iconType)) {
-				return iconV.map(ModelTypes.Value.forType(Icon.class), mvi -> mvi.map(sv -> SettableValue.asSettable(sv.map(loc -> {
+			ExceptionHandler.Container0<TypeConversionException> tce = ExceptionHandler.<TypeConversionException> get1().hold1();
+			InterpretedValueSynth<SettableValue<?>, SettableValue<Icon>> iconV = expression.interpret(ModelTypes.Value.forType(Icon.class),
+				env, tce);
+			if (iconV != null)
+				return iconV;
+			tce.clear1();
+			InterpretedValueSynth<SettableValue<?>, SettableValue<Image>> imageV = expression
+				.interpret(ModelTypes.Value.forType(Image.class), env, tce);
+			if (imageV != null)
+				return imageV.map(ModelTypes.Value.forType(Icon.class), mvi -> mvi
+					.map(sv -> SettableValue.asSettable(sv.map(img -> img == null ? null : new ImageIcon(img)), __ -> "Unsettable")));
+			tce.clear1();
+			InterpretedValueSynth<SettableValue<?>, SettableValue<URL>> urlV = expression.interpret(ModelTypes.Value.forType(URL.class),
+				env, tce);
+			if (urlV != null)
+				return urlV.map(ModelTypes.Value.forType(Icon.class), mvi -> mvi
+					.map(sv -> SettableValue.asSettable(sv.map(url -> url == null ? null : new ImageIcon(url)), __ -> "unsettable")));
+			tce.clear1();
+			InterpretedValueSynth<SettableValue<?>, SettableValue<String>> stringV = expression
+				.interpret(ModelTypes.Value.forType(String.class), env, tce);
+			if (stringV != null)
+				return stringV.map(ModelTypes.Value.forType(Icon.class), mvi -> mvi.map(sv -> SettableValue.asSettable(sv.map(loc -> {
 					if (loc == null)
 						return null;
 					String relLoc;
 					try {
-						relLoc = QommonsConfig.resolve((String) loc, sourceDocument);
+						relLoc = QommonsConfig.resolve(loc, sourceDocument);
 					} catch (IOException e) {
 						System.err.println("Could not resolve icon location '" + loc + "' relative to document " + sourceDocument);
 						e.printStackTrace();
@@ -242,16 +254,14 @@ public class QuickBaseInterpretation implements QonfigInterpretation {
 					}
 					ImageIcon relIcon = new ImageIcon(relLoc);
 					if (relIcon.getImageLoadStatus() == MediaTracker.ERRORED)
-						return ObservableSwingUtils.getFixedIcon(null, (String) loc, 16, 16);
+						return ObservableSwingUtils.getFixedIcon(null, loc, 16, 16);
 					else {
 						relIcon = new ImageIcon(relIcon.getImage().getScaledInstance(16, 16, Image.SCALE_SMOOTH));
 						return relIcon;
 					}
 				}), __ -> "unsettable")));
-			} else {
-				env.reporting().warn("Cannot use value " + expression + ", type " + iconV.getType().getType(0) + " as an icon");
-				return InterpretedValueSynth.literalValue(TypeTokens.get().of(Icon.class), null, "Icon not provided");
-			}
+			env.reporting().warn("Cannot evaluate '" + expression + "' as an icon");
+			return InterpretedValueSynth.literalValue(TypeTokens.get().of(Icon.class), null, "Icon not provided");
 		} else
 			return InterpretedValueSynth.literalValue(TypeTokens.get().of(Icon.class), null, "None provided");
 	}

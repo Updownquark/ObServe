@@ -30,6 +30,7 @@ import org.qommons.Ternian;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigElement.QonfigValue;
 import org.qommons.config.QonfigInterpretationException;
+import org.qommons.ex.ExceptionHandler;
 import org.qommons.io.LocatedFilePosition;
 
 public abstract class Sizeable extends ExAddOn.Abstract<ExElement> {
@@ -398,7 +399,7 @@ public abstract class Sizeable extends ExAddOn.Abstract<ExElement> {
 			if (fUnit > 0) {
 				InterpretedValueSynth<SettableValue<?>, SettableValue<Double>> num;
 				try {
-					num = parsed.evaluate(ModelTypes.Value.forType(double.class), env, 0);
+					num = parsed.evaluate(ModelTypes.Value.forType(double.class), env, 0, ExceptionHandler.get1());
 				} catch (ExpressoEvaluationException e) {
 					throw new ExpressoInterpretationException(e.getMessage(),
 						new LocatedFilePosition(value.fileLocation, value.position.getPosition(e.getErrorOffset())), e.getErrorLength(), e);
@@ -426,25 +427,26 @@ public abstract class Sizeable extends ExAddOn.Abstract<ExElement> {
 						.replaceSource(reverse, rev -> rev.allowInexactReverse(true)));
 				}));
 			} else {
+				ExceptionHandler.Container0<TypeConversionException> tce = ExceptionHandler.<TypeConversionException> get1().hold1();
 				try {
-					positionValue = parsed.evaluate(ModelTypes.Value.forType(QuickSize.class), env, 0);
-				} catch (ExpressoEvaluationException e1) {
+					positionValue = parsed.evaluate(ModelTypes.Value.forType(QuickSize.class), env, 0, tce);
+				} catch (ExpressoEvaluationException e) {
+					throw new ExpressoInterpretationException(e.getMessage(),
+						new LocatedFilePosition(value.fileLocation, value.position.getPosition(0)), value.text.length(), e);
+				}
+				if (tce.hasException()) {
 					// If it doesn't parse as a position, try parsing as a number.
 					try {
-						positionValue = parsed.evaluate(ModelTypes.Value.forType(int.class), env, 0)//
+						positionValue = parsed.evaluate(ModelTypes.Value.forType(int.class), env, 0, ExceptionHandler.get1())//
 							.map(ModelTypes.Value.forType(QuickSize.class), mvi -> mvi.map(v -> v.transformReversible(QuickSize.class,
 								tx -> tx.map(d -> new QuickSize(0.0f, d)).withReverse(pos -> pos.pixels))));
 					} catch (ExpressoEvaluationException e2) {
 						throw new ExpressoInterpretationException(e2.getMessage(),
-							new LocatedFilePosition(value.fileLocation, value.position.getPosition(e2.getErrorOffset())),
-							e1.getErrorLength(), e1);
+							new LocatedFilePosition(value.fileLocation, tce.get1().getPosition()), 0, tce.get1());
 					} catch (TypeConversionException e2) {
 						throw new ExpressoInterpretationException(e2.getMessage(),
-							new LocatedFilePosition(value.fileLocation, value.position.getPosition(0)), value.text.length(), e2);
+							new LocatedFilePosition(value.fileLocation, tce.get1().getPosition()), 0, tce.get1());
 					}
-				} catch (TypeConversionException e) {
-					throw new ExpressoInterpretationException(e.getMessage(),
-						new LocatedFilePosition(value.fileLocation, value.position.getPosition(0)), value.text.length(), e);
 				}
 			}
 			return positionValue;

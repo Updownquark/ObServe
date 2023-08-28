@@ -28,6 +28,8 @@ import org.qommons.collect.BetterList;
 import org.qommons.ex.ExBiFunction;
 import org.qommons.ex.ExConsumer;
 import org.qommons.ex.ExFunction;
+import org.qommons.ex.ExceptionHandler;
+import org.qommons.io.FilePosition;
 import org.qommons.io.LocatedFilePosition;
 
 import com.google.common.reflect.TypeToken;
@@ -199,11 +201,11 @@ public interface ObservableModelSet extends Identifiable {
 		 * @param type The type to convert to
 		 * @param env The interpreted environment which may be needed for the conversion
 		 * @return The converted value
-		 * @throws TypeConversionException If the conversion could not be made
+		 * @throws TX If the conversion could not be made
 		 */
-		default <M2, MV2 extends M2> InterpretedValueSynth<M2, MV2> as(ModelInstanceType<M2, MV2> type, InterpretedExpressoEnv env)
-			throws TypeConversionException {
-			return getType().as(this, type, env);
+		default <M2, MV2 extends M2, TX extends Throwable> InterpretedValueSynth<M2, MV2> as(ModelInstanceType<M2, MV2> type,
+			InterpretedExpressoEnv env, ExceptionHandler.Single<TypeConversionException, TX> exHandler, FilePosition position) throws TX {
+			return getType().as(this, type, env, exHandler, position);
 		}
 
 		/**
@@ -253,9 +255,10 @@ public interface ObservableModelSet extends Identifiable {
 			}
 
 			@Override
-			public <M3, MV3 extends M3> InterpretedValueSynth<M3, MV3> as(ModelInstanceType<M3, MV3> type, InterpretedExpressoEnv env)
-				throws TypeConversionException {
-				return InterpretedValueSynth.super.as(type, env);
+			public <M3, MV3 extends M3, TX extends Throwable> InterpretedValueSynth<M3, MV3> as(ModelInstanceType<M3, MV3> type,
+				InterpretedExpressoEnv env, ExceptionHandler.Single<TypeConversionException, TX> exHandler, FilePosition position)
+				throws TX {
+				return InterpretedValueSynth.super.as(type, env, exHandler, position);
 			}
 
 			@Override
@@ -1435,7 +1438,7 @@ public interface ObservableModelSet extends Identifiable {
 			InterpretedModelComponentNode<?, ?> node = getComponent(path).interpreted();
 			if (node.getModel() != null)
 				throw new ModelException("'" + path + "' is a sub-model, not a value");
-			return node.as(type, env);
+			return node.as(type, env, ExceptionHandler.get1(), node.getSourceLocation());
 		}
 
 		/**
@@ -1454,7 +1457,7 @@ public interface ObservableModelSet extends Identifiable {
 			InterpretedModelComponentNode<?, ?> node = getComponent(componentId).interpreted();
 			if (node.getModel() != null)
 				throw new ModelException("'" + componentId + "' is a sub-model, not a value");
-			return node.as(type, env);
+			return node.as(type, env, ExceptionHandler.get1(), node.getSourceLocation());
 		}
 
 		@Override
@@ -1668,7 +1671,7 @@ public interface ObservableModelSet extends Identifiable {
 				throw new ModelException("No such " + type + " declared: '" + pathTo(path) + "'");
 			ModelType.ModelInstanceConverter<Object, M> converter = ((ModelInstanceType<Object, Object>) thing.type).convert(type, env);
 			if (converter == null)
-				throw new TypeConversionException(path, thing.type, type);
+				throw new TypeConversionException(path, thing.type, type, env.reporting().getPosition());
 			return (MV) converter.convert(thing.thing);
 		}
 

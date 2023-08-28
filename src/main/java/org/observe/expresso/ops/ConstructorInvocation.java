@@ -8,11 +8,13 @@ import java.util.List;
 import java.util.function.Function;
 
 import org.observe.SettableValue;
-import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ExpressoEvaluationException;
 import org.observe.expresso.ExpressoInterpretationException;
+import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ObservableExpression;
+import org.observe.expresso.TypeConversionException;
+import org.qommons.ex.ExceptionHandler;
 
 /** An expression representing the invocation of a constructor to create a new instance of a type */
 public class ConstructorInvocation extends Invocation {
@@ -89,18 +91,23 @@ public class ConstructorInvocation extends Invocation {
 	}
 
 	@Override
-	protected <M, MV extends M> InvokableResult<?, M, MV> evaluateInternal2(ModelInstanceType<M, MV> type, InterpretedExpressoEnv env, ArgOption args,
-		int expressionOffset) throws ExpressoEvaluationException, ExpressoInterpretationException {
+	protected <M, MV extends M, TX extends Throwable> InvokableResult<?, M, MV> evaluateInternal2(ModelInstanceType<M, MV> type,
+		InterpretedExpressoEnv env, ArgOption args, int expressionOffset, ExceptionHandler.Single<TypeConversionException, TX> exHandler)
+			throws ExpressoEvaluationException, ExpressoInterpretationException, TX {
 		Class<?> constructorType = env.getClassView().getType(theType.getName());
 		if (constructorType == null)
 			throw new ExpressoEvaluationException(expressionOffset + 4, theType.length(), "No such type found: " + theType);
+		ExceptionHandler.Container0<TypeConversionException> tce = ExceptionHandler.<TypeConversionException> get1().hold1();
 		Invocation.MethodResult<Constructor<?>, MV> result = Invocation.findMethod(constructorType.getConstructors(), null, null, true,
-			Arrays.asList(args), type, env, Invocation.ExecutableImpl.CONSTRUCTOR, this, expressionOffset);
+			Arrays.asList(args), type, env, Invocation.ExecutableImpl.CONSTRUCTOR, this, expressionOffset, tce);
 		if (result != null) {
 			EvaluatedExpression<SettableValue<?>, SettableValue<?>>[] realArgs = new EvaluatedExpression[getArguments().size()];
 			for (int a = 0; a < realArgs.length; a++)
 				realArgs[a] = args.args[a].get(0);
 			return new InvokableResult<>(result, null, false, Arrays.asList(realArgs), Invocation.ExecutableImpl.CONSTRUCTOR);
+		} else if (tce.hasException()) {
+			exHandler.handle1(tce.get1());
+			return null;
 		}
 		throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(), "No such constructor " + printSignature());
 	}

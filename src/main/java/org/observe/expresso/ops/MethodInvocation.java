@@ -18,6 +18,7 @@ import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.TypeConversionException;
 import org.observe.util.TypeTokens;
 import org.qommons.ArrayUtils;
+import org.qommons.ex.ExceptionHandler;
 
 import com.google.common.reflect.TypeToken;
 
@@ -130,15 +131,16 @@ public class MethodInvocation extends Invocation {
 	}
 
 	@Override
-	protected <M, MV extends M> InvokableResult<?, M, MV> evaluateInternal2(ModelInstanceType<M, MV> type, InterpretedExpressoEnv env,
-		ArgOption args, int expressionOffset) throws ExpressoEvaluationException, ExpressoInterpretationException {
+	protected <M, MV extends M, TX extends Throwable> InvokableResult<?, M, MV> evaluateInternal2(ModelInstanceType<M, MV> type,
+		InterpretedExpressoEnv env, ArgOption args, int expressionOffset, ExceptionHandler.Single<TypeConversionException, TX> exHandler)
+			throws ExpressoEvaluationException, ExpressoInterpretationException, TX {
 		if (theContext != null) {
 			if (theContext instanceof NameExpression) {
 				Class<?> clazz = env.getClassView().getType(((NameExpression) theContext).getName());
 				if (clazz != null) {
 					Invocation.MethodResult<Method, MV> result = Invocation.findMethod(clazz.getMethods(), theMethodName.getName(),
 						TypeTokens.get().of(clazz), true, Arrays.asList(args), type, env, Invocation.ExecutableImpl.METHOD, this,
-						expressionOffset);
+						expressionOffset, exHandler);
 					if (result != null) {
 						EvaluatedExpression<SettableValue<?>, SettableValue<?>>[] realArgs = new EvaluatedExpression[getArguments().size()];
 						for (int a = 0; a < realArgs.length; a++)
@@ -154,8 +156,10 @@ public class MethodInvocation extends Invocation {
 			}
 			EvaluatedExpression<SettableValue<?>, SettableValue<?>> ctx;
 			try {
-				ctx = theContext.evaluate(ModelTypes.Value.any(), env, expressionOffset);
-			} catch (ExpressoInterpretationException | TypeConversionException e) {
+				ctx = theContext.evaluate(ModelTypes.Value.any(), env, expressionOffset, exHandler);
+				if (ctx == null)
+					return null;
+			} catch (ExpressoInterpretationException e) {
 				throw new ExpressoEvaluationException(expressionOffset, theContext.getExpressionLength(), e.getMessage(), e);
 			}
 			TypeToken<?> ctxType = ctx.getType().getType(0);
@@ -163,26 +167,34 @@ public class MethodInvocation extends Invocation {
 			Method[] methods = rawCtxType.getMethods();
 			if (rawCtxType.isInterface())
 				methods = ArrayUtils.addAll(methods, Object.class.getMethods());
+			ExceptionHandler.Container0<TypeConversionException> tce = ExceptionHandler.<TypeConversionException> get1().hold1();
 			Invocation.MethodResult<Method, MV> result = Invocation.findMethod(methods, theMethodName.getName(), ctxType, false,
-				Arrays.asList(args), type, env, Invocation.ExecutableImpl.METHOD, this, expressionOffset);
+				Arrays.asList(args), type, env, Invocation.ExecutableImpl.METHOD, this, expressionOffset, tce);
 			if (result != null) {
 				EvaluatedExpression<SettableValue<?>, SettableValue<?>>[] realArgs = new EvaluatedExpression[getArguments().size()];
 				for (int a = 0; a < realArgs.length; a++)
 					realArgs[a] = args.args[a].get(0);
 				return new InvokableResult<>(result, ctx, false, Arrays.asList(realArgs), Invocation.ExecutableImpl.METHOD);
+			} else if (tce.hasException()) {
+				exHandler.handle1(tce.get1());
+				return null;
 			}
 			throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(),
 				"No such method " + printSignature() + " on " + theContext + "(" + ctxType + ")");
 		} else {
 			List<Method> methods = env.getClassView().getImportedStaticMethods(theMethodName.getName());
+			ExceptionHandler.Container0<TypeConversionException> tce = ExceptionHandler.<TypeConversionException> get1().hold1();
 			Invocation.MethodResult<Method, MV> result = Invocation.findMethod(methods.toArray(new Method[methods.size()]),
 				theMethodName.getName(), null, true, Arrays.asList(args), type, env, Invocation.ExecutableImpl.METHOD, this,
-				expressionOffset);
+				expressionOffset, tce);
 			if (result != null) {
 				EvaluatedExpression<SettableValue<?>, SettableValue<?>>[] realArgs = new EvaluatedExpression[getArguments().size()];
 				for (int a = 0; a < realArgs.length; a++)
 					realArgs[a] = args.args[a].get(0);
 				return new InvokableResult<>(result, null, false, Arrays.asList(realArgs), Invocation.ExecutableImpl.METHOD);
+			} else if (tce.hasException()) {
+				exHandler.handle1(tce.get1());
+				return null;
 			}
 			throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(), "No such imported method " + printSignature());
 		}
