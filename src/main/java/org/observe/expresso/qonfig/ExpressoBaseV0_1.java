@@ -118,7 +118,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		})//
 		.createWith("action", ExtModelValueElement.Def.class, session -> {
 			ExpressoQIS exS = session.as(ExpressoQIS.class);
-			return new ExtModelValueElement.Def.Single<>(exS.getElementRepresentation(), exS.getFocusType(), ModelTypes.Action,
+				return new ExtModelValueElement.Def.UnTyped<>(exS.getElementRepresentation(), exS.getFocusType(), ModelTypes.Action,
 				"action");
 		})//
 		.createWith("value", ExtModelValueElement.Def.class, session -> {

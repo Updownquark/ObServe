@@ -6,14 +6,13 @@ import java.util.List;
 import java.util.function.Function;
 
 import org.observe.expresso.CompiledExpressoEnv;
-import org.observe.expresso.ExpressoEvaluationException;
+import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelType;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
-import org.observe.expresso.TypeConversionException;
 import org.observe.util.TypeTokens;
 import org.qommons.ex.ExceptionHandler;
 
@@ -69,27 +68,24 @@ public class ClassInstanceExpression implements ObservableExpression {
 	}
 
 	@Override
-	public <M, MV extends M, TX extends Throwable> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type,
-		InterpretedExpressoEnv env, int expressionOffset, ExceptionHandler.Single<TypeConversionException, TX> exHandler)
-		throws ExpressoEvaluationException, TX {
+	public <M, MV extends M, EX extends Throwable> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type,
+		InterpretedExpressoEnv env, int expressionOffset, ExceptionHandler.Single<ExpressoInterpretationException, EX> exHandler)
+		throws ExpressoInterpretationException, EX {
 		if (type.getModelType() != ModelTypes.Value) {
-			exHandler.handle1(new TypeConversionException("A class instance expression can only be evaluated to a value", type,
-				env.reporting().getPosition()));
-			return null;
+			throw new ExpressoInterpretationException("A class instance expression can only be evaluated to a value",
+				env.reporting().getPosition(), getExpressionLength());
 		}
 		Class<?> clazz;
 		try {
 			clazz = TypeTokens.getRawType(env.getClassView().parseType(theType.getName()));
 		} catch (ParseException e) {
-			if (e.getErrorOffset() == 0)
-				throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(), e.getMessage(), e);
-			else
-				throw new ExpressoEvaluationException(expressionOffset + e.getErrorOffset(), 0, e.getMessage(), e);
+			throw new ExpressoInterpretationException(e.getMessage(), env.reporting().at(e.getErrorOffset()).getPosition(),
+				e.getErrorOffset() == 0 ? getExpressionLength() : 0, e);
 		}
 		TypeToken<Class<?>> classType = TypeTokens.get().keyFor(Class.class).parameterized(clazz);
 		if (!TypeTokens.get().isAssignable(type.getType(0), classType)) {
-			exHandler.handle1(new TypeConversionException(theType + ".class cannot be evaluated as a " + type.getType(0), type,
-				env.reporting().getPosition()));
+			exHandler.handle1(new ExpressoInterpretationException(theType + ".class cannot be evaluated as a " + type.getType(0),
+				env.reporting().getPosition(), getExpressionLength()));
 			return null;
 		}
 		return ObservableExpression.evEx(expressionOffset, getExpressionLength(),

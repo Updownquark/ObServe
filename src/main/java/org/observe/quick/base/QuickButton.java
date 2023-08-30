@@ -71,7 +71,7 @@ public class QuickButton extends QuickWidget.Abstract {
 	public static class Interpreted<B extends QuickButton> extends QuickWidget.Interpreted.Abstract<B> {
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<String>> theText;
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<Icon>> theIcon;
-		private InterpretedValueSynth<ObservableAction<?>, ObservableAction<?>> theAction;
+		private InterpretedValueSynth<ObservableAction, ObservableAction> theAction;
 
 		public Interpreted(Def<? super B> definition, ExElement.Interpreted<?> parent) {
 			super(definition, parent);
@@ -95,7 +95,7 @@ public class QuickButton extends QuickWidget.Abstract {
 			return theIcon;
 		}
 
-		public InterpretedValueSynth<ObservableAction<?>, ObservableAction<?>> getAction() {
+		public InterpretedValueSynth<ObservableAction, ObservableAction> getAction() {
 			return theAction;
 		}
 
@@ -105,7 +105,7 @@ public class QuickButton extends QuickWidget.Abstract {
 			theText = getDefinition().getText() == null ? null : getDefinition().getText().interpret(ModelTypes.Value.STRING, env);
 			theIcon = getDefinition().getIcon() == null ? null : QuickBaseInterpretation.evaluateIcon(getDefinition().getIcon(), env,
 				getDefinition().getElement().getDocument().getLocation());
-			theAction = getDefinition().getAction().interpret(ModelTypes.Action.any(), env);
+			theAction = getDefinition().getAction().interpret(ModelTypes.Action.instance(), env);
 		}
 
 		@Override
@@ -116,11 +116,11 @@ public class QuickButton extends QuickWidget.Abstract {
 
 	private ModelValueInstantiator<SettableValue<String>> theTextInstantiator;
 	private ModelValueInstantiator<SettableValue<Icon>> theIconInstantiator;
-	private ModelValueInstantiator<ObservableAction<?>> theActionInstantiator;
+	private ModelValueInstantiator<ObservableAction> theActionInstantiator;
 
 	private SettableValue<String> theText;
 	private SettableValue<Icon> theIcon;
-	private ObservableAction<?> theAction;
+	private ObservableAction theAction;
 
 	public QuickButton(Object id) {
 		super(id);
@@ -134,7 +134,7 @@ public class QuickButton extends QuickWidget.Abstract {
 		return theIcon;
 	}
 
-	public ObservableAction<?> getAction() {
+	public ObservableAction getAction() {
 		return theAction;
 	}
 

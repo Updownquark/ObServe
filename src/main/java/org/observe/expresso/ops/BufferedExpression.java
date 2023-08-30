@@ -6,13 +6,11 @@ import java.util.function.Function;
 
 import org.observe.expresso.CompiledExpressoEnv;
 import org.observe.expresso.ExpressoCompilationException;
-import org.observe.expresso.ExpressoEvaluationException;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelType;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ObservableExpression;
-import org.observe.expresso.TypeConversionException;
 import org.qommons.ex.ExceptionHandler;
 
 /** An expression buffered by white space on either side */
@@ -61,15 +59,14 @@ public class BufferedExpression implements ObservableExpression {
 	}
 
 	@Override
-	public ModelType<?> getModelType(CompiledExpressoEnv env, int expressionOffset)
-		throws ExpressoCompilationException, ExpressoEvaluationException {
+	public ModelType<?> getModelType(CompiledExpressoEnv env, int expressionOffset) throws ExpressoCompilationException {
 		return theExpression.getModelType(env, expressionOffset + theBefore);
 	}
 
 	@Override
-	public <M, MV extends M, TX extends Throwable> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type,
-		InterpretedExpressoEnv env, int expressionOffset, ExceptionHandler.Single<TypeConversionException, TX> exHandler)
-			throws ExpressoEvaluationException, ExpressoInterpretationException, TX {
+	public <M, MV extends M, EX extends Throwable> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type,
+		InterpretedExpressoEnv env, int expressionOffset, ExceptionHandler.Single<ExpressoInterpretationException, EX> exHandler)
+		throws ExpressoInterpretationException, EX {
 		return ObservableExpression.wrap(theExpression.evaluateInternal(type, env, expressionOffset + theBefore, exHandler));
 	}
 

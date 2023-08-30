@@ -49,9 +49,9 @@ public interface ObservableExpression {
 		}
 
 		@Override
-		public <M, MV extends M, TX extends Throwable> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type,
-			InterpretedExpressoEnv env, int expressionOffset, ExceptionHandler.Single<TypeConversionException, TX> exHandler)
-				throws ExpressoEvaluationException, TX {
+		public <M, MV extends M, EX extends Throwable> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type,
+			InterpretedExpressoEnv env, int expressionOffset, ExceptionHandler.Single<ExpressoInterpretationException, EX> exHandler)
+				throws EX {
 			return ObservableExpression.evEx(expressionOffset, 0,
 				(InterpretedValueSynth<M, MV>) InterpretedValueSynth.literalValue(TypeTokens.get().WILDCARD, null, "(empty)"), null);
 		}
@@ -305,9 +305,8 @@ public interface ObservableExpression {
 	 * @param env The environment in which the expression will be evaluated
 	 * @return A best guess as to the model type that this expression would evaluate to in the given environment
 	 * @throws ExpressoCompilationException If the model type could not be evaluated
-	 * @throws ExpressoEvaluationException If the model type could not be evaluated
 	 */
-	default ModelType<?> getModelType(CompiledExpressoEnv env) throws ExpressoCompilationException, ExpressoEvaluationException {
+	default ModelType<?> getModelType(CompiledExpressoEnv env) throws ExpressoCompilationException {
 		return getModelType(env, 0);
 	}
 
@@ -316,10 +315,8 @@ public interface ObservableExpression {
 	 * @param expressionOffset The offset of this expression in the evaluated root
 	 * @return A best guess as to the model type that this expression would evaluate to in the given environment
 	 * @throws ExpressoCompilationException If the model type could not be evaluated
-	 * @throws ExpressoEvaluationException If the model type could not be evaluated
 	 */
-	ModelType<?> getModelType(CompiledExpressoEnv env, int expressionOffset)
-		throws ExpressoCompilationException, ExpressoEvaluationException;
+	ModelType<?> getModelType(CompiledExpressoEnv env, int expressionOffset) throws ExpressoCompilationException;
 
 	/**
 	 * Attempts to evaluate this expression
@@ -330,17 +327,17 @@ public interface ObservableExpression {
 	 * @param env The environment in which to evaluate the expression
 	 * @param expressionOffset The offset of this expression in the evaluated root
 	 * @return A value container to generate the expression's value from a {@link ModelSetInstance model instance}
-	 * @throws ExpressoEvaluationException If the expression cannot be evaluated in the given environment as the given type
-	 * @throws ExpressoInterpretationException If an expression on which this expression depends fails to evaluate
+	 * @throws EX If the expression cannot be evaluated in the given environment
 	 * @throws TX If this expression could not be interpreted as the given type
 	 */
-	default <M, MV extends M, TX extends Throwable> EvaluatedExpression<M, MV> evaluate(ModelInstanceType<M, MV> type,
-		InterpretedExpressoEnv env, int expressionOffset, ExceptionHandler.Single<TypeConversionException, TX> exHandler)
-			throws ExpressoEvaluationException, ExpressoInterpretationException, TX {
+	default <M, MV extends M, EX extends Throwable, TX extends Throwable> EvaluatedExpression<M, MV> evaluate(ModelInstanceType<M, MV> type,
+		InterpretedExpressoEnv env, int expressionOffset,
+		ExceptionHandler.Double<ExpressoInterpretationException, TypeConversionException, EX, TX> exHandler)
+			throws ExpressoInterpretationException, EX, TX {
 		EvaluatedExpression<M, MV> value = evaluateInternal(type, env, expressionOffset, exHandler);
 		if (value == null)
 			return null;
-		InterpretedValueSynth<M, MV> cast = value.as(type, env, exHandler, env.reporting().getPosition());
+		InterpretedValueSynth<M, MV> cast = value.as(type, env, exHandler.twoOnly());
 		if (cast instanceof EvaluatedExpression) // Generally means a cast was not necessary
 			return (EvaluatedExpression<M, MV>) cast;
 		else
@@ -356,12 +353,11 @@ public interface ObservableExpression {
 	 * @param env The environment in which to evaluate the expression
 	 * @param expressionOffset The offset of this expression in the evaluated root
 	 * @return A value container to generate the expression's value from a {@link ModelSetInstance model instance}
-	 * @throws ExpressoEvaluationException If the expression cannot be evaluated in the given environment as the given type
-	 * @throws ExpressoInterpretationException If a dependency
+	 * @throws EX If the expression cannot be evaluated in the given environment as the given type
 	 */
-	<M, MV extends M, TX extends Throwable> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type,
-		InterpretedExpressoEnv env, int expressionOffset, ExceptionHandler.Single<TypeConversionException, TX> exHandler)
-			throws ExpressoEvaluationException, ExpressoInterpretationException, TX;
+	<M, MV extends M, EX extends Throwable> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type,
+		InterpretedExpressoEnv env, int expressionOffset, ExceptionHandler.Single<ExpressoInterpretationException, EX> exHandler)
+			throws ExpressoInterpretationException, EX;
 
 	/**
 	 * An expression that always returns a constant value
@@ -411,24 +407,23 @@ public interface ObservableExpression {
 		}
 
 		@Override
-		public <M, MV extends M, TX extends Throwable> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type,
-			InterpretedExpressoEnv env, int expressionOffset, ExceptionHandler.Single<TypeConversionException, TX> exHandler)
-				throws ExpressoEvaluationException, TX {
+		public <M, MV extends M, EX extends Throwable> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type,
+			InterpretedExpressoEnv env, int expressionOffset, ExceptionHandler.Single<ExpressoInterpretationException, EX> exHandler)
+				throws EX {
 			if (type.getModelType() != ModelTypes.Value) {
 				if (theValue == null)
 					return ObservableExpression.evEx(expressionOffset, getExpressionLength(),
-						InterpretedValueSynth.literal(type, null, "null"),
-						this);
+						InterpretedValueSynth.literal(type, null, "null"), this);
 				else {
-					exHandler.handle1(new TypeConversionException(theText, ModelTypes.Value.forType(theValue.getClass()), type,
-						env.reporting().getPosition()));
+					exHandler.handle1(new ExpressoInterpretationException(theText, env.reporting().getPosition(), getExpressionLength()));
 					return null;
 				}
 			}
 			if (theValue == null) {
 				if (type.getType(0).isPrimitive()) {
-					exHandler.handle1(new TypeConversionException("Cannot assign null to a primitive type (" + type.getType(0) + ")", type,
-						env.reporting().getPosition()));
+					exHandler
+					.handle1(new ExpressoInterpretationException("Cannot assign null to a primitive type (" + type.getType(0) + ")",
+						env.reporting().getPosition(), getExpressionLength()));
 					return null;
 				}
 				MV value = (MV) createValue(type.getType(0), null);

@@ -335,7 +335,7 @@ class PanelPopulationImpl {
 		}
 
 		@Override
-		public P withPostButton(String buttonText, ObservableAction<?> action, Consumer<ButtonEditor<JButton, ?>> modify) {
+		public P withPostButton(String buttonText, ObservableAction action, Consumer<ButtonEditor<JButton, ?>> modify) {
 			if (thePostLabel != null) {
 				System.err.println("A field can only have one post component");
 				thePostLabel = null;
@@ -515,13 +515,13 @@ class PanelPopulationImpl {
 
 	static class SimpleButtonEditor<B extends AbstractButton, P extends SimpleButtonEditor<B, P>> extends SimpleFieldEditor<B, P>
 	implements ButtonEditor<B, P> {
-		private final ObservableAction<?> theAction;
+		private final ObservableAction theAction;
 		private ObservableValue<String> theText;
 		private ObservableValue<? extends Icon> theIcon;
 		private ObservableValue<String> theDisablement;
 		private final boolean isPostButton;
 
-		SimpleButtonEditor(String fieldName, B button, String buttonText, ObservableAction<?> action, boolean postButton,
+		SimpleButtonEditor(String fieldName, B button, String buttonText, ObservableAction action, boolean postButton,
 			Observable<?> until) {
 			super(fieldName, button, until);
 			theAction = action;
@@ -625,7 +625,7 @@ class PanelPopulationImpl {
 		private SettableValue<ObservableValue<Double>> theMinValue;
 		private SettableValue<ObservableValue<Double>> theMaxValue;
 
-		public static SimpleMultiSliderEditor<?> createForValue(String fieldName, SettableValue<Double> value, Observable<?> until){
+		public static SimpleMultiSliderEditor<?> createForValue(String fieldName, SettableValue<Double> value, Observable<?> until) {
 			SettableValue<ObservableValue<Double>>[] minMax = createMinMax();
 			SettableValue<MultiRangeSlider.Range> sliderBounds = createSliderBounds(until, minMax);
 			MultiRangeSlider slider = MultiRangeSlider.forValueExtent(false, sliderBounds, value,
@@ -667,21 +667,21 @@ class PanelPopulationImpl {
 
 		public static SimpleMultiSliderEditor<?> createForRanges(String fieldName, ObservableCollection<MultiRangeSlider.Range> ranges,
 			Observable<?> until) {
-			SettableValue<ObservableValue<Double>> [] minMax=createMinMax();
+			SettableValue<ObservableValue<Double>>[] minMax = createMinMax();
 			SettableValue<MultiRangeSlider.Range> sliderBounds = createSliderBounds(until, minMax);
 			return new SimpleMultiSliderEditor<>(fieldName, //
 				MultiRangeSlider.multi(false, sliderBounds, ranges, until), //
 				minMax, until);
 		}
 
-		static SettableValue<ObservableValue<Double>> [] createMinMax(){
+		static SettableValue<ObservableValue<Double>>[] createMinMax() {
 			SettableValue<ObservableValue<Double>> min = SettableValue
 				.build((Class<ObservableValue<Double>>) (Class<?>) ObservableValue.class)
 				.withValue(SettableValue.build(double.class).withValue(0.0).build()).build();
 			SettableValue<ObservableValue<Double>> max = SettableValue
 				.build((Class<ObservableValue<Double>>) (Class<?>) ObservableValue.class)
 				.withValue(SettableValue.build(double.class).withValue(1.0).build()).build();
-			return new SettableValue[] {min, max};
+			return new SettableValue[] { min, max };
 		}
 
 		static SettableValue<MultiRangeSlider.Range> createSliderBounds(Observable<?> until,
@@ -2195,7 +2195,7 @@ class PanelPopulationImpl {
 				}
 
 				@Override
-				public P2 withPostButton(String buttonText, ObservableAction<?> action, Consumer<ButtonEditor<JButton, ?>> modify) {
+				public P2 withPostButton(String buttonText, ObservableAction action, Consumer<ButtonEditor<JButton, ?>> modify) {
 					return (P2) this;
 				}
 
@@ -2348,7 +2348,7 @@ class PanelPopulationImpl {
 		private boolean multipleAllowed;
 		private boolean actWhenAnyEnabled;
 		private boolean isDisplayedWhenDisabled;
-		ObservableAction<?> theObservableAction;
+		ObservableAction theObservableAction;
 		SettableValue<String> theEnabledString;
 		SettableValue<String> theTooltipString;
 		Consumer<ButtonEditor<?, ?>> theButtonMod;
@@ -2362,20 +2362,14 @@ class PanelPopulationImpl {
 			theSelectedValues = selectedValues;
 			theUntil = until;
 			theEnabledString = SettableValue.build(String.class).build();
-			theObservableAction = new ObservableAction<Object>() {
+			theObservableAction = new ObservableAction() {
 				@Override
-				public TypeToken<Object> getType() {
-					return TypeTokens.get().OBJECT;
-				}
-
-				@Override
-				public Object act(Object cause) throws IllegalStateException {
+				public void act(Object cause) throws IllegalStateException {
 					List<R> selected = theSelectedValues.get();
 					if (theEnablement != null)
 						selected = QommonsUtils.filterMap(selected, v -> theEnablement.apply(v) == null, null);
 					theAction.accept(selected);
 					updateSelection(getActionItems(), cause);
-					return null;
 				}
 
 				@Override
@@ -2520,7 +2514,7 @@ class PanelPopulationImpl {
 		}
 
 		@Override
-		public A modifyAction(Function<? super ObservableAction<?>, ? extends ObservableAction<?>> actionMod) {
+		public A modifyAction(Function<? super ObservableAction, ? extends ObservableAction> actionMod) {
 			theObservableAction = actionMod.apply(theObservableAction);
 			return (A) this;
 		}
@@ -2528,20 +2522,13 @@ class PanelPopulationImpl {
 		@Override
 		public A confirm(String alertTitle, Function<List<? extends R>, String> alertText, boolean confirmType) {
 			return modifyAction(action -> {
-				return new ObservableAction<Void>() {
+				return new ObservableAction() {
 					@Override
-					public TypeToken<Void> getType() {
-						return TypeTokens.get().VOID;
-					}
-
-					@Override
-					public Void act(Object cause) throws IllegalStateException {
+					public void act(Object cause) throws IllegalStateException {
 						List<? extends R> selected = theWidget.getSelection();
 						String text = alertText.apply(selected);
-						if (!theWidget.alert(alertTitle, text).confirm(confirmType))
-							return null;
-						action.act(cause);
-						return null;
+						if (theWidget.alert(alertTitle, text).confirm(confirmType))
+							action.act(cause);
 					}
 
 					@Override
@@ -2555,14 +2542,9 @@ class PanelPopulationImpl {
 		@Override
 		public A confirmForItems(String alertTitle, String alertPreText, String alertPostText, boolean confirmType) {
 			return modifyAction(action -> {
-				return new ObservableAction<Void>() {
+				return new ObservableAction() {
 					@Override
-					public TypeToken<Void> getType() {
-						return TypeTokens.get().VOID;
-					}
-
-					@Override
-					public Void act(Object cause) throws IllegalStateException {
+					public void act(Object cause) throws IllegalStateException {
 						List<? extends R> selected = theWidget.getSelection();
 						StringBuilder text = new StringBuilder();
 						if (alertPreText != null && !alertPreText.isEmpty())
@@ -2579,10 +2561,8 @@ class PanelPopulationImpl {
 							text.append(selected.size()).append(' ').append(StringUtils.pluralize(theWidget.getItemName()));
 						if (alertPostText != null && !alertPostText.isEmpty())
 							text.append(alertPostText);
-						if (!theWidget.alert(alertTitle, text.toString()).confirm(confirmType))
-							return null;
-						action.act(cause);
-						return null;
+						if (theWidget.alert(alertTitle, text.toString()).confirm(confirmType))
+							action.act(cause);
 					}
 
 					@Override
@@ -2863,11 +2843,11 @@ class PanelPopulationImpl {
 				if (theMessage != null)
 					panel.addLabel(null, theMessage, null);
 				ValueHolder<ObservableTextField<T>> field = new ValueHolder<>();
-				panel.addTextField(null, value, format, f -> f.fill().modifyEditor(tf->{
+				panel.addTextField(null, value, format, f -> f.fill().modifyEditor(tf -> {
 					field.accept(tf);
-					tf.onEnter((v, ke)->{
-						if(tf.getErrorState().get()==null) {
-							provided[0]=true;
+					tf.onEnter((v, ke) -> {
+						if (tf.getErrorState().get() == null) {
+							provided[0] = true;
 							dialog.getWindow().setVisible(false);
 						}
 					});
@@ -2914,8 +2894,8 @@ class PanelPopulationImpl {
 			if (COLOR_EDITOR == null) {
 				SwitchableFilterValue<Color> selected = new SwitchableFilterValue<>(TypeTokens.get().of(Color.class), filter);
 				selected.set(initial, null);
-				COLOR_EDITOR = new ObservableColorEditor(selected, true,
-					SettableValue.build(boolean.class).withValue(withAlpha).build(), Observable.empty());
+				COLOR_EDITOR = new ObservableColorEditor(selected, true, SettableValue.build(boolean.class).withValue(withAlpha).build(),
+					Observable.empty());
 				COLOR_EDITING_MESSAGE = new JLabel(theMessage, theImage == null ? null : theImage.getIcon().get(), JLabel.LEADING);
 				new FontAdjuster().withFontSize(16).adjust(COLOR_EDITING_MESSAGE);
 			} else {

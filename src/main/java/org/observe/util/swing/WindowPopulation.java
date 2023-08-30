@@ -28,7 +28,6 @@ import org.observe.ObservableAction;
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.SimpleObservable;
-import org.observe.util.TypeTokens;
 import org.observe.util.swing.PanelPopulation.ButtonEditor;
 import org.observe.util.swing.PanelPopulation.DialogBuilder;
 import org.observe.util.swing.PanelPopulation.MenuBarBuilder;
@@ -440,7 +439,7 @@ public class WindowPopulation {
 
 	static class JMenuBuilder<M extends JMenuBuilder<M>> extends SimpleButtonEditor<JMenu, M> implements MenuBuilder<JMenu, M> {
 		public JMenuBuilder(JMenu button, Observable<?> until) {
-			super((String) null, button, button.getText(), ObservableAction.nullAction(TypeTokens.get().VOID, null), false, until);
+			super((String) null, button, button.getText(), ObservableAction.nullAction(), false, until);
 		}
 
 		@Override
@@ -463,7 +462,7 @@ public class WindowPopulation {
 		}
 
 		@Override
-		public M withAction(String name, ObservableAction<?> action, Consumer<ButtonEditor<JMenuItem, ?>> ui) {
+		public M withAction(String name, ObservableAction action, Consumer<ButtonEditor<JMenuItem, ?>> ui) {
 			JMenuItem item = new JMenuItem(name);
 			ButtonEditor<JMenuItem, ?> button = new PanelPopulationImpl.SimpleButtonEditor<>(name, item, name, action, false, getUntil());
 			if (ui != null) {

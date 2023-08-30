@@ -297,8 +297,8 @@ public class ExpressoTransformations {
 			private final boolean isEfficientCopy;
 			private final TransformInstantiator<MV1, MV2> theFullTransform;
 
-			public Instantiator(ModelValueInstantiator<MV1> source, List<Operation.Instantiator<?, ?>> operations,
-				boolean efficientCopy, TransformInstantiator<MV1, MV2> fullTransform) {
+			public Instantiator(ModelValueInstantiator<MV1> source, List<Operation.Instantiator<?, ?>> operations, boolean efficientCopy,
+				TransformInstantiator<MV1, MV2> fullTransform) {
 				theSource = source;
 				theOperations = operations;
 				isEfficientCopy = efficientCopy;
@@ -486,7 +486,7 @@ public class ExpressoTransformations {
 	 * @param <M> The model type of the target observable structure
 	 * @param <E> The type of element produced
 	 */
-	public interface ActionTransform<M, E extends ExElement> extends Operation<ObservableAction<?>, M, E> {
+	public interface ActionTransform<M, E extends ExElement> extends Operation<ObservableAction, M, E> {
 	}
 
 	/**
@@ -1895,7 +1895,7 @@ public class ExpressoTransformations {
 		}
 
 		public static class Interpreted<S, T, E extends ExElement> extends AbstractMapReverse.Interpreted<S, T, E> {
-			private InterpretedValueSynth<ObservableAction<?>, ObservableAction<?>> theReverse;
+			private InterpretedValueSynth<ObservableAction, ObservableAction> theReverse;
 
 			public Interpreted(SourceModifyingReverse<? super E> definition, ExElement.Interpreted<?> parent) {
 				super(definition, parent);
@@ -1907,7 +1907,7 @@ public class ExpressoTransformations {
 			}
 
 			@Override
-			public InterpretedValueSynth<ObservableAction<?>, ObservableAction<?>> getReverse() {
+			public InterpretedValueSynth<ObservableAction, ObservableAction> getReverse() {
 				return theReverse;
 			}
 
@@ -1915,7 +1915,7 @@ public class ExpressoTransformations {
 			public void update(ModelComponentId sourceName, TypeToken<S> sourceType, TypeToken<T> targetType, InterpretedExpressoEnv env)
 				throws ExpressoInterpretationException {
 				super.update(sourceName, sourceType, targetType, env);
-				theReverse = getDefinition().getReverse().interpret(ModelTypes.Action.any(), getExpressoEnv());
+				theReverse = getDefinition().getReverse().interpret(ModelTypes.Action.instance(), getExpressoEnv());
 			}
 
 			@Override
@@ -1931,13 +1931,13 @@ public class ExpressoTransformations {
 			public Instantiator(ModelInstantiator localModel, ModelComponentId targetVariable,
 				ModelValueInstantiator<SettableValue<String>> enabled, ModelValueInstantiator<SettableValue<String>> accept,
 				ModelValueInstantiator<SettableValue<S>> add, ModelValueInstantiator<SettableValue<String>> addAccept, boolean stateful,
-				ModelValueInstantiator<ObservableAction<?>> reverse) {
+				ModelValueInstantiator<ObservableAction> reverse) {
 				super(localModel, targetVariable, enabled, accept, add, addAccept, stateful, reverse);
 			}
 
 			@Override
-			public ModelValueInstantiator<ObservableAction<?>> getReverse() {
-				return (ModelValueInstantiator<ObservableAction<?>>) super.getReverse();
+			public ModelValueInstantiator<ObservableAction> getReverse() {
+				return (ModelValueInstantiator<ObservableAction>) super.getReverse();
 			}
 
 			@Override
@@ -1948,7 +1948,7 @@ public class ExpressoTransformations {
 				SettableValue<T> targetV = parameters.targetValue;
 				List<CombineWith.TransformationModification<S, T>> mods = parameters.modifications;
 
-				ObservableAction<?> reversedEvld = getReverse().get(models);
+				ObservableAction reversedEvld = getReverse().get(models);
 				BiConsumer<T, Transformation.TransformationValues<? extends S, ? extends T>> reverseFn;
 				reverseFn = (target, tvs) -> {
 					prepareTx(tvs, true, sourceV, targetV, target, mods);

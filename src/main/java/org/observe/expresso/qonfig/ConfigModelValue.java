@@ -24,7 +24,6 @@ import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigInterpreterCore.QonfigValueCreator;
 import org.qommons.ex.ExceptionHandler;
-import org.qommons.io.LocatedFilePosition;
 
 import com.google.common.reflect.TypeToken;
 
@@ -53,8 +52,6 @@ public interface ConfigModelValue<T, M, MV extends M> extends ModelValueElement<
 		@QonfigChildGetter("format")
 		CompiledSynth<SettableValue<?>, ?> getFormat();
 
-		LocatedFilePosition getFormatPosition();
-
 		@Override
 		Interpreted<?, M, ?> interpret();
 
@@ -62,7 +59,6 @@ public interface ConfigModelValue<T, M, MV extends M> extends ModelValueElement<
 			private VariableType theValueType;
 			private ObservableConfigPath theConfigPath;
 			private ModelValueElement.CompiledSynth<SettableValue<?>, ?> theFormat;
-			private LocatedFilePosition theFormatPosition;
 
 			protected Abstract(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType, ModelType<M> modelType) {
 				super(parent, qonfigType, modelType);
@@ -84,11 +80,6 @@ public interface ConfigModelValue<T, M, MV extends M> extends ModelValueElement<
 			}
 
 			@Override
-			public LocatedFilePosition getFormatPosition() {
-				return theFormatPosition;
-			}
-
-			@Override
 			protected void doPrepare(ExpressoQIS session) throws QonfigInterpretationException {
 			}
 
@@ -102,7 +93,6 @@ public interface ConfigModelValue<T, M, MV extends M> extends ModelValueElement<
 				else
 					theConfigPath = ObservableConfigPath.create(getAddOn(ExNamed.Def.class).getName());
 				theFormat = session.interpretChildren("format", ModelValueElement.CompiledSynth.class).peekFirst();
-				theFormatPosition = theFormat == null ? null : session.getChildren("format").getFirst().getPositionInFile();
 			}
 		}
 	}
@@ -190,7 +180,7 @@ public interface ConfigModelValue<T, M, MV extends M> extends ModelValueElement<
 					theFormat = getDefinition().getFormat() == null ? null
 						: getDefinition().getFormat().interpret(env).as(ModelTypes.Value.forType(TypeTokens.get()
 							.keyFor(ObservableConfigFormat.class).<ObservableConfigFormat<T>> parameterized(getValueType())), env,
-							ExceptionHandler.get1(), getDefinition().getFormatPosition());
+							ExceptionHandler.thrower());
 				} catch (TypeConversionException e) {
 					throw new ExpressoInterpretationException("Could not interpret format",
 						getDefinition().getFormat().reporting().getPosition(), 0, e);

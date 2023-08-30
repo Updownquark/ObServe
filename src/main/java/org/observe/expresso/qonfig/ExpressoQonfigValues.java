@@ -33,7 +33,6 @@ import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelType;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
-import org.observe.expresso.ObservableModelSet.CompiledModelValue;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelComponentId;
 import org.observe.expresso.ObservableModelSet.ModelInstantiator;
@@ -1755,7 +1754,7 @@ public class ExpressoQonfigValues {
 		implements ModelValueElement.InterpretedSynth<Observable<?>, Observable<T>, ModelValueElement<Observable<?>, Observable<T>>> {
 			private TypeToken<T> theEventType;
 			private InterpretedValueSynth<Observable<?>, Observable<T>> theEvent;
-			private InterpretedValueSynth<ObservableAction<?>, ObservableAction<?>> theAction;
+			private InterpretedValueSynth<ObservableAction, ObservableAction> theAction;
 
 			public Interpreted(Hook definition) {
 				super(definition, null);
@@ -1793,7 +1792,7 @@ public class ExpressoQonfigValues {
 				return theEventType;
 			}
 
-			public InterpretedValueSynth<ObservableAction<?>, ObservableAction<?>> getAction() {
+			public InterpretedValueSynth<ObservableAction, ObservableAction> getAction() {
 				return theAction;
 			}
 
@@ -1812,7 +1811,7 @@ public class ExpressoQonfigValues {
 			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 				super.doUpdate(env);
 				getOrEvalEventType(getExpressoEnv());
-				theAction = getDefinition().getAction().interpret(ModelTypes.Action.any(), getExpressoEnv());
+				theAction = getDefinition().getAction().interpret(ModelTypes.Action.instance(), getExpressoEnv());
 			}
 
 			@Override
@@ -1841,15 +1840,15 @@ public class ExpressoQonfigValues {
 			private final TypeToken<T> theType;
 			private final ModelInstantiator theLocalModels;
 			private final ModelValueInstantiator<Observable<T>> theEvent;
-			private final ModelValueInstantiator<ObservableAction<A>> theAction;
+			private final ModelValueInstantiator<ObservableAction> theAction;
 			private final ModelComponentId theEventValue;
 
 			Instantiator(TypeToken<T> type, ModelInstantiator localModels, ModelValueInstantiator<Observable<T>> event,
-				ModelValueInstantiator<? extends ObservableAction<?>> action, ModelComponentId eventValue) {
+				ModelValueInstantiator<? extends ObservableAction> action, ModelComponentId eventValue) {
 				theType = type;
 				theLocalModels = localModels;
 				theEvent = event;
-				theAction = (ModelValueInstantiator<ObservableAction<A>>) action;
+				theAction = (ModelValueInstantiator<ObservableAction>) action;
 				theEventValue = eventValue;
 			}
 
@@ -1864,11 +1863,11 @@ public class ExpressoQonfigValues {
 			public Observable<T> get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
 				models = theLocalModels.wrap(models);
 				Observable<T> on = theEvent == null ? null : theEvent.get(models);
-				ObservableAction<A> action = theAction.get(models);
+				ObservableAction action = theAction.get(models);
 				return create(on, action, models);
 			}
 
-			Observable<T> create(Observable<T> on, ObservableAction<A> action, ModelSetInstance models) throws ModelInstantiationException {
+			Observable<T> create(Observable<T> on, ObservableAction action, ModelSetInstance models) throws ModelInstantiationException {
 				SettableValue<T> event = SettableValue.build(theType)//
 					.withValue(TypeTokens.get().getDefaultValue(theType)).build();
 				ExFlexibleElementModelAddOn.satisfyElementValue(theEventValue, models, event);
@@ -1889,8 +1888,8 @@ public class ExpressoQonfigValues {
 				throws ModelInstantiationException {
 				Observable<T> oldEvent = theEvent == null ? null : theEvent.get(sourceModels);
 				Observable<T> newEvent = theEvent == null ? null : theEvent.forModelCopy(oldEvent, sourceModels, newModels);
-				ObservableAction<A> oldAction = theAction.get(sourceModels);
-				ObservableAction<A> newAction = theAction.forModelCopy(oldAction, sourceModels, newModels);
+				ObservableAction oldAction = theAction.get(sourceModels);
+				ObservableAction newAction = theAction.forModelCopy(oldAction, sourceModels, newModels);
 				if (oldEvent == newEvent && oldAction == newAction)
 					return value;
 				else
@@ -1899,8 +1898,8 @@ public class ExpressoQonfigValues {
 		}
 	}
 
-	public static class Action extends ModelValueElement.Def.Abstract<ObservableAction<?>, ModelValueElement<ObservableAction<?>, ?>>
-	implements ModelValueElement.CompiledSynth<ObservableAction<?>, ModelValueElement<ObservableAction<?>, ?>> {
+	public static class Action extends ModelValueElement.Def.Abstract<ObservableAction, ModelValueElement<ObservableAction, ?>>
+	implements ModelValueElement.CompiledSynth<ObservableAction, ModelValueElement<ObservableAction, ?>> {
 		private CompiledExpression theAction;
 
 		public Action(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
@@ -1922,14 +1921,14 @@ public class ExpressoQonfigValues {
 		}
 
 		@Override
-		public Interpreted<?> interpret() {
-			return new Interpreted<>(this);
+		public Interpreted interpret() {
+			return new Interpreted(this);
 		}
 
-		protected static class Interpreted<T> extends
-		ModelValueElement.Interpreted.Abstract<ObservableAction<?>, ObservableAction<T>, ModelValueElement<ObservableAction<?>, ObservableAction<T>>>
+		protected static class Interpreted extends
+		ModelValueElement.Interpreted.Abstract<ObservableAction, ObservableAction, ModelValueElement<ObservableAction, ObservableAction>>
 		implements
-		ModelValueElement.InterpretedSynth<ObservableAction<?>, ObservableAction<T>, ModelValueElement<ObservableAction<?>, ObservableAction<T>>> {
+		ModelValueElement.InterpretedSynth<ObservableAction, ObservableAction, ModelValueElement<ObservableAction, ObservableAction>> {
 			public Interpreted(Action definition) {
 				super(definition, null);
 			}
@@ -1940,13 +1939,13 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
-			public Interpreted<T> setParentElement(ExElement.Interpreted<?> parent) {
-				return (Interpreted<T>) super.setParentElement(parent);
+			public Interpreted setParentElement(ExElement.Interpreted<?> parent) {
+				return (Interpreted) super.setParentElement(parent);
 			}
 
 			@Override
-			protected ModelInstanceType<ObservableAction<?>, ObservableAction<T>> getTargetType() {
-				return ModelTypes.Action.<ObservableAction<T>> anyAs();
+			protected ModelInstanceType<ObservableAction, ObservableAction> getTargetType() {
+				return ModelTypes.Action.<ObservableAction> anyAs();
 			}
 
 			@Override
@@ -1955,7 +1954,7 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
-			public ModelValueInstantiator<ObservableAction<T>> instantiate() {
+			public ModelValueInstantiator<ObservableAction> instantiate() {
 				return getElementValue().instantiate();
 			}
 		}
@@ -1963,9 +1962,9 @@ public class ExpressoQonfigValues {
 
 	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE, qonfigType = "action-group", interpretation = ActionGroup.Interpreted.class)
 	public static class ActionGroup
-	extends ModelValueElement.Def.Abstract<ObservableAction<?>, ModelValueElement<ObservableAction<?>, ObservableAction<Void>>>
-	implements ModelValueElement.CompiledSynth<ObservableAction<?>, ModelValueElement<ObservableAction<?>, ObservableAction<Void>>> {
-		private final List<ModelValueElement.CompiledSynth<ObservableAction<?>, ?>> theActions;
+	extends ModelValueElement.Def.Abstract<ObservableAction, ModelValueElement<ObservableAction, ObservableAction>>
+	implements ModelValueElement.CompiledSynth<ObservableAction, ModelValueElement<ObservableAction, ObservableAction>> {
+		private final List<ModelValueElement.CompiledSynth<ObservableAction, ?>> theActions;
 
 		public ActionGroup(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
 			super(parent, qonfigType, ModelTypes.Action);
@@ -1973,7 +1972,7 @@ public class ExpressoQonfigValues {
 		}
 
 		@QonfigChildGetter("action")
-		public List<ModelValueElement.CompiledSynth<ObservableAction<?>, ?>> getActions() {
+		public List<ModelValueElement.CompiledSynth<ObservableAction, ?>> getActions() {
 			return Collections.unmodifiableList(theActions);
 		}
 
@@ -1987,7 +1986,7 @@ public class ExpressoQonfigValues {
 		protected void doPrepare(ExpressoQIS session) throws QonfigInterpretationException {
 			List<ExpressoQIS> actionSessions = session.forChildren("action");
 			int i = 0;
-			for (ModelValueElement.CompiledSynth<ObservableAction<?>, ?> action : theActions)
+			for (ModelValueElement.CompiledSynth<ObservableAction, ?> action : theActions)
 				action.prepareModelValue(actionSessions.get(i++));
 		}
 
@@ -1997,10 +1996,10 @@ public class ExpressoQonfigValues {
 		}
 
 		static class Interpreted extends
-		ModelValueElement.Interpreted.Abstract<ObservableAction<?>, ObservableAction<Void>, ModelValueElement<ObservableAction<?>, ObservableAction<Void>>>
+		ModelValueElement.Interpreted.Abstract<ObservableAction, ObservableAction, ModelValueElement<ObservableAction, ObservableAction>>
 		implements
-		ModelValueElement.InterpretedSynth<ObservableAction<?>, ObservableAction<Void>, ModelValueElement<ObservableAction<?>, ObservableAction<Void>>> {
-			private final List<Action.Interpreted<?>> theActions;
+		ModelValueElement.InterpretedSynth<ObservableAction, ObservableAction, ModelValueElement<ObservableAction, ObservableAction>> {
+			private final List<Action.Interpreted> theActions;
 
 			public Interpreted(ActionGroup definition) {
 				super(definition, null);
@@ -2018,20 +2017,20 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
-			protected ModelInstanceType<ObservableAction<?>, ObservableAction<Void>> getTargetType() {
-				return ModelTypes.Action.VOID; // Not actually used, since getType() is overridden
+			protected ModelInstanceType<ObservableAction, ObservableAction> getTargetType() {
+				return ModelTypes.Action.instance(); // Not actually used, since getType() is overridden
 			}
 
 			@Override
-			public ModelInstanceType<ObservableAction<?>, ObservableAction<Void>> getType() {
-				return ModelTypes.Action.VOID;
+			public ModelInstanceType<ObservableAction, ObservableAction> getType() {
+				return ModelTypes.Action.instance();
 			}
 
 			@Override
 			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 				super.doUpdate(env);
 				CollectionUtils.synchronize(theActions, getDefinition().getActions(), (i, d) -> i.getIdentity() == d.getIdentity())//
-				.simpleE(d -> (Action.Interpreted<?>) d.interpret(getExpressoEnv()))//
+					.simpleE(d -> (Action.Interpreted) d.interpret(getExpressoEnv()))//
 				.onLeftX(el -> el.getLeftValue().destroy())//
 				.onCommonX(el -> el.getLeftValue().setParentElement(this).update(getExpressoEnv()))//
 				.adjust();
@@ -2043,15 +2042,15 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
-			public ModelValueInstantiator<ObservableAction<Void>> instantiate() {
+			public ModelValueInstantiator<ObservableAction> instantiate() {
 				return new Instantiator(QommonsUtils.map(theActions, a -> a.instantiate(), true));
 			}
 		}
 
-		static class Instantiator implements ModelValueInstantiator<ObservableAction<Void>> {
-			private final List<ModelValueInstantiator<? extends ObservableAction<?>>> theActions;
+		static class Instantiator implements ModelValueInstantiator<ObservableAction> {
+			private final List<ModelValueInstantiator<? extends ObservableAction>> theActions;
 
-			Instantiator(List<ModelValueInstantiator<? extends ObservableAction<?>>> actions) {
+			Instantiator(List<ModelValueInstantiator<? extends ObservableAction>> actions) {
 				theActions = actions;
 			}
 
@@ -2062,22 +2061,22 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
-			public ObservableAction<Void> get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
-				ObservableAction<?>[] actions = new ObservableAction[theActions.size()];
+			public ObservableAction get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
+				ObservableAction[] actions = new ObservableAction[theActions.size()];
 				for (int i = 0; i < actions.length; i++)
 					actions[i] = theActions.get(i).get(models);
 				return new GroupAction(actions);
 			}
 
 			@Override
-			public ObservableAction<Void> forModelCopy(ObservableAction<Void> value, ModelSetInstance sourceModels,
-				ModelSetInstance newModels) throws ModelInstantiationException {
+			public ObservableAction forModelCopy(ObservableAction value, ModelSetInstance sourceModels, ModelSetInstance newModels)
+				throws ModelInstantiationException {
 				GroupAction action = (GroupAction) value;
-				ObservableAction<?>[] actionCopies = new ObservableAction[action.getActions().length];
+				ObservableAction[] actionCopies = new ObservableAction[action.getActions().length];
 				boolean different = false;
 				for (int i = 0; i < theActions.size(); i++) {
-					actionCopies[i] = ((ModelValueInstantiator<ObservableAction<Object>>) theActions.get(i))
-						.forModelCopy((ObservableAction<Object>) action.getActions()[i], sourceModels, newModels);
+					actionCopies[i] = ((ModelValueInstantiator<ObservableAction>) theActions.get(i)).forModelCopy(action.getActions()[i],
+						sourceModels, newModels);
 					if (actionCopies[i] != action.getActions()[i])
 						different = true;
 				}
@@ -2088,11 +2087,11 @@ public class ExpressoQonfigValues {
 			}
 		}
 
-		static class GroupAction implements ObservableAction<Void> {
-			private final ObservableAction<?>[] theActions;
+		static class GroupAction implements ObservableAction {
+			private final ObservableAction[] theActions;
 			private final ObservableValue<String> theEnabled;
 
-			GroupAction(ObservableAction<?>[] actions) {
+			GroupAction(ObservableAction[] actions) {
 				theActions = actions;
 				ObservableValue<String>[] actionsEnabled = new ObservableValue[actions.length];
 				for (int i = 0; i < actions.length; i++)
@@ -2100,24 +2099,18 @@ public class ExpressoQonfigValues {
 				theEnabled = ObservableValue.firstValue(TypeTokens.get().STRING, v -> v != null, null, actionsEnabled);
 			}
 
-			ObservableAction<?>[] getActions() {
+			ObservableAction[] getActions() {
 				return theActions;
 			}
 
 			@Override
-			public TypeToken<Void> getType() {
-				return TypeTokens.get().VOID;
-			}
-
-			@Override
-			public Void act(Object cause) throws IllegalStateException {
+			public void act(Object cause) throws IllegalStateException {
 				// Don't do any actions if any are disabled
 				String msg = theEnabled.get();
 				if (msg != null)
 					throw new IllegalStateException(msg);
-				for (ObservableAction<?> action : theActions)
+				for (ObservableAction action : theActions)
 					action.act(cause);
-				return null;
 			}
 
 			@Override
@@ -2127,15 +2120,15 @@ public class ExpressoQonfigValues {
 		}
 	}
 
-	public static class Loop extends ModelValueElement.Def.Abstract<ObservableAction<?>, ModelValueElement<ObservableAction<?>, ?>>
-	implements ModelValueElement.CompiledSynth<ObservableAction<?>, ModelValueElement<ObservableAction<?>, ?>> {
+	public static class Loop extends ModelValueElement.Def.Abstract<ObservableAction, ModelValueElement<ObservableAction, ObservableAction>>
+	implements ModelValueElement.CompiledSynth<ObservableAction, ModelValueElement<ObservableAction, ObservableAction>> {
 		private CompiledExpression theInit;
 		private CompiledExpression theBefore;
 		private CompiledExpression theWhile;
 		private CompiledExpression theBeforeBody;
 		private CompiledExpression theAfterBody;
 		private CompiledExpression theFinally;
-		private final List<ModelValueElement.CompiledSynth<ObservableAction<?>, ?>> theBody;
+		private final List<ModelValueElement.CompiledSynth<ObservableAction, ?>> theBody;
 
 		public Loop(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
 			super(parent, qonfigType, ModelTypes.Action);
@@ -2166,7 +2159,7 @@ public class ExpressoQonfigValues {
 			return theFinally;
 		}
 
-		public List<ModelValueElement.CompiledSynth<ObservableAction<?>, ?>> getBody() {
+		public List<ModelValueElement.CompiledSynth<ObservableAction, ?>> getBody() {
 			return Collections.unmodifiableList(theBody);
 		}
 
@@ -2186,7 +2179,7 @@ public class ExpressoQonfigValues {
 		public void doPrepare(ExpressoQIS session) throws QonfigInterpretationException {
 			List<ExpressoQIS> bodySessions = session.forChildren("body");
 			int i = 0;
-			for (CompiledModelValue<ObservableAction<?>> body : theBody) {
+			for (ModelValueElement.CompiledSynth<ObservableAction, ?> body : theBody) {
 				if (body instanceof ModelValueElement.Def)
 					((ModelValueElement.Def<?, ?>) body).prepareModelValue(bodySessions.get(i++));
 			}
@@ -2198,16 +2191,16 @@ public class ExpressoQonfigValues {
 		}
 
 		static class Interpreted extends
-		ModelValueElement.Interpreted.Abstract<ObservableAction<?>, ObservableAction<?>, ModelValueElement<ObservableAction<?>, ObservableAction<?>>>
+		ModelValueElement.Interpreted.Abstract<ObservableAction, ObservableAction, ModelValueElement<ObservableAction, ObservableAction>>
 		implements
-		ModelValueElement.InterpretedSynth<ObservableAction<?>, ObservableAction<?>, ModelValueElement<ObservableAction<?>, ObservableAction<?>>> {
-			private InterpretedValueSynth<ObservableAction<?>, ObservableAction<?>> theInit;
-			private InterpretedValueSynth<ObservableAction<?>, ObservableAction<?>> theBefore;
+		ModelValueElement.InterpretedSynth<ObservableAction, ObservableAction, ModelValueElement<ObservableAction, ObservableAction>> {
+			private InterpretedValueSynth<ObservableAction, ObservableAction> theInit;
+			private InterpretedValueSynth<ObservableAction, ObservableAction> theBefore;
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> theWhile;
-			private InterpretedValueSynth<ObservableAction<?>, ObservableAction<?>> theBeforeBody;
-			private InterpretedValueSynth<ObservableAction<?>, ObservableAction<?>> theAfterBody;
-			private InterpretedValueSynth<ObservableAction<?>, ObservableAction<?>> theFinally;
-			private final List<InterpretedValueSynth<ObservableAction<?>, ?>> theBody;
+			private InterpretedValueSynth<ObservableAction, ObservableAction> theBeforeBody;
+			private InterpretedValueSynth<ObservableAction, ObservableAction> theAfterBody;
+			private InterpretedValueSynth<ObservableAction, ObservableAction> theFinally;
+			private final List<InterpretedValueSynth<ObservableAction, ?>> theBody;
 
 			Interpreted(Loop definition) {
 				super(definition, null);
@@ -2225,34 +2218,31 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
-			protected ModelInstanceType<ObservableAction<?>, ObservableAction<?>> getTargetType() {
+			protected ModelInstanceType<ObservableAction, ObservableAction> getTargetType() {
 				return getType(); // Not actually used, since getType() is overridden
 			}
 
 			@Override
-			public ModelInstanceType<ObservableAction<?>, ObservableAction<?>> getType() {
-				if (theBody.isEmpty())
-					return (ModelInstanceType<ObservableAction<?>, ObservableAction<?>>) (ModelInstanceType<?, ?>) ModelTypes.Action.VOID;
-				else
-					return (ModelInstanceType<ObservableAction<?>, ObservableAction<?>>) theBody.get(theBody.size() - 1).getType();
+			public ModelInstanceType<ObservableAction, ObservableAction> getType() {
+				return ModelTypes.Action.instance();
 			}
 
 			@Override
 			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 				super.doUpdate(env);
 				theInit = getDefinition().getInit() == null ? null
-					: getDefinition().getInit().interpret(ModelTypes.Action.any(), getExpressoEnv());
+					: getDefinition().getInit().interpret(ModelTypes.Action.instance(), getExpressoEnv());
 				theBefore = getDefinition().getBefore() == null ? null
-					: getDefinition().getBefore().interpret(ModelTypes.Action.any(), getExpressoEnv());
+					: getDefinition().getBefore().interpret(ModelTypes.Action.instance(), getExpressoEnv());
 				theWhile = getDefinition().getWhile().interpret(ModelTypes.Value.forType(boolean.class), getExpressoEnv());
 				theBeforeBody = getDefinition().getBeforeBody() == null ? null
-					: getDefinition().getBeforeBody().interpret(ModelTypes.Action.any(), getExpressoEnv());
+					: getDefinition().getBeforeBody().interpret(ModelTypes.Action.instance(), getExpressoEnv());
 				theAfterBody = getDefinition().getAfterBody() == null ? null
-					: getDefinition().getAfterBody().interpret(ModelTypes.Action.any(), getExpressoEnv());
+					: getDefinition().getAfterBody().interpret(ModelTypes.Action.instance(), getExpressoEnv());
 				theFinally = getDefinition().getFinally() == null ? null
-					: getDefinition().getFinally().interpret(ModelTypes.Action.any(), getExpressoEnv());
+					: getDefinition().getFinally().interpret(ModelTypes.Action.instance(), getExpressoEnv());
 				theBody.clear();
-				for (ModelValueElement.CompiledSynth<ObservableAction<?>, ?> body : getDefinition().getBody())
+				for (ModelValueElement.CompiledSynth<ObservableAction, ?> body : getDefinition().getBody())
 					theBody.add(body.interpret(getExpressoEnv()));
 			}
 
@@ -2264,7 +2254,7 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
-			public ModelValueInstantiator<ObservableAction<?>> instantiate() {
+			public ModelValueInstantiator<ObservableAction> instantiate() {
 				return new Instantiator(getExpressoEnv().getModels().instantiate(), //
 					theInit == null ? null : theInit.instantiate(), //
 						theBefore == null ? null : theBefore.instantiate(), //
@@ -2276,22 +2266,21 @@ public class ExpressoQonfigValues {
 			}
 		}
 
-		static class Instantiator implements ModelValueInstantiator<ObservableAction<?>> {
+		static class Instantiator implements ModelValueInstantiator<ObservableAction> {
 			private final ModelInstantiator theLocalModels;
-			private final ModelValueInstantiator<? extends ObservableAction<?>> theInit;
-			private final ModelValueInstantiator<? extends ObservableAction<?>> theBefore;
+			private final ModelValueInstantiator<? extends ObservableAction> theInit;
+			private final ModelValueInstantiator<? extends ObservableAction> theBefore;
 			private final ModelValueInstantiator<SettableValue<Boolean>> theWhile;
-			private final ModelValueInstantiator<? extends ObservableAction<?>> theBeforeBody;
-			private final List<? extends ModelValueInstantiator<? extends ObservableAction<?>>> theBody;
-			private final ModelValueInstantiator<? extends ObservableAction<?>> theAfterBody;
-			private final ModelValueInstantiator<? extends ObservableAction<?>> theFinally;
+			private final ModelValueInstantiator<? extends ObservableAction> theBeforeBody;
+			private final List<? extends ModelValueInstantiator<? extends ObservableAction>> theBody;
+			private final ModelValueInstantiator<? extends ObservableAction> theAfterBody;
+			private final ModelValueInstantiator<? extends ObservableAction> theFinally;
 
-			Instantiator(ModelInstantiator localModels, ModelValueInstantiator<? extends ObservableAction<?>> init,
-				ModelValueInstantiator<? extends ObservableAction<?>> before, ModelValueInstantiator<SettableValue<Boolean>> while1,
-					ModelValueInstantiator<? extends ObservableAction<?>> beforeBody,
-						List<? extends ModelValueInstantiator<? extends ObservableAction<?>>> body,
-							ModelValueInstantiator<? extends ObservableAction<?>> afterBody,
-								ModelValueInstantiator<? extends ObservableAction<?>> finally1) {
+			Instantiator(ModelInstantiator localModels, ModelValueInstantiator<? extends ObservableAction> init,
+				ModelValueInstantiator<? extends ObservableAction> before, ModelValueInstantiator<SettableValue<Boolean>> while1,
+				ModelValueInstantiator<? extends ObservableAction> beforeBody,
+				List<? extends ModelValueInstantiator<? extends ObservableAction>> body,
+					ModelValueInstantiator<? extends ObservableAction> afterBody, ModelValueInstantiator<? extends ObservableAction> finally1) {
 				theLocalModels = localModels;
 				theInit = init;
 				theBefore = before;
@@ -2322,49 +2311,49 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
-			public ObservableAction<?> get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
+			public ObservableAction get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
 				models = theLocalModels.wrap(models);
-				ObservableAction<?> init = theInit == null ? null : theInit.get(models);
-				ObservableAction<?> before = theBefore == null ? null : theBefore.get(models);
+				ObservableAction init = theInit == null ? null : theInit.get(models);
+				ObservableAction before = theBefore == null ? null : theBefore.get(models);
 				SettableValue<Boolean> condition = theWhile.get(models);
-				ObservableAction<?> beforeBody = theBeforeBody == null ? null : theBeforeBody.get(models);
-				List<ObservableAction<?>> body = new ArrayList<>(theBody.size());
-				for (ModelValueInstantiator<? extends ObservableAction<?>> b : theBody)
+				ObservableAction beforeBody = theBeforeBody == null ? null : theBeforeBody.get(models);
+				List<ObservableAction> body = new ArrayList<>(theBody.size());
+				for (ModelValueInstantiator<? extends ObservableAction> b : theBody)
 					body.add(b.get(models));
-				ObservableAction<?> afterBody = theAfterBody == null ? null : theAfterBody.get(models);
-				ObservableAction<?> last = theFinally == null ? null : theFinally.get(models);
+				ObservableAction afterBody = theAfterBody == null ? null : theAfterBody.get(models);
+				ObservableAction last = theFinally == null ? null : theFinally.get(models);
 				return new LoopAction(init, before, condition, beforeBody, Collections.unmodifiableList(body), afterBody, last);
 			}
 
 			@Override
-			public ObservableAction<?> forModelCopy(ObservableAction<?> value, ModelSetInstance sourceModels, ModelSetInstance newModels)
+			public ObservableAction forModelCopy(ObservableAction value, ModelSetInstance sourceModels, ModelSetInstance newModels)
 				throws ModelInstantiationException {
 				LoopAction loop = (LoopAction) value;
-				ObservableAction<Object> initS = (ObservableAction<Object>) loop.getInit();
-				ObservableAction<Object> initA = theInit == null ? null
-					: ((ModelValueInstantiator<ObservableAction<Object>>) theInit).forModelCopy(initS, sourceModels, newModels);
-				ObservableAction<Object> beforeS = (ObservableAction<Object>) loop.getBeforeCondition();
-				ObservableAction<Object> beforeA = theBefore == null ? null
-					: ((ModelValueInstantiator<ObservableAction<Object>>) theBefore).forModelCopy(beforeS, sourceModels, newModels);
+				ObservableAction initS = loop.getInit();
+				ObservableAction initA = theInit == null ? null
+					: ((ModelValueInstantiator<ObservableAction>) theInit).forModelCopy(initS, sourceModels, newModels);
+				ObservableAction beforeS = loop.getBeforeCondition();
+				ObservableAction beforeA = theBefore == null ? null
+					: ((ModelValueInstantiator<ObservableAction>) theBefore).forModelCopy(beforeS, sourceModels, newModels);
 				SettableValue<Boolean> whileS = (SettableValue<Boolean>) loop.getCondition();
 				SettableValue<Boolean> whileA = theWhile.forModelCopy(whileS, sourceModels, newModels);
-				ObservableAction<Object> beforeBodyS = (ObservableAction<Object>) loop.getBeforeBody();
-				ObservableAction<Object> beforeBodyA = theBeforeBody == null ? null
-					: ((ModelValueInstantiator<ObservableAction<Object>>) theBeforeBody).forModelCopy(beforeBodyS, sourceModels, newModels);
+				ObservableAction beforeBodyS = loop.getBeforeBody();
+				ObservableAction beforeBodyA = theBeforeBody == null ? null
+					: ((ModelValueInstantiator<ObservableAction>) theBeforeBody).forModelCopy(beforeBodyS, sourceModels, newModels);
 				boolean different = initS != initA || beforeS != beforeA || whileS != whileA || beforeBodyS != beforeBodyA;
-				List<ObservableAction<?>> execAs = new ArrayList<>(theBody.size());
+				List<ObservableAction> execAs = new ArrayList<>(theBody.size());
 				for (int i = 0; i < theBody.size(); i++) {
-					ObservableAction<?> bodyS = loop.getBody().get(i);
-					ObservableAction<?> bodyA = ((ModelValueInstantiator<ObservableAction<?>>) theBody.get(i)).forModelCopy(bodyS,
-						sourceModels, newModels);
+					ObservableAction bodyS = loop.getBody().get(i);
+					ObservableAction bodyA = ((ModelValueInstantiator<ObservableAction>) theBody.get(i)).forModelCopy(bodyS, sourceModels,
+						newModels);
 					different |= bodyS != bodyA;
 				}
-				ObservableAction<Object> afterBodyS = (ObservableAction<Object>) loop.getAfterBody();
-				ObservableAction<Object> afterBodyA = theAfterBody == null ? null
-					: ((ModelValueInstantiator<ObservableAction<Object>>) theAfterBody).forModelCopy(afterBodyS, sourceModels, newModels);
-				ObservableAction<Object> finallyS = (ObservableAction<Object>) loop.getFinally();
-				ObservableAction<Object> finallyA = theFinally == null ? null
-					: ((ModelValueInstantiator<ObservableAction<Object>>) theFinally).forModelCopy(finallyS, sourceModels, newModels);
+				ObservableAction afterBodyS = loop.getAfterBody();
+				ObservableAction afterBodyA = theAfterBody == null ? null
+					: ((ModelValueInstantiator<ObservableAction>) theAfterBody).forModelCopy(afterBodyS, sourceModels, newModels);
+				ObservableAction finallyS = loop.getFinally();
+				ObservableAction finallyA = theFinally == null ? null
+					: ((ModelValueInstantiator<ObservableAction>) theFinally).forModelCopy(finallyS, sourceModels, newModels);
 				different |= afterBodyS != afterBodyA || finallyS != finallyA;
 				if (different)
 					return new LoopAction(initA, beforeA, whileA, beforeBodyA, execAs, afterBodyA, finallyA);
@@ -2373,18 +2362,17 @@ public class ExpressoQonfigValues {
 			}
 		}
 
-		static class LoopAction implements ObservableAction<Object> {
-			private final ObservableAction<?> theInit;
-			private final ObservableAction<?> theBeforeCondition;
+		static class LoopAction implements ObservableAction {
+			private final ObservableAction theInit;
+			private final ObservableAction theBeforeCondition;
 			private final ObservableValue<Boolean> theCondition;
-			private final ObservableAction<?> theBeforeBody;
-			private final List<ObservableAction<?>> theBody;
-			private final ObservableAction<?> theAfterBody;
-			private final ObservableAction<?> theFinally;
+			private final ObservableAction theBeforeBody;
+			private final List<ObservableAction> theBody;
+			private final ObservableAction theAfterBody;
+			private final ObservableAction theFinally;
 
-			public LoopAction(ObservableAction<?> init, ObservableAction<?> before, ObservableValue<Boolean> condition,
-				ObservableAction<?> beforeBody, List<ObservableAction<?>> body, ObservableAction<?> afterBody,
-				ObservableAction<?> finallly) {
+			public LoopAction(ObservableAction init, ObservableAction before, ObservableValue<Boolean> condition,
+				ObservableAction beforeBody, List<ObservableAction> body, ObservableAction afterBody, ObservableAction finallly) {
 				theInit = init;
 				theBeforeCondition = before;
 				theCondition = condition;
@@ -2394,11 +2382,11 @@ public class ExpressoQonfigValues {
 				theFinally = finallly;
 			}
 
-			public ObservableAction<?> getInit() {
+			public ObservableAction getInit() {
 				return theInit;
 			}
 
-			public ObservableAction<?> getBeforeCondition() {
+			public ObservableAction getBeforeCondition() {
 				return theBeforeCondition;
 			}
 
@@ -2406,26 +2394,20 @@ public class ExpressoQonfigValues {
 				return theCondition;
 			}
 
-			public ObservableAction<?> getBeforeBody() {
+			public ObservableAction getBeforeBody() {
 				return theBeforeBody;
 			}
 
-			public List<ObservableAction<?>> getBody() {
+			public List<ObservableAction> getBody() {
 				return theBody;
 			}
 
-			public ObservableAction<?> getAfterBody() {
+			public ObservableAction getAfterBody() {
 				return theAfterBody;
 			}
 
-			public ObservableAction<?> getFinally() {
+			public ObservableAction getFinally() {
 				return theFinally;
-			}
-
-			@Override
-			public TypeToken<Object> getType() {
-				return (TypeToken<Object>) (TypeToken<?>) (theBody.isEmpty() ? TypeTokens.get().VOID
-					: theBody.get(theBody.size() - 1).getType());
 			}
 
 			@Override
@@ -2435,13 +2417,12 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
-			public Object act(Object cause) throws IllegalStateException {
+			public void act(Object cause) throws IllegalStateException {
 				try (Causable.CausableInUse cause2 = Causable.cause(cause)) {
 					if (theInit != null)
 						theInit.act(cause2);
 
 					try {
-						Object result = null;
 						// Prevent infinite loops. This structure isn't terribly efficient, so I think this should be sufficient.
 						int count = 0;
 						while (count < 1_000_000) {
@@ -2451,12 +2432,11 @@ public class ExpressoQonfigValues {
 								break;
 							if (theBeforeBody != null)
 								theBeforeBody.act(cause2);
-							for (ObservableAction<?> body : theBody)
-								result = body.act(cause2);
+							for (ObservableAction body : theBody)
+								body.act(cause2);
 							if (theAfterBody != null)
 								theAfterBody.act(cause2);
 						}
-						return result;
 					} finally {
 						if (theFinally != null)
 							theFinally.act(cause2);

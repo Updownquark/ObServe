@@ -9,7 +9,7 @@ import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.function.IntPredicate;
 
-import org.observe.expresso.ExpressoEvaluationException;
+import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.util.TypeTokens;
 import org.qommons.BiTuple;
 import org.qommons.ClassMap;
@@ -17,6 +17,8 @@ import org.qommons.ClassMap.TypeMatch;
 import org.qommons.SelfDescribed;
 import org.qommons.StringUtils;
 import org.qommons.TriFunction;
+import org.qommons.ex.ExceptionHandler;
+import org.qommons.io.LocatedFilePosition;
 
 import com.google.common.reflect.TypeToken;
 
@@ -36,13 +38,13 @@ public class BinaryOperatorSet {
 		/**
 		 * @param leftOpType The type of the left operand
 		 * @param rightOpType The type of the right operand
-		 * @param offset The offset of the operator in the expression
+		 * @param position The position of the operator in the file
 		 * @param length The length of the expression
 		 * @return The type of output produced by this operator for the given operand types
-		 * @throws ExpressoEvaluationException If this operation cannot be used for the combination of the given operand types
+		 * @throws EX If this operation cannot be used for the combination of the given operand types
 		 */
-		TypeToken<V> getTargetType(TypeToken<? extends S> leftOpType, TypeToken<? extends T> rightOpType, int offset, int length)
-			throws ExpressoEvaluationException;
+		<EX extends Throwable> TypeToken<V> getTargetType(TypeToken<? extends S> leftOpType, TypeToken<? extends T> rightOpType,
+			LocatedFilePosition position, int length, ExceptionHandler.Single<ExpressoInterpretationException, EX> exHandler) throws EX;
 
 		/**
 		 * Performs the operation
@@ -117,8 +119,9 @@ public class BinaryOperatorSet {
 				}
 
 				@Override
-				public TypeToken<V> getTargetType(TypeToken<? extends S> leftOpType, TypeToken<? extends T> rightOpType, int offset,
-					int length) {
+				public <EX extends Throwable> TypeToken<V> getTargetType(TypeToken<? extends S> leftOpType,
+					TypeToken<? extends T> rightOpType, LocatedFilePosition position, int length,
+					ExceptionHandler.Single<ExpressoInterpretationException, EX> exHandler) {
 					return type;
 				}
 
@@ -202,8 +205,9 @@ public class BinaryOperatorSet {
 				}
 
 				@Override
-				public TypeToken<T> getTargetType(TypeToken<? extends T> leftOpType, TypeToken<? extends T> rightOpType, int offset,
-					int length) {
+				public <EX extends Throwable> TypeToken<T> getTargetType(TypeToken<? extends T> leftOpType,
+					TypeToken<? extends T> rightOpType, LocatedFilePosition position, int length,
+					ExceptionHandler.Single<ExpressoInterpretationException, EX> exHandler) {
 					return type;
 				}
 
@@ -357,9 +361,10 @@ public class BinaryOperatorSet {
 				}
 
 				@Override
-				public TypeToken<V> getTargetType(TypeToken<? extends S> leftOpType, TypeToken<? extends T> rightOpType, int offset,
-					int length) throws ExpressoEvaluationException {
-					return op.getTargetType(getType(leftOpType), rightOpType, offset, length);
+				public <EX extends Throwable> TypeToken<V> getTargetType(TypeToken<? extends S> leftOpType,
+					TypeToken<? extends T> rightOpType, LocatedFilePosition position, int length,
+					ExceptionHandler.Single<ExpressoInterpretationException, EX> exHandler) throws EX {
+					return op.getTargetType(getType(leftOpType), rightOpType, position, length, exHandler);
 				}
 
 				@Override
@@ -403,9 +408,10 @@ public class BinaryOperatorSet {
 				}
 
 				@Override
-				public TypeToken<V> getTargetType(TypeToken<? extends T> leftOpType, TypeToken<? extends S> rightOpType, int offset,
-					int length) throws ExpressoEvaluationException {
-					return op.getTargetType(leftOpType, getType(rightOpType), offset, length);
+				public <EX extends Throwable> TypeToken<V> getTargetType(TypeToken<? extends T> leftOpType,
+					TypeToken<? extends S> rightOpType, LocatedFilePosition position, int length,
+					ExceptionHandler.Single<ExpressoInterpretationException, EX> exHandler) throws EX {
+					return op.getTargetType(leftOpType, getType(rightOpType), position, length, exHandler);
 				}
 
 				@Override
@@ -448,9 +454,10 @@ public class BinaryOperatorSet {
 				}
 
 				@Override
-				public TypeToken<V> getTargetType(TypeToken<? extends S> leftOpType, TypeToken<? extends T> rightOpType, int offset,
-					int length) throws ExpressoEvaluationException {
-					return op.getTargetType(sourceCast.getType(leftOpType), otherCast.getType(rightOpType), offset, length);
+				public <EX extends Throwable> TypeToken<V> getTargetType(TypeToken<? extends S> leftOpType,
+					TypeToken<? extends T> rightOpType, LocatedFilePosition position, int length,
+					ExceptionHandler.Single<ExpressoInterpretationException, EX> exHandler) throws EX {
+					return op.getTargetType(sourceCast.getType(leftOpType), otherCast.getType(rightOpType), position, length, exHandler);
 				}
 
 				@Override
@@ -978,12 +985,16 @@ public class BinaryOperatorSet {
 			}
 
 			@Override
-			public TypeToken<Boolean> getTargetType(TypeToken<? extends Comparable<?>> leftOpType,
-				TypeToken<? extends Comparable<?>> rightOpType, int offset, int length) throws ExpressoEvaluationException {
+			public <EX extends Throwable> TypeToken<Boolean> getTargetType(TypeToken<? extends Comparable<?>> leftOpType,
+				TypeToken<? extends Comparable<?>> rightOpType, LocatedFilePosition position, int length,
+					ExceptionHandler.Single<ExpressoInterpretationException, EX> exHandler) throws EX {
 				TypeToken<?> leftTarget = leftOpType.resolveType(Comparable.class.getTypeParameters()[0]);
-				if (!TypeTokens.get().isAssignable(leftTarget, rightOpType))
-					throw new ExpressoEvaluationException(offset, length,
-						"Comparable comparison cannot be used for incompatible types " + leftTarget + " and " + rightOpType);
+				if (!TypeTokens.get().isAssignable(leftTarget, rightOpType)) {
+					exHandler.handle1(new ExpressoInterpretationException(
+						"Comparable comparison cannot be used for incompatible types " + leftTarget + " and " + rightOpType, position,
+						length));
+					return null;
+				}
 				return TypeTokens.get().BOOLEAN;
 			}
 

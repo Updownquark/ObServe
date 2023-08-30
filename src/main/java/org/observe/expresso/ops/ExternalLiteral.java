@@ -8,7 +8,7 @@ import java.util.function.Function;
 
 import org.observe.SettableValue;
 import org.observe.expresso.CompiledExpressoEnv;
-import org.observe.expresso.ExpressoEvaluationException;
+import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelType;
 import org.observe.expresso.ModelType.ModelInstanceType;
@@ -16,7 +16,6 @@ import org.observe.expresso.ModelTypes;
 import org.observe.expresso.NonStructuredParser;
 import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
-import org.observe.expresso.TypeConversionException;
 import org.observe.util.TypeTokens;
 import org.qommons.ex.ExceptionHandler;
 
@@ -65,28 +64,27 @@ public class ExternalLiteral implements ObservableExpression {
 	}
 
 	@Override
-	public <M, MV extends M, TX extends Throwable> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type,
-		InterpretedExpressoEnv env, int expressionOffset, ExceptionHandler.Single<TypeConversionException, TX> exHandler)
-			throws ExpressoEvaluationException, TX {
+	public <M, MV extends M, EX extends Throwable> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type,
+		InterpretedExpressoEnv env, int expressionOffset, ExceptionHandler.Single<ExpressoInterpretationException, EX> exHandler)
+		throws ExpressoInterpretationException, EX {
 		if (type.getModelType() != ModelTypes.Value) {
-			exHandler.handle1(
-				new TypeConversionException("'" + theText + "' cannot be evaluated as a " + type, type, env.reporting().getPosition()));
-			return null;
+			throw new ExpressoInterpretationException("'" + theText + "' cannot be evaluated as a " + type, env.reporting().getPosition(),
+				getExpressionLength());
 		}
 		NonStructuredParser[] parser = new NonStructuredParser[1];
 		InterpretedValueSynth<SettableValue<?>, ?> value = _parseValue(type.getType(0), env, expressionOffset, parser, exHandler);
 		return (EvaluatedExpression<M, MV>) ObservableExpression.evEx(expressionOffset, getExpressionLength(), value, parser[0]);
 	}
 
-	private <T, TX extends Throwable> InterpretedValueSynth<SettableValue<?>, ? extends SettableValue<? extends T>> _parseValue(
+	private <T, EX extends Throwable> InterpretedValueSynth<SettableValue<?>, ? extends SettableValue<? extends T>> _parseValue(
 		TypeToken<T> asType, InterpretedExpressoEnv env, int expressionOffset, NonStructuredParser[] parserUsed,
-		ExceptionHandler.Single<TypeConversionException, TX> exHandler) throws ExpressoEvaluationException, TX {
+		ExceptionHandler.Single<ExpressoInterpretationException, EX> exHandler) throws EX {
 		// Get all parsers that may possibly be able to generate an appropriate value
 		Class<T> rawType = TypeTokens.getRawType(asType);
 		Set<NonStructuredParser> parsers = env.getNonStructuredParsers(rawType);
 		if (parsers.isEmpty()) {
-			exHandler.handle1(new TypeConversionException("No literal parsers available for type " + rawType.getName(),
-				ModelTypes.Value.forType(asType), env.reporting().getPosition()));
+			exHandler.handle1(new ExpressoInterpretationException("No literal parsers available for type " + rawType.getName(),
+				env.reporting().getPosition(), getExpressionLength()));
 			return null;
 		}
 		NonStructuredParser parser = null;
@@ -96,20 +94,21 @@ public class ExternalLiteral implements ObservableExpression {
 				break;
 			}
 		}
-		if (parser == null)
-			throw new ExpressoEvaluationException(expressionOffset + 1, theText.length(),
-				"No literal parsers for value `" + theText + "` as type " + rawType.getName());
+		if (parser == null) {
+			exHandler
+			.handle1(new ExpressoInterpretationException("No literal parsers for value `" + theText + "` as type " + rawType.getName(),
+				env.reporting().getPosition(), getExpressionLength()));
+			return null;
+		}
 		parserUsed[0] = parser;
 		InterpretedValueSynth<SettableValue<?>, ? extends SettableValue<? extends T>> value;
 		try {
 			value = parser.parse(asType, theText);
 		} catch (ParseException e) {
-			if (e.getErrorOffset() == 0)
-				throw new ExpressoEvaluationException(expressionOffset + 1, getExpressionLength(),
-					"Literal parsing failed for value `" + theText + "` as type " + rawType.getName(), e);
-			else
-				throw new ExpressoEvaluationException(expressionOffset + 1 + e.getErrorOffset(), 0,
-					"Literal parsing failed for value `" + theText + "` as type " + rawType.getName(), e);
+			exHandler.handle1(
+				new ExpressoInterpretationException("Literal parsing failed for value `" + theText + "` as type " + rawType.getName(),
+					env.reporting().at(e.getErrorOffset()).getPosition(), e.getErrorOffset() == 0 ? getExpressionLength() : 0, e));
+			return null;
 		}
 		return value;
 	}

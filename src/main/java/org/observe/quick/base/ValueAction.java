@@ -134,7 +134,7 @@ public interface ValueAction<T> extends ExElement {
 
 		InterpretedValueSynth<SettableValue<?>, SettableValue<String>> getTooltip();
 
-		InterpretedValueSynth<ObservableAction<?>, ObservableAction<?>> getAction();
+		InterpretedValueSynth<ObservableAction, ObservableAction> getAction();
 
 		void updateAction(InterpretedExpressoEnv env) throws ExpressoInterpretationException;
 
@@ -146,7 +146,7 @@ public interface ValueAction<T> extends ExElement {
 			InterpretedValueSynth<SettableValue<?>, SettableValue<Icon>> theIcon;
 			InterpretedValueSynth<SettableValue<?>, SettableValue<String>> isEnabled;
 			InterpretedValueSynth<SettableValue<?>, SettableValue<String>> theTooltip;
-			InterpretedValueSynth<ObservableAction<?>, ObservableAction<?>> theAction;
+			InterpretedValueSynth<ObservableAction, ObservableAction> theAction;
 
 			protected Abstract(Def<? super T, ? super A> definition, ExElement.Interpreted<?> parent, TypeToken<T> valueType) {
 				super(definition, parent);
@@ -184,7 +184,7 @@ public interface ValueAction<T> extends ExElement {
 			}
 
 			@Override
-			public InterpretedValueSynth<ObservableAction<?>, ObservableAction<?>> getAction() {
+			public InterpretedValueSynth<ObservableAction, ObservableAction> getAction() {
 				return theAction;
 			}
 
@@ -204,7 +204,7 @@ public interface ValueAction<T> extends ExElement {
 					: getDefinition().isEnabled().interpret(ModelTypes.Value.STRING, getExpressoEnv());
 				theTooltip = getDefinition().getTooltip() == null ? null
 					: getDefinition().getTooltip().interpret(ModelTypes.Value.STRING, getExpressoEnv());
-				theAction = getDefinition().getAction().interpret(ModelTypes.Action.any(), getExpressoEnv());
+				theAction = getDefinition().getAction().interpret(ModelTypes.Action.instance(), getExpressoEnv());
 			}
 		}
 	}
@@ -221,7 +221,7 @@ public interface ValueAction<T> extends ExElement {
 
 	SettableValue<String> getTooltip();
 
-	ObservableAction<?> getAction();
+	ObservableAction getAction();
 
 	@Override
 	ValueAction<T> copy(ExElement parent);
@@ -232,14 +232,14 @@ public interface ValueAction<T> extends ExElement {
 		private ModelValueInstantiator<SettableValue<Icon>> theIconInstantiator;
 		private ModelValueInstantiator<SettableValue<String>> theEnabledInstantiator;
 		private ModelValueInstantiator<SettableValue<String>> theTooltipInstantiator;
-		private ModelValueInstantiator<ObservableAction<?>> theActionInstantiator;
+		private ModelValueInstantiator<ObservableAction> theActionInstantiator;
 		private SettableValue<SettableValue<String>> theName;
 		private boolean isButton;
 		private boolean isPopup;
 		private SettableValue<SettableValue<Icon>> theIcon;
 		private SettableValue<SettableValue<String>> isEnabled;
 		private SettableValue<SettableValue<String>> theTooltip;
-		private ObservableAction<?> theAction;
+		private ObservableAction theAction;
 
 		protected Abstract(Object id) {
 			super(id);
@@ -286,7 +286,7 @@ public interface ValueAction<T> extends ExElement {
 		}
 
 		@Override
-		public ObservableAction<?> getAction() {
+		public ObservableAction getAction() {
 			return theAction.disableWith(isEnabled());
 		}
 

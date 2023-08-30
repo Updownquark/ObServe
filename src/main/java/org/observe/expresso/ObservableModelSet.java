@@ -29,7 +29,6 @@ import org.qommons.ex.ExBiFunction;
 import org.qommons.ex.ExConsumer;
 import org.qommons.ex.ExFunction;
 import org.qommons.ex.ExceptionHandler;
-import org.qommons.io.FilePosition;
 import org.qommons.io.LocatedFilePosition;
 
 import com.google.common.reflect.TypeToken;
@@ -204,8 +203,8 @@ public interface ObservableModelSet extends Identifiable {
 		 * @throws TX If the conversion could not be made
 		 */
 		default <M2, MV2 extends M2, TX extends Throwable> InterpretedValueSynth<M2, MV2> as(ModelInstanceType<M2, MV2> type,
-			InterpretedExpressoEnv env, ExceptionHandler.Single<TypeConversionException, TX> exHandler, FilePosition position) throws TX {
-			return getType().as(this, type, env, exHandler, position);
+			InterpretedExpressoEnv env, ExceptionHandler.Single<TypeConversionException, TX> exHandler) throws TX {
+			return getType().as(this, type, env, exHandler);
 		}
 
 		/**
@@ -256,9 +255,8 @@ public interface ObservableModelSet extends Identifiable {
 
 			@Override
 			public <M3, MV3 extends M3, TX extends Throwable> InterpretedValueSynth<M3, MV3> as(ModelInstanceType<M3, MV3> type,
-				InterpretedExpressoEnv env, ExceptionHandler.Single<TypeConversionException, TX> exHandler, FilePosition position)
-				throws TX {
-				return InterpretedValueSynth.super.as(type, env, exHandler, position);
+				InterpretedExpressoEnv env, ExceptionHandler.Single<TypeConversionException, TX> exHandler) throws TX {
+				return InterpretedValueSynth.super.as(type, env, exHandler);
 			}
 
 			@Override
@@ -296,8 +294,8 @@ public interface ObservableModelSet extends Identifiable {
 		 * @param components The components of the model value
 		 * @return A value container with the given type, implemented by the given function
 		 */
-		static <M, MV extends M> InterpretedValueSynth<M, MV> of(ModelInstanceType<M, MV> type,
-			Supplier<ModelValueInstantiator<MV>> value, InterpretedValueSynth<?, ?>... components) {
+		static <M, MV extends M> InterpretedValueSynth<M, MV> of(ModelInstanceType<M, MV> type, Supplier<ModelValueInstantiator<MV>> value,
+			InterpretedValueSynth<?, ?>... components) {
 			class SimpleVC implements InterpretedValueSynth<M, MV> {
 				@Override
 				public ModelType<M> getModelType() {
@@ -1438,7 +1436,7 @@ public interface ObservableModelSet extends Identifiable {
 			InterpretedModelComponentNode<?, ?> node = getComponent(path).interpreted();
 			if (node.getModel() != null)
 				throw new ModelException("'" + path + "' is a sub-model, not a value");
-			return node.as(type, env, ExceptionHandler.get1(), node.getSourceLocation());
+			return node.as(type, env, ExceptionHandler.thrower());
 		}
 
 		/**
@@ -1457,7 +1455,7 @@ public interface ObservableModelSet extends Identifiable {
 			InterpretedModelComponentNode<?, ?> node = getComponent(componentId).interpreted();
 			if (node.getModel() != null)
 				throw new ModelException("'" + componentId + "' is a sub-model, not a value");
-			return node.as(type, env, ExceptionHandler.get1(), node.getSourceLocation());
+			return node.as(type, env, ExceptionHandler.thrower());
 		}
 
 		@Override
@@ -1671,7 +1669,7 @@ public interface ObservableModelSet extends Identifiable {
 				throw new ModelException("No such " + type + " declared: '" + pathTo(path) + "'");
 			ModelType.ModelInstanceConverter<Object, M> converter = ((ModelInstanceType<Object, Object>) thing.type).convert(type, env);
 			if (converter == null)
-				throw new TypeConversionException(path, thing.type, type, env.reporting().getPosition());
+				throw new TypeConversionException(path, thing.type, type);
 			return (MV) converter.convert(thing.thing);
 		}
 
@@ -2889,9 +2887,8 @@ public interface ObservableModelSet extends Identifiable {
 					for (ModelComponentId inh : theMSI.getModel().getInheritance())
 						theInheritance.put(inh, other);
 				} else if (!theMSI.getModel().getInheritance().contains(other.getModel().getIdentity().getRootId())) {
-					throw new IllegalArgumentException(
-						"Model " + other.getModel().getIdentity() + " is not related to this model (" + theMSI.getModel().getIdentity()
-						+ ")");
+					throw new IllegalArgumentException("Model " + other.getModel().getIdentity() + " is not related to this model ("
+						+ theMSI.getModel().getIdentity() + ")");
 				}
 				theInheritance.put(other.getModel().getIdentity().getRootId(), other);
 				for (ModelComponentId modelId : other.getModel().getInheritance())
@@ -2945,8 +2942,8 @@ public interface ObservableModelSet extends Identifiable {
 			private ModelSetInstance theSourceModel;
 			private Set<ModelComponentId> theCircularityDetector;
 
-			protected DefaultMSI(ModelInstantiatorImpl instantiator, ModelSetInstance sourceModel,
-				Observable<?> until, Map<ModelComponentId, Object> components, Map<ModelComponentId, ModelSetInstance> inheritance) {
+			protected DefaultMSI(ModelInstantiatorImpl instantiator, ModelSetInstance sourceModel, Observable<?> until,
+				Map<ModelComponentId, Object> components, Map<ModelComponentId, ModelSetInstance> inheritance) {
 				theModelInstantiator = instantiator;
 				theComponents = components;
 				theInheritance = inheritance;

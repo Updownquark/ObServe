@@ -27,11 +27,8 @@ import org.observe.ObservableAction;
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.Subscription;
-import org.observe.util.TypeTokens;
 import org.qommons.ThreadConstraint;
 import org.qommons.threading.QommonsTimer;
-
-import com.google.common.reflect.TypeToken;
 
 /** A file button that, when clicked, displays a file chooser to allow the user to select a file for a {@link SettableValue} */
 public class ObservableFileButton extends JButton {
@@ -242,16 +239,10 @@ public class ObservableFileButton extends JButton {
 			return theActions.get("Clear");
 		isClearable = clearable;
 		if (clearable) {
-			return withAction("Clear", new ObservableAction<Void>() {
+			return withAction("Clear", new ObservableAction() {
 				@Override
-				public TypeToken<Void> getType() {
-					return TypeTokens.get().VOID;
-				}
-
-				@Override
-				public Void act(Object cause) throws IllegalStateException {
+				public void act(Object cause) throws IllegalStateException {
 					theValue.set(null, cause);
-					return null;
 				}
 
 				@Override
@@ -268,7 +259,7 @@ public class ObservableFileButton extends JButton {
 	 * @param action The action to perform when the user clicks it, or null to get the current action with the given name
 	 * @return The FileAction for the action
 	 */
-	public FileAction withAction(String actionText, ObservableAction<?> action) {
+	public FileAction withAction(String actionText, ObservableAction action) {
 		FileAction fileAction = theActions.get(actionText);
 		if (fileAction != null) {
 			if (action != null && fileAction.theAction != action)
@@ -406,13 +397,13 @@ public class ObservableFileButton extends JButton {
 	/** Represents a right-click menu action on an {@link ObservableFileButton} */
 	public class FileAction {
 		String theName;
-		final ObservableAction<?> theAction;
+		final ObservableAction theAction;
 		final JMenuItem theMenuItem;
 		private String theActionTooltip;
 
 		private Subscription theEnablementSub;
 
-		FileAction(String name, ObservableAction<?> action, JMenuItem menuItem) {
+		FileAction(String name, ObservableAction action, JMenuItem menuItem) {
 			theName = name;
 			theAction = action;
 			theMenuItem = menuItem;

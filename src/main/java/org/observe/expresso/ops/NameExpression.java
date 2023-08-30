@@ -11,14 +11,23 @@ import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.SettableValue;
 import org.observe.SimpleObservable;
-import org.observe.expresso.*;
+import org.observe.expresso.CompiledExpressoEnv;
+import org.observe.expresso.ExpressoCompilationException;
+import org.observe.expresso.ExpressoInterpretationException;
+import org.observe.expresso.InterpretedExpressoEnv;
+import org.observe.expresso.ModelInstantiationException;
+import org.observe.expresso.ModelType;
 import org.observe.expresso.ModelType.ModelInstanceType;
+import org.observe.expresso.ModelTypes;
+import org.observe.expresso.ObservableExpression;
+import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretableModelComponentNode;
 import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelComponentNode;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
+import org.observe.expresso.TypeConversionException;
 import org.observe.util.TypeTokens;
 import org.qommons.Identifiable;
 import org.qommons.LambdaUtils;
@@ -28,6 +37,7 @@ import org.qommons.StringUtils;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterList;
 import org.qommons.ex.ExceptionHandler;
+import org.qommons.ex.NeverThrown;
 import org.qommons.io.ErrorReporting;
 
 import com.google.common.reflect.TypeToken;
@@ -140,14 +150,20 @@ public class NameExpression implements ObservableExpression, Named {
 	}
 
 	@Override
-	public <M, MV extends M, TX extends Throwable> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type,
-		InterpretedExpressoEnv env, int expressionOffset, ExceptionHandler.Single<TypeConversionException, TX> exHandler)
-			throws ExpressoEvaluationException, ExpressoInterpretationException, TX {
+	public <M, MV extends M, EX extends Throwable> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type,
+		InterpretedExpressoEnv env, int expressionOffset, ExceptionHandler.Single<ExpressoInterpretationException, EX> exHandler)
+			throws ExpressoInterpretationException, EX {
 		EvaluatedExpression<?, ?>[] divisions = new EvaluatedExpression[theNames.size()];
 		InterpretedValueSynth<?, ?> mv = null;
 		if (theContext != null) {
-			mv = theContext.evaluate(ModelTypes.Value.any(), env, expressionOffset, exHandler);
-			if (mv == null)
+			ExceptionHandler.Double<ExpressoInterpretationException, TypeConversionException, EX, NeverThrown> doubleX = exHandler
+				.stack(ExceptionHandler.holder());
+			mv = theContext.evaluate(ModelTypes.Value.any(), env, expressionOffset, doubleX);
+			if (doubleX.get2() != null) {
+				exHandler.handle1(new ExpressoInterpretationException(doubleX.get2().getMessage(), env.reporting().getPosition(),
+					theContext.getExpressionLength(), doubleX.get2()));
+				return null;
+			} else if (mv == null)
 				return null;
 			return evaluateModel(//
 				mv, 0, new StringBuilder(), type, env.getModels(), expressionOffset + theContext.getExpressionLength() + 1,
@@ -183,20 +199,21 @@ public class NameExpression implements ObservableExpression, Named {
 				typeName.append('.').append(theNames.get(i).getName());
 				clazz = env.getClassView().getType(typeName.toString());
 			}
-			if (clazz == null)
-				throw new ExpressoEvaluationException(expressionOffset + getDivisionOffset(0),
-					expressionOffset + getDivisionOffset(0) + theNames.get(0).length(), //
-					"'" + theNames.get(0) + "' cannot be resolved to a variable");
+			if (clazz == null) {
+				exHandler.handle1(new ExpressoInterpretationException("'" + theNames.get(0) + "' cannot be resolved to a variable",
+					env.reporting().at(getDivisionOffset(i)).getPosition(), theNames.get(0).length()));
+				return null;
+			}
 			try {
 				field = clazz.getField(theNames.get(i).getName());
 			} catch (NoSuchFieldException e) {
-				throw new ExpressoEvaluationException(expressionOffset + getDivisionOffset(i),
-					expressionOffset + getDivisionOffset(i) + theNames.get(0).length(), //
-					"'" + theNames.get(i) + "' cannot be resolved or is not a field");
+				exHandler.handle1(new ExpressoInterpretationException("'" + theNames.get(0) + "' cannot be resolved or is not a field",
+					env.reporting().at(getDivisionOffset(i)).getPosition(), theNames.get(0).length(), e));
+				return null;
 			} catch (SecurityException e) {
-				throw new ExpressoEvaluationException(expressionOffset + getDivisionOffset(i),
-					expressionOffset + getDivisionOffset(i) + theNames.get(0).length(), //
-					clazz.getName() + "." + theNames.get(i) + " cannot be accessed", e);
+				exHandler.handle1(new ExpressoInterpretationException(clazz.getName() + "." + theNames.get(i) + " cannot be accessed",
+					env.reporting().at(getDivisionOffset(i)).getPosition(), theNames.get(0).length(), e));
+				return null;
 			}
 			fieldValue = evaluateField(field, TypeTokens.get().of(field.getGenericType()), null, i, type, expressionOffset, env.reporting(),
 				divisions, env, exHandler);
@@ -209,16 +226,15 @@ public class NameExpression implements ObservableExpression, Named {
 			QommonsUtils.unmodifiableCopy(divisions));
 	}
 
-	private <M, MV extends M, TX extends Throwable> EvaluatedExpression<M, MV> evaluateModel(InterpretedValueSynth<?, ?> mv, int nameIndex,
+	private <M, MV extends M, EX extends Throwable> EvaluatedExpression<M, MV> evaluateModel(InterpretedValueSynth<?, ?> mv, int nameIndex,
 		StringBuilder path, ModelInstanceType<M, MV> type, InterpretedModelSet models, int expressionOffset, ErrorReporting reporting,
 		EvaluatedExpression<?, ?>[] divisions, EvaluatedExpression<?, ?> context, InterpretedExpressoEnv env,
-		ExceptionHandler.Single<TypeConversionException, TX> exHandler)
-			throws ExpressoEvaluationException, ExpressoInterpretationException, TX {
+		ExceptionHandler.Single<ExpressoInterpretationException, EX> exHandler) throws ExpressoInterpretationException, EX {
 		ModelType<?> mvType = mv.getModelType();
 		if (nameIndex == theNames.size()) {
 			if (mvType == ModelTypes.Model)
-				throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(),
-					this + " is a model, not a " + type.getModelType());
+				throw new ExpressoInterpretationException(this + " is a model, not a " + type.getModelType(), reporting.getPosition(),
+					theNames.getLast().length());
 			InterpretedValueSynth<M, MV> imv = (InterpretedValueSynth<M, MV>) mv;
 			if (nameIndex > 0)
 				divisions[nameIndex - 1] = ObservableExpression.evEx(expressionOffset, getExpressionLength(), imv, mv);
@@ -240,9 +256,8 @@ public class NameExpression implements ObservableExpression, Named {
 					nextMV.interpreted(), nameIndex + 1, path, type, models, expressionOffset,
 					reporting.at(theNames.get(nameIndex).length()), divisions, context, env, exHandler);
 			} else
-				throw new ExpressoEvaluationException(expressionOffset + getDivisionOffset(nameIndex),
-					getDivisionOffset(0) + theNames.get(nameIndex).length(), //
-					"'" + theNames.get(nameIndex) + "' cannot be resolved or is not a model value");
+				throw new ExpressoInterpretationException("'" + theNames.get(nameIndex) + "' cannot be resolved or is not a model value",
+					reporting.getPosition(), theNames.get(nameIndex).length());
 		} else if (mvType == ModelTypes.Value) {
 			InterpretedValueSynth<SettableValue<?>, ? extends SettableValue<?>> imv = (InterpretedValueSynth<SettableValue<?>, ? extends SettableValue<?>>) mv;
 			ModelInstanceType<SettableValue<?>, ? extends SettableValue<?>> instType = imv.getType();
@@ -253,33 +268,34 @@ public class NameExpression implements ObservableExpression, Named {
 			try {
 				field = ctxType.getField(theNames.get(nameIndex).getName());
 			} catch (NoSuchFieldException e) {
-				throw new ExpressoEvaluationException(expressionOffset + getDivisionOffset(nameIndex),
-					getDivisionOffset(0) + theNames.get(nameIndex).length(), //
-					"'" + getPath(nameIndex) + "' cannot be resolved or is not a field of " + ctxType.getName());
+				exHandler.handle1(new ExpressoInterpretationException(
+					"'" + getPath(nameIndex) + "' cannot be resolved or is not a field of " + ctxType.getName(), reporting.getPosition(),
+					theNames.get(nameIndex).length()));
+				return null;
 			} catch (SecurityException e) {
-				throw new ExpressoEvaluationException(expressionOffset + getDivisionOffset(nameIndex),
-					getDivisionOffset(0) + theNames.get(nameIndex).length(), //
-					getPath(nameIndex) + " cannot be accessed", e);
+				exHandler.handle1(new ExpressoInterpretationException(getPath(nameIndex) + " cannot be accessed", reporting.getPosition(),
+					theNames.get(nameIndex).length(), e));
+				return null;
 			}
 			return evaluateField(field, instType.getType(0).resolveType(field.getGenericType()), //
 				imv, nameIndex, type, expressionOffset, reporting.at(theNames.get(nameIndex).length() + 1), divisions, env, exHandler);
 		} else
-			throw new ExpressoEvaluationException(expressionOffset + getDivisionOffset(nameIndex + 1),
-				getDivisionOffset(0) + theNames.get(nameIndex + 1).length(), //
-				"Cannot evaluate field '" + theNames.get(nameIndex + 1) + "' against model of type " + mvType);
+			throw new ExpressoInterpretationException(
+				"Cannot evaluate field '" + theNames.get(nameIndex + 1) + "' against model of type " + mvType, reporting.getPosition(),
+				theNames.get(nameIndex + 1).length());
 	}
 
-	private <M, MV extends M, F, TX extends Throwable> EvaluatedExpression<M, MV> evaluateField(Field field, TypeToken<F> fieldType,
+	private <M, MV extends M, F, EX extends Throwable> EvaluatedExpression<M, MV> evaluateField(Field field, TypeToken<F> fieldType,
 		InterpretedValueSynth<SettableValue<?>, ? extends SettableValue<?>> context, int nameIndex, ModelInstanceType<M, MV> type,
 			int expressionOffset, ErrorReporting reporting, EvaluatedExpression<?, ?>[] divisions, InterpretedExpressoEnv env,
-			ExceptionHandler.Single<TypeConversionException, TX> exHandler) throws ExpressoEvaluationException, TX {
+			ExceptionHandler.Single<ExpressoInterpretationException, EX> exHandler) throws EX {
 		if (!field.isAccessible()) {
 			try {
 				field.setAccessible(true);
 			} catch (SecurityException e) {
-				throw new ExpressoEvaluationException(expressionOffset + getDivisionOffset(nameIndex),
-					getDivisionOffset(0) + theNames.get(nameIndex).length(), //
-					"Could not access field " + getPath(nameIndex), e);
+				exHandler.handle1(new ExpressoInterpretationException("Could not access field " + getPath(nameIndex),
+					reporting.getPosition(), theNames.get(nameIndex).length(), e));
+				return null;
 			}
 		}
 		EvaluatedExpression<SettableValue<?>, ? extends SettableValue<?>> fieldValue = getFieldValue(field, fieldType, context, nameIndex,
@@ -290,22 +306,28 @@ public class NameExpression implements ObservableExpression, Named {
 			if (type.getModelType() == ModelTypes.Value)
 				value = (EvaluatedExpression<M, MV>) fieldValue;
 			else {
+				ExceptionHandler.Single<TypeConversionException, NeverThrown> tce = ExceptionHandler.holder();
 				value = ObservableExpression.evEx2(expressionOffset, getExpressionLength(),
-					fieldValue.as(type, env, exHandler, env.reporting().getPosition()), fieldValue.getDescriptor(),
+					fieldValue.as(type, env, tce), fieldValue.getDescriptor(),
 					fieldValue.getComponents(), fieldValue.getDivisions());
+				if (tce.hasException()) {
+					exHandler.handle1(new ExpressoInterpretationException(tce.get1().getMessage(), reporting.getPosition(),
+						theNames.get(nameIndex).length(), tce.get1()));
+					return null;
+				}
 			}
 		} else {
 			Field newField;
 			try {
 				newField = TypeTokens.getRawType(fieldType).getField(theNames.get(nameIndex).getName());
 			} catch (NoSuchFieldException e) {
-				throw new ExpressoEvaluationException(expressionOffset + getDivisionOffset(nameIndex),
-					getDivisionOffset(0) + theNames.get(nameIndex).length(), //
-					getPath(nameIndex) + "' cannot be resolved or is not a field");
+				exHandler.handle1(new ExpressoInterpretationException(getPath(nameIndex) + "' cannot be resolved or is not a field",
+					reporting.getPosition(), theNames.get(nameIndex).length(), e));
+				return null;
 			} catch (SecurityException e) {
-				throw new ExpressoEvaluationException(expressionOffset + getDivisionOffset(nameIndex),
-					getDivisionOffset(0) + theNames.get(nameIndex).length(), //
-					getPath(nameIndex) + " cannot be accessed", e);
+				exHandler.handle1(new ExpressoInterpretationException(getPath(nameIndex) + " cannot be accessed", reporting.getPosition(),
+					theNames.get(nameIndex).length(), e));
+				return null;
 			}
 			value = evaluateField(newField, fieldType.resolveType(newField.getGenericType()), //
 				fieldValue, nameIndex + 1, type, expressionOffset, reporting.at(theNames.get(nameIndex).length() + 1), divisions, env,
@@ -334,7 +356,7 @@ public class NameExpression implements ObservableExpression, Named {
 
 	private <F, M> EvaluatedExpression<SettableValue<?>, SettableValue<M>> getFieldValue(Field field, TypeToken<F> fieldType,
 		InterpretedValueSynth<SettableValue<?>, ?> context, int nameIndex, int expressionOffset, ErrorReporting reporting,
-		InterpretedExpressoEnv env) throws ExpressoEvaluationException {
+		InterpretedExpressoEnv env) {
 		ModelInstanceType<SettableValue<?>, SettableValue<F>> fieldModelType = ModelTypes.Value.forType(fieldType);
 		InterpretedValueSynth<SettableValue<?>, SettableValue<F>> fieldValue = InterpretedValueSynth.of(fieldModelType,
 			() -> new FieldInstantiator<>(//

@@ -31,8 +31,8 @@ public class ObservableActionTransformations {
 	}
 
 	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE, qonfigType = "disable", interpretation = DisabledActionTransform.Interpreted.class)
-	static class DisabledActionTransform extends TypePreservingTransform<ObservableAction<?>>
-	implements ActionTransform<ObservableAction<?>, ExElement> {
+	static class DisabledActionTransform extends TypePreservingTransform<ObservableAction>
+	implements ActionTransform<ObservableAction, ExElement> {
 		private CompiledExpression theDisablement;
 		private ModelComponentId theSourceVariable;
 
@@ -46,7 +46,7 @@ public class ObservableActionTransformations {
 		}
 
 		@Override
-		public void update(ExpressoQIS session, ModelType<ObservableAction<?>> sourceModelType) throws QonfigInterpretationException {
+		public void update(ExpressoQIS session, ModelType<ObservableAction> sourceModelType) throws QonfigInterpretationException {
 			super.update(session, sourceModelType);
 			String sourceAs = session.getAttributeText("source-as");
 			ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
@@ -62,7 +62,7 @@ public class ObservableActionTransformations {
 			return new Interpreted<>(this, parent);
 		}
 
-		static class Interpreted<T> extends TypePreservingTransform.Interpreted<ObservableAction<?>, ObservableAction<T>> {
+		static class Interpreted<T> extends TypePreservingTransform.Interpreted<ObservableAction, ObservableAction> {
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<String>> theDisablement;
 
 			Interpreted(DisabledActionTransform definition, ExElement.Interpreted<?> parent) {
@@ -79,7 +79,7 @@ public class ObservableActionTransformations {
 			}
 
 			@Override
-			public void update(ModelInstanceType<ObservableAction<?>, ObservableAction<T>> sourceType, InterpretedExpressoEnv env)
+			public void update(ModelInstanceType<ObservableAction, ObservableAction> sourceType, InterpretedExpressoEnv env)
 				throws ExpressoInterpretationException {
 				super.update(sourceType, env);
 				theDisablement = ExpressoTransformations.parseFilter(getDefinition().getDisablement(), getExpressoEnv(), true);
@@ -101,7 +101,7 @@ public class ObservableActionTransformations {
 			}
 		}
 
-		static class Instantiator<T> implements Operation.EfficientCopyingInstantiator<ObservableAction<T>, ObservableAction<T>> {
+		static class Instantiator<T> implements Operation.EfficientCopyingInstantiator<ObservableAction, ObservableAction> {
 			private final ModelValueInstantiator<SettableValue<String>> theDisablement;
 
 			Instantiator(ModelValueInstantiator<SettableValue<String>> disablement) {
@@ -119,9 +119,9 @@ public class ObservableActionTransformations {
 			}
 
 			@Override
-			public ObservableAction<T> transform(ObservableAction<T> source, ModelSetInstance models) throws ModelInstantiationException {
+			public ObservableAction transform(ObservableAction source, ModelSetInstance models) throws ModelInstantiationException {
 				SettableValue<String> disabled = theDisablement.get(models);
-				return new DisabledAction<>(source, disabled);
+				return new DisabledAction(source, disabled);
 			}
 
 			@Override
@@ -131,30 +131,30 @@ public class ObservableActionTransformations {
 			}
 
 			@Override
-			public ObservableAction<T> getSource(ObservableAction<T> value) {
-				return ((DisabledAction<T>) value).getParentAction();
+			public ObservableAction getSource(ObservableAction value) {
+				return ((DisabledAction) value).getParentAction();
 			}
 
 			@Override
-			public ObservableAction<T> forModelCopy(ObservableAction<T> prevValue, ObservableAction<T> newSource,
-				ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException {
-				DisabledAction<T> disabled = (DisabledAction<T>) prevValue;
+			public ObservableAction forModelCopy(ObservableAction prevValue, ObservableAction newSource, ModelSetInstance sourceModels,
+				ModelSetInstance newModels) throws ModelInstantiationException {
+				DisabledAction disabled = (DisabledAction) prevValue;
 				SettableValue<String> newDisablement = theDisablement.forModelCopy((SettableValue<String>) disabled.getDisablement(),
 					sourceModels, newModels);
 				if (newSource == disabled.getParentAction() && newDisablement == disabled.getDisablement())
 					return prevValue;
 				else
-					return new DisabledAction<>(newSource, newDisablement);
+					return new DisabledAction(newSource, newDisablement);
 			}
 		}
 
-		static class DisabledAction<T> extends ObservableAction.DisabledObservableAction<T> {
-			DisabledAction(ObservableAction<T> parentAction, ObservableValue<String> disablement) {
+		static class DisabledAction extends ObservableAction.DisabledObservableAction {
+			DisabledAction(ObservableAction parentAction, ObservableValue<String> disablement) {
 				super(parentAction, disablement);
 			}
 
 			@Override
-			protected ObservableAction<T> getParentAction() {
+			protected ObservableAction getParentAction() {
 				return super.getParentAction();
 			}
 

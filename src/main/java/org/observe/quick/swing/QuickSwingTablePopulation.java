@@ -209,8 +209,7 @@ class QuickSwingTablePopulation {
 			}
 			if (theColumn.getEditing() != null) {
 				if (swingEditor != null) {
-					swingEditor.populate(new SwingCellPopulator<>(this, false),
-						theColumn.getEditing().getEditor());
+					swingEditor.populate(new SwingCellPopulator<>(this, false), theColumn.getEditing().getEditor());
 				}
 				theEditContext = new QuickTableColumn.ColumnEditContext.Default<>(theColumn.getColumnSet().getRowType(),
 					theColumn.getType(), theColumn.getEditing().reporting().getPosition().toShortString());
@@ -900,8 +899,7 @@ class QuickSwingTablePopulation {
 		}
 
 		@Override
-		public SwingCellPopulator<R, C> addButton(String buttonText, ObservableAction<?> action,
-			Consumer<ButtonEditor<JButton, ?>> modify) {
+		public SwingCellPopulator<R, C> addButton(String buttonText, ObservableAction action, Consumer<ButtonEditor<JButton, ?>> modify) {
 			if (isRenderer) {
 				ButtonRenderEditor[] editor = new SwingCellPopulator.ButtonRenderEditor[1];
 				ObservableCellRenderer<R, C> delegate = ObservableCellRenderer.buttonRenderer(cell -> {
@@ -1188,7 +1186,7 @@ class QuickSwingTablePopulation {
 			}
 
 			@Override
-			public E withPostButton(String buttonText, ObservableAction<?> action, Consumer<ButtonEditor<JButton, ?>> modify) {
+			public E withPostButton(String buttonText, ObservableAction action, Consumer<ButtonEditor<JButton, ?>> modify) {
 				return unsupported("Post button");
 			}
 		}

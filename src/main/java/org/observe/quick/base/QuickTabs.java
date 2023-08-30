@@ -107,7 +107,7 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<String>> theTabName;
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<Icon>> theTabIcon;
 			private InterpretedValueSynth<Observable<?>, Observable<?>> theSelectOn;
-			private InterpretedValueSynth<ObservableAction<?>, ObservableAction<?>> theOnSelect;
+			private InterpretedValueSynth<ObservableAction, ObservableAction> theOnSelect;
 
 			public Interpreted(Def definition, ExElement.Interpreted<? extends ExElement> element) {
 				super(definition, element);
@@ -130,7 +130,7 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 				return theSelectOn;
 			}
 
-			public InterpretedValueSynth<ObservableAction<?>, ObservableAction<?>> getOnSelect() {
+			public InterpretedValueSynth<ObservableAction, ObservableAction> getOnSelect() {
 				return theOnSelect;
 			}
 
@@ -143,7 +143,7 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 				theTabIcon = getDefinition().getTabIcon() == null ? null : QuickBaseInterpretation
 					.evaluateIcon(getDefinition().getTabIcon(), env, getDefinition().getElement().getElement().getDocument().getLocation());
 				theOnSelect = getDefinition().getOnSelect() == null ? null
-					: getDefinition().getOnSelect().interpret(ModelTypes.Action.any(), env);
+					: getDefinition().getOnSelect().interpret(ModelTypes.Action.instance(), env);
 			}
 
 			@Override
@@ -154,12 +154,12 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 
 		private ModelValueInstantiator<SettableValue<String>> theTabNameInstantiator;
 		private ModelValueInstantiator<SettableValue<Icon>> theTabIconInstantiator;
-		private ModelValueInstantiator<ObservableAction<?>> theOnSelectInstantiator;
+		private ModelValueInstantiator<ObservableAction> theOnSelectInstantiator;
 		private ModelComponentId isTabSelectedVariable;
 
 		private SettableValue<SettableValue<String>> theTabName;
 		private SettableValue<SettableValue<Icon>> theTabIcon;
-		private ObservableAction<?> theOnSelect;
+		private ObservableAction theOnSelect;
 		private SettableValue<Boolean> isTabSelected;
 
 		public AbstractTab(ExElement element) {

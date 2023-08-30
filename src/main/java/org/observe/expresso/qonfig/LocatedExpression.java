@@ -1,6 +1,5 @@
 package org.observe.expresso.qonfig;
 
-import org.observe.expresso.ExpressoEvaluationException;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelType.ModelInstanceType;
@@ -41,21 +40,18 @@ public interface LocatedExpression {
 	default <M, MV extends M> ObservableExpression.EvaluatedExpression<M, MV> interpret(ModelInstanceType<M, MV> type,
 		InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 		try {
-			return interpret(type, env, ExceptionHandler.get1());
+			return interpret(type, env, ExceptionHandler.thrower2());
 		} catch (TypeConversionException e) {
 			throw new ExpressoInterpretationException(e.getMessage(), getFilePosition(0), 0, e);
 		}
 	}
 
-	default <M, MV extends M, TX extends Throwable> ObservableExpression.EvaluatedExpression<M, MV> interpret(ModelInstanceType<M, MV> type,
-		InterpretedExpressoEnv env, ExceptionHandler.Single<TypeConversionException, TX> exHandler)
-		throws ExpressoInterpretationException, TX {
-		try {
-			return getExpression()//
-				.evaluate(//
-					type, env.at(getFilePosition()), 0, exHandler);
-		} catch (ExpressoEvaluationException e) {
-			throw new ExpressoInterpretationException(e.getMessage(), getFilePosition(e.getErrorOffset()), e.getErrorLength(), e);
-		}
+	default <M, MV extends M, EX extends Throwable, TX extends Throwable> ObservableExpression.EvaluatedExpression<M, MV> interpret(
+		ModelInstanceType<M, MV> type, InterpretedExpressoEnv env,
+		ExceptionHandler.Double<ExpressoInterpretationException, TypeConversionException, EX, TX> exHandler)
+		throws ExpressoInterpretationException, EX, TX {
+		return getExpression()//
+			.evaluate(//
+				type, env.at(getFilePosition()), 0, exHandler);
 	}
 }

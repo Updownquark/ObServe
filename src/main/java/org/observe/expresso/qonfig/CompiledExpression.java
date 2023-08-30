@@ -2,7 +2,6 @@ package org.observe.expresso.qonfig;
 
 import org.observe.expresso.CompiledExpressoEnv;
 import org.observe.expresso.ExpressoCompilationException;
-import org.observe.expresso.ExpressoEvaluationException;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ModelType;
 import org.observe.expresso.ObservableExpression;
@@ -74,11 +73,7 @@ public class CompiledExpression implements LocatedExpression {
 			theEnv = theSession.getExpressoEnv();
 			theSession = null; // Don't need it anymore--release it
 		}
-		try {
-			return theExpression.getModelType(theEnv);
-		} catch (ExpressoEvaluationException e) {
-			throw new ExpressoCompilationException(e.getMessage(), getFilePosition(e.getErrorOffset()), e.getErrorLength(), e);
-		}
+		return theExpression.getModelType(theEnv);
 	}
 
 	/**

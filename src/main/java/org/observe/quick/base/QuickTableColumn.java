@@ -408,8 +408,7 @@ public interface QuickTableColumn<R, C> {
 					.build();
 				if (table.getValueVariable() != null)
 					ExFlexibleElementModelAddOn.satisfyElementValue(table.getValueVariable(), editorModels,
-						SettableValue.flatten(theEditRowValue),
-						ExFlexibleElementModelAddOn.ActionIfSatisfied.Replace);
+						SettableValue.flatten(theEditRowValue), ExFlexibleElementModelAddOn.ActionIfSatisfied.Replace);
 				if (table.getSelectedVariable() != null)
 					ExFlexibleElementModelAddOn.satisfyElementValue(table.getSelectedVariable(), editorModels,
 						SettableValue.flatten(isSelected), ExFlexibleElementModelAddOn.ActionIfSatisfied.Replace);
@@ -526,7 +525,7 @@ public interface QuickTableColumn<R, C> {
 			}
 
 			public static class Interpreted<R, C> extends ColumnEditType.Interpreted<R, C, RowModifyEditType<R, C>> {
-				private InterpretedValueSynth<ObservableAction<?>, ObservableAction<?>> theCommit;
+				private InterpretedValueSynth<ObservableAction, ObservableAction> theCommit;
 
 				public Interpreted(Def definition, ColumnEditing.Interpreted<R, C> element) {
 					super(definition, element);
@@ -537,7 +536,7 @@ public interface QuickTableColumn<R, C> {
 					return (Def) super.getDefinition();
 				}
 
-				public InterpretedValueSynth<ObservableAction<?>, ObservableAction<?>> getCommit() {
+				public InterpretedValueSynth<ObservableAction, ObservableAction> getCommit() {
 					return theCommit;
 				}
 
@@ -545,7 +544,7 @@ public interface QuickTableColumn<R, C> {
 				public void update(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 					super.update(env);
 					theCommit = getDefinition().getCommit() == null ? null
-						: getDefinition().getCommit().interpret(ModelTypes.Action.any(), env);
+						: getDefinition().getCommit().interpret(ModelTypes.Action.instance(), env);
 				}
 
 				@Override
@@ -554,20 +553,20 @@ public interface QuickTableColumn<R, C> {
 				}
 			}
 
-			private ModelValueInstantiator<ObservableAction<?>> theCommitInstantiator;
-			private SettableValue<ObservableAction<?>> theCommit;
+			private ModelValueInstantiator<ObservableAction> theCommitInstantiator;
+			private SettableValue<ObservableAction> theCommit;
 			private boolean isRowUpdate;
 
 			public RowModifyEditType(ColumnEditing<R, C> element) {
 				super(element);
-				theCommit = SettableValue.build(TypeTokens.get().keyFor(ObservableAction.class).<ObservableAction<?>> wildCard()).build();
+				theCommit = SettableValue.build(TypeTokens.get().of(ObservableAction.class)).build();
 			}
 
 			public boolean isRowUpdate() {
 				return isRowUpdate;
 			}
 
-			public ObservableAction<?> getCommit() {
+			public ObservableAction getCommit() {
 				return ObservableAction.flatten(theCommit);
 			}
 

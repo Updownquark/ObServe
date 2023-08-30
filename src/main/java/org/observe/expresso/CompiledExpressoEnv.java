@@ -23,6 +23,7 @@ import org.qommons.ClassMap;
 import org.qommons.Colors;
 import org.qommons.TimeUtils;
 import org.qommons.io.ErrorReporting;
+import org.qommons.io.LocatedPositionedContent;
 
 import com.google.common.reflect.TypeToken;
 
@@ -34,21 +35,25 @@ public class CompiledExpressoEnv {
 	 */
 	public static final CompiledExpressoEnv STANDARD_JAVA = new CompiledExpressoEnv(//
 		ObservableModelSet.build("StandardJava", ObservableModelSet.JAVA_NAME_CHECKER).build(), //
-		UnaryOperatorSet.STANDARD_JAVA, BinaryOperatorSet.STANDARD_JAVA).withDefaultNonStructuredParsing();
+		UnaryOperatorSet.STANDARD_JAVA, BinaryOperatorSet.STANDARD_JAVA, new ErrorReporting.Default(LocatedPositionedContent.EMPTY))//
+			.withDefaultNonStructuredParsing();
 
 	private final ObservableModelSet theModels;
 	private final Map<String, String> theAttributes;
 	private final UnaryOperatorSet theUnaryOperators;
 	private final BinaryOperatorSet theBinaryOperators;
 	private final ClassMap<Set<NonStructuredParser>> theNonStructuredParsers;
+	private final ErrorReporting theErrorReporting;
 
 	/**
 	 * @param models The model set containing all values and sub-models available to expressions
 	 * @param unaryOperators The set of unary operators available for expressions
 	 * @param binaryOperators The set of binary operators available for expressions
+	 * @param reporting The error reporting for the environment
 	 */
-	public CompiledExpressoEnv(ObservableModelSet models, UnaryOperatorSet unaryOperators, BinaryOperatorSet binaryOperators) {
-		this(models, Collections.emptyMap(), null, unaryOperators, binaryOperators);
+	public CompiledExpressoEnv(ObservableModelSet models, UnaryOperatorSet unaryOperators, BinaryOperatorSet binaryOperators,
+		ErrorReporting reporting) {
+		this(models, Collections.emptyMap(), null, unaryOperators, binaryOperators, reporting);
 	}
 
 	/**
@@ -57,10 +62,11 @@ public class CompiledExpressoEnv {
 	 * @param nonStructuredParsers The non-structured parsers for the environment
 	 * @param unaryOperators The unary operators for the environment
 	 * @param binaryOperators The binary operators for the environment
+	 * @param reporting The error reporting for the environment
 	 */
 	protected CompiledExpressoEnv(ObservableModelSet models, Map<String, String> attributes,
 		ClassMap<Set<NonStructuredParser>> nonStructuredParsers,
-		UnaryOperatorSet unaryOperators, BinaryOperatorSet binaryOperators) {
+		UnaryOperatorSet unaryOperators, BinaryOperatorSet binaryOperators, ErrorReporting reporting) {
 		theModels = models;
 		theAttributes = attributes;
 		theUnaryOperators = unaryOperators;
@@ -68,6 +74,7 @@ public class CompiledExpressoEnv {
 		theNonStructuredParsers = new ClassMap<>();
 		if (nonStructuredParsers != null)
 			theNonStructuredParsers.putAll(nonStructuredParsers);
+		theErrorReporting = reporting;
 	}
 
 	/**
@@ -81,7 +88,7 @@ public class CompiledExpressoEnv {
 	protected CompiledExpressoEnv copy(ObservableModelSet models, Map<String, String> attributes,
 		ClassMap<Set<NonStructuredParser>> nonStructuredParsers,
 		UnaryOperatorSet unaryOperators, BinaryOperatorSet binaryOperators) {
-		return new CompiledExpressoEnv(models, attributes, nonStructuredParsers, unaryOperators, binaryOperators);
+		return new CompiledExpressoEnv(models, attributes, nonStructuredParsers, unaryOperators, binaryOperators, reporting());
 	}
 
 	/** @return The model set containing all values and sub-models available to expressions */
@@ -114,6 +121,11 @@ public class CompiledExpressoEnv {
 		return theBinaryOperators;
 	}
 
+	/** @return The error reporting for expressions evaluated in this environment to use */
+	public ErrorReporting reporting() {
+		return theErrorReporting;
+	}
+
 	private static ObservableModelSet.Built buildModel(ObservableModelSet model) {
 		if (model == null)
 			throw new IllegalStateException("No models set");
@@ -128,15 +140,14 @@ public class CompiledExpressoEnv {
 	/**
 	 * @param extModels The external models for the interpreted environment
 	 * @param classView The class view for the interpreted environment
-	 * @param reporting The error reporting for the interpreted environment
 	 * @return The interpretation of this compiled environment
 	 */
-	public InterpretedExpressoEnv interpret(ExternalModelSet extModels, ClassView classView, ErrorReporting reporting) {
+	public InterpretedExpressoEnv interpret(ExternalModelSet extModels, ClassView classView) {
 		if (extModels == null)
 			extModels = ObservableModelSet.buildExternal(ObservableModelSet.JAVA_NAME_CHECKER).build();
 
 		InterpretedExpressoEnv interpreted = new InterpretedExpressoEnv(null, extModels, classView, Collections.emptyMap(),
-			getNonStructuredParsers(), getUnaryOperators(), getBinaryOperators(), reporting, new HashMap<>(), false);
+			getNonStructuredParsers(), getUnaryOperators(), getBinaryOperators(), reporting(), new HashMap<>(), false);
 
 		InterpretedModelSet interpretedModels = getBuiltModels().createInterpreted(interpreted);
 		return interpreted.with(interpretedModels);

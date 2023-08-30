@@ -3,7 +3,7 @@ package org.observe.expresso.qonfig;
 import java.util.Collections;
 import java.util.Set;
 
-import org.observe.expresso.ExpressoEvaluationException;
+import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.JavaExpressoParser;
 import org.observe.expresso.ops.BinaryOperatorSet;
@@ -16,6 +16,8 @@ import org.qommons.config.QonfigInterpreterCore.CoreSession;
 import org.qommons.config.QonfigToolkit;
 import org.qommons.config.SpecialSession;
 import org.qommons.config.SpecialSessionImplementation;
+import org.qommons.ex.ExceptionHandler;
+import org.qommons.io.LocatedFilePosition;
 
 import com.google.common.reflect.TypeToken;
 
@@ -39,10 +41,10 @@ public class ExpressoSessionImplV0_1 implements SpecialSessionImplementation<Exp
 			return Object.class;
 		}
 
-
 		@Override
-		public TypeToken<Object> getTargetType(TypeToken<? extends Object> leftOpType, TypeToken<? extends Object> rightOpType, int offset,
-			int length) throws ExpressoEvaluationException {
+		public <EX extends Throwable> TypeToken<Object> getTargetType(TypeToken<? extends Object> leftOpType,
+			TypeToken<? extends Object> rightOpType, LocatedFilePosition position, int length,
+			ExceptionHandler.Single<ExpressoInterpretationException, EX> exHandler) {
 			return TypeTokens.get().getCommonType(leftOpType, rightOpType);
 		}
 

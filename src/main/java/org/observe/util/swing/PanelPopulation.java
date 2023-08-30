@@ -340,16 +340,10 @@ public class PanelPopulation {
 		// P addMultiple(String fieldName, Consumer<PanelPopulator<JPanel, ?>> panel);
 
 		default P addButton(String buttonText, Consumer<Object> action, Consumer<ButtonEditor<JButton, ?>> modify) {
-			return addButton(buttonText, new ObservableAction<Void>() {
+			return addButton(buttonText, new ObservableAction() {
 				@Override
-				public TypeToken<Void> getType() {
-					return TypeTokens.get().of(Void.class);
-				}
-
-				@Override
-				public Void act(Object cause) throws IllegalStateException {
+				public void act(Object cause) throws IllegalStateException {
 					action.accept(cause);
-					return null;
 				}
 
 				@Override
@@ -359,7 +353,7 @@ public class PanelPopulation {
 			}, modify);
 		}
 
-		P addButton(String buttonText, ObservableAction<?> action, Consumer<ButtonEditor<JButton, ?>> modify);
+		P addButton(String buttonText, ObservableAction action, Consumer<ButtonEditor<JButton, ?>> modify);
 
 		<F> P addComboButton(String buttonText, ObservableCollection<F> values, BiConsumer<? super F, Object> action,
 			Consumer<ComboButtonBuilder<F, ComboButton<F>, ?>> modify);
@@ -576,7 +570,7 @@ public class PanelPopulation {
 		default P addToggleButton(String fieldName, SettableValue<Boolean> field, String text,
 			Consumer<ButtonEditor<JToggleButton, ?>> modify) {
 			SimpleButtonEditor<JToggleButton, ?> fieldPanel = new SimpleButtonEditor<>(fieldName, new JToggleButton(), text,
-				ObservableAction.nullAction(TypeTokens.get().WILDCARD, null), false, getUntil());
+				ObservableAction.nullAction(), false, getUntil());
 			Subscription sub = ObservableSwingUtils.checkFor(fieldPanel.getEditor(), fieldPanel.getTooltip(), field);
 			getUntil().take(1).act(__ -> sub.unsubscribe());
 			modify(fieldPanel);
@@ -722,7 +716,7 @@ public class PanelPopulation {
 		}
 
 		@Override
-		default P addButton(String buttonText, ObservableAction<?> action, Consumer<ButtonEditor<JButton, ?>> modify) {
+		default P addButton(String buttonText, ObservableAction action, Consumer<ButtonEditor<JButton, ?>> modify) {
 			SimpleButtonEditor<JButton, ?> field = new SimpleButtonEditor<>(null, new JButton(), buttonText, action, false, getUntil())
 				.withText(buttonText);
 			modify(field);
@@ -1271,7 +1265,7 @@ public class PanelPopulation {
 				}
 
 				@Override
-				public JPMBuilder withPostButton(String buttonText, ObservableAction<?> action, Consumer<ButtonEditor<JButton, ?>> modify) {
+				public JPMBuilder withPostButton(String buttonText, ObservableAction action, Consumer<ButtonEditor<JButton, ?>> modify) {
 					System.err.println("Post Button cannot be set for a popup menu");
 					return this;
 				}
@@ -1307,7 +1301,7 @@ public class PanelPopulation {
 				}
 
 				@Override
-				public JPMBuilder withAction(String name, ObservableAction<?> action, Consumer<ButtonEditor<JMenuItem, ?>> ui) {
+				public JPMBuilder withAction(String name, ObservableAction action, Consumer<ButtonEditor<JMenuItem, ?>> ui) {
 					JMenuItem item = new JMenuItem(name);
 					ButtonEditor<JMenuItem, ?> button = new PanelPopulationImpl.SimpleButtonEditor<>(name, item, name, action, false,
 						getUntil());
@@ -1443,16 +1437,10 @@ public class PanelPopulation {
 		P withPostLabel(ObservableValue<String> postLabel);
 
 		default P withPostButton(String buttonText, Consumer<Object> action, Consumer<ButtonEditor<JButton, ?>> modify) {
-			return withPostButton(buttonText, new ObservableAction<Void>() {
+			return withPostButton(buttonText, new ObservableAction() {
 				@Override
-				public TypeToken<Void> getType() {
-					return TypeTokens.get().of(Void.class);
-				}
-
-				@Override
-				public Void act(Object cause) throws IllegalStateException {
+				public void act(Object cause) throws IllegalStateException {
 					action.accept(cause);
-					return null;
 				}
 
 				@Override
@@ -1462,7 +1450,7 @@ public class PanelPopulation {
 			}, modify);
 		}
 
-		P withPostButton(String buttonText, ObservableAction<?> action, Consumer<ButtonEditor<JButton, ?>> modify);
+		P withPostButton(String buttonText, ObservableAction action, Consumer<ButtonEditor<JButton, ?>> modify);
 	}
 
 	public interface Iconized<I> {
@@ -1636,6 +1624,7 @@ public class PanelPopulation {
 		P last(Component component);
 
 		P withSplitLocation(int split);
+
 		P withSplitProportion(double split);
 
 		P withSplitLocation(SettableValue<Integer> split);
@@ -1876,7 +1865,7 @@ public class PanelPopulation {
 
 		// A disableWith(Function<? super List<? extends R>, String> disabled);
 
-		A modifyAction(Function<? super ObservableAction<?>, ? extends ObservableAction<?>> actionMod);
+		A modifyAction(Function<? super ObservableAction, ? extends ObservableAction> actionMod);
 
 		default A confirm(String alertTitle, String alertText, boolean confirmType) {
 			return confirm(alertTitle, selected -> alertText, confirmType);
@@ -2032,7 +2021,9 @@ public class PanelPopulation {
 		default P withTitle(String title) {
 			return withTitle(ObservableValue.of(TypeTokens.get().STRING, title));
 		}
+
 		P withTitle(ObservableValue<String> title);
+
 		ObservableValue<String> getTitle();
 
 		default P withIcon(Class<?> clazz, String location) {
@@ -2041,24 +2032,33 @@ public class PanelPopulation {
 				withIcon(icon.getImage());
 			return (P) this;
 		}
+
 		default P withIcon(Image icon) {
 			return withIcon(ObservableValue.of(TypeTokens.get().of(Image.class), icon));
 		}
+
 		P withIcon(ObservableValue<? extends Image> icon);
+
 		ObservableValue<? extends Image> getIcon();
 
 		P withX(SettableValue<Integer> x);
+
 		P withY(SettableValue<Integer> y);
+
 		P withWidth(SettableValue<Integer> width);
+
 		P withHeight(SettableValue<Integer> height);
+
 		default P withLocation(ObservableConfig locationConfig) {
 			withX(locationConfig.asValue(Integer.class).at("x").withFormat(Format.INT, () -> null).buildValue(null));
 			return withY(locationConfig.asValue(Integer.class).at("y").withFormat(Format.INT, () -> getWindow().getX()).buildValue(null));
 		}
+
 		default P withSize(ObservableConfig sizeConfig) {
 			withWidth(sizeConfig.asValue(Integer.class).at("width").withFormat(Format.INT, () -> null).buildValue(null));
 			return withHeight(sizeConfig.asValue(Integer.class).at("height").withFormat(Format.INT, () -> null).buildValue(null));
 		}
+
 		default P withBounds(ObservableConfig boundsConfig) {
 			withLocation(boundsConfig);
 			return withSize(boundsConfig);
@@ -2114,12 +2114,11 @@ public class PanelPopulation {
 	}
 
 	public interface MenuBuilder<B extends JComponent, M extends MenuBuilder<B, M>> extends ButtonEditor<B, M> {
-		M withAction(String name, ObservableAction<?> action, Consumer<ButtonEditor<JMenuItem, ?>> ui);
+		M withAction(String name, ObservableAction action, Consumer<ButtonEditor<JMenuItem, ?>> ui);
 
 		default M withAction(String name, Consumer<Object> action, Consumer<ButtonEditor<JMenuItem, ?>> ui) {
-			return withAction(name, ObservableAction.of(TypeTokens.get().VOID, cause -> {
+			return withAction(name, ObservableAction.of(cause -> {
 				action.accept(cause);
-				return null;
 			}), ui);
 		}
 
@@ -2204,5 +2203,6 @@ public class PanelPopulation {
 		return layout;
 	}
 
-	private PanelPopulation() {}
+	private PanelPopulation() {
+	}
 }

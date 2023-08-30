@@ -39,6 +39,7 @@ import org.qommons.config.QonfigInterpreterCore.CoreSession;
 import org.qommons.config.QonfigToolkit;
 import org.qommons.config.SpecialSession;
 import org.qommons.ex.ExceptionHandler;
+import org.qommons.ex.NeverThrown;
 
 import com.google.common.reflect.TypeToken;
 
@@ -181,6 +182,8 @@ public class QuickBaseInterpretation implements QonfigInterpretation {
 		interpreter.createWith(QuickTabs.Tab.TAB, QuickTabs.Tab.Def.class, ExAddOn.creator(QuickWidget.Def.class, QuickTabs.Tab.Def::new));
 		interpreter.createWith(QuickTabs.TabSet.TAB_SET, QuickTabs.TabSet.Def.class, ExElement.creator(QuickTabs.TabSet.Def::new));
 
+		interpreter.createWith(QuickTree.TREE, QuickTree.Def.class, ExElement.creator(QuickTree.Def::new));
+
 		return interpreter;
 	}
 
@@ -220,27 +223,25 @@ public class QuickBaseInterpretation implements QonfigInterpretation {
 	public static InterpretedValueSynth<SettableValue<?>, SettableValue<Icon>> evaluateIcon(CompiledExpression expression,
 		InterpretedExpressoEnv env, String sourceDocument) throws ExpressoInterpretationException {
 		if (expression != null) {
-			ExceptionHandler.Container0<TypeConversionException> tce = ExceptionHandler.<TypeConversionException> get1().hold1();
+			ExceptionHandler.Double<ExpressoInterpretationException, TypeConversionException, NeverThrown, NeverThrown> tce = ExceptionHandler
+				.holder2();
 			InterpretedValueSynth<SettableValue<?>, SettableValue<Icon>> iconV = expression.interpret(ModelTypes.Value.forType(Icon.class),
 				env, tce);
 			if (iconV != null)
 				return iconV;
-			tce.clear1();
 			InterpretedValueSynth<SettableValue<?>, SettableValue<Image>> imageV = expression
-				.interpret(ModelTypes.Value.forType(Image.class), env, tce);
+				.interpret(ModelTypes.Value.forType(Image.class), env, tce.clear());
 			if (imageV != null)
 				return imageV.map(ModelTypes.Value.forType(Icon.class), mvi -> mvi
 					.map(sv -> SettableValue.asSettable(sv.map(img -> img == null ? null : new ImageIcon(img)), __ -> "Unsettable")));
-			tce.clear1();
 			InterpretedValueSynth<SettableValue<?>, SettableValue<URL>> urlV = expression.interpret(ModelTypes.Value.forType(URL.class),
-				env, tce);
+				env, tce.clear());
 			if (urlV != null)
 				return urlV.map(ModelTypes.Value.forType(Icon.class), mvi -> mvi
 					.map(sv -> SettableValue.asSettable(sv.map(url -> url == null ? null : new ImageIcon(url)), __ -> "unsettable")));
-			tce.clear1();
 			InterpretedValueSynth<SettableValue<?>, SettableValue<String>> stringV = expression
-				.interpret(ModelTypes.Value.forType(String.class), env, tce);
-			if (stringV != null)
+				.interpret(ModelTypes.Value.forType(String.class), env, tce.clear());
+			if (stringV != null) {
 				return stringV.map(ModelTypes.Value.forType(Icon.class), mvi -> mvi.map(sv -> SettableValue.asSettable(sv.map(loc -> {
 					if (loc == null)
 						return null;
@@ -260,6 +261,7 @@ public class QuickBaseInterpretation implements QonfigInterpretation {
 						return relIcon;
 					}
 				}), __ -> "unsettable")));
+			}
 			env.reporting().warn("Cannot evaluate '" + expression + "' as an icon");
 			return InterpretedValueSynth.literalValue(TypeTokens.get().of(Icon.class), null, "Icon not provided");
 		} else

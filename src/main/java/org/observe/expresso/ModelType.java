@@ -18,7 +18,7 @@ import org.observe.util.TypeTokens.TypeConverter;
 import org.qommons.LambdaUtils;
 import org.qommons.Named;
 import org.qommons.ex.ExceptionHandler;
-import org.qommons.io.FilePosition;
+import org.qommons.ex.NeverThrown;
 
 import com.google.common.reflect.TypeToken;
 
@@ -371,7 +371,7 @@ public abstract class ModelType<M> implements Named {
 				TypeToken<?>[] params = new TypeToken[getModelType().getTypeCount()];
 				TypeConverter<Object, Object, Object, Object>[] casts = new TypeConverter[params.length];
 				boolean trivial = true, exit = false;
-				ExceptionHandler.Container0<IllegalArgumentException> iae = ExceptionHandler.<IllegalArgumentException> get1().hold1();
+				ExceptionHandler.Single<IllegalArgumentException, NeverThrown> iae = ExceptionHandler.holder();
 				for (int i = 0; i < getModelType().getTypeCount(); i++) {
 					TypeToken<?> myType = getType(i);
 					TypeToken<?> targetType = target.getType(i);
@@ -450,18 +450,18 @@ public abstract class ModelType<M> implements Named {
 		 * @param targetType The type to convert to
 		 * @param env The environment which may contain information needed for the conversion
 		 * @return A value equivalent to this value, but with the given type
-		 * @throws TypeConversionException If no converter is available for the conversion from this type to the given type
+		 * @throws TX If no converter is available for the conversion from this type to the given type
 		 */
 		public <M2, MV2 extends M2, TX extends Throwable> InterpretedValueSynth<M2, MV2> as(InterpretedValueSynth<M, MV> source,
 			ModelInstanceType<M2, MV2> targetType, InterpretedExpressoEnv env,
-			ExceptionHandler.Single<TypeConversionException, TX> exHandler, FilePosition position) throws TX {
+			ExceptionHandler.Single<TypeConversionException, TX> exHandler) throws TX {
 			ModelInstanceType<M, MV> sourceType = source.getType();
 			ModelType.ModelInstanceConverter<M, M2> converter = sourceType.convert(targetType, env);
 			if (converter == null) {
 				// This next line is for debugging. I'm going to keep it here because it continues to be useful,
 				// and it's only a performance hit when there's a conversion error, and then only a slight one.
 				sourceType.convert(targetType, env);
-				exHandler.handle1(new TypeConversionException(source.toString(), sourceType, targetType, position));
+				exHandler.handle1(new TypeConversionException(source.toString(), sourceType, targetType));
 				return null;
 			} else if (converter instanceof NoOpConverter)
 				return (InterpretedValueSynth<M2, MV2>) source;
@@ -770,7 +770,7 @@ public abstract class ModelType<M> implements Named {
 		 * @param name The name of the model type
 		 * @param type The super type of the model type
 		 */
-		public UnTyped(String name, Class<M> type) {
+		protected UnTyped(String name, Class<M> type) {
 			super(name, type);
 			theInstance = new ModelInstanceType.UnTyped<M>() {
 				@Override
@@ -778,6 +778,11 @@ public abstract class ModelType<M> implements Named {
 					return ModelType.UnTyped.this;
 				}
 			};
+		}
+
+		@Override
+		public TypeToken<?> getType(M value, int typeIndex) {
+			throw new IndexOutOfBoundsException(typeIndex + " of 0");
 		}
 
 		@Override

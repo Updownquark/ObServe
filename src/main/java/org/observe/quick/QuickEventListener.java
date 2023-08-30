@@ -108,7 +108,7 @@ public interface QuickEventListener extends ExElement {
 
 		List<EventFilter.Interpreted> getFilters();
 
-		InterpretedValueSynth<ObservableAction<?>, ObservableAction<?>> getAction();
+		InterpretedValueSynth<ObservableAction, ObservableAction> getAction();
 
 		void updateListener(InterpretedExpressoEnv env) throws ExpressoInterpretationException;
 
@@ -116,7 +116,7 @@ public interface QuickEventListener extends ExElement {
 
 		public abstract class Abstract<L extends QuickEventListener> extends ExElement.Interpreted.Abstract<L> implements Interpreted<L> {
 			private final List<EventFilter.Interpreted> theFilters;
-			private InterpretedValueSynth<ObservableAction<?>, ObservableAction<?>> theAction;
+			private InterpretedValueSynth<ObservableAction, ObservableAction> theAction;
 
 			protected Abstract(Def<? super L> definition, ExElement.Interpreted<?> parent) {
 				super(definition, parent);
@@ -129,7 +129,7 @@ public interface QuickEventListener extends ExElement {
 			}
 
 			@Override
-			public InterpretedValueSynth<ObservableAction<?>, ObservableAction<?>> getAction() {
+			public InterpretedValueSynth<ObservableAction, ObservableAction> getAction() {
 				return theAction;
 			}
 
@@ -152,7 +152,7 @@ public interface QuickEventListener extends ExElement {
 				.onRightX(el -> el.getLeftValue().updateFilter(getExpressoEnv()))//
 				.onCommonX(el -> el.getLeftValue().updateFilter(getExpressoEnv()))//
 				.addLast();
-				theAction = getDefinition().getAction().interpret(ModelTypes.Action.any(), getExpressoEnv());
+				theAction = getDefinition().getAction().interpret(ModelTypes.Action.instance(), getExpressoEnv());
 			}
 		}
 	}
@@ -209,7 +209,7 @@ public interface QuickEventListener extends ExElement {
 		return true;
 	}
 
-	ObservableAction<?> getAction();
+	ObservableAction getAction();
 
 	@Override
 	QuickEventListener copy(ExElement parent);
@@ -217,8 +217,8 @@ public interface QuickEventListener extends ExElement {
 	public abstract class Abstract extends ExElement.Abstract implements QuickEventListener {
 		private List<EventFilter> theFilters;
 
-		private ModelValueInstantiator<? extends ObservableAction<?>> theActionInstantiator;
-		private ObservableAction<?> theAction;
+		private ModelValueInstantiator<? extends ObservableAction> theActionInstantiator;
+		private ObservableAction theAction;
 
 		private ModelComponentId theAltPressedValue;
 		private ModelComponentId theCtrlPressedValue;
@@ -252,17 +252,15 @@ public interface QuickEventListener extends ExElement {
 		}
 
 		@Override
-		public ObservableAction<?> getAction() {
-			return ObservableAction.of(TypeTokens.get().OBJECT, cause -> {
+		public ObservableAction getAction() {
+			return ObservableAction.of(cause -> {
 				if (theAction != null) {
 					try {
-						return theAction.act(cause);
+						theAction.act(cause);
 					} catch (RuntimeException | Error e) {
 						reporting().error(e.toString(), e);
-						return null;
 					}
-				} else
-					return null;
+				}
 			});
 		}
 

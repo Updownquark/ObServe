@@ -1360,7 +1360,7 @@ public class TypeTokens implements TypeParser {
 	 */
 	public <S, T> TypeConverter<? super S, ? extends S, ? super T, ? extends T> getCast(TypeToken<T> target, TypeToken<S> source,
 		boolean safe) throws IllegalArgumentException {
-		return getCast(target, source, safe, true, ExceptionHandler.get1());
+		return getCast(target, source, safe, true, ExceptionHandler.thrower());
 	}
 
 	private static class InstanceChecker<T> {
@@ -1403,7 +1403,7 @@ public class TypeTokens implements TypeParser {
 	 */
 	public <S, T, TX extends Throwable> TypeConverter<? super S, ? extends S, ? super T, ? extends T> getCast(TypeToken<T> target,
 		TypeToken<S> source, boolean safe, boolean downCastOnly, ExceptionHandler.Single<IllegalArgumentException, TX> exHandler)
-		throws IllegalArgumentException, TX {
+			throws IllegalArgumentException, TX {
 		Class<S> rawSource = getRawType(source);
 		TypeKey<S> sourceKey = keyFor(rawSource);
 		if (target.equals(source)) {
@@ -1480,8 +1480,7 @@ public class TypeTokens implements TypeParser {
 				if (reverseConverter == null)
 					return null;
 			} else {
-				ExceptionHandler.Container0<IllegalArgumentException> iae = ExceptionHandler.<IllegalArgumentException> get1().hold1();
-				reverseConverter = getCast(source, target, safe, false, iae);
+				reverseConverter = getCast(source, target, safe, false, ExceptionHandler.holder());
 				if (reverseConverter == null)
 					return suppConvert;
 			}

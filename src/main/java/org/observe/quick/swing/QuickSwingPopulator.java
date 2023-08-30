@@ -2513,7 +2513,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 		}
 
 		@Override
-		public AbstractQuickContainerPopulator addButton(String buttonText, ObservableAction<?> action,
+		public AbstractQuickContainerPopulator addButton(String buttonText, ObservableAction action,
 			Consumer<ButtonEditor<JButton, ?>> modify) {
 			return addHPanel(null, new JustifiedBoxLayout(true).mainJustified().crossJustified(),
 				p -> modify(p).addButton(buttonText, action, modify));

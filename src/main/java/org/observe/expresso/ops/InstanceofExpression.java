@@ -7,7 +7,6 @@ import java.util.function.Function;
 
 import org.observe.SettableValue;
 import org.observe.expresso.CompiledExpressoEnv;
-import org.observe.expresso.ExpressoEvaluationException;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
@@ -21,6 +20,7 @@ import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.TypeConversionException;
 import org.observe.util.TypeTokens;
 import org.qommons.ex.ExceptionHandler;
+import org.qommons.ex.NeverThrown;
 
 /** An expression that returns a boolean for whether a given expression's value is an instance of a constant type */
 public class InstanceofExpression implements ObservableExpression {
@@ -80,28 +80,34 @@ public class InstanceofExpression implements ObservableExpression {
 	}
 
 	@Override
-	public <M, MV extends M, TX extends Throwable> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type,
-		InterpretedExpressoEnv env, int expressionOffset, ExceptionHandler.Single<TypeConversionException, TX> exHandler)
-		throws ExpressoEvaluationException, ExpressoInterpretationException, TX {
-		if (type.getModelType() != ModelTypes.Value && !TypeTokens.get().isAssignable(type.getType(0), TypeTokens.get().BOOLEAN)) {
-			exHandler.handle1(new TypeConversionException("instanceof expressions can only be evaluated to Value<Boolean>", type,
-				env.reporting().getPosition()));
+	public <M, MV extends M, EX extends Throwable> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type,
+		InterpretedExpressoEnv env, int expressionOffset, ExceptionHandler.Single<ExpressoInterpretationException, EX> exHandler)
+			throws ExpressoInterpretationException, EX {
+		if (type.getModelType() != ModelTypes.Value) {
+			throw new ExpressoInterpretationException("instanceof expressions can only be evaluated to Value<Boolean>",
+				env.reporting().getPosition(), getExpressionLength());
+		} else if (!TypeTokens.get().isAssignable(type.getType(0), TypeTokens.get().BOOLEAN)) {
+			exHandler.handle1(new ExpressoInterpretationException("instanceof expressions can only be evaluated to Value<Boolean>",
+				env.reporting().getPosition(), getExpressionLength()));
 			return null;
 		}
+		ExceptionHandler.Double<ExpressoInterpretationException, TypeConversionException, EX, NeverThrown> doubleX = exHandler
+			.stack(ExceptionHandler.holder());
 		EvaluatedExpression<SettableValue<?>, SettableValue<?>> leftValue = theLeft.evaluate(ModelTypes.Value.any(), env, expressionOffset,
-			exHandler);
-		if (leftValue == null)
+			doubleX);
+		if (doubleX.get2() != null) {
+			exHandler.handle1(new ExpressoInterpretationException(doubleX.get2().getMessage(), env.reporting().getPosition(),
+				theLeft.getExpressionLength(), doubleX.get2()));
+			return null;
+		} else if (leftValue == null)
 			return null;
 		Class<?> testType;
 		try {
 			testType = TypeTokens.getRawType(env.getClassView().parseType(theType.getName()));
 		} catch (ParseException e) {
-			if (e.getErrorOffset() == 0)
-				throw new ExpressoEvaluationException(expressionOffset + theLeft.getExpressionLength() + 12, theType.length(),
-					e.getMessage(), e);
-			else
-				throw new ExpressoEvaluationException(expressionOffset + theLeft.getExpressionLength() + 12 + e.getErrorOffset(), 0,
-					e.getMessage(), e);
+			throw new ExpressoInterpretationException(e.getMessage(),
+				env.reporting().at(theLeft.getExpressionLength() + 12 + e.getErrorOffset()).getPosition(),
+				e.getErrorOffset() == 0 ? theType.length() : 0, e);
 		}
 		InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> container = leftValue.map(ModelTypes.Value.forType(boolean.class),
 			lv -> new Instantiator<>(lv, testType));

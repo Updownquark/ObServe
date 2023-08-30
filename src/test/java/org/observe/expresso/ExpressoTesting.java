@@ -66,7 +66,7 @@ public class ExpressoTesting extends ExElement.Def.Abstract<ExElement> {
 		}
 
 		public static class Interpreted extends ExElement.Interpreted.Abstract<ExpressoTest> implements Named {
-			private final List<TestAction.Interpreted<?>> theActions;
+			private final List<TestAction.Interpreted> theActions;
 
 			Interpreted(Def definition, ExElement.Interpreted<?> parent) {
 				super(definition, parent);
@@ -83,7 +83,7 @@ public class ExpressoTesting extends ExElement.Def.Abstract<ExElement> {
 				return getDefinition().getName();
 			}
 
-			public List<TestAction.Interpreted<?>> getActions() {
+			public List<TestAction.Interpreted> getActions() {
 				return Collections.unmodifiableList(theActions);
 			}
 
@@ -107,7 +107,7 @@ public class ExpressoTesting extends ExElement.Def.Abstract<ExElement> {
 			}
 		}
 
-		private final List<TestAction.TestActionElement<?>> theActions;
+		private final List<TestAction.TestActionElement> theActions;
 
 		public ExpressoTest(Object id) {
 			super(id);
@@ -115,16 +115,16 @@ public class ExpressoTesting extends ExElement.Def.Abstract<ExElement> {
 		}
 
 		@QonfigChildGetter("action")
-		public List<TestAction.TestActionElement<?>> getActions() {
+		public List<TestAction.TestActionElement> getActions() {
 			return theActions;
 		}
 
 		public void execute() {
-			for (TestAction.TestActionElement<?> action : theActions) {
+			for (TestAction.TestActionElement action : theActions) {
 				System.out.print(action.reporting().getPosition().printPosition());
 				System.out.flush();
 				System.out.println(":");
-				ObservableAction<?> obsAction = action.getAction();
+				ObservableAction obsAction = action.getAction();
 				if (action.isBreakpoint())
 					BreakpointHere.breakpoint();
 				try {
@@ -157,14 +157,14 @@ public class ExpressoTesting extends ExElement.Def.Abstract<ExElement> {
 		@Override
 		public void instantiated() {
 			super.instantiated();
-			for (TestActionElement<?> action : theActions)
+			for (TestActionElement action : theActions)
 				action.instantiated();
 		}
 
 		@Override
 		protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
 			super.doInstantiate(myModels);
-			for (TestAction.TestActionElement<?> action : theActions)
+			for (TestAction.TestActionElement action : theActions)
 				action.instantiate(myModels);
 		}
 	}
@@ -207,11 +207,11 @@ public class ExpressoTesting extends ExElement.Def.Abstract<ExElement> {
 		}
 
 		@Override
-		public Interpreted<?> interpret() {
-			return new Interpreted<>(this);
+		public Interpreted interpret() {
+			return new Interpreted(this);
 		}
 
-		public static class Interpreted<T> extends ExpressoQonfigValues.Action.Interpreted<T> {
+		public static class Interpreted extends ExpressoQonfigValues.Action.Interpreted {
 			private Class<? extends Throwable> theExpectedException;
 
 			Interpreted(TestAction def) {
@@ -219,7 +219,7 @@ public class ExpressoTesting extends ExElement.Def.Abstract<ExElement> {
 			}
 
 			@Override
-			public Interpreted<T> setParentElement(ExElement.Interpreted<?> parent) {
+			public Interpreted setParentElement(ExElement.Interpreted<?> parent) {
 				super.setParentElement(parent);
 				return this;
 			}
@@ -258,14 +258,14 @@ public class ExpressoTesting extends ExElement.Def.Abstract<ExElement> {
 				return getDefinition().getPosition();
 			}
 
-			public TestActionElement<T> create(ExElement parent) {
-				return new TestActionElement<>(getIdentity());
+			public TestActionElement create(ExElement parent) {
+				return new TestActionElement(getIdentity());
 			}
 		}
 
-		static class TestActionElement<T> extends ExElement.Abstract {
-			private ModelValueInstantiator<ObservableAction<T>> theActionInstantiator;
-			private ObservableAction<T> theAction;
+		static class TestActionElement extends ExElement.Abstract {
+			private ModelValueInstantiator<ObservableAction> theActionInstantiator;
+			private ObservableAction theAction;
 			private Class<? extends Throwable> theExpectedException;
 			private boolean isBreakpoint;
 
@@ -273,7 +273,7 @@ public class ExpressoTesting extends ExElement.Def.Abstract<ExElement> {
 				super(id);
 			}
 
-			public ObservableAction<T> getAction() {
+			public ObservableAction getAction() {
 				return theAction;
 			}
 
@@ -288,7 +288,7 @@ public class ExpressoTesting extends ExElement.Def.Abstract<ExElement> {
 			@Override
 			protected void doUpdate(Interpreted<?> interpreted) {
 				super.doUpdate(interpreted);
-				TestAction.Interpreted<T> myInterpreted = (TestAction.Interpreted<T>) interpreted;
+				TestAction.Interpreted myInterpreted = (TestAction.Interpreted) interpreted;
 				theActionInstantiator = myInterpreted.instantiate();
 				theExpectedException = myInterpreted.getExpectedException();
 				isBreakpoint = myInterpreted.isBreakpoint();

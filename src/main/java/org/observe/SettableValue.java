@@ -104,7 +104,7 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 	 * @return An action whose {@link ObservableAction#isEnabled() enabled} property is tied to this settable's {@link #isEnabled() enabled}
 	 *         property and the current value's {@link #isAcceptable(Object) acceptability} for this settable.
 	 */
-	default <V extends T> ObservableAction<V> assignmentTo(ObservableValue<V> value) {
+	default <V extends T> ObservableAction assignmentTo(ObservableValue<V> value) {
 		return assignmentTo(value, null);
 	}
 
@@ -114,19 +114,13 @@ public interface SettableValue<T> extends ObservableValue<T>, Transactable {
 	 * @return An action whose {@link ObservableAction#isEnabled() enabled} property is tied to this settable's {@link #isEnabled() enabled}
 	 *         property and the current value's {@link #isAcceptable(Object) acceptability} for this settable.
 	 */
-	default <V extends T> ObservableAction<V> assignmentTo(ObservableValue<V> value, Consumer<IllegalArgumentException> onError){
-		return new ObservableAction<V>() {
+	default <V extends T> ObservableAction assignmentTo(ObservableValue<V> value, Consumer<IllegalArgumentException> onError) {
+		return new ObservableAction() {
 			@Override
-			public TypeToken<V> getType() {
-				return value.getType();
-			}
-
-			@Override
-			public V act(Object cause) throws IllegalStateException {
+			public void act(Object cause) throws IllegalStateException {
 				try {
 					V newValue = value.get();
 					set(newValue, cause);
-					return newValue;
 				} catch (IllegalArgumentException e) {
 					if(onError!=null)
 						onError.accept(e);

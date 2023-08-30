@@ -133,8 +133,8 @@ public class Qwysiwyg {
 					LocatedPositionedContent content = LocatedPositionedContent.of("QWYSIWYG Watch Expression",
 						new PositionedContent.Simple(FilePosition.START, expressionText));
 					theInterpretedValue = theExpression.evaluate(ModelTypes.Value.any(), theInterpretedContext.getExpressoEnv()//
-						.withErrorReporting(new ErrorReporting.Default(content)), 0, ExceptionHandler.get1());
-				} catch (ExpressoInterpretationException | ExpressoEvaluationException | TypeConversionException e) {
+						.withErrorReporting(new ErrorReporting.Default(content)), 0, ExceptionHandler.thrower2());
+				} catch (ExpressoInterpretationException | TypeConversionException e) {
 					e.printStackTrace();
 					theInterpretedValue = null;
 					theValueText = "<Interpret Error: " + e.getMessage() + ">";
@@ -188,12 +188,12 @@ public class Qwysiwyg {
 
 		StyleDebugValue(QuickInterpretedStyle source, QuickStyleValue styleValue, QuickStyleAttribute<T> attr,
 			ObservableValue<ConditionalValue<T>> conditionalValue, InterpretedExpressoEnv env, ModelSetInstance models)
-				throws ExpressoInterpretationException, ExpressoEvaluationException, TypeConversionException {
+				throws ExpressoInterpretationException, TypeConversionException {
 			theSource = source;
 			theStyleValue = styleValue;
 			theConditionalValue = conditionalValue;
 			theConditionX = styleValue.getApplication().getCondition() == null ? null
-				: styleValue.getApplication().getCondition().evaluate(ModelTypes.Value.BOOLEAN, env, 0, ExceptionHandler.get1());
+				: styleValue.getApplication().getCondition().evaluate(ModelTypes.Value.BOOLEAN, env, 0, ExceptionHandler.thrower2());
 			if (theConditionX != null) {
 				LocatedPositionedContent conditionContent = new LocatedPositionedContent.Default(styleValue + ".condition",
 					new PositionedContent.Simple(FilePosition.START, styleValue.getApplication().getCondition().toString()));
@@ -1122,7 +1122,7 @@ public class Qwysiwyg {
 				component.instanceTooltip(((SettableValue<?>) value).map(String::valueOf));
 			else {
 				try {
-					update = expression.as(ModelTypes.Event.any(), env, ExceptionHandler.get1(), component.start).instantiate().get(models);
+					update = expression.as(ModelTypes.Event.any(), env, ExceptionHandler.thrower()).instantiate().get(models);
 				} catch (TypeConversionException e) {
 					update = null;
 				}

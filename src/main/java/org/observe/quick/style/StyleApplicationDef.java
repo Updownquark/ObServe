@@ -4,14 +4,23 @@ import java.util.*;
 import java.util.function.Function;
 
 import org.observe.SettableValue;
-import org.observe.expresso.*;
+import org.observe.expresso.CompiledExpressoEnv;
+import org.observe.expresso.ExpressoCompilationException;
+import org.observe.expresso.ExpressoInterpretationException;
+import org.observe.expresso.InterpretedExpressoEnv;
+import org.observe.expresso.ModelException;
+import org.observe.expresso.ModelType;
 import org.observe.expresso.ModelType.ModelInstanceType;
+import org.observe.expresso.ModelTypes;
+import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableExpression.EvaluatedExpression;
+import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretedModelComponentNode;
 import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelComponentNode;
 import org.observe.expresso.ObservableModelSet.ModelTag;
+import org.observe.expresso.TypeConversionException;
 import org.observe.expresso.ops.BinaryOperator;
 import org.observe.expresso.ops.BufferedExpression;
 import org.observe.expresso.ops.NameExpression;
@@ -30,6 +39,7 @@ import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigToolkit;
 import org.qommons.ex.ExceptionHandler;
+import org.qommons.ex.NeverThrown;
 import org.qommons.io.LocatedFilePosition;
 import org.qommons.io.LocatedPositionedContent;
 
@@ -162,11 +172,7 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 		ObservableModelSet models, QonfigToolkit expresso, boolean styleSheet, ElementModelValue.Cache dmvCache)
 			throws QonfigInterpretationException {
 		ObservableExpression expression;
-		try {
-			expression = _findModelValues(ex.getExpression(), modelValues, models, expresso, styleSheet, dmvCache, 0);
-		} catch (ExpressoEvaluationException e) {
-			throw new QonfigInterpretationException(e.getMessage(), ex.getFilePosition(e.getErrorOffset()), e.getErrorLength(), e);
-		}
+		expression = _findModelValues(ex.getExpression(), modelValues, models, expresso, styleSheet, dmvCache, 0);
 		if (expression == ex.getExpression())
 			return ex;
 		return new LocatedExpression() {
@@ -188,14 +194,13 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 			@Override
 			public <M, MV extends M> EvaluatedExpression<M, MV> interpret(ModelInstanceType<M, MV> type, InterpretedExpressoEnv env)
 				throws ExpressoInterpretationException {
-				try {
-					return expression.evaluate(type, env.at(getFilePosition()), 0, ExceptionHandler.get1());
-				} catch (TypeConversionException e) {
-					throw new ExpressoInterpretationException(e.getMessage(), ex.getFilePosition(0), 0, e);
-				} catch (ExpressoEvaluationException e) {
-					throw new ExpressoInterpretationException(e.getMessage(), ex.getFilePosition(e.getErrorOffset()), e.getErrorLength(),
-						e);
-				}
+				ExceptionHandler.Double<ExpressoInterpretationException, TypeConversionException, ExpressoInterpretationException, NeverThrown> doubleX = ExceptionHandler
+					.<ExpressoInterpretationException> thrower().stack(//
+						ExceptionHandler.<TypeConversionException> holder());
+				EvaluatedExpression<M, MV> result = expression.evaluate(type, env.at(getFilePosition()), 0, doubleX);
+				if (doubleX.get2() != null)
+					throw new ExpressoInterpretationException(doubleX.get2().getMessage(), ex.getFilePosition(0), 0, doubleX.get2());
+				return result;
 			}
 
 			@Override
@@ -216,8 +221,7 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 	}
 
 	private ObservableExpression _findModelValues(ObservableExpression ex, Collection<ElementModelValue.Identity> modelValues,
-		ObservableModelSet models, QonfigToolkit expresso, boolean styleSheet, ElementModelValue.Cache dmvCache, int expressionOffset)
-			throws ExpressoEvaluationException {
+		ObservableModelSet models, QonfigToolkit expresso, boolean styleSheet, ElementModelValue.Cache dmvCache, int expressionOffset) {
 		if (ex instanceof NameExpression && ((NameExpression) ex).getContext() == null) {
 			NameExpression nameEx = (NameExpression) ex;
 			String name = nameEx.getNames().getFirst().getName();
@@ -307,8 +311,7 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 		}
 
 		@Override
-		public ModelType<?> getModelType(CompiledExpressoEnv env, int expressionOffset)
-			throws ExpressoCompilationException, ExpressoEvaluationException {
+		public ModelType<?> getModelType(CompiledExpressoEnv env, int expressionOffset) throws ExpressoCompilationException {
 			return theWrapped.getModelType(env, expressionOffset);
 		}
 
@@ -329,18 +332,24 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 		}
 
 		@Override
-		public <M, MV extends M, TX extends Throwable> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type,
-			InterpretedExpressoEnv env, int expressionOffset, ExceptionHandler.Single<TypeConversionException, TX> exHandler)
-			throws ExpressoEvaluationException, ExpressoInterpretationException, TX {
+		public <M, MV extends M, EX extends Throwable> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type,
+			InterpretedExpressoEnv env, int expressionOffset, ExceptionHandler.Single<ExpressoInterpretationException, EX> exHandler)
+				throws ExpressoInterpretationException, EX {
 			InterpretedModelComponentNode<?, ?> node;
 			try {
 				node = env.getModels().getIdentifiedComponent(theModelValue).interpreted();
 			} catch (ModelException e) {
-				throw new ExpressoEvaluationException(expressionOffset, theModelValue.getName().length(),
-					"No such model value found: '" + theModelValue.getName() + "'", e);
+				exHandler.handle1(new ExpressoInterpretationException("No such model value found: '" + theModelValue.getName() + "'",
+					env.reporting().getPosition(), theModelValue.getName().length(), e));
+				return null;
 			}
-			return ObservableExpression.evEx(expressionOffset, getExpressionLength(),
-				node.as(type, env, exHandler, env.reporting().getPosition()), theModelValue);
+			ExceptionHandler.Single<TypeConversionException, NeverThrown> tce = ExceptionHandler.holder();
+			InterpretedValueSynth<M, MV> nodeX = node.as(type, env, tce);
+			if (nodeX != null)
+				return ObservableExpression.evEx(expressionOffset, getExpressionLength(), nodeX, theModelValue);
+			exHandler.handle1(
+				new ExpressoInterpretationException(tce.get1().getMessage(), env.reporting().getPosition(), getExpressionLength()));
+			return null;
 		}
 
 		@Override

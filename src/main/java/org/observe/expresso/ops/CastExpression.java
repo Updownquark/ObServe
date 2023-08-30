@@ -7,7 +7,6 @@ import java.util.function.Function;
 
 import org.observe.SettableValue;
 import org.observe.expresso.CompiledExpressoEnv;
-import org.observe.expresso.ExpressoEvaluationException;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
@@ -21,6 +20,7 @@ import org.observe.expresso.TypeConversionException;
 import org.observe.util.TypeTokens;
 import org.observe.util.TypeTokens.TypeConverter;
 import org.qommons.ex.ExceptionHandler;
+import org.qommons.ex.NeverThrown;
 import org.qommons.io.ErrorReporting;
 
 import com.google.common.reflect.TypeToken;
@@ -83,49 +83,59 @@ public class CastExpression implements ObservableExpression {
 	}
 
 	@Override
-	public <M, MV extends M, TX extends Throwable> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type,
-		InterpretedExpressoEnv env, int expressionOffset, ExceptionHandler.Single<TypeConversionException, TX> exHandler)
-			throws ExpressoEvaluationException, ExpressoInterpretationException, TX {
+	public <M, MV extends M, EX extends Throwable> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type,
+		InterpretedExpressoEnv env, int expressionOffset, ExceptionHandler.Single<ExpressoInterpretationException, EX> exHandler)
+		throws ExpressoInterpretationException, EX {
 		if (type.getModelType() != ModelTypes.Value)
-			throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(),
-				"A cast expression can only be evaluated as a value");
+			throw new ExpressoInterpretationException("A cast expression can only be evaluated as a value", env.reporting().getPosition(),
+				getExpressionLength());
 		return (EvaluatedExpression<M, MV>) doEval((ModelInstanceType<SettableValue<?>, SettableValue<?>>) type, env, expressionOffset,
 			exHandler);
 	}
 
-	private <T, TX extends Throwable> EvaluatedExpression<SettableValue<?>, SettableValue<T>> doEval(
+	private <S, T, EX extends Throwable> EvaluatedExpression<SettableValue<?>, SettableValue<T>> doEval(
 		ModelInstanceType<SettableValue<?>, SettableValue<?>> type, InterpretedExpressoEnv env, int expressionOffset,
-		ExceptionHandler.Single<TypeConversionException, TX> exHandler)
-			throws ExpressoEvaluationException, ExpressoInterpretationException, TX {
+		ExceptionHandler.Single<ExpressoInterpretationException, EX> exHandler) throws ExpressoInterpretationException, EX {
 		TypeToken<T> valueType;
 		try {
 			valueType = (TypeToken<T>) env.getClassView().parseType(theType.getName());
 		} catch (ParseException e) {
-			throw new ExpressoEvaluationException(expressionOffset + 1, theType.length(), e.getMessage(), e);
+			throw new ExpressoInterpretationException(e.getMessage(), env.reporting().at(1).getPosition(), theType.length(), e);
 		}
-		if (!TypeTokens.get().isAssignable(type.getType(0), valueType))
-			throw new ExpressoEvaluationException(expressionOffset + 1, theType.length(),
-				"Cannot assign " + valueType + " to " + type.getType(0));
+		if (!TypeTokens.get().isAssignable(type.getType(0), valueType)) {
+			exHandler.handle1(new ExpressoInterpretationException("Cannot assign " + valueType + " to " + type.getType(0),
+				env.reporting().getPosition(), getExpressionLength()));
+			return null;
+		}
 		int valueOffset = expressionOffset + theType.length() + 2;
 
 		// First, see if we can evaluate the expression as the cast type.
 		// This can work around some issues such as where flattening is needed, and if it succeeds it's simpler and less troublesome
 		EvaluatedExpression<SettableValue<?>, SettableValue<T>> evaldX = theValue.evaluate(ModelTypes.Value.forType(valueType),
-			env.at(theType.length() + 2), valueOffset, ExceptionHandler.<TypeConversionException> get1().hold1());
+			env.at(theType.length() + 2), valueOffset, ExceptionHandler.holder2());
 		if (evaldX != null)
 			return ObservableExpression.wrap(evaldX);
-		return ObservableExpression
-			.wrap(evalAsDynamicCast(theValue.evaluate(ModelTypes.Value.anyAsV(), env.at(theType.length() + 2), valueOffset, exHandler),
-				valueType, valueOffset, env.reporting().at(1)));
+		ExceptionHandler.Double<ExpressoInterpretationException, TypeConversionException, EX, NeverThrown> doubleX = exHandler
+			.stack(ExceptionHandler.holder());
+		InterpretedExpressoEnv valueEnv = env.at(theType.length() + 2);
+		EvaluatedExpression<SettableValue<?>, SettableValue<S>> evald = theValue.evaluate(ModelTypes.Value.anyAsV(), valueEnv, valueOffset,
+			doubleX);
+		if (doubleX.get2() != null) {
+			exHandler.handle1(new ExpressoInterpretationException(doubleX.get2().getMessage(), valueEnv.reporting().getPosition(),
+				theValue.getExpressionLength(), doubleX.get2()));
+			return null;
+		} else if (evald == null)
+			return null;
+		return ObservableExpression.wrap(evalAsDynamicCast(evald, valueType, valueOffset, env.reporting().at(1), exHandler));
 	}
 
-	private <S, T> EvaluatedExpression<SettableValue<?>, SettableValue<T>> evalAsDynamicCast(
+	private <S, T, EX extends Throwable> EvaluatedExpression<SettableValue<?>, SettableValue<T>> evalAsDynamicCast(
 		EvaluatedExpression<SettableValue<?>, SettableValue<S>> valueContainer, TypeToken<T> valueType, int expressionOffset,
-		ErrorReporting reporting) throws ExpressoEvaluationException {
+		ErrorReporting reporting, ExceptionHandler.Single<ExpressoInterpretationException, EX> exHandler) throws EX {
 		TypeToken<S> sourceType = (TypeToken<S>) valueContainer.getType().getType(0);
 
 		TypeTokens.TypeConverter<? super S, ? extends S, ? super T, ? extends T> converter;
-		ExceptionHandler.Container0<IllegalArgumentException> iae = ExceptionHandler.<IllegalArgumentException> get1().hold1();
+		ExceptionHandler.Single<IllegalArgumentException, NeverThrown> iae = ExceptionHandler.holder();
 		converter = TypeTokens.get().getCast(valueType, sourceType, true, false, iae);
 		if (converter != null) {
 			if (converter.isTrivial())
@@ -134,10 +144,11 @@ public class CastExpression implements ObservableExpression {
 				valueContainer.map(ModelTypes.Value.forType(valueType), vc -> new ConvertedInstantiator<>(vc, converter)), valueType,
 				valueContainer);
 		} else if (!TypeTokens.get().isAssignable(sourceType, valueType)//
-			&& !TypeTokens.get().isAssignable(valueType, sourceType))
-			throw new ExpressoEvaluationException(expressionOffset, getExpressionLength(),
-				"Cannot cast value of type " + sourceType + " to " + valueType);
-		else {
+			&& !TypeTokens.get().isAssignable(valueType, sourceType)) {
+			exHandler.handle1(new ExpressoInterpretationException("Cannot cast value of type " + sourceType + " to " + valueType,
+				reporting.getPosition(), getExpressionLength() - 1));
+			return null;
+		} else {
 			Class<S> sourceClass = TypeTokens.getRawType(sourceType);
 			return ObservableExpression.evEx(expressionOffset, getExpressionLength(), valueContainer
 				.map(ModelTypes.Value.forType(valueType), vc -> new CheckingInstantiator<>(vc, sourceClass, valueType, reporting)),

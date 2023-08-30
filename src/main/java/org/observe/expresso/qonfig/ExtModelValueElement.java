@@ -98,6 +98,25 @@ public class ExtModelValueElement<M, MV extends M> extends ModelValueElement.Def
 			return getElement().getPositionInFile();
 		}
 
+		public static class UnTyped<M> extends ExtModelValueElement.Def<M> {
+			private final String theTypeName;
+
+			public UnTyped(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType, ModelType.UnTyped<M> modelType, String typeName) {
+				super(parent, qonfigType, modelType);
+				theTypeName = typeName;
+			}
+
+			@Override
+			public ModelType.UnTyped<M> getModelType() {
+				return (ModelType.UnTyped<M>) super.getModelType();
+			}
+
+			@Override
+			public ModelInstanceType<M, ?> getType(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+				return getModelType().instance();
+			}
+		}
+
 		public static class Single<M> extends ExtModelValueElement.Def<M> {
 			private final String theTypeName;
 

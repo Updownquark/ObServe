@@ -1,7 +1,10 @@
 package org.observe.expresso;
 
+import java.text.ParseException;
+
 /** Thrown from {@link ExpressoParser#parse(String)} in response to text parse or semantic errors */
-public class ExpressoParseException extends ExpressoException {
+public class ExpressoParseException extends ParseException {
+	private final int theLength;
 	private final String theType;
 
 	/**
@@ -11,7 +14,8 @@ public class ExpressoParseException extends ExpressoException {
 	 * @param message The message for the exception
 	 */
 	public ExpressoParseException(int errorOffset, int endIndex, String type, String message) {
-		super(errorOffset, endIndex, message);
+		super(message, errorOffset);
+		theLength = endIndex - errorOffset;
 		theType = type;
 	}
 
@@ -23,7 +27,9 @@ public class ExpressoParseException extends ExpressoException {
 	 * @param cause The cause of the exception
 	 */
 	public ExpressoParseException(int errorOffset, int endIndex, String type, String message, Throwable cause) {
-		super(errorOffset, endIndex, message, cause);
+		super(message, errorOffset);
+		initCause(cause);
+		theLength = endIndex - errorOffset;
 		theType = type;
 	}
 
@@ -32,8 +38,7 @@ public class ExpressoParseException extends ExpressoException {
 	 * @param message The message for the exception
 	 */
 	public ExpressoParseException(Expression exp, String message) {
-		super(exp, message);
-		theType = exp.getType();
+		this(exp.getStartIndex(), exp.getEndIndex(), exp.getType(), message);
 	}
 
 	/**
@@ -42,8 +47,12 @@ public class ExpressoParseException extends ExpressoException {
 	 * @param cause The cause of the exception
 	 */
 	public ExpressoParseException(Expression exp, String message, Throwable cause) {
-		super(exp, message, cause);
-		theType = exp.getType();
+		this(exp.getStartIndex(), exp.getEndIndex(), exp.getType(), message, cause);
+	}
+
+	/** @return The text length of the error */
+	public int getErrorLength() {
+		return theLength;
 	}
 
 	/** @return The token type of the error */

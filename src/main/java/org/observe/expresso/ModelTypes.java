@@ -60,11 +60,6 @@ public class ModelTypes {
 	public static final ModelType.UnTyped<ObservableModelSet> Model = new ModelType.UnTyped<ObservableModelSet>("Model",
 		ObservableModelSet.class) {
 		@Override
-		public TypeToken<?> getType(ObservableModelSet value, int typeIndex) {
-			throw new IndexOutOfBoundsException(typeIndex + " of 0");
-		}
-
-		@Override
 		public <MV extends ObservableModelSet> HollowModelValue<ObservableModelSet, MV> createHollowValue(String name,
 			ModelInstanceType<ObservableModelSet, MV> type) {
 			throw new IllegalStateException("Hollow values not supported for models");
@@ -107,13 +102,10 @@ public class ModelTypes {
 		.<ModelType<?>, Function<SettableValue<?>, Object>> buildMap(null)//
 		.with(Event, value -> ObservableValue.flattenObservableValue((SettableValue<Observable<?>>) value))//
 		.with(Action, value -> {
-			TypeToken<Object> type = (TypeToken<Object>) value.getType().resolveType(ObservableAction.class.getTypeParameters()[0]);
-			return ObservableAction.of(type, cause -> {
-				ObservableAction<Object> a = (ObservableAction<Object>) value.get();
+			return ObservableAction.of(cause -> {
+				ObservableAction a = (ObservableAction) value.get();
 				if (a != null)
-					return a.act(cause);
-				else
-					return null;
+					a.act(cause);
 			});
 		})//
 		.with(Value, value -> {
@@ -301,125 +293,31 @@ public class ModelTypes {
 	}
 
 	/** See {@link ModelTypes#Action} */
-	public static class ActionModelType extends ModelType.SingleTyped<ObservableAction<?>> {
-		/** Action&lt;Void> type */
-		public final ModelInstanceType.SingleTyped<ObservableAction<?>, Void, ObservableAction<Void>> VOID = forType(TypeTokens.get().VOID);
-
+	public static class ActionModelType extends ModelType.UnTyped<ObservableAction> {
 		private ActionModelType() {
-			super("Action", (Class<ObservableAction<?>>) (Class<?>) ObservableAction.class);
+			super("Action", ObservableAction.class);
 		}
 
 		@Override
-		public TypeToken<?> getType(ObservableAction<?> value, int typeIndex) {
-			if (typeIndex == 0)
-				return value.getType();
-			else
-				throw new IndexOutOfBoundsException(typeIndex + " of 1");
+		public <MV extends ObservableAction> HollowModelValue<ObservableAction, MV> createHollowValue(String name,
+			ModelInstanceType<ObservableAction, MV> type) {
+			return (HollowModelValue<ObservableAction, MV>) new HollowAction(name);
 		}
 
-		@Override
-		public ModelInstanceType<ObservableAction<?>, ObservableAction<?>> any() {
-			return (ModelInstanceType<ObservableAction<?>, ObservableAction<?>>) super.any();
-		}
-
-		/**
-		 * A form of {@link #any()} that casts the type to a type parameter. This is useful in cases where the value type defines a type
-		 * parameter in the calling method.
-		 *
-		 * @param <V> The type to assign as
-		 * @return A ModelInstanceType of this model type with wildcard parameter types, as the given type
-		 */
-		public <V> ModelInstanceType<ObservableAction<?>, ObservableAction<V>> anyAsV() {
-			return (ModelInstanceType<ObservableAction<?>, ObservableAction<V>>) super.any();
-		}
-
-		@Override
-		public <V> ModelInstanceType.SingleTyped<ObservableAction<?>, V, ObservableAction<V>> forType(TypeToken<V> type) {
-			return (ModelInstanceType.SingleTyped<ObservableAction<?>, V, ObservableAction<V>>) super.forType(type);
-		}
-
-		@Override
-		public <V> ModelInstanceType.SingleTyped<ObservableAction<?>, V, ObservableAction<V>> forType(Class<V> type) {
-			return (ModelInstanceType.SingleTyped<ObservableAction<?>, V, ObservableAction<V>>) super.forType(type);
-		}
-
-		@Override
-		public <V> ModelInstanceType.SingleTyped<ObservableAction<?>, ? extends V, ObservableAction<? extends V>> below(TypeToken<V> type) {
-			return (ModelInstanceType.SingleTyped<ObservableAction<?>, ? extends V, ObservableAction<? extends V>>) super.below(type);
-		}
-
-		@Override
-		public <V> ModelInstanceType.SingleTyped<ObservableAction<?>, ? extends V, ObservableAction<? extends V>> below(Class<V> type) {
-			return (ModelInstanceType.SingleTyped<ObservableAction<?>, ? extends V, ObservableAction<? extends V>>) super.below(type);
-		}
-
-		@Override
-		public <V> ModelInstanceType.SingleTyped<ObservableAction<?>, ? super V, ObservableAction<? super V>> above(TypeToken<V> type) {
-			return (ModelInstanceType.SingleTyped<ObservableAction<?>, ? super V, ObservableAction<? super V>>) super.above(type);
-		}
-
-		@Override
-		public <V> ModelInstanceType.SingleTyped<ObservableAction<?>, ? super V, ObservableAction<? super V>> above(Class<V> type) {
-			return (ModelInstanceType.SingleTyped<ObservableAction<?>, ? super V, ObservableAction<? super V>>) super.above(type);
-		}
-
-		@Override
-		protected Function<ObservableAction<?>, ObservableAction<?>> convertType(ModelInstanceType<ObservableAction<?>, ?> target,
-			TypeConverter<Object, Object, Object, Object>[] casts) {
-			return src -> src.map((TypeToken<Object>) target.getType(0), casts[0]);
-		}
-
-		@Override
-		protected void setupConversions(ConversionBuilder<ObservableAction<?>> builder) {
-			builder.convertSelf(new ModelConverter<ObservableAction<?>, ObservableAction<?>>() {
-				@Override
-				public ModelInstanceConverter<ObservableAction<?>, ObservableAction<?>> convert(
-					ModelInstanceType<ObservableAction<?>, ?> source, ModelInstanceType<ObservableAction<?>, ?> dest,
-					InterpretedExpressoEnv env) throws IllegalArgumentException {
-					if (dest.getType(0).getType() == void.class || dest.getType(0).getType() == Void.class) {
-						return new ModelInstanceConverter<ObservableAction<?>, ObservableAction<?>>() {
-							@Override
-							public ObservableAction<?> convert(ObservableAction<?> source2) {
-								return source2.map(TypeTokens.get().VOID, __ -> null);
-							}
-
-							@Override
-							public ModelInstanceType<ObservableAction<?>, ?> getType() {
-								return Action.forType(TypeTokens.get().VOID);
-							}
-						};
-					}
-					return null;
-				}
-			});
-		}
-
-		@Override
-		public <MV extends ObservableAction<?>> HollowModelValue<ObservableAction<?>, MV> createHollowValue(String name,
-			ModelInstanceType<ObservableAction<?>, MV> type) {
-			return (HollowModelValue<ObservableAction<?>, MV>) new HollowAction<>(name, (TypeToken<Object>) type.getType(0));
-		}
-
-		static class HollowAction<T> implements HollowModelValue<ObservableAction<?>, ObservableAction<T>>, ObservableAction<T> {
+		static class HollowAction implements HollowModelValue<ObservableAction, ObservableAction>, ObservableAction {
 			private final String theName;
-			private final TypeToken<T> theType;
 			private HollowModelValue<SettableValue<?>, SettableValue<String>> theEnabled;
 
-			private ObservableAction<T> theSatisfied;
+			private ObservableAction theSatisfied;
 
-			public HollowAction(String name, TypeToken<T> type) {
+			public HollowAction(String name) {
 				theName = name;
-				theType = type;
 			}
 
 			@Override
-			public TypeToken<T> getType() {
-				return theType;
-			}
-
-			@Override
-			public T act(Object cause) throws IllegalStateException {
-				return null;
+			public void act(Object cause) throws IllegalStateException {
+				if (theSatisfied != null)
+					theSatisfied.act(cause);
 			}
 
 			@Override
@@ -440,9 +338,9 @@ public class ModelTypes {
 			}
 
 			@Override
-			public void satisfy(ObservableAction<T> realValue) throws IllegalStateException {
+			public void satisfy(ObservableAction realValue) throws IllegalStateException {
 				if (realValue == null)
-					throw new NullPointerException("Cannot satisfy a hollow value (Action<" + theType + ">) with null");
+					throw new NullPointerException("Cannot satisfy a hollow value (Action) with null");
 				theSatisfied = realValue;
 				if (theEnabled != null)
 					theEnabled.satisfy(SettableValue.asSettable(realValue.isEnabled(), __ -> "Not Settable"));
@@ -1732,8 +1630,8 @@ public class ModelTypes {
 			return src -> {
 				ObservableMultiMap.MultiMapFlow<Object, Object> flow = ((ObservableMultiMap<Object, Object>) src).flow();
 				if (casts[0] != null) {
-					flow = flow.withKeys(keyFlow -> keyFlow.transformEquivalent((TypeToken<Object>) target.getType(0),
-						transformReversible(casts[0])));
+					flow = flow.withKeys(
+						keyFlow -> keyFlow.transformEquivalent((TypeToken<Object>) target.getType(0), transformReversible(casts[0])));
 				}
 				if (casts[1] != null) {
 					flow = flow
@@ -1851,8 +1749,8 @@ public class ModelTypes {
 			return src -> {
 				ObservableSortedMultiMap.SortedMultiMapFlow<Object, Object> flow = ((ObservableSortedMultiMap<Object, Object>) src).flow();
 				if (casts[0] != null) {
-					flow = flow.withStillSortedKeys(keyFlow -> keyFlow.transformEquivalent((TypeToken<Object>) target.getType(0),
-						transformReversible(casts[0])));
+					flow = flow.withStillSortedKeys(
+						keyFlow -> keyFlow.transformEquivalent((TypeToken<Object>) target.getType(0), transformReversible(casts[0])));
 				}
 				if (casts[1] != null) {
 					flow = flow

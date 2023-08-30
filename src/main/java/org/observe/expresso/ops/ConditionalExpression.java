@@ -9,7 +9,6 @@ import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableSet;
 import org.observe.expresso.CompiledExpressoEnv;
 import org.observe.expresso.ExpressoCompilationException;
-import org.observe.expresso.ExpressoEvaluationException;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
@@ -24,6 +23,7 @@ import org.observe.util.TypeTokens;
 import org.qommons.LambdaUtils;
 import org.qommons.QommonsUtils;
 import org.qommons.ex.ExceptionHandler;
+import org.qommons.ex.NeverThrown;
 
 import com.google.common.reflect.TypeToken;
 
@@ -97,38 +97,50 @@ public class ConditionalExpression implements ObservableExpression {
 	}
 
 	@Override
-	public ModelType<?> getModelType(CompiledExpressoEnv env, int expressionOffset)
-		throws ExpressoCompilationException, ExpressoEvaluationException {
+	public ModelType<?> getModelType(CompiledExpressoEnv env, int expressionOffset) throws ExpressoCompilationException {
 		int primaryOffset = expressionOffset + getComponentOffset(1);
 		return thePrimary.getModelType(env, primaryOffset).getCommonType(//
 			theSecondary.getModelType(env, primaryOffset + thePrimary.getExpressionLength() + 1));
 	}
 
 	@Override
-	public <M, MV extends M, TX extends Throwable> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type,
-		InterpretedExpressoEnv env, int expressionOffset, ExceptionHandler.Single<TypeConversionException, TX> exHandler)
-		throws ExpressoEvaluationException, ExpressoInterpretationException, TX {
+	public <M, MV extends M, EX extends Throwable> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type,
+		InterpretedExpressoEnv env, int expressionOffset, ExceptionHandler.Single<ExpressoInterpretationException, EX> exHandler)
+		throws ExpressoInterpretationException, EX {
 		if (type.getModelType() == ModelTypes.Action || type.getModelType() == ModelTypes.Value
 			|| type.getModelType() == ModelTypes.Collection || type.getModelType() == ModelTypes.Set) {//
 		} else {
-			exHandler.handle1(new TypeConversionException(
-				"Conditional expressions not supported for model type " + type.getModelType() + " (" + this + ")", type,
-				env.reporting().getPosition()));
-			return null;
+			throw new ExpressoInterpretationException(
+				"Conditional expressions not supported for model type " + type.getModelType() + " (" + this + ")",
+				env.reporting().getPosition(), getExpressionLength());
 		}
+		ExceptionHandler.Double<ExpressoInterpretationException, TypeConversionException, EX, NeverThrown> doubleX = exHandler
+			.stack(ExceptionHandler.holder());
 		EvaluatedExpression<SettableValue<?>, SettableValue<Boolean>> conditionV = theCondition.evaluate(//
-			ModelTypes.Value.forType(boolean.class), env, expressionOffset, exHandler);
-		if (conditionV == null)
+			ModelTypes.Value.forType(boolean.class), env, expressionOffset, doubleX);
+		if (doubleX.get2() != null) {
+			exHandler.handle1(new ExpressoInterpretationException(doubleX.get2().getMessage(), env.reporting().getPosition(),
+				theCondition.getExpressionLength()));
+			return null;
+		} else if (conditionV == null)
 			return null;
 		int primaryOffset = expressionOffset + theCondition.getExpressionLength() + 1;
 		InterpretedExpressoEnv primaryEnv = env.at(theCondition.getExpressionLength() + 1);
-		EvaluatedExpression<M, MV> primaryV = thePrimary.evaluate(type, primaryEnv, primaryOffset, exHandler);
-		if (primaryV == null)
+		EvaluatedExpression<M, MV> primaryV = thePrimary.evaluate(type, primaryEnv, primaryOffset, doubleX);
+		if (doubleX.get2() != null) {
+			exHandler.handle1(new ExpressoInterpretationException(doubleX.get2().getMessage(),
+				env.reporting().at(getComponentOffset(1)).getPosition(), thePrimary.getExpressionLength()));
+			return null;
+		} else if (primaryV == null)
 			return null;
 		int secondaryOffset = primaryOffset + thePrimary.getExpressionLength() + 1;
 		InterpretedExpressoEnv secondaryEnv = primaryEnv.at(thePrimary.getExpressionLength() + 1);
-		EvaluatedExpression<M, MV> secondaryV = theSecondary.evaluate(type, secondaryEnv, secondaryOffset, exHandler);
-		if (secondaryV == null)
+		EvaluatedExpression<M, MV> secondaryV = theSecondary.evaluate(type, secondaryEnv, secondaryOffset, doubleX);
+		if (doubleX.get2() != null) {
+			exHandler.handle1(new ExpressoInterpretationException(doubleX.get2().getMessage(),
+				env.reporting().at(getComponentOffset(2)).getPosition(), theSecondary.getExpressionLength()));
+			return null;
+		} else if (secondaryV == null)
 			return null;
 
 		ModelInstanceType<M, MV> resultType;
