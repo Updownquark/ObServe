@@ -85,7 +85,7 @@ public class CastExpression implements ObservableExpression {
 	@Override
 	public <M, MV extends M, EX extends Throwable> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type,
 		InterpretedExpressoEnv env, int expressionOffset, ExceptionHandler.Single<ExpressoInterpretationException, EX> exHandler)
-		throws ExpressoInterpretationException, EX {
+			throws ExpressoInterpretationException, EX {
 		if (type.getModelType() != ModelTypes.Value)
 			throw new ExpressoInterpretationException("A cast expression can only be evaluated as a value", env.reporting().getPosition(),
 				getExpressionLength());
@@ -138,8 +138,6 @@ public class CastExpression implements ObservableExpression {
 		ExceptionHandler.Single<IllegalArgumentException, NeverThrown> iae = ExceptionHandler.holder();
 		converter = TypeTokens.get().getCast(valueType, sourceType, true, false, iae);
 		if (converter != null) {
-			if (converter.isTrivial())
-				return (EvaluatedExpression<SettableValue<?>, SettableValue<T>>) (EvaluatedExpression<?, ?>) valueContainer;
 			return ObservableExpression.evEx(expressionOffset, getExpressionLength(),
 				valueContainer.map(ModelTypes.Value.forType(valueType), vc -> new ConvertedInstantiator<>(vc, converter)), valueType,
 				valueContainer);
