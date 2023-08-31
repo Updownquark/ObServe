@@ -35,6 +35,7 @@ import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.TypeConversionException;
 import org.observe.util.TypeTokens;
 import org.qommons.ArrayUtils;
+import org.qommons.BreakpointHere;
 import org.qommons.QommonsUtils;
 import org.qommons.Stamped;
 import org.qommons.StringUtils;
@@ -485,22 +486,26 @@ public abstract class Invocation implements ObservableExpression {
 
 				}
 				if (ok) {
+					if ("listFiles".equals(methodName))
+						BreakpointHere.breakpoint();
 					TypeToken<?> returnType = tva.resolve(impl.getReturnType(m));
 
 					ModelInstanceConverter<?, ?> converter = ModelTypes.Value.forType(returnType).convert(targetType, env);
 					if (converter == null) {
-						exHandler.handle1(
+						if (methodErrors == null)
+							methodErrors = new LinkedHashMap<>();
+						methodErrors.put(m,
 							new ExpressoInterpretationException("Return type " + returnType + " of method " + Invocation.printSignature(m)
-							+ " cannot be assigned to type " + targetType, env.reporting().getPosition(), 0));
-						return null;
+						+ " cannot be assigned to type " + targetType, env.reporting().getPosition(), 0));
+					} else {
+						if (specificity < 0) {
+							specificity = 0;
+							for (TypeToken<?> pt : paramTypes)
+								specificity += TypeTokens.get().getTypeSpecificity(pt.getType());
+						}
+						bestResult = new Invocation.MethodResult<>(m, o, false, specificity,
+							(ModelInstanceConverter<SettableValue<Object>, MV>) converter);
 					}
-					if (specificity < 0) {
-						specificity = 0;
-						for (TypeToken<?> pt : paramTypes)
-							specificity += TypeTokens.get().getTypeSpecificity(pt.getType());
-					}
-					bestResult = new Invocation.MethodResult<>(m, o, false, specificity,
-						(ModelInstanceConverter<SettableValue<Object>, MV>) converter);
 				}
 			}
 		}
