@@ -49,13 +49,13 @@ public abstract class ObservableTreeModel<T> implements TreeModel {
 	private final List<TreeModelListener> theListeners;
 
 	/** @param rootValue The root of the model */
-	public ObservableTreeModel(T rootValue) {
+	protected ObservableTreeModel(T rootValue) {
 		this(ObservableValue.<T> of(rootValue == null ? (TypeToken<T>) (TypeToken<?>) TypeTokens.get().OBJECT
 			: (TypeToken<T>) TypeTokens.get().of(rootValue.getClass()), rootValue));
 	}
 
 	/** @param root The observable value for the root of the model */
-	public ObservableTreeModel(ObservableValue<? extends T> root) {
+	protected ObservableTreeModel(ObservableValue<? extends T> root) {
 		theRoot = root;
 
 		theNodes = new ConcurrentHashMap<>();
@@ -171,11 +171,12 @@ public abstract class ObservableTreeModel<T> implements TreeModel {
 	}
 
 	/**
-	 * @param parent
-	 *            The parent to get the children of
+	 * @param parentPath The path from the root to the parent node to get the children of
+	 * @param nodeUntil An observable that will fire when the node is removed from the tree or its value changes such that the returned
+	 *        collection is no longer needed
 	 * @return An observable collection representing the parent's children
 	 */
-	protected abstract ObservableCollection<? extends T> getChildren(T parent);
+	protected abstract ObservableCollection<? extends T> getChildren(BetterList<T> parentPath, Observable<?> nodeUntil);
 
 	/** Releases this model's observers placed on child collections */
 	public void dispose() {
@@ -227,7 +228,7 @@ public abstract class ObservableTreeModel<T> implements TreeModel {
 			areChildrenInitialized = true;
 
 			unsubscribe = SimpleObservable.build().build();
-			theUnsafeChildren = ObservableTreeModel.this.getChildren(theValue);
+			theUnsafeChildren = ObservableTreeModel.this.getChildren(getBetterPath(), unsubscribe.readOnly());
 			theChildren = theUnsafeChildren == null ? null : theUnsafeChildren.safe(ThreadConstraint.EDT, unsubscribe);
 			init(false);
 			return this;
@@ -355,14 +356,13 @@ public abstract class ObservableTreeModel<T> implements TreeModel {
 		void changed() {
 			if (!areChildrenInitialized)
 				return;
-			ObservableCollection<? extends T> children = ObservableTreeModel.this.getChildren(theValue);
+			ObservableCollection<? extends T> children = ObservableTreeModel.this.getChildren(getBetterPath(), unsubscribe.readOnly());
 			if (theUnsafeChildren == children
 				|| (children != null && theUnsafeChildren != null && children.getIdentity().equals(theUnsafeChildren.getIdentity())))
 				return;
 			try (Transaction t = Transactable.lock(theChildren, false, null); //
 				Transaction t2 = Transactable.lock(children, false, null)) {
-				if (unsubscribe != null)
-					unsubscribe.onNext(null);
+				unsubscribe.onNext(null);
 				if (theChildren != null) {
 					int[] indexes = new int[theChildNodes.size()];
 					Object[] values = new Object[indexes.length];

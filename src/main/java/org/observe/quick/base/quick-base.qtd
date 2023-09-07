@@ -121,12 +121,12 @@
 		<add-on name="multi-value-renderable" requires="widget">
 			<element-model>
 				<?DOC The value that is currently in use (e.g. being rendered, hovered, etc.)?>
-				<value name-attribute="value-name" priority="1" />
+				<value name-attribute="active-value-name" priority="1" />
 				<?DOC Whether the current value is selected?>
 				<value name="selected" type="boolean" priority="100" />
 			</element-model>
 			<?DOC The name of the currently applicable value, e.g. for rendering?>
-			<attribute name="value-name" type="identifier" default="value" />
+			<attribute name="active-value-name" type="identifier" default="value" />
 		</add-on>
 		<add-on name="tabular-widget" requires="multi-value-widget">
 			<element-model>
@@ -181,6 +181,11 @@
 		</add-on>
 		<add-on name="dialog" inherits="window">
 			<attribute name="modal" type="boolean" default="true" />
+		</add-on>
+
+		<add-on name="tree-column" requires="column">
+			<attr-mod name="column.value" specify="forbidden" default="{active-value-name}.getLast()" />
+			<attr-mod name="column.name" specify="optional" default="`Tree Column`" />
 		</add-on>
 	</add-ons>
 
@@ -329,17 +334,13 @@
 		</element-def>
 
 		<?DOC A widget that allows the user to select between a collection of available values?>
-		<element-def name="collection-selector-widget" extends="value-widget" abstract="true">
-			<element-model>
-				<?DOC Whether the current value is selected?>
-				<value name="selected" type="boolean" priority="100" />
-			</element-model>
+		<element-def name="collection-selector-widget" extends="value-widget" inherits="multi-value-renderable" abstract="true">
 			<?DOC The values to render in the widget?>
 			<attribute name="values" type="expression" specify="required" />
 		</element-def>
 		<?DOC A combo/drop-down box?>
-		<element-def name="combo" extends="collection-selector-widget">
-			<!-- TODO Renderer -->
+		<element-def name="combo" extends="collection-selector-widget" inherits="rendering">
+			<label role="default-renderer" value="{active-value-name}" />
 		</element-def>
 		<?DOC A set of radio buttons, one for each available value, only one of which may be selected?>
 		<element-def name="radio-buttons" extends="collection-selector-widget" />
@@ -463,7 +464,7 @@
 		<element-def name="tree" extends="multi-value-widget">
 			<element-model>
 				<?DOC The path to the current value (e.g. the one that is being rendered)?>
-				<value name-attribute="path-name" priority="1" />
+				<value name-attribute="active-node-name" priority="1" />
 				<?DOC Whether the current value (e.g. the one being rendered) is a leaf node with no possibility of children?>
 				<value name="leaf" type="boolean" priority="20" />
 			</element-model>
@@ -473,10 +474,10 @@
 			<attribute name="children" type="expression" specify="required" />
 			<?DOC Whether the current value is a leaf node with no possibility of children?>
 			<attribute name="leaf" type="expression" specify="optional" />
-			<?DOC The name of the model value containing the current value's path?>
-			<attribute name="path-name" type="identifier" default="path" />
+			<?DOC The name of the model value containing the termninal node of the current value's path?>
+			<attribute name="active-node-name" type="identifier" default="path" />
 			<?DOC The column to render each value in the tree?>
-			<child-def name="tree-column" type="column" min="0" max="1" />
+			<child-def name="tree-column" type="column" min="0" max="1" inherits="tree-column" />
 			<?DOC Actions that may be performed against selected values in the tree?>
 			<child-def name="action" type="abstract-value-action" min="0" max="inf" />
 		</element-def>

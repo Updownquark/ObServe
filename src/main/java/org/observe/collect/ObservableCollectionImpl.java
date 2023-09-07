@@ -3928,6 +3928,12 @@ public final class ObservableCollectionImpl {
 
 			init(backing// TODO Maybe one day add capability for callers to affect the backing data
 				.flow().unmodifiable(false).collectPassive());
+			try {
+				refresh();
+			} catch (RuntimeException e) {
+				System.err.println("Could not perform initial refresh");
+				e.printStackTrace();
+			}
 		}
 
 		@Override

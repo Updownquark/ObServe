@@ -40,6 +40,7 @@ import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigToolkit;
 import org.qommons.ex.ExceptionHandler;
 import org.qommons.ex.NeverThrown;
+import org.qommons.io.ErrorReporting;
 import org.qommons.io.LocatedFilePosition;
 import org.qommons.io.LocatedPositionedContent;
 
@@ -165,14 +166,15 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 	 * @param styleSheet Whether the expression is from a style sheet. Model values that do not declare their
 	 *        {@link org.observe.expresso.qonfig.ElementModelValue.Identity#getType() type} cannot be used as conditions in style sheets.
 	 * @param dmvCache The model value cache to use
+	 * @param reporting
 	 * @return The expression to use in place of the given condition
 	 * @throws QonfigInterpretationException If a type-less condition is used from a style sheet
 	 */
 	public LocatedExpression findModelValues(LocatedExpression ex, Collection<ElementModelValue.Identity> modelValues,
-		ObservableModelSet models, QonfigToolkit expresso, boolean styleSheet, ElementModelValue.Cache dmvCache)
+		ObservableModelSet models, QonfigToolkit expresso, boolean styleSheet, ElementModelValue.Cache dmvCache, ErrorReporting reporting)
 			throws QonfigInterpretationException {
 		ObservableExpression expression;
-		expression = _findModelValues(ex.getExpression(), modelValues, models, expresso, styleSheet, dmvCache, 0);
+		expression = _findModelValues(ex.getExpression(), modelValues, models, expresso, styleSheet, dmvCache, 0, reporting);
 		if (expression == ex.getExpression())
 			return ex;
 		return new LocatedExpression() {
@@ -221,7 +223,8 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 	}
 
 	private ObservableExpression _findModelValues(ObservableExpression ex, Collection<ElementModelValue.Identity> modelValues,
-		ObservableModelSet models, QonfigToolkit expresso, boolean styleSheet, ElementModelValue.Cache dmvCache, int expressionOffset) {
+		ObservableModelSet models, QonfigToolkit expresso, boolean styleSheet, ElementModelValue.Cache dmvCache, int expressionOffset,
+		ErrorReporting reporting) {
 		if (ex instanceof NameExpression && ((NameExpression) ex).getContext() == null) {
 			NameExpression nameEx = (NameExpression) ex;
 			String name = nameEx.getNames().getFirst().getName();
@@ -230,7 +233,7 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 				if (node.getValueIdentity() instanceof ElementModelValue.Identity)
 					modelValues.add((ElementModelValue.Identity) node.getValueIdentity());
 			} else if (styleSheet) {
-				Map<String, ElementModelValue.Identity> typeValues = getTypeValues(dmvCache, expresso, null);
+				Map<String, ElementModelValue.Identity> typeValues = getTypeValues(dmvCache, expresso, null, reporting);
 				ElementModelValue.Identity mv = typeValues == null ? null : typeValues.get(name);
 				if (mv != null) {
 					modelValues.add(mv);
@@ -245,7 +248,7 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 			int c = 0;
 			for (ObservableExpression child : ex.getComponents()) {
 				ObservableExpression newChild = _findModelValues(child, modelValues, models, expresso, styleSheet, dmvCache, //
-					ex.getComponentOffset(c));
+					ex.getComponentOffset(c), reporting);
 				if (newChild != child) {
 					if (replace[0] == null)
 						replace[0] = new IdentityHashMap<>();
@@ -264,13 +267,13 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 	}
 
 	private Map<String, ElementModelValue.Identity> getTypeValues(ElementModelValue.Cache dmvCache, QonfigToolkit expresso,
-		Map<String, ElementModelValue.Identity> values) {
+		Map<String, ElementModelValue.Identity> values, ErrorReporting reporting) {
 		for (QonfigElementOrAddOn type : theTypes.values())
-			values = dmvCache.getDynamicValues(expresso, type, values);
+			values = dmvCache.getDynamicValues(expresso, type, values, reporting);
 		if (theRole != null && theRole.getType() != null)
-			values = dmvCache.getDynamicValues(expresso, theRole.getType(), values);
+			values = dmvCache.getDynamicValues(expresso, theRole.getType(), values, reporting);
 		if (theParent != null)
-			values = theParent.getTypeValues(dmvCache, expresso, values);
+			values = theParent.getTypeValues(dmvCache, expresso, values, reporting);
 		return values;
 	}
 
@@ -575,7 +578,7 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 	 *         model values} from a style-sheet
 	 */
 	public StyleApplicationDef forCondition(LocatedExpression condition, ObservableModelSet models,
-		QonfigAttributeDef.Declared priorityAttr, boolean styleSheet, ElementModelValue.Cache dmvCache)
+		QonfigAttributeDef.Declared priorityAttr, boolean styleSheet, ElementModelValue.Cache dmvCache, ErrorReporting reporting)
 			throws QonfigInterpretationException {
 		LocatedExpression newCondition;
 		if (theCondition == null)
@@ -584,16 +587,16 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 			newCondition = new LocatedAndExpression(theCondition, condition);
 
 		Map<ElementModelValue.Identity, Integer> modelValues = new HashMap<>();
-		newCondition = getPrioritizedModelValues(newCondition, models, priorityAttr, styleSheet, dmvCache, modelValues);
+		newCondition = getPrioritizedModelValues(newCondition, models, priorityAttr, styleSheet, dmvCache, modelValues, reporting);
 		return new StyleApplicationDef(theParent, theRole, theTypes, newCondition, modelValues);
 	}
 
 	private LocatedExpression getPrioritizedModelValues(LocatedExpression newCondition, ObservableModelSet models,
 		QonfigAttributeDef.Declared priorityAttr, boolean styleSheet, ElementModelValue.Cache dmvCache,
-		Map<ElementModelValue.Identity, Integer> modelValues) throws QonfigInterpretationException {
+		Map<ElementModelValue.Identity, Integer> modelValues, ErrorReporting reporting) throws QonfigInterpretationException {
 		Set<ElementModelValue.Identity> mvs = new LinkedHashSet<>();
 		// We don't need to worry about satisfying anything here. The model values just need to be available for the link level.
-		newCondition = findModelValues(newCondition, mvs, models, priorityAttr.getDeclarer(), styleSheet, dmvCache);
+		newCondition = findModelValues(newCondition, mvs, models, priorityAttr.getDeclarer(), styleSheet, dmvCache, reporting);
 		mvs.addAll(theModelValues.keySet());
 		prioritizeModelValues(mvs, theModelValues, priorityAttr, modelValues);
 		return newCondition;

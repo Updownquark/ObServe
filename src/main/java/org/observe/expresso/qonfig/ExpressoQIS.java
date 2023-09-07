@@ -119,10 +119,11 @@ public class ExpressoQIS implements SpecialSession<ExpressoQIS> {
 			expression = getExpressoParser().parse(((QonfigExpression) value.value).text);
 		} catch (ExpressoParseException e) {
 			LocatedFilePosition position;
-			if (value.position == null || e.getErrorOffset() < 0)
-				position = null;
+			if (value.position instanceof LocatedPositionedContent)
+				position = ((LocatedPositionedContent) value.position).getPosition(e.getErrorOffset());
 			else
-				position = new LocatedFilePosition(getElement().getDocument().getLocation(), value.position.getPosition(e.getErrorOffset()));
+				position = new LocatedFilePosition(getElement().getDocument().getLocation(),
+					value.position.getPosition(e.getErrorOffset()));
 			throw new QonfigInterpretationException("Could not parse attribute " + type, position, e.getErrorLength(), e);
 		}
 		return new CompiledExpression(expression, getElement(), type,

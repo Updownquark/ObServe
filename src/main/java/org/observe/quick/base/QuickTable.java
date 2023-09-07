@@ -45,8 +45,8 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 		}
 
 		@Override
-		protected String getValueVariableName(ExpressoQIS session) {
-			return session.getAttributeText("value-name");
+		protected String getActiveValueVariableName(ExpressoQIS session) {
+			return session.getAttributeText("active-value-name");
 		}
 
 		@Override
@@ -81,7 +81,7 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 		@Override
 		protected TypeToken<?> getRowType(TabularWidget.Interpreted<?, ?> interpreted, InterpretedExpressoEnv env)
 			throws ExpressoInterpretationException {
-			return ((Interpreted<?>) interpreted).getRowType();
+			return ((Interpreted<?>) interpreted).getValueType();
 		}
 
 		@Override
@@ -107,7 +107,7 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 		}
 
 		@Override
-		public TypeToken<R> getRowType() {
+		public TypeToken<R> getValueType() {
 			return (TypeToken<R>) theRows.getType().getType(0);
 		}
 
@@ -131,7 +131,7 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 
 		@Override
 		public TypeToken<QuickTable<R>> getWidgetType() {
-			return TypeTokens.get().keyFor(QuickTable.class).parameterized(getRowType());
+			return TypeTokens.get().keyFor(QuickTable.class).parameterized(getValueType());
 		}
 
 		@Override
@@ -140,13 +140,13 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 			theRows = getDefinition().getRows().interpret(ModelTypes.Collection.<R> anyAsV(), env);
 			super.doUpdate(env);
 			theSelection = getDefinition().getSelection() == null ? null
-				: getDefinition().getSelection().interpret(ModelTypes.Value.forType(getRowType()), env);
+				: getDefinition().getSelection().interpret(ModelTypes.Value.forType(getValueType()), env);
 			theMultiSelection = getDefinition().getMultiSelection() == null ? null
-				: getDefinition().getMultiSelection().interpret(ModelTypes.Collection.forType(getRowType()), env);
+				: getDefinition().getMultiSelection().interpret(ModelTypes.Collection.forType(getValueType()), env);
 			CollectionUtils.synchronize(theActions, getDefinition().getActions(), //
 				(a, d) -> a.getIdentity() == d.getIdentity())//
 			.<ExpressoInterpretationException> simpleE(
-				child -> (ValueAction.Interpreted<R, ?>) ((ValueAction.Def<R, ?>) child).interpret(this, getRowType()))//
+				child -> (ValueAction.Interpreted<R, ?>) ((ValueAction.Def<R, ?>) child).interpret(this, getValueType()))//
 			.rightOrder()//
 			.onRightX(element -> element.getLeftValue().updateAction(getExpressoEnv()))//
 			.onCommonX(element -> element.getLeftValue().updateAction(getExpressoEnv()))//

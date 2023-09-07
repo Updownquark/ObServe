@@ -37,8 +37,8 @@ import org.qommons.config.QonfigInterpretationException;
 import com.google.common.reflect.TypeToken;
 
 public interface QuickTableColumn<R, C> {
-	public interface TableColumnSet<R> extends RowTyped<R> {
-		public interface Def<CC extends TableColumnSet<?>> extends RowTyped.Def<CC> {
+	public interface TableColumnSet<R> extends ValueTyped<R> {
+		public interface Def<CC extends TableColumnSet<?>> extends ValueTyped.Def<CC> {
 			QuickWidget.Def<?> getRenderer();
 
 			ColumnEditing.Def getEditing();
@@ -46,12 +46,12 @@ public interface QuickTableColumn<R, C> {
 			<R> Interpreted<R, ? extends CC> interpret(ExElement.Interpreted<?> parent);
 		}
 
-		public interface Interpreted<R, CC extends TableColumnSet<R>> extends RowTyped.Interpreted<R, CC> {
+		public interface Interpreted<R, CC extends TableColumnSet<R>> extends ValueTyped.Interpreted<R, CC> {
 			@Override
 			Def<? super CC> getDefinition();
 
 			@Override
-			TabularWidget.Interpreted<R, ?> getParentElement();
+			ValueTyped.Interpreted<R, ?> getParentElement();
 
 			QuickWidget.Interpreted<?> getRenderer();
 
@@ -63,7 +63,7 @@ public interface QuickTableColumn<R, C> {
 		}
 
 		@Override
-		MultiValueWidget<R> getParentElement();
+		ValueTyped<R> getParentElement();
 
 		TypeToken<R> getRowType();
 
@@ -330,7 +330,7 @@ public interface QuickTableColumn<R, C> {
 		}
 
 		public void setEditorContext(ColumnEditContext<R, C> ctx) {
-			theEditRowValue.set(ctx.getRenderValue(), null);
+			theEditRowValue.set(ctx.getActiveValue(), null);
 			theEditColumnValue.set(ctx.getEditColumnValue(), null);
 			isSelected.set(ctx.isSelected(), null);
 			theRowIndex.set(ctx.getRowIndex(), null);
@@ -342,7 +342,7 @@ public interface QuickTableColumn<R, C> {
 			super.doUpdate(interpreted);
 			ColumnEditing.Interpreted<R, C> myInterpreted = (ColumnEditing.Interpreted<R, C>) interpreted;
 
-			TypeToken<R> rowType = myInterpreted.getParentElement().getParentElement().getRowType();
+			TypeToken<R> rowType = myInterpreted.getParentElement().getParentElement().getValueType();
 			if (theEditRowValue == null || !theRowType.equals(rowType)) {
 				theEditRowValue = SettableValue
 					.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<R>> parameterized(rowType)).build();
@@ -400,24 +400,28 @@ public interface QuickTableColumn<R, C> {
 
 			ExFlexibleElementModelAddOn.satisfyElementValue(theColumnEditValueVariable, myModels,
 				SettableValue.flatten(theEditColumnValue));
-			MultiValueWidget<R> table = getParentElement().getParentElement();
-			if (theEditor != null) {
+			ExElement owner = getParentElement().getParentElement();
+			if (theEditor != null && owner instanceof MultiValueRenderable) {
 				// Not enough to copy the editor models, because I also need to replace values table models
 				ModelSetInstance editorModels = myModels.copy()//
-					.withAll(myModels.getInherited(table.getModels().getIdentity()).copy(myModels.getUntil()).build())//
+					.withAll(myModels.getInherited(owner.getModels().getIdentity()).copy(myModels.getUntil()).build())//
 					.build();
-				if (table.getValueVariable() != null)
-					ExFlexibleElementModelAddOn.satisfyElementValue(table.getValueVariable(), editorModels,
+				MultiValueRenderable<R> mvr = (MultiValueRenderable<R>) owner;
+				if (mvr.getActiveValueVariable() != null)
+					ExFlexibleElementModelAddOn.satisfyElementValue(mvr.getActiveValueVariable(), editorModels,
 						SettableValue.flatten(theEditRowValue), ExFlexibleElementModelAddOn.ActionIfSatisfied.Replace);
-				if (table.getSelectedVariable() != null)
-					ExFlexibleElementModelAddOn.satisfyElementValue(table.getSelectedVariable(), editorModels,
+				if (mvr.getSelectedVariable() != null)
+					ExFlexibleElementModelAddOn.satisfyElementValue(mvr.getSelectedVariable(), editorModels,
 						SettableValue.flatten(isSelected), ExFlexibleElementModelAddOn.ActionIfSatisfied.Replace);
-				if (table.getRowIndexVariable() != null)
-					ExFlexibleElementModelAddOn.satisfyElementValue(table.getRowIndexVariable(), editorModels,
-						SettableValue.flatten(theRowIndex), ExFlexibleElementModelAddOn.ActionIfSatisfied.Replace);
-				if (table.getColumnIndexVariable() != null)
-					ExFlexibleElementModelAddOn.satisfyElementValue(table.getColumnIndexVariable(), editorModels,
-						SettableValue.flatten(theColumnIndex), ExFlexibleElementModelAddOn.ActionIfSatisfied.Replace);
+				if (owner instanceof TabularWidget) {
+					TabularWidget<R> table = (TabularWidget<R>) owner;
+					if (table.getRowIndexVariable() != null)
+						ExFlexibleElementModelAddOn.satisfyElementValue(table.getRowIndexVariable(), editorModels,
+							SettableValue.flatten(theRowIndex), ExFlexibleElementModelAddOn.ActionIfSatisfied.Replace);
+					if (table.getColumnIndexVariable() != null)
+						ExFlexibleElementModelAddOn.satisfyElementValue(table.getColumnIndexVariable(), editorModels,
+							SettableValue.flatten(theColumnIndex), ExFlexibleElementModelAddOn.ActionIfSatisfied.Replace);
+				}
 				theEditor.instantiate(editorModels);
 			}
 		}
@@ -651,7 +655,7 @@ public interface QuickTableColumn<R, C> {
 				public void update(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 					super.update(env);
 					theReplacement = getDefinition().getReplacement() == null ? null : getDefinition().getReplacement()
-						.interpret(ModelTypes.Value.forType(getElement().getParentElement().getRowType()), env);
+						.interpret(ModelTypes.Value.forType(getElement().getParentElement().getValueType()), env);
 				}
 
 				@Override
@@ -724,13 +728,13 @@ public interface QuickTableColumn<R, C> {
 			private QuickWidget.Def<?> theRenderer;
 			private ColumnEditing.Def theEditing;
 
-			public Def(RowTyped.Def<?> parent, QonfigElementOrAddOn type) {
+			public Def(ValueTyped.Def<?> parent, QonfigElementOrAddOn type) {
 				super(parent, type);
 			}
 
 			@Override
-			public RowTyped.Def<?> getParentElement() {
-				return (RowTyped.Def<?>) super.getParentElement();
+			public ValueTyped.Def<?> getParentElement() {
+				return (ValueTyped.Def<?>) super.getParentElement();
 			}
 
 			@QonfigAttributeGetter(asType = "column", value = "name")
@@ -790,7 +794,7 @@ public interface QuickTableColumn<R, C> {
 
 			@Override
 			public <R> Interpreted<R, ?> interpret(ExElement.Interpreted<?> parent) {
-				return new Interpreted<>(this, (RowTyped.Interpreted<R, ?>) parent);
+				return new Interpreted<>(this, (ValueTyped.Interpreted<R, ?>) parent);
 			}
 		}
 
@@ -802,8 +806,10 @@ public interface QuickTableColumn<R, C> {
 			private QuickWidget.Interpreted<?> theRenderer;
 			private ColumnEditing.Interpreted<R, C> theEditing;
 
-			public Interpreted(SingleColumnSet.Def definition, RowTyped.Interpreted<R, ?> parent) {
+			public Interpreted(SingleColumnSet.Def definition, ValueTyped.Interpreted<R, ?> parent) {
 				super(definition, parent);
+				if (!(parent instanceof MultiValueWidget.Interpreted))
+					throw new IllegalStateException("The parent of a column must be a multi-value-widget");
 			}
 
 			@Override
@@ -812,8 +818,8 @@ public interface QuickTableColumn<R, C> {
 			}
 
 			@Override
-			public TabularWidget.Interpreted<R, ?> getParentElement() {
-				return (TabularWidget.Interpreted<R, ?>) super.getParentElement();
+			public MultiValueWidget.Interpreted<R, ?> getParentElement() {
+				return (MultiValueWidget.Interpreted<R, ?>) super.getParentElement();
 			}
 
 			public InterpretedValueSynth<SettableValue<?>, SettableValue<String>> getName() {
@@ -839,8 +845,8 @@ public interface QuickTableColumn<R, C> {
 			}
 
 			@Override
-			public TypeToken<R> getRowType() {
-				return getParentElement().getRowType();
+			public TypeToken<R> getValueType() {
+				return ((ValueTyped.Interpreted<R, ?>) getParentElement()).getValueType();
 			}
 
 			public TypeToken<C> getType() {
@@ -927,8 +933,8 @@ public interface QuickTableColumn<R, C> {
 		}
 
 		@Override
-		public TabularWidget<R> getParentElement() {
-			return (TabularWidget<R>) super.getParentElement();
+		public ValueTyped<R> getParentElement() {
+			return (ValueTyped<R>) super.getParentElement();
 		}
 
 		public SettableValue<String> getName() {
@@ -969,8 +975,8 @@ public interface QuickTableColumn<R, C> {
 		protected void doUpdate(ExElement.Interpreted<?> interpreted) {
 			super.doUpdate(interpreted);
 			SingleColumnSet.Interpreted<R, C> myInterpreted = (SingleColumnSet.Interpreted<R, C>) interpreted;
-			if (theRowType == null || !theRowType.equals(myInterpreted.getRowType()) || !theColumnType.equals(myInterpreted.getType())) {
-				theRowType = myInterpreted.getRowType();
+			if (theRowType == null || !theRowType.equals(myInterpreted.getValueType()) || !theColumnType.equals(myInterpreted.getType())) {
+				theRowType = myInterpreted.getValueType();
 				theColumnType = myInterpreted.getType();
 				theValue = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<C>> parameterized(theColumnType))
 					.build();

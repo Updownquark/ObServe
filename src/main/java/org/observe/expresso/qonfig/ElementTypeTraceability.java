@@ -475,8 +475,8 @@ public interface ElementTypeTraceability<E extends ExElement, I extends ExElemen
 			Set<String> unusedAttrs = new HashSet<>(theAttributes.keySet());
 			for (QonfigAttributeDef.Declared attr : type.getDeclaredAttributes().values()) {
 				if (!unusedAttrs.remove(attr.getName()))
-					reporting.warn("No attribute '" + attr.getName() + "' configured for " + theToolkitName + " " + theToolkitVersion + "."
-						+ theTypeName);
+					reporting.warn("Traceability not configured for attribute '" + attr.getName() + "' of " + theToolkitName + " "
+						+ theToolkitVersion + "." + theTypeName);
 			}
 			if (!unusedAttrs.isEmpty())
 				reporting.warn("No such attributes: " + unusedAttrs + " found in element for " + theToolkitName + " " + theToolkitVersion
@@ -484,15 +484,16 @@ public interface ElementTypeTraceability<E extends ExElement, I extends ExElemen
 
 			if (type.getValue() != null && type.getValue() instanceof QonfigValueDef.Declared && type.getValue().getOwner() == type) {
 				if (theValue == null)
-					reporting.warn("No value configured for " + theToolkitName + " " + theToolkitVersion + "." + theTypeName);
+					reporting
+					.warn("Traceability not configured for value of " + theToolkitName + " " + theToolkitVersion + "." + theTypeName);
 			} else if (theValue != null)
 				reporting.warn("Value configured for value-less element " + theToolkitName + " " + theToolkitVersion + "." + theTypeName);
 
 			Set<String> unusedChildren = new HashSet<>(theChildren.keySet());
 			for (QonfigChildDef.Declared child : type.getDeclaredChildren().values()) {
 				if (!unusedChildren.remove(child.getName()))
-					reporting.warn("No child '" + child.getName() + "' configured for " + theToolkitName + " " + theToolkitVersion + "."
-						+ theTypeName);
+					reporting.warn("Traceablity not configured for child '" + child.getName() + "' of " + theToolkitName + " "
+						+ theToolkitVersion + "." + theTypeName);
 			}
 			if (!unusedChildren.isEmpty())
 				reporting.warn("No such children: " + unusedChildren + " found in element for " + theToolkitName + " " + theToolkitVersion

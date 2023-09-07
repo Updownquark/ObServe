@@ -35,7 +35,6 @@ import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.TypeConversionException;
 import org.observe.util.TypeTokens;
 import org.qommons.ArrayUtils;
-import org.qommons.BreakpointHere;
 import org.qommons.QommonsUtils;
 import org.qommons.Stamped;
 import org.qommons.StringUtils;
@@ -486,8 +485,6 @@ public abstract class Invocation implements ObservableExpression {
 
 				}
 				if (ok) {
-					if ("listFiles".equals(methodName))
-						BreakpointHere.breakpoint();
 					TypeToken<?> returnType = tva.resolve(impl.getReturnType(m));
 
 					ModelInstanceConverter<?, ?> converter = ModelTypes.Value.forType(returnType).convert(targetType, env);
@@ -496,7 +493,7 @@ public abstract class Invocation implements ObservableExpression {
 							methodErrors = new LinkedHashMap<>();
 						methodErrors.put(m,
 							new ExpressoInterpretationException("Return type " + returnType + " of method " + Invocation.printSignature(m)
-						+ " cannot be assigned to type " + targetType, env.reporting().getPosition(), 0));
+							+ " cannot be assigned to type " + targetType, env.reporting().getPosition(), 0));
 					} else {
 						if (specificity < 0) {
 							specificity = 0;
@@ -752,9 +749,10 @@ public abstract class Invocation implements ObservableExpression {
 		private final SettableValue<Object> theContext;
 		private final SettableValue<?>[] theArguments;
 		protected final boolean isTesting;
+		private final Object theDefaultValue;
 
 		protected InvocationInstance(MethodResult<X, R> method, boolean caching, ErrorReporting reporting, ExecutableImpl<X> impl,
-			SettableValue<Object> context, SettableValue<?>[] arguments, boolean testing) {
+			SettableValue<Object> context, SettableValue<?>[] arguments, boolean testing, Object defaultValue) {
 			theMethod = method;
 			isCaching = caching;
 			theReporting = reporting;
@@ -762,6 +760,7 @@ public abstract class Invocation implements ObservableExpression {
 			theContext = context;
 			theArguments = arguments;
 			isTesting = testing;
+			theDefaultValue = defaultValue;
 		}
 
 		protected Object invoke(boolean asAction)
@@ -776,7 +775,7 @@ public abstract class Invocation implements ObservableExpression {
 				theReporting.error(msg);
 				// Although throwing an exception is better in theory, all the conditionals needed to work around this are obnoxious
 				// throw new NullPointerException(ctxV + " is null, cannot call " + theMethod);
-				return null;
+				return theDefaultValue;
 			}
 			Object[] args = new Object[theArguments.length];
 			for (int a = 0; a < args.length; a++)
@@ -809,7 +808,7 @@ public abstract class Invocation implements ObservableExpression {
 					return (X2) invoke(false);
 				} catch (Throwable e) {
 					theReporting.error(null, e);
-					return null;
+					return (X2) theDefaultValue;
 				}
 			}, () -> {
 				if (ctxV != null)
@@ -895,7 +894,7 @@ public abstract class Invocation implements ObservableExpression {
 		implements ObservableAction {
 			protected InvocationAction(MethodResult<X, SettableValue<T>> method, boolean caching, ErrorReporting reporting,
 				ExecutableImpl<X> impl, SettableValue<Object> context, SettableValue<?>[] arguments, boolean testing, TypeToken<T> type) {
-				super(method, caching, reporting, impl, context, arguments, testing);
+				super(method, caching, reporting, impl, context, arguments, testing, null);
 			}
 
 			@Override
@@ -958,8 +957,14 @@ public abstract class Invocation implements ObservableExpression {
 			@Override
 			protected MV createModelValue(SettableValue<?> ctxV, SettableValue<?>[] argVs, Observable<Object> changes)
 				throws ModelInstantiationException {
+				Object defaultValue;
+				if (getMethod().method instanceof Method)
+					defaultValue = TypeTokens.get().getDefaultValue(((Method) getMethod().method).getReturnType());
+				else
+					defaultValue = null;
 				SettableValue<Object> value = new InvocationInstance<>(getMethod(), isCaching, theReporting, theImpl,
-					(SettableValue<Object>) ctxV, argVs, isTesting).syntheticResultValue(TypeTokens.get().OBJECT, ctxV, argVs, changes);
+					(SettableValue<Object>) ctxV, argVs, isTesting, defaultValue)
+					.syntheticResultValue(TypeTokens.get().OBJECT, ctxV, argVs, changes);
 				return getMethod().converter.convert(value);
 			}
 		}

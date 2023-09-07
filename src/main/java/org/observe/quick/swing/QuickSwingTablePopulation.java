@@ -18,10 +18,10 @@ import javax.swing.Icon;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
+import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JList;
 import javax.swing.JPopupMenu;
-import javax.swing.JTable;
 import javax.swing.ListCellRenderer;
 import javax.swing.text.StyledDocument;
 
@@ -61,7 +61,6 @@ import org.observe.util.swing.PanelPopulation.FieldEditor;
 import org.observe.util.swing.PanelPopulation.MenuBuilder;
 import org.observe.util.swing.PanelPopulation.PanelPopulator;
 import org.observe.util.swing.PanelPopulation.SliderEditor;
-import org.observe.util.swing.PanelPopulation.TableBuilder;
 import org.qommons.Causable;
 import org.qommons.LambdaUtils;
 import org.qommons.Transaction;
@@ -79,13 +78,13 @@ class QuickSwingTablePopulation {
 		private ElementId theElementId;
 
 		public InterpretedSwingTableColumn(QuickWidget quickParent, QuickTableColumn<R, C> column, TabularContext<R> context,
-			Transformer<ExpressoInterpretationException> tx, Observable<?> until, Supplier<TableBuilder<R, ?>> parent,
-			QuickSwingPopulator<QuickWidget> swingRenderer, QuickSwingPopulator<QuickWidget> swingEditor)
-				throws ModelInstantiationException {
+			Transformer<ExpressoInterpretationException> tx, Observable<?> until, Supplier<? extends ComponentEditor<?, ?>> parent,
+				QuickSwingPopulator<QuickWidget> swingRenderer, QuickSwingPopulator<QuickWidget> swingEditor)
+					throws ModelInstantiationException {
 			theColumn = column;
 			theCRS = new CategoryRenderStrategy<>(column.getName().get(), column.getType(), row -> {
 				try (Transaction t = QuickCoreSwing.rendering()) {
-					context.getRenderValue().set(row, null);
+					context.getActiveValue().set(row, null);
 					return column.getValue().get();
 				}
 			});
@@ -166,7 +165,7 @@ class QuickSwingTablePopulation {
 		private final QuickWidget theRenderer;
 		private final QuickWidget.WidgetContext theRendererContext;
 		private final TabularWidget.TabularContext<R> theRenderTableContext;
-		private final Supplier<TableBuilder<R, ?>> theParent;
+		private final Supplier<? extends ComponentEditor<?, ?>> theParent;
 		private final SimpleObservable<Void> theRenderUntil;
 		private ObservableCellRenderer<R, C> theDelegate;
 		private AbstractComponentEditor<?, ?> theComponent;
@@ -180,12 +179,12 @@ class QuickSwingTablePopulation {
 		private final QuickKeyListener.KeyTypedContext theKeyTypeContext;
 		private final QuickKeyListener.KeyCodeContext theKeyCodeContext;
 
-		private JTable theTable;
+		private JComponent theOwner;
 
 		QuickSwingTableColumn(QuickWidget quickParent, QuickTableColumn<R, C> column, TabularWidget.TabularContext<R> ctx,
-			Transformer<ExpressoInterpretationException> tx, Observable<?> until, Supplier<TableBuilder<R, ?>> parent,
-			QuickSwingPopulator<QuickWidget> swingRenderer, QuickSwingPopulator<QuickWidget> swingEditor)
-				throws ModelInstantiationException {
+			Transformer<ExpressoInterpretationException> tx, Observable<?> until, Supplier<? extends ComponentEditor<?, ?>> parent,
+				QuickSwingPopulator<QuickWidget> swingRenderer, QuickSwingPopulator<QuickWidget> swingEditor)
+					throws ModelInstantiationException {
 			theQuickParent = quickParent;
 			theColumn = column;
 			theRenderer = column.getRenderer();
@@ -198,7 +197,10 @@ class QuickSwingTablePopulation {
 			if (swingRenderer != null) {
 				renderPopulator = new SwingCellPopulator<>(this, true);
 				renderPopulator.addModifier(ce -> ce.modifyComponent(comp -> {
-					theTable = parent.get().getEditor();
+					if (parent.get().getEditor() instanceof JComponent)
+						theOwner = (JComponent) parent.get().getEditor();
+					else if (parent.get().getComponent() instanceof JComponent)
+						theOwner = (JComponent) parent.get().getComponent();
 				}));
 
 				theRendererContext = new QuickWidget.WidgetContext.Default();
@@ -264,7 +266,7 @@ class QuickSwingTablePopulation {
 			if (theColumn.getEditing() != null) {
 				mutation.editableIf((rowValue, colValue) -> {
 					try (Transaction t = QuickCoreSwing.rendering()) {
-						theRenderTableContext.getRenderValue().set(rowValue, null);
+						theRenderTableContext.getActiveValue().set(rowValue, null);
 						theRenderTableContext.getRowIndex().set(0, null);
 						theRenderTableContext.getColumnIndex().set(0, null);
 						theRenderTableContext.isSelected().set(false, null);
@@ -273,7 +275,7 @@ class QuickSwingTablePopulation {
 				});
 				mutation.filterAccept((rowEl, colValue) -> {
 					try (Transaction t = QuickCoreSwing.rendering()) {
-						theRenderTableContext.getRenderValue().set(rowEl.get(), null);
+						theRenderTableContext.getActiveValue().set(rowEl.get(), null);
 						theRenderTableContext.getRowIndex().set(0, null);
 						theRenderTableContext.getColumnIndex().set(0, null);
 						theRenderTableContext.isSelected().set(false, null);
@@ -285,7 +287,7 @@ class QuickSwingTablePopulation {
 						.getEditing().getType();
 					mutation.mutateAttribute((rowValue, colValue) -> {
 						try (Transaction t = QuickCoreSwing.rendering()) {
-							theEditContext.getRenderValue().set(rowValue, null);
+							theEditContext.getActiveValue().set(rowValue, null);
 							theEditContext.getEditColumnValue().set(colValue, null);
 							editType.getCommit().act(null);
 						}
@@ -296,7 +298,7 @@ class QuickSwingTablePopulation {
 						.getEditing().getType();
 					mutation.withRowValueSwitch((rowValue, colValue) -> {
 						try (Transaction t = QuickCoreSwing.rendering()) {
-							theEditContext.getRenderValue().set(rowValue, null);
+							theEditContext.getActiveValue().set(rowValue, null);
 							theEditContext.getEditColumnValue().set(colValue, null);
 							return editType.getReplacement().get();
 						}
@@ -352,7 +354,7 @@ class QuickSwingTablePopulation {
 			if (theTooltip == null)
 				return null;
 			try (Transaction t = QuickCoreSwing.rendering()) {
-				theRenderTableContext.getRenderValue().set(modelValue, null);
+				theRenderTableContext.getActiveValue().set(modelValue, null);
 			}
 			return theTooltip.get();
 		}
@@ -415,7 +417,7 @@ class QuickSwingTablePopulation {
 				}
 				String newTT = theTooltip == null ? null : theTooltip.get();
 				if (!Objects.equals(tt, newTT))
-					theTable.setToolTipText(newTT);
+					theOwner.setToolTipText(newTT);
 			}
 		}
 
@@ -442,7 +444,7 @@ class QuickSwingTablePopulation {
 				}
 				String newTT = theTooltip == null ? null : theTooltip.get();
 				if (!Objects.equals(tt, newTT))
-					theTable.setToolTipText(newTT);
+					theOwner.setToolTipText(newTT);
 			}
 		}
 
@@ -467,7 +469,7 @@ class QuickSwingTablePopulation {
 				}
 				String newTT = theTooltip == null ? null : theTooltip.get();
 				if (!Objects.equals(tt, newTT))
-					theTable.setToolTipText(newTT);
+					theOwner.setToolTipText(newTT);
 			}
 		}
 
@@ -507,7 +509,7 @@ class QuickSwingTablePopulation {
 				}
 				String newTT = theTooltip == null ? null : theTooltip.get();
 				if (!Objects.equals(tt, newTT))
-					theTable.setToolTipText(newTT);
+					theOwner.setToolTipText(newTT);
 			}
 		}
 
@@ -536,7 +538,7 @@ class QuickSwingTablePopulation {
 				}
 				String newTT = theTooltip == null ? null : theTooltip.get();
 				if (!Objects.equals(tt, newTT))
-					theTable.setToolTipText(newTT);
+					theOwner.setToolTipText(newTT);
 			}
 		}
 
@@ -565,7 +567,7 @@ class QuickSwingTablePopulation {
 				}
 				String newTT = theTooltip == null ? null : theTooltip.get();
 				if (!Objects.equals(tt, newTT))
-					theTable.setToolTipText(newTT);
+					theOwner.setToolTipText(newTT);
 			}
 		}
 
@@ -590,7 +592,7 @@ class QuickSwingTablePopulation {
 				}
 				String newTT = theTooltip == null ? null : theTooltip.get();
 				if (!Objects.equals(tt, newTT))
-					theTable.setToolTipText(newTT);
+					theOwner.setToolTipText(newTT);
 			}
 		}
 
@@ -615,7 +617,7 @@ class QuickSwingTablePopulation {
 				}
 				String newTT = theTooltip == null ? null : theTooltip.get();
 				if (!Objects.equals(tt, newTT))
-					theTable.setToolTipText(newTT);
+					theOwner.setToolTipText(newTT);
 			}
 		}
 
@@ -640,7 +642,7 @@ class QuickSwingTablePopulation {
 				}
 				String newTT = theTooltip == null ? null : theTooltip.get();
 				if (!Objects.equals(tt, newTT))
-					theTable.setToolTipText(newTT);
+					theOwner.setToolTipText(newTT);
 			}
 		}
 	}
@@ -815,13 +817,13 @@ class QuickSwingTablePopulation {
 				ObservableCellRenderer<R, C> delegate = new AbstractObservableCellRenderer<R, C>() {
 					@Override
 					public String renderAsText(ModelCell<? extends R, ? extends C> cell) {
-						theCell.getContext().getRenderValue().set(cell.getModelValue(), null);
+						theCell.getContext().getActiveValue().set(cell.getModelValue(), null);
 						return format.apply(field.get());
 					}
 
 					@Override
 					protected Component renderCell(Component parent, ModelCell<? extends R, ? extends C> cell, CellRenderContext ctx) {
-						theCell.getContext().getRenderValue().set(cell.getModelValue(), null);
+						theCell.getContext().getActiveValue().set(cell.getModelValue(), null);
 						label[0].setText(format.apply(field.get()));
 						editor.decorate(label[0]);
 						return label[0];
@@ -837,7 +839,7 @@ class QuickSwingTablePopulation {
 		public SwingCellPopulator<R, C> addIcon(String fieldName, ObservableValue<Icon> icon, Consumer<FieldEditor<JLabel, ?>> modify) {
 			if (isRenderer) {
 				ObservableCellRenderer<R, C> delegate = ObservableCellRenderer.<R, C> formatted(c -> "").setIcon(cell -> {
-					theCell.getContext().getRenderValue().set(cell.getModelValue(), null);
+					theCell.getContext().getActiveValue().set(cell.getModelValue(), null);
 					return icon.get();
 				});
 				FieldRenderEditor<JLabel> editor = new FieldRenderEditor<>(theCell);
@@ -856,7 +858,7 @@ class QuickSwingTablePopulation {
 			Consumer<Object> action, Consumer<FieldEditor<JLabel, ?>> modify) {
 			if (isRenderer) {
 				ObservableCellRenderer<R, C> delegate = ObservableCellRenderer.linkRenderer(cell -> {
-					theCell.getContext().getRenderValue().set(cell.getModelValue(), null);
+					theCell.getContext().getActiveValue().set(cell.getModelValue(), null);
 					F fieldValue = field.get();
 					return format.apply(fieldValue);
 				});
@@ -965,13 +967,13 @@ class QuickSwingTablePopulation {
 				ObservableCellRenderer<R, C> delegate = new AbstractObservableCellRenderer<R, C>() {
 					@Override
 					public String renderAsText(ModelCell<? extends R, ? extends C> cell) {
-						theCell.getContext().getRenderValue().set(cell.getModelValue(), null);
+						theCell.getContext().getActiveValue().set(cell.getModelValue(), null);
 						return doc.toString();
 					}
 
 					@Override
 					protected Component renderCell(Component parent, ModelCell<? extends R, ? extends C> cell, CellRenderContext ctx) {
-						theCell.getContext().getRenderValue().set(cell.getModelValue(), null);
+						theCell.getContext().getActiveValue().set(cell.getModelValue(), null);
 						editor.decorate(textArea[0]);
 						doc.refresh(null);
 						ObservableStyledDocument.synchronize(doc, ((StyledDocument) textArea[0].getDocument()), renderUntil);

@@ -18,6 +18,8 @@ import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigToolkit;
 import org.qommons.config.QonfigValueDef;
 import org.qommons.config.QonfigValueType;
+import org.qommons.io.ErrorReporting;
+import org.qommons.io.LocatedPositionedContent;
 
 /**
  * A model value declared on an element definition (see the with-element-model add-on in the Expresso-Base toolkit)
@@ -171,12 +173,13 @@ public interface ElementModelValue<M> extends ObservableModelSet.IdentifiableCom
 		 * @param values The map to add the dynamic values into
 		 * @return The identities/definitions of all dynamic values defined on the given type, grouped by name/name attribute
 		 */
-		public Map<String, Identity> getDynamicValues(QonfigToolkit expresso, QonfigElementOrAddOn type, Map<String, Identity> values) {
-			return getDynamicValues(expresso, null, type, values);
+		public Map<String, Identity> getDynamicValues(QonfigToolkit expresso, QonfigElementOrAddOn type, Map<String, Identity> values,
+			ErrorReporting reporting) {
+			return getDynamicValues(expresso, null, type, values, reporting);
 		}
 
 		private Map<String, Identity> getDynamicValues(QonfigToolkit expresso, ElementModelData modelData, QonfigElementOrAddOn type,
-			Map<String, Identity> values) {
+			Map<String, Identity> values, ErrorReporting reporting) {
 			if (modelData == null)
 				modelData = new ElementModelData();
 			if (modelData.withElementModel == null)
@@ -188,7 +191,7 @@ public interface ElementModelValue<M> extends ObservableModelSet.IdentifiableCom
 				synchronized (Cache.class) {
 					found = theDynamicValues.get(type);
 					if (found == null) {
-						found = compileDynamicValues(expresso, modelData, type);
+						found = compileDynamicValues(expresso, modelData, type, reporting);
 						theDynamicValues.put(type, found);
 					}
 				}
@@ -199,12 +202,13 @@ public interface ElementModelValue<M> extends ObservableModelSet.IdentifiableCom
 			return values;
 		}
 
-		private Map<String, Identity> compileDynamicValues(QonfigToolkit expresso, ElementModelData modelData, QonfigElementOrAddOn type) {
+		private Map<String, Identity> compileDynamicValues(QonfigToolkit expresso, ElementModelData modelData, QonfigElementOrAddOn type,
+			ErrorReporting reporting) {
 			Map<String, Identity> values = new LinkedHashMap<>();
 			if (type.getSuperElement() != null)
-				getDynamicValues(expresso, modelData, type.getSuperElement(), values);
+				getDynamicValues(expresso, modelData, type.getSuperElement(), values, reporting);
 			for (QonfigAddOn inh : type.getInheritance())
-				getDynamicValues(expresso, modelData, inh, values);
+				getDynamicValues(expresso, modelData, inh, values, reporting);
 			if (modelData.elementModel == null)
 				modelData.elementModel = expresso.getMetaChild("with-element-model", "element-model");
 			QonfigElement metadata = type.getMetadata().getRoot().getChildrenByRole().get(modelData.elementModel.getDeclared()).peekFirst();
@@ -227,16 +231,28 @@ public interface ElementModelValue<M> extends ObservableModelSet.IdentifiableCom
 							throw new IllegalArgumentException("Cannot specify both name and name-attribute on an internal model value");
 						name = null;
 						int slash = nameAttrS.lastIndexOf('/');
-						if (slash < 0) { // Attribute is on the element itself
-							sourceChild = null;
-							nameAttr = getAttribute(type, nameAttrS);
-						} else {
-							sourceChild = getChild(type, nameAttrS.substring(0, slash));
-							nameAttr = getAttribute(sourceChild, nameAttrS.substring(slash + 1));
+						try {
+							if (slash < 0) { // Attribute is on the element itself
+								sourceChild = null;
+								nameAttr = getAttribute(type, nameAttrS);
+							} else {
+								sourceChild = getChild(type, nameAttrS.substring(0, slash));
+								nameAttr = getAttribute(sourceChild, nameAttrS.substring(slash + 1));
+							}
+						} catch (IllegalArgumentException e) {
+							reporting
+							.at(LocatedPositionedContent.of(metadata.getDocument().getLocation(),
+								value.getAttributes().get(modelData.nameAttrAttr).position.subSequence(1, nameAttrS.length() - 1)))
+							.error(e.getMessage(), e);
+							continue;
 						}
-						if (nameAttr.getType() != modelData.identifierType)
-							throw new IllegalArgumentException("name-attribute (" + nameAttr
+						if (nameAttr.getType() != modelData.identifierType) {
+							reporting
+							.at(LocatedPositionedContent.of(metadata.getDocument().getLocation(),
+								value.getAttributes().get(modelData.nameAttrAttr).position.subSequence(1, nameAttrS.length() - 1)))
+							.error("name-attribute (" + nameAttr
 								+ ") must refer to an attribute of type 'identifier', not " + nameAttr.getType());
+						}
 						// Just don't define the value if not specified
 						// else if (nameAttr.getSpecification() != SpecificationType.Required && nameAttr.getDefaultValue() == null)
 						// throw new IllegalArgumentException(
@@ -255,13 +271,22 @@ public interface ElementModelValue<M> extends ObservableModelSet.IdentifiableCom
 						sourceAttr = null;
 					} else if (sourceAttrS.isEmpty()) {
 						QonfigValueDef valueDef = sourceChild != null ? sourceChild.getType().getValue() : type.getValue();
-						if (valueDef == null)
-							throw new IllegalArgumentException(
-								"Empty source-attribute specified, but no value defined on " + (sourceChild != null ? sourceChild : type));
-						if (!(valueDef.getType() instanceof QonfigValueType.Custom)
-							|| !(((QonfigValueType.Custom) valueDef.getType()).getCustomType() instanceof ExpressionValueType))
-							throw new IllegalArgumentException(
+						if (valueDef == null) {
+							reporting
+								.at(LocatedPositionedContent.of(metadata.getDocument().getLocation(),
+									value.getAttributes().get(modelData.nameAttrAttr).position.subSequence(1, nameAttrS.length() - 1)))
+								.error("Empty source-attribute specified, but no value defined on "
+									+ (sourceChild != null ? sourceChild : type));
+							continue;
+						} else if (!(valueDef.getType() instanceof QonfigValueType.Custom)
+							|| !(((QonfigValueType.Custom) valueDef.getType()).getCustomType() instanceof ExpressionValueType)) {
+							reporting
+								.at(LocatedPositionedContent.of(metadata.getDocument().getLocation(),
+									value.getAttributes().get(modelData.nameAttrAttr).position.subSequence(1, nameAttrS.length() - 1)))
+								.error(
 								"Empty source-attribute must refer to an element value of type 'expression', not " + valueDef.getType());
+							continue;
+						}
 
 						sourceValue = true;
 						sourceAttr = null;
@@ -269,15 +294,23 @@ public interface ElementModelValue<M> extends ObservableModelSet.IdentifiableCom
 						sourceValue = false;
 						sourceAttr = sourceChild != null ? getAttribute(sourceChild, sourceAttrS) : getAttribute(type, sourceAttrS);
 						if (!(sourceAttr.getType() instanceof QonfigValueType.Custom)
-							|| !(((QonfigValueType.Custom) sourceAttr.getType()).getCustomType() instanceof ExpressionValueType))
-							throw new IllegalArgumentException("source-attribute (" + sourceAttr
+							|| !(((QonfigValueType.Custom) sourceAttr.getType()).getCustomType() instanceof ExpressionValueType)) {
+							reporting
+								.at(LocatedPositionedContent.of(metadata.getDocument().getLocation(),
+									value.getAttributes().get(modelData.nameAttrAttr).position.subSequence(1, nameAttrS.length() - 1)))
+								.error("source-attribute (" + sourceAttr
 								+ ") must refer to an attribute of type 'expression', not " + sourceAttr.getType());
+							continue;
+						}
 					}
 					Identity newModelValue = new Identity(type, name, sourceChild, nameAttr, typeName, sourceAttr, sourceValue, value);
 					Identity overridden = values.get(newModelValue.getName());
-					if (overridden != null)
-						throw new IllegalArgumentException("Type " + type + " declares a dynamic value '" + newModelValue.getName()
+					if (overridden != null) {
+						reporting.at(LocatedPositionedContent.of(metadata.getDocument().getLocation(), value.getFilePosition()))
+							.error("Type " + type + " declares a dynamic value '" + newModelValue.getName()
 						+ "' that clashes with the value of the same name declared by " + overridden.getOwner());
+						continue;
+					}
 					values.put(newModelValue.getName(), newModelValue);
 				}
 			}

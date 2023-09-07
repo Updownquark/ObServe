@@ -219,54 +219,46 @@ public class UnaryOperatorSet {
 	 * @return The builder
 	 */
 	public static Builder standardJava(Builder operators) {
-		operators.withSymmetric("!", Boolean.class, b -> b == null ? true : !b, "Boolean NOT operator");
+		operators.withSymmetric("!", boolean.class, b -> !b, "Boolean NOT operator");
 
-		operators.withSymmetric("~", Integer.class, i -> i == null ? ~0 : ~i, "Integer complement operator");
-		operators.withIdentity("+", Integer.class, "Integer identity operator");
-		operators.withSymmetric("-", Integer.class, i -> i == null ? 0 : -i, "Integer negation operator");
+		operators.withSymmetric("~", int.class, i -> i == null ? ~0 : ~i, "Integer complement operator");
+		operators.withIdentity("+", int.class, "Integer identity operator");
+		operators.withSymmetric("-", int.class, i -> i == null ? 0 : -i, "Integer negation operator");
 		operators.withAction("++", Integer.class, i -> i == null ? 1 : i + 1, "Integer increment operator");
 		operators.withAction("--", Integer.class, i -> i == null ? 1 : i - 1, "Integer decrement operator");
 
-		operators.withSymmetric("~", Long.class, i -> i == null ? ~0 : ~i, "Long integer complement operator");
-		operators.withIdentity("+", Long.class, "Long integer identity operator");
-		operators.withSymmetric("-", Long.class, i -> i == null ? 0 : -i, "Long integer negation operator");
+		operators.withSymmetric("~", long.class, i -> i == null ? ~0 : ~i, "Long integer complement operator");
+		operators.withIdentity("+", long.class, "Long integer identity operator");
+		operators.withSymmetric("-", long.class, i -> i == null ? 0 : -i, "Long integer negation operator");
 		operators.withAction("++", Long.class, i -> i == null ? 1 : i + 1, "Long integer increment operator");
 		operators.withAction("--", Long.class, i -> i == null ? 1 : i - 1, "Long integer decrement operator");
 
-		operators.with2("~", Byte.class, Integer.class, i -> i == null ? ~0 : ~i, i -> (byte) (i == null ? 0 : ~i),
-			"Byte complement operator");
-		operators.with2("+", Byte.class, Integer.class, i -> i == null ? 0 : (int) i, i -> (byte) (i == null ? 0 : i),
-			"Byte identity operator");
-		operators.with2("-", Byte.class, Integer.class, i -> i == null ? 0 : -i, i -> (byte) (i == null ? 0 : -i),
-			"Byte negation operator");
+		operators.with2("~", byte.class, int.class, i -> i == null ? ~0 : ~i, i -> (byte) (~i), "Byte complement operator");
+		operators.with2("+", byte.class, int.class, i -> i == null ? 0 : (int) i, i -> (byte) i.intValue(), "Byte identity operator");
+		operators.with2("-", byte.class, int.class, i -> i == null ? 0 : -i, i -> (byte) (-i), "Byte negation operator");
 		operators.withAction("++", Byte.class, i -> (byte) (i == null ? 1 : i + 1), "Byte increment operator");
 		operators.withAction("--", Byte.class, i -> (byte) (i == null ? 1 : i - 1), "Byte decrement operator");
 
-		operators.with2("~", Character.class, Integer.class, i -> i == null ? ~0 : ~i, i -> (char) (i == null ? 0 : ~i),
-			"Character complement operator");
-		operators.with2("+", Character.class, Integer.class, i -> i == null ? 0 : (int) i, i -> (char) (i == null ? 0 : i),
-			"Character identity operator");
-		operators.with2("-", Character.class, Integer.class, i -> i == null ? 0 : -i, i -> (char) (i == null ? 0 : -i),
-			"Character negation operator");
+		operators.with2("~", char.class, int.class, i -> i == null ? ~0 : ~i, i -> (char) (~i), "Character complement operator");
+		operators.with2("+", char.class, int.class, i -> i == null ? 0 : (int) i, i -> (char) i.intValue(), "Character identity operator");
+		operators.with2("-", char.class, int.class, i -> i == null ? 0 : -i, i -> (char) (-i), "Character negation operator");
 		operators.withAction("++", Character.class, i -> (char) (i == null ? 1 : i + 1), "Character increment operator");
 		operators.withAction("--", Character.class, i -> (char) (i == null ? 1 : i - 1), "Character decrement operator");
 
-		operators.with2("~", Short.class, Integer.class, i -> i == null ? ~0 : ~i, i -> (short) (i == null ? 0 : ~i),
-			"Short integer complement operator");
-		operators.with2("+", Short.class, Integer.class, i -> i == null ? 0 : (int) i, i -> (short) (i == null ? 0 : i),
+		operators.with2("~", short.class, int.class, i -> i == null ? ~0 : ~i, i -> (short) (~i), "Short integer complement operator");
+		operators.with2("+", short.class, int.class, i -> i == null ? 0 : (int) i, i -> (short) i.intValue(),
 			"Short integer identity operator");
-		operators.with2("-", Short.class, Integer.class, i -> i == null ? 0 : -i, i -> (short) (i == null ? 0 : -i),
-			"Short integer negation operator");
+		operators.with2("-", short.class, int.class, i -> i == null ? 0 : -i, i -> (short) (-i), "Short integer negation operator");
 		operators.withAction("++", Short.class, i -> (short) (i == null ? 1 : i + 1), "Short integer increment operator");
 		operators.withAction("--", Short.class, i -> (short) (i == null ? 1 : i - 1), "Short integer decrement operator");
 
-		operators.withIdentity("+", Double.class, "Double-precision floating-point identity operator");
-		operators.withSymmetric("-", Double.class, i -> i == null ? 0 : -i, "Double-precision floating-point negation operator");
+		operators.withIdentity("+", double.class, "Double-precision floating-point identity operator");
+		operators.withSymmetric("-", double.class, i -> i == null ? 0 : -i, "Double-precision floating-point negation operator");
 		operators.withAction("++", Double.class, i -> i == null ? 1 : i + 1, "Double-precision floating-point increment operator");
 		operators.withAction("--", Double.class, i -> i == null ? 1 : i - 1, "Double-precision floating-point decrement operator");
 
-		operators.withIdentity("+", Float.class, "Floating-point identity operator");
-		operators.withSymmetric("-", Float.class, i -> i == null ? 0 : -i, "Floating-point negation operator");
+		operators.withIdentity("+", float.class, "Floating-point identity operator");
+		operators.withSymmetric("-", float.class, i -> i == null ? 0 : -i, "Floating-point negation operator");
 		operators.withAction("++", Float.class, i -> i == null ? 1 : i + 1, "Floating-point increment operator");
 		operators.withAction("--", Float.class, i -> i == null ? 1 : i - 1, "Floating-point decrement operator");
 

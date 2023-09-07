@@ -8,6 +8,7 @@ import java.awt.event.MouseMotionListener;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
@@ -69,7 +70,21 @@ public class SimpleTreeBuilder<F, P extends SimpleTreeBuilder<F, P>> extends Abs
 	 */
 	public static <F> SimpleTreeBuilder<F, ?> createTree2(ObservableValue<? extends F> root,
 		Function<? super BetterList<F>, ? extends ObservableCollection<? extends F>> children, Observable<?> until) {
-		return new SimpleTreeBuilder<>(root, new PPTreeModel2<>(root, children), until);
+		return createTree3(root, (path, nodeUntil) -> children.apply(path), until);
+	}
+
+	/**
+	 * Creates a tree with a function that accepts the node path and an observable that fires when the node is removed
+	 *
+	 * @param <F> The super-type of values in the tree
+	 * @param root The root value for the tree
+	 * @param children The function to produce children for each tree node path
+	 * @param until The observable which, when it fires, will disconnect all of the tree's listeners to the values
+	 * @return The tree builder to configure
+	 */
+	public static <F> SimpleTreeBuilder<F, ?> createTree3(ObservableValue<? extends F> root,
+		BiFunction<? super BetterList<F>, Observable<?>, ? extends ObservableCollection<? extends F>> children, Observable<?> until) {
+		return new SimpleTreeBuilder<>(root, new PPTreeModel3<>(root, children), until);
 	}
 
 	private final ObservableValue<? extends F> theRoot;
@@ -97,6 +112,7 @@ public class SimpleTreeBuilder<F, P extends SimpleTreeBuilder<F, P>> extends Abs
 
 	static abstract class PPTreeModel<F> extends ObservableTreeModel<F> {
 		private Predicate<? super F> theLeafTest;
+		private Predicate<? super BetterList<F>> theLeafTest2;
 
 		PPTreeModel(ObservableValue<? extends F> root) {
 			super(root);
@@ -108,11 +124,23 @@ public class SimpleTreeBuilder<F, P extends SimpleTreeBuilder<F, P>> extends Abs
 		@Override
 		public boolean isLeaf(Object node) {
 			Predicate<? super F> leafTest = theLeafTest;
-			return leafTest != null && leafTest.test((F) node);
+			if (leafTest != null)
+				return leafTest.test((F) node);
+			Predicate<? super BetterList<F>> leafTest2 = theLeafTest2;
+			if (leafTest2 != null) {
+				BetterList<F> path = getBetterPath((F) node, false);
+				if (path != null)
+					return leafTest2.test(path);
+			}
+			return false;
 		}
 
 		public void setLeafTest(Predicate<? super F> leafTest) {
 			theLeafTest = leafTest;
+		}
+
+		public void setLeafTest2(Predicate<? super BetterList<F>> leafTest) {
+			theLeafTest2 = leafTest;
 		}
 	}
 
@@ -125,25 +153,23 @@ public class SimpleTreeBuilder<F, P extends SimpleTreeBuilder<F, P>> extends Abs
 		}
 
 		@Override
-		protected ObservableCollection<? extends F> getChildren(F parent) {
-			return theChildren.apply(parent);
+		protected ObservableCollection<? extends F> getChildren(BetterList<F> parentPath, Observable<?> until) {
+			return theChildren.apply(parentPath.getLast());
 		}
 	}
 
-	static class PPTreeModel2<F> extends PPTreeModel<F> {
-		private final Function<? super BetterList<F>, ? extends ObservableCollection<? extends F>> theChildren;
+	static class PPTreeModel3<F> extends PPTreeModel<F> {
+		private final BiFunction<? super BetterList<F>, Observable<?>, ? extends ObservableCollection<? extends F>> theChildren;
 
-		PPTreeModel2(ObservableValue<? extends F> root, Function<? super BetterList<F>, ? extends ObservableCollection<? extends F>> children) {
+		PPTreeModel3(ObservableValue<? extends F> root,
+			BiFunction<? super BetterList<F>, Observable<?>, ? extends ObservableCollection<? extends F>> children) {
 			super(root);
 			theChildren = children;
 		}
 
 		@Override
-		protected ObservableCollection<? extends F> getChildren(F parent) {
-			BetterList<F> path = getBetterPath(parent, false);
-			if (path == null)
-				throw new IllegalStateException("Asking for children of node " + parent + " which does not exist");
-			return theChildren.apply(path);
+		protected ObservableCollection<? extends F> getChildren(BetterList<F> parentPath, Observable<?> nodeUntil) {
+			return theChildren.apply(parentPath, nodeUntil);
 		}
 	}
 
@@ -241,6 +267,12 @@ public class SimpleTreeBuilder<F, P extends SimpleTreeBuilder<F, P>> extends Abs
 	@Override
 	public P withLeafTest(Predicate<? super F> leafTest) {
 		((SimpleTreeBuilder.PPTreeModel<F>) getEditor().getModel()).setLeafTest(leafTest);
+		return (P) this;
+	}
+
+	@Override
+	public P withLeafTest2(Predicate<? super BetterList<F>> leafTest) {
+		((SimpleTreeBuilder.PPTreeModel<F>) getEditor().getModel()).setLeafTest2(leafTest);
 		return (P) this;
 	}
 

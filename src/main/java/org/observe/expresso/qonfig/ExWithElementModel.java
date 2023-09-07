@@ -38,9 +38,9 @@ public class ExWithElementModel extends ExFlexibleElementModelAddOn<ExElement> {
 			ElementModelValue.Cache dmvCache = session.getElementValueCache();
 			Map<String, ElementModelValue.Identity> dynamicValues = new LinkedHashMap<>();
 			QonfigToolkit expresso = session.getFocusType().getDeclarer();
-			dmvCache.getDynamicValues(expresso, session.getElement().getType(), dynamicValues);
+			dmvCache.getDynamicValues(expresso, session.getElement().getType(), dynamicValues, element.reporting());
 			for (QonfigAddOn inh : session.getElement().getInheritance().values())
-				dmvCache.getDynamicValues(expresso, inh, dynamicValues);
+				dmvCache.getDynamicValues(expresso, inh, dynamicValues, element.reporting());
 			if (!dynamicValues.isEmpty()) {
 				// Branch the model lazily. Don't do it if there are no actual element values.
 				// This can happen if the values are all attribute-sourced and the attributes are optional

@@ -27,6 +27,7 @@ import java.util.Enumeration;
 import java.util.List;
 import java.util.Map;
 import java.util.function.BiConsumer;
+import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
@@ -167,8 +168,14 @@ public class PanelPopulation {
 		<F> P addTree(ObservableValue<? extends F> root, Function<? super F, ? extends ObservableCollection<? extends F>> children,
 			Consumer<TreeEditor<F, ?>> modify);
 
-		<F> P addTree2(ObservableValue<? extends F> root,
-			Function<? super BetterList<F>, ? extends ObservableCollection<? extends F>> children, Consumer<TreeEditor<F, ?>> modify);
+		default <F> P addTree2(ObservableValue<? extends F> root,
+			Function<? super BetterList<F>, ? extends ObservableCollection<? extends F>> children, Consumer<TreeEditor<F, ?>> modify) {
+			return addTree3(root, (path, until) -> children.apply(path), modify);
+		}
+
+		<F> P addTree3(ObservableValue<? extends F> root,
+			BiFunction<? super BetterList<F>, Observable<?>, ? extends ObservableCollection<? extends F>> children,
+				Consumer<TreeEditor<F, ?>> modify);
 
 		<F> P addTreeTable(ObservableValue<F> root, Function<? super F, ? extends ObservableCollection<? extends F>> children,
 			Consumer<TreeTableEditor<F, ?>> modify);
@@ -807,9 +814,10 @@ public class PanelPopulation {
 		}
 
 		@Override
-		default <F> P addTree2(ObservableValue<? extends F> root,
-			Function<? super BetterList<F>, ? extends ObservableCollection<? extends F>> children, Consumer<TreeEditor<F, ?>> modify) {
-			SimpleTreeBuilder<F, ?> treeEditor = SimpleTreeBuilder.createTree2(root, children, getUntil());
+		default <F> P addTree3(ObservableValue<? extends F> root,
+			BiFunction<? super BetterList<F>, Observable<?>, ? extends ObservableCollection<? extends F>> children,
+				Consumer<TreeEditor<F, ?>> modify) {
+			SimpleTreeBuilder<F, ?> treeEditor = SimpleTreeBuilder.createTree3(root, children, getUntil());
 			modify(treeEditor);
 			if (modify != null)
 				modify.accept(treeEditor);
@@ -1972,6 +1980,8 @@ public class PanelPopulation {
 		P withValueSelection(ObservableCollection<F> selection);
 
 		P withLeafTest(Predicate<? super F> leafTest);
+
+		P withLeafTest2(Predicate<? super BetterList<F>> leafTest);
 
 		boolean isVisible(List<? extends F> path);
 

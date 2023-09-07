@@ -1194,6 +1194,8 @@ public abstract class ModelType<M> implements Named {
 	 * @param <MV> The type of the value
 	 */
 	public interface HollowModelValue<M, MV extends M> {
+		ModelInstanceType<M, MV> getModelType();
+
 		/**
 		 * Satisfies this value with a real value, so that this value becomes a pass-through to the given value.
 		 *

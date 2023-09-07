@@ -345,7 +345,12 @@ public class ObservableFile implements BetterFile {
 
 	@Override
 	public boolean equals(Object obj) {
-		return theFile.equals(obj);
+		if (this == obj)
+			return true;
+		else if (obj instanceof ObservableFile)
+			return theFile.equals(((ObservableFile) obj).theFile);
+		else
+			return theFile.equals(obj);
 	}
 
 	@Override

@@ -28,12 +28,12 @@ import org.qommons.config.QonfigInterpretationException;
 
 import com.google.common.reflect.TypeToken;
 
-public interface TabularWidget<R> extends MultiValueWidget<R>, RowTyped<R> {
+public interface TabularWidget<R> extends MultiValueWidget<R> {
 	@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
 		qonfigType = "tabular-widget",
 		interpretation = Interpreted.class,
 		instance = TabularWidget.class)
-	public interface Def<W extends TabularWidget<?>> extends MultiValueWidget.Def<W>, RowTyped.Def<W> {
+	public interface Def<W extends TabularWidget<?>> extends MultiValueWidget.Def<W> {
 		@QonfigChildGetter("columns")
 		List<QuickTableColumn.TableColumnSet.Def<?>> getColumns();
 
@@ -45,7 +45,7 @@ public interface TabularWidget<R> extends MultiValueWidget<R>, RowTyped<R> {
 
 		public abstract class Abstract<W extends TabularWidget<?>> extends QuickWidget.Def.Abstract<W> implements Def<W> {
 			private final List<QuickTableColumn.TableColumnSet.Def<?>> theColumns;
-			private ModelComponentId theValueVariable;
+			private ModelComponentId theActiveValueVariable;
 			private ModelComponentId theSelectedVariable;
 			private ModelComponentId theRowIndexVariable;
 			private ModelComponentId theColumnIndexVariable;
@@ -61,8 +61,8 @@ public interface TabularWidget<R> extends MultiValueWidget<R>, RowTyped<R> {
 			}
 
 			@Override
-			public ModelComponentId getValueVariable() {
-				return theValueVariable;
+			public ModelComponentId getActiveValueVariable() {
+				return theActiveValueVariable;
 			}
 
 			@Override
@@ -80,7 +80,7 @@ public interface TabularWidget<R> extends MultiValueWidget<R>, RowTyped<R> {
 				return theColumnIndexVariable;
 			}
 
-			protected abstract String getValueVariableName(ExpressoQIS session);
+			protected abstract String getActiveValueVariableName(ExpressoQIS session);
 
 			@Override
 			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
@@ -88,11 +88,11 @@ public interface TabularWidget<R> extends MultiValueWidget<R>, RowTyped<R> {
 					.getSuperElement() // widget
 					));
 				ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
-				theValueVariable = elModels.getElementValueModelId(getValueVariableName(session));
+				theActiveValueVariable = elModels.getElementValueModelId(getActiveValueVariableName(session));
 				theSelectedVariable = elModels.getElementValueModelId("selected");
 				theRowIndexVariable = elModels.getElementValueModelId("rowIndex");
 				theColumnIndexVariable = elModels.getElementValueModelId("columnIndex");
-				elModels.satisfyElementValueType(getValueVariable(), ModelTypes.Value,
+				elModels.satisfyElementValueType(getActiveValueVariable(), ModelTypes.Value,
 					(interp, env) -> ModelTypes.Value.forType(getRowType((TabularWidget.Interpreted<?, ?>) interp, env)));
 				CollectionUtils
 				.synchronize(theColumns, session.forChildren("columns"), (c, s) -> ExElement.typesEqual(c.getElement(), s.getElement()))//
@@ -138,12 +138,9 @@ public interface TabularWidget<R> extends MultiValueWidget<R>, RowTyped<R> {
 		}
 	}
 
-	public interface Interpreted<R, W extends TabularWidget<R>> extends MultiValueWidget.Interpreted<R, W>, RowTyped.Interpreted<R, W> {
+	public interface Interpreted<R, W extends TabularWidget<R>> extends MultiValueWidget.Interpreted<R, W> {
 		@Override
 		Def<? super W> getDefinition();
-
-		@Override
-		TypeToken<R> getRowType();
 
 		List<QuickTableColumn.TableColumnSet.Interpreted<R, ?>> getColumns();
 
@@ -162,7 +159,7 @@ public interface TabularWidget<R> extends MultiValueWidget<R>, RowTyped<R> {
 			}
 
 			@Override
-			public TypeToken<R> getRowType() {
+			public TypeToken<R> getValueType() {
 				return theRowType;
 			}
 
@@ -173,12 +170,12 @@ public interface TabularWidget<R> extends MultiValueWidget<R>, RowTyped<R> {
 
 			@Override
 			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-				theRowType = (TypeToken<R>) env.getModels().getComponent(getDefinition().getValueVariable()).interpreted().getType()
+				theRowType = (TypeToken<R>) env.getModels().getComponent(getDefinition().getActiveValueVariable()).interpreted().getType()
 					.getType(0);
 				if (theColumns == null)
 					theColumns = ObservableCollection.build(TypeTokens.get().keyFor(
 						QuickTableColumn.TableColumnSet.Interpreted.class).<QuickTableColumn.TableColumnSet.Interpreted<R, ?>> parameterized(
-							getRowType(), TypeTokens.get().WILDCARD))//
+							getValueType(), TypeTokens.get().WILDCARD))//
 					.build();
 				super.doUpdate(env);
 				CollectionUtils.synchronize(theColumns, getDefinition().getColumns(), (i, d) -> i.getIdentity() == d.getIdentity())//
@@ -272,7 +269,11 @@ public interface TabularWidget<R> extends MultiValueWidget<R>, RowTyped<R> {
 	TypeToken<R> getRowType();
 
 	@Override
-	ModelComponentId getValueVariable();
+	ModelComponentId getActiveValueVariable();
+
+	ModelComponentId getRowIndexVariable();
+
+	ModelComponentId getColumnIndexVariable();
 
 	void setContext(TabularContext<R> ctx) throws ModelInstantiationException;
 
@@ -288,9 +289,9 @@ public interface TabularWidget<R> extends MultiValueWidget<R>, RowTyped<R> {
 		private ModelComponentId theSelectedVariable;
 		private ModelComponentId theRowIndexVariable;
 		private ModelComponentId theColumnIndexVariable;
-		private ModelComponentId theValueVariable;
+		private ModelComponentId theActiveValueVariable;
 
-		private SettableValue<SettableValue<R>> theRenderValue;
+		private SettableValue<SettableValue<R>> theActiveValue;
 		private SettableValue<SettableValue<Boolean>> isSelected;
 		private SettableValue<SettableValue<Integer>> theRowIndex;
 		private SettableValue<SettableValue<Integer>> theColumnIndex;
@@ -321,8 +322,8 @@ public interface TabularWidget<R> extends MultiValueWidget<R>, RowTyped<R> {
 		}
 
 		@Override
-		public ModelComponentId getValueVariable() {
-			return theValueVariable;
+		public ModelComponentId getActiveValueVariable() {
+			return theActiveValueVariable;
 		}
 
 		@Override
@@ -349,7 +350,7 @@ public interface TabularWidget<R> extends MultiValueWidget<R>, RowTyped<R> {
 
 		@Override
 		public void setContext(MultiValueRenderContext<R> ctx) throws ModelInstantiationException {
-			theRenderValue.set(ctx.getRenderValue(), null);
+			theActiveValue.set(ctx.getActiveValue(), null);
 			isSelected.set(ctx.isSelected(), null);
 		}
 
@@ -357,21 +358,21 @@ public interface TabularWidget<R> extends MultiValueWidget<R>, RowTyped<R> {
 		protected void doUpdate(ExElement.Interpreted<?> interpreted) {
 			super.doUpdate(interpreted);
 			TabularWidget.Interpreted<R, ?> myInterpreted = (TabularWidget.Interpreted<R, ?>) interpreted;
-			if (theRowType == null || !theRowType.equals(myInterpreted.getRowType())) {
-				theRowType = myInterpreted.getRowType();
+			if (theRowType == null || !theRowType.equals(myInterpreted.getValueType())) {
+				theRowType = myInterpreted.getValueType();
 				theColumnSets = ObservableCollection.build((Class<TableColumnSet<R>>) (Class<?>) TableColumnSet.class).build();
 				TypeToken<QuickTableColumn<R, ?>> columnType = TypeTokens.get().keyFor(QuickTableColumn.class)//
 					.<QuickTableColumn<R, ?>> parameterized(theRowType, TypeTokens.get().WILDCARD);
 				theColumns = theColumnSets.flow()//
 					.<QuickTableColumn<R, ?>> flatMap(columnType, columnSet -> columnSet.getColumns().flow())//
 					.collect();
-				theRenderValue = SettableValue
+				theActiveValue = SettableValue
 					.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<R>> parameterized(theRowType)).build();
 			}
 			theSelectedVariable = myInterpreted.getDefinition().getSelectedVariable();
 			theRowIndexVariable = myInterpreted.getDefinition().getRowIndexVariable();
 			theColumnIndexVariable = myInterpreted.getDefinition().getColumnIndexVariable();
-			theValueVariable = myInterpreted.getDefinition().getValueVariable();
+			theActiveValueVariable = myInterpreted.getDefinition().getActiveValueVariable();
 			CollectionUtils.synchronize(theColumnSets, myInterpreted.getColumns(), (v, i) -> v.getIdentity() == i.getIdentity())//
 			.adjust(
 				new CollectionUtils.CollectionSynchronizer<QuickTableColumn.TableColumnSet<R>, QuickTableColumn.TableColumnSet.Interpreted<R, ?>>() {
@@ -384,7 +385,7 @@ public interface TabularWidget<R> extends MultiValueWidget<R>, RowTyped<R> {
 					@Override
 					public ElementSyncAction leftOnly(
 						ElementSyncInput<QuickTableColumn.TableColumnSet<R>, QuickTableColumn.TableColumnSet.Interpreted<R, ?>> element) {
-						// TODO Dispose of the column?
+						element.getLeftValue().destroy();
 						return element.remove();
 					}
 
@@ -442,7 +443,7 @@ public interface TabularWidget<R> extends MultiValueWidget<R>, RowTyped<R> {
 		protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
 			super.doInstantiate(myModels);
 
-			ExFlexibleElementModelAddOn.satisfyElementValue(theValueVariable, myModels, SettableValue.flatten(theRenderValue));
+			ExFlexibleElementModelAddOn.satisfyElementValue(theActiveValueVariable, myModels, SettableValue.flatten(theActiveValue));
 			ExFlexibleElementModelAddOn.satisfyElementValue(theSelectedVariable, myModels, SettableValue.flatten(isSelected));
 			ExFlexibleElementModelAddOn.satisfyElementValue(theRowIndexVariable, myModels, SettableValue.flatten(theRowIndex));
 			ExFlexibleElementModelAddOn.satisfyElementValue(theColumnIndexVariable, myModels, SettableValue.flatten(theColumnIndex));
@@ -459,7 +460,7 @@ public interface TabularWidget<R> extends MultiValueWidget<R>, RowTyped<R> {
 			copy.theColumns = copy.theColumnSets.flow()//
 				.<QuickTableColumn<R, ?>> flatMap(theColumns.getType(), columnSet -> columnSet.getColumns().flow())//
 				.collect();
-			copy.theRenderValue = SettableValue.build(theRenderValue.getType()).build();
+			copy.theActiveValue = SettableValue.build(theActiveValue.getType()).build();
 			copy.isSelected = SettableValue.build(isSelected.getType()).build();
 			copy.theRowIndex = SettableValue.build(theRowIndex.getType()).build();
 			copy.theColumnIndex = SettableValue.build(theRowIndex.getType()).build();

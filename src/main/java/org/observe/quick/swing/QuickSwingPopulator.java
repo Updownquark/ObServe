@@ -21,6 +21,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.WeakHashMap;
 import java.util.function.BiConsumer;
+import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.IntSupplier;
@@ -60,6 +61,7 @@ import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.Transformer;
 import org.qommons.Transformer.Builder;
+import org.qommons.ValueHolder;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.ex.CheckedExceptionWrapper;
@@ -1537,6 +1539,9 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 			// Tabs
 			QuickSwingPopulator.<QuickTabs<?>, QuickTabs.Interpreted<?>> interpretWidget(tx, gen(QuickTabs.Interpreted.class),
 				QuickBaseSwing::interpretTabs);
+			// Tree
+			QuickSwingPopulator.<QuickTree<?>, QuickTree.Interpreted<?, ?>> interpretWidget(tx, gen(QuickTree.Interpreted.class),
+				QuickBaseSwing::interpretTree);
 		}
 
 		static <T> Class<T> gen(Class<? super T> rawClass) {
@@ -1980,7 +1985,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 
 		static <R> QuickSwingPopulator<QuickTable<R>> interpretTable(QuickTable.Interpreted<R> interpreted,
 			Transformer<ExpressoInterpretationException> tx) throws ExpressoInterpretationException {
-			TypeToken<R> rowType = interpreted.getRowType();
+			TypeToken<R> rowType = interpreted.getValueType();
 			Map<Object, QuickSwingPopulator<QuickWidget>> renderers = new HashMap<>();
 			Map<Object, QuickSwingPopulator<QuickWidget>> editors = new HashMap<>();
 			boolean[] renderersInitialized = new boolean[1];
@@ -2088,6 +2093,79 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 			});
 			tableInitialized[0] = true;
 			return swingTable;
+		}
+
+		static <T> QuickSwingPopulator<QuickTree<T>> interpretTree(QuickTree.Interpreted<T, ?> interpreted,
+			Transformer<ExpressoInterpretationException> tx) throws ExpressoInterpretationException{
+			QuickSwingPopulator<QuickWidget> renderer, editor;
+			if(interpreted.getTreeColumn()==null) {
+				renderer=null;
+				editor=null;
+			} else {
+				renderer=interpreted.getTreeColumn().getRenderer()==null ? null : tx.transform(interpreted.getTreeColumn().getRenderer(), QuickSwingPopulator.class);
+				if(interpreted.getTreeColumn().getEditing()==null || interpreted.getTreeColumn().getEditing().getEditor()==null)
+					editor=null;
+				else
+					editor=tx.transform(interpreted.getTreeColumn().getEditing().getEditor(), QuickSwingPopulator.class);
+			}
+			return createWidget((panel, quick)->{
+				MultiValueRenderable.MultiValueRenderContext<BetterList<T>> ctx = new MultiValueRenderable.MultiValueRenderContext.Default<>(
+					TypeTokens.get().keyFor(BetterList.class).<BetterList<T>> parameterized(quick.getNodeType()));
+				quick.setContext(ctx);
+				InterpretedSwingTableColumn<BetterList<T>, T> column;
+				ValueHolder<PanelPopulation.TreeEditor<T, ?>> treeHolder = new ValueHolder<>();
+				if(quick.getTreeColumn()==null)
+					column=null;
+				else {
+					TabularWidget.TabularContext<BetterList<T>> tableCtx = new TabularWidget.TabularContext<BetterList<T>>() {
+						private final SettableValue<Integer> theRow = SettableValue.build(int.class).withDescription("row").withValue(0)
+							.build();
+						private final SettableValue<Integer> theColumn = SettableValue.build(int.class).withDescription("column")
+							.withValue(0).build();
+
+						@Override
+						public SettableValue<BetterList<T>> getActiveValue() {
+							return ctx.getActiveValue();
+						}
+
+						@Override
+						public SettableValue<Boolean> isSelected() {
+							return ctx.isSelected();
+						}
+
+						@Override
+						public SettableValue<Integer> getRowIndex() {
+							return theRow;
+						}
+
+						@Override
+						public SettableValue<Integer> getColumnIndex() {
+							return theColumn;
+						}
+					};
+					column = new InterpretedSwingTableColumn<>(quick,
+						(QuickTableColumn<BetterList<T>, T>) quick.getTreeColumn().getColumns().getFirst(), tableCtx, tx, panel.getUntil(),
+						treeHolder, renderer, editor);
+				}
+				TypeToken<BetterList<T>> pathType = TypeTokens.get().keyFor(BetterList.class)
+					.<BetterList<T>> parameterized(quick.getNodeType());
+				panel.addTree3(quick.getRoot(), (parentPath, nodeUntil) -> {
+					try {
+						return quick.getChildren(ObservableValue.of(pathType, parentPath), nodeUntil);
+					} catch (ModelInstantiationException e) {
+						quick.reporting().error("Could not create children for " + parentPath, e);
+						return null;
+					}
+				}, tree -> {
+					treeHolder.accept(tree);
+					if (column != null)
+						tree.withRender(column.getCRS());
+					tree.withLeafTest2(path -> {
+						ctx.getActiveValue().set(path, null);
+						return quick.isLeaf();
+					});
+				});
+			});
 		}
 
 		static QuickSwingContainerPopulator<QuickSplit> interpretSplit(QuickSplit.Interpreted<?> interpreted,
@@ -2350,10 +2428,11 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 		}
 
 		@Override
-		public <F> AbstractQuickContainerPopulator addTree2(ObservableValue<? extends F> root,
-			Function<? super BetterList<F>, ? extends ObservableCollection<? extends F>> children, Consumer<TreeEditor<F, ?>> modify) {
+		public <F> AbstractQuickContainerPopulator addTree3(ObservableValue<? extends F> root,
+			BiFunction<? super BetterList<F>, Observable<?>, ? extends ObservableCollection<? extends F>> children,
+				Consumer<TreeEditor<F, ?>> modify) {
 			return addHPanel(null, new JustifiedBoxLayout(true).mainJustified().crossJustified(),
-				p -> modify(p).addTree2(root, children, modify));
+				p -> modify(p).addTree3(root, children, modify));
 		}
 
 		@Override

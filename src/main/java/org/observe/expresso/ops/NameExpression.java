@@ -201,7 +201,7 @@ public class NameExpression implements ObservableExpression, Named {
 			}
 			if (clazz == null) {
 				exHandler.handle1(new ExpressoInterpretationException("'" + theNames.get(0) + "' cannot be resolved to a variable",
-					env.reporting().at(getDivisionOffset(i)).getPosition(), theNames.get(0).length()));
+					env.reporting().getPosition(), theNames.get(0).length()));
 				return null;
 			}
 			try {

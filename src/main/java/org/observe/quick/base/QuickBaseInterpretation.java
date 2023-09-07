@@ -163,7 +163,7 @@ public class QuickBaseInterpretation implements QonfigInterpretation {
 		// Table
 		interpreter.createWith(QuickTable.TABLE, QuickTable.Def.class, ExElement.creator(QuickTable.Def::new));
 		interpreter.createWith(QuickTableColumn.SingleColumnSet.COLUMN, QuickTableColumn.SingleColumnSet.Def.class,
-			ExElement.creator(RowTyped.Def.class, QuickTableColumn.SingleColumnSet.Def::new));
+			ExElement.creator(ValueTyped.Def.class, QuickTableColumn.SingleColumnSet.Def::new));
 		interpreter.createWith(QuickTableColumn.ColumnEditing.COLUMN_EDITING, QuickTableColumn.ColumnEditing.Def.class,
 			ExElement.creator(QuickTableColumn.TableColumnSet.Def.class, QuickTableColumn.ColumnEditing.Def::new));
 		interpreter.createWith("modify-row-value", QuickTableColumn.ColumnEditType.RowModifyEditType.Def.class,

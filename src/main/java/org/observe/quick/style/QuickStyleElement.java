@@ -212,7 +212,7 @@ public class QuickStyleElement<T> extends ExElement.Abstract {
 			if (theCondition != null) {
 				QonfigAttributeDef.Declared priorityAttr = QuickTypeStyle.getPriorityAttr(getQonfigType().getDeclarer());
 				application = application.forCondition(theCondition, session.getExpressoEnv().getModels(), priorityAttr, styleSheet != null,
-					emvCache);
+					emvCache, reporting());
 			}
 			theApplication = application;
 
@@ -252,7 +252,7 @@ public class QuickStyleElement<T> extends ExElement.Abstract {
 					throw new QonfigInterpretationException("Cannot specify a style value without an attribute",
 						theValue.getFilePosition().getPosition(0), theValue.length());
 				LocatedExpression replacedValue = theApplication.findModelValues(theValue, new HashSet<>(),
-					session.getExpressoEnv().getModels(), getQonfigType().getDeclarer(), styleSheet != null, emvCache);
+					session.getExpressoEnv().getModels(), getQonfigType().getDeclarer(), styleSheet != null, emvCache, reporting());
 				theStyleValues.add(new QuickStyleValue(styleSheet, theApplication, theEffectiveAttribute, replacedValue));
 			}
 			QonfigValue styleSetName = session.getAttributeQV("style-set");

@@ -111,24 +111,6 @@ public class DynamicStyledDocument<T> extends StyledDocument<T> {
 
 		public Interpreted(Def<? super D> definition, ExElement.Interpreted<?> parent) {
 			super(definition, parent);
-			/* TODO
-			 * It's really unfortunate that we have to do this, but in order to generate an independent, listenable collection for each node,
-			 * we have to keep the model instance around to create copies.
-			 *
-			 * In other widgets I've created so far, the values needed from elements in a collection could be transient, where the value is
-			 * inspected and then the observable value could be repurposed for the next child.  But we need to keep the child collection
-			 * around for each node independently so we can be notified of changes deep in the hierarchy.
-			 *
-			 * This is a problem because the ModelSetInstance API currently keeps and exposes its source models.
-			 * This means that the structures used to create the models, including expressions, text, Qonfig elements, etc.
-			 * must be kept around in memory.  Up to now I'd been able to get away with releasing these after the widget instances were built.
-			 *
-			 * We also need a reference to the InterpretedValueSynth to create the collection from model copies.  That structure is typically
-			 * composed of references to other model values in the form of InterpretedModelComponentNodes, which have references to the models.
-			 *
-			 * I think the solution to this is to divorce ModelSetInstance and InterpretedValueSynth from the source models.
-			 * Once that's done, I think we can delete this comment and accept the way this is done.
-			 */
 			persistModelInstances(true);
 		}
 

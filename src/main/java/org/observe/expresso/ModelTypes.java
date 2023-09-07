@@ -228,8 +228,12 @@ public class ModelTypes {
 			public HollowObservable(String name) {
 				theId = new NamedUniqueIdentity(name);
 				theContainer = SettableValue.build(TypeTokens.get().keyFor(Observable.class).<Observable<T>> wildCard()).build();
-				;
 				theFlatObservable = ObservableValue.flattenObservableValue(theContainer);
+			}
+
+			@Override
+			public ModelInstanceType<Observable<?>, Observable<T>> getModelType() {
+				return Event.anyAs();
 			}
 
 			@Override
@@ -312,6 +316,11 @@ public class ModelTypes {
 
 			public HollowAction(String name) {
 				theName = name;
+			}
+
+			@Override
+			public ModelInstanceType<ObservableAction, ObservableAction> getModelType() {
+				return Action.instance();
 			}
 
 			@Override
@@ -640,6 +649,11 @@ public class ModelTypes {
 			}
 
 			@Override
+			public ModelInstanceType<SettableValue<?>, SettableValue<T>> getModelType() {
+				return Value.forType(getType());
+			}
+
+			@Override
 			protected SettableValue<SettableValue<T>> getWrapped() {
 				return (SettableValue<SettableValue<T>>) super.getWrapped();
 			}
@@ -787,6 +801,11 @@ public class ModelTypes {
 				theContainer = SettableValue
 					.build(TypeTokens.get().keyFor(ObservableCollection.class).<ObservableCollection<T>> parameterized(type)).build();
 				init(ObservableCollection.flattenValue(theContainer));
+			}
+
+			@Override
+			public ModelInstanceType<ObservableCollection<?>, ObservableCollection<T>> getModelType() {
+				return Collection.forType(getType());
 			}
 
 			@Override
@@ -1048,6 +1067,11 @@ public class ModelTypes {
 				theContainer = SettableValue.build(TypeTokens.get().keyFor(ObservableSet.class).<ObservableSet<T>> parameterized(type))
 					.build();
 				init(ObservableCollection.flattenValue(theContainer));
+			}
+
+			@Override
+			public ModelInstanceType<ObservableSet<?>, ObservableSet<T>> getModelType() {
+				return Set.forType(getType());
 			}
 
 			@Override

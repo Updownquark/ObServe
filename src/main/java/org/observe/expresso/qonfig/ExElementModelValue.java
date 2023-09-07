@@ -34,7 +34,8 @@ public class ExElementModelValue extends ExAddOn.Abstract<ExtModelValueElement<?
 			super.update(session, element);
 			if (session.getElement().getDocument() instanceof QonfigMetadata) {
 				QonfigElementOrAddOn owner = ((QonfigMetadata) session.getElement().getDocument()).getElement();
-				theElementValue = session.getElementValueCache().getDynamicValues(session.getFocusType().getDeclarer(), owner, null)//
+				theElementValue = session.getElementValueCache()
+					.getDynamicValues(session.getFocusType().getDeclarer(), owner, null, element.reporting())//
 					.get(session.getAttributeText("name"));
 			}
 		}

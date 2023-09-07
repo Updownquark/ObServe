@@ -82,6 +82,7 @@ implements TreeTableEditor<F, P> {
 	private final Function<? super F, ? extends ObservableCollection<? extends F>> theChildren1;
 	private final Function<? super BetterList<F>, ? extends ObservableCollection<? extends F>> theChildren2;
 	private Predicate<? super F> theLeafTest;
+	private Predicate<? super BetterList<F>> theLeafTest2;
 
 	private String theItemName;
 
@@ -110,7 +111,6 @@ implements TreeTableEditor<F, P> {
 		theRoot = root;
 		theChildren1 = children1;
 		theChildren2 = children2;
-		theLeafTest = __ -> false;
 		theActions = new ArrayList<>();
 		theTreeColumn = new CategoryRenderStrategy<>("Tree", root.getType(),
 			LambdaUtils.printableFn(BetterList::getLast, "BetterList::getLast", null));
@@ -123,10 +123,10 @@ implements TreeTableEditor<F, P> {
 		}
 
 		@Override
-		protected ObservableCollection<? extends F> getChildren(F parent) {
+		protected ObservableCollection<? extends F> getChildren(BetterList<F> parentPath, Observable<?> nodeUntil) {
 			if (theChildren1 != null)
-				return theChildren1.apply(parent);
-			return theChildren2.apply(getBetterPath(parent, false));
+				return theChildren1.apply(parentPath.getLast());
+			return theChildren2.apply(parentPath);
 		}
 
 		@Override
@@ -136,7 +136,15 @@ implements TreeTableEditor<F, P> {
 		@Override
 		public boolean isLeaf(Object node) {
 			Predicate<? super F> leafTest = theLeafTest;
-			return leafTest != null && leafTest.test((F) node);
+			if (leafTest != null)
+				return leafTest.test((F) node);
+			Predicate<? super BetterList<F>> leafTest2 = theLeafTest2;
+			if (leafTest2 != null) {
+				BetterList<F> path = getBetterPath((F) node, false);
+				if (path != null)
+					return leafTest2.test(path);
+			}
+			return false;
 		}
 	}
 
@@ -224,6 +232,12 @@ implements TreeTableEditor<F, P> {
 	@Override
 	public P withLeafTest(Predicate<? super F> leafTest) {
 		theLeafTest = leafTest;
+		return (P) this;
+	}
+
+	@Override
+	public P withLeafTest2(Predicate<? super BetterList<F>> leafTest) {
+		theLeafTest2 = leafTest;
 		return (P) this;
 	}
 
