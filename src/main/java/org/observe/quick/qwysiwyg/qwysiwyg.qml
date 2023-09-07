@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<quick uses:base="Quick-Base v0.1" uses:config="Expresso-Config v0.1" with-extension="window" title="app.qwysiwyg.title" close-action="exit"
+<quick xmlns:base="Quick-Base v0.1" xmlns:config="Expresso-Config v0.1" with-extension="window" title="app.qwysiwyg.title" close-action="exit"
 	x="config.x" y="config.y" width="config.width" height="config.height">
 	<head>
 		<imports>

@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<qonfig-def name="QWYSIWYG" version="0.1" extends:style="Quick-Style v0.1">
+<qonfig-def name="QWYSIWYG" version="0.1" xmlns:style="Quick-Style v0.1">
 	<add-ons>
 		<?DOC Elements that inherit this add-on can modify their representations in their application in response to events from QWYSIWYG?>
 		<add-on name="qwysiwyg-ed" inherits="styled">

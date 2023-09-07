@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<quick uses:base="Quick-Base v0.1" uses:expresso="Expresso-Base v0.1" with-extension="window"
+<quick xmlns:base="Quick-Base v0.1" xmlns:expresso="Expresso-Base v0.1" with-extension="window"
 	title="`Simple Quick Tree Demo`" close-action="exit" x="app.x" y="app.y" width="app.w" height="app.h">
 	<head>
 		<models>

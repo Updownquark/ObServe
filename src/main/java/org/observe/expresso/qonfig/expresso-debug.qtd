@@ -3,7 +3,7 @@
 <!--
 This file defines syntax for debugging expresso models
 -->
-<qonfig-def name="Expresso-Debug" version="0.1" extends:expresso="Expresso-Core v0.1">
+<qonfig-def name="Expresso-Debug" version="0.1" xmlns:expresso="Expresso-Core v0.1">
 	<value-types>
 		<one-of name="breakpoint-type">
 			<?DOC Catch a breakpoint as the value is being parsed and compiled?>

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<qonfig-def name="Quick-App" version="0.1" extends:qonfig-app="Qonfig-App 0.1" root="quick-app">
+<qonfig-def name="Quick-App" version="0.1" xmlns:qonfig-app="Qonfig-App 0.1" root="quick-app">
 	<elements>
 		<element-def name="quick-app" extends="qonfig-app">
 			<child-def name="quick-interpretation" type="quick-interpretation" min="1" max="inf" />

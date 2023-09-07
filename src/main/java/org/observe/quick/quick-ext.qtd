@@ -4,7 +4,7 @@
 	GitHub URL https://github.com/Updownquark/Quick/releases/download/v1.0.0/quick.qtd
 	Local URL ../../../../core/src/main/resources/quick.dtd
 -->
-<qonfig-def name="Quick-X" version="0.1" extends:base="Quick-Base v0.1">
+<qonfig-def name="Quick-X" version="0.1" xmlns:base="Quick-Base v0.1">
 	<elements>
 		<element-def name="collapse-pane" extends="container">
 			<attribute name="collapsed" type="expression" specify="optional" />

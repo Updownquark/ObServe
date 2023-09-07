@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<qonfig-def name="Quick-Style" version="0.1" root="style-sheet" extends:expresso="Expresso-Base v0.1">
+<qonfig-def name="Quick-Style" version="0.1" root="style-sheet" xmlns:expresso="Expresso-Base v0.1">
 	<value-types>
 		<pattern name="style-name">[a-zA-Z0-9_\\-]+</pattern>
 		<pattern name="widget-name">((?&lt;ns&gt;[a-zA-Z0-9_\\-]+)\:)?(?&lt;widget&gt;[a-zA-Z0-9_\\-]+)</pattern>

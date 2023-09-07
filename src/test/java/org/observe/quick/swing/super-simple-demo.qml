@@ -4,7 +4,7 @@
 A bunch of this random junk is in here just to test out the XML parser
 blah -->
 
-<quick uses:base="Quick-Base v0.1" uses:expresso="Expresso-Base v0.1" with-extension="window"
+<quick xmlns:base="Quick-Base v0.1" xmlns:expresso="Expresso-Base v0.1" with-extension="window"
 	title="`Super Simple Quick Demo`" close-action="exit" x="app.x" y="app.y" width="app.w" height="app.h">
 	<head>
 		<?CONTENTLESS-INTRUCTION?>

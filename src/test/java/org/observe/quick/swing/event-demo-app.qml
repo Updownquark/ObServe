@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<quick-app uses:app="Quick-App v0.1" app-file="event-demo.qml">
+<quick-app xmlns:app="Quick-App v0.1" app-file="event-demo.qml">
 	<toolkit def="/org/observe/expresso/qonfig/expresso-core.qtd">
 		<value-type>org.observe.expresso.qonfig.ExpressionValueType</value-type>
 	</toolkit>

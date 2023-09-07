@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<qonfig-def name="Quick-Base" version="0.1" extends:core="Quick-Core v0.1">
+<qonfig-def name="Quick-Base" version="0.1" xmlns:core="Quick-Core v0.1">
 	<value-types>
 		<one-of name="orientation">
 			<literal>horizontal</literal>

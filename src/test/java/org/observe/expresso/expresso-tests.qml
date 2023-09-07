@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<testing uses:test="Expresso-Test 0.1" uses:debug="Expresso-Debug v0.1">
+<testing xmlns:test="Expresso-Test 0.1" xmlns:debug="Expresso-Debug v0.1">
 	<!-- TODO
 		Test AND DOCUMENT!!
 

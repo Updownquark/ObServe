@@ -1,18 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<qonfig-def name="Quick-Swing" version="0.1" extends:core="Quick-Core v0.1" root="quick-debug">
+<qonfig-def name="Quick-Swing" version="0.1" xmlns:core="Quick-Core v0.1" root="quick-debug">
 	<add-ons>
 		<add-on name="quick" requires="core:quick">
 			<attribute name="look-and-feel" type="string" default="system" />
 		</add-on>
 	</add-ons>
-	<elements>
-		<element-def name="quick-debug" extends="core:quick">
-			<attribute name="debug-visible" type="expression" />
-			<attribute name="debug-x" type="expression" specify="optional" />
-			<attribute name="debug-y" type="expression" specify="optional" />
-			<attribute name="debug-width" type="expression" specify="optional" />
-			<attribute name="debug-height" type="expression" specify="optional" />
-		</element-def>
-	</elements>
 </qonfig-def>

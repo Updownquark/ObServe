@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<qonfig-def name="Quick-Style-Test" version="0.1" extends:expresso="Expresso-Testing v0.1" extends:style="Quick-Style v0.1">
+<qonfig-def name="Quick-Style-Test" version="0.1" xmlns:expresso="Expresso-Testing v0.1" xmlns:style="Quick-Style v0.1">
 	<elements>
 		<element-def name="styled-value" extends="model-value" inherits="styled" abstract="true" />
 

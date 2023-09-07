@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<quick uses:base="Quick-Base v0.1" uses:expresso="Expresso-Base v0.1" uses:qwysiwyg="QWYSIWYG v0.1"
+<quick xmlns:base="Quick-Base v0.1" xmlns:expresso="Expresso-Base v0.1" xmlns:qwysiwyg="QWYSIWYG v0.1"
 	with-extension="window" title="`Simple Quick Table Demo`" close-action="exit">
-	<!--uses:qwysiwyg="QWYSIWYG v0.1"-->
+	<!--xmlns:qwysiwyg="QWYSIWYG v0.1"-->
 	<head>
 		<imports>
 			<import>org.qommons.Primes</import>

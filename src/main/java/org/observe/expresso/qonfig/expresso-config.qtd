@@ -5,7 +5,7 @@ This file defines the persisted config extension to the expresso toolkit.
 
 It builds on the Expresso-Base toolkit and allows specification of persisted config models.
 -->
-<qonfig-def name="Expresso-Config" version="0.1" extends:base="Expresso-Base v0.1">
+<qonfig-def name="Expresso-Config" version="0.1" xmlns:base="Expresso-Base v0.1">
 	<add-ons>
 		<add-on name="allow-config-model" abstract="true" />
 		<add-on name="config-model-value" requires="model-value" inherits="type-required">

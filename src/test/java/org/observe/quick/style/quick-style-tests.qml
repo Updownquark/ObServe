@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<testing uses:style="Quick-Style-Test 0.1">
+<testing xmlns:style="Quick-Style-Test 0.1">
 	<expresso>
 		<imports>
 			<import>org.junit.Assert.*</import>

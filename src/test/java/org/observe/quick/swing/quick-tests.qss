@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<style-sheet uses:base="Quick-Base v0.1">
+<style-sheet xmlns:base="Quick-Base v0.1">
 	<style attr="widget.color">
 		<style element="tabular-widget">
 			<style child="columns">
