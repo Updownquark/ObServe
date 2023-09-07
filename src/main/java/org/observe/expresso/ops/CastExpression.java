@@ -14,6 +14,7 @@ import org.observe.expresso.ModelType;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
+import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.TypeConversionException;
@@ -113,8 +114,11 @@ public class CastExpression implements ObservableExpression {
 		// This can work around some issues such as where flattening is needed, and if it succeeds it's simpler and less troublesome
 		EvaluatedExpression<SettableValue<?>, SettableValue<T>> evaldX = theValue.evaluate(ModelTypes.Value.forType(valueType),
 			env.at(theType.length() + 2), valueOffset, ExceptionHandler.holder2());
-		if (evaldX != null)
-			return ObservableExpression.wrap(evaldX);
+		if (evaldX != null) {
+			InterpretedValueSynth<SettableValue<?>, SettableValue<T>> synth = InterpretedValueSynth.of(ModelTypes.Value.forType(valueType),
+				() -> evaldX.instantiate().map(sv -> sv.transformReversible(valueType, tx -> tx.map(v -> v).withReverse(v -> v))), evaldX);
+			return ObservableExpression.evEx(0, getExpressionLength(), synth, valueType, evaldX);
+		}
 		ExceptionHandler.Double<ExpressoInterpretationException, TypeConversionException, EX, NeverThrown> doubleX = exHandler
 			.stack(ExceptionHandler.holder());
 		InterpretedExpressoEnv valueEnv = env.at(theType.length() + 2);

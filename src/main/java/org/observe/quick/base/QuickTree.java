@@ -1,7 +1,5 @@
 package org.observe.quick.base;
 
-import org.observe.Observable;
-import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.collect.ObservableCollection;
 import org.observe.expresso.ExpressoInterpretationException;
@@ -30,7 +28,7 @@ import org.qommons.config.QonfigInterpretationException;
 
 import com.google.common.reflect.TypeToken;
 
-public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidget<BetterList<N>> {
+public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidget<BetterList<N>>, TreeModel.TreeModelOwner {
 	public static final String TREE = "tree";
 
 	@ExMultiElementTraceable({ //
@@ -46,13 +44,12 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 		qonfigType = "multi-value-renderable",
 		interpretation = Interpreted.class,
 		instance = QuickTree.class) })
-	public static class Def<T extends QuickTree<?>> extends QuickWidget.Def.Abstract<T> implements MultiValueWidget.Def<T> {
-		private CompiledExpression theRoot;
-		private CompiledExpression theChildren;
-		private CompiledExpression isLeaf;
+	public static class Def<T extends QuickTree<?>> extends QuickWidget.Def.Abstract<T>
+	implements MultiValueWidget.Def<T>, TreeModel.TreeModelOwner.Def<T> {
 		private ModelComponentId theActiveValueVariable;
 		private ModelComponentId theNodeVariable;
 		private ModelComponentId theSelectedVariable;
+		private TreeModel.Def<?> theModel;
 		private QuickTableColumn.SingleColumnSet.Def theTreeColumn;
 		private CompiledExpression theSelection;
 		private CompiledExpression theMultiSelection;
@@ -61,19 +58,8 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 			super(parent, type);
 		}
 
-		@QonfigAttributeGetter(asType = "tree", value = "root")
-		public CompiledExpression getRoot() {
-			return theRoot;
-		}
-
-		@QonfigAttributeGetter(asType = "tree", value = "children")
-		public CompiledExpression getChildren() {
-			return theChildren;
-		}
-
-		@QonfigAttributeGetter(asType = "tree", value = "leaf")
-		public CompiledExpression isLeaf() {
-			return isLeaf;
+		public TreeModel.Def<?> getModel() {
+			return theModel;
 		}
 
 		@QonfigChildGetter(asType = "tree", value = "tree-column")
@@ -87,6 +73,7 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 			return theActiveValueVariable;
 		}
 
+		@Override
 		@QonfigAttributeGetter(asType = "tree", value = "active-node-name")
 		public ModelComponentId getNodeVariable() {
 			return theNodeVariable;
@@ -111,9 +98,7 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			super.doUpdate(session);
-			theRoot = session.getAttributeExpression("root");
-			theChildren = session.getAttributeExpression("children");
-			isLeaf = session.getAttributeExpression("leaf");
+			theModel = ExElement.useOrReplace(TreeModel.Def.class, theModel, session, "model");
 			ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
 			String valueName = session.getAttributeText("active-value-name");
 			theActiveValueVariable = elModels.getElementValueModelId(valueName);
@@ -136,11 +121,9 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 	}
 
 	public static class Interpreted<N, T extends QuickTree<N>> extends QuickWidget.Interpreted.Abstract<T>
-	implements MultiValueWidget.Interpreted<BetterList<N>, T> {
-		private InterpretedValueSynth<SettableValue<?>, SettableValue<N>> theRoot;
-		private InterpretedValueSynth<ObservableCollection<?>, ? extends ObservableCollection<? extends N>> theChildren;
+	implements MultiValueWidget.Interpreted<BetterList<N>, T>, TreeModel.TreeModelOwner.Interpreted<T> {
+		private TreeModel.Interpreted<N, ?> theModel;
 		private TypeToken<N> theNodeType;
-		private InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> isLeaf;
 		private QuickTableColumn.SingleColumnSet.Interpreted<BetterList<N>, N> theTreeColumn;
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<BetterList<N>>> theSelection;
 		private InterpretedValueSynth<ObservableCollection<?>, ObservableCollection<BetterList<N>>> theMultiSelection;
@@ -155,16 +138,8 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 			return (Def<? super T>) super.getDefinition();
 		}
 
-		public InterpretedValueSynth<SettableValue<?>, SettableValue<N>> getRoot() {
-			return theRoot;
-		}
-
-		public InterpretedValueSynth<ObservableCollection<?>, ? extends ObservableCollection<? extends N>> getChildren() {
-			return theChildren;
-		}
-
-		public InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> isLeaf() {
-			return isLeaf;
+		public TreeModel.Interpreted<N, ?> getModel() {
+			return theModel;
 		}
 
 		@Override
@@ -183,10 +158,8 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 		}
 
 		public TypeToken<N> getNodeType() throws ExpressoInterpretationException {
-			if (theNodeType == null) {
-				theRoot = getDefinition().getRoot().interpret(ModelTypes.Value.anyAs(), getExpressoEnv());
-				theNodeType = (TypeToken<N>) theRoot.getType().getType(0);
-			}
+			if (theNodeType == null)
+				theNodeType = theModel.getNodeType(getExpressoEnv());
 			return theNodeType;
 		}
 
@@ -205,19 +178,17 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 
 		@Override
 		protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+			if (theModel != null && theModel.getIdentity() != getDefinition().getModel().getIdentity()) {
+				theModel.destroy();
+				theModel = null;
+			}
+			if (theModel == null)
+				theModel = getDefinition().getModel().interpret(this);
+
 			super.doUpdate(env);
 
 			getNodeType(); // Initialize root
-			theChildren = getDefinition().getChildren().interpret(ModelTypes.Collection.forType(getNodeType()), env);
-			TypeToken<?> childType = theChildren.getType().getType(0);
-			if (!TypeTokens.get().isAssignable(theNodeType, childType)) {
-				throw new ExpressoInterpretationException(
-					"The type of a tree's children must be a sub-type of the type of its root\n" + childType + " is not a sub-type of "
-						+ theNodeType + "\n" + "Try using a cast to a super-type on the root",
-						getDefinition().getChildren().getFilePosition().getPosition(0),
-						getDefinition().getChildren().getExpression().getExpressionLength());
-			}
-			isLeaf = getDefinition().isLeaf() == null ? null : getDefinition().isLeaf().interpret(ModelTypes.Value.BOOLEAN, env);
+			theModel.updateModel(env);
 			if (theTreeColumn != null && (getDefinition().getTreeColumn() == null
 				|| theTreeColumn.getIdentity() != getDefinition().getTreeColumn().getIdentity())) {
 				theTreeColumn.destroy();
@@ -246,14 +217,10 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 	private ModelComponentId theNodeVariable;
 	private ModelComponentId theSelectedVariable;
 	private TypeToken<N> theNodeType;
-	private ModelValueInstantiator<SettableValue<N>> theRootInstantiator;
-	private ModelValueInstantiator<? extends ObservableCollection<? extends N>> theChildren;
-	private ModelValueInstantiator<SettableValue<Boolean>> theLeafInstantiator;
+	private TreeModel<N> theModel;
 	private ModelValueInstantiator<SettableValue<BetterList<N>>> theSelectionInstantiator;
 	private ModelValueInstantiator<ObservableCollection<BetterList<N>>> theMultiSelectionInstantiator;
 
-	private SettableValue<SettableValue<N>> theRoot;
-	private SettableValue<Boolean> isLeaf;
 	private SettableValue<SettableValue<BetterList<N>>> theSelection;
 	private SettableValue<ObservableCollection<BetterList<N>>> theMultiSelection;
 	private QuickTableColumn.SingleColumnSet<BetterList<N>, N> theTreeColumn;
@@ -266,6 +233,10 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 		super(id);
 		isSelected = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Boolean>> parameterized(boolean.class))
 			.build();
+	}
+
+	public TreeModel<N> getModel() {
+		return theModel;
 	}
 
 	public TypeToken<N> getNodeType() {
@@ -295,26 +266,6 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 			__ -> "Tree value is not settable"), null);
 	}
 
-	public SettableValue<N> getRoot() {
-		return SettableValue.flatten(theRoot);
-	}
-
-	public ObservableCollection<? extends N> getChildren(ObservableValue<BetterList<N>> path, Observable<?> until)
-		throws ModelInstantiationException {
-		ModelSetInstance nodeModel = getUpdatingModels().copy(until).build();
-		ExFlexibleElementModelAddOn.satisfyElementValue(theActiveValueVariable, nodeModel,
-			SettableValue.asSettable(path, __ -> "Not Settable"),
-			ExFlexibleElementModelAddOn.ActionIfSatisfied.Replace);
-		ExFlexibleElementModelAddOn.satisfyElementValue(theNodeVariable, nodeModel,
-			SettableValue.asSettable(path.map(theNodeType, p -> p == null ? null : p.peekLast()), __ -> "Not Settable"),
-			ExFlexibleElementModelAddOn.ActionIfSatisfied.Replace);
-		return theChildren.get(nodeModel);
-	}
-
-	public boolean isLeaf() {
-		return isLeaf != null && isLeaf.get();
-	}
-
 	@Override
 	public SettableValue<BetterList<N>> getSelection() {
 		return SettableValue.flatten(theSelection);
@@ -337,9 +288,13 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 		theNodeVariable = myInterpreted.getDefinition().getNodeVariable();
 		theSelectedVariable = myInterpreted.getDefinition().getSelectedVariable();
 
-		theRootInstantiator = myInterpreted.getRoot().instantiate();
-		theChildren = myInterpreted.getChildren().instantiate();
-		theLeafInstantiator = myInterpreted.isLeaf() == null ? null : myInterpreted.isLeaf().instantiate();
+		if (theModel != null && theModel.getIdentity() != myInterpreted.getModel().getIdentity()) {
+			theModel.destroy();
+			theModel = null;
+		}
+		if (theModel == null)
+			theModel = myInterpreted.getModel().create();
+		theModel.update(myInterpreted.getModel(), theModel);
 		theSelectionInstantiator = myInterpreted.getSelection() == null ? null : myInterpreted.getSelection().instantiate();
 		theMultiSelectionInstantiator = myInterpreted.getMultiSelection() == null ? null : myInterpreted.getMultiSelection().instantiate();
 
@@ -349,20 +304,18 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 		} catch (ExpressoInterpretationException e) {
 			throw new IllegalStateException("Not evaluated?", e);
 		}
-		if (theRoot == null || !theNodeType.equals(nodeType)) {
+		if (theNodeType == null || !theNodeType.equals(nodeType)) {
 			theNodeType = nodeType;
 			TypeToken<BetterList<N>> pathType = TypeTokens.get().keyFor(BetterList.class).parameterized(theNodeType);
-			theRoot = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<N>> parameterized(nodeType)).build();
 			theSelection = SettableValue
 				.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<BetterList<N>>> parameterized(pathType)).build();
 			theMultiSelection = SettableValue
 				.build(TypeTokens.get().keyFor(ObservableCollection.class).<ObservableCollection<BetterList<N>>> parameterized(pathType))
 				.build();
-			theActiveNode = SettableValue.build(theRoot.getType()).build();
-			theActivePath = SettableValue
-				.build(TypeTokens.get().keyFor(SettableValue.class)
-					.<SettableValue<BetterList<N>>> parameterized(pathType))
+			theActiveNode = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<N>> parameterized(nodeType))
 				.build();
+			theActivePath = SettableValue
+				.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<BetterList<N>>> parameterized(pathType)).build();
 		}
 
 		if (theTreeColumn != null && theTreeColumn
@@ -379,9 +332,7 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 	@Override
 	public void instantiated() {
 		super.instantiated();
-		theChildren.instantiate();
-		if (theLeafInstantiator != null)
-			theLeafInstantiator.instantiate();
+		theModel.instantiated();
 		if (theSelectionInstantiator != null)
 			theSelectionInstantiator.instantiate();
 		if (theMultiSelectionInstantiator != null)
@@ -397,8 +348,7 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 		ExFlexibleElementModelAddOn.satisfyElementValue(theActiveValueVariable, myModels, SettableValue.flatten(theActivePath));
 		ExFlexibleElementModelAddOn.satisfyElementValue(theNodeVariable, myModels, SettableValue.flatten(theActiveNode));
 		ExFlexibleElementModelAddOn.satisfyElementValue(theSelectedVariable, myModels, SettableValue.flatten(isSelected, () -> false));
-		theRoot.set(theRootInstantiator.get(myModels), null);
-		isLeaf = theLeafInstantiator == null ? null : theLeafInstantiator.get(myModels);
+		theModel.instantiate(myModels);
 		theSelection.set(theSelectionInstantiator == null ? null : theSelectionInstantiator.get(myModels), null);
 		theMultiSelection.set(theMultiSelectionInstantiator == null ? null : theMultiSelectionInstantiator.get(myModels), null);
 
@@ -409,7 +359,7 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 	@Override
 	public QuickTree<N> copy(ExElement parent) {
 		QuickTree<N> copy = (QuickTree<N>) super.copy(parent);
-		copy.theRoot = SettableValue.build(theRoot.getType()).build();
+		copy.theModel = theModel.copy(copy);
 		if (theSelection != null)
 			copy.theSelection = SettableValue.build(theSelection.getType()).build();
 		if (theMultiSelection != null)

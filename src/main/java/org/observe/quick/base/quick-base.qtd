@@ -183,6 +183,10 @@
 			<attribute name="modal" type="boolean" default="true" />
 		</add-on>
 
+		<add-on name="tree-model">
+			<?DOC The value of this node, the root of the hierarchy?>
+			<attribute name="value" type="expression" specify="required" />
+		</add-on>
 		<add-on name="tree-column" requires="column">
 			<attr-mod name="column.value" specify="forbidden" default="{active-value-name}.getLast()" />
 			<attr-mod name="column.name" specify="optional" default="`Tree Column`" />
@@ -468,18 +472,23 @@
 				<?DOC Whether the current value (e.g. the one being rendered) is a leaf node with no possibility of children?>
 				<value name="leaf" type="boolean" priority="20" />
 			</element-model>
-			<?DOC The root of the hierarchy?>
-			<attribute name="root" type="expression" specify="required" />
-			<?DOC The children of the current value?>
-			<attribute name="children" type="expression" specify="required" />
-			<?DOC Whether the current value is a leaf node with no possibility of children?>
-			<attribute name="leaf" type="expression" specify="optional" />
+			<?DOC The data to represent in the tree?>
+			<child-def name="model" type="tree-model" />
 			<?DOC The name of the model value containing the termninal node of the current value's path?>
 			<attribute name="active-node-name" type="identifier" default="path" />
 			<?DOC The column to render each value in the tree?>
 			<child-def name="tree-column" type="column" min="0" max="1" inherits="tree-column" />
 			<?DOC Actions that may be performed against selected values in the tree?>
 			<child-def name="action" type="abstract-value-action" min="0" max="inf" />
+		</element-def>
+		<element-def name="dynamic-tree-model" inherits="tree-model">
+			<?DOC The children of the current value?>
+			<attribute name="children" type="expression" specify="required" />
+			<?DOC Whether the current value is a leaf node with no possibility of children?>
+			<attribute name="leaf" type="expression" specify="optional" />
+		</element-def>
+		<element-def name="tree-node" inherits="tree-model">
+			<child-def name="child" type="tree-model" />
 		</element-def>
 
 		<!-- Containers -->

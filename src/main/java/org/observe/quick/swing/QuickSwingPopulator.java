@@ -2149,9 +2149,9 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 				}
 				TypeToken<BetterList<T>> pathType = TypeTokens.get().keyFor(BetterList.class)
 					.<BetterList<T>> parameterized(quick.getNodeType());
-				panel.addTree3(quick.getRoot(), (parentPath, nodeUntil) -> {
+				panel.addTree3(quick.getModel().getValue(), (parentPath, nodeUntil) -> {
 					try {
-						return quick.getChildren(ObservableValue.of(pathType, parentPath), nodeUntil);
+						return quick.getModel().getChildren(ObservableValue.of(pathType, parentPath), nodeUntil);
 					} catch (ModelInstantiationException e) {
 						quick.reporting().error("Could not create children for " + parentPath, e);
 						return null;
@@ -2162,7 +2162,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 						tree.withRender(column.getCRS());
 					tree.withLeafTest2(path -> {
 						ctx.getActiveValue().set(path, null);
-						return quick.isLeaf();
+						return quick.getModel().isLeaf(path);
 					});
 				});
 			});
