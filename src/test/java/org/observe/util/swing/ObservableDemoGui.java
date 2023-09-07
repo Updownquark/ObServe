@@ -8,11 +8,13 @@ import javax.swing.JScrollPane;
 import javax.swing.JTree;
 import javax.swing.tree.TreePath;
 
+import org.observe.Observable;
 import org.observe.SettableValue;
 import org.observe.assoc.ObservableMultiMap;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableSet;
 import org.observe.util.TypeTokens;
+import org.qommons.collect.BetterList;
 import org.qommons.collect.CollectionElement;
 import org.qommons.io.SpinnerFormat;
 
@@ -72,11 +74,11 @@ public class ObservableDemoGui extends JPanel {
 			}
 
 			@Override
-			protected ObservableCollection<?> getChildren(Object parent) {
-				if (parent instanceof String)
+			protected ObservableCollection<?> getChildren(BetterList<Object> parentPath, Observable<?> nodeUntil) {
+				if (parentPath.getLast() instanceof String)
 					return theCategories;
-				else if (parent instanceof ValueCategory)
-					return ((ValueCategory) parent).values;
+				else if (parentPath.getLast() instanceof ValueCategory)
+					return ((ValueCategory) parentPath.getLast()).values;
 				else
 					return ObservableCollection.of(TypeTokens.get().VOID);
 			}
@@ -95,11 +97,11 @@ public class ObservableDemoGui extends JPanel {
 			public void valueForPathChanged(TreePath path, Object newVal) {}
 
 			@Override
-			protected ObservableCollection<?> getChildren(Object parent) {
-				if (parent instanceof String)
+			protected ObservableCollection<?> getChildren(BetterList<Object> parentPath, Observable<?> nodeUntil) {
+				if (parentPath.getLast() instanceof String)
 					return mapByMod5.keySet();
-				else if (parent instanceof Long)
-					return mapByMod5.get((Long) parent);
+				else if (parentPath.getLast() instanceof Long)
+					return mapByMod5.get((Long) parentPath.getLast());
 				else
 					return ObservableCollection.of(TypeTokens.get().VOID);
 			}
