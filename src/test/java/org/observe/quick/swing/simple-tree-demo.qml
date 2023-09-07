@@ -26,6 +26,7 @@
 	<scroll>
 		<box role="content" layout="inline-layout" orientation="vertical" cross-align="justify">
 			<tree active-node-name="node">
+				<!-- These up casts are because child nodes can't be sub-types of their parent node -->
 				<tree-node value="(Object) &quot;Root&quot;">
 					<tree-node value="(Object) &quot;Numbers&quot;">
 						<tree-node value="1" />
