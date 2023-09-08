@@ -28,7 +28,7 @@ import org.qommons.config.QonfigInterpretationException;
 
 import com.google.common.reflect.TypeToken;
 
-public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidget<BetterList<N>>, TreeModel.TreeModelOwner {
+public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidget<BetterList<N>> {
 	public static final String TREE = "tree";
 
 	@ExMultiElementTraceable({ //
@@ -44,8 +44,7 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 		qonfigType = "multi-value-renderable",
 		interpretation = Interpreted.class,
 		instance = QuickTree.class) })
-	public static class Def<T extends QuickTree<?>> extends QuickWidget.Def.Abstract<T>
-	implements MultiValueWidget.Def<T>, TreeModel.TreeModelOwner.Def<T> {
+	public static class Def<T extends QuickTree<?>> extends QuickWidget.Def.Abstract<T> implements MultiValueWidget.Def<T> {
 		private ModelComponentId theActiveValueVariable;
 		private ModelComponentId theNodeVariable;
 		private ModelComponentId theSelectedVariable;
@@ -73,7 +72,6 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 			return theActiveValueVariable;
 		}
 
-		@Override
 		@QonfigAttributeGetter(asType = "tree", value = "active-node-name")
 		public ModelComponentId getNodeVariable() {
 			return theNodeVariable;
@@ -121,7 +119,7 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 	}
 
 	public static class Interpreted<N, T extends QuickTree<N>> extends QuickWidget.Interpreted.Abstract<T>
-	implements MultiValueWidget.Interpreted<BetterList<N>, T>, TreeModel.TreeModelOwner.Interpreted<T> {
+		implements MultiValueWidget.Interpreted<BetterList<N>, T> {
 		private TreeModel.Interpreted<N, ?> theModel;
 		private TypeToken<N> theNodeType;
 		private QuickTableColumn.SingleColumnSet.Interpreted<BetterList<N>, N> theTreeColumn;
@@ -159,7 +157,7 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 
 		public TypeToken<N> getNodeType() throws ExpressoInterpretationException {
 			if (theNodeType == null)
-				theNodeType = theModel.getNodeType(getExpressoEnv());
+				theNodeType = (TypeToken<N>) theModel.getNodeType(getExpressoEnv());
 			return theNodeType;
 		}
 

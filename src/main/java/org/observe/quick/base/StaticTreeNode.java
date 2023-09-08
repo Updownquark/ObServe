@@ -14,12 +14,15 @@ import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
-import org.observe.expresso.ObservableModelSet.ModelComponentId;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.qonfig.CompiledExpression;
 import org.observe.expresso.qonfig.ExElement;
+import org.observe.expresso.qonfig.ExElementTraceable;
+import org.observe.expresso.qonfig.ExMultiElementTraceable;
 import org.observe.expresso.qonfig.ExpressoQIS;
+import org.observe.expresso.qonfig.QonfigAttributeGetter;
+import org.observe.expresso.qonfig.QonfigChildGetter;
 import org.observe.util.TypeTokens;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.CollectionUtils;
@@ -28,40 +31,35 @@ import org.qommons.config.QonfigInterpretationException;
 
 import com.google.common.reflect.TypeToken;
 
-public class StaticTreeNode<N> extends ExElement.Abstract implements TreeModel<N>, TreeModel.TreeModelOwner {
+public class StaticTreeNode<N> extends ExElement.Abstract implements TreeModel<N> {
 	public static final String TREE_NODE = "tree-node";
 
-	public static class Def<TN extends StaticTreeNode<?>> extends ExElement.Def.Abstract<TN>
-	implements TreeModel.Def<TN>, TreeModelOwner.Def<TN> {
+	@ExMultiElementTraceable({ //
+		@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
+			qonfigType = TREE_NODE,
+			interpretation = Interpreted.class,
+			instance = StaticTreeNode.class),
+		@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
+		qonfigType = TreeModel.TREE_MODEL,
+		interpretation = Interpreted.class,
+		instance = StaticTreeNode.class) })
+	public static class Def<TN extends StaticTreeNode<?>> extends ExElement.Def.Abstract<TN> implements TreeModel.Def<TN> {
 		private CompiledExpression theValue;
 		private final List<TreeModel.Def<?>> theChildren;
 
-		public Def(TreeModelOwner.Def<?> parent, QonfigElementOrAddOn qonfigType) {
+		public Def(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
 			super(parent, qonfigType);
 			theChildren = new ArrayList<>();
 		}
 
+		@QonfigAttributeGetter(asType = TreeModel.TREE_MODEL, value = "value")
 		public CompiledExpression getValue() {
 			return theValue;
 		}
 
+		@QonfigChildGetter(asType = TREE_NODE, value = "child")
 		public List<TreeModel.Def<?>> getChildren() {
 			return Collections.unmodifiableList(theChildren);
-		}
-
-		@Override
-		public TreeModelOwner.Def<?> getParentElement() {
-			return (TreeModelOwner.Def<?>) super.getParentElement();
-		}
-
-		@Override
-		public ModelComponentId getActiveValueVariable() {
-			return getParentElement().getActiveValueVariable();
-		}
-
-		@Override
-		public ModelComponentId getNodeVariable() {
-			return getParentElement().getNodeVariable();
 		}
 
 		@Override
@@ -72,18 +70,18 @@ public class StaticTreeNode<N> extends ExElement.Abstract implements TreeModel<N
 		}
 
 		@Override
-		public <N> Interpreted<N, ? extends TN> interpret(TreeModelOwner.Interpreted<?> parent) {
+		public <N> Interpreted<N, ? extends TN> interpret(ExElement.Interpreted<?> parent) {
 			return (Interpreted<N, ? extends TN>) new Interpreted<>((Def<StaticTreeNode<Object>>) this, parent);
 		}
 	}
 
 	public static class Interpreted<N, TN extends StaticTreeNode<N>> extends ExElement.Interpreted.Abstract<TN>
-	implements TreeModel.Interpreted<N, TN>, TreeModelOwner.Interpreted<TN> {
-		private InterpretedValueSynth<SettableValue<?>, SettableValue<N>> theValue;
+	implements TreeModel.Interpreted<N, TN> {
+		private InterpretedValueSynth<SettableValue<?>, ? extends SettableValue<? extends N>> theValue;
 		private List<TreeModel.Interpreted<? extends N, ?>> theChildren;
 		private TypeToken<N> theNodeType;
 
-		Interpreted(Def<? super TN> definition, TreeModelOwner.Interpreted<?> parent) {
+		Interpreted(Def<? super TN> definition, ExElement.Interpreted<?> parent) {
 			super(definition, parent);
 			theChildren = new ArrayList<>();
 		}
@@ -93,12 +91,7 @@ public class StaticTreeNode<N> extends ExElement.Abstract implements TreeModel<N
 			return (Def<? super TN>) super.getDefinition();
 		}
 
-		@Override
-		public TreeModelOwner.Interpreted<?> getParentElement() {
-			return (TreeModelOwner.Interpreted<?>) super.getParentElement();
-		}
-
-		public InterpretedValueSynth<SettableValue<?>, SettableValue<N>> getValue() {
+		public InterpretedValueSynth<SettableValue<?>, ? extends SettableValue<? extends N>> getValue() {
 			return theValue;
 		}
 
@@ -109,8 +102,18 @@ public class StaticTreeNode<N> extends ExElement.Abstract implements TreeModel<N
 		@Override
 		public TypeToken<N> getNodeType(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 			if (theNodeType == null) {
+				// This should be safe. The interpretation of the children here shouldn't need anything from the environment.
+				CollectionUtils.synchronize(theChildren, getDefinition().getChildren(), (i, d) -> i.getIdentity() == d.getIdentity())
+				.<ExpressoInterpretationException> simpleE(def -> def.interpret(this))//
+				.onLeftX(el -> el.getLeftValue().destroy())//
+				.rightOrder()//
+				.adjust();
+				List<TypeToken<? extends N>> types = new ArrayList<>(theChildren.size() + 1);
 				theValue = getDefinition().getValue().interpret(ModelTypes.Value.anyAs(), env);
-				theNodeType = (TypeToken<N>) theValue.getType().getType(0);
+				types.add((TypeToken<? extends N>) theValue.getType().getType(0));
+				for (TreeModel.Interpreted<? extends N, ?> child : theChildren)
+					types.add(child.getNodeType(env));
+				theNodeType = TypeTokens.get().getCommonType(types);
 			}
 			return theNodeType;
 		}
@@ -124,17 +127,8 @@ public class StaticTreeNode<N> extends ExElement.Abstract implements TreeModel<N
 		protected void doUpdate(InterpretedExpressoEnv expressoEnv) throws ExpressoInterpretationException {
 			super.doUpdate(expressoEnv);
 			getNodeType(expressoEnv); // Init value
-			CollectionUtils.synchronize(theChildren, getDefinition().getChildren(), (i, d) -> i.getIdentity() == d.getIdentity())
-			.<ExpressoInterpretationException> simpleE(def -> def.interpret(this))//
-			.onLeftX(el -> el.getLeftValue().destroy()).onRightX(el -> el.getLeftValue().updateModel(expressoEnv))
-			.onCommonX(el -> el.getLeftValue().updateModel(expressoEnv)).rightOrder()//
-			.adjust();
-			for (TreeModel.Interpreted<? extends N, ?> child : theChildren) {
-				if (!TypeTokens.get().isAssignable(theNodeType, child.getNodeType(expressoEnv)))
-					throw new ExpressoInterpretationException("Tree model with value type " + child.getNodeType(expressoEnv)
-					+ " cannot be a child of tree node with value type " + theNodeType,
-					child.getDefinition().getElement().getPositionInFile(), 0);
-			}
+			for (int c = 0; c < theChildren.size(); c++)
+				theChildren.get(c).updateModel(expressoEnv);
 		}
 
 		@Override
@@ -144,7 +138,7 @@ public class StaticTreeNode<N> extends ExElement.Abstract implements TreeModel<N
 	}
 
 	private TypeToken<N> theNodeType;
-	private ModelValueInstantiator<SettableValue<N>> theValueInstantiator;
+	private ModelValueInstantiator<? extends SettableValue<? extends N>> theValueInstantiator;
 
 	private SettableValue<SettableValue<N>> theValue;
 	private List<TreeModel<? extends N>> theChildren;
@@ -153,7 +147,7 @@ public class StaticTreeNode<N> extends ExElement.Abstract implements TreeModel<N
 	private ObservableCollection<N> theChildValues;
 	private ObservableMap<N, TreeModel<? extends N>> theChildrenByValue;
 
-	public StaticTreeNode(Object id) {
+	StaticTreeNode(Object id) {
 		super(id);
 		theChildren = new ArrayList<>();
 	}
@@ -168,11 +162,6 @@ public class StaticTreeNode<N> extends ExElement.Abstract implements TreeModel<N
 			.groupBy(theNodeType, model -> model.getValue().get(), null)//
 			.gatherActive(isDestroyed().noInitChanges())//
 			.singleMap(false);
-	}
-
-	@Override
-	public TreeModelOwner getParentElement() {
-		return (TreeModelOwner) super.getParentElement();
 	}
 
 	@Override
@@ -249,7 +238,7 @@ public class StaticTreeNode<N> extends ExElement.Abstract implements TreeModel<N
 	protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
 		super.doInstantiate(myModels);
 
-		theValue.set(theValueInstantiator.get(myModels), null);
+		theValue.set((SettableValue<N>) theValueInstantiator.get(myModels), null);
 
 		for (TreeModel<? extends N> child : theInitializedChildren)
 			child.instantiate(myModels);

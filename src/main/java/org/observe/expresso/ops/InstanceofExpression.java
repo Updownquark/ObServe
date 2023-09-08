@@ -19,6 +19,7 @@ import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.TypeConversionException;
 import org.observe.util.TypeTokens;
+import org.qommons.LambdaUtils;
 import org.qommons.ex.ExceptionHandler;
 import org.qommons.ex.NeverThrown;
 
@@ -140,7 +141,8 @@ public class InstanceofExpression implements ObservableExpression {
 		}
 
 		private SettableValue<Boolean> test(SettableValue<?> value) {
-			return SettableValue.asSettable(value.map(TypeTokens.get().BOOLEAN, v -> v != null && theTest.isInstance(v)),
+			return SettableValue.asSettable(value.map(TypeTokens.get().BOOLEAN, //
+				LambdaUtils.printableFn(v -> v != null && theTest.isInstance(v), "instanceof(" + theTest.getName() + ")", null)),
 				__ -> "instanceof expressions are not reversible");
 		}
 

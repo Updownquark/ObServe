@@ -20,6 +20,7 @@ import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.TypeConversionException;
 import org.observe.util.TypeTokens;
 import org.observe.util.TypeTokens.TypeConverter;
+import org.qommons.LambdaUtils;
 import org.qommons.ex.ExceptionHandler;
 import org.qommons.ex.NeverThrown;
 import org.qommons.io.ErrorReporting;
@@ -229,14 +230,14 @@ public class CastExpression implements ObservableExpression {
 
 		private SettableValue<T> transform(SettableValue<S> value) {
 			return value.transformReversible(theType, tx -> tx//
-				.map(v -> {
+				.map(LambdaUtils.printableFn(v -> {
 					if (v == null || theCastClass.isInstance(v))
 						return (T) v;
 					else {
 						theReporting.error("Cast failed: " + v + " (" + v.getClass().getName() + ") to " + theType);
 						return null;
 					}
-				}).replaceSource(v -> (S) v, replace -> replace.rejectWith(v -> {
+				}, "as(" + theType + ")", null)).replaceSource(v -> (S) v, replace -> replace.rejectWith(v -> {
 					if (v != null && !theSourceClass.isInstance(v))
 						return theValue + " (" + v.getClass().getName() + ") is not an instance of " + theType;
 					return null;

@@ -27,16 +27,18 @@
 		<box role="content" layout="inline-layout" orientation="vertical" cross-align="justify">
 			<tree active-node-name="node">
 				<!-- These up casts are because child nodes can't be sub-types of their parent node -->
-				<tree-node value="(Object) &quot;Root&quot;">
-					<tree-node value="(Object) &quot;Numbers&quot;">
+				<tree-node value="&quot;Root&quot;">
+					<tree-node value="&quot;Numbers&quot;">
 						<tree-node value="1" />
 						<tree-node value="2" />
 						<tree-node value="3" />
 					</tree-node>
-					<dynamic-tree-model value="app.root" children="((ObservableFile) node).listFiles()" leaf="!((ObservableFile) node).isDirectory()" />
+					<dynamic-tree-model value="app.root" dynamic-node-name="dNode" children="dNode.listFiles()" leaf="!dNode.isDirectory()" />
 				</tree-node>
 				<column>
 					<label value="columnValue instanceof ObservableFile ? ((ObservableFile) columnValue).getName() : columnValue.toString()" />
+						<!-- This isn't working yet, not sure why
+						icon="columnValue instanceof ObservableFile ? (&quot;/icons/icons8-&quot;+ ( ((ObservableFile) columnValue).isFile() ? &quot;file-50&quot; : &quot;folder-16&quot;)+&quot;.png&quot;) : null" />-->
 				</column>
 			</tree>
 		</box>

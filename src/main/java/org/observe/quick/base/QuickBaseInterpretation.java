@@ -184,9 +184,8 @@ public class QuickBaseInterpretation implements QonfigInterpretation {
 
 		interpreter.createWith(QuickTree.TREE, QuickTree.Def.class, ExElement.creator(QuickTree.Def::new));
 		interpreter.createWith(DynamicTreeModel.DYNAMIC_TREE_MODEL, DynamicTreeModel.Def.class,
-			ExElement.creator(TreeModel.TreeModelOwner.Def.class, DynamicTreeModel.Def::new));
-		interpreter.createWith(StaticTreeNode.TREE_NODE, StaticTreeNode.Def.class,
-			ExElement.creator(TreeModel.TreeModelOwner.Def.class, StaticTreeNode.Def::new));
+			ExElement.creator(DynamicTreeModel.Def::new));
+		interpreter.createWith(StaticTreeNode.TREE_NODE, StaticTreeNode.Def.class, ExElement.creator(StaticTreeNode.Def::new));
 
 		return interpreter;
 	}
