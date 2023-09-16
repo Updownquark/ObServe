@@ -7,6 +7,7 @@ public class ExpressoReflectTester {
 		return CREATED;
 	}
 
+	public boolean condition;
 	public int length;
 	public int lengthCalled;
 

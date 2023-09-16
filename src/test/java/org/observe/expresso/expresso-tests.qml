@@ -1532,6 +1532,9 @@
 			<value name="s" type="String" />
 
 			<value name="c">b ? p : s</value>
+
+			<value name="obj">new ExpressoReflectTester(&quot;String&quot;)</value>
+			<value name="objLen">obj.condition ? obj.getLength() : 1999</value>
 		</model>
 
 		<action>assertEquals(null, c)</action>
@@ -1563,6 +1566,13 @@
 		<action>c="Test2"</action>
 		<action>assertEquals("Test2", p)</action>
 		<action>assertEquals("Test", s)</action>
+
+		<!-- Ensure that the inactive target of the conditional is not evalauted -->
+		<action>assertEquals(1999, objLen)</action>
+		<action>assertEquals(0, obj.lengthCalled)</action>
+		<action>obj.condition=true</action>
+		<action>assertEquals(6, objLen)</action>
+		<action>assertEquals(1, obj.lengthCalled)</action>
 	</test>
 	<test name="mapTo">
 		<model>
