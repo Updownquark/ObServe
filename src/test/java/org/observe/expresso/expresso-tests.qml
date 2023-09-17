@@ -1536,6 +1536,11 @@
 			<value name="b2" init="false" />
 			<value name="obj">new ExpressoReflectTester(&quot;String&quot;)</value>
 			<value name="objLen">b2 ? obj.getLength() : 1999</value>
+
+			<value name="b3" init="false" />
+			<value name="obj2">new ExpressoReflectTester(&quot;String&quot;)</value>
+			<value name="objLen2">b3 ? obj2.getLength() : 1999</value>
+			<watch name="watchLen">objLen2</watch>
 		</model>
 
 		<action>assertEquals(null, c)</action>
@@ -1574,6 +1579,12 @@
 		<action>b2=true</action>
 		<action>assertEquals(6, objLen)</action>
 		<action>assertEquals(1, obj.lengthCalled)</action>
+
+		<action>assertEquals(1999, watchLen)</action>
+		<action>assertEquals(0, obj2.lengthCalled)</action>
+		<action>b3=true</action>
+		<action>assertEquals(6, watchLen)</action>
+		<action>assertEquals(1, obj2.lengthCalled)</action>
 	</test>
 	<test name="mapTo">
 		<model>
@@ -1683,6 +1694,10 @@
 			<value name="i" type="int" />
 			<value name="lenPlusI">tester.getLengthPlus(i)</value>
 			<value name="lenField">tester.length</value>
+
+			<value name="b" init="false" />
+			<value name="tester2" type="ExpressoReflectTester" />
+			<value name="len2">tester2.getLength()</value>
 		</model>
 
 		<!-- Constructed variable should not be re-evaluated on repeated access -->
@@ -1722,6 +1737,10 @@
 		<action>tester.length=21</action>
 		<action>assertEquals(21, lenField)</action>
 
+		<!-- Testing for method access to null context -->
+		<action>assertEquals(0, len2)</action>
+		<action>tester2=new ExpressoReflectTester("Test")</action>
+		<action>assertEquals(4, len2)</action>
 		<!-- TODO Type parameterization -->
 	</test>
 	<test name="classes">
