@@ -1533,8 +1533,9 @@
 
 			<value name="c">b ? p : s</value>
 
+			<value name="b2" init="false" />
 			<value name="obj">new ExpressoReflectTester(&quot;String&quot;)</value>
-			<value name="objLen">obj.condition ? obj.getLength() : 1999</value>
+			<value name="objLen">b2 ? obj.getLength() : 1999</value>
 		</model>
 
 		<action>assertEquals(null, c)</action>
@@ -1570,7 +1571,7 @@
 		<!-- Ensure that the inactive target of the conditional is not evalauted -->
 		<action>assertEquals(1999, objLen)</action>
 		<action>assertEquals(0, obj.lengthCalled)</action>
-		<action>obj.condition=true</action>
+		<action>b2=true</action>
 		<action>assertEquals(6, objLen)</action>
 		<action>assertEquals(1, obj.lengthCalled)</action>
 	</test>
@@ -1681,6 +1682,7 @@
 			<value name="methodLen">tester.getLength()</value>
 			<value name="i" type="int" />
 			<value name="lenPlusI">tester.getLengthPlus(i)</value>
+			<value name="lenField">tester.length</value>
 		</model>
 
 		<!-- Constructed variable should not be re-evaluated on repeated access -->
@@ -1713,6 +1715,13 @@
 
 		<action>assertEquals(15, tester.varArgsCall(1, 2, 3, 4, 5))</action>
 		<action>assertEquals(6, tester.varArgsCall(1, 2, 3))</action>
+
+		<!-- Ensure that access to a non-final field always gets the current value -->
+		<action>tester.length=0</action>
+		<action>assertEquals(0, lenField)</action>
+		<action>tester.length=21</action>
+		<action>assertEquals(21, lenField)</action>
+
 		<!-- TODO Type parameterization -->
 	</test>
 	<test name="classes">

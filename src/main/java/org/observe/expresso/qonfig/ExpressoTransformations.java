@@ -45,6 +45,7 @@ import org.qommons.TriFunction;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.CollectionUtils;
 import org.qommons.config.AbstractQIS;
+import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigInterpreterCore;
@@ -54,8 +55,7 @@ import com.google.common.reflect.TypeToken;
 public class ExpressoTransformations {
 	public static final String TARGET_MODEL_TYPE_KEY = "Expresso.Transformation.Target.Model.Type";
 
-	private ExpressoTransformations() {
-	}
+	private ExpressoTransformations() {}
 
 	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE,
 		qonfigType = "transform",
@@ -477,8 +477,7 @@ public class ExpressoTransformations {
 	 * @param <M> The model type of the target observable structure
 	 * @param <E> The type of element produced
 	 */
-	public interface ObservableTransform<M, E extends ExElement> extends Operation<Observable<?>, M, E> {
-	}
+	public interface ObservableTransform<M, E extends ExElement> extends Operation<Observable<?>, M, E> {}
 
 	/**
 	 * A transformer capable of transforming an {@link ObservableAction}
@@ -486,8 +485,7 @@ public class ExpressoTransformations {
 	 * @param <M> The model type of the target observable structure
 	 * @param <E> The type of element produced
 	 */
-	public interface ActionTransform<M, E extends ExElement> extends Operation<ObservableAction, M, E> {
-	}
+	public interface ActionTransform<M, E extends ExElement> extends Operation<ObservableAction, M, E> {}
 
 	/**
 	 * A transformer capable of transforming a {@link SettableValue}
@@ -495,8 +493,7 @@ public class ExpressoTransformations {
 	 * @param <M> The model type of the target observable structure
 	 * @param <E> The type of element produced
 	 */
-	public interface ValueTransform<M, E extends ExElement> extends Operation<SettableValue<?>, M, E> {
-	}
+	public interface ValueTransform<M, E extends ExElement> extends Operation<SettableValue<?>, M, E> {}
 
 	/**
 	 * A transformer capable of transforming an {@link ObservableCollection}
@@ -505,8 +502,7 @@ public class ExpressoTransformations {
 	 * @param <M2> The model type of the target observable structure
 	 * @param <E> The type of element produced
 	 */
-	public interface CollectionTransform<M1 extends ObservableCollection<?>, M2, E extends ExElement> extends Operation<M1, M2, E> {
-	}
+	public interface CollectionTransform<M1 extends ObservableCollection<?>, M2, E extends ExElement> extends Operation<M1, M2, E> {}
 
 	/**
 	 * A transformer capable of transforming an {@link ObservableCollection} into another {@link ObservableCollection}
@@ -1174,6 +1170,7 @@ public class ExpressoTransformations {
 		}
 	}
 
+	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE, qonfigType = "map-with", interpretation = MapWith.Interpreted.class)
 	public static class MapWith<E extends ExElement> extends ExElement.Def.Abstract<E> {
 		private CompiledExpression theMap;
 
@@ -1186,6 +1183,7 @@ public class ExpressoTransformations {
 			return (AbstractCompiledTransformation<?, ?, ?>) super.getParentElement();
 		}
 
+		@QonfigAttributeGetter
 		public CompiledExpression getMap() {
 			return theMap;
 		}
@@ -1337,6 +1335,7 @@ public class ExpressoTransformations {
 		}
 	}
 
+	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE, qonfigType = "combine-with", interpretation = CombineWith.Interpreted.class)
 	public static class CombineWith<E extends ExElement> extends ExElement.Def.Abstract<E> implements Named {
 		private CompiledExpression theValue;
 		private ModelComponentId theValueVariable;
@@ -1359,6 +1358,7 @@ public class ExpressoTransformations {
 			return theValueVariable;
 		}
 
+		@QonfigAttributeGetter
 		@Override
 		public CompiledExpression getElementValue() {
 			return theValue;
@@ -1463,8 +1463,16 @@ public class ExpressoTransformations {
 		}
 	}
 
+	@ExMultiElementTraceable({
+		@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE,
+			qonfigType = "map-reverse",
+			interpretation = AbstractMapReverse.Interpreted.class),
+		@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE,
+		qonfigType = "modify-source",
+		interpretation = AbstractMapReverse.Interpreted.class) })
 	public static abstract class AbstractMapReverse<E extends ExElement> extends ExElement.Def.Abstract<E>
 	implements CompiledMapReverse<E> {
+		private QonfigAddOn theType;
 		private ModelComponentId theTargetVariable;
 		private CompiledExpression theReverse;
 		private CompiledExpression theEnabled;
@@ -1482,26 +1490,37 @@ public class ExpressoTransformations {
 			return (CompiledTransformation<?, ?, ?>) super.getParentElement();
 		}
 
+		@QonfigAttributeGetter(asType = "map-reverse", value = "type")
+		public QonfigAddOn getType() {
+			return theType;
+		}
+
+		@QonfigAttributeGetter(asType = "map-reverse", value = "target-as")
 		public ModelComponentId getTargetVariable() {
 			return theTargetVariable;
 		}
 
+		@QonfigAttributeGetter(asType = "map-reverse")
 		public CompiledExpression getReverse() {
 			return theReverse;
 		}
 
+		@QonfigAttributeGetter(asType = "modify-source", value = "enabled")
 		public CompiledExpression getEnabled() {
 			return theEnabled;
 		}
 
+		@QonfigAttributeGetter(asType = "modify-source", value = "accept")
 		public CompiledExpression getAccept() {
 			return theAccept;
 		}
 
+		@QonfigAttributeGetter(asType = "modify-source", value = "add")
 		public CompiledExpression getAdd() {
 			return theAdd;
 		}
 
+		@QonfigAttributeGetter(asType = "modify-source", value = "add-accept")
 		public CompiledExpression getAddAccept() {
 			return theAddAccept;
 		}
@@ -1513,6 +1532,7 @@ public class ExpressoTransformations {
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			super.doUpdate(session);
+			theType = session.getAttribute("type", QonfigAddOn.class);
 			String targetName = session.getAttributeText("target-as");
 			theTargetVariable = getAddOn(ExWithElementModel.Def.class).getElementValueModelId(targetName);
 			theReverse = session.getValueExpression();
@@ -1787,6 +1807,9 @@ public class ExpressoTransformations {
 		}
 	}
 
+	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE,
+		qonfigType = "replace-source",
+		interpretation = SourceReplaceReverse.Interpreted.class)
 	public static class SourceReplaceReverse<E extends ExElement> extends AbstractMapReverse<E> {
 		private boolean isInexact;
 
@@ -1799,6 +1822,7 @@ public class ExpressoTransformations {
 			return super.getParentElement();
 		}
 
+		@QonfigAttributeGetter("inexact")
 		public boolean isInexact() {
 			return isInexact;
 		}
@@ -1884,6 +1908,9 @@ public class ExpressoTransformations {
 		}
 	}
 
+	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE,
+		qonfigType = "modify-source",
+		interpretation = SourceModifyingReverse.Interpreted.class)
 	public static class SourceModifyingReverse<E extends ExElement> extends AbstractMapReverse<E> {
 		public SourceModifyingReverse(CompiledTransformation<?, ?, ?> parent, QonfigElementOrAddOn qonfigType) {
 			super(parent, qonfigType);

@@ -415,6 +415,7 @@ public class NameExpression implements ObservableExpression, Named {
 	static class FieldValue<F> extends Identifiable.AbstractIdentifiable implements SettableValue<F> {
 		private final SettableValue<?> theContext;
 		private final Field theField;
+		private final boolean isFinal;
 		private final TypeToken<F> theType;
 		private final SimpleObservable<Void> theChanges;
 		private final ObservableValue<F> theMappedValue;
@@ -424,13 +425,15 @@ public class NameExpression implements ObservableExpression, Named {
 		FieldValue(SettableValue<?> context, Field field, TypeToken<F> type, ErrorReporting reporting) {
 			theContext = context;
 			theField = field;
+			isFinal = Modifier.isFinal(theField.getModifiers());
 			theType = type;
 			theChanges = SimpleObservable.build().build();
 			if (theContext == null)
 				theMappedValue = ObservableValue.of(type, LambdaUtils.printableSupplier(this::getStatic, theField::getName, null),
 					this::getStamp, theChanges);
 			else
-				theMappedValue = theContext.map(LambdaUtils.printableFn(this::getFromContext, theField.getName(), null));
+				theMappedValue = theContext.transform(theType, tx -> tx.cache(isFinal).map(//
+					LambdaUtils.printableFn(this::getFromContext, theField.getName(), null)));
 			theReporting = reporting;
 		}
 
@@ -494,6 +497,8 @@ public class NameExpression implements ObservableExpression, Named {
 
 		@Override
 		public long getStamp() {
+			if (!isFinal)
+				theStamp++; // Could have changed, gotta make sure we can always see the current value
 			return theStamp + (theContext == null ? 0 : theContext.getStamp());
 		}
 

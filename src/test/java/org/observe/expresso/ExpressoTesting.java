@@ -12,6 +12,7 @@ import org.observe.SimpleObservable;
 import org.observe.expresso.ExpressoTesting.TestAction.TestActionElement;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
+import org.observe.expresso.TestInterpretation.StatefulStruct;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExElementTraceable;
 import org.observe.expresso.qonfig.ExNamed;
@@ -28,6 +29,9 @@ import org.qommons.config.QonfigInterpretationException;
 import org.qommons.io.LocatedFilePosition;
 
 /** A testing structure parsed from a Qonfig XML file for testing expresso or expresso-dependent toolkits */
+@ExElementTraceable(toolkit = ExpressoTestFrameworkInterpretation.TESTING,
+qonfigType = "testing",
+interpretation = StatefulStruct.Interpreted.class)
 public class ExpressoTesting extends ExElement.Def.Abstract<ExElement> {
 	/** A test to execute */
 	public static class ExpressoTest extends ExElement.Abstract {
@@ -49,6 +53,7 @@ public class ExpressoTesting extends ExElement.Def.Abstract<ExElement> {
 			}
 
 			/** @return All the actions to execute for this test */
+			@QonfigChildGetter("test-action")
 			public List<TestAction> getActions() {
 				return Collections.unmodifiableList(theActions);
 			}
@@ -114,7 +119,6 @@ public class ExpressoTesting extends ExElement.Def.Abstract<ExElement> {
 			theActions = new ArrayList<>();
 		}
 
-		@QonfigChildGetter("action")
 		public List<TestAction.TestActionElement> getActions() {
 			return theActions;
 		}
@@ -312,11 +316,13 @@ public class ExpressoTesting extends ExElement.Def.Abstract<ExElement> {
 		theTestsByName = new LinkedHashMap<>();
 	}
 
+	@QonfigChildGetter("head")
 	public Expresso.Def getHead() {
 		return theHead;
 	}
 
 	/** @return All the tests to execute */
+	@QonfigChildGetter("test")
 	public List<ExpressoTest.Def> getTests() {
 		return Collections.unmodifiableList(theTests);
 	}

@@ -13,11 +13,13 @@ import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.qonfig.CompiledExpression;
 import org.observe.expresso.qonfig.ExElement;
+import org.observe.expresso.qonfig.ExElementTraceable;
 import org.observe.expresso.qonfig.ExFlexibleElementModelAddOn;
 import org.observe.expresso.qonfig.ExWithElementModel;
 import org.observe.expresso.qonfig.ExpressoBaseV0_1;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.ModelValueElement;
+import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.qommons.Version;
 import org.qommons.collect.BetterList;
 import org.qommons.config.QonfigElementOrAddOn;
@@ -33,6 +35,8 @@ public class TestInterpretation implements QonfigInterpretation {
 	public static final String TOOLKIT_NAME = "Expresso-Test";
 	/** The version of the test toolkit */
 	public static final Version VERSION = new Version(0, 1, 0);
+
+	public static final String TESTING = "Expresso-Test v0.1";
 
 	@Override
 	public Set<Class<? extends SpecialSession<?>>> getExpectedAPIs() {
@@ -63,6 +67,7 @@ public class TestInterpretation implements QonfigInterpretation {
 		return interpreter;
 	}
 
+	@ExElementTraceable(toolkit = TESTING, qonfigType = "stateful-struct", interpretation = StatefulStruct.Interpreted.class)
 	static class StatefulStruct extends ExElement.Def.Abstract<ModelValueElement<SettableValue<?>, SettableValue<StatefulTestStructure>>>
 	implements
 	ModelValueElement.CompiledSynth<SettableValue<?>, ModelValueElement<SettableValue<?>, SettableValue<StatefulTestStructure>>> {
@@ -84,6 +89,7 @@ public class TestInterpretation implements QonfigInterpretation {
 			return ModelTypes.Value;
 		}
 
+		@QonfigAttributeGetter("derived-state")
 		public CompiledExpression getDerivedState() {
 			return theDerivedState;
 		}
@@ -207,6 +213,9 @@ public class TestInterpretation implements QonfigInterpretation {
 		}
 	}
 
+	@ExElementTraceable(toolkit = TESTING,
+		qonfigType = "dynamic-type-stateful-struct",
+		interpretation = DynamicTypeStatefulStruct.Interpreted.class)
 	static class DynamicTypeStatefulStruct
 	extends ExElement.Def.Abstract<ModelValueElement<SettableValue<?>, SettableValue<DynamicTypeStatefulTestStructure>>> implements
 	ModelValueElement.CompiledSynth<SettableValue<?>, ModelValueElement<SettableValue<?>, SettableValue<DynamicTypeStatefulTestStructure>>> {
@@ -234,10 +243,12 @@ public class TestInterpretation implements QonfigInterpretation {
 			return null;
 		}
 
+		@QonfigAttributeGetter("internal-state")
 		public CompiledExpression getInternalState() {
 			return theInternalState;
 		}
 
+		@QonfigAttributeGetter("derived-state")
 		public CompiledExpression getDerivedState() {
 			return theDerivedState;
 		}
@@ -370,10 +381,14 @@ public class TestInterpretation implements QonfigInterpretation {
 		}
 	}
 
+	@ExElementTraceable(toolkit = TESTING,
+		qonfigType = "dynamic-type-stateful-struct2",
+		interpretation = DynamicTypeStatefulStruct.Interpreted.class)
 	static class DynamicTypeStatefulStruct2
 	extends ExElement.Def.Abstract<ModelValueElement<SettableValue<?>, SettableValue<DynamicTypeStatefulTestStructure>>> implements
 	ModelValueElement.CompiledSynth<SettableValue<?>, ModelValueElement<SettableValue<?>, SettableValue<DynamicTypeStatefulTestStructure>>> {
 		private String theModelPath;
+		private CompiledExpression theInternalState;
 		private CompiledExpression theDerivedState;
 
 		public DynamicTypeStatefulStruct2(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
@@ -395,6 +410,12 @@ public class TestInterpretation implements QonfigInterpretation {
 			return null;
 		}
 
+		@QonfigAttributeGetter("internal-state")
+		public CompiledExpression getInternalState() {
+			return theInternalState;
+		}
+
+		@QonfigAttributeGetter("derived-state")
 		public CompiledExpression getDerivedState() {
 			return theDerivedState;
 		}
@@ -403,6 +424,7 @@ public class TestInterpretation implements QonfigInterpretation {
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			super.doUpdate(session);
 			theModelPath = session.get(ExpressoBaseV0_1.PATH_KEY, String.class);
+			theInternalState = session.getAttributeExpression("internal-state");
 			theDerivedState = session.getAttributeExpression("derived-state");
 		}
 
@@ -454,7 +476,6 @@ public class TestInterpretation implements QonfigInterpretation {
 			@Override
 			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 				super.doUpdate(env);
-				System.out.println("Interpret " + getDefinition().getModelPath());
 				try {
 					theInternalState = getExpressoEnv().getModels().getValue("internalState", ModelTypes.Value.<SettableValue<T>> anyAs(),
 						env);

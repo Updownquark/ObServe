@@ -2030,7 +2030,7 @@ public class ExpressoQonfigValues {
 			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 				super.doUpdate(env);
 				CollectionUtils.synchronize(theActions, getDefinition().getActions(), (i, d) -> i.getIdentity() == d.getIdentity())//
-					.simpleE(d -> (Action.Interpreted) d.interpret(getExpressoEnv()))//
+				.simpleE(d -> (Action.Interpreted) d.interpret(getExpressoEnv()))//
 				.onLeftX(el -> el.getLeftValue().destroy())//
 				.onCommonX(el -> el.getLeftValue().setParentElement(this).update(getExpressoEnv()))//
 				.adjust();
@@ -2120,6 +2120,7 @@ public class ExpressoQonfigValues {
 		}
 	}
 
+	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE, qonfigType = "loop", interpretation = Loop.Interpreted.class)
 	public static class Loop extends ModelValueElement.Def.Abstract<ObservableAction, ModelValueElement<ObservableAction, ObservableAction>>
 	implements ModelValueElement.CompiledSynth<ObservableAction, ModelValueElement<ObservableAction, ObservableAction>> {
 		private CompiledExpression theInit;
@@ -2135,30 +2136,37 @@ public class ExpressoQonfigValues {
 			theBody = new ArrayList<>();
 		}
 
+		@QonfigAttributeGetter("init")
 		public CompiledExpression getInit() {
 			return theInit;
 		}
 
+		@QonfigAttributeGetter("before-while")
 		public CompiledExpression getBefore() {
 			return theBefore;
 		}
 
+		@QonfigAttributeGetter("while")
 		public CompiledExpression getWhile() {
 			return theWhile;
 		}
 
+		@QonfigAttributeGetter("before-body")
 		public CompiledExpression getBeforeBody() {
 			return theBeforeBody;
 		}
 
+		@QonfigAttributeGetter("after-body")
 		public CompiledExpression getAfterBody() {
 			return theAfterBody;
 		}
 
+		@QonfigAttributeGetter("finally")
 		public CompiledExpression getFinally() {
 			return theFinally;
 		}
 
+		@QonfigChildGetter("body")
 		public List<ModelValueElement.CompiledSynth<ObservableAction, ?>> getBody() {
 			return Collections.unmodifiableList(theBody);
 		}

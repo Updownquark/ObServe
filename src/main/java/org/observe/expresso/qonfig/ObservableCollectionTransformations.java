@@ -608,6 +608,13 @@ public class ObservableCollectionTransformations {
 		}
 	}
 
+	@ExMultiElementTraceable({
+		@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE,
+			qonfigType = "refresh-each",
+			interpretation = RefreshEachCollectionTransform.Interpreted.class),
+		@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE,
+			qonfigType = "complex-operation",
+			interpretation = RefreshEachCollectionTransform.Interpreted.class) })
 	static class RefreshEachCollectionTransform<C extends ObservableCollection<?>> extends TypePreservingTransform<C>
 	implements CollectionTransform<C, C, ExElement> {
 		private ModelComponentId theSourceName;
@@ -617,10 +624,12 @@ public class ObservableCollectionTransformations {
 			super(parent, qonfigType);
 		}
 
+		@QonfigAttributeGetter(asType = "complex-operation", value = "source-as")
 		public ModelComponentId getSourceVariable() {
 			return theSourceName;
 		}
 
+		@QonfigAttributeGetter(asType = "refresh-each", value = "on")
 		public CompiledExpression getRefresh() {
 			return theRefresh;
 		}
