@@ -106,7 +106,7 @@ public class ConditionalExpression implements ObservableExpression {
 	@Override
 	public <M, MV extends M, EX extends Throwable> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type,
 		InterpretedExpressoEnv env, int expressionOffset, ExceptionHandler.Single<ExpressoInterpretationException, EX> exHandler)
-		throws ExpressoInterpretationException, EX {
+			throws ExpressoInterpretationException, EX {
 		if (type.getModelType() == ModelTypes.Action || type.getModelType() == ModelTypes.Value
 			|| type.getModelType() == ModelTypes.Collection || type.getModelType() == ModelTypes.Set) {//
 		} else {
@@ -277,6 +277,11 @@ public class ConditionalExpression implements ObservableExpression {
 			if (sourceCondition == newCondition && sourcePrimary == newPrimary && sourceSecondary == newSecondary)
 				return value;
 			return createValue(newCondition, newPrimary, newSecondary);
+		}
+
+		@Override
+		public String toString() {
+			return theCondition + "?" + thePrimary + ":" + theSecondary;
 		}
 	}
 }

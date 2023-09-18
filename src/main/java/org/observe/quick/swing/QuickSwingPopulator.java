@@ -1690,7 +1690,10 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 			Transformer<ExpressoInterpretationException> tx) throws ExpressoInterpretationException {
 			return QuickSwingPopulator.<QuickLabel<T>, QuickLabel.Interpreted<T, QuickLabel<T>>> createWidget((panel, quick) -> {
 				Format<T> format = quick.getFormat().get();
-				panel.addLabel(null, quick.getValue(), format, null);
+				panel.addLabel(null, quick.getValue(), format, lbl -> {
+					if (quick.getIcon() != null)
+						lbl.withIcon(quick.getIcon());
+				});
 			});
 		}
 
@@ -2158,6 +2161,10 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 					}
 				}, tree -> {
 					treeHolder.accept(tree);
+					if (quick.getSelection() != null)
+						tree.withSelection(quick.getSelection(), false);
+					if (quick.getMultiSelection() != null)
+						tree.withSelection(quick.getMultiSelection());
 					if (column != null)
 						tree.withRender(column.getCRS());
 					tree.withLeafTest2(path -> {
@@ -2501,7 +2508,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 
 		@Override
 		public <F> AbstractQuickContainerPopulator addLabel(String fieldName, ObservableValue<F> field, Function<? super F, String> format,
-			Consumer<FieldEditor<JLabel, ?>> modify) {
+			Consumer<LabelEditor<JLabel, ?>> modify) {
 			return addHPanel(null, new JustifiedBoxLayout(true).mainJustified().crossJustified(),
 				p -> modify(p).addLabel(fieldName, field, format, modify));
 		}

@@ -450,6 +450,36 @@ class PanelPopulationImpl {
 		}
 	}
 
+	static class SimpleLabelEditor<L extends JLabel, P extends SimpleLabelEditor<L, P>> extends SimpleFieldEditor<L, P>
+		implements LabelEditor<L, P> {
+		private ObservableValue<? extends Icon> theIcon;
+
+		SimpleLabelEditor(String fieldName, L editor, Observable<?> until) {
+			super(fieldName, editor, until);
+		}
+
+		public ObservableValue<? extends Icon> getIcon() {
+			return theIcon;
+		}
+
+		@Override
+		public P withIcon(ObservableValue<? extends Icon> icon) {
+			theIcon = icon;
+			return (P) this;
+		}
+
+		@Override
+		public Component decorate(Component c) {
+			super.decorate(c);
+			if (theIcon != null) {
+				theIcon.changes().takeUntil(getUntil()).act(evt -> {
+					((JLabel) c).setIcon(evt.getNewValue());
+				});
+			}
+			return c;
+		}
+	}
+
 	static class SimpleImageControl implements ImageControl {
 		private final SettableValue<ObservableValue<? extends Icon>> theSettableIcon;
 		private final ObservableValue<Icon> theIcon;

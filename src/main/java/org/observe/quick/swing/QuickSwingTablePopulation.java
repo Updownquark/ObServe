@@ -58,6 +58,7 @@ import org.observe.util.swing.PanelPopulation.ButtonEditor;
 import org.observe.util.swing.PanelPopulation.ComboEditor;
 import org.observe.util.swing.PanelPopulation.ComponentEditor;
 import org.observe.util.swing.PanelPopulation.FieldEditor;
+import org.observe.util.swing.PanelPopulation.LabelEditor;
 import org.observe.util.swing.PanelPopulation.MenuBuilder;
 import org.observe.util.swing.PanelPopulation.PanelPopulator;
 import org.observe.util.swing.PanelPopulation.SliderEditor;
@@ -798,9 +799,9 @@ class QuickSwingTablePopulation {
 
 		@Override
 		public <F> SwingCellPopulator<R, C> addLabel(String fieldName, ObservableValue<F> field, Function<? super F, String> format,
-			Consumer<FieldEditor<JLabel, ?>> modify) {
+			Consumer<LabelEditor<JLabel, ?>> modify) {
 			if (isRenderer) {
-				FieldRenderEditor<JLabel> editor = new FieldRenderEditor<>(theCell);
+				LabelRenderEditor editor = new LabelRenderEditor(theCell);
 				if (modify != null)
 					modify.accept(editor);
 				for (Consumer<ComponentEditor<?, ?>> modifier : theModifiers)
@@ -826,6 +827,7 @@ class QuickSwingTablePopulation {
 						theCell.getContext().getActiveValue().set(cell.getModelValue(), null);
 						label[0].setText(format.apply(field.get()));
 						editor.decorate(label[0]);
+						System.out.println("For " + field.get() + ": " + label[0].getIcon());
 						return label[0];
 					}
 				};
@@ -1200,6 +1202,32 @@ class QuickSwingTablePopulation {
 
 			FieldRenderEditor(ObservableCellEditor<R, C> cellEditor) {
 				super(cellEditor);
+			}
+		}
+
+		class LabelRenderEditor extends AbstractFieldRenderEditor<JLabel, LabelRenderEditor>
+		implements LabelEditor<JLabel, LabelRenderEditor> {
+			private ObservableValue<? extends Icon> theIcon;
+
+			LabelRenderEditor(ObservableCellEditor<R, C> cellEditor) {
+				super(cellEditor);
+			}
+
+			LabelRenderEditor(ObservableCellRenderer<R, C> cellRenderer) {
+				super(cellRenderer);
+			}
+
+			@Override
+			public LabelRenderEditor withIcon(ObservableValue<? extends Icon> icon) {
+				theIcon = icon;
+				return this;
+			}
+
+			@Override
+			public Component decorate(Component c) {
+				super.decorate(c);
+				((JLabel) c).setIcon(theIcon == null ? null : theIcon.get());
+				return c;
 			}
 		}
 

@@ -32,6 +32,7 @@ public class ComponentDecorator extends BgFontAdjuster {
 
 	private boolean isUsingImage;
 	private BufferedImage theImage;
+	private boolean isIconCleared;
 
 	public Border getBorder() {
 		return theBorder;
@@ -44,6 +45,7 @@ public class ComponentDecorator extends BgFontAdjuster {
 		theIcon = null;
 		isEnabled = null;
 		isUsingImage = false;
+		isIconCleared = false;
 		return this;
 	}
 
@@ -214,6 +216,8 @@ public class ComponentDecorator extends BgFontAdjuster {
 
 	public ComponentDecorator withIcon(Icon icon) {
 		theIcon = icon;
+		if (icon == null)
+			isIconCleared = true;
 		return this;
 	}
 
@@ -259,22 +263,26 @@ public class ComponentDecorator extends BgFontAdjuster {
 
 		if (c instanceof JLabel) {
 			Icon oldIcon = ((JLabel) c).getIcon();
+			boolean doRevert = theIcon != null || isUsingImage || isIconCleared;
 			if (theIcon != null)
 				((JLabel) c).setIcon(theIcon);
 			else if (isUsingImage)
 				((JLabel) c).setIcon(new ImageIcon(theImage));
-			else
+			else if (isIconCleared)
 				((JLabel) c).setIcon(null);
-			revert.add(() -> ((JLabel) c).setIcon(oldIcon));
+			if (doRevert)
+				revert.add(() -> ((JLabel) c).setIcon(oldIcon));
 		} else if (c instanceof AbstractButton) {
 			Icon oldIcon = ((AbstractButton) c).getIcon();
+			boolean doRevert = theIcon != null || isUsingImage || isIconCleared;
 			if (theIcon != null)
 				((AbstractButton) c).setIcon(theIcon);
 			else if (isUsingImage)
 				((AbstractButton) c).setIcon(new ImageIcon(theImage));
-			else
+			else if (isIconCleared)
 				((AbstractButton) c).setIcon(null);
-			revert.add(() -> ((AbstractButton) c).setIcon(oldIcon));
+			if (doRevert)
+				revert.add(() -> ((AbstractButton) c).setIcon(oldIcon));
 		}
 
 		if (theCursor != null) {

@@ -36,9 +36,10 @@
 					<dynamic-tree-model value="app.root" dynamic-node-name="dNode" children="dNode.listFiles()" leaf="!dNode.isDirectory()" />
 				</tree-node>
 				<column>
-					<label value="columnValue instanceof ObservableFile ? ((ObservableFile) columnValue).getName() : columnValue.toString()" />
-						<!-- This isn't working yet, not sure why
-						icon="columnValue instanceof ObservableFile ? (&quot;/icons/icons8-&quot;+ ( ((ObservableFile) columnValue).isFile() ? &quot;file-50&quot; : &quot;folder-16&quot;)+&quot;.png&quot;) : null" />-->
+						<!-- This isn't working yet, not sure why -->
+					<label value="columnValue instanceof ObservableFile ? ((ObservableFile) columnValue).getName() : columnValue.toString()"
+						icon="columnValue instanceof ObservableFile ? (&quot;/icons/icons8-&quot;+ ( ((ObservableFile) columnValue).isFile() ? &quot;file-50&quot; : &quot;folder-16&quot;)+&quot;.png&quot;) : null" />
+						<!-- -->
 				</column>
 			</tree>
 		</box>

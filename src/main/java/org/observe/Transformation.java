@@ -2353,7 +2353,7 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 		@Override
 		public TransformedElement<S, T> createElement(Supplier<S> source) {
 			if (theTransformation.isCached())
-				return new CachedTransformedElement(source, get());
+				return new CachedTransformedElement(source, this::get);
 			else
 				return new DynamicTransformedElement(source);
 		}
@@ -2577,11 +2577,11 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 
 		class CachedTransformedElement extends AbstractTransformedElement {
 			private final Supplier<S> theSourceSupplier;
-			private TransformationState theInitialTransformation;
+			private Supplier<TransformationState> theInitialTransformation;
 			volatile S theSource;
 			volatile T theResult;
 
-			CachedTransformedElement(Supplier<S> source, TransformationState state) {
+			CachedTransformedElement(Supplier<S> source, Supplier<TransformationState> state) {
 				theSourceSupplier = source;
 				theInitialTransformation = state;
 				// this.theSource = sourceVal;
@@ -2590,14 +2590,14 @@ public class Transformation<S, T> extends XformOptions.XformDef implements Ident
 			}
 
 			private void init() {
-				TransformationState initState = theInitialTransformation;
+				Supplier<TransformationState> initState = theInitialTransformation;
 				if (initState == null)
 					return;
 				theInitialTransformation = null;
 				S sourceVal = theSourceSupplier.get();
 				this.theSource = sourceVal;
 				this.theResult = transform(false, //
-					() -> sourceVal, sourceVal, null, initState, false);
+					() -> sourceVal, sourceVal, null, initState.get(), false);
 			}
 
 

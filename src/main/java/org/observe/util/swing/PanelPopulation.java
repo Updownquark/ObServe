@@ -244,16 +244,16 @@ public class PanelPopulation {
 
 		<F> P addStyledTextArea(String fieldName, ObservableStyledDocument<F> doc, Consumer<FieldEditor<ObservableTextArea<F>, ?>> modify);
 
-		default P addLabel(String fieldName, String label, Consumer<FieldEditor<JLabel, ?>> modify) {
+		default P addLabel(String fieldName, String label, Consumer<LabelEditor<JLabel, ?>> modify) {
 			return addLabel(fieldName, ObservableValue.of(label), v -> v, modify);
 		}
 
-		default <F> P addLabel(String fieldName, ObservableValue<F> field, Format<F> format, Consumer<FieldEditor<JLabel, ?>> modify) {
+		default <F> P addLabel(String fieldName, ObservableValue<F> field, Format<F> format, Consumer<LabelEditor<JLabel, ?>> modify) {
 			return addLabel(fieldName, field, v -> format.format(v), modify);
 		}
 
 		<F> P addLabel(String fieldName, ObservableValue<F> field, Function<? super F, String> format,
-			Consumer<FieldEditor<JLabel, ?>> modify);
+			Consumer<LabelEditor<JLabel, ?>> modify);
 
 		P addIcon(String fieldName, ObservableValue<Icon> icon, Consumer<FieldEditor<JLabel, ?>> modify);
 
@@ -484,14 +484,14 @@ public class PanelPopulation {
 
 		@Override
 		default <F> P addLabel(String fieldName, ObservableValue<F> field, Function<? super F, String> format,
-			Consumer<FieldEditor<JLabel, ?>> modify) {
+			Consumer<LabelEditor<JLabel, ?>> modify) {
 			JLabel label = new JLabel();
 			if (!isSyntheticRenderer()) {
 				field.changes().takeUntil(getUntil()).act(evt -> {
 					label.setText(format.apply(evt.getNewValue()));
 				});
 			}
-			SimpleFieldEditor<JLabel, ?> fieldPanel = new SimpleFieldEditor<>(fieldName, label, getUntil());
+			SimpleLabelEditor<JLabel, ?> fieldPanel = new SimpleLabelEditor<>(fieldName, label, getUntil());
 			modify(fieldPanel);
 			if (!isSyntheticRenderer())
 				fieldPanel.getTooltip().changes().takeUntil(getUntil())
@@ -1471,6 +1471,9 @@ public class PanelPopulation {
 		}
 
 		I withIcon(ObservableValue<? extends Icon> icon);
+	}
+
+	public interface LabelEditor<L extends JLabel, P extends LabelEditor<L, P>> extends FieldEditor<L, P>, Iconized<P> {
 	}
 
 	public interface ButtonEditor<B extends JComponent, P extends ButtonEditor<B, P>> extends FieldEditor<B, P>, Iconized<P> {
