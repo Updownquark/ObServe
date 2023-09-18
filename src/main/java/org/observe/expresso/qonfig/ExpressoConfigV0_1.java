@@ -5,16 +5,21 @@ import java.util.List;
 import java.util.Set;
 
 import org.observe.SettableValue;
+import org.observe.assoc.ObservableMap;
 import org.observe.config.ObservableConfig;
 import org.observe.config.ObservableConfig.ObservableConfigValueBuilder;
+import org.observe.config.ObservableValueSet;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
+import org.observe.expresso.ModelType;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
+import org.observe.expresso.VariableType;
+import org.observe.expresso.qonfig.ExElement.Def;
 import org.qommons.Version;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretation;
@@ -22,6 +27,8 @@ import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigInterpreterCore;
 import org.qommons.config.QonfigToolkit;
 import org.qommons.config.SpecialSession;
+
+import com.google.common.reflect.TypeToken;
 
 /** Qonfig Interpretation for the ExpressoConfigV0_1 API */
 public class ExpressoConfigV0_1 implements QonfigInterpretation {
@@ -112,12 +119,13 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		interpreter.createWith("config", ObservableModelElement.ConfigModelElement.Def.class,
 			ExElement.creator(ObservableModelElement.ConfigModelElement.Def::new));
 		interpreter.createWith("value", ConfigModelValue.Def.class, ExElement.creator(ConfigValue::new));
-		// interpreter.createWith("value-set", ConfigModelValue.class, valueSetCreator());
+		interpreter.createWith("value-set", ConfigModelValue.Def.class, ExElement.creator(ConfigValueSet::new));
+		interpreter.createWith("map", ConfigModelValue.Def.class, ExElement.creator(ConfigMap::new));
 		// interpreter.createWith("list", ConfigModelValue.class, collectionCreator());
 		// interpreter.createWith("sorted-list", ConfigModelValue.class, sortedCollectionCreator());
 		// interpreter.createWith("set", ConfigModelValue.class, setCreator());
 		// interpreter.createWith("sorted-set", ConfigModelValue.class, sortedSetCreator());
-		// interpreter.createWith("map", ConfigModelValue.class, mapCreator());
+		interpreter.createWith("map", ConfigModelValue.Def.class, ExElement.creator(ConfigMap::new));
 		// interpreter.createWith("sorted-map", ConfigModelValue.class, sortedMapCreator());
 		// interpreter.createWith("multi-map", ConfigModelValue.class, multiMapCreator());
 		// interpreter.createWith("sorted-multi-map", ConfigModelValue.class, sortedMultiMapCreator());
@@ -208,6 +216,142 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 				if (theDefaultValue != null && config.getConfig().getChild(config.getPath(), false, null) == null)
 					value.set(theDefaultValue.get(msi).get(), null);
 				return value;
+			}
+		}
+	}
+
+	static class ConfigValueSet extends ConfigModelValue.Def.Abstract<ObservableValueSet<?>> {
+		public ConfigValueSet(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
+			super(parent, qonfigType, ModelTypes.ValueSet);
+		}
+
+		@Override
+		public Interpreted<?> interpret() {
+			return new Interpreted<>(this);
+		}
+
+		static class Interpreted<T> extends ConfigModelValue.Interpreted.Abstract<T, ObservableValueSet<?>, ObservableValueSet<T>> {
+			public Interpreted(ConfigValueSet definition) {
+				super(definition);
+			}
+
+			@Override
+			public List<? extends InterpretedValueSynth<?, ?>> getComponents() {
+				return Collections.emptyList();
+			}
+
+			@Override
+			protected ModelInstanceType<ObservableValueSet<?>, ObservableValueSet<T>> getTargetType() {
+				return ModelTypes.ValueSet.forType(getValueType());
+			}
+
+			@Override
+			public ModelValueInstantiator<ObservableValueSet<T>> instantiate() {
+				return new Instantiator<>(this);
+			}
+		}
+
+		static class Instantiator<T> extends ConfigModelValue.Instantiator<T, ObservableValueSet<T>> {
+			public Instantiator(Interpreted<T> interpreted) {
+				super(interpreted.getConfigValue().instantiate(), interpreted.getValueType(), interpreted.getConfigPath(),
+					interpreted.getFormat() == null ? null : interpreted.getFormat().instantiate(), interpreted.getFormatSet());
+			}
+
+			@Override
+			public ObservableValueSet<T> create(ObservableConfigValueBuilder<T> config, ModelSetInstance msi)
+				throws ModelInstantiationException {
+				return config.buildEntitySet(null);
+			}
+		}
+	}
+
+	static abstract class ConfigMapValue<M> extends ConfigModelValue.Def.Abstract<M> {
+		private VariableType theKeyType;
+
+		protected ConfigMapValue(Def<?> parent, QonfigElementOrAddOn qonfigType, ModelType.DoubleTyped<M> modelType) {
+			super(parent, qonfigType, modelType);
+		}
+
+		public VariableType getKeyType() {
+			return theKeyType;
+		}
+
+		@Override
+		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
+			super.doUpdate(session);
+
+			theKeyType = getAddOn(ExMapModelValue.Def.class).getKeyType();
+		}
+
+		public static abstract class Interpreted<K, V, M, MV extends M> extends ConfigModelValue.Interpreted.Abstract<V, M, MV> {
+			private TypeToken<K> theKeyType;
+
+			protected Interpreted(ConfigMapValue<M> definition) {
+				super(definition);
+			}
+
+			@Override
+			public ConfigMapValue<M> getDefinition() {
+				return (ConfigMapValue<M>) super.getDefinition();
+			}
+
+			public TypeToken<K> getKeyType() {
+				return theKeyType;
+			}
+
+			@Override
+			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+				super.doUpdate(env);
+
+				theKeyType = (TypeToken<K>) getDefinition().getKeyType().getType(env);
+			}
+		}
+	}
+
+	static class ConfigMap extends ConfigMapValue<ObservableMap<?, ?>> {
+		public ConfigMap(Def<?> parent, QonfigElementOrAddOn qonfigType) {
+			super(parent, qonfigType, ModelTypes.Map);
+		}
+
+		@Override
+		public Interpreted<?, ?> interpret() {
+			return new Interpreted<>(this);
+		}
+
+		static class Interpreted<K, V> extends ConfigMapValue.Interpreted<K, V, ObservableMap<?, ?>, ObservableMap<K, V>> {
+			public Interpreted(ConfigMap definition) {
+				super(definition);
+			}
+
+			@Override
+			public List<? extends InterpretedValueSynth<?, ?>> getComponents() {
+				return Collections.emptyList();
+			}
+
+			@Override
+			protected ModelInstanceType<ObservableMap<?, ?>, ObservableMap<K, V>> getTargetType() {
+				return ModelTypes.Map.forType(getKeyType(), getValueType());
+			}
+
+			@Override
+			public ModelValueInstantiator<ObservableMap<K, V>> instantiate() {
+				return new Instantiator<>(this);
+			}
+		}
+
+		static class Instantiator<K, V> extends ConfigModelValue.Instantiator<V, ObservableMap<K, V>> {
+			private TypeToken<K> theKeyType;
+
+			public Instantiator(Interpreted<K, V> interpreted) {
+				super(interpreted.getConfigValue().instantiate(), interpreted.getValueType(), interpreted.getConfigPath(),
+					interpreted.getFormat() == null ? null : interpreted.getFormat().instantiate(), interpreted.getFormatSet());
+				theKeyType = interpreted.getKeyType();
+			}
+
+			@Override
+			public ObservableMap<K, V> create(ObservableConfigValueBuilder<V> config, ModelSetInstance msi)
+				throws ModelInstantiationException {
+				return config.asMap(theKeyType).buildMap(null);
 			}
 		}
 	}
