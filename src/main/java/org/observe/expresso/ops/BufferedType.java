@@ -4,8 +4,9 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
-import org.qommons.Named;
+import org.qommons.QommonsUtils;
 import org.qommons.StringUtils;
+import org.qommons.collect.BetterList;
 
 /** A type in which white space may be embedded */
 public class BufferedType {
@@ -33,9 +34,34 @@ public class BufferedType {
 		int length = 0;
 		if (theNames.size() > 1)
 			length += theNames.size() - 1;
-		for (Named name : theNames)
+		for (BufferedName name : theNames)
 			length += name.getName().length();
 		return length;
+	}
+
+	public int getFullLength() {
+		int length = 0;
+		if (theNames.size() > 1)
+			length += theNames.size() - 1;
+		for (BufferedName name : theNames)
+			length += name.length();
+		return length;
+	}
+
+	public BufferedType buffer(int before, int after) {
+		if (before <= 0 && after <= 0)
+			return this;
+		if (theNames.size() == 1)
+			return new BufferedType(QommonsUtils.unmodifiableCopy(BufferedName.buffer(//
+				before + theNames.get(0).getBefore(), theNames.get(0).getName(), after + theNames.get(0).getAfter())));
+		BufferedName[] names = theNames.toArray(new BufferedName[theNames.size()]);
+		if (before > 0)
+			names[0] = BufferedName.buffer(before + names[0].getBefore(), names[0].getName(), names[0].getAfter());
+		if (after > 0) {
+			BufferedName last = names[names.length - 1];
+			names[names.length - 1] = BufferedName.buffer(last.getBefore(), last.getName(), after + last.getAfter());
+		}
+		return new BufferedType(BetterList.of(names));
 	}
 
 	@Override

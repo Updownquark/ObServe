@@ -55,12 +55,12 @@ public class CastExpression implements ObservableExpression {
 	public int getComponentOffset(int childIndex) {
 		if (childIndex != 0)
 			throw new IndexOutOfBoundsException(childIndex + " of 1");
-		return theType.length() + 2;
+		return theType.getFullLength() + 2;
 	}
 
 	@Override
 	public int getExpressionLength() {
-		return theValue.getExpressionLength() + theType.length() + 2;
+		return theValue.getExpressionLength() + theType.getFullLength() + 2;
 	}
 
 	@Override
@@ -117,7 +117,9 @@ public class CastExpression implements ObservableExpression {
 			env.at(theType.length() + 2), valueOffset, ExceptionHandler.holder2());
 		if (evaldX != null) {
 			InterpretedValueSynth<SettableValue<?>, SettableValue<T>> synth = InterpretedValueSynth.of(ModelTypes.Value.forType(valueType),
-				() -> evaldX.instantiate().map(sv -> sv.transformReversible(valueType, tx -> tx.map(v -> v).withReverse(v -> v))), evaldX);
+				() -> evaldX.instantiate()
+				.map(sv -> sv.transformReversible(valueType, tx -> tx.map(LambdaUtils.identity()).withReverse(LambdaUtils.identity()))),
+				evaldX);
 			return ObservableExpression.evEx(0, getExpressionLength(), synth, valueType, evaldX);
 		}
 		ExceptionHandler.Double<ExpressoInterpretationException, TypeConversionException, EX, NeverThrown> doubleX = exHandler

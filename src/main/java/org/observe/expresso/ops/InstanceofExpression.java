@@ -56,7 +56,7 @@ public class InstanceofExpression implements ObservableExpression {
 
 	@Override
 	public int getExpressionLength() {
-		return theLeft.getExpressionLength() + 12 + theType.length();
+		return theLeft.getExpressionLength() + 10 + theType.getFullLength();
 	}
 
 	@Override
@@ -107,8 +107,8 @@ public class InstanceofExpression implements ObservableExpression {
 			testType = TypeTokens.getRawType(env.getClassView().parseType(theType.getName()));
 		} catch (ParseException e) {
 			throw new ExpressoInterpretationException(e.getMessage(),
-				env.reporting().at(theLeft.getExpressionLength() + 12 + e.getErrorOffset()).getPosition(),
-				e.getErrorOffset() == 0 ? theType.length() : 0, e);
+				env.reporting().at(theLeft.getExpressionLength() + 10 + e.getErrorOffset()).getPosition(),
+				e.getErrorOffset() == 0 ? theType.getFullLength() : 0, e);
 		}
 		InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> container = leftValue.map(ModelTypes.Value.forType(boolean.class),
 			lv -> new Instantiator<>(lv, testType));
@@ -118,7 +118,7 @@ public class InstanceofExpression implements ObservableExpression {
 
 	@Override
 	public String toString() {
-		return theLeft + " instanceof " + theType;
+		return theLeft + "instanceof" + theType;
 	}
 
 	static class Instantiator<S> implements ModelValueInstantiator<SettableValue<Boolean>> {

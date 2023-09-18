@@ -264,7 +264,9 @@ public class JavaExpressoParser implements ExpressoParser {
 					left = _parse(firstChild, fullText);
 					left = BufferedExpression.buffer(0, left,
 						getWhiteSpaceAt(fullText, firstChild.getStartIndex() + left.getExpressionLength()));
-					return new InstanceofExpression(left, parseType(expression.getComponents().getLast()));
+					Expression last = expression.getComponents().getLast();
+					return new InstanceofExpression(left, parseType(last)//
+						.buffer(getWhiteSpaceBefore(fullText, last.getStartIndex(), 0), 0));
 				case "?":
 					ObservableExpression condition = _parse(firstChild, fullText);
 					condition = BufferedExpression.buffer(0, condition,

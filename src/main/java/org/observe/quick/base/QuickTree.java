@@ -57,6 +57,7 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 			super(parent, type);
 		}
 
+		@QonfigChildGetter(asType = "tree", value = "model")
 		public TreeModel.Def<?> getModel() {
 			return theModel;
 		}
@@ -119,7 +120,7 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 	}
 
 	public static class Interpreted<N, T extends QuickTree<N>> extends QuickWidget.Interpreted.Abstract<T>
-		implements MultiValueWidget.Interpreted<BetterList<N>, T> {
+	implements MultiValueWidget.Interpreted<BetterList<N>, T> {
 		private TreeModel.Interpreted<N, ?> theModel;
 		private TypeToken<N> theNodeType;
 		private QuickTableColumn.SingleColumnSet.Interpreted<BetterList<N>, N> theTreeColumn;

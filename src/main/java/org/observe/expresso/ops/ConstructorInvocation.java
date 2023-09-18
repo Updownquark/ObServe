@@ -48,7 +48,7 @@ public class ConstructorInvocation extends Invocation {
 
 	@Override
 	public int getExpressionLength() {
-		int length = 5 + theType.length();
+		int length = 5 + theType.getFullLength();
 		if (!getComponents().isEmpty())
 			length += getComponents().size() - 1;
 		for (ObservableExpression arg : getComponents())
@@ -81,7 +81,7 @@ public class ConstructorInvocation extends Invocation {
 
 	@Override
 	protected int getInitialArgOffset() {
-		return theType.length() + 4;
+		return theType.getFullLength() + 4;
 	}
 
 	@Override
@@ -96,7 +96,7 @@ public class ConstructorInvocation extends Invocation {
 		Class<?> constructorType = env.getClassView().getType(theType.getName());
 		if (constructorType == null)
 			throw new ExpressoInterpretationException("No such type found: " + theType, env.reporting().at(4).getPosition(),
-				theType.length());
+				theType.getFullLength());
 		ExceptionHandler.Single<ExpressoInterpretationException, NeverThrown> tce = ExceptionHandler
 			.<ExpressoInterpretationException> holder();
 		Invocation.MethodResult<Constructor<?>, MV> result = Invocation.findMethod(constructorType.getConstructors(), null, null, true,

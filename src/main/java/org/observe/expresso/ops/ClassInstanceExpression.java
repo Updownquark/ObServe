@@ -49,7 +49,7 @@ public class ClassInstanceExpression implements ObservableExpression {
 
 	@Override
 	public int getExpressionLength() {
-		return theType.length() + 6 + theOpSpacing;
+		return theType.getFullLength() + 6 + theOpSpacing;
 	}
 
 	@Override
@@ -70,7 +70,7 @@ public class ClassInstanceExpression implements ObservableExpression {
 	@Override
 	public <M, MV extends M, EX extends Throwable> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type,
 		InterpretedExpressoEnv env, int expressionOffset, ExceptionHandler.Single<ExpressoInterpretationException, EX> exHandler)
-		throws ExpressoInterpretationException, EX {
+			throws ExpressoInterpretationException, EX {
 		if (type.getModelType() != ModelTypes.Value) {
 			throw new ExpressoInterpretationException("A class instance expression can only be evaluated to a value",
 				env.reporting().getPosition(), getExpressionLength());

@@ -59,7 +59,7 @@ public class ParentheticExpression implements ObservableExpression {
 	public <M, MV extends M, EX extends Throwable> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type,
 		InterpretedExpressoEnv env, int expressionOffset, ExceptionHandler.Single<ExpressoInterpretationException, EX> exHandler)
 			throws ExpressoInterpretationException, EX {
-		return ObservableExpression.wrap(theContent.evaluateInternal(type, env, expressionOffset + 1, exHandler));
+		return ObservableExpression.wrap(theContent.evaluateInternal(type, env.at(1), expressionOffset + 1, exHandler));
 	}
 
 	@Override

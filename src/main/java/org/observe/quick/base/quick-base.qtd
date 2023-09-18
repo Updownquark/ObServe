@@ -188,7 +188,7 @@
 			<attribute name="value" type="expression" specify="required" />
 		</add-on>
 		<add-on name="tree-column" requires="column">
-			<attr-mod name="column.value" specify="forbidden" default="{active-value-name}.getLast()" />
+			<attr-mod name="column.value" specify="forbidden" default="{active-value-name} == null ? null : {active-value-name}.getLast()" />
 			<attr-mod name="column.name" specify="optional" default="`Tree Column`" />
 		</add-on>
 	</add-ons>

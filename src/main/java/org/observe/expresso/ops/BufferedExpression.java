@@ -66,8 +66,8 @@ public class BufferedExpression implements ObservableExpression {
 	@Override
 	public <M, MV extends M, EX extends Throwable> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type,
 		InterpretedExpressoEnv env, int expressionOffset, ExceptionHandler.Single<ExpressoInterpretationException, EX> exHandler)
-		throws ExpressoInterpretationException, EX {
-		return ObservableExpression.wrap(theExpression.evaluateInternal(type, env, expressionOffset + theBefore, exHandler));
+			throws ExpressoInterpretationException, EX {
+		return ObservableExpression.wrap(theExpression.evaluateInternal(type, env.at(theBefore), expressionOffset + theBefore, exHandler));
 	}
 
 	@Override
