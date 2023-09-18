@@ -2424,6 +2424,70 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 		}
 	}
 
+	public static class QuickXSwing implements QuickInterpretation {
+		@Override
+		public void configure(Transformer.Builder<ExpressoInterpretationException> tx) {
+			QuickSwingPopulator.<CollapsePane, CollapsePane.Interpreted> interpretWidget(tx,
+				QuickBaseSwing.gen(CollapsePane.Interpreted.class), QuickXSwing::interpretCollapsePane);
+		}
+
+		static QuickSwingPopulator<CollapsePane> interpretCollapsePane(CollapsePane.Interpreted interpreted,
+			Transformer<ExpressoInterpretationException> tx) throws ExpressoInterpretationException {
+			QuickSwingPopulator<QuickWidget> header = interpreted.getHeader() == null ? null
+				: tx.transform(interpreted.getHeader(), QuickSwingPopulator.class);
+			QuickSwingPopulator<QuickWidget> content = tx.transform(interpreted.getContents().getFirst(), QuickSwingPopulator.class);
+			return createWidget((panel, quick) -> {
+				content.populate(new CollapsePanePopulator(panel, quick, header), quick.getContents().getFirst());
+			});
+		}
+
+		private static class CollapsePanePopulator extends AbstractQuickContainerPopulator {
+			private PanelPopulator<?, ?> thePopulator;
+			private CollapsePane theCollapsePane;
+			private QuickSwingPopulator<QuickWidget> theInterpretedHeader;
+
+			public CollapsePanePopulator(PanelPopulator<?, ?> populator, CollapsePane collapsePane,
+				QuickSwingPopulator<QuickWidget> interpretedHeader) {
+				thePopulator = populator;
+				theCollapsePane = collapsePane;
+				theInterpretedHeader = interpretedHeader;
+			}
+
+			@Override
+			public Observable<?> getUntil() {
+				return thePopulator.getUntil();
+			}
+
+			@Override
+			public AbstractQuickContainerPopulator addHPanel(String fieldName, LayoutManager layout,
+				Consumer<PanelPopulator<JPanel, ?>> panel) {
+				thePopulator.addCollapsePanel(true, layout, cp -> populateCollapsePane(cp, panel));
+				return this;
+			}
+
+			@Override
+			public AbstractQuickContainerPopulator addVPanel(Consumer<PanelPopulator<JPanel, ?>> panel) {
+				thePopulator.addCollapsePanel(true, "mig", cp -> populateCollapsePane(cp, panel));
+				return this;
+			}
+
+			private void populateCollapsePane(CollapsePanel<JXCollapsiblePane, JXPanel, ?> cp, Consumer<PanelPopulator<JPanel, ?>> panel) {
+				if (theInterpretedHeader != null) {
+					cp.withHeader(hp -> {
+						try {
+							theInterpretedHeader.populate(hp, theCollapsePane.getHeader());
+						} catch (ModelInstantiationException e) {
+							throw new CheckedExceptionWrapper(e);
+						}
+					});
+				}
+				if (theCollapsePane.isCollapsed() != null)
+					cp.withCollapsed(theCollapsePane.isCollapsed());
+				panel.accept((PanelPopulator<JPanel, ?>) (PanelPopulator<?, ?>) cp);
+			}
+		}
+	}
+
 	public static abstract class AbstractQuickContainerPopulator
 	implements PanelPopulation.PanelPopulator<JPanel, AbstractQuickContainerPopulator> {
 		private List<Consumer<ComponentEditor<?, ?>>> theModifiers;
