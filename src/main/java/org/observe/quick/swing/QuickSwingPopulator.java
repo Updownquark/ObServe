@@ -1500,6 +1500,8 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 				QuickBaseSwing::interpretButton);
 			QuickSwingPopulator.<QuickComboBox<?>, QuickComboBox.Interpreted<?>> interpretWidget(tx,
 				QuickBaseSwing.gen(QuickComboBox.Interpreted.class), QuickBaseSwing::interpretComboBox);
+			QuickSwingPopulator.<QuickRadioButtons<?>, QuickRadioButtons.Interpreted<?>> interpretWidget(tx,
+				QuickBaseSwing.gen(QuickRadioButtons.Interpreted.class), QuickBaseSwing::interpretRadioButtons);
 			QuickSwingPopulator.<QuickTextArea<?>, QuickTextArea.Interpreted<?>> interpretWidget(tx,
 				QuickBaseSwing.gen(QuickTextArea.Interpreted.class), QuickBaseSwing::interpretTextArea);
 			tx.with(DynamicStyledDocument.Interpreted.class, QuickSwingDocument.class,
@@ -1983,6 +1985,13 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 			Transformer<ExpressoInterpretationException> tx) {
 			return createWidget((panel, quick) -> {
 				panel.addComboField(null, quick.getValue(), quick.getValues(), null);
+			});
+		}
+
+		static <T> QuickSwingPopulator<QuickRadioButtons<T>> interpretRadioButtons(QuickRadioButtons.Interpreted<T> interpreted,
+			Transformer<ExpressoInterpretationException> tx) {
+			return createWidget((panel, quick) -> {
+				panel.addRadioField(null, quick.getValue(), quick.getValues(), null);
 			});
 		}
 

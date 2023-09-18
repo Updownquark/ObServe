@@ -8,14 +8,14 @@ import org.qommons.config.QonfigElementOrAddOn;
 
 import com.google.common.reflect.TypeToken;
 
-public class QuickComboBox<T> extends CollectionSelectorWidget<T> {
-	public static final String COMBO_BOX = "combo";
+public class QuickRadioButtons<T> extends CollectionSelectorWidget<T> {
+	public static final String RADIO_BUTTONS = "radio-buttons";
 
 	@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
-		qonfigType = COMBO_BOX,
+		qonfigType = RADIO_BUTTONS,
 		interpretation = Interpreted.class,
-		instance = QuickComboBox.class)
-	public static class Def extends CollectionSelectorWidget.Def<QuickComboBox<?>> {
+		instance = QuickRadioButtons.class)
+	public static class Def extends CollectionSelectorWidget.Def<QuickRadioButtons<?>> {
 		public Def(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
 			super(parent, type);
 		}
@@ -26,7 +26,7 @@ public class QuickComboBox<T> extends CollectionSelectorWidget<T> {
 		}
 	}
 
-	public static class Interpreted<T> extends CollectionSelectorWidget.Interpreted<T, QuickComboBox<T>> {
+	public static class Interpreted<T> extends CollectionSelectorWidget.Interpreted<T, QuickRadioButtons<T>> {
 		public Interpreted(Def definition, ExElement.Interpreted<?> parent) {
 			super(definition, parent);
 		}
@@ -37,22 +37,22 @@ public class QuickComboBox<T> extends CollectionSelectorWidget<T> {
 		}
 
 		@Override
-		public TypeToken<QuickComboBox<T>> getWidgetType() throws ExpressoInterpretationException {
-			return TypeTokens.get().keyFor(QuickComboBox.class).<QuickComboBox<T>> parameterized(getValueType());
+		public TypeToken<QuickRadioButtons<T>> getWidgetType() throws ExpressoInterpretationException {
+			return TypeTokens.get().keyFor(QuickRadioButtons.class).<QuickRadioButtons<T>> parameterized(getValueType());
 		}
 
 		@Override
-		public QuickComboBox<T> create() {
-			return new QuickComboBox<>(getIdentity());
+		public QuickRadioButtons<T> create() {
+			return new QuickRadioButtons<>(getIdentity());
 		}
 	}
 
-	public QuickComboBox(Object id) {
+	public QuickRadioButtons(Object id) {
 		super(id);
 	}
 
 	@Override
-	protected QuickComboBox<T> clone() {
-		return (QuickComboBox<T>) super.clone();
+	protected QuickRadioButtons<T> clone() {
+		return (QuickRadioButtons<T>) super.clone();
 	}
 }
