@@ -44,7 +44,7 @@ It builds on the Expresso-Base toolkit and allows specification of persisted con
 			<child-def name="validate" type="validate" min="0" max="inf" />
 		</element-def>
 		<element-def name="validate" abstract="true" />
-		<element-def name="format-from-model" extends="format" />
+		<element-def name="format-from-model" extends="format" inherits="model-reference" />
 		<element-def name="text-format" extends="format" />
 		<element-def name="file-format" extends="format">
 			<!-- Default is native -->
@@ -106,7 +106,6 @@ It builds on the Expresso-Base toolkit and allows specification of persisted con
 		</element-def>
 		<element-def name="regex-format" extends="format" />
 		<element-def name="regex-format-string" extends="format" />
-		<element-def name="validate-type" abstract="true" />
 		
 		<element-def name="regex-validation" extends="validate">
 			<attribute name="pattern" type="expression" />

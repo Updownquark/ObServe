@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<qonfig-def name="Quick-Swing" version="0.1" xmlns:core="Quick-Core v0.1" root="quick-debug">
+<qonfig-def name="Quick-Swing" version="0.1" xmlns:core="Quick-Core v0.1">
 	<add-ons>
-		<add-on name="quick" requires="core:quick">
+		<add-on name="quick-swing" requires="core:quick">
 			<attribute name="look-and-feel" type="string" default="system" />
 		</add-on>
 	</add-ons>

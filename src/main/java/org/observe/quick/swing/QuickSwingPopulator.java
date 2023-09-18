@@ -2488,6 +2488,14 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 		}
 	}
 
+	public static class QuickSwing implements QuickInterpretation {
+		@Override
+		public void configure(Transformer.Builder<ExpressoInterpretationException> tx) {
+			QuickSwingPopulator.<CollapsePane, CollapsePane.Interpreted> interpretWidget(tx,
+				QuickBaseSwing.gen(CollapsePane.Interpreted.class), QuickXSwing::interpretCollapsePane);
+		}
+	}
+
 	public static abstract class AbstractQuickContainerPopulator
 	implements PanelPopulation.PanelPopulator<JPanel, AbstractQuickContainerPopulator> {
 		private List<Consumer<ComponentEditor<?, ?>>> theModifiers;
