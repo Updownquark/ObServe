@@ -327,6 +327,11 @@ public class PanelPopulation {
 			return addToggleField(fieldName, value, Arrays.asList(values), JRadioButton.class, __ -> new JRadioButton(), modify);
 		}
 
+		default <F> P addRadioField(String fieldName, SettableValue<F> value, List<? extends F> values,
+			Consumer<ToggleEditor<F, JRadioButton, ?>> modify) {
+			return addToggleField(fieldName, value, values, JRadioButton.class, __ -> new JRadioButton(), modify);
+		}
+
 		<F, TB extends JToggleButton> P addToggleField(String fieldName, SettableValue<F> value, List<? extends F> values,
 			Class<TB> buttonType, Function<? super F, ? extends TB> buttonCreator, Consumer<ToggleEditor<F, TB, ?>> modify);
 
