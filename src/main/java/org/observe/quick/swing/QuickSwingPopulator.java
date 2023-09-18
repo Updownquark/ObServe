@@ -1498,6 +1498,8 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 				QuickBaseSwing.gen(QuickCheckBox.Interpreted.class), QuickBaseSwing::interpretCheckBox);
 			QuickSwingPopulator.<QuickButton, QuickButton.Interpreted<QuickButton>> interpretWidget(tx, gen(QuickButton.Interpreted.class),
 				QuickBaseSwing::interpretButton);
+			QuickSwingPopulator.<QuickFileButton, QuickFileButton.Interpreted> interpretWidget(tx, gen(QuickFileButton.Interpreted.class),
+				QuickBaseSwing::interpretFileButton);
 			QuickSwingPopulator.<QuickComboBox<?>, QuickComboBox.Interpreted<?>> interpretWidget(tx,
 				QuickBaseSwing.gen(QuickComboBox.Interpreted.class), QuickBaseSwing::interpretComboBox);
 			QuickSwingPopulator.<QuickRadioButtons<?>, QuickRadioButtons.Interpreted<?>> interpretWidget(tx,
@@ -1978,6 +1980,13 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 					if (quick.getText() != null)
 						btn.withText(quick.getText());
 				});
+			});
+		}
+
+		static QuickSwingPopulator<QuickFileButton> interpretFileButton(QuickFileButton.Interpreted interpreted,
+			Transformer<ExpressoInterpretationException> tx) {
+			return createWidget((panel, quick) -> {
+				panel.addFileField(null, quick.getValue(), quick.isOpen(), null);
 			});
 		}
 

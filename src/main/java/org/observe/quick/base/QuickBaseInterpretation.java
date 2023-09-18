@@ -125,7 +125,9 @@ public class QuickBaseInterpretation implements QonfigInterpretation {
 		interpreter.createWith(QuickTextField.TEXT_FIELD, QuickTextField.Def.class, ExElement.creator(QuickTextField.Def::new));
 		interpreter.createWith(QuickCheckBox.CHECK_BOX, QuickCheckBox.Def.class, ExElement.creator(QuickCheckBox.Def::new));
 		interpreter.createWith(QuickButton.BUTTON, QuickButton.Def.class, ExElement.creator(QuickButton.Def::new));
+		interpreter.createWith(QuickFileButton.FILE_BUTTON, QuickFileButton.Def.class, ExElement.creator(QuickFileButton.Def::new));
 		interpreter.createWith(QuickComboBox.COMBO_BOX, QuickComboBox.Def.class, ExElement.creator(QuickComboBox.Def::new));
+		interpreter.createWith(QuickRadioButtons.RADIO_BUTTONS, QuickRadioButtons.Def.class, ExElement.creator(QuickRadioButtons.Def::new));
 		interpreter.createWith(QuickTextArea.TEXT_AREA, QuickTextArea.Def.class, ExElement.creator(QuickTextArea.Def::new));
 		interpreter.createWith(DynamicStyledDocument.DYNAMIC_STYLED_DOCUMENT, DynamicStyledDocument.Def.class, ExElement.creator(DynamicStyledDocument.Def::new));
 		interpreter.createWith(StyledDocument.TEXT_STYLE, StyledDocument.TextStyleElement.Def.class,
