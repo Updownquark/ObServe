@@ -87,6 +87,9 @@ public interface QuickWidget extends QuickTextElement {
 		@QonfigChildGetter("event-listener")
 		List<QuickEventListener.Def<?>> getEventListeners();
 
+		@QonfigChildGetter("dialog")
+		List<QuickDialog.Def<?>> getDialogs();
+
 		/**
 		 * @param parent The parent container interpretation
 		 * @return The new widget interpretation
@@ -110,6 +113,7 @@ public interface QuickWidget extends QuickTextElement {
 
 			private QuickBorder.Def<?> theBorder;
 			private final List<QuickEventListener.Def<?>> theEventListeners;
+			private final List<QuickDialog.Def<?>> theDialogs;
 
 			/**
 			 * @param parent The parent container definition
@@ -118,6 +122,7 @@ public interface QuickWidget extends QuickTextElement {
 			protected Abstract(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
 				super(parent, type);
 				theEventListeners = new ArrayList<>();
+				theDialogs = new ArrayList<>();
 			}
 
 			@Override
@@ -177,6 +182,11 @@ public interface QuickWidget extends QuickTextElement {
 			}
 
 			@Override
+			public List<QuickDialog.Def<?>> getDialogs() {
+				return Collections.unmodifiableList(theDialogs);
+			}
+
+			@Override
 			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 				super.doUpdate(session.asElement("styled"));
 				theName = session.getAttributeText("name");
@@ -196,6 +206,15 @@ public interface QuickWidget extends QuickTextElement {
 						return listener;
 					})//
 				.onCommonX(el -> el.getLeftValue().update(el.getRightValue())).adjust();
+
+				CollectionUtils
+					.synchronize(theDialogs, session.forChildren("dialog"), (l, s) -> ExElement.typesEqual(l.getElement(), s.getElement()))
+					.simpleE(s -> {
+						QuickDialog.Def<?> listener = s.interpret(QuickDialog.Def.class);
+						listener.update(s);
+						return listener;
+					})//
+					.onCommonX(el -> el.getLeftValue().update(el.getRightValue())).adjust();
 			}
 
 			@Override
@@ -238,6 +257,8 @@ public interface QuickWidget extends QuickTextElement {
 
 		List<QuickEventListener.Interpreted<?>> getEventListeners();
 
+		List<QuickDialog.Interpreted<?>> getDialogs();
+
 		/**
 		 * Produces a widget instance
 		 *
@@ -255,6 +276,7 @@ public interface QuickWidget extends QuickTextElement {
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<String>> theTooltip;
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> isVisible;
 			private final List<QuickEventListener.Interpreted<?>> theEventListeners;
+			private final List<QuickDialog.Interpreted<?>> theDialogs;
 
 			/**
 			 * @param definition The definition producing this interpretation
@@ -263,6 +285,7 @@ public interface QuickWidget extends QuickTextElement {
 			protected Abstract(Def<? super W> definition, ExElement.Interpreted<?> parent) {
 				super(definition, parent);
 				theEventListeners = new ArrayList<>();
+				theDialogs = new ArrayList<>();
 			}
 
 			@Override
@@ -302,6 +325,11 @@ public interface QuickWidget extends QuickTextElement {
 			}
 
 			@Override
+			public List<QuickDialog.Interpreted<?>> getDialogs() {
+				return Collections.unmodifiableList(theDialogs);
+			}
+
+			@Override
 			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 				super.doUpdate(env);
 				if (getDefinition().getBorder() == null)
@@ -314,6 +342,7 @@ public interface QuickWidget extends QuickTextElement {
 					: getDefinition().getTooltip().interpret(ModelTypes.Value.STRING, env);
 				isVisible = getDefinition().isVisible() == null ? null
 					: getDefinition().isVisible().interpret(ModelTypes.Value.BOOLEAN, env);
+
 				CollectionUtils
 				.synchronize(theEventListeners, getDefinition().getEventListeners(), (l, d) -> l.getIdentity() == d.getIdentity())//
 				.simpleE(l -> {
@@ -323,6 +352,15 @@ public interface QuickWidget extends QuickTextElement {
 				})//
 				.onCommonX(el -> el.getLeftValue().updateListener(env))//
 				.adjust();
+
+				CollectionUtils.synchronize(theDialogs, getDefinition().getDialogs(), (l, d) -> l.getIdentity() == d.getIdentity())//
+					.simpleE(l -> {
+						QuickDialog.Interpreted<?> listener = l.interpret(this);
+						listener.updateDialog(env);
+						return listener;
+					})//
+					.onCommonX(el -> el.getLeftValue().updateDialog(env))//
+					.adjust();
 			}
 
 			@Override
@@ -419,6 +457,8 @@ public interface QuickWidget extends QuickTextElement {
 
 	ObservableCollection<QuickEventListener> getEventListeners();
 
+	ObservableCollection<QuickDialog> getDialogs();
+
 	void setContext(WidgetContext ctx) throws ModelInstantiationException;
 
 	@Override
@@ -444,6 +484,7 @@ public interface QuickWidget extends QuickTextElement {
 
 		private QuickBorder theBorder;
 		private ObservableCollection<QuickEventListener> theEventListeners;
+		private ObservableCollection<QuickDialog> theDialogs;
 
 		protected Abstract(Object id) {
 			super(id);
@@ -453,6 +494,7 @@ public interface QuickWidget extends QuickTextElement {
 			isVisible = SettableValue
 				.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Boolean>> parameterized(boolean.class)).build();
 			theEventListeners = ObservableCollection.build(QuickEventListener.class).build();
+			theDialogs = ObservableCollection.build(QuickDialog.class).build();
 
 			isHovered = SettableValue
 				.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Boolean>> parameterized(boolean.class)).build();
@@ -518,6 +560,11 @@ public interface QuickWidget extends QuickTextElement {
 		}
 
 		@Override
+		public ObservableCollection<QuickDialog> getDialogs() {
+			return theDialogs.flow().unmodifiable(false).collect();
+		}
+
+		@Override
 		public void setContext(WidgetContext ctx) throws ModelInstantiationException {
 			isHovered.set(ctx.isHovered(), null);
 			isFocused.set(ctx.isFocused(), null);
@@ -555,6 +602,17 @@ public interface QuickWidget extends QuickTextElement {
 				.onCommon(el -> el.getLeftValue().update(el.getRightValue(), this))//
 				.adjust();
 			}
+
+			try (Transaction t = theDialogs.lock(true, null)) {
+				CollectionUtils.synchronize(theDialogs, myInterpreted.getDialogs(), (l, i) -> l.getIdentity() == i.getIdentity())//
+					.simple(l -> {
+						QuickDialog listener = l.create();
+						listener.update(l, this);
+						return listener;
+					})//
+					.onCommon(el -> el.getLeftValue().update(el.getRightValue(), this))//
+					.adjust();
+			}
 		}
 
 		@Override
@@ -570,6 +628,8 @@ public interface QuickWidget extends QuickTextElement {
 				theBorder.instantiated();
 			for (QuickEventListener listener : theEventListeners)
 				listener.instantiated();
+			for (QuickDialog dialog : theDialogs)
+				dialog.instantiated();
 		}
 
 		@Override
@@ -589,6 +649,9 @@ public interface QuickWidget extends QuickTextElement {
 
 			for (QuickEventListener listener : theEventListeners)
 				listener.instantiate(myModels);
+
+			for (QuickDialog dialog : theDialogs)
+				dialog.instantiate(myModels);
 		}
 
 		@Override
@@ -612,6 +675,8 @@ public interface QuickWidget extends QuickTextElement {
 				copy.theBorder = theBorder.copy(copy);
 			for (QuickEventListener listener : theEventListeners)
 				copy.theEventListeners.add(listener.copy(copy));
+			for (QuickDialog dialog : theDialogs)
+				copy.theDialogs.add(dialog.copy(copy));
 
 			return copy;
 		}

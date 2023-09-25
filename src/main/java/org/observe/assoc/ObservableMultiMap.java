@@ -8,6 +8,7 @@ import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
+import org.observe.CausableChanging;
 import org.observe.Equivalence;
 import org.observe.Eventable;
 import org.observe.Observable;
@@ -35,25 +36,8 @@ import org.qommons.Identifiable;
 import org.qommons.LambdaUtils;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
-import org.qommons.collect.BetterCollection;
-import org.qommons.collect.BetterList;
-import org.qommons.collect.BetterMap;
-import org.qommons.collect.BetterMultiMap;
-import org.qommons.collect.BetterSet;
-import org.qommons.collect.BetterSortedMap;
-import org.qommons.collect.BetterSortedSet;
-import org.qommons.collect.CollectionBuilder;
-import org.qommons.collect.CollectionElement;
-import org.qommons.collect.CollectionLockingStrategy;
-import org.qommons.collect.ElementId;
-import org.qommons.collect.MapEntryHandle;
-import org.qommons.collect.MultiEntryHandle;
-import org.qommons.collect.MultiEntryValueHandle;
-import org.qommons.collect.MultiMap;
-import org.qommons.collect.MutableCollectionElement;
+import org.qommons.collect.*;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
-import org.qommons.collect.SimpleMapEntry;
-import org.qommons.collect.SimpleMultiEntry;
 import org.qommons.tree.BetterTreeMap;
 import org.qommons.tree.BetterTreeSet;
 
@@ -65,7 +49,7 @@ import com.google.common.reflect.TypeToken;
  * @param <K> The type of key used by this map
  * @param <V> The type of values stored in this map
  */
-public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V>, Eventable {
+public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V>, Eventable, CausableChanging {
 	/** This class's wildcard {@link TypeToken} */
 	static TypeToken<ObservableMap<?, ?>> TYPE = TypeTokens.get().keyFor(ObservableMap.class).wildCard();
 
@@ -375,6 +359,11 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V>, Eventabl
 	 */
 	default Observable<Causable> changes() {
 		return entrySet().simpleChanges();
+	}
+
+	@Override
+	default Observable<Causable> simpleChanges() {
+		return changes();
 	}
 
 	/** @return A multi-map data flow that may be used to produce derived maps whose data is based on this map's */

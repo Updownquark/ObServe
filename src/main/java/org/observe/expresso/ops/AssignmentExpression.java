@@ -4,7 +4,9 @@ import java.util.List;
 import java.util.Objects;
 import java.util.function.Function;
 
+import org.observe.Observable;
 import org.observe.ObservableAction;
+import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.expresso.CompiledExpressoEnv;
 import org.observe.expresso.ExpressoInterpretationException;
@@ -20,7 +22,14 @@ import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.TypeConversionException;
 import org.observe.util.TypeTokens;
 import org.qommons.QommonsUtils;
+import org.qommons.Stamped;
+import org.qommons.Transactable;
 import org.qommons.Transaction;
+import org.qommons.collect.BetterList;
+import org.qommons.collect.CollectionElement;
+import org.qommons.collect.CollectionUtils;
+import org.qommons.collect.CollectionUtils.ElementSyncAction;
+import org.qommons.collect.CollectionUtils.ElementSyncInput;
 import org.qommons.ex.ExceptionHandler;
 import org.qommons.ex.NeverThrown;
 import org.qommons.io.ErrorReporting;
@@ -137,7 +146,7 @@ public class AssignmentExpression implements ObservableExpression {
 
 			@Override
 			public ModelInstanceType<ObservableAction, ObservableAction> getType() {
-					return ModelTypes.Action.instance();
+				return ModelTypes.Action.instance();
 			}
 
 			@Override
@@ -195,7 +204,11 @@ public class AssignmentExpression implements ObservableExpression {
 		public ObservableAction get(ModelSetInstance models) throws ModelInstantiationException {
 			SettableValue<S> ctxValue = theTarget.get(models);
 			SettableValue<T> valueValue = theSource.get(models);
-			return ctxValue.assignmentTo(valueValue, err -> theReporting.error(null, err));
+			if (List.class.isAssignableFrom(TypeTokens.getRawType(ctxValue.getType())))
+				return new ListAssignmentAction<>((SettableValue<List<Object>>) ctxValue, (SettableValue<List<Object>>) valueValue,
+					theReporting);
+			else
+				return ctxValue.assignmentTo(valueValue, err -> theReporting.error(null, err));
 		}
 
 		@Override
@@ -209,6 +222,156 @@ public class AssignmentExpression implements ObservableExpression {
 				return value2;
 			else
 				return newTarget.assignmentTo(newSource);
+		}
+	}
+
+	/**
+	 * <p>
+	 * This action supports the assignment operation for lists in the situation where the target value cannot be assigned directly.
+	 * </p>
+	 * <p>
+	 * In this case, this action will attempt to synchronize the values from the source list into the target.
+	 * </p>
+	 *
+	 * @param <T> The type of values in the list
+	 * @param <C> The type of the list
+	 */
+	static class ListAssignmentAction<T, C extends List<T>> implements ObservableAction {
+		private final SettableValue<C> theTarget;
+		private final SettableValue<? extends C> theSource;
+		private final ErrorReporting theReporting;
+
+		public ListAssignmentAction(SettableValue<C> target, SettableValue<? extends C> source, ErrorReporting reporting) {
+			theTarget = target;
+			theSource = source;
+			theReporting = reporting;
+		}
+
+		@Override
+		public void act(Object cause) throws IllegalStateException {
+			if (theTarget.isEnabled().get() == null) {
+				try {
+					C newValue = theSource.get();
+					theTarget.set(newValue, cause);
+				} catch (IllegalArgumentException e) {
+					theReporting.error("Assignment failed", e);
+				}
+			} else {
+				C target = theTarget.get();
+				if (target == null)
+					theReporting.error("Cannot synchronize with null target collection");
+				else {
+					C source = theSource.get();
+					try (Transaction targetT = Transactable.lock(target, true, null); //
+						Transaction sourceT = Transactable.lock(source, false, null)) {
+						if (source == null)
+							target.clear();
+						else {
+							boolean ordered = target instanceof BetterList ? !((BetterList<T>) target).isContentControlled() : true;
+							CollectionUtils.synchronize(target, source).adjust(new CollectionUtils.CollectionSynchronizer<T, T>() {
+								@Override
+								public boolean getOrder(ElementSyncInput<T, T> element) {
+									return true;
+								}
+
+								@Override
+								public ElementSyncAction leftOnly(ElementSyncInput<T, T> element) {
+									return element.remove();
+								}
+
+								@Override
+								public ElementSyncAction rightOnly(ElementSyncInput<T, T> element) {
+									return element.useValue(element.getRightValue());
+								}
+
+								@Override
+								public ElementSyncAction common(ElementSyncInput<T, T> element) {
+									if (element.getLeftValue() != element.getRightValue())
+										element.useValue(element.getRightValue());
+									return element.preserve();
+								}
+							}, ordered ? CollectionUtils.AdjustmentOrder.RightOrder : CollectionUtils.AdjustmentOrder.AddLast);
+						}
+					} catch (RuntimeException e) {
+						theReporting.error("Synchronization failed", e);
+					}
+				}
+			}
+		}
+
+		@Override
+		public ObservableValue<String> isEnabled() {
+			ObservableValue<String> simpleAssignmentEnabled = theTarget.refresh(theTarget.noInitChanges())
+				.map(v -> theTarget.isAcceptable(v));
+			ObservableValue<String> listAssignmentEnabled = ObservableValue.of(TypeTokens.get().STRING, () -> {
+				C target = theTarget.get();
+				if (!(target instanceof BetterList))
+					return null; // No way to tell, hope for the best
+
+				// This here isn't perfect. It can't be. It attempts to determine the compatibility of all changes that need to be made
+				// without performing any of those changes.
+				// This could fail in some situations. If, for example, the collection has a size limit, any single add may be admissible,
+				// but multiple adds would fail.
+				// I think the situations where this would fail are weird enough that this is still value added.
+				BetterList<T> betterTarget = (BetterList<T>) target;
+				C source = theSource.get();
+				boolean ordered = !betterTarget.isContentControlled();
+				// We could compile a huge message of every error that we get (they could be different),
+				// but I think it's sufficient (and better) to just use one error. Most of the time they'll all be the same anyway.
+				String[] message = new String[1];
+				try (Transaction targetT = Transactable.lock(target, false, null); //
+					Transaction sourceT = Transactable.lock(source, false, null)) {
+					CollectionUtils.synchronize(betterTarget.elements(), source, (el, s) -> Objects.equals(el.get(), s))//
+					.adjust(new CollectionUtils.CollectionSynchronizer<CollectionElement<T>, T>() {
+						@Override
+						public boolean getOrder(ElementSyncInput<CollectionElement<T>, T> element) {
+							return true;
+						}
+
+						@Override
+						public ElementSyncAction leftOnly(ElementSyncInput<CollectionElement<T>, T> element) {
+							if (message[0] == null)
+								message[0] = betterTarget.mutableElement(element.getLeftValue().getElementId()).canRemove();
+							return element.preserve();
+						}
+
+						@Override
+						public ElementSyncAction rightOnly(ElementSyncInput<CollectionElement<T>, T> element) {
+							if (message[0] == null) {
+								if (ordered) {
+									CollectionElement<T> after = element.getTargetIndex() == betterTarget.size() ? null
+										: betterTarget.getElement(element.getTargetIndex());
+									CollectionElement<T> before = after == null ? betterTarget.getTerminalElement(false)
+										: betterTarget.getAdjacentElement(after.getElementId(), false);
+									message[0] = betterTarget.canAdd(element.getRightValue(), CollectionElement.getElementId(after),
+										CollectionElement.getElementId(before));
+								} else
+									message[0] = betterTarget.canAdd(element.getRightValue());
+							}
+							return element.preserve();
+						}
+
+						@Override
+						public ElementSyncAction common(ElementSyncInput<CollectionElement<T>, T> element) {
+							if (element.getLeftValue().get() == element.getRightValue())
+								return element.preserve();
+							else if (message[0] == null)
+								message[0] = betterTarget.mutableElement(element.getLeftValue().getElementId())
+								.isAcceptable(element.getRightValue());
+							return element.preserve();
+						}
+					}, ordered ? CollectionUtils.AdjustmentOrder.RightOrder : CollectionUtils.AdjustmentOrder.AddLast);
+				}
+				return message[0];
+			}, () -> Stamped.compositeStamp(theTarget.getStamp(), theSource.getStamp()), //
+				Observable.or(theTarget.noInitChanges(), theSource.noInitChanges()));
+			return ObservableValue.flatten(theTarget.isEnabled().map(e -> e == null ? simpleAssignmentEnabled : listAssignmentEnabled));
+
+		}
+
+		@Override
+		public String toString() {
+			return theTarget + "=" + theSource;
 		}
 	}
 }

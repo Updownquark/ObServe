@@ -82,7 +82,10 @@ public class ExWithElementModel extends ExFlexibleElementModelAddOn<ExElement> {
 			}
 			CompiledExpression sourceAttrX;
 			try {
-				if (dv.isSourceValue())
+				if(dv.getValue()!=null)
+					sourceAttrX = new CompiledExpression(dv.getValue().getExpression(), dv.getValue().getElement(),
+						dv.getValue().getFilePosition(), session);
+				else if (dv.isSourceValue())
 					sourceAttrX = session.getValueExpression();
 				else if (dv.getSourceAttribute() != null)
 					sourceAttrX = session.getAttributeExpression(dv.getSourceAttribute());

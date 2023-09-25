@@ -8,6 +8,7 @@ import java.util.Objects;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
+import org.observe.CausableChanging;
 import org.observe.Equivalence;
 import org.observe.Eventable;
 import org.observe.Observable;
@@ -48,7 +49,7 @@ import com.google.common.reflect.TypeToken;
  * @param <K> The type of keys this map uses
  * @param <V> The type of values this map stores
  */
-public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable {
+public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable, CausableChanging {
 	/** This class's wildcard {@link TypeToken} */
 	static TypeToken<ObservableMap<?, ?>> TYPE = TypeTokens.get().keyFor(ObservableMap.class).wildCard();
 
@@ -493,6 +494,11 @@ public interface ObservableMap<K, V> extends BetterMap<K, V>, Eventable {
 	 */
 	default Observable<Causable> changes() {
 		return values().simpleChanges();
+	}
+
+	@Override
+	default Observable<? extends Causable> simpleChanges() {
+		return changes();
 	}
 
 	/**

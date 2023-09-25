@@ -370,11 +370,11 @@ class PanelPopulationImpl {
 
 	static class SimpleHPanel<C extends Container, P extends SimpleHPanel<C, P>> extends SimpleFieldEditor<C, P>
 	implements PartialPanelPopulatorImpl<C, P> {
-		private final List<Consumer<ComponentEditor<?, ?>>> theModifiers;
+		private final Set<Consumer<ComponentEditor<?, ?>>> theModifiers;
 
 		SimpleHPanel(String fieldName, C editor, Observable<?> until) {
 			super(fieldName, editor, until);
-			theModifiers = new ArrayList<>();
+			theModifiers = new LinkedHashSet<>();
 		}
 
 		@Override
@@ -451,7 +451,7 @@ class PanelPopulationImpl {
 	}
 
 	static class SimpleLabelEditor<L extends JLabel, P extends SimpleLabelEditor<L, P>> extends SimpleFieldEditor<L, P>
-		implements LabelEditor<L, P> {
+	implements LabelEditor<L, P> {
 		private ObservableValue<? extends Icon> theIcon;
 
 		SimpleLabelEditor(String fieldName, L editor, Observable<?> until) {
@@ -1645,6 +1645,15 @@ class PanelPopulationImpl {
 						}
 					});
 				}
+			} else {
+				EventQueue.invokeLater(() -> {
+					Component first = getEditor().getLeftComponent();
+					Component last = getEditor().getRightComponent();
+					boolean vertical = getEditor().getOrientation() == JSplitPane.VERTICAL_SPLIT;
+					int firstSz = vertical ? first.getPreferredSize().height : first.getPreferredSize().width;
+					int lastSz = vertical ? last.getPreferredSize().height : last.getPreferredSize().width;
+					getEditor().setDividerLocation(firstSz * 1.0 / (firstSz + lastSz));
+				});
 			}
 			return getEditor();
 		}
@@ -1787,6 +1796,7 @@ class PanelPopulationImpl {
 			theModifiers = new ArrayList<>();
 			theCollapsePane = cp;
 			theCollapsePane.setLayout(layout);
+			theCollapsePane.getContentPane().setLayout(layout);
 			if (vertical)
 				theContentPanel = new MigFieldPanel<>(null, getEditor(), getUntil());
 			else

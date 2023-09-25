@@ -83,6 +83,14 @@ public interface QuickTableColumn<R, C> {
 
 	SettableValue<String> getHeaderTooltip();
 
+	Integer getMinWidth();
+
+	Integer getPrefWidth();
+
+	Integer getMaxWidth();
+
+	Integer getWidth();
+
 	QuickWidget getRenderer();
 
 	ColumnEditing<R, C> getEditing();
@@ -342,7 +350,12 @@ public interface QuickTableColumn<R, C> {
 			super.doUpdate(interpreted);
 			ColumnEditing.Interpreted<R, C> myInterpreted = (ColumnEditing.Interpreted<R, C>) interpreted;
 
-			TypeToken<R> rowType = myInterpreted.getParentElement().getParentElement().getValueType();
+			TypeToken<R> rowType;
+			try {
+				rowType = myInterpreted.getParentElement().getParentElement().getValueType();
+			} catch (ExpressoInterpretationException e) {
+				throw new IllegalStateException("Not initialized?", e);
+			}
 			if (theEditRowValue == null || !theRowType.equals(rowType)) {
 				theEditRowValue = SettableValue
 					.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<R>> parameterized(rowType)).build();
@@ -423,6 +436,7 @@ public interface QuickTableColumn<R, C> {
 							SettableValue.flatten(theColumnIndex), ExFlexibleElementModelAddOn.ActionIfSatisfied.Replace);
 				}
 				theEditor.instantiate(editorModels);
+				getAddOn(ColumnEditType.class).instantiateEditor(editorModels);
 			}
 		}
 
@@ -484,6 +498,13 @@ public interface QuickTableColumn<R, C> {
 				return (ColumnEditing.Interpreted<R, C>) super.getElement();
 			}
 		}
+
+		@Override
+		public void instantiate(ModelSetInstance models) throws ModelInstantiationException {
+			// Do nothing. We need to use the editor models, which are passed intentionally from the editing via the method below
+		}
+
+		public abstract void instantiateEditor(ModelSetInstance editorModels) throws ModelInstantiationException;
 
 		protected ColumnEditType(ColumnEditing<R, C> element) {
 			super(element);
@@ -588,9 +609,9 @@ public interface QuickTableColumn<R, C> {
 			}
 
 			@Override
-			public void instantiate(ModelSetInstance models) throws ModelInstantiationException {
-				super.instantiate(models);
-				theCommit.set(theCommitInstantiator == null ? null : theCommitInstantiator.get(models), null);
+			public void instantiateEditor(ModelSetInstance editorModels) throws ModelInstantiationException {
+				super.instantiate(editorModels);
+				theCommit.set(theCommitInstantiator == null ? null : theCommitInstantiator.get(editorModels), null);
 			}
 
 			@Override
@@ -691,9 +712,9 @@ public interface QuickTableColumn<R, C> {
 			}
 
 			@Override
-			public void instantiate(ModelSetInstance models) throws ModelInstantiationException {
-				super.instantiate(models);
-				theReplacement.set(theReplacementInstantiator == null ? null : theReplacementInstantiator.get(models), null);
+			public void instantiateEditor(ModelSetInstance editorModels) throws ModelInstantiationException {
+				super.instantiate(editorModels);
+				theReplacement.set(theReplacementInstantiator == null ? null : theReplacementInstantiator.get(editorModels), null);
 			}
 
 			@Override
@@ -725,6 +746,10 @@ public interface QuickTableColumn<R, C> {
 			private ModelComponentId theColumnValueVariable;
 			private CompiledExpression theValue;
 			private CompiledExpression theHeaderTooltip;
+			private Integer theMinWidth;
+			private Integer thePrefWidth;
+			private Integer theMaxWidth;
+			private Integer theWidth;
 			private QuickWidget.Def<?> theRenderer;
 			private ColumnEditing.Def theEditing;
 
@@ -757,6 +782,26 @@ public interface QuickTableColumn<R, C> {
 				return theHeaderTooltip;
 			}
 
+			@QonfigAttributeGetter(asType = "column", value = "min-width")
+			public Integer getMinWidth() {
+				return theMinWidth;
+			}
+
+			@QonfigAttributeGetter(asType = "column", value = "pref-width")
+			public Integer getPrefWidth() {
+				return thePrefWidth;
+			}
+
+			@QonfigAttributeGetter(asType = "column", value = "max-width")
+			public Integer getMaxWidth() {
+				return theMaxWidth;
+			}
+
+			@QonfigAttributeGetter(asType = "column", value = "width")
+			public Integer getWidth() {
+				return theWidth;
+			}
+
 			@QonfigChildGetter(asType = "rendering", value = "renderer")
 			@Override
 			public QuickWidget.Def<?> getRenderer() {
@@ -778,6 +823,15 @@ public interface QuickTableColumn<R, C> {
 				theColumnValueVariable = elModels.getElementValueModelId(columnValueName);
 				theValue = session.getAttributeExpression("value");
 				theHeaderTooltip = session.getAttributeExpression("header-tooltip");
+				String w = session.getAttributeText("min-width");
+				theMinWidth = w == null ? null : Integer.parseInt(w);
+				w = session.getAttributeText("pref-width");
+				thePrefWidth = w == null ? null : Integer.parseInt(w);
+				w = session.getAttributeText("max-width");
+				theMaxWidth = w == null ? null : Integer.parseInt(w);
+				w = session.getAttributeText("width");
+				theWidth = w == null ? null : Integer.parseInt(w);
+
 				ExpressoQIS renderer = session.forChildren("renderer").peekFirst();
 				if (renderer == null)
 					renderer = session.forMetadata("default-renderer").peekFirst();
@@ -845,7 +899,7 @@ public interface QuickTableColumn<R, C> {
 			}
 
 			@Override
-			public TypeToken<R> getValueType() {
+			public TypeToken<R> getValueType() throws ExpressoInterpretationException {
 				return ((ValueTyped.Interpreted<R, ?>) getParentElement()).getValueType();
 			}
 
@@ -918,6 +972,11 @@ public interface QuickTableColumn<R, C> {
 		private ModelValueInstantiator<SettableValue<C>> theValueInstantiator;
 		private ModelValueInstantiator<SettableValue<String>> theHeaderTooltipInstantiator;
 
+		private Integer theMinWidth;
+		private Integer thePrefWidth;
+		private Integer theMaxWidth;
+		private Integer theWidth;
+
 		private SettableValue<SettableValue<String>> theName;
 		private ModelComponentId theColumnValueVariable;
 		private SettableValue<SettableValue<C>> theValue;
@@ -975,8 +1034,14 @@ public interface QuickTableColumn<R, C> {
 		protected void doUpdate(ExElement.Interpreted<?> interpreted) {
 			super.doUpdate(interpreted);
 			SingleColumnSet.Interpreted<R, C> myInterpreted = (SingleColumnSet.Interpreted<R, C>) interpreted;
-			if (theRowType == null || !theRowType.equals(myInterpreted.getValueType()) || !theColumnType.equals(myInterpreted.getType())) {
-				theRowType = myInterpreted.getValueType();
+			TypeToken<R> rowType;
+			try {
+				rowType = myInterpreted.getValueType();
+			} catch (ExpressoInterpretationException e) {
+				throw new IllegalStateException("Not initialized?", e);
+			}
+			if (theRowType == null || !theRowType.equals(rowType) || !theColumnType.equals(myInterpreted.getType())) {
+				theRowType = rowType;
 				theColumnType = myInterpreted.getType();
 				theValue = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<C>> parameterized(theColumnType))
 					.build();
@@ -987,6 +1052,11 @@ public interface QuickTableColumn<R, C> {
 			theColumnValueVariable = myInterpreted.getDefinition().getColumnValueVariable();
 			theValueInstantiator = myInterpreted.getValue().instantiate();
 			theHeaderTooltipInstantiator = myInterpreted.getHeaderTooltip() == null ? null : myInterpreted.getHeaderTooltip().instantiate();
+
+			theMinWidth = myInterpreted.getDefinition().getMinWidth();
+			thePrefWidth = myInterpreted.getDefinition().getPrefWidth();
+			theMaxWidth = myInterpreted.getDefinition().getMaxWidth();
+			theWidth = myInterpreted.getDefinition().getWidth();
 
 			if (myInterpreted.getRenderer() == null)
 				theRenderer = null;
@@ -1081,6 +1151,26 @@ public interface QuickTableColumn<R, C> {
 			@Override
 			public SettableValue<String> getHeaderTooltip() {
 				return SingleColumnSet.this.getHeaderTooltip();
+			}
+
+			@Override
+			public Integer getMinWidth() {
+				return theMinWidth;
+			}
+
+			@Override
+			public Integer getPrefWidth() {
+				return thePrefWidth;
+			}
+
+			@Override
+			public Integer getMaxWidth() {
+				return theMaxWidth;
+			}
+
+			@Override
+			public Integer getWidth() {
+				return theWidth;
 			}
 
 			@Override

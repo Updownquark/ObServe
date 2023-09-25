@@ -672,6 +672,6 @@ public abstract class ObservableTreeModel<T> implements TreeModel {
 
 	public static <T> void syncSelection(JTree tree, ObservableCollection<BetterList<T>> multiSelection, Observable<?> until) {
 		// TODO Auto-generated method stub
-		System.err.println("Not implemented yet");
+		System.err.println("Tree multi-selection is not implemented yet");
 	}
 }

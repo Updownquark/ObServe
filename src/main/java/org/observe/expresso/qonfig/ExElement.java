@@ -26,6 +26,8 @@ import org.observe.expresso.qonfig.ElementTypeTraceability.SingleTypeTraceabilit
 import org.qommons.ClassMap;
 import org.qommons.Identifiable;
 import org.qommons.collect.CollectionUtils;
+import org.qommons.collect.CollectionUtils.ElementSyncAction;
+import org.qommons.collect.CollectionUtils.ElementSyncInput;
 import org.qommons.collect.ListenerList;
 import org.qommons.config.*;
 import org.qommons.ex.ExBiConsumer;
@@ -818,6 +820,10 @@ public interface ExElement extends Identifiable {
 
 	void destroy();
 
+	default Observable<ObservableValueEvent<Boolean>> onDestroy() {
+		return isDestroyed().noInitChanges().filter(evt -> evt.getNewValue()).take(1);
+	}
+
 	/** Abstract {@link ExElement} implementation */
 	public abstract class Abstract implements ExElement, Cloneable {
 		private final Object theId;
@@ -897,10 +903,33 @@ public interface ExElement extends Identifiable {
 			CollectionUtils
 			.synchronize(new ArrayList<>(theAddOns.getAllValues()), new ArrayList<>(interpreted.getAddOns()),
 				(inst, interp) -> inst.getInterpretationType() == interp.getClass())//
-			.simple(interp -> ((ExAddOn.Interpreted<ExElement, ?>) interp).create(this))//
-			.onLeft(el -> theAddOns.compute(el.getLeftValue().getClass(), __ -> null))//
-			.onRight(el -> theAddOns.put(el.getLeftValue().getClass(), el.getLeftValue()))//
-			.adjust();
+			.adjust(new CollectionUtils.CollectionSynchronizer<ExAddOn<?>, ExAddOn.Interpreted<?, ?>>() {
+				@Override
+				public boolean getOrder(ElementSyncInput<ExAddOn<?>, ExAddOn.Interpreted<?, ?>> element) {
+					return true;
+				}
+
+				@Override
+				public ElementSyncAction leftOnly(ElementSyncInput<ExAddOn<?>, ExAddOn.Interpreted<?, ?>> element) {
+					theAddOns.compute(element.getLeftValue().getClass(), __ -> null);
+					return element.remove();
+				}
+
+				@Override
+				public ElementSyncAction rightOnly(ElementSyncInput<ExAddOn<?>, ExAddOn.Interpreted<?, ?>> element) {
+					ExAddOn<?> instance = ((ExAddOn.Interpreted<ExElement, ?>) element.getRightValue()).create(ExElement.Abstract.this);
+					if (instance != null) {
+						theAddOns.put(instance.getClass(), instance);
+						return element.useValue(instance);
+					} else
+						return element.preserve();
+				}
+
+				@Override
+				public ElementSyncAction common(ElementSyncInput<ExAddOn<?>, ExAddOn.Interpreted<?, ?>> element) {
+					return element.preserve();
+				}
+			}, CollectionUtils.AdjustmentOrder.RightOrder);
 
 			if (interpreted.getParentElement() == null || interpreted.getExpressoEnv().getModels().getIdentity() != interpreted
 				.getParentElement().getExpressoEnv().getModels().getIdentity())

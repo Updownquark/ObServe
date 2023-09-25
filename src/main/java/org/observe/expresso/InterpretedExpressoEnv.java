@@ -66,14 +66,14 @@ public class InterpretedExpressoEnv extends CompiledExpressoEnv {
 	 */
 	public InterpretedExpressoEnv forChild(CompiledExpressoEnv child) {
 		InterpretedExpressoEnv env = this;
-		if (getModels() != null) {
-			if (child.getModels() != null && !getModels().getIdentity().equals(child.getModels().getIdentity()))
-				env = env.with(child.getBuiltModels().createInterpreted(this));
-		} else if (child.getModels() != null)
-			env = env.with(child.getBuiltModels().createInterpreted(this));
 		for (Map.Entry<String, String> attr : child.getAttributes().entrySet())
 			env = env.withAttribute(attr.getKey(), attr.getValue());
 		env = env.withAllNonStructuredParsers(child);
+		if (getModels() != null) {
+			if (child.getModels() != null && !getModels().getIdentity().equals(child.getModels().getIdentity()))
+				env = env.with(child.getBuiltModels().createInterpreted(env));
+		} else if (child.getModels() != null)
+			env = env.with(child.getBuiltModels().createInterpreted(env));
 		return env;
 	}
 

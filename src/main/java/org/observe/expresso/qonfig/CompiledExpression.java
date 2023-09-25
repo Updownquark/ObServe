@@ -7,7 +7,6 @@ import org.observe.expresso.ModelType;
 import org.observe.expresso.ObservableExpression;
 import org.qommons.config.QonfigElement;
 import org.qommons.config.QonfigInterpretationException;
-import org.qommons.config.QonfigValueDef;
 import org.qommons.io.LocatedFilePosition;
 import org.qommons.io.LocatedPositionedContent;
 
@@ -18,7 +17,6 @@ import org.qommons.io.LocatedPositionedContent;
 public class CompiledExpression implements LocatedExpression {
 	private final ObservableExpression theExpression;
 	private final QonfigElement theElement;
-	private final QonfigValueDef theDef;
 	private final LocatedPositionedContent thePosition;
 	private ExpressoQIS theSession;
 	private CompiledExpressoEnv theEnv;
@@ -26,15 +24,13 @@ public class CompiledExpression implements LocatedExpression {
 	/**
 	 * @param expression The expression to be evaluated
 	 * @param element The QonfigElement where the expression was defined
-	 * @param def The {@link QonfigValueDef} containing the actual definition of the expression
 	 * @param position The position in the Qonfig file of the start of the expression
 	 * @param session The Expresso session in which to evaluate the expression
 	 */
-	public CompiledExpression(ObservableExpression expression, QonfigElement element, QonfigValueDef def, LocatedPositionedContent position,
+	public CompiledExpression(ObservableExpression expression, QonfigElement element, LocatedPositionedContent position,
 		ExpressoQIS session) {
 		theExpression = expression;
 		theElement = element;
-		theDef = def;
 		thePosition = position;
 		theSession = session;
 	}
@@ -47,11 +43,6 @@ public class CompiledExpression implements LocatedExpression {
 	/** @return The QonfigElement where the expression was defined */
 	public QonfigElement getElement() {
 		return theElement;
-	}
-
-	/** @return The {@link QonfigValueDef} containing the actual definition of the expression */
-	public QonfigValueDef getDef() {
-		return theDef;
 	}
 
 	@Override

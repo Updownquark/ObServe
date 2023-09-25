@@ -1,8 +1,12 @@
 package org.observe.expresso.qonfig;
 
+import java.time.Instant;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
+import java.util.TimeZone;
+import java.util.function.Predicate;
+import java.util.function.Supplier;
 
 import org.observe.SettableValue;
 import org.observe.assoc.ObservableMap;
@@ -20,6 +24,11 @@ import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.VariableType;
 import org.observe.expresso.qonfig.ExElement.Def;
+import org.observe.expresso.qonfig.ModelValueElement.InterpretedSynth;
+import org.observe.util.TypeTokens;
+import org.qommons.ArrayUtils;
+import org.qommons.LambdaUtils;
+import org.qommons.TimeUtils;
 import org.qommons.Version;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretation;
@@ -27,6 +36,8 @@ import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigInterpreterCore;
 import org.qommons.config.QonfigToolkit;
 import org.qommons.config.SpecialSession;
+import org.qommons.io.Format;
+import org.qommons.io.SpinnerFormat;
 
 import com.google.common.reflect.TypeToken;
 
@@ -147,6 +158,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			super.doUpdate(session.asElement("config-model-value"));
+			theDefaultValue = session.asElement("config-value").getAttributeExpression("default");
 		}
 
 		@Override
@@ -677,6 +689,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 	// }
 	//
 	private void configureFormats(QonfigInterpreterCore.Builder interpreter) {
+		interpreter.createWith("instant-format", ModelValueElement.CompiledSynth.class, ExElement.creator(DateFormat::new));
 		// interpreter.createWith("model-reference", CompiledModelValue.class, session -> {
 		// ExpressoQIS exS = wrap(session);
 		// CompiledExpression ref = exS.getAttributeExpression("ref");
@@ -755,6 +768,227 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		//
 		// // ObservableConfigFormats
 		// interpreter.createWith("text-config-format", CompiledModelValue.class, session -> createTextConfigFormat(wrap(session)));
+	}
+
+	public interface FormatValidation<T> extends ExElement, Predicate<T> {
+		public interface Def<V extends FormatValidation<?>> extends ExElement.Def<V> {
+			Interpreted<?, ? extends V> interpret(ExElement.Interpreted<?> parent);
+		}
+
+		public interface Interpreted<T, V extends FormatValidation<T>> extends ExElement.Interpreted<V> {
+			FormatValidation<T> create();
+		}
+	}
+
+	// static class AbstractFormatProducer<T>
+	// extends ModelValueElement.Def.SingleTyped<SettableValue<?>, ModelValueElement<SettableValue<?>, SettableValue<Format<T>>>>
+	// implements ModelValueElement.CompiledSynth<SettableValue<?>, ModelValueElement<SettableValue<?>, SettableValue<Format<T>>>> {
+	// private final List<FormatValidation.Def<?>> theValidation;
+	//
+	// protected AbstractFormatProducer(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
+	// super(parent, qonfigType, ModelTypes.Value);
+	// theValidation = new ArrayList<>();
+	// }
+	//
+	// public List<FormatValidation.Def<?>> getValidation() {
+	// return Collections.unmodifiableList(theValidation);
+	// }
+	// }
+
+	@ExElementTraceable(toolkit = CONFIG, qonfigType = "instant-format", interpretation = DateFormat.Interpreted.class)
+	static class DateFormat
+	extends ModelValueElement.Def.SingleTyped<SettableValue<?>, ModelValueElement<SettableValue<?>, SettableValue<Format<Instant>>>>
+	implements ModelValueElement.CompiledSynth<SettableValue<?>, ModelValueElement<SettableValue<?>, SettableValue<Format<Instant>>>> {
+		private String theDayFormat;
+		private TimeZone theTimeZone;
+		private TimeUtils.DateElementType theMaxResolution;
+		private boolean isFormat24H;
+		private TimeUtils.RelativeInstantEvaluation theRelativeEvaluation;
+		private CompiledExpression theRelativeTo;
+
+		public DateFormat(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
+			super(parent, qonfigType, ModelTypes.Value);
+		}
+
+		@QonfigAttributeGetter("day-format")
+		public String getDayFormat() {
+			return theDayFormat;
+		}
+
+		@QonfigAttributeGetter("time-zone")
+		public TimeZone getTimeZone() {
+			return theTimeZone;
+		}
+
+		@QonfigAttributeGetter("max-resolution")
+		public TimeUtils.DateElementType getMaxResolution() {
+			return theMaxResolution;
+		}
+
+		@QonfigAttributeGetter("format-24h")
+		public boolean isFormat24H() {
+			return isFormat24H;
+		}
+
+		@QonfigAttributeGetter("relative-evaluation")
+		public TimeUtils.RelativeInstantEvaluation getRelativeEvaluation() {
+			return theRelativeEvaluation;
+		}
+
+		@QonfigAttributeGetter("relative-to")
+		public CompiledExpression getRelativeTo() {
+			return theRelativeTo;
+		}
+
+		@Override
+		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
+			super.doUpdate(session);
+
+			theDayFormat = session.getAttributeText("day-format");
+			String tz = session.getAttributeText("time-zone");
+			theTimeZone = tz == null ? TimeZone.getDefault() : TimeZone.getTimeZone(tz);
+			// Above method returns UTC if the string isn't recognized. But we want to tell the user.
+			if (tz != null && theTimeZone.getRawOffset() == 0 && !"GMT".equalsIgnoreCase(tz) && !"UTC".equalsIgnoreCase(tz)
+				&& !ArrayUtils.contains(TimeZone.getAvailableIDs(), tz)) {
+				reporting().error("Unrecognized time zone: " + tz);
+				theTimeZone = TimeZone.getDefault();
+			}
+			try {
+				theMaxResolution = TimeUtils.DateElementType.parse(session.getAttributeText("max-resolution"));
+				switch (theMaxResolution) {
+				case AmPm:
+				case TimeZone:
+					reporting().error("Invalid max-resolution: " + theMaxResolution);
+					theMaxResolution = TimeUtils.DateElementType.Second;
+					break;
+				case Weekday:
+					theMaxResolution = TimeUtils.DateElementType.Day;
+					break;
+				default:
+					// It's fine
+				}
+			} catch (IllegalArgumentException e) {
+				reporting().error("Unrecognized max-resolution: " + session.getAttributeText("max-resolution"), e);
+				theMaxResolution = TimeUtils.DateElementType.Second;
+			}
+
+			isFormat24H = session.getAttribute("format-24h", boolean.class);
+			try {
+				theRelativeEvaluation = TimeUtils.RelativeInstantEvaluation.parse(session.getAttributeText("relative-evaluation"));
+			} catch (IllegalArgumentException e) {
+				reporting().error("Unrecognized max-resolution: " + session.getAttributeText("relative-evaluation"), e);
+				theRelativeEvaluation = TimeUtils.RelativeInstantEvaluation.Closest;
+			}
+
+			theRelativeTo = session.getAttributeExpression("relative-to");
+		}
+
+		@Override
+		protected void doPrepare(ExpressoQIS session) throws QonfigInterpretationException {
+		}
+
+		@Override
+		public InterpretedSynth<SettableValue<?>, ?, ? extends ModelValueElement<SettableValue<?>, SettableValue<Format<Instant>>>> interpret() {
+			return new Interpreted(this);
+		}
+
+		static class Interpreted extends
+		ModelValueElement.Def.SingleTyped.Interpreted<SettableValue<?>, SettableValue<Format<Instant>>, ModelValueElement<SettableValue<?>, SettableValue<Format<Instant>>>>
+		implements
+		ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<Format<Instant>>, ModelValueElement<SettableValue<?>, SettableValue<Format<Instant>>>> {
+			private InterpretedValueSynth<SettableValue<?>, SettableValue<Instant>> theRelativeTo;
+
+			Interpreted(DateFormat definition) {
+				super(definition, null);
+			}
+
+			@Override
+			public DateFormat getDefinition() {
+				return (DateFormat) super.getDefinition();
+			}
+
+			@Override
+			public Interpreted setParentElement(ExElement.Interpreted<?> parent) {
+				super.setParentElement(parent);
+				return this;
+			}
+
+			public InterpretedValueSynth<SettableValue<?>, SettableValue<Instant>> getRelativeTo() {
+				return theRelativeTo;
+			}
+
+			@Override
+			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+				super.doUpdate(env);
+				theRelativeTo = getDefinition().getRelativeTo() == null ? null
+					: getDefinition().getRelativeTo().interpret(ModelTypes.Value.forType(Instant.class), env);
+			}
+
+			@Override
+			public List<? extends InterpretedValueSynth<?, ?>> getComponents() {
+				return theRelativeTo == null ? Collections.emptyList() : Collections.singletonList(theRelativeTo);
+			}
+
+			@Override
+			public ModelValueInstantiator<SettableValue<Format<Instant>>> instantiate() {
+				return new Instantiator(this);
+			}
+		}
+
+		static class Instantiator implements ModelValueInstantiator<SettableValue<Format<Instant>>> {
+			private final String theDayFormat;
+			private final TimeZone theTimeZone;
+			private final TimeUtils.DateElementType theMaxResolution;
+			private final boolean isFormat24H;
+			private final TimeUtils.RelativeInstantEvaluation theRelativeEvaluation;
+			private final ModelValueInstantiator<SettableValue<Instant>> theRelativeTo;
+
+			Instantiator(Interpreted interpreted) {
+				theDayFormat = interpreted.getDefinition().getDayFormat();
+				theTimeZone = interpreted.getDefinition().getTimeZone();
+				theMaxResolution = interpreted.getDefinition().getMaxResolution();
+				isFormat24H = interpreted.getDefinition().isFormat24H();
+				theRelativeEvaluation = interpreted.getDefinition().getRelativeEvaluation();
+				theRelativeTo = interpreted.getRelativeTo() == null ? null : interpreted.getRelativeTo().instantiate();
+			}
+
+			@Override
+			public void instantiate() {
+				if (theRelativeTo != null)
+					theRelativeTo.instantiate();
+			}
+
+			@Override
+			public SettableValue<Format<Instant>> get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
+				Supplier<Instant> relativeTo = theRelativeTo == null ? LambdaUtils.printableSupplier(Instant::now, () -> "now", null)
+					: theRelativeTo.get(models);
+				return SettableValue.of(TypeTokens.get().keyFor(Format.class).<Format<Instant>> parameterized(Instant.class), //
+					SpinnerFormat.flexDate(relativeTo, theDayFormat, teo -> teo//
+						.withTimeZone(theTimeZone)//
+						.withMaxResolution(theMaxResolution)//
+						.with24HourFormat(isFormat24H)//
+						.withEvaluationType(theRelativeEvaluation)),
+					"Unsettable");
+			}
+
+			@Override
+			public SettableValue<Format<Instant>> forModelCopy(SettableValue<Format<Instant>> value, ModelSetInstance sourceModels,
+				ModelSetInstance newModels) throws ModelInstantiationException {
+				if (theRelativeTo == null)
+					return value;
+				SettableValue<Instant> sourceRT = theRelativeTo.get(sourceModels);
+				SettableValue<Instant> newRT = theRelativeTo.forModelCopy(sourceRT, sourceModels, newModels);
+				if (sourceRT == newRT)
+					return value;
+				return SettableValue.of(TypeTokens.get().keyFor(Format.class).<Format<Instant>> parameterized(Instant.class), //
+					SpinnerFormat.flexDate(newRT, theDayFormat, teo -> teo//
+						.withTimeZone(theTimeZone)//
+						.withMaxResolution(theMaxResolution)//
+						.with24HourFormat(isFormat24H)//
+						.withEvaluationType(theRelativeEvaluation)),
+					"Unsettable");
+			}
+		}
 	}
 	//
 	// private <T> CompiledModelValue<SettableValue<?>>> createTextConfigFormat(ExpressoQIS session)

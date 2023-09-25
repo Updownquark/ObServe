@@ -116,6 +116,8 @@
 			<child-def name="border" type="border" min="0" />
 			<?DOC Listeners to events like mouse clicks or key presses?>
 			<child-def name="event-listener" type="event-listener" min="0" max="inf" />
+			<?DOC Dialogs that the widget may display to the user?>
+			<child-def name="dialog" type="dialog" min="0" max="inf" />
 		</element-def>
 
 		<element-def name="event-listener" inherits="with-element-model,with-local-model" abstract="true">
@@ -220,6 +222,14 @@
 		<element-def name="titled-border" extends="line-border" inherits="with-text">
 			<?DOC The title to display for the border?>
 			<attribute name="title" type="expression" specify="required" />
+		</element-def>
+
+		<element-def name="dialog" abstract="true" inherits="with-local-model">
+			<attribute name="visible" type="expression" />
+			<attribute name="title" type="expression" />
+		</element-def>
+		<element-def name="content-dialog" extends="dialog" abstract="true">
+			<child-def name="content" type="widget" />
 		</element-def>
 
 		<!-- Now a basic outline of abstract Quick widgets -->

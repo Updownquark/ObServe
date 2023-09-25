@@ -11,12 +11,18 @@ import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.qonfig.CompiledExpression;
 import org.observe.expresso.qonfig.ExAddOn;
 import org.observe.expresso.qonfig.ExElement;
+import org.observe.expresso.qonfig.ExElementTraceable;
 import org.observe.expresso.qonfig.ExpressoQIS;
+import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.quick.QuickWidget;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
 public class QuickField extends ExAddOn.Abstract<QuickWidget> {
+	@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
+		qonfigType = "field",
+		interpretation = Interpreted.class,
+		instance = QuickField.class)
 	public static class Def extends ExAddOn.Def.Abstract<QuickWidget, QuickField> {
 		private CompiledExpression theFieldLabel;
 		private boolean isFill;
@@ -25,10 +31,12 @@ public class QuickField extends ExAddOn.Abstract<QuickWidget> {
 			super(type, element);
 		}
 
+		@QonfigAttributeGetter("field-label")
 		public CompiledExpression getFieldLabel() {
 			return theFieldLabel;
 		}
 
+		@QonfigAttributeGetter("fill")
 		public boolean isFill() {
 			return isFill;
 		}

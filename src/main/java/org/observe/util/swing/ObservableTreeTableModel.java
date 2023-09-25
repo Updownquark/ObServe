@@ -30,13 +30,13 @@ import javax.swing.tree.TreeCellRenderer;
 import javax.swing.tree.TreePath;
 import javax.swing.tree.TreeSelectionModel;
 
-import org.jdesktop.swingx.JXTreeTable;
 import org.jdesktop.swingx.treetable.TreeTableModel;
 import org.observe.Equivalence;
 import org.observe.Observable;
 import org.observe.SettableValue;
 import org.observe.Subscription;
 import org.observe.collect.ObservableCollection;
+import org.observe.swingx.JXTreeTable;
 import org.observe.util.TypeTokens;
 import org.observe.util.swing.CategoryRenderStrategy.CategoryKeyListener;
 import org.observe.util.swing.ObservableTableModel.RowMouseListener;
@@ -183,21 +183,26 @@ public class ObservableTreeTableModel<T> implements TreeTableModel {
 
 	@Override
 	public void setValueAt(Object newValue, Object treeValue, int columnIndex) {
-		CategoryRenderStrategy<? super T, Object> column = (CategoryRenderStrategy<? super T, Object>) theColumnModel
+		BetterList<T> path = getTreeModel().getBetterPath((T) treeValue, false);
+		if (path == null) {
+			System.err.println("Could not find tree node " + treeValue);
+			return;
+		}
+		CategoryRenderStrategy<BetterList<T>, Object> column = (CategoryRenderStrategy<BetterList<T>, Object>) theColumnModel
 			.getElementAt(columnIndex);
-		MutableCollectionElement<T> element = new MutableCollectionElement<T>() {
+		MutableCollectionElement<BetterList<T>> element = new MutableCollectionElement<BetterList<T>>() {
 			@Override
 			public ElementId getElementId() {
 				throw new UnsupportedOperationException();
 			}
 
 			@Override
-			public T get() {
-				return (T) treeValue;
+			public BetterList<T> get() {
+				return path;
 			}
 
 			@Override
-			public BetterCollection<T> getCollection() {
+			public BetterCollection<BetterList<T>> getCollection() {
 				throw new UnsupportedOperationException();
 			}
 
@@ -207,12 +212,12 @@ public class ObservableTreeTableModel<T> implements TreeTableModel {
 			}
 
 			@Override
-			public String isAcceptable(T value) {
+			public String isAcceptable(BetterList<T> value) {
 				return StdMsg.UNSUPPORTED_OPERATION;
 			}
 
 			@Override
-			public void set(T value) throws UnsupportedOperationException, IllegalArgumentException {
+			public void set(BetterList<T> value) throws UnsupportedOperationException, IllegalArgumentException {
 				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
 			}
 
@@ -300,6 +305,8 @@ public class ObservableTreeTableModel<T> implements TreeTableModel {
 
 			@Override
 			protected <C> void setToolTip(String tooltip, boolean header) {
+				if (header && table.getTableHeader() == null)
+					return;
 				(header ? table.getTableHeader() : table).setToolTipText(tooltip);
 			}
 
@@ -393,18 +400,19 @@ public class ObservableTreeTableModel<T> implements TreeTableModel {
 						table.setToolTipText(null);
 						return;
 					}
-					CategoryRenderStrategy<? super R, Object> category = (CategoryRenderStrategy<? super R, Object>) model
+					CategoryRenderStrategy<BetterList<R>, Object> category = (CategoryRenderStrategy<BetterList<R>, Object>) model
 						.getColumn(column);
-					row = table.convertRowIndexToModel(row);
-					column = table.convertColumnIndexToModel(column);
-					R rowValue = (R) table.getPathForRow(row).getLastPathComponent();
 					if (category.getTooltipFn() != null) {
+						row = table.convertRowIndexToModel(row);
+						column = table.convertColumnIndexToModel(column);
+						BetterList<R> rowValue = toBetterList(table.getPathForRow(row));
 						boolean selected = table.isRowSelected(row);
 						boolean rowHovered = ml.getHoveredRow() == row;
 						boolean cellHovered = rowHovered && ml.getHoveredColumn() == column;
-						table.setToolTipText(category.getTooltip(new ModelCell.Default<>(() -> rowValue,
+						String tooltip = category.getTooltip(new ModelCell.Default<>(() -> rowValue,
 							category.getCategoryValue(rowValue), row, column, selected, selected, rowHovered, cellHovered, true,
-							model.isLeaf(rowValue), null)));
+							model.isLeaf(rowValue), null));
+						table.setToolTipText(tooltip);
 					}
 				}
 			};
@@ -500,8 +508,10 @@ public class ObservableTreeTableModel<T> implements TreeTableModel {
 					table.getTableHeader().setToolTipText(category.getHeaderTooltip());
 				}
 			};
-			table.getTableHeader().addMouseMotionListener(headerML);
-			subs.add(() -> table.getTableHeader().removeMouseMotionListener(headerML));
+			if (table.getTableHeader() != null) {
+				table.getTableHeader().addMouseMotionListener(headerML);
+				subs.add(() -> table.getTableHeader().removeMouseMotionListener(headerML));
+			}
 		}
 		return TableHookup.of(Subscription.forAll(subs.toArray(new Subscription[subs.size()])), ml::getHoveredRow, ml::getHoveredColumn);
 	}
@@ -527,6 +537,10 @@ public class ObservableTreeTableModel<T> implements TreeTableModel {
 			tblColumn.setMaxWidth(column.getMaxWidth());
 		tblColumn.setResizable(column.isResizable());
 		// TODO Add other column stuff
+	}
+
+	private static <R> BetterList<R> toBetterList(TreePath path) {
+		return (BetterList<R>) (BetterList<?>) BetterList.of(path.getPath());
 	}
 
 	private static class ObservableTreeTableCellRenderer<R, C> implements TableCellRenderer, TreeCellRenderer {
@@ -618,7 +632,7 @@ public class ObservableTreeTableModel<T> implements TreeTableModel {
 		// This is copied from ObservableTreeModel and only slightly modified to match the JXTreeTable class,
 		// but it's not really possible to consolidate this code, because though the JTree and JXTreeTable classes
 		// have similar tree APIs, they're not related by inheritance
-		ObservableTreeModel<T> model = ((ObservableTreeTableModel<T>) treeTable.getModel()).getTreeModel();
+		ObservableTreeModel<T> model = ((ObservableTreeTableModel<T>) treeTable.getTreeTableModel()).getTreeModel();
 		boolean[] callbackLock = new boolean[1];
 		TreeSelectionModel[] selectionModel = new TreeSelectionModel[] { treeTable.getTreeSelectionModel() };
 		TreeSelectionListener selListener = e -> {
@@ -768,6 +782,6 @@ public class ObservableTreeTableModel<T> implements TreeTableModel {
 
 	public static <T> void syncSelection(JXTreeTable tree, ObservableCollection<BetterList<T>> multiSelection, Observable<?> until) {
 		// TODO Auto-generated method stub
-		System.err.println("Not implemented yet");
+		System.err.println("TreeTable multi-selection is not implemented yet");
 	}
 }

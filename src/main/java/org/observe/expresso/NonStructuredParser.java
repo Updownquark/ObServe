@@ -1,6 +1,7 @@
 package org.observe.expresso;
 
 import java.text.ParseException;
+import java.util.function.Predicate;
 
 import org.observe.SettableValue;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
@@ -46,8 +47,18 @@ public interface NonStructuredParser extends SelfDescribed {
 
 		@Override
 		public boolean canParse(TypeToken<?> type, String text) {
-			return theType == null || TypeTokens.get().isAssignable(type, theType);
+			if (theType == null)
+				return checkText(text);
+			// If this parser's type is asked for specifically, use it. If they're asking for a super-type, check the text.
+			if (theType.equals(type))
+				return true;
+			else if (TypeTokens.get().isAssignable(type, theType))
+				return checkText(text);
+			else
+				return false;
 		}
+
+		public abstract boolean checkText(String text);
 
 		@Override
 		public <T2> InterpretedValueSynth<SettableValue<?>, ? extends SettableValue<? extends T2>> parse(TypeToken<T2> type, String text)
@@ -72,12 +83,14 @@ public interface NonStructuredParser extends SelfDescribed {
 	/**
 	 * Creates a simple parser from a function
 	 *
+	 * @param textChecker The checker to check text to see if it matches the parser's capability
 	 * @param parser The parser
 	 * @param description The description for the parser
 	 * @return The parser
 	 */
-	static <T> Simple<T> simple(ExBiFunction<TypeToken<? extends T>, String, T, ParseException> parser, String description) {
-		return simple(null, parser, description);
+	static <T> Simple<T> simple(Predicate<String> textChecker, ExBiFunction<TypeToken<? extends T>, String, T, ParseException> parser,
+		String description) {
+		return simple(null, textChecker, parser, description);
 	}
 
 	/**
@@ -85,13 +98,19 @@ public interface NonStructuredParser extends SelfDescribed {
 	 *
 	 * @param <T> The type of values to parser
 	 * @param type The type of values to parse
+	 * @param textChecker The checker to check text to see if it matches the parser's capability
 	 * @param parser The parser
 	 * @param description The description for the parser
 	 * @return The parser
 	 */
-	static <T> Simple<T> simple(TypeToken<T> type, ExBiFunction<TypeToken<? extends T>, String, T, ParseException> parser,
-		String description) {
+	static <T> Simple<T> simple(TypeToken<T> type, Predicate<String> textChecker,
+		ExBiFunction<TypeToken<? extends T>, String, T, ParseException> parser, String description) {
 		return new Simple<T>(null) {
+			@Override
+			public boolean checkText(String text) {
+				return textChecker.test(text);
+			}
+
 			@Override
 			protected <T2 extends T> T2 parseValue(TypeToken<T2> type2, String text) throws ParseException {
 				return (T2) parser.apply(type2, text);

@@ -101,7 +101,7 @@ It builds on the Expresso-Base toolkit and allows specification of persisted con
 			<attribute name="time-zone" type="string" specify="optional" />
 			<attribute name="max-resolution" type="string" default="Second" />
 			<attribute name="format-24h" type="boolean" default="false" />
-			<attribute name="relative-eval-type" type="string" default="Closest" />
+			<attribute name="relative-evaluation" type="string" default="Closest" />
 			<attribute name="relative-to" type="expression" specify="optional" />
 		</element-def>
 		<element-def name="regex-format" extends="format" />
@@ -124,7 +124,7 @@ It builds on the Expresso-Base toolkit and allows specification of persisted con
 			<attribute name="ref" type="expression" />
 		</element-def>
 		<element-def name="text-config-format" extends="config-format">
-			<child-def name="text-format" type="format" />
+			<child-def name="text-format" type="format" min="0" />
 			<attribute name="default" type="expression" specify="optional" />
 			<attribute name="default-text" type="string" specify="optional" />
 		</element-def>

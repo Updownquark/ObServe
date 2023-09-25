@@ -8,6 +8,7 @@ import java.util.SortedMap;
 import java.util.SortedSet;
 import java.util.function.Function;
 
+import org.observe.CausableChanging;
 import org.observe.Observable;
 import org.observe.ObservableAction;
 import org.observe.ObservableValue;
@@ -37,6 +38,7 @@ import org.qommons.ClassMap.TypeMatch;
 import org.qommons.Identifiable.AbstractIdentifiable;
 import org.qommons.LambdaUtils;
 import org.qommons.QommonsUtils;
+import org.qommons.Stamped;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterSortedList;
@@ -507,10 +509,17 @@ public class ModelTypes {
 						return new ModelInstanceConverter<Object, SettableValue<?>>() {
 							@Override
 							public SettableValue<?> convert(Object sourceV) throws ModelInstantiationException {
-								return SettableValue.asSettable(//
-									ObservableValue.of((TypeToken<Object>) type.getType(0), //
-										((ModelInstanceConverter<Object, Object>) valueConverter).convert(sourceV)), //
-									NOT_REVERSIBLE);
+								Object converted = ((ModelInstanceConverter<Object, Object>) valueConverter).convert(sourceV);
+								if (sourceV instanceof Stamped && sourceV instanceof CausableChanging) {
+									// This section creates a value that updates with the contained model value
+									return SettableValue.asSettable(//
+										ObservableValue.of((TypeToken<Object>) type.getType(0), () -> converted,
+											((Stamped) converted)::getStamp, ((CausableChanging) converted).simpleChanges()),
+										NOT_REVERSIBLE);
+								} else {
+									return SettableValue.asSettable(ObservableValue.of((TypeToken<Object>) type.getType(0), converted),
+										NOT_REVERSIBLE);
+								}
 							}
 
 							@Override

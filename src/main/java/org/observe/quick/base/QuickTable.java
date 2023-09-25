@@ -148,6 +148,7 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 			.<ExpressoInterpretationException> simpleE(
 				child -> (ValueAction.Interpreted<R, ?>) ((ValueAction.Def<R, ?>) child).interpret(this, getValueType()))//
 			.rightOrder()//
+			.onLeftX(el -> el.getLeftValue().destroy())//
 			.onRightX(element -> element.getLeftValue().updateAction(getExpressoEnv()))//
 			.onCommonX(element -> element.getLeftValue().updateAction(getExpressoEnv()))//
 			.adjust();
@@ -211,6 +212,7 @@ public class QuickTable<R> extends TabularWidget.Abstract<R> {
 			(a, i) -> a.getIdentity() == i.getIdentity())//
 		.simple(action -> action.create())//
 		.rightOrder()//
+			.onLeftX(element -> element.getLeftValue().destroy())//
 		.onRight(element -> element.getLeftValue().update(element.getRightValue(), this))//
 		.onCommon(element -> element.getLeftValue().update(element.getRightValue(), this))//
 		.adjust();

@@ -120,6 +120,20 @@ class QuickSwingTablePopulation {
 					refresh();
 				});
 			}
+			Integer width = column.getWidth();
+			if (column.getMinWidth() != null)
+				theCRS.withWidth("min", column.getMinWidth());
+			else if (width != null)
+				theCRS.withWidth("min", width);
+			if (column.getPrefWidth() != null)
+				theCRS.withWidth("pref", column.getPrefWidth());
+			else if (width != null)
+				theCRS.withWidth("pref", width);
+			if (column.getMaxWidth() != null)
+				theCRS.withWidth("max", column.getMaxWidth());
+			else if (width != null)
+				theCRS.withWidth("max", width);
+
 			theCRS.withRenderer(renderer);
 			theCRS.withValueTooltip(renderer::getTooltip);
 			// The listeners may take a performance hit, so only add listening if they're there
@@ -265,24 +279,48 @@ class QuickSwingTablePopulation {
 
 		void mutation(CategoryRenderStrategy<R, C>.CategoryMutationStrategy mutation) {
 			if (theColumn.getEditing() != null) {
-				mutation.editableIf((rowValue, colValue) -> {
-					try (Transaction t = QuickCoreSwing.rendering()) {
-						theRenderTableContext.getActiveValue().set(rowValue, null);
-						theRenderTableContext.getRowIndex().set(0, null);
-						theRenderTableContext.getColumnIndex().set(0, null);
-						theRenderTableContext.isSelected().set(false, null);
-						return theColumn.getEditing().getFilteredColumnEditValue().isEnabled().get() == null;
-					}
-				});
-				mutation.filterAccept((rowEl, colValue) -> {
-					try (Transaction t = QuickCoreSwing.rendering()) {
-						theRenderTableContext.getActiveValue().set(rowEl.get(), null);
-						theRenderTableContext.getRowIndex().set(0, null);
-						theRenderTableContext.getColumnIndex().set(0, null);
-						theRenderTableContext.isSelected().set(false, null);
-						return theColumn.getEditing().getFilteredColumnEditValue().isAcceptable(colValue);
-					}
-				});
+				if (theColumn.getEditing().isEditable() != null) {
+					mutation.editableIf((rowValue, colValue) -> {
+						try (Transaction t = QuickCoreSwing.rendering()) {
+							theEditContext.getActiveValue().set(rowValue, null);
+							theEditContext.getEditColumnValue().set(colValue, null);
+							theEditContext.getRowIndex().set(0, null);
+							theEditContext.getColumnIndex().set(0, null);
+							return theColumn.getEditing().isEditable().get() == null;
+						}
+					});
+				} else {
+					mutation.editableIf((rowValue, colValue) -> {
+						try (Transaction t = QuickCoreSwing.rendering()) {
+							theRenderTableContext.getActiveValue().set(rowValue, null);
+							theRenderTableContext.getRowIndex().set(0, null);
+							theRenderTableContext.getColumnIndex().set(0, null);
+							theRenderTableContext.isSelected().set(false, null);
+							return theColumn.getEditing().getFilteredColumnEditValue().isEnabled().get() == null;
+						}
+					});
+				}
+				if (theColumn.getEditing().isAcceptable() != null) {
+					mutation.filterAccept((rowEl, colValue) -> {
+						try (Transaction t = QuickCoreSwing.rendering()) {
+							theEditContext.getActiveValue().set(rowEl.get(), null);
+							theEditContext.getEditColumnValue().set(colValue, null);
+							theEditContext.getRowIndex().set(0, null);
+							theEditContext.getColumnIndex().set(0, null);
+							return theColumn.getEditing().isAcceptable().get();
+						}
+					});
+				} else {
+					mutation.filterAccept((rowEl, colValue) -> {
+						try (Transaction t = QuickCoreSwing.rendering()) {
+							theRenderTableContext.getActiveValue().set(rowEl.get(), null);
+							theRenderTableContext.getRowIndex().set(0, null);
+							theRenderTableContext.getColumnIndex().set(0, null);
+							theRenderTableContext.isSelected().set(false, null);
+							return theColumn.getEditing().getFilteredColumnEditValue().isAcceptable(colValue);
+						}
+					});
+				}
 				if (theColumn.getEditing().getType() instanceof QuickTableColumn.ColumnEditType.RowModifyEditType) {
 					QuickTableColumn.ColumnEditType.RowModifyEditType<R, C> editType = (QuickTableColumn.ColumnEditType.RowModifyEditType<R, C>) theColumn
 						.getEditing().getType();
@@ -827,7 +865,6 @@ class QuickSwingTablePopulation {
 						theCell.getContext().getActiveValue().set(cell.getModelValue(), null);
 						label[0].setText(format.apply(field.get()));
 						editor.decorate(label[0]);
-						System.out.println("For " + field.get() + ": " + label[0].getIcon());
 						return label[0];
 					}
 				};
@@ -1336,7 +1373,8 @@ class QuickSwingTablePopulation {
 			ValueAction.SingleValueActionContext<R> ctx = new ValueAction.SingleValueActionContext.Default<>(action.getValueType());
 			action.setActionContext(ctx);
 			table.withAction(null, LambdaUtils.printableConsumer(v -> {
-				ctx.getActionValue().set(v, null);
+				if (!Objects.equals(v, ctx.getActionValue().get()))
+					ctx.getActionValue().set(v, null);
 				action.getAction().act(null);
 			}, () -> action.getAction().toString(), null), ta -> {
 				ta.allowForEmpty(false);
@@ -1344,7 +1382,8 @@ class QuickSwingTablePopulation {
 				ta.displayAsButton(action.isButton());
 				ta.displayAsPopup(action.isPopup());
 				ta.allowWhen(v -> {
-					ctx.getActionValue().set(v, null);
+					if (!Objects.equals(v, ctx.getActionValue().get()))
+						ctx.getActionValue().set(v, null);
 					return action.getAction().isEnabled().get();
 				}, null);
 				ta.disableWith(action.getAction().isEnabled());
@@ -1364,17 +1403,31 @@ class QuickSwingTablePopulation {
 			action.setActionContext(ctx);
 			Supplier<List<R>>[] actionValues = new Supplier[1];
 			table.withMultiAction(null, LambdaUtils.printableConsumer(values -> {
-				ctx.getActionValues().addAll(values);
+				if (!ctx.getActionValues().equals(values)) {
+					try (Transaction t = ctx.getActionValues().lock(true, null)) {
+						CollectionUtils.synchronize(ctx.getActionValues(), values)//
+						.simple(v -> v)//
+						.rightOrder()//
+						.adjust();
+					}
+				}
 				action.getAction().act(null);
 				CollectionUtils.synchronize(ctx.getActionValues(), actionValues[0].get()).simple(r -> r).adjust();
 			}, () -> action.getAction().toString(), null), ta -> {
 				actionValues[0] = ta::getActionItems;
-				ta.allowForEmpty(ta.isAllowedForEmpty());
-				ta.allowForMultiple(ta.isAllowedForMultiple());
+				ta.allowForEmpty(action.allowForEmpty());
+				ta.allowForMultiple(true);
 				ta.displayAsButton(action.isButton());
 				ta.displayAsPopup(action.isPopup());
 				ta.allowWhenMulti(values -> {
-					CollectionUtils.synchronize(ctx.getActionValues(), values).simple(r -> r).adjust();
+					if (!ctx.getActionValues().equals(values)) {
+						try (Transaction t = ctx.getActionValues().lock(true, null)) {
+							CollectionUtils.synchronize(ctx.getActionValues(), values)//
+							.simple(v -> v)//
+							.rightOrder()//
+							.adjust();
+						}
+					}
 					return action.isEnabled().get();
 				}, null);
 				ta.disableWith(action.getAction().isEnabled());

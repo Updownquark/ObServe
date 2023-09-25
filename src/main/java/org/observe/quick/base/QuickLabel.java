@@ -78,7 +78,7 @@ public class QuickLabel<T> extends QuickTextWidget.Abstract<T> {
 			theStaticText = staticText;
 			if (theStaticText != null) {
 				theTextExpression = new CompiledExpression(//
-					new ObservableExpression.LiteralExpression<>(theStaticText, theStaticText), session.getElement(), session.getValueDef(),
+					new ObservableExpression.LiteralExpression<>(theStaticText, theStaticText), session.getElement(),
 					LocatedPositionedContent.of(session.getElement().getDocument().getLocation(), session.getElement().getValue().position),
 					session);
 			}
@@ -118,6 +118,14 @@ public class QuickLabel<T> extends QuickTextWidget.Abstract<T> {
 			super.doUpdate(env);
 			theIcon = getDefinition().getIcon() == null ? null : QuickBaseInterpretation.evaluateIcon(getDefinition().getIcon(), env,
 				getDefinition().getElement().getDocument().getLocation());
+		}
+
+		@Override
+		protected void checkValidModel() throws ExpressoInterpretationException {
+			super.checkValidModel();
+			if (getDefinition().getValue().getExpression() == ObservableExpression.EMPTY && getDefinition().getValueText() == null
+				&& getIcon() == null)
+				reporting().warn("Label has no value, text, or icon");
 		}
 
 		@Override

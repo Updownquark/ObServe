@@ -7,11 +7,14 @@ import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.qonfig.ExAddOn;
 import org.observe.expresso.qonfig.ExElement;
+import org.observe.expresso.qonfig.ExElementTraceable;
 import org.observe.expresso.qonfig.ExpressoQIS;
+import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.quick.QuickDocument;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
+@ExElementTraceable(toolkit = QuickSwingInterpretation.SWING, qonfigType = "quick-swing", interpretation = QuickSwing.Interpreted.class)
 public class QuickSwing extends ExAddOn.Def.Abstract<QuickDocument, ExAddOn.Void<QuickDocument>> {
 	private String theLookAndFeel;
 
@@ -19,6 +22,7 @@ public class QuickSwing extends ExAddOn.Def.Abstract<QuickDocument, ExAddOn.Void
 		super(type, element);
 	}
 
+	@QonfigAttributeGetter("look-and-feel")
 	public String getLookAndFeel() {
 		return theLookAndFeel;
 	}

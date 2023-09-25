@@ -13,6 +13,7 @@ import java.util.function.LongSupplier;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
+import org.observe.CausableChanging;
 import org.observe.Equivalence;
 import org.observe.Eventable;
 import org.observe.Observable;
@@ -84,7 +85,7 @@ import com.google.common.reflect.TypeToken;
  *
  * @param <E> The type of element in the collection
  */
-public interface ObservableCollection<E> extends BetterList<E>, TypedValueContainer<E>, Eventable {
+public interface ObservableCollection<E> extends BetterList<E>, TypedValueContainer<E>, Eventable, CausableChanging {
 	/** This class's wildcard {@link TypeToken} */
 	static TypeToken<ObservableCollection<?>> TYPE = TypeTokens.get().keyFor(ObservableCollection.class).wildCard();
 
@@ -377,6 +378,7 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 	 * @return An observable that fires a value (the {@link Causable#getRootCause() root cause} event of the change) whenever anything in
 	 *         this collection changes. Unlike {@link #changes()}, this observable will only fire 1 event per transaction.
 	 */
+	@Override
 	default Observable<Causable> simpleChanges() {
 		class SimpleChanges extends AbstractIdentifiable implements Observable<Causable> {
 			@Override

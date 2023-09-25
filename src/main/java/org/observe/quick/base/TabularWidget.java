@@ -192,7 +192,7 @@ public interface TabularWidget<R> extends MultiValueWidget<R> {
 						public ElementSyncAction leftOnly(
 							ElementSyncInput<QuickTableColumn.TableColumnSet.Interpreted<R, ?>, QuickTableColumn.TableColumnSet.Def<?>> element)
 								throws ExpressoInterpretationException {
-							// TODO Dispose of the column set?
+							element.getLeftValue().destroy();
 							return element.remove();
 						}
 
@@ -358,8 +358,14 @@ public interface TabularWidget<R> extends MultiValueWidget<R> {
 		protected void doUpdate(ExElement.Interpreted<?> interpreted) {
 			super.doUpdate(interpreted);
 			TabularWidget.Interpreted<R, ?> myInterpreted = (TabularWidget.Interpreted<R, ?>) interpreted;
-			if (theRowType == null || !theRowType.equals(myInterpreted.getValueType())) {
-				theRowType = myInterpreted.getValueType();
+			TypeToken<R> rowType;
+			try {
+				rowType=myInterpreted.getValueType();
+			} catch(ExpressoInterpretationException e) {
+				throw new IllegalStateException("Not initialized?", e);
+			}
+			if (theRowType == null || !theRowType.equals(rowType)) {
+				theRowType = rowType;
 				theColumnSets = ObservableCollection.build((Class<TableColumnSet<R>>) (Class<?>) TableColumnSet.class).build();
 				TypeToken<QuickTableColumn<R, ?>> columnType = TypeTokens.get().keyFor(QuickTableColumn.class)//
 					.<QuickTableColumn<R, ?>> parameterized(theRowType, TypeTokens.get().WILDCARD);

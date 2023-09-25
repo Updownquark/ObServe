@@ -1,6 +1,7 @@
 package org.observe.expresso;
 
 import java.awt.Color;
+import java.lang.reflect.Modifier;
 import java.text.ParseException;
 import java.time.Duration;
 import java.time.Instant;
@@ -10,10 +11,11 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Collectors;
 
+import org.observe.SettableValue;
 import org.observe.expresso.ObservableModelSet.ExternalModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
+import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ops.BinaryOperatorSet;
 import org.observe.expresso.ops.ExternalLiteral;
 import org.observe.expresso.ops.UnaryOperatorSet;
@@ -22,6 +24,7 @@ import org.qommons.BiTuple;
 import org.qommons.ClassMap;
 import org.qommons.Colors;
 import org.qommons.TimeUtils;
+import org.qommons.collect.BetterList;
 import org.qommons.io.ErrorReporting;
 import org.qommons.io.LocatedPositionedContent;
 
@@ -36,7 +39,7 @@ public class CompiledExpressoEnv {
 	public static final CompiledExpressoEnv STANDARD_JAVA = new CompiledExpressoEnv(//
 		ObservableModelSet.build("StandardJava", ObservableModelSet.JAVA_NAME_CHECKER).build(), //
 		UnaryOperatorSet.STANDARD_JAVA, BinaryOperatorSet.STANDARD_JAVA, new ErrorReporting.Default(LocatedPositionedContent.EMPTY))//
-			.withDefaultNonStructuredParsing();
+		.withDefaultNonStructuredParsing();
 
 	private final ObservableModelSet theModels;
 	private final Map<String, String> theAttributes;
@@ -220,8 +223,12 @@ public class CompiledExpressoEnv {
 	 * @return All non-structured parsers that may be able to parse a value of the given type
 	 */
 	public Set<NonStructuredParser> getNonStructuredParsers(Class<?> type) {
-		return theNonStructuredParsers.getAll(type, null).stream().flatMap(Set::stream)
-			.collect(Collectors.toCollection(LinkedHashSet::new));
+		BetterList<Set<NonStructuredParser>> nsps = theNonStructuredParsers.getAll(type, null);
+		// ClassMap returns values from least- to most- type-specific, but we want to try the most specific types first
+		Set<NonStructuredParser> ret = new LinkedHashSet<>();
+		for (Set<NonStructuredParser> nsp : nsps.reverse())
+			ret.addAll(nsp);
+		return ret;
 	}
 
 	/**
@@ -254,14 +261,71 @@ public class CompiledExpressoEnv {
 	 * @return This environment
 	 */
 	public CompiledExpressoEnv withDefaultNonStructuredParsing() {
-		return withNonStructuredParser(String.class, NonStructuredParser.simple((t, s) -> s, "Simple String literal"))//
-			.withNonStructuredParser(Duration.class,
-				NonStructuredParser.simple((t, s) -> TimeUtils.parseDuration(s), "Simple duration literal"))//
-			.withNonStructuredParser(Instant.class,
-				NonStructuredParser.simple((t, s) -> TimeUtils.parseInstant(s, true, true, null).evaluate(Instant::now),
-					"Simple date/time literal"))//
-			.withNonStructuredParser(Enum.class, NonStructuredParser.simple((t, s) -> parseEnum(t, s), "Enum literal"))//
-			.withNonStructuredParser(Color.class, NonStructuredParser.simple((t, s) -> Colors.parseColor(s), "Color literal"));
+		// To make it easier to specify strings in XML, the string literal need not be evaluated by type
+		return withNonStructuredParser(Object.class, new NonStructuredParser() {
+			@Override
+			public <T> InterpretedValueSynth<SettableValue<?>, ? extends SettableValue<? extends T>> parse(TypeToken<T> type, String text)
+				throws ParseException {
+				return (InterpretedValueSynth<SettableValue<?>, ? extends SettableValue<? extends T>>) InterpretedValueSynth
+					.literalValue(TypeTokens.get().STRING, text, text);
+			}
+
+			@Override
+			public String getDescription() {
+				return "Simple String literal";
+			}
+		})//
+			.withNonStructuredParser(Duration.class, NonStructuredParser.simple(//
+				s -> {
+					try {
+						return TimeUtils.parseDuration(s, false) != null;
+					} catch (ParseException e) {
+						return false;
+					}
+				}, (t, s) -> TimeUtils.parseDuration(s), "Simple duration literal"))//
+			.withNonStructuredParser(Instant.class, NonStructuredParser.simple(//
+				s -> {
+					try {
+						return TimeUtils.parseInstant(s, true, false, null) != null;
+					} catch (ParseException e) {
+						return false;
+					}
+				}, (t, s) -> TimeUtils.parseInstant(s, true, true, null).evaluate(Instant::now),
+				"Simple date/time literal"))//
+			.withNonStructuredParser(Enum.class, new NonStructuredParser() {
+				@Override
+				public boolean canParse(TypeToken<?> type, String text) {
+					Class<?> raw = TypeTokens.getRawType(type);
+					return Enum.class.isAssignableFrom(raw) && !Modifier.isAbstract(raw.getModifiers());
+				}
+
+				@Override
+				public <T> InterpretedValueSynth<SettableValue<?>, ? extends SettableValue<? extends T>> parse(TypeToken<T> type,
+					String text) throws ParseException {
+					return parseEnum(TypeTokens.getRawType(type), text);
+				}
+
+				private <E extends Enum<E>> E parseEnum(Class<?> type, String text) throws ParseException {
+					try {
+						return Enum.valueOf((Class<E>) type, text);
+					} catch (IllegalArgumentException e) {
+						throw new ParseException(e.getMessage(), 0);
+					}
+				}
+
+				@Override
+				public String getDescription() {
+					return "Enum literal";
+				}
+			})//
+			.withNonStructuredParser(Color.class, NonStructuredParser.simple(//
+				s -> {
+					try {
+						return Colors.parseIfColor(s) != null;
+					} catch (ParseException e) {
+						return false;
+					}
+				}, (t, s) -> Colors.parseColor(s), "Color literal"));
 	}
 
 	/**
@@ -312,13 +376,5 @@ public class CompiledExpressoEnv {
 	@Override
 	public String toString() {
 		return new StringBuilder().append("models=").append(theModels).toString();
-	}
-
-	private static <E extends Enum<E>> E parseEnum(TypeToken<?> type, String text) throws ParseException {
-		try {
-			return Enum.valueOf((Class<E>) TypeTokens.getRawType(type), text);
-		} catch (IllegalArgumentException e) {
-			throw new ParseException(e.getMessage(), 0);
-		}
 	}
 }

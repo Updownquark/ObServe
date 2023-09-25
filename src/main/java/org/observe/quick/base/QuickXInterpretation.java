@@ -45,6 +45,7 @@ public class QuickXInterpretation implements QonfigInterpretation {
 	@Override
 	public QonfigInterpreterCore.Builder configureInterpreter(Builder interpreter) {
 		interpreter.createWith(CollapsePane.COLLAPSE_PANE, CollapsePane.Def.class, ExElement.creator(CollapsePane.Def::new));
+		interpreter.createWith(QuickTreeTable.TREE_TABLE, QuickTreeTable.Def.class, ExElement.creator(QuickTreeTable.Def::new));
 
 		return interpreter;
 	}

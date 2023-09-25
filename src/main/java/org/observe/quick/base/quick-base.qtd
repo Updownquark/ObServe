@@ -179,16 +179,13 @@
 		<add-on name="menu-container">
 			<child-def name="menu-bar" type="menu-bar" min="0" />
 		</add-on>
-		<add-on name="dialog" inherits="window">
-			<attribute name="modal" type="boolean" default="true" />
-		</add-on>
 
 		<add-on name="tree-model">
 			<?DOC The value of this node, the root of the hierarchy?>
 			<attribute name="value" type="expression" specify="required" />
 		</add-on>
 		<add-on name="tree-column" requires="column">
-			<attr-mod name="column.value" specify="forbidden" default="{active-value-name} == null ? null : {active-value-name}.getLast()" />
+			<attr-mod name="column.value" default="{active-value-name} == null ? null : {active-value-name}.getLast()" />
 			<attr-mod name="column.name" specify="optional" default="`Tree Column`" />
 		</add-on>
 	</add-ons>
@@ -333,6 +330,7 @@
 			<?DOC The maximum value for the progress bar?>
 			<attribute name="max" type="expression" specify="required" />
 		</element-def>
+
 		<element-def name="render-field-panel" extends="value-widget">
 			<child-def name="field" type="value-widget" min="0" max="inf" />
 		</element-def>
@@ -376,6 +374,14 @@
 			<attribute name="column-value-name" type="identifier" default="columnValue" />
 			<?DOC The tooltip to display for the column header?>
 			<attribute name="header-tooltip" type="expression" specify="optional" />
+			<?DOC The minimum width for the column?>
+			<attribute name="min-width" type="int" specify="optional" />
+			<?DOC The preferred width for the column?>
+			<attribute name="pref-width" type="int" specify="optional" />
+			<?DOC The maximum width for the column?>
+			<attribute name="max-width" type="int" specify="optional" />
+			<?DOC The constrained width for the column?>
+			<attribute name="width" type="int" specify="optional" />
 			<?DOC Configures the ability to update or replace the value of each row by providing a new value for the column?>
 			<child-def name="edit" type="column-edit" min="0" />
 		</element-def>
@@ -420,7 +426,7 @@
 			<attribute name="column-variable-name" type="identifier" default="columnVariableValue" />
 			<child-def name="column" type="column" />
 		</element-def>
-		<element-def name="abstract-value-action" abstract="true">
+		<element-def name="abstract-value-action" abstract="true" inherits="with-local-model">
 			<?DOC The name of the action to display to the user?>
 			<attribute name="name" type="expression" specify="optional" />
 			<?DOC Whether the action should be presented to the user as a button near the widget?>
@@ -467,15 +473,17 @@
 		<?DOC A hierarchical display of values?>
 		<element-def name="tree" extends="multi-value-widget">
 			<element-model>
-				<?DOC The path to the current value (e.g. the one that is being rendered)?>
-				<value name-attribute="active-node-name" priority="1" />
+				<?DOC The current value (e.g. the one that is being rendered)?>
+				<value name-attribute="active-node-name" priority="1">{active-value-name}==null ? null : {active-value-name}.getLast()</value>
 				<?DOC Whether the current value (e.g. the one being rendered) is a leaf node with no possibility of children?>
 				<value name="leaf" type="boolean" priority="20" />
 			</element-model>
 			<?DOC The data to represent in the tree?>
-			<child-def name="model" type="tree-model" />
+			<child-def name="tree-model" type="tree-model" />
 			<?DOC The name of the model value containing the termninal node of the current value's path?>
 			<attribute name="active-node-name" type="identifier" default="path" />
+			<?DOC Whether the root of the tree will be visible and collapsible?>
+			<attribute name="root-visible" type="boolean" default="true" />
 			<?DOC The column to render each value in the tree?>
 			<child-def name="tree-column" type="column" min="0" max="1" inherits="tree-column" />
 			<?DOC Actions that may be performed against selected values in the tree?>
@@ -545,6 +553,39 @@
 			<attribute name="orientation" type="orientation" specify="required" />
 			<attribute name="split-position" type="expression" specify="optional" />
 			<child-mod child="content" min="2" max="2" />
+		</element-def>
+
+		<!-- Dialogs -->
+		<element-def name="confirm" extends="content-dialog">
+			<attribute name="icon" type="expression" specify="optional" />
+			<attribute name="on-confirm" type="expression" />
+			<attribute name="on-cancel" type="expression" specify="optional" />
+		</element-def>
+		<element-def name="info-dialog" extends="content-dialog">
+			<?DOC <html>The type of the dialog, which may affect its look and feel. This should evaluate to a string.<br>
+				Implementations may allow their own enumerated values or generalise this, but the following standard values should be supported:
+				<ul>
+				<li>error</li>
+				<li>warn[ing]</li>
+				<li>info</li>
+				</ul>
+				If not specified, the default should be "info".?>
+			<attribute name="type" type="expression" specify="optional" />
+			<attribute name="icon" type="expression" specify="optional" />
+			<attribute name="on-close" type="expression" specify="optional" />
+		</element-def>
+		<element-def name="file-chooser" extends="dialog" inherits="with-element-model">
+			<element-model>
+				<?DOC Type is the default file type of the language or implementation?>
+				<list name="chosenFiles" />
+			</element-model>
+			<attribute name="open" type="boolean" />
+			<attribute name="files-selectable" type="boolean" default="true" />
+			<attribute name="directories-selectable" type="boolean" default="false" />
+			<attribute name="multi-selectable" type="boolean" default="false" />
+			<attribute name="directory" type="expression" specify="optional" />
+			<attribute name="on-select" type="expression" />
+			<attribute name="on-cancel" type="expression" specify="optional" />
 		</element-def>
 		
 		<!-- Miscellaneous -->

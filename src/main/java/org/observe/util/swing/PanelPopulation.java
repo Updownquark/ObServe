@@ -43,7 +43,6 @@ import javax.swing.text.TabStop;
 
 import org.jdesktop.swingx.JXCollapsiblePane;
 import org.jdesktop.swingx.JXPanel;
-import org.jdesktop.swingx.JXTreeTable;
 import org.observe.Observable;
 import org.observe.ObservableAction;
 import org.observe.ObservableValue;
@@ -54,6 +53,7 @@ import org.observe.collect.ObservableCollection;
 import org.observe.config.ObservableConfig;
 import org.observe.dbug.Dbug;
 import org.observe.dbug.DbugAnchorType;
+import org.observe.swingx.JXTreeTable;
 import org.observe.util.TypeTokens;
 import org.observe.util.swing.PanelPopulationImpl.*;
 import org.observe.util.swing.WindowPopulation.JMenuBuilder;
@@ -180,8 +180,14 @@ public class PanelPopulation {
 		<F> P addTreeTable(ObservableValue<F> root, Function<? super F, ? extends ObservableCollection<? extends F>> children,
 			Consumer<TreeTableEditor<F, ?>> modify);
 
-		<F> P addTreeTable2(ObservableValue<F> root, Function<? super BetterList<F>, ? extends ObservableCollection<? extends F>> children,
-			Consumer<TreeTableEditor<F, ?>> modify);
+		default <F> P addTreeTable2(ObservableValue<F> root,
+			Function<? super BetterList<F>, ? extends ObservableCollection<? extends F>> children, Consumer<TreeTableEditor<F, ?>> modify) {
+			return addTreeTable3(root, (path, until) -> children.apply(path), modify);
+		}
+
+		<F> P addTreeTable3(ObservableValue<F> root,
+			BiFunction<? super BetterList<F>, Observable<?>, ? extends ObservableCollection<? extends F>> children,
+				Consumer<TreeTableEditor<F, ?>> modify);
 
 		P addTabs(Consumer<TabPaneEditor<JTabbedPane, ?>> tabs);
 
@@ -842,9 +848,10 @@ public class PanelPopulation {
 		}
 
 		@Override
-		default <F> P addTreeTable2(ObservableValue<F> root,
-			Function<? super BetterList<F>, ? extends ObservableCollection<? extends F>> children, Consumer<TreeTableEditor<F, ?>> modify) {
-			SimpleTreeTableBuilder<F, ?> treeTableEditor = SimpleTreeTableBuilder.createTreeTable2(root, children, getUntil());
+		default <F> P addTreeTable3(ObservableValue<F> root,
+			BiFunction<? super BetterList<F>, Observable<?>, ? extends ObservableCollection<? extends F>> children,
+				Consumer<TreeTableEditor<F, ?>> modify) {
+			SimpleTreeTableBuilder<F, ?> treeTableEditor = SimpleTreeTableBuilder.createTreeTable3(root, children, getUntil());
 			modify(treeTableEditor);
 			if (modify != null)
 				modify.accept(treeTableEditor);
@@ -895,7 +902,6 @@ public class PanelPopulation {
 		@Override
 		default P addCollapsePanel(boolean vertical, LayoutManager layout, Consumer<CollapsePanel<JXCollapsiblePane, JXPanel, ?>> panel) {
 			JXCollapsiblePane cp = new JXCollapsiblePane();
-			cp.setLayout(layout);
 			SimpleCollapsePane collapsePanel = new SimpleCollapsePane(cp, getUntil(), vertical, layout);
 			modify(collapsePanel);
 			panel.accept(collapsePanel);
@@ -1990,6 +1996,8 @@ public class PanelPopulation {
 		P withLeafTest(Predicate<? super F> leafTest);
 
 		P withLeafTest2(Predicate<? super BetterList<F>> leafTest);
+
+		P withRootVisible(boolean rootVisible);
 
 		boolean isVisible(List<? extends F> path);
 

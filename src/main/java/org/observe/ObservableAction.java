@@ -10,6 +10,23 @@ import com.google.common.reflect.TypeToken;
 
 /** An action with an observable enabled property */
 public interface ObservableAction {
+	/** An ObservableAction that is always enabled and does nothing */
+	public static final ObservableAction DO_NOTHING = new ObservableAction() {
+		@Override
+		public void act(Object cause) throws IllegalStateException {
+		}
+
+		@Override
+		public ObservableValue<String> isEnabled() {
+			return SettableValue.ALWAYS_ENABLED;
+		}
+
+		@Override
+		public String toString() {
+			return "doNothing";
+		}
+	};
+
 	/**
 	 * @param cause An object that may have caused the action (e.g. a user event)
 	 * @throws IllegalStateException If this action is not enabled

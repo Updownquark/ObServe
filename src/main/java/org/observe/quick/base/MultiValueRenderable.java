@@ -12,6 +12,8 @@ import org.observe.util.TypeTokens;
 import com.google.common.reflect.TypeToken;
 
 public interface MultiValueRenderable<T> extends QuickWidget {
+	public static final String MULTI_VALUE_RENDERABLE = "multi-value-renderable";
+
 	@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
 		qonfigType = "multi-value-renderable",
 		interpretation = Interpreted.class,

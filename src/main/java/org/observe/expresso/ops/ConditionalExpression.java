@@ -144,11 +144,12 @@ public class ConditionalExpression implements ObservableExpression {
 			return null;
 
 		ModelInstanceType<M, MV> resultType;
-		if (primaryV.getType().equals(secondaryV.getType()))
-			resultType = primaryV.getType();
-		else if (thePrimary instanceof LiteralExpression && ((LiteralExpression<?>) thePrimary).getValue() == null)
+		// If either target is literal null, use the type of the other
+		if (isLiteralNull(thePrimary))
 			resultType = secondaryV.getType();
-		else if (theSecondary instanceof LiteralExpression && ((LiteralExpression<?>) theSecondary).getValue() == null)
+		else if (isLiteralNull(theSecondary))
+			resultType = primaryV.getType();
+		else if (primaryV.getType().equals(secondaryV.getType()))
 			resultType = primaryV.getType();
 		else {
 			TypeToken<?>[] types = new TypeToken[primaryV.getType().getModelType().getTypeCount()];
@@ -197,6 +198,15 @@ public class ConditionalExpression implements ObservableExpression {
 				return conditionV + " ? " + primaryV + " : " + secondaryV;
 			}
 		};
+	}
+
+	private static boolean isLiteralNull(ObservableExpression ex) {
+		if (ex instanceof BufferedExpression || ex instanceof ParentheticExpression)
+			return isLiteralNull(ex.getComponents().get(0));
+		else if (ex instanceof LiteralExpression && ((LiteralExpression<?>) ex).getValue() == null)
+			return true;
+		else
+			return false;
 	}
 
 	@Override

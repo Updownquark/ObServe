@@ -35,7 +35,8 @@ import com.google.common.reflect.TypeToken;
  *
  * @param <T> The compile-time type of this observable's value
  */
-public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>, Lockable, Stamped, Identifiable, Eventable {
+public interface ObservableValue<T>
+	extends Supplier<T>, TypedValueContainer<T>, Lockable, Stamped, Identifiable, Eventable, CausableChanging {
 	/** This class's wildcard {@link TypeToken} */
 	static TypeToken<ObservableValue<?>> TYPE = TypeTokens.get().keyFor(ObservableValue.class).wildCard();
 
@@ -56,6 +57,11 @@ public interface ObservableValue<T> extends Supplier<T>, TypedValueContainer<T>,
 	 *         event for the value when subscribed (unless the value happens to change during subscription, which is allowed).
 	 */
 	Observable<ObservableValueEvent<T>> noInitChanges();
+
+	@Override
+	default Observable<? extends Causable> simpleChanges() {
+		return noInitChanges();
+	}
 
 	@Override
 	default ThreadConstraint getThreadConstraint() {

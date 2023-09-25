@@ -497,6 +497,8 @@ public class ExpressoQonfigValues {
 				ExpressoQIS intListSession = session.asElement("int-list");
 				ExElement.syncDefs(CollectionElement.class, theElements, intListSession.forChildren("element"));
 			}
+			if (getElementValue() != null && !theElements.isEmpty())
+				reporting().error("Both a list value and elements specified");
 		}
 
 		@Override
@@ -574,22 +576,29 @@ public class ExpressoQonfigValues {
 		protected static abstract class Instantiator<T, C extends ObservableCollection<T>> implements ModelValueInstantiator<C> {
 			private final String theModelPath;
 			private final TypeToken<T> theType;
+			private final ModelValueInstantiator<C> theValueInstantiator;
 			private final List<CollectionElement.CollectionPopulator<T>> theElements;
 
-			protected Instantiator(String modelPath, TypeToken<T> type, List<CollectionPopulator<T>> elements) {
+			protected Instantiator(String modelPath, TypeToken<T> type, ModelValueInstantiator<C> value,
+				List<CollectionPopulator<T>> elements) {
 				theModelPath = modelPath;
 				theType = type;
+				theValueInstantiator = value;
 				theElements = elements;
 			}
 
 			@Override
 			public void instantiate() {
+				if (theValueInstantiator != null)
+					theValueInstantiator.instantiate();
 				for (CollectionElement.CollectionPopulator<T> element : theElements)
 					element.instantiate();
 			}
 
 			@Override
 			public C get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
+				if (theValueInstantiator != null)
+					return theValueInstantiator.get(models);
 				ObservableCollectionBuilder<T, ?> builder = create(theType, models);
 				if (theModelPath != null)
 					builder.withDescription(theModelPath);
@@ -601,6 +610,8 @@ public class ExpressoQonfigValues {
 
 			@Override
 			public C forModelCopy(C value, ModelSetInstance sourceModels, ModelSetInstance newModels) throws ModelInstantiationException {
+				if (theValueInstantiator != null)
+					return theValueInstantiator.forModelCopy(value, sourceModels, newModels);
 				// Configured elements are merely initialized, not slaved, and the collection may have been modified
 				// since it was created. There's no sense to making a re-initialized copy here.
 				return value;
@@ -628,13 +639,16 @@ public class ExpressoQonfigValues {
 
 			@Override
 			public ModelValueInstantiator<ObservableCollection<T>> instantiate() {
-				return new PlainInstantiator<>(getDefinition().getModelPath(), getValueType(), instantiateElements());
+				return new PlainInstantiator<>(getDefinition().getModelPath(), getValueType(), //
+					getElementValue() == null ? null : getElementValue().instantiate(), //
+						instantiateElements());
 			}
 		}
 
 		static class PlainInstantiator<T> extends Instantiator<T, ObservableCollection<T>> {
-			public PlainInstantiator(String modelPath, TypeToken<T> type, List<CollectionPopulator<T>> elements) {
-				super(modelPath, type, elements);
+			public PlainInstantiator(String modelPath, TypeToken<T> type, ModelValueInstantiator<ObservableCollection<T>> value,
+				List<CollectionPopulator<T>> elements) {
+				super(modelPath, type, value, elements);
 			}
 
 			@Override
@@ -665,6 +679,8 @@ public class ExpressoQonfigValues {
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			super.doUpdate(session);
 			theSort = ExElement.useOrReplace(ExSort.ExRootSort.class, theSort, session, "sort");
+			if (getElementValue() != null && theSort != null)
+				reporting().warn("Sorting will not be used if the value of the collection is specified");
 		}
 
 		@Override
@@ -687,7 +703,8 @@ public class ExpressoQonfigValues {
 			@Override
 			public void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 				super.doUpdate(env);
-				if (getDefinition().getSort() == null) {
+				if (getElementValue() != null) { // No sorting needed
+				} else if (getDefinition().getSort() == null) {
 					if (theSort != null)
 						theSort.destroy();
 					theSort = null;
@@ -716,8 +733,8 @@ public class ExpressoQonfigValues {
 			private final ModelValueInstantiator<Comparator<? super T>> theSort;
 
 			protected SortedInstantiator(String modelPath, TypeToken<T> type, ModelValueInstantiator<Comparator<? super T>> sort,
-				List<CollectionPopulator<T>> elements) {
-				super(modelPath, type, elements);
+				ModelValueInstantiator<C> value, List<CollectionPopulator<T>> elements) {
+				super(modelPath, type, value, elements);
 				theSort = sort;
 			}
 
@@ -757,14 +774,15 @@ public class ExpressoQonfigValues {
 			@Override
 			public ModelValueInstantiator<ObservableSortedCollection<T>> instantiate() {
 				return new SimpleSortedInstantiator<>(getDefinition().getModelPath(), getValueType(), instantiateSort(),
+					getElementValue() == null ? null : getElementValue().instantiate(), //
 					instantiateElements());
 			}
 		}
 
 		static class SimpleSortedInstantiator<T> extends SortedInstantiator<T, ObservableSortedCollection<T>> {
 			SimpleSortedInstantiator(String modelPath, TypeToken<T> type, ModelValueInstantiator<Comparator<? super T>> sort,
-				List<CollectionPopulator<T>> elements) {
-				super(modelPath, type, sort, elements);
+				ModelValueInstantiator<ObservableSortedCollection<T>> value, List<CollectionPopulator<T>> elements) {
+				super(modelPath, type, sort, value, elements);
 			}
 
 			@Override
@@ -792,13 +810,16 @@ public class ExpressoQonfigValues {
 
 			@Override
 			public ModelValueInstantiator<ObservableSet<T>> instantiate() {
-				return new SetInstantiator<>(getDefinition().getModelPath(), getValueType(), instantiateElements());
+				return new SetInstantiator<>(getDefinition().getModelPath(), getValueType(), //
+					getElementValue() == null ? null : getElementValue().instantiate(), //
+						instantiateElements());
 			}
 		}
 
 		static class SetInstantiator<T> extends Instantiator<T, ObservableSet<T>> {
-			public SetInstantiator(String modelPath, TypeToken<T> type, List<CollectionPopulator<T>> elements) {
-				super(modelPath, type, elements);
+			public SetInstantiator(String modelPath, TypeToken<T> type, ModelValueInstantiator<ObservableSet<T>> value,
+				List<CollectionPopulator<T>> elements) {
+				super(modelPath, type, value, elements);
 			}
 
 			@Override
@@ -827,14 +848,15 @@ public class ExpressoQonfigValues {
 			@Override
 			public ModelValueInstantiator<ObservableSortedSet<T>> instantiate() {
 				return new SortedSetInstantiator<>(getDefinition().getModelPath(), getValueType(), instantiateSort(),
+					getElementValue() == null ? null : getElementValue().instantiate(), //
 					instantiateElements());
 			}
 		}
 
 		static class SortedSetInstantiator<T> extends SortedInstantiator<T, ObservableSortedSet<T>> {
 			SortedSetInstantiator(String modelPath, TypeToken<T> type, ModelValueInstantiator<Comparator<? super T>> sort,
-				List<CollectionPopulator<T>> elements) {
-				super(modelPath, type, sort, elements);
+				ModelValueInstantiator<ObservableSortedSet<T>> value, List<CollectionPopulator<T>> elements) {
+				super(modelPath, type, sort, value, elements);
 			}
 
 			@Override

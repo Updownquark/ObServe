@@ -7,6 +7,9 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
+import org.observe.expresso.ExpressoParseException;
+import org.observe.expresso.ExpressoParser;
+import org.observe.expresso.JavaExpressoParser;
 import org.observe.expresso.ObservableModelSet;
 import org.qommons.Named;
 import org.qommons.SelfDescribed;
@@ -36,6 +39,7 @@ public interface ElementModelValue<M> extends ObservableModelSet.IdentifiableCom
 		private final String theType;
 		private final QonfigAttributeDef theSourceAttribute;
 		private final boolean isSourceValue;
+		private final CompiledExpression theValue;
 		private final QonfigElement theDeclaration;
 
 		/**
@@ -51,7 +55,7 @@ public interface ElementModelValue<M> extends ObservableModelSet.IdentifiableCom
 		 * @param declaration The element that declares this value
 		 */
 		public Identity(QonfigElementOrAddOn owner, String name, QonfigChildDef sourceChild, QonfigAttributeDef nameAttribute, String type,
-			QonfigAttributeDef sourceAttribute, boolean sourceValue, QonfigElement declaration) {
+			QonfigAttributeDef sourceAttribute, boolean sourceValue, CompiledExpression value, QonfigElement declaration) {
 			theOwner = owner;
 			theName = name;
 			theSourceChild = sourceChild;
@@ -59,6 +63,7 @@ public interface ElementModelValue<M> extends ObservableModelSet.IdentifiableCom
 			theType = type;
 			theSourceAttribute = sourceAttribute;
 			isSourceValue = sourceValue;
+			theValue = value;
 			theDeclaration = declaration;
 		}
 
@@ -102,6 +107,10 @@ public interface ElementModelValue<M> extends ObservableModelSet.IdentifiableCom
 		/** @return If true, this value will be that evaluated from the expression-typed {@link QonfigElement#getValue()} of the element */
 		public boolean isSourceValue() {
 			return isSourceValue;
+		}
+
+		public CompiledExpression getValue() {
+			return theValue;
 		}
 
 		/** @return The metadata that is the declaration for this dynamic value */
@@ -221,9 +230,23 @@ public interface ElementModelValue<M> extends ObservableModelSet.IdentifiableCom
 					modelData.typeAttr = expresso.getAttribute("typed", "type");
 					modelData.sourceAttr = expresso.getAttribute("element-model-value", "source-attribute");
 				}
-				for (QonfigElement value : metadata.getChildrenByRole().get(modelData.modelValue.getDeclared())) {
-					String name = value.getAttributeText(modelData.nameAttr);
-					String nameAttrS = value.getAttributeText(modelData.nameAttrAttr);
+				ExpressoParser parser = new JavaExpressoParser();
+				for (QonfigElement elValue : metadata.getChildrenByRole().get(modelData.modelValue.getDeclared())) {
+					String name = elValue.getAttributeText(modelData.nameAttr);
+					String nameAttrS = elValue.getAttributeText(modelData.nameAttrAttr);
+					CompiledExpression value;
+					if (elValue.getValue() != null) {
+						try {
+							LocatedPositionedContent content = new LocatedPositionedContent.Default(elValue.getValue().fileLocation,
+								elValue.getValue().position);
+							value = new CompiledExpression(parser.parse(((QonfigExpression) elValue.getValue().value).text), elValue,
+								content, null);
+						} catch (ExpressoParseException e) {
+							reporting.at(elValue.getFilePosition()).error("Could not parse value expression", e);
+							continue;
+						}
+					} else
+						value = null;
 					QonfigChildDef sourceChild;
 					QonfigAttributeDef nameAttr;
 					if (nameAttrS != null) {
@@ -242,14 +265,14 @@ public interface ElementModelValue<M> extends ObservableModelSet.IdentifiableCom
 						} catch (IllegalArgumentException e) {
 							reporting
 							.at(LocatedPositionedContent.of(metadata.getDocument().getLocation(),
-								value.getAttributes().get(modelData.nameAttrAttr).position.subSequence(1, nameAttrS.length() - 1)))
+								elValue.getAttributes().get(modelData.nameAttrAttr).position.subSequence(1, nameAttrS.length() - 1)))
 							.error(e.getMessage(), e);
 							continue;
 						}
 						if (nameAttr.getType() != modelData.identifierType) {
 							reporting
 							.at(LocatedPositionedContent.of(metadata.getDocument().getLocation(),
-								value.getAttributes().get(modelData.nameAttrAttr).position.subSequence(1, nameAttrS.length() - 1)))
+								elValue.getAttributes().get(modelData.nameAttrAttr).position.subSequence(1, nameAttrS.length() - 1)))
 							.error("name-attribute (" + nameAttr
 								+ ") must refer to an attribute of type 'identifier', not " + nameAttr.getType());
 						}
@@ -262,28 +285,33 @@ public interface ElementModelValue<M> extends ObservableModelSet.IdentifiableCom
 						sourceChild = null;
 						nameAttr = null;
 					}
-					String typeName = value.getAttributeText(modelData.typeAttr);
-					String sourceAttrS = value.getAttributeText(modelData.sourceAttr);
+					String typeName = elValue.getAttributeText(modelData.typeAttr);
+					String sourceAttrS = elValue.getAttributeText(modelData.sourceAttr);
 					QonfigAttributeDef sourceAttr;
 					boolean sourceValue;
-					if (sourceAttrS == null) {
+					if (value != null) {
+						if (sourceAttrS != null)
+							reporting.at(elValue.getFilePosition()).error("Both a source-attribute and a value given");
+						sourceValue = false;
+						sourceAttr = null;
+					} else if (sourceAttrS == null) {
 						sourceValue = false;
 						sourceAttr = null;
 					} else if (sourceAttrS.isEmpty()) {
 						QonfigValueDef valueDef = sourceChild != null ? sourceChild.getType().getValue() : type.getValue();
 						if (valueDef == null) {
 							reporting
-								.at(LocatedPositionedContent.of(metadata.getDocument().getLocation(),
-									value.getAttributes().get(modelData.nameAttrAttr).position.subSequence(1, nameAttrS.length() - 1)))
-								.error("Empty source-attribute specified, but no value defined on "
-									+ (sourceChild != null ? sourceChild : type));
+							.at(LocatedPositionedContent.of(metadata.getDocument().getLocation(),
+								elValue.getAttributes().get(modelData.nameAttrAttr).position.subSequence(1, nameAttrS.length() - 1)))
+							.error("Empty source-attribute specified, but no value defined on "
+								+ (sourceChild != null ? sourceChild : type));
 							continue;
 						} else if (!(valueDef.getType() instanceof QonfigValueType.Custom)
 							|| !(((QonfigValueType.Custom) valueDef.getType()).getCustomType() instanceof ExpressionValueType)) {
 							reporting
-								.at(LocatedPositionedContent.of(metadata.getDocument().getLocation(),
-									value.getAttributes().get(modelData.nameAttrAttr).position.subSequence(1, nameAttrS.length() - 1)))
-								.error(
+							.at(LocatedPositionedContent.of(metadata.getDocument().getLocation(),
+								elValue.getAttributes().get(modelData.nameAttrAttr).position.subSequence(1, nameAttrS.length() - 1)))
+							.error(
 								"Empty source-attribute must refer to an element value of type 'expression', not " + valueDef.getType());
 							continue;
 						}
@@ -296,18 +324,19 @@ public interface ElementModelValue<M> extends ObservableModelSet.IdentifiableCom
 						if (!(sourceAttr.getType() instanceof QonfigValueType.Custom)
 							|| !(((QonfigValueType.Custom) sourceAttr.getType()).getCustomType() instanceof ExpressionValueType)) {
 							reporting
-								.at(LocatedPositionedContent.of(metadata.getDocument().getLocation(),
-									value.getAttributes().get(modelData.nameAttrAttr).position.subSequence(1, nameAttrS.length() - 1)))
-								.error("source-attribute (" + sourceAttr
+							.at(LocatedPositionedContent.of(metadata.getDocument().getLocation(),
+								elValue.getAttributes().get(modelData.nameAttrAttr).position.subSequence(1, nameAttrS.length() - 1)))
+							.error("source-attribute (" + sourceAttr
 								+ ") must refer to an attribute of type 'expression', not " + sourceAttr.getType());
 							continue;
 						}
 					}
-					Identity newModelValue = new Identity(type, name, sourceChild, nameAttr, typeName, sourceAttr, sourceValue, value);
+					Identity newModelValue = new Identity(type, name, sourceChild, nameAttr, typeName, sourceAttr, sourceValue, value,
+						elValue);
 					Identity overridden = values.get(newModelValue.getName());
 					if (overridden != null) {
-						reporting.at(LocatedPositionedContent.of(metadata.getDocument().getLocation(), value.getFilePosition()))
-							.error("Type " + type + " declares a dynamic value '" + newModelValue.getName()
+						reporting.at(LocatedPositionedContent.of(metadata.getDocument().getLocation(), elValue.getFilePosition()))
+						.error("Type " + type + " declares a dynamic value '" + newModelValue.getName()
 						+ "' that clashes with the value of the same name declared by " + overridden.getOwner());
 						continue;
 					}

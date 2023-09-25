@@ -41,6 +41,7 @@ public class QuickSplit extends QuickContainer.Abstract<QuickWidget> {
 			return isVertical;
 		}
 
+		@QonfigAttributeGetter("split-position")
 		public CompiledExpression getSplitPosition() {
 			return theSplitPosition;
 		}
@@ -137,7 +138,9 @@ public class QuickSplit extends QuickContainer.Abstract<QuickWidget> {
 	protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
 		super.doInstantiate(myModels);
 		theSplitPosition.set(
-			theSplitPosition == null ? SettableValue.build(QuickSize.class).build() : theSplitPositionInstantiator.get(myModels), null);
+			theSplitPositionInstantiator == null ? SettableValue.build(QuickSize.class).build()
+				: theSplitPositionInstantiator.get(myModels),
+				null);
 	}
 
 	@Override

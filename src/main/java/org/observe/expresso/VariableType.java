@@ -58,8 +58,9 @@ public interface VariableType {
 					// so this flexibility makes it easier to specify generic types in XML
 				case '}':
 				case ',':
-					start[0] = c + 1;
-					break;
+					Simple param = new Simple(content.subSequence(start[0], c));
+					start[0] = c;
+					return param;
 				case '<':
 				case '{':
 					if (c == content.length() - 1)
@@ -87,7 +88,7 @@ public interface VariableType {
 						switch (content.charAt(c)) {
 						case ',':
 							continue;
-						case '<':
+						case '>':
 						case '}':
 							start[0]++;
 							break paramLoop;

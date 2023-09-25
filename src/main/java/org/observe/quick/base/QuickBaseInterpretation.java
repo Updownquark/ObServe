@@ -184,11 +184,15 @@ public class QuickBaseInterpretation implements QonfigInterpretation {
 		interpreter.createWith(QuickTabs.Tab.TAB, QuickTabs.Tab.Def.class, ExAddOn.creator(QuickWidget.Def.class, QuickTabs.Tab.Def::new));
 		interpreter.createWith(QuickTabs.TabSet.TAB_SET, QuickTabs.TabSet.Def.class, ExElement.creator(QuickTabs.TabSet.Def::new));
 
+		// Tree
 		interpreter.createWith(QuickTree.TREE, QuickTree.Def.class, ExElement.creator(QuickTree.Def::new));
 		interpreter.createWith(DynamicTreeModel.DYNAMIC_TREE_MODEL, DynamicTreeModel.Def.class,
 			ExElement.creator(DynamicTreeModel.Def::new));
 		interpreter.createWith(StaticTreeNode.TREE_NODE, StaticTreeNode.Def.class, ExElement.creator(StaticTreeNode.Def::new));
 
+		// Dialogs
+		interpreter.createWith(QuickConfirm.CONFIRM, QuickConfirm.Def.class, ExElement.creator(QuickConfirm.Def::new));
+		interpreter.createWith(QuickFileChooser.FILE_CHOOSER, QuickFileChooser.Def.class, ExElement.creator(QuickFileChooser.Def::new));
 		return interpreter;
 	}
 

@@ -98,10 +98,7 @@ It builds on the Expresso-Core specification and contains everything needed for 
 		</ul>?>
 		<element-def name="value" extends="model-value" inherits="allow-ext-model" />
 		<?DOC An ordered collection of values.  For internal models, this may be initialized with elements.?>
-		<element-def name="list" extends="model-value" inherits="allow-ext-model">
-			<?DOC Can't specify a scalar value for a list?>
-			<value-mod specify="forbidden" />
-		</element-def>
+		<element-def name="list" extends="model-value" inherits="allow-ext-model" />
 		<?DOC An ordered collection with added addition capabilities?>
 		<element-def name="value-set" extends="list" />
 		<?DOC An ordered collection of values with no duplicates?>

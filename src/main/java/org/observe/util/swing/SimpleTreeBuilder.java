@@ -98,6 +98,7 @@ public class SimpleTreeBuilder<F, P extends SimpleTreeBuilder<F, P>> extends Abs
 	private ObservableCollection<F> theValueMultiSelection;
 	private ObservableCollection<BetterList<F>> thePathMultiSelection;
 	private ObservableValue<String> theDisablement;
+	private boolean isRootVisible;
 	private List<SimpleDataAction<BetterList<F>, ?>> theActions;
 	private boolean theActionsOnTop;
 
@@ -106,6 +107,7 @@ public class SimpleTreeBuilder<F, P extends SimpleTreeBuilder<F, P>> extends Abs
 		theRenderer = new CategoryRenderStrategy<>("Tree", (TypeToken<F>) root.getType(),
 			LambdaUtils.printableFn(BetterList::getLast, "BetterList::getLast", null));
 		theRoot = root;
+		isRootVisible = true;
 		theActions = new ArrayList<>();
 		theActionsOnTop = true;
 	}
@@ -277,6 +279,12 @@ public class SimpleTreeBuilder<F, P extends SimpleTreeBuilder<F, P>> extends Abs
 	}
 
 	@Override
+	public P withRootVisible(boolean rootVisible) {
+		isRootVisible = rootVisible;
+		return (P) this;
+	}
+
+	@Override
 	public boolean isVisible(List<? extends F> path) {
 		return getEditor().isVisible(new TreePath(path.toArray()));
 	}
@@ -357,6 +365,7 @@ public class SimpleTreeBuilder<F, P extends SimpleTreeBuilder<F, P>> extends Abs
 			});
 		}
 		getEditor().setExpandsSelectedPaths(true);
+		getEditor().setRootVisible(isRootVisible);
 		JScrollPane scroll = new JScrollPane(getEditor());
 		Component comp = scroll;
 		if (!theActions.isEmpty()) {

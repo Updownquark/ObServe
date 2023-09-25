@@ -201,7 +201,7 @@ public class BinaryOperator implements ObservableExpression {
 		EvaluatedExpression<SettableValue<?>, SettableValue<T>> right;
 		right = theRight.evaluate(ModelTypes.Value.forType((TypeToken<T>) targetOpType), rightEnv, rightOffset, doubleX);
 		if (doubleX.get2() != null) {
-			exHandler.handle1(new ExpressoInterpretationException(doubleX.get2().getMessage(), env.reporting().getPosition(),
+			exHandler.handle1(new ExpressoInterpretationException(doubleX.get2().getMessage(), rightEnv.reporting().getPosition(),
 				theLeft.getExpressionLength()));
 			return null;
 		} else if (right == null)

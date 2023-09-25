@@ -69,9 +69,14 @@ public class FontStyleParser extends NonStructuredParser.Simple<Double> {
 
 	@Override
 	public boolean canParse(TypeToken<?> type, String text) {
-		if (!super.canParse(type, text))
-			return false;
-		return NAMED_WEIGHTS.containsKey(text) || NAMED_SLANTS.containsKey(text);
+		return TypeTokens.get().isAssignable(TypeTokens.get().DOUBLE, type)//
+			&& NAMED_WEIGHTS.containsKey(text) || NAMED_SLANTS.containsKey(text);
+	}
+
+	@Override
+	public boolean checkText(String text) {
+		// Not used
+		return true;
 	}
 
 	@Override

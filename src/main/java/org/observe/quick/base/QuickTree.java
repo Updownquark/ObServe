@@ -1,5 +1,9 @@
 package org.observe.quick.base;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+
 import org.observe.SettableValue;
 import org.observe.collect.ObservableCollection;
 import org.observe.expresso.ExpressoInterpretationException;
@@ -21,8 +25,8 @@ import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.expresso.qonfig.QonfigChildGetter;
 import org.observe.quick.QuickWidget;
 import org.observe.util.TypeTokens;
-import org.qommons.LambdaUtils;
 import org.qommons.collect.BetterList;
+import org.qommons.collect.CollectionUtils;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
@@ -52,12 +56,15 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 		private QuickTableColumn.SingleColumnSet.Def theTreeColumn;
 		private CompiledExpression theSelection;
 		private CompiledExpression theMultiSelection;
+		private final List<ValueAction.Def<?, ?>> theActions;
+		private boolean isRootVisible;
 
 		public Def(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
 			super(parent, type);
+			theActions = new ArrayList<>();
 		}
 
-		@QonfigChildGetter(asType = "tree", value = "model")
+		@QonfigChildGetter(asType = "tree", value = "tree-model")
 		public TreeModel.Def<?> getModel() {
 			return theModel;
 		}
@@ -94,23 +101,34 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 			return theMultiSelection;
 		}
 
+		@QonfigChildGetter(asType = TREE, value = "action")
+		public List<ValueAction.Def<?, ?>> getActions() {
+			return Collections.unmodifiableList(theActions);
+		}
+
+		@QonfigAttributeGetter(asType = TREE, value = "root-visible")
+		public boolean isRootVisible() {
+			return isRootVisible;
+		}
+
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			super.doUpdate(session);
-			theModel = ExElement.useOrReplace(TreeModel.Def.class, theModel, session, "model");
+			theModel = ExElement.useOrReplace(TreeModel.Def.class, theModel, session, "tree-model");
 			ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
 			String valueName = session.getAttributeText("active-value-name");
 			theActiveValueVariable = elModels.getElementValueModelId(valueName);
-			String pathName = session.getAttributeText("active-node-name");
-			theNodeVariable = elModels.getElementValueModelId(pathName);
+			String nodeName = session.getAttributeText("active-node-name");
+			theNodeVariable = elModels.getElementValueModelId(nodeName);
 			theSelectedVariable = elModels.getElementValueModelId("selected");
 			theTreeColumn = ExElement.useOrReplace(QuickTableColumn.SingleColumnSet.Def.class, theTreeColumn, session, "tree-column");
 			theSelection = session.getAttributeExpression("selection");
 			theMultiSelection = session.getAttributeExpression("multi-selection");
 			elModels.satisfyElementValueType(theActiveValueVariable, ModelTypes.Value,
 				(interp, env) -> ModelTypes.Value.forType(((Interpreted<?, ?>) interp).getPathType()));
-			elModels.satisfyElementValueType(theNodeVariable, ModelTypes.Value,
-				(interp, env) -> ModelTypes.Value.forType(((Interpreted<?, ?>) interp).getNodeType()));
+			isRootVisible = session.getAttribute("root-visible", boolean.class);
+
+			ExElement.syncDefs(ValueAction.Def.class, theActions, session.forChildren("action"));
 		}
 
 		@Override
@@ -126,10 +144,12 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 		private QuickTableColumn.SingleColumnSet.Interpreted<BetterList<N>, N> theTreeColumn;
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<BetterList<N>>> theSelection;
 		private InterpretedValueSynth<ObservableCollection<?>, ObservableCollection<BetterList<N>>> theMultiSelection;
+		private final List<ValueAction.Interpreted<BetterList<N>, ?>> theActions;
 
 		Interpreted(Def<? super T> definition, ExElement.Interpreted<?> parent) {
 			super(definition, parent);
 			persistModelInstances(true);
+			theActions = new ArrayList<>();
 		}
 
 		@Override
@@ -152,8 +172,8 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 		}
 
 		@Override
-		public TypeToken<BetterList<N>> getValueType() {
-			return TypeTokens.get().keyFor(BetterList.class).<BetterList<N>> parameterized(theNodeType);
+		public TypeToken<BetterList<N>> getValueType() throws ExpressoInterpretationException {
+			return TypeTokens.get().keyFor(BetterList.class).<BetterList<N>> parameterized(getNodeType());
 		}
 
 		public TypeToken<N> getNodeType() throws ExpressoInterpretationException {
@@ -168,6 +188,10 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 
 		public QuickTableColumn.SingleColumnSet.Interpreted<BetterList<N>, N> getTreeColumn() {
 			return theTreeColumn;
+		}
+
+		public List<ValueAction.Interpreted<BetterList<N>, ?>> getActions() {
+			return Collections.unmodifiableList(theActions);
 		}
 
 		@Override
@@ -204,6 +228,17 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 				: getDefinition().getSelection().interpret(ModelTypes.Value.forType(pathType), env);
 			theMultiSelection = getDefinition().getSelection() == null ? null
 				: getDefinition().getMultiSelection().interpret(ModelTypes.Collection.forType(pathType), env);
+
+			CollectionUtils.synchronize(theActions, getDefinition().getActions(), //
+				(a, d) -> a.getIdentity() == d.getIdentity())//
+			.<ExpressoInterpretationException> simpleE(
+				child -> (ValueAction.Interpreted<BetterList<N>, ?>) ((ValueAction.Def<BetterList<N>, ?>) child).interpret(this,
+					getValueType()))//
+			.rightOrder()//
+			.onLeftX(el -> el.getLeftValue().destroy())//
+			.onRightX(element -> element.getLeftValue().updateAction(getExpressoEnv()))//
+			.onCommonX(element -> element.getLeftValue().updateAction(getExpressoEnv()))//
+			.adjust();
 		}
 
 		@Override
@@ -213,20 +248,21 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 	}
 
 	private ModelComponentId theActiveValueVariable;
-	private ModelComponentId theNodeVariable;
 	private ModelComponentId theSelectedVariable;
 	private TypeToken<N> theNodeType;
 	private TreeModel<N> theModel;
 	private ModelValueInstantiator<SettableValue<BetterList<N>>> theSelectionInstantiator;
 	private ModelValueInstantiator<ObservableCollection<BetterList<N>>> theMultiSelectionInstantiator;
+	private boolean isRootVisible;
 
 	private SettableValue<SettableValue<BetterList<N>>> theSelection;
 	private SettableValue<ObservableCollection<BetterList<N>>> theMultiSelection;
 	private QuickTableColumn.SingleColumnSet<BetterList<N>, N> theTreeColumn;
 
-	private SettableValue<SettableValue<N>> theActiveNode;
 	private SettableValue<SettableValue<BetterList<N>>> theActivePath;
 	private SettableValue<SettableValue<Boolean>> isSelected;
+
+	private ObservableCollection<ValueAction<BetterList<N>>> theActions;
 
 	QuickTree(Object id) {
 		super(id);
@@ -247,10 +283,6 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 		return theActiveValueVariable;
 	}
 
-	public ModelComponentId getPathVariable() {
-		return theNodeVariable;
-	}
-
 	@Override
 	public ModelComponentId getSelectedVariable() {
 		return theSelectedVariable;
@@ -260,9 +292,6 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 	public void setContext(MultiValueRenderContext<BetterList<N>> ctx) throws ModelInstantiationException {
 		theActivePath.set(ctx.getActiveValue(), null);
 		isSelected.set(ctx.isSelected(), null);
-		theActiveNode.set(SettableValue.asSettable(
-			ctx.getActiveValue().map(theNodeType, LambdaUtils.printableFn(path -> path == null ? null : path.getLast(), "last", null)),
-			__ -> "Tree value is not settable"), null);
 	}
 
 	@Override
@@ -279,12 +308,19 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 		return theTreeColumn;
 	}
 
+	public boolean isRootVisible() {
+		return isRootVisible;
+	}
+
+	public ObservableCollection<ValueAction<BetterList<N>>> getActions() {
+		return theActions.flow().unmodifiable(false).collect();
+	}
+
 	@Override
 	protected void doUpdate(ExElement.Interpreted<?> interpreted) {
 		super.doUpdate(interpreted);
 		Interpreted<N, ?> myInterpreted = (Interpreted<N, ?>) interpreted;
 		theActiveValueVariable = myInterpreted.getDefinition().getActiveValueVariable();
-		theNodeVariable = myInterpreted.getDefinition().getNodeVariable();
 		theSelectedVariable = myInterpreted.getDefinition().getSelectedVariable();
 
 		if (theModel != null && theModel.getIdentity() != myInterpreted.getModel().getIdentity()) {
@@ -311,11 +347,12 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 			theMultiSelection = SettableValue
 				.build(TypeTokens.get().keyFor(ObservableCollection.class).<ObservableCollection<BetterList<N>>> parameterized(pathType))
 				.build();
-			theActiveNode = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<N>> parameterized(nodeType))
-				.build();
 			theActivePath = SettableValue
 				.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<BetterList<N>>> parameterized(pathType)).build();
+			theActions = ObservableCollection
+				.build(TypeTokens.get().keyFor(ValueAction.class).<ValueAction<BetterList<N>>> parameterized(pathType)).build();
 		}
+		isRootVisible = myInterpreted.getDefinition().isRootVisible();
 
 		if (theTreeColumn != null && theTreeColumn
 			.getIdentity() != (myInterpreted.getTreeColumn() == null ? null : myInterpreted.getTreeColumn().getIdentity())) {
@@ -326,6 +363,15 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 			theTreeColumn = myInterpreted.getTreeColumn().create();
 		if (theTreeColumn != null)
 			theTreeColumn.update(myInterpreted.getTreeColumn(), this);
+
+		CollectionUtils.synchronize(theActions, myInterpreted.getActions(), //
+			(a, i) -> a.getIdentity() == i.getIdentity())//
+		.simple(action -> action.create())//
+		.rightOrder()//
+		.onLeftX(element -> element.getLeftValue().destroy())//
+		.onRight(element -> element.getLeftValue().update(element.getRightValue(), this))//
+		.onCommon(element -> element.getLeftValue().update(element.getRightValue(), this))//
+		.adjust();
 	}
 
 	@Override
@@ -338,6 +384,8 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 			theMultiSelectionInstantiator.instantiate();
 		if (theTreeColumn != null)
 			theTreeColumn.instantiated();
+		for (ValueAction<BetterList<N>> action : theActions)
+			action.instantiated();
 	}
 
 	@Override
@@ -345,7 +393,6 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 		super.doInstantiate(myModels);
 
 		ExFlexibleElementModelAddOn.satisfyElementValue(theActiveValueVariable, myModels, SettableValue.flatten(theActivePath));
-		ExFlexibleElementModelAddOn.satisfyElementValue(theNodeVariable, myModels, SettableValue.flatten(theActiveNode));
 		ExFlexibleElementModelAddOn.satisfyElementValue(theSelectedVariable, myModels, SettableValue.flatten(isSelected, () -> false));
 		theModel.instantiate(myModels);
 		theSelection.set(theSelectionInstantiator == null ? null : theSelectionInstantiator.get(myModels), null);
@@ -353,6 +400,9 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 
 		if (theTreeColumn != null)
 			theTreeColumn.instantiate(myModels);
+
+		for (ValueAction<BetterList<N>> action : theActions)
+			action.instantiate(myModels);
 	}
 
 	@Override
@@ -367,9 +417,13 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 		if (theTreeColumn != null)
 			copy.theTreeColumn = theTreeColumn.copy(copy);
 
-		copy.theActiveNode = SettableValue.build(theActiveNode.getType()).build();
 		copy.theActivePath = SettableValue.build(theActivePath.getType()).build();
 		copy.isSelected = SettableValue.build(isSelected.getType()).build();
+		copy.theActions = ObservableCollection.build(theActions.getType()).build();
+
+		for (ValueAction<BetterList<N>> action : theActions)
+			copy.theActions.add(action.copy(copy));
+
 		return copy;
 	}
 }

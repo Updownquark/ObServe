@@ -134,6 +134,36 @@ public class QuickSize {
 		}
 
 		@Override
+		public boolean checkText(String text) {
+			int c = 0;
+			for (; c < text.length(); c++) {
+				if (!Character.isWhitespace(text.charAt(c)))
+					break;
+			}
+			int digits = 0;
+			for (; c < text.length(); c++) {
+				if (text.charAt(c) < '0' || text.charAt(c) > '9')
+					break;
+				digits++;
+			}
+			if (digits == 0)
+				return false;
+			for (; c < text.length(); c++) {
+				if (!Character.isWhitespace(text.charAt(c)))
+					break;
+			}
+			switch (text.substring(c).trim()) {
+			case "px":
+			case "%":
+			case "xp":
+				break;
+			default:
+				return false;
+			}
+			return true;
+		}
+
+		@Override
 		protected <T2 extends QuickSize> T2 parseValue(TypeToken<T2> type, String text) throws ParseException {
 			boolean pct, xp;
 			int unit;

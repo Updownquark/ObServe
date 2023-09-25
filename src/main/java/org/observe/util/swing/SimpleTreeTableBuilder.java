@@ -9,6 +9,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
@@ -28,13 +29,13 @@ import javax.swing.event.TableModelListener;
 import javax.swing.tree.TreePath;
 import javax.swing.tree.TreeSelectionModel;
 
-import org.jdesktop.swingx.JXTreeTable;
 import org.observe.Equivalence;
 import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.Subscription;
 import org.observe.collect.ObservableCollection;
+import org.observe.swingx.JXTreeTable;
 import org.observe.util.TypeTokens;
 import org.observe.util.swing.PanelPopulation.AbstractComponentEditor;
 import org.observe.util.swing.PanelPopulation.DataAction;
@@ -70,17 +71,24 @@ class SimpleTreeTableBuilder<F, P extends SimpleTreeTableBuilder<F, P>> extends 
 implements TreeTableEditor<F, P> {
 	public static <F> SimpleTreeTableBuilder<F, ?> createTreeTable(ObservableValue<F> root,
 		Function<? super F, ? extends ObservableCollection<? extends F>> children, Observable<?> until) {
-		return new SimpleTreeTableBuilder<>(root, children, null, until);
+		return new SimpleTreeTableBuilder<>(root, children, null, null, until);
 	}
 
 	public static <F> SimpleTreeTableBuilder<F, ?> createTreeTable2(ObservableValue<F> root,
 		Function<? super BetterList<F>, ? extends ObservableCollection<? extends F>> children, Observable<?> until) {
-		return new SimpleTreeTableBuilder<>(root, null, children, until);
+		return new SimpleTreeTableBuilder<>(root, null, children, null, until);
+	}
+
+	public static <F> SimpleTreeTableBuilder<F, ?> createTreeTable3(ObservableValue<F> root,
+		BiFunction<? super BetterList<F>, ? super Observable<?>, ? extends ObservableCollection<? extends F>> children,
+			Observable<?> until) {
+		return new SimpleTreeTableBuilder<>(root, null, null, children, until);
 	}
 
 	private final ObservableValue<F> theRoot;
 	private final Function<? super F, ? extends ObservableCollection<? extends F>> theChildren1;
 	private final Function<? super BetterList<F>, ? extends ObservableCollection<? extends F>> theChildren2;
+	private final BiFunction<? super BetterList<F>, ? super Observable<?>, ? extends ObservableCollection<? extends F>> theChildren3;
 	private Predicate<? super F> theLeafTest;
 	private Predicate<? super BetterList<F>> theLeafTest2;
 
@@ -92,6 +100,7 @@ implements TreeTableEditor<F, P> {
 	private ObservableCollection<F> theValueMultiSelection;
 	private ObservableCollection<BetterList<F>> thePathMultiSelection;
 	private ObservableValue<String> theDisablement;
+	private boolean isRootVisible;
 	private List<SimpleDataAction<BetterList<F>, ?>> theActions;
 	private boolean theActionsOnTop;
 
@@ -106,12 +115,18 @@ implements TreeTableEditor<F, P> {
 	private boolean isScrollable;
 
 	private SimpleTreeTableBuilder(ObservableValue<F> root, Function<? super F, ? extends ObservableCollection<? extends F>> children1,
-		Function<? super BetterList<F>, ? extends ObservableCollection<? extends F>> children2, Observable<?> until) {
+		Function<? super BetterList<F>, ? extends ObservableCollection<? extends F>> children2,
+			BiFunction<? super BetterList<F>, ? super Observable<?>, ? extends ObservableCollection<? extends F>> children3,
+				Observable<?> until) {
 		super(null, new JXTreeTable(), until);
 		theRoot = root;
 		theChildren1 = children1;
 		theChildren2 = children2;
+		theChildren3 = children3;
+		isRootVisible = true;
 		theActions = new ArrayList<>();
+		withColumnHeader = true;
+		isScrollable = true;
 		theTreeColumn = new CategoryRenderStrategy<>("Tree", root.getType(),
 			LambdaUtils.printableFn(BetterList::getLast, "BetterList::getLast", null));
 		theActionsOnTop = true;
@@ -126,7 +141,10 @@ implements TreeTableEditor<F, P> {
 		protected ObservableCollection<? extends F> getChildren(BetterList<F> parentPath, Observable<?> nodeUntil) {
 			if (theChildren1 != null)
 				return theChildren1.apply(parentPath.getLast());
-			return theChildren2.apply(parentPath);
+			else if (theChildren2 != null)
+				return theChildren2.apply(parentPath);
+			else
+				return theChildren3.apply(parentPath, nodeUntil);
 		}
 
 		@Override
@@ -238,6 +256,12 @@ implements TreeTableEditor<F, P> {
 	@Override
 	public P withLeafTest2(Predicate<? super BetterList<F>> leafTest) {
 		theLeafTest2 = leafTest;
+		return (P) this;
+	}
+
+	@Override
+	public P withRootVisible(boolean rootVisible) {
+		isRootVisible = rootVisible;
 		return (P) this;
 	}
 
@@ -482,6 +506,8 @@ implements TreeTableEditor<F, P> {
 				false, Equivalence.DEFAULT, getUntil());
 		if (isSingleSelection)
 			getEditor().getSelectionModel().setSelectionMode(TreeSelectionModel.SINGLE_TREE_SELECTION);
+
+		getEditor().setRootVisible(isRootVisible);
 
 		Component comp = scroll;
 		if (!theActions.isEmpty()) {
