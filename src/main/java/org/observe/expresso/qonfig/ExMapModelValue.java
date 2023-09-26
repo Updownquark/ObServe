@@ -11,7 +11,7 @@ import org.qommons.io.LocatedPositionedContent;
 import com.google.common.reflect.TypeToken;
 
 public class ExMapModelValue<K> extends ExAddOn.Abstract<ExElement> {
-	@ExElementTraceable(toolkit = ExpressoSessionImplV0_1.CORE,
+	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE,
 		qonfigType = "map-model-value",
 		interpretation = Interpreted.class,
 		instance = ExMapModelValue.class)

@@ -72,7 +72,7 @@ It builds on the Expresso-Base toolkit and allows specification of persisted con
 			<child-def name="wrapped" type="file-source" min="0" />
 			<child-def name="archive-method" type="archive-method" min="0" max="inf" />
 		</element-def>
-		<element-def name="archive-method" extends="model-value">
+		<element-def name="archive-method" extends="model-value" abstract="true">
 			<attr-mod name="model-value.type" specify="forbidden" default="" />
 		</element-def>
 		<element-def name="zip-archival" extends="archive-method" />
@@ -83,8 +83,8 @@ It builds on the Expresso-Base toolkit and allows specification of persisted con
 		</element-def>
 		<element-def name="long-format" extends="int-format" />
 		<element-def name="double-format" extends="format">
-			<attribute name="sig-digs" type="int" />
-			<attribute name="unit" type="string" specify="optional" />
+			<attribute name="sig-digs" type="expression" />
+			<attribute name="unit" type="identifier" specify="optional" />
 			<attribute name="unit-required" type="boolean" default="true" />
 			<attribute name="metric-prefixes" type="boolean" default="false" />
 			<attribute name="metric-prefixes-p2" type="boolean" default="false" />
@@ -92,8 +92,11 @@ It builds on the Expresso-Base toolkit and allows specification of persisted con
 			<!-- TODO -->
 		</element-def>
 		<element-def name="prefix">
+			<?DOC The name of the prefix, how it should be specified in text?>
 			<attribute name="name" type="string" />
+			<?DOC The exponent of the prefix, how many powers of ten this prefix represents.  May not be specified with a multiplier.?>
 			<attribute name="exp" type="int" specify="optional" />
+			<?DOC The multiplier of this prefix, how much it multiplies the value by.  May not be specified with an exp.?>
 			<attribute name="multiplier" type="float" specify="optional" />
 		</element-def>
 		<element-def name="instant-format" extends="format">
@@ -105,6 +108,7 @@ It builds on the Expresso-Base toolkit and allows specification of persisted con
 			<attribute name="relative-to" type="expression" specify="optional" />
 		</element-def>
 		<element-def name="regex-format" extends="format" />
+		<?DOC This format produces a String that can be compiled into a regular expression?>
 		<element-def name="regex-format-string" extends="format" />
 		
 		<element-def name="regex-validation" extends="validate">
@@ -124,6 +128,7 @@ It builds on the Expresso-Base toolkit and allows specification of persisted con
 			<attribute name="ref" type="expression" />
 		</element-def>
 		<element-def name="text-config-format" extends="config-format">
+			<attribute name="type" type="string" specify="optional" />
 			<child-def name="text-format" type="format" min="0" />
 			<attribute name="default" type="expression" specify="optional" />
 			<attribute name="default-text" type="string" specify="optional" />

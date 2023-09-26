@@ -70,6 +70,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		interpreter.createWith("with-local-model", ExWithLocalModel.Def.class, ExAddOn.creator(ExWithLocalModel.Def::new));
 		interpreter.createWith("named", ExNamed.Def.class, ExAddOn.creator(ExNamed.Def::new));
 		interpreter.createWith("typed", ExTyped.Def.class, ExAddOn.creator(ExTyped.Def::new));
+		interpreter.createWith("map-model-value", ExMapModelValue.Def.class, ExAddOn.creator(ExMapModelValue.Def::new));
 		interpreter.createWith("int-value", ExIntValue.Def.class, ExAddOn.creator(ExIntValue.Def::new));
 		interpreter.createWith("complex-operation", ExComplexOperation.class, ExAddOn.creator(ExComplexOperation::new));
 		interpreter.createWith("sort", ExSort.ExRootSort.class, ExElement.creator(ExSort.ExRootSort::new));
@@ -118,7 +119,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		})//
 		.createWith("action", ExtModelValueElement.Def.class, session -> {
 			ExpressoQIS exS = session.as(ExpressoQIS.class);
-				return new ExtModelValueElement.Def.UnTyped<>(exS.getElementRepresentation(), exS.getFocusType(), ModelTypes.Action,
+			return new ExtModelValueElement.Def.UnTyped<>(exS.getElementRepresentation(), exS.getFocusType(), ModelTypes.Action,
 				"action");
 		})//
 		.createWith("value", ExtModelValueElement.Def.class, session -> {
