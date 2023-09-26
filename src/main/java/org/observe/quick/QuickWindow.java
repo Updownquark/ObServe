@@ -18,7 +18,7 @@ import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
 /** An add-on for an element that is to be a window */
-public class QuickWindow extends ExAddOn.Abstract<ExElement> {
+public class QuickWindow extends QuickAbstractWindow {
 	public static final String WINDOW = "window";
 
 	/** An action to perform when the user closes the window (e.g. clicks the "X") */
@@ -38,13 +38,11 @@ public class QuickWindow extends ExAddOn.Abstract<ExElement> {
 		qonfigType = WINDOW,
 		interpretation = Interpreted.class,
 		instance = QuickWindow.class)
-	public static class Def extends ExAddOn.Def.Abstract<ExElement, QuickWindow> {
+	public static class Def extends QuickAbstractWindow.Def<QuickWindow> {
 		private CompiledExpression theX;
 		private CompiledExpression theY;
 		private CompiledExpression theWidth;
 		private CompiledExpression theHeight;
-		private CompiledExpression theTitle;
-		private CompiledExpression theVisible;
 		private CloseAction theCloseAction;
 
 		/**
@@ -79,18 +77,6 @@ public class QuickWindow extends ExAddOn.Abstract<ExElement> {
 			return theHeight;
 		}
 
-		/** @return The expression defining the title for the window */
-		@QonfigAttributeGetter("title")
-		public CompiledExpression getTitle() {
-			return theTitle;
-		}
-
-		/** @return The expression defining when the window is visible--to hide/show and to be updated when the user closes the window */
-		@QonfigAttributeGetter("visible")
-		public CompiledExpression isVisible() {
-			return theVisible;
-		}
-
 		/** @return The action to perform when the user closes the window */
 		@QonfigAttributeGetter("close-action")
 		public CloseAction getCloseAction() {
@@ -103,8 +89,6 @@ public class QuickWindow extends ExAddOn.Abstract<ExElement> {
 			theY = session.getAttributeExpression("y");
 			theWidth = session.getAttributeExpression("width");
 			theHeight = session.getAttributeExpression("height");
-			theTitle = session.getAttributeExpression("title");
-			theVisible = session.getAttributeExpression("visible");
 			String closeAction = session.getAttributeText("close-action");
 			switch (closeAction) {
 			case "do-nothing":
@@ -127,35 +111,28 @@ public class QuickWindow extends ExAddOn.Abstract<ExElement> {
 
 		@Override
 		public Interpreted interpret(ExElement.Interpreted<? extends ExElement> element) {
-			return new Interpreted(this, (QuickDocument.Interpreted) element);
+			return new Interpreted(this, element);
 		}
 	}
 
 	/** An interpretation of a {@link QuickWindow} */
-	public static class Interpreted extends ExAddOn.Interpreted.Abstract<ExElement, QuickWindow> {
+	public static class Interpreted extends QuickAbstractWindow.Interpreted<QuickWindow> {
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> theX;
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> theY;
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> theWidth;
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> theHeight;
-		private InterpretedValueSynth<SettableValue<?>, SettableValue<String>> theTitle;
-		private InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> theVisible;
 
 		/**
 		 * @param definition The definition producing this interpretation
 		 * @param element The element interpretation that this add-on is added onto
 		 */
-		public Interpreted(Def definition, QuickDocument.Interpreted element) {
+		public Interpreted(Def definition, ExElement.Interpreted<?> element) {
 			super(definition, element);
 		}
 
 		@Override
 		public Def getDefinition() {
 			return (Def) super.getDefinition();
-		}
-
-		@Override
-		public QuickDocument.Interpreted getElement() {
-			return (QuickDocument.Interpreted) super.getElement();
 		}
 
 		/** @return The expression defining the x-coordinate of the window--to move and be updated when the user moves it */
@@ -178,24 +155,12 @@ public class QuickWindow extends ExAddOn.Abstract<ExElement> {
 			return theHeight;
 		}
 
-		/** @return The expression defining the title for the window */
-		public InterpretedValueSynth<SettableValue<?>, SettableValue<String>> getTitle() {
-			return theTitle;
-		}
-
-		/** @return The expression defining when the window is visible--to hide/show and to be updated when the user closes the window */
-		public InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> isVisible() {
-			return theVisible;
-		}
-
 		@Override
 		public void update(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 			theX = getDefinition().getX() == null ? null : getDefinition().getX().interpret(ModelTypes.Value.INT, env);
 			theY = getDefinition().getY() == null ? null : getDefinition().getY().interpret(ModelTypes.Value.INT, env);
 			theWidth = getDefinition().getWidth() == null ? null : getDefinition().getWidth().interpret(ModelTypes.Value.INT, env);
 			theHeight = getDefinition().getHeight() == null ? null : getDefinition().getHeight().interpret(ModelTypes.Value.INT, env);
-			theTitle = getDefinition().getTitle() == null ? null : getDefinition().getTitle().interpret(ModelTypes.Value.STRING, env);
-			theVisible = getDefinition().isVisible() == null ? null : getDefinition().isVisible().interpret(ModelTypes.Value.BOOLEAN, env);
 		}
 
 		@Override
@@ -208,15 +173,11 @@ public class QuickWindow extends ExAddOn.Abstract<ExElement> {
 	private ModelValueInstantiator<SettableValue<Integer>> theYInstantiator;
 	private ModelValueInstantiator<SettableValue<Integer>> theWidthInstantiator;
 	private ModelValueInstantiator<SettableValue<Integer>> theHeightInstantiator;
-	private ModelValueInstantiator<SettableValue<String>> theTitleInstantiator;
-	private ModelValueInstantiator<SettableValue<Boolean>> theVisibleInstantiator;
 	private CloseAction theCloseAction;
 	private SettableValue<Integer> theX;
 	private SettableValue<Integer> theY;
 	private SettableValue<Integer> theWidth;
 	private SettableValue<Integer> theHeight;
-	private SettableValue<String> theTitle;
-	private SettableValue<Boolean> theVisible;
 
 	/** @param element The element that this add-on is added onto */
 	public QuickWindow(ExElement element) {
@@ -252,16 +213,6 @@ public class QuickWindow extends ExAddOn.Abstract<ExElement> {
 		return theHeight;
 	}
 
-	/** @return The value defining the title for the window */
-	public SettableValue<String> getTitle() {
-		return theTitle;
-	}
-
-	/** @return The value defining when the window is visible--to hide/show and to be updated when the user closes the window */
-	public SettableValue<Boolean> isVisible() {
-		return theVisible;
-	}
-
 	@Override
 	public void update(ExAddOn.Interpreted<?, ?> interpreted) {
 		super.update(interpreted);
@@ -271,8 +222,6 @@ public class QuickWindow extends ExAddOn.Abstract<ExElement> {
 		theYInstantiator = myInterpreted.getY() == null ? null : myInterpreted.getY().instantiate();
 		theWidthInstantiator = myInterpreted.getWidth() == null ? null : myInterpreted.getWidth().instantiate();
 		theHeightInstantiator = myInterpreted.getHeight() == null ? null : myInterpreted.getHeight().instantiate();
-		theTitleInstantiator = myInterpreted.getTitle() == null ? null : myInterpreted.getTitle().instantiate();
-		theVisibleInstantiator = myInterpreted.isVisible() == null ? null : myInterpreted.isVisible().instantiate();
 	}
 
 	@Override
@@ -283,7 +232,5 @@ public class QuickWindow extends ExAddOn.Abstract<ExElement> {
 		theY = theYInstantiator == null ? null : theYInstantiator.get(models);
 		theWidth = theWidthInstantiator == null ? null : theWidthInstantiator.get(models);
 		theHeight = theHeightInstantiator == null ? null : theHeightInstantiator.get(models);
-		theTitle = theTitleInstantiator == null ? null : theTitleInstantiator.get(models);
-		theVisible = theVisibleInstantiator == null ? null : theVisibleInstantiator.get(models);
 	}
 }

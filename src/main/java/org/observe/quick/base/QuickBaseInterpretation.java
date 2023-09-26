@@ -193,6 +193,7 @@ public class QuickBaseInterpretation implements QonfigInterpretation {
 		// Dialogs
 		interpreter.createWith(QuickConfirm.CONFIRM, QuickConfirm.Def.class, ExElement.creator(QuickConfirm.Def::new));
 		interpreter.createWith(QuickFileChooser.FILE_CHOOSER, QuickFileChooser.Def.class, ExElement.creator(QuickFileChooser.Def::new));
+		interpreter.createWith(GeneralDialog.GENERAL_DIALOG, GeneralDialog.Def.class, ExElement.creator(GeneralDialog.Def::new));
 		return interpreter;
 	}
 

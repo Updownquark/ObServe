@@ -28,6 +28,7 @@ public class QuickTextField<T> extends QuickEditableTextWidget.Abstract<T> {
 		instance = QuickTextField.class)
 	public static class Def extends QuickEditableTextWidget.Def.Abstract<QuickTextField<?>> {
 		private Integer theColumns;
+		private CompiledExpression isPassword;
 		private CompiledExpression theEmptyText;
 
 		public Def(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
@@ -44,6 +45,11 @@ public class QuickTextField<T> extends QuickEditableTextWidget.Abstract<T> {
 			return theColumns;
 		}
 
+		@QonfigAttributeGetter("password")
+		public CompiledExpression isPassword() {
+			return isPassword;
+		}
+
 		@QonfigAttributeGetter("empty-text")
 		public CompiledExpression getEmptyText() {
 			return theEmptyText;
@@ -54,6 +60,7 @@ public class QuickTextField<T> extends QuickEditableTextWidget.Abstract<T> {
 			super.doUpdate(session.asElement(session.getFocusType().getSuperElement()));
 			String columnsStr = session.getAttributeText("columns");
 			theColumns = columnsStr == null ? null : Integer.parseInt(columnsStr);
+			isPassword = session.getAttributeExpression("password");
 			theEmptyText = session.getAttributeExpression("empty-text");
 		}
 
@@ -64,6 +71,7 @@ public class QuickTextField<T> extends QuickEditableTextWidget.Abstract<T> {
 	}
 
 	public static class Interpreted<T> extends QuickEditableTextWidget.Interpreted.Abstract<T, QuickTextField<T>> {
+		private InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> isPassword;
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<String>> theEmptyText;
 
 		public Interpreted(Def definition, ExElement.Interpreted<?> parent) {
@@ -80,6 +88,10 @@ public class QuickTextField<T> extends QuickEditableTextWidget.Abstract<T> {
 			return TypeTokens.get().keyFor(QuickTextField.class).parameterized(getValueType());
 		}
 
+		public InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> isPassword() {
+			return isPassword;
+		}
+
 		public InterpretedValueSynth<SettableValue<?>, SettableValue<String>> getEmptyText() {
 			return theEmptyText;
 		}
@@ -87,8 +99,9 @@ public class QuickTextField<T> extends QuickEditableTextWidget.Abstract<T> {
 		@Override
 		protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 			super.doUpdate(env);
+			isPassword = getDefinition().isPassword().interpret(ModelTypes.Value.BOOLEAN, getExpressoEnv());
 			theEmptyText = getDefinition().getEmptyText() == null ? null
-				: getDefinition().getEmptyText().interpret(ModelTypes.Value.forType(String.class), getExpressoEnv());
+				: getDefinition().getEmptyText().interpret(ModelTypes.Value.STRING, getExpressoEnv());
 		}
 
 		@Override
@@ -97,18 +110,26 @@ public class QuickTextField<T> extends QuickEditableTextWidget.Abstract<T> {
 		}
 	}
 
+	private ModelValueInstantiator<SettableValue<Boolean>> thePasswordInstantiator;
 	private ModelValueInstantiator<SettableValue<String>> theEmptyTextInstantiator;
 	private Integer theColumns;
+	private SettableValue<SettableValue<Boolean>> isPassword;
 	private SettableValue<SettableValue<String>> theEmptyText;
 
 	public QuickTextField(Object id) {
 		super(id);
+		isPassword = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Boolean>> parameterized(boolean.class))
+			.build();
 		theEmptyText = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<String>> parameterized(String.class))
 			.build();
 	}
 
 	public Integer getColumns() {
 		return theColumns;
+	}
+
+	public SettableValue<Boolean> isPassword() {
+		return SettableValue.flatten(isPassword);
 	}
 
 	public SettableValue<String> getEmptyText() {
@@ -120,12 +141,14 @@ public class QuickTextField<T> extends QuickEditableTextWidget.Abstract<T> {
 		super.doUpdate(interpreted);
 		QuickTextField.Interpreted<T> myInterpreted = (QuickTextField.Interpreted<T>) interpreted;
 		theColumns = myInterpreted.getDefinition().getColumns();
+		thePasswordInstantiator = myInterpreted.isPassword().instantiate();
 		theEmptyTextInstantiator = myInterpreted.getEmptyText() == null ? null : myInterpreted.getEmptyText().instantiate();
 	}
 
 	@Override
 	public void instantiated() {
 		super.instantiated();
+		thePasswordInstantiator.instantiate();
 		if (theEmptyTextInstantiator != null)
 			theEmptyTextInstantiator.instantiate();
 	}
@@ -133,6 +156,7 @@ public class QuickTextField<T> extends QuickEditableTextWidget.Abstract<T> {
 	@Override
 	protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
 		super.doInstantiate(myModels);
+		isPassword.set(thePasswordInstantiator.get(myModels), null);
 		theEmptyText.set(theEmptyTextInstantiator == null ? null : theEmptyTextInstantiator.get(myModels), null);
 	}
 
@@ -140,6 +164,7 @@ public class QuickTextField<T> extends QuickEditableTextWidget.Abstract<T> {
 	public QuickTextField<T> copy(ExElement parent) {
 		QuickTextField<T> copy = (QuickTextField<T>) super.copy(parent);
 
+		copy.isPassword = SettableValue.build(isPassword.getType()).build();
 		copy.theEmptyText = SettableValue.build(theEmptyText.getType()).build();
 
 		return copy;

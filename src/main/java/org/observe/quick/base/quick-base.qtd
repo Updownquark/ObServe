@@ -308,6 +308,7 @@
 			<attribute name="empty-text" type="expression" specify="optional" />
 			<?DOC The number of columns of characters to configure the text field's width?>
 			<attribute name="columns" type="int" specify="optional" />
+			<attribute name="password" type="expression" default="false" />
 		</element-def>
 		<?DOC A multi-line text widget that may render simple or HTML text.  Functions similarly to a &lt;text-field>?>
 		<element-def name="text-area" extends="editable-text-widget" inherits="with-element-model">
@@ -556,11 +557,6 @@
 		</element-def>
 
 		<!-- Dialogs -->
-		<element-def name="confirm" extends="content-dialog">
-			<attribute name="icon" type="expression" specify="optional" />
-			<attribute name="on-confirm" type="expression" />
-			<attribute name="on-cancel" type="expression" specify="optional" />
-		</element-def>
 		<element-def name="info-dialog" extends="content-dialog">
 			<?DOC <html>The type of the dialog, which may affect its look and feel. This should evaluate to a string.<br>
 				Implementations may allow their own enumerated values or generalise this, but the following standard values should be supported:
@@ -573,6 +569,11 @@
 			<attribute name="type" type="expression" specify="optional" />
 			<attribute name="icon" type="expression" specify="optional" />
 			<attribute name="on-close" type="expression" specify="optional" />
+		</element-def>
+		<element-def name="confirm" extends="content-dialog">
+			<attribute name="icon" type="expression" specify="optional" />
+			<attribute name="on-confirm" type="expression" />
+			<attribute name="on-cancel" type="expression" specify="optional" />
 		</element-def>
 		<element-def name="file-chooser" extends="dialog" inherits="with-element-model">
 			<element-model>
@@ -587,7 +588,10 @@
 			<attribute name="on-select" type="expression" />
 			<attribute name="on-cancel" type="expression" specify="optional" />
 		</element-def>
-		
+		<element-def name="general-dialog" extends="content-dialog" inherits="window">
+			<attribute name="modal" type="boolean" />
+		</element-def>
+
 		<!-- Miscellaneous -->
 		<element-def name="menu-bar" inherits="with-text">
 			<child-def name="menu" type="menu" min="0" max="inf" />

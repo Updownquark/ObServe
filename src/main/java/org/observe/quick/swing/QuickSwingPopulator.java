@@ -1,6 +1,7 @@
 package org.observe.quick.swing;
 
 import java.awt.*;
+import java.awt.Dialog.ModalityType;
 import java.awt.event.FocusEvent;
 import java.awt.event.FocusListener;
 import java.awt.event.KeyAdapter;
@@ -28,16 +29,7 @@ import java.util.function.IntSupplier;
 import java.util.function.Supplier;
 import java.util.function.ToIntFunction;
 
-import javax.swing.Icon;
-import javax.swing.JComponent;
-import javax.swing.JFileChooser;
-import javax.swing.JFrame;
-import javax.swing.JLabel;
-import javax.swing.JOptionPane;
-import javax.swing.JPanel;
-import javax.swing.JViewport;
-import javax.swing.SwingConstants;
-import javax.swing.SwingUtilities;
+import javax.swing.*;
 import javax.swing.event.CaretListener;
 import javax.swing.text.BadLocationException;
 import javax.swing.text.JTextComponent;
@@ -377,10 +369,8 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 									if (!dialogs.isEmpty()) {
 										for (QuickDialog dialog : w.getDialogs()) {
 											QuickSwingDialog<QuickDialog> swingDialog = dialogs.get(dialog.getIdentity());
-											swingDialog.initialize(dialog, c, comp.getUntil());
+											swingDialog.initialize(dialog, c, Observable.or(dialog.onDestroy(), comp.getUntil()));
 											SettableValue<Boolean> visible = dialog.isVisible();
-											if (!Boolean.FALSE.equals(visible.get()) && visible.isAcceptable(Boolean.FALSE) == null)
-												visible.set(Boolean.FALSE, null);
 											visible.value().takeUntil(comp.getUntil()).filter(v -> v)
 											.act(__ -> swingDialog.display(dialog, c, visible));
 										}
@@ -1601,6 +1591,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 			// Dialogs
 			tx.with(QuickConfirm.Interpreted.class, QuickSwingDialog.class, QuickBaseSwing::interpretConfirm);
 			tx.with(QuickFileChooser.Interpreted.class, QuickSwingDialog.class, QuickBaseSwing::interpretFileChooser);
+			tx.with(GeneralDialog.Interpreted.class, QuickSwingDialog.class, QuickBaseSwing::interpretGeneralDialog);
 		}
 
 		static <T> Class<T> gen(Class<? super T> rawClass) {
@@ -1777,6 +1768,8 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 							tf2.setCommitOnType(commitOnType);
 						if (columns != null)
 							tf2.withColumns(columns);
+						quick.isPassword().changes().takeUntil(tf.getUntil())
+						.act(evt -> tf2.asPassword(evt.getNewValue() ? '*' : (char) 0));
 						quick.getEmptyText().changes().takeUntil(tf.getUntil()).act(evt -> tf2.setEmptyText(evt.getNewValue()));
 						quick.isEditable().changes().takeUntil(tf.getUntil())
 						.act(evt -> tf2.setEditable(!Boolean.FALSE.equals(evt.getNewValue())));
@@ -2328,6 +2321,83 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 			});
 		}
 
+		private static class ScrollPopulator extends AbstractQuickContainerPopulator {
+			private final PanelPopulation.ScrollPane<?> theScroll;
+
+			ScrollPopulator(PanelPopulation.ScrollPane<?> scroll) {
+				theScroll = scroll;
+			}
+
+			@Override
+			public Observable<?> getUntil() {
+				return theScroll.getUntil();
+			}
+
+			@Override
+			public AbstractQuickContainerPopulator addHPanel(String fieldName, LayoutManager layout,
+				Consumer<PanelPopulator<JPanel, ?>> hPanel) {
+				theScroll.withHContent(layout, p -> hPanel.accept((PanelPopulator<JPanel, ?>) modify(p)));
+				return this;
+			}
+
+			@Override
+			public AbstractQuickContainerPopulator addVPanel(Consumer<PanelPopulator<JPanel, ?>> vPanel) {
+				theScroll.withVContent(p -> vPanel.accept((PanelPopulator<JPanel, ?>) modify(p)));
+				return this;
+			}
+		}
+
+		private static class ScrollRowHeaderPopulator extends AbstractQuickContainerPopulator {
+			private final PanelPopulation.ScrollPane<?> theScroll;
+
+			ScrollRowHeaderPopulator(PanelPopulation.ScrollPane<?> scroll) {
+				theScroll = scroll;
+			}
+
+			@Override
+			public Observable<?> getUntil() {
+				return theScroll.getUntil();
+			}
+
+			@Override
+			public AbstractQuickContainerPopulator addHPanel(String fieldName, LayoutManager layout,
+				Consumer<PanelPopulator<JPanel, ?>> hPanel) {
+				theScroll.withHRowHeader(layout, p -> hPanel.accept((PanelPopulator<JPanel, ?>) modify(p)));
+				return this;
+			}
+
+			@Override
+			public AbstractQuickContainerPopulator addVPanel(Consumer<PanelPopulator<JPanel, ?>> vPanel) {
+				theScroll.withVRowHeader(p -> vPanel.accept((PanelPopulator<JPanel, ?>) modify(p)));
+				return this;
+			}
+		}
+
+		private static class ScrollColumnHeaderPopulator extends AbstractQuickContainerPopulator {
+			private final PanelPopulation.ScrollPane<?> theScroll;
+
+			ScrollColumnHeaderPopulator(PanelPopulation.ScrollPane<?> scroll) {
+				theScroll = scroll;
+			}
+
+			@Override
+			public Observable<?> getUntil() {
+				return theScroll.getUntil();
+			}
+
+			@Override
+			public AbstractQuickContainerPopulator addHPanel(String fieldName, LayoutManager layout,
+				Consumer<PanelPopulator<JPanel, ?>> hPanel) {
+				theScroll.withHColumnHeader(layout, p -> hPanel.accept((PanelPopulator<JPanel, ?>) modify(p)));
+				return this;
+			}
+
+			@Override
+			public AbstractQuickContainerPopulator addVPanel(Consumer<PanelPopulator<JPanel, ?>> vPanel) {
+				throw new IllegalArgumentException("Vertical panel makes no sense for a column header");
+			}
+		}
+
 		static QuickSwingDialog<QuickConfirm> interpretConfirm(QuickConfirm.Interpreted interpreted,
 			Transformer<ExpressoInterpretationException> tx) throws ExpressoInterpretationException {
 			QuickSwingPopulator<QuickWidget> content = tx.transform(interpreted.getContent(), QuickSwingPopulator.class);
@@ -2344,7 +2414,7 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 					theIcon = dialog.getIcon();
 					theOnConfirm = dialog.getOnConfirm();
 					theOnCancel = dialog.getOnCancel();
-					ComponentExtractor ce = new ComponentExtractor(Observable.or(dialog.onDestroy(), until));
+					ComponentExtractor ce = new ComponentExtractor(until);
 					content.populate(ce, dialog.getContent());
 					theContent = ce.getExtractedComponent();
 				}
@@ -2432,80 +2502,70 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 			};
 		}
 
-		private static class ScrollPopulator extends AbstractQuickContainerPopulator {
-			private final PanelPopulation.ScrollPane<?> theScroll;
+		static QuickSwingDialog<GeneralDialog> interpretGeneralDialog(GeneralDialog.Interpreted<?> interpreted,
+			Transformer<ExpressoInterpretationException> tx) throws ExpressoInterpretationException {
+			QuickSwingPopulator<QuickWidget> content = tx.transform(interpreted.getContent(), QuickSwingPopulator.class);
+			return new QuickSwingDialog<GeneralDialog>() {
+				private SettableValue<String> theTitle;
+				private PanelPopulation.WindowBuilder<JDialog, ?> theDialog;
 
-			ScrollPopulator(PanelPopulation.ScrollPane<?> scroll) {
-				theScroll = scroll;
-			}
+				@Override
+				public void initialize(GeneralDialog dialog, Component parent, Observable<?> until) throws ModelInstantiationException {
+					until.act(__ -> System.out.println("UNTIL!!!"));
+					theTitle = dialog.getTitle();
+					JDialog jDialog = new JDialog(SwingUtilities.getWindowAncestor(parent), //
+						dialog.isModal() ? ModalityType.APPLICATION_MODAL : ModalityType.MODELESS);
+					theDialog = WindowPopulation.populateDialog(jDialog, until, false);
+					content.populate(new WindowContentPopulator(theDialog, until), dialog.getContent());
+					theDialog.withTitle(theTitle);
+					QuickWindow window = dialog.getAddOn(QuickWindow.class);
+					if (window.getX() != null)
+						theDialog.withX(window.getX());
+					if (window.getY() != null)
+						theDialog.withY(window.getY());
+					if (window.getWidth() != null)
+						theDialog.withWidth(window.getWidth());
+					if (window.getHeight() != null)
+						theDialog.withHeight(window.getHeight());
+					theDialog.withVisible(dialog.isVisible());
+					theDialog.disposeOnClose(false);
+					EventQueue.invokeLater(() -> { // Do in an invoke later to allow the UI to come up before opening the dialog
+						theDialog.run(parent);
+					});
+				}
 
-			@Override
-			public Observable<?> getUntil() {
-				return theScroll.getUntil();
-			}
-
-			@Override
-			public AbstractQuickContainerPopulator addHPanel(String fieldName, LayoutManager layout,
-				Consumer<PanelPopulator<JPanel, ?>> hPanel) {
-				theScroll.withHContent(layout, p -> hPanel.accept((PanelPopulator<JPanel, ?>) modify(p)));
-				return this;
-			}
-
-			@Override
-			public AbstractQuickContainerPopulator addVPanel(Consumer<PanelPopulator<JPanel, ?>> vPanel) {
-				theScroll.withVContent(p -> vPanel.accept((PanelPopulator<JPanel, ?>) modify(p)));
-				return this;
-			}
+				@Override
+				public void display(GeneralDialog dialog, Component parent, SettableValue<Boolean> visible) {
+					// Since we set the visibility in the initializer, the display should happen automatically
+				}
+			};
 		}
 
-		private static class ScrollRowHeaderPopulator extends AbstractQuickContainerPopulator {
-			private final PanelPopulation.ScrollPane<?> theScroll;
+		static class WindowContentPopulator extends AbstractQuickContainerPopulator {
+			private final PanelPopulation.WindowBuilder<?, ?> theWindow;
+			private final Observable<?> theUntil;
 
-			ScrollRowHeaderPopulator(PanelPopulation.ScrollPane<?> scroll) {
-				theScroll = scroll;
+			WindowContentPopulator(WindowBuilder<?, ?> window, Observable<?> until) {
+				theWindow = window;
+				theUntil = until;
 			}
 
 			@Override
 			public Observable<?> getUntil() {
-				return theScroll.getUntil();
+				return theUntil;
 			}
 
 			@Override
 			public AbstractQuickContainerPopulator addHPanel(String fieldName, LayoutManager layout,
-				Consumer<PanelPopulator<JPanel, ?>> hPanel) {
-				theScroll.withHRowHeader(layout, p -> hPanel.accept((PanelPopulator<JPanel, ?>) modify(p)));
+				Consumer<PanelPopulator<JPanel, ?>> panel) {
+				theWindow.withHContent(layout, (Consumer<PanelPopulator<?, ?>>) (Consumer<?>) panel);
 				return this;
 			}
 
 			@Override
-			public AbstractQuickContainerPopulator addVPanel(Consumer<PanelPopulator<JPanel, ?>> vPanel) {
-				theScroll.withVRowHeader(p -> vPanel.accept((PanelPopulator<JPanel, ?>) modify(p)));
+			public AbstractQuickContainerPopulator addVPanel(Consumer<PanelPopulator<JPanel, ?>> panel) {
+				theWindow.withVContent((Consumer<PanelPopulator<?, ?>>) (Consumer<?>) panel);
 				return this;
-			}
-		}
-
-		private static class ScrollColumnHeaderPopulator extends AbstractQuickContainerPopulator {
-			private final PanelPopulation.ScrollPane<?> theScroll;
-
-			ScrollColumnHeaderPopulator(PanelPopulation.ScrollPane<?> scroll) {
-				theScroll = scroll;
-			}
-
-			@Override
-			public Observable<?> getUntil() {
-				return theScroll.getUntil();
-			}
-
-			@Override
-			public AbstractQuickContainerPopulator addHPanel(String fieldName, LayoutManager layout,
-				Consumer<PanelPopulator<JPanel, ?>> hPanel) {
-				theScroll.withHColumnHeader(layout, p -> hPanel.accept((PanelPopulator<JPanel, ?>) modify(p)));
-				return this;
-			}
-
-			@Override
-			public AbstractQuickContainerPopulator addVPanel(Consumer<PanelPopulator<JPanel, ?>> vPanel) {
-				throw new IllegalArgumentException("Vertical panel makes no sense for a column header");
 			}
 		}
 
