@@ -28,6 +28,12 @@
 
 	<add-ons>
 		<add-on name="abstract-window" abstract="true">
+			<attribute name="title" type="expression" specify="optional" />
+			<?DOC Controls when the window is displayed?>
+			<attribute name="visible" type="expression" specify="optional" />
+			<?DOC The action to take when the user closes the window by clicking the "X" at the corner?>
+		</add-on>
+		<add-on name="window" inherits="abstract-window">
 			<?DOC The x-coordinate of the position of the top-left corner of the window in the graphics environment?>
 			<attribute name="x" type="expression" specify="optional" />
 			<?DOC The y-coordinate of the position of the top-left corner of the window in the graphics environment?>
@@ -37,12 +43,6 @@
 			<?DOC The height of the window?>
 			<attribute name="height" type="expression" specify="optional" />
 			<?DOC The title for the window?>
-			<attribute name="title" type="expression" specify="optional" />
-			<?DOC Controls when the window is displayed?>
-			<attribute name="visible" type="expression" specify="optional" />
-			<?DOC The action to take when the user closes the window by clicking the "X" at the corner?>
-		</add-on>
-		<add-on name="window" inherits="abstract-window">
 			<attribute name="close-action" type="window-close-action" default="hide" />
 		</add-on>
 
@@ -226,7 +226,10 @@
 			<attribute name="title" type="expression" specify="required" />
 		</element-def>
 
-		<element-def name="dialog" abstract="true" inherits="abstract-window,with-local-model" />
+		<element-def name="dialog" abstract="true" inherits="abstract-window,with-local-model">
+			<attr-mod name="abstract-window.visible" specify="required" />
+			<attr-mod name="abstract-window.title" specify="required" />
+		</element-def>
 		<element-def name="content-dialog" extends="dialog" abstract="true">
 			<child-def name="content" type="widget" />
 		</element-def>
