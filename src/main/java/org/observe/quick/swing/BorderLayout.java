@@ -1,4 +1,4 @@
-package org.observe.quick.base;
+package org.observe.quick.swing;
 
 import java.awt.Component;
 import java.awt.Container;
@@ -10,7 +10,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Supplier;
 
+import org.observe.quick.base.QuickBorderLayout;
 import org.observe.quick.base.QuickBorderLayout.Region;
+import org.observe.quick.base.QuickSize;
 import org.qommons.LambdaUtils;
 
 public class BorderLayout implements LayoutManager2 {

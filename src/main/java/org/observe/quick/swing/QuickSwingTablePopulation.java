@@ -210,7 +210,8 @@ class QuickSwingTablePopulation {
 			SwingCellPopulator<R, C> renderPopulator;
 			if (swingRenderer != null) {
 				renderPopulator = new SwingCellPopulator<>(this, true);
-				renderPopulator.addModifier(ce -> ce.modifyComponent(comp -> {
+				// This is in the modifier because we don't have the component yet
+				renderPopulator.addChildModifier(ce -> ce.modifyComponent(comp -> {
 					if (parent.get().getEditor() instanceof JComponent)
 						theOwner = (JComponent) parent.get().getEditor();
 					else if (parent.get().getComponent() instanceof JComponent)
@@ -722,12 +723,12 @@ class QuickSwingTablePopulation {
 		}
 
 		@Override
-		public void addModifier(Consumer<ComponentEditor<?, ?>> modifier) {
+		public void addChildModifier(Consumer<ComponentEditor<?, ?>> modifier) {
 			theModifiers.add(modifier);
 		}
 
 		@Override
-		public void removeModifier(Consumer<ComponentEditor<?, ?>> modifier) {
+		public void removeChildModifier(Consumer<ComponentEditor<?, ?>> modifier) {
 			theModifiers.remove(modifier);
 		}
 
@@ -822,7 +823,7 @@ class QuickSwingTablePopulation {
 		}
 
 		@Override
-		public <C2 extends ComponentEditor<?, ?>> C2 modify(C2 component) {
+		public <C2 extends ComponentEditor<?, ?>> C2 modifyChild(C2 component) {
 			return component;
 		}
 

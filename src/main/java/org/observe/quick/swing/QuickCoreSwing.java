@@ -178,8 +178,8 @@ public class QuickCoreSwing implements QuickInterpretation {
 								QUICK_SWING_WIDGETS.put(c, w); // first time
 							else
 								revert[0].run();
-						} else
-							QUICK_SWING_WIDGETS.put(c, w);
+						} else if (QUICK_SWING_WIDGETS.put(c, w) != null)
+							return;
 
 						component[0] = c;
 						if (renderer) {

@@ -490,7 +490,7 @@ public interface ExElement extends Identifiable {
 
 			@Override
 			public String toString() {
-				return theElement == null ? super.toString() : theElement.toString();
+				return theId.toString();
 			}
 		}
 	}

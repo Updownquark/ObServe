@@ -1,4 +1,4 @@
-package org.observe.quick.base;
+package org.observe.quick.swing;
 
 import java.awt.Component;
 import java.awt.Container;
@@ -11,6 +11,7 @@ import java.util.function.Supplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import org.observe.quick.base.QuickSize;
 import org.qommons.LambdaUtils;
 
 public class SimpleLayout implements LayoutManager2 {

@@ -4,6 +4,7 @@ import org.observe.SettableValue;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
+import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
@@ -116,11 +117,15 @@ public interface QuickValueWidget<T> extends QuickWidget {
 				return theValue;
 			}
 
+			protected ModelInstanceType<SettableValue<?>, SettableValue<T>> getTargetType() {
+				return ModelTypes.Value.<T> anyAsV();
+			}
+
 			@Override
 			public InterpretedValueSynth<SettableValue<?>, SettableValue<T>> getOrInitValue() throws ExpressoInterpretationException {
 				if (theValue == null) {
 					if (getDefinition().getValue() != null)
-						theValue = getDefinition().getValue().interpret(ModelTypes.Value.<T> anyAsV(), getExpressoEnv());
+						theValue = getDefinition().getValue().interpret(getTargetType(), getExpressoEnv());
 					else
 						theValue = ((WidgetValueSupplier.Interpreted<T, ?>) getParentElement()).getValue();
 				}

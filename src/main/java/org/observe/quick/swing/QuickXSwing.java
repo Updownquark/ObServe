@@ -30,7 +30,6 @@ import org.observe.util.swing.CategoryRenderStrategy;
 import org.observe.util.swing.PanelPopulation;
 import org.observe.util.swing.PanelPopulation.CollapsePanel;
 import org.observe.util.swing.PanelPopulation.PanelPopulator;
-import org.observe.util.swing.PanelPopulation.TreeTableEditor;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transformer;
 import org.qommons.ValueHolder;
@@ -227,13 +226,13 @@ public class QuickXSwing implements QuickInterpretation {
 		@Override
 		public AbstractQuickContainerPopulator addHPanel(String fieldName, LayoutManager layout,
 			Consumer<PanelPopulator<JPanel, ?>> panel) {
-			thePopulator.addCollapsePanel(false, layout, cp -> populateCollapsePane(cp, panel));
+			thePopulator.addCollapsePanel(false, layout, cp -> populateCollapsePane(modify(cp), panel));
 			return this;
 		}
 
 		@Override
 		public AbstractQuickContainerPopulator addVPanel(Consumer<PanelPopulator<JPanel, ?>> panel) {
-			thePopulator.addCollapsePanel(false, "mig", cp -> populateCollapsePane(cp, panel));
+			thePopulator.addCollapsePanel(false, "mig", cp -> populateCollapsePane(modify(cp), panel));
 			return this;
 		}
 

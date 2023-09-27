@@ -192,17 +192,17 @@ class PanelPopulationImpl {
 		}
 
 		@Override
-		public void addModifier(Consumer<ComponentEditor<?, ?>> modifier) {
+		public void addChildModifier(Consumer<ComponentEditor<?, ?>> modifier) {
 			theModifiers.add(modifier);
 		}
 
 		@Override
-		public void removeModifier(Consumer<ComponentEditor<?, ?>> modifier) {
+		public void removeChildModifier(Consumer<ComponentEditor<?, ?>> modifier) {
 			theModifiers.remove(modifier);
 		}
 
 		@Override
-		public <C2 extends ComponentEditor<?, ?>> C2 modify(C2 component) {
+		public <C2 extends ComponentEditor<?, ?>> C2 modifyChild(C2 component) {
 			for (Consumer<ComponentEditor<?, ?>> modifier : theModifiers)
 				modifier.accept(component);
 			return component;
@@ -422,7 +422,7 @@ class PanelPopulationImpl {
 		public P addCheckField(String fieldName, SettableValue<Boolean> field, Consumer<FieldEditor<JCheckBox, ?>> modify) {
 			SimpleFieldEditor<JCheckBox, ?> fieldPanel = new SimpleFieldEditor<>(fieldName, new JCheckBox(), getUntil());
 			fieldPanel.getEditor().setHorizontalTextPosition(SwingConstants.LEADING);
-			modify(fieldPanel);
+			modifyChild(fieldPanel);
 			Subscription sub = ObservableSwingUtils.checkFor(fieldPanel.getEditor(), fieldPanel.getTooltip(), field);
 			getUntil().take(1).act(__ -> sub.unsubscribe());
 			if (modify != null)
@@ -433,17 +433,17 @@ class PanelPopulationImpl {
 		}
 
 		@Override
-		public void addModifier(Consumer<ComponentEditor<?, ?>> modifier) {
+		public void addChildModifier(Consumer<ComponentEditor<?, ?>> modifier) {
 			theModifiers.add(modifier);
 		}
 
 		@Override
-		public void removeModifier(Consumer<ComponentEditor<?, ?>> modifier) {
+		public void removeChildModifier(Consumer<ComponentEditor<?, ?>> modifier) {
 			theModifiers.remove(modifier);
 		}
 
 		@Override
-		public <C2 extends ComponentEditor<?, ?>> C2 modify(C2 component) {
+		public <C2 extends ComponentEditor<?, ?>> C2 modifyChild(C2 component) {
 			for (Consumer<ComponentEditor<?, ?>> modifier : theModifiers)
 				modifier.accept(component);
 			return component;
@@ -1926,17 +1926,17 @@ class PanelPopulationImpl {
 		}
 
 		@Override
-		public void addModifier(Consumer<ComponentEditor<?, ?>> modifier) {
+		public void addChildModifier(Consumer<ComponentEditor<?, ?>> modifier) {
 			theModifiers.add(modifier);
 		}
 
 		@Override
-		public void removeModifier(Consumer<ComponentEditor<?, ?>> modifier) {
+		public void removeChildModifier(Consumer<ComponentEditor<?, ?>> modifier) {
 			theModifiers.remove(modifier);
 		}
 
 		@Override
-		public <C2 extends ComponentEditor<?, ?>> C2 modify(C2 component) {
+		public <C2 extends ComponentEditor<?, ?>> C2 modifyChild(C2 component) {
 			for (Consumer<ComponentEditor<?, ?>> modifier : theModifiers)
 				modifier.accept(component);
 			return component;

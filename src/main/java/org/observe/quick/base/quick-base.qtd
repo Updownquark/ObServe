@@ -330,6 +330,7 @@
 		<element-def name="progress-bar" extends="value-widget">
 			<?DOC The maximum value for the progress bar?>
 			<attribute name="max" type="expression" specify="required" />
+			<attribute name="text" type="expression" specify="optional" />
 		</element-def>
 
 		<element-def name="render-field-panel" extends="value-widget">
@@ -562,11 +563,14 @@
 				Implementations may allow their own enumerated values or generalise this, but the following standard values should be supported:
 				<ul>
 				<li>error</li>
+				<li>! (same as error)</li>
 				<li>warn[ing]</li>
 				<li>info</li>
+				<li>question</li>
+				<li>? (same as question)</li>
 				</ul>
 				If not specified, the default should be "info".?>
-			<attribute name="type" type="expression" specify="optional" />
+			<attribute name="type" type="expression" default="&quot;info&quot;" />
 			<attribute name="icon" type="expression" specify="optional" />
 			<attribute name="on-close" type="expression" specify="optional" />
 		</element-def>

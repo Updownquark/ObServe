@@ -68,7 +68,7 @@ implements PanelPopulation.PanelPopulator<JPanel, AbstractQuickContainerPopulato
 	public <F> AbstractQuickContainerPopulator addTree(ObservableValue<? extends F> root,
 		Function<? super F, ? extends ObservableCollection<? extends F>> children, Consumer<TreeEditor<F, ?>> modify) {
 		return addHPanel(null, new JustifiedBoxLayout(true).mainJustified().crossJustified(),
-			p -> modify(p).addTree(root, children, modify));
+			p -> p.addTree(root, children, modify));
 	}
 
 	@Override
@@ -76,14 +76,14 @@ implements PanelPopulation.PanelPopulator<JPanel, AbstractQuickContainerPopulato
 		BiFunction<? super BetterList<F>, Observable<?>, ? extends ObservableCollection<? extends F>> children,
 			Consumer<TreeEditor<F, ?>> modify) {
 		return addHPanel(null, new JustifiedBoxLayout(true).mainJustified().crossJustified(),
-			p -> modify(p).addTree3(root, children, modify));
+			p -> p.addTree3(root, children, modify));
 	}
 
 	@Override
 	public <F> AbstractQuickContainerPopulator addTreeTable(ObservableValue<F> root,
 		Function<? super F, ? extends ObservableCollection<? extends F>> children, Consumer<TreeTableEditor<F, ?>> modify) {
 		return addHPanel(null, new JustifiedBoxLayout(true).mainJustified().crossJustified(),
-			p -> modify(p).addTreeTable(root, children, modify));
+			p -> p.addTreeTable(root, children, modify));
 	}
 
 	@Override
@@ -91,141 +91,141 @@ implements PanelPopulation.PanelPopulator<JPanel, AbstractQuickContainerPopulato
 		BiFunction<? super BetterList<F>, Observable<?>, ? extends ObservableCollection<? extends F>> children,
 			Consumer<TreeTableEditor<F, ?>> modify) {
 		return addHPanel(null, new JustifiedBoxLayout(true).mainJustified().crossJustified(),
-			p -> modify(p.withName("DEBUG")).addTreeTable3(root, children, modify));
+			p -> p.addTreeTable3(root, children, modify));
 	}
 
 	@Override
 	public AbstractQuickContainerPopulator addTabs(Consumer<TabPaneEditor<JTabbedPane, ?>> tabs) {
-		return addHPanel(null, new JustifiedBoxLayout(true).mainJustified().crossJustified(), p -> modify(p).addTabs(tabs));
+		return addHPanel(null, new JustifiedBoxLayout(true).mainJustified().crossJustified(), p -> p.addTabs(tabs));
 	}
 
 	@Override
 	public AbstractQuickContainerPopulator addSplit(boolean vertical, Consumer<SplitPane<?>> split) {
-		return addHPanel(null, new JustifiedBoxLayout(true).mainJustified().crossJustified(), p -> modify(p).addSplit(vertical, split));
+		return addHPanel(null, new JustifiedBoxLayout(true).mainJustified().crossJustified(), p -> p.addSplit(vertical, split));
 	}
 
 	@Override
 	public AbstractQuickContainerPopulator addScroll(String fieldName, Consumer<PanelPopulation.ScrollPane<?>> scroll) {
 		return addHPanel(null, new JustifiedBoxLayout(true).mainJustified().crossJustified(),
-			p -> modify(p).addScroll(fieldName, scroll));
+			p -> p.addScroll(fieldName, scroll));
 	}
 
 	@Override
 	public <S> AbstractQuickContainerPopulator addComponent(String fieldName, S component, Consumer<FieldEditor<S, ?>> modify) {
 		return addHPanel(null, new JustifiedBoxLayout(true).mainJustified().crossJustified(),
-			p -> modify(p).addComponent(fieldName, component, modify));
+			p -> p.addComponent(fieldName, component, modify));
 	}
 
 	@Override
 	public AbstractQuickContainerPopulator addCollapsePanel(boolean vertical, LayoutManager layout,
 		Consumer<CollapsePanel<JXCollapsiblePane, JXPanel, ?>> panel) {
 		return addHPanel(null, new JustifiedBoxLayout(true).mainJustified().crossJustified(),
-			p -> modify(p).addCollapsePanel(vertical, layout, panel));
+			p -> p.addCollapsePanel(vertical, layout, panel));
 	}
 
 	@Override
 	public <F> AbstractQuickContainerPopulator addTextField(String fieldName, SettableValue<F> field, Format<F> format,
 		Consumer<FieldEditor<ObservableTextField<F>, ?>> modify) {
 		return addHPanel(null, new JustifiedBoxLayout(true).mainJustified().crossJustified(),
-			p -> modify(p).addTextField(fieldName, field, format, modify));
+			p -> p.addTextField(fieldName, field, format, modify));
 	}
 
 	@Override
 	public <F> AbstractQuickContainerPopulator addTextArea(String fieldName, SettableValue<F> field, Format<F> format,
 		Consumer<FieldEditor<ObservableTextArea<F>, ?>> modify) {
 		return addHPanel(null, new JustifiedBoxLayout(true).mainJustified().crossJustified(),
-			p -> modify(p).addTextArea(fieldName, field, format, modify));
+			p -> p.addTextArea(fieldName, field, format, modify));
 	}
 
 	@Override
 	public <F> AbstractQuickContainerPopulator addStyledTextArea(String fieldName, ObservableStyledDocument<F> doc,
 		Consumer<FieldEditor<ObservableTextArea<F>, ?>> modify) {
 		return addHPanel(null, new JustifiedBoxLayout(true).mainJustified().crossJustified(),
-			p -> modify(p).addStyledTextArea(fieldName, doc, modify));
+			p -> p.addStyledTextArea(fieldName, doc, modify));
 	}
 
 	@Override
 	public <F> AbstractQuickContainerPopulator addLabel(String fieldName, ObservableValue<F> field, Function<? super F, String> format,
 		Consumer<LabelEditor<JLabel, ?>> modify) {
 		return addHPanel(null, new JustifiedBoxLayout(true).mainJustified().crossJustified(),
-			p -> modify(p).addLabel(fieldName, field, format, modify));
+			p -> p.addLabel(fieldName, field, format, modify));
 	}
 
 	@Override
 	public AbstractQuickContainerPopulator addIcon(String fieldName, ObservableValue<Icon> icon,
 		Consumer<FieldEditor<JLabel, ?>> modify) {
 		return addHPanel(null, new JustifiedBoxLayout(true).mainJustified().crossJustified(),
-			p -> modify(p).addIcon(fieldName, icon, modify));
+			p -> p.addIcon(fieldName, icon, modify));
 	}
 
 	@Override
 	public <F> AbstractQuickContainerPopulator addLink(String fieldName, ObservableValue<F> field, Function<? super F, String> format,
 		Consumer<Object> action, Consumer<FieldEditor<JLabel, ?>> modify) {
 		return addHPanel(null, new JustifiedBoxLayout(true).mainJustified().crossJustified(),
-			p -> modify(p).addLink(fieldName, field, format, action, modify));
+			p -> p.addLink(fieldName, field, format, action, modify));
 	}
 
 	@Override
 	public AbstractQuickContainerPopulator addCheckField(String fieldName, SettableValue<Boolean> field,
 		Consumer<FieldEditor<JCheckBox, ?>> modify) {
 		return addHPanel(null, new JustifiedBoxLayout(true).mainJustified().crossJustified(),
-			p -> modify(p).addCheckField(fieldName, field, modify));
+			p -> p.addCheckField(fieldName, field, modify));
 	}
 
 	@Override
 	public AbstractQuickContainerPopulator addToggleButton(String fieldName, SettableValue<Boolean> field, String text,
 		Consumer<ButtonEditor<JToggleButton, ?>> modify) {
 		return addHPanel(null, new JustifiedBoxLayout(true).mainJustified().crossJustified(),
-			p -> modify(p).addToggleButton(fieldName, field, text, modify));
+			p -> p.addToggleButton(fieldName, field, text, modify));
 	}
 
 	@Override
 	public <F> AbstractQuickContainerPopulator addSpinnerField(String fieldName, JSpinner spinner, SettableValue<F> value,
 		Function<? super F, ? extends F> purifier, Consumer<SteppedFieldEditor<JSpinner, F, ?>> modify) {
 		return addHPanel(null, new JustifiedBoxLayout(true).mainJustified().crossJustified(),
-			p -> modify(p).addSpinnerField(fieldName, spinner, value, purifier, modify));
+			p -> p.addSpinnerField(fieldName, spinner, value, purifier, modify));
 	}
 
 	@Override
 	public AbstractQuickContainerPopulator addSlider(String fieldName, SettableValue<Double> value,
 		Consumer<SliderEditor<MultiRangeSlider, ?>> modify) {
 		return addHPanel(null, new JustifiedBoxLayout(true).mainJustified().crossJustified(),
-			p -> modify(p).addSlider(fieldName, value, modify));
+			p -> p.addSlider(fieldName, value, modify));
 	}
 
 	@Override
 	public AbstractQuickContainerPopulator addMultiSlider(String fieldName, ObservableCollection<Double> values,
 		Consumer<SliderEditor<MultiRangeSlider, ?>> modify) {
 		return addHPanel(null, new JustifiedBoxLayout(true).mainJustified().crossJustified(),
-			p -> modify(p).addMultiSlider(fieldName, values, modify));
+			p -> p.addMultiSlider(fieldName, values, modify));
 	}
 
 	@Override
 	public AbstractQuickContainerPopulator addRangeSlider(String fieldName, SettableValue<Range> range,
 		Consumer<SliderEditor<MultiRangeSlider, ?>> modify) {
 		return addHPanel(null, new JustifiedBoxLayout(true).mainJustified().crossJustified(),
-			p -> modify(p).addRangeSlider(fieldName, range, modify));
+			p -> p.addRangeSlider(fieldName, range, modify));
 	}
 
 	@Override
 	public AbstractQuickContainerPopulator addMultiRangeSlider(String fieldName, ObservableCollection<Range> values,
 		Consumer<SliderEditor<MultiRangeSlider, ?>> modify) {
 		return addHPanel(null, new JustifiedBoxLayout(true).mainJustified().crossJustified(),
-			p -> modify(p).addMultiRangeSlider(fieldName, values, modify));
+			p -> p.addMultiRangeSlider(fieldName, values, modify));
 	}
 
 	@Override
 	public <F> AbstractQuickContainerPopulator addComboField(String fieldName, SettableValue<F> value,
 		List<? extends F> availableValues, Consumer<ComboEditor<F, ?>> modify) {
 		return addHPanel(null, new JustifiedBoxLayout(true).mainJustified().crossJustified(),
-			p -> modify(p).addComboField(fieldName, value, availableValues, modify));
+			p -> p.addComboField(fieldName, value, availableValues, modify));
 	}
 
 	@Override
 	public AbstractQuickContainerPopulator addFileField(String fieldName, SettableValue<File> value, boolean open,
 		Consumer<FieldEditor<ObservableFileButton, ?>> modify) {
 		return addHPanel(null, new JustifiedBoxLayout(true).mainJustified().crossJustified(),
-			p -> modify(p).addFileField(fieldName, value, open, modify));
+			p -> p.addFileField(fieldName, value, open, modify));
 	}
 
 	@Override
@@ -233,27 +233,27 @@ implements PanelPopulation.PanelPopulator<JPanel, AbstractQuickContainerPopulato
 		List<? extends F> values, Class<TB> buttonType, Function<? super F, ? extends TB> buttonCreator,
 		Consumer<ToggleEditor<F, TB, ?>> modify) {
 		return addHPanel(null, new JustifiedBoxLayout(true).mainJustified().crossJustified(),
-			p -> modify(p).addToggleField(fieldName, value, values, buttonType, buttonCreator, modify));
+			p -> p.addToggleField(fieldName, value, values, buttonType, buttonCreator, modify));
 	}
 
 	@Override
 	public AbstractQuickContainerPopulator addButton(String buttonText, ObservableAction action,
 		Consumer<ButtonEditor<JButton, ?>> modify) {
 		return addHPanel(null, new JustifiedBoxLayout(true).mainJustified().crossJustified(),
-			p -> modify(p).addButton(buttonText, action, modify));
+			p -> p.addButton(buttonText, action, modify));
 	}
 
 	@Override
 	public <F> AbstractQuickContainerPopulator addComboButton(String buttonText, ObservableCollection<F> values,
 		BiConsumer<? super F, Object> action, Consumer<ComboButtonBuilder<F, ComboButton<F>, ?>> modify) {
 		return addHPanel(null, new JustifiedBoxLayout(true).mainJustified().crossJustified(),
-			p -> modify(p).addComboButton(buttonText, values, action, modify));
+			p -> p.addComboButton(buttonText, values, action, modify));
 	}
 
 	@Override
 	public AbstractQuickContainerPopulator addProgressBar(String fieldName, Consumer<ProgressEditor<?>> progress) {
 		return addHPanel(null, new JustifiedBoxLayout(true).mainJustified().crossJustified(),
-			p -> modify(p).addProgressBar(fieldName, progress));
+			p -> p.addProgressBar(fieldName, progress));
 	}
 
 	@Override
@@ -263,7 +263,7 @@ implements PanelPopulation.PanelPopulator<JPanel, AbstractQuickContainerPopulato
 
 	@Override
 	public AbstractQuickContainerPopulator addSettingsMenu(Consumer<SettingsMenu<JPanel, ?>> menu) {
-		return addHPanel(null, new JustifiedBoxLayout(true).mainJustified().crossJustified(), p -> modify(p).addSettingsMenu(menu));
+		return addHPanel(null, new JustifiedBoxLayout(true).mainJustified().crossJustified(), p -> p.addSettingsMenu(menu));
 	}
 
 	@Override
@@ -277,14 +277,14 @@ implements PanelPopulation.PanelPopulator<JPanel, AbstractQuickContainerPopulato
 	}
 
 	@Override
-	public void addModifier(Consumer<ComponentEditor<?, ?>> modifier) {
+	public void addChildModifier(Consumer<ComponentEditor<?, ?>> modifier) {
 		if (theModifiers == null)
 			theModifiers = new ArrayList<>();
 		theModifiers.add(modifier);
 	}
 
 	@Override
-	public void removeModifier(Consumer<ComponentEditor<?, ?>> modifier) {
+	public void removeChildModifier(Consumer<ComponentEditor<?, ?>> modifier) {
 		if (theModifiers != null)
 			theModifiers.remove(modifier);
 	}
@@ -292,7 +292,7 @@ implements PanelPopulation.PanelPopulator<JPanel, AbstractQuickContainerPopulato
 	protected <P extends PanelPopulator<?, ?>> P modify(P container) {
 		if (theModifiers != null) {
 			for (Consumer<ComponentEditor<?, ?>> modifier : theModifiers)
-				container.addModifier(modifier);
+				container.addChildModifier(modifier);
 		}
 		return container;
 	}

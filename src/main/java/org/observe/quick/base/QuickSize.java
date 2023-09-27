@@ -42,7 +42,10 @@ public class QuickSize {
 	}
 
 	public QuickSize plus(QuickSize other) {
-		return new QuickSize(percent + other.percent, pixels + other.pixels);
+		int pix = pixels + other.pixels;
+		if (pix < 0)
+			pix = Integer.MAX_VALUE;
+		return new QuickSize(percent + other.percent, pix);
 	}
 
 	public QuickSize minus(QuickSize other) {
@@ -50,7 +53,10 @@ public class QuickSize {
 	}
 
 	public QuickSize plus(int adjPixels) {
-		return new QuickSize(percent, pixels + adjPixels);
+		int pix = pixels + adjPixels;
+		if (pix < 0)
+			pix = Integer.MAX_VALUE;
+		return new QuickSize(percent, pix);
 	}
 
 	public int resolveExponential() {
