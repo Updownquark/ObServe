@@ -27,14 +27,14 @@ import org.qommons.Transaction;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
-public class QuickFileChooser extends QuickDialog.Abstract {
+public class QuickFileChooser extends ExElement.Abstract implements QuickDialog {
 	public static final String FILE_CHOOSER = "file-chooser";
 
 	@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
 		qonfigType = FILE_CHOOSER,
 		interpretation = Interpreted.class,
 		instance = QuickFileChooser.class)
-	public static class Def extends QuickDialog.Def.Abstract<QuickFileChooser> {
+	public static class Def extends ExElement.Def.Abstract<QuickFileChooser> implements QuickDialog.Def<QuickFileChooser> {
 		private ModelComponentId theChosenFilesVariable;
 		private boolean isOpen;
 		private boolean isFilesSelectable;
@@ -111,7 +111,8 @@ public class QuickFileChooser extends QuickDialog.Abstract {
 		}
 	}
 
-	public static class Interpreted extends QuickDialog.Interpreted.Abstract<QuickFileChooser> {
+	public static class Interpreted extends ExElement.Interpreted.Abstract<QuickFileChooser>
+	implements QuickDialog.Interpreted<QuickFileChooser> {
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<File>> theDirectory;
 		private InterpretedValueSynth<ObservableAction, ObservableAction> theOnSelect;
 		private InterpretedValueSynth<ObservableAction, ObservableAction> theOnCancel;
@@ -135,6 +136,11 @@ public class QuickFileChooser extends QuickDialog.Abstract {
 
 		public InterpretedValueSynth<ObservableAction, ObservableAction> getOnCancel() {
 			return theOnCancel;
+		}
+
+		@Override
+		public void updateDialog(InterpretedExpressoEnv expressoEnv) throws ExpressoInterpretationException {
+			update(expressoEnv);
 		}
 
 		@Override

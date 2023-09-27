@@ -55,7 +55,10 @@ public class QuickCoreInterpretation implements QonfigInterpretation {
 		interpreter.createWith(QuickDocument.QuickHeadSection.HEAD, QuickDocument.QuickHeadSection.Def.class,
 			session -> new QuickDocument.QuickHeadSection.Def((QuickDocument.Def) session.getElementRepresentation(),
 				session.getFocusType()));
-		interpreter.createWith("window", QuickWindow.Def.class, session -> interpretAddOn(session, (p, ao) -> new QuickWindow.Def(ao, p)));
+		interpreter.createWith(QuickAbstractWindow.ABSTRACT_WINDOW, QuickAbstractWindow.Def.Default.class,
+			session -> interpretAddOn(session, (p, ao) -> new QuickAbstractWindow.Def.Default<>(ao, p)));
+		interpreter.createWith(QuickWindow.WINDOW, QuickWindow.Def.class,
+			session -> interpretAddOn(session, (p, ao) -> new QuickWindow.Def(ao, p)));
 		interpreter.createWith(QuickBorder.LineBorder.LINE_BORDER, QuickBorder.LineBorder.Def.class,
 			ExElement.creator(QuickBorder.LineBorder.Def::new));
 		interpreter.createWith(QuickBorder.TitledBorder.TITLED_BORDER, QuickBorder.TitledBorder.Def.class,

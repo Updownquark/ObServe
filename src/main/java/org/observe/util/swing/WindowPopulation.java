@@ -378,7 +378,11 @@ public class WindowPopulation {
 				theWindow.dispose();
 			});
 			if (visible != null) {
-				visible.changes().takeUntil(theUntil).act(evt -> theWindow.setVisible(evt.getNewValue()));
+				visible.changes().takeUntil(theUntil).act(evt -> {
+					EventQueue.invokeLater(() -> {
+						theWindow.setVisible(evt.getNewValue());
+					});
+				});
 			} else
 				theWindow.setVisible(true);
 			return (P) this;

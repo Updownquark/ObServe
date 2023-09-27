@@ -18,7 +18,7 @@ import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
 /** An add-on for an element that is to be a window */
-public class QuickWindow extends QuickAbstractWindow {
+public class QuickWindow extends QuickAbstractWindow.Default {
 	public static final String WINDOW = "window";
 
 	/** An action to perform when the user closes the window (e.g. clicks the "X") */
@@ -38,7 +38,7 @@ public class QuickWindow extends QuickAbstractWindow {
 		qonfigType = WINDOW,
 		interpretation = Interpreted.class,
 		instance = QuickWindow.class)
-	public static class Def extends QuickAbstractWindow.Def<QuickWindow> {
+	public static class Def extends QuickAbstractWindow.Def.Default<QuickWindow> {
 		private CompiledExpression theX;
 		private CompiledExpression theY;
 		private CompiledExpression theWidth;
@@ -85,6 +85,7 @@ public class QuickWindow extends QuickAbstractWindow {
 
 		@Override
 		public void update(ExpressoQIS session, ExElement.Def<? extends ExElement> element) throws QonfigInterpretationException {
+			super.update(session, element);
 			theX = session.getAttributeExpression("x");
 			theY = session.getAttributeExpression("y");
 			theWidth = session.getAttributeExpression("width");
@@ -116,7 +117,7 @@ public class QuickWindow extends QuickAbstractWindow {
 	}
 
 	/** An interpretation of a {@link QuickWindow} */
-	public static class Interpreted extends QuickAbstractWindow.Interpreted<QuickWindow> {
+	public static class Interpreted extends QuickAbstractWindow.Interpreted.Default<QuickWindow> {
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> theX;
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> theY;
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> theWidth;
@@ -157,6 +158,7 @@ public class QuickWindow extends QuickAbstractWindow {
 
 		@Override
 		public void update(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+			super.update(env);
 			theX = getDefinition().getX() == null ? null : getDefinition().getX().interpret(ModelTypes.Value.INT, env);
 			theY = getDefinition().getY() == null ? null : getDefinition().getY().interpret(ModelTypes.Value.INT, env);
 			theWidth = getDefinition().getWidth() == null ? null : getDefinition().getWidth().interpret(ModelTypes.Value.INT, env);

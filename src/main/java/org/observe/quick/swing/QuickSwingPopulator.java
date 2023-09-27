@@ -12,7 +12,6 @@ import javax.swing.event.CaretListener;
 import javax.swing.text.JTextComponent;
 
 import org.observe.Observable;
-import org.observe.SettableValue;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.qonfig.ExAddOn;
@@ -154,8 +153,6 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 
 	public interface QuickSwingDialog<D extends QuickDialog> {
 		void initialize(D dialog, Component parent, Observable<?> until) throws ModelInstantiationException;
-
-		void display(D dialog, Component parent, SettableValue<Boolean> visible);
 	}
 
 	public interface QuickSwingDocument<T> {

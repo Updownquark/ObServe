@@ -2,10 +2,10 @@ package org.observe.quick.swing;
 
 import java.awt.Color;
 import java.awt.Component;
+import java.awt.Dialog.ModalityType;
 import java.awt.EventQueue;
 import java.awt.LayoutManager;
 import java.awt.Rectangle;
-import java.awt.Dialog.ModalityType;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseMotionListener;
@@ -35,11 +35,11 @@ import org.observe.Subscription;
 import org.observe.collect.ObservableCollection;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ModelInstantiationException;
+import org.observe.quick.QuickAbstractWindow;
 import org.observe.quick.QuickInterpretation;
 import org.observe.quick.QuickTextWidget;
 import org.observe.quick.QuickWidget;
 import org.observe.quick.QuickWindow;
-import org.observe.quick.QuickWidget.Interpreted;
 import org.observe.quick.base.*;
 import org.observe.quick.swing.QuickSwingPopulator.QuickSwingContainerPopulator;
 import org.observe.quick.swing.QuickSwingPopulator.QuickSwingDialog;
@@ -54,12 +54,11 @@ import org.observe.util.swing.JustifiedBoxLayout;
 import org.observe.util.swing.ObservableStyledDocument;
 import org.observe.util.swing.ObservableTextArea;
 import org.observe.util.swing.PanelPopulation;
-import org.observe.util.swing.WindowPopulation;
 import org.observe.util.swing.PanelPopulation.FieldEditor;
 import org.observe.util.swing.PanelPopulation.PanelPopulator;
 import org.observe.util.swing.PanelPopulation.TableBuilder;
-import org.observe.util.swing.PanelPopulation.TreeEditor;
 import org.observe.util.swing.PanelPopulation.WindowBuilder;
+import org.observe.util.swing.WindowPopulation;
 import org.qommons.Causable;
 import org.qommons.LambdaUtils;
 import org.qommons.ThreadConstraint;
@@ -100,8 +99,8 @@ public class QuickBaseSwing implements QuickInterpretation {
 		// Containers
 		QuickSwingPopulator.<QuickBox, QuickBox.Interpreted<?>> interpretContainer(tx, gen(QuickBox.Interpreted.class),
 			QuickBaseSwing::interpretBox);
-		QuickSwingPopulator.<QuickFieldPanel, QuickFieldPanel.Interpreted> interpretContainer(tx,
-			gen(QuickFieldPanel.Interpreted.class), QuickBaseSwing::interpretFieldPanel);
+		QuickSwingPopulator.<QuickFieldPanel, QuickFieldPanel.Interpreted> interpretContainer(tx, gen(QuickFieldPanel.Interpreted.class),
+			QuickBaseSwing::interpretFieldPanel);
 		QuickSwingPopulator.<QuickWidget, QuickField, QuickField.Interpreted> modifyForAddOn(tx, QuickField.Interpreted.class,
 			(Class<QuickWidget.Interpreted<QuickWidget>>) (Class<?>) QuickWidget.Interpreted.class, (ao, qsp, tx2) -> {
 				qsp.addModifier((comp, w) -> {
@@ -113,8 +112,8 @@ public class QuickBaseSwing implements QuickInterpretation {
 			});
 		QuickSwingPopulator.<QuickSplit, QuickSplit.Interpreted<?>> interpretContainer(tx, gen(QuickSplit.Interpreted.class),
 			QuickBaseSwing::interpretSplit);
-		QuickSwingPopulator.<QuickScrollPane, QuickScrollPane.Interpreted> interpretContainer(tx,
-			gen(QuickScrollPane.Interpreted.class), QuickBaseSwing::interpretScroll);
+		QuickSwingPopulator.<QuickScrollPane, QuickScrollPane.Interpreted> interpretContainer(tx, gen(QuickScrollPane.Interpreted.class),
+			QuickBaseSwing::interpretScroll);
 
 		// Box layouts
 		tx.with(QuickInlineLayout.Interpreted.class, QuickSwingLayout.class, QuickBaseSwing::interpretInlineLayout);
@@ -271,8 +270,7 @@ public class QuickBaseSwing implements QuickInterpretation {
 		if (size == null)
 			return new BorderLayout.Constraints(region, null, null, null, null);
 		return new BorderLayout.Constraints(region, //
-			size.getSize(), enforceAbsolute(size.getMinimum()), enforceAbsolute(size.getPreferred()),
-			enforceAbsolute(size.getMaximum()));
+			size.getSize(), enforceAbsolute(size.getMinimum()), enforceAbsolute(size.getPreferred()), enforceAbsolute(size.getMaximum()));
 	}
 
 	static QuickSwingPopulator<QuickSpacer> interpretSpacer(QuickSpacer.Interpreted interpreted,
@@ -314,8 +312,7 @@ public class QuickBaseSwing implements QuickInterpretation {
 						tf2.setCommitOnType(commitOnType);
 					if (columns != null)
 						tf2.withColumns(columns);
-					quick.isPassword().changes().takeUntil(tf.getUntil())
-					.act(evt -> tf2.asPassword(evt.getNewValue() ? '*' : (char) 0));
+					quick.isPassword().changes().takeUntil(tf.getUntil()).act(evt -> tf2.asPassword(evt.getNewValue() ? '*' : (char) 0));
 					quick.getEmptyText().changes().takeUntil(tf.getUntil()).act(evt -> tf2.setEmptyText(evt.getNewValue()));
 					quick.isEditable().changes().takeUntil(tf.getUntil())
 					.act(evt -> tf2.setEditable(!Boolean.FALSE.equals(evt.getNewValue())));
@@ -394,8 +391,7 @@ public class QuickBaseSwing implements QuickInterpretation {
 				throws ModelInstantiationException {
 				DynamicStyledDocument<T> doc = (DynamicStyledDocument<T>) quickDoc;
 				Format<T> format = doc.getFormat();
-				ObservableStyledDocument<T> swingDoc = new ObservableStyledDocument<T>(doc.getRoot(), format, ThreadConstraint.EDT,
-					until) {
+				ObservableStyledDocument<T> swingDoc = new ObservableStyledDocument<T>(doc.getRoot(), format, ThreadConstraint.EDT, until) {
 					@Override
 					protected ObservableCollection<? extends T> getChildren(T value) {
 						try {
@@ -701,8 +697,7 @@ public class QuickBaseSwing implements QuickInterpretation {
 					table.withSelection(quick.getMultiSelection());
 				try {
 					for (int a = 0; a < interpretedActions.size(); a++)
-						((QuickSwingTableAction<R, ValueAction<R>>) interpretedActions.get(a)).addAction(table,
-							quick.getActions().get(a));
+						((QuickSwingTableAction<R, ValueAction<R>>) interpretedActions.get(a)).addAction(table, quick.getActions().get(a));
 				} catch (ModelInstantiationException e) {
 					throw new CheckedExceptionWrapper(e);
 				}
@@ -738,8 +733,8 @@ public class QuickBaseSwing implements QuickInterpretation {
 				TabularWidget.TabularContext<BetterList<T>> tableCtx = new TabularWidget.TabularContext<BetterList<T>>() {
 					private final SettableValue<Integer> theRow = SettableValue.build(int.class).withDescription("row").withValue(0)
 						.build();
-					private final SettableValue<Integer> theColumn = SettableValue.build(int.class).withDescription("column")
-						.withValue(0).build();
+					private final SettableValue<Integer> theColumn = SettableValue.build(int.class).withDescription("column").withValue(0)
+						.build();
 
 					@Override
 					public SettableValue<BetterList<T>> getActiveValue() {
@@ -956,32 +951,32 @@ public class QuickBaseSwing implements QuickInterpretation {
 
 			@Override
 			public void initialize(QuickConfirm dialog, Component parent, Observable<?> until) throws ModelInstantiationException {
-				theTitle = dialog.getTitle();
+				QuickAbstractWindow window = dialog.getAddOn(QuickAbstractWindow.class);
+				theTitle = window.getTitle();
 				theIcon = dialog.getIcon();
 				theOnConfirm = dialog.getOnConfirm();
 				theOnCancel = dialog.getOnCancel();
 				QuickBaseSwing.ComponentExtractor ce = new ComponentExtractor(until);
 				content.populate(ce, dialog.getContent());
 				theContent = ce.getExtractedComponent();
-			}
 
-			@Override
-			public void display(QuickConfirm dialog, Component parent, SettableValue<Boolean> visible) {
-				int result;
-				Icon icon = theIcon == null ? null : theIcon.get();
-				if (icon != null)
-					result = JOptionPane.showConfirmDialog(parent, theContent, theTitle.get(), JOptionPane.OK_CANCEL_OPTION,
-						JOptionPane.QUESTION_MESSAGE, icon);
-				else
-					result = JOptionPane.showConfirmDialog(parent, theContent, theTitle.get(), JOptionPane.OK_CANCEL_OPTION);
-				EventQueue.invokeLater(() -> {
-					if (visible.isAcceptable(false) == null)
-						visible.set(false, null);
+				window.isVisible().value().takeUntil(until).filter(v -> v).act(__ -> {
+					int result;
+					Icon icon = theIcon == null ? null : theIcon.get();
+					if (icon != null)
+						result = JOptionPane.showConfirmDialog(parent, theContent, theTitle.get(), JOptionPane.OK_CANCEL_OPTION,
+							JOptionPane.QUESTION_MESSAGE, icon);
+					else
+						result = JOptionPane.showConfirmDialog(parent, theContent, theTitle.get(), JOptionPane.OK_CANCEL_OPTION);
+					EventQueue.invokeLater(() -> {
+						if (window.isVisible().isAcceptable(false) == null)
+							window.isVisible().set(false, null);
+					});
+					if (result == JOptionPane.OK_OPTION)
+						theOnConfirm.act(null);
+					else if (theOnCancel.isEnabled() == null)
+						theOnCancel.act(null);
 				});
-				if (result == JOptionPane.OK_OPTION)
-					theOnConfirm.act(null);
-				else if (theOnCancel.isEnabled() == null)
-					theOnCancel.act(null);
 			}
 		};
 	}
@@ -994,6 +989,7 @@ public class QuickBaseSwing implements QuickInterpretation {
 
 			@Override
 			public void initialize(QuickFileChooser dialog, Component parent, Observable<?> until) throws ModelInstantiationException {
+				QuickAbstractWindow window = dialog.getAddOn(QuickAbstractWindow.class);
 				theQuickChooser = dialog;
 				int mode;
 				if (theQuickChooser.isFilesSelectable()) {
@@ -1005,22 +1001,25 @@ public class QuickBaseSwing implements QuickInterpretation {
 					mode = JFileChooser.DIRECTORIES_ONLY;
 				theSwingChooser.setFileSelectionMode(mode);
 				theSwingChooser.setMultiSelectionEnabled(theQuickChooser.isMultiSelectable());
+
+				window.isVisible().value().takeUntil(until).filter(v -> v).act(__ -> display(window, parent));
 			}
 
-			@Override
-			public void display(QuickFileChooser dialog, Component parent, SettableValue<Boolean> visible) {
-				File dir = theQuickChooser.getDirectory().get();
-				if (dir != null)
-					theSwingChooser.setCurrentDirectory(dir);
-				int result;
-				if (theQuickChooser.isOpen())
-					result = theSwingChooser.showOpenDialog(parent);
-				else
-					result = theSwingChooser.showSaveDialog(parent);
-				while (true) {
+			void display(QuickAbstractWindow window, Component parent) {
+				boolean satisfied = false;
+				while (!satisfied) {
+					File dir = theQuickChooser.getDirectory().get();
+					if (dir != null)
+						theSwingChooser.setCurrentDirectory(dir);
+
+					int result;
+					if (theQuickChooser.isOpen())
+						result = theSwingChooser.showOpenDialog(parent);
+					else
+						result = theSwingChooser.showSaveDialog(parent);
+
 					String enabled, title = null;
-					switch (result) {
-					case JFileChooser.APPROVE_OPTION:
+					if (result == JFileChooser.APPROVE_OPTION) {
 						List<File> files;
 						if (theSwingChooser.isMultiSelectionEnabled())
 							files = Arrays.asList(theSwingChooser.getSelectedFiles());
@@ -1028,22 +1027,26 @@ public class QuickBaseSwing implements QuickInterpretation {
 							files = Arrays.asList(theSwingChooser.getSelectedFile());
 						enabled = theQuickChooser.filesChosen(files);
 						if (enabled == null) {
-							if (theQuickChooser.getDirectory().isAcceptable(theSwingChooser.getCurrentDirectory()) == null)
+							if (theQuickChooser.getDirectory().isAcceptable(theSwingChooser.getCurrentDirectory()) == null) {
+								satisfied = true;
 								theQuickChooser.getDirectory().set(theSwingChooser.getCurrentDirectory(), null);
-							return;
+							}
 						} else
 							title = "Selected file" + (files.size() == 1 ? "" : "s") + " not allowed";
-						break;
-					default:
+					} else {
 						enabled = theQuickChooser.getOnCancel().isEnabled().get();
 						if (enabled == null) {
+							satisfied = true;
 							theQuickChooser.getOnCancel().act(null);
-							return;
 						} else
 							title = theQuickChooser.isOpen() ? "A file must be chosen" : "The file must be saved";
 					}
 					JOptionPane.showMessageDialog(parent, enabled, title, JOptionPane.ERROR_MESSAGE);
 				}
+				EventQueue.invokeLater(() -> {
+					if (window.isVisible().isAcceptable(false) == null)
+						window.isVisible().set(false, null);
+				});
 			}
 		};
 	}
@@ -1057,14 +1060,13 @@ public class QuickBaseSwing implements QuickInterpretation {
 
 			@Override
 			public void initialize(GeneralDialog dialog, Component parent, Observable<?> until) throws ModelInstantiationException {
-				until.act(__ -> System.out.println("UNTIL!!!"));
-				theTitle = dialog.getTitle();
+				QuickWindow window = dialog.getAddOn(QuickWindow.class);
+				theTitle = window.getTitle();
 				JDialog jDialog = new JDialog(SwingUtilities.getWindowAncestor(parent), //
 					dialog.isModal() ? ModalityType.APPLICATION_MODAL : ModalityType.MODELESS);
 				theDialog = WindowPopulation.populateDialog(jDialog, until, false);
 				content.populate(new WindowContentPopulator(theDialog, until), dialog.getContent());
 				theDialog.withTitle(theTitle);
-				QuickWindow window = dialog.getAddOn(QuickWindow.class);
 				if (window.getX() != null)
 					theDialog.withX(window.getX());
 				if (window.getY() != null)
@@ -1073,16 +1075,11 @@ public class QuickBaseSwing implements QuickInterpretation {
 					theDialog.withWidth(window.getWidth());
 				if (window.getHeight() != null)
 					theDialog.withHeight(window.getHeight());
-				theDialog.withVisible(dialog.isVisible());
+				theDialog.withVisible(window.isVisible());
 				theDialog.disposeOnClose(false);
 				EventQueue.invokeLater(() -> { // Do in an invoke later to allow the UI to come up before opening the dialog
 					theDialog.run(parent);
 				});
-			}
-
-			@Override
-			public void display(GeneralDialog dialog, Component parent, SettableValue<Boolean> visible) {
-				// Since we set the visibility in the initializer, the display should happen automatically
 			}
 		};
 	}
@@ -1150,8 +1147,7 @@ public class QuickBaseSwing implements QuickInterpretation {
 		private final QuickTabs.TabInstance<? extends T> theTab;
 		private final int theTabIndex;
 
-		TabsPopulator(PanelPopulation.TabPaneEditor<?, ?> tabEditor, QuickTabs<T> tabs, QuickTabs.TabInstance<? extends T> tab,
-			int index) {
+		TabsPopulator(PanelPopulation.TabPaneEditor<?, ?> tabEditor, QuickTabs<T> tabs, QuickTabs.TabInstance<? extends T> tab, int index) {
 			theTabEditor = tabEditor;
 			theTabs = tabs;
 			theTab = tab;

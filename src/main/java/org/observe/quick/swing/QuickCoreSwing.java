@@ -37,7 +37,6 @@ import org.observe.Subscription;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.quick.*;
-import org.observe.quick.QuickMouseListener.MouseButton;
 import org.observe.quick.QuickTextElement.QuickTextStyle;
 import org.observe.quick.swing.QuickSwingPopulator.QuickSwingBorder;
 import org.observe.quick.swing.QuickSwingPopulator.QuickSwingDialog;
@@ -46,8 +45,8 @@ import org.observe.util.TypeTokens;
 import org.observe.util.swing.ComponentDecorator;
 import org.observe.util.swing.FontAdjuster;
 import org.observe.util.swing.JustifiedBoxLayout;
-import org.observe.util.swing.WindowPopulation;
 import org.observe.util.swing.PanelPopulation.WindowBuilder;
+import org.observe.util.swing.WindowPopulation;
 import org.qommons.Causable;
 import org.qommons.Identifiable;
 import org.qommons.ThreadConstraint;
@@ -205,9 +204,6 @@ public class QuickCoreSwing implements QuickInterpretation {
 									for (QuickDialog dialog : w.getDialogs()) {
 										QuickSwingDialog<QuickDialog> swingDialog = dialogs.get(dialog.getIdentity());
 										swingDialog.initialize(dialog, c, Observable.or(dialog.onDestroy(), comp.getUntil()));
-										SettableValue<Boolean> visible = dialog.isVisible();
-										visible.value().takeUntil(comp.getUntil()).filter(v -> v)
-										.act(__ -> swingDialog.display(dialog, c, visible));
 									}
 								}
 							} catch (ModelInstantiationException e) {
