@@ -44,7 +44,6 @@ import org.observe.quick.base.QuickTableColumn;
 import org.observe.quick.base.TabularWidget;
 import org.observe.quick.base.TabularWidget.TabularContext;
 import org.observe.quick.base.ValueAction;
-import org.observe.quick.swing.QuickSwingPopulator.QuickCoreSwing;
 import org.observe.quick.swing.QuickSwingPopulator.QuickSwingTableAction;
 import org.observe.util.TypeTokens;
 import org.observe.util.swing.*;

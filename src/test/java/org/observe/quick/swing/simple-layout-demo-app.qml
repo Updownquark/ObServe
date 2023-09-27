@@ -13,6 +13,6 @@
 	<interpretation>org.observe.quick.style.QuickStyleInterpretation</interpretation>
 	<interpretation>org.observe.quick.QuickCoreInterpretation</interpretation>
 	<interpretation>org.observe.quick.base.QuickBaseInterpretation</interpretation>
-	<quick-interpretation>org.observe.quick.swing.QuickSwingPopulator$QuickCoreSwing</quick-interpretation>
-	<quick-interpretation>org.observe.quick.swing.QuickSwingPopulator$QuickBaseSwing</quick-interpretation>
+	<quick-interpretation>org.observe.quick.swing.QuickCoreSwing</quick-interpretation>
+	<quick-interpretation>org.observe.quick.swing.QuickBaseSwing</quick-interpretation>
 </quick-app>
