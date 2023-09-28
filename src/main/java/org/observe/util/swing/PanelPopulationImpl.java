@@ -106,14 +106,11 @@ class PanelPopulationImpl {
 
 	static class MigFieldPanel<C extends Container, P extends MigFieldPanel<C, P>> extends AbstractComponentEditor<C, P>
 	implements PartialPanelPopulatorImpl<C, P> {
-		private final List<Consumer<ComponentEditor<?, ?>>> theModifiers;
-
 		MigFieldPanel(String fieldName, C container, Observable<?> until) {
 			super(fieldName, //
 				container != null ? container
 					: (C) new ConformingPanel(PanelPopulation.createMigLayout(true, () -> "install the layout before using this class")),
 					until);
-			theModifiers = new ArrayList<>();
 			if (getContainer().getLayout() == null
 				|| !PanelPopulation.MIG_LAYOUT_CLASS_NAME.equals(getContainer().getLayout().getClass().getName())) {
 				LayoutManager2 migLayout = PanelPopulation.createMigLayout(true, () -> "install the layout before using this class");
@@ -189,23 +186,6 @@ class PanelPopulationImpl {
 		@Override
 		protected Component createPostLabel(Observable<?> until) {
 			return null;
-		}
-
-		@Override
-		public void addChildModifier(Consumer<ComponentEditor<?, ?>> modifier) {
-			theModifiers.add(modifier);
-		}
-
-		@Override
-		public void removeChildModifier(Consumer<ComponentEditor<?, ?>> modifier) {
-			theModifiers.remove(modifier);
-		}
-
-		@Override
-		public <C2 extends ComponentEditor<?, ?>> C2 modifyChild(C2 component) {
-			for (Consumer<ComponentEditor<?, ?>> modifier : theModifiers)
-				modifier.accept(component);
-			return component;
 		}
 	}
 
@@ -370,11 +350,8 @@ class PanelPopulationImpl {
 
 	static class SimpleHPanel<C extends Container, P extends SimpleHPanel<C, P>> extends SimpleFieldEditor<C, P>
 	implements PartialPanelPopulatorImpl<C, P> {
-		private final Set<Consumer<ComponentEditor<?, ?>>> theModifiers;
-
 		SimpleHPanel(String fieldName, C editor, Observable<?> until) {
 			super(fieldName, editor, until);
-			theModifiers = new LinkedHashSet<>();
 		}
 
 		@Override
@@ -422,7 +399,6 @@ class PanelPopulationImpl {
 		public P addCheckField(String fieldName, SettableValue<Boolean> field, Consumer<FieldEditor<JCheckBox, ?>> modify) {
 			SimpleFieldEditor<JCheckBox, ?> fieldPanel = new SimpleFieldEditor<>(fieldName, new JCheckBox(), getUntil());
 			fieldPanel.getEditor().setHorizontalTextPosition(SwingConstants.LEADING);
-			modifyChild(fieldPanel);
 			Subscription sub = ObservableSwingUtils.checkFor(fieldPanel.getEditor(), fieldPanel.getTooltip(), field);
 			getUntil().take(1).act(__ -> sub.unsubscribe());
 			if (modify != null)
@@ -430,23 +406,6 @@ class PanelPopulationImpl {
 			fieldPanel.onFieldName(fieldPanel.getEditor(), name -> fieldPanel.getEditor().setText(name), getUntil());
 			doAdd(fieldPanel, null, fieldPanel.createPostLabel(getUntil()), false);
 			return (P) this;
-		}
-
-		@Override
-		public void addChildModifier(Consumer<ComponentEditor<?, ?>> modifier) {
-			theModifiers.add(modifier);
-		}
-
-		@Override
-		public void removeChildModifier(Consumer<ComponentEditor<?, ?>> modifier) {
-			theModifiers.remove(modifier);
-		}
-
-		@Override
-		public <C2 extends ComponentEditor<?, ?>> C2 modifyChild(C2 component) {
-			for (Consumer<ComponentEditor<?, ?>> modifier : theModifiers)
-				modifier.accept(component);
-			return component;
 		}
 	}
 
@@ -1784,7 +1743,6 @@ class PanelPopulationImpl {
 		private SimpleHPanel<JPanel, ?> theHeaderPanel;
 		private PanelPopulator<JPanel, ?> theExposedHeaderPanel;
 		private final SettableValue<Boolean> theInternalCollapsed;
-		private final List<Consumer<ComponentEditor<?, ?>>> theModifiers;
 
 		private Icon theCollapsedIcon;
 		private Icon theExpandedIcon;
@@ -1793,7 +1751,6 @@ class PanelPopulationImpl {
 
 		SimpleCollapsePane(JXCollapsiblePane cp, Observable<?> until, boolean vertical, LayoutManager layout) {
 			super(null, (JXPanel) cp.getContentPane(), until);
-			theModifiers = new ArrayList<>();
 			theCollapsePane = cp;
 			theCollapsePane.setLayout(layout);
 			theCollapsePane.getContentPane().setLayout(layout);
@@ -1923,23 +1880,6 @@ class PanelPopulationImpl {
 		@Override
 		protected Component createPostLabel(Observable<?> until) {
 			return null;
-		}
-
-		@Override
-		public void addChildModifier(Consumer<ComponentEditor<?, ?>> modifier) {
-			theModifiers.add(modifier);
-		}
-
-		@Override
-		public void removeChildModifier(Consumer<ComponentEditor<?, ?>> modifier) {
-			theModifiers.remove(modifier);
-		}
-
-		@Override
-		public <C2 extends ComponentEditor<?, ?>> C2 modifyChild(C2 component) {
-			for (Consumer<ComponentEditor<?, ?>> modifier : theModifiers)
-				modifier.accept(component);
-			return component;
 		}
 	}
 

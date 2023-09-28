@@ -23,12 +23,14 @@ import org.observe.quick.base.QuickTableColumn;
 import org.observe.quick.base.QuickTreeTable;
 import org.observe.quick.base.TabularWidget;
 import org.observe.quick.base.ValueAction;
-import org.observe.quick.swing.QuickSwingPopulator.QuickSwingTableAction;
+import org.observe.quick.swing.QuickSwingPopulator.QuickSwingContainerPopulator;
 import org.observe.quick.swing.QuickSwingTablePopulation.InterpretedSwingTableColumn;
 import org.observe.util.TypeTokens;
 import org.observe.util.swing.CategoryRenderStrategy;
 import org.observe.util.swing.PanelPopulation;
 import org.observe.util.swing.PanelPopulation.CollapsePanel;
+import org.observe.util.swing.PanelPopulation.ComponentEditor;
+import org.observe.util.swing.PanelPopulation.ContainerPopulator;
 import org.observe.util.swing.PanelPopulation.PanelPopulator;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transformer;
@@ -38,112 +40,176 @@ import org.qommons.ex.CheckedExceptionWrapper;
 
 import com.google.common.reflect.TypeToken;
 
+/** Swing implementation for the Quick-X toolkit */
 public class QuickXSwing implements QuickInterpretation {
 	@Override
 	public void configure(Transformer.Builder<ExpressoInterpretationException> tx) {
-		QuickSwingPopulator.<CollapsePane, CollapsePane.Interpreted> interpretWidget(tx,
-			QuickBaseSwing.gen(CollapsePane.Interpreted.class), QuickXSwing::interpretCollapsePane);
-		QuickSwingPopulator.<QuickTreeTable<?>, QuickTreeTable.Interpreted<?>> interpretWidget(tx,
-			QuickBaseSwing.gen(QuickTreeTable.Interpreted.class), QuickXSwing::interpretTreeTable);
+		tx.with(CollapsePane.Interpreted.class, QuickSwingContainerPopulator.class, SwingCollapsePane::new);
+		tx.with(QuickTreeTable.Interpreted.class, QuickSwingPopulator.class, SwingTreeTable::new);
 	}
 
-	static QuickSwingPopulator<CollapsePane> interpretCollapsePane(CollapsePane.Interpreted interpreted,
-		Transformer<ExpressoInterpretationException> tx) throws ExpressoInterpretationException {
-		QuickSwingPopulator<QuickWidget> header = interpreted.getHeader() == null ? null
-			: tx.transform(interpreted.getHeader(), QuickSwingPopulator.class);
-		QuickSwingPopulator<QuickWidget> content = tx.transform(interpreted.getContents().getFirst(), QuickSwingPopulator.class);
-		return QuickSwingPopulator.createWidget((panel, quick) -> {
-			content.populate(new CollapsePanePopulator(panel, quick, header), quick.getContents().getFirst());
-		});
-	}
+	static class SwingCollapsePane extends QuickSwingContainerPopulator.Abstract<CollapsePane> {
+		QuickSwingPopulator<QuickWidget> header;
+		QuickSwingPopulator<QuickWidget> content;
 
-	static <T> QuickSwingPopulator<QuickTreeTable<T>> interpretTreeTable(QuickTreeTable.Interpreted<T> interpreted,
-		Transformer<ExpressoInterpretationException> tx) throws ExpressoInterpretationException {
-		QuickSwingPopulator<QuickWidget> renderer, editor;
-		if (interpreted.getTreeColumn() == null) {
-			renderer = null;
-			editor = null;
-		} else {
-			renderer = interpreted.getTreeColumn().getRenderer() == null ? null
-				: tx.transform(interpreted.getTreeColumn().getRenderer(), QuickSwingPopulator.class);
-			if (interpreted.getTreeColumn().getEditing() == null || interpreted.getTreeColumn().getEditing().getEditor() == null)
-				editor = null;
-			else
-				editor = tx.transform(interpreted.getTreeColumn().getEditing().getEditor(), QuickSwingPopulator.class);
+		SwingCollapsePane(CollapsePane.Interpreted interpreted, Transformer<ExpressoInterpretationException> tx)
+			throws ExpressoInterpretationException {
+			header = interpreted.getHeader() == null ? null : tx.transform(interpreted.getHeader(), QuickSwingPopulator.class);
+			content = tx.transform(interpreted.getContents().getFirst(), QuickSwingPopulator.class);
 		}
 
-		TypeToken<BetterList<T>> rowType = interpreted.getValueType();
-		Map<Object, QuickSwingPopulator<QuickWidget>> renderers = new HashMap<>();
-		Map<Object, QuickSwingPopulator<QuickWidget>> editors = new HashMap<>();
-		boolean[] renderersInitialized = new boolean[1];
-		Subscription sub;
-		try {
-			sub = interpreted.getColumns().subscribe(evt -> {
-				boolean colRenderer = false;
-				try {
-					switch (evt.getType()) {
-					case add:
-						colRenderer = true;
-						if (evt.getNewValue().getRenderer() != null)
-							renderers.put(evt.getNewValue().getIdentity(),
-								tx.transform(evt.getNewValue().getRenderer(), QuickSwingPopulator.class));
-						colRenderer = false;
-						if (evt.getNewValue().getEditing() != null && evt.getNewValue().getEditing().getEditor() != null)
-							editors.put(evt.getNewValue().getIdentity(),
-								tx.transform(evt.getNewValue().getEditing().getEditor(), QuickSwingPopulator.class));
-						break;
-					case remove:
-						renderers.remove(evt.getOldValue().getIdentity());
-						editors.remove(evt.getOldValue().getIdentity());
-						break;
-					case set:
-						if (evt.getOldValue().getIdentity() != evt.getNewValue().getIdentity()) {
-							renderers.remove(evt.getOldValue().getIdentity());
-							editors.remove(evt.getOldValue().getIdentity());
+		@Override
+		protected void doPopulateContainer(ContainerPopulator<?, ?> panel, CollapsePane quick, Consumer<ComponentEditor<?, ?>> component)
+			throws ModelInstantiationException {
+			content.populate(new CollapsePanePopulator(panel, quick, header, component), quick.getContents().getFirst());
+		}
+
+		private static class CollapsePanePopulator extends AbstractQuickContainerPopulator {
+			private ContainerPopulator<?, ?> thePopulator;
+			private CollapsePane theCollapsePane;
+			private QuickSwingPopulator<QuickWidget> theInterpretedHeader;
+			private Consumer<ComponentEditor<?, ?>> theComponent;
+
+			public CollapsePanePopulator(ContainerPopulator<?, ?> populator, CollapsePane collapsePane,
+				QuickSwingPopulator<QuickWidget> interpretedHeader, Consumer<ComponentEditor<?, ?>> component) {
+				thePopulator = populator;
+				theCollapsePane = collapsePane;
+				theInterpretedHeader = interpretedHeader;
+				theComponent = component;
+			}
+
+			@Override
+			public Observable<?> getUntil() {
+				return thePopulator.getUntil();
+			}
+
+			@Override
+			public AbstractQuickContainerPopulator addHPanel(String fieldName, LayoutManager layout,
+				Consumer<PanelPopulator<JPanel, ?>> panel) {
+				thePopulator.addCollapsePanel(false, layout, cp -> populateCollapsePane(cp, panel));
+				return this;
+			}
+
+			@Override
+			public AbstractQuickContainerPopulator addVPanel(Consumer<PanelPopulator<JPanel, ?>> panel) {
+				thePopulator.addCollapsePanel(false, "mig", cp -> populateCollapsePane(cp, panel));
+				return this;
+			}
+
+			private void populateCollapsePane(CollapsePanel<JXCollapsiblePane, JXPanel, ?> cp, Consumer<PanelPopulator<JPanel, ?>> panel) {
+				theComponent.accept(cp);
+				if (theInterpretedHeader != null) {
+					cp.withHeader(hp -> {
+						try {
+							theInterpretedHeader.populate(hp, theCollapsePane.getHeader());
+						} catch (ModelInstantiationException e) {
+							throw new CheckedExceptionWrapper(e);
 						}
-						colRenderer = true;
-						if (evt.getNewValue().getRenderer() != null)
-							renderers.put(evt.getNewValue().getIdentity(),
-								tx.transform(evt.getNewValue().getRenderer(), QuickSwingPopulator.class));
-						colRenderer = false;
-						if (evt.getNewValue().getEditing() != null && evt.getNewValue().getEditing().getEditor() != null)
-							editors.put(evt.getNewValue().getIdentity(),
-								tx.transform(evt.getNewValue().getEditing().getEditor(), QuickSwingPopulator.class));
-						break;
-					}
-				} catch (ExpressoInterpretationException e) {
-					if (renderersInitialized[0])
-						(colRenderer ? evt.getNewValue().getRenderer() : evt.getNewValue().getEditing().getEditor()).reporting()
-						.at(e.getErrorOffset()).error(e.getMessage(), e);
-					else
-						throw new CheckedExceptionWrapper(e);
+					});
 				}
-			}, true);
-		} catch (CheckedExceptionWrapper e) {
-			if (e.getCause() instanceof ExpressoInterpretationException)
-				throw (ExpressoInterpretationException) e.getCause();
-			else
-				throw new ExpressoInterpretationException(e.getMessage(), interpreted.reporting().getPosition(), 0, e.getCause());
+				if (theCollapsePane.isCollapsed() != null)
+					cp.withCollapsed(theCollapsePane.isCollapsed());
+				panel.accept((PanelPopulator<JPanel, ?>) (PanelPopulator<?, ?>) cp);
+			}
 		}
-		renderersInitialized[0] = true;
-		interpreted.destroyed().act(__ -> sub.unsubscribe());
-		boolean[] tableInitialized = new boolean[1];
-		// TODO Changes to actions collection?
-		List<QuickSwingTableAction<BetterList<T>, ?>> interpretedActions = BetterList.<ValueAction.Interpreted<BetterList<T>, ?>, QuickSwingTableAction<BetterList<T>, ?>, ExpressoInterpretationException> of2(
-			interpreted.getActions().stream(),
-			a -> (QuickSwingTableAction<BetterList<T>, ?>) tx.transform(a, QuickSwingTableAction.class));
+	}
 
-		return QuickSwingPopulator.createWidget((panel, quick) -> {
+	static class SwingTreeTable<T> extends QuickSwingPopulator.Abstract<QuickTreeTable<T>> {
+		private final TypeToken<BetterList<T>> theRowType;
+		private final QuickSwingPopulator<QuickWidget> theRenderer;
+		private final QuickSwingPopulator<QuickWidget> theEditor;
+		private final Map<Object, QuickSwingPopulator<QuickWidget>> theColumnRenderers = new HashMap<>();
+		private final Map<Object, QuickSwingPopulator<QuickWidget>> theColumnEditors = new HashMap<>();
+		private List<QuickSwingTableAction<BetterList<T>, ?>> interpretedActions;
+
+		private boolean tableInitialized;
+
+		SwingTreeTable(QuickTreeTable.Interpreted<T> interpreted, Transformer<ExpressoInterpretationException> tx)
+			throws ExpressoInterpretationException {
+			if (interpreted.getTreeColumn() == null) {
+				theRenderer = null;
+				theEditor = null;
+			} else {
+				theRenderer = interpreted.getTreeColumn().getRenderer() == null ? null
+					: tx.transform(interpreted.getTreeColumn().getRenderer(), QuickSwingPopulator.class);
+				if (interpreted.getTreeColumn().getEditing() == null || interpreted.getTreeColumn().getEditing().getEditor() == null)
+					theEditor = null;
+				else
+					theEditor = tx.transform(interpreted.getTreeColumn().getEditing().getEditor(), QuickSwingPopulator.class);
+			}
+
+			theRowType = interpreted.getValueType();
+			boolean[] renderersInitialized = new boolean[1];
+			Subscription sub;
+			try {
+				sub = interpreted.getColumns().subscribe(evt -> {
+					boolean colRenderer = false;
+					try {
+						switch (evt.getType()) {
+						case add:
+							colRenderer = true;
+							if (evt.getNewValue().getRenderer() != null)
+								theColumnRenderers.put(evt.getNewValue().getIdentity(),
+									tx.transform(evt.getNewValue().getRenderer(), QuickSwingPopulator.class));
+							colRenderer = false;
+							if (evt.getNewValue().getEditing() != null && evt.getNewValue().getEditing().getEditor() != null)
+								theColumnEditors.put(evt.getNewValue().getIdentity(),
+									tx.transform(evt.getNewValue().getEditing().getEditor(), QuickSwingPopulator.class));
+							break;
+						case remove:
+							theColumnRenderers.remove(evt.getOldValue().getIdentity());
+							theColumnEditors.remove(evt.getOldValue().getIdentity());
+							break;
+						case set:
+							if (evt.getOldValue().getIdentity() != evt.getNewValue().getIdentity()) {
+								theColumnRenderers.remove(evt.getOldValue().getIdentity());
+								theColumnEditors.remove(evt.getOldValue().getIdentity());
+							}
+							colRenderer = true;
+							if (evt.getNewValue().getRenderer() != null)
+								theColumnRenderers.put(evt.getNewValue().getIdentity(),
+									tx.transform(evt.getNewValue().getRenderer(), QuickSwingPopulator.class));
+							colRenderer = false;
+							if (evt.getNewValue().getEditing() != null && evt.getNewValue().getEditing().getEditor() != null)
+								theColumnEditors.put(evt.getNewValue().getIdentity(),
+									tx.transform(evt.getNewValue().getEditing().getEditor(), QuickSwingPopulator.class));
+							break;
+						}
+					} catch (ExpressoInterpretationException e) {
+						if (renderersInitialized[0])
+							(colRenderer ? evt.getNewValue().getRenderer() : evt.getNewValue().getEditing().getEditor()).reporting()
+							.at(e.getErrorOffset()).error(e.getMessage(), e);
+						else
+							throw new CheckedExceptionWrapper(e);
+					}
+				}, true);
+			} catch (CheckedExceptionWrapper e) {
+				if (e.getCause() instanceof ExpressoInterpretationException)
+					throw (ExpressoInterpretationException) e.getCause();
+				else
+					throw new ExpressoInterpretationException(e.getMessage(), interpreted.reporting().getPosition(), 0, e.getCause());
+			}
+			renderersInitialized[0] = true;
+			interpreted.destroyed().act(__ -> sub.unsubscribe());
+			// TODO Changes to actions collection?
+			interpretedActions = BetterList.<ValueAction.Interpreted<BetterList<T>, ?>, QuickSwingTableAction<BetterList<T>, ?>, ExpressoInterpretationException> of2(
+				interpreted.getActions().stream(),
+				a -> (QuickSwingTableAction<BetterList<T>, ?>) tx.transform(a, QuickSwingTableAction.class));
+		}
+
+		@Override
+		protected void doPopulate(PanelPopulator<?, ?> panel, QuickTreeTable<T> quick, Consumer<ComponentEditor<?, ?>> component)
+			throws ModelInstantiationException {
 			InterpretedSwingTableColumn<BetterList<T>, T> treeColumn;
 			ValueHolder<PanelPopulation.TreeTableEditor<T, ?>> treeHolder = new ValueHolder<>();
-			TabularWidget.TabularContext<BetterList<T>> tableCtx = new TabularWidget.TabularContext.Default<>(rowType,
+			TabularWidget.TabularContext<BetterList<T>> tableCtx = new TabularWidget.TabularContext.Default<>(theRowType,
 				quick.reporting().getPosition().toShortString());
 			if (quick.getTreeColumn() == null)
 				treeColumn = null;
 			else {
 				treeColumn = new InterpretedSwingTableColumn<>(quick,
-					(QuickTableColumn<BetterList<T>, T>) quick.getTreeColumn().getColumns().getFirst(), tableCtx, tx, panel.getUntil(),
-					treeHolder, renderer, editor);
+					(QuickTableColumn<BetterList<T>, T>) quick.getTreeColumn().getColumns().getFirst(), tableCtx, panel.getUntil(),
+					treeHolder, theRenderer, theEditor);
 			}
 			TypeToken<BetterList<T>> pathType = TypeTokens.get().keyFor(BetterList.class)
 				.<BetterList<T>> parameterized(quick.getNodeType());
@@ -151,10 +217,11 @@ public class QuickXSwing implements QuickInterpretation {
 			ObservableCollection<InterpretedSwingTableColumn<BetterList<T>, ?>> columns = quick.getAllColumns().flow()//
 				.map((Class<InterpretedSwingTableColumn<BetterList<T>, ?>>) (Class<?>) InterpretedSwingTableColumn.class, col -> {
 					try {
-						return new InterpretedSwingTableColumn<>(quick, col, tableCtx, tx, panel.getUntil(), treeHolder,
-							renderers.get(col.getColumnSet().getIdentity()), editors.get(col.getColumnSet().getIdentity()));
+						return new InterpretedSwingTableColumn<>(quick, col, tableCtx, panel.getUntil(), treeHolder,
+							theColumnRenderers.get(col.getColumnSet().getIdentity()),
+							theColumnEditors.get(col.getColumnSet().getIdentity()));
 					} catch (ModelInstantiationException e) {
-						if (tableInitialized[0]) {
+						if (tableInitialized) {
 							col.getColumnSet().reporting().error(e.getMessage(), e);
 							return null;
 						} else
@@ -182,6 +249,7 @@ public class QuickXSwing implements QuickInterpretation {
 					return null;
 				}
 			}, treeTable -> {
+				component.accept(treeTable);
 				treeHolder.accept(treeTable);
 				if (quick.getSelection() != null)
 					treeTable.withSelection(quick.getSelection(), false);
@@ -197,58 +265,13 @@ public class QuickXSwing implements QuickInterpretation {
 				treeTable.withRootVisible(quick.isRootVisible());
 				try {
 					for (int a = 0; a < interpretedActions.size(); a++)
-						((QuickSwingTableAction<BetterList<T>, ValueAction<BetterList<T>>>) interpretedActions.get(a))
-						.addAction(treeTable, quick.getActions().get(a));
+						((QuickSwingTableAction<BetterList<T>, ValueAction<BetterList<T>>>) interpretedActions.get(a)).addAction(treeTable,
+							quick.getActions().get(a));
 				} catch (ModelInstantiationException e) {
 					throw new CheckedExceptionWrapper(e);
 				}
 			});
-		});
-	}
-
-	private static class CollapsePanePopulator extends AbstractQuickContainerPopulator {
-		private PanelPopulator<?, ?> thePopulator;
-		private CollapsePane theCollapsePane;
-		private QuickSwingPopulator<QuickWidget> theInterpretedHeader;
-
-		public CollapsePanePopulator(PanelPopulator<?, ?> populator, CollapsePane collapsePane,
-			QuickSwingPopulator<QuickWidget> interpretedHeader) {
-			thePopulator = populator;
-			theCollapsePane = collapsePane;
-			theInterpretedHeader = interpretedHeader;
-		}
-
-		@Override
-		public Observable<?> getUntil() {
-			return thePopulator.getUntil();
-		}
-
-		@Override
-		public AbstractQuickContainerPopulator addHPanel(String fieldName, LayoutManager layout,
-			Consumer<PanelPopulator<JPanel, ?>> panel) {
-			thePopulator.addCollapsePanel(false, layout, cp -> populateCollapsePane(modify(cp), panel));
-			return this;
-		}
-
-		@Override
-		public AbstractQuickContainerPopulator addVPanel(Consumer<PanelPopulator<JPanel, ?>> panel) {
-			thePopulator.addCollapsePanel(false, "mig", cp -> populateCollapsePane(modify(cp), panel));
-			return this;
-		}
-
-		private void populateCollapsePane(CollapsePanel<JXCollapsiblePane, JXPanel, ?> cp, Consumer<PanelPopulator<JPanel, ?>> panel) {
-			if (theInterpretedHeader != null) {
-				cp.withHeader(hp -> {
-					try {
-						theInterpretedHeader.populate(hp, theCollapsePane.getHeader());
-					} catch (ModelInstantiationException e) {
-						throw new CheckedExceptionWrapper(e);
-					}
-				});
-			}
-			if (theCollapsePane.isCollapsed() != null)
-				cp.withCollapsed(theCollapsePane.isCollapsed());
-			panel.accept((PanelPopulator<JPanel, ?>) (PanelPopulator<?, ?>) cp);
+			tableInitialized = true;
 		}
 	}
 }

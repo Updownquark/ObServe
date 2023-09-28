@@ -28,7 +28,7 @@ import org.observe.util.swing.PanelPopulation.ComponentEditor;
 import org.observe.util.swing.PanelPopulation.ContainerPopulator;
 import org.observe.util.swing.PanelPopulation.PanelPopulator;
 import org.qommons.Transformer;
-import org.qommons.ValueHolder;
+import org.qommons.ex.CheckedExceptionWrapper;
 import org.qommons.ex.ExBiConsumer;
 import org.qommons.ex.ExTriConsumer;
 
@@ -64,18 +64,28 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 
 		@Override
 		public void populate(PanelPopulator<?, ?> panel, W quick) throws ModelInstantiationException {
-			populate(panel, quick);
+			populate((ContainerPopulator<?, ?>) panel, quick);
 		}
 
 		protected <P extends ContainerPopulator<?, ?>> void populate(P panel, W quick) throws ModelInstantiationException {
-			ValueHolder<ComponentEditor<?, ?>> component = new ValueHolder<>();
-			doPopulate((PanelPopulator<?, ?>) panel, quick, component);
-			if (!component.isPresent())
-				throw new IllegalStateException("No component set");
-			if (component.get() != null) {
-				for (ExBiConsumer<ComponentEditor<?, ?>, ? super W, ModelInstantiationException> modifier : theModifiers)
-					modifier.accept(component.get(), quick);
+			boolean[] modified = new boolean[1];
+			try {
+				doPopulate((PanelPopulator<?, ?>) panel, quick, comp -> {
+					modified[0] = true;
+					if (comp != null) {
+						try {
+							for (ExBiConsumer<ComponentEditor<?, ?>, ? super W, ModelInstantiationException> modifier : theModifiers)
+								modifier.accept(comp, quick);
+						} catch (ModelInstantiationException e) {
+							throw new CheckedExceptionWrapper(e);
+						}
+					}
+				});
+			} catch (CheckedExceptionWrapper w) {
+				throw CheckedExceptionWrapper.getThrowable(w, ModelInstantiationException.class);
 			}
+			if (!modified[0])
+				throw new IllegalStateException("Component modifier not invoked by " + getClass().getName());
 		}
 
 		@Override

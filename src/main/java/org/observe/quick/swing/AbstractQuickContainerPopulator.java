@@ -4,7 +4,6 @@ import java.awt.Component;
 import java.awt.LayoutManager;
 import java.awt.event.MouseEvent;
 import java.io.File;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
@@ -45,8 +44,6 @@ import org.qommons.io.Format;
 
 public abstract class AbstractQuickContainerPopulator
 implements PanelPopulation.PanelPopulator<JPanel, AbstractQuickContainerPopulator> {
-	private List<Consumer<ComponentEditor<?, ?>>> theModifiers;
-
 	@Override
 	public abstract AbstractQuickContainerPopulator addHPanel(String fieldName, LayoutManager layout,
 		Consumer<PanelPopulator<JPanel, ?>> panel);
@@ -61,7 +58,7 @@ implements PanelPopulation.PanelPopulator<JPanel, AbstractQuickContainerPopulato
 
 	@Override
 	public <R> AbstractQuickContainerPopulator addTable(ObservableCollection<R> rows, Consumer<TableBuilder<R, ?>> table) {
-		return addHPanel(null, new JustifiedBoxLayout(true).mainJustified().crossJustified(), p -> modify(p).addTable(rows, table));
+		return addHPanel(null, new JustifiedBoxLayout(true).mainJustified().crossJustified(), p -> p.addTable(rows, table));
 	}
 
 	@Override
@@ -258,7 +255,7 @@ implements PanelPopulation.PanelPopulator<JPanel, AbstractQuickContainerPopulato
 
 	@Override
 	public <R> AbstractQuickContainerPopulator addList(ObservableCollection<R> rows, Consumer<ListBuilder<R, ?>> list) {
-		return addHPanel(null, new JustifiedBoxLayout(true).mainJustified().crossJustified(), p -> modify(p).addList(rows, list));
+		return addHPanel(null, new JustifiedBoxLayout(true).mainJustified().crossJustified(), p -> p.addList(rows, list));
 	}
 
 	@Override
@@ -274,27 +271,6 @@ implements PanelPopulation.PanelPopulator<JPanel, AbstractQuickContainerPopulato
 	@Override
 	public JPanel getContainer() {
 		throw new UnsupportedOperationException("Should not call this here");
-	}
-
-	@Override
-	public void addChildModifier(Consumer<ComponentEditor<?, ?>> modifier) {
-		if (theModifiers == null)
-			theModifiers = new ArrayList<>();
-		theModifiers.add(modifier);
-	}
-
-	@Override
-	public void removeChildModifier(Consumer<ComponentEditor<?, ?>> modifier) {
-		if (theModifiers != null)
-			theModifiers.remove(modifier);
-	}
-
-	protected <P extends PanelPopulator<?, ?>> P modify(P container) {
-		if (theModifiers != null) {
-			for (Consumer<ComponentEditor<?, ?>> modifier : theModifiers)
-				container.addChildModifier(modifier);
-		}
-		return container;
 	}
 
 	@Override

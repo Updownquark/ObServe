@@ -6,7 +6,6 @@ import java.awt.Insets;
 import java.awt.LayoutManager;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseEvent;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Consumer;
@@ -78,9 +77,8 @@ class QuickSwingTablePopulation {
 		private ElementId theElementId;
 
 		public InterpretedSwingTableColumn(QuickWidget quickParent, QuickTableColumn<R, C> column, TabularContext<R> context,
-			Transformer<ExpressoInterpretationException> tx, Observable<?> until, Supplier<? extends ComponentEditor<?, ?>> parent,
-				QuickSwingPopulator<QuickWidget> swingRenderer, QuickSwingPopulator<QuickWidget> swingEditor)
-					throws ModelInstantiationException {
+			Observable<?> until, Supplier<? extends ComponentEditor<?, ?>> parent, QuickSwingPopulator<QuickWidget> swingRenderer,
+				QuickSwingPopulator<QuickWidget> swingEditor) throws ModelInstantiationException {
 			theColumn = column;
 			theCRS = new CategoryRenderStrategy<>(column.getName().get(), column.getType(), row -> {
 				try (Transaction t = QuickCoreSwing.rendering()) {
@@ -97,8 +95,8 @@ class QuickSwingTablePopulation {
 				theCRS.withHeaderTooltip(evt.getNewValue());
 				refresh();
 			});
-			QuickSwingTableColumn<R, C> renderer = new QuickSwingTableColumn<>(quickParent, column, context, tx, until, parent,
-				swingRenderer, swingEditor);
+			QuickSwingTableColumn<R, C> renderer = new QuickSwingTableColumn<>(quickParent, column, context, until, parent, swingRenderer,
+				swingEditor);
 			/* We need to listen to the style so external changes will re-render the table.
 			 * But we need to be careful, because the style depends on element values of the cell which are changed as the table renders
 			 * different cells.  So if we blindly listen for changes, this will keep re-rendering forever.
@@ -196,9 +194,8 @@ class QuickSwingTablePopulation {
 		private JComponent theOwner;
 
 		QuickSwingTableColumn(QuickWidget quickParent, QuickTableColumn<R, C> column, TabularWidget.TabularContext<R> ctx,
-			Transformer<ExpressoInterpretationException> tx, Observable<?> until, Supplier<? extends ComponentEditor<?, ?>> parent,
-				QuickSwingPopulator<QuickWidget> swingRenderer, QuickSwingPopulator<QuickWidget> swingEditor)
-					throws ModelInstantiationException {
+			Observable<?> until, Supplier<? extends ComponentEditor<?, ?>> parent, QuickSwingPopulator<QuickWidget> swingRenderer,
+				QuickSwingPopulator<QuickWidget> swingEditor) throws ModelInstantiationException {
 			theQuickParent = quickParent;
 			theColumn = column;
 			theRenderer = column.getRenderer();
@@ -211,12 +208,14 @@ class QuickSwingTablePopulation {
 			if (swingRenderer != null) {
 				renderPopulator = new SwingCellPopulator<>(this, true);
 				// This is in the modifier because we don't have the component yet
-				renderPopulator.addChildModifier(ce -> ce.modifyComponent(comp -> {
-					if (parent.get().getEditor() instanceof JComponent)
-						theOwner = (JComponent) parent.get().getEditor();
-					else if (parent.get().getComponent() instanceof JComponent)
-						theOwner = (JComponent) parent.get().getComponent();
-				}));
+				swingRenderer.addModifier((comp, w)->{
+					comp.modifyComponent(c -> {
+						if (parent.get().getEditor() instanceof JComponent)
+							theOwner = (JComponent) parent.get().getEditor();
+						else if (parent.get().getComponent() instanceof JComponent)
+							theOwner = (JComponent) parent.get().getComponent();
+					});
+				});
 
 				theRendererContext = new QuickWidget.WidgetContext.Default();
 				theRenderer.setContext(theRendererContext);
@@ -689,12 +688,10 @@ class QuickSwingTablePopulation {
 	static class SwingCellPopulator<R, C> implements PanelPopulation.PartialPanelPopulatorImpl<Container, SwingCellPopulator<R, C>> {
 		private final QuickSwingTableColumn<R, C> theCell;
 		private final boolean isRenderer;
-		private final List<Consumer<ComponentEditor<?, ?>>> theModifiers;
 
 		public SwingCellPopulator(QuickSwingTableColumn<R, C> cell, boolean renderer) {
 			theCell = cell;
 			isRenderer = renderer;
-			theModifiers = new ArrayList<>();
 		}
 
 		SwingCellPopulator<R, C> unsupported(String message) {
@@ -720,16 +717,6 @@ class QuickSwingTablePopulation {
 		@Override
 		public boolean isSyntheticRenderer() {
 			return true;
-		}
-
-		@Override
-		public void addChildModifier(Consumer<ComponentEditor<?, ?>> modifier) {
-			theModifiers.add(modifier);
-		}
-
-		@Override
-		public void removeChildModifier(Consumer<ComponentEditor<?, ?>> modifier) {
-			theModifiers.remove(modifier);
 		}
 
 		@Override
@@ -823,11 +810,6 @@ class QuickSwingTablePopulation {
 		}
 
 		@Override
-		public <C2 extends ComponentEditor<?, ?>> C2 modifyChild(C2 component) {
-			return component;
-		}
-
-		@Override
 		public void doAdd(AbstractComponentEditor<?, ?> field, Component fieldLabel, Component postLabel, boolean scrolled) {
 			if (isRenderer)
 				theCell.renderWith(field, field::reset);
@@ -842,14 +824,10 @@ class QuickSwingTablePopulation {
 				LabelRenderEditor editor = new LabelRenderEditor(theCell);
 				if (modify != null)
 					modify.accept(editor);
-				for (Consumer<ComponentEditor<?, ?>> modifier : theModifiers)
-					modifier.accept(editor);
 				JLabel[] label = new JLabel[1];
 				PanelPopulation.PartialPanelPopulatorImpl.super.addLabel(fieldName, field, format, tf -> {
 					if (modify != null)
 						modify.accept(tf);
-					for (Consumer<ComponentEditor<?, ?>> modifier : theModifiers)
-						modifier.accept(tf);
 					label[0] = tf.getEditor();
 				});
 
@@ -884,8 +862,6 @@ class QuickSwingTablePopulation {
 				FieldRenderEditor<JLabel> editor = new FieldRenderEditor<>(theCell);
 				if (modify != null)
 					modify.accept(editor);
-				for (Consumer<ComponentEditor<?, ?>> modifier : theModifiers)
-					modifier.accept(editor);
 				theCell.delegateTo(delegate);
 			} else
 				unsupported("Icon");
@@ -904,8 +880,6 @@ class QuickSwingTablePopulation {
 				FieldRenderEditor<JLabel> editor = new FieldRenderEditor<>(theCell);
 				if (modify != null)
 					modify.accept(editor);
-				for (Consumer<ComponentEditor<?, ?>> modifier : theModifiers)
-					modifier.accept(editor);
 				theCell.delegateTo(delegate);
 			} else
 				unsupported("Link");
@@ -922,8 +896,6 @@ class QuickSwingTablePopulation {
 				FieldRenderEditor<JCheckBox> editor = new FieldRenderEditor<>(theCell);
 				if (modify != null)
 					modify.accept(editor);
-				for (Consumer<ComponentEditor<?, ?>> modifier : theModifiers)
-					modifier.accept(editor);
 				theCell.delegateTo(delegate);
 			} else {
 				if (TypeTokens.getRawType(TypeTokens.get().unwrap(theCell.getColumn().getType())) != boolean.class)
@@ -950,8 +922,6 @@ class QuickSwingTablePopulation {
 				delegate.modify(comp -> editor[0].decorateButton((JButton) comp));
 				if (modify != null)
 					modify.accept(editor[0]);
-				for (Consumer<ComponentEditor<?, ?>> modifier : theModifiers)
-					modifier.accept(editor[0]);
 				theCell.delegateTo(delegate);
 			} else {
 				ButtonRenderEditor[] editor = new SwingCellPopulator.ButtonRenderEditor[1];
@@ -990,15 +960,11 @@ class QuickSwingTablePopulation {
 				FieldRenderEditor<ObservableTextArea<F>> editor = new FieldRenderEditor<>(theCell);
 				if (modify != null)
 					modify.accept(editor);
-				for (Consumer<ComponentEditor<?, ?>> modifier : theModifiers)
-					modifier.accept(editor);
 				ObservableTextArea<F>[] textArea = new ObservableTextArea[1];
 				SimpleObservable<Void> renderUntil = new SimpleObservable<>();
 				PanelPopulation.PartialPanelPopulatorImpl.super.addStyledTextArea(fieldName, doc, tf -> {
 					if (modify != null)
 						modify.accept(tf);
-					for (Consumer<ComponentEditor<?, ?>> modifier : theModifiers)
-						modifier.accept(tf);
 					textArea[0] = tf.getEditor();
 				});
 				textArea[0].setMargin(new Insets(0, 0, 0, 0));
@@ -1129,7 +1095,8 @@ class QuickSwingTablePopulation {
 
 			@Override
 			public E visibleWhen(ObservableValue<Boolean> visible) {
-				return unsupported("Visible");
+				// Visibility is unsupported, but don't throw a fit
+				return (E) this;
 			}
 
 			@Override

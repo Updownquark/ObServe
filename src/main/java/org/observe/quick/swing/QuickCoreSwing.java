@@ -213,10 +213,8 @@ public class QuickCoreSwing implements QuickInterpretation {
 					});
 					if (w.getTooltip() != null)
 						comp.withTooltip(w.getTooltip());
-					if (!renderer) {
-						if (w.isVisible() != null)
-							comp.visibleWhen(w.isVisible());
-					}
+					if (!renderer)
+						comp.visibleWhen(w.isVisible());
 					if (border != null) {
 						comp.decorate(deco2 -> {
 							try {

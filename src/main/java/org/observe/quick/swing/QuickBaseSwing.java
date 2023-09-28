@@ -69,6 +69,7 @@ import org.qommons.Transformer;
 import org.qommons.ValueHolder;
 import org.qommons.collect.BetterList;
 import org.qommons.ex.CheckedExceptionWrapper;
+import org.qommons.ex.ExBiFunction;
 import org.qommons.io.Format;
 
 import com.google.common.reflect.TypeToken;
@@ -78,33 +79,22 @@ public class QuickBaseSwing implements QuickInterpretation {
 	@Override
 	public void configure(Transformer.Builder<ExpressoInterpretationException> tx) {
 		// Simple widgets
-		tx.with((Class<QuickLabel.Interpreted<?, ?>>) (Class<?>) QuickLabel.Interpreted.class, QuickSwingPopulator.class,
-			(i, tx2) -> new SwingLabel<>());
+		tx.with(QuickLabel.Interpreted.class, QuickSwingPopulator.class, widget(SwingLabel::new));
 		tx.with(QuickSpacer.Interpreted.class, QuickSwingPopulator.class, (i, tx2) -> new SwingSpacer());
-		QuickSwingPopulator.<QuickProgressBar, QuickProgressBar.Interpreted> interpretWidget(tx,
-			QuickBaseSwing.gen(QuickProgressBar.Interpreted.class), QuickBaseSwing::interpretProgressBar);
-		QuickSwingPopulator.<QuickTextField<?>, QuickTextField.Interpreted<?>> interpretWidget(tx,
-			QuickBaseSwing.gen(QuickTextField.Interpreted.class), QuickBaseSwing::interpretTextField);
-		QuickSwingPopulator.<QuickCheckBox, QuickCheckBox.Interpreted> interpretWidget(tx,
-			QuickBaseSwing.gen(QuickCheckBox.Interpreted.class), QuickBaseSwing::interpretCheckBox);
-		QuickSwingPopulator.<QuickButton, QuickButton.Interpreted<QuickButton>> interpretWidget(tx, gen(QuickButton.Interpreted.class),
-			QuickBaseSwing::interpretButton);
-		QuickSwingPopulator.<QuickFileButton, QuickFileButton.Interpreted> interpretWidget(tx, gen(QuickFileButton.Interpreted.class),
-			QuickBaseSwing::interpretFileButton);
-		QuickSwingPopulator.<QuickComboBox<?>, QuickComboBox.Interpreted<?>> interpretWidget(tx,
-			QuickBaseSwing.gen(QuickComboBox.Interpreted.class), QuickBaseSwing::interpretComboBox);
-		QuickSwingPopulator.<QuickRadioButtons<?>, QuickRadioButtons.Interpreted<?>> interpretWidget(tx,
-			QuickBaseSwing.gen(QuickRadioButtons.Interpreted.class), QuickBaseSwing::interpretRadioButtons);
+		tx.with(QuickProgressBar.Interpreted.class, QuickSwingPopulator.class, (i, tx2) -> new SwingProgressBar());
+		tx.with(QuickTextField.Interpreted.class, QuickSwingPopulator.class, widget(SwingTextField::new));
+		tx.with(QuickCheckBox.Interpreted.class, QuickSwingPopulator.class, widget(SwingCheckBox::new));
+		tx.with(QuickButton.Interpreted.class, QuickSwingPopulator.class, widget(SwingButton::new));
+		tx.with(QuickFileButton.Interpreted.class, QuickSwingPopulator.class, widget(SwingFileButton::new));
+		tx.with(QuickComboBox.Interpreted.class, QuickSwingPopulator.class, widget(SwingComboBox::new));
+		tx.with(QuickRadioButtons.Interpreted.class, QuickSwingPopulator.class, widget(SwingRadioButtons::new));
 		tx.with(QuickTextArea.Interpreted.class, QuickSwingPopulator.class, SwingTextArea::new);
-		QuickSwingPopulator.<QuickTextArea<?>, QuickTextArea.Interpreted<?>> interpretWidget(tx,
-			QuickBaseSwing.gen(QuickTextArea.Interpreted.class), QuickBaseSwing::interpretTextArea);
 		tx.with(DynamicStyledDocument.Interpreted.class, QuickSwingDocument.class,
 			(qd, tx2) -> QuickBaseSwing.interpretDynamicStyledDoc(qd, tx2));
 
 		// Containers
 		tx.with(QuickBox.Interpreted.class, QuickSwingContainerPopulator.class, SwingBox::new);
-		QuickSwingPopulator.<QuickFieldPanel, QuickFieldPanel.Interpreted> interpretContainer(tx, gen(QuickFieldPanel.Interpreted.class),
-			QuickBaseSwing::interpretFieldPanel);
+		tx.with(QuickFieldPanel.Interpreted.class, QuickSwingContainerPopulator.class, SwingFieldPanel::new);
 		QuickSwingPopulator.<QuickWidget, QuickField, QuickField.Interpreted> modifyForAddOn(tx, QuickField.Interpreted.class,
 			(Class<QuickWidget.Interpreted<QuickWidget>>) (Class<?>) QuickWidget.Interpreted.class, (ao, qsp, tx2) -> {
 				qsp.addModifier((comp, w) -> {
@@ -114,10 +104,8 @@ public class QuickBaseSwing implements QuickInterpretation {
 						comp.fill();
 				});
 			});
-		QuickSwingPopulator.<QuickSplit, QuickSplit.Interpreted<?>> interpretContainer(tx, gen(QuickSplit.Interpreted.class),
-			QuickBaseSwing::interpretSplit);
-		QuickSwingPopulator.<QuickScrollPane, QuickScrollPane.Interpreted> interpretContainer(tx, gen(QuickScrollPane.Interpreted.class),
-			QuickBaseSwing::interpretScroll);
+		tx.with(QuickSplit.Interpreted.class, QuickSwingContainerPopulator.class, SwingSplit::new);
+		tx.with(QuickScrollPane.Interpreted.class, QuickSwingContainerPopulator.class, SwingScroll::new);
 
 		// Box layouts
 		tx.with(QuickInlineLayout.Interpreted.class, QuickSwingLayout.class, QuickBaseSwing::interpretInlineLayout);
@@ -125,17 +113,14 @@ public class QuickBaseSwing implements QuickInterpretation {
 		tx.with(QuickBorderLayout.Interpreted.class, QuickSwingLayout.class, QuickBaseSwing::interpretBorderLayout);
 
 		// Table
-		QuickSwingPopulator.<QuickTable<?>, QuickTable.Interpreted<?>> interpretWidget(tx, gen(QuickTable.Interpreted.class),
-			QuickBaseSwing::interpretTable);
+		tx.with(QuickTable.Interpreted.class, QuickSwingPopulator.class, SwingTable::new);
 		tx.with(ValueAction.Single.Interpreted.class, QuickSwingTableAction.class, QuickSwingTablePopulation::interpretValueAction);
 		tx.with(ValueAction.Multi.Interpreted.class, QuickSwingTableAction.class, QuickSwingTablePopulation::interpretMultiValueAction);
 
 		// Tabs
-		QuickSwingPopulator.<QuickTabs<?>, QuickTabs.Interpreted<?>> interpretWidget(tx, gen(QuickTabs.Interpreted.class),
-			QuickBaseSwing::interpretTabs);
+		tx.with(QuickTabs.Interpreted.class, QuickSwingContainerPopulator.class, SwingTabs::new);
 		// Tree
-		QuickSwingPopulator.<QuickTree<?>, QuickTree.Interpreted<?, ?>> interpretWidget(tx, gen(QuickTree.Interpreted.class),
-			QuickBaseSwing::interpretTree);
+		tx.with(QuickTree.Interpreted.class, QuickSwingPopulator.class, SwingTree::new);
 
 		// Dialogs
 		tx.with(QuickInfoDialog.Interpreted.class, QuickSwingDialog.class, QuickBaseSwing::interpretInfoDialog);
@@ -144,8 +129,10 @@ public class QuickBaseSwing implements QuickInterpretation {
 		tx.with(GeneralDialog.Interpreted.class, QuickSwingDialog.class, QuickBaseSwing::interpretGeneralDialog);
 	}
 
-	static <T> Class<T> gen(Class<? super T> rawClass) {
-		return (Class<T>) rawClass;
+	public static <W extends QuickWidget, GW extends W, I extends QuickWidget.Interpreted<W>, GI extends QuickWidget.Interpreted<GW>> //
+	ExBiFunction<I, Transformer<ExpressoInterpretationException>, QuickSwingPopulator<W>, ExpressoInterpretationException> widget(
+		Supplier<QuickSwingPopulator<GW>> ctor) {
+		return (i, tx) -> (QuickSwingPopulator<W>) ctor.get();
 	}
 
 	static class SwingBox extends QuickSwingPopulator.QuickSwingContainerPopulator.Abstract<QuickBox> {
@@ -630,91 +617,100 @@ public class QuickBaseSwing implements QuickInterpretation {
 		}
 	}
 
-	static class SwingFileButton extends QuickSwingPopulator.Abst
-
-	static QuickSwingPopulator<QuickFileButton> interpretFileButton(QuickFileButton.Interpreted interpreted,
-		Transformer<ExpressoInterpretationException> tx) {
-		return QuickSwingPopulator.createWidget((panel, quick) -> {
-			panel.addFileField(null, quick.getValue(), quick.isOpen(), null);
-		});
+	static class SwingFileButton extends QuickSwingPopulator.Abstract<QuickFileButton> {
+		@Override
+		protected void doPopulate(PanelPopulator<?, ?> panel, QuickFileButton quick, Consumer<ComponentEditor<?, ?>> component)
+			throws ModelInstantiationException {
+			panel.addFileField(null, quick.getValue(), quick.isOpen(), fb -> component.accept(fb));
+		}
 	}
 
-	static <T> QuickSwingPopulator<QuickComboBox<T>> interpretComboBox(QuickComboBox.Interpreted<T> interpreted,
-		Transformer<ExpressoInterpretationException> tx) {
-		return QuickSwingPopulator.createWidget((panel, quick) -> {
-			panel.addComboField(null, quick.getValue(), quick.getValues(), null);
-		});
+	static class SwingComboBox<T> extends QuickSwingPopulator.Abstract<QuickComboBox<T>> {
+		@Override
+		protected void doPopulate(PanelPopulator<?, ?> panel, QuickComboBox<T> quick, Consumer<ComponentEditor<?, ?>> component)
+			throws ModelInstantiationException {
+			panel.addComboField(null, quick.getValue(), quick.getValues(), cf -> component.accept(cf));
+		}
 	}
 
-	static <T> QuickSwingPopulator<QuickRadioButtons<T>> interpretRadioButtons(QuickRadioButtons.Interpreted<T> interpreted,
-		Transformer<ExpressoInterpretationException> tx) {
-		return QuickSwingPopulator.createWidget((panel, quick) -> {
-			panel.addRadioField(null, quick.getValue(), quick.getValues(), null);
-		});
+	static class SwingRadioButtons<T> extends QuickSwingPopulator.Abstract<QuickRadioButtons<T>> {
+		@Override
+		protected void doPopulate(PanelPopulator<?, ?> panel, QuickRadioButtons<T> quick, Consumer<ComponentEditor<?, ?>> component)
+			throws ModelInstantiationException {
+			panel.addRadioField(null, quick.getValue(), quick.getValues(), rf -> component.accept(rf));
+		}
 	}
 
-	static <R> QuickSwingPopulator<QuickTable<R>> interpretTable(QuickTable.Interpreted<R> interpreted,
-		Transformer<ExpressoInterpretationException> tx) throws ExpressoInterpretationException {
-		TypeToken<R> rowType = interpreted.getValueType();
-		Map<Object, QuickSwingPopulator<QuickWidget>> renderers = new HashMap<>();
-		Map<Object, QuickSwingPopulator<QuickWidget>> editors = new HashMap<>();
-		boolean[] renderersInitialized = new boolean[1];
-		Subscription sub;
-		try {
-			sub = interpreted.getColumns().subscribe(evt -> {
-				boolean renderer = false;
-				try {
-					switch (evt.getType()) {
-					case add:
-						renderer = true;
-						if (evt.getNewValue().getRenderer() != null)
-							renderers.put(evt.getNewValue().getIdentity(),
-								tx.transform(evt.getNewValue().getRenderer(), QuickSwingPopulator.class));
-						renderer = false;
-						if (evt.getNewValue().getEditing() != null && evt.getNewValue().getEditing().getEditor() != null)
-							editors.put(evt.getNewValue().getIdentity(),
-								tx.transform(evt.getNewValue().getEditing().getEditor(), QuickSwingPopulator.class));
-						break;
-					case remove:
-						renderers.remove(evt.getOldValue().getIdentity());
-						editors.remove(evt.getOldValue().getIdentity());
-						break;
-					case set:
-						if (evt.getOldValue().getIdentity() != evt.getNewValue().getIdentity()) {
+	static class SwingTable<R> extends QuickSwingPopulator.Abstract<QuickTable<R>> {
+		private final TypeToken<R> rowType;
+		private final Map<Object, QuickSwingPopulator<QuickWidget>> renderers = new HashMap<>();
+		private final Map<Object, QuickSwingPopulator<QuickWidget>> editors = new HashMap<>();
+		private boolean renderersInitialized;
+		private boolean tableInitialized;
+		private final List<QuickSwingTableAction<R, ?>> interpretedActions;
+
+		SwingTable(QuickTable.Interpreted<R> interpreted, Transformer<ExpressoInterpretationException> tx)
+			throws ExpressoInterpretationException {
+			rowType = interpreted.getValueType();
+			Subscription sub;
+			try {
+				sub = interpreted.getColumns().subscribe(evt -> {
+					boolean renderer = false;
+					try {
+						switch (evt.getType()) {
+						case add:
+							renderer = true;
+							if (evt.getNewValue().getRenderer() != null)
+								renderers.put(evt.getNewValue().getIdentity(),
+									tx.transform(evt.getNewValue().getRenderer(), QuickSwingPopulator.class));
+							renderer = false;
+							if (evt.getNewValue().getEditing() != null && evt.getNewValue().getEditing().getEditor() != null)
+								editors.put(evt.getNewValue().getIdentity(),
+									tx.transform(evt.getNewValue().getEditing().getEditor(), QuickSwingPopulator.class));
+							break;
+						case remove:
 							renderers.remove(evt.getOldValue().getIdentity());
 							editors.remove(evt.getOldValue().getIdentity());
+							break;
+						case set:
+							if (evt.getOldValue().getIdentity() != evt.getNewValue().getIdentity()) {
+								renderers.remove(evt.getOldValue().getIdentity());
+								editors.remove(evt.getOldValue().getIdentity());
+							}
+							renderer = true;
+							if (evt.getNewValue().getRenderer() != null)
+								renderers.put(evt.getNewValue().getIdentity(),
+									tx.transform(evt.getNewValue().getRenderer(), QuickSwingPopulator.class));
+							renderer = false;
+							if (evt.getNewValue().getEditing() != null && evt.getNewValue().getEditing().getEditor() != null)
+								editors.put(evt.getNewValue().getIdentity(),
+									tx.transform(evt.getNewValue().getEditing().getEditor(), QuickSwingPopulator.class));
+							break;
 						}
-						renderer = true;
-						if (evt.getNewValue().getRenderer() != null)
-							renderers.put(evt.getNewValue().getIdentity(),
-								tx.transform(evt.getNewValue().getRenderer(), QuickSwingPopulator.class));
-						renderer = false;
-						if (evt.getNewValue().getEditing() != null && evt.getNewValue().getEditing().getEditor() != null)
-							editors.put(evt.getNewValue().getIdentity(),
-								tx.transform(evt.getNewValue().getEditing().getEditor(), QuickSwingPopulator.class));
-						break;
+					} catch (ExpressoInterpretationException e) {
+						if (renderersInitialized)
+							(renderer ? evt.getNewValue().getRenderer() : evt.getNewValue().getEditing().getEditor()).reporting()
+							.at(e.getErrorOffset()).error(e.getMessage(), e);
+						else
+							throw new CheckedExceptionWrapper(e);
 					}
-				} catch (ExpressoInterpretationException e) {
-					if (renderersInitialized[0])
-						(renderer ? evt.getNewValue().getRenderer() : evt.getNewValue().getEditing().getEditor()).reporting()
-						.at(e.getErrorOffset()).error(e.getMessage(), e);
-					else
-						throw new CheckedExceptionWrapper(e);
-				}
-			}, true);
-		} catch (CheckedExceptionWrapper e) {
-			if (e.getCause() instanceof ExpressoInterpretationException)
-				throw (ExpressoInterpretationException) e.getCause();
-			else
-				throw new ExpressoInterpretationException(e.getMessage(), interpreted.reporting().getPosition(), 0, e.getCause());
+				}, true);
+			} catch (CheckedExceptionWrapper e) {
+				if (e.getCause() instanceof ExpressoInterpretationException)
+					throw (ExpressoInterpretationException) e.getCause();
+				else
+					throw new ExpressoInterpretationException(e.getMessage(), interpreted.reporting().getPosition(), 0, e.getCause());
+			}
+			renderersInitialized = true;
+			interpreted.destroyed().act(__ -> sub.unsubscribe());
+			// TODO Changes to actions collection?
+			interpretedActions = BetterList.<ValueAction.Interpreted<R, ?>, QuickSwingTableAction<R, ?>, ExpressoInterpretationException> of2(
+				interpreted.getActions().stream(), a -> (QuickSwingTableAction<R, ?>) tx.transform(a, QuickSwingTableAction.class));
 		}
-		renderersInitialized[0] = true;
-		interpreted.destroyed().act(__ -> sub.unsubscribe());
-		boolean[] tableInitialized = new boolean[1];
-		// TODO Changes to actions collection?
-		List<QuickSwingTableAction<R, ?>> interpretedActions = BetterList.<ValueAction.Interpreted<R, ?>, QuickSwingTableAction<R, ?>, ExpressoInterpretationException> of2(
-			interpreted.getActions().stream(), a -> (QuickSwingTableAction<R, ?>) tx.transform(a, QuickSwingTableAction.class));
-		QuickSwingPopulator<QuickTable<R>> swingTable = QuickSwingPopulator.createWidget((panel, quick) -> {
+
+		@Override
+		protected void doPopulate(PanelPopulator<?, ?> panel, QuickTable<R> quick, Consumer<ComponentEditor<?, ?>> component)
+			throws ModelInstantiationException {
 			TabularWidget.TabularContext<R> ctx = new TabularWidget.TabularContext.Default<>(rowType,
 				quick.reporting().getPosition().toShortString());
 			quick.setContext(ctx);
@@ -722,10 +718,10 @@ public class QuickBaseSwing implements QuickInterpretation {
 			ObservableCollection<InterpretedSwingTableColumn<R, ?>> columns = quick.getAllColumns().flow()//
 				.map((Class<InterpretedSwingTableColumn<R, ?>>) (Class<?>) InterpretedSwingTableColumn.class, column -> {
 					try {
-						return new InterpretedSwingTableColumn<>(quick, column, ctx, tx, panel.getUntil(), () -> parent[0],
+						return new InterpretedSwingTableColumn<>(quick, column, ctx, panel.getUntil(), () -> parent[0],
 							renderers.get(column.getColumnSet().getIdentity()), editors.get(column.getColumnSet().getIdentity()));
 					} catch (ModelInstantiationException e) {
-						if (tableInitialized[0]) {
+						if (tableInitialized) {
 							column.getColumnSet().reporting().error(e.getMessage(), e);
 							return null;
 						} else
@@ -746,6 +742,7 @@ public class QuickBaseSwing implements QuickInterpretation {
 					column -> column.getCRS())//
 				.collect();
 			panel.addTable(quick.getRows(), table -> {
+				component.accept(table);
 				parent[0] = table;
 				table.withColumns(crss);
 				if (quick.getSelection() != null)
@@ -759,26 +756,32 @@ public class QuickBaseSwing implements QuickInterpretation {
 					throw new CheckedExceptionWrapper(e);
 				}
 			});
-		});
-		tableInitialized[0] = true;
-		return swingTable;
+			tableInitialized = true;
+		}
 	}
 
-	static <T> QuickSwingPopulator<QuickTree<T>> interpretTree(QuickTree.Interpreted<T, ?> interpreted,
-		Transformer<ExpressoInterpretationException> tx) throws ExpressoInterpretationException {
-		QuickSwingPopulator<QuickWidget> renderer, editor;
-		if (interpreted.getTreeColumn() == null) {
-			renderer = null;
-			editor = null;
-		} else {
-			renderer = interpreted.getTreeColumn().getRenderer() == null ? null
-				: tx.transform(interpreted.getTreeColumn().getRenderer(), QuickSwingPopulator.class);
-			if (interpreted.getTreeColumn().getEditing() == null || interpreted.getTreeColumn().getEditing().getEditor() == null)
-				editor = null;
-			else
-				editor = tx.transform(interpreted.getTreeColumn().getEditing().getEditor(), QuickSwingPopulator.class);
+	static class SwingTree<T> extends QuickSwingPopulator.Abstract<QuickTree<T>> {
+		private QuickSwingPopulator<QuickWidget> theRenderer;
+		private QuickSwingPopulator<QuickWidget> theEditor;
+
+		SwingTree(QuickTree.Interpreted<T, ?> interpreted, Transformer<ExpressoInterpretationException> tx)
+			throws ExpressoInterpretationException {
+			if (interpreted.getTreeColumn() == null) {
+				theRenderer = null;
+				theEditor = null;
+			} else {
+				theRenderer = interpreted.getTreeColumn().getRenderer() == null ? null
+					: tx.transform(interpreted.getTreeColumn().getRenderer(), QuickSwingPopulator.class);
+				if (interpreted.getTreeColumn().getEditing() == null || interpreted.getTreeColumn().getEditing().getEditor() == null)
+					theEditor = null;
+				else
+					theEditor = tx.transform(interpreted.getTreeColumn().getEditing().getEditor(), QuickSwingPopulator.class);
+			}
 		}
-		return QuickSwingPopulator.createWidget((panel, quick) -> {
+
+		@Override
+		protected void doPopulate(PanelPopulator<?, ?> panel, QuickTree<T> quick, Consumer<ComponentEditor<?, ?>> component)
+			throws ModelInstantiationException {
 			MultiValueRenderable.MultiValueRenderContext<BetterList<T>> ctx = new MultiValueRenderable.MultiValueRenderContext.Default<>(
 				TypeTokens.get().keyFor(BetterList.class).<BetterList<T>> parameterized(quick.getNodeType()));
 			quick.setContext(ctx);
@@ -814,8 +817,8 @@ public class QuickBaseSwing implements QuickInterpretation {
 					}
 				};
 				treeColumn = new InterpretedSwingTableColumn<>(quick,
-					(QuickTableColumn<BetterList<T>, T>) quick.getTreeColumn().getColumns().getFirst(), tableCtx, tx, panel.getUntil(),
-					treeHolder, renderer, editor);
+					(QuickTableColumn<BetterList<T>, T>) quick.getTreeColumn().getColumns().getFirst(), tableCtx, panel.getUntil(),
+					treeHolder, theRenderer, theEditor);
 			}
 			TypeToken<BetterList<T>> pathType = TypeTokens.get().keyFor(BetterList.class)
 				.<BetterList<T>> parameterized(quick.getNodeType());
@@ -827,6 +830,7 @@ public class QuickBaseSwing implements QuickInterpretation {
 					return null;
 				}
 			}, tree -> {
+				component.accept(tree);
 				treeHolder.accept(tree);
 				if (quick.getSelection() != null)
 					tree.withSelection(quick.getSelection(), false);
@@ -840,15 +844,30 @@ public class QuickBaseSwing implements QuickInterpretation {
 				});
 				tree.withRootVisible(quick.isRootVisible());
 			});
-		});
+		}
 	}
 
-	static QuickSwingContainerPopulator<QuickSplit> interpretSplit(QuickSplit.Interpreted<?> interpreted,
-		Transformer<ExpressoInterpretationException> tx) throws ExpressoInterpretationException {
-		BetterList<QuickSwingPopulator<QuickWidget>> contents = BetterList.<QuickWidget.Interpreted<?>, QuickSwingPopulator<QuickWidget>, ExpressoInterpretationException> of2(
-			interpreted.getContents().stream(), content -> tx.transform(content, QuickSwingPopulator.class));
-		return QuickSwingPopulator.createContainer((panel, quick) -> {
+	static class SwingSplit extends QuickSwingPopulator.QuickSwingContainerPopulator.Abstract<QuickSplit> {
+		private final QuickSwingPopulator<QuickWidget> theFirst;
+		private final QuickSwingPopulator<QuickWidget> theLast;
+
+		SwingSplit(QuickSplit.Interpreted<?> interpreted, Transformer<ExpressoInterpretationException> tx)
+			throws ExpressoInterpretationException {
+			if (interpreted.getContents().size() > 0)
+				theFirst = tx.transform(interpreted.getContents().getFirst(), QuickSwingPopulator.class);
+			else
+				theFirst = null;
+			if (interpreted.getContents().size() > 1)
+				theLast = tx.transform(interpreted.getContents().getLast(), QuickSwingPopulator.class);
+			else
+				theLast = null;
+		}
+
+		@Override
+		protected void doPopulateContainer(ContainerPopulator<?, ?> panel, QuickSplit quick, Consumer<ComponentEditor<?, ?>> component)
+			throws ModelInstantiationException {
 			panel.addSplit(quick.isVertical(), s -> {
+				component.accept(s);
 				AbstractQuickContainerPopulator populator = new AbstractQuickContainerPopulator() {
 					private boolean isFirst = true;
 
@@ -862,9 +881,9 @@ public class QuickBaseSwing implements QuickInterpretation {
 						Consumer<PanelPopulator<JPanel, ?>> hPanel) {
 						if (isFirst) {
 							isFirst = false;
-							s.firstH(layout, p -> hPanel.accept((PanelPopulator<JPanel, ?>) modify(p)));
+							s.firstH(layout, p -> hPanel.accept((PanelPopulator<JPanel, ?>) p));
 						} else
-							s.lastH(layout, p -> hPanel.accept((PanelPopulator<JPanel, ?>) modify(p)));
+							s.lastH(layout, p -> hPanel.accept((PanelPopulator<JPanel, ?>) p));
 						return this;
 					}
 
@@ -872,127 +891,130 @@ public class QuickBaseSwing implements QuickInterpretation {
 					public AbstractQuickContainerPopulator addVPanel(Consumer<PanelPopulator<JPanel, ?>> vPanel) {
 						if (isFirst) {
 							isFirst = false;
-							s.firstV(p -> vPanel.accept((PanelPopulator<JPanel, ?>) modify(p)));
+							s.firstV(p -> vPanel.accept((PanelPopulator<JPanel, ?>) p));
 							s.firstV((Consumer<PanelPopulator<?, ?>>) (Consumer<?>) vPanel);
 						} else
-							s.lastV(p -> vPanel.accept((PanelPopulator<JPanel, ?>) modify(p)));
+							s.lastV(p -> vPanel.accept((PanelPopulator<JPanel, ?>) p));
 						return this;
 					}
 				};
 				try {
-					switch (contents.size()) {
-					case 0:
-						return;
-					case 1:
-						contents.getFirst().populate(populator, quick.getContents().getFirst());
-						break;
-					default:
-						contents.getFirst().populate(populator, quick.getContents().getFirst());
-						contents.get(1).populate(populator, quick.getContents().get(1));
-					}
+					if (theFirst != null)
+						theFirst.populate(populator, quick.getContents().getFirst());
+					if (theLast != null)
+						theLast.populate(populator, quick.getContents().getLast());
 				} catch (ModelInstantiationException e) {
 					throw new CheckedExceptionWrapper(e);
 				}
 			});
-		});
+		}
 	}
 
-	static QuickSwingContainerPopulator<QuickScrollPane> interpretScroll(QuickScrollPane.Interpreted interpreted,
-		Transformer<ExpressoInterpretationException> tx) throws ExpressoInterpretationException {
-		QuickSwingPopulator<QuickWidget> content = tx.transform(interpreted.getContents().getFirst(), QuickSwingPopulator.class);
-		QuickSwingPopulator<QuickWidget> rowHeader = interpreted.getRowHeader() == null ? null
-			: tx.transform(interpreted.getRowHeader(), QuickSwingPopulator.class);
-		QuickSwingPopulator<QuickWidget> columnHeader = interpreted.getColumnHeader() == null ? null
-			: tx.transform(interpreted.getColumnHeader(), QuickSwingPopulator.class);
-		return QuickSwingPopulator.createContainer((panel, quick) -> {
+	static class SwingScroll extends QuickSwingPopulator.QuickSwingContainerPopulator.Abstract<QuickScrollPane> {
+		private QuickSwingPopulator<QuickWidget> theContent;
+		private QuickSwingPopulator<QuickWidget> theRowHeader;
+		private QuickSwingPopulator<QuickWidget> theColumnHeader;
+
+		SwingScroll(QuickScrollPane.Interpreted interpreted, Transformer<ExpressoInterpretationException> tx)
+			throws ExpressoInterpretationException {
+			theContent = tx.transform(interpreted.getContents().getFirst(), QuickSwingPopulator.class);
+			theRowHeader = interpreted.getRowHeader() == null ? null : tx.transform(interpreted.getRowHeader(), QuickSwingPopulator.class);
+			theColumnHeader = interpreted.getColumnHeader() == null ? null
+				: tx.transform(interpreted.getColumnHeader(), QuickSwingPopulator.class);
+		}
+
+		@Override
+		protected void doPopulateContainer(ContainerPopulator<?, ?> panel, QuickScrollPane quick, Consumer<ComponentEditor<?, ?>> component)
+			throws ModelInstantiationException {
 			panel.addScroll(null, s -> {
+				component.accept(s);
 				try {
-					content.populate(new ScrollPopulator(s), quick.getContents().getFirst());
-					if (rowHeader != null)
-						rowHeader.populate(new ScrollRowHeaderPopulator(s), quick.getRowHeader());
-					if (columnHeader != null)
-						columnHeader.populate(new ScrollColumnHeaderPopulator(s), quick.getColumnHeader());
+					theContent.populate(new ScrollPopulator(s), quick.getContents().getFirst());
+					if (theRowHeader != null)
+						theRowHeader.populate(new ScrollRowHeaderPopulator(s), quick.getRowHeader());
+					if (theColumnHeader != null)
+						theColumnHeader.populate(new ScrollColumnHeaderPopulator(s), quick.getColumnHeader());
 				} catch (ModelInstantiationException e) {
 					throw new CheckedExceptionWrapper(e);
 				}
 			});
-		});
-	}
-
-	private static class ScrollPopulator extends AbstractQuickContainerPopulator {
-		private final PanelPopulation.ScrollPane<?> theScroll;
-
-		ScrollPopulator(PanelPopulation.ScrollPane<?> scroll) {
-			theScroll = scroll;
 		}
 
-		@Override
-		public Observable<?> getUntil() {
-			return theScroll.getUntil();
+		private static class ScrollPopulator extends AbstractQuickContainerPopulator {
+			private final PanelPopulation.ScrollPane<?> theScroll;
+
+			ScrollPopulator(PanelPopulation.ScrollPane<?> scroll) {
+				theScroll = scroll;
+			}
+
+			@Override
+			public Observable<?> getUntil() {
+				return theScroll.getUntil();
+			}
+
+			@Override
+			public AbstractQuickContainerPopulator addHPanel(String fieldName, LayoutManager layout,
+				Consumer<PanelPopulator<JPanel, ?>> hPanel) {
+				theScroll.withHContent(layout, p -> hPanel.accept((PanelPopulator<JPanel, ?>) p));
+				return this;
+			}
+
+			@Override
+			public AbstractQuickContainerPopulator addVPanel(Consumer<PanelPopulator<JPanel, ?>> vPanel) {
+				theScroll.withVContent(p -> vPanel.accept((PanelPopulator<JPanel, ?>) p));
+				return this;
+			}
 		}
 
-		@Override
-		public AbstractQuickContainerPopulator addHPanel(String fieldName, LayoutManager layout,
-			Consumer<PanelPopulator<JPanel, ?>> hPanel) {
-			theScroll.withHContent(layout, p -> hPanel.accept((PanelPopulator<JPanel, ?>) modify(p)));
-			return this;
+		private static class ScrollRowHeaderPopulator extends AbstractQuickContainerPopulator {
+			private final PanelPopulation.ScrollPane<?> theScroll;
+
+			ScrollRowHeaderPopulator(PanelPopulation.ScrollPane<?> scroll) {
+				theScroll = scroll;
+			}
+
+			@Override
+			public Observable<?> getUntil() {
+				return theScroll.getUntil();
+			}
+
+			@Override
+			public AbstractQuickContainerPopulator addHPanel(String fieldName, LayoutManager layout,
+				Consumer<PanelPopulator<JPanel, ?>> hPanel) {
+				theScroll.withHRowHeader(layout, p -> hPanel.accept((PanelPopulator<JPanel, ?>) p));
+				return this;
+			}
+
+			@Override
+			public AbstractQuickContainerPopulator addVPanel(Consumer<PanelPopulator<JPanel, ?>> vPanel) {
+				theScroll.withVRowHeader(p -> vPanel.accept((PanelPopulator<JPanel, ?>) p));
+				return this;
+			}
 		}
 
-		@Override
-		public AbstractQuickContainerPopulator addVPanel(Consumer<PanelPopulator<JPanel, ?>> vPanel) {
-			theScroll.withVContent(p -> vPanel.accept((PanelPopulator<JPanel, ?>) modify(p)));
-			return this;
-		}
-	}
+		private static class ScrollColumnHeaderPopulator extends AbstractQuickContainerPopulator {
+			private final PanelPopulation.ScrollPane<?> theScroll;
 
-	private static class ScrollRowHeaderPopulator extends AbstractQuickContainerPopulator {
-		private final PanelPopulation.ScrollPane<?> theScroll;
+			ScrollColumnHeaderPopulator(PanelPopulation.ScrollPane<?> scroll) {
+				theScroll = scroll;
+			}
 
-		ScrollRowHeaderPopulator(PanelPopulation.ScrollPane<?> scroll) {
-			theScroll = scroll;
-		}
+			@Override
+			public Observable<?> getUntil() {
+				return theScroll.getUntil();
+			}
 
-		@Override
-		public Observable<?> getUntil() {
-			return theScroll.getUntil();
-		}
+			@Override
+			public AbstractQuickContainerPopulator addHPanel(String fieldName, LayoutManager layout,
+				Consumer<PanelPopulator<JPanel, ?>> hPanel) {
+				theScroll.withHColumnHeader(layout, p -> hPanel.accept((PanelPopulator<JPanel, ?>) p));
+				return this;
+			}
 
-		@Override
-		public AbstractQuickContainerPopulator addHPanel(String fieldName, LayoutManager layout,
-			Consumer<PanelPopulator<JPanel, ?>> hPanel) {
-			theScroll.withHRowHeader(layout, p -> hPanel.accept((PanelPopulator<JPanel, ?>) modify(p)));
-			return this;
-		}
-
-		@Override
-		public AbstractQuickContainerPopulator addVPanel(Consumer<PanelPopulator<JPanel, ?>> vPanel) {
-			theScroll.withVRowHeader(p -> vPanel.accept((PanelPopulator<JPanel, ?>) modify(p)));
-			return this;
-		}
-	}
-
-	private static class ScrollColumnHeaderPopulator extends AbstractQuickContainerPopulator {
-		private final PanelPopulation.ScrollPane<?> theScroll;
-
-		ScrollColumnHeaderPopulator(PanelPopulation.ScrollPane<?> scroll) {
-			theScroll = scroll;
-		}
-
-		@Override
-		public Observable<?> getUntil() {
-			return theScroll.getUntil();
-		}
-
-		@Override
-		public AbstractQuickContainerPopulator addHPanel(String fieldName, LayoutManager layout,
-			Consumer<PanelPopulator<JPanel, ?>> hPanel) {
-			theScroll.withHColumnHeader(layout, p -> hPanel.accept((PanelPopulator<JPanel, ?>) modify(p)));
-			return this;
-		}
-
-		@Override
-		public AbstractQuickContainerPopulator addVPanel(Consumer<PanelPopulator<JPanel, ?>> vPanel) {
-			throw new IllegalArgumentException("Vertical panel makes no sense for a column header");
+			@Override
+			public AbstractQuickContainerPopulator addVPanel(Consumer<PanelPopulator<JPanel, ?>> vPanel) {
+				throw new IllegalArgumentException("Vertical panel makes no sense for a column header");
+			}
 		}
 	}
 
@@ -1231,33 +1253,42 @@ public class QuickBaseSwing implements QuickInterpretation {
 		@Override
 		public AbstractQuickContainerPopulator addHPanel(String fieldName, LayoutManager layout,
 			Consumer<PanelPopulator<JPanel, ?>> panel) {
-			theWindow.withHContent(layout, p -> panel.accept((PanelPopulator<JPanel, ?>) modify(p)));
+			theWindow.withHContent(layout, p -> panel.accept((PanelPopulator<JPanel, ?>) p));
 			return this;
 		}
 
 		@Override
 		public AbstractQuickContainerPopulator addVPanel(Consumer<PanelPopulator<JPanel, ?>> panel) {
-			theWindow.withVContent(p -> panel.accept((PanelPopulator<JPanel, ?>) modify(p)));
+			theWindow.withVContent(p -> panel.accept((PanelPopulator<JPanel, ?>) p));
 			return this;
 		}
 	}
 
-	static <T> QuickSwingContainerPopulator<QuickTabs<T>> interpretTabs(QuickTabs.Interpreted<T> interpreted,
-		Transformer<ExpressoInterpretationException> tx) throws ExpressoInterpretationException {
+	static class SwingTabs<T> extends QuickSwingContainerPopulator.Abstract<QuickTabs<T>> {
 		Map<Object, QuickSwingPopulator<QuickWidget>> renderers = new HashMap<>();
-		for (QuickWidget.Interpreted<?> content : interpreted.getContents())
-			renderers.put(content.getIdentity(), tx.transform(content, QuickSwingPopulator.class));
-		for (QuickTabs.TabSet.Interpreted<? extends T> tabSet : interpreted.getTabSets())
-			renderers.put(tabSet.getRenderer().getIdentity(), tx.transform(tabSet.getRenderer(), QuickSwingPopulator.class));
-		return QuickSwingPopulator.createContainer((panel, quick) -> {
+
+		SwingTabs(QuickTabs.Interpreted<T> interpreted, Transformer<ExpressoInterpretationException> tx)
+			throws ExpressoInterpretationException {
+			for (QuickWidget.Interpreted<?> content : interpreted.getContents())
+				renderers.put(content.getIdentity(), tx.transform(content, QuickSwingPopulator.class));
+			for (QuickTabs.TabSet.Interpreted<? extends T> tabSet : interpreted.getTabSets())
+				renderers.put(tabSet.getRenderer().getIdentity(), tx.transform(tabSet.getRenderer(), QuickSwingPopulator.class));
+		}
+
+		@Override
+		protected void doPopulateContainer(ContainerPopulator<?, ?> panel, QuickTabs<T> quick, Consumer<ComponentEditor<?, ?>> component)
+			throws ModelInstantiationException {
 			PanelPopulation.TabPaneEditor<?, ?>[] tabs = new PanelPopulation.TabPaneEditor[1];
-			panel.addTabs(t -> tabs[0] = t);
+			panel.addTabs(t -> {
+				component.accept(t);
+				tabs[0] = t;
+			});
 			quick.getTabs().subscribe(evt -> {
 				switch (evt.getType()) {
 				case add:
 					QuickSwingPopulator<QuickWidget> renderer = renderers.get(evt.getNewValue().getRenderer().getIdentity());
 					try {
-						renderer.populate(new QuickBaseSwing.TabsPopulator<>(tabs[0], quick, evt.getNewValue(), evt.getIndex()),
+						renderer.populate(new TabsPopulator<>(tabs[0], evt.getNewValue(), evt.getIndex()),
 							evt.getNewValue().getRenderer());
 					} catch (ModelInstantiationException e) {
 						evt.getNewValue().getRenderer().reporting().error("Failed to populate tab", e);
@@ -1268,53 +1299,52 @@ public class QuickBaseSwing implements QuickInterpretation {
 				}
 			}, true);
 			tabs[0].withSelectedTab(quick.getSelectedTab());
-		});
-	}
-
-	private static class TabsPopulator<T> extends AbstractQuickContainerPopulator {
-		private final PanelPopulation.TabPaneEditor<?, ?> theTabEditor;
-		private final QuickTabs<T> theTabs;
-		private final QuickTabs.TabInstance<? extends T> theTab;
-		private final int theTabIndex;
-
-		TabsPopulator(PanelPopulation.TabPaneEditor<?, ?> tabEditor, QuickTabs<T> tabs, QuickTabs.TabInstance<? extends T> tab, int index) {
-			theTabEditor = tabEditor;
-			theTabs = tabs;
-			theTab = tab;
-			theTabIndex = index;
 		}
 
-		@Override
-		public Observable<?> getUntil() {
-			return theTabEditor.getUntil();
-		}
+		private static class TabsPopulator<T> extends AbstractQuickContainerPopulator {
+			private final PanelPopulation.TabPaneEditor<?, ?> theTabEditor;
+			private final QuickTabs.TabInstance<? extends T> theTab;
+			private final int theTabIndex;
 
-		@Override
-		public AbstractQuickContainerPopulator addHPanel(String fieldName, LayoutManager layout,
-			Consumer<PanelPopulator<JPanel, ?>> panel) {
-			theTabEditor.withHTab(theTab.getTabValue(), theTabIndex, layout, tab -> panel.accept((PanelPopulator<JPanel, ?>) modify(tab)),
-				this::configureTab);
-			return this;
-		}
+			TabsPopulator(PanelPopulation.TabPaneEditor<?, ?> tabEditor, QuickTabs.TabInstance<? extends T> tab,
+				int index) {
+				theTabEditor = tabEditor;
+				theTab = tab;
+				theTabIndex = index;
+			}
 
-		@Override
-		public AbstractQuickContainerPopulator addVPanel(Consumer<PanelPopulator<JPanel, ?>> panel) {
-			theTabEditor.withVTab(theTab.getTabValue(), theTabIndex, tab -> panel.accept((PanelPopulator<JPanel, ?>) modify(tab)),
-				this::configureTab);
-			return this;
-		}
+			@Override
+			public Observable<?> getUntil() {
+				return theTabEditor.getUntil();
+			}
 
-		void configureTab(PanelPopulation.TabEditor<?> tab) {
-			tab.setName(theTab.getTabName());
-			tab.setIcon(theTab.getTabIcon());
-			tab.setRemovable(theTab.isRemovable().get());
-			tab.onRemove(__ -> theTab.onRemove());
-			tab.onSelect(onSelect -> {
-				onSelect.changes().takeUntil(theTab.getRenderer().isDestroyed().noInitChanges().take(1)).act(evt -> {
-					if (evt.getNewValue())
-						theTab.onSelect();
+			@Override
+			public AbstractQuickContainerPopulator addHPanel(String fieldName, LayoutManager layout,
+				Consumer<PanelPopulator<JPanel, ?>> panel) {
+				theTabEditor.withHTab(theTab.getTabValue(), theTabIndex, layout,
+					tab -> panel.accept((PanelPopulator<JPanel, ?>) tab), this::configureTab);
+				return this;
+			}
+
+			@Override
+			public AbstractQuickContainerPopulator addVPanel(Consumer<PanelPopulator<JPanel, ?>> panel) {
+				theTabEditor.withVTab(theTab.getTabValue(), theTabIndex, tab -> panel.accept((PanelPopulator<JPanel, ?>) tab),
+					this::configureTab);
+				return this;
+			}
+
+			void configureTab(PanelPopulation.TabEditor<?> tab) {
+				tab.setName(theTab.getTabName());
+				tab.setIcon(theTab.getTabIcon());
+				tab.setRemovable(theTab.isRemovable().get());
+				tab.onRemove(__ -> theTab.onRemove());
+				tab.onSelect(onSelect -> {
+					onSelect.changes().takeUntil(theTab.getRenderer().isDestroyed().noInitChanges().take(1)).act(evt -> {
+						if (evt.getNewValue())
+							theTab.onSelect();
+					});
 				});
-			});
+			}
 		}
 	}
 
@@ -1335,7 +1365,6 @@ public class QuickBaseSwing implements QuickInterpretation {
 		public AbstractQuickContainerPopulator addHPanel(String fieldName, LayoutManager layout,
 			Consumer<PanelPopulator<JPanel, ?>> panel) {
 			PanelPopulation.PanelPopulator<JPanel, ?> populator = PanelPopulation.populateHPanel(null, layout, theUntil);
-			modify(populator);
 			panel.accept(populator);
 			theExtractedComponent = populator.getContainer();
 			return this;
@@ -1344,7 +1373,6 @@ public class QuickBaseSwing implements QuickInterpretation {
 		@Override
 		public AbstractQuickContainerPopulator addVPanel(Consumer<PanelPopulator<JPanel, ?>> panel) {
 			PanelPopulation.PanelPopulator<JPanel, ?> populator = PanelPopulation.populateVPanel(null, theUntil);
-			modify(populator);
 			panel.accept(populator);
 			theExtractedComponent = populator.getContainer();
 			return this;
