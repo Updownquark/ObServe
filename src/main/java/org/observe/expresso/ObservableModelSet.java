@@ -2667,7 +2667,7 @@ public interface ObservableModelSet extends Identifiable {
 						depPath = theCycleChecker.iterator().next() + " depends on itself";
 					else
 						depPath = StringUtils.print("<-", theCycleChecker, Object::toString).toString() + "<-" + sourceNode;
-					throw new IllegalStateException("Dependency cycle detected: " + depPath);
+					throw new ExpressoInterpretationException("Dependency cycle detected: " + depPath, sourceNode.getSourceLocation(), 0);
 				}
 				try {
 					InterpretedModelComponentNode<M, ?> interpreted = sourceNode.interpret(theExpressoEnv);

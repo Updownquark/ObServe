@@ -5,6 +5,7 @@ import java.util.Set;
 
 import org.observe.expresso.ObservableModelSet.ExternalModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
+import org.observe.expresso.ObservableModelSet.ModelComponentId;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ops.BinaryOperatorSet;
 import org.observe.expresso.ops.ExternalLiteral;
@@ -41,7 +42,8 @@ public class InterpretedExpressoEnv extends CompiledExpressoEnv {
 	private final Map<Object, Object> theProperties;
 	private final boolean isTesting;
 
-	InterpretedExpressoEnv(InterpretedModelSet models, ExternalModelSet extModels, ClassView classView, Map<String, String> attributes,
+	InterpretedExpressoEnv(InterpretedModelSet models, ExternalModelSet extModels, ClassView classView,
+		Map<String, ModelComponentId> attributes,
 		ClassMap<Set<NonStructuredParser>> nonStructuredParsers, UnaryOperatorSet unaryOperators, BinaryOperatorSet binaryOperators,
 		ErrorReporting reporting, Map<Object, Object> properties, boolean testing) {
 		super(models, attributes, nonStructuredParsers, unaryOperators, binaryOperators, reporting);
@@ -52,7 +54,7 @@ public class InterpretedExpressoEnv extends CompiledExpressoEnv {
 	}
 
 	@Override
-	protected CompiledExpressoEnv copy(ObservableModelSet models, Map<String, String> attributes,
+	protected CompiledExpressoEnv copy(ObservableModelSet models, Map<String, ModelComponentId> attributes,
 		ClassMap<Set<NonStructuredParser>> nonStructuredParsers, UnaryOperatorSet unaryOperators, BinaryOperatorSet binaryOperators) {
 		if (models != null && !(models instanceof InterpretedModelSet))
 			return super.copy(models, attributes, nonStructuredParsers, unaryOperators, binaryOperators);
@@ -66,7 +68,7 @@ public class InterpretedExpressoEnv extends CompiledExpressoEnv {
 	 */
 	public InterpretedExpressoEnv forChild(CompiledExpressoEnv child) {
 		InterpretedExpressoEnv env = this;
-		for (Map.Entry<String, String> attr : child.getAttributes().entrySet())
+		for (Map.Entry<String, ModelComponentId> attr : child.getAttributes().entrySet())
 			env = env.withAttribute(attr.getKey(), attr.getValue());
 		env = env.withAllNonStructuredParsers(child);
 		if (getModels() != null) {
@@ -192,7 +194,7 @@ public class InterpretedExpressoEnv extends CompiledExpressoEnv {
 	}
 
 	@Override
-	public InterpretedExpressoEnv withAttribute(String attributeName, String value) {
+	public InterpretedExpressoEnv withAttribute(String attributeName, ModelComponentId value) {
 		return (InterpretedExpressoEnv) super.withAttribute(attributeName, value);
 	}
 

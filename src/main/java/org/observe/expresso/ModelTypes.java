@@ -792,6 +792,33 @@ public class ModelTypes {
 					}
 				}
 			});
+			// Support constant collections from arrays
+			builder.convertibleFrom(ModelTypes.Value, new ModelConverter<SettableValue<?>, ObservableCollection<?>>() {
+				@Override
+				public ModelInstanceConverter<SettableValue<?>, ObservableCollection<?>> convert(
+					ModelInstanceType<SettableValue<?>, ?> source, ModelInstanceType<ObservableCollection<?>, ?> target,
+					InterpretedExpressoEnv env) {
+					if (source.getType(0).isArray())
+						return convertArrayValue(source.getType(0).getComponentType(), target, env);
+					else
+						return null;
+				}
+
+				private <T> ModelInstanceConverter<SettableValue<?>, ObservableCollection<?>> convertArrayValue(TypeToken<T> componentType,
+					ModelInstanceType<ObservableCollection<?>, ?> target, InterpretedExpressoEnv env) {
+					ModelInstanceType<ObservableCollection<?>, ObservableCollection<T>> collectionType = forType(componentType);
+					ModelInstanceConverter<ObservableCollection<?>, ObservableCollection<?>> collectionConverter = target
+						.convert(collectionType, env);
+					if (collectionConverter == null)
+						return null;
+					TypeToken<ObservableCollection<T>> ocType = TypeTokens.get().keyFor(ObservableCollection.class)
+						.<ObservableCollection<T>> parameterized(componentType);
+					return ModelType.converter(LambdaUtils.printableFn(arrayValue -> {
+						return ObservableCollection
+							.flattenValue(arrayValue.map(ocType, v -> v == null ? null : ObservableCollection.of(componentType, (T[]) v)));
+					}, "asCollection", null), collectionConverter.getType());
+				}
+			});
 		}
 
 		@Override

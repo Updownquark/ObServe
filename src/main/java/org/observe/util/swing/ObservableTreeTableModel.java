@@ -688,7 +688,8 @@ public class ObservableTreeTableModel<T> implements TreeTableModel {
 					List<T> list = new ArrayList<>(e.getPath().length + 1);
 					list.addAll((List<T>) (List<?>) Arrays.asList(e.getPath()));
 					list.add((T) e.getChildren()[found]);
-					selection.set(BetterList.of(list), e);
+					if (selection.isAcceptable(BetterList.of(list)) == null)
+						selection.set(BetterList.of(list), e);
 				} finally {
 					callbackLock[0] = false;
 				}
@@ -708,7 +709,7 @@ public class ObservableTreeTableModel<T> implements TreeTableModel {
 					TreePath path = treeTable.getPathForRow(selModel.getLeadSelectionRow());
 					list = (List<T>) (List<?>) Arrays.asList(path.getPath());
 				}
-				if (!Objects.equals(list, selection.get())) {
+				if (!Objects.equals(list, selection.get()) && selection.isAcceptable(BetterList.of(list)) == null) {
 					callbackLock[0] = true;
 					try {
 						selection.set(BetterList.of(list), e);

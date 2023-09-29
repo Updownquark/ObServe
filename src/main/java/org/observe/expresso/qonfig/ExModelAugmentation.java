@@ -17,7 +17,7 @@ public abstract class ExModelAugmentation<E extends ExElement> extends ExAddOn.A
 			ObservableModelSet.Builder builder;
 			if (session.get(CREATED_LOCAL_MODEL_COPY) == null) {
 				session.putLocal(CREATED_LOCAL_MODEL_COPY, true);
-				builder = ObservableModelSet.build(session.getElement().getType().getName() + ".local",
+				builder = ObservableModelSet.build(getElement().toString() + ".local",
 					models == null ? ObservableModelSet.JAVA_NAME_CHECKER : models.getNameChecker());
 				if (session.getExpressoEnv().getModels() != null)
 					builder.withAll(session.getExpressoEnv().getModels());
@@ -26,7 +26,7 @@ public abstract class ExModelAugmentation<E extends ExElement> extends ExAddOn.A
 			} else if (models != null)
 				builder = (ObservableModelSet.Builder) models;
 			else {
-				builder = ObservableModelSet.build(session.getElement().getType().getName() + ".local",
+				builder = ObservableModelSet.build(getElement().toString() + ".local",
 					ObservableModelSet.JAVA_NAME_CHECKER);
 				getElement().setExpressoEnv(getElement().getExpressoEnv().with(builder));
 				session.setExpressoEnv(getElement().getExpressoEnv());

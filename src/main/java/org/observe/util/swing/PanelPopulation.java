@@ -490,7 +490,7 @@ public class PanelPopulation {
 			JLabel label = new JLabel();
 			if (!isSyntheticRenderer()) {
 				field.changes().safe(ThreadConstraint.EDT).takeUntil(getUntil()).act(evt -> {
-					label.setText(format.apply(evt.getNewValue()));
+					setText(format.apply(evt.getNewValue()), label::setText);
 				});
 			}
 			SimpleLabelEditor<JLabel, ?> fieldPanel = new SimpleLabelEditor<>(fieldName, label, getUntil());
@@ -869,6 +869,12 @@ public class PanelPopulation {
 			doAdd(collapsePanel, null, null, false);
 			return (P) this;
 		}
+	}
+
+	public static void setText(String text, Consumer<String> setter) {
+		if (!text.startsWith("<html>") && text.indexOf('\n') >= 0)
+			text = "<html>" + text.replace("\n", "<br>");
+		setter.accept(text);
 	}
 
 	public interface ComponentEditor<E, P extends ComponentEditor<E, P>> extends Tooltipped<P> {

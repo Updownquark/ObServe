@@ -16,6 +16,7 @@ import org.observe.SettableValue;
 import org.observe.expresso.ObservableModelSet.ExternalModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
+import org.observe.expresso.ObservableModelSet.ModelComponentId;
 import org.observe.expresso.ops.BinaryOperatorSet;
 import org.observe.expresso.ops.ExternalLiteral;
 import org.observe.expresso.ops.UnaryOperatorSet;
@@ -42,7 +43,7 @@ public class CompiledExpressoEnv {
 		.withDefaultNonStructuredParsing();
 
 	private final ObservableModelSet theModels;
-	private final Map<String, String> theAttributes;
+	private final Map<String, ModelComponentId> theAttributes;
 	private final UnaryOperatorSet theUnaryOperators;
 	private final BinaryOperatorSet theBinaryOperators;
 	private final ClassMap<Set<NonStructuredParser>> theNonStructuredParsers;
@@ -61,13 +62,13 @@ public class CompiledExpressoEnv {
 
 	/**
 	 * @param models The models for the environment
-	 * @param attributes A mapping of attribute name to variable name for values that are named via a text attribute
+	 * @param attributes A mapping of attribute name to variable ID for values that are named via a text attribute
 	 * @param nonStructuredParsers The non-structured parsers for the environment
 	 * @param unaryOperators The unary operators for the environment
 	 * @param binaryOperators The binary operators for the environment
 	 * @param reporting The error reporting for the environment
 	 */
-	protected CompiledExpressoEnv(ObservableModelSet models, Map<String, String> attributes,
+	protected CompiledExpressoEnv(ObservableModelSet models, Map<String, ModelComponentId> attributes,
 		ClassMap<Set<NonStructuredParser>> nonStructuredParsers,
 		UnaryOperatorSet unaryOperators, BinaryOperatorSet binaryOperators, ErrorReporting reporting) {
 		theModels = models;
@@ -82,13 +83,13 @@ public class CompiledExpressoEnv {
 
 	/**
 	 * @param models The models for the environment
-	 * @param attributes A mapping of attribute name to variable name for values that are named via a text attribute
+	 * @param attributes A mapping of attribute name to variable ID for values that are named via a text attribute
 	 * @param nonStructuredParsers The non-structured parsers for the environment
 	 * @param unaryOperators The unary operators for the environment
 	 * @param binaryOperators The binary operators for the environment
 	 * @return A copy of this environment with the given information
 	 */
-	protected CompiledExpressoEnv copy(ObservableModelSet models, Map<String, String> attributes,
+	protected CompiledExpressoEnv copy(ObservableModelSet models, Map<String, ModelComponentId> attributes,
 		ClassMap<Set<NonStructuredParser>> nonStructuredParsers,
 		UnaryOperatorSet unaryOperators, BinaryOperatorSet binaryOperators) {
 		return new CompiledExpressoEnv(models, attributes, nonStructuredParsers, unaryOperators, binaryOperators, reporting());
@@ -105,7 +106,7 @@ public class CompiledExpressoEnv {
 	}
 
 	/** @return A mapping of attribute name to variable name for values that are named via a text attribute */
-	protected Map<String, String> getAttributes() {
+	protected Map<String, ModelComponentId> getAttributes() {
 		return theAttributes;
 	}
 
@@ -333,10 +334,10 @@ public class CompiledExpressoEnv {
 	 * the attribute name, without knowing what the value of that attribute might be in a given context
 	 *
 	 * @param attributeName The name of the attribute
-	 * @param value The value of the attribute
+	 * @param value The variable ID of the attribute
 	 * @return The (possible) copy of this environment containing the mapping
 	 */
-	public CompiledExpressoEnv withAttribute(String attributeName, String value) {
+	public CompiledExpressoEnv withAttribute(String attributeName, ModelComponentId value) {
 		CompiledExpressoEnv env;
 		if (theAttributes.isEmpty())
 			env = copy(theModels, new LinkedHashMap<>(), theNonStructuredParsers, theUnaryOperators, theBinaryOperators);
@@ -350,7 +351,7 @@ public class CompiledExpressoEnv {
 	 * @param name The name of the attribute to get
 	 * @return The value of the attribute
 	 */
-	public String getAttribute(String name) {
+	public ModelComponentId getAttribute(String name) {
 		return theAttributes.get(name);
 	}
 

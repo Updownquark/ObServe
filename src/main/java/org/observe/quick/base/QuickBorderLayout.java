@@ -4,6 +4,7 @@ import org.observe.expresso.qonfig.ExAddOn;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExElementTraceable;
 import org.observe.expresso.qonfig.ExpressoQIS;
+import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.quick.QuickWidget;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigInterpretationException;
@@ -73,6 +74,7 @@ public class QuickBorderLayout extends QuickLayout.Abstract {
 				super(type, element);
 			}
 
+			@QonfigAttributeGetter("region")
 			public Region getRegion() {
 				return theRegion;
 			}

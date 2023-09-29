@@ -51,6 +51,7 @@ import org.observe.util.TypeTokens;
 import org.observe.util.swing.BgFontAdjuster;
 import org.observe.util.swing.CategoryRenderStrategy;
 import org.observe.util.swing.JustifiedBoxLayout;
+import org.observe.util.swing.ObservableCellRenderer;
 import org.observe.util.swing.ObservableStyledDocument;
 import org.observe.util.swing.ObservableTextArea;
 import org.observe.util.swing.PanelPopulation;
@@ -86,7 +87,7 @@ public class QuickBaseSwing implements QuickInterpretation {
 		tx.with(QuickCheckBox.Interpreted.class, QuickSwingPopulator.class, widget(SwingCheckBox::new));
 		tx.with(QuickButton.Interpreted.class, QuickSwingPopulator.class, widget(SwingButton::new));
 		tx.with(QuickFileButton.Interpreted.class, QuickSwingPopulator.class, widget(SwingFileButton::new));
-		tx.with(QuickComboBox.Interpreted.class, QuickSwingPopulator.class, widget(SwingComboBox::new));
+		tx.with(QuickComboBox.Interpreted.class, QuickSwingPopulator.class, SwingComboBox::new);
 		tx.with(QuickRadioButtons.Interpreted.class, QuickSwingPopulator.class, widget(SwingRadioButtons::new));
 		tx.with(QuickTextArea.Interpreted.class, QuickSwingPopulator.class, SwingTextArea::new);
 		tx.with(DynamicStyledDocument.Interpreted.class, QuickSwingDocument.class,
@@ -626,10 +627,28 @@ public class QuickBaseSwing implements QuickInterpretation {
 	}
 
 	static class SwingComboBox<T> extends QuickSwingPopulator.Abstract<QuickComboBox<T>> {
+		private QuickSwingPopulator<QuickWidget> theRenderer;
+
+		SwingComboBox(QuickComboBox.Interpreted<T> interpreted, Transformer<ExpressoInterpretationException> tx)
+			throws ExpressoInterpretationException {
+			if (interpreted.getRenderer() != null)
+				theRenderer = tx.transform(interpreted.getRenderer(), QuickSwingPopulator.class);
+		}
+
 		@Override
 		protected void doPopulate(PanelPopulator<?, ?> panel, QuickComboBox<T> quick, Consumer<ComponentEditor<?, ?>> component)
 			throws ModelInstantiationException {
-			panel.addComboField(null, quick.getValue(), quick.getValues(), cf -> component.accept(cf));
+			ComponentEditor<?, ?>[] combo = new ComponentEditor[1];
+			TabularWidget.TabularContext<T> tableCtx = new TabularWidget.TabularContext.Default<>(quick.getValue().getType(),
+				quick.toString());
+			ObservableCellRenderer<T, T> renderer = theRenderer == null ? null : new QuickSwingTablePopulation.QuickSwingRenderer<>(quick,
+				quick.getValue().getType(), quick.getValue(), quick.getRenderer(), tableCtx, () -> combo[0], theRenderer);
+			panel.addComboField(null, quick.getValue(), quick.getValues(), cf -> {
+				combo[0] = cf;
+				component.accept(cf);
+				// if (theRenderer != null)
+				// cf.renderWith(renderer);
+			});
 		}
 	}
 

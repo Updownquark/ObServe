@@ -68,6 +68,8 @@ import org.qommons.collect.CollectionUtils;
 import org.qommons.collect.ElementId;
 import org.qommons.io.Format;
 
+import com.google.common.reflect.TypeToken;
+
 /** Code to populate Quick-sourced tables in Java swing */
 class QuickSwingTablePopulation {
 	static class InterpretedSwingTableColumn<R, C> {
@@ -95,7 +97,7 @@ class QuickSwingTablePopulation {
 				theCRS.withHeaderTooltip(evt.getNewValue());
 				refresh();
 			});
-			QuickSwingTableColumn<R, C> renderer = new QuickSwingTableColumn<>(quickParent, column, context, until, parent, swingRenderer,
+			QuickSwingTableColumn<R, C> renderer = new QuickSwingTableColumn<>(quickParent, column, context, parent, swingRenderer,
 				swingEditor);
 			/* We need to listen to the style so external changes will re-render the table.
 			 * But we need to be careful, because the style depends on element values of the cell which are changed as the table renders
@@ -170,7 +172,142 @@ class QuickSwingTablePopulation {
 		}
 	}
 
-	static class QuickSwingTableColumn<R, C> extends AbstractObservableCellRenderer<R, C>
+	static class QuickSwingRenderer<R, C> extends AbstractObservableCellRenderer<R, C> {
+		private final QuickWidget theQuickParent;
+		private final Supplier<? extends ComponentEditor<?, ?>> theParent;
+		private final QuickWidget theRenderer;
+		private final SimpleObservable<Void> theRenderUntil;
+		private final QuickWidget.WidgetContext theRendererContext;
+		private final TabularWidget.TabularContext<R> theRenderTableContext;
+		private ObservableCellRenderer<R, C> theDelegate;
+		private AbstractComponentEditor<?, ?> theComponent;
+		private Runnable thePreRender;
+		private final TypeToken<C> theValueType;
+		private final Supplier<C> theValue;
+
+		private JComponent theOwner;
+		private ObservableValue<String> theTooltip;
+
+		QuickSwingRenderer(QuickWidget quickParent, TypeToken<C> valueType, Supplier<C> value, QuickWidget renderer,
+			TabularWidget.TabularContext<R> ctx, Supplier<? extends ComponentEditor<?, ?>> parent,
+				QuickSwingPopulator<QuickWidget> swingRenderer) throws ModelInstantiationException {
+			theQuickParent = quickParent;
+			theParent = parent;
+			theValueType = valueType;
+			theValue = value;
+			theRenderer = renderer;
+			theRenderTableContext = ctx;
+			theRenderUntil = new SimpleObservable<>();
+
+			SwingCellPopulator<R, C> renderPopulator;
+			if (swingRenderer != null) {
+				renderPopulator = new SwingCellPopulator<>(this, true);
+				// This is in the modifier because we don't have the component yet
+				swingRenderer.addModifier((comp, w) -> {
+					comp.modifyComponent(c -> {
+						if (parent.get().getEditor() instanceof JComponent)
+							theOwner = (JComponent) parent.get().getEditor();
+						else if (parent.get().getComponent() instanceof JComponent)
+							theOwner = (JComponent) parent.get().getComponent();
+					});
+				});
+
+				theRendererContext = new QuickWidget.WidgetContext.Default();
+				theRenderer.setContext(theRendererContext);
+			} else {
+				renderPopulator = null;
+				theRendererContext = null;
+			}
+
+			if (renderPopulator != null)
+				swingRenderer.populate(renderPopulator, theRenderer);
+		}
+
+		public QuickWidget getRenderer() {
+			return theRenderer;
+		}
+
+		public ComponentEditor<?, ?> getParent() {
+			return theParent.get();
+		}
+
+		public TypeToken<C> getValueType() {
+			return theValueType;
+		}
+
+		public TabularWidget.TabularContext<R> getContext() {
+			return theRenderTableContext;
+		}
+
+		void delegateTo(ObservableCellRenderer<R, C> delegate) {
+			theDelegate = delegate;
+		}
+
+		void renderWith(AbstractComponentEditor<?, ?> component, Runnable preRender) {
+			theComponent = component;
+			thePreRender = preRender;
+		}
+
+		public void setTooltip(ObservableValue<String> tooltip) {
+			theTooltip = tooltip;
+		}
+
+		@Override
+		public String renderAsText(ModelCell<? extends R, ? extends C> cell) {
+			setCellContext(cell, theRenderTableContext);
+			if (theRenderer instanceof QuickTextWidget) {
+				if (thePreRender != null)
+					thePreRender.run();
+				String text = ((QuickTextWidget<C>) theRenderer).getCurrentText();
+				theRenderUntil.onNext(null);
+				return text;
+			} else {
+				C colValue = theValue.get();
+				return colValue == null ? "" : colValue.toString();
+			}
+		}
+
+		@Override
+		protected Component renderCell(Component parent, ModelCell<? extends R, ? extends C> cell, CellRenderContext ctx) {
+			setCellContext(cell, theRenderTableContext);
+			if (thePreRender != null)
+				thePreRender.run();
+			Component render;
+			try (Transaction t = QuickCoreSwing.rendering()) {
+				if (theDelegate != null)
+					render = theDelegate.getCellRendererComponent(parent, cell, ctx);
+				else if (theComponent != null)
+					render = theComponent.getComponent();
+				else { // No renderer specified, use default
+					theDelegate = ObservableCellRenderer.formatted(String::valueOf);
+					render = theDelegate.getCellRendererComponent(parent, cell, ctx);
+				}
+			}
+			theRenderUntil.onNext(null);
+			return render;
+		}
+
+		void setCellContext(ModelCell<? extends R, ? extends C> cell, TabularWidget.TabularContext<R> tableCtx) {
+			try (Transaction t = QuickCoreSwing.rendering(); Causable.CausableInUse cause = Causable.cause()) {
+				tableCtx.isSelected().set(cell.isSelected(), cause);
+				tableCtx.getRowIndex().set(cell.getRowIndex(), cause);
+				tableCtx.getColumnIndex().set(cell.getColumnIndex(), cause);
+				if (tableCtx == theRenderTableContext && theRendererContext != null) {
+					theRendererContext.isHovered().set(cell.isCellHovered(), cause);
+					theRendererContext.isFocused().set(cell.isCellFocused(), cause);
+					if (cell.isCellHovered()) {
+						theRendererContext.isPressed().set(theQuickParent.isPressed().get(), cause);
+						theRendererContext.isRightPressed().set(theQuickParent.isRightPressed().get(), cause);
+					} else {
+						theRendererContext.isPressed().set(false, cause);
+						theRendererContext.isRightPressed().set(false, cause);
+					}
+				}
+			}
+		}
+	}
+
+	static class QuickSwingTableColumn<R, C> extends QuickSwingRenderer<R, C>
 	implements CategoryMouseListener<R, C>, CategoryKeyListener<R, C> {
 		private final QuickWidget theQuickParent;
 		private final QuickTableColumn<R, C> theColumn;
@@ -194,8 +331,9 @@ class QuickSwingTablePopulation {
 		private JComponent theOwner;
 
 		QuickSwingTableColumn(QuickWidget quickParent, QuickTableColumn<R, C> column, TabularWidget.TabularContext<R> ctx,
-			Observable<?> until, Supplier<? extends ComponentEditor<?, ?>> parent, QuickSwingPopulator<QuickWidget> swingRenderer,
+			Supplier<? extends ComponentEditor<?, ?>> parent, QuickSwingPopulator<QuickWidget> swingRenderer,
 				QuickSwingPopulator<QuickWidget> swingEditor) throws ModelInstantiationException {
+			super(quickParent, column.getType(), column.getValue(), column.getRenderer(), ctx, parent, swingRenderer);
 			theQuickParent = quickParent;
 			theColumn = column;
 			theRenderer = column.getRenderer();
@@ -203,7 +341,6 @@ class QuickSwingTablePopulation {
 			theParent = parent;
 			theRenderUntil = new SimpleObservable<>();
 
-			// TODO The interpretation/transformation of the renderer and editor should be done elsewhere
 			SwingCellPopulator<R, C> renderPopulator;
 			if (swingRenderer != null) {
 				renderPopulator = new SwingCellPopulator<>(this, true);
@@ -260,14 +397,17 @@ class QuickSwingTablePopulation {
 			return theColumn;
 		}
 
+		@Override
 		public QuickWidget getRenderer() {
 			return theRenderer;
 		}
 
+		@Override
 		public TabularWidget.TabularContext<R> getContext() {
 			return theRenderTableContext;
 		}
 
+		@Override
 		public ComponentEditor<?, ?> getParent() {
 			return theParent.get();
 		}
@@ -352,23 +492,29 @@ class QuickSwingTablePopulation {
 		}
 
 		String isEditAcceptable(ModelCell<R, C> cell, C editValue) {
+			if (cell == null)
+				return "Nothing being edited";
 			setCellContext(cell, theRenderTableContext);
 			return theColumn.getEditing().getFilteredColumnEditValue().isAcceptable(editValue);
 		}
 
+		@Override
 		void delegateTo(ObservableCellRenderer<R, C> delegate) {
 			theDelegate = delegate;
 		}
 
+		@Override
 		void renderWith(AbstractComponentEditor<?, ?> component, Runnable preRender) {
 			theComponent = component;
 			thePreRender = preRender;
 		}
 
+		@Override
 		public void setTooltip(ObservableValue<String> tooltip) {
 			theTooltip = tooltip;
 		}
 
+		@Override
 		void setCellContext(ModelCell<? extends R, ? extends C> cell, TabularWidget.TabularContext<R> tableCtx) {
 			try (Transaction t = QuickCoreSwing.rendering(); Causable.CausableInUse cause = Causable.cause()) {
 				tableCtx.isSelected().set(cell.isSelected(), cause);
@@ -686,16 +832,24 @@ class QuickSwingTablePopulation {
 	}
 
 	static class SwingCellPopulator<R, C> implements PanelPopulation.PartialPanelPopulatorImpl<Container, SwingCellPopulator<R, C>> {
-		private final QuickSwingTableColumn<R, C> theCell;
+		private final QuickSwingRenderer<R, C> theRenderer;
+		private final QuickSwingTableColumn<R, C> theEditor;
 		private final boolean isRenderer;
 
-		public SwingCellPopulator(QuickSwingTableColumn<R, C> cell, boolean renderer) {
-			theCell = cell;
+		public SwingCellPopulator(QuickSwingRenderer<R, C> cell, boolean renderer) {
+			theRenderer = cell;
 			isRenderer = renderer;
+			if (!renderer) {
+				if (!(cell instanceof QuickSwingTableColumn))
+					throw new IllegalStateException("Editing unsupported for this type");
+				theEditor = (QuickSwingTableColumn<R, C>) cell;
+			} else
+				theEditor = null;
 		}
 
 		SwingCellPopulator<R, C> unsupported(String message) {
-			theCell.getRenderer().reporting().warn(message + " unsupported for cell " + (isRenderer ? "renderer" : "editor") + " holder");
+			theRenderer.getRenderer().reporting()
+			.warn(message + " unsupported for cell " + (isRenderer ? "renderer" : "editor") + " holder");
 			return this;
 		}
 
@@ -812,7 +966,7 @@ class QuickSwingTablePopulation {
 		@Override
 		public void doAdd(AbstractComponentEditor<?, ?> field, Component fieldLabel, Component postLabel, boolean scrolled) {
 			if (isRenderer)
-				theCell.renderWith(field, field::reset);
+				theRenderer.renderWith(field, field::reset);
 			else
 				unsupported("This editor type");
 		}
@@ -821,7 +975,7 @@ class QuickSwingTablePopulation {
 		public <F> SwingCellPopulator<R, C> addLabel(String fieldName, ObservableValue<F> field, Function<? super F, String> format,
 			Consumer<LabelEditor<JLabel, ?>> modify) {
 			if (isRenderer) {
-				LabelRenderEditor editor = new LabelRenderEditor(theCell);
+				LabelRenderEditor editor = new LabelRenderEditor(theRenderer);
 				if (modify != null)
 					modify.accept(editor);
 				JLabel[] label = new JLabel[1];
@@ -834,19 +988,19 @@ class QuickSwingTablePopulation {
 				ObservableCellRenderer<R, C> delegate = new AbstractObservableCellRenderer<R, C>() {
 					@Override
 					public String renderAsText(ModelCell<? extends R, ? extends C> cell) {
-						theCell.getContext().getActiveValue().set(cell.getModelValue(), null);
+						theRenderer.getContext().getActiveValue().set(cell.getModelValue(), null);
 						return format.apply(field.get());
 					}
 
 					@Override
 					protected Component renderCell(Component parent, ModelCell<? extends R, ? extends C> cell, CellRenderContext ctx) {
-						theCell.getContext().getActiveValue().set(cell.getModelValue(), null);
+						theRenderer.getContext().getActiveValue().set(cell.getModelValue(), null);
 						label[0].setText(format.apply(field.get()));
 						editor.decorate(label[0]);
 						return label[0];
 					}
 				};
-				theCell.delegateTo(delegate);
+				theRenderer.delegateTo(delegate);
 			} else
 				unsupported("Label");
 			return this;
@@ -856,13 +1010,13 @@ class QuickSwingTablePopulation {
 		public SwingCellPopulator<R, C> addIcon(String fieldName, ObservableValue<Icon> icon, Consumer<FieldEditor<JLabel, ?>> modify) {
 			if (isRenderer) {
 				ObservableCellRenderer<R, C> delegate = ObservableCellRenderer.<R, C> formatted(c -> "").setIcon(cell -> {
-					theCell.getContext().getActiveValue().set(cell.getModelValue(), null);
+					theRenderer.getContext().getActiveValue().set(cell.getModelValue(), null);
 					return icon.get();
 				});
-				FieldRenderEditor<JLabel> editor = new FieldRenderEditor<>(theCell);
+				FieldRenderEditor<JLabel> editor = new FieldRenderEditor<>(theRenderer);
 				if (modify != null)
 					modify.accept(editor);
-				theCell.delegateTo(delegate);
+				theRenderer.delegateTo(delegate);
 			} else
 				unsupported("Icon");
 			return this;
@@ -873,14 +1027,14 @@ class QuickSwingTablePopulation {
 			Consumer<Object> action, Consumer<FieldEditor<JLabel, ?>> modify) {
 			if (isRenderer) {
 				ObservableCellRenderer<R, C> delegate = ObservableCellRenderer.linkRenderer(cell -> {
-					theCell.getContext().getActiveValue().set(cell.getModelValue(), null);
+					theRenderer.getContext().getActiveValue().set(cell.getModelValue(), null);
 					F fieldValue = field.get();
 					return format.apply(fieldValue);
 				});
-				FieldRenderEditor<JLabel> editor = new FieldRenderEditor<>(theCell);
+				FieldRenderEditor<JLabel> editor = new FieldRenderEditor<>(theRenderer);
 				if (modify != null)
 					modify.accept(editor);
-				theCell.delegateTo(delegate);
+				theRenderer.delegateTo(delegate);
 			} else
 				unsupported("Link");
 			return this;
@@ -893,19 +1047,21 @@ class QuickSwingTablePopulation {
 				ObservableCellRenderer<R, C> delegate = ObservableCellRenderer.checkRenderer(cell -> {
 					return Boolean.TRUE.equals(field.get());
 				});
-				FieldRenderEditor<JCheckBox> editor = new FieldRenderEditor<>(theCell);
+				FieldRenderEditor<JCheckBox> editor = new FieldRenderEditor<>(theRenderer);
 				if (modify != null)
 					modify.accept(editor);
-				theCell.delegateTo(delegate);
+				theRenderer.delegateTo(delegate);
 			} else {
-				if (TypeTokens.getRawType(TypeTokens.get().unwrap(theCell.getColumn().getType())) != boolean.class)
-					theCell.getColumn().getEditing().getEditor().reporting()
-					.error("Check box editor can only be used for boolean-type columns, not " + theCell.getColumn().getType());
+				if (TypeTokens.getRawType(TypeTokens.get().unwrap(theEditor.getColumn().getType())) != boolean.class)
+					theEditor.getColumn().getEditing().getEditor().reporting()
+					.error("Check box editor can only be used for boolean-type columns, not " + theEditor.getColumn().getType());
 				else {
-					FieldRenderEditor<JCheckBox> fieldEditor = new FieldRenderEditor<>(ObservableCellEditor.createCheckBoxEditor());
+					JCheckBox check = new JCheckBox();
+					FieldRenderEditor<JCheckBox> fieldEditor = new FieldRenderEditor<>(ObservableCellEditor.createCheckBoxEditor(check),
+						check);
 					if (modify != null)
 						modify.accept(fieldEditor);
-					theCell.withEditor(fieldEditor.getCellEditor());
+					theEditor.withEditor(fieldEditor.getCellEditor());
 				}
 			}
 			return this;
@@ -922,18 +1078,19 @@ class QuickSwingTablePopulation {
 				delegate.modify(comp -> editor[0].decorateButton((JButton) comp));
 				if (modify != null)
 					modify.accept(editor[0]);
-				theCell.delegateTo(delegate);
+				theRenderer.delegateTo(delegate);
 			} else {
 				ButtonRenderEditor[] editor = new SwingCellPopulator.ButtonRenderEditor[1];
+				JButton button = new JButton();
 				editor[0] = new ButtonRenderEditor(buttonText, ObservableCellEditor.createButtonCellEditor(colValue -> {
 					return editor[0].getButtonText().get();
-				}, cell -> {
+				}, button, cell -> {
 					action.act(null);
 					return cell.getCellValue();
-				}));
+				}), button);
 				if (modify != null)
 					modify.accept(editor[0]);
-				theCell.withEditor(editor[0].getCellEditor());
+				theEditor.withEditor(editor[0].getCellEditor());
 			}
 			return this;
 		}
@@ -944,11 +1101,12 @@ class QuickSwingTablePopulation {
 			if (isRenderer)
 				PanelPopulation.PartialPanelPopulatorImpl.super.addTextField(fieldName, field, format, modify);
 			else {
-				FieldRenderEditor<ObservableTextField<C>> fieldEditor = new FieldRenderEditor<>(
-					ObservableCellEditor.createTextEditor(format));
+				ObservableTextField<C>[] textField = new ObservableTextField[1];
+				ObservableCellEditor<R, C> cellEditor = ObservableCellEditor.createTextEditor((Format<C>) format, tf -> textField[0] = tf);
+				FieldRenderEditor<ObservableTextField<C>> fieldEditor = new FieldRenderEditor<>(cellEditor, textField[0]);
 				if (modify != null)
 					modify.accept((FieldEditor<ObservableTextField<F>, ?>) (FieldEditor<?, ?>) fieldEditor);
-				theCell.withEditor(fieldEditor.getCellEditor());
+				theEditor.withEditor(fieldEditor.getCellEditor());
 			}
 			return this;
 		}
@@ -957,7 +1115,7 @@ class QuickSwingTablePopulation {
 		public <F> SwingCellPopulator<R, C> addStyledTextArea(String fieldName, ObservableStyledDocument<F> doc,
 			Consumer<FieldEditor<ObservableTextArea<F>, ?>> modify) {
 			if (isRenderer) {
-				FieldRenderEditor<ObservableTextArea<F>> editor = new FieldRenderEditor<>(theCell);
+				FieldRenderEditor<ObservableTextArea<F>> editor = new FieldRenderEditor<>(theRenderer);
 				if (modify != null)
 					modify.accept(editor);
 				ObservableTextArea<F>[] textArea = new ObservableTextArea[1];
@@ -972,13 +1130,13 @@ class QuickSwingTablePopulation {
 				ObservableCellRenderer<R, C> delegate = new AbstractObservableCellRenderer<R, C>() {
 					@Override
 					public String renderAsText(ModelCell<? extends R, ? extends C> cell) {
-						theCell.getContext().getActiveValue().set(cell.getModelValue(), null);
+						theRenderer.getContext().getActiveValue().set(cell.getModelValue(), null);
 						return doc.toString();
 					}
 
 					@Override
 					protected Component renderCell(Component parent, ModelCell<? extends R, ? extends C> cell, CellRenderContext ctx) {
-						theCell.getContext().getActiveValue().set(cell.getModelValue(), null);
+						theRenderer.getContext().getActiveValue().set(cell.getModelValue(), null);
 						editor.decorate(textArea[0]);
 						doc.refresh(null);
 						ObservableStyledDocument.synchronize(doc, ((StyledDocument) textArea[0].getDocument()), renderUntil);
@@ -987,7 +1145,7 @@ class QuickSwingTablePopulation {
 						return textArea[0];
 					}
 				};
-				theCell.delegateTo(delegate);
+				theEditor.delegateTo(delegate);
 			} else
 				unsupported("Text Area");
 			return this;
@@ -999,7 +1157,7 @@ class QuickSwingTablePopulation {
 			if (isRenderer)
 				PanelPopulation.PartialPanelPopulatorImpl.super.addSlider(fieldName, value, modify);
 			else { // TODO
-				theCell.getColumn().getEditing().getEditor().reporting().error("Slider cell editing is not implemented");
+				theEditor.getColumn().getEditing().getEditor().reporting().error("Slider cell editing is not implemented");
 			}
 			return this;
 		}
@@ -1011,15 +1169,16 @@ class QuickSwingTablePopulation {
 			if (availableValues instanceof ObservableCollection)
 				values = (ObservableCollection<C>) availableValues;
 			else
-				values = ObservableCollection.of(theCell.getColumn().getType(), (List<C>) availableValues);
+				values = ObservableCollection.of(theRenderer.getValueType(), (List<C>) availableValues);
 			if (isRenderer)
 				PanelPopulation.PartialPanelPopulatorImpl.super.addComboField(fieldName, value, availableValues, modify);
 			else {
-				ComboRenderEditor[] editor = new SwingCellPopulator.ComboRenderEditor[1];
-				editor[0] = new ComboRenderEditor(ObservableCellEditor.createComboEditor(String::valueOf, (v, until) -> values));
+				JComboBox<C> combo = new JComboBox<>();
+				ComboRenderEditor editor = new ComboRenderEditor(
+					ObservableCellEditor.createComboEditor(String::valueOf, combo, (v, until) -> values), combo);
 				if (modify != null)
-					modify.accept((ComboEditor<F, ?>) editor[0]);
-				theCell.withEditor(editor[0].getCellEditor());
+					modify.accept((ComboEditor<F, ?>) editor);
+				theEditor.withEditor(editor.getCellEditor());
 			}
 			return this;
 		}
@@ -1028,15 +1187,18 @@ class QuickSwingTablePopulation {
 		implements FieldEditor<COMP, E> {
 			private final ObservableCellRenderer<R, C> theCellRenderer;
 			private final ObservableCellEditor<R, C> theCellEditor;
+			private final COMP theEditorComponent;
 
 			protected AbstractFieldRenderEditor(ObservableCellRenderer<R, C> cellRenderer) {
 				theCellRenderer = cellRenderer;
 				theCellEditor = null;
+				theEditorComponent = null;
 			}
 
-			protected AbstractFieldRenderEditor(ObservableCellEditor<R, C> cellEditor) {
+			protected AbstractFieldRenderEditor(ObservableCellEditor<R, C> cellEditor, COMP component) {
 				theCellRenderer = null;
 				theCellEditor = cellEditor;
+				theEditorComponent = component;
 			}
 
 			public ObservableCellRenderer<R, C> getCellRenderer() {
@@ -1048,7 +1210,7 @@ class QuickSwingTablePopulation {
 			}
 
 			E unsupported(String message) {
-				theCell.getRenderer().reporting()
+				theRenderer.getRenderer().reporting()
 				.warn(message + " unsupported for cell " + (theCellRenderer == null ? "editor" : "renderer"));
 				return (E) this;
 			}
@@ -1060,7 +1222,7 @@ class QuickSwingTablePopulation {
 
 			@Override
 			public E withTooltip(ObservableValue<String> tooltip) {
-				theCell.setTooltip(tooltip);
+				theRenderer.setTooltip(tooltip);
 				return (E) this;
 			}
 
@@ -1089,8 +1251,7 @@ class QuickSwingTablePopulation {
 
 			@Override
 			public COMP getEditor() {
-				unsupported("Editor retrieval");
-				return null;
+				return theEditorComponent;
 			}
 
 			@Override
@@ -1164,7 +1325,7 @@ class QuickSwingTablePopulation {
 
 			@Override
 			public Alert alert(String title, String message) {
-				return theCell.getParent().alert(title, message);
+				return theRenderer.getParent().alert(title, message);
 			}
 
 			@Override
@@ -1174,7 +1335,7 @@ class QuickSwingTablePopulation {
 
 			@Override
 			public E withPopupMenu(Consumer<MenuBuilder<JPopupMenu, ?>> menu) {
-				theCell.getParent().withPopupMenu(menu);
+				theRenderer.getParent().withPopupMenu(menu);
 				return (E) this;
 			}
 
@@ -1204,8 +1365,8 @@ class QuickSwingTablePopulation {
 				super(cellRenderer);
 			}
 
-			FieldRenderEditor(ObservableCellEditor<R, C> cellEditor) {
-				super(cellEditor);
+			FieldRenderEditor(ObservableCellEditor<R, C> cellEditor, COMP editorComponent) {
+				super(cellEditor, editorComponent);
 			}
 		}
 
@@ -1213,8 +1374,8 @@ class QuickSwingTablePopulation {
 		implements LabelEditor<JLabel, LabelRenderEditor> {
 			private ObservableValue<? extends Icon> theIcon;
 
-			LabelRenderEditor(ObservableCellEditor<R, C> cellEditor) {
-				super(cellEditor);
+			LabelRenderEditor(ObservableCellEditor<R, C> cellEditor, JLabel editorComponent) {
+				super(cellEditor, editorComponent);
 			}
 
 			LabelRenderEditor(ObservableCellRenderer<R, C> cellRenderer) {
@@ -1246,8 +1407,8 @@ class QuickSwingTablePopulation {
 				theButtonText = ObservableValue.of(String.class, buttonText);
 			}
 
-			ButtonRenderEditor(String buttonText, ObservableCellEditor<R, C> cellEditor) {
-				super(cellEditor);
+			ButtonRenderEditor(String buttonText, ObservableCellEditor<R, C> cellEditor, JButton editorComponent) {
+				super(cellEditor, editorComponent);
 				theButtonText = ObservableValue.of(String.class, buttonText);
 			}
 
@@ -1293,8 +1454,8 @@ class QuickSwingTablePopulation {
 			private Function<? super C, String> theValueTooltip;
 			private IntSupplier theHoveredItem;
 
-			public ComboRenderEditor(ObservableCellEditor<R, C> cellEditor) {
-				super(cellEditor);
+			public ComboRenderEditor(ObservableCellEditor<R, C> cellEditor, JComboBox<C> editorComponent) {
+				super(cellEditor, editorComponent);
 			}
 
 			void setHoveredItem(IntSupplier hoveredItem) {
@@ -1309,11 +1470,13 @@ class QuickSwingTablePopulation {
 						public Component getListCellRendererComponent(JList<? extends C> list, C value, int index, boolean isSelected,
 							boolean cellHasFocus) {
 							boolean hovered = theHoveredItem != null && theHoveredItem.getAsInt() == index;
-							return renderer.getCellRendererComponent(list,
-								new ModelCell.Default<>(() -> value, value, index, 0, isSelected, cellHasFocus, hovered, hovered, true,
-									true, //
-									theCell.isEditAcceptable(getCellEditor().getEditingCell(), value)),
-								CellRenderContext.DEFAULT);
+							ModelCell<C, C> cell = new ModelCell.Default<>(() -> value, value, index, 0, isSelected, cellHasFocus, hovered,
+								hovered, true, true, null);
+							String enabled = theEditor.isEditAcceptable(getCellEditor().getEditingCell(), value);
+							if (enabled != null)
+								cell = new ModelCell.Default<>(() -> value, value, index, 0, isSelected, cellHasFocus, hovered, hovered,
+									true, true, enabled);
+							return renderer.getCellRendererComponent(list, cell, CellRenderContext.DEFAULT);
 						}
 					});
 					return null;

@@ -69,10 +69,6 @@ public class ExWithElementModel extends ExFlexibleElementModelAddOn<ExElement> {
 				name = session.getElement().getAttributeText(dv.getNameAttribute());
 				if (name == null) // If name attribute is not specified, value shall not be declared
 					return builder;
-				CompiledExpressoEnv env = session.getExpressoEnv();
-				env = env.withAttribute(dv.getNameAttribute().getName(), name);
-				session.setExpressoEnv(env);
-				getElement().setExpressoEnv(env);
 			}
 			ElementModelValue<?> prev = getElementValues().get(name);
 			if (prev != null) {
@@ -108,6 +104,12 @@ public class ExWithElementModel extends ExFlexibleElementModelAddOn<ExElement> {
 				builder = createBuilder(session);
 			ModelComponentNode<?> modelNode = addElementValue(name, value, builder, spec.getElement().getPositionInFile());
 			value.setModelId(modelNode.getIdentity());
+			if (dv.getNameAttribute() != null) {
+				CompiledExpressoEnv env = session.getExpressoEnv();
+				env = env.withAttribute(dv.getNameAttribute().getName(), modelNode.getIdentity());
+				session.setExpressoEnv(env);
+				getElement().setExpressoEnv(env);
+			}
 			return builder;
 		}
 

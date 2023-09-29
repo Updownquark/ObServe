@@ -157,11 +157,15 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 
 	public static <M, C> ObservableCellEditor<M, C> createComboEditor(Function<? super C, String> renderer,
 		BiFunction<? super ModelCell<? extends M, ? extends C>, Observable<?>, ObservableCollection<? extends C>> options) {
+		return createComboEditor(renderer, new JComboBox<>(), options);
+	}
+
+	public static <M, C> ObservableCellEditor<M, C> createComboEditor(Function<? super C, String> renderer, JComboBox<C> combo,
+		BiFunction<? super ModelCell<? extends M, ? extends C>, Observable<?>, ObservableCollection<? extends C>> options) {
 		Function<C, String>[] filter = new Function[1];
-		String[] tooltip = new String[1];
+		SettableValue<String> tooltip = SettableValue.build(String.class).build();
 		Function<? super C, String>[] valueToolTip = new Function[1];
 		SettableValue<C> value = DefaultObservableCellEditor.createEditorValue(filter);
-		JComboBox<C> combo = new JComboBox<>();
 		combo.setRenderer(new DefaultListCellRenderer() {
 			@Override
 			public Component getListCellRendererComponent(JList<?> list, Object option, int index, boolean isSelected,
@@ -170,38 +174,42 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 				return super.getListCellRendererComponent(list, text, index, isSelected, cellHasFocus);
 			}
 		});
-		Subscription[] editSub = new Subscription[1];
 		SimpleObservable<Void> until = SimpleObservable.build().build();
 		ObservableCellEditor<M, C>[] editor = new ObservableCellEditor[1];
+		SettableValue<ObservableCollection<? extends C>> availableValues = SettableValue
+			.build((Class<ObservableCollection<? extends C>>) (Class<?>) ObservableCollection.class).build();
+		ObservableComboBoxModel.comboFor(combo, tooltip, v -> {
+			return valueToolTip[0] == null ? null : valueToolTip[0].apply(v);
+		}, ObservableCollection.flattenValue(availableValues), value);
 		editor[0] = new DefaultObservableCellEditor<>(combo, value, (e, c, f, tt, vtt) -> {
 			filter[0] = f;
-			tooltip[0] = tt;
+			tooltip.set(tt, null);
 			valueToolTip[0] = vtt;
-			ObservableCollection<? extends C> cellOptions = options.apply(editor[0].getEditingCell(), until);
-			editSub[0] = ObservableComboBoxModel.comboFor(combo, tt, vtt, cellOptions, value);
+			ObservableCollection<? extends C> newValues = options.apply(editor[0].getEditingCell(), until);
+			availableValues.set(newValues, null);
 			return commit -> {
 				filter[0] = null;
 				if (combo.isEditable()) // Just copying from DefaultCellEditor, not currently editable here, so just for posterity
 					combo.actionPerformed(new ActionEvent(e, 0, ""));
-				if (editSub[0] != null) {
-					editSub[0].unsubscribe();
-					editSub[0] = null;
-				}
+				availableValues.set(null, null);
 				until.onNext(null);
 				return true;
 			};
 		}, editWithClicks(2));
 		value.noInitChanges().act(evt -> {
-			if (editSub[0] != null)
+			if (availableValues.get() != null)
 				editor[0].stopCellEditing();
 		});
 		return editor[0];
 	}
 
 	public static <M> ObservableCellEditor<M, Boolean> createCheckBoxEditor() {
+		return createCheckBoxEditor(new JCheckBox());
+	}
+
+	public static <M> ObservableCellEditor<M, Boolean> createCheckBoxEditor(JCheckBox check) {
 		Function<Boolean, String>[] filter = new Function[1];
 		SettableValue<Boolean> value = DefaultObservableCellEditor.createEditorValue(filter);
-		JCheckBox check = new JCheckBox();
 		Subscription[] editSub = new Subscription[1];
 		ObservableCellEditor<M, Boolean> editor = new DefaultObservableCellEditor<>(check, value, (e, c, f, tt, vtt) -> {
 			filter[0] = f;
@@ -306,9 +314,13 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 
 	public static <M, C> ObservableCellEditor<M, C> createButtonCellEditor(Function<? super C, String> renderer,
 		Function<? super ModelCell<M, ? extends C>, ? extends C> action) {
+		return createButtonCellEditor(renderer, new JButton(), action);
+	}
+
+	public static <M, C> ObservableCellEditor<M, C> createButtonCellEditor(Function<? super C, String> renderer, JButton button,
+		Function<? super ModelCell<M, ? extends C>, ? extends C> action) {
 		Function<C, String>[] filter = new Function[1];
 		SettableValue<C> value = DefaultObservableCellEditor.createEditorValue(filter);
-		JButton button = new JButton();
 		boolean[] editing = new boolean[1];
 		ObservableCellEditor<M, C> editor = new DefaultObservableCellEditor<>(button, value, (e, c, f, tt, vtt) -> {
 			filter[0] = f;
@@ -385,8 +397,10 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 					Runnable oldReset = old.apply(comp);
 					Runnable newReset = modify.apply(comp);
 					return () -> {
-						newReset.run();
-						oldReset.run();
+						if (newReset != null)
+							newReset.run();
+						if (oldReset != null)
+							oldReset.run();
 					};
 				};
 			}
@@ -602,11 +616,27 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 				cellHovered, true, true, null);
 			if (theEditorValue.get() != value)
 				theEditorValue.set((C) value, null);
+
+			Runnable revert = null;
 			if (theDecorator != null) {
 				ComponentDecorator cd = new ComponentDecorator();
 				theDecorator.decorate(theEditingCell, cd);
-				theRevert = cd.decorate(theEditorComponent);
+				revert = cd.decorate(theEditorComponent);
 			}
+			if (theModifier != null) {
+				Runnable modRevert = theModifier.apply(theEditorComponent);
+				if (revert == null)
+					revert = modRevert;
+				else if (modRevert != null) {
+					Runnable decoRevert = revert;
+					revert = () -> {
+						modRevert.run();
+						decoRevert.run();
+					};
+				}
+			}
+			theRevert = revert;
+
 			theEditorSubscription = theInstallation.install(this, table, valueFilter, tooltip, valueTooltip);
 			return theEditorComponent;
 		}
@@ -627,11 +657,27 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 			theEditingCell = new ModelCell.Default<>(() -> (M) value, (C) value, row, 0, isSelected, isSelected, hovered, hovered, expanded,
 				leaf, null);
 			theEditorValue.set((C) value, null);
+
+			Runnable revert = null;
 			if (theDecorator != null) {
 				ComponentDecorator cd = new ComponentDecorator();
 				theDecorator.decorate(theEditingCell, cd);
-				theRevert = cd.decorate(theEditorComponent);
+				revert = cd.decorate(theEditorComponent);
 			}
+			if (theModifier != null) {
+				Runnable modRevert = theModifier.apply(theEditorComponent);
+				if (revert == null)
+					revert = modRevert;
+				else if (modRevert != null) {
+					Runnable decoRevert = revert;
+					revert = () -> {
+						modRevert.run();
+						decoRevert.run();
+					};
+				}
+			}
+			theRevert = revert;
+
 			theEditorSubscription = theInstallation.install(this, tree, null, null, null);
 			return theEditorComponent;
 		}
