@@ -61,6 +61,7 @@ public class QuickSplit extends QuickContainer.Abstract<QuickWidget> {
 				session.reporting().at(session.getAttributeValuePosition("orientation"))
 				.error("Unrecognized orientation: '" + session.getAttributeText("orientation"));
 			}
+			theSplitPosition = session.getAttributeExpression("split-position");
 			if (getContents().size() != 2)
 				session.reporting().error("Expected exactly 2 children, not " + getContents().size());
 		}
@@ -117,6 +118,14 @@ public class QuickSplit extends QuickContainer.Abstract<QuickWidget> {
 
 	public boolean isVertical() {
 		return isVertical;
+	}
+
+	public SettableValue<QuickSize> getSplitPosition() {
+		return SettableValue.flatten(theSplitPosition);
+	}
+
+	public boolean isSplitPositionSet() {
+		return theSplitPosition.get() != null;
 	}
 
 	@Override

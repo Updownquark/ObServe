@@ -28,8 +28,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
+import java.util.function.BiPredicate;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.IntFunction;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
@@ -1612,13 +1614,41 @@ public class PanelPopulation {
 
 		P last(Component component);
 
-		P withSplitLocation(int split);
+		P withSplit(IntFunction<Integer> split, BiPredicate<Integer, Integer> onChange, Observable<?> changes);
 
-		P withSplitProportion(double split);
+		default P withSplitLocation(int split) {
+			return withSplit(__ -> split, null, null);
+		}
 
-		P withSplitLocation(SettableValue<Integer> split);
+		default P withSplitProportion(double split) {
+			return withSplit(sz -> (int) Math.round(split * sz), null, null);
+		}
 
-		P withSplitProportion(SettableValue<Double> split);
+		default P withSplitLocation(SettableValue<Integer> split) {
+			return withSplit(__ -> split.get(), (splitPos, size) -> {
+				if (split.isAcceptable(splitPos) == null) {
+					split.set(splitPos, null);
+					return true;
+				} else
+					return false;
+			}, split.noInitChanges());
+		}
+
+		default P withSplitProportion(SettableValue<Double> split) {
+			return withSplit(sz -> {
+				Double prop = split.get();
+				if (prop != null && prop >= 0 && prop <= 1)
+					return (int) Math.round(prop * sz);
+				return null;
+			}, (splitPos, size) -> {
+				double prop = splitPos * 1.0 / size;
+				if (split.isAcceptable(prop) == null) {
+					split.set(prop, null);
+					return true;
+				} else
+					return false;
+			}, split.noInitChanges());
+		}
 	}
 
 	public interface ScrollPane<P extends ScrollPane<P>> extends ComponentEditor<JScrollPane, P> {

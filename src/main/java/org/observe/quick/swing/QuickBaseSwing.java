@@ -888,6 +888,25 @@ public class QuickBaseSwing implements QuickInterpretation {
 			throws ModelInstantiationException {
 			panel.addSplit(quick.isVertical(), s -> {
 				component.accept(s);
+				SettableValue<QuickSize> splitPos = quick.getSplitPosition();
+				s.withSplit(size -> {
+					QuickSize sz = splitPos.get();
+					return sz == null ? null : sz.evaluate(size);
+				}, (newSplit, size) -> {
+					if (!quick.isSplitPositionSet())
+						return true;
+					QuickSize sz = splitPos.get();
+					QuickSize newSz;
+					if (sz == null || sz.percent != 0.0f) // Proportion
+						newSz = new QuickSize(newSplit * 100.0f / size, 0);
+					else
+						newSz = new QuickSize(0.0f, newSplit);
+					if (splitPos.isAcceptable(newSz) == null) {
+						splitPos.set(newSz, null);
+						return true;
+					} else
+						return false;
+				}, splitPos.noInitChanges());
 				AbstractQuickContainerPopulator populator = new AbstractQuickContainerPopulator() {
 					private boolean isFirst = true;
 

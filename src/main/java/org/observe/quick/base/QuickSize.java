@@ -13,10 +13,10 @@ public class QuickSize {
 	/** A size of zero */
 	public static final QuickSize ZERO = new QuickSize(0.0f, 0);
 
-	/** The size relative to the container size */
+	/** The size relative to the container size (if greater than zero) */
 	public final float percent;
 
-	/** The size in pixels */
+	/** The size in pixels (if not equal to zero) */
 	public final int pixels;
 
 	/**

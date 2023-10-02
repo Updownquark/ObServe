@@ -94,8 +94,7 @@ public class QuickBaseInterpretation implements QonfigInterpretation {
 	}
 
 	@Override
-	public void init(QonfigToolkit toolkit) {
-	}
+	public void init(QonfigToolkit toolkit) {}
 
 	@Override
 	public QonfigInterpreterCore.Builder configureInterpreter(Builder interpreter) {
@@ -106,10 +105,10 @@ public class QuickBaseInterpretation implements QonfigInterpretation {
 			public Object prepareSession(CoreSession session) throws QonfigInterpretationException {
 				ExpressoQIS exS = session.as(ExpressoQIS.class);
 				CompiledExpressoEnv env = exS.getExpressoEnv();
-				exS.setExpressoEnv(env//
+				env = env//
 					.withNonStructuredParser(QuickSize.class, new QuickSize.Parser(true))//
-					.withOperators(unaryOps(env.getUnaryOperators()), binaryOps(env.getBinaryOperators()))//
-					);
+					.withOperators(unaryOps(env.getUnaryOperators()), binaryOps(env.getBinaryOperators()));
+				exS.setExpressoEnv(env);
 				return null;
 			}
 
@@ -130,7 +129,8 @@ public class QuickBaseInterpretation implements QonfigInterpretation {
 		interpreter.createWith(QuickRadioButtons.RADIO_BUTTONS, QuickRadioButtons.Def.class, ExElement.creator(QuickRadioButtons.Def::new));
 		interpreter.createWith(QuickTextArea.TEXT_AREA, QuickTextArea.Def.class, ExElement.creator(QuickTextArea.Def::new));
 		interpreter.createWith(QuickProgressBar.PROGRESS_BAR, QuickProgressBar.Def.class, ExElement.creator(QuickProgressBar.Def::new));
-		interpreter.createWith(DynamicStyledDocument.DYNAMIC_STYLED_DOCUMENT, DynamicStyledDocument.Def.class, ExElement.creator(DynamicStyledDocument.Def::new));
+		interpreter.createWith(DynamicStyledDocument.DYNAMIC_STYLED_DOCUMENT, DynamicStyledDocument.Def.class,
+			ExElement.creator(DynamicStyledDocument.Def::new));
 		interpreter.createWith(StyledDocument.TEXT_STYLE, StyledDocument.TextStyleElement.Def.class,
 			ExElement.creator(StyledDocument.Def.class, StyledDocument.TextStyleElement.Def::new));
 		interpreter.createWith(QuickSpacer.SPACER, QuickSpacer.Def.class, ExElement.creator(QuickSpacer.Def::new));
@@ -175,8 +175,10 @@ public class QuickBaseInterpretation implements QonfigInterpretation {
 		interpreter.createWith("replace-row-value", QuickTableColumn.ColumnEditType.RowReplaceEditType.Def.class,
 			session -> new QuickTableColumn.ColumnEditType.RowReplaceEditType.Def((QonfigAddOn) session.getFocusType(),
 				(QuickTableColumn.ColumnEditing.Def) session.getElementRepresentation()));
-		interpreter.createWith(ValueAction.Single.SINGLE_VALUE_ACTION, ValueAction.Single.Def.class, ExElement.creator(ValueAction.Single.Def::new));
-		interpreter.createWith(ValueAction.Multi.MULTI_VALUE_ACTION, ValueAction.Multi.Def.class, ExElement.creator(ValueAction.Multi.Def::new));
+		interpreter.createWith(ValueAction.Single.SINGLE_VALUE_ACTION, ValueAction.Single.Def.class,
+			ExElement.creator(ValueAction.Single.Def::new));
+		interpreter.createWith(ValueAction.Multi.MULTI_VALUE_ACTION, ValueAction.Multi.Def.class,
+			ExElement.creator(ValueAction.Multi.Def::new));
 
 		// Tabs
 		interpreter.createWith(QuickTabs.TABS, QuickTabs.Def.class, ExElement.creator(QuickTabs.Def::new));
@@ -215,9 +217,18 @@ public class QuickBaseInterpretation implements QonfigInterpretation {
 			.with("+", QuickSize.class, QuickSize.class, QuickSize::plus,
 				(s1, s2, o) -> new QuickSize(s1.percent - s2.percent, s1.pixels - s2.pixels), null, "Size addition operator")//
 			.with("-", QuickSize.class, QuickSize.class, QuickSize::minus,
-				(s1, s2, o) -> new QuickSize(s1.percent + s2.percent, s1.pixels + s2.pixels), null, "Size subtraction operator")//
+				(s1, s2, o) -> new QuickSize(s1.percent - s2.percent, s1.pixels + s2.pixels), null, "Size subtraction operator")//
 			.with("*", QuickSize.class, Double.class, (s, d) -> new QuickSize((float) (s.percent * d), (int) Math.round(s.pixels * d)),
 				(s, d, o) -> new QuickSize((float) (s.percent / d), (int) Math.round(s.pixels / d)), null, "Size multiplication operator")//
+			.with2("*", Double.class, QuickSize.class, QuickSize.class,
+				(d, s) -> new QuickSize((float) (s.percent * d), (int) Math.round(s.pixels * d)), (d, s, o) -> {
+					if (s == null)
+						return Double.NaN;
+					if (s.percent != 0.0f)
+						return o.percent * 1.0 / s.percent;
+					else
+						return o.pixels * 1.0 / s.pixels;
+				}, null, "Size multiplication operator")//
 			.with("/", QuickSize.class, Double.class, (s, d) -> new QuickSize((float) (s.percent / d), (int) Math.round(s.pixels / d)),
 				(s, d, o) -> new QuickSize((float) (s.percent * d), (int) Math.round(s.pixels * d)), null, "Size division operator")//
 			.build();

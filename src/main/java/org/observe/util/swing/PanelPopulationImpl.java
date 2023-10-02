@@ -24,8 +24,10 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.BiConsumer;
+import java.util.function.BiPredicate;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.IntFunction;
 import java.util.function.IntSupplier;
 import java.util.function.Supplier;
 
@@ -1318,10 +1320,9 @@ class PanelPopulationImpl {
 	}
 
 	static class SimpleSplitEditor<P extends SimpleSplitEditor<P>> extends AbstractComponentEditor<JSplitPane, P> implements SplitPane<P> {
-		private int theDivLocation = -1;
-		private double theDivProportion = Double.NaN;
-		private SettableValue<Integer> theObsDivLocation;
-		private SettableValue<Double> theObsDivProportion;
+		private IntFunction<Integer> theSplitFunction;
+		private BiPredicate<Integer, Integer> theSplitOnChange;
+		private Observable<?> theSplitChanges;
 
 		SimpleSplitEditor(boolean vertical, Observable<?> until) {
 			super(null, new JSplitPane(vertical ? JSplitPane.VERTICAL_SPLIT : JSplitPane.HORIZONTAL_SPLIT), until);
@@ -1389,30 +1390,10 @@ class PanelPopulationImpl {
 		}
 
 		@Override
-		public P withSplitLocation(int split) {
-			theDivLocation = split;
-			return (P) this;
-		}
-
-		@Override
-		public P withSplitProportion(double split) {
-			theDivProportion = split;
-			return (P) this;
-		}
-
-		@Override
-		public P withSplitLocation(SettableValue<Integer> split) {
-			if (theObsDivProportion != null)
-				throw new IllegalStateException("Cannot set the div location and the div proportion both");
-			theObsDivLocation = split;
-			return (P) this;
-		}
-
-		@Override
-		public P withSplitProportion(SettableValue<Double> split) {
-			if (theObsDivLocation != null)
-				throw new IllegalStateException("Cannot set the div location and the div proportion both");
-			theObsDivProportion = split;
+		public P withSplit(IntFunction<Integer> split, BiPredicate<Integer, Integer> onChange, Observable<?> changes) {
+			theSplitFunction = split;
+			theSplitOnChange = onChange;
+			theSplitChanges = changes;
 			return (P) this;
 		}
 
@@ -1433,177 +1414,69 @@ class PanelPopulationImpl {
 
 		@Override
 		protected Component createComponent() {
-			SettableValue<Integer> divLoc = theObsDivLocation;
-			SettableValue<Double> divProp = theObsDivProportion;
-			if (divLoc != null || divProp != null) {
-				boolean[] callbackLock = new boolean[1];
-				ComponentAdapter visListener = new ComponentAdapter() {
-					@Override
-					public void componentShown(ComponentEvent e) {
-						EventQueue.invokeLater(() -> {
-							callbackLock[0] = true;
-							try {
-								if (divProp != null)
-									getEditor().setDividerLocation(divProp.get());
-								else
-									getEditor().setDividerLocation(divLoc.get());
-							} finally {
-								callbackLock[0] = false;
+			if (theSplitFunction != null) {
+				boolean vertical = getEditor().getOrientation() == JSplitPane.VERTICAL_SPLIT;
+				IntSupplier size = vertical ? () -> getEditor().getHeight() - getEditor().getDividerSize()
+					: () -> getEditor().getWidth() - getEditor().getDividerSize();
+					boolean[] callbackLock = new boolean[1];
+					boolean[] hasConfiguredDL = new boolean[1];
+					Runnable resize = () -> {
+						callbackLock[0] = true;
+						hasConfiguredDL[0] = true;
+						try {
+							Integer divLoc = theSplitFunction.apply(size.getAsInt());
+							if (divLoc != null) {
+								System.out.println("Setting DL to " + divLoc);
+								getEditor().setDividerLocation(divLoc);
 							}
-						});
-					}
-
-					@Override
-					public void componentResized(ComponentEvent e) {
-						if (divProp != null) {
-							if (callbackLock[0])
-								return;
-							callbackLock[0] = true;
-							try {
-								getEditor().setDividerLocation(divProp.get());
-							} finally {
-								callbackLock[0] = false;
-							}
-						}
-					}
-				};
-				getEditor().addComponentListener(visListener);
-				if (getEditor().getLeftComponent() != null) {
-					getEditor().getLeftComponent().addComponentListener(new ComponentAdapter() {
-						@Override
-						public void componentShown(ComponentEvent e) {
-							if (getEditor().getRightComponent() == null || !getEditor().getRightComponent().isVisible())
-								return;
-							EventQueue.invokeLater(() -> {
-								callbackLock[0] = true;
-								try {
-									if (divProp != null)
-										getEditor().setDividerLocation(divProp.get());
-									else
-										getEditor().setDividerLocation(divLoc.get());
-								} finally {
-									callbackLock[0] = false;
-								}
-							});
-						}
-					});
-				}
-				if (getEditor().getRightComponent() != null) {
-					getEditor().getRightComponent().addComponentListener(new ComponentAdapter() {
-						@Override
-						public void componentShown(ComponentEvent e) {
-							if (getEditor().getLeftComponent() == null || !getEditor().getLeftComponent().isVisible())
-								return;
-							EventQueue.invokeLater(() -> {
-								callbackLock[0] = true;
-								try {
-									if (divProp != null)
-										getEditor().setDividerLocation(divProp.get());
-									else
-										getEditor().setDividerLocation(divLoc.get());
-								} finally {
-									callbackLock[0] = false;
-								}
-							});
-						}
-					});
-				}
-				IntSupplier length = getEditor().getOrientation() == JSplitPane.VERTICAL_SPLIT ? getEditor()::getHeight
-					: getEditor()::getWidth;
-				getEditor().addPropertyChangeListener(JSplitPane.DIVIDER_LOCATION_PROPERTY, evt -> {
-					if (callbackLock[0])
-						return;
-					callbackLock[0] = true;
-					try {
-						if (divProp != null)
-							divProp.set(getEditor().getDividerLocation() * 1.0 / length.getAsInt(), evt);
-						else
-							divLoc.set(getEditor().getDividerLocation(), evt);
-					} finally {
-						callbackLock[0] = false;
-					}
-				});
-				if (divProp != null) {
-					divProp.changes().takeUntil(getUntil()).act(evt -> {
-						if (callbackLock[0])
-							return;
-						EventQueue.invokeLater(() -> {
-							callbackLock[0] = true;
-							try {
-								getEditor().setDividerLocation(evt.getNewValue());
-							} finally {
-								callbackLock[0] = false;
-							}
-						});
-					});
-				} else {
-					divLoc.changes().takeUntil(getUntil()).act(evt -> {
-						if (callbackLock[0])
-							return;
-						EventQueue.invokeLater(() -> {
-							callbackLock[0] = true;
-							try {
-								getEditor().setDividerLocation(evt.getNewValue());
-							} finally {
-								callbackLock[0] = false;
-							}
-						});
-					});
-				}
-			} else if (theDivLocation >= 0 || !Double.isNaN(theDivProportion)) {
-				if (getEditor().isVisible()) {
-					EventQueue.invokeLater(() -> {
-						if (theDivLocation >= 0)
-							getEditor().setDividerLocation(theDivLocation);
-						else
-							getEditor().setDividerLocation(theDivProportion);
-					});
-				} else {
-					ComponentAdapter[] visListener = new ComponentAdapter[1];
-					visListener[0] = new ComponentAdapter() {
-						@Override
-						public void componentShown(ComponentEvent e) {
-							getEditor().removeComponentListener(visListener[0]);
-							EventQueue.invokeLater(() -> {
-								if (theDivLocation >= 0)
-									getEditor().setDividerLocation(theDivLocation);
-								else
-									getEditor().setDividerLocation(theDivProportion);
-							});
+						} finally {
+							callbackLock[0] = false;
 						}
 					};
-					getEditor().addComponentListener(visListener[0]);
-				}
-				if (getEditor().getLeftComponent() != null) {
-					getEditor().getLeftComponent().addComponentListener(new ComponentAdapter() {
+					ComponentAdapter visListener = new ComponentAdapter() {
 						@Override
 						public void componentShown(ComponentEvent e) {
-							if (getEditor().getRightComponent() == null || !getEditor().getRightComponent().isVisible())
-								return;
-							EventQueue.invokeLater(() -> {
-								if (theDivLocation >= 0)
-									getEditor().setDividerLocation(theDivLocation);
-								else
-									getEditor().setDividerLocation(theDivProportion);
-							});
+							EventQueue.invokeLater(resize);
 						}
-					});
-				}
-				if (getEditor().getRightComponent() != null) {
-					getEditor().getRightComponent().addComponentListener(new ComponentAdapter() {
+
 						@Override
-						public void componentShown(ComponentEvent e) {
-							if (getEditor().getLeftComponent() == null || !getEditor().getLeftComponent().isVisible())
+						public void componentResized(ComponentEvent e) {
+							if (callbackLock[0])
 								return;
-							EventQueue.invokeLater(() -> {
-								if (theDivLocation >= 0)
-									getEditor().setDividerLocation(theDivLocation);
-								else
-									getEditor().setDividerLocation(theDivProportion);
-							});
+							resize.run();
+						}
+					};
+					getEditor().addComponentListener(visListener);
+					if (getEditor().getLeftComponent() != null) {
+						getEditor().getLeftComponent().addComponentListener(new ComponentAdapter() {
+							@Override
+							public void componentShown(ComponentEvent e) {
+								if (getEditor().getRightComponent() == null || !getEditor().getRightComponent().isVisible())
+									return;
+								EventQueue.invokeLater(resize);
+							}
+						});
+					}
+					if (getEditor().getRightComponent() != null) {
+						getEditor().getRightComponent().addComponentListener(new ComponentAdapter() {
+							@Override
+							public void componentShown(ComponentEvent e) {
+								if (getEditor().getLeftComponent() == null || !getEditor().getLeftComponent().isVisible())
+									return;
+								EventQueue.invokeLater(resize);
+							}
+						});
+					}
+					getEditor().addPropertyChangeListener(JSplitPane.DIVIDER_LOCATION_PROPERTY, evt -> {
+						if (callbackLock[0] || !hasConfiguredDL[0])
+							return;
+						if (theSplitOnChange != null) {
+							if (!theSplitOnChange.test(((Number) evt.getNewValue()).intValue(), size.getAsInt()))
+								EventQueue.invokeLater(resize);
 						}
 					});
-				}
+					if (theSplitChanges != null)
+						theSplitChanges.takeUntil(getUntil()).act(__ -> resize.run());
 			} else {
 				EventQueue.invokeLater(() -> {
 					Component first = getEditor().getLeftComponent();

@@ -71,6 +71,7 @@ public class InterpretedExpressoEnv extends CompiledExpressoEnv {
 		for (Map.Entry<String, ModelComponentId> attr : child.getAttributes().entrySet())
 			env = env.withAttribute(attr.getKey(), attr.getValue());
 		env = env.withAllNonStructuredParsers(child);
+		env = env.withOperators(child.getUnaryOperators(), child.getBinaryOperators());
 		if (getModels() != null) {
 			if (child.getModels() != null && !getModels().getIdentity().equals(child.getModels().getIdentity()))
 				env = env.with(child.getBuiltModels().createInterpreted(env));
