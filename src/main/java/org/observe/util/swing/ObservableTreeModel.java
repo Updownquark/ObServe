@@ -32,6 +32,7 @@ import org.qommons.ThreadConstraint;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterList;
+import org.qommons.collect.ElementId;
 import org.qommons.collect.MutableCollectionElement;
 
 import com.google.common.reflect.TypeToken;
@@ -160,6 +161,15 @@ public abstract class ObservableTreeModel<T> implements TreeModel {
 		return node == null ? -1 : node.indexOfChild(child);
 	}
 
+	public MutableCollectionElement<T> getElementOfChild(T child) {
+		TreeNode childNode = getNode(child, false);
+		if (childNode == null)
+			return null;
+		ElementId element = childNode.getParent().getChildren().getElement(//
+			childNode.getParent().getChildNodes().indexOf(childNode)).getElementId();
+		return (MutableCollectionElement<T>) childNode.getParent().getChildren().mutableElement(element);
+	}
+
 	@Override
 	public void addTreeModelListener(TreeModelListener l) {
 		theListeners.add(l);
@@ -203,6 +213,10 @@ public abstract class ObservableTreeModel<T> implements TreeModel {
 			theValue = value;
 			theDepth = parent == null ? 0 : parent.getDepth() + 1;
 			theChildNodes = new ArrayList<>();
+		}
+
+		TreeNode getParent() {
+			return theParent;
 		}
 
 		T get() {

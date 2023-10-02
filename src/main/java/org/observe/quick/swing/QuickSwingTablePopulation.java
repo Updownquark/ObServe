@@ -254,7 +254,7 @@ class QuickSwingTablePopulation {
 
 		@Override
 		public String renderAsText(ModelCell<? extends R, ? extends C> cell) {
-			setCellContext(cell, theRenderTableContext);
+			setCellContext(cell, theRenderTableContext, false);
 			if (theRenderer instanceof QuickTextWidget) {
 				if (thePreRender != null)
 					thePreRender.run();
@@ -269,7 +269,7 @@ class QuickSwingTablePopulation {
 
 		@Override
 		protected Component renderCell(Component parent, ModelCell<? extends R, ? extends C> cell, CellRenderContext ctx) {
-			setCellContext(cell, theRenderTableContext);
+			setCellContext(cell, theRenderTableContext, false);
 			if (thePreRender != null)
 				thePreRender.run();
 			Component render;
@@ -287,8 +287,10 @@ class QuickSwingTablePopulation {
 			return render;
 		}
 
-		void setCellContext(ModelCell<? extends R, ? extends C> cell, TabularWidget.TabularContext<R> tableCtx) {
+		void setCellContext(ModelCell<? extends R, ? extends C> cell, TabularWidget.TabularContext<R> tableCtx, boolean withValue) {
 			try (Transaction t = QuickCoreSwing.rendering(); Causable.CausableInUse cause = Causable.cause()) {
+				if (withValue)
+					tableCtx.getActiveValue().set(cell.getModelValue(), null);
 				tableCtx.isSelected().set(cell.isSelected(), cause);
 				tableCtx.getRowIndex().set(cell.getRowIndex(), cause);
 				tableCtx.getColumnIndex().set(cell.getColumnIndex(), cause);
@@ -455,7 +457,7 @@ class QuickSwingTablePopulation {
 		String isEditAcceptable(ModelCell<R, C> cell, C editValue) {
 			if (cell == null)
 				return "Nothing being edited";
-			setCellContext(cell, theRenderTableContext);
+			setCellContext(cell, theRenderTableContext, true);
 			return theColumn.getEditing().getFilteredColumnEditValue().isAcceptable(editValue);
 		}
 
@@ -464,7 +466,7 @@ class QuickSwingTablePopulation {
 			if (cell == null)
 				return;
 			try (Transaction t = QuickCoreSwing.rendering()) {
-				setCellContext(cell, theRenderTableContext);
+				setCellContext(cell, theRenderTableContext, true);
 				KeyCode code = QuickCoreSwing.getKeyCodeFromAWT(e.getKeyCode(), e.getKeyLocation());
 				if (code == null)
 					return;
@@ -491,7 +493,7 @@ class QuickSwingTablePopulation {
 			if (cell == null)
 				return;
 			try (Transaction t = QuickCoreSwing.rendering()) {
-				setCellContext(cell, theRenderTableContext);
+				setCellContext(cell, theRenderTableContext, true);
 				KeyCode code = QuickCoreSwing.getKeyCodeFromAWT(e.getKeyCode(), e.getKeyLocation());
 				if (code == null)
 					return;
@@ -518,7 +520,7 @@ class QuickSwingTablePopulation {
 			if (cell == null)
 				return;
 			try (Transaction t = QuickCoreSwing.rendering()) {
-				setCellContext(cell, theRenderTableContext);
+				setCellContext(cell, theRenderTableContext, true);
 				char ch = e.getKeyChar();
 				theKeyTypeContext.getTypedChar().set(ch, e);
 				String tt = getTooltip();
@@ -555,7 +557,7 @@ class QuickSwingTablePopulation {
 				QuickMouseListener.MouseButton eventButton = QuickCoreSwing.checkMouseEventType(e, null);
 				if (eventButton == null)
 					return;
-				setCellContext(cell, theRenderTableContext);
+				setCellContext(cell, theRenderTableContext, true);
 				theMouseContext.getMouseButton().set(eventButton, e);
 				theMouseContext.getX().set(e.getX(), e);
 				theMouseContext.getY().set(e.getY(), e);
@@ -586,7 +588,7 @@ class QuickSwingTablePopulation {
 				QuickMouseListener.MouseButton eventButton = QuickCoreSwing.checkMouseEventType(e, null);
 				if (eventButton == null)
 					return;
-				setCellContext(cell, theRenderTableContext);
+				setCellContext(cell, theRenderTableContext, true);
 				theMouseContext.getMouseButton().set(eventButton, e);
 				theMouseContext.getX().set(e.getX(), e);
 				theMouseContext.getY().set(e.getY(), e);
@@ -615,7 +617,7 @@ class QuickSwingTablePopulation {
 				QuickMouseListener.MouseButton eventButton = QuickCoreSwing.checkMouseEventType(e, null);
 				if (eventButton == null)
 					return;
-				setCellContext(cell, theRenderTableContext);
+				setCellContext(cell, theRenderTableContext, true);
 				theMouseContext.getMouseButton().set(eventButton, e);
 				theMouseContext.getX().set(e.getX(), e);
 				theMouseContext.getY().set(e.getY(), e);
@@ -641,7 +643,7 @@ class QuickSwingTablePopulation {
 			if (cell == null)
 				return;
 			try (Transaction t = QuickCoreSwing.rendering()) {
-				setCellContext(cell, theRenderTableContext);
+				setCellContext(cell, theRenderTableContext, true);
 				theMouseContext.getX().set(e.getX(), e);
 				theMouseContext.getY().set(e.getY(), e);
 				String tt = getTooltip();
@@ -666,7 +668,7 @@ class QuickSwingTablePopulation {
 			if (cell == null)
 				return;
 			try (Transaction t = QuickCoreSwing.rendering()) {
-				setCellContext(cell, theRenderTableContext);
+				setCellContext(cell, theRenderTableContext, true);
 				theMouseContext.getX().set(e.getX(), e);
 				theMouseContext.getY().set(e.getY(), e);
 				String tt = getTooltip();
@@ -691,7 +693,7 @@ class QuickSwingTablePopulation {
 			if (cell == null)
 				return;
 			try (Transaction t = QuickCoreSwing.rendering()) {
-				setCellContext(cell, theRenderTableContext);
+				setCellContext(cell, theRenderTableContext, true);
 				theMouseContext.getX().set(e.getX(), e);
 				theMouseContext.getY().set(e.getY(), e);
 				String tt = getTooltip();

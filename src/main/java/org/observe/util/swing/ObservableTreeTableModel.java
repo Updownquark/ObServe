@@ -539,7 +539,7 @@ public class ObservableTreeTableModel<T> implements TreeTableModel {
 		// TODO Add other column stuff
 	}
 
-	private static <R> BetterList<R> toBetterList(TreePath path) {
+	public static <R> BetterList<R> toBetterList(TreePath path) {
 		return (BetterList<R>) (BetterList<?>) BetterList.of(path.getPath());
 	}
 

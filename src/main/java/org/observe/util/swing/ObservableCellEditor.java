@@ -30,13 +30,18 @@ import javax.swing.event.ChangeEvent;
 import javax.swing.table.TableCellEditor;
 import javax.swing.table.TableModel;
 import javax.swing.tree.TreeCellEditor;
+import javax.swing.tree.TreePath;
 
 import org.observe.Observable;
 import org.observe.SettableValue;
 import org.observe.SimpleObservable;
 import org.observe.Subscription;
 import org.observe.collect.ObservableCollection;
+import org.observe.swingx.JXTreeTable;
 import org.observe.util.TypeTokens;
+import org.qommons.collect.BetterCollection;
+import org.qommons.collect.BetterList;
+import org.qommons.collect.ElementId;
 import org.qommons.collect.MutableCollectionElement;
 import org.qommons.io.Format;
 
@@ -457,6 +462,7 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 			ChangeEvent changeEvent = new ChangeEvent(this);
 			for (CellEditorListener listener : theListeners)
 				listener.editingStopped(changeEvent);
+			System.out.println("Stop edit");
 			theEditingCell = null;
 			return true;
 		}
@@ -470,6 +476,7 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 			ChangeEvent changeEvent = new ChangeEvent(this);
 			for (CellEditorListener listener : theListeners)
 				listener.editingCanceled(changeEvent);
+			System.out.println("Cancel edit");
 			theEditingCell = null;
 		}
 
@@ -535,6 +542,7 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 
 			theEditingCell = new ModelCell.Default<>(() -> modelValue, (C) modelValue, rowIndex, 0, selected, selected, hovered, hovered,
 				true, true, null);
+			System.out.println("Editing " + theEditingCell);
 			if (theEditorValue.get() != modelValue)
 				theEditorValue.set((C) modelValue, null);
 			Runnable revert = null;
@@ -606,6 +614,93 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 							true, true, null));
 				} else
 					valueTooltip = null;
+			} else if (table instanceof JXTreeTable && ((JXTreeTable) table).getTreeTableModel() instanceof ObservableTreeTableModel) {
+				ObservableTreeTableModel<? super M> obsModel = (ObservableTreeTableModel<? super M>) ((JXTreeTable) table)
+					.getTreeTableModel();
+				CategoryRenderStrategy<M, C> category = (CategoryRenderStrategy<M, C>) obsModel.getColumn(column);
+				TreePath path = ((JXTreeTable) table).getPathForRow(row);
+				BetterList<?> betterPath = ObservableTreeTableModel.toBetterList(path);
+				modelValue = (M) betterPath;
+				MutableCollectionElement<?> treeNodeElement = obsModel.getTreeModel().getElementOfChild((M) path.getLastPathComponent());
+				MutableCollectionElement<M> modelElement = new MutableCollectionElement<M>() {
+					@Override
+					public ElementId getElementId() {
+						return treeNodeElement.getElementId();
+					}
+
+					@Override
+					public M get() {
+						return modelValue;
+					}
+
+					@Override
+					public BetterCollection<M> getCollection() {
+						return (BetterCollection<M>) treeNodeElement.getCollection();
+					}
+
+					@Override
+					public String isEnabled() {
+						return treeNodeElement.isEnabled();
+					}
+
+					@Override
+					public String isAcceptable(M value2) {
+						if (!(value2 instanceof BetterList))
+							return StdMsg.ILLEGAL_ELEMENT;
+						BetterList<?> elPath = (BetterList<?>) value2;
+						if (elPath.size() != betterPath.size())
+							return StdMsg.ILLEGAL_ELEMENT;
+						for (int i = 0; i < betterPath.size() - 1; i++) {
+							if (elPath.get(i) != betterPath.get(i))
+								return StdMsg.ILLEGAL_ELEMENT;
+						}
+						return ((MutableCollectionElement<Object>) treeNodeElement).isAcceptable(elPath.getLast());
+					}
+
+					@Override
+					public void set(M value2) throws UnsupportedOperationException, IllegalArgumentException {
+						if (!(value2 instanceof BetterList))
+							throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
+						BetterList<?> elPath = (BetterList<?>) value2;
+						if (elPath.size() != betterPath.size())
+							throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
+						for (int i = 0; i < betterPath.size() - 1; i++) {
+							if (elPath.get(i) != betterPath.get(i))
+								throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
+						}
+						((MutableCollectionElement<Object>) treeNodeElement).set(elPath.getLast());
+					}
+
+					@Override
+					public String canRemove() {
+						return treeNodeElement.canRemove();
+					}
+
+					@Override
+					public void remove() throws UnsupportedOperationException {
+						treeNodeElement.remove();
+					}
+				};
+				valueFilter = v -> {
+					if (v == null || TypeTokens.get().isInstance(category.getType(), v))
+						return category.getMutator().isAcceptable(modelElement, v);
+					else
+						return "Unacceptable value";
+				};
+				if (category.getMutator().getEditorTooltip() != null || category.getTooltipFn() != null) {
+					ModelCell<M, C> cell = new ModelCell.Default<>(() -> modelValue, (C) value, row, column, isSelected, isSelected,
+						rowHovered, cellHovered, true, true, null);
+					if (category.getMutator().getEditorTooltip() != null)
+						tooltip = category.getMutator().getEditorTooltip().apply(cell);
+					else
+						tooltip = category.getTooltip(cell);
+				} else
+					tooltip = null;
+				if (theValueTooltip != null) {
+					valueTooltip = c -> theValueTooltip.apply(new ModelCell.Default<>(() -> modelValue, c, row, column, isSelected,
+						isSelected, rowHovered, cellHovered, true, true, null));
+				} else
+					valueTooltip = null;
 			} else {
 				modelValue = null;
 				valueFilter = null;
@@ -614,6 +709,7 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 			}
 			theEditingCell = new ModelCell.Default<>(() -> modelValue, (C) value, row, column, isSelected, isSelected, rowHovered,
 				cellHovered, true, true, null);
+			System.out.println("Editing " + theEditingCell);
 			if (theEditorValue.get() != value)
 				theEditorValue.set((C) value, null);
 
@@ -656,6 +752,7 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 			// TODO See if there's a way to get the information needed for the value filter and tooltip somewhere
 			theEditingCell = new ModelCell.Default<>(() -> (M) value, (C) value, row, 0, isSelected, isSelected, hovered, hovered, expanded,
 				leaf, null);
+			System.out.println("Editing " + theEditingCell);
 			theEditorValue.set((C) value, null);
 
 			Runnable revert = null;

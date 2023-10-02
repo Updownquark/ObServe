@@ -1425,10 +1425,8 @@ class PanelPopulationImpl {
 						hasConfiguredDL[0] = true;
 						try {
 							Integer divLoc = theSplitFunction.apply(size.getAsInt());
-							if (divLoc != null) {
-								System.out.println("Setting DL to " + divLoc);
+							if (divLoc != null)
 								getEditor().setDividerLocation(divLoc);
-							}
 						} finally {
 							callbackLock[0] = false;
 						}
