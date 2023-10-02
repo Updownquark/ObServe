@@ -178,7 +178,7 @@ class QuickSwingTablePopulation {
 		private final QuickWidget theRenderer;
 		private final SimpleObservable<Void> theRenderUntil;
 		private final QuickWidget.WidgetContext theRendererContext;
-		private final TabularWidget.TabularContext<R> theRenderTableContext;
+		protected final TabularWidget.TabularContext<R> theRenderTableContext;
 		private ObservableCellRenderer<R, C> theDelegate;
 		private AbstractComponentEditor<?, ?> theComponent;
 		private Runnable thePreRender;
@@ -305,25 +305,28 @@ class QuickSwingTablePopulation {
 				}
 			}
 		}
+
+		String getTooltip(R modelValue, C columnValue) {
+			if (theTooltip == null)
+				return null;
+			try (Transaction t = QuickCoreSwing.rendering()) {
+				theRenderTableContext.getActiveValue().set(modelValue, null);
+			}
+			return theTooltip.get();
+		}
+
+		String getTooltip() {
+			return theTooltip == null ? null : theTooltip.get();
+		}
 	}
 
 	static class QuickSwingTableColumn<R, C> extends QuickSwingRenderer<R, C>
 	implements CategoryMouseListener<R, C>, CategoryKeyListener<R, C> {
-		private final QuickWidget theQuickParent;
 		private final QuickTableColumn<R, C> theColumn;
-		private final QuickWidget theRenderer;
-		private final QuickWidget.WidgetContext theRendererContext;
-		private final TabularWidget.TabularContext<R> theRenderTableContext;
-		private final Supplier<? extends ComponentEditor<?, ?>> theParent;
-		private final SimpleObservable<Void> theRenderUntil;
-		private ObservableCellRenderer<R, C> theDelegate;
-		private AbstractComponentEditor<?, ?> theComponent;
-		private Runnable thePreRender;
 
 		private final QuickTableColumn.ColumnEditContext<R, C> theEditContext;
 		private ObservableCellEditor<R, C> theCellEditor;
 
-		private ObservableValue<String> theTooltip;
 		private final QuickMouseListener.MouseButtonListenerContext theMouseContext;
 		private final QuickKeyListener.KeyTypedContext theKeyTypeContext;
 		private final QuickKeyListener.KeyCodeContext theKeyCodeContext;
@@ -334,32 +337,8 @@ class QuickSwingTablePopulation {
 			Supplier<? extends ComponentEditor<?, ?>> parent, QuickSwingPopulator<QuickWidget> swingRenderer,
 				QuickSwingPopulator<QuickWidget> swingEditor) throws ModelInstantiationException {
 			super(quickParent, column.getType(), column.getValue(), column.getRenderer(), ctx, parent, swingRenderer);
-			theQuickParent = quickParent;
 			theColumn = column;
-			theRenderer = column.getRenderer();
-			theRenderTableContext = ctx;
-			theParent = parent;
-			theRenderUntil = new SimpleObservable<>();
 
-			SwingCellPopulator<R, C> renderPopulator;
-			if (swingRenderer != null) {
-				renderPopulator = new SwingCellPopulator<>(this, true);
-				// This is in the modifier because we don't have the component yet
-				swingRenderer.addModifier((comp, w)->{
-					comp.modifyComponent(c -> {
-						if (parent.get().getEditor() instanceof JComponent)
-							theOwner = (JComponent) parent.get().getEditor();
-						else if (parent.get().getComponent() instanceof JComponent)
-							theOwner = (JComponent) parent.get().getComponent();
-					});
-				});
-
-				theRendererContext = new QuickWidget.WidgetContext.Default();
-				theRenderer.setContext(theRendererContext);
-			} else {
-				renderPopulator = null;
-				theRendererContext = null;
-			}
 			if (theColumn.getEditing() != null) {
 				if (swingEditor != null) {
 					swingEditor.populate(new SwingCellPopulator<>(this, false), theColumn.getEditing().getEditor());
@@ -374,8 +353,8 @@ class QuickSwingTablePopulation {
 			theKeyTypeContext = new QuickKeyListener.KeyTypedContext.Default();
 			theKeyCodeContext = new QuickKeyListener.KeyCodeContext.Default();
 
-			if (theRenderer != null) {
-				for (QuickEventListener listener : theRenderer.getEventListeners()) {
+			if (getRenderer() != null) {
+				for (QuickEventListener listener : getRenderer().getEventListeners()) {
 					if (listener instanceof QuickMouseListener.QuickMouseButtonListener)
 						((QuickMouseListener.QuickMouseButtonListener) listener).setListenerContext(theMouseContext);
 					else if (listener instanceof QuickMouseListener)
@@ -388,28 +367,10 @@ class QuickSwingTablePopulation {
 						listener.reporting().error("Unhandled cell renderer listener type: " + listener.getClass().getName());
 				}
 			}
-
-			if (renderPopulator != null)
-				swingRenderer.populate(renderPopulator, theRenderer);
 		}
 
 		public QuickTableColumn<R, C> getColumn() {
 			return theColumn;
-		}
-
-		@Override
-		public QuickWidget getRenderer() {
-			return theRenderer;
-		}
-
-		@Override
-		public TabularWidget.TabularContext<R> getContext() {
-			return theRenderTableContext;
-		}
-
-		@Override
-		public ComponentEditor<?, ?> getParent() {
-			return theParent.get();
 		}
 
 		void withEditor(ObservableCellEditor<R, C> editor) {
@@ -499,86 +460,6 @@ class QuickSwingTablePopulation {
 		}
 
 		@Override
-		void delegateTo(ObservableCellRenderer<R, C> delegate) {
-			theDelegate = delegate;
-		}
-
-		@Override
-		void renderWith(AbstractComponentEditor<?, ?> component, Runnable preRender) {
-			theComponent = component;
-			thePreRender = preRender;
-		}
-
-		@Override
-		public void setTooltip(ObservableValue<String> tooltip) {
-			theTooltip = tooltip;
-		}
-
-		@Override
-		void setCellContext(ModelCell<? extends R, ? extends C> cell, TabularWidget.TabularContext<R> tableCtx) {
-			try (Transaction t = QuickCoreSwing.rendering(); Causable.CausableInUse cause = Causable.cause()) {
-				tableCtx.isSelected().set(cell.isSelected(), cause);
-				tableCtx.getRowIndex().set(cell.getRowIndex(), cause);
-				tableCtx.getColumnIndex().set(cell.getColumnIndex(), cause);
-				if (tableCtx == theRenderTableContext && theRendererContext != null) {
-					theRendererContext.isHovered().set(cell.isCellHovered(), cause);
-					theRendererContext.isFocused().set(cell.isCellFocused(), cause);
-					if (cell.isCellHovered()) {
-						theRendererContext.isPressed().set(theQuickParent.isPressed().get(), cause);
-						theRendererContext.isRightPressed().set(theQuickParent.isRightPressed().get(), cause);
-					} else {
-						theRendererContext.isPressed().set(false, cause);
-						theRendererContext.isRightPressed().set(false, cause);
-					}
-				}
-			}
-		}
-
-		String getTooltip(R modelValue, C columnValue) {
-			if (theTooltip == null)
-				return null;
-			try (Transaction t = QuickCoreSwing.rendering()) {
-				theRenderTableContext.getActiveValue().set(modelValue, null);
-			}
-			return theTooltip.get();
-		}
-
-		@Override
-		public String renderAsText(ModelCell<? extends R, ? extends C> cell) {
-			setCellContext(cell, theRenderTableContext);
-			if (theRenderer instanceof QuickTextWidget) {
-				if (thePreRender != null)
-					thePreRender.run();
-				String text = ((QuickTextWidget<C>) theRenderer).getCurrentText();
-				theRenderUntil.onNext(null);
-				return text;
-			} else {
-				C colValue = theColumn.getValue().get();
-				return colValue == null ? "" : colValue.toString();
-			}
-		}
-
-		@Override
-		protected Component renderCell(Component parent, ModelCell<? extends R, ? extends C> cell, CellRenderContext ctx) {
-			setCellContext(cell, theRenderTableContext);
-			if (thePreRender != null)
-				thePreRender.run();
-			Component render;
-			try (Transaction t = QuickCoreSwing.rendering()) {
-				if (theDelegate != null)
-					render = theDelegate.getCellRendererComponent(parent, cell, ctx);
-				else if (theComponent != null)
-					render = theComponent.getComponent();
-				else { // No renderer specified, use default
-					theDelegate = ObservableCellRenderer.formatted(String::valueOf);
-					render = theDelegate.getCellRendererComponent(parent, cell, ctx);
-				}
-			}
-			theRenderUntil.onNext(null);
-			return render;
-		}
-
-		@Override
 		public void keyPressed(ModelCell<? extends R, ? extends C> cell, KeyEvent e) {
 			if (cell == null)
 				return;
@@ -588,8 +469,8 @@ class QuickSwingTablePopulation {
 				if (code == null)
 					return;
 				theKeyCodeContext.getKeyCode().set(code, e);
-				String tt = theTooltip == null ? null : theTooltip.get();
-				for (QuickEventListener listener : theRenderer.getEventListeners()) {
+				String tt = getTooltip();
+				for (QuickEventListener listener : getRenderer().getEventListeners()) {
 					if (listener instanceof QuickKeyListener.QuickKeyCodeListener) {
 						QuickKeyListener.QuickKeyCodeListener keyL = (QuickKeyListener.QuickKeyCodeListener) listener;
 						if (!keyL.isPressed() || (keyL.getKeyCode() != null && keyL.getKeyCode() != code))
@@ -599,7 +480,7 @@ class QuickSwingTablePopulation {
 						keyL.getAction().act(e);
 					}
 				}
-				String newTT = theTooltip == null ? null : theTooltip.get();
+				String newTT = getTooltip();
 				if (!Objects.equals(tt, newTT))
 					theOwner.setToolTipText(newTT);
 			}
@@ -615,8 +496,8 @@ class QuickSwingTablePopulation {
 				if (code == null)
 					return;
 				theKeyCodeContext.getKeyCode().set(code, e);
-				String tt = theTooltip == null ? null : theTooltip.get();
-				for (QuickEventListener listener : theRenderer.getEventListeners()) {
+				String tt = getTooltip();
+				for (QuickEventListener listener : getRenderer().getEventListeners()) {
 					if (listener instanceof QuickKeyListener.QuickKeyCodeListener) {
 						QuickKeyListener.QuickKeyCodeListener keyL = (QuickKeyListener.QuickKeyCodeListener) listener;
 						if (!keyL.isPressed() || (keyL.getKeyCode() != null && keyL.getKeyCode() != code))
@@ -626,7 +507,7 @@ class QuickSwingTablePopulation {
 						keyL.getAction().act(e);
 					}
 				}
-				String newTT = theTooltip == null ? null : theTooltip.get();
+				String newTT = getTooltip();
 				if (!Objects.equals(tt, newTT))
 					theOwner.setToolTipText(newTT);
 			}
@@ -640,8 +521,8 @@ class QuickSwingTablePopulation {
 				setCellContext(cell, theRenderTableContext);
 				char ch = e.getKeyChar();
 				theKeyTypeContext.getTypedChar().set(ch, e);
-				String tt = theTooltip == null ? null : theTooltip.get();
-				for (QuickEventListener listener : theRenderer.getEventListeners()) {
+				String tt = getTooltip();
+				for (QuickEventListener listener : getRenderer().getEventListeners()) {
 					if (listener instanceof QuickKeyListener.QuickKeyTypedListener) {
 						QuickKeyListener.QuickKeyTypedListener keyL = (QuickKeyListener.QuickKeyTypedListener) listener;
 						if (keyL.getCharFilter() != 0 && keyL.getCharFilter() != ch)
@@ -651,7 +532,7 @@ class QuickSwingTablePopulation {
 						keyL.getAction().act(e);
 					}
 				}
-				String newTT = theTooltip == null ? null : theTooltip.get();
+				String newTT = getTooltip();
 				if (!Objects.equals(tt, newTT))
 					theOwner.setToolTipText(newTT);
 			}
@@ -659,7 +540,7 @@ class QuickSwingTablePopulation {
 
 		@Override
 		public boolean isMovementListener() {
-			for (QuickEventListener listener : theRenderer.getEventListeners()) {
+			for (QuickEventListener listener : getRenderer().getEventListeners()) {
 				if (listener instanceof QuickMouseListener.QuickMouseMoveListener)
 					return true;
 			}
@@ -678,8 +559,8 @@ class QuickSwingTablePopulation {
 				theMouseContext.getMouseButton().set(eventButton, e);
 				theMouseContext.getX().set(e.getX(), e);
 				theMouseContext.getY().set(e.getY(), e);
-				String tt = theTooltip == null ? null : theTooltip.get();
-				for (QuickEventListener listener : theRenderer.getEventListeners()) {
+				String tt = getTooltip();
+				for (QuickEventListener listener : getRenderer().getEventListeners()) {
 					if (listener instanceof QuickMouseListener.QuickMouseClickListener) {
 						QuickMouseListener.QuickMouseClickListener mouseL = (QuickMouseListener.QuickMouseClickListener) listener;
 						if (mouseL.getButton() != null && mouseL.getButton() != eventButton)
@@ -691,7 +572,7 @@ class QuickSwingTablePopulation {
 						mouseL.getAction().act(e);
 					}
 				}
-				String newTT = theTooltip == null ? null : theTooltip.get();
+				String newTT = getTooltip();
 				if (!Objects.equals(tt, newTT))
 					theOwner.setToolTipText(newTT);
 			}
@@ -709,8 +590,8 @@ class QuickSwingTablePopulation {
 				theMouseContext.getMouseButton().set(eventButton, e);
 				theMouseContext.getX().set(e.getX(), e);
 				theMouseContext.getY().set(e.getY(), e);
-				String tt = theTooltip == null ? null : theTooltip.get();
-				for (QuickEventListener listener : theRenderer.getEventListeners()) {
+				String tt = getTooltip();
+				for (QuickEventListener listener : getRenderer().getEventListeners()) {
 					if (listener instanceof QuickMouseListener.QuickMousePressedListener) {
 						QuickMouseListener.QuickMousePressedListener mouseL = (QuickMouseListener.QuickMousePressedListener) listener;
 						if (mouseL.getButton() != null && mouseL.getButton() != eventButton)
@@ -720,7 +601,7 @@ class QuickSwingTablePopulation {
 						mouseL.getAction().act(e);
 					}
 				}
-				String newTT = theTooltip == null ? null : theTooltip.get();
+				String newTT = getTooltip();
 				if (!Objects.equals(tt, newTT))
 					theOwner.setToolTipText(newTT);
 			}
@@ -738,8 +619,8 @@ class QuickSwingTablePopulation {
 				theMouseContext.getMouseButton().set(eventButton, e);
 				theMouseContext.getX().set(e.getX(), e);
 				theMouseContext.getY().set(e.getY(), e);
-				String tt = theTooltip == null ? null : theTooltip.get();
-				for (QuickEventListener listener : theRenderer.getEventListeners()) {
+				String tt = getTooltip();
+				for (QuickEventListener listener : getRenderer().getEventListeners()) {
 					if (listener instanceof QuickMouseListener.QuickMouseReleasedListener) {
 						QuickMouseListener.QuickMouseReleasedListener mouseL = (QuickMouseListener.QuickMouseReleasedListener) listener;
 						if (mouseL.getButton() != null && mouseL.getButton() != eventButton)
@@ -749,7 +630,7 @@ class QuickSwingTablePopulation {
 						mouseL.getAction().act(e);
 					}
 				}
-				String newTT = theTooltip == null ? null : theTooltip.get();
+				String newTT = getTooltip();
 				if (!Objects.equals(tt, newTT))
 					theOwner.setToolTipText(newTT);
 			}
@@ -763,8 +644,8 @@ class QuickSwingTablePopulation {
 				setCellContext(cell, theRenderTableContext);
 				theMouseContext.getX().set(e.getX(), e);
 				theMouseContext.getY().set(e.getY(), e);
-				String tt = theTooltip == null ? null : theTooltip.get();
-				for (QuickEventListener listener : theRenderer.getEventListeners()) {
+				String tt = getTooltip();
+				for (QuickEventListener listener : getRenderer().getEventListeners()) {
 					if (listener instanceof QuickMouseListener.QuickMouseMoveListener) {
 						QuickMouseListener.QuickMouseMoveListener mouseL = (QuickMouseListener.QuickMouseMoveListener) listener;
 						if (mouseL.getEventType() != QuickMouseListener.MouseMoveEventType.Enter)
@@ -774,7 +655,7 @@ class QuickSwingTablePopulation {
 						mouseL.getAction().act(e);
 					}
 				}
-				String newTT = theTooltip == null ? null : theTooltip.get();
+				String newTT = getTooltip();
 				if (!Objects.equals(tt, newTT))
 					theOwner.setToolTipText(newTT);
 			}
@@ -788,8 +669,8 @@ class QuickSwingTablePopulation {
 				setCellContext(cell, theRenderTableContext);
 				theMouseContext.getX().set(e.getX(), e);
 				theMouseContext.getY().set(e.getY(), e);
-				String tt = theTooltip == null ? null : theTooltip.get();
-				for (QuickEventListener listener : theRenderer.getEventListeners()) {
+				String tt = getTooltip();
+				for (QuickEventListener listener : getRenderer().getEventListeners()) {
 					if (listener instanceof QuickMouseListener.QuickMouseMoveListener) {
 						QuickMouseListener.QuickMouseMoveListener mouseL = (QuickMouseListener.QuickMouseMoveListener) listener;
 						if (mouseL.getEventType() != QuickMouseListener.MouseMoveEventType.Exit)
@@ -799,7 +680,7 @@ class QuickSwingTablePopulation {
 						mouseL.getAction().act(e);
 					}
 				}
-				String newTT = theTooltip == null ? null : theTooltip.get();
+				String newTT = getTooltip();
 				if (!Objects.equals(tt, newTT))
 					theOwner.setToolTipText(newTT);
 			}
@@ -813,8 +694,8 @@ class QuickSwingTablePopulation {
 				setCellContext(cell, theRenderTableContext);
 				theMouseContext.getX().set(e.getX(), e);
 				theMouseContext.getY().set(e.getY(), e);
-				String tt = theTooltip == null ? null : theTooltip.get();
-				for (QuickEventListener listener : theRenderer.getEventListeners()) {
+				String tt = getTooltip();
+				for (QuickEventListener listener : getRenderer().getEventListeners()) {
 					if (listener instanceof QuickMouseListener.QuickMouseMoveListener) {
 						QuickMouseListener.QuickMouseMoveListener mouseL = (QuickMouseListener.QuickMouseMoveListener) listener;
 						if (mouseL.getEventType() != QuickMouseListener.MouseMoveEventType.Move)
@@ -824,7 +705,7 @@ class QuickSwingTablePopulation {
 						mouseL.getAction().act(e);
 					}
 				}
-				String newTT = theTooltip == null ? null : theTooltip.get();
+				String newTT = getTooltip();
 				if (!Objects.equals(tt, newTT))
 					theOwner.setToolTipText(newTT);
 			}

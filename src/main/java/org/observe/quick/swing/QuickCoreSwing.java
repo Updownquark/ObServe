@@ -42,7 +42,7 @@ import org.observe.quick.swing.QuickSwingPopulator.QuickSwingBorder;
 import org.observe.quick.swing.QuickSwingPopulator.QuickSwingDialog;
 import org.observe.quick.swing.QuickSwingPopulator.QuickSwingEventListener;
 import org.observe.util.TypeTokens;
-import org.observe.util.swing.ComponentDecorator;
+import org.observe.util.swing.ComponentPropertyManager;
 import org.observe.util.swing.FontAdjuster;
 import org.observe.util.swing.JustifiedBoxLayout;
 import org.observe.util.swing.PanelPopulation.WindowBuilder;
@@ -59,7 +59,17 @@ import org.qommons.ex.CheckedExceptionWrapper;
 
 /** Quick interpretation of the core toolkit for Swing */
 public class QuickCoreSwing implements QuickInterpretation {
-	private static final WeakHashMap<Component, QuickWidget> QUICK_SWING_WIDGETS = new WeakHashMap<>();
+	private static class QuickSwingComponentData {
+		final QuickWidget widget;
+		final ComponentPropertyManager<Component> propertyMgr;
+
+		QuickSwingComponentData(QuickWidget widget, Component c) {
+			this.widget = widget;
+			propertyMgr = new ComponentPropertyManager<>(c);
+		}
+	}
+
+	private static final WeakHashMap<Component, QuickSwingComponentData> QUICK_SWING_WIDGETS = new WeakHashMap<>();
 
 	private static int isRendering;
 
@@ -159,8 +169,8 @@ public class QuickCoreSwing implements QuickInterpretation {
 			}
 			qsp.addModifier((comp, w) -> {
 				comp.withName(name);
-				ComponentDecorator deco = new ComponentDecorator();
-				Runnable[] revert = new Runnable[1];
+				FontAdjuster pmDecorator = new FontAdjuster();
+				ComponentPropertyManager<Component>[] propertyManager = new ComponentPropertyManager[1];
 				Component[] component = new Component[1];
 				ObservableValue<Color> color = w.getStyle().getColor();
 				ObservableValue<Cursor> cursor = w.getStyle().getMouseCursor().map(quickCursor -> {
@@ -173,23 +183,30 @@ public class QuickCoreSwing implements QuickInterpretation {
 				});
 				try {
 					comp.modifyComponent(c -> {
-						if (renderer) {
-							if (revert[0] == null)
-								QUICK_SWING_WIDGETS.put(c, w); // first time
-							else
-								revert[0].run();
-						} else if (QUICK_SWING_WIDGETS.put(c, w) != null)
+						boolean[] firstTime = new boolean[1];
+						QuickSwingComponentData scd = QUICK_SWING_WIDGETS.computeIfAbsent(c, c2 -> {
+							firstTime[0] = true;
+							return new QuickSwingComponentData(w, c2);
+						});
+						if (!renderer && !firstTime[0])
 							return;
 
 						component[0] = c;
+						propertyManager[0] = scd.propertyMgr;
 						if (renderer) {
 							// We can just do all this dynamically for renderers
-							adjustFont(deco.reset(), w.getStyle());
-							deco.withBackground(color.get());
+							adjustFont(pmDecorator.reset(), w.getStyle());
+							propertyManager[0].setFont(pmDecorator::adjust);
+							propertyManager[0].setForeground(pmDecorator.getForeground());
+							Color bg = color.get();
+							// if (c instanceof JLabel) { // DEBUGGING
+							// System.out.println("Render '" + ((JLabel) c).getText() + "' bg " + Colors.toString(bg));
+							// }
+							propertyManager[0].setBackground(bg);
+							propertyManager[0].setOpaque(bg == null ? null : true);
 							c.setCursor(cursor.get());
-							revert[0] = deco.decorate(c);
 						} else {
-							revert[0] = deco.decorate(c);
+							propertyManager[0].setForeground(pmDecorator.getForeground());
 							try {
 								w.setContext(new QuickWidget.WidgetContext.Default(//
 									new MouseValueSupport(c, "hovered", null), //
@@ -230,15 +247,16 @@ public class QuickCoreSwing implements QuickInterpretation {
 					throw e;
 				}
 				if (!renderer) { // Don't keep any subscriptions for renderers
-					adjustFont(deco, w.getStyle());
-					deco.withBackground(color.get());
+					adjustFont(pmDecorator, w.getStyle());
 					cursor.noInitChanges().takeUntil(comp.getUntil()).act(evt -> component[0].setCursor(evt.getNewValue()));
 					Observable.onRootFinish(Observable.or(color.noInitChanges(), fontChanges(w.getStyle()))).act(__ -> {
-						adjustFont(deco.reset(), w.getStyle());
-						deco.withBackground(color.get());
+						adjustFont(pmDecorator.reset(), w.getStyle());
+						if (propertyManager[0] != null) {
+							propertyManager[0].setFont(pmDecorator::adjust);
+							propertyManager[0].setForeground(pmDecorator.getForeground());
+							propertyManager[0].setBackground(color.get());
+						}
 						if (component[0] != null) {
-							revert[0].run();
-							revert[0] = deco.decorate(component[0]);
 							if (!renderer && !isRendering())
 								component[0].repaint();
 						}

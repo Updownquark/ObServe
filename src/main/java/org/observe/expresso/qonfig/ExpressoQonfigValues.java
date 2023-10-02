@@ -33,6 +33,7 @@ import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelType;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
+import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelComponentId;
 import org.observe.expresso.ObservableModelSet.ModelInstantiator;
@@ -497,7 +498,7 @@ public class ExpressoQonfigValues {
 				ExpressoQIS intListSession = session.asElement("int-list");
 				ExElement.syncDefs(CollectionElement.class, theElements, intListSession.forChildren("element"));
 			}
-			if (getElementValue() != null && !theElements.isEmpty())
+			if ((getElementValue() != null && getElementValue().getExpression() != ObservableExpression.EMPTY) && !theElements.isEmpty())
 				reporting().error("Both a list value and elements specified");
 		}
 
@@ -775,7 +776,7 @@ public class ExpressoQonfigValues {
 			public ModelValueInstantiator<ObservableSortedCollection<T>> instantiate() {
 				return new SimpleSortedInstantiator<>(getDefinition().getModelPath(), getValueType(), instantiateSort(),
 					getElementValue() == null ? null : getElementValue().instantiate(), //
-					instantiateElements());
+						instantiateElements());
 			}
 		}
 
@@ -849,7 +850,7 @@ public class ExpressoQonfigValues {
 			public ModelValueInstantiator<ObservableSortedSet<T>> instantiate() {
 				return new SortedSetInstantiator<>(getDefinition().getModelPath(), getValueType(), instantiateSort(),
 					getElementValue() == null ? null : getElementValue().instantiate(), //
-					instantiateElements());
+						instantiateElements());
 			}
 		}
 

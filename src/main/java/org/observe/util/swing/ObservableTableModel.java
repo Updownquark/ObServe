@@ -592,8 +592,6 @@ public class ObservableTableModel<R> implements TableModel {
 		private IntSupplier theHoveredRow;
 		private IntSupplier theHoveredColumn;
 
-		private Component theLastRender;
-
 		ObservableTableCellRenderer(ObservableTableModel<R> model, CategoryRenderStrategy<R, C> column, TableRenderContext ctx,
 			IntSupplier hoveredRow, IntSupplier hoveredColumn) {
 			theModel = model;
@@ -610,11 +608,6 @@ public class ObservableTableModel<R> implements TableModel {
 				theRevert.run();
 				theRevert = null;
 			}
-			if (theLastRender != null) {
-				theLastRender.setBackground(null);
-				theLastRender.setForeground(null);
-				theLastRender = null;
-			}
 			ObservableCellRenderer<R, C> renderer = theColumn.getRenderer() != null ? (ObservableCellRenderer<R, C>) theColumn.getRenderer()
 				: new ObservableCellRenderer.DefaultObservableCellRenderer<>((r, c) -> String.valueOf(c));
 			int modelRow = table.convertRowIndexToModel(row);
@@ -625,7 +618,6 @@ public class ObservableTableModel<R> implements TableModel {
 				row, column, isSelected, hasFocus, rowHovered, cellHovered, true, true, null);
 			Component c = renderer.getCellRendererComponent(table, cell,
 				() -> theContext == null ? null : theContext.getEmphaticRegions(modelRow, modelColumn));
-			theLastRender = c;
 
 			if (theColumn.getDecorator() != null) {
 				if (theDecorator == null)

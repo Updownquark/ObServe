@@ -7,7 +7,6 @@ import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExElementTraceable;
 import org.observe.expresso.qonfig.ExMultiElementTraceable;
-import org.observe.expresso.qonfig.ExWithElementModel;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigChildGetter;
 import org.observe.quick.QuickCoreInterpretation;
@@ -51,7 +50,6 @@ public class QuickComboBox<T> extends CollectionSelectorWidget<T> {
 			if (renderer == null)
 				renderer = session.forMetadata("default-renderer").peekFirst();
 			theRenderer = ExElement.useOrReplace(QuickWidget.Def.class, theRenderer, renderer, null);
-			ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
 		}
 
 		@Override

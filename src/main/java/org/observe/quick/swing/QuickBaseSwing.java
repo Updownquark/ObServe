@@ -641,13 +641,14 @@ public class QuickBaseSwing implements QuickInterpretation {
 			ComponentEditor<?, ?>[] combo = new ComponentEditor[1];
 			TabularWidget.TabularContext<T> tableCtx = new TabularWidget.TabularContext.Default<>(quick.getValue().getType(),
 				quick.toString());
+			quick.setContext(tableCtx);
 			ObservableCellRenderer<T, T> renderer = theRenderer == null ? null : new QuickSwingTablePopulation.QuickSwingRenderer<>(quick,
 				quick.getValue().getType(), quick.getValue(), quick.getRenderer(), tableCtx, () -> combo[0], theRenderer);
 			panel.addComboField(null, quick.getValue(), quick.getValues(), cf -> {
 				combo[0] = cf;
 				component.accept(cf);
-				// if (theRenderer != null)
-				// cf.renderWith(renderer);
+				if (theRenderer != null)
+					cf.renderWith(renderer);
 			});
 		}
 	}

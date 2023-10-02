@@ -551,8 +551,6 @@ public class ObservableTreeTableModel<T> implements TreeTableModel {
 		private IntSupplier theHoveredColumn;
 		private Runnable theRevert;
 
-		private Component theLastRender;
-
 		ObservableTreeTableCellRenderer(CategoryRenderStrategy<BetterList<R>, C> column, TableRenderContext ctx, IntSupplier hoveredRow,
 			IntSupplier hoveredColumn) {
 			theColumn = column;
@@ -582,11 +580,6 @@ public class ObservableTreeTableModel<T> implements TreeTableModel {
 				theRevert.run();
 				theRevert = null;
 			}
-			if (theLastRender != null) {
-				theLastRender.setBackground(null);
-				theLastRender.setForeground(null);
-				theLastRender = null;
-			}
 			ObservableCellRenderer<? super BetterList<R>, ? super C> renderer = theColumn.getRenderer() != null ? theColumn.getRenderer()
 				: new ObservableCellRenderer.DefaultObservableCellRenderer<>((r, c) -> String.valueOf(c));
 			boolean rowHovered = theHoveredRow.getAsInt() == row;
@@ -602,7 +595,6 @@ public class ObservableTreeTableModel<T> implements TreeTableModel {
 				}, (C) value, row, column, isSelected, hasFocus, rowHovered, cellHovered, expanded, leaf, null);
 			Component c = renderer.getCellRendererComponent(component, cell,
 				() -> theContext == null ? null : theContext.getEmphaticRegions(modelRow, modelColumn));
-			theLastRender = c;
 
 			if (theColumn.getDecorator() != null) {
 				if (theDecorator == null)
