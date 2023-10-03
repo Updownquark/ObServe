@@ -15,6 +15,8 @@ import java.util.function.Predicate;
 import javax.swing.Icon;
 import javax.swing.JComponent;
 import javax.swing.TransferHandler;
+import javax.swing.event.TableModelEvent;
+import javax.swing.event.TableModelListener;
 import javax.swing.tree.TreePath;
 import javax.swing.tree.TreeSelectionModel;
 
@@ -23,6 +25,7 @@ import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.collect.CollectionChangeEvent;
+import org.observe.collect.CollectionChangeType;
 import org.observe.collect.ObservableCollection;
 import org.observe.swingx.JXTreeTable;
 import org.observe.util.TypeTokens;
@@ -116,8 +119,7 @@ implements TreeTableEditor<F, P> {
 		}
 
 		@Override
-		public void valueForPathChanged(TreePath path, Object newValue) {
-		}
+		public void valueForPathChanged(TreePath path, Object newValue) {}
 
 		@Override
 		public boolean isLeaf(Object node) {
@@ -238,21 +240,19 @@ implements TreeTableEditor<F, P> {
 	@Override
 	protected void syncSelection(JXTreeTable table, AbstractObservableTableModel<BetterList<F>> model,
 		SettableValue<BetterList<F>> selection, boolean enforceSingle) {
-		// TODO Auto-generated method stub
-
+		ObservableTreeTableModel.syncSelection(table, selection, false, Equivalence.DEFAULT, getUntil());
 	}
 
 	@Override
 	protected void syncMultiSelection(JXTreeTable table, AbstractObservableTableModel<BetterList<F>> model,
 		ObservableCollection<BetterList<F>> selection) {
-		// TODO Auto-generated method stub
-
+		if (selection != null)
+			ObservableTreeTableModel.syncSelection(table, selection, getUntil());
 	}
 
 	@Override
 	protected void watchSelection(AbstractObservableTableModel<BetterList<F>> model, JXTreeTable table, Consumer<Object> onSelect) {
-		// TODO Auto-generated method stub
-
+		getEditor().getTreeSelectionModel().addTreeSelectionListener(evt -> onSelect.accept(evt));
 	}
 
 	@Override
@@ -262,15 +262,115 @@ implements TreeTableEditor<F, P> {
 	}
 
 	@Override
-	protected void onVisibleData(Consumer<CollectionChangeEvent<BetterList<F>>> onChange) {
-		// TODO Auto-generated method stub
+	protected void onVisibleData(AbstractObservableTableModel<BetterList<F>> model,
+		Consumer<CollectionChangeEvent<BetterList<F>>> onChange) {
+		TableModelListener listener = new TableModelListener() {
+			@Override
+			public void tableChanged(TableModelEvent e) {
+				if (e.getColumn() == TableModelEvent.ALL_COLUMNS && e.getFirstRow() != TableModelEvent.HEADER_ROW) {
+					CollectionChangeType type = null;
+					List<CollectionChangeEvent.ElementChange<BetterList<F>>> changes = null;
+					switch (e.getType()) {
+					case TableModelEvent.INSERT:
+						type = CollectionChangeType.add;
+						changes = new ArrayList<>();
+						for (int i = e.getFirstRow(); i <= e.getLastRow(); i++)
+							changes.add(new CollectionChangeEvent.ElementChange<>(model.getRow(i, getEditor()), null, i, null));
+						break;
+					case TableModelEvent.DELETE:
+						type = CollectionChangeType.remove;
+						changes = new ArrayList<>();
+						for (int i = e.getFirstRow(); i <= e.getLastRow(); i++) {
+							BetterList<F> row = model.getRow(i, getEditor());
+							changes.add(new CollectionChangeEvent.ElementChange<>(row, row, i, null));
+						}
+						break;
+					case TableModelEvent.UPDATE:
+						type = CollectionChangeType.set;
+						changes = new ArrayList<>();
+						for (int i = e.getFirstRow(); i <= e.getLastRow(); i++) {
+							BetterList<F> row = model.getRow(i, getEditor());
+							changes.add(new CollectionChangeEvent.ElementChange<>(row, row, i, null));
+						}
+						break;
+					}
+					if (type != null) {
+						CollectionChangeEvent<BetterList<F>> event = new CollectionChangeEvent<>(type, changes, e);
+						try (Transaction t = event.use()) {
+							onChange.accept(event);
+						}
+					}
+				}
+			}
+		};
+		getEditor().getModel().addTableModelListener(listener);
+		getUntil().act(__ -> getEditor().getModel().removeTableModelListener(listener));
+	}
 
+	private static class ModelRowImpl<F> implements ModelRow<BetterList<F>> {
+		private final JXTreeTable theTable;
+		private final ObservableTreeTableModel<F> theModel;
+		private int theRowIndex = -1;
+		private BetterList<F> theRowValue;
+
+		ModelRowImpl(JXTreeTable table, ObservableTreeTableModel<F> model) {
+			theTable = table;
+			theModel = model;
+		}
+
+		ModelRowImpl<F> nextRow(BetterList<F> rowValue) {
+			theRowValue = rowValue;
+			theRowIndex++;
+			return this;
+		}
+
+		@Override
+		public BetterList<F> getModelValue() {
+			return theRowValue;
+		}
+
+		@Override
+		public int getRowIndex() {
+			return theRowIndex;
+		}
+
+		@Override
+		public boolean isSelected() {
+			return theTable.isRowSelected(theRowIndex);
+		}
+
+		@Override
+		public boolean hasFocus() {
+			return false;
+		}
+
+		@Override
+		public boolean isRowHovered() {
+			return false;
+		}
+
+		@Override
+		public boolean isExpanded() {
+			return theTable.isExpanded(theRowIndex);
+		}
+
+		@Override
+		public boolean isLeaf() {
+			return theModel.isLeaf(theRowValue.getLast());
+		}
+
+		@Override
+		public String isEnabled() {
+			return null;
+		}
 	}
 
 	@Override
-	protected void forAllVisibleData(Consumer<ModelRow<BetterList<F>>> forEach) {
-		// TODO Auto-generated method stub
-
+	protected void forAllVisibleData(AbstractObservableTableModel<BetterList<F>> model, Consumer<ModelRow<BetterList<F>>> forEach) {
+		JXTreeTable table = getEditor();
+		ModelRowImpl<F> row = new ModelRowImpl<>(table, (ObservableTreeTableModel<F>) model);
+		for (int i = 0; i < table.getRowCount(); i++)
+			forEach.accept(row.nextRow(model.getRow(i, table)));
 	}
 
 	@Override

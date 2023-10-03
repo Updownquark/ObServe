@@ -571,14 +571,18 @@ implements TableBuilder<R, T, P> {
 	}
 
 	@Override
-	protected void onVisibleData(Consumer<CollectionChangeEvent<R>> onChange) {
+	protected void onVisibleData(AbstractObservableTableModel<R> model, Consumer<CollectionChangeEvent<R>> onChange) {
 		theFilteredRows.changes().takeUntil(getUntil()).act(onChange);
 	}
 
-	static class ModelRowImpl<R> implements ModelRow<R> {
+	private static class ModelRowImpl<R> implements ModelRow<R> {
+		private final JTable theTable;
 		private int theRowIndex = -1;
 		private R theRowValue;
-		private JTable theTable;
+
+		ModelRowImpl(JTable table) {
+			theTable = table;
+		}
 
 		ModelRowImpl<R> nextRow(R rowValue) {
 			theRowValue = rowValue;
@@ -628,14 +632,12 @@ implements TableBuilder<R, T, P> {
 	}
 
 	@Override
-	protected void forAllVisibleData(Consumer<ModelRow<R>> forEach) {
+	protected void forAllVisibleData(AbstractObservableTableModel<R> model, Consumer<ModelRow<R>> forEach) {
 		try (Transaction t = theFilteredRows.lock(false, null)) {
-			ModelRowImpl<R> row = new ModelRowImpl<>();
+			ModelRowImpl<R> row = new ModelRowImpl<>(getEditor());
 			for (R rowValue : theFilteredRows)
 				forEach.accept(row.nextRow(rowValue));
 		}
-		// TODO Auto-generated method stub
-
 	}
 
 	private static void handleColumnHeaderClick(ObservableValue<? extends TableContentControl> filter, String columnName, boolean checkType,

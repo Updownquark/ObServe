@@ -317,9 +317,9 @@ implements AbstractTableBuilder<R, T, P>, CollectionWidgetBuilder<R, T, P> {
 
 	protected abstract TransferHandler setUpDnD(T table, SimpleTransferSource<R> dragSource, SimpleTransferAccepter<R, R, R> dragAccepter);
 
-	protected abstract void onVisibleData(Consumer<CollectionChangeEvent<R>> onChange);
+	protected abstract void onVisibleData(AbstractObservableTableModel<R> model, Consumer<CollectionChangeEvent<R>> onChange);
 
-	protected abstract void forAllVisibleData(Consumer<ModelRow<R>> forEach);
+	protected abstract void forAllVisibleData(AbstractObservableTableModel<R> model, Consumer<ModelRow<R>> forEach);
 
 	@Override
 	protected Component createComponent() {
@@ -479,14 +479,14 @@ implements AbstractTableBuilder<R, T, P>, CollectionWidgetBuilder<R, T, P> {
 			for (int c = 0; c < columns.size(); c++) {
 				int[] widths = new int[4]; // min, pref, max, and actual
 				theColumnWidths.add(widths);
-				getColumnWidths(columns.get(c), c, widths, null);
+				getColumnWidths(model, columns.get(c), c, widths, null);
 				TableColumn column = table.getColumnModel().getColumn(table.convertColumnIndexToView(c));
 				column.setMinWidth(widths[0]);
 				column.setMaxWidth(widths[2]);
 				widths[3] = widths[1];
 			}
 			adjustScrollWidths();
-			onVisibleData(evt -> {
+			onVisibleData(model, evt -> {
 				if (theAdaptivePrefRowHeight > 0)
 					adjustHeight();
 				boolean adjusted = false;
@@ -498,7 +498,7 @@ implements AbstractTableBuilder<R, T, P>, CollectionWidgetBuilder<R, T, P> {
 						boolean colAdjust = false;
 						switch (evt.type) {
 						case add:
-							getColumnWidths(column, c, newWidths, evt);
+							getColumnWidths(model, column, c, newWidths, evt);
 							if (newWidths[0] > cw[0]) {
 								colAdjust = true;
 								cw[0] = newWidths[0];
@@ -514,7 +514,7 @@ implements AbstractTableBuilder<R, T, P>, CollectionWidgetBuilder<R, T, P> {
 							break;
 						case remove:
 						case set:
-							getColumnWidths(column, c, newWidths, null);
+							getColumnWidths(model, column, c, newWidths, null);
 							if (newWidths[0] != cw[0]) {
 								colAdjust = true;
 								cw[0] = newWidths[0];
@@ -557,7 +557,7 @@ implements AbstractTableBuilder<R, T, P>, CollectionWidgetBuilder<R, T, P> {
 					case add:
 						int[] widths = new int[4];
 						theColumnWidths.add(change.index, widths);
-						getColumnWidths(change.newValue, change.index, widths, null);
+						getColumnWidths(model, change.newValue, change.index, widths, null);
 						widths[3] = widths[1];
 						adjust = true;
 						break;
@@ -1042,7 +1042,8 @@ implements AbstractTableBuilder<R, T, P>, CollectionWidgetBuilder<R, T, P> {
 		}
 	}
 
-	void getColumnWidths(CategoryRenderStrategy<R, ?> column, int columnIndex, int[] widths, CollectionChangeEvent<R> rowEvent) {
+	void getColumnWidths(AbstractObservableTableModel<R> model, CategoryRenderStrategy<R, ?> column, int columnIndex, int[] widths,
+		CollectionChangeEvent<R> rowEvent) {
 		if (column.isUsingRenderingForSize()) {
 			ObservableCellRenderer<R, ?> renderer = (ObservableCellRenderer<R, ?>) column.getRenderer();
 			if (renderer == null) {
@@ -1071,7 +1072,7 @@ implements AbstractTableBuilder<R, T, P>, CollectionWidgetBuilder<R, T, P> {
 					cc.adjust(min, pref, max);
 				}
 			} else {
-				forAllVisibleData(row -> {
+				forAllVisibleData(model, row -> {
 					Object cellValue = column.getCategoryValue(row.getModelValue());
 					ModelCell<R, Object> cell = new ModelCell.Default<>(row::getModelValue, cellValue, row.getRowIndex(), columnIndex,
 						row.isSelected(), row.hasFocus(), false, false, row.isExpanded(), row.isLeaf(), null);
