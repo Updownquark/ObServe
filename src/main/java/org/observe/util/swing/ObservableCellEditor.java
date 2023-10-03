@@ -462,7 +462,6 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 			ChangeEvent changeEvent = new ChangeEvent(this);
 			for (CellEditorListener listener : theListeners)
 				listener.editingStopped(changeEvent);
-			System.out.println("Stop edit");
 			theEditingCell = null;
 			return true;
 		}
@@ -476,7 +475,6 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 			ChangeEvent changeEvent = new ChangeEvent(this);
 			for (CellEditorListener listener : theListeners)
 				listener.editingCanceled(changeEvent);
-			System.out.println("Cancel edit");
 			theEditingCell = null;
 		}
 
@@ -542,7 +540,6 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 
 			theEditingCell = new ModelCell.Default<>(() -> modelValue, (C) modelValue, rowIndex, 0, selected, selected, hovered, hovered,
 				true, true, null);
-			System.out.println("Editing " + theEditingCell);
 			if (theEditorValue.get() != modelValue)
 				theEditorValue.set((C) modelValue, null);
 			Runnable revert = null;
@@ -589,7 +586,7 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 			String tooltip;
 			if (model instanceof ObservableTableModel) {
 				ObservableTableModel<? extends M> obsModel = (ObservableTableModel<? extends M>) model;
-				modelValue = obsModel.getRow(row); // This is more reliable and thread-safe
+				modelValue = obsModel.getRow(row, table); // This is more reliable and thread-safe
 				MutableCollectionElement<M> modelElement = (MutableCollectionElement<M>) obsModel.getRows()
 					.mutableElement(obsModel.getRows().getElement(row).getElementId());
 				CategoryRenderStrategy<M, C> category = (CategoryRenderStrategy<M, C>) obsModel.getColumn(column);
@@ -619,7 +616,7 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 					.getTreeTableModel();
 				CategoryRenderStrategy<M, C> category = (CategoryRenderStrategy<M, C>) obsModel.getColumn(column);
 				TreePath path = ((JXTreeTable) table).getPathForRow(row);
-				BetterList<?> betterPath = ObservableTreeTableModel.toBetterList(path);
+				BetterList<?> betterPath = ObservableTreeModel.betterPath(path);
 				modelValue = (M) betterPath;
 				MutableCollectionElement<?> treeNodeElement = obsModel.getTreeModel().getElementOfChild((M) path.getLastPathComponent());
 				MutableCollectionElement<M> modelElement = new MutableCollectionElement<M>() {
@@ -709,7 +706,6 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 			}
 			theEditingCell = new ModelCell.Default<>(() -> modelValue, (C) value, row, column, isSelected, isSelected, rowHovered,
 				cellHovered, true, true, null);
-			System.out.println("Editing " + theEditingCell);
 			if (theEditorValue.get() != value)
 				theEditorValue.set((C) value, null);
 
@@ -752,7 +748,6 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 			// TODO See if there's a way to get the information needed for the value filter and tooltip somewhere
 			theEditingCell = new ModelCell.Default<>(() -> (M) value, (C) value, row, 0, isSelected, isSelected, hovered, hovered, expanded,
 				leaf, null);
-			System.out.println("Editing " + theEditingCell);
 			theEditorValue.set((C) value, null);
 
 			Runnable revert = null;
@@ -785,6 +780,15 @@ public interface ObservableCellEditor<M, C> extends TableCellEditor, TreeCellEdi
 
 		public static <C> SettableValue<C> createEditorValue(Function<C, String>[] filter) {
 			return createEditorValue((TypeToken<C>) TypeTokens.get().OBJECT, filter, null);
+		}
+
+		public static <C> SettableValue<C> modifyEditorValue(SettableValue<C> value, Function<C, String>[] filter) {
+			return value.filterAccept(v -> {
+				if (filter[0] != null)
+					return filter[0].apply(v);
+				else
+					return null;
+			});
 		}
 
 		public static <C> SettableValue<C> createEditorValue(TypeToken<C> type, Function<C, String>[] filter,

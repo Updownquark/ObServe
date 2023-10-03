@@ -187,8 +187,8 @@ public class ObservableValueSelector<T, X> extends JPanel {
 	private final DbugAnchor<ObservableValueSelector> anchor = DBUG.instance(this);
 
 	private ObservableValueSelector(ObservableCollection<T> sourceRows, //
-		Consumer<PanelPopulation.TableBuilder<SelectableValue<T, X>, ?>> sourceTable,
-		Consumer<PanelPopulation.TableBuilder<SelectableValue<T, X>, ?>> destTable, //
+		Consumer<PanelPopulation.TableBuilder<SelectableValue<T, X>, ?, ?>> sourceTable,
+		Consumer<PanelPopulation.TableBuilder<SelectableValue<T, X>, ?, ?>> destTable, //
 		Function<? super T, ? extends X> map, boolean reEvalOnUpdate, Observable<?> until, //
 		boolean includedByDefault, Format<TableContentControl> filterFormat, boolean commitOnType, String itemName) {
 		super(null); // No layout
@@ -763,8 +763,8 @@ public class ObservableValueSelector<T, X> extends JPanel {
 	 * @return The builder to build the widget
 	 */
 	public static <T, X> Builder<T, X> build(ObservableCollection<T> sourceRows, //
-		Consumer<PanelPopulation.TableBuilder<SelectableValue<T, X>, ?>> sourceTable, //
-		Consumer<PanelPopulation.TableBuilder<SelectableValue<T, X>, ?>> destTable, //
+		Consumer<PanelPopulation.TableBuilder<SelectableValue<T, X>, ?, ?>> sourceTable, //
+		Consumer<PanelPopulation.TableBuilder<SelectableValue<T, X>, ?, ?>> destTable, //
 		Function<? super T, ? extends X> map) {
 		return new Builder<>(sourceRows, sourceTable, destTable, map);
 	}
@@ -777,8 +777,8 @@ public class ObservableValueSelector<T, X> extends JPanel {
 	 */
 	public static class Builder<T, X> {
 		private final ObservableCollection<T> theSourceRows;
-		private Consumer<PanelPopulation.TableBuilder<SelectableValue<T, X>, ?>> theSourceTable;
-		private Consumer<PanelPopulation.TableBuilder<SelectableValue<T, X>, ?>> theDestTable;
+		private Consumer<PanelPopulation.TableBuilder<SelectableValue<T, X>, ?, ?>> theSourceTable;
+		private Consumer<PanelPopulation.TableBuilder<SelectableValue<T, X>, ?, ?>> theDestTable;
 		private final Function<? super T, ? extends X> theMap;
 		private boolean isReEvalOnUpdate;
 		private Observable<?> theUntil;
@@ -787,8 +787,8 @@ public class ObservableValueSelector<T, X> extends JPanel {
 		private boolean isFilterCommitOnType;
 		private String theItemName;
 
-		Builder(ObservableCollection<T> sourceRows, Consumer<TableBuilder<SelectableValue<T, X>, ?>> sourceTable,
-			Consumer<TableBuilder<SelectableValue<T, X>, ?>> destTable, Function<? super T, ? extends X> map) {
+		Builder(ObservableCollection<T> sourceRows, Consumer<TableBuilder<SelectableValue<T, X>, ?, ?>> sourceTable,
+			Consumer<TableBuilder<SelectableValue<T, X>, ?, ?>> destTable, Function<? super T, ? extends X> map) {
 			theSourceRows = sourceRows;
 			theSourceTable = sourceTable;
 			theDestTable = destTable;

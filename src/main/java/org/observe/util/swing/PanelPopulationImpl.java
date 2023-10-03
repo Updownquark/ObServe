@@ -2403,9 +2403,10 @@ class PanelPopulationImpl {
 						if (selected.isEmpty())
 							text.append("no ").append(StringUtils.pluralize(theWidget.getItemName()));
 						else if (selected.size() == 1) {
-							if (theWidget instanceof SimpleTableBuilder && ((SimpleTableBuilder<R, ?>) theWidget).getNameFunction() != null)
+							if (theWidget instanceof SimpleTableBuilder
+								&& ((SimpleTableBuilder<R, ?, ?>) theWidget).getNameFunction() != null)
 								text.append(theWidget.getItemName()).append(" \"")
-								.append(((SimpleTableBuilder<R, ?>) theWidget).getNameFunction().apply(selected.get(0))).append('"');
+									.append(((SimpleTableBuilder<R, ?, ?>) theWidget).getNameFunction().apply(selected.get(0))).append('"');
 							else
 								text.append("1 ").append(theWidget.getItemName());
 						} else

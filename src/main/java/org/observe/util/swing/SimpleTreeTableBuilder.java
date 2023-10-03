@@ -1,8 +1,6 @@
 package org.observe.util.swing;
 
-import java.awt.BorderLayout;
 import java.awt.Component;
-import java.awt.Dimension;
 import java.awt.datatransfer.Transferable;
 import java.awt.dnd.InvalidDnDOperationException;
 import java.io.IOException;
@@ -14,18 +12,9 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
 
-import javax.swing.BoundedRangeModel;
-import javax.swing.DropMode;
 import javax.swing.Icon;
 import javax.swing.JComponent;
-import javax.swing.JPanel;
-import javax.swing.JScrollPane;
-import javax.swing.JTable;
 import javax.swing.TransferHandler;
-import javax.swing.event.ChangeEvent;
-import javax.swing.event.ChangeListener;
-import javax.swing.event.TableModelEvent;
-import javax.swing.event.TableModelListener;
 import javax.swing.tree.TreePath;
 import javax.swing.tree.TreeSelectionModel;
 
@@ -33,15 +22,14 @@ import org.observe.Equivalence;
 import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
-import org.observe.Subscription;
+import org.observe.collect.CollectionChangeEvent;
 import org.observe.collect.ObservableCollection;
 import org.observe.swingx.JXTreeTable;
 import org.observe.util.TypeTokens;
-import org.observe.util.swing.PanelPopulation.AbstractComponentEditor;
-import org.observe.util.swing.PanelPopulation.DataAction;
+import org.observe.util.swing.AbstractObservableTableModel.TableRenderContext;
+import org.observe.util.swing.Dragging.SimpleTransferAccepter;
+import org.observe.util.swing.Dragging.SimpleTransferSource;
 import org.observe.util.swing.PanelPopulation.TreeTableEditor;
-import org.observe.util.swing.PanelPopulationImpl.SimpleDataAction;
-import org.observe.util.swing.PanelPopulationImpl.SimpleHPanel;
 import org.qommons.LambdaUtils;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
@@ -53,7 +41,6 @@ import org.qommons.collect.ElementId;
 import org.qommons.collect.MutableCollectionElement;
 import org.qommons.tree.BetterTreeList;
 
-import com.google.common.reflect.TypeParameter;
 import com.google.common.reflect.TypeToken;
 
 /**
@@ -67,7 +54,7 @@ import com.google.common.reflect.TypeToken;
  * same signatures, classes that use JTree can't use JXTreeTable, so all the code has to be duplicated and I can't see any way around this.
  * Maybe someone can some day.
  */
-class SimpleTreeTableBuilder<F, P extends SimpleTreeTableBuilder<F, P>> extends AbstractComponentEditor<JXTreeTable, P>
+class SimpleTreeTableBuilder<F, P extends SimpleTreeTableBuilder<F, P>> extends AbstractSimpleTableBuilder<BetterList<F>, JXTreeTable, P>
 implements TreeTableEditor<F, P> {
 	public static <F> SimpleTreeTableBuilder<F, ?> createTreeTable(ObservableValue<F> root,
 		Function<? super F, ? extends ObservableCollection<? extends F>> children, Observable<?> until) {
@@ -92,27 +79,12 @@ implements TreeTableEditor<F, P> {
 	private Predicate<? super F> theLeafTest;
 	private Predicate<? super BetterList<F>> theLeafTest2;
 
-	private String theItemName;
-
 	private SettableValue<F> theValueSingleSelection;
-	private SettableValue<BetterList<F>> thePathSingleSelection;
 	private boolean isSingleSelection;
 	private ObservableCollection<F> theValueMultiSelection;
-	private ObservableCollection<BetterList<F>> thePathMultiSelection;
-	private ObservableValue<String> theDisablement;
 	private boolean isRootVisible;
-	private List<SimpleDataAction<BetterList<F>, ?>> theActions;
-	private boolean theActionsOnTop;
 
-	private Function<? super F, String> theNameFunction;
 	private CategoryRenderStrategy<BetterList<F>, F> theTreeColumn;
-	private ObservableCollection<? extends CategoryRenderStrategy<BetterList<F>, ?>> theColumns;
-	private List<ObservableTableModel.RowMouseListener<? super BetterList<F>>> theMouseListeners;
-	private boolean withColumnHeader;
-	private int theAdaptiveMinRowHeight;
-	private int theAdaptivePrefRowHeight;
-	private int theAdaptiveMaxRowHeight;
-	private boolean isScrollable;
 
 	private SimpleTreeTableBuilder(ObservableValue<F> root, Function<? super F, ? extends ObservableCollection<? extends F>> children1,
 		Function<? super BetterList<F>, ? extends ObservableCollection<? extends F>> children2,
@@ -124,12 +96,8 @@ implements TreeTableEditor<F, P> {
 		theChildren2 = children2;
 		theChildren3 = children3;
 		isRootVisible = true;
-		theActions = new ArrayList<>();
-		withColumnHeader = true;
-		isScrollable = true;
 		theTreeColumn = new CategoryRenderStrategy<>("Tree", root.getType(),
 			LambdaUtils.printableFn(BetterList::getLast, "BetterList::getLast", null));
-		theActionsOnTop = true;
 	}
 
 	class PPTreeModel extends ObservableTreeModel<F> {
@@ -174,64 +142,13 @@ implements TreeTableEditor<F, P> {
 	}
 
 	@Override
-	public P disableWith(ObservableValue<String> disabled) {
-		if (theDisablement == null)
-			theDisablement = disabled;
-		else
-			theDisablement = ObservableValue.firstValue(TypeTokens.get().STRING, msg -> msg != null, () -> null, theDisablement, disabled);
-		return (P) this;
-	}
-
-	@Override
-	public P withRemove(Consumer<? super List<? extends BetterList<F>>> deletion, Consumer<DataAction<BetterList<F>, ?>> actionMod) {
+	protected Consumer<? super List<? extends BetterList<F>>> defaultDeletion() {
 		throw new UnsupportedOperationException("Not yet implemented");
-	}
-
-	@Override
-	public P withMultiAction(String actionName, Consumer<? super List<? extends BetterList<F>>> action,
-		Consumer<DataAction<BetterList<F>, ?>> actionMod) {
-		SimpleDataAction<BetterList<F>, ?> ta = new SimpleDataAction<>(actionName, this, action, this::getSelection, true, getUntil());
-		actionMod.accept(ta);
-		theActions.add(ta);
-		return (P) this;
-	}
-
-	@Override
-	public P withActionsOnTop(boolean actionsOnTop) {
-		theActionsOnTop = actionsOnTop;
-		return (P) this;
-	}
-
-	@Override
-	public P withItemName(String itemName) {
-		theItemName = itemName;
-		return (P) this;
-	}
-
-	@Override
-	public String getItemName() {
-		if (theItemName == null)
-			return "item";
-		else
-			return theItemName;
 	}
 
 	@Override
 	public ObservableValue<? extends F> getRoot() {
 		return theRoot;
-	}
-
-	@Override
-	public P withSelection(SettableValue<BetterList<F>> selection, boolean enforceSingleSelection) {
-		thePathSingleSelection = selection;
-		isSingleSelection = enforceSingleSelection;
-		return (P) this;
-	}
-
-	@Override
-	public P withSelection(ObservableCollection<BetterList<F>> selection) {
-		thePathMultiSelection = selection;
-		return (P) this;
 	}
 
 	@Override
@@ -276,41 +193,6 @@ implements TreeTableEditor<F, P> {
 	}
 
 	@Override
-	public ObservableValue<String> getTooltip() {
-		return null;
-	}
-
-	@Override
-	protected Component createFieldNameLabel(Observable<?> until) {
-		return null;
-	}
-
-	@Override
-	protected Component createPostLabel(Observable<?> until) {
-		return null;
-	}
-
-	Function<? super F, String> getNameFunction() {
-		return theNameFunction;
-	}
-
-	@Override
-	public P withColumns(ObservableCollection<? extends CategoryRenderStrategy<BetterList<F>, ?>> columns) {
-		theColumns = columns;
-		return (P) this;
-	}
-
-	@Override
-	public P withColumn(CategoryRenderStrategy<BetterList<F>, ?> column) {
-		if (theColumns == null)
-			theColumns = ObservableCollection.create(new TypeToken<CategoryRenderStrategy<BetterList<F>, ?>>() {
-			}.where(new TypeParameter<F>() {
-			}, theRoot.getType()));
-		((ObservableCollection<CategoryRenderStrategy<BetterList<F>, ?>>) theColumns).add(column);
-		return (P) this;
-	}
-
-	@Override
 	public CategoryRenderStrategy<BetterList<F>, F> getRender() {
 		return theTreeColumn;
 	}
@@ -322,183 +204,87 @@ implements TreeTableEditor<F, P> {
 	}
 
 	@Override
-	public P withColumnHeader(boolean columnHeader) {
-		withColumnHeader = columnHeader;
-		return (P) this;
+	protected TypeToken<BetterList<F>> getRowType() {
+		return TypeTokens.get().keyFor(BetterList.class).<BetterList<F>> parameterized(theRoot.getType());
 	}
 
 	@Override
-	public P withAdaptiveHeight(int minRows, int prefRows, int maxRows) {
-		if (minRows < 0 || minRows > prefRows || prefRows > maxRows)
-			throw new IllegalArgumentException("Required: 0<=min<=pref<=max: " + minRows + ", " + prefRows + ", " + maxRows);
-		theAdaptiveMinRowHeight = minRows;
-		theAdaptivePrefRowHeight = prefRows;
-		theAdaptiveMaxRowHeight = maxRows;
-		return (P) this;
-	}
-
-	@Override
-	public P scrollable(boolean scrollable) {
-		isScrollable = scrollable;
-		return (P) this;
-	}
-
-	@Override
-	protected Component createComponent() {
-		if (theColumns == null)
-			throw new IllegalStateException("No columns configured");
+	protected ObservableCollection<? extends CategoryRenderStrategy<BetterList<F>, ?>> createColumnSet() {
 		TypeToken<CategoryRenderStrategy<BetterList<F>, ?>> columnType = TypeTokens.get().keyFor(CategoryRenderStrategy.class)
 			.parameterized(//
 				TypeTokens.get().keyFor(BetterList.class).parameterized(theRoot.getType()), //
 				TypeTokens.get().WILDCARD);
 		if (theTreeColumn == null)
 			theTreeColumn = new CategoryRenderStrategy<>("Tree", theRoot.getType(), f -> f.getLast());
-		ObservableCollection<? extends CategoryRenderStrategy<BetterList<F>, ?>> columns = theColumns;
+		ObservableCollection<? extends CategoryRenderStrategy<BetterList<F>, ?>> columns = getColumns();
 		columns = columns.safe(ThreadConstraint.EDT, getUntil());
 		columns = ObservableCollection.flattenCollections(columnType, //
 			ObservableCollection.of(columnType, theTreeColumn), //
 			columns).collect();
-		ObservableTreeTableModel<F> model = new ObservableTreeTableModel<>(new PPTreeModel(), columns);
-		JXTreeTable table = getEditor();
-		table.setTreeTableModel(model);
-		if (theDisablement != null) {
-			theDisablement.changes().takeUntil(getUntil()).act(evt -> {
-				// Let's not worry about tooltip here. We could mess up cell tooltips and stuff.
-				table.setEnabled(evt.getNewValue() == null);
-			});
-		}
-		if (theMouseListeners != null) {
-			for (ObservableTableModel.RowMouseListener<? super BetterList<F>> listener : theMouseListeners)
-				model.addMouseListener(listener);
-		}
-		if (!withColumnHeader)
-			table.setTableHeader(null);
-		Subscription sub = ObservableTreeTableModel.hookUp(table, model);
-		getUntil().take(1).act(__ -> sub.unsubscribe());
+		return columns;
+	}
 
-		JScrollPane scroll = new JScrollPane(table);
-		if (isScrollable) {
-			// Default scroll increments are ridiculously small
-			scroll.getVerticalScrollBar().setUnitIncrement(10);
-			scroll.getHorizontalScrollBar().setUnitIncrement(10);
-			if (theAdaptivePrefRowHeight > 0) {
-				class HeightAdjustmentListener implements TableModelListener, ChangeListener {
-					private boolean isHSBVisible;
-					private boolean isVSBVisible;
+	@Override
+	protected AbstractObservableTableModel<BetterList<F>> createTableModel(
+		ObservableCollection<? extends CategoryRenderStrategy<BetterList<F>, ?>> columns) {
+		return new ObservableTreeTableModel<>(new PPTreeModel(), columns);
+	}
 
-					@Override
-					public void tableChanged(TableModelEvent e) {
-						switch (e.getType()) {
-						case TableModelEvent.DELETE:
-							if (e.getFirstRow() < theAdaptiveMaxRowHeight)
-								adjustHeight();
-							break;
-						case TableModelEvent.INSERT:
-							if (e.getFirstRow() < theAdaptiveMaxRowHeight)
-								adjustHeight();
-							break;
-						default:
-							if (e.getFirstRow() < theAdaptiveMaxRowHeight)
-								adjustHeight();
-							break;
-						}
-					}
+	@Override
+	protected TableRenderContext createTableRenderContext() {
+		return null;
+	}
 
-					@Override
-					public void stateChanged(ChangeEvent e) {
-						BoundedRangeModel hbm = scroll.getHorizontalScrollBar().getModel();
-						if (hbm.getValueIsAdjusting())
-							return;
-						if (isHSBVisible != (hbm.getExtent() > hbm.getMaximum())) {
-							adjustHeight();
-						} else {
-							BoundedRangeModel vbm = scroll.getVerticalScrollBar().getModel();
-							if (vbm.getValueIsAdjusting())
-								return;
-							if (isVSBVisible != (vbm.getExtent() > vbm.getMaximum()))
-								adjustHeight();
-						}
-					}
+	@Override
+	protected void syncSelection(JXTreeTable table, AbstractObservableTableModel<BetterList<F>> model,
+		SettableValue<BetterList<F>> selection, boolean enforceSingle) {
+		// TODO Auto-generated method stub
 
-					void adjustHeight() {
-						int minHeight = 0, prefHeight = 0, maxHeight = 0;
-						if (table.getTableHeader() != null && table.getTableHeader().isVisible()) {
-							minHeight += table.getTableHeader().getPreferredSize().height;
-							maxHeight += table.getTableHeader().getPreferredSize().height;
-						}
-						int rowCount = table.getRowCount();
-						for (int i = 0; i < theAdaptiveMaxRowHeight && i < rowCount; i++) {
-							int rowHeight = table.getRowHeight(i);
-							if (i < theAdaptiveMinRowHeight)
-								minHeight += rowHeight;
-							if (i < theAdaptivePrefRowHeight)
-								prefHeight += rowHeight;
-							if (i < theAdaptiveMaxRowHeight)
-								maxHeight += rowHeight;
-						}
-						BoundedRangeModel hbm = scroll.getHorizontalScrollBar().getModel();
-						isHSBVisible = hbm.getExtent() > hbm.getMaximum();
-						if (isHSBVisible) {
-							int sbh = scroll.getHorizontalScrollBar().getHeight();
-							minHeight += sbh;
-							maxHeight += sbh;
-						}
-						BoundedRangeModel vbm = scroll.getVerticalScrollBar().getModel();
-						isVSBVisible = vbm.getExtent() > vbm.getMaximum();
-						Dimension psvs = table.getPreferredScrollableViewportSize();
-						if (psvs.height != prefHeight) {
-							// int w = 0;
-							// for (int c = 0; c < table.getColumnModel().getColumnCount(); c++)
-							// w += table.getColumnModel().getColumn(c).getWidth();
-							table.setPreferredScrollableViewportSize(new Dimension(psvs.width, prefHeight));
-						}
-						Dimension min = scroll.getMinimumSize();
-						if (min.height != minHeight) {
-							int w = 10;
-							if (isVSBVisible)
-								w += scroll.getVerticalScrollBar().getWidth();
-							scroll.getViewport().setMinimumSize(new Dimension(w, minHeight));
-						}
-						Dimension max = scroll.getMaximumSize();
-						if (max.height != maxHeight) {
-							int w = 0;
-							if (isVSBVisible)
-								w += scroll.getVerticalScrollBar().getWidth();
-							for (int c = 0; c < model.getColumnCount(); c++) {
-								w += table.getColumnModel().getColumn(c).getMaxWidth();
-								if (w < 0) {
-									w = Integer.MAX_VALUE;
-									break;
-								}
-							}
-							scroll.getViewport().setMaximumSize(new Dimension(w, maxHeight));
-						}
-						if (scroll.getParent() != null)
-							scroll.getParent().revalidate();
-					}
-				}
-				HeightAdjustmentListener hal = new HeightAdjustmentListener();
-				table.getModel().addTableModelListener(hal);
-				scroll.getHorizontalScrollBar().getModel().addChangeListener(hal);
-				scroll.getVerticalScrollBar().getModel().addChangeListener(hal);
-				hal.adjustHeight();
-			}
-		} else {
-			scroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
-			scroll.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_NEVER);
-		}
+	}
 
+	@Override
+	protected void syncMultiSelection(JXTreeTable table, AbstractObservableTableModel<BetterList<F>> model,
+		ObservableCollection<BetterList<F>> selection) {
+		// TODO Auto-generated method stub
+
+	}
+
+	@Override
+	protected void watchSelection(AbstractObservableTableModel<BetterList<F>> model, JXTreeTable table, Consumer<Object> onSelect) {
+		// TODO Auto-generated method stub
+
+	}
+
+	@Override
+	protected TransferHandler setUpDnD(JXTreeTable table, SimpleTransferSource<BetterList<F>> dragSource,
+		SimpleTransferAccepter<BetterList<F>, BetterList<F>, BetterList<F>> dragAccepter) {
+		return new TreeTableBuilderTransferHandler(table);
+	}
+
+	@Override
+	protected void onVisibleData(Consumer<CollectionChangeEvent<BetterList<F>>> onChange) {
+		// TODO Auto-generated method stub
+
+	}
+
+	@Override
+	protected void forAllVisibleData(Consumer<ModelRow<BetterList<F>>> forEach) {
+		// TODO Auto-generated method stub
+
+	}
+
+	@Override
+	protected Component createComponent() {
+		Component comp = super.createComponent();
+
+		ObservableTreeTableModel<F> model = (ObservableTreeTableModel<F>) getEditor().getTreeTableModel();
 		// Selection
-		if (thePathMultiSelection != null)
-			ObservableTreeTableModel.syncSelection(getEditor(), thePathMultiSelection, getUntil());
 		if (theValueMultiSelection != null)
 			ObservableTreeTableModel.syncSelection(
 				getEditor(), theValueSingleSelection.safe(ThreadConstraint.EDT, getUntil()).transformReversible(//
 					TypeTokens.get().keyFor(BetterList.class).<BetterList<F>> parameterized(getRoot().getType()), tx -> tx
 					.map(v -> model.getTreeModel().getBetterPath(v, true)).withReverse(path -> path == null ? null : path.getLast())),
 				false, Equivalence.DEFAULT, getUntil());
-		if (thePathSingleSelection != null)
-			ObservableTreeTableModel.syncSelection(getEditor(), thePathSingleSelection, false, Equivalence.DEFAULT, getUntil());
 		if (theValueSingleSelection != null)
 			ObservableTreeTableModel.syncSelection(getEditor(), theValueSingleSelection.transformReversible(//
 				TypeTokens.get().keyFor(BetterList.class).<BetterList<F>> parameterized(getRoot().getType()),
@@ -508,62 +294,7 @@ implements TreeTableEditor<F, P> {
 			getEditor().getSelectionModel().setSelectionMode(TreeSelectionModel.SINGLE_TREE_SELECTION);
 
 		getEditor().setRootVisible(isRootVisible);
-
-		Component comp = scroll;
-		if (!theActions.isEmpty()) {
-			SimpleDataAction<BetterList<F>, ?>[] actions = theActions.toArray(new SimpleDataAction[theActions.size()]);
-			getEditor().getTreeSelectionModel().addTreeSelectionListener(evt -> {
-				List<BetterList<F>> selection = getSelection();
-				for (SimpleDataAction<BetterList<F>, ?> action : actions)
-					action.updateSelection(selection, evt);
-			});
-			boolean hasPopups = false, hasButtons = false;
-			for (SimpleDataAction<BetterList<F>, ?> action : actions) {
-				if (action.isPopup())
-					hasPopups = true;
-				if (action.isButton())
-					hasButtons = true;
-			}
-			if (hasPopups) {
-				withPopupMenu(popupMenu -> {
-					for (SimpleDataAction<BetterList<F>, ?> action : actions) {
-						if (action.isPopup())
-							popupMenu.withAction("Action", action.theObservableAction, action::modifyButtonEditor);
-					}
-				});
-			}
-			if (hasButtons) {
-				SimpleHPanel<JPanel, ?> buttonPanel = new SimpleHPanel<>(null,
-					new JPanel(new JustifiedBoxLayout(false).setMainAlignment(JustifiedBoxLayout.Alignment.LEADING)), getUntil());
-				for (SimpleDataAction<BetterList<F>, ?> action : actions) {
-					if (((SimpleDataAction<?, ?>) action).isButton())
-						((SimpleDataAction<BetterList<F>, ?>) action).addButton(buttonPanel);
-				}
-				JPanel treePanel = new JPanel(new BorderLayout());
-				treePanel.add(buttonPanel.getComponent(), theActionsOnTop ? BorderLayout.NORTH : BorderLayout.SOUTH);
-				treePanel.add(scroll, BorderLayout.CENTER);
-				comp = treePanel;
-			}
-		}
-		table.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
-
-		// Set up transfer handling (DnD, copy/paste)
-		boolean draggable = theTreeColumn.getDragSource() != null || theTreeColumn.getMutator().getDragAccepter() != null;
-		for (CategoryRenderStrategy<BetterList<F>, ?> column : theColumns) {
-			// TODO check the draggable flag
-			if (column.getDragSource() != null || column.getMutator().getDragAccepter() != null) {
-				draggable = true;
-				break;
-			}
-		}
-		if (draggable) {
-			table.setDragEnabled(true);
-			table.setDropMode(DropMode.INSERT_ROWS);
-			TreeTableBuilderTransferHandler handler = new TreeTableBuilderTransferHandler(table);
-			table.setTransferHandler(handler);
-		}
-
-		return decorate(comp);
+		return comp;
 	}
 
 	class TreeTableBuilderTransferHandler extends TransferHandler {
@@ -575,7 +306,7 @@ implements TreeTableEditor<F, P> {
 
 		@Override
 		protected Transferable createTransferable(JComponent c) {
-			try (Transaction colT = theColumns.lock(false, null)) {
+			try (Transaction colT = getColumns().lock(false, null)) {
 				if (theTable.getSelectedRowCount() == 0)
 					return null;
 				List<BetterList<F>> selectedRows = new ArrayList<>(theTable.getSelectedRowCount());
@@ -587,7 +318,7 @@ implements TreeTableEditor<F, P> {
 				int columnIndex = theTable.getSelectedColumn();
 				if (columnIndex >= 0)
 					columnIndex = theTable.convertColumnIndexToModel(columnIndex);
-				CategoryRenderStrategy<BetterList<F>, ?> column = columnIndex >= 0 ? theColumns.get(columnIndex) : null;
+				CategoryRenderStrategy<BetterList<F>, ?> column = columnIndex >= 0 ? getColumns().get(columnIndex) : null;
 				Transferable columnTransfer = null;
 				if (column != null && column.getDragSource() != null) {
 					Transferable[] columnTs = new Transferable[selectedRows.size()];
@@ -603,13 +334,13 @@ implements TreeTableEditor<F, P> {
 		@Override
 		public int getSourceActions(JComponent c) {
 			int actions = 0;
-			try (Transaction colT = theColumns.lock(false, null)) {
+			try (Transaction colT = getColumns().lock(false, null)) {
 				if (theTable.getSelectedRowCount() == 0)
 					return actions;
 				int columnIndex = theTable.getSelectedColumn();
 				if (columnIndex >= 0)
 					columnIndex = theTable.convertColumnIndexToModel(columnIndex);
-				CategoryRenderStrategy<BetterList<F>, ?> column = columnIndex >= 0 ? theColumns.get(columnIndex) : null;
+				CategoryRenderStrategy<BetterList<F>, ?> column = columnIndex >= 0 ? getColumns().get(columnIndex) : null;
 				if (column != null && column.getDragSource() != null) {
 					actions |= column.getDragSource().getSourceActions();
 				}
@@ -631,7 +362,7 @@ implements TreeTableEditor<F, P> {
 
 		@Override
 		public boolean canImport(TransferSupport support) {
-			try (Transaction colT = theColumns.lock(false, null)) {
+			try (Transaction colT = getColumns().lock(false, null)) {
 				int rowIndex;
 				if (support.isDrop()) {
 					rowIndex = theTable.rowAtPoint(support.getDropLocation().getDropPoint());
@@ -673,7 +404,7 @@ implements TreeTableEditor<F, P> {
 					else if (columnIndex == 0)
 						column = theTreeColumn;
 					else
-						column = theColumns.get(columnIndex - 1);
+						column = getColumns().get(columnIndex - 1);
 					BetterList<F> parentPath = BetterTreeList.<F> build().build();
 					parentPath.addAll(path.subList(0, path.size() - 1));
 					if (canImport(support, parentPath, children, targetRow, rowIndex, column, false))
@@ -760,7 +491,7 @@ implements TreeTableEditor<F, P> {
 					return false;
 				boolean selected = theTable.isRowSelected(rowIndex);
 				ModelCell<BetterList<F>, C> cell = new ModelCell.Default<>(() -> BetterCollections.unmodifiableList(parentPath), oldValue,
-					rowIndex, theColumns.indexOf(column), selected, selected, false, false, theTable.isExpanded(rowIndex),
+					rowIndex, getColumns().indexOf(column) + 1, selected, selected, false, false, theTable.isExpanded(rowIndex),
 					theLeafTest.test(rowEl.get()), null);
 				if (!column.getMutator().getDragAccepter().canAccept(cell, support, false))
 					return false;
@@ -805,7 +536,7 @@ implements TreeTableEditor<F, P> {
 				if (!column.getMutator().isEditable(root, oldValue))
 					return false;
 				boolean selected = theTable.isRowSelected(rowIndex);
-				ModelCell<BetterList<F>, C> cell = new ModelCell.Default<>(() -> root, oldValue, rowIndex, theColumns.indexOf(column),
+				ModelCell<BetterList<F>, C> cell = new ModelCell.Default<>(() -> root, oldValue, rowIndex, getColumns().indexOf(column) + 1,
 					selected, selected, false, false, theTable.isExpanded(rowIndex), theLeafTest.test(root.getLast()), null);
 				if (!column.getMutator().getDragAccepter().canAccept(cell, support, false))
 					return false;
@@ -888,7 +619,7 @@ implements TreeTableEditor<F, P> {
 		@Override
 		public boolean importData(TransferSupport support) {
 			try (// Transaction rowT = getRoot().lock(true, support); // Don't know what to lock here
-				Transaction colT = theColumns.lock(false, null)) {
+				Transaction colT = getColumns().lock(false, null)) {
 				int rowIndex;
 				if (support.isDrop()) {
 					rowIndex = theTable.rowAtPoint(support.getDropLocation().getDropPoint());
@@ -930,7 +661,7 @@ implements TreeTableEditor<F, P> {
 					else if (columnIndex == 0)
 						column = theTreeColumn;
 					else
-						column = theColumns.get(columnIndex - 1);
+						column = getColumns().get(columnIndex - 1);
 					BetterList<F> parentPath = BetterTreeList.<F> build().build();
 					parentPath.addAll(path.subList(0, path.size() - 1));
 					if (canImport(support, parentPath, children, targetRow, rowIndex, column, true)) {

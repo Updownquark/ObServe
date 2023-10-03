@@ -57,7 +57,7 @@ implements PanelPopulation.PanelPopulator<JPanel, AbstractQuickContainerPopulato
 	}
 
 	@Override
-	public <R> AbstractQuickContainerPopulator addTable(ObservableCollection<R> rows, Consumer<TableBuilder<R, ?>> table) {
+	public <R> AbstractQuickContainerPopulator addTable(ObservableCollection<R> rows, Consumer<TableBuilder<R, ?, ?>> table) {
 		return addHPanel(null, new JustifiedBoxLayout(true).mainJustified().crossJustified(), p -> p.addTable(rows, table));
 	}
 

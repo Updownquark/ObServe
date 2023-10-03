@@ -734,7 +734,7 @@ public class QuickBaseSwing implements QuickInterpretation {
 			TabularWidget.TabularContext<R> ctx = new TabularWidget.TabularContext.Default<>(rowType,
 				quick.reporting().getPosition().toShortString());
 			quick.setContext(ctx);
-			TableBuilder<R, ?>[] parent = new TableBuilder[1];
+			TableBuilder<R, ?, ?>[] parent = new TableBuilder[1];
 			ObservableCollection<InterpretedSwingTableColumn<R, ?>> columns = quick.getAllColumns().flow()//
 				.map((Class<InterpretedSwingTableColumn<R, ?>>) (Class<?>) InterpretedSwingTableColumn.class, column -> {
 					try {

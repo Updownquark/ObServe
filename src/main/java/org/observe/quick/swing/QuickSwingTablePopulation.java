@@ -384,8 +384,10 @@ class QuickSwingTablePopulation {
 				if (theColumn.getEditing().isEditable() != null) {
 					mutation.editableIf((rowValue, colValue) -> {
 						try (Transaction t = QuickCoreSwing.rendering()) {
-							theEditContext.getActiveValue().set(rowValue, null);
-							theEditContext.getEditColumnValue().set(colValue, null);
+							if (theEditContext.getActiveValue().get() != rowValue)
+								theEditContext.getActiveValue().set(rowValue, null);
+							if (theEditContext.getEditColumnValue() != colValue)
+								theEditContext.getEditColumnValue().set(colValue, null);
 							theEditContext.getRowIndex().set(0, null);
 							theEditContext.getColumnIndex().set(0, null);
 							return theColumn.getEditing().isEditable().get() == null;
@@ -457,7 +459,9 @@ class QuickSwingTablePopulation {
 		String isEditAcceptable(ModelCell<R, C> cell, C editValue) {
 			if (cell == null)
 				return "Nothing being edited";
-			setCellContext(cell, theRenderTableContext, true);
+			setCellContext(cell, theRenderTableContext, false);
+			theEditContext.getActiveValue().set(cell.getModelValue(), null);
+			theEditContext.getEditColumnValue().set(editValue, null);
 			return theColumn.getEditing().getFilteredColumnEditValue().isAcceptable(editValue);
 		}
 

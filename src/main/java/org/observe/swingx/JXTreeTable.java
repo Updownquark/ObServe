@@ -81,7 +81,6 @@ import org.jdesktop.swingx.rollover.RolloverProducer;
 import org.jdesktop.swingx.rollover.RolloverRenderer;
 import org.jdesktop.swingx.tree.DefaultXTreeCellRenderer;
 import org.jdesktop.swingx.treetable.DefaultTreeTableModel;
-import org.jdesktop.swingx.treetable.TreeTableCellEditor;
 import org.jdesktop.swingx.treetable.TreeTableModel;
 import org.jdesktop.swingx.util.Contract;
 
@@ -89,7 +88,7 @@ import org.jdesktop.swingx.util.Contract;
  * Andrew: This is straight copied from https://github.com/tmyroadctfig/swingx.  I'm pulling in swingx via Maven, but the latest version on
  * Maven Central is 1.6.1.  This is from the latest (I think I can say that confidently, since the latest at this point is over 9 years old),
  * version 1.6.6.  It contains some bugfixes I need.
- * 
+ *
  * <p><code>JXTreeTable</code> is a specialized {@link javax.swing.JTable table}
  * consisting of a single column in which to display hierarchical data, and any
  * number of other columns in which to display regular data. The interface for
@@ -211,7 +210,12 @@ public class JXTreeTable extends JXTable {
 		// no grid
 		setShowGrid(false, false);
 
-		hierarchicalEditor = new TreeTableCellEditor(renderer);
+		hierarchicalEditor = new TreeTableCellEditor(renderer, () -> {
+			if (getColumnModel().getColumnCount() > 0)
+				return getColumnModel().getColumn(0).getCellEditor();
+			else
+				return null;
+		});
 
 		//        // No grid.
 		//        setShowGrid(false); // superclass default is "true"

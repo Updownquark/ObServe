@@ -133,7 +133,7 @@ public class PanelPopulation {
 		return new PanelPopulationImpl.SimpleHPanel<>(null, panel, until == null ? Observable.empty() : until);
 	}
 
-	public static <R> TableBuilder<R, ?> buildTable(ObservableCollection<R> rows) {
+	public static <R> TableBuilder<R, ?, ?> buildTable(ObservableCollection<R> rows) {
 		if (!EventQueue.isDispatchThread())
 			System.err.println(
 				"Calling panel population off of the EDT from " + BreakpointHere.getCodeLine(1) + "--could cause threading problems!!");
@@ -165,7 +165,7 @@ public class PanelPopulation {
 	}
 
 	public interface ContainerPopulator<C extends Container, P extends ContainerPopulator<C, P>> extends ComponentEditor<C, P> {
-		<R> P addTable(ObservableCollection<R> rows, Consumer<TableBuilder<R, ?>> table);
+		<R> P addTable(ObservableCollection<R> rows, Consumer<TableBuilder<R, ?, ?>> table);
 
 		<F> P addTree(ObservableValue<? extends F> root, Function<? super F, ? extends ObservableCollection<? extends F>> children,
 			Consumer<TreeEditor<F, ?>> modify);
@@ -778,8 +778,8 @@ public class PanelPopulation {
 		}
 
 		@Override
-		default <R> P addTable(ObservableCollection<R> rows, Consumer<TableBuilder<R, ?>> table) {
-			SimpleTableBuilder<R, ?> tb = new SimpleTableBuilder<>(rows, getUntil());
+		default <R> P addTable(ObservableCollection<R> rows, Consumer<TableBuilder<R, ?, ?>> table) {
+			SimpleTableBuilder<R, JTable, ?> tb = new SimpleTableBuilder<>(rows, getUntil());
 			table.accept(tb);
 			doAdd(tb, null, null, false);
 			return (P) this;
@@ -1736,6 +1736,11 @@ public class PanelPopulation {
 	}
 
 	public interface AbstractTableBuilder<R, C extends Component, P extends AbstractTableBuilder<R, C, P>> {
+		static final DbugAnchorType<AbstractTableBuilder> DBUG = Dbug.common().anchor(AbstractTableBuilder.class, a -> a//
+			.withField("type", true, false, TypeTokens.get().keyFor(TypeToken.class).wildCard())//
+			.withEvent("create").withEvent("adjustWidth").withEvent("layoutColumns").withEvent("adjustHeight")//
+			);
+
 		P withColumns(ObservableCollection<? extends CategoryRenderStrategy<R, ?>> columns);
 
 		P withColumn(CategoryRenderStrategy<R, ?> column);
@@ -1753,21 +1758,24 @@ public class PanelPopulation {
 			return withColumn(name, TypeTokens.get().of(type), accessor, column);
 		}
 
+		P withTableOption(Consumer<? super PanelPopulator<?, ?>> panel);
+
 		P withColumnHeader(boolean columnHeader);
 
 		P withAdaptiveHeight(int minRows, int prefRows, int maxRows);
 
 		P scrollable(boolean scrollable);
+
+		P dragSourceRow(Consumer<? super Dragging.TransferSource<R>> source);
+
+		P dragAcceptRow(Consumer<? super Dragging.TransferAccepter<R, R, R>> accept);
+
+		P withMouseListener(ObservableTableModel.RowMouseListener<? super R> listener);
 	}
 
-	public interface TableBuilder<R, P extends TableBuilder<R, P>>
-	extends CollectionWidgetBuilder<R, JTable, P>, ListWidgetBuilder<R, JTable, P>, AbstractTableBuilder<R, JTable, P> {
+	public interface TableBuilder<R, T extends JTable, P extends TableBuilder<R, T, P>>
+	extends CollectionWidgetBuilder<R, T, P>, ListWidgetBuilder<R, T, P>, AbstractTableBuilder<R, T, P> {
 		@SuppressWarnings("rawtypes")
-		static final DbugAnchorType<TableBuilder> DBUG = Dbug.common().anchor(TableBuilder.class, a -> a//
-			.withField("type", true, false, TypeTokens.get().keyFor(TypeToken.class).wildCard())//
-			.withEvent("create").withEvent("adjustWidth").withEvent("layoutColumns").withEvent("adjustHeight")//
-			);
-
 		default P withNameColumn(Function<? super R, String> getName, BiConsumer<? super R, String> setName, boolean unique,
 			Consumer<CategoryRenderStrategy<R, String>> column) {
 			return withColumn("Name", String.class, getName, col -> {
@@ -1794,15 +1802,13 @@ public class PanelPopulation {
 			});
 		}
 
-		P withInitialSelection(Predicate<? super R> initSelection);
-
 		P withIndexColumn(String columnName, Consumer<CategoryRenderStrategy<R, Integer>> column);
 
 		<C> P withDynamicColumns(Function<? super R, ? extends Collection<? extends C>> columnValues, //
 			Comparator<? super C> columnSort, //
 			Function<? super C, CategoryRenderStrategy<R, ?>> columnCreator);
 
-		P withTableOption(Consumer<? super PanelPopulator<?, ?>> panel);
+		P withInitialSelection(Predicate<? super R> initSelection);
 
 		P withFiltering(ObservableValue<? extends TableContentControl> filter);
 
@@ -1813,12 +1819,6 @@ public class PanelPopulation {
 		P withMove(boolean up, Consumer<DataAction<R, ?>> actionMod);
 
 		P withMoveToEnd(boolean up, Consumer<DataAction<R, ?>> actionMod);
-
-		P dragSourceRow(Consumer<? super Dragging.TransferSource<R>> source);
-
-		P dragAcceptRow(Consumer<? super Dragging.TransferAccepter<R, R, R>> accept);
-
-		P withMouseListener(ObservableTableModel.RowMouseListener<? super R> listener);
 	}
 
 	public interface DataAction<R, A extends DataAction<R, A>> {

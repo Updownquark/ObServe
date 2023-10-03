@@ -408,17 +408,14 @@ public interface QuickTableColumn<R, C> {
 		protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
 			super.doInstantiate(myModels);
 
-			isEditable.set(theEditableInstantiator == null ? null : theEditableInstantiator.get(myModels), null);
-			isAcceptable.set(theAcceptInstantiator == null ? null : theAcceptInstantiator.get(myModels), null);
-
 			ExFlexibleElementModelAddOn.satisfyElementValue(theColumnEditValueVariable, myModels,
 				SettableValue.flatten(theEditColumnValue));
 			ExElement owner = getParentElement().getParentElement();
+			ModelSetInstance editorModels = myModels.copy()//
+				.withAll(myModels.getInherited(owner.getModels().getIdentity()).copy(myModels.getUntil()).build())//
+				.build();
 			if (theEditor != null && owner instanceof MultiValueRenderable) {
 				// Not enough to copy the editor models, because I also need to replace values table models
-				ModelSetInstance editorModels = myModels.copy()//
-					.withAll(myModels.getInherited(owner.getModels().getIdentity()).copy(myModels.getUntil()).build())//
-					.build();
 				MultiValueRenderable<R> mvr = (MultiValueRenderable<R>) owner;
 				if (mvr.getActiveValueVariable() != null)
 					ExFlexibleElementModelAddOn.satisfyElementValue(mvr.getActiveValueVariable(), editorModels,
@@ -438,6 +435,8 @@ public interface QuickTableColumn<R, C> {
 				theEditor.instantiate(editorModels);
 				getAddOn(ColumnEditType.class).instantiateEditor(editorModels);
 			}
+			isEditable.set(theEditableInstantiator == null ? null : theEditableInstantiator.get(editorModels), null);
+			isAcceptable.set(theAcceptInstantiator == null ? null : theAcceptInstantiator.get(editorModels), null);
 		}
 
 		@Override
