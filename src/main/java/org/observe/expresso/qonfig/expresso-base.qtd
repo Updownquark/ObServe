@@ -285,10 +285,6 @@ It builds on the Expresso-Core specification and contains everything needed for 
 		<element-def name="collect" extends="operation">
 			<attribute name="active" type="boolean" specify="optional" />
 		</element-def>
-		<element-def name="first-value" extends="model-value">
-			<value-mod specify="forbidden" />
-			<child-def name="value" type="model-value" min="1" max="inf" />
-		</element-def>
 		<element-def name="hook" extends="model-value" inherits="with-element-model">
 			<element-model>
 				<value name="event" />

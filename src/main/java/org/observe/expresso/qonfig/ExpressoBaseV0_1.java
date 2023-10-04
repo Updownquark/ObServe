@@ -78,7 +78,6 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		configureBaseModels(interpreter);
 		configureExternalModels(interpreter);
 		configureInternalModels(interpreter);
-		interpreter.createWith("first-value", ModelValueElement.CompiledSynth.class, ExElement.creator(ExpressoQonfigValues.FirstValue::new));
 		interpreter.createWith("hook", ModelValueElement.CompiledSynth.class, ExElement.creator(ExpressoQonfigValues.Hook::new));
 		ExpressoTransformations.configureTransformation(interpreter);
 		return interpreter;
