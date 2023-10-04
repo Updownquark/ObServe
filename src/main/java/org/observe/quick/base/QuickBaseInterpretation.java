@@ -123,6 +123,8 @@ public class QuickBaseInterpretation implements QonfigInterpretation {
 		interpreter.createWith(QuickLabel.LABEL, QuickLabel.Def.class, ExElement.creator(QuickLabel.Def::new));
 		interpreter.createWith(QuickTextField.TEXT_FIELD, QuickTextField.Def.class, ExElement.creator(QuickTextField.Def::new));
 		interpreter.createWith(QuickCheckBox.CHECK_BOX, QuickCheckBox.Def.class, ExElement.creator(QuickCheckBox.Def::new));
+		interpreter.createWith(QuickToggleButton.TOGGLE_BUTTON, QuickToggleButton.Def.class, ExElement.creator(QuickToggleButton.Def::new));
+		interpreter.createWith(QuickRadioButton.RADIO_BUTTON, QuickRadioButton.Def.class, ExElement.creator(QuickRadioButton.Def::new));
 		interpreter.createWith(QuickButton.BUTTON, QuickButton.Def.class, ExElement.creator(QuickButton.Def::new));
 		interpreter.createWith(QuickFileButton.FILE_BUTTON, QuickFileButton.Def.class, ExElement.creator(QuickFileButton.Def::new));
 		interpreter.createWith(QuickComboBox.COMBO_BOX, QuickComboBox.Def.class, ExElement.creator(QuickComboBox.Def::new));
@@ -198,6 +200,16 @@ public class QuickBaseInterpretation implements QonfigInterpretation {
 		interpreter.createWith(QuickConfirm.CONFIRM, QuickConfirm.Def.class, ExElement.creator(QuickConfirm.Def::new));
 		interpreter.createWith(QuickFileChooser.FILE_CHOOSER, QuickFileChooser.Def.class, ExElement.creator(QuickFileChooser.Def::new));
 		interpreter.createWith(GeneralDialog.GENERAL_DIALOG, GeneralDialog.Def.class, ExElement.creator(GeneralDialog.Def::new));
+
+		// Menus
+		interpreter.createWith(QuickMenuContainer.MENU_CONTAINER, QuickMenuContainer.Def.class,
+			ExAddOn.creator(QuickMenuContainer.Def::new));
+		interpreter.createWith(QuickMenuBar.MENU_BAR, QuickMenuBar.Def.class, ExElement.creator(QuickMenuBar.Def::new));
+		interpreter.createWith(QuickMenu.MENU, QuickMenu.Def.class, ExElement.creator(QuickMenu.Def::new));
+		interpreter.createWith(QuickMenuItem.MENU_ITEM, QuickMenuItem.Def.class, ExElement.creator(QuickMenuItem.Def::new));
+		interpreter.createWith(QuickCheckBoxMenuItem.CHECK_BOX_MENU_ITEM, QuickCheckBoxMenuItem.Def.class,
+			ExElement.creator(QuickCheckBoxMenuItem.Def::new));
+
 		return interpreter;
 	}
 

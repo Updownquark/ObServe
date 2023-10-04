@@ -169,6 +169,11 @@ public class ExWithElementModel extends ExFlexibleElementModelAddOn<ExElement> {
 		}
 
 		@Override
+		public Class<ExWithElementModel> getInstanceType() {
+			return ExWithElementModel.class;
+		}
+
+		@Override
 		public ExWithElementModel create(ExElement element) {
 			return new ExWithElementModel(element);
 		}

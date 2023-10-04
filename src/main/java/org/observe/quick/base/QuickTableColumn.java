@@ -572,6 +572,11 @@ public interface QuickTableColumn<R, C> {
 				}
 
 				@Override
+				public Class<RowModifyEditType<R, C>> getInstanceType() {
+					return (Class<RowModifyEditType<R, C>>) (Class<?>) RowModifyEditType.class;
+				}
+
+				@Override
 				public RowModifyEditType<R, C> create(ColumnEditing<R, C> element) {
 					return new RowModifyEditType<>(element);
 				}
@@ -676,6 +681,11 @@ public interface QuickTableColumn<R, C> {
 					super.update(env);
 					theReplacement = getDefinition().getReplacement() == null ? null : getDefinition().getReplacement()
 						.interpret(ModelTypes.Value.forType(getElement().getParentElement().getValueType()), env);
+				}
+
+				@Override
+				public Class<RowReplaceEditType<R, C>> getInstanceType() {
+					return (Class<RowReplaceEditType<R, C>>) (Class<?>) RowReplaceEditType.class;
 				}
 
 				@Override

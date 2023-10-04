@@ -164,4 +164,9 @@ public class QuickLabel<T> extends QuickTextWidget.Abstract<T> {
 		super.doInstantiate(myModels);
 		theIcon = theIconInstantiator == null ? null : theIconInstantiator.get(myModels);
 	}
+
+	@Override
+	public QuickLabel<T> copy(ExElement parent) {
+		return (QuickLabel<T>) super.copy(parent);
+	}
 }

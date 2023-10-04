@@ -147,6 +147,11 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 			}
 
 			@Override
+			public Class<AbstractTab> getInstanceType() {
+				return (Class<AbstractTab>) (Class<?>) AbstractTab.class;
+			}
+
+			@Override
 			public AbstractTab create(ExElement element) {
 				return new AbstractTab(element);
 			}
@@ -293,6 +298,11 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 			public void update(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 				super.update(env);
 				theTabId = getDefinition().getTabId().interpret(ModelTypes.Value.anyAs(), env);
+			}
+
+			@Override
+			public Class<Tab<T>> getInstanceType() {
+				return (Class<Tab<T>>) (Class<?>) Tab.class;
 			}
 
 			@Override

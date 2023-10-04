@@ -6,8 +6,6 @@ import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollectionImpl;
 import org.observe.util.TypeTokens;
 
-import com.google.common.reflect.TypeToken;
-
 /** An action with an observable enabled property */
 public interface ObservableAction {
 	/** An ObservableAction that is always enabled and does nothing */
@@ -68,16 +66,7 @@ public interface ObservableAction {
 	 * @return An action that does nothing but return the given value
 	 */
 	static ObservableAction nullAction() {
-		return new ObservableAction() {
-			@Override
-			public void act(Object cause) throws IllegalStateException {
-			}
-
-			@Override
-			public ObservableValue<String> isEnabled() {
-				return ObservableValue.of(TypeToken.of(String.class), null);
-			}
-		};
+		return DO_NOTHING;
 	}
 
 	/**

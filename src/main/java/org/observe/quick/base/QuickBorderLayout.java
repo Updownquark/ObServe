@@ -42,6 +42,11 @@ public class QuickBorderLayout extends QuickLayout.Abstract {
 		}
 
 		@Override
+		public Class<QuickBorderLayout> getInstanceType() {
+			return QuickBorderLayout.class;
+		}
+
+		@Override
 		public QuickBorderLayout create(QuickBox element) {
 			return new QuickBorderLayout(element);
 		}
@@ -119,6 +124,11 @@ public class QuickBorderLayout extends QuickLayout.Abstract {
 			@Override
 			public Def getDefinition() {
 				return (Def) super.getDefinition();
+			}
+
+			@Override
+			public Class<Child> getInstanceType() {
+				return Child.class;
 			}
 
 			@Override

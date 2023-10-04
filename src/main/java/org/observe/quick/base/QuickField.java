@@ -82,6 +82,11 @@ public class QuickField extends ExAddOn.Abstract<QuickWidget> {
 		}
 
 		@Override
+		public Class<QuickField> getInstanceType() {
+			return QuickField.class;
+		}
+
+		@Override
 		public QuickField create(QuickWidget widget) {
 			return new QuickField(widget);
 		}

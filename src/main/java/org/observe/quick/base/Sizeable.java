@@ -238,6 +238,11 @@ public abstract class Sizeable extends ExAddOn.Abstract<ExElement> {
 			}
 
 			@Override
+			public Class<Sizeable.Vertical> getInstanceType() {
+				return Sizeable.Vertical.class;
+			}
+
+			@Override
 			public Sizeable.Vertical create(ExElement element) {
 				return new Sizeable.Vertical(element);
 			}
@@ -254,6 +259,11 @@ public abstract class Sizeable extends ExAddOn.Abstract<ExElement> {
 			}
 
 			@Override
+			public Class<Sizeable.Horizontal> getInstanceType() {
+				return Sizeable.Horizontal.class;
+			}
+
+			@Override
 			public Sizeable.Horizontal create(ExElement element) {
 				return new Sizeable.Horizontal(element);
 			}
@@ -267,6 +277,11 @@ public abstract class Sizeable extends ExAddOn.Abstract<ExElement> {
 			@Override
 			public Def.Generic getDefinition() {
 				return (Def.Generic) super.getDefinition();
+			}
+
+			@Override
+			public Class<Sizeable.Generic> getInstanceType() {
+				return Sizeable.Generic.class;
 			}
 
 			@Override

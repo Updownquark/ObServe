@@ -107,6 +107,11 @@ public class ExpressoDebugV0_1 implements QonfigInterpretation {
 			}
 
 			@Override
+			public Class<DebugValue> getInstanceType() {
+				return DebugValue.class;
+			}
+
+			@Override
 			public DebugValue create(ExElement element) {
 				return new DebugValue(element, getDefinition().getBreakType());
 			}

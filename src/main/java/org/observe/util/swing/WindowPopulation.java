@@ -15,6 +15,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
 
+import javax.swing.JCheckBoxMenuItem;
+import javax.swing.JComponent;
 import javax.swing.JDialog;
 import javax.swing.JFrame;
 import javax.swing.JMenu;
@@ -28,6 +30,7 @@ import org.observe.ObservableAction;
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.SimpleObservable;
+import org.observe.Subscription;
 import org.observe.util.swing.PanelPopulation.ButtonEditor;
 import org.observe.util.swing.PanelPopulation.DialogBuilder;
 import org.observe.util.swing.PanelPopulation.MenuBarBuilder;
@@ -204,7 +207,6 @@ public class WindowPopulation {
 		@Override
 		public P run(Component relativeTo) {
 			theWindow.pack();
-			theWindow.setLocationRelativeTo(relativeTo);
 			if (theTitle != null) {
 				if (theWindow instanceof Frame)
 					theTitle.changes().takeUntil(theUntil)
@@ -224,6 +226,7 @@ public class WindowPopulation {
 			SettableValue<Integer> y = theY;
 			SettableValue<Integer> w = theWidth;
 			SettableValue<Integer> h = theHeight;
+			boolean sizeSet = false;
 			if (x != null || y != null || w != null || h != null) {
 				class BoundsListener extends ComponentAdapter {
 					boolean callbackLock;
@@ -235,10 +238,24 @@ public class WindowPopulation {
 						callbackLock = true;
 						Causable evt = Causable.simpleCause(e);
 						try (Transaction t = evt.use()) {
-							if (w != null && (w.get() == null || w.get() != theWindow.getWidth()))
-								w.set(theWindow.getWidth(), evt);
-							if (h != null && (h.get() == null || h.get() != theWindow.getHeight()))
-								h.set(theWindow.getHeight(), evt);
+							boolean sizeRefused = false;
+							if (w != null && (w.get() == null || w.get() != theWindow.getWidth())) {
+								if (w.isAcceptable(theWindow.getWidth()) == null)
+									w.set(theWindow.getWidth(), evt);
+								else
+									sizeRefused = true;
+							}
+							if (h != null && (h.get() == null || h.get() != theWindow.getHeight())) {
+								if (h.isAcceptable(theWindow.getHeight()) == null)
+									h.set(theWindow.getHeight(), evt);
+								else
+									sizeRefused = true;
+							}
+							if (sizeRefused) {
+								EventQueue.invokeLater(() -> {
+									theWindow.setSize(theWidth.get(), theHeight.get());
+								});
+							}
 						} finally {
 							callbackLock = false;
 						}
@@ -267,14 +284,18 @@ public class WindowPopulation {
 					if (x != null && x.get() != null) {
 						boundsObs.add(x.noInitChanges());
 						int xv = x.get();
-						if (xv != -1)
+						if (xv != -1) {
+							sizeSet = true;
 							bounds.x = xv;
+						}
 					}
 					if (y != null && y.get() != null) {
 						boundsObs.add(y.noInitChanges());
 						int yv = y.get();
-						if (yv != -1)
+						if (yv != -1) {
+							sizeSet = true;
 							bounds.y = yv;
+						}
 					}
 					if (w != null && w.get() != null) {
 						boundsObs.add(w.noInitChanges());
@@ -288,25 +309,27 @@ public class WindowPopulation {
 						if (hv > 0)
 							bounds.height = hv;
 					}
-					bounds = ObservableSwingUtils.fitBoundsToGraphicsEnv(bounds.x, bounds.y, bounds.width, bounds.height, //
-						ObservableSwingUtils.getGraphicsBounds());
-					try {
-						if (x != null && x.get() != null && x.get() != bounds.x) {
-							x.set(bounds.x, null);
+					if (sizeSet) {
+						bounds = ObservableSwingUtils.fitBoundsToGraphicsEnv(bounds.x, bounds.y, bounds.width, bounds.height, //
+							ObservableSwingUtils.getGraphicsBounds());
+						try {
+							if (x != null && x.get() != null && x.get() != bounds.x) {
+								x.set(bounds.x, null);
+							}
+							if (y != null && y.get() != null && y.get() != bounds.y) {
+								y.set(bounds.y, null);
+							}
+							if (w != null && w.get() != null && w.get() != bounds.width) {
+								w.set(bounds.width, null);
+							}
+							if (h != null && h.get() != null && h.get() != bounds.height) {
+								h.set(bounds.height, null);
+							}
+						} catch (RuntimeException e) {
+							e.printStackTrace();
 						}
-						if (y != null && y.get() != null && y.get() != bounds.y) {
-							y.set(bounds.y, null);
-						}
-						if (w != null && w.get() != null && w.get() != bounds.width) {
-							w.set(bounds.width, null);
-						}
-						if (h != null && h.get() != null && h.get() != bounds.height) {
-							h.set(bounds.height, null);
-						}
-					} catch (RuntimeException e) {
-						e.printStackTrace();
+						theWindow.setBounds(bounds);
 					}
-					theWindow.setBounds(bounds);
 				}
 				Observable.or(boundsObs.toArray(new Observable[boundsObs.size()])).takeUntil(theUntil).act(evt -> {
 					if (boundsListener.callbackLock)
@@ -378,13 +401,21 @@ public class WindowPopulation {
 				theWindow.dispose();
 			});
 			if (visible != null) {
+				boolean[] reposition = new boolean[] { !sizeSet };
 				visible.changes().takeUntil(theUntil).act(evt -> {
 					EventQueue.invokeLater(() -> {
+						if (evt.getNewValue() && reposition[0]) {
+							reposition[0] = false;
+							theWindow.setLocationRelativeTo(relativeTo);
+						}
 						theWindow.setVisible(evt.getNewValue());
 					});
 				});
-			} else
+			} else {
+				if (!sizeSet)
+					theWindow.setLocationRelativeTo(relativeTo);
 				theWindow.setVisible(true);
+			}
 			return (P) this;
 		}
 	}
@@ -433,7 +464,7 @@ public class WindowPopulation {
 			boolean found = jmenu != null;
 			if (!found)
 				jmenu = new JMenu(menuName);
-			JMenuBuilder<?> builder = new JMenuBuilder<>(jmenu, theUntil);
+			JMenuBuilder<JMenu> builder = new JMenuBuilder<>(jmenu, theUntil);
 			menu.accept(builder);
 			if (!found)
 				theMenuBar.add((JMenu) builder.getComponent());
@@ -441,39 +472,64 @@ public class WindowPopulation {
 		}
 	}
 
-	static class JMenuBuilder<M extends JMenuBuilder<M>> extends SimpleButtonEditor<JMenu, M> implements MenuBuilder<JMenu, M> {
-		public JMenuBuilder(JMenu button, Observable<?> until) {
-			super((String) null, button, button.getText(), ObservableAction.nullAction(), false, until);
-		}
+	public static interface AbstractMenuBuilder<M extends JComponent, B extends AbstractMenuBuilder<M, B>> extends MenuBuilder<M, B> {
+		void addMenuItem(JMenuItem item);
 
 		@Override
-		public M withSubMenu(String name, Consumer<MenuBuilder<JMenu, ?>> subMenu) {
+		default B withSubMenu(String name, Consumer<MenuBuilder<JMenu, ?>> subMenu) {
 			JMenu jmenu = null;
-			for (int m = 0; m < getEditor().getItemCount(); m++) {
-				if (getEditor().getItem(m) instanceof JMenu && ((JMenu) getEditor().getItem(m)).getText().equals(name)) {
-					jmenu = (JMenu) getEditor().getItem(m);
+			for (int m = 0; m < getEditor().getComponentCount(); m++) {
+				if (getEditor().getComponent(m) instanceof JMenu && ((JMenu) getEditor().getComponent(m)).getText().equals(name)) {
+					jmenu = (JMenu) getEditor().getComponent(m);
 					break;
 				}
 			}
 			boolean found = jmenu != null;
 			if (!found)
 				jmenu = new JMenu(name);
-			JMenuBuilder<?> builder = new JMenuBuilder<>(jmenu, getUntil());
+			JMenuBuilder<JMenu> builder = new JMenuBuilder<>(jmenu, getUntil());
 			subMenu.accept(builder);
 			if (!found)
-				getEditor().add((JMenu) builder.getComponent());
-			return (M) this;
+				addMenuItem((JMenu) builder.getComponent());
+			return (B) this;
 		}
 
 		@Override
-		public M withAction(String name, ObservableAction action, Consumer<ButtonEditor<JMenuItem, ?>> ui) {
+		default B withAction(String name, ObservableAction action, Consumer<ButtonEditor<JMenuItem, ?>> ui) {
 			JMenuItem item = new JMenuItem(name);
 			ButtonEditor<JMenuItem, ?> button = new PanelPopulationImpl.SimpleButtonEditor<>(name, item, name, action, false, getUntil());
 			if (ui != null) {
 				ui.accept(button);
 			}
-			getEditor().add((JMenuItem) button.getComponent());
-			return (M) this;
+			addMenuItem((JMenuItem) button.getComponent());
+			return (B) this;
+		}
+
+		@Override
+		default B withCheckBoxMenuItem(String name, SettableValue<Boolean> value,
+			Consumer<ButtonEditor<JCheckBoxMenuItem, ?>> ui) {
+			JCheckBoxMenuItem item = new JCheckBoxMenuItem(name);
+			ButtonEditor<JCheckBoxMenuItem, ?> button = new PanelPopulationImpl.SimpleButtonEditor<>(name, item, name,
+				ObservableAction.DO_NOTHING, false, getUntil());
+			if (ui != null) {
+				ui.accept(button);
+			}
+			Subscription sub = ObservableSwingUtils.checkFor(item, button.getTooltip(), value);
+			getUntil().take(1).act(__ -> sub.unsubscribe());
+			addMenuItem((JMenuItem) button.getComponent());
+			return (B) this;
+		}
+	}
+
+	public static class JMenuBuilder<M extends JMenu> extends SimpleButtonEditor<M, JMenuBuilder<M>>
+	implements AbstractMenuBuilder<M, JMenuBuilder<M>> {
+		public JMenuBuilder(M button, Observable<?> until) {
+			super((String) null, button, button.getText(), ObservableAction.nullAction(), false, until);
+		}
+
+		@Override
+		public void addMenuItem(JMenuItem item) {
+			getEditor().add(item);
 		}
 	}
 }

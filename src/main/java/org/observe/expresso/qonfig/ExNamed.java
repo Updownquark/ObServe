@@ -45,6 +45,11 @@ public class ExNamed extends ExAddOn.Abstract<ExElement> implements Named {
 		}
 
 		@Override
+		public Class<ExNamed> getInstanceType() {
+			return ExNamed.class;
+		}
+
+		@Override
 		public ExNamed create(ExElement element) {
 			return new ExNamed(element);
 		}

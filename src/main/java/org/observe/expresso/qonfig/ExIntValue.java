@@ -70,6 +70,11 @@ public class ExIntValue<T> extends ExAddOn.Abstract<ExElement> {
 		}
 
 		@Override
+		public Class<ExIntValue<T>> getInstanceType() {
+			return (Class<ExIntValue<T>>) (Class<?>) ExIntValue.class;
+		}
+
+		@Override
 		public ExIntValue<T> create(ExElement element) {
 			return new ExIntValue<>(element);
 		}

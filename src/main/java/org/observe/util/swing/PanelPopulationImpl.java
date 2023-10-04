@@ -398,8 +398,9 @@ class PanelPopulationImpl {
 		}
 
 		@Override
-		public P addCheckField(String fieldName, SettableValue<Boolean> field, Consumer<FieldEditor<JCheckBox, ?>> modify) {
-			SimpleFieldEditor<JCheckBox, ?> fieldPanel = new SimpleFieldEditor<>(fieldName, new JCheckBox(), getUntil());
+		public P addCheckField(String fieldName, SettableValue<Boolean> field, Consumer<ButtonEditor<JCheckBox, ?>> modify) {
+			SimpleButtonEditor<JCheckBox, ?> fieldPanel = new SimpleButtonEditor<>(fieldName, new JCheckBox(), null,
+				ObservableAction.DO_NOTHING, false, getUntil());
 			fieldPanel.getEditor().setHorizontalTextPosition(SwingConstants.LEADING);
 			Subscription sub = ObservableSwingUtils.checkFor(fieldPanel.getEditor(), fieldPanel.getTooltip(), field);
 			getUntil().take(1).act(__ -> sub.unsubscribe());
@@ -2058,6 +2059,11 @@ class PanelPopulationImpl {
 				}
 
 				@Override
+				public ObservableValue<String> getTooltip() {
+					return ObservableValue.of(String.class, (String) theAction.getValue(Action.LONG_DESCRIPTION));
+				}
+
+				@Override
 				public P2 modifyFieldLabel(Consumer<FontAdjuster> font) {
 					return (P2) this;
 				}
@@ -2406,7 +2412,7 @@ class PanelPopulationImpl {
 							if (theWidget instanceof SimpleTableBuilder
 								&& ((SimpleTableBuilder<R, ?, ?>) theWidget).getNameFunction() != null)
 								text.append(theWidget.getItemName()).append(" \"")
-									.append(((SimpleTableBuilder<R, ?, ?>) theWidget).getNameFunction().apply(selected.get(0))).append('"');
+								.append(((SimpleTableBuilder<R, ?, ?>) theWidget).getNameFunction().apply(selected.get(0))).append('"');
 							else
 								text.append("1 ").append(theWidget.getItemName());
 						} else

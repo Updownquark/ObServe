@@ -71,6 +71,11 @@ public class ExMapModelValue<K> extends ExAddOn.Abstract<ExElement> {
 		}
 
 		@Override
+		public Class<ExMapModelValue<K>> getInstanceType() {
+			return (Class<ExMapModelValue<K>>) (Class<?>) ExMapModelValue.class;
+		}
+
+		@Override
 		public ExMapModelValue<K> create(ExElement element) {
 			return new ExMapModelValue<>(element);
 		}

@@ -283,7 +283,7 @@ public class CompiledExpressoEnv {
 					} catch (ParseException e) {
 						return false;
 					}
-				}, (t, s) -> TimeUtils.parseDuration(s), "Simple duration literal"))//
+				}, (t, s) -> TimeUtils.parseDuration(s).asDuration(), "Simple duration literal"))//
 			.withNonStructuredParser(Instant.class, NonStructuredParser.simple(//
 				s -> {
 					try {

@@ -38,6 +38,11 @@ public class QuickSimpleLayout extends QuickLayout.Abstract {
 		}
 
 		@Override
+		public Class<QuickSimpleLayout> getInstanceType() {
+			return QuickSimpleLayout.class;
+		}
+
+		@Override
 		public QuickSimpleLayout create(QuickBox element) {
 			return new QuickSimpleLayout(element);
 		}
@@ -67,6 +72,11 @@ public class QuickSimpleLayout extends QuickLayout.Abstract {
 		public static class Interpreted extends ExAddOn.Interpreted.Abstract<QuickWidget, Child> {
 			public Interpreted(Def definition, QuickWidget.Interpreted<?> element) {
 				super(definition, element);
+			}
+
+			@Override
+			public Class<Child> getInstanceType() {
+				return Child.class;
 			}
 
 			@Override

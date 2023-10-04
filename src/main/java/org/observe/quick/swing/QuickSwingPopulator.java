@@ -121,6 +121,10 @@ public interface QuickSwingPopulator<W extends QuickWidget> {
 		}
 	}
 
+	public interface WindowModifier<AO extends ExAddOn<?>> {
+		void modifyWindow(PanelPopulation.WindowBuilder<?, ?> window, AO quick) throws ModelInstantiationException;
+	}
+
 	/**
 	 * Creates a Swing layout from a {@link QuickLayout}
 	 *

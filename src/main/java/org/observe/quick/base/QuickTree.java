@@ -329,7 +329,7 @@ public class QuickTree<N> extends QuickWidget.Abstract implements MultiValueWidg
 		}
 		if (theModel == null)
 			theModel = myInterpreted.getModel().create();
-		theModel.update(myInterpreted.getModel(), theModel);
+		theModel.update(myInterpreted.getModel(), this);
 		theSelectionInstantiator = myInterpreted.getSelection() == null ? null : myInterpreted.getSelection().instantiate();
 		theMultiSelectionInstantiator = myInterpreted.getMultiSelection() == null ? null : myInterpreted.getMultiSelection().instantiate();
 

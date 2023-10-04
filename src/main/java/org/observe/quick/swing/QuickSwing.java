@@ -73,6 +73,11 @@ public class QuickSwing extends ExAddOn.Def.Abstract<QuickDocument, ExAddOn.Void
 		}
 
 		@Override
+		public Class<ExAddOn.Void<QuickDocument>> getInstanceType() {
+			return (Class<ExAddOn.Void<QuickDocument>>) (Class<?>) ExAddOn.Void.class;
+		}
+
+		@Override
 		public ExAddOn.Void<QuickDocument> create(QuickDocument element) {
 			return null;
 		}

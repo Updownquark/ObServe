@@ -112,6 +112,8 @@ public interface ExAddOn<E extends ExElement> {
 		default void postUpdate() throws ExpressoInterpretationException {
 		}
 
+		public Class<AO> getInstanceType();
+
 		/**
 		 * @param element The QonfigDefinedElement
 		 * @return An instance of this add-on for the given element

@@ -14,6 +14,7 @@ import java.awt.font.TextAttribute;
 import java.lang.reflect.InvocationTargetException;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.WeakHashMap;
@@ -36,6 +37,7 @@ import org.observe.SettableValue;
 import org.observe.Subscription;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ModelInstantiationException;
+import org.observe.expresso.qonfig.ExAddOn;
 import org.observe.quick.*;
 import org.observe.quick.QuickTextElement.QuickTextStyle;
 import org.observe.quick.swing.QuickSwingPopulator.QuickSwingBorder;
@@ -52,7 +54,7 @@ import org.qommons.Identifiable;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
-import org.qommons.Transformer.Builder;
+import org.qommons.Transformer;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.ex.CheckedExceptionWrapper;
@@ -83,44 +85,33 @@ public class QuickCoreSwing implements QuickInterpretation {
 	}
 
 	@Override
-	public void configure(Builder<ExpressoInterpretationException> tx) {
+	public void configure(Transformer.Builder<ExpressoInterpretationException> tx) {
 		initMouseListening();
 		tx.with(QuickDocument.Interpreted.class, QuickApplication.class, (interpretedDoc, tx2) -> {
+			Map<Class<? extends ExAddOn<?>>, QuickSwingPopulator.WindowModifier<?>> modifiers = new LinkedHashMap<>();
+			for (ExAddOn.Interpreted<?, ?> addOn : interpretedDoc.getAddOns()) {
+				if (tx2.supportsTransform(addOn, QuickSwingPopulator.WindowModifier.class))
+					modifiers.put(addOn.getInstanceType(), tx2.transform(addOn, QuickSwingPopulator.WindowModifier.class));
+			}
 			QuickSwingPopulator<QuickWidget> interpretedBody = tx2.transform(interpretedDoc.getBody(), QuickSwingPopulator.class);
 			return new QuickApplication() {
 				@Override
 				public void runApplication(QuickDocument doc, Observable<?> until) throws ModelInstantiationException {
 					try {
 						EventQueue.invokeAndWait(() -> {
-							QuickWindow window = doc.getAddOn(QuickWindow.class);
 							WindowBuilder<?, ?> w = WindowPopulation.populateWindow(new JFrame(), until, true, true);
-							if (window != null) {
-								switch (window.getCloseAction()) {
-								case DoNothing:
-									w.withCloseAction(JFrame.DO_NOTHING_ON_CLOSE);
-									break;
-								case Hide:
-									w.withCloseAction(JFrame.HIDE_ON_CLOSE);
-									break;
-								case Dispose:
-									w.withCloseAction(JFrame.DISPOSE_ON_CLOSE);
-									break;
-								case Exit:
-									w.withCloseAction(JFrame.EXIT_ON_CLOSE);
-									break;
-								}
-								if (window.getX() != null)
-									w.withX(window.getX());
-								if (window.getY() != null)
-									w.withY(window.getY());
-								if (window.getWidth() != null)
-									w.withWidth(window.getWidth());
-								if (window.getHeight() != null)
-									w.withHeight(window.getHeight());
-								if (window.getTitle() != null)
-									w.withTitle(window.getTitle());
-								if (window.isVisible() != null)
-									w.withVisible(window.isVisible());
+							for (Map.Entry<Class<? extends ExAddOn<?>>, QuickSwingPopulator.WindowModifier<?>> modifier : modifiers
+								.entrySet()) {
+								ExAddOn<?> addOn = doc.getAddOn(modifier.getKey());
+								if (addOn != null) {
+									try {
+										((QuickSwingPopulator.WindowModifier<ExAddOn<?>>) modifier.getValue()).modifyWindow(w, addOn);
+									} catch (ModelInstantiationException e) {
+										throw new CheckedExceptionWrapper(e);
+									}
+								} else
+									doc.reporting().warn("Interpretation of window modifier " + modifier.getKey().getName()
+										+ " found, but add-on not found");
 							}
 							w.withHContent(new JustifiedBoxLayout(true).mainJustified().crossJustified(), content -> {
 								try {
@@ -138,6 +129,8 @@ public class QuickCoreSwing implements QuickInterpretation {
 							&& e.getTargetException().getCause() instanceof ModelInstantiationException)
 							throw (ModelInstantiationException) e.getTargetException().getCause();
 						doc.reporting().error("Unhandled error", e);
+					} catch (CheckedExceptionWrapper e) {
+						throw CheckedExceptionWrapper.getThrowable(e, ModelInstantiationException.class);
 					} catch (RuntimeException | Error e) {
 						doc.reporting().error("Unhandled error", e);
 					}
@@ -149,6 +142,7 @@ public class QuickCoreSwing implements QuickInterpretation {
 				}
 			};
 		});
+		tx.with(QuickWindow.Interpreted.class, QuickSwingPopulator.WindowModifier.class, (interp, tx2) -> new QuickWindowModifier());
 		QuickSwingPopulator.modifyForWidget(tx, QuickWidget.Interpreted.class, (qw, qsp, tx2) -> {
 			boolean renderer = qw.getAddOn(QuickRenderer.Interpreted.class) != null;
 			List<QuickSwingEventListener<QuickEventListener>> listeners = BetterList.of2(//
@@ -562,6 +556,38 @@ public class QuickCoreSwing implements QuickInterpretation {
 				});
 			};
 		});
+	}
+
+	static class QuickWindowModifier implements QuickSwingPopulator.WindowModifier<QuickWindow> {
+		@Override
+		public void modifyWindow(WindowBuilder<?, ?> window, QuickWindow quick) {
+			switch (quick.getCloseAction()) {
+			case DoNothing:
+				window.withCloseAction(JFrame.DO_NOTHING_ON_CLOSE);
+				break;
+			case Hide:
+				window.withCloseAction(JFrame.HIDE_ON_CLOSE);
+				break;
+			case Dispose:
+				window.withCloseAction(JFrame.DISPOSE_ON_CLOSE);
+				break;
+			case Exit:
+				window.withCloseAction(JFrame.EXIT_ON_CLOSE);
+				break;
+			}
+			if (quick.getX() != null)
+				window.withX(quick.getX());
+			if (quick.getY() != null)
+				window.withY(quick.getY());
+			if (quick.getWidth() != null)
+				window.withWidth(quick.getWidth());
+			if (quick.getHeight() != null)
+				window.withHeight(quick.getHeight());
+			if (quick.getTitle() != null)
+				window.withTitle(quick.getTitle());
+			if (quick.isVisible() != null)
+				window.withVisible(quick.isVisible());
+		}
 	}
 
 	public static ToIntFunction<Point> getTextOffset(Component component) {

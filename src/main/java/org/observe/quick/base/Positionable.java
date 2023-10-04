@@ -175,6 +175,11 @@ public abstract class Positionable extends ExAddOn.Abstract<ExElement> {
 			}
 
 			@Override
+			public Class<Positionable.Vertical> getInstanceType() {
+				return Positionable.Vertical.class;
+			}
+
+			@Override
 			public Positionable.Vertical create(ExElement element) {
 				return new Positionable.Vertical(element);
 			}
@@ -188,6 +193,11 @@ public abstract class Positionable extends ExAddOn.Abstract<ExElement> {
 			@Override
 			public Def.Horizontal getDefinition() {
 				return (Def.Horizontal) super.getDefinition();
+			}
+
+			@Override
+			public Class<Positionable.Horizontal> getInstanceType() {
+				return Positionable.Horizontal.class;
 			}
 
 			@Override

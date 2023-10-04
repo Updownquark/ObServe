@@ -166,6 +166,11 @@ public class QuickWindow extends QuickAbstractWindow.Default {
 		}
 
 		@Override
+		public Class<QuickWindow> getInstanceType() {
+			return QuickWindow.class;
+		}
+
+		@Override
 		public QuickWindow create(ExElement element) {
 			return new QuickWindow(element);
 		}

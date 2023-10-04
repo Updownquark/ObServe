@@ -114,6 +114,11 @@ public interface QuickAbstractWindow extends ExAddOn<ExElement> {
 			}
 
 			@Override
+			public Class<W> getInstanceType() {
+				return (Class<W>) QuickAbstractWindow.Default.class;
+			}
+
+			@Override
 			public W create(ExElement element) {
 				return (W) new QuickAbstractWindow.Default(element);
 			}

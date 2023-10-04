@@ -26,8 +26,8 @@ public class QuickCheckBox extends QuickValueWidget.Abstract<Boolean> {
 	@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
 		qonfigType = CHECK_BOX,
 		interpretation = Interpreted.class,
-		instance = MultiValueWidget.class)
-	public static class Def extends QuickValueWidget.Def.Abstract<QuickCheckBox> {
+		instance = QuickCheckBox.class)
+	public static class Def<W extends QuickCheckBox> extends QuickValueWidget.Def.Abstract<W> {
 		private CompiledExpression theText;
 
 		public Def(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
@@ -46,21 +46,21 @@ public class QuickCheckBox extends QuickValueWidget.Abstract<Boolean> {
 		}
 
 		@Override
-		public Interpreted interpret(ExElement.Interpreted<?> parent) {
-			return new Interpreted(this, parent);
+		public Interpreted<? extends W> interpret(ExElement.Interpreted<?> parent) {
+			return new Interpreted<>(this, parent);
 		}
 	}
 
-	public static class Interpreted extends QuickValueWidget.Interpreted.Abstract<Boolean, QuickCheckBox> {
+	public static class Interpreted<W extends QuickCheckBox> extends QuickValueWidget.Interpreted.Abstract<Boolean, W> {
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<String>> theText;
 
-		public Interpreted(Def definition, ExElement.Interpreted<?> parent) {
+		public Interpreted(Def<? super W> definition, ExElement.Interpreted<?> parent) {
 			super(definition, parent);
 		}
 
 		@Override
-		public Def getDefinition() {
-			return (Def) super.getDefinition();
+		public Def<? super W> getDefinition() {
+			return (Def<? super W>) super.getDefinition();
 		}
 
 		public InterpretedValueSynth<SettableValue<?>, SettableValue<String>> getText() {
@@ -68,8 +68,8 @@ public class QuickCheckBox extends QuickValueWidget.Abstract<Boolean> {
 		}
 
 		@Override
-		public TypeToken<QuickCheckBox> getWidgetType() {
-			return TypeTokens.get().of(QuickCheckBox.class);
+		public TypeToken<W> getWidgetType() {
+			return (TypeToken<W>) TypeTokens.get().of(QuickCheckBox.class);
 		}
 
 		@Override
@@ -79,8 +79,8 @@ public class QuickCheckBox extends QuickValueWidget.Abstract<Boolean> {
 		}
 
 		@Override
-		public QuickCheckBox create() {
-			return new QuickCheckBox(getIdentity());
+		public W create() {
+			return (W) new QuickCheckBox(getIdentity());
 		}
 	}
 
@@ -100,7 +100,7 @@ public class QuickCheckBox extends QuickValueWidget.Abstract<Boolean> {
 	@Override
 	protected void doUpdate(ExElement.Interpreted<?> interpreted) {
 		super.doUpdate(interpreted);
-		Interpreted myInterpreted = (Interpreted) interpreted;
+		Interpreted<?> myInterpreted = (Interpreted<?>) interpreted;
 		theTextInstantiator = myInterpreted.getText() == null ? null : myInterpreted.getText().instantiate();
 	}
 
@@ -118,8 +118,8 @@ public class QuickCheckBox extends QuickValueWidget.Abstract<Boolean> {
 	}
 
 	@Override
-	protected QuickCheckBox clone() {
-		QuickCheckBox copy = (QuickCheckBox) super.clone();
+	public QuickCheckBox copy(ExElement parent) {
+		QuickCheckBox copy = (QuickCheckBox) super.copy(parent);
 
 		copy.theText = SettableValue.build(theText.getType()).build();
 

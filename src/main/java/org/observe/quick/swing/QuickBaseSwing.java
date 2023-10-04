@@ -10,6 +10,7 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseMotionListener;
 import java.io.File;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -35,6 +36,7 @@ import org.observe.Subscription;
 import org.observe.collect.ObservableCollection;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ModelInstantiationException;
+import org.observe.expresso.qonfig.ExElement;
 import org.observe.quick.QuickAbstractWindow;
 import org.observe.quick.QuickInterpretation;
 import org.observe.quick.QuickTextWidget;
@@ -58,6 +60,8 @@ import org.observe.util.swing.PanelPopulation;
 import org.observe.util.swing.PanelPopulation.ComponentEditor;
 import org.observe.util.swing.PanelPopulation.ContainerPopulator;
 import org.observe.util.swing.PanelPopulation.FieldEditor;
+import org.observe.util.swing.PanelPopulation.MenuBarBuilder;
+import org.observe.util.swing.PanelPopulation.MenuBuilder;
 import org.observe.util.swing.PanelPopulation.PanelPopulator;
 import org.observe.util.swing.PanelPopulation.TableBuilder;
 import org.observe.util.swing.PanelPopulation.WindowBuilder;
@@ -77,6 +81,14 @@ import com.google.common.reflect.TypeToken;
 
 /** Quick interpretation of the base toolkit for Swing */
 public class QuickBaseSwing implements QuickInterpretation {
+	public interface QuickSwingMenuBarPopulator<E extends ExElement> {
+		void populateMenuBar(PanelPopulation.MenuBarBuilder<?> menuBar, E quick) throws ModelInstantiationException;
+	}
+
+	public interface QuickSwingMenuPopulator<E extends ExElement> {
+		void populateMenu(PanelPopulation.MenuBuilder<?, ?> menu, E quick) throws ModelInstantiationException;
+	}
+
 	@Override
 	public void configure(Transformer.Builder<ExpressoInterpretationException> tx) {
 		// Simple widgets
@@ -85,6 +97,8 @@ public class QuickBaseSwing implements QuickInterpretation {
 		tx.with(QuickProgressBar.Interpreted.class, QuickSwingPopulator.class, (i, tx2) -> new SwingProgressBar());
 		tx.with(QuickTextField.Interpreted.class, QuickSwingPopulator.class, widget(SwingTextField::new));
 		tx.with(QuickCheckBox.Interpreted.class, QuickSwingPopulator.class, widget(SwingCheckBox::new));
+		tx.with(QuickRadioButton.Interpreted.class, QuickSwingPopulator.class, widget(SwingRadioButton::new));
+		tx.with(QuickToggleButton.Interpreted.class, QuickSwingPopulator.class, widget(SwingToggleButton::new));
 		tx.with(QuickButton.Interpreted.class, QuickSwingPopulator.class, widget(SwingButton::new));
 		tx.with(QuickFileButton.Interpreted.class, QuickSwingPopulator.class, widget(SwingFileButton::new));
 		tx.with(QuickComboBox.Interpreted.class, QuickSwingPopulator.class, SwingComboBox::new);
@@ -128,12 +142,155 @@ public class QuickBaseSwing implements QuickInterpretation {
 		tx.with(QuickConfirm.Interpreted.class, QuickSwingDialog.class, QuickBaseSwing::interpretConfirm);
 		tx.with(QuickFileChooser.Interpreted.class, QuickSwingDialog.class, QuickBaseSwing::interpretFileChooser);
 		tx.with(GeneralDialog.Interpreted.class, QuickSwingDialog.class, QuickBaseSwing::interpretGeneralDialog);
+
+		// Menus
+		tx.with(QuickMenuContainer.Interpreted.class, QuickSwingPopulator.WindowModifier.class,
+			(quick, tx2) -> new SwingMenuContainer(quick, tx2));
+		tx.with(QuickMenu.Interpreted.class, QuickSwingMenuBarPopulator.class, (quick, tx2) -> new SwingMenu<>(quick, tx2));
+		tx.with(QuickMenu.Interpreted.class, QuickSwingMenuPopulator.class, (quick, tx2) -> new SwingSubMenu<>(quick, tx2));
+		tx.with(QuickMenuItem.Interpreted.class, QuickSwingMenuPopulator.class, (quick, tx2) -> new SwingMenuItem<>());
+		tx.with(QuickCheckBoxMenuItem.Interpreted.class, QuickSwingMenuPopulator.class, (quick, tx2) -> new SwingCheckBoxMenuItem<>());
 	}
 
 	public static <W extends QuickWidget, GW extends W, I extends QuickWidget.Interpreted<W>, GI extends QuickWidget.Interpreted<GW>> //
 	ExBiFunction<I, Transformer<ExpressoInterpretationException>, QuickSwingPopulator<W>, ExpressoInterpretationException> widget(
 		Supplier<QuickSwingPopulator<GW>> ctor) {
 		return (i, tx) -> (QuickSwingPopulator<W>) ctor.get();
+	}
+
+	static class SwingMenuContainer implements QuickSwingPopulator.WindowModifier<QuickMenuContainer> {
+		private final List<QuickSwingMenuBarPopulator<?>> theMenuPopulators;
+
+		SwingMenuContainer(QuickMenuContainer.Interpreted interpreted, Transformer<ExpressoInterpretationException> tx)
+			throws ExpressoInterpretationException {
+			theMenuPopulators = new ArrayList<>();
+			QuickMenuBar.Interpreted menuBar = interpreted.getMenuBar();
+			if (menuBar != null) {
+				for (QuickMenu.Interpreted<?, ?> menu : menuBar.getMenus())
+					theMenuPopulators.add(tx.transform(menu, QuickSwingMenuBarPopulator.class));
+			}
+		}
+
+		@Override
+		public void modifyWindow(WindowBuilder<?, ?> window, QuickMenuContainer quick) throws ModelInstantiationException {
+			if (!theMenuPopulators.isEmpty()) {
+				try {
+					window.withMenuBar(menuBar -> {
+						try {
+							for (int m = 0; m < theMenuPopulators.size(); m++)
+								((QuickSwingMenuBarPopulator<ExElement>) theMenuPopulators.get(m)).populateMenuBar(menuBar,
+									quick.getMenuBar().getMenus().get(m));
+						} catch (ModelInstantiationException e) {
+							throw new CheckedExceptionWrapper(e);
+						}
+					});
+				} catch (CheckedExceptionWrapper e) {
+					throw CheckedExceptionWrapper.getThrowable(e, ModelInstantiationException.class);
+				}
+			}
+		}
+	}
+
+	static class SwingMenu<T> implements QuickSwingMenuBarPopulator<QuickMenu<T>> {
+		private final List<QuickSwingMenuPopulator<?>> theMenuItemPopulators;
+
+		SwingMenu(QuickMenu.Interpreted<T, ?> interpreted, Transformer<ExpressoInterpretationException> tx)
+			throws ExpressoInterpretationException {
+			theMenuItemPopulators = new ArrayList<>();
+			for (QuickAbstractMenuItem.Interpreted<?, ?> menu : interpreted.getMenuItems())
+				theMenuItemPopulators.add(tx.transform(menu, QuickSwingMenuPopulator.class));
+		}
+
+		@Override
+		public void populateMenuBar(MenuBarBuilder<?> menuBar, QuickMenu<T> quick) throws ModelInstantiationException {
+			Format<T> format = quick.getFormat().get();
+			if (format == null)
+				format = (Format<T>) QuickTextWidget.TO_STRING_FORMAT;
+			Format<T> fFormat = format;
+			try {
+				menuBar.withMenu(null, menu -> {
+					menu.withText(quick.getValue().map(fFormat::format));
+					if (quick.getIcon() != null)
+						menu.withIcon(quick.getIcon());
+
+					try {
+						for (int m = 0; m < theMenuItemPopulators.size(); m++)
+							((QuickSwingMenuPopulator<ExElement>) theMenuItemPopulators.get(m)).populateMenu(menu,
+								quick.getMenuItems().get(m));
+					} catch (ModelInstantiationException e) {
+						throw new CheckedExceptionWrapper(e);
+					}
+				});
+			} catch (CheckedExceptionWrapper e) {
+				throw CheckedExceptionWrapper.getThrowable(e, ModelInstantiationException.class);
+			}
+		}
+	}
+
+	static class SwingMenuItem<T> implements QuickSwingMenuPopulator<QuickMenuItem<T>> {
+		@Override
+		public void populateMenu(MenuBuilder<?, ?> menu, QuickMenuItem<T> quick) throws ModelInstantiationException {
+			Format<T> format = quick.getFormat().get();
+			if (format == null)
+				format = (Format<T>) QuickTextWidget.TO_STRING_FORMAT;
+			Format<T> fFormat = format;
+			menu.withAction(null, quick.getAction(), menuItem -> {
+				menuItem.withText(quick.getValue().map(fFormat::format));
+				if (quick.getIcon() != null)
+					menuItem.withIcon(quick.getIcon());
+			});
+		}
+	}
+
+	static class SwingSubMenu<T> implements QuickSwingMenuPopulator<QuickMenu<T>> {
+		private final List<QuickSwingMenuPopulator<?>> theMenuItemPopulators;
+
+		SwingSubMenu(QuickMenu.Interpreted<T, ?> interpreted, Transformer<ExpressoInterpretationException> tx)
+			throws ExpressoInterpretationException {
+			theMenuItemPopulators = new ArrayList<>();
+			for (QuickAbstractMenuItem.Interpreted<?, ?> menu : interpreted.getMenuItems())
+				theMenuItemPopulators.add(tx.transform(menu, QuickSwingMenuPopulator.class));
+		}
+
+		@Override
+		public void populateMenu(MenuBuilder<?, ?> menu, QuickMenu<T> quick) throws ModelInstantiationException {
+			Format<T> format = quick.getFormat().get();
+			if (format == null)
+				format = (Format<T>) QuickTextWidget.TO_STRING_FORMAT;
+			Format<T> fFormat = format;
+			try {
+				menu.withSubMenu(null, subMenu -> {
+					subMenu.withText(quick.getValue().map(fFormat::format));
+					if (quick.getIcon() != null)
+						subMenu.withIcon(quick.getIcon());
+
+					try {
+						for (int m = 0; m < theMenuItemPopulators.size(); m++)
+							((QuickSwingMenuPopulator<ExElement>) theMenuItemPopulators.get(m)).populateMenu(subMenu,
+								quick.getMenuItems().get(m));
+					} catch (ModelInstantiationException e) {
+						throw new CheckedExceptionWrapper(e);
+					}
+				});
+			} catch (CheckedExceptionWrapper e) {
+				throw CheckedExceptionWrapper.getThrowable(e, ModelInstantiationException.class);
+			}
+		}
+	}
+
+	static class SwingCheckBoxMenuItem<T> implements QuickSwingMenuPopulator<QuickCheckBoxMenuItem<T>> {
+		@Override
+		public void populateMenu(MenuBuilder<?, ?> menu, QuickCheckBoxMenuItem<T> quick) throws ModelInstantiationException {
+			Format<T> format = quick.getFormat().get();
+			if (format == null)
+				format = (Format<T>) QuickTextWidget.TO_STRING_FORMAT;
+			Format<T> fFormat = format;
+			menu.withCheckBoxMenuItem(null, quick.isSelected(), menuItem -> {
+				menuItem.withText(quick.getValue().map(fFormat::format));
+				if (quick.getIcon() != null)
+					menuItem.withIcon(quick.getIcon());
+			});
+		}
 	}
 
 	static class SwingBox extends QuickSwingPopulator.QuickSwingContainerPopulator.Abstract<QuickBox> {
@@ -573,7 +730,33 @@ public class QuickBaseSwing implements QuickInterpretation {
 		@Override
 		protected void doPopulate(PanelPopulator<?, ?> panel, QuickCheckBox quick, Consumer<ComponentEditor<?, ?>> component)
 			throws ModelInstantiationException {
-			panel.addCheckField(null, quick.getValue(), cb -> component.accept(cb));
+			panel.addCheckField(null, quick.getValue(), cb -> {
+				cb.withText(quick.getText());
+				component.accept(cb);
+			});
+		}
+	}
+
+	static class SwingRadioButton extends QuickSwingPopulator.Abstract<QuickRadioButton> {
+		@Override
+		protected void doPopulate(PanelPopulator<?, ?> panel, QuickRadioButton quick, Consumer<ComponentEditor<?, ?>> component)
+			throws ModelInstantiationException {
+			panel.addRadioButton(null, quick.getValue(), cb -> {
+				cb.withText(quick.getText());
+				component.accept(cb);
+			});
+		}
+	}
+
+	static class SwingToggleButton extends QuickSwingPopulator.Abstract<QuickToggleButton> {
+		@Override
+		protected void doPopulate(PanelPopulator<?, ?> panel, QuickToggleButton quick, Consumer<ComponentEditor<?, ?>> component)
+			throws ModelInstantiationException {
+			panel.addToggleButton(null, quick.getValue(), null, cb -> {
+				component.accept(cb);
+				cb.withText(quick.getText());
+				cb.withIcon(quick.getIcon());
+			});
 		}
 	}
 

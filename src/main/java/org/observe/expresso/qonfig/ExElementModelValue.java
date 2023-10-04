@@ -53,6 +53,11 @@ public class ExElementModelValue extends ExAddOn.Abstract<ExtModelValueElement<?
 		}
 
 		@Override
+		public Class<AO> getInstanceType() {
+			return (Class<AO>) ExElementModelValue.class;
+		}
+
+		@Override
 		public AO create(ExtModelValueElement<?, ?> element) {
 			return (AO) new ExElementModelValue(element);
 		}

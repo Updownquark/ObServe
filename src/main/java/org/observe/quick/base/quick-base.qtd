@@ -217,12 +217,14 @@
 			<value type="expression" specify="optional" />
 		</element-def>
 		<?DOC A toggle button to edit a boolean value?>
-		<element-def name="toggle-button" extends="value-widget">
+		<element-def name="toggle-button" extends="check-box">
 			<?DOC The text to display for the button?>
 			<value type="expression" specify="optional" />
 			<?DOC The icon to display for the button?>
 			<attribute name="icon" type="expression" specify="optional" />
 		</element-def>
+		<?DOC A single radio button to control a boolean value?>
+		<element-def name="radio-button" extends="check-box" />
 		<?DOC A button that opens a file browser?>
 		<element-def name="file-button" extends="value-widget">
 			<attribute name="open" type="boolean" />
@@ -603,7 +605,7 @@
 		<element-def name="abst-menu-item" extends="label" abstract="true">
 		</element-def>
 		<element-def name="menu" extends="abst-menu-item">
-			<child-def name="item" type="menu-item" min="0" max="inf" />
+			<child-def name="menu-item" type="menu-item" min="0" max="inf" />
 		</element-def>
 		<element-def name="menu-item" extends="abst-menu-item">
 			<attribute name="action" type="expression" />

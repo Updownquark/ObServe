@@ -89,6 +89,11 @@ public class QuickInlineLayout extends QuickLayout.Abstract {
 		}
 
 		@Override
+		public Class<QuickInlineLayout> getInstanceType() {
+			return QuickInlineLayout.class;
+		}
+
+		@Override
 		public QuickInlineLayout create(QuickBox element) {
 			return new QuickInlineLayout(element);
 		}

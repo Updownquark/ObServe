@@ -71,6 +71,11 @@ public class ExTyped<T> extends ExAddOn.Abstract<ExElement> {
 		}
 
 		@Override
+		public Class<ExTyped<T>> getInstanceType() {
+			return (Class<ExTyped<T>>) (Class<?>) ExTyped.class;
+		}
+
+		@Override
 		public ExTyped<T> create(ExElement element) {
 			return new ExTyped<>(element);
 		}

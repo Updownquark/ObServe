@@ -38,6 +38,11 @@ public class QuickRenderer extends ExAddOn.Abstract<QuickWidget> {
 		}
 
 		@Override
+		public Class<QuickRenderer> getInstanceType() {
+			return QuickRenderer.class;
+		}
+
+		@Override
 		public QuickRenderer create(QuickWidget element) {
 			return new QuickRenderer(element);
 		}

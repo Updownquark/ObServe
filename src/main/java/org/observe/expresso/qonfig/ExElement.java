@@ -896,6 +896,8 @@ public interface ExElement extends Identifiable {
 			if (interpreted instanceof Interpreted.Abstract)
 				((Interpreted.Abstract<ExElement>) interpreted).instantiated(this);
 			theReporting = interpreted.reporting();
+			if (parent == this)
+				throw new IllegalArgumentException("An element cannot be its own parent");
 			theParent = parent;
 			theTypeName = interpreted.getDefinition().getElement().getType().getName();
 

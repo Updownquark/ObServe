@@ -77,6 +77,11 @@ public class ExWithLocalModel extends ExModelAugmentation<ExElement> {
 		}
 
 		@Override
+		public Class<ExWithLocalModel> getInstanceType() {
+			return ExWithLocalModel.class;
+		}
+
+		@Override
 		public ExWithLocalModel create(ExElement element) {
 			return new ExWithLocalModel(element);
 		}

@@ -16,6 +16,7 @@ import javax.swing.JCheckBox;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
+import javax.swing.JRadioButton;
 import javax.swing.JSpinner;
 import javax.swing.JTabbedPane;
 import javax.swing.JToggleButton;
@@ -164,9 +165,16 @@ implements PanelPopulation.PanelPopulator<JPanel, AbstractQuickContainerPopulato
 
 	@Override
 	public AbstractQuickContainerPopulator addCheckField(String fieldName, SettableValue<Boolean> field,
-		Consumer<FieldEditor<JCheckBox, ?>> modify) {
+		Consumer<ButtonEditor<JCheckBox, ?>> modify) {
 		return addHPanel(null, new JustifiedBoxLayout(true).mainJustified().crossJustified(),
 			p -> p.addCheckField(fieldName, field, modify));
+	}
+
+	@Override
+	public AbstractQuickContainerPopulator addRadioButton(String fieldName, SettableValue<Boolean> field,
+		Consumer<ButtonEditor<JRadioButton, ?>> modify) {
+		return addHPanel(null, new JustifiedBoxLayout(true).mainJustified().crossJustified(),
+			p -> p.addRadioButton(fieldName, field, modify));
 	}
 
 	@Override
@@ -356,5 +364,10 @@ implements PanelPopulation.PanelPopulator<JPanel, AbstractQuickContainerPopulato
 	@Override
 	public AbstractQuickContainerPopulator withTooltip(ObservableValue<String> tooltip) {
 		throw new UnsupportedOperationException("Should not call this here");
+	}
+
+	@Override
+	public ObservableValue<String> getTooltip() {
+		return ObservableValue.of(String.class, null);
 	}
 }

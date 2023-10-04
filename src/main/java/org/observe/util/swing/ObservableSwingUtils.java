@@ -156,6 +156,65 @@ public class ObservableSwingUtils {
 	}
 
 	/**
+	 * Links up a check box menu item's {@link JCheckBoxMenuItem#isSelected() selected} state to a settable boolean, such that the user's
+	 * interaction with the check box is reported by the value, and setting the value alters the check box.
+	 *
+	 * @param checkBox The menu item to control observably
+	 * @param descrip The description for the check box's tool tip when it is enabled
+	 * @param selected The settable, observable boolean to control the check box's selection
+	 * @return The subscription to {@link Subscription#unsubscribe() unsubscribe} to terminate the link
+	 */
+	public static Subscription checkFor(JCheckBoxMenuItem checkBox, ObservableValue<String> descrip, SettableValue<Boolean> selected) {
+		SimpleObservable<Void> until = SimpleObservable.build().build();
+		ObservableValue<String> safeDescrip = descrip.safe(ThreadConstraint.EDT, until);
+		SettableValue<Boolean> safeSelected = selected.safe(ThreadConstraint.EDT, until);
+
+		String[] enDesc = new String[2];
+		Runnable checkEnabled = () -> {
+			if (enDesc[0] != null) {
+				if (checkBox.isEnabled())
+					checkBox.setEnabled(false);
+				checkBox.setToolTipText(enDesc[0]);
+			} else {
+				String acceptable = safeSelected.isAcceptable(!checkBox.isSelected());
+				if (acceptable != null) {
+					if (checkBox.isEnabled())
+						checkBox.setEnabled(false);
+					checkBox.setToolTipText(acceptable);
+				} else {
+					if (!checkBox.isEnabled())
+						checkBox.setEnabled(true);
+					checkBox.setToolTipText(enDesc[1]);
+				}
+			}
+		};
+		ActionListener action = evt -> {
+			safeSelected.set(checkBox.isSelected(), evt);
+			checkEnabled.run();
+		};
+		checkBox.addActionListener(action);
+		Subscription enabledSub = safeSelected.isEnabled().changes().act(evt -> {
+			enDesc[0] = evt.getNewValue();
+			checkEnabled.run();
+		});
+		Subscription descripSub = safeDescrip.changes().act(evt -> {
+			enDesc[1] = evt.getNewValue();
+			checkEnabled.run();
+		});
+		Subscription selectedSub = safeSelected.changes().act(evt -> {
+			checkBox.setSelected(evt.getNewValue() != null && evt.getNewValue());
+			checkEnabled.run();
+		});
+		return () -> {
+			selectedSub.unsubscribe();
+			descripSub.unsubscribe();
+			enabledSub.unsubscribe();
+			checkBox.removeActionListener(action);
+			until.onNext(null);
+		};
+	}
+
+	/**
 	 * Links up the {@link JToggleButton#isSelected() selected} state of a list of {@link JToggleButton}s to a settable value, such that the
 	 * user's interaction with the toggle buttons is reported by the value, and setting the value alters the toggle buttons.
 	 *

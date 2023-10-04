@@ -13,6 +13,7 @@ import java.util.function.Function;
 import java.util.function.IntSupplier;
 import java.util.function.Supplier;
 
+import javax.swing.AbstractButton;
 import javax.swing.Icon;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
@@ -319,6 +320,10 @@ class QuickSwingTablePopulation {
 
 		String getTooltip() {
 			return theTooltip == null ? null : theTooltip.get();
+		}
+
+		ObservableValue<String> getTooltipValue() {
+			return theTooltip == null ? ObservableValue.of(String.class, null) : theTooltip;
 		}
 	}
 
@@ -846,6 +851,11 @@ class QuickSwingTablePopulation {
 		}
 
 		@Override
+		public ObservableValue<String> getTooltip() {
+			return ObservableValue.of(String.class, null);
+		}
+
+		@Override
 		public Observable<?> getUntil() {
 			return Observable.constant(null);
 		}
@@ -929,12 +939,12 @@ class QuickSwingTablePopulation {
 
 		@Override
 		public SwingCellPopulator<R, C> addCheckField(String fieldName, SettableValue<Boolean> field,
-			Consumer<FieldEditor<JCheckBox, ?>> modify) {
+			Consumer<ButtonEditor<JCheckBox, ?>> modify) {
 			if (isRenderer) {
 				ObservableCellRenderer<R, C> delegate = ObservableCellRenderer.checkRenderer(cell -> {
 					return Boolean.TRUE.equals(field.get());
 				});
-				FieldRenderEditor<JCheckBox> editor = new FieldRenderEditor<>(theRenderer);
+				ButtonRenderEditor<JCheckBox, ?> editor = new ButtonRenderEditor<>(null, theRenderer);
 				if (modify != null)
 					modify.accept(editor);
 				theRenderer.delegateTo(delegate);
@@ -944,8 +954,8 @@ class QuickSwingTablePopulation {
 					.error("Check box editor can only be used for boolean-type columns, not " + theEditor.getColumn().getType());
 				else {
 					JCheckBox check = new JCheckBox();
-					FieldRenderEditor<JCheckBox> fieldEditor = new FieldRenderEditor<>(ObservableCellEditor.createCheckBoxEditor(check),
-						check);
+					ButtonRenderEditor<JCheckBox, ?> fieldEditor = new ButtonRenderEditor<>(null,
+						ObservableCellEditor.createCheckBoxEditor(check), check);
 					if (modify != null)
 						modify.accept(fieldEditor);
 					theEditor.withEditor(fieldEditor.getCellEditor());
@@ -956,20 +966,19 @@ class QuickSwingTablePopulation {
 
 		@Override
 		public SwingCellPopulator<R, C> addButton(String buttonText, ObservableAction action, Consumer<ButtonEditor<JButton, ?>> modify) {
+			ButtonRenderEditor<JButton, ?>[] editor = new SwingCellPopulator.ButtonRenderEditor[1];
 			if (isRenderer) {
-				ButtonRenderEditor[] editor = new SwingCellPopulator.ButtonRenderEditor[1];
 				ObservableCellRenderer<R, C> delegate = ObservableCellRenderer.buttonRenderer(cell -> {
 					return editor[0].theButtonText == null ? null : editor[0].theButtonText.get();
 				});
-				editor[0] = new ButtonRenderEditor(buttonText, delegate);
+				editor[0] = new ButtonRenderEditor<>(buttonText, delegate);
 				delegate.modify(comp -> editor[0].decorateButton((JButton) comp));
 				if (modify != null)
 					modify.accept(editor[0]);
 				theRenderer.delegateTo(delegate);
 			} else {
-				ButtonRenderEditor[] editor = new SwingCellPopulator.ButtonRenderEditor[1];
 				JButton button = new JButton();
-				editor[0] = new ButtonRenderEditor(buttonText, ObservableCellEditor.createButtonCellEditor(colValue -> {
+				editor[0] = new ButtonRenderEditor<>(buttonText, ObservableCellEditor.createButtonCellEditor(colValue -> {
 					return editor[0].getButtonText().get();
 				}, button, cell -> {
 					action.act(null);
@@ -1111,6 +1120,11 @@ class QuickSwingTablePopulation {
 			public E withTooltip(ObservableValue<String> tooltip) {
 				theRenderer.setTooltip(tooltip);
 				return (E) this;
+			}
+
+			@Override
+			public ObservableValue<String> getTooltip() {
+				return theRenderer.getTooltipValue();
 			}
 
 			@Override
@@ -1283,8 +1297,8 @@ class QuickSwingTablePopulation {
 			}
 		}
 
-		class ButtonRenderEditor extends AbstractFieldRenderEditor<JButton, ButtonRenderEditor>
-		implements ButtonEditor<JButton, ButtonRenderEditor> {
+		class ButtonRenderEditor<B extends AbstractButton, E extends ButtonRenderEditor<B, E>> extends AbstractFieldRenderEditor<B, E>
+			implements ButtonEditor<B, E> {
 			ObservableValue<String> theButtonText;
 			private ObservableValue<? extends Icon> theIcon;
 			private ObservableValue<String> theDisabled;
@@ -1294,21 +1308,21 @@ class QuickSwingTablePopulation {
 				theButtonText = ObservableValue.of(String.class, buttonText);
 			}
 
-			ButtonRenderEditor(String buttonText, ObservableCellEditor<R, C> cellEditor, JButton editorComponent) {
+			ButtonRenderEditor(String buttonText, ObservableCellEditor<R, C> cellEditor, B editorComponent) {
 				super(cellEditor, editorComponent);
 				theButtonText = ObservableValue.of(String.class, buttonText);
 			}
 
 			@Override
-			public ButtonRenderEditor withIcon(ObservableValue<? extends Icon> icon) {
+			public E withIcon(ObservableValue<? extends Icon> icon) {
 				theIcon = icon;
-				return this;
+				return (E) this;
 			}
 
 			@Override
-			public ButtonRenderEditor withText(ObservableValue<String> text) {
+			public E withText(ObservableValue<String> text) {
 				theButtonText = text;
-				return this;
+				return (E) this;
 			}
 
 			public ObservableValue<String> getButtonText() {
@@ -1316,14 +1330,14 @@ class QuickSwingTablePopulation {
 			}
 
 			@Override
-			public ButtonRenderEditor disableWith(ObservableValue<String> disabled) {
+			public E disableWith(ObservableValue<String> disabled) {
 				if (theDisabled == null)
 					theDisabled = disabled;
 				else {
 					ObservableValue<String> old = theDisabled;
 					theDisabled = ObservableValue.firstValue(TypeTokens.get().STRING, msg -> msg != null, () -> null, old, disabled);
 				}
-				return this;
+				return (E) this;
 			}
 
 			public Runnable decorateButton(JButton button) {

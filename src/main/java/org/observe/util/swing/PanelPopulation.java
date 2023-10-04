@@ -58,7 +58,6 @@ import org.observe.dbug.DbugAnchorType;
 import org.observe.swingx.JXTreeTable;
 import org.observe.util.TypeTokens;
 import org.observe.util.swing.PanelPopulationImpl.*;
-import org.observe.util.swing.WindowPopulation.JMenuBuilder;
 import org.qommons.BreakpointHere;
 import org.qommons.StringUtils;
 import org.qommons.ThreadConstraint;
@@ -264,23 +263,16 @@ public class PanelPopulation {
 		<F> P addLink(String fieldName, ObservableValue<F> field, Function<? super F, String> format, Consumer<Object> action,
 			Consumer<FieldEditor<JLabel, ?>> modify);
 
-		P addCheckField(String fieldName, SettableValue<Boolean> field, Consumer<FieldEditor<JCheckBox, ?>> modify);
+		P addCheckField(String fieldName, SettableValue<Boolean> field, Consumer<ButtonEditor<JCheckBox, ?>> modify);
+
+		P addRadioButton(String fieldName, SettableValue<Boolean> field, Consumer<ButtonEditor<JRadioButton, ?>> modify);
 
 		P addToggleButton(String fieldName, SettableValue<Boolean> field, String text, Consumer<ButtonEditor<JToggleButton, ?>> modify);
 
 		/* TODO
-		 * slider
-		 * progress bar
-		 * spinner
 		 * offloaded actions
-		 * menu button
-		 * (multi-) split pane (with configurable splitter panel)
-		 * scroll pane
 		 * value selector
 		 * settings menu
-		 * rotation
-		 * form controls (e.g. press enter in a text field and a submit action (also tied to a button) fires)
-		 * styles: borders, background...
 		 *
 		 * Dragging!!!
 		 *
@@ -338,22 +330,6 @@ public class PanelPopulation {
 
 		<F, TB extends JToggleButton> P addToggleField(String fieldName, SettableValue<F> value, List<? extends F> values,
 			Class<TB> buttonType, Function<? super F, ? extends TB> buttonCreator, Consumer<ToggleEditor<F, TB, ?>> modify);
-
-		// public <F> MigPanelPopulatorField<F, JToggleButton> addToggleField(String fieldName, SettableValue<F> value,
-		// boolean radio, F... availableValues) {
-		// return addToggleField(fieldName, value, radio, Arrays.asList(availableValues));
-		// }
-		//
-		// public <F> MigPanelPopulatorField<F, JToggleButton> addToggleField(String fieldName, SettableValue<F> value, boolean radio,
-		// List<? extends F> availableValues) {
-		// }
-		//
-		// public <F> MigPanelPopulatorField<F, JSlider> addSliderField(String fieldName, SettableValue<Integer> value) {}
-		//
-		// public <F> MigPanelPopulatorField<F, ObservableTreeModel> addTree(Object root,
-		// Function<Object, ? extends ObservableCollection<?>> branching) {}
-		//
-		// P addMultiple(String fieldName, Consumer<PanelPopulator<JPanel, ?>> panel);
 
 		default P addButton(String buttonText, Consumer<Object> action, Consumer<ButtonEditor<JButton, ?>> modify) {
 			return addButton(buttonText, new ObservableAction() {
@@ -560,8 +536,9 @@ public class PanelPopulation {
 		}
 
 		@Override
-		default P addCheckField(String fieldName, SettableValue<Boolean> field, Consumer<FieldEditor<JCheckBox, ?>> modify) {
-			SimpleFieldEditor<JCheckBox, ?> fieldPanel = new SimpleFieldEditor<>(fieldName, new JCheckBox(), getUntil());
+		default P addCheckField(String fieldName, SettableValue<Boolean> field, Consumer<ButtonEditor<JCheckBox, ?>> modify) {
+			SimpleButtonEditor<JCheckBox, ?> fieldPanel = new SimpleButtonEditor<>(fieldName, new JCheckBox(), null,
+				ObservableAction.DO_NOTHING, false, getUntil());
 			Subscription sub = ObservableSwingUtils.checkFor(fieldPanel.getEditor(), fieldPanel.getTooltip(), field);
 			getUntil().take(1).act(__ -> sub.unsubscribe());
 			if (modify != null)
@@ -569,6 +546,21 @@ public class PanelPopulation {
 			if (fieldPanel.isDecorated())
 				field.noInitChanges().safe(ThreadConstraint.EDT).takeUntil(getUntil())
 				.act(__ -> fieldPanel.decorate(fieldPanel.getComponent()));
+			doAdd(fieldPanel);
+			return (P) this;
+		}
+
+		@Override
+		default P addRadioButton(String fieldName, SettableValue<Boolean> field, Consumer<ButtonEditor<JRadioButton, ?>> modify) {
+			SimpleButtonEditor<JRadioButton, ?> fieldPanel = new SimpleButtonEditor<>(fieldName, new JRadioButton(), null,
+				ObservableAction.DO_NOTHING, false, getUntil());
+			Subscription sub = ObservableSwingUtils.checkFor(fieldPanel.getEditor(), fieldPanel.getTooltip(), field);
+			getUntil().take(1).act(__ -> sub.unsubscribe());
+			if (modify != null)
+				modify.accept(fieldPanel);
+			if (fieldPanel.isDecorated())
+				field.noInitChanges().safe(ThreadConstraint.EDT).takeUntil(getUntil())
+					.act(__ -> fieldPanel.decorate(fieldPanel.getComponent()));
 			doAdd(fieldPanel);
 			return (P) this;
 		}
@@ -1090,7 +1082,8 @@ public class PanelPopulation {
 			return (P) this;
 		}
 
-		ObservableValue<String> getTooltip() {
+		@Override
+		public ObservableValue<String> getTooltip() {
 			isTooltipHandled = true;
 			return theTooltip;
 		}
@@ -1223,7 +1216,8 @@ public class PanelPopulation {
 			decorated = true;
 			if (theName != null)
 				c.setName(theName);
-			class JPMBuilder extends AbstractComponentEditor<JPopupMenu, JPMBuilder> implements MenuBuilder<JPopupMenu, JPMBuilder> {
+			class JPMBuilder extends AbstractComponentEditor<JPopupMenu, JPMBuilder>
+			implements WindowPopulation.AbstractMenuBuilder<JPopupMenu, JPMBuilder> {
 				ObservableValue<String> theDisablement;
 
 				public JPMBuilder(Observable<?> until) {
@@ -1270,34 +1264,8 @@ public class PanelPopulation {
 				}
 
 				@Override
-				public JPMBuilder withSubMenu(String name, Consumer<MenuBuilder<JMenu, ?>> subMenu) {
-					JMenu jmenu = null;
-					for (int m = 0; m < getEditor().getComponentCount(); m++) {
-						if (getEditor().getComponent(m) instanceof JMenu && ((JMenu) getEditor().getComponent(m)).getText().equals(name)) {
-							jmenu = (JMenu) getEditor().getComponent(m);
-							break;
-						}
-					}
-					boolean found = jmenu != null;
-					if (!found)
-						jmenu = new JMenu(name);
-					JMenuBuilder<?> builder = new JMenuBuilder<>(jmenu, getUntil());
-					subMenu.accept(builder);
-					if (!found)
-						getEditor().add((JMenu) builder.getComponent());
-					return this;
-				}
-
-				@Override
-				public JPMBuilder withAction(String name, ObservableAction action, Consumer<ButtonEditor<JMenuItem, ?>> ui) {
-					JMenuItem item = new JMenuItem(name);
-					ButtonEditor<JMenuItem, ?> button = new PanelPopulationImpl.SimpleButtonEditor<>(name, item, name, action, false,
-						getUntil());
-					if (ui != null) {
-						ui.accept(button);
-					}
-					getEditor().add((JMenuItem) button.getComponent());
-					return this;
+				public void addMenuItem(JMenuItem item) {
+					getEditor().add(item);
 				}
 			}
 			JPMBuilder menuBuilder;
@@ -1415,6 +1383,8 @@ public class PanelPopulation {
 		}
 
 		T withTooltip(ObservableValue<String> tooltip);
+
+		ObservableValue<String> getTooltip();
 	}
 
 	public interface FieldEditor<E, P extends FieldEditor<E, P>> extends ComponentEditor<E, P>, Tooltipped<P> {
@@ -2144,6 +2114,8 @@ public class PanelPopulation {
 				action.accept(cause);
 			}), ui);
 		}
+
+		M withCheckBoxMenuItem(String name, SettableValue<Boolean> value, Consumer<ButtonEditor<JCheckBoxMenuItem, ?>> ui);
 
 		M withSubMenu(String name, Consumer<MenuBuilder<JMenu, ?>> subMenu);
 	}

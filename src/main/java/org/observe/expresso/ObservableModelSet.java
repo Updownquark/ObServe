@@ -1954,10 +1954,16 @@ public interface ObservableModelSet extends Identifiable {
 
 		@Override
 		public String toString() {
-			StringBuilder str = new StringBuilder();
-			str.append(theId);
-			print(str, 1);
-			return str.toString();
+			try {
+				StringBuilder str = new StringBuilder();
+				str.append(theId);
+				print(str, 1);
+				return str.toString();
+			} catch (RuntimeException e) {
+				// I've been having trouble with this, but the stack trace hadn't been printing, so I couldn't find the problem
+				e.printStackTrace();
+				return "(exception)";
+			}
 		}
 
 		private void print(StringBuilder str, int indent) {
@@ -1967,14 +1973,12 @@ public interface ObservableModelSet extends Identifiable {
 				str.append('\n');
 				for (int i = 0; i < indent; i++)
 					str.append('\t');
-				ModelComponentNode<?> thing = getComponentIfExists(component, false);
+				ModelComponentNode<?> node = getComponentIfExists(component, false);
 				str.append(component).append(':');
-				if (thing.getModel() != null)
-					((DefaultModelSet) thing.getModel()).print(str, indent + 1);
-				else {
-					if (this instanceof InterpretedModelSet)
-						str.append(' ').append(((InterpretedValueSynth<?, ?>) thing).getType());
-				}
+				if (node.getModel() != null)
+					((DefaultModelSet) node.getModel()).print(str, indent + 1);
+				else if (node instanceof InterpretedValueSynth)
+					str.append(' ').append(((InterpretedValueSynth<?, ?>) node).getType());
 			}
 		}
 
