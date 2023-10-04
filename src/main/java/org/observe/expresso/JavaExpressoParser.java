@@ -81,6 +81,7 @@ public class JavaExpressoParser implements ExpressoParser {
 		Expression firstChild = expression.getComponents().peekFirst();
 		switch (expression.getType()) {
 		case "expressionFull":
+		case "variableInitializer":
 			return _parse(firstChild, fullText);
 		case "expression":
 			switch (expression.getComponents().size()) {
@@ -351,6 +352,12 @@ public class JavaExpressoParser implements ExpressoParser {
 					getWhiteSpaceAt(fullText, arg.getStartIndex() + argX.getExpressionLength())));
 			}
 			return new MethodInvocation(null, methodName, null, args);
+		case "arrayInitializer":
+			List<Expression> valueExprs = expression.getComponents("variableInitializer");
+			List<ObservableExpression> values = new ArrayList<>(valueExprs.size());
+			for (Expression value : valueExprs)
+				values.add(_parse(value, fullText));
+			return new ArrayInitializerExpression(Collections.unmodifiableList(values));
 		case "integerLiteral":
 			String text = expression.getText();
 			int start = 0, end = text.length();

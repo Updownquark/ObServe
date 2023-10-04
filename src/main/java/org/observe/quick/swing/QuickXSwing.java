@@ -19,6 +19,7 @@ import org.observe.expresso.ModelInstantiationException;
 import org.observe.quick.QuickInterpretation;
 import org.observe.quick.QuickWidget;
 import org.observe.quick.base.CollapsePane;
+import org.observe.quick.base.QuickMultiSlider;
 import org.observe.quick.base.QuickTableColumn;
 import org.observe.quick.base.QuickTreeTable;
 import org.observe.quick.base.TabularWidget;
@@ -27,6 +28,7 @@ import org.observe.quick.swing.QuickSwingPopulator.QuickSwingContainerPopulator;
 import org.observe.quick.swing.QuickSwingTablePopulation.InterpretedSwingTableColumn;
 import org.observe.util.TypeTokens;
 import org.observe.util.swing.CategoryRenderStrategy;
+import org.observe.util.swing.MultiRangeSlider;
 import org.observe.util.swing.PanelPopulation;
 import org.observe.util.swing.PanelPopulation.CollapsePanel;
 import org.observe.util.swing.PanelPopulation.ComponentEditor;
@@ -46,6 +48,7 @@ public class QuickXSwing implements QuickInterpretation {
 	public void configure(Transformer.Builder<ExpressoInterpretationException> tx) {
 		tx.with(CollapsePane.Interpreted.class, QuickSwingContainerPopulator.class, SwingCollapsePane::new);
 		tx.with(QuickTreeTable.Interpreted.class, QuickSwingPopulator.class, SwingTreeTable::new);
+		tx.with(QuickMultiSlider.Interpreted.class, QuickSwingPopulator.class, SwingMultiSlider::new);
 	}
 
 	static class SwingCollapsePane extends QuickSwingContainerPopulator.Abstract<CollapsePane> {
@@ -272,6 +275,32 @@ public class QuickXSwing implements QuickInterpretation {
 				}
 			});
 			tableInitialized = true;
+		}
+	}
+
+	static class SwingMultiSlider extends QuickSwingPopulator.Abstract<QuickMultiSlider> {
+		SwingMultiSlider(QuickMultiSlider.Interpreted interpreted, Transformer<ExpressoInterpretationException> tx)
+			throws ExpressoInterpretationException {}
+
+		@Override
+		protected void doPopulate(PanelPopulator<?, ?> panel, QuickMultiSlider quick, Consumer<ComponentEditor<?, ?>> component)
+			throws ModelInstantiationException {
+			panel.addMultiSlider(null, quick.getValues(), slider -> {
+				component.accept(slider);
+				slider.withBounds(quick.getMin(), quick.getMax());
+				quick.getBGRenderer().changes().takeUntil(slider.getUntil()).act(evt -> {
+					if (evt.getNewValue() != null)
+						slider.getEditor().setRenderer(evt.getNewValue());
+					else if (!evt.isInitial())
+						slider.getEditor().setRenderer(new MultiRangeSlider.MRSliderRenderer.Default());
+				});
+				quick.getValueRenderer().changes().takeUntil(slider.getUntil()).act(evt -> {
+					if (evt.getNewValue() != null)
+						slider.getEditor().setRangeRenderer(evt.getNewValue());
+					else if (!evt.isInitial())
+						slider.getEditor().setRangeRenderer(new MultiRangeSlider.RangeRenderer.Default(false));
+				});
+			});
 		}
 	}
 }

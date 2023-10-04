@@ -9,5 +9,15 @@
 		</element-def>
 
 		<element-def name="tree-table" extends="tree" inherits="tabular-widget" />
+
+		<element-def name="multi-slider" extends="widget">
+			<attribute name="values" type="expression" />
+			<attribute name="orientation" type="orientation" default="horizontal" />
+			<attribute name="enforce-order" type="boolean" default="true" />
+			<attribute name="min" type="expression" />
+			<attribute name="max" type="expression" />
+			<attribute name="bg-renderer" type="expression" specify="optional" />
+			<attribute name="value-renderer" type="expression" specify="optional" />
+		</element-def>
 	</elements>
 </qonfig-def>

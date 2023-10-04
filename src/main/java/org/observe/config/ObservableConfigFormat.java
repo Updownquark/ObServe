@@ -105,9 +105,10 @@ public interface ObservableConfigFormat<E> {
 	 * @param config Accessor for the config to persist to
 	 * @param acceptedValue Accepts the value after it is persisted--it may be different from the given value
 	 * @param until An observable to release all listeners and resources associated with the persistence
+	 * @return Whether this call caused any changes in the config
 	 * @throws IllegalArgumentException If the value could not be persisted
 	 */
-	void format(ObservableConfigParseSession session, E value, E previousValue, ConfigGetter config, Consumer<E> acceptedValue,
+	boolean format(ObservableConfigParseSession session, E value, E previousValue, ConfigGetter config, Consumer<E> acceptedValue,
 		Observable<?> until) throws IllegalArgumentException;
 
 	/**
@@ -896,7 +897,7 @@ public interface ObservableConfigFormat<E> {
 		TypeToken<E> elementType = (TypeToken<E>) collectionType.resolveType(Collection.class.getTypeParameters()[0]);
 		return new ObservableConfigFormat<C>() {
 			@Override
-			public void format(ObservableConfigParseSession session, C value, C previousValue, ConfigGetter config,
+			public boolean format(ObservableConfigParseSession session, C value, C previousValue, ConfigGetter config,
 				Consumer<C> acceptedValue, Observable<?> until) {
 				// We don't support calling set on a field like this
 				// If this is from a copy event, we'll do the initial formatting
@@ -909,6 +910,7 @@ public interface ObservableConfigFormat<E> {
 				}
 				// Otherwise, there's nothing to do
 				acceptedValue.accept(value);
+				return false;
 			}
 
 			@Override
@@ -949,7 +951,8 @@ public interface ObservableConfigFormat<E> {
 	static <E> ObservableConfigFormat<SyncValueSet<E>> ofEntitySet(EntityConfigFormat<E> elementFormat, String childName) {
 		return new ObservableConfigFormat<SyncValueSet<E>>() {
 			@Override
-			public void format(ObservableConfigParseSession session, SyncValueSet<E> value, SyncValueSet<E> preValue, ConfigGetter config,
+			public boolean format(ObservableConfigParseSession session, SyncValueSet<E> value, SyncValueSet<E> preValue,
+				ConfigGetter config,
 				Consumer<SyncValueSet<E>> acceptedValue, Observable<?> until) {
 				// We don't support calling set on a field like this
 				// In the case that the config is currently empty, this is trivial, and we'll support it for the sake of copying values
@@ -962,6 +965,7 @@ public interface ObservableConfigFormat<E> {
 				}
 				// Otherwise, there's nothing to do
 				acceptedValue.accept(preValue);
+				return false;
 			}
 
 			@Override
@@ -1010,7 +1014,7 @@ public interface ObservableConfigFormat<E> {
 		Impl.EntryFormat<K, V> entryFormat = new Impl.EntryFormat<>(true, keyName, valueName, keyType, valueType, keyFormat, valueFormat);
 		return new ObservableConfigFormat<ObservableMap<K, V>>() {
 			@Override
-			public void format(ObservableConfigParseSession session, ObservableMap<K, V> value, ObservableMap<K, V> previousValue,
+			public boolean format(ObservableConfigParseSession session, ObservableMap<K, V> value, ObservableMap<K, V> previousValue,
 				ConfigGetter config, Consumer<ObservableMap<K, V>> acceptedValue, Observable<?> until) throws IllegalArgumentException {
 				// We don't support calling set on a field like this
 				// In the case that the config is currently empty, this is trivial, and we'll support it for the sake of copying values
@@ -1026,6 +1030,7 @@ public interface ObservableConfigFormat<E> {
 				}
 				// Otherwise, there's nothing to do
 				acceptedValue.accept(previousValue);
+				return false;
 			}
 
 			@Override
@@ -1072,7 +1077,8 @@ public interface ObservableConfigFormat<E> {
 		Impl.EntryFormat<K, V> entryFormat = new Impl.EntryFormat<>(true, keyName, valueName, keyType, valueType, keyFormat, valueFormat);
 		return new ObservableConfigFormat<ObservableMultiMap<K, V>>() {
 			@Override
-			public void format(ObservableConfigParseSession session, ObservableMultiMap<K, V> value, ObservableMultiMap<K, V> previousValue,
+			public boolean format(ObservableConfigParseSession session, ObservableMultiMap<K, V> value,
+				ObservableMultiMap<K, V> previousValue,
 				ConfigGetter config, Consumer<ObservableMultiMap<K, V>> acceptedValue, Observable<?> until)
 					throws IllegalArgumentException {
 				// We don't support calling set on a field like this
@@ -1090,6 +1096,7 @@ public interface ObservableConfigFormat<E> {
 					}
 				}
 				acceptedValue.accept(previousValue);
+				return false;
 			}
 
 			@Override
@@ -1261,15 +1268,20 @@ public interface ObservableConfigFormat<E> {
 				return valueFilter;
 			}
 
-			void moldConfig(ObservableConfig config) {
-				if (!configFilter.isMulti() && !config.getName().equals(configFilter.getName()))
+			boolean moldConfig(ObservableConfig config) {
+				boolean changed = false;
+				if (!configFilter.isMulti() && !config.getName().equals(configFilter.getName())) {
 					config.setName(configFilter.getName());
+					changed = true;
+				}
 				for (Map.Entry<String, String> attr : configFilter.getAttributes().entrySet()) {
+					changed = true;
 					if (attr.getValue() == null)
 						config.getChild(attr.getKey(), true, null);
 					else
 						config.set(attr.getKey(), attr.getValue());
 				}
+				return changed;
 			}
 
 			boolean applies(Object value) {
@@ -1307,8 +1319,10 @@ public interface ObservableConfigFormat<E> {
 		}
 
 		@Override
-		public void format(ObservableConfigParseSession session, T value, T previousValue, ConfigGetter config, Consumer<T> acceptedValue,
+		public boolean format(ObservableConfigParseSession session, T value, T previousValue, ConfigGetter config,
+			Consumer<T> acceptedValue,
 			Observable<?> until) throws IllegalArgumentException {
+			boolean changed = false;
 			SubFormat<? extends T> format = formatFor(value);
 			if (value != null && format == null)
 				throw new IllegalArgumentException("No sub-format found for value " + value.getClass().getName() + " " + value);
@@ -1316,15 +1330,18 @@ public interface ObservableConfigFormat<E> {
 				if (config.getConfig(false, false) != null) {
 					config.getConfig(true, false).set("null", "true");
 					config.getConfig(true, false).getAllContent().getValues().clear();
+					changed = true;
 				}
 				acceptedValue.accept(null);
-				return;
+				return changed;
 			} else {
 				config.getConfig(true, false).set("null", null);
-				format.moldConfig(config.getConfig(true, false));
-				((SubFormat<T>) format).format.format(session, value, format.applies(previousValue) ? previousValue : null, config,
+				changed |= format.moldConfig(config.getConfig(true, false));
+				changed |= ((SubFormat<T>) format).format.format(session, value, format.applies(previousValue) ? previousValue : null,
+					config,
 					acceptedValue, until);
 			}
+			return changed;
 		}
 
 		@Override
@@ -1507,7 +1524,7 @@ public interface ObservableConfigFormat<E> {
 			}
 
 			@Override
-			public void format(ObservableConfigParseSession session, T value, T previousValue, ConfigGetter config,
+			public boolean format(ObservableConfigParseSession session, T value, T previousValue, ConfigGetter config,
 				Consumer<T> acceptedValue, Observable<?> until) {
 				acceptedValue.accept(value);
 				String formatted;
@@ -1522,8 +1539,10 @@ public interface ObservableConfigFormat<E> {
 					else
 						formatted = format.format(value);
 				}
-				if (!Objects.equals(formatted, config.getConfig(true, false).getValue()))
+				boolean change = !Objects.equals(formatted, config.getConfig(true, false).getValue());
+				if (change)
 					config.getConfig(true, false).setValue(formatted);
+				return change;
 			}
 
 			@Override
@@ -1602,11 +1621,13 @@ public interface ObservableConfigFormat<E> {
 			}
 
 			@Override
-			public void format(ObservableConfigParseSession session, T value, T previousValue, ConfigGetter config,
+			public boolean format(ObservableConfigParseSession session, T value, T previousValue, ConfigGetter config,
 				Consumer<T> acceptedValue, Observable<?> until) throws IllegalArgumentException {
+				boolean change = false;
 				if (value == null) {
 					if (config.getConfig(false, false) != null) {
 						for (ObservableConfig child : config.getConfig(true, false).getContent()) {
+							change = true;
 							if (child.getName().equals("null")) {
 								child.setValue("true");
 								child.getAllContent().getValues().clear();
@@ -1615,7 +1636,7 @@ public interface ObservableConfigFormat<E> {
 						}
 					}
 					acceptedValue.accept(value);
-					return;
+					return change;
 				}
 				ObservableConfig nullConfig = config.getConfig(true, false).getChild("null");
 				if (nullConfig != null)
@@ -1635,6 +1656,7 @@ public interface ObservableConfigFormat<E> {
 				}
 				acceptedValue.accept(value);
 				config.getConfig(true, false).withParsedItem(session, value);
+				return true; // ??
 			}
 
 			private <F> void formatField(ObservableConfigParseSession session, ObservableConfig child, F fieldValue, F preFieldValue,
@@ -1739,9 +1761,10 @@ public interface ObservableConfigFormat<E> {
 			}
 
 			@Override
-			public void format(ObservableConfigParseSession session, T value, T previousValue, ConfigGetter config,
+			public boolean format(ObservableConfigParseSession session, T value, T previousValue, ConfigGetter config,
 				Consumer<T> acceptedValue, Observable<?> until) throws IllegalArgumentException {
 				// No need to persist at all
+				return false;
 			}
 
 			@Override
@@ -1786,10 +1809,12 @@ public interface ObservableConfigFormat<E> {
 
 		static class NullFormat implements ObservableConfigFormat<Object> {
 			@Override
-			public void format(ObservableConfigParseSession session, Object value, Object previousValue, ConfigGetter config,
+			public boolean format(ObservableConfigParseSession session, Object value, Object previousValue, ConfigGetter config,
 				Consumer<Object> acceptedValue, Observable<?> until) throws IllegalArgumentException {
-				if (config.getConfig(false, true) != null)
+				boolean change = config.getConfig(false, true) != null;
+				if (change)
 					config.getConfig(false, true).setTrivial(true);
+				return change;
 			}
 
 			@Override
@@ -1921,8 +1946,9 @@ public interface ObservableConfigFormat<E> {
 			}
 
 			@Override
-			public void format(ObservableConfigParseSession session, E value, E previousValue, ConfigGetter config,
+			public boolean format(ObservableConfigParseSession session, E value, E previousValue, ConfigGetter config,
 				Consumer<E> acceptedValue, Observable<?> until) {
+				boolean change = false;
 				if (value == null) {
 					acceptedValue.accept(null);
 					ObservableConfig c = config.getConfig(false, false);
@@ -1931,12 +1957,15 @@ public interface ObservableConfigFormat<E> {
 						for (int i = 0; i < theFields.keySize(); i++) {
 							if (theFields.get(i).childName == null) {
 								Object fieldValue = previousValue == null ? null : theFields.get(i).getter.apply(previousValue);
-								formatField(session, value, (ComponentField<E, Object>) theFields.get(i), fieldValue, fieldValue, c, fv -> {
+								change |= formatField(session, value, (ComponentField<E, Object>) theFields.get(i), fieldValue, fieldValue,
+									c, fv -> {
 								}, until, null);
 							} else {
 								ObservableConfig cfg = c.getChild(theFields.get(i).childName);
-								if (cfg != null)
+								if (cfg != null) {
+									change = true;
 									cfg.remove();
+								}
 							}
 							c.withParsedItem(session, null);
 						}
@@ -1946,20 +1975,21 @@ public interface ObservableConfigFormat<E> {
 					EntitySubFormat<? extends E> subFormat = formatFor(value);
 					if (subFormat != null) {
 						subFormat.moldConfig(c);
-						((EntitySubFormat<E>) subFormat).format.format(session, value,
+						change |= ((EntitySubFormat<E>) subFormat).format.format(session, value,
 							subFormat.applies(previousValue) ? previousValue : null, config, acceptedValue, until);
-						return;
+						return change;
 					}
 					acceptedValue.accept(value);
 					c.set("null", null);
 					for (int i = 0; i < theFields.keySize(); i++) {
 						ComponentField<E, ?> field = theFields.get(i);
 						Object fieldValue = field.getter.apply(value);
-						formatField(session, value, (ComponentField<E, Object>) field, fieldValue, fieldValue, c, fv -> {
+						change |= formatField(session, value, (ComponentField<E, Object>) field, fieldValue, fieldValue, c, fv -> {
 						}, until, null);
 					}
 					c.withParsedItem(session, value);
 				}
+				return change;
 			}
 
 			@Override
@@ -2119,9 +2149,10 @@ public interface ObservableConfigFormat<E> {
 
 			protected abstract E create(ObservableConfigParseContext<E> ctx, QuickMap<String, Object> fieldValues);
 
-			protected <F> void formatField(ObservableConfigParseSession session, E value, ComponentField<E, F> field, F previousValue,
+			protected <F> boolean formatField(ObservableConfigParseSession session, E value, ComponentField<E, F> field, F previousValue,
 				F fieldValue, ObservableConfig entityConfig, Consumer<F> onFieldValue, Observable<?> until, Object cause) {
 				boolean[] added = new boolean[1];
+				boolean[] changed = new boolean[1];
 				FormatEvent formatCause = new FormatEvent(cause, field.index);
 				try (Transaction causeT = Causable.use(formatCause); Transaction t = entityConfig.lock(true, formatCause)) {
 					if (fieldValue != null || field.childName == null) {
@@ -2131,17 +2162,21 @@ public interface ObservableConfigFormat<E> {
 						} else {
 							fieldConfig = entityConfig.getChild(field.childName, true, fc -> {
 								added[0] = true;
-								field.format.format(session, fieldValue, fieldValue, (__, ___) -> fc, onFieldValue, until);
+								changed[0] = field.format.format(session, fieldValue, fieldValue, (__, ___) -> fc, onFieldValue, until);
 							});
 						}
 						if (!added[0])
-							field.format.format(session, fieldValue, fieldValue, (__, ___) -> fieldConfig, onFieldValue, until);
+							changed[0] = field.format.format(session, fieldValue, fieldValue, (__, ___) -> fieldConfig, onFieldValue,
+								until);
 					} else {
 						ObservableConfig fieldConfig = entityConfig.getChild(field.childName);
-						if (fieldConfig != null)
+						if (fieldConfig != null) {
+							changed[0] = true;
 							fieldConfig.remove();
+						}
 					}
 				}
+				return changed[0];
 			}
 
 			protected <F> void parseUpdatedField(ObservableConfigParseContext<E> entityCtx, int fieldIdx) throws ParseException {
@@ -2592,9 +2627,10 @@ public interface ObservableConfigFormat<E> {
 			}
 
 			@Override
-			protected <F> void formatField(ObservableConfigParseSession session, E value, ComponentField<E, F> field, F previousValue,
+			protected <F> boolean formatField(ObservableConfigParseSession session, E value, ComponentField<E, F> field, F previousValue,
 				F fieldValue, ObservableConfig entityConfig, Consumer<F> onFieldValue, Observable<?> until, Object cause) {
-				super.formatField(session, value, field, previousValue, fieldValue, entityConfig, onFieldValue, until, cause);
+				boolean changed = super.formatField(session, value, field, previousValue, fieldValue, entityConfig, onFieldValue, until,
+					cause);
 				if (value != null) {
 					Object key = field.setter;
 					ListenerList<Consumer<FieldChange<?>>> listeners = (ListenerList<Consumer<FieldChange<?>>>) theEntityType
@@ -2605,6 +2641,7 @@ public interface ObservableConfigFormat<E> {
 							l -> l.accept(change));
 					}
 				}
+				return changed;
 			}
 
 			@Override

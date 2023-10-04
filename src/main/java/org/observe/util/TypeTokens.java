@@ -1656,10 +1656,10 @@ public class TypeTokens implements TypeParser {
 		if (!raw.isInterface()) {
 			Class<X> c = (Class<X>) raw;
 			TypeToken<X> t = type;
-			while (c != Object.class) {
+			while (c != null && c != Object.class) {
 				decomposed.add(t);
 				c = (Class<X>) c.getSuperclass();
-				t = (TypeToken<X>) t.getSupertype(c);
+				t = c == null ? null : (TypeToken<X>) t.getSupertype(c);
 			}
 		}
 		for (Class<?> intf : raw.getInterfaces())

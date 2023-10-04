@@ -340,15 +340,18 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 			Object[] oldValue = new Object[1];
 			try (Transaction t = lock(true, cause)) {
 				isSetting = true;
+				boolean[] changed = new boolean[1];
 				getParent(true, false, parent -> {
 					try (Transaction parentT = parent.lock(true, cause)) {
 						E oldV = theValue;
 						oldValue[0] = oldV;
-						theFormat.format(getSession(), value, oldV, (__, trivial) -> parent, theModifyingValue, getUntil());
+						changed[0] = theFormat.format(getSession(), value, oldV, (__, trivial) -> parent, theModifyingValue, getUntil());
 					} finally {
 						theModifyingValue.clear();
 					}
 				});
+				if (!changed[0]) // If there was no change by the format, we need to fire an event ourselves
+					fire(createChangeEvent((E) oldValue[0], value, cause));
 			} finally {
 				isSetting = false;
 			}

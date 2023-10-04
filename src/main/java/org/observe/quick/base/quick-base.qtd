@@ -596,6 +596,7 @@
 		</element-def>
 		<element-def name="general-dialog" extends="content-dialog" inherits="window">
 			<attribute name="modal" type="boolean" />
+			<attribute name="always-on-top" type="boolean" default="true" />
 		</element-def>
 
 		<!-- Miscellaneous -->
@@ -605,7 +606,7 @@
 		<element-def name="abst-menu-item" extends="label" abstract="true">
 		</element-def>
 		<element-def name="menu" extends="abst-menu-item">
-			<child-def name="menu-item" type="menu-item" min="0" max="inf" />
+			<child-def name="menu-item" type="abst-menu-item" min="0" max="inf" />
 		</element-def>
 		<element-def name="menu-item" extends="abst-menu-item">
 			<attribute name="action" type="expression" />

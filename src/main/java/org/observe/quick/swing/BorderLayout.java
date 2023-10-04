@@ -118,7 +118,7 @@ public class BorderLayout implements LayoutManager2 {
 		List<QuickSize> hStacks = new ArrayList<>();
 		List<QuickSize> vStacks = new ArrayList<>();
 		QuickSize width = QuickSize.ZERO, height = QuickSize.ZERO;
-		boolean hasCenter = false;
+		Component center = null;
 		for (Component c : parent.getComponents()) {
 			if (!c.isVisible())
 				continue;
@@ -139,8 +139,7 @@ public class BorderLayout implements LayoutManager2 {
 				if (size == null)
 					size = QuickSize.ofPixels(getComponentSize(c, type, true));
 				int cross = getComponentSize(c, type, false);
-				for (int i = 0; i < hStacks.size(); i++)
-					hStacks.set(i, hStacks.get(i).plus(cross));
+				hStacks.add(width.plus(cross));
 				height = height.plus(size);
 				break;
 			case East:
@@ -148,28 +147,29 @@ public class BorderLayout implements LayoutManager2 {
 				if (size == null)
 					size = QuickSize.ofPixels(getComponentSize(c, type, false));
 				cross = getComponentSize(c, type, true);
-				for (int i = 0; i < vStacks.size(); i++)
-					vStacks.set(i, vStacks.get(i).plus(cross));
+				vStacks.add(height.plus(cross));
 				width = width.plus(size);
 				break;
 			default:
-				if (hasCenter) {
+				if (center != null) {
 					System.out.println("Multiple components found fulfulling center role--only the first will be used");
 					break;
 				}
-				hasCenter = true;
-				Dimension d;
-				if (type < 0)
-					d = c.getMinimumSize();
-				else if (type == 0)
-					d = c.getPreferredSize();
-				else
-					d = c.getMaximumSize();
-				if (d == null)
-					break;
+				center = c;
+				break; // Handle center last
+			}
+		}
+		if (center != null) {
+			Dimension d;
+			if (type < 0)
+				d = center.getMinimumSize();
+			else if (type == 0)
+				d = center.getPreferredSize();
+			else
+				d = center.getMaximumSize();
+			if (d != null) {
 				width = width.plus(d.width);
 				height = height.plus(d.height);
-				break;
 			}
 		}
 		int maxW = width.resolveExponential();

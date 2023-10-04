@@ -1438,6 +1438,8 @@ public class QuickBaseSwing implements QuickInterpretation {
 				theTitle = window.getTitle();
 				JDialog jDialog = new JDialog(SwingUtilities.getWindowAncestor(parent), //
 					dialog.isModal() ? ModalityType.APPLICATION_MODAL : ModalityType.MODELESS);
+				if (!dialog.isModal())
+					jDialog.setAlwaysOnTop(dialog.isAlwaysOnTop());
 				theDialog = WindowPopulation.populateDialog(jDialog, until, false);
 				content.populate(new WindowContentPopulator(theDialog, until), dialog.getContent());
 				theDialog.withTitle(theTitle);

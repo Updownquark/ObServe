@@ -589,6 +589,7 @@ expression
     | methodCall
     | NEW creator
     | '(' annotation* typeType ('&' typeType)* ')' expression
+    | arrayInitializer
     | expression postfix=('++' | '--')
     | prefix=('+'|'-'|'++'|'--') expression
     | prefix=('~'|'!') expression

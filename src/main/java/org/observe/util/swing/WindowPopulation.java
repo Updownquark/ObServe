@@ -408,7 +408,10 @@ public class WindowPopulation {
 							reposition[0] = false;
 							theWindow.setLocationRelativeTo(relativeTo);
 						}
-						theWindow.setVisible(evt.getNewValue());
+						if (evt.getNewValue() && theWindow.isVisible())
+							theWindow.requestFocus();
+						else
+							theWindow.setVisible(evt.getNewValue());
 					});
 				});
 			} else {

@@ -17,6 +17,7 @@ public class GeneralDialog extends QuickContentDialog.Abstract {
 		instance = GeneralDialog.class)
 	public static class Def<D extends GeneralDialog> extends QuickContentDialog.Def.Abstract<D> {
 		private boolean isModal;
+		private boolean isAlwaysOnTop;
 
 		public Def(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
 			super(parent, qonfigType);
@@ -27,10 +28,18 @@ public class GeneralDialog extends QuickContentDialog.Abstract {
 			return isModal;
 		}
 
+		@QonfigAttributeGetter("always-on-top")
+		public boolean isAlwaysOnTop() {
+			return isAlwaysOnTop;
+		}
+
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			super.doUpdate(session);
 			isModal = session.getAttribute("modal", boolean.class);
+			isAlwaysOnTop = session.getAttribute("always-on-top", boolean.class);
+			if (isModal && !isAlwaysOnTop)
+				reporting().warn("modal is true, but always-on-top is false.  Makes no sense.");
 		}
 
 		@Override
@@ -56,6 +65,7 @@ public class GeneralDialog extends QuickContentDialog.Abstract {
 	}
 
 	private boolean isModal;
+	private boolean isAlwaysOnTop;
 
 	public GeneralDialog(Object id) {
 		super(id);
@@ -65,11 +75,16 @@ public class GeneralDialog extends QuickContentDialog.Abstract {
 		return isModal;
 	}
 
+	public boolean isAlwaysOnTop() {
+		return isAlwaysOnTop;
+	}
+
 	@Override
 	protected void doUpdate(ExElement.Interpreted<?> interpreted) {
 		super.doUpdate(interpreted);
 
 		Interpreted<?> myInterpreted = (Interpreted<?>) interpreted;
 		isModal = myInterpreted.getDefinition().isModal();
+		isAlwaysOnTop = myInterpreted.getDefinition().isAlwaysOnTop();
 	}
 }

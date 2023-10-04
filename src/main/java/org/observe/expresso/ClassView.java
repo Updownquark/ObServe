@@ -49,7 +49,7 @@ public class ClassView implements TypeParser {
 		for (Map.Entry<String, String> imp : theImportedTypes.entrySet()) {
 			Class<?> type = getType(imp.getKey());
 			if (type == null)
-				importTypeErrors.get(imp.getKey()).error("Import '" + imp.getValue() + "' cannot be resolved");
+				importTypeErrors.get(imp.getValue()).error("Import '" + imp.getValue() + "' cannot be resolved");
 		}
 
 		theParser = TypeTokens.get().newParser();
