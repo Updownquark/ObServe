@@ -4,6 +4,7 @@ import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExElementTraceable;
 import org.observe.expresso.qonfig.ExpressoQIS;
+import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.quick.QuickWidget;
 import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElementOrAddOn;
@@ -25,6 +26,7 @@ public class QuickSpacer extends QuickWidget.Abstract {
 			super(parent, type);
 		}
 
+		@QonfigAttributeGetter("length")
 		public int getLength() {
 			return theLength;
 		}

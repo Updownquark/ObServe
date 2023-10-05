@@ -358,11 +358,9 @@ public class PanelPopulation {
 			return spacer(size, null);
 		}
 
-		default P spacer(int size, Consumer<Component> component) {
+		default P spacer(int size, Consumer<FieldEditor<Component, ?>> modify) {
 			Component box = Box.createRigidArea(new Dimension(size, size));
-			if (component != null)
-				component.accept(box);
-			return addComponent(null, box, null);
+			return addComponent(null, box, modify);
 		}
 
 		P addSettingsMenu(Consumer<SettingsMenu<JPanel, ?>> menu);
@@ -560,7 +558,7 @@ public class PanelPopulation {
 				modify.accept(fieldPanel);
 			if (fieldPanel.isDecorated())
 				field.noInitChanges().safe(ThreadConstraint.EDT).takeUntil(getUntil())
-					.act(__ -> fieldPanel.decorate(fieldPanel.getComponent()));
+				.act(__ -> fieldPanel.decorate(fieldPanel.getComponent()));
 			doAdd(fieldPanel);
 			return (P) this;
 		}

@@ -159,6 +159,8 @@ public class BorderLayout implements LayoutManager2 {
 				break; // Handle center last
 			}
 		}
+		int maxW;
+		int maxH;
 		if (center != null) {
 			Dimension d;
 			if (type < 0)
@@ -171,9 +173,13 @@ public class BorderLayout implements LayoutManager2 {
 				width = width.plus(d.width);
 				height = height.plus(d.height);
 			}
-		}
-		int maxW = width.resolveExponential();
-		int maxH = height.resolveExponential();
+			maxW = width.resolveExponential();
+			maxH = height.resolveExponential();
+		} else if (type <= 0) {
+			maxW = width.resolveExponential();
+			maxH = height.resolveExponential();
+		} else
+			maxW = maxH = 0;
 		for (QuickSize w : hStacks)
 			maxW = Math.max(maxW, w.resolveExponential());
 		for (QuickSize h : vStacks)

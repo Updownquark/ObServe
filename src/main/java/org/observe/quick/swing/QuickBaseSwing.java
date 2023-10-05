@@ -436,8 +436,7 @@ public class QuickBaseSwing implements QuickInterpretation {
 		@Override
 		protected void doPopulate(PanelPopulator<?, ?> panel, QuickSpacer quick, Consumer<ComponentEditor<?, ?>> component)
 			throws ModelInstantiationException {
-			panel.spacer(quick.getLength());
-			component.accept(null);
+			panel.spacer(quick.getLength(), sp -> component.accept(sp));
 		}
 	}
 
