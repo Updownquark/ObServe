@@ -426,6 +426,8 @@ public abstract class Invocation implements ObservableExpression {
 				tva = TypeTokens.get().accumulate(impl.getMethodTypes(m), tvaResolver);
 				for (int a = 0; ok && a < option.size() - methodArgStart; a++) {
 					int ma = a - methodArgStart;
+					if (ma < 0)
+						continue;
 					int p = ma < paramTypes.length ? ma : paramTypes.length - 1;
 					TypeToken<?> paramType = paramTypes[p];
 					if (p == paramTypes.length - 1 && m.isVarArgs()) {
