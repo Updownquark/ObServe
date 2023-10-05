@@ -414,7 +414,8 @@ public interface QuickTableColumn<R, C> {
 			ModelSetInstance editorModels = myModels.copy()//
 				.withAll(myModels.getInherited(owner.getModels().getIdentity()).copy(myModels.getUntil()).build())//
 				.build();
-			if (theEditor != null && owner instanceof MultiValueRenderable) {
+			ColumnEditType<R, C> editing = getAddOn(ColumnEditType.class);
+			if (editing != null && owner instanceof MultiValueRenderable) {
 				// Not enough to copy the editor models, because I also need to replace values table models
 				MultiValueRenderable<R> mvr = (MultiValueRenderable<R>) owner;
 				if (mvr.getActiveValueVariable() != null)
@@ -432,8 +433,9 @@ public interface QuickTableColumn<R, C> {
 						ExFlexibleElementModelAddOn.satisfyElementValue(table.getColumnIndexVariable(), editorModels,
 							SettableValue.flatten(theColumnIndex), ExFlexibleElementModelAddOn.ActionIfSatisfied.Replace);
 				}
-				theEditor.instantiate(editorModels);
-				getAddOn(ColumnEditType.class).instantiateEditor(editorModels);
+				if (theEditor != null)
+					theEditor.instantiate(editorModels);
+				editing.instantiateEditor(editorModels);
 			}
 			isEditable.set(theEditableInstantiator == null ? null : theEditableInstantiator.get(editorModels), null);
 			isAcceptable.set(theAcceptInstantiator == null ? null : theAcceptInstantiator.get(editorModels), null);

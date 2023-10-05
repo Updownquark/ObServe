@@ -369,6 +369,7 @@ public class MultiRangeSlider extends ConformingPanel {
 			private double theMaxValue;
 			private final FloatList theLabeledTicks;
 			private boolean areTicksSet;
+			private float theLineThickness;
 			private DoubleFunction<String> theValueRenderer;
 			private final NavigableMap<Double, Color> theColorRanges;
 
@@ -380,6 +381,7 @@ public class MultiRangeSlider extends ConformingPanel {
 				setLabeledTickWidth(DEFAULT_LABELED_TICK_WIDTH);
 				setSimpleTickWidth(DEFAULT_SIMPLE_TICK_WIDTH);
 				theValueRenderer = VALUE_FORMAT::format;
+				theLineThickness = 1;
 				theColorRanges = new TreeMap<>();
 			}
 
@@ -486,6 +488,15 @@ public class MultiRangeSlider extends ConformingPanel {
 			 */
 			public Default setSimpleTickSpacing(double simpleTickSpacing) {
 				theSimpleTickSpacing = simpleTickSpacing;
+				return this;
+			}
+
+			public float getLineThickness() {
+				return theLineThickness;
+			}
+
+			public Default setLineThickness(float lineThickness) {
+				theLineThickness = lineThickness;
 				return this;
 			}
 
@@ -600,17 +611,19 @@ public class MultiRangeSlider extends ConformingPanel {
 				Range extent=theSlider.getSliderRange().get();
 				double min = extent.getMin();
 				double max = extent.getMax();
-				double value = min;
 				int pos = 0;
-				Map.Entry<Double, Color> range = theColorRanges.ceilingEntry(value);
-				while (value < max && range != null) {
+				Map.Entry<Double, Color> range = theColorRanges.ceilingEntry(min);
+				while (pos < length && range != null) {
 					g.setColor(range.getValue());
-					double nextValue = range == null ? max : Math.min(max, range.getKey());
-					int nextPos = (int) Math.round(nextValue * length / (max - min));
+					double nextValue = range.getKey();
+					int nextPos;
+					if (nextValue > max)
+						nextPos = length;
+					else
+						nextPos = (int) Math.round((nextValue - min) / (max - min) * length);
 					drawLine.accept(pos, nextPos);
 					range = theColorRanges.higherEntry(range.getKey());
 					pos = nextPos;
-					value = nextValue;
 				}
 				if (pos < length) {
 					g.setColor(getForeground());
@@ -622,23 +635,26 @@ public class MultiRangeSlider extends ConformingPanel {
 			public void paint(Graphics g) {
 				if (theSlider == null)
 					return;
+				if (g instanceof Graphics2D)
+					((Graphics2D) g).setStroke(new BasicStroke(theLineThickness));
 				g.setColor(getBackground());
 				g.fillRect(0, 0, getWidth(), getHeight());
 				g.setFont(getFont());
-				g.setColor(getForeground());
 				double min = theSlider.getSliderRange().get().getMin();
 				float max = (float) theSlider.getSliderRange().get().getMax();
+				int left = (int) Math.ceil(theLineThickness / 2);
 				if (theSlider.isVertical()) {
 					drawMainLine(g, getHeight(),
-						(pos, len) -> g.drawLine(getWidth() - theCrossSize / 2, pos, getWidth() - theCrossSize / 2, len));
+						(start, end) -> g.drawLine(getWidth() - theCrossSize / 2, start, getWidth() - theCrossSize / 2, end));
 					g.setColor(getColor(min));
-					g.drawLine(getWidth() - theCrossSize, 0, getWidth(), 0);
+					g.drawLine(getWidth() - theCrossSize, left, getWidth(), left);
 					g.setColor(getColor(max));
-					g.drawLine(getWidth() - theCrossSize, getHeight() - 1, getWidth(), getHeight() - 1);
+					g.drawLine(getWidth() - theCrossSize, getHeight() - left, getWidth(), getHeight() - left);
 					g.setColor(getForeground());
 					double extent = theSlider.getSliderRange().get().getExtent();
 					for (double tick : theLabeledTicks) {
 						int pos = getHeight() - (int) Math.round((tick - min) * getHeight() / extent);
+						g.setColor(getColor(tick));
 						g.drawLine(getWidth() - theCrossSize / 2 - theLabeledTickWidth / 2, pos,
 							getWidth() - theCrossSize / 2 + theLabeledTickWidth / 2, pos);
 						String text = theValueRenderer.apply(tick);
@@ -656,21 +672,23 @@ public class MultiRangeSlider extends ConformingPanel {
 							simpleTick -= theSimpleTickSpacing;
 						while (simpleTick < max) {
 							int pos = getHeight() - (int) Math.round((simpleTick - min) * getHeight() / extent);
+							g.setColor(getColor(simpleTick));
 							g.drawLine(getWidth() - theCrossSize / 2 - theSimpleTickWidth / 2, pos,
 								getWidth() - theCrossSize / 2 + theSimpleTickWidth / 2, pos);
 							simpleTick += theSimpleTickSpacing;
 						}
 					}
 				} else {
-					drawMainLine(g, getWidth(), (pos, len) -> g.drawLine(pos, theCrossSize / 2, len, theCrossSize / 2));
+					drawMainLine(g, getWidth(), (start, end) -> g.drawLine(start, theCrossSize / 2, end, theCrossSize / 2));
 					g.setColor(getColor(min));
-					g.drawLine(0, 0, 0, theCrossSize);
+					g.drawLine(left, 0, left, theCrossSize);
 					g.setColor(getColor(max));
-					g.drawLine(getWidth() - 1, 0, getWidth() - 1, theCrossSize);
+					g.drawLine(getWidth() - left, 0, getWidth() - left, theCrossSize);
 					g.setColor(getForeground());
 					double extent = theSlider.getSliderRange().get().getExtent();
 					for (double tick : theLabeledTicks) {
 						int pos = (int) Math.round((tick - min) * getWidth() / extent);
+						g.setColor(getColor(tick));
 						g.drawLine(pos, theCrossSize / 2 - theLabeledTickWidth / 2, pos, theCrossSize / 2 + theLabeledTickWidth / 2);
 						String text = theValueRenderer.apply(tick);
 						Rectangle2D bounds = new TextLayout(text, getFont(), ((Graphics2D) g).getFontRenderContext()).getBounds();
@@ -687,6 +705,7 @@ public class MultiRangeSlider extends ConformingPanel {
 							simpleTick -= theSimpleTickSpacing;
 						while (simpleTick < max) {
 							int pos = (int) Math.round((simpleTick - min) * getWidth() / extent);
+							g.setColor(getColor(simpleTick));
 							g.drawLine(pos, theCrossSize / 2 - theSimpleTickWidth / 2, pos, theCrossSize / 2 + theSimpleTickWidth / 2);
 							simpleTick += theSimpleTickSpacing;
 						}

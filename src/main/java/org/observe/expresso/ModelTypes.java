@@ -545,8 +545,18 @@ public class ModelTypes {
 						return new ModelInstanceConverter<Object, SettableValue<?>>() {
 							@Override
 							public SettableValue<?> convert(Object sourceV) throws ModelInstantiationException {
-								return valueConverter.convert(//
-									SettableValue.of((TypeToken<Object>) sourceType.getType(0), sourceV, "Unmodifiable"));
+								SettableValue<?> container;
+								if (sourceV instanceof Stamped && sourceV instanceof CausableChanging) {
+									// This section creates a value that updates with the contained model value
+									container = SettableValue.asSettable(//
+										ObservableValue.of((TypeToken<Object>) sourceType.getType(0), () -> sourceV,
+											((Stamped) sourceV)::getStamp, ((CausableChanging) sourceV).simpleChanges()),
+										NOT_REVERSIBLE);
+								} else {
+									return SettableValue.asSettable(ObservableValue.of((TypeToken<Object>) sourceType.getType(0), sourceV),
+										NOT_REVERSIBLE);
+								}
+								return valueConverter.convert(container);
 							}
 
 							@Override

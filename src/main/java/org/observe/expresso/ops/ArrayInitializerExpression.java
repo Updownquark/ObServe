@@ -149,10 +149,11 @@ public class ArrayInitializerExpression implements ObservableExpression {
 			if (evaldValue == null) {
 				if (tce.get1() != null)
 					exHandler.handle1(new ExpressoInterpretationException(tce.get1().getMessage(), tce.get1().getPosition(),
-						value.getExpressionLength()));
+						value.getExpressionLength(), tce.get1()));
 				else
 					exHandler.handle1(
-						new ExpressoInterpretationException(tce.get2().getMessage(), env.reporting().getPosition(), getExpressionLength()));
+						new ExpressoInterpretationException(tce.get2().getMessage(), env.reporting().getPosition(), getExpressionLength(),
+							tce.get2()));
 				return null;
 			}
 			values.add(evaldValue);

@@ -288,6 +288,10 @@ public class QuickXSwing implements QuickInterpretation {
 			panel.addMultiSlider(null, quick.getValues(), slider -> {
 				component.accept(slider);
 				slider.withBounds(quick.getMin(), quick.getMax());
+				if (quick.isOrderEnforced())
+					slider.getEditor().setValidator(MultiRangeSlider.RangeValidator.NO_OVERLAP_ENFORCE_RANGE);
+				else
+					slider.getEditor().setValidator(MultiRangeSlider.RangeValidator.ENFORCE_RANGE);
 				quick.getBGRenderer().changes().takeUntil(slider.getUntil()).act(evt -> {
 					if (evt.getNewValue() != null)
 						slider.getEditor().setRenderer(evt.getNewValue());

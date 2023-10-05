@@ -162,6 +162,8 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 	private ModelValueInstantiator<SettableValue<MultiRangeSlider.MRSliderRenderer>> theBgRendererInstantiator;
 	private ModelValueInstantiator<SettableValue<MultiRangeSlider.RangeRenderer>> theValueRendererInstantiator;
 
+	private boolean isVertical;
+	private boolean isOrderEnforced;
 	private SettableValue<ObservableCollection<Double>> theValues;
 	private SettableValue<SettableValue<Double>> theMin;
 	private SettableValue<SettableValue<Double>> theMax;
@@ -190,6 +192,14 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 		return ObservableCollection.flattenValue(theValues);
 	}
 
+	public boolean isVertical() {
+		return isVertical;
+	}
+
+	public boolean isOrderEnforced() {
+		return isOrderEnforced;
+	}
+
 	public SettableValue<Double> getMin() {
 		return SettableValue.flatten(theMin, () -> 0.0);
 	}
@@ -211,6 +221,8 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 		super.doUpdate(interpreted);
 
 		Interpreted myInterpreted = (Interpreted) interpreted;
+		isVertical = myInterpreted.getDefinition().isVertical();
+		isOrderEnforced = myInterpreted.getDefinition().isOrderEnforced();
 		theValuesInstantiator = myInterpreted.getValues().instantiate();
 		theMinInstantiator = myInterpreted.getMin().instantiate();
 		theMaxInstantiator = myInterpreted.getMax().instantiate();
