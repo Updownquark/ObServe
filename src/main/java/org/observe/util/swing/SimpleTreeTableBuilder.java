@@ -288,7 +288,10 @@ implements TreeTableEditor<F, P> {
 					case TableModelEvent.UPDATE:
 						type = CollectionChangeType.set;
 						changes = new ArrayList<>();
-						for (int i = e.getFirstRow(); i <= e.getLastRow(); i++) {
+						int lastRow = e.getLastRow();
+						if (lastRow == Integer.MAX_VALUE)
+							lastRow = getEditor().getRowCount();
+						for (int i = e.getFirstRow(); i <= lastRow; i++) {
 							BetterList<F> row = model.getRow(i, getEditor());
 							changes.add(new CollectionChangeEvent.ElementChange<>(row, row, i, null));
 						}
