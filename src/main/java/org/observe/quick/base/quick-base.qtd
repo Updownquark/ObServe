@@ -126,7 +126,7 @@
 				<value name="selected" type="boolean" priority="100" />
 			</element-model>
 			<?DOC The name of the currently applicable value, e.g. for rendering?>
-			<attribute name="active-value-name" type="identifier" default="value" />
+			<attribute name="active-value-name" type="identifier" default="activeValue" />
 		</add-on>
 		<add-on name="tabular-widget" requires="multi-value-widget">
 			<element-model>
