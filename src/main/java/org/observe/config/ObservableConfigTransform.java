@@ -390,6 +390,7 @@ public abstract class ObservableConfigTransform implements Transactable, Stamped
 
 		@Override
 		protected void onChange(ObservableConfigEvent parentChange) {
+			incrementStamp();
 			E oldValue = theValue;
 			if (!theModifyingValue.isPresent()) {
 				try {

@@ -354,7 +354,7 @@ public class ObservableConfigContent {
 			long stamp = theConfigChild.getStamp();
 			ObservableConfig child = theConfigChild.get();
 			if (child != null)
-				stamp ^= Long.rotateRight(child.getStamp(), 32);
+				stamp = Stamped.compositeStamp(stamp, child.getStamp());
 			return stamp;
 		}
 
