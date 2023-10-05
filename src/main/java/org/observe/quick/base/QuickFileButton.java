@@ -4,7 +4,9 @@ import java.io.File;
 
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.qonfig.ExElement;
+import org.observe.expresso.qonfig.ExElementTraceable;
 import org.observe.expresso.qonfig.ExpressoQIS;
+import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.quick.QuickValueWidget;
 import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElementOrAddOn;
@@ -15,6 +17,10 @@ import com.google.common.reflect.TypeToken;
 public class QuickFileButton extends QuickValueWidget.Abstract<File> {
 	public static final String FILE_BUTTON = "file-button";
 
+	@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
+		qonfigType = FILE_BUTTON,
+		interpretation = Interpreted.class,
+		instance = QuickFileButton.class)
 	public static class Def extends QuickValueWidget.Def.Abstract<QuickFileButton> {
 		private boolean isOpen;
 
@@ -22,6 +28,7 @@ public class QuickFileButton extends QuickValueWidget.Abstract<File> {
 			super(parent, type);
 		}
 
+		@QonfigAttributeGetter("open")
 		public boolean isOpen() {
 			return isOpen;
 		}

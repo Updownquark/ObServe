@@ -1072,6 +1072,28 @@ public interface ExElement extends Identifiable {
 		return def;
 	}
 
+	/**
+	 * @param <D> The type of the element definition
+	 * @param type The type of the element definition
+	 * @param def The definition currently in use
+	 * @param session The parent session to interpret the new definition from, if needed
+	 * @param childName The name of the child role fulfilled by the element to parse the definition from
+	 * @return The given definition if it is up-to-date, or the newly interpreted one
+	 * @throws QonfigInterpretationException If the definition could not be interpreted
+	 * @throws IllegalArgumentException If no such child role exists
+	 */
+	public static <D extends ExElement.Def<?>> D useOrReplace(Class<? extends D> type, D def, ExpressoQIS session, String childName,
+		ExBiConsumer<? super D, ExpressoQIS, QonfigInterpretationException> update)
+			throws QonfigInterpretationException, IllegalArgumentException {
+		ExpressoQIS childSession = childName == null ? session : session.forChildren(childName).peekFirst();
+		if (childSession == null)
+			return null;
+		else if (def != null && typesEqual(def.getElement(), childSession.getElement()))
+			return def;
+		def = childSession.interpret(type, update);
+		return def;
+	}
+
 	public static <T extends ExElement.Def<?>> void syncDefs(Class<T> defType, List<? extends T> defs, List<ExpressoQIS> sessions)
 		throws QonfigInterpretationException {
 		syncDefs(defType, defs, sessions, (d, s) -> d.update(s));
