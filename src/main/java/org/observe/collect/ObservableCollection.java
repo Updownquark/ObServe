@@ -19,6 +19,7 @@ import org.observe.Eventable;
 import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.Observer;
+import org.observe.SettableValue;
 import org.observe.Subscription;
 import org.observe.Transformation;
 import org.observe.Transformation.ReversibleTransformation;
@@ -744,6 +745,20 @@ public interface ObservableCollection<E> extends BetterList<E>, TypedValueContai
 	static <E> ObservableCollection<E> flattenValue(ObservableValue<? extends ObservableCollection<? extends E>> collectionObservable,
 		Equivalence<Object> equivalence) {
 		return new ObservableCollectionImpl.FlattenedValueCollection<>(collectionObservable, equivalence);
+	}
+
+	/**
+	 * Turns an observable value containing an observable collection into the contents of the value
+	 *
+	 * @param <E> The type for the collection
+	 * @param type The type for the collection
+	 * @param collectionObservable The observable value
+	 * @return A collection representing the contents of the value, or a zero-length collection when null
+	 */
+	static <E> ObservableCollection<E> flattenSimpleCollectionValue(TypeToken<E> type,
+		SettableValue<? extends Collection<E>> collectionObservable) {
+		return new ObservableCollectionImpl.SimpleCollectionBackedObservable<>(ObservableCollection.build(type).build(),
+			collectionObservable);
 	}
 
 	/**

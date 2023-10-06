@@ -1,6 +1,7 @@
 package org.observe.expresso.qonfig;
 
 import java.text.ParseException;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -22,6 +23,7 @@ import org.observe.SettableValue;
 import org.observe.Subscription;
 import org.observe.assoc.ObservableMap;
 import org.observe.config.ObservableConfig;
+import org.observe.config.ObservableConfig.ObservableConfigMapBuilder;
 import org.observe.config.ObservableConfig.ObservableConfigValueBuilder;
 import org.observe.config.ObservableConfigFormat;
 import org.observe.config.ObservableConfigFormatSet;
@@ -38,7 +40,6 @@ import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.VariableType;
 import org.observe.expresso.qonfig.ExElement.Def;
-import org.observe.expresso.qonfig.ModelValueElement.CompiledSynth;
 import org.observe.expresso.qonfig.ModelValueElement.InterpretedSynth;
 import org.observe.util.TypeTokens;
 import org.qommons.ArrayUtils;
@@ -53,6 +54,7 @@ import org.qommons.Version;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.CollectionUtils;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
+import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretation;
 import org.qommons.config.QonfigInterpretationException;
@@ -72,50 +74,6 @@ import com.google.common.reflect.TypeToken;
 
 /** Qonfig Interpretation for the ExpressoConfigV0_1 API */
 public class ExpressoConfigV0_1 implements QonfigInterpretation {
-	// /** Equivalent of a {@link CompiledModelValue} for a &lt;validate> element */
-	// public interface ValidationProducer {
-	// /**
-	// * @param <T> The type to validate
-	// * @param formatType The type to validate
-	// * @return A Validation to create the actual validator
-	// * @throws ExpressoInterpretationException If the validator cannot be created
-	// */
-	// <T> Validation<T> createValidator(TypeToken<T> formatType) throws ExpressoInterpretationException;
-	// }
-	//
-	// /**
-	// * Equivalent of a {@link ModelValueSynth} for a &lt;validate> element
-	// *
-	// * @param <V> The type to validate
-	// */
-	// public interface Validation<V> {
-	// /**
-	// * @param models The model instance for the test to use
-	// * @return The actual test
-	// * @throws ModelInstantiationException If the test cannot be created
-	// */
-	// Function<V, String> getTest(ModelSetInstance models) throws ModelInstantiationException;
-	//
-	// /**
-	// * Equivalent of {@link ModelValueSynth#forModelCopy(Object, ModelSetInstance, ModelSetInstance)}
-	// *
-	// * @param validator The validator from the source models
-	// * @param sourceModels The source models
-	// * @param newModels The new models
-	// * @return The validator for the new models
-	// * @throws ModelInstantiationException If the new test cannot be created
-	// */
-	// Function<V, String> forModelCopy(Function<V, String> validator, ModelSetInstance sourceModels, ModelSetInstance newModels)
-	// throws ModelInstantiationException;
-	//
-	// /**
-	// * Equivalent of {@link ModelValueSynth#getComponents()}
-	// *
-	// * @return The value container that are components of the test
-	// */
-	// List<InterpretedValueSynth<?, ?>> getComponents();
-	// }
-
 	/** The name of the expresso config toolkit */
 	public static final String NAME = "Expresso-Config";
 
@@ -183,15 +141,10 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			ExElement.creator(ObservableModelElement.ConfigModelElement.Def::new));
 		interpreter.createWith("value", ConfigModelValue.Def.class, ExElement.creator(ConfigValue::new));
 		interpreter.createWith("value-set", ConfigModelValue.Def.class, ExElement.creator(ConfigValueSet::new));
-		interpreter.createWith("map", ConfigModelValue.Def.class, ExElement.creator(ConfigMap::new));
-		// interpreter.createWith("list", ConfigModelValue.class, collectionCreator());
-		// interpreter.createWith("sorted-list", ConfigModelValue.class, sortedCollectionCreator());
-		// interpreter.createWith("set", ConfigModelValue.class, setCreator());
-		// interpreter.createWith("sorted-set", ConfigModelValue.class, sortedSetCreator());
-		interpreter.createWith("map", ConfigModelValue.Def.class, ExElement.creator(ConfigMap::new));
-		// interpreter.createWith("sorted-map", ConfigModelValue.class, sortedMapCreator());
-		// interpreter.createWith("multi-map", ConfigModelValue.class, multiMapCreator());
-		// interpreter.createWith("sorted-multi-map", ConfigModelValue.class, sortedMultiMapCreator());
+		// TODO list, sorted-list, set, sorted-set
+		interpreter.createWith(ConfigMap.CONFIG_MAP, ConfigMap.Def.class, ExAddOn.creator(ConfigMap.Def::new));
+		interpreter.createWith("map", ConfigModelValue.Def.class, ExElement.creator(ExConfigMap::new));
+		// TODO sorted-map, multi-map, sorted-multi-map
 	}
 
 	@ExElementTraceable(toolkit = CONFIG, qonfigType = "config-value", interpretation = ConfigValue.Interpreted.class)
@@ -329,10 +282,102 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		}
 	}
 
-	static abstract class ConfigMapValue<M> extends ConfigModelValue.Def.Abstract<M> {
-		private VariableType theKeyType;
+	public static class ConfigMap<K> extends ExMapModelValue<K> {
+		public static final String CONFIG_MAP = "config-map";
 
-		protected ConfigMapValue(Def<?> parent, QonfigElementOrAddOn qonfigType, ModelType.DoubleTyped<M> modelType) {
+		@ExElementTraceable(toolkit = CONFIG, qonfigType = CONFIG_MAP, interpretation = Interpreted.class, instance = ConfigMap.class)
+		public static class Def extends ExMapModelValue.Def<ConfigMap<?>> {
+			private CompiledExpression theKeyFormat;
+
+			public Def(QonfigAddOn type, ExElement.Def<? extends ExElement> element) {
+				super(type, element);
+			}
+
+			@QonfigAttributeGetter("key-format")
+			public CompiledExpression getKeyFormat() {
+				return theKeyFormat;
+			}
+
+			@Override
+			public void update(ExpressoQIS session, ExElement.Def<? extends ExElement> element) throws QonfigInterpretationException {
+				super.update(session, element);
+
+				theKeyFormat = session.getAttributeExpression("key-format");
+			}
+
+			@Override
+			public Interpreted<?> interpret(ExElement.Interpreted<? extends ExElement> element) {
+				return new Interpreted<>(this, element);
+			}
+		}
+
+		public static class Interpreted<K> extends ExMapModelValue.Interpreted<K, ConfigMap<K>> {
+			private InterpretedValueSynth<SettableValue<?>, SettableValue<ObservableConfigFormat<K>>> theKeyFormat;
+
+			Interpreted(Def definition, ExElement.Interpreted<?> element) {
+				super(definition, element);
+			}
+
+			@Override
+			public Def getDefinition() {
+				return (Def) super.getDefinition();
+			}
+
+			public InterpretedValueSynth<SettableValue<?>, SettableValue<ObservableConfigFormat<K>>> getKeyFormat() {
+				return theKeyFormat;
+			}
+
+			@Override
+			public Class<ConfigMap<K>> getInstanceType() {
+				return (Class<ConfigMap<K>>) (Class<?>) ConfigMap.class;
+			}
+
+			@Override
+			public void update(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+				super.update(env);
+
+				theKeyFormat = getDefinition().getKeyFormat() == null ? null
+					: getDefinition().getKeyFormat()
+					.interpret(ModelTypes.Value.forType(
+						TypeTokens.get().keyFor(ObservableConfigFormat.class).<ObservableConfigFormat<K>> parameterized(getKeyType())),
+						env);
+			}
+
+			@Override
+			public ConfigMap<K> create(ExElement element) {
+				return new ConfigMap<>(element);
+			}
+		}
+
+		private ModelValueInstantiator<SettableValue<ObservableConfigFormat<K>>> theKeyFormat;
+
+		public ConfigMap(ExElement element) {
+			super(element);
+		}
+
+		public ModelValueInstantiator<SettableValue<ObservableConfigFormat<K>>> getKeyFormat() {
+			return theKeyFormat;
+		}
+
+		@Override
+		public void update(ExAddOn.Interpreted<?, ?> interpreted) {
+			super.update(interpreted);
+
+			Interpreted<K> myInterpreted = (Interpreted<K>) interpreted;
+			theKeyFormat = myInterpreted.getKeyFormat() == null ? null : myInterpreted.getKeyFormat().instantiate();
+		}
+
+		@Override
+		public Class<Interpreted<?>> getInterpretationType() {
+			return (Class<Interpreted<?>>) (Class<?>) Interpreted.class;
+		}
+	}
+
+	static abstract class AbstractConfigMap<M> extends ConfigModelValue.Def.Abstract<M> {
+		private VariableType theKeyType;
+		private CompiledExpression theKeyFormat;
+
+		protected AbstractConfigMap(Def<?> parent, QonfigElementOrAddOn qonfigType, ModelType.DoubleTyped<M> modelType) {
 			super(parent, qonfigType, modelType);
 		}
 
@@ -340,40 +385,53 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			return theKeyType;
 		}
 
+		public CompiledExpression getKeyFormat() {
+			return theKeyFormat;
+		}
+
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			super.doUpdate(session);
 
-			theKeyType = getAddOn(ExMapModelValue.Def.class).getKeyType();
+			ConfigMap.Def mapAddOn = getAddOn(ConfigMap.Def.class);
+			theKeyType = mapAddOn.getKeyType();
+			theKeyFormat = mapAddOn.getKeyFormat();
 		}
 
 		public static abstract class Interpreted<K, V, M, MV extends M> extends ConfigModelValue.Interpreted.Abstract<V, M, MV> {
 			private TypeToken<K> theKeyType;
+			private InterpretedValueSynth<SettableValue<?>, SettableValue<ObservableConfigFormat<K>>> theKeyFormat;
 
-			protected Interpreted(ConfigMapValue<M> definition) {
+			protected Interpreted(AbstractConfigMap<M> definition) {
 				super(definition);
 			}
 
 			@Override
-			public ConfigMapValue<M> getDefinition() {
-				return (ConfigMapValue<M>) super.getDefinition();
+			public AbstractConfigMap<M> getDefinition() {
+				return (AbstractConfigMap<M>) super.getDefinition();
 			}
 
 			public TypeToken<K> getKeyType() {
 				return theKeyType;
 			}
 
+			public InterpretedValueSynth<SettableValue<?>, SettableValue<ObservableConfigFormat<K>>> getKeyFormat() {
+				return theKeyFormat;
+			}
+
 			@Override
 			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 				super.doUpdate(env);
 
-				theKeyType = (TypeToken<K>) getDefinition().getKeyType().getType(env);
+				ConfigMap.Interpreted<K> mapAddOn = getAddOn(ConfigMap.Interpreted.class);
+				theKeyType = mapAddOn.getKeyType();
+				theKeyFormat = mapAddOn.getKeyFormat();
 			}
 		}
 	}
 
-	static class ConfigMap extends ConfigMapValue<ObservableMap<?, ?>> {
-		public ConfigMap(Def<?> parent, QonfigElementOrAddOn qonfigType) {
+	static class ExConfigMap extends AbstractConfigMap<ObservableMap<?, ?>> {
+		public ExConfigMap(Def<?> parent, QonfigElementOrAddOn qonfigType) {
 			super(parent, qonfigType, ModelTypes.Map);
 		}
 
@@ -382,8 +440,8 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			return new Interpreted<>(this);
 		}
 
-		static class Interpreted<K, V> extends ConfigMapValue.Interpreted<K, V, ObservableMap<?, ?>, ObservableMap<K, V>> {
-			public Interpreted(ConfigMap definition) {
+		static class Interpreted<K, V> extends AbstractConfigMap.Interpreted<K, V, ObservableMap<?, ?>, ObservableMap<K, V>> {
+			public Interpreted(ExConfigMap definition) {
 				super(definition);
 			}
 
@@ -405,194 +463,57 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 
 		static class Instantiator<K, V> extends ConfigModelValue.Instantiator<V, ObservableMap<K, V>> {
 			private TypeToken<K> theKeyType;
+			private ModelValueInstantiator<SettableValue<ObservableConfigFormat<K>>> theKeyFormat;
 
 			public Instantiator(Interpreted<K, V> interpreted) {
 				super(interpreted.getConfigValue().instantiate(), interpreted.getValueType(), interpreted.getConfigPath(),
 					interpreted.getFormat() == null ? null : interpreted.getFormat().instantiate(), interpreted.getFormatSet());
 				theKeyType = interpreted.getKeyType();
+				theKeyFormat = interpreted.getKeyFormat() == null ? null : interpreted.getKeyFormat().instantiate();
 			}
 
 			@Override
 			public ObservableMap<K, V> create(ObservableConfigValueBuilder<V> config, ModelSetInstance msi)
 				throws ModelInstantiationException {
-				return config.asMap(theKeyType).buildMap(null);
+				ObservableConfigMapBuilder<K, V> mapBuilder = config.asMap(theKeyType);
+				if (theKeyFormat != null) {
+					ObservableConfigFormat<K> keyFormat = theKeyFormat.get(msi).get();
+					if (keyFormat != null)
+						mapBuilder.withKeyFormat(keyFormat);
+				}
+				return mapBuilder.buildMap(null);
 			}
 		}
 	}
 
 	private void configureFormats(QonfigInterpreterCore.Builder interpreter) {
-		interpreter.createWith(FileSourceFromModel.FILE_SOURCE_FROM_MODEL, ModelValueElement.CompiledSynth.class,
-			ExElement.creator(FileSourceFromModel::new));
-		interpreter.createWith(ExArchiveEnabledFileSource.ARCHIVE_ENABLED_FILE_SOURCE, ModelValueElement.CompiledSynth.class,
-			ExElement.creator(ExArchiveEnabledFileSource::new));
-		interpreter.createWith(ZipCompression.ZIP_ARCHIVAL, ModelValueElement.CompiledSynth.class, ExElement.creator(ZipCompression::new));
-		interpreter.createWith(GZCompression.GZ_ARCHIVAL, ModelValueElement.CompiledSynth.class, ExElement.creator(GZCompression::new));
-		interpreter.createWith(TarArchival.TAR_ARCHIVAL, ModelValueElement.CompiledSynth.class, ExElement.creator(TarArchival::new));
-		interpreter.createWith(TextFormat.TEXT_FORMAT, ModelValueElement.CompiledSynth.class, ExElement.creator(TextFormat::new));
-		interpreter.createWith("format-from-model", ModelValueElement.CompiledSynth.class, ExElement.creator(FormatFromModel::new));
+		// Text formats
+		interpreter.createWith(StandardTextFormat.STANDARD_TEXT_FORMAT, ModelValueElement.CompiledSynth.class,
+			ExElement.creator(StandardTextFormat::new));
+		// TODO custom-text-format, int-format, long-format
 		interpreter.createWith(DoubleFormat.DOUBLE_FORMAT, ModelValueElement.CompiledSynth.class, ExElement.creator(DoubleFormat::new));
 		interpreter.createWith(FileFormat.FILE_FORMAT, ModelValueElement.CompiledSynth.class, ExElement.creator(FileFormat::new));
 		interpreter.createWith(DateFormat.INSTANT_FORMAT, ModelValueElement.CompiledSynth.class, ExElement.creator(DateFormat::new));
 		interpreter.createWith(RegexStringFormat.REGEX_FORMAT_STRING, ModelValueElement.CompiledSynth.class,
 			ExElement.creator(RegexStringFormat::new));
-		interpreter.createWith(TextConfigFormat.TEXT_CONFIG_FORMAT, ModelValueElement.CompiledSynth.class,
-			ExElement.creator(TextConfigFormat::new));
+		// TODO regex-format
 
+		// Text format validation
+		// TODO reged-validation
 		interpreter.createWith(FilterValidation.FILTER_VALIDATION, FormatValidation.Def.class,
 			ExElement.creator(FilterValidation.Def::new));
-		// interpreter.createWith("model-reference", CompiledModelValue.class, session -> {
-		// ExpressoQIS exS = wrap(session);
-		// CompiledExpression ref = exS.getAttributeExpression("ref");
-		// return CompiledModelValue.of("model-reference", ModelTypes.Value, () -> ref.evaluate(ModelTypes.Value.any()));
-		// });
-		// // File sources
-		// interpreter.createWith("native-file-source", CompiledModelValue.class, session -> CompiledModelValue
-		// .literal(TypeTokens.get().of(NativeFileSource.class), new NativeFileSource(), "native-file-source"));
-		// interpreter.createWith("sftp-file-source", CompiledModelValue.class, session -> createSftpFileSource(wrap(session)));
-		// interpreter.createWith("archive-enabled-file-source", CompiledModelValue.class,
-		// session -> createArchiveEnabledFileSource(wrap(session)));
-		//
-		// // Text formats
-		// interpreter.createWith("text-format", CompiledModelValue.class,
-		// session -> CompiledModelValue.literal(
-		// TypeTokens.get().keyFor(SpinnerFormat.class).<SpinnerFormat<String>> parameterized(String.class),
-		// SpinnerFormat.NUMERICAL_TEXT, "text-format"));
-		// interpreter.createWith("int-format", CompiledModelValue.class, session -> {
-		// SpinnerFormat.IntFormat format = SpinnerFormat.INT;
-		// String sep = session.getAttributeText("grouping-separator");
-		// if (sep != null) {
-		// if (sep.length() != 0)
-		// session.reporting().warn("WARNING: grouping-separator must be a single character");
-		// else
-		// format = format.withGroupingSeparator(sep.charAt(0));
-		// }
-		// return CompiledModelValue.constant(ModelValueSynth
-		// .literal(TypeTokens.get().keyFor(Format.class).<Format<Integer>> parameterized(Integer.class), format, "int-format"));
-		// });
-		// interpreter.createWith("long-format", CompiledModelValue.class, session -> {
-		// session.put(ExpressoBaseV0_1.VALUE_TYPE_KEY, TypeTokens.get().LONG);
-		// SpinnerFormat.LongFormat format = SpinnerFormat.LONG;
-		// String sep = session.getAttributeText("grouping-separator");
-		// if (sep != null) {
-		// if (sep.length() != 0)
-		// session.reporting().warn("WARNING: grouping-separator must be a single character");
-		// else
-		// format = format.withGroupingSeparator(sep.charAt(0));
-		// }
-		// return CompiledModelValue.constant(ModelValueSynth
-		// .literal(TypeTokens.get().keyFor(Format.class).<Format<Long>> parameterized(Long.class), format, "long-format"));
-		// });
-		// interpreter.createWith("regex-format", CompiledModelValue.class, session -> CompiledModelValue
-		// .literal(TypeTokens.get().keyFor(Format.class).<Format<Pattern>> parameterized(Pattern.class), Format.PATTERN, "regex-format"));
-		//
-		// interpreter.createWith("regex-validation", ValidationProducer.class, session -> createRegexValidation(wrap(session)));
-		//
-		// // ObservableConfigFormats
-		// interpreter.createWith("text-config-format", CompiledModelValue.class, session -> createTextConfigFormat(wrap(session)));
-	}
 
-	// static class AbstractFormatProducer<T>
-	// extends ModelValueElement.Def.SingleTyped<SettableValue<?>, ModelValueElement<SettableValue<?>, SettableValue<Format<T>>>>
-	// implements ModelValueElement.CompiledSynth<SettableValue<?>, ModelValueElement<SettableValue<?>, SettableValue<Format<T>>>> {
-	// private final List<FormatValidation.Def<?>> theValidation;
-	//
-	// protected AbstractFormatProducer(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
-	// super(parent, qonfigType, ModelTypes.Value);
-	// theValidation = new ArrayList<>();
-	// }
-	//
-	// public List<FormatValidation.Def<?>> getValidation() {
-	// return Collections.unmodifiableList(theValidation);
-	// }
-	// }
+		// File sources
+		// TODO native-file-source, sftp-file-source
+		interpreter.createWith(ExArchiveEnabledFileSource.ARCHIVE_ENABLED_FILE_SOURCE, ModelValueElement.CompiledSynth.class,
+			ExElement.creator(ExArchiveEnabledFileSource::new));
+		interpreter.createWith(ZipCompression.ZIP_ARCHIVAL, ModelValueElement.CompiledSynth.class, ExElement.creator(ZipCompression::new));
+		interpreter.createWith(GZCompression.GZ_ARCHIVAL, ModelValueElement.CompiledSynth.class, ExElement.creator(GZCompression::new));
+		interpreter.createWith(TarArchival.TAR_ARCHIVAL, ModelValueElement.CompiledSynth.class, ExElement.creator(TarArchival::new));
 
-	@ExElementTraceable(toolkit = CONFIG, qonfigType = "model-reference", interpretation = ModelReference.Interpreted.class)
-	public static abstract class ModelReference<T>
-	extends ModelValueElement.Def.SingleTyped<SettableValue<?>, ModelValueElement<SettableValue<?>, SettableValue<T>>>
-	implements ModelValueElement.CompiledSynth<SettableValue<?>, ModelValueElement<SettableValue<?>, SettableValue<T>>> {
-		private CompiledExpression theReference;
-
-		protected ModelReference(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
-			super(parent, qonfigType, ModelTypes.Value);
-		}
-
-		@QonfigAttributeGetter("ref")
-		public CompiledExpression getReference() {
-			return theReference;
-		}
-
-		@Override
-		protected void doPrepare(ExpressoQIS session) throws QonfigInterpretationException {
-			theReference = session.getAttributeExpression("ref");
-		}
-
-		public static abstract class Interpreted<T> extends
-		ModelValueElement.Def.SingleTyped.Interpreted<SettableValue<?>, SettableValue<T>, ModelValueElement<SettableValue<?>, SettableValue<T>>>
-		implements
-		ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<T>, ModelValueElement<SettableValue<?>, SettableValue<T>>> {
-			private InterpretedValueSynth<SettableValue<?>, SettableValue<T>> theReference;
-
-			protected Interpreted(ModelReference<T> definition) {
-				super(definition, null);
-			}
-
-			@Override
-			public ModelReference<T> getDefinition() {
-				return (ModelReference<T>) super.getDefinition();
-			}
-
-			@Override
-			public Interpreted<T> setParentElement(ExElement.Interpreted<?> parent) {
-				super.setParentElement(parent);
-				return this;
-			}
-
-			public InterpretedValueSynth<SettableValue<?>, SettableValue<T>> getReference() {
-				return theReference;
-			}
-
-			protected abstract TypeToken<T> getValueType();
-
-			@Override
-			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-				super.doUpdate(env);
-				theReference = getDefinition().getReference().interpret(ModelTypes.Value.forType(getValueType()), env);
-			}
-
-			@Override
-			public List<? extends InterpretedValueSynth<?, ?>> getComponents() {
-				return Arrays.asList(theReference);
-			}
-
-			@Override
-			public ModelValueInstantiator<SettableValue<T>> instantiate() {
-				return theReference.instantiate();
-			}
-		}
-	}
-
-	static class FileSourceFromModel extends ModelReference<FileDataSource> {
-		public static final String FILE_SOURCE_FROM_MODEL = "file-source-from-model";
-
-		public FileSourceFromModel(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
-			super(parent, qonfigType);
-		}
-
-		@Override
-		public Interpreted interpret() {
-			return new Interpreted(this);
-		}
-
-		static class Interpreted extends ModelReference.Interpreted<FileDataSource> {
-			public Interpreted(FileSourceFromModel definition) {
-				super(definition);
-			}
-
-			@Override
-			protected TypeToken<FileDataSource> getValueType() {
-				return TypeTokens.get().of(FileDataSource.class);
-			}
-		}
+		// ObservableConfig formats
+		interpreter.createWith(TextConfigFormat.TEXT_CONFIG_FORMAT, ModelValueElement.CompiledSynth.class,
+			ExElement.creator(TextConfigFormat::new));
 	}
 
 	@ExElementTraceable(toolkit = CONFIG,
@@ -604,7 +525,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 	ModelValueElement.CompiledSynth<SettableValue<?>, ModelValueElement<SettableValue<?>, SettableValue<ArchiveEnabledFileSource>>> {
 		public static final String ARCHIVE_ENABLED_FILE_SOURCE = "archive-enabled-file-source";
 
-		private ModelValueElement.CompiledSynth<SettableValue<?>, ModelValueElement<SettableValue<?>, SettableValue<FileDataSource>>> theWrapped;
+		private CompiledExpression theWrapped;
 		private CompiledExpression theMaxArchiveDepth;
 		private final List<ModelValueElement.CompiledSynth<SettableValue<?>, ModelValueElement<SettableValue<?>, SettableValue<ArchiveEnabledFileSource.FileArchival>>>> theArchiveMethods;
 
@@ -613,8 +534,8 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			theArchiveMethods = new ArrayList<>();
 		}
 
-		@QonfigChildGetter("wrapped")
-		public ModelValueElement.CompiledSynth<SettableValue<?>, ModelValueElement<SettableValue<?>, SettableValue<FileDataSource>>> getWrapped() {
+		@QonfigAttributeGetter("wrapped")
+		public CompiledExpression getWrapped() {
 			return theWrapped;
 		}
 
@@ -630,7 +551,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 
 		@Override
 		protected void doPrepare(ExpressoQIS session) throws QonfigInterpretationException {
-			theWrapped = ExElement.useOrReplace(ModelValueElement.CompiledSynth.class, theWrapped, session, "wrapped");
+			theWrapped = session.getAttributeExpression("wrapped");
 			theMaxArchiveDepth = session.getAttributeExpression("max-archive-depth");
 			ExElement.syncDefs(ModelValueElement.CompiledSynth.class, theArchiveMethods, session.forChildren("archive-method"));
 		}
@@ -644,7 +565,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		ModelValueElement.Def.SingleTyped.Interpreted<SettableValue<?>, SettableValue<ArchiveEnabledFileSource>, ModelValueElement<SettableValue<?>, SettableValue<ArchiveEnabledFileSource>>>
 		implements
 		ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<ArchiveEnabledFileSource>, ModelValueElement<SettableValue<?>, SettableValue<ArchiveEnabledFileSource>>> {
-			private ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<FileDataSource>, ?> theWrapped;
+			private InterpretedValueSynth<SettableValue<?>, SettableValue<FileDataSource>> theWrapped;
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> theMaxArchiveDepth;
 			private final List<ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<ArchiveEnabledFileSource.FileArchival>, ?>> theArchiveMethods;
 
@@ -669,7 +590,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 				return ModelTypes.Value.forType(ArchiveEnabledFileSource.class);
 			}
 
-			public ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<FileDataSource>, ?> getWrapped() {
+			public InterpretedValueSynth<SettableValue<?>, SettableValue<FileDataSource>> getWrapped() {
 				return theWrapped;
 			}
 
@@ -684,16 +605,8 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			@Override
 			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 				super.doUpdate(env);
-				if (theWrapped != null
-					&& (getDefinition().getWrapped() == null || theWrapped.getIdentity() != getDefinition().getWrapped().getIdentity())) {
-					theWrapped.destroy();
-					theWrapped = null;
-				}
-				if (theWrapped == null && getDefinition().getWrapped() != null)
-					theWrapped = (ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<FileDataSource>, ?>) getDefinition()
-					.getWrapped().interpret(env);
-				if (theWrapped != null)
-					theWrapped.updateValue(env);
+				theWrapped = getDefinition().getWrapped() == null ? null
+					: getDefinition().getWrapped().interpret(ModelTypes.Value.forType(FileDataSource.class), env);
 				theMaxArchiveDepth = getDefinition().getMaxArchiveDepth().interpret(ModelTypes.Value.INT, env);
 				CollectionUtils
 				.synchronize(theArchiveMethods, getDefinition().getArchiveMethods(),
@@ -1323,7 +1236,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 	static class FileFormat extends AbstractFormat<BetterFile> {
 		public static final String FILE_FORMAT = "file-format";
 
-		private ModelValueElement.CompiledSynth<SettableValue<?>, ModelValueElement<SettableValue<?>, SettableValue<FileDataSource>>> theFileSource;
+		private CompiledExpression theFileSource;
 		private CompiledExpression theWorkingDir;
 		private boolean isAllowEmpty;
 
@@ -1331,8 +1244,8 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			super(parent, qonfigType);
 		}
 
-		@QonfigChildGetter("file-source")
-		public CompiledSynth<SettableValue<?>, ModelValueElement<SettableValue<?>, SettableValue<FileDataSource>>> getFileSource() {
+		@QonfigAttributeGetter("file-source")
+		public CompiledExpression getFileSource() {
 			return theFileSource;
 		}
 
@@ -1349,11 +1262,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		@Override
 		protected void doPrepare(ExpressoQIS session) throws QonfigInterpretationException {
 			super.doPrepare(session);
-			theFileSource = ExElement.useOrReplace(ModelValueElement.CompiledSynth.class, theFileSource, session, "file-source",
-				(fs, s) -> {
-					fs.update(s);
-					fs.prepareModelValue(s);
-				});
+			theFileSource = session.getAttributeExpression("file-source");
 			theWorkingDir = session.getAttributeExpression("working-dir");
 		}
 
@@ -1363,7 +1272,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		}
 
 		static class Interpreted extends AbstractFormat.Interpreted<BetterFile> {
-			private ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<FileDataSource>, ?> theFileSource;
+			private InterpretedValueSynth<SettableValue<?>, SettableValue<FileDataSource>> theFileSource;
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<BetterFile>> theWorkingDir;
 
 			Interpreted(FileFormat definition) {
@@ -1381,7 +1290,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 				return this;
 			}
 
-			public ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<FileDataSource>, ?> getFileSource() {
+			public InterpretedValueSynth<SettableValue<?>, SettableValue<FileDataSource>> getFileSource() {
 				return theFileSource;
 			}
 
@@ -1397,16 +1306,8 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			@Override
 			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 				super.doUpdate(env);
-				if (theFileSource != null && (getDefinition().getFileSource() == null
-					|| theFileSource.getIdentity() != getDefinition().getFileSource().getIdentity())) {
-					theFileSource.destroy();
-					theFileSource = null;
-				}
-				if (theFileSource == null && getDefinition().getFileSource() != null)
-					theFileSource = (ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<FileDataSource>, ?>) getDefinition()
-					.getFileSource().interpret(env);
-				if (theFileSource != null)
-					theFileSource.updateValue(env);
+				theFileSource = getDefinition().getFileSource() == null ? null
+					: getDefinition().getFileSource().interpret(ModelTypes.Value.forType(FileDataSource.class), env);
 				theWorkingDir = getDefinition().getWorkingDir() == null ? null
 					: getDefinition().getWorkingDir().interpret(ModelTypes.Value.forType(BetterFile.class), env);
 
@@ -2016,70 +1917,11 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		}
 	}
 
-	static class TextFormat extends AbstractFormat<String> {
-		public static final String TEXT_FORMAT = "text-format";
+	static class StandardTextFormat<T> extends AbstractFormat<T> {
+		public static final String STANDARD_TEXT_FORMAT = "standard-text-format";
 
-		public TextFormat(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
+		public StandardTextFormat(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
 			super(parent, qonfigType);
-		}
-
-		@Override
-		public Interpreted interpret() {
-			return new Interpreted(this);
-		}
-
-		static class Interpreted extends AbstractFormat.Interpreted<String> {
-			Interpreted(TextFormat definition) {
-				super(definition, null);
-			}
-
-			@Override
-			protected TypeToken<String> getValueType() {
-				return TypeTokens.get().STRING;
-			}
-
-			@Override
-			public Instantiator instantiate() {
-				return new Instantiator(this);
-			}
-		}
-
-		static class Instantiator extends AbstractFormat.Instantiator<String> {
-			Instantiator(Interpreted interpreted) {
-				super(interpreted);
-			}
-
-			@Override
-			protected SettableValue<Format<String>> createFormat(ModelSetInstance models)
-				throws ModelInstantiationException, IllegalStateException {
-				return SettableValue.of(getFormatType(), SpinnerFormat.NUMERICAL_TEXT, StdMsg.UNSUPPORTED_OPERATION);
-			}
-
-			@Override
-			protected SettableValue<Format<String>> copyFormat(SettableValue<Format<String>> format, ModelSetInstance sourceModels,
-				ModelSetInstance newModels) throws ModelInstantiationException {
-				return format;
-			}
-		}
-	}
-
-	@ExElementTraceable(toolkit = CONFIG, qonfigType = "model-reference", interpretation = FormatFromModel.Interpreted.class)
-	static class FormatFromModel<T> extends AbstractFormat<T> {
-		private CompiledExpression theReference;
-
-		public FormatFromModel(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
-			super(parent, qonfigType);
-		}
-
-		@QonfigAttributeGetter("ref")
-		public CompiledExpression getReference() {
-			return theReference;
-		}
-
-		@Override
-		protected void doPrepare(ExpressoQIS session) throws QonfigInterpretationException {
-			super.doPrepare(session);
-			theReference = session.getAttributeExpression("ref");
 		}
 
 		@Override
@@ -2088,31 +1930,53 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		}
 
 		static class Interpreted<T> extends AbstractFormat.Interpreted<T> {
-			private InterpretedValueSynth<SettableValue<?>, SettableValue<Format<T>>> theReference;
+			private TypeToken<T> theType;
+			private Format<T> theFormat;
 
-			Interpreted(FormatFromModel<T> definition) {
+			Interpreted(StandardTextFormat<T> definition) {
 				super(definition, null);
 			}
 
 			@Override
-			public FormatFromModel<T> getDefinition() {
-				return (FormatFromModel<T>) super.getDefinition();
-			}
-
-			public InterpretedValueSynth<SettableValue<?>, SettableValue<Format<T>>> getReference() {
-				return theReference;
-			}
-
-			@Override
 			protected TypeToken<T> getValueType() {
-				return (TypeToken<T>) theReference.getType().getType(0).resolveType(Format.class.getTypeParameters()[0]);
+				return theType;
+			}
+
+			public Format<T> getFormat() {
+				return theFormat;
 			}
 
 			@Override
 			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
-				theReference = getDefinition().getReference()
-					.interpret(ModelTypes.Value.forType(TypeTokens.get().keyFor(Format.class).<Format<T>> wildCard()), env);
 				super.doUpdate(env);
+
+				theType = getAddOn(ExTyped.Interpreted.class).getValueType();
+				Format<?> f;
+				Class<?> type = TypeTokens.get().unwrap(TypeTokens.getRawType(theType));
+				if (type == String.class)
+					f = SpinnerFormat.NUMERICAL_TEXT;
+				else if (type == int.class)
+					f = SpinnerFormat.INT;
+				else if (type == long.class)
+					f = SpinnerFormat.LONG;
+				else if (type == double.class)
+					f = Format.doubleFormat(4).build();
+				else if (type == float.class)
+					f = Format.doubleFormat(4).buildFloat();
+				else if (type == boolean.class)
+					f = Format.BOOLEAN;
+				else if (Enum.class.isAssignableFrom(type))
+					f = Format.enumFormat((Class<Enum<?>>) type);
+				else if (type == Instant.class)
+					f = SpinnerFormat.flexDate(Instant::now, "EEE MMM dd, yyyy", null);
+				else if (type == Duration.class)
+					f = SpinnerFormat.flexDuration(false);
+				else if (type == java.io.File.class)
+					f = new Format.FileFormat(true);
+				else
+					throw new ExpressoInterpretationException("No standard format available for type " + theType, reporting().getPosition(),
+						0);
+				theFormat = (Format<T>) f;
 			}
 
 			@Override
@@ -2122,23 +1986,23 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		}
 
 		static class Instantiator<T> extends AbstractFormat.Instantiator<T> {
-			private final ModelValueInstantiator<SettableValue<Format<T>>> theReference;
+			private Format<T> theFormat;
 
 			Instantiator(Interpreted<T> interpreted) {
 				super(interpreted);
-				theReference = interpreted.getReference().instantiate();
+				theFormat = interpreted.getFormat();
 			}
 
 			@Override
 			protected SettableValue<Format<T>> createFormat(ModelSetInstance models)
 				throws ModelInstantiationException, IllegalStateException {
-				return theReference.get(models);
+				return SettableValue.of(getFormatType(), theFormat, StdMsg.UNSUPPORTED_OPERATION);
 			}
 
 			@Override
 			protected SettableValue<Format<T>> copyFormat(SettableValue<Format<T>> format, ModelSetInstance sourceModels,
 				ModelSetInstance newModels) throws ModelInstantiationException {
-				return theReference.forModelCopy(format, sourceModels, newModels);
+				return format;
 			}
 		}
 	}
@@ -2216,7 +2080,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			@Override
 			protected void doUpdate(InterpretedExpressoEnv expressoEnv) throws ExpressoInterpretationException {
 				super.doUpdate(expressoEnv);
-				theTest = getDefinition().getTest().interpret(ModelTypes.Value.STRING, expressoEnv);
+				theTest = ExpressoTransformations.parseFilter(getDefinition().getTest(), expressoEnv, true);
 			}
 
 			@Override
@@ -2314,7 +2178,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		public static final String TEXT_CONFIG_FORMAT = "text-config-format";
 
 		private VariableType theType;
-		private ModelValueElement.CompiledSynth<SettableValue<?>, ModelValueElement<SettableValue<?>, SettableValue<Format<?>>>> theTextFormat;
+		private CompiledExpression theTextFormat;
 		private CompiledExpression theDefaultValue;
 		private String theDefaultText;
 
@@ -2327,8 +2191,8 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 			return theType;
 		}
 
-		@QonfigChildGetter("text-format")
-		public ModelValueElement.CompiledSynth<SettableValue<?>, ModelValueElement<SettableValue<?>, SettableValue<Format<?>>>> getTextFormat() {
+		@QonfigAttributeGetter("text-format")
+		public CompiledExpression getTextFormat() {
 			return theTextFormat;
 		}
 
@@ -2346,10 +2210,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		protected void doPrepare(ExpressoQIS session) throws QonfigInterpretationException {
 			LocatedPositionedContent type = session.getAttributeValuePosition("type");
 			theType = type == null ? null : VariableType.parseType(type);
-			theTextFormat = ExElement.useOrReplace(ModelValueElement.CompiledSynth.class, theTextFormat, session, "text-format", (f, s) -> {
-				f.update(s);
-				f.prepareModelValue(s);
-			});
+			theTextFormat = session.getAttributeExpression("text-format");
 			if (theType == null && theTextFormat == null)
 				throw new QonfigInterpretationException("Either 'type' or 'text-format' must be specified",
 					session.getElement().getPositionInFile(), 0);
@@ -2373,7 +2234,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 		implements
 		ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<ObservableConfigFormat<T>>, ModelValueElement<SettableValue<?>, SettableValue<ObservableConfigFormat<T>>>> {
 			private TypeToken<T> theType;
-			private ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<Format<T>>, ?> theTextFormat;
+			private InterpretedValueSynth<SettableValue<?>, SettableValue<Format<T>>> theTextFormat;
 			private Format<T> theDefaultFormat;
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<T>> theDefaultValue;
 
@@ -2407,7 +2268,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 				return theType;
 			}
 
-			public ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<Format<T>>, ?> getTextFormat() {
+			public InterpretedValueSynth<SettableValue<?>, SettableValue<Format<T>>> getTextFormat() {
 				return theTextFormat;
 			}
 
@@ -2424,18 +2285,18 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 				super.doUpdate(env);
 				theType = getDefinition().getConfiguredType() == null ? null
 					: (TypeToken<T>) getDefinition().getConfiguredType().getType(env);
-				if (theTextFormat != null && (getDefinition().getTextFormat() == null
-					|| theTextFormat.getIdentity() != getDefinition().getTextFormat().getIdentity())) {
-					theTextFormat.destroy();
-					theTextFormat = null;
-				}
-				if (theTextFormat == null && getDefinition().getTextFormat() != null)
-					theTextFormat = (ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<Format<T>>, ?>) getDefinition()
-					.getTextFormat().interpret(env);
-				if (theTextFormat != null)
-					theTextFormat.updateValue(env);
+				ModelInstanceType<SettableValue<?>, SettableValue<Format<T>>> formatType;
+				if (theType != null)
+					formatType = ModelTypes.Value.forType(TypeTokens.get().keyFor(Format.class).<Format<T>> parameterized(theType));
+				else
+					formatType = ModelTypes.Value.anyAsV();
+				theTextFormat = getDefinition().getTextFormat() == null ? null : getDefinition().getTextFormat().interpret(formatType, env);
 
 				if (theTextFormat == null) {
+					if (theType == null)
+						throw new ExpressoInterpretationException(
+							"If no text-format is specified, a type must be specified to determine a default text format",
+							reporting().getPosition(), 0);
 					try {
 						ObservableConfigFormat<T> defaultFormat = new ObservableConfigFormatSet().getConfigFormat(theType, null);
 						if (!(defaultFormat instanceof ObservableConfigFormat.Impl.SimpleConfigFormat))
@@ -2448,6 +2309,7 @@ public class ExpressoConfigV0_1 implements QonfigInterpretation {
 							getDefinition().getConfiguredType().getContent().length(), e);
 					}
 				}
+
 
 				theDefaultValue = getDefinition().getDefaultValue() == null ? null
 					: getDefinition().getDefaultValue().interpret(ModelTypes.Value.forType(getValueType()), env);

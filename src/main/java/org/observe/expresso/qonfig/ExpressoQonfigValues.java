@@ -45,7 +45,6 @@ import org.observe.expresso.qonfig.ExpressoQonfigValues.CollectionElement.Collec
 import org.observe.expresso.qonfig.ModelValueElement.InterpretedSynth;
 import org.observe.util.TypeTokens;
 import org.qommons.Causable;
-import org.qommons.LambdaUtils;
 import org.qommons.QommonsUtils;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transaction;
@@ -1709,7 +1708,8 @@ public class ExpressoQonfigValues {
 			@Override
 			public void instantiate() {
 				theLocalModels.instantiate();
-				theEvent.instantiate();
+				if (theEvent != null)
+					theEvent.instantiate();
 				theAction.instantiate();
 			}
 

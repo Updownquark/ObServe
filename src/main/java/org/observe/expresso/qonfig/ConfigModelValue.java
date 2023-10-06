@@ -23,7 +23,6 @@ import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigInterpreterCore.QonfigValueCreator;
-import org.qommons.ex.ExceptionHandler;
 
 import com.google.common.reflect.TypeToken;
 
@@ -49,8 +48,8 @@ public interface ConfigModelValue<T, M, MV extends M> extends ModelValueElement<
 		@QonfigAttributeGetter("config-path")
 		ObservableConfigPath getConfigPath();
 
-		@QonfigChildGetter("format")
-		CompiledSynth<SettableValue<?>, ?> getFormat();
+		@QonfigAttributeGetter("format")
+		CompiledExpression getFormat();
 
 		@Override
 		Interpreted<?, M, ?> interpret();
@@ -58,7 +57,7 @@ public interface ConfigModelValue<T, M, MV extends M> extends ModelValueElement<
 		public abstract class Abstract<M> extends ModelValueElement.Def.Abstract<M, ConfigModelValue<?, M, ?>> implements Def<M> {
 			private VariableType theValueType;
 			private ObservableConfigPath theConfigPath;
-			private ModelValueElement.CompiledSynth<SettableValue<?>, ?> theFormat;
+			private CompiledExpression theFormat;
 
 			protected Abstract(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType, ModelType<M> modelType) {
 				super(parent, qonfigType, modelType);
@@ -75,7 +74,7 @@ public interface ConfigModelValue<T, M, MV extends M> extends ModelValueElement<
 			}
 
 			@Override
-			public CompiledSynth<SettableValue<?>, ?> getFormat() {
+			public CompiledExpression getFormat() {
 				return theFormat;
 			}
 
@@ -92,10 +91,7 @@ public interface ConfigModelValue<T, M, MV extends M> extends ModelValueElement<
 					theConfigPath = ObservableConfigPath.create(configPath);
 				else
 					theConfigPath = ObservableConfigPath.create(getAddOn(ExNamed.Def.class).getName());
-				theFormat = ExElement.useOrReplace(ModelValueElement.CompiledSynth.class, theFormat, session, "format", (f, s) -> {
-					f.update(s);
-					f.prepareModelValue(s);
-				});
+				theFormat = session.getAttributeExpression("format");
 			}
 		}
 	}
@@ -170,7 +166,7 @@ public interface ConfigModelValue<T, M, MV extends M> extends ModelValueElement<
 			@Override
 			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 				super.doUpdate(env);
-				theValueType = (TypeToken<T>) getDefinition().getValueType().getType(env);
+				theValueType = getAddOn(ExTyped.Interpreted.class).getValueType();
 				try {
 					theConfigValue = env.getModels().getValue(ExpressoConfigV0_1.CONFIG_NAME,
 						ModelTypes.Value.forType(ObservableConfig.class), env);
@@ -179,15 +175,10 @@ public interface ConfigModelValue<T, M, MV extends M> extends ModelValueElement<
 						reporting().getPosition(), 0, e);
 				}
 				theConfigPath = getDefinition().getConfigPath();
-				try {
-					theFormat = getDefinition().getFormat() == null ? null
-						: getDefinition().getFormat().interpret(env).as(ModelTypes.Value.forType(TypeTokens.get()
-							.keyFor(ObservableConfigFormat.class).<ObservableConfigFormat<T>> parameterized(getValueType())), env,
-							ExceptionHandler.thrower());
-				} catch (TypeConversionException e) {
-					throw new ExpressoInterpretationException("Could not interpret format",
-						getDefinition().getFormat().reporting().getPosition(), 0, e);
-				}
+				theFormat = getDefinition().getFormat() == null ? null : getDefinition().getFormat().interpret(//
+					ModelTypes.Value.forType(
+						TypeTokens.get().keyFor(ObservableConfigFormat.class).<ObservableConfigFormat<T>> parameterized(getValueType())),
+					env);
 				theFormatSet = theFormat == null ? env.getProperty(FORMAT_SET_KEY, ObservableConfigFormatSet.class) : null;
 			}
 		}

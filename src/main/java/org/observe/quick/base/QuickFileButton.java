@@ -2,7 +2,10 @@ package org.observe.quick.base;
 
 import java.io.File;
 
+import org.observe.SettableValue;
 import org.observe.expresso.ExpressoInterpretationException;
+import org.observe.expresso.ModelType.ModelInstanceType;
+import org.observe.expresso.ModelTypes;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExElementTraceable;
 import org.observe.expresso.qonfig.ExpressoQIS;
@@ -53,6 +56,11 @@ public class QuickFileButton extends QuickValueWidget.Abstract<File> {
 		@Override
 		public Def getDefinition() {
 			return (Def) super.getDefinition();
+		}
+
+		@Override
+		protected ModelInstanceType<SettableValue<?>, SettableValue<File>> getTargetType() {
+			return ModelTypes.Value.forType(File.class);
 		}
 
 		@Override

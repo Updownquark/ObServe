@@ -15,7 +15,7 @@ public class ExMapModelValue<K> extends ExAddOn.Abstract<ExElement> {
 		qonfigType = "map-model-value",
 		interpretation = Interpreted.class,
 		instance = ExMapModelValue.class)
-	public static class Def extends ExAddOn.Def.Abstract<ExElement, ExMapModelValue<?>> {
+	public static class Def<AO extends ExMapModelValue<?>> extends ExAddOn.Def.Abstract<ExElement, AO> {
 		private VariableType theKeyType;
 
 		public Def(QonfigAddOn type, ExElement.Def<? extends ExElement> element) {
@@ -39,15 +39,15 @@ public class ExMapModelValue<K> extends ExAddOn.Abstract<ExElement> {
 		}
 
 		@Override
-		public Interpreted interpret(ExElement.Interpreted<? extends ExElement> element) {
-			return new Interpreted(this, element);
+		public Interpreted<?, ? extends AO> interpret(ExElement.Interpreted<? extends ExElement> element) {
+			return (Interpreted<?, ? extends AO>) new Interpreted<>((Def<ExMapModelValue<Object>>) this, element);
 		}
 	}
 
-	public static class Interpreted<K> extends ExAddOn.Interpreted.Abstract<ExElement, ExMapModelValue<K>> {
+	public static class Interpreted<K, AO extends ExMapModelValue<K>> extends ExAddOn.Interpreted.Abstract<ExElement, AO> {
 		private TypeToken<K> theKeyType;
 
-		public Interpreted(Def definition, ExElement.Interpreted<? extends ExElement> element) {
+		public Interpreted(Def<? super AO> definition, ExElement.Interpreted<? extends ExElement> element) {
 			super(definition, element);
 		}
 
@@ -71,35 +71,35 @@ public class ExMapModelValue<K> extends ExAddOn.Abstract<ExElement> {
 		}
 
 		@Override
-		public Class<ExMapModelValue<K>> getInstanceType() {
-			return (Class<ExMapModelValue<K>>) (Class<?>) ExMapModelValue.class;
+		public Class<AO> getInstanceType() {
+			return (Class<AO>) ExMapModelValue.class;
 		}
 
 		@Override
-		public ExMapModelValue<K> create(ExElement element) {
-			return new ExMapModelValue<>(element);
+		public AO create(ExElement element) {
+			return (AO) new ExMapModelValue<>(element);
 		}
 	}
 
-	private TypeToken<?> theValueType;
+	private TypeToken<?> theKeyType;
 
 	public ExMapModelValue(ExElement element) {
 		super(element);
 	}
 
 	@Override
-	public Class<Interpreted<?>> getInterpretationType() {
-		return (Class<Interpreted<?>>) (Class<?>) Interpreted.class;
+	public Class<? extends Interpreted<?, ?>> getInterpretationType() {
+		return (Class<Interpreted<?, ?>>) (Class<?>) Interpreted.class;
 	}
 
-	public TypeToken<?> getValueType() {
-		return theValueType;
+	public TypeToken<?> getKeyType() {
+		return theKeyType;
 	}
 
 	@Override
 	public void update(ExAddOn.Interpreted<?, ?> interpreted) {
 		super.update(interpreted);
-		Interpreted<K> myInterpreted = (Interpreted<K>) interpreted;
-		theValueType = myInterpreted.getKeyType();
+		Interpreted<K, ?> myInterpreted = (Interpreted<K, ?>) interpreted;
+		theKeyType = myInterpreted.getKeyType();
 	}
 }

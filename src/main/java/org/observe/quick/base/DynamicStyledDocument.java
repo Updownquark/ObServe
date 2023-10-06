@@ -299,7 +299,7 @@ public class DynamicStyledDocument<T> extends StyledDocument<T> {
 		if (theTextStyle != null)
 			theTextStyle.update(myInterpreted.getTextStyle(), this);
 		theChildrenSynth = myInterpreted.getChildren().instantiate();
-		thePostTextSynth = myInterpreted.getPostText().instantiate();
+		thePostTextSynth = myInterpreted.getPostText() == null ? null : myInterpreted.getPostText().instantiate();
 	}
 
 	@Override

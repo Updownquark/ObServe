@@ -1038,6 +1038,10 @@ public class QuickBaseSwing implements QuickInterpretation {
 					tree.withSelection(quick.getSelection(), false);
 				if (quick.getMultiSelection() != null)
 					tree.withSelection(quick.getMultiSelection());
+				if (quick.getNodeSelection() != null)
+					tree.withValueSelection(quick.getNodeSelection(), false);
+				if (quick.getNodeMultiSelection() != null)
+					tree.withValueSelection(quick.getNodeMultiSelection());
 				if (treeColumn != null)
 					tree.withRender(treeColumn.getCRS());
 				tree.withLeafTest2(path -> {
@@ -1112,7 +1116,6 @@ public class QuickBaseSwing implements QuickInterpretation {
 					public AbstractQuickContainerPopulator addVPanel(Consumer<PanelPopulator<JPanel, ?>> vPanel) {
 						if (isFirst) {
 							isFirst = false;
-							s.firstV(p -> vPanel.accept((PanelPopulator<JPanel, ?>) p));
 							s.firstV((Consumer<PanelPopulator<?, ?>>) (Consumer<?>) vPanel);
 						} else
 							s.lastV(p -> vPanel.accept((PanelPopulator<JPanel, ?>) p));

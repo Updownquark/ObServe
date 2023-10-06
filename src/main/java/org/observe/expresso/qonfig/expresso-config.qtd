@@ -10,17 +10,13 @@ It builds on the Expresso-Base toolkit and allows specification of persisted con
 		<add-on name="allow-config-model" abstract="true" />
 		<add-on name="config-model-value" requires="model-value" inherits="type-required">
 			<attribute name="config-path" type="string" specify="optional" />
-			<child-def name="format" type="config-format" min="0" />
+			<attribute name="format" type="expression" specify="optional" />
 		</add-on>
 		<add-on name="config-value" requires="value" inherits="config-model-value">
 			<attribute name="default" type="expression" specify="optional" />
 		</add-on>
 		<add-on name="config-map" requires="map" inherits="config-model-value">
 			<attribute name="key-format" type="expression" specify="optional" />
-		</add-on>
-
-		<add-on name="model-reference" requires="model-value">
-			<attribute name="ref" type="expression" />
 		</add-on>
 	</add-ons>
 
@@ -44,18 +40,31 @@ It builds on the Expresso-Base toolkit and allows specification of persisted con
 			<child-def name="validate" type="validate" min="0" max="inf" />
 		</element-def>
 		<element-def name="validate" abstract="true" />
-		<element-def name="format-from-model" extends="format" inherits="model-reference" />
-		<element-def name="text-format" extends="format" />
+		<element-def name="standard-text-format" extends="format" inherits="type-required" />
+		<element-def name="custom-text-format" extends="format" inherits="type-required,with-element-model">
+			<element-model>
+				<value name-attribute="text-name" />
+				<value name-attribute="format-value-name" />
+			</element-model>
+			<?DOC <html>The name of the variable to place the text to parse in.<br>
+				If not specified, the format will only be able to print, but not parse.?>
+			<attribute name="text-name" type="identifier" specify="optional" />
+			<attribute name="format-value-name" type="identifier" />
+			<?DOC <html>The expression to parse the text into a value.<br>
+				If not specified, the format will only be able to print, but not parse.?>
+			<attribute name="parse" type="expression" specify="optional" />
+			<attribute name="print" type="expression" />
+		</element-def>
 		<element-def name="file-format" extends="format">
+			<attr-mod name="typed.type" specify="forbidden" />
 			<!-- Default is native -->
-			<child-def name="file-source" type="file-source" min="0" />
+			<attribute name="file-source" type="expression" specify="optional" />
 			<attribute name="working-dir" type="expression" specify="optional" />
 			<attribute name="allow-empty" type="boolean" default="false" />
 		</element-def>
 		<element-def name="file-source" extends="model-value">
-			<attr-mod name="model-value.type" specify="forbidden" default="" />
+			<attr-mod name="typed.type" specify="forbidden" />
 		</element-def>
-		<element-def name="file-source-from-model" extends="file-source" inherits="model-reference" />
 		<element-def name="native-file-source" extends="file-source" />
 		<element-def name="sftp-file-source" extends="file-source">
 			<attribute name="host" type="expression" />
@@ -69,7 +78,7 @@ It builds on the Expresso-Base toolkit and allows specification of persisted con
 		<element-def name="archive-enabled-file-source" extends="file-source">
 			<attribute name="max-archive-depth" type="expression" default="10" />
 			<!-- Default is native -->
-			<child-def name="wrapped" type="file-source" min="0" />
+			<attribute name="wrapped" type="expression" specify="optional" />
 			<child-def name="archive-method" type="archive-method" min="0" max="inf" />
 		</element-def>
 		<element-def name="archive-method" extends="model-value" abstract="true">
@@ -79,10 +88,12 @@ It builds on the Expresso-Base toolkit and allows specification of persisted con
 		<element-def name="tar-archival" extends="archive-method" />
 		<element-def name="gz-archival" extends="archive-method" />
 		<element-def name="int-format" extends="format">
+			<attr-mod name="typed.type" specify="forbidden" />
 			<attribute name="grouping-separator" type="string" specify="optional" />
 		</element-def>
 		<element-def name="long-format" extends="int-format" />
 		<element-def name="double-format" extends="format">
+			<attr-mod name="typed.type" specify="forbidden" />
 			<attribute name="sig-digs" type="expression" />
 			<attribute name="unit" type="identifier" specify="optional" />
 			<attribute name="unit-required" type="boolean" default="true" />
@@ -100,6 +111,7 @@ It builds on the Expresso-Base toolkit and allows specification of persisted con
 			<attribute name="multiplier" type="float" specify="optional" />
 		</element-def>
 		<element-def name="instant-format" extends="format">
+			<attr-mod name="typed.type" specify="forbidden" />
 			<attribute name="day-format" type="string" default="EEE MMM dd, yyyy" />
 			<attribute name="time-zone" type="string" specify="optional" />
 			<attribute name="max-resolution" type="string" default="Second" />
@@ -107,9 +119,13 @@ It builds on the Expresso-Base toolkit and allows specification of persisted con
 			<attribute name="relative-evaluation" type="string" default="Closest" />
 			<attribute name="relative-to" type="expression" specify="optional" />
 		</element-def>
-		<element-def name="regex-format" extends="format" />
+		<element-def name="regex-format" extends="format">
+			<attr-mod name="typed.type" specify="forbidden" />
+		</element-def>
 		<?DOC This format produces a String that can be compiled into a regular expression?>
-		<element-def name="regex-format-string" extends="format" />
+		<element-def name="regex-format-string" extends="format">
+			<attr-mod name="typed.type" specify="forbidden" />
+		</element-def>
 		
 		<element-def name="regex-validation" extends="validate">
 			<attribute name="pattern" type="expression" />
@@ -124,12 +140,9 @@ It builds on the Expresso-Base toolkit and allows specification of persisted con
 		
 		<element-def name="config-format" extends="model-value" abstract="true">
 		</element-def>
-		<element-def name="config-format-from-model" extends="model-value" inherits="model-reference">
-			<attribute name="ref" type="expression" />
-		</element-def>
 		<element-def name="text-config-format" extends="config-format">
 			<attribute name="type" type="string" specify="optional" />
-			<child-def name="text-format" type="format" min="0" />
+			<attribute name="text-format" type="expression" specify="optional" />
 			<attribute name="default" type="expression" specify="optional" />
 			<attribute name="default-text" type="string" specify="optional" />
 		</element-def>

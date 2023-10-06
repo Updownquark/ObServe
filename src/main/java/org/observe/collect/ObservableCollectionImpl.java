@@ -3,6 +3,7 @@ package org.observe.collect;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -3877,6 +3878,615 @@ public final class ObservableCollectionImpl {
 				if (!getElementId().check())
 					throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
 				getElement().remove();
+			}
+		}
+	}
+
+	public static class SimpleCollectionBackedObservable<T> implements ObservableCollection<T> {
+		private final ObservableCollection<T> theCollection;
+		private final List<ElementId> theBackingElements;
+		private final SettableValue<? extends Collection<T>> theCollectionValue;
+		private Subscription theValueSubscription;
+		private final AtomicInteger theSubscriptionCount;
+		private long theStampCopy;
+		private boolean isModifying;
+
+		protected SimpleCollectionBackedObservable(ObservableCollection<T> collection,
+			SettableValue<? extends Collection<T>> collectionValue) {
+			theCollection = collection;
+			theBackingElements = new ArrayList<>();
+			theCollectionValue = collectionValue;
+			theSubscriptionCount = new AtomicInteger();
+			theStampCopy = -1;
+			sync(null);
+		}
+
+		@Override
+		public CollectionElement<T> getElement(int index) throws IndexOutOfBoundsException {
+			return theCollection.getElement(index);
+		}
+
+		@Override
+		public boolean isContentControlled() {
+			return theCollection.isContentControlled();
+		}
+
+		@Override
+		public int getElementsBefore(ElementId id) {
+			update();
+			return theCollection.getElementsBefore(id);
+		}
+
+		@Override
+		public int getElementsAfter(ElementId id) {
+			update();
+			return theCollection.getElementsAfter(id);
+		}
+
+		@Override
+		public Transaction lock(boolean write, Object cause) {
+			Transaction cvT = theCollectionValue.lock(write, cause);
+			Collection<T> cv = theCollectionValue.get();
+			Transaction cT = Transactable.lock(cv, write, cause);
+			update();
+			Transaction collT = theCollection.lock(write, cause);
+			return Transaction.and(cvT, cT, collT);
+		}
+
+		@Override
+		public Transaction tryLock(boolean write, Object cause) {
+			Transaction cvT = theCollectionValue.tryLock(write, cause);
+			if (cvT == null)
+				return null;
+			Collection<T> cv = theCollectionValue.get();
+			Transaction cT = Transactable.tryLock(cv, write, cause);
+			if (cT == null) {
+				cvT.close();
+				return null;
+			}
+			update();
+			Transaction collT = theCollection.tryLock(write, cause);
+			if (collT == null) {
+				cT.close();
+				cvT.close();
+				return null;
+			}
+			return Transaction.and(cvT, cT, collT);
+		}
+
+		@Override
+		public CoreId getCoreId() {
+			return theCollectionValue.getCoreId();
+		}
+
+		@Override
+		public int size() {
+			update();
+			return theCollection.size();
+		}
+
+		@Override
+		public ThreadConstraint getThreadConstraint() {
+			return theCollectionValue.getThreadConstraint();
+		}
+
+		@Override
+		public Object getIdentity() {
+			return Identifiable.wrap(theCollectionValue.getIdentity(), "observeCollection");
+		}
+
+		@Override
+		public boolean isEmpty() {
+			update();
+			return theCollection.isEmpty();
+		}
+
+		@Override
+		public boolean isEventing() {
+			return theCollection.isEventing() || theCollectionValue.isEventing();
+		}
+
+		@Override
+		public CollectionElement<T> getElement(T value, boolean first) {
+			update();
+			return theCollection.getElement(value, first);
+		}
+
+		@Override
+		public CollectionElement<T> getElement(ElementId id) {
+			update();
+			return theCollection.getElement(id);
+		}
+
+		@Override
+		public CollectionElement<T> getTerminalElement(boolean first) {
+			update();
+			return theCollection.getTerminalElement(first);
+		}
+
+		@Override
+		public CollectionElement<T> getAdjacentElement(ElementId elementId, boolean next) {
+			update();
+			return theCollection.getAdjacentElement(elementId, next);
+		}
+
+		@Override
+		public MutableCollectionElement<T> mutableElement(ElementId id) {
+			update();
+			return new MutableElement(theCollection.mutableElement(id));
+		}
+
+		@Override
+		public BetterList<CollectionElement<T>> getElementsBySource(ElementId sourceEl, BetterCollection<?> sourceCollection) {
+			if (sourceCollection == this)
+				return BetterList.of(getElement(sourceEl));
+			Collection<T> c = theCollectionValue.get();
+			if (c instanceof BetterCollection) {
+				try (Transaction t = lock(false, null)) {
+					BetterCollection<T> list = (BetterCollection<T>) c;
+					return BetterList.of2(list.getElementsBySource(sourceEl, sourceCollection).stream(),
+						el -> getElement(getFrontedElement(el.getElementId())));
+				}
+			} else
+				return BetterList.empty();
+		}
+
+		@Override
+		public BetterList<ElementId> getSourceElements(ElementId localElement, BetterCollection<?> sourceCollection) {
+			if (sourceCollection == this)
+				return BetterList.of(localElement);
+			Collection<T> c = theCollectionValue.get();
+			if (c instanceof BetterList && !theCollection.isContentControlled()) {
+				try (Transaction t = lock(false, null)) {
+					BetterCollection<T> list = (BetterCollection<T>) c;
+					return BetterList.of2(list.getSourceElements(localElement, sourceCollection).stream(), el -> getFrontedElement(el));
+				}
+			} else
+				return BetterList.empty();
+		}
+
+		@Override
+		public ElementId getEquivalentElement(ElementId equivalentEl) {
+			ElementId result = theCollection.getEquivalentElement(equivalentEl);
+			if (result != null)
+				return result;
+			Collection<T> c = theCollectionValue.get();
+			if (c instanceof BetterList && !theCollection.isContentControlled()) {
+				try (Transaction t = lock(false, null)) {
+					BetterList<T> list = (BetterList<T>) c;
+					result = list.getEquivalentElement(equivalentEl);
+					if (result != null)
+						return getElement(list.getElementsBefore(result)).getElementId();
+				}
+			}
+			return null;
+		}
+
+		@Override
+		public String canAdd(T value, ElementId after, ElementId before) {
+			try (Transaction t = lock(false, null)) {
+				String error = theCollection.canAdd(value, after, before);
+				if (error != null)
+					throw new IllegalArgumentException(error);
+				Collection<T> coll = theCollectionValue.get();
+				if (coll instanceof BetterCollection) {
+					return ((BetterCollection<T>) coll).canAdd(value, getBackingElement(after), getBackingElement(before));
+				} else if (coll instanceof List)
+					return null;
+				else
+					return StdMsg.UNSUPPORTED_OPERATION;
+			}
+		}
+
+		@Override
+		public CollectionElement<T> addElement(T value, ElementId after, ElementId before, boolean first)
+			throws UnsupportedOperationException, IllegalArgumentException {
+			try (Transaction t = lock(true, null)) {
+				String error = theCollection.canAdd(value, after, before);
+				if (error != null)
+					throw new IllegalArgumentException(error);
+				CollectionElement<T> result;
+				Collection<T> coll = theCollectionValue.get();
+				if (coll instanceof BetterCollection) {
+					CollectionElement<T> backing = ((BetterCollection<T>) coll).addElement(value, getBackingElement(after),
+						getBackingElement(before), first);
+					if (backing == null)
+						return null;
+					result = addBackingElement(backing);
+				} else if (coll instanceof List) {
+					int index;
+					if (first) {
+						if (after != null)
+							index = theCollection.getElementsBefore(after) + 1;
+						else
+							index = 0;
+					} else if (before != null)
+						index = theCollection.getElementsBefore(before);
+					else
+						index = theCollection.size();
+					((List<T>) coll).add(index, value);
+					result = theCollection.addElement(index, value);
+				} else if (after == null && before == null) {
+					// In theory we could try to add here, but it would be difficult to figure out where the element was added
+					throw new IllegalArgumentException(StdMsg.UNSUPPORTED_OPERATION);
+				} else
+					throw new IllegalArgumentException(StdMsg.UNSUPPORTED_OPERATION);
+
+				if (result != null) {
+					isModifying = true;
+					try {
+						if (((SettableValue<Collection<T>>) theCollectionValue).isAcceptable(coll) == null) {
+							((SettableValue<Collection<T>>) theCollectionValue).set(coll, null);
+						}
+					} finally {
+						isModifying = false;
+					}
+				}
+				return result;
+			}
+		}
+
+		@Override
+		public String canMove(ElementId valueEl, ElementId after, ElementId before) {
+			try (Transaction t = lock(false, null)) {
+				String error = theCollection.canMove(valueEl, after, before);
+				if (error != null)
+					throw new IllegalArgumentException(error);
+				Collection<T> coll = theCollectionValue.get();
+				if (coll instanceof BetterCollection) {
+					return ((BetterCollection<T>) coll).canMove(valueEl, getBackingElement(after), getBackingElement(before));
+				} else if (coll instanceof List)
+					return null;
+				else
+					return StdMsg.UNSUPPORTED_OPERATION;
+			}
+		}
+
+		@Override
+		public CollectionElement<T> move(ElementId valueEl, ElementId after, ElementId before, boolean first, Runnable afterRemove)
+			throws UnsupportedOperationException, IllegalArgumentException {
+			try (Transaction t = lock(true, null)) {
+				String error = theCollection.canMove(valueEl, after, before);
+				if (error != null)
+					throw new IllegalArgumentException(error);
+				CollectionElement<T> result;
+				Collection<T> coll = theCollectionValue.get();
+				if (coll instanceof BetterCollection) {
+					ElementId backingValueEl = getBackingElement(valueEl);
+					CollectionElement<T> backing = ((BetterCollection<T>) coll).move(backingValueEl, getBackingElement(after),
+						getBackingElement(before), first, () -> removeBackingElement(backingValueEl));
+					if (backingValueEl.isPresent())
+						return getElement(valueEl); // No actual move
+					// We can't use movement in the backing collection, because it might not put it exactly where the source did
+					theCollection.mutableElement(valueEl).remove();
+					if (afterRemove != null)
+						afterRemove.run();
+					result = addBackingElement(backing);
+				} else if (coll instanceof List) {
+					int sourceIndex = theCollection.getElementsBefore(valueEl);
+					result = theCollection.move(valueEl, after, before, first, afterRemove);
+					if (valueEl.isPresent())
+						return result; // No actual move
+					T value = ((List<T>) coll).remove(sourceIndex);
+					((List<T>) coll).add(theCollection.getElementsBefore(result.getElementId()), value);
+				} else
+					throw new IllegalArgumentException(StdMsg.UNSUPPORTED_OPERATION);
+
+				if (result != null) {
+					isModifying = true;
+					try {
+						if (((SettableValue<Collection<T>>) theCollectionValue).isAcceptable(coll) == null) {
+							((SettableValue<Collection<T>>) theCollectionValue).set(coll, null);
+						}
+					} finally {
+						isModifying = false;
+					}
+				}
+				return result;
+			}
+		}
+
+		@Override
+		public long getStamp() {
+			update();
+			return theStampCopy;
+		}
+
+		@Override
+		public TypeToken<T> getType() {
+			return theCollection.getType();
+		}
+
+		@Override
+		public boolean isLockSupported() {
+			return theCollectionValue.isLockSupported();
+		}
+
+		@Override
+		public void clear() {
+			try (Transaction t = lock(true, null)) {
+				Collection<T> coll = theCollectionValue.get();
+				if (coll.isEmpty())
+					return;
+				int preSize = coll.size();
+				coll.clear();
+				isModifying = true;
+				try {
+					if (coll.size() != preSize && ((SettableValue<Collection<T>>) theCollectionValue).isAcceptable(coll) == null) {
+						((SettableValue<Collection<T>>) theCollectionValue).set(coll, null);
+					}
+				} finally {
+					isModifying = false;
+				}
+			}
+		}
+
+		@Override
+		public Equivalence<? super T> equivalence() {
+			return theCollection.equivalence();
+		}
+
+		@Override
+		public void setValue(Collection<ElementId> elements, T value) {
+			if (elements.isEmpty())
+				return;
+			try (Transaction t = lock(true, null)) {
+				Collection<T> coll = theCollectionValue.get();
+				if (coll instanceof BetterCollection) {
+					BetterCollection<T> bc = (BetterCollection<T>) coll;
+					for (ElementId el : elements) {
+						String error = bc.mutableElement(el).isAcceptable(value);
+						if (StdMsg.UNSUPPORTED_OPERATION.equals(error))
+							throw new UnsupportedOperationException(error);
+						else if (error != null)
+							throw new IllegalArgumentException(error);
+					}
+					boolean success = false;
+					try {
+						for (ElementId el : elements)
+							bc.mutableElement(el).set(value);
+						success = true;
+						theCollection.setValue(elements, value);
+					} finally {
+						if (!success)
+							update();
+					}
+					isModifying = true;
+					try {
+						if (((SettableValue<Collection<T>>) theCollectionValue).isAcceptable(coll) == null) {
+							((SettableValue<Collection<T>>) theCollectionValue).set(coll, null);
+						}
+					} finally {
+						isModifying = false;
+					}
+				}
+			}
+		}
+
+		protected ElementId getBackingElement(ElementId localElement) {
+			if (localElement == null || !localElement.isPresent())
+				return null;
+			return theBackingElements.get(theCollection.getElementsBefore(localElement));
+		}
+
+		protected ElementId getFrontedElement(ElementId backingElement) {
+			int index = Collections.binarySearch(theBackingElements, backingElement);
+			return theCollection.getElement(index).getElementId();
+		}
+
+		private CollectionElement<T> addBackingElement(CollectionElement<T> backingElement) {
+			int index = Collections.binarySearch(theBackingElements, backingElement.getElementId());
+			index = -index - 1;
+			return theCollection.addElement(index, backingElement.get());
+		}
+
+		private void removeBackingElement(ElementId backingElement) {
+			int index = Collections.binarySearch(theBackingElements, backingElement);
+			theBackingElements.remove(index);
+		}
+
+		protected void update() {
+			long stamp = getBackingStamp();
+			if (stamp != theStampCopy) {
+				theStampCopy = stamp;
+				sync(null);
+			}
+		}
+
+		private long getBackingStamp() {
+			long stamp = theCollectionValue.getStamp();
+			Collection<T> coll = theCollectionValue.get();
+			if (coll instanceof Stamped)
+				return Stamped.compositeStamp(stamp, ((Stamped) coll).getStamp());
+			else
+				return stamp;
+		}
+
+		private void sync(Object cause) {
+			try (Transaction t = theCollectionValue.lock(); //
+				Causable.CausableInUse syncCause = Causable.cause(cause)) {
+				Collection<T> cv = theCollectionValue.get();
+				try (Transaction t2 = Transactable.lock(cv, false, syncCause)) {
+					List<T> list = cv instanceof List ? (List<T>) cv : QommonsUtils.unmodifiableCopy(cv);
+					CollectionUtils.SimpleAdjustment<T, T, RuntimeException> syncAction = CollectionUtils.synchronize(theCollection, list)//
+						.simple(LambdaUtils.identity());
+					if (theCollection.isContentControlled())
+						syncAction.addLast();
+					else
+						syncAction.rightOrder();
+					syncAction.adjust();
+				}
+			}
+		}
+
+		@Override
+		public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends T>> observer) {
+			if (0 == theSubscriptionCount.getAndIncrement()) {
+				theValueSubscription = theCollectionValue.noInitChanges().act(evt -> {
+					if (!isModifying)
+						sync(evt);
+				});
+			}
+			Subscription sub = theCollection.onChange(observer);
+			boolean[] unsubscribed = new boolean[1];
+			return () -> {
+				if (unsubscribed[0])
+					return;
+				unsubscribed[0] = true;
+				sub.unsubscribe();
+				if (0 == theSubscriptionCount.decrementAndGet()) {
+					theValueSubscription.unsubscribe();
+					theValueSubscription = null;
+				}
+			};
+		}
+
+		@Override
+		public int hashCode() {
+			return BetterCollection.hashCode(this);
+		}
+
+		@Override
+		public boolean equals(Object obj) {
+			return BetterCollection.equals(this, obj);
+		}
+
+		@Override
+		public String toString() {
+			return BetterCollection.toString(this);
+		}
+
+		class MutableElement implements MutableCollectionElement<T> {
+			private final MutableCollectionElement<T> theWrappedEl;
+
+			MutableElement(MutableCollectionElement<T> wrappedEl) {
+				theWrappedEl = wrappedEl;
+			}
+
+			@Override
+			public ElementId getElementId() {
+				return theWrappedEl.getElementId();
+			}
+
+			@Override
+			public T get() {
+				return theWrappedEl.get();
+			}
+
+			@Override
+			public BetterCollection<T> getCollection() {
+				return SimpleCollectionBackedObservable.this;
+			}
+
+			@Override
+			public String isEnabled() {
+				String msg = theWrappedEl.isEnabled();
+				if (msg != null)
+					return msg;
+				try (Transaction t = lock(false, null)) {
+					if (!theWrappedEl.getElementId().isPresent())
+						return StdMsg.ELEMENT_REMOVED;
+					Collection<T> coll = theCollectionValue.get();
+					if (coll instanceof BetterCollection)
+						return ((BetterCollection<T>) coll).mutableElement(getBackingElement(getElementId())).isEnabled();
+					else if (coll instanceof List)
+						return null;
+					else
+						return StdMsg.UNSUPPORTED_OPERATION;
+				}
+			}
+
+			@Override
+			public String isAcceptable(T value) {
+				String msg = theWrappedEl.isAcceptable(value);
+				if (msg != null)
+					return msg;
+				try (Transaction t = lock(false, null)) {
+					if (!theWrappedEl.getElementId().isPresent())
+						return StdMsg.ELEMENT_REMOVED;
+					Collection<T> coll = theCollectionValue.get();
+					if (coll instanceof BetterCollection)
+						return ((BetterCollection<T>) coll).mutableElement(getBackingElement(getElementId())).isAcceptable(value);
+					else if (coll instanceof List)
+						return null;
+					else
+						return StdMsg.UNSUPPORTED_OPERATION;
+				}
+			}
+
+			@Override
+			public void set(T value) throws UnsupportedOperationException, IllegalArgumentException {
+				String msg = theWrappedEl.isAcceptable(value);
+				if (msg != null)
+					throw new IllegalArgumentException(msg);
+				try (Transaction t = lock(true, null)) {
+					if (!theWrappedEl.getElementId().isPresent())
+						throw new IllegalArgumentException(StdMsg.ELEMENT_REMOVED);
+					Collection<T> coll = theCollectionValue.get();
+					if (coll instanceof BetterCollection) {
+						((BetterCollection<T>) coll).mutableElement(getBackingElement(getElementId())).set(value);
+						theWrappedEl.set(value);
+					} else if (coll instanceof List) {
+						int index = theCollection.getElementsBefore(getElementId());
+						((List<T>) coll).set(index, value);
+						theWrappedEl.set(value);
+					} else
+						throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+					isModifying = true;
+					try {
+						if (((SettableValue<Collection<T>>) theCollectionValue).isAcceptable(coll) == null) {
+							((SettableValue<Collection<T>>) theCollectionValue).set(coll, null);
+						}
+					} finally {
+						isModifying = false;
+					}
+				}
+			}
+
+			@Override
+			public String canRemove() {
+				try (Transaction t = lock(false, null)) {
+					if (!theWrappedEl.getElementId().isPresent())
+						return StdMsg.ELEMENT_REMOVED;
+					Collection<T> coll = theCollectionValue.get();
+					if (coll instanceof BetterCollection)
+						return ((BetterCollection<T>) coll).mutableElement(getBackingElement(getElementId())).canRemove();
+					else if (coll instanceof List)
+						return null;
+					else
+						return StdMsg.UNSUPPORTED_OPERATION;
+				}
+			}
+
+			@Override
+			public void remove() throws UnsupportedOperationException {
+				try (Transaction t = lock(true, null)) {
+					if (!theWrappedEl.getElementId().isPresent())
+						throw new IllegalArgumentException(StdMsg.ELEMENT_REMOVED);
+					Collection<T> coll = theCollectionValue.get();
+					if (coll instanceof BetterCollection) {
+						((BetterCollection<T>) coll).mutableElement(getBackingElement(getElementId())).remove();
+						theWrappedEl.remove();
+					} else if (coll instanceof List) {
+						int index = theCollection.getElementsBefore(getElementId());
+						((List<T>) coll).remove(index);
+						theWrappedEl.remove();
+					} else
+						throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+					isModifying = true;
+					try {
+						if (((SettableValue<Collection<T>>) theCollectionValue).isAcceptable(coll) == null) {
+							((SettableValue<Collection<T>>) theCollectionValue).set(coll, null);
+						}
+					} finally {
+						isModifying = false;
+					}
+				}
+			}
+
+			@Override
+			public String toString() {
+				return theWrappedEl.toString();
 			}
 		}
 	}

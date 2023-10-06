@@ -79,6 +79,11 @@ public abstract class ExFlexibleElementModelAddOn<E extends ExElement> extends E
 
 		protected <M> ModelComponentNode<M> addElementValue(String name, CompiledModelValue<M> value, ObservableModelSet.Builder builder,
 			LocatedFilePosition position) throws QonfigInterpretationException {
+			try {
+				builder.getNameChecker().checkName(name);
+			} catch (IllegalArgumentException e) {
+				throw new QonfigInterpretationException("Illegal variable name: '" + name + "'", position, 0, e);
+			}
 			if (theElementValues.isEmpty())
 				theElementValues = new LinkedHashMap<>();
 			CompiledModelValue<?> prev = getElementValues().get(name);

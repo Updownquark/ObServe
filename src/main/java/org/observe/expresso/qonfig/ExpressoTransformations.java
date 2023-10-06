@@ -697,6 +697,8 @@ public class ExpressoTransformations {
 
 	public static InterpretedValueSynth<SettableValue<?>, SettableValue<String>> parseFilter(CompiledExpression testX,
 		InterpretedExpressoEnv env, boolean preferMessage) throws ExpressoInterpretationException {
+		if (testX == null)
+			return null;
 		InterpretedValueSynth<SettableValue<?>, SettableValue<String>> test;
 		try {
 			if (preferMessage)

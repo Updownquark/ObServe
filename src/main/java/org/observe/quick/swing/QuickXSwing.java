@@ -28,6 +28,7 @@ import org.observe.quick.swing.QuickSwingPopulator.QuickSwingContainerPopulator;
 import org.observe.quick.swing.QuickSwingTablePopulation.InterpretedSwingTableColumn;
 import org.observe.util.TypeTokens;
 import org.observe.util.swing.CategoryRenderStrategy;
+import org.observe.util.swing.JustifiedBoxLayout;
 import org.observe.util.swing.MultiRangeSlider;
 import org.observe.util.swing.PanelPopulation;
 import org.observe.util.swing.PanelPopulation.CollapsePanel;
@@ -89,17 +90,19 @@ public class QuickXSwing implements QuickInterpretation {
 			@Override
 			public AbstractQuickContainerPopulator addHPanel(String fieldName, LayoutManager layout,
 				Consumer<PanelPopulator<JPanel, ?>> panel) {
-				thePopulator.addCollapsePanel(false, layout, cp -> populateCollapsePane(cp, panel));
+				thePopulator.addCollapsePanel(false, layout, cp -> populateCollapsePane(cp, panel, false));
 				return this;
 			}
 
 			@Override
 			public AbstractQuickContainerPopulator addVPanel(Consumer<PanelPopulator<JPanel, ?>> panel) {
-				thePopulator.addCollapsePanel(false, "mig", cp -> populateCollapsePane(cp, panel));
+				thePopulator.addCollapsePanel(false, new JustifiedBoxLayout(true).mainJustified().crossJustified(),
+					cp -> populateCollapsePane(cp, panel, true));
 				return this;
 			}
 
-			private void populateCollapsePane(CollapsePanel<JXCollapsiblePane, JXPanel, ?> cp, Consumer<PanelPopulator<JPanel, ?>> panel) {
+			private void populateCollapsePane(CollapsePanel<JXCollapsiblePane, JXPanel, ?> cp, Consumer<PanelPopulator<JPanel, ?>> panel,
+				boolean verticalLayout) {
 				theComponent.accept(cp);
 				if (theInterpretedHeader != null) {
 					cp.withHeader(hp -> {
@@ -112,7 +115,10 @@ public class QuickXSwing implements QuickInterpretation {
 				}
 				if (theCollapsePane.isCollapsed() != null)
 					cp.withCollapsed(theCollapsePane.isCollapsed());
-				panel.accept((PanelPopulator<JPanel, ?>) (PanelPopulator<?, ?>) cp);
+				if (verticalLayout)
+					cp.addVPanel(panel);
+				else
+					panel.accept((PanelPopulator<JPanel, ?>) (PanelPopulator<?, ?>) cp);
 			}
 		}
 	}
@@ -258,6 +264,10 @@ public class QuickXSwing implements QuickInterpretation {
 					treeTable.withSelection(quick.getSelection(), false);
 				if (quick.getMultiSelection() != null)
 					treeTable.withSelection(quick.getMultiSelection());
+				if (quick.getNodeSelection() != null)
+					treeTable.withValueSelection(quick.getNodeSelection(), false);
+				if (quick.getNodeMultiSelection() != null)
+					treeTable.withValueSelection(quick.getNodeMultiSelection());
 				if (treeColumn != null)
 					treeTable.withRender(treeColumn.getCRS());
 				treeTable.withColumns(crss);

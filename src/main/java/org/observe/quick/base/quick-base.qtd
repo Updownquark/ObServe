@@ -398,7 +398,7 @@
 			<?DOC The type of column editing to use to update the data set with column edit operations?>
 			<attribute name="type" type="column-edit-type" />
 			<?DOC The variable name of the column value being edited for expressions?>
-			<attribute name="column-edit-value-name" type="identifier" default="columnEditValue" />
+			<attribute name="column-edit-value-name" type="identifier" />
 			<?DOC A filter on the column value that determines whether the column is editable for a particular row?>
 			<attribute name="editable-if" type="expression" specify="optional" />
 			<?DOC A filter that will prevent a column value from being committed?>
@@ -488,6 +488,8 @@
 			<attribute name="active-node-name" type="identifier" default="path" />
 			<?DOC Whether the root of the tree will be visible and collapsible?>
 			<attribute name="root-visible" type="boolean" default="true" />
+			<attribute name="node-selection" type="expression" specify="optional" />
+			<attribute name="node-multi-selection" type="expression" specify="optional" />
 			<?DOC The column to render each value in the tree?>
 			<child-def name="tree-column" type="column" min="0" max="1" inherits="tree-column" />
 			<?DOC Actions that may be performed against selected values in the tree?>

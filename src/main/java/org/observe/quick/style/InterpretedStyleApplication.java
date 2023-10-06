@@ -118,7 +118,7 @@ public class InterpretedStyleApplication {
 				return parentCond;
 			else
 				return parentCond.transform(boolean.class, tx -> tx.combineWith(localCond)//
-					.combine(LambdaUtils.printableBiFn((c1, c2) -> c1 && c2, "&&", "&&")));
+					.combine(LambdaUtils.printableBiFn((c1, c2) -> Boolean.TRUE.equals(c1) && Boolean.TRUE.equals(c2), "&&", "&&")));
 		}
 
 		@Override

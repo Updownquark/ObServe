@@ -810,6 +810,12 @@ public class ModelTypes {
 					InterpretedExpressoEnv env) {
 					if (source.getType(0).isArray())
 						return convertArrayValue(source.getType(0).getComponentType(), target, env);
+					Class<?> raw = TypeTokens.getRawType(source.getType(0));
+					if (ObservableCollection.class.isAssignableFrom(raw))
+						return null; // The Value type takes care of this case
+					else if (Collection.class.isAssignableFrom(raw))
+						return convertCollectionValue(raw, source.getType(0).resolveType(Collection.class.getTypeParameters()[0]), target,
+							env);
 					else
 						return null;
 				}
@@ -827,6 +833,19 @@ public class ModelTypes {
 						return ObservableCollection
 							.flattenValue(arrayValue.map(ocType, v -> v == null ? null : ObservableCollection.of(componentType, (T[]) v)));
 					}, "asCollection", null), collectionConverter.getType());
+				}
+
+				private <T> ModelInstanceConverter<SettableValue<?>, ObservableCollection<?>> convertCollectionValue(Class<?> raw,
+					TypeToken<T> componentType, ModelInstanceType<ObservableCollection<?>, ?> target, InterpretedExpressoEnv env) {
+					ModelInstanceType<ObservableCollection<?>, ObservableCollection<T>> collectionType = forType(componentType);
+					ModelInstanceConverter<ObservableCollection<?>, ObservableCollection<?>> collectionConverter = target
+						.convert(collectionType, env);
+					if (collectionConverter == null)
+						return null;
+					return ModelType.converter(LambdaUtils.printableFn(collectionValue -> {
+						return ObservableCollection.flattenSimpleCollectionValue(componentType,
+							(SettableValue<? extends Collection<T>>) collectionValue);
+					}, "asObservableCollection", null), collectionConverter.getType());
 				}
 			});
 		}
