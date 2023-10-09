@@ -24,6 +24,7 @@ import org.observe.quick.style.QuickInterpretedStyleCache;
 import org.observe.quick.style.QuickInterpretedStyleCache.Applications;
 import org.observe.quick.style.QuickStyleAttribute;
 import org.observe.quick.style.QuickStyleAttributeDef;
+import org.observe.quick.style.QuickStyleSheet;
 import org.observe.quick.style.QuickStyledElement;
 import org.observe.quick.style.QuickStyledElement.QuickInstanceStyle;
 import org.observe.quick.style.QuickTypeStyle;
@@ -352,8 +353,9 @@ public abstract class StyledDocument<T> extends ExElement.Abstract {
 			}
 
 			@Override
-			public void update(InterpretedExpressoEnv env, Applications appCache) throws ExpressoInterpretationException {
-				super.update(env, appCache);
+			public void update(InterpretedExpressoEnv env, QuickStyleSheet.Interpreted styleSheet, Applications appCache)
+				throws ExpressoInterpretationException {
+				super.update(env, styleSheet, appCache);
 				QuickInterpretedStyleCache cache = QuickInterpretedStyleCache.get(env);
 				theBackground = get(cache.getAttribute(getDefinition().getBackground(), Color.class, env));
 			}

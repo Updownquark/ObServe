@@ -30,6 +30,7 @@ import org.observe.quick.style.QuickInterpretedStyleCache;
 import org.observe.quick.style.QuickInterpretedStyleCache.Applications;
 import org.observe.quick.style.QuickStyleAttribute;
 import org.observe.quick.style.QuickStyleAttributeDef;
+import org.observe.quick.style.QuickStyleSheet;
 import org.observe.quick.style.QuickStyledElement;
 import org.observe.quick.style.QuickTypeStyle;
 import org.observe.util.TypeTokens;
@@ -208,13 +209,13 @@ public interface QuickWidget extends QuickTextElement {
 				.onCommonX(el -> el.getLeftValue().update(el.getRightValue())).adjust();
 
 				CollectionUtils
-					.synchronize(theDialogs, session.forChildren("dialog"), (l, s) -> ExElement.typesEqual(l.getElement(), s.getElement()))
-					.simpleE(s -> {
-						QuickDialog.Def<?> listener = s.interpret(QuickDialog.Def.class);
-						listener.update(s);
-						return listener;
-					})//
-					.onCommonX(el -> el.getLeftValue().update(el.getRightValue())).adjust();
+				.synchronize(theDialogs, session.forChildren("dialog"), (l, s) -> ExElement.typesEqual(l.getElement(), s.getElement()))
+				.simpleE(s -> {
+					QuickDialog.Def<?> listener = s.interpret(QuickDialog.Def.class);
+					listener.update(s);
+					return listener;
+				})//
+				.onCommonX(el -> el.getLeftValue().update(el.getRightValue())).adjust();
 			}
 
 			@Override
@@ -354,13 +355,13 @@ public interface QuickWidget extends QuickTextElement {
 				.adjust();
 
 				CollectionUtils.synchronize(theDialogs, getDefinition().getDialogs(), (l, d) -> l.getIdentity() == d.getIdentity())//
-					.simpleE(l -> {
-						QuickDialog.Interpreted<?> listener = l.interpret(this);
-						listener.updateDialog(env);
-						return listener;
-					})//
-					.onCommonX(el -> el.getLeftValue().updateDialog(env))//
-					.adjust();
+				.simpleE(l -> {
+					QuickDialog.Interpreted<?> listener = l.interpret(this);
+					listener.updateDialog(env);
+					return listener;
+				})//
+				.onCommonX(el -> el.getLeftValue().updateDialog(env))//
+				.adjust();
 			}
 
 			@Override
@@ -605,13 +606,13 @@ public interface QuickWidget extends QuickTextElement {
 
 			try (Transaction t = theDialogs.lock(true, null)) {
 				CollectionUtils.synchronize(theDialogs, myInterpreted.getDialogs(), (l, i) -> l.getIdentity() == i.getIdentity())//
-					.simple(l -> {
-						QuickDialog listener = l.create();
-						listener.update(l, this);
-						return listener;
-					})//
-					.onCommon(el -> el.getLeftValue().update(el.getRightValue(), this))//
-					.adjust();
+				.simple(l -> {
+					QuickDialog listener = l.create();
+					listener.update(l, this);
+					return listener;
+				})//
+				.onCommon(el -> el.getLeftValue().update(el.getRightValue(), this))//
+				.adjust();
 			}
 		}
 
@@ -752,8 +753,9 @@ public interface QuickWidget extends QuickTextElement {
 				}
 
 				@Override
-				public void update(InterpretedExpressoEnv env, Applications appCache) throws ExpressoInterpretationException {
-					super.update(env, appCache);
+				public void update(InterpretedExpressoEnv env, QuickStyleSheet.Interpreted styleSheet, Applications appCache)
+					throws ExpressoInterpretationException {
+					super.update(env, styleSheet, appCache);
 					QuickInterpretedStyleCache cache = QuickInterpretedStyleCache.get(env);
 					theColor = get(cache.getAttribute(getDefinition().getColor(), Color.class, env));
 					theMouseCursor = get(cache.getAttribute(getDefinition().getMouseCursor(), MouseCursor.class, env));

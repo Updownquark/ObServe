@@ -49,11 +49,10 @@ public class QuickStyleInterpretation implements QonfigInterpretation {
 	@Override
 	public Builder configureInterpreter(Builder interpreter) {
 		interpreter.modifyWith("styled", Object.class, new QonfigInterpreterCore.QonfigValueModifier<Object>() {
-
 			@Override
 			public Object prepareSession(CoreSession session) throws QonfigInterpretationException {
 				ExpressoQIS exS = session.as(ExpressoQIS.class);
-				exS.setExpressoEnv(exS.getExpressoEnv().copy().withNonStructuredParser(double.class, new FontStyleParser()));
+				exS.setExpressoEnv(exS.getExpressoEnv().copy().withNonStructuredParser(double.class, FontStyleParser.INSTANCE));
 				return null;
 			}
 
@@ -64,6 +63,19 @@ public class QuickStyleInterpretation implements QonfigInterpretation {
 		});
 		interpreter.createWith("with-style-sheet", ExAddOn.Def.class, session -> new ExWithStyleSheet((QonfigAddOn) session.getFocusType(),
 			session.as(ExpressoQIS.class).getElementRepresentation()));
+		interpreter.modifyWith("with-style-sheet", Object.class, new QonfigInterpreterCore.QonfigValueModifier<Object>() {
+			@Override
+			public Object prepareSession(CoreSession session) throws QonfigInterpretationException {
+				ExpressoQIS exS = session.as(ExpressoQIS.class);
+				exS.setExpressoEnv(exS.getExpressoEnv().copy().withNonStructuredParser(double.class, FontStyleParser.INSTANCE));
+				return null;
+			}
+
+			@Override
+			public Object modifyValue(Object value, CoreSession session, Object prepared) throws QonfigInterpretationException {
+				return value;
+			}
+		});
 		interpreter.createWith("style", QuickStyleElement.Def.class, ExElement.creator(QuickStyleElement.Def::new));
 		interpreter.createWith("style-sheet", QuickStyleSheet.class, ExElement.creator(QuickStyleSheet::new));
 		interpreter.createWith("style-set", QuickStyleSet.class, session -> {

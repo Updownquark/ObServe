@@ -68,7 +68,7 @@ public interface ModelValueElement<M, MV extends M> extends ExElement {
 				String name = getAddOnValue(ExNamed.Def.class, ExNamed.Def::getName);
 				if (name != null) {
 					theModelPath = session.get(ExpressoBaseV0_1.PATH_KEY, String.class);
-					if (theModelPath == null)
+					if (theModelPath == null || theModelPath.isEmpty())
 						theModelPath = name;
 					else
 						theModelPath += "." + name;

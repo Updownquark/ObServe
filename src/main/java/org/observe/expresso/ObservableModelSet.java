@@ -151,8 +151,7 @@ public interface ObservableModelSet extends Identifiable {
 	 *
 	 * @param <M> The model type of the value
 	 */
-	public interface IdentifiableCompiledValue<M> extends CompiledModelValue<M>, Identifiable {
-	}
+	public interface IdentifiableCompiledValue<M> extends CompiledModelValue<M>, Identifiable {}
 
 	/**
 	 * A value synthesizer that has been interpreted. It contains instance type information and links to other model values
@@ -475,8 +474,7 @@ public interface ObservableModelSet extends Identifiable {
 		static <MV> ModelValueInstantiator<MV> literal(MV value, String text) {
 			return new ModelValueInstantiator<MV>() {
 				@Override
-				public void instantiate() {
-				}
+				public void instantiate() {}
 
 				@Override
 				public MV get(ObservableModelSet.ModelSetInstance extModels) {
@@ -505,8 +503,7 @@ public interface ObservableModelSet extends Identifiable {
 		static <MV> ModelValueInstantiator<MV> of(ExFunction<ModelSetInstance, MV, ModelInstantiationException> value) {
 			return new ModelValueInstantiator<MV>() {
 				@Override
-				public void instantiate() {
-				}
+				public void instantiate() {}
 
 				@Override
 				public MV get(ModelSetInstance models) throws ModelInstantiationException {
@@ -1539,6 +1536,21 @@ public interface ObservableModelSet extends Identifiable {
 		Object get(ModelComponentId component) throws ModelInstantiationException, IllegalArgumentException;
 
 		/**
+		 * @param valueId The {@link ModelComponentNode#getValueIdentity() value ID} of the model component to get the value for
+		 * @return The model value in this model instance set for the given component
+		 * @throws ModelInstantiationException If the model component could not be instantiated
+		 * @throws IllegalArgumentException If there is no component with the given value ID in this model
+		 */
+		default Object getByValueId(Object valueId) throws ModelInstantiationException, IllegalArgumentException {
+			ModelComponentId componentId = getComponentsByValueId().get(valueId);
+			if (componentId == null)
+				throw new IllegalArgumentException("No value in this model with value identifier '" + valueId + "'");
+			return get(componentId);
+		}
+
+		Map<Object, ModelComponentId> getComponentsByValueId();
+
+		/**
 		 * @param modelId The id of the inherited model
 		 * @return The instance of the given model inherited by this instance builder
 		 * @throws IllegalArgumentException
@@ -1851,7 +1863,7 @@ public interface ObservableModelSet extends Identifiable {
 		private final DefaultModelSet theRoot;
 		/** This model's components */
 		protected final Map<String, ? extends ModelComponentNode<?>> theComponents;
-		private final Map<Object, ? extends ModelComponentNode<?>> theIdentifiedComponents;
+		private final Map<Object, ModelComponentId> theComponentsByModelId;
 		private final NameChecker theNameChecker;
 
 		/**
@@ -1861,19 +1873,19 @@ public interface ObservableModelSet extends Identifiable {
 		 * @param tagValues Model tag values for this model
 		 * @param inheritance The new model's {@link ObservableModelSet#getInheritance() inheritance}
 		 * @param components The {@link ObservableModelSet#getComponentNames() components} for the new model
-		 * @param identifiedComponents All {@link IdentifiableCompiledValue identified} values in the model
+		 * @param componentsByModelId All {@link IdentifiableCompiledValue identified} values in the model
 		 * @param nameChecker The {@link ObservableModelSet#getNameChecker() name checker} for the new model
 		 */
 		protected DefaultModelSet(ModelComponentId id, DefaultModelSet root, DefaultModelSet parent, Map<ModelTag<?>, Object> tagValues,
 			Map<ModelComponentId, ? extends ObservableModelSet> inheritance, Map<String, ? extends ModelComponentNode<?>> components,
-				Map<Object, ? extends ModelComponentNode<?>> identifiedComponents, NameChecker nameChecker) {
+				Map<Object, ModelComponentId> componentsByModelId, NameChecker nameChecker) {
 			theId = id;
 			theRoot = root == null ? this : root;
 			theTagValues = tagValues;
 			theInheritance = inheritance;
 			theParent = parent;
 			theComponents = components;
-			theIdentifiedComponents = identifiedComponents;
+			theComponentsByModelId = componentsByModelId;
 			theNameChecker = nameChecker;
 		}
 
@@ -1898,8 +1910,8 @@ public interface ObservableModelSet extends Identifiable {
 		}
 
 		/** @return This model's (modifiable) identified components */
-		protected Map<Object, ? extends ModelComponentNode<?>> getIdentifiedComponents() {
-			return theIdentifiedComponents;
+		protected Map<Object, ModelComponentId> getIdentifiedComponents() {
+			return theComponentsByModelId;
 		}
 
 		@Override
@@ -1944,12 +1956,13 @@ public interface ObservableModelSet extends Identifiable {
 
 		@Override
 		public Set<Object> getComponentIdentifiers() {
-			return theIdentifiedComponents.keySet();
+			return theComponentsByModelId.keySet();
 		}
 
 		@Override
 		public ModelComponentNode<?> getLocalIdentifiedComponent(Object valueIdentifier) {
-			return theIdentifiedComponents.get(valueIdentifier);
+			ModelComponentId componentId = theComponentsByModelId.get(valueIdentifier);
+			return componentId == null ? null : getComponent(componentId);
 		}
 
 		@Override
@@ -2259,8 +2272,9 @@ public interface ObservableModelSet extends Identifiable {
 			}
 
 			@Override
-			protected Map<Object, ModelComponentNode<?>> getIdentifiedComponents() {
-				return (Map<Object, ModelComponentNode<?>>) super.getIdentifiedComponents();
+			protected Map<Object, ModelComponentId> getIdentifiedComponents() {
+				// TODO Auto-generated method stub
+				return super.getIdentifiedComponents();
 			}
 
 			void assertNotBuilt() {
@@ -2302,7 +2316,7 @@ public interface ObservableModelSet extends Identifiable {
 					sourceLocation);
 				getComponents().put(name, node);
 				if (node.getValueIdentity() != null)
-					getIdentifiedComponents().put(node.getValueIdentity(), node);
+					getIdentifiedComponents().put(node.getValueIdentity(), node.getIdentity());
 				return this;
 			}
 
@@ -2339,7 +2353,7 @@ public interface ObservableModelSet extends Identifiable {
 					if (component.getModel() != null)
 						createSubModel(component.getIdentity().getName(), component.getSourceLocation()).withAll(component.getModel());
 					else if (component.getValueIdentity() != null)
-						getIdentifiedComponents().putIfAbsent(component.getValueIdentity(), component);
+						getIdentifiedComponents().putIfAbsent(component.getValueIdentity(), component.getIdentity());
 				}
 				return this;
 			}
@@ -2376,7 +2390,7 @@ public interface ObservableModelSet extends Identifiable {
 
 			private DefaultBuilt _build(DefaultBuilt root, DefaultBuilt parent) {
 				Map<String, ModelComponentNode<?>> components = new LinkedHashMap<>(theComponents.size() * 3 / 2 + 1);
-				Map<Object, ModelComponentNode<?>> idComponents = getIdentifiedComponents().isEmpty() ? Collections.emptyMap()
+				Map<Object, ModelComponentId> idComponents = getIdentifiedComponents().isEmpty() ? Collections.emptyMap()
 					: new LinkedHashMap<>(getIdentifiedComponents().size() * 3 / 2 + 1);
 				Map<ModelComponentId, ObservableModelSet.Built> inheritance = new LinkedHashMap<>(
 					super.getInheritance().size() * 3 / 2 + 1);
@@ -2404,7 +2418,7 @@ public interface ObservableModelSet extends Identifiable {
 						node = component.getValue();
 					components.put(component.getKey(), node);
 					if (node.getValueIdentity() != null)
-						idComponents.put(node.getValueIdentity(), node);
+						idComponents.put(node.getValueIdentity(), node.getIdentity());
 				}
 				return model;
 			}
@@ -2420,7 +2434,7 @@ public interface ObservableModelSet extends Identifiable {
 			 * @return The new model
 			 */
 			protected DefaultBuilt createModel(DefaultBuilt root, DefaultBuilt parent, Map<String, ModelComponentNode<?>> components,
-				Map<Object, ModelComponentNode<?>> idComponents, Map<ModelComponentId, ObservableModelSet.Built> inheritance) {
+				Map<Object, ModelComponentId> idComponents, Map<ModelComponentId, ObservableModelSet.Built> inheritance) {
 				return new DefaultBuilt(getIdentity(), root, parent, //
 					QommonsUtils.unmodifiableCopy(getTagValues()), //
 					QommonsUtils.unmodifiableCopy(inheritance), //
@@ -2446,7 +2460,7 @@ public interface ObservableModelSet extends Identifiable {
 			 */
 			protected DefaultBuilt(ModelComponentId id, DefaultBuilt root, DefaultBuilt parent, Map<ModelTag<?>, Object> tagValues,
 				Map<ModelComponentId, ObservableModelSet.Built> inheritance, Map<String, ? extends ModelComponentNode<?>> components,
-					Map<Object, ? extends ModelComponentNode<?>> identifiedComponents, NameChecker nameChecker) {
+					Map<Object, ModelComponentId> identifiedComponents, NameChecker nameChecker) {
 				super(id, root, parent, tagValues, inheritance, components, identifiedComponents, nameChecker);
 			}
 
@@ -2515,7 +2529,7 @@ public interface ObservableModelSet extends Identifiable {
 				Map<ModelComponentId, InterpretedModelSet> inheritance, InterpretedExpressoEnv env) {
 				return new DefaultInterpreted(getIdentity(), root, parent, //
 					QommonsUtils.unmodifiableCopy(getTagValues()), //
-					inheritance, //
+					inheritance, getIdentifiedComponents(), //
 					getNameChecker(), this, env);
 			}
 		}
@@ -2540,13 +2554,15 @@ public interface ObservableModelSet extends Identifiable {
 			 * @param nameChecker The {@link ObservableModelSet#getNameChecker() name checker} for the new model
 			 * @param source The model this is the interpretation of
 			 * @param env The environment to interpret in
+			 * @param componentsByValueId The components of this model by their value identifier
 			 */
 			public DefaultInterpreted(ModelComponentId id, DefaultInterpreted root, DefaultInterpreted parent,
-				Map<ModelTag<?>, Object> tagValues, Map<ModelComponentId, InterpretedModelSet> inheritance, NameChecker nameChecker,
+				Map<ModelTag<?>, Object> tagValues, Map<ModelComponentId, InterpretedModelSet> inheritance,
+				Map<Object, ModelComponentId> componentsByValueId, NameChecker nameChecker,
 				DefaultBuilt source, InterpretedExpressoEnv env) {
 				// No good reason to use linked hash maps here, since dependencies between model values
 				// may change the order in which they are added to the maps
-				super(id, root, parent, tagValues, inheritance, new HashMap<>(), new HashMap<>(), nameChecker);
+				super(id, root, parent, tagValues, inheritance, new HashMap<>(), componentsByValueId, nameChecker);
 				theSource = source;
 				theExpressoEnv = env.with(this);
 				theCycleChecker = root == null ? new LinkedHashSet<>() : root.theCycleChecker;
@@ -2558,8 +2574,6 @@ public interface ObservableModelSet extends Identifiable {
 						InterpretedModelNodeImpl<?, ?> interpreted = new InterpretedModelNodeImpl<>(component.getValue().getIdentity(),
 							null, null, null, interpretedModel, component.getValue().getSourceLocation());
 						getComponents().put(component.getValue().getIdentity().getName(), interpreted);
-						if (component.getValue().getValueIdentity() != null)
-							getIdentifiedComponents().put(component.getValue().getValueIdentity(), interpreted);
 					}
 				}
 			}
@@ -2601,8 +2615,8 @@ public interface ObservableModelSet extends Identifiable {
 			}
 
 			@Override
-			protected Map<Object, InterpretedModelComponentNode<?, ?>> getIdentifiedComponents() {
-				return (Map<Object, InterpretedModelComponentNode<?, ?>>) super.getIdentifiedComponents();
+			protected Map<Object, ModelComponentId> getIdentifiedComponents() {
+				return super.getIdentifiedComponents();
 			}
 
 			@Override
@@ -2616,9 +2630,11 @@ public interface ObservableModelSet extends Identifiable {
 
 			@Override
 			public InterpretableModelComponentNode<?> getLocalIdentifiedComponent(Object valueIdentifier) {
-				InterpretedModelComponentNode<?, ?> interpreted = getIdentifiedComponents().get(valueIdentifier);
-				if (interpreted != null || theSource == null)
-					return interpreted;
+				ModelComponentId interpreted = getIdentifiedComponents().get(valueIdentifier);
+				if (interpreted != null)
+					return getComponent(interpreted);
+				else if (theSource == null)
+					return null;
 				else
 					return interpretable(theSource.getLocalIdentifiedComponent(valueIdentifier));
 			}
@@ -2638,7 +2654,7 @@ public interface ObservableModelSet extends Identifiable {
 				if (getParent() != null)
 					return getParent().instantiate();
 				else if (theInstantiator == null)
-					theInstantiator = new ModelInstantiatorImpl(this);
+					theInstantiator = new ModelInstantiatorImpl(this, getIdentifiedComponents());
 				return theInstantiator;
 			}
 
@@ -2676,8 +2692,6 @@ public interface ObservableModelSet extends Identifiable {
 				try {
 					InterpretedModelComponentNode<M, ?> interpreted = sourceNode.interpret(theExpressoEnv);
 					getComponents().put(sourceNode.getIdentity().getName(), interpreted);
-					if (sourceNode.getValueIdentity() != null)
-						getIdentifiedComponents().put(sourceNode.getValueIdentity(), interpreted);
 					return interpreted;
 				} finally {
 					theCycleChecker.remove(sourceNode);
@@ -2734,13 +2748,15 @@ public interface ObservableModelSet extends Identifiable {
 		static class ModelInstantiatorImpl implements ModelInstantiator {
 			private final ModelComponentId theModelId;
 			private final Map<ModelComponentId, ModelValueInstantiator<?>> theComponents;
+			private final Map<Object, ModelComponentId> theComponentsByValueId;
 			private final Map<ModelComponentId, ModelInstantiator> theInheritance;
 			private InterpretedModelSet theInterpretedModels;
 			// It may be noticed that I'm not checking for cycles here.
 			// I figure I already did that with the compiled and interpreted structures.
 
-			ModelInstantiatorImpl(InterpretedModelSet interpreted) {
+			ModelInstantiatorImpl(InterpretedModelSet interpreted, Map<Object, ModelComponentId> componentsByValueId) {
 				theModelId = interpreted.getIdentity();
+				theComponentsByValueId = componentsByValueId;
 				theInterpretedModels = interpreted;
 				if (interpreted.getComponentNames().isEmpty())
 					theComponents = Collections.emptyMap();
@@ -2820,7 +2836,7 @@ public interface ObservableModelSet extends Identifiable {
 				if (theInterpretedModels != null)
 					throw new IllegalStateException(
 						"Attempting to build a model instance set from a model instantiator that has not been completely instantiated");
-				return new DefaultMSIBuilder(this, null, until);
+				return new DefaultMSIBuilder(this, null, theComponentsByValueId, until);
 			}
 
 			@Override
@@ -2865,13 +2881,17 @@ public interface ObservableModelSet extends Identifiable {
 
 		static class DefaultMSIBuilder implements ModelSetInstanceBuilder {
 			private final Map<ModelComponentId, Object> theComponents;
+			private final Map<Object, ModelComponentId> theComponentsByValueId;
 			private final Map<ModelComponentId, ModelSetInstance> theInheritance;
 			private final DefaultMSI theMSI;
 
-			DefaultMSIBuilder(ModelInstantiatorImpl modelInstantiator, ModelSetInstance sourceModel, Observable<?> until) {
+			DefaultMSIBuilder(ModelInstantiatorImpl modelInstantiator, ModelSetInstance sourceModel,
+				Map<Object, ModelComponentId> componentsByValueId, Observable<?> until) {
 				theComponents = new HashMap<>();
+				theComponentsByValueId = componentsByValueId;
 				theInheritance = new LinkedHashMap<>();
-				theMSI = new DefaultMSI(modelInstantiator, sourceModel, until, theComponents, Collections.unmodifiableMap(theInheritance));
+				theMSI = new DefaultMSI(modelInstantiator, sourceModel, until, theComponents, theComponentsByValueId,
+					Collections.unmodifiableMap(theInheritance));
 			}
 
 			@Override
@@ -2940,6 +2960,7 @@ public interface ObservableModelSet extends Identifiable {
 		static class DefaultMSI implements ModelSetInstance {
 			private final ModelInstantiatorImpl theModelInstantiator;
 			protected final Map<ModelComponentId, Object> theComponents;
+			private final Map<Object, ModelComponentId> theComponentsByValueId;
 			private final Map<ModelComponentId, ModelSetInstance> theInheritance;
 			private final Observable<?> theUntil;
 
@@ -2947,9 +2968,11 @@ public interface ObservableModelSet extends Identifiable {
 			private Set<ModelComponentId> theCircularityDetector;
 
 			protected DefaultMSI(ModelInstantiatorImpl instantiator, ModelSetInstance sourceModel, Observable<?> until,
-				Map<ModelComponentId, Object> components, Map<ModelComponentId, ModelSetInstance> inheritance) {
+				Map<ModelComponentId, Object> components, Map<Object, ModelComponentId> componentsByValueId,
+				Map<ModelComponentId, ModelSetInstance> inheritance) {
 				theModelInstantiator = instantiator;
 				theComponents = components;
+				theComponentsByValueId = componentsByValueId;
 				theInheritance = inheritance;
 				theUntil = until;
 
@@ -3013,10 +3036,15 @@ public interface ObservableModelSet extends Identifiable {
 			}
 
 			@Override
+			public Map<Object, ModelComponentId> getComponentsByValueId() {
+				return theComponentsByValueId;
+			}
+
+			@Override
 			public ModelSetInstanceBuilder copy(Observable<?> until) {
 				if (theCircularityDetector != null)
 					throw new IllegalStateException("Cannot create a copy of a model that is currently being built");
-				ModelSetInstanceBuilder builder = new DefaultMSIBuilder(theModelInstantiator, this, until);
+				ModelSetInstanceBuilder builder = new DefaultMSIBuilder(theModelInstantiator, this, theComponentsByValueId, until);
 
 				for (ModelSetInstance inh : theInheritance.values()) {
 					try {

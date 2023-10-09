@@ -60,8 +60,7 @@ public class TestInterpretation implements QonfigInterpretation {
 	}
 
 	@Override
-	public void init(QonfigToolkit toolkit) {
-	}
+	public void init(QonfigToolkit toolkit) {}
 
 	@Override
 	public Builder configureInterpreter(Builder interpreter) {
@@ -98,8 +97,7 @@ public class TestInterpretation implements QonfigInterpretation {
 			}
 
 			@Override
-			public void prepareModelValue(ExpressoQIS session) throws QonfigInterpretationException {
-			}
+			public void prepareModelValue(ExpressoQIS session) throws QonfigInterpretationException {}
 		}
 
 		static abstract class Interpreted<T> extends QuickStyledElement.Interpreted.Abstract<StyledTestElement<T>>
@@ -394,9 +392,9 @@ public class TestInterpretation implements QonfigInterpretation {
 				}
 
 				@Override
-				public void update(InterpretedExpressoEnv env, QuickInterpretedStyleCache.Applications appCache)
-					throws ExpressoInterpretationException {
-					super.update(env, appCache);
+				public void update(InterpretedExpressoEnv env, QuickStyleSheet.Interpreted styleSheet,
+					QuickInterpretedStyleCache.Applications appCache) throws ExpressoInterpretationException {
+					super.update(env, styleSheet, appCache);
 					QuickInterpretedStyleCache cache = QuickInterpretedStyleCache.get(env);
 					s0 = get(cache.getAttribute(getDefinition().getS0(), boolean.class, env));
 					s1 = get(cache.getAttribute(getDefinition().getS1(), int.class, env));
@@ -710,9 +708,9 @@ public class TestInterpretation implements QonfigInterpretation {
 				}
 
 				@Override
-				public void update(InterpretedExpressoEnv env, QuickInterpretedStyleCache.Applications appCache)
-					throws ExpressoInterpretationException {
-					super.update(env, appCache);
+				public void update(InterpretedExpressoEnv env, QuickStyleSheet.Interpreted styleSheet,
+					QuickInterpretedStyleCache.Applications appCache) throws ExpressoInterpretationException {
+					super.update(env, styleSheet, appCache);
 					QuickInterpretedStyleCache cache = QuickInterpretedStyleCache.get(env);
 					s3 = get(cache.getAttribute(getDefinition().getS3(), int.class, env));
 					s4 = get(cache.getAttribute(getDefinition().getS4(), int.class, env));
@@ -917,9 +915,9 @@ public class TestInterpretation implements QonfigInterpretation {
 				}
 
 				@Override
-				public void update(InterpretedExpressoEnv env, QuickInterpretedStyleCache.Applications appCache)
-					throws ExpressoInterpretationException {
-					super.update(env, appCache);
+				public void update(InterpretedExpressoEnv env, QuickStyleSheet.Interpreted styleSheet,
+					QuickInterpretedStyleCache.Applications appCache) throws ExpressoInterpretationException {
+					super.update(env, styleSheet, appCache);
 					QuickInterpretedStyleCache cache = QuickInterpretedStyleCache.get(env);
 					s5 = get(cache.getAttribute(getDefinition().getS5(), boolean.class, env));
 				}
@@ -1101,9 +1099,9 @@ public class TestInterpretation implements QonfigInterpretation {
 				}
 
 				@Override
-				public void update(InterpretedExpressoEnv env, QuickInterpretedStyleCache.Applications appCache)
-					throws ExpressoInterpretationException {
-					super.update(env, appCache);
+				public void update(InterpretedExpressoEnv env, QuickStyleSheet.Interpreted styleSheet,
+					QuickInterpretedStyleCache.Applications appCache) throws ExpressoInterpretationException {
+					super.update(env, styleSheet, appCache);
 					QuickInterpretedStyleCache cache = QuickInterpretedStyleCache.get(env);
 					s6 = get(cache.getAttribute(getDefinition().getS6(), int.class, env));
 				}

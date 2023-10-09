@@ -103,10 +103,12 @@ public interface Expression {
 		} catch (ExpressoAntlrCompiler.InternalExpressoErrorException e) {
 			String displayType = parser.getVocabulary().getDisplayName(e.token.getType());
 			if (e.getCause() != null && e.getCause() != e)
-				throw new ExpressoParseException(e.token.getStartIndex(), e.token.getStopIndex(), displayType, e.getMessage(),
+				throw new ExpressoParseException(e.token.getStartIndex(), e.token.getStopIndex(), displayType, e.token.getText(),
 					e.getCause());
+			else if (e.token.getStartIndex() >= 0 && e.token.getStopIndex() >= 0)
+				throw new ExpressoParseException(e.token.getStartIndex(), e.token.getStopIndex(), displayType, e.token.getText());
 			else
-				throw new ExpressoParseException(e.token.getStartIndex(), e.token.getStopIndex(), displayType, e.getMessage());
+				throw new ExpressoParseException(0, expression.getText().length(), displayType, e.token.getText());
 		}
 		return compiler.getRoot();
 	}

@@ -6,6 +6,7 @@ import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
+import org.observe.expresso.qonfig.ExWithRequiredModels;
 import org.observe.expresso.qonfig.LocatedExpression;
 import org.qommons.StringUtils;
 import org.qommons.config.QonfigElementOrAddOn;
@@ -13,24 +14,33 @@ import org.qommons.config.QonfigElementOrAddOn;
 /** The definition of a conditional value for a style attribute in quick */
 public class QuickStyleValue implements Comparable<QuickStyleValue> {
 	private final QuickStyleSheet theStyleSheet;
+	private final QuickStyleSet theStyleSet;
 	private final StyleApplicationDef theApplication;
 	private final QuickStyleAttributeDef theAttribute;
 	private final LocatedExpression theValueExpression;
 	private final boolean isTrickleDown;
+	private final ExWithRequiredModels.RequiredModelContext theModelContext;
 
 	/**
 	 * @param styleSheet The style sheet that defined this value
+	 * @param styleSet The style set that defined this value
 	 * @param application The application of this value
 	 * @param attribute THe attribute this value is for
 	 * @param value The expression defining this style value's value
 	 */
-	public QuickStyleValue(QuickStyleSheet styleSheet, StyleApplicationDef application, QuickStyleAttributeDef attribute,
-		LocatedExpression value) {
+	public QuickStyleValue(QuickStyleSheet styleSheet, QuickStyleSet styleSet, StyleApplicationDef application,
+		QuickStyleAttributeDef attribute, LocatedExpression value) {
+		this(styleSheet, styleSet, application, attribute, value, null);
+	}
+
+	private QuickStyleValue(QuickStyleSheet styleSheet, QuickStyleSet styleSet, StyleApplicationDef application,
+		QuickStyleAttributeDef attribute, LocatedExpression value, ExWithRequiredModels.RequiredModelContext modelContext) {
 		if (attribute == null)
 			throw new NullPointerException("Attribute is null");
 		else if (value == null)
 			throw new NullPointerException("Value is null");
 		theStyleSheet = styleSheet;
+		theStyleSet = styleSet;
 		theApplication = application;
 		theAttribute = attribute;
 		theValueExpression = value;
@@ -46,11 +56,25 @@ public class QuickStyleValue implements Comparable<QuickStyleValue> {
 			}
 		}
 		isTrickleDown = !styleAppliesToApp;
+		theModelContext = modelContext;
+	}
+
+	public QuickStyleValue withModelContext(ExWithRequiredModels.RequiredModelContext modelContext) {
+		if (modelContext == null)
+			return this;
+		if (theModelContext != null)
+			modelContext = theModelContext.and(modelContext);
+		return new QuickStyleValue(theStyleSheet, theStyleSet, theApplication, theAttribute, theValueExpression, modelContext);
 	}
 
 	/** @return The style sheet that defined this value */
 	public QuickStyleSheet getStyleSheet() {
 		return theStyleSheet;
+	}
+
+	/** @return The style set that defined this value */
+	public QuickStyleSet getStyleSet() {
+		return theStyleSet;
 	}
 
 	/**
@@ -92,24 +116,41 @@ public class QuickStyleValue implements Comparable<QuickStyleValue> {
 	/**
 	 * @param appCache The interpreted style cache to avoid duplicating applications
 	 * @param env The expresso environment with which to
-	 *        {@link ObservableExpression#evaluate(org.observe.expresso.ModelType.ModelInstanceType, InterpretedExpressoEnv, int) evaluate}
-	 *        this value's expressions
+	 *        {@link ObservableExpression#evaluate(org.observe.expresso.ModelType.ModelInstanceType, InterpretedExpressoEnv, int, org.qommons.ex.ExceptionHandler.Double)
+	 *        evaluate} this value's expressions
 	 * @return The compiled style value
 	 * @throws ExpressoInterpretationException If the expressions could not be compiled
 	 */
-	public InterpretedStyleValue<?> interpret(InterpretedExpressoEnv env, QuickInterpretedStyleCache.Applications appCache)
-		throws ExpressoInterpretationException {
+	public InterpretedStyleValue<?> interpret(InterpretedExpressoEnv env, QuickStyleSheet.Interpreted styleSheet,
+		QuickInterpretedStyleCache.Applications appCache) throws ExpressoInterpretationException {
 		InterpretedStyleApplication application = appCache.getApplication(theApplication, env);
 		QuickInterpretedStyleCache cache = QuickInterpretedStyleCache.get(env);
 		QuickStyleAttribute<?> attribute = cache.getAttribute(theAttribute, env);
-		return _interpret(application, attribute, env);
+		return _interpret(application, attribute, styleSheet, env);
 	}
 
 	private <T> InterpretedStyleValue<T> _interpret(InterpretedStyleApplication application, QuickStyleAttribute<T> attribute,
-		InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+		QuickStyleSheet.Interpreted styleSheet, InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 		InterpretedValueSynth<SettableValue<?>, SettableValue<T>> value = theValueExpression
 			.interpret(ModelTypes.Value.forType(attribute.getType()), env);
-		return new InterpretedStyleValue<>(this, application, attribute, value);
+		ExWithRequiredModels.InterpretedRequiredModelContext modelContext = null;
+		if (theModelContext == null)
+			modelContext = null;
+		else {
+			if (theStyleSet != null) {
+				QuickStyleSet.Interpreted styleSet = styleSheet.getStyleSets().get(theStyleSet.getName());
+				ExWithRequiredModels.Interpreted reqModels = styleSet.getAddOn(ExWithRequiredModels.Interpreted.class);
+				modelContext = reqModels.getContextConverter(theModelContext, env);
+			}
+			if (theStyleSheet != null) {
+				ExWithRequiredModels.Interpreted reqModels = styleSheet.getAddOn(ExWithRequiredModels.Interpreted.class);
+				if (modelContext == null)
+					modelContext = reqModels.getContextConverter(theModelContext, env);
+				else
+					modelContext = modelContext.and(reqModels.getContextConverter(theModelContext, env));
+			}
+		}
+		return new InterpretedStyleValue<>(this, application, attribute, value, modelContext);
 	}
 
 	/**
@@ -118,7 +159,8 @@ public class QuickStyleValue implements Comparable<QuickStyleValue> {
 	 *         {@link StyleApplicationDef#and(StyleApplicationDef) AND} operation of this value's application and the one given
 	 */
 	public QuickStyleValue when(StyleApplicationDef application) {
-		return new QuickStyleValue(theStyleSheet, theApplication.and(application), theAttribute, theValueExpression);
+		return new QuickStyleValue(theStyleSheet, theStyleSet, theApplication.and(application), theAttribute, theValueExpression,
+			theModelContext);
 	}
 
 	@Override

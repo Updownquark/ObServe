@@ -68,6 +68,11 @@ It does not include anything "useful" in the concrete, i.e. no values or transfo
 			<?DOC External values are specified by code instantiating the model ?>
 			<value-mod specify="forbidden" />
 		</add-on>
+
+		<?DOC Elements that inherit this add-on may declare model values that must be provided as input in some way?>
+		<add-on name="with-required-models" abstract="true">
+			<child-def name="required" type="ext-model" min="0" />
+		</add-on>
 	</add-ons>
 
 	<elements>

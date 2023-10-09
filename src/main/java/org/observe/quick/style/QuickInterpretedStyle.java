@@ -97,7 +97,8 @@ public interface QuickInterpretedStyle {
 		return get(attributeName, TypeTokens.get().of(type));
 	}
 
-	void update(InterpretedExpressoEnv env, QuickInterpretedStyleCache.Applications appCache) throws ExpressoInterpretationException;
+	void update(InterpretedExpressoEnv env, QuickStyleSheet.Interpreted styleSheet, QuickInterpretedStyleCache.Applications appCache)
+		throws ExpressoInterpretationException;
 
 	/** Default implementation */
 	public class Default implements QuickInterpretedStyle {
@@ -120,17 +121,17 @@ public interface QuickInterpretedStyle {
 		}
 
 		@Override
-		public void update(InterpretedExpressoEnv env, QuickInterpretedStyleCache.Applications appCache)
-			throws ExpressoInterpretationException {
+		public void update(InterpretedExpressoEnv env, QuickStyleSheet.Interpreted styleSheet,
+			QuickInterpretedStyleCache.Applications appCache) throws ExpressoInterpretationException {
 			theDeclaredValues.clear();
 			for (QuickStyleValue value : getDefinition().getDeclaredValues())
-				theDeclaredValues.add(value.interpret(env, appCache));
+				theDeclaredValues.add(value.interpret(env, styleSheet, appCache));
 			QuickInterpretedStyleCache cache = QuickInterpretedStyleCache.get(env);
 			for (QuickStyleAttributeDef attr : getDefinition().getAttributes()) {
 				QuickStyleAttribute<Object> interpretedAttr = (QuickStyleAttribute<Object>) cache.getAttribute(attr, env);
 				QuickInterpretedStyle.QuickElementStyleAttribute<Object> inherited;
 				inherited = getInherited(theParent, interpretedAttr);
-				theValues.put(interpretedAttr, getDefinition().getValues(attr).interpret(this, inherited, env, appCache));
+				theValues.put(interpretedAttr, getDefinition().getValues(attr).interpret(this, inherited, env, styleSheet, appCache));
 			}
 			theAttributesByName.clear();
 			for (QuickStyleAttribute<?> attr : theValues.keySet())
@@ -257,9 +258,9 @@ public interface QuickInterpretedStyle {
 		}
 
 		@Override
-		public void update(InterpretedExpressoEnv env, QuickInterpretedStyleCache.Applications appCache)
-			throws ExpressoInterpretationException {
-			theWrapped.update(env, appCache);
+		public void update(InterpretedExpressoEnv env, QuickStyleSheet.Interpreted styleSheet,
+			QuickInterpretedStyleCache.Applications appCache) throws ExpressoInterpretationException {
+			theWrapped.update(env, styleSheet, appCache);
 		}
 
 		@Override
@@ -382,8 +383,11 @@ public interface QuickInterpretedStyle {
 		public List<ObservableValue<ConditionalValue<T>>> getConditionalValues(ModelSetInstance models) throws ModelInstantiationException {
 			List<ObservableValue<ConditionalValue<T>>> values = new ArrayList<>();
 			for (int i = 0; i < theValues.size(); i++) {
-				ObservableValue<Boolean> condition = theValues.get(i).condition.get(models);
-				SettableValue<T> value = theValues.get(i).value.get(models);
+				InterpretedStyleValue.StyleValueInstantiator<T> styleValue = theValues.get(i);
+				if (styleValue.modelContext != null)
+					styleValue.modelContext.populateModel(models);
+				ObservableValue<Boolean> condition = styleValue.condition.get(models);
+				SettableValue<T> value = styleValue.value.get(models);
 				values.add(condition.map(LambdaUtils.printableFn(pass -> new ConditionalValue<>(Boolean.TRUE.equals(pass), value),
 					"ifPass(" + value + ")", null)));
 			}

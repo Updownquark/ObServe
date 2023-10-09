@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Set;
 
 import org.observe.SettableValue;
+import org.observe.expresso.CompiledExpressoEnv;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
@@ -17,10 +18,10 @@ import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
-import org.observe.expresso.qonfig.CompiledExpression;
 import org.observe.expresso.qonfig.ElementModelValue;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExElementTraceable;
+import org.observe.expresso.qonfig.ExWithRequiredModels;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.LocatedExpression;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
@@ -49,11 +50,11 @@ public class QuickStyleElement<T> extends ExElement.Abstract {
 	public static class Def extends ExElement.Def.Abstract<QuickStyleElement<?>> {
 		private QonfigElementOrAddOn theStyleElement;
 		private List<QonfigChildDef> theRoles;
-		private CompiledExpression theCondition;
+		private LocatedExpression theCondition;
 		private QuickStyleSet theStyleSet;
 		private QuickStyleAttributeDef theDeclaredAttribute;
 		private QuickStyleAttributeDef theEffectiveAttribute;
-		private CompiledExpression theValue;
+		private LocatedExpression theValue;
 		private StyleApplicationDef theApplication;
 		private final List<Def> theChildren;
 		private final List<QuickStyleValue> theStyleValues;
@@ -76,7 +77,7 @@ public class QuickStyleElement<T> extends ExElement.Abstract {
 		}
 
 		@QonfigAttributeGetter("if")
-		public CompiledExpression getCondition() {
+		public LocatedExpression getCondition() {
 			return theCondition;
 		}
 
@@ -95,7 +96,7 @@ public class QuickStyleElement<T> extends ExElement.Abstract {
 		}
 
 		@QonfigAttributeGetter
-		public CompiledExpression getValue() {
+		public LocatedExpression getValue() {
 			return theValue;
 		}
 
@@ -108,7 +109,8 @@ public class QuickStyleElement<T> extends ExElement.Abstract {
 			return Collections.unmodifiableList(theChildren);
 		}
 
-		public void getStyleValues(Collection<QuickStyleValue> values, StyleApplicationDef application, QonfigElement element) {
+		public void getStyleValues(Collection<QuickStyleValue> values, StyleApplicationDef application, QonfigElement element,
+			CompiledExpressoEnv env, ExWithRequiredModels.RequiredModelContext modelContext) throws QonfigInterpretationException {
 			if (application == StyleApplicationDef.ALL) {
 				for (QuickStyleValue value : theStyleValues)
 					if (value.getApplication().applies(element))
@@ -120,9 +122,9 @@ public class QuickStyleElement<T> extends ExElement.Abstract {
 				}
 			}
 			for (QuickStyleElement.Def child : theChildren)
-				child.getStyleValues(values, application, element);
+				child.getStyleValues(values, application, element, env, modelContext);
 			if (theStyleSet != null)
-				theStyleSet.getStyleValues(values, theApplication.and(application), element);
+				theStyleSet.getStyleValues(values, theApplication.and(application), element, env, modelContext);
 		}
 
 		@Override
@@ -211,6 +213,8 @@ public class QuickStyleElement<T> extends ExElement.Abstract {
 			theCondition = session.getAttributeExpression("if");
 			if (theCondition != null) {
 				QonfigAttributeDef.Declared priorityAttr = QuickTypeStyle.getPriorityAttr(getQonfigType().getDeclarer());
+				theCondition = application.findModelValues(theCondition, new ArrayList<>(), session.getExpressoEnv().getModels(),
+					priorityAttr.getDeclarer(), styleSheet != null, emvCache, reporting());
 				application = application.forCondition(theCondition, session.getExpressoEnv().getModels(), priorityAttr, styleSheet != null,
 					emvCache, reporting());
 			}
@@ -251,9 +255,10 @@ public class QuickStyleElement<T> extends ExElement.Abstract {
 				if (theEffectiveAttribute == null)
 					throw new QonfigInterpretationException("Cannot specify a style value without an attribute",
 						theValue.getFilePosition().getPosition(0), theValue.length());
-				LocatedExpression replacedValue = theApplication.findModelValues(theValue, new HashSet<>(),
+				QuickStyleSet styleSet = session.get(QuickStyleSet.STYLE_SET_SESSION_KEY, QuickStyleSet.class);
+				theValue = theApplication.findModelValues(theValue, new HashSet<>(),
 					session.getExpressoEnv().getModels(), getQonfigType().getDeclarer(), styleSheet != null, emvCache, reporting());
-				theStyleValues.add(new QuickStyleValue(styleSheet, theApplication, theEffectiveAttribute, replacedValue));
+				theStyleValues.add(new QuickStyleValue(styleSheet, styleSet, theApplication, theEffectiveAttribute, theValue));
 			}
 			QonfigValue styleSetName = session.getAttributeQV("style-set");
 			if (styleSetName != null) {
@@ -366,11 +371,19 @@ public class QuickStyleElement<T> extends ExElement.Abstract {
 					if (styled != null)
 						attrs.addAll(styled.getAttributes(attrName.text));
 				}
-				if (attrs.isEmpty())
-					throw new QonfigInterpretationException("No such style attribute: " + types + "." + attrName, //
-						attrName.position == null ? null : new LocatedFilePosition(attrName.fileLocation, attrName.position.getPosition(0)),
-							attrName.text.length());
-				else if (attrs.size() > 1)
+				if (attrs.isEmpty()) {
+					if (types.isEmpty())
+						throw new QonfigInterpretationException(
+							"No element types for context, specify styles as 'element.style-name' (" + attrName + ")", //
+							attrName.position == null ? null
+								: new LocatedFilePosition(attrName.fileLocation, attrName.position.getPosition(0)),
+								attrName.text.length());
+					else
+						throw new QonfigInterpretationException("No such style attribute: " + types + "." + attrName, //
+							attrName.position == null ? null
+								: new LocatedFilePosition(attrName.fileLocation, attrName.position.getPosition(0)),
+								attrName.text.length());
+				} else if (attrs.size() > 1)
 					throw new QonfigInterpretationException(
 						"Multiple style attributes found matching " + types + "." + attrName + ": " + attrs, //
 						attrName.position == null ? null : new LocatedFilePosition(attrName.fileLocation, attrName.position.getPosition(0)),

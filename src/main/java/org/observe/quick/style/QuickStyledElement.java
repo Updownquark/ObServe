@@ -111,19 +111,19 @@ public interface QuickStyledElement extends ExElement {
 
 				ExElement.syncDefs(QuickStyleElement.Def.class, theStyleElements, session.forChildren("style"));
 				List<QuickStyleValue> declaredValues;
+				List<QuickStyleValue> styleSheetValues;
 				if (theStyleElements.isEmpty())
 					declaredValues = Collections.emptyList();
 				else {
 					declaredValues = new ArrayList<>();
 					for (QuickStyleElement.Def styleEl : theStyleElements)
-						styleEl.getStyleValues(declaredValues, StyleApplicationDef.ALL, getElement());
+						styleEl.getStyleValues(declaredValues, StyleApplicationDef.ALL, getElement(), session.getExpressoEnv(), null);
 				}
 
 				QuickStyleSheet styleSheet = session.get(ExWithStyleSheet.QUICK_STYLE_SHEET, QuickStyleSheet.class);
-				List<QuickStyleValue> styleSheetValues;
 				if (styleSheet != null) {
 					styleSheetValues = new ArrayList<>();
-					styleSheet.getStyleValues(styleSheetValues, getElement());
+					styleSheet.getStyleValues(styleSheetValues, getElement(), session.getExpressoEnv());
 				} else
 					styleSheetValues = Collections.emptyList();
 
@@ -234,7 +234,13 @@ public interface QuickStyledElement extends ExElement {
 					theStyle = getDefinition().getStyle().interpret(this,
 						parent == null ? null : ((QuickStyledElement.Interpreted<?>) parent).getStyle(), getExpressoEnv());
 				}
-				theStyle.update(getExpressoEnv(), new QuickInterpretedStyleCache.Applications());
+				QuickStyleSheet.Interpreted styleSheet = null;
+				ExElement.Interpreted<?> parent = getParentElement();
+				while (parent != null && styleSheet == null) {
+					styleSheet = parent.getAddOnValue(ExWithStyleSheet.Interpreted.class, ss -> ss.getStyleSheet());
+					parent = parent.getParentElement();
+				}
+				theStyle.update(getExpressoEnv(), styleSheet, new QuickInterpretedStyleCache.Applications());
 
 				CollectionUtils
 				.synchronize(theStyleElements, getDefinition().getStyleElements(), (i, d) -> i.getIdentity() == d.getIdentity())
@@ -422,8 +428,9 @@ public interface QuickStyledElement extends ExElement {
 				}
 
 				@Override
-				public void update(InterpretedExpressoEnv env, Applications appCache) throws ExpressoInterpretationException {
-					super.update(env, appCache);
+				public void update(InterpretedExpressoEnv env, QuickStyleSheet.Interpreted styleSheet, Applications appCache)
+					throws ExpressoInterpretationException {
+					super.update(env, styleSheet, appCache);
 					theApplicableAttributes.clear();
 					QuickInterpretedStyleCache cache = QuickInterpretedStyleCache.get(env);
 					for (QuickStyleAttributeDef attr : getDefinition().getApplicableAttributes())

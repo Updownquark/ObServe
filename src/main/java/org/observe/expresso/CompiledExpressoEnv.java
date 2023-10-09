@@ -275,6 +275,11 @@ public class CompiledExpressoEnv {
 			public String getDescription() {
 				return "Simple String literal";
 			}
+
+			@Override
+			public String toString() {
+				return getDescription();
+			}
 		})//
 			.withNonStructuredParser(Duration.class, NonStructuredParser.simple(//
 				s -> {
@@ -317,6 +322,11 @@ public class CompiledExpressoEnv {
 				@Override
 				public String getDescription() {
 					return "Enum literal";
+				}
+
+				@Override
+				public String toString() {
+					return getDescription();
 				}
 			})//
 			.withNonStructuredParser(Color.class, NonStructuredParser.simple(//

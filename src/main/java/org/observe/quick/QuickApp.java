@@ -142,8 +142,8 @@ public class QuickApp extends QonfigApp {
 			startQuick(clArgs);
 		} catch (TextParseException e) {
 			e.printStackTrace();
-			JOptionPane.showMessageDialog(null, "<html>" + e.getPosition() + "<br>" + e.getMessage(), "Quick Failed To Start",
-				JOptionPane.ERROR_MESSAGE);
+			JOptionPane.showMessageDialog(null, "<html>" + e.getPosition() + "<br>" + e.getMessage().replace("<", "&lt;"),
+				"Quick Failed To Start", JOptionPane.ERROR_MESSAGE);
 			System.exit(1);
 		} catch (Exception e) {
 			e.printStackTrace();

@@ -21,7 +21,9 @@ import org.qommons.io.LocatedFilePosition;
 import com.google.common.reflect.TypeToken;
 
 public class ExtModelValueElement<M, MV extends M> extends ModelValueElement.Default<M, MV> {
-	@ExElementTraceable(toolkit = ExpressoSessionImplV0_1.CORE, qonfigType = "ext-model-value", interpretation = Interpreted.class)
+	public static final String EXT_MODEL_VALUE = "ext-model-value";
+
+	@ExElementTraceable(toolkit = ExpressoSessionImplV0_1.CORE, qonfigType = EXT_MODEL_VALUE, interpretation = Interpreted.class)
 	public static abstract class Def<M> extends ModelValueElement.Def.Abstract<M, ExtModelValueElement<M, ?>> implements ExtValueRef<M> {
 		private CompiledExpression theDefault;
 
@@ -55,7 +57,7 @@ public class ExtModelValueElement<M, MV extends M> extends ModelValueElement.Def
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			// This can be used with element-model values as well
-			boolean isExtValue = session.isInstance("ext-model-value") != null;
+			boolean isExtValue = session.isInstance(EXT_MODEL_VALUE) != null;
 			super.doUpdate(session.asElement(session.getFocusType().getSuperElement()));
 
 			if (isExtValue)

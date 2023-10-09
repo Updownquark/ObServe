@@ -8,24 +8,29 @@ import org.observe.expresso.CompiledExpressoEnv;
 import org.observe.expresso.ExpressoCompilationException;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.InterpretedExpressoEnv;
-import org.observe.expresso.ModelException;
+import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.ModelType;
+import org.observe.expresso.ModelType.ModelInstanceConverter;
 import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableExpression;
 import org.observe.expresso.ObservableExpression.EvaluatedExpression;
 import org.observe.expresso.ObservableModelSet;
+import org.observe.expresso.ObservableModelSet.InterpretableModelComponentNode;
 import org.observe.expresso.ObservableModelSet.InterpretedModelComponentNode;
 import org.observe.expresso.ObservableModelSet.InterpretedModelSet;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelComponentNode;
+import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelTag;
+import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.TypeConversionException;
 import org.observe.expresso.ops.BinaryOperator;
 import org.observe.expresso.ops.BufferedExpression;
 import org.observe.expresso.ops.NameExpression;
 import org.observe.expresso.qonfig.ElementModelValue;
 import org.observe.expresso.qonfig.ElementModelValue.Identity;
+import org.observe.expresso.qonfig.ExpressoBaseV0_1;
 import org.observe.expresso.qonfig.LocatedExpression;
 import org.observe.util.TypeTokens;
 import org.qommons.BiTuple;
@@ -43,6 +48,8 @@ import org.qommons.ex.NeverThrown;
 import org.qommons.io.ErrorReporting;
 import org.qommons.io.LocatedFilePosition;
 import org.qommons.io.LocatedPositionedContent;
+
+import com.google.common.reflect.TypeToken;
 
 /**
  * Definition structure parsed from a &lt;style> element determining what &lt;styled> {@link QonfigElement}s a {@link QuickStyleValue}
@@ -224,8 +231,10 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 
 	private ObservableExpression _findModelValues(ObservableExpression ex, Collection<ElementModelValue.Identity> modelValues,
 		ObservableModelSet models, QonfigToolkit expresso, boolean styleSheet, ElementModelValue.Cache dmvCache, int expressionOffset,
-		ErrorReporting reporting) {
-		if (ex instanceof NameExpression && ((NameExpression) ex).getContext() == null) {
+		ErrorReporting reporting) throws QonfigInterpretationException {
+		if (ex instanceof ModelValueExpression) {
+			modelValues.add(((ModelValueExpression) ex).getModelValue());
+		} else if (ex instanceof NameExpression && ((NameExpression) ex).getContext() == null) {
 			NameExpression nameEx = (NameExpression) ex;
 			String name = nameEx.getNames().getFirst().getName();
 			ModelComponentNode<?> node = models.getComponentIfExists(name);
@@ -267,7 +276,7 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 	}
 
 	private Map<String, ElementModelValue.Identity> getTypeValues(ElementModelValue.Cache dmvCache, QonfigToolkit expresso,
-		Map<String, ElementModelValue.Identity> values, ErrorReporting reporting) {
+		Map<String, ElementModelValue.Identity> values, ErrorReporting reporting) throws QonfigInterpretationException {
 		for (QonfigElementOrAddOn type : theTypes.values())
 			values = dmvCache.getDynamicValues(expresso, type, values, reporting);
 		if (theRole != null && theRole.getType() != null)
@@ -338,21 +347,32 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 		public <M, MV extends M, EX extends Throwable> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type,
 			InterpretedExpressoEnv env, int expressionOffset, ExceptionHandler.Single<ExpressoInterpretationException, EX> exHandler)
 				throws ExpressoInterpretationException, EX {
-			InterpretedModelComponentNode<?, ?> node;
-			try {
-				node = env.getModels().getIdentifiedComponent(theModelValue).interpreted();
-			} catch (ModelException e) {
-				exHandler.handle1(new ExpressoInterpretationException("No such model value found: '" + theModelValue.getName() + "'",
-					env.reporting().getPosition(), theModelValue.getName().length(), e));
+
+			InterpretableModelComponentNode<?> interpretableNode = env.getModels().getIdentifiedComponentIfExists(theModelValue);
+			if (interpretableNode != null) {// If we already have a handle on it, use that
+				InterpretedModelComponentNode<?, ?> node = interpretableNode.interpreted();
+				ExceptionHandler.Single<TypeConversionException, NeverThrown> tce = ExceptionHandler.holder();
+				InterpretedValueSynth<M, MV> nodeX = node.as(type, env, tce);
+				if (nodeX != null)
+					return ObservableExpression.evEx(expressionOffset, getExpressionLength(), nodeX, theModelValue);
+				exHandler.handle1(
+					new ExpressoInterpretationException(tce.get1().getMessage(), env.reporting().getPosition(), getExpressionLength()));
 				return null;
 			}
-			ExceptionHandler.Single<TypeConversionException, NeverThrown> tce = ExceptionHandler.holder();
-			InterpretedValueSynth<M, MV> nodeX = node.as(type, env, tce);
-			if (nodeX != null)
-				return ObservableExpression.evEx(expressionOffset, getExpressionLength(), nodeX, theModelValue);
-			exHandler.handle1(
-				new ExpressoInterpretationException(tce.get1().getMessage(), env.reporting().getPosition(), getExpressionLength()));
-			return null;
+			// Otherwise, we may just not be in the right environment yet
+			if (!"value".equals(theModelValue.getDeclaration().getType().getName())
+				|| !ExpressoBaseV0_1.NAME.equals(theModelValue.getDeclaration().getType().getDeclarer().getName()))
+				throw new ExpressoInterpretationException(
+					"Cannot use model value of type " + theModelValue.getDeclaration().getType() + " in this style",
+					env.reporting().getPosition(), getExpressionLength());
+			else if (theModelValue.getType() == null)
+				throw new ExpressoInterpretationException("Cannot use a variable-type model value in this style",
+					env.reporting().getPosition(), getExpressionLength());
+			ModelInstanceConverter<SettableValue<?>, M> converter = ModelTypes.Value.forType(//
+				(TypeToken<Object>) theModelValue.getType().getType(env))//
+				.convert(type, env);
+			return ObservableExpression.evEx(expressionOffset, getExpressionLength(),
+				new Interpreted<>(theModelValue, (ModelInstanceConverter<SettableValue<?>, MV>) converter), theModelValue);
 		}
 
 		@Override
@@ -369,6 +389,56 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 		@Override
 		public String toString() {
 			return theWrapped.toString();
+		}
+
+		static class Interpreted<MS, M, MV extends M> implements InterpretedValueSynth<M, MV> {
+			private final ElementModelValue.Identity theModelValue;
+			private final ModelInstanceConverter<MS, MV> theConverter;
+
+			Interpreted(Identity modelValue, ModelInstanceConverter<MS, MV> converter) {
+				theModelValue = modelValue;
+				theConverter = converter;
+			}
+
+			@Override
+			public ModelInstanceType<M, MV> getType() {
+				return (ModelInstanceType<M, MV>) theConverter.getType();
+			}
+
+			@Override
+			public List<? extends InterpretedValueSynth<?, ?>> getComponents() {
+				return Collections.emptyList();
+			}
+
+			@Override
+			public ModelValueInstantiator<MV> instantiate() {
+				return new Instantiator<>(theModelValue, theConverter);
+			}
+		}
+
+		static class Instantiator<MV1, MV2> implements ModelValueInstantiator<MV2> {
+			private final ElementModelValue.Identity theModelValue;
+			private final ModelInstanceConverter<MV1, MV2> theConverter;
+
+			Instantiator(Identity modelValue, ModelInstanceConverter<MV1, MV2> converter) {
+				theModelValue = modelValue;
+				theConverter = converter;
+			}
+
+			@Override
+			public void instantiate() {}
+
+			@Override
+			public MV2 get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
+				MV1 modelValue = (MV1) models.getByValueId(theModelValue);
+				return theConverter.convert(modelValue);
+			}
+
+			@Override
+			public MV2 forModelCopy(MV2 value, ModelSetInstance sourceModels, ModelSetInstance newModels)
+				throws ModelInstantiationException {
+				return get(newModels);
+			}
 		}
 	}
 
@@ -581,12 +651,13 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 		QonfigAttributeDef.Declared priorityAttr, boolean styleSheet, ElementModelValue.Cache dmvCache, ErrorReporting reporting)
 			throws QonfigInterpretationException {
 		LocatedExpression newCondition;
-		if (theCondition == null)
+		Map<ElementModelValue.Identity, Integer> modelValues = new HashMap<>();
+		if (theCondition == null) {
 			newCondition = condition;
-		else
+			modelValues.putAll(theModelValues);
+		} else
 			newCondition = new LocatedAndExpression(theCondition, condition);
 
-		Map<ElementModelValue.Identity, Integer> modelValues = new HashMap<>();
 		newCondition = getPrioritizedModelValues(newCondition, models, priorityAttr, styleSheet, dmvCache, modelValues, reporting);
 		return new StyleApplicationDef(theParent, theRole, theTypes, newCondition, modelValues);
 	}
@@ -843,12 +914,14 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 
 	/**
 	 *
-	 * @param env The Expresso environment in which to {@link ObservableExpression#evaluate(ModelInstanceType, InterpretedExpressoEnv, int)
+	 * @param env The Expresso environment in which to
+	 *        {@link ObservableExpression#evaluate(ModelInstanceType, InterpretedExpressoEnv, int, org.qommons.ex.ExceptionHandler.Double)
 	 *        evaluate} {@link #getCondition() conditions}
 	 * @param appCache A cache of compiled applications for re-use
 	 * @return An {@link InterpretedStyleApplication} for this application in the given environment
 	 * @throws ExpressoInterpretationException If a condition could not be
-	 *         {@link ObservableExpression#evaluate(ModelInstanceType, InterpretedExpressoEnv, int) evaluated}
+	 *         {@link ObservableExpression#evaluate(ModelInstanceType, InterpretedExpressoEnv, int, org.qommons.ex.ExceptionHandler.Double)
+	 *         evaluated}
 	 */
 	public InterpretedStyleApplication interpret(InterpretedExpressoEnv env, QuickInterpretedStyleCache.Applications appCache)
 		throws ExpressoInterpretationException {

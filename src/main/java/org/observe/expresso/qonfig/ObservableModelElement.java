@@ -66,6 +66,8 @@ import org.qommons.threading.QommonsTimer;
 import com.google.common.reflect.TypeToken;
 
 public abstract class ObservableModelElement extends ExElement.Abstract {
+	public static final String PREVENT_MODEL_BUILDING = "ObservableModel.Prevent.Model.Building";
+
 	@ExElementTraceable(toolkit = ExpressoSessionImplV0_1.CORE, qonfigType = "abst-model", interpretation = Interpreted.class)
 	public static abstract class Def<M extends ObservableModelElement, V extends ModelValueElement.Def<?, ?>>
 	extends ExElement.Def.Abstract<M> {
@@ -99,16 +101,23 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 			String name = getName();
 			if (theModelPath == null) {
 				if (name == null)
-					name = "model";
+					name = "";
 				theModelPath = name;
-			} else if (name != null)
-				theModelPath += "." + name;
+			} else if (name != null) {
+				if (theModelPath.isEmpty())
+					theModelPath = name;
+				else
+					theModelPath += "." + name;
+			}
 			session.put(ExpressoBaseV0_1.PATH_KEY, theModelPath);
 
 			BetterList<ExpressoQIS> valueSessions = session.forChildren("value");
 			ExElement.syncDefs(getValueType(), theValues, valueSessions);
-			for (ModelValueElement.Def<?, ?> value : theValues)
-				value.populate((ObservableModelSet.Builder) session.getExpressoEnv().getModels());
+			Boolean building = session.get(PREVENT_MODEL_BUILDING, Boolean.class);
+			if (!Boolean.FALSE.equals(building)) {
+				for (ModelValueElement.Def<?, ?> value : theValues)
+					value.populate((ObservableModelSet.Builder) session.getExpressoEnv().getModels());
+			}
 			int i = 0;
 			for (ExpressoQIS vs : valueSessions)
 				theValues.get(i++).prepareModelValue(vs);
@@ -556,41 +565,6 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 				ExElement.syncDefs(ExtModelElement.Def.class, theSubModels, session.forChildren("sub-model"));
 			}
 
-			// @Override
-			// protected ModelValueElement.Def<?, ?> interpretValue(String name, ExpressoQIS valueEl, ModelValueElement.Def<?, ?> previous,
-			// ObservableModelSet.Builder builder) throws QonfigInterpretationException {
-			// ExtModelValue<?> container = valueEl.interpret(ExtModelValue.class);
-			// ModelInstanceType<Object, Object> childType;
-			// ObservableModelSet valueModel = valueEl.getExpressoEnv().getModels();
-			// try {
-			// childType = (ModelInstanceType<Object, Object>) container.getType(valueModel);
-			// } catch (ExpressoInterpretationException e) {
-			// throw new QonfigInterpretationException("Could not interpret type", e.getPosition(), e.getErrorLength(), e);
-			// }
-			// CompiledExpression defaultX = valueEl.getAttributeExpression("default");
-			// String childPath = builder.getIdentity().getPath() + "." + name;
-			// builder.withExternal(name, childType, valueEl.getElement().getPositionInFile(), extModels -> {
-			// try {
-			// return extModels.getValue(childPath, childType);
-			// } catch (IllegalArgumentException | ModelException | TypeConversionException e) {
-			// if (defaultX == null)
-			// throw e;
-			// }
-			// return null;
-			// }, models -> {
-			// if (defaultX == null)
-			// return null;
-			// ModelValueSynth<Object, Object> defaultV;
-			// try {
-			// defaultV = defaultX.evaluate(childType);
-			// } catch (ExpressoInterpretationException e) {
-			// throw new ModelInstantiationException(e.getMessage(), e.getPosition(), e.getErrorLength(), e);
-			// }
-			// return defaultV.get(models);
-			// });
-			// return container instanceof ModelValueElement.Def ? (ModelValueElement.Def<?, ?>) container : null;
-			// }
-
 			@Override
 			public Interpreted<? extends M> interpret(ExElement.Interpreted<?> parent) throws ExpressoInterpretationException {
 				return new Interpreted<>(this, parent);
@@ -608,6 +582,11 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 			@Override
 			public Def<? super M> getDefinition() {
 				return (Def<? super M>) super.getDefinition();
+			}
+
+			@Override
+			public List<? extends ExtModelValueElement.Interpreted<?, ?>> getValues() {
+				return (List<? extends ExtModelValueElement.Interpreted<?, ?>>) super.getValues();
 			}
 
 			public List<? extends Interpreted<?>> getSubModels() {

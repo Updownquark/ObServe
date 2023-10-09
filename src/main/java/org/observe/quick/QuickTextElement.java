@@ -12,6 +12,7 @@ import org.observe.quick.style.QuickInterpretedStyleCache;
 import org.observe.quick.style.QuickInterpretedStyleCache.Applications;
 import org.observe.quick.style.QuickStyleAttribute;
 import org.observe.quick.style.QuickStyleAttributeDef;
+import org.observe.quick.style.QuickStyleSheet;
 import org.observe.quick.style.QuickStyledElement;
 import org.observe.quick.style.QuickTypeStyle;
 
@@ -199,8 +200,9 @@ public interface QuickTextElement extends QuickStyledElement {
 				}
 
 				@Override
-				public void update(InterpretedExpressoEnv env, Applications appCache) throws ExpressoInterpretationException {
-					super.update(env, appCache);
+				public void update(InterpretedExpressoEnv env, QuickStyleSheet.Interpreted styleSheet, Applications appCache)
+					throws ExpressoInterpretationException {
+					super.update(env, styleSheet, appCache);
 					QuickInterpretedStyleCache cache = QuickInterpretedStyleCache.get(env);
 					theFontColor = get(cache.getAttribute(getDefinition().getFontColor(), Color.class, env));
 					theFontSize = get(cache.getAttribute(getDefinition().getFontSize(), Double.class, env));

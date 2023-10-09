@@ -301,12 +301,13 @@ public interface QuickCompiledStyle {
 		 * @throws ExpressoInterpretationException If the condition or the value could not be interpreted
 		 */
 		public <T> QuickElementStyleAttribute<T> interpret(QuickInterpretedStyle elementStyle, QuickElementStyleAttribute<T> inherited,
-			InterpretedExpressoEnv env, QuickInterpretedStyleCache.Applications appCache) throws ExpressoInterpretationException {
+			InterpretedExpressoEnv env, QuickStyleSheet.Interpreted styleSheet, QuickInterpretedStyleCache.Applications appCache)
+				throws ExpressoInterpretationException {
 			QuickInterpretedStyleCache cache = QuickInterpretedStyleCache.get(env);
 			QuickStyleAttribute<T> attribute = (QuickStyleAttribute<T>) cache.getAttribute(theAttribute, env);
 			List<InterpretedStyleValue<T>> values = new ArrayList<>(theValues.size());
 			for (QuickStyleValue v : theValues)
-				values.add((InterpretedStyleValue<T>) v.interpret(env, appCache));
+				values.add((InterpretedStyleValue<T>) v.interpret(env, styleSheet, appCache));
 			return new QuickElementStyleAttribute<>(attribute, elementStyle, Collections.unmodifiableList(values), inherited);
 		}
 

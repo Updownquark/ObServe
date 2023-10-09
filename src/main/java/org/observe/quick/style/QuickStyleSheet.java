@@ -12,13 +12,17 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.observe.expresso.CompiledExpressoEnv;
+import org.observe.expresso.ExpressoInterpretationException;
+import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ObservableModelSet;
 import org.observe.expresso.qonfig.ExElement;
-import org.observe.expresso.qonfig.ExElement.Def;
 import org.observe.expresso.qonfig.ExElementTraceable;
+import org.observe.expresso.qonfig.ExWithRequiredModels;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.expresso.qonfig.QonfigChildGetter;
+import org.qommons.collect.CollectionUtils;
 import org.qommons.config.DefaultQonfigParser;
 import org.qommons.config.QommonsConfig;
 import org.qommons.config.QonfigDocument;
@@ -123,7 +127,7 @@ public class QuickStyleSheet extends ExElement.Def.Abstract<ExElement.Void> {
 	private final List<QuickStyleSet> theStyleSetList;
 	private final Map<String, QuickStyleSet> theStyleSets;
 
-	public QuickStyleSheet(Def<?> parent, QonfigElementOrAddOn qonfigType) {
+	public QuickStyleSheet(ExElement.Def<?> parent, QonfigElementOrAddOn qonfigType) {
 		super(parent, qonfigType);
 		theStyleSetList = new ArrayList<>();
 		theStyleSets = new HashMap<>();
@@ -182,12 +186,16 @@ public class QuickStyleSheet extends ExElement.Def.Abstract<ExElement.Void> {
 	 * @param styleValues Collection into which to add style values in this style sheet that
 	 *        {@link StyleApplicationDef#applies(QonfigElement) apply} to the given element
 	 * @param element The element to get style values for
+	 * @param env The compiled environment to validate against
+	 * @throws QonfigInterpretationException If this style sheet's styles cannot be applied in the given environment
 	 */
-	public final void getStyleValues(Collection<QuickStyleValue> styleValues, QonfigElement element) {
+	public final void getStyleValues(Collection<QuickStyleValue> styleValues, QonfigElement element, CompiledExpressoEnv env)
+		throws QonfigInterpretationException {
+		ExWithRequiredModels.RequiredModelContext styleSheetModelContext = getAddOn(ExWithRequiredModels.Def.class).getContext(env);
 		for (QuickStyleElement.Def style : theStyleElements)
-			style.getStyleValues(styleValues, StyleApplicationDef.ALL, element);
+			style.getStyleValues(styleValues, StyleApplicationDef.ALL, element, env, styleSheetModelContext);
 		for (QuickStyleSheet imported : theImportedStyleSheets.values())
-			imported.getStyleValues(styleValues, element);
+			imported.getStyleValues(styleValues, element, env);
 	}
 
 	@Override
@@ -213,6 +221,10 @@ public class QuickStyleSheet extends ExElement.Def.Abstract<ExElement.Void> {
 				throw new QonfigInterpretationException("Multiple style sets named '" + styleSet.getName() + "'",
 					styleSet.reporting().getPosition(), 0);
 		}
+	}
+
+	public Interpreted interpret(ExElement.Interpreted<?> parent) {
+		return new Interpreted(this, parent);
 	}
 
 	/**
@@ -249,5 +261,90 @@ public class QuickStyleSheet extends ExElement.Def.Abstract<ExElement.Void> {
 	@Override
 	public String toString() {
 		return print(null, 0).toString();
+	}
+
+	public static class Interpreted extends ExElement.Interpreted.Abstract<ExElement.Void> {
+		private final List<QuickStyleElement.Interpreted<?>> theStyleElements;
+		private final Map<String, QuickStyleSheet.Interpreted> theImportedStyleSheets;
+		private final Map<String, QuickStyleSet.Interpreted> theStyleSets;
+
+		Interpreted(QuickStyleSheet definition, ExElement.Interpreted<?> parent) {
+			super(definition, parent);
+			theStyleElements = new ArrayList<>();
+			theImportedStyleSheets = new LinkedHashMap<>();
+			theStyleSets = new LinkedHashMap<>();
+		}
+
+		@Override
+		public QuickStyleSheet getDefinition() {
+			return (QuickStyleSheet) super.getDefinition();
+		}
+
+		public List<QuickStyleElement.Interpreted<?>> getStyleElements() {
+			return Collections.unmodifiableList(theStyleElements);
+		}
+
+		public Map<String, QuickStyleSheet.Interpreted> getImportedStyleSheets() {
+			return Collections.unmodifiableMap(theImportedStyleSheets);
+		}
+
+		public Map<String, QuickStyleSet.Interpreted> getStyleSets() {
+			return Collections.unmodifiableMap(theStyleSets);
+		}
+
+		public void updateStyleSheet(InterpretedExpressoEnv expressoEnv) throws ExpressoInterpretationException {
+			update(expressoEnv);
+		}
+
+		@Override
+		protected void doUpdate(InterpretedExpressoEnv expressoEnv) throws ExpressoInterpretationException {
+			super.doUpdate(expressoEnv);
+
+			CollectionUtils
+			.synchronize(theStyleElements, getDefinition().getStyleElements(),
+				(interp, def) -> interp.getIdentity() == def.getIdentity())//
+			.<ExpressoInterpretationException> simpleE(def -> def.interpret(this))//
+			.onLeftX(el -> el.getLeftValue().destroy())//
+			.onRightX(el -> el.getLeftValue().updateStyle(expressoEnv))//
+			.onCommonX(el -> el.getLeftValue().updateStyle(expressoEnv))//
+			.rightOrder()//
+			.adjust();
+
+			List<QuickStyleSheet.Interpreted> importedStyleSheets = new ArrayList<>(theImportedStyleSheets.values());
+			theImportedStyleSheets.clear();
+			CollectionUtils
+			.synchronize(importedStyleSheets, new ArrayList<>(getDefinition().getImportedStyleSheets().entrySet()),
+				(interp, def) -> interp.getIdentity() == def.getValue().getIdentity())//
+				.<ExpressoInterpretationException> simpleE(def -> def.getValue().interpret(null))//
+			.onLeftX(el -> el.getLeftValue().destroy())//
+			.onRightX(el -> {
+				el.getLeftValue().updateStyleSheet(expressoEnv);
+				theImportedStyleSheets.put(el.getRightValue().getKey(), el.getLeftValue());
+			})//
+			.onCommonX(el -> {
+				el.getLeftValue().updateStyleSheet(expressoEnv);
+				theImportedStyleSheets.put(el.getRightValue().getKey(), el.getLeftValue());
+			})//
+			.rightOrder()//
+			.adjust();
+
+			List<QuickStyleSet.Interpreted> styleSets = new ArrayList<>(theStyleSets.values());
+			theStyleSets.clear();
+			CollectionUtils
+			.synchronize(styleSets, new ArrayList<>(getDefinition().getStyleSets().entrySet()),
+				(interp, def) -> interp.getIdentity() == def.getValue().getIdentity())//
+			.<ExpressoInterpretationException> simpleE(def -> def.getValue().interpret(this))//
+			.onLeftX(el -> el.getLeftValue().destroy())//
+			.onRightX(el -> {
+				el.getLeftValue().updateStyleSet(expressoEnv);
+				theStyleSets.put(el.getRightValue().getKey(), el.getLeftValue());
+			})//
+			.onCommonX(el -> {
+				el.getLeftValue().updateStyleSet(expressoEnv);
+				theStyleSets.put(el.getRightValue().getKey(), el.getLeftValue());
+			})//
+			.rightOrder()//
+			.adjust();
+		}
 	}
 }

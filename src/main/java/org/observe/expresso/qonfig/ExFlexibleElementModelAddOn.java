@@ -56,6 +56,15 @@ public abstract class ExFlexibleElementModelAddOn<E extends ExElement> extends E
 		hollow.satisfy(value);
 	}
 
+	public static boolean isElementValueSatisfied(ModelComponentId elementValueId, ModelSetInstance models)
+		throws ModelInstantiationException {
+		Object modelValue = models.get(elementValueId);
+		if (!(modelValue instanceof ModelType.HollowModelValue))
+			throw new IllegalArgumentException("Element value '" + elementValueId + "' is not dynamic");
+		ModelType.HollowModelValue<Object, Object> hollow = (ModelType.HollowModelValue<Object, Object>) modelValue;
+		return hollow.isSatisfied();
+	}
+
 	public static abstract class Def<E extends ExElement, AO extends ExFlexibleElementModelAddOn<? super E>>
 	extends ExModelAugmentation.Def<E, AO> {
 		private Map<String, CompiledModelValue<?>> theElementValues;
@@ -89,9 +98,11 @@ public abstract class ExFlexibleElementModelAddOn<E extends ExElement> extends E
 			CompiledModelValue<?> prev = getElementValues().get(name);
 			if (prev != null)
 				throw new QonfigInterpretationException("Multiple conflicting element values named '" + name + "' declared", position, 0);
-			theElementValues.put(name, value);
+			ModelComponentNode<M> component;
 			builder.withMaker(name, value, position);
-			return (ModelComponentNode<M>) builder.getLocalComponent(name);
+			component = (ModelComponentNode<M>) builder.getLocalComponent(name);
+			theElementValues.put(component.getIdentity().getPath(), value);
+			return component;
 		}
 
 		protected CompiledModelValue<?> getElementValue(String elementValueName) throws QonfigInterpretationException {

@@ -11,13 +11,16 @@ import org.observe.expresso.ExpressoParseException;
 import org.observe.expresso.ExpressoParser;
 import org.observe.expresso.JavaExpressoParser;
 import org.observe.expresso.ObservableModelSet;
+import org.observe.expresso.VariableType;
 import org.qommons.Named;
 import org.qommons.SelfDescribed;
 import org.qommons.config.QonfigAddOn;
 import org.qommons.config.QonfigAttributeDef;
 import org.qommons.config.QonfigChildDef;
 import org.qommons.config.QonfigElement;
+import org.qommons.config.QonfigElement.QonfigValue;
 import org.qommons.config.QonfigElementOrAddOn;
+import org.qommons.config.QonfigInterpretationException;
 import org.qommons.config.QonfigToolkit;
 import org.qommons.config.QonfigValueDef;
 import org.qommons.config.QonfigValueType;
@@ -36,7 +39,7 @@ public interface ElementModelValue<M> extends ObservableModelSet.IdentifiableCom
 		private final String theName;
 		private final QonfigChildDef theSourceChild;
 		private final QonfigAttributeDef theNameAttribute;
-		private final String theType;
+		private final VariableType theType;
 		private final QonfigAttributeDef theSourceAttribute;
 		private final boolean isSourceValue;
 		private final CompiledExpression theValue;
@@ -54,8 +57,9 @@ public interface ElementModelValue<M> extends ObservableModelSet.IdentifiableCom
 		 *        element
 		 * @param declaration The element that declares this value
 		 */
-		public Identity(QonfigElementOrAddOn owner, String name, QonfigChildDef sourceChild, QonfigAttributeDef nameAttribute, String type,
-			QonfigAttributeDef sourceAttribute, boolean sourceValue, CompiledExpression value, QonfigElement declaration) {
+		public Identity(QonfigElementOrAddOn owner, String name, QonfigChildDef sourceChild, QonfigAttributeDef nameAttribute,
+			VariableType type, QonfigAttributeDef sourceAttribute, boolean sourceValue, CompiledExpression value,
+			QonfigElement declaration) {
 			theOwner = owner;
 			theName = name;
 			theSourceChild = sourceChild;
@@ -86,8 +90,8 @@ public interface ElementModelValue<M> extends ObservableModelSet.IdentifiableCom
 			return theNameAttribute;
 		}
 
-		/** @return The string representation of the type for this value. Null if the type is variable. */
-		public String getType() {
+		/** @return The type for this value. Null if the type is variable. */
+		public VariableType getType() {
 			return theType;
 		}
 
@@ -183,12 +187,12 @@ public interface ElementModelValue<M> extends ObservableModelSet.IdentifiableCom
 		 * @return The identities/definitions of all dynamic values defined on the given type, grouped by name/name attribute
 		 */
 		public Map<String, Identity> getDynamicValues(QonfigToolkit expresso, QonfigElementOrAddOn type, Map<String, Identity> values,
-			ErrorReporting reporting) {
+			ErrorReporting reporting) throws QonfigInterpretationException {
 			return getDynamicValues(expresso, null, type, values, reporting);
 		}
 
 		private Map<String, Identity> getDynamicValues(QonfigToolkit expresso, ElementModelData modelData, QonfigElementOrAddOn type,
-			Map<String, Identity> values, ErrorReporting reporting) {
+			Map<String, Identity> values, ErrorReporting reporting) throws QonfigInterpretationException {
 			if (modelData == null)
 				modelData = new ElementModelData();
 			if (modelData.withElementModel == null)
@@ -212,7 +216,7 @@ public interface ElementModelValue<M> extends ObservableModelSet.IdentifiableCom
 		}
 
 		private Map<String, Identity> compileDynamicValues(QonfigToolkit expresso, ElementModelData modelData, QonfigElementOrAddOn type,
-			ErrorReporting reporting) {
+			ErrorReporting reporting) throws QonfigInterpretationException {
 			Map<String, Identity> values = new LinkedHashMap<>();
 			if (type.getSuperElement() != null)
 				getDynamicValues(expresso, modelData, type.getSuperElement(), values, reporting);
@@ -273,8 +277,8 @@ public interface ElementModelValue<M> extends ObservableModelSet.IdentifiableCom
 							reporting
 							.at(LocatedPositionedContent.of(metadata.getDocument().getLocation(),
 								elValue.getAttributes().get(modelData.nameAttrAttr).position.subSequence(1, nameAttrS.length() - 1)))
-							.error("name-attribute (" + nameAttr
-								+ ") must refer to an attribute of type 'identifier', not " + nameAttr.getType());
+							.error("name-attribute (" + nameAttr + ") must refer to an attribute of type 'identifier', not "
+								+ nameAttr.getType());
 						}
 						// Just don't define the value if not specified
 						// else if (nameAttr.getSpecification() != SpecificationType.Required && nameAttr.getDefaultValue() == null)
@@ -285,7 +289,9 @@ public interface ElementModelValue<M> extends ObservableModelSet.IdentifiableCom
 						sourceChild = null;
 						nameAttr = null;
 					}
-					String typeName = elValue.getAttributeText(modelData.typeAttr);
+					QonfigValue typeName = elValue.getAttributes().get(modelData.typeAttr);
+					VariableType valueType = typeName == null ? null
+						: VariableType.parseType(new LocatedPositionedContent.Default(typeName.fileLocation, typeName.position));
 					String sourceAttrS = elValue.getAttributeText(modelData.sourceAttr);
 					QonfigAttributeDef sourceAttr;
 					boolean sourceValue;
@@ -311,8 +317,8 @@ public interface ElementModelValue<M> extends ObservableModelSet.IdentifiableCom
 							reporting
 							.at(LocatedPositionedContent.of(metadata.getDocument().getLocation(),
 								elValue.getAttributes().get(modelData.nameAttrAttr).position.subSequence(1, nameAttrS.length() - 1)))
-							.error(
-								"Empty source-attribute must refer to an element value of type 'expression', not " + valueDef.getType());
+							.error("Empty source-attribute must refer to an element value of type 'expression', not "
+								+ valueDef.getType());
 							continue;
 						}
 
@@ -326,12 +332,12 @@ public interface ElementModelValue<M> extends ObservableModelSet.IdentifiableCom
 							reporting
 							.at(LocatedPositionedContent.of(metadata.getDocument().getLocation(),
 								elValue.getAttributes().get(modelData.nameAttrAttr).position.subSequence(1, nameAttrS.length() - 1)))
-							.error("source-attribute (" + sourceAttr
-								+ ") must refer to an attribute of type 'expression', not " + sourceAttr.getType());
+							.error("source-attribute (" + sourceAttr + ") must refer to an attribute of type 'expression', not "
+								+ sourceAttr.getType());
 							continue;
 						}
 					}
-					Identity newModelValue = new Identity(type, name, sourceChild, nameAttr, typeName, sourceAttr, sourceValue, value,
+					Identity newModelValue = new Identity(type, name, sourceChild, nameAttr, valueType, sourceAttr, sourceValue, value,
 						elValue);
 					Identity overridden = values.get(newModelValue.getName());
 					if (overridden != null) {
