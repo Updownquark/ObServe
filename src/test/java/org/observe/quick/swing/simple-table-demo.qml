@@ -43,8 +43,8 @@
 	<box layout="inline-layout" orientation="vertical" cross-align="justify">
 		<table rows="app.values" name="Simple Table" selection="app.selected" multi-selection="app.allSelected">
 			<titled-border title="`Factored Values`">
-				<style attr="border-color" condition="hovered">`green`</style>
-				<style condition="pressed">
+				<style attr="border-color" if="hovered">`green`</style>
+				<style if="pressed">
 					<style attr="font-slant">`italic`</style>
 					<style attr="font-color">`orange`</style>
 				</style>
@@ -59,9 +59,9 @@
 				header-tooltip="`Whether the value is prime`">
 				<check-box value="prime" tooltip="prime ? `Prime` : `Not Prime`">
 					<style attr="color">
-						<style condition="hovered">`red`</style>
-						<style condition="focused">`teal`</style>
-						<style condition="focused &amp;&amp; hovered">`purple`</style>
+						<style if="hovered">`red`</style>
+						<style if="focused">`teal`</style>
+						<style if="focused &amp;&amp; hovered">`purple`</style>
 					</style>
 					<on-type>System.out.println("Typed "+typedChar)</on-type>
 				</check-box>
@@ -69,8 +69,8 @@
 			<column name="`Factorization`" value="Primes.formatFactorization(app.primes.factorize(value, 100_000))"
 				header-tooltip="&quot;The prime factors of each of the &quot;+app.valueSize+&quot; values&quot;">
 				<label value="columnValue">
-					<style attr="color" condition="hovered">`aqua`</style>
-					<style attr="font-weight" condition="rightPressed">`bold`</style>
+					<style attr="color" if="hovered">`aqua`</style>
+					<style attr="font-weight" if="rightPressed">`bold`</style>
 				</label>
 			</column>
 			<multi-value-action icon="&quot;icons/remove.png&quot;" as-popup="true" tooltip="`Remove selected rows`">
@@ -79,7 +79,7 @@
 		</table>
 		<box layout="inline-layout" orientation="horizontal" main-align="justify">
 			<text-field value="app.newValue" commit-on-type="true">
-				<style condition="pressed">
+				<style if="pressed">
 					<style attr="font-weight">`ultra-bold`</style>
 					<style attr="font-color">`purple`</style>
 				</style>

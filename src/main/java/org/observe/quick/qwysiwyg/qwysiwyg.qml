@@ -41,13 +41,13 @@
 						<hook name="updateHoverNode" on="node">hoveredNode=node</hook>
 					</model>
 					<text-style>
-						<style attr="font-weight" condition="node!=null &amp;&amp; node.isBold()">`bold`</style>
+						<style attr="font-weight" if="node!=null &amp;&amp; node.isBold()">`bold`</style>
 						<style attr="font-color">node==null ? null : node.getFontColor()</style>
-						<style attr="underline" condition="node!=null &amp;&amp; node.isActiveLink()">true</style>
+						<style attr="underline" if="node!=null &amp;&amp; node.isActiveLink()">true</style>
 					</text-style>
 				</dynamic-styled-document>
 				<style>
-					<style attr="mouse-cursor" condition="hoveredNode!=null &amp;&amp; hoveredNode.isActiveLink()">HAND</style>
+					<style attr="mouse-cursor" if="hoveredNode!=null &amp;&amp; hoveredNode.isActiveLink()">HAND</style>
 				</style>
 				<on-mouse-enter>app.qwysiwyg.controlPressed(ctrlPressed)</on-mouse-enter>
 				<on-key-press>app.qwysiwyg.controlPressed(ctrlPressed)</on-key-press>
@@ -80,13 +80,13 @@
 					<combo values="app.qwysiwyg.availableStyles" value="app.qwysiwyg.selectedStyle" />
 				</box>
 				<table rows="app.qwysiwyg.styleDebugValues" value-name="row">
-					<style attr="with-text.font-weight" condition="row!=null &amp;&amp; row.isActive()">`bold`</style>
+					<style attr="with-text.font-weight" if="row!=null &amp;&amp; row.isActive()">`bold`</style>
 					<column name="`Source File`" value="row.getSourceFile()">
 						<label value="columnValue" tooltip="row.getFullSourceFile()" />
 					</column>
 					<column name="`Source`" value="row.getSourceElement()">
 						<label value="columnValue">
-							<style condition="row!=null &amp;&amp; row.isSourceElementLink()">
+							<style if="row!=null &amp;&amp; row.isSourceElementLink()">
 								<style attr="underline">true</style>
 								<style attr="font-color">`blue`</style>
 							</style>
@@ -98,16 +98,16 @@
 							<dynamic-styled-document root="columnValue" children="node==null ? null : node.children"
 								post-text="node==null ? null : node.getPostText()">
 								<text-style>
-									<style attr="font-weight" condition="node!=null &amp;&amp; node.isBold()">`bold`</style>
+									<style attr="font-weight" if="node!=null &amp;&amp; node.isBold()">`bold`</style>
 									<style attr="font-color">node==null ? null : node.getFontColor()</style>
-									<style attr="underline" condition="node!=null &amp;&amp; node.isActiveLink()">true</style>
+									<style attr="underline" if="node!=null &amp;&amp; node.isActiveLink()">true</style>
 								</text-style>
 							</dynamic-styled-document>
 						</text-area>
 					</column>
 					<column name="`Value`" value="row.getValueExpression()" />
 					<column name="`Active Value`" value="row.getCurrentValue()">
-						<style attr="with-text.font-slant" condition="row!=null &amp;&amp; !row.isActive()">`italic`</style>
+						<style attr="with-text.font-slant" if="row!=null &amp;&amp; !row.isActive()">`italic`</style>
 					</column>
 				</table>
 			</box>

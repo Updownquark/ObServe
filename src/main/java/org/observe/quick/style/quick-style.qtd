@@ -56,7 +56,7 @@
 			<?DOC The attribute whose value to change when this style applies?>
 			<attribute name="attr" type="style-attr" specify="optional" />
 			<?DOC "The runtime condition for the style.  A style will only be applied when its condition, if present, is true."?>
-			<attribute name="condition" type="expression" specify="optional" />
+			<attribute name="if" type="expression" specify="optional" />
 			<?DOC The style set to apply when this style applies?>
 			<attribute name="style-set" type="string" specify="optional" />
 			<?DOC The value for the style's attribute, when it applies?>

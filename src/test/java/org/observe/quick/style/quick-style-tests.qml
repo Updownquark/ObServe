@@ -22,9 +22,9 @@
 			<a name="a0" a="models.m0" b="models.m2" c="models.m1" d="models.m4">
 				<style attr="s0">a</style>
 				<style attr="s1">c*10</style>
-				<style attr="s1" condition="a">models.m1</style>
-				<style attr="s1" condition="b">models.m3</style>
-				<style attr="s1" condition="a &amp;&amp; d">models.m1 + models.m3</style>
+				<style attr="s1" if="a">models.m1</style>
+				<style attr="s1" if="b">models.m3</style>
+				<style attr="s1" if="a &amp;&amp; d">models.m1 + models.m3</style>
 			</a>
 		</model>
 		<action>models.m0=true</action>
@@ -82,9 +82,9 @@
 			<a name="a0" a="models.m0" b="models.m2" c="models.m1" d="models.m4">
 				<style attr="s0">a</style>
 				<style attr="s1">c*10</style>
-				<style attr="s1" condition="a">models.m1</style>
-				<style attr="s1" condition="b">models.m3</style>
-				<style attr="s1" condition="a &amp;&amp; d">models.m1 + models.m3</style>
+				<style attr="s1" if="a">models.m1</style>
+				<style attr="s1" if="b">models.m3</style>
+				<style attr="s1" if="a &amp;&amp; d">models.m1 + models.m3</style>
 			</a>
 			<watch name="w_a0_s0">a0.s0</watch>
 			<watch name="w_a0_s1">a0.s1</watch>
@@ -189,19 +189,19 @@
 			<style element="a">
 				<style attr="s0">!a</style>
 				<style attr="s1">c</style>
-				<style condition="b">
+				<style if="b">
 					<style attr="s0">d</style>
 					<style attr="s1">c*100</style>
-					<style condition="d">
+					<style if="d">
 						<style attr="s1">c*1_000_000</style>
 					</style>
 				</style>
 			</style>
 			<style element="b">
-				<style attr="s3" condition="e">models.m3</style>
-				<style attr="s4" condition="!e">models.m1</style>
+				<style attr="s3" if="e">models.m3</style>
+				<style attr="s4" if="!e">models.m1</style>
 				<style child="a">
-					<style condition="e"> <!-- A child style dependent on an element model value from the parent -->
+					<style if="e"> <!-- A child style dependent on an element model value from the parent -->
 						<style attr="s1">f</style>
 					</style>
 				</style>
@@ -249,20 +249,20 @@
 		<model>
 			<!-- a1 has a copy of all the same styles as are contained in the style set -->
 			<a name="a1" a="models.m0" b="true" c="0" d="models.m2">
-				<style condition="a" attr="s1">217
-					<style condition="d">856</style>
+				<style if="a" attr="s1">217
+					<style if="d">856</style>
 				</style>
 			</a>
 			<!-- a2 uses the style set.  Its style is the same as a1 when the style set applies to it, i.e. when a is true -->
 			<a name="a2" a="models.m0" b="true" c="0" d="models.m2">
 				<style attr="s0">false</style>
-				<style condition="a" style-set="testStyle" />
+				<style if="a" style-set="testStyle" />
 			</a>
 		</model>
 		<style-sheet>
 			<style-set name="testStyle">
 				<style element="a" attr="s1">217
-					<style condition="d">856</style>
+					<style if="d">856</style>
 				</style>
 				<style element="a" attr="s0">true</style> <!-- Just to test multiple styles in a style set -->
 			</style-set>

@@ -2,7 +2,7 @@
 
 <style-sheet xmlns:qwysiwyg="QWYSIWYG v0.1" xmlns:quick-base="Quick-Base v0.1">
 	<style element="qwysiwyg-ed">
-		<style condition="qwysiwygHovered">
+		<style if="qwysiwygHovered">
 			<style element="with-text">
 				<style attr="font-weight">`ultra-bold`</style>
 				<style attr="font-color">`dark-violet`</style>
@@ -21,7 +21,7 @@
 			</style>
 		</style>
 
-		<style condition="qwysiwygHighlight>0">
+		<style if="qwysiwygHighlight>0">
 			<style element="with-text">
 				<style attr="font-weight">`bold`</style>
 				<style attr="font-color">
@@ -50,7 +50,7 @@
 			</style>
 		</style>
 
-		<style condition="qwysiwygSeverity==org.qommons.io.ErrorReporting.IssueSeverity.ERROR">
+		<style if="qwysiwygSeverity==org.qommons.io.ErrorReporting.IssueSeverity.ERROR">
 			<style element="with-text">
 				<style attr="font-weight">`ultra-bold`</style>
 				<style attr="font-color">`dark-red`</style>

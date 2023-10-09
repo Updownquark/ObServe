@@ -4,10 +4,10 @@
 	<style attr="widget.color">
 		<style element="tabular-widget">
 			<style child="columns">
-				<style condition="selected">`cornflower-blue`</style>
-				<style condition="rowIndex % 2 == 1">
+				<style if="selected">`cornflower-blue`</style>
+				<style if="rowIndex % 2 == 1">
 					<style>`light-gray`</style>
-					<style condition="selected">`steel-blue`</style>
+					<style if="selected">`steel-blue`</style>
 				</style>
 				<style>`white`</style>
 			</style>

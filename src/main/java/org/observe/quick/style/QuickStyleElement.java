@@ -75,7 +75,7 @@ public class QuickStyleElement<T> extends ExElement.Abstract {
 			return Collections.unmodifiableList(theRoles);
 		}
 
-		@QonfigAttributeGetter("condition")
+		@QonfigAttributeGetter("if")
 		public CompiledExpression getCondition() {
 			return theCondition;
 		}
@@ -208,7 +208,7 @@ public class QuickStyleElement<T> extends ExElement.Abstract {
 			}
 
 			ElementModelValue.Cache emvCache = session.getElementValueCache();
-			theCondition = session.getAttributeExpression("condition");
+			theCondition = session.getAttributeExpression("if");
 			if (theCondition != null) {
 				QonfigAttributeDef.Declared priorityAttr = QuickTypeStyle.getPriorityAttr(getQonfigType().getDeclarer());
 				application = application.forCondition(theCondition, session.getExpressoEnv().getModels(), priorityAttr, styleSheet != null,
