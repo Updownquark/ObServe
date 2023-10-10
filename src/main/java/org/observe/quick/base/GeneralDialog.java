@@ -38,8 +38,6 @@ public class GeneralDialog extends QuickContentDialog.Abstract {
 			super.doUpdate(session);
 			isModal = session.getAttribute("modal", boolean.class);
 			isAlwaysOnTop = session.getAttribute("always-on-top", boolean.class);
-			if (isModal && !isAlwaysOnTop)
-				reporting().warn("modal is true, but always-on-top is false.  Makes no sense.");
 		}
 
 		@Override
