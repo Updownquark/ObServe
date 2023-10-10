@@ -1024,9 +1024,16 @@ public class QuickBaseSwing implements QuickInterpretation {
 			}
 			TypeToken<BetterList<T>> pathType = TypeTokens.get().keyFor(BetterList.class)
 				.<BetterList<T>> parameterized(quick.getNodeType());
+			Map<BetterList<T>, ObservableCollection<? extends T>> childrenCache = new HashMap<>();
 			panel.addTree3(quick.getModel().getValue(), (parentPath, nodeUntil) -> {
+				ObservableCollection<? extends T> children = childrenCache.get(parentPath);
+				if (children != null)
+					return children;
 				try {
-					return quick.getModel().getChildren(ObservableValue.of(pathType, parentPath), nodeUntil);
+					children = quick.getModel().getChildren(ObservableValue.of(pathType, parentPath), nodeUntil);
+					childrenCache.put(parentPath, children);
+					nodeUntil.take(1).act(__ -> childrenCache.remove(parentPath));
+					return children;
 				} catch (ModelInstantiationException e) {
 					quick.reporting().error("Could not create children for " + parentPath, e);
 					return null;

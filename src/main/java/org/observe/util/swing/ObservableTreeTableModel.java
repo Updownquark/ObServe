@@ -23,7 +23,6 @@ import org.observe.Observable;
 import org.observe.SettableValue;
 import org.observe.collect.ObservableCollection;
 import org.observe.swingx.JXTreeTable;
-import org.qommons.ArrayUtils;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterList;
@@ -191,6 +190,15 @@ public class ObservableTreeTableModel<T> extends AbstractObservableTableModel<Be
 		return super.hookUp(table, ctx);
 	}
 
+	@Override
+	protected <C> void hookUpColumn(JTable table, TableColumn tblColumn, CategoryRenderStrategy<BetterList<T>, C> column,
+		TableRenderContext ctx, IntSupplier hoveredRow, IntSupplier hoveredColumn) {
+		super.hookUpColumn(table, tblColumn, column, ctx, hoveredRow, hoveredColumn);
+		JXTreeTable treeTable = (JXTreeTable) table;
+		if (tblColumn.getModelIndex() == treeTable.getTreeTableModel().getHierarchicalColumn())
+			treeTable.setTreeCellRenderer((TreeCellRenderer) tblColumn.getCellRenderer());
+	}
+
 	/**
 	 * Synchronizes a tree's selection model with a SettableValue whose value is a tree path (BetterList) of items in the tree
 	 *
@@ -253,8 +261,17 @@ public class ObservableTreeTableModel<T> extends AbstractObservableTableModel<Be
 					return;
 				else if (singularOnly && selModel.getSelectionCount() > 1)
 					return;
-				int selIdx = selModel.getLeadSelectionRow();
-				int found = ArrayUtils.binarySearch(0, e.getChildIndices().length, i -> Integer.compare(parentRow + i, selIdx));
+				TreePath selPath = selModel.getSelectionPath();
+				if (!selPath.isDescendant(e.getTreePath()) || selPath.getPathCount() == e.getTreePath().getPathCount())
+					return;
+				Object selNode = selPath.getPathComponent(e.getTreePath().getPathCount());
+				int found = -1;
+				for (int c = 0; c < e.getChildren().length; c++) {
+					if (e.getChildren()[c] == selNode) {
+						found = c;
+						break;
+					}
+				}
 				if (found < 0)
 					return;
 				callbackLock[0] = true;
@@ -358,14 +375,5 @@ public class ObservableTreeTableModel<T> extends AbstractObservableTableModel<Be
 	public static <T> void syncSelection(JXTreeTable tree, ObservableCollection<BetterList<T>> multiSelection, Observable<?> until) {
 		// TODO Auto-generated method stub
 		System.err.println("TreeTable multi-selection is not implemented yet");
-	}
-
-	@Override
-	protected <C> void hookUpColumn(JTable table, TableColumn tblColumn, CategoryRenderStrategy<BetterList<T>, C> column,
-		TableRenderContext ctx, IntSupplier hoveredRow, IntSupplier hoveredColumn) {
-		super.hookUpColumn(table, tblColumn, column, ctx, hoveredRow, hoveredColumn);
-		JXTreeTable treeTable = (JXTreeTable) table;
-		if (tblColumn.getModelIndex() == treeTable.getTreeTableModel().getHierarchicalColumn())
-			treeTable.setTreeCellRenderer((TreeCellRenderer) tblColumn.getCellRenderer());
 	}
 }

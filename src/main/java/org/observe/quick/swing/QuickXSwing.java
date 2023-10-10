@@ -250,9 +250,16 @@ public class QuickXSwing implements QuickInterpretation {
 				.map((Class<CategoryRenderStrategy<BetterList<T>, ?>>) (Class<?>) CategoryRenderStrategy.class, //
 					col -> col.getCRS())//
 				.collect();
+			Map<BetterList<T>, ObservableCollection<? extends T>> childrenCache = new HashMap<>();
 			panel.addTreeTable3(quick.getModel().getValue(), (parentPath, nodeUntil) -> {
+				ObservableCollection<? extends T> children = childrenCache.get(parentPath);
+				if (children != null)
+					return children;
 				try {
-					return quick.getModel().getChildren(ObservableValue.of(pathType, parentPath), nodeUntil);
+					children = quick.getModel().getChildren(ObservableValue.of(pathType, parentPath), nodeUntil);
+					childrenCache.put(parentPath, children);
+					nodeUntil.take(1).act(__ -> childrenCache.remove(parentPath));
+					return children;
 				} catch (ModelInstantiationException e) {
 					quick.reporting().error("Could not create children for " + parentPath, e);
 					return null;

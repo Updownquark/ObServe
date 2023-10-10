@@ -569,8 +569,17 @@ public abstract class ObservableTreeModel<T> implements TreeModel {
 					return;
 				else if (singularOnly && selModel.getSelectionCount() > 1)
 					return;
-				int selIdx = selModel.getLeadSelectionRow();
-				int found = ArrayUtils.binarySearch(0, e.getChildIndices().length, i -> Integer.compare(parentRow + i, selIdx));
+				TreePath selPath = selModel.getSelectionPath();
+				if (!selPath.isDescendant(e.getTreePath()) || selPath.getPathCount() == e.getTreePath().getPathCount())
+					return;
+				Object selNode = selPath.getPathComponent(e.getTreePath().getPathCount());
+				int found = -1;
+				for (int c = 0; c < e.getChildren().length; c++) {
+					if (e.getChildren()[c] == selNode) {
+						found = c;
+						break;
+					}
+				}
 				if (found < 0)
 					return;
 				callbackLock[0] = true;
