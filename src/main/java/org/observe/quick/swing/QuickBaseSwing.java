@@ -1431,32 +1431,29 @@ public class QuickBaseSwing implements QuickInterpretation {
 		Transformer<ExpressoInterpretationException> tx) throws ExpressoInterpretationException {
 		QuickSwingPopulator<QuickWidget> content = tx.transform(interpreted.getContent(), QuickSwingPopulator.class);
 		return new QuickSwingDialog<GeneralDialog>() {
-			private SettableValue<String> theTitle;
-			private PanelPopulation.WindowBuilder<JDialog, ?> theDialog;
-
 			@Override
 			public void initialize(GeneralDialog dialog, Component parent, Observable<?> until) throws ModelInstantiationException {
 				QuickWindow window = dialog.getAddOn(QuickWindow.class);
-				theTitle = window.getTitle();
+				SettableValue<String> title = window.getTitle();
 				JDialog jDialog = new JDialog(SwingUtilities.getWindowAncestor(parent), //
 					dialog.isModal() ? ModalityType.APPLICATION_MODAL : ModalityType.MODELESS);
 				if (!dialog.isModal())
 					jDialog.setAlwaysOnTop(dialog.isAlwaysOnTop());
-				theDialog = WindowPopulation.populateDialog(jDialog, until, false);
-				content.populate(new WindowContentPopulator(theDialog, until), dialog.getContent());
-				theDialog.withTitle(theTitle);
+				PanelPopulation.WindowBuilder<JDialog, ?> swingDialog = WindowPopulation.populateDialog(jDialog, until, false);
+				content.populate(new WindowContentPopulator(swingDialog, until), dialog.getContent());
+				swingDialog.withTitle(title);
 				if (window.getX() != null)
-					theDialog.withX(window.getX());
+					swingDialog.withX(window.getX());
 				if (window.getY() != null)
-					theDialog.withY(window.getY());
+					swingDialog.withY(window.getY());
 				if (window.getWidth() != null)
-					theDialog.withWidth(window.getWidth());
+					swingDialog.withWidth(window.getWidth());
 				if (window.getHeight() != null)
-					theDialog.withHeight(window.getHeight());
-				theDialog.withVisible(window.isVisible());
-				theDialog.disposeOnClose(false);
+					swingDialog.withHeight(window.getHeight());
+				swingDialog.withVisible(window.isVisible());
+				swingDialog.disposeOnClose(false);
 				EventQueue.invokeLater(() -> { // Do in an invoke later to allow the UI to come up before opening the dialog
-					theDialog.run(parent);
+					swingDialog.run(parent);
 				});
 			}
 		};

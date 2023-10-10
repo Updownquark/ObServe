@@ -598,7 +598,7 @@
 		</element-def>
 		<element-def name="general-dialog" extends="content-dialog" inherits="window">
 			<attribute name="modal" type="boolean" />
-			<attribute name="always-on-top" type="boolean" default="true" />
+			<attribute name="always-on-top" type="boolean" default="false" />
 		</element-def>
 
 		<!-- Miscellaneous -->
