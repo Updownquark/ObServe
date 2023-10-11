@@ -33,6 +33,7 @@ import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.expresso.qonfig.QonfigChildGetter;
 import org.observe.quick.QuickContainer;
+import org.observe.quick.QuickCoreInterpretation;
 import org.observe.quick.QuickWidget;
 import org.observe.util.TypeTokens;
 import org.qommons.collect.CollectionUtils;
@@ -140,7 +141,7 @@ public class QuickTabs<T> extends QuickContainer.Abstract<QuickWidget> {
 
 				theTabName = getDefinition().getTabName() == null ? null
 					: getDefinition().getTabName().interpret(ModelTypes.Value.STRING, env);
-				theTabIcon = getDefinition().getTabIcon() == null ? null : QuickBaseInterpretation
+				theTabIcon = getDefinition().getTabIcon() == null ? null : QuickCoreInterpretation
 					.evaluateIcon(getDefinition().getTabIcon(), env, getDefinition().getElement().getElement().getDocument().getLocation());
 				theOnSelect = getDefinition().getOnSelect() == null ? null
 					: getDefinition().getOnSelect().interpret(ModelTypes.Action.instance(), env);

@@ -42,6 +42,8 @@
 			<attribute name="width" type="expression" specify="optional" />
 			<?DOC The height of the window?>
 			<attribute name="height" type="expression" specify="optional" />
+			<?DOC The icon for the window?>
+			<attribute name="window-icon" type="expression" specify="optional" />
 			<?DOC The title for the window?>
 			<attribute name="close-action" type="window-close-action" default="hide" />
 		</add-on>

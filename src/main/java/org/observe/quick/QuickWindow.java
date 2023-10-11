@@ -1,5 +1,7 @@
 package org.observe.quick;
 
+import javax.swing.Icon;
+
 import org.observe.SettableValue;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.InterpretedExpressoEnv;
@@ -19,6 +21,7 @@ import org.qommons.config.QonfigInterpretationException;
 
 /** An add-on for an element that is to be a window */
 public class QuickWindow extends QuickAbstractWindow.Default {
+	/** The name of the Qonfig add-on this implements */
 	public static final String WINDOW = "window";
 
 	/** An action to perform when the user closes the window (e.g. clicks the "X") */
@@ -43,6 +46,7 @@ public class QuickWindow extends QuickAbstractWindow.Default {
 		private CompiledExpression theY;
 		private CompiledExpression theWidth;
 		private CompiledExpression theHeight;
+		private CompiledExpression theWindowIcon;
 		private CloseAction theCloseAction;
 
 		/**
@@ -77,6 +81,12 @@ public class QuickWindow extends QuickAbstractWindow.Default {
 			return theHeight;
 		}
 
+		/** @return The expression defining the icon of the window */
+		@QonfigAttributeGetter("window-icon")
+		public CompiledExpression getWindowIcon() {
+			return theWindowIcon;
+		}
+
 		/** @return The action to perform when the user closes the window */
 		@QonfigAttributeGetter("close-action")
 		public CloseAction getCloseAction() {
@@ -90,6 +100,7 @@ public class QuickWindow extends QuickAbstractWindow.Default {
 			theY = session.getAttributeExpression("y");
 			theWidth = session.getAttributeExpression("width");
 			theHeight = session.getAttributeExpression("height");
+			theWindowIcon = session.getAttributeExpression("window-icon");
 			String closeAction = session.getAttributeText("close-action");
 			switch (closeAction) {
 			case "do-nothing":
@@ -122,6 +133,7 @@ public class QuickWindow extends QuickAbstractWindow.Default {
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> theY;
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> theWidth;
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> theHeight;
+		private InterpretedValueSynth<SettableValue<?>, SettableValue<Icon>> theWindowIcon;
 
 		/**
 		 * @param definition The definition producing this interpretation
@@ -156,6 +168,11 @@ public class QuickWindow extends QuickAbstractWindow.Default {
 			return theHeight;
 		}
 
+		/** @return The expression defining the icon to display for the window */
+		public InterpretedValueSynth<SettableValue<?>, SettableValue<Icon>> getWindowIcon() {
+			return theWindowIcon;
+		}
+
 		@Override
 		public void update(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 			super.update(env);
@@ -163,6 +180,8 @@ public class QuickWindow extends QuickAbstractWindow.Default {
 			theY = getDefinition().getY() == null ? null : getDefinition().getY().interpret(ModelTypes.Value.INT, env);
 			theWidth = getDefinition().getWidth() == null ? null : getDefinition().getWidth().interpret(ModelTypes.Value.INT, env);
 			theHeight = getDefinition().getHeight() == null ? null : getDefinition().getHeight().interpret(ModelTypes.Value.INT, env);
+			theWindowIcon = getDefinition().getWindowIcon() == null ? null : QuickCoreInterpretation
+				.evaluateIcon(getDefinition().getWindowIcon(), env, getDefinition().getElement().getElement().getDocument().getLocation());
 		}
 
 		@Override
@@ -180,11 +199,13 @@ public class QuickWindow extends QuickAbstractWindow.Default {
 	private ModelValueInstantiator<SettableValue<Integer>> theYInstantiator;
 	private ModelValueInstantiator<SettableValue<Integer>> theWidthInstantiator;
 	private ModelValueInstantiator<SettableValue<Integer>> theHeightInstantiator;
+	private ModelValueInstantiator<SettableValue<Icon>> theWindowIconInstantiator;
 	private CloseAction theCloseAction;
 	private SettableValue<Integer> theX;
 	private SettableValue<Integer> theY;
 	private SettableValue<Integer> theWidth;
 	private SettableValue<Integer> theHeight;
+	private SettableValue<Icon> theWindowIcon;
 
 	/** @param element The element that this add-on is added onto */
 	public QuickWindow(ExElement element) {
@@ -196,6 +217,7 @@ public class QuickWindow extends QuickAbstractWindow.Default {
 		return Interpreted.class;
 	}
 
+	/** @return The action to take when the user closes the window */
 	public CloseAction getCloseAction() {
 		return theCloseAction;
 	}
@@ -220,6 +242,11 @@ public class QuickWindow extends QuickAbstractWindow.Default {
 		return theHeight;
 	}
 
+	/** @return The icon to display for the window */
+	public SettableValue<Icon> getWindowIcon() {
+		return theWindowIcon;
+	}
+
 	@Override
 	public void update(ExAddOn.Interpreted<?, ?> interpreted) {
 		super.update(interpreted);
@@ -229,6 +256,7 @@ public class QuickWindow extends QuickAbstractWindow.Default {
 		theYInstantiator = myInterpreted.getY() == null ? null : myInterpreted.getY().instantiate();
 		theWidthInstantiator = myInterpreted.getWidth() == null ? null : myInterpreted.getWidth().instantiate();
 		theHeightInstantiator = myInterpreted.getHeight() == null ? null : myInterpreted.getHeight().instantiate();
+		theWindowIconInstantiator = myInterpreted.getWindowIcon() == null ? null : myInterpreted.getWindowIcon().instantiate();
 	}
 
 	@Override
@@ -239,5 +267,6 @@ public class QuickWindow extends QuickAbstractWindow.Default {
 		theY = theYInstantiator == null ? null : theYInstantiator.get(models);
 		theWidth = theWidthInstantiator == null ? null : theWidthInstantiator.get(models);
 		theHeight = theHeightInstantiator == null ? null : theHeightInstantiator.get(models);
+		theWindowIcon = theWindowIconInstantiator == null ? null : theWindowIconInstantiator.get(models);
 	}
 }

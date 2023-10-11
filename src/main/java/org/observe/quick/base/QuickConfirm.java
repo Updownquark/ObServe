@@ -17,6 +17,7 @@ import org.observe.expresso.qonfig.ExElementTraceable;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.quick.QuickContentDialog;
+import org.observe.quick.QuickCoreInterpretation;
 import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
@@ -100,7 +101,7 @@ public class QuickConfirm extends QuickContentDialog.Abstract {
 			theOnConfirm = getDefinition().getOnConfirm().interpret(ModelTypes.Action.instance(), expressoEnv);
 			theOnCancel = getDefinition().getOnCancel() == null ? null
 				: getDefinition().getOnCancel().interpret(ModelTypes.Action.instance(), expressoEnv);
-			theIcon = QuickBaseInterpretation.evaluateIcon(getDefinition().getIcon(), expressoEnv,
+			theIcon = QuickCoreInterpretation.evaluateIcon(getDefinition().getIcon(), expressoEnv,
 				getDefinition().getElement().getDocument().getLocation());
 		}
 

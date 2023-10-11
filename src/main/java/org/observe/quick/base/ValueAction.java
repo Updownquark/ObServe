@@ -21,6 +21,7 @@ import org.observe.expresso.qonfig.ExFlexibleElementModelAddOn;
 import org.observe.expresso.qonfig.ExWithElementModel;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
+import org.observe.quick.QuickCoreInterpretation;
 import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
@@ -198,7 +199,7 @@ public interface ValueAction<T> extends ExElement {
 				super.doUpdate(env);
 				theName = getDefinition().getName() == null ? null
 					: getDefinition().getName().interpret(ModelTypes.Value.STRING, getExpressoEnv());
-				theIcon = getDefinition().getIcon() == null ? null : QuickBaseInterpretation.evaluateIcon(getDefinition().getIcon(),
+				theIcon = getDefinition().getIcon() == null ? null : QuickCoreInterpretation.evaluateIcon(getDefinition().getIcon(),
 					getExpressoEnv(), getDefinition().getElement().getDocument().getLocation());
 				isEnabled = getDefinition().isEnabled() == null ? null
 					: getDefinition().isEnabled().interpret(ModelTypes.Value.STRING, getExpressoEnv());

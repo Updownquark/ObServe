@@ -1458,6 +1458,7 @@ public class QuickBaseSwing implements QuickInterpretation {
 				if (window.getHeight() != null)
 					swingDialog.withHeight(window.getHeight());
 				swingDialog.withVisible(window.isVisible());
+				QuickCoreSwing.applyIcon(swingDialog, window);
 				swingDialog.disposeOnClose(false);
 				EventQueue.invokeLater(() -> { // Do in an invoke later to allow the UI to come up before opening the dialog
 					swingDialog.run(parent);

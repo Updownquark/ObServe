@@ -11,6 +11,7 @@ import java.awt.event.MouseListener;
 import java.awt.event.MouseWheelEvent;
 import java.awt.font.FontRenderContext;
 import java.awt.font.TextAttribute;
+import java.awt.image.BufferedImage;
 import java.lang.reflect.InvocationTargetException;
 import java.util.Collections;
 import java.util.HashMap;
@@ -23,6 +24,8 @@ import java.util.function.IntSupplier;
 import java.util.function.Supplier;
 import java.util.function.ToIntFunction;
 
+import javax.swing.Icon;
+import javax.swing.ImageIcon;
 import javax.swing.JComponent;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
@@ -38,6 +41,7 @@ import org.observe.Subscription;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.expresso.qonfig.ExAddOn;
+import org.observe.expresso.qonfig.ExElement;
 import org.observe.quick.*;
 import org.observe.quick.QuickTextElement.QuickTextStyle;
 import org.observe.quick.swing.QuickSwingPopulator.QuickSwingBorder;
@@ -589,7 +593,67 @@ public class QuickCoreSwing implements QuickInterpretation {
 				window.withTitle(quick.getTitle());
 			if (quick.isVisible() != null)
 				window.withVisible(quick.isVisible());
+			applyIcon(window, quick);
 		}
+	}
+
+	public static void applyIcon(WindowBuilder<?, ?> window, QuickWindow quckWindow) {
+		if (quckWindow.getWindowIcon() != null)
+			applyIcon(window, quckWindow.getWindowIcon());
+		else {
+			ExElement parent = quckWindow.getElement().getParentElement();
+			QuickWindow parentWindow = parent.getAddOn(QuickWindow.class);
+			while (parent != null && (parentWindow == null || parentWindow.getWindowIcon() == null)) {
+				parent = parent.getParentElement();
+				parentWindow = parent == null ? null : parent.getAddOn(QuickWindow.class);
+			}
+			if (parentWindow != null && parentWindow.getWindowIcon() != null)
+				applyIcon(window, parentWindow.getWindowIcon());
+		}
+	}
+
+	public static void applyIcon(WindowBuilder<?, ?> window, SettableValue<Icon> windowIcon) {
+		window.withIcon(windowIcon.map(icon -> {
+			if (icon == null)
+				return null;
+			else if (icon instanceof ImageIcon)
+				return ((ImageIcon) icon).getImage();
+			else {
+				BufferedImage image = new BufferedImage(icon.getIconWidth(), icon.getIconHeight(), BufferedImage.TYPE_4BYTE_ABGR);
+				icon.paintIcon(window.getWindow(), image.getGraphics(), 0, 0);
+				return image;
+			}
+		}));
+	}
+
+	public static void applyIcon(Window window, QuickWindow quckWindow, Observable<?> until) {
+		if (quckWindow.getWindowIcon() != null)
+			applyIcon(window, quckWindow.getWindowIcon(), until);
+		else {
+			ExElement parent = quckWindow.getElement().getParentElement();
+			QuickWindow parentWindow = parent.getAddOn(QuickWindow.class);
+			while (parent != null && (parentWindow == null || parentWindow.getWindowIcon() == null)) {
+				parent = parent.getParentElement();
+				parentWindow = parent == null ? null : parent.getAddOn(QuickWindow.class);
+			}
+			if (parentWindow != null && parentWindow.getWindowIcon() != null)
+				applyIcon(window, parentWindow.getWindowIcon(), until);
+		}
+	}
+
+	public static void applyIcon(Window window, SettableValue<Icon> windowIcon, Observable<?> until) {
+		windowIcon.changes().takeUntil(until).act(evt -> {
+			Icon icon = evt.getNewValue();
+			if (icon == null)
+				window.setIconImages(Collections.emptyList());
+			else if (icon instanceof ImageIcon)
+				window.setIconImage(((ImageIcon) icon).getImage());
+			else {
+				BufferedImage image = new BufferedImage(icon.getIconWidth(), icon.getIconHeight(), BufferedImage.TYPE_4BYTE_ABGR);
+				icon.paintIcon(window, image.getGraphics(), 0, 0);
+				window.setIconImage(image);
+			}
+		});
 	}
 
 	public static ToIntFunction<Point> getTextOffset(Component component) {
