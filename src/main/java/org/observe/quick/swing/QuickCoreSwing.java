@@ -248,7 +248,9 @@ public class QuickCoreSwing implements QuickInterpretation {
 						if (propertyManager[0] != null) {
 							propertyManager[0].setFont(pmDecorator::adjust);
 							propertyManager[0].setForeground(pmDecorator.getForeground());
-							propertyManager[0].setBackground(color.get());
+							Color bg = color.get();
+							propertyManager[0].setBackground(bg);
+							propertyManager[0].setOpaque(bg == null ? null : true);
 						}
 						if (component[0] != null) {
 							if (!renderer && !isRendering())

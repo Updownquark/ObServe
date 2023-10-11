@@ -129,6 +129,7 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 	private final LocatedExpression theCondition;
 	private final Map<ElementModelValue.Identity, Integer> theModelValues;
 	private final long thePriority;
+	private final int theConditionComplexity;
 
 	private StyleApplicationDef(StyleApplicationDef parent, QonfigChildDef role, MultiInheritanceSet<QonfigElementOrAddOn> types,
 		LocatedExpression condition, Map<ElementModelValue.Identity, Integer> modelValues) {
@@ -154,6 +155,7 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 		}
 		theTypeComplexity = localComplexity + (theParent == null ? 0 : theParent.getTypeComplexity());
 		thePriority = modelValues.values().stream().mapToLong(Integer::longValue).sum();
+		theConditionComplexity = condition == null ? 0 : getComplexity(condition.getExpression());
 	}
 
 	private static void addHierarchy(QonfigElementOrAddOn type, Set<QonfigElementOrAddOn> visited) {
@@ -442,6 +444,13 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 		}
 	}
 
+	private static int getComplexity(ObservableExpression ex) {
+		int complexity = 1;
+		for (ObservableExpression child : ex.getComponents())
+			complexity += getComplexity(child);
+		return complexity;
+	}
+
 	/**
 	 * Conditionless application test
 	 *
@@ -520,6 +529,11 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 		return theModelValues;
 	}
 
+	/** @return A heuristic of the complexity of this application's {@link #getCondition() condition} */
+	public int getConditionComplexity() {
+		return theConditionComplexity;
+	}
+
 	@Override
 	public int compareTo(StyleApplicationDef o) {
 		int comp;
@@ -533,6 +547,13 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 		// Compare the complexity of the element type
 		if (comp == 0)
 			comp = -Integer.compare(getTypeComplexity(), o.getTypeComplexity());
+
+		// Compare the logical complexity of the condition.
+		// This is somewhat fuzzy (e.g. a parenthetic expression "(expr)" will show as more complex than its content alone "expr"),
+		// but still valuable.
+		if (comp == 0)
+			comp = -Integer.compare(getConditionComplexity(), o.getConditionComplexity());
+
 		return comp;
 	}
 

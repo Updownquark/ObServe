@@ -1041,7 +1041,7 @@ class QuickSwingTablePopulation {
 						return textArea[0];
 					}
 				};
-				theEditor.delegateTo(delegate);
+				theRenderer.delegateTo(delegate);
 			} else
 				unsupported("Text Area");
 			return this;
@@ -1298,7 +1298,7 @@ class QuickSwingTablePopulation {
 		}
 
 		class ButtonRenderEditor<B extends AbstractButton, E extends ButtonRenderEditor<B, E>> extends AbstractFieldRenderEditor<B, E>
-			implements ButtonEditor<B, E> {
+		implements ButtonEditor<B, E> {
 			ObservableValue<String> theButtonText;
 			private ObservableValue<? extends Icon> theIcon;
 			private ObservableValue<String> theDisabled;
