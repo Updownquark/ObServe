@@ -80,6 +80,10 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 		}
 	}, Collections.emptyMap());
 
+	/**
+	 * The {@link ObservableModelSet#getTagValue(ModelTag) model tag} that the styled {@link QonfigElement} will be stored in to enable
+	 * hierarchical style values
+	 */
 	public static final ModelTag<QonfigElement> STYLED_ELEMENT_TAG = ModelTag.of(QonfigElement.class.getSimpleName(),
 		TypeTokens.get().of(QonfigElement.class));
 	private static final Map<ElementModelValue.Identity, Integer> MODEL_VALUE_PRIORITY = new WeakHashMap<>();
@@ -175,7 +179,7 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 	 * @param styleSheet Whether the expression is from a style sheet. Model values that do not declare their
 	 *        {@link org.observe.expresso.qonfig.ElementModelValue.Identity#getType() type} cannot be used as conditions in style sheets.
 	 * @param dmvCache The model value cache to use
-	 * @param reporting
+	 * @param reporting The error reporting to report errors to
 	 * @return The expression to use in place of the given condition
 	 * @throws QonfigInterpretationException If a type-less condition is used from a style sheet
 	 */
@@ -183,7 +187,7 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 		ObservableModelSet models, QonfigToolkit expresso, boolean styleSheet, ElementModelValue.Cache dmvCache, ErrorReporting reporting)
 			throws QonfigInterpretationException {
 		ObservableExpression expression;
-		expression = _findModelValues(ex.getExpression(), modelValues, models, expresso, styleSheet, dmvCache, 0, reporting);
+		expression = _findModelValues(ex.getExpression(), modelValues, models, expresso, styleSheet, dmvCache, reporting);
 		if (expression == ex.getExpression())
 			return ex;
 		return new LocatedExpression() {
@@ -232,8 +236,8 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 	}
 
 	private ObservableExpression _findModelValues(ObservableExpression ex, Collection<ElementModelValue.Identity> modelValues,
-		ObservableModelSet models, QonfigToolkit expresso, boolean styleSheet, ElementModelValue.Cache dmvCache, int expressionOffset,
-		ErrorReporting reporting) throws QonfigInterpretationException {
+		ObservableModelSet models, QonfigToolkit expresso, boolean styleSheet, ElementModelValue.Cache dmvCache, ErrorReporting reporting)
+			throws QonfigInterpretationException {
 		if (ex instanceof ModelValueExpression) {
 			modelValues.add(((ModelValueExpression) ex).getModelValue());
 		} else if (ex instanceof NameExpression && ((NameExpression) ex).getContext() == null) {
@@ -256,16 +260,13 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 			}
 		} else {
 			IdentityHashMap<ObservableExpression, ObservableExpression>[] replace = new IdentityHashMap[1];
-			int c = 0;
 			for (ObservableExpression child : ex.getComponents()) {
-				ObservableExpression newChild = _findModelValues(child, modelValues, models, expresso, styleSheet, dmvCache, //
-					ex.getComponentOffset(c), reporting);
+				ObservableExpression newChild = _findModelValues(child, modelValues, models, expresso, styleSheet, dmvCache, reporting);
 				if (newChild != child) {
 					if (replace[0] == null)
 						replace[0] = new IdentityHashMap<>();
 					replace[0].put(child, newChild);
 				}
-				c++;
 			}
 			if (replace[0] != null) {
 				return ex.replaceAll(child -> {
@@ -663,6 +664,7 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 	 * @param priorityAttr The style-model-value.priority attribute from the Quick-Style toolkit
 	 * @param styleSheet Whether the application is defined from a style-sheet, as opposed to inline under the element
 	 * @param dmvCache The model value cache to use
+	 * @param reporting The error reporting to report errors to
 	 * @return A {@link StyleApplicationDef} that applies to {@link QonfigElement}s that this application applies to <b>AND</b> whose model
 	 *         passes the given condition
 	 * @throws QonfigInterpretationException If the condition uses any unusable model values, such as un-typed {@link ElementModelValue
@@ -957,6 +959,10 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 		return new InterpretedStyleApplication(parent, this, condition);
 	}
 
+	/**
+	 * @param models The models to get the parent of
+	 * @return The models that are the parent of the given model, to get inherited style values from
+	 */
 	public static InterpretedModelSet getParentModel(InterpretedModelSet models) {
 		// Get the models for the most recent styled ancestor element
 		QonfigElement element = models.getTagValue(STYLED_ELEMENT_TAG);

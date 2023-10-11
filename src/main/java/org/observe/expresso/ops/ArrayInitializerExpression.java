@@ -49,10 +49,12 @@ import com.google.common.reflect.TypeToken;
 public class ArrayInitializerExpression implements ObservableExpression {
 	private final List<ObservableExpression> theValues;
 
+	/** @param values The values in the array initializer */
 	public ArrayInitializerExpression(List<ObservableExpression> values) {
 		theValues = values;
 	}
 
+	/** @return The values in the array initializer */
 	public List<ObservableExpression> getValues() {
 		return theValues;
 	}

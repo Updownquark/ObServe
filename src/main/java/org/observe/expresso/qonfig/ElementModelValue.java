@@ -55,6 +55,7 @@ public interface ElementModelValue<M> extends ObservableModelSet.IdentifiableCom
 		 * @param sourceAttribute If defined, the this value will be that evaluated from this expression-typed attribute
 		 * @param sourceValue If true, this value will be that evaluated from the expression-typed {@link QonfigElement#getValue()} of the
 		 *        element
+		 * @param value The value expression of the element value, if specified
 		 * @param declaration The element that declares this value
 		 */
 		public Identity(QonfigElementOrAddOn owner, String name, QonfigChildDef sourceChild, QonfigAttributeDef nameAttribute,
@@ -113,6 +114,7 @@ public interface ElementModelValue<M> extends ObservableModelSet.IdentifiableCom
 			return isSourceValue;
 		}
 
+		/** @return The value expression of the element value, if specified */
 		public CompiledExpression getValue() {
 			return theValue;
 		}
@@ -184,7 +186,9 @@ public interface ElementModelValue<M> extends ObservableModelSet.IdentifiableCom
 		 * @param expresso The toolkit to get expresso types from
 		 * @param type The element type to get the dynamic values for
 		 * @param values The map to add the dynamic values into
+		 * @param reporting The error reporting to report errors to
 		 * @return The identities/definitions of all dynamic values defined on the given type, grouped by name/name attribute
+		 * @throws QonfigInterpretationException If an element value's type cannot be parsed
 		 */
 		public Map<String, Identity> getDynamicValues(QonfigToolkit expresso, QonfigElementOrAddOn type, Map<String, Identity> values,
 			ErrorReporting reporting) throws QonfigInterpretationException {
