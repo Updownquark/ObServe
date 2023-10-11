@@ -183,6 +183,7 @@ public class ExpressoBaseV0_1 implements QonfigInterpretation {
 		interpreter.createWith("event", ModelValueElement.CompiledSynth.class, ExElement.creator(ExpressoQonfigValues.Event::new));
 		interpreter.createWith("action-group", ModelValueElement.CompiledSynth.class, ExElement.creator(ExpressoQonfigValues.ActionGroup::new));
 		interpreter.createWith("loop", ModelValueElement.CompiledSynth.class, ExElement.creator(ExpressoQonfigValues.Loop::new));
+		interpreter.createWith("timer", ModelValueElement.CompiledSynth.class, ExElement.creator(ExpressoQonfigValues.Timer::new));
 		interpreter.createWith("value-set", CompiledModelValue.class, ExElement.creator(ExpressoQonfigValues.ValueSet::new));
 		interpreter.createWith("element", ExpressoQonfigValues.CollectionElement.class,
 			ExElement.creator(ExpressoQonfigValues.CollectionElement::new));

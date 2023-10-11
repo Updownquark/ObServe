@@ -305,12 +305,28 @@ It builds on the Expresso-Core specification and contains everything needed for 
 			<child-def name="body" type="action" min="0" max="inf" />
 		</element-def>
 
+		<?DOC This structure is expressed as a value which is the Instant of the last time the timer executed
+			(or the start of the current execution if it is currently executing)?>
 		<element-def name="timer" extends="model-value" inherits="with-local-model">
 			<attribute name="active" type="expression" default="true" />
 			<attribute name="frequency" type="expression" />
 			<attribute name="strict-timing" type="boolean" default="false" />
-			<?DOC ?>
-			<attribute name="run-next" type="expression" specify="optional" />
+			<?DOC Each time the timer executes and this value is not null, it is decremented.  When the value reaches zero, the timer will deactivate.?>
+			<attribute name="remaining-executions" type="expression" specify="optional" />
+			<?DOC If this instant is not null, the timer will deactivate after this time?>
+			<attribute name="until" type="expression" specify="optional" />
+			<?DOC Whenever this duration value is assigned, the timer will activate (if inactive) and execute next at the given duration after the current time?>
+			<attribute name="run-next-in" type="expression" specify="optional" />
+			<?DOC Each time the timer executes, this value is assigned to the time of the next scheduled execution,
+				or null if the timer is not scheduled to execute again.<br>
+				If this value is assigned, the timer will activate (if it is not active) and then execute next at the given time?>
+			<attribute name="next-execution" type="expression" specify="optional" />
+			<?DOC Each time the timer executes, this value is incremented.?>
+			<attribute name="execution-count" type="expression" specify="optional" />
+			<?DOC This value is assigned to true while the timer is executing, then reset to false?>
+			<attribute name="executing" type="expression" specify="optional" />
+			<?DOC An action to perform each time the timer executes?>
+			<value type="expression" specify="optional" />
 		</element-def>
 	</elements>
 

@@ -1,5 +1,7 @@
 package org.observe.expresso.qonfig;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -14,6 +16,7 @@ import org.observe.ObservableAction;
 import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.SettableValue;
+import org.observe.SettableValue.WrappingSettableValue;
 import org.observe.assoc.ObservableMap;
 import org.observe.assoc.ObservableMultiMap;
 import org.observe.assoc.ObservableSortedMap;
@@ -54,15 +57,16 @@ import org.qommons.collect.BetterMap;
 import org.qommons.collect.BetterMultiMap;
 import org.qommons.collect.CollectionUtils;
 import org.qommons.collect.FastFailLockingStrategy;
+import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 import org.qommons.io.ErrorReporting;
+import org.qommons.threading.QommonsTimer;
 
 import com.google.common.reflect.TypeToken;
 
 public class ExpressoQonfigValues {
-	private ExpressoQonfigValues() {
-	}
+	private ExpressoQonfigValues() {}
 
 	public static abstract class AbstractCompiledValue<E extends AbstractCompiledValue.Element<?>>
 	extends ModelValueElement.Def.SingleTyped<SettableValue<?>, E> implements ModelValueElement.CompiledSynth<SettableValue<?>, E> {
@@ -1024,8 +1028,7 @@ public class ExpressoQonfigValues {
 		}
 
 		@Override
-		protected void doPrepare(ExpressoQIS session) {
-		}
+		protected void doPrepare(ExpressoQIS session) {}
 
 		@Override
 		public Interpreted<?, ?, M> interpret() {
@@ -2401,8 +2404,7 @@ public class ExpressoQonfigValues {
 			}
 
 			@Override
-			public void instantiate() {
-			}
+			public void instantiate() {}
 
 			@Override
 			public ObservableValueSet<T> get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
@@ -2418,6 +2420,475 @@ public class ExpressoQonfigValues {
 			public ObservableValueSet<T> forModelCopy(ObservableValueSet<T> value, ModelSetInstance sourceModels,
 				ModelSetInstance newModels) throws ModelInstantiationException {
 				return value;
+			}
+		}
+	}
+
+	@ExElementTraceable(toolkit = ExpressoBaseV0_1.BASE, qonfigType = Timer.TIMER, interpretation = Timer.Interpreted.class)
+	static class Timer
+	extends ModelValueElement.Def.SingleTyped<SettableValue<?>, ModelValueElement<SettableValue<?>, SettableValue<Instant>>>
+	implements ModelValueElement.CompiledSynth<SettableValue<?>, ModelValueElement<SettableValue<?>, SettableValue<Instant>>> {
+		public static final String TIMER = "timer";
+
+		private CompiledExpression isActive;
+		private CompiledExpression theFrequency;
+		private boolean isStrictTiming;
+		private CompiledExpression theRemainingExecutions;
+		private CompiledExpression theUntil;
+		private CompiledExpression theRunNextIn;
+		private CompiledExpression theNextExecution;
+		private CompiledExpression theExecutionCount;
+		private CompiledExpression isExecuting;
+
+		public Timer(Def<?> parent, QonfigElementOrAddOn qonfigType) {
+			super(parent, qonfigType, ModelTypes.Value);
+		}
+
+		@QonfigAttributeGetter("active")
+		public CompiledExpression isActive() {
+			return isActive;
+		}
+
+		@QonfigAttributeGetter("frequency")
+		public CompiledExpression getFrequency() {
+			return theFrequency;
+		}
+
+		@QonfigAttributeGetter("strict-timing")
+		public boolean isStrictTiming() {
+			return isStrictTiming;
+		}
+
+		@QonfigAttributeGetter("remaining-executions")
+		public CompiledExpression getRemainingExecutions() {
+			return theRemainingExecutions;
+		}
+
+		@QonfigAttributeGetter("until")
+		public CompiledExpression getUntil() {
+			return theUntil;
+		}
+
+		@QonfigAttributeGetter("run-next-in")
+		public CompiledExpression getRunNextIn() {
+			return theRunNextIn;
+		}
+
+		@QonfigAttributeGetter("next-execution")
+		public CompiledExpression getNextExecution() {
+			return theNextExecution;
+		}
+
+		@QonfigAttributeGetter("execution-count")
+		public CompiledExpression getExecutionCount() {
+			return theExecutionCount;
+		}
+
+		@QonfigAttributeGetter("executing")
+		public CompiledExpression isExecuting() {
+			return isExecuting;
+		}
+
+		@Override
+		protected void doPrepare(ExpressoQIS session) throws QonfigInterpretationException {
+			isActive = session.getAttributeExpression("active");
+			theFrequency = session.getAttributeExpression("frequency");
+			isStrictTiming = session.getAttribute("strict-timing", boolean.class);
+			theRemainingExecutions = session.getAttributeExpression("remaining-executions");
+			theUntil = session.getAttributeExpression("until");
+			theRunNextIn = session.getAttributeExpression("run-next-in");
+			theNextExecution = session.getAttributeExpression("next-execution");
+			theExecutionCount = session.getAttributeExpression("execution-count");
+			isExecuting = session.getAttributeExpression("executing");
+		}
+
+		@Override
+		public Interpreted interpret() {
+			return new Interpreted(this);
+		}
+
+		static class Interpreted extends
+		ModelValueElement.Def.SingleTyped.Interpreted<SettableValue<?>, SettableValue<Instant>, ModelValueElement<SettableValue<?>, SettableValue<Instant>>>
+		implements
+		ModelValueElement.InterpretedSynth<SettableValue<?>, SettableValue<Instant>, ModelValueElement<SettableValue<?>, SettableValue<Instant>>> {
+			private InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> isActive;
+			private InterpretedValueSynth<SettableValue<?>, SettableValue<Duration>> theFrequency;
+			private InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> theRemainingExecutions;
+			private InterpretedValueSynth<SettableValue<?>, SettableValue<Instant>> theUntil;
+			private InterpretedValueSynth<SettableValue<?>, SettableValue<Duration>> theRunNextIn;
+			private InterpretedValueSynth<SettableValue<?>, SettableValue<Instant>> theNextExecution;
+			private InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> theExecutionCount;
+			private InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> isExecuting;
+
+			Interpreted(Timer definition) {
+				super(definition, null);
+			}
+
+			@Override
+			public Timer getDefinition() {
+				return (Timer) super.getDefinition();
+			}
+
+			@Override
+			public Interpreted setParentElement(ExElement.Interpreted<?> parent) {
+				super.setParentElement(parent);
+				return this;
+			}
+
+			@Override
+			public ModelInstanceType<SettableValue<?>, SettableValue<Instant>> getType() {
+				return ModelTypes.Value.forType(Instant.class);
+			}
+
+			// A little hacky here because the type of the element value (action) isn't the same as the type of this element
+			// (value<Instant>)
+			// The super class doesn't expect this situation
+			@Override
+			protected ModelInstanceType<SettableValue<?>, SettableValue<Instant>> getTargetType() {
+				return (ModelInstanceType<SettableValue<?>, SettableValue<Instant>>) (ModelInstanceType<?, ?>) ModelTypes.Action.instance();
+			}
+
+			public InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> isActive() {
+				return isActive;
+			}
+
+			public InterpretedValueSynth<SettableValue<?>, SettableValue<Duration>> getFrequency() {
+				return theFrequency;
+			}
+
+			public InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> getRemainingExecutions() {
+				return theRemainingExecutions;
+			}
+
+			public InterpretedValueSynth<SettableValue<?>, SettableValue<Instant>> getUntil() {
+				return theUntil;
+			}
+
+			public InterpretedValueSynth<SettableValue<?>, SettableValue<Duration>> getRunNextIn() {
+				return theRunNextIn;
+			}
+
+			public InterpretedValueSynth<SettableValue<?>, SettableValue<Instant>> getNextExecution() {
+				return theNextExecution;
+			}
+
+			public InterpretedValueSynth<SettableValue<?>, SettableValue<Integer>> getExecutionCount() {
+				return theExecutionCount;
+			}
+
+			public InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> isExecuting() {
+				return isExecuting;
+			}
+
+			@Override
+			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+				super.doUpdate(env);
+
+				isActive = getDefinition().isActive().interpret(ModelTypes.Value.BOOLEAN, env);
+				theFrequency = getDefinition().getFrequency().interpret(ModelTypes.Value.forType(Duration.class), env);
+				theRemainingExecutions = getDefinition().getRemainingExecutions() == null ? null
+					: getDefinition().getRemainingExecutions().interpret(ModelTypes.Value.INT, env);
+				theUntil = getDefinition().getUntil() == null ? null
+					: getDefinition().getUntil().interpret(ModelTypes.Value.forType(Instant.class), env);
+				theRunNextIn = getDefinition().getRunNextIn() == null ? null
+					: getDefinition().getRunNextIn().interpret(ModelTypes.Value.forType(Duration.class), env);
+				theNextExecution = getDefinition().getNextExecution() == null ? null
+					: getDefinition().getNextExecution().interpret(ModelTypes.Value.forType(Instant.class), env);
+				theExecutionCount = getDefinition().getExecutionCount() == null ? null
+					: getDefinition().getExecutionCount().interpret(ModelTypes.Value.INT, env);
+				isExecuting = getDefinition().isExecuting() == null ? null
+					: getDefinition().isExecuting().interpret(ModelTypes.Value.BOOLEAN, env);
+			}
+
+			@Override
+			public List<? extends InterpretedValueSynth<?, ?>> getComponents() {
+				return BetterList.of(Stream.of(isActive, theFrequency, theRemainingExecutions, theUntil, theRunNextIn, theNextExecution,
+					theExecutionCount, isExecuting, getElementValue()).filter(Objects::nonNull));
+			}
+
+			@Override
+			public ModelValueInstantiator<SettableValue<Instant>> instantiate() {
+				return new Instantiator(this);
+			}
+		}
+
+		static class Instantiator implements ModelValueInstantiator<SettableValue<Instant>> {
+			private final ModelValueInstantiator<SettableValue<Boolean>> isActive;
+			private final ModelValueInstantiator<SettableValue<Duration>> theFrequency;
+			private final boolean isStrictTiming;
+			private final ModelValueInstantiator<SettableValue<Integer>> theRemainingExecutions;
+			private final ModelValueInstantiator<SettableValue<Instant>> theUntil;
+			private final ModelValueInstantiator<SettableValue<Duration>> theRunNextIn;
+			private final ModelValueInstantiator<SettableValue<Instant>> theNextExecution;
+			private final ModelValueInstantiator<SettableValue<Integer>> theExecutionCount;
+			private final ModelValueInstantiator<SettableValue<Boolean>> isExecuting;
+			private final ModelValueInstantiator<ObservableAction> theAction;
+			private final ErrorReporting theActionReporting;
+
+			Instantiator(Interpreted interpreted) {
+				isActive = interpreted.isActive().instantiate();
+				theFrequency = interpreted.getFrequency().instantiate();
+				isStrictTiming = interpreted.getDefinition().isStrictTiming();
+				theRemainingExecutions = interpreted.getRemainingExecutions() == null ? null
+					: interpreted.getRemainingExecutions().instantiate();
+				theUntil = interpreted.getUntil() == null ? null : interpreted.getUntil().instantiate();
+				theRunNextIn = interpreted.getRunNextIn() == null ? null : interpreted.getRunNextIn().instantiate();
+				theNextExecution = interpreted.getNextExecution() == null ? null : interpreted.getNextExecution().instantiate();
+				theExecutionCount = interpreted.getExecutionCount() == null ? null : interpreted.getExecutionCount().instantiate();
+				isExecuting = interpreted.isExecuting() == null ? null : interpreted.isExecuting().instantiate();
+				theAction = interpreted.getElementValue() == null ? null
+					: (ModelValueInstantiator<ObservableAction>) (ModelValueInstantiator<?>) interpreted.getElementValue().instantiate();
+				theActionReporting = theAction == null ? null
+					: interpreted.reporting().at(interpreted.getDefinition().getElementValue().getFilePosition());
+			}
+
+			@Override
+			public void instantiate() {
+				isActive.instantiate();
+				theFrequency.instantiate();
+				if (theRemainingExecutions != null)
+					theRemainingExecutions.instantiate();
+				if (theUntil != null)
+					theUntil.instantiate();
+				if (theRunNextIn != null)
+					theRunNextIn.instantiate();
+				if (theNextExecution != null)
+					theNextExecution.instantiate();
+				if (theExecutionCount != null)
+					theExecutionCount.instantiate();
+				if (isExecuting != null)
+					isExecuting.instantiate();
+				if (theAction != null)
+					theAction.instantiate();
+			}
+
+			@Override
+			public SettableValue<Instant> get(ModelSetInstance models) throws ModelInstantiationException, IllegalStateException {
+				SettableValue<Boolean> active = isActive.get(models);
+				SettableValue<Duration> frequency = theFrequency.get(models);
+				SettableValue<Integer> remainingExecutions = theRemainingExecutions == null ? null : theRemainingExecutions.get(models);
+				SettableValue<Instant> until = theUntil == null ? null : theUntil.get(models);
+				SettableValue<Duration> runNextIn = theRunNextIn == null ? null : theRunNextIn.get(models);
+				SettableValue<Instant> nextExecution = theNextExecution == null ? null : theNextExecution.get(models);
+				SettableValue<Integer> executionCount = theExecutionCount == null ? null : theExecutionCount.get(models);
+				SettableValue<Boolean> executing = isExecuting == null ? null : isExecuting.get(models);
+				ObservableAction action = theAction == null ? null : theAction.get(models);
+				return new TimerInstance(active, frequency, isStrictTiming, remainingExecutions, until, runNextIn, nextExecution,
+					executionCount, executing, action, theActionReporting);
+			}
+
+			@Override
+			public SettableValue<Instant> forModelCopy(SettableValue<Instant> value, ModelSetInstance sourceModels,
+				ModelSetInstance newModels) throws ModelInstantiationException {
+				TimerInstance timer = (TimerInstance) value;
+				SettableValue<Boolean> active = isActive.forModelCopy(timer.isActive, sourceModels, newModels);
+				SettableValue<Duration> frequency = theFrequency.forModelCopy(timer.theFrequency, sourceModels, newModels);
+				SettableValue<Integer> remainingExecutions = theRemainingExecutions == null ? null
+					: theRemainingExecutions.forModelCopy(timer.theRemainingExecutions, sourceModels, newModels);
+				SettableValue<Instant> until = theUntil == null ? null : theUntil.forModelCopy(timer.theUntil, sourceModels, newModels);
+				SettableValue<Duration> runNextIn = theRunNextIn == null ? null
+					: theRunNextIn.forModelCopy(timer.theRunNextIn, sourceModels, newModels);
+				SettableValue<Instant> nextExecution = theNextExecution == null ? null
+					: theNextExecution.forModelCopy(timer.theNextExecution, sourceModels, newModels);
+				SettableValue<Integer> executionCount = theExecutionCount == null ? null
+					: theExecutionCount.forModelCopy(timer.theExecutionCount, sourceModels, newModels);
+				SettableValue<Boolean> executing = isExecuting == null ? null
+					: isExecuting.forModelCopy(timer.isExecuting, sourceModels, newModels);
+				ObservableAction action = theAction == null ? null : theAction.forModelCopy(timer.theAction, sourceModels, newModels);
+
+				if (active != timer.isActive || frequency != timer.theFrequency || remainingExecutions != timer.theRemainingExecutions
+					|| until != timer.theUntil || runNextIn != timer.theRunNextIn || nextExecution != timer.theNextExecution
+					|| executionCount != timer.theExecutionCount || executing != timer.isExecuting || action != timer.theAction)
+					return new TimerInstance(active, frequency, isStrictTiming, remainingExecutions, until, runNextIn, nextExecution,
+						executionCount, executing, action, theActionReporting);
+				else
+					return timer;
+			}
+		}
+
+		static class TimerInstance extends WrappingSettableValue<Instant> {
+			final SettableValue<Boolean> isActive;
+			final SettableValue<Duration> theFrequency;
+			final boolean isStrictTiming;
+			final SettableValue<Integer> theRemainingExecutions;
+			final SettableValue<Instant> theUntil;
+			final SettableValue<Duration> theRunNextIn;
+			final SettableValue<Instant> theNextExecution;
+			final SettableValue<Integer> theExecutionCount;
+			final SettableValue<Boolean> isExecuting;
+			final ObservableAction theAction;
+			final ErrorReporting theActionReporting;
+
+			final QommonsTimer.TaskHandle theHandle;
+			private final Causable.CausableKey theExecuteFinish;
+
+			private volatile boolean theCallbackLock;
+
+			TimerInstance(SettableValue<Boolean> active, SettableValue<Duration> frequency, boolean strictTiming,
+				SettableValue<Integer> remainingExecutions, SettableValue<Instant> until, SettableValue<Duration> runNextIn,
+				SettableValue<Instant> nextExecution, SettableValue<Integer> executionCount, SettableValue<Boolean> executing,
+				ObservableAction action, ErrorReporting actionReporting) {
+				super(SettableValue.build(Instant.class).withDescription("timer").build());
+				isActive = active;
+				theFrequency = frequency;
+				isStrictTiming = strictTiming;
+				theRemainingExecutions = remainingExecutions;
+				theUntil = until;
+				theRunNextIn = runNextIn;
+				theNextExecution = nextExecution;
+				theExecutionCount = executionCount;
+				isExecuting = executing;
+				theAction = action;
+				theActionReporting = actionReporting;
+
+				QommonsTimer.TaskHandle task = QommonsTimer.getCommonInstance().build(this::executeIfAllowed, theFrequency.get(),
+					isStrictTiming);
+				theHandle = task;
+				theExecuteFinish = Causable.key((cause, data) -> {}, (cause, data) -> {
+					if (isExecuting != null && isExecuting.isAcceptable(false) == null)
+						isExecuting.set(false, cause);
+				});
+				theFrequency.noInitChanges().act(evt -> {
+					if (evt.getNewValue() != null)
+						task.setFrequency(evt.getNewValue(), isStrictTiming);
+					else
+						deactivate();
+				});
+				if (theRunNextIn != null) {
+					theRunNextIn.changes().act(evt -> {
+						if (evt.getNewValue() != null) {
+							Instant nextRun = Instant.now().plus(evt.getNewValue());
+							activate(nextRun, evt, false);
+							task.runNextIn(evt.getNewValue());
+						} else
+							deactivate();
+					});
+				}
+				if (theNextExecution != null) {
+					theNextExecution.changes().act(evt -> {
+						if (theCallbackLock)
+							return;
+						if (evt.getNewValue() != null) {
+							activate(evt.getNewValue(), evt, false);
+							task.runNextAt(evt.getNewValue());
+						} else
+							deactivate();
+					});
+				}
+				getWrapped().noInitChanges().act(this::execute);
+				// Activate last
+				isActive.changes().act(evt -> {
+					if (theCallbackLock)
+						return;
+					task.setActive(Boolean.TRUE.equals(evt.getNewValue()));
+				});
+			}
+
+			private void executeIfAllowed() {
+				Instant time = theHandle.getPreviousExecution();
+				if (theUntil != null) {
+					Instant until = theUntil.get();
+					if (until != null && time.compareTo(until) > 0) {
+						deactivate();
+						return;
+					}
+				}
+				// First, make sure we're allowed to execute
+				if (theRemainingExecutions != null) {
+					Integer remaining = theRemainingExecutions.get();
+					if (remaining != null && remaining <= 0) {
+						deactivate();
+						return;
+					}
+				}
+				getWrapped().set(time, null);
+			}
+
+			private void execute(ObservableValueEvent<Instant> event) {
+				if (isExecuting != null && isExecuting.isAcceptable(true) == null) {
+					isExecuting.set(true, event);
+					event.onFinish(theExecuteFinish);
+				}
+				if (theRemainingExecutions != null) {
+					Integer remaining = theRemainingExecutions.get();
+					if (remaining != null && remaining > 0) {
+						remaining = remaining - 1;
+						if (theRemainingExecutions.isAcceptable(remaining) == null)
+							theRemainingExecutions.set(remaining, event);
+					}
+				}
+				if (theNextExecution != null && theNextExecution.isAcceptable(theHandle.getNextExecution()) == null) {
+					theCallbackLock = true;
+					try {
+						theNextExecution.set(theHandle.getNextExecution(), event);
+					} finally {
+						theCallbackLock = false;
+					}
+				}
+				if (theExecutionCount != null) {
+					Integer count = theExecutionCount.get();
+					count = count == null ? 1 : count + 1;
+					if (theExecutionCount.isAcceptable(count) == null)
+						theExecutionCount.set(count, event);
+				}
+				if (theAction != null) {
+					try {
+						theAction.act(event);
+					} catch (Throwable e) {
+						theActionReporting.error("Timer action throw an exception", e);
+					}
+				}
+			}
+
+			private void activate(Instant nextRun, Object cause, boolean activateTask) {
+				if (nextRun == null)
+					nextRun = Instant.now();
+				if (theUntil != null) {
+					Instant until = theUntil.get();
+					if (until != null && until.compareTo(nextRun) <= 0)
+						theUntil.set(null, null);
+				}
+				if (activateTask) {
+					if (!Boolean.TRUE.equals(isActive.get()) && isActive.isAcceptable(true) == null)
+						isActive.set(true, null);
+					else
+						theHandle.setActive(true);
+				} else {
+					theCallbackLock = true;
+					try {
+						if (!Boolean.TRUE.equals(isActive.get()) && isActive.isAcceptable(true) == null)
+							isActive.set(true, null);
+					} finally {
+						theCallbackLock = false;
+					}
+				}
+			}
+
+			private void deactivate() {
+				if (!Boolean.FALSE.equals(isActive.get()) && isActive.isAcceptable(false) == null)
+					isActive.set(false, null);
+				else
+					theHandle.setActive(false);
+			}
+
+			@Override
+			public <V extends Instant> Instant set(V value, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
+				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+			}
+
+			@Override
+			public <V extends Instant> String isAcceptable(V value) {
+				return StdMsg.UNSUPPORTED_OPERATION;
+			}
+
+			@Override
+			public ObservableValue<String> isEnabled() {
+				return ObservableValue.of(StdMsg.UNSUPPORTED_OPERATION);
+			}
+
+			@Override
+			public String toString() {
+				return "timer";
 			}
 		}
 	}
