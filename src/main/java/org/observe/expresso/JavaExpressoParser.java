@@ -355,8 +355,13 @@ public class JavaExpressoParser implements ExpressoParser {
 		case "arrayInitializer":
 			List<Expression> valueExprs = expression.getComponents("variableInitializer");
 			List<ObservableExpression> values = new ArrayList<>(valueExprs.size());
-			for (Expression value : valueExprs)
-				values.add(_parse(value, fullText));
+			for (Expression value : valueExprs) {
+				ObservableExpression valueX = _parse(value, fullText);
+				values.add(BufferedExpression.buffer(//
+					getWhiteSpaceBefore(fullText, value.getStartIndex(), 0), //
+					valueX, //
+					getWhiteSpaceAt(fullText, value.getEndIndex())));
+			}
 			return new ArrayInitializerExpression(Collections.unmodifiableList(values));
 		case "integerLiteral":
 			String text = expression.getText();

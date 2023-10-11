@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.function.Function;
 import java.util.function.Predicate;
 
+import org.observe.ObservableAction;
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.expresso.ModelType.ModelInstanceType;
@@ -52,8 +53,12 @@ public interface ObservableExpression {
 		public <M, MV extends M, EX extends Throwable> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type,
 			InterpretedExpressoEnv env, int expressionOffset, ExceptionHandler.Single<ExpressoInterpretationException, EX> exHandler)
 				throws EX {
-			return ObservableExpression.evEx(expressionOffset, 0,
-				(InterpretedValueSynth<M, MV>) InterpretedValueSynth.literalValue(TypeTokens.get().WILDCARD, null, "(empty)"), null);
+			if (type.getModelType() == ModelTypes.Action)
+				return ObservableExpression.evEx(expressionOffset, 0, (InterpretedValueSynth<M, MV>) InterpretedValueSynth
+					.literal(ModelTypes.Action.instance(), ObservableAction.DO_NOTHING, "(empty)"), null);
+			else
+				return ObservableExpression.evEx(expressionOffset, 0,
+					(InterpretedValueSynth<M, MV>) InterpretedValueSynth.literalValue(TypeTokens.get().WILDCARD, null, "(empty)"), null);
 		}
 
 		@Override
@@ -64,7 +69,7 @@ public interface ObservableExpression {
 
 	/**
 	 * The {@link InterpretedValueSynth} extension returned by
-	 * {@link ObservableExpression#evaluate(ModelInstanceType, InterpretedExpressoEnv, int)}
+	 * {@link ObservableExpression#evaluate(ModelInstanceType, InterpretedExpressoEnv, int, org.qommons.ex.ExceptionHandler.Double)}
 	 *
 	 * @param <M> The model type of the interpreted expression
 	 * @param <MV> The instance type of the interpreted expression
@@ -99,6 +104,7 @@ public interface ObservableExpression {
 	 * @param <M> The model type of the value
 	 * @param <MV> The instance type of the value
 	 * @param offset The offset of the expression in the root
+	 * @param length The length of the expression
 	 * @param value The type of the value
 	 * @param descriptor The expression descriptor
 	 * @param children The children of the expression
@@ -115,6 +121,7 @@ public interface ObservableExpression {
 	 * @param <M> The model type of the value
 	 * @param <MV> The instance type of the value
 	 * @param offset The offset of the expression in the root
+	 * @param length The length of the expression
 	 * @param value The type of the value
 	 * @param descriptor The expression descriptor
 	 * @param children The children of the expression
@@ -131,6 +138,7 @@ public interface ObservableExpression {
 	 * @param <M> The model type of the value
 	 * @param <MV> The instance type of the value
 	 * @param offset The offset of the expression in the root
+	 * @param length The length of the expression
 	 * @param value The type of the value
 	 * @param descriptor The expression descriptor
 	 * @param children The children of the expression
@@ -323,10 +331,14 @@ public interface ObservableExpression {
 	 *
 	 * @param <M> The model type to evaluate the expression as
 	 * @param <MV> The model instance type to evaluate the expression as
+	 * @param <EX> The type of exception thrown by the handler in response to an {@link ExpressoInterpretationException}
+	 * @param <TX> The type of exception thrown by the handler in response to a {@link TypeConversionException}
 	 * @param type The model instance type to evaluate the expression as
 	 * @param env The environment in which to evaluate the expression
 	 * @param expressionOffset The offset of this expression in the evaluated root
+	 * @param exHandler The exception handler
 	 * @return A value container to generate the expression's value from a {@link ModelSetInstance model instance}
+	 * @throws ExpressoInterpretationException If the expression cannot be evaluated
 	 * @throws EX If the expression cannot be evaluated in the given environment
 	 * @throws TX If this expression could not be interpreted as the given type
 	 */
@@ -349,10 +361,13 @@ public interface ObservableExpression {
 	 *
 	 * @param <M> The model type to evaluate the expression as
 	 * @param <MV> The model instance type to evaluate the expression as
+	 * @param <EX> The type of exception thrown by the handler in response to an {@link ExpressoInterpretationException}
 	 * @param type The model instance type to evaluate the expression as
 	 * @param env The environment in which to evaluate the expression
 	 * @param expressionOffset The offset of this expression in the evaluated root
+	 * @param exHandler The exception handler
 	 * @return A value container to generate the expression's value from a {@link ModelSetInstance model instance}
+	 * @throws ExpressoInterpretationException If the expression cannot be evaluated
 	 * @throws EX If the expression cannot be evaluated in the given environment as the given type
 	 */
 	<M, MV extends M, EX extends Throwable> EvaluatedExpression<M, MV> evaluateInternal(ModelInstanceType<M, MV> type,

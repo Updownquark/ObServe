@@ -75,7 +75,7 @@ public class ConditionalExpression implements ObservableExpression {
 
 	@Override
 	public int getExpressionLength() {
-		return theCondition.getExpressionLength() + thePrimary.getExpressionLength() + theSecondary.getExpressionLength() + 1;
+		return theCondition.getExpressionLength() + thePrimary.getExpressionLength() + theSecondary.getExpressionLength() + 2;
 	}
 
 	@Override

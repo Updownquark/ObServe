@@ -64,7 +64,7 @@ public class ArrayInitializerExpression implements ObservableExpression {
 
 		int length = 1;
 		for (int i = 0; i < childIndex; i++)
-			length += theValues.get(childIndex).getExpressionLength() + 1;
+			length += theValues.get(i).getExpressionLength() + 1;
 		return length;
 	}
 
@@ -162,6 +162,20 @@ public class ArrayInitializerExpression implements ObservableExpression {
 			.getCommonType(values.stream().map(v -> v.getType().getType(0)).collect(Collectors.toList()));
 		return ObservableExpression.evEx(expressionOffset, getExpressionLength(),
 			new Interpreted<>(ModelTypes.Collection.forType(elType), values), null, values);
+	}
+
+	@Override
+	public String toString() {
+		StringBuilder str = new StringBuilder("{");
+		boolean first = true;
+		for (ObservableExpression value : theValues) {
+			if (first)
+				first = false;
+			else
+				str.append(',');
+			str.append(value);
+		}
+		return str.append('}').toString();
 	}
 
 	static class Interpreted<T> implements InterpretedValueSynth<ObservableCollection<?>, ObservableCollection<T>> {

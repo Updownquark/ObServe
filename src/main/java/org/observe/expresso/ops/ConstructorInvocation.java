@@ -38,11 +38,11 @@ public class ConstructorInvocation extends Invocation {
 	public int getComponentOffset(int childIndex) {
 		if (childIndex >= getComponents().size())
 			throw new IndexOutOfBoundsException(childIndex + " of " + getComponents().size());
-		int offset = 4 + theType.length();
+		int offset = 5 + theType.length(); // "new <type>("
 		if (childIndex > 0)
 			offset += childIndex - 1;
 		for (int i = 0; i < childIndex; i++)
-			offset += getComponents().get(childIndex).getExpressionLength();
+			offset += getComponents().get(i).getExpressionLength();
 		return offset;
 	}
 
