@@ -304,6 +304,14 @@ It builds on the Expresso-Core specification and contains everything needed for 
 			<attribute name="finally" type="expression" specify="optional" />
 			<child-def name="body" type="action" min="0" max="inf" />
 		</element-def>
+
+		<element-def name="timer" extends="model-value" inherits="with-local-model">
+			<attribute name="active" type="expression" default="true" />
+			<attribute name="frequency" type="expression" />
+			<attribute name="strict-timing" type="boolean" default="false" />
+			<?DOC ?>
+			<attribute name="run-next" type="expression" specify="optional" />
+		</element-def>
 	</elements>
 
 	<auto-inheritance>
