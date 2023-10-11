@@ -16,6 +16,7 @@
 				<value name="y" type="int" />
 				<value name="width" type="int" default="860" />
 				<value name="height" type="int" default="860" />
+				<value name="split" type="double" default="65" />
 			</config>
 			<model name="app">
 				<value name="qwysiwyg">new Qwysiwyg()</value>
@@ -25,7 +26,7 @@
 			</model>
 		</models>
 	</head>
-	<box layout="inline-layout" orientation="vertical" main-align="justify">
+	<split orientation="vertical" split-position="config.split * `1%`">
 		<scroll>
 			<box role="row-header" layout="simple-layout"> <!-- This outer box is so we can control the width -->
 				<text-area value="app.qwysiwyg.lineNumbers" editable="false" width="`65px`" />
@@ -58,7 +59,7 @@
 			</text-area>
 		</scroll>
 		<tabs>
-			<table tab-id="&quot;Watch Expressions&quot;" tab-name="`Watch Expressions`" rows="app.qwysiwyg.watchExpressions" value-name="ex">
+			<table tab-id="&quot;Watch Expressions&quot;" tab-name="`Watch Expressions`" rows="app.qwysiwyg.watchExpressions" active-value-name="ex">
 				<column name="`Expression`" value="ex.getExpressionText()">
 					<column-edit column-edit-value-name="newEx" type="modify-row-value" commit="ex.setExpressionText(newEx)">
 						<text-field />
@@ -79,7 +80,7 @@
 				<box layout="inline-layout" orientation="horizontal">
 					<combo values="app.qwysiwyg.availableStyles" value="app.qwysiwyg.selectedStyle" />
 				</box>
-				<table rows="app.qwysiwyg.styleDebugValues" value-name="row">
+				<table rows="app.qwysiwyg.styleDebugValues" active-value-name="row">
 					<style attr="with-text.font-weight" if="row!=null &amp;&amp; row.isActive()">`bold`</style>
 					<column name="`Source File`" value="row.getSourceFile()">
 						<label value="columnValue" tooltip="row.getFullSourceFile()" />
@@ -112,5 +113,5 @@
 				</table>
 			</box>
 		</tabs>
-	</box>
+	</split>
 </quick>
