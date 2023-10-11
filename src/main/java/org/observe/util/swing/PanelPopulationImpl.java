@@ -987,6 +987,7 @@ class PanelPopulationImpl {
 		public P withVTab(Object tabID, int tabIndex, Consumer<PanelPopulator<?, ?>> panel, Consumer<TabEditor<?>> tabModifier) {
 			MigFieldPanel<JPanel, ?> fieldPanel = new MigFieldPanel<>(null, null, getUntil());
 			panel.accept(fieldPanel);
+			fieldPanel.getComponent(); // Enact the decorations
 			return withTabImpl(tabID, tabIndex, fieldPanel.getContainer(), tabModifier, fieldPanel);
 		}
 
@@ -995,6 +996,7 @@ class PanelPopulationImpl {
 			Consumer<TabEditor<?>> tabModifier) {
 			SimpleHPanel<JPanel, ?> hPanel = new SimpleHPanel<>(null, new ConformingPanel(layout), getUntil());
 			panel.accept(hPanel);
+			hPanel.getComponent(); // Enact the decorations
 			return withTabImpl(tabID, tabIndex, hPanel.getContainer(), tabModifier, hPanel);
 		}
 
