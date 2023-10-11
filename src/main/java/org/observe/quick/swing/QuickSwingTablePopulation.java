@@ -821,6 +821,14 @@ class QuickSwingTablePopulation {
 		}
 
 		@Override
+		public SwingCellPopulator<R, C> modifyAssociatedComponents(Consumer<Component> component) {
+			return unsupported("General component modifier");
+		}
+
+		@Override
+		public void modifyAssociatedComponent(Component component) {}
+
+		@Override
 		public Component getComponent() {
 			throw new IllegalStateException("Container retrieval unsupported for cell " + (isRenderer ? "renderer" : "editor") + " holder");
 		}
@@ -1217,6 +1225,15 @@ class QuickSwingTablePopulation {
 				}
 				return (E) this;
 			}
+
+			@Override
+			public E modifyAssociatedComponents(Consumer<Component> component) {
+				// Should I do something here?
+				return (E) this;
+			}
+
+			@Override
+			public void modifyAssociatedComponent(Component component) {}
 
 			@Override
 			public Component getComponent() {

@@ -407,7 +407,10 @@ class PanelPopulationImpl {
 			if (modify != null)
 				modify.accept(fieldPanel);
 			fieldPanel.onFieldName(fieldPanel.getEditor(), name -> fieldPanel.getEditor().setText(name), getUntil());
-			doAdd(fieldPanel, null, fieldPanel.createPostLabel(getUntil()), false);
+			Component postLabel = fieldPanel.createPostLabel(getUntil());
+			if (postLabel != null)
+				fieldPanel.modifyAssociatedComponent(postLabel);
+			doAdd(fieldPanel, null, postLabel, false);
 			return (P) this;
 		}
 	}
@@ -2137,6 +2140,14 @@ class PanelPopulationImpl {
 				public P2 modifyComponent(Consumer<Component> component) {
 					return (P2) this; // TODO can we support this?
 				}
+
+				@Override
+				public P2 modifyAssociatedComponents(Consumer<Component> component) {
+					return (P2) this;
+				}
+
+				@Override
+				public void modifyAssociatedComponent(Component component) {}
 
 				@Override
 				public P2 modifyEditor(Consumer<? super JButton> modify) {

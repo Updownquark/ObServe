@@ -382,7 +382,10 @@ public class PanelPopulation {
 		}
 
 		default void doAdd(AbstractComponentEditor<?, ?> field, boolean scrolled) {
-			doAdd(field, field.createFieldNameLabel(getUntil()), field.createPostLabel(getUntil()), scrolled);
+			Component postLabel = field.createPostLabel(getUntil());
+			if (postLabel != null)
+				field.modifyAssociatedComponent(postLabel);
+			doAdd(field, field.createFieldNameLabel(getUntil()), postLabel, scrolled);
 		}
 
 		@Override
@@ -912,6 +915,10 @@ public class PanelPopulation {
 
 		P modifyComponent(Consumer<Component> component);
 
+		P modifyAssociatedComponents(Consumer<Component> component);
+
+		void modifyAssociatedComponent(Component component);
+
 		Component getComponent();
 
 		Alert alert(String title, String message);
@@ -978,6 +985,8 @@ public class PanelPopulation {
 		private boolean isFillH;
 		private boolean isFillV;
 		private Consumer<Component> theComponentModifier;
+		private Consumer<Component> theAllComponentsModifier;
+		private List<Component> theAssociatedComponents;
 		private ObservableValue<String> theTooltip;
 		private boolean isTooltipHandled;
 		private SettableValue<ObservableValue<String>> theSettableTooltip;
@@ -1142,6 +1151,33 @@ public class PanelPopulation {
 		}
 
 		@Override
+		public P modifyAssociatedComponents(Consumer<Component> component) {
+			if (theAssociatedComponents != null) {
+				for (Component comp : theAssociatedComponents)
+					component.accept(comp);
+			}
+			if (theAllComponentsModifier == null)
+				theAllComponentsModifier = component;
+			else {
+				Consumer<Component> old = theAllComponentsModifier;
+				theAllComponentsModifier = c -> {
+					old.accept(c);
+					component.accept(c);
+				};
+			}
+			return (P) this;
+		}
+
+		@Override
+		public void modifyAssociatedComponent(Component component) {
+			if (theAssociatedComponents == null)
+				theAssociatedComponents = new ArrayList<>();
+			theAssociatedComponents.add(component);
+			if (theAllComponentsModifier != null)
+				theAllComponentsModifier.accept(component);
+		}
+
+		@Override
 		public Alert alert(String title, String message) {
 			return new SimpleAlert(getComponent(), title, message);
 		}
@@ -1187,6 +1223,7 @@ public class PanelPopulation {
 			if (theFieldName == null)
 				return null;
 			JLabel fieldNameLabel = new JLabel(theFieldName.get());
+			modifyAssociatedComponent(fieldNameLabel);
 			return onFieldName(fieldNameLabel, fieldNameLabel::setText, until);
 		}
 

@@ -13,6 +13,7 @@ import java.awt.font.FontRenderContext;
 import java.awt.font.TextAttribute;
 import java.awt.image.BufferedImage;
 import java.lang.reflect.InvocationTargetException;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -168,7 +169,7 @@ public class QuickCoreSwing implements QuickInterpretation {
 			qsp.addModifier((comp, w) -> {
 				comp.withName(name);
 				FontAdjuster pmDecorator = new FontAdjuster();
-				ComponentPropertyManager<Component>[] propertyManager = new ComponentPropertyManager[1];
+				List<ComponentPropertyManager<Component>> propertyManagers = new ArrayList<>();
 				Component[] component = new Component[1];
 				ObservableValue<Color> color = w.getStyle().getColor();
 				ObservableValue<Cursor> cursor = w.getStyle().getMouseCursor().map(quickCursor -> {
@@ -190,21 +191,22 @@ public class QuickCoreSwing implements QuickInterpretation {
 							return;
 
 						component[0] = c;
-						propertyManager[0] = scd.propertyMgr;
+						if (propertyManagers.isEmpty() || propertyManagers.get(0) != scd.propertyMgr)
+							propertyManagers.add(0, scd.propertyMgr);
 						if (renderer) {
 							// We can just do all this dynamically for renderers
 							adjustFont(pmDecorator.reset(), w.getStyle());
-							propertyManager[0].setFont(pmDecorator::adjust);
-							propertyManager[0].setForeground(pmDecorator.getForeground());
+							scd.propertyMgr.setFont(pmDecorator::adjust);
+							scd.propertyMgr.setForeground(pmDecorator.getForeground());
 							Color bg = color.get();
 							// if (c instanceof JLabel) { // DEBUGGING
 							// System.out.println("Render '" + ((JLabel) c).getText() + "' bg " + Colors.toString(bg));
 							// }
-							propertyManager[0].setBackground(bg);
-							propertyManager[0].setOpaque(bg == null ? null : true);
+							scd.propertyMgr.setBackground(bg);
+							scd.propertyMgr.setOpaque(bg == null ? null : true);
 							c.setCursor(cursor.get());
 						} else {
-							propertyManager[0].setForeground(pmDecorator.getForeground());
+							scd.propertyMgr.setForeground(pmDecorator.getForeground());
 							try {
 								w.setContext(new QuickWidget.WidgetContext.Default(//
 									new MouseValueSupport(c, "hovered", null), //
@@ -225,6 +227,12 @@ public class QuickCoreSwing implements QuickInterpretation {
 								throw new CheckedExceptionWrapper(e);
 							}
 						}
+					});
+					comp.modifyAssociatedComponents(c -> {
+						ComponentPropertyManager<Component> pm = new ComponentPropertyManager<>(c);
+						propertyManagers.add(pm);
+						pm.setForeground(pmDecorator.getForeground());
+						c.setCursor(cursor.get());
 					});
 					if (w.getTooltip() != null)
 						comp.withTooltip(w.getTooltip());
@@ -249,12 +257,12 @@ public class QuickCoreSwing implements QuickInterpretation {
 					cursor.noInitChanges().takeUntil(comp.getUntil()).act(evt -> component[0].setCursor(evt.getNewValue()));
 					Observable.onRootFinish(Observable.or(color.noInitChanges(), fontChanges(w.getStyle()))).act(__ -> {
 						adjustFont(pmDecorator.reset(), w.getStyle());
-						if (propertyManager[0] != null) {
-							propertyManager[0].setFont(pmDecorator::adjust);
-							propertyManager[0].setForeground(pmDecorator.getForeground());
+						for (ComponentPropertyManager<?> pm : propertyManagers) {
+							pm.setFont(pmDecorator::adjust);
+							pm.setForeground(pmDecorator.getForeground());
 							Color bg = color.get();
-							propertyManager[0].setBackground(bg);
-							propertyManager[0].setOpaque(bg == null ? null : true);
+							pm.setBackground(bg);
+							pm.setOpaque(bg == null ? null : true);
 						}
 						if (component[0] != null) {
 							if (!renderer && !isRendering())

@@ -337,6 +337,14 @@ implements PanelPopulation.PanelPopulator<JPanel, AbstractQuickContainerPopulato
 	}
 
 	@Override
+	public AbstractQuickContainerPopulator modifyAssociatedComponents(Consumer<Component> component) {
+		throw new UnsupportedOperationException("Should not call this here");
+	}
+
+	@Override
+	public void modifyAssociatedComponent(Component component) {}
+
+	@Override
 	public Component getComponent() {
 		throw new UnsupportedOperationException("Should not call this here");
 	}
