@@ -163,7 +163,7 @@ public interface ElementTypeTraceability<E extends ExElement, I extends ExElemen
 
 		@Override
 		public Object getFromInterpreted(ExElement.Interpreted<? extends E> interp) {
-			return interp.getAddOnValue(theInterpType, this::getFromInterpreted);
+			return theInterpType == null ? null : interp.getAddOnValue(theInterpType, this::getFromInterpreted);
 		}
 
 		public static <E extends ExElement, AO extends ExAddOn<? super E>, I extends ExAddOn.Interpreted<? super E, ? extends AO>, D extends ExAddOn.Def<? super E, ? extends AO>> Default<E, AO, I, D> of(

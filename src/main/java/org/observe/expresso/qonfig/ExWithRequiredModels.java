@@ -81,7 +81,7 @@ public class ExWithRequiredModels extends ExFlexibleElementModelAddOn<ExElement>
 					component = env.getModels().getComponent(value.getModelPath());
 				} catch (ModelException e) {
 					throw new QonfigInterpretationException("Model value '" + value.getModelPath() + "' is required to apply "
-						+ getElement() + ", but is not present in this model", value.getElement().getPositionInFile(), 0);
+						+ getElement() + ", but is not present in this model", env.reporting().getPosition(), 0);
 				}
 				contextValues.put(((PlaceholderExtValue<?>) super.getElementValue(value.getModelPath())).getModelId(),
 					component.getIdentity());

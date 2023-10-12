@@ -55,11 +55,12 @@ public class InterpretedExpressoEnv extends CompiledExpressoEnv {
 
 	@Override
 	protected CompiledExpressoEnv copy(ObservableModelSet models, Map<String, ModelComponentId> attributes,
-		ClassMap<Set<NonStructuredParser>> nonStructuredParsers, UnaryOperatorSet unaryOperators, BinaryOperatorSet binaryOperators) {
+		ClassMap<Set<NonStructuredParser>> nonStructuredParsers, UnaryOperatorSet unaryOperators, BinaryOperatorSet binaryOperators,
+		ErrorReporting reporting) {
 		if (models != null && !(models instanceof InterpretedModelSet))
-			return super.copy(models, attributes, nonStructuredParsers, unaryOperators, binaryOperators);
+			return super.copy(models, attributes, nonStructuredParsers, unaryOperators, binaryOperators, reporting);
 		return new InterpretedExpressoEnv((InterpretedModelSet) models, theExtModels, theClassView, attributes, nonStructuredParsers,
-			unaryOperators, binaryOperators, reporting(), theProperties, isTesting);
+			unaryOperators, binaryOperators, reporting, theProperties, isTesting);
 	}
 
 	/**
@@ -210,28 +211,14 @@ public class InterpretedExpressoEnv extends CompiledExpressoEnv {
 			getUnaryOperators(), getBinaryOperators(), reporting(), theProperties, isTesting);
 	}
 
-	/**
-	 * @param position The position at which to report errors for the new expresso environment
-	 * @return The new environment
-	 */
+	@Override
 	public InterpretedExpressoEnv at(LocatedPositionedContent position) {
-		ErrorReporting reporting = reporting().at(position);
-		if (reporting == reporting())
-			return this;
-		return new InterpretedExpressoEnv(getModels(), theExtModels, theClassView, getAttributes(), getNonStructuredParsers(),
-			getUnaryOperators(), getBinaryOperators(), reporting, theProperties, isTesting);
+		return (InterpretedExpressoEnv) super.at(position);
 	}
 
-	/**
-	 * @param positionOffset The relative position offset at which to report errors for the new expresso environment
-	 * @return The new environment
-	 */
+	@Override
 	public InterpretedExpressoEnv at(int positionOffset) {
-		ErrorReporting reporting = reporting().at(positionOffset);
-		if (reporting == reporting())
-			return this;
-		return new InterpretedExpressoEnv(getModels(), theExtModels, theClassView, getAttributes(), getNonStructuredParsers(),
-			getUnaryOperators(), getBinaryOperators(), reporting, theProperties, isTesting);
+		return (InterpretedExpressoEnv) super.at(positionOffset);
 	}
 
 	/**

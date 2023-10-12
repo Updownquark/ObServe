@@ -111,20 +111,21 @@ public class QuickStyleElement<T> extends ExElement.Abstract {
 
 		public void getStyleValues(Collection<QuickStyleValue> values, StyleApplicationDef application, QonfigElement element,
 			CompiledExpressoEnv env, ExWithRequiredModels.RequiredModelContext modelContext) throws QonfigInterpretationException {
-			if (application == StyleApplicationDef.ALL) {
-				for (QuickStyleValue value : theStyleValues)
-					if (value.getApplication().applies(element))
-						values.add(value);
-			} else if (theApplication.applies(element)) {
+			if (theApplication.applies(element)) {
 				for (QuickStyleValue value : theStyleValues) {
 					if (value.getApplication().applies(element))
 						values.add(value.when(application));
 				}
+				if (theStyleSet != null)
+					theStyleSet.getStyleValues(values, theApplication.and(application), element, env.at(reporting().getFileLocation()),
+						modelContext);
+			} else if (application.equals(StyleApplicationDef.ALL)) {
+				for (QuickStyleValue value : theStyleValues)
+					if (value.getApplication().applies(element))
+						values.add(value);
 			}
 			for (QuickStyleElement.Def child : theChildren)
 				child.getStyleValues(values, application, element, env, modelContext);
-			if (theStyleSet != null)
-				theStyleSet.getStyleValues(values, theApplication.and(application), element, env, modelContext);
 		}
 
 		@Override

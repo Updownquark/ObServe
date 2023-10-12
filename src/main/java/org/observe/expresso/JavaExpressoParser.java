@@ -96,7 +96,7 @@ public class JavaExpressoParser implements ExpressoParser {
 				case "++":
 				case "--":
 					ObservableExpression operand = _parse(expression.getComponents().getLast(), fullText);
-					int ws = getWhiteSpaceAt(fullText, firstChild.getStartIndex() + operand.getExpressionLength());
+					int ws = getWhiteSpaceAt(fullText, firstChild.getEndIndex());
 					return new UnaryOperator(firstChild.getText(), BufferedExpression.buffer(ws, operand, 0), true);
 				case "new":
 					Expression creator = expression.getComponents().get(1);

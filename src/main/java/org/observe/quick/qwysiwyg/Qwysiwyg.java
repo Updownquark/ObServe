@@ -1140,7 +1140,7 @@ public class Qwysiwyg {
 					}
 				}
 			}
-		} catch (ModelInstantiationException e) {
+		} catch (ModelInstantiationException | RuntimeException e) {
 			logToConsole(e, new LocatedPositionedContent.SimpleLine(new LocatedFilePosition(theAppLocation, component.start), ""));
 		}
 	}

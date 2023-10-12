@@ -3145,8 +3145,10 @@ public class JXTreeTable extends JXTable {
 
 			visibleRow = row;
 
-			// Cache the cell renderer to allow the possibility for rendering to change the appearance of the entire hierarchical column
-			theCachingRenderer.cacheCellRenderer(value, isSelected, row, hasFocus);
+			if (theCachingRenderer != null) {
+				// Cache the cell renderer to allow the possibility for rendering to change the appearance of the entire hierarchical column
+				theCachingRenderer.cacheCellRenderer(value, isSelected, row, hasFocus);
+			}
 
 			return this;
 		}

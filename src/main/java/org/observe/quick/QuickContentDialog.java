@@ -15,7 +15,7 @@ public interface QuickContentDialog extends QuickDialog {
 	@ExElementTraceable(toolkit = QuickCoreInterpretation.CORE,
 		qonfigType = "content-dialog",
 		interpretation = Interpreted.class,
-		instance = QuickDialog.class)
+		instance = QuickContentDialog.class)
 	public static interface Def<D extends QuickContentDialog> extends QuickDialog.Def<D> {
 		@QonfigChildGetter("content")
 		QuickWidget.Def<?> getContent();

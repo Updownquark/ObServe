@@ -558,6 +558,24 @@ public class StyleApplicationDef implements Comparable<StyleApplicationDef> {
 		return comp;
 	}
 
+	@Override
+	public int hashCode() {
+		return Objects.hash(theParent, theRole, theTypes, theCondition);
+	}
+
+	@Override
+	public boolean equals(Object obj) {
+		if (obj == this)
+			return true;
+		else if (!(obj instanceof StyleApplicationDef))
+			return false;
+		StyleApplicationDef other = (StyleApplicationDef) obj;
+		return Objects.equals(theParent, other.theParent)//
+			&& Objects.equals(theRole, other.theRole)//
+			&& theTypes.equals(other.theTypes)//
+			&& Objects.equals(theCondition, other.theCondition);
+	}
+
 	/**
 	 * @param types The types to test
 	 * @return Whether the given types are compatible with this application. E.g. 2 unrelated {@link QonfigElementDef}s cannot be part of

@@ -204,8 +204,6 @@ public class QuickStyleSheet extends ExElement.Def.Abstract<ExElement.Void> {
 
 		session.put(ExWithStyleSheet.QUICK_STYLE_SHEET, this);
 
-		ExElement.syncDefs(QuickStyleElement.Def.class, theStyleElements, session.forChildren("style"));
-
 		ExElement.syncDefs(StyleSheetRef.class, theStyleSheetRefs, session.forChildren("style-sheet-ref"));
 		theImportedStyleSheets.clear();
 		for (StyleSheetRef ref : theStyleSheetRefs) {
@@ -214,6 +212,7 @@ public class QuickStyleSheet extends ExElement.Def.Abstract<ExElement.Void> {
 					ref.reporting().getPosition(), 0);
 		}
 
+		// Parse style-sheets and style-sets first so they can be referred to
 		ExElement.syncDefs(QuickStyleSet.class, theStyleSetList, session.forChildren("style-set"));
 		theStyleSets.clear();
 		for (QuickStyleSet styleSet : theStyleSetList) {
@@ -221,6 +220,8 @@ public class QuickStyleSheet extends ExElement.Def.Abstract<ExElement.Void> {
 				throw new QonfigInterpretationException("Multiple style sets named '" + styleSet.getName() + "'",
 					styleSet.reporting().getPosition(), 0);
 		}
+
+		ExElement.syncDefs(QuickStyleElement.Def.class, theStyleElements, session.forChildren("style"));
 	}
 
 	public Interpreted interpret(ExElement.Interpreted<?> parent) {
@@ -315,7 +316,7 @@ public class QuickStyleSheet extends ExElement.Def.Abstract<ExElement.Void> {
 			CollectionUtils
 			.synchronize(importedStyleSheets, new ArrayList<>(getDefinition().getImportedStyleSheets().entrySet()),
 				(interp, def) -> interp.getIdentity() == def.getValue().getIdentity())//
-				.<ExpressoInterpretationException> simpleE(def -> def.getValue().interpret(null))//
+			.<ExpressoInterpretationException> simpleE(def -> def.getValue().interpret(null))//
 			.onLeftX(el -> el.getLeftValue().destroy())//
 			.onRightX(el -> {
 				el.getLeftValue().updateStyleSheet(expressoEnv);

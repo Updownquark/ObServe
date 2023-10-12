@@ -612,7 +612,7 @@ public class QuickCoreSwing implements QuickInterpretation {
 			applyIcon(window, quckWindow.getWindowIcon());
 		else {
 			ExElement parent = quckWindow.getElement().getParentElement();
-			QuickWindow parentWindow = parent.getAddOn(QuickWindow.class);
+			QuickWindow parentWindow = parent == null ? null : parent.getAddOn(QuickWindow.class);
 			while (parent != null && (parentWindow == null || parentWindow.getWindowIcon() == null)) {
 				parent = parent.getParentElement();
 				parentWindow = parent == null ? null : parent.getAddOn(QuickWindow.class);

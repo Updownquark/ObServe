@@ -200,18 +200,21 @@ public class NameExpression implements ObservableExpression, Named {
 				clazz = env.getClassView().getType(typeName.toString());
 			}
 			if (clazz == null) {
-				exHandler.handle1(new ExpressoInterpretationException("'" + theNames.get(0) + "' cannot be resolved to a variable",
+				exHandler
+				.handle1(new ExpressoInterpretationException("'" + theNames.get(0).getName() + "' cannot be resolved to a variable",
 					env.reporting().getPosition(), theNames.get(0).length()));
 				return null;
 			}
 			try {
 				field = clazz.getField(theNames.get(i).getName());
 			} catch (NoSuchFieldException e) {
-				exHandler.handle1(new ExpressoInterpretationException("'" + theNames.get(0) + "' cannot be resolved or is not a field",
+				exHandler
+				.handle1(new ExpressoInterpretationException("'" + theNames.get(0).getName() + "' cannot be resolved or is not a field",
 					env.reporting().at(getDivisionOffset(i)).getPosition(), theNames.get(0).length(), e));
 				return null;
 			} catch (SecurityException e) {
-				exHandler.handle1(new ExpressoInterpretationException(clazz.getName() + "." + theNames.get(i) + " cannot be accessed",
+				exHandler
+				.handle1(new ExpressoInterpretationException(clazz.getName() + "." + theNames.get(i).getName() + " cannot be accessed",
 					env.reporting().at(getDivisionOffset(i)).getPosition(), theNames.get(0).length(), e));
 				return null;
 			}
@@ -307,9 +310,8 @@ public class NameExpression implements ObservableExpression, Named {
 				value = (EvaluatedExpression<M, MV>) fieldValue;
 			else {
 				ExceptionHandler.Single<TypeConversionException, NeverThrown> tce = ExceptionHandler.holder();
-				value = ObservableExpression.evEx2(expressionOffset, getExpressionLength(),
-					fieldValue.as(type, env, tce), fieldValue.getDescriptor(),
-					fieldValue.getComponents(), fieldValue.getDivisions());
+				value = ObservableExpression.evEx2(expressionOffset, getExpressionLength(), fieldValue.as(type, env, tce),
+					fieldValue.getDescriptor(), fieldValue.getComponents(), fieldValue.getDivisions());
 				if (tce.hasException()) {
 					exHandler.handle1(new ExpressoInterpretationException(tce.get1().getMessage(), reporting.getPosition(),
 						theNames.get(nameIndex).length(), tce.get1()));
