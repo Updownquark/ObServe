@@ -1,5 +1,9 @@
 package org.observe.quick.swing;
 
+import java.awt.BasicStroke;
+import java.awt.Color;
+import java.awt.Component;
+import java.awt.Cursor;
 import java.awt.LayoutManager;
 import java.util.HashMap;
 import java.util.List;
@@ -18,8 +22,10 @@ import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.ModelInstantiationException;
 import org.observe.quick.QuickInterpretation;
 import org.observe.quick.QuickWidget;
+import org.observe.quick.QuickWithBackground;
 import org.observe.quick.base.CollapsePane;
 import org.observe.quick.base.QuickMultiSlider;
+import org.observe.quick.base.QuickMultiSlider.SliderHandleRenderer;
 import org.observe.quick.base.QuickTableColumn;
 import org.observe.quick.base.QuickTreeTable;
 import org.observe.quick.base.TabularWidget;
@@ -30,6 +36,8 @@ import org.observe.util.TypeTokens;
 import org.observe.util.swing.CategoryRenderStrategy;
 import org.observe.util.swing.JustifiedBoxLayout;
 import org.observe.util.swing.MultiRangeSlider;
+import org.observe.util.swing.MultiRangeSlider.Range;
+import org.observe.util.swing.MultiRangeSlider.RangePoint;
 import org.observe.util.swing.PanelPopulation;
 import org.observe.util.swing.PanelPopulation.CollapsePanel;
 import org.observe.util.swing.PanelPopulation.ComponentEditor;
@@ -39,6 +47,7 @@ import org.qommons.ThreadConstraint;
 import org.qommons.Transformer;
 import org.qommons.ValueHolder;
 import org.qommons.collect.BetterList;
+import org.qommons.collect.CollectionElement;
 import org.qommons.ex.CheckedExceptionWrapper;
 
 import com.google.common.reflect.TypeToken;
@@ -296,12 +305,18 @@ public class QuickXSwing implements QuickInterpretation {
 	}
 
 	static class SwingMultiSlider extends QuickSwingPopulator.Abstract<QuickMultiSlider> {
+		private final Transformer<ExpressoInterpretationException> theTransformer;
+
 		SwingMultiSlider(QuickMultiSlider.Interpreted interpreted, Transformer<ExpressoInterpretationException> tx)
-			throws ExpressoInterpretationException {}
+			throws ExpressoInterpretationException {
+			theTransformer = tx;
+		}
 
 		@Override
 		protected void doPopulate(PanelPopulator<?, ?> panel, QuickMultiSlider quick, Consumer<ComponentEditor<?, ?>> component)
 			throws ModelInstantiationException {
+			HandleRenderer handleRenderer = quick.getHandleRenderer() == null ? null
+				: new HandleRenderer(false, quick.getValues(), quick.getHandleRenderer(), theTransformer);
 			panel.addMultiSlider(null, quick.getValues(), slider -> {
 				component.accept(slider);
 				slider.withBounds(quick.getMin(), quick.getMax());
@@ -318,10 +333,74 @@ public class QuickXSwing implements QuickInterpretation {
 				quick.getValueRenderer().changes().takeUntil(slider.getUntil()).act(evt -> {
 					if (evt.getNewValue() != null)
 						slider.getEditor().setRangeRenderer(evt.getNewValue());
+					else if (handleRenderer != null)
+						slider.getEditor().setRangeRenderer(handleRenderer);
 					else if (!evt.isInitial())
 						slider.getEditor().setRangeRenderer(new MultiRangeSlider.RangeRenderer.Default(false));
 				});
 			});
+		}
+
+		static class HandleRenderer extends MultiRangeSlider.RangeRenderer.Default {
+			private final ObservableCollection<Double> theValues;
+			private final QuickMultiSlider.SliderHandleRenderer theQuickRenderer;
+			private final QuickMultiSlider.SliderHandleRenderer.HandleRenderContext theHandleContext;
+			private final QuickWithBackground.BackgroundContext theBackgroundContext;
+			private final ObservableValue<Cursor> theCursor;
+
+			private BasicStroke theStroke;
+
+			HandleRenderer(boolean vertical, ObservableCollection<Double> values, SliderHandleRenderer quickRenderer,
+				Transformer<ExpressoInterpretationException> tx) throws ModelInstantiationException {
+				super(vertical);
+				theValues = values;
+				theQuickRenderer = quickRenderer;
+				withColor(__ -> getLineColor(), __ -> getFillColor());
+				theHandleContext = new QuickMultiSlider.SliderHandleRenderer.HandleRenderContext.Default();
+				theBackgroundContext = new QuickWithBackground.BackgroundContext.Default();
+				theQuickRenderer.setHandleContext(theHandleContext);
+				theQuickRenderer.setContext(theBackgroundContext);
+				theCursor = theQuickRenderer.getStyle().getMouseCursor().map(quickCursor -> {
+					try {
+						return quickCursor == null ? null : tx.transform(quickCursor, Cursor.class);
+					} catch (ExpressoInterpretationException e) {
+						theQuickRenderer.reporting().error("Unsupported cursor: " + quickCursor, e);
+						return null;
+					}
+				});
+			}
+
+			@Override
+			public Component renderRange(CollectionElement<Range> range, RangePoint hovered, RangePoint focused) {
+				theHandleContext.getHandleValue().set(range.get().getValue(), null);
+				theHandleContext.getHandleIndex().set(theValues.getElementsBefore(range.getElementId()), null);
+				theBackgroundContext.isHovered().set(hovered != null, null);
+				theBackgroundContext.isFocused().set(focused != null, null);
+				// TODO Clicked
+
+				Integer thick = theQuickRenderer.getStyle().getLineThickness().get();
+				if (thick == null)
+					thick = 1;
+				if (theStroke == null || theStroke.getLineWidth() != thick.intValue())
+					theStroke = new BasicStroke(thick);
+				return super.renderRange(range, hovered, focused);
+			}
+
+			Color getLineColor() {
+				return theQuickRenderer.getStyle().getLineColor().get();
+			}
+
+			Color getFillColor() {
+				return theQuickRenderer.getStyle().getColor().get();
+			}
+
+			@Override
+			public Cursor getCursor(CollectionElement<Range> range, RangePoint point, boolean focused) {
+				Cursor cursor = theCursor.get();
+				if(cursor!=null)
+					return cursor;
+				return super.getCursor(range, point, focused);
+			}
 		}
 	}
 }

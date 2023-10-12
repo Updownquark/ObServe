@@ -178,7 +178,7 @@ class QuickSwingTablePopulation {
 		private final Supplier<? extends ComponentEditor<?, ?>> theParent;
 		private final QuickWidget theRenderer;
 		private final SimpleObservable<Void> theRenderUntil;
-		private final QuickWidget.WidgetContext theRendererContext;
+		private final QuickWidget.BackgroundContext theRendererContext;
 		protected final TabularWidget.TabularContext<R> theRenderTableContext;
 		private ObservableCellRenderer<R, C> theDelegate;
 		private AbstractComponentEditor<?, ?> theComponent;
@@ -213,7 +213,7 @@ class QuickSwingTablePopulation {
 					});
 				});
 
-				theRendererContext = new QuickWidget.WidgetContext.Default();
+				theRendererContext = new QuickWidget.BackgroundContext.Default();
 				theRenderer.setContext(theRendererContext);
 			} else {
 				renderPopulator = null;

@@ -18,6 +18,23 @@
 			<attribute name="max" type="expression" />
 			<attribute name="bg-renderer" type="expression" specify="optional" />
 			<attribute name="value-renderer" type="expression" specify="optional" />
+			<child-def name="handle-renderer" type="slider-handle-renderer" min="0" />
+			<child-def name="bg-renderer" type="slider-bg-renderer" min="0" max="inf" />
+		</element-def>
+		<element-def name="slider-handle-renderer" inherits="with-background,with-element-model">
+			<styles>
+				<style-attribute name="line-thickness" type="int" trickle-down="false" />
+				<style-attribute name="line-color" type="java.awt.Color" trickle-down="false" />
+			</styles>
+			<element-model>
+				<value name="handleValue" type="double" priority="10" />
+				<value name="handleIndex" type="int" priority="10" />
+			</element-model>
+			<attribute name="tooltip" type="expression" specify="optional" />
+		</element-def>
+		<element-def name="slider-bg-renderer" inherits="with-background">
+			<attribute name="min-value" type="expression" specify="optional" />
+			<attribute name="max-value" type="expression" specify="optional" />
 		</element-def>
 	</elements>
 </qonfig-def>

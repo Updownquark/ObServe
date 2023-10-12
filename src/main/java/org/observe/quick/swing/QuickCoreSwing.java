@@ -176,7 +176,7 @@ public class QuickCoreSwing implements QuickInterpretation {
 					try {
 						return quickCursor == null ? null : tx2.transform(quickCursor, Cursor.class);
 					} catch (ExpressoInterpretationException e) {
-						w.reporting().error("Supported cursor: " + quickCursor, e);
+						w.reporting().error("Unsupported cursor: " + quickCursor, e);
 						return null;
 					}
 				});
@@ -210,7 +210,7 @@ public class QuickCoreSwing implements QuickInterpretation {
 						} else {
 							scd.propertyMgr.setForeground(pmDecorator.getForeground());
 							try {
-								w.setContext(new QuickWidget.WidgetContext.Default(//
+								w.setContext(new QuickWidget.BackgroundContext.Default(//
 									new MouseValueSupport(c, "hovered", null), //
 									new FocusSupport(c), //
 									new MouseValueSupport(c, "pressed", true), //

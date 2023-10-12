@@ -48,6 +48,24 @@
 			<attribute name="close-action" type="window-close-action" default="hide" />
 		</add-on>
 
+		<add-on name="with-background" inherits="styled" abstract="true">
+			<element-model>
+				<?DOC Whether the mouse is currently hovered over the widget?>
+				<value name="hovered" type="boolean" priority="5" />
+				<?DOC Whether the widget currently has focus?>
+				<value name="focused" type="boolean" priority="1" />
+				<?DOC Whether the left mouse button is currently pressed over the widget?>
+				<value name="pressed" type="boolean" priority="1000" />
+				<?DOC Whether the right mouse button is currently pressed over the widget?>
+				<value name="rightPressed" type="boolean" priority="1001" />
+			</element-model>
+			<styles>
+				<?DOC The background color of the widget?>
+				<style-attribute name="color" type="java.awt.Color" />
+				<?DOC The cursor to display for the mouse when it is over the widget?>
+				<style-attribute name="mouse-cursor" type="org.observe.quick.MouseCursor" />
+			</styles>
+		</add-on>
 		<add-on name="with-text" inherits="styled" abstract="true">
 			<styles>
 				<?DOC The color of the text?>
@@ -93,23 +111,7 @@
 		</element-def>
 		<element-def name="head" extends="expresso" inherits="with-style-sheet" />
 
-		<element-def name="widget" abstract="true" inherits="with-text">
-			<element-model>
-				<?DOC Whether the mouse is currently hovered over the widget?>
-				<value name="hovered" type="boolean" priority="5" />
-				<?DOC Whether the widget currently has focus?>
-				<value name="focused" type="boolean" priority="1" />
-				<?DOC Whether the left mouse button is currently pressed over the widget?>
-				<value name="pressed" type="boolean" priority="1000" />
-				<?DOC Whether the right mouse button is currently pressed over the widget?>
-				<value name="rightPressed" type="boolean" priority="1001" />
-			</element-model>
-			<styles>
-				<?DOC The background color of the widget?>
-				<style-attribute name="color" type="java.awt.Color" />
-				<?DOC The cursor to display for the mouse when it is over the widget?>
-				<style-attribute name="mouse-cursor" type="org.observe.quick.MouseCursor" />
-			</styles>
+		<element-def name="widget" abstract="true" inherits="with-background,with-text">
 			<?DOC The name of the widget.  Typically only used for debugging?>
 			<attribute name="name" type="string" specify="optional" />
 			<?DOC The tooltip to display when the user hovers the mouse over the widget, for user feedback?>

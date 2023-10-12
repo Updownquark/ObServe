@@ -42,7 +42,7 @@ import org.qommons.config.QonfigInterpretationException;
 import com.google.common.reflect.TypeToken;
 
 /** The base class for widgets in Quick */
-public interface QuickWidget extends QuickTextElement {
+public interface QuickWidget extends QuickTextElement, QuickWithBackground {
 	public static final String WIDGET = "widget";
 
 	/**
@@ -54,7 +54,7 @@ public interface QuickWidget extends QuickTextElement {
 		qonfigType = WIDGET,
 		interpretation = Interpreted.class,
 		instance = QuickWidget.class)
-	public interface Def<W extends QuickWidget> extends QuickTextElement.Def<W> {
+	public interface Def<W extends QuickWidget> extends QuickTextElement.Def<W>, QuickWithBackground.Def<W> {
 		@Override
 		QuickWidgetStyle.Def getStyle();
 
@@ -72,14 +72,6 @@ public interface QuickWidget extends QuickTextElement {
 		/** @return The expression determining when this widget is to be visible */
 		@QonfigAttributeGetter("visible")
 		CompiledExpression isVisible();
-
-		ModelComponentId getHoveredValue();
-
-		ModelComponentId getFocusedValue();
-
-		ModelComponentId getPressedValue();
-
-		ModelComponentId getRightPressedValue();
 
 		/** @return This widget's border */
 		@QonfigChildGetter("border")
@@ -230,7 +222,7 @@ public interface QuickWidget extends QuickTextElement {
 	 *
 	 * @param <W> The type of widget that this interpretation is for
 	 */
-	public interface Interpreted<W extends QuickWidget> extends QuickTextElement.Interpreted<W> {
+	public interface Interpreted<W extends QuickWidget> extends QuickTextElement.Interpreted<W>, QuickWithBackground.Interpreted<W> {
 		@Override
 		Def<? super W> getDefinition();
 
@@ -378,58 +370,6 @@ public interface QuickWidget extends QuickTextElement {
 		}
 	}
 
-	public interface WidgetContext {
-		SettableValue<Boolean> isHovered();
-
-		SettableValue<Boolean> isFocused();
-
-		SettableValue<Boolean> isPressed();
-
-		SettableValue<Boolean> isRightPressed();
-
-		public class Default implements WidgetContext {
-			private final SettableValue<Boolean> isHovered;
-			private final SettableValue<Boolean> isFocused;
-			private final SettableValue<Boolean> isPressed;
-			private final SettableValue<Boolean> isRightPressed;
-
-			public Default(SettableValue<Boolean> hovered, SettableValue<Boolean> focused, SettableValue<Boolean> pressed,
-				SettableValue<Boolean> rightPressed) {
-				isHovered = hovered;
-				isFocused = focused;
-				isPressed = pressed;
-				isRightPressed = rightPressed;
-			}
-
-			public Default() {
-				this(SettableValue.build(boolean.class).withValue(false).build(), //
-					SettableValue.build(boolean.class).withValue(false).build(), //
-					SettableValue.build(boolean.class).withValue(false).build(), //
-					SettableValue.build(boolean.class).withValue(false).build());
-			}
-
-			@Override
-			public SettableValue<Boolean> isHovered() {
-				return isHovered;
-			}
-
-			@Override
-			public SettableValue<Boolean> isFocused() {
-				return isFocused;
-			}
-
-			@Override
-			public SettableValue<Boolean> isPressed() {
-				return isPressed;
-			}
-
-			@Override
-			public SettableValue<Boolean> isRightPressed() {
-				return isRightPressed;
-			}
-		}
-	}
-
 	@Override
 	QuickWidgetStyle getStyle();
 
@@ -448,19 +388,9 @@ public interface QuickWidget extends QuickTextElement {
 	/** @return The value determining when this widget is to be visible */
 	SettableValue<Boolean> isVisible();
 
-	SettableValue<Boolean> isHovered();
-
-	SettableValue<Boolean> isFocused();
-
-	SettableValue<Boolean> isPressed();
-
-	SettableValue<Boolean> isRightPressed();
-
 	ObservableCollection<QuickEventListener> getEventListeners();
 
 	ObservableCollection<QuickDialog> getDialogs();
-
-	void setContext(WidgetContext ctx) throws ModelInstantiationException;
 
 	@Override
 	QuickWidget copy(ExElement parent);
@@ -566,7 +496,7 @@ public interface QuickWidget extends QuickTextElement {
 		}
 
 		@Override
-		public void setContext(WidgetContext ctx) throws ModelInstantiationException {
+		public void setContext(BackgroundContext ctx) throws ModelInstantiationException {
 			isHovered.set(ctx.isHovered(), null);
 			isFocused.set(ctx.isFocused(), null);
 			isPressed.set(ctx.isPressed(), null);
@@ -666,11 +596,10 @@ public interface QuickWidget extends QuickTextElement {
 				.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Boolean>> parameterized(boolean.class)).build();
 			copy.theEventListeners = ObservableCollection.build(QuickEventListener.class).build();
 
-			copy.isHovered = SettableValue
-				.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Boolean>> parameterized(boolean.class)).build();
-			copy.isFocused = SettableValue.build(isHovered.getType()).build();
-			copy.isPressed = SettableValue.build(isHovered.getType()).build();
-			copy.isRightPressed = SettableValue.build(isHovered.getType()).build();
+			copy.isHovered = SettableValue.build(isHovered.getType()).build();
+			copy.isFocused = SettableValue.build(isFocused.getType()).build();
+			copy.isPressed = SettableValue.build(isPressed.getType()).build();
+			copy.isRightPressed = SettableValue.build(isRightPressed.getType()).build();
 
 			if (theBorder != null)
 				copy.theBorder = theBorder.copy(copy);
@@ -683,12 +612,8 @@ public interface QuickWidget extends QuickTextElement {
 		}
 	}
 
-	public interface QuickWidgetStyle extends QuickTextStyle {
-		public interface Def extends QuickTextStyle.Def {
-			QuickStyleAttributeDef getColor();
-
-			QuickStyleAttributeDef getMouseCursor();
-
+	public interface QuickWidgetStyle extends QuickTextStyle, QuickBackgroundStyle {
+		public interface Def extends QuickTextStyle.Def, QuickBackgroundStyle.Def {
 			public class Default extends QuickTextStyle.Def.Abstract implements QuickWidgetStyle.Def {
 				private final QuickStyleAttributeDef theColor;
 				private final QuickStyleAttributeDef theMouseCursor;
@@ -720,11 +645,7 @@ public interface QuickWidget extends QuickTextElement {
 			}
 		}
 
-		public interface Interpreted extends QuickTextStyle.Interpreted {
-			QuickElementStyleAttribute<Color> getColor();
-
-			QuickElementStyleAttribute<MouseCursor> getMouseCursor();
-
+		public interface Interpreted extends QuickTextStyle.Interpreted, QuickBackgroundStyle.Interpreted {
 			@Override
 			QuickWidgetStyle create(QuickStyledElement styledElement);
 
@@ -767,10 +688,6 @@ public interface QuickWidget extends QuickTextElement {
 				}
 			}
 		}
-
-		ObservableValue<Color> getColor();
-
-		ObservableValue<MouseCursor> getMouseCursor();
 
 		public class Default extends QuickTextStyle.Abstract implements QuickWidgetStyle {
 			private QuickStyleAttribute<Color> theColorAttr;
