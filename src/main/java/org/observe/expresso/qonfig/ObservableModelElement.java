@@ -1,8 +1,6 @@
 package org.observe.expresso.qonfig;
 
 import java.awt.Image;
-import java.awt.event.ComponentAdapter;
-import java.awt.event.ComponentEvent;
 import java.io.BufferedInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -12,7 +10,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
-import javax.swing.JFrame;
+import javax.swing.JDialog;
 
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
@@ -41,6 +39,7 @@ import org.observe.expresso.ObservableModelSet.ModelSetInstance;
 import org.observe.expresso.ObservableModelSet.ModelValueInstantiator;
 import org.observe.expresso.qonfig.ModelValueElement.CompiledSynth;
 import org.observe.util.TypeTokens;
+import org.observe.util.swing.PanelPopulation;
 import org.observe.util.swing.WindowPopulation;
 import org.qommons.QommonsUtils;
 import org.qommons.ThreadConstraint;
@@ -1016,56 +1015,44 @@ public abstract class ObservableModelElement extends ExElement.Abstract {
 				SettableValue<Instant> selectedBackup = SettableValue.build(Instant.class).build();
 				Format<Instant> PAST_DATE_FORMAT = SpinnerFormat.flexDate(Instant::now, "EEE MMM dd, yyyy", opts -> opts
 					.withMaxResolution(TimeUtils.DateElementType.Second).withEvaluationType(TimeUtils.RelativeInstantEvaluation.Past));
-				JFrame[] frame = new JFrame[1];
 				boolean[] backedUp = new boolean[1];
 				ObservableValue<String> title = (app == null || app.title == null) ? ObservableValue.of("Unnamed Application")
 					: app.title.get(msi);
 				ObservableValue<Image> icon = (app == null || app.icon == null) ? ObservableValue.of(Image.class, null) : app.icon.get(msi);
-				frame[0] = WindowPopulation.populateWindow(null, null, false, false)//
-					.withTitle((app == null || title.get() == null) ? "Backup" : title.get() + " Backup")//
-					.withIcon(app == null ? ObservableValue.of(Image.class, null) : icon)//
-					.withVContent(content -> {
-						if (fromError)
-							content.addLabel(null, "Your configuration is missing or has been corrupted", null);
-						TimeUtils.RelativeTimeFormat durationFormat = TimeUtils.relativeFormat()
-							.withMaxPrecision(TimeUtils.DurationComponentType.Second).withMaxElements(2).withMonthsAndYears();
-						content.addLabel(null, "Please choose a backup to restore", null)//
-						.addTable(ObservableCollection.of(TypeTokens.get().of(Instant.class), backupTimes.reverse()), table -> {
-							table.fill()
-							.withColumn("Date", Instant.class, t -> t,
-								col -> col.formatText(PAST_DATE_FORMAT::format).withWidths(80, 160, 500))//
-							.withColumn("Age", Instant.class, t -> t,
-								col -> col.formatText(t -> durationFormat.printAsDuration(t, Instant.now())).withWidths(50, 90,
-									500))//
-							.withSelection(selectedBackup, true);
-						}).addButton("Backup", __ -> {
-							closingWithoutSave[0] = true;
-							try {
-								backups.restore(selectedBackup.get());
-								if (config != null)
-									populate(config, QommonsConfig
-										.fromXml(QommonsConfig.getRootElement(backups.getBackup(selectedBackup.get()).read())));
-								backedUp[0] = true;
-							} catch (IOException e) {
-								e.printStackTrace();
-							} finally {
-								closingWithoutSave[0] = false;
-							}
-							frame[0].setVisible(false);
-						}, btn -> btn.disableWith(selectedBackup.map(t -> t == null ? "Select a Backup" : null)));
-					}).run(null).getWindow();
-				frame[0].addComponentListener(new ComponentAdapter() {
-					@Override
-					public void componentHidden(ComponentEvent e) {
-						if (backedUp[0]) {
-							if (onBackup != null)
-								onBackup.run();
-						} else {
-							if (onNoBackup != null)
-								onNoBackup.run();
+				PanelPopulation.DialogBuilder<JDialog, ?> dialog = WindowPopulation.populateDialog(null, null, false);
+				dialog.modal(true)//
+				.withTitle((app == null || title.get() == null) ? "Backup" : title.get() + " Backup")//
+				.withIcon(app == null ? ObservableValue.of(Image.class, null) : icon)//
+				.withVContent(content -> {
+					if (fromError)
+						content.addLabel(null, "Your configuration is missing or has been corrupted", null);
+					TimeUtils.RelativeTimeFormat durationFormat = TimeUtils.relativeFormat()
+						.withMaxPrecision(TimeUtils.DurationComponentType.Second).withMaxElements(2).withMonthsAndYears();
+					content.addLabel(null, "Please choose a backup to restore", null)//
+					.addTable(ObservableCollection.of(TypeTokens.get().of(Instant.class), backupTimes.reverse()), table -> {
+						table.fill()
+						.withColumn("Date", Instant.class, t -> t,
+							col -> col.formatText(PAST_DATE_FORMAT::format).withWidths(80, 160, 500))//
+						.withColumn("Age", Instant.class, t -> t,
+							col -> col.formatText(t -> durationFormat.printAsDuration(t, Instant.now())).withWidths(50, 90,
+								500))//
+						.withSelection(selectedBackup, true);
+					}).addButton("Backup", __ -> {
+						closingWithoutSave[0] = true;
+						try {
+							backups.restore(selectedBackup.get());
+							if (config != null)
+								populate(config, QommonsConfig
+									.fromXml(QommonsConfig.getRootElement(backups.getBackup(selectedBackup.get()).read())));
+							backedUp[0] = true;
+						} catch (IOException e) {
+							e.printStackTrace();
+						} finally {
+							closingWithoutSave[0] = false;
 						}
-					}
-				});
+								dialog.getWindow().setVisible(false);
+					}, btn -> btn.disableWith(selectedBackup.map(t -> t == null ? "Select a Backup" : null)));
+				}).run(null).getWindow();
 			}
 
 			static void populate(ObservableConfig config, QommonsConfig initConfig) {
