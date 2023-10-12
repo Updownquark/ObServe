@@ -5,6 +5,7 @@ import java.awt.Color;
 import java.awt.Component;
 import java.awt.Cursor;
 import java.awt.LayoutManager;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -25,6 +26,7 @@ import org.observe.quick.QuickWidget;
 import org.observe.quick.QuickWithBackground;
 import org.observe.quick.base.CollapsePane;
 import org.observe.quick.base.QuickMultiSlider;
+import org.observe.quick.base.QuickMultiSlider.SliderBgRenderer;
 import org.observe.quick.base.QuickMultiSlider.SliderHandleRenderer;
 import org.observe.quick.base.QuickTableColumn;
 import org.observe.quick.base.QuickTreeTable;
@@ -43,6 +45,7 @@ import org.observe.util.swing.PanelPopulation.CollapsePanel;
 import org.observe.util.swing.PanelPopulation.ComponentEditor;
 import org.observe.util.swing.PanelPopulation.ContainerPopulator;
 import org.observe.util.swing.PanelPopulation.PanelPopulator;
+import org.qommons.Causable;
 import org.qommons.ThreadConstraint;
 import org.qommons.Transformer;
 import org.qommons.ValueHolder;
@@ -317,27 +320,21 @@ public class QuickXSwing implements QuickInterpretation {
 			throws ModelInstantiationException {
 			HandleRenderer handleRenderer = quick.getHandleRenderer() == null ? null
 				: new HandleRenderer(false, quick.getValues(), quick.getHandleRenderer(), theTransformer);
+			BgRenderer bgRenderer = quick.getBgRenderers().isEmpty() ? null
+				: new BgRenderer(quick.getBgRenderers(), Observable.or(panel.getUntil(), quick.onDestroy()));
 			panel.addMultiSlider(null, quick.getValues(), slider -> {
 				component.accept(slider);
+				if (bgRenderer != null)
+					bgRenderer.setSlider(slider.getEditor());
 				slider.withBounds(quick.getMin(), quick.getMax());
 				if (quick.isOrderEnforced())
 					slider.getEditor().setValidator(MultiRangeSlider.RangeValidator.NO_OVERLAP_ENFORCE_RANGE);
 				else
 					slider.getEditor().setValidator(MultiRangeSlider.RangeValidator.ENFORCE_RANGE);
-				quick.getBGRenderer().changes().takeUntil(slider.getUntil()).act(evt -> {
-					if (evt.getNewValue() != null)
-						slider.getEditor().setRenderer(evt.getNewValue());
-					else if (!evt.isInitial())
-						slider.getEditor().setRenderer(new MultiRangeSlider.MRSliderRenderer.Default());
-				});
-				quick.getValueRenderer().changes().takeUntil(slider.getUntil()).act(evt -> {
-					if (evt.getNewValue() != null)
-						slider.getEditor().setRangeRenderer(evt.getNewValue());
-					else if (handleRenderer != null)
-						slider.getEditor().setRangeRenderer(handleRenderer);
-					else if (!evt.isInitial())
-						slider.getEditor().setRangeRenderer(new MultiRangeSlider.RangeRenderer.Default(false));
-				});
+				if (handleRenderer != null)
+					slider.getEditor().setRangeRenderer(handleRenderer);
+				if (bgRenderer != null)
+					slider.getEditor().setRenderer(bgRenderer);
 			});
 		}
 
@@ -372,11 +369,7 @@ public class QuickXSwing implements QuickInterpretation {
 
 			@Override
 			public Component renderRange(CollectionElement<Range> range, RangePoint hovered, RangePoint focused) {
-				theHandleContext.getHandleValue().set(range.get().getValue(), null);
-				theHandleContext.getHandleIndex().set(theValues.getElementsBefore(range.getElementId()), null);
-				theBackgroundContext.isHovered().set(hovered != null, null);
-				theBackgroundContext.isFocused().set(focused != null, null);
-				// TODO Clicked
+				setContext(range, hovered != null, focused != null);
 
 				Integer thick = theQuickRenderer.getStyle().getLineThickness().get();
 				if (thick == null)
@@ -386,12 +379,31 @@ public class QuickXSwing implements QuickInterpretation {
 				return super.renderRange(range, hovered, focused);
 			}
 
+			private void setContext(CollectionElement<Range> range, boolean hovered, boolean focused) {
+				theHandleContext.getHandleValue().set(range.get().getValue(), null);
+				theHandleContext.getHandleIndex().set(theValues.getElementsBefore(range.getElementId()), null);
+				theBackgroundContext.isHovered().set(hovered, null);
+				theBackgroundContext.isFocused().set(focused, null);
+				// TODO Clicked
+			}
+
+			@Override
+			public String getTooltip(CollectionElement<Range> range, RangePoint point) {
+				if (theQuickRenderer.getTooltip() != null) {
+					setContext(range, getHovered() != null, getFocused() != null);
+					return theQuickRenderer.getTooltip().get();
+				} else
+					return super.getTooltip(range, point);
+			}
+
 			Color getLineColor() {
-				return theQuickRenderer.getStyle().getLineColor().get();
+				Color color = theQuickRenderer.getStyle().getLineColor().get();
+				return color == null ? getForeground() : color;
 			}
 
 			Color getFillColor() {
-				return theQuickRenderer.getStyle().getColor().get();
+				Color color = theQuickRenderer.getStyle().getColor().get();
+				return color == null ? getBackground() : color;
 			}
 
 			@Override
@@ -400,6 +412,44 @@ public class QuickXSwing implements QuickInterpretation {
 				if(cursor!=null)
 					return cursor;
 				return super.getCursor(range, point, focused);
+			}
+		}
+
+		static class BgRenderer extends MultiRangeSlider.MRSliderRenderer.Default {
+			private final List<QuickMultiSlider.SliderBgRenderer> theQuickRenderers;
+			private MultiRangeSlider theSlider;
+
+			BgRenderer(List<SliderBgRenderer> quickRenderers, Observable<?> until) {
+				theQuickRenderers = quickRenderers;
+				List<Observable<? extends Causable>> listening = new ArrayList<>();
+				for (QuickMultiSlider.SliderBgRenderer bgr : theQuickRenderers) {
+					if (bgr.getMaxValue() != null)
+						listening.add(bgr.getMaxValue().noInitChanges());
+				}
+				setLineThickness(2);
+				Observable.onRootFinish(Observable.or(listening.toArray(new Observable[listening.size()]))).takeUntil(until)
+				.act(__ -> update(false));
+				update(true);
+			}
+
+			void setSlider(MultiRangeSlider slider) {
+				theSlider = slider;
+			}
+
+			void update(boolean init) {
+				clearColorRanges();
+
+				// First renderers defined should have priority
+				for (int i = theQuickRenderers.size() - 1; i >= 0; i--) {
+					QuickMultiSlider.SliderBgRenderer bgr = theQuickRenderers.get(i);
+					Color color = bgr.getStyle().getColor().get();
+					if (color == null)
+						continue;
+					withColorRange(bgr.getMaxValue() == null ? Double.POSITIVE_INFINITY : bgr.getMaxValue().get(), color);
+				}
+
+				if (!init && theSlider != null)
+					theSlider.repaint();
 			}
 		}
 	}

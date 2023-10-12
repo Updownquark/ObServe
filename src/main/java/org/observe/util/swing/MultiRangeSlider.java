@@ -595,7 +595,7 @@ public class MultiRangeSlider extends ConformingPanel {
 				}
 			}
 
-			private Color getColor(double value) {
+			protected Color getColor(double value) {
 				if (theColorRanges.isEmpty())
 					return getForeground();
 				Map.Entry<Double, Color> range = theColorRanges.ceilingEntry(value);

@@ -36,7 +36,6 @@ import org.observe.quick.style.QuickStyleSheet;
 import org.observe.quick.style.QuickStyledElement;
 import org.observe.quick.style.QuickTypeStyle;
 import org.observe.util.TypeTokens;
-import org.observe.util.swing.MultiRangeSlider;
 import org.qommons.collect.CollectionUtils;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
@@ -49,9 +48,14 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 	public static final String SLIDER_BG_RENDERER = "slider-bg-renderer";
 
 	public static class SliderHandleRenderer extends QuickWithBackground.Abstract {
+		@ExElementTraceable(toolkit = QuickXInterpretation.X,
+			qonfigType = SLIDER_HANDLE_RENDERER,
+			interpretation = Interpreted.class,
+			instance = SliderHandleRenderer.class)
 		public static class Def extends QuickWithBackground.Def.Abstract<SliderHandleRenderer> {
 			private ModelComponentId theHandleValueVariable;
 			private ModelComponentId theHandleIndexVariable;
+			private CompiledExpression theTooltip;
 
 			public Def(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
 				super(parent, type);
@@ -63,6 +67,11 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 
 			public ModelComponentId getHandleIndexVariable() {
 				return theHandleIndexVariable;
+			}
+
+			@QonfigAttributeGetter("tooltip")
+			public CompiledExpression getTooltip() {
+				return theTooltip;
 			}
 
 			@Override
@@ -82,6 +91,7 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 				ExWithElementModel.Def elModels = getAddOn(ExWithElementModel.Def.class);
 				theHandleValueVariable = elModels.getElementValueModelId("handleValue");
 				theHandleIndexVariable = elModels.getElementValueModelId("handleIndex");
+				theTooltip = session.getAttributeExpression("tooltip");
 			}
 
 			public Interpreted interpret(ExElement.Interpreted<?> parent) {
@@ -90,6 +100,8 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 		}
 
 		public static class Interpreted extends QuickWithBackground.Interpreted.Abstract<SliderHandleRenderer> {
+			private InterpretedValueSynth<SettableValue<?>, SettableValue<String>> theTooltip;
+
 			Interpreted(SliderHandleRenderer.Def definition, ExElement.Interpreted<?> parent) {
 				super(definition, parent);
 			}
@@ -104,8 +116,19 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 				return (SliderHandleStyle.Interpreted) super.getStyle();
 			}
 
+			public InterpretedValueSynth<SettableValue<?>, SettableValue<String>> getTooltip() {
+				return theTooltip;
+			}
+
 			public void updateRenderer(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 				update(env);
+			}
+
+			@Override
+			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
+				super.doUpdate(env);
+				theTooltip = getDefinition().getTooltip() == null ? null
+					: getDefinition().getTooltip().interpret(ModelTypes.Value.STRING, env);
 			}
 
 			public SliderHandleRenderer create() {
@@ -146,9 +169,11 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 
 		private ModelComponentId theHandleValueVariable;
 		private ModelComponentId theHandleIndexVariable;
+		private ModelValueInstantiator<SettableValue<String>> theTooltipInstantiator;
 
 		private SettableValue<SettableValue<Double>> theHandleValue;
 		private SettableValue<SettableValue<Integer>> theHandleIndex;
+		private SettableValue<String> theTooltip;
 
 		public SliderHandleRenderer(Object id) {
 			super(id);
@@ -171,6 +196,10 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 			return (SliderHandleStyle) super.getStyle();
 		}
 
+		public SettableValue<String> getTooltip() {
+			return theTooltip;
+		}
+
 		public void setHandleContext(HandleRenderContext context) throws ModelInstantiationException {
 			theHandleValue.set(context.getHandleValue(), null);
 			theHandleIndex.set(context.getHandleIndex(), null);
@@ -183,6 +212,15 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 			Interpreted myInterpreted = (Interpreted) interpreted;
 			theHandleValueVariable = myInterpreted.getDefinition().getHandleValueVariable();
 			theHandleIndexVariable = myInterpreted.getDefinition().getHandleIndexVariable();
+			theTooltipInstantiator = myInterpreted.getTooltip() == null ? null : myInterpreted.getTooltip().instantiate();
+		}
+
+		@Override
+		public void instantiated() {
+			super.instantiated();
+
+			if (theTooltipInstantiator != null)
+				theTooltipInstantiator.instantiate();
 		}
 
 		@Override
@@ -191,6 +229,7 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 
 			ExFlexibleElementModelAddOn.satisfyElementValue(theHandleValueVariable, myModels, SettableValue.flatten(theHandleValue));
 			ExFlexibleElementModelAddOn.satisfyElementValue(theHandleIndexVariable, myModels, SettableValue.flatten(theHandleIndex));
+			theTooltip = theTooltipInstantiator == null ? null : theTooltipInstantiator.get(myModels);
 		}
 
 		@Override
@@ -310,18 +349,18 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 	}
 
 	public static class SliderBgRenderer extends QuickWithBackground.Abstract {
+		@ExElementTraceable(toolkit = QuickXInterpretation.X,
+			qonfigType = SLIDER_BG_RENDERER,
+			interpretation = Interpreted.class,
+			instance = SliderBgRenderer.class)
 		public static class Def extends QuickWithBackground.Def.Abstract<SliderBgRenderer> {
-			private CompiledExpression theMinValue;
 			private CompiledExpression theMaxValue;
 
 			public Def(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
 				super(parent, type);
 			}
 
-			public CompiledExpression getMinValue() {
-				return theMinValue;
-			}
-
+			@QonfigAttributeGetter("max-value")
 			public CompiledExpression getMaxValue() {
 				return theMaxValue;
 			}
@@ -329,7 +368,6 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 			@Override
 			protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 				super.doUpdate(session);
-				theMinValue = session.getAttributeExpression("min-value");
 				theMaxValue = session.getAttributeExpression("max-value");
 			}
 
@@ -339,7 +377,6 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 		}
 
 		public static class Interpreted extends QuickWithBackground.Interpreted.Abstract<SliderBgRenderer> {
-			private InterpretedValueSynth<SettableValue<?>, SettableValue<Double>> theMinValue;
 			private InterpretedValueSynth<SettableValue<?>, SettableValue<Double>> theMaxValue;
 
 			Interpreted(SliderBgRenderer.Def definition, ExElement.Interpreted<?> parent) {
@@ -349,10 +386,6 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 			@Override
 			public SliderBgRenderer.Def getDefinition() {
 				return (SliderBgRenderer.Def) super.getDefinition();
-			}
-
-			public InterpretedValueSynth<SettableValue<?>, SettableValue<Double>> getMinValue() {
-				return theMinValue;
 			}
 
 			public InterpretedValueSynth<SettableValue<?>, SettableValue<Double>> getMaxValue() {
@@ -367,8 +400,6 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 			protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 				super.doUpdate(env);
 
-				theMinValue = getDefinition().getMinValue() == null ? null
-					: getDefinition().getMinValue().interpret(ModelTypes.Value.DOUBLE, env);
 				theMaxValue = getDefinition().getMaxValue() == null ? null
 					: getDefinition().getMaxValue().interpret(ModelTypes.Value.DOUBLE, env);
 			}
@@ -378,18 +409,12 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 			}
 		}
 
-		private ModelValueInstantiator<SettableValue<Double>> theMinValueInstantiator;
 		private ModelValueInstantiator<SettableValue<Double>> theMaxValueInstantiator;
 
-		private SettableValue<Double> theMinValue;
 		private SettableValue<Double> theMaxValue;
 
 		public SliderBgRenderer(Object id) {
 			super(id);
-		}
-
-		public SettableValue<Double> getMinValue() {
-			return theMinValue;
 		}
 
 		public SettableValue<Double> getMaxValue() {
@@ -401,7 +426,6 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 			super.doUpdate(interpreted);
 
 			Interpreted myInterpreted = (Interpreted) interpreted;
-			theMinValueInstantiator = myInterpreted.getMinValue() == null ? null : myInterpreted.getMinValue().instantiate();
 			theMaxValueInstantiator = myInterpreted.getMaxValue() == null ? null : myInterpreted.getMaxValue().instantiate();
 		}
 
@@ -409,8 +433,6 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 		public void instantiated() {
 			super.instantiated();
 
-			if (theMinValueInstantiator != null)
-				theMinValueInstantiator.instantiate();
 			if (theMaxValueInstantiator != null)
 				theMaxValueInstantiator.instantiate();
 		}
@@ -419,7 +441,6 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 		protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
 			super.doInstantiate(myModels);
 
-			theMinValue = theMinValueInstantiator == null ? null : theMinValueInstantiator.get(myModels);
 			theMaxValue = theMaxValueInstantiator == null ? null : theMaxValueInstantiator.get(myModels);
 		}
 
@@ -439,8 +460,6 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 		private boolean isOrderEnforced;
 		private CompiledExpression theMin;
 		private CompiledExpression theMax;
-		private CompiledExpression theBgRenderer;
-		private CompiledExpression theValueRenderer;
 		private SliderHandleRenderer.Def theHandleRenderer;
 		private final List<SliderBgRenderer.Def> theBgRenderers;
 
@@ -474,16 +493,6 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 			return theMax;
 		}
 
-		@QonfigAttributeGetter("bg-renderer")
-		public CompiledExpression getBGRenderer() {
-			return theBgRenderer;
-		}
-
-		@QonfigAttributeGetter("value-renderer")
-		public CompiledExpression getValueRenderer() {
-			return theValueRenderer;
-		}
-
 		@QonfigChildGetter("handle-renderer")
 		public SliderHandleRenderer.Def getHandleRenderer() {
 			return theHandleRenderer;
@@ -503,8 +512,6 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 			isOrderEnforced = session.getAttribute("enforce-order", boolean.class);
 			theMin = session.getAttributeExpression("min");
 			theMax = session.getAttributeExpression("max");
-			theBgRenderer = session.getAttributeExpression("bg-renderer");
-			theValueRenderer = session.getAttributeExpression("value-renderer");
 			theHandleRenderer = ExElement.useOrReplace(SliderHandleRenderer.Def.class, theHandleRenderer, session, "handle-renderer");
 			ExElement.syncDefs(SliderBgRenderer.Def.class, theBgRenderers, session.forChildren("bg-renderer"));
 		}
@@ -519,8 +526,6 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 		private InterpretedValueSynth<ObservableCollection<?>, ObservableCollection<Double>> theValues;
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<Double>> theMin;
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<Double>> theMax;
-		private InterpretedValueSynth<SettableValue<?>, SettableValue<MultiRangeSlider.MRSliderRenderer>> theBgRenderer;
-		private InterpretedValueSynth<SettableValue<?>, SettableValue<MultiRangeSlider.RangeRenderer>> theValueRenderer;
 		private SliderHandleRenderer.Interpreted theHandleRenderer;
 		private final List<SliderBgRenderer.Interpreted> theBgRenderers;
 
@@ -546,14 +551,6 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 			return theMax;
 		}
 
-		public InterpretedValueSynth<SettableValue<?>, SettableValue<MultiRangeSlider.MRSliderRenderer>> getBGRenderer() {
-			return theBgRenderer;
-		}
-
-		public InterpretedValueSynth<SettableValue<?>, SettableValue<MultiRangeSlider.RangeRenderer>> getValueRenderer() {
-			return theValueRenderer;
-		}
-
 		public SliderHandleRenderer.Interpreted getHandleRenderer() {
 			return theHandleRenderer;
 		}
@@ -574,10 +571,6 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 			theValues = getDefinition().getValues().interpret(ModelTypes.Collection.forType(double.class), env);
 			theMin = getDefinition().getMin().interpret(ModelTypes.Value.DOUBLE, env);
 			theMax = getDefinition().getMax().interpret(ModelTypes.Value.DOUBLE, env);
-			theBgRenderer = getDefinition().getBGRenderer() == null ? null
-				: getDefinition().getBGRenderer().interpret(ModelTypes.Value.forType(MultiRangeSlider.MRSliderRenderer.class), env);
-			theValueRenderer = getDefinition().getValueRenderer() == null ? null
-				: getDefinition().getValueRenderer().interpret(ModelTypes.Value.forType(MultiRangeSlider.RangeRenderer.class), env);
 
 			if (theHandleRenderer != null && (getDefinition().getHandleRenderer() == null
 				|| theHandleRenderer.getIdentity() != getDefinition().getHandleRenderer().getIdentity())) {
@@ -608,16 +601,12 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 	private ModelValueInstantiator<ObservableCollection<Double>> theValuesInstantiator;
 	private ModelValueInstantiator<SettableValue<Double>> theMinInstantiator;
 	private ModelValueInstantiator<SettableValue<Double>> theMaxInstantiator;
-	private ModelValueInstantiator<SettableValue<MultiRangeSlider.MRSliderRenderer>> theBgRendererInstantiator;
-	private ModelValueInstantiator<SettableValue<MultiRangeSlider.RangeRenderer>> theValueRendererInstantiator;
 
 	private boolean isVertical;
 	private boolean isOrderEnforced;
 	private SettableValue<ObservableCollection<Double>> theValues;
 	private SettableValue<SettableValue<Double>> theMin;
 	private SettableValue<SettableValue<Double>> theMax;
-	private SettableValue<SettableValue<MultiRangeSlider.MRSliderRenderer>> theBgRenderer;
-	private SettableValue<SettableValue<MultiRangeSlider.RangeRenderer>> theValueRenderer;
 	private SliderHandleRenderer theHandleRenderer;
 	private List<SliderBgRenderer> theBgRenderers;
 
@@ -628,14 +617,6 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 		theMin = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Double>> parameterized(double.class))
 			.build();
 		theMax = SettableValue.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<Double>> parameterized(double.class))
-			.build();
-		theBgRenderer = SettableValue
-			.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<MultiRangeSlider.MRSliderRenderer>> parameterized(
-				MultiRangeSlider.MRSliderRenderer.class))
-			.build();
-		theValueRenderer = SettableValue
-			.build(TypeTokens.get().keyFor(SettableValue.class).<SettableValue<MultiRangeSlider.RangeRenderer>> parameterized(
-				MultiRangeSlider.RangeRenderer.class))
 			.build();
 		theBgRenderers = new ArrayList<>();
 	}
@@ -660,14 +641,6 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 		return SettableValue.flatten(theMax, () -> 0.0);
 	}
 
-	public SettableValue<MultiRangeSlider.MRSliderRenderer> getBGRenderer() {
-		return SettableValue.flatten(theBgRenderer);
-	}
-
-	public SettableValue<MultiRangeSlider.RangeRenderer> getValueRenderer() {
-		return SettableValue.flatten(theValueRenderer);
-	}
-
 	public SliderHandleRenderer getHandleRenderer() {
 		return theHandleRenderer;
 	}
@@ -686,8 +659,6 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 		theValuesInstantiator = myInterpreted.getValues().instantiate();
 		theMinInstantiator = myInterpreted.getMin().instantiate();
 		theMaxInstantiator = myInterpreted.getMax().instantiate();
-		theBgRendererInstantiator = myInterpreted.getBGRenderer() == null ? null : myInterpreted.getBGRenderer().instantiate();
-		theValueRendererInstantiator = myInterpreted.getValueRenderer() == null ? null : myInterpreted.getValueRenderer().instantiate();
 
 		if (theHandleRenderer != null && (myInterpreted.getHandleRenderer() == null
 			|| theHandleRenderer.getIdentity() != myInterpreted.getHandleRenderer().getIdentity())) {
@@ -716,10 +687,6 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 		theValuesInstantiator.instantiate();
 		theMinInstantiator.instantiate();
 		theMaxInstantiator.instantiate();
-		if (theBgRendererInstantiator != null)
-			theBgRendererInstantiator.instantiate();
-		if (theValueRendererInstantiator != null)
-			theValueRendererInstantiator.instantiate();
 		if (theHandleRenderer != null)
 			theHandleRenderer.instantiated();
 		for (SliderBgRenderer bgRenderer : theBgRenderers)
@@ -741,8 +708,6 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 			theMin.set(min, null);
 			theMax.set(max, null);
 		}
-		theBgRenderer.set(theBgRendererInstantiator == null ? null : theBgRendererInstantiator.get(myModels), null);
-		theValueRenderer.set(theValueRendererInstantiator == null ? null : theValueRendererInstantiator.get(myModels), null);
 		if (theHandleRenderer != null)
 			theHandleRenderer.instantiate(myModels);
 		for (SliderBgRenderer bgRenderer : theBgRenderers)
@@ -756,8 +721,6 @@ public class QuickMultiSlider extends QuickWidget.Abstract {
 		copy.theValues = SettableValue.build(theValues.getType()).build();
 		copy.theMin = SettableValue.build(theMin.getType()).build();
 		copy.theMax = SettableValue.build(theMax.getType()).build();
-		copy.theBgRenderer = SettableValue.build(theBgRenderer.getType()).build();
-		copy.theValueRenderer = SettableValue.build(theValueRenderer.getType()).build();
 		if (theHandleRenderer != null)
 			copy.theHandleRenderer = theHandleRenderer.copy(copy);
 		copy.theBgRenderers = new ArrayList<>();
