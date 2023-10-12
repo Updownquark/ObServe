@@ -110,6 +110,8 @@ public class QuickBaseInterpretation implements QonfigInterpretation {
 		interpreter.createWith(QuickButton.BUTTON, QuickButton.Def.class, ExElement.creator(QuickButton.Def::new));
 		interpreter.createWith(QuickFileButton.FILE_BUTTON, QuickFileButton.Def.class, ExElement.creator(QuickFileButton.Def::new));
 		interpreter.createWith(QuickComboBox.COMBO_BOX, QuickComboBox.Def.class, ExElement.creator(QuickComboBox.Def::new));
+		interpreter.createWith(QuickSlider.SLIDER, QuickSlider.Def.class, ExElement.creator(QuickSlider.Def::new));
+		interpreter.createWith(QuickSpinner.SPINNER, QuickSpinner.Def.class, ExElement.creator(QuickSpinner.Def::new));
 		interpreter.createWith(QuickRadioButtons.RADIO_BUTTONS, QuickRadioButtons.Def.class, ExElement.creator(QuickRadioButtons.Def::new));
 		interpreter.createWith(QuickTextArea.TEXT_AREA, QuickTextArea.Def.class, ExElement.creator(QuickTextArea.Def::new));
 		interpreter.createWith(QuickProgressBar.PROGRESS_BAR, QuickProgressBar.Def.class, ExElement.creator(QuickProgressBar.Def::new));

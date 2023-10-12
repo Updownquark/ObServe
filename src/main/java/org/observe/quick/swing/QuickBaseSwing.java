@@ -102,6 +102,8 @@ public class QuickBaseSwing implements QuickInterpretation {
 		tx.with(QuickButton.Interpreted.class, QuickSwingPopulator.class, widget(SwingButton::new));
 		tx.with(QuickFileButton.Interpreted.class, QuickSwingPopulator.class, widget(SwingFileButton::new));
 		tx.with(QuickComboBox.Interpreted.class, QuickSwingPopulator.class, SwingComboBox::new);
+		tx.with(QuickSlider.Interpreted.class, QuickSwingPopulator.class, widget(SwingSlider::new));
+		tx.with(QuickSpinner.Interpreted.class, QuickSwingPopulator.class, (i, tx2) -> new SwingSpinner<>(i));
 		tx.with(QuickRadioButtons.Interpreted.class, QuickSwingPopulator.class, widget(SwingRadioButtons::new));
 		tx.with(QuickTextArea.Interpreted.class, QuickSwingPopulator.class, SwingTextArea::new);
 		tx.with(DynamicStyledDocument.Interpreted.class, QuickSwingDocument.class,
@@ -832,6 +834,40 @@ public class QuickBaseSwing implements QuickInterpretation {
 				if (theRenderer != null)
 					cf.renderWith(renderer);
 			});
+		}
+	}
+
+	static class SwingSlider extends QuickSwingPopulator.Abstract<QuickSlider> {
+		@Override
+		protected void doPopulate(PanelPopulator<?, ?> panel, QuickSlider quick, Consumer<ComponentEditor<?, ?>> component)
+			throws ModelInstantiationException {
+			panel.addSlider(null, quick.getValue(), slider -> {
+				component.accept(slider);
+				slider.withBounds(quick.getMin(), quick.getMax());
+			});
+		}
+	}
+
+	static class SwingSpinner<T> extends QuickSwingPopulator.Abstract<QuickSpinner<T>> {
+		private final Class<T> theType;
+
+		SwingSpinner(QuickSpinner.Interpreted<T> interpreted) throws ExpressoInterpretationException {
+			theType = TypeTokens.get().unwrap(TypeTokens.getRawType(interpreted.getValueType()));
+		}
+
+		@Override
+		protected void doPopulate(PanelPopulator<?, ?> panel, QuickSpinner<T> quick, Consumer<ComponentEditor<?, ?>> component)
+			throws ModelInstantiationException {
+			throw new UnsupportedOperationException("Not implemented");
+			// SpinnerModel model;
+			// if(theType == int.class)
+			// model=new SpinnerNumberModel((Integer) quick.getValue().get(), Integer.MIN_VALUE, Integer.MAX_VALUE, 1);
+			// else
+			// model=null; //TODO
+			// panel.addSpinnerField(null, new JSpinner(model), quick.getValue(), v->v, spinner -> {
+			// component.accept(spinner);
+			// spinner.withS
+			// });
 		}
 	}
 

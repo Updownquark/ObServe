@@ -328,6 +328,10 @@
 		<element-def name="spinner" extends="text-field">
 			<attribute name="increment" type="expression" specify="optional" />
 		</element-def>
+		<element-def name="slider" extends="value-widget">
+			<attribute name="min" type="expression" />
+			<attribute name="max" type="expression" />
+		</element-def>
 		<?DOC A progress bar?>
 		<element-def name="progress-bar" extends="value-widget">
 			<?DOC The maximum value for the progress bar?>
