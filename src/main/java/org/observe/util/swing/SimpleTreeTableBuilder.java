@@ -396,6 +396,8 @@ implements TreeTableEditor<F, P> {
 		if (isSingleSelection)
 			getEditor().getSelectionModel().setSelectionMode(TreeSelectionModel.SINGLE_TREE_SELECTION);
 
+		if (theTreeColumn != null && theTreeColumn.getRenderer() != null)
+			theTreeColumn.getRenderer().associate((Component) getEditor().getCellRenderer(0, 0)); // Hacky, but it works
 		getEditor().setRootVisible(isRootVisible);
 		return comp;
 	}

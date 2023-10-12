@@ -2,7 +2,10 @@ package org.observe.util.swing;
 
 import java.awt.Color;
 import java.awt.Component;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.function.BiFunction;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
@@ -39,6 +42,10 @@ public interface ObservableCellRenderer<M, C> {
 	ObservableCellRenderer<M, C> decorate(CellDecorator<M, C> decorator);
 
 	ObservableCellRenderer<M, C> modify(Function<Component, Runnable> rendered);
+
+	ObservableCellRenderer<M, C> modifyAssociated(Consumer<Component> modify);
+
+	void associate(Component component);
 
 	Component getCellRendererComponent(Component parent, ModelCell<? extends M, ? extends C> cell, CellRenderContext ctx);
 
@@ -112,6 +119,8 @@ public interface ObservableCellRenderer<M, C> {
 		private ComponentDecorator theComponentDecorator;
 		private Runnable theRevert;
 		private Function<Component, Runnable> theModifier;
+		private Consumer<Component> theAssociatedModifier;
+		private List<Component> theAssociated;
 
 		@Override
 		public Component getCellRendererComponent(Component parent, ModelCell<? extends M, ? extends C> cell, CellRenderContext ctx) {
@@ -178,6 +187,33 @@ public interface ObservableCellRenderer<M, C> {
 			else
 				theDecorator = theDecorator.modify(decorator);
 			return this;
+		}
+
+		@Override
+		public ObservableCellRenderer<M, C> modifyAssociated(Consumer<Component> modify) {
+			if (theAssociatedModifier == null)
+				theAssociatedModifier = modify;
+			else {
+				Consumer<Component> old = theAssociatedModifier;
+				theAssociatedModifier = c -> {
+					old.accept(c);
+					modify.accept(c);
+				};
+			}
+			if (theAssociated != null) {
+				for (Component assoc : theAssociated)
+					modify.accept(assoc);
+			}
+			return this;
+		}
+
+		@Override
+		public void associate(Component component) {
+			if (theAssociated == null)
+				theAssociated = new ArrayList<>();
+			theAssociated.add(component);
+			if (theAssociatedModifier != null)
+				theAssociatedModifier.accept(component);
 		}
 	}
 

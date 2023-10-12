@@ -2707,7 +2707,8 @@ public class JXTreeTable extends JXTable {
 			// removed as fix for #769-swingx: defaults for treetable should be same as tree
 			//            setOverwriteRendererIcons(true);
 			// setCellRenderer(new DefaultTreeRenderer());
-			setCellRenderer(new ClippedTreeCellRenderer());
+			// AButler: No need to cache for the default renderer
+			super.setCellRenderer(new ClippedTreeCellRenderer());
 		}
 
 
@@ -3144,7 +3145,54 @@ public class JXTreeTable extends JXTable {
 
 			visibleRow = row;
 
+			// Cache the cell renderer to allow the possibility for rendering to change the appearance of the entire hierarchical column
+			theCachingRenderer.cacheCellRenderer(value, isSelected, row, hasFocus);
+
 			return this;
+		}
+
+		private CachingTreeCellRenderer theCachingRenderer;
+
+		@Override
+		public void setCellRenderer(TreeCellRenderer renderer) {
+			theCachingRenderer = new CachingTreeCellRenderer(renderer);
+			super.setCellRenderer(theCachingRenderer);
+		}
+
+		/**
+		 * <p>
+		 * AButler: This hack is to allow some possibility for code to modify the appearance of the entire hierarchical column, not just the
+		 * tree cell.
+		 * </p>
+		 * <p>
+		 * E.g. highlighting odd rows in the tree is more or less impossible without this, because the background of the tree is painted
+		 * before the renderer is notified which cell is being painted.
+		 * </p>
+		 * <p>
+		 * With this hack, the renderer is called with cell details first, giving it the opportunity to modify the tree's appearance, then
+		 * the renderer is re-used when the tree calls for it.
+		 * </p>
+		 */
+		class CachingTreeCellRenderer extends DefaultXTreeCellRenderer {
+			private final TreeCellRenderer theWrappedRenderer;
+			private Component theCachedCellRenderer;
+
+			CachingTreeCellRenderer(TreeCellRenderer wrappedRenderer) {
+				theWrappedRenderer = wrappedRenderer;
+			}
+
+			private void cacheCellRenderer(Object value, boolean selected, int row, boolean hasFocus) {
+				theCachedCellRenderer = theWrappedRenderer.getTreeCellRendererComponent(TreeTableCellRenderer.this, value, selected,
+					hasFocus, selected, row, hasFocus);
+			}
+
+			@Override
+			public Component getTreeCellRendererComponent(JTree tree, Object value, boolean sel, boolean expanded, boolean leaf, int row,
+				boolean hasFocus) {
+				if (theCachedCellRenderer != null)
+					return theCachedCellRenderer;
+				return theWrappedRenderer.getTreeCellRendererComponent(tree, value, sel, expanded, leaf, row, hasFocus);
+			}
 		}
 
 		private class ClippedTreeCellRenderer extends DefaultXTreeCellRenderer

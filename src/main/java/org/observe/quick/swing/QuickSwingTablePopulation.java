@@ -1228,7 +1228,8 @@ class QuickSwingTablePopulation {
 
 			@Override
 			public E modifyAssociatedComponents(Consumer<Component> component) {
-				// Should I do something here?
+				if (theCellRenderer != null)
+					theCellRenderer.modifyAssociated(component);
 				return (E) this;
 			}
 

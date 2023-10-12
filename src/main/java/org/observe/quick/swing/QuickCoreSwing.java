@@ -196,14 +196,16 @@ public class QuickCoreSwing implements QuickInterpretation {
 						if (renderer) {
 							// We can just do all this dynamically for renderers
 							adjustFont(pmDecorator.reset(), w.getStyle());
-							scd.propertyMgr.setFont(pmDecorator::adjust);
-							scd.propertyMgr.setForeground(pmDecorator.getForeground());
 							Color bg = color.get();
-							// if (c instanceof JLabel) { // DEBUGGING
-							// System.out.println("Render '" + ((JLabel) c).getText() + "' bg " + Colors.toString(bg));
-							// }
-							scd.propertyMgr.setBackground(bg);
-							scd.propertyMgr.setOpaque(bg == null ? null : true);
+							for (ComponentPropertyManager<?> pm : propertyManagers) {
+								pm.setFont(pmDecorator::adjust);
+								pm.setForeground(pmDecorator.getForeground());
+								// if (c instanceof JLabel) { // DEBUGGING
+								// System.out.println("Render '" + ((JLabel) c).getText() + "' bg " + Colors.toString(bg));
+								// }
+								pm.setBackground(bg);
+								pm.setOpaque(bg == null ? null : true);
+							}
 							c.setCursor(cursor.get());
 						} else {
 							scd.propertyMgr.setForeground(pmDecorator.getForeground());
