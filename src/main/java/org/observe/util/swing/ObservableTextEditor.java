@@ -45,9 +45,6 @@ public class ObservableTextEditor<E> {
 	 * @param <W> The type of this widget
 	 */
 	public interface ObservableTextEditorWidget<E, W extends ObservableTextEditorWidget<E, W>> {
-		/** @return The value controlled by this text field */
-		SettableValue<E> getValue();
-
 		/** @return The format converting between value and text */
 		Format<E> getFormat();
 
@@ -237,10 +234,8 @@ public class ObservableTextEditor<E> {
 		reformatOnCommit = true;
 
 		normal_bg = component.getBackground();
+		disabled_bg = component.getDisabledTextColor();
 		isExternallyEnabled = true;
-		enabled.accept(false);
-		disabled_bg = component.getBackground();
-		enabled.accept(true);
 
 		selectAllOnFocus = true;
 		revertOnFocusLoss = true;
@@ -249,7 +244,7 @@ public class ObservableTextEditor<E> {
 				setValue(evt.getNewValue());
 		});
 		theValue.isEnabled().changes().takeUntil(until).act(evt -> {
-			if (evt.getOldValue() == evt.getNewValue())
+			if (!evt.isInitial() && evt.getOldValue() == evt.getNewValue())
 				return;
 			checkEnabled();
 			setErrorState(theError, theWarningMsg);

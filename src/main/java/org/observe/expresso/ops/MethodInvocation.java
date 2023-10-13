@@ -149,10 +149,10 @@ public class MethodInvocation extends Invocation {
 							getExpressionLength(), InterpretedValueSynth.literalValue(TypeTokens.get().VOID, null, theContext.toString()),
 							clazz);
 						return new InvokableResult<>(result, ctx, true, Arrays.asList(realArgs), Invocation.ExecutableImpl.METHOD);
-					}
-					exHandler
-					.handle1(new ExpressoInterpretationException("No such method " + printSignature() + " in class " + clazz.getName(),
-						env.reporting().getPosition(), getExpressionLength()));
+					} else if (!exHandler.hasException())
+						exHandler.handle1(
+							new ExpressoInterpretationException("No such method " + printSignature() + " in class " + clazz.getName(),
+								env.reporting().getPosition(), getExpressionLength()));
 					return null;
 				}
 			}

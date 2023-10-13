@@ -28,17 +28,8 @@ import org.observe.ObservableAction;
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.collect.ObservableCollection;
-import org.observe.util.swing.ComboButton;
-import org.observe.util.swing.ComponentDecorator;
-import org.observe.util.swing.FontAdjuster;
-import org.observe.util.swing.JustifiedBoxLayout;
-import org.observe.util.swing.MultiRangeSlider;
+import org.observe.util.swing.*;
 import org.observe.util.swing.MultiRangeSlider.Range;
-import org.observe.util.swing.ObservableFileButton;
-import org.observe.util.swing.ObservableStyledDocument;
-import org.observe.util.swing.ObservableTextArea;
-import org.observe.util.swing.ObservableTextField;
-import org.observe.util.swing.PanelPopulation;
 import org.observe.util.swing.PanelPopulation.*;
 import org.qommons.collect.BetterList;
 import org.qommons.io.Format;
@@ -189,6 +180,14 @@ implements PanelPopulation.PanelPopulator<JPanel, AbstractQuickContainerPopulato
 		Function<? super F, ? extends F> purifier, Consumer<SteppedFieldEditor<JSpinner, F, ?>> modify) {
 		return addHPanel(null, new JustifiedBoxLayout(true).mainJustified().crossJustified(),
 			p -> p.addSpinnerField(fieldName, spinner, value, purifier, modify));
+	}
+
+	@Override
+	public <F> AbstractQuickContainerPopulator addSpinnerField(String fieldName, SettableValue<F> value, Format<F> format,
+		Function<? super F, ? extends F> previousValue, Function<? super F, ? extends F> nextValue,
+		Consumer<FieldEditor<ObservableSpinner<F>, ?>> modify) {
+		return addHPanel(null, new JustifiedBoxLayout(true).mainJustified().crossJustified(),
+			p -> p.addSpinnerField(fieldName, value, format, previousValue, nextValue, modify));
 	}
 
 	@Override

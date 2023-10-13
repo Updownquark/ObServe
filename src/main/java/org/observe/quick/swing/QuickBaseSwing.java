@@ -16,6 +16,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 import javax.swing.Icon;
@@ -843,6 +844,7 @@ public class QuickBaseSwing implements QuickInterpretation {
 			throws ModelInstantiationException {
 			panel.addSlider(null, quick.getValue(), slider -> {
 				component.accept(slider);
+				System.out.println("min=" + quick.getMin().get() + ", max=" + quick.getMax().get());
 				slider.withBounds(quick.getMin(), quick.getMax());
 			});
 		}
@@ -850,24 +852,149 @@ public class QuickBaseSwing implements QuickInterpretation {
 
 	static class SwingSpinner<T> extends QuickSwingPopulator.Abstract<QuickSpinner<T>> {
 		private final Class<T> theType;
+		private Function<? super T, ? extends T> theDefaultPrevious;
+		private Function<? super T, ? extends T> theDefaultNext;
 
 		SwingSpinner(QuickSpinner.Interpreted<T> interpreted) throws ExpressoInterpretationException {
 			theType = TypeTokens.get().unwrap(TypeTokens.getRawType(interpreted.getValueType()));
+			// For integer types, can just use 1 as the increment
+			if (interpreted.getNext() != null && interpreted.getPrevious() != null) {
+				// They specified next and previous, so we don't have to worry about defaults
+			} else if (theType == byte.class) {
+				theDefaultPrevious = v -> {
+					if (v == null)
+						return (T) Byte.valueOf((byte) 0);
+					byte b = ((Number) v).byteValue();
+					if (b == Byte.MIN_VALUE)
+						return null;
+					return (T) Byte.valueOf((byte) (b - 1));
+				};
+				theDefaultNext = v -> {
+					if (v == null)
+						return (T) Byte.valueOf((byte) 1);
+					byte b = ((Number) v).byteValue();
+					if (b == Byte.MAX_VALUE)
+						return null;
+					return (T) Byte.valueOf((byte) (b + 1));
+				};
+			} else if (theType == short.class) {
+				theDefaultPrevious = v -> {
+					if (v == null)
+						return (T) Short.valueOf((short) 0);
+					short s = ((Number) v).shortValue();
+					if (s == Short.MIN_VALUE)
+						return null;
+					return (T) Short.valueOf((short) (s - 1));
+				};
+				theDefaultNext = v -> {
+					if (v == null)
+						return (T) Short.valueOf((short) 1);
+					short s = ((Number) v).shortValue();
+					if (s == Short.MIN_VALUE)
+						return null;
+					return (T) Short.valueOf((short) (s + 1));
+				};
+			} else if (theType == int.class) {
+				theDefaultPrevious = v -> {
+					if (v == null)
+						return (T) Integer.valueOf(0);
+					int i = ((Number) v).intValue();
+					if (i == Integer.MIN_VALUE)
+						return null;
+					return (T) Integer.valueOf(i - 1);
+				};
+				theDefaultNext = v -> {
+					if (v == null)
+						return (T) Integer.valueOf(1);
+					int i = ((Number) v).intValue();
+					if (i == Integer.MAX_VALUE)
+						return null;
+					return (T) Integer.valueOf(i + 1);
+				};
+			} else if (theType == long.class) {
+				theDefaultPrevious = v -> {
+					if (v == null)
+						return (T) Long.valueOf(0);
+					long i = ((Number) v).longValue();
+					if (i == Long.MIN_VALUE)
+						return null;
+					return (T) Long.valueOf(i - 1);
+				};
+				theDefaultNext = v -> {
+					if (v == null)
+						return (T) Long.valueOf(1);
+					long i = ((Number) v).longValue();
+					if (i == Long.MAX_VALUE)
+						return null;
+					return (T) Long.valueOf(i + 1);
+				};
+			} else if (theType == boolean.class) {
+				// Kinda weird, but alright
+				theDefaultPrevious = v -> {
+					if (v == null)
+						return (T) Boolean.FALSE;
+					else
+						return (T) Boolean.valueOf(!((Boolean) v).booleanValue());
+				};
+				theDefaultNext = v -> {
+					if (v == null)
+						return (T) Boolean.TRUE;
+					else
+						return (T) Boolean.valueOf(!((Boolean) v).booleanValue());
+				};
+			} else if (Enum.class.isAssignableFrom(theType)) {
+				// Logical enough as well
+				theDefaultPrevious = v -> {
+					if (v == null)
+						return theType.getEnumConstants()[0];
+					int ordinal = ((Enum<?>) v).ordinal();
+					return ordinal == 0 ? null : theType.getEnumConstants()[ordinal - 1];
+				};
+				theDefaultNext = v -> {
+					if (v == null)
+						return theType.getEnumConstants()[0];
+					int ordinal = ((Enum<?>) v).ordinal();
+					return ordinal == theType.getEnumConstants().length - 1 ? null : theType.getEnumConstants()[ordinal + 1];
+				};
+			} else
+				throw new ExpressoInterpretationException("Unable to determine logical increment for spinner of type " + theType
+					+ ": 'previous' and 'next' attributes must be specified", interpreted.reporting().getPosition(), 0);
 		}
 
 		@Override
 		protected void doPopulate(PanelPopulator<?, ?> panel, QuickSpinner<T> quick, Consumer<ComponentEditor<?, ?>> component)
 			throws ModelInstantiationException {
-			throw new UnsupportedOperationException("Not implemented");
-			// SpinnerModel model;
-			// if(theType == int.class)
-			// model=new SpinnerNumberModel((Integer) quick.getValue().get(), Integer.MIN_VALUE, Integer.MAX_VALUE, 1);
-			// else
-			// model=null; //TODO
-			// panel.addSpinnerField(null, new JSpinner(model), quick.getValue(), v->v, spinner -> {
-			// component.accept(spinner);
-			// spinner.withS
-			// });
+			Function<? super T, ? extends T> previous, next;
+			if (quick.getPrevious() != null) {
+				previous = __ -> quick.getPrevious().get();
+			} else
+				previous = theDefaultPrevious;
+			if (quick.getNext() != null) {
+				next = __ -> quick.getNext().get();
+			} else
+				next = theDefaultNext;
+			Format<T> format = quick.getFormat().get();
+			boolean commitOnType = quick.isCommitOnType();
+			Integer columns = quick.getColumns();
+			panel.addSpinnerField(null, quick.getValue(), format, previous, next, tf -> {
+				component.accept(tf);
+				tf.modifyEditor(tf2 -> {
+					try {
+						quick.setContext(new QuickEditableTextWidget.EditableTextWidgetContext.Default(//
+							tf2.getErrorState(), tf2.getWarningState()));
+					} catch (ModelInstantiationException e) {
+						quick.reporting().error(e.getMessage(), e);
+						return;
+					}
+					if (commitOnType)
+						tf2.setCommitOnType(commitOnType);
+					if (columns != null)
+						tf2.withColumns(columns);
+					// No support for editable
+					// quick.isEditable().changes().takeUntil(tf.getUntil())
+					// .act(evt -> tf2.setEditable(!Boolean.FALSE.equals(evt.getNewValue())));
+				});
+			});
 		}
 	}
 
@@ -1555,8 +1682,7 @@ public class QuickBaseSwing implements QuickInterpretation {
 				case add:
 					QuickSwingPopulator<QuickWidget> renderer = renderers.get(evt.getNewValue().getRenderer().getIdentity());
 					try {
-						renderer.populate(new TabsPopulator<>(tabs[0], evt.getNewValue(), evt.getIndex()),
-							evt.getNewValue().getRenderer());
+						renderer.populate(new TabsPopulator<>(tabs[0], evt.getNewValue(), evt.getIndex()), evt.getNewValue().getRenderer());
 					} catch (ModelInstantiationException e) {
 						evt.getNewValue().getRenderer().reporting().error("Failed to populate tab", e);
 					}
@@ -1573,8 +1699,7 @@ public class QuickBaseSwing implements QuickInterpretation {
 			private final QuickTabs.TabInstance<? extends T> theTab;
 			private final int theTabIndex;
 
-			TabsPopulator(PanelPopulation.TabPaneEditor<?, ?> tabEditor, QuickTabs.TabInstance<? extends T> tab,
-				int index) {
+			TabsPopulator(PanelPopulation.TabPaneEditor<?, ?> tabEditor, QuickTabs.TabInstance<? extends T> tab, int index) {
 				theTabEditor = tabEditor;
 				theTab = tab;
 				theTabIndex = index;
@@ -1588,8 +1713,8 @@ public class QuickBaseSwing implements QuickInterpretation {
 			@Override
 			public AbstractQuickContainerPopulator addHPanel(String fieldName, LayoutManager layout,
 				Consumer<PanelPopulator<JPanel, ?>> panel) {
-				theTabEditor.withHTab(theTab.getTabValue(), theTabIndex, layout,
-					tab -> panel.accept((PanelPopulator<JPanel, ?>) tab), this::configureTab);
+				theTabEditor.withHTab(theTab.getTabValue(), theTabIndex, layout, tab -> panel.accept((PanelPopulator<JPanel, ?>) tab),
+					this::configureTab);
 				return this;
 			}
 

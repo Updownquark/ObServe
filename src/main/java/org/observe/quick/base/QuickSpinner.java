@@ -13,37 +13,43 @@ import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExElementTraceable;
 import org.observe.expresso.qonfig.ExpressoQIS;
 import org.observe.expresso.qonfig.QonfigAttributeGetter;
-import org.observe.quick.QuickValueWidget;
 import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElementOrAddOn;
 import org.qommons.config.QonfigInterpretationException;
 
 import com.google.common.reflect.TypeToken;
 
-public class QuickSpinner<T> extends QuickValueWidget.Abstract<T> {
+public class QuickSpinner<T> extends QuickTextField<T> {
 	public static final String SPINNER = "spinner";
 
 	@ExElementTraceable(toolkit = QuickBaseInterpretation.BASE,
 		qonfigType = SPINNER,
 		interpretation = Interpreted.class,
 		instance = QuickSpinner.class)
-	public static class Def extends QuickValueWidget.Def.Abstract<QuickSpinner<?>> {
-		private CompiledExpression theIncrement;
+	public static class Def extends QuickTextField.Def<QuickSpinner<?>> {
+		private CompiledExpression thePrevious;
+		private CompiledExpression theNext;
 
 		public Def(ExElement.Def<?> parent, QonfigElementOrAddOn type) {
 			super(parent, type);
 		}
 
-		@QonfigAttributeGetter("increment")
-		public CompiledExpression getIncrement() {
-			return theIncrement;
+		@QonfigAttributeGetter("previous")
+		public CompiledExpression getPrevious() {
+			return thePrevious;
+		}
+
+		@QonfigAttributeGetter("next")
+		public CompiledExpression getNext() {
+			return theNext;
 		}
 
 		@Override
 		protected void doUpdate(ExpressoQIS session) throws QonfigInterpretationException {
 			super.doUpdate(session);
 
-			theIncrement = session.getAttributeExpression("increment");
+			thePrevious = session.getAttributeExpression("previous");
+			theNext = session.getAttributeExpression("next");
 		}
 
 		@Override
@@ -52,8 +58,9 @@ public class QuickSpinner<T> extends QuickValueWidget.Abstract<T> {
 		}
 	}
 
-	public static class Interpreted<T> extends QuickValueWidget.Interpreted.Abstract<T, QuickSpinner<T>> {
-		private InterpretedValueSynth<SettableValue<?>, SettableValue<T>> theIncrement;
+	public static class Interpreted<T> extends QuickTextField.Interpreted<T, QuickSpinner<T>> {
+		private InterpretedValueSynth<SettableValue<?>, SettableValue<T>> thePrevious;
+		private InterpretedValueSynth<SettableValue<?>, SettableValue<T>> theNext;
 
 		public Interpreted(Def definition, ExElement.Interpreted<?> parent) {
 			super(definition, parent);
@@ -64,8 +71,12 @@ public class QuickSpinner<T> extends QuickValueWidget.Abstract<T> {
 			return (Def) super.getDefinition();
 		}
 
-		public InterpretedValueSynth<SettableValue<?>, SettableValue<T>> getIncrement() {
-			return theIncrement;
+		public InterpretedValueSynth<SettableValue<?>, SettableValue<T>> getPrevious() {
+			return thePrevious;
+		}
+
+		public InterpretedValueSynth<SettableValue<?>, SettableValue<T>> getNext() {
+			return theNext;
 		}
 
 		@Override
@@ -77,42 +88,34 @@ public class QuickSpinner<T> extends QuickValueWidget.Abstract<T> {
 		protected void doUpdate(InterpretedExpressoEnv env) throws ExpressoInterpretationException {
 			super.doUpdate(env);
 
-			theIncrement = getDefinition().getIncrement() == null ? null
-				: getDefinition().getIncrement().interpret(ModelTypes.Value.forType(getValueType()), env);
-
-			Class<T> valueType = TypeTokens.get().unwrap(TypeTokens.getRawType(getValueType()));
-			if (valueType.isPrimitive()) {
-				if (valueType == boolean.class || valueType == char.class || valueType == void.class)
-					throw new ExpressoInterpretationException("Cannot create a spinner for type " + valueType.getName(),
-						env.reporting().getPosition(), 0);
-			} else if (valueType.isEnum()) {
-				if (theIncrement != null)
-					throw new ExpressoInterpretationException(
-						"The increment attribute is not compatible with a spinner for enum type " + valueType.getName(),
-						env.reporting().getPosition(),
-						0);
-			} else
-				throw new ExpressoInterpretationException("Cannot create a spinner for type " + valueType.getName(),
-					env.reporting().getPosition(), 0);
+			thePrevious = getDefinition().getPrevious() == null ? null
+				: getDefinition().getPrevious().interpret(ModelTypes.Value.forType(getValueType()), env);
+			theNext = getDefinition().getPrevious() == null ? null
+				: getDefinition().getNext().interpret(ModelTypes.Value.forType(getValueType()), env);
 		}
 
 		@Override
-		public QuickSpinner create() {
-			return new QuickSpinner(getIdentity());
+		public QuickSpinner<T> create() {
+			return new QuickSpinner<>(getIdentity());
 		}
 	}
 
-	private ModelValueInstantiator<SettableValue<T>> theIncrementInstantiator;
+	private ModelValueInstantiator<SettableValue<T>> thePreviousInstantiator;
+	private ModelValueInstantiator<SettableValue<T>> theNextInstantiator;
 
-	private SettableValue<SettableValue<T>> theIncrement;
+	private SettableValue<T> thePrevious;
+	private SettableValue<T> theNext;
 
 	public QuickSpinner(Object id) {
 		super(id);
-		theIncrement = SettableValue.build((Class<SettableValue<T>>) (Class<?>) SettableValue.class).build();
 	}
 
-	public SettableValue<T> getIncrement() {
-		return SettableValue.flatten(theIncrement);
+	public SettableValue<T> getPrevious() {
+		return thePrevious;
+	}
+
+	public SettableValue<T> getNext() {
+		return theNext;
 	}
 
 	@Override
@@ -120,30 +123,30 @@ public class QuickSpinner<T> extends QuickValueWidget.Abstract<T> {
 		super.doUpdate(interpreted);
 
 		Interpreted<T> myInterpreted = (Interpreted<T>) interpreted;
-		theIncrementInstantiator = myInterpreted.getIncrement() == null ? null : myInterpreted.getIncrement().instantiate();
+		thePreviousInstantiator = myInterpreted.getPrevious() == null ? null : myInterpreted.getPrevious().instantiate();
+		theNextInstantiator = myInterpreted.getNext() == null ? null : myInterpreted.getNext().instantiate();
 	}
 
 	@Override
 	public void instantiated() {
 		super.instantiated();
 
-		if (theIncrement != null)
-			theIncrementInstantiator.instantiate();
+		if (thePrevious != null)
+			thePreviousInstantiator.instantiate();
+		if (theNext != null)
+			theNextInstantiator.instantiate();
 	}
 
 	@Override
 	protected void doInstantiate(ModelSetInstance myModels) throws ModelInstantiationException {
 		super.doInstantiate(myModels);
 
-		theIncrement.set(theIncrementInstantiator == null ? null : theIncrementInstantiator.get(myModels), null);
+		thePrevious = thePreviousInstantiator == null ? null : thePreviousInstantiator.get(myModels);
+		theNext = theNextInstantiator == null ? null : theNextInstantiator.get(myModels);
 	}
 
 	@Override
 	public QuickSpinner<T> copy(ExElement parent) {
-		QuickSpinner<T> copy = (QuickSpinner<T>) super.copy(parent);
-
-		copy.theIncrement = SettableValue.build(theIncrement.getType()).build();
-
-		return copy;
+		return (QuickSpinner<T>) super.copy(parent);
 	}
 }

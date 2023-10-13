@@ -123,7 +123,7 @@ public class ObservableTextArea<E> extends JTextPane implements ObservableTextEd
 		}
 	}
 
-	@Override
+	/** @return The value controlled by this text area */
 	public SettableValue<E> getValue() {
 		if (theEditor == null)
 			return null;

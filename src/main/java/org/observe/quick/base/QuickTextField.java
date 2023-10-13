@@ -26,7 +26,7 @@ public class QuickTextField<T> extends QuickEditableTextWidget.Abstract<T> {
 		qonfigType = TEXT_FIELD,
 		interpretation = Interpreted.class,
 		instance = QuickTextField.class)
-	public static class Def extends QuickEditableTextWidget.Def.Abstract<QuickTextField<?>> {
+	public static class Def<F extends QuickTextField<?>> extends QuickEditableTextWidget.Def.Abstract<F> {
 		private Integer theColumns;
 		private CompiledExpression isPassword;
 		private CompiledExpression theEmptyText;
@@ -65,26 +65,26 @@ public class QuickTextField<T> extends QuickEditableTextWidget.Abstract<T> {
 		}
 
 		@Override
-		public Interpreted<?> interpret(ExElement.Interpreted<?> parent) {
-			return new Interpreted<>(this, parent);
+		public Interpreted<?, ? extends F> interpret(ExElement.Interpreted<?> parent) {
+			return (Interpreted<?, ? extends F>) new Interpreted<>((Def<QuickTextField<Object>>) this, parent);
 		}
 	}
 
-	public static class Interpreted<T> extends QuickEditableTextWidget.Interpreted.Abstract<T, QuickTextField<T>> {
+	public static class Interpreted<T, F extends QuickTextField<T>> extends QuickEditableTextWidget.Interpreted.Abstract<T, F> {
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<Boolean>> isPassword;
 		private InterpretedValueSynth<SettableValue<?>, SettableValue<String>> theEmptyText;
 
-		public Interpreted(Def definition, ExElement.Interpreted<?> parent) {
+		public Interpreted(Def<? super F> definition, ExElement.Interpreted<?> parent) {
 			super(definition, parent);
 		}
 
 		@Override
-		public QuickTextField.Def getDefinition() {
-			return (Def) super.getDefinition();
+		public Def<? super F> getDefinition() {
+			return (Def<? super F>) super.getDefinition();
 		}
 
 		@Override
-		public TypeToken<QuickTextField<T>> getWidgetType() throws ExpressoInterpretationException {
+		public TypeToken<F> getWidgetType() throws ExpressoInterpretationException {
 			return TypeTokens.get().keyFor(QuickTextField.class).parameterized(getValueType());
 		}
 
@@ -105,8 +105,8 @@ public class QuickTextField<T> extends QuickEditableTextWidget.Abstract<T> {
 		}
 
 		@Override
-		public QuickTextField<T> create() {
-			return new QuickTextField<>(getIdentity());
+		public F create() {
+			return (F) new QuickTextField<>(getIdentity());
 		}
 	}
 
@@ -139,7 +139,7 @@ public class QuickTextField<T> extends QuickEditableTextWidget.Abstract<T> {
 	@Override
 	protected void doUpdate(ExElement.Interpreted<?> interpreted) {
 		super.doUpdate(interpreted);
-		QuickTextField.Interpreted<T> myInterpreted = (QuickTextField.Interpreted<T>) interpreted;
+		Interpreted<T, ?> myInterpreted = (Interpreted<T, ?>) interpreted;
 		theColumns = myInterpreted.getDefinition().getColumns();
 		thePasswordInstantiator = myInterpreted.isPassword().instantiate();
 		theEmptyTextInstantiator = myInterpreted.getEmptyText() == null ? null : myInterpreted.getEmptyText().instantiate();

@@ -75,7 +75,7 @@ public class ObservableTextField<E> extends JPasswordField implements Observable
 		});
 	}
 
-	@Override
+	/** @return The value controlled by this text area */
 	public SettableValue<E> getValue() {
 		if (theEditor == null)
 			return null;

@@ -295,6 +295,9 @@ public class PanelPopulation {
 		<F> P addSpinnerField(String fieldName, JSpinner spinner, SettableValue<F> value, Function<? super F, ? extends F> purifier,
 			Consumer<SteppedFieldEditor<JSpinner, F, ?>> modify);
 
+		<F> P addSpinnerField(String fieldName, SettableValue<F> value, Format<F> format, Function<? super F, ? extends F> previousValue,
+			Function<? super F, ? extends F> nextValue, Consumer<FieldEditor<ObservableSpinner<F>, ?>> modify);
+
 		P addSlider(String fieldName, SettableValue<Double> value, Consumer<SliderEditor<MultiRangeSlider, ?>> modify);
 
 		P addMultiSlider(String fieldName, ObservableCollection<Double> values, Consumer<SliderEditor<MultiRangeSlider, ?>> modify);
@@ -599,8 +602,25 @@ public class PanelPopulation {
 		}
 
 		@Override
+		default <F> P addSpinnerField(String fieldName, SettableValue<F> value, Format<F> format,
+			Function<? super F, ? extends F> previousValue, Function<? super F, ? extends F> nextValue,
+			Consumer<FieldEditor<ObservableSpinner<F>, ?>> modify) {
+			ObservableSpinner<F> spinner = new ObservableSpinner<>(value, format, previousValue, nextValue, getUntil());
+			SimpleFieldEditor<ObservableSpinner<F>, ?> fieldPanel = new SimpleFieldEditor<>(fieldName, spinner, getUntil());
+			fieldPanel.getTooltip().changes().takeUntil(getUntil()).act(evt -> fieldPanel.getEditor().setToolTipText(evt.getNewValue()));
+			if (modify != null)
+				modify.accept(fieldPanel);
+			if (fieldPanel.isDecorated())
+				value.noInitChanges().safe(ThreadConstraint.EDT).takeUntil(getUntil())
+				.act(__ -> fieldPanel.decorate(fieldPanel.getComponent()));
+			doAdd(fieldPanel);
+			return (P) this;
+		}
+
+		@Override
 		default P addSlider(String fieldName, SettableValue<Double> value, Consumer<SliderEditor<MultiRangeSlider, ?>> modify) {
 			SimpleMultiSliderEditor<?> compEditor = SimpleMultiSliderEditor.createForValue(fieldName, value, getUntil());
+			compEditor.getTooltip().changes().takeUntil(getUntil()).act(evt -> compEditor.getEditor().setToolTipText(evt.getNewValue()));
 			if (modify != null)
 				modify.accept(compEditor);
 			if (compEditor.isDecorated())

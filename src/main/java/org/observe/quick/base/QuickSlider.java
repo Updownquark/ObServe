@@ -4,6 +4,7 @@ import org.observe.SettableValue;
 import org.observe.expresso.ExpressoInterpretationException;
 import org.observe.expresso.InterpretedExpressoEnv;
 import org.observe.expresso.ModelInstantiationException;
+import org.observe.expresso.ModelType.ModelInstanceType;
 import org.observe.expresso.ModelTypes;
 import org.observe.expresso.ObservableModelSet.InterpretedValueSynth;
 import org.observe.expresso.ObservableModelSet.ModelSetInstance;
@@ -12,6 +13,7 @@ import org.observe.expresso.qonfig.CompiledExpression;
 import org.observe.expresso.qonfig.ExElement;
 import org.observe.expresso.qonfig.ExElementTraceable;
 import org.observe.expresso.qonfig.ExpressoQIS;
+import org.observe.expresso.qonfig.QonfigAttributeGetter;
 import org.observe.quick.QuickValueWidget;
 import org.observe.util.TypeTokens;
 import org.qommons.config.QonfigElementOrAddOn;
@@ -34,10 +36,12 @@ public class QuickSlider extends QuickValueWidget.Abstract<Double> {
 			super(parent, type);
 		}
 
+		@QonfigAttributeGetter("min")
 		public CompiledExpression getMin() {
 			return theMin;
 		}
 
+		@QonfigAttributeGetter("max")
 		public CompiledExpression getMax() {
 			return theMax;
 		}
@@ -47,7 +51,7 @@ public class QuickSlider extends QuickValueWidget.Abstract<Double> {
 			super.doUpdate(session);
 
 			theMin = session.getAttributeExpression("min");
-			theMax = session.getAttributeExpression("min");
+			theMax = session.getAttributeExpression("max");
 		}
 
 		@Override
@@ -75,6 +79,11 @@ public class QuickSlider extends QuickValueWidget.Abstract<Double> {
 
 		public InterpretedValueSynth<SettableValue<?>, SettableValue<Double>> getMax() {
 			return theMax;
+		}
+
+		@Override
+		protected ModelInstanceType<SettableValue<?>, SettableValue<Double>> getTargetType() {
+			return ModelTypes.Value.DOUBLE;
 		}
 
 		@Override

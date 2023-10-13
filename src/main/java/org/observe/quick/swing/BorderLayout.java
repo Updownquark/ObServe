@@ -8,7 +8,10 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
+import java.util.function.IntFunction;
 import java.util.function.Supplier;
+import java.util.function.ToIntFunction;
 
 import org.observe.quick.base.QuickBorderLayout;
 import org.observe.quick.base.QuickBorderLayout.Region;
@@ -115,16 +118,31 @@ public class BorderLayout implements LayoutManager2 {
 	}
 
 	Dimension layoutSize(Container parent, int type) {
+		Function<Component, Dimension> sizeFn;
+		if (type < 0)
+			sizeFn = Component::getMinimumSize;
+		else if (type == 0)
+			sizeFn = Component::getPreferredSize;
+		else
+			sizeFn = Component::getMaximumSize;
+		return layoutSize(parent, type, ci -> sizeFn.apply(parent.getComponent(ci)));
+	}
+
+	Dimension layoutSize(Container parent, int type, IntFunction<Dimension> componentSize) {
 		List<QuickSize> hStacks = new ArrayList<>();
 		List<QuickSize> vStacks = new ArrayList<>();
 		QuickSize width = QuickSize.ZERO, height = QuickSize.ZERO;
-		Component center = null;
+		int centerIdx = -1;
+		int compIdx = 0;
 		for (Component c : parent.getComponents()) {
-			if (!c.isVisible())
+			if (!c.isVisible()) {
+				compIdx++;
 				continue;
+			}
 			Constraints constraints = theConstraints.get(c);
 			if (constraints == null) {
 				System.err.println("No constraints for component of border layout--region required");
+				compIdx++;
 				continue;
 			}
 			QuickSize size = constraints.size == null ? null : constraints.size.get();
@@ -136,39 +154,35 @@ public class BorderLayout implements LayoutManager2 {
 			switch (constraints.region) {
 			case North:
 			case South:
+				Dimension cs = componentSize.apply(compIdx);
 				if (size == null)
-					size = QuickSize.ofPixels(getComponentSize(c, type, true));
-				int cross = getComponentSize(c, type, false);
+					size = QuickSize.ofPixels(cs.height);
+				int cross = cs.width;
 				hStacks.add(width.plus(cross));
 				height = height.plus(size);
 				break;
 			case East:
 			case West:
+				cs = componentSize.apply(compIdx);
 				if (size == null)
-					size = QuickSize.ofPixels(getComponentSize(c, type, false));
-				cross = getComponentSize(c, type, true);
+					size = QuickSize.ofPixels(cs.width);
+				cross = cs.height;
 				vStacks.add(height.plus(cross));
 				width = width.plus(size);
 				break;
 			default:
-				if (center != null) {
+				if (centerIdx >= 0) {
 					System.out.println("Multiple components found fulfulling center role--only the first will be used");
 					break;
 				}
-				center = c;
 				break; // Handle center last
 			}
+			compIdx++;
 		}
 		int maxW;
 		int maxH;
-		if (center != null) {
-			Dimension d;
-			if (type < 0)
-				d = center.getMinimumSize();
-			else if (type == 0)
-				d = center.getPreferredSize();
-			else
-				d = center.getMaximumSize();
+		if (centerIdx >= 0) {
+			Dimension d = componentSize.apply(centerIdx);
 			if (d != null) {
 				width = width.plus(d.width);
 				height = height.plus(d.height);
@@ -193,232 +207,159 @@ public class BorderLayout implements LayoutManager2 {
 		return new Dimension(maxW, maxH);
 	}
 
-	private static int getComponentSize(Component c, int type, boolean vertical) {
-		Dimension d;
-		if (type < 0)
-			d = c.getMinimumSize();
-		else if (type == 0)
-			d = c.getPreferredSize();
-		else
-			d = c.getMaximumSize();
-		if (d == null)
-			return -1;
-		return vertical ? d.height : d.width;
-	}
-
 	@Override
 	public void layoutContainer(Container parent) {
 		Dimension parentSize = parent.getSize();
 		if (parentSize.width == 0 || parentSize.height == 0)
 			return;
 		Component[] components = parent.getComponents();
-		int[][] compSizeBounds = new int[components.length][3];
-		int[] totalWidth = new int[3], totalHeight = new int[3];
-		Component center = null;
+
+		// First, compile all the relevante component sizes
+		QuickBorderLayout.Region[] compRegions = new QuickBorderLayout.Region[components.length];
+		Dimension[][] compSizes = new Dimension[components.length][3];
 		int compIdx = 0;
+		int maxSize = Integer.MAX_VALUE / components.length;
 		for (Component c : components) {
-			if (!c.isVisible())
+			if (!c.isVisible()) {
+				compIdx++;
 				continue;
+			}
 			Constraints constraints = theConstraints.get(c);
-			if (constraints == null)
+			if (constraints == null) {
+				compIdx++;
 				continue;
+			}
+			compRegions[compIdx] = constraints.region;
+			Dimension compMin = c.getMinimumSize();
+			Dimension compPref = c.getPreferredSize();
+			Dimension compMax = c.getMaximumSize();
 			QuickSize size = constraints.size == null ? null : constraints.size.get();
 			switch (constraints.region) {
 			case North:
 			case South:
-				if (size != null) {
-					int sz = size.evaluate(parentSize.height);
-					compSizeBounds[compIdx][0] = sz;
-					compSizeBounds[compIdx][1] = sz;
-					compSizeBounds[compIdx][2] = sz;
-				} else {
-					Integer sz = constraints.getSize(-1);
-					compSizeBounds[compIdx][0] = sz != null ? sz : getComponentSize(c, -1, true);
-					sz = constraints.getSize(0);
-					compSizeBounds[compIdx][1] = sz != null ? sz : getComponentSize(c, 0, true);
-					sz = constraints.getSize(1);
-					compSizeBounds[compIdx][2] = sz != null ? sz : getComponentSize(c, 1, true);
-				}
-				totalHeight[0] += compSizeBounds[compIdx][0];
-				totalHeight[1] += compSizeBounds[compIdx][1];
-				totalHeight[2] += compSizeBounds[compIdx][2];
+				Integer evalSz = size == null ? null : size.evaluate(parentSize.height);
+				Integer minSz = size == null ? constraints.getSize(-1) : evalSz;
+				Integer prefSz = size == null ? constraints.getSize(0) : evalSz;
+				Integer maxSz = size == null ? constraints.getSize(1) : evalSz;
+				compSizes[compIdx][0] = minSz == null ? compMin : new Dimension(compMin.width, minSz);
+				compSizes[compIdx][1] = prefSz == null ? compPref : new Dimension(compPref.width, prefSz);
+				compSizes[compIdx][2] = maxSz == null ? compMax : new Dimension(compMax.width, maxSz);
 				break;
 			case East:
 			case West:
-				if (size != null) {
-					int sz = size.evaluate(parentSize.width);
-					compSizeBounds[compIdx][0] = sz;
-					compSizeBounds[compIdx][1] = sz;
-					compSizeBounds[compIdx][2] = sz;
-				} else {
-					Integer sz = constraints.getSize(-1);
-					compSizeBounds[compIdx][0] = sz != null ? sz : getComponentSize(c, -1, false);
-					sz = constraints.getSize(0);
-					compSizeBounds[compIdx][1] = sz != null ? sz : getComponentSize(c, 0, false);
-					sz = constraints.getSize(1);
-					compSizeBounds[compIdx][2] = sz != null ? sz : getComponentSize(c, 1, false);
-				}
-				totalWidth[0] += compSizeBounds[compIdx][0];
-				totalWidth[1] += compSizeBounds[compIdx][1];
-				totalWidth[2] += compSizeBounds[compIdx][2];
+				evalSz = size == null ? null : size.evaluate(parentSize.width);
+				minSz = size == null ? constraints.getSize(-1) : evalSz;
+				prefSz = size == null ? constraints.getSize(0) : evalSz;
+				maxSz = size == null ? constraints.getSize(1) : evalSz;
+				compSizes[compIdx][0] = minSz == null ? compMin : new Dimension(minSz, compMin.height);
+				compSizes[compIdx][1] = prefSz == null ? compPref : new Dimension(prefSz, compPref.height);
+				compSizes[compIdx][2] = maxSz == null ? compMax : new Dimension(maxSz, compMax.height);
 				break;
-			default:
-				if (center != null)
-					break;
-				center = c;
-				Dimension d = c.getMinimumSize();
-				if (d != null) {
-					totalWidth[0] += d.width;
-					totalHeight[0] += d.height;
-				}
-				d = c.getPreferredSize();
-				if (d != null) {
-					totalWidth[1] += d.width;
-					totalHeight[1] += d.height;
-				}
-				d = c.getMaximumSize();
-				if (d != null) {
-					totalWidth[2] += d.width;
-					totalHeight[2] += d.height;
-				}
-				break;
+			case Center:
+				compSizes[compIdx][0] = compMin;
+				compSizes[compIdx][1] = compPref;
+				compSizes[compIdx][2] = compMax;
 			}
+			// Correct for maximum
+			if (compSizes[compIdx][2].width > maxSize)
+				compSizes[compIdx][2].width = maxSize;
+			if (compSizes[compIdx][2].height > maxSize)
+				compSizes[compIdx][2].height = maxSize;
 			compIdx++;
 		}
 
-		int[] compSizes = new int[components.length];
+		// Now determine how much we need to stretch or squish in each dimension
+		Dimension pref = layoutSize(parent, 0, ci -> compSizes[ci][1]);
+		Dimension min = null, max = null;
+		double wStretch;
+		if (parentSize.width < pref.width) {
+			min = layoutSize(parent, -1, ci -> compSizes[ci][0]);
+			if (parentSize.width <= min.width)
+				wStretch = -1;
+			else
+				wStretch = -(parentSize.width - min.width) * 1.0 / (pref.width - min.width);
+		} else if (parentSize.width > pref.width) {
+			max = layoutSize(parent, 1, ci -> compSizes[ci][2]);
+			if (parentSize.width > max.width)
+				wStretch = 1;
+			else
+				wStretch = (parentSize.width - pref.width) * 1.0 / (max.width - pref.width);
+		} else
+			wStretch = 0;
+		double hStretch;
+		if (parentSize.height < pref.height) {
+			if (min == null)
+				min = layoutSize(parent, -1, ci -> compSizes[ci][0]);
+			if (parentSize.height <= min.height)
+				hStretch = -1;
+			else
+				hStretch = -(parentSize.height - min.height) * 1.0 / (pref.height - min.height);
+		} else if (parentSize.height > pref.height) {
+			if (max == null)
+				max = layoutSize(parent, 1, ci -> compSizes[ci][2]);
+			if (parentSize.height > max.height)
+				hStretch = 1;
+			else
+				hStretch = (parentSize.height - pref.height) * 1.0 / (max.height - pref.height);
+		} else
+			hStretch = 0;
 
-		if (parentSize.width <= totalWidth[0]) {
-			float mult = totalWidth[0] * 1.0f / parentSize.width;
-			for (int c = 0; c < components.length; c++) {
-				if (!components[c].isVisible())
-					continue;
-				Constraints constraints = theConstraints.get(components[c]);
-				if (constraints == null)
-					continue;
-				switch (constraints.region) {
-				case East:
-				case West:
-					compSizes[c] = Math.round(compSizeBounds[c][0] * mult);
-					break;
-				default:
-					break;
-				}
-			}
-		} else if (parentSize.width <= totalWidth[1]) {
-			float mult = (parentSize.width - totalWidth[0]) * 1.0f / (totalWidth[1] - totalWidth[0]);
-			for (int c = 0; c < components.length; c++) {
-				if (!components[c].isVisible())
-					continue;
-				Constraints constraints = theConstraints.get(components[c]);
-				if (constraints == null)
-					continue;
-				switch (constraints.region) {
-				case East:
-				case West:
-					compSizes[c] = compSizeBounds[c][0] + Math.round((compSizeBounds[c][1] - compSizeBounds[c][0]) * mult);
-					break;
-				default:
-					break;
-				}
-			}
+		ToIntFunction<Integer> compWidth, compHeight;
+		if (wStretch == 0) {
+			compWidth = ci -> compSizes[ci][1].width;
+		} else if (wStretch < 0) {
+			compWidth = ci -> (int) Math.round(compSizes[ci][0].width + (compSizes[ci][1].width - compSizes[ci][0].width) * wStretch);
 		} else {
-			float mult = Math.min(1.0f, (parentSize.width - totalWidth[1]) * 1.0f / (totalWidth[2] - totalWidth[1]));
-			for (int c = 0; c < components.length; c++) {
-				if (!components[c].isVisible())
-					continue;
-				Constraints constraints = theConstraints.get(components[c]);
-				if (constraints == null)
-					continue;
-				switch (constraints.region) {
-				case East:
-				case West:
-					compSizes[c] = compSizeBounds[c][1] + Math.round((compSizeBounds[c][2] - compSizeBounds[c][1]) * mult);
-					break;
-				default:
-					break;
-				}
-			}
+			compWidth = ci -> (int) Math.round(compSizes[ci][1].width + (compSizes[ci][2].width - compSizes[ci][1].width) * wStretch);
 		}
-		if (parentSize.height <= totalHeight[0]) {
-			float mult = totalHeight[0] * 1.0f / parentSize.height;
-			for (int c = 0; c < components.length; c++) {
-				if (!components[c].isVisible())
-					continue;
-				Constraints constraints = theConstraints.get(components[c]);
-				if (constraints == null)
-					continue;
-				switch (constraints.region) {
-				case North:
-				case South:
-					compSizes[c] = Math.round(compSizeBounds[c][0] * mult);
-					break;
-				default:
-					break;
-				}
-			}
-		} else if (parentSize.height <= totalHeight[1]) {
-			float mult = (parentSize.height - totalHeight[0]) * 1.0f / (totalHeight[1] - totalHeight[0]);
-			for (int c = 0; c < components.length; c++) {
-				if (!components[c].isVisible())
-					continue;
-				Constraints constraints = theConstraints.get(components[c]);
-				if (constraints == null)
-					continue;
-				switch (constraints.region) {
-				case North:
-				case South:
-					compSizes[c] = compSizeBounds[c][0] + Math.round((compSizeBounds[c][1] - compSizeBounds[c][0]) * mult);
-					break;
-				default:
-					break;
-				}
-			}
+		if (hStretch == 0) {
+			compHeight = ci -> compSizes[ci][1].height;
+		} else if (hStretch < 0) {
+			compHeight = ci -> (int) Math.round(compSizes[ci][0].height + (compSizes[ci][1].height - compSizes[ci][0].height) * wStretch);
 		} else {
-			float mult = Math.min(1.0f, (parentSize.height - totalHeight[1]) * 1.0f / (totalHeight[2] - totalHeight[1]));
-			for (int c = 0; c < components.length; c++) {
-				if (!components[c].isVisible())
-					continue;
-				Constraints constraints = theConstraints.get(components[c]);
-				if (constraints == null)
-					continue;
-				switch (constraints.region) {
-				case North:
-				case South:
-					compSizes[c] = compSizeBounds[c][1] + Math.round((compSizeBounds[c][2] - compSizeBounds[c][1]) * mult);
-					break;
-				default:
-					break;
-				}
-			}
+			compHeight = ci -> (int) Math.round(compSizes[ci][1].height + (compSizes[ci][2].height - compSizes[ci][1].height) * wStretch);
 		}
+		compIdx = 0;
 		int left = 0, right = parentSize.width, top = 0, bottom = parentSize.height;
+		Component center = null;
 		for (int c = 0; c < components.length; c++) {
-			if (!components[c].isVisible())
+			if (!components[c].isVisible()) {
+				compIdx++;
 				continue;
+			}
 			Constraints constraints = theConstraints.get(components[c]);
-			if (constraints == null)
+			if (constraints == null) {
+				compIdx++;
 				continue;
+			}
+			int compSz;
 			switch (constraints.region) {
 			case North:
-				components[c].setBounds(left, top, right - left, compSizes[c]);
-				top += compSizes[c];
+				compSz = compHeight.applyAsInt(compIdx);
+				components[c].setBounds(left, top, right - left, compSz);
+				top += compSz;
 				break;
 			case South:
-				bottom -= compSizes[c];
-				components[c].setBounds(left, bottom, right - left, compSizes[c]);
+				compSz = compHeight.applyAsInt(compIdx);
+				bottom -= compSz;
+				components[c].setBounds(left, bottom, right - left, compSz);
 				break;
 			case East:
-				right -= compSizes[c];
-				components[c].setBounds(right, top, compSizes[c], bottom - top);
+				compSz = compWidth.applyAsInt(compIdx);
+				right -= compSz;
+				components[c].setBounds(right, top, compSz, bottom - top);
 				break;
 			case West:
-				components[c].setBounds(left, top, compSizes[c], bottom - top);
-				left += compSizes[c];
+				compSz = compWidth.applyAsInt(compIdx);
+				components[c].setBounds(left, top, compSz, bottom - top);
+				left += compSz;
 				break;
-			default:
+			case Center:
+				if (center == null)
+					center = components[c];
 				break;
 			}
+			compIdx++;
 		}
 		if (center != null)
 			center.setBounds(left, top, right - left, bottom - top);

@@ -326,7 +326,13 @@
 		</element-def>
 		<?DOC A text field with up and down buttons for either fully specifying or quickly adjusting a value?>
 		<element-def name="spinner" extends="text-field">
-			<attribute name="increment" type="expression" specify="optional" />
+			<attr-mod name="text-field.password" specify="forbidden" />
+			<?DOC The value that will be set for the spinner if the user presses the down button, or null if there is no logical previous value.
+				This can be determined automatically for some types, e.g. integer, enum.?>
+			<attribute name="previous" type="expression" specify="optional" />
+			<?DOC The value that will be set for the spinner if the user presses the up button, or null if there is no logical next value.
+				This can be determined automatically for some types, e.g. integer, enum.?>
+			<attribute name="next" type="expression" specify="optional" />
 		</element-def>
 		<element-def name="slider" extends="value-widget">
 			<attribute name="min" type="expression" />
